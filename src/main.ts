@@ -1,24 +1,47 @@
 /**
- * Steel Thread - Animated Particles Demo
+ * Oscilla v2 - Main Application Entry
  *
- * Minimal viable pipeline: time → domain → fields → render
+ * Sets up the UI layout and initializes the animated particles demo.
  */
 
 import { buildPatch } from './graph';
 import { compile } from './compiler';
 import { createRuntimeState, BufferPool, executeFrame } from './runtime';
 import { renderFrame } from './render';
-import { PatchViewer } from './viewer';
+import { getAppLayout, TabbedContent } from './ui';
 import type { Block } from './graph/Patch';
+
+// =============================================================================
+// Global State
+// =============================================================================
+
+let currentProgram: any = null;
+let currentState: any = null;
+let currentPatch: any = null;
+let canvas: HTMLCanvasElement | null = null;
+let ctx: CanvasRenderingContext2D | null = null;
+let pool: BufferPool | null = null;
+let logEl: HTMLElement | null = null;
+let statsEl: HTMLElement | null = null;
+let inspectorEl: HTMLElement | null = null;
+
+// =============================================================================
+// Zoom and Pan State
+// =============================================================================
+
+let zoom = 1;
+let panX = 0;
+let panY = 0;
+let isDragging = false;
+let lastMouseX = 0;
+let lastMouseY = 0;
 
 // =============================================================================
 // Logging
 // =============================================================================
 
-const logEl = document.getElementById('log')!;
-const statsEl = document.getElementById('stats')!;
-
 function log(msg: string, level: 'info' | 'warn' | 'error' = 'info') {
+  if (!logEl) return;
   const line = document.createElement('div');
   line.className = `log-${level}`;
   line.textContent = `[${new Date().toISOString().slice(11, 19)}] ${msg}`;
@@ -28,38 +51,26 @@ function log(msg: string, level: 'info' | 'warn' | 'error' = 'info') {
 }
 
 // =============================================================================
-// Global State
-// =============================================================================
-
-let currentProgram = null as any;
-let currentState = null as any;
-let currentPatch = null as any;
-
-// =============================================================================
 // Block Inspector
 // =============================================================================
 
-const inspectorEl = document.getElementById('block-inspector')!;
-
 function showBlockInspector(block: Block) {
-  // Build inspector HTML
+  if (!inspectorEl) return;
+
   const html: string[] = [];
 
   html.push('<h3>Block Inspector</h3>');
 
-  // Block ID
   html.push('<div class="inspector-section">');
   html.push('<div class="inspector-label">Block ID</div>');
   html.push(`<div class="inspector-value">${escapeHtml(block.id)}</div>`);
   html.push('</div>');
 
-  // Block type
   html.push('<div class="inspector-section">');
   html.push('<div class="inspector-label">Type</div>');
   html.push(`<div class="inspector-value">${escapeHtml(block.type)}</div>`);
   html.push('</div>');
 
-  // Label (if present)
   if (block.label) {
     html.push('<div class="inspector-section">');
     html.push('<div class="inspector-label">Label</div>');
@@ -67,7 +78,6 @@ function showBlockInspector(block: Block) {
     html.push('</div>');
   }
 
-  // Params
   const params = Object.entries(block.params);
   if (params.length > 0) {
     html.push('<div class="inspector-section">');
@@ -105,20 +115,75 @@ function formatParamValue(value: any): string {
 }
 
 // =============================================================================
-// Patch Viewer Setup
+// Canvas Setup
 // =============================================================================
 
-const patchViewerEl = document.getElementById('patch-viewer')!;
-const patchViewer = new PatchViewer(patchViewerEl);
+function setupCanvas(container: HTMLElement): HTMLCanvasElement {
+  const canvasEl = document.createElement('canvas');
+  canvasEl.width = 800;
+  canvasEl.height = 600;
+  canvasEl.style.borderRadius = '4px';
+  canvasEl.style.cursor = 'grab';
+  container.appendChild(canvasEl);
 
-// Setup block click handler
-patchViewer.setOnBlockClick((block) => {
-  log(`Block clicked: ${block.id} (${block.type})`);
-  showBlockInspector(block);
-});
+  // Mouse wheel zoom
+  canvasEl.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const rect = canvasEl.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+    const newZoom = Math.max(0.1, Math.min(10, zoom * zoomFactor));
+
+    const dx = mouseX - canvasEl.width / 2;
+    const dy = mouseY - canvasEl.height / 2;
+    panX += dx * (1 - zoomFactor) / zoom;
+    panY += dy * (1 - zoomFactor) / zoom;
+
+    zoom = newZoom;
+  }, { passive: false });
+
+  // Mouse drag pan
+  canvasEl.addEventListener('mousedown', (e) => {
+    isDragging = true;
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+    canvasEl.style.cursor = 'grabbing';
+  });
+
+  canvasEl.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    const dx = e.clientX - lastMouseX;
+    const dy = e.clientY - lastMouseY;
+    panX += dx / zoom;
+    panY += dy / zoom;
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+  });
+
+  canvasEl.addEventListener('mouseup', () => {
+    isDragging = false;
+    canvasEl.style.cursor = 'grab';
+  });
+
+  canvasEl.addEventListener('mouseleave', () => {
+    isDragging = false;
+    canvasEl.style.cursor = 'grab';
+  });
+
+  // Double-click to reset view
+  canvasEl.addEventListener('dblclick', () => {
+    zoom = 1;
+    panX = 0;
+    panY = 0;
+  });
+
+  return canvasEl;
+}
 
 // =============================================================================
-// Build the Steel Thread Patch
+// Build and Compile
 // =============================================================================
 
 async function buildAndCompile(particleCount: number) {
@@ -131,129 +196,119 @@ async function buildAndCompile(particleCount: number) {
     // Domain: variable particle count
     const domain = b.addBlock('DomainN', { n: particleCount, seed: 42 });
 
-  // Per-element ID (normalized 0..1)
-  const id01 = b.addBlock('FieldFromDomainId', {});
+    // Per-element ID (normalized 0..1)
+    const id01 = b.addBlock('FieldFromDomainId', {});
 
-  // Fixed center
-  const centerX = b.addBlock('ConstFloat', { value: 0.5 });
-  const centerY = b.addBlock('ConstFloat', { value: 0.5 });
+    // Fixed center
+    const centerX = b.addBlock('ConstFloat', { value: 0.5 });
+    const centerY = b.addBlock('ConstFloat', { value: 0.5 });
 
-  // Per-element pulsing radius using FieldPulse
-  // Each particle pulses with a staggered phase based on its ID
-  const radiusBase = b.addBlock('ConstFloat', { value: 0.35 });
-  const radiusAmplitude = b.addBlock('ConstFloat', { value: 0.08 });
-  const radiusSpread = b.addBlock('ConstFloat', { value: 3.0 }); // 3 full waves across all particles
-  const radiusPulse = b.addBlock('FieldPulse', {});
+    // Per-element pulsing radius using FieldPulse
+    const radiusBase = b.addBlock('ConstFloat', { value: 0.35 });
+    const radiusAmplitude = b.addBlock('ConstFloat', { value: 0.08 });
+    const radiusSpread = b.addBlock('ConstFloat', { value: 3.0 });
+    const radiusPulse = b.addBlock('FieldPulse', {});
 
-  // Spin: 2 full rotations per cycle
-  const spin = b.addBlock('ConstFloat', { value: 2.0 });
+    // Spin: 2 full rotations per cycle
+    const spin = b.addBlock('ConstFloat', { value: 2.0 });
 
-  // Position from composable primitives
-  // Golden angle spread for nice particle distribution
-  const goldenAngle = b.addBlock('FieldGoldenAngle', { turns: 50 });
+    // Golden angle spread for nice particle distribution
+    const goldenAngle = b.addBlock('FieldGoldenAngle', { turns: 50 });
 
-  // Angular offset from phase (inner particles spin faster)
-  const angularOffset = b.addBlock('FieldAngularOffset', {});
+    // Angular offset from phase
+    const angularOffset = b.addBlock('FieldAngularOffset', {});
 
-  // Add base angle + offset for total angle
-  const totalAngle = b.addBlock('FieldAdd', {});
+    // Add base angle + offset for total angle
+    const totalAngle = b.addBlock('FieldAdd', {});
 
-  // Square root distribution for even area coverage
-  const effectiveRadius = b.addBlock('FieldRadiusSqrt', {});
+    // Square root distribution for even area coverage
+    const effectiveRadius = b.addBlock('FieldRadiusSqrt', {});
 
-  // Polar to cartesian conversion
-  const pos = b.addBlock('FieldPolarToCartesian', {});
+    // Polar to cartesian conversion
+    const pos = b.addBlock('FieldPolarToCartesian', {});
 
-  // Per-element jitter for organic feel
-  const jitterX = b.addBlock('ConstFloat', { value: 0.012 }); // Small X offset
-  const jitterY = b.addBlock('ConstFloat', { value: 0.012 }); // Small Y offset
-  const jitter = b.addBlock('FieldJitter2D', {});
+    // Per-element jitter for organic feel
+    const jitterX = b.addBlock('ConstFloat', { value: 0.012 });
+    const jitterY = b.addBlock('ConstFloat', { value: 0.012 });
+    const jitter = b.addBlock('FieldJitter2D', {});
 
-  // Color parameters - slightly desaturated for softer look
-  const sat = b.addBlock('ConstFloat', { value: 0.85 });
-  const val = b.addBlock('ConstFloat', { value: 0.9 });
+    // Color parameters
+    const sat = b.addBlock('ConstFloat', { value: 0.85 });
+    const val = b.addBlock('ConstFloat', { value: 0.9 });
 
-  // Rainbow color from composable primitives
-  const hue = b.addBlock('FieldHueFromPhase', {});
-  const color = b.addBlock('HsvToRgb', {});
+    // Rainbow color from composable primitives
+    const hue = b.addBlock('FieldHueFromPhase', {});
+    const color = b.addBlock('HsvToRgb', {});
 
-  // Size with pulsing animation - each particle grows/shrinks over time
-  const sizeBase = b.addBlock('ConstFloat', { value: 3 });
-  const sizeAmplitude = b.addBlock('ConstFloat', { value: 2 }); // How much to pulse (±2px)
-  const sizeSpread = b.addBlock('ConstFloat', { value: 1.0 }); // Phase spread across particles
-  const sizePulse = b.addBlock('FieldPulse', {});
+    // Size with pulsing animation
+    const sizeBase = b.addBlock('ConstFloat', { value: 3 });
+    const sizeAmplitude = b.addBlock('ConstFloat', { value: 2 });
+    const sizeSpread = b.addBlock('ConstFloat', { value: 1.0 });
+    const sizePulse = b.addBlock('FieldPulse', {});
 
-  // Render sink
-  const render = b.addBlock('RenderInstances2D', {});
+    // Render sink
+    const render = b.addBlock('RenderInstances2D', {});
 
-  // Wire domain
-  b.wire(domain, 'domain', id01, 'domain');
-  b.wire(domain, 'domain', render, 'domain');
+    // Wire domain
+    b.wire(domain, 'domain', id01, 'domain');
+    b.wire(domain, 'domain', render, 'domain');
 
-  // Wire time/phase
-  b.wire(time, 'phaseA', radiusPulse, 'phase');
-  b.wire(time, 'phaseA', angularOffset, 'phase');
-  b.wire(time, 'phaseA', hue, 'phase');
+    // Wire time/phase
+    b.wire(time, 'phaseA', radiusPulse, 'phase');
+    b.wire(time, 'phaseA', angularOffset, 'phase');
+    b.wire(time, 'phaseA', hue, 'phase');
 
-  // Wire per-element pulsing radius
-  b.wire(id01, 'id01', radiusPulse, 'id01');
-  b.wire(radiusBase, 'out', radiusPulse, 'base');
-  b.wire(radiusAmplitude, 'out', radiusPulse, 'amplitude');
-  b.wire(radiusSpread, 'out', radiusPulse, 'spread');
+    // Wire per-element pulsing radius
+    b.wire(id01, 'id01', radiusPulse, 'id01');
+    b.wire(radiusBase, 'out', radiusPulse, 'base');
+    b.wire(radiusAmplitude, 'out', radiusPulse, 'amplitude');
+    b.wire(radiusSpread, 'out', radiusPulse, 'spread');
 
-  // Wire id01
-  b.wire(id01, 'id01', goldenAngle, 'id01');
-  b.wire(id01, 'id01', angularOffset, 'id01');
-  b.wire(id01, 'id01', hue, 'id01');
-  b.wire(id01, 'id01', effectiveRadius, 'id01');
+    // Wire id01
+    b.wire(id01, 'id01', goldenAngle, 'id01');
+    b.wire(id01, 'id01', angularOffset, 'id01');
+    b.wire(id01, 'id01', hue, 'id01');
+    b.wire(id01, 'id01', effectiveRadius, 'id01');
 
-  // Wire spin to angular offset
-  b.wire(spin, 'out', angularOffset, 'spin');
+    // Wire spin to angular offset
+    b.wire(spin, 'out', angularOffset, 'spin');
 
-  // Wire golden angle + offset to total angle
-  b.wire(goldenAngle, 'angle', totalAngle, 'a');
-  b.wire(angularOffset, 'offset', totalAngle, 'b');
+    // Wire golden angle + offset to total angle
+    b.wire(goldenAngle, 'angle', totalAngle, 'a');
+    b.wire(angularOffset, 'offset', totalAngle, 'b');
 
-  // Wire position parameters - FIXED center
-  b.wire(centerX, 'out', pos, 'centerX');
-  b.wire(centerY, 'out', pos, 'centerY');
-  b.wire(radiusPulse, 'value', effectiveRadius, 'radius');
-  b.wire(totalAngle, 'out', pos, 'angle');
-  b.wire(effectiveRadius, 'radius', pos, 'radius');
+    // Wire position parameters
+    b.wire(centerX, 'out', pos, 'centerX');
+    b.wire(centerY, 'out', pos, 'centerY');
+    b.wire(radiusPulse, 'value', effectiveRadius, 'radius');
+    b.wire(totalAngle, 'out', pos, 'angle');
+    b.wire(effectiveRadius, 'radius', pos, 'radius');
 
-  // Wire jitter
-  b.wire(pos, 'pos', jitter, 'pos');
-  b.wire(domain, 'rand', jitter, 'rand');
-  b.wire(jitterX, 'out', jitter, 'amountX');
-  b.wire(jitterY, 'out', jitter, 'amountY');
+    // Wire jitter
+    b.wire(pos, 'pos', jitter, 'pos');
+    b.wire(domain, 'rand', jitter, 'rand');
+    b.wire(jitterX, 'out', jitter, 'amountX');
+    b.wire(jitterY, 'out', jitter, 'amountY');
 
-  // Wire hue and color parameters
-  b.wire(hue, 'hue', color, 'hue');
-  b.wire(sat, 'out', color, 'sat');
-  b.wire(val, 'out', color, 'val');
+    // Wire hue and color parameters
+    b.wire(hue, 'hue', color, 'hue');
+    b.wire(sat, 'out', color, 'sat');
+    b.wire(val, 'out', color, 'val');
 
-  // Wire size pulse: each particle pulses smoothly over time
-  b.wire(time, 'phaseA', sizePulse, 'phase');
-  b.wire(id01, 'id01', sizePulse, 'id01');
-  b.wire(sizeBase, 'out', sizePulse, 'base');
-  b.wire(sizeAmplitude, 'out', sizePulse, 'amplitude');
-  b.wire(sizeSpread, 'out', sizePulse, 'spread');
+    // Wire size pulse
+    b.wire(time, 'phaseA', sizePulse, 'phase');
+    b.wire(id01, 'id01', sizePulse, 'id01');
+    b.wire(sizeBase, 'out', sizePulse, 'base');
+    b.wire(sizeAmplitude, 'out', sizePulse, 'amplitude');
+    b.wire(sizeSpread, 'out', sizePulse, 'spread');
 
-  // Wire to render with pulsing per-particle size
-  b.wire(jitter, 'pos', render, 'pos');
-  b.wire(color, 'color', render, 'color');
-  b.wire(sizePulse, 'value', render, 'size');
+    // Wire to render
+    b.wire(jitter, 'pos', render, 'pos');
+    b.wire(color, 'color', render, 'color');
+    b.wire(sizePulse, 'value', render, 'size');
   });
 
   log(`Patch built: ${patch.blocks.size} blocks, ${patch.edges.length} edges`);
-
-  // Render patch visualization
-  try {
-    await patchViewer.render(patch);
-    log('Patch visualization rendered');
-  } catch (err) {
-    log(`Failed to render patch visualization: ${err}`, 'error');
-  }
 
   // Compile
   const result = compile(patch);
@@ -275,98 +330,12 @@ async function buildAndCompile(particleCount: number) {
 }
 
 // =============================================================================
-// Runtime Setup
-// =============================================================================
-
-const canvas = document.getElementById('canvas') as HTMLCanvasElement;
-const ctx = canvas.getContext('2d')!;
-const pool = new BufferPool();
-
-// =============================================================================
-// Zoom and Pan State
-// =============================================================================
-
-let zoom = 1;
-let panX = 0;
-let panY = 0;
-let isDragging = false;
-let lastMouseX = 0;
-let lastMouseY = 0;
-
-// Mouse wheel zoom
-canvas.addEventListener('wheel', (e) => {
-  e.preventDefault();
-  const rect = canvas.getBoundingClientRect();
-  const mouseX = e.clientX - rect.left;
-  const mouseY = e.clientY - rect.top;
-
-  // Zoom factor
-  const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-  const newZoom = Math.max(0.1, Math.min(10, zoom * zoomFactor));
-
-  // Adjust pan to zoom toward mouse position
-  const dx = mouseX - canvas.width / 2;
-  const dy = mouseY - canvas.height / 2;
-  panX += dx * (1 - zoomFactor) / zoom;
-  panY += dy * (1 - zoomFactor) / zoom;
-
-  zoom = newZoom;
-}, { passive: false });
-
-// Mouse drag pan
-canvas.addEventListener('mousedown', (e) => {
-  isDragging = true;
-  lastMouseX = e.clientX;
-  lastMouseY = e.clientY;
-  canvas.style.cursor = 'grabbing';
-});
-
-canvas.addEventListener('mousemove', (e) => {
-  if (!isDragging) return;
-  const dx = e.clientX - lastMouseX;
-  const dy = e.clientY - lastMouseY;
-  panX += dx / zoom;
-  panY += dy / zoom;
-  lastMouseX = e.clientX;
-  lastMouseY = e.clientY;
-});
-
-canvas.addEventListener('mouseup', () => {
-  isDragging = false;
-  canvas.style.cursor = 'grab';
-});
-
-canvas.addEventListener('mouseleave', () => {
-  isDragging = false;
-  canvas.style.cursor = 'grab';
-});
-
-// Set initial cursor
-canvas.style.cursor = 'grab';
-
-// Double-click to reset view
-canvas.addEventListener('dblclick', () => {
-  zoom = 1;
-  panX = 0;
-  panY = 0;
-});
-
-// Initial build with 5000 particles
-await buildAndCompile(5000);
-
-log('Runtime initialized');
-
-// =============================================================================
 // Animation Loop
 // =============================================================================
 
 let frameCount = 0;
 let lastFpsUpdate = performance.now();
 let fps = 0;
-let frameTime = 0;
-let lastFrameTime = 0;
-
-let totalFrameTime = 0;
 let execTime = 0;
 let renderTime = 0;
 let minFrameTime = Infinity;
@@ -374,6 +343,11 @@ let maxFrameTime = 0;
 let frameTimeSum = 0;
 
 function animate(tMs: number) {
+  if (!currentProgram || !currentState || !ctx || !canvas || !pool) {
+    requestAnimationFrame(animate);
+    return;
+  }
+
   try {
     const frameStart = performance.now();
 
@@ -393,10 +367,9 @@ function animate(tMs: number) {
     renderTime = performance.now() - renderStart;
 
     // Calculate frame time
-    totalFrameTime = performance.now() - frameStart;
-    frameTime = totalFrameTime;
+    const frameTime = performance.now() - frameStart;
 
-    // Track min/max for consistency
+    // Track min/max
     minFrameTime = Math.min(minFrameTime, frameTime);
     maxFrameTime = Math.max(maxFrameTime, frameTime);
     frameTimeSum += frameTime;
@@ -406,11 +379,9 @@ function animate(tMs: number) {
     const now = performance.now();
     if (now - lastFpsUpdate > 500) {
       fps = Math.round((frameCount * 1000) / (now - lastFpsUpdate));
-      // Calculate budget based on actual FPS
-      const budget = 1000 / fps;
-      const avgFrameTime = frameTimeSum / frameCount;
-      const headroom = Math.max(0, Math.round((budget - maxFrameTime) / budget * 100));
-      statsEl.textContent = `FPS: ${fps} | ${execTime.toFixed(1)}/${renderTime.toFixed(1)}ms | Min/Max: ${minFrameTime.toFixed(1)}/${maxFrameTime.toFixed(1)}ms`;
+      if (statsEl) {
+        statsEl.textContent = `FPS: ${fps} | ${execTime.toFixed(1)}/${renderTime.toFixed(1)}ms | Min/Max: ${minFrameTime.toFixed(1)}/${maxFrameTime.toFixed(1)}ms`;
+      }
       frameCount = 0;
       lastFpsUpdate = now;
       minFrameTime = Infinity;
@@ -418,7 +389,6 @@ function animate(tMs: number) {
       frameTimeSum = 0;
     }
 
-    // Continue animation
     requestAnimationFrame(animate);
   } catch (err) {
     log(`Runtime error: ${err}`, 'error');
@@ -426,20 +396,165 @@ function animate(tMs: number) {
   }
 }
 
-// Start animation
-log('Starting animation loop...');
-requestAnimationFrame(animate);
-
 // =============================================================================
-// Slider Control
+// UI Setup
 // =============================================================================
 
-const particleSlider = document.getElementById('particleSlider') as HTMLInputElement;
-const particleCountEl = document.getElementById('particleCount') as HTMLElement;
+async function setupUI() {
+  const appLayout = getAppLayout();
 
-particleSlider.addEventListener('input', async (e) => {
-  const count = parseInt((e.target as HTMLInputElement).value);
-  particleCountEl.textContent = count.toString();
-  await buildAndCompile(count);
-  log(`Particle count changed to ${count}`);
-});
+  try {
+    await appLayout.init();
+    log('UI framework initialized');
+  } catch (err) {
+    console.error('Failed to initialize UI framework:', err);
+    // Fall back to simple layout
+    setupFallbackUI();
+    return;
+  }
+
+  // Get stats element
+  statsEl = document.getElementById('stats');
+
+  // Setup left sidebar with tabs (Library + Inspector)
+  const leftRegion = appLayout.getRegionElement('left');
+  new TabbedContent(leftRegion, [
+    {
+      id: 'library',
+      label: 'Library',
+      contentFactory: (container) => {
+        container.innerHTML = '<div style="padding: 1rem; color: #888;">Block library (coming soon)</div>';
+      },
+    },
+    {
+      id: 'inspector',
+      label: 'Inspector',
+      contentFactory: (container) => {
+        inspectorEl = document.createElement('div');
+        inspectorEl.className = 'block-inspector';
+        container.appendChild(inspectorEl);
+      },
+    },
+  ], { initialTab: 'inspector' });
+
+  // Setup center panel with canvas (patch view will be reimplemented)
+  const centerRegion = appLayout.getRegionElement('center');
+  new TabbedContent(centerRegion, [
+    {
+      id: 'canvas',
+      label: 'Preview',
+      contentFactory: (container) => {
+        const canvasWrapper = document.createElement('div');
+        canvasWrapper.className = 'canvas-container';
+        canvas = setupCanvas(canvasWrapper);
+        ctx = canvas.getContext('2d')!;
+        container.appendChild(canvasWrapper);
+      },
+    },
+  ], { initialTab: 'canvas' });
+
+  // Setup right sidebar with tabs (Debug + Help)
+  const rightRegion = appLayout.getRegionElement('right');
+  new TabbedContent(rightRegion, [
+    {
+      id: 'debug',
+      label: 'Debug',
+      contentFactory: (container) => {
+        container.innerHTML = '<div style="padding: 1rem; color: #888;">Debug panel (coming soon)</div>';
+      },
+    },
+    {
+      id: 'help',
+      label: 'Help',
+      contentFactory: (container) => {
+        container.innerHTML = `
+          <div style="padding: 1rem; font-size: 0.875rem; color: #888;">
+            <h3 style="color: #4ecdc4; margin-bottom: 0.5rem;">Controls</h3>
+            <p><strong>Canvas:</strong></p>
+            <ul style="margin-left: 1rem; margin-top: 0.5rem;">
+              <li>Scroll to zoom</li>
+              <li>Click and drag to pan</li>
+              <li>Double-click to reset view</li>
+            </ul>
+            <p style="margin-top: 1rem;"><strong>Patch:</strong></p>
+            <ul style="margin-left: 1rem; margin-top: 0.5rem;">
+              <li>Click blocks to inspect</li>
+              <li>Scroll/drag to navigate</li>
+            </ul>
+          </div>
+        `;
+      },
+    },
+  ], { initialTab: 'debug' });
+
+  // Setup bottom log panel
+  const bottomRegion = appLayout.getRegionElement('bottom');
+  const logContainer = document.createElement('div');
+  logContainer.className = 'log-container';
+  logEl = logContainer;
+  bottomRegion.appendChild(logContainer);
+
+  log('Layout initialized');
+}
+
+/**
+ * Fallback UI if jsPanel fails to load.
+ */
+function setupFallbackUI() {
+  console.warn('Using fallback UI');
+
+  // Create simple containers
+  const centerRegion = document.getElementById('region-center');
+  const bottomRegion = document.getElementById('region-bottom');
+
+  if (centerRegion) {
+    const canvasWrapper = document.createElement('div');
+    canvasWrapper.className = 'canvas-container';
+    canvasWrapper.style.height = '100%';
+    canvas = setupCanvas(canvasWrapper);
+    ctx = canvas.getContext('2d')!;
+    centerRegion.appendChild(canvasWrapper);
+  }
+
+  if (bottomRegion) {
+    const logContainer = document.createElement('div');
+    logContainer.className = 'log-container';
+    logEl = logContainer;
+    bottomRegion.appendChild(logContainer);
+  }
+
+  statsEl = document.getElementById('stats');
+}
+
+// =============================================================================
+// Main Entry Point
+// =============================================================================
+
+async function main() {
+  try {
+    // Setup UI first
+    await setupUI();
+
+    // Initialize buffer pool
+    pool = new BufferPool();
+
+    // Build and compile with initial particle count
+    await buildAndCompile(5000);
+
+    log('Runtime initialized');
+
+    // Start animation loop
+    log('Starting animation loop...');
+    requestAnimationFrame(animate);
+
+  } catch (err) {
+    console.error('Failed to initialize application:', err);
+    const logContainer = document.getElementById('region-bottom');
+    if (logContainer) {
+      logContainer.innerHTML = `<div style="padding: 1rem; color: #ff6b6b;">Error: ${err}</div>`;
+    }
+  }
+}
+
+// Run main
+main();

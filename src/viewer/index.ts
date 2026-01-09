@@ -2,7 +2,8 @@
  * Patch Viewer
  *
  * Exports utilities for visualizing Patch graphs.
+ * TODO: Implement new patch viewer based on reference implementation
  */
 
-export { PatchViewer } from './PatchViewer';
-export { patchToMermaid } from './patch-to-mermaid';
+// Placeholder - will be reimplemented with new UI features
+export {};

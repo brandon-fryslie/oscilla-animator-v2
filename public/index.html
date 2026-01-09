@@ -3,105 +3,209 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Oscilla v2 - Steel Thread</title>
+  <title>Oscilla v2 - Editor</title>
   <style>
+    /* Reset and base */
     * {
       margin: 0;
       padding: 0;
       box-sizing: border-box;
     }
+
     body {
       background: #1a1a2e;
       color: #eee;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
+      height: 100vh;
       overflow: hidden;
     }
-    header {
-      padding: 1rem;
+
+    /* App container */
+    #app-container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Toolbar */
+    #toolbar {
+      flex-shrink: 0;
+      height: 48px;
       background: #16213e;
       border-bottom: 1px solid #0f3460;
-      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      padding: 0 1rem;
+      gap: 1rem;
     }
-    h1 {
-      font-size: 1.25rem;
+
+    #toolbar h1 {
+      font-size: 1rem;
       font-weight: 500;
+      color: #4ecdc4;
     }
-    main {
+
+    .toolbar-spacer {
       flex: 1;
-      display: flex;
-      gap: 1rem;
-      padding: 1rem;
-      min-height: 0;
-      overflow: hidden;
     }
-    /* Split view layout */
-    #split-container {
+
+    .toolbar-section {
       display: flex;
-      gap: 1rem;
-      width: 100%;
-      height: 100%;
-      min-height: 0;
-      overflow: hidden;
-    }
-    /* Left panel: Patch viewer (40%) */
-    #patch-viewer-panel {
-      flex: 0 0 40%;
-      display: flex;
-      flex-direction: column;
+      align-items: center;
       gap: 0.5rem;
-      min-width: 400px;
-      height: 100%;
-      overflow: hidden;
     }
-    #patch-viewer-container {
-      flex: 1 1 auto;
-      min-height: 200px;
-      background: #0f0f23;
-      border-radius: 8px;
-      padding: 1rem;
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-    }
-    #patch-viewer-container h2 {
-      font-size: 0.875rem;
+
+    .toolbar-btn {
+      padding: 6px 12px;
+      background: transparent;
+      border: 1px solid #0f3460;
+      border-radius: 4px;
       color: #888;
-      margin-bottom: 0.5rem;
-      flex-shrink: 0;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: all 0.15s;
     }
-    #patch-viewer {
+
+    .toolbar-btn:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: #eee;
+      border-color: #4ecdc4;
+    }
+
+    /* Main workspace */
+    #workspace {
       flex: 1;
+      display: flex;
       min-height: 0;
       overflow: hidden;
     }
-    /* Block inspector - fixed height at bottom */
-    #block-inspector {
-      flex: 0 0 180px;
-      background: #16213e;
-      border-radius: 8px;
+
+    /* Layout regions */
+    .panel-region {
+      position: relative;
+      overflow: hidden;
+    }
+
+    #region-left {
+      flex: 0 0 280px;
+      min-width: 200px;
+      max-width: 500px;
+      border-right: 1px solid #0f3460;
+    }
+
+    #region-center {
+      flex: 1;
+      min-width: 400px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #region-right {
+      flex: 0 0 300px;
+      min-width: 200px;
+      max-width: 500px;
+      border-left: 1px solid #0f3460;
+    }
+
+    /* Bottom region */
+    #region-bottom {
+      flex: 0 0 150px;
+      min-height: 80px;
+      max-height: 400px;
+      border-top: 1px solid #0f3460;
+      background: #0f0f23;
+    }
+
+    /* Stats in toolbar */
+    #stats {
+      font-family: 'SF Mono', Monaco, Consolas, monospace;
+      font-size: 0.75rem;
+      color: #888;
+      padding: 4px 8px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 4px;
+    }
+
+    /* Panel content styles */
+    .panel-content {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Log styles */
+    .log-container {
+      padding: 0.75rem;
+      font-family: 'SF Mono', Monaco, Consolas, monospace;
+      font-size: 0.75rem;
+      line-height: 1.4;
+      height: 100%;
+      overflow-y: auto;
+    }
+
+    .log-error {
+      color: #ff6b6b;
+    }
+
+    .log-info {
+      color: #4ecdc4;
+    }
+
+    .log-warn {
+      color: #ffd93d;
+    }
+
+    /* Canvas container */
+    .canvas-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0f0f23;
+      min-height: 300px;
+      overflow: hidden;
+    }
+
+    canvas {
+      border-radius: 4px;
+    }
+
+    /* Patch viewer */
+    .patch-viewer-container {
+      flex: 1;
+      overflow: hidden;
+      background: #0f0f23;
+      padding: 0.5rem;
+    }
+
+    /* Block inspector */
+    .block-inspector {
       padding: 0.75rem;
       overflow-y: auto;
-      border: 1px solid #0f3460;
     }
-    #block-inspector:empty::before {
+
+    .block-inspector:empty::before {
       content: 'Click a block to inspect';
       color: #666;
       font-style: italic;
     }
-    #block-inspector h3 {
+
+    .block-inspector h3 {
       font-size: 0.875rem;
       color: #4ecdc4;
       margin-bottom: 0.75rem;
     }
+
     .inspector-section {
       margin-bottom: 1rem;
     }
+
     .inspector-section:last-child {
       margin-bottom: 0;
     }
+
     .inspector-label {
       font-size: 0.75rem;
       color: #888;
@@ -109,12 +213,14 @@
       letter-spacing: 0.5px;
       margin-bottom: 0.25rem;
     }
+
     .inspector-value {
       font-family: 'SF Mono', Monaco, Consolas, monospace;
       font-size: 0.875rem;
       color: #eee;
       margin-bottom: 0.5rem;
     }
+
     .inspector-params {
       display: grid;
       grid-template-columns: auto 1fr;
@@ -122,110 +228,46 @@
       font-family: 'SF Mono', Monaco, Consolas, monospace;
       font-size: 0.75rem;
     }
+
     .param-key {
       color: #4ecdc4;
       text-align: right;
     }
+
     .param-value {
       color: #eee;
     }
-    /* Right panel: Animation (60%) */
-    #animation-panel {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-      min-width: 0;
+
+    /* jsPanel overrides for our theme */
+    .jsPanel {
+      box-shadow: none !important;
     }
-    #canvas-container {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #0f0f23;
-      border-radius: 8px;
-      min-height: 400px;
+
+    .jsPanel-content {
+      background: #0f0f23 !important;
+      overflow: hidden !important;
     }
-    canvas {
-      border-radius: 4px;
+
+    .jsPanel-hdr {
+      background: #16213e !important;
+      border-bottom: 1px solid #0f3460 !important;
     }
-    #log-container {
-      background: #0f0f23;
-      border-radius: 8px;
-      padding: 1rem;
-      max-height: 150px;
-      overflow-y: auto;
-      flex-shrink: 0;
+
+    .jsPanel-titlebar {
+      color: #eee !important;
+      font-size: 0.75rem !important;
     }
-    #log-container h2 {
-      font-size: 0.875rem;
-      color: #888;
-      margin-bottom: 0.5rem;
+
+    /* Hide jsPanel controls - we removed them in config but this ensures it */
+    .jsPanel-controlbar {
+      display: none !important;
     }
-    #log {
-      font-family: 'SF Mono', Monaco, Consolas, monospace;
-      font-size: 0.75rem;
-      line-height: 1.4;
-      white-space: pre-wrap;
-    }
-    .log-error {
-      color: #ff6b6b;
-    }
-    .log-info {
-      color: #4ecdc4;
-    }
-    .log-warn {
-      color: #ffd93d;
-    }
-    #stats {
-      position: fixed;
-      top: 1rem;
-      right: 1rem;
-      background: rgba(15, 15, 35, 0.9);
-      padding: 0.5rem 1rem;
-      border-radius: 4px;
-      font-family: 'SF Mono', Monaco, Consolas, monospace;
-      font-size: 0.75rem;
-      z-index: 100;
-    }
-    #controls {
-      position: fixed;
-      bottom: 1rem;
-      left: 1rem;
-      background: rgba(15, 15, 35, 0.95);
-      padding: 1rem;
-      border-radius: 8px;
-      border: 1px solid #0f3460;
-      min-width: 280px;
-      z-index: 100;
-    }
-    .control-group {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      font-size: 0.875rem;
-    }
-    .control-group label {
-      flex-shrink: 0;
-      min-width: 60px;
-      color: #888;
-    }
-    #particleSlider {
-      flex: 1;
-      cursor: pointer;
-    }
-    #particleCount {
-      min-width: 50px;
-      text-align: right;
-      color: #4ecdc4;
-      font-family: 'SF Mono', Monaco, Consolas, monospace;
-      font-size: 0.875rem;
-      font-weight: 500;
-    }
+
     /* Mermaid diagram styling */
     .mermaid-container {
       min-width: max-content;
     }
+
     .mermaid-container svg {
       max-width: 100%;
       height: auto;
@@ -233,40 +275,30 @@
   </style>
 </head>
 <body>
-  <header>
-    <h1>Oscilla v2 - Steel Thread: Animated Particles</h1>
-  </header>
-  <main>
-    <div id="split-container">
-      <!-- Left panel: Patch viewer -->
-      <div id="patch-viewer-panel">
-        <div id="patch-viewer-container">
-          <h2>Patch Graph</h2>
-          <div id="patch-viewer"></div>
-        </div>
-        <div id="block-inspector"></div>
+  <div id="app-container">
+    <!-- Toolbar -->
+    <header id="toolbar">
+      <h1>Oscilla v2</h1>
+      <div class="toolbar-spacer"></div>
+      <div id="stats">FPS: --</div>
+      <div class="toolbar-section">
+        <button class="toolbar-btn">New</button>
+        <button class="toolbar-btn">Open</button>
+        <button class="toolbar-btn">Save</button>
       </div>
+    </header>
 
-      <!-- Right panel: Animation -->
-      <div id="animation-panel">
-        <div id="canvas-container">
-          <canvas id="canvas" width="800" height="600"></canvas>
-        </div>
-        <div id="log-container">
-          <h2>Log</h2>
-          <div id="log"></div>
-        </div>
-      </div>
-    </div>
-  </main>
-  <div id="stats">FPS: --</div>
-  <div id="controls">
-    <div class="control-group">
-      <label>Particles:</label>
-      <input type="range" id="particleSlider" min="100" max="30000" value="5000" step="100">
-      <span id="particleCount">5000</span>
-    </div>
+    <!-- Main workspace -->
+    <main id="workspace">
+      <div id="region-left" class="panel-region"></div>
+      <div id="region-center" class="panel-region"></div>
+      <div id="region-right" class="panel-region"></div>
+    </main>
+
+    <!-- Bottom region (log) -->
+    <div id="region-bottom" class="panel-region"></div>
   </div>
+
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
