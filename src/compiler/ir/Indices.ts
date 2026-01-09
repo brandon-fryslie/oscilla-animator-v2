@@ -15,8 +15,6 @@ export type NodeIndex = number & { readonly __brand: 'NodeIndex' };
 /** Dense index for ports within a node. */
 export type PortIndex = number & { readonly __brand: 'PortIndex' };
 
-/** Dense index for buses in the BusTable. */
-export type BusIndex = number & { readonly __brand: 'BusIndex' };
 
 /** Dense index for value slots in the ValueStore. */
 export type ValueSlot = number & { readonly __brand: 'ValueSlot' };
@@ -46,8 +44,6 @@ export type TransformChainId = number & { readonly __brand: 'TransformChainId' }
 /** Stable string ID for nodes. */
 export type NodeId = string & { readonly __brand: 'NodeId' };
 
-/** Stable string ID for buses. */
-export type BusId = string & { readonly __brand: 'BusId' };
 
 /** Stable string ID for schedule steps. */
 export type StepId = string & { readonly __brand: 'StepId' };
@@ -76,9 +72,6 @@ export function portIndex(n: number): PortIndex {
   return n as PortIndex;
 }
 
-export function busIndex(n: number): BusIndex {
-  return n as BusIndex;
-}
 
 export function valueSlot(n: number): ValueSlot {
   return n as ValueSlot;
@@ -108,9 +101,6 @@ export function nodeId(s: string): NodeId {
   return s as NodeId;
 }
 
-export function busId(s: string): BusId {
-  return s as BusId;
-}
 
 export function stepId(s: string): StepId {
   return s as StepId;

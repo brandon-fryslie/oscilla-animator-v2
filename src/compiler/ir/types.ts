@@ -25,7 +25,6 @@ type StateSlotId = _StateSlotId;
 export type {
   NodeIndex,
   PortIndex,
-  BusIndex,
   ValueSlot,
   StateSlotId,
   StepIndex,
@@ -34,7 +33,6 @@ export type {
   EventExprId,
   TransformChainId,
   NodeId,
-  BusId,
   StepId,
   ExprId,
   StateId,
@@ -45,7 +43,6 @@ export type {
 export {
   nodeIndex,
   portIndex,
-  busIndex,
   valueSlot,
   stateSlotId,
   stepIndex,
@@ -53,7 +50,6 @@ export {
   fieldExprId,
   eventExprId,
   nodeId,
-  busId,
   stepId,
   exprId,
   stateId,

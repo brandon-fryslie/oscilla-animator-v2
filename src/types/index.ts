@@ -1,7 +1,7 @@
 /**
  * Core type definitions for Oscilla v2
  *
- * This module consolidates all types from core/types.ts and compiler/ir/Indices.ts.
+ * This module consolidates all types from core/canonical-types.ts and compiler/ir/Indices.ts.
  * It provides a single import point for common types.
  */
 
@@ -9,32 +9,62 @@
 export type { Block, Edge, Endpoint, Patch, PortRef, BlockType } from '../graph/Patch';
 
 // =============================================================================
-// Core Type System (from core/types.ts)
+// Core Type System (from core/canonical-types.ts)
 // =============================================================================
 
-// Re-export ALL type definitions from core
+// Re-export canonical type system
 export type {
-  TypeWorld,
-  Domain,
-  TypeCategory,
-  TypeDesc,
-  CoreDomain,
-  InternalDomain,
-} from '../core/types';
+  SignalType,
+  PayloadType,
+  Cardinality,
+  Temporality,
+  Binding,
+  Extent,
+  DomainId,
+  DomainRef,
+  DomainDecl,
+  DomainShape,
+  PerspectiveId,
+  BranchId,
+  ReferentId,
+  ReferentRef,
+  AxisTag,
+} from '../core/canonical-types';
 
 export {
-  createTypeDesc,
-  getTypeArity,
-  inferBundleLanes,
-  sigType,
-  fieldType,
-  scalarType,
-  eventType,
-} from '../core/types';
-
-// Create local aliases for World (since core/types uses TypeWorld)
-import type { TypeWorld as CoreTypeWorld, Domain as CoreDomain } from '../core/types';
-export type World = CoreTypeWorld;
+  signalType,
+  signalTypeSignal,
+  signalTypeField,
+  signalTypeTrigger,
+  signalTypeStatic,
+  signalTypePerLaneEvent,
+  axisDefault,
+  axisInstantiated,
+  isInstantiated,
+  getAxisValue,
+  cardinalityZero,
+  cardinalityOne,
+  cardinalityMany,
+  temporalityContinuous,
+  temporalityDiscrete,
+  bindingUnbound,
+  bindingWeak,
+  bindingStrong,
+  bindingIdentity,
+  domainRef,
+  referentRef,
+  extent,
+  extentDefault,
+  unifyAxis,
+  unifyExtent,
+  worldToAxes,
+  domainDeclFixedCount,
+  domainDeclGrid2d,
+  domainDeclVoices,
+  domainDeclMeshVertices,
+  DEFAULTS_V0,
+  FRAME_V0,
+} from '../core/canonical-types';
 
 // =============================================================================
 // Branded IDs (from compiler/ir/Indices.ts)
@@ -43,7 +73,6 @@ export type World = CoreTypeWorld;
 export type {
   NodeIndex,
   PortIndex,
-  BusIndex,
   ValueSlot,
   StepIndex,
   SigExprId,
@@ -51,25 +80,21 @@ export type {
   EventExprId,
   TransformChainId,
   NodeId,
-  BusId,
   StepId,
   ExprId,
   StateId,
-  DomainId,
   SlotId,
 } from '../compiler/ir/Indices';
 
 export {
   nodeIndex,
   portIndex,
-  busIndex,
   valueSlot,
   stepIndex,
   sigExprId,
   fieldExprId,
   eventExprId,
   nodeId,
-  busId,
   stepId,
   exprId,
   stateId,
@@ -99,9 +124,14 @@ export function portId(s: string): PortId {
 // Type Compatibility (Simple version for toy compiler)
 // =============================================================================
 
+import type { SignalType } from '../core/canonical-types';
+
 /**
  * Check if source type can connect to target type.
  * Returns the conversion needed, or null if incompatible.
+ *
+ * NOTE: This is a legacy function. New code should use the canonical type system
+ * unification and compatibility functions from canonical-types.ts.
  */
 export function getConversion(
   source: { world: string; domain: string },
@@ -163,14 +193,12 @@ export type CombineMode =
 // Transform System Types
 // =============================================================================
 
-import type { TypeDesc } from '../core/types';
-
 export type TransformStep = AdapterStep | LensStep;
 
 export interface AdapterStep {
   readonly kind: 'adapter';
-  readonly from: TypeDesc;
-  readonly to: TypeDesc;
+  readonly from: SignalType;
+  readonly to: SignalType;
   readonly adapter: string;
   readonly adapterId?: string;
   readonly params?: Record<string, unknown>;
@@ -201,7 +229,7 @@ export type SlotDirection = 'input' | 'output';
 export interface Slot {
   readonly id: string;
   readonly label: string;
-  readonly type: TypeDesc;
+  readonly type: SignalType;
   readonly direction: SlotDirection;
   readonly optional?: boolean;
   readonly defaultValue?: unknown;
@@ -232,7 +260,6 @@ export type UIControlHint =
 
 // Import types used in role definitions
 import type { PortRef } from '../graph/Patch';
-import type { BusId } from '../compiler/ir/Indices';
 
 /**
  * Wire identifier (for wireState targeting).
@@ -261,12 +288,11 @@ export type BlockRole =
 
 /**
  * Metadata for derived blocks specifying their purpose.
+ * Note: bus/rail variants removed - buses are now regular blocks.
  */
 export type DerivedBlockMeta =
   | { readonly kind: "defaultSource"; readonly target: { readonly kind: "port"; readonly port: PortRef } }
   | { readonly kind: "wireState";     readonly target: { readonly kind: "wire"; readonly wire: WireId } }
-  | { readonly kind: "bus";           readonly target: { readonly kind: "bus"; readonly busId: BusId } }
-  | { readonly kind: "rail";          readonly target: { readonly kind: "bus"; readonly busId: BusId } }
   | { readonly kind: "lens";          readonly target: { readonly kind: "node"; readonly node: NodeRef } };
 
 // =============================================================================
@@ -275,11 +301,11 @@ export type DerivedBlockMeta =
 
 /**
  * Every edge has an explicit role declaration.
+ * Note: busTap variant removed - buses are now regular blocks.
  */
 export type EdgeRole =
   | { readonly kind: "user" }
   | { readonly kind: "default"; readonly meta: { readonly defaultSourceBlockId: BlockId } }
-  | { readonly kind: "busTap";  readonly meta: { readonly busId: BusId } }
   | { readonly kind: "auto";    readonly meta: { readonly reason: "portMoved" | "rehydrate" | "migrate" } };
 
 // =============================================================================
