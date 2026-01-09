@@ -9,6 +9,7 @@
 
 // Import the legacy types for now (will be replaced with proper execution node types)
 import type { SigExpr, FieldExpr, EventExpr } from './types';
+import type { SignalType } from '../../core/canonical-types';
 
 // =============================================================================
 // Version and Core Types
@@ -134,22 +135,29 @@ export interface SlotMetaEntry {
    */
   readonly offset: number;
 
-  /** REQUIRED: logical type including axes */
-  readonly type: TypeDesc;
+  /**
+   * REQUIRED: Canonical type (5-axis SignalType).
+   * This is the compiler-authoritative type including all semantic axes.
+   * Runtime uses this for type assertions and validation in debug mode.
+   */
+  readonly type: SignalType;
 
   /** Optional debug label */
   readonly debugName?: string;
 }
 
 // =============================================================================
-// Type System
+// Type System (IR Format)
 // =============================================================================
 
 /**
- * TypeDesc - Complete Type Descriptor
+ * TypeDesc - Complete Type Descriptor (IR Format)
  *
- * The single logical type descriptor used everywhere (debug, validation, tooling).
+ * The IR type descriptor used for serialization and tooling.
  * Axes are REQUIRED and are the compiler-authoritative semantic classification.
+ *
+ * Note: SlotMetaEntry.type uses SignalType directly, not this IR format.
+ * This TypeDesc is for serialized IR and debug information.
  */
 export interface TypeDesc {
   readonly axes: AxesDescIR;
