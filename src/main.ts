@@ -9,6 +9,7 @@ import { compile } from './compiler';
 import { createRuntimeState, BufferPool, executeFrame } from './runtime';
 import { renderFrame } from './render';
 import { PatchViewer } from './viewer';
+import type { Block } from './graph/Patch';
 
 // =============================================================================
 // Logging
@@ -35,11 +36,86 @@ let currentState = null as any;
 let currentPatch = null as any;
 
 // =============================================================================
+// Block Inspector
+// =============================================================================
+
+const inspectorEl = document.getElementById('block-inspector')!;
+const inspectorContentEl = document.getElementById('inspector-content')!;
+
+function showBlockInspector(block: Block) {
+  // Build inspector HTML
+  const html: string[] = [];
+
+  // Block ID
+  html.push('<div class="inspector-section">');
+  html.push('<div class="inspector-label">Block ID</div>');
+  html.push(`<div class="inspector-value">${escapeHtml(block.id)}</div>`);
+  html.push('</div>');
+
+  // Block type
+  html.push('<div class="inspector-section">');
+  html.push('<div class="inspector-label">Type</div>');
+  html.push(`<div class="inspector-value">${escapeHtml(block.type)}</div>`);
+  html.push('</div>');
+
+  // Label (if present)
+  if (block.label) {
+    html.push('<div class="inspector-section">');
+    html.push('<div class="inspector-label">Label</div>');
+    html.push(`<div class="inspector-value">${escapeHtml(block.label)}</div>`);
+    html.push('</div>');
+  }
+
+  // Params
+  const params = Object.entries(block.params);
+  if (params.length > 0) {
+    html.push('<div class="inspector-section">');
+    html.push('<div class="inspector-label">Parameters</div>');
+    html.push('<div class="inspector-params">');
+    for (const [key, value] of params) {
+      html.push(`<div class="param-key">${escapeHtml(key)}:</div>`);
+      html.push(`<div class="param-value">${formatParamValue(value)}</div>`);
+    }
+    html.push('</div>');
+    html.push('</div>');
+  }
+
+  inspectorContentEl.innerHTML = html.join('');
+  inspectorEl.classList.add('visible');
+}
+
+function escapeHtml(text: string): string {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function formatParamValue(value: any): string {
+  if (typeof value === 'string') {
+    return escapeHtml(`"${value}"`);
+  } else if (typeof value === 'number') {
+    return Number.isInteger(value) ? value.toString() : value.toFixed(3);
+  } else if (typeof value === 'boolean') {
+    return value.toString();
+  } else if (value === null || value === undefined) {
+    return 'null';
+  } else {
+    return escapeHtml(JSON.stringify(value));
+  }
+}
+
+// =============================================================================
 // Patch Viewer Setup
 // =============================================================================
 
 const patchViewerEl = document.getElementById('patch-viewer')!;
 const patchViewer = new PatchViewer(patchViewerEl);
+
+// Setup block click handler
+patchViewer.setOnBlockClick((block) => {
+  log(`Block clicked: ${block.id} (${block.type})`);
+  showBlockInspector(block);
+});
 
 // =============================================================================
 // Build the Steel Thread Patch

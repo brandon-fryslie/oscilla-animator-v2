@@ -57,18 +57,71 @@
       background: #0f0f23;
       border-radius: 8px;
       padding: 1rem;
-      overflow-y: auto;
-      overflow-x: auto;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
     }
     #patch-viewer-container h2 {
       font-size: 0.875rem;
       color: #888;
       margin-bottom: 1rem;
-      position: sticky;
-      top: 0;
-      background: #0f0f23;
-      padding-bottom: 0.5rem;
-      z-index: 1;
+      flex-shrink: 0;
+    }
+    #patch-viewer {
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
+    /* Block inspector */
+    #block-inspector {
+      background: #16213e;
+      border-radius: 8px;
+      padding: 1rem;
+      max-height: 300px;
+      overflow-y: auto;
+      border: 1px solid #0f3460;
+      display: none;
+    }
+    #block-inspector.visible {
+      display: block;
+    }
+    #block-inspector h3 {
+      font-size: 0.875rem;
+      color: #4ecdc4;
+      margin-bottom: 0.75rem;
+    }
+    .inspector-section {
+      margin-bottom: 1rem;
+    }
+    .inspector-section:last-child {
+      margin-bottom: 0;
+    }
+    .inspector-label {
+      font-size: 0.75rem;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 0.25rem;
+    }
+    .inspector-value {
+      font-family: 'SF Mono', Monaco, Consolas, monospace;
+      font-size: 0.875rem;
+      color: #eee;
+      margin-bottom: 0.5rem;
+    }
+    .inspector-params {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.5rem 1rem;
+      font-family: 'SF Mono', Monaco, Consolas, monospace;
+      font-size: 0.75rem;
+    }
+    .param-key {
+      color: #4ecdc4;
+      text-align: right;
+    }
+    .param-value {
+      color: #eee;
     }
     /* Right panel: Animation (60%) */
     #animation-panel {
@@ -184,6 +237,10 @@
         <div id="patch-viewer-container">
           <h2>Patch Graph</h2>
           <div id="patch-viewer"></div>
+        </div>
+        <div id="block-inspector">
+          <h3>Block Inspector</h3>
+          <div id="inspector-content"></div>
         </div>
       </div>
 

@@ -19,43 +19,15 @@ function escapeLabel(text: string): string {
 }
 
 /**
- * Format a block's information as a multi-line label.
+ * Format a block's information as a compact label.
+ * Just show type and short ID.
  */
 function formatBlockLabel(block: Block): string {
-  const lines: string[] = [];
+  // Extract short ID (last part after underscore, or full ID if no underscore)
+  const shortId = block.id.includes('_') ? block.id.split('_').pop() : block.id;
 
-  // Type (prominent)
-  lines.push(`<b>${escapeLabel(block.type)}</b>`);
-
-  // Label if present
-  if (block.label) {
-    lines.push(`<i>${escapeLabel(block.label)}</i>`);
-  }
-
-  // Params (show key: value)
-  const params = Object.entries(block.params);
-  if (params.length > 0) {
-    lines.push('---');
-    for (const [key, value] of params) {
-      // Format value based on type
-      let valueStr: string;
-      if (typeof value === 'string') {
-        valueStr = `"${escapeLabel(value)}"`;
-      } else if (typeof value === 'number') {
-        // Format numbers nicely
-        valueStr = Number.isInteger(value) ? value.toString() : value.toFixed(2);
-      } else if (typeof value === 'boolean') {
-        valueStr = value.toString();
-      } else if (value === null || value === undefined) {
-        valueStr = 'null';
-      } else {
-        valueStr = JSON.stringify(value);
-      }
-      lines.push(`${escapeLabel(key)}: ${valueStr}`);
-    }
-  }
-
-  return lines.join('<br/>');
+  // Just type name and short ID
+  return `<b>${escapeLabel(block.type)}</b><br/>${escapeLabel(shortId!)}`;
 }
 
 /**
@@ -83,7 +55,7 @@ export function patchToMermaid(patch: Patch): string {
   for (const block of patch.blocks.values()) {
     const nodeId = sanitizeNodeId(block.id);
     const label = formatBlockLabel(block);
-    // Use rectangular nodes with rich HTML labels
+    // Use rectangular nodes with compact HTML labels
     lines.push(`  ${nodeId}["${label}"]`);
   }
 
@@ -102,10 +74,10 @@ export function patchToMermaid(patch: Patch): string {
     const fromId = sanitizeNodeId(edge.from.blockId);
     const toId = sanitizeNodeId(edge.to.blockId);
 
-    // Format edge label showing port connection
+    // Compact edge label - just the port names
     const fromPort = escapeLabel(edge.from.slotId);
     const toPort = escapeLabel(edge.to.slotId);
-    const edgeLabel = `${fromPort} → ${toPort}`;
+    const edgeLabel = `${fromPort}→${toPort}`;
 
     // Draw edge with label
     lines.push(`  ${fromId} -->|"${edgeLabel}"| ${toId}`);
