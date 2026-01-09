@@ -1,0 +1,45 @@
+Agent: iterative-implementer | 2026-01-09-093640
+Mode: manual
+Completed: Unify AxesDescIR with ResolvedExtent | Files: 6 | Commits: 1
+Tests: 123 passing, 0 failing
+Cache invalidated: N/A (no eval-cache exists)
+Status: complete
+
+Summary:
+Successfully replaced duplicate AxesDescIR type with canonical ResolvedExtent.
+All IR types now use canonical vocabulary (cardinality, temporality, binding).
+Single source of truth established in canonical-types.ts.
+
+Implementation:
+1. Added ResolvedExtent interface to canonical-types.ts (lines 359-378)
+2. Added resolveExtent() function for default resolution
+3. Deleted AxesDescIR from program.ts (removed ~50 lines of duplicate code)
+4. Updated TypeDesc.axes to use ResolvedExtent
+5. Simplified bridge.ts to use resolveExtent directly
+6. Updated bridges.ts to return canonical types
+7. Updated all tests to check canonical field names (cardinality, binding)
+
+Verification:
+- npm run typecheck: PASS
+- npm run test: 123 tests PASS (0 failures)
+- npm run build: PASS
+- grep for AxesDescIR type definition: 0 matches (SUCCESS)
+
+Vocabulary Mapping Applied:
+- Old: domain = 'signal'/'field'/'value' → New: cardinality.kind = 'one'/'many'/'zero'
+- Old: identity → New: binding (with referent structure preserved)
+- temporality, perspective, branch: unchanged (direct mapping)
+
+Files Modified:
+- src/core/canonical-types.ts (+33 lines)
+- src/compiler/ir/program.ts (-68 lines, removed duplicate)
+- src/compiler/ir/bridge.ts (-100 lines, simplified)
+- src/compiler/ir/bridges.ts (updated to use ResolvedExtent)
+- src/compiler/ir/__tests__/bridges.test.ts (updated expectations)
+
+Commit: 0b27621 "refactor(types): unify IR types with canonical ResolvedExtent"
+
+Next Steps:
+- TypeDesc now uses canonical ResolvedExtent
+- All bridge functions simplified
+- Ready for downstream consumers to use canonical vocabulary
