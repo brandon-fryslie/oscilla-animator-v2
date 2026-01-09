@@ -1,10 +1,13 @@
 /**
  * Compiler Passes - Public API
  *
- * Canonical compilation pipeline.
- * Sprint 1: Passes 1-5 (normalization, types, time, deps, SCC)
- * Sprint 2: Passes 6-8 (block lowering, link resolution)
- * Sprint 3: Passes 9-11 (render lowering, constants, debug index)
+ * Compilation pipeline:
+ * - Pass 2: Type Graph (type resolution)
+ * - Pass 3: Time Topology (time model)
+ * - Pass 4: Dependency Graph
+ * - Pass 5: SCC Validation (cycle check)
+ * - Pass 6: Block Lowering
+ * - Pass 8: Link Resolution
  */
 
 // Pass 2: Type Graph
@@ -28,10 +31,6 @@ export type { AcyclicOrLegalGraph } from "../ir/patches";
 export { pass6BlockLowering } from "./pass6-block-lowering";
 export type { UnlinkedIRFragments, ValueRefPacked } from "./pass6-block-lowering";
 
+// Pass 8: Link Resolution
 export { pass8LinkResolution } from "./pass8-link-resolution";
 export type { LinkedGraphIR, BlockInputRootIR, BlockOutputRootIR } from "./pass8-link-resolution";
-
-// Pass 9: Codegen
-// TODO: Re-enable when pass9-codegen type issues are fixed
-// Currently using buildSchedule.ts directly in the IR pipeline
-// export { pass9Codegen } from "./pass9-codegen";
