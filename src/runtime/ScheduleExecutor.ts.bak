@@ -1,0 +1,286 @@
+/**
+ * Schedule Executor - Core Frame Execution Loop
+ *
+ * Executes the IR program schedule step-by-step to produce a frame.
+ * Simplified for v2 - pure IR path, no legacy complexity.
+ */
+
+import type { IRProgram, Step, SigExpr } from '../compiler/ir/types';
+import type { RuntimeState } from './RuntimeState';
+import type { BufferPool } from './BufferPool';
+import { resolveTime } from './timeResolution';
+import { materialize } from './Materializer';
+
+/**
+ * RenderFrameIR - Output from frame execution
+ *
+ * Contains all render passes for the frame.
+ */
+export interface RenderFrameIR {
+  version: 1;
+  passes: RenderPassIR[];
+}
+
+/**
+ * RenderPassIR - Single render pass
+ */
+export interface RenderPassIR {
+  kind: 'instances2d';
+  count: number;
+  position: ArrayBufferView;
+  color: ArrayBufferView;
+  size: number;
+}
+
+/**
+ * Execute one frame of the program
+ *
+ * @param program - Compiled IR program
+ * @param state - Runtime state
+ * @param pool - Buffer pool
+ * @param tAbsMs - Absolute time in milliseconds
+ * @returns RenderFrameIR for this frame
+ */
+export function executeFrame(
+  program: IRProgram,
+  state: RuntimeState,
+  pool: BufferPool,
+  tAbsMs: number
+): RenderFrameIR {
+  // 1. Advance frame
+  state.frameId++;
+  state.cache.frameId++;
+
+  // 2. Resolve effective time
+  const time = resolveTime(tAbsMs, program.timeModel, state.timeState);
+  state.time = time;
+
+  // 3. Execute schedule steps
+  const passes: RenderPassIR[] = [];
+
+  for (const step of program.steps) {
+    switch (step.kind) {
+      case 'evalSig': {
+        // Evaluate signal and store in slot
+        const value = evaluateSignal(step.expr, program, state);
+        state.values.f64[step.target as number] = value;
+
+        // Cache the result
+        state.cache.sigValues[step.expr as number] = value;
+        state.cache.sigStamps[step.expr as number] = state.cache.frameId;
+        break;
+      }
+
+      case 'materialize': {
+        // Materialize field to buffer and store in slot
+        const buffer = materialize(
+          step.field,
+          step.domain,
+          program.fields,
+          program.domains,
+          state,
+          pool
+        );
+        state.values.objects.set(step.target, buffer);
+        break;
+      }
+
+      case 'render': {
+        // Assemble render pass
+        const domain = program.domains.get(step.domain);
+        if (!domain) {
+          throw new Error(`Domain ${step.domain} not found`);
+        }
+
+        const position = materialize(
+          step.position,
+          step.domain,
+          program.fields,
+          program.domains,
+          state,
+          pool
+        );
+
+        const color = materialize(
+          step.color,
+          step.domain,
+          program.fields,
+          program.domains,
+          state,
+          pool
+        );
+
+        const size = step.size !== undefined
+          ? evaluateSignal(step.size, program, state)
+          : 10;
+
+        passes.push({
+          kind: 'instances2d',
+          count: domain.count,
+          position,
+          color,
+          size,
+        });
+        break;
+      }
+
+      default: {
+        const _exhaustive: never = step;
+        throw new Error(`Unknown step kind: ${(_exhaustive as Step).kind}`);
+      }
+    }
+  }
+
+  // 4. Return render frame
+  return {
+    version: 1,
+    passes,
+  };
+}
+
+/**
+ * Evaluate a signal expression
+ */
+function evaluateSignal(
+  sigId: number,
+  program: IRProgram,
+  state: RuntimeState
+): number {
+  // Check cache
+  const cached = state.cache.sigValues[sigId];
+  const cachedStamp = state.cache.sigStamps[sigId];
+  if (cachedStamp === state.cache.frameId) {
+    return cached;
+  }
+
+  // Get expression
+  const expr = program.signals.get(sigId as any);
+  if (!expr) {
+    throw new Error(`Signal expression ${sigId} not found`);
+  }
+
+  // Evaluate based on kind
+  const value = evaluateSigExpr(expr, program, state);
+
+  // Cache result
+  state.cache.sigValues[sigId] = value;
+  state.cache.sigStamps[sigId] = state.cache.frameId;
+
+  return value;
+}
+
+/**
+ * Evaluate a SigExpr recursively
+ */
+function evaluateSigExpr(
+  expr: SigExpr,
+  program: IRProgram,
+  state: RuntimeState
+): number {
+  if (!state.time) {
+    throw new Error('Effective time not set');
+  }
+
+  switch (expr.kind) {
+    case 'const': {
+      return typeof expr.value === 'number' ? expr.value : 0;
+    }
+
+    case 'slot': {
+      return state.values.f64[expr.slot as number];
+    }
+
+    case 'time': {
+      switch (expr.which) {
+        case 't':
+          return state.time.tModelMs;
+        case 'dt':
+          return state.time.dt;
+        case 'phase':
+          return state.time.phase ?? 0;
+        case 'pulse':
+          return state.time.pulse ?? 0;
+        case 'energy':
+          return state.time.energy ?? 0;
+        default: {
+          const _exhaustive: never = expr.which;
+          throw new Error(`Unknown time signal: ${String(_exhaustive)}`);
+        }
+      }
+    }
+
+    case 'map': {
+      const input = evaluateSignal(expr.input as number, program, state);
+      return applyPureFn(expr.fn, [input]);
+    }
+
+    case 'zip': {
+      const inputs = expr.inputs.map((id) =>
+        evaluateSignal(id as number, program, state)
+      );
+      return applyPureFn(expr.fn, inputs);
+    }
+
+    default: {
+      const _exhaustive: never = expr;
+      throw new Error(`Unknown signal expr kind: ${(_exhaustive as SigExpr).kind}`);
+    }
+  }
+}
+
+/**
+ * Apply a pure function to values
+ */
+function applyPureFn(
+  fn: { kind: 'opcode'; opcode: string } | { kind: 'expr'; expr: string } | { kind: 'kernel'; name: string },
+  values: number[]
+): number {
+  if (fn.kind === 'opcode') {
+    return applyOpCode(fn.opcode, values);
+  }
+  throw new Error(`PureFn kind ${fn.kind} not implemented`);
+}
+
+/**
+ * Apply an opcode to values
+ */
+function applyOpCode(opcode: string, values: number[]): number {
+  switch (opcode) {
+    case 'add':
+      return values.reduce((a, b) => a + b, 0);
+    case 'sub':
+      return values.length >= 2 ? values[0] - values[1] : -values[0];
+    case 'mul':
+      return values.reduce((a, b) => a * b, 1);
+    case 'div':
+      return values.length >= 2 ? values[0] / values[1] : 1 / values[0];
+    case 'mod':
+      return values.length >= 2 ? values[0] % values[1] : 0;
+    case 'neg':
+      return -values[0];
+    case 'abs':
+      return Math.abs(values[0]);
+    case 'sin':
+      return Math.sin(values[0]);
+    case 'cos':
+      return Math.cos(values[0]);
+    case 'tan':
+      return Math.tan(values[0]);
+    case 'min':
+      return Math.min(...values);
+    case 'max':
+      return Math.max(...values);
+    case 'clamp':
+      return values.length >= 3
+        ? Math.max(values[1], Math.min(values[2], values[0]))
+        : values[0];
+    case 'lerp':
+      return values.length >= 3
+        ? values[0] * (1 - values[2]) + values[1] * values[2]
+        : values[0];
+    case 'wrap01':
+      return ((values[0] % 1) + 1) % 1;
+    default:
+      throw new Error(`Unknown opcode: ${opcode}`);
+  }
+}
