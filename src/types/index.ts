@@ -199,6 +199,7 @@ export type UIControlHint =
   | { kind: 'boolean' }
   | { kind: 'text' }
   | { kind: 'xy' };
+
 // =============================================================================
 // Block Roles (from spec 02-block-system.md)
 // =============================================================================
@@ -228,8 +229,21 @@ export interface NodeRef {
  * Roles exist for the editor, not the compiler.
  */
 export type BlockRole =
-  | { readonly kind: "user" }
-  | { readonly kind: "derived"; readonly meta: DerivedBlockMeta };
+  | { readonly kind: 'user';      readonly meta: UserBlockMeta }
+  | { readonly kind: 'timeRoot';  readonly meta: TimeRootMeta }
+  | { readonly kind: 'bus';       readonly meta: BusMeta }
+  | { readonly kind: 'domain';    readonly meta: DomainMeta }
+  | { readonly kind: 'renderer';  readonly meta: RendererMeta }
+  | { readonly kind: 'derived';   readonly meta: DerivedBlockMeta };
+
+/**
+ * Meta types - empty for now, structure allows future extension
+ */
+export interface UserBlockMeta {}
+export interface TimeRootMeta {}
+export interface BusMeta {}
+export interface DomainMeta {}
+export interface RendererMeta {}
 
 /**
  * Metadata for derived blocks specifying their purpose.
@@ -239,6 +253,33 @@ export type DerivedBlockMeta =
   | { readonly kind: "defaultSource"; readonly target: { readonly kind: "port"; readonly port: PortRef } }
   | { readonly kind: "wireState";     readonly target: { readonly kind: "wire"; readonly wire: WireId } }
   | { readonly kind: "lens";          readonly target: { readonly kind: "node"; readonly node: NodeRef } };
+
+/**
+ * Helper functions to create BlockRole instances
+ */
+export function userRole(): BlockRole {
+  return { kind: 'user', meta: {} };
+}
+
+export function timeRootRole(): BlockRole {
+  return { kind: 'timeRoot', meta: {} };
+}
+
+export function busRole(): BlockRole {
+  return { kind: 'bus', meta: {} };
+}
+
+export function domainRole(): BlockRole {
+  return { kind: 'domain', meta: {} };
+}
+
+export function rendererRole(): BlockRole {
+  return { kind: 'renderer', meta: {} };
+}
+
+export function derivedRole(meta: DerivedBlockMeta): BlockRole {
+  return { kind: 'derived', meta };
+}
 
 // =============================================================================
 // Edge Roles (from spec 02-block-system.md)
@@ -252,15 +293,3 @@ export type EdgeRole =
   | { readonly kind: "user" }
   | { readonly kind: "default"; readonly meta: { readonly defaultSourceBlockId: BlockId } }
   | { readonly kind: "auto";    readonly meta: { readonly reason: "portMoved" | "rehydrate" | "migrate" } };
-
-// =============================================================================
-// Rail IDs (MVP rail identifiers)
-// =============================================================================
-
-export type RailId =
-  | 'time'
-  | 'phaseA'
-  | 'phaseB'
-  | 'pulse'
-  | 'palette'
-  | 'energy';

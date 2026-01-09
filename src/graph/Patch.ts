@@ -5,7 +5,7 @@
  * It consists of Blocks connected by Edges.
  */
 
-import type { BlockId, PortId } from '../types';
+import type { BlockId, PortId, BlockRole } from '../types';
 
 // =============================================================================
 // Block
@@ -15,8 +15,14 @@ export interface Block {
   readonly id: BlockId;
   readonly type: BlockType;
   readonly params: Readonly<Record<string, unknown>>;
-  /** Optional label for display */
+  /** Optional label for display (legacy - prefer displayName) */
   readonly label?: string;
+  /** User-editable display name (REQUIRED - can be null) */
+  readonly displayName: string | null;
+  /** Reference to domain block ID (REQUIRED - can be null) */
+  readonly domainId: string | null;
+  /** Semantic role for editor behavior (REQUIRED) */
+  readonly role: BlockRole;
 }
 
 export type BlockType = string;
@@ -80,9 +86,27 @@ export class PatchBuilder {
   private nextBlockId = 0;
   private nextEdgeId = 0;
 
-  addBlock(type: BlockType, params: Record<string, unknown> = {}, label?: string): BlockId {
+  addBlock(
+    type: BlockType,
+    params: Record<string, unknown> = {},
+    options?: {
+      label?: string;
+      displayName?: string | null;
+      domainId?: string | null;
+      role?: BlockRole;
+    }
+  ): BlockId {
     const id = `b${this.nextBlockId++}` as BlockId;
-    this.blocks.set(id, { id, type, params, label });
+
+    this.blocks.set(id, {
+      id,
+      type,
+      params,
+      label: options?.label,
+      displayName: options?.displayName ?? null,
+      domainId: options?.domainId ?? null,
+      role: options?.role ?? { kind: 'user', meta: {} },
+    });
     return id;
   }
 
