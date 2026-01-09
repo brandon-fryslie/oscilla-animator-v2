@@ -172,12 +172,12 @@ function buildAndCompile(particleCount: number) {
 
   const program = result.program;
   log(
-    `Compiled: ${program.signals.size} signals, ${program.fields.size} fields, ${program.steps.length} steps`,
+    `Compiled: ${program.signalExprs.nodes.length} signals, ${program.fieldExprs.nodes.length} fields, ${program.slotMeta.length} slots`,
   );
 
   // Update global state
   currentProgram = program;
-  currentState = createRuntimeState(program.slotCount);
+  currentState = createRuntimeState(program.slotMeta.length);
 }
 
 // =============================================================================

@@ -25,6 +25,8 @@ import type {
   DebugIndexIR,
   OutputSpecIR,
   ValueSlot as IRValueSlot,
+  BlockId,
+  StepId,
 } from './program';
 import type {
   DomainDef,
@@ -54,6 +56,13 @@ export class IRBuilder {
 
   // Track slot types for slotMeta generation
   private slotTypes = new Map<ValueSlot, SignalType>();
+
+  // Track debug provenance for DoD compliance
+  private stepToBlock = new Map<StepId, BlockId>(); // StepId → BlockId
+  private slotToBlock = new Map<ValueSlot, BlockId>(); // ValueSlot → BlockId
+
+  // Track the output slot for the render frame
+  private renderOutputSlot: ValueSlot | null = null;
 
   // ===========================================================================
   // Time Model
@@ -271,25 +280,47 @@ export class IRBuilder {
   // Steps
   // ===========================================================================
 
-  stepEvalSig(expr: SigExprId, target: ValueSlot): void {
+  stepEvalSig(expr: SigExprId, target: ValueSlot, sourceBlock?: BlockId): void {
+    const stepId = this.steps.length as StepId;
     this.steps.push({ kind: 'evalSig', expr, target });
+
+    // Track debug provenance
+    if (sourceBlock !== undefined) {
+      this.stepToBlock.set(stepId, sourceBlock);
+      this.slotToBlock.set(target, sourceBlock);
+    }
   }
 
   stepMaterialize(
     field: FieldExprId,
     domain: DomainId,
-    target: ValueSlot
+    target: ValueSlot,
+    sourceBlock?: BlockId
   ): void {
+    const stepId = this.steps.length as StepId;
     this.steps.push({ kind: 'materialize', field, domain, target });
+
+    // Track debug provenance
+    if (sourceBlock !== undefined) {
+      this.stepToBlock.set(stepId, sourceBlock);
+      this.slotToBlock.set(target, sourceBlock);
+    }
   }
 
   stepRender(
     domain: DomainId,
     position: FieldExprId,
     color: FieldExprId,
-    size?: SigExprId | FieldExprId
+    size?: SigExprId | FieldExprId,
+    sourceBlock?: BlockId
   ): void {
+    const stepId = this.steps.length as StepId;
     this.steps.push({ kind: 'render', domain, position, color, size });
+
+    // Track debug provenance
+    if (sourceBlock !== undefined) {
+      this.stepToBlock.set(stepId, sourceBlock);
+    }
   }
 
   // ===========================================================================
@@ -302,49 +333,93 @@ export class IRBuilder {
     const fieldExprs = { nodes: Array.from(this.fields.values()) };
     const eventExprs = { nodes: Array.from(this.events.values()) };
 
+    // Allocate a slot for the render output if we have a render step
+    const renderStep = this.steps.find((s) => s.kind === 'render');
+    if (renderStep && !this.renderOutputSlot) {
+      // Allocate an object slot for RenderFrameIR
+      this.renderOutputSlot = makeValueSlot(this.nextSlotId++);
+    }
+
     // Build slotMeta with offsets
     const slotMeta: SlotMetaEntry[] = [];
+
+    // Count slots per storage class to compute offsets
+    const slotsByStorage: Map<'f64' | 'object', ValueSlot[]> = new Map([
+      ['f64', []],
+      ['object', []],
+    ]);
+
+    for (let i = 0; i < this.nextSlotId; i++) {
+      const slot = makeValueSlot(i) as IRValueSlot;
+
+      // Determine storage class
+      // RenderOutputSlot is always object storage
+      const storage = slot === this.renderOutputSlot ? 'object' : 'f64';
+      slotsByStorage.get(storage)!.push(slot);
+    }
+
+    // Build slotMeta with proper offsets per storage class
     for (let i = 0; i < this.nextSlotId; i++) {
       const slot = makeValueSlot(i) as IRValueSlot;
       const type = this.slotTypes.get(slot);
 
+      // Determine storage and offset
+      const storage = slot === this.renderOutputSlot ? 'object' : 'f64';
+      const slotsInStorage = slotsByStorage.get(storage)!;
+      const offset = slotsInStorage.indexOf(slot);
+
       // Default type for slots without explicit type info
-      const typeDesc = type
-        ? signalTypeToTypeDesc(type)
-        : {
-            axes: {
-              domain: 'signal' as const,
-              temporality: 'continuous' as const,
-              perspective: 'global' as const,
-              branch: 'single' as const,
-              identity: { kind: 'none' as const },
-            },
-            shape: { kind: 'number' as const },
-          };
+      let typeDesc;
+      if (slot === this.renderOutputSlot) {
+        // RenderFrameIR object type
+        typeDesc = {
+          axes: {
+            domain: 'value' as const,
+            temporality: 'discrete' as const,
+            perspective: 'frame' as const,
+            branch: 'single' as const,
+            identity: { kind: 'none' as const },
+          },
+          shape: { kind: 'object' as const, class: 'RenderFrameIR' },
+        };
+      } else if (type) {
+        typeDesc = signalTypeToTypeDesc(type);
+      } else {
+        // Default for untyped slots
+        typeDesc = {
+          axes: {
+            domain: 'signal' as const,
+            temporality: 'continuous' as const,
+            perspective: 'global' as const,
+            branch: 'single' as const,
+            identity: { kind: 'none' as const },
+          },
+          shape: { kind: 'number' as const },
+        };
+      }
 
       slotMeta.push({
         slot,
-        storage: 'f64', // v0: all slots use f64 storage
-        offset: i, // Direct offset = slot number for now
+        storage,
+        offset,
         type: typeDesc,
       });
     }
 
-    // Find render step to determine output slot
-    const renderStep = this.steps.find((s) => s.kind === 'render');
-    const outputs: OutputSpecIR[] = renderStep
+    // Set outputs to the render output slot
+    const outputs: OutputSpecIR[] = this.renderOutputSlot
       ? [
           {
             kind: 'renderFrame',
-            slot: makeValueSlot(0) as IRValueSlot, // Placeholder - will be fixed when we track render output
+            slot: this.renderOutputSlot as IRValueSlot,
           },
         ]
       : [];
 
-    // Minimal debug index
+    // Build debug index with provenance (cast Maps to satisfy type)
     const debugIndex: DebugIndexIR = {
-      stepToBlock: new Map(),
-      slotToBlock: new Map(),
+      stepToBlock: new Map(this.stepToBlock) as ReadonlyMap<StepId, BlockId>,
+      slotToBlock: new Map(this.slotToBlock) as ReadonlyMap<ValueSlot, BlockId>,
       ports: [],
       slotToPort: new Map(),
     };

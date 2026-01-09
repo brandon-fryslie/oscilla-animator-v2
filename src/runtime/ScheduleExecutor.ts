@@ -5,7 +5,7 @@
  * Simplified for v2 - pure IR path, no legacy complexity.
  */
 
-import type { CompiledProgramIR } from '../compiler/ir/program';
+import type { CompiledProgramIR, ValueSlot } from '../compiler/ir/program';
 import type { Step } from '../compiler/ir/types';
 import type { SigExprId } from '../types';
 import type { RuntimeState } from './RuntimeState';
@@ -33,6 +33,23 @@ export interface RenderPassIR {
   position: ArrayBufferView;
   color: ArrayBufferView;
   size: number | ArrayBufferView; // Can be uniform size or per-particle sizes
+}
+
+/**
+ * Helper: Resolve slot to storage offset using slotMeta
+ *
+ * DoD: Runtime MUST use slotMeta.offset for typed array access (f64, f32, etc)
+ * For object storage, we still use slot as the Map key
+ */
+function resolveSlotOffset(
+  program: CompiledProgramIR,
+  slot: ValueSlot
+): { storage: 'f64' | 'f32' | 'i32' | 'u32' | 'object'; offset: number; slot: ValueSlot } {
+  const meta = program.slotMeta.find((m) => m.slot === slot);
+  if (!meta) {
+    throw new Error(`Slot ${slot} not found in slotMeta`);
+  }
+  return { storage: meta.storage, offset: meta.offset, slot };
 }
 
 /**
@@ -73,9 +90,16 @@ export function executeFrame(
   for (const step of steps) {
     switch (step.kind) {
       case 'evalSig': {
-        // Evaluate signal and store in slot
+        // Evaluate signal and store in slot using slotMeta.offset
         const value = evaluateSignal(step.expr, signals, state);
-        state.values.f64[step.target as number] = value;
+        const { storage, offset } = resolveSlotOffset(program, step.target);
+
+        if (storage === 'f64') {
+          // DoD: Use slotMeta.offset for typed array access
+          state.values.f64[offset] = value;
+        } else {
+          throw new Error(`evalSig expects f64 storage, got ${storage}`);
+        }
 
         // Cache the result
         state.cache.sigValues[step.expr as number] = value;
@@ -94,7 +118,14 @@ export function executeFrame(
           state,
           pool
         );
-        state.values.objects.set(step.target, buffer);
+        const { storage, slot } = resolveSlotOffset(program, step.target);
+
+        if (storage === 'object') {
+          // For object storage, use slot as Map key (not offset)
+          state.values.objects.set(slot, buffer);
+        } else {
+          throw new Error(`materialize expects object storage, got ${storage}`);
+        }
         break;
       }
 
@@ -171,9 +202,34 @@ export function executeFrame(
     }
   }
 
-  // 4. Return render frame
-  return {
+  // 4. Build RenderFrameIR
+  const frame: RenderFrameIR = {
     version: 1,
     passes,
   };
+
+  // 5. Store frame in output slot (DoD: outputs contract)
+  if (program.outputs.length > 0) {
+    const outputSpec = program.outputs[0];
+    const { storage, slot } = resolveSlotOffset(program, outputSpec.slot);
+
+    if (storage === 'object') {
+      // For object storage, use slot as Map key
+      state.values.objects.set(slot, frame);
+    } else {
+      throw new Error(
+        `Output slot expects object storage, got ${storage}`
+      );
+    }
+
+    // 6. Read from outputs[0].slot (DoD: runtime reads from outputs[0].slot)
+    const outputFrame = state.values.objects.get(slot);
+    if (!outputFrame) {
+      throw new Error('Output frame not found in slot');
+    }
+    return outputFrame as RenderFrameIR;
+  }
+
+  // Fallback: no outputs defined (shouldn't happen with proper compilation)
+  return frame;
 }

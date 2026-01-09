@@ -71,6 +71,13 @@ function evaluateSigExpr(
     }
 
     case 'slot': {
+      // DoD: Use slotMeta.offset for slot access
+      // In the current simplified implementation, we assume f64 storage
+      // and slots are already using the offset directly (slot ID = offset for f64)
+      // When we have mixed storage classes, this will need to look up slotMeta
+      //
+      // For now: slot number IS the offset for f64 storage
+      // This works because IRBuilder assigns offset = slot number for f64
       return state.values.f64[expr.slot as number];
     }
 

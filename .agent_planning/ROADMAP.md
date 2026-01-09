@@ -1,6 +1,6 @@
 # Oscilla Animator v2 - Project Roadmap
 
-Last updated: 2026-01-09-190000
+Last updated: 2026-01-09-200700
 
 ---
 
@@ -44,11 +44,13 @@ Last updated: 2026-01-09-190000
 - **Planning Files:** `.agent_planning/ir-5-axes/`
 - **Status Note:** Evaluation shows major gaps - spec largely unimplemented
 
-#### 💡 type-system [PROPOSED]
-- **State:** PROPOSED
+#### 📋 type-system [PLANNING]
+- **State:** PLANNING
 - **Epic:** None
-- **Spec:** `design-docs/spec/01-type-system.md`
-- **Description:** Worlds, TypeDesc, domains, compatibility rules
+- **Spec:** `design-docs/CANONICAL-oscilla-v2.5-20260109/topics/01-type-system.md`
+- **Description:** P4-P6: Runtime migration, constraint solving, bus migration (builds on canonical-arch-alignment P0-P3)
+- **Planning Files:** `.agent_planning/type-system/`
+- **Current Sprint:** P4 - Runtime Migration (adapter, slotMeta, assertions)
 
 #### 💡 time-model [PROPOSED]
 - **State:** PROPOSED
