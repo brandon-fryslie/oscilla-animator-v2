@@ -1,0 +1,22 @@
+# Build output
+dist/
+
+# Dependencies
+node_modules/
+
+# IDE
+.idea/
+*.swp
+*.swo
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+coverage/
+*.log
+
+# Vite cache
+node_modules/.vite/
