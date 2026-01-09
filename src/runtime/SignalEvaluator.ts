@@ -16,13 +16,13 @@ import { applyOpcode } from './OpcodeInterpreter';
  * Evaluate a signal expression with caching
  *
  * @param sigId - Signal expression ID to evaluate
- * @param signals - Map of signal expressions
+ * @param signals - Dense array of signal expressions
  * @param state - Runtime state with cache
  * @returns Evaluated signal value
  */
 export function evaluateSignal(
   sigId: SigExprId,
-  signals: ReadonlyMap<SigExprId, SigExpr>,
+  signals: readonly SigExpr[],
   state: RuntimeState
 ): number {
   // Check cache first
@@ -32,8 +32,8 @@ export function evaluateSignal(
     return cached;
   }
 
-  // Get expression
-  const expr = signals.get(sigId);
+  // Get expression from dense array
+  const expr = signals[sigId as number];
   if (!expr) {
     throw new Error(`Signal expression ${sigId} not found`);
   }
@@ -52,13 +52,13 @@ export function evaluateSignal(
  * Evaluate a SigExpr recursively
  *
  * @param expr - Signal expression to evaluate
- * @param signals - Map of all signal expressions (for recursive evaluation)
+ * @param signals - Dense array of all signal expressions (for recursive evaluation)
  * @param state - Runtime state
  * @returns Evaluated value
  */
 function evaluateSigExpr(
   expr: SigExpr,
-  signals: ReadonlyMap<SigExprId, SigExpr>,
+  signals: readonly SigExpr[],
   state: RuntimeState
 ): number {
   if (!state.time) {

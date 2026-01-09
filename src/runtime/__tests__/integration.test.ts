@@ -27,12 +27,13 @@ describe('Runtime Integration', () => {
     const program = result.program;
 
     // Verify program structure
-    expect(program.timeModel.kind).toBe('infinite');
-    expect(program.domains.size).toBeGreaterThan(0);
-    expect(program.steps.length).toBeGreaterThanOrEqual(0);
+    const schedule = program.schedule as any;
+    expect(schedule.timeModel.kind).toBe('infinite');
+    expect(schedule.domains.size).toBeGreaterThan(0);
+    expect(schedule.steps.length).toBeGreaterThanOrEqual(0);
 
     // Create runtime
-    const state = createRuntimeState(program.slotCount);
+    const state = createRuntimeState(program.slotMeta.length);
     const pool = new BufferPool();
 
     // Execute at t=0
@@ -66,7 +67,7 @@ describe('Runtime Integration', () => {
     if (result.kind !== 'ok') return;
 
     const program = result.program;
-    const state = createRuntimeState(program.slotCount);
+    const state = createRuntimeState(program.slotMeta.length);
     const pool = new BufferPool();
 
     // Initial state
@@ -93,7 +94,7 @@ describe('Runtime Integration', () => {
     if (result.kind !== 'ok') return;
 
     const program = result.program;
-    const state = createRuntimeState(program.slotCount);
+    const state = createRuntimeState(program.slotMeta.length);
     const pool = new BufferPool();
 
     // Execute at various times
@@ -125,7 +126,7 @@ describe('Runtime Integration', () => {
     if (result.kind !== 'ok') return;
 
     const program = result.program;
-    const state = createRuntimeState(program.slotCount);
+    const state = createRuntimeState(program.slotMeta.length);
     const pool = new BufferPool();
 
     // Execute at various times

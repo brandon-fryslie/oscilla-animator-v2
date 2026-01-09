@@ -5,7 +5,8 @@
  * Simplified for v2 - pure IR path, no legacy complexity.
  */
 
-import type { IRProgram, Step, SigExpr } from '../compiler/ir/types';
+import type { CompiledProgramIR } from '../compiler/ir/program';
+import type { Step } from '../compiler/ir/types';
 import type { SigExprId } from '../types';
 import type { RuntimeState } from './RuntimeState';
 import type { BufferPool } from './BufferPool';
@@ -37,33 +38,43 @@ export interface RenderPassIR {
 /**
  * Execute one frame of the program
  *
- * @param program - Compiled IR program
+ * @param program - Compiled IR program (CompiledProgramIR)
  * @param state - Runtime state
  * @param pool - Buffer pool
  * @param tAbsMs - Absolute time in milliseconds
  * @returns RenderFrameIR for this frame
  */
 export function executeFrame(
-  program: IRProgram,
+  program: CompiledProgramIR,
   state: RuntimeState,
   pool: BufferPool,
   tAbsMs: number
 ): RenderFrameIR {
+  // Extract schedule components (legacy wrapper for now)
+  const schedule = program.schedule as any;
+  const timeModel = schedule.timeModel || { kind: 'infinite' as const };
+  const domains = schedule.domains || new Map();
+  const steps: readonly Step[] = schedule.steps || [];
+
   // 1. Advance frame (cache owns frameId)
   state.cache.frameId++;
 
   // 2. Resolve effective time
-  const time = resolveTime(tAbsMs, program.timeModel, state.timeState);
+  const time = resolveTime(tAbsMs, timeModel, state.timeState);
   state.time = time;
 
   // 3. Execute schedule steps
   const passes: RenderPassIR[] = [];
 
-  for (const step of program.steps) {
+  // Get dense arrays from program
+  const signals = program.signalExprs.nodes;
+  const fields = program.fieldExprs.nodes;
+
+  for (const step of steps) {
     switch (step.kind) {
       case 'evalSig': {
         // Evaluate signal and store in slot
-        const value = evaluateSignal(step.expr, program.signals, state);
+        const value = evaluateSignal(step.expr, signals, state);
         state.values.f64[step.target as number] = value;
 
         // Cache the result
@@ -77,9 +88,9 @@ export function executeFrame(
         const buffer = materialize(
           step.field,
           step.domain,
-          program.fields,
-          program.signals,
-          program.domains,
+          fields,
+          signals,
+          domains,
           state,
           pool
         );
@@ -89,7 +100,7 @@ export function executeFrame(
 
       case 'render': {
         // Assemble render pass
-        const domain = program.domains.get(step.domain);
+        const domain = domains.get(step.domain);
         if (!domain) {
           throw new Error(`Domain ${step.domain} not found`);
         }
@@ -97,9 +108,9 @@ export function executeFrame(
         const position = materialize(
           step.position,
           step.domain,
-          program.fields,
-          program.signals,
-          program.domains,
+          fields,
+          signals,
+          domains,
           state,
           pool
         );
@@ -107,9 +118,9 @@ export function executeFrame(
         const color = materialize(
           step.color,
           step.domain,
-          program.fields,
-          program.signals,
-          program.domains,
+          fields,
+          signals,
+          domains,
           state,
           pool
         );
@@ -117,9 +128,9 @@ export function executeFrame(
         // Size can be a signal (uniform) or field (per-particle)
         let size: number | ArrayBufferView;
         if (step.size !== undefined) {
-          // Check if it's a signal or field ID by checking which map it belongs to
-          const isSignal = program.signals.has(step.size as any);
-          const isField = program.fields.has(step.size as any);
+          // Check if it's a signal or field ID by checking array bounds
+          const isSignal = (step.size as number) < signals.length;
+          const isField = (step.size as number) < fields.length;
 
           // Check field FIRST - fields take precedence for per-particle data
           if (isField) {
@@ -127,15 +138,15 @@ export function executeFrame(
             size = materialize(
               step.size as any,
               step.domain,
-              program.fields,
-              program.signals,
-              program.domains,
+              fields,
+              signals,
+              domains,
               state,
               pool
             );
           } else if (isSignal) {
             // It's a signal - evaluate once
-            size = evaluateSignal(step.size as SigExprId, program.signals, state);
+            size = evaluateSignal(step.size as SigExprId, signals, state);
           } else {
             size = 10; // Fallback
           }
@@ -166,4 +177,3 @@ export function executeFrame(
     passes,
   };
 }
-

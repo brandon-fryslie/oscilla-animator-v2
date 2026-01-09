@@ -29,8 +29,8 @@ import { applyOpcode } from './OpcodeInterpreter';
  *
  * @param fieldId - Field expression ID
  * @param domainId - Domain to materialize over
- * @param fields - Field expression map
- * @param signals - Signal expression map (for lazy evaluation)
+ * @param fields - Dense array of field expressions
+ * @param signals - Dense array of signal expressions (for lazy evaluation)
  * @param domains - Domain definition map
  * @param state - Runtime state (for signal values)
  * @param pool - Buffer pool for allocation
@@ -39,8 +39,8 @@ import { applyOpcode } from './OpcodeInterpreter';
 export function materialize(
   fieldId: FieldExprId,
   domainId: DomainId,
-  fields: ReadonlyMap<FieldExprId, FieldExpr>,
-  signals: ReadonlyMap<SigExprId, SigExpr>,
+  fields: readonly FieldExpr[],
+  signals: readonly SigExpr[],
   domains: ReadonlyMap<DomainId, DomainDef>,
   state: RuntimeState,
   pool: BufferPool
@@ -53,8 +53,8 @@ export function materialize(
     return cached;
   }
 
-  // Get field expression
-  const expr = fields.get(fieldId);
+  // Get field expression from dense array
+  const expr = fields[fieldId as number];
   if (!expr) {
     throw new Error(`Field expression ${fieldId} not found`);
   }
@@ -86,8 +86,8 @@ function fillBuffer(
   expr: FieldExpr,
   buffer: ArrayBufferView,
   domain: DomainDef,
-  fields: ReadonlyMap<FieldExprId, FieldExpr>,
-  signals: ReadonlyMap<SigExprId, SigExpr>,
+  fields: readonly FieldExpr[],
+  signals: readonly SigExpr[],
   domains: ReadonlyMap<DomainId, DomainDef>,
   state: RuntimeState,
   pool: BufferPool

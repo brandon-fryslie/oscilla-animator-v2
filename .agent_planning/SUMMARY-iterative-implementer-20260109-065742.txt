@@ -1,0 +1,56 @@
+Agent: iterative-implementer | 2026-01-09T06:57:30Z
+Mode: manual
+Completed: CompiledProgramIR migration with dense arrays | Files: 4 | Commits: 1
+Tests: 68 passing
+Cache invalidated: None (new files, no cache exists)
+Status: complete
+
+## What Was Done
+
+### P0-P1: Compiler IR Migration  
+- Updated `src/compiler/ir/builder.ts` to build() method to return CompiledProgramIR
+- Created dense execution tables: SignalExprTable, FieldExprTable, EventExprTable
+- Added SlotMetaEntry[] generation with:
+  - Required offset field (per-storage indexing)
+  - TypeDesc with AxesDescIR (5-axis metadata)
+  - Storage class assignment (f64 for v0)
+- Created legacy adapter `src/compiler/ir/legacy-adapter.ts` for runtime compatibility
+- Updated `src/compiler/compile.ts` to use adapter
+- Fixed `src/compiler/ir/program.ts` execution table types (were unknown, now proper interfaces)
+
+### Results
+- All 68 tests pass
+- TypeScript compilation clean
+- Steel-thread animated particles test works
+- Runtime still uses legacy IRProgram interface (via adapter)
+
+## What Remains
+
+### Immediate Next Steps (P2-P3)
+- Update runtime to use CompiledProgramIR directly (remove adapter)
+- Add proper ScheduleIR type
+- Populate outputs[] array with actual render sink slot
+- Add proper timeModel to schedule
+
+### Later (P4-P6)
+- Proper slot offset allocation (currently 1:1 with slot number)
+- Separate storage classes (f64, f32, i32, u32, object)
+- DebugIndexIR population with provenance data
+- Remove legacy adapter once runtime migrated
+
+## Technical Notes
+
+### Architecture Decisions
+- **Adapter Pattern**: Used LegacyIRProgram adapter to avoid breaking runtime
+- **Dense Arrays**: Maps converted to arrays at build() time
+- **Type Safety**: Proper TypeScript types for execution tables
+- **Incremental**: Runtime still works with legacy interface
+
+### Key Files Modified
+1. `/Users/bmf/code/oscilla-animator-v2/src/compiler/ir/builder.ts` - Main compiler IR builder
+2. `/Users/bmf/code/oscilla-animator-v2/src/compiler/ir/program.ts` - AuthoritativeIR schema
+3. `/Users/bmf/code/oscilla-animator-v2/src/compiler/compile.ts` - Compiler entry point
+4. `/Users/bmf/code/oscilla-animator-v2/src/compiler/ir/legacy-adapter.ts` - Compatibility layer (NEW)
+
+### Commits
+- 9e3e55e: feat(compiler): migrate to CompiledProgramIR with dense arrays and slotMeta

@@ -59,8 +59,8 @@ describe('compile', () => {
 
       expect(result.kind).toBe('ok');
       if (result.kind === 'ok') {
-        // Should have signal expressions
-        expect(result.program.signals.size).toBeGreaterThan(0);
+        // Should have signal expressions in dense array
+        expect(result.program.signalExprs.nodes.length).toBeGreaterThan(0);
       }
     });
 
@@ -76,7 +76,7 @@ describe('compile', () => {
       expect(result.kind).toBe('ok');
       if (result.kind === 'ok') {
         // Should have oscillator output
-        expect(result.program.signals.size).toBeGreaterThan(0);
+        expect(result.program.signalExprs.nodes.length).toBeGreaterThan(0);
       }
     });
   });
@@ -92,8 +92,11 @@ describe('compile', () => {
 
       expect(result.kind).toBe('ok');
       if (result.kind === 'ok') {
-        expect(result.program.domains.size).toBe(1);
-        const domain = [...result.program.domains.values()][0];
+        // Domains are in schedule wrapper for now
+        const schedule = result.program.schedule as any;
+        const domains = schedule.domains;
+        expect(domains.size).toBe(1);
+        const domain = [...domains.values()][0];
         expect(domain.count).toBe(16);
         expect(domain.elementIds.length).toBe(16);
       }
@@ -109,8 +112,11 @@ describe('compile', () => {
 
       expect(result.kind).toBe('ok');
       if (result.kind === 'ok') {
-        expect(result.program.domains.size).toBe(1);
-        const domain = [...result.program.domains.values()][0];
+        // Domains are in schedule wrapper for now
+        const schedule = result.program.schedule as any;
+        const domains = schedule.domains;
+        expect(domains.size).toBe(1);
+        const domain = [...domains.values()][0];
         expect(domain.count).toBe(100);
       }
     });
@@ -131,7 +137,8 @@ describe('compile', () => {
 
       expect(result.kind).toBe('ok');
       if (result.kind === 'ok') {
-        expect(result.program.fields.size).toBeGreaterThan(0);
+        // Should have field expressions in dense array
+        expect(result.program.fieldExprs.nodes.length).toBeGreaterThan(0);
       }
     });
   });
@@ -165,7 +172,9 @@ describe('TimeModel', () => {
 
     expect(result.kind).toBe('ok');
     if (result.kind === 'ok') {
-      expect(result.program.timeModel.kind).toBe('infinite');
+      // TimeModel is in schedule wrapper for now
+      const schedule = result.program.schedule as any;
+      expect(schedule.timeModel.kind).toBe('infinite');
     }
   });
 
@@ -178,9 +187,11 @@ describe('TimeModel', () => {
 
     expect(result.kind).toBe('ok');
     if (result.kind === 'ok') {
-      expect(result.program.timeModel.kind).toBe('finite');
-      if (result.program.timeModel.kind === 'finite') {
-        expect(result.program.timeModel.durationMs).toBe(5000);
+      // TimeModel is in schedule wrapper for now
+      const schedule = result.program.schedule as any;
+      expect(schedule.timeModel.kind).toBe('finite');
+      if (schedule.timeModel.kind === 'finite') {
+        expect(schedule.timeModel.durationMs).toBe(5000);
       }
     }
   });

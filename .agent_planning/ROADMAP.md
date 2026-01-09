@@ -1,10 +1,10 @@
 # Oscilla Animator v2 - Project Roadmap
 
-Last updated: 2026-01-07-164500
+Last updated: 2026-01-09-190000
 
 ---
 
-## 🟢 Phase 1: Core Foundation [ACTIVE] (0/7 completed)
+## 🟢 Phase 1: Core Foundation [ACTIVE] (3/10 completed)
 
 **Goal:** Implement the core compilation pipeline and runtime system according to the unified spec
 
@@ -13,6 +13,36 @@ Last updated: 2026-01-07-164500
 **Target Completion:** TBD
 
 ### Topics
+
+#### ✅ update-blocks-types [COMPLETED]
+- **State:** COMPLETED
+- **Epic:** None
+- **Description:** Refactor blocks to use centralized type helpers, split god blocks into composable primitives
+- **Completed:** 2026-01-05
+- **Summary:** PositionSwirl split into 5 composable blocks, HueRainbow split into 2. All tests pass.
+- **Completion Report:** `.agent_planning/ARCHITECTURAL-REFACTOR-COMPLETE.md`
+
+#### ✅ canonical-arch-alignment [COMPLETED]
+- **State:** COMPLETED
+- **Epic:** None
+- **Description:** Implement canonical 5-axis type system (PayloadType, AxisTag, Cardinality, Temporality, Binding, Extent, SignalType)
+- **Completed:** 2026-01-09
+- **Summary:** P0-P3 delivered. 68 tests passing. All 25 blocks migrated to SignalType system.
+- **Planning Files:** `.agent_planning/canonical-arch-alignment/`
+
+#### ✅ design-docs-audit [COMPLETED]
+- **State:** COMPLETED
+- **Epic:** None
+- **Description:** Audit design docs for contradictions, ambiguities, and inconsistencies
+- **Planning Files:** `.agent_planning/design-docs-audit/`
+
+#### 📋 ir-5-axes [PLANNING]
+- **State:** PLANNING
+- **Epic:** None
+- **Spec:** `design-docs/IR-and-normalization-5-axes.md`
+- **Description:** Implement 5-axis metadata in IR schema, CompiledProgramIR, slotMeta with offsets
+- **Planning Files:** `.agent_planning/ir-5-axes/`
+- **Status Note:** Evaluation shows major gaps - spec largely unimplemented
 
 #### 💡 type-system [PROPOSED]
 - **State:** PROPOSED
@@ -43,15 +73,6 @@ Last updated: 2026-01-07-164500
 - **Epic:** None
 - **Spec:** `design-docs/spec/05-runtime.md`
 - **Description:** Runtime loop, hot swap, state continuity
-
-#### 🔄 update-blocks-types [PLANNING]
-- **State:** PLANNING
-- **Epic:** None
-- **Spec:** Related to type system cleanup
-- **Description:** Refactor blocks to use centralized type helpers
-- **Planning Files:**
-  - `PLAN-2026-01-05.md` - Sprint plan for type helper migration
-  - `DOD-2026-01-05.md` - Definition of done
 
 #### 💡 primitives-catalog [PROPOSED]
 - **State:** PROPOSED
@@ -126,3 +147,4 @@ Last updated: 2026-01-07-164500
 - Each topic should have planning files in `.agent_planning/<topic>/`
 - Use `/do:roadmap <topic>` to add new topics
 - Use `/do:plan <topic>` to create planning files for a topic
+- Roadmap is automatically updated by workflow skills (see `.claude/rules/roadmap-hooks.md`)

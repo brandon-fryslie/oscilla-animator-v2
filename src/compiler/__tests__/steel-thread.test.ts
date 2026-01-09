@@ -94,17 +94,18 @@ describe('Steel Thread - Animated Particles', () => {
     const program = result.program;
 
     // Verify the program structure
-    expect(program.timeModel.kind).toBe('infinite');
-    expect(program.domains.size).toBe(1);
-    expect(program.steps.length).toBeGreaterThan(0);
+    const schedule = program.schedule as any;
+    expect(schedule.timeModel.kind).toBe('infinite');
+    expect(schedule.domains.size).toBe(1);
+    expect(schedule.steps.length).toBeGreaterThan(0);
 
     // Check we have a render step
-    const renderSteps = program.steps.filter((s) => s.kind === 'render');
+    const renderSteps = schedule.steps.filter((s: any) => s.kind === 'render');
     expect(renderSteps.length).toBe(1);
 
     // Execute a frame
     const pool = new BufferPool();
-    const state = createRuntimeState(program.slotCount);
+    const state = createRuntimeState(program.slotMeta.length);
 
     const frame = executeFrame(program, state, pool, 0);
 
