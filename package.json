@@ -10,6 +10,9 @@
     "test": "vitest run",
     "test:watch": "vitest"
   },
+  "dependencies": {
+    "mermaid": "^11.4.1"
+  },
   "devDependencies": {
     "playwright": "^1.57.0",
     "typescript": "^5.7.2",
