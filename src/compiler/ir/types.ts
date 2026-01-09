@@ -194,7 +194,8 @@ export interface FieldExprMapIndexed {
 export type EventExpr =
   | EventExprPulse
   | EventExprWrap
-  | EventExprCombine;
+  | EventExprCombine
+  | EventExprNever;
 
 export interface EventExprPulse {
   readonly kind: 'pulse';
@@ -210,6 +211,10 @@ export interface EventExprCombine {
   readonly kind: 'combine';
   readonly events: readonly EventExprId[];
   readonly mode: 'any' | 'all';
+}
+
+export interface EventExprNever {
+  readonly kind: 'never';
 }
 
 // =============================================================================

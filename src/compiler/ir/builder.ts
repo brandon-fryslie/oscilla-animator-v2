@@ -417,6 +417,16 @@ export class IRBuilder {
     return id;
   }
 
+  /**
+   * Create a "never fires" event.
+   * Used as a default when an event input is optional and not connected.
+   */
+  eventNever(): EventExprId {
+    const id = makeEventExprId(this.nextEventId++);
+    this.events.set(id, { kind: 'never' });
+    return id;
+  }
+
   // ===========================================================================
   // Domains
   // ===========================================================================
