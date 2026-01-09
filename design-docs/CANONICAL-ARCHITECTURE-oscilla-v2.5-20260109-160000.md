@@ -27,6 +27,7 @@ source_files:
   - design-docs/spec/time/11-phase-unwrap-IMPORTANT.md
   - design-docs/spec/_architecture-refinement/ChatGPT-Fundamental Axes in Systems.md
 archived_to: design-docs/spec-archived-20260109-160000/
+encyclopedia: CANONICAL-oscilla-v2.5-20260109/
 ---
 
 # Oscilla v2.5: Canonical Architecture Specification
@@ -34,6 +35,8 @@ archived_to: design-docs/spec-archived-20260109-160000/
 > **This is the authoritative source of truth for the Oscilla Animator v2.5 type system and architecture.**
 > Generated after full resolution of all contradictions, ambiguities, and gaps.
 > All other design documents for this topic are superseded by this specification.
+>
+> **For detailed specifications, see the encyclopedia:** [CANONICAL-oscilla-v2.5-20260109/](./CANONICAL-oscilla-v2.5-20260109/)
 
 Generated: 2026-01-09T16:00:00Z
 Approved by: Brandon Fryslie
@@ -44,6 +47,14 @@ Resolution History:
 - CANONICALIZED-QUESTIONS-oscilla-v2-20260108-140000.md
 - CANONICALIZED-QUESTIONS-oscilla-v2-20260109-120000.md
 - USER-APPROVAL-oscilla-v2-20260109-150000.md
+
+**Encyclopedia Topics (detailed specifications):**
+- [01-type-system.md](./CANONICAL-oscilla-v2.5-20260109/topics/01-type-system.md) - Five-axis type model
+- [02-block-system.md](./CANONICAL-oscilla-v2.5-20260109/topics/02-block-system.md) - Blocks and roles
+- [03-time-system.md](./CANONICAL-oscilla-v2.5-20260109/topics/03-time-system.md) - Time and rails
+- [04-compilation.md](./CANONICAL-oscilla-v2.5-20260109/topics/04-compilation.md) - Compilation pipeline
+- [05-runtime.md](./CANONICAL-oscilla-v2.5-20260109/topics/05-runtime.md) - Execution model
+- [06-renderer.md](./CANONICAL-oscilla-v2.5-20260109/topics/06-renderer.md) - Render pipeline
 
 ---
 
