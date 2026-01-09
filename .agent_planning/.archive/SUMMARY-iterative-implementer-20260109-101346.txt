@@ -1,0 +1,23 @@
+Agent: iterative-implementer | 20260109-101346
+Mode: manual
+Completed: 3 improvements | Files: 4 | Commits: 1
+Cache invalidated: None (no cache exists yet)
+Status: complete
+
+Implementation Details:
+- Made diagram nodes compact (just type + short ID)
+- Made edge labels compact (removed spaces)
+- Added mouse wheel zoom (0.1x to 5x)
+- Added click-and-drag panning
+- Added double-click to reset view
+- Added block inspector panel
+- Inspector shows: ID, type, label, all params
+- Reduced Mermaid spacing for denser layout
+
+Files Modified:
+- /Users/bmf/code/oscilla-animator-v2/src/viewer/patch-to-mermaid.ts
+- /Users/bmf/code/oscilla-animator-v2/src/viewer/PatchViewer.ts
+- /Users/bmf/code/oscilla-animator-v2/public/index.html
+- /Users/bmf/code/oscilla-animator-v2/src/main.ts
+
+Commit: 7a2bc18

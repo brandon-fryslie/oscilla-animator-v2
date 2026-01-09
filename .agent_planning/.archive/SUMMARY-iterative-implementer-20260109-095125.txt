@@ -1,0 +1,76 @@
+Agent: iterative-implementer | 2026-01-09 09:51:25
+Mode: manual
+Completed: Patch viewer with Mermaid.js integration | Files: 6 | Commits: 5
+Tests: N/A (manual validation mode)
+Cache invalidated: None (no eval cache exists)
+Status: complete
+
+Implementation Summary:
+=====================
+
+Task: Implement read-only patch viewer using Mermaid.js
+
+Completed Work:
+--------------
+1. Added mermaid dependency (v11.4.1) to package.json
+2. Created src/viewer/patch-to-mermaid.ts
+   - Converts Patch to Mermaid flowchart syntax
+   - Shows block type, label, params, and port connections
+   - Escapes special characters properly
+   - Uses dark theme colors
+3. Created src/viewer/PatchViewer.ts
+   - Manages Mermaid diagram rendering
+   - Handles errors gracefully
+   - Configures dark theme to match app
+4. Created src/viewer/index.ts barrel export
+5. Updated public/index.html
+   - Split-view layout: patch viewer left (40%), animation right (60%)
+   - Scrollable patch viewer panel
+   - Maintains dark theme styling
+6. Integrated PatchViewer into src/main.ts
+   - Renders patch on initial load
+   - Updates patch viewer when slider changes
+   - Made buildAndCompile async to support rendering
+
+Files Modified:
+--------------
+- package.json (added mermaid dependency)
+- package-lock.json (dependency lockfile)
+- public/index.html (split-view layout)
+- src/main.ts (viewer integration)
+- src/viewer/patch-to-mermaid.ts (new)
+- src/viewer/PatchViewer.ts (new)
+- src/viewer/index.ts (new)
+
+Commits:
+--------
+1. 72733b9 - feat(viewer): add mermaid dependency for patch visualization
+2. 574cbdc - feat(viewer): create patch-to-mermaid converter and PatchViewer class
+3. 4f06fa1 - feat(viewer): update HTML layout for split-view with patch viewer
+4. 248f904 - feat(viewer): integrate PatchViewer into main application
+
+Validation:
+----------
+- Type check passes (npm run typecheck)
+- Dev server runs without errors (port 5175)
+- Application loads successfully
+- Patch viewer renders Mermaid diagram
+- Split-view layout displays correctly
+- No console errors
+- Screenshot verified showing:
+  * Left panel: Mermaid patch graph with all blocks/edges
+  * Right panel: Animated particles canvas
+  * Dark theme consistent across UI
+  * Controls and stats overlays visible
+
+Definition of Done:
+------------------
+✓ Mermaid dependency added and installed
+✓ patch-to-mermaid.ts converts Patch → valid Mermaid string
+✓ PatchViewer.ts renders Mermaid diagrams
+✓ index.html has split-view layout (patch left, animation right)
+✓ main.ts integrates patch viewer, updates on slider change
+✓ Application runs without errors (npm run dev)
+✓ Type check passes (npm run typecheck)
+
+Ready for evaluation: YES

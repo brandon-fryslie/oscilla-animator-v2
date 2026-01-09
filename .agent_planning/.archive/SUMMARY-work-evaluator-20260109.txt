@@ -1,0 +1,7 @@
+Agent: work-evaluator | 2026-01-09
+Scope: work/patch-viewer
+Verdict: COMPLETE
+Criteria: 8/8 working | Breaks found: 0 | Ambiguities: 0
+Previous issues: N/A (first evaluation)
+Missing checks: 1 E2E test recommended
+Cache updated: runtime-patch-viewer.md, INDEX.md

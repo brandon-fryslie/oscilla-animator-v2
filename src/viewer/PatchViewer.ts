@@ -14,7 +14,7 @@ let mermaidInitialized = false;
 export class PatchViewer {
   private renderCount = 0;
   private currentPatch: Patch | null = null;
-  private zoom = 1;
+  private zoom = 0.25;  // Start zoomed out to see full diagram
   private panX = 0;
   private panY = 0;
   private isDragging = false;
@@ -74,16 +74,20 @@ export class PatchViewer {
       // Clear container
       this.container.innerHTML = '';
 
-      // Create wrapper for zoom/pan
+      // Create wrapper for zoom/pan - must fill container and clip content
       const wrapper = document.createElement('div');
       wrapper.className = 'mermaid-wrapper';
       wrapper.style.cssText = `
-        width: 100%;
-        height: 100%;
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
         overflow: hidden;
-        position: relative;
         cursor: grab;
       `;
+      // Make container relative for absolute positioning
+      this.container.style.position = 'relative';
       this.container.appendChild(wrapper);
 
       // Create a div for the diagram
@@ -196,12 +200,13 @@ export class PatchViewer {
     // We need to map from sanitized IDs back to block IDs
     const blockMap = new Map<string, Block>();
     for (const block of this.currentPatch.blocks.values()) {
+      // Match the sanitization in patch-to-mermaid.ts
       const sanitized = block.id.replace(/[^a-zA-Z0-9_]/g, '_');
       blockMap.set(sanitized, block);
     }
 
     // Find all node groups (Mermaid wraps nodes in <g> elements with IDs like "flowchart-{nodeId}-{number}")
-    const nodes = svg.querySelectorAll('g[id^="flowchart-"]');
+    const nodes = svg.querySelectorAll('g.node');
     for (const node of nodes) {
       const nodeId = (node as SVGElement).id;
 
@@ -219,6 +224,15 @@ export class PatchViewer {
             this.onBlockClick!(block);
           });
         }
+      }
+    }
+
+    // Also try to handle clicks on the node shapes themselves (rect, polygon, etc.)
+    const shapes = svg.querySelectorAll('.node rect, .node polygon, .node circle, .node ellipse');
+    for (const shape of shapes) {
+      const parentNode = shape.closest('g.node');
+      if (parentNode) {
+        (shape as SVGElement).style.cursor = 'pointer';
       }
     }
   }

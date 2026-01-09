@@ -40,11 +40,12 @@ let currentPatch = null as any;
 // =============================================================================
 
 const inspectorEl = document.getElementById('block-inspector')!;
-const inspectorContentEl = document.getElementById('inspector-content')!;
 
 function showBlockInspector(block: Block) {
   // Build inspector HTML
   const html: string[] = [];
+
+  html.push('<h3>Block Inspector</h3>');
 
   // Block ID
   html.push('<div class="inspector-section">');
@@ -80,8 +81,7 @@ function showBlockInspector(block: Block) {
     html.push('</div>');
   }
 
-  inspectorContentEl.innerHTML = html.join('');
-  inspectorEl.classList.add('visible');
+  inspectorEl.innerHTML = html.join('');
 }
 
 function escapeHtml(text: string): string {
