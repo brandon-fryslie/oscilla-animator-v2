@@ -9,9 +9,11 @@ import { IRBuilderImpl } from "../ir/IRBuilderImpl";
 import type { CompileError } from "../types";
 import type { ValueRefPacked, LowerCtx } from "../ir/lowerTypes";
 import { getBlockType } from "../ir/lowerTypes";
+import { BLOCK_DEFS_BY_TYPE } from "../../blocks/registry";
 // Multi-Input Blocks Integration
 import {
   type Writer,
+  resolveBlockInputs,
 } from "./resolveWriters";
 import {
   createCombineNode,

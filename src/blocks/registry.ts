@@ -6,7 +6,7 @@
  */
 
 import type { SignalType } from '../core/canonical-types';
-import type { Slot, SlotWorld, UIControlHint, DefaultSource } from '../types';
+import type { Slot, UIControlHint, DefaultSource } from '../types';
 
 // =============================================================================
 // Block Definition Types

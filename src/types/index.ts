@@ -172,9 +172,6 @@ export type LensParamBinding =
 
 export type SlotDirection = 'input' | 'output';
 
-/** Classification for evaluation timing */
-export type SlotWorld = 'signal' | 'field' | 'scalar' | 'config';
-
 export interface Slot {
   readonly id: string;
   readonly label: string;
