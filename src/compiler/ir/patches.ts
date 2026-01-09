@@ -67,9 +67,6 @@ export type LensBinding = { kind: 'literal'; value: unknown };
 export interface TypedPatch extends NormalizedPatch {
   /** Type descriptors for each block output: Map<BlockId, Map<PortId, SignalType | DomainRef>> */
   readonly blockOutputTypes: ReadonlyMap<string, ReadonlyMap<string, SignalType | DomainRef>>;
-
-  /** Type descriptors for bus outputs (if any buses exist) */
-  readonly busOutputTypes?: ReadonlyMap<string, SignalType | DomainRef>;
 }
 
 // =============================================================================

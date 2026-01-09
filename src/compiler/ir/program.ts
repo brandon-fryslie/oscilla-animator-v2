@@ -45,7 +45,6 @@ export type PortId = number & { readonly __brand: 'PortId' };
  *
  * Forbidden Fields (must NOT exist):
  * - program.nodes
- * - program.buses
  * - program.constPool (use constants.json only)
  * - program.transforms
  * - program.meta (except under debugIndex)
@@ -263,9 +262,6 @@ export interface DebugIndexIR {
 
   /** Optional: combine provenance */
   readonly combines?: readonly CombineDebugIR[];
-
-  /** Optional: legacy bus mapping (only if buses exist at editor level) */
-  readonly busToValueRef?: ReadonlyMap<number, ValueSlot>;
 
   /** Optional: general labels for debugging */
   readonly labels?: ReadonlyMap<string, string>;
