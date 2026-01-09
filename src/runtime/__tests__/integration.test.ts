@@ -99,20 +99,20 @@ describe('Runtime Integration', () => {
 
     // Execute at various times
     executeFrame(program, state, pool, 0);
-    expect(state.time?.tModelMs).toBe(0);
+    expect(state.time?.tMs).toBe(0);
     expect(state.time?.progress).toBe(0);
 
     executeFrame(program, state, pool, 500);
-    expect(state.time?.tModelMs).toBe(500);
+    expect(state.time?.tMs).toBe(500);
     expect(state.time?.progress).toBe(0.5);
 
     executeFrame(program, state, pool, 1000);
-    expect(state.time?.tModelMs).toBe(1000);
+    expect(state.time?.tMs).toBe(1000);
     expect(state.time?.progress).toBe(1);
 
     // Beyond duration should clamp
     executeFrame(program, state, pool, 1500);
-    expect(state.time?.tModelMs).toBe(1000);
+    expect(state.time?.tMs).toBe(1000);
     expect(state.time?.progress).toBe(1);
   });
 
@@ -131,12 +131,12 @@ describe('Runtime Integration', () => {
 
     // Execute at various times
     executeFrame(program, state, pool, 0);
-    expect(state.time?.tModelMs).toBe(0);
+    expect(state.time?.tMs).toBe(0);
 
     executeFrame(program, state, pool, 1000);
-    expect(state.time?.tModelMs).toBe(1000);
+    expect(state.time?.tMs).toBe(1000);
 
     executeFrame(program, state, pool, 5000);
-    expect(state.time?.tModelMs).toBe(5000);
+    expect(state.time?.tMs).toBe(5000);
   });
 });

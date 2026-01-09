@@ -25,6 +25,23 @@ const lowerRenderInstances2D: BlockLower = ({ b, inputsById }) => {
     throw new Error('RenderInstances2D requires color (field<color>) input');
   }
 
+  // Domain validation: ensure field domains match sink domain
+  const posDomain = b.inferFieldDomain(pos.id);
+  if (posDomain !== undefined && posDomain !== domain.id) {
+    throw new Error(
+      `RenderInstances2D: pos field domain '${posDomain}' does not match ` +
+      `sink domain '${domain.id}'`
+    );
+  }
+
+  const colorDomain = b.inferFieldDomain(color.id);
+  if (colorDomain !== undefined && colorDomain !== domain.id) {
+    throw new Error(
+      `RenderInstances2D: color field domain '${colorDomain}' does not match ` +
+      `sink domain '${domain.id}'`
+    );
+  }
+
   // Size can be a signal or field
   let sizeId: SigExprId | FieldExprId | undefined;
   if (size) {

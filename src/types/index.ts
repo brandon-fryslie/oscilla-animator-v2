@@ -226,10 +226,13 @@ export type UIControlHint =
   | { kind: 'boolean' }
   | { kind: 'text' }
   | { kind: 'xy' };
-
 // =============================================================================
 // Block Roles (from spec 02-block-system.md)
 // =============================================================================
+
+// Import types used in role definitions
+import type { PortRef } from '../graph/Patch';
+import type { BusId } from '../compiler/ir/Indices';
 
 /**
  * Wire identifier (for wireState targeting).
