@@ -29,7 +29,7 @@ const lowerDomainN: BlockLower = ({ b, config }) => {
 };
 
 registerBlock({
-  type: 'DomainN',
+  kind: 'DomainN',
   inputs: [],
   outputs: [
     { portId: portId('domain'), type: domainType() },

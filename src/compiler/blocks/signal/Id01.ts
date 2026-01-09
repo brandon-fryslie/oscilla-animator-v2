@@ -37,7 +37,7 @@ const lowerId01: BlockLower = ({ b, inputsById }) => {
 };
 
 registerBlock({
-  type: 'Id01',
+  kind: 'Id01',
   inputs: [
     { portId: portId('index'), type: sigType('float') },
     { portId: portId('count'), type: sigType('float') },

@@ -35,7 +35,7 @@ const lowerFieldGoldenAngle: BlockLower = ({ b, inputsById, config }) => {
 };
 
 registerBlock({
-  type: 'FieldGoldenAngle',
+  kind: 'FieldGoldenAngle',
   inputs: [{ portId: portId('id01'), type: fieldType('float') }],
   outputs: [{ portId: portId('angle'), type: fieldType('float') }],
   lower: lowerFieldGoldenAngle,

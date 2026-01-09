@@ -41,7 +41,7 @@ const lowerFieldRadiusSqrt: BlockLower = ({ b, inputsById }) => {
 };
 
 registerBlock({
-  type: 'FieldRadiusSqrt',
+  kind: 'FieldRadiusSqrt',
   inputs: [
     { portId: portId('radius'), type: fieldType('float') },
     { portId: portId('id01'), type: fieldType('float') },

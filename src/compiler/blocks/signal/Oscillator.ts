@@ -45,7 +45,7 @@ const lowerOscillator: BlockLower = ({ b, inputsById, config }) => {
 };
 
 registerBlock({
-  type: 'Oscillator',
+  kind: 'Oscillator',
   inputs: [{ portId: portId('phase'), type: sigType('phase') }],
   outputs: [{ portId: portId('out'), type: sigType('float') }],
   lower: lowerOscillator,

@@ -7,7 +7,7 @@ import {
 } from '../registry';
 
 registerBlock({
-  type: 'FieldAttract2D',
+  kind: 'FieldAttract2D',
   inputs: [
     { portId: portId('pos'), type: fieldType('vec2') },
     { portId: portId('targetX'), type: sigType('float') },

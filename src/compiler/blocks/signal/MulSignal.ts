@@ -21,7 +21,7 @@ const lowerMulSignal: BlockLower = ({ b, inputsById }) => {
 };
 
 registerBlock({
-  type: 'MulSignal',
+  kind: 'MulSignal',
   inputs: [
     { portId: portId('a'), type: sigType('float') },
     { portId: portId('b'), type: sigType('float') },

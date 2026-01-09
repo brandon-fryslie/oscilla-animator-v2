@@ -10,6 +10,7 @@
 // Import the legacy types for now (will be replaced with proper execution node types)
 import type { SigExpr, FieldExpr, EventExpr } from './types';
 import type { SignalType } from '../../core/canonical-types';
+import type { ScheduleIR as PassScheduleIR } from '../passes-v2/pass7-schedule';
 
 // =============================================================================
 // Version and Core Types
@@ -62,7 +63,7 @@ export interface CompiledProgramIR {
     readonly json: readonly unknown[];
   };
 
-  // Execution schedule
+  // Execution schedule (phase-ordered)
   readonly schedule: ScheduleIR;
 
   // Output extraction contract
@@ -73,6 +74,30 @@ export interface CompiledProgramIR {
 
   // Debug provenance
   readonly debugIndex: DebugIndexIR;
+}
+
+// =============================================================================
+// Schedule IR
+// =============================================================================
+
+/**
+ * ScheduleIR - Explicit, phase-ordered execution schedule.
+ *
+ * For v0/MVP, this can wrap legacy steps during migration.
+ * Full implementation uses PassScheduleIR from pass7-schedule.ts.
+ */
+export type ScheduleIR = PassScheduleIR | LegacyScheduleWrapper;
+
+/**
+ * Legacy schedule wrapper for backward compatibility during migration.
+ */
+export interface LegacyScheduleWrapper {
+  readonly kind: 'legacy';
+  readonly timeModel: any;
+  readonly steps: readonly any[];
+  readonly domains: any;
+  readonly stateSlotCount?: number;
+  readonly stateSlots?: readonly any[];
 }
 
 // =============================================================================
@@ -172,11 +197,12 @@ export interface TypeDesc {
  */
 export interface AxesDescIR {
   /**
-   * Domain (a.k.a. "world"): which evaluation universe this value inhabits.
-   * - "signal": time-indexed value (per tick / per sample / per frame)
-   * - "field": spatially-indexed value (evaluated over a domain such as x/y, uv, etc.)
-   * - "event": instantaneous value carried by event semantics (triggered, not continuous)
-   * - "value": non-world value (constants, config, editor objects) that does not live in a world
+   * Execution domain: which evaluation context this value inhabits.
+   * Maps to canonical Cardinality axis (zero/one/many).
+   * - "signal": single-lane time-varying value (Cardinality: one)
+   * - "field": multi-lane spatially-indexed value (Cardinality: many(domain))
+   * - "event": discrete occurrence (Temporality: discrete)
+   * - "value": compile-time constant (Cardinality: zero)
    */
   readonly domain: 'signal' | 'field' | 'event' | 'value';
 
@@ -299,13 +325,3 @@ export interface CombineDebugIR {
   readonly dst: ValueSlot;
   readonly contributors: readonly ValueSlot[]; // in priority / evaluation order
 }
-
-// =============================================================================
-// Schedule (Abstract for Now)
-// =============================================================================
-
-/**
- * ScheduleIR is left abstract here; runtime must execute steps that
- * evaluate expr tables into slots using slotMeta.offset addressing.
- */
-export type ScheduleIR = unknown;

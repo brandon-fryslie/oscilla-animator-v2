@@ -145,7 +145,7 @@ const lower: BlockLower = ({ ctx, inputsById, config }) => {
 };
 
 registerBlock({
-  type: 'AddSignal',
+  kind: 'AddSignal',
   inputs: [
     { portId: 'a', type: 'Signal:float' },
     { portId: 'b', type: 'Signal:float' },

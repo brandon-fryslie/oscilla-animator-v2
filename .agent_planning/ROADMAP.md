@@ -1,6 +1,6 @@
 # Oscilla Animator v2 - Project Roadmap
 
-Last updated: 2026-01-09-073500
+Last updated: 2026-01-09-080500
 
 ---
 
@@ -69,13 +69,14 @@ Last updated: 2026-01-09-073500
 - **Planning Files:** `.agent_planning/phase1-remaining/`
 - **Status Note:** ~10% complete, major work pending
 
-#### 📋 compilation-pipeline [PLANNING]
-- **State:** PLANNING
+#### 🔄 compilation-pipeline [IN PROGRESS]
+- **State:** IN PROGRESS
 - **Epic:** Phase 1 Unified Plan (P3)
 - **Spec:** `design-docs/CANONICAL-oscilla-v2.5-20260109/topics/04-compilation.md`
 - **Description:** Passes 5-10: execution class, tables, schedule, slots, debug
-- **Planning Files:** `.agent_planning/phase1-remaining/`
-- **Status Note:** ~40% complete, passes 5-10 needed
+- **Planning Files:** `.agent_planning/compilation-pipeline/`
+- **Status Note:** Domain unification COMPLETE (2026-01-09). Passes 5-10 remaining.
+- **Completed Sprint:** Domain Unification - 11 tests passing, domain tracking through field composition
 
 #### 📋 runtime-execution [PLANNING]
 - **State:** PLANNING
@@ -95,7 +96,7 @@ Last updated: 2026-01-09-073500
 
 ---
 
-## ⏸️ Phase 2: Rendering & UI [QUEUED] (0/2 completed)
+## ⏸️ Phase 2: Rendering & UI [QUEUED] (0/3 completed)
 
 **Goal:** Implement rendering pipeline and basic UI for patch editing
 
@@ -114,6 +115,12 @@ Last updated: 2026-01-09-073500
 - **State:** PROPOSED
 - **Epic:** None
 - **Description:** Visual patch editor for creating and editing animation programs
+
+#### 💡 domain-editor-ui [PROPOSED]
+- **State:** PROPOSED
+- **Epic:** None
+- **Description:** UI for creating and selecting domains - presets vs custom configuration, domain management UX
+- **Origin:** Identified during compilation-pipeline domain unification sprint (2026-01-09)
 
 ---
 

@@ -23,6 +23,7 @@ import {
 } from './Indices';
 import type {
   CompiledProgramIR,
+  LegacyScheduleWrapper,
   SlotMetaEntry,
   DebugIndexIR,
   OutputSpecIR,
@@ -591,8 +592,9 @@ export class IRBuilder {
       slotToPort: new Map(),
     };
 
-    // Build schedule (for now, just wrap legacy steps)
-    const schedule = {
+    // Build schedule (legacy wrapper for backward compatibility)
+    const schedule: LegacyScheduleWrapper = {
+      kind: 'legacy',
       timeModel: this.timeModel,
       steps: this.steps,
       domains: this.domains,

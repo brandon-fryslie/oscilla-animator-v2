@@ -71,7 +71,7 @@ const lowerFiniteTimeRoot: BlockLower = ({ b, config }) => {
 };
 
 registerBlock({
-  type: 'FiniteTimeRoot',
+  kind: 'FiniteTimeRoot',
   inputs: [],
   outputs: [
     { portId: portId('tMs'), type: sigType('int') },

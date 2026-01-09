@@ -21,7 +21,7 @@ const lowerFieldFromDomainId: BlockLower = ({ b, inputsById }) => {
 };
 
 registerBlock({
-  type: 'FieldFromDomainId',
+  kind: 'FieldFromDomainId',
   inputs: [
     { portId: portId('domain'), type: domainType() },
   ],

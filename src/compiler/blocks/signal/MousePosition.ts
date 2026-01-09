@@ -5,7 +5,7 @@ import {
 } from '../registry';
 
 registerBlock({
-  type: 'MousePosition',
+  kind: 'MousePosition',
   inputs: [],
   outputs: [
     { portId: portId('x'), type: sigType('float') },

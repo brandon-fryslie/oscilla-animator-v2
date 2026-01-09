@@ -201,7 +201,7 @@ The v1 codebase had "god blocks" that agents kept copying. Clean v2 rewrite need
 import { registerBlock, portId, sigType, sig } from '../registry';
 
 registerBlock({
-  type: 'AddSignal',
+  kind: 'AddSignal',
   inputs: [
     { portId: portId('a'), type: sigType('float') },
     { portId: portId('b'), type: sigType('float') },

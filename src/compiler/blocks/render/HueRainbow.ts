@@ -42,7 +42,7 @@ const lowerHsvToRgb: BlockLower = ({ b, inputsById }) => {
 };
 
 registerBlock({
-  type: 'HsvToRgb',
+  kind: 'HsvToRgb',
   inputs: [
     { portId: portId('hue'), type: fieldType('float') },
     { portId: portId('sat'), type: sigType('float') },

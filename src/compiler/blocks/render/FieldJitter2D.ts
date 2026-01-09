@@ -51,7 +51,7 @@ const lowerFieldJitter2D: BlockLower = ({ b, inputsById }) => {
 };
 
 registerBlock({
-  type: 'FieldJitter2D',
+  kind: 'FieldJitter2D',
   inputs: [
     { portId: portId('pos'), type: fieldType('vec2') },
     { portId: portId('rand'), type: fieldType('float') },

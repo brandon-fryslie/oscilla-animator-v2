@@ -59,10 +59,13 @@ The single authoritative time source. Exactly one per patch. **System-managed** 
 | Output | Cardinality | Temporality | Payload | Description |
 |--------|-------------|-------------|---------|-------------|
 | `tMs` | one | continuous | int | Monotonic time in milliseconds |
+| `dt` | one | continuous | float | Delta time since last frame (ms) |
 | `phaseA` | one | continuous | phase | Primary phase (0..1) |
 | `phaseB` | one | continuous | phase | Secondary phase (0..1) |
 | `progress` | one | continuous | unit | 0..1 for finite only |
 | `pulse` | one | discrete | unit | Frame tick trigger |
+| `palette` | one | continuous | color | Default color atmosphere (HSV rainbow) |
+| `energy` | one | continuous | float | Animation intensity (0..1, audio-reactive ready) |
 
 ### TimeRoot Kinds
 
@@ -103,6 +106,39 @@ const pulseType: SignalType = {
   extent: {
     cardinality: { kind: 'instantiated', value: { kind: 'one' } },
     temporality: { kind: 'instantiated', value: { kind: 'discrete' } },
+    binding: { kind: 'default' },
+    perspective: { kind: 'default' },
+    branch: { kind: 'default' },
+  }
+};
+
+const dtType: SignalType = {
+  payload: 'float',
+  extent: {
+    cardinality: { kind: 'instantiated', value: { kind: 'one' } },
+    temporality: { kind: 'instantiated', value: { kind: 'continuous' } },
+    binding: { kind: 'default' },
+    perspective: { kind: 'default' },
+    branch: { kind: 'default' },
+  }
+};
+
+const paletteType: SignalType = {
+  payload: 'color',
+  extent: {
+    cardinality: { kind: 'instantiated', value: { kind: 'one' } },
+    temporality: { kind: 'instantiated', value: { kind: 'continuous' } },
+    binding: { kind: 'default' },
+    perspective: { kind: 'default' },
+    branch: { kind: 'default' },
+  }
+};
+
+const energyType: SignalType = {
+  payload: 'float',
+  extent: {
+    cardinality: { kind: 'instantiated', value: { kind: 'one' } },
+    temporality: { kind: 'instantiated', value: { kind: 'continuous' } },
     binding: { kind: 'default' },
     perspective: { kind: 'default' },
     branch: { kind: 'default' },
@@ -234,13 +270,14 @@ Simulation time in milliseconds.
 - **Monotonic**: Always increasing
 - **Unbounded**: Never wraps
 
-### dtMs
+### dt
 
-Delta time (not directly exposed from TimeRoot, but derivable):
+Delta time since last frame in milliseconds.
 
-```typescript
-const dtMs = tMs - tMs_previous;  // Via UnitDelay
-```
+- **Type**: `float`
+- **SignalType**: `one + continuous + float`
+- **Semantics**: Time elapsed since previous frame
+- **Use case**: Frame-rate independent animation, physics integration
 
 ### phaseA / phaseB
 
@@ -267,6 +304,25 @@ Frame tick trigger:
 - **Type**: `unit`
 - **SignalType**: `one + discrete + unit`
 - **Semantics**: Event fires every frame
+
+### palette
+
+Default color atmosphere for the patch.
+
+- **Type**: `color`
+- **SignalType**: `one + continuous + color`
+- **Default**: HSV rainbow cycling with phaseA (hue = phaseA, saturation = 1.0, value = 0.5)
+- **Semantics**: Provides ambient color reference; can be overridden
+
+### energy
+
+Animation intensity signal (audio-reactive ready).
+
+- **Type**: `float`
+- **SignalType**: `one + continuous + float`
+- **Range**: [0, 1]
+- **Default**: Sine wave derived from phaseA (0.5 + 0.5 * sin(phaseA * 2π))
+- **Semantics**: Overall animation "energy" level; designed for future audio reactivity
 
 ---
 

@@ -14,7 +14,7 @@ const lowerConstFloat: BlockLower = ({ b, config }) => {
 };
 
 registerBlock({
-  type: 'ConstFloat',
+  kind: 'ConstFloat',
   inputs: [],
   outputs: [{ portId: portId('out'), type: sigType('float') }],
   lower: lowerConstFloat,

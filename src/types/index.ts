@@ -121,57 +121,6 @@ export function portId(s: string): PortId {
 }
 
 // =============================================================================
-// Type Compatibility (Simple version for toy compiler)
-// =============================================================================
-
-import type { SignalType } from '../core/canonical-types';
-
-/**
- * Check if source type can connect to target type.
- * Returns the conversion needed, or null if incompatible.
- *
- * NOTE: This is a legacy function. New code should use the canonical type system
- * unification and compatibility functions from canonical-types.ts.
- */
-export function getConversion(
-  source: { world: string; domain: string },
-  target: { world: string; domain: string }
-): Conversion | null {
-  // Same type - direct
-  if (source.world === target.world && source.domain === target.domain) {
-    return { kind: 'direct' };
-  }
-
-  // Domain must match for automatic conversions
-  if (source.domain !== target.domain) {
-    return null;
-  }
-
-  // Scalar → Signal (promote)
-  if (source.world === 'scalar' && target.world === 'signal') {
-    return { kind: 'promote', from: 'scalar', to: 'signal' };
-  }
-
-  // Signal → Field (broadcast)
-  if (source.world === 'signal' && target.world === 'field') {
-    return { kind: 'broadcast' };
-  }
-
-  // Scalar → Field (promote then broadcast)
-  if (source.world === 'scalar' && target.world === 'field') {
-    return { kind: 'promote-broadcast' };
-  }
-
-  return null;
-}
-
-export type Conversion =
-  | { kind: 'direct' }
-  | { kind: 'promote'; from: 'scalar'; to: 'signal' }
-  | { kind: 'broadcast' }
-  | { kind: 'promote-broadcast' };
-
-// =============================================================================
 // SlotWorld - Classification for evaluation timing
 // =============================================================================
 
@@ -188,6 +137,9 @@ export type CombineMode =
   | 'average'   // Numeric average
   | 'max'       // Numeric maximum
   | 'min';      // Numeric minimum
+
+// Import SignalType for local use in interface definitions
+import type { SignalType } from '../core/canonical-types';
 
 // =============================================================================
 // Transform System Types

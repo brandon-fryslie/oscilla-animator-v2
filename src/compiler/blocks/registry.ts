@@ -81,7 +81,7 @@ export type BlockLower = (
 // =============================================================================
 
 export interface BlockDef {
-  readonly type: string;
+  readonly kind: string;
   readonly inputs: readonly PortDef[];
   readonly outputs: readonly PortDef[];
   readonly lower: BlockLower;
@@ -94,8 +94,8 @@ export interface BlockDef {
 const registry = new Map<string, BlockDef>();
 
 export function registerBlock(def: BlockDef): void {
-  if (registry.has(def.type)) {
-    throw new Error(`Block type already registered: ${def.type}`);
+  if (registry.has(def.kind)) {
+    throw new Error(`Block type already registered: ${def.kind}`);
   }
 
   // Validate port IDs are unique
@@ -103,13 +103,13 @@ export function registerBlock(def: BlockDef): void {
   const outputIds = new Set(def.outputs.map((p) => p.portId));
 
   if (inputIds.size !== def.inputs.length) {
-    throw new Error(`Duplicate input port IDs in block ${def.type}`);
+    throw new Error(`Duplicate input port IDs in block ${def.kind}`);
   }
   if (outputIds.size !== def.outputs.length) {
-    throw new Error(`Duplicate output port IDs in block ${def.type}`);
+    throw new Error(`Duplicate output port IDs in block ${def.kind}`);
   }
 
-  registry.set(def.type, def);
+  registry.set(def.kind, def);
 }
 
 export function getBlock(type: string): BlockDef | undefined {

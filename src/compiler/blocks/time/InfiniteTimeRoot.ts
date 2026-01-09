@@ -15,7 +15,7 @@ const lowerInfiniteTimeRoot: BlockLower = ({ b, config }) => {
   // Set time model with dual periods
   b.setTimeModel({ kind: 'infinite', windowMs: 60000, periodAMs, periodBMs });
 
-  // System time (unbounded, monotonic) - spec says 'int' but runtime uses float
+  // System time (unbounded, monotonic)
   const tMs = b.sigTime('tMs', sigType('int'));
 
   // Delta time
@@ -65,7 +65,7 @@ const lowerInfiniteTimeRoot: BlockLower = ({ b, config }) => {
 };
 
 registerBlock({
-  type: 'InfiniteTimeRoot',
+  kind: 'InfiniteTimeRoot',
   inputs: [],
   outputs: [
     { portId: portId('tMs'), type: sigType('int') },

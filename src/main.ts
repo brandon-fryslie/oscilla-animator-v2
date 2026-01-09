@@ -41,7 +41,7 @@ function buildAndCompile(particleCount: number) {
 
   const patch = buildPatch((b) => {
     // Time source - 16 second cycle (slower animation)
-    const time = b.addBlock('InfiniteTimeRoot', { periodMs: 16000 });
+    const time = b.addBlock('InfiniteTimeRoot', { periodAMs: 16000, periodBMs: 32000 });
 
     // Domain: variable particle count
     const domain = b.addBlock('DomainN', { n: particleCount, seed: 42 });
@@ -106,9 +106,9 @@ function buildAndCompile(particleCount: number) {
   b.wire(domain, 'domain', render, 'domain');
 
   // Wire time/phase
-  b.wire(time, 'phase', radiusPulse, 'phase');
-  b.wire(time, 'phase', angularOffset, 'phase');
-  b.wire(time, 'phase', hue, 'phase');
+  b.wire(time, 'phaseA', radiusPulse, 'phase');
+  b.wire(time, 'phaseA', angularOffset, 'phase');
+  b.wire(time, 'phaseA', hue, 'phase');
 
   // Wire per-element pulsing radius
   b.wire(id01, 'id01', radiusPulse, 'id01');
@@ -148,7 +148,7 @@ function buildAndCompile(particleCount: number) {
   b.wire(val, 'out', color, 'val');
 
   // Wire size pulse: each particle pulses smoothly over time
-  b.wire(time, 'phase', sizePulse, 'phase');
+  b.wire(time, 'phaseA', sizePulse, 'phase');
   b.wire(id01, 'id01', sizePulse, 'id01');
   b.wire(sizeBase, 'out', sizePulse, 'base');
   b.wire(sizeAmplitude, 'out', sizePulse, 'amplitude');

@@ -25,7 +25,7 @@ const lowerFieldMap: BlockLower = ({ b, inputsById, config }) => {
 };
 
 registerBlock({
-  type: 'FieldMap',
+  kind: 'FieldMap',
   inputs: [{ portId: portId('field'), type: fieldType('float') }],
   outputs: [{ portId: portId('out'), type: fieldType('float') }],
   lower: lowerFieldMap,

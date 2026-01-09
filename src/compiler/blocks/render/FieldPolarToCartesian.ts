@@ -77,7 +77,7 @@ const lowerFieldPolarToCartesian: BlockLower = ({ b, inputsById }) => {
 };
 
 registerBlock({
-  type: 'FieldPolarToCartesian',
+  kind: 'FieldPolarToCartesian',
   inputs: [
     { portId: portId('centerX'), type: sigType('float') },
     { portId: portId('centerY'), type: sigType('float') },

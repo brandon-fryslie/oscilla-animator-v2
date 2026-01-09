@@ -48,7 +48,7 @@ const lowerFieldAngularOffset: BlockLower = ({ b, inputsById }) => {
 };
 
 registerBlock({
-  type: 'FieldAngularOffset',
+  kind: 'FieldAngularOffset',
   inputs: [
     { portId: portId('phase'), type: sigType('phase') },
     { portId: portId('spin'), type: sigType('float') },

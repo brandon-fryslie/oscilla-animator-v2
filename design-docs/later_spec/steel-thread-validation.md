@@ -9,17 +9,17 @@ The steel thread patch uses the minimum set of blocks required to produce visibl
 ### Blocks (in dependency order)
 
 1. **InfiniteTimeRoot**
-   - Type: `InfiniteTimeRoot`
+   - kind: `InfiniteTimeRoot`
    - Params: `{ periodMs: 3000 }`
    - Purpose: Provides time signals for animation
 
 2. **GridDomain**
-   - Type: `GridDomain`
+   - kind: `GridDomain`
    - Params: `{ rows: 5, cols: 5 }`
    - Purpose: Creates a 25-element domain
 
 3. **RenderInstances2D**
-   - Type: `RenderInstances2D`
+   - kind: `RenderInstances2D`
    - Params: `{}`
    - Purpose: Render sink that materializes circles
 

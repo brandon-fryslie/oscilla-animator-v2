@@ -87,7 +87,7 @@ const lowerFieldPulse: BlockLower = ({ b, inputsById }) => {
 };
 
 registerBlock({
-  type: 'FieldPulse',
+  kind: 'FieldPulse',
   inputs: [
     { portId: portId('phase'), type: sigType('phase') },
     { portId: portId('id01'), type: fieldType('float') },

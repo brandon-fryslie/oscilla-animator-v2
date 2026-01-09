@@ -78,7 +78,7 @@ const lowerRenderInstances2D: BlockLower = ({ b, inputsById }) => {
 };
 
 registerBlock({
-  type: 'RenderInstances2D',
+  kind: 'RenderInstances2D',
   inputs: [
     { portId: portId('domain'), type: domainType() },
     { portId: portId('pos'), type: fieldType('vec2') },

@@ -38,7 +38,7 @@ const lowerGridDomain: BlockLower = ({ b, config }) => {
 };
 
 registerBlock({
-  type: 'GridDomain',
+  kind: 'GridDomain',
   inputs: [],
   outputs: [
     { portId: portId('domain'), type: domainType() },

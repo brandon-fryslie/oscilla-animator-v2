@@ -29,7 +29,7 @@ const lowerFieldAdd: BlockLower = ({ b, inputsById }) => {
 };
 
 registerBlock({
-  type: 'FieldAdd',
+  kind: 'FieldAdd',
   inputs: [
     { portId: portId('a'), type: fieldType('float') },
     { portId: portId('b'), type: fieldType('float') },

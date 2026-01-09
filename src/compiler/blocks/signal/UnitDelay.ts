@@ -41,7 +41,7 @@ const lowerUnitDelay: BlockLower = ({ b, inputsById }) => {
 };
 
 registerBlock({
-  type: 'UnitDelay',
+  kind: 'UnitDelay',
   inputs: [{ portId: portId('in'), type: sigType('float') }],
   outputs: [{ portId: portId('out'), type: sigType('float') }],
   lower: lowerUnitDelay,

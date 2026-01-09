@@ -41,7 +41,7 @@ const lowerHash: BlockLower = ({ b, inputsById }) => {
 };
 
 registerBlock({
-  type: 'Hash',
+  kind: 'Hash',
   inputs: [
     { portId: portId('value'), type: sigType('float') },
     { portId: portId('seed'), type: sigType('float'), optional: true },

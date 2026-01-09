@@ -51,7 +51,7 @@ const lowerFieldZipSig: BlockLower = ({ b, inputsById, config }) => {
 };
 
 registerBlock({
-  type: 'FieldZipSig',
+  kind: 'FieldZipSig',
   inputs: [
     { portId: portId('field'), type: fieldType('float') },
     { portId: portId('signal'), type: sigType('float') },

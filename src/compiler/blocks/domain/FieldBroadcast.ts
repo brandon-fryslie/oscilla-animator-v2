@@ -20,7 +20,7 @@ const lowerFieldBroadcast: BlockLower = ({ b, inputsById }) => {
 };
 
 registerBlock({
-  type: 'FieldBroadcast',
+  kind: 'FieldBroadcast',
   inputs: [{ portId: portId('signal'), type: sigType('float') }],
   outputs: [{ portId: portId('out'), type: fieldType('float') }],
   lower: lowerFieldBroadcast,

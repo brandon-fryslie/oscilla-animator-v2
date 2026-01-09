@@ -7,6 +7,7 @@
  * - Pass 4: Dependency Graph
  * - Pass 5: SCC Validation (cycle check)
  * - Pass 6: Block Lowering
+ * - Pass 7: Schedule Construction
  * - Pass 8: Link Resolution
  */
 
@@ -30,6 +31,10 @@ export type { AcyclicOrLegalGraph } from "../ir/patches";
 // Pass 6: Block Lowering
 export { pass6BlockLowering } from "./pass6-block-lowering";
 export type { UnlinkedIRFragments, ValueRefPacked } from "./pass6-block-lowering";
+
+// Pass 7: Schedule Construction
+export { pass7Schedule } from "./pass7-schedule";
+export type { ScheduleIR, ScheduleStep, PhaseGroup, ExecutionPhase, ExecutionClass } from "./pass7-schedule";
 
 // Pass 8: Link Resolution
 export { pass8LinkResolution } from "./pass8-link-resolution";
