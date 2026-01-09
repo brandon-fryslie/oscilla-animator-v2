@@ -16,9 +16,10 @@
 // Import canonical types as source of truth
 import type { SignalType } from '../../core/canonical-types';
 
-// Import ValueSlot for use in this file
-import type { ValueSlot as _ValueSlot } from './Indices';
+// Import ValueSlot and StateSlotId for use in this file
+import type { ValueSlot as _ValueSlot, StateSlotId as _StateSlotId } from './Indices';
 type ValueSlot = _ValueSlot;
+type StateSlotId = _StateSlotId;
 
 // Re-export branded indices
 export type {
@@ -26,6 +27,7 @@ export type {
   PortIndex,
   BusIndex,
   ValueSlot,
+  StateSlotId,
   StepIndex,
   SigExprId,
   FieldExprId,
@@ -45,6 +47,7 @@ export {
   portIndex,
   busIndex,
   valueSlot,
+  stateSlotId,
   stepIndex,
   sigExprId,
   fieldExprId,
@@ -76,7 +79,8 @@ export type SigExpr =
   | SigExprTime
   | SigExprExternal
   | SigExprMap
-  | SigExprZip;
+  | SigExprZip
+  | SigExprStateRead;
 
 export interface SigExprConst {
   readonly kind: 'const';
@@ -113,6 +117,12 @@ export interface SigExprZip {
   readonly kind: 'zip';
   readonly inputs: readonly SigExprId[];
   readonly fn: PureFn;
+  readonly type: SignalType;
+}
+
+export interface SigExprStateRead {
+  readonly kind: 'stateRead';
+  readonly stateSlot: StateSlotId;
   readonly type: SignalType;
 }
 
@@ -240,6 +250,9 @@ export enum OpCode {
 
   // Phase
   Wrap01 = 'wrap01',
+
+  // Hash
+  Hash = 'hash',
 }
 
 // =============================================================================
@@ -270,7 +283,8 @@ export type TimeModel =
 export type Step =
   | StepEvalSig
   | StepMaterialize
-  | StepRender;
+  | StepRender
+  | StepStateWrite;
 
 export interface StepEvalSig {
   readonly kind: 'evalSig';
@@ -291,6 +305,12 @@ export interface StepRender {
   readonly position: FieldExprId;
   readonly color: FieldExprId;
   readonly size?: SigExprId | FieldExprId;
+}
+
+export interface StepStateWrite {
+  readonly kind: 'stateWrite';
+  readonly stateSlot: StateSlotId;
+  readonly value: SigExprId;
 }
 
 // =============================================================================
@@ -316,4 +336,5 @@ export interface IRProgram {
   readonly domains: ReadonlyMap<DomainId, DomainDef>;
   readonly steps: readonly Step[];
   readonly slotCount: number;
+  readonly stateSlotCount?: number;
 }
