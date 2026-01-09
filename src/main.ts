@@ -9,6 +9,7 @@ import { compile } from './compiler';
 import { createRuntimeState, BufferPool, executeFrame } from './runtime';
 import { renderFrame } from './render';
 import { getAppLayout, TabbedContent } from './ui';
+import { TableView, BlockInspector, BlockLibrary, DomainsPanel } from './ui/components';
 import type { Block } from './graph/Patch';
 
 // =============================================================================
@@ -23,7 +24,12 @@ let ctx: CanvasRenderingContext2D | null = null;
 let pool: BufferPool | null = null;
 let logEl: HTMLElement | null = null;
 let statsEl: HTMLElement | null = null;
-let inspectorEl: HTMLElement | null = null;
+
+// UI component instances
+let tableView: TableView | null = null;
+let blockInspector: BlockInspector | null = null;
+let blockLibrary: BlockLibrary | null = null;
+let domainsPanel: DomainsPanel | null = null;
 
 // =============================================================================
 // Zoom and Pan State
@@ -48,70 +54,6 @@ function log(msg: string, level: 'info' | 'warn' | 'error' = 'info') {
   logEl.appendChild(line);
   logEl.scrollTop = logEl.scrollHeight;
   console.log(`[${level}] ${msg}`);
-}
-
-// =============================================================================
-// Block Inspector
-// =============================================================================
-
-function showBlockInspector(block: Block) {
-  if (!inspectorEl) return;
-
-  const html: string[] = [];
-
-  html.push('<h3>Block Inspector</h3>');
-
-  html.push('<div class="inspector-section">');
-  html.push('<div class="inspector-label">Block ID</div>');
-  html.push(`<div class="inspector-value">${escapeHtml(block.id)}</div>`);
-  html.push('</div>');
-
-  html.push('<div class="inspector-section">');
-  html.push('<div class="inspector-label">Type</div>');
-  html.push(`<div class="inspector-value">${escapeHtml(block.type)}</div>`);
-  html.push('</div>');
-
-  if (block.label) {
-    html.push('<div class="inspector-section">');
-    html.push('<div class="inspector-label">Label</div>');
-    html.push(`<div class="inspector-value">${escapeHtml(block.label)}</div>`);
-    html.push('</div>');
-  }
-
-  const params = Object.entries(block.params);
-  if (params.length > 0) {
-    html.push('<div class="inspector-section">');
-    html.push('<div class="inspector-label">Parameters</div>');
-    html.push('<div class="inspector-params">');
-    for (const [key, value] of params) {
-      html.push(`<div class="param-key">${escapeHtml(key)}:</div>`);
-      html.push(`<div class="param-value">${formatParamValue(value)}</div>`);
-    }
-    html.push('</div>');
-    html.push('</div>');
-  }
-
-  inspectorEl.innerHTML = html.join('');
-}
-
-function escapeHtml(text: string): string {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-function formatParamValue(value: any): string {
-  if (typeof value === 'string') {
-    return escapeHtml(`"${value}"`);
-  } else if (typeof value === 'number') {
-    return Number.isInteger(value) ? value.toString() : value.toFixed(3);
-  } else if (typeof value === 'boolean') {
-    return value.toString();
-  } else if (value === null || value === undefined) {
-    return 'null';
-  } else {
-    return escapeHtml(JSON.stringify(value));
-  }
 }
 
 // =============================================================================
@@ -327,6 +269,17 @@ async function buildAndCompile(particleCount: number) {
   currentProgram = program;
   currentState = createRuntimeState(program.slotMeta.length);
   currentPatch = patch;
+
+  // Update UI components with new patch
+  if (tableView) {
+    tableView.setPatch(patch);
+  }
+  if (blockInspector) {
+    blockInspector.setPatch(patch);
+  }
+  if (domainsPanel) {
+    domainsPanel.setPatch(patch);
+  }
 }
 
 // =============================================================================
@@ -423,23 +376,28 @@ async function setupUI() {
       id: 'library',
       label: 'Library',
       contentFactory: (container) => {
-        container.innerHTML = '<div style="padding: 1rem; color: #888;">Block library (coming soon)</div>';
+        blockLibrary = new BlockLibrary(container);
       },
     },
     {
       id: 'inspector',
       label: 'Inspector',
       contentFactory: (container) => {
-        inspectorEl = document.createElement('div');
-        inspectorEl.className = 'block-inspector';
-        container.appendChild(inspectorEl);
+        blockInspector = new BlockInspector(container);
       },
     },
   ], { initialTab: 'inspector' });
 
-  // Setup center panel with canvas (patch view will be reimplemented)
+  // Setup center panel with Table View and Preview
   const centerRegion = appLayout.getRegionElement('center');
   new TabbedContent(centerRegion, [
+    {
+      id: 'table',
+      label: 'Blocks',
+      contentFactory: (container) => {
+        tableView = new TableView(container);
+      },
+    },
     {
       id: 'canvas',
       label: 'Preview',
@@ -451,16 +409,16 @@ async function setupUI() {
         container.appendChild(canvasWrapper);
       },
     },
-  ], { initialTab: 'canvas' });
+  ], { initialTab: 'table' });
 
-  // Setup right sidebar with tabs (Debug + Help)
+  // Setup right sidebar with Domains and Help
   const rightRegion = appLayout.getRegionElement('right');
   new TabbedContent(rightRegion, [
     {
-      id: 'debug',
-      label: 'Debug',
+      id: 'domains',
+      label: 'Domains',
       contentFactory: (container) => {
-        container.innerHTML = '<div style="padding: 1rem; color: #888;">Debug panel (coming soon)</div>';
+        domainsPanel = new DomainsPanel(container);
       },
     },
     {
@@ -478,14 +436,15 @@ async function setupUI() {
             </ul>
             <p style="margin-top: 1rem;"><strong>Patch:</strong></p>
             <ul style="margin-left: 1rem; margin-top: 0.5rem;">
-              <li>Click blocks to inspect</li>
-              <li>Scroll/drag to navigate</li>
+              <li>Click blocks in table to inspect</li>
+              <li>Expand rows to see ports and connections</li>
+              <li>Click connections to navigate</li>
             </ul>
           </div>
         `;
       },
     },
-  ], { initialTab: 'debug' });
+  ], { initialTab: 'domains' });
 
   // Setup bottom log panel
   const bottomRegion = appLayout.getRegionElement('bottom');
