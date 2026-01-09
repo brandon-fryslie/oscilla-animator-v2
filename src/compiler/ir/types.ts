@@ -80,6 +80,7 @@ export type SigExpr =
   | SigExprExternal
   | SigExprMap
   | SigExprZip
+  | SigExprStateRead
   | SigExprStateRead;
 
 export interface SigExprConst {
@@ -163,6 +164,7 @@ export interface FieldExprMap {
   readonly input: FieldExprId;
   readonly fn: PureFn;
   readonly type: SignalType;
+  readonly domain?: DomainId; // Propagated from input
 }
 
 export interface FieldExprZip {
@@ -170,6 +172,7 @@ export interface FieldExprZip {
   readonly inputs: readonly FieldExprId[];
   readonly fn: PureFn;
   readonly type: SignalType;
+  readonly domain?: DomainId; // Unified from inputs
 }
 
 export interface FieldExprZipSig {
@@ -178,6 +181,7 @@ export interface FieldExprZipSig {
   readonly signals: readonly SigExprId[];
   readonly fn: PureFn;
   readonly type: SignalType;
+  readonly domain?: DomainId; // From field input
 }
 
 export interface FieldExprMapIndexed {
@@ -284,6 +288,7 @@ export type Step =
   | StepEvalSig
   | StepMaterialize
   | StepRender
+  | StepStateWrite
   | StepStateWrite;
 
 export interface StepEvalSig {
