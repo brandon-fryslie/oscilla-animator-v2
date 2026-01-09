@@ -133,18 +133,22 @@ export interface RuntimeState {
 
   /** External inputs (mouse, MIDI, etc.) */
   external: ExternalInputs;
+
+  /** Persistent state array (survives across frames) */
+  state: Float64Array;
 }
 
 /**
  * Create a RuntimeState
  */
-export function createRuntimeState(slotCount: number): RuntimeState {
+export function createRuntimeState(slotCount: number, stateSlotCount: number = 0): RuntimeState {
   return {
     values: createValueStore(slotCount),
     cache: createFrameCache(),
     timeState: createTimeState(),
     time: null,
     external: createExternalInputs(),
+    state: new Float64Array(stateSlotCount),
   };
 }
 

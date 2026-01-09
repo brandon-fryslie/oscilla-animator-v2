@@ -103,7 +103,7 @@ export class IRBuilder {
     return id;
   }
 
-  sigTime(which: 't' | 'dt' | 'phase' | 'pulse' | 'energy', type: SignalType): SigExprId {
+  sigTime(which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'pulse' | 'progress', type: SignalType): SigExprId {
     const id = makeSigExprId(this.nextSigId++);
     this.signals.set(id, { kind: 'time', which, type });
     return id;

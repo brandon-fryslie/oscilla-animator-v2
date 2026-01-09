@@ -79,6 +79,20 @@ function applyNaryOp(op: string, values: number[]): number {
       return values.length >= 3
         ? values[0] * (1 - values[2]) + values[1] * values[2]
         : values[0];
+    case 'hash': {
+      // Deterministic hash function for seeded randomness
+      // Input: (value, seed) → Output: [0, 1)
+      const [value, seed = 0] = values;
+
+      // xxHash-style mixing for good distribution
+      let h = Math.floor(value * 2654435761) ^ Math.floor(seed * 2246822519);
+      h = Math.imul(h ^ (h >>> 15), 2246822519);
+      h = Math.imul(h ^ (h >>> 13), 3266489917);
+      h = (h ^ (h >>> 16)) >>> 0;
+
+      // Normalize to [0, 1)
+      return h / 0x100000000;
+    }
     default:
       // Try unary if single value
       if (values.length === 1) {

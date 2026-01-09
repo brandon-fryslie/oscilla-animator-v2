@@ -96,7 +96,7 @@ export interface SigExprSlot {
 
 export interface SigExprTime {
   readonly kind: 'time';
-  readonly which: 't' | 'dt' | 'phase' | 'pulse' | 'energy';
+  readonly which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'pulse' | 'progress';
   readonly type: SignalType;
 }
 
@@ -272,9 +272,9 @@ export interface DomainDef {
 // =============================================================================
 
 export type TimeModel =
-  | { kind: 'finite'; durationMs: number }
-  | { kind: 'infinite'; windowMs?: number }
-  | { kind: 'cyclic'; periodMs: number };
+  | { kind: 'finite'; durationMs: number; periodAMs?: number; periodBMs?: number }
+  | { kind: 'infinite'; windowMs?: number; periodAMs?: number; periodBMs?: number }
+  | { kind: 'cyclic'; periodAMs: number; periodBMs: number };
 
 // =============================================================================
 // Schedule Steps

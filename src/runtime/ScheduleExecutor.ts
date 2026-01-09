@@ -195,6 +195,13 @@ export function executeFrame(
         break;
       }
 
+      case 'stateWrite': {
+        // Write to persistent state array
+        const value = evaluateSignal(step.value, signals, state);
+        state.state[step.stateSlot as number] = value;
+        break;
+      }
+
       default: {
         const _exhaustive: never = step;
         throw new Error(`Unknown step kind: ${(_exhaustive as Step).kind}`);

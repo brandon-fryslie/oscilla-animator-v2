@@ -120,6 +120,11 @@ function evaluateSigExpr(
       return applyPureFn(expr.fn, inputs);
     }
 
+    case 'stateRead': {
+      // Read from persistent state array
+      return state.state[expr.stateSlot as number];
+    }
+
     default: {
       const _exhaustive: never = expr;
       throw new Error(`Unknown signal expr kind: ${(_exhaustive as SigExpr).kind}`);
