@@ -211,8 +211,9 @@ export class IRBuilder {
    * Domain is inherited from the input field.
    */
   fieldMap(input: FieldExprId, fn: PureFn, type: SignalType): FieldExprId {
+    const domain = this.inferFieldDomain(input);
     const id = makeFieldExprId(this.nextFieldId++);
-    this.fields.set(id, { kind: 'map', input, fn, type });
+    this.fields.set(id, { kind: 'map', input, fn, type, domain });
     return id;
   }
 
@@ -221,8 +222,9 @@ export class IRBuilder {
    * Domain must be consistent across all inputs (enforced at compile time).
    */
   fieldZip(inputs: readonly FieldExprId[], fn: PureFn, type: SignalType): FieldExprId {
+    const domain = this.inferZipDomain(inputs);
     const id = makeFieldExprId(this.nextFieldId++);
-    this.fields.set(id, { kind: 'zip', inputs, fn, type });
+    this.fields.set(id, { kind: 'zip', inputs, fn, type, domain });
     return id;
   }
 
@@ -236,8 +238,9 @@ export class IRBuilder {
     fn: PureFn,
     type: SignalType
   ): FieldExprId {
+    const domain = this.inferFieldDomain(field);
     const id = makeFieldExprId(this.nextFieldId++);
-    this.fields.set(id, { kind: 'zipSig', field, signals, fn, type });
+    this.fields.set(id, { kind: 'zipSig', field, signals, fn, type, domain });
     return id;
   }
 
@@ -272,6 +275,63 @@ export class IRBuilder {
     // Note: FieldExpr types don't have a 'slot' kind, this may need review
     // For now, throw an error to catch usage
     throw new Error('fieldSlot is not implemented - use fieldSource or fieldBroadcast instead');
+  }
+
+  // ===========================================================================
+  // Domain Inference
+  // ===========================================================================
+
+  /**
+   * Infer domain from a field expression (public for render sink validation).
+   * Returns the domain ID if the field is bound to a specific domain,
+   * or undefined if the field has no inherent domain (e.g., broadcast, const).
+   */
+  inferFieldDomain(fieldId: FieldExprId): DomainId | undefined {
+    const expr = this.fields.get(fieldId);
+    if (!expr) return undefined;
+
+    switch (expr.kind) {
+      case 'source':
+        return expr.domain;
+      case 'mapIndexed':
+        return expr.domain;
+      case 'map':
+        return expr.domain ?? this.inferFieldDomain(expr.input);
+      case 'zip':
+        return expr.domain ?? this.inferZipDomain(expr.inputs);
+      case 'zipSig':
+        return expr.domain ?? this.inferFieldDomain(expr.field);
+      case 'broadcast':
+      case 'const':
+        return undefined; // No inherent domain
+    }
+  }
+
+  /**
+   * Infer domain from zip inputs, throwing an error if they differ.
+   * Returns the unified domain, or undefined if all inputs are domain-free.
+   */
+  private inferZipDomain(inputs: readonly FieldExprId[]): DomainId | undefined {
+    const domains: DomainId[] = [];
+    for (const id of inputs) {
+      const d = this.inferFieldDomain(id);
+      if (d !== undefined) {
+        domains.push(d);
+      }
+    }
+
+    if (domains.length === 0) return undefined;
+
+    const first = domains[0];
+    for (let i = 1; i < domains.length; i++) {
+      if (domains[i] !== first) {
+        throw new Error(
+          `Domain mismatch in fieldZip: '${first}' vs '${domains[i]}'. ` +
+          `All field inputs must share the same domain.`
+        );
+      }
+    }
+    return first;
   }
 
   // ===========================================================================

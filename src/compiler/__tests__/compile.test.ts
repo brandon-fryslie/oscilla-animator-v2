@@ -68,7 +68,7 @@ describe('compile', () => {
       const patch = buildPatch((b) => {
         const time = b.addBlock('InfiniteTimeRoot', { periodMs: 1000 });
         const osc = b.addBlock('Oscillator', { waveform: 'sin' });
-        b.wire(time, 'phase', osc, 'phase');
+        b.wire(time, 'phaseA', osc, 'phase');
       });
 
       const result = compile(patch);
@@ -129,7 +129,7 @@ describe('compile', () => {
         const osc = b.addBlock('Oscillator', { waveform: 'sin' });
         const broadcast = b.addBlock('FieldBroadcast', {});
 
-        b.wire(time, 'phase', osc, 'phase');
+        b.wire(time, 'phaseA', osc, 'phase');
         b.wire(osc, 'out', broadcast, 'signal');
       });
 

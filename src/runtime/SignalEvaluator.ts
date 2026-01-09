@@ -81,25 +81,28 @@ function evaluateSigExpr(
       return state.values.f64[expr.slot as number];
     }
 
-    case 'time': {
-      const timeExpr = expr as { which: 't' | 'dt' | 'phase' | 'pulse' | 'energy' };
+        case 'time': {
+      const timeExpr = expr as { which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'pulse' | 'progress' };
       switch (timeExpr.which) {
-        case 't':
-          return state.time.tModelMs;
+        case 'tMs':
+          return state.time.tMs;
         case 'dt':
           return state.time.dt;
-        case 'phase':
-          return state.time.phase ?? 0;
+        case 'phaseA':
+          return state.time.phaseA;
+        case 'phaseB':
+          return state.time.phaseB;
         case 'pulse':
-          return state.time.pulse ?? 0;
-        case 'energy':
-          return state.time.energy ?? 0;
+          return state.time.pulse;
+        case 'progress':
+          return state.time.progress ?? 0;
         default: {
           const _exhaustive: never = timeExpr.which;
           throw new Error(`Unknown time signal: ${String(_exhaustive)}`);
         }
       }
     }
+
 
     case 'external': {
       const ext = expr as { which: 'mouseX' | 'mouseY' | 'mouseOver' };

@@ -277,8 +277,7 @@ export interface DomainDef {
 
 export type TimeModel =
   | { kind: 'finite'; durationMs: number; periodAMs?: number; periodBMs?: number }
-  | { kind: 'infinite'; windowMs?: number; periodAMs?: number; periodBMs?: number }
-  | { kind: 'cyclic'; periodAMs: number; periodBMs: number };
+  | { kind: 'infinite'; windowMs?: number; periodAMs?: number; periodBMs?: number };
 
 // =============================================================================
 // Schedule Steps

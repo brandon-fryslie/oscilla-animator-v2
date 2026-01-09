@@ -21,6 +21,7 @@ import {
   signalTypeSignal,
   signalTypeField,
   signalTypeStatic,
+  signalTypeTrigger,
   domainRef,
   type PayloadType,
 } from '../../core/canonical-types';
@@ -150,11 +151,11 @@ export function scalarType(payload: PayloadType): SignalType {
 }
 
 /**
- * Create an Event SignalType.
- * Note: Events use discrete temporality.
+ * Create an Event SignalType (one + discrete).
+ * Fixed to use discrete temporality per spec.
  */
-export function eventType(payload: PayloadType = 'float'): SignalType {
-  return signalTypeSignal(payload); // TODO: Update to use discrete temporality
+export function eventType(payload: PayloadType = 'unit'): SignalType {
+  return signalTypeTrigger(payload);
 }
 
 /**
