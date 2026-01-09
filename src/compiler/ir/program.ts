@@ -7,6 +7,9 @@
  * Spec Reference: design-docs/IR-and-normalization-5-axes.md
  */
 
+// Import the legacy types for now (will be replaced with proper execution node types)
+import type { SigExpr, FieldExpr, EventExpr } from './types';
+
 // =============================================================================
 // Version and Core Types
 // =============================================================================
@@ -70,6 +73,26 @@ export interface CompiledProgramIR {
 
   // Debug provenance
   readonly debugIndex: DebugIndexIR;
+}
+
+// =============================================================================
+// Execution Tables
+// =============================================================================
+
+/**
+ * Dense, cache-friendly execution tables.
+ * For v0, we use the legacy expr types but wrap them in dense arrays.
+ */
+export interface SignalExprTable {
+  readonly nodes: readonly SigExpr[];
+}
+
+export interface FieldExprTable {
+  readonly nodes: readonly FieldExpr[];
+}
+
+export interface EventExprTable {
+  readonly nodes: readonly EventExpr[];
 }
 
 // =============================================================================
@@ -272,21 +295,6 @@ export interface CombineDebugIR {
   readonly dst: ValueSlot;
   readonly contributors: readonly ValueSlot[]; // in priority / evaluation order
 }
-
-// =============================================================================
-// Execution Tables (Abstract for Now)
-// =============================================================================
-
-/**
- * These are intentionally left abstract here; they will be defined
- * as dense arrays in subsequent passes.
- *
- * All execution tables MUST ultimately write into ValueSlots that have
- * SlotMetaEntry with TypeDesc.axes filled in.
- */
-export type SignalExprTable = unknown;
-export type FieldExprTable = unknown;
-export type EventExprTable = unknown;
 
 // =============================================================================
 // Schedule (Abstract for Now)

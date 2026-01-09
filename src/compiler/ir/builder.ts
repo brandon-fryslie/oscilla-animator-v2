@@ -6,6 +6,7 @@
  */
 
 import type { SignalType } from '../../core/canonical-types';
+import { signalTypeToTypeDesc } from './bridge';
 import {
   domainId as makeDomainId,
   valueSlot as makeValueSlot,
@@ -19,10 +20,16 @@ import {
   type ValueSlot,
 } from './Indices';
 import type {
+  CompiledProgramIR,
+  SlotMetaEntry,
+  DebugIndexIR,
+  OutputSpecIR,
+  ValueSlot as IRValueSlot,
+} from './program';
+import type {
   DomainDef,
   EventExpr,
   FieldExpr,
-  IRProgram,
   OpCode,
   PureFn,
   SigExpr,
@@ -45,6 +52,9 @@ export class IRBuilder {
 
   private timeModel: TimeModel = { kind: 'infinite' };
 
+  // Track slot types for slotMeta generation
+  private slotTypes = new Map<ValueSlot, SignalType>();
+
   // ===========================================================================
   // Time Model
   // ===========================================================================
@@ -59,6 +69,13 @@ export class IRBuilder {
 
   allocSlot(): ValueSlot {
     return makeValueSlot(this.nextSlotId++);
+  }
+
+  /** Allocate a typed value slot (tracking type for slotMeta) */
+  allocTypedSlot(type: SignalType, _label?: string): ValueSlot {
+    const slot = makeValueSlot(this.nextSlotId++);
+    this.slotTypes.set(slot, type);
+    return slot;
   }
 
   // ===========================================================================
@@ -276,18 +293,103 @@ export class IRBuilder {
   }
 
   // ===========================================================================
-  // Build
+  // Build - Convert to CompiledProgramIR
   // ===========================================================================
 
-  build(): IRProgram {
-    return {
-      timeModel: this.timeModel,
-      signals: new Map(this.signals),
-      fields: new Map(this.fields),
-      events: new Map(this.events),
-      domains: new Map(this.domains),
-      steps: [...this.steps],
-      slotCount: this.nextSlotId,
+  build(): CompiledProgramIR {
+    // Convert Maps to dense arrays
+    const signalExprs = { nodes: Array.from(this.signals.values()) };
+    const fieldExprs = { nodes: Array.from(this.fields.values()) };
+    const eventExprs = { nodes: Array.from(this.events.values()) };
+
+    // Build slotMeta with offsets
+    const slotMeta: SlotMetaEntry[] = [];
+    for (let i = 0; i < this.nextSlotId; i++) {
+      const slot = makeValueSlot(i) as IRValueSlot;
+      const type = this.slotTypes.get(slot);
+
+      // Default type for slots without explicit type info
+      const typeDesc = type
+        ? signalTypeToTypeDesc(type)
+        : {
+            axes: {
+              domain: 'signal' as const,
+              temporality: 'continuous' as const,
+              perspective: 'global' as const,
+              branch: 'single' as const,
+              identity: { kind: 'none' as const },
+            },
+            shape: { kind: 'number' as const },
+          };
+
+      slotMeta.push({
+        slot,
+        storage: 'f64', // v0: all slots use f64 storage
+        offset: i, // Direct offset = slot number for now
+        type: typeDesc,
+      });
+    }
+
+    // Find render step to determine output slot
+    const renderStep = this.steps.find((s) => s.kind === 'render');
+    const outputs: OutputSpecIR[] = renderStep
+      ? [
+          {
+            kind: 'renderFrame',
+            slot: makeValueSlot(0) as IRValueSlot, // Placeholder - will be fixed when we track render output
+          },
+        ]
+      : [];
+
+    // Minimal debug index
+    const debugIndex: DebugIndexIR = {
+      stepToBlock: new Map(),
+      slotToBlock: new Map(),
+      ports: [],
+      slotToPort: new Map(),
     };
+
+    // Build schedule (for now, just wrap legacy steps)
+    const schedule = {
+      timeModel: this.timeModel,
+      steps: this.steps,
+      domains: this.domains,
+    };
+
+    return {
+      irVersion: 1,
+      signalExprs,
+      fieldExprs,
+      eventExprs,
+      constants: { json: [] },
+      schedule: schedule as any, // TODO: proper ScheduleIR type
+      outputs,
+      slotMeta,
+      debugIndex,
+    };
+  }
+
+  // ===========================================================================
+  // Legacy compatibility methods (for gradual migration)
+  // ===========================================================================
+
+  /** Get domains map (for runtime that still needs it) */
+  getDomains(): ReadonlyMap<DomainId, DomainDef> {
+    return new Map(this.domains);
+  }
+
+  /** Get signals map (for runtime that still needs it) */
+  getSignals(): ReadonlyMap<SigExprId, SigExpr> {
+    return new Map(this.signals);
+  }
+
+  /** Get fields map (for runtime that still needs it) */
+  getFields(): ReadonlyMap<FieldExprId, FieldExpr> {
+    return new Map(this.fields);
+  }
+
+  /** Get slot count (for runtime state initialization) */
+  getSlotCount(): number {
+    return this.nextSlotId;
   }
 }

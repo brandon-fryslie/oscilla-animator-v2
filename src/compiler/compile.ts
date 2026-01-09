@@ -1,7 +1,7 @@
 /**
  * Main Compiler Entry Point
  *
- * Compiles a Patch into an IRProgram through a series of passes:
+ * Compiles a Patch into a CompiledProgramIR through a series of passes:
  * 1. Normalize - Dense indices, canonical ordering
  * 2. TypeCheck - Validate connections
  * 3. TimeResolve - Find TimeRoot, extract TimeModel
@@ -13,7 +13,9 @@
 
 import type { Patch } from '../graph';
 import { normalize, type NormalizedPatch } from '../graph/normalize';
+import type { CompiledProgramIR } from './ir/program';
 import type { IRProgram } from './ir';
+import { adaptToLegacy } from './ir/legacy-adapter';
 import { IRBuilder } from './ir';
 import { getBlock, type ValueRef } from './blocks';
 import { checkTypes } from './passes/TypeChecker';
@@ -31,7 +33,7 @@ export interface CompileError {
 
 export interface CompileResult {
   readonly kind: 'ok';
-  readonly program: IRProgram;
+  readonly program: IRProgram; // Legacy interface for now
 }
 
 export interface CompileFailure {
@@ -121,9 +123,13 @@ export function compile(patch: Patch): CompileResult | CompileFailure {
     return { kind: 'error', errors };
   }
 
+  // Build CompiledProgramIR and adapt to legacy format
+  const compiledIR = builder.build();
+  const legacyProgram = adaptToLegacy(compiledIR);
+
   return {
     kind: 'ok',
-    program: builder.build(),
+    program: legacyProgram,
   };
 }
 
