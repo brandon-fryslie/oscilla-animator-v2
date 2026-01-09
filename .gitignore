@@ -20,3 +20,6 @@ coverage/
 
 # Vite cache
 node_modules/.vite/
+
+# TypeScript build info
+*.tsbuildinfo
