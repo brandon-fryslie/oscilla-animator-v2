@@ -1,6 +1,6 @@
 # Oscilla Animator v2 - Project Roadmap
 
-Last updated: 2026-01-09-232000
+Last updated: 2026-01-09-145500
 
 ---
 
@@ -96,7 +96,7 @@ Last updated: 2026-01-09-232000
 
 ---
 
-## 🟢 Phase 2: Rendering & UI [ACTIVE] (1/4 completed)
+## 🟢 Phase 2: Rendering & UI [ACTIVE] (2/5 completed)
 
 **Goal:** Implement rendering pipeline and basic UI for patch editing
 
@@ -112,6 +112,14 @@ Last updated: 2026-01-09-232000
 - **Completed:** 2026-01-09
 - **Summary:** Three-column layout with tabs, toolbar, sidebars. Canvas preview + Patch diagram in center. Inspector, debug, help panels. 146 tests passing. 60 FPS animation.
 - **Planning Files:** `.agent_planning/ui-framework/`
+
+#### 🔄 ui-features-v2 [IN PROGRESS]
+- **State:** IN PROGRESS
+- **Epic:** None
+- **Description:** Visualization and inspection UI - Table View, Block Inspector, Block Library, Domains Panel
+- **Planning Files:** `.agent_planning/ui-features-v2/`
+- **Status Note:** P0-P4 complete (2026-01-09). Table view, inspector, library, domains panel working. P5 (rails) deferred.
+- **Summary:** 4 major components integrated. Selection state, block type registry. 146 tests passing. Ready for manual verification.
 
 #### 💡 renderer-implementation [PROPOSED]
 - **State:** PROPOSED
