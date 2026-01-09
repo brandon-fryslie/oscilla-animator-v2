@@ -1,6 +1,6 @@
 # Oscilla Animator v2 - Project Roadmap
 
-Last updated: 2026-01-09-145500
+Last updated: 2026-01-10-150000
 
 ---
 
@@ -118,8 +118,9 @@ Last updated: 2026-01-09-145500
 - **Epic:** None
 - **Description:** Visualization and inspection UI - Table View, Block Inspector, Block Library, Domains Panel
 - **Planning Files:** `.agent_planning/ui-features-v2/`
-- **Status Note:** P0-P4 complete (2026-01-09). Table view, inspector, library, domains panel working. P5 (rails) deferred.
-- **Summary:** 4 major components integrated. Selection state, block type registry. 146 tests passing. Ready for manual verification.
+- **Status Note:** Phase 2 P0-P2, P6 complete. P3 (Connection Matrix), P4 (Split Sidebar), P5 (TimeRoot Hidden), P7 (DefaultSource), P8 (Type Preview) planned (2026-01-10).
+- **Summary:** Block model, roles, bus block done. Remaining: connection matrix, split sidebar, timeRoot filtering, DefaultSource display, type preview.
+- **Current Plan:** `PLAN-20260110-150000.md`
 
 #### 💡 renderer-implementation [PROPOSED]
 - **State:** PROPOSED
