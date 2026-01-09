@@ -11,17 +11,14 @@ export type {
   TimeModelFinite,
   TimeModelInfinite,
 } from './schedule';
-export {
+export type {
   ValueRefPacked,
   IRPortDecl,
   LowerResult,
   LowerCtx,
   LowerArgs,
   BlockTypeDecl,
-  registerBlockType,
-  getBlockType,
-  hasBlockType,
-  getAllBlockTypes,
+  LowerContext,
   // Legacy types
   LoweredOutput,
   LoweredSignal,
@@ -38,7 +35,12 @@ export {
   BlockLowerFn,
   LoweredIR,
 } from './lowerTypes';
-export type { LowerContext } from './lowerTypes';
+export {
+  registerBlockType,
+  getBlockType,
+  hasBlockType,
+  getAllBlockTypes,
+} from './lowerTypes';
 
 // IR builder
 // The concrete class from builder.ts is used directly by compile.ts

@@ -2,13 +2,16 @@
  * Bridge Functions: Canonical Type System → IR Schema
  *
  * These pure functions translate from the canonical type system
- * (SignalType with 5-axis Extent) to the IR schema format (AxesDescIR).
+ * (SignalType with 5-axis Extent) to individual axis/shape components.
  *
  * Design principles:
  * - Pure functions (no side effects)
  * - Handle ALL variants exhaustively
  * - Fail fast on invalid input
  * - Map according to spec semantics
+ *
+ * Note: This module provides granular bridge functions for testing.
+ * Production code should use bridge.ts which wraps these.
  */
 
 import type {
@@ -19,16 +22,17 @@ import type {
   Binding,
   AxisTag,
   PayloadType,
+  ResolvedExtent,
 } from '../../core/canonical-types';
-import type { AxesDescIR, ShapeDescIR } from './program';
 import { isInstantiated } from '../../core/canonical-types';
+import type { ShapeDescIR, TypeDesc } from './program';
 
 // =============================================================================
-// Main Bridge Function: Extent → AxesDescIR
+// Main Bridge Function: Extent → ResolvedExtent
 // =============================================================================
 
 /**
- * Bridge a complete Extent to AxesDescIR.
+ * Bridge a complete Extent to ResolvedExtent.
  *
  * This is the primary entry point for type system → IR conversion.
  * It requires that all axes are instantiated (not default).
@@ -36,7 +40,7 @@ import { isInstantiated } from '../../core/canonical-types';
  *
  * @throws Error if any axis is still 'default'
  */
-export function bridgeExtentToAxesDescIR(extent: Extent): AxesDescIR {
+export function bridgeExtentToAxesDescIR(extent: Extent): ResolvedExtent {
   // Extract instantiated values or throw
   const cardinality = getInstantiatedOrThrow(
     extent.cardinality,
@@ -50,22 +54,25 @@ export function bridgeExtentToAxesDescIR(extent: Extent): AxesDescIR {
   const perspective = getInstantiatedOrThrow(extent.perspective, 'perspective');
   const branch = getInstantiatedOrThrow(extent.branch, 'branch');
 
-  // Map each axis independently
+  // Return resolved extent with canonical types
   return {
-    domain: bridgeCardinalityToIR(cardinality),
-    temporality: bridgeTemporalityToIR(temporality),
-    perspective: bridgePerspectiveToIR(perspective),
-    branch: bridgeBranchToIR(branch),
-    identity: bridgeBindingToIdentityIR(binding),
+    cardinality,
+    temporality,
+    binding,
+    perspective,
+    branch,
   };
 }
 
 // =============================================================================
-// Axis-Specific Bridge Functions
+// Axis-Specific Bridge Functions (for testing)
 // =============================================================================
 
 /**
- * Bridge Cardinality to IR domain axis.
+ * Bridge Cardinality to IR domain classification string.
+ *
+ * This is a test helper that maps cardinality to the old "domain" vocabulary.
+ * Production code should use the cardinality directly.
  *
  * Mapping:
  * - zero → "value" (compile-time constant, not world-resident)
@@ -74,7 +81,7 @@ export function bridgeExtentToAxesDescIR(extent: Extent): AxesDescIR {
  */
 export function bridgeCardinalityToIR(
   cardinality: Cardinality
-): AxesDescIR['domain'] {
+): 'signal' | 'field' | 'value' {
   switch (cardinality.kind) {
     case 'zero':
       return 'value';
@@ -88,18 +95,15 @@ export function bridgeCardinalityToIR(
 }
 
 /**
- * Bridge Temporality to IR temporality axis.
+ * Bridge Temporality to IR temporality string.
  *
  * Mapping is direct (same vocabulary):
  * - continuous → "continuous"
  * - discrete → "discrete"
- *
- * Note: IR also supports "static" and "instant" which will be added
- * when the canonical type system expands.
  */
 export function bridgeTemporalityToIR(
   temporality: Temporality
-): AxesDescIR['temporality'] {
+): 'continuous' | 'discrete' {
   switch (temporality.kind) {
     case 'continuous':
       return 'continuous';
@@ -111,26 +115,26 @@ export function bridgeTemporalityToIR(
 }
 
 /**
- * Bridge Perspective to IR perspective axis.
+ * Bridge Perspective to IR perspective string.
  *
  * For v0, we canonicalize all perspectives to 'global'.
  * Future versions will preserve 'frame' and 'sample' distinctions.
  */
 export function bridgePerspectiveToIR(
   perspective: string
-): AxesDescIR['perspective'] {
+): 'frame' | 'sample' | 'global' {
   // V0: all perspectives map to 'global'
   // This is intentionally simplified for initial implementation
   return 'global';
 }
 
 /**
- * Bridge Branch to IR branch axis.
+ * Bridge Branch to IR branch string.
  *
  * For v0, we canonicalize all branches to 'single'.
  * Branch semantics are deferred to Phase 2.
  */
-export function bridgeBranchToIR(branch: string): AxesDescIR['branch'] {
+export function bridgeBranchToIR(_branch: string): 'single' | 'branched' {
   // V0: all branches map to 'single'
   // This is intentionally simplified for initial implementation
   return 'single';
@@ -149,7 +153,13 @@ export function bridgeBranchToIR(branch: string): AxesDescIR['branch'] {
  */
 export function bridgeBindingToIdentityIR(
   binding: Binding
-): AxesDescIR['identity'] {
+):
+  | { readonly kind: 'none' }
+  | {
+      readonly kind: 'keyed';
+      readonly keySpace: 'entity' | 'point' | 'pixel' | 'custom';
+      readonly keyTag?: string;
+    } {
   switch (binding.kind) {
     case 'unbound':
       return { kind: 'none' };
@@ -218,7 +228,7 @@ export function payloadTypeToShapeDescIR(payload: PayloadType): ShapeDescIR {
  */
 export function signalTypeToTypeDescIR(
   type: SignalType
-): { axes: AxesDescIR; shape: ShapeDescIR } {
+): TypeDesc {
   return {
     axes: bridgeExtentToAxesDescIR(type.extent),
     shape: payloadTypeToShapeDescIR(type.payload),

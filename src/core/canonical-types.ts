@@ -345,6 +345,39 @@ export const FRAME_V0 = {
 } as const;
 
 // =============================================================================
+// ResolvedExtent - IR-Ready Form
+// =============================================================================
+
+/**
+ * ResolvedExtent - All axes instantiated (no defaults).
+ *
+ * This is the "IR-ready" form of Extent. After default resolution,
+ * all AxisTags are guaranteed to be instantiated with concrete values.
+ *
+ * Used by: IR TypeDesc, debugging, serialization
+ */
+export interface ResolvedExtent {
+  readonly cardinality: Cardinality;
+  readonly temporality: Temporality;
+  readonly binding: Binding;
+  readonly perspective: PerspectiveId;
+  readonly branch: BranchId;
+}
+
+/**
+ * Resolve an Extent to ResolvedExtent using v0 defaults.
+ */
+export function resolveExtent(extent: Extent): ResolvedExtent {
+  return {
+    cardinality: getAxisValue(extent.cardinality, DEFAULTS_V0.cardinality),
+    temporality: getAxisValue(extent.temporality, DEFAULTS_V0.temporality),
+    binding: getAxisValue(extent.binding, DEFAULTS_V0.binding),
+    perspective: getAxisValue(extent.perspective, DEFAULTS_V0.perspective),
+    branch: getAxisValue(extent.branch, DEFAULTS_V0.branch),
+  };
+}
+
+// =============================================================================
 // Domain Declarations
 // =============================================================================
 

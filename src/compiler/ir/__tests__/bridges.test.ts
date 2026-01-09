@@ -2,7 +2,7 @@
  * Tests for Type System → IR Bridge Functions
  *
  * These tests verify that all canonical type system variants
- * map correctly to IR schema format.
+ * map correctly to IR schema format using ResolvedExtent.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -191,7 +191,7 @@ describe('payloadTypeToShapeDescIR', () => {
 });
 
 // =============================================================================
-// Complete Extent → AxesDescIR
+// Complete Extent → ResolvedExtent
 // =============================================================================
 
 describe('bridgeExtentToAxesDescIR', () => {
@@ -204,15 +204,13 @@ describe('bridgeExtentToAxesDescIR', () => {
       branch: axisInstantiated('main'),
     };
 
-    const axes = bridgeExtentToAxesDescIR(extent);
+    const resolved = bridgeExtentToAxesDescIR(extent);
 
-    expect(axes).toEqual({
-      domain: 'signal',
-      temporality: 'continuous',
-      perspective: 'global',
-      branch: 'single',
-      identity: { kind: 'none' },
-    });
+    expect(resolved.cardinality).toEqual({ kind: 'one' });
+    expect(resolved.temporality).toEqual({ kind: 'continuous' });
+    expect(resolved.binding).toEqual({ kind: 'unbound' });
+    expect(resolved.perspective).toBe('global');
+    expect(resolved.branch).toBe('main');
   });
 
   it('bridges field extent (many + continuous)', () => {
@@ -224,15 +222,16 @@ describe('bridgeExtentToAxesDescIR', () => {
       branch: axisInstantiated('main'),
     };
 
-    const axes = bridgeExtentToAxesDescIR(extent);
+    const resolved = bridgeExtentToAxesDescIR(extent);
 
-    expect(axes).toEqual({
-      domain: 'field',
-      temporality: 'continuous',
-      perspective: 'global',
-      branch: 'single',
-      identity: { kind: 'none' },
+    expect(resolved.cardinality).toEqual({
+      kind: 'many',
+      domain: { kind: 'domain', id: 'particles' },
     });
+    expect(resolved.temporality).toEqual({ kind: 'continuous' });
+    expect(resolved.binding).toEqual({ kind: 'unbound' });
+    expect(resolved.perspective).toBe('global');
+    expect(resolved.branch).toBe('main');
   });
 
   it('bridges event extent (one + discrete)', () => {
@@ -244,15 +243,13 @@ describe('bridgeExtentToAxesDescIR', () => {
       branch: axisInstantiated('main'),
     };
 
-    const axes = bridgeExtentToAxesDescIR(extent);
+    const resolved = bridgeExtentToAxesDescIR(extent);
 
-    expect(axes).toEqual({
-      domain: 'signal',
-      temporality: 'discrete',
-      perspective: 'global',
-      branch: 'single',
-      identity: { kind: 'none' },
-    });
+    expect(resolved.cardinality).toEqual({ kind: 'one' });
+    expect(resolved.temporality).toEqual({ kind: 'discrete' });
+    expect(resolved.binding).toEqual({ kind: 'unbound' });
+    expect(resolved.perspective).toBe('global');
+    expect(resolved.branch).toBe('main');
   });
 
   it('bridges value extent (zero + continuous)', () => {
@@ -264,15 +261,13 @@ describe('bridgeExtentToAxesDescIR', () => {
       branch: axisInstantiated('main'),
     };
 
-    const axes = bridgeExtentToAxesDescIR(extent);
+    const resolved = bridgeExtentToAxesDescIR(extent);
 
-    expect(axes).toEqual({
-      domain: 'value',
-      temporality: 'continuous',
-      perspective: 'global',
-      branch: 'single',
-      identity: { kind: 'none' },
-    });
+    expect(resolved.cardinality).toEqual({ kind: 'zero' });
+    expect(resolved.temporality).toEqual({ kind: 'continuous' });
+    expect(resolved.binding).toEqual({ kind: 'unbound' });
+    expect(resolved.perspective).toBe('global');
+    expect(resolved.branch).toBe('main');
   });
 
   it('throws error when cardinality is default', () => {
@@ -312,11 +307,11 @@ describe('bridgeExtentToAxesDescIR', () => {
       branch: axisInstantiated('main'),
     };
 
-    const axes = bridgeExtentToAxesDescIR(extent);
+    const resolved = bridgeExtentToAxesDescIR(extent);
 
-    expect(axes.identity).toEqual({
-      kind: 'keyed',
-      keySpace: 'entity',
+    expect(resolved.binding).toEqual({
+      kind: 'identity',
+      referent: { kind: 'referent', id: 'entities' },
     });
   });
 });
@@ -340,16 +335,12 @@ describe('signalTypeToTypeDescIR', () => {
 
     const typeDesc = signalTypeToTypeDescIR(signalType);
 
-    expect(typeDesc).toEqual({
-      axes: {
-        domain: 'signal',
-        temporality: 'continuous',
-        perspective: 'global',
-        branch: 'single',
-        identity: { kind: 'none' },
-      },
-      shape: { kind: 'number' },
-    });
+    expect(typeDesc.axes.cardinality).toEqual({ kind: 'one' });
+    expect(typeDesc.axes.temporality).toEqual({ kind: 'continuous' });
+    expect(typeDesc.axes.binding).toEqual({ kind: 'unbound' });
+    expect(typeDesc.axes.perspective).toBe('global');
+    expect(typeDesc.axes.branch).toBe('main');
+    expect(typeDesc.shape).toEqual({ kind: 'number' });
   });
 
   it('bridges complete field type (color field)', () => {
@@ -368,16 +359,15 @@ describe('signalTypeToTypeDescIR', () => {
 
     const typeDesc = signalTypeToTypeDescIR(signalType);
 
-    expect(typeDesc).toEqual({
-      axes: {
-        domain: 'field',
-        temporality: 'continuous',
-        perspective: 'global',
-        branch: 'single',
-        identity: { kind: 'none' },
-      },
-      shape: { kind: 'vec', lanes: 4, element: 'number' },
+    expect(typeDesc.axes.cardinality).toEqual({
+      kind: 'many',
+      domain: { kind: 'domain', id: 'particles' },
     });
+    expect(typeDesc.axes.temporality).toEqual({ kind: 'continuous' });
+    expect(typeDesc.axes.binding).toEqual({ kind: 'unbound' });
+    expect(typeDesc.axes.perspective).toBe('global');
+    expect(typeDesc.axes.branch).toBe('main');
+    expect(typeDesc.shape).toEqual({ kind: 'vec', lanes: 4, element: 'number' });
   });
 
   it('bridges vec2 field type', () => {
@@ -415,7 +405,7 @@ describe('signalTypeToTypeDescIR', () => {
 
     const typeDesc = signalTypeToTypeDescIR(signalType);
 
-    expect(typeDesc.axes.domain).toBe('signal');
+    expect(typeDesc.axes.cardinality).toEqual({ kind: 'one' });
     expect(typeDesc.shape).toEqual({ kind: 'number' });
   });
 });

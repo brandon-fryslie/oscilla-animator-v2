@@ -9,7 +9,7 @@
 
 // Import the legacy types for now (will be replaced with proper execution node types)
 import type { SigExpr, FieldExpr, EventExpr } from './types';
-import type { SignalType } from '../../core/canonical-types';
+import type { SignalType, ResolvedExtent } from '../../core/canonical-types';
 import type { ScheduleIR } from '../passes-v2/pass7-schedule';
 
 // =============================================================================
@@ -164,65 +164,12 @@ export interface SlotMetaEntry {
  * The IR type descriptor used for serialization and tooling.
  * Axes are REQUIRED and are the compiler-authoritative semantic classification.
  *
- * Note: SlotMetaEntry.type uses SignalType directly, not this IR format.
- * This TypeDesc is for serialized IR and debug information.
+ * Note: TypeDesc now uses ResolvedExtent directly from canonical-types.
+ * This ensures single source of truth for type representation.
  */
 export interface TypeDesc {
-  readonly axes: AxesDescIR;
+  readonly axes: ResolvedExtent;
   readonly shape: ShapeDescIR;
-}
-
-/**
- * AxesDescIR - 5-Axis Semantic Classification
- *
- * Models the "new axes" explicitly. This is stable metadata:
- * - Adding fields is allowed
- * - Removing/renaming is a breaking IR change
- */
-export interface AxesDescIR {
-  /**
-   * Execution domain: which evaluation context this value inhabits.
-   * Maps to canonical Cardinality axis (zero/one/many).
-   * - "signal": single-lane time-varying value (Cardinality: one)
-   * - "field": multi-lane spatially-indexed value (Cardinality: many(domain))
-   * - "event": discrete occurrence (Temporality: discrete)
-   * - "value": compile-time constant (Cardinality: zero)
-   */
-  readonly domain: 'signal' | 'field' | 'event' | 'value';
-
-  /**
-   * Temporality: how the value varies with time *within its domain*.
-   * - "static": not time-varying (can still be sampled)
-   * - "discrete": changes only at ticks/frames/steps
-   * - "continuous": intended to represent continuous-time variation (still simulated discretely)
-   * - "instant": exists only at an event instant (typically used with domain="event")
-   */
-  readonly temporality: 'static' | 'discrete' | 'continuous' | 'instant';
-
-  /**
-   * Perspective: which "view" this value is expressed in, when relevant.
-   * This is intentionally an enum rather than a free-form string to keep tooling stable.
-   * If you only need one, use "frame" everywhere for now.
-   */
-  readonly perspective: 'frame' | 'sample' | 'global';
-
-  /**
-   * Branch axis: whether this value is single-lane or branch-lane.
-   * This is metadata only; the schedule defines actual control-flow.
-   */
-  readonly branch: 'single' | 'branched';
-
-  /**
-   * Identity axis: whether this value is keyed to a stable identity.
-   * This is metadata for composition and debugging (e.g., per-entity signals, per-point fields).
-   */
-  readonly identity:
-    | { readonly kind: 'none' }
-    | {
-        readonly kind: 'keyed';
-        readonly keySpace: 'entity' | 'point' | 'pixel' | 'custom';
-        readonly keyTag?: string;
-      };
 }
 
 /**
@@ -289,7 +236,12 @@ export interface PortBindingIR {
   /** Stable identifiers for UI and logs */
   readonly portName: string; // "in.color", "out.field", etc.
   readonly direction: 'in' | 'out';
-  readonly domain: 'signal' | 'field' | 'event' | 'value'; // should match axes.domain
+
+  /**
+   * Domain classification based on cardinality.
+   * Maps to canonical: zero='value', one='signal', many='field'
+   */
+  readonly domain: 'signal' | 'field' | 'event' | 'value';
 
   /** Why does this value exist? */
   readonly role: 'userWire' | 'defaultSource' | 'implicitCoerce' | 'internalHelper';

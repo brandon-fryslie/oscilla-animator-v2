@@ -2,7 +2,7 @@
  * Bridge Functions - Convert Canonical Types to IR Types
  *
  * These functions convert from the canonical SignalType (payload + extent)
- * to the CompiledProgramIR TypeDesc (axes + shape) format.
+ * to the CompiledProgramIR TypeDesc (resolved extent + shape) format.
  *
  * This is the ONLY place where this conversion happens.
  * Runtime never performs this conversion.
@@ -12,146 +12,26 @@ import type {
   SignalType,
   PayloadType,
   Extent,
-  Cardinality,
-  Temporality,
-  Binding,
-  AxisTag,
+  ResolvedExtent,
 } from '../../core/canonical-types';
-import { getAxisValue, DEFAULTS_V0, FRAME_V0 } from '../../core/canonical-types';
-import type { AxesDescIR, ShapeDescIR, TypeDesc } from './program';
+import { resolveExtent } from '../../core/canonical-types';
+import type { ShapeDescIR, TypeDesc } from './program';
 
 // =============================================================================
-// Bridge: Extent → AxesDescIR
+// Bridge: Extent → ResolvedExtent
 // =============================================================================
 
 /**
- * Convert Extent to AxesDescIR.
+ * Convert Extent to ResolvedExtent.
  *
  * This resolves all AxisTag.default values using v0 canonical defaults.
  * After this conversion, all axes are fully instantiated.
- */
-export function extentToAxesDescIR(extent: Extent): AxesDescIR {
-  // Resolve cardinality
-  const cardinality = getAxisValue(extent.cardinality, DEFAULTS_V0.cardinality);
-
-  // Resolve temporality
-  const temporality = getAxisValue(extent.temporality, DEFAULTS_V0.temporality);
-
-  // Resolve binding
-  const binding = getAxisValue(extent.binding, DEFAULTS_V0.binding);
-
-  // Resolve perspective (v0: always global)
-  const perspective = getAxisValue(extent.perspective, DEFAULTS_V0.perspective);
-
-  // Resolve branch (v0: always main)
-  const branch = getAxisValue(extent.branch, DEFAULTS_V0.branch);
-
-  // Map cardinality → domain
-  const domain = cardinalityToDomain(cardinality);
-
-  // Map temporality → temporality
-  const temporalityIR = temporalityToTemporalityIR(temporality);
-
-  // Map perspective → perspective
-  const perspectiveIR = perspectiveToIR(perspective);
-
-  // Map branch → branch
-  const branchIR = branchToIR(branch);
-
-  // Map binding → identity
-  const identity = bindingToIdentity(binding);
-
-  return {
-    domain,
-    temporality: temporalityIR,
-    perspective: perspectiveIR,
-    branch: branchIR,
-    identity,
-  };
-}
-
-/**
- * Map Cardinality to domain axis.
  *
- * - zero → "value" (compile-time constant, no runtime lanes)
- * - one → "signal" (single time-indexed lane)
- * - many(domain) → "field" (spatially-indexed lanes)
+ * This is simply a re-export of resolveExtent from canonical-types.
+ * We keep this alias for backwards compatibility with existing bridge code.
  */
-function cardinalityToDomain(
-  cardinality: Cardinality
-): 'signal' | 'field' | 'event' | 'value' {
-  switch (cardinality.kind) {
-    case 'zero':
-      return 'value'; // Compile-time constant
-    case 'one':
-      return 'signal'; // Single time-indexed lane
-    case 'many':
-      return 'field'; // Spatially-indexed lanes over domain
-  }
-}
-
-/**
- * Map Temporality to temporality axis.
- *
- * - continuous → "continuous"
- * - discrete → "discrete" (for events)
- *
- * Note: We map to IR temporality. For zero cardinality (value),
- * we use "static" instead of "continuous".
- */
-function temporalityToTemporalityIR(
-  temporality: Temporality
-): 'static' | 'discrete' | 'continuous' | 'instant' {
-  switch (temporality.kind) {
-    case 'continuous':
-      return 'continuous';
-    case 'discrete':
-      return 'instant'; // Discrete events exist only at instants
-  }
-}
-
-/**
- * Map perspective ID to IR perspective.
- */
-function perspectiveToIR(perspectiveId: string): 'frame' | 'sample' | 'global' {
-  // v0: always "global" per FRAME_V0
-  if (perspectiveId === 'global') {
-    return 'global';
-  }
-  // For future use: map other perspectives
-  return 'frame'; // Default fallback
-}
-
-/**
- * Map branch ID to IR branch.
- */
-function branchToIR(_branchId: string): 'single' | 'branched' {
-  // v0: always "single" (no branch support yet)
-  return 'single';
-}
-
-/**
- * Map Binding to identity axis.
- *
- * - unbound → { kind: "none" }
- * - weak/strong/identity → { kind: "keyed", keySpace: "entity" }
- */
-function bindingToIdentity(
-  binding: Binding
-): AxesDescIR['identity'] {
-  switch (binding.kind) {
-    case 'unbound':
-      return { kind: 'none' };
-    case 'weak':
-    case 'strong':
-    case 'identity':
-      // For v0, map all bound referents to "entity" keyspace
-      return {
-        kind: 'keyed',
-        keySpace: 'entity',
-        keyTag: binding.referent.id,
-      };
-  }
+export function extentToResolvedExtent(extent: Extent): ResolvedExtent {
+  return resolveExtent(extent);
 }
 
 // =============================================================================
@@ -196,7 +76,7 @@ export function payloadTypeToShapeDescIR(payload: PayloadType): ShapeDescIR {
  */
 export function signalTypeToTypeDesc(signalType: SignalType): TypeDesc {
   return {
-    axes: extentToAxesDescIR(signalType.extent),
+    axes: resolveExtent(signalType.extent),
     shape: payloadTypeToShapeDescIR(signalType.payload),
   };
 }
@@ -206,53 +86,75 @@ export function signalTypeToTypeDesc(signalType: SignalType): TypeDesc {
 // =============================================================================
 
 /**
- * Create axes for a value domain (compile-time constant).
+ * Create resolved extent for a value (compile-time constant).
+ * - cardinality: zero
+ * - temporality: continuous
+ * - binding: unbound
+ * - perspective: global
+ * - branch: main
  */
-export function axesForValue(): AxesDescIR {
+export function axesForValue(): ResolvedExtent {
   return {
-    domain: 'value',
-    temporality: 'static',
+    cardinality: { kind: 'zero' },
+    temporality: { kind: 'continuous' },
+    binding: { kind: 'unbound' },
     perspective: 'global',
-    branch: 'single',
-    identity: { kind: 'none' },
+    branch: 'main',
   };
 }
 
 /**
- * Create axes for a signal domain (single time-indexed lane).
+ * Create resolved extent for a signal (single time-indexed lane).
+ * - cardinality: one
+ * - temporality: continuous
+ * - binding: unbound
+ * - perspective: global
+ * - branch: main
  */
-export function axesForSignal(): AxesDescIR {
+export function axesForSignal(): ResolvedExtent {
   return {
-    domain: 'signal',
-    temporality: 'continuous',
+    cardinality: { kind: 'one' },
+    temporality: { kind: 'continuous' },
+    binding: { kind: 'unbound' },
     perspective: 'global',
-    branch: 'single',
-    identity: { kind: 'none' },
+    branch: 'main',
   };
 }
 
 /**
- * Create axes for a field domain (spatially-indexed lanes).
+ * Create resolved extent for a field (spatially-indexed lanes).
+ * - cardinality: many (domain will need to be filled in)
+ * - temporality: continuous
+ * - binding: unbound
+ * - perspective: global
+ * - branch: main
+ *
+ * Note: This returns a placeholder. Callers must fill in the domain.
  */
-export function axesForField(): AxesDescIR {
+export function axesForField(): ResolvedExtent {
   return {
-    domain: 'field',
-    temporality: 'continuous',
+    cardinality: { kind: 'many', domain: { kind: 'domain', id: '__placeholder__' } },
+    temporality: { kind: 'continuous' },
+    binding: { kind: 'unbound' },
     perspective: 'global',
-    branch: 'single',
-    identity: { kind: 'none' },
+    branch: 'main',
   };
 }
 
 /**
- * Create axes for an event domain (discrete occurrences).
+ * Create resolved extent for an event (discrete occurrences).
+ * - cardinality: one
+ * - temporality: discrete
+ * - binding: unbound
+ * - perspective: global
+ * - branch: main
  */
-export function axesForEvent(): AxesDescIR {
+export function axesForEvent(): ResolvedExtent {
   return {
-    domain: 'event',
-    temporality: 'instant',
+    cardinality: { kind: 'one' },
+    temporality: { kind: 'discrete' },
+    binding: { kind: 'unbound' },
     perspective: 'global',
-    branch: 'single',
-    identity: { kind: 'none' },
+    branch: 'main',
   };
 }
