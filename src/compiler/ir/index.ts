@@ -9,12 +9,7 @@ export * from './patches';
 export type {
   TimeModelIR,
   TimeModelFinite,
-  TimeModelCyclic,
   TimeModelInfinite,
-  CuePointIR,
-  ScheduleIR,
-  StepBase,
-  // Note: StepMaterialize, StepEvalSig, StepRender are from ./types, not ./schedule
 } from './schedule';
 export {
   ValueRefPacked,

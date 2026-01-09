@@ -48,8 +48,8 @@ describe('Steel Thread - Animated Particles', () => {
       b.wire(domain, 'domain', render, 'domain');
 
       // Wire phase to position and color
-      b.wire(time, 'phase', angularOffset, 'phase');
-      b.wire(time, 'phase', hue, 'phase');
+      b.wire(time, 'phaseA', angularOffset, 'phase');
+      b.wire(time, 'phaseA', hue, 'phase');
 
       // Wire id01 to position and color blocks
       b.wire(id01, 'id01', goldenAngle, 'id01');

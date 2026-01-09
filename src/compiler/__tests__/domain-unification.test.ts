@@ -15,7 +15,7 @@ describe('Domain Unification', () => {
     it('infers domain from FieldExprSource', () => {
       const b = new IRBuilder();
       const domain = b.domainN(10);
-      const type = signalTypeField('number', domain);
+      const type = signalTypeField('float', domain);
       const field = b.fieldSource(domain, 'index', type);
 
       expect(b.inferFieldDomain(field)).toBe(domain);
@@ -24,7 +24,7 @@ describe('Domain Unification', () => {
     it('propagates domain through FieldExprMap', () => {
       const b = new IRBuilder();
       const domain = b.domainN(10);
-      const type = signalTypeField('number', domain);
+      const type = signalTypeField('float', domain);
       const source = b.fieldSource(domain, 'index', type);
       const mapped = b.fieldMap(source, { kind: 'opcode', opcode: OpCode.Sin }, type);
 
@@ -34,8 +34,8 @@ describe('Domain Unification', () => {
     it('propagates domain through FieldExprZipSig', () => {
       const b = new IRBuilder();
       const domain = b.domainN(10);
-      const fieldType = signalTypeField('number', domain);
-      const sigType = signalTypeSignal('number');
+      const fieldType = signalTypeField('float', domain);
+      const sigType = signalTypeSignal('float');
       const field = b.fieldSource(domain, 'index', fieldType);
       const signal = b.sigConst(2.0, sigType);
       const zipped = b.fieldZipSig(field, [signal], { kind: 'opcode', opcode: OpCode.Mul }, fieldType);
@@ -46,8 +46,8 @@ describe('Domain Unification', () => {
     it('returns undefined for broadcast fields', () => {
       const b = new IRBuilder();
       const domain = b.domainN(10);
-      const type = signalTypeField('number', domain);
-      const sig = b.sigConst(1.0, signalTypeSignal('number'));
+      const type = signalTypeField('float', domain);
+      const sig = b.sigConst(1.0, signalTypeSignal('float'));
       const broadcast = b.fieldBroadcast(sig, type);
 
       expect(b.inferFieldDomain(broadcast)).toBeUndefined();
@@ -56,7 +56,7 @@ describe('Domain Unification', () => {
     it('returns undefined for const fields', () => {
       const b = new IRBuilder();
       const domain = b.domainN(10);
-      const type = signalTypeField('number', domain);
+      const type = signalTypeField('float', domain);
       const constField = b.fieldConst(42, type);
 
       expect(b.inferFieldDomain(constField)).toBeUndefined();
@@ -67,7 +67,7 @@ describe('Domain Unification', () => {
     it('accepts fields from the same domain', () => {
       const b = new IRBuilder();
       const domain = b.domainN(10);
-      const type = signalTypeField('number', domain);
+      const type = signalTypeField('float', domain);
       const field1 = b.fieldSource(domain, 'index', type);
       const field2 = b.fieldSource(domain, 'normalizedIndex', type);
 
@@ -80,8 +80,8 @@ describe('Domain Unification', () => {
       const b = new IRBuilder();
       const domain1 = b.domainN(10);
       const domain2 = b.domainN(20);
-      const type1 = signalTypeField('number', domain1);
-      const type2 = signalTypeField('number', domain2);
+      const type1 = signalTypeField('float', domain1);
+      const type2 = signalTypeField('float', domain2);
       const field1 = b.fieldSource(domain1, 'index', type1);
       const field2 = b.fieldSource(domain2, 'index', type2);
 
@@ -93,9 +93,9 @@ describe('Domain Unification', () => {
     it('handles broadcast fields (no domain) gracefully', () => {
       const b = new IRBuilder();
       const domain = b.domainN(10);
-      const type = signalTypeField('number', domain);
+      const type = signalTypeField('float', domain);
       const source = b.fieldSource(domain, 'index', type);
-      const sig = b.sigConst(1.0, signalTypeSignal('number'));
+      const sig = b.sigConst(1.0, signalTypeSignal('float'));
       const broadcast = b.fieldBroadcast(sig, type);
 
       // Broadcast has no domain, so zip should use source's domain
@@ -106,9 +106,9 @@ describe('Domain Unification', () => {
     it('accepts multiple broadcast fields without error', () => {
       const b = new IRBuilder();
       const domain = b.domainN(10);
-      const type = signalTypeField('number', domain);
-      const sig1 = b.sigConst(1.0, signalTypeSignal('number'));
-      const sig2 = b.sigConst(2.0, signalTypeSignal('number'));
+      const type = signalTypeField('float', domain);
+      const sig1 = b.sigConst(1.0, signalTypeSignal('float'));
+      const sig2 = b.sigConst(2.0, signalTypeSignal('float'));
       const broadcast1 = b.fieldBroadcast(sig1, type);
       const broadcast2 = b.fieldBroadcast(sig2, type);
 
@@ -122,7 +122,7 @@ describe('Domain Unification', () => {
     it('propagates domain through map after zip', () => {
       const b = new IRBuilder();
       const domain = b.domainN(10);
-      const type = signalTypeField('number', domain);
+      const type = signalTypeField('float', domain);
       const field1 = b.fieldSource(domain, 'index', type);
       const field2 = b.fieldSource(domain, 'normalizedIndex', type);
       const zipped = b.fieldZip([field1, field2], { kind: 'opcode', opcode: OpCode.Add }, type);
@@ -135,8 +135,8 @@ describe('Domain Unification', () => {
       const b = new IRBuilder();
       const domain1 = b.domainN(10);
       const domain2 = b.domainN(20);
-      const type1 = signalTypeField('number', domain1);
-      const type2 = signalTypeField('number', domain2);
+      const type1 = signalTypeField('float', domain1);
+      const type2 = signalTypeField('float', domain2);
       const field1 = b.fieldSource(domain1, 'index', type1);
       const field2 = b.fieldSource(domain2, 'index', type2);
       const field3 = b.fieldSource(domain1, 'normalizedIndex', type1);

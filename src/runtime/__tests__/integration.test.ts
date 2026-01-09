@@ -110,9 +110,9 @@ describe('Runtime Integration', () => {
     expect(state.time?.tMs).toBe(1000);
     expect(state.time?.progress).toBe(1);
 
-    // Beyond duration should clamp
+    // Beyond duration - tMs stays monotonic, progress clamps to 1
     executeFrame(program, state, pool, 1500);
-    expect(state.time?.tMs).toBe(1000);
+    expect(state.time?.tMs).toBe(1500);  // tMs is monotonic, never clamps
     expect(state.time?.progress).toBe(1);
   });
 
