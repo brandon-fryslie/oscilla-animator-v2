@@ -188,6 +188,75 @@ const canvas = document.getElementById('canvas') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
 const pool = new BufferPool();
 
+// =============================================================================
+// Zoom and Pan State
+// =============================================================================
+
+let zoom = 1;
+let panX = 0;
+let panY = 0;
+let isDragging = false;
+let lastMouseX = 0;
+let lastMouseY = 0;
+
+// Mouse wheel zoom
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const mouseX = e.clientX - rect.left;
+  const mouseY = e.clientY - rect.top;
+
+  // Zoom factor
+  const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+  const newZoom = Math.max(0.1, Math.min(10, zoom * zoomFactor));
+
+  // Adjust pan to zoom toward mouse position
+  const dx = mouseX - canvas.width / 2;
+  const dy = mouseY - canvas.height / 2;
+  panX += dx * (1 - zoomFactor) / zoom;
+  panY += dy * (1 - zoomFactor) / zoom;
+
+  zoom = newZoom;
+}, { passive: false });
+
+// Mouse drag pan
+canvas.addEventListener('mousedown', (e) => {
+  isDragging = true;
+  lastMouseX = e.clientX;
+  lastMouseY = e.clientY;
+  canvas.style.cursor = 'grabbing';
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  if (!isDragging) return;
+  const dx = e.clientX - lastMouseX;
+  const dy = e.clientY - lastMouseY;
+  panX += dx / zoom;
+  panY += dy / zoom;
+  lastMouseX = e.clientX;
+  lastMouseY = e.clientY;
+});
+
+canvas.addEventListener('mouseup', () => {
+  isDragging = false;
+  canvas.style.cursor = 'grab';
+});
+
+canvas.addEventListener('mouseleave', () => {
+  isDragging = false;
+  canvas.style.cursor = 'grab';
+});
+
+// Set initial cursor
+canvas.style.cursor = 'grab';
+
+// Double-click to reset view
+canvas.addEventListener('dblclick', () => {
+  zoom = 1;
+  panX = 0;
+  panY = 0;
+});
+
 // Initial build with 5000 particles
 buildAndCompile(5000);
 
@@ -219,9 +288,14 @@ function animate(tMs: number) {
     const frame = executeFrame(currentProgram, currentState, pool, tMs);
     execTime = performance.now() - execStart;
 
-    // Render to canvas
+    // Render to canvas with zoom/pan transform
     const renderStart = performance.now();
+    ctx.save();
+    ctx.translate(canvas.width / 2 + panX * zoom, canvas.height / 2 + panY * zoom);
+    ctx.scale(zoom, zoom);
+    ctx.translate(-canvas.width / 2, -canvas.height / 2);
     renderFrame(ctx, frame, canvas.width, canvas.height);
+    ctx.restore();
     renderTime = performance.now() - renderStart;
 
     // Calculate frame time
