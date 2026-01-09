@@ -13,10 +13,12 @@ import {
   sigExprId as makeSigExprId,
   fieldExprId as makeFieldExprId,
   eventExprId as makeEventExprId,
+  stateSlotId as makeStateSlotId,
   type DomainId,
   type EventExprId,
   type FieldExprId,
   type SigExprId,
+  type StateSlotId,
   type ValueSlot,
 } from './Indices';
 import type {
@@ -51,11 +53,15 @@ export class IRBuilder {
   private nextEventId = 0;
   private nextDomainId = 0;
   private nextSlotId = 0;
+  private nextStateSlotId = 0;
 
   private timeModel: TimeModel = { kind: 'infinite' };
 
   // Track slot types for slotMeta generation
   private slotTypes = new Map<ValueSlot, SignalType>();
+
+  // Track state slots (persistent cross-frame storage)
+  private stateSlots: { initialValue: number }[] = [];
 
   // Track debug provenance for DoD compliance
   private stepToBlock = new Map<StepId, BlockId>(); // StepId → BlockId
@@ -85,6 +91,57 @@ export class IRBuilder {
     const slot = makeValueSlot(this.nextSlotId++);
     this.slotTypes.set(slot, type);
     return slot;
+  }
+
+  // ===========================================================================
+  // State Slot Allocation (Persistent Cross-Frame Storage)
+  // ===========================================================================
+
+  /**
+   * Allocate a persistent state slot with an initial value.
+   * State slots survive across frames and are used for feedback/delay.
+   *
+   * @param initialValue - Initial value for the state slot (default: 0)
+   * @returns StateSlotId for referencing this state slot
+   */
+  allocStateSlot(initialValue: number = 0): StateSlotId {
+    const id = makeStateSlotId(this.nextStateSlotId++);
+    this.stateSlots.push({ initialValue });
+    return id;
+  }
+
+  /**
+   * Create a signal expression that reads from a state slot.
+   * State reads happen at the beginning of the frame, reading the value
+   * written by the previous frame.
+   *
+   * @param stateSlot - State slot to read from
+   * @param type - Signal type for the read value
+   * @returns SigExprId for the read expression
+   */
+  sigStateRead(stateSlot: StateSlotId, type: SignalType): SigExprId {
+    const id = makeSigExprId(this.nextSigId++);
+    this.signals.set(id, { kind: 'stateRead', stateSlot, type });
+    return id;
+  }
+
+  /**
+   * Schedule a state write step.
+   * State writes happen at the end of the frame, storing a value
+   * that will be read by the next frame.
+   *
+   * @param stateSlot - State slot to write to
+   * @param value - Signal expression to evaluate and write
+   * @param sourceBlock - Optional block ID for debug provenance
+   */
+  stepStateWrite(stateSlot: StateSlotId, value: SigExprId, sourceBlock?: BlockId): void {
+    const stepId = this.steps.length as StepId;
+    this.steps.push({ kind: 'stateWrite', stateSlot, value });
+
+    // Track debug provenance
+    if (sourceBlock !== undefined) {
+      this.stepToBlock.set(stepId, sourceBlock);
+    }
   }
 
   // ===========================================================================
@@ -539,6 +596,8 @@ export class IRBuilder {
       timeModel: this.timeModel,
       steps: this.steps,
       domains: this.domains,
+      stateSlotCount: this.nextStateSlotId,
+      stateSlots: this.stateSlots,
     };
 
     return {

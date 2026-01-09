@@ -96,11 +96,11 @@ export interface TimeSignals {
   /** Signal expression ID for tModelMs (model time) */
   readonly tModelMs: SigExprId;
 
-  /** Signal expression ID for phase01 (cyclic only) */
-  readonly phase01?: SigExprId;
+  /** Signal expression ID for phaseA (primary phase) */
+  readonly phaseA?: SigExprId;
 
-  /** Signal expression ID for wrapEvent (cyclic only) */
-  readonly wrapEvent?: SigExprId;
+  /** Signal expression ID for phaseB (secondary phase) */
+  readonly phaseB?: SigExprId;
 
   /** Signal expression ID for progress01 (finite only) */
   readonly progress01?: SigExprId;

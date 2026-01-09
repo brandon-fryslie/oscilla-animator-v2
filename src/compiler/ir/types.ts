@@ -80,7 +80,6 @@ export type SigExpr =
   | SigExprExternal
   | SigExprMap
   | SigExprZip
-  | SigExprStateRead
   | SigExprStateRead;
 
 export interface SigExprConst {
@@ -287,7 +286,6 @@ export type Step =
   | StepEvalSig
   | StepMaterialize
   | StepRender
-  | StepStateWrite
   | StepStateWrite;
 
 export interface StepEvalSig {
