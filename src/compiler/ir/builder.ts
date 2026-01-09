@@ -128,6 +128,19 @@ export class IRBuilder {
   }
 
   /**
+   * Binary operation helper - creates a sig expression that zips two inputs with an opcode.
+   */
+  sigBinOp(a: SigExprId, b: SigExprId, opcode: OpCode, type: SignalType): SigExprId {
+    return this.sigZip([a, b], { kind: 'opcode', opcode }, type);
+  }
+
+  /**
+   * Unary operation helper - creates a sig expression that maps a single input with an opcode.
+   */
+  sigUnaryOp(input: SigExprId, opcode: OpCode, type: SignalType): SigExprId {
+    return this.sigMap(input, { kind: 'opcode', opcode }, type);
+  }
+  /**
    * Look up the SigExpr for a given SigExprId.
    * Used by blocks that need to introspect expression structure.
    */
@@ -159,54 +172,79 @@ export class IRBuilder {
   // Field Expressions
   // ===========================================================================
 
-  fieldConst(value: number, domain: DomainId, type: SignalType): FieldExprId {
+  /**
+   * Create a constant field expression.
+   * Note: FieldExprConst has no domain field - domain is inferred from usage context.
+   */
+  fieldConst(value: number | string, type: SignalType): FieldExprId {
     const id = makeFieldExprId(this.nextFieldId++);
-    this.fields.set(id, { kind: 'const', value, domain, type });
+    this.fields.set(id, { kind: 'const', value, type });
     return id;
   }
 
-  fieldSlot(slot: ValueSlot, domain: DomainId, type: SignalType): FieldExprId {
+  /**
+   * Create a field source expression (e.g., position, index).
+   * This is one of the few field expressions that explicitly stores a domain.
+   */
+  fieldSource(
+    domain: DomainId,
+    sourceId: 'pos0' | 'idRand' | 'index' | 'normalizedIndex',
+    type: SignalType
+  ): FieldExprId {
     const id = makeFieldExprId(this.nextFieldId++);
-    this.fields.set(id, { kind: 'slot', slot, domain, type });
+    this.fields.set(id, { kind: 'source', domain, sourceId, type });
     return id;
   }
 
-  fieldBroadcast(signal: SigExprId, domain: DomainId, type: SignalType): FieldExprId {
+  /**
+   * Broadcast a signal to a field.
+   * Note: No explicit domain field - domain comes from materialization context.
+   */
+  fieldBroadcast(signal: SigExprId, type: SignalType): FieldExprId {
     const id = makeFieldExprId(this.nextFieldId++);
-    this.fields.set(id, { kind: 'broadcast', signal, domain, type });
+    this.fields.set(id, { kind: 'broadcast', signal, type });
     return id;
   }
 
-  fieldIndex(domain: DomainId, type: SignalType): FieldExprId {
+  /**
+   * Map a function over a field expression.
+   * Domain is inherited from the input field.
+   */
+  fieldMap(input: FieldExprId, fn: PureFn, type: SignalType): FieldExprId {
     const id = makeFieldExprId(this.nextFieldId++);
-    this.fields.set(id, { kind: 'index', domain, type });
+    this.fields.set(id, { kind: 'map', input, fn, type });
     return id;
   }
 
-  fieldMap(input: FieldExprId, domain: DomainId, fn: PureFn, type: SignalType): FieldExprId {
+  /**
+   * Zip multiple field expressions together.
+   * Domain must be consistent across all inputs (enforced at compile time).
+   */
+  fieldZip(inputs: readonly FieldExprId[], fn: PureFn, type: SignalType): FieldExprId {
     const id = makeFieldExprId(this.nextFieldId++);
-    this.fields.set(id, { kind: 'map', input, domain, fn, type });
+    this.fields.set(id, { kind: 'zip', inputs, fn, type });
     return id;
   }
 
-  fieldZip(inputs: readonly FieldExprId[], domain: DomainId, fn: PureFn, type: SignalType): FieldExprId {
-    const id = makeFieldExprId(this.nextFieldId++);
-    this.fields.set(id, { kind: 'zip', inputs, domain, fn, type });
-    return id;
-  }
-
+  /**
+   * Zip a field with signals.
+   * Domain comes from the field input.
+   */
   fieldZipSig(
     field: FieldExprId,
     signals: readonly SigExprId[],
-    domain: DomainId,
     fn: PureFn,
     type: SignalType
   ): FieldExprId {
     const id = makeFieldExprId(this.nextFieldId++);
-    this.fields.set(id, { kind: 'zipSig', field, signals, domain, fn, type });
+    this.fields.set(id, { kind: 'zipSig', field, signals, fn, type });
     return id;
   }
 
+  /**
+   * Map over domain indices with optional signal inputs.
+   * This creates a field from scratch, so domain must be explicit.
+   */
   fieldMapIndexed(
     domain: DomainId,
     fn: PureFn,
@@ -216,6 +254,24 @@ export class IRBuilder {
     const id = makeFieldExprId(this.nextFieldId++);
     this.fields.set(id, { kind: 'mapIndexed', domain, fn, type, signals });
     return id;
+  }
+
+  /**
+   * Legacy alias for fieldSource with sourceId='index'.
+   * Kept for backward compatibility with existing blocks.
+   */
+  fieldIndex(domain: DomainId, type: SignalType): FieldExprId {
+    return this.fieldSource(domain, 'index', type);
+  }
+
+  /**
+   * Legacy alias for fieldBroadcast that accepted domain parameter.
+   * Domain parameter is ignored - kept for API compatibility during migration.
+   */
+  fieldSlot(slot: ValueSlot, _domain: DomainId, type: SignalType): FieldExprId {
+    // Note: FieldExpr types don't have a 'slot' kind, this may need review
+    // For now, throw an error to catch usage
+    throw new Error('fieldSlot is not implemented - use fieldSource or fieldBroadcast instead');
   }
 
   // ===========================================================================
