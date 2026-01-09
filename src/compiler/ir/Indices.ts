@@ -21,6 +21,9 @@ export type BusIndex = number & { readonly __brand: 'BusIndex' };
 /** Dense index for value slots in the ValueStore. */
 export type ValueSlot = number & { readonly __brand: 'ValueSlot' };
 
+/** Dense index for persistent state slots (cross-frame storage). */
+export type StateSlotId = number & { readonly __brand: 'StateSlotId' };
+
 /** Dense index for steps in the Schedule. */
 export type StepIndex = number & { readonly __brand: 'StepIndex' };
 
@@ -79,6 +82,10 @@ export function busIndex(n: number): BusIndex {
 
 export function valueSlot(n: number): ValueSlot {
   return n as ValueSlot;
+}
+
+export function stateSlotId(n: number): StateSlotId {
+  return n as StateSlotId;
 }
 
 export function stepIndex(n: number): StepIndex {
