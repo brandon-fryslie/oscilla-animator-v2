@@ -24,16 +24,7 @@ import type { EventCombineMode } from "../ir/signalExpr";
 // =============================================================================
 
 /**
- * Legacy type descriptor used internally by combine utils.
- * This is a minimal compatibility type until combine-utils is fully migrated to SignalType.
- */
-export interface LegacyTypeDesc {
-  readonly world: 'signal' | 'field' | 'event' | 'scalar' | 'config';
-  readonly domain: 'float' | 'int' | 'vec2' | 'vec3' | 'color' | 'boolean' | string;
-}
-
-/**
- * Core payload domains - user-facing types in the bus system.
+ * Core payload domains for combine operations.
  */
 export type CorePayload = 'float' | 'int' | 'vec2' | 'color' | 'bool';
 
@@ -237,7 +228,7 @@ function normalizeCombineMode(mode: CombineMode | 'error' | 'layer'): CombineMod
 export function createCombineNode(
   mode: CombineMode | 'error' | 'layer',
   inputs: readonly ValueRefPacked[],
-  type: LegacyTypeDesc | SignalType,
+  type: SignalType,
   builder: IRBuilder
 ): ValueRefPacked | null {
   // Handle empty inputs - caller should materialize default
@@ -269,6 +260,7 @@ export function createCombineNode(
     }
   }
 
+  // FIX IMMEDIATELY
   // Determine world from legacy type or infer from inputs
   const world = ('world' in type) ? type.world :
                 (sigTerms.length > 0 ? 'signal' :

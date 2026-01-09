@@ -50,12 +50,12 @@ export interface UnlinkedIRFragments {
 // =============================================================================
 
 /**
- * Check if a domain is a CoreDomain from core/types.
- * CoreDomains: float, int, vec2, vec3, color, boolean, time, rate, trigger
+ * Check if a domain/payload is valid for combine mode validation.
+ * Valid payloads: float, int, vec2, vec3, color, boolean, time, rate, trigger
  */
-function isCoreDomain(domain: string): domain is import("../../../core/types").CoreDomain {
-  const coreDomains = ['float', 'int', 'vec2', 'vec3', 'color', 'boolean', 'time', 'rate', 'trigger'];
-  return coreDomains.includes(domain);
+function isCorePayload(payload: string): boolean {
+  const corePayloads = ['float', 'int', 'vec2', 'vec3', 'color', 'boolean', 'time', 'rate', 'trigger'];
+  return corePayloads.includes(payload);
 }
 
 // =============================================================================
@@ -105,13 +105,13 @@ function resolveInputsWithMultiInput(
     }
 
     // Validate combine mode against port type
-    // Only validate for slot worlds (signal, field, scalar, config) and core domains
+    // Only validate for slot worlds (signal, field, scalar, config) and core payloads
     // Skip validation for event world and internal domains
-    if (combine.mode !== 'error' && portType.world !== 'event' && isCoreDomain(portType.domain)) {
+    if (combine.mode !== 'error' && portType.world !== 'event' && isCorePayload(portType.domain)) {
       const modeValidation = validateCombineMode(
         combine.mode,
         portType.world as SlotWorld,
-        portType.domain as import("../../../core/types").CoreDomain
+        portType.domain
       );
       if (!modeValidation.valid) {
         errors.push({
