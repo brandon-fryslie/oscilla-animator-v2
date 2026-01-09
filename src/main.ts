@@ -9,7 +9,7 @@ import { compile } from './compiler';
 import { createRuntimeState, BufferPool, executeFrame } from './runtime';
 import { renderFrame } from './render';
 import { getAppLayout, TabbedContent } from './ui';
-import { TableView, BlockInspector, BlockLibrary, DomainsPanel } from './ui/components';
+import { TableView, ConnectionMatrixWrapper, BlockInspector, BlockLibrary, DomainsPanel } from './ui/components';
 import type { Block } from './graph/Patch';
 
 // =============================================================================
@@ -27,6 +27,7 @@ let statsEl: HTMLElement | null = null;
 
 // UI component instances
 let tableView: TableView | null = null;
+let connectionMatrix: ConnectionMatrixWrapper | null = null;
 let blockInspector: BlockInspector | null = null;
 let blockLibrary: BlockLibrary | null = null;
 let domainsPanel: DomainsPanel | null = null;
@@ -274,6 +275,9 @@ async function buildAndCompile(particleCount: number) {
   if (tableView) {
     tableView.setPatch(patch);
   }
+  if (connectionMatrix) {
+    connectionMatrix.setPatch(patch);
+  }
   if (blockInspector) {
     blockInspector.setPatch(patch);
   }
@@ -388,7 +392,7 @@ async function setupUI() {
     },
   ], { initialTab: 'inspector' });
 
-  // Setup center panel with Table View and Preview
+  // Setup center panel with Blocks, Matrix, and Preview tabs
   const centerRegion = appLayout.getRegionElement('center');
   new TabbedContent(centerRegion, [
     {
@@ -396,6 +400,13 @@ async function setupUI() {
       label: 'Blocks',
       contentFactory: (container) => {
         tableView = new TableView(container);
+      },
+    },
+    {
+      id: 'matrix',
+      label: 'Matrix',
+      contentFactory: (container) => {
+        connectionMatrix = new ConnectionMatrixWrapper(container);
       },
     },
     {

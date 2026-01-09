@@ -14,7 +14,12 @@
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@mui/material": "^7.3.7",
-    "mermaid": "^11.4.1"
+    "@mui/x-data-grid": "^8.24.0",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "mermaid": "^11.4.1",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3"
   },
   "devDependencies": {
     "playwright": "^1.57.0",
