@@ -5,7 +5,7 @@ export type { CompileResult, CompileFailure } from './compile';
 // Export IR types (selective to avoid conflicts)
 export { createIRBuilder, IRBuilderImpl } from './ir';
 export type { IRBuilder, IRProgram, SigExpr, FieldExpr, EventExpr, Step, TimeModel, DomainDef } from './ir';
-export type { TypeDesc, SigExprId, FieldExprId, EventExprId, DomainId, SlotId, ValueSlot } from './ir';
+export type { SigExprId, FieldExprId, EventExprId, DomainId, SlotId, ValueSlot } from './ir';
 
 // Export block registry (note: has its own LowerContext)
 export { getAllBlocks, getBlock, registerBlock } from './blocks';

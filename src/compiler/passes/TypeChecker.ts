@@ -9,7 +9,8 @@
 
 import type { NormalizedPatch } from '../../graph/normalize';
 import { getBlock } from '../blocks/registry';
-import { getConversion } from '../../types';
+import type { SignalType, DomainRef, Cardinality } from '../../core/canonical-types';
+import { isInstantiated, DEFAULTS_V0 } from '../../core/canonical-types';
 
 /**
  * Compile error type for type checking
@@ -67,11 +68,13 @@ export function checkTypes(patch: NormalizedPatch): TypeCheckError[] {
     }
 
     // Check type compatibility
-    const conversion = getConversion(sourcePort.type, targetPort.type);
+    const conversion = getCanonicalConversion(sourcePort.type, targetPort.type);
     if (conversion === null) {
+      const sourceDesc = formatPortType(sourcePort.type);
+      const targetDesc = formatPortType(targetPort.type);
       errors.push({
         kind: 'TypeMismatch',
-        message: `Cannot connect ${sourcePort.type.world}:${sourcePort.type.domain} to ${targetPort.type.world}:${targetPort.type.domain} (${sourceBlock.type}.${edge.fromPort} → ${targetBlock.type}.${edge.toPort})`,
+        message: `Cannot connect ${sourceDesc} to ${targetDesc} (${sourceBlock.type}.${edge.fromPort} → ${targetBlock.type}.${edge.toPort})`,
         blockId: sourceBlock.id,
         portId: edge.fromPort as string,
       });
@@ -104,4 +107,105 @@ export function checkTypes(patch: NormalizedPatch): TypeCheckError[] {
   }
 
   return errors;
+}
+
+// =============================================================================
+// Canonical Type Conversion Helpers
+// =============================================================================
+
+type PortType = SignalType | DomainRef;
+
+type Conversion =
+  | { kind: 'direct' }
+  | { kind: 'promote'; from: 'zero'; to: 'one' }
+  | { kind: 'broadcast' }
+  | { kind: 'promote-broadcast' };
+
+/**
+ * Type guard for DomainRef.
+ */
+function isDomainRef(type: PortType): type is DomainRef {
+  return 'kind' in type && type.kind === 'domain';
+}
+
+/**
+ * Type guard for SignalType.
+ */
+function isSignalType(type: PortType): type is SignalType {
+  return 'payload' in type;
+}
+
+/**
+ * Get effective cardinality from a SignalType.
+ */
+function getCardinality(type: SignalType): Cardinality {
+  const tag = type.extent.cardinality;
+  return isInstantiated(tag) ? tag.value : DEFAULTS_V0.cardinality;
+}
+
+/**
+ * Get cardinality "world" name for comparison.
+ */
+function cardinalityToWorld(card: Cardinality): 'zero' | 'one' | 'many' {
+  return card.kind === 'zero' ? 'zero' : card.kind === 'one' ? 'one' : 'many';
+}
+
+/**
+ * Check if source type can connect to target type.
+ * Returns the conversion needed, or null if incompatible.
+ */
+function getCanonicalConversion(source: PortType, target: PortType): Conversion | null {
+  // DomainRef can only connect to DomainRef
+  if (isDomainRef(source) || isDomainRef(target)) {
+    if (isDomainRef(source) && isDomainRef(target)) {
+      return { kind: 'direct' };
+    }
+    return null; // Can't connect domain to non-domain
+  }
+
+  // Both are SignalType (narrow using type guard)
+  const sourceSignal = source as SignalType;
+  const targetSignal = target as SignalType;
+
+  const sourceCard = cardinalityToWorld(getCardinality(sourceSignal));
+  const targetCard = cardinalityToWorld(getCardinality(targetSignal));
+
+  // Same cardinality and payload - direct
+  if (sourceCard === targetCard && sourceSignal.payload === targetSignal.payload) {
+    return { kind: 'direct' };
+  }
+
+  // Payload must match for automatic conversions
+  if (sourceSignal.payload !== targetSignal.payload) {
+    return null;
+  }
+
+  // Zero → One (promote)
+  if (sourceCard === 'zero' && targetCard === 'one') {
+    return { kind: 'promote', from: 'zero', to: 'one' };
+  }
+
+  // One → Many (broadcast)
+  if (sourceCard === 'one' && targetCard === 'many') {
+    return { kind: 'broadcast' };
+  }
+
+  // Zero → Many (promote then broadcast)
+  if (sourceCard === 'zero' && targetCard === 'many') {
+    return { kind: 'promote-broadcast' };
+  }
+
+  return null;
+}
+
+/**
+ * Format a port type for error messages.
+ */
+function formatPortType(type: PortType): string {
+  if (isDomainRef(type)) {
+    return `domain:${type.id}`;
+  }
+  const signalType = type as SignalType;
+  const card = cardinalityToWorld(getCardinality(signalType));
+  return `${card}:${signalType.payload}`;
 }

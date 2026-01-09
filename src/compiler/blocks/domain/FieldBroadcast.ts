@@ -12,10 +12,10 @@ const lowerFieldBroadcast: BlockLower = ({ b, inputsById }) => {
     throw new Error('FieldBroadcast requires signal input');
   }
 
-  const fieldId = b.fieldBroadcast(signal.id, fieldType(signal.type.domain));
+  const fieldId = b.fieldBroadcast(signal.id, fieldType(signal.type.payload));
 
   return {
-    out: { kind: 'field', id: fieldId, type: fieldType(signal.type.domain) },
+    out: { kind: 'field', id: fieldId, type: fieldType(signal.type.payload) },
   };
 };
 

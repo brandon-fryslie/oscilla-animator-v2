@@ -16,11 +16,11 @@ const lowerFieldMap: BlockLower = ({ b, inputsById, config }) => {
   const outputId = b.fieldMap(
     field.id,
     { kind: 'expr', expr },
-    fieldType(field.type.domain)
+    fieldType(field.type.payload)
   );
 
   return {
-    out: { kind: 'field', id: outputId, type: fieldType(field.type.domain) },
+    out: { kind: 'field', id: outputId, type: fieldType(field.type.payload) },
   };
 };
 

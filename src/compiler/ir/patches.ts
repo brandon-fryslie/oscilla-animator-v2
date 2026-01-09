@@ -16,7 +16,8 @@
  * It never sees raw Patch directly.
  */
 
-import type { TypeDesc, SigExprId } from "./types";
+import type { SigExprId } from "./types";
+import type { SignalType, DomainRef } from "../../core/canonical-types";
 import type { TimeModelIR } from "./schedule";
 
 // Re-export from graph/normalize for convenience - these are the authoritative types
@@ -64,11 +65,11 @@ export type LensBinding = { kind: 'literal'; value: unknown };
  * Extends NormalizedPatch from graph/normalize.ts.
  */
 export interface TypedPatch extends NormalizedPatch {
-  /** Type descriptors for each block output: Map<BlockId, Map<PortId, TypeDesc>> */
-  readonly blockOutputTypes: ReadonlyMap<string, ReadonlyMap<string, TypeDesc>>;
+  /** Type descriptors for each block output: Map<BlockId, Map<PortId, SignalType | DomainRef>> */
+  readonly blockOutputTypes: ReadonlyMap<string, ReadonlyMap<string, SignalType | DomainRef>>;
 
   /** Type descriptors for bus outputs (if any buses exist) */
-  readonly busOutputTypes?: ReadonlyMap<string, TypeDesc>;
+  readonly busOutputTypes?: ReadonlyMap<string, SignalType | DomainRef>;
 }
 
 // =============================================================================
