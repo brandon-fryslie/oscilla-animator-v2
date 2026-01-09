@@ -1,6 +1,6 @@
 # Oscilla Animator v2 - Project Roadmap
 
-Last updated: 2026-01-09-200700
+Last updated: 2026-01-09-073500
 
 ---
 
@@ -11,6 +11,7 @@ Last updated: 2026-01-09-200700
 **Status:** ACTIVE
 **Started:** 2026-01-05
 **Target Completion:** TBD
+**Unified Plan:** `.agent_planning/phase1-remaining/PLAN-20260109-210000.md` (APPROVED)
 
 ### Topics
 
@@ -38,49 +39,59 @@ Last updated: 2026-01-09-200700
 
 #### 📋 ir-5-axes [PLANNING]
 - **State:** PLANNING
-- **Epic:** None
+- **Epic:** Phase 1 Unified Plan (P0)
 - **Spec:** `design-docs/IR-and-normalization-5-axes.md`
 - **Description:** Implement 5-axis metadata in IR schema, CompiledProgramIR, slotMeta with offsets
 - **Planning Files:** `.agent_planning/ir-5-axes/`
-- **Status Note:** Evaluation shows major gaps - spec largely unimplemented
+- **Status Note:** Plan approved, ready for implementation
 
 #### 📋 type-system [PLANNING]
 - **State:** PLANNING
-- **Epic:** None
+- **Epic:** Phase 1 Unified Plan (P1)
 - **Spec:** `design-docs/CANONICAL-oscilla-v2.5-20260109/topics/01-type-system.md`
-- **Description:** P4-P6: Runtime migration, constraint solving, bus migration (builds on canonical-arch-alignment P0-P3)
-- **Planning Files:** `.agent_planning/type-system/`
-- **Current Sprint:** P4 - Runtime Migration (adapter, slotMeta, assertions)
+- **Description:** AxesDescIR integration, bridge functions, SlotMetaEntry population
+- **Planning Files:** `.agent_planning/phase1-remaining/`
+- **Status Note:** ~90% foundation complete, IR integration remaining
 
-#### 💡 time-model [PROPOSED]
-- **State:** PROPOSED
-- **Epic:** None
-- **Spec:** `design-docs/spec/02-time.md`
-- **Description:** TimeRoot, TimeModel, monotonic time rules
+#### 📋 time-model [PLANNING]
+- **State:** PLANNING
+- **Epic:** Phase 1 Unified Plan (P2)
+- **Spec:** `design-docs/CANONICAL-oscilla-v2.5-20260109/topics/03-time-system.md`
+- **Description:** Dual-phase TimeRoot (phaseA/phaseB independent periods), phase continuity on hot-swap
+- **Planning Files:** `.agent_planning/time-model/`
+- **Status Note:** Sprint plan APPROVED. P0: Dual-phase TimeRoot, P1: Runtime tracking, P2: Phase continuity
 
-#### 💡 buses-and-rails [PROPOSED]
-- **State:** PROPOSED
-- **Epic:** None
-- **Spec:** `design-docs/spec/03-buses.md`
-- **Description:** Multi-writer inputs, combine modes, bus blocks
+#### 📋 buses-and-rails [PLANNING]
+- **State:** PLANNING
+- **Epic:** Phase 1 Unified Plan (P5)
+- **Spec:** `design-docs/CANONICAL-oscilla-v2.5-20260109/topics/02-block-system.md`
+- **Description:** Multi-writer combine, default sources, rail system
+- **Planning Files:** `.agent_planning/phase1-remaining/`
+- **Status Note:** ~10% complete, major work pending
 
-#### 💡 compilation-pipeline [PROPOSED]
-- **State:** PROPOSED
-- **Epic:** None
-- **Spec:** `design-docs/spec/04-compilation.md`
-- **Description:** Normalization, validation, compile passes
+#### 📋 compilation-pipeline [PLANNING]
+- **State:** PLANNING
+- **Epic:** Phase 1 Unified Plan (P3)
+- **Spec:** `design-docs/CANONICAL-oscilla-v2.5-20260109/topics/04-compilation.md`
+- **Description:** Passes 5-10: execution class, tables, schedule, slots, debug
+- **Planning Files:** `.agent_planning/phase1-remaining/`
+- **Status Note:** ~40% complete, passes 5-10 needed
 
-#### 💡 runtime-execution [PROPOSED]
-- **State:** PROPOSED
-- **Epic:** None
-- **Spec:** `design-docs/spec/05-runtime.md`
-- **Description:** Runtime loop, hot swap, state continuity
+#### 📋 runtime-execution [PLANNING]
+- **State:** PLANNING
+- **Epic:** Phase 1 Unified Plan (P4)
+- **Spec:** `design-docs/CANONICAL-oscilla-v2.5-20260109/topics/05-runtime.md`
+- **Description:** Offset-addressed execution, schedule executor update
+- **Planning Files:** `.agent_planning/phase1-remaining/`
+- **Status Note:** ~50% complete, offset addressing needed
 
-#### 💡 primitives-catalog [PROPOSED]
-- **State:** PROPOSED
-- **Epic:** None
-- **Spec:** `design-docs/spec/08-primitives-composites.md`
-- **Description:** Complete primitive block set and composite library
+#### 📋 primitives-catalog [PLANNING]
+- **State:** PLANNING
+- **Epic:** Phase 1 Unified Plan (P6)
+- **Spec:** `design-docs/CANONICAL-oscilla-v2.5-20260109/topics/02-block-system.md`
+- **Description:** Basic 12 completion, stateful primitives, composites
+- **Planning Files:** `.agent_planning/primitives-catalog/`
+- **Status Note:** Sprint plan APPROVED. Deliverables: UnitDelay, Hash, Id01
 
 ---
 
@@ -96,7 +107,7 @@ Last updated: 2026-01-09-200700
 #### 💡 renderer-implementation [PROPOSED]
 - **State:** PROPOSED
 - **Epic:** None
-- **Spec:** `design-docs/spec/09-renderer.md`
+- **Spec:** `design-docs/CANONICAL-oscilla-v2.5-20260109/topics/06-renderer.md`
 - **Description:** Renderer contract, Canvas2D implementation, render commands
 
 #### 💡 patch-editor-ui [PROPOSED]
@@ -118,13 +129,13 @@ Last updated: 2026-01-09-200700
 #### 💡 phase-matching-system [PROPOSED]
 - **State:** PROPOSED
 - **Epic:** None
-- **Spec:** `design-docs/spec/10-phase-matching-system.md`
+- **Spec:** `design-docs/spec-archived-20260109-160000/time/10-phase-matching-system.md`
 - **Description:** Phase matching and unwrapping system
 
 #### 💡 transforms-catalog [PROPOSED]
 - **State:** PROPOSED
 - **Epic:** None
-- **Spec:** `design-docs/spec/07-transforms.md`
+- **Spec:** `design-docs/spec-archived-20260109-160000/graph/07-transforms.md`
 - **Description:** Transform blocks, lens/adapter stacks, full catalog
 
 ---
@@ -139,14 +150,15 @@ Last updated: 2026-01-09-200700
 
 **Topic Status:**
 - 💡 PROPOSED - Identified but no planning yet
-- 📋 PLANNING - Planning files exist, no implementation
+- 📋 PLANNING - Planning files exist, ready for implementation
 - 🔄 IN PROGRESS - Implementation started
 - ✅ COMPLETED - All acceptance criteria met
 - 📦 ARCHIVED - No longer maintained
 
 **Notes:**
-- Topics align with unified spec in `design-docs/spec/`
+- Topics align with canonical spec in `design-docs/CANONICAL-oscilla-v2.5-20260109/`
 - Each topic should have planning files in `.agent_planning/<topic>/`
+- Phase 1 remaining work unified in `.agent_planning/phase1-remaining/`
 - Use `/do:roadmap <topic>` to add new topics
 - Use `/do:plan <topic>` to create planning files for a topic
 - Roadmap is automatically updated by workflow skills (see `.claude/rules/roadmap-hooks.md`)
