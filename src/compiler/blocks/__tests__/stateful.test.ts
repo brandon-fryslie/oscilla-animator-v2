@@ -51,25 +51,28 @@ function compileAndExtract(blockType: string, inputs: Record<string, number>): {
   // Build program
   const program = builder.build();
 
+  // Create persistent state for the program
+  const schedule = program.schedule as any;
+  const stateSlotCount = schedule.stateSlotCount ?? 0;
+  const state = createRuntimeState(program.slotMeta.length, stateSlotCount);
+
+  // Initialize state slots if needed
+  if (schedule.stateSlots) {
+    for (let i = 0; i < schedule.stateSlots.length; i++) {
+      state.state[i] = schedule.stateSlots[i].initialValue;
+    }
+  }
+
+  const pool = new BufferPool();
+  let lastFrameExecuted = -1;
+
   // Helper to extract output value after executing a frame
   const extractOutput = (frameIndex: number): number => {
-    const schedule = program.schedule as any;
-    const stateSlotCount = schedule.stateSlotCount ?? 0;
-    const state = createRuntimeState(program.slotMeta.length, stateSlotCount);
-
-    // Initialize state slots if needed
-    if (schedule.stateSlots) {
-      for (let i = 0; i < schedule.stateSlots.length; i++) {
-        state.state[i] = schedule.stateSlots[i].initialValue;
-      }
-    }
-
-    const pool = new BufferPool();
-
-    // Execute frames up to frameIndex
-    for (let i = 0; i <= frameIndex; i++) {
+    // Execute all frames from lastFrameExecuted+1 to frameIndex
+    for (let i = lastFrameExecuted + 1; i <= frameIndex; i++) {
       executeFrame(program, state, pool, i * 16.67); // ~60fps
     }
+    lastFrameExecuted = frameIndex;
 
     // Read output from slot
     const meta = program.slotMeta.find((m) => m.slot === outSlot);
@@ -84,7 +87,7 @@ function compileAndExtract(blockType: string, inputs: Record<string, number>): {
 // UnitDelay Tests
 // =============================================================================
 
-describe.skip('UnitDelay', () => {
+describe('UnitDelay', () => {
   // TODO: Fix state infrastructure - these tests verify stateful block behavior
   // which requires proper state array handling in the runtime
   it('outputs 0 on first frame', () => {

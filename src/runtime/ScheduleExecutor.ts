@@ -80,13 +80,17 @@ export function executeFrame(
   const time = resolveTime(tAbsMs, timeModel, state.timeState);
   state.time = time;
 
-  // 3. Execute schedule steps
+  // 3. Execute schedule steps in TWO PHASES
+  // Phase 1: Execute evalSig, materialize, render (skip stateWrite)
+  // Phase 2: Execute all stateWrite steps
+  // This ensures state reads see previous frame's values
   const passes: RenderPassIR[] = [];
 
   // Get dense arrays from program
   const signals = program.signalExprs.nodes;
   const fields = program.fieldExprs.nodes;
 
+  // PHASE 1: Execute all non-stateWrite steps
   for (const step of steps) {
     switch (step.kind) {
       case 'evalSig': {
@@ -196,9 +200,7 @@ export function executeFrame(
       }
 
       case 'stateWrite': {
-        // Write to persistent state array
-        const value = evaluateSignal(step.value, signals, state);
-        state.state[step.stateSlot as number] = value;
+        // SKIP in Phase 1 - will be executed in Phase 2
         break;
       }
 
@@ -206,6 +208,16 @@ export function executeFrame(
         const _exhaustive: never = step;
         throw new Error(`Unknown step kind: ${(_exhaustive as Step).kind}`);
       }
+    }
+  }
+
+  // PHASE 2: Execute all stateWrite steps
+  // This ensures state reads in Phase 1 saw previous frame's values
+  for (const step of steps) {
+    if (step.kind === 'stateWrite') {
+      // Write to persistent state array
+      const value = evaluateSignal(step.value, signals, state);
+      state.state[step.stateSlot as number] = value;
     }
   }
 
