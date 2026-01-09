@@ -3,7 +3,7 @@
  */
 
 import type { AcyclicOrLegalGraph, BlockIndex } from "../ir/patches";
-import type { Block, Edge, SlotWorld } from "../../types";
+import type { Block, Edge } from "../../types";
 import type { IRBuilder } from "../ir/IRBuilder";
 import { IRBuilderImpl } from "../ir/IRBuilderImpl";
 import type { CompileError } from "../types";
@@ -110,7 +110,7 @@ function resolveInputsWithMultiInput(
     if (combine.mode !== 'error' && portType.world !== 'event' && isCorePayload(portType.domain)) {
       const modeValidation = validateCombineMode(
         combine.mode,
-        portType.world as SlotWorld,
+        portType.world,
         portType.domain
       );
       if (!modeValidation.valid) {

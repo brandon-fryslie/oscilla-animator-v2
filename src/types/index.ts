@@ -121,12 +121,6 @@ export function portId(s: string): PortId {
 }
 
 // =============================================================================
-// SlotWorld - Classification for evaluation timing
-// =============================================================================
-
-export type SlotWorld = 'signal' | 'field' | 'scalar' | 'config';
-
-// =============================================================================
 // Combine Mode
 // =============================================================================
 
@@ -178,6 +172,9 @@ export type LensParamBinding =
 
 export type SlotDirection = 'input' | 'output';
 
+/** Classification for evaluation timing */
+export type SlotWorld = 'signal' | 'field' | 'scalar' | 'config';
+
 export interface Slot {
   readonly id: string;
   readonly label: string;
@@ -190,7 +187,6 @@ export interface Slot {
 
 export interface DefaultSource {
   readonly value: unknown;
-  readonly world?: SlotWorld;
 }
 
 // =============================================================================

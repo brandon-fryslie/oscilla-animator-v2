@@ -9,6 +9,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { IRBuilder } from '../../ir/builder';
+import type { ScheduleIR } from '../../passes-v2/pass7-schedule';
 // Import blocks to trigger registration
 import '../index';
 import type { ValueRef } from '../registry';
@@ -52,7 +53,7 @@ function compileAndExtract(blockType: string, inputs: Record<string, number>): {
   const program = builder.build();
 
   // Create persistent state for the program
-  const schedule = program.schedule as any;
+  const schedule = program.schedule as ScheduleIR;
   const stateSlotCount = schedule.stateSlotCount ?? 0;
   const state = createRuntimeState(program.slotMeta.length, stateSlotCount);
 

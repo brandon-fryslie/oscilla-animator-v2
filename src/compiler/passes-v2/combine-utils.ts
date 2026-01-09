@@ -40,14 +40,6 @@ export type CombinePolicy =
   | { when: 'multi'; mode: 'error' };
 
 /**
- * SlotWorld - subset of TypeWorld for runtime-evaluated values.
- *
- * This type was removed from editor/types.ts but is needed by the compiler.
- * Redefined here for compiler internal use.
- */
-export type SlotWorld = 'signal' | 'field' | 'scalar' | 'config';
-
-/**
  * Result of combine mode validation.
  */
 export interface CombineModeValidation {
@@ -81,7 +73,7 @@ export interface CombineModeValidation {
  */
 export function validateCombineMode(
   mode: CombineMode | 'error' | 'layer',
-  world: SlotWorld,
+  world: 'signal' | 'field' | 'scalar' | 'config',
   payload: CorePayload | string
 ): CombineModeValidation {
   // 'error' mode is special - it rejects multiple writers

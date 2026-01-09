@@ -7,6 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildPatch } from '../../graph';
 import { compile } from '../compile';
+import type { ScheduleIR } from '../passes-v2/pass7-schedule';
 
 describe('compile', () => {
   describe('TimeRoot validation', () => {
@@ -93,7 +94,7 @@ describe('compile', () => {
       expect(result.kind).toBe('ok');
       if (result.kind === 'ok') {
         // Domains are in schedule wrapper for now
-        const schedule = result.program.schedule as any;
+        const schedule = result.program.schedule as ScheduleIR;
         const domains = schedule.domains;
         expect(domains.size).toBe(1);
         const domain = [...domains.values()][0];
@@ -113,7 +114,7 @@ describe('compile', () => {
       expect(result.kind).toBe('ok');
       if (result.kind === 'ok') {
         // Domains are in schedule wrapper for now
-        const schedule = result.program.schedule as any;
+        const schedule = result.program.schedule as ScheduleIR;
         const domains = schedule.domains;
         expect(domains.size).toBe(1);
         const domain = [...domains.values()][0];
@@ -173,7 +174,7 @@ describe('TimeModel', () => {
     expect(result.kind).toBe('ok');
     if (result.kind === 'ok') {
       // TimeModel is in schedule wrapper for now
-      const schedule = result.program.schedule as any;
+      const schedule = result.program.schedule as ScheduleIR;
       expect(schedule.timeModel.kind).toBe('infinite');
     }
   });
@@ -188,7 +189,7 @@ describe('TimeModel', () => {
     expect(result.kind).toBe('ok');
     if (result.kind === 'ok') {
       // TimeModel is in schedule wrapper for now
-      const schedule = result.program.schedule as any;
+      const schedule = result.program.schedule as ScheduleIR;
       expect(schedule.timeModel.kind).toBe('finite');
       if (schedule.timeModel.kind === 'finite') {
         expect(schedule.timeModel.durationMs).toBe(5000);

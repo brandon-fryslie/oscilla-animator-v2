@@ -8,6 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildPatch } from '../../graph';
 import { compile } from '../compile';
+import type { ScheduleIR } from '../passes-v2/pass7-schedule';
 import {
   createRuntimeState,
   BufferPool,
@@ -94,7 +95,7 @@ describe('Steel Thread - Animated Particles', () => {
     const program = result.program;
 
     // Verify the program structure
-    const schedule = program.schedule as any;
+    const schedule = program.schedule as ScheduleIR;
     expect(schedule.timeModel.kind).toBe('infinite');
     expect(schedule.domains.size).toBe(1);
     expect(schedule.steps.length).toBeGreaterThan(0);
