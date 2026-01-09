@@ -5,7 +5,7 @@
  * to IR expressions.
  */
 
-import type { TypeDesc } from '../../core/types';
+import type { SignalType } from '../../core/canonical-types';
 import type {
   SigExprId,
   FieldExprId,
@@ -41,7 +41,7 @@ export type ValueRefPacked =
  */
 export interface IRPortDecl {
   readonly portId: string;
-  readonly type: TypeDesc;
+  readonly type: SignalType;
 }
 
 /**
@@ -60,8 +60,8 @@ export interface LowerCtx {
   readonly blockType: string;
   readonly instanceId: string;
   readonly label?: string;
-  readonly inTypes: readonly TypeDesc[];
-  readonly outTypes: readonly TypeDesc[];
+  readonly inTypes: readonly SignalType[];
+  readonly outTypes: readonly SignalType[];
   readonly b: IRBuilder;
   readonly seedConstId: number;
 }
@@ -139,19 +139,19 @@ export type LoweredOutput =
 export interface LoweredSignal {
   readonly kind: 'signal';
   readonly sigId: SigExprId;
-  readonly type: TypeDesc;
+  readonly type: SignalType;
 }
 
 export interface LoweredField {
   readonly kind: 'field';
   readonly fieldId: FieldExprId;
-  readonly type: TypeDesc;
+  readonly type: SignalType;
 }
 
 export interface LoweredScalar {
   readonly kind: 'scalar';
   readonly value: unknown;
-  readonly type: TypeDesc;
+  readonly type: SignalType;
 }
 
 export interface LoweredDomain {
@@ -173,20 +173,20 @@ export type LoweredInput =
 export interface LoweredSignalInput {
   readonly kind: 'signal';
   readonly sigId: SigExprId;
-  readonly type: TypeDesc;
+  readonly type: SignalType;
   readonly slot?: ValueSlot;
 }
 
 export interface LoweredFieldInput {
   readonly kind: 'field';
   readonly fieldId: FieldExprId;
-  readonly type: TypeDesc;
+  readonly type: SignalType;
 }
 
 export interface LoweredScalarInput {
   readonly kind: 'scalar';
   readonly value: unknown;
-  readonly type: TypeDesc;
+  readonly type: SignalType;
 }
 
 export interface LoweredDomainInput {
@@ -198,7 +198,7 @@ export interface LoweredDomainInput {
 export interface LoweredUnconnectedInput {
   readonly kind: 'unconnected';
   readonly defaultValue?: unknown;
-  readonly type: TypeDesc;
+  readonly type: SignalType;
 }
 
 /**

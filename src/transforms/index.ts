@@ -5,7 +5,7 @@
  * This is a stub that will be extended with actual transform definitions.
  */
 
-import type { TypeDesc } from '../types';
+import type { SignalType } from '../core/canonical-types';
 
 // =============================================================================
 // Transform Function Types
@@ -21,8 +21,8 @@ export type TransformFn = (value: unknown, params: Record<string, unknown>) => u
  */
 export interface AdapterDef {
   readonly id: string;
-  readonly from: TypeDesc;
-  readonly to: TypeDesc;
+  readonly from: SignalType;
+  readonly to: SignalType;
   readonly fn: TransformFn;
   readonly cost: number;
 }
@@ -32,8 +32,8 @@ export interface AdapterDef {
  */
 export interface LensDef {
   readonly id: string;
-  readonly inputType: TypeDesc;
-  readonly outputType: TypeDesc;
+  readonly inputType: SignalType;
+  readonly outputType: SignalType;
   readonly params: readonly LensParamDef[];
   readonly fn: TransformFn;
 }
@@ -44,7 +44,7 @@ export interface LensDef {
 export interface LensParamDef {
   readonly id: string;
   readonly label: string;
-  readonly type: TypeDesc;
+  readonly type: SignalType;
   readonly defaultValue: unknown;
 }
 
@@ -85,13 +85,13 @@ export function registerLens(def: LensDef): void {
 
 /**
  * Find adapters that convert from source to target type.
+ *
+ * Note: This is a simple comparison. In the future, we may need more sophisticated
+ * matching logic that considers axis unification and payload compatibility.
  */
-export function findAdapters(from: TypeDesc, to: TypeDesc): AdapterDef[] {
+export function findAdapters(from: SignalType, to: SignalType): AdapterDef[] {
   return Array.from(adapters.values()).filter(
-    a => a.from.world === from.world &&
-         a.from.domain === from.domain &&
-         a.to.world === to.world &&
-         a.to.domain === to.domain
+    a => a.from.payload === from.payload && a.to.payload === to.payload
   );
 }
 

@@ -3,7 +3,7 @@
  *
  * This module implements the canonical writer resolution model from the
  * Multi-Input Blocks specification. It handles:
- * - Enumerating all writers to an input endpoint (wires, bus listeners, defaults)
+ * - Enumerating all writers to an input endpoint
  * - Deterministic ordering for stable combine semantics
  * - Combine policy resolution and validation
  *
@@ -41,11 +41,7 @@ export interface InputEndpoint {
  * Writer: A source that writes to an input slot.
  *
  * All writers are wires - direct connections from another block's output.
- * This includes BusBlock.out edges and DSConst.out edges (for default sources).
  *
- * NOTE: The 'default' kind was removed. Default sources are now materialized
- * as DSConst blocks by GraphNormalizer.normalize() before compilation.
- * Those DSConst blocks connect via regular wire edges.
  */
 export type Writer = { kind: 'wire'; from: { blockId: string; slotId: string }; connId: string };
 
@@ -78,8 +74,6 @@ export interface ResolvedInputSpec {
  *
  * Sort order (ascending):
  * 1. Wires: "0:{from.blockId}:{from.slotId}:{connId}"
- * 2. Bus listeners: "1:{busId}:{listenerId}"
- * 3. Defaults: "2:{defaultId}"
  *
  * This ensures:
  * - Order-dependent modes ('last', 'first', 'layer') are deterministic
@@ -142,7 +136,7 @@ export function enumerateWriters(
     if (edge.to.blockId !== endpoint.blockId) continue;
     if (edge.to.slotId !== endpoint.slotId) continue;
 
-    // After Sprint 2 migration, all edges are port→port (including BusBlock.out edges)
+    // After Sprint 2 migration, all edges are port→port
     if (edge.from.kind === 'port') {
       writers.push({
         kind: 'wire',
@@ -150,7 +144,6 @@ export function enumerateWriters(
         connId: edge.id,
       });
     }
-    // Note: edge.from.kind === 'bus' no longer exists after migration
   }
 
   // NOTE: No legacy defaultSource injection here.
@@ -181,15 +174,10 @@ export function getDefaultCombinePolicy(): CombinePolicy {
 /**
  * Resolve combine policy for an input slot.
  *
- * NOTE: Slot no longer has a 'combine' property after Bus interface simplification.
- * All slots now use the default combine policy.
- *
  * @param _inputSlot - The input slot definition (unused after Slot.combine removal)
  * @returns Combine policy (always default)
  */
 export function resolveCombinePolicy(_inputSlot: Slot): CombinePolicy {
-  // Slot.combine was removed - all regular slots use default policy
-  // Bus-specific combine logic is handled separately in bus lowering
   return getDefaultCombinePolicy();
 }
 
@@ -201,7 +189,7 @@ export function resolveCombinePolicy(_inputSlot: Slot): CombinePolicy {
  * Resolve all inputs for a block.
  *
  * For each input slot:
- * 1. Enumerate writers (wires, bus listeners, defaults)
+ * 1. Enumerate writers
  * 2. Sort writers deterministically
  * 3. Resolve combine policy
  * 4. Return ResolvedInputSpec

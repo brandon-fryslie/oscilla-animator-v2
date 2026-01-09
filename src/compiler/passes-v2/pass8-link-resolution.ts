@@ -7,11 +7,6 @@
  * This pass finalizes the IR by ensuring every port has a concrete value
  * and there are no dangling references.
  *
- * Sprint: Bus-Block Unification - Aggressive Cleanup (2026-01-02)
- * - Removed Pass 7 (bus lowering) - buses are just blocks
- * - Removed bus-specific validation
- * - Removed migration utilities
- *
  * Workstream 04: Render Sink Emission Policy (2026-01-03)
  * - Split applyRenderLowering into applyCameraLowering (cameras only)
  * - Render blocks are lowered in pass6, not pass8
@@ -21,10 +16,6 @@
  * - Removed unused _wires parameter (CompilerConnection deprecated)
  * - All connections now use Edge type exclusively
  *
- * References:
- * - design-docs/12-Compiler-Final/15-Canonical-Lowering-Pipeline.md § Pass 8
- * - .agent_planning/bus-block-unification/DOD-2026-01-02-121323.md
- */
 
 import type { Block, TransformStep, AdapterStep, Edge } from "../../types";
 import type { BlockIndex } from "../ir/patches";
@@ -409,7 +400,6 @@ function applyTransformStepIR(
         const constId = builder.allocConstId(binding.value);
         paramsMap[paramId] = { k: 'scalarConst', constId };
       }
-      // Only literal bindings are supported in IR mode (bus/wire removed)
     }
 
     irCtx = {
@@ -478,14 +468,6 @@ function applyTransformsIR(
 /**
  * Build BlockInputRootIR by resolving input sources.
  *
- * All edges are port→port after Sprint 2 migration. BusBlock.out edges are
- * regular port edges, not special. Legacy format no longer supported.
- *
- * Note: Default sources are handled by Pass 0 (materializeDefaultSources),
- * which creates hidden provider blocks and edges for all unconnected inputs
- * with defaultSource metadata. By the time this function runs, those inputs
- * already have edges and don't need special handling.
- *
  * If no source is found (no edge), it's a missing required input error.
  */
 function buildBlockInputRoots(
@@ -526,8 +508,6 @@ function buildBlockInputRoots(
 
       if (edge !== undefined) {
         // All edges are port→port after migration
-        // This includes regular block-to-block connections and BusBlock connections
-
         // Resolve upstream block output
         const upstreamBlockIdx = blockIdToIndex.get(edge.from.blockId);
 

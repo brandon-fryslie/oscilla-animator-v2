@@ -5,10 +5,6 @@
  * 1. Creating BlockEval nodes for all blocks
  * 2. Adding edges (block → block) from unified Edge type
  *
- * NOTE: After Bus-Block Unification, BusBlocks are regular blocks.
- * There are no separate BusValue nodes - BusBlocks appear as BlockEval nodes.
- * Edges to/from BusBlocks are treated like any other edge.
- *
  * This graph is used for topological scheduling and cycle validation.
  *
  * References:
@@ -56,9 +52,6 @@ export interface DepGraphWithTimeModel {
  * Builds a unified dependency graph with BlockEval nodes
  * and edges from the unified Edge array.
  *
- * After Bus-Block Unification, BusBlocks are regular blocks.
- * All edges are port→port, including edges to/from BusBlocks.
- *
  * @param timeResolved - The time-resolved patch from Pass 3
  * @returns A dependency graph ready for cycle validation
  */
@@ -69,8 +62,6 @@ export function pass4DepGraph(
   const nodes: DepNode[] = [];
   const depEdges: DepEdge[] = [];
 
-  // Step 1: Create BlockEval nodes for all blocks (including BusBlocks)
-  // Use Array.from() to avoid downlevelIteration issues
   for (const blockData of Array.from(timeResolved.blocks.values())) {
     const block = blockData as Block;
     const blockIndex = timeResolved.blockIndexMap.get(block.id);
@@ -88,7 +79,6 @@ export function pass4DepGraph(
   }
 
   // Step 2: Add edges from unified Edge array
-  // All edges are now port→port (block→block) including BusBlock connections
   const patchEdges: readonly Edge[] = timeResolved.edges ?? [];
 
   for (const edge of patchEdges) {

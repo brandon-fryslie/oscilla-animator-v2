@@ -7,6 +7,7 @@ import {
   domainType,
   type BlockLower,
 } from '../registry';
+import { domainId } from '../../ir/Indices';
 
 const lowerRenderInstances2D: BlockLower = ({ b, inputsById }) => {
   const domain = inputsById.domain;
@@ -70,7 +71,7 @@ const lowerRenderInstances2D: BlockLower = ({ b, inputsById }) => {
   }
 
   // Emit the render step
-  b.stepRender(domain.id, pos.id, finalColorId, sizeId);
+  b.stepRender(domainId(domain.id), pos.id, finalColorId, sizeId);
 
   // Render blocks have no outputs (they're sinks)
   return {};

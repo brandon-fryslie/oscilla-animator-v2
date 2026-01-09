@@ -59,14 +59,14 @@ function isCoreDomain(domain: string): domain is import("../../../core/types").C
 }
 
 // =============================================================================
-// Multi-Input Resolution (New in Multi-Input Blocks Integration)
+// Multi-Input Resolution
 // =============================================================================
 
 /**
  * Resolve input ValueRefs for a block using multi-input resolution.
  *
  * For each input:
- * 1. Enumerate writers (wires, bus listeners, defaults) via resolveWriters
+ * 1. Enumerate writers via resolveWriters
  * 2. If N=0: Error (should not happen after pass 0 materialization)
  * 3. If N=1: Direct bind
  * 4. If N>1: Validate combine policy, create combine node

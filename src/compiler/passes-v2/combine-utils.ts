@@ -13,9 +13,7 @@
  * Updated: Multi-Input Blocks Integration (2026-01-01)
  */
 
-import type { CombineMode, Edge } from "../../types";
-import type { TypeDesc } from "../../core/types";
-import type { CoreDomain } from "../../core/types";
+import type { CombineMode, Edge, SignalType } from "../../types";
 import type { IRBuilder } from "../ir/IRBuilder";
 import type { ValueRefPacked } from "../ir/lowerTypes";
 import type { EventExprId } from "../ir/types";
@@ -24,6 +22,20 @@ import type { EventCombineMode } from "../ir/signalExpr";
 // =============================================================================
 // Types
 // =============================================================================
+
+/**
+ * Legacy type descriptor used internally by combine utils.
+ * This is a minimal compatibility type until combine-utils is fully migrated to SignalType.
+ */
+export interface LegacyTypeDesc {
+  readonly world: 'signal' | 'field' | 'event' | 'scalar' | 'config';
+  readonly domain: 'float' | 'int' | 'vec2' | 'vec3' | 'color' | 'boolean' | string;
+}
+
+/**
+ * Core payload domains - user-facing types in the bus system.
+ */
+export type CorePayload = 'float' | 'int' | 'vec2' | 'color' | 'bool';
 
 /**
  * Combine policy - controls when and how multiple writers are combined.
@@ -73,13 +85,13 @@ export interface CombineModeValidation {
  *
  * @param mode - The combine mode to validate
  * @param world - The slot's world (signal, field, config, scalar)
- * @param domain - The slot's domain (float, color, vec2, etc.)
+ * @param payload - The slot's payload type (float, color, vec2, etc.)
  * @returns Validation result with reason if invalid
  */
 export function validateCombineMode(
   mode: CombineMode | 'error' | 'layer',
   world: SlotWorld,
-  domain: CoreDomain
+  payload: CorePayload | string
 ): CombineModeValidation {
   // 'error' mode is special - it rejects multiple writers
   if (mode === 'error') {
@@ -108,13 +120,13 @@ export function validateCombineMode(
   }
 
   // Domain-specific validation for signal/field worlds
-  const numericDomains: CoreDomain[] = ['float', 'int', 'vec2', 'vec3'];
-  if (numericDomains.includes(domain)) {
+  const numericPayloads = ['float', 'int', 'vec2', 'vec3'];
+  if (numericPayloads.includes(payload)) {
     // Numeric domains support all combine modes
     return { valid: true };
   }
 
-  if (domain === 'color') {
+  if (payload === 'color') {
     // Color domain only supports 'last', 'first', and 'layer'
     if (mode === 'layer') {
       return { valid: true };
@@ -125,10 +137,10 @@ export function validateCombineMode(
     };
   }
 
-  // String, boolean, and other domains only support 'last' and 'first'
+  // Boolean and other domains only support 'last' and 'first'
   return {
     valid: false,
-    reason: `Domain "${domain}" only supports combineMode "last" or "first"`,
+    reason: `Payload "${payload}" only supports combineMode "last" or "first"`,
   };
 }
 
@@ -206,9 +218,6 @@ function normalizeCombineMode(mode: CombineMode | 'error' | 'layer'): CombineMod
 /**
  * Create a combine node for N inputs with the specified combine mode.
  *
- * This is the core combine logic extracted from Pass 7 bus lowering.
- * Handles Signal, Field, and Event worlds with all combine modes.
- *
  * Edge ordering:
  * - Inputs are assumed to be pre-sorted by the caller
  * - For 'last' and 'layer' modes, order matters (last input wins)
@@ -221,14 +230,14 @@ function normalizeCombineMode(mode: CombineMode | 'error' | 'layer'): CombineMod
  *
  * @param mode - Combine mode (sum, average, max, min, last, first, layer)
  * @param inputs - Pre-sorted input ValueRefs (ascending sortKey, ties by edge ID)
- * @param type - Type descriptor (world, domain, category)
+ * @param type - Legacy type descriptor (world, domain) or SignalType
  * @param builder - IRBuilder for emitting nodes
  * @returns Combined ValueRefPacked or null if no inputs
  */
 export function createCombineNode(
   mode: CombineMode | 'error' | 'layer',
   inputs: readonly ValueRefPacked[],
-  type: TypeDesc,
+  type: LegacyTypeDesc | SignalType,
   builder: IRBuilder
 ): ValueRefPacked | null {
   // Handle empty inputs - caller should materialize default
@@ -260,8 +269,17 @@ export function createCombineNode(
     }
   }
 
+  // Determine world from legacy type or infer from inputs
+  const world = ('world' in type) ? type.world :
+                (sigTerms.length > 0 ? 'signal' :
+                 fieldTerms.length > 0 ? 'field' :
+                 eventTerms.length > 0 ? 'event' : 'signal');
+
+  // Convert to SignalType if needed (for IRBuilder API)
+  const signalType = ('payload' in type) ? type : type as unknown as SignalType;
+
   // Handle Signal world
-  if (type.world === "signal") {
+  if (world === "signal") {
     if (sigTerms.length === 0) {
       return null; // No valid signal terms
     }
@@ -271,14 +289,14 @@ export function createCombineNode(
     const safeMode = validModes.includes(normalizedMode) ? normalizedMode : "last";
     const combineMode = safeMode as "sum" | "average" | "max" | "min" | "last";
 
-    const sigId = builder.sigCombine(sigTerms, combineMode, type);
-    const slot = builder.allocValueSlot(type, `combine_sig_${combineMode}`);
+    const sigId = builder.sigCombine(sigTerms, combineMode, signalType);
+    const slot = builder.allocValueSlot(signalType, `combine_sig_${combineMode}`);
     builder.registerSigSlot(sigId, slot);
     return { k: "sig", id: sigId, slot };
   }
 
   // Handle Field world
-  if (type.world === "field") {
+  if (world === "field") {
     if (fieldTerms.length === 0) {
       return null; // No valid field terms
     }
@@ -288,23 +306,23 @@ export function createCombineNode(
     const safeMode = validModes.includes(normalizedMode) ? normalizedMode : "product";
     const combineMode = safeMode as "sum" | "average" | "max" | "min" | "last" | "product";
 
-    const fieldId = builder.fieldCombine(fieldTerms, combineMode, type);
-    const slot = builder.allocValueSlot(type, `combine_field_${combineMode}`);
+    const fieldId = builder.fieldCombine(fieldTerms, combineMode, signalType);
+    const slot = builder.allocValueSlot(signalType, `combine_field_${combineMode}`);
     builder.registerFieldSlot(fieldId, slot);
     return { k: "field", id: fieldId, slot };
   }
 
   // Handle Event world
-  if (type.world === "event") {
+  if (world === "event") {
     if (eventTerms.length === 0) {
       return null; // No valid event terms
     }
 
-    // Map bus combineMode to event combine semantics
+    // Map BLOCK combineMode to event combine semantics
     // For events: 'merge' combines all streams, 'last' takes only last publisher
     const eventMode: EventCombineMode = normalizedMode === 'last' ? 'last' : 'merge';
-    const eventId = builder.eventCombine(eventTerms, eventMode, type);
-    const slot = builder.allocValueSlot(type, `combine_event_${eventMode}`);
+    const eventId = builder.eventCombine(eventTerms, eventMode, signalType);
+    const slot = builder.allocValueSlot(signalType, `combine_event_${eventMode}`);
     builder.registerEventSlot(eventId, slot);
     return { k: "event", id: eventId, slot };
   }

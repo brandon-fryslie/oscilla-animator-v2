@@ -5,7 +5,8 @@
  * This is a stub that will be extended with actual block definitions.
  */
 
-import type { TypeDesc, Slot, SlotWorld, UIControlHint, DefaultSource } from '../types';
+import type { SignalType } from '../core/canonical-types';
+import type { Slot, SlotWorld, UIControlHint, DefaultSource } from '../types';
 
 // =============================================================================
 // Block Definition Types
@@ -27,7 +28,7 @@ export type Capability = 'time' | 'identity' | 'state' | 'render' | 'io' | 'pure
 export interface InputDef {
   readonly id: string;
   readonly label: string;
-  readonly type: TypeDesc;
+  readonly type: SignalType;
   readonly optional?: boolean;
   readonly defaultValue?: unknown;
   readonly defaultSource?: DefaultSource;
@@ -40,7 +41,7 @@ export interface InputDef {
 export interface OutputDef {
   readonly id: string;
   readonly label: string;
-  readonly type: TypeDesc;
+  readonly type: SignalType;
 }
 
 /**

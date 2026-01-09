@@ -2,18 +2,14 @@
  * Pass 2: Type Graph Construction
  *
  * Transforms a NormalizedPatch into a TypedPatch by:
- * 1. Converting SlotType strings to IR TypeDesc
- * 2. Validating bus type eligibility (only scalars can be buses)
- * 3. Enforcing reserved bus type constraints (phaseA, pulse, energy, palette)
+ * 1. Extracting SignalType from blocks
  * 4. Building block output types map
  *
  * This pass establishes the type system foundation for all subsequent passes.
  *
- * NOTE: After Bus-Block Unification (2026-01-02), all connections use unified edges.
- *
  * References:
  * - HANDOFF.md Topic 3: Pass 2 - Type Graph
- * - design-docs/12-Compiler-Final/15-Canonical-Lowering-Pipeline.md § Pass 2
+ * - design-docs/spec/CANONICAL-ARCHITECTURE-oscilla-v2.5-20260109-160000.md
  */
 
 import type {
@@ -21,13 +17,15 @@ import type {
   Edge,
   Endpoint,
 } from "../../types";
-import type { TypeDesc, Domain } from "../../core/types";
-import { createTypeDesc } from "../../core/types";
+import type { SignalType, PayloadType, Cardinality, Temporality } from "../../core/canonical-types";
+import {
+  signalTypeSignal,
+  signalTypeTrigger,
+  getAxisValue,
+  DEFAULTS_V0,
+} from "../../core/canonical-types";
 import type { NormalizedPatch, TypedPatch } from "../ir/patches";
 import { getBlockDefinition } from "../../blocks/registry";
-
-// Type alias for compatibility
-type TypeDomain = Domain;
 
 /**
  * Error types emitted by Pass 2.
@@ -36,7 +34,6 @@ export interface PortTypeUnknownError {
   kind: "PortTypeUnknown";
   blockId: string;
   slotId: string;
-  slotType: TypeDesc;
   message: string;
 }
 
@@ -44,7 +41,7 @@ export interface BusIneligibleTypeError {
   kind: "BusIneligibleType";
   busId: string;
   busName: string;
-  typeDesc: TypeDesc;
+  signalType: SignalType;
   message: string;
 }
 
@@ -53,15 +50,15 @@ export interface ReservedBusTypeViolationError {
   busId: string;
   busName: string;
   expectedType: string;
-  actualType: TypeDesc;
+  actualType: SignalType;
   message: string;
 }
 
 export interface NoConversionPathError {
   kind: "NoConversionPath";
   connectionId: string;
-  fromType: TypeDesc;
-  toType: TypeDesc;
+  fromType: SignalType;
+  toType: SignalType;
   message: string;
 }
 
@@ -72,47 +69,34 @@ export type Pass2Error =
   | NoConversionPathError;
 
 /**
- * Convert editor SlotType (TypeDesc) to IR TypeDesc.
+ * Check if a SignalType is eligible for bus usage.
  *
- * Note: After TypeDesc unification, SlotType is already a TypeDesc object,
- * so this function primarily validates and normalizes the type.
- *
- * @param slotType - The slot type (now a TypeDesc object)
- * @returns A TypeDesc for the IR
- * @throws Error if the slot type cannot be parsed
+ * Rules (using canonical type system):
+ * - cardinality=one + temporality=continuous → bus-eligible (signal)
+ * - cardinality=one + temporality=discrete → bus-eligible (event/trigger)
+ * - cardinality=zero → NOT bus-eligible (compile-time constant)
+ * - cardinality=many → only if payload is scalar-like (float, int, bool, color)
  */
-function slotTypeToTypeDesc(slotType: TypeDesc): TypeDesc {
-  // SlotType is now TypeDesc, so just return it
-  // We may need to normalize or validate in the future
-  return slotType;
-}
+export function isBusEligible(type: SignalType): boolean {
+  const cardinality = getAxisValue(type.extent.cardinality, DEFAULTS_V0.cardinality);
+  const temporality = getAxisValue(type.extent.temporality, DEFAULTS_V0.temporality);
 
-/**
- * Check if a TypeDesc is eligible for bus usage.
- *
- * Rules:
- * - signal world: always bus-eligible
- * - field world: only if domain is scalar (float, int, boolean, color)
- * - scalar world: not bus-eligible (compile-time only)
- * - event world: bus-eligible (for event buses)
- * - config world: not bus-eligible
- */
-export function isBusEligible(type: Pick<TypeDesc, 'world' | 'domain'>): boolean {
-  if (type.world === "signal") {
+  // cardinality=zero (compile-time constant) is NOT bus-eligible
+  if (cardinality.kind === 'zero') {
+    return false;
+  }
+
+  // cardinality=one → bus-eligible for both continuous and discrete
+  if (cardinality.kind === 'one') {
     return true;
   }
 
-  if (type.world === "event") {
-    return true;
+  // cardinality=many → only bus-eligible for scalar payloads
+  if (cardinality.kind === 'many') {
+    const scalarPayloads: PayloadType[] = ['float', 'int', 'bool', 'color'];
+    return scalarPayloads.includes(type.payload);
   }
 
-  if (type.world === "field") {
-    // Field is bus-eligible only for scalar domains
-    const scalarDomains = ["float", "int", "boolean", "color"];
-    return scalarDomains.includes(type.domain);
-  }
-
-  // scalar and config are not bus-eligible
   return false;
 }
 
@@ -121,34 +105,37 @@ export function isBusEligible(type: Pick<TypeDesc, 'world' | 'domain'>): boolean
  * These buses have strict type requirements enforced by the compiler.
  *
  * Canonical types:
- * - phaseA: signal<float> - Phase has special invariants (wrap semantics, cycle-derived provenance)
- * - pulse: event<trigger> - Discrete events, not continuous signals (cleaner scheduling)
- * - energy: signal<number> - Continuous energy/amplitude
- * - energy: signal<float> - Continuous energy/amplitude
- * - palette: signal<color> - Color palette
+ * - phaseA: signal<float> (one + continuous)
+ * - pulse: trigger<bool> (one + discrete)
+ * - energy: signal<float> (one + continuous)
+ * - palette: signal<color> (one + continuous)
  */
 const RESERVED_BUS_CONSTRAINTS: Record<
   string,
-  { world: string; domain: string; description: string }
+  { payload: PayloadType; cardinality: 'one'; temporality: 'continuous' | 'discrete'; description: string }
 > = {
   phaseA: {
-    world: "signal",
-    domain: "float",
+    payload: 'float',
+    cardinality: 'one',
+    temporality: 'continuous',
     description: "Primary phase signal (0..1) with wrap semantics",
   },
   pulse: {
-    world: "event",
-    domain: "trigger",
+    payload: 'bool',
+    cardinality: 'one',
+    temporality: 'discrete',
     description: "Primary pulse/event trigger (discrete, not continuous)",
   },
   energy: {
-    world: "signal",
-    domain: "float",
+    payload: 'float',
+    cardinality: 'one',
+    temporality: 'continuous',
     description: "Energy/amplitude signal (0..∞)",
   },
   palette: {
-    world: "signal",
-    domain: "color",
+    payload: 'color',
+    cardinality: 'one',
+    temporality: 'continuous',
     description: "Color palette signal",
   },
 };
@@ -159,25 +146,29 @@ const RESERVED_BUS_CONSTRAINTS: Record<
 function validateReservedBus(
   busId: string,
   busName: string,
-  busType: TypeDesc
+  busType: SignalType
 ): ReservedBusTypeViolationError | null {
   const constraint = RESERVED_BUS_CONSTRAINTS[busName];
   if (constraint === undefined) {
     return null; // Not a reserved bus
   }
 
-  // Check world and domain match
+  const cardinality = getAxisValue(busType.extent.cardinality, DEFAULTS_V0.cardinality);
+  const temporality = getAxisValue(busType.extent.temporality, DEFAULTS_V0.temporality);
+
+  // Check payload, cardinality, and temporality match
   if (
-    busType.world !== constraint.world ||
-    busType.domain !== constraint.domain
+    busType.payload !== constraint.payload ||
+    cardinality.kind !== constraint.cardinality ||
+    temporality.kind !== constraint.temporality
   ) {
     return {
       kind: "ReservedBusTypeViolation",
       busId,
       busName,
-      expectedType: `${constraint.world}<${constraint.domain}>`,
+      expectedType: `${constraint.cardinality}+${constraint.temporality}<${constraint.payload}>`,
       actualType: busType,
-      message: `Reserved bus '${busName}' must have type ${constraint.world}<${constraint.domain}> (${constraint.description}), got ${busType.world}<${busType.domain}>`,
+      message: `Reserved bus '${busName}' must have type ${constraint.cardinality}+${constraint.temporality}<${constraint.payload}> (${constraint.description}), got ${cardinality.kind}+${temporality.kind}<${busType.payload}>`,
     };
   }
 
@@ -188,51 +179,55 @@ function validateReservedBus(
  * Type compatibility check for wired connections.
  * Determines if a value of type 'from' can be connected to a port expecting type 'to'.
  *
- * Compatibility rules:
- * 1. Exact match (same world + domain)
- * 2. Scalar can promote to Signal (same domain)
- * 3. Signal can broadcast to Field (same domain)
- * 4. Scalar can broadcast to Field via implicit signal promotion (same domain)
- * 5. Special domain compatibility (render types, sceneTargets→vec2)
- *
- * Note: In the IR type system, 'point' is normalized to 'vec2' by domainFromString(),
- * so we don't need special handling for point↔vec2 compatibility.
+ * Compatibility rules (canonical type system):
+ * 1. Exact match (same payload + same resolved axes)
+ * 2. zero → one (promote compile-time constant to runtime value)
+ * 3. one → many (broadcast single lane to all elements)
+ * 4. zero → many (promote then broadcast)
  *
  * @param from - Source type descriptor
  * @param to - Target type descriptor
  * @returns true if connection is compatible
  */
-function isTypeCompatible(from: TypeDesc, to: TypeDesc): boolean {
-  // Exact match (world + domain)
-  if (from.world === to.world && from.domain === to.domain) {
+function isTypeCompatible(from: SignalType, to: SignalType): boolean {
+  // Resolve axes with defaults
+  const fromCard = getAxisValue(from.extent.cardinality, DEFAULTS_V0.cardinality);
+  const fromTemp = getAxisValue(from.extent.temporality, DEFAULTS_V0.temporality);
+  const toCard = getAxisValue(to.extent.cardinality, DEFAULTS_V0.cardinality);
+  const toTemp = getAxisValue(to.extent.temporality, DEFAULTS_V0.temporality);
+
+  // Payload must match
+  if (from.payload !== to.payload) {
+    return false;
+  }
+
+  // Temporality must match
+  if (fromTemp.kind !== toTemp.kind) {
+    return false;
+  }
+
+  // Exact cardinality match
+  if (fromCard.kind === toCard.kind) {
+    if (fromCard.kind === 'many' && toCard.kind === 'many') {
+      // Domain must match
+      return fromCard.domain.id === toCard.domain.id;
+    }
     return true;
   }
 
-  // Scalar can promote to Signal (same domain)
-  if (from.world === "scalar" && to.world === "signal" && from.domain === to.domain) {
+  // zero → one (promote)
+  if (fromCard.kind === 'zero' && toCard.kind === 'one') {
     return true;
   }
 
-  // Signal can broadcast to Field (same domain)
-  if (from.world === "signal" && to.world === "field" && from.domain === to.domain) {
+  // one → many (broadcast)
+  if (fromCard.kind === 'one' && toCard.kind === 'many') {
     return true;
   }
 
-  // Scalar can broadcast to Field via signal promotion (same domain)
-  if (from.world === "scalar" && to.world === "field" && from.domain === to.domain) {
+  // zero → many (promote then broadcast)
+  if (fromCard.kind === 'zero' && toCard.kind === 'many') {
     return true;
-  }
-
-  // Special case: renderTree and renderNode are compatible
-  const renderDomains: TypeDomain[] = ["renderTree", "renderNode"];
-  if (renderDomains.includes(from.domain) && renderDomains.includes(to.domain)) {
-    if (from.world === to.world) return true;
-  }
-
-  // Special case: sceneTargets can flow to vec2 (scene target points are positions)
-  // Note: sceneTargets→point is also handled because point is normalized to vec2
-  if (from.domain === "sceneTargets" && to.domain === "vec2") {
-    if (from.world === to.world) return true;
   }
 
   return false;
@@ -245,8 +240,8 @@ function isTypeCompatible(from: TypeDesc, to: TypeDesc): boolean {
 function getEndpointType(
   endpoint: Endpoint,
   blocks: ReadonlyMap<string, unknown>,
-  _busTypes: Map<string, TypeDesc>
-): TypeDesc | null {
+  _busTypes: Map<string, SignalType>
+): SignalType | null {
   // Bus-Block Unification: All endpoints are port kind now
   // Find the block and slot
   const blockData = blocks.get(endpoint.blockId);
@@ -259,8 +254,7 @@ function getEndpointType(
   const slot = [...blockDef.inputs, ...blockDef.outputs].find(s => s.id === endpoint.slotId);
   if (slot === null || slot === undefined) return null;
 
-  // slot.type is now TypeDesc, not string
-  return slotTypeToTypeDesc(slot.type);
+  return slot.type;
 }
 
 /**
@@ -282,7 +276,7 @@ export function pass2TypeGraph(
 
   // Step 1: Build bus type map from BusBlocks and validate bus eligibility
   // After Bus-Block Unification, bus info is in BusBlock params
-  const busOutputTypes = new Map<string, TypeDesc>();
+  const busOutputTypes = new Map<string, SignalType>();
 
   // Use Array.from() to avoid downlevelIteration issues
   for (const blockData of Array.from(normalized.blocks.values())) {
@@ -298,11 +292,29 @@ export function pass2TypeGraph(
       continue;
     }
 
-    // Create TypeDesc using editor TypeDesc (from ir/types/TypeDesc)
-    const busType = createTypeDesc({
-      domain: busTypeDesc.domain as TypeDomain,
-      world: busTypeDesc.world as 'signal' | 'field' | 'event' | 'scalar',
-    });
+    // Convert legacy world/domain to SignalType
+    // This is a temporary adapter until BusBlock stores SignalType directly
+    let busType: SignalType;
+    const payload = busTypeDesc.domain as PayloadType;
+
+    switch (busTypeDesc.world) {
+      case 'signal':
+        busType = signalTypeSignal(payload);
+        break;
+      case 'event':
+        busType = signalTypeTrigger(payload);
+        break;
+      default:
+        // Unsupported world for bus
+        errors.push({
+          kind: "BusIneligibleType",
+          busId,
+          busName,
+          signalType: signalTypeSignal('float'), // placeholder
+          message: `Bus '${busName}' (${busId}) has unsupported world '${busTypeDesc.world}'. Only signal and event worlds are supported for buses.`,
+        });
+        continue;
+    }
 
     // Validate bus eligibility
     if (!isBusEligible(busType)) {
@@ -310,8 +322,8 @@ export function pass2TypeGraph(
         kind: "BusIneligibleType",
         busId,
         busName,
-        typeDesc: busType,
-        message: `Bus '${busName}' (${busId}) has ineligible type ${busType.world}<${busType.domain}>. Only signal, event, and scalar-domain field types can be buses.`,
+        signalType: busType,
+        message: `Bus '${busName}' (${busId}) has ineligible type. Check cardinality and payload constraints.`,
       });
     }
 
@@ -324,8 +336,8 @@ export function pass2TypeGraph(
     busOutputTypes.set(busId, busType);
   }
 
-  // Step 2: Build block output types map and validate all slot types can be parsed
-  const blockOutputTypes = new Map<string, ReadonlyMap<string, TypeDesc>>();
+  // Step 2: Build block output types map and validate all slot types
+  const blockOutputTypes = new Map<string, ReadonlyMap<string, SignalType>>();
 
   // Use Array.from() to avoid downlevelIteration issues
   for (const blockData of Array.from(normalized.blocks.values())) {
@@ -333,37 +345,11 @@ export function pass2TypeGraph(
     const blockDef = getBlockDefinition(block.type);
     if (!blockDef) continue;
 
-    const outputTypes = new Map<string, TypeDesc>();
+    const outputTypes = new Map<string, SignalType>();
 
-    // Parse input types (for validation)
-    for (const slot of blockDef.inputs) {
-      try {
-        slotTypeToTypeDesc(slot.type);
-      } catch (error) {
-        errors.push({
-          kind: "PortTypeUnknown",
-          blockId: block.id,
-          slotId: slot.id,
-          slotType: slot.type,
-          message: `Cannot parse slot type on block ${block.id}.${slot.id}: ${error instanceof Error ? error.message : String(error)}`,
-        });
-      }
-    }
-
-    // Parse and store output types
+    // Store output types
     for (const slot of blockDef.outputs) {
-      try {
-        const typeDesc = slotTypeToTypeDesc(slot.type);
-        outputTypes.set(slot.id, typeDesc);
-      } catch (error) {
-        errors.push({
-          kind: "PortTypeUnknown",
-          blockId: block.id,
-          slotId: slot.id,
-          slotType: slot.type,
-          message: `Cannot parse slot type on block ${block.id}.${slot.id}: ${error instanceof Error ? error.message : String(error)}`,
-        });
-      }
+      outputTypes.set(slot.id, slot.type);
     }
 
     blockOutputTypes.set(block.id, outputTypes);
@@ -385,12 +371,17 @@ export function pass2TypeGraph(
 
     // Check type compatibility
     if (!isTypeCompatible(fromType, toType)) {
+      const fromCard = getAxisValue(fromType.extent.cardinality, DEFAULTS_V0.cardinality);
+      const fromTemp = getAxisValue(fromType.extent.temporality, DEFAULTS_V0.temporality);
+      const toCard = getAxisValue(toType.extent.cardinality, DEFAULTS_V0.cardinality);
+      const toTemp = getAxisValue(toType.extent.temporality, DEFAULTS_V0.temporality);
+
       errors.push({
         kind: "NoConversionPath",
         connectionId: edge.id,
         fromType,
         toType,
-        message: `Type mismatch: cannot connect ${fromType.world}<${fromType.domain}> to ${toType.world}<${toType.domain}> for edge ${edge.id}`,
+        message: `Type mismatch: cannot connect ${fromCard.kind}+${fromTemp.kind}<${fromType.payload}> to ${toCard.kind}+${toTemp.kind}<${toType.payload}> for edge ${edge.id}`,
       });
     }
   }

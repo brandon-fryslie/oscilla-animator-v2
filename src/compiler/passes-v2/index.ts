@@ -5,9 +5,6 @@
  * Sprint 1: Passes 1-5 (normalization, types, time, deps, SCC)
  * Sprint 2: Passes 6-8 (block lowering, link resolution)
  * Sprint 3: Passes 9-11 (render lowering, constants, debug index)
- *
- * Note: Pass 7 (bus lowering) has been removed - buses are now treated
- * identically to other blocks in Pass 6.
  */
 
 // Pass 2: Type Graph
@@ -31,7 +28,6 @@ export type { AcyclicOrLegalGraph } from "../ir/patches";
 export { pass6BlockLowering } from "./pass6-block-lowering";
 export type { UnlinkedIRFragments, ValueRefPacked } from "./pass6-block-lowering";
 
-// Pass 8: Link Resolution (Pass 7 removed - buses are just blocks)
 export { pass8LinkResolution } from "./pass8-link-resolution";
 export type { LinkedGraphIR, BlockInputRootIR, BlockOutputRootIR } from "./pass8-link-resolution";
 
