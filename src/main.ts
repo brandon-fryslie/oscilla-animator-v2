@@ -8,6 +8,7 @@ import { buildPatch } from './graph';
 import { compile } from './compiler';
 import { createRuntimeState, BufferPool, executeFrame } from './runtime';
 import { renderFrame } from './render';
+import { PatchViewer } from './viewer';
 
 // =============================================================================
 // Logging
@@ -31,12 +32,20 @@ function log(msg: string, level: 'info' | 'warn' | 'error' = 'info') {
 
 let currentProgram = null as any;
 let currentState = null as any;
+let currentPatch = null as any;
+
+// =============================================================================
+// Patch Viewer Setup
+// =============================================================================
+
+const patchViewerEl = document.getElementById('patch-viewer')!;
+const patchViewer = new PatchViewer(patchViewerEl);
 
 // =============================================================================
 // Build the Steel Thread Patch
 // =============================================================================
 
-function buildAndCompile(particleCount: number) {
+async function buildAndCompile(particleCount: number) {
   log(`Building patch with ${particleCount} particles...`);
 
   const patch = buildPatch((b) => {
@@ -162,6 +171,14 @@ function buildAndCompile(particleCount: number) {
 
   log(`Patch built: ${patch.blocks.size} blocks, ${patch.edges.length} edges`);
 
+  // Render patch visualization
+  try {
+    await patchViewer.render(patch);
+    log('Patch visualization rendered');
+  } catch (err) {
+    log(`Failed to render patch visualization: ${err}`, 'error');
+  }
+
   // Compile
   const result = compile(patch);
 
@@ -178,6 +195,7 @@ function buildAndCompile(particleCount: number) {
   // Update global state
   currentProgram = program;
   currentState = createRuntimeState(program.slotMeta.length);
+  currentPatch = patch;
 }
 
 // =============================================================================
@@ -258,7 +276,7 @@ canvas.addEventListener('dblclick', () => {
 });
 
 // Initial build with 5000 particles
-buildAndCompile(5000);
+await buildAndCompile(5000);
 
 log('Runtime initialized');
 
@@ -343,9 +361,9 @@ requestAnimationFrame(animate);
 const particleSlider = document.getElementById('particleSlider') as HTMLInputElement;
 const particleCountEl = document.getElementById('particleCount') as HTMLElement;
 
-particleSlider.addEventListener('input', (e) => {
+particleSlider.addEventListener('input', async (e) => {
   const count = parseInt((e.target as HTMLInputElement).value);
   particleCountEl.textContent = count.toString();
-  buildAndCompile(count);
+  await buildAndCompile(count);
   log(`Particle count changed to ${count}`);
 });
