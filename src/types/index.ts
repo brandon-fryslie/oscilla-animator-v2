@@ -226,3 +226,67 @@ export type UIControlHint =
   | { kind: 'boolean' }
   | { kind: 'text' }
   | { kind: 'xy' };
+
+// =============================================================================
+// Block Roles (from spec 02-block-system.md)
+// =============================================================================
+
+/**
+ * Wire identifier (for wireState targeting).
+ */
+export type WireId = string & { readonly __brand: 'WireId' };
+
+export function wireId(s: string): WireId {
+  return s as WireId;
+}
+
+/**
+ * Node reference (for lens targeting).
+ */
+export interface NodeRef {
+  readonly kind: 'node';
+  readonly id: string;
+}
+
+/**
+ * Every block has an explicit role declaration.
+ * Roles exist for the editor, not the compiler.
+ */
+export type BlockRole =
+  | { readonly kind: "user" }
+  | { readonly kind: "derived"; readonly meta: DerivedBlockMeta };
+
+/**
+ * Metadata for derived blocks specifying their purpose.
+ */
+export type DerivedBlockMeta =
+  | { readonly kind: "defaultSource"; readonly target: { readonly kind: "port"; readonly port: PortRef } }
+  | { readonly kind: "wireState";     readonly target: { readonly kind: "wire"; readonly wire: WireId } }
+  | { readonly kind: "bus";           readonly target: { readonly kind: "bus"; readonly busId: BusId } }
+  | { readonly kind: "rail";          readonly target: { readonly kind: "bus"; readonly busId: BusId } }
+  | { readonly kind: "lens";          readonly target: { readonly kind: "node"; readonly node: NodeRef } };
+
+// =============================================================================
+// Edge Roles (from spec 02-block-system.md)
+// =============================================================================
+
+/**
+ * Every edge has an explicit role declaration.
+ */
+export type EdgeRole =
+  | { readonly kind: "user" }
+  | { readonly kind: "default"; readonly meta: { readonly defaultSourceBlockId: BlockId } }
+  | { readonly kind: "busTap";  readonly meta: { readonly busId: BusId } }
+  | { readonly kind: "auto";    readonly meta: { readonly reason: "portMoved" | "rehydrate" | "migrate" } };
+
+// =============================================================================
+// Rail IDs (MVP rail identifiers)
+// =============================================================================
+
+export type RailId =
+  | 'time'
+  | 'phaseA'
+  | 'phaseB'
+  | 'pulse'
+  | 'palette'
+  | 'energy';
