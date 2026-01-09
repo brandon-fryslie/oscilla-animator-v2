@@ -6,6 +6,7 @@
  */
 
 import type { CompiledProgramIR, ValueSlot } from '../compiler/ir/program';
+import type { ScheduleIR } from '../compiler/passes-v2/pass7-schedule';
 import type { Step } from '../compiler/ir/types';
 import type { SigExprId } from '../types';
 import type { RuntimeState } from './RuntimeState';
@@ -67,11 +68,11 @@ export function executeFrame(
   pool: BufferPool,
   tAbsMs: number
 ): RenderFrameIR {
-  // Extract schedule components (legacy wrapper for now)
-  const schedule = program.schedule as any;
-  const timeModel = schedule.timeModel || { kind: 'infinite' as const };
-  const domains = schedule.domains || new Map();
-  const steps: readonly Step[] = schedule.steps || [];
+  // Extract schedule components
+  const schedule = program.schedule as ScheduleIR;
+  const timeModel = schedule.timeModel;
+  const domains = schedule.domains;
+  const steps = schedule.steps;
 
   // 1. Advance frame (cache owns frameId)
   state.cache.frameId++;

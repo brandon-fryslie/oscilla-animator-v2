@@ -10,7 +10,7 @@
 // Import the legacy types for now (will be replaced with proper execution node types)
 import type { SigExpr, FieldExpr, EventExpr } from './types';
 import type { SignalType } from '../../core/canonical-types';
-import type { ScheduleIR as PassScheduleIR } from '../passes-v2/pass7-schedule';
+import type { ScheduleIR } from '../passes-v2/pass7-schedule';
 
 // =============================================================================
 // Version and Core Types
@@ -80,25 +80,9 @@ export interface CompiledProgramIR {
 // Schedule IR
 // =============================================================================
 
-/**
- * ScheduleIR - Explicit, phase-ordered execution schedule.
- *
- * For v0/MVP, this can wrap legacy steps during migration.
- * Full implementation uses PassScheduleIR from pass7-schedule.ts.
- */
-export type ScheduleIR = PassScheduleIR | LegacyScheduleWrapper;
-
-/**
- * Legacy schedule wrapper for backward compatibility during migration.
- */
-export interface LegacyScheduleWrapper {
-  readonly kind: 'legacy';
-  readonly timeModel: any;
-  readonly steps: readonly any[];
-  readonly domains: any;
-  readonly stateSlotCount?: number;
-  readonly stateSlots?: readonly any[];
-}
+// ScheduleIR is imported from pass7-schedule.ts and used above
+// Re-export for convenience
+export type { ScheduleIR } from '../passes-v2/pass7-schedule';
 
 // =============================================================================
 // Execution Tables

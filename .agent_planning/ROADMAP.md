@@ -1,6 +1,6 @@
 # Oscilla Animator v2 - Project Roadmap
 
-Last updated: 2026-01-09-080500
+Last updated: 2026-01-09-081000
 
 ---
 
@@ -116,10 +116,13 @@ Last updated: 2026-01-09-080500
 - **Epic:** None
 - **Description:** Visual patch editor for creating and editing animation programs
 
-#### 💡 domain-editor-ui [PROPOSED]
-- **State:** PROPOSED
+#### 📋 domain-editor-ui [PLANNING]
+- **State:** PLANNING
 - **Epic:** None
 - **Description:** UI for creating and selecting domains - presets vs custom configuration, domain management UX
+- **Planning Files:** `.agent_planning/domain-editor-ui/`
+- **Recommended Approach:** Parameter Panel + Presets (Option A from research)
+- **Dependencies:** patch-editor-ui, Phase 1 complete
 - **Origin:** Identified during compilation-pipeline domain unification sprint (2026-01-09)
 
 ---

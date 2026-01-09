@@ -23,7 +23,6 @@ import {
 } from './Indices';
 import type {
   CompiledProgramIR,
-  LegacyScheduleWrapper,
   SlotMetaEntry,
   DebugIndexIR,
   OutputSpecIR,
@@ -31,6 +30,7 @@ import type {
   BlockId,
   StepId,
 } from './program';
+import type { ScheduleIR } from '../passes-v2/pass7-schedule';
 import type {
   DomainDef,
   EventExpr,
@@ -592,12 +592,11 @@ export class IRBuilder {
       slotToPort: new Map(),
     };
 
-    // Build schedule (legacy wrapper for backward compatibility)
-    const schedule: LegacyScheduleWrapper = {
-      kind: 'legacy',
+    // Build schedule
+    const schedule: ScheduleIR = {
       timeModel: this.timeModel,
-      steps: this.steps,
       domains: this.domains,
+      steps: this.steps,
       stateSlotCount: this.nextStateSlotId,
       stateSlots: this.stateSlots,
     };
