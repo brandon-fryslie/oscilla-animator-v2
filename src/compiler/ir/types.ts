@@ -7,6 +7,10 @@
  * - FieldExpr: Field expressions (evaluated per-element at sinks)
  * - EventExpr: Event expressions (edge-triggered)
  * - Steps: Execution schedule
+ *
+ * @deprecated This file contains legacy IR types.
+ * The authoritative IR schema is in ./program.ts (CompiledProgramIR).
+ * This file will be removed once runtime migration is complete.
  */
 
 // Import canonical types as source of truth
@@ -290,9 +294,20 @@ export interface StepRender {
 }
 
 // =============================================================================
-// Complete IR Program
+// Complete IR Program (LEGACY - Use CompiledProgramIR instead)
 // =============================================================================
 
+/**
+ * @deprecated Use CompiledProgramIR from ./program.ts instead.
+ * This type will be removed once runtime migration is complete.
+ *
+ * Key differences in CompiledProgramIR:
+ * - Dense arrays instead of ReadonlyMap
+ * - Required slotMeta with offsets
+ * - Axes exposed on every slot type
+ * - Outputs contract for frame extraction
+ * - Debug index for provenance
+ */
 export interface IRProgram {
   readonly timeModel: TimeModel;
   readonly signals: ReadonlyMap<SigExprId, SigExpr>;
