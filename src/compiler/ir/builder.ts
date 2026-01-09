@@ -6,7 +6,7 @@
  */
 
 import type { SignalType } from '../../core/canonical-types';
-import { signalTypeToTypeDesc } from './bridge';
+import { signalTypeSignal, signalTypeStatic } from '../../core/canonical-types';
 import {
   domainId as makeDomainId,
   valueSlot as makeValueSlot,
@@ -103,19 +103,13 @@ export class IRBuilder {
     return id;
   }
 
-  sigTime(
-    which: 't' | 'dt' | 'phase' | 'pulse' | 'energy',
-    type: SignalType
-  ): SigExprId {
+  sigTime(which: 't' | 'dt' | 'phase' | 'pulse' | 'energy', type: SignalType): SigExprId {
     const id = makeSigExprId(this.nextSigId++);
     this.signals.set(id, { kind: 'time', which, type });
     return id;
   }
 
-  sigExternal(
-    which: 'mouseX' | 'mouseY' | 'mouseOver',
-    type: SignalType
-  ): SigExprId {
+  sigExternal(which: 'mouseX' | 'mouseY' | 'mouseOver', type: SignalType): SigExprId {
     const id = makeSigExprId(this.nextSigId++);
     this.signals.set(id, { kind: 'external', which, type });
     return id;
@@ -133,66 +127,83 @@ export class IRBuilder {
     return id;
   }
 
-  // Convenience: binary op
-  sigBinOp(a: SigExprId, b: SigExprId, op: OpCode, type: SignalType): SigExprId {
-    return this.sigZip([a, b], { kind: 'opcode', opcode: op }, type);
+  /**
+   * Look up the SigExpr for a given SigExprId.
+   * Used by blocks that need to introspect expression structure.
+   */
+  getSigExpr(id: SigExprId): SigExpr | undefined {
+    return this.signals.get(id);
   }
 
-  // Convenience: unary op
-  sigUnaryOp(input: SigExprId, op: OpCode, type: SignalType): SigExprId {
-    return this.sigMap(input, { kind: 'opcode', opcode: op }, type);
+  /**
+   * Look up the type for a signal expression.
+   */
+  getSigExprType(id: SigExprId): SignalType | undefined {
+    const expr = this.signals.get(id);
+    return expr?.type;
+  }
+
+  /**
+   * Resolve a SigExprId to its slot, if it exists.
+   * Returns undefined if the signal is not a slot reference.
+   */
+  resolveSigSlot(id: SigExprId): ValueSlot | undefined {
+    const expr = this.signals.get(id);
+    if (expr?.kind === 'slot') {
+      return expr.slot;
+    }
+    return undefined;
   }
 
   // ===========================================================================
   // Field Expressions
   // ===========================================================================
 
-  fieldConst(value: number | string, type: SignalType): FieldExprId {
+  fieldConst(value: number, domain: DomainId, type: SignalType): FieldExprId {
     const id = makeFieldExprId(this.nextFieldId++);
-    this.fields.set(id, { kind: 'const', value, type });
+    this.fields.set(id, { kind: 'const', value, domain, type });
     return id;
   }
 
-  fieldSource(
-    domain: DomainId,
-    sourceId: 'pos0' | 'idRand' | 'index' | 'normalizedIndex',
-    type: SignalType
-  ): FieldExprId {
+  fieldSlot(slot: ValueSlot, domain: DomainId, type: SignalType): FieldExprId {
     const id = makeFieldExprId(this.nextFieldId++);
-    this.fields.set(id, { kind: 'source', domain, sourceId, type });
+    this.fields.set(id, { kind: 'slot', slot, domain, type });
     return id;
   }
 
-  fieldBroadcast(signal: SigExprId, type: SignalType): FieldExprId {
+  fieldBroadcast(signal: SigExprId, domain: DomainId, type: SignalType): FieldExprId {
     const id = makeFieldExprId(this.nextFieldId++);
-    this.fields.set(id, { kind: 'broadcast', signal, type });
+    this.fields.set(id, { kind: 'broadcast', signal, domain, type });
     return id;
   }
 
-  fieldMap(input: FieldExprId, fn: PureFn, type: SignalType): FieldExprId {
+  fieldIndex(domain: DomainId, type: SignalType): FieldExprId {
     const id = makeFieldExprId(this.nextFieldId++);
-    this.fields.set(id, { kind: 'map', input, fn, type });
+    this.fields.set(id, { kind: 'index', domain, type });
     return id;
   }
 
-  fieldZip(
-    inputs: readonly FieldExprId[],
-    fn: PureFn,
-    type: SignalType
-  ): FieldExprId {
+  fieldMap(input: FieldExprId, domain: DomainId, fn: PureFn, type: SignalType): FieldExprId {
     const id = makeFieldExprId(this.nextFieldId++);
-    this.fields.set(id, { kind: 'zip', inputs, fn, type });
+    this.fields.set(id, { kind: 'map', input, domain, fn, type });
+    return id;
+  }
+
+  fieldZip(inputs: readonly FieldExprId[], domain: DomainId, fn: PureFn, type: SignalType): FieldExprId {
+    const id = makeFieldExprId(this.nextFieldId++);
+    this.fields.set(id, { kind: 'zip', inputs, domain, fn, type });
     return id;
   }
 
   fieldZipSig(
     field: FieldExprId,
     signals: readonly SigExprId[],
+    domain: DomainId,
     fn: PureFn,
     type: SignalType
   ): FieldExprId {
     const id = makeFieldExprId(this.nextFieldId++);
-    this.fields.set(id, { kind: 'zipSig', field, signals, fn, type });
+    this.fields.set(id, { kind: 'zipSig', field, signals, domain, fn, type });
     return id;
   }
 
@@ -369,40 +380,23 @@ export class IRBuilder {
       const offset = slotsInStorage.indexOf(slot);
 
       // Default type for slots without explicit type info
-      let typeDesc;
+      let signalType: SignalType;
       if (slot === this.renderOutputSlot) {
-        // RenderFrameIR object type
-        typeDesc = {
-          axes: {
-            domain: 'value' as const,
-            temporality: 'discrete' as const,
-            perspective: 'frame' as const,
-            branch: 'single' as const,
-            identity: { kind: 'none' as const },
-          },
-          shape: { kind: 'object' as const, class: 'RenderFrameIR' },
-        };
+        // RenderFrameIR object type - use static type for objects
+        signalType = signalTypeStatic('float'); // Placeholder - objects don't have a payload type
       } else if (type) {
-        typeDesc = signalTypeToTypeDesc(type);
+        // Use the tracked type
+        signalType = type;
       } else {
-        // Default for untyped slots
-        typeDesc = {
-          axes: {
-            domain: 'signal' as const,
-            temporality: 'continuous' as const,
-            perspective: 'global' as const,
-            branch: 'single' as const,
-            identity: { kind: 'none' as const },
-          },
-          shape: { kind: 'number' as const },
-        };
+        // Default for untyped slots: signal world, float payload
+        signalType = signalTypeSignal('float');
       }
 
       slotMeta.push({
         slot,
         storage,
         offset,
-        type: typeDesc,
+        type: signalType,
       });
     }
 
@@ -437,34 +431,10 @@ export class IRBuilder {
       fieldExprs,
       eventExprs,
       constants: { json: [] },
-      schedule: schedule as any, // TODO: proper ScheduleIR type
+      schedule,
       outputs,
       slotMeta,
       debugIndex,
     };
-  }
-
-  // ===========================================================================
-  // Legacy compatibility methods (for gradual migration)
-  // ===========================================================================
-
-  /** Get domains map (for runtime that still needs it) */
-  getDomains(): ReadonlyMap<DomainId, DomainDef> {
-    return new Map(this.domains);
-  }
-
-  /** Get signals map (for runtime that still needs it) */
-  getSignals(): ReadonlyMap<SigExprId, SigExpr> {
-    return new Map(this.signals);
-  }
-
-  /** Get fields map (for runtime that still needs it) */
-  getFields(): ReadonlyMap<FieldExprId, FieldExpr> {
-    return new Map(this.fields);
-  }
-
-  /** Get slot count (for runtime state initialization) */
-  getSlotCount(): number {
-    return this.nextSlotId;
   }
 }
