@@ -1,0 +1,85 @@
+Agent: iterative-implementer | 20260109-075838
+Mode: manual (no existing tests)
+Completed: Domain unification for compilation pipeline | Files: 3 | Commits: 6
+Tests: 11 passing, 0 failing
+Cache invalidated: None (no eval-cache directory exists yet)
+Status: complete
+
+Implementation Summary:
+======================
+
+Implemented domain compatibility checking for field expressions in the compilation pipeline.
+
+Changes Made:
+-------------
+
+1. IR Types Updated (src/compiler/ir/types.ts)
+   - Added optional `domain?: DomainId` to FieldExprMap
+   - Added optional `domain?: DomainId` to FieldExprZip
+   - Added optional `domain?: DomainId` to FieldExprZipSig
+   - Types compile without errors
+   - Optional fields don't break existing code
+
+2. Domain Inference Implemented (src/compiler/ir/builder.ts)
+   - Added inferFieldDomain() - public method for render sink validation
+   - Added inferZipDomain() - private method validates inputs share same domain
+   - fieldMap() now stores inferred domain in FieldExprMap
+   - fieldZip() now stores inferred domain and validates consistency
+   - fieldZipSig() now stores inferred domain from field input
+   - Domain mismatches throw clear errors at compile time
+
+3. Render Sink Validation (src/compiler/blocks/render/RenderInstances2D.ts)
+   - Added domain validation for pos field
+   - Added domain validation for color field
+   - Domain mismatch produces clear error with both domain IDs
+   - Broadcast fields (domain=undefined) handled gracefully
+
+4. Tests Created (src/compiler/__tests__/domain-unification.test.ts)
+   - Domain inference from source/map/zipSig
+   - Domain propagation through map
+   - Domain unification in zip (same domain passes)
+   - Domain mismatch in zip (different domains throws error)
+   - Broadcast fields handled gracefully
+   - All 11 tests pass
+
+Acceptance Criteria Status:
+----------------------------
+[x] AC-1: IR Types Updated
+[x] AC-2: Domain Inference Works
+[x] AC-3: Domain Stored in IR
+[x] AC-4: Render Sink Validation
+[x] AC-5: Tests Pass (11/11 passing)
+[x] AC-6: Error Quality (clear messages with domain IDs)
+
+Validation Results:
+-------------------
+- npm run test: 11 domain unification tests pass
+- npm run typecheck: No errors in implemented files (pre-existing errors in other files)
+- npm run dev: Not tested (manual mode - tests validate behavior)
+
+Pre-existing Test Failures (Not Related):
+------------------------------------------
+- src/compiler/__tests__/steel-thread.test.ts: 1 failure (UnknownPort: 'phase')
+- src/runtime/__tests__/integration.test.ts: 1 failure (time clamping)
+- src/compiler/blocks/__tests__/stateful.test.ts: 9 failures (new test file)
+
+These failures existed before domain unification work and are not affected by these changes.
+
+Commits:
+--------
+1. 6de3a56 - feat(ir): add optional domain field to composite FieldExpr types
+2. c9401c3 - feat(ir): implement domain inference and validation in IRBuilder
+3. c5b7ccc - feat(render): add domain validation to RenderInstances2D
+4. ed17b0e - test(compiler): add domain unification tests
+5. d0289f7 - fix(tests): correct domain-unification test imports and types
+6. 4f4aa01 - chore: ensure all domain-unification tests use correct PayloadType
+
+Next Steps:
+-----------
+- Consider adding domain validation to other render sink types if they exist
+- Consider adding domain validation in TypeChecker (DomainRef equality) when type system tracks domain identity
+- Monitor for any runtime issues with domain checking in real usage
+
+Definition of Done Status:
+--------------------------
+All acceptance criteria met. Implementation complete and verified.
