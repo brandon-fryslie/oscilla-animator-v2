@@ -5,6 +5,26 @@
  * It establishes the type contracts between editor, compiler, and runtime.
  */
 
+import type {
+  SignalType,
+  PayloadType,
+  Cardinality,
+  Temporality,
+  DomainId,
+} from './canonical-types';
+import {
+  signalType,
+  axisInstantiated,
+  cardinalityOne,
+  cardinalityZero,
+  cardinalityMany,
+  domainRef,
+  temporalityContinuous,
+  temporalityDiscrete,
+  getAxisValue,
+  DEFAULTS_V0,
+} from './canonical-types';
+
 // =============================================================================
 // Primitives
 // =============================================================================
@@ -159,6 +179,161 @@ export interface TypeDesc {
 
   /** Optional unit annotation */
   readonly unit?: string;
+}
+
+// =============================================================================
+// TypeDesc ↔ SignalType Adapter (P4: Runtime Migration)
+// =============================================================================
+
+/**
+ * Convert old TypeDesc to new SignalType.
+ *
+ * This adapter enables gradual migration from the legacy type system
+ * to the canonical 5-axis type system.
+ *
+ * Mapping rules:
+ * - signal → cardinality=one, temporality=continuous
+ * - field → cardinality=many(domain), temporality=continuous
+ * - event → cardinality=one, temporality=discrete
+ * - scalar/config → cardinality=zero, temporality=continuous
+ *
+ * @param td - Legacy TypeDesc
+ * @returns Canonical SignalType
+ */
+export function typeDescToSignalType(td: TypeDesc): SignalType {
+  // Map domain to PayloadType
+  // For now, we assume domain names align with PayloadType
+  // In the future, may need more sophisticated mapping
+  const payload = mapDomainToPayload(td.domain);
+
+  switch (td.world) {
+    case 'signal':
+      return signalType(payload, {
+        cardinality: axisInstantiated(cardinalityOne()),
+        temporality: axisInstantiated(temporalityContinuous()),
+      });
+
+    case 'field':
+      // For field types, use 'default' as domain ID
+      // Real domain tracking would come from the graph context
+      return signalType(payload, {
+        cardinality: axisInstantiated(cardinalityMany(domainRef('default'))),
+        temporality: axisInstantiated(temporalityContinuous()),
+      });
+
+    case 'event':
+      // Events are discrete, cardinality=one (unless domain-many)
+      return signalType(payload, {
+        cardinality: axisInstantiated(cardinalityOne()),
+        temporality: axisInstantiated(temporalityDiscrete()),
+      });
+
+    case 'scalar':
+    case 'config':
+      // Scalars/config are compile-time constants: cardinality=zero
+      return signalType(payload, {
+        cardinality: axisInstantiated(cardinalityZero()),
+        temporality: axisInstantiated(temporalityContinuous()),
+      });
+
+    case 'special':
+      // Special types (resources) treated as static values
+      return signalType(payload, {
+        cardinality: axisInstantiated(cardinalityZero()),
+        temporality: axisInstantiated(temporalityContinuous()),
+      });
+  }
+}
+
+/**
+ * Convert new SignalType back to old TypeDesc for backward compatibility.
+ *
+ * This is primarily for legacy code paths that still use TypeDesc.
+ *
+ * @param st - Canonical SignalType
+ * @returns Legacy TypeDesc
+ */
+export function signalTypeToTypeDesc(st: SignalType): TypeDesc {
+  // Resolve axes with defaults
+  const cardinality = getAxisValue(st.extent.cardinality, DEFAULTS_V0.cardinality);
+  const temporality = getAxisValue(st.extent.temporality, DEFAULTS_V0.temporality);
+
+  // Determine world from axes
+  let world: TypeWorld;
+  if (cardinality.kind === 'zero') {
+    world = 'scalar';
+  } else if (cardinality.kind === 'many') {
+    world = 'field';
+  } else if (temporality.kind === 'discrete') {
+    world = 'event';
+  } else {
+    world = 'signal';
+  }
+
+  // Map PayloadType back to Domain
+  const domain = mapPayloadToDomain(st.payload);
+
+  return {
+    world,
+    domain,
+    category: 'core',
+    busEligible: true,
+  };
+}
+
+/**
+ * Map Domain to PayloadType.
+ *
+ * This is a lossy conversion - some Domain values don't have
+ * direct PayloadType equivalents.
+ */
+function mapDomainToPayload(domain: Domain): PayloadType {
+  switch (domain) {
+    case 'float':
+    case 'time':
+    case 'rate':
+    case 'duration':
+      return 'float';
+    case 'int':
+    case 'elementCount':
+      return 'int';
+    case 'vec2':
+    case 'point':
+      return 'vec2';
+    case 'color':
+      return 'color';
+    case 'boolean':
+    case 'trigger':
+      return 'bool';
+    default:
+      // For unknown/unsupported domains, default to float
+      return 'float';
+  }
+}
+
+/**
+ * Map PayloadType to Domain.
+ *
+ * This is used for backward compatibility when converting
+ * SignalType back to TypeDesc.
+ */
+function mapPayloadToDomain(payload: PayloadType): Domain {
+  switch (payload) {
+    case 'float':
+      return 'float';
+    case 'int':
+      return 'int';
+    case 'vec2':
+      return 'vec2';
+    case 'color':
+      return 'color';
+    case 'bool':
+      return 'boolean';
+    case 'phase':
+      return 'float'; // Phase maps to float for legacy
+    case 'unit':
+      return 'float'; // Unit maps to float for legacy
+  }
 }
 
 // =============================================================================
