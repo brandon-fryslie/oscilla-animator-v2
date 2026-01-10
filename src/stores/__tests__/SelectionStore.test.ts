@@ -188,4 +188,210 @@ describe('SelectionStore', () => {
       expect(selectionStore.selectedBlock?.params.frequency).toBe(880);
     });
   });
+
+  describe('emphasis patterns - related blocks and edges', () => {
+    it('should compute relatedBlockIds for upstream connections', () => {
+      // Create: sourceA -> target, sourceB -> target
+      const sourceA = patchStore.addBlock('SourceA');
+      const sourceB = patchStore.addBlock('SourceB');
+      const target = patchStore.addBlock('Target');
+
+      const fromA: Endpoint = { kind: 'port', blockId: sourceA, slotId: 'out' };
+      const fromB: Endpoint = { kind: 'port', blockId: sourceB, slotId: 'out' };
+      const toTarget: Endpoint = { kind: 'port', blockId: target, slotId: 'in' };
+
+      patchStore.addEdge(fromA, toTarget);
+      patchStore.addEdge(fromB, toTarget);
+
+      // Select target
+      selectionStore.selectBlock(target);
+
+      // Should find both upstream sources
+      const related = selectionStore.relatedBlockIds;
+      expect(related.size).toBe(2);
+      expect(related.has(sourceA)).toBe(true);
+      expect(related.has(sourceB)).toBe(true);
+    });
+
+    it('should compute relatedBlockIds for downstream connections', () => {
+      // Create: source -> targetA, source -> targetB
+      const source = patchStore.addBlock('Source');
+      const targetA = patchStore.addBlock('TargetA');
+      const targetB = patchStore.addBlock('TargetB');
+
+      const fromSource: Endpoint = { kind: 'port', blockId: source, slotId: 'out' };
+      const toA: Endpoint = { kind: 'port', blockId: targetA, slotId: 'in' };
+      const toB: Endpoint = { kind: 'port', blockId: targetB, slotId: 'in' };
+
+      patchStore.addEdge(fromSource, toA);
+      patchStore.addEdge(fromSource, toB);
+
+      // Select source
+      selectionStore.selectBlock(source);
+
+      // Should find both downstream targets
+      const related = selectionStore.relatedBlockIds;
+      expect(related.size).toBe(2);
+      expect(related.has(targetA)).toBe(true);
+      expect(related.has(targetB)).toBe(true);
+    });
+
+    it('should compute relatedBlockIds for both upstream and downstream', () => {
+      // Create: upstream -> middle -> downstream
+      const upstream = patchStore.addBlock('Upstream');
+      const middle = patchStore.addBlock('Middle');
+      const downstream = patchStore.addBlock('Downstream');
+
+      const fromUp: Endpoint = { kind: 'port', blockId: upstream, slotId: 'out' };
+      const toMiddle: Endpoint = { kind: 'port', blockId: middle, slotId: 'in' };
+      const fromMiddle: Endpoint = { kind: 'port', blockId: middle, slotId: 'out' };
+      const toDown: Endpoint = { kind: 'port', blockId: downstream, slotId: 'in' };
+
+      patchStore.addEdge(fromUp, toMiddle);
+      patchStore.addEdge(fromMiddle, toDown);
+
+      // Select middle
+      selectionStore.selectBlock(middle);
+
+      // Should find both upstream and downstream
+      const related = selectionStore.relatedBlockIds;
+      expect(related.size).toBe(2);
+      expect(related.has(upstream)).toBe(true);
+      expect(related.has(downstream)).toBe(true);
+    });
+
+    it('should return empty set for relatedBlockIds when no block selected', () => {
+      patchStore.addBlock('Block');
+
+      expect(selectionStore.relatedBlockIds.size).toBe(0);
+    });
+
+    it('should exclude self-loops from relatedBlockIds', () => {
+      // Create a self-loop: block -> block
+      const block = patchStore.addBlock('Block');
+
+      const from: Endpoint = { kind: 'port', blockId: block, slotId: 'out' };
+      const to: Endpoint = { kind: 'port', blockId: block, slotId: 'in' };
+
+      patchStore.addEdge(from, to);
+
+      selectionStore.selectBlock(block);
+
+      // Self-loops should not be included in related blocks
+      expect(selectionStore.relatedBlockIds.size).toBe(0);
+    });
+
+    it('should compute relatedEdgeIds', () => {
+      // Create: A -> B, B -> C
+      const a = patchStore.addBlock('A');
+      const b = patchStore.addBlock('B');
+      const c = patchStore.addBlock('C');
+
+      const fromA: Endpoint = { kind: 'port', blockId: a, slotId: 'out' };
+      const toB: Endpoint = { kind: 'port', blockId: b, slotId: 'in' };
+      const fromB: Endpoint = { kind: 'port', blockId: b, slotId: 'out' };
+      const toC: Endpoint = { kind: 'port', blockId: c, slotId: 'in' };
+
+      const edge1 = patchStore.addEdge(fromA, toB);
+      const edge2 = patchStore.addEdge(fromB, toC);
+
+      // Select B
+      selectionStore.selectBlock(b);
+
+      // Should find both edges
+      const related = selectionStore.relatedEdgeIds;
+      expect(related.size).toBe(2);
+      expect(related.has(edge1)).toBe(true);
+      expect(related.has(edge2)).toBe(true);
+    });
+
+    it('should return empty set for relatedEdgeIds when no block selected', () => {
+      const a = patchStore.addBlock('A');
+      const b = patchStore.addBlock('B');
+
+      const from: Endpoint = { kind: 'port', blockId: a, slotId: 'out' };
+      const to: Endpoint = { kind: 'port', blockId: b, slotId: 'in' };
+
+      patchStore.addEdge(from, to);
+
+      expect(selectionStore.relatedEdgeIds.size).toBe(0);
+    });
+
+    it('should include self-loop edges in relatedEdgeIds', () => {
+      // Create a self-loop: block -> block
+      const block = patchStore.addBlock('Block');
+
+      const from: Endpoint = { kind: 'port', blockId: block, slotId: 'out' };
+      const to: Endpoint = { kind: 'port', blockId: block, slotId: 'in' };
+
+      const edgeId = patchStore.addEdge(from, to);
+
+      selectionStore.selectBlock(block);
+
+      // Self-loop edge SHOULD be included in related edges
+      expect(selectionStore.relatedEdgeIds.size).toBe(1);
+      expect(selectionStore.relatedEdgeIds.has(edgeId)).toBe(true);
+    });
+
+    it('should compute highlightedBlockIds', () => {
+      // Create: A -> B -> C
+      const a = patchStore.addBlock('A');
+      const b = patchStore.addBlock('B');
+      const c = patchStore.addBlock('C');
+
+      const fromA: Endpoint = { kind: 'port', blockId: a, slotId: 'out' };
+      const toB: Endpoint = { kind: 'port', blockId: b, slotId: 'in' };
+      const fromB: Endpoint = { kind: 'port', blockId: b, slotId: 'out' };
+      const toC: Endpoint = { kind: 'port', blockId: c, slotId: 'in' };
+
+      patchStore.addEdge(fromA, toB);
+      patchStore.addEdge(fromB, toC);
+
+      // Select B
+      selectionStore.selectBlock(b);
+
+      // Should highlight B (selected) + A and C (related)
+      const highlighted = selectionStore.highlightedBlockIds;
+      expect(highlighted.size).toBe(3);
+      expect(highlighted.has(a)).toBe(true);
+      expect(highlighted.has(b)).toBe(true);
+      expect(highlighted.has(c)).toBe(true);
+    });
+
+    it('should compute highlightedEdgeIds', () => {
+      // Create: A -> B, B -> C, C -> D
+      const a = patchStore.addBlock('A');
+      const b = patchStore.addBlock('B');
+      const c = patchStore.addBlock('C');
+      const d = patchStore.addBlock('D');
+
+      const fromA: Endpoint = { kind: 'port', blockId: a, slotId: 'out' };
+      const toB: Endpoint = { kind: 'port', blockId: b, slotId: 'in' };
+      const fromB: Endpoint = { kind: 'port', blockId: b, slotId: 'out' };
+      const toC: Endpoint = { kind: 'port', blockId: c, slotId: 'in' };
+      const fromC: Endpoint = { kind: 'port', blockId: c, slotId: 'out' };
+      const toD: Endpoint = { kind: 'port', blockId: d, slotId: 'in' };
+
+      const edge1 = patchStore.addEdge(fromA, toB);
+      const edge2 = patchStore.addEdge(fromB, toC);
+      const edge3 = patchStore.addEdge(fromC, toD);
+
+      // Select B
+      selectionStore.selectBlock(b);
+
+      // Should highlight edges involving B
+      const highlighted = selectionStore.highlightedEdgeIds;
+      expect(highlighted.size).toBe(2);
+      expect(highlighted.has(edge1)).toBe(true);
+      expect(highlighted.has(edge2)).toBe(true);
+      expect(highlighted.has(edge3)).toBe(false);
+    });
+
+    it('should return empty sets for highlighted IDs when no block selected', () => {
+      patchStore.addBlock('Block');
+
+      expect(selectionStore.highlightedBlockIds.size).toBe(0);
+      expect(selectionStore.highlightedEdgeIds.size).toBe(0);
+    });
+  });
 });
