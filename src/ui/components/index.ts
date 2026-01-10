@@ -13,3 +13,6 @@ export { ConnectionMatrixWrapper } from './ConnectionMatrixWrapper';
 export { BlockInspector } from './BlockInspector';
 export { BlockLibrary } from './BlockLibrary';
 export { DomainsPanel } from './DomainsPanel';
+
+export { InspectorContainer } from './InspectorContainer';
+export type { InspectorContainerProps } from './InspectorContainer';
