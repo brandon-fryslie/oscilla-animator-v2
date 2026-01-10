@@ -11,6 +11,7 @@ import { renderFrame } from './render';
 import { getAppLayout, TabbedContent } from './ui';
 import { TableView, ConnectionMatrixWrapper, BlockInspector, BlockLibrary, DomainsPanel } from './ui/components';
 import type { Block } from './graph/Patch';
+import { timeRootRole } from './types';
 
 // =============================================================================
 // Global State
@@ -134,7 +135,10 @@ async function buildAndCompile(particleCount: number) {
 
   const patch = buildPatch((b) => {
     // Time source - 16 second cycle (slower animation)
-    const time = b.addBlock('InfiniteTimeRoot', { periodAMs: 16000, periodBMs: 32000 });
+    const time = b.addBlock('InfiniteTimeRoot',
+      { periodAMs: 16000, periodBMs: 32000 },
+      { role: timeRootRole() }
+    );
 
     // Domain: variable particle count
     const domain = b.addBlock('DomainN', { n: particleCount, seed: 42 });
