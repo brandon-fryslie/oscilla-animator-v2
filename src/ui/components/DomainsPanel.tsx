@@ -28,7 +28,7 @@ interface DomainInfo {
  */
 export const DomainsPanel = observer(function DomainsPanel() {
   const [expandedDomains, setExpandedDomains] = useState<Set<string>>(new Set());
-  const patch = rootStore.patch.immutablePatch;
+  const patch = rootStore.patch.patch;
 
   // Extract domain information from patch
   const extractDomains = (): DomainInfo[] => {

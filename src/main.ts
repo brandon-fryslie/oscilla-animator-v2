@@ -4,15 +4,19 @@
  * Sets up the UI layout and initializes the animated particles demo.
  */
 
-import { autorun } from 'mobx';
+import React from 'react';
+import { createRoot } from 'react-dom/client';
 import { rootStore } from './stores';
 import { buildPatch } from './graph';
 import { compile } from './compiler';
 import { createRuntimeState, BufferPool, executeFrame } from './runtime';
 import { renderFrame } from './render';
 import { getAppLayout, TabbedContent } from './ui';
-import { TableView, ConnectionMatrixWrapper, BlockInspector, BlockLibrary, DomainsPanel } from './ui/components';
-import type { Block } from './graph/Patch';
+import { ConnectionMatrix } from './ui/components/ConnectionMatrix';
+import { TableView } from './ui/components/TableView';
+import { BlockInspector } from './ui/components/BlockInspector';
+import { BlockLibrary } from './ui/components/BlockLibrary';
+import { DomainsPanel } from './ui/components/DomainsPanel';
 import { timeRootRole } from './types';
 
 // =============================================================================
@@ -26,13 +30,6 @@ let ctx: CanvasRenderingContext2D | null = null;
 let pool: BufferPool | null = null;
 let logEl: HTMLElement | null = null;
 let statsEl: HTMLElement | null = null;
-
-// UI component instances
-let tableView: TableView | null = null;
-let connectionMatrix: ConnectionMatrixWrapper | null = null;
-let blockInspector: BlockInspector | null = null;
-let blockLibrary: BlockLibrary | null = null;
-let domainsPanel: DomainsPanel | null = null;
 
 // Viewport state is now managed by rootStore.viewport
 // Animation state is now managed by rootStore.playback
@@ -281,21 +278,6 @@ async function buildAndCompile(particleCount: number) {
   // Update global state
   currentProgram = program;
   currentState = createRuntimeState(program.slotMeta.length);
-
-  // Update UI components with patch from store
-  const storePatch = rootStore.patch.patch;
-  if (tableView) {
-    tableView.setPatch(storePatch);
-  }
-  if (connectionMatrix) {
-    connectionMatrix.setPatch(storePatch);
-  }
-  if (blockInspector) {
-    blockInspector.setPatch(storePatch);
-  }
-  if (domainsPanel) {
-    domainsPanel.setPatch(storePatch);
-  }
 }
 
 // =============================================================================
@@ -393,14 +375,16 @@ async function setupUI() {
       id: 'library',
       label: 'Library',
       contentFactory: (container) => {
-        blockLibrary = new BlockLibrary(container);
+        const root = createRoot(container);
+        root.render(React.createElement(BlockLibrary as any));
       },
     },
     {
       id: 'inspector',
       label: 'Inspector',
       contentFactory: (container) => {
-        blockInspector = new BlockInspector(container);
+        const root = createRoot(container);
+        root.render(React.createElement(BlockInspector as any));
       },
     },
   ], { initialTab: 'inspector' });
@@ -412,14 +396,16 @@ async function setupUI() {
       id: 'table',
       label: 'Blocks',
       contentFactory: (container) => {
-        tableView = new TableView(container);
+        const root = createRoot(container);
+        root.render(React.createElement(TableView as any));
       },
     },
     {
       id: 'matrix',
       label: 'Matrix',
       contentFactory: (container) => {
-        connectionMatrix = new ConnectionMatrixWrapper(container);
+        const root = createRoot(container);
+        root.render(React.createElement(ConnectionMatrix as any));
       },
     },
     {
@@ -442,7 +428,8 @@ async function setupUI() {
       id: 'domains',
       label: 'Domains',
       contentFactory: (container) => {
-        domainsPanel = new DomainsPanel(container);
+        const root = createRoot(container);
+        root.render(React.createElement(DomainsPanel as any));
       },
     },
     {
@@ -463,6 +450,8 @@ async function setupUI() {
               <li>Click blocks in table to inspect</li>
               <li>Expand rows to see ports and connections</li>
               <li>Click connections to navigate</li>
+              <li>Click block type in library to preview</li>
+              <li>Double-click block type to add to patch</li>
             </ul>
           </div>
         `;

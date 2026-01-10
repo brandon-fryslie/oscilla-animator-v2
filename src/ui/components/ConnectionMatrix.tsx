@@ -7,16 +7,13 @@
  */
 
 import React, { useMemo } from 'react';
+import { observer } from 'mobx-react-lite';
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
 import { ThemeProvider } from '@mui/material/styles';
+import { rootStore } from '../../stores';
 import type { Patch, Block, Edge } from '../../graph/Patch';
 import type { BlockId } from '../../types';
 import { darkTheme, colors } from '../theme';
-import { getSelectionState } from '../state/selection';
-
-interface ConnectionMatrixProps {
-  patch: Patch | null;
-}
 
 interface MatrixRow {
   id: string;
@@ -62,7 +59,9 @@ function categorizeBlocks(patch: Patch) {
 /**
  * ConnectionMatrix component.
  */
-export const ConnectionMatrix: React.FC<ConnectionMatrixProps> = ({ patch }) => {
+export const ConnectionMatrix = observer(function ConnectionMatrix() {
+  const patch = rootStore.patch.patch;
+
   const { rows, columns } = useMemo(() => {
     if (!patch) {
       return { rows: [], columns: [] };
@@ -104,7 +103,7 @@ export const ConnectionMatrix: React.FC<ConnectionMatrixProps> = ({ patch }) => 
               }}
               onClick={() => {
                 if (params.row.blockId) {
-                  getSelectionState().selectBlock(params.row.blockId);
+                  rootStore.selection.selectBlock(params.row.blockId);
                 }
               }}
             >
@@ -160,7 +159,7 @@ export const ConnectionMatrix: React.FC<ConnectionMatrixProps> = ({ patch }) => 
                 }}
                 onClick={() => {
                   // Select the single edge
-                  getSelectionState().selectEdge(edges[0].id);
+                  rootStore.selection.selectEdge(edges[0].id);
                 }}
               >
                 ●
@@ -178,7 +177,7 @@ export const ConnectionMatrix: React.FC<ConnectionMatrixProps> = ({ patch }) => 
               }}
               onClick={() => {
                 // Select the first edge (TODO: support multi-edge selection)
-                getSelectionState().selectEdge(edges[0].id);
+                rootStore.selection.selectEdge(edges[0].id);
               }}
             >
               ●{count}
@@ -299,4 +298,4 @@ export const ConnectionMatrix: React.FC<ConnectionMatrixProps> = ({ patch }) => 
       </div>
     </ThemeProvider>
   );
-};
+});

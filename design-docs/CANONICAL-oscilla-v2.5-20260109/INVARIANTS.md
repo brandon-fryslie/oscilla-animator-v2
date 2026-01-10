@@ -26,15 +26,28 @@ When reading topic documents, keep these rules in mind.
 
 ---
 
-### I2: Transport Continuity Across Hot-Swap
+### I2: Gauge Invariance (Transport Continuity)
 
-**Rule**: When recompiling, `tMs` continues. Derived rails continue unless explicitly reset.
+**Rule**: Effective values (phase, parameters, fields) are continuous across discontinuities unless explicitly reset by user action. This is enforced by gauge layers (phase offset, value reconciliation, field projection) that absorb discontinuities.
 
-**Rationale**: Live editing must feel responsive, not like restarting.
+**Formal Statement**: For all observables `x_eff(t)`:
+```
+lim(t→t0⁻) x_eff(t) = lim(t→t0⁺) x_eff(t)
+```
+Even when underlying `x_base(t)` jumps due to scrubbing, looping, hot-swap, or topology changes.
 
-**Consequences of Violation**: If recompiling resets the world, it's a toy.
+**Rationale**: Without gauge invariance:
+- Scrubbing breaks animation
+- Loops pop at boundaries
+- Edits feel jarring
+- Export cannot match playback
+- The system feels mechanical, not alive
 
-**Enforcement**: Hot-swap implementation preserves time state.
+**Consequences of Violation**: Visual pops, broken export parity, unusable live editing.
+
+**Enforcement**: Continuity System (topic 11); phase offset in timeDerive; value reconciliation and field projection at hot-swap boundaries.
+
+**See**: [11-continuity-system](./topics/11-continuity-system.md) for complete specification.
 
 ---
 
@@ -390,12 +403,36 @@ When reading topic documents, keep these rules in mind.
 
 ---
 
+### I30: Continuity is Deterministic
+
+**Rule**: All continuity operations (phase offset, value reconciliation, field projection, slew) use `t_model_ms` and deterministic algorithms. Given same inputs, continuity produces identical outputs.
+
+**Rationale**: Export must match playback. Non-deterministic continuity breaks replay and debugging.
+
+**Consequences of Violation**: Export drifts from playback, debugging becomes impossible, profiling is meaningless.
+
+**Enforcement**: Continuity System uses only `t_model_ms`, seeded RNGs, and deterministic mapping algorithms.
+
+---
+
+### I31: Export Matches Playback (Continuity Parity)
+
+**Rule**: Export uses the exact same schedule, continuity steps, and policies as live playback. No "simplified" or "optimized" continuity for export.
+
+**Rationale**: Users expect export to match what they see. Divergence destroys trust.
+
+**Consequences of Violation**: "It looks different when I export" - deal-breaker for professional use.
+
+**Enforcement**: Export loop executes same `StepContinuityApply` steps as live runtime.
+
+---
+
 ## Invariant Quick Reference
 
 | ID | Category | Rule (Brief) |
 |----|----------|--------------|
 | I1 | Time | Time is monotonic, never wraps |
-| I2 | Time | Hot-swap preserves time |
+| I2 | Continuity | Gauge invariance across discontinuities |
 | I3 | Time | State migration with stable IDs |
 | I4 | Time | Deterministic event ordering |
 | I5 | Time | Single time authority |
@@ -423,6 +460,8 @@ When reading topic documents, keep these rules in mind.
 | I27 | Arch | Toy detector meta-rule |
 | I28 | Debug | Diagnostic attribution to targets |
 | I29 | Debug | Error taxonomy by domain/severity |
+| I30 | Continuity | Continuity is deterministic |
+| I31 | Continuity | Export matches playback |
 
 ---
 

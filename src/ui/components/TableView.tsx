@@ -37,7 +37,7 @@ interface BlockRowData {
  */
 export const TableView = observer(function TableView() {
   const [expandedBlocks, setExpandedBlocks] = useState<Set<BlockId>>(new Set());
-  const patch = rootStore.patch.immutablePatch;
+  const patch = rootStore.patch.patch;
   const selectedBlockId = rootStore.selection.selectedBlockId;
 
   const toggleExpanded = (blockId: BlockId) => {
@@ -304,7 +304,7 @@ interface ExpandedRowProps {
 }
 
 const ExpandedRow: React.FC<ExpandedRowProps> = observer(({ data, onConnectionClick }) => {
-  const patch = rootStore.patch.immutablePatch;
+  const patch = rootStore.patch.patch;
 
   if (!patch) return null;
 

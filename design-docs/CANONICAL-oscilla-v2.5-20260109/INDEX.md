@@ -7,8 +7,8 @@ updating_sources:
   - design-docs/debugger/*.md (16 files)
 approved_by: Brandon Fryslie
 approval_method: full_walkthrough + integrated_debugger_update
-source_documents: 43
-topics: 10
+source_documents: 44
+topics: 11
 ---
 
 # Oscilla v2.5: Canonical Specification Index
@@ -17,10 +17,10 @@ topics: 10
 > Debugger specification integrated successfully (2026-01-10T18:30:00Z)
 
 Generated: 2026-01-09T17:00:00Z
-Last Updated: 2026-01-10T18:30:00Z
+Last Updated: 2026-01-10T19:30:00Z
 Approved by: Brandon Fryslie
-Source Documents: 43 files (27 original + 16 debugger)
-Total Resolutions: 73 (53 original + 20 debugger integration)
+Source Documents: 44 files (27 original + 16 debugger + 1 anti-jank)
+Total Resolutions: 74 (53 original + 20 debugger integration + 1 continuity)
 
 ---
 
@@ -48,6 +48,7 @@ Total Resolutions: 73 (53 original + 20 debugger integration)
 | 08b | [Diagnostic Rules Engine](./topics/08b-diagnostic-rules-engine.md) | Heuristic rules for problem detection | Rules A-H, evidence, fixes |
 | 09 | [Debug UI](./topics/09-debug-ui-spec.md) | Non-technical inspection interface | Probe mode, Trace view, diagnostics drawer |
 | 10 | [Power-User Debugging](./topics/10-power-user-debugging.md) | Advanced observation tools (post-MVP) | TraceEvents, technical panel |
+| 11 | [Continuity System](./topics/11-continuity-system.md) | Anti-jank architecture (gauge invariance) | Phase offset, value reconciliation, field projection |
 
 ## Recommended Reading Order
 

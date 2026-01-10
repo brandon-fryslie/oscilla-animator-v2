@@ -18,7 +18,7 @@ import type { BlockId } from '../../types';
  */
 export const BlockInspector = observer(function BlockInspector() {
   const { previewType, selectedBlockId } = rootStore.selection;
-  const patch = rootStore.patch.immutablePatch;
+  const patch = rootStore.patch.patch;
 
   // Preview mode takes precedence
   if (previewType) {
@@ -277,7 +277,7 @@ interface BlockDetailsProps {
 }
 
 const BlockDetails: React.FC<BlockDetailsProps> = observer(({ block }) => {
-  const patch = rootStore.patch.immutablePatch;
+  const patch = rootStore.patch.patch;
 
   if (!patch) return null;
 
