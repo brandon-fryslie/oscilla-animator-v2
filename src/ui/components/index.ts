@@ -4,12 +4,8 @@
  * Reusable UI components for the Oscilla editor.
  */
 
-// App components (new React root structure)
+// App components (React root structure)
 export * from './app';
-
-// Legacy components (will be removed in cleanup)
-export { TabbedContent } from './TabbedContent';
-export type { TabConfig as LegacyTabConfig, TabChangeCallback } from './TabbedContent';
 
 // Feature components
 export { TableView } from './TableView';

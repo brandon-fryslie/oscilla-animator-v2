@@ -1,25 +1,16 @@
 /**
  * Split Panel Component
  *
- * Uses jsPanel4 layout system to create a resizable horizontal split.
- * This component "bakes in" jsPanel deeply as core layout infrastructure.
- *
- * jsPanel manages:
- * - Physical DOM layout for split regions
- * - Resize handles and drag mechanics
- * - Size constraints
- *
- * React manages:
- * - Rendering components into jsPanel-managed containers
- * - Component lifecycle
+ * Simple horizontal split panel with draggable divider.
+ * Top and bottom panels are always visible simultaneously.
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 
 interface SplitPanelProps {
   topComponent: React.ComponentType<any>;
   bottomComponent: React.ComponentType<any>;
-  initialSplit?: number; // 0-1, percentage for top panel
+  initialSplit?: number; // 0-1, percentage for top panel (default 0.5)
 }
 
 export const SplitPanel: React.FC<SplitPanelProps> = ({
@@ -27,131 +18,38 @@ export const SplitPanel: React.FC<SplitPanelProps> = ({
   bottomComponent: BottomComponent,
   initialSplit = 0.5,
 }) => {
+  const [topHeight, setTopHeight] = useState(initialSplit);
+  const [isDragging, setIsDragging] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const topRef = useRef<HTMLDivElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const [jsPanel, setJsPanel] = useState<any>(null);
-  const [mounted, setMounted] = useState(false);
 
-  // Load jsPanel
   useEffect(() => {
-    let cancelled = false;
+    if (!isDragging) return;
 
-    (async () => {
-      try {
-        // Import jsPanel from custom fork
-        const jsPanelModule = await import('jspanel4/es6module/jspanel.js');
-        const jsPanelInstance = jsPanelModule.default || jsPanelModule.jsPanel;
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const y = e.clientY - rect.top;
+      const percentage = Math.max(0.1, Math.min(0.9, y / rect.height));
+      setTopHeight(percentage);
+    };
 
-        // Import CSS
-        await import('jspanel4/dist/jspanel.css');
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
 
-        if (!cancelled) {
-          setJsPanel(jsPanelInstance);
-        }
-      } catch (err) {
-        console.error('Failed to load jsPanel:', err);
-      }
-    })();
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
 
     return () => {
-      cancelled = true;
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, []);
+  }, [isDragging]);
 
-  // Setup split layout when jsPanel is loaded
-  useEffect(() => {
-    if (!jsPanel || !containerRef.current || !topRef.current || !bottomRef.current) {
-      return;
-    }
-
-    const container = containerRef.current;
-    const topContainer = topRef.current;
-    const bottomContainer = bottomRef.current;
-
-    // Calculate initial sizes
-    const containerHeight = container.clientHeight;
-    const topHeight = Math.floor(containerHeight * initialSplit);
-    const bottomHeight = containerHeight - topHeight;
-
-    // Create top panel
-    const topPanel = jsPanel.create({
-      container: topContainer,
-      panelSize: {
-        width: '100%',
-        height: topHeight,
-      },
-      position: {
-        my: 'left-top',
-        at: 'left-top',
-      },
-      dragit: 'disabled',
-      resizeit: {
-        handles: 's', // Only resize from bottom edge
-        minHeight: 100,
-      },
-      headerControls: 'none',
-      header: false,
-      borderRadius: 0,
-      boxShadow: 'none',
-      theme: {
-        bgPanel: '#0f0f23',
-        bgContent: '#0f0f23',
-      },
-      onclosed: () => false, // Prevent closing
-    });
-
-    // Create bottom panel
-    const bottomPanel = jsPanel.create({
-      container: bottomContainer,
-      panelSize: {
-        width: '100%',
-        height: bottomHeight,
-      },
-      position: {
-        my: 'left-top',
-        at: 'left-top',
-      },
-      dragit: 'disabled',
-      resizeit: 'disabled', // Bottom panel size is derived from top panel
-      headerControls: 'none',
-      header: false,
-      borderRadius: 0,
-      boxShadow: 'none',
-      theme: {
-        bgPanel: '#0f0f23',
-        bgContent: '#0f0f23',
-      },
-      onclosed: () => false,
-    });
-
-    // Sync bottom panel height when top panel is resized
-    const syncBottomHeight = () => {
-      const newBottomHeight = containerHeight - topPanel.offsetHeight;
-      bottomPanel.resize({
-        width: '100%',
-        height: Math.max(100, newBottomHeight),
-      });
-    };
-
-    // Hook into resize event
-    if (topPanel.options.resizeit && typeof topPanel.options.resizeit === 'object') {
-      topPanel.options.resizeit.stop = topPanel.options.resizeit.stop || [];
-      topPanel.options.resizeit.stop.push(syncBottomHeight);
-    }
-
-    setMounted(true);
-
-    // Cleanup
-    return () => {
-      try {
-        topPanel.close();
-        bottomPanel.close();
-      } catch (e) {
-        // Panels might already be closed
-      }
-    };
-  }, [jsPanel, initialSplit]);
+  const handleDividerMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
 
   return (
     <div
@@ -165,28 +63,49 @@ export const SplitPanel: React.FC<SplitPanelProps> = ({
         background: '#0f0f23',
       }}
     >
-      {/* Top container */}
+      {/* Top panel */}
       <div
-        ref={topRef}
         style={{
-          position: 'relative',
+          height: `${topHeight * 100}%`,
           overflow: 'hidden',
-          borderBottom: '1px solid #0f3460',
+          display: 'flex',
+          flexDirection: 'column',
         }}
       >
-        {mounted && <TopComponent />}
+        <TopComponent />
       </div>
 
-      {/* Bottom container */}
+      {/* Divider */}
       <div
-        ref={bottomRef}
+        onMouseDown={handleDividerMouseDown}
+        style={{
+          height: '4px',
+          background: '#0f3460',
+          cursor: 'ns-resize',
+          flexShrink: 0,
+          position: 'relative',
+          zIndex: 10,
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = '#4ecdc4';
+        }}
+        onMouseLeave={(e) => {
+          if (!isDragging) {
+            e.currentTarget.style.background = '#0f3460';
+          }
+        }}
+      />
+
+      {/* Bottom panel */}
+      <div
         style={{
           flex: 1,
-          position: 'relative',
           overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
         }}
       >
-        {mounted && <BottomComponent />}
+        <BottomComponent />
       </div>
     </div>
   );

@@ -7,7 +7,10 @@
 // Theme
 export { darkTheme, colors } from './theme';
 
-// Panel system
+// Components (React root and feature components)
+export * from './components';
+
+// Legacy exports (for gradual migration if needed)
 export {
   PanelManager,
   type PanelConfig,
@@ -16,7 +19,6 @@ export {
   type ResizeDirection,
 } from './panel';
 
-// Layout system
 export {
   AppLayout,
   getAppLayout,
@@ -25,10 +27,3 @@ export {
   getRegionElement,
   type LayoutRegion,
 } from './layout';
-
-// Components
-export {
-  TabbedContent,
-  type TabConfig,
-  type TabChangeCallback,
-} from './components';
