@@ -366,6 +366,30 @@ When reading topic documents, keep these rules in mind.
 
 ---
 
+### I28: Diagnostic Attribution
+
+**Rule**: Every diagnostic must be attributable to a specific graph element via TargetRef.
+
+**Rationale**: Diagnostics must be navigable and fixable. A diagnostic without a target is useless.
+
+**Consequences of Violation**: Users cannot locate/fix the problem.
+
+**Enforcement**: TargetRef in Diagnostic type; compiler validation.
+
+---
+
+### I29: Error Taxonomy
+
+**Rule**: Errors are categorized by domain (compile/runtime/authoring/perf) and severity (fatal/error/warn/info/hint).
+
+**Rationale**: Different error streams require different UI treatment and urgency handling.
+
+**Consequences of Violation**: UI cannot prioritize, users miss critical issues.
+
+**Enforcement**: DiagnosticCode enumeration; severity assignment in producers.
+
+---
+
 ## Invariant Quick Reference
 
 | ID | Category | Rule (Brief) |
@@ -397,6 +421,8 @@ When reading topic documents, keep these rules in mind.
 | I25 | Scale | Asset system with stable IDs |
 | I26 | Arch | Every input has a source |
 | I27 | Arch | Toy detector meta-rule |
+| I28 | Debug | Diagnostic attribution to targets |
+| I29 | Debug | Error taxonomy by domain/severity |
 
 ---
 

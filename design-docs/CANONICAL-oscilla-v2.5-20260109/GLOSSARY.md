@@ -533,6 +533,222 @@ type NormalizedGraph = {
 
 ---
 
+## Diagnostics & Observability
+
+### Diagnostic
+
+**Definition**: A timestamped, structured record describing a condition (error/warn/info/perf) attached to a specific target in the graph.
+
+**Type**: type
+
+**Canonical Form**: `Diagnostic`
+
+**Structure**:
+```typescript
+interface Diagnostic {
+  id: string;  // stable hash for dedupe
+  code: DiagnosticCode;
+  severity: Severity;
+  domain: Domain;
+  primaryTarget: TargetRef;
+  title: string;
+  message: string;
+  actions?: DiagnosticAction[];
+  metadata: DiagnosticMetadata;
+}
+```
+
+**Source**: [07-diagnostics-system.md](./topics/07-diagnostics-system.md)
+
+**Note**: Diagnostics are stateful facts, not messages. They have lifecycle and can be deduped/updated.
+
+---
+
+### DiagnosticHub
+
+**Definition**: Central state manager for all diagnostic events. Maintains compile/authoring/runtime scopes with snapshot semantics.
+
+**Type**: class
+
+**Canonical Form**: `DiagnosticHub`
+
+**Source**: [07-diagnostics-system.md](./topics/07-diagnostics-system.md)
+
+**Note**: Subscribes to GraphCommitted, CompileStarted, CompileFinished, ProgramSwapped, RuntimeHealthSnapshot events.
+
+---
+
+### TargetRef
+
+**Definition**: Discriminated union pointing to a graph element (block, port, bus, edge, etc.). Every diagnostic must have one.
+
+**Type**: type
+
+**Canonical Form**: `TargetRef`
+
+**Values**:
+```typescript
+type TargetRef =
+  | { kind: 'block'; blockId: string }
+  | { kind: 'port'; blockId: string; portId: string }
+  | { kind: 'bus'; busId: string }
+  | { kind: 'binding'; bindingId: string; ... }
+  | { kind: 'timeRoot'; blockId: string }
+  | { kind: 'graphSpan'; blockIds: string[]; ... }
+  | { kind: 'composite'; compositeDefId: string; ... }
+```
+
+**Source**: [07-diagnostics-system.md](./topics/07-diagnostics-system.md)
+
+**Note**: Target addressing makes diagnostics clickable/navigable in UI.
+
+---
+
+### DiagnosticCode
+
+**Definition**: Machine-readable enum for diagnostic types. Follows naming convention: E_ (error), W_ (warn), I_ (info), P_ (perf).
+
+**Type**: enum
+
+**Canonical Form**: `DiagnosticCode`
+
+**Examples**: `E_TIME_ROOT_MISSING`, `W_BUS_EMPTY`, `I_REDUCE_REQUIRED`, `P_FIELD_MATERIALIZATION_HEAVY`
+
+**Source**: [07-diagnostics-system.md](./topics/07-diagnostics-system.md)
+
+**Note**: 22 canonical codes defined. Stable across patches for deduplication.
+
+---
+
+### Severity
+
+**Definition**: Diagnostic severity level. Determines UI treatment and urgency.
+
+**Type**: enum
+
+**Canonical Form**: `Severity`
+
+**Values**: `'hint' | 'info' | 'warn' | 'error' | 'fatal'`
+
+**Source**: [07-diagnostics-system.md](./topics/07-diagnostics-system.md)
+
+**Semantics**:
+- `fatal`: Patch cannot run
+- `error`: Cannot compile/meaningless result
+- `warn`: Runs but important issue
+- `info`: Guidance
+- `hint`: Suggestions (dismissible)
+
+---
+
+### DiagnosticAction
+
+**Definition**: Structured fix action attached to a diagnostic. Serializable, replayable, deterministic.
+
+**Type**: type
+
+**Canonical Form**: `DiagnosticAction`
+
+**Examples**:
+- `{ kind: 'goToTarget'; target: TargetRef }`
+- `{ kind: 'insertBlock'; blockType: 'UnitDelay'; ... }`
+- `{ kind: 'createTimeRoot'; timeRootKind: 'Cycle' }`
+
+**Source**: [07-diagnostics-system.md](./topics/07-diagnostics-system.md)
+
+**Note**: Actions are intentions, not code. UI/runtime knows how to execute them.
+
+---
+
+### DebugGraph
+
+**Definition**: Compile-time static metadata describing patch topology for debugging. Contains buses, publishers, listeners, pipelines, and reverse lookup indices.
+
+**Type**: type / concept
+
+**Canonical Form**: `DebugGraph`
+
+**Source**: [08-observation-system.md](./topics/08-observation-system.md)
+
+**Note**: Immutable per patch revision. Used by DebugService for probe operations.
+
+---
+
+### DebugSnapshot
+
+**Definition**: Runtime sample of system state at a point in time. Contains bus values, binding values, health metrics, performance counters.
+
+**Type**: type
+
+**Canonical Form**: `DebugSnapshot`
+
+**Source**: [08-observation-system.md](./topics/08-observation-system.md)
+
+**Note**: Emitted at 10-15 Hz (configurable). Bounded data structures to avoid memory explosion.
+
+---
+
+### DebugTap
+
+**Definition**: Optional interface passed to compiler/runtime to record debug information. Non-allocating, level-gated.
+
+**Type**: interface
+
+**Canonical Form**: `DebugTap`
+
+**Source**: [08-observation-system.md](./topics/08-observation-system.md)
+
+**Methods**:
+- `onDebugGraph(g: DebugGraph)` - Called at compile time
+- `onSnapshot(s: DebugSnapshot)` - Called at sample rate
+- `recordBusNow(busId, value)` - Record bus value
+- `recordBindingNow(bindingId, value)` - Record binding value
+- `hitMaterialize(who)` - Count field materialization
+- `hitAdapter(id)`, `hitLens(id)` - Count adapter/lens invocations
+
+---
+
+### DebugService
+
+**Definition**: Central observation service. Manages DebugGraph, snapshots, and provides query APIs for UI.
+
+**Type**: class
+
+**Canonical Form**: `DebugService`
+
+**Source**: [08-observation-system.md](./topics/08-observation-system.md)
+
+**Note**: Separate from DiagnosticHub. Responsible for observation, not problem reporting.
+
+---
+
+### ValueSummary
+
+**Definition**: Compact representation of a value for debug snapshots. Non-allocating tagged union.
+
+**Type**: type
+
+**Canonical Form**: `ValueSummary`
+
+**Values**:
+```typescript
+type ValueSummary =
+  | { t: 'num'; v: number }
+  | { t: 'vec2'; x: number; y: number }
+  | { t: 'color'; rgba: number }
+  | { t: 'phase'; v: number }
+  | { t: 'bool'; v: 0|1 }
+  | { t: 'trigger'; v: 0|1 }
+  | { t: 'none' }
+  | { t: 'err'; code: string };
+```
+
+**Source**: [08-observation-system.md](./topics/08-observation-system.md)
+
+**Note**: Never includes Field contents or large arrays.
+
+---
+
 ## Deprecated Terms
 
 | Deprecated | Use Instead | Notes |

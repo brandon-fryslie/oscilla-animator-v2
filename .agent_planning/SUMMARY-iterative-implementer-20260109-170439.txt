@@ -1,0 +1,33 @@
+Agent: iterative-implementer | 20260109-170439
+Mode: manual
+Completed: Fixed timeRoot role assignment in demo patch | Files: 1 | Commits: 1
+Tests: N/A (manual validation mode)
+Cache invalidated: None (no eval cache relevant to main.ts demo code)
+Status: complete
+
+## Summary
+
+Fixed missing timeRoot role assignment in the demo patch (src/main.ts).
+
+## Changes
+
+1. Added import: `import { timeRootRole } from './types';`
+2. Updated InfiniteTimeRoot block creation to include role option:
+   ```typescript
+   const time = b.addBlock('InfiniteTimeRoot',
+     { periodAMs: 16000, periodBMs: 32000 },
+     { role: timeRootRole() }
+   );
+   ```
+
+## Verification
+
+- TypeScript typecheck passed
+- Fix ensures Connection Matrix correctly filters out the time block
+- Commit: 6c913f7 "fix(demo): assign timeRoot role to InfiniteTimeRoot block"
+
+## Impact
+
+The Connection Matrix component already had correct filtering logic for timeRoot blocks,
+but the demo patch wasn't marking the InfiniteTimeRoot block with the proper role.
+This fix ensures the time block is properly filtered from the connection matrix display.

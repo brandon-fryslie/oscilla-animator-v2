@@ -6,7 +6,11 @@ This directory contains reusable evaluation findings to speed up future evaluati
 
 ### Component-Specific
 - **runtime-patch-viewer.md**: Patch viewer component behavior, Mermaid integration, layout
+- **runtime-connection-matrix.md**: Connection Matrix filtering, display names, cell rendering, selection
 - **runtime-offset-buses/** (directory): Offset bus implementation findings
+
+### API/State Management
+(none - findings-selection-api.md removed due to new store implementation)
 
 ## General Patterns
 (none yet - add as patterns emerge across multiple evaluations)

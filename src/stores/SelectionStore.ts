@@ -22,12 +22,16 @@ export class SelectionStore {
   hoveredBlockId: BlockId | null = null;
   hoveredPortRef: PortRef | null = null;
 
+  // Block type preview mode (for library preview)
+  previewType: string | null = null;
+
   constructor(private patchStore: PatchStore) {
     makeObservable(this, {
       selectedBlockId: observable,
       selectedEdgeId: observable,
       hoveredBlockId: observable,
       hoveredPortRef: observable,
+      previewType: observable,
       selectedBlock: computed,
       selectedEdge: computed,
       hoveredBlock: computed,
@@ -40,6 +44,8 @@ export class SelectionStore {
       hoverBlock: action,
       hoverPort: action,
       clearSelection: action,
+      setPreviewType: action,
+      clearPreview: action,
     });
   }
 
@@ -153,20 +159,22 @@ export class SelectionStore {
 
   /**
    * Selects a block by ID.
-   * Clears edge selection.
+   * Clears edge selection and preview mode.
    */
   selectBlock(id: BlockId | null): void {
     this.selectedBlockId = id;
     this.selectedEdgeId = null;
+    this.previewType = null;
   }
 
   /**
    * Selects an edge by ID.
-   * Clears block selection.
+   * Clears block selection and preview mode.
    */
   selectEdge(id: string | null): void {
     this.selectedEdgeId = id;
     this.selectedBlockId = null;
+    this.previewType = null;
   }
 
   /**
@@ -184,12 +192,30 @@ export class SelectionStore {
   }
 
   /**
-   * Clears all selection state.
+   * Clears all selection state including preview.
    */
   clearSelection(): void {
     this.selectedBlockId = null;
     this.selectedEdgeId = null;
     this.hoveredBlockId = null;
     this.hoveredPortRef = null;
+    this.previewType = null;
+  }
+
+  /**
+   * Sets preview mode for a block type.
+   * Clears block and edge selection.
+   */
+  setPreviewType(type: string | null): void {
+    this.previewType = type;
+    this.selectedBlockId = null;
+    this.selectedEdgeId = null;
+  }
+
+  /**
+   * Clears preview mode without affecting selection.
+   */
+  clearPreview(): void {
+    this.previewType = null;
   }
 }

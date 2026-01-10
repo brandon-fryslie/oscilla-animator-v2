@@ -18,6 +18,8 @@
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "mermaid": "^11.4.1",
+    "mobx": "^6.15.0",
+    "mobx-react-lite": "^4.1.1",
     "react": "^19.2.3",
     "react-dom": "^19.2.3"
   },

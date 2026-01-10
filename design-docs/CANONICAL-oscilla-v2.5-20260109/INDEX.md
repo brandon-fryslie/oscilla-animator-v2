@@ -1,21 +1,26 @@
 ---
 status: CANONICAL
 generated: 2026-01-09T17:00:00Z
+updated: 2026-01-10T18:30:00Z
+updating_started: 2026-01-10T16:30:00Z
+updating_sources:
+  - design-docs/debugger/*.md (16 files)
 approved_by: Brandon Fryslie
-approval_method: full_walkthrough
-source_documents: 23
-topics: 6
+approval_method: full_walkthrough + integrated_debugger_update
+source_documents: 43
+topics: 10
 ---
 
 # Oscilla v2.5: Canonical Specification Index
 
-> **STATUS: CANONICAL**
-> This is the authoritative source of truth for the Oscilla Animator v2.5 architecture.
-> All other documents are superseded by this specification series.
+> **STATUS: ✅ CANONICAL**
+> Debugger specification integrated successfully (2026-01-10T18:30:00Z)
 
 Generated: 2026-01-09T17:00:00Z
+Last Updated: 2026-01-10T18:30:00Z
 Approved by: Brandon Fryslie
-Source Documents: 23 files from `design-docs/spec/`
+Source Documents: 43 files (27 original + 16 debugger)
+Total Resolutions: 73 (53 original + 20 debugger integration)
 
 ---
 
@@ -38,6 +43,11 @@ Source Documents: 23 files from `design-docs/spec/`
 | 04 | [Compilation](./topics/04-compilation.md) | Graph normalization and IR | NormalizedGraph, CompiledProgramIR |
 | 05 | [Runtime](./topics/05-runtime.md) | Execution model and state | State slots, scheduling, erasure |
 | 06 | [Renderer](./topics/06-renderer.md) | Render pipeline and sinks | RenderInstances2D, batching |
+| 07 | [Diagnostics System](./topics/07-diagnostics-system.md) | Structured diagnostics and observability | Diagnostic, DiagnosticHub, TargetRef, Events |
+| 08 | [Observation System](./topics/08-observation-system.md) | Runtime state capture and queries | DebugGraph, DebugSnapshot, DebugTap, DebugService |
+| 08b | [Diagnostic Rules Engine](./topics/08b-diagnostic-rules-engine.md) | Heuristic rules for problem detection | Rules A-H, evidence, fixes |
+| 09 | [Debug UI](./topics/09-debug-ui-spec.md) | Non-technical inspection interface | Probe mode, Trace view, diagnostics drawer |
+| 10 | [Power-User Debugging](./topics/10-power-user-debugging.md) | Advanced observation tools (post-MVP) | TraceEvents, technical panel |
 
 ## Recommended Reading Order
 
@@ -69,8 +79,15 @@ Looking for something specific? Here's where to find it:
 | NormalizedGraph, CompiledProgramIR | [04-compilation.md](./topics/04-compilation.md) |
 | State slots, scheduling | [05-runtime.md](./topics/05-runtime.md) |
 | RenderInstances2D, batching | [06-renderer.md](./topics/06-renderer.md) |
+| Diagnostic, DiagnosticHub, TargetRef | [07-diagnostics-system.md](./topics/07-diagnostics-system.md) |
+| DiagnosticCode, Severity, Events | [07-diagnostics-system.md](./topics/07-diagnostics-system.md) |
+| DebugGraph, DebugSnapshot, DebugTap | [08-observation-system.md](./topics/08-observation-system.md) |
+| DebugService, ValueSummary | [08-observation-system.md](./topics/08-observation-system.md) |
+| Rules A-H, Rule thresholds | [08b-diagnostic-rules-engine.md](./topics/08b-diagnostic-rules-engine.md) |
+| Probe mode, Trace view, fixes | [09-debug-ui-spec.md](./topics/09-debug-ui-spec.md) |
+| TraceEvent, Trace panel | [10-power-user-debugging.md](./topics/10-power-user-debugging.md) |
 | All term definitions | [GLOSSARY.md](./GLOSSARY.md) |
-| All invariant rules | [INVARIANTS.md](./INVARIANTS.md) |
+| All invariant rules (I1-I29) | [INVARIANTS.md](./INVARIANTS.md) |
 
 ## Appendices
 
@@ -83,18 +100,39 @@ Looking for something specific? Here's where to find it:
 
 This specification series was generated through a structured canonicalization process:
 
-1. **Source Analysis**: 23 documents analyzed for contradictions and ambiguities
-2. **Resolution**: 50 items resolved through iterative refinement
+1. **Source Analysis** (Phase 1): 27 documents analyzed for contradictions and ambiguities
+2. **Resolution** (Phase 1): 53 items resolved through iterative refinement
 3. **Editorial Review**: Peer design review conducted
 4. **User Approval**: All decisions approved by Brandon Fryslie (full walkthrough method)
+5. **Update** (Phase 2, 2026-01-10): Debugger specification integrated (16 files, 20 resolutions)
+   - 4 critical blockers resolved
+   - 4 high-priority design decisions made
+   - 4 new canonical topics created (08, 08b, 09, 10)
+   - 2 invariants added (I28, I29)
+   - 5 new glossary terms
+   - Total resolutions: 53 → 73
+   - Status: CANONICAL (fully approved)
 
 Resolution history is preserved in [RESOLUTION-LOG.md](./RESOLUTION-LOG.md).
 
 ---
 
+## Archived & Legacy Documents
+
+Old specification documents, working files, and superseded materials are archived in:
+[spec-archived-20260110-190000/](../spec-archived-20260110-190000/)
+
+This includes:
+- **Intermediate working files** from canonicalization (questions, summaries, integration reports)
+- **Legacy designs** (v1 debugger specs, event system, modulation tables, etc.)
+- **Single-document reference** (monolithic version for quick lookup)
+- **Design exploration** (earlier iterations, analysis documents)
+
+See the archive [README](../spec-archived-20260110-190000/README.md) for complete manifest.
+
 ## Companion Document
 
-For a condensed single-document overview, see:
-[CANONICAL-ARCHITECTURE-oscilla-v2.5-20260109-160000.md](../CANONICAL-ARCHITECTURE-oscilla-v2.5-20260109-160000.md)
+For a condensed single-document quick reference, see:
+[../spec-archived-20260110-190000/CANONICAL-ARCHITECTURE-oscilla-v2.5-20260109-160000.md](../spec-archived-20260110-190000/CANONICAL-ARCHITECTURE-oscilla-v2.5-20260109-160000.md)
 
-The monolith provides a quick reference; this encyclopedia provides exhaustive detail.
+The monolith provides quick lookup; this encyclopedia provides exhaustive detail and is the authoritative specification.
