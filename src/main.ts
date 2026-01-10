@@ -4,6 +4,8 @@
  * Sets up the UI layout and initializes the animated particles demo.
  */
 
+import { autorun } from 'mobx';
+import { rootStore } from './stores';
 import { buildPatch } from './graph';
 import { compile } from './compiler';
 import { createRuntimeState, BufferPool, executeFrame } from './runtime';
@@ -19,7 +21,6 @@ import { timeRootRole } from './types';
 
 let currentProgram: any = null;
 let currentState: any = null;
-let currentPatch: any = null;
 let canvas: HTMLCanvasElement | null = null;
 let ctx: CanvasRenderingContext2D | null = null;
 let pool: BufferPool | null = null;
@@ -33,13 +34,10 @@ let blockInspector: BlockInspector | null = null;
 let blockLibrary: BlockLibrary | null = null;
 let domainsPanel: DomainsPanel | null = null;
 
-// =============================================================================
-// Zoom and Pan State
-// =============================================================================
+// Viewport state is now managed by rootStore.viewport
+// Animation state is now managed by rootStore.playback
 
-let zoom = 1;
-let panX = 0;
-let panY = 0;
+// Canvas drag state (local to this module)
 let isDragging = false;
 let lastMouseX = 0;
 let lastMouseY = 0;
@@ -56,6 +54,12 @@ function log(msg: string, level: 'info' | 'warn' | 'error' = 'info') {
   logEl.appendChild(line);
   logEl.scrollTop = logEl.scrollHeight;
   console.log(`[${level}] ${msg}`);
+
+  // Also log to diagnostics store (id and timestamp added by store)
+  rootStore.diagnostics.log({
+    level,
+    message: msg,
+  });
 }
 
 // =============================================================================
@@ -70,7 +74,7 @@ function setupCanvas(container: HTMLElement): HTMLCanvasElement {
   canvasEl.style.cursor = 'grab';
   container.appendChild(canvasEl);
 
-  // Mouse wheel zoom
+  // Mouse wheel zoom - using viewport store
   canvasEl.addEventListener('wheel', (e) => {
     e.preventDefault();
     const rect = canvasEl.getBoundingClientRect();
@@ -78,17 +82,21 @@ function setupCanvas(container: HTMLElement): HTMLCanvasElement {
     const mouseY = e.clientY - rect.top;
 
     const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-    const newZoom = Math.max(0.1, Math.min(10, zoom * zoomFactor));
+    const newZoom = Math.max(0.1, Math.min(10, rootStore.viewport.zoom * zoomFactor));
 
     const dx = mouseX - canvasEl.width / 2;
     const dy = mouseY - canvasEl.height / 2;
-    panX += dx * (1 - zoomFactor) / zoom;
-    panY += dy * (1 - zoomFactor) / zoom;
 
-    zoom = newZoom;
+    // Update pan to zoom towards mouse position
+    rootStore.viewport.panBy(
+      dx * (1 - zoomFactor) / rootStore.viewport.zoom,
+      dy * (1 - zoomFactor) / rootStore.viewport.zoom
+    );
+
+    rootStore.viewport.setZoom(newZoom);
   }, { passive: false });
 
-  // Mouse drag pan
+  // Mouse drag pan - using viewport store
   canvasEl.addEventListener('mousedown', (e) => {
     isDragging = true;
     lastMouseX = e.clientX;
@@ -100,8 +108,7 @@ function setupCanvas(container: HTMLElement): HTMLCanvasElement {
     if (!isDragging) return;
     const dx = e.clientX - lastMouseX;
     const dy = e.clientY - lastMouseY;
-    panX += dx / zoom;
-    panY += dy / zoom;
+    rootStore.viewport.panBy(dx / rootStore.viewport.zoom, dy / rootStore.viewport.zoom);
     lastMouseX = e.clientX;
     lastMouseY = e.clientY;
   });
@@ -118,9 +125,7 @@ function setupCanvas(container: HTMLElement): HTMLCanvasElement {
 
   // Double-click to reset view
   canvasEl.addEventListener('dblclick', () => {
-    zoom = 1;
-    panX = 0;
-    panY = 0;
+    rootStore.viewport.resetView();
   });
 
   return canvasEl;
@@ -257,6 +262,9 @@ async function buildAndCompile(particleCount: number) {
 
   log(`Patch built: ${patch.blocks.size} blocks, ${patch.edges.length} edges`);
 
+  // Load patch into store
+  rootStore.patch.loadPatch(patch);
+
   // Compile
   const result = compile(patch);
 
@@ -273,20 +281,20 @@ async function buildAndCompile(particleCount: number) {
   // Update global state
   currentProgram = program;
   currentState = createRuntimeState(program.slotMeta.length);
-  currentPatch = patch;
 
-  // Update UI components with new patch
+  // Update UI components with patch from store
+  const storePatch = rootStore.patch.patch;
   if (tableView) {
-    tableView.setPatch(patch);
+    tableView.setPatch(storePatch);
   }
   if (connectionMatrix) {
-    connectionMatrix.setPatch(patch);
+    connectionMatrix.setPatch(storePatch);
   }
   if (blockInspector) {
-    blockInspector.setPatch(patch);
+    blockInspector.setPatch(storePatch);
   }
   if (domainsPanel) {
-    domainsPanel.setPatch(patch);
+    domainsPanel.setPatch(storePatch);
   }
 }
 
@@ -317,10 +325,11 @@ function animate(tMs: number) {
     const frame = executeFrame(currentProgram, currentState, pool, tMs);
     execTime = performance.now() - execStart;
 
-    // Render to canvas with zoom/pan transform
+    // Render to canvas with zoom/pan transform from store
     const renderStart = performance.now();
+    const { zoom, pan } = rootStore.viewport;
     ctx.save();
-    ctx.translate(canvas.width / 2 + panX * zoom, canvas.height / 2 + panY * zoom);
+    ctx.translate(canvas.width / 2 + pan.x * zoom, canvas.height / 2 + pan.y * zoom);
     ctx.scale(zoom, zoom);
     ctx.translate(-canvas.width / 2, -canvas.height / 2);
     renderFrame(ctx, frame, canvas.width, canvas.height);

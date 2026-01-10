@@ -26,5 +26,8 @@ export {
 // React integration
 export { StoreProvider, useStores, useStore } from './context';
 
+// Singleton instance for non-React code
+export { rootStore } from './instance';
+
 // Note: internal.ts is NOT exported
 // Note: configure.ts is NOT exported (used internally by RootStore)
