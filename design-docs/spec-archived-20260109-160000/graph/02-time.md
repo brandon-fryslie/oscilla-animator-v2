@@ -46,7 +46,7 @@ The runtime never wraps or clamps `tMs`.
 
 ## Derived Cycles
 
-There is no CycleTimeRoot. Cycles are produced by ordinary blocks (e.g., Phasor + WaveShaper).
+There is no Time block that is intrinsically "cycle" based. Cycles are produced by ordinary blocks (e.g., Phasor + WaveShaper).
 
 The UI may present a "Time Console" that instantiates these blocks, but it is not a special runtime system.
 

@@ -98,19 +98,6 @@ registry.register({
 });
 
 registry.register({
-  type: 'CycleTimeRoot',
-  label: 'Cycle Time Root',
-  category: 'Time',
-  description: 'Time source with a fixed number of cycles',
-  inputs: [],
-  outputs: [
-    { id: 'phaseA', label: 'Phase A', typeStr: 'Signal<phase>' },
-    { id: 'phaseB', label: 'Phase B', typeStr: 'Signal<phase>' },
-  ],
-  tags: ['time', 'phase', 'cycle'],
-});
-
-registry.register({
   type: 'FiniteTimeRoot',
   label: 'Finite Time Root',
   category: 'Time',

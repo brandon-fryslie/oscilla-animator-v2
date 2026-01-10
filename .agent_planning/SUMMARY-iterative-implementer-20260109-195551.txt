@@ -1,0 +1,71 @@
+Agent: iterative-implementer | 2026-01-10 20:30
+Mode: manual
+Completed: All 4 components converted, integration complete, cleanup done | Files: 11 | Commits: 6
+Tests: N/A (manual validation mode - no tests exist for UI components)
+Cache invalidated: runtime-connection-matrix.md
+Status: complete
+
+## Work Completed
+
+### Phase 0: Selection State Reconciliation
+- Added previewType field to SelectionStore for block type preview
+- Added setPreviewType() and clearPreview() actions
+- selectBlock() and selectEdge() now clear preview mode
+- Migrated all missing functionality from legacy SelectionState
+
+### Phase 1: Simple Conversions
+- Converted DomainsPanel.ts → DomainsPanel.tsx with observer pattern
+- Converted BlockLibrary.ts → BlockLibrary.tsx with preview and addBlock wiring
+  - Click block type: sets preview mode
+  - Double-click block type: adds block and selects it
+
+### Phase 2: Selection-Dependent Components
+- Converted BlockInspector.ts → BlockInspector.tsx with three modes:
+  - Type preview mode (when previewType is set)
+  - Block details mode (when block selected)
+  - No selection mode
+- Converted TableView.ts → TableView.tsx with full selection integration
+  - Click row: selects block
+  - Visual highlight for selected row
+  - Clickable connections for navigation
+
+### Phase 3: Integration
+- Updated ConnectionMatrix to observer pattern (removed patch prop)
+- Mounted all React components via createRoot in main.ts
+- Deleted legacy files:
+  - ConnectionMatrixWrapper.ts
+  - selection.ts (legacy selection state)
+  - Old .ts component files (BlockInspector, BlockLibrary, TableView, DomainsPanel)
+- Updated component exports in index.ts
+
+## Files Modified
+- src/stores/SelectionStore.ts (added preview mode)
+- src/ui/components/DomainsPanel.tsx (new)
+- src/ui/components/BlockLibrary.tsx (new)
+- src/ui/components/BlockInspector.tsx (new)
+- src/ui/components/TableView.tsx (new)
+- src/ui/components/ConnectionMatrix.tsx (updated to observer)
+- src/main.ts (React integration)
+- src/ui/components/index.ts (updated exports)
+
+## Files Deleted
+- src/ui/components/ConnectionMatrixWrapper.ts
+- src/ui/state/selection.ts
+- src/ui/components/BlockInspector.ts (old vanilla)
+- src/ui/components/BlockLibrary.ts (old vanilla)
+- src/ui/components/TableView.ts (old vanilla)
+- src/ui/components/DomainsPanel.ts (old vanilla)
+
+## Commits
+1. feat(stores): add preview mode to SelectionStore
+2. feat(ui): convert DomainsPanel to React component
+3. feat(ui): convert BlockLibrary to React with preview and add wiring
+4. feat(ui): convert BlockInspector to React with preview mode
+5. feat(ui): convert TableView to React with selection wiring
+6. feat(ui): integrate React components in main.ts and cleanup
+
+## Next Steps
+- Manual runtime verification needed (DoD Phase 3)
+- Test block library click/double-click behavior
+- Test selection state across all components
+- Verify MobX reactivity is working correctly
