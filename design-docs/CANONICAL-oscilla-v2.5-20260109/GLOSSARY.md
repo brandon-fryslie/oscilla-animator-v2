@@ -660,6 +660,191 @@ type TargetRef =
 
 ---
 
+### EventHub
+
+**Definition**: Typed, synchronous, non-blocking event coordination spine. Central dispatcher for all domain events (graph changes, compilation, runtime lifecycle).
+
+**Type**: class
+
+**Canonical Form**: `EventHub`
+
+**API**:
+```typescript
+class EventHub {
+  emit(event: EditorEvent): void;
+  on<T>(type: T, handler: (event: Extract<EditorEvent, { type: T }>) => void): () => void;
+  subscribe(handler: (event: EditorEvent) => void): () => void;
+}
+```
+
+**Source**: [12-event-hub.md](./topics/12-event-hub.md)
+
+**Note**: Events emitted after state changes are committed. Handlers cannot synchronously mutate core state.
+
+---
+
+### EditorEvent
+
+**Definition**: Discriminated union of all event types. Strongly typed to enable exhaustiveness checking.
+
+**Type**: type
+
+**Canonical Form**: `EditorEvent`
+
+**Examples**:
+```typescript
+type EditorEvent =
+  | GraphCommittedEvent
+  | CompileStartedEvent
+  | CompileFinishedEvent
+  | ProgramSwappedEvent
+  | RuntimeHealthSnapshotEvent
+  | MacroInsertedEvent
+  | BusCreatedEvent
+  | BlockAddedEvent
+  | ...
+```
+
+**Source**: [12-event-hub.md](./topics/12-event-hub.md)
+
+**Note**: Every event includes `EventMeta` (patchId, rev, tx, origin, at).
+
+---
+
+### GraphCommitted
+
+**Definition**: Event emitted exactly once after any user operation changes the patch graph (blocks/buses/bindings/time root).
+
+**Type**: event
+
+**Canonical Form**: `GraphCommittedEvent`
+
+**Payload**:
+```typescript
+{
+  type: 'GraphCommitted';
+  patchId: string;
+  patchRevision: number;  // Monotonic, increments on every edit
+  reason: 'userEdit' | 'macroExpand' | 'compositeSave' | 'migration' | 'import' | 'undo' | 'redo';
+  diffSummary: { blocksAdded, blocksRemoved, busesAdded, busesRemoved, bindingsChanged, timeRootChanged };
+  affectedBlockIds?: string[];
+  affectedBusIds?: string[];
+}
+```
+
+**Source**: [12-event-hub.md](./topics/12-event-hub.md), [13-event-diagnostics-integration.md](./topics/13-event-diagnostics-integration.md)
+
+**Note**: Triggers authoring validators in DiagnosticHub. Single boundary event for all graph mutations.
+
+---
+
+### CompileStarted
+
+**Definition**: Event emitted when compilation begins for a specific graph revision.
+
+**Type**: event
+
+**Canonical Form**: `CompileStartedEvent`
+
+**Payload**:
+```typescript
+{
+  type: 'CompileStarted';
+  compileId: string;      // UUID for this compile pass
+  patchId: string;
+  patchRevision: number;
+  trigger: 'graphCommitted' | 'manual' | 'startup' | 'hotReload';
+}
+```
+
+**Source**: [12-event-hub.md](./topics/12-event-hub.md)
+
+**Note**: Marks compile diagnostics as "pending" in DiagnosticHub.
+
+---
+
+### CompileFinished
+
+**Definition**: Event emitted when compilation completes (success OR failure). Contains authoritative diagnostic snapshot.
+
+**Type**: event
+
+**Canonical Form**: `CompileFinishedEvent`
+
+**Payload**:
+```typescript
+{
+  type: 'CompileFinished';
+  compileId: string;
+  patchId: string;
+  patchRevision: number;
+  status: 'ok' | 'failed';
+  durationMs: number;
+  diagnostics: Diagnostic[];  // Authoritative snapshot
+  programMeta?: { timelineHint, busUsageSummary };
+}
+```
+
+**Source**: [12-event-hub.md](./topics/12-event-hub.md), [13-event-diagnostics-integration.md](./topics/13-event-diagnostics-integration.md)
+
+**Note**: DiagnosticHub replaces compile snapshot (not merge). Single event for both success and failure.
+
+---
+
+### ProgramSwapped
+
+**Definition**: Event emitted when runtime begins executing a newly compiled program.
+
+**Type**: event
+
+**Canonical Form**: `ProgramSwappedEvent`
+
+**Payload**:
+```typescript
+{
+  type: 'ProgramSwapped';
+  patchId: string;
+  patchRevision: number;
+  compileId: string;
+  swapMode: 'hard' | 'soft' | 'deferred';
+  swapLatencyMs: number;
+  stateBridgeUsed?: boolean;
+}
+```
+
+**Source**: [12-event-hub.md](./topics/12-event-hub.md)
+
+**Note**: Sets active revision pointer in DiagnosticHub. Runtime diagnostics attach to active revision.
+
+---
+
+### RuntimeHealthSnapshot
+
+**Definition**: Low-frequency (2-5 Hz) event containing runtime performance metrics and optional diagnostic deltas.
+
+**Type**: event
+
+**Canonical Form**: `RuntimeHealthSnapshotEvent`
+
+**Payload**:
+```typescript
+{
+  type: 'RuntimeHealthSnapshot';
+  patchId: string;
+  activePatchRevision: number;
+  tMs: number;
+  frameBudget: { fpsEstimate, avgFrameMs, worstFrameMs };
+  evalStats: { fieldMaterializations, nanCount, infCount, worstOffenders };
+  diagnosticsDelta?: { raised: Diagnostic[]; resolved: string[] };
+}
+```
+
+**Source**: [12-event-hub.md](./topics/12-event-hub.md), [13-event-diagnostics-integration.md](./topics/13-event-diagnostics-integration.md)
+
+**Note**: Updates runtime diagnostics without per-frame spam. Emitted at 2-5 Hz, NOT 60 Hz.
+
+---
+
 ### DebugGraph
 
 **Definition**: Compile-time static metadata describing patch topology for debugging. Contains buses, publishers, listeners, pipelines, and reverse lookup indices.

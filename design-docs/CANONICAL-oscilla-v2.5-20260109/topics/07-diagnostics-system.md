@@ -296,7 +296,7 @@ Indicates which subsystem produced the diagnostic.
 ```typescript
 interface Diagnostic {
   // Identity: stable across graph rewrites
-  id: string;  // hash(code + primaryTarget + signature)
+  id: string;  // hash(code + primaryTarget + signature + patchRevision)
 
   // Classification
   code: DiagnosticCode;
@@ -314,6 +314,7 @@ interface Diagnostic {
 
   // Actions: what can the user do?
   actions?: DiagnosticAction[];
+  quickFixId?: string;            // Optional: recommended primary action
 
   // Lifecycle
   metadata: {
@@ -331,10 +332,11 @@ interface Diagnostic {
 function generateDiagnosticId(
   code: DiagnosticCode,
   primaryTarget: TargetRef,
+  patchRevision: number,
   signature?: string
 ): string {
   const targetStr = serializeTargetRef(primaryTarget);
-  const base = `${code}:${targetStr}`;
+  const base = `${code}:${targetStr}:rev${patchRevision}`;
   return signature ? `${base}:${signature}` : base;
 }
 ```
@@ -342,16 +344,19 @@ function generateDiagnosticId(
 **Critical rule**: ID is derived from:
 - `code` - Diagnostic type
 - `primaryTarget` - Serialized target reference
+- `patchRevision` - Which patch version this applies to (same error in different patch is different diagnostic)
 - `signature` - Optional key data fields defining the condition
 
 **Not included in ID** (goes in metadata):
 - Timestamps
 - Occurrence counts
 - Frame counts
-- Current time
+- Current time t
 - Dynamic data
 
-This ensures same root cause → same ID → dedupe works.
+This ensures same root cause in same patch → same ID → dedupe works.
+
+**Why patchRevision is included**: If a patch is edited and the same error re-appears, that's a NEW diagnostic instance (user wants to see it again). Different patches, different diagnostics—even if the root cause is identical.
 
 ### Diagnostic Actions
 
@@ -757,12 +762,139 @@ During evaluation, a Noise block produces NaN due to invalid parameters.
 
 ---
 
+## Polish: Canonical Addressing & Resilience
+
+These enhancements make diagnostics feel professional and future-proof.
+
+### Dual Addressing (Hard + Semantic)
+
+Every `TargetRef` optionally carries two parallel addresses:
+
+**A) Hard address** (exact, executable):
+```typescript
+{ kind: 'port', blockId: 'block-123', portId: 'radius' }
+```
+Used for focusing selection, applying fixes, debugging exact wiring.
+
+**B) Semantic address** (stable intent):
+```typescript
+{ pathRef: '/renderers/dots[instance=block-123]/inputs/radius' }
+```
+Used for long-lived diagnostics across graph rewrites, composite boundaries, server-to-client mapping when IDs differ.
+
+**Resilience rule**: If `hardRef` resolves, use it. If not, try to resolve `pathRef` by searching the current graph. If both fail, display diagnostic with "target missing (stale)" instead of silently disappearing.
+
+This prevents the worst UX: errors vanishing when things break.
+
+### Canonical Type Formatting
+
+Every `SignalType` must be representable as a stable string key:
+- `signal:number`
+- `field:vec2(point)`
+- `special:renderTree`
+- `scalar:duration(ms)`
+
+This key is used for:
+- Diagnostic IDs
+- Suggested adapter chain lookup
+- UI badges
+- Serialization
+
+**Equality policy**:
+- **Compatibility** (can connect): `field:vec2(point)` and `field:vec2` are compatible
+- **Equality** (same): `field:vec2(point)` and `field:vec2` are NOT equal
+- **Display** (how shown): Always show the normalized type key + semantic tag
+
+### Diagnostic Grouping
+
+To keep diagnostics usable as patches grow:
+
+**A) Coalesce duplicates by ID** (covered above)
+
+**B) Group multi-target diagnostics**:
+- Type mismatch: primary is receiving port, related is bus/source
+- Illegal cycle: primary is bus or time root, related is SCC members
+
+**C) Provide groupKey** for UI:
+```typescript
+groupKey = `${code}:${busId}` // or blockId
+```
+UI can collapse 20 similar warnings into one expandable group.
+
+This prevents warning fatigue while staying strict.
+
+### Action Determinism Contract
+
+Every `DiagnosticAction` must be purely described, never "best effort".
+
+**Actions must specify**:
+- Exact target(s)
+- Exact insertion site (for InsertBlock)
+- Exact before/after binding chain (for ReplaceAdapterChain)
+- Exact parameter values used
+- Apply mode (immediate/onBoundary/staged)
+
+**Actions must be**:
+- Serializable (can be sent over network)
+- Replayable (user/code can execute them)
+- Safe (all references are by ID, not mutable objects)
+
+This enables:
+- Undo/redo for fixes
+- "Apply all safe fixes"
+- Server-authoritative collaborative editing later
+
+### Style Guide (Wording)
+
+**Titles**:
+- Concrete, short, no blame, no internal jargon (unless user opted into "Expert" mode)
+- Bad: "Type mismatch in binding graph edge"
+- Good: "Radius expects Field but bus provides Signal"
+
+**Summaries** always contain:
+- What it affects (render/time/bus)
+- What it's doing right now (silent value, clamping, failing)
+
+**Details** always include:
+- "Expected"
+- "Got"
+- "Where"
+- "Fix options"
+
+### Diagnostic Revision Tracking
+
+DiagnosticHub maintains a `diagnosticsRevision` counter (monotonic):
+
+```typescript
+class DiagnosticHub {
+  private diagnosticsRevision: number = 0;
+
+  incrementRevision() {
+    this.diagnosticsRevision++;
+  }
+
+  getRevision(): number {
+    return this.diagnosticsRevision;
+  }
+}
+```
+
+Every time the active set changes meaningfully, bump it. UI subscribes and re-renders efficiently.
+
+Enables:
+- Deterministic tests ("after action X, diagnosticsRevision increments and active set matches")
+- Stable multi-client updates (diffing snapshots)
+
+---
+
 ## See Also
 
 - [02-block-system](./02-block-system.md) - Block and edge structures that diagnostics target
 - [03-time-system](./03-time-system.md) - TimeRoot validation
 - [04-compilation](./04-compilation.md) - Where compile diagnostics originate
 - [05-runtime](./05-runtime.md) - Slot-addressed execution and performance monitoring
+- [12-event-hub](./12-event-hub.md) - Event architecture powering the diagnostic system
+- [13-event-diagnostics-integration](./13-event-diagnostics-integration.md) - How events drive diagnostics
 - [Glossary: Diagnostic](../GLOSSARY.md#diagnostic)
-- [Invariant: I28](../INVARIANTS.md#i28-diagnostics-are-non-blocking)
-- [Invariant: I29](../INVARIANTS.md#i29-diagnostic-ids-are-stable)
+- [Invariant: I28](../INVARIANTS.md#i28-diagnostic-attribution)
+- [Invariant: I29](../INVARIANTS.md#i29-error-taxonomy)

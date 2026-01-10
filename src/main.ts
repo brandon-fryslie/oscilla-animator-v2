@@ -1,7 +1,8 @@
 /**
  * Oscilla v2 - Main Application Entry
  *
- * Sets up the UI layout and initializes the animated particles demo.
+ * Single React root entry point.
+ * Sets up the demo patch and animation loop.
  */
 
 import React from 'react';
@@ -11,12 +12,7 @@ import { buildPatch } from './graph';
 import { compile } from './compiler';
 import { createRuntimeState, BufferPool, executeFrame } from './runtime';
 import { renderFrame } from './render';
-import { getAppLayout, TabbedContent } from './ui';
-import { ConnectionMatrix } from './ui/components/ConnectionMatrix';
-import { TableView } from './ui/components/TableView';
-import { BlockInspector } from './ui/components/BlockInspector';
-import { BlockLibrary } from './ui/components/BlockLibrary';
-import { DomainsPanel } from './ui/components/DomainsPanel';
+import { App } from './ui/components';
 import { timeRootRole } from './types';
 
 // =============================================================================
@@ -28,104 +24,19 @@ let currentState: any = null;
 let canvas: HTMLCanvasElement | null = null;
 let ctx: CanvasRenderingContext2D | null = null;
 let pool: BufferPool | null = null;
-let logEl: HTMLElement | null = null;
-let statsEl: HTMLElement | null = null;
-
-// Viewport state is now managed by rootStore.viewport
-// Animation state is now managed by rootStore.playback
-
-// Canvas drag state (local to this module)
-let isDragging = false;
-let lastMouseX = 0;
-let lastMouseY = 0;
 
 // =============================================================================
 // Logging
 // =============================================================================
 
 function log(msg: string, level: 'info' | 'warn' | 'error' = 'info') {
-  if (!logEl) return;
-  const line = document.createElement('div');
-  line.className = `log-${level}`;
-  line.textContent = `[${new Date().toISOString().slice(11, 19)}] ${msg}`;
-  logEl.appendChild(line);
-  logEl.scrollTop = logEl.scrollHeight;
   console.log(`[${level}] ${msg}`);
 
-  // Also log to diagnostics store (id and timestamp added by store)
+  // Log to diagnostics store (id and timestamp added by store)
   rootStore.diagnostics.log({
     level,
     message: msg,
   });
-}
-
-// =============================================================================
-// Canvas Setup
-// =============================================================================
-
-function setupCanvas(container: HTMLElement): HTMLCanvasElement {
-  const canvasEl = document.createElement('canvas');
-  canvasEl.width = 800;
-  canvasEl.height = 600;
-  canvasEl.style.borderRadius = '4px';
-  canvasEl.style.cursor = 'grab';
-  container.appendChild(canvasEl);
-
-  // Mouse wheel zoom - using viewport store
-  canvasEl.addEventListener('wheel', (e) => {
-    e.preventDefault();
-    const rect = canvasEl.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-    const newZoom = Math.max(0.1, Math.min(10, rootStore.viewport.zoom * zoomFactor));
-
-    const dx = mouseX - canvasEl.width / 2;
-    const dy = mouseY - canvasEl.height / 2;
-
-    // Update pan to zoom towards mouse position
-    rootStore.viewport.panBy(
-      dx * (1 - zoomFactor) / rootStore.viewport.zoom,
-      dy * (1 - zoomFactor) / rootStore.viewport.zoom
-    );
-
-    rootStore.viewport.setZoom(newZoom);
-  }, { passive: false });
-
-  // Mouse drag pan - using viewport store
-  canvasEl.addEventListener('mousedown', (e) => {
-    isDragging = true;
-    lastMouseX = e.clientX;
-    lastMouseY = e.clientY;
-    canvasEl.style.cursor = 'grabbing';
-  });
-
-  canvasEl.addEventListener('mousemove', (e) => {
-    if (!isDragging) return;
-    const dx = e.clientX - lastMouseX;
-    const dy = e.clientY - lastMouseY;
-    rootStore.viewport.panBy(dx / rootStore.viewport.zoom, dy / rootStore.viewport.zoom);
-    lastMouseX = e.clientX;
-    lastMouseY = e.clientY;
-  });
-
-  canvasEl.addEventListener('mouseup', () => {
-    isDragging = false;
-    canvasEl.style.cursor = 'grab';
-  });
-
-  canvasEl.addEventListener('mouseleave', () => {
-    isDragging = false;
-    canvasEl.style.cursor = 'grab';
-  });
-
-  // Double-click to reset view
-  canvasEl.addEventListener('dblclick', () => {
-    rootStore.viewport.resetView();
-  });
-
-  return canvasEl;
 }
 
 // =============================================================================
@@ -331,9 +242,13 @@ function animate(tMs: number) {
     const now = performance.now();
     if (now - lastFpsUpdate > 500) {
       fps = Math.round((frameCount * 1000) / (now - lastFpsUpdate));
-      if (statsEl) {
-        statsEl.textContent = `FPS: ${fps} | ${execTime.toFixed(1)}/${renderTime.toFixed(1)}ms | Min/Max: ${minFrameTime.toFixed(1)}/${maxFrameTime.toFixed(1)}ms`;
+      const statsText = `FPS: ${fps} | ${execTime.toFixed(1)}/${renderTime.toFixed(1)}ms | Min/Max: ${minFrameTime.toFixed(1)}/${maxFrameTime.toFixed(1)}ms`;
+
+      // Update stats via global callback set by App component
+      if ((window as any).__setStats) {
+        (window as any).__setStats(statsText);
       }
+
       frameCount = 0;
       lastFpsUpdate = now;
       minFrameTime = Infinity;
@@ -349,163 +264,30 @@ function animate(tMs: number) {
 }
 
 // =============================================================================
-// UI Setup
-// =============================================================================
-
-async function setupUI() {
-  const appLayout = getAppLayout();
-
-  try {
-    await appLayout.init();
-    log('UI framework initialized');
-  } catch (err) {
-    console.error('Failed to initialize UI framework:', err);
-    // Fall back to simple layout
-    setupFallbackUI();
-    return;
-  }
-
-  // Get stats element
-  statsEl = document.getElementById('stats');
-
-  // Setup left sidebar with tabs (Library + Inspector)
-  const leftRegion = appLayout.getRegionElement('left');
-  new TabbedContent(leftRegion, [
-    {
-      id: 'library',
-      label: 'Library',
-      contentFactory: (container) => {
-        const root = createRoot(container);
-        root.render(React.createElement(BlockLibrary as any));
-      },
-    },
-    {
-      id: 'inspector',
-      label: 'Inspector',
-      contentFactory: (container) => {
-        const root = createRoot(container);
-        root.render(React.createElement(BlockInspector as any));
-      },
-    },
-  ], { initialTab: 'inspector' });
-
-  // Setup center panel with Blocks, Matrix, and Preview tabs
-  const centerRegion = appLayout.getRegionElement('center');
-  new TabbedContent(centerRegion, [
-    {
-      id: 'table',
-      label: 'Blocks',
-      contentFactory: (container) => {
-        const root = createRoot(container);
-        root.render(React.createElement(TableView as any));
-      },
-    },
-    {
-      id: 'matrix',
-      label: 'Matrix',
-      contentFactory: (container) => {
-        const root = createRoot(container);
-        root.render(React.createElement(ConnectionMatrix as any));
-      },
-    },
-    {
-      id: 'canvas',
-      label: 'Preview',
-      contentFactory: (container) => {
-        const canvasWrapper = document.createElement('div');
-        canvasWrapper.className = 'canvas-container';
-        canvas = setupCanvas(canvasWrapper);
-        ctx = canvas.getContext('2d')!;
-        container.appendChild(canvasWrapper);
-      },
-    },
-  ], { initialTab: 'table' });
-
-  // Setup right sidebar with Domains and Help
-  const rightRegion = appLayout.getRegionElement('right');
-  new TabbedContent(rightRegion, [
-    {
-      id: 'domains',
-      label: 'Domains',
-      contentFactory: (container) => {
-        const root = createRoot(container);
-        root.render(React.createElement(DomainsPanel as any));
-      },
-    },
-    {
-      id: 'help',
-      label: 'Help',
-      contentFactory: (container) => {
-        container.innerHTML = `
-          <div style="padding: 1rem; font-size: 0.875rem; color: #888;">
-            <h3 style="color: #4ecdc4; margin-bottom: 0.5rem;">Controls</h3>
-            <p><strong>Canvas:</strong></p>
-            <ul style="margin-left: 1rem; margin-top: 0.5rem;">
-              <li>Scroll to zoom</li>
-              <li>Click and drag to pan</li>
-              <li>Double-click to reset view</li>
-            </ul>
-            <p style="margin-top: 1rem;"><strong>Patch:</strong></p>
-            <ul style="margin-left: 1rem; margin-top: 0.5rem;">
-              <li>Click blocks in table to inspect</li>
-              <li>Expand rows to see ports and connections</li>
-              <li>Click connections to navigate</li>
-              <li>Click block type in library to preview</li>
-              <li>Double-click block type to add to patch</li>
-            </ul>
-          </div>
-        `;
-      },
-    },
-  ], { initialTab: 'domains' });
-
-  // Setup bottom log panel
-  const bottomRegion = appLayout.getRegionElement('bottom');
-  const logContainer = document.createElement('div');
-  logContainer.className = 'log-container';
-  logEl = logContainer;
-  bottomRegion.appendChild(logContainer);
-
-  log('Layout initialized');
-}
-
-/**
- * Fallback UI if jsPanel fails to load.
- */
-function setupFallbackUI() {
-  console.warn('Using fallback UI');
-
-  // Create simple containers
-  const centerRegion = document.getElementById('region-center');
-  const bottomRegion = document.getElementById('region-bottom');
-
-  if (centerRegion) {
-    const canvasWrapper = document.createElement('div');
-    canvasWrapper.className = 'canvas-container';
-    canvasWrapper.style.height = '100%';
-    canvas = setupCanvas(canvasWrapper);
-    ctx = canvas.getContext('2d')!;
-    centerRegion.appendChild(canvasWrapper);
-  }
-
-  if (bottomRegion) {
-    const logContainer = document.createElement('div');
-    logContainer.className = 'log-container';
-    logEl = logContainer;
-    bottomRegion.appendChild(logContainer);
-  }
-
-  statsEl = document.getElementById('stats');
-}
-
-// =============================================================================
 // Main Entry Point
 // =============================================================================
 
 async function main() {
   try {
-    // Setup UI first
-    await setupUI();
+    // Get app container
+    const appContainer = document.getElementById('app-container');
+    if (!appContainer) {
+      throw new Error('App container not found');
+    }
+
+    // Create React root and render App
+    const root = createRoot(appContainer);
+    root.render(
+      React.createElement(App, {
+        onCanvasReady: (canvasEl: HTMLCanvasElement) => {
+          canvas = canvasEl;
+          ctx = canvas.getContext('2d');
+          log('Canvas ready');
+        },
+      })
+    );
+
+    log('React root initialized');
 
     // Initialize buffer pool
     pool = new BufferPool();
@@ -521,10 +303,7 @@ async function main() {
 
   } catch (err) {
     console.error('Failed to initialize application:', err);
-    const logContainer = document.getElementById('region-bottom');
-    if (logContainer) {
-      logContainer.innerHTML = `<div style="padding: 1rem; color: #ff6b6b;">Error: ${err}</div>`;
-    }
+    log(`Failed to initialize: ${err}`, 'error');
   }
 }
 
