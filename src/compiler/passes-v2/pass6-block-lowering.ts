@@ -270,9 +270,9 @@ function lowerBlockInstance(
   const blockType = getBlockType(block.type);
 
   if (blockType === undefined) {
-    // No lowering function registered
+    // No lowering function registered - use UnknownBlockType error kind
     errors.push({
-      code: "NotImplemented",
+      code: "UnknownBlockType",
       message: `Block type "${block.type}" has no registered IR lowering function`,
       where: { blockId: block.id },
     });
@@ -354,7 +354,9 @@ function lowerBlockInstance(
     const result = blockType.lower({ ctx, inputs, inputsById, config });
 
     // All blocks MUST use outputsById pattern
-    if (result.outputsById === undefined || Object.keys(result.outputsById).length === 0) {
+    // Allow empty outputsById only if block has no declared outputs
+    const hasOutputs = blockType.outputs.length > 0;
+    if (result.outputsById === undefined || (hasOutputs && Object.keys(result.outputsById).length === 0)) {
       errors.push({
         code: "IRValidationFailed",
         message: `Block ${ctx.blockType}#${ctx.instanceId} must use outputsById pattern (outputs array is deprecated)`,
@@ -424,7 +426,7 @@ export function pass6BlockLowering(
   validated: AcyclicOrLegalGraph
 ): UnlinkedIRFragments {
   const builder = new IRBuilderImpl();
-  
+
   // Extract blocks and edges from validated patch
   const blocks = validated.blocks;
   const edges = validated.edges as any as readonly Edge[];

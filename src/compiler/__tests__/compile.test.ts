@@ -62,6 +62,10 @@ describe('compile', () => {
 
       const result = compile(patch);
 
+      if (result.kind === 'error') {
+        console.error('COMPILE ERROR (ConstFloat):', JSON.stringify(result.errors, null, 2));
+      }
+
       expect(result.kind).toBe('ok');
       if (result.kind === 'ok') {
         // Should have signal expressions in dense array
@@ -77,6 +81,10 @@ describe('compile', () => {
       });
 
       const result = compile(patch);
+
+      if (result.kind === 'error') {
+        console.error('COMPILE ERROR (Oscillator):', JSON.stringify(result.errors, null, 2));
+      }
 
       expect(result.kind).toBe('ok');
       if (result.kind === 'ok') {
@@ -94,6 +102,10 @@ describe('compile', () => {
       });
 
       const result = compile(patch);
+
+      if (result.kind === 'error') {
+        console.error('COMPILE ERROR (GridDomain):', JSON.stringify(result.errors, null, 2));
+      }
 
       expect(result.kind).toBe('ok');
       if (result.kind === 'ok') {
@@ -114,6 +126,10 @@ describe('compile', () => {
       });
 
       const result = compile(patch);
+
+      if (result.kind === 'error') {
+        console.error('COMPILE ERROR (DomainN):', JSON.stringify(result.errors, null, 2));
+      }
 
       expect(result.kind).toBe('ok');
       if (result.kind === 'ok') {
@@ -140,6 +156,10 @@ describe('compile', () => {
 
       const result = compile(patch);
 
+      if (result.kind === 'error') {
+        console.error('COMPILE ERROR (FieldBroadcast):', JSON.stringify(result.errors, null, 2));
+      }
+
       expect(result.kind).toBe('ok');
       if (result.kind === 'ok') {
         // Should have field expressions in dense array
@@ -156,6 +176,10 @@ describe('compile', () => {
       });
 
       const result = compile(patch);
+
+      if (result.kind === 'error') {
+        console.error('COMPILE ERROR (NonExistentBlock):', JSON.stringify(result.errors, null, 2));
+      }
 
       expect(result.kind).toBe('error');
       if (result.kind === 'error') {

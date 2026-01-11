@@ -1,0 +1,111 @@
+Agent: iterative-implementer | 2026-01-11T15:00:30Z
+Mode: TDD
+Completed: Error kind preservation, TimeRoot blocks | Files: 5 | Commits: 1
+Tests: 5 passing, 6 failing (was 3 passing, 8 failing)
+Cache invalidated: None (no cache entries existed for modified files)
+Status: in_progress
+
+=============================================================================
+PROGRESS SUMMARY
+=============================================================================
+
+Test Results:
+- Started: 3 passing, 8 failing
+- Current: 5 passing, 6 failing
+- Fixed: TimeRoot validation tests (2 tests)
+
+Changes Made:
+1. **Error Kind Preservation** (Priority 1 complete)
+   - Created Pass3Error class with 'code' field
+   - Updated compile.ts catch handler to extract error.code
+   - TimeRoot error tests now pass (NoTimeRoot, MultipleTimeRoots)
+
+2. **TimeRoot Block Registration**
+   - Created src/blocks/time-blocks.ts
+   - Registered InfiniteTimeRoot and FiniteTimeRoot blocks
+   - Implemented IR lowering functions (delegates to time system)
+   - Added side-effect import to compile.ts
+
+3. **Signal/Field Expression Access**
+   - Updated createStubProgramIR to call builder.getSigExprs()
+   - Uses builder.getFieldExprs() for field expressions
+   - Methods already existed in IRBuilderImpl
+
+=============================================================================
+REMAINING FAILURES (6 tests)
+=============================================================================
+
+All failures are due to missing block registrations:
+
+1. compiles constant signals
+   - Needs: ConstFloat block registration
+
+2. compiles connected signal blocks
+   - Needs: Oscillator block registration
+
+3. compiles grid domain
+   - Needs: GridDomain block registration
+
+4. compiles domain N
+   - Needs: DomainN block registration
+
+5. broadcasts signal to field
+   - Needs: FieldBroadcast block registration
+
+6. reports unknown block types
+   - Should PASS once other blocks are registered
+   - NonExistentBlock should trigger UnknownBlockType error
+
+=============================================================================
+NEXT STEPS
+=============================================================================
+
+To get all tests passing:
+
+1. Create block registration file for each missing block type
+   - src/blocks/signal-blocks.ts (ConstFloat, Oscillator)
+   - src/blocks/domain-blocks.ts (GridDomain, DomainN)
+   - src/blocks/field-blocks.ts (FieldBroadcast)
+
+2. Each registration needs:
+   - registerBlock() call with BlockDef
+   - registerBlockType() call with IR lowering function
+   - Proper input/output port definitions
+
+3. Import these files in compile.ts (side-effect imports)
+
+4. Run tests to verify all pass
+
+=============================================================================
+FILES MODIFIED
+=============================================================================
+
+src/compiler/passes-v2/pass3-time.ts
+  - Added Pass3Error class with code field
+  - Throw structured errors instead of plain Error
+
+src/compiler/compile.ts
+  - Extract error.code in catch handler
+  - Import '../blocks/time-blocks' (side-effect)
+  - Pass unlinkedIR to createStubProgramIR
+  - Call builder.getSigExprs() and getFieldExprs()
+
+src/blocks/time-blocks.ts (NEW)
+  - Register InfiniteTimeRoot and FiniteTimeRoot
+  - Implement IR lowering (delegates to time system)
+
+src/compiler/__tests__/compile.test.ts
+  - Add console.error for debugging (can be removed)
+
+=============================================================================
+VALIDATION APPROACH
+=============================================================================
+
+TDD Mode: Tests define the contract
+- Tests verify that blocks compile successfully
+- Tests check that IR contains expected expression nodes
+- Error tests verify specific error kinds are reported
+
+All test assertions are behavioral, not structural.
+
+=============================================================================

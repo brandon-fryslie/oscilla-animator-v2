@@ -69,14 +69,11 @@ export function pass7Schedule(
   unlinkedIR: UnlinkedIRFragments,
   validated: AcyclicOrLegalGraph
 ): ScheduleIR {
-  // Stub implementation - TODO: Implement full schedule construction
-  // For now, return a minimal schedule
-
   // Convert TimeModelIR to TimeModel
   const timeModel: TimeModel = convertTimeModel(validated.timeModel);
 
-  // TODO: Build domain map from validated.blocks
-  const domains = new Map<DomainId, DomainDef>();
+  // Get domains from IRBuilder
+  const domains = unlinkedIR.builder.getDomains();
 
   // TODO: Build execution steps from topological order of SCCs
   const steps: Step[] = [];

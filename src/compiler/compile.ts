@@ -22,6 +22,9 @@ import type { EventHub } from '../events/EventHub';
 
 // Import block registrations (side-effect imports to register blocks)
 import '../blocks/time-blocks';
+import '../blocks/signal-blocks';
+import '../blocks/domain-blocks';
+import '../blocks/field-blocks';
 
 // Import passes
 import { pass2TypeGraph } from './passes-v2';
