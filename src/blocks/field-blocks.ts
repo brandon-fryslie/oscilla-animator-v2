@@ -7,6 +7,7 @@
 import { registerBlock } from './registry';
 import { registerBlockType } from '../compiler/ir/lowerTypes';
 import { signalType, signalTypeField } from '../core/canonical-types';
+import type { SigExprId } from '../compiler/ir/Indices';
 
 // =============================================================================
 // FieldBroadcast
@@ -43,7 +44,7 @@ registerBlockType({
     }
 
     // Create field broadcast operation
-    const fieldId = ctx.b.fieldBroadcast(signalValue.id, signalTypeField('float', 'default'));
+    const fieldId = ctx.b.fieldBroadcast(signalValue.id as SigExprId, signalTypeField('float', 'default'));
     const slot = ctx.b.allocSlot();
 
     return {

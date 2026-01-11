@@ -7,6 +7,8 @@
 import { registerBlock } from './registry';
 import { registerBlockType } from '../compiler/ir/lowerTypes';
 import { signalType } from '../core/canonical-types';
+import { OpCode } from '../compiler/ir/types';
+import type { SigExprId } from '../compiler/ir/Indices';
 
 // =============================================================================
 // ConstFloat
@@ -93,31 +95,30 @@ registerBlockType({
     const amplitude = (config?.amplitude as number) ?? 1.0;
     const offset = (config?.offset as number) ?? 0.0;
 
-    // Create oscillator signal expression
-    // For now, just use a basic wave generation
-    // Real implementation would use proper IR opcodes
-    const sigId = ctx.b.sigCall(
-      waveform,
-      [phaseValue.id],
-      signalType('float')
-    );
+    // Create oscillator signal expression using sigMap
+    // Map the waveform function over the phase input
+    const waveFn = ctx.b.kernel(waveform); // sin, cos, etc.
+    let sigId: SigExprId = ctx.b.sigMap(phaseValue.id as SigExprId, waveFn, signalType('float'));
 
-    // Apply amplitude and offset if not default
-    let finalSigId = sigId;
+    // Apply amplitude if not 1.0
     if (amplitude !== 1.0) {
       const ampConst = ctx.b.sigConst(amplitude, signalType('float'));
-      finalSigId = ctx.b.sigCall('mul', [finalSigId, ampConst], signalType('float'));
+      const mulFn = ctx.b.opcode(OpCode.Mul);
+      sigId = ctx.b.sigZip([sigId, ampConst], mulFn, signalType('float'));
     }
+
+    // Apply offset if not 0.0
     if (offset !== 0.0) {
       const offsetConst = ctx.b.sigConst(offset, signalType('float'));
-      finalSigId = ctx.b.sigCall('add', [finalSigId, offsetConst], signalType('float'));
+      const addFn = ctx.b.opcode(OpCode.Add);
+      sigId = ctx.b.sigZip([sigId, offsetConst], addFn, signalType('float'));
     }
 
     const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        out: { k: 'sig', id: finalSigId, slot },
+        out: { k: 'sig', id: sigId, slot },
       },
     };
   },

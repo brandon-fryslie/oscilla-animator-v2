@@ -15,7 +15,7 @@ import type {
   StateId,
 } from './Indices';
 import type { TimeModelIR } from './schedule';
-import type { PureFn, OpCode } from './types';
+import type { PureFn, OpCode, DomainDef } from './types';
 
 // =============================================================================
 // IRBuilder Interface
@@ -146,6 +146,9 @@ export interface IRBuilder {
     count: number,
     params?: Record<string, unknown>
   ): DomainId;
+
+  /** Get all registered domains. */
+  getDomains(): ReadonlyMap<DomainId, DomainDef>;
 
   // =========================================================================
   // Slots
