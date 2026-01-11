@@ -83,7 +83,7 @@ These need store interface updates but logic is portable:
 | LensChainEditor (1204 LOC) | V2 transforms are simpler |
 | HelpCenter (794 LOC) | Redesign for v2 mental model |
 | BusPicker | Buses implicit in type system |
-| Lane UI | No lanes in v2 |
+| Lane UI | No lanes in v2 |33
 
 ---
 

@@ -1,0 +1,252 @@
+/**
+ * BlockLibrary Styles
+ *
+ * Dark theme styling aligned with v2 color palette.
+ * Simplified from v1: no tier/subcategory nesting, no drag-drop styles.
+ */
+
+.block-library {
+  width: 100%;
+  height: 100%;
+  background: #0f0f23; /* colors.bgContent */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ============================================================================
+ * Header
+ * ========================================================================== */
+
+.library-header {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #0f3460; /* colors.border */
+  background: #16213e; /* colors.bgPanel */
+  flex-shrink: 0;
+}
+
+.library-header h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #eee; /* colors.textPrimary */
+}
+
+/* Search input container */
+.library-search-container {
+  position: relative;
+  width: 100%;
+}
+
+.library-search {
+  width: 100%;
+  padding: 0.5rem 2rem 0.5rem 0.5rem; /* Right padding for clear button */
+  background: #0f0f23; /* colors.bgContent */
+  border: 1px solid #0f3460; /* colors.border */
+  border-radius: 4px;
+  color: #eee; /* colors.textPrimary */
+  font-size: 0.8125rem;
+  outline: none;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.library-search:focus {
+  border-color: #4ecdc4; /* colors.primary */
+}
+
+.library-search::placeholder {
+  color: #666; /* colors.textMuted */
+}
+
+/* Clear button */
+.library-search-clear {
+  position: absolute;
+  right: 0.25rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #888; /* colors.textSecondary */
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.875rem;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.library-search-clear:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: #eee; /* colors.textPrimary */
+}
+
+/* Result count */
+.library-result-count {
+  margin-top: 0.5rem;
+  font-size: 0.7rem;
+  color: #888; /* colors.textSecondary */
+}
+
+/* ============================================================================
+ * Categories Container
+ * ========================================================================== */
+
+.library-categories {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0.5rem;
+  min-height: 0;
+}
+
+/* Custom scrollbar styling (matches InspectorContainer) */
+.library-categories::-webkit-scrollbar {
+  width: 8px;
+}
+
+.library-categories::-webkit-scrollbar-track {
+  background-color: #0f0f23; /* colors.bgContent */
+}
+
+.library-categories::-webkit-scrollbar-thumb {
+  background-color: #0f3460; /* colors.border */
+  border-radius: 4px;
+}
+
+.library-categories::-webkit-scrollbar-thumb:hover {
+  background-color: #4ecdc4; /* colors.primary */
+}
+
+/* ============================================================================
+ * Category Section
+ * ========================================================================== */
+
+.category {
+  margin-bottom: 0.5rem;
+}
+
+.category-header {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem;
+  cursor: pointer;
+  background: #16213e; /* colors.bgPanel */
+  border-radius: 4px;
+  margin-bottom: 0.25rem;
+  user-select: none;
+  transition: background 0.15s;
+}
+
+.category-header:hover {
+  background: #1a2847; /* Slightly lighter than bgPanel */
+}
+
+.category-chevron {
+  margin-right: 0.5rem;
+  color: #888; /* colors.textSecondary */
+  font-family: monospace;
+  font-size: 0.875rem;
+  width: 1rem;
+  text-align: center;
+}
+
+.category-label {
+  flex: 1;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #eee; /* colors.textPrimary */
+}
+
+.category-count {
+  font-size: 0.75rem;
+  color: #888; /* colors.textSecondary */
+  background: #0f0f23; /* colors.bgContent */
+  padding: 0.125rem 0.5rem;
+  border-radius: 12px;
+}
+
+/* ============================================================================
+ * Block Items
+ * ========================================================================== */
+
+.category-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding-left: 1rem;
+}
+
+.block-item {
+  padding: 0.5rem;
+  background: #0f0f23; /* colors.bgContent */
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.block-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.block-item.selected {
+  background: #2a3a4a;
+  border-color: #4ecdc4; /* colors.primary */
+}
+
+.block-item.keyboard-focused {
+  outline: 2px solid #4ecdc4; /* colors.primary */
+  outline-offset: -2px;
+}
+
+/* Block label (bold) */
+.block-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #4ecdc4; /* colors.primary */
+  margin-bottom: 0.25rem;
+}
+
+/* Block type (monospace) */
+.block-type {
+  font-size: 0.7rem;
+  font-family: 'Courier New', monospace;
+  color: #888; /* colors.textSecondary */
+  margin-bottom: 0.25rem;
+}
+
+/* Block description (gray, truncated) */
+.block-description {
+  font-size: 0.7rem;
+  color: #666; /* colors.textMuted */
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Port counts */
+.block-ports {
+  font-size: 0.65rem;
+  color: #888; /* colors.textSecondary */
+  margin-top: 0.25rem;
+}
+
+/* ============================================================================
+ * Empty State
+ * ========================================================================== */
+
+.category-empty {
+  padding: 0.5rem 1rem;
+  color: #666; /* colors.textMuted */
+  font-size: 0.7rem;
+  font-style: italic;
+}
+
+.library-no-results {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: #666; /* colors.textMuted */
+  font-size: 0.875rem;
+}
