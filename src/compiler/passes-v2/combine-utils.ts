@@ -248,7 +248,7 @@ export function createCombineNode(
     } else if (ref.k === "field") {
       fieldTerms.push(ref.id);
     } else if (ref.k === "event") {
-      eventTerms.push(ref.id);
+      eventTerms.push(ref.id as EventExprId);
     }
   }
 

@@ -60,7 +60,7 @@ export type CompileResult = CompileSuccess | CompileFailure;
 
 export interface CompileOptions {
   readonly patchId?: string;
-  readonly patchRevision?: string;
+  readonly patchRevision?: number;
   readonly events: EventHub;
 }
 
@@ -76,16 +76,17 @@ export interface CompileOptions {
  * @returns CompileResult with either the compiled program or errors
  */
 export function compile(patch: Patch, options?: CompileOptions): CompileResult {
-  const compileId = options?.patchId ? `${options.patchId}:${options.patchRevision || 'latest'}` : 'unknown';
+  const compileId = options?.patchId ? `${options.patchId}:${options.patchRevision || 0}` : 'unknown';
   const startTime = performance.now();
 
-  // Emit CompileStart event
+  // Emit CompileBegin event
   if (options) {
     options.events.emit({
-      type: 'CompileStart',
+      type: 'CompileBegin',
       compileId,
       patchId: options.patchId || 'unknown',
-      patchRevision: options.patchRevision || 'latest',
+      patchRevision: options.patchRevision || 0,
+      trigger: 'manual',
     });
   }
 
@@ -140,7 +141,7 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
         type: 'CompileEnd',
         compileId,
         patchId: options.patchId || 'unknown',
-        patchRevision: options.patchRevision || 'latest',
+        patchRevision: options.patchRevision || 0,
         status: 'success',
         durationMs,
         diagnostics: [],
@@ -175,12 +176,12 @@ function emitFailure(
 ): CompileFailure {
   if (options) {
     const durationMs = performance.now() - startTime;
-    const diagnostics = convertCompileErrorsToDiagnostics(errors);
+    const diagnostics = convertCompileErrorsToDiagnostics(errors, options.patchRevision || 0, compileId);
     options.events.emit({
       type: 'CompileEnd',
       compileId,
       patchId: options.patchId || 'unknown',
-      patchRevision: options.patchRevision || 'latest',
+      patchRevision: options.patchRevision || 0,
       status: 'failure',
       durationMs,
       diagnostics,
@@ -206,10 +207,12 @@ function createStubProgramIR(scheduleIR: any): CompiledProgramIR {
     constants: { json: [] },
     schedule: scheduleIR as any,
     outputs: [],
-    slotMeta: new Map(),
+    slotMeta: [],
     debugIndex: {
-      blockIndex: new Map(),
-      sigExprToBlock: new Map(),
+      stepToBlock: new Map(),
+      slotToBlock: new Map(),
+      ports: [],
+      slotToPort: new Map(),
     },
   };
 }

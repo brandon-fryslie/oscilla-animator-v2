@@ -70,15 +70,15 @@ function extractTimeModel(
 function generateTimeSignals(timeModel: TimeModelIR): TimeSignals {
   const builder = new IRBuilderImpl();
 
-  // All models have tModelMs - r1 (scalar real number)
-  const tModelMs = builder.sigTime('tMs', signalType('r'));
+  // All models have tModelMs - float scalar
+  const tModelMs = builder.sigTime('tMs', signalType('float'));
 
-  // All models have phaseA and phaseB - r1 (scalar real number)
-  const phaseA = builder.sigTime('phaseA', signalType('r'));
-  const phaseB = builder.sigTime('phaseB', signalType('r'));
+  // All models have phaseA and phaseB - float scalar
+  const phaseA = builder.sigTime('phaseA', signalType('float'));
+  const phaseB = builder.sigTime('phaseB', signalType('float'));
 
   if (timeModel.kind === "finite") {
-    const progress01 = builder.sigTime('progress', signalType('r'));
+    const progress01 = builder.sigTime('progress', signalType('float'));
     return { tModelMs, phaseA, phaseB, progress01 };
   }
 

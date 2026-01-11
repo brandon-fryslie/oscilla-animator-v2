@@ -20,9 +20,9 @@ import type {
   Edge,
   Slot,
   Block,
-  TypeDesc,
+  SignalType,
 } from '../../types';
-import { getBlockDefinition } from '../../blocks/registry';
+import { getBlockDefinition, type InputDef } from '../../blocks/registry';
 import type { CombinePolicy } from './combine-utils';
 
 // =============================================================================
@@ -56,7 +56,7 @@ export interface ResolvedInputSpec {
   readonly endpoint: InputEndpoint;
 
   /** Type of the input port */
-  readonly portType: TypeDesc;
+  readonly portType: SignalType;
 
   /** All writers to this input (length >= 1 after defaults injected) */
   readonly writers: readonly Writer[];
@@ -177,7 +177,7 @@ export function getDefaultCombinePolicy(): CombinePolicy {
  * @param _inputSlot - The input slot definition (unused after Slot.combine removal)
  * @returns Combine policy (always default)
  */
-export function resolveCombinePolicy(_inputSlot: Slot): CombinePolicy {
+export function resolveCombinePolicy(_input: InputDef): CombinePolicy {
   return getDefaultCombinePolicy();
 }
 
@@ -222,7 +222,7 @@ export function resolveBlockInputs(
     // Resolve combine policy
     const combine = resolveCombinePolicy(inputSlot);
 
-    // Get port type - inputSlot.type is now TypeDesc object
+    // Get port type - inputSlot.type is SignalType
     const portType = inputSlot.type;
 
     // Build resolved spec
@@ -261,7 +261,7 @@ export function resolveInput(
   // Resolve combine policy
   const combine = resolveCombinePolicy(inputSlot);
 
-  // Get port type - inputSlot.type is now TypeDesc object
+  // Get port type - inputSlot.type is SignalType
   const portType = inputSlot.type;
 
   return {
