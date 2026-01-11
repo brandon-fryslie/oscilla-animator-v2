@@ -1,6 +1,6 @@
 # Oscilla Animator v2 - Project Roadmap
 
-Last updated: 2026-01-10-160000
+Last updated: 2026-01-11-044500
 
 ---
 
@@ -96,7 +96,7 @@ Last updated: 2026-01-10-160000
 
 ---
 
-## 🟢 Phase 2: Rendering & UI [ACTIVE] (2/5 completed)
+## 🟢 Phase 2: Rendering & UI [ACTIVE] (3/6 completed)
 
 **Goal:** Implement rendering pipeline and basic UI for patch editing
 
@@ -112,6 +112,17 @@ Last updated: 2026-01-10-160000
 - **Completed:** 2026-01-09
 - **Summary:** Three-column layout with tabs, toolbar, sidebars. Canvas preview + Patch diagram in center. Inspector, debug, help panels. 146 tests passing. 60 FPS animation.
 - **Planning Files:** `.agent_planning/ui-framework/`
+
+#### ✅ diagnostics-system [COMPLETED]
+- **State:** COMPLETED (Sprint 1)
+- **Epic:** None
+- **Spec:** `design-docs/CANONICAL-oscilla-v2.5-20260109/topics/07-diagnostics-system.md`
+- **Description:** Event-driven diagnostics with stable IDs, EventHub coordination, compile/authoring/runtime streams
+- **Completed:** 2026-01-11
+- **Sprint 1 Summary:** Core infrastructure complete - EventHub, DiagnosticHub, TargetRef (7 kinds), stable diagnostic IDs, authoring validators (<10ms), compiler integration, DiagnosticConsole UI. 206 tests passing. All 15 acceptance criteria met.
+- **Planning Files:** `.agent_planning/diagnostics-system/`
+- **Sprint 2 Planned:** Runtime diagnostics (NaN/performance monitoring), bus warnings, quick fixes, UI badges
+- **Architecture:** Event-driven with five-event contract (GraphCommitted, CompileBegin, CompileEnd, ProgramSwapped, RuntimeHealthSnapshot). Snapshot semantics for compile/authoring (replace), runtime (merge with expiry).
 
 #### 🔄 ui-features-v2 [IN PROGRESS]
 - **State:** IN PROGRESS
