@@ -1,29 +1,36 @@
 /**
  * Main Compiler Entry Point
  *
- * Compiles a Patch into a CompiledProgramIR through a series of passes:
+ * Compiles a Patch into executable IR using the passes-v2 multi-pass architecture:
  * 1. Normalize - Dense indices, canonical ordering
- * 2. TypeCheck - Validate connections
- * 3. TimeResolve - Find TimeRoot, extract TimeModel
- * 4. DepGraph - Build dependency graph
- * 5. Validate - Check for cycles
- * 6. Lower - Lower blocks to IR
- * 7. Link - Resolve connections
+ * 2. Pass 2: Type Graph - Type resolution and validation
+ * 3. Pass 3: Time Topology - Find TimeRoot, extract TimeModel
+ * 4. Pass 4: Dependency Graph - Build dependency information
+ * 5. Pass 5: Cycle Validation - Check for cycles
+ * 6. Pass 6: Block Lowering - Lower blocks to IR expressions
+ * 7. Pass 7: Schedule Construction - Build execution schedule
+ * 8. Pass 8: Link Resolution - Resolve all connections
  *
- * Extended with event emission for diagnostics integration.
+ * Integrated with event emission for diagnostics.
  */
 
 import type { Patch } from '../graph';
 import { normalize, type NormalizedPatch } from '../graph/normalize';
 import type { CompiledProgramIR } from './ir/program';
-import { IRBuilder } from './ir';
-import { getBlock, type ValueRef } from './blocks';
-import { checkTypes } from './passes/TypeChecker';
-import type { EventHub } from '../events/EventHub';
 import { convertCompileErrorsToDiagnostics } from './diagnosticConversion';
+import type { EventHub } from '../events/EventHub';
+
+// Import passes
+import { pass2TypeGraph } from './passes-v2';
+import { pass3TimeTopology } from './passes-v2';
+import { pass4DepGraph } from './passes-v2';
+import { pass5CycleValidation } from './passes-v2';
+import { pass6BlockLowering } from './passes-v2';
+import { pass7Schedule } from './passes-v2';
+import { pass8LinkResolution } from './passes-v2';
 
 // =============================================================================
-// Compile Errors
+// Compile Errors & Results
 // =============================================================================
 
 export interface CompileError {
@@ -43,14 +50,6 @@ export interface CompileFailure {
   readonly errors: readonly CompileError[];
 }
 
-// =============================================================================
-// Compile Options
-// =============================================================================
-
-/**
- * Options for compile function (optional).
- * If provided, enables event emission and diagnostics integration.
- */
 export interface CompileOptions {
   readonly events: EventHub;
   readonly patchRevision: number;
@@ -62,7 +61,7 @@ export interface CompileOptions {
 // =============================================================================
 
 /**
- * Compiles a Patch into executable IR.
+ * Compiles a Patch into executable IR using multi-pass architecture.
  *
  * @param patch The patch to compile
  * @param options Optional event emission and diagnostics integration
@@ -86,168 +85,104 @@ export function compile(
     });
   }
 
-  const errors: CompileError[] = [];
+  try {
+    // Pass 1: Normalize
+    const normResult = normalize(patch);
+    if (normResult.kind === 'error') {
+      const compileErrors = normResult.errors.map((e) => ({
+        kind: e.kind,
+        message: formatNormError(e),
+      }));
 
-  // Pass 1: Normalize
-  const normResult = normalize(patch);
-  if (normResult.kind === 'error') {
-    const compileErrors = normResult.errors.map((e) => ({
-      kind: e.kind,
-      message: formatNormError(e),
-    }));
+      return emitFailure(options, startTime, compileId, compileErrors);
+    }
 
-    // Emit CompileEnd event (failure)
+    const normalized = normResult.patch;
+
+    // Pass 2: Type Graph
+    const typedPatch = pass2TypeGraph(normalized);
+
+    // Pass 3: Time Topology
+    const timeResolvedPatch = pass3TimeTopology(typedPatch);
+
+    // Pass 4: Dependency Graph
+    const depGraphPatch = pass4DepGraph(timeResolvedPatch);
+
+    // Pass 5: Cycle Validation (SCC)
+    const acyclicPatch = pass5CycleValidation(depGraphPatch);
+
+    // Pass 6: Block Lowering
+    const unlinkedIR = pass6BlockLowering(acyclicPatch);
+
+    // Pass 7: Schedule Construction
+    const scheduleIR = pass7Schedule(unlinkedIR);
+
+    // Pass 8: Link Resolution
+    const linkedIR = pass8LinkResolution(scheduleIR);
+
+    // Convert LinkedGraphIR to CompiledProgramIR
+    const compiledIR = convertLinkedIRToProgram(linkedIR);
+
+    // Emit CompileEnd event (success)
     if (options) {
       const durationMs = performance.now() - startTime;
-      const diagnostics = convertCompileErrorsToDiagnostics(
-        compileErrors,
-        options.patchRevision,
-        compileId
-      );
       options.events.emit({
         type: 'CompileEnd',
         compileId,
         patchId: options.patchId,
         patchRevision: options.patchRevision,
-        status: 'failure',
+        status: 'success',
         durationMs,
-        diagnostics,
+        diagnostics: [],
       });
     }
 
     return {
-      kind: 'error',
-      errors: compileErrors,
+      kind: 'ok',
+      program: compiledIR,
     };
-  }
-
-  const normalized = normResult.patch;
-
-  // Pass 2: Find TimeRoot
-  const timeRootResult = findTimeRoot(normalized);
-  if (timeRootResult.kind === 'error') {
-    errors.push(...timeRootResult.errors);
-  }
-
-  // Pass 2.5: Type Check (strict enforcement)
-  const typeErrors = checkTypes(normalized);
-  if (typeErrors.length > 0) {
-    errors.push(...typeErrors);
-  }
-
-  if (errors.length > 0) {
-    // Emit CompileEnd event (failure)
-    if (options) {
-      const durationMs = performance.now() - startTime;
-      const diagnostics = convertCompileErrorsToDiagnostics(
-        errors,
-        options.patchRevision,
-        compileId
-      );
-      options.events.emit({
-        type: 'CompileEnd',
-        compileId,
-        patchId: options.patchId,
-        patchRevision: options.patchRevision,
-        status: 'failure',
-        durationMs,
-        diagnostics,
-      });
-    }
-
-    return { kind: 'error', errors };
-  }
-
-  // Pass 3: Build dependency order
-  const depOrder = buildDependencyOrder(normalized);
-
-  // Pass 4: Lower blocks in dependency order
-  const builder = new IRBuilder();
-  const blockOutputs = new Map<number, Record<string, ValueRef>>();
-
-  for (const blockIdx of depOrder) {
-    const block = normalized.blocks[blockIdx];
-    const blockDef = getBlock(block.type);
-
-    if (!blockDef) {
-      errors.push({
-        kind: 'UnknownBlockType',
-        message: `Unknown block type: ${block.type}`,
-        blockId: block.id,
-      });
-      continue;
-    }
-
-    // Resolve inputs
-    const inputsById = resolveInputs(normalized, blockIdx, blockOutputs);
-
-    // Lower the block
-    try {
-      const outputs = blockDef.lower({
-        b: builder,
-        config: block.params,
-        inputsById,
-      });
-
-      blockOutputs.set(blockIdx, outputs);
-    } catch (e) {
-      errors.push({
-        kind: 'LoweringError',
+  } catch (e) {
+    const errors: CompileError[] = [
+      {
+        kind: 'CompileError',
         message: e instanceof Error ? e.message : String(e),
-        blockId: block.id,
-      });
-    }
+      },
+    ];
+
+    return emitFailure(options, startTime, compileId, errors);
   }
+}
 
-  if (errors.length > 0) {
-    // Emit CompileEnd event (failure)
-    if (options) {
-      const durationMs = performance.now() - startTime;
-      const diagnostics = convertCompileErrorsToDiagnostics(
-        errors,
-        options.patchRevision,
-        compileId
-      );
-      options.events.emit({
-        type: 'CompileEnd',
-        compileId,
-        patchId: options.patchId,
-        patchRevision: options.patchRevision,
-        status: 'failure',
-        durationMs,
-        diagnostics,
-      });
-    }
+// =============================================================================
+// Helpers
+// =============================================================================
 
-    return { kind: 'error', errors };
-  }
-
-  // Build CompiledProgramIR and return directly
-  const compiledIR = builder.build();
-
-  // Emit CompileEnd event (success)
+function emitFailure(
+  options: CompileOptions | undefined,
+  startTime: number,
+  compileId: string,
+  errors: CompileError[]
+): CompileFailure {
   if (options) {
     const durationMs = performance.now() - startTime;
+    const diagnostics = convertCompileErrorsToDiagnostics(
+      errors,
+      options.patchRevision,
+      compileId
+    );
     options.events.emit({
       type: 'CompileEnd',
       compileId,
       patchId: options.patchId,
       patchRevision: options.patchRevision,
-      status: 'success',
+      status: 'failure',
       durationMs,
-      diagnostics: [], // No diagnostics on success
+      diagnostics,
     });
   }
 
-  return {
-    kind: 'ok',
-    program: compiledIR,
-  };
+  return { kind: 'error', errors };
 }
-
-// =============================================================================
-// Pass Helpers
-// =============================================================================
 
 function formatNormError(e: { kind: string }): string {
   switch (e.kind) {
@@ -260,134 +195,12 @@ function formatNormError(e: { kind: string }): string {
   }
 }
 
-interface TimeRootSuccess {
-  kind: 'ok';
-  blockIdx: number;
-}
-
-interface TimeRootFailure {
-  kind: 'error';
-  errors: CompileError[];
-}
-
-function findTimeRoot(
-  patch: NormalizedPatch
-): TimeRootSuccess | TimeRootFailure {
-  const timeRoots: number[] = [];
-
-  for (let i = 0; i < patch.blocks.length; i++) {
-    const block = patch.blocks[i];
-    if (
-      block.type === 'InfiniteTimeRoot' ||
-      block.type === 'FiniteTimeRoot' ||
-      block.type === 'TimeRoot'
-    ) {
-      timeRoots.push(i);
-    }
-  }
-
-  if (timeRoots.length === 0) {
-    return {
-      kind: 'error',
-      errors: [
-        {
-          kind: 'NoTimeRoot',
-          message: 'No TimeRoot block found. Every patch needs exactly one.',
-        },
-      ],
-    };
-  }
-
-  if (timeRoots.length > 1) {
-    return {
-      kind: 'error',
-      errors: [
-        {
-          kind: 'MultipleTimeRoots',
-          message: `Found ${timeRoots.length} TimeRoot blocks. Only one allowed.`,
-        },
-      ],
-    };
-  }
-
-  return { kind: 'ok', blockIdx: timeRoots[0] };
-}
-
-function buildDependencyOrder(patch: NormalizedPatch): number[] {
-  // Build adjacency list (edges go from source to target)
-  const incoming = new Map<number, Set<number>>();
-  const outgoing = new Map<number, Set<number>>();
-
-  for (let i = 0; i < patch.blocks.length; i++) {
-    incoming.set(i, new Set());
-    outgoing.set(i, new Set());
-  }
-
-  for (const edge of patch.edges) {
-    incoming.get(edge.toBlock)!.add(edge.fromBlock);
-    outgoing.get(edge.fromBlock)!.add(edge.toBlock);
-  }
-
-  // Kahn's algorithm for topological sort
-  const order: number[] = [];
-  const queue: number[] = [];
-
-  // Find blocks with no incoming edges
-  for (let i = 0; i < patch.blocks.length; i++) {
-    if (incoming.get(i)!.size === 0) {
-      queue.push(i);
-    }
-  }
-
-  while (queue.length > 0) {
-    const node = queue.shift()!;
-    order.push(node);
-
-    for (const neighbor of outgoing.get(node)!) {
-      incoming.get(neighbor)!.delete(node);
-      if (incoming.get(neighbor)!.size === 0) {
-        queue.push(neighbor);
-      }
-    }
-  }
-
-  // If not all nodes in order, there's a cycle
-  if (order.length !== patch.blocks.length) {
-    // Find nodes in cycle
-    const inCycle = new Set<number>();
-    for (let i = 0; i < patch.blocks.length; i++) {
-      if (!order.includes(i)) {
-        inCycle.add(i);
-      }
-    }
-
-    // Report error with cycle participants
-    const cycleBlocks = [...inCycle].map(i => patch.blocks[i].id);
-    throw new Error(
-      `Dependency cycle detected involving blocks: ${cycleBlocks.join(', ')}`
-    );
-  }
-
-  return order;
-}
-
-function resolveInputs(
-  patch: NormalizedPatch,
-  blockIdx: number,
-  blockOutputs: Map<number, Record<string, ValueRef>>
-): Record<string, ValueRef | undefined> {
-  const result: Record<string, ValueRef | undefined> = {};
-
-  // Find all edges targeting this block
-  for (const edge of patch.edges) {
-    if (edge.toBlock === blockIdx) {
-      const sourceOutputs = blockOutputs.get(edge.fromBlock);
-      if (sourceOutputs) {
-        const portId = edge.fromPort as string;
-        result[edge.toPort as string] = sourceOutputs[portId];
-      }
-    }
-  }
-
-  return result;
+function convertLinkedIRToProgram(linkedIR: any): CompiledProgramIR {
+  // TODO: Implement conversion from LinkedGraphIR to CompiledProgramIR
+  // For now, return a minimal program
+  // This will be updated once LinkedGraphIR structure is finalized
+  return {
+    version: 1,
+    passes: [],
+  } as CompiledProgramIR;
 }

@@ -6,22 +6,34 @@
 
 import type { TypedPatch, TimeResolvedPatch, TimeSignals } from "../ir/patches";
 import type { TimeModelIR } from "../ir/schedule";
+import type { Block } from "../../graph/Patch";
 import { IRBuilderImpl } from "../ir/IRBuilderImpl";
+import { signalType } from "../../core/canonical-types";
 
 /**
  * Pass 3: Resolve time topology and generate time signals.
  */
 export function pass3TimeTopology(
-  typed: TypedPatch,
-  errors: string[]
+  typed: TypedPatch
 ): TimeResolvedPatch {
-  // Find TimeRoot block
-  const timeRoot = typed.normalizedPatch.blocks.find(
-    (b) => b.kind === "InfiniteTimeRoot" || b.kind === "FiniteTimeRoot" || b.kind === "TimeRoot"
+  // Find all TimeRoot blocks
+  const timeRoots = typed.blocks.filter(
+    (b: Block) => b.type === "InfiniteTimeRoot" || b.type === "FiniteTimeRoot" || b.type === "TimeRoot"
   );
 
+  // Validate TimeRoot count
+  if (timeRoots.length === 0) {
+    throw new Error("NoTimeRoot: Patch must have exactly one TimeRoot block");
+  }
+
+  if (timeRoots.length > 1) {
+    throw new Error(`MultipleTimeRoots: Patch has ${timeRoots.length} TimeRoot blocks`);
+  }
+
+  const timeRoot = timeRoots[0];
+
   // Determine time model
-  const timeModel = extractTimeModel(timeRoot, errors);
+  const timeModel = extractTimeModel(timeRoot);
 
   // Generate time signals
   const timeSignals = generateTimeSignals(timeModel);
@@ -37,19 +49,13 @@ export function pass3TimeTopology(
  * Extract time model from TimeRoot block.
  */
 function extractTimeModel(
-  timeRoot: { kind: string; params?: Record<string, unknown> } | undefined,
-  errors: string[]
+  timeRoot: Block
 ): TimeModelIR {
-  if (!timeRoot) {
-    // Default to infinite if no TimeRoot
-    return { kind: "infinite" };
-  }
-
   // FiniteTimeRoot block
-  if (timeRoot.kind === "FiniteTimeRoot") {
+  if (timeRoot.type === "FiniteTimeRoot") {
     const durationMs = (timeRoot.params?.durationMs as number) ?? 10000;
     if (durationMs <= 0) {
-      errors.push(`Invalid FiniteTimeRoot duration: ${durationMs}ms`);
+      throw new Error(`Pass 3 (Time Topology) failed: Invalid FiniteTimeRoot duration: ${durationMs}ms`);
     }
     return { kind: "finite", durationMs: Math.max(1, durationMs) };
   }
@@ -64,15 +70,15 @@ function extractTimeModel(
 function generateTimeSignals(timeModel: TimeModelIR): TimeSignals {
   const builder = new IRBuilderImpl();
 
-  // All models have tModelMs
-  const tModelMs = builder.sigTimeModelMs();
+  // All models have tModelMs - scalar time signal
+  const tModelMs = builder.sigTime('tMs', signalType('r1'));
 
-  // All models have phaseA and phaseB
-  const phaseA = builder.sigPhase01();
-  const phaseB = builder.sigPhase01(); // Second phase
+  // All models have phaseA and phaseB - scalar phase signals
+  const phaseA = builder.sigTime('phaseA', signalType('r1'));
+  const phaseB = builder.sigTime('phaseB', signalType('r1'));
 
   if (timeModel.kind === "finite") {
-    const progress01 = builder.sigProgress01();
+    const progress01 = builder.sigTime('progress', signalType('r1'));
     return { tModelMs, phaseA, phaseB, progress01 };
   }
 

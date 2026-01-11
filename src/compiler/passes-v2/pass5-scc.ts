@@ -13,16 +13,17 @@
  * - https://en.wikipedia.org/wiki/Tarjan%27s_strongly_connected_components_algorithm
  */
 
-import type { DepGraphWithTimeModel } from "./pass4-depgraph";
-import type { Block } from "../../types";
 import type {
+  DepGraphWithTimeModel,
   DepGraph,
   DepNode,
   SCC,
   AcyclicOrLegalGraph,
   IllegalCycleError,
   BlockIndex,
-} from "../ir";
+} from "../ir/patches";
+import type { Block } from "../../graph/Patch";
+import { getBlockDefinition } from "../../blocks/registry";
 
 /**
  * Tarjan's SCC algorithm state.
@@ -30,171 +31,18 @@ import type {
 interface TarjanState {
   index: number;
   stack: DepNode[];
-  indices: Map<string, number>;
-  lowlinks: Map<string, number>;
-  onStack: Set<string>;
+  indices: Map<DepNode, number>;
+  lowlinks: Map<DepNode, number>;
+  onStack: Set<DepNode>;
   sccs: SCC[];
 }
 
 /**
- * Create a unique key for a DepNode.
+ * Run Tarjan's strongly connected components algorithm.
  *
- * NOTE: DepNode is now only BlockEval (bus nodes removed in Edge migration).
- */
-function nodeKey(node: DepNode): string {
-  return `block:${node.blockIndex}`;
-}
-
-/**
- * Check if two DepNodes are equal.
- */
-function nodesEqual(a: DepNode, b: DepNode): boolean {
-  if (a.kind !== b.kind) {
-    return false;
-  }
-
-  // Only BlockEval nodes exist now
-  if (a.kind === "BlockEval" && b.kind === "BlockEval") {
-    return a.blockIndex === b.blockIndex;
-  }
-
-  return false;
-}
-
-/**
- * Get successors of a node in the dependency graph.
- */
-function getSuccessors(graph: DepGraph, node: DepNode): DepNode[] {
-  return graph.edges
-    .filter((e) => nodesEqual(e.from, node))
-    .map((e) => e.to);
-}
-
-/**
- * Check if a node has a self-loop.
- */
-function hasSelfLoop(graph: DepGraph, node: DepNode): boolean {
-  return graph.edges.some(
-    (e) => nodesEqual(e.from, node) && nodesEqual(e.to, node)
-  );
-}
-
-/**
- * Tarjan's strongConnect recursive function.
- */
-function strongConnect(
-  graph: DepGraph,
-  node: DepNode,
-  state: TarjanState,
-  blocks: readonly Block[]
-): void {
-  const key = nodeKey(node);
-
-  // Set the depth index for this node
-  state.indices.set(key, state.index);
-  state.lowlinks.set(key, state.index);
-  state.index++;
-  state.stack.push(node);
-  state.onStack.add(key);
-
-  // Consider successors of node
-  for (const successor of getSuccessors(graph, node)) {
-    const successorKey = nodeKey(successor);
-
-    if (!state.indices.has(successorKey)) {
-      // Successor has not yet been visited; recurse on it
-      strongConnect(graph, successor, state, blocks);
-      state.lowlinks.set(
-        key,
-        Math.min(state.lowlinks.get(key)!, state.lowlinks.get(successorKey)!)
-      );
-    } else if (state.onStack.has(successorKey)) {
-      // Successor is in stack and hence in the current SCC
-      state.lowlinks.set(
-        key,
-        Math.min(state.lowlinks.get(key)!, state.indices.get(successorKey)!)
-      );
-    }
-  }
-
-  // If node is a root node, pop the stack and generate an SCC
-  if (state.lowlinks.get(key) === state.indices.get(key)) {
-    const sccNodes: DepNode[] = [];
-    let w: DepNode;
-
-    do {
-      w = state.stack.pop()!;
-      state.onStack.delete(nodeKey(w));
-      sccNodes.push(w);
-    } while (!nodesEqual(w, node));
-
-    // Check if this SCC has a state boundary
-    const hasStateBoundary = checkStateBoundary(sccNodes, blocks, graph);
-
-    state.sccs.push({
-      nodes: sccNodes,
-      hasStateBoundary,
-    });
-  }
-}
-
-/**
- * Check if an SCC has a state boundary.
- *
- * A state boundary is a BlockEval node where the corresponding block
- * has a "state" capability and breaksCombinatorialCycle === true.
- *
- * For now, we'll use a simple heuristic: blocks with "state" in their type name.
- * TODO: Add proper capability checking via block registry.
- */
-function checkStateBoundary(
-  sccNodes: readonly DepNode[],
-  blocks: readonly Block[],
-  graph: DepGraph
-): boolean {
-  // Trivial SCCs (size 1, no self-loop) don't need state boundaries
-  if (sccNodes.length === 1 && !hasSelfLoop(graph, sccNodes[0])) {
-    return true; // Trivial SCC is always valid
-  }
-
-  // Check if any node in the SCC is a state boundary
-  for (const node of sccNodes) {
-    if (node.kind === "BlockEval") {
-      const block = blocks[node.blockIndex];
-      if (isStateBoundaryBlock(block)) {
-        return true;
-      }
-    }
-  }
-
-  return false;
-}
-
-/**
- * Check if a block is a state boundary.
- *
- * State boundary blocks have:
- * - Type containing "Delay", "Integrator", "Feedback", or "State"
- * - Or explicit subcategory "State"
- *
- * TODO: Replace with proper capability checking via block registry.
- */
-function isStateBoundaryBlock(block: Block): boolean {
-  // Check block type for state-related names
-  const stateTypePatterns = [
-    /delay/i,
-    /integrator/i,
-    /feedback/i,
-    /state/i,
-    /sample/i,
-    /hold/i,
-  ];
-
-  return stateTypePatterns.some((pattern) => pattern.test(block.type));
-}
-
-/**
- * Run Tarjan's SCC algorithm on the dependency graph.
+ * @param graph - The dependency graph
+ * @param blocks - The blocks (for state boundary checking)
+ * @returns Array of SCCs with state boundary information
  */
 function tarjanSCC(graph: DepGraph, blocks: readonly Block[]): SCC[] {
   const state: TarjanState = {
@@ -206,11 +54,10 @@ function tarjanSCC(graph: DepGraph, blocks: readonly Block[]): SCC[] {
     sccs: [],
   };
 
-  // Visit all nodes
+  // Visit each node
   for (const node of graph.nodes) {
-    const key = nodeKey(node);
-    if (!state.indices.has(key)) {
-      strongConnect(graph, node, state, blocks);
+    if (!state.indices.has(node)) {
+      strongConnect(node, graph, blocks, state);
     }
   }
 
@@ -218,20 +65,103 @@ function tarjanSCC(graph: DepGraph, blocks: readonly Block[]): SCC[] {
 }
 
 /**
- * Pass 5: Cycle Validation (SCC)
+ * Tarjan's strongConnect procedure.
+ */
+function strongConnect(
+  v: DepNode,
+  graph: DepGraph,
+  blocks: readonly Block[],
+  state: TarjanState
+): void {
+  // Set the depth index for v to the smallest unused index
+  state.indices.set(v, state.index);
+  state.lowlinks.set(v, state.index);
+  state.index++;
+  state.stack.push(v);
+  state.onStack.add(v);
+
+  // Consider successors of v
+  for (const edge of graph.edges) {
+    if (edge.from !== v) continue;
+    const w = edge.to;
+
+    if (!state.indices.has(w)) {
+      // Successor w has not yet been visited; recurse on it
+      strongConnect(w, graph, blocks, state);
+      state.lowlinks.set(v, Math.min(state.lowlinks.get(v)!, state.lowlinks.get(w)!));
+    } else if (state.onStack.has(w)) {
+      // Successor w is in stack S and hence in the current SCC
+      state.lowlinks.set(v, Math.min(state.lowlinks.get(v)!, state.indices.get(w)!));
+    }
+  }
+
+  // If v is a root node, pop the stack and generate an SCC
+  if (state.lowlinks.get(v) === state.indices.get(v)) {
+    const sccNodes: DepNode[] = [];
+    let w: DepNode;
+    do {
+      w = state.stack.pop()!;
+      state.onStack.delete(w);
+      sccNodes.push(w);
+    } while (w !== v);
+
+    // Check if any block in this SCC has a state boundary
+    const hasStateBoundary = sccNodes.some((node) => {
+      if (node.kind === "BlockEval") {
+        const block = blocks[node.blockIndex];
+        const blockDef = getBlockDefinition(block.type);
+        // Check if block breaks combinatorial cycles (has state)
+        // For now, we'll check if the block type contains "State" or "Delay"
+        // This is a heuristic - proper implementation would check block definition metadata
+        return blockDef?.type?.includes('State') || blockDef?.type?.includes('Delay');
+      }
+      return false;
+    });
+
+    state.sccs.push({
+      nodes: sccNodes,
+      hasStateBoundary,
+    });
+  }
+}
+
+/**
+ * Check if a node has a self-loop.
+ */
+function hasSelfLoop(graph: DepGraph, node: DepNode): boolean {
+  return graph.edges.some((e) => e.from === node && e.to === node);
+}
+
+/**
+ * Pass 5: Cycle Validation
  *
- * Detects strongly connected components and validates that non-trivial
- * cycles have state boundaries.
+ * Detects cycles in the dependency graph and validates that all cycles have
+ * at least one state boundary block.
  *
- * @param depGraph - The dependency graph from Pass 4
- * @param blocks - The blocks from the patch (for state boundary checking)
+ * Legal cycles:
+ * - Trivial cycles (single node with no self-loop)
+ * - Cycles containing at least one block with breaksCombinatorialCycle=true
+ *
+ * Illegal cycles:
+ * - Multi-node cycles with no state boundary
+ * - Single-node cycles with self-loop and no state boundary
+ *
+ * Uses Tarjan's SCC algorithm for efficient cycle detection.
+ *
+ * References:
+ * - design-docs/12-Compiler-Final/15-Canonical-Lowering-Pipeline.md § Pass 5
+ * - design-docs/12-Compiler-Final/10-Memory-Semantics.md § Combinatorial Cycles
+ *
+ * @param depGraphWithTime - The dependency graph with time model from Pass 4
  * @returns A validated graph with SCC information
  */
 export function pass5CycleValidation(
-  depGraphWithTime: DepGraphWithTimeModel,
-  blocks: readonly Block[]
+  depGraphWithTime: DepGraphWithTimeModel
 ): AcyclicOrLegalGraph {
   const errors: IllegalCycleError[] = [];
+
+  // Get blocks from depGraphWithTime
+  const blocks = depGraphWithTime.blocks;
 
   // Step 1: Run Tarjan's SCC algorithm
   const sccs = tarjanSCC(depGraphWithTime.graph, blocks);
@@ -259,10 +189,22 @@ export function pass5CycleValidation(
     }
   }
 
-  // Return validated graph with SCC information
+  // Throw if there are illegal cycles
+  if (errors.length > 0) {
+    const errorSummary = errors
+      .map((e) => `  - IllegalCycle: blocks [${e.nodes.join(', ')}]`)
+      .join("\n");
+    throw new Error(
+      `Pass 5 (Cycle Validation) failed with ${errors.length} error(s):\n${errorSummary}`
+    );
+  }
+
+  // Return validated graph with SCC information and blocks/edges threaded through
   return {
     graph: depGraphWithTime.graph,
     timeModel: depGraphWithTime.timeModel,
+    blocks: depGraphWithTime.blocks,
+    edges: depGraphWithTime.edges,
     sccs,
     errors,
   };

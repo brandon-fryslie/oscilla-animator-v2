@@ -3,7 +3,7 @@
  *
  * Transforms a TimeResolvedPatch into a DepGraph by:
  * 1. Creating BlockEval nodes for all blocks
- * 2. Adding edges (block → block) from unified Edge type
+ * 2. Adding edges (block → block) from NormalizedEdge array
  *
  * This graph is used for topological scheduling and cycle validation.
  *
@@ -13,16 +13,12 @@
  */
 
 import type {
-  Block,
-  Edge,
-} from "../../types";
-import type {
   TimeResolvedPatch,
   DepGraph,
   DepNode,
   DepEdge,
-} from "../ir";
-import type { TimeModelIR } from "../ir/schedule";
+  DepGraphWithTimeModel,
+} from "../ir/patches";
 
 /**
  * Error types emitted by Pass 4.
@@ -30,8 +26,8 @@ import type { TimeModelIR } from "../ir/schedule";
 export interface DanglingConnectionError {
   kind: "DanglingConnection";
   connectionId: string;
-  fromBlockId?: string;
-  toBlockId?: string;
+  fromBlockIndex?: number;
+  toBlockIndex?: number;
   message: string;
 }
 
@@ -39,18 +35,10 @@ export type Pass4Error =
   | DanglingConnectionError;
 
 /**
- * Output of Pass 4: DepGraph with timeModel threaded through.
- */
-export interface DepGraphWithTimeModel {
-  readonly graph: DepGraph;
-  readonly timeModel: TimeModelIR;
-}
-
-/**
  * Pass 4: Dependency Graph Construction
  *
  * Builds a unified dependency graph with BlockEval nodes
- * and edges from the unified Edge array.
+ * and edges from the NormalizedEdge array.
  *
  * @param timeResolved - The time-resolved patch from Pass 3
  * @returns A dependency graph ready for cycle validation
@@ -62,49 +50,42 @@ export function pass4DepGraph(
   const nodes: DepNode[] = [];
   const depEdges: DepEdge[] = [];
 
-  for (const blockData of Array.from(timeResolved.blocks.values())) {
-    const block = blockData as Block;
-    const blockIndex = timeResolved.blockIndexMap.get(block.id);
-    if (blockIndex === undefined) {
-      // This should never happen - blockIndexMap is created in Pass 1
-      throw new Error(
-        `Block ${block.id} not found in blockIndexMap (internal error)`
-      );
-    }
-
+  // Step 1: Create BlockEval nodes for all blocks
+  // Blocks are already in index order, so we can just iterate
+  for (let i = 0; i < timeResolved.blocks.length; i++) {
     nodes.push({
       kind: "BlockEval",
-      blockIndex,
+      blockIndex: i as any, // BlockIndex is just a branded number
     });
   }
 
-  // Step 2: Add edges from unified Edge array
-  const patchEdges: readonly Edge[] = timeResolved.edges ?? [];
-
-  for (const edge of patchEdges) {
-    if (!edge.enabled) continue;
-
-    const fromBlockIndex = timeResolved.blockIndexMap.get(edge.from.blockId);
-    const toBlockIndex = timeResolved.blockIndexMap.get(edge.to.blockId);
-
-    // Validate both endpoints exist
-    if (fromBlockIndex === undefined || toBlockIndex === undefined) {
+  // Step 2: Add edges from NormalizedEdge array
+  // NormalizedEdge already has block indices, no lookup needed
+  for (const edge of timeResolved.edges) {
+    // Validate that block indices are within bounds
+    if (edge.fromBlock < 0 || edge.fromBlock >= timeResolved.blocks.length) {
       errors.push({
         kind: "DanglingConnection",
-        connectionId: edge.id,
-        fromBlockId:
-          fromBlockIndex === undefined ? edge.from.blockId : undefined,
-        toBlockId: toBlockIndex === undefined ? edge.to.blockId : undefined,
-        message: `Edge ${edge.id} references non-existent block(s): ${
-          fromBlockIndex === undefined ? `from=${edge.from.blockId} ` : ""
-        }${toBlockIndex === undefined ? `to=${edge.to.blockId}` : ""}`,
+        connectionId: `${edge.fromBlock}:${edge.fromPort}->${edge.toBlock}:${edge.toPort}`,
+        fromBlockIndex: edge.fromBlock,
+        message: `Edge references invalid fromBlock index ${edge.fromBlock} (valid range: 0-${timeResolved.blocks.length - 1})`,
+      });
+      continue;
+    }
+
+    if (edge.toBlock < 0 || edge.toBlock >= timeResolved.blocks.length) {
+      errors.push({
+        kind: "DanglingConnection",
+        connectionId: `${edge.fromBlock}:${edge.fromPort}->${edge.toBlock}:${edge.toPort}`,
+        toBlockIndex: edge.toBlock,
+        message: `Edge references invalid toBlock index ${edge.toBlock} (valid range: 0-${timeResolved.blocks.length - 1})`,
       });
       continue;
     }
 
     depEdges.push({
-      from: { kind: "BlockEval", blockIndex: fromBlockIndex },
-      to: { kind: "BlockEval", blockIndex: toBlockIndex },
+      from: { kind: "BlockEval", blockIndex: edge.fromBlock as any },
+      to: { kind: "BlockEval", blockIndex: edge.toBlock as any },
     });
   }
 
@@ -118,12 +99,14 @@ export function pass4DepGraph(
     );
   }
 
-  // Return dependency graph with timeModel threaded through
+  // Return dependency graph with timeModel and blocks/edges threaded through
   return {
     graph: {
       nodes,
       edges: depEdges,
     },
     timeModel: timeResolved.timeModel,
+    blocks: timeResolved.blocks,
+    edges: timeResolved.edges,
   };
 }

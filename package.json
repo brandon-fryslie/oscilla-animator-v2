@@ -22,7 +22,10 @@
     "mobx": "^6.15.0",
     "mobx-react-lite": "^4.1.1",
     "react": "^19.2.3",
-    "react-dom": "^19.2.3"
+    "react-dom": "^19.2.3",
+    "jspanel4": "file:../brandon-fryslie_jsPanel4/packages/core",
+    "@jspanel/react": "file:../brandon-fryslie_jsPanel4/packages/react",
+    "@jspanel/mobx": "file:../brandon-fryslie_jsPanel4/packages/mobx"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",

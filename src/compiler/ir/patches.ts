@@ -23,7 +23,8 @@ import type { TimeModelIR } from "./schedule";
 // Re-export from graph/normalize for convenience - these are the authoritative types
 export type { BlockIndex, NormalizedPatch, NormalizedEdge } from "../../graph/normalize";
 export type { Block, Edge, Patch, PortRef } from "../../graph/Patch";
-import type { BlockIndex, NormalizedPatch } from "../../graph/normalize";
+import type { BlockIndex, NormalizedPatch, NormalizedEdge } from "../../graph/normalize";
+import type { Block } from "../../graph/Patch";
 
 // =============================================================================
 // Transform Steps (for future edge transforms)
@@ -128,6 +129,20 @@ export interface DepGraph {
   readonly edges: readonly DepEdge[];
 }
 
+/**
+ * Dependency graph with time model (output of Pass 4).
+ */
+export interface DepGraphWithTimeModel {
+  readonly graph: DepGraph;
+  readonly timeModel: TimeModelIR;
+
+  /** Blocks threaded through from NormalizedPatch */
+  readonly blocks: readonly Block[];
+
+  /** Edges threaded through from NormalizedPatch */
+  readonly edges: readonly NormalizedEdge[];
+}
+
 // =============================================================================
 // Cycle Validation - Pass 5
 // =============================================================================
@@ -158,6 +173,12 @@ export interface AcyclicOrLegalGraph {
 
   /** Time model from Pass 3, threaded through for Pass 6 */
   readonly timeModel: TimeModelIR;
+
+  /** Blocks threaded through for downstream passes */
+  readonly blocks: readonly Block[];
+
+  /** Edges threaded through for downstream passes */
+  readonly edges: readonly NormalizedEdge[];
 }
 
 // =============================================================================

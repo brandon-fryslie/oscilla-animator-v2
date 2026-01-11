@@ -12,17 +12,13 @@
  * - design-docs/spec/CANONICAL-ARCHITECTURE-oscilla-v2.5-20260109-160000.md
  */
 
-import type {
-  Block,
-  Edge,
-  Endpoint,
-} from "../../types";
+import type { Block } from "../../graph/Patch";
 import type { SignalType } from "../../core/canonical-types";
 import {
   getAxisValue,
   DEFAULTS_V0,
 } from "../../core/canonical-types";
-import type { NormalizedPatch, TypedPatch } from "../ir/patches";
+import type { NormalizedPatch, TypedPatch, BlockIndex } from "../ir/patches";
 import { getBlockDefinition } from "../../blocks/registry";
 
 /**
@@ -30,7 +26,7 @@ import { getBlockDefinition } from "../../blocks/registry";
  */
 export interface PortTypeUnknownError {
   kind: "PortTypeUnknown";
-  blockId: string;
+  blockIndex: BlockIndex;
   slotId: string;
   message: string;
 }
@@ -106,20 +102,16 @@ function isTypeCompatible(from: SignalType, to: SignalType): boolean {
 }
 
 /**
- * Get the type of an endpoint (port).
+ * Get the type of a port on a block.
  */
-function getEndpointType(
-  endpoint: Endpoint,
-  blocks: ReadonlyMap<string, unknown>
+function getPortType(
+  block: Block,
+  portId: string
 ): SignalType | null {
-  const blockData = blocks.get(endpoint.blockId);
-  if (blockData === null || blockData === undefined) return null;
-
-  const block = blockData as Block;
   const blockDef = getBlockDefinition(block.type);
   if (!blockDef) return null;
 
-  const slot = [...blockDef.inputs, ...blockDef.outputs].find(s => s.id === endpoint.slotId);
+  const slot = [...blockDef.inputs, ...blockDef.outputs].find(s => s.id === portId);
   if (slot === null || slot === undefined) return null;
 
   return slot.type;
@@ -142,8 +134,7 @@ export function pass2TypeGraph(
   // Build block output types map
   const blockOutputTypes = new Map<string, ReadonlyMap<string, SignalType>>();
 
-  for (const blockData of Array.from(normalized.blocks.values())) {
-    const block = blockData as Block;
+  for (const block of normalized.blocks) {
     const blockDef = getBlockDefinition(block.type);
     if (!blockDef) continue;
 
@@ -155,16 +146,38 @@ export function pass2TypeGraph(
     blockOutputTypes.set(block.id, outputTypes);
   }
 
-  // Validate type compatibility for edges
-  const edges: readonly Edge[] = normalized.edges ?? [];
-  for (const edge of edges) {
-    if (!edge.enabled) continue;
+  // Validate type compatibility for edges using NormalizedEdge
+  for (const edge of normalized.edges) {
+    // Get blocks by index
+    const fromBlock = normalized.blocks[edge.fromBlock];
+    const toBlock = normalized.blocks[edge.toBlock];
 
-    const fromType = getEndpointType(edge.from, normalized.blocks);
-    const toType = getEndpointType(edge.to, normalized.blocks);
+    if (!fromBlock || !toBlock) {
+      // Should never happen if normalization is correct
+      continue;
+    }
+
+    const fromType = getPortType(fromBlock, edge.fromPort);
+    const toType = getPortType(toBlock, edge.toPort);
 
     if (fromType === null || toType === null) {
-      // Dangling reference - will be caught by Pass 4
+      // Unknown port type - report error
+      if (fromType === null) {
+        errors.push({
+          kind: "PortTypeUnknown",
+          blockIndex: edge.fromBlock as BlockIndex,
+          slotId: edge.fromPort,
+          message: `Unknown output port type: block[${edge.fromBlock}].${edge.fromPort}`,
+        });
+      }
+      if (toType === null) {
+        errors.push({
+          kind: "PortTypeUnknown",
+          blockIndex: edge.toBlock as BlockIndex,
+          slotId: edge.toPort,
+          message: `Unknown input port type: block[${edge.toBlock}].${edge.toPort}`,
+        });
+      }
       continue;
     }
 
@@ -176,10 +189,10 @@ export function pass2TypeGraph(
 
       errors.push({
         kind: "NoConversionPath",
-        connectionId: edge.id,
+        connectionId: `${edge.fromBlock}:${edge.fromPort}->${edge.toBlock}:${edge.toPort}`,
         fromType,
         toType,
-        message: `Type mismatch: cannot connect ${fromCard.kind}+${fromTemp.kind}<${fromType.payload}> to ${toCard.kind}+${toTemp.kind}<${toType.payload}> for edge ${edge.id}`,
+        message: `Type mismatch: cannot connect ${fromCard.kind}+${fromTemp.kind}<${fromType.payload}> to ${toCard.kind}+${toTemp.kind}<${toType.payload}>`,
       });
     }
   }
@@ -196,5 +209,5 @@ export function pass2TypeGraph(
   return {
     ...normalized,
     blockOutputTypes,
-  } as TypedPatch;
+  };
 }
