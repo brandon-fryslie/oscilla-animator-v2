@@ -25,6 +25,11 @@ import '../blocks/time-blocks';
 import '../blocks/signal-blocks';
 import '../blocks/domain-blocks';
 import '../blocks/field-blocks';
+import '../blocks/math-blocks';
+import '../blocks/color-blocks';
+import '../blocks/geometry-blocks';
+import '../blocks/identity-blocks';
+import '../blocks/render-blocks';
 
 // Import passes
 import { pass2TypeGraph } from './passes-v2';
