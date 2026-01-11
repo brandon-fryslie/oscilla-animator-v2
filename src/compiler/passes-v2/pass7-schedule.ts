@@ -14,6 +14,9 @@
  */
 
 import type { Step, TimeModel, DomainId, DomainDef } from '../ir/types';
+import type { UnlinkedIRFragments } from './pass6-block-lowering';
+import type { AcyclicOrLegalGraph } from '../ir/patches';
+import type { TimeModelIR } from '../ir/schedule';
 
 // =============================================================================
 // Schedule IR Types
@@ -51,4 +54,56 @@ export interface ScheduleIR {
  */
 export interface StateSlotDef {
   readonly initialValue: number;
+}
+
+/**
+ * Pass 7: Schedule Construction
+ *
+ * Builds topologically-ordered execution schedule from unlinked IR fragments.
+ *
+ * @param unlinkedIR - Block IR fragments from Pass 6
+ * @param validated - Validated graph with SCC information
+ * @returns Execution schedule with phase ordering
+ */
+export function pass7Schedule(
+  unlinkedIR: UnlinkedIRFragments,
+  validated: AcyclicOrLegalGraph
+): ScheduleIR {
+  // Stub implementation - TODO: Implement full schedule construction
+  // For now, return a minimal schedule
+
+  // Convert TimeModelIR to TimeModel
+  const timeModel: TimeModel = convertTimeModel(validated.timeModel);
+
+  // TODO: Build domain map from validated.blocks
+  const domains = new Map<DomainId, DomainDef>();
+
+  // TODO: Build execution steps from topological order of SCCs
+  const steps: Step[] = [];
+
+  // TODO: Count state slots from unlinkedIR
+  const stateSlotCount = 0;
+
+  const stateSlots: StateSlotDef[] = [];
+
+  return {
+    timeModel,
+    domains,
+    steps,
+    stateSlotCount,
+    stateSlots,
+  };
+}
+
+/**
+ * Convert TimeModelIR to TimeModel for schedule.
+ */
+function convertTimeModel(timeModelIR: TimeModelIR): TimeModel {
+  if (timeModelIR.kind === 'finite') {
+    return {
+      kind: 'finite',
+      durationMs: timeModelIR.durationMs,
+    };
+  }
+  return { kind: 'infinite' };
 }

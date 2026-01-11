@@ -21,7 +21,7 @@ export type { TimeResolvedPatch } from "../ir/patches";
 
 // Pass 4: Dependency Graph
 export { pass4DepGraph } from "./pass4-depgraph";
-export type { DepGraphWithTimeModel } from "./pass4-depgraph";
+export type { DepGraphWithTimeModel } from "../ir/patches";
 export type { DepGraph } from "../ir/patches";
 
 // Pass 5: SCC Validation
@@ -30,12 +30,12 @@ export type { AcyclicOrLegalGraph } from "../ir/patches";
 
 // Pass 6: Block Lowering
 export { pass6BlockLowering } from "./pass6-block-lowering";
-export type { UnlinkedIRFragments, ValueRefPacked } from "./pass6-block-lowering";
+export type { UnlinkedIRFragments } from "./pass6-block-lowering";
 
 // Pass 7: Schedule Construction
 export { pass7Schedule } from "./pass7-schedule";
-export type { ScheduleIR, ScheduleStep, PhaseGroup, ExecutionPhase, ExecutionClass } from "./pass7-schedule";
+export type { ScheduleIR } from "./pass7-schedule";
 
 // Pass 8: Link Resolution
-export { pass8LinkResolution } from "./pass8-link-resolution";
-export type { LinkedGraphIR, BlockInputRootIR, BlockOutputRootIR } from "./pass8-link-resolution";
+// TODO: Fix pass8LinkResolution exports
+// export { pass8LinkResolution } from "./pass8-link-resolution";

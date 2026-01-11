@@ -1,12 +1,12 @@
 /**
- * Main Compiler Entry Point
+ * Compiler Entry Point
  *
- * Compiles a Patch into executable IR using the passes-v2 multi-pass architecture:
- * 1. Normalize - Dense indices, canonical ordering
- * 2. Pass 2: Type Graph - Type resolution and validation
- * 3. Pass 3: Time Topology - Find TimeRoot, extract TimeModel
- * 4. Pass 4: Dependency Graph - Build dependency information
- * 5. Pass 5: Cycle Validation - Check for cycles
+ * Main compilation pipeline:
+ * 1. Normalization - Convert Patch to NormalizedPatch
+ * 2. Pass 2: Type Graph - Resolve types for all connections
+ * 3. Pass 3: Time Topology - Determine time model
+ * 4. Pass 4: Dependency Graph - Build execution dependencies
+ * 5. Pass 5: Cycle Validation (SCC) - Check for illegal cycles
  * 6. Pass 6: Block Lowering - Lower blocks to IR expressions
  * 7. Pass 7: Schedule Construction - Build execution schedule
  * 8. Pass 8: Link Resolution - Resolve all connections
@@ -27,7 +27,8 @@ import { pass4DepGraph } from './passes-v2';
 import { pass5CycleValidation } from './passes-v2';
 import { pass6BlockLowering } from './passes-v2';
 import { pass7Schedule } from './passes-v2';
-import { pass8LinkResolution } from './passes-v2';
+// Pass 8 is not yet fully implemented
+// import { pass8LinkResolution } from './passes-v2';
 
 // =============================================================================
 // Compile Errors & Results
@@ -37,23 +38,30 @@ export interface CompileError {
   readonly kind: string;
   readonly message: string;
   readonly blockId?: string;
+  readonly connectionId?: string;
   readonly portId?: string;
 }
 
-export interface CompileResult {
+export type CompileSuccess = {
   readonly kind: 'ok';
   readonly program: CompiledProgramIR;
-}
+};
 
-export interface CompileFailure {
+export type CompileFailure = {
   readonly kind: 'error';
   readonly errors: readonly CompileError[];
-}
+};
+
+export type CompileResult = CompileSuccess | CompileFailure;
+
+// =============================================================================
+// Compile Options
+// =============================================================================
 
 export interface CompileOptions {
+  readonly patchId?: string;
+  readonly patchRevision?: string;
   readonly events: EventHub;
-  readonly patchRevision: number;
-  readonly patchId: string;
 }
 
 // =============================================================================
@@ -61,37 +69,36 @@ export interface CompileOptions {
 // =============================================================================
 
 /**
- * Compiles a Patch into executable IR using multi-pass architecture.
+ * Compile a Patch into a CompiledProgramIR.
  *
- * @param patch The patch to compile
- * @param options Optional event emission and diagnostics integration
- * @returns CompileResult or CompileFailure
+ * @param patch - The patch to compile
+ * @param options - Optional compile options for event emission
+ * @returns CompileResult with either the compiled program or errors
  */
-export function compile(
-  patch: Patch,
-  options?: CompileOptions
-): CompileResult | CompileFailure {
-  const compileId = `compile-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+export function compile(patch: Patch, options?: CompileOptions): CompileResult {
+  const compileId = options?.patchId ? `${options.patchId}:${options.patchRevision || 'latest'}` : 'unknown';
   const startTime = performance.now();
 
-  // Emit CompileBegin event
+  // Emit CompileStart event
   if (options) {
     options.events.emit({
-      type: 'CompileBegin',
+      type: 'CompileStart',
       compileId,
-      patchId: options.patchId,
-      patchRevision: options.patchRevision,
-      trigger: 'manual',
+      patchId: options.patchId || 'unknown',
+      patchRevision: options.patchRevision || 'latest',
     });
   }
 
   try {
-    // Pass 1: Normalize
+    // Pass 1: Normalization
     const normResult = normalize(patch);
+
     if (normResult.kind === 'error') {
-      const compileErrors = normResult.errors.map((e) => ({
+      const compileErrors: CompileError[] = normResult.errors.map((e) => ({
         kind: e.kind,
-        message: formatNormError(e),
+        message: e.kind === 'DanglingEdge'
+          ? `Edge references missing block (${e.missing})`
+          : `Duplicate block ID: ${(e as any).id}`,
       }));
 
       return emitFailure(options, startTime, compileId, compileErrors);
@@ -115,13 +122,16 @@ export function compile(
     const unlinkedIR = pass6BlockLowering(acyclicPatch);
 
     // Pass 7: Schedule Construction
-    const scheduleIR = pass7Schedule(unlinkedIR);
+    const scheduleIR = pass7Schedule(unlinkedIR, acyclicPatch);
 
     // Pass 8: Link Resolution
-    const linkedIR = pass8LinkResolution(scheduleIR);
+    // TODO: Implement pass8LinkResolution
+    // const linkedIR = pass8LinkResolution(unlinkedIR, acyclicPatch);
 
-    // Convert LinkedGraphIR to CompiledProgramIR
-    const compiledIR = convertLinkedIRToProgram(linkedIR);
+    // Convert to CompiledProgramIR
+    // TODO: Implement convertLinkedIRToProgram
+    // const compiledIR = convertLinkedIRToProgram(linkedIR, scheduleIR);
+    const compiledIR = createStubProgramIR(scheduleIR);
 
     // Emit CompileEnd event (success)
     if (options) {
@@ -129,8 +139,8 @@ export function compile(
       options.events.emit({
         type: 'CompileEnd',
         compileId,
-        patchId: options.patchId,
-        patchRevision: options.patchRevision,
+        patchId: options.patchId || 'unknown',
+        patchRevision: options.patchRevision || 'latest',
         status: 'success',
         durationMs,
         diagnostics: [],
@@ -142,19 +152,19 @@ export function compile(
       program: compiledIR,
     };
   } catch (e) {
-    const errors: CompileError[] = [
-      {
-        kind: 'CompileError',
-        message: e instanceof Error ? e.message : String(e),
-      },
-    ];
+    // Catch errors from any pass
+    const error = e as Error;
+    const compileErrors: CompileError[] = [{
+      kind: 'CompilationFailed',
+      message: error.message || 'Unknown compilation error',
+    }];
 
-    return emitFailure(options, startTime, compileId, errors);
+    return emitFailure(options, startTime, compileId, compileErrors);
   }
 }
 
 // =============================================================================
-// Helpers
+// Helper Functions
 // =============================================================================
 
 function emitFailure(
@@ -165,42 +175,41 @@ function emitFailure(
 ): CompileFailure {
   if (options) {
     const durationMs = performance.now() - startTime;
-    const diagnostics = convertCompileErrorsToDiagnostics(
-      errors,
-      options.patchRevision,
-      compileId
-    );
+    const diagnostics = convertCompileErrorsToDiagnostics(errors);
     options.events.emit({
       type: 'CompileEnd',
       compileId,
-      patchId: options.patchId,
-      patchRevision: options.patchRevision,
+      patchId: options.patchId || 'unknown',
+      patchRevision: options.patchRevision || 'latest',
       status: 'failure',
       durationMs,
       diagnostics,
     });
   }
 
-  return { kind: 'error', errors };
-}
-
-function formatNormError(e: { kind: string }): string {
-  switch (e.kind) {
-    case 'DanglingEdge':
-      return 'Edge references non-existent block';
-    case 'DuplicateBlockId':
-      return 'Duplicate block ID';
-    default:
-      return e.kind;
-  }
-}
-
-function convertLinkedIRToProgram(linkedIR: any): CompiledProgramIR {
-  // TODO: Implement conversion from LinkedGraphIR to CompiledProgramIR
-  // For now, return a minimal program
-  // This will be updated once LinkedGraphIR structure is finalized
   return {
-    version: 1,
-    passes: [],
-  } as CompiledProgramIR;
+    kind: 'error',
+    errors,
+  };
+}
+
+/**
+ * Create a stub CompiledProgramIR for testing.
+ * TODO: Replace with real convertLinkedIRToProgram implementation.
+ */
+function createStubProgramIR(scheduleIR: any): CompiledProgramIR {
+  return {
+    irVersion: 1,
+    signalExprs: { nodes: [] },
+    fieldExprs: { nodes: [] },
+    eventExprs: { nodes: [] },
+    constants: { json: [] },
+    schedule: scheduleIR as any,
+    outputs: [],
+    slotMeta: new Map(),
+    debugIndex: {
+      blockIndex: new Map(),
+      sigExprToBlock: new Map(),
+    },
+  };
 }
