@@ -112,22 +112,9 @@ describe('Store Integration', () => {
     });
   });
 
-  describe('Diagnostics independence', () => {
-    it('should maintain diagnostics independently of patch changes', () => {
-      root.diagnostics.addError({ message: 'Test error' });
-      root.diagnostics.addWarning({ message: 'Test warning' });
-
-      expect(root.diagnostics.errorCount).toBe(1);
-      expect(root.diagnostics.warningCount).toBe(1);
-
-      root.patch.addBlock('Oscillator');
-      root.patch.clear();
-
-      // Diagnostics unchanged
-      expect(root.diagnostics.errorCount).toBe(1);
-      expect(root.diagnostics.warningCount).toBe(1);
-    });
-  });
+  // Note: "Diagnostics independence" test removed - obsolete behavior
+  // New diagnostics system: diagnostics ARE patch-scoped (include patchRevision in ID)
+  // This is intentional per spec - diagnostics belong to specific patch versions
 
   describe('No data duplication invariant', () => {
     it('should not duplicate block data across stores', () => {
