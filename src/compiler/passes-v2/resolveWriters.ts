@@ -17,13 +17,13 @@
  */
 
 import type {
-  Edge,
   Slot,
   Block,
   SignalType,
 } from '../../types';
 import { getBlockDefinition, type InputDef } from '../../blocks/registry';
 import type { CombinePolicy } from './combine-utils';
+import type { NormalizedEdge, BlockIndex } from '../ir/patches';
 
 // =============================================================================
 // Types
@@ -117,33 +117,57 @@ export function sortWriters(writers: readonly Writer[]): Writer[] {
  * Writers are NOT sorted here - call sortWriters() separately.
  *
  * @param endpoint - Target input endpoint
- * @param edges - All edges in the patch
+ * @param edges - All edges in the patch (NormalizedEdge format)
+ * @param blocks - All blocks in the patch (for index lookup)
  * @returns Array of writers (unsorted, may be empty)
  */
 export function enumerateWriters(
   endpoint: InputEndpoint,
-  edges: readonly Edge[]
+  edges: readonly NormalizedEdge[],
+  blocks: readonly Block[]
 ): Writer[] {
   const writers: Writer[] = [];
 
+  // Create block index to ID map for lookups
+  const indexToId = new Map<BlockIndex, string>();
+  for (let i = 0; i < blocks.length; i++) {
+    indexToId.set(i as BlockIndex, blocks[i].id);
+  }
+
+  // Create block ID to index map for target matching
+  const idToIndex = new Map<string, BlockIndex>();
+  for (let i = 0; i < blocks.length; i++) {
+    idToIndex.set(blocks[i].id, i as BlockIndex);
+  }
+
+  const targetIndex = idToIndex.get(endpoint.blockId);
+  if (targetIndex === undefined) {
+    // Endpoint block not found - return empty (will be caught as error by caller)
+    return writers;
+  }
+
   // Enumerate edges to this endpoint
   for (const edge of edges) {
-    // Skip disabled edges
-    if (!edge.enabled) continue;
-
     // Check if this edge targets our endpoint
-    if (edge.to.kind !== 'port') continue;
-    if (edge.to.blockId !== endpoint.blockId) continue;
-    if (edge.to.slotId !== endpoint.slotId) continue;
+    if (edge.toBlock !== targetIndex) continue;
+    if (edge.toPort !== endpoint.slotId) continue;
 
-    // After Sprint 2 migration, all edges are port→port
-    if (edge.from.kind === 'port') {
-      writers.push({
-        kind: 'wire',
-        from: { blockId: edge.from.blockId, slotId: edge.from.slotId },
-        connId: edge.id,
-      });
+    // Get source block ID
+    const fromBlockId = indexToId.get(edge.fromBlock);
+    if (fromBlockId === undefined) {
+      // Source block not found - skip this edge (shouldn't happen after normalization)
+      continue;
     }
+
+    // Generate connection ID from edge properties
+    // Format: "{fromBlockId}:{fromPort}->{toBlockId}:{toPort}"
+    const connId = `${fromBlockId}:${edge.fromPort}->${endpoint.blockId}:${edge.toPort}`;
+
+    writers.push({
+      kind: 'wire',
+      from: { blockId: fromBlockId, slotId: edge.fromPort },
+      connId,
+    });
   }
 
   // NOTE: No legacy defaultSource injection here.
@@ -195,12 +219,14 @@ export function resolveCombinePolicy(_input: InputDef): CombinePolicy {
  * 4. Return ResolvedInputSpec
  *
  * @param block - Block instance
- * @param edges - All edges in the patch
+ * @param edges - All edges in the patch (NormalizedEdge format)
+ * @param blocks - All blocks in the patch (for index lookup)
  * @returns Map of slotId → ResolvedInputSpec
  */
 export function resolveBlockInputs(
   block: Block,
-  edges: readonly Edge[]
+  edges: readonly NormalizedEdge[],
+  blocks: readonly Block[]
 ): Map<string, ResolvedInputSpec> {
   const resolved = new Map<string, ResolvedInputSpec>();
 
@@ -214,7 +240,7 @@ export function resolveBlockInputs(
     };
 
     // Enumerate writers (DSConst edges are included via GraphNormalizer)
-    const writers = enumerateWriters(endpoint, edges);
+    const writers = enumerateWriters(endpoint, edges, blocks);
 
     // Sort deterministically
     const sortedWriters = sortWriters(writers);
@@ -243,17 +269,19 @@ export function resolveBlockInputs(
  * Convenience function for resolving a specific input port.
  *
  * @param endpoint - Target input endpoint
- * @param edges - All edges in the patch
+ * @param edges - All edges in the patch (NormalizedEdge format)
+ * @param blocks - All blocks in the patch (for index lookup)
  * @param inputSlot - The input slot definition
  * @returns Resolved input spec
  */
 export function resolveInput(
   endpoint: InputEndpoint,
-  edges: readonly Edge[],
+  edges: readonly NormalizedEdge[],
+  blocks: readonly Block[],
   inputSlot: Slot
 ): ResolvedInputSpec {
   // Enumerate writers (DSConst edges are included via GraphNormalizer)
-  const writers = enumerateWriters(endpoint, edges);
+  const writers = enumerateWriters(endpoint, edges, blocks);
 
   // Sort deterministically
   const sortedWriters = sortWriters(writers);

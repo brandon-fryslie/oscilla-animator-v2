@@ -21,6 +21,7 @@ import {
   validateCombinePolicy,
   shouldCombine,
 } from "./combine-utils";
+import type { NormalizedEdge } from "../ir/patches";
 
 // =============================================================================
 // Types
@@ -74,7 +75,8 @@ function isCorePayload(payload: string): boolean {
  * 4. If N>1: Validate combine policy, create combine node
  *
  * @param block - Block instance
- * @param edges - Unified edges (from Pass 1)
+ * @param edges - Normalized edges (from NormalizedPatch)
+ * @param blocks - All blocks in the patch (for index lookup)
  * @param builder - IRBuilder for emitting combine nodes
  * @param errors - Error accumulator
  * @param blockOutputs - Map of block outputs for wire resolution
@@ -83,13 +85,14 @@ function isCorePayload(payload: string): boolean {
  */
 function resolveInputsWithMultiInput(
   block: Block,
-  edges: readonly Edge[],
+  edges: readonly NormalizedEdge[],
+  blocks: readonly Block[],
   builder: IRBuilder,
   errors: CompileError[],
   blockOutputs?: Map<BlockIndex, Map<string, ValueRefPacked>>,
   blockIdToIndex?: Map<string, BlockIndex>
 ): Map<string, ValueRefPacked> {
-  const resolved = resolveBlockInputs(block, edges as any);
+  const resolved = resolveBlockInputs(block, edges, blocks);
   const inputRefs = new Map<string, ValueRefPacked>();
 
   for (const [slotId, spec] of resolved.entries()) {
@@ -249,7 +252,8 @@ function getWriterValueRef(
  * @param blockIndex - Block index
  * @param builder - IRBuilder for emitting IR nodes
  * @param errors - Error accumulator
- * @param edges - Unified edges for multi-input resolution
+ * @param edges - Normalized edges for multi-input resolution
+ * @param blocks - All blocks in the patch (for index lookup)
  * @param blockOutputs - Map of block outputs for wire resolution
  * @param blockIdToIndex - Map from block ID to block index
  * @returns Map of port ID to ValueRefPacked
@@ -259,7 +263,8 @@ function lowerBlockInstance(
   blockIndex: BlockIndex,
   builder: IRBuilder,
   errors: CompileError[],
-  edges?: readonly Edge[],
+  edges?: readonly NormalizedEdge[],
+  blocks?: readonly Block[],
   blockOutputs?: Map<BlockIndex, Map<string, ValueRefPacked>>,
   blockIdToIndex?: Map<string, BlockIndex>
 ): Map<string, ValueRefPacked> {
@@ -308,9 +313,9 @@ function lowerBlockInstance(
     }
 
     // Collect input ValueRefs
-    // Use resolveInputsWithMultiInput if edges available
-    const inputsById: Record<string, ValueRefPacked> = edges !== undefined
-      ? Object.fromEntries(resolveInputsWithMultiInput(block, edges, builder, errors, blockOutputs, blockIdToIndex).entries())
+    // Use resolveInputsWithMultiInput if edges and blocks available
+    const inputsById: Record<string, ValueRefPacked> = (edges !== undefined && blocks !== undefined)
+      ? Object.fromEntries(resolveInputsWithMultiInput(block, edges, blocks, builder, errors, blockOutputs, blockIdToIndex).entries())
       : {};
 
     const inputs: ValueRefPacked[] = [];
@@ -429,7 +434,7 @@ export function pass6BlockLowering(
 
   // Extract blocks and edges from validated patch
   const blocks = validated.blocks;
-  const edges = validated.edges as any as readonly Edge[];
+  const edges = validated.edges;
   const blockOutputs = new Map<BlockIndex, Map<string, ValueRefPacked>>();
   const errors: CompileError[] = [];
 
@@ -471,6 +476,7 @@ export function pass6BlockLowering(
         builder,
         errors,
         edges,
+        blocks,
         blockOutputs,
         blockIdToIndex
       );
