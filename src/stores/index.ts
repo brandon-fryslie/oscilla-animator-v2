@@ -18,7 +18,7 @@ export { ViewportStore, type Pan } from './ViewportStore';
 export { PlaybackStore } from './PlaybackStore';
 export {
   DiagnosticsStore,
-  type Diagnostic,
+  type LegacyDiagnostic, // Renamed from Diagnostic to avoid conflict
   type LogLevel,
   type LogEntry,
 } from './DiagnosticsStore';

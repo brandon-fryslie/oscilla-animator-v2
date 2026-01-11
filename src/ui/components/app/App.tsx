@@ -5,14 +5,14 @@
  * Manages the overall layout with:
  * - Toolbar (top)
  * - Workspace (3-column: left split sidebar, center tabs, right tabs)
- * - Log panel (bottom)
+ * - Diagnostic console (bottom)
  *
  * The left sidebar uses jsPanel's split layout (Library top, Inspector bottom).
  */
 
 import React, { useCallback, useState, useRef, useEffect } from 'react';
 import { Toolbar } from './Toolbar';
-import { LogPanel } from './LogPanel';
+import { DiagnosticConsole } from './DiagnosticConsole';
 import { HelpPanel } from './HelpPanel';
 import { CanvasTab } from './CanvasTab';
 import { Tabs, TabConfig } from './Tabs';
@@ -149,7 +149,7 @@ export const App: React.FC<AppProps> = ({ onCanvasReady }) => {
         </div>
       </main>
 
-      {/* Bottom log panel */}
+      {/* Bottom diagnostic console */}
       <div
         style={{
           flex: '0 0 150px',
@@ -160,7 +160,7 @@ export const App: React.FC<AppProps> = ({ onCanvasReady }) => {
           overflow: 'hidden',
         }}
       >
-        <LogPanel />
+        <DiagnosticConsole />
       </div>
     </div>
   );
