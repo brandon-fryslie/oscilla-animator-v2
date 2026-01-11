@@ -1,27 +1,31 @@
 # Evaluation Cache Index
 
-Runtime knowledge extracted from work evaluations. Reusable findings for future evaluations.
+**Purpose**: Reusable findings from work-evaluator runs to avoid redundant testing.
 
-## Runtime Behavior
+**Last Updated**: 2026-01-11 09:17:58
 
-### UI Components
-- [runtime-ui-blocklibrary.md](runtime-ui-blocklibrary.md) - BlockLibrary component behavior, performance, edge cases (2026-01-11)
-- [runtime-ui-store-wiring.md](runtime-ui-store-wiring.md) - UI-Store integration patterns
-- [runtime-patch-viewer.md](runtime-patch-viewer.md) - PatchViewer runtime behavior
+## Active Cache Files
 
-## Data Flow
-(None yet)
+### Runtime Behavior
+- **runtime-diagnostics-system.md** (FRESH): Diagnostics System Sprint 1 test suite, coverage, build characteristics, integration points
 
-## Break-It Patterns
-(None yet)
+### Break-It Test Patterns
+(None yet - will accumulate patterns that reveal bugs)
 
-## Performance Baselines
-- **BlockLibrary search**: <50ms for 18 blocks, <300ms total with debounce
-- See runtime-ui-blocklibrary.md for details
+### Data Flow Verification
+(None yet - will capture stable data flow patterns)
 
-## Known Edge Cases
-- **localStorage unavailable**: BlockLibrary handles gracefully with try/catch
-- See runtime-ui-blocklibrary.md for full list
+## Cache Confidence Levels
 
-## Last Updated
-2026-01-11
+- **FRESH**: Just evaluated, fully trusted
+- **RECENT**: Evaluated recently, no code changes detected
+- **RISKY**: Related code changed, verify affected areas
+- **STALE**: Files in scope changed, full re-evaluation needed
+
+## Usage Notes
+
+**For work-evaluator**: Check this index before evaluating. Reuse findings where confidence allows.
+
+**For implementers**: Update runtime-*.md files when discovering new behaviors during implementation.
+
+**For project-evaluator**: These are scoped findings (work-level). Project-level evaluations use broader scope.
