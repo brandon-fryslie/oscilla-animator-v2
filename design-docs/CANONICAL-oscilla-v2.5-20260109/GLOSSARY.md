@@ -993,6 +993,86 @@ type ValueSummary =
 
 ---
 
+### Chain
+
+**Definition**: The tree of blocks reachable from a selected block by traversing edges without reversing direction (downstream only OR upstream only, not both from any given node).
+
+**Type**: concept
+
+**Canonical Form**: `Chain`
+
+**Source**: [15-graph-editor-ui.md](./topics/15-graph-editor-ui.md)
+
+**Related**: [Pivot Block](#pivot-block), [Focused Subgraph](#focused-subgraph)
+
+**Example**: From block `h` in graph `a → b → c → f → g → h`, the chain includes `{h, g, f, c, b, a}` (all upstream), but NOT blocks downstream of `g` because that would require reversal.
+
+---
+
+### Pivot Block
+
+**Definition**: A block with multiple inputs OR multiple outputs where perspective can rotate to focus on different subgraph paths.
+
+**Type**: concept
+
+**Canonical Form**: `Pivot Block`
+
+**Source**: [15-graph-editor-ui.md](./topics/15-graph-editor-ui.md)
+
+**Related**: [Chain](#chain), [Perspective Rotation](#perspective-rotation)
+
+**Example**: A combine block with 3 inputs is a pivot block - user can rotate to focus upstream via any of the 3 input paths.
+
+---
+
+### Focused Subgraph
+
+**Definition**: The currently visible chain of blocks displayed at full opacity in the graph editor.
+
+**Type**: UI state
+
+**Canonical Form**: `Focused Subgraph`
+
+**Source**: [15-graph-editor-ui.md](./topics/15-graph-editor-ui.md)
+
+**Related**: [Chain](#chain), [Dimmed Subgraph](#dimmed-subgraph)
+
+**Note**: When block `c` is selected, the focused subgraph is all blocks in `c`'s chain.
+
+---
+
+### Dimmed Subgraph
+
+**Definition**: Blocks not in the current chain, rendered at reduced opacity (faded but visible).
+
+**Type**: UI state
+
+**Canonical Form**: `Dimmed Subgraph`
+
+**Source**: [15-graph-editor-ui.md](./topics/15-graph-editor-ui.md)
+
+**Related**: [Chain](#chain), [Focused Subgraph](#focused-subgraph)
+
+**Note**: When focusing on one branch of a split, the other branch becomes dimmed (30% opacity).
+
+---
+
+### Perspective Rotation
+
+**Definition**: UI interaction (typically right-click context menu) to change which path through a pivot block is "forward" and which is dimmed.
+
+**Type**: UI interaction
+
+**Canonical Form**: `Perspective Rotation`
+
+**Source**: [15-graph-editor-ui.md](./topics/15-graph-editor-ui.md)
+
+**Related**: [Pivot Block](#pivot-block), [Chain](#chain)
+
+**Example**: Right-clicking a block with 2 downstream outputs shows menu: "Focus downstream path: • To [block H] • To [block I]"
+
+---
+
 ## Deprecated Terms
 
 | Deprecated | Use Instead | Notes |

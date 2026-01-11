@@ -56,14 +56,34 @@ These intermediate canonicalization documents are also in the archive:
 
 ---
 
-## Archive Location
+## Conversation Exports (Design History)
+
+ChatGPT conversation exports documenting the v2.5 design process:
+
+| Document | Original Location | Archived To | Purpose |
+|----------|-------------------|-------------|---------|
+| compiler-changes.md | design-docs/ | conversations-archived-20260111/ | 5-axis type system, compiler pipeline design |
+| runtime-changes.md | design-docs/ | conversations-archived-20260111/ | Runtime implications of 5-axis model |
+| IR-and-normalization-5-axes.md | design-docs/ | conversations-archived-20260111/ | Detailed IR schema, graph normalization v2.5 |
+| later_spec/HANDOFF-ForeverYours-Debug.md | design-docs/later_spec/ | conversations-archived-20260111/later_spec/ | Debug system handoff notes |
+| later_spec/steel-thread-validation.md | design-docs/later_spec/ | conversations-archived-20260111/later_spec/ | Validation approach |
+| later_spec/TUTORIAL.md | design-docs/later_spec/ | conversations-archived-20260111/later_spec/ | Tutorial notes |
+
+**Archived**: 2026-01-11T06:15:00Z
+
+**Rationale**: These documents show design rationale and decision-making process - valuable as historical context. The architectural content is already integrated into canonical Topics 01, 04, 05, 07-10.
+
+---
+
+## Archive Locations
 
 All original documents were moved to:
 ```
-design-docs/spec-archived-20260109-160000/
+design-docs/spec-archived-20260109-160000/          # Original v2 specs
+design-docs/conversations-archived-20260111/        # v2.5 design conversations
 ```
 
-Directory structure preserved within the archive.
+Directory structure preserved within archives.
 
 ---
 

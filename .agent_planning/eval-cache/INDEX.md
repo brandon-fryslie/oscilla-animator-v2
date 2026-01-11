@@ -1,22 +1,27 @@
-# Eval Cache Index
+# Evaluation Cache Index
 
-This directory contains reusable evaluation findings to speed up future evaluations.
+Runtime knowledge extracted from work evaluations. Reusable findings for future evaluations.
 
-## Runtime Findings
+## Runtime Behavior
 
-### Component-Specific
-- **runtime-patch-viewer.md**: Patch viewer component behavior, Mermaid integration, layout
-- **runtime-offset-buses/** (directory): Offset bus implementation findings
-- **runtime-ui-store-wiring.md**: React components with MobX observer pattern (NEW)
+### UI Components
+- [runtime-ui-blocklibrary.md](runtime-ui-blocklibrary.md) - BlockLibrary component behavior, performance, edge cases (2026-01-11)
+- [runtime-ui-store-wiring.md](runtime-ui-store-wiring.md) - UI-Store integration patterns
+- [runtime-patch-viewer.md](runtime-patch-viewer.md) - PatchViewer runtime behavior
 
-### API/State Management
-- **runtime-ui-store-wiring.md**: Selection state flow, store integration patterns, React/vanilla boundary
+## Data Flow
+(None yet)
 
-## General Patterns
-(none yet - add as patterns emerge across multiple evaluations)
+## Break-It Patterns
+(None yet)
 
-## Usage Notes
-- Check confidence level before reusing (FRESH > RECENT > RISKY > STALE)
-- Verify no code changes in scope since cache was written
-- Update cache files when new runtime behavior is discovered
-- Keep findings factual - no opinions or verdicts
+## Performance Baselines
+- **BlockLibrary search**: <50ms for 18 blocks, <300ms total with debounce
+- See runtime-ui-blocklibrary.md for details
+
+## Known Edge Cases
+- **localStorage unavailable**: BlockLibrary handles gracefully with try/catch
+- See runtime-ui-blocklibrary.md for full list
+
+## Last Updated
+2026-01-11

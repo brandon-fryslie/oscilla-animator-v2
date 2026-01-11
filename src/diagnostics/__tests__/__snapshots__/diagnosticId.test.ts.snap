@@ -1,0 +1,9 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`diagnosticId > ID format stability (snapshot) > should maintain stable format for TimeRoot diagnostics 1`] = `"E_TIME_ROOT_MISSING:graphSpan-[]:rev0"`;
+
+exports[`diagnosticId > ID format stability (snapshot) > should maintain stable format for block target 1`] = `"E_TYPE_MISMATCH:block-oscillator-1:rev42"`;
+
+exports[`diagnosticId > ID format stability (snapshot) > should maintain stable format for cycle detection 1`] = `"E_CYCLE_DETECTED:graphSpan-[filter-2,osc-1,osc-1]:cycle:rev8"`;
+
+exports[`diagnosticId > ID format stability (snapshot) > should maintain stable format for port target 1`] = `"E_MISSING_INPUT:port-osc-1:frequency:rev15:float-expected"`;

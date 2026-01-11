@@ -1072,3 +1072,81 @@ When integrating source documents:
 2. ✅ GLOSSARY updated with Transform/Adapter/Lens
 3. Update INDEX with new topic
 4. Archive Modulation Table source files
+
+---
+
+## Update 3: Graph Editor UI Integration (2026-01-11)
+
+**Sources Analyzed**: 7 files from design-docs/
+**New Topics**: 1 (Graph Editor UI)
+**Resolutions Made**: 2
+**Administrative Actions**: Archived 6 conversation exports
+
+---
+
+### A1: Archive ChatGPT Conversation Exports
+
+**Date**: 2026-01-11
+
+**Category**: Administrative
+
+**Source**: design-docs/ update (compiler-changes.md, runtime-changes.md, IR-and-normalization-5-axes.md, later_spec/*)
+
+**The Situation**:
+6 of 7 new source files are ChatGPT conversation exports documenting the design process that produced the v2.5 canonical specification (5-axis type system, compiler pipeline, IR schema, graph normalization).
+
+**Resolution**:
+Archive as design history to `conversations-archived-20260111/`. These documents show design rationale and decision-making process - valuable as historical context. The architectural content is already integrated into canonical Topics 01, 04, 05, 07-10.
+
+**Rationale**:
+- These are design artifacts, not active specifications
+- Archiving preserves history without treating as canonical sources
+- Content already integrated; keeping active would create confusion
+
+**Impact**: Organizational only - no changes to canonical spec
+
+---
+
+### A2: Add Topic 15 - Graph Editor UI
+
+**Date**: 2026-01-11
+
+**Category**: New Topic (Additive)
+
+**Source**: design-docs/spec/10-linear-graph-editor.md
+
+**Content**:
+Complete UI specification for linear auto-layout graph editor:
+- Automatic block positioning (no manual drag-and-drop)
+- Chain traversal and focus semantics (no-reversal rule)
+- Perspective rotation at pivot blocks
+- Focus/dimming visual states
+- Keyboard/mouse interaction patterns
+
+**Resolution**:
+Add as Topic 15 (T3: Optional - UI implementation detail). Self-contained UI specification with no dependencies or conflicts.
+
+**Rationale**:
+- Genuinely new UI specification not yet in canonical
+- T3 tier appropriate - UI implementation can change freely without affecting core architecture
+- Aligns with existing UI topics (09: Debug UI, 14: Modulation Table UI)
+
+**Impact**:
+- Created `topics/15-graph-editor-ui.md`
+- Added 5 new terms to GLOSSARY (Chain, Pivot Block, Focused Subgraph, Dimmed Subgraph, Perspective Rotation)
+- Updated INDEX, source-map, search hints
+
+---
+
+## Statistics
+
+| Phase | Date | Sources | Topics | Resolutions |
+|-------|------|---------|--------|-------------|
+| **Phase 1** | 2026-01-09 | 27 | 7 | 53 |
+| **Phase 2 (Debugger)** | 2026-01-10 | +16 | +7 | +20 |
+| **Phase 2 (Events)** | 2026-01-10 | +6 | +0 | +1 |
+| **Phase 2 (Continuity)** | 2026-01-10 | +1 | +1 | +1 |
+| **Phase 2 (Modulation)** | 2026-01-10 | +3 | +1 | +3 |
+| **Phase 3 (Graph Editor)** | 2026-01-11 | +1 | +1 | +2 |
+| **Total** | — | **55** | **15** | **79** |
+

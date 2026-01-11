@@ -1,28 +1,35 @@
 ---
 status: CANONICAL
 generated: 2026-01-09T17:00:00Z
-updated: 2026-01-10T19:45:00Z
-updating_started: 2026-01-10T16:30:00Z
-updating_sources:
-  - design-docs/debugger/*.md (16 files)
-  - design-docs/4-Event-System/*.md (6 files)
-  - design-docs/ANTi-JANK-GAUGE-INVARIANCE.md
+updated: 2026-01-11T06:15:00Z
 approved_by: Brandon Fryslie
-approval_method: full_walkthrough + integrated_debugger_update + event_system_integration + continuity_integration
-source_documents: 54
-topics: 14
+approval_method: full_walkthrough + integrated_debugger_update + event_system_integration + continuity_integration + graph_editor_ui_integration
+source_documents: 55
+topics: 15
+update_history:
+  - date: 2026-01-10T19:45:00Z
+    sources_added: 23
+    topics_updated: [07, 08, 09, 10, 12, 13]
+    topics_added: 7
+    resolutions_made: 24
+  - date: 2026-01-11T06:15:00Z
+    sources_added: 1
+    topics_added: 1
+    topics_updated: []
+    resolutions_made: 2
+    notes: "Archived 6 conversation exports as design history; integrated graph editor UI spec"
 ---
 
 # Oscilla v2.5: Canonical Specification Index
 
 > **STATUS: ✅ CANONICAL**
-> Debugger specification integrated successfully (2026-01-10T18:30:00Z)
+> Graph Editor UI specification integrated successfully (2026-01-11T06:15:00Z)
 
 Generated: 2026-01-09T17:00:00Z
-Last Updated: 2026-01-10T19:45:00Z
+Last Updated: 2026-01-11T06:15:00Z
 Approved by: Brandon Fryslie
-Source Documents: 54 files (27 original + 16 debugger + 1 anti-jank + 6 event-system + 3 modulation-table + 1 continuity)
-Total Resolutions: 77 (53 original + 20 debugger integration + 1 continuity + 3 modulation-table)
+Source Documents: 55 files (27 original + 16 debugger + 1 anti-jank + 6 event-system + 3 modulation-table + 1 continuity + 1 graph-editor-ui)
+Total Resolutions: 79 (53 original + 20 debugger integration + 1 continuity + 3 modulation-table + 2 graph-editor-ui integration)
 
 ---
 
@@ -54,6 +61,7 @@ Total Resolutions: 77 (53 original + 20 debugger integration + 1 continuity + 3 
 | 12 | [Event Hub](./topics/12-event-hub.md) | Event coordination spine | Typed events, emission patterns, decoupling |
 | 13 | [Event-Diagnostics Integration](./topics/13-event-diagnostics-integration.md) | How events drive diagnostics | DiagnosticHub subscriptions, snapshot semantics |
 | 14 | [Modulation Table UI](./topics/14-modulation-table-ui.md) | Table view for port connections (UI only) | Transform chains, Adapters, Lenses |
+| 15 | [Graph Editor UI](./topics/15-graph-editor-ui.md) | Linear auto-layout graph editor | Chain, Pivot Block, Perspective Rotation, Focus/Dimming |
 
 ## Recommended Reading Order
 
@@ -96,6 +104,8 @@ Looking for something specific? Here's where to find it:
 | EventHub, EditorEvent, GraphCommitted | [12-event-hub.md](./topics/12-event-hub.md) |
 | DiagnosticHub event subscriptions | [13-event-diagnostics-integration.md](./topics/13-event-diagnostics-integration.md) |
 | Transform, Adapter, Lens, Modulation Table UI | [14-modulation-table-ui.md](./topics/14-modulation-table-ui.md) |
+| Chain, Pivot Block, Perspective Rotation | [15-graph-editor-ui.md](./topics/15-graph-editor-ui.md) |
+| Focused Subgraph, Dimmed Subgraph | [15-graph-editor-ui.md](./topics/15-graph-editor-ui.md) |
 | All term definitions | [GLOSSARY.md](./GLOSSARY.md) |
 | All invariant rules (I1-I31) | [INVARIANTS.md](./INVARIANTS.md) |
 
