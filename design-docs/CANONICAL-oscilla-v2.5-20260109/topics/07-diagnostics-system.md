@@ -94,8 +94,8 @@ Every diagnostic belongs to one of three streams with different characteristics:
           ▼                ▼                    ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                      EVENT HUB                               │
-│  • GraphCommitted      • CompileStarted                     │
-│  • CompileFinished     • ProgramSwapped                     │
+│  • GraphCommitted      • CompileBegin                     │
+│  • CompileEnd     • ProgramSwapped                     │
 │  • RuntimeHealthSnapshot                                     │
 └────────────────────────────┬────────────────────────────────┘
                              │
@@ -161,13 +161,13 @@ interface GraphCommittedEvent {
 
 **Diagnostic Role**: Signals authoring validators to recompute immediately for fast feedback.
 
-### 2. CompileStarted
+### 2. CompileBegin
 
 Emitted when compilation begins.
 
 ```typescript
-interface CompileStartedEvent {
-  type: 'CompileStarted';
+interface CompileBeginEvent {
+  type: 'CompileBegin';
   compileId: string;      // UUID for this compile pass
   patchId: string;
   patchRevision: number;
@@ -177,17 +177,17 @@ interface CompileStartedEvent {
 
 **Diagnostic Role**: Marks compile diagnostics for that revision as "pending".
 
-### 3. CompileFinished
+### 3. CompileEnd
 
 Emitted when compilation completes (success OR failure).
 
 ```typescript
-interface CompileFinishedEvent {
-  type: 'CompileFinished';
+interface CompileEndEvent {
+  type: 'CompileEnd';
   compileId: string;
   patchId: string;
   patchRevision: number;
-  status: 'ok' | 'failed';
+  status: 'success' | 'failure';
   durationMs: number;
   diagnostics: Diagnostic[];  // Authoritative snapshot
   programMeta?: {
@@ -316,12 +316,19 @@ interface Diagnostic {
   actions?: DiagnosticAction[];
   quickFixId?: string;            // Optional: recommended primary action
 
+  // Scope: where/when does this apply?
+  scope: {
+    patchRevision: number;        // Which patch version this applies to
+    compileId?: string;           // For compile-only diagnostics
+    runtimeSessionId?: string;    // For runtime-only diagnostics
+    exportTarget?: 'svg' | 'video' | 'server';  // For export-specific diagnostics
+  };
+
   // Lifecycle
   metadata: {
     firstSeenAt: number;          // Timestamp when first observed
     lastSeenAt: number;           // Last time this exact diagnostic occurred
     occurrenceCount: number;      // How many times seen (for runtime diagnostics)
-    patchRevision: number;        // Which patch version produced this
   };
 }
 ```
@@ -424,8 +431,8 @@ class DiagnosticHub {
 | Event | Handler |
 |-------|---------|
 | `GraphCommitted` | Run authoring validators, update authoring snapshot |
-| `CompileStarted` | Mark revision as "pending" |
-| `CompileFinished` | **Replace** compile snapshot (complete replacement) |
+| `CompileBegin` | Mark revision as "pending" |
+| `CompileEnd` | **Replace** compile snapshot (complete replacement) |
 | `ProgramSwapped` | Set active revision pointer |
 | `RuntimeHealthSnapshot` | Update/merge runtime diagnostics |
 
@@ -523,7 +530,7 @@ Canonical diagnostic codes organized by domain and severity:
 ### Rule 1: Snapshots vs Streams
 
 - **Compile diagnostics**: Complete snapshot per compilation
-  - `CompileFinished` event contains full list
+  - `CompileEnd` event contains full list
   - Replaces previous snapshot entirely (not merged)
   - Scope is a single patch revision
 
@@ -687,7 +694,7 @@ User connects a `float` output to a `color` input.
 **Compiler produces**:
 ```typescript
 {
-  id: 'E_TYPE_MISMATCH:port-b1:p2:float->color',
+  id: 'E_TYPE_MISMATCH:port-b1:p2:rev42:float->color',
   code: 'E_TYPE_MISMATCH',
   severity: 'error',
   domain: 'compile',
@@ -703,7 +710,8 @@ User connects a `float` output to a `color` input.
   actions: [
     { kind: 'insertBlock', blockType: 'HSVtoRGB', nearBlockId: 'b0' },
   ],
-  metadata: { firstSeenAt: 123, lastSeenAt: 123, occurrenceCount: 1, patchRevision: 42 }
+  scope: { patchRevision: 42, compileId: 'compile-xyz' },
+  metadata: { firstSeenAt: 123, lastSeenAt: 123, occurrenceCount: 1 }
 }
 ```
 
@@ -716,7 +724,7 @@ Compile detects a bus with publishers but no subscribers.
 **Diagnostic**:
 ```typescript
 {
-  id: 'W_BUS_EMPTY:bus-mybus',
+  id: 'W_BUS_EMPTY:bus-mybus:rev42',
   code: 'W_BUS_EMPTY',
   severity: 'warn',
   domain: 'compile',
@@ -731,7 +739,8 @@ Compile detects a bus with publishers but no subscribers.
   actions: [
     { kind: 'goToTarget', target: { kind: 'bus', busId: 'mybus' } }
   ],
-  metadata: { firstSeenAt: 200, lastSeenAt: 200, occurrenceCount: 1, patchRevision: 42 }
+  scope: { patchRevision: 42, compileId: 'compile-xyz' },
+  metadata: { firstSeenAt: 200, lastSeenAt: 200, occurrenceCount: 1 }
 }
 ```
 
@@ -744,18 +753,18 @@ During evaluation, a Noise block produces NaN due to invalid parameters.
 **Runtime emits** (via `RuntimeHealthSnapshot`):
 ```typescript
 {
-  id: 'P_NAN_DETECTED:block-b3',
+  id: 'P_NAN_DETECTED:block-b3:rev42',
   code: 'P_NAN_DETECTED',
   severity: 'warn',
   domain: 'perf',
   primaryTarget: { kind: 'block', blockId: 'b3' },
   title: 'NaN value detected',
   message: 'Block produced NaN during evaluation',
+  scope: { patchRevision: 42, runtimeSessionId: 'session-abc' },
   metadata: {
     firstSeenAt: 5000,
     lastSeenAt: 5250,  // Updated on next sample
-    occurrenceCount: 3,  // Seen 3 times in window
-    patchRevision: 42
+    occurrenceCount: 3  // Seen 3 times in window
   }
 }
 ```

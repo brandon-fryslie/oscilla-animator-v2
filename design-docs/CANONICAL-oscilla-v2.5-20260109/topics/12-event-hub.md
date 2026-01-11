@@ -130,24 +130,26 @@ Events are organized by domain.
 
 Domain facts about the patch structure:
 
-- `GraphCommitted` - Patch graph changed (blocks/buses/bindings)
+- `PatchLoaded` - Patch loaded from file/storage
+- `PatchSaved` - Patch saved to file/storage
+- `PatchReset` - Patch reset to initial state
+- `GraphCommitted` - Patch graph changed (blocks/edges/bindings)
 - `BlockAdded` - New block created
 - `BlockRemoved` - Block deleted
 - `BlocksMoved` - Blocks repositioned
-- `BlockParamChanged` - Block parameter updated
-- `BusCreated` - New bus created
-- `BusDeleted` - Bus removed
-- `PublisherAdded` - Bus publisher created
-- `ListenerAdded` - Bus listener created
-- `MacroInserted` - Macro expanded into patch
+- `EdgeAdded` - Edge (wire/binding) created
+- `EdgeRemoved` - Edge (wire/binding) removed
+- `MacroExpanded` - Macro expanded into patch
+- `CompositeEdited` - Composite definition edited
+- `CompositeSaved` - Composite definition saved
 - `TimeRootChanged` - TimeRoot block changed
 
 ### Compile Lifecycle
 
 Compilation state transitions:
 
-- `CompileStarted` - Compilation began
-- `CompileFinished` - Compilation completed (success or failure)
+- `CompileBegin` - Compilation began
+- `CompileEnd` - Compilation completed (status: 'success' | 'failure')
 - `ProgramSwapped` - Runtime began executing new program
 
 ### Runtime Lifecycle
@@ -183,36 +185,12 @@ Every event includes standard metadata:
 interface EventMeta {
   patchId: string;         // Which patch this event relates to
   rev: number;             // Patch revision (increments on commits)
-  tx: string;              // Transaction ID (groups related events)
   origin: 'ui' | 'import' | 'system' | 'remote' | 'migration';
   at: number;              // Timestamp (performance.now() or Date.now())
 }
 ```
 
-### Transaction Boundaries
-
-A "transaction" is one user intent:
-- Insert macro
-- Create bus
-- Add listener
-- Delete block(s)
-- Change param slider (maybe coalesced)
-
-Within a transaction:
-- Multiple events may be emitted
-- All share the same `tx` ID
-- All share the same `rev` (post-commit)
-
-Implementation uses a store-level `runTx(origin, fn)` wrapper:
-
-```typescript
-runTx('ui', () => {
-  // Mutate state
-  // All emitted events get same tx + rev
-});
-```
-
-This can be implemented with MobX `runInAction` or `transaction`.
+**Note**: Transaction concepts (tx ID, transaction boundaries) have been removed. These relate to "branch axis" functionality not yet designed in the system.
 
 ---
 
@@ -240,8 +218,8 @@ class EventHub {
 
 ```typescript
 // Subscribe to compile events
-const unsubscribe = editorStore.events.on('CompileFinished', (event) => {
-  if (event.status === 'ok') {
+const unsubscribe = editorStore.events.on('CompileEnd', (event) => {
+  if (event.status === 'success') {
     console.log(`Compiled in ${event.durationMs}ms`);
   }
 });
@@ -356,24 +334,22 @@ runTx('userEdit', () => {
 
 ### Macro Expansion
 
-**When**: After macro is fully expanded and all internal blocks/wires/bindings are committed
+**When**: After macro is fully expanded and all internal blocks/edges are committed
 
-**What**: Emit `MacroInserted` with created entity IDs
+**What**: Emit `MacroExpanded` with created entity IDs
 
 **Pattern**:
 ```typescript
 expandMacro(macroId, position) {
-  const { createdBlocks, createdWires, createdPublishers, createdListeners } =
+  const { createdBlocks, createdEdges } =
     internalExpansion(macroId, position);
 
   this.events.emit({
-    type: 'MacroInserted',
+    type: 'MacroExpanded',
     macroId,
     macroName: getMacroName(macroId),
     createdBlocks,
-    createdWires,
-    createdPublishers,
-    createdListeners
+    createdEdges
   });
 }
 ```
@@ -390,8 +366,8 @@ Downstream systems react:
 **When**: At compile lifecycle boundaries
 
 **What**:
-1. `CompileStarted` - When compilation begins
-2. `CompileFinished` - When compilation completes (success OR failure)
+1. `CompileBegin` - When compilation begins
+2. `CompileEnd` - When compilation completes (status: 'success' | 'failure')
 3. `ProgramSwapped` - When runtime adopts new program
 
 **Pattern**:
@@ -400,15 +376,15 @@ async compile() {
   const compileId = generateId();
   const patchRevision = this.patchStore.revision;
 
-  this.events.emit({ type: 'CompileStarted', compileId, patchRevision, trigger: 'graphCommitted' });
+  this.events.emit({ type: 'CompileBegin', compileId, patchRevision, trigger: 'graphCommitted' });
 
   const result = await runCompiler(this.patchStore.graph);
 
   this.events.emit({
-    type: 'CompileFinished',
+    type: 'CompileEnd',
     compileId,
     patchRevision,
-    status: result.ok ? 'ok' : 'failed',
+    status: result.ok ? 'success' : 'failure',
     durationMs: result.durationMs,
     diagnostics: result.diagnostics || []
   });
@@ -534,28 +510,25 @@ Key pattern:
 User drops a macro into the patch:
 
 ```
-1. UI calls editorStore.insertMacro('Dots', position)
+1. UI calls editorStore.expandMacro('Dots', position)
 
-2. Inside insertMacro:
-   - runTx('ui', () => {
-       - Add blocks
-       - Add wires
-       - Add bus bindings
-     })
-   - Emit MacroInserted { createdBlocks, createdWires, ... }
+2. Inside expandMacro:
+   - Add blocks
+   - Add edges
+   - Emit MacroExpanded { createdBlocks, createdEdges, ... }
    - Emit GraphCommitted { reason: 'macroExpand', diffSummary, ... }
 
 3. Subscribers react:
-   - LogStore hears MacroInserted → clears console (if configured)
+   - LogStore hears MacroExpanded → clears console (if configured)
    - DiagnosticHub hears GraphCommitted → runs authoring validators
    - CompileOrchestrator hears GraphCommitted → triggers compile
 
 4. Compile runs:
-   - Emit CompileStarted
+   - Emit CompileBegin
    - Run compiler
-   - Emit CompileFinished { status: 'ok', diagnostics: [...] }
+   - Emit CompileEnd { status: 'success', diagnostics: [...] }
 
-5. DiagnosticHub hears CompileFinished → updates compile diagnostics snapshot
+5. DiagnosticHub hears CompileEnd → updates compile diagnostics snapshot
 
 6. Runtime swaps program:
    - Emit ProgramSwapped { swapMode: 'soft' }

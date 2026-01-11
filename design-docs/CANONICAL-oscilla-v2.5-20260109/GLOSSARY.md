@@ -508,6 +508,65 @@ type NormalizedGraph = {
 
 ---
 
+## UI & Interaction
+
+### Transform
+
+**Definition**: Umbrella term for value transformations and type conversions on edges.
+
+**Type**: concept
+
+**Canonical Form**: `Transform` (abstract), `Adapter` (subtype), `Lens` (subtype)
+
+**Subtypes**:
+- **Adapter**: Type conversion that enables ports of different types to connect (mechanical compatibility, no value transformation)
+- **Lens**: Value transformation (scale, offset, easing, etc.) - may or may not change type
+
+**Source**: [14-modulation-table-ui.md](./topics/14-modulation-table-ui.md)
+
+**Implementation**: Transforms compile to blocks in the patch
+
+**Note**: Transform registry and detailed transform system are deferred (roadmap item)
+
+---
+
+### Adapter
+
+**Definition**: A transform that changes signal type to enable port connections, without transforming the value itself.
+
+**Type**: concept (transform subtype)
+
+**Canonical Form**: `Adapter`
+
+**Purpose**: Mechanical port compatibility
+
+**Example**: `phase → float` adapter allows phase output to connect to float input by converting type representation
+
+**Source**: [14-modulation-table-ui.md](./topics/14-modulation-table-ui.md)
+
+---
+
+### Lens
+
+**Definition**: A transform that modifies signal values, possibly changing type as a side effect.
+
+**Type**: concept (transform subtype)
+
+**Canonical Form**: `Lens`
+
+**Purpose**: Value transformation and modulation
+
+**Examples**:
+- `scale(0..1 → 0..360)` - range mapping
+- `ease(inOut)` - easing curve
+- `offset(+0.5)` - value shift
+
+**Source**: [14-modulation-table-ui.md](./topics/14-modulation-table-ui.md)
+
+**Note**: Lens system details deferred to future spec topic
+
+---
+
 ## Naming Conventions
 
 ### Type Names
@@ -574,7 +633,7 @@ interface Diagnostic {
 
 **Source**: [07-diagnostics-system.md](./topics/07-diagnostics-system.md)
 
-**Note**: Subscribes to GraphCommitted, CompileStarted, CompileFinished, ProgramSwapped, RuntimeHealthSnapshot events.
+**Note**: Subscribes to GraphCommitted, CompileBegin, CompileEnd, ProgramSwapped, RuntimeHealthSnapshot events.
 
 ---
 
@@ -695,8 +754,8 @@ class EventHub {
 ```typescript
 type EditorEvent =
   | GraphCommittedEvent
-  | CompileStartedEvent
-  | CompileFinishedEvent
+  | CompileBeginEvent
+  | CompileEndEvent
   | ProgramSwappedEvent
   | RuntimeHealthSnapshotEvent
   | MacroInsertedEvent
@@ -738,18 +797,18 @@ type EditorEvent =
 
 ---
 
-### CompileStarted
+### CompileBegin
 
 **Definition**: Event emitted when compilation begins for a specific graph revision.
 
 **Type**: event
 
-**Canonical Form**: `CompileStartedEvent`
+**Canonical Form**: `CompileBeginEvent`
 
 **Payload**:
 ```typescript
 {
-  type: 'CompileStarted';
+  type: 'CompileBegin';
   compileId: string;      // UUID for this compile pass
   patchId: string;
   patchRevision: number;
@@ -763,22 +822,22 @@ type EditorEvent =
 
 ---
 
-### CompileFinished
+### CompileEnd
 
-**Definition**: Event emitted when compilation completes (success OR failure). Contains authoritative diagnostic snapshot.
+**Definition**: Event emitted when compilation completes. Contains authoritative diagnostic snapshot and status indicating success or failure.
 
 **Type**: event
 
-**Canonical Form**: `CompileFinishedEvent`
+**Canonical Form**: `CompileEndEvent`
 
 **Payload**:
 ```typescript
 {
-  type: 'CompileFinished';
+  type: 'CompileEnd';
   compileId: string;
   patchId: string;
   patchRevision: number;
-  status: 'ok' | 'failed';
+  status: 'success' | 'failure';
   durationMs: number;
   diagnostics: Diagnostic[];  // Authoritative snapshot
   programMeta?: { timelineHint, busUsageSummary };
@@ -787,7 +846,7 @@ type EditorEvent =
 
 **Source**: [12-event-hub.md](./topics/12-event-hub.md), [13-event-diagnostics-integration.md](./topics/13-event-diagnostics-integration.md)
 
-**Note**: DiagnosticHub replaces compile snapshot (not merge). Single event for both success and failure.
+**Note**: DiagnosticHub replaces compile snapshot (not merge). Single event covering both success and failure cases.
 
 ---
 

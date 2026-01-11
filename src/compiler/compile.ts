@@ -9,6 +9,8 @@
  * 5. Validate - Check for cycles
  * 6. Lower - Lower blocks to IR
  * 7. Link - Resolve connections
+ *
+ * Extended with event emission for diagnostics integration.
  */
 
 import type { Patch } from '../graph';
@@ -17,6 +19,8 @@ import type { CompiledProgramIR } from './ir/program';
 import { IRBuilder } from './ir';
 import { getBlock, type ValueRef } from './blocks';
 import { checkTypes } from './passes/TypeChecker';
+import type { EventHub } from '../events/EventHub';
+import { convertCompileErrorsToDiagnostics } from './diagnosticConversion';
 
 // =============================================================================
 // Compile Errors
@@ -40,21 +44,80 @@ export interface CompileFailure {
 }
 
 // =============================================================================
+// Compile Options
+// =============================================================================
+
+/**
+ * Options for compile function (optional).
+ * If provided, enables event emission and diagnostics integration.
+ */
+export interface CompileOptions {
+  readonly events: EventHub;
+  readonly patchRevision: number;
+  readonly patchId: string;
+}
+
+// =============================================================================
 // Main Compile Function
 // =============================================================================
 
-export function compile(patch: Patch): CompileResult | CompileFailure {
+/**
+ * Compiles a Patch into executable IR.
+ *
+ * @param patch The patch to compile
+ * @param options Optional event emission and diagnostics integration
+ * @returns CompileResult or CompileFailure
+ */
+export function compile(
+  patch: Patch,
+  options?: CompileOptions
+): CompileResult | CompileFailure {
+  const compileId = `compile-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  const startTime = performance.now();
+
+  // Emit CompileBegin event
+  if (options) {
+    options.events.emit({
+      type: 'CompileBegin',
+      compileId,
+      patchId: options.patchId,
+      patchRevision: options.patchRevision,
+      trigger: 'manual',
+    });
+  }
+
   const errors: CompileError[] = [];
 
   // Pass 1: Normalize
   const normResult = normalize(patch);
   if (normResult.kind === 'error') {
+    const compileErrors = normResult.errors.map((e) => ({
+      kind: e.kind,
+      message: formatNormError(e),
+    }));
+
+    // Emit CompileEnd event (failure)
+    if (options) {
+      const durationMs = performance.now() - startTime;
+      const diagnostics = convertCompileErrorsToDiagnostics(
+        compileErrors,
+        options.patchRevision,
+        compileId
+      );
+      options.events.emit({
+        type: 'CompileEnd',
+        compileId,
+        patchId: options.patchId,
+        patchRevision: options.patchRevision,
+        status: 'failure',
+        durationMs,
+        diagnostics,
+      });
+    }
+
     return {
       kind: 'error',
-      errors: normResult.errors.map((e) => ({
-        kind: e.kind,
-        message: formatNormError(e),
-      })),
+      errors: compileErrors,
     };
   }
 
@@ -73,6 +136,25 @@ export function compile(patch: Patch): CompileResult | CompileFailure {
   }
 
   if (errors.length > 0) {
+    // Emit CompileEnd event (failure)
+    if (options) {
+      const durationMs = performance.now() - startTime;
+      const diagnostics = convertCompileErrorsToDiagnostics(
+        errors,
+        options.patchRevision,
+        compileId
+      );
+      options.events.emit({
+        type: 'CompileEnd',
+        compileId,
+        patchId: options.patchId,
+        patchRevision: options.patchRevision,
+        status: 'failure',
+        durationMs,
+        diagnostics,
+      });
+    }
+
     return { kind: 'error', errors };
   }
 
@@ -118,11 +200,44 @@ export function compile(patch: Patch): CompileResult | CompileFailure {
   }
 
   if (errors.length > 0) {
+    // Emit CompileEnd event (failure)
+    if (options) {
+      const durationMs = performance.now() - startTime;
+      const diagnostics = convertCompileErrorsToDiagnostics(
+        errors,
+        options.patchRevision,
+        compileId
+      );
+      options.events.emit({
+        type: 'CompileEnd',
+        compileId,
+        patchId: options.patchId,
+        patchRevision: options.patchRevision,
+        status: 'failure',
+        durationMs,
+        diagnostics,
+      });
+    }
+
     return { kind: 'error', errors };
   }
 
   // Build CompiledProgramIR and return directly
   const compiledIR = builder.build();
+
+  // Emit CompileEnd event (success)
+  if (options) {
+    const durationMs = performance.now() - startTime;
+    options.events.emit({
+      type: 'CompileEnd',
+      compileId,
+      patchId: options.patchId,
+      patchRevision: options.patchRevision,
+      status: 'success',
+      durationMs,
+      diagnostics: [], // No diagnostics on success
+    });
+  }
 
   return {
     kind: 'ok',

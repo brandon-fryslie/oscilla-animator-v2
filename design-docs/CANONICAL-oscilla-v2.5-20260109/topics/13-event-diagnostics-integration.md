@@ -34,8 +34,8 @@ DiagnosticHub subscribes to exactly five events from EventHub:
 | Event | Purpose | DiagnosticHub Action |
 |-------|---------|----------------------|
 | `GraphCommitted` | Patch graph changed | Run authoring validators, update authoring snapshot |
-| `CompileStarted` | Compilation began | Mark revision as "pending compile" |
-| `CompileFinished` | Compilation completed | **Replace** compile snapshot (authoritative) |
+| `CompileBegin` | Compilation began | Mark revision as "pending compile" |
+| `CompileEnd` | Compilation completed | **Replace** compile snapshot (authoritative) |
 | `ProgramSwapped` | Runtime adopted new program | Set active revision pointer |
 | `RuntimeHealthSnapshot` | Periodic runtime health (2-5 Hz) | Update/merge runtime diagnostics |
 
@@ -72,12 +72,12 @@ These run **synchronously** (no async compilation) for instant feedback.
 
 ---
 
-### 2. CompileStarted → Pending State
+### 2. CompileBegin → Pending State
 
 When compilation begins, mark that revision as "compiling."
 
 ```typescript
-events.on('CompileStarted', (event) => {
+events.on('CompileBegin', (event) => {
   diagnosticHub.markCompilePending(event.patchRevision, event.compileId);
 });
 ```
@@ -86,12 +86,12 @@ events.on('CompileStarted', (event) => {
 
 ---
 
-### 3. CompileFinished → Compile Snapshot Replacement
+### 3. CompileEnd → Compile Snapshot Replacement
 
-When compilation completes (success OR failure), the `diagnostics` payload is the **authoritative snapshot** for that revision.
+When compilation completes (status: 'success' | 'failure'), the `diagnostics` payload is the **authoritative snapshot** for that revision.
 
 ```typescript
-events.on('CompileFinished', (event) => {
+events.on('CompileEnd', (event) => {
   // REPLACE compile snapshot entirely (not merge)
   diagnosticHub.setCompileSnapshot(
     event.patchRevision,
@@ -106,7 +106,7 @@ events.on('CompileFinished', (event) => {
 
 **Critical rule**: This is a **snapshot replacement**, not incremental updates.
 
-If `CompileFinished` has 3 diagnostics, the compile snapshot for that revision is exactly those 3 diagnostics (even if the previous compile had 10).
+If `CompileEnd` has 3 diagnostics, the compile snapshot for that revision is exactly those 3 diagnostics (even if the previous compile had 10).
 
 **Why replacement, not merge**:
 - Diagnostics that were present but are now fixed should disappear
@@ -419,20 +419,20 @@ const DiagnosticsPanel = observer(() => {
 User drops a macro, which triggers a type error:
 
 ```
-1. User action: insertMacro('Dots', position)
+1. User action: expandMacro('Dots', position)
 
 2. GraphCommitted emitted
    → DiagnosticHub runs authoring validators
    → Authoring snapshot updated (no errors from fast checks)
    → UI shows "authoring: clean"
 
-3. CompileStarted emitted
+3. CompileBegin emitted
    → DiagnosticHub marks revision 42 as "pending"
    → UI shows "compiling..."
 
 4. Compiler runs, finds type mismatch
 
-5. CompileFinished emitted { status: 'failed', diagnostics: [E_TYPE_MISMATCH] }
+5. CompileEnd emitted { status: 'failure', diagnostics: [E_TYPE_MISMATCH] }
    → DiagnosticHub replaces compile snapshot for revision 42
    → Compile snapshot now has 1 error
    → DiagnosticHub.incrementRevision()
@@ -445,9 +445,9 @@ User drops a macro, which triggers a type error:
    → GraphCommitted emitted (revision 43)
    → Authoring validators run (clean)
 
-8. CompileStarted emitted (revision 43)
+8. CompileBegin emitted (revision 43)
 
-9. CompileFinished emitted { status: 'ok', diagnostics: [] }
+9. CompileEnd emitted { status: 'success', diagnostics: [] }
    → DiagnosticHub replaces compile snapshot for revision 43 with empty array
    → Error disappears from UI
 
@@ -508,20 +508,21 @@ test('compile error updates diagnostic snapshot', () => {
 
   hub.subscribe(events);
 
-  // Emit compile finished with error
+  // Emit compile end with error
   events.emit({
-    type: 'CompileFinished',
+    type: 'CompileEnd',
     patchRevision: 1,
     compileId: 'compile-1',
-    status: 'failed',
+    status: 'failure',
     diagnostics: [{
-      id: 'E_TYPE_MISMATCH:port-b1:p2',
+      id: 'E_TYPE_MISMATCH:port-b1:p2:rev1',
       code: 'E_TYPE_MISMATCH',
       severity: 'error',
       domain: 'compile',
       primaryTarget: { kind: 'port', blockId: 'b1', portId: 'p2' },
       title: 'Type Mismatch',
       message: 'Expected color, got float',
+      scope: { patchRevision: 1, compileId: 'compile-1' },
       metadata: { firstSeenAt: 0, lastSeenAt: 0, occurrenceCount: 1, patchRevision: 1 }
     }]
   });

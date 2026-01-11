@@ -9,8 +9,8 @@ updating_sources:
   - design-docs/ANTi-JANK-GAUGE-INVARIANCE.md
 approved_by: Brandon Fryslie
 approval_method: full_walkthrough + integrated_debugger_update + event_system_integration + continuity_integration
-source_documents: 51
-topics: 13
+source_documents: 54
+topics: 14
 ---
 
 # Oscilla v2.5: Canonical Specification Index
@@ -21,8 +21,8 @@ topics: 13
 Generated: 2026-01-09T17:00:00Z
 Last Updated: 2026-01-10T19:45:00Z
 Approved by: Brandon Fryslie
-Source Documents: 51 files (27 original + 16 debugger + 1 anti-jank + 6 event-system + 1 modulation-table)
-Total Resolutions: 74 (53 original + 20 debugger integration + 1 continuity)
+Source Documents: 54 files (27 original + 16 debugger + 1 anti-jank + 6 event-system + 3 modulation-table + 1 continuity)
+Total Resolutions: 77 (53 original + 20 debugger integration + 1 continuity + 3 modulation-table)
 
 ---
 
@@ -53,6 +53,7 @@ Total Resolutions: 74 (53 original + 20 debugger integration + 1 continuity)
 | 11 | [Continuity System](./topics/11-continuity-system.md) | Anti-jank architecture (gauge invariance) | Phase offset, value reconciliation, field projection |
 | 12 | [Event Hub](./topics/12-event-hub.md) | Event coordination spine | Typed events, emission patterns, decoupling |
 | 13 | [Event-Diagnostics Integration](./topics/13-event-diagnostics-integration.md) | How events drive diagnostics | DiagnosticHub subscriptions, snapshot semantics |
+| 14 | [Modulation Table UI](./topics/14-modulation-table-ui.md) | Table view for port connections (UI only) | Transform chains, Adapters, Lenses |
 
 ## Recommended Reading Order
 
@@ -94,6 +95,7 @@ Looking for something specific? Here's where to find it:
 | Phase offset, continuity, gauge invariance | [11-continuity-system.md](./topics/11-continuity-system.md) |
 | EventHub, EditorEvent, GraphCommitted | [12-event-hub.md](./topics/12-event-hub.md) |
 | DiagnosticHub event subscriptions | [13-event-diagnostics-integration.md](./topics/13-event-diagnostics-integration.md) |
+| Transform, Adapter, Lens, Modulation Table UI | [14-modulation-table-ui.md](./topics/14-modulation-table-ui.md) |
 | All term definitions | [GLOSSARY.md](./GLOSSARY.md) |
 | All invariant rules (I1-I31) | [INVARIANTS.md](./INVARIANTS.md) |
 
