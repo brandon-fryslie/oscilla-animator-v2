@@ -20,6 +20,9 @@ import type { CompiledProgramIR } from './ir/program';
 import { convertCompileErrorsToDiagnostics } from './diagnosticConversion';
 import type { EventHub } from '../events/EventHub';
 
+// Import block registrations (side-effect imports to register blocks)
+import '../blocks/time-blocks';
+
 // Import passes
 import { pass2TypeGraph } from './passes-v2';
 import { pass3TimeTopology } from './passes-v2';
@@ -122,6 +125,16 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
     // Pass 6: Block Lowering
     const unlinkedIR = pass6BlockLowering(acyclicPatch);
 
+    // Check for errors from pass 6
+    if (unlinkedIR.errors.length > 0) {
+      const compileErrors: CompileError[] = unlinkedIR.errors.map((e) => ({
+        kind: e.code,
+        message: e.message,
+        blockId: e.where?.blockId,
+      }));
+      return emitFailure(options, startTime, compileId, compileErrors);
+    }
+
     // Pass 7: Schedule Construction
     const scheduleIR = pass7Schedule(unlinkedIR, acyclicPatch);
 
@@ -132,7 +145,7 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
     // Convert to CompiledProgramIR
     // TODO: Implement convertLinkedIRToProgram
     // const compiledIR = convertLinkedIRToProgram(linkedIR, scheduleIR);
-    const compiledIR = createStubProgramIR(scheduleIR);
+    const compiledIR = createStubProgramIR(scheduleIR, unlinkedIR);
 
     // Emit CompileEnd event (success)
     if (options) {
@@ -154,10 +167,15 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
     };
   } catch (e) {
     // Catch errors from any pass
-    const error = e as Error;
+    const error = e as any;
+
+    // Extract error code if available (from structured errors like Pass3Error)
+    const errorKind = error.code || 'CompilationFailed';
+    const errorMessage = error.message || 'Unknown compilation error';
+
     const compileErrors: CompileError[] = [{
-      kind: 'CompilationFailed',
-      message: error.message || 'Unknown compilation error',
+      kind: errorKind,
+      message: errorMessage,
     }];
 
     return emitFailure(options, startTime, compileId, compileErrors);
@@ -198,11 +216,16 @@ function emitFailure(
  * Create a stub CompiledProgramIR for testing.
  * TODO: Replace with real convertLinkedIRToProgram implementation.
  */
-function createStubProgramIR(scheduleIR: any): CompiledProgramIR {
+function createStubProgramIR(scheduleIR: any, unlinkedIR: any): CompiledProgramIR {
+  // Extract actual signal nodes from the builder if available
+  const builder = unlinkedIR?.builder;
+  const signalNodes = builder?.getSigExprs?.() || [];
+  const fieldNodes = builder?.getFieldExprs?.() || [];
+
   return {
     irVersion: 1,
-    signalExprs: { nodes: [] },
-    fieldExprs: { nodes: [] },
+    signalExprs: { nodes: signalNodes },
+    fieldExprs: { nodes: fieldNodes },
     eventExprs: { nodes: [] },
     constants: { json: [] },
     schedule: scheduleIR as any,

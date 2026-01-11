@@ -45,6 +45,10 @@ describe('compile', () => {
 
       const result = compile(patch);
 
+      if (result.kind === 'error') {
+        console.error('COMPILE ERROR:', result.errors);
+      }
+
       expect(result.kind).toBe('ok');
     });
   });

@@ -11,6 +11,20 @@ import { IRBuilderImpl } from "../ir/IRBuilderImpl";
 import { signalType } from "../../core/canonical-types";
 
 /**
+ * Structured error for pass 3 failures.
+ * Includes a `code` field that can be extracted by compile.ts.
+ */
+class Pass3Error extends Error {
+  code: string;
+
+  constructor(code: string, message: string) {
+    super(message);
+    this.code = code;
+    this.name = 'Pass3Error';
+  }
+}
+
+/**
  * Pass 3: Resolve time topology and generate time signals.
  */
 export function pass3TimeTopology(
@@ -23,11 +37,11 @@ export function pass3TimeTopology(
 
   // Validate TimeRoot count
   if (timeRoots.length === 0) {
-    throw new Error("NoTimeRoot: Patch must have exactly one TimeRoot block");
+    throw new Pass3Error("NoTimeRoot", "Patch must have exactly one TimeRoot block");
   }
 
   if (timeRoots.length > 1) {
-    throw new Error(`MultipleTimeRoots: Patch has ${timeRoots.length} TimeRoot blocks`);
+    throw new Pass3Error("MultipleTimeRoots", `Patch has ${timeRoots.length} TimeRoot blocks`);
   }
 
   const timeRoot = timeRoots[0];
@@ -55,7 +69,7 @@ function extractTimeModel(
   if (timeRoot.type === "FiniteTimeRoot") {
     const durationMs = (timeRoot.params?.durationMs as number) ?? 10000;
     if (durationMs <= 0) {
-      throw new Error(`Pass 3 (Time Topology) failed: Invalid FiniteTimeRoot duration: ${durationMs}ms`);
+      throw new Pass3Error("InvalidDuration", `Invalid FiniteTimeRoot duration: ${durationMs}ms`);
     }
     return { kind: "finite", durationMs: Math.max(1, durationMs) };
   }
