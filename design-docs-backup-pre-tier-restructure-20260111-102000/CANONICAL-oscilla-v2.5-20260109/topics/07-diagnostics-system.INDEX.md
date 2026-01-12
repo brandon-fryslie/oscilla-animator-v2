@@ -44,10 +44,15 @@ index_version: 1.0
 
 ## Data Structures
 - **Diagnostic** (13 fields) [L297]
-- **TargetRef** (7 discriminated variants) [L260]
+  - id, code, severity, domain, primaryTarget, affectedTargets, title, message, payload, actions, quickFixId, scope, metadata
+- **TargetRef** (7 discriminated variants) [L260-267]
+  - block, port, bus, binding, timeRoot, graphSpan, composite
 - **DiagnosticHub** (4 maps + state) [L407-426]
+  - compileSnapshots, authoringSnapshot, runtimeDiagnostics, activeRevision, pendingCompileRevision, mutedDiagnostics
 - **CompileEndEvent** (6 fields + diagnostics[]) [L184-197]
+  - compileId, patchId, patchRevision, status, durationMs, diagnostics, programMeta
 - **RuntimeHealthSnapshotEvent** (6 fields + diagnosticsDelta) [L225-246]
+  - patchId, activePatchRevision, tMs, frameBudget, evalStats, diagnosticsDelta
 
 ## Dependencies
 - **Depends on**: [02-block-system](./02-block-system.md) (block/port/bus structure), [04-compilation](./04-compilation.md) (compiler errors), [05-runtime](./05-runtime.md) (performance monitoring)
@@ -64,5 +69,5 @@ index_version: 1.0
 - DECISION: Grouping multi-target diagnostics by groupKey for UI scalability [L817-833]
 
 ## Tier Classification
-- **Suggested**: T1
-- **Rationale**: Critical for user-facing feedback, error attribution, and actionability; defines how system communicates problems to users across compile/runtime/authoring domains.
+- **Tier**: T2 (Structural)
+- **Rationale**: Diagnostics system provides foundational observability and developer feedback across compile/runtime/authoring domains. T2 classification reflects that it's a structural component supporting the entire system's health reporting and user communication, but not foundational to core compilation or execution.

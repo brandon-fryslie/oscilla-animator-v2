@@ -1,12 +1,13 @@
 ---
 indexed: true
 source: design-docs/CANONICAL-oscilla-v2.5-20260109/topics/02-block-system.md
-source_hash: 947cfe0b60
-source_mtime: 2026-01-09T00:00:00Z
+source_hash: 72564b7be9f8
+source_mtime: 2026-01-12T00:00:00Z
 original_tokens: ~2443
 index_tokens: ~1200
 compression: 49.1%
 index_version: 1.0
+tier: T1
 ---
 
 # Index: Block System (02-block-system.md)

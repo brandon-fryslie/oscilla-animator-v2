@@ -2,12 +2,15 @@
 
 **Purpose**: Reusable findings from work-evaluator runs to avoid redundant testing.
 
-**Last Updated**: 2026-01-11 09:17:58
+**Last Updated**: 2026-01-12 03:07:00
 
 ## Active Cache Files
 
 ### Runtime Behavior
-- **runtime-diagnostics-system.md** (FRESH): Diagnostics System Sprint 1 test suite, coverage, build characteristics, integration points
+- **runtime-diagnostics-system.md** (RECENT): Diagnostics System Sprint 1 test suite, coverage, build characteristics, integration points
+- **runtime-diagnostics-sprint2.md** (FRESH): Sprint 2 P0+P1 implementation (batching, throttling, config object, event flow)
+- **runtime-block-registry.md** (FRESH): Block registry unification, registration patterns, test coverage
+- **runtime-ui-blocklibrary.md** (FRESH): BlockLibrary Tier 1 UI implementation, CSS styling, test patterns
 
 ### Break-It Test Patterns
 (None yet - will accumulate patterns that reveal bugs)
