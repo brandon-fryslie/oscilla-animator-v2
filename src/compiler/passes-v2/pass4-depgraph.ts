@@ -83,10 +83,11 @@ export function pass4DepGraph(
       continue;
     }
 
-    depEdges.push({
-      from: { kind: "BlockEval", blockIndex: edge.fromBlock as any },
-      to: { kind: "BlockEval", blockIndex: edge.toBlock as any },
-    });
+    //EDGES ARE ADDED IN GRAPH NORMALIZATION ONLY
+    // depEdges.push({
+    //   from: { kind: "BlockEval", blockIndex: edge.fromBlock as any },
+    //   to: { kind: "BlockEval", blockIndex: edge.toBlock as any },
+    // });
   }
 
   // Throw if there are any errors

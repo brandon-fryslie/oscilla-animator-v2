@@ -5,7 +5,6 @@
  */
 
 import { registerBlock } from './registry';
-import { registerBlockType } from '../compiler/ir/lowerTypes';
 import { signalType, signalTypeField } from '../core/canonical-types';
 import { domainId } from '../compiler/ir/Indices';
 
@@ -30,17 +29,6 @@ registerBlock({
   params: {
     seed: 0,
   },
-});
-
-registerBlockType({
-  type: 'StableIdHash',
-  inputs: [
-    { portId: 'domain', type: signalType('float') },
-  ],
-  outputs: [
-    { portId: 'rand', type: signalTypeField('float', 'default') },
-    { portId: 'id01', type: signalTypeField('float', 'default') },
-  ],
   lower: ({ ctx, config }) => {
     const seed = (config?.seed as number) ?? 0;
 
@@ -80,15 +68,6 @@ registerBlock({
   outputs: [
     { id: 'index', label: 'Index', type: signalTypeField('float', 'default') },
     { id: 'indexInt', label: 'Index (int)', type: signalTypeField('int', 'default') },
-  ],
-});
-
-registerBlockType({
-  type: 'DomainIndex',
-  inputs: [],
-  outputs: [
-    { portId: 'index', type: signalTypeField('float', 'default') },
-    { portId: 'indexInt', type: signalTypeField('int', 'default') },
   ],
   lower: ({ ctx }) => {
     // Get the domain from context

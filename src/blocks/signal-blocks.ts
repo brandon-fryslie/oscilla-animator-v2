@@ -5,7 +5,6 @@
  */
 
 import { registerBlock } from './registry';
-import { registerBlockType } from '../compiler/ir/lowerTypes';
 import { signalType } from '../core/canonical-types';
 import { OpCode } from '../compiler/ir/types';
 import type { SigExprId } from '../compiler/ir/Indices';
@@ -28,14 +27,6 @@ registerBlock({
   params: {
     value: 0,
   },
-});
-
-registerBlockType({
-  type: 'ConstFloat',
-  inputs: [],
-  outputs: [
-    { portId: 'out', type: signalType('float') },
-  ],
   lower: ({ ctx, config }) => {
     // Get the constant value from config (block params)
     const value = (config?.value as number) ?? 0;
@@ -74,16 +65,6 @@ registerBlock({
     amplitude: 1.0,
     offset: 0.0,
   },
-});
-
-registerBlockType({
-  type: 'Oscillator',
-  inputs: [
-    { portId: 'phase', type: signalType('float') },
-  ],
-  outputs: [
-    { portId: 'out', type: signalType('float') },
-  ],
   lower: ({ ctx, inputsById, config }) => {
     // Get the phase input
     const phaseValue = inputsById.phase;

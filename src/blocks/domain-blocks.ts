@@ -5,7 +5,6 @@
  */
 
 import { registerBlock } from './registry';
-import { registerBlockType } from '../compiler/ir/lowerTypes';
 
 // =============================================================================
 // GridDomain
@@ -24,12 +23,6 @@ registerBlock({
     rows: 4,
     cols: 4,
   },
-});
-
-registerBlockType({
-  type: 'GridDomain',
-  inputs: [],
-  outputs: [],
   lower: ({ ctx, config }) => {
     const rows = (config?.rows as number) ?? 4;
     const cols = (config?.cols as number) ?? 4;
@@ -61,12 +54,6 @@ registerBlock({
     n: 100,
     seed: 0,
   },
-});
-
-registerBlockType({
-  type: 'DomainN',
-  inputs: [],
-  outputs: [],
   lower: ({ ctx, config }) => {
     const n = (config?.n as number) ?? 100;
     const seed = (config?.seed as number) ?? 0;

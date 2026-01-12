@@ -5,9 +5,8 @@
  */
 
 import { registerBlock } from './registry';
-import { registerBlockType } from '../compiler/ir/lowerTypes';
 import { signalType, signalTypeField } from '../core/canonical-types';
-import type { SigExprId, FieldExprId } from '../compiler/ir/Indices';
+import type { SigExprId } from '../compiler/ir/Indices';
 import { domainId } from '../compiler/ir/Indices';
 
 // =============================================================================
@@ -29,19 +28,6 @@ registerBlock({
   ],
   outputs: [
     { id: 'pos', label: 'Position', type: signalType('vec2') },
-  ],
-});
-
-registerBlockType({
-  type: 'PolarToCartesian',
-  inputs: [
-    { portId: 'angle', type: signalType('float') },
-    { portId: 'radius', type: signalType('float') },
-    { portId: 'centerX', type: signalType('float') },
-    { portId: 'centerY', type: signalType('float') },
-  ],
-  outputs: [
-    { portId: 'pos', type: signalType('vec2') },
   ],
   lower: ({ ctx, inputsById }) => {
     const angle = inputsById.angle;
@@ -96,18 +82,6 @@ registerBlock({
     radius: 100,
     phaseOffset: 0,
   },
-});
-
-registerBlockType({
-  type: 'Circle',
-  inputs: [
-    { portId: 'radius', type: signalType('float') },
-    { portId: 'phase', type: signalType('float') },
-  ],
-  outputs: [
-    { portId: 'pos', type: signalTypeField('vec2', 'default') },
-    { portId: 'angle', type: signalTypeField('float', 'default') },
-  ],
   lower: ({ ctx, inputsById, config }) => {
     const radius = inputsById.radius;
     const phase = inputsById.phase;
@@ -166,19 +140,6 @@ registerBlock({
   ],
   outputs: [
     { id: 'pos', label: 'Position', type: signalType('vec2') },
-  ],
-});
-
-registerBlockType({
-  type: 'OffsetPosition',
-  inputs: [
-    { portId: 'pos', type: signalType('vec2') },
-    { portId: 'amountX', type: signalType('float') },
-    { portId: 'amountY', type: signalType('float') },
-    { portId: 'rand', type: signalType('float') },
-  ],
-  outputs: [
-    { portId: 'pos', type: signalType('vec2') },
   ],
   lower: ({ ctx, inputsById }) => {
     const pos = inputsById.pos;

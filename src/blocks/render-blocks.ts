@@ -5,7 +5,6 @@
  */
 
 import { registerBlock } from './registry';
-import { registerBlockType } from '../compiler/ir/lowerTypes';
 import { signalType, signalTypeField } from '../core/canonical-types';
 
 // =============================================================================
@@ -29,17 +28,6 @@ registerBlock({
   params: {
     defaultSize: 10,
   },
-});
-
-registerBlockType({
-  type: 'RenderCircle',
-  inputs: [
-    { portId: 'domain', type: signalType('float') },
-    { portId: 'pos', type: signalTypeField('vec2', 'default') },
-    { portId: 'color', type: signalTypeField('color', 'default') },
-    { portId: 'size', type: signalTypeField('float', 'default') },
-  ],
-  outputs: [],
   lower: ({ ctx, inputsById, config }) => {
     const pos = inputsById.pos;
     const color = inputsById.color;
@@ -85,18 +73,6 @@ registerBlock({
     defaultWidth: 10,
     defaultHeight: 10,
   },
-});
-
-registerBlockType({
-  type: 'RenderRect',
-  inputs: [
-    { portId: 'domain', type: signalType('float') },
-    { portId: 'pos', type: signalTypeField('vec2', 'default') },
-    { portId: 'color', type: signalTypeField('color', 'default') },
-    { portId: 'width', type: signalTypeField('float', 'default') },
-    { portId: 'height', type: signalTypeField('float', 'default') },
-  ],
-  outputs: [],
   lower: ({ ctx, inputsById, config }) => {
     const pos = inputsById.pos;
     const color = inputsById.color;

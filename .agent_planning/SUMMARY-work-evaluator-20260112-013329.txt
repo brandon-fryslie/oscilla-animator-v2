@@ -1,0 +1,7 @@
+Agent: work-evaluator | 2026-01-12T01:33:29Z
+Scope: work/doc-index-skill
+Verdict: INCOMPLETE
+Criteria: 3/5 working | Breaks found: 4 | Ambiguities: 4
+Previous issues: n/a (first evaluation)
+Missing checks: 4 specified
+Cache updated: runtime-doc-index.md

@@ -166,10 +166,12 @@ export class DiagnosticHub {
     patchRevision: number;
     diagnostics: readonly Diagnostic[];
   }): void {
+    console.log('[DiagnosticHub] CompileEnd event:', event);
     if (event.patchId !== this.patchId) return;
 
     // Replace compile snapshot (not merge!)
     this.compileSnapshots.set(event.patchRevision, [...event.diagnostics]);
+    console.log('[DiagnosticHub] Compile snapshot set:', event.patchRevision, event.diagnostics.length);
 
     // Clear pending compile
     if (this.pendingCompileRevision === event.patchRevision) {
@@ -178,6 +180,7 @@ export class DiagnosticHub {
 
     // Increment revision to trigger UI updates
     this.incrementRevision();
+    console.log('[DiagnosticHub] Diagnostics revision:', this.diagnosticsRevision);
   }
 
   /**

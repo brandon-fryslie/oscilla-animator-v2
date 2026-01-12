@@ -174,13 +174,16 @@ async function buildAndCompile(particleCount: number) {
   rootStore.patch.loadPatch(patch);
 
   // Compile with event emission for diagnostics
+  console.log('[main] Starting compilation with patch revision:', rootStore.getPatchRevision());
   const result = compile(patch, {
     events: rootStore.events,
     patchRevision: rootStore.getPatchRevision(),
     patchId: 'patch-0',
   });
 
+  console.log('[main] Compile result:', result.kind);
   if (result.kind !== 'ok') {
+    console.log('[main] Compile errors:', result.errors);
     log(`Compile failed: ${JSON.stringify(result.errors)}`, 'error');
     throw new Error('Compile failed');
   }

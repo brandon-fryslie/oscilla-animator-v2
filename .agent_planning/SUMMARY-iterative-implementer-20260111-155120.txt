@@ -1,0 +1,113 @@
+Agent: iterative-implementer | 2026-01-11 15:51:20
+Mode: manual
+Completed: 5 block categories registered (15 total blocks) | Files: 6 | Commits: 1
+Cache invalidated: None (new feature, no existing cache)
+Status: complete
+
+================================================================================
+BLOCKS REGISTERED
+================================================================================
+
+Math Blocks (5):
+- Add, Subtract, Multiply, Divide, Modulo
+- All use OpCode-based operations via IRBuilder
+- Signal-to-signal binary operations
+
+Color Blocks (3):
+- ColorLFO: Animated color from phase via hue rotation
+- HSVToColor: HSV to RGB conversion
+- ConstColor: Constant color values
+- All use kernel-based color operations
+
+Geometry Blocks (3):
+- PolarToCartesian: Convert polar coords to cartesian
+- Circle: Circle layout for domain elements
+- OffsetPosition: Position offset with randomization
+- Use fieldSource and fieldZipSig for domain operations
+
+Identity Blocks (2):
+- StableIdHash: Stable random values from domain IDs
+- DomainIndex: Domain index access (normalized and int)
+- Use fieldSource to access domain-specific values
+
+Render Blocks (2):
+- RenderCircle: Render circles at positions
+- RenderRect: Render rectangles at positions
+- Sink blocks with no outputs
+
+================================================================================
+TECHNICAL DECISIONS
+================================================================================
+
+1. Domain Resolution:
+   - Blocks use domainId('default') for now
+   - TODO: Pass domain context from compiler
+
+2. Field Operations:
+   - Use fieldSource for domain-based values
+   - Use fieldZipSig to combine fields with signals
+   - Never mix fieldMap with signal inputs
+
+3. Type System:
+   - All blocks use canonical 5-axis types
+   - signalType() for signals
+   - signalTypeField() for fields
+   - Proper use of branded types (DomainId, SigExprId, FieldExprId)
+
+4. IRBuilder Methods:
+   - sigConst: Create constant signals
+   - sigZip: Combine signals with operations
+   - fieldSource: Get domain-specific values
+   - fieldZipSig: Combine field with signals
+   - kernel(): Create kernel-based functions
+   - opcode(): Create OpCode-based functions
+
+================================================================================
+FILES MODIFIED
+================================================================================
+
+New:
+- src/blocks/math-blocks.ts (239 lines)
+- src/blocks/color-blocks.ts (190 lines)
+- src/blocks/geometry-blocks.ts (211 lines)
+- src/blocks/identity-blocks.ts (113 lines)
+- src/blocks/render-blocks.ts (122 lines)
+
+Modified:
+- src/compiler/compile.ts (added 5 block imports)
+
+================================================================================
+VALIDATION
+================================================================================
+
+Type checking: PASSED (npm run typecheck)
+Compilation: SUCCESS (no TypeScript errors)
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+1. Test blocks with actual patches:
+   - Load application patches
+   - Verify compilation succeeds
+   - Check for remaining PortTypeUnknown errors
+
+2. Implement kernel functions:
+   - hsvToRgb
+   - packRGBA
+   - polarToCartesian
+   - circleLayout
+   - circleAngle
+   - offsetPosition
+   - stableHash
+   - indexNormalized
+   - indexInt
+
+3. Add more blocks as needed:
+   - Spectrum analysis blocks
+   - Wave shaping blocks
+   - Additional render primitives
+
+4. Domain context passing:
+   - Update compiler to pass domain context to blocks
+   - Replace domainId('default') with actual domain resolution

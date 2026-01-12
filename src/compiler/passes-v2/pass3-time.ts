@@ -65,17 +65,19 @@ export function pass3TimeTopology(
 function extractTimeModel(
   timeRoot: Block
 ): TimeModelIR {
-  // FiniteTimeRoot block
-  if (timeRoot.type === "FiniteTimeRoot") {
-    const durationMs = (timeRoot.params?.durationMs as number) ?? 10000;
-    if (durationMs <= 0) {
-      throw new Pass3Error("InvalidDuration", `Invalid FiniteTimeRoot duration: ${durationMs}ms`);
-    }
-    return { kind: "finite", durationMs: Math.max(1, durationMs) };
-  }
 
-  // InfiniteTimeRoot or default
-  return { kind: "infinite" };
+  // THIS IS ILLEGAL - no compiler passes can have special cases per block type
+  // // FiniteTimeRoot block
+  // if (timeRoot.type === "FiniteTimeRoot") {
+  //   const durationMs = (timeRoot.params?.durationMs as number) ?? 10000;
+  //   if (durationMs <= 0) {
+  //     throw new Pass3Error("InvalidDuration", `Invalid FiniteTimeRoot duration: ${durationMs}ms`);
+  //   }
+  //   return { kind: "finite", durationMs: Math.max(1, durationMs) };
+  // }
+  //
+  // // InfiniteTimeRoot or default
+  // return { kind: "infinite" };
 }
 
 /**
@@ -91,10 +93,11 @@ function generateTimeSignals(timeModel: TimeModelIR): TimeSignals {
   const phaseA = builder.sigTime('phaseA', signalType('float'));
   const phaseB = builder.sigTime('phaseB', signalType('float'));
 
-  if (timeModel.kind === "finite") {
-    const progress01 = builder.sigTime('progress', signalType('float'));
-    return { tModelMs, phaseA, phaseB, progress01 };
-  }
+  // ILLEGAL ACCESS - DO NOT SPECIAL CASE BLOCK KIND IN COMPILER
+  // if (timeModel.kind === "finite") {
+  //   const progress01 = builder.sigTime('progress', signalType('float'));
+  //   return { tModelMs, phaseA, phaseB, progress01 };
+  // }
 
   // Infinite model
   return { tModelMs, phaseA, phaseB };

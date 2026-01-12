@@ -5,7 +5,6 @@
  */
 
 import { registerBlock } from './registry';
-import { registerBlockType } from '../compiler/ir/lowerTypes';
 import { signalType } from '../core/canonical-types';
 
 // =============================================================================
@@ -28,16 +27,6 @@ registerBlock({
   params: {
     periodMs: 1000,
   },
-});
-
-registerBlockType({
-  type: 'InfiniteTimeRoot',
-  inputs: [],
-  outputs: [
-    { portId: 'tMs', type: signalType('float') },
-    { portId: 'phaseA', type: signalType('float') },
-    { portId: 'phaseB', type: signalType('float') },
-  ],
   lower: ({ ctx }) => {
     // TimeRoot blocks don't produce IR directly
     // Their outputs are provided by the time system (pass 3)
@@ -81,17 +70,6 @@ registerBlock({
   params: {
     durationMs: 10000,
   },
-});
-
-registerBlockType({
-  type: 'FiniteTimeRoot',
-  inputs: [],
-  outputs: [
-    { portId: 'tMs', type: signalType('float') },
-    { portId: 'phaseA', type: signalType('float') },
-    { portId: 'phaseB', type: signalType('float') },
-    { portId: 'progress', type: signalType('float') },
-  ],
   lower: ({ ctx }) => {
     // TimeRoot blocks don't produce IR directly
     // Their outputs are provided by the time system (pass 3)

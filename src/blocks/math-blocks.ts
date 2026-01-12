@@ -5,7 +5,6 @@
  */
 
 import { registerBlock } from './registry';
-import { registerBlockType } from '../compiler/ir/lowerTypes';
 import { signalType } from '../core/canonical-types';
 import { OpCode } from '../compiler/ir/types';
 import type { SigExprId } from '../compiler/ir/Indices';
@@ -27,17 +26,6 @@ registerBlock({
   ],
   outputs: [
     { id: 'out', label: 'Output', type: signalType('float') },
-  ],
-});
-
-registerBlockType({
-  type: 'Add',
-  inputs: [
-    { portId: 'a', type: signalType('float') },
-    { portId: 'b', type: signalType('float') },
-  ],
-  outputs: [
-    { portId: 'out', type: signalType('float') },
   ],
   lower: ({ ctx, inputsById }) => {
     const a = inputsById.a;
@@ -77,17 +65,6 @@ registerBlock({
   outputs: [
     { id: 'out', label: 'Output', type: signalType('float') },
   ],
-});
-
-registerBlockType({
-  type: 'Subtract',
-  inputs: [
-    { portId: 'a', type: signalType('float') },
-    { portId: 'b', type: signalType('float') },
-  ],
-  outputs: [
-    { portId: 'out', type: signalType('float') },
-  ],
   lower: ({ ctx, inputsById }) => {
     const a = inputsById.a;
     const b = inputsById.b;
@@ -125,17 +102,6 @@ registerBlock({
   ],
   outputs: [
     { id: 'out', label: 'Output', type: signalType('float') },
-  ],
-});
-
-registerBlockType({
-  type: 'Multiply',
-  inputs: [
-    { portId: 'a', type: signalType('float') },
-    { portId: 'b', type: signalType('float') },
-  ],
-  outputs: [
-    { portId: 'out', type: signalType('float') },
   ],
   lower: ({ ctx, inputsById }) => {
     const a = inputsById.a;
@@ -175,17 +141,6 @@ registerBlock({
   outputs: [
     { id: 'out', label: 'Output', type: signalType('float') },
   ],
-});
-
-registerBlockType({
-  type: 'Divide',
-  inputs: [
-    { portId: 'a', type: signalType('float') },
-    { portId: 'b', type: signalType('float') },
-  ],
-  outputs: [
-    { portId: 'out', type: signalType('float') },
-  ],
   lower: ({ ctx, inputsById }) => {
     const a = inputsById.a;
     const b = inputsById.b;
@@ -223,17 +178,6 @@ registerBlock({
   ],
   outputs: [
     { id: 'out', label: 'Output', type: signalType('float') },
-  ],
-});
-
-registerBlockType({
-  type: 'Modulo',
-  inputs: [
-    { portId: 'a', type: signalType('float') },
-    { portId: 'b', type: signalType('float') },
-  ],
-  outputs: [
-    { portId: 'out', type: signalType('float') },
   ],
   lower: ({ ctx, inputsById }) => {
     const a = inputsById.a;

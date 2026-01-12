@@ -5,7 +5,6 @@
  */
 
 import { registerBlock } from './registry';
-import { registerBlockType } from '../compiler/ir/lowerTypes';
 import { signalType, signalTypeField } from '../core/canonical-types';
 import type { SigExprId } from '../compiler/ir/Indices';
 
@@ -25,16 +24,6 @@ registerBlock({
   ],
   outputs: [
     { id: 'field', label: 'Field', type: signalTypeField('float', 'default') },
-  ],
-});
-
-registerBlockType({
-  type: 'FieldBroadcast',
-  inputs: [
-    { portId: 'signal', type: signalType('float') },
-  ],
-  outputs: [
-    { portId: 'field', type: signalTypeField('float', 'default') },
   ],
   lower: ({ ctx, inputsById }) => {
     // Get the signal input

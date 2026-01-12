@@ -5,9 +5,8 @@
  */
 
 import { registerBlock } from './registry';
-import { registerBlockType } from '../compiler/ir/lowerTypes';
-import { signalType } from '../core/canonical-types';
-import type { SigExprId } from '../compiler/ir/Indices';
+import { signalType, signalTypeField } from '../core/canonical-types';
+import type { SigExprId, FieldExprId } from '../compiler/ir/Indices';
 
 // =============================================================================
 // ColorLFO
@@ -34,19 +33,6 @@ registerBlock({
     saturation: 1.0,
     value: 1.0,
   },
-});
-
-registerBlockType({
-  type: 'ColorLFO',
-  inputs: [
-    { portId: 'phase', type: signalType('float') },
-    { portId: 'hue', type: signalType('float') },
-    { portId: 'sat', type: signalType('float') },
-    { portId: 'val', type: signalType('float') },
-  ],
-  outputs: [
-    { portId: 'color', type: signalType('color') },
-  ],
   lower: ({ ctx, inputsById }) => {
     const phase = inputsById.phase;
     const hue = inputsById.hue;
@@ -99,18 +85,6 @@ registerBlock({
   outputs: [
     { id: 'color', label: 'Color', type: signalType('color') },
   ],
-});
-
-registerBlockType({
-  type: 'HSVToColor',
-  inputs: [
-    { portId: 'hue', type: signalType('float') },
-    { portId: 'sat', type: signalType('float') },
-    { portId: 'val', type: signalType('float') },
-  ],
-  outputs: [
-    { portId: 'color', type: signalType('color') },
-  ],
   lower: ({ ctx, inputsById }) => {
     const hue = inputsById.hue;
     const sat = inputsById.sat;
@@ -127,6 +101,54 @@ registerBlockType({
     return {
       outputsById: {
         color: { k: 'sig', id: sigId, slot },
+      },
+    };
+  },
+});
+
+// =============================================================================
+// HsvToRgb (Field-aware variant)
+// =============================================================================
+
+registerBlock({
+  type: 'HsvToRgb',
+  label: 'HSV to RGB',
+  category: 'color',
+  description: 'Converts HSV values (field or signal) to RGB color field',
+  form: 'primitive',
+  capability: 'pure',
+  inputs: [
+    { id: 'hue', label: 'Hue', type: signalTypeField('float', 'default') },
+    { id: 'sat', label: 'Saturation', type: signalType('float') },
+    { id: 'val', label: 'Value', type: signalType('float') },
+  ],
+  outputs: [
+    { id: 'color', label: 'Color', type: signalTypeField('color', 'default') },
+  ],
+  lower: ({ ctx, inputsById }) => {
+    const hue = inputsById.hue;
+    const sat = inputsById.sat;
+    const val = inputsById.val;
+
+    if (!hue || hue.k !== 'field') {
+      throw new Error('HsvToRgb hue must be a field');
+    }
+    if (!sat || sat.k !== 'sig' || !val || val.k !== 'sig') {
+      throw new Error('HsvToRgb sat and val must be signals');
+    }
+
+    const hsvFn = ctx.b.kernel('hsvToRgb');
+    const colorField = ctx.b.fieldZipSig(
+      hue.id as FieldExprId,
+      [sat.id as SigExprId, val.id as SigExprId],
+      hsvFn,
+      signalTypeField('color', 'default')
+    );
+    const slot = ctx.b.allocSlot();
+
+    return {
+      outputsById: {
+        color: { k: 'field', id: colorField, slot },
       },
     };
   },
@@ -153,14 +175,6 @@ registerBlock({
     b: 1.0,
     a: 1.0,
   },
-});
-
-registerBlockType({
-  type: 'ConstColor',
-  inputs: [],
-  outputs: [
-    { portId: 'out', type: signalType('color') },
-  ],
   lower: ({ ctx, config }) => {
     // Color constant - encode as RGBA values
     // Use a kernel to pack the color components

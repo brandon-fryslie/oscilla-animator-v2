@@ -21,6 +21,8 @@ import {
 import type { NormalizedPatch, TypedPatch, BlockIndex } from "../ir/patches";
 import { getBlockDefinition } from "../../blocks/registry";
 
+// Move these types into a better place
+
 /**
  * Error types emitted by Pass 2.
  */

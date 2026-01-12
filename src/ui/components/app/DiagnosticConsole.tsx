@@ -36,6 +36,9 @@ export const DiagnosticConsole: React.FC = observer(() => {
   // Get active diagnostics (reactive - triggers re-render when changed)
   const diagnostics = rootStore.diagnostics.activeDiagnostics;
 
+  // Debug logging
+  console.log('[DiagnosticConsole] Rendering with diagnostics:', diagnostics.length);
+
   // Filter diagnostics by severity
   const filteredDiagnostics = filter === 'all'
     ? diagnostics
