@@ -29,16 +29,11 @@ interface AppProps {
 
 export const App: React.FC<AppProps> = ({ onCanvasReady }) => {
   const [stats, setStats] = useState('FPS: --');
-  const canvasCallbackRef = useRef<((canvas: HTMLCanvasElement) => void) | undefined>(undefined);
 
-  // Store callback in ref to avoid re-creating CanvasTab
-  useEffect(() => {
-    canvasCallbackRef.current = onCanvasReady;
-  }, [onCanvasReady]);
-
+  // Direct callback - no ref indirection needed
   const handleCanvasReady = useCallback((canvas: HTMLCanvasElement) => {
-    canvasCallbackRef.current?.(canvas);
-  }, []);
+    onCanvasReady?.(canvas);
+  }, [onCanvasReady]);
 
   // Make setStats available globally for main.ts
   useEffect(() => {

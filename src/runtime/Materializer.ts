@@ -316,6 +316,17 @@ function applyMap(
           outArr[i] = Math.round(inArr[i]);
         }
         break;
+      case 'fieldGoldenAngle': {
+        // Golden angle ≈ 2.39996... radians (137.508°)
+        // Formula: angle = id01 * turns * goldenAngle
+        // Default turns = 50 (baked in for now)
+        const goldenAngle = Math.PI * (3 - Math.sqrt(5)); // ≈ 2.39996
+        const turns = 50;
+        for (let i = 0; i < N; i++) {
+          outArr[i] = inArr[i] * turns * goldenAngle;
+        }
+        break;
+      }
       default:
         throw new Error(`Unknown map kernel: ${fn.name}`);
     }
@@ -506,6 +517,122 @@ function applyKernel(
       outArr[i * 2 + 0] = x + dx * drift;
       outArr[i * 2 + 1] = y + dy * drift;
     }
+  } else if (kernelName === 'fieldAngularOffset') {
+    // Angular offset: offset = 2π * phase * spin
+    // Inputs: [id01, phase, spin]
+    if (inputs.length !== 3) {
+      throw new Error('fieldAngularOffset requires 3 inputs (id01, phase, spin)');
+    }
+    const outArr = out as Float32Array;
+    const id01Arr = inputs[0] as Float32Array;
+    const phaseArr = inputs[1] as Float32Array;
+    const spinArr = inputs[2] as Float32Array;
+    const TWO_PI = Math.PI * 2;
+
+    for (let i = 0; i < N; i++) {
+      // offset = 2π * phase * spin (id01 not used in offset calc, just for field alignment)
+      outArr[i] = TWO_PI * phaseArr[i] * spinArr[i];
+    }
+  } else if (kernelName === 'fieldRadiusSqrt') {
+    // Square root radius: effective_radius = radius * sqrt(id01)
+    // Inputs: [id01, radius]
+    if (inputs.length !== 2) {
+      throw new Error('fieldRadiusSqrt requires 2 inputs (id01, radius)');
+    }
+    const outArr = out as Float32Array;
+    const id01Arr = inputs[0] as Float32Array;
+    const radiusArr = inputs[1] as Float32Array;
+
+    for (let i = 0; i < N; i++) {
+      outArr[i] = radiusArr[i] * Math.sqrt(id01Arr[i]);
+    }
+  } else if (kernelName === 'fieldAdd') {
+    // Add two fields
+    // Inputs: [a, b]
+    if (inputs.length !== 2) {
+      throw new Error('fieldAdd requires 2 inputs (a, b)');
+    }
+    const outArr = out as Float32Array;
+    const aArr = inputs[0] as Float32Array;
+    const bArr = inputs[1] as Float32Array;
+
+    for (let i = 0; i < N; i++) {
+      outArr[i] = aArr[i] + bArr[i];
+    }
+  } else if (kernelName === 'fieldPolarToCartesian') {
+    // Polar to Cartesian: (centerX, centerY, radius, angle) -> vec2
+    // Inputs: [centerX, centerY, radius, angle]
+    if (inputs.length !== 4) {
+      throw new Error('fieldPolarToCartesian requires 4 inputs (centerX, centerY, radius, angle)');
+    }
+    const outArr = out as Float32Array;
+    const cxArr = inputs[0] as Float32Array;
+    const cyArr = inputs[1] as Float32Array;
+    const radiusArr = inputs[2] as Float32Array;
+    const angleArr = inputs[3] as Float32Array;
+
+    for (let i = 0; i < N; i++) {
+      const cx = cxArr[i];
+      const cy = cyArr[i];
+      const r = radiusArr[i];
+      const a = angleArr[i];
+      outArr[i * 2 + 0] = cx + r * Math.cos(a);
+      outArr[i * 2 + 1] = cy + r * Math.sin(a);
+    }
+  } else if (kernelName === 'fieldPulse') {
+    // Pulsing animation: value = base + amplitude * sin(2π * (phase + id01 * spread))
+    // Inputs: [id01, phase, base, amplitude, spread]
+    if (inputs.length !== 5) {
+      throw new Error('fieldPulse requires 5 inputs (id01, phase, base, amplitude, spread)');
+    }
+    const outArr = out as Float32Array;
+    const id01Arr = inputs[0] as Float32Array;
+    const phaseArr = inputs[1] as Float32Array;
+    const baseArr = inputs[2] as Float32Array;
+    const ampArr = inputs[3] as Float32Array;
+    const spreadArr = inputs[4] as Float32Array;
+    const TWO_PI = Math.PI * 2;
+
+    for (let i = 0; i < N; i++) {
+      const effectivePhase = phaseArr[i] + id01Arr[i] * spreadArr[i];
+      outArr[i] = baseArr[i] + ampArr[i] * Math.sin(TWO_PI * effectivePhase);
+    }
+  } else if (kernelName === 'fieldHueFromPhase') {
+    // Hue from phase: hue = (id01 + phase) mod 1.0
+    // Inputs: [id01, phase]
+    if (inputs.length !== 2) {
+      throw new Error('fieldHueFromPhase requires 2 inputs (id01, phase)');
+    }
+    const outArr = out as Float32Array;
+    const id01Arr = inputs[0] as Float32Array;
+    const phaseArr = inputs[1] as Float32Array;
+
+    for (let i = 0; i < N; i++) {
+      const hue = id01Arr[i] + phaseArr[i];
+      outArr[i] = hue - Math.floor(hue); // fract (mod 1.0)
+    }
+  } else if (kernelName === 'fieldJitter2D') {
+    // Alias for jitter2d
+    // Inputs: [pos(vec2), rand(float), amountX(float), amountY(float)]
+    if (inputs.length !== 4) {
+      throw new Error('fieldJitter2D requires 4 inputs (pos, rand, amountX, amountY)');
+    }
+    const outArr = out as Float32Array;
+    const posArr = inputs[0] as Float32Array;
+    const randArr = inputs[1] as Float32Array;
+    const amountXArr = inputs[2] as Float32Array;
+    const amountYArr = inputs[3] as Float32Array;
+
+    for (let i = 0; i < N; i++) {
+      const rand = randArr[i];
+      const randX = Math.sin(rand * 12.9898 + 78.233) * 43758.5453;
+      const randY = Math.sin(rand * 93.9898 + 67.345) * 24571.2341;
+      const offsetX = ((randX - Math.floor(randX)) * 2 - 1) * amountXArr[i];
+      const offsetY = ((randY - Math.floor(randY)) * 2 - 1) * amountYArr[i];
+
+      outArr[i * 2 + 0] = posArr[i * 2 + 0] + offsetX;
+      outArr[i * 2 + 1] = posArr[i * 2 + 1] + offsetY;
+    }
   } else {
     throw new Error(`Unknown kernel function: ${kernelName}`);
   }
@@ -536,6 +663,23 @@ function applyKernelZipSig(
       outArr[i * 4 + 1] = inArr[i * 4 + 1];
       outArr[i * 4 + 2] = inArr[i * 4 + 2];
       outArr[i * 4 + 3] = alpha;
+    }
+  } else if (kernelName === 'hsvToRgb') {
+    // HSV to RGB: field input is hue, sigValues are [sat, val]
+    if (sigValues.length !== 2) {
+      throw new Error('hsvToRgb zipSig requires 2 signals (sat, val)');
+    }
+    const outArr = out as Uint8ClampedArray;
+    const hueArr = fieldInput as Float32Array;
+    const sat = sigValues[0];
+    const val = sigValues[1];
+
+    for (let i = 0; i < N; i++) {
+      const [r, g, b] = hsvToRgb(hueArr[i], sat, val);
+      outArr[i * 4 + 0] = r;
+      outArr[i * 4 + 1] = g;
+      outArr[i * 4 + 2] = b;
+      outArr[i * 4 + 3] = 255; // Full opacity
     }
   } else {
     throw new Error(`Unknown zipSig kernel function: ${kernelName}`);
