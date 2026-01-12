@@ -2,7 +2,7 @@
  * Block Library Component (React)
  *
  * Browse available block types organized by category.
- * Click to preview, double-click to add block.
+ * Click to preview type in inspector, double-click to add block.
  */
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
@@ -89,9 +89,6 @@ export const BlockLibrary: React.FC = observer(() => {
   // Track which category currently has focus (for keyboard navigation)
   const [focusedCategory, setFocusedCategory] = useState<BlockCategory | null>(null);
 
-  // Selected block type (for preview/detail view)
-  const [selectedType, setSelectedType] = useState<BlockTypeInfo | null>(null);
-
   // Callbacks
   const toggleCategory = useCallback((category: BlockCategory) => {
     setCollapsedCategories((prev) => {
@@ -107,7 +104,8 @@ export const BlockLibrary: React.FC = observer(() => {
   }, []);
 
   const handleBlockClick = useCallback((type: BlockTypeInfo) => {
-    setSelectedType(type);
+    // Set preview type in selection store to trigger inspector preview
+    rootStore.selection.setPreviewType(type.type);
   }, []);
 
   const handleBlockDoubleClick = useCallback((type: BlockTypeInfo) => {
@@ -150,22 +148,33 @@ export const BlockLibrary: React.FC = observer(() => {
 
   const categories = getBlockCategories();
 
+  // Filter out timeRoot blocks (P5: TimeRoot Hidden)
+  const filteredCategories = useMemo(() => {
+    return categories.filter(category => {
+      const types = getBlockTypesByCategory(category);
+      // Check if category has any non-timeRoot blocks
+      return types.some((t: BlockDef) => t.capability !== 'time');
+    });
+  }, [categories]);
+
   // Calculate total results across all categories
   const totalResults = useMemo(() => {
     let count = 0;
-    categories.forEach((category: string) => {
+    filteredCategories.forEach((category: string) => {
       const types = getBlockTypesByCategory(category);
+      // Filter out timeRoot blocks
+      const nonTimeRootTypes = types.filter((t: BlockDef) => t.capability !== 'time');
       const filtered = debouncedSearchQuery
-        ? types.filter((t: BlockDef) =>
+        ? nonTimeRootTypes.filter((t: BlockDef) =>
             t.type.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
             t.label.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
             (t.description?.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ?? false)
           )
-        : types;
+        : nonTimeRootTypes;
       count += filtered.length;
     });
     return count;
-  }, [categories, debouncedSearchQuery]);
+  }, [filteredCategories, debouncedSearchQuery]);
 
   return (
     <div className="block-library">
@@ -201,7 +210,7 @@ export const BlockLibrary: React.FC = observer(() => {
       </div>
 
       <div className="block-library__categories">
-        {categories.map((category: string) => (
+        {filteredCategories.map((category: string) => (
           <BlockCategorySection
             key={category}
             category={category}
@@ -215,41 +224,6 @@ export const BlockLibrary: React.FC = observer(() => {
           />
         ))}
       </div>
-
-      {selectedType && (
-        <div className="block-library__preview">
-          <h3>{selectedType.label}</h3>
-          <p className="block-library__preview-type">{selectedType.type}</p>
-          {selectedType.description && (
-            <p className="block-library__preview-description">
-              {selectedType.description}
-            </p>
-          )}
-          <div className="block-library__preview-ports">
-            <div className="block-library__preview-inputs">
-              <h4>Inputs</h4>
-              <ul>
-                {selectedType.inputs.map((input) => (
-                  <li key={input.id}>
-                    <strong>{input.label}</strong>: {formatSignalType(input.type)}
-                    {input.optional && <span className="optional">(optional)</span>}
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div className="block-library__preview-outputs">
-              <h4>Outputs</h4>
-              <ul>
-                {selectedType.outputs.map((output) => (
-                  <li key={output.id}>
-                    <strong>{output.label}</strong>: {formatSignalType(output.type)}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 });
@@ -280,14 +254,19 @@ const BlockCategorySection: React.FC<BlockCategorySectionProps> = ({
 }) => {
   const types = getBlockTypesByCategory(category);
 
+  // Filter out timeRoot blocks (P5: TimeRoot Hidden)
+  const nonTimeRootTypes = useMemo(() => {
+    return types.filter((t: BlockDef) => t.capability !== 'time');
+  }, [types]);
+
   const filteredTypes = useMemo(() => {
-    if (!searchQuery) return types;
-    return types.filter((t: BlockDef) =>
+    if (!searchQuery) return nonTimeRootTypes;
+    return nonTimeRootTypes.filter((t: BlockDef) =>
       t.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
       t.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (t.description?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false)
     );
-  }, [types, searchQuery]);
+  }, [nonTimeRootTypes, searchQuery]);
 
   if (filteredTypes.length === 0) return null;
 

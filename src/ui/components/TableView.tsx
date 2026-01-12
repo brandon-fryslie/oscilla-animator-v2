@@ -3,6 +3,8 @@
  *
  * Matrix showing all blocks and their connections.
  * Primary patch visualization component for center panel.
+ *
+ * Note: TimeRoot blocks are filtered out (P5: TimeRoot Hidden)
  */
 
 import React, { useState, useEffect } from 'react';
@@ -60,13 +62,18 @@ export const TableView = observer(function TableView() {
     rootStore.selection.selectBlock(blockId);
   };
 
-  // Analyze blocks
+  // Analyze blocks (P5: Filter out timeRoot blocks)
   const analyzeBlocks = (): BlockRowData[] => {
     if (!patch) return [];
 
     const blockData: BlockRowData[] = [];
 
     for (const block of patch.blocks.values()) {
+      // P5: TimeRoot Hidden - skip blocks with timeRoot role
+      if (block.role?.kind === 'timeRoot') {
+        continue;
+      }
+
       const incomingEdges = patch.edges.filter(e => e.to.blockId === block.id);
       const outgoingEdges = patch.edges.filter(e => e.from.blockId === block.id);
 
