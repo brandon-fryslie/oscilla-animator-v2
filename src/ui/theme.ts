@@ -15,6 +15,7 @@ export const colors = {
   bgPanel: '#16213e',      // Panel/header background
   bgContent: '#0f0f23',    // Content area background
   bgHover: 'rgba(255, 255, 255, 0.05)',
+  bg: '#16213e',           // Alias for bgPanel
 
   // Borders
   border: '#0f3460',
@@ -23,11 +24,13 @@ export const colors = {
   primary: '#4ecdc4',      // Teal accent
   secondary: '#ff6b6b',    // Red/error accent
   warning: '#ffd93d',      // Yellow warning
+  error: '#ff6b6b',        // Error color (alias for secondary)
 
   // Text
   textPrimary: '#eee',
   textSecondary: '#888',
   textMuted: '#666',
+  text: '#eee',            // Alias for textPrimary
 } as const;
 
 /**

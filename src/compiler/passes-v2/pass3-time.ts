@@ -4,9 +4,8 @@
  * Determines the time model (finite/infinite) and generates time-derived signals.
  */
 
-import type { NormalizedPatch } from '../../graph/normalize';
 import type { Block } from '../../graph/Patch';
-import type { TimeModelIR, TimeSignals } from '../ir';
+import type { TimeModelIR, TimeSignals, TypedPatch, TimeResolvedPatch } from '../ir';
 import { IRBuilderImpl } from '../ir/IRBuilderImpl';
 import { signalType } from '../../core/canonical-types';
 
@@ -34,15 +33,12 @@ export class Pass3Error extends Error {
 /**
  * Extract time model and generate time signals.
  *
- * @param normalized - The normalized patch from Pass 2
- * @returns Time model IR
+ * @param typedPatch - The typed patch from Pass 2
+ * @returns Time-resolved patch with time model and signals
  */
-export function pass3Time(normalized: NormalizedPatch): {
-  timeModel: TimeModelIR;
-  timeSignals: TimeSignals;
-} {
+export function pass3Time(typedPatch: TypedPatch): TimeResolvedPatch {
   // Find TimeRoot block
-  const timeRoots = Array.from(normalized.patch.blocks.values()).filter(
+  const timeRoots = Array.from(typedPatch.patch.blocks.values()).filter(
     (b) => b.type === 'TimeRoot' || b.type === 'FiniteTimeRoot' || b.type === 'InfiniteTimeRoot'
   );
 
@@ -62,7 +58,11 @@ export function pass3Time(normalized: NormalizedPatch): {
   // Generate time signals based on model
   const timeSignals = generateTimeSignals(timeModel);
 
-  return { timeModel, timeSignals };
+  return {
+    ...typedPatch,
+    timeModel,
+    timeSignals,
+  };
 }
 
 /**

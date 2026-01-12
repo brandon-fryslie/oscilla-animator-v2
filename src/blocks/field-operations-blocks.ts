@@ -57,7 +57,7 @@ registerBlock({
     { id: 'b', label: 'B', type: signalTypeField('float', 'default') },
   ],
   outputs: [
-    { id: 'result', label: 'Result', type: signalTypeField('float', 'default') },
+    { id: 'out', label: 'Output', type: signalTypeField('float', 'default') },
   ],
   params: {},
   lower: ({ ctx, inputsById }) => {
@@ -74,7 +74,7 @@ registerBlock({
 
     return {
       outputsById: {
-        result: { k: 'field', id: result, slot },
+        out: { k: 'field', id: result, slot },
       },
     };
   },
@@ -389,6 +389,318 @@ registerBlock({
       outputsById: {
         angle: { k: 'field', id: angleField, slot: angleSlot },
         radius: { k: 'field', id: radiusField, slot: radiusSlot },
+      },
+    };
+  },
+});
+
+// =============================================================================
+// FieldPulse
+// =============================================================================
+
+registerBlock({
+  type: 'FieldPulse',
+  label: 'Field Pulse',
+  category: 'field',
+  description: 'Per-element pulsing animation based on phase and spread',
+  form: 'primitive',
+  capability: 'pure',
+  inputs: [
+    { id: 'id01', label: 'ID (0..1)', type: signalTypeField('float', 'default') },
+    { id: 'phase', label: 'Phase', type: signalType('float') },
+    { id: 'base', label: 'Base', type: signalType('float') },
+    { id: 'amplitude', label: 'Amplitude', type: signalType('float') },
+    { id: 'spread', label: 'Spread', type: signalType('float') },
+  ],
+  outputs: [
+    { id: 'value', label: 'Value', type: signalTypeField('float', 'default') },
+  ],
+  params: {},
+  lower: ({ ctx, inputsById }) => {
+    const id01 = inputsById.id01;
+    const phase = inputsById.phase;
+    const base = inputsById.base;
+    const amplitude = inputsById.amplitude;
+    const spread = inputsById.spread;
+
+    if (!id01 || id01.k !== 'field') {
+      throw new Error('FieldPulse id01 must be a field');
+    }
+
+    // Broadcast signal inputs to fields
+    const phaseSig = phase?.k === 'sig' ? phase.id : ctx.b.sigConst(0, signalType('float'));
+    const baseSig = base?.k === 'sig' ? base.id : ctx.b.sigConst(0, signalType('float'));
+    const ampSig = amplitude?.k === 'sig' ? amplitude.id : ctx.b.sigConst(1, signalType('float'));
+    const spreadSig = spread?.k === 'sig' ? spread.id : ctx.b.sigConst(1, signalType('float'));
+
+    const phaseField = ctx.b.fieldBroadcast(phaseSig, signalTypeField('float', 'default'));
+    const baseField = ctx.b.fieldBroadcast(baseSig, signalTypeField('float', 'default'));
+    const ampField = ctx.b.fieldBroadcast(ampSig, signalTypeField('float', 'default'));
+    const spreadField = ctx.b.fieldBroadcast(spreadSig, signalTypeField('float', 'default'));
+
+    // Compute: base + amplitude * sin(2π * (phase + id01 * spread))
+    const pulseFn = ctx.b.kernel('fieldPulse');
+    const result = ctx.b.fieldZip(
+      [id01.id, phaseField, baseField, ampField, spreadField],
+      pulseFn,
+      signalTypeField('float', 'default')
+    );
+
+    const slot = ctx.b.allocSlot();
+
+    return {
+      outputsById: {
+        value: { k: 'field', id: result, slot },
+      },
+    };
+  },
+});
+
+// =============================================================================
+// FieldGoldenAngle
+// =============================================================================
+
+registerBlock({
+  type: 'FieldGoldenAngle',
+  label: 'Field Golden Angle',
+  category: 'field',
+  description: 'Generate golden angle distribution for each element',
+  form: 'primitive',
+  capability: 'pure',
+  inputs: [
+    { id: 'id01', label: 'ID (0..1)', type: signalTypeField('float', 'default') },
+  ],
+  outputs: [
+    { id: 'angle', label: 'Angle', type: signalTypeField('float', 'default') },
+  ],
+  params: { turns: 50 },
+  lower: ({ ctx, inputsById, config }) => {
+    const id01 = inputsById.id01;
+
+    if (!id01 || id01.k !== 'field') {
+      throw new Error('FieldGoldenAngle id01 must be a field');
+    }
+
+    // Golden angle ≈ 2.39996... radians (137.508°)
+    // angle = id01 * turns * goldenAngle
+    const goldenAngleFn = ctx.b.kernel('fieldGoldenAngle');
+    const result = ctx.b.fieldMap(id01.id, goldenAngleFn, signalTypeField('float', 'default'));
+
+    const slot = ctx.b.allocSlot();
+
+    return {
+      outputsById: {
+        angle: { k: 'field', id: result, slot },
+      },
+    };
+  },
+});
+
+// =============================================================================
+// FieldAngularOffset
+// =============================================================================
+
+registerBlock({
+  type: 'FieldAngularOffset',
+  label: 'Field Angular Offset',
+  category: 'field',
+  description: 'Per-element angular offset based on phase and spin',
+  form: 'primitive',
+  capability: 'pure',
+  inputs: [
+    { id: 'id01', label: 'ID (0..1)', type: signalTypeField('float', 'default') },
+    { id: 'phase', label: 'Phase', type: signalType('float') },
+    { id: 'spin', label: 'Spin', type: signalType('float') },
+  ],
+  outputs: [
+    { id: 'offset', label: 'Offset', type: signalTypeField('float', 'default') },
+  ],
+  params: {},
+  lower: ({ ctx, inputsById }) => {
+    const id01 = inputsById.id01;
+    const phase = inputsById.phase;
+    const spin = inputsById.spin;
+
+    if (!id01 || id01.k !== 'field') {
+      throw new Error('FieldAngularOffset id01 must be a field');
+    }
+
+    // Broadcast signal inputs to fields
+    const phaseSig = phase?.k === 'sig' ? phase.id : ctx.b.sigConst(0, signalType('float'));
+    const spinSig = spin?.k === 'sig' ? spin.id : ctx.b.sigConst(1, signalType('float'));
+
+    const phaseField = ctx.b.fieldBroadcast(phaseSig, signalTypeField('float', 'default'));
+    const spinField = ctx.b.fieldBroadcast(spinSig, signalTypeField('float', 'default'));
+
+    // offset = 2π * phase * spin
+    const offsetFn = ctx.b.kernel('fieldAngularOffset');
+    const result = ctx.b.fieldZip(
+      [id01.id, phaseField, spinField],
+      offsetFn,
+      signalTypeField('float', 'default')
+    );
+
+    const slot = ctx.b.allocSlot();
+
+    return {
+      outputsById: {
+        offset: { k: 'field', id: result, slot },
+      },
+    };
+  },
+});
+
+// =============================================================================
+// FieldRadiusSqrt
+// =============================================================================
+
+registerBlock({
+  type: 'FieldRadiusSqrt',
+  label: 'Field Radius Sqrt',
+  category: 'field',
+  description: 'Square root radius distribution for even area coverage',
+  form: 'primitive',
+  capability: 'pure',
+  inputs: [
+    { id: 'id01', label: 'ID (0..1)', type: signalTypeField('float', 'default') },
+    { id: 'radius', label: 'Radius', type: signalTypeField('float', 'default') },
+  ],
+  outputs: [
+    { id: 'radius', label: 'Radius', type: signalTypeField('float', 'default') },
+  ],
+  params: {},
+  lower: ({ ctx, inputsById }) => {
+    const id01 = inputsById.id01;
+    const radius = inputsById.radius;
+
+    if (!id01 || id01.k !== 'field') {
+      throw new Error('FieldRadiusSqrt id01 must be a field');
+    }
+    if (!radius || radius.k !== 'field') {
+      throw new Error('FieldRadiusSqrt radius must be a field');
+    }
+
+    // effective_radius = radius * sqrt(id01)
+    const sqrtFn = ctx.b.kernel('fieldRadiusSqrt');
+    const result = ctx.b.fieldZip(
+      [id01.id, radius.id],
+      sqrtFn,
+      signalTypeField('float', 'default')
+    );
+
+    const slot = ctx.b.allocSlot();
+
+    return {
+      outputsById: {
+        radius: { k: 'field', id: result, slot },
+      },
+    };
+  },
+});
+
+// =============================================================================
+// FieldJitter2D
+// =============================================================================
+
+registerBlock({
+  type: 'FieldJitter2D',
+  label: 'Field Jitter 2D',
+  category: 'field',
+  description: 'Add per-element random jitter to 2D positions',
+  form: 'primitive',
+  capability: 'pure',
+  inputs: [
+    { id: 'pos', label: 'Position', type: signalTypeField('vec2', 'default') },
+    { id: 'rand', label: 'Random', type: signalTypeField('float', 'default') },
+    { id: 'amountX', label: 'Amount X', type: signalType('float') },
+    { id: 'amountY', label: 'Amount Y', type: signalType('float') },
+  ],
+  outputs: [
+    { id: 'pos', label: 'Position', type: signalTypeField('vec2', 'default') },
+  ],
+  params: {},
+  lower: ({ ctx, inputsById }) => {
+    const pos = inputsById.pos;
+    const rand = inputsById.rand;
+    const amountX = inputsById.amountX;
+    const amountY = inputsById.amountY;
+
+    if (!pos || pos.k !== 'field') {
+      throw new Error('FieldJitter2D pos must be a field');
+    }
+    if (!rand || rand.k !== 'field') {
+      throw new Error('FieldJitter2D rand must be a field');
+    }
+
+    // Broadcast signal inputs to fields
+    const amountXSig = amountX?.k === 'sig' ? amountX.id : ctx.b.sigConst(0, signalType('float'));
+    const amountYSig = amountY?.k === 'sig' ? amountY.id : ctx.b.sigConst(0, signalType('float'));
+
+    const amountXField = ctx.b.fieldBroadcast(amountXSig, signalTypeField('float', 'default'));
+    const amountYField = ctx.b.fieldBroadcast(amountYSig, signalTypeField('float', 'default'));
+
+    // pos += vec2(rand * amountX, rand * amountY)
+    const jitterFn = ctx.b.kernel('fieldJitter2D');
+    const result = ctx.b.fieldZip(
+      [pos.id, rand.id, amountXField, amountYField],
+      jitterFn,
+      signalTypeField('vec2', 'default')
+    );
+
+    const slot = ctx.b.allocSlot();
+
+    return {
+      outputsById: {
+        pos: { k: 'field', id: result, slot },
+      },
+    };
+  },
+});
+
+// =============================================================================
+// FieldHueFromPhase
+// =============================================================================
+
+registerBlock({
+  type: 'FieldHueFromPhase',
+  label: 'Field Hue From Phase',
+  category: 'field',
+  description: 'Generate per-element hue values from phase and ID',
+  form: 'primitive',
+  capability: 'pure',
+  inputs: [
+    { id: 'id01', label: 'ID (0..1)', type: signalTypeField('float', 'default') },
+    { id: 'phase', label: 'Phase', type: signalType('float') },
+  ],
+  outputs: [
+    { id: 'hue', label: 'Hue', type: signalTypeField('float', 'default') },
+  ],
+  params: {},
+  lower: ({ ctx, inputsById }) => {
+    const id01 = inputsById.id01;
+    const phase = inputsById.phase;
+
+    if (!id01 || id01.k !== 'field') {
+      throw new Error('FieldHueFromPhase id01 must be a field');
+    }
+
+    // Broadcast phase to field
+    const phaseSig = phase?.k === 'sig' ? phase.id : ctx.b.sigConst(0, signalType('float'));
+    const phaseField = ctx.b.fieldBroadcast(phaseSig, signalTypeField('float', 'default'));
+
+    // hue = (id01 + phase) mod 1.0
+    const hueFn = ctx.b.kernel('fieldHueFromPhase');
+    const result = ctx.b.fieldZip(
+      [id01.id, phaseField],
+      hueFn,
+      signalTypeField('float', 'default')
+    );
+
+    const slot = ctx.b.allocSlot();
+
+    return {
+      outputsById: {
+        hue: { k: 'field', id: result, slot },
       },
     };
   },

@@ -16,7 +16,7 @@ export { pass2TypeGraph } from "./pass2-types";
 export type { TypedPatch } from "../ir/patches";
 
 // Pass 3: Time Topology
-export { pass3TimeTopology } from "./pass3-time";
+export { pass3Time } from "./pass3-time";
 export type { TimeResolvedPatch } from "../ir/patches";
 
 // Pass 4: Dependency Graph

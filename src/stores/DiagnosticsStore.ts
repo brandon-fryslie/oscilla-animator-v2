@@ -65,6 +65,10 @@ export class DiagnosticsStore {
 
   private hub: DiagnosticHub | null = null;
 
+  // Observable revision counter for MobX reactivity
+  // This is incremented via a callback from DiagnosticHub
+  private _revision: number = 0;
+
   // Legacy state (for backwards compatibility)
   private _legacyErrors: LegacyDiagnostic[] = [];
   private _legacyWarnings: LegacyDiagnostic[] = [];
@@ -80,8 +84,12 @@ export class DiagnosticsStore {
 
     makeObservable<
       DiagnosticsStore,
-      '_legacyErrors' | '_legacyWarnings' | '_logs'
+      '_revision' | '_legacyErrors' | '_legacyWarnings' | '_logs' | 'incrementRevision'
     >(this, {
+      // Observable revision counter
+      _revision: observable,
+      incrementRevision: action,
+
       // New API (DiagnosticHub)
       revision: computed,
       activeDiagnostics: computed,
@@ -104,6 +112,15 @@ export class DiagnosticsStore {
     });
   }
 
+  /**
+   * Increments the revision counter.
+   * Called by DiagnosticHub when diagnostics change.
+   */
+  incrementRevision(): void {
+    this._revision++;
+    console.log('[DiagnosticsStore] Revision incremented to:', this._revision);
+  }
+
   // =============================================================================
   // New API (DiagnosticHub Integration)
   // =============================================================================
@@ -114,7 +131,7 @@ export class DiagnosticsStore {
    * MobX tracks this to trigger UI updates.
    */
   get revision(): number {
-    return this.hub?.getDiagnosticsRevision() || 0;
+    return this._revision;
   }
 
   /**

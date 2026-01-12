@@ -12,6 +12,14 @@ import { colors } from '../theme';
 import { getBlockDefinition, type BlockDef } from '../../blocks/registry';
 import type { Block } from '../../graph/Patch';
 import type { BlockId } from '../../types';
+import type { SignalType } from '../../core/canonical-types';
+
+/**
+ * Format a SignalType for display.
+ */
+function formatSignalType(type: SignalType): string {
+  return type.payload;
+}
 
 /**
  * Block Inspector component.
@@ -43,7 +51,7 @@ export const BlockInspector = observer(function BlockInspector() {
  */
 function NoSelection() {
   return (
-    <div style={{ padding: '16px', color: colors.text.secondary }}>
+    <div style={{ padding: '16px', color: colors.textSecondary }}>
       <p>Select a block to inspect.</p>
     </div>
   );
@@ -70,7 +78,7 @@ function TypePreview({ type }: TypePreviewProps) {
   return (
     <div style={{ padding: '16px' }}>
       <h3 style={{ margin: '0 0 8px', fontSize: '18px' }}>{typeInfo.label}</h3>
-      <p style={{ margin: '0 0 16px', color: colors.text.secondary, fontSize: '13px' }}>
+      <p style={{ margin: '0 0 16px', color: colors.textSecondary, fontSize: '13px' }}>
         {typeInfo.type}
       </p>
       {typeInfo.description && (
@@ -80,15 +88,15 @@ function TypePreview({ type }: TypePreviewProps) {
       )}
 
       <div style={{ marginBottom: '16px' }}>
-        <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: colors.text.secondary }}>
+        <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: colors.textSecondary }}>
           Inputs
         </h4>
         <ul style={{ margin: 0, paddingLeft: '20px' }}>
           {typeInfo.inputs.map((input) => (
             <li key={input.id} style={{ marginBottom: '4px', fontSize: '13px' }}>
-              <strong>{input.label}</strong>: {input.type}
+              <strong>{input.label}</strong>: {formatSignalType(input.type)}
               {input.optional && (
-                <span style={{ color: colors.text.secondary }}> (optional)</span>
+                <span style={{ color: colors.textSecondary }}> (optional)</span>
               )}
             </li>
           ))}
@@ -96,23 +104,23 @@ function TypePreview({ type }: TypePreviewProps) {
       </div>
 
       <div>
-        <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: colors.text.secondary }}>
+        <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: colors.textSecondary }}>
           Outputs
         </h4>
         <ul style={{ margin: 0, paddingLeft: '20px' }}>
           {typeInfo.outputs.map((output) => (
             <li key={output.id} style={{ marginBottom: '4px', fontSize: '13px' }}>
-              <strong>{output.label}</strong>: {output.type}
+              <strong>{output.label}</strong>: {formatSignalType(output.type)}
             </li>
           ))}
         </ul>
       </div>
 
-      <div style={{ marginTop: '16px', padding: '12px', backgroundColor: colors.bg.secondary, borderRadius: '4px' }}>
-        <div style={{ fontSize: '12px', color: colors.text.secondary }}>
+      <div style={{ marginTop: '16px', padding: '12px', backgroundColor: colors.bgPanel, borderRadius: '4px' }}>
+        <div style={{ fontSize: '12px', color: colors.textSecondary }}>
           <strong>Form:</strong> {typeInfo.form}
         </div>
-        <div style={{ fontSize: '12px', color: colors.text.secondary }}>
+        <div style={{ fontSize: '12px', color: colors.textSecondary }}>
           <strong>Capability:</strong> {typeInfo.capability}
         </div>
       </div>
@@ -144,12 +152,12 @@ function BlockDetails({ block, patch }: BlockDetailsProps) {
       <h3 style={{ margin: '0 0 8px', fontSize: '18px' }}>
         {block.label || typeInfo.label}
       </h3>
-      <p style={{ margin: '0 0 16px', color: colors.text.secondary, fontSize: '13px' }}>
+      <p style={{ margin: '0 0 16px', color: colors.textSecondary, fontSize: '13px' }}>
         {typeInfo.type}
       </p>
 
       <div style={{ marginBottom: '16px' }}>
-        <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: colors.text.secondary }}>
+        <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: colors.textSecondary }}>
           Inputs
         </h4>
         <ul style={{ margin: 0, paddingLeft: '20px', listStyle: 'none' }}>
@@ -158,7 +166,7 @@ function BlockDetails({ block, patch }: BlockDetailsProps) {
             return (
               <li key={port.id} style={{ marginBottom: '4px', fontSize: '13px' }}>
                 <strong>{port.label}</strong>
-                <span style={{ color: colors.text.secondary }}> ({port.type})</span>
+                <span style={{ color: colors.textSecondary }}> ({port.type})</span>
               </li>
             );
           })}
@@ -166,7 +174,7 @@ function BlockDetails({ block, patch }: BlockDetailsProps) {
       </div>
 
       <div style={{ marginBottom: '16px' }}>
-        <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: colors.text.secondary }}>
+        <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: colors.textSecondary }}>
           Outputs
         </h4>
         <ul style={{ margin: 0, paddingLeft: '20px', listStyle: 'none' }}>
@@ -175,29 +183,29 @@ function BlockDetails({ block, patch }: BlockDetailsProps) {
             return (
               <li key={port.id} style={{ marginBottom: '4px', fontSize: '13px' }}>
                 <strong>{port.label}</strong>
-                <span style={{ color: colors.text.secondary }}> ({port.type})</span>
+                <span style={{ color: colors.textSecondary }}> ({port.type})</span>
               </li>
             );
           })}
         </ul>
       </div>
 
-      {block.config && Object.keys(block.config).length > 0 && (
+      {block.params && Object.keys(block.params).length > 0 && (
         <div>
-          <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: colors.text.secondary }}>
+          <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: colors.textSecondary }}>
             Configuration
           </h4>
           <pre
             style={{
               margin: 0,
               padding: '8px',
-              backgroundColor: colors.bg.secondary,
+              backgroundColor: colors.bgPanel,
               borderRadius: '4px',
               fontSize: '12px',
               overflow: 'auto',
             }}
           >
-            {JSON.stringify(block.config, null, 2)}
+            {JSON.stringify(block.params, null, 2)}
           </pre>
         </div>
       )}

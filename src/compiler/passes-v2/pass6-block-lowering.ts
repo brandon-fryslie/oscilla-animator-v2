@@ -421,9 +421,11 @@ export function pass6BlockLowering(
   // Set time model from Pass 3 (threaded through Pass 4 and 5)
   builder.setTimeModel(validated.timeModel);
 
-  // Process blocks in dependency order (already sorted by Pass 4)
-  // For each block, translate its output artifacts to IR nodes
-  for (const scc of validated.sccs) {
+  // Process blocks in dependency order
+  // Tarjan's SCC algorithm returns SCCs in REVERSE topological order,
+  // so we reverse them to process dependencies before dependents
+  const orderedSccs = [...validated.sccs].reverse();
+  for (const scc of orderedSccs) {
     for (const node of scc.nodes) {
       if (node.kind !== "BlockEval") {
         continue; // Skip non-block nodes

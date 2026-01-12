@@ -13,10 +13,12 @@
  * deterministic execution order.
  */
 
-import type { Step, TimeModel, DomainId, DomainDef } from '../ir/types';
+import type { Step, StepRender, TimeModel, DomainId, DomainDef, FieldExprId, SigExprId } from '../ir/types';
 import type { UnlinkedIRFragments } from './pass6-block-lowering';
-import type { AcyclicOrLegalGraph } from '../ir/patches';
+import type { AcyclicOrLegalGraph, NormalizedEdge, Block, BlockIndex } from '../ir/patches';
 import type { TimeModelIR } from '../ir/schedule';
+import type { ValueRefPacked } from '../ir/lowerTypes';
+import { getBlockDefinition } from '../../blocks/registry';
 
 // =============================================================================
 // Schedule IR Types
@@ -56,6 +58,115 @@ export interface StateSlotDef {
   readonly initialValue: number;
 }
 
+// =============================================================================
+// Helper Functions
+// =============================================================================
+
+/**
+ * Find all render blocks in the validated graph.
+ */
+function findRenderBlocks(
+  blocks: readonly Block[]
+): Array<{ block: Block; index: BlockIndex }> {
+  const result: Array<{ block: Block; index: BlockIndex }> = [];
+
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i];
+    const def = getBlockDefinition(block.type);
+    if (def?.capability === 'render') {
+      result.push({ block, index: i as BlockIndex });
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Get the ValueRef for a specific input port of a block.
+ * Traces through edges to find the source block's output.
+ */
+function getInputRef(
+  blockIndex: BlockIndex,
+  portId: string,
+  edges: readonly NormalizedEdge[],
+  blockOutputs: Map<BlockIndex, Map<string, ValueRefPacked>>
+): ValueRefPacked | undefined {
+  // Find edge targeting this block.port
+  const edge = edges.find(
+    e => e.toBlock === blockIndex && e.toPort === portId
+  );
+
+  if (!edge) return undefined;
+
+  // Look up source block's outputs
+  const sourceOutputs = blockOutputs.get(edge.fromBlock);
+  if (!sourceOutputs) return undefined;
+
+  return sourceOutputs.get(edge.fromPort);
+}
+
+/**
+ * Build render steps from render blocks.
+ *
+ * P0: Generates StepRender for each render block
+ * P1: Wires position, color, size inputs from blockOutputs
+ * P2: Resolves domain for each render step
+ */
+function buildRenderSteps(
+  blocks: readonly Block[],
+  edges: readonly NormalizedEdge[],
+  blockOutputs: Map<BlockIndex, Map<string, ValueRefPacked>>,
+  domains: ReadonlyMap<DomainId, DomainDef>
+): StepRender[] {
+  const steps: StepRender[] = [];
+  const renderBlocks = findRenderBlocks(blocks);
+
+  // P2: MVP - Use first domain (demo patch has single domain)
+  const domainId = domains.keys().next().value;
+  if (!domainId) {
+    console.warn('[pass7-schedule] No domains found, cannot create render steps');
+    return steps;
+  }
+
+  for (const { block, index } of renderBlocks) {
+    // P1: Trace inputs through edges to blockOutputs
+    const posRef = getInputRef(index, 'pos', edges, blockOutputs);
+    const colorRef = getInputRef(index, 'color', edges, blockOutputs);
+    const sizeRef = getInputRef(index, 'size', edges, blockOutputs);
+
+    // P0/P1: Validate required inputs (position and color)
+    if (posRef?.k !== 'field') {
+      console.warn(`[pass7-schedule] Render block ${block.id} missing or invalid 'pos' input (field expected)`);
+      continue;
+    }
+    if (colorRef?.k !== 'field') {
+      console.warn(`[pass7-schedule] Render block ${block.id} missing or invalid 'color' input (field expected)`);
+      continue;
+    }
+
+    // P0: Create StepRender with wired inputs
+    const step: StepRender = {
+      kind: 'render',
+      domain: domainId,
+      position: posRef.id,
+      color: colorRef.id,
+    };
+
+    // P1: Add optional size if present
+    if (sizeRef?.k === 'field' || sizeRef?.k === 'sig') {
+      (step as { size?: SigExprId | FieldExprId }).size = sizeRef.id;
+    }
+
+    steps.push(step);
+  }
+
+  return steps;
+}
+
+// =============================================================================
+// Pass 7 Entry Point
+// =============================================================================
+
 /**
  * Pass 7: Schedule Construction
  *
@@ -75,12 +186,20 @@ export function pass7Schedule(
   // Get domains from IRBuilder
   const domains = unlinkedIR.builder.getDomains();
 
-  // TODO: Build execution steps from topological order of SCCs
-  const steps: Step[] = [];
+  // Build render steps (P0, P1, P2)
+  const renderSteps = buildRenderSteps(
+    validated.blocks,
+    validated.edges,
+    unlinkedIR.blockOutputs,
+    domains
+  );
 
-  // TODO: Count state slots from unlinkedIR
+  // MVP: Schedule contains only render steps
+  // Future: Add evalSig, materialize, stateWrite steps
+  const steps: Step[] = [...renderSteps];
+
+  // MVP: No state slots (demo patch has no stateful blocks)
   const stateSlotCount = 0;
-
   const stateSlots: StateSlotDef[] = [];
 
   return {

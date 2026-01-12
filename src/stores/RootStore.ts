@@ -50,6 +50,9 @@ export class RootStore {
     );
     this.diagnostics = new DiagnosticsStore(diagnosticHub);
 
+    // Wire up callback for MobX reactivity
+    diagnosticHub.setOnRevisionChange(() => this.diagnostics.incrementRevision());
+
     // Wire patch mutations to emit GraphCommitted events
     this.setupGraphCommittedEmission();
   }

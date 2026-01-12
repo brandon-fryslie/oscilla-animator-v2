@@ -140,6 +140,18 @@ export interface IRBuilder {
   /** Create a pure function reference (kernel). */
   kernel(name: string): PureFn;
 
+  /** Create an opcode-based pure function. */
+  opcode(op: OpCode): PureFn;
+
+  /** Create an expression-based pure function. */
+  expr(expression: string): PureFn;
+
+  /** Create a domain. */
+  createDomain(kind: 'grid' | 'n' | 'path', count: number, params?: Record<string, unknown>): DomainId;
+
+  /** Get all domains. */
+  getDomains(): ReadonlyMap<DomainId, DomainDef>;
+
   /** Get timepoint markers. */
   getTimepointMarkers(): { start: number; end: number } | null;
 

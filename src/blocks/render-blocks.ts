@@ -95,3 +95,45 @@ registerBlock({
     };
   },
 });
+
+// =============================================================================
+// RenderInstances2D
+// =============================================================================
+
+registerBlock({
+  type: 'RenderInstances2D',
+  label: 'Render Instances 2D',
+  category: 'render',
+  description: 'Renders 2D instances (particles/sprites) at positions with color and size',
+  form: 'primitive',
+  capability: 'render',
+  inputs: [
+    { id: 'domain', label: 'Domain', type: signalType('int') },
+    { id: 'pos', label: 'Position', type: signalTypeField('vec2', 'default') },
+    { id: 'color', label: 'Color', type: signalTypeField('color', 'default') },
+    { id: 'size', label: 'Size', type: signalTypeField('float', 'default') },
+  ],
+  outputs: [],
+  params: {
+    defaultSize: 5,
+  },
+  lower: ({ ctx, inputsById }) => {
+    const pos = inputsById.pos;
+    const color = inputsById.color;
+    const size = inputsById.size;
+
+    if (!pos || pos.k !== 'field') {
+      throw new Error('RenderInstances2D pos input must be a field');
+    }
+    if (!color || color.k !== 'field') {
+      throw new Error('RenderInstances2D color input must be a field');
+    }
+
+    // Render blocks don't produce outputs - they're sinks
+    // The actual rendering will be handled by the runtime
+
+    return {
+      outputsById: {},
+    };
+  },
+});

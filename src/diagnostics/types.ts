@@ -115,7 +115,10 @@ export type DiagnosticCode =
   | 'P_FRAME_BUDGET_EXCEEDED' // Frame eval exceeded time budget
 
   // --- Authoring Hints ---
-  | 'I_SILENT_VALUE_USED'; // Unconnected input using default value
+  | 'I_SILENT_VALUE_USED' // Unconnected input using default value
+
+  // --- Compile Info ---
+  | 'I_COMPILE_SUCCESS'; // Compilation successful (info)
 
 // =============================================================================
 // Diagnostic Payload (Extensible per Code)

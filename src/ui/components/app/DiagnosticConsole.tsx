@@ -35,9 +35,10 @@ export const DiagnosticConsole: React.FC = observer(() => {
 
   // Get active diagnostics (reactive - triggers re-render when changed)
   const diagnostics = rootStore.diagnostics.activeDiagnostics;
+  const revision = rootStore.diagnostics.revision;
 
   // Debug logging
-  console.log('[DiagnosticConsole] Rendering with diagnostics:', diagnostics.length);
+  console.log('[DiagnosticConsole] Rendering with diagnostics:', diagnostics.length, 'revision:', revision);
 
   // Filter diagnostics by severity
   const filteredDiagnostics = filter === 'all'
@@ -117,7 +118,7 @@ export const DiagnosticConsole: React.FC = observer(() => {
             }}
           >
             {filter === 'all'
-              ? 'No diagnostics'
+              ? `No diagnostics (rev: ${revision})`
               : `No ${filter} diagnostics`}
           </div>
         ) : (

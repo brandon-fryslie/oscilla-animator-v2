@@ -30,10 +30,11 @@ import '../blocks/color-blocks';
 import '../blocks/geometry-blocks';
 import '../blocks/identity-blocks';
 import '../blocks/render-blocks';
+import '../blocks/field-operations-blocks';
 
 // Import passes
 import { pass2TypeGraph } from './passes-v2';
-import { pass3TimeTopology } from './passes-v2';
+import { pass3Time } from './passes-v2';
 import { pass4DepGraph } from './passes-v2';
 import { pass5CycleValidation } from './passes-v2';
 import { pass6BlockLowering } from './passes-v2';
@@ -122,7 +123,7 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
     const typedPatch = pass2TypeGraph(normalized);
 
     // Pass 3: Time Topology
-    const timeResolvedPatch = pass3TimeTopology(typedPatch);
+    const timeResolvedPatch = pass3Time(typedPatch);
 
     // Pass 4: Dependency Graph
     const depGraphPatch = pass4DepGraph(timeResolvedPatch);
@@ -158,6 +159,21 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
     // Emit CompileEnd event (success)
     if (options) {
       const durationMs = performance.now() - startTime;
+      const successDiagnostic = {
+        id: `compile-success:rev${options.patchRevision || 0}`,
+        code: 'I_COMPILE_SUCCESS' as const,
+        severity: 'info' as const,
+        domain: 'compile' as const,
+        primaryTarget: { kind: 'graphSpan' as const, blockIds: [] },
+        title: 'Compilation Successful',
+        message: `Compiled in ${durationMs.toFixed(1)}ms`,
+        scope: { patchRevision: options.patchRevision || 0, compileId },
+        metadata: {
+          firstSeenAt: Date.now(),
+          lastSeenAt: Date.now(),
+          occurrenceCount: 1,
+        },
+      };
       options.events.emit({
         type: 'CompileEnd',
         compileId,
@@ -165,7 +181,7 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
         patchRevision: options.patchRevision || 0,
         status: 'success',
         durationMs,
-        diagnostics: [],
+        diagnostics: [successDiagnostic],
       });
     }
 

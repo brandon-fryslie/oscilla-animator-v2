@@ -5,6 +5,8 @@
  */
 
 import { registerBlock } from './registry';
+import { signalType, signalTypeField } from '../core/canonical-types';
+import { domainId } from '../compiler/ir/Indices';
 
 // =============================================================================
 // GridDomain
@@ -47,9 +49,12 @@ registerBlock({
   category: 'domain',
   description: 'Creates a 1D domain with N elements',
   form: 'primitive',
-  capability: 'pure',
+  capability: 'identity',
   inputs: [],
-  outputs: [],
+  outputs: [
+    { id: 'domain', label: 'Domain', type: signalType('int') },
+    { id: 'rand', label: 'Random', type: signalTypeField('float', 'default') },
+  ],
   params: {
     n: 100,
     seed: 0,
@@ -61,8 +66,20 @@ registerBlock({
     // Register domain with the builder
     ctx.b.createDomain('n', n, { seed });
 
+    // Create domain count signal
+    const domainCountSig = ctx.b.sigConst(n, signalType('int'));
+    const domainSlot = ctx.b.allocSlot();
+
+    // Create per-element random field (idRand gives stable random values per element)
+    const domain = domainId('default');
+    const randField = ctx.b.fieldSource(domain, 'idRand', signalTypeField('float', 'default'));
+    const randSlot = ctx.b.allocSlot();
+
     return {
-      outputsById: {},
+      outputsById: {
+        domain: { k: 'sig', id: domainCountSig, slot: domainSlot },
+        rand: { k: 'field', id: randField, slot: randSlot },
+      },
     };
   },
 });

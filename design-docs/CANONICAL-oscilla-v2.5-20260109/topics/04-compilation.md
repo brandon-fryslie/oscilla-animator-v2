@@ -62,7 +62,20 @@ Transforms NormalizedGraph to executable IR:
 
 ---
 
-## NormalizedGraph
+## RawGraph vs NormalizedGraph
+
+The compilation pipeline operates on two graph representations:
+
+### RawGraph (UI Graph)
+
+What the user edits: blocks, edges, plus role metadata. May contain implicit attachments:
+- Default source attachments (badges on ports)
+- Wire-state indicators (slew/delay markers)
+- Bus tap UI affordances
+
+**RawGraph is the authoritative, undoable user intent.**
+
+### NormalizedGraph (Compiler Graph)
 
 The canonical compile-time representation the compiler consumes.
 
@@ -73,6 +86,37 @@ type NormalizedGraph = {
   edges: Edge[];
 };
 ```
+
+A fully explicit graph where:
+- Every default-source is an actual `BlockInstance` + `Edge`
+- Every bus tap/publish is an actual block + edges
+- Every wire-state sidecar is an actual state block + edges
+- No implicit attachments remain
+
+**NormalizedGraph is what you compile.**
+
+### Normalization Invariants
+
+1. **Pure, Deterministic Rewrite**: `normalized = normalize(raw)` is a pure function
+2. **ID-Stable**: Structural nodes/edges get stable IDs derived from anchors (not creation order)
+3. **Single Writer**: Only normalization creates structural artifacts; compiler never inserts blocks
+
+### Anchor-Based Stable IDs
+
+Structural artifacts are keyed by what they attach to, ensuring IDs survive copy/paste/undo:
+
+| Structural Type | Anchor Format |
+|-----------------|---------------|
+| Default source | `defaultSource:<blockId>:<portName>:<in\|out>` |
+| Wire-state | `wireState:<wireId>` |
+| Bus junction | `bus:<busId>:<pub\|sub>:<typeKey>` |
+
+```typescript
+structNodeId = hash("structNode", anchor)
+structEdgeId = hash("structEdge", anchor, localEdgeName)
+```
+
+**Why anchors matter:** Structural objects stop thrashing when the user rearranges things. Moving a block doesn't regenerate all its default-source IDs.
 
 ### Properties
 

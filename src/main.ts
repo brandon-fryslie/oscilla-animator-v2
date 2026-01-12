@@ -196,6 +196,15 @@ async function buildAndCompile(particleCount: number) {
     `Compiled: ${program.signalExprs.nodes.length} signals, ${program.fieldExprs.nodes.length} fields, ${program.slotMeta.length} slots`,
   );
 
+  // Emit ProgramSwapped to update active revision for diagnostics
+  rootStore.events.emit({
+    type: 'ProgramSwapped',
+    patchId: 'patch-0',
+    patchRevision: rootStore.getPatchRevision(),
+    compileId: 'compile-0',
+    swapMode: 'hard',
+  });
+
   // Update global state
   currentProgram = program;
   currentState = createRuntimeState(program.slotMeta.length);

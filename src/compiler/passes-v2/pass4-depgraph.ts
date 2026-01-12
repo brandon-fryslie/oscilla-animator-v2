@@ -83,11 +83,12 @@ export function pass4DepGraph(
       continue;
     }
 
-    //EDGES ARE ADDED IN GRAPH NORMALIZATION ONLY
-    // depEdges.push({
-    //   from: { kind: "BlockEval", blockIndex: edge.fromBlock as any },
-    //   to: { kind: "BlockEval", blockIndex: edge.toBlock as any },
-    // });
+    // Add dependency edge: source block (fromBlock) must be evaluated before target block (toBlock)
+    // IMPORTANT: Reference existing nodes from the nodes array, not new objects
+    depEdges.push({
+      from: nodes[edge.fromBlock],
+      to: nodes[edge.toBlock],
+    });
   }
 
   // Throw if there are any errors

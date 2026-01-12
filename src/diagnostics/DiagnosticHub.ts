@@ -71,6 +71,9 @@ export class DiagnosticHub {
   // Reference to patch (for authoring validators)
   private patchGetter: () => any; // Will be set to () => rootStore.patch
 
+  // Callback to notify store of changes (for MobX reactivity)
+  private onRevisionChange: (() => void) | null = null;
+
   // =============================================================================
   // Constructor
   // =============================================================================
@@ -394,6 +397,18 @@ export class DiagnosticHub {
    */
   private incrementRevision(): void {
     this.diagnosticsRevision++;
+    // Notify store of change for MobX reactivity
+    if (this.onRevisionChange) {
+      this.onRevisionChange();
+    }
+  }
+
+  /**
+   * Sets the callback to be called when diagnostics revision changes.
+   * Used by DiagnosticsStore for MobX reactivity.
+   */
+  setOnRevisionChange(callback: () => void): void {
+    this.onRevisionChange = callback;
   }
 
   // =============================================================================

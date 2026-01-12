@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "cherry-chrome": {
+      "command": "node",
+      "args": ["/Users/bmf/code/cherry-chrome-mcp/build/src/index.js"],
+      "env": {
+        "USE_SMART_TOOLS": "false"
+      }
+    }
+  }
+}

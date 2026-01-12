@@ -13,7 +13,15 @@ import {
   getBlockTypesByCategory,
   type BlockDef,
 } from '../../blocks/registry';
+import type { SignalType } from '../../core/canonical-types';
 import './BlockLibrary.css';
+
+/**
+ * Format a SignalType for display.
+ */
+function formatSignalType(type: SignalType): string {
+  return type.payload;
+}
 
 // Type aliases for clarity
 type BlockCategory = string;
@@ -223,7 +231,7 @@ export const BlockLibrary: React.FC = observer(() => {
               <ul>
                 {selectedType.inputs.map((input) => (
                   <li key={input.id}>
-                    <strong>{input.label}</strong>: {input.type}
+                    <strong>{input.label}</strong>: {formatSignalType(input.type)}
                     {input.optional && <span className="optional">(optional)</span>}
                   </li>
                 ))}
@@ -234,7 +242,7 @@ export const BlockLibrary: React.FC = observer(() => {
               <ul>
                 {selectedType.outputs.map((output) => (
                   <li key={output.id}>
-                    <strong>{output.label}</strong>: {output.type}
+                    <strong>{output.label}</strong>: {formatSignalType(output.type)}
                   </li>
                 ))}
               </ul>

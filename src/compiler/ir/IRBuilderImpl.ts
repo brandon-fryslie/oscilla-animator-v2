@@ -330,6 +330,40 @@ export class IRBuilderImpl implements IRBuilder {
   getEventSlots(): ReadonlyMap<EventExprId, ValueSlot> {
     return this.eventSlots;
   }
+
+  // =========================================================================
+  // Missing Interface Methods (Stubs)
+  // =========================================================================
+
+  getTimepointMarkers(): { start: number; end: number } | null {
+    // TODO: Implement timepoint markers
+    return null;
+  }
+
+  defineDomain(id: DomainId, def: DomainDef): void {
+    this.domains.set(id, def);
+  }
+
+  getSchedule(): TimeModelIR {
+    if (!this.timeModel) {
+      throw new Error('Time model not set');
+    }
+    return this.timeModel;
+  }
+
+  declareState(_id: StateId, _type: SignalType, _initialValue?: unknown): void {
+    // TODO: Implement state declaration
+  }
+
+  readState(_id: StateId, type: SignalType): SigExprId {
+    // TODO: Implement state reading
+    // For now, return a dummy const
+    return this.sigConst(0, type);
+  }
+
+  writeState(_id: StateId, _value: SigExprId): void {
+    // TODO: Implement state writing
+  }
 }
 
 /**

@@ -1,251 +1,135 @@
 ---
 source_file: topics/04-compilation.md
-source_hash: d4d8661fd16b
+source_hash: 1c774de2a943
 tier: T1
 date_generated: 2026-01-12
+compression: 24%
 ---
 
 # Index: Compilation Pipeline (04-compilation)
 
-## 1. Quick Reference
+**Dense reference for contradictions, dependencies, decisions, and invariants.**
 
-**Topic**: Compilation Pipeline
-**Tier**: T1 (Foundational)
-**Status**: Complete specification
-**Key Focus**: How patches transform from user-authored graphs to runtime-executable IR
+## Invariants & Constraints [L12-13]
 
-**Time Budget**: 15-20 minutes to read
-**Prerequisites**: 01-type-system, 02-block-system
-
----
-
-## 2. Core Concepts Map
-
-| Concept | Definition | Key Property |
-|---------|-----------|--------------|
-| **RawGraph** | User-authored patch | May have unconnected inputs, implicit buses |
-| **NormalizedGraph** | Canonical compile-time representation | Explicitly closed, fully connected, typed ports |
-| **CompiledProgramIR** | Runtime-executable form | No type info, slot-addressed, schedule-driven |
-| **GraphNormalization** | Stage 1→2 transformation | Materializes derived blocks, assigns initial types |
-| **Compilation** | Stage 2→3 transformation | Type unification, cycle detection, scheduling, slot allocation |
-
----
-
-## 3. Invariants & Constraints
-
-| ID | Rule | Enforcement |
-|----|------|------------|
+| ID | Rule | Where |
+|----|------|-------|
 | **I6** | Compiler never mutates the graph | Immutable input contract |
 | **I7** | Explicit cycle semantics | Tarjan SCC + validation |
-| **I8** | Slot-addressed execution | Runtime uses indices, not names |
+| **I8** | Slot-addressed execution | Runtime indices, not names |
 | **I9** | Schedule is data | Explicit Step[] structure |
-| **I13** | Hash-consing for identical subtrees | ExprId deduplication |
+| **I13** | Hash-consing identical subtrees | ExprId deduplication |
 | **I14** | Cache keys explicit | CacheKey record for all caches |
 
----
+## Pipeline Overview [L17-29]
 
-## 4. Architecture Decisions
-
-### Pipeline Structure
 ```
 RawGraph → GraphNormalization → NormalizedGraph → Compilation → CompiledProgramIR
 ```
 
-**Key Decision**: Three-stage pipeline with immutable intermediate representations at each boundary.
+**Core principles**: Immutable graph (I6), explicit structure post-normalization, runtime type erasure, schedule-as-data (I9).
 
-### Type Erasure Strategy
-- **Compile-time**: Full 5-axis SignalType coordinates
-- **Runtime**: Type info completely erased
-- **Rationale**: 5-10ms performance budget requires zero-overhead IR
+## Representations [L65-163]
 
-### Cycle Handling
-- **Detection**: Tarjan's strongly connected components algorithm
-- **Validation**: Every cycle must contain ≥1 stateful primitive (UnitDelay, Lag, Phasor, SampleAndHold)
-- **Error**: CycleError with suggestion to add UnitDelay
+**RawGraph** [L69-76]: User-edited, may have unconnected inputs, implicit buses. **Authoritative user intent.**
 
-### Slot Allocation by Cardinality
-| Cardinality | Slot Type | Example |
-|-------------|-----------|---------|
-| `zero` | Inlined constant (no slot) | Literal 42 |
-| `one` | ScalarSlot | Single float value |
-| `many(domain)` | FieldSlot | Array per domain element |
+**NormalizedGraph** [L78-96]: Fully explicit—all defaults/buses/wire-state become blocks+edges. **Compile input.**
 
----
+**Anchor-Based IDs** [L104-119]: Structural artifacts keyed by attachment (e.g., `defaultSource:<blockId>:<portName>:<in|out>`) survive user edits.
 
-## 5. Section-by-Section Breakdown
+**Port Structure** [L140-151]: `{ id, dir: PortDirection, type: SignalType, combine: CombineMode }`
+**Combine on input port, not edge** [L163].
 
-### Overview (Lines 17-30)
-**Purpose**: High-level pipeline definition
-**Key**: Introduces the 5-stage transformation and four core principles
-**Actions**: Read first to understand flow
+## Domain Declarations [L167-179]
 
-### Pipeline Stages (Lines 33-61)
-**Purpose**: Describes each transformation stage
-**Key Stages**:
-- Stage 1: RawGraph (user input)
-- Stage 2: GraphNormalization (materializes structure)
-- Stage 3: Compilation (generates IR)
-**Actions**: Reference when implementing stage-specific logic
+Four shapes: `fixed_count(number)`, `grid_2d(width, height)`, `voices(maxVoices)`, `mesh_vertices(assetId)`.
+Each compiles to dense lanes 0..N-1.
 
-### NormalizedGraph (Lines 65-119)
-**Purpose**: Specifies the canonical compile-time representation
-**Key Properties**:
-- Explicitly closed (all derived blocks materialized)
-- Fully connected (every input has exactly one source)
-- Typed ports (SignalType 5-axis coordinates)
-- **Critical**: Node/Port/Edge ID types and PortDirection structure
-**Actions**: Use as reference for normalization output contract
+## Type System [L183-235]
 
-### Domain Declarations (Lines 123-136)
-**Purpose**: Resource declaration model for domains
-**Key**: Four domain shape types (FixedCount, Grid2D, Voices, MeshVertices)
-**v0 Invariant**: Every domain compiles to dense lanes 0..N-1
-**Actions**: Reference when implementing domain lowering
+**Five-axis**: GraphNorm assigns initial (mostly default); Compilation unifies, resolves, specializes, allocates, **erases from IR**.
 
-### Type System in Compilation (Lines 139-191)
-**Purpose**: How 5-axis model flows through compilation
-**Two-Pass Process**:
-1. Propagation: Infer missing structure
-2. Unification + Resolution: Ensure agreement, resolve defaults
-**Key Rules**: Default unification rules, axis resolution using DEFAULTS_V0 and FRAME_V0
-**Critical Decision**: Type erasure happens after resolution
-**Actions**: Use for type propagation and default resolution logic
+**Unification** [L202-212]:
+```
+default + default → default
+default + X → X
+X + X → X
+X + Y (X≠Y) → ERROR
+```
+Unification points: edges, multi-input ops, combine points.
 
-### Cycle Detection and Validation (Lines 194-217)
-**Purpose**: Ensure feedback loops are well-formed
-**Algorithm**: Tarjan's SCC
-**Validation Rule**: Every SCC must contain ≥1 stateful primitive
-**Error Type**: CycleError with clear suggestion
-**Actions**: Implement Tarjan's algorithm and validation check
+**Resolution** [L219-234]: After unification, resolve AxisTag.default using DEFAULTS_V0, FRAME_V0.
 
-### Scheduling (Lines 221-256)
-**Purpose**: Define execution order
-**Key Invariant**: I9 - Schedule is Data
-**Seven Step Types**: eval_scalar, eval_field, eval_event, state_read, state_write, combine, render
-**Ordering Guarantees**: Read inputs → Update time → Eval topological → Events → Render
-**Actions**: Use Step[] as IR execution unit
+## Cycle Detection & Validation [L238-261]
 
-### Slot Allocation (Lines 259-285)
-**Purpose**: Map values to runtime storage
-**Key Invariant**: I8 - Slot-Addressed Execution
-**Three Slot Types**: ScalarSlot, FieldSlot, EventSlot, StateSlot
-**Cardinality Mapping**: zero→inline, one→scalar, many(domain)→field
-**State Allocation**: Replicated N times for many(domain)
-**Actions**: Implement slot allocation based on type resolution
+**Algorithm**: Tarjan's SCC.
+**Requirement**: Every SCC must contain ≥1 stateful (UnitDelay, Lag, Phasor, SampleAndHold).
+**Error**: `{ kind: 'invalid_cycle', cycle: NodeId[], suggestion }`
 
-### CompiledProgramIR (Lines 288-354)
-**Purpose**: Final runtime-executable form
-**Key Properties**:
-- No type info, no binding/perspective/branch
-- Slot-based access only
-- Lowered operations (scalar/field unary/binary, broadcast/reduce)
-- Loop lowering for field operations with compile-time bounds
-**Actions**: Use as target for all lowering passes
+## Scheduling [L265-299]
 
-### Runtime Erasure (Lines 357-371)
-**Purpose**: Hard constraints for performance
-**Erased Elements**: Axis tags, referent IDs, domain objects, perspective/branch
-**Remaining**: Scalars, dense arrays, event buffers, compiled schedules
-**Rationale**: 5-10ms performance budget
-**Actions**: Verify all type-system metadata removed before execution
+**I9: Schedule is Data** [L267-278]. Explicit structure: `{ steps: Step[], stateSlots, fieldSlots, scalarSlots }`.
 
-### Structural Sharing (Lines 374-392)
-**Purpose**: Optimization via hash-consing
-**Key Invariant**: I13
-**Mechanism**: Identical FieldExpr/SignalExpr subtrees share ExprId
-**Benefit**: Increased cache hit rate, safe recompile
-**Actions**: Implement deduplicated expression store
+**7 Step Types** [L282-291]: eval_scalar, eval_field, eval_event, state_read, state_write, combine, render.
 
-### Cache Keys (Lines 395-413)
-**Purpose**: Explicit cache invalidation
-**Key Invariant**: I14
-**CacheKey Fields**: time, domain, upstreamSlots, params, stateVersion
-**Expresses**: "Stable across frames" vs "changes each frame"
-**Actions**: Every cache must declare explicit key dependency
+**Order** [L293-299]: read inputs → update time → topological eval → events → render.
 
-### Error Handling (Lines 415-440)
-**Purpose**: User-facing diagnostics
-**Error Categories**:
-- TypeError (axis/domain/phase mismatches)
-- GraphError (cycles, missing inputs, invalid edges)
-**Key Property**: Every error includes location info for UI display + suggested fix
-**Actions**: Structure all compiler errors with location + suggestion
+## Slot Allocation [L303-329]
 
-### Polymorphism (Lines 444-478)
-**Purpose**: Generic block specialization
-**Key Model**: Blocks are generic over (World, Domain) with compile-time constraints
-**Monomorphization**: One Add block generates concrete ops for any SignalType combination
-**No Runtime Polymorphism**: All specialization happens at compile time
-**Actions**: Implement type-constraint system and monomorphization
+**I8: Slot-Addressed Execution** [L305]. Runtime uses indices.
 
-### See Also (Lines 481-488)
-**Cross-References**:
-- 01-type-system (type definitions)
-- 02-block-system (block structure)
-- 05-runtime (IR execution)
-- Glossary: NormalizedGraph
-- Invariant: I6
+**By Cardinality** [L316-323]:
+- `zero` → inlined constant
+- `one` → ScalarSlot
+- `many(domain)` → FieldSlot
 
----
+**State**: card=one → 1 cell; many(domain) → N(domain) cells.
 
-## 6. Reading Path
+## CompiledProgramIR [L332-397]
 
-**Goal: Understand overall compilation flow**
-1. Overview (30 sec)
-2. Pipeline Stages (2 min)
-3. NormalizedGraph (3 min)
-4. CompiledProgramIR (3 min)
-5. Scheduling (3 min)
+**Storage** [L336-343]: ScalarSlot, FieldSlot, EventSlot, StateSlot (numeric ids).
 
-**Goal: Implement type system**
-1. Type System in Compilation (5 min)
-2. Cross-reference: 01-type-system
-3. Unification Rules + Default Resolution (2 min)
-4. Polymorphism section (3 min)
+**Ops** [L347-377]:
+- Scalar/field unary/binary (sin, cos, abs, clamp, negate; add, sub, mul, div, min, max)
+- Broadcast/reduce (ReduceOp: min, max, sum, avg)
+- State read/write, event read/write, render sink write
 
-**Goal: Implement cycle detection**
-1. Cycle Detection and Validation (3 min)
-2. Implement Tarjan's SCC
-3. Validation check for stateful primitives
+**Loop Lowering** [L379-397]: Field ops inside domain loops; bounds compile-time constants.
 
-**Goal: Implement scheduler**
-1. Scheduling (5 min)
-2. Slot Allocation (3 min)
-3. Runtime Erasure (2 min)
-4. Study Step[] types and ordering
+## Runtime Erasure [L401-414]
 
-**Goal: Understand runtime IR**
-1. CompiledProgramIR (5 min)
-2. Loop Lowering (2 min)
-3. Slot Allocation (3 min)
-4. Runtime Erasure (2 min)
+MVP constraints (5-10ms budget):
+- ✗ Axis tags, referent ids, domain objects, perspective/branch
+- ✓ Scalars, dense arrays, event buffers, compiled schedules
 
----
+## Structural Sharing & Caching [L418-450]
 
-## 7. Verification Checklist
+**I13: Hash-Consing** [L420-431]: Identical FieldExpr/SignalExpr subtrees share ExprId → increased cache hits.
 
-### Specification Completeness
-- [ ] All 5 pipeline stages documented with input/output types
-- [ ] NormalizedGraph structure fully specified (nodes, edges, domains)
-- [ ] Cycle detection algorithm named (Tarjan's SCC)
-- [ ] Cycle validation rule explicit (stateful primitive requirement)
-- [ ] Schedule explicitly structured (Step[] with 7 types)
-- [ ] Slot allocation deterministic (cardinality-based mapping)
-- [ ] Type erasure complete (no runtime type info)
-- [ ] Error types include location + suggestion
-- [ ] All invariants referenced (I6, I7, I8, I9, I13, I14)
+**I14: Cache Keys** [L439-450]: Explicit `{ time, domain, upstreamSlots, params, stateVersion }` expresses "stable vs dynamic."
 
-### Implementation Readiness
-- [ ] NormalizedGraph types can be directly translated to TypeScript
-- [ ] Step[] types have clear semantics for interpreter
-- [ ] Slot types have deterministic memory layout
-- [ ] Unification rules are mechanically applicable
-- [ ] Default resolution rules are deterministic
-- [ ] Cardinality → SlotType mapping has no ambiguity
-- [ ] Error handling can emit diagnostic messages with locations
+## Error Handling [L459-484]
 
-### Gaps & Risks
-- **Q1**: How are ExprIds generated in hash-consing? (Deferred to implementation)
-- **Q2**: What does DEFAULTS_V0 and FRAME_V0 contain? (Cross-ref: 01-type-system)
-- **Q3**: How are StepIds assigned for hot-swap reuse? (Deferred to implementation)
-- **Risk**: Loop lowering assumes compile-time domain bounds; must verify domains are fully resolved
+**Type Errors** [L461-469]: axis_mismatch, domain_mismatch, invalid_phase_op, unresolved_type.
+**Graph Errors** [L471-478]: invalid_cycle, missing_input, invalid_edge.
+**All include**: location (node/port/edge) + suggested fix.
+
+## Polymorphism & Monomorphization [L488-522]
+
+**Generic Blocks** [L490-513]: Generic over (World, Domain) with constraints (Typeclass, SameDomain, Promote).
+**Monomorphization** [L516-521]: Each instance → concrete IR ops; type vars resolved at compile time; lowering by `(world, domain)`.
+
+## Dependencies
+
+- [01-type-system.md](./01-type-system.md) — Type definitions
+- [02-block-system.md](./02-block-system.md) — Block structure
+- [05-runtime.md](./05-runtime.md) — IR execution
+
+## Key Decisions
+
+1. **Immutable normalization**: Pure function, never mutated by compiler
+2. **Explicit schedule**: First-class Step[] data structure
+3. **Early type erasure**: Pre-runtime for 5-10ms budget
+4. **Slot addressing**: Indexed, not named
+5. **Monomorphic**: All specialization at compile time
+6. **Anchor-stable IDs**: Survive user edits without thrashing
