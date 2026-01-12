@@ -3,6 +3,9 @@
  *
  * These types represent the intermediate results of lowering blocks
  * to IR expressions.
+ *
+ * NOTE: The actual block registry and lowering functions have moved to src/blocks/registry.ts
+ * This file now only contains types used by the compiler passes.
  */
 
 import type { SignalType } from '../../core/canonical-types';
@@ -14,8 +17,6 @@ import type {
   DomainId,
   StateId,
 } from './Indices';
-import type { BlockIndex } from '../../graph/normalize';
-import type { IRBuilder } from './IRBuilder';
 
 // =============================================================================
 // Value Reference Types
@@ -31,97 +32,6 @@ export type ValueRefPacked =
   | { readonly k: 'event'; readonly id: number; readonly slot: ValueSlot }
   | { readonly k: 'domain'; readonly id: DomainId }
   | { readonly k: 'scalar'; readonly value: unknown };
-
-// =============================================================================
-// Block Type Registry (IR Lowering)
-// =============================================================================
-
-/**
- * Port declaration for IR block types.
- */
-export interface IRPortDecl {
-  readonly portId: string;
-  readonly type: SignalType;
-}
-
-/**
- * Lower result - output of a block's lower function.
- */
-export interface LowerResult {
-  /** Map of port ID to ValueRef (required, replaces outputs array) */
-  readonly outputsById: Record<string, ValueRefPacked>;
-}
-
-/**
- * Lower context - provided to block lower functions.
- */
-export interface LowerCtx {
-  readonly blockIdx: BlockIndex;
-  readonly blockType: string;
-  readonly instanceId: string;
-  readonly label?: string;
-  readonly inTypes: readonly SignalType[];
-  readonly outTypes: readonly SignalType[];
-  readonly b: IRBuilder;
-  readonly seedConstId: number;
-}
-
-/**
- * Lower args - arguments to a block's lower function.
- */
-export interface LowerArgs {
-  readonly ctx: LowerCtx;
-  readonly inputs: readonly ValueRefPacked[];
-  readonly inputsById: Record<string, ValueRefPacked>;
-  readonly config?: Readonly<Record<string, unknown>>;
-}
-
-/**
- * Block type declaration for IR lowering.
- */
-export interface BlockTypeDecl {
-  readonly type: string;
-  readonly inputs: readonly IRPortDecl[];
-  readonly outputs: readonly IRPortDecl[];
-  readonly lower: (args: LowerArgs) => LowerResult;
-  readonly tags?: {
-    readonly irPortContract?: 'strict' | 'relaxed';
-  };
-}
-
-// =============================================================================
-// Block Type Registry
-// =============================================================================
-
-const BLOCK_TYPES = new Map<string, BlockTypeDecl>();
-
-/**
- * Register a block type for IR lowering.
- */
-export function registerBlockType(decl: BlockTypeDecl): void {
-  BLOCK_TYPES.set(decl.type, decl);
-}
-
-/**
- * Get a block type declaration by type name.
- */
-export function getBlockType(type: string): BlockTypeDecl | undefined {
-  return BLOCK_TYPES.get(type);
-}
-
-/**
- * Check if a block type is registered.
- */
-export function hasBlockType(type: string): boolean {
-  return BLOCK_TYPES.has(type);
-}
-
-/**
- * Get all registered block type names.
- */
-export function getAllBlockTypes(): string[] {
-  return Array.from(BLOCK_TYPES.keys());
-}
 
 // =============================================================================
 // Legacy Types (for compatibility with existing code)
