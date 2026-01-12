@@ -7,8 +7,8 @@ import type { Block, Edge } from "../../types";
 import type { IRBuilder } from "../ir/IRBuilder";
 import { IRBuilderImpl } from "../ir/IRBuilderImpl";
 import type { CompileError } from "../types";
-import type { ValueRefPacked, LowerCtx } from "../ir/lowerTypes";
-import { getBlockType } from "../ir/lowerTypes";
+import type { ValueRefPacked } from "../ir/lowerTypes";
+import { getBlockDefinition, type LowerCtx } from "../../blocks/registry";
 import { BLOCK_DEFS_BY_TYPE } from "../../blocks/registry";
 // Multi-Input Blocks Integration
 import {
@@ -269,16 +269,13 @@ function lowerBlockInstance(
   blockIdToIndex?: Map<string, BlockIndex>
 ): Map<string, ValueRefPacked> {
   const outputRefs = new Map<string, ValueRefPacked>();
-  const blockDef = BLOCK_DEFS_BY_TYPE.get(block.type);
+  const blockDef = getBlockDefinition(block.type);
 
-  // Check if block has registered lowering function
-  const blockType = getBlockType(block.type);
-
-  if (blockType === undefined) {
-    // No lowering function registered - use UnknownBlockType error kind
+  if (blockDef === undefined) {
+    // No block definition - use UnknownBlockType error kind
     errors.push({
       code: "UnknownBlockType",
-      message: `Block type "${block.type}" has no registered IR lowering function`,
+      message: `Block type "${block.type}" is not registered`,
       where: { blockId: block.id },
     });
 
@@ -289,29 +286,6 @@ function lowerBlockInstance(
   console.debug(`[IR] Using IR lowering for ${block.type} (${block.id})`);
 
   try {
-    const enforcePortContract = true; // BlockDef has no tags property yet
-    if (enforcePortContract && blockDef !== undefined) {
-      const defInputIds = blockDef.inputs.map((input) => input.id);
-      const irInputIds = blockType.inputs.map((input) => input.portId);
-      const defOutputIds = blockDef.outputs.map((output) => output.id);
-      const irOutputIds = blockType.outputs.map((output) => output.portId);
-
-      const inputOrderMismatch = defInputIds.join('|') !== irInputIds.join('|');
-      const outputOrderMismatch = defOutputIds.join('|') !== irOutputIds.join('|');
-
-      if (inputOrderMismatch || outputOrderMismatch) {
-        errors.push({
-          code: "IRValidationFailed",
-          message:
-            `IR port contract mismatch for "${block.type}" (${block.id}). ` +
-            `Editor inputs [${defInputIds.join(", ")}], IR inputs [${irInputIds.join(", ")}]; ` +
-            `Editor outputs [${defOutputIds.join(", ")}], IR outputs [${irOutputIds.join(", ")}].`,
-          where: { blockId: block.id },
-        });
-        return outputRefs;
-      }
-    }
-
     // Collect input ValueRefs
     // Use resolveInputsWithMultiInput if edges and blocks available
     const inputsById: Record<string, ValueRefPacked> = (edges !== undefined && blocks !== undefined)
@@ -320,7 +294,7 @@ function lowerBlockInstance(
 
     const inputs: ValueRefPacked[] = [];
     let hasUnresolvedInputs = false;
-    for (const inputPort of (blockDef?.inputs ?? [])) {
+    for (const inputPort of blockDef.inputs) {
       const resolved = inputsById[inputPort.id];
       if (resolved !== undefined) {
         inputs.push(resolved);
@@ -346,8 +320,8 @@ function lowerBlockInstance(
       blockType: block.type,
       instanceId: block.id,
       label: block.label,
-      inTypes: blockType.inputs.map((port) => port.type),
-      outTypes: blockType.outputs.map((port) => port.type),
+      inTypes: blockDef.inputs.map((port) => port.type),
+      outTypes: blockDef.outputs.map((port) => port.type),
       b: builder,
       seedConstId: 0, // TODO: Proper seed management
     };
@@ -356,11 +330,11 @@ function lowerBlockInstance(
     const config = block.params;
 
     // Call lowering function
-    const result = blockType.lower({ ctx, inputs, inputsById, config });
+    const result = blockDef.lower({ ctx, inputs, inputsById, config });
 
     // All blocks MUST use outputsById pattern
     // Allow empty outputsById only if block has no declared outputs
-    const hasOutputs = blockType.outputs.length > 0;
+    const hasOutputs = blockDef.outputs.length > 0;
     if (result.outputsById === undefined || (hasOutputs && Object.keys(result.outputsById).length === 0)) {
       errors.push({
         code: "IRValidationFailed",
@@ -371,7 +345,7 @@ function lowerBlockInstance(
     }
 
     // Map outputs to port IDs using outputsById
-    const portOrder = blockType.outputs.map((p) => p.portId);
+    const portOrder = blockDef.outputs.map((p) => p.id);
     for (const portId of portOrder) {
       const ref = result.outputsById[portId];
       if (ref === undefined) {
@@ -416,7 +390,7 @@ function lowerBlockInstance(
  *
  * Translates blocks into IR nodes using registered lowering functions.
  *
- * All blocks MUST have IR lowering registered via registerBlockType().
+ * All blocks MUST have IR lowering registered via registerBlock().
  * All blocks MUST use outputsById pattern (outputs array deprecated).
  * No fallback to non-IR outputs.
  *
