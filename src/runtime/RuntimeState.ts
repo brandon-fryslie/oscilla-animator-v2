@@ -116,6 +116,75 @@ export function updateSmoothing(ext: ExternalInputs, lerpFactor: number = 0.05):
 }
 
 /**
+ * HealthMetrics - Runtime health monitoring state
+ *
+ * Tracks performance metrics and error conditions for diagnostics.
+ * Uses batched aggregation to minimize overhead (<1% frame budget).
+ *
+ * Batching strategy:
+ * - Frame times: Ring buffer (last 10 frames)
+ * - NaN/Inf: 100ms batch windows (not per-occurrence)
+ * - Snapshots: Throttled to 5 Hz (200ms interval)
+ */
+export interface HealthMetrics {
+  /** Ring buffer of last 10 frame times (ms) */
+  frameTimes: number[];
+
+  /** Current write position in frameTimes ring buffer */
+  frameTimesIndex: number;
+
+  /** Count of NaN batch windows detected (NOT individual NaN occurrences) */
+  nanCount: number;
+
+  /** Count of Infinity batch windows detected */
+  infCount: number;
+
+  /** Block ID of last NaN occurrence (for diagnostic target) */
+  lastNanBlockId: string | null;
+
+  /** Block ID of last Infinity occurrence (for diagnostic target) */
+  lastInfBlockId: string | null;
+
+  /** Count of field materializations (for perf diagnostics) */
+  materializationCount: number;
+
+  /** Blocks with heavy materialization overhead */
+  heavyMaterializationBlocks: Map<string, number>;
+
+  /** Timestamp of last health snapshot emission (performance.now()) */
+  lastSnapshotTime: number;
+
+  /** Start of current sampling batch window (performance.now()) */
+  samplingBatchStart: number;
+
+  /** NaN occurrences in current batch window (resets every 100ms) */
+  nanBatchCount: number;
+
+  /** Infinity occurrences in current batch window (resets every 100ms) */
+  infBatchCount: number;
+}
+
+/**
+ * Create initial HealthMetrics state
+ */
+export function createHealthMetrics(): HealthMetrics {
+  return {
+    frameTimes: new Array(10).fill(0),
+    frameTimesIndex: 0,
+    nanCount: 0,
+    infCount: 0,
+    lastNanBlockId: null,
+    lastInfBlockId: null,
+    materializationCount: 0,
+    heavyMaterializationBlocks: new Map(),
+    lastSnapshotTime: 0,
+    samplingBatchStart: 0,
+    nanBatchCount: 0,
+    infBatchCount: 0,
+  };
+}
+
+/**
  * RuntimeState - Complete frame execution state
  */
 export interface RuntimeState {
@@ -136,6 +205,9 @@ export interface RuntimeState {
 
   /** Persistent state array (survives across frames) */
   state: Float64Array;
+
+  /** Health monitoring metrics (Sprint 2+) */
+  health: HealthMetrics;
 }
 
 /**
@@ -149,6 +221,7 @@ export function createRuntimeState(slotCount: number, stateSlotCount: number = 0
     time: null,
     external: createExternalInputs(),
     state: new Float64Array(stateSlotCount),
+    health: createHealthMetrics(),
   };
 }
 

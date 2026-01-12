@@ -3,6 +3,8 @@
  *
  * Single React root entry point.
  * Sets up the demo patch and animation loop.
+ *
+ * Sprint 2: Integrates runtime health monitoring
  */
 
 import React from 'react';
@@ -14,6 +16,7 @@ import { createRuntimeState, BufferPool, executeFrame } from './runtime';
 import { renderFrame } from './render';
 import { App } from './ui/components';
 import { timeRootRole } from './types';
+import { recordFrameTime, shouldEmitSnapshot, emitHealthSnapshot } from './runtime/HealthMonitor';
 
 // =============================================================================
 // Global State
@@ -238,6 +241,20 @@ function animate(tMs: number) {
 
     // Calculate frame time
     const frameTime = performance.now() - frameStart;
+
+    // Record health metrics (Sprint 2)
+    recordFrameTime(currentState, frameTime);
+
+    // Emit health snapshot if throttle interval elapsed (Sprint 2)
+    if (shouldEmitSnapshot(currentState)) {
+      emitHealthSnapshot(
+        currentState,
+        rootStore.events,
+        'patch-0',
+        rootStore.getPatchRevision(),
+        tMs
+      );
+    }
 
     // Track min/max
     minFrameTime = Math.min(minFrameTime, frameTime);

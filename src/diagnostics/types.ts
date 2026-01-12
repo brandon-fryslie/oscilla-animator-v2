@@ -77,25 +77,15 @@ export type Severity = 'fatal' | 'error' | 'warn' | 'info' | 'hint';
 export type Domain = 'authoring' | 'compile' | 'runtime' | 'perf';
 
 // =============================================================================
-// Diagnostic Codes (Sprint 1 Subset - P0 Codes Only)
+// Diagnostic Codes
 // =============================================================================
 
 /**
  * DiagnosticCode is a stable, unique identifier for each diagnostic type.
  * Codes are organized by category for readability.
  *
- * Sprint 1 includes P0 codes only:
- * - Time & Topology errors
- * - Type system errors
- * - Graph structure errors
- * - Graph quality warnings
- * - Authoring hints
- *
- * Sprint 2+ will add:
- * - Runtime errors/warnings
- * - Performance diagnostics
- * - Bus warnings
- * - Export-specific diagnostics
+ * Sprint 1: P0 codes (time, topology, types, graph quality)
+ * Sprint 2: Runtime diagnostics, bus warnings
  */
 export type DiagnosticCode =
   // --- Time & Topology Errors ---
@@ -114,6 +104,15 @@ export type DiagnosticCode =
   // --- Graph Quality Warnings ---
   | 'W_GRAPH_DISCONNECTED_BLOCK' // Block not reachable from TimeRoot
   | 'W_GRAPH_UNUSED_OUTPUT' // Block output has no consumers
+
+  // --- Bus Warnings (Sprint 2 - Compile Stream) ---
+  | 'W_BUS_EMPTY' // Bus has publishers but no listeners
+  | 'W_BUS_NO_PUBLISHERS' // Bus has listeners but no publishers (silent value)
+
+  // --- Performance Diagnostics (Sprint 2 - Runtime Stream) ---
+  | 'P_NAN_DETECTED' // NaN value produced during evaluation
+  | 'P_INFINITY_DETECTED' // Infinity value produced during evaluation
+  | 'P_FRAME_BUDGET_EXCEEDED' // Frame eval exceeded time budget
 
   // --- Authoring Hints ---
   | 'I_SILENT_VALUE_USED'; // Unconnected input using default value

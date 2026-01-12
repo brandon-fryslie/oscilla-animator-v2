@@ -1,11 +1,12 @@
 ---
-status: CANONICAL
+status: UPDATING
 generated: 2026-01-09T17:00:00Z
-updated: 2026-01-11T06:15:00Z
+updated: 2026-01-11T10:54:00Z
 approved_by: Brandon Fryslie
 approval_method: full_walkthrough + integrated_debugger_update + event_system_integration + continuity_integration + graph_editor_ui_integration
 source_documents: 55
 topics: 15
+updating_reason: "Restructuring to three-tier encyclopedia format (foundational/structural/optional)"
 update_history:
   - date: 2026-01-10T19:45:00Z
     sources_added: 23
@@ -18,12 +19,17 @@ update_history:
     topics_updated: []
     resolutions_made: 2
     notes: "Archived 6 conversation exports as design history; integrated graph editor UI spec"
+  - date: 2026-01-11T10:54:00Z
+    action: "Downgraded to UPDATING - restructuring to three-tier format"
+    reason: "Previous auto-resolved integrations need re-evaluation with tier-aware analysis"
 ---
 
 # Oscilla v2.5: Canonical Specification Index
 
-> **STATUS: ✅ CANONICAL**
-> Graph Editor UI specification integrated successfully (2026-01-11T06:15:00Z)
+> **STATUS: 🔄 UPDATING**
+> Restructuring to three-tier encyclopedia format (foundational/structural/optional).
+> Previous auto-resolved integrations being re-evaluated.
+> Started: 2026-01-11T10:54:00Z
 
 Generated: 2026-01-09T17:00:00Z
 Last Updated: 2026-01-11T06:15:00Z

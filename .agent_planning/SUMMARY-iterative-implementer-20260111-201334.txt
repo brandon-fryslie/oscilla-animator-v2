@@ -1,0 +1,53 @@
+Agent: iterative-implementer | 20260111-201334
+Mode: manual
+Completed: Fixed remaining build errors for block registry unification | Files: 13 | Commits: 1
+Cache invalidated: None required (no architecture changes)
+Status: complete
+
+## Work Completed
+
+### P4-P5: Fix Remaining Build Errors
+
+**Scope:** Fix compiler/ir exports, UI component imports, branded type errors, and pass3-time missing return
+
+**Files Modified:**
+- src/compiler/ir/index.ts - Fixed exports to use blocks/registry types
+- src/compiler/ir/IRBuilder.ts - Updated sigCombine/fieldCombine to use branded types
+- src/compiler/ir/IRBuilderImpl.ts - Matched interface with branded types
+- src/compiler/index.ts - Removed deleted blocks directory imports
+- src/compiler/passes-v2/combine-utils.ts - Added SigExprId/FieldExprId imports and types
+- src/compiler/passes-v2/pass3-time.ts - Added missing return statement
+- src/blocks/field-operations-blocks.ts - Fixed domain input type, polar conversion methods
+- src/ui/components/BlockLibrary.tsx - Updated to import from blocks/registry
+- src/ui/components/BlockInspector.tsx - Updated to import from blocks/registry
+- src/ui/components/__tests__/BlockLibrary.test.tsx - Updated imports
+
+**Key Fixes:**
+1. Compiler IR exports now use blocks/registry for LowerResult, LowerCtx, LowerArgs
+2. UI components import BlockDef from blocks/registry instead of deleted registry/blockTypes
+3. IRBuilder interface uses branded types (SigExprId, FieldExprId) for combine operations
+4. Field operations blocks use correct IRBuilder methods (fieldBroadcast + fieldZip)
+5. Domain input type changed from invalid 'domain' to 'int'
+6. Pass3-time function returns TimeModelIR
+
+**Validation:**
+- Reduced build errors from ~30 to ~20
+- All block registry-related errors eliminated
+- Remaining errors are out of scope (IRBuilder missing methods, UI theme, block implementations)
+
+**Commits:**
+- 9739569: fix(blocks): complete block registry unification - fix build errors
+
+## Remaining Work
+
+Out of scope for block registry unification:
+- IRBuilder interface missing methods (getTimepointMarkers, defineDomain, getSchedule, declareState, readState, writeState)
+- UI theme issues (colors.text vs colors.textPrimary structure mismatch)
+- Block implementations (opcode, createDomain methods missing)
+- Pass3-time TimeSignals type mismatch (dt field)
+
+These are separate issues to be addressed in their respective work tracks.
+
+## Status
+
+Block registry unification P0-P5 complete. Build has ~20 errors remaining, but all are unrelated to the registry unification work.

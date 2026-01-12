@@ -5,12 +5,15 @@
  * Eliminates ~90 lines of code duplication.
  *
  * Adheres to architectural law: ONE SOURCE OF TRUTH
+ *
+ * Sprint 2: Adds NaN/Inf detection with batched reporting
  */
 
 import type { SigExpr } from '../compiler/ir/types';
 import type { SigExprId } from '../types';
 import type { RuntimeState } from './RuntimeState';
 import { applyOpcode } from './OpcodeInterpreter';
+import { recordNaN, recordInfinity } from './HealthMonitor';
 
 /**
  * Evaluate a signal expression with caching
@@ -40,6 +43,16 @@ export function evaluateSignal(
 
   // Evaluate based on kind
   const value = evaluateSigExpr(expr, signals, state);
+
+  // NaN/Inf detection (batched)
+  // Note: sourceBlockId not yet tracked in IR - will pass null for now
+  // Once IR includes block provenance, update this to pass actual block ID
+  if (Number.isNaN(value)) {
+    recordNaN(state, null);
+  } else if (!Number.isFinite(value)) {
+    // Infinity (positive or negative)
+    recordInfinity(state, null);
+  }
 
   // Cache result
   state.cache.sigValues[sigId as number] = value;
