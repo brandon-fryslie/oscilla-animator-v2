@@ -313,10 +313,11 @@ registerBlock({
     const centerXField = ctx.b.fieldBroadcast(centerXSig, signalTypeField('float', 'default'));
     const centerYField = ctx.b.fieldBroadcast(centerYSig, signalTypeField('float', 'default'));
 
-    // Zip all four fields together: angle, radius, centerX, centerY -> vec2
+    // Zip all four fields together: centerX, centerY, radius, angle -> vec2
+    // NOTE: Order must match kernel expectation in Materializer.ts
     const polarFn = ctx.b.kernel('fieldPolarToCartesian');
     const posField = ctx.b.fieldZip(
-      [angle.id, radius.id, centerXField, centerYField],
+      [centerXField, centerYField, radius.id, angle.id],
       polarFn,
       signalTypeField('vec2', 'default')
     );

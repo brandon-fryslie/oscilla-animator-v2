@@ -10,7 +10,7 @@
  * The left sidebar uses jsPanel's split layout (Library top, Inspector bottom).
  */
 
-import React, { useCallback, useState, useMemo, useEffect } from 'react';
+import React, { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import { Toolbar } from './Toolbar';
 import { DiagnosticConsole } from './DiagnosticConsole';
 import { HelpPanel } from './HelpPanel';
@@ -29,11 +29,18 @@ interface AppProps {
 
 export const App: React.FC<AppProps> = ({ onCanvasReady }) => {
   const [stats, setStats] = useState('FPS: --');
+  // Initialize ref with prop value so it's available immediately on first render
+  const canvasCallbackRef = useRef<((canvas: HTMLCanvasElement) => void) | undefined>(onCanvasReady);
 
-  // Direct callback - no ref indirection needed
-  const handleCanvasReady = useCallback((canvas: HTMLCanvasElement) => {
-    onCanvasReady?.(canvas);
+  // Keep ref in sync with prop changes
+  useEffect(() => {
+    canvasCallbackRef.current = onCanvasReady;
   }, [onCanvasReady]);
+
+  // Stable callback that reads from ref - never changes identity
+  const handleCanvasReady = useCallback((canvas: HTMLCanvasElement) => {
+    canvasCallbackRef.current?.(canvas);
+  }, []);
 
   // Make setStats available globally for main.ts
   useEffect(() => {
@@ -44,7 +51,7 @@ export const App: React.FC<AppProps> = ({ onCanvasReady }) => {
   }, []);
 
   // Create a stable component wrapper for CanvasTab to avoid remounting
-  // The inline arrow function would cause a new component identity on every render
+  // Since handleCanvasReady is stable (empty deps), this only creates once
   const CanvasTabWrapper = useMemo(() => {
     return function CanvasTabWrapper() {
       return <CanvasTab onCanvasReady={handleCanvasReady} />;
