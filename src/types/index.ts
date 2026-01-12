@@ -182,8 +182,35 @@ export interface Slot {
   readonly defaultSource?: DefaultSource;
 }
 
-export interface DefaultSource {
-  readonly value: unknown;
+/**
+ * DefaultSource - discriminated union for default input sources.
+ *
+ * Every input port has exactly one source. If no explicit edge is connected,
+ * the DefaultSource provides the fallback behavior.
+ *
+ * Variants:
+ * - 'rail': Reference to a named rail (e.g., 'phaseA', 'phaseB')
+ * - 'constant': A constant value
+ * - 'none': No default (port reads as undefined/zero/empty)
+ */
+export type DefaultSource =
+  | { readonly kind: 'rail'; readonly railId: string }
+  | { readonly kind: 'constant'; readonly value: unknown }
+  | { readonly kind: 'none' };
+
+/**
+ * Helper functions to create DefaultSource instances
+ */
+export function defaultSourceRail(railId: string): DefaultSource {
+  return { kind: 'rail', railId };
+}
+
+export function defaultSourceConstant(value: unknown): DefaultSource {
+  return { kind: 'constant', value };
+}
+
+export function defaultSourceNone(): DefaultSource {
+  return { kind: 'none' };
 }
 
 // =============================================================================
