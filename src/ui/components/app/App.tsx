@@ -10,7 +10,7 @@
  * The left sidebar uses jsPanel's split layout (Library top, Inspector bottom).
  */
 
-import React, { useCallback, useState, useRef, useEffect } from 'react';
+import React, { useCallback, useState, useMemo, useEffect } from 'react';
 import { Toolbar } from './Toolbar';
 import { DiagnosticConsole } from './DiagnosticConsole';
 import { HelpPanel } from './HelpPanel';
@@ -43,8 +43,16 @@ export const App: React.FC<AppProps> = ({ onCanvasReady }) => {
     };
   }, []);
 
-  // Center tabs configuration
-  const centerTabs: TabConfig[] = [
+  // Create a stable component wrapper for CanvasTab to avoid remounting
+  // The inline arrow function would cause a new component identity on every render
+  const CanvasTabWrapper = useMemo(() => {
+    return function CanvasTabWrapper() {
+      return <CanvasTab onCanvasReady={handleCanvasReady} />;
+    };
+  }, [handleCanvasReady]);
+
+  // Center tabs configuration - memoized to prevent recreating on every render
+  const centerTabs: TabConfig[] = useMemo(() => [
     {
       id: 'table',
       label: 'Blocks',
@@ -58,9 +66,9 @@ export const App: React.FC<AppProps> = ({ onCanvasReady }) => {
     {
       id: 'canvas',
       label: 'Preview',
-      component: () => <CanvasTab onCanvasReady={handleCanvasReady} />,
+      component: CanvasTabWrapper,
     },
-  ];
+  ], [CanvasTabWrapper]);
 
   // Right tabs configuration
   const rightTabs: TabConfig[] = [

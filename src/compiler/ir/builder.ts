@@ -39,6 +39,7 @@ import type {
   PureFn,
   SigExpr,
   Step,
+  StepRender,
   TimeModel,
 } from './types';
 
@@ -502,11 +503,16 @@ export class IRBuilder {
     }
   }
 
+  /**
+   * Add a render step to the schedule.
+   * Note: stepRender accepts size as discriminated union - caller must construct proper type.
+   * In practice, render steps are constructed by pass7-schedule, not by calling this method.
+   */
   stepRender(
     domain: DomainId,
     position: FieldExprId,
     color: FieldExprId,
-    size?: SigExprId | FieldExprId,
+    size?: StepRender['size'],
     sourceBlock?: BlockId
   ): void {
     const stepId = this.steps.length as StepId;
@@ -516,6 +522,17 @@ export class IRBuilder {
     if (sourceBlock !== undefined) {
       this.stepToBlock.set(stepId, sourceBlock);
     }
+  }
+
+  // ===========================================================================
+  // Domains Accessor
+  // ===========================================================================
+
+  /**
+   * Get all domains (used by pass7-schedule)
+   */
+  getDomains(): ReadonlyMap<DomainId, DomainDef> {
+    return this.domains;
   }
 
   // ===========================================================================
