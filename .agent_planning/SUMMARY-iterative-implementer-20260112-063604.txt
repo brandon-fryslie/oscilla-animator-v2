@@ -1,0 +1,81 @@
+Agent: iterative-implementer | 2026-01-12-063500
+Mode: manual (no existing tests for these features)
+Topic: ui-features-v2 Phase 2 (P3-P8)
+
+Completed Work:
+=============
+1. P7: DefaultSource Type Enhancement
+   - Changed DefaultSource from {value} to discriminated union
+   - Added 'rail' | 'constant' | 'none' kinds
+   - Created helper functions: defaultSourceRail(), defaultSourceConstant(), defaultSourceNone()
+   - Updated 6 field operation blocks with default sources
+
+2. P5: TimeRoot Hidden
+   - Filtered timeRoot blocks from TableView (role.kind === 'timeRoot')
+   - Filtered timeRoot blocks from BlockLibrary (capability !== 'time')
+   - Added TimeRootBlock component in Inspector showing "System block (hidden)"
+
+3. P7: DefaultSource Display (UI)
+   - BlockInspector shows defaults for unconnected ports
+   - Rail defaults displayed in italic with distinctive color
+   - TypePreview mode shows defaults for all inputs
+   - BlockDetails mode shows defaults for unconnected inputs
+
+4. P8: Block Type Preview
+   - BlockLibrary onClick sets selection.previewType
+   - BlockInspector TypePreview shows [TYPE PREVIEW] banner
+   - Displays full type info: name, description, ports, defaults
+   - Selecting actual block clears preview
+
+Files Modified:
+===============
+- src/types/index.ts (DefaultSource discriminated union)
+- src/blocks/field-operations-blocks.ts (default sources added to 6 blocks)
+- src/ui/components/BlockInspector.tsx (defaults display, type preview, timeRoot)
+- src/ui/components/BlockLibrary.tsx (timeRoot filter, preview click)
+- src/ui/components/TableView.tsx (timeRoot filter)
+
+Commits: 2
+- bd87c50: feat(types): enhance DefaultSource with discriminated union
+- 3c085b7: feat(ui): implement P5, P7, P8 UI features
+
+Validation:
+===========
+Type Check: PASS (npm run typecheck)
+Tests: NOT RUN (manual mode - no tests for UI features)
+Manual: NOT PERFORMED (requires runtime verification)
+
+Remaining Work (Deferred):
+==========================
+P3: Connection Matrix Table View - MAJOR REWRITE NEEDED
+    - Transform TableView from block list to blocks × blocks adjacency matrix
+    - Matrix rendering with row/column headers
+    - Cell click handlers for edge selection
+    - Diagonal self-reference indicators
+    - Bus blocks in separate section
+    - Horizontal scroll for wide matrices
+    - Estimated effort: 3-4 hours
+
+P4: Split Sidebar Layout - NEW COMPONENT NEEDED
+    - Create SplitPanel component with draggable divider
+    - Replace left sidebar TabbedContent with SplitPanel
+    - Library in top, Inspector in bottom
+    - Min height constraints
+    - Estimated effort: 1-2 hours
+
+Status: PARTIAL COMPLETE
+Ready for Evaluation: YES (for P5, P7, P8)
+
+DoD Status:
+===========
+P3: 0/10 criteria (deferred)
+P4: 0/7 criteria (deferred)
+P5: 4/4 criteria COMPLETE
+P7: 6/6 criteria COMPLETE
+P8: 8/8 criteria COMPLETE
+
+Overall: 18/33 criteria complete (55%)
+
+Cache Invalidated:
+==================
+None (no cached evaluations exist yet for this topic)

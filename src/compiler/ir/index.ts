@@ -38,11 +38,8 @@ export type {
 export type { LowerResult, LowerCtx, LowerArgs } from '../../blocks/registry';
 
 // IR builder
-// The concrete class from builder.ts is used directly by compile.ts
-export { IRBuilder } from './builder';
-
-// Also export the interface and impl for flexibility
-export type { IRBuilder as IRBuilderInterface } from './IRBuilder';
+// Export interface and implementation
+export type { IRBuilder } from './IRBuilder';
 export { IRBuilderImpl, createIRBuilder } from './IRBuilderImpl';
 
 // Signal expression types

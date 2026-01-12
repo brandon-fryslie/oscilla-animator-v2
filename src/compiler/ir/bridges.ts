@@ -25,7 +25,7 @@ import type {
   ResolvedExtent,
 } from '../../core/canonical-types';
 import { isInstantiated } from '../../core/canonical-types';
-import type { ShapeDescIR, TypeDesc } from './program';
+import type { ShapeDescIR } from './program';
 
 // =============================================================================
 // Main Bridge Function: Extent → ResolvedExtent
@@ -220,20 +220,6 @@ export function payloadTypeToShapeDescIR(payload: PayloadType): ShapeDescIR {
   }
 }
 
-/**
- * Complete SignalType → IR TypeDesc conversion.
- *
- * This combines payload and extent bridging.
- * Requires all extent axes to be instantiated.
- */
-export function signalTypeToTypeDescIR(
-  type: SignalType
-): TypeDesc {
-  return {
-    axes: bridgeExtentToAxesDescIR(type.extent),
-    shape: payloadTypeToShapeDescIR(type.payload),
-  };
-}
 
 // =============================================================================
 // Utilities

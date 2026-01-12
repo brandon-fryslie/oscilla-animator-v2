@@ -13,6 +13,7 @@ import type {
   ValueSlot,
   DomainId,
   StateId,
+  StateSlotId,
 } from './Indices';
 import {
   sigExprId,
@@ -21,6 +22,7 @@ import {
   valueSlot,
   domainId,
   stateId,
+  stateSlotId,
 } from './Indices';
 import type { TimeModelIR } from './schedule';
 import type {
@@ -30,6 +32,7 @@ import type {
   FieldExpr,
   EventExpr,
   DomainDef,
+  Step,
 } from './types';
 
 // =============================================================================
@@ -43,6 +46,7 @@ export class IRBuilderImpl implements IRBuilder {
   private domains: Map<DomainId, DomainDef> = new Map();
   private slotCounter = 0;
   private stateCounter = 0;
+  private stateSlotCounter = 0;
   private constCounter = 0;
   private timeModel: TimeModelIR | undefined;
   private currentBlockId: string | undefined;
@@ -51,6 +55,15 @@ export class IRBuilderImpl implements IRBuilder {
   private sigSlots = new Map<number, ValueSlot>();
   private fieldSlots = new Map<number, ValueSlot>();
   private eventSlots = new Map<EventExprId, ValueSlot>();
+
+  // State slot tracking for persistent cross-frame storage
+  private stateSlots: { initialValue: number }[] = [];
+
+  // Step tracking for schedule generation
+  private steps: Step[] = [];
+
+  // Slot type tracking for slotMeta generation
+  private slotTypes = new Map<ValueSlot, SignalType>();
 
   // =========================================================================
   // Signal Expressions
@@ -93,6 +106,20 @@ export class IRBuilderImpl implements IRBuilder {
     return id;
   }
 
+  /**
+   * Binary operation helper - creates a sig expression that zips two inputs with an opcode.
+   */
+  sigBinOp(a: SigExprId, b: SigExprId, opcode: OpCode, type: SignalType): SigExprId {
+    return this.sigZip([a, b], { kind: 'opcode', opcode }, type);
+  }
+
+  /**
+   * Unary operation helper - creates a sig expression that maps a single input with an opcode.
+   */
+  sigUnaryOp(input: SigExprId, opcode: OpCode, type: SignalType): SigExprId {
+    return this.sigMap(input, { kind: 'opcode', opcode }, type);
+  }
+
   // =========================================================================
   // Signal Combine
   // =========================================================================
@@ -108,6 +135,38 @@ export class IRBuilderImpl implements IRBuilder {
     const id = sigExprId(this.sigExprs.length);
     this.sigExprs.push({ kind: 'zip', inputs, fn, type });
     return id;
+  }
+
+  // =========================================================================
+  // Signal Expression Lookup
+  // =========================================================================
+
+  /**
+   * Look up the SigExpr for a given SigExprId.
+   * Used by blocks that need to introspect expression structure.
+   */
+  getSigExpr(id: SigExprId): SigExpr | undefined {
+    return this.sigExprs[id as number];
+  }
+
+  /**
+   * Look up the type for a signal expression.
+   */
+  getSigExprType(id: SigExprId): SignalType | undefined {
+    const expr = this.sigExprs[id as number];
+    return expr?.type;
+  }
+
+  /**
+   * Resolve a SigExprId to its slot, if it exists.
+   * Returns undefined if the signal is not a slot reference.
+   */
+  resolveSigSlot(id: SigExprId): ValueSlot | undefined {
+    const expr = this.sigExprs[id as number];
+    if (expr?.kind === 'slot') {
+      return expr.slot as unknown as ValueSlot;
+    }
+    return undefined;
   }
 
   // =========================================================================
@@ -137,14 +196,16 @@ export class IRBuilderImpl implements IRBuilder {
   }
 
   fieldMap(input: FieldExprId, fn: PureFn, type: SignalType): FieldExprId {
+    const domain = this.inferFieldDomain(input);
     const id = fieldExprId(this.fieldExprs.length);
-    this.fieldExprs.push({ kind: 'map', input, fn, type });
+    this.fieldExprs.push({ kind: 'map', input, fn, type, domain });
     return id;
   }
 
   fieldZip(inputs: readonly FieldExprId[], fn: PureFn, type: SignalType): FieldExprId {
+    const domain = this.inferZipDomain(inputs);
     const id = fieldExprId(this.fieldExprs.length);
-    this.fieldExprs.push({ kind: 'zip', inputs, fn, type });
+    this.fieldExprs.push({ kind: 'zip', inputs, fn, type, domain });
     return id;
   }
 
@@ -154,9 +215,90 @@ export class IRBuilderImpl implements IRBuilder {
     fn: PureFn,
     type: SignalType
   ): FieldExprId {
+    const domain = this.inferFieldDomain(field);
     const id = fieldExprId(this.fieldExprs.length);
-    this.fieldExprs.push({ kind: 'zipSig', field, signals, fn, type });
+    this.fieldExprs.push({ kind: 'zipSig', field, signals, fn, type, domain });
     return id;
+  }
+
+  /**
+   * Map over domain indices with optional signal inputs.
+   * This creates a field from scratch, so domain must be explicit.
+   */
+  fieldMapIndexed(
+    domain: DomainId,
+    fn: PureFn,
+    type: SignalType,
+    signals?: readonly SigExprId[]
+  ): FieldExprId {
+    const id = fieldExprId(this.fieldExprs.length);
+    this.fieldExprs.push({ kind: 'mapIndexed', domain, fn, type, signals });
+    return id;
+  }
+
+  /**
+   * Legacy alias for fieldSource with sourceId='index'.
+   * Kept for backward compatibility with existing blocks.
+   */
+  fieldIndex(domain: DomainId, type: SignalType): FieldExprId {
+    return this.fieldSource(domain, 'index', type);
+  }
+
+  // =========================================================================
+  // Domain Inference
+  // =========================================================================
+
+  /**
+   * Infer domain from a field expression (public for render sink validation).
+   * Returns the domain ID if the field is bound to a specific domain,
+   * or undefined if the field has no inherent domain (e.g., broadcast, const).
+   */
+  inferFieldDomain(fieldId: FieldExprId): DomainId | undefined {
+    const expr = this.fieldExprs[fieldId as number];
+    if (!expr) return undefined;
+
+    switch (expr.kind) {
+      case 'source':
+        return expr.domain;
+      case 'mapIndexed':
+        return expr.domain;
+      case 'map':
+        return (expr as any).domain ?? this.inferFieldDomain(expr.input);
+      case 'zip':
+        return (expr as any).domain ?? this.inferZipDomain(expr.inputs);
+      case 'zipSig':
+        return (expr as any).domain ?? this.inferFieldDomain(expr.field);
+      case 'broadcast':
+      case 'const':
+        return undefined; // No inherent domain
+    }
+  }
+
+  /**
+   * Infer domain from zip inputs, throwing an error if they differ.
+   * Returns the unified domain, or undefined if all inputs are domain-free.
+   */
+  private inferZipDomain(inputs: readonly FieldExprId[]): DomainId | undefined {
+    const domains: DomainId[] = [];
+    for (const id of inputs) {
+      const d = this.inferFieldDomain(id);
+      if (d !== undefined) {
+        domains.push(d);
+      }
+    }
+
+    if (domains.length === 0) return undefined;
+
+    const first = domains[0];
+    for (let i = 1; i < domains.length; i++) {
+      if (domains[i] !== first) {
+        throw new Error(
+          `Domain mismatch in fieldZip: '${first}' vs '${domains[i]}'. ` +
+          `All field inputs must share the same domain.`
+        );
+      }
+    }
+    return first;
   }
 
   // =========================================================================
@@ -204,6 +346,16 @@ export class IRBuilderImpl implements IRBuilder {
     return id;
   }
 
+  /**
+   * Create a "never fires" event.
+   * Used as a default when an event input is optional and not connected.
+   */
+  eventNever(): EventExprId {
+    const id = eventExprId(this.eventExprs.length);
+    this.eventExprs.push({ kind: 'never' });
+    return id;
+  }
+
   // =========================================================================
   // Domains
   // =========================================================================
@@ -219,6 +371,54 @@ export class IRBuilderImpl implements IRBuilder {
     return id;
   }
 
+  /**
+   * Create a grid domain with rows x cols elements.
+   */
+  domainGrid(rows: number, cols: number): DomainId {
+    const id = domainId(`domain_${this.domains.size}`);
+    const count = rows * cols;
+    const elementIds = Array.from({ length: count }, (_, i) =>
+      this.seededId(rows * 10000 + cols + i)
+    );
+    this.domains.set(id, {
+      id,
+      kind: 'grid',
+      count,
+      elementIds,
+      params: { rows, cols },
+    });
+    return id;
+  }
+
+  /**
+   * Create an N-element domain with optional seed for deterministic IDs.
+   */
+  domainN(n: number, seed: number = 0): DomainId {
+    const id = domainId(`domain_${this.domains.size}`);
+    const elementIds = Array.from({ length: n }, (_, i) =>
+      this.seededId(seed * 100000 + n + i)
+    );
+    this.domains.set(id, {
+      id,
+      kind: 'n',
+      count: n,
+      elementIds,
+      params: { n, seed },
+    });
+    return id;
+  }
+
+  /**
+   * Generate a deterministic 8-char alphanumeric ID from a seed.
+   */
+  private seededId(seed: number): string {
+    let h = seed;
+    h = ((h >> 16) ^ h) * 0x45d9f3b;
+    h = ((h >> 16) ^ h) * 0x45d9f3b;
+    h = (h >> 16) ^ h;
+    return Math.abs(h).toString(36).slice(0, 8).padStart(8, '0');
+  }
+
   // =========================================================================
   // Slots
   // =========================================================================
@@ -227,12 +427,44 @@ export class IRBuilderImpl implements IRBuilder {
     return valueSlot(this.slotCounter++);
   }
 
-  allocValueSlot(_type: SignalType, _label?: string): ValueSlot {
-    return valueSlot(this.slotCounter++);
+  /**
+   * Allocate a typed value slot (tracking type for slotMeta generation).
+   */
+  allocTypedSlot(type: SignalType, _label?: string): ValueSlot {
+    const slot = valueSlot(this.slotCounter++);
+    this.slotTypes.set(slot, type);
+    return slot;
+  }
+
+  /**
+   * Allocate a value slot with type (alias for allocTypedSlot for interface compatibility).
+   */
+  allocValueSlot(type: SignalType, label?: string): ValueSlot {
+    return this.allocTypedSlot(type, label);
   }
 
   getSlotCount(): number {
     return this.slotCounter;
+  }
+
+  // =========================================================================
+  // State Slots (Persistent Cross-Frame Storage)
+  // =========================================================================
+
+  allocStateSlot(initialValue: number = 0): StateSlotId {
+    const id = stateSlotId(this.stateSlotCounter++);
+    this.stateSlots.push({ initialValue });
+    return id;
+  }
+
+  sigStateRead(stateSlot: StateSlotId, type: SignalType): SigExprId {
+    const id = sigExprId(this.sigExprs.length);
+    this.sigExprs.push({ kind: 'stateRead', stateSlot, type });
+    return id;
+  }
+
+  stepStateWrite(stateSlot: StateSlotId, value: SigExprId): void {
+    this.steps.push({ kind: 'stateWrite', stateSlot, value });
   }
 
   // =========================================================================
@@ -329,6 +561,18 @@ export class IRBuilderImpl implements IRBuilder {
 
   getEventSlots(): ReadonlyMap<EventExprId, ValueSlot> {
     return this.eventSlots;
+  }
+
+  getStateSlots(): readonly { initialValue: number }[] {
+    return this.stateSlots;
+  }
+
+  getStateSlotCount(): number {
+    return this.stateSlotCounter;
+  }
+
+  getSteps(): readonly Step[] {
+    return this.steps;
   }
 
   // =========================================================================

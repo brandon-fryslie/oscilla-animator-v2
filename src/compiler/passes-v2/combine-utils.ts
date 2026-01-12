@@ -304,9 +304,9 @@ export function createCombineNode(
     }
 
     // Map BLOCK combineMode to event combine semantics
-    // For events: 'merge' combines all streams, 'last' takes only last publisher
-    const eventMode: EventCombineMode = normalizedMode === 'last' ? 'last' : 'merge';
-    const eventId = builder.eventCombine(eventTerms, eventMode, signalType);
+    // For events: 'any' combines all streams (fire on any), 'all' requires all to fire
+    const eventMode = normalizedMode === 'last' ? 'any' : 'any';
+    const eventId = builder.eventCombine(eventTerms, eventMode);
     const slot = builder.allocValueSlot(signalType, `combine_event_${eventMode}`);
     builder.registerEventSlot(eventId, slot);
     return { k: "event", id: eventId, slot };

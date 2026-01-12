@@ -6,14 +6,14 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { IRBuilder } from '../ir/builder';
+import { IRBuilderImpl } from '../ir/IRBuilderImpl';
 import { OpCode } from '../ir/types';
 import { signalTypeField, signalTypeSignal } from '../../core/canonical-types';
 
 describe('Domain Unification', () => {
   describe('domain inference', () => {
     it('infers domain from FieldExprSource', () => {
-      const b = new IRBuilder();
+      const b = new IRBuilderImpl();
       const domain = b.domainN(10);
       const type = signalTypeField('float', domain);
       const field = b.fieldSource(domain, 'index', type);
@@ -22,7 +22,7 @@ describe('Domain Unification', () => {
     });
 
     it('propagates domain through FieldExprMap', () => {
-      const b = new IRBuilder();
+      const b = new IRBuilderImpl();
       const domain = b.domainN(10);
       const type = signalTypeField('float', domain);
       const source = b.fieldSource(domain, 'index', type);
@@ -32,7 +32,7 @@ describe('Domain Unification', () => {
     });
 
     it('propagates domain through FieldExprZipSig', () => {
-      const b = new IRBuilder();
+      const b = new IRBuilderImpl();
       const domain = b.domainN(10);
       const fieldType = signalTypeField('float', domain);
       const sigType = signalTypeSignal('float');
@@ -44,7 +44,7 @@ describe('Domain Unification', () => {
     });
 
     it('returns undefined for broadcast fields', () => {
-      const b = new IRBuilder();
+      const b = new IRBuilderImpl();
       const domain = b.domainN(10);
       const type = signalTypeField('float', domain);
       const sig = b.sigConst(1.0, signalTypeSignal('float'));
@@ -54,7 +54,7 @@ describe('Domain Unification', () => {
     });
 
     it('returns undefined for const fields', () => {
-      const b = new IRBuilder();
+      const b = new IRBuilderImpl();
       const domain = b.domainN(10);
       const type = signalTypeField('float', domain);
       const constField = b.fieldConst(42, type);
@@ -65,7 +65,7 @@ describe('Domain Unification', () => {
 
   describe('fieldZip domain validation', () => {
     it('accepts fields from the same domain', () => {
-      const b = new IRBuilder();
+      const b = new IRBuilderImpl();
       const domain = b.domainN(10);
       const type = signalTypeField('float', domain);
       const field1 = b.fieldSource(domain, 'index', type);
@@ -77,7 +77,7 @@ describe('Domain Unification', () => {
     });
 
     it('rejects fields from different domains', () => {
-      const b = new IRBuilder();
+      const b = new IRBuilderImpl();
       const domain1 = b.domainN(10);
       const domain2 = b.domainN(20);
       const type1 = signalTypeField('float', domain1);
@@ -91,7 +91,7 @@ describe('Domain Unification', () => {
     });
 
     it('handles broadcast fields (no domain) gracefully', () => {
-      const b = new IRBuilder();
+      const b = new IRBuilderImpl();
       const domain = b.domainN(10);
       const type = signalTypeField('float', domain);
       const source = b.fieldSource(domain, 'index', type);
@@ -104,7 +104,7 @@ describe('Domain Unification', () => {
     });
 
     it('accepts multiple broadcast fields without error', () => {
-      const b = new IRBuilder();
+      const b = new IRBuilderImpl();
       const domain = b.domainN(10);
       const type = signalTypeField('float', domain);
       const sig1 = b.sigConst(1.0, signalTypeSignal('float'));
@@ -120,7 +120,7 @@ describe('Domain Unification', () => {
 
   describe('domain propagation through composition', () => {
     it('propagates domain through map after zip', () => {
-      const b = new IRBuilder();
+      const b = new IRBuilderImpl();
       const domain = b.domainN(10);
       const type = signalTypeField('float', domain);
       const field1 = b.fieldSource(domain, 'index', type);
@@ -132,7 +132,7 @@ describe('Domain Unification', () => {
     });
 
     it('detects mismatch in nested zip operations', () => {
-      const b = new IRBuilder();
+      const b = new IRBuilderImpl();
       const domain1 = b.domainN(10);
       const domain2 = b.domainN(20);
       const type1 = signalTypeField('float', domain1);

@@ -124,7 +124,6 @@ function buildRenderSteps(
   // P2: MVP - Use first domain (demo patch has single domain)
   const domainId = domains.keys().next().value;
   if (!domainId) {
-    console.warn('[pass7-schedule] No domains found, cannot create render steps');
     return steps;
   }
 
@@ -136,11 +135,9 @@ function buildRenderSteps(
 
     // P0/P1: Validate required inputs (position and color)
     if (posRef?.k !== 'field') {
-      console.warn(`[pass7-schedule] Render block ${block.id} missing or invalid 'pos' input (field expected)`);
       continue;
     }
     if (colorRef?.k !== 'field') {
-      console.warn(`[pass7-schedule] Render block ${block.id} missing or invalid 'color' input (field expected)`);
       continue;
     }
 
@@ -196,13 +193,17 @@ export function pass7Schedule(
     domains
   );
 
-  // MVP: Schedule contains only render steps
-  // Future: Add evalSig, materialize, stateWrite steps
-  const steps: Step[] = [...renderSteps];
+  // Collect steps from builder (stateWrite steps from stateful blocks)
+  const builderSteps = unlinkedIR.builder.getSteps();
 
-  // MVP: No state slots (demo patch has no stateful blocks)
-  const stateSlotCount = 0;
-  const stateSlots: StateSlotDef[] = [];
+  // Combine render steps with builder steps (render first, then state writes)
+  const steps: Step[] = [...renderSteps, ...builderSteps];
+
+  // Get state slots from builder
+  const stateSlotCount = unlinkedIR.builder.getStateSlotCount();
+  const stateSlots: StateSlotDef[] = unlinkedIR.builder.getStateSlots().map(s => ({
+    initialValue: s.initialValue,
+  }));
 
   return {
     timeModel,

@@ -14,7 +14,6 @@ import {
   bridgeBranchToIR,
   bridgeBindingToIdentityIR,
   payloadTypeToShapeDescIR,
-  signalTypeToTypeDescIR,
 } from '../bridges';
 import type {
   Cardinality,
@@ -313,100 +312,6 @@ describe('bridgeExtentToAxesDescIR', () => {
       kind: 'identity',
       referent: { kind: 'referent', id: 'entities' },
     });
-  });
-});
-
-// =============================================================================
-// Complete SignalType → TypeDesc
-// =============================================================================
-
-describe('signalTypeToTypeDescIR', () => {
-  it('bridges complete signal type (float signal)', () => {
-    const signalType: SignalType = {
-      payload: 'float',
-      extent: {
-        cardinality: axisInstantiated(cardinalityOne()),
-        temporality: axisInstantiated(temporalityContinuous()),
-        binding: axisInstantiated(bindingUnbound()),
-        perspective: axisInstantiated('global'),
-        branch: axisInstantiated('main'),
-      },
-    };
-
-    const typeDesc = signalTypeToTypeDescIR(signalType);
-
-    expect(typeDesc.axes.cardinality).toEqual({ kind: 'one' });
-    expect(typeDesc.axes.temporality).toEqual({ kind: 'continuous' });
-    expect(typeDesc.axes.binding).toEqual({ kind: 'unbound' });
-    expect(typeDesc.axes.perspective).toBe('global');
-    expect(typeDesc.axes.branch).toBe('main');
-    expect(typeDesc.shape).toEqual({ kind: 'number' });
-  });
-
-  it('bridges complete field type (color field)', () => {
-    const signalType: SignalType = {
-      payload: 'color',
-      extent: {
-        cardinality: axisInstantiated(
-          cardinalityMany(domainRef('particles'))
-        ),
-        temporality: axisInstantiated(temporalityContinuous()),
-        binding: axisInstantiated(bindingUnbound()),
-        perspective: axisInstantiated('global'),
-        branch: axisInstantiated('main'),
-      },
-    };
-
-    const typeDesc = signalTypeToTypeDescIR(signalType);
-
-    expect(typeDesc.axes.cardinality).toEqual({
-      kind: 'many',
-      domain: { kind: 'domain', id: 'particles' },
-    });
-    expect(typeDesc.axes.temporality).toEqual({ kind: 'continuous' });
-    expect(typeDesc.axes.binding).toEqual({ kind: 'unbound' });
-    expect(typeDesc.axes.perspective).toBe('global');
-    expect(typeDesc.axes.branch).toBe('main');
-    expect(typeDesc.shape).toEqual({ kind: 'vec', lanes: 4, element: 'number' });
-  });
-
-  it('bridges vec2 field type', () => {
-    const signalType: SignalType = {
-      payload: 'vec2',
-      extent: {
-        cardinality: axisInstantiated(cardinalityMany(domainRef('grid'))),
-        temporality: axisInstantiated(temporalityContinuous()),
-        binding: axisInstantiated(bindingUnbound()),
-        perspective: axisInstantiated('global'),
-        branch: axisInstantiated('main'),
-      },
-    };
-
-    const typeDesc = signalTypeToTypeDescIR(signalType);
-
-    expect(typeDesc.shape).toEqual({
-      kind: 'vec',
-      lanes: 2,
-      element: 'number',
-    });
-  });
-
-  it('bridges phase signal type', () => {
-    const signalType: SignalType = {
-      payload: 'phase',
-      extent: {
-        cardinality: axisInstantiated(cardinalityOne()),
-        temporality: axisInstantiated(temporalityContinuous()),
-        binding: axisInstantiated(bindingUnbound()),
-        perspective: axisInstantiated('global'),
-        branch: axisInstantiated('main'),
-      },
-    };
-
-    const typeDesc = signalTypeToTypeDescIR(signalType);
-
-    expect(typeDesc.axes.cardinality).toEqual({ kind: 'one' });
-    expect(typeDesc.shape).toEqual({ kind: 'number' });
   });
 });
 

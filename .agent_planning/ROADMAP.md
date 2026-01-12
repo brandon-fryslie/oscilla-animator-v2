@@ -1,10 +1,10 @@
 # Oscilla Animator v2 - Project Roadmap
 
-Last updated: 2026-01-11-044500
+Last updated: 2026-01-12-060000
 
 ---
 
-## 🟢 Phase 1: Core Foundation [ACTIVE] (3/10 completed)
+## 🟢 Phase 1: Core Foundation [ACTIVE] (4/10 completed)
 
 **Goal:** Implement the core compilation pipeline and runtime system according to the unified spec
 
@@ -37,13 +37,15 @@ Last updated: 2026-01-11-044500
 - **Description:** Audit design docs for contradictions, ambiguities, and inconsistencies
 - **Planning Files:** `.agent_planning/design-docs-audit/`
 
-#### 📋 ir-5-axes [PLANNING]
-- **State:** PLANNING
+#### ✅ ir-5-axes [COMPLETED]
+- **State:** COMPLETED
 - **Epic:** Phase 1 Unified Plan (P0)
 - **Spec:** `design-docs/IR-and-normalization-5-axes.md`
 - **Description:** Implement 5-axis metadata in IR schema, CompiledProgramIR, slotMeta with offsets
+- **Completed:** 2026-01-09
+- **Summary:** CompiledProgramIR schema foundation complete. Dense execution tables, slot addressing with offsets, mandatory axes metadata, and DebugIndexIR all implemented. All 68 tests passing.
 - **Planning Files:** `.agent_planning/ir-5-axes/`
-- **Status Note:** Plan approved, ready for implementation
+- **Completion Report:** `.agent_planning/ir-5-axes/COMPLETION-20260109-212700.md`
 
 #### 📋 type-system [PLANNING]
 - **State:** PLANNING

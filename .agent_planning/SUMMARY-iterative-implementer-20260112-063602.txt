@@ -1,0 +1,72 @@
+Agent: iterative-implementer | 2026-01-12 06:36:02
+Mode: manual
+Completed: Block registration verification | Files: 0 | Commits: 0
+Cache invalidated: None (no files modified)
+Status: complete
+
+## Summary
+
+Verified that all block types required by main.ts are already registered with lower functions. No additional work was needed.
+
+## Investigation Results
+
+### Block Registration Status
+Checked all 14 block types used in main.ts demo patch:
+
+✓ InfiniteTimeRoot - registered (time-blocks.ts)
+✓ DomainN - registered (domain-blocks.ts)
+✓ FieldFromDomainId - registered (field-operations-blocks.ts)
+✓ ConstFloat - registered (signal-blocks.ts)
+✓ FieldPulse - registered (field-operations-blocks.ts)
+✓ FieldGoldenAngle - registered (field-operations-blocks.ts)
+✓ FieldAngularOffset - registered (field-operations-blocks.ts)
+✓ FieldAdd - registered (field-operations-blocks.ts)
+✓ FieldRadiusSqrt - registered (field-operations-blocks.ts)
+✓ FieldPolarToCartesian - registered (field-operations-blocks.ts)
+✓ FieldJitter2D - registered (field-operations-blocks.ts)
+✓ FieldHueFromPhase - registered (field-operations-blocks.ts)
+✓ HsvToRgb - registered (color-blocks.ts)
+✓ RenderInstances2D - registered (render-blocks.ts)
+
+Total: 39 block types registered system-wide
+All blocks have `lower` functions for IR lowering
+
+### Compilation Pipeline Status
+
+TypeCheck: ✓ PASS (zero errors)
+Build: ✓ PASS (builds successfully)
+Tests: 9/11 PASS (2 known issues, not blocking)
+
+Failing tests (pre-existing issues):
+1. "fails if no TimeRoot block" - expects 'NoTimeRoot' error but gets 'MissingTimeRoot'
+   - Error naming mismatch in pass3-time.ts
+   - Not a registration issue
+
+2. "FiniteTimeRoot sets finite time model" - expects 'finite' but gets 'infinite'
+   - pass3-time.ts:74-81 has TODO: extractTimeModel always returns infinite
+   - Documented as ILLEGAL pattern (compiler shouldn't special-case block types)
+   - Architectural decision needed on how blocks declare time model
+
+### Diagnostics Panel
+
+Log panel correctly subscribed to diagnostics store (LogPanel.tsx)
+main.ts log() function correctly calls rootStore.diagnostics.log()
+MobX reactivity properly configured
+
+## Conclusion
+
+The HANDOFF document was written before recent fixes. The following work has already been completed:
+
+1. ✓ Block registry unified (commit 9739569)
+2. ✓ All missing blocks registered with lower functions
+3. ✓ Application builds and type-checks successfully
+4. ✓ Diagnostics panel wired correctly
+
+The compilation pipeline is functional. The 2 failing tests are architectural issues that require design decisions, not missing registrations.
+
+## Recommendation
+
+The compilation pipeline work is COMPLETE for the scope defined in HANDOFF. The two failing tests should be addressed in separate tasks:
+
+1. Task: Standardize error naming (MissingTimeRoot vs NoTimeRoot)
+2. Task: Design pattern for blocks to declare time model without compiler special-casing

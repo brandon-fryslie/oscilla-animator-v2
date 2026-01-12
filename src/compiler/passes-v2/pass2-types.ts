@@ -49,15 +49,13 @@ export type Pass2Error =
  * Type compatibility check for wired connections.
  * Determines if a value of type 'from' can be connected to a port expecting type 'to'.
  *
- * Compatibility rules (canonical type system):
- * 1. Exact match (same payload + same resolved axes)
- * 2. zero → one (promote compile-time constant to runtime value)
- * 3. one → many (broadcast single lane to all elements)
- * 4. zero → many (promote then broadcast)
+ * The compiler requires EXACT type matches. It does not perform any type coercion,
+ * promotion, or automatic adaptation. Graph normalization is responsible for
+ * inserting any necessary adapters before compilation.
  *
  * @param from - Source type descriptor
  * @param to - Target type descriptor
- * @returns true if connection is compatible
+ * @returns true if types are exactly equal
  */
 function isTypeCompatible(from: SignalType, to: SignalType): boolean {
   // Resolve axes with defaults
@@ -66,41 +64,27 @@ function isTypeCompatible(from: SignalType, to: SignalType): boolean {
   const toCard = getAxisValue(to.extent.cardinality, DEFAULTS_V0.cardinality);
   const toTemp = getAxisValue(to.extent.temporality, DEFAULTS_V0.temporality);
 
-  // Payload must match
+  // Payload must match exactly
   if (from.payload !== to.payload) {
     return false;
   }
 
-  // Temporality must match
+  // Temporality must match exactly
   if (fromTemp.kind !== toTemp.kind) {
     return false;
   }
 
-  // Exact cardinality match
-  if (fromCard.kind === toCard.kind) {
-    if (fromCard.kind === 'many' && toCard.kind === 'many') {
-      // Domain must match
-      return fromCard.domain.id === toCard.domain.id;
-    }
-    return true;
+  // Cardinality must match exactly
+  if (fromCard.kind !== toCard.kind) {
+    return false;
   }
 
-  // zero → one (promote)
-  if (fromCard.kind === 'zero' && toCard.kind === 'one') {
-    return true;
+  // For 'many' cardinality, domain must also match
+  if (fromCard.kind === 'many' && toCard.kind === 'many') {
+    return fromCard.domain.id === toCard.domain.id;
   }
 
-  // one → many (broadcast)
-  if (fromCard.kind === 'one' && toCard.kind === 'many') {
-    return true;
-  }
-
-  // zero → many (promote then broadcast)
-  if (fromCard.kind === 'zero' && toCard.kind === 'many') {
-    return true;
-  }
-
-  return false;
+  return true;
 }
 
 /**

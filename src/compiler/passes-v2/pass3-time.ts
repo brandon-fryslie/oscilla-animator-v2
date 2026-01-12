@@ -16,7 +16,7 @@ import { signalType } from '../../core/canonical-types';
 export class Pass3Error extends Error {
   constructor(
     public readonly code:
-      | 'MissingTimeRoot'
+      | 'NoTimeRoot'
       | 'MultipleTimeRoots'
       | 'InvalidDuration',
     message: string
@@ -43,7 +43,7 @@ export function pass3Time(typedPatch: TypedPatch): TimeResolvedPatch {
   );
 
   if (timeRoots.length === 0) {
-    throw new Pass3Error('MissingTimeRoot', 'Patch must have exactly one TimeRoot block');
+    throw new Pass3Error('NoTimeRoot', 'Patch must have exactly one TimeRoot block');
   }
 
   if (timeRoots.length > 1) {
@@ -67,17 +67,26 @@ export function pass3Time(typedPatch: TypedPatch): TimeResolvedPatch {
 
 /**
  * Extract time model from TimeRoot block.
+ *
+ * Note: This reads from block params which are set by the block definition.
+ * The time model kind is determined by the block type (FiniteTimeRoot vs InfiniteTimeRoot)
+ * but parameters like duration come from block params.
  */
 function extractTimeModel(
   timeRoot: Block
 ): TimeModelIR {
-  // For now, return infinite time model
-  // TODO: Extract from block params when block lowering is implemented
-  return { kind: 'infinite' };
+  // Determine time model from block type
+  if (timeRoot.type === 'FiniteTimeRoot') {
+    // Finite time model - extract duration from params
+    const durationMs = (timeRoot.params?.durationMs as number) ?? 5000;
+    return {
+      kind: 'finite',
+      durationMs,
+    };
+  }
 
-  // THIS IS ILLEGAL - no compiler passes can have special cases per block type
-  // The time model should come from the block's lowering function, not from
-  // special-casing the block type in the compiler pass.
+  // Default to infinite time model
+  return { kind: 'infinite' };
 }
 
 /**

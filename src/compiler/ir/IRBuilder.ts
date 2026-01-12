@@ -13,9 +13,10 @@ import type {
   ValueSlot,
   DomainId,
   StateId,
+  StateSlotId,
 } from './Indices';
 import type { TimeModelIR } from './schedule';
-import type { PureFn, OpCode, DomainDef } from './types';
+import type { PureFn, OpCode, DomainDef, Step } from './types';
 
 // =============================================================================
 // IRBuilder Interface
@@ -134,6 +135,40 @@ export interface IRBuilder {
   allocSlot(): ValueSlot;
 
   // =========================================================================
+  // State Slot Allocation (Persistent Cross-Frame Storage)
+  // =========================================================================
+
+  /**
+   * Allocate a persistent state slot with an initial value.
+   * State slots survive across frames and are used for feedback/delay.
+   *
+   * @param initialValue - Initial value for the state slot (default: 0)
+   * @returns StateSlotId for referencing this state slot
+   */
+  allocStateSlot(initialValue?: number): StateSlotId;
+
+  /**
+   * Create a signal expression that reads from a state slot.
+   * State reads happen at the beginning of the frame, reading the value
+   * written by the previous frame.
+   *
+   * @param stateSlot - State slot to read from
+   * @param type - Signal type for the read value
+   * @returns SigExprId for the read expression
+   */
+  sigStateRead(stateSlot: StateSlotId, type: SignalType): SigExprId;
+
+  /**
+   * Schedule a state write step.
+   * State writes happen at the end of the frame, storing a value
+   * that will be read by the next frame.
+   *
+   * @param stateSlot - State slot to write to
+   * @param value - Signal expression to evaluate and write
+   */
+  stepStateWrite(stateSlot: StateSlotId, value: SigExprId): void;
+
+  // =========================================================================
   // Utility
   // =========================================================================
 
@@ -169,4 +204,17 @@ export interface IRBuilder {
 
   /** Write state. */
   writeState(id: StateId, value: SigExprId): void;
+
+  // =========================================================================
+  // Build Results
+  // =========================================================================
+
+  /** Get all emitted steps (state writes, etc). */
+  getSteps(): readonly Step[];
+
+  /** Get state slots. */
+  getStateSlots(): readonly { initialValue: number }[];
+
+  /** Get state slot count. */
+  getStateSlotCount(): number;
 }

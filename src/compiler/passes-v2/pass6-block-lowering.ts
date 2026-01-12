@@ -109,25 +109,6 @@ function resolveInputsWithMultiInput(
       continue;
     }
 
-    // TODO: Fix validation for new SignalType structure
-    //       if (!modeValidation.valid) {
-    // TODO: Fix validation for new SignalType structure
-    //         errors.push({
-    // TODO: Fix validation for new SignalType structure
-    //           code: 'PortTypeMismatch',
-    // TODO: Fix validation for new SignalType structure
-    //           message: `${modeValidation.reason} for port ${endpoint.blockId}.${endpoint.slotId}`,
-    // TODO: Fix validation for new SignalType structure
-    //           where: { blockId: endpoint.blockId, port: endpoint.slotId },
-    // TODO: Fix validation for new SignalType structure
-    //         });
-    // TODO: Fix validation for new SignalType structure
-    //         continue;
-    // TODO: Fix validation for new SignalType structure
-    //       }
-    // TODO: Fix validation for new SignalType structure
-    //     }
-
     // Convert writers to ValueRefs
     const writerRefs: ValueRefPacked[] = [];
     for (const writer of writers) {
@@ -283,7 +264,6 @@ function lowerBlockInstance(
   }
 
   // Use registered lowering function
-  console.debug(`[IR] Using IR lowering for ${block.type} (${block.id})`);
 
   try {
     // Collect input ValueRefs

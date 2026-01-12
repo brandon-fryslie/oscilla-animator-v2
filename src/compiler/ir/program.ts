@@ -159,20 +159,6 @@ export interface SlotMetaEntry {
 // =============================================================================
 
 /**
- * TypeDesc - Complete Type Descriptor (IR Format)
- *
- * The IR type descriptor used for serialization and tooling.
- * Axes are REQUIRED and are the compiler-authoritative semantic classification.
- *
- * Note: TypeDesc now uses ResolvedExtent directly from canonical-types.
- * This ensures single source of truth for type representation.
- */
-export interface TypeDesc {
-  readonly axes: ResolvedExtent;
-  readonly shape: ShapeDescIR;
-}
-
-/**
  * ShapeDescIR - Value Payload Structure
  *
  * Shape is the value "payload" structure independent of domain/temporality.
