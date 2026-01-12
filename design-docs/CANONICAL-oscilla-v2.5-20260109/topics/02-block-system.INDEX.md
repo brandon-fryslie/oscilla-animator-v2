@@ -3,9 +3,9 @@ indexed: true
 source: ./02-block-system.md
 source_hash: d2e3c5a8f7b4
 source_mtime: 2026-01-09T00:00:00Z
-original_tokens: ~655
-index_tokens: ~130
-compression: 80%
+original_tokens: ~2443
+index_tokens: ~578
+compression: 23.7%
 index_version: 1.0
 ---
 

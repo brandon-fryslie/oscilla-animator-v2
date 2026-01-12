@@ -17,12 +17,25 @@ Given a source file, create an index file alongside it (same name with `.INDEX.m
 
 Scan the source document and extract:
 
-1. **Key Assertions** - Any MUST/MUST NOT/SHALL statements with line references
+1. **Key Assertions** - Normative statements with line references:
+   - MUST/MUST NOT/SHALL/SHALL NOT (RFC 2119 style)
+   - REQUIRED/FORBIDDEN/MANDATORY
+   - Imperative assertions ("all signals flow through...", "execution order is...")
+   - **Bold requirements** or numbered requirements
+
 2. **Definitions** - Bold terms (just the term name and line number, no descriptions)
-3. **Invariants** - Numbered rules like I1, I2, etc. (keep the full rule text)
+
+3. **Invariants** - Numbered rules like I1, I2, etc. (keep the full rule text INCLUDING critical examples)
+   - If examples define the rule's meaning, include them
+   - If rationale is one sentence, include it
+   - Keep consequences if they're critical to understanding
+
 4. **Data Structures** - Interface/type names with field count and line reference
+
 5. **Dependencies** - What this doc references and what references it
+
 6. **Decisions** - Lines starting with "DECISION:" (just the decision title, no rationale)
+
 7. **Tier Suggestion** - Is this T1 (foundational), T2 (structural), or T3 (optional)?
 
 ## Line References
@@ -39,7 +52,7 @@ source_hash: {first 12 chars of sha256}
 source_mtime: {ISO timestamp}
 original_tokens: ~{word_count * 1.3}
 index_tokens: ~{index_word_count * 1.3}
-compression: {percentage}%
+compression: {percentage}%  # Percentage of original RETAINED (not reduced)
 index_version: 1.0
 ---
 

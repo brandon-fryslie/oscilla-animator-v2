@@ -3,9 +3,9 @@ indexed: true
 source: ./INVARIANTS.md
 source_hash: 7f3e9c1a2b6d
 source_mtime: 2026-01-09T00:00:00Z
-original_tokens: ~750
-index_tokens: ~160
-compression: 79%
+original_tokens: ~2461
+index_tokens: ~798
+compression: 32.4%
 index_version: 1.0
 ---
 

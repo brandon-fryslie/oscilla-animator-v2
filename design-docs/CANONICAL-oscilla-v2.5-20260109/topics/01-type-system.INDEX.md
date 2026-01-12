@@ -3,9 +3,9 @@ indexed: true
 source: design-docs/CANONICAL-oscilla-v2.5-20260109/topics/01-type-system.md
 source_hash: f5ea1ecb0492
 source_mtime: 2026-01-09T06:20:26Z
-original_tokens: ~2100
-index_tokens: ~450
-compression: 21%
+original_tokens: ~2257
+index_tokens: ~876
+compression: 38.8%
 index_version: 1.0
 ---
 

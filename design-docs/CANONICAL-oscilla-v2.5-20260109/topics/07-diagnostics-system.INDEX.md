@@ -3,9 +3,9 @@ indexed: true
 source: ./07-diagnostics-system.md
 source_hash: a4f8c2e9d1b5
 source_mtime: 2026-01-09T00:00:00Z
-original_tokens: ~1385
-index_tokens: ~235
-compression: 83%
+original_tokens: ~4510
+index_tokens: ~670
+compression: 14.8%
 index_version: 1.0
 ---
 
