@@ -9,32 +9,9 @@ import type { SignalType } from '../core/canonical-types';
 import type { Slot, UIControlHint, DefaultSource } from '../types';
 import type { IRBuilder } from '../compiler/ir/IRBuilder';
 import type { BlockIndex } from '../graph/normalize';
-import type {
-  SigExprId,
-  FieldExprId,
-  EventExprId,
-  ValueSlot,
-  DomainId,
-} from '../compiler/ir/Indices';
 
-// =============================================================================
-// Value Reference Types (for IR lowering)
-// =============================================================================
-
-/**
- * Packed value reference - represents a signal, field, event, domain, or scalar.
- * Used throughout the compiler pipeline for tracking IR expressions.
- */
-export type ValueRefPacked =
-  | { readonly k: 'sig'; readonly id: SigExprId; readonly slot: ValueSlot }
-  | { readonly k: 'field'; readonly id: FieldExprId; readonly slot: ValueSlot }
-  | { readonly k: 'event'; readonly id: EventExprId; readonly slot: ValueSlot }
-  | { readonly k: 'domain'; readonly id: DomainId }
-  | { readonly k: 'scalar'; readonly value: unknown };
-
-// =============================================================================
-// Lowering Context Types
-// =============================================================================
+// Re-export lowering types from compiler
+export type { ValueRefPacked } from '../compiler/ir/lowerTypes';
 
 /**
  * Lower context - provided to block lower functions.
@@ -55,8 +32,8 @@ export interface LowerCtx {
  */
 export interface LowerArgs {
   readonly ctx: LowerCtx;
-  readonly inputs: readonly ValueRefPacked[];
-  readonly inputsById: Record<string, ValueRefPacked>;
+  readonly inputs: readonly import('../compiler/ir/lowerTypes').ValueRefPacked[];
+  readonly inputsById: Record<string, import('../compiler/ir/lowerTypes').ValueRefPacked>;
   readonly config?: Readonly<Record<string, unknown>>;
 }
 
@@ -65,7 +42,7 @@ export interface LowerArgs {
  */
 export interface LowerResult {
   /** Map of port ID to ValueRef (required) */
-  readonly outputsById: Record<string, ValueRefPacked>;
+  readonly outputsById: Record<string, import('../compiler/ir/lowerTypes').ValueRefPacked>;
 }
 
 // =============================================================================

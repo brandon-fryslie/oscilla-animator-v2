@@ -17,6 +17,7 @@ import type { CombineMode, Edge, SignalType } from "../../types";
 import type { IRBuilder } from "../ir/IRBuilder";
 import type { ValueRefPacked } from "../ir/lowerTypes";
 import type { EventExprId } from "../ir/types";
+import type { SigExprId, FieldExprId } from "../ir/Indices";
 import type { EventCombineMode } from "../ir/signalExpr";
 
 // =============================================================================
@@ -238,8 +239,8 @@ export function createCombineNode(
   // We still create a combine node here for semantic clarity (e.g., 'last' of 1 item).
 
   // Collect terms by world type
-  const sigTerms: number[] = [];
-  const fieldTerms: number[] = [];
+  const sigTerms: SigExprId[] = [];
+  const fieldTerms: FieldExprId[] = [];
   const eventTerms: EventExprId[] = [];
 
   for (const ref of orderedInputs) {

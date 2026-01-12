@@ -11,10 +11,13 @@ import { rootStore } from '../../stores';
 import {
   getBlockCategories,
   getBlockTypesByCategory,
-  type BlockCategory,
-  type BlockTypeInfo,
-} from '../registry/blockTypes';
+  type BlockDef,
+} from '../../blocks/registry';
 import './BlockLibrary.css';
+
+// Type aliases for clarity
+type BlockCategory = string;
+type BlockTypeInfo = BlockDef;
 
 // LocalStorage key for category collapse state
 const COLLAPSE_STATE_KEY = 'blockLibrary.collapsedCategories';
@@ -28,14 +31,13 @@ const SEARCH_DEBOUNCE_MS = 150;
 function loadCollapsedCategories(): Set<BlockCategory> {
   try {
     const stored = localStorage.getItem(COLLAPSE_STATE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      return new Set(parsed);
-    }
+    if (!stored) return new Set();
+    const parsed = JSON.parse(stored);
+    return new Set(Array.isArray(parsed) ? parsed : []);
   } catch (e) {
-    // Ignore parse errors
+    console.warn('Failed to load collapsed categories from localStorage:', e);
+    return new Set();
   }
-  return new Set();
 }
 
 /**
@@ -45,75 +47,64 @@ function saveCollapsedCategories(collapsed: Set<BlockCategory>): void {
   try {
     localStorage.setItem(COLLAPSE_STATE_KEY, JSON.stringify(Array.from(collapsed)));
   } catch (e) {
-    // Ignore storage errors
+    console.warn('Failed to save collapsed categories to localStorage:', e);
   }
 }
 
 /**
- * Custom hook for debounced search query.
+ * Debounce helper - returns a debounced value.
  */
-function useDebouncedValue<T>(value: T, delay: number): T {
+function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState(value);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedValue(value);
-    }, delay);
-
-    return () => {
-      clearTimeout(timer);
-    };
+    const handler = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(handler);
   }, [value, delay]);
 
   return debouncedValue;
 }
 
 /**
- * Block Library component.
+ * Block Library Component
  */
-export const BlockLibrary = observer(function BlockLibrary() {
-  // Collapse state (persisted to localStorage)
+export const BlockLibrary: React.FC = observer(() => {
+  // State
+  const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebounce(searchQuery, SEARCH_DEBOUNCE_MS);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
   const [collapsedCategories, setCollapsedCategories] = useState<Set<BlockCategory>>(
     loadCollapsedCategories
   );
 
-  // Search state
-  const [searchQuery, setSearchQuery] = useState('');
-  const debouncedSearchQuery = useDebouncedValue(searchQuery, SEARCH_DEBOUNCE_MS);
-
-  // Keyboard navigation state
+  // Track which category currently has focus (for keyboard navigation)
   const [focusedCategory, setFocusedCategory] = useState<BlockCategory | null>(null);
-  const [focusedBlockIndex, setFocusedBlockIndex] = useState<number>(-1);
 
-  const searchInputRef = useRef<HTMLInputElement>(null);
+  // Selected block type (for preview/detail view)
+  const [selectedType, setSelectedType] = useState<BlockTypeInfo | null>(null);
 
-  // Save collapse state to localStorage whenever it changes
-  useEffect(() => {
-    saveCollapsedCategories(collapsedCategories);
-  }, [collapsedCategories]);
-
+  // Callbacks
   const toggleCategory = useCallback((category: BlockCategory) => {
-    setCollapsedCategories(prev => {
+    setCollapsedCategories((prev) => {
       const next = new Set(prev);
       if (next.has(category)) {
         next.delete(category);
       } else {
         next.add(category);
       }
+      saveCollapsedCategories(next);
       return next;
     });
   }, []);
 
   const handleBlockClick = useCallback((type: BlockTypeInfo) => {
-    // Click = preview mode
-    rootStore.selection.setPreviewType(type.type);
+    setSelectedType(type);
   }, []);
 
   const handleBlockDoubleClick = useCallback((type: BlockTypeInfo) => {
-    // Double-click = add block
-    const blockId = rootStore.patch.addBlock(type.type, {});
-    // Select the newly added block
-    rootStore.selection.selectBlock(blockId);
+    // TODO: Add block to canvas
+    console.log('Add block:', type.type);
   }, []);
 
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -125,8 +116,26 @@ export const BlockLibrary = observer(function BlockLibrary() {
     searchInputRef.current?.focus();
   }, []);
 
-  const handleSearchKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Escape') {
+  // Focus search input on mount
+  useEffect(() => {
+    searchInputRef.current?.focus();
+  }, []);
+
+  // Clear search on Escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && searchQuery) {
+        e.preventDefault();
+        handleSearchClear();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [searchQuery, handleSearchClear]);
+
+  // Keyboard navigation
+  useEffect(() => {
+    if (debouncedSearchQuery && searchQuery === debouncedSearchQuery) {
       handleSearchClear();
     }
   }, [handleSearchClear]);
@@ -136,13 +145,13 @@ export const BlockLibrary = observer(function BlockLibrary() {
   // Calculate total results across all categories
   const totalResults = useMemo(() => {
     let count = 0;
-    categories.forEach(category => {
+    categories.forEach((category: string) => {
       const types = getBlockTypesByCategory(category);
       const filtered = debouncedSearchQuery
-        ? types.filter(t =>
+        ? types.filter((t: BlockDef) =>
             t.type.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
             t.label.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-            t.description.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
+            (t.description?.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ?? false)
           )
         : types;
       count += filtered.length;
@@ -152,146 +161,147 @@ export const BlockLibrary = observer(function BlockLibrary() {
 
   return (
     <div className="block-library">
-      {/* Header with search */}
-      <div className="library-header">
-        <h3>Block Library</h3>
+      <div className="block-library__header">
+        <h2 className="block-library__title">Blocks</h2>
 
-        <div className="library-search-container">
+        <div className="block-library__search">
           <input
             ref={searchInputRef}
             type="text"
-            className="library-search"
+            className="block-library__search-input"
             placeholder="Search blocks..."
             value={searchQuery}
             onChange={handleSearchChange}
-            onKeyDown={handleSearchKeyDown}
+            aria-label="Search blocks"
           />
           {searchQuery && (
             <button
-              className="library-search-clear"
+              className="block-library__search-clear"
               onClick={handleSearchClear}
               aria-label="Clear search"
             >
-              ✕
+              ×
             </button>
           )}
         </div>
 
         {debouncedSearchQuery && (
-          <div className="library-result-count">
+          <div className="block-library__search-results">
             {totalResults} {totalResults === 1 ? 'result' : 'results'}
           </div>
         )}
       </div>
 
-      {/* Scrollable categories */}
-      <div className="library-categories">
-        {categories.map(category => (
-          <CategorySection
+      <div className="block-library__categories">
+        {categories.map((category: string) => (
+          <BlockCategorySection
             key={category}
             category={category}
-            isExpanded={!collapsedCategories.has(category)}
+            collapsed={collapsedCategories.has(category)}
             searchQuery={debouncedSearchQuery}
-            onToggle={() => toggleCategory(category)}
+            onToggle={toggleCategory}
             onBlockClick={handleBlockClick}
             onBlockDoubleClick={handleBlockDoubleClick}
-            isFocused={focusedCategory === category}
-            focusedBlockIndex={focusedBlockIndex}
-            onFocusChange={(blockIndex) => {
-              setFocusedCategory(category);
-              setFocusedBlockIndex(blockIndex);
-            }}
+            focused={focusedCategory === category}
+            onFocus={() => setFocusedCategory(category)}
           />
         ))}
-
-        {totalResults === 0 && debouncedSearchQuery && (
-          <div className="library-no-results">
-            No blocks found matching "{debouncedSearchQuery}"
-          </div>
-        )}
       </div>
+
+      {selectedType && (
+        <div className="block-library__preview">
+          <h3>{selectedType.label}</h3>
+          <p className="block-library__preview-type">{selectedType.type}</p>
+          {selectedType.description && (
+            <p className="block-library__preview-description">
+              {selectedType.description}
+            </p>
+          )}
+          <div className="block-library__preview-ports">
+            <div className="block-library__preview-inputs">
+              <h4>Inputs</h4>
+              <ul>
+                {selectedType.inputs.map((input) => (
+                  <li key={input.id}>
+                    <strong>{input.label}</strong>: {input.type}
+                    {input.optional && <span className="optional">(optional)</span>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="block-library__preview-outputs">
+              <h4>Outputs</h4>
+              <ul>
+                {selectedType.outputs.map((output) => (
+                  <li key={output.id}>
+                    <strong>{output.label}</strong>: {output.type}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 });
 
 /**
- * Category section component.
+ * Block Category Section
  */
-interface CategorySectionProps {
+interface BlockCategorySectionProps {
   category: BlockCategory;
-  isExpanded: boolean;
+  collapsed: boolean;
   searchQuery: string;
-  onToggle: () => void;
+  onToggle: (category: BlockCategory) => void;
   onBlockClick: (type: BlockTypeInfo) => void;
   onBlockDoubleClick: (type: BlockTypeInfo) => void;
-  isFocused: boolean;
-  focusedBlockIndex: number;
-  onFocusChange: (blockIndex: number) => void;
+  focused: boolean;
+  onFocus: () => void;
 }
 
-const CategorySection: React.FC<CategorySectionProps> = ({
+const BlockCategorySection: React.FC<BlockCategorySectionProps> = ({
   category,
-  isExpanded,
+  collapsed,
   searchQuery,
   onToggle,
   onBlockClick,
   onBlockDoubleClick,
-  isFocused,
-  focusedBlockIndex,
-  onFocusChange,
+  focused,
+  onFocus,
 }) => {
   const types = getBlockTypesByCategory(category);
 
-  // Filter by search query
-  const filteredTypes = searchQuery
-    ? types.filter(t =>
-        t.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.description.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : types;
+  const filteredTypes = useMemo(() => {
+    if (!searchQuery) return types;
+    return types.filter((t: BlockDef) =>
+      t.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (t.description?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false)
+    );
+  }, [types, searchQuery]);
 
   if (filteredTypes.length === 0) return null;
 
   return (
-    <div className="category">
-      {/* Category header */}
-      <div
-        className="category-header"
-        onClick={onToggle}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            onToggle();
-          }
-        }}
-      >
-        <span className="category-chevron">
-          {isExpanded ? '▼' : '▸'}
-        </span>
-
-        <span className="category-label">
-          {category}
-        </span>
-
-        <span className="category-count">
-          {filteredTypes.length}
-        </span>
+    <div
+      className={`block-category ${collapsed ? 'collapsed' : ''} ${focused ? 'focused' : ''}`}
+      onFocus={onFocus}
+    >
+      <div className="block-category__header" onClick={() => onToggle(category)}>
+        <span className="block-category__icon">{collapsed ? '▶' : '▼'}</span>
+        <h3 className="block-category__title">{category}</h3>
+        <span className="block-category__count">{filteredTypes.length}</span>
       </div>
 
-      {/* Block list (if expanded) */}
-      {isExpanded && (
-        <div className="category-blocks">
-          {filteredTypes.map((type, index) => (
-            <BlockItem
+      {!collapsed && (
+        <div className="block-category__types">
+          {filteredTypes.map((type: BlockDef, index: number) => (
+            <BlockTypeItem
               key={type.type}
               type={type}
-              onClick={() => onBlockClick(type)}
-              onDoubleClick={() => onBlockDoubleClick(type)}
-              isFocused={isFocused && focusedBlockIndex === index}
-              onFocus={() => onFocusChange(index)}
+              onClick={onBlockClick}
+              onDoubleClick={onBlockDoubleClick}
             />
           ))}
         </div>
@@ -301,76 +311,32 @@ const CategorySection: React.FC<CategorySectionProps> = ({
 };
 
 /**
- * Block item component.
+ * Block Type Item
  */
-interface BlockItemProps {
+interface BlockTypeItemProps {
   type: BlockTypeInfo;
-  onClick: () => void;
-  onDoubleClick: () => void;
-  isFocused: boolean;
-  onFocus: () => void;
+  onClick: (type: BlockTypeInfo) => void;
+  onDoubleClick: (type: BlockTypeInfo) => void;
 }
 
-const BlockItem: React.FC<BlockItemProps> = ({
+const BlockTypeItem: React.FC<BlockTypeItemProps> = ({
   type,
   onClick,
   onDoubleClick,
-  isFocused,
-  onFocus,
 }) => {
-  const [isHovered, setIsHovered] = useState(false);
-  const isSelected = rootStore.selection.previewType === type.type;
-  const itemRef = useRef<HTMLDivElement>(null);
-
-  // Scroll into view when focused
-  useEffect(() => {
-    if (isFocused && itemRef.current) {
-      itemRef.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    }
-  }, [isFocused]);
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      if (e.shiftKey) {
-        onDoubleClick(); // Shift+Enter = add block
-      } else {
-        onClick(); // Enter = preview block
-      }
-    }
-  }, [onClick, onDoubleClick]);
-
   return (
     <div
-      ref={itemRef}
-      className={`block-item ${isSelected ? 'selected' : ''} ${isFocused ? 'keyboard-focused' : ''}`}
-      onClick={onClick}
-      onDoubleClick={onDoubleClick}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      onFocus={onFocus}
-      onKeyDown={handleKeyDown}
-      tabIndex={0}
-      role="button"
+      className="block-type-item"
+      onClick={() => onClick(type)}
+      onDoubleClick={() => onDoubleClick(type)}
     >
-      {/* Block label (bold) */}
-      <div className="block-label">
-        {type.label}
+      <div className="block-type-item__icon">
+        {/* TODO: Add block icon based on category/capability */}
+        📦
       </div>
-
-      {/* Block type (monospace) */}
-      <div className="block-type">
-        {type.type}
-      </div>
-
-      {/* Description (gray, truncated to 3 lines) */}
-      <div className="block-description">
-        {type.description}
-      </div>
-
-      {/* Port counts */}
-      <div className="block-ports">
-        {type.inputs.length} in, {type.outputs.length} out
+      <div className="block-type-item__info">
+        <div className="block-type-item__label">{type.label}</div>
+        <div className="block-type-item__type">{type.type}</div>
       </div>
     </div>
   );

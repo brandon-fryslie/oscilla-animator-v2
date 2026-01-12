@@ -17,6 +17,7 @@ import type {
   DomainId,
   StateId,
 } from './Indices';
+import type { IRBuilder } from './IRBuilder';
 
 // =============================================================================
 // Value Reference Types
@@ -27,9 +28,9 @@ import type {
  * Used throughout the compiler pipeline for tracking IR expressions.
  */
 export type ValueRefPacked =
-  | { readonly k: 'sig'; readonly id: number; readonly slot: ValueSlot }
-  | { readonly k: 'field'; readonly id: number; readonly slot: ValueSlot }
-  | { readonly k: 'event'; readonly id: number; readonly slot: ValueSlot }
+  | { readonly k: 'sig'; readonly id: SigExprId; readonly slot: ValueSlot }
+  | { readonly k: 'field'; readonly id: FieldExprId; readonly slot: ValueSlot }
+  | { readonly k: 'event'; readonly id: EventExprId; readonly slot: ValueSlot }
   | { readonly k: 'domain'; readonly id: DomainId }
   | { readonly k: 'scalar'; readonly value: unknown };
 

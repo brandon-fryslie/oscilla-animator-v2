@@ -1,62 +1,68 @@
 /**
- * Pass 3: Time Topology
+ * Pass 3: Time Model Pass
  *
- * Determines the time model from TimeRoot blocks and generates derived time signals.
+ * Determines the time model (finite/infinite) and generates time-derived signals.
  */
 
-import type { TypedPatch, TimeResolvedPatch, TimeSignals } from "../ir/patches";
-import type { TimeModelIR } from "../ir/schedule";
-import type { Block } from "../../graph/Patch";
-import { IRBuilderImpl } from "../ir/IRBuilderImpl";
-import { signalType } from "../../core/canonical-types";
+import type { NormalizedPatch } from '../../graph/normalize';
+import type { Block } from '../../graph/Patch';
+import type { TimeModelIR, TimeSignals } from '../ir';
+import { IRBuilderImpl } from '../ir/IRBuilderImpl';
+import { signalType } from '../../core/canonical-types';
 
-/**
- * Structured error for pass 3 failures.
- * Includes a `code` field that can be extracted by compile.ts.
- */
-class Pass3Error extends Error {
-  code: string;
+// =============================================================================
+// Error Types
+// =============================================================================
 
-  constructor(code: string, message: string) {
+export class Pass3Error extends Error {
+  constructor(
+    public readonly code:
+      | 'MissingTimeRoot'
+      | 'MultipleTimeRoots'
+      | 'InvalidDuration',
+    message: string
+  ) {
     super(message);
-    this.code = code;
     this.name = 'Pass3Error';
   }
 }
 
+// =============================================================================
+// Pass 3: Time Model
+// =============================================================================
+
 /**
- * Pass 3: Resolve time topology and generate time signals.
+ * Extract time model and generate time signals.
+ *
+ * @param normalized - The normalized patch from Pass 2
+ * @returns Time model IR
  */
-export function pass3TimeTopology(
-  typed: TypedPatch
-): TimeResolvedPatch {
-  // Find all TimeRoot blocks
-  const timeRoots = typed.blocks.filter(
-    (b: Block) => b.type === "InfiniteTimeRoot" || b.type === "FiniteTimeRoot" || b.type === "TimeRoot"
+export function pass3Time(normalized: NormalizedPatch): {
+  timeModel: TimeModelIR;
+  timeSignals: TimeSignals;
+} {
+  // Find TimeRoot block
+  const timeRoots = Array.from(normalized.patch.blocks.values()).filter(
+    (b) => b.type === 'TimeRoot' || b.type === 'FiniteTimeRoot' || b.type === 'InfiniteTimeRoot'
   );
 
-  // Validate TimeRoot count
   if (timeRoots.length === 0) {
-    throw new Pass3Error("NoTimeRoot", "Patch must have exactly one TimeRoot block");
+    throw new Pass3Error('MissingTimeRoot', 'Patch must have exactly one TimeRoot block');
   }
 
   if (timeRoots.length > 1) {
-    throw new Pass3Error("MultipleTimeRoots", `Patch has ${timeRoots.length} TimeRoot blocks`);
+    throw new Pass3Error('MultipleTimeRoots', 'Patch cannot have multiple TimeRoot blocks');
   }
 
   const timeRoot = timeRoots[0];
 
-  // Determine time model
+  // Extract time model from TimeRoot
   const timeModel = extractTimeModel(timeRoot);
 
-  // Generate time signals
+  // Generate time signals based on model
   const timeSignals = generateTimeSignals(timeModel);
 
-  return {
-    ...typed,
-    timeModel,
-    timeSignals,
-  };
+  return { timeModel, timeSignals };
 }
 
 /**
@@ -65,19 +71,13 @@ export function pass3TimeTopology(
 function extractTimeModel(
   timeRoot: Block
 ): TimeModelIR {
+  // For now, return infinite time model
+  // TODO: Extract from block params when block lowering is implemented
+  return { kind: 'infinite' };
 
   // THIS IS ILLEGAL - no compiler passes can have special cases per block type
-  // // FiniteTimeRoot block
-  // if (timeRoot.type === "FiniteTimeRoot") {
-  //   const durationMs = (timeRoot.params?.durationMs as number) ?? 10000;
-  //   if (durationMs <= 0) {
-  //     throw new Pass3Error("InvalidDuration", `Invalid FiniteTimeRoot duration: ${durationMs}ms`);
-  //   }
-  //   return { kind: "finite", durationMs: Math.max(1, durationMs) };
-  // }
-  //
-  // // InfiniteTimeRoot or default
-  // return { kind: "infinite" };
+  // The time model should come from the block's lowering function, not from
+  // special-casing the block type in the compiler pass.
 }
 
 /**
@@ -89,16 +89,35 @@ function generateTimeSignals(timeModel: TimeModelIR): TimeSignals {
   // All models have tModelMs - float scalar
   const tModelMs = builder.sigTime('tMs', signalType('float'));
 
-  // All models have phaseA and phaseB - float scalar
-  const phaseA = builder.sigTime('phaseA', signalType('float'));
-  const phaseB = builder.sigTime('phaseB', signalType('float'));
+  // Generate phase and other time-derived signals based on model type
+  if (timeModel.kind === 'finite') {
+    const phaseA = builder.sigTime('phaseA', signalType('phase'));
+    const phaseB = builder.sigTime('phaseB', signalType('phase'));
+    const dt = builder.sigTime('dt', signalType('float'));
+    const pulse = builder.sigTime('pulse', signalType('bool'));
+    const progress = builder.sigTime('progress', signalType('unit'));
 
-  // ILLEGAL ACCESS - DO NOT SPECIAL CASE BLOCK KIND IN COMPILER
-  // if (timeModel.kind === "finite") {
-  //   const progress01 = builder.sigTime('progress', signalType('float'));
-  //   return { tModelMs, phaseA, phaseB, progress01 };
-  // }
+    return {
+      tModelMs,
+      phaseA,
+      phaseB,
+      dt,
+      pulse,
+      progress,
+    };
+  }
 
-  // Infinite model
-  return { tModelMs, phaseA, phaseB };
+  // Infinite time model
+  const phaseA = builder.sigTime('phaseA', signalType('phase'));
+  const phaseB = builder.sigTime('phaseB', signalType('phase'));
+  const dt = builder.sigTime('dt', signalType('float'));
+
+  return {
+    tModelMs,
+    phaseA,
+    phaseB,
+    dt,
+    pulse: null,
+    progress: null,
+  };
 }

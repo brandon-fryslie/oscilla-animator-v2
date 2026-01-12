@@ -98,15 +98,15 @@ export class IRBuilderImpl implements IRBuilder {
   // =========================================================================
 
   sigCombine(
-    inputs: readonly number[],
+    inputs: readonly SigExprId[],
     mode: 'sum' | 'average' | 'max' | 'min' | 'last',
     type: SignalType
-  ): number {
+  ): SigExprId {
     // For combining signals, we use zip with appropriate combine function
-    const sigInputs = inputs.map(i => i as SigExprId);
+    // inputs are already SigExprId[]
     const fn: PureFn = { kind: 'kernel', name: `combine_${mode}` };
     const id = sigExprId(this.sigExprs.length);
-    this.sigExprs.push({ kind: 'zip', inputs: sigInputs, fn, type });
+    this.sigExprs.push({ kind: 'zip', inputs, fn, type });
     return id;
   }
 
@@ -164,15 +164,15 @@ export class IRBuilderImpl implements IRBuilder {
   // =========================================================================
 
   fieldCombine(
-    inputs: readonly number[],
+    inputs: readonly FieldExprId[],
     mode: 'sum' | 'average' | 'max' | 'min' | 'last' | 'product',
     type: SignalType
-  ): number {
+  ): FieldExprId {
     // For combining fields, we use zip with appropriate combine function
-    const fieldInputs = inputs.map(i => i as FieldExprId);
+    // inputs are already FieldExprId[]
     const fn: PureFn = { kind: 'kernel', name: `combine_${mode}` };
     const id = fieldExprId(this.fieldExprs.length);
-    this.fieldExprs.push({ kind: 'zip', inputs: fieldInputs, fn, type });
+    this.fieldExprs.push({ kind: 'zip', inputs, fn, type });
     return id;
   }
 

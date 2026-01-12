@@ -98,17 +98,17 @@ export interface IRBuilder {
 
   /** Combine multiple signals. */
   sigCombine(
-    inputs: readonly number[],
+    inputs: readonly SigExprId[],
     mode: 'sum' | 'average' | 'max' | 'min' | 'last',
     type: SignalType
-  ): number;
+  ): SigExprId;
 
   /** Combine multiple fields. */
   fieldCombine(
-    inputs: readonly number[],
+    inputs: readonly FieldExprId[],
     mode: 'sum' | 'average' | 'max' | 'min' | 'last' | 'product',
     type: SignalType
-  ): number;
+  ): FieldExprId;
 
   // =========================================================================
   // Slot Registration
@@ -118,81 +118,43 @@ export interface IRBuilder {
   allocValueSlot(type: SignalType, label?: string): ValueSlot;
 
   /** Register a signal expression with a slot. */
-  registerSigSlot(sigId: number, slot: ValueSlot): void;
+  registerSigSlot(sigId: SigExprId, slot: ValueSlot): void;
 
   /** Register a field expression with a slot. */
-  registerFieldSlot(fieldId: number, slot: ValueSlot): void;
+  registerFieldSlot(fieldId: FieldExprId, slot: ValueSlot): void;
 
   /** Register an event expression with a slot. */
   registerEventSlot(eventId: EventExprId, slot: ValueSlot): void;
 
   // =========================================================================
-  // Debug Tracking
+  // Slot Allocation (Simple)
   // =========================================================================
 
-  /** Set current block ID for debug tracking. */
-  setCurrentBlockId(blockId: string | undefined): void;
-
-  /** Allocate a constant ID. */
-  allocConstId(value: number): number;
-
-  // =========================================================================
-  // Domains
-  // =========================================================================
-
-  /** Create a domain. */
-  createDomain(
-    kind: 'grid' | 'n' | 'path',
-    count: number,
-    params?: Record<string, unknown>
-  ): DomainId;
-
-  /** Get all registered domains. */
-  getDomains(): ReadonlyMap<DomainId, DomainDef>;
-
-  // =========================================================================
-  // Slots
-  // =========================================================================
-
-  /** Allocate a value slot. */
+  /** Allocate a simple slot (without type information). */
   allocSlot(): ValueSlot;
 
-  /** Get current slot count. */
-  getSlotCount(): number;
-
   // =========================================================================
-  // State
+  // Utility
   // =========================================================================
 
-  /** Allocate a state cell. */
-  allocState(initialValue: unknown): StateId;
-
-  // =========================================================================
-  // Time Model
-  // =========================================================================
-
-  /** Set the time model. */
-  setTimeModel(timeModel: TimeModelIR): void;
-
-  /** Get the current time model. */
-  getTimeModel(): TimeModelIR | undefined;
-
-  // =========================================================================
-  // Pure Functions
-  // =========================================================================
-
-  /** Create an opcode-based pure function. */
-  opcode(op: OpCode): PureFn;
-
-  /** Create an expression-based pure function. */
-  expr(expression: string): PureFn;
-
-  /** Create a kernel-based pure function. */
+  /** Create a pure function reference (kernel). */
   kernel(name: string): PureFn;
+
+  /** Get timepoint markers. */
+  getTimepointMarkers(): { start: number; end: number } | null;
+
+  /** Define a domain. */
+  defineDomain(id: DomainId, def: DomainDef): void;
+
+  /** Get schedule. */
+  getSchedule(): TimeModelIR;
+
+  /** Declare state. */
+  declareState(id: StateId, type: SignalType, initialValue?: unknown): void;
+
+  /** Read state. */
+  readState(id: StateId, type: SignalType): SigExprId;
+
+  /** Write state. */
+  writeState(id: StateId, value: SigExprId): void;
 }
-
-// =============================================================================
-// Export
-// =============================================================================
-
-export type { OpCode, PureFn } from './types';
