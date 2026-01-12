@@ -158,5 +158,49 @@ function applyPureFn(
   if (fn.kind === 'opcode') {
     return applyOpcode(fn.opcode, values);
   }
+  if (fn.kind === 'kernel') {
+    return applySignalKernel(fn.name, values);
+  }
   throw new Error(`PureFn kind ${fn.kind} not implemented`);
+}
+
+/**
+ * Apply kernel function at signal level
+ *
+ * Signal kernels operate on scalar values (single numbers).
+ * Note: vec2 kernels are not supported at signal level - use field-level versions.
+ */
+function applySignalKernel(name: string, values: number[]): number {
+  switch (name) {
+    case 'sin':
+      if (values.length !== 1) {
+        throw new Error(`Signal kernel 'sin' expects 1 input, got ${values.length}`);
+      }
+      return Math.sin(values[0]);
+
+    case 'cos':
+      if (values.length !== 1) {
+        throw new Error(`Signal kernel 'cos' expects 1 input, got ${values.length}`);
+      }
+      return Math.cos(values[0]);
+
+    case 'tan':
+      if (values.length !== 1) {
+        throw new Error(`Signal kernel 'tan' expects 1 input, got ${values.length}`);
+      }
+      return Math.tan(values[0]);
+
+    // vec2 kernels not supported at signal level
+    case 'polarToCartesian':
+    case 'offsetPosition':
+    case 'circleLayout':
+    case 'circleAngle':
+      throw new Error(
+        `Signal kernel '${name}' returns vec2 which is not yet supported at signal level. ` +
+        `Use field-level version instead (fieldZipSig or fieldMap).`
+      );
+
+    default:
+      throw new Error(`Unknown signal kernel: ${name}`);
+  }
 }
