@@ -164,15 +164,10 @@ export function executeFrame(
         // Size can be a signal (uniform) or field (per-particle)
         let size: number | ArrayBufferView;
         if (step.size !== undefined) {
-          // Check if it's a signal or field ID by checking array bounds
-          const isSignal = (step.size as number) < signals.length;
-          const isField = (step.size as number) < fields.length;
-
-          // Check field FIRST - fields take precedence for per-particle data
-          if (isField) {
-            // It's a field - materialize per-particle values
+          if (step.size.k === 'field') {
+            // Field - materialize per-particle values
             size = materialize(
-              step.size as any,
+              step.size.id,
               step.domain,
               fields,
               signals,
@@ -180,13 +175,12 @@ export function executeFrame(
               state,
               pool
             );
-          } else if (isSignal) {
-            // It's a signal - evaluate once
-            size = evaluateSignal(step.size as SigExprId, signals, state);
           } else {
-            size = 10; // Fallback
+            // Signal - evaluate once for uniform size
+            size = evaluateSignal(step.size.id, signals, state);
           }
         } else {
+          // Default size when no input connected
           size = 10;
         }
 

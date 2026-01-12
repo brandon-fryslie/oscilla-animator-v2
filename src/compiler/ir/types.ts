@@ -307,7 +307,9 @@ export interface StepRender {
   readonly domain: DomainId;
   readonly position: FieldExprId;
   readonly color: FieldExprId;
-  readonly size?: SigExprId | FieldExprId;
+  readonly size?:
+    | { readonly k: 'sig'; readonly id: SigExprId }
+    | { readonly k: 'field'; readonly id: FieldExprId };
 }
 
 export interface StepStateWrite {

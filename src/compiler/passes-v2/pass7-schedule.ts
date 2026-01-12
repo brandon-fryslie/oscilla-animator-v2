@@ -152,9 +152,11 @@ function buildRenderSteps(
       color: colorRef.id,
     };
 
-    // P1: Add optional size if present
-    if (sizeRef?.k === 'field' || sizeRef?.k === 'sig') {
-      (step as { size?: SigExprId | FieldExprId }).size = sizeRef.id;
+    // P1: Add optional size with type discriminator
+    if (sizeRef?.k === 'field') {
+      (step as any).size = { k: 'field', id: sizeRef.id };
+    } else if (sizeRef?.k === 'sig') {
+      (step as any).size = { k: 'sig', id: sizeRef.id };
     }
 
     steps.push(step);
