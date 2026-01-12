@@ -681,6 +681,41 @@ function applyKernelZipSig(
       outArr[i * 4 + 2] = b;
       outArr[i * 4 + 3] = 255; // Full opacity
     }
+  } else if (kernelName === 'circleLayout') {
+    // Circle layout: normalized index -> vec2 position on circle
+    // Input field: normalizedIndex (0-1)
+    // Signals: [radius, phase]
+    if (sigValues.length !== 2) {
+      throw new Error('circleLayout requires 2 signals (radius, phase)');
+    }
+    const outArr = out as Float32Array;
+    const indexArr = fieldInput as Float32Array;
+    const radius = sigValues[0];
+    const phase = sigValues[1];
+    const TWO_PI = Math.PI * 2;
+    const cx = 0.5; // Center in normalized coords
+    const cy = 0.5;
+
+    for (let i = 0; i < N; i++) {
+      const angle = TWO_PI * (indexArr[i] + phase);
+      outArr[i * 2 + 0] = cx + radius * Math.cos(angle);
+      outArr[i * 2 + 1] = cy + radius * Math.sin(angle);
+    }
+  } else if (kernelName === 'circleAngle') {
+    // Circle angle: normalized index -> angle in radians
+    // Input field: normalizedIndex (0-1)
+    // Signals: [phase]
+    if (sigValues.length !== 1) {
+      throw new Error('circleAngle requires 1 signal (phase)');
+    }
+    const outArr = out as Float32Array;
+    const indexArr = fieldInput as Float32Array;
+    const phase = sigValues[0];
+    const TWO_PI = Math.PI * 2;
+
+    for (let i = 0; i < N; i++) {
+      outArr[i] = TWO_PI * (indexArr[i] + phase);
+    }
   } else {
     throw new Error(`Unknown zipSig kernel function: ${kernelName}`);
   }
