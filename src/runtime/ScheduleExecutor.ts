@@ -27,6 +27,11 @@ export interface RenderFrameIR {
 
 /**
  * RenderPassIR - Single render pass
+ *
+ * Shape encoding:
+ *   0 = circle
+ *   1 = square
+ *   2 = triangle
  */
 export interface RenderPassIR {
   kind: 'instances2d';
@@ -34,6 +39,7 @@ export interface RenderPassIR {
   position: ArrayBufferView;
   color: ArrayBufferView;
   size: number | ArrayBufferView; // Can be uniform size or per-particle sizes
+  shape: number | ArrayBufferView; // Can be uniform shape or per-particle shapes
 }
 
 /**
@@ -184,12 +190,36 @@ export function executeFrame(
           size = 10;
         }
 
+        // Shape can be a signal (uniform) or field (per-particle)
+        let shape: number | ArrayBufferView;
+        if (step.shape !== undefined) {
+          if (step.shape.k === 'field') {
+            // Field - materialize per-particle values
+            shape = materialize(
+              step.shape.id,
+              step.domain,
+              fields,
+              signals,
+              domains,
+              state,
+              pool
+            );
+          } else {
+            // Signal - evaluate once for uniform shape
+            shape = evaluateSignal(step.shape.id, signals, state);
+          }
+        } else {
+          // Default shape when no input connected (0 = circle)
+          shape = 0;
+        }
+
         passes.push({
           kind: 'instances2d',
           count: domain.count,
           position,
           color,
           size,
+          shape,
         });
         break;
       }

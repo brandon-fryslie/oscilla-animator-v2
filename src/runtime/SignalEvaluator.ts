@@ -190,6 +190,252 @@ function applySignalKernel(name: string, values: number[]): number {
       }
       return Math.tan(values[0]);
 
+    // Waveform kernels - input is phase (0..1), output is -1..1 or 0..1
+    case 'triangle': {
+      if (values.length !== 1) {
+        throw new Error(`Signal kernel 'triangle' expects 1 input, got ${values.length}`);
+      }
+      // Triangle wave: rises from -1 to 1, then falls back to -1
+      const t = values[0] % 1;
+      return 4 * Math.abs(t - 0.5) - 1;
+    }
+
+    case 'square': {
+      if (values.length !== 1) {
+        throw new Error(`Signal kernel 'square' expects 1 input, got ${values.length}`);
+      }
+      // Square wave: 1 for first half, -1 for second half
+      const t = values[0] % 1;
+      return t < 0.5 ? 1 : -1;
+    }
+
+    case 'sawtooth': {
+      if (values.length !== 1) {
+        throw new Error(`Signal kernel 'sawtooth' expects 1 input, got ${values.length}`);
+      }
+      // Sawtooth wave: rises from -1 to 1 over the period
+      const t = values[0] % 1;
+      return 2 * t - 1;
+    }
+
+    // === MATH FUNCTIONS ===
+
+    case 'abs': {
+      if (values.length !== 1) {
+        throw new Error(`Signal kernel 'abs' expects 1 input, got ${values.length}`);
+      }
+      return Math.abs(values[0]);
+    }
+
+    case 'floor': {
+      if (values.length !== 1) {
+        throw new Error(`Signal kernel 'floor' expects 1 input, got ${values.length}`);
+      }
+      return Math.floor(values[0]);
+    }
+
+    case 'ceil': {
+      if (values.length !== 1) {
+        throw new Error(`Signal kernel 'ceil' expects 1 input, got ${values.length}`);
+      }
+      return Math.ceil(values[0]);
+    }
+
+    case 'round': {
+      if (values.length !== 1) {
+        throw new Error(`Signal kernel 'round' expects 1 input, got ${values.length}`);
+      }
+      return Math.round(values[0]);
+    }
+
+    case 'fract': {
+      if (values.length !== 1) {
+        throw new Error(`Signal kernel 'fract' expects 1 input, got ${values.length}`);
+      }
+      // Fractional part (always positive, like GLSL)
+      const x = values[0];
+      return x - Math.floor(x);
+    }
+
+    case 'sqrt': {
+      if (values.length !== 1) {
+        throw new Error(`Signal kernel 'sqrt' expects 1 input, got ${values.length}`);
+      }
+      return Math.sqrt(values[0]);
+    }
+
+    case 'exp': {
+      if (values.length !== 1) {
+        throw new Error(`Signal kernel 'exp' expects 1 input, got ${values.length}`);
+      }
+      return Math.exp(values[0]);
+    }
+
+    case 'log': {
+      if (values.length !== 1) {
+        throw new Error(`Signal kernel 'log' expects 1 input, got ${values.length}`);
+      }
+      return Math.log(values[0]);
+    }
+
+    case 'pow': {
+      if (values.length !== 2) {
+        throw new Error(`Signal kernel 'pow' expects 2 inputs, got ${values.length}`);
+      }
+      return Math.pow(values[0], values[1]);
+    }
+
+    case 'min': {
+      if (values.length !== 2) {
+        throw new Error(`Signal kernel 'min' expects 2 inputs, got ${values.length}`);
+      }
+      return Math.min(values[0], values[1]);
+    }
+
+    case 'max': {
+      if (values.length !== 2) {
+        throw new Error(`Signal kernel 'max' expects 2 inputs, got ${values.length}`);
+      }
+      return Math.max(values[0], values[1]);
+    }
+
+    case 'clamp': {
+      if (values.length !== 3) {
+        throw new Error(`Signal kernel 'clamp' expects 3 inputs (value, min, max), got ${values.length}`);
+      }
+      return Math.min(Math.max(values[0], values[1]), values[2]);
+    }
+
+    case 'mix': {
+      if (values.length !== 3) {
+        throw new Error(`Signal kernel 'mix' expects 3 inputs (a, b, t), got ${values.length}`);
+      }
+      // Linear interpolation: a + (b - a) * t
+      return values[0] + (values[1] - values[0]) * values[2];
+    }
+
+    case 'smoothstep': {
+      if (values.length !== 3) {
+        throw new Error(`Signal kernel 'smoothstep' expects 3 inputs (edge0, edge1, x), got ${values.length}`);
+      }
+      // Hermite interpolation with clamping
+      const edge0 = values[0], edge1 = values[1], x = values[2];
+      const t = Math.min(Math.max((x - edge0) / (edge1 - edge0), 0), 1);
+      return t * t * (3 - 2 * t);
+    }
+
+    case 'step': {
+      if (values.length !== 2) {
+        throw new Error(`Signal kernel 'step' expects 2 inputs (edge, x), got ${values.length}`);
+      }
+      // Returns 0 if x < edge, 1 otherwise
+      return values[1] < values[0] ? 0 : 1;
+    }
+
+    case 'sign': {
+      if (values.length !== 1) {
+        throw new Error(`Signal kernel 'sign' expects 1 input, got ${values.length}`);
+      }
+      return Math.sign(values[0]);
+    }
+
+    // === EASING FUNCTIONS (input 0..1, output 0..1) ===
+
+    case 'easeInQuad': {
+      if (values.length !== 1) {
+        throw new Error(`Signal kernel 'easeInQuad' expects 1 input, got ${values.length}`);
+      }
+      const t = values[0];
+      return t * t;
+    }
+
+    case 'easeOutQuad': {
+      if (values.length !== 1) {
+        throw new Error(`Signal kernel 'easeOutQuad' expects 1 input, got ${values.length}`);
+      }
+      const t = values[0];
+      return t * (2 - t);
+    }
+
+    case 'easeInOutQuad': {
+      if (values.length !== 1) {
+        throw new Error(`Signal kernel 'easeInOutQuad' expects 1 input, got ${values.length}`);
+      }
+      const t = values[0];
+      return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+    }
+
+    case 'easeInCubic': {
+      if (values.length !== 1) {
+        throw new Error(`Signal kernel 'easeInCubic' expects 1 input, got ${values.length}`);
+      }
+      const t = values[0];
+      return t * t * t;
+    }
+
+    case 'easeOutCubic': {
+      if (values.length !== 1) {
+        throw new Error(`Signal kernel 'easeOutCubic' expects 1 input, got ${values.length}`);
+      }
+      const t = values[0] - 1;
+      return t * t * t + 1;
+    }
+
+    case 'easeInOutCubic': {
+      if (values.length !== 1) {
+        throw new Error(`Signal kernel 'easeInOutCubic' expects 1 input, got ${values.length}`);
+      }
+      const t = values[0];
+      return t < 0.5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1;
+    }
+
+    case 'easeInElastic': {
+      if (values.length !== 1) {
+        throw new Error(`Signal kernel 'easeInElastic' expects 1 input, got ${values.length}`);
+      }
+      const t = values[0];
+      if (t === 0 || t === 1) return t;
+      return -Math.pow(2, 10 * (t - 1)) * Math.sin((t - 1.1) * 5 * Math.PI);
+    }
+
+    case 'easeOutElastic': {
+      if (values.length !== 1) {
+        throw new Error(`Signal kernel 'easeOutElastic' expects 1 input, got ${values.length}`);
+      }
+      const t = values[0];
+      if (t === 0 || t === 1) return t;
+      return Math.pow(2, -10 * t) * Math.sin((t - 0.1) * 5 * Math.PI) + 1;
+    }
+
+    case 'easeOutBounce': {
+      if (values.length !== 1) {
+        throw new Error(`Signal kernel 'easeOutBounce' expects 1 input, got ${values.length}`);
+      }
+      let t = values[0];
+      const n1 = 7.5625, d1 = 2.75;
+      if (t < 1 / d1) {
+        return n1 * t * t;
+      } else if (t < 2 / d1) {
+        return n1 * (t -= 1.5 / d1) * t + 0.75;
+      } else if (t < 2.5 / d1) {
+        return n1 * (t -= 2.25 / d1) * t + 0.9375;
+      } else {
+        return n1 * (t -= 2.625 / d1) * t + 0.984375;
+      }
+    }
+
+    // === NOISE (deterministic, seed-based) ===
+
+    case 'noise': {
+      if (values.length !== 1) {
+        throw new Error(`Signal kernel 'noise' expects 1 input, got ${values.length}`);
+      }
+      // Simple hash-based noise, deterministic
+      const x = values[0];
+      const n = Math.sin(x * 12.9898 + 78.233) * 43758.5453;
+      return n - Math.floor(n);
+    }
+
     // vec2 kernels not supported at signal level
     case 'polarToCartesian':
     case 'offsetPosition':

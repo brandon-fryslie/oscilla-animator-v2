@@ -38,6 +38,12 @@ export function getBufferFormat(payload: PayloadType): BufferFormat {
     // Colors
     case 'color':
       return 'rgba8';
+    // Polymorphic - should be resolved before reaching runtime
+    case '???':
+      throw new Error(
+        `Cannot get buffer format for polymorphic type '???'. ` +
+        `Type must be resolved by normalizer before reaching runtime.`
+      );
   }
 }
 
