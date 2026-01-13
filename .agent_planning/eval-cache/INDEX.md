@@ -1,35 +1,18 @@
-# Evaluation Cache Index
+# Eval Cache Index
 
-**Purpose**: Reusable findings from work-evaluator runs to avoid redundant testing.
+## Runtime Findings
 
-**Last Updated**: 2026-01-12 22:00:00
+### 2026-01-13
+- **runtime-sprint2a-validation.md** - Sprint 2A runtime validation findings
+  - Strong code implementation
+  - Missing E2E tests (all 30 tests skipped)
+  - Build passes, dev server running
+  - Key gap: no runtime validation of user-facing behavior
 
-## Active Cache Files
+## Previous Evaluations
 
-### Runtime Behavior
-- **runtime-diagnostics-system.md** (RECENT): Diagnostics System Sprint 1 test suite, coverage, build characteristics, integration points
-- **runtime-diagnostics-sprint2.md** (FRESH): Sprint 2 P0+P1 implementation (batching, throttling, config object, event flow)
-- **runtime-block-registry.md** (FRESH): Block registry unification, registration patterns, test coverage
-- **runtime-ui-blocklibrary.md** (FRESH): BlockLibrary Tier 1 UI implementation, CSS styling, test patterns
-- **runtime-rete-editor.md** (FRESH): Rete.js visual node editor - rendering, sync behavior, known issues
+### 2026-01-12
+- **runtime-rete-editor.md** - Initial Rete editor implementation findings
+  - Editor context setup
+  - Initial sync layer implementation
 
-### Break-It Test Patterns
-(None yet - will accumulate patterns that reveal bugs)
-
-### Data Flow Verification
-(None yet - will capture stable data flow patterns)
-
-## Cache Confidence Levels
-
-- **FRESH**: Just evaluated, fully trusted
-- **RECENT**: Evaluated recently, no code changes detected
-- **RISKY**: Related code changed, verify affected areas
-- **STALE**: Files in scope changed, full re-evaluation needed
-
-## Usage Notes
-
-**For work-evaluator**: Check this index before evaluating. Reuse findings where confidence allows.
-
-**For implementers**: Update runtime-*.md files when discovering new behaviors during implementation.
-
-**For project-evaluator**: These are scoped findings (work-level). Project-level evaluations use broader scope.

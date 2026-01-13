@@ -197,9 +197,9 @@ describe('Hash Block', () => {
     const result2 = compile(patch2);
 
     console.log('[TEST] result1.kind:', result1.kind);
-    if (result1.kind !== 'ok') console.log('[TEST] result1.error:', result1.error);
+    if (result1.kind !== 'ok') console.log('[TEST] result1.errors:', result1.errors);
     console.log('[TEST] result2.kind:', result2.kind);
-    if (result2.kind !== 'ok') console.log('[TEST] result2.error:', result2.error);
+    if (result2.kind !== 'ok') console.log('[TEST] result2.errors:', result2.errors);
 
     expect(result1.kind).toBe('ok');
     expect(result2.kind).toBe('ok');
