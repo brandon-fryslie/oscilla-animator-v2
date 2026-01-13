@@ -154,7 +154,7 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
     // Convert to CompiledProgramIR
     // TODO: Implement convertLinkedIRToProgram
     // const compiledIR = convertLinkedIRToProgram(linkedIR, scheduleIR);
-    const compiledIR = createStubProgramIR(scheduleIR, unlinkedIR);
+    const compiledIR = convertLinkedIRToProgram(unlinkedIR, scheduleIR);
 
     // Emit CompileEnd event (success)
     if (options) {
@@ -261,5 +261,49 @@ function createStubProgramIR(scheduleIR: any, unlinkedIR: any): CompiledProgramI
       ports: [],
       slotToPort: new Map(),
     },
+  };
+}
+
+/**
+ * Convert LinkedIR and ScheduleIR to CompiledProgramIR.
+ *
+ * @param unlinkedIR - Unlinked IR fragments from Pass 6
+ * @param scheduleIR - Execution schedule from Pass 7
+ * @returns CompiledProgramIR
+ */
+function convertLinkedIRToProgram(
+  unlinkedIR: any,
+  scheduleIR: any
+): CompiledProgramIR {
+  // Extract data from the IR builder
+  const builder = unlinkedIR.builder;
+  const signalNodes = builder.getSigExprs();
+  const fieldNodes = builder.getFieldExprs();
+  const eventNodes = builder.getEventExprs();
+
+  // Build output specs (TBD - for now return empty array)
+  const outputs: any[] = [];
+
+  // Build slot metadata (TBD - for now return empty array)
+  const slotMeta: any[] = [];
+
+  // Build debug index
+  const debugIndex = {
+    stepToBlock: new Map(),
+    slotToBlock: new Map(),
+    ports: [],
+    slotToPort: new Map(),
+  };
+
+  return {
+    irVersion: 1,
+    signalExprs: { nodes: signalNodes },
+    fieldExprs: { nodes: fieldNodes },
+    eventExprs: { nodes: eventNodes },
+    constants: { json: [] },
+    schedule: scheduleIR,
+    outputs,
+    slotMeta,
+    debugIndex,
   };
 }
