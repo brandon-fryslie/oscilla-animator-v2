@@ -178,8 +178,7 @@ export interface Slot {
   readonly type: SignalType;
   readonly direction: SlotDirection;
   readonly optional?: boolean;
-  readonly defaultValue?: unknown;
-  readonly defaultSource?: DefaultSource;
+  readonly defaultSource: DefaultSource;
 }
 
 /**
@@ -279,7 +278,8 @@ export interface RendererMeta {}
 export type DerivedBlockMeta =
   | { readonly kind: "defaultSource"; readonly target: { readonly kind: "port"; readonly port: PortRef } }
   | { readonly kind: "wireState";     readonly target: { readonly kind: "wire"; readonly wire: WireId } }
-  | { readonly kind: "lens";          readonly target: { readonly kind: "node"; readonly node: NodeRef } };
+  | { readonly kind: "lens";          readonly target: { readonly kind: "node"; readonly node: NodeRef } }
+  | { readonly kind: "adapter";       readonly edgeId: string; readonly adapterType: string };
 
 /**
  * Helper functions to create BlockRole instances
