@@ -1,6 +1,6 @@
 # Oscilla Animator v2 - Project Roadmap
 
-Last updated: 2026-01-12-060000
+Last updated: 2026-01-12-175500
 
 ---
 
@@ -77,8 +77,10 @@ Last updated: 2026-01-12-060000
 - **Spec:** `design-docs/CANONICAL-oscilla-v2.5-20260109/topics/04-compilation.md`
 - **Description:** Passes 5-10: execution class, tables, schedule, slots, debug
 - **Planning Files:** `.agent_planning/compilation-pipeline/`
-- **Status Note:** Domain unification COMPLETE (2026-01-09). Passes 5-10 remaining.
-- **Completed Sprint:** Domain Unification - 11 tests passing, domain tracking through field composition
+- **Status Note:** Domain unification COMPLETE (2026-01-09). Graph normalization adapter system COMPLETE (2026-01-12). Passes 5-10 remaining.
+- **Completed Sprints:**
+  - Domain Unification - 11 tests passing, domain tracking through field composition
+  - Graph Normalization Adapters - Type-aware adapter insertion (signal→field broadcast), strict type checking in Pass 2, extensible adapter registry
 
 #### 📋 runtime-execution [PLANNING]
 - **State:** PLANNING
@@ -98,7 +100,7 @@ Last updated: 2026-01-12-060000
 
 ---
 
-## 🟢 Phase 2: Rendering & UI [ACTIVE] (3/6 completed)
+## 🟢 Phase 2: Rendering & UI [ACTIVE] (4/6 completed)
 
 **Goal:** Implement rendering pipeline and basic UI for patch editing
 
@@ -126,14 +128,15 @@ Last updated: 2026-01-12-060000
 - **Sprint 2 Planned:** Runtime diagnostics (NaN/performance monitoring), bus warnings, quick fixes, UI badges
 - **Architecture:** Event-driven with five-event contract (GraphCommitted, CompileBegin, CompileEnd, ProgramSwapped, RuntimeHealthSnapshot). Snapshot semantics for compile/authoring (replace), runtime (merge with expiry).
 
-#### 🔄 ui-features-v2 [IN PROGRESS]
-- **State:** IN PROGRESS
+#### ✅ ui-features-v2 [COMPLETED]
+- **State:** COMPLETED
 - **Epic:** None
 - **Description:** Visualization and inspection UI - Table View, Block Inspector, Block Library, Domains Panel
+- **Completed:** 2026-01-12
+- **Sprint 1:** P0-P2, P6 complete (Block model, roles, bus block)
+- **Sprint 2:** P3-P8 complete (Connection Matrix, Split Sidebar, TimeRoot Hidden, DefaultSource Display, Type Preview)
+- **Summary:** Full read-only visualization. Connection matrix shows block×block adjacency. Split sidebar shows Library+Inspector simultaneously. TimeRoot blocks hidden from UI. Default sources displayed in inspector. Type preview when clicking Library items.
 - **Planning Files:** `.agent_planning/ui-features-v2/`
-- **Status Note:** Phase 2 P0-P2, P6 complete. P3 (Connection Matrix), P4 (Split Sidebar), P5 (TimeRoot Hidden), P7 (DefaultSource), P8 (Type Preview) planned (2026-01-10).
-- **Summary:** Block model, roles, bus block done. Remaining: connection matrix, split sidebar, timeRoot filtering, DefaultSource display, type preview.
-- **Current Plan:** `PLAN-20260110-150000.md`
 
 #### 💡 renderer-implementation [PROPOSED]
 - **State:** PROPOSED
