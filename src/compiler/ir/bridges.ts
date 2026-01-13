@@ -215,6 +215,12 @@ export function payloadTypeToShapeDescIR(payload: PayloadType): ShapeDescIR {
     case 'bool':
       return { kind: 'bool' };
 
+    case '???':
+      throw new Error(
+        `Cannot bridge polymorphic type '???' to runtime shape. ` +
+        `Type must be resolved by normalizer before compilation.`
+      );
+
     default:
       exhaustiveCheck(payload);
   }

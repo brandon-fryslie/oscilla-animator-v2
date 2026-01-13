@@ -42,8 +42,12 @@ function renderPass(
 }
 
 /**
- * Render 2D instances with minimal fillStyle changes
- * Uses squares instead of circles for better performance
+ * Render 2D instances with shape support
+ *
+ * Shape encoding:
+ *   0 = circle
+ *   1 = square
+ *   2 = triangle
  */
 function renderInstances2D(
   ctx: CanvasRenderingContext2D,
@@ -55,14 +59,39 @@ function renderInstances2D(
   const color = pass.color as Uint8ClampedArray;
   const sizes = typeof pass.size === 'number' ? null : pass.size as Float32Array;
   const uniformSize = typeof pass.size === 'number' ? pass.size : 3;
+  const shapes = typeof pass.shape === 'number' ? null : pass.shape as Float32Array;
+  const uniformShape = typeof pass.shape === 'number' ? Math.floor(pass.shape) : 0;
 
-  // Simplest possible loop - JIT optimizes this best
   for (let i = 0; i < pass.count; i++) {
     const x = position[i * 2] * width;
     const y = position[i * 2 + 1] * height;
     const size = sizes ? sizes[i] : uniformSize;
+    const shape = shapes ? Math.floor(shapes[i]) : uniformShape;
 
     ctx.fillStyle = `rgba(${color[i * 4]},${color[i * 4 + 1]},${color[i * 4 + 2]},${color[i * 4 + 3] / 255})`;
-    ctx.fillRect(x - size / 2, y - size / 2, size, size);
+
+    switch (shape) {
+      case 0: // circle
+        ctx.beginPath();
+        ctx.arc(x, y, size / 2, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      case 1: // square
+        ctx.fillRect(x - size / 2, y - size / 2, size, size);
+        break;
+      case 2: // triangle
+        ctx.beginPath();
+        ctx.moveTo(x, y - size / 2);
+        ctx.lineTo(x + size / 2, y + size / 2);
+        ctx.lineTo(x - size / 2, y + size / 2);
+        ctx.closePath();
+        ctx.fill();
+        break;
+      default:
+        // fallback to circle
+        ctx.beginPath();
+        ctx.arc(x, y, size / 2, 0, Math.PI * 2);
+        ctx.fill();
+    }
   }
 }

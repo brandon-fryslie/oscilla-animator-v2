@@ -2,10 +2,16 @@
  * Render Blocks
  *
  * Blocks that render visual output (sinks in the execution graph).
+ *
+ * Shape encoding (for shape input):
+ *   0 = circle
+ *   1 = square
+ *   2 = triangle
  */
 
 import { registerBlock } from './registry';
 import { signalType, signalTypeField } from '../core/canonical-types';
+import { defaultSourceConstant } from '../types';
 
 // =============================================================================
 // RenderCircle
@@ -112,11 +118,9 @@ registerBlock({
     { id: 'pos', label: 'Position', type: signalTypeField('vec2', 'default') },
     { id: 'color', label: 'Color', type: signalTypeField('color', 'default') },
     { id: 'size', label: 'Size', type: signalTypeField('float', 'default') },
+    { id: 'shape', label: 'Shape', type: signalType('int'), defaultSource: defaultSourceConstant(0) }, // 0=circle, 1=square, 2=triangle
   ],
   outputs: [],
-  params: {
-    defaultSize: 5,
-  },
   lower: ({ ctx, inputsById }) => {
     const pos = inputsById.pos;
     const color = inputsById.color;

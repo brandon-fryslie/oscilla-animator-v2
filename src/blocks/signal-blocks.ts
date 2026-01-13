@@ -5,35 +5,133 @@
  */
 
 import { registerBlock } from './registry';
-import { signalType } from '../core/canonical-types';
+import { signalType, type PayloadType } from '../core/canonical-types';
 import { OpCode } from '../compiler/ir/types';
 import type { SigExprId } from '../compiler/ir/Indices';
 
 // =============================================================================
-// ConstFloat
+// Const (Polymorphic)
 // =============================================================================
 
+/**
+ * Polymorphic constant block.
+ *
+ * The output type is '???' (polymorphic) - resolved by the normalizer
+ * based on what this block is wired to. The resolved type is stored
+ * in the `payloadType` param.
+ *
+ * Supported payload types: float, int, bool, phase, unit
+ * (vec2 and color require separate blocks due to value structure)
+ */
 registerBlock({
-  type: 'ConstFloat',
-  label: 'Constant Float',
+  type: 'Const',
+  label: 'Constant',
   category: 'signal',
-  description: 'Outputs a constant float value',
+  description: 'Outputs a constant value (type inferred from target)',
   form: 'primitive',
   capability: 'pure',
   inputs: [],
   outputs: [
-    { id: 'out', label: 'Output', type: signalType('float') },
+    // Output type is polymorphic - resolved by normalizer from target port
+    { id: 'out', label: 'Output', type: signalType('???') },
   ],
   params: {
     value: 0,
+    // payloadType is set by normalizer after type inference
   },
   lower: ({ ctx, config }) => {
-    // Get the constant value from config (block params)
-    const value = (config?.value as number) ?? 0;
+    const payloadType = config?.payloadType as PayloadType | undefined;
+    const rawValue = config?.value;
 
-    // Create a constant signal
-    const sigId = ctx.b.sigConst(value, signalType('float'));
+    if (payloadType === undefined) {
+      throw new Error(
+        `Const block missing payloadType. Type must be resolved by normalizer before lowering.`
+      );
+    }
+
+    if (rawValue === undefined) {
+      throw new Error(
+        `Const block missing value. Value must be provided.`
+      );
+    }
+
+    let sigId;
     const slot = ctx.b.allocSlot();
+
+    switch (payloadType) {
+      case 'float': {
+        if (typeof rawValue !== 'number') {
+          throw new Error(`Const<float> requires number value, got ${typeof rawValue}`);
+        }
+        sigId = ctx.b.sigConst(rawValue, signalType('float'));
+        break;
+      }
+      case 'int': {
+        if (typeof rawValue !== 'number') {
+          throw new Error(`Const<int> requires number value, got ${typeof rawValue}`);
+        }
+        sigId = ctx.b.sigConst(Math.floor(rawValue), signalType('int'));
+        break;
+      }
+      case 'bool': {
+        if (typeof rawValue !== 'boolean' && typeof rawValue !== 'number') {
+          throw new Error(`Const<bool> requires boolean or number value, got ${typeof rawValue}`);
+        }
+        sigId = ctx.b.sigConst(rawValue ? 1 : 0, signalType('bool'));
+        break;
+      }
+      case 'phase':
+      case 'unit': {
+        if (typeof rawValue !== 'number') {
+          throw new Error(`Const<${payloadType}> requires number value, got ${typeof rawValue}`);
+        }
+        if (rawValue < 0 || rawValue > 1) {
+          throw new Error(`Const<${payloadType}> value must be in [0, 1], got ${rawValue}`);
+        }
+        sigId = ctx.b.sigConst(rawValue, signalType(payloadType));
+        break;
+      }
+      case 'vec2': {
+        const val = rawValue as { x?: number; y?: number };
+        if (typeof val !== 'object' || val === null) {
+          throw new Error(`Const<vec2> requires {x, y} object, got ${typeof rawValue}`);
+        }
+        if (typeof val.x !== 'number' || typeof val.y !== 'number') {
+          throw new Error(`Const<vec2> requires {x: number, y: number}, got {x: ${typeof val.x}, y: ${typeof val.y}}`);
+        }
+        const xSig = ctx.b.sigConst(val.x, signalType('float'));
+        const ySig = ctx.b.sigConst(val.y, signalType('float'));
+        const packFn = ctx.b.kernel('packVec2');
+        sigId = ctx.b.sigZip([xSig, ySig], packFn, signalType('vec2'));
+        break;
+      }
+      case 'color': {
+        const val = rawValue as { r?: number; g?: number; b?: number; a?: number };
+        if (typeof val !== 'object' || val === null) {
+          throw new Error(`Const<color> requires {r, g, b, a} object, got ${typeof rawValue}`);
+        }
+        if (typeof val.r !== 'number' || typeof val.g !== 'number' ||
+            typeof val.b !== 'number' || typeof val.a !== 'number') {
+          throw new Error(`Const<color> requires {r, g, b, a} as numbers`);
+        }
+        const rSig = ctx.b.sigConst(val.r, signalType('float'));
+        const gSig = ctx.b.sigConst(val.g, signalType('float'));
+        const bSig = ctx.b.sigConst(val.b, signalType('float'));
+        const aSig = ctx.b.sigConst(val.a, signalType('float'));
+        const packFn = ctx.b.kernel('packColor');
+        sigId = ctx.b.sigZip([rSig, gSig, bSig, aSig], packFn, signalType('color'));
+        break;
+      }
+      case '???': {
+        throw new Error(
+          `Cannot lower Const block with unresolved type '???'. ` +
+          `Type must be resolved by normalizer before lowering.`
+        );
+      }
+      default: {
+        throw new Error(`Unsupported payload type for Const: ${payloadType}`);
+      }
+    }
 
     return {
       outputsById: {

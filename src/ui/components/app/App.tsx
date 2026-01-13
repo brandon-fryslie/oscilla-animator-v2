@@ -142,7 +142,7 @@ export const App: React.FC<AppProps> = ({ onCanvasReady }) => {
             overflow: 'hidden',
           }}
         >
-          <Tabs tabs={centerTabs} initialTab="table" />
+          <Tabs tabs={centerTabs} initialTab="canvas" />
         </div>
 
         {/* Right sidebar - Tabbed content */}

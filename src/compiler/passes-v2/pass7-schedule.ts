@@ -132,6 +132,7 @@ function buildRenderSteps(
     const posRef = getInputRef(index, 'pos', edges, blockOutputs);
     const colorRef = getInputRef(index, 'color', edges, blockOutputs);
     const sizeRef = getInputRef(index, 'size', edges, blockOutputs);
+    const shapeRef = getInputRef(index, 'shape', edges, blockOutputs);
 
     // P0/P1: Validate required inputs (position and color)
     if (posRef?.k !== 'field') {
@@ -141,20 +142,25 @@ function buildRenderSteps(
       continue;
     }
 
+    // Build optional size
+    const size = sizeRef?.k === 'field' ? { k: 'field' as const, id: sizeRef.id }
+               : sizeRef?.k === 'sig' ? { k: 'sig' as const, id: sizeRef.id }
+               : undefined;
+
+    // Build optional shape
+    const shape = shapeRef?.k === 'field' ? { k: 'field' as const, id: shapeRef.id }
+                : shapeRef?.k === 'sig' ? { k: 'sig' as const, id: shapeRef.id }
+                : undefined;
+
     // P0: Create StepRender with wired inputs
     const step: StepRender = {
       kind: 'render',
       domain: domainId,
       position: posRef.id,
       color: colorRef.id,
+      ...(size && { size }),
+      ...(shape && { shape }),
     };
-
-    // P1: Add optional size with type discriminator
-    if (sizeRef?.k === 'field') {
-      (step as any).size = { k: 'field', id: sizeRef.id };
-    } else if (sizeRef?.k === 'sig') {
-      (step as any).size = { k: 'sig', id: sizeRef.id };
-    }
 
     steps.push(step);
   }

@@ -310,6 +310,9 @@ export interface StepRender {
   readonly size?:
     | { readonly k: 'sig'; readonly id: SigExprId }
     | { readonly k: 'field'; readonly id: FieldExprId };
+  readonly shape?:
+    | { readonly k: 'sig'; readonly id: SigExprId }
+    | { readonly k: 'field'; readonly id: FieldExprId };
 }
 
 export interface StepStateWrite {
