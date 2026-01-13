@@ -3,6 +3,7 @@
  *
  * Main visual node editor using Rete.js v2.
  * Provides pan/zoom, node creation, connection management.
+ * Syncs bidirectionally with PatchStore.
  */
 
 import React, { useEffect, useRef } from 'react';
@@ -14,6 +15,8 @@ import {
   ConnectionPlugin,
   Presets as ConnectionPresets,
 } from 'rete-connection-plugin';
+import { rootStore } from '../../stores';
+import { syncPatchToEditor, setupEditorToPatchSync, setupPatchToEditorReaction } from './sync';
 
 // Type schemes for Rete editor
 type Schemes = GetSchemes<
@@ -68,11 +71,19 @@ export const ReteEditor: React.FC<ReteEditorProps> = ({ onEditorReady }) => {
     const handle: ReteEditorHandle = { editor, area, connection };
     editorRef.current = handle;
 
+    // Setup bidirectional sync
+    setupEditorToPatchSync(handle, rootStore.patch);
+    const disposeReaction = setupPatchToEditorReaction(handle, rootStore.patch);
+
+    // Initial sync from PatchStore
+    syncPatchToEditor(handle, rootStore.patch.patch);
+
     // Notify parent
     onEditorReady?.(handle);
 
     // Cleanup on unmount
     return () => {
+      disposeReaction();
       area.destroy();
     };
   }, [onEditorReady]);
