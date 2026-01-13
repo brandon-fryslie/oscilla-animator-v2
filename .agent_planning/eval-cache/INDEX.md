@@ -2,7 +2,7 @@
 
 **Purpose**: Reusable findings from work-evaluator runs to avoid redundant testing.
 
-**Last Updated**: 2026-01-12 03:07:00
+**Last Updated**: 2026-01-12 22:00:00
 
 ## Active Cache Files
 
@@ -11,6 +11,7 @@
 - **runtime-diagnostics-sprint2.md** (FRESH): Sprint 2 P0+P1 implementation (batching, throttling, config object, event flow)
 - **runtime-block-registry.md** (FRESH): Block registry unification, registration patterns, test coverage
 - **runtime-ui-blocklibrary.md** (FRESH): BlockLibrary Tier 1 UI implementation, CSS styling, test patterns
+- **runtime-rete-editor.md** (FRESH): Rete.js visual node editor - rendering, sync behavior, known issues
 
 ### Break-It Test Patterns
 (None yet - will accumulate patterns that reveal bugs)

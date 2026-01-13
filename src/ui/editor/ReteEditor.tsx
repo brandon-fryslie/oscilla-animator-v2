@@ -16,8 +16,15 @@ import {
   Presets as ConnectionPresets,
 } from 'rete-connection-plugin';
 import { ContextMenuPlugin, ContextMenuExtra } from 'rete-context-menu-plugin';
+import { HistoryPlugin } from 'rete-history-plugin';
 import { rootStore } from '../../stores';
-import { syncPatchToEditor, setupEditorToPatchSync, setupPatchToEditorReaction } from './sync';
+import {
+  syncPatchToEditor,
+  setupEditorToPatchSync,
+  setupPatchToEditorReaction,
+  setHistoryPlugin,
+  pushHistoryState,
+} from './sync';
 import { useEditor } from './EditorContext';
 import { OscillaNode } from './nodes';
 
@@ -84,11 +91,15 @@ export const ReteEditor: React.FC<ReteEditorProps> = ({ onEditorReady }) => {
       }
     });
 
+    // History plugin for undo/redo
+    const history = new HistoryPlugin<Schemes>();
+
     // Register plugins
     editor.use(area);
     area.use(connection);
     area.use(reactPlugin);
     area.use(contextMenu);
+    area.use(history);
 
     // Setup connection and rendering presets
     connection.addPreset(ConnectionPresets.classic.setup());
@@ -102,6 +113,9 @@ export const ReteEditor: React.FC<ReteEditorProps> = ({ onEditorReady }) => {
     // Zoom at mouse position
     AreaExtensions.simpleNodesOrder(area);
 
+    // Store history plugin for undo/redo operations
+    setHistoryPlugin(history);
+
     // Store handle
     const handle: ReteEditorHandle = { editor, area, connection };
     editorRef.current = handle;
@@ -110,6 +124,56 @@ export const ReteEditor: React.FC<ReteEditorProps> = ({ onEditorReady }) => {
     // Setup bidirectional sync
     setupEditorToPatchSync(handle, rootStore.patch);
     const disposeReaction = setupPatchToEditorReaction(handle, rootStore.patch);
+
+    // Setup keyboard shortcuts for undo/redo
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle shortcuts when editor is visible/active
+      // You could add more sophisticated logic here to check if editor tab is active
+
+      // Ctrl+Z or Cmd+Z for undo
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        // Check if undo is available
+        const historyPlugin = (history as any);
+        if (historyPlugin && typeof historyPlugin.undo === 'function') {
+          historyPlugin.undo();
+        }
+      }
+
+      // Ctrl+Y or Ctrl+Shift+Z for redo
+      if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+        e.preventDefault();
+        const historyPlugin = (history as any);
+        if (historyPlugin && typeof historyPlugin.redo === 'function') {
+          historyPlugin.redo();
+        }
+      }
+
+      // Ctrl+Shift+Z for redo (alternative)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && e.shiftKey) {
+        e.preventDefault();
+        const historyPlugin = (history as any);
+        if (historyPlugin && typeof historyPlugin.redo === 'function') {
+          historyPlugin.redo();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    // Setup history to commit on user actions
+    editor.addPipe((context) => {
+      // Commit on user actions that modify the graph
+      if (context.type === 'nodecreated' ||
+          context.type === 'noderemoved' ||
+          context.type === 'connectioncreated' ||
+          context.type === 'connectionremoved') {
+        // Use the pushHistoryState function which checks isSyncing
+        pushHistoryState();
+      }
+
+      return context;
+    });
 
     // Initial sync from PatchStore
     syncPatchToEditor(handle, rootStore.patch.patch);
@@ -121,6 +185,7 @@ export const ReteEditor: React.FC<ReteEditorProps> = ({ onEditorReady }) => {
     return () => {
       setEditorHandle(null);
       disposeReaction();
+      window.removeEventListener('keydown', handleKeyDown);
       area.destroy();
     };
   }, [onEditorReady, setEditorHandle]);

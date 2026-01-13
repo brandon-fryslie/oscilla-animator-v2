@@ -76,14 +76,13 @@ describe('UnitDelay Block', () => {
     expect(state.state[0]).toBe(10);
   });
 
-  // Skip: TimeMs block not yet implemented
-  it.skip('maintains correct delay over changing input', () => {
-    // This test will use TimeMs as a changing signal
+  // Fixed: Use InfiniteTimeRoot's tMs output instead of non-existent TimeMs block
+  it('maintains correct delay over changing input', () => {
+    // This test uses InfiniteTimeRoot's tMs output as a changing signal
     const patch = buildPatch((b) => {
-      b.addBlock('InfiniteTimeRoot', {});
-      const timeBlock = b.addBlock('TimeMs', {});
+      const timeRoot = b.addBlock('InfiniteTimeRoot', {});
       const delayBlock = b.addBlock('UnitDelay', {});
-      b.wire(timeBlock, 'out', delayBlock, 'in');
+      b.wire(timeRoot, 'tMs', delayBlock, 'in');
     });
 
     const result = compile(patch);
@@ -173,8 +172,8 @@ describe('Hash Block', () => {
     expect(hash1).toBe(hash2);
   });
 
-  // Skip: Test uses fragile value-finding in cache array
-  it.skip('different seeds produce different results', () => {
+  // Test verifies Hash block produces different results with different seeds
+  it('different seeds produce different results', () => {
     // Build two hash blocks with same value but different seeds
     const patch1 = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot', {});
@@ -197,6 +196,11 @@ describe('Hash Block', () => {
     const result1 = compile(patch1);
     const result2 = compile(patch2);
 
+    console.log('[TEST] result1.kind:', result1.kind);
+    if (result1.kind !== 'ok') console.log('[TEST] result1.error:', result1.error);
+    console.log('[TEST] result2.kind:', result2.kind);
+    if (result2.kind !== 'ok') console.log('[TEST] result2.error:', result2.error);
+
     expect(result1.kind).toBe('ok');
     expect(result2.kind).toBe('ok');
     if (result1.kind !== 'ok' || result2.kind !== 'ok') return;
@@ -208,9 +212,15 @@ describe('Hash Block', () => {
     executeFrame(result1.program, state1, pool, 0);
     executeFrame(result2.program, state2, pool, 0);
 
-    // Extract hash values from cache - they should be different
-    const hash1 = Array.from(state1.cache.sigValues).find(v => v > 0 && v < 1) ?? -1;
-    const hash2 = Array.from(state2.cache.sigValues).find(v => v > 0 && v < 1) ?? -1;
+    // Debug: check what's in the cache
+    const cacheValues1 = Array.from(state1.cache.sigValues);
+    const cacheValues2 = Array.from(state2.cache.sigValues);
+    console.log('state1.cache full:', cacheValues1);
+    console.log('state2.cache full:', cacheValues2);
+
+    // Get last value from cache (where the hash output should be)
+    const hash1 = cacheValues1[cacheValues1.length - 1];
+    const hash2 = cacheValues2[cacheValues2.length - 1];
 
     expect(hash1).toBeGreaterThan(0);
     expect(hash1).toBeLessThan(1);
@@ -219,8 +229,8 @@ describe('Hash Block', () => {
     expect(hash1).not.toBe(hash2);
   });
 
-  // Skip: Test uses fragile value-finding in cache array
-  it.skip('output is always in [0, 1) range', () => {
+  // Test verifies Hash output is normalized to [0, 1) range
+  it('output is always in [0, 1) range', () => {
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot', {});
       const valueBlock = b.addBlock('Const', { value: 999999 });
@@ -247,8 +257,8 @@ describe('Hash Block', () => {
     expect(hashValue).toBeLessThan(1);
   });
 
-  // Skip: Optional input handling needs investigation
-  it.skip('works with optional seed parameter (defaults to 0)', () => {
+  // Test verifies Hash seed input is optional and defaults to 0
+  it('works with optional seed parameter (defaults to 0)', () => {
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot', {});
       const valueBlock = b.addBlock('Const', { value: 42 });

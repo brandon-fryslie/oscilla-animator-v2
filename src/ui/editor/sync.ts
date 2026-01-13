@@ -8,7 +8,7 @@
  * 1. PatchStore → Rete: Load initial state, react to external changes
  * 2. Rete → PatchStore: User edits in editor update PatchStore
  *
- * Uses isSyncing guard to prevent infinite loops.
+ * Uses isSyncing guard to prevent infinite loops and history commits.
  */
 
 import { reaction } from 'mobx';
@@ -124,7 +124,7 @@ export async function addBlockToEditor(
     def
   );
 
-  // Add node to editor
+  // Add node to editor first
   await editor.addNode(node);
 
   // Calculate viewport center
@@ -142,6 +142,13 @@ export async function addBlockToEditor(
 
   // Position the node at viewport center
   await area.translate(node.id, { x: editorX, y: editorY });
+
+  // Zoom to fit if this is the only node
+  const nodes = editor.getNodes();
+  if (nodes.length === 1) {
+    // Only one node (this one), zoom to fit
+    await AreaExtensions.zoomAt(area, nodes);
+  }
 
   return node;
 }
@@ -242,4 +249,42 @@ export function setupPatchToEditorReaction(
       }
     }
   );
+}
+
+/**
+ * History plugin integration for undo/redo
+ */
+let history: any = null; // Will be set when plugin is initialized
+
+export function setHistoryPlugin(historyPlugin: any): void {
+  history = historyPlugin;
+}
+
+export function pushHistoryState(): void {
+  if (history && !isSyncing) {
+    history.push();
+  }
+}
+
+export function undo(): void {
+  if (history) {
+    history.undo();
+  }
+}
+
+export function redo(): void {
+  if (history) {
+    history.redo();
+  }
+}
+
+export function isHistoryAvailable(): { undo: boolean; redo: boolean } {
+  if (!history) {
+    return { undo: false, redo: false };
+  }
+
+  return {
+    undo: history.canUndo(),
+    redo: history.canRedo()
+  };
 }
