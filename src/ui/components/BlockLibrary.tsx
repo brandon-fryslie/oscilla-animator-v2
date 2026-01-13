@@ -11,9 +11,12 @@ import { rootStore } from '../../stores';
 import {
   getBlockCategories,
   getBlockTypesByCategory,
+  getBlockDefinition,
   type BlockDef,
 } from '../../blocks/registry';
 import type { SignalType } from '../../core/canonical-types';
+import { useEditor } from '../editor/EditorContext';
+import { createNodeFromBlockDef } from '../editor/nodes';
 import './BlockLibrary.css';
 
 /**
@@ -89,6 +92,9 @@ export const BlockLibrary: React.FC = observer(() => {
   // Track which category currently has focus (for keyboard navigation)
   const [focusedCategory, setFocusedCategory] = useState<BlockCategory | null>(null);
 
+  // Get editor handle from context
+  const { editorHandle } = useEditor();
+
   // Callbacks
   const toggleCategory = useCallback((category: BlockCategory) => {
     setCollapsedCategories((prev) => {
@@ -108,10 +114,34 @@ export const BlockLibrary: React.FC = observer(() => {
     rootStore.selection.setPreviewType(type.type);
   }, []);
 
-  const handleBlockDoubleClick = useCallback((type: BlockTypeInfo) => {
-    // TODO: Add block to canvas
-    console.log('Add block:', type.type);
-  }, []);
+  const handleBlockDoubleClick = useCallback(
+    (type: BlockTypeInfo) => {
+      // Add block to PatchStore
+      const blockId = rootStore.patch.addBlock(type.type, {}, {
+        displayName: type.label,
+      });
+
+      // If editor is ready, add node to Rete editor
+      if (editorHandle) {
+        const { editor, area } = editorHandle;
+        const def = getBlockDefinition(type.type);
+        if (def) {
+          const node = createNodeFromBlockDef(def, blockId);
+
+          // Add node to editor (async)
+          editor.addNode(node).then(() => {
+            // Position at center of viewport
+            const { x, y } = area.area.pointer;
+            area.translate(node.id, { x: x || 300, y: y || 300 });
+
+            // Select the new block
+            rootStore.selection.selectBlock(blockId);
+          });
+        }
+      }
+    },
+    [editorHandle]
+  );
 
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(e.target.value);

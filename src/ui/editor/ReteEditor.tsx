@@ -17,6 +17,7 @@ import {
 } from 'rete-connection-plugin';
 import { rootStore } from '../../stores';
 import { syncPatchToEditor, setupEditorToPatchSync, setupPatchToEditorReaction } from './sync';
+import { useEditor } from './EditorContext';
 
 // Type schemes for Rete editor
 type Schemes = GetSchemes<
@@ -38,6 +39,7 @@ interface ReteEditorProps {
 export const ReteEditor: React.FC<ReteEditorProps> = ({ onEditorReady }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<ReteEditorHandle | null>(null);
+  const { setEditorHandle } = useEditor();
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -70,6 +72,7 @@ export const ReteEditor: React.FC<ReteEditorProps> = ({ onEditorReady }) => {
     // Store handle
     const handle: ReteEditorHandle = { editor, area, connection };
     editorRef.current = handle;
+    setEditorHandle(handle); // Register with context for BlockLibrary access
 
     // Setup bidirectional sync
     setupEditorToPatchSync(handle, rootStore.patch);
@@ -83,10 +86,11 @@ export const ReteEditor: React.FC<ReteEditorProps> = ({ onEditorReady }) => {
 
     // Cleanup on unmount
     return () => {
+      setEditorHandle(null);
       disposeReaction();
       area.destroy();
     };
-  }, [onEditorReady]);
+  }, [onEditorReady, setEditorHandle]);
 
   return (
     <div

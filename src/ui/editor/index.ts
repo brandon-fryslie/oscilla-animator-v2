@@ -6,3 +6,4 @@
 
 export { ReteEditor } from './ReteEditor';
 export type { ReteEditorHandle } from './ReteEditor';
+export { EditorProvider, useEditor } from './EditorContext';
