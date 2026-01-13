@@ -55,9 +55,9 @@ describe('Runtime Integration', () => {
   it('evaluates constant signals', () => {
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot', {});
-      const a = b.addBlock('ConstFloat', { value: 5 });
-      const b2 = b.addBlock('ConstFloat', { value: 3 });
-      const add = b.addBlock('AddSignal', {});
+      const a = b.addBlock('Const', { value: 5 });
+      const b2 = b.addBlock('Const', { value: 3 });
+      const add = b.addBlock('Add', {});
       b.wire(a, 'out', add, 'a');
       b.wire(b2, 'out', add, 'b');
     });

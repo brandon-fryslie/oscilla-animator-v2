@@ -22,10 +22,10 @@ describe('Steel Thread - Animated Particles', () => {
       const time = b.addBlock('InfiniteTimeRoot', { periodMs: 5000 });
       const domain = b.addBlock('DomainN', { n: 100, seed: 42 });
       const id01 = b.addBlock('FieldFromDomainId', {});
-      const centerX = b.addBlock('ConstFloat', { value: 0.5 });
-      const centerY = b.addBlock('ConstFloat', { value: 0.5 });
-      const radius = b.addBlock('ConstFloat', { value: 0.35 });
-      const spin = b.addBlock('ConstFloat', { value: 0.5 });
+      const centerX = b.addBlock('Const', { value: 0.5 });
+      const centerY = b.addBlock('Const', { value: 0.5 });
+      const radius = b.addBlock('Const', { value: 0.35 });
+      const spin = b.addBlock('Const', { value: 0.5 });
 
       // Position from composable primitives
       const goldenAngle = b.addBlock('FieldGoldenAngle', { turns: 50 });
@@ -34,14 +34,14 @@ describe('Steel Thread - Animated Particles', () => {
       const effectiveRadius = b.addBlock('FieldRadiusSqrt', {});
       const pos = b.addBlock('FieldPolarToCartesian', {});
 
-      const sat = b.addBlock('ConstFloat', { value: 1.0 });
-      const val = b.addBlock('ConstFloat', { value: 1.0 });
+      const sat = b.addBlock('Const', { value: 1.0 });
+      const val = b.addBlock('Const', { value: 1.0 });
 
       // Color from composable primitives
       const hue = b.addBlock('FieldHueFromPhase', {});
       const color = b.addBlock('HsvToRgb', {});
 
-      const size = b.addBlock('ConstFloat', { value: 3 });
+      const size = b.addBlock('Const', { value: 3 });
       const render = b.addBlock('RenderInstances2D', {});
 
       // Wire domain to blocks that need it

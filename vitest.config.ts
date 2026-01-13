@@ -5,6 +5,7 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./src/ui/components/__tests__/setup.ts'],
+    exclude: ['**/node_modules/**', '**/dist/**', 'salvage/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],

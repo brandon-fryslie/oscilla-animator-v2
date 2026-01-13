@@ -13,7 +13,7 @@ describe('compile', () => {
   describe('TimeRoot validation', () => {
     it('fails if no TimeRoot block', () => {
       const patch = buildPatch((b) => {
-        b.addBlock('ConstFloat', { value: 42 });
+        b.addBlock('Const', { value: 42 });
       });
 
       const result = compile(patch);
@@ -55,15 +55,19 @@ describe('compile', () => {
 
   describe('signal compilation', () => {
     it('compiles constant signals', () => {
+      // Const block must be wired to something so its type can be inferred
       const patch = buildPatch((b) => {
         b.addBlock('InfiniteTimeRoot', {});
-        b.addBlock('ConstFloat', { value: 42 });
+        const c = b.addBlock('Const', { value: 42 });
+        const add = b.addBlock('Add', {});
+        b.wire(c, 'out', add, 'a');
+        b.wire(c, 'out', add, 'b');
       });
 
       const result = compile(patch);
 
       if (result.kind === 'error') {
-        console.error('COMPILE ERROR (ConstFloat):', JSON.stringify(result.errors, null, 2));
+        console.error('COMPILE ERROR (Const):', JSON.stringify(result.errors, null, 2));
       }
 
       expect(result.kind).toBe('ok');
