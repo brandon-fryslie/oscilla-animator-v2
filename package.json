@@ -14,18 +14,23 @@
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
+    "@jspanel/mobx": "file:../brandon-fryslie_jsPanel4/packages/mobx",
+    "@jspanel/react": "file:../brandon-fryslie_jsPanel4/packages/react",
     "@mui/material": "^7.3.7",
     "@mui/x-data-grid": "^8.24.0",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
+    "jspanel4": "file:../brandon-fryslie_jsPanel4/packages/core",
     "mermaid": "^11.4.1",
     "mobx": "^6.15.0",
     "mobx-react-lite": "^4.1.1",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
-    "jspanel4": "file:../brandon-fryslie_jsPanel4/packages/core",
-    "@jspanel/react": "file:../brandon-fryslie_jsPanel4/packages/react",
-    "@jspanel/mobx": "file:../brandon-fryslie_jsPanel4/packages/mobx"
+    "rete": "^2.0.6",
+    "rete-area-plugin": "^2.1.5",
+    "rete-connection-plugin": "^2.0.5",
+    "rete-context-menu-plugin": "^2.0.6",
+    "rete-react-plugin": "^2.1.0"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",

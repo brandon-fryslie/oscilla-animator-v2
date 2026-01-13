@@ -22,6 +22,7 @@ import { BlockInspector } from '../BlockInspector';
 import { TableView } from '../TableView';
 import { ConnectionMatrix } from '../ConnectionMatrix';
 import { DomainsPanel } from '../DomainsPanel';
+import { ReteEditor } from '../../editor';
 
 interface AppProps {
   onCanvasReady?: (canvas: HTMLCanvasElement) => void;
@@ -69,6 +70,11 @@ export const App: React.FC<AppProps> = ({ onCanvasReady }) => {
       id: 'matrix',
       label: 'Matrix',
       component: ConnectionMatrix,
+    },
+    {
+      id: 'editor',
+      label: 'Editor',
+      component: ReteEditor,
     },
     {
       id: 'canvas',
@@ -142,7 +148,7 @@ export const App: React.FC<AppProps> = ({ onCanvasReady }) => {
             overflow: 'hidden',
           }}
         >
-          <Tabs tabs={centerTabs} initialTab="canvas" />
+          <Tabs tabs={centerTabs} initialTab="editor" />
         </div>
 
         {/* Right sidebar - Tabbed content */}
