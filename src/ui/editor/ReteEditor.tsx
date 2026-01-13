@@ -15,16 +15,18 @@ import {
   ConnectionPlugin,
   Presets as ConnectionPresets,
 } from 'rete-connection-plugin';
+import { ContextMenuPlugin, ContextMenuExtra } from 'rete-context-menu-plugin';
 import { rootStore } from '../../stores';
 import { syncPatchToEditor, setupEditorToPatchSync, setupPatchToEditorReaction } from './sync';
 import { useEditor } from './EditorContext';
+import { OscillaNode } from './nodes';
 
 // Type schemes for Rete editor
 type Schemes = GetSchemes<
   ClassicPreset.Node,
   ClassicPreset.Connection<ClassicPreset.Node, ClassicPreset.Node>
 >;
-type AreaExtra = ReactArea2D<Schemes>;
+type AreaExtra = ReactArea2D<Schemes> | ContextMenuExtra;
 
 export interface ReteEditorHandle {
   editor: NodeEditor<Schemes>;
@@ -51,11 +53,42 @@ export const ReteEditor: React.FC<ReteEditorProps> = ({ onEditorReady }) => {
     const area = new AreaPlugin<Schemes, AreaExtra>(container);
     const connection = new ConnectionPlugin<Schemes, AreaExtra>();
     const reactPlugin = new ReactPlugin<Schemes, AreaExtra>({ createRoot });
+    const contextMenu = new ContextMenuPlugin<Schemes>({
+      items(context, plugin) {
+        // Background context menu (right-click on empty space)
+        if (context === 'root') {
+          return {
+            searchBar: false,
+            list: []
+          };
+        }
+
+        // Node context menu (right-click on node)
+        if (context && typeof context === 'object' && 'label' in context) {
+          const node = context as OscillaNode;
+          return {
+            searchBar: false,
+            list: [
+              {
+                label: 'Delete',
+                key: 'delete',
+                handler: () => {
+                  editor.removeNode(node.id);
+                }
+              }
+            ]
+          };
+        }
+
+        return { searchBar: false, list: [] };
+      }
+    });
 
     // Register plugins
     editor.use(area);
     area.use(connection);
     area.use(reactPlugin);
+    area.use(contextMenu);
 
     // Setup connection and rendering presets
     connection.addPreset(ConnectionPresets.classic.setup());

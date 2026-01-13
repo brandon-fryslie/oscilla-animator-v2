@@ -16,7 +16,7 @@ import {
 } from '../../blocks/registry';
 import type { SignalType } from '../../core/canonical-types';
 import { useEditor } from '../editor/EditorContext';
-import { createNodeFromBlockDef } from '../editor/nodes';
+import { addBlockToEditor } from '../editor/sync';
 import './BlockLibrary.css';
 
 /**
@@ -123,21 +123,12 @@ export const BlockLibrary: React.FC = observer(() => {
 
       // If editor is ready, add node to Rete editor
       if (editorHandle) {
-        const { editor, area } = editorHandle;
-        const def = getBlockDefinition(type.type);
-        if (def) {
-          const node = createNodeFromBlockDef(def, blockId);
-
-          // Add node to editor (async)
-          editor.addNode(node).then(() => {
-            // Position at center of viewport
-            const { x, y } = area.area.pointer;
-            area.translate(node.id, { x: x || 300, y: y || 300 });
-
+        addBlockToEditor(editorHandle, blockId, type.type).then((node) => {
+          if (node) {
             // Select the new block
             rootStore.selection.selectBlock(blockId);
-          });
-        }
+          }
+        });
       }
     },
     [editorHandle]

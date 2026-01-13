@@ -103,6 +103,50 @@ export async function syncPatchToEditor(handle: ReteEditorHandle, patch: Patch):
 }
 
 /**
+ * Add a block to the editor at the center of the viewport.
+ * Returns the node that was added.
+ */
+export async function addBlockToEditor(
+  handle: ReteEditorHandle,
+  blockId: BlockId,
+  blockType: string
+): Promise<OscillaNode | null> {
+  const { editor, area } = handle;
+
+  const def = getBlockDefinition(blockType);
+  if (!def) {
+    console.warn(`Block definition not found: ${blockType}`);
+    return null;
+  }
+
+  const node = createNodeFromBlock(
+    { id: blockId, type: blockType, displayName: def.label, params: {} } as any,
+    def
+  );
+
+  // Add node to editor
+  await editor.addNode(node);
+
+  // Calculate viewport center
+  // area.container is the DOM element, get its dimensions
+  const container = area.container;
+  const rect = container.getBoundingClientRect();
+  const centerX = rect.width / 2;
+  const centerY = rect.height / 2;
+
+  // Transform to editor coordinates (account for pan/zoom)
+  // area.area.transform gives us the current transform
+  const transform = area.area.transform;
+  const editorX = (centerX - transform.x) / transform.k;
+  const editorY = (centerY - transform.y) / transform.k;
+
+  // Position the node at viewport center
+  await area.translate(node.id, { x: editorX, y: editorY });
+
+  return node;
+}
+
+/**
  * Setup Rete → PatchStore sync (user edits in editor).
  * Listens to Rete events and updates PatchStore.
  */

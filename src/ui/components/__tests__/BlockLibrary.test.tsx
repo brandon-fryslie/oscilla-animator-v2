@@ -14,6 +14,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { BlockLibrary } from '../BlockLibrary';
+import { EditorProvider } from '../../editor/EditorContext';
 import { rootStore } from '../../../stores';
 import { getBlockCategories, getBlockTypesByCategory } from '../../../blocks/registry';
 
@@ -39,6 +40,11 @@ Object.defineProperty(window, 'localStorage', {
   value: localStorageMock,
 });
 
+// Wrapper component to provide required context
+function TestWrapper({ children }: { children: React.ReactNode }) {
+  return <EditorProvider>{children}</EditorProvider>;
+}
+
 describe('BlockLibrary', () => {
   beforeEach(() => {
     localStorageMock.clear();
@@ -52,7 +58,7 @@ describe('BlockLibrary', () => {
 
   describe('Category Organization', () => {
     it('should display blocks grouped by BlockCategory enum', () => {
-      render(<BlockLibrary />);
+      render(<BlockLibrary />, { wrapper: TestWrapper });
 
       const categories = getBlockCategories();
       categories.forEach((category: string) => {
@@ -61,7 +67,7 @@ describe('BlockLibrary', () => {
     });
 
     it('should show correct count of blocks per category', () => {
-      render(<BlockLibrary />);
+      render(<BlockLibrary />, { wrapper: TestWrapper });
 
       const categories = getBlockCategories();
       categories.forEach((category: string) => {
@@ -72,7 +78,7 @@ describe('BlockLibrary', () => {
     });
 
     it('should allow toggling category collapse', () => {
-      render(<BlockLibrary />);
+      render(<BlockLibrary />, { wrapper: TestWrapper });
 
       const categories = getBlockCategories();
       if (categories.length === 0) return;
@@ -92,7 +98,7 @@ describe('BlockLibrary', () => {
 
   describe('Search Functionality', () => {
     it('should filter blocks based on type name', async () => {
-      render(<BlockLibrary />);
+      render(<BlockLibrary />, { wrapper: TestWrapper });
 
       const searchInput = screen.getByPlaceholderText('Search blocks...');
       fireEvent.change(searchInput, { target: { value: 'sine' } });
@@ -107,7 +113,7 @@ describe('BlockLibrary', () => {
     });
 
     it('should be case-insensitive', async () => {
-      render(<BlockLibrary />);
+      render(<BlockLibrary />, { wrapper: TestWrapper });
 
       const searchInput = screen.getByPlaceholderText('Search blocks...');
       fireEvent.change(searchInput, { target: { value: 'SINE' } });
@@ -121,7 +127,7 @@ describe('BlockLibrary', () => {
     });
 
     it('should debounce search input', async () => {
-      render(<BlockLibrary />);
+      render(<BlockLibrary />, { wrapper: TestWrapper });
 
       const searchInput = screen.getByPlaceholderText('Search blocks...');
 
@@ -138,7 +144,7 @@ describe('BlockLibrary', () => {
     });
 
     it('should clear search on Escape key', async () => {
-      render(<BlockLibrary />);
+      render(<BlockLibrary />, { wrapper: TestWrapper });
 
       const searchInput = screen.getByPlaceholderText('Search blocks...') as HTMLInputElement;
       fireEvent.change(searchInput, { target: { value: 'test' } });
@@ -152,7 +158,7 @@ describe('BlockLibrary', () => {
     });
 
     it('should clear search on clear button click', () => {
-      render(<BlockLibrary />);
+      render(<BlockLibrary />, { wrapper: TestWrapper });
 
       const searchInput = screen.getByPlaceholderText('Search blocks...') as HTMLInputElement;
       fireEvent.change(searchInput, { target: { value: 'test' } });
@@ -166,7 +172,7 @@ describe('BlockLibrary', () => {
 
   describe('Block Interactions', () => {
     it('should preview block on single click', async () => {
-      render(<BlockLibrary />);
+      render(<BlockLibrary />, { wrapper: TestWrapper });
 
       const categories = getBlockCategories();
       if (categories.length === 0) return;
@@ -183,7 +189,7 @@ describe('BlockLibrary', () => {
     });
 
     it('should add block on double click', async () => {
-      render(<BlockLibrary />);
+      render(<BlockLibrary />, { wrapper: TestWrapper });
 
       const categories = getBlockCategories();
       if (categories.length === 0) return;
@@ -194,18 +200,19 @@ describe('BlockLibrary', () => {
       const firstType = types[0];
       const blockElement = screen.getByText(firstType.label);
 
-      const consoleSpy = vi.spyOn(console, 'log');
+      const initialBlockCount = rootStore.patch.blocks.size;
       fireEvent.doubleClick(blockElement);
 
       await waitFor(() => {
-        expect(consoleSpy).toHaveBeenCalledWith('Add block:', firstType.type);
+        // Block should be added to PatchStore
+        expect(rootStore.patch.blocks.size).toBe(initialBlockCount + 1);
       });
     });
   });
 
   describe('Persistence', () => {
     it('should persist collapsed categories to localStorage', () => {
-      render(<BlockLibrary />);
+      render(<BlockLibrary />, { wrapper: TestWrapper });
 
       const categories = getBlockCategories();
       if (categories.length === 0) return;
@@ -231,7 +238,7 @@ describe('BlockLibrary', () => {
         JSON.stringify([firstCategory])
       );
 
-      render(<BlockLibrary />);
+      render(<BlockLibrary />, { wrapper: TestWrapper });
 
       const categoryHeader = screen.getByText(firstCategory);
       expect(categoryHeader).toBeInTheDocument();
