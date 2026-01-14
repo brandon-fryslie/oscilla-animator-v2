@@ -15,8 +15,7 @@ import {
   type BlockDef,
 } from '../../blocks/registry';
 import type { SignalType } from '../../core/canonical-types';
-import { useEditor } from '../editor/EditorContext';
-import { addBlockToEditor } from '../editor/sync';
+import { useEditor } from '../editorCommon';
 import './BlockLibrary.css';
 
 /**
@@ -121,13 +120,11 @@ export const BlockLibrary: React.FC = observer(() => {
         displayName: type.label,
       });
 
-      // If editor is ready, add node to Rete editor
+      // If editor is ready, add node to editor using generic interface
       if (editorHandle) {
-        addBlockToEditor(editorHandle, blockId, type.type).then((node) => {
-          if (node) {
-            // Select the new block
-            rootStore.selection.selectBlock(blockId);
-          }
+        editorHandle.addBlock(blockId, type.type).then(() => {
+          // Select the new block
+          rootStore.selection.selectBlock(blockId);
         });
       }
     },

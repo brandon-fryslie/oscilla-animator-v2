@@ -14,7 +14,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { BlockLibrary } from '../BlockLibrary';
-import { EditorProvider } from '../../editor/EditorContext';
+import { EditorProvider } from '../../editorCommon';
 import { rootStore } from '../../../stores';
 import { getBlockCategories, getBlockTypesByCategory } from '../../../blocks/registry';
 

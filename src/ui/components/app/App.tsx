@@ -22,7 +22,8 @@ import { BlockInspector } from '../BlockInspector';
 import { TableView } from '../TableView';
 import { ConnectionMatrix } from '../ConnectionMatrix';
 import { DomainsPanel } from '../DomainsPanel';
-import { ReteEditor, EditorProvider } from '../../editor';
+import { ReteEditor } from '../../reteEditor';
+import { EditorProvider } from '../../editorCommon';
 
 interface AppProps {
   onCanvasReady?: (canvas: HTMLCanvasElement) => void;
