@@ -1,0 +1,62 @@
+/**
+ * ReactFlowEditor Styles
+ */
+
+.react-flow {
+  background-color: #1a1a2e;
+}
+
+.react-flow__node {
+  background: #2a2a4e;
+  border: 2px solid #4a4a6e;
+  border-radius: 8px;
+  padding: 10px;
+  color: #ffffff;
+  font-size: 14px;
+}
+
+.react-flow__node.selected {
+  border-color: #5a9fd4;
+  box-shadow: 0 0 0 2px rgba(90, 159, 212, 0.3);
+}
+
+.react-flow__edge-path {
+  stroke: #5a9fd4;
+  stroke-width: 2;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: #7db9e8;
+  stroke-width: 3;
+}
+
+.react-flow__handle {
+  background: #5a9fd4;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #ffffff;
+}
+
+.react-flow__handle-left {
+  left: -5px;
+}
+
+.react-flow__handle-right {
+  right: -5px;
+}
+
+.react-flow__controls {
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+.react-flow__controls-button {
+  background: #333;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.react-flow__controls-button:hover {
+  background: #444;
+}

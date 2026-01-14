@@ -1,0 +1,183 @@
+/**
+ * ReactFlowEditor Component
+ *
+ * Alternative node editor using ReactFlow library.
+ * Provides pan/zoom, node creation, connection management.
+ * Syncs bidirectionally with PatchStore.
+ */
+
+import React, { useEffect, useCallback } from 'react';
+import ReactFlow, {
+  Background,
+  Controls,
+  MiniMap,
+  useNodesState,
+  useEdgesState,
+  addEdge,
+  type Node,
+  type Edge,
+} from 'reactflow';
+import 'reactflow/dist/style.css';
+import { rootStore } from '../../stores';
+import type { BlockId } from '../../types';
+import type { EditorHandle } from '../editorCommon';
+import { useEditor } from '../editorCommon';
+import {
+  syncPatchToReactFlow,
+  setupPatchToReactFlowReaction,
+  createNodesChangeHandler,
+  createEdgesChangeHandler,
+  createConnectHandler,
+  addBlockToReactFlow,
+  type SyncHandle,
+} from './sync';
+import './ReactFlowEditor.css';
+
+export interface ReactFlowEditorHandle {
+  addBlock(blockId: BlockId, blockType: string): Promise<void>;
+  removeBlock(blockId: BlockId): Promise<void>;
+  zoomToFit(): Promise<void>;
+}
+
+interface ReactFlowEditorProps {
+  onEditorReady?: (handle: ReactFlowEditorHandle) => void;
+}
+
+/**
+ * Create EditorHandle adapter for ReactFlowEditorHandle.
+ * Implements generic EditorHandle interface.
+ */
+function createReactFlowEditorAdapter(
+  handle: ReactFlowEditorHandle
+): EditorHandle {
+  return {
+    type: 'reactflow' as const,
+
+    async addBlock(blockId: BlockId, blockType: string): Promise<void> {
+      await handle.addBlock(blockId, blockType);
+    },
+
+    async removeBlock(blockId: BlockId): Promise<void> {
+      await handle.removeBlock(blockId);
+    },
+
+    async zoomToFit(): Promise<void> {
+      await handle.zoomToFit();
+    },
+
+    getRawHandle(): unknown {
+      return handle;
+    },
+  };
+}
+
+export const ReactFlowEditor: React.FC<ReactFlowEditorProps> = ({
+  onEditorReady,
+}) => {
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const { setEditorHandle } = useEditor();
+
+  // Setup sync handle
+  const syncHandle: SyncHandle = {
+    patchStore: rootStore.patch,
+    setNodes,
+    setEdges,
+  };
+
+  // Create event handlers that sync to PatchStore
+  const handleNodesChange = useCallback(
+    createNodesChangeHandler(syncHandle),
+    [syncHandle.patchStore]
+  );
+
+  const handleEdgesChange = useCallback(
+    createEdgesChangeHandler(syncHandle),
+    [syncHandle.patchStore]
+  );
+
+  const handleConnect = useCallback(
+    createConnectHandler(syncHandle),
+    [syncHandle.patchStore]
+  );
+
+  // Setup bidirectional sync and editor handle
+  useEffect(() => {
+    // Initial sync from PatchStore
+    syncPatchToReactFlow(rootStore.patch.patch, setNodes, setEdges);
+
+    // Setup MobX reaction for external changes
+    const disposeReaction = setupPatchToReactFlowReaction(syncHandle);
+
+    // Create handle for EditorContext
+    const handle: ReactFlowEditorHandle = {
+      async addBlock(blockId: BlockId, blockType: string): Promise<void> {
+        addBlockToReactFlow(blockId, blockType, setNodes);
+      },
+
+      async removeBlock(blockId: BlockId): Promise<void> {
+        setNodes((nodes) => nodes.filter((node) => node.id !== blockId));
+      },
+
+      async zoomToFit(): Promise<void> {
+        // ReactFlow handles this via Controls component
+        console.log('Zoom to fit requested');
+      },
+    };
+
+    // Register adapter with context
+    const adapter = createReactFlowEditorAdapter(handle);
+    setEditorHandle(adapter);
+
+    // Notify parent
+    onEditorReady?.(handle);
+
+    // Cleanup
+    return () => {
+      setEditorHandle(null);
+      disposeReaction();
+    };
+  }, [onEditorReady, setEditorHandle, setNodes, setEdges]);
+
+  // Handle delete key
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent) => {
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        // Get selected nodes
+        const selectedNodes = nodes.filter((node) => node.selected);
+        for (const node of selectedNodes) {
+          rootStore.patch.removeBlock(node.id as BlockId);
+        }
+
+        // Get selected edges
+        const selectedEdges = edges.filter((edge) => edge.selected);
+        for (const edge of selectedEdges) {
+          rootStore.patch.removeEdge(edge.id);
+        }
+      }
+    },
+    [nodes, edges]
+  );
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
+
+  return (
+    <div style={{ width: '100%', height: '100%' }}>
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={handleNodesChange}
+        onEdgesChange={handleEdgesChange}
+        onConnect={handleConnect}
+        fitView
+        attributionPosition="bottom-left"
+      >
+        <Background />
+        <Controls />
+      </ReactFlow>
+    </div>
+  );
+};
