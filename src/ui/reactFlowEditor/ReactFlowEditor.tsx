@@ -6,11 +6,10 @@
  * Syncs bidirectionally with PatchStore.
  */
 
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useMemo } from 'react';
 import ReactFlow, {
   Background,
   Controls,
-  MiniMap,
   useNodesState,
   useEdgesState,
   addEdge,
@@ -31,6 +30,7 @@ import {
   addBlockToReactFlow,
   type SyncHandle,
 } from './sync';
+import { OscillaNode } from './OscillaNode';
 import './ReactFlowEditor.css';
 
 export interface ReactFlowEditorHandle {
@@ -77,6 +77,9 @@ export const ReactFlowEditor: React.FC<ReactFlowEditorProps> = ({
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const { setEditorHandle } = useEditor();
+
+  // Register custom node types (memoized to prevent recreation)
+  const nodeTypes = useMemo(() => ({ oscilla: OscillaNode }), []);
 
   // Setup sync handle
   const syncHandle: SyncHandle = {
@@ -169,6 +172,7 @@ export const ReactFlowEditor: React.FC<ReactFlowEditorProps> = ({
       <ReactFlow
         nodes={nodes}
         edges={edges}
+        nodeTypes={nodeTypes}
         onNodesChange={handleNodesChange}
         onEdgesChange={handleEdgesChange}
         onConnect={handleConnect}

@@ -32,7 +32,7 @@ export type OscillaNode = Node<OscillaNodeData>;
 export function createNodeFromBlock(block: Block, blockDef: BlockDef): OscillaNode {
   return {
     id: block.id,
-    type: 'default',
+    type: 'oscilla',
     position: { x: 0, y: 0 }, // Will be set by layout
     data: {
       blockId: block.id,
