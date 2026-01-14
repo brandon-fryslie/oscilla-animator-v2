@@ -29,6 +29,7 @@ import {
 } from './sync';
 import { useEditor } from './EditorContext';
 import { OscillaNode } from './nodes';
+import './ReteEditor.css';
 
 // Type schemes for Rete editor
 type Schemes = GetSchemes<
@@ -226,9 +227,18 @@ export const ReteEditor: React.FC<ReteEditorProps> = ({ onEditorReady }) => {
         return;
       }
 
-      // Perform layout
+      // Perform layout with elkjs options
+      // Configure direction (left-to-right) and spacing (100px horizontal, 80px vertical)
       if (arrange && typeof arrange.layout === 'function') {
-        await arrange.layout();
+        await arrange.layout({
+          options: {
+            'elk.algorithm': 'layered',
+            'elk.direction': 'RIGHT', // Left-to-right flow
+            'elk.spacing.nodeNode': '100', // Horizontal spacing between nodes
+            'elk.layered.spacing.nodeNodeBetweenLayers': '80', // Vertical spacing between layers
+            'elk.padding': '[top=20,left=20,bottom=20,right=20]'
+          }
+        });
       }
 
       // Zoom to fit after layout
@@ -236,6 +246,8 @@ export const ReteEditor: React.FC<ReteEditorProps> = ({ onEditorReady }) => {
 
       // Commit to history
       pushHistoryState();
+    } catch (error) {
+      console.error('Auto-arrange failed:', error);
     } finally {
       setIsArranging(false);
     }
