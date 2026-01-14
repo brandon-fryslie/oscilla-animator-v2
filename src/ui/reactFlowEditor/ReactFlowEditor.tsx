@@ -20,7 +20,6 @@ import 'reactflow/dist/style.css';
 import { rootStore } from '../../stores';
 import type { BlockId } from '../../types';
 import type { EditorHandle } from '../editorCommon';
-import { useEditor } from '../editorCommon';
 import {
   syncPatchToReactFlow,
   setupPatchToReactFlowReaction,
@@ -40,7 +39,7 @@ export interface ReactFlowEditorHandle {
 }
 
 interface ReactFlowEditorProps {
-  onEditorReady?: (handle: ReactFlowEditorHandle) => void;
+  onEditorReady?: (handle: EditorHandle) => void;
 }
 
 /**
@@ -76,7 +75,6 @@ export const ReactFlowEditor: React.FC<ReactFlowEditorProps> = ({
 }) => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const { setEditorHandle } = useEditor();
 
   // Register custom node types (memoized to prevent recreation)
   const nodeTypes = useMemo(() => ({ oscilla: OscillaNode }), []);
@@ -128,19 +126,15 @@ export const ReactFlowEditor: React.FC<ReactFlowEditorProps> = ({
       },
     };
 
-    // Register adapter with context
+    // Create adapter and notify parent (App.tsx will manage EditorContext)
     const adapter = createReactFlowEditorAdapter(handle);
-    setEditorHandle(adapter);
-
-    // Notify parent
-    onEditorReady?.(handle);
+    onEditorReady?.(adapter);
 
     // Cleanup
     return () => {
-      setEditorHandle(null);
       disposeReaction();
     };
-  }, [onEditorReady, setEditorHandle, setNodes, setEdges]);
+  }, [onEditorReady, setNodes, setEdges]);
 
   // Handle delete key
   const handleKeyDown = useCallback(

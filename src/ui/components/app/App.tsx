@@ -23,7 +23,8 @@ import { TableView } from '../TableView';
 import { ConnectionMatrix } from '../ConnectionMatrix';
 import { DomainsPanel } from '../DomainsPanel';
 import { ReteEditor } from '../../reteEditor';
-import { EditorProvider } from '../../editorCommon';
+import { ReactFlowEditor } from '../../reactFlowEditor';
+import { EditorProvider, type EditorHandle, useEditor } from '../../editorCommon';
 
 interface AppProps {
   onCanvasReady?: (canvas: HTMLCanvasElement) => void;
@@ -31,6 +32,12 @@ interface AppProps {
 
 export const App: React.FC<AppProps> = ({ onCanvasReady }) => {
   const [stats, setStats] = useState('FPS: --');
+  // Store handles for both editors
+  const reteHandleRef = useRef<EditorHandle | null>(null);
+  const reactFlowHandleRef = useRef<EditorHandle | null>(null);
+  const editorContextRef = useRef<{ setEditorHandle: (handle: EditorHandle | null) => void } | null>(null);
+  const [activeEditorTab, setActiveEditorTab] = useState<'rete-editor' | 'flow-editor' | null>('rete-editor');
+
   // Initialize ref with prop value so it's available immediately on first render
   const canvasCallbackRef = useRef<((canvas: HTMLCanvasElement) => void) | undefined>(onCanvasReady);
 
@@ -52,6 +59,58 @@ export const App: React.FC<AppProps> = ({ onCanvasReady }) => {
     };
   }, []);
 
+  // Update EditorContext when active editor changes or handles are updated
+  useEffect(() => {
+    if (!editorContextRef.current) return;
+
+    if (activeEditorTab === 'rete-editor') {
+      editorContextRef.current.setEditorHandle(reteHandleRef.current);
+    } else if (activeEditorTab === 'flow-editor') {
+      editorContextRef.current.setEditorHandle(reactFlowHandleRef.current);
+    } else {
+      editorContextRef.current.setEditorHandle(null);
+    }
+  }, [activeEditorTab]);
+
+  // Create wrapped components that store editor handles
+  const ReteEditorWrapper = useMemo(() => {
+    return function ReteEditorWrapper() {
+      return (
+        <ReteEditor
+          onEditorReady={(handle) => {
+            // Store the Rete handle as EditorHandle
+            const adapter: EditorHandle = handle as unknown as EditorHandle;
+            reteHandleRef.current = adapter;
+
+            // If Rete is the active tab, update context immediately
+            if (activeEditorTab === 'rete-editor' && editorContextRef.current) {
+              editorContextRef.current.setEditorHandle(adapter);
+            }
+          }}
+        />
+      );
+    };
+  }, [activeEditorTab]);
+
+  const ReactFlowEditorWrapper = useMemo(() => {
+    return function ReactFlowEditorWrapper() {
+      return (
+        <ReactFlowEditor
+          onEditorReady={(handle) => {
+            // Store the ReactFlow handle as EditorHandle
+            const adapter: EditorHandle = handle as unknown as EditorHandle;
+            reactFlowHandleRef.current = adapter;
+
+            // If Flow is the active tab, update context immediately
+            if (activeEditorTab === 'flow-editor' && editorContextRef.current) {
+              editorContextRef.current.setEditorHandle(adapter);
+            }
+          }}
+        />
+      );
+    };
+  }, [activeEditorTab]);
+
   // Create a stable component wrapper for CanvasTab to avoid remounting
   // Since handleCanvasReady is stable (empty deps), this only creates once
   const CanvasTabWrapper = useMemo(() => {
@@ -59,6 +118,16 @@ export const App: React.FC<AppProps> = ({ onCanvasReady }) => {
       return <CanvasTab onCanvasReady={handleCanvasReady} />;
     };
   }, [handleCanvasReady]);
+
+  // Handle tab changes to update active editor
+  const handleCenterTabChange = useCallback((tabId: string) => {
+    // Update which editor is active
+    if (tabId === 'rete-editor' || tabId === 'flow-editor') {
+      setActiveEditorTab(tabId);
+    } else {
+      setActiveEditorTab(null);
+    }
+  }, []);
 
   // Center tabs configuration - memoized to prevent recreating on every render
   const centerTabs: TabConfig[] = useMemo(() => [
@@ -73,16 +142,21 @@ export const App: React.FC<AppProps> = ({ onCanvasReady }) => {
       component: ConnectionMatrix,
     },
     {
-      id: 'editor',
-      label: 'Editor',
-      component: ReteEditor,
+      id: 'rete-editor',
+      label: 'Rete',
+      component: ReteEditorWrapper,
+    },
+    {
+      id: 'flow-editor',
+      label: 'Flow',
+      component: ReactFlowEditorWrapper,
     },
     {
       id: 'canvas',
       label: 'Preview',
       component: CanvasTabWrapper,
     },
-  ], [CanvasTabWrapper]);
+  ], [CanvasTabWrapper, ReteEditorWrapper, ReactFlowEditorWrapper]);
 
   // Right tabs configuration
   const rightTabs: TabConfig[] = [
@@ -100,6 +174,9 @@ export const App: React.FC<AppProps> = ({ onCanvasReady }) => {
 
   return (
     <EditorProvider>
+      {/* Capture EditorContext methods */}
+      <EditorContextCapture contextRef={editorContextRef} />
+
       <div
         style={{
           display: 'flex',
@@ -150,7 +227,11 @@ export const App: React.FC<AppProps> = ({ onCanvasReady }) => {
               overflow: 'hidden',
             }}
           >
-            <Tabs tabs={centerTabs} initialTab="editor" />
+            <Tabs
+              tabs={centerTabs}
+              initialTab="rete-editor"
+              onTabChange={handleCenterTabChange}
+            />
           </div>
 
           {/* Right sidebar - Tabbed content */}
@@ -183,4 +264,20 @@ export const App: React.FC<AppProps> = ({ onCanvasReady }) => {
       </div>
     </EditorProvider>
   );
+};
+
+/**
+ * Helper component to capture EditorContext methods.
+ * This allows us to call setEditorHandle from outside the EditorProvider's children.
+ */
+const EditorContextCapture: React.FC<{
+  contextRef: React.MutableRefObject<{ setEditorHandle: (handle: EditorHandle | null) => void } | null>;
+}> = ({ contextRef }) => {
+  const { setEditorHandle } = useEditor();
+
+  useEffect(() => {
+    contextRef.current = { setEditorHandle };
+  }, [contextRef, setEditorHandle]);
+
+  return null;
 };

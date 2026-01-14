@@ -22,7 +22,6 @@ import { MinimapPlugin, MinimapExtra } from 'rete-minimap-plugin';
 import { rootStore } from '../../stores';
 import type { BlockId } from '../../types';
 import type { EditorHandle } from '../editorCommon';
-import { useEditor } from '../editorCommon';
 import {
   syncPatchToEditor,
   setupEditorToPatchSync,
@@ -49,7 +48,7 @@ export interface ReteEditorHandle {
 }
 
 interface ReteEditorProps {
-  onEditorReady?: (handle: ReteEditorHandle) => void;
+  onEditorReady?: (handle: EditorHandle) => void;
 }
 
 /**
@@ -114,7 +113,6 @@ function createReteEditorAdapter(handle: ReteEditorHandle): EditorHandle {
 export const ReteEditor: React.FC<ReteEditorProps> = ({ onEditorReady }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<ReteEditorHandle | null>(null);
-  const { setEditorHandle } = useEditor();
   const [isArranging, setIsArranging] = useState(false);
 
   useEffect(() => {
@@ -200,9 +198,9 @@ export const ReteEditor: React.FC<ReteEditorProps> = ({ onEditorReady }) => {
     const handle: ReteEditorHandle = { editor, area, connection, arrange };
     editorRef.current = handle;
 
-    // Create adapter and register with context for BlockLibrary access
+    // Create adapter and notify parent (App.tsx will manage EditorContext)
     const adapter = createReteEditorAdapter(handle);
-    setEditorHandle(adapter);
+    onEditorReady?.(adapter);
 
     // Setup bidirectional sync
     setupEditorToPatchSync(handle, rootStore.patch);
@@ -261,17 +259,13 @@ export const ReteEditor: React.FC<ReteEditorProps> = ({ onEditorReady }) => {
     // Initial sync from PatchStore
     syncPatchToEditor(handle, rootStore.patch.patch);
 
-    // Notify parent
-    onEditorReady?.(handle);
-
     // Cleanup on unmount
     return () => {
-      setEditorHandle(null);
       disposeReaction();
       window.removeEventListener('keydown', handleKeyDown);
       area.destroy();
     };
-  }, [onEditorReady, setEditorHandle]);
+  }, [onEditorReady]);
 
   // Auto-arrange handler
   const handleAutoArrange = async () => {
