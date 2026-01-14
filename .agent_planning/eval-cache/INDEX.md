@@ -2,7 +2,7 @@
 
 **Purpose:** Reusable evaluation findings to speed up future work evaluations.
 
-**Last Updated:** 2026-01-13 23:15:00
+**Last Updated:** 2026-01-13 23:03:41
 
 ---
 
@@ -16,6 +16,18 @@
 - Confidence: FRESH
 - Reusable: Structural verification approach, risk assessment
 - Next evaluation: Check if files changed before re-verifying
+
+**runtime-dual-editor-p0.md**
+- Scope: P0 implementation (legacy, superseded by runtime-dual-editor-reactflow-p0.md)
+- Status: Structurally complete
+- Confidence: STALE (use runtime-dual-editor-reactflow-p0.md instead)
+
+**runtime-dual-editor-p2.md**
+- Scope: P2 tab integration + sync
+- Status: Structurally complete, runtime verification required
+- Confidence: FRESH
+- Reusable: Tab switching patterns, sync infrastructure verification, EditorContext management
+- Next evaluation: Manual runtime testing needed, or check if sync.ts/App.tsx/Tabs.tsx changed
 
 ---
 
