@@ -5,7 +5,7 @@ This directory contains reusable evaluation findings to speed up future work-eva
 ## Cache Files
 
 ### Runtime Knowledge
-(No active cache files - previous cache invalidated due to ReteEditor modifications)
+(No active cache files - cache invalidated due to editor architecture refactor)
 
 ## Usage Guidelines
 
@@ -26,9 +26,14 @@ This directory contains reusable evaluation findings to speed up future work-eva
 
 ## Coverage
 
+### Editor Architecture
+- ⏳ EditorHandle abstraction (P0 complete, needs evaluation)
+- ⏳ ReteEditor adapter (P0 complete, needs evaluation)
+- ⏳ ReactFlow integration (pending P1)
+
 ### Rete.js Plugins
-- ⏳ AutoArrangePlugin (updated with elkjs config, needs re-evaluation)
-- ⏳ MinimapPlugin (updated with CSS styling, needs re-evaluation)
+- ⏳ AutoArrangePlugin (needs re-evaluation after P0 refactor)
+- ⏳ MinimapPlugin (needs re-evaluation after P0 refactor)
 - ⏳ Custom rendering (pending Phase 3)
 - ⏳ Parameter controls (pending Phase 4)
 
@@ -39,4 +44,4 @@ This directory contains reusable evaluation findings to speed up future work-eva
 ---
 
 **Last updated:** 2026-01-13
-**Last invalidation:** 2026-01-13 (ReteEditor.tsx modifications - gap fixes)
+**Last invalidation:** 2026-01-13 (P0: Editor architecture refactor - created editorCommon, renamed editor → reteEditor)
