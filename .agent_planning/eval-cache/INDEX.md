@@ -1,18 +1,42 @@
-# Eval Cache Index
+# Evaluation Cache Index
 
-## Runtime Findings
+This directory contains reusable evaluation findings to speed up future work-evaluator runs.
 
-### 2026-01-13
-- **runtime-sprint2a-validation.md** - Sprint 2A runtime validation findings
-  - Strong code implementation
-  - Missing E2E tests (all 30 tests skipped)
-  - Build passes, dev server running
-  - Key gap: no runtime validation of user-facing behavior
+## Cache Files
 
-## Previous Evaluations
+### Runtime Knowledge
+(No active cache files - previous cache invalidated due to ReteEditor modifications)
 
-### 2026-01-12
-- **runtime-rete-editor.md** - Initial Rete editor implementation findings
-  - Editor context setup
-  - Initial sync layer implementation
+## Usage Guidelines
 
+**When to use cache:**
+- Starting evaluation of Rete plugin integration
+- Debugging plugin-related issues
+- Planning new Rete features
+
+**When to update cache:**
+- Discovered new plugin behavior
+- Found additional edge cases
+- Identified new integration patterns
+
+**Confidence decay:**
+- FRESH: Just added (trust fully)
+- RECENT: <1 week old (light verification)
+- STALE: >1 week or after major plugin updates (verify before use)
+
+## Coverage
+
+### Rete.js Plugins
+- ⏳ AutoArrangePlugin (updated with elkjs config, needs re-evaluation)
+- ⏳ MinimapPlugin (updated with CSS styling, needs re-evaluation)
+- ⏳ Custom rendering (pending Phase 3)
+- ⏳ Parameter controls (pending Phase 4)
+
+### Testing Patterns
+- ⏳ E2E testing setup (pending Phase 5)
+- ⏳ Performance benchmarks (pending Phase 5)
+
+---
+
+**Last updated:** 2026-01-13
+**Last invalidation:** 2026-01-13 (ReteEditor.tsx modifications - gap fixes)

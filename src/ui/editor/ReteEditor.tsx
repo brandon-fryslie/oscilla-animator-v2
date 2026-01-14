@@ -18,7 +18,7 @@ import {
 import { ContextMenuPlugin, ContextMenuExtra } from 'rete-context-menu-plugin';
 import { HistoryPlugin } from 'rete-history-plugin';
 import { AutoArrangePlugin, Presets as ArrangePresets } from 'rete-auto-arrange-plugin';
-import { MinimapPlugin } from 'rete-minimap-plugin';
+import { MinimapPlugin, MinimapExtra } from 'rete-minimap-plugin';
 import { rootStore } from '../../stores';
 import {
   syncPatchToEditor,
@@ -36,7 +36,7 @@ type Schemes = GetSchemes<
   ClassicPreset.Node,
   ClassicPreset.Connection<ClassicPreset.Node, ClassicPreset.Node>
 >;
-type AreaExtra = ReactArea2D<Schemes> | ContextMenuExtra;
+type AreaExtra = ReactArea2D<Schemes> | ContextMenuExtra | MinimapExtra;
 
 export interface ReteEditorHandle {
   editor: NodeEditor<Schemes>;
@@ -121,6 +121,7 @@ export const ReteEditor: React.FC<ReteEditorProps> = ({ onEditorReady }) => {
     // Setup connection and rendering presets
     connection.addPreset(ConnectionPresets.classic.setup());
     reactPlugin.addPreset(ReactPresets.classic.setup());
+    reactPlugin.addPreset(ReactPresets.minimap.setup());
 
     // Enable node selection
     AreaExtensions.selectableNodes(area, AreaExtensions.selector(), {
