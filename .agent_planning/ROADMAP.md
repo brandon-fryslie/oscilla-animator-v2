@@ -1,6 +1,6 @@
 # Oscilla Animator v2 - Project Roadmap
 
-Last updated: 2026-01-12-175500
+Last updated: 2026-01-13-053000
 
 ---
 
@@ -100,7 +100,7 @@ Last updated: 2026-01-12-175500
 
 ---
 
-## 🟢 Phase 2: Rendering & UI [ACTIVE] (4/6 completed)
+## 🟢 Phase 2: Rendering & UI [ACTIVE] (5/6 completed)
 
 **Goal:** Implement rendering pipeline and basic UI for patch editing
 
@@ -144,10 +144,14 @@ Last updated: 2026-01-12-175500
 - **Spec:** `design-docs/CANONICAL-oscilla-v2.5-20260109/topics/06-renderer.md`
 - **Description:** Renderer contract, Canvas2D implementation, render commands
 
-#### 💡 patch-editor-ui [PROPOSED]
-- **State:** PROPOSED
+#### ✅ patch-editor-ui [COMPLETED]
+- **State:** COMPLETED
 - **Epic:** None
 - **Description:** Visual patch editor for creating and editing animation programs
+- **Completed:** 2026-01-13
+- **Summary:** Sprint 2A complete - All blockers fixed, undo/redo implemented (50 steps), keyboard shortcuts (Ctrl+Z/Y), context menu delete, pan/zoom navigation. 275 tests passing. Production ready.
+- **Planning Files:** `.agent_planning/patch-editor-ui/`
+- **Verification:** `/SPRINT2A-VERIFICATION.md`
 
 #### 📋 domain-editor-ui [PLANNING]
 - **State:** PLANNING

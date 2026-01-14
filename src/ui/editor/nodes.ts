@@ -15,6 +15,8 @@ import type { BlockDef } from '../../blocks/registry';
 export class OscillaNode extends ClassicPreset.Node {
   public readonly blockId: BlockId;
   public readonly blockType: string;
+  public width = 180;
+  public height = 120;
 
   constructor(blockDef: BlockDef, blockId: BlockId, displayName?: string | null) {
     super(displayName || blockDef.label);

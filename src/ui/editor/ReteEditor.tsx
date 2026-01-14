@@ -6,7 +6,7 @@
  * Syncs bidirectionally with PatchStore.
  */
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { NodeEditor, GetSchemes, ClassicPreset } from 'rete';
 import { AreaPlugin, AreaExtensions } from 'rete-area-plugin';
@@ -17,6 +17,8 @@ import {
 } from 'rete-connection-plugin';
 import { ContextMenuPlugin, ContextMenuExtra } from 'rete-context-menu-plugin';
 import { HistoryPlugin } from 'rete-history-plugin';
+import { AutoArrangePlugin, Presets as ArrangePresets } from 'rete-auto-arrange-plugin';
+import { MinimapPlugin } from 'rete-minimap-plugin';
 import { rootStore } from '../../stores';
 import {
   syncPatchToEditor,
@@ -39,6 +41,7 @@ export interface ReteEditorHandle {
   editor: NodeEditor<Schemes>;
   area: AreaPlugin<Schemes, AreaExtra>;
   connection: ConnectionPlugin<Schemes, AreaExtra>;
+  arrange?: any; // AutoArrangePlugin has complex type constraints
 }
 
 interface ReteEditorProps {
@@ -49,6 +52,7 @@ export const ReteEditor: React.FC<ReteEditorProps> = ({ onEditorReady }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<ReteEditorHandle | null>(null);
   const { setEditorHandle } = useEditor();
+  const [isArranging, setIsArranging] = useState(false);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -94,12 +98,24 @@ export const ReteEditor: React.FC<ReteEditorProps> = ({ onEditorReady }) => {
     // History plugin for undo/redo
     const history = new HistoryPlugin<Schemes>();
 
+    // Auto-arrange plugin (using any due to type constraints)
+    const arrange = new (AutoArrangePlugin as any)(area);
+    arrange.addPreset((ArrangePresets.classic as any).setup());
+
+    // Minimap plugin (using any due to type constraints)
+    const minimap = new (MinimapPlugin as any)({
+      minDistance: 25,
+      ratio: 0.2,
+    });
+
     // Register plugins
     editor.use(area);
     area.use(connection);
     area.use(reactPlugin);
     area.use(contextMenu);
     area.use(history);
+    area.use(arrange);
+    area.use(minimap);
 
     // Setup connection and rendering presets
     connection.addPreset(ConnectionPresets.classic.setup());
@@ -117,7 +133,7 @@ export const ReteEditor: React.FC<ReteEditorProps> = ({ onEditorReady }) => {
     setHistoryPlugin(history);
 
     // Store handle
-    const handle: ReteEditorHandle = { editor, area, connection };
+    const handle: ReteEditorHandle = { editor, area, connection, arrange };
     editorRef.current = handle;
     setEditorHandle(handle); // Register with context for BlockLibrary access
 
@@ -190,15 +206,87 @@ export const ReteEditor: React.FC<ReteEditorProps> = ({ onEditorReady }) => {
     };
   }, [onEditorReady, setEditorHandle]);
 
+  // Auto-arrange handler
+  const handleAutoArrange = async () => {
+    if (!editorRef.current || isArranging) return;
+
+    setIsArranging(true);
+    try {
+      const { editor, area, arrange } = editorRef.current;
+      const nodes = editor.getNodes();
+
+      // Don't arrange if graph is empty
+      if (nodes.length === 0) {
+        return;
+      }
+
+      // Only arrange if single node - just center it
+      if (nodes.length === 1) {
+        await AreaExtensions.zoomAt(area, nodes);
+        return;
+      }
+
+      // Perform layout
+      if (arrange && typeof arrange.layout === 'function') {
+        await arrange.layout();
+      }
+
+      // Zoom to fit after layout
+      await AreaExtensions.zoomAt(area, nodes);
+
+      // Commit to history
+      pushHistoryState();
+    } finally {
+      setIsArranging(false);
+    }
+  };
+
   return (
-    <div
-      ref={containerRef}
-      style={{
-        width: '100%',
-        height: '100%',
-        background: '#1a1a2e',
-        position: 'relative',
-      }}
-    />
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      {/* Toolbar */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 8,
+          left: 8,
+          zIndex: 1000,
+          display: 'flex',
+          gap: 8,
+          padding: 8,
+          background: 'rgba(0, 0, 0, 0.7)',
+          borderRadius: 4,
+          border: '1px solid rgba(255, 255, 255, 0.2)',
+        }}
+      >
+        <button
+          onClick={handleAutoArrange}
+          disabled={isArranging}
+          title="Auto Arrange (arrange nodes automatically)"
+          style={{
+            padding: '6px 12px',
+            background: isArranging ? '#555' : '#333',
+            color: '#fff',
+            border: '1px solid #666',
+            borderRadius: 4,
+            cursor: isArranging ? 'not-allowed' : 'pointer',
+            fontSize: 14,
+            fontWeight: 500,
+          }}
+        >
+          {isArranging ? 'Arranging...' : 'Auto Arrange'}
+        </button>
+      </div>
+
+      {/* Editor container */}
+      <div
+        ref={containerRef}
+        style={{
+          width: '100%',
+          height: '100%',
+          background: '#1a1a2e',
+          position: 'relative',
+        }}
+      />
+    </div>
   );
 };
