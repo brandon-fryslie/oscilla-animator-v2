@@ -20,14 +20,17 @@ import { HistoryPlugin } from 'rete-history-plugin';
 import { AutoArrangePlugin, Presets as ArrangePresets } from 'rete-auto-arrange-plugin';
 import { MinimapPlugin, MinimapExtra } from 'rete-minimap-plugin';
 import { rootStore } from '../../stores';
+import type { BlockId } from '../../types';
+import type { EditorHandle } from '../editorCommon';
+import { useEditor } from '../editorCommon';
 import {
   syncPatchToEditor,
   setupEditorToPatchSync,
   setupPatchToEditorReaction,
   setHistoryPlugin,
   pushHistoryState,
+  addBlockToEditor,
 } from './sync';
-import { useEditor } from './EditorContext';
 import { OscillaNode } from './nodes';
 import './ReteEditor.css';
 
@@ -47,6 +50,65 @@ export interface ReteEditorHandle {
 
 interface ReteEditorProps {
   onEditorReady?: (handle: ReteEditorHandle) => void;
+}
+
+/**
+ * Create EditorHandle adapter for ReteEditorHandle.
+ * Implements generic EditorHandle interface.
+ */
+function createReteEditorAdapter(handle: ReteEditorHandle): EditorHandle {
+  return {
+    type: 'rete' as const,
+
+    async addBlock(blockId: BlockId, blockType: string): Promise<void> {
+      await addBlockToEditor(handle, blockId, blockType);
+    },
+
+    async removeBlock(blockId: BlockId): Promise<void> {
+      const node = handle.editor.getNodes().find((n) => (n as OscillaNode).blockId === blockId);
+      if (node) {
+        await handle.editor.removeNode(node.id);
+      }
+    },
+
+    async zoomToFit(): Promise<void> {
+      const nodes = handle.editor.getNodes();
+      if (nodes.length > 0) {
+        await AreaExtensions.zoomAt(handle.area, nodes);
+      }
+    },
+
+    async autoArrange(): Promise<void> {
+      const { editor, area, arrange } = handle;
+      const nodes = editor.getNodes();
+
+      if (nodes.length === 0) return;
+
+      if (nodes.length === 1) {
+        await AreaExtensions.zoomAt(area, nodes);
+        return;
+      }
+
+      if (arrange && typeof arrange.layout === 'function') {
+        await arrange.layout({
+          options: {
+            'elk.algorithm': 'layered',
+            'elk.direction': 'RIGHT',
+            'elk.spacing.nodeNode': '100',
+            'elk.layered.spacing.nodeNodeBetweenLayers': '80',
+            'elk.padding': '[top=20,left=20,bottom=20,right=20]'
+          }
+        });
+      }
+
+      await AreaExtensions.zoomAt(area, nodes);
+      pushHistoryState();
+    },
+
+    getRawHandle(): unknown {
+      return handle;
+    },
+  };
 }
 
 export const ReteEditor: React.FC<ReteEditorProps> = ({ onEditorReady }) => {
@@ -137,7 +199,10 @@ export const ReteEditor: React.FC<ReteEditorProps> = ({ onEditorReady }) => {
     // Store handle
     const handle: ReteEditorHandle = { editor, area, connection, arrange };
     editorRef.current = handle;
-    setEditorHandle(handle); // Register with context for BlockLibrary access
+
+    // Create adapter and register with context for BlockLibrary access
+    const adapter = createReteEditorAdapter(handle);
+    setEditorHandle(adapter);
 
     // Setup bidirectional sync
     setupEditorToPatchSync(handle, rootStore.patch);
