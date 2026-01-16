@@ -10,20 +10,5 @@ export { darkTheme, colors } from './theme';
 // Components (React root and feature components)
 export * from './components';
 
-// Legacy exports (for gradual migration if needed)
-export {
-  PanelManager,
-  type PanelConfig,
-  type PanelInstance,
-  type PanelRegion,
-  type ResizeDirection,
-} from './panel';
-
-export {
-  AppLayout,
-  getAppLayout,
-  REGIONS,
-  getRegion,
-  getRegionElement,
-  type LayoutRegion,
-} from './layout';
+// Dockview layout system
+export * from './dockview';

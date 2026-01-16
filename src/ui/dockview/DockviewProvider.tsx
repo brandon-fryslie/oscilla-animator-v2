@@ -5,7 +5,7 @@
  * Manages layout initialization and provides callbacks for special panels.
  */
 
-import React, { createContext, useState, useCallback } from 'react';
+import React, { createContext, useState, useCallback, useEffect } from 'react';
 import { DockviewReact, type DockviewReadyEvent, type DockviewApi } from 'dockview';
 import { PANEL_COMPONENTS } from './panelRegistry';
 import { createDefaultLayout } from './defaultLayout';
@@ -23,6 +23,7 @@ interface DockviewProviderProps {
   onReteEditorReady?: (handle: EditorHandle) => void;
   onReactFlowEditorReady?: (handle: EditorHandle) => void;
   onCanvasReady?: (canvas: HTMLCanvasElement) => void;
+  onActivePanelChange?: (panelId: string | undefined) => void;
 }
 
 /**
@@ -33,6 +34,7 @@ export const DockviewProvider: React.FC<DockviewProviderProps> = ({
   onReteEditorReady,
   onReactFlowEditorReady,
   onCanvasReady,
+  onActivePanelChange,
 }) => {
   const [api, setApi] = useState<DockviewApi | null>(null);
 
@@ -49,6 +51,19 @@ export const DockviewProvider: React.FC<DockviewProviderProps> = ({
     },
     [onReteEditorReady, onReactFlowEditorReady, onCanvasReady]
   );
+
+  // Subscribe to active panel changes
+  useEffect(() => {
+    if (!api || !onActivePanelChange) return;
+
+    const disposable = api.onDidActivePanelChange((panel) => {
+      onActivePanelChange(panel?.id);
+    });
+
+    return () => {
+      disposable.dispose();
+    };
+  }, [api, onActivePanelChange]);
 
   return (
     <DockviewContext.Provider value={{ api }}>

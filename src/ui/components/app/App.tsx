@@ -2,29 +2,17 @@
  * App Component
  *
  * Root React component for the entire application.
- * Manages the overall layout with:
- * - Toolbar (top)
- * - Workspace (3-column: left split sidebar, center tabs, right tabs)
- * - Diagnostic console (bottom)
+ * Manages the overall layout with Dockview:
+ * - Toolbar (top, outside Dockview)
+ * - Dockview workspace (all panels)
  *
- * The left sidebar uses jsPanel's split layout (Library top, Inspector bottom).
+ * Handles editor context switching when users switch between editor tabs.
  */
 
-import React, { useCallback, useState, useMemo, useEffect, useRef } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { Toolbar } from './Toolbar';
-import { DiagnosticConsole } from './DiagnosticConsole';
-import { HelpPanel } from './HelpPanel';
-import { CanvasTab } from './CanvasTab';
-import { Tabs, TabConfig } from './Tabs';
-import { SplitPanel } from './SplitPanel';
-import { BlockLibrary } from '../BlockLibrary';
-import { BlockInspector } from '../BlockInspector';
-import { TableView } from '../TableView';
-import { ConnectionMatrix } from '../ConnectionMatrix';
-import { DomainsPanel } from '../DomainsPanel';
-import { ReteEditor } from '../../reteEditor';
-import { ReactFlowEditor } from '../../reactFlowEditor';
 import { EditorProvider, type EditorHandle, useEditor } from '../../editorCommon';
+import { DockviewProvider } from '../../dockview';
 
 interface AppProps {
   onCanvasReady?: (canvas: HTMLCanvasElement) => void;
@@ -32,6 +20,7 @@ interface AppProps {
 
 export const App: React.FC<AppProps> = ({ onCanvasReady }) => {
   const [stats, setStats] = useState('FPS: --');
+
   // Store handles for both editors
   const reteHandleRef = useRef<EditorHandle | null>(null);
   const reactFlowHandleRef = useRef<EditorHandle | null>(null);
@@ -71,6 +60,18 @@ export const App: React.FC<AppProps> = ({ onCanvasReady }) => {
     setEditorsReady(prev => ({ ...prev, flow: true }));
   }, []);
 
+  // Handle Dockview panel activation to update active editor
+  const handleActivePanelChange = useCallback((panelId: string | undefined) => {
+    if (panelId === 'rete-editor') {
+      setActiveEditorTab('rete-editor');
+    } else if (panelId === 'flow-editor') {
+      setActiveEditorTab('flow-editor');
+    } else {
+      // Non-editor panel activated, clear active editor
+      setActiveEditorTab(null);
+    }
+  }, []);
+
   // Update EditorContext when active editor changes or editors become ready
   useEffect(() => {
     if (!editorContextRef.current) return;
@@ -83,77 +84,6 @@ export const App: React.FC<AppProps> = ({ onCanvasReady }) => {
       editorContextRef.current.setEditorHandle(null);
     }
   }, [activeEditorTab, editorsReady]);
-
-  // Create wrapped components
-  const ReteEditorWrapper = useMemo(() => {
-    return function ReteEditorWrapper() {
-      return <ReteEditor onEditorReady={handleReteEditorReady} />;
-    };
-  }, [handleReteEditorReady]);
-
-  const ReactFlowEditorWrapper = useMemo(() => {
-    return function ReactFlowEditorWrapper() {
-      return <ReactFlowEditor onEditorReady={handleReactFlowEditorReady} />;
-    };
-  }, [handleReactFlowEditorReady]);
-
-  const CanvasTabWrapper = useMemo(() => {
-    return function CanvasTabWrapper() {
-      return <CanvasTab onCanvasReady={handleCanvasReady} />;
-    };
-  }, [handleCanvasReady]);
-
-  // Handle tab changes to update active editor
-  const handleCenterTabChange = useCallback((tabId: string) => {
-    if (tabId === 'rete-editor' || tabId === 'flow-editor') {
-      setActiveEditorTab(tabId);
-    } else {
-      setActiveEditorTab(null);
-    }
-  }, []);
-
-  // Center tabs configuration
-  const centerTabs: TabConfig[] = useMemo(() => [
-    {
-      id: 'table',
-      label: 'Blocks',
-      component: TableView,
-    },
-    {
-      id: 'matrix',
-      label: 'Matrix',
-      component: ConnectionMatrix,
-    },
-    {
-      id: 'rete-editor',
-      label: 'Rete',
-      component: ReteEditorWrapper,
-    },
-    {
-      id: 'flow-editor',
-      label: 'Flow',
-      component: ReactFlowEditorWrapper,
-    },
-    {
-      id: 'canvas',
-      label: 'Preview',
-      component: CanvasTabWrapper,
-    },
-  ], [CanvasTabWrapper, ReteEditorWrapper, ReactFlowEditorWrapper]);
-
-  // Right tabs configuration
-  const rightTabs: TabConfig[] = [
-    {
-      id: 'domains',
-      label: 'Domains',
-      component: DomainsPanel,
-    },
-    {
-      id: 'help',
-      label: 'Help',
-      component: HelpPanel,
-    },
-  ];
 
   return (
     <EditorProvider>
@@ -171,78 +101,17 @@ export const App: React.FC<AppProps> = ({ onCanvasReady }) => {
           fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
         }}
       >
-        {/* Toolbar */}
+        {/* Toolbar - outside Dockview */}
         <Toolbar stats={stats} />
 
-        {/* Main workspace */}
-        <main
-          style={{
-            flex: 1,
-            display: 'flex',
-            minHeight: 0,
-            overflow: 'hidden',
-          }}
-        >
-          {/* Left sidebar - Split panel with Library (top) and Inspector (bottom) */}
-          <div
-            style={{
-              flex: '0 0 280px',
-              minWidth: '200px',
-              maxWidth: '500px',
-              borderRight: '1px solid #0f3460',
-              overflow: 'hidden',
-            }}
-          >
-            <SplitPanel
-              topComponent={BlockLibrary}
-              bottomComponent={BlockInspector}
-              initialSplit={0.5}
-            />
-          </div>
-
-          {/* Center region - Tabbed content */}
-          <div
-            style={{
-              flex: 1,
-              minWidth: '400px',
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-            }}
-          >
-            <Tabs
-              tabs={centerTabs}
-              initialTab="rete-editor"
-              onTabChange={handleCenterTabChange}
-            />
-          </div>
-
-          {/* Right sidebar - Tabbed content */}
-          <div
-            style={{
-              flex: '0 0 300px',
-              minWidth: '200px',
-              maxWidth: '500px',
-              borderLeft: '1px solid #0f3460',
-              overflow: 'hidden',
-            }}
-          >
-            <Tabs tabs={rightTabs} initialTab="domains" />
-          </div>
-        </main>
-
-        {/* Bottom diagnostic console */}
-        <div
-          style={{
-            flex: '0 0 150px',
-            minHeight: '80px',
-            maxHeight: '400px',
-            borderTop: '1px solid #0f3460',
-            background: '#0f0f23',
-            overflow: 'hidden',
-          }}
-        >
-          <DiagnosticConsole />
+        {/* Dockview workspace - all panels managed by Dockview */}
+        <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+          <DockviewProvider
+            onReteEditorReady={handleReteEditorReady}
+            onReactFlowEditorReady={handleReactFlowEditorReady}
+            onCanvasReady={handleCanvasReady}
+            onActivePanelChange={handleActivePanelChange}
+          />
         </div>
       </div>
     </EditorProvider>

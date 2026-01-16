@@ -21,6 +21,9 @@ interface LayoutCallbacks {
 /**
  * Builds the default 6-group layout.
  * Groups are created left-to-right, top-to-bottom.
+ *
+ * Note: Dockview creates groups implicitly when adding panels with position directives.
+ * We don't need to call addGroup() explicitly.
  */
 export function createDefaultLayout(api: DockviewApi, callbacks: LayoutCallbacks = {}): void {
   // Get panel definitions by group
@@ -31,37 +34,41 @@ export function createDefaultLayout(api: DockviewApi, callbacks: LayoutCallbacks
   const rightBottomPanels = PANEL_DEFINITIONS.filter((p) => p.group === 'right-bottom');
   const bottomPanels = PANEL_DEFINITIONS.filter((p) => p.group === 'bottom');
 
-  // Create left-top group (first group, no reference needed)
-  const leftTopGroup = api.addGroup({ id: 'left-top' });
-  leftTopPanels.forEach((panel) => {
+  // Add first left-top panel (creates the first group)
+  const firstLeftTopPanel = leftTopPanels[0];
+  if (firstLeftTopPanel) {
+    api.addPanel({
+      id: firstLeftTopPanel.id,
+      component: firstLeftTopPanel.component,
+      title: firstLeftTopPanel.title,
+    });
+
+    // Add remaining left-top panels as tabs in same group
+    leftTopPanels.slice(1).forEach((panel) => {
+      api.addPanel({
+        id: panel.id,
+        component: panel.component,
+        title: panel.title,
+        position: { referencePanel: firstLeftTopPanel.id },
+      });
+    });
+  }
+
+  // Add left-bottom panels (below left-top)
+  leftBottomPanels.forEach((panel, index) => {
     api.addPanel({
       id: panel.id,
       component: panel.component,
       title: panel.title,
-      position: { referenceGroup: leftTopGroup },
+      position: {
+        referencePanel: firstLeftTopPanel.id,
+        direction: index === 0 ? 'below' : 'within',
+      },
     });
   });
 
-  // Create left-bottom group (below left-top)
-  const leftBottomGroup = api.addGroup({
-    id: 'left-bottom',
-    position: { referenceGroup: leftTopGroup, direction: 'below' },
-  });
-  leftBottomPanels.forEach((panel) => {
-    api.addPanel({
-      id: panel.id,
-      component: panel.component,
-      title: panel.title,
-      position: { referenceGroup: leftBottomGroup },
-    });
-  });
-
-  // Create center group (right of left-top)
-  const centerGroup = api.addGroup({
-    id: 'center',
-    position: { referenceGroup: leftTopGroup, direction: 'right' },
-  });
-  centerPanels.forEach((panel) => {
+  // Add center panels (right of left-top) - all as tabs in same group
+  centerPanels.forEach((panel, index) => {
     const params: Record<string, unknown> = {};
 
     // Pass callbacks to panels that need them
@@ -77,86 +84,76 @@ export function createDefaultLayout(api: DockviewApi, callbacks: LayoutCallbacks
       id: panel.id,
       component: panel.component,
       title: panel.title,
-      position: { referenceGroup: centerGroup },
+      position: {
+        referencePanel: firstLeftTopPanel.id,
+        direction: index === 0 ? 'right' : 'within',
+      },
       params: Object.keys(params).length > 0 ? params : undefined,
     });
   });
 
-  // Activate the first center panel (Rete editor by default)
+  // Activate the rete editor tab
   const retePanel = api.getPanel('rete-editor');
   if (retePanel) {
     retePanel.api.setActive();
   }
 
-  // Create right-top group (right of center)
-  const rightTopGroup = api.addGroup({
-    id: 'right-top',
-    position: { referenceGroup: centerGroup, direction: 'right' },
-  });
-  rightTopPanels.forEach((panel) => {
+  // Add right-top panels (right of center)
+  const firstCenterPanel = centerPanels[0];
+  rightTopPanels.forEach((panel, index) => {
     api.addPanel({
       id: panel.id,
       component: panel.component,
       title: panel.title,
-      position: { referenceGroup: rightTopGroup },
+      position: {
+        referencePanel: firstCenterPanel?.id || firstLeftTopPanel.id,
+        direction: index === 0 ? 'right' : 'within',
+      },
     });
   });
 
-  // Create right-bottom group (below right-top)
-  const rightBottomGroup = api.addGroup({
-    id: 'right-bottom',
-    position: { referenceGroup: rightTopGroup, direction: 'below' },
-  });
-  rightBottomPanels.forEach((panel) => {
+  // Add right-bottom panels (below right-top)
+  const firstRightTopPanel = rightTopPanels[0];
+  rightBottomPanels.forEach((panel, index) => {
     api.addPanel({
       id: panel.id,
       component: panel.component,
       title: panel.title,
-      position: { referenceGroup: rightBottomGroup },
+      position: {
+        referencePanel: firstRightTopPanel?.id || firstLeftTopPanel.id,
+        direction: index === 0 ? 'below' : 'within',
+      },
     });
   });
 
-  // Create bottom group (below left-bottom, spanning width)
-  const bottomGroup = api.addGroup({
-    id: 'bottom',
-    position: { referenceGroup: leftBottomGroup, direction: 'below' },
-  });
-  bottomPanels.forEach((panel) => {
+  // Add bottom panels (below left-bottom, spanning width)
+  const firstLeftBottomPanel = leftBottomPanels[0];
+  bottomPanels.forEach((panel, index) => {
     api.addPanel({
       id: panel.id,
       component: panel.component,
       title: panel.title,
-      position: { referenceGroup: bottomGroup },
+      position: {
+        referencePanel: firstLeftBottomPanel?.id || firstLeftTopPanel.id,
+        direction: index === 0 ? 'below' : 'within',
+      },
     });
   });
 
-  // Set initial sizes via group APIs
-  // Left sidebar: 280px
-  if (leftTopGroup.api.width !== 280) {
-    leftTopGroup.api.setSize({ width: 280 });
+  // Set initial sizes
+  // Note: Dockview will adjust sizes dynamically, these are suggestions
+  const leftTopPanel = api.getPanel(firstLeftTopPanel.id);
+  if (leftTopPanel?.api.group) {
+    leftTopPanel.api.group.api.setSize({ width: 280 });
   }
 
-  // Right sidebar: 300px
-  if (rightTopGroup.api.width !== 300) {
-    rightTopGroup.api.setSize({ width: 300 });
+  const firstRightPanel = api.getPanel(firstRightTopPanel?.id || '');
+  if (firstRightPanel?.api.group) {
+    firstRightPanel.api.group.api.setSize({ width: 300 });
   }
 
-  // Bottom: 150px
-  if (bottomGroup.api.height !== 150) {
-    bottomGroup.api.setSize({ height: 150 });
-  }
-
-  // Split left sidebar 50/50
-  if (leftTopGroup.api.height && leftBottomGroup.api.height) {
-    const totalHeight = leftTopGroup.api.height + leftBottomGroup.api.height;
-    const halfHeight = totalHeight / 2;
-    leftTopGroup.api.setSize({ height: halfHeight });
-  }
-
-  // Split right sidebar 50/50
-  if (rightTopGroup.api.height && rightBottomGroup.api.height) {
-    const totalHeight = rightTopGroup.api.height + rightBottomGroup.api.height;
-    const halfHeight = totalHeight / 2;
-    rightTopGroup.api.setSize({ height: halfHeight });
+  const bottomPanel = api.getPanel(bottomPanels[0]?.id || '');
+  if (bottomPanel?.api.group) {
+    bottomPanel.api.group.api.setSize({ height: 150 });
   }
 }
