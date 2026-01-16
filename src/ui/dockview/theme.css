@@ -1,0 +1,84 @@
+/**
+ * Dockview Theme - Oscilla Dark
+ *
+ * Matches existing color scheme:
+ * - Background primary: #0f0f23
+ * - Background secondary: #16213e
+ * - Border: #0f3460
+ * - Text: #eee
+ * - Accent: #4ecdc4
+ */
+
+.oscilla-dockview {
+  /* Panel backgrounds */
+  --dv-group-view-background-color: #0f0f23;
+  --dv-tabs-and-actions-container-background-color: #16213e;
+
+  /* Tab backgrounds - active group */
+  --dv-activegroup-visiblepanel-tab-background-color: #1a1a2e;
+  --dv-activegroup-hiddenpanel-tab-background-color: #16213e;
+
+  /* Tab backgrounds - inactive group */
+  --dv-inactivegroup-visiblepanel-tab-background-color: #0f0f23;
+  --dv-inactivegroup-hiddenpanel-tab-background-color: #0f0f23;
+
+  /* Tab text colors */
+  --dv-activegroup-visiblepanel-tab-color: #eee;
+  --dv-activegroup-hiddenpanel-tab-color: #888;
+  --dv-inactivegroup-visiblepanel-tab-color: #aaa;
+  --dv-inactivegroup-hiddenpanel-tab-color: #666;
+
+  /* Borders and dividers */
+  --dv-tab-divider-color: #0f3460;
+  --dv-separator-border: 1px solid #0f3460;
+  --dv-paneview-header-border-color: #0f3460;
+
+  /* Hover states */
+  --dv-activegroup-visiblepanel-tab-hover-background-color: #222244;
+  --dv-activegroup-hiddenpanel-tab-hover-background-color: #1a1a2e;
+
+  /* Focus/active indicators */
+  --dv-activegroup-visiblepanel-tab-bottom-border-color: #4ecdc4;
+
+  /* Drag and drop overlay */
+  --dv-drag-over-background-color: rgba(78, 205, 196, 0.1);
+
+  /* Scrollbar (for overflow) */
+  --dv-scrollbar-color: #0f3460;
+  --dv-scrollbar-hover-color: #4ecdc4;
+
+  /* Floating group shadow */
+  --dv-floating-group-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+
+  /* Base font */
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #eee;
+
+  /* Fill container */
+  height: 100%;
+  width: 100%;
+}
+
+/* Tab hover effects */
+.oscilla-dockview .tabs-container .tab:hover {
+  background-color: var(--dv-activegroup-visiblepanel-tab-hover-background-color);
+}
+
+/* Active tab indicator */
+.oscilla-dockview .tabs-container .tab.active-tab {
+  border-bottom: 2px solid var(--dv-activegroup-visiblepanel-tab-bottom-border-color);
+}
+
+/* Panel content padding removed - let components control their own padding */
+.oscilla-dockview .dockview-panel-content {
+  overflow: hidden;
+}
+
+/* Ensure separators are visible */
+.oscilla-dockview .split-view-view > .split-view-container > .separator {
+  background-color: #0f3460;
+}
+
+.oscilla-dockview .split-view-view > .split-view-container > .separator:hover {
+  background-color: #4ecdc4;
+}

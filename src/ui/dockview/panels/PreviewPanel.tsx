@@ -1,0 +1,13 @@
+/**
+ * Preview Panel Wrapper
+ *
+ * Wraps CanvasTab for Dockview with canvas ready callback.
+ */
+
+import React from 'react';
+import type { IDockviewPanelProps } from 'dockview';
+import { CanvasTab } from '../../components/app/CanvasTab';
+
+export const PreviewPanel: React.FC<IDockviewPanelProps<{ onCanvasReady?: (canvas: HTMLCanvasElement) => void }>> = ({ params }) => {
+  return <CanvasTab onCanvasReady={params?.onCanvasReady} />;
+};
