@@ -73,7 +73,6 @@ export const DockviewProvider: React.FC<DockviewProviderProps> = ({
         components={PANEL_COMPONENTS}
         onReady={handleReady}
         floatingGroupBounds="boundedWithinViewport"
-        defaultTabComponent={() => null} // Use default tab rendering
       />
     </DockviewContext.Provider>
   );
