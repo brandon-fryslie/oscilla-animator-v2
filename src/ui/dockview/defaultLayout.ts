@@ -24,6 +24,15 @@ interface LayoutCallbacks {
  * Builds the default layout with floating preview and split bottom.
  * Groups are created left-to-right, top-to-bottom, then floating last.
  *
+ * CRITICAL LAYOUT ORDER:
+ * 1. Add Library (anchor - creates first group)
+ * 2. Add Center panels RIGHT of Library (creates left column + center region)
+ * 3. Add Inspector BELOW Library (splits only the left column vertically)
+ * 4. Add Diagnostics BELOW the entire structure
+ *
+ * This order ensures Library and Inspector are stacked in a single left sidebar,
+ * with center editors to the right, not below.
+ *
  * Note: Dockview creates groups implicitly when adding panels with position directives.
  * We don't need to call addGroup() explicitly.
  */
@@ -57,20 +66,8 @@ export function createDefaultLayout(api: DockviewApi, callbacks: LayoutCallbacks
     });
   });
 
-  // 2. Add left-bottom panels (below left-top)
-  leftBottomPanels.forEach((panel, index) => {
-    api.addPanel({
-      id: panel.id,
-      component: panel.component,
-      title: panel.title,
-      position: {
-        referencePanel: firstLeftTopPanel.id,
-        direction: index === 0 ? 'below' : 'within',
-      },
-    });
-  });
-
-  // 3. Add center panels (right of left-top) - all as tabs in same group
+  // 2. Add center panels (right of left-top) - BEFORE adding left-bottom
+  //    This creates the left sidebar + center layout structure
   centerPanels.forEach((panel, index) => {
     const params: Record<string, unknown> = {};
 
@@ -98,6 +95,20 @@ export function createDefaultLayout(api: DockviewApi, callbacks: LayoutCallbacks
   if (retePanel) {
     retePanel.api.setActive();
   }
+
+  // 3. Add left-bottom panels (below left-top) - AFTER center panels exist
+  //    Now this splits only the left sidebar vertically, not the entire viewport
+  leftBottomPanels.forEach((panel, index) => {
+    api.addPanel({
+      id: panel.id,
+      component: panel.component,
+      title: panel.title,
+      position: {
+        referencePanel: firstLeftTopPanel.id,
+        direction: index === 0 ? 'below' : 'within',
+      },
+    });
+  });
 
   // 4. Add bottom-left panels (below left-bottom, spanning to center)
   const firstLeftBottomPanel = leftBottomPanels[0];
