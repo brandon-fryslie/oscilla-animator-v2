@@ -7,6 +7,7 @@
 
 import React, { createContext, useState, useCallback, useEffect } from 'react';
 import { DockviewReact, type DockviewReadyEvent, type DockviewApi } from 'dockview';
+import 'dockview/dist/styles/dockview.css';
 import { PANEL_COMPONENTS } from './panelRegistry';
 import { createDefaultLayout } from './defaultLayout';
 import type { EditorHandle } from '../editorCommon';

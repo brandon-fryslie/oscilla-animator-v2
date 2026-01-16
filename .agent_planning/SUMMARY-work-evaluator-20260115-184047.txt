@@ -1,0 +1,7 @@
+Agent: work-evaluator | 2026-01-15T18:40:47
+Scope: work/dockview-integration/foundation
+Verdict: INCOMPLETE
+Criteria: 6/11 working (code-level complete, runtime blocked)
+Previous issues: N/A (first evaluation)
+Missing checks: 2 critical integration requirements
+Cache updated: runtime-dockview-integration.md, INDEX.md

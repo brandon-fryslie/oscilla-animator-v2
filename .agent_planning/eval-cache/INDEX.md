@@ -2,13 +2,21 @@
 
 **Purpose:** Reusable evaluation findings to speed up future work evaluations.
 
-**Last Updated:** 2026-01-13 23:03:41
+**Last Updated:** 2026-01-15 18:40:47
 
 ---
 
 ## Available Cache Files
 
 ### Runtime Findings
+
+**runtime-dockview-integration.md** [NEW]
+- Scope: Dockview integration (foundation sprint)
+- Status: Critical integration requirements documented
+- Confidence: FRESH
+- Reusable: CSS import requirements, theme class setup, panel wrapper patterns, layout creation patterns
+- Key findings: Missing CSS import and theme class block runtime rendering
+- Next evaluation: After fixes applied, verify visual layout + tab switching
 
 **runtime-dual-editor-reactflow-p0.md**
 - Scope: P0 directory restructure + EditorHandle abstraction
