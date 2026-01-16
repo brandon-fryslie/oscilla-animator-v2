@@ -141,6 +141,8 @@ export function createDefaultLayout(api: DockviewApi, callbacks: LayoutCallbacks
         width: 300,
         height: 300,
       },
+      minimumWidth: 150,
+      minimumHeight: 150,
     });
   }
 
