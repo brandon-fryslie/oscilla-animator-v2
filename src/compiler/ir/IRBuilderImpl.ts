@@ -14,6 +14,8 @@ import type {
   DomainId,
   StateId,
   StateSlotId,
+  InstanceId,
+  DomainTypeId,
 } from './Indices';
 import {
   sigExprId,
@@ -23,6 +25,7 @@ import {
   domainId,
   stateId,
   stateSlotId,
+  instanceId,
 } from './Indices';
 import type { TimeModelIR } from './schedule';
 import type {
@@ -32,6 +35,8 @@ import type {
   FieldExpr,
   EventExpr,
   DomainDef,
+  InstanceDecl,
+  LayoutSpec,
   Step,
 } from './types';
 
@@ -44,6 +49,7 @@ export class IRBuilderImpl implements IRBuilder {
   private fieldExprs: FieldExpr[] = [];
   private eventExprs: EventExpr[] = [];
   private domains: Map<DomainId, DomainDef> = new Map();
+  private instances: Map<InstanceId, InstanceDecl> = new Map(); // NEW
   private slotCounter = 0;
   private stateCounter = 0;
   private stateSlotCounter = 0;
@@ -186,6 +192,24 @@ export class IRBuilderImpl implements IRBuilder {
   ): FieldExprId {
     const id = fieldExprId(this.fieldExprs.length);
     this.fieldExprs.push({ kind: 'source', domain, sourceId, type });
+    return id;
+  }
+
+  /**
+   * Create a field from an intrinsic property (NEW).
+   */
+  fieldIntrinsic(instanceId: InstanceId, intrinsic: string, type: SignalType): FieldExprId {
+    const id = fieldExprId(this.fieldExprs.length);
+    // Store as a new-style FieldExprSource with instanceId and intrinsic
+    // For now, we'll add these as extra properties that coexist with old ones
+    this.fieldExprs.push({
+      kind: 'source',
+      domain: domainId('deprecated'), // Placeholder for old field
+      sourceId: 'index', // Placeholder for old field
+      instanceId: instanceId as any, // NEW field
+      intrinsic: intrinsic as any, // NEW field
+      type,
+    } as any);
     return id;
   }
 
@@ -357,7 +381,7 @@ export class IRBuilderImpl implements IRBuilder {
   }
 
   // =========================================================================
-  // Domains
+  // Domains (OLD - Will be removed in Sprint 8)
   // =========================================================================
 
   createDomain(
@@ -406,6 +430,45 @@ export class IRBuilderImpl implements IRBuilder {
       params: { n, seed },
     });
     return id;
+  }
+
+  getDomains(): ReadonlyMap<DomainId, DomainDef> {
+    return this.domains;
+  }
+
+  defineDomain(id: DomainId, def: DomainDef): void {
+    this.domains.set(id, def);
+  }
+
+  // =========================================================================
+  // Instances (NEW)
+  // =========================================================================
+
+  /**
+   * Create an instance (NEW).
+   */
+  createInstance(
+    domainType: DomainTypeId,
+    count: number,
+    layout: LayoutSpec,
+    lifecycle: 'static' | 'dynamic' | 'pooled' = 'static'
+  ): InstanceId {
+    const id = instanceId(`instance_${this.instances.size}`);
+    this.instances.set(id, {
+      id: id as string,
+      domainType: domainType as string,
+      count,
+      layout,
+      lifecycle,
+    });
+    return id;
+  }
+
+  /**
+   * Get all instances (NEW).
+   */
+  getInstances(): ReadonlyMap<InstanceId, InstanceDecl> {
+    return this.instances;
   }
 
   /**
@@ -547,10 +610,6 @@ export class IRBuilderImpl implements IRBuilder {
     return this.eventExprs;
   }
 
-  getDomains(): ReadonlyMap<DomainId, DomainDef> {
-    return this.domains;
-  }
-
   getSigSlots(): ReadonlyMap<number, ValueSlot> {
     return this.sigSlots;
   }
@@ -582,10 +641,6 @@ export class IRBuilderImpl implements IRBuilder {
   getTimepointMarkers(): { start: number; end: number } | null {
     // TODO: Implement timepoint markers
     return null;
-  }
-
-  defineDomain(id: DomainId, def: DomainDef): void {
-    this.domains.set(id, def);
   }
 
   getSchedule(): TimeModelIR {

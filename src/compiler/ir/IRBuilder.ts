@@ -14,9 +14,11 @@ import type {
   DomainId,
   StateId,
   StateSlotId,
+  InstanceId,
+  DomainTypeId,
 } from './Indices';
 import type { TimeModelIR } from './schedule';
-import type { PureFn, OpCode, DomainDef, Step } from './types';
+import type { PureFn, OpCode, DomainDef, InstanceDecl, LayoutSpec, Step } from './types';
 
 // =============================================================================
 // IRBuilder Interface
@@ -56,12 +58,23 @@ export interface IRBuilder {
   /** Create a constant field expression. */
   fieldConst(value: number | string, type: SignalType): FieldExprId;
 
-  /** Create a source field (identity, random, index). */
+  /**
+   * Create a source field (identity, random, index).
+   * @deprecated Use fieldIntrinsic instead for new code.
+   */
   fieldSource(
     domain: DomainId,
     sourceId: 'pos0' | 'idRand' | 'index' | 'normalizedIndex',
     type: SignalType
   ): FieldExprId;
+
+  /**
+   * Create a field from an intrinsic property.
+   * @param instanceId - The instance to query
+   * @param intrinsic - Intrinsic property name ('position', 'index', 'radius', etc.)
+   * @param type - Signal type for the field
+   */
+  fieldIntrinsic(instanceId: InstanceId, intrinsic: string, type: SignalType): FieldExprId;
 
   /** Broadcast a signal to a field. */
   fieldBroadcast(signal: SigExprId, type: SignalType): FieldExprId;
@@ -181,11 +194,38 @@ export interface IRBuilder {
   /** Create an expression-based pure function. */
   expr(expression: string): PureFn;
 
-  /** Create a domain. */
+  /**
+   * Create a domain (OLD - will be removed).
+   * @deprecated Use createInstance instead.
+   */
   createDomain(kind: 'grid' | 'n' | 'path', count: number, params?: Record<string, unknown>): DomainId;
 
-  /** Get all domains. */
+  /**
+   * Get all domains (OLD - will be removed).
+   * @deprecated Use getInstances instead.
+   */
   getDomains(): ReadonlyMap<DomainId, DomainDef>;
+
+  /**
+   * Create an instance (NEW).
+   * @param domainType - Domain type ID (shape, circle, etc.)
+   * @param count - Number of elements
+   * @param layout - Layout specification
+   * @param lifecycle - Lifecycle mode (default: 'static')
+   * @returns InstanceId for the created instance
+   */
+  createInstance(
+    domainType: DomainTypeId,
+    count: number,
+    layout: LayoutSpec,
+    lifecycle?: 'static' | 'dynamic' | 'pooled'
+  ): InstanceId;
+
+  /**
+   * Get all instances (NEW).
+   * @returns ReadonlyMap of all instance declarations
+   */
+  getInstances(): ReadonlyMap<InstanceId, InstanceDecl>;
 
   /** Get timepoint markers. */
   getTimepointMarkers(): { start: number; end: number } | null;
