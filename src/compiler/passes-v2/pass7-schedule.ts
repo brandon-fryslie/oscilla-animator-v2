@@ -13,7 +13,7 @@
  * deterministic execution order.
  */
 
-import type { Step, StepRender, TimeModel, DomainId, DomainDef, FieldExprId, SigExprId } from '../ir/types';
+import type { Step, StepRender, TimeModel, InstanceId, InstanceDecl, FieldExprId, SigExprId } from '../ir/types';
 import type { UnlinkedIRFragments } from './pass6-block-lowering';
 import type { AcyclicOrLegalGraph, NormalizedEdge, Block, BlockIndex } from '../ir/patches';
 import type { TimeModelIR } from '../ir/schedule';
@@ -29,7 +29,7 @@ import { getBlockDefinition } from '../../blocks/registry';
  *
  * Contains everything the runtime needs to execute a frame:
  * - timeModel: Time configuration
- * - domains: Domain definitions (count, etc)
+ * - instances: Instance declarations (count, layout, etc)
  * - steps: Ordered execution steps
  * - stateSlotCount: Number of persistent state slots
  * - stateSlots: Initial values for state slots
@@ -38,8 +38,8 @@ export interface ScheduleIR {
   /** Time model configuration */
   readonly timeModel: TimeModel;
 
-  /** Domain definitions (domain ID → DomainDef) */
-  readonly domains: ReadonlyMap<DomainId, DomainDef>;
+  /** Instance declarations (instance ID → InstanceDecl) */
+  readonly instances: ReadonlyMap<InstanceId, InstanceDecl>;
 
   /** Ordered execution steps */
   readonly steps: readonly Step[];
@@ -110,20 +110,20 @@ function getInputRef(
  *
  * P0: Generates StepRender for each render block
  * P1: Wires position, color, size inputs from blockOutputs
- * P2: Resolves domain for each render step
+ * P2: Resolves instance for each render step
  */
 function buildRenderSteps(
   blocks: readonly Block[],
   edges: readonly NormalizedEdge[],
   blockOutputs: Map<BlockIndex, Map<string, ValueRefPacked>>,
-  domains: ReadonlyMap<DomainId, DomainDef>
+  instances: ReadonlyMap<InstanceId, InstanceDecl>
 ): StepRender[] {
   const steps: StepRender[] = [];
   const renderBlocks = findRenderBlocks(blocks);
 
-  // P2: MVP - Use first domain (demo patch has single domain)
-  const domainId = domains.keys().next().value;
-  if (!domainId) {
+  // P2: MVP - Use first instance (demo patch has single instance)
+  const instanceId = instances.keys().next().value;
+  if (!instanceId) {
     return steps;
   }
 
@@ -155,7 +155,7 @@ function buildRenderSteps(
     // P0: Create StepRender with wired inputs
     const step: StepRender = {
       kind: 'render',
-      domain: domainId,
+      instanceId: instanceId,
       position: posRef.id,
       color: colorRef.id,
       ...(size && { size }),
@@ -188,15 +188,15 @@ export function pass7Schedule(
   // Convert TimeModelIR to TimeModel
   const timeModel: TimeModel = convertTimeModel(validated.timeModel);
 
-  // Get domains from IRBuilder
-  const domains = unlinkedIR.builder.getDomains();
+  // Get instances from IRBuilder
+  const instances = unlinkedIR.builder.getInstances();
 
   // Build render steps (P0, P1, P2)
   const renderSteps = buildRenderSteps(
     validated.blocks,
     validated.edges,
     unlinkedIR.blockOutputs,
-    domains
+    instances
   );
 
   // Collect steps from builder (stateWrite steps from stateful blocks)
@@ -213,7 +213,7 @@ export function pass7Schedule(
 
   return {
     timeModel,
-    domains,
+    instances,
     steps,
     stateSlotCount,
     stateSlots,

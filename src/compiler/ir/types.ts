@@ -38,6 +38,7 @@ export type {
   StateId,
   DomainId,
   SlotId,
+  InstanceId,
 } from './Indices';
 
 export {
@@ -55,6 +56,7 @@ export {
   stateId,
   domainId,
   slotId,
+  instanceId,
 } from './Indices';
 
 import type {
@@ -336,13 +338,13 @@ export interface StepEvalSig {
 export interface StepMaterialize {
   readonly kind: 'materialize';
   readonly field: FieldExprId;
-  readonly domain: DomainId;
+  readonly instanceId: string; // InstanceId - UPDATED for Sprint 6
   readonly target: ValueSlot;
 }
 
 export interface StepRender {
   readonly kind: 'render';
-  readonly domain: DomainId;
+  readonly instanceId: string; // InstanceId - UPDATED for Sprint 6
   readonly position: FieldExprId;
   readonly color: FieldExprId;
   readonly size?:
@@ -379,7 +381,7 @@ export interface IRProgram {
   readonly signals: ReadonlyMap<SigExprId, SigExpr>;
   readonly fields: ReadonlyMap<FieldExprId, FieldExpr>;
   readonly events: ReadonlyMap<EventExprId, EventExpr>;
-  readonly domains: ReadonlyMap<DomainId, DomainDef>;
+  readonly instances: ReadonlyMap<string, InstanceDecl>; // UPDATED for Sprint 6 (was domains)
   readonly steps: readonly Step[];
   readonly slotCount: number;
   readonly stateSlotCount?: number;
