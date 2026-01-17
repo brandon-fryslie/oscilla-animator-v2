@@ -2,7 +2,7 @@
 
 **Purpose:** Reusable evaluation findings to speed up future work evaluations.
 
-**Last Updated:** 2026-01-15 18:40:47
+**Last Updated:** 2026-01-17 04:48:00
 
 ---
 
@@ -54,3 +54,10 @@
 - Specific verdicts (COMPLETE/INCOMPLETE) - point-in-time only
 - Test pass/fail counts - re-run to verify
 - Bug details - keep in WORK-EVALUATION files
+
+---
+
+## Invalidated Cache (Sprint 3 - Instance Blocks)
+
+**Removed:**
+- runtime-block-registry.md - Block registry modified with instance/inferredInstance fields

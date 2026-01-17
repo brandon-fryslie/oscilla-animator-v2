@@ -6,7 +6,6 @@
 
 import { registerBlock } from './registry';
 import { signalType, signalTypeField } from '../core/canonical-types';
-import { domainId } from '../compiler/ir/Indices';
 
 // =============================================================================
 // StableIdHash
@@ -32,14 +31,16 @@ registerBlock({
   lower: ({ ctx, config }) => {
     const seed = (config?.seed as number) ?? 0;
 
-    // Get the domain from context
-    // For now, we'll use 'default' domain ID
-    const domain = domainId('default');
+    // Get instance context from CircleInstance or inferred from inputs
+    const instance = ctx.inferredInstance ?? ctx.instance;
+    if (!instance) {
+      throw new Error('StableIdHash requires instance context');
+    }
 
-    // Create field expressions that map domain index to random values
-    // Use fieldSource to get domain-specific values
-    const randField = ctx.b.fieldSource(domain, 'idRand', signalTypeField('float', 'default'));
-    const id01Field = ctx.b.fieldSource(domain, 'normalizedIndex', signalTypeField('float', 'default'));
+    // Create field expressions that map instance index to random values
+    // Use fieldIntrinsic to get instance-specific values
+    const randField = ctx.b.fieldIntrinsic(instance, 'randomId', signalTypeField('float', 'default'));
+    const id01Field = ctx.b.fieldIntrinsic(instance, 'normalizedIndex', signalTypeField('float', 'default'));
 
     const randSlot = ctx.b.allocSlot();
     const id01Slot = ctx.b.allocSlot();
@@ -70,13 +71,15 @@ registerBlock({
     { id: 'indexInt', label: 'Index (int)', type: signalTypeField('int', 'default') },
   ],
   lower: ({ ctx }) => {
-    // Get the domain from context
-    // For now, we'll use 'default' domain ID
-    const domain = domainId('default');
+    // Get instance context from CircleInstance or inferred from inputs
+    const instance = ctx.inferredInstance ?? ctx.instance;
+    if (!instance) {
+      throw new Error('DomainIndex requires instance context');
+    }
 
-    // Create field expressions that expose domain index
-    const indexField = ctx.b.fieldSource(domain, 'normalizedIndex', signalTypeField('float', 'default'));
-    const indexIntField = ctx.b.fieldSource(domain, 'index', signalTypeField('int', 'default'));
+    // Create field expressions that expose instance index
+    const indexField = ctx.b.fieldIntrinsic(instance, 'normalizedIndex', signalTypeField('float', 'default'));
+    const indexIntField = ctx.b.fieldIntrinsic(instance, 'index', signalTypeField('int', 'default'));
 
     const indexSlot = ctx.b.allocSlot();
     const indexIntSlot = ctx.b.allocSlot();

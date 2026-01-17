@@ -896,211 +896,231 @@ interface FieldExprSource {
 
 ---
 
-### 3.5 Instantiation: Where Should It Live?
+### 3.5 The Three-Stage Architecture: Primitive → Array → Layout
 
-This is a critical design decision. Let's analyze the options:
+The correct architecture separates three orthogonal concerns:
 
-#### Option A: Instantiation Blocks in the Graph
+1. **Primitive** — What kind of thing (domain classification)
+2. **Array** — How many instances (cardinality transform: one → many)
+3. **Layout** — Where they are (spatial arrangement)
 
-Instantiation is done by special blocks that create instances:
-
-```
-[Count: 100] ──┬──▶ [Shape Instance] ──▶ [... shape operations ...]
-[Layout: Grid] ─┘
-```
-
-**Pros:**
-- Consistent with "everything is a block" philosophy
-- Count and layout can be animated (connect a signal to count!)
-- Instantiation is visible in the graph — no hidden state
-- Compiler sees everything in one place
-
-**Cons:**
-- Users must explicitly create instance blocks (extra step)
-- Ambiguity: does the instance block "output" the shapes, or just declare them?
-- If count is animated, what happens to existing elements? (lifecycle complexity)
-
-**Conceptual purity:** Medium-high. Instantiation is explicit, but mixing declaration (what exists) with transformation (what happens) in the same graph can be confusing.
-
-#### Option B: Separate Instantiation Layer
-
-Instances are declared outside the graph, in a separate "resources" panel:
-
-```
-Resources:
-  - myShapes: 100 circles in grid layout
-  - bgParticles: 500 particles, random scatter
-
-Graph:
-  [myShapes.position] ──▶ [Translate] ──▶ [Render]
-```
-
-**Pros:**
-- Clean separation: resources vs transformations
-- No ambiguity about what "exists" vs what "happens"
-- Instance configuration is always static (simpler lifecycle)
-
-**Cons:**
-- Two places to look (resources + graph)
-- Can't animate instance count without special mechanisms
-- Feels like "configuration" rather than "composition"
-
-**Conceptual purity:** High. But ergonomically awkward — users must context-switch.
-
-#### Option C: Implicit Instantiation from Domain Blocks
-
-Domain-specific "source" blocks implicitly create instances:
-
-```
-[100 Circles] ──▶ [Translate] ──▶ [Render]
-     │
-     └── This block both declares the instance AND provides its intrinsics
-```
-
-**Pros:**
-- Minimal friction — one block does both jobs
-- Matches user mental model: "I want 100 circles" → place one block
-- No separate resource management
-
-**Cons:**
-- Conflates "what exists" with "initial values"
-- If you want the same instance in two places, do you duplicate the block?
-- Harder to separate count/layout configuration from the block
-
-**Conceptual purity:** Low. But ergonomically excellent.
-
-#### Option D: Hybrid — Instance Blocks with Implicit Propagation
-
-Instance blocks declare what exists, but downstream blocks automatically inherit the domain:
-
-```
-[100 Circles in Grid] ──▶ [Translate] ──▶ [Scale] ──▶ [Render]
-         │                     │             │            │
-         │                     └─────────────┴────────────┘
-         │                          All automatically know they're
-         └── Declares instance      operating on the circle instance
-```
-
-**Pros:**
-- Instance is declared once, explicitly
-- Downstream blocks don't need to specify "which shapes" — it's inherited
-- Clean separation of concerns
-- Count/layout are configurable via inputs to the instance block
-
-**Cons:**
-- "Implicit propagation" needs careful design to avoid confusion
-- What if graph branches and rejoins? (domain unification)
-- Still need to handle the "intrinsics" question
-
-**Conceptual purity:** High. This separates declaration from transformation while keeping ergonomics good.
-
-#### Recommendation: Option D with Refinements
-
-Option D is the best balance. Here's how to refine it:
-
-1. **Instance blocks** declare what exists and configure count/layout
-2. **Intrinsic source blocks** (or implicit ports) provide access to intrinsics
-3. **Domain propagates** through connected blocks automatically
-4. **Domain mismatches** are caught at connection time with clear errors
-
-This keeps the graph as the single source of truth while maintaining conceptual separation.
+Each is a separate block, composable and independent.
 
 ---
 
-### 3.6 Instance Blocks: Detailed Design
+### 3.6 Primitive Blocks
 
-An instance block has:
-- **Inputs**: count, layout configuration, domain-specific params
-- **Outputs**: access to the instance's intrinsic properties
-- **Side effect**: registers the instance with the compiler
+Primitive blocks create **a single element** of a specific domain type.
 
 ```
 ┌─────────────────────────────┐
-│       Circle Instance       │
+│          Circle             │
 ├─────────────────────────────┤
-│ count: ────────────○        │  ← Input: number (can be signal!)
-│ layout: ───────────○        │  ← Input: layout spec
-│ radius: ───────────○        │  ← Input: per-element or uniform
+│ radius: ───────────○        │  ← Input: float (optional)
 ├─────────────────────────────┤
-│              position ○─────│  ← Output: Field<vec2> over this instance
-│                bounds ○─────│  ← Output: Field<Rect> over this instance
-│                radius ○─────│  ← Output: Field<float> over this instance
-│                 index ○─────│  ← Output: Field<int> (element index)
-│                     t ○─────│  ← Output: Field<float> (normalized index)
+│               circle ○──────│  ← Output: Signal<circle> (ONE circle)
 └─────────────────────────────┘
 ```
 
-**Key insight**: The instance block's outputs are the **intrinsic properties** of the domain. This is how intrinsics become available — they're outputs of the instance block.
+**Key properties:**
+- Output type: `signalType('circle')` — cardinality: **one**
+- No count, no layout — just defines a single circle
+- Domain-specific parameters (e.g., radius for circle)
 
-**Count and Layout as Inputs:**
-
-```
-[Constant: 100] ──▶ count ─┐
-                           ├──▶ [Circle Instance] ──▶ ...
-[Grid: 10×10] ────▶ layout ┘
-```
-
-Or with animation:
+**Other primitive blocks:**
 
 ```
-[LFO: 50-150] ──▶ count ─┐
-                         ├──▶ [Circle Instance] ──▶ ...
-[Grid: 10×10] ──▶ layout ┘
-```
-
-Now count is animated! Elements are created/destroyed dynamically based on the signal.
-
-**Layout as a Block:**
-
-Layout specifications can themselves be blocks:
-
-```
-┌──────────────────┐
-│    Grid Layout   │
-├──────────────────┤
-│ rows: ──────○    │
-│ cols: ──────○    │
-│ spacing: ───○    │
-├──────────────────┤
-│      layout ○────│  ← Output: LayoutSpec
-└──────────────────┘
+┌─────────────────────────────┐
+│        Rectangle            │
+├─────────────────────────────┤
+│ width: ────────────○        │
+│ height: ───────────○        │
+├─────────────────────────────┤
+│          rectangle ○────────│  ← Signal<rectangle>
+└─────────────────────────────┘
 ```
 
 ```
-┌──────────────────────┐
-│  Random Scatter      │
-├──────────────────────┤
-│ bounds: ────────○    │
-│ seed: ──────────○    │
-├──────────────────────┤
-│          layout ○────│  ← Output: LayoutSpec
-└──────────────────────┘
+┌─────────────────────────────┐
+│         Polygon             │
+├─────────────────────────────┤
+│ sides: ────────────○        │
+├─────────────────────────────┤
+│            polygon ○────────│  ← Signal<polygon>
+└─────────────────────────────┘
 ```
 
-```
-┌──────────────────────┐
-│    Along Path        │
-├──────────────────────┤
-│ path: ──────────○    │  ← Input: a path instance
-│ spacing: ───────○    │
-├──────────────────────┤
-│          layout ○────│  ← Output: LayoutSpec
-└──────────────────────┘
-```
-
-This makes layout a first-class composable concept, handled by blocks like everything else.
+All output `Signal<T>` where T is a domain type. One element.
 
 ---
 
-### 3.7 Domain Propagation: How Connected Blocks Know Their Domain
+### 3.7 Array Block (Cardinality Transform)
+
+The Array block transforms **one element** into **many elements**.
+
+```
+┌─────────────────────────────┐
+│           Array             │
+├─────────────────────────────┤
+│ element: ──────────○        │  ← Input: Signal<any-domain> (ONE)
+│ count: ────────────○        │  ← Input: Signal<int>
+├─────────────────────────────┤
+│           elements ○────────│  ← Output: Field<same-domain> (MANY)
+│            index ○──────────│  ← Output: Field<int>
+│                t ○──────────│  ← Output: Field<float> [0,1]
+│           active ○──────────│  ← Output: Field<bool> (for pooling)
+└─────────────────────────────┘
+```
+
+**Type transform:**
+- Input: `Signal<T>` (one element of domain T)
+- Output: `Field<T, inst>` (many elements of domain T)
+
+**Pool-based implementation:**
+- `maxCount` parameter defines pool size (allocated once)
+- `count` input determines how many are active each frame
+- `active` output is a boolean mask: `active[i] = (i < count)`
+
+**Example usage:**
+
+```
+[Circle] ──element──▶ [Array] ──elements──▶ ...
+                        ↑
+                    count: 100
+                  maxCount: 200
+```
+
+This creates 100 circles (from a pool of 200).
+
+**Dynamic count:**
+
+```
+[Circle] ──▶ [Array] ──elements──▶ ...
+              ↑
+    [Audio] ──▶ [Envelope] ──▶ [Remap: 50-150]
+```
+
+Count varies 50-150 based on audio. Pool size is 200 (static).
+
+---
+
+### 3.8 Layout Blocks (Spatial Arrangement)
+
+Layout blocks operate on **field** inputs (many elements) and output **position** fields.
+
+```
+┌─────────────────────────────┐
+│        Grid Layout          │
+├─────────────────────────────┤
+│ elements: ─────────○        │  ← Input: Field<any>
+│ rows: ─────────────○        │  ← Input: Signal<int>
+│ cols: ─────────────○        │  ← Input: Signal<int>
+├─────────────────────────────┤
+│          position ○─────────│  ← Output: Field<vec2, same-instance>
+└─────────────────────────────┘
+```
+
+**Key properties:**
+- Operates on existing elements (field input)
+- Outputs position field over the same instance
+- Layout parameters can be signals (animated grids!)
+
+**Other layout blocks:**
+
+```
+┌─────────────────────────────┐
+│      Spiral Layout          │
+├─────────────────────────────┤
+│ elements: ─────────○        │
+│ radius: ───────────○        │
+│ turns: ────────────○        │
+├─────────────────────────────┤
+│          position ○─────────│
+│           tangent ○─────────│
+└─────────────────────────────┘
+```
+
+```
+┌─────────────────────────────┐
+│    Along Path Layout        │
+├─────────────────────────────┤
+│ elements: ─────────○        │
+│ path: ─────────────○        │  ← Input: Field<path>
+├─────────────────────────────┤
+│          position ○─────────│
+│           tangent ○─────────│
+│                 t ○─────────│
+└─────────────────────────────┘
+```
+
+```
+┌─────────────────────────────┐
+│     Random Scatter          │
+├─────────────────────────────┤
+│ elements: ─────────○        │
+│ bounds: ───────────○        │
+│ seed: ─────────────○        │
+├─────────────────────────────┤
+│          position ○─────────│
+└─────────────────────────────┘
+```
+
+**Layout as an operation:**
+- Layout is not "configuration" — it's a transformation
+- Position is just another field that can be replaced/modified
+- Layouts can be chained, blended, or swapped
+
+---
+
+---
+
+### 3.9 Complete Flow Example
+
+Here's a complete graph showing all three stages:
+
+```
+[Circle] ──element──▶ [Array] ──elements──▶ [Grid Layout] ──position──▶ [Noise] ──▶ [Render]
+ radius: 0.02          ↑  ↑                   ↑  ↑                         ↑
+                     count maxCount         rows cols                amplitude
+                      100   200               10   10                    0.1
+```
+
+**Data flow:**
+
+1. `[Circle]` outputs `Signal<circle>` — ONE circle with radius 0.02
+2. `[Array]` transforms to `Field<circle, inst_1>` — 100 circles (from pool of 200)
+3. `[Grid Layout]` assigns positions in 10×10 grid → `Field<vec2, inst_1>`
+4. `[Noise]` adds random displacement to positions → `Field<vec2, inst_1>`
+5. `[Render]` draws all 100 circles at their final positions
+
+**Composability benefits:**
+
+Same circles, different layouts:
+```
+                    ┌──▶ [Grid Layout] ──▶ [Render: View A]
+[Circle] ──▶ [Array]─┼──▶ [Spiral Layout] ──▶ [Render: View B]
+                    └──▶ [Along Path] ──▶ [Render: View C]
+```
+
+Different primitives, same layout:
+```
+[Circle] ──▶ [Array × 100] ──▶ [Grid] ──▶ [Render]
+[Rectangle] ──▶ [Array × 50] ──▶ [Grid] ──▶ [Render]
+```
+
+---
+
+### 3.10 Domain Propagation: How Connected Blocks Know Their Domain
 
 When blocks are connected, domain information flows through the graph:
 
 ```
-[Circle Instance] ──position──▶ [Translate] ──▶ [Scale] ──▶ [Render]
-       │                              │             │           │
-   domain: circle              domain: circle  domain: circle  domain: circle
-   instance: inst_1            instance: inst_1 instance: inst_1 instance: inst_1
+[Circle] ──▶ [Array] ──▶ [Grid Layout] ──▶ [Translate] ──▶ [Render]
+    │          │              │                │              │
+domain:    domain:        domain:         domain:        domain:
+circle     circle        circle          circle         circle
+card: one  card: many    card: many      card: many     card: many
+           inst: 1       inst: 1         inst: 1        inst: 1
 ```
 
 **Propagation rules:**
@@ -1169,25 +1189,25 @@ This block ONLY accepts `circle` domain (or subtypes). Connecting a `rectangle` 
 
 ---
 
-### 3.8 Intrinsic Sources: Design Options
+### 3.11 Intrinsic Sources: Design Options
 
 How do users access intrinsic properties (position, radius, index, etc.)?
 
-#### Option I1: Outputs on Instance Block
+#### Option I1: Outputs on Array Block
 
-Intrinsics are output ports on the instance block:
+Intrinsics are output ports on the Array block (which creates the instance):
 
 ```
 ┌─────────────────────────────┐
-│       Circle Instance       │
+│           Array             │
 ├─────────────────────────────┤
+│ element: ──────────○        │
 │ count: ────────────○        │
-│ layout: ───────────○        │
 ├─────────────────────────────┤
-│              position ○─────│
-│                radius ○─────│
-│                 index ○─────│
-│                     t ○─────│
+│           elements ○────────│
+│              index ○────────│
+│                  t ○────────│
+│             active ○────────│
 └─────────────────────────────┘
 ```
 
@@ -1259,23 +1279,24 @@ Intrinsics accessed via expression syntax in parameter fields:
 
 **Ergonomics:** Excellent for power users, learning curve for beginners.
 
-#### Option I4: Hybrid — Instance Outputs + Context Blocks
+#### Option I4: Hybrid — Array Outputs + Context Blocks
 
-Instance block has primary intrinsics as outputs. Additional "Get Property" blocks for accessing any intrinsic by name:
+Array block has primary intrinsics as outputs (index, t, active). Domain-specific intrinsics accessed via "Get Property" blocks:
 
 ```
                       ┌──────────────────┐
-[Circle Instance] ────│ position ○───────│──▶ [Translate] ──▶ ...
-        │             │ radius ○─────────│
-        │             └──────────────────┘
-        │
-        │   (later in the graph)
-        │
-        └──────────────────────▶ [Get: curvature] ──▶ [Color Map] ──▶ ...
+[Circle] ──▶ [Array]──│ elements ○───────│──▶ [Translate] ──▶ ...
+                      │ index ○──────────│
+                      │ t ○──────────────│
+                      └──────────────────┘
+                           │
+                           │   (later in the graph)
+                           │
+                           └──▶ [Get: radius] ──▶ [Color Map] ──▶ ...
 ```
 
-Primary intrinsics (position, radius) are instance block outputs.
-Secondary intrinsics (curvature, area) accessed via "Get" blocks.
+Universal intrinsics (index, t) are Array outputs.
+Domain-specific intrinsics (radius for circles) accessed via "Get" blocks.
 
 **Pros:**
 - Common intrinsics are discoverable and convenient
@@ -1290,47 +1311,49 @@ Secondary intrinsics (curvature, area) accessed via "Get" blocks.
 
 **Ergonomics:** Good balance.
 
-#### Recommendation: Option I1 with Collapsible Sections
+#### Recommendation: Option I1
 
-Instance blocks show intrinsics as outputs, but with UI affordances:
-
-1. **Common intrinsics** always visible (position, index, t)
-2. **Domain-specific intrinsics** in an expandable section
-3. **Derived intrinsics** computed on-demand, shown when expanded
+Array block shows universal intrinsics as outputs:
 
 ```
 ┌─────────────────────────────┐
-│       Circle Instance       │
+│           Array             │
 ├─────────────────────────────┤
+│ element: ──────────○        │
 │ count: ────────────○        │
-│ layout: ───────────○        │
 ├─────────────────────────────┤
-│              position ○─────│  ← Always visible
-│                 index ○─────│  ← Always visible
-│                     t ○─────│  ← Always visible
-├─ ▼ Circle Properties ───────┤  ← Expandable section
-│                radius ○─────│
-│                center ○─────│
-│                  area ○─────│
+│           elements ○────────│  ← The field itself
+│              index ○────────│  ← Universal intrinsic
+│                  t ○────────│  ← Universal intrinsic
+│             active ○────────│  ← Pool mask
 └─────────────────────────────┘
 ```
 
-This keeps the block compact while making all intrinsics discoverable.
+Domain-specific intrinsics (like `radius` for circles, `width` for rectangles) are accessed via:
+- **Primitive block outputs** if they're parameters (e.g., `Circle.radius` input becomes intrinsic)
+- **Get Property blocks** for derived intrinsics (e.g., area, bounds)
+
+This keeps the Array block domain-agnostic and maximally composable.
 
 ---
 
-### 3.9 User Experience: Making Domains Invisible
+### 3.12 User Experience: Making Domains Invisible
 
 The goal: users work naturally with shapes, particles, controls — never thinking about "domains."
 
 #### Principle 1: Domain Follows Intent
 
-When a user places a "100 Circles" block, they get:
-- A circle instance (domain: circle, count: 100)
-- Access to circle intrinsics (position, radius, etc.)
-- Downstream blocks automatically know they're working with circles
+When a user creates circles:
+```
+[Circle] ──▶ [Array] ──▶ [Grid Layout] ──▶ ...
+```
 
-The user didn't configure a domain. They said "100 circles" and the system understood.
+They think: "I want circles in a grid." The system provides:
+- Circle primitive (domain: circle)
+- Array (creates 100 instances)
+- Grid layout (positions them)
+
+The user didn't configure a "domain type" — they chose "Circle" from the palette and the domain follows naturally.
 
 #### Principle 2: Errors Are Actionable
 
@@ -1377,154 +1400,155 @@ Users learn to "read" the graph by color without understanding the underlying ty
 
 ---
 
-### 3.10 Steel Thread: End-to-End Example
+### 3.13 Steel Thread: End-to-End Example
 
 Let's trace a complete example from user action to rendered frame.
 
 **User Goal:** "100 circles in a grid, pulsing in size based on their distance from center"
 
-#### Step 1: User Creates Instance
+#### Step 1: User Creates Circle Primitive
 
-User drags "Circle Instance" block onto canvas.
+User drags "Circle" block onto canvas.
 
 ```
 ┌─────────────────────────────┐
-│       Circle Instance       │
+│          Circle             │
 ├─────────────────────────────┤
-│ count: [100]                │
-│ layout: ○                   │
+│ radius: [0.02]              │
 ├─────────────────────────────┤
-│              position ○     │
-│                radius ○     │
-│                 index ○     │
-│                     t ○     │
+│               circle ○──────│
 └─────────────────────────────┘
 ```
 
 **What happens internally:**
-- Block registers instance: `{ id: 'inst_1', domainType: 'circle', count: 100, layout: null }`
-- Output ports typed as `Field<vec2, circle, inst_1>`, etc.
+- Output typed as `Signal<circle>` (cardinality: one)
+- Domain: circle, count: 1
 
-#### Step 2: User Configures Layout
+#### Step 2: User Creates Array
 
-User drags "Grid Layout" block and connects to layout input.
+User drags "Array" block and connects circle to it.
 
 ```
-┌──────────────────┐     ┌─────────────────────────────┐
-│   Grid Layout    │     │       Circle Instance       │
-├──────────────────┤     ├─────────────────────────────┤
-│ rows: [10]       │     │ count: [100]                │
-│ cols: [10]       │────▶│ layout: ○                   │
-├──────────────────┤     ├─────────────────────────────┤
-│      layout ○────│     │              position ○     │
-└──────────────────┘     └─────────────────────────────┘
+[Circle] ──▶ [Array]
+              ↑
+         count: [100]
+       maxCount: 200
 ```
 
 **What happens internally:**
-- Instance updated: `{ ..., layout: { kind: 'grid', rows: 10, cols: 10 } }`
-- Position intrinsic now has grid-based initial values
+- Input: `Signal<circle>`
+- Output: `Field<circle, inst_1>` where inst_1 is a new instance
+- Instance registered: `{ id: 'inst_1', domainType: 'circle', maxCount: 200, lifecycle: 'pooled' }`
+- Pool allocated: 200-element buffers (positions, radii, active flags)
+- Active count: 100 (indices 0-99 active, 100-199 inactive)
 
-#### Step 3: User Computes Distance from Center
+#### Step 3: User Applies Grid Layout
 
-User needs distance from center for each circle. They connect the position output to a "Distance" block.
+User drags "Grid Layout" and connects array output.
 
 ```
-[Circle Instance] ──position──▶ [Distance] ──▶ ???
-                                    │
-                         center: [0.5, 0.5]
+[Circle] ──▶ [Array] ──elements──▶ [Grid Layout] ──position──▶ ...
+                                        ↑
+                                    rows: 10
+                                    cols: 10
 ```
 
 **What happens internally:**
-- Distance block inherits domain from input: `circle, inst_1`
-- Output is `Field<float, circle, inst_1>` — distance per circle
+- Grid layout reads instance from `elements` field: inst_1
+- Computes grid positions for active elements (0-99)
+- Output: `Field<vec2, inst_1>` — position per circle
 
-#### Step 4: User Maps Distance to Radius
+#### Step 4: User Computes Distance from Center
 
-User connects distance to the radius input of a "Set Radius" block.
+User adds "Distance" block.
 
 ```
-[Circle Instance] ──position──▶ [Distance] ──distance──▶ [Remap] ──▶ [Set Radius] ──▶ ???
-                                                │            │              │
-                                         in: 0..0.7    out: 0.02..0.1      │
-                                                                           │
-[Circle Instance] ────────────────────────────────────────(circles)────────┘
+[Grid Layout] ──position──▶ [Distance] ──▶ ...
+                                 │
+                        center: [0.5, 0.5]
 ```
-
-Wait — there's a problem. "Set Radius" needs both:
-- The circles (to modify)
-- The new radius values (per circle)
-
-Both must be over the SAME instance. The system checks this.
 
 **What happens internally:**
-- `Set Radius` has two field inputs, both constrained to same instance
-- Compiler verifies: position comes from inst_1, distance derived from position (still inst_1), radius values still inst_1 ✓
-- All types unify correctly
+- Distance inherits instance from position field: inst_1
+- Output: `Field<float, inst_1>` — distance per circle
 
-#### Step 5: User Adds Time-Based Animation
+#### Step 5: User Maps Distance to Size
 
-User wants the pulsing to animate. They add an LFO modulating the remap output.
+User adds Remap to scale distance to size range.
 
 ```
-[Clock] ──▶ [LFO] ──▶ [Multiply] ──▶ ...
-                          │
-           (distance) ────┘
+[Distance] ──▶ [Remap] ──▶ ...
+                 │
+           in: [0, 0.7]
+          out: [0.01, 0.05]
+```
+
+**What happens internally:**
+- Remap operates per-element
+- Output: `Field<float, inst_1>` — size per circle
+
+#### Step 6: User Adds Time-Based Pulsing
+
+User wants pulsing animation.
+
+```
+[Time] ──▶ [LFO] ──▶ [Multiply] ──▶ ...
+                        ↑
+                  (size field)
 ```
 
 **Type consideration:**
-- Clock outputs `Signal<float>` (single value, not per-element)
-- LFO outputs `Signal<float>` (single value)
-- Distance is `Field<float, circle, inst_1>` (per-element)
+- LFO outputs `Signal<float>` (cardinality: one)
+- Size is `Field<float, inst_1>` (cardinality: many)
+- Multiply broadcasts signal across field
+- Result: `Field<float, inst_1>` — pulsing size per circle
 
-Multiplying a signal by a field broadcasts the signal across all elements. The result is still `Field<float, circle, inst_1>`.
-
-#### Step 6: User Renders
-
-User connects the final circles to a Render block.
+#### Step 7: User Renders
 
 ```
-[Set Radius output] ──▶ [Render]
+[Grid Layout] ──position──┐
+                          ├──▶ [Render]
+[Multiply] ──size─────────┘
 ```
 
 **What happens internally:**
-- Render block accepts `Field<shape, *, *>` (any shape domain, any instance)
-- Circle is a subtype of shape ✓
-- Render knows to iterate over inst_1's elements
+- Render accepts position and size fields
+- Both must be over same instance → inst_1 ✓
+- Render iterates only over active elements (0-99)
 
 #### Compilation Result
-
-The compiler produces:
 
 ```typescript
 // Instance declaration
 instances: {
   'inst_1': {
     domainType: 'circle',
-    count: 100,
-    layout: { kind: 'grid', rows: 10, cols: 10 },
+    maxCount: 200,
+    count: 100,  // Active count
+    lifecycle: 'pooled'
   }
 }
 
 // Field expressions
 fields: {
-  'f_position': { kind: 'source', instance: 'inst_1', intrinsic: 'position' },
+  'f_elements': { kind: 'array', primitiveId: 'prim_circle', instanceId: 'inst_1' },
+  'f_position': { kind: 'layout', layout: 'grid', instanceId: 'inst_1', params: { rows: 10, cols: 10 } },
   'f_distance': { kind: 'map', input: 'f_position', fn: 'distance_from_center' },
-  'f_remapped': { kind: 'map', input: 'f_distance', fn: 'remap_0_0.7_to_0.02_0.1' },
-  'f_animated': { kind: 'zipSig', field: 'f_remapped', signals: ['s_lfo'], fn: 'multiply' },
-  'f_radius': { kind: 'identity', input: 'f_animated' },  // Set radius just updates the intrinsic
+  'f_size': { kind: 'map', input: 'f_distance', fn: 'remap_0_0.7_to_0.01_0.05' },
+  'f_pulsing': { kind: 'zipSig', field: 'f_size', signals: ['s_lfo'], fn: 'multiply' },
 }
 
 // Signals
 signals: {
-  's_clock': { kind: 'source', sourceId: 'time' },
-  's_lfo': { kind: 'map', input: 's_clock', fn: 'sin_0_1' },
+  's_time': { kind: 'time', which: 'tMs' },
+  's_lfo': { kind: 'map', input: 's_time', fn: 'lfo_sine' },
 }
 
 // Steps
 steps: [
-  { kind: 'materialize', field: 'f_position', instance: 'inst_1', target: slot_0 },
-  { kind: 'materialize', field: 'f_radius', instance: 'inst_1', target: slot_1 },
-  { kind: 'render', instance: 'inst_1', position: slot_0, radius: slot_1 },
+  { kind: 'materialize', field: 'f_position', instanceId: 'inst_1', target: slot_0 },
+  { kind: 'materialize', field: 'f_pulsing', instanceId: 'inst_1', target: slot_1 },
+  { kind: 'render', instanceId: 'inst_1', position: slot_0, size: slot_1 },
 ]
 ```
 
@@ -1532,56 +1556,64 @@ steps: [
 
 Each frame:
 
-1. Evaluate `s_clock` → current time
+1. Evaluate `s_time` → current milliseconds
 2. Evaluate `s_lfo` → sin(time) mapped to 0..1
-3. For each element in inst_1 (100 circles):
+3. For each active element (i = 0..99):
+   - Read position from slot_0[i] (grid layout computed)
    - Compute distance from position to center
-   - Remap distance to radius range
-   - Multiply by LFO value
-4. Render all 100 circles with computed positions/radii
+   - Remap distance → base size
+   - Multiply by LFO → pulsing size
+   - Store in slot_1[i]
+4. Render all 100 circles using position and size arrays
+5. Inactive elements (i = 100..199) are skipped
 
-The domain information is erased at runtime — it's just arrays and loops. But the domain system ensured at compile time that all the arrays are the right size and all the operations are valid.
+The domain information is mostly erased at runtime — just arrays, loops, and an active mask. But the domain system ensured at compile time that all operations are valid and all arrays are the right size.
 
 ---
 
-### 3.11 What Doesn't Exist Yet: Gap Analysis
+### 3.14 What Doesn't Exist Yet: Gap Analysis
 
 Before Part 4 (touch points), let's identify what the correct architecture requires that may not exist:
 
 **Type System:**
 - Domain type as part of SignalType (not just DomainId, but domain classification)
 - Instance ID separate from domain type
+- Primitive concept (Signal<T> for single elements)
 - Domain hierarchy for subtyping
 - Domain constraint specifications for block ports
 
 **IR:**
-- Instance declarations separate from domain specs
-- Layout as a proper IR construct
+- Primitive declarations (what defines a single element)
+- Instance declarations (pool-based, separate from domain specs)
+- Layout as field operations (not instance configuration)
+- FieldExprArray (created by Array block)
+- FieldExprLayout (created by layout blocks)
 - Intrinsic derivation functions
-- Domain-aware field expressions
 
 **Block Library:**
-- Instance blocks per domain type
-- Layout blocks (Grid, Random, Circular, AlongPath)
-- Intrinsic access patterns
+- Primitive blocks per domain type (Circle, Rectangle, etc.)
+- Array block (cardinality transform: one → many)
+- Layout blocks as operations (Grid, Spiral, Random, AlongPath)
+- Intrinsic access patterns (universal: index/t/active, domain-specific via Get blocks)
 - Domain conversion blocks
 
 **Compiler:**
 - Domain inference pass
 - Domain validation pass
-- Instance resolution
-- Layout computation
+- Primitive resolution
+- Instance resolution (pool allocation)
+- Layout evaluation (as field operations)
 
 **UI:**
 - Domain-colored wires
 - Context-aware block palette
 - Conversion suggestions on mismatch
-- Collapsible intrinsic sections
+- Visual distinction between Signal<T> (one) and Field<T> (many)
 
 **Runtime:**
-- Instance-scoped buffers
-- Dynamic count handling
-- Layout-to-position computation
+- Pool-based instance buffers (allocated once)
+- Active mask evaluation (toggles visibility)
+- Layout evaluation as field computation (per-frame for dynamic layouts)
 
 ---
 
@@ -1589,14 +1621,26 @@ Before Part 4 (touch points), let's identify what the correct architecture requi
 
 This document establishes the correct understanding of **domain** as a fundamental concept in Oscilla:
 
-1. **Domain is classification, not instantiation.** A domain answers "what kind of thing?" — shape, control, event — not "how many?" or "what layout?"
+1. **Domain is classification, not instantiation.** A domain answers "what kind of thing?" — shape, control, event — not "how many?" or "where?"
 
-2. **Domain, count, and layout are orthogonal.** The current codebase conflates these. The correct model separates them cleanly, with domain as the type classification and instantiation (count + layout) as configuration.
+2. **Three orthogonal stages:** The architecture separates:
+   - **Primitive** (domain classification: what kind)
+   - **Array** (cardinality: how many)
+   - **Layout** (spatial arrangement: where)
 
-3. **Domain enables semantic correctness.** Operations are valid for specific domains. Connections are checked for domain compatibility. Intrinsic properties are granted by domain membership.
+3. **Cardinality is explicit in the type system:**
+   - `Signal<T>` — one element of domain T
+   - `Field<T, instance>` — many elements of domain T
+   - Array block is the transform: one → many
 
-4. **Users never see "domain."** They see circles, particles, controls. The domain system operates beneath the surface, providing type safety and intelligent tooling without exposing abstract concepts.
+4. **Pool-based performance:** Instances allocate once (maxCount), use active mask to toggle visibility. No reallocation when count changes dynamically.
 
-5. **Implementation requires a clean break.** The current `DomainDef`, `DomainId`, and related code embody the incorrect conflation. A scorched-earth migration is necessary — no bridging, no dual code paths.
+5. **Layout is an operation, not configuration.** Layout blocks operate on existing fields, outputting position fields. Position is not special — it's just another field that can be replaced or transformed.
+
+6. **Domain enables semantic correctness.** Operations are valid for specific domains. Connections are checked for domain compatibility. Intrinsic properties are granted by domain membership.
+
+7. **Users never see "domain."** They see circles, particles, controls. The domain system operates beneath the surface, providing type safety and intelligent tooling without exposing abstract concepts.
+
+8. **Implementation requires a clean break.** The current `DomainDef`, `DomainId`, and related code embody multiple incorrect conflations. A scorched-earth migration is necessary — no bridging, no dual code paths.
 
 The detailed refactoring plan is in `WHAT-IS-A-DOMAIN-PART-4-REFACTOR.md`.

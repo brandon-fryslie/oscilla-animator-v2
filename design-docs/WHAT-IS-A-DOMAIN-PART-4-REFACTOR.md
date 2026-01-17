@@ -8,13 +8,29 @@ This document catalogs the codebase changes required to implement the correct do
 
 ## Executive Summary
 
-The current codebase has a fundamental conflation: `DomainId` and `DomainDef` mix **domain type** (what kind of thing) with **instantiation** (how many, what layout). This must be separated into:
+The current codebase has multiple fundamental conflations that must be separated:
 
-1. **DomainType** — Classification (shape, circle, control, event)
-2. **InstanceDecl** — Configuration (count, layout, lifecycle)
-3. **InstanceId** — Reference to a specific instantiation
+1. **Domain vs Instantiation**: `DomainDef` mixes domain type (what kind) with count/layout (how many/where)
+2. **Primitive vs Array**: No separation between "a circle" and "100 circles"
+3. **Instance vs Layout**: Count and spatial arrangement are entangled
 
-Every file that touches domain concepts needs updating. The changes fall into categories:
+The correct architecture has three stages:
+
+1. **Primitive Blocks** — Define single elements (domain classification)
+   - `[Circle]` outputs `Signal<circle>` (ONE circle)
+
+2. **Array Block** — Cardinality transform: one → many
+   - `[Array]` transforms `Signal<T>` → `Field<T, instance>`
+
+3. **Layout Blocks** — Spatial arrangement operations
+   - `[Grid Layout]` operates on `Field<T>` → outputs position `Field<vec2>`
+
+This separation enables:
+- Maximum composability (same elements, different layouts)
+- Clean type system (cardinality axis is explicit)
+- Pool-based performance (allocate once, toggle visibility)
+
+Every file that touches domain/instance concepts needs updating. The changes fall into categories:
 
 | Category | Scope | Effort |
 |----------|-------|--------|
@@ -25,6 +41,89 @@ Every file that touches domain concepts needs updating. The changes fall into ca
 | Compiler Passes | 6+ files | Moderate changes |
 | Runtime | 4 files | Moderate changes |
 | Tests | 8+ files | Rewrite to match new model |
+
+---
+
+## Architecture Overview: The Three-Stage Model
+
+Before diving into file changes, understand the target architecture:
+
+### Stage 1: Primitives (Domain Classification)
+
+```
+[Circle]
+  inputs: { radius: Signal<float> }
+  outputs: { circle: Signal<circle> }
+
+  Creates ONE circle
+  Domain: circle
+  Cardinality: one
+```
+
+Primitives define WHAT kind of thing, not HOW MANY.
+
+### Stage 2: Array (Cardinality Transform)
+
+```
+[Array]
+  inputs: { element: Signal<any-domain>, count: Signal<int> }
+  outputs: { elements: Field<same-domain>, index: Field<int>, t: Field<float>, active: Field<bool> }
+
+  Transforms Signal<T> → Field<T, instance>
+  Creates instance with pool-based allocation
+  Cardinality: one → many
+```
+
+Array is the ONLY place where instances are created. It's the cardinality transform.
+
+### Stage 3: Layout (Spatial Arrangement)
+
+```
+[Grid Layout]
+  inputs: { elements: Field<any>, rows: Signal<int>, cols: Signal<int> }
+  outputs: { position: Field<vec2, same-instance> }
+
+  Operates on existing field (instance)
+  Computes positions based on layout algorithm
+  Position is just another field (not special-cased)
+```
+
+Layout assigns WHERE elements are, separate from WHAT they are and HOW MANY exist.
+
+### Data Flow Example
+
+```
+[Circle] ──Signal<circle>──▶ [Array] ──Field<circle, inst_1>──▶ [Grid] ──position──▶ [Render]
+  r=0.02                      count=100                         10×10
+                            maxCount=200
+```
+
+1. Circle: ONE circle primitive
+2. Array: 100 instances (from pool of 200)
+3. Grid: Positions for those 100 circles
+4. Render: Draw them
+
+### Why This Matters
+
+**Composability:**
+```
+                    ┌──▶ [Grid] ──▶ [Render A]
+[Circle] ──▶ [Array]─┼──▶ [Spiral] ──▶ [Render B]
+                    └──▶ [Random] ──▶ [Render C]
+
+Same 100 circles, three different layouts, three views.
+```
+
+**Type Safety:**
+- `Signal<circle>` — cardinality: one
+- `Field<circle, inst_1>` — cardinality: many (over instance inst_1)
+
+Operations know which they accept. Mismatch = compile error.
+
+**Performance:**
+- Pool allocated once (200 elements)
+- Active mask toggles visibility (cheap)
+- No reallocation when count changes
 
 ---
 
@@ -81,6 +180,15 @@ export type Cardinality =
   | { readonly kind: 'zero' }
   | { readonly kind: 'one' }
   | { readonly kind: 'many'; readonly instance: InstanceRef };  // Changed from 'domain'
+
+// Primitive Types (NEW)
+export type PrimitiveId = string & { readonly __brand: 'PrimitiveId' };
+
+export interface PrimitiveDecl {
+  readonly id: PrimitiveId;
+  readonly domainType: DomainTypeId;
+  readonly params: Record<string, SigExprId>;  // e.g., { radius: sig_1 }
+}
 ```
 
 **Also update:** All helper functions that create cardinality values.
@@ -140,29 +248,41 @@ export interface DomainDef {
   readonly params: Readonly<Record<string, unknown>>;
 }
 
-// ADD: Separate Instance Declaration
+// ADD: Separate Instance Declaration (Pool-Based)
 export interface InstanceDecl {
   readonly id: InstanceId;
   readonly domainType: DomainTypeId;
-  readonly count: number | 'dynamic';
-  readonly layout: LayoutSpec;
-  readonly lifecycle: 'static' | 'dynamic' | 'pooled';
+  readonly primitiveId: PrimitiveId;      // Which primitive this arrays
+  readonly maxCount: number;              // Pool size (allocated once)
+  readonly countExpr?: SigExprId;         // Dynamic count signal (optional)
+  readonly lifecycle: 'static' | 'pooled';
 }
 
-export type LayoutSpec =
-  | { kind: 'unordered' }
-  | { kind: 'grid'; rows: number; cols: number }
-  | { kind: 'circular'; radius: number }
-  | { kind: 'linear'; spacing: number }
-  | { kind: 'random'; bounds: { x: number; y: number; w: number; h: number }; seed: number }
-  | { kind: 'along-path'; pathInstanceId: InstanceId }
-  | { kind: 'custom'; positionField: FieldExprId };
+// Layout is NO LONGER part of instance!
+// Layout blocks are operations that produce position fields.
 
-// UPDATE FieldExprSource:
+// UPDATE FieldExprSource (intrinsic access):
 export interface FieldExprSource {
   readonly kind: 'source';
-  readonly instanceId: InstanceId;        // Which instance (not domain!)
-  readonly intrinsic: string;             // 'position', 'index', 'radius', etc.
+  readonly instanceId: InstanceId;        // Which instance
+  readonly intrinsic: string;             // 'index', 't', 'active', etc.
+  readonly type: SignalType;
+}
+
+// NEW: FieldExprArray (created by Array block)
+export interface FieldExprArray {
+  readonly kind: 'array';
+  readonly primitiveId: PrimitiveId;      // Source primitive
+  readonly instanceId: InstanceId;        // Created instance
+  readonly type: SignalType;
+}
+
+// NEW: FieldExprLayout (created by layout blocks)
+export interface FieldExprLayout {
+  readonly kind: 'layout';
+  readonly instanceId: InstanceId;        // Which instance to position
+  readonly layout: 'grid' | 'spiral' | 'random' | 'along-path';
+  readonly params: readonly SigExprId[];  // Layout parameters (rows, cols, etc.)
   readonly type: SignalType;
 }
 
@@ -201,20 +321,36 @@ export interface StepRender {
 
 ### File: `src/compiler/ir/IRBuilder.ts` (interface)
 
-**Current problem:** Methods use `DomainId` for what should be instances.
+**Current problem:** Methods use `DomainId` for what should be instances. No primitive concept.
 
 **Required changes:**
 
 ```typescript
-// RENAME createDomain → createInstance
+// NEW: Primitive creation
+createPrimitive(
+  domainType: DomainTypeId,
+  params: Record<string, SigExprId>
+): PrimitiveId;
+
+// NEW: Array/instance creation (REPLACES createDomain)
 // Old: createDomain(kind: 'grid' | 'n' | 'path', count: number, params?: Record<string, unknown>): DomainId;
 // New:
 createInstance(
-  domainType: DomainTypeId,
-  count: number | 'dynamic',
-  layout: LayoutSpec,
-  lifecycle?: 'static' | 'dynamic' | 'pooled'
+  primitiveId: PrimitiveId,
+  maxCount: number,           // Pool size
+  countExpr?: SigExprId,      // Optional dynamic count
+  lifecycle?: 'static' | 'pooled'
 ): InstanceId;
+
+// NEW: Field expression for array
+fieldArray(instanceId: InstanceId, domainType: DomainTypeId): FieldExprId;
+
+// NEW: Field expression for layout
+fieldLayout(
+  instanceId: InstanceId,
+  layoutKind: 'grid' | 'spiral' | 'random' | 'along-path',
+  params: readonly SigExprId[]
+): FieldExprId;
 
 // RENAME getDomains → getInstances
 // Old: getDomains(): ReadonlyMap<DomainId, DomainDef>;
@@ -290,61 +426,98 @@ const indexField = ctx.b.fieldIntrinsic(instanceId, 'normalizedIndex', signalTyp
 
 **File:** `src/blocks/domain-blocks.ts`
 
-**Current (WRONG):** `GridDomain` and `DomainN` blocks that conflate domain with instantiation.
+**Current (WRONG):** `GridDomain` and `DomainN` blocks conflate domain type, count, and layout.
 
-**Correct replacement:** Instance blocks per domain type.
+**Correct replacement:** Three separate block types following the primitive → array → layout architecture.
 
 ```typescript
-// DELETE: GridDomain, DomainN
+// DELETE: GridDomain, DomainN (completely wrong model)
 
-// ADD: Shape Instance block (example)
+// ADD: Primitive blocks (one per domain type)
 registerBlock({
-  type: 'CircleInstance',
-  label: 'Circles',
-  category: 'instance',
-  description: 'Creates a collection of circles',
+  type: 'Circle',
+  label: 'Circle',
+  category: 'primitive',
+  description: 'A single circle',
   form: 'primitive',
-  capability: 'instance',  // New capability type
+  capability: 'pure',
   inputs: [
-    { id: 'count', label: 'Count', type: signalType('int') },
-    { id: 'layout', label: 'Layout', type: signalType('layout') },  // New layout type
+    { id: 'radius', label: 'Radius', type: signalType('float') },
   ],
   outputs: [
-    { id: 'position', label: 'Position', type: signalTypeField('vec2', 'self') },
-    { id: 'radius', label: 'Radius', type: signalTypeField('float', 'self') },
-    { id: 'index', label: 'Index', type: signalTypeField('int', 'self') },
-    { id: 't', label: 't [0,1]', type: signalTypeField('float', 'self') },
+    { id: 'circle', label: 'Circle', type: signalType('circle') },  // ONE circle
   ],
   lower: ({ ctx, inputsById, config }) => {
-    const count = resolveCount(inputsById.count, config);
-    const layout = resolveLayout(inputsById.layout, config);
+    // Create a single circle primitive (no instance yet)
+    const radius = inputsById.radius || ctx.b.sigConst(config.radius ?? 0.02, signalType('float'));
 
-    // Create instance
-    const instId = ctx.b.createInstance(
-      domainTypeId('circle'),
-      count,
-      layout
-    );
-
-    // Output intrinsics as field expressions
-    const posField = ctx.b.fieldIntrinsic(instId, 'position', signalTypeField('vec2', instId));
-    const radiusField = ctx.b.fieldIntrinsic(instId, 'radius', signalTypeField('float', instId));
-    const indexField = ctx.b.fieldIntrinsic(instId, 'index', signalTypeField('int', instId));
-    const tField = ctx.b.fieldIntrinsic(instId, 'normalizedIndex', signalTypeField('float', instId));
-
+    // Output is a Signal<circle>, not a field
     return {
-      instanceId: instId,  // Propagate to downstream blocks
+      primitiveType: 'circle',
+      params: { radius },
       outputsById: {
-        position: { k: 'field', id: posField, slot: ctx.b.allocSlot() },
-        radius: { k: 'field', id: radiusField, slot: ctx.b.allocSlot() },
-        index: { k: 'field', id: indexField, slot: ctx.b.allocSlot() },
-        t: { k: 'field', id: tField, slot: ctx.b.allocSlot() },
+        circle: { k: 'signal', id: primitiveId, slot: ctx.b.allocSlot() },
       },
     };
   },
 });
 
-// ADD: Layout blocks
+// ADD: Array block (cardinality transform: one → many)
+registerBlock({
+  type: 'Array',
+  label: 'Array',
+  category: 'instance',
+  description: 'Creates multiple instances of an element',
+  form: 'primitive',
+  capability: 'instance',
+  inputs: [
+    { id: 'element', label: 'Element', type: signalType('any-domain') },  // ONE element
+    { id: 'count', label: 'Count', type: signalType('int') },
+  ],
+  outputs: [
+    { id: 'elements', label: 'Elements', type: signalTypeField('same-as:element', 'self') },  // MANY elements
+    { id: 'index', label: 'Index', type: signalTypeField('int', 'self') },
+    { id: 't', label: 't [0,1]', type: signalTypeField('float', 'self') },
+    { id: 'active', label: 'Active', type: signalTypeField('bool', 'self') },
+  ],
+  params: {
+    maxCount: 200,  // Pool size
+  },
+  lower: ({ ctx, inputsById, config }) => {
+    const elementInput = inputsById.element;
+    const countSignal = inputsById.count;
+    const maxCount = config.maxCount as number;
+
+    // Extract domain type from element input
+    const domainType = extractDomainType(elementInput);
+
+    // Create pooled instance
+    const instId = ctx.b.createInstance(
+      domainType,
+      maxCount,
+      { kind: 'pooled', countExpr: countSignal },
+      'pooled'
+    );
+
+    // Output universal intrinsics
+    const elementsField = ctx.b.fieldArray(instId, domainType);
+    const indexField = ctx.b.fieldIntrinsic(instId, 'index', signalTypeField('int', instId));
+    const tField = ctx.b.fieldIntrinsic(instId, 'normalizedIndex', signalTypeField('float', instId));
+    const activeField = ctx.b.fieldIntrinsic(instId, 'active', signalTypeField('bool', instId));
+
+    return {
+      instanceId: instId,
+      outputsById: {
+        elements: { k: 'field', id: elementsField, slot: ctx.b.allocSlot() },
+        index: { k: 'field', id: indexField, slot: ctx.b.allocSlot() },
+        t: { k: 'field', id: tField, slot: ctx.b.allocSlot() },
+        active: { k: 'field', id: activeField, slot: ctx.b.allocSlot() },
+      },
+    };
+  },
+});
+
+// ADD: Layout blocks (operate on existing fields)
 registerBlock({
   type: 'GridLayout',
   label: 'Grid',
@@ -353,24 +526,32 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   inputs: [
+    { id: 'elements', label: 'Elements', type: signalTypeField('any', 'any') },
     { id: 'rows', label: 'Rows', type: signalType('int') },
     { id: 'cols', label: 'Cols', type: signalType('int') },
-    { id: 'spacing', label: 'Spacing', type: signalType('float') },
   ],
   outputs: [
-    { id: 'layout', label: 'Layout', type: signalType('layout') },
+    { id: 'position', label: 'Position', type: signalTypeField('vec2', 'same-as:elements') },
   ],
-  lower: ({ ctx, inputsById, config }) => {
-    const rows = resolveInt(inputsById.rows, config, 'rows', 10);
-    const cols = resolveInt(inputsById.cols, config, 'cols', 10);
-    const spacing = resolveFloat(inputsById.spacing, config, 'spacing', 1.0);
+  lower: ({ ctx, inputsById }) => {
+    const elementsField = inputsById.elements;
+    const instanceId = extractInstanceFromField(elementsField);
 
-    // Layout is a compile-time construct, not a runtime signal
-    const layoutSpec: LayoutSpec = { kind: 'grid', rows, cols, spacing };
+    const rowsSignal = inputsById.rows;
+    const colsSignal = inputsById.cols;
+
+    // Create field expression that computes grid positions
+    const posField = ctx.b.fieldMapIndexed(
+      instanceId,
+      ctx.b.kernel('grid_position'),
+      signalTypeField('vec2', instanceId),
+      [rowsSignal, colsSignal]
+    );
 
     return {
-      layoutSpec,  // Special return for layout blocks
-      outputsById: {},
+      outputsById: {
+        position: { k: 'field', id: posField, slot: ctx.b.allocSlot() },
+      },
     };
   },
 });

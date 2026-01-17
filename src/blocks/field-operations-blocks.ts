@@ -8,7 +8,6 @@ import { registerBlock } from './registry';
 import { signalType, signalTypeField } from '../core/canonical-types';
 import { defaultSourceConstant, defaultSourceRail, defaultSourceNone } from '../types';
 import type { SigExprId, FieldExprId } from '../compiler/ir/Indices';
-import { domainId } from '../compiler/ir/Indices';
 
 // =============================================================================
 // FieldFromDomainId
@@ -29,9 +28,14 @@ registerBlock({
   ],
   params: {},
   lower: ({ ctx }) => {
-    // Use fieldSource to get normalized index (0..1) for each domain element
-    const domain = domainId('default');
-    const id01Field = ctx.b.fieldSource(domain, 'normalizedIndex', signalTypeField('float', 'default'));
+    // Get instance context from CircleInstance or inferred from inputs
+    const instance = ctx.inferredInstance ?? ctx.instance;
+    if (!instance) {
+      throw new Error('FieldFromDomainId requires instance context');
+    }
+
+    // Use fieldIntrinsic to get normalized index (0..1) for each instance element
+    const id01Field = ctx.b.fieldIntrinsic(instance, 'normalizedIndex', signalTypeField('float', 'default'));
     const slot = ctx.b.allocSlot();
 
     return {

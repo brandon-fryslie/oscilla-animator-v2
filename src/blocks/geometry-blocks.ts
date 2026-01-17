@@ -7,7 +7,6 @@
 import { registerBlock } from './registry';
 import { signalType, signalTypeField } from '../core/canonical-types';
 import type { SigExprId } from '../compiler/ir/Indices';
-import { domainId } from '../compiler/ir/Indices';
 
 // =============================================================================
 // PolarToCartesian
@@ -89,13 +88,15 @@ registerBlock({
     const radiusValue = config?.radius as number ?? 100;
     const phaseOffset = config?.phaseOffset as number ?? 0;
 
-    // Get the domain from context (this should be passed by the compiler)
-    // For now, we'll use 'default' domain ID
-    const domain = domainId('default');
+    // Get instance context from CircleInstance or inferred from inputs
+    const instance = ctx.inferredInstance ?? ctx.instance;
+    if (!instance) {
+      throw new Error('Circle requires instance context');
+    }
 
     // Create field expressions for circle layout
-    // Use fieldSource to get the normalized index for each domain element
-    const indexField = ctx.b.fieldSource(domain, 'normalizedIndex', signalTypeField('float', 'default'));
+    // Use fieldIntrinsic to get the normalized index for each instance element
+    const indexField = ctx.b.fieldIntrinsic(instance, 'normalizedIndex', signalTypeField('float', 'default'));
 
     // Apply circle layout transformation
     const radiusSig = radius?.k === 'sig' ? radius.id as SigExprId : ctx.b.sigConst(radiusValue, signalType('float'));

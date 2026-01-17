@@ -1,0 +1,70 @@
+Agent: iterative-implementer | 2026-01-17 04:48:20
+Mode: manual
+Completed: Sprint 3 - Instance Blocks | Files: 4 | Commits: 1
+Tests: 224 passing, 12 failing (no new failures)
+Cache invalidated: runtime-block-registry.md
+Status: complete
+
+SPRINT 3 SUMMARY
+================
+
+Mission: Create instance-based blocks and update lowering context for domain refactor
+
+COMPLETED WORK:
+
+1. Instance Blocks (NEW FILE: src/blocks/instance-blocks.ts)
+   - CircleInstance block:
+     * Inputs: count (int), layout (int, optional)
+     * Outputs: position (vec2 field), radius (float field), index (int field), t (float field)
+     * Uses createInstance() from Sprint 2
+     * Supports both config-based and input-based layouts
+
+   - GridLayout block:
+     * Inputs: rows (int), cols (int)
+     * Outputs: layout (int) with LayoutSpec metadata
+     * Compile-time layout specification
+
+   - LinearLayout block:
+     * Inputs: direction (vec2), spacing (float)
+     * Outputs: layout (int) with LayoutSpec metadata
+     * Compile-time layout specification
+
+2. LowerCtx Enhancements (src/blocks/registry.ts)
+   - Added instance?: InstanceId field
+   - Added inferredInstance?: InstanceId field
+   - Infrastructure for context propagation (Sprint 4 will populate)
+
+3. Compiler Integration (src/compiler/compile.ts)
+   - Added import for instance-blocks.ts
+   - Blocks now registered via side-effect import
+
+4. Bug Fix (src/blocks/geometry-blocks.ts)
+   - Fixed OffsetPosition port ID collision
+   - Renamed: posIn (input), posOut (output)
+
+TECHNICAL NOTES:
+
+- Layout blocks use int signals as placeholders with metadata
+- Actual LayoutSpec carried in metadata field (compile-time construct)
+- Instance context fields in LowerCtx are placeholders for Sprint 4
+- Field intrinsics created via fieldIntrinsic(instanceId, intrinsic, type)
+- CircleInstance outputs 't' (normalized index) for convenience
+
+VERIFICATION:
+
+- All tests passing that were passing before (224 tests)
+- No new test failures introduced
+- TypeScript compiles (aside from pre-existing UI issues)
+- Blocks register successfully without errors
+- OffsetPosition port collision resolved
+
+FILES MODIFIED:
+- src/blocks/instance-blocks.ts (NEW)
+- src/blocks/geometry-blocks.ts (bug fix)
+- src/blocks/registry.ts (context fields)
+- src/compiler/compile.ts (import)
+
+NEXT STEPS (Sprint 4):
+- Update pass6-block-lowering to populate instance/inferredInstance
+- Implement instance context propagation through graph edges
+- Field operations should infer instance from inputs
