@@ -97,7 +97,7 @@ describe('Steel Thread - Animated Particles', () => {
     // Verify the program structure
     const schedule = program.schedule as ScheduleIR;
     expect(schedule.timeModel.kind).toBe('infinite');
-    expect(schedule.domains.size).toBe(1);
+    expect(schedule.instances.size).toBe(1);
     expect(schedule.steps.length).toBeGreaterThan(0);
 
     // Check we have a render step

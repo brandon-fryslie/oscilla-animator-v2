@@ -98,8 +98,8 @@ describe('compile', () => {
     });
   });
 
-  describe('domain compilation', () => {
-    it('compiles grid domain', () => {
+  describe('instance compilation', () => {
+    it('compiles grid instance', () => {
       const patch = buildPatch((b) => {
         b.addBlock('InfiniteTimeRoot', {});
         b.addBlock('GridDomain', { rows: 4, cols: 4 });
@@ -113,17 +113,17 @@ describe('compile', () => {
 
       expect(result.kind).toBe('ok');
       if (result.kind === 'ok') {
-        // Domains are in schedule wrapper for now
+        // Instances are in schedule wrapper
         const schedule = result.program.schedule as ScheduleIR;
-        const domains = schedule.domains;
-        expect(domains.size).toBe(1);
-        const domain = [...domains.values()][0];
-        expect(domain.count).toBe(16);
-        expect(domain.elementIds.length).toBe(16);
+        const instances = schedule.instances;
+        expect(instances.size).toBe(1);
+        const instance = [...instances.values()][0];
+        expect(instance.count).toBe(16);
+        expect(instance.layout.kind).toBe('grid');
       }
     });
 
-    it('compiles domain N', () => {
+    it('compiles instance N', () => {
       const patch = buildPatch((b) => {
         b.addBlock('InfiniteTimeRoot', {});
         b.addBlock('DomainN', { n: 100, seed: 42 });
@@ -137,12 +137,12 @@ describe('compile', () => {
 
       expect(result.kind).toBe('ok');
       if (result.kind === 'ok') {
-        // Domains are in schedule wrapper for now
+        // Instances are in schedule wrapper
         const schedule = result.program.schedule as ScheduleIR;
-        const domains = schedule.domains;
-        expect(domains.size).toBe(1);
-        const domain = [...domains.values()][0];
-        expect(domain.count).toBe(100);
+        const instances = schedule.instances;
+        expect(instances.size).toBe(1);
+        const instance = [...instances.values()][0];
+        expect(instance.count).toBe(100);
       }
     });
   });
