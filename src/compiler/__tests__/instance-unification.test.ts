@@ -5,19 +5,25 @@
  * field expression composition and at render sinks.
  *
  * Note: These tests validate the domain unification logic used for field expressions.
- * Even with the instance model, fields still have domain constraints for unification.
+ * With the new instance model, fields are tied to instances and unification ensures
+ * that field operations only combine fields from the same instance.
  */
 
 import { describe, it, expect } from 'vitest';
 import { IRBuilderImpl } from '../ir/IRBuilderImpl';
 import { OpCode } from '../ir/types';
 import { signalTypeField, signalTypeSignal } from '../../core/canonical-types';
+import { DOMAIN_CIRCLE } from '../../core/domain-registry';
+import { domainId } from '../ir/Indices';
 
 describe('Instance Unification', () => {
   describe('domain inference', () => {
     it('infers domain from FieldExprSource', () => {
       const b = new IRBuilderImpl();
-      const domain = b.domainN(10);
+      // Create instance using new API
+      const instanceId = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
+      // Use the instance's internal domain for field creation
+      const domain = domainId(`domain_0`); // First domain created
       const type = signalTypeField('float', domain);
       const field = b.fieldSource(domain, 'index', type);
 
@@ -26,7 +32,8 @@ describe('Instance Unification', () => {
 
     it('propagates domain through FieldExprMap', () => {
       const b = new IRBuilderImpl();
-      const domain = b.domainN(10);
+      const instanceId = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
+      const domain = domainId(`domain_0`);
       const type = signalTypeField('float', domain);
       const source = b.fieldSource(domain, 'index', type);
       const mapped = b.fieldMap(source, { kind: 'opcode', opcode: OpCode.Sin }, type);
@@ -36,7 +43,8 @@ describe('Instance Unification', () => {
 
     it('propagates domain through FieldExprZipSig', () => {
       const b = new IRBuilderImpl();
-      const domain = b.domainN(10);
+      const instanceId = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
+      const domain = domainId(`domain_0`);
       const fieldType = signalTypeField('float', domain);
       const sigType = signalTypeSignal('float');
       const field = b.fieldSource(domain, 'index', fieldType);
@@ -48,7 +56,8 @@ describe('Instance Unification', () => {
 
     it('returns undefined for broadcast fields', () => {
       const b = new IRBuilderImpl();
-      const domain = b.domainN(10);
+      const instanceId = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
+      const domain = domainId(`domain_0`);
       const type = signalTypeField('float', domain);
       const sig = b.sigConst(1.0, signalTypeSignal('float'));
       const broadcast = b.fieldBroadcast(sig, type);
@@ -58,7 +67,8 @@ describe('Instance Unification', () => {
 
     it('returns undefined for const fields', () => {
       const b = new IRBuilderImpl();
-      const domain = b.domainN(10);
+      const instanceId = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
+      const domain = domainId(`domain_0`);
       const type = signalTypeField('float', domain);
       const constField = b.fieldConst(42, type);
 
@@ -69,7 +79,8 @@ describe('Instance Unification', () => {
   describe('fieldZip domain validation', () => {
     it('accepts fields from the same domain', () => {
       const b = new IRBuilderImpl();
-      const domain = b.domainN(10);
+      const instanceId = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
+      const domain = domainId(`domain_0`);
       const type = signalTypeField('float', domain);
       const field1 = b.fieldSource(domain, 'index', type);
       const field2 = b.fieldSource(domain, 'normalizedIndex', type);
@@ -81,8 +92,11 @@ describe('Instance Unification', () => {
 
     it('rejects fields from different domains', () => {
       const b = new IRBuilderImpl();
-      const domain1 = b.domainN(10);
-      const domain2 = b.domainN(20);
+      // Create two separate instances (creates two domains)
+      const instance1 = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
+      const instance2 = b.createInstance(DOMAIN_CIRCLE, 20, { kind: 'unordered' });
+      const domain1 = domainId(`domain_0`);
+      const domain2 = domainId(`domain_1`);
       const type1 = signalTypeField('float', domain1);
       const type2 = signalTypeField('float', domain2);
       const field1 = b.fieldSource(domain1, 'index', type1);
@@ -95,7 +109,8 @@ describe('Instance Unification', () => {
 
     it('handles broadcast fields (no domain) gracefully', () => {
       const b = new IRBuilderImpl();
-      const domain = b.domainN(10);
+      const instanceId = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
+      const domain = domainId(`domain_0`);
       const type = signalTypeField('float', domain);
       const source = b.fieldSource(domain, 'index', type);
       const sig = b.sigConst(1.0, signalTypeSignal('float'));
@@ -108,7 +123,8 @@ describe('Instance Unification', () => {
 
     it('accepts multiple broadcast fields without error', () => {
       const b = new IRBuilderImpl();
-      const domain = b.domainN(10);
+      const instanceId = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
+      const domain = domainId(`domain_0`);
       const type = signalTypeField('float', domain);
       const sig1 = b.sigConst(1.0, signalTypeSignal('float'));
       const sig2 = b.sigConst(2.0, signalTypeSignal('float'));
@@ -124,7 +140,8 @@ describe('Instance Unification', () => {
   describe('domain propagation through composition', () => {
     it('propagates domain through map after zip', () => {
       const b = new IRBuilderImpl();
-      const domain = b.domainN(10);
+      const instanceId = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
+      const domain = domainId(`domain_0`);
       const type = signalTypeField('float', domain);
       const field1 = b.fieldSource(domain, 'index', type);
       const field2 = b.fieldSource(domain, 'normalizedIndex', type);
@@ -136,8 +153,11 @@ describe('Instance Unification', () => {
 
     it('detects mismatch in nested zip operations', () => {
       const b = new IRBuilderImpl();
-      const domain1 = b.domainN(10);
-      const domain2 = b.domainN(20);
+      // Create two separate instances
+      const instance1 = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
+      const instance2 = b.createInstance(DOMAIN_CIRCLE, 20, { kind: 'unordered' });
+      const domain1 = domainId(`domain_0`);
+      const domain2 = domainId(`domain_1`);
       const type1 = signalTypeField('float', domain1);
       const type2 = signalTypeField('float', domain2);
       const field1 = b.fieldSource(domain1, 'index', type1);

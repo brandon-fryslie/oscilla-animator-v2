@@ -8,6 +8,7 @@
 import { registerBlock } from './registry';
 import { signalType, signalTypeField } from '../core/canonical-types';
 import { DOMAIN_CIRCLE } from '../core/domain-registry';
+import { defaultSourceConstant, defaultSourceNone } from '../types';
 import type { LayoutSpec } from '../compiler/ir/types';
 
 // =============================================================================
@@ -108,8 +109,8 @@ registerBlock({
   form: 'primitive',
   capability: 'identity',
   inputs: [
-    { id: 'count', label: 'Count', type: signalType('int'), defaultValue: 100 },
-    { id: 'layout', label: 'Layout', type: signalType('int'), optional: true },
+    { id: 'count', label: 'Count', type: signalType('int'), defaultValue: 100, defaultSource: defaultSourceConstant(100) },
+    { id: 'layout', label: 'Layout', type: signalType('int'), optional: true, defaultSource: defaultSourceNone() },
   ],
   outputs: [
     { id: 'position', label: 'Position', type: signalTypeField('vec2', 'default') },

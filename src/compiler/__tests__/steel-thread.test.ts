@@ -17,11 +17,11 @@ import {
 
 describe('Steel Thread - Animated Particles', () => {
   it('should compile and execute the minimal animated particles patch', () => {
-    // Build the patch
+    // Build the patch using new instance model
     const patch = buildPatch((b) => {
       const time = b.addBlock('InfiniteTimeRoot', { periodMs: 5000 });
-      const domain = b.addBlock('DomainN', { n: 100, seed: 42 });
-      const id01 = b.addBlock('FieldFromDomainId', {});
+      // Use new CircleInstance which outputs position, index, t directly
+      const instance = b.addBlock('CircleInstance', { count: 100, layoutKind: 'unordered' });
       const centerX = b.addBlock('Const', { value: 0.5 });
       const centerY = b.addBlock('Const', { value: 0.5 });
       const radius = b.addBlock('Const', { value: 0.35 });
@@ -44,19 +44,15 @@ describe('Steel Thread - Animated Particles', () => {
       const size = b.addBlock('Const', { value: 3 });
       const render = b.addBlock('RenderInstances2D', {});
 
-      // Wire domain to blocks that need it
-      b.wire(domain, 'domain', id01, 'domain');
-      b.wire(domain, 'domain', render, 'domain');
-
       // Wire phase to position and color
       b.wire(time, 'phaseA', angularOffset, 'phase');
       b.wire(time, 'phaseA', hue, 'phase');
 
-      // Wire id01 to position and color blocks
-      b.wire(id01, 'id01', goldenAngle, 'id01');
-      b.wire(id01, 'id01', angularOffset, 'id01');
-      b.wire(id01, 'id01', hue, 'id01');
-      b.wire(id01, 'id01', effectiveRadius, 'id01');
+      // Wire instance 't' output (normalized index 0-1) to field blocks
+      b.wire(instance, 't', goldenAngle, 'id01');
+      b.wire(instance, 't', angularOffset, 'id01');
+      b.wire(instance, 't', hue, 'id01');
+      b.wire(instance, 't', effectiveRadius, 'id01');
 
       // Wire spin to angular offset
       b.wire(spin, 'out', angularOffset, 'spin');
@@ -70,7 +66,7 @@ describe('Steel Thread - Animated Particles', () => {
       b.wire(centerY, 'out', pos, 'centerY');
       b.wire(radius, 'out', effectiveRadius, 'radius');
       b.wire(totalAngle, 'out', pos, 'angle');
-      b.wire(effectiveRadius, 'radius', pos, 'radius');
+      b.wire(effectiveRadius, 'out', pos, 'radius');
 
       // Wire hue and sat/val to color
       b.wire(hue, 'hue', color, 'hue');

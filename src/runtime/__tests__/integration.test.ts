@@ -13,10 +13,10 @@ import { BufferPool } from '../BufferPool';
 
 describe('Runtime Integration', () => {
   it('executes a simple animated grid', () => {
-    // Build patch: TimeRoot -> Grid
+    // Build patch: TimeRoot -> CircleInstance with grid layout
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot', {});
-      b.addBlock('GridDomain', { rows: 2, cols: 2 });
+      b.addBlock('CircleInstance', { count: 4, layoutKind: 'grid', rows: 2, cols: 2 });
     });
 
     // Compile

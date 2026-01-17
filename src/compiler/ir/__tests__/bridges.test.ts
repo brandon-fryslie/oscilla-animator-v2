@@ -35,7 +35,7 @@ import {
   bindingWeak,
   bindingStrong,
   bindingIdentity,
-  domainRef,
+  instanceRef,
   referentRef,
 } from '../../../core/canonical-types';
 
@@ -55,7 +55,7 @@ describe('bridgeCardinalityToIR', () => {
   });
 
   it('maps many cardinality to "field" domain', () => {
-    const card: Cardinality = cardinalityMany(domainRef('particles'));
+    const card: Cardinality = cardinalityMany(instanceRef('circle', 'particles'));
     expect(bridgeCardinalityToIR(card)).toBe('field');
   });
 });
@@ -214,7 +214,7 @@ describe('bridgeExtentToAxesDescIR', () => {
 
   it('bridges field extent (many + continuous)', () => {
     const extent: Extent = {
-      cardinality: axisInstantiated(cardinalityMany(domainRef('particles'))),
+      cardinality: axisInstantiated(cardinalityMany(instanceRef('circle', 'particles'))),
       temporality: axisInstantiated(temporalityContinuous()),
       binding: axisInstantiated(bindingUnbound()),
       perspective: axisInstantiated('global'),
@@ -225,7 +225,7 @@ describe('bridgeExtentToAxesDescIR', () => {
 
     expect(resolved.cardinality).toEqual({
       kind: 'many',
-      domain: { kind: 'domain', id: 'particles' },
+      instance: { kind: 'instance', domainType: 'circle', instanceId: 'particles' },
     });
     expect(resolved.temporality).toEqual({ kind: 'continuous' });
     expect(resolved.binding).toEqual({ kind: 'unbound' });
@@ -299,7 +299,7 @@ describe('bridgeExtentToAxesDescIR', () => {
 
   it('preserves identity binding through bridging', () => {
     const extent: Extent = {
-      cardinality: axisInstantiated(cardinalityMany(domainRef('particles'))),
+      cardinality: axisInstantiated(cardinalityMany(instanceRef('circle', 'particles'))),
       temporality: axisInstantiated(temporalityContinuous()),
       binding: axisInstantiated(bindingIdentity(referentRef('entities'))),
       perspective: axisInstantiated('global'),
@@ -324,7 +324,7 @@ describe('bridging edge cases', () => {
     const cardinalities: Cardinality[] = [
       cardinalityZero(),
       cardinalityOne(),
-      cardinalityMany(domainRef('test')),
+      cardinalityMany(instanceRef('circle', 'test')),
     ];
     const temporalities: Temporality[] = [
       temporalityContinuous(),

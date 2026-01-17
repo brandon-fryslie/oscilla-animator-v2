@@ -102,13 +102,14 @@ describe('compile', () => {
     it('compiles grid instance', () => {
       const patch = buildPatch((b) => {
         b.addBlock('InfiniteTimeRoot', {});
-        b.addBlock('GridDomain', { rows: 4, cols: 4 });
+        // Use new CircleInstance block with grid layout
+        b.addBlock('CircleInstance', { count: 16, layoutKind: 'grid', rows: 4, cols: 4 });
       });
 
       const result = compile(patch);
 
       if (result.kind === 'error') {
-        console.error('COMPILE ERROR (GridDomain):', JSON.stringify(result.errors, null, 2));
+        console.error('COMPILE ERROR (CircleInstance grid):', JSON.stringify(result.errors, null, 2));
       }
 
       expect(result.kind).toBe('ok');
@@ -123,16 +124,17 @@ describe('compile', () => {
       }
     });
 
-    it('compiles instance N', () => {
+    it('compiles instance with count', () => {
       const patch = buildPatch((b) => {
         b.addBlock('InfiniteTimeRoot', {});
-        b.addBlock('DomainN', { n: 100, seed: 42 });
+        // Use new CircleInstance block with unordered layout
+        b.addBlock('CircleInstance', { count: 100, layoutKind: 'unordered' });
       });
 
       const result = compile(patch);
 
       if (result.kind === 'error') {
-        console.error('COMPILE ERROR (DomainN):', JSON.stringify(result.errors, null, 2));
+        console.error('COMPILE ERROR (CircleInstance):', JSON.stringify(result.errors, null, 2));
       }
 
       expect(result.kind).toBe('ok');

@@ -135,7 +135,9 @@ export type FieldExpr =
   | FieldExprMap
   | FieldExprZip
   | FieldExprZipSig
-  | FieldExprMapIndexed;
+  | FieldExprMapIndexed
+  | FieldExprArray
+  | FieldExprLayout;
 
 export interface FieldExprConst {
   readonly kind: 'const';
@@ -189,6 +191,28 @@ export interface FieldExprMapIndexed {
   readonly domain: DomainId;
   readonly fn: PureFn;
   readonly signals?: readonly SigExprId[];
+  readonly type: SignalType;
+}
+
+/**
+ * Array field expression - represents Signal<T> → Field<T> transform.
+ * Created by Array block (Stage 2 of three-stage architecture).
+ */
+export interface FieldExprArray {
+  readonly kind: 'array';
+  readonly instanceId: InstanceId;
+  readonly type: SignalType;
+}
+
+/**
+ * Layout field expression - represents field operation that outputs positions.
+ * Created by layout blocks (Stage 3 of three-stage architecture).
+ */
+export interface FieldExprLayout {
+  readonly kind: 'layout';
+  readonly input: FieldExprId;
+  readonly layoutSpec: LayoutSpec;
+  readonly instanceId: InstanceId;
   readonly type: SignalType;
 }
 

@@ -22,7 +22,6 @@ import {
   cardinalityZero,
   cardinalityOne,
   cardinalityMany,
-  domainRef,
 
   // Temporality
   type Temporality,
@@ -50,18 +49,13 @@ import {
   DEFAULTS_V0,
   FRAME_V0,
 
-  // DomainDecl
-  type DomainDecl,
-  domainDeclFixedCount,
-  domainDeclGrid2d,
+  // Instance system
+  instanceRef,
 
   // Unification
   unifyAxis,
   unifyExtent,
   AxisUnificationError,
-
-  // World mapping
-  worldToAxes,
 
   // Derived types
   signalTypeSignal,
@@ -158,12 +152,13 @@ describe('Cardinality', () => {
     expect(c.kind).toBe('one');
   });
 
-  it('creates many cardinality with domain reference', () => {
-    const c = cardinalityMany(domainRef('particles'));
+  it('creates many cardinality with instance reference', () => {
+    const c = cardinalityMany(instanceRef('circle', 'circles-1'));
     expect(c.kind).toBe('many');
     if (c.kind === 'many') {
-      expect(c.domain.kind).toBe('domain');
-      expect(c.domain.id).toBe('particles');
+      expect(c.instance.kind).toBe('instance');
+      expect(c.instance.domainType).toBe('circle');
+      expect(c.instance.instanceId).toBe('circles-1');
     }
   });
 });
@@ -256,7 +251,7 @@ describe('SignalType', () => {
 
   it('creates SignalType with payload and custom extent', () => {
     const st = signalType('vec2', {
-      cardinality: axisInstantiated(cardinalityMany(domainRef('grid'))),
+      cardinality: axisInstantiated(cardinalityMany(instanceRef('shape', 'grid-1'))),
     });
     expect(st.payload).toBe('vec2');
     expect(st.extent.cardinality.kind).toBe('instantiated');
@@ -296,33 +291,6 @@ describe('FRAME_V0', () => {
 
   it('has branch = main', () => {
     expect(FRAME_V0.branch).toBe('main');
-  });
-});
-
-// =============================================================================
-// DomainDecl Tests
-// =============================================================================
-
-describe('DomainDecl', () => {
-  it('creates fixed count domain', () => {
-    const d = domainDeclFixedCount('particles', 100);
-    expect(d.kind).toBe('domain_decl');
-    expect(d.id).toBe('particles');
-    expect(d.shape.kind).toBe('fixed_count');
-    if (d.shape.kind === 'fixed_count') {
-      expect(d.shape.count).toBe(100);
-    }
-  });
-
-  it('creates grid 2d domain', () => {
-    const d = domainDeclGrid2d('grid', 10, 10);
-    expect(d.kind).toBe('domain_decl');
-    expect(d.id).toBe('grid');
-    expect(d.shape.kind).toBe('grid_2d');
-    if (d.shape.kind === 'grid_2d') {
-      expect(d.shape.width).toBe(10);
-      expect(d.shape.height).toBe(10);
-    }
   });
 });
 
@@ -377,16 +345,16 @@ describe('unifyAxis', () => {
   });
 
   describe('complex value equality', () => {
-    it('unifies matching many(domain) cardinalities', () => {
-      const a = axisInstantiated(cardinalityMany(domainRef('particles')));
-      const b = axisInstantiated(cardinalityMany(domainRef('particles')));
+    it('unifies matching many(instance) cardinalities', () => {
+      const a = axisInstantiated(cardinalityMany(instanceRef('circle', 'inst-1')));
+      const b = axisInstantiated(cardinalityMany(instanceRef('circle', 'inst-1')));
       const result = unifyAxis('cardinality', a, b);
       expect(result.kind).toBe('instantiated');
     });
 
-    it('rejects mismatched domain references', () => {
-      const a = axisInstantiated(cardinalityMany(domainRef('particles')));
-      const b = axisInstantiated(cardinalityMany(domainRef('grid')));
+    it('rejects mismatched instance references', () => {
+      const a = axisInstantiated(cardinalityMany(instanceRef('circle', 'inst-1')));
+      const b = axisInstantiated(cardinalityMany(instanceRef('circle', 'inst-2')));
       expect(() => unifyAxis('cardinality', a, b)).toThrow(AxisUnificationError);
     });
   });
@@ -417,55 +385,6 @@ describe('unifyExtent', () => {
 });
 
 // =============================================================================
-// World → Axes Mapping Tests
-// =============================================================================
-
-describe('worldToAxes', () => {
-  it('maps static to zero + continuous', () => {
-    const { cardinality, temporality } = worldToAxes('static');
-    expect(cardinality.kind).toBe('zero');
-    expect(temporality.kind).toBe('continuous');
-  });
-
-  it('maps scalar to zero + continuous', () => {
-    const { cardinality, temporality } = worldToAxes('scalar');
-    expect(cardinality.kind).toBe('zero');
-    expect(temporality.kind).toBe('continuous');
-  });
-
-  it('maps signal to one + continuous', () => {
-    const { cardinality, temporality } = worldToAxes('signal');
-    expect(cardinality.kind).toBe('one');
-    expect(temporality.kind).toBe('continuous');
-  });
-
-  it('maps field to many(domain) + continuous', () => {
-    const { cardinality, temporality } = worldToAxes('field', 'particles');
-    expect(cardinality.kind).toBe('many');
-    expect(temporality.kind).toBe('continuous');
-    if (cardinality.kind === 'many') {
-      expect(cardinality.domain.id).toBe('particles');
-    }
-  });
-
-  it('throws if field is missing domainId', () => {
-    expect(() => worldToAxes('field')).toThrow('field world requires domainId');
-  });
-
-  it('maps event to one + discrete by default', () => {
-    const { cardinality, temporality } = worldToAxes('event');
-    expect(cardinality.kind).toBe('one');
-    expect(temporality.kind).toBe('discrete');
-  });
-
-  it('maps event with domain to many + discrete', () => {
-    const { cardinality, temporality } = worldToAxes('event', 'particles');
-    expect(cardinality.kind).toBe('many');
-    expect(temporality.kind).toBe('discrete');
-  });
-});
-
-// =============================================================================
 // Derived SignalType Helpers Tests
 // =============================================================================
 
@@ -484,7 +403,7 @@ describe('derived SignalType helpers', () => {
   });
 
   it('signalTypeField creates many + continuous', () => {
-    const st = signalTypeField('vec2', 'grid');
+    const st = signalTypeField('vec2', 'grid-1');
     expect(st.payload).toBe('vec2');
     const card = st.extent.cardinality;
     const temp = st.extent.temporality;

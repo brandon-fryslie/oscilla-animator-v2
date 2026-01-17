@@ -77,27 +77,43 @@ export function getAxisValue<T>(tag: AxisTag<T>, defaultValue: T): T {
 }
 
 // =============================================================================
-// Domain References
+// Instance System (NEW - Domain Refactor)
 // =============================================================================
 
 /**
- * Stable identifier for a domain declaration.
+ * Re-export domain registry types.
+ * These define the domain TYPE system (shape, circle, control, event).
  */
-export type DomainId = string;
+export type { DomainTypeId, InstanceId, IntrinsicSpec, DomainType } from './domain-registry';
+export {
+  domainTypeId,
+  instanceId,
+  DOMAIN_SHAPE,
+  DOMAIN_CIRCLE,
+  DOMAIN_RECTANGLE,
+  DOMAIN_CONTROL,
+  DOMAIN_EVENT,
+  getDomainType,
+  isSubdomainOf,
+  getIntrinsics,
+  hasIntrinsic,
+} from './domain-registry';
 
 /**
- * Reference to a domain by ID.
+ * Reference to a specific instance.
+ * Instances are configurations of domain types (count, layout, lifecycle).
  */
-export interface DomainRef {
-  readonly kind: 'domain';
-  readonly id: DomainId;
+export interface InstanceRef {
+  readonly kind: 'instance';
+  readonly domainType: string; // DomainTypeId
+  readonly instanceId: string; // InstanceId
 }
 
 /**
- * Create a domain reference.
+ * Create an instance reference.
  */
-export function domainRef(id: DomainId): DomainRef {
-  return { kind: 'domain', id };
+export function instanceRef(domainType: string, instanceId: string): InstanceRef {
+  return { kind: 'instance', domainType, instanceId };
 }
 
 // =============================================================================
@@ -110,12 +126,12 @@ export function domainRef(id: DomainId): DomainRef {
  * Mapping from old World:
  * - zero = was 'static' / 'config' / 'scalar' (compile-time constant)
  * - one = was 'signal' (single lane, time-varying)
- * - many(domain) = was 'field(domain)' (N lanes aligned by domain)
+ * - many(instance) = was 'field(domain)' (N lanes aligned by instance)
  */
 export type Cardinality =
-  | { readonly kind: 'zero' }                           // Compile-time constant, no runtime lanes
-  | { readonly kind: 'one' }                            // Single lane
-  | { readonly kind: 'many'; readonly domain: DomainRef }; // N lanes aligned by domain
+  | { readonly kind: 'zero' }                              // Compile-time constant, no runtime lanes
+  | { readonly kind: 'one' }                               // Single lane
+  | { readonly kind: 'many'; readonly instance: InstanceRef }; // N lanes aligned by instance
 
 /**
  * Create a zero cardinality (compile-time constant).
@@ -132,10 +148,10 @@ export function cardinalityOne(): Cardinality {
 }
 
 /**
- * Create a many cardinality (N lanes aligned by domain).
+ * Create a many cardinality (N lanes aligned by instance).
  */
-export function cardinalityMany(domain: DomainRef): Cardinality {
-  return { kind: 'many', domain };
+export function cardinalityMany(instance: InstanceRef): Cardinality {
+  return { kind: 'many', instance };
 }
 
 // =============================================================================
@@ -379,99 +395,6 @@ export function resolveExtent(extent: Extent): ResolvedExtent {
 }
 
 // =============================================================================
-// Domain Declarations
-// =============================================================================
-
-/**
- * Shape specification for a domain.
- */
-export type DomainShape =
-  | { readonly kind: 'fixed_count'; readonly count: number }
-  | { readonly kind: 'grid_2d'; readonly width: number; readonly height: number }
-  | { readonly kind: 'voices'; readonly maxVoices: number }
-  | { readonly kind: 'mesh_vertices'; readonly assetId: string };
-
-/**
- * Domain declaration - compile-time resource defining element topology.
- *
- * Domain is NOT a wire value. It's a compile-time declared stable index set.
- * At runtime, domains are erased to loop bounds + layout constants.
- */
-export interface DomainDecl {
-  readonly kind: 'domain_decl';
-  readonly id: DomainId;
-  readonly shape: DomainShape;
-}
-
-/**
- * Create a fixed-count domain declaration.
- */
-export function domainDeclFixedCount(id: DomainId, count: number): DomainDecl {
-  return { kind: 'domain_decl', id, shape: { kind: 'fixed_count', count } };
-}
-
-/**
- * Create a 2D grid domain declaration.
- */
-export function domainDeclGrid2d(id: DomainId, width: number, height: number): DomainDecl {
-  return { kind: 'domain_decl', id, shape: { kind: 'grid_2d', width, height } };
-}
-
-/**
- * Create a voices domain declaration.
- */
-export function domainDeclVoices(id: DomainId, maxVoices: number): DomainDecl {
-  return { kind: 'domain_decl', id, shape: { kind: 'voices', maxVoices } };
-}
-
-/**
- * Create a mesh vertices domain declaration.
- */
-export function domainDeclMeshVertices(id: DomainId, assetId: string): DomainDecl {
-  return { kind: 'domain_decl', id, shape: { kind: 'mesh_vertices', assetId } };
-}
-
-// =============================================================================
-// Instance System (NEW - Domain Refactor)
-// =============================================================================
-
-/**
- * Re-export domain registry types.
- * These define the domain TYPE system (shape, circle, control, event).
- */
-export type { DomainTypeId, InstanceId, IntrinsicSpec, DomainType } from './domain-registry';
-export {
-  domainTypeId,
-  instanceId,
-  DOMAIN_SHAPE,
-  DOMAIN_CIRCLE,
-  DOMAIN_RECTANGLE,
-  DOMAIN_CONTROL,
-  DOMAIN_EVENT,
-  getDomainType,
-  isSubdomainOf,
-  getIntrinsics,
-  hasIntrinsic,
-} from './domain-registry';
-
-/**
- * Reference to a specific instance.
- * Instances are configurations of domain types (count, layout, lifecycle).
- */
-export interface InstanceRef {
-  readonly kind: 'instance';
-  readonly domainType: string; // DomainTypeId
-  readonly instanceId: string; // InstanceId
-}
-
-/**
- * Create an instance reference.
- */
-export function instanceRef(domainType: string, instanceId: string): InstanceRef {
-  return { kind: 'instance', domainType, instanceId };
-}
-
-// =============================================================================
 // Axis Unification
 // =============================================================================
 
@@ -566,12 +489,15 @@ export function unifyExtent(a: Extent, b: Extent): Extent {
  * Mapping:
  * - static/scalar → zero + continuous
  * - signal → one + continuous
- * - field(domain) → many(domain) + continuous
+ * - field(instanceId) → many(instance) + continuous
  * - event → one|many + discrete
+ *
+ * Note: instanceId parameter is just the ID string (e.g., 'circles-1').
+ * Domain type is inferred as 'default' for backward compatibility.
  */
 export function worldToAxes(
   world: 'static' | 'scalar' | 'signal' | 'field' | 'event',
-  domainId?: DomainId
+  instanceIdStr?: string
 ): { cardinality: Cardinality; temporality: Temporality } {
   switch (world) {
     case 'static':
@@ -586,16 +512,16 @@ export function worldToAxes(
         temporality: temporalityContinuous(),
       };
     case 'field':
-      if (!domainId) {
+      if (!instanceIdStr) {
         throw new Error('field world requires domainId');
       }
       return {
-        cardinality: cardinalityMany(domainRef(domainId)),
+        cardinality: cardinalityMany(instanceRef('default', instanceIdStr)),
         temporality: temporalityContinuous(),
       };
     case 'event':
       return {
-        cardinality: domainId ? cardinalityMany(domainRef(domainId)) : cardinalityOne(),
+        cardinality: instanceIdStr ? cardinalityMany(instanceRef('default', instanceIdStr)) : cardinalityOne(),
         temporality: temporalityDiscrete(),
       };
   }
@@ -616,11 +542,17 @@ export function signalTypeSignal(payload: PayloadType): SignalType {
 }
 
 /**
- * Create a Field SignalType (many(domain) + continuous).
+ * Create a Field SignalType (many(instance) + continuous).
+ *
+ * Accepts either an InstanceRef or a plain instanceId string (uses 'default' domain type).
  */
-export function signalTypeField(payload: PayloadType, domainId: DomainId): SignalType {
+export function signalTypeField(payload: PayloadType, instance: InstanceRef | string): SignalType {
+  const instanceRefValue = typeof instance === 'string'
+    ? instanceRef('default', instance)
+    : instance;
+
   return signalType(payload, {
-    cardinality: axisInstantiated(cardinalityMany(domainRef(domainId))),
+    cardinality: axisInstantiated(cardinalityMany(instanceRefValue)),
     temporality: axisInstantiated(temporalityContinuous()),
   });
 }
@@ -646,11 +578,17 @@ export function signalTypeStatic(payload: PayloadType): SignalType {
 }
 
 /**
- * Create a per-lane Event SignalType (many(domain) + discrete).
+ * Create a per-lane Event SignalType (many(instance) + discrete).
+ *
+ * Accepts either an InstanceRef or a plain instanceId string (uses 'default' domain type).
  */
-export function signalTypePerLaneEvent(payload: PayloadType, domainId: DomainId): SignalType {
+export function signalTypePerLaneEvent(payload: PayloadType, instance: InstanceRef | string): SignalType {
+  const instanceRefValue = typeof instance === 'string'
+    ? instanceRef('default', instance)
+    : instance;
+
   return signalType(payload, {
-    cardinality: axisInstantiated(cardinalityMany(domainRef(domainId))),
+    cardinality: axisInstantiated(cardinalityMany(instanceRefValue)),
     temporality: axisInstantiated(temporalityDiscrete()),
   });
 }

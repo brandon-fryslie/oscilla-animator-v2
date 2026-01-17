@@ -213,6 +213,41 @@ export class IRBuilderImpl implements IRBuilder {
     return id;
   }
 
+  /**
+   * Create an array field expression (Stage 2: Signal<T> → Field<T>).
+   * Represents the elements of an array instance.
+   */
+  fieldArray(instanceId: InstanceId, type: SignalType): FieldExprId {
+    const id = fieldExprId(this.fieldExprs.length);
+    this.fieldExprs.push({
+      kind: 'array',
+      instanceId,
+      type,
+    });
+    return id;
+  }
+
+  /**
+   * Create a layout field expression (Stage 3: Field operation for positions).
+   * Applies a layout specification to compute positions for field elements.
+   */
+  fieldLayout(
+    input: FieldExprId,
+    layoutSpec: LayoutSpec,
+    instanceId: InstanceId,
+    type: SignalType
+  ): FieldExprId {
+    const id = fieldExprId(this.fieldExprs.length);
+    this.fieldExprs.push({
+      kind: 'layout',
+      input,
+      layoutSpec,
+      instanceId,
+      type,
+    });
+    return id;
+  }
+
   fieldBroadcast(signal: SigExprId, type: SignalType): FieldExprId {
     const id = fieldExprId(this.fieldExprs.length);
     this.fieldExprs.push({ kind: 'broadcast', signal, type });
@@ -295,6 +330,9 @@ export class IRBuilderImpl implements IRBuilder {
       case 'broadcast':
       case 'const':
         return undefined; // No inherent domain
+      case 'array':
+      case 'layout':
+        return undefined; // These use instance-based model
     }
   }
 

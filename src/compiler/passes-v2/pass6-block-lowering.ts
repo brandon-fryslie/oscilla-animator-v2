@@ -8,6 +8,7 @@ import type { IRBuilder } from "../ir/IRBuilder";
 import { IRBuilderImpl } from "../ir/IRBuilderImpl";
 import type { CompileError } from "../types";
 import type { ValueRefPacked } from "../ir/lowerTypes";
+import type { InstanceId } from "../ir/Indices";
 import { getBlockDefinition, type LowerCtx } from "../../blocks/registry";
 import { BLOCK_DEFS_BY_TYPE } from "../../blocks/registry";
 // Multi-Input Blocks Integration
@@ -96,7 +97,13 @@ function resolveInputsWithMultiInput(
   const inputRefs = new Map<string, ValueRefPacked>();
 
   for (const [slotId, spec] of resolved.entries()) {
-    const { writers, combine, portType, endpoint } = spec;
+    const { writers, combine, portType, endpoint, optional } = spec;
+
+    // Handle optional inputs with no writers - skip them
+    if (writers.length === 0 && optional) {
+      // Optional input with no connection - lowering function should handle undefined
+      continue;
+    }
 
     // Validate combine policy against writer count
     const policyValidation = validateCombinePolicy(combine, writers.length);
@@ -278,8 +285,11 @@ function lowerBlockInstance(
       const resolved = inputsById[inputPort.id];
       if (resolved !== undefined) {
         inputs.push(resolved);
+      } else if (inputPort.optional) {
+        // Optional inputs can be undefined - lowering function must handle this
+        // Don't add to inputs array, but allow lowering to proceed
       } else {
-        // Accumulate error for unresolved input
+        // Accumulate error for unresolved required input
         errors.push({
           code: "NotImplemented",
           message: `Unresolved input "${inputPort.id}" for block "${block.type}" (${block.id}). All inputs should be resolved by multi-input resolution.`,
@@ -294,6 +304,21 @@ function lowerBlockInstance(
       return outputRefs;
     }
 
+    // Infer instance context from field inputs
+    let inferredInstance: InstanceId | undefined;
+    for (const ref of Object.values(inputsById)) {
+      if (ref.k === 'field') {
+        // Look up the field expression to find its instance
+        const builderImpl = builder as IRBuilderImpl;
+        const fieldExprs = builderImpl.getFieldExprs();
+        const fieldExpr = fieldExprs[ref.id as unknown as number];
+        if (fieldExpr && (fieldExpr as any).instanceId) {
+          inferredInstance = (fieldExpr as any).instanceId;
+          break;
+        }
+      }
+    }
+
     // Build lowering context
     const ctx: LowerCtx = {
       blockIdx: blockIndex,
@@ -304,6 +329,7 @@ function lowerBlockInstance(
       outTypes: blockDef.outputs.map((port) => port.type),
       b: builder,
       seedConstId: 0, // TODO: Proper seed management
+      inferredInstance,
     };
 
     // Pass block params as config (needed for DSConst blocks to access their value)

@@ -8,7 +8,7 @@
 import type { CompiledProgramIR, ValueSlot } from '../compiler/ir/program';
 import type { ScheduleIR } from '../compiler/passes-v2/pass7-schedule';
 import type { Step, InstanceDecl } from '../compiler/ir/types';
-import type { SigExprId, InstanceId } from '../types';
+import type { SigExprId, IrInstanceId as InstanceId } from '../types';
 import type { RuntimeState } from './RuntimeState';
 import type { BufferPool } from './BufferPool';
 import { resolveTime } from './timeResolution';

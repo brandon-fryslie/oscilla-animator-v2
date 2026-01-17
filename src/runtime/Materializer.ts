@@ -191,6 +191,65 @@ function fillBuffer(
       break;
     }
 
+    case 'array': {
+      // Array field expression: Stage 2 of three-stage architecture
+      // This represents the identity field of the instance
+      // For now, we'll fill with the index as a placeholder
+      // TODO: Support actual element values when blocks provide them
+      const arr = buffer as Float32Array;
+      for (let i = 0; i < N; i++) {
+        arr[i] = i;
+      }
+      break;
+    }
+
+    case 'layout': {
+      // Layout field expression: Stage 3 of three-stage architecture
+      // Applies layout specification to compute positions
+      const layout = expr.layoutSpec;
+      const arr = buffer as Float32Array;
+
+      if (layout.kind === 'grid') {
+        const rows = layout.rows || 1;
+        const cols = layout.cols || 1;
+        for (let i = 0; i < N; i++) {
+          const row = Math.floor(i / cols);
+          const col = i % cols;
+          arr[i * 2 + 0] = cols > 1 ? col / (cols - 1) : 0.5;
+          arr[i * 2 + 1] = rows > 1 ? row / (rows - 1) : 0.5;
+        }
+      } else if (layout.kind === 'circular') {
+        const radius = layout.radius || 0.3;
+        const cx = 0.5;
+        const cy = 0.5;
+        const TWO_PI = Math.PI * 2;
+        for (let i = 0; i < N; i++) {
+          const angle = TWO_PI * (i / N);
+          arr[i * 2 + 0] = cx + radius * Math.cos(angle);
+          arr[i * 2 + 1] = cy + radius * Math.sin(angle);
+        }
+      } else if (layout.kind === 'linear') {
+        const spacing = layout.spacing || 0.01;
+        for (let i = 0; i < N; i++) {
+          arr[i * 2 + 0] = 0.5;
+          arr[i * 2 + 1] = i * spacing;
+        }
+      } else if (layout.kind === 'unordered') {
+        // Unordered: no specific layout, default to (0.5, 0.5)
+        for (let i = 0; i < N; i++) {
+          arr[i * 2 + 0] = 0.5;
+          arr[i * 2 + 1] = 0.5;
+        }
+      } else {
+        // Default: center all elements
+        for (let i = 0; i < N; i++) {
+          arr[i * 2 + 0] = 0.5;
+          arr[i * 2 + 1] = 0.5;
+        }
+      }
+      break;
+    }
+
     default: {
       const _exhaustive: never = expr;
       throw new Error(`Unknown field expr kind: ${(_exhaustive as FieldExpr).kind}`);

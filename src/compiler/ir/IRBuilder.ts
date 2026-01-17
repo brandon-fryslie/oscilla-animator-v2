@@ -76,6 +76,29 @@ export interface IRBuilder {
    */
   fieldIntrinsic(instanceId: InstanceId, intrinsic: string, type: SignalType): FieldExprId;
 
+  /**
+   * Create an array field expression (Stage 2: Signal<T> → Field<T>).
+   * Represents the elements of an array instance.
+   * @param instanceId - The instance containing the array elements
+   * @param type - Signal type for the array elements
+   */
+  fieldArray(instanceId: InstanceId, type: SignalType): FieldExprId;
+
+  /**
+   * Create a layout field expression (Stage 3: Field operation for positions).
+   * Applies a layout specification to compute positions for field elements.
+   * @param input - The field to apply layout to
+   * @param layoutSpec - Layout specification (grid, circular, etc.)
+   * @param instanceId - The instance being laid out
+   * @param type - Signal type for the output (typically vec2)
+   */
+  fieldLayout(
+    input: FieldExprId,
+    layoutSpec: LayoutSpec,
+    instanceId: InstanceId,
+    type: SignalType
+  ): FieldExprId;
+
   /** Broadcast a signal to a field. */
   fieldBroadcast(signal: SigExprId, type: SignalType): FieldExprId;
 

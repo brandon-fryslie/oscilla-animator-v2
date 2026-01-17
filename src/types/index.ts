@@ -20,15 +20,30 @@ export type {
   Temporality,
   Binding,
   Extent,
-  DomainId,
-  DomainRef,
-  DomainDecl,
-  DomainShape,
   PerspectiveId,
   BranchId,
   ReferentId,
   ReferentRef,
   AxisTag,
+  InstanceRef,
+  DomainTypeId,
+  DomainType,
+  IntrinsicSpec,
+} from '../core/canonical-types';
+
+export {
+  instanceRef,
+  domainTypeId,
+  instanceId,
+  DOMAIN_SHAPE,
+  DOMAIN_CIRCLE,
+  DOMAIN_RECTANGLE,
+  DOMAIN_CONTROL,
+  DOMAIN_EVENT,
+  getDomainType,
+  isSubdomainOf,
+  getIntrinsics,
+  hasIntrinsic,
 } from '../core/canonical-types';
 
 export {
@@ -51,17 +66,12 @@ export {
   bindingWeak,
   bindingStrong,
   bindingIdentity,
-  domainRef,
   referentRef,
   extent,
   extentDefault,
   unifyAxis,
   unifyExtent,
   worldToAxes,
-  domainDeclFixedCount,
-  domainDeclGrid2d,
-  domainDeclVoices,
-  domainDeclMeshVertices,
   DEFAULTS_V0,
   FRAME_V0,
 } from '../core/canonical-types';
@@ -84,7 +94,8 @@ export type {
   ExprId,
   StateId,
   SlotId,
-  InstanceId,
+  InstanceId as IrInstanceId,
+  DomainTypeId as IrDomainTypeId,
 } from '../compiler/ir/Indices';
 
 export {
@@ -99,9 +110,9 @@ export {
   stepId,
   exprId,
   stateId,
-  domainId,
   slotId,
-  instanceId,
+  instanceId as irInstanceId,
+  domainTypeId as irDomainTypeId,
 } from '../compiler/ir/Indices';
 
 // =============================================================================

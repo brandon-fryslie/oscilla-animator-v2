@@ -181,3 +181,27 @@ export function registerBlock(def: BlockDef): void {
 export function getAllBlockTypes(): readonly string[] {
   return Array.from(registry.keys());
 }
+
+/**
+ * Get all unique block categories.
+ */
+export function getBlockCategories(): readonly string[] {
+  const categories = new Set<string>();
+  for (const def of registry.values()) {
+    categories.add(def.category);
+  }
+  return Array.from(categories).sort();
+}
+
+/**
+ * Get all block types in a given category.
+ */
+export function getBlockTypesByCategory(category: string): readonly BlockDef[] {
+  const blocks: BlockDef[] = [];
+  for (const def of registry.values()) {
+    if (def.category === category) {
+      blocks.push(def);
+    }
+  }
+  return blocks;
+}

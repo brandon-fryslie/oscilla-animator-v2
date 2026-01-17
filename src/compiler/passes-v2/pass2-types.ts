@@ -83,9 +83,14 @@ function isTypeCompatible(from: SignalType, to: SignalType): boolean {
     return false;
   }
 
-  // For 'many' cardinality, domain must also match
+  // For 'many' cardinality, instance must also match
   if (fromCard.kind === 'many' && toCard.kind === 'many') {
-    return fromCard.domain.id === toCard.domain.id;
+    const fromInstance = fromCard.instance;
+    const toInstance = toCard.instance;
+    if (!fromInstance || !toInstance) return false;
+    // Instances match if both domainType and instanceId are equal
+    return fromInstance.domainType === toInstance.domainType &&
+           fromInstance.instanceId === toInstance.instanceId;
   }
 
   return true;

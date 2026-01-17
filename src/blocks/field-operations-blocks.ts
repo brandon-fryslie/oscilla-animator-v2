@@ -572,7 +572,7 @@ registerBlock({
     { id: 'radius', label: 'Radius', type: signalTypeField('float', 'default') },
   ],
   outputs: [
-    { id: 'radius', label: 'Radius', type: signalTypeField('float', 'default') },
+    { id: 'out', label: 'Radius', type: signalTypeField('float', 'default') },
   ],
   params: {},
   lower: ({ ctx, inputsById }) => {
@@ -598,7 +598,7 @@ registerBlock({
 
     return {
       outputsById: {
-        radius: { k: 'field', id: result, slot },
+        out: { k: 'field', id: result, slot },
       },
     };
   },
@@ -622,7 +622,7 @@ registerBlock({
     { id: 'amountY', label: 'Amount Y', type: signalType('float'), defaultSource: defaultSourceConstant(0.01) },
   ],
   outputs: [
-    { id: 'pos', label: 'Position', type: signalTypeField('vec2', 'default') },
+    { id: 'out', label: 'Position', type: signalTypeField('vec2', 'default') },
   ],
   params: {},
   lower: ({ ctx, inputsById }) => {
@@ -657,7 +657,7 @@ registerBlock({
 
     return {
       outputsById: {
-        pos: { k: 'field', id: result, slot },
+        out: { k: 'field', id: result, slot },
       },
     };
   },
