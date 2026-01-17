@@ -1,10 +1,10 @@
 # Oscilla Animator v2 - Project Roadmap
 
-Last updated: 2026-01-13-194900
+Last updated: 2026-01-17-120000
 
 ---
 
-## 🟢 Phase 1: Core Foundation [ACTIVE] (4/10 completed)
+## 🟢 Phase 1: Core Foundation [ACTIVE] (4/11 completed)
 
 **Goal:** Implement the core compilation pipeline and runtime system according to the unified spec
 
@@ -97,6 +97,21 @@ Last updated: 2026-01-13-194900
 - **Description:** Basic 12 completion, stateful primitives, composites
 - **Planning Files:** `.agent_planning/primitives-catalog/`
 - **Status Note:** Sprint plan APPROVED. Deliverables: UnitDelay, Hash, Id01
+
+#### 📋 domain-refactor [PLANNING]
+- **State:** PLANNING
+- **Epic:** None (Cross-cutting refactor)
+- **Spec:** `design-docs/WHAT-IS-A-DOMAIN.md`, `design-docs/WHAT-IS-A-DOMAIN-PART-4-REFACTOR.md`
+- **Description:** Complete architectural refactor separating domain TYPE (shape, circle, control) from INSTANTIATION (count, layout). Currently conflated throughout codebase.
+- **Planning Files:** `.agent_planning/domain-refactor/`
+- **Status Note:** 8-sprint plan ready. Affects ~50 files. Foundation for domain-editor-ui.
+- **Key Changes:**
+  - Add DomainTypeId, InstanceId, InstanceDecl, LayoutSpec types
+  - Create domain registry with hierarchy (circle extends shape)
+  - Delete GridDomain/DomainN blocks (embody wrong model)
+  - Create new instance blocks (CircleInstance, ShapeInstance)
+  - Update all field operations to use instance context
+  - Update compiler passes and runtime
 
 ---
 

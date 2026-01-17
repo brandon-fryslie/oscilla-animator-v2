@@ -54,8 +54,23 @@ export type ExprId = string & { readonly __brand: 'ExprId' };
 /** Stable string ID for state bindings. */
 export type StateId = string & { readonly __brand: 'StateId' };
 
-/** Stable string ID for domains. */
+/**
+ * Stable string ID for domains (OLD - will be removed in Sprint 8).
+ * @deprecated Use DomainTypeId and InstanceId instead.
+ */
 export type DomainId = string & { readonly __brand: 'DomainId' };
+
+/**
+ * Stable string ID for domain types (NEW).
+ * Domain types classify elements (shape, circle, control, event).
+ */
+export type DomainTypeId = string & { readonly __brand: 'DomainTypeId' };
+
+/**
+ * Stable string ID for instances (NEW).
+ * Instances are specific instantiations of domain types (count, layout).
+ */
+export type InstanceId = string & { readonly __brand: 'InstanceId' };
 
 /** Stable string ID for slots. */
 export type SlotId = string & { readonly __brand: 'SlotId' };
@@ -114,8 +129,25 @@ export function stateId(s: string): StateId {
   return s as StateId;
 }
 
+/**
+ * @deprecated Use domainTypeId() or instanceId() instead.
+ */
 export function domainId(s: string): DomainId {
   return s as DomainId;
+}
+
+/**
+ * Create a DomainTypeId (NEW).
+ */
+export function domainTypeId(s: string): DomainTypeId {
+  return s as DomainTypeId;
+}
+
+/**
+ * Create an InstanceId (NEW).
+ */
+export function instanceId(s: string): InstanceId {
+  return s as InstanceId;
 }
 
 export function slotId(s: string): SlotId {
