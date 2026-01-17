@@ -34,7 +34,6 @@ import type {
   SigExpr,
   FieldExpr,
   EventExpr,
-  DomainDef,
   InstanceDecl,
   LayoutSpec,
   Step,
@@ -48,7 +47,6 @@ export class IRBuilderImpl implements IRBuilder {
   private sigExprs: SigExpr[] = [];
   private fieldExprs: FieldExpr[] = [];
   private eventExprs: EventExpr[] = [];
-  private domains: Map<DomainId, DomainDef> = new Map();
   private instances: Map<InstanceId, InstanceDecl> = new Map(); // NEW
   private slotCounter = 0;
   private stateCounter = 0;
@@ -422,61 +420,16 @@ export class IRBuilderImpl implements IRBuilder {
   // Domains (OLD - Will be removed in Sprint 8)
   // =========================================================================
 
-  createDomain(
-    kind: 'grid' | 'n' | 'path',
-    count: number,
-    params: Record<string, unknown> = {}
-  ): DomainId {
-    const id = domainId(`domain_${this.domains.size}`);
-    const elementIds = Array.from({ length: count }, (_, i) => `${id}_${i}`);
-    this.domains.set(id, { id, kind, count, elementIds, params });
-    return id;
-  }
 
   /**
    * Create a grid domain with rows x cols elements.
    */
-  domainGrid(rows: number, cols: number): DomainId {
-    const id = domainId(`domain_${this.domains.size}`);
-    const count = rows * cols;
-    const elementIds = Array.from({ length: count }, (_, i) =>
-      this.seededId(rows * 10000 + cols + i)
-    );
-    this.domains.set(id, {
-      id,
-      kind: 'grid',
-      count,
-      elementIds,
-      params: { rows, cols },
-    });
-    return id;
-  }
 
   /**
    * Create an N-element domain with optional seed for deterministic IDs.
    */
-  domainN(n: number, seed: number = 0): DomainId {
-    const id = domainId(`domain_${this.domains.size}`);
-    const elementIds = Array.from({ length: n }, (_, i) =>
-      this.seededId(seed * 100000 + n + i)
-    );
-    this.domains.set(id, {
-      id,
-      kind: 'n',
-      count: n,
-      elementIds,
-      params: { n, seed },
-    });
-    return id;
-  }
 
-  getDomains(): ReadonlyMap<DomainId, DomainDef> {
-    return this.domains;
-  }
 
-  defineDomain(id: DomainId, def: DomainDef): void {
-    this.domains.set(id, def);
-  }
 
   // =========================================================================
   // Instances (NEW)

@@ -289,19 +289,7 @@ export enum OpCode {
 }
 
 // =============================================================================
-// Domains
-// =============================================================================
-
-export interface DomainDef {
-  readonly id: DomainId;
-  readonly kind: 'grid' | 'n' | 'path';
-  readonly count: number;
-  readonly elementIds: readonly string[];
-  readonly params: Readonly<Record<string, unknown>>;
-}
-
-// =============================================================================
-// Instance System (NEW - Domain Refactor)
+// Instance System
 // =============================================================================
 
 /**

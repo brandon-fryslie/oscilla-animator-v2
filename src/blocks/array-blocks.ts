@@ -21,7 +21,7 @@ import { defaultSourceConstant } from '../types';
  * Takes a Signal<T> and produces Field<T> with N elements.
  *
  * Example:
- * Circle (Signal<circle>) → Array → Field<circle> (100 copies)
+ * Circle (Signal<float>) → Array → Field<float> (100 copies)
  *
  * Outputs:
  * - elements: Field<T> - The array elements (input broadcast to field)
@@ -37,11 +37,11 @@ registerBlock({
   form: 'primitive',
   capability: 'identity',
   inputs: [
-    { id: 'element', label: 'Element', type: signalType('any') },
+    { id: 'element', label: 'Element', type: signalType('???') },
     { id: 'count', label: 'Count', type: signalType('int'), defaultValue: 100, defaultSource: defaultSourceConstant(100) },
   ],
   outputs: [
-    { id: 'elements', label: 'Elements', type: signalTypeField('any', 'default') },
+    { id: 'elements', label: 'Elements', type: signalTypeField('???', 'default') },
     { id: 'index', label: 'Index', type: signalTypeField('int', 'default') },
     { id: 't', label: 'T (0-1)', type: signalTypeField('float', 'default') },
     { id: 'active', label: 'Active', type: signalTypeField('bool', 'default') },
@@ -61,10 +61,10 @@ registerBlock({
     let elementsField;
     if (elementInput && elementInput.k === 'sig') {
       // Broadcast the signal to a field
-      elementsField = ctx.b.fieldBroadcast(elementInput.id, signalTypeField('circle', 'default'));
+      elementsField = ctx.b.fieldBroadcast(elementInput.id, signalTypeField('float', 'default'));
     } else {
       // No input - use array field (identity)
-      elementsField = ctx.b.fieldArray(instanceId, signalTypeField('circle', 'default'));
+      elementsField = ctx.b.fieldArray(instanceId, signalTypeField('float', 'default'));
     }
 
     // 2. Intrinsic fields (index, t, active)

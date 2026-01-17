@@ -11,14 +11,13 @@ import type {
   FieldExprId,
   EventExprId,
   ValueSlot,
-  DomainId,
   StateId,
   StateSlotId,
   InstanceId,
   DomainTypeId,
 } from './Indices';
 import type { TimeModelIR } from './schedule';
-import type { PureFn, OpCode, DomainDef, InstanceDecl, LayoutSpec, Step } from './types';
+import type { PureFn, OpCode, InstanceDecl, LayoutSpec, Step } from './types';
 
 // =============================================================================
 // IRBuilder Interface
@@ -57,16 +56,6 @@ export interface IRBuilder {
 
   /** Create a constant field expression. */
   fieldConst(value: number | string, type: SignalType): FieldExprId;
-
-  /**
-   * Create a source field (identity, random, index).
-   * @deprecated Use fieldIntrinsic instead for new code.
-   */
-  fieldSource(
-    domain: DomainId,
-    sourceId: 'pos0' | 'idRand' | 'index' | 'normalizedIndex',
-    type: SignalType
-  ): FieldExprId;
 
   /**
    * Create a field from an intrinsic property.
@@ -218,19 +207,7 @@ export interface IRBuilder {
   expr(expression: string): PureFn;
 
   /**
-   * Create a domain (OLD - will be removed).
-   * @deprecated Use createInstance instead.
-   */
-  createDomain(kind: 'grid' | 'n' | 'path', count: number, params?: Record<string, unknown>): DomainId;
-
-  /**
-   * Get all domains (OLD - will be removed).
-   * @deprecated Use getInstances instead.
-   */
-  getDomains(): ReadonlyMap<DomainId, DomainDef>;
-
-  /**
-   * Create an instance (NEW).
+   * Create an instance.
    * @param domainType - Domain type ID (shape, circle, etc.)
    * @param count - Number of elements
    * @param layout - Layout specification
@@ -245,16 +222,13 @@ export interface IRBuilder {
   ): InstanceId;
 
   /**
-   * Get all instances (NEW).
+   * Get all instances.
    * @returns ReadonlyMap of all instance declarations
    */
   getInstances(): ReadonlyMap<InstanceId, InstanceDecl>;
 
   /** Get timepoint markers. */
   getTimepointMarkers(): { start: number; end: number } | null;
-
-  /** Define a domain. */
-  defineDomain(id: DomainId, def: DomainDef): void;
 
   /** Get schedule. */
   getSchedule(): TimeModelIR;
