@@ -226,6 +226,41 @@ function getWriterValueRef(
 }
 
 // =============================================================================
+// Instance Context Propagation
+// =============================================================================
+
+/**
+ * Infer instance context from input edges.
+ *
+ * Checks if any input comes from a block that has instance context,
+ * and returns that instance context for propagation to the current block.
+ *
+ * @param blockIndex - Index of block being lowered
+ * @param edges - All edges in the patch
+ * @param instanceContextByBlock - Map from block index to instance context
+ * @returns InstanceId if found, undefined otherwise
+ */
+function inferInstanceContext(
+  blockIndex: BlockIndex,
+  edges: readonly NormalizedEdge[],
+  instanceContextByBlock: Map<BlockIndex, InstanceId>
+): InstanceId | undefined {
+  // Find all edges that target this block
+  const incomingEdges = edges.filter((e) => e.toBlock === blockIndex);
+
+
+  // Check each incoming edge's source block for instance context
+  for (const edge of incomingEdges) {
+    const instanceContext = instanceContextByBlock.get(edge.fromBlock);
+    if (instanceContext !== undefined) {
+      return instanceContext;
+    }
+  }
+
+  return undefined;
+}
+
+// =============================================================================
 // Block Lowering with Registered Functions
 // =============================================================================
 
@@ -244,6 +279,7 @@ function getWriterValueRef(
  * @param blocks - All blocks in the patch (for index lookup)
  * @param blockOutputs - Map of block outputs for wire resolution
  * @param blockIdToIndex - Map from block ID to block index
+ * @param instanceContextByBlock - Map from block index to instance context
  * @returns Map of port ID to ValueRefPacked
  */
 function lowerBlockInstance(
@@ -254,7 +290,8 @@ function lowerBlockInstance(
   edges?: readonly NormalizedEdge[],
   blocks?: readonly Block[],
   blockOutputs?: Map<BlockIndex, Map<string, ValueRefPacked>>,
-  blockIdToIndex?: Map<string, BlockIndex>
+  blockIdToIndex?: Map<string, BlockIndex>,
+  instanceContextByBlock?: Map<BlockIndex, InstanceId>
 ): Map<string, ValueRefPacked> {
   const outputRefs = new Map<string, ValueRefPacked>();
   const blockDef = getBlockDefinition(block.type);
@@ -304,19 +341,10 @@ function lowerBlockInstance(
       return outputRefs;
     }
 
-    // Infer instance context from field inputs
+    // Infer instance context from upstream blocks
     let inferredInstance: InstanceId | undefined;
-    for (const ref of Object.values(inputsById)) {
-      if (ref.k === 'field') {
-        // Look up the field expression to find its instance
-        const builderImpl = builder as IRBuilderImpl;
-        const fieldExprs = builderImpl.getFieldExprs();
-        const fieldExpr = fieldExprs[ref.id as unknown as number];
-        if (fieldExpr && (fieldExpr as any).instanceId) {
-          inferredInstance = (fieldExpr as any).instanceId;
-          break;
-        }
-      }
+    if (edges !== undefined && instanceContextByBlock !== undefined) {
+      inferredInstance = inferInstanceContext(blockIndex, edges, instanceContextByBlock);
     }
 
     // Build lowering context
@@ -373,6 +401,11 @@ function lowerBlockInstance(
       outputRefs.set(portId, ref);
     }
 
+    // Track instance context for downstream propagation
+    if (result.instanceContext !== undefined && instanceContextByBlock !== undefined) {
+      instanceContextByBlock.set(blockIndex, result.instanceContext);
+    }
+
   } catch (error) {
     // Lowering failed - record error (will be thrown at end of pass with all other errors)
     const errorMsg = `Block lowering failed for "${block.type}": ${error instanceof Error ? error.message : String(error)}`;
@@ -404,6 +437,10 @@ function lowerBlockInstance(
  * - Uses resolveInputsWithMultiInput for all input resolution
  * - Supports combine nodes for multi-writer inputs
  *
+ * Instance Context Propagation:
+ * - Tracks instanceContext returned by blocks (e.g., Array)
+ * - Propagates to downstream blocks via ctx.inferredInstance
+ *
  * Input: Validated dependency graph + blocks array + edges
  * Output: UnlinkedIRFragments with IR nodes
  */
@@ -417,6 +454,9 @@ export function pass6BlockLowering(
   const edges = validated.edges;
   const blockOutputs = new Map<BlockIndex, Map<string, ValueRefPacked>>();
   const errors: CompileError[] = [];
+
+  // Track instance context for propagation
+  const instanceContextByBlock = new Map<BlockIndex, InstanceId>();
 
   // Create blockId → blockIndex lookup for input resolution
   const blockIdToIndex = new Map<string, BlockIndex>();
@@ -451,6 +491,7 @@ export function pass6BlockLowering(
       // Set current block ID for debug index tracking (Phase 7)
       builder.setCurrentBlockId(block.id);
 
+
       // Lower this block instance
       const outputRefs = lowerBlockInstance(
         block,
@@ -460,7 +501,8 @@ export function pass6BlockLowering(
         edges,
         blocks,
         blockOutputs,
-        blockIdToIndex
+        blockIdToIndex,
+        instanceContextByBlock
       );
 
       if (outputRefs.size > 0) {

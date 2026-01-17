@@ -56,6 +56,13 @@ export interface LowerArgs {
 export interface LowerResult {
   /** Map of port ID to ValueRef (required) */
   readonly outputsById: Record<string, import('../compiler/ir/lowerTypes').ValueRefPacked>;
+
+  /**
+   * Instance context (optional).
+   * Set by blocks that create instances (e.g., Array) to provide instance context
+   * to downstream blocks that need it (e.g., GridLayout, RenderInstances2D).
+   */
+  readonly instanceContext?: InstanceId;
 }
 
 // =============================================================================

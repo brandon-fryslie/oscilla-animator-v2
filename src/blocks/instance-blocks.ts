@@ -77,6 +77,8 @@ registerBlock({
       outputsById: {
         position: { k: 'field', id: positionField, slot: ctx.b.allocSlot() },
       },
+      // Propagate instance context downstream
+      instanceContext: instanceId,
     };
   },
 });
@@ -132,6 +134,8 @@ registerBlock({
       outputsById: {
         position: { k: 'field', id: positionField, slot: ctx.b.allocSlot() },
       },
+      // Propagate instance context downstream
+      instanceContext: instanceId,
     };
   },
 });

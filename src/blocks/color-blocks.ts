@@ -150,6 +150,8 @@ registerBlock({
       outputsById: {
         color: { k: 'field', id: colorField, slot },
       },
+      // Propagate instance context from inputs
+      instanceContext: ctx.inferredInstance,
     };
   },
 });

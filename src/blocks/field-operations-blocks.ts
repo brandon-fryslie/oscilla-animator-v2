@@ -42,6 +42,8 @@ registerBlock({
       outputsById: {
         id01: { k: 'field', id: id01Field, slot },
       },
+      // Propagate instance context
+      instanceContext: instance,
     };
   },
 });
@@ -81,6 +83,8 @@ registerBlock({
       outputsById: {
         out: { k: 'field', id: result, slot },
       },
+      // Propagate instance context from inputs
+      instanceContext: ctx.inferredInstance,
     };
   },
 });
@@ -120,6 +124,8 @@ registerBlock({
       outputsById: {
         result: { k: 'field', id: result, slot },
       },
+      // Propagate instance context from inputs
+      instanceContext: ctx.inferredInstance,
     };
   },
 });
@@ -162,6 +168,8 @@ registerBlock({
       outputsById: {
         result: { k: 'field', id: result, slot },
       },
+      // Propagate instance context from inputs
+      instanceContext: ctx.inferredInstance,
     };
   },
 });
@@ -199,6 +207,8 @@ registerBlock({
       outputsById: {
         result: { k: 'field', id: result, slot },
       },
+      // Propagate instance context from inputs
+      instanceContext: ctx.inferredInstance,
     };
   },
 });
@@ -236,6 +246,8 @@ registerBlock({
       outputsById: {
         result: { k: 'field', id: result, slot },
       },
+      // Propagate instance context from inputs
+      instanceContext: ctx.inferredInstance,
     };
   },
 });
@@ -275,6 +287,8 @@ registerBlock({
       outputsById: {
         result: { k: 'field', id: result, slot },
       },
+      // Propagate instance context from inputs
+      instanceContext: ctx.inferredInstance,
     };
   },
 });
@@ -333,6 +347,8 @@ registerBlock({
       outputsById: {
         pos: { k: 'field', id: posField, slot },
       },
+      // Propagate instance context from inputs
+      instanceContext: ctx.inferredInstance,
     };
   },
 });
@@ -396,6 +412,8 @@ registerBlock({
         angle: { k: 'field', id: angleField, slot: angleSlot },
         radius: { k: 'field', id: radiusField, slot: radiusSlot },
       },
+      // Propagate instance context from inputs
+      instanceContext: ctx.inferredInstance,
     };
   },
 });
@@ -458,6 +476,8 @@ registerBlock({
       outputsById: {
         value: { k: 'field', id: result, slot },
       },
+      // Propagate instance context from inputs
+      instanceContext: ctx.inferredInstance,
     };
   },
 });
@@ -498,6 +518,8 @@ registerBlock({
       outputsById: {
         angle: { k: 'field', id: result, slot },
       },
+      // Propagate instance context from inputs
+      instanceContext: ctx.inferredInstance,
     };
   },
 });
@@ -552,6 +574,8 @@ registerBlock({
       outputsById: {
         offset: { k: 'field', id: result, slot },
       },
+      // Propagate instance context from inputs
+      instanceContext: ctx.inferredInstance,
     };
   },
 });
@@ -600,6 +624,8 @@ registerBlock({
       outputsById: {
         out: { k: 'field', id: result, slot },
       },
+      // Propagate instance context from inputs
+      instanceContext: ctx.inferredInstance,
     };
   },
 });
@@ -659,6 +685,8 @@ registerBlock({
       outputsById: {
         out: { k: 'field', id: result, slot },
       },
+      // Propagate instance context from inputs
+      instanceContext: ctx.inferredInstance,
     };
   },
 });
@@ -708,6 +736,8 @@ registerBlock({
       outputsById: {
         hue: { k: 'field', id: result, slot },
       },
+      // Propagate instance context from inputs
+      instanceContext: ctx.inferredInstance,
     };
   },
 });

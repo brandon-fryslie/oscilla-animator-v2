@@ -62,6 +62,10 @@ registerBlock({
       outputsById: {
         field: { k: 'field', id: fieldId, slot },
       },
+      // Propagate instance context from inputs
+      // FieldBroadcast is special - it can receive instance context even though
+      // it doesn't have field inputs (it's inserted by adapters in field contexts)
+      instanceContext: ctx.inferredInstance,
     };
   },
 });
