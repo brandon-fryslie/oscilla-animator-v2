@@ -133,16 +133,16 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   inputs: [
-    { id: 'pos', label: 'Position', type: signalType('vec2') },
+    { id: 'posIn', label: 'Position In', type: signalType('vec2') },
     { id: 'amountX', label: 'Offset X', type: signalType('float') },
     { id: 'amountY', label: 'Offset Y', type: signalType('float') },
     { id: 'rand', label: 'Random', type: signalType('float') },
   ],
   outputs: [
-    { id: 'pos', label: 'Position', type: signalType('vec2') },
+    { id: 'posOut', label: 'Position Out', type: signalType('vec2') },
   ],
   lower: ({ ctx, inputsById }) => {
-    const pos = inputsById.pos;
+    const pos = inputsById.posIn;
     const amountX = inputsById.amountX;
     const amountY = inputsById.amountY;
     const rand = inputsById.rand;
@@ -164,7 +164,7 @@ registerBlock({
 
     return {
       outputsById: {
-        pos: { k: 'sig', id: sigId, slot },
+        posOut: { k: 'sig', id: sigId, slot },
       },
     };
   },

@@ -9,6 +9,7 @@ import type { SignalType } from '../core/canonical-types';
 import type { Slot, UIControlHint, DefaultSource } from '../types';
 import type { IRBuilder } from '../compiler/ir/IRBuilder';
 import type { BlockIndex } from '../graph/normalize';
+import type { InstanceId } from '../compiler/ir/Indices';
 
 // Re-export lowering types from compiler
 export type { ValueRefPacked } from '../compiler/ir/lowerTypes';
@@ -25,6 +26,18 @@ export interface LowerCtx {
   readonly outTypes: readonly SignalType[];
   readonly b: IRBuilder;
   readonly seedConstId: number;
+
+  /**
+   * Instance context (NEW - Domain Refactor Sprint 3).
+   * Set by instance blocks (CircleInstance, etc.) to provide instance context to downstream blocks.
+   */
+  readonly instance?: InstanceId;
+
+  /**
+   * Inferred instance context (NEW - Domain Refactor Sprint 3).
+   * Automatically inferred from connected field inputs during lowering.
+   */
+  readonly inferredInstance?: InstanceId;
 }
 
 /**
@@ -152,62 +165,19 @@ export function registerBlock(def: BlockDef): void {
     throw new Error(`Duplicate output port IDs in block ${def.type}`);
   }
 
+  // Check input/output ID collision
+  for (const outId of outputIds) {
+    if (inputIds.has(outId)) {
+      throw new Error(`Port ID used as both input and output in block ${def.type}: ${outId}`);
+    }
+  }
+
   registry.set(def.type, def);
 }
 
 /**
- * Get all registered block types.
+ * Get all registered block types (for debugging/introspection).
  */
-export function getAllBlockTypes(): string[] {
+export function getAllBlockTypes(): readonly string[] {
   return Array.from(registry.keys());
-}
-
-/**
- * Get all registered block definitions.
- */
-export function getAllBlockDefs(): BlockDef[] {
-  return Array.from(registry.values());
-}
-
-/**
- * Check if a block type is registered.
- */
-export function hasBlockDefinition(blockType: string): boolean {
-  return registry.has(blockType);
-}
-
-// =============================================================================
-// UI Accessor Functions
-// =============================================================================
-
-/**
- * Get all unique categories.
- */
-export function getBlockCategories(): string[] {
-  const categories = new Set<string>();
-  for (const def of registry.values()) {
-    categories.add(def.category);
-  }
-  return Array.from(categories).sort();
-}
-
-/**
- * Get blocks by category.
- */
-export function getBlockTypesByCategory(category: string): BlockDef[] {
-  return Array.from(registry.values())
-    .filter(def => def.category === category);
-}
-
-/**
- * Search blocks by query string.
- */
-export function searchBlockTypes(query: string): BlockDef[] {
-  const q = query.toLowerCase();
-  return Array.from(registry.values())
-    .filter(def =>
-      def.type.toLowerCase().includes(q) ||
-      def.label.toLowerCase().includes(q) ||
-      (def.description?.toLowerCase().includes(q) ?? false)
-    );
 }
