@@ -7,8 +7,8 @@
 
 import type { CompiledProgramIR, ValueSlot } from '../compiler/ir/program';
 import type { ScheduleIR } from '../compiler/passes-v2/pass7-schedule';
-import type { Step } from '../compiler/ir/types';
-import type { SigExprId } from '../types';
+import type { Step, InstanceDecl } from '../compiler/ir/types';
+import type { SigExprId, InstanceId } from '../types';
 import type { RuntimeState } from './RuntimeState';
 import type { BufferPool } from './BufferPool';
 import { resolveTime } from './timeResolution';
@@ -77,7 +77,7 @@ export function executeFrame(
   // Extract schedule components
   const schedule = program.schedule as ScheduleIR;
   const timeModel = schedule.timeModel;
-  const domains = schedule.domains;
+  const instances = schedule.instances;
   const steps = schedule.steps;
 
   // 1. Advance frame (cache owns frameId)
@@ -122,10 +122,10 @@ export function executeFrame(
         // Materialize field to buffer and store in slot
         const buffer = materialize(
           step.field,
-          step.domain,
+          step.instanceId, // string
           fields,
           signals,
-          domains,
+          instances as ReadonlyMap<string, InstanceDecl>,
           state,
           pool
         );
@@ -142,27 +142,27 @@ export function executeFrame(
 
       case 'render': {
         // Assemble render pass
-        const domain = domains.get(step.domain);
-        if (!domain) {
-          throw new Error(`Domain ${step.domain} not found`);
+        const instance = instances.get(step.instanceId as InstanceId);
+        if (!instance) {
+          throw new Error(`Instance ${step.instanceId} not found`);
         }
 
         const position = materialize(
           step.position,
-          step.domain,
+          step.instanceId, // string
           fields,
           signals,
-          domains,
+          instances as ReadonlyMap<string, InstanceDecl>,
           state,
           pool
         );
 
         const color = materialize(
           step.color,
-          step.domain,
+          step.instanceId, // string
           fields,
           signals,
-          domains,
+          instances as ReadonlyMap<string, InstanceDecl>,
           state,
           pool
         );
@@ -174,10 +174,10 @@ export function executeFrame(
             // Field - materialize per-particle values
             size = materialize(
               step.size.id,
-              step.domain,
+              step.instanceId, // string
               fields,
               signals,
-              domains,
+              instances as ReadonlyMap<string, InstanceDecl>,
               state,
               pool
             );
@@ -197,10 +197,10 @@ export function executeFrame(
             // Field - materialize per-particle values
             shape = materialize(
               step.shape.id,
-              step.domain,
+              step.instanceId, // string
               fields,
               signals,
-              domains,
+              instances as ReadonlyMap<string, InstanceDecl>,
               state,
               pool
             );
@@ -213,9 +213,12 @@ export function executeFrame(
           shape = 0;
         }
 
+        // Resolve count from instance
+        const count = typeof instance.count === 'number' ? instance.count : 0;
+
         passes.push({
           kind: 'instances2d',
-          count: domain.count,
+          count,
           position,
           color,
           size,

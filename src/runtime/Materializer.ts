@@ -6,14 +6,13 @@
  */
 
 import type {
-  DomainId,
   FieldExprId,
   SigExprId,
 } from '../types';
 import type { SignalType } from '../core/canonical-types';
 import type {
   FieldExpr,
-  DomainDef,
+  InstanceDecl,
   OpCode,
   PureFn,
   SigExpr,
@@ -28,25 +27,25 @@ import { applyOpcode } from './OpcodeInterpreter';
  * Materialize a field expression into a typed array
  *
  * @param fieldId - Field expression ID
- * @param domainId - Domain to materialize over
+ * @param instanceId - Instance to materialize over (string)
  * @param fields - Dense array of field expressions
  * @param signals - Dense array of signal expressions (for lazy evaluation)
- * @param domains - Domain definition map
+ * @param instances - Instance declaration map
  * @param state - Runtime state (for signal values)
  * @param pool - Buffer pool for allocation
  * @returns Typed array with materialized field data
  */
 export function materialize(
   fieldId: FieldExprId,
-  domainId: DomainId,
+  instanceId: string,
   fields: readonly FieldExpr[],
   signals: readonly SigExpr[],
-  domains: ReadonlyMap<DomainId, DomainDef>,
+  instances: ReadonlyMap<string, InstanceDecl>,
   state: RuntimeState,
   pool: BufferPool
 ): ArrayBufferView {
   // Check cache
-  const cacheKey = `${fieldId}:${domainId}`;
+  const cacheKey = `${fieldId}:${instanceId}`;
   const cached = state.cache.fieldBuffers.get(cacheKey);
   const cachedStamp = state.cache.fieldStamps.get(cacheKey);
   if (cached && cachedStamp === state.cache.frameId) {
@@ -59,18 +58,21 @@ export function materialize(
     throw new Error(`Field expression ${fieldId} not found`);
   }
 
-  // Get domain
-  const domain = domains.get(domainId);
-  if (!domain) {
-    throw new Error(`Domain ${domainId} not found`);
+  // Get instance
+  const instance = instances.get(instanceId);
+  if (!instance) {
+    throw new Error(`Instance ${instanceId} not found`);
   }
+
+  // Resolve count
+  const count = typeof instance.count === 'number' ? instance.count : 0;
 
   // Allocate buffer
   const format = getBufferFormat(expr.type.payload);
-  const buffer = pool.alloc(format, domain.count);
+  const buffer = pool.alloc(format, count);
 
   // Fill buffer based on expression kind
-  fillBuffer(expr, buffer, domain, fields, signals, domains, state, pool);
+  fillBuffer(expr, buffer, instance, fields, signals, instances, state, pool);
 
   // Cache result
   state.cache.fieldBuffers.set(cacheKey, buffer);
@@ -85,14 +87,15 @@ export function materialize(
 function fillBuffer(
   expr: FieldExpr,
   buffer: ArrayBufferView,
-  domain: DomainDef,
+  instance: InstanceDecl,
   fields: readonly FieldExpr[],
   signals: readonly SigExpr[],
-  domains: ReadonlyMap<DomainId, DomainDef>,
+  instances: ReadonlyMap<string, InstanceDecl>,
   state: RuntimeState,
   pool: BufferPool
 ): void {
-  const N = domain.count;
+  const count = typeof instance.count === 'number' ? instance.count : 0;
+  const N = count;
 
   switch (expr.kind) {
     case 'const': {
@@ -126,8 +129,8 @@ function fillBuffer(
     }
 
     case 'source': {
-      // Fill from domain source
-      fillBufferSource(expr.sourceId, buffer, domain);
+      // Fill from instance source
+      fillBufferSource(expr.sourceId, buffer, instance);
       break;
     }
 
@@ -145,10 +148,10 @@ function fillBuffer(
       // Map: get input, apply function
       const input = materialize(
         expr.input,
-        domain.id,
+        instance.id,
         fields,
         signals,
-        domains,
+        instances,
         state,
         pool
       );
@@ -159,7 +162,7 @@ function fillBuffer(
     case 'zip': {
       // Zip: get inputs, apply function
       const inputs = expr.inputs.map((id) =>
-        materialize(id, domain.id, fields, signals, domains, state, pool)
+        materialize(id, instance.id, fields, signals, instances, state, pool)
       );
       applyZip(buffer, inputs, expr.fn, N, expr.type);
       break;
@@ -169,10 +172,10 @@ function fillBuffer(
       // ZipSig: combine field with signals
       const fieldInput = materialize(
         expr.field,
-        domain.id,
+        instance.id,
         fields,
         signals,
-        domains,
+        instances,
         state,
         pool
       );
@@ -184,7 +187,7 @@ function fillBuffer(
     case 'mapIndexed': {
       // MapIndexed: generate from index + signals
       const sigValues = expr.signals?.map((id) => evaluateSignal(id, signals, state)) ?? [];
-      applyMapIndexed(buffer, expr.fn, sigValues, N, domain, expr.type);
+      applyMapIndexed(buffer, expr.fn, sigValues, N, instance, expr.type);
       break;
     }
 
@@ -209,14 +212,15 @@ function applyPureFn(
 }
 
 /**
- * Fill buffer from domain source
+ * Fill buffer from instance source
  */
 function fillBufferSource(
   sourceId: 'pos0' | 'idRand' | 'index' | 'normalizedIndex',
   buffer: ArrayBufferView,
-  domain: DomainDef
+  instance: InstanceDecl
 ): void {
-  const N = domain.count;
+  const count = typeof instance.count === 'number' ? instance.count : 0;
+  const N = count;
 
   switch (sourceId) {
     case 'index': {
@@ -236,10 +240,12 @@ function fillBufferSource(
     }
 
     case 'pos0': {
-      // Position source depends on domain kind
-      if (domain.kind === 'grid') {
-        const rows = (domain.params.rows as number) || 1;
-        const cols = (domain.params.cols as number) || 1;
+      // Position source depends on instance layout
+      const layout = instance.layout;
+
+      if (layout.kind === 'grid') {
+        const rows = layout.rows || 1;
+        const cols = layout.cols || 1;
         const arr = buffer as Float32Array;
         for (let i = 0; i < N; i++) {
           const row = Math.floor(i / cols);
@@ -248,7 +254,8 @@ function fillBufferSource(
           arr[i * 2 + 1] = rows > 1 ? row / (rows - 1) : 0.5;
         }
       } else {
-        // For non-grid domains, default to (0, 0)
+        // For non-grid layouts, default to (0, 0)
+        // TODO: Implement other layouts (circular, linear, etc.)
         const arr = buffer as Float32Array;
         for (let i = 0; i < N; i++) {
           arr[i * 2 + 0] = 0;
@@ -260,9 +267,11 @@ function fillBufferSource(
 
     case 'idRand': {
       // Deterministic random from element ID
+      // For now, use index-based seeding
+      // TODO: Support explicit element IDs if instance provides them
       const arr = buffer as Float32Array;
       for (let i = 0; i < N; i++) {
-        const elementId = domain.elementIds[i] || String(i);
+        const elementId = `${instance.id}:${i}`;
         arr[i] = hashToFloat01(elementId);
       }
       break;
@@ -396,7 +405,7 @@ function applyMapIndexed(
   fn: PureFn,
   sigValues: number[],
   N: number,
-  domain: DomainDef,
+  instance: InstanceDecl,
   type: SignalType
 ): void {
   const outArr = out as Float32Array;
@@ -405,13 +414,22 @@ function applyMapIndexed(
     // Named kernel functions
     if (fn.name === 'gridPos') {
       // Generate grid positions
-      const rows = (domain.params.rows as number) || 1;
-      const cols = (domain.params.cols as number) || 1;
-      for (let i = 0; i < N; i++) {
-        const row = Math.floor(i / cols);
-        const col = i % cols;
-        outArr[i * 2 + 0] = cols > 1 ? col / (cols - 1) : 0.5;
-        outArr[i * 2 + 1] = rows > 1 ? row / (rows - 1) : 0.5;
+      const layout = instance.layout;
+      if (layout.kind === 'grid') {
+        const rows = layout.rows || 1;
+        const cols = layout.cols || 1;
+        for (let i = 0; i < N; i++) {
+          const row = Math.floor(i / cols);
+          const col = i % cols;
+          outArr[i * 2 + 0] = cols > 1 ? col / (cols - 1) : 0.5;
+          outArr[i * 2 + 1] = rows > 1 ? row / (rows - 1) : 0.5;
+        }
+      } else {
+        // Default to (0.5, 0.5) for non-grid layouts
+        for (let i = 0; i < N; i++) {
+          outArr[i * 2 + 0] = 0.5;
+          outArr[i * 2 + 1] = 0.5;
+        }
       }
     } else {
       throw new Error(`Unknown kernel function: ${fn.name}`);

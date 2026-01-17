@@ -84,6 +84,7 @@ export type {
   ExprId,
   StateId,
   SlotId,
+  InstanceId,
 } from '../compiler/ir/Indices';
 
 export {
@@ -100,6 +101,7 @@ export {
   stateId,
   domainId,
   slotId,
+  instanceId,
 } from '../compiler/ir/Indices';
 
 // =============================================================================
