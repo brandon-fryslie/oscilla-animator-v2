@@ -25,7 +25,6 @@ registerBlock({
   form: 'primitive',
   capability: 'render',
   inputs: [
-    { id: 'domain', label: 'Domain', type: signalType('float') },
     { id: 'pos', label: 'Position', type: signalTypeField('vec2', 'default') },
     { id: 'color', label: 'Color', type: signalTypeField('color', 'default') },
     { id: 'size', label: 'Size', type: signalTypeField('float', 'default') },
@@ -44,6 +43,12 @@ registerBlock({
     }
     if (!color || color.k !== 'field') {
       throw new Error('RenderCircle color input must be a field');
+    }
+
+    // Get instance from field inputs (NEW - Domain Refactor Sprint 5)
+    const instance = ctx.inferredInstance;
+    if (!instance) {
+      throw new Error('RenderCircle requires field inputs with instance context');
     }
 
     // Render blocks don't produce outputs - they're sinks
@@ -68,7 +73,6 @@ registerBlock({
   form: 'primitive',
   capability: 'render',
   inputs: [
-    { id: 'domain', label: 'Domain', type: signalType('float') },
     { id: 'pos', label: 'Position', type: signalTypeField('vec2', 'default') },
     { id: 'color', label: 'Color', type: signalTypeField('color', 'default') },
     { id: 'width', label: 'Width', type: signalTypeField('float', 'default') },
@@ -90,6 +94,12 @@ registerBlock({
     }
     if (!color || color.k !== 'field') {
       throw new Error('RenderRect color input must be a field');
+    }
+
+    // Get instance from field inputs (NEW - Domain Refactor Sprint 5)
+    const instance = ctx.inferredInstance;
+    if (!instance) {
+      throw new Error('RenderRect requires field inputs with instance context');
     }
 
     // Render blocks don't produce outputs - they're sinks
@@ -114,7 +124,6 @@ registerBlock({
   form: 'primitive',
   capability: 'render',
   inputs: [
-    { id: 'domain', label: 'Domain', type: signalType('int') },
     { id: 'pos', label: 'Position', type: signalTypeField('vec2', 'default') },
     { id: 'color', label: 'Color', type: signalTypeField('color', 'default') },
     { id: 'size', label: 'Size', type: signalTypeField('float', 'default') },
@@ -131,6 +140,12 @@ registerBlock({
     }
     if (!color || color.k !== 'field') {
       throw new Error('RenderInstances2D color input must be a field');
+    }
+
+    // Get instance from field inputs (NEW - Domain Refactor Sprint 5)
+    const instance = ctx.inferredInstance;
+    if (!instance) {
+      throw new Error('RenderInstances2D requires field inputs with instance context');
     }
 
     // Render blocks don't produce outputs - they're sinks

@@ -23,8 +23,7 @@ import type { EventHub } from '../events/EventHub';
 // Import block registrations (side-effect imports to register blocks)
 import '../blocks/time-blocks';
 import '../blocks/signal-blocks';
-import '../blocks/domain-blocks';
-import '../blocks/instance-blocks'; // NEW - Sprint 3
+import '../blocks/instance-blocks'; // NEW - Sprint 3 (replaces domain-blocks)
 import '../blocks/field-blocks';
 import '../blocks/math-blocks';
 import '../blocks/color-blocks';
