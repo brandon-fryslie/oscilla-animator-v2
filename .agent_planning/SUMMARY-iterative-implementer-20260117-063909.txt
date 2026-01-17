@@ -1,0 +1,67 @@
+Agent: iterative-implementer | 2026-01-17 06:00:00
+Mode: manual
+Completed: P0-P2 | Files: 6 | Commits: 2
+Status: in_progress (pausing - need to complete P3-P6 in next session)
+
+## Completed Work
+
+### P0: IR Builder Methods ✅
+- Added FieldExprArray and FieldExprLayout types to types.ts
+- Implemented fieldArray() method in IRBuilder and IRBuilderImpl
+- Implemented fieldLayout() method in IRBuilder and IRBuilderImpl
+- Updated Materializer to handle 'array' and 'layout' field kinds
+- Implemented grid, circular, linear, unordered layouts in runtime
+- TypeScript compiles successfully
+- Commit: cfe765c
+
+### P1: Circle Primitive Block ✅
+- Created src/blocks/primitive-blocks.ts
+- Implemented Circle block (Stage 1: outputs Signal<circle>)
+- Input: radius (Signal<float>)
+- Output: circle (Signal<circle>)
+- Cardinality: ONE (not a field)
+- Commit: 559ece9 (with P2)
+
+### P2: Array Block ✅
+- Created src/blocks/array-blocks.ts
+- Implemented Array block (Stage 2: Signal<T> → Field<T>)
+- Inputs: element (Signal<any>), count (Signal<int>)
+- Outputs: elements, index, t, active (all fields)
+- Uses fieldArray() for elements output
+- Uses fieldIntrinsic() for index, t outputs
+- Sets inferredInstance context for downstream blocks
+- Registered blocks in compiler/compile.ts
+- Commit: 559ece9
+
+## Remaining Work (Next Session)
+
+### P3: GridLayout Rewrite ❌
+- Rewrite GridLayout in instance-blocks.ts
+- Change from: outputs Signal with metadata hack
+- Change to: takes Field input, outputs Field<vec2>
+- Uses fieldLayout() internally
+- No metadata hack
+
+### P4: LinearLayout Fix ❌
+- Update LinearLayout to match GridLayout pattern
+- Field in → Field<vec2> out
+- Remove layout metadata hack
+
+### P5: Delete CircleInstance ❌
+- Remove CircleInstance block from instance-blocks.ts
+- No layout metadata hack remains
+- Verify grep shows no CircleInstance usage
+
+### P6: Update Steel Thread Test ❌
+- Modify steel-thread.test.ts to use Circle → Array → GridLayout
+- Replace CircleInstance with three-stage chain
+- Verify test passes
+
+## Notes
+
+- All IR changes are complete and working
+- Runtime materializer handles new field kinds correctly
+- TypeScript compiles with no errors
+- Ready to implement P3-P6 (layout blocks and test update)
+- No blocking issues
+

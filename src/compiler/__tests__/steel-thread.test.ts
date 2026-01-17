@@ -1,8 +1,8 @@
 /**
  * Steel Thread Test - Animated Particles
  *
- * Tests the minimal viable pipeline:
- * time → domain → fields → render
+ * Tests the minimal viable pipeline using three-stage block architecture:
+ * CirclePrimitive (primitive) → Array (cardinality) → GridLayout (operation) → Render
  */
 
 import { describe, it, expect } from 'vitest';
@@ -17,11 +17,21 @@ import {
 
 describe('Steel Thread - Animated Particles', () => {
   it('should compile and execute the minimal animated particles patch', () => {
-    // Build the patch using new instance model
+    // Build the patch using three-stage block architecture
     const patch = buildPatch((b) => {
       const time = b.addBlock('InfiniteTimeRoot', { periodMs: 5000 });
-      // Use new CircleInstance which outputs position, index, t directly
-      const instance = b.addBlock('CircleInstance', { count: 100, layoutKind: 'unordered' });
+
+      // Three-stage architecture:
+      // 1. CirclePrimitive (primitive) → Signal<float>
+      // 2. Array (cardinality) → Field<float>
+      // 3. GridLayout (operation) → Field<vec2>
+      const circle = b.addBlock('CirclePrimitive', { radius: 0.02 });
+      const array = b.addBlock('Array', { count: 100 });
+      const layout = b.addBlock('GridLayout', { rows: 10, cols: 10 });
+
+      // Wire CirclePrimitive → Array → GridLayout
+      b.wire(circle, 'circle', array, 'element');
+      b.wire(array, 'elements', layout, 'elements');
       const centerX = b.addBlock('Const', { value: 0.5 });
       const centerY = b.addBlock('Const', { value: 0.5 });
       const radius = b.addBlock('Const', { value: 0.35 });
@@ -48,11 +58,11 @@ describe('Steel Thread - Animated Particles', () => {
       b.wire(time, 'phaseA', angularOffset, 'phase');
       b.wire(time, 'phaseA', hue, 'phase');
 
-      // Wire instance 't' output (normalized index 0-1) to field blocks
-      b.wire(instance, 't', goldenAngle, 'id01');
-      b.wire(instance, 't', angularOffset, 'id01');
-      b.wire(instance, 't', hue, 'id01');
-      b.wire(instance, 't', effectiveRadius, 'id01');
+      // Wire Array 't' output (normalized index 0-1) to field blocks
+      b.wire(array, 't', goldenAngle, 'id01');
+      b.wire(array, 't', angularOffset, 'id01');
+      b.wire(array, 't', hue, 'id01');
+      b.wire(array, 't', effectiveRadius, 'id01');
 
       // Wire spin to angular offset
       b.wire(spin, 'out', angularOffset, 'spin');

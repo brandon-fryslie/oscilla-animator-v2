@@ -4,7 +4,7 @@ export type { CompileResult, CompileFailure } from './compile';
 
 // Export IR types (selective to avoid conflicts)
 export { createIRBuilder, IRBuilderImpl } from './ir';
-export type { IRBuilder, IRProgram, SigExpr, FieldExpr, EventExpr, Step, TimeModel, DomainDef } from './ir';
+export type { IRBuilder, IRProgram, SigExpr, FieldExpr, EventExpr, Step, TimeModel } from './ir';
 export type { SigExprId, FieldExprId, EventExprId, DomainId, SlotId, ValueSlot } from './ir';
 
 // NOTE: Block registry is now at src/blocks/registry.ts

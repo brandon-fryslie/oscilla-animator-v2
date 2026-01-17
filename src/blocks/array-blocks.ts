@@ -8,7 +8,7 @@
 import { registerBlock } from './registry';
 import { signalType, signalTypeField } from '../core/canonical-types';
 import { DOMAIN_CIRCLE } from '../core/domain-registry';
-import { defaultSourceConstant } from '../types';
+import { defaultSourceConstant, defaultSourceNone } from '../types';
 
 // =============================================================================
 // Array Block
@@ -21,7 +21,7 @@ import { defaultSourceConstant } from '../types';
  * Takes a Signal<T> and produces Field<T> with N elements.
  *
  * Example:
- * Circle (Signal<float>) → Array → Field<float> (100 copies)
+ * CirclePrimitive (Signal<float>) → Array → Field<float> (100 copies)
  *
  * Outputs:
  * - elements: Field<T> - The array elements (input broadcast to field)
@@ -37,7 +37,7 @@ registerBlock({
   form: 'primitive',
   capability: 'identity',
   inputs: [
-    { id: 'element', label: 'Element', type: signalType('???') },
+    { id: 'element', label: 'Element', type: signalType('???'), optional: true, defaultSource: defaultSourceNone() },
     { id: 'count', label: 'Count', type: signalType('int'), defaultValue: 100, defaultSource: defaultSourceConstant(100) },
   ],
   outputs: [
