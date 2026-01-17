@@ -1,116 +1,162 @@
 /**
- * Instance Blocks (NEW - Domain Refactor Sprint 3)
+ * Instance Blocks
  *
- * Blocks that create instances of domain types.
- * These replace the old GridDomain/DomainN blocks.
+ * Instance and layout blocks following three-stage architecture:
+ * - Stage 2 blocks (Array) create instances
+ * - Stage 3 blocks (layouts) apply spatial operations to fields
  */
 
 import { registerBlock } from './registry';
 import { signalType, signalTypeField } from '../core/canonical-types';
 import { DOMAIN_CIRCLE } from '../core/domain-registry';
-import { defaultSourceConstant, defaultSourceNone } from '../types';
+import { defaultSourceConstant } from '../types';
 import type { LayoutSpec } from '../compiler/ir/types';
 
 // =============================================================================
-// Layout Blocks
+// Layout Blocks (Stage 3: Field Operations)
 // =============================================================================
 
 /**
- * GridLayout - Creates a grid layout specification
+ * GridLayout - Arranges field elements in a grid pattern
  *
- * NOTE: Layout blocks output 'int' signals as placeholders. The actual LayoutSpec
- * is carried as metadata. This is a compile-time construct.
+ * Stage 3: Field operation block.
+ * Takes Field<T> input and outputs Field<vec2> positions.
+ *
+ * Example:
+ * Array (Field<float>) → GridLayout → Field<vec2> (grid positions)
+ *
+ * This is NOT a metadata hack - it uses ctx.b.fieldLayout() to create
+ * a proper layout field expression in the IR.
  */
 registerBlock({
   type: 'GridLayout',
   label: 'Grid Layout',
   category: 'layout',
-  description: 'Creates a grid layout with rows and columns',
+  description: 'Arranges elements in a grid pattern',
   form: 'primitive',
   capability: 'pure',
   inputs: [
+    { id: 'elements', label: 'Elements', type: signalTypeField('???', 'default') },
     { id: 'rows', label: 'Rows', type: signalType('int'), defaultValue: 10 },
     { id: 'cols', label: 'Columns', type: signalType('int'), defaultValue: 10 },
   ],
   outputs: [
-    { id: 'layout', label: 'Layout', type: signalType('int') },
+    { id: 'position', label: 'Position', type: signalTypeField('vec2', 'default') },
   ],
   params: {
-    defaultRows: 10,
-    defaultCols: 10,
+    rows: 10,
+    cols: 10,
   },
   lower: ({ ctx, inputsById, config }) => {
-    // For now, layouts are compile-time only, so we extract const values
-    // TODO: Support dynamic layouts when runtime supports it
-    const rows = (config?.defaultRows as number) ?? 10;
-    const cols = (config?.defaultCols as number) ?? 10;
+    const elementsInput = inputsById.elements;
 
-    // Create layout spec object
+    if (!elementsInput || elementsInput.k !== 'field') {
+      throw new Error('GridLayout requires a field input (from Array block)');
+    }
+
+    const rows = (config?.rows as number) ?? 10;
+    const cols = (config?.cols as number) ?? 10;
     const layout: LayoutSpec = { kind: 'grid', rows, cols };
 
-    // Store layout as metadata on a signal (layouts are not executable IR, they're config)
-    // Use int(0) as a placeholder value
-    const layoutSignal = ctx.b.sigConst(0, signalType('int'));
-    const slot = ctx.b.allocSlot();
+    // Get instance context from the field input
+    // The instance context should be set by the Array block
+    const instanceId = ctx.inferredInstance;
+    if (!instanceId) {
+      throw new Error('GridLayout requires instance context from upstream Array block');
+    }
+
+    // Create layout field using fieldLayout()
+    const positionField = ctx.b.fieldLayout(
+      elementsInput.id,
+      layout,
+      instanceId,
+      signalTypeField('vec2', 'default')
+    );
 
     return {
       outputsById: {
-        layout: { k: 'sig', id: layoutSignal, slot, metadata: { layoutSpec: layout } },
+        position: { k: 'field', id: positionField, slot: ctx.b.allocSlot() },
       },
     };
   },
 });
 
 /**
- * LinearLayout - Creates a linear layout specification
+ * LinearLayout - Arranges field elements in a linear pattern
+ *
+ * Stage 3: Field operation block.
+ * Takes Field<T> input and outputs Field<vec2> positions.
  */
 registerBlock({
   type: 'LinearLayout',
   label: 'Linear Layout',
   category: 'layout',
-  description: 'Creates a linear layout with direction and spacing',
+  description: 'Arranges elements in a linear pattern',
   form: 'primitive',
   capability: 'pure',
   inputs: [
-    { id: 'direction', label: 'Direction', type: signalType('vec2'), defaultValue: [1, 0] },
-    { id: 'spacing', label: 'Spacing', type: signalType('float'), defaultValue: 10 },
+    { id: 'elements', label: 'Elements', type: signalTypeField('???', 'default') },
+    { id: 'spacing', label: 'Spacing', type: signalType('float'), defaultValue: 0.1 },
   ],
   outputs: [
-    { id: 'layout', label: 'Layout', type: signalType('int') },
+    { id: 'position', label: 'Position', type: signalTypeField('vec2', 'default') },
   ],
   params: {
-    defaultSpacing: 10,
+    spacing: 0.1,
   },
-  lower: ({ ctx, config }) => {
-    const spacing = (config?.defaultSpacing as number) ?? 10;
+  lower: ({ ctx, inputsById, config }) => {
+    const elementsInput = inputsById.elements;
 
+    if (!elementsInput || elementsInput.k !== 'field') {
+      throw new Error('LinearLayout requires a field input (from Array block)');
+    }
+
+    const spacing = (config?.spacing as number) ?? 0.1;
     const layout: LayoutSpec = { kind: 'linear', spacing };
 
-    const layoutSignal = ctx.b.sigConst(0, signalType('int'));
-    const slot = ctx.b.allocSlot();
+    // Get instance context from the field input
+    const instanceId = ctx.inferredInstance;
+    if (!instanceId) {
+      throw new Error('LinearLayout requires instance context from upstream Array block');
+    }
+
+    // Create layout field using fieldLayout()
+    const positionField = ctx.b.fieldLayout(
+      elementsInput.id,
+      layout,
+      instanceId,
+      signalTypeField('vec2', 'default')
+    );
 
     return {
       outputsById: {
-        layout: { k: 'sig', id: layoutSignal, slot, metadata: { layoutSpec: layout } },
+        position: { k: 'field', id: positionField, slot: ctx.b.allocSlot() },
       },
     };
   },
 });
 
 // =============================================================================
-// CircleInstance
+// DEPRECATED: CircleInstance (Replaced by Circle + Array + GridLayout)
 // =============================================================================
+//
+// CircleInstance has been replaced by the three-stage architecture:
+// 1. Circle (primitive) → Signal<float> (radius)
+// 2. Array (cardinality) → Field<float> (many radii)
+// 3. GridLayout (operation) → Field<vec2> (positions)
+//
+// This block will be removed in P5.
+// For now, it's kept for backward compatibility with existing patches.
 
 registerBlock({
   type: 'CircleInstance',
-  label: 'Circle Instance',
+  label: 'Circle Instance (DEPRECATED)',
   category: 'instance',
-  description: 'Creates an instance of circles with specified layout',
+  description: '[DEPRECATED] Use Circle → Array → GridLayout instead',
   form: 'primitive',
   capability: 'identity',
   inputs: [
     { id: 'count', label: 'Count', type: signalType('int'), defaultValue: 100, defaultSource: defaultSourceConstant(100) },
-    { id: 'layout', label: 'Layout', type: signalType('int'), optional: true, defaultSource: defaultSourceNone() },
   ],
   outputs: [
     { id: 'position', label: 'Position', type: signalTypeField('vec2', 'default') },
@@ -124,27 +170,17 @@ registerBlock({
     rows: 10,
     cols: 10,
   },
-  lower: ({ ctx, inputsById, config }) => {
+  lower: ({ ctx, config }) => {
     const count = (config?.count as number) ?? 100;
+    const layoutKind = (config?.layoutKind as string) ?? 'grid';
+    const rows = (config?.rows as number) ?? 10;
+    const cols = (config?.cols as number) ?? 10;
 
-    // Try to get layout from input
-    const layoutInput = inputsById.layout;
     let layout: LayoutSpec;
-
-    if (layoutInput && (layoutInput as any).metadata?.layoutSpec) {
-      // Use layout from connected block
-      layout = (layoutInput as any).metadata.layoutSpec;
+    if (layoutKind === 'grid') {
+      layout = { kind: 'grid', rows, cols };
     } else {
-      // Fallback to config-based layout
-      const layoutKind = (config?.layoutKind as string) ?? 'grid';
-      const rows = (config?.rows as number) ?? 10;
-      const cols = (config?.cols as number) ?? 10;
-
-      if (layoutKind === 'grid') {
-        layout = { kind: 'grid', rows, cols };
-      } else {
-        layout = { kind: 'unordered' };
-      }
+      layout = { kind: 'unordered' };
     }
 
     // Create instance using new IRBuilder method
@@ -156,18 +192,12 @@ registerBlock({
     const indexField = ctx.b.fieldIntrinsic(instanceId, 'index', signalTypeField('int', 'default'));
     const tField = ctx.b.fieldIntrinsic(instanceId, 'normalizedIndex', signalTypeField('float', 'default'));
 
-    // Allocate slots
-    const positionSlot = ctx.b.allocSlot();
-    const radiusSlot = ctx.b.allocSlot();
-    const indexSlot = ctx.b.allocSlot();
-    const tSlot = ctx.b.allocSlot();
-
     return {
       outputsById: {
-        position: { k: 'field', id: positionField, slot: positionSlot },
-        radius: { k: 'field', id: radiusField, slot: radiusSlot },
-        index: { k: 'field', id: indexField, slot: indexSlot },
-        t: { k: 'field', id: tField, slot: tSlot },
+        position: { k: 'field', id: positionField, slot: ctx.b.allocSlot() },
+        radius: { k: 'field', id: radiusField, slot: ctx.b.allocSlot() },
+        index: { k: 'field', id: indexField, slot: ctx.b.allocSlot() },
+        t: { k: 'field', id: tField, slot: ctx.b.allocSlot() },
       },
     };
   },
