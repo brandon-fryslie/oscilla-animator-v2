@@ -272,6 +272,41 @@ export interface DomainDef {
 }
 
 // =============================================================================
+// Instance System (NEW - Domain Refactor)
+// =============================================================================
+
+/**
+ * Import new domain system types.
+ */
+import type { DomainTypeId, InstanceId } from './Indices';
+
+/**
+ * Layout specification for an instance.
+ * Layout determines spatial arrangement (orthogonal to domain type).
+ */
+export type LayoutSpec =
+  | { readonly kind: 'unordered' }
+  | { readonly kind: 'grid'; readonly rows: number; readonly cols: number }
+  | { readonly kind: 'circular'; readonly radius: number }
+  | { readonly kind: 'linear'; readonly spacing: number }
+  | { readonly kind: 'random'; readonly bounds: { x: number; y: number; w: number; h: number }; readonly seed: number }
+  | { readonly kind: 'along-path'; readonly pathInstanceId: string }
+  | { readonly kind: 'custom'; readonly positionField: FieldExprId };
+
+/**
+ * Instance declaration (NEW).
+ * An instance is a specific instantiation of a domain type with count, layout, and lifecycle.
+ */
+export interface InstanceDecl {
+  readonly id: string; // InstanceId
+  readonly domainType: string; // DomainTypeId
+  readonly count: number | 'dynamic';
+  readonly layout: LayoutSpec;
+  readonly lifecycle: 'static' | 'dynamic' | 'pooled';
+}
+
+
+// =============================================================================
 // Time Model
 // =============================================================================
 
