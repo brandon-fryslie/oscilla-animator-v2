@@ -1,8 +1,11 @@
 /**
- * Domain Unification Tests
+ * Instance Unification Tests
  *
- * Verifies that domain compatibility checking works correctly during
+ * Verifies that instance/domain compatibility checking works correctly during
  * field expression composition and at render sinks.
+ *
+ * Note: These tests validate the domain unification logic used for field expressions.
+ * Even with the instance model, fields still have domain constraints for unification.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -10,7 +13,7 @@ import { IRBuilderImpl } from '../ir/IRBuilderImpl';
 import { OpCode } from '../ir/types';
 import { signalTypeField, signalTypeSignal } from '../../core/canonical-types';
 
-describe('Domain Unification', () => {
+describe('Instance Unification', () => {
   describe('domain inference', () => {
     it('infers domain from FieldExprSource', () => {
       const b = new IRBuilderImpl();
