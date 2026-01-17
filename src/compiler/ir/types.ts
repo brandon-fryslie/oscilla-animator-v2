@@ -146,6 +146,9 @@ export interface FieldExprSource {
   readonly domain: DomainId;
   readonly sourceId: 'pos0' | 'idRand' | 'index' | 'normalizedIndex';
   readonly type: SignalType;
+  // NEW: Instance-based model (Sprint 2)
+  readonly instanceId?: string; // InstanceId
+  readonly intrinsic?: string;  // Intrinsic property name
 }
 
 export interface FieldExprBroadcast {
