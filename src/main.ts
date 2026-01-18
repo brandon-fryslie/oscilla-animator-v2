@@ -48,93 +48,94 @@ function log(msg: string, level: 'info' | 'warn' | 'error' = 'info') {
 
 type PatchBuilder = (b: any) => void;
 
-// Original patch - constants only
+// Original patch - using three-stage architecture: Circle → Array → GridLayout
 const patchOriginal: PatchBuilder = (b) => {
   const time = b.addBlock('InfiniteTimeRoot',
     { periodAMs: 799, periodBMs: 32000 },
     { role: timeRootRole() }
   );
-  const domain = b.addBlock('DomainN', { n: 5000, seed: 42 });
-  const id01 = b.addBlock('FieldFromDomainId', {});
+
+  // Three-stage architecture:
+  // 1. Circle (primitive) → Signal<float>
+  // 2. Array (cardinality) → Field<float>
+  // 3. GridLayout (operation) → Field<vec2>
+  const circle = b.addBlock('Circle', { radius: 0.02 });
+  const array = b.addBlock('Array', { count: 5000 });
+  const layout = b.addBlock('GridLayout', { rows: 71, cols: 71 });
+
+  // Wire Circle → Array → GridLayout
+  b.wire(circle, 'circle', array, 'element');
+  b.wire(array, 'elements', layout, 'elements');
+
   const centerX = b.addBlock('Const', { value: 0.5 });
   const centerY = b.addBlock('Const', { value: 0.5 });
   const radiusBase = b.addBlock('Const', { value: 0.35 });
-  const radiusAmplitude = b.addBlock('Const', { value: 0.08 });
-  const radiusSpread = b.addBlock('Const', { value: 3.0 });
-  const radiusPulse = b.addBlock('FieldPulse', {});
   const spin = b.addBlock('Const', { value: 2.0 });
   const goldenAngle = b.addBlock('FieldGoldenAngle', { turns: 50 });
   const angularOffset = b.addBlock('FieldAngularOffset', {});
   const totalAngle = b.addBlock('FieldAdd', {});
   const effectiveRadius = b.addBlock('FieldRadiusSqrt', {});
   const pos = b.addBlock('FieldPolarToCartesian', {});
-  const jitterX = b.addBlock('Const', { value: 0.012 });
-  const jitterY = b.addBlock('Const', { value: 0.012 });
-  const jitter = b.addBlock('FieldJitter2D', {});
   const sat = b.addBlock('Const', { value: 0.85 });
   const val = b.addBlock('Const', { value: 0.9 });
   const hue = b.addBlock('FieldHueFromPhase', {});
   const color = b.addBlock('HsvToRgb', {});
-  const sizeBase = b.addBlock('Const', { value: 3 });
-  const sizeAmplitude = b.addBlock('Const', { value: 2 });
-  const sizeSpread = b.addBlock('Const', { value: 1.0 });
-  const sizePulse = b.addBlock('FieldPulse', {});
+  const size = b.addBlock('Const', { value: 3 });
   const render = b.addBlock('RenderInstances2D', {});
 
-  b.wire(domain, 'domain', id01, 'domain');
-  b.wire(domain, 'domain', render, 'domain');
-  b.wire(time, 'phaseA', radiusPulse, 'phase');
+  // Wire phase to position and color
   b.wire(time, 'phaseA', angularOffset, 'phase');
   b.wire(time, 'phaseA', hue, 'phase');
-  b.wire(id01, 'id01', radiusPulse, 'id01');
-  b.wire(radiusBase, 'out', radiusPulse, 'base');
-  b.wire(radiusAmplitude, 'out', radiusPulse, 'amplitude');
-  b.wire(radiusSpread, 'out', radiusPulse, 'spread');
-  b.wire(id01, 'id01', goldenAngle, 'id01');
-  b.wire(id01, 'id01', angularOffset, 'id01');
-  b.wire(id01, 'id01', hue, 'id01');
-  b.wire(id01, 'id01', effectiveRadius, 'id01');
+
+  // Wire Array 't' output (normalized index 0-1) to field blocks
+  b.wire(array, 't', goldenAngle, 'id01');
+  b.wire(array, 't', angularOffset, 'id01');
+  b.wire(array, 't', hue, 'id01');
+  b.wire(array, 't', effectiveRadius, 'id01');
+
+  // Wire spin to angular offset
   b.wire(spin, 'out', angularOffset, 'spin');
+
+  // Wire golden angle + offset to total angle
   b.wire(goldenAngle, 'angle', totalAngle, 'a');
   b.wire(angularOffset, 'offset', totalAngle, 'b');
+
+  // Wire center, radius, angle to polar to cartesian
   b.wire(centerX, 'out', pos, 'centerX');
   b.wire(centerY, 'out', pos, 'centerY');
-  b.wire(radiusPulse, 'value', effectiveRadius, 'radius');
+  b.wire(radiusBase, 'out', effectiveRadius, 'radius');
   b.wire(totalAngle, 'out', pos, 'angle');
-  b.wire(effectiveRadius, 'radius', pos, 'radius');
-  b.wire(pos, 'pos', jitter, 'pos');
-  b.wire(domain, 'rand', jitter, 'rand');
-  b.wire(jitterX, 'out', jitter, 'amountX');
-  b.wire(jitterY, 'out', jitter, 'amountY');
+  b.wire(effectiveRadius, 'out', pos, 'radius');
+
+  // Wire hue and sat/val to color
   b.wire(hue, 'hue', color, 'hue');
   b.wire(sat, 'out', color, 'sat');
   b.wire(val, 'out', color, 'val');
-  b.wire(time, 'phaseA', sizePulse, 'phase');
-  b.wire(id01, 'id01', sizePulse, 'id01');
-  b.wire(sizeBase, 'out', sizePulse, 'base');
-  b.wire(sizeAmplitude, 'out', sizePulse, 'amplitude');
-  b.wire(sizeSpread, 'out', sizePulse, 'spread');
-  b.wire(jitter, 'pos', render, 'pos');
+
+  // Wire pos, color, size to render
+  b.wire(pos, 'pos', render, 'pos');
   b.wire(color, 'color', render, 'color');
-  b.wire(sizePulse, 'value', render, 'size');
+  b.wire(size, 'out', render, 'size');
 };
 
-// Breathing patch - oscillating radius
+// Breathing patch - oscillating spin speed
 const patchBreathing: PatchBuilder = (b) => {
   const time = b.addBlock('InfiniteTimeRoot',
     { periodAMs: 2000, periodBMs: 8000 },
     { role: timeRootRole() }
   );
-  const domain = b.addBlock('DomainN', { n: 5000, seed: 42 });
-  const id01 = b.addBlock('FieldFromDomainId', {});
+
+  // Three-stage architecture
+  const circle = b.addBlock('Circle', { radius: 0.02 });
+  const array = b.addBlock('Array', { count: 5000 });
+  const layout = b.addBlock('GridLayout', { rows: 71, cols: 71 });
+
+  b.wire(circle, 'circle', array, 'element');
+  b.wire(array, 'elements', layout, 'elements');
+
   const centerX = b.addBlock('Const', { value: 0.5 });
   const centerY = b.addBlock('Const', { value: 0.5 });
-
-  // Oscillating radius base - breathes in and out
-  const radiusOsc = b.addBlock('Oscillator', { waveform: 'sin', amplitude: 0.15, offset: 0.3 });
-  const radiusAmplitude = b.addBlock('Const', { value: 0.05 });
-  const radiusSpread = b.addBlock('Const', { value: 2.0 });
-  const radiusPulse = b.addBlock('FieldPulse', {});
+  const radiusBase = b.addBlock('Const', { value: 0.35 });
 
   // Oscillating spin - speeds up and slows down
   const spinOsc = b.addBlock('Oscillator', { waveform: 'sin', amplitude: 1.5, offset: 1.0 });
@@ -144,226 +145,181 @@ const patchBreathing: PatchBuilder = (b) => {
   const totalAngle = b.addBlock('FieldAdd', {});
   const effectiveRadius = b.addBlock('FieldRadiusSqrt', {});
   const pos = b.addBlock('FieldPolarToCartesian', {});
-  const jitterX = b.addBlock('Const', { value: 0.008 });
-  const jitterY = b.addBlock('Const', { value: 0.008 });
-  const jitter = b.addBlock('FieldJitter2D', {});
   const sat = b.addBlock('Const', { value: 0.9 });
   const val = b.addBlock('Const', { value: 0.95 });
   const hue = b.addBlock('FieldHueFromPhase', {});
   const color = b.addBlock('HsvToRgb', {});
-
-  // Oscillating size
-  const sizeOsc = b.addBlock('Oscillator', { waveform: 'sin', amplitude: 2, offset: 4 });
-  const sizeAmplitude = b.addBlock('Const', { value: 1.5 });
-  const sizeSpread = b.addBlock('Const', { value: 0.5 });
-  const sizePulse = b.addBlock('FieldPulse', {});
-
+  const size = b.addBlock('Const', { value: 4 });
   const render = b.addBlock('RenderInstances2D', {});
 
   // Wire oscillators to time
-  b.wire(time, 'phaseA', radiusOsc, 'phase');
   b.wire(time, 'phaseB', spinOsc, 'phase');
-  b.wire(time, 'phaseB', sizeOsc, 'phase');
 
-  b.wire(domain, 'domain', id01, 'domain');
-  b.wire(domain, 'domain', render, 'domain');
-  b.wire(time, 'phaseA', radiusPulse, 'phase');
+  // Wire phase to position and color
   b.wire(time, 'phaseA', angularOffset, 'phase');
   b.wire(time, 'phaseA', hue, 'phase');
-  b.wire(id01, 'id01', radiusPulse, 'id01');
-  b.wire(radiusOsc, 'out', radiusPulse, 'base');
-  b.wire(radiusAmplitude, 'out', radiusPulse, 'amplitude');
-  b.wire(radiusSpread, 'out', radiusPulse, 'spread');
-  b.wire(id01, 'id01', goldenAngle, 'id01');
-  b.wire(id01, 'id01', angularOffset, 'id01');
-  b.wire(id01, 'id01', hue, 'id01');
-  b.wire(id01, 'id01', effectiveRadius, 'id01');
+
+  // Wire Array 't' output to field blocks
+  b.wire(array, 't', goldenAngle, 'id01');
+  b.wire(array, 't', angularOffset, 'id01');
+  b.wire(array, 't', hue, 'id01');
+  b.wire(array, 't', effectiveRadius, 'id01');
+
+  // Wire oscillating spin
   b.wire(spinOsc, 'out', angularOffset, 'spin');
+
+  // Wire golden angle + offset to total angle
   b.wire(goldenAngle, 'angle', totalAngle, 'a');
   b.wire(angularOffset, 'offset', totalAngle, 'b');
+
+  // Wire center, radius, angle to polar to cartesian
   b.wire(centerX, 'out', pos, 'centerX');
   b.wire(centerY, 'out', pos, 'centerY');
-  b.wire(radiusPulse, 'value', effectiveRadius, 'radius');
+  b.wire(radiusBase, 'out', effectiveRadius, 'radius');
   b.wire(totalAngle, 'out', pos, 'angle');
-  b.wire(effectiveRadius, 'radius', pos, 'radius');
-  b.wire(pos, 'pos', jitter, 'pos');
-  b.wire(domain, 'rand', jitter, 'rand');
-  b.wire(jitterX, 'out', jitter, 'amountX');
-  b.wire(jitterY, 'out', jitter, 'amountY');
+  b.wire(effectiveRadius, 'out', pos, 'radius');
+
+  // Wire hue and sat/val to color
   b.wire(hue, 'hue', color, 'hue');
   b.wire(sat, 'out', color, 'sat');
   b.wire(val, 'out', color, 'val');
-  b.wire(time, 'phaseA', sizePulse, 'phase');
-  b.wire(id01, 'id01', sizePulse, 'id01');
-  b.wire(sizeOsc, 'out', sizePulse, 'base');
-  b.wire(sizeAmplitude, 'out', sizePulse, 'amplitude');
-  b.wire(sizeSpread, 'out', sizePulse, 'spread');
-  b.wire(jitter, 'pos', render, 'pos');
+
+  // Wire pos, color, size to render
+  b.wire(pos, 'pos', render, 'pos');
   b.wire(color, 'color', render, 'color');
-  b.wire(sizePulse, 'value', render, 'size');
+  b.wire(size, 'out', render, 'size');
 };
 
-// Wobbly patch - triangle wave jitter
+// Wobbly patch - fast spin
 const patchWobbly: PatchBuilder = (b) => {
   const time = b.addBlock('InfiniteTimeRoot',
     { periodAMs: 500, periodBMs: 3000 },
     { role: timeRootRole() }
   );
-  const domain = b.addBlock('DomainN', { n: 5000, seed: 42 });
-  const id01 = b.addBlock('FieldFromDomainId', {});
+
+  // Three-stage architecture
+  const circle = b.addBlock('Circle', { radius: 0.02 });
+  const array = b.addBlock('Array', { count: 5000 });
+  const layout = b.addBlock('GridLayout', { rows: 71, cols: 71 });
+
+  b.wire(circle, 'circle', array, 'element');
+  b.wire(array, 'elements', layout, 'elements');
+
   const centerX = b.addBlock('Const', { value: 0.5 });
   const centerY = b.addBlock('Const', { value: 0.5 });
   const radiusBase = b.addBlock('Const', { value: 0.35 });
-  const radiusAmplitude = b.addBlock('Const', { value: 0.1 });
-  const radiusSpread = b.addBlock('Const', { value: 4.0 });
-  const radiusPulse = b.addBlock('FieldPulse', {});
   const spin = b.addBlock('Const', { value: 3.0 });
   const goldenAngle = b.addBlock('FieldGoldenAngle', { turns: 50 });
   const angularOffset = b.addBlock('FieldAngularOffset', {});
   const totalAngle = b.addBlock('FieldAdd', {});
   const effectiveRadius = b.addBlock('FieldRadiusSqrt', {});
   const pos = b.addBlock('FieldPolarToCartesian', {});
-
-  // Oscillating jitter amounts - triangle wave for snappy motion
-  const jitterOscX = b.addBlock('Oscillator', { waveform: 'triangle', amplitude: 0.03, offset: 0.01 });
-  const jitterOscY = b.addBlock('Oscillator', { waveform: 'triangle', amplitude: 0.03, offset: 0.01 });
-  const jitter = b.addBlock('FieldJitter2D', {});
-
-  // Oscillating saturation
-  const satOsc = b.addBlock('Oscillator', { waveform: 'sin', amplitude: 0.3, offset: 0.7 });
+  const sat = b.addBlock('Const', { value: 0.95 });
   const val = b.addBlock('Const', { value: 0.95 });
   const hue = b.addBlock('FieldHueFromPhase', {});
   const color = b.addBlock('HsvToRgb', {});
-
-  const sizeBase = b.addBlock('Const', { value: 4 });
-  const sizeAmplitude = b.addBlock('Const', { value: 2 });
-  const sizeSpread = b.addBlock('Const', { value: 2.0 });
-  const sizePulse = b.addBlock('FieldPulse', {});
+  const size = b.addBlock('Const', { value: 4 });
   const render = b.addBlock('RenderInstances2D', {});
 
-  // Wire oscillators
-  b.wire(time, 'phaseA', jitterOscX, 'phase');
-  b.wire(time, 'phaseB', jitterOscY, 'phase');
-  b.wire(time, 'phaseB', satOsc, 'phase');
-
-  b.wire(domain, 'domain', id01, 'domain');
-  b.wire(domain, 'domain', render, 'domain');
-  b.wire(time, 'phaseA', radiusPulse, 'phase');
+  // Wire phase to position and color
   b.wire(time, 'phaseA', angularOffset, 'phase');
   b.wire(time, 'phaseA', hue, 'phase');
-  b.wire(id01, 'id01', radiusPulse, 'id01');
-  b.wire(radiusBase, 'out', radiusPulse, 'base');
-  b.wire(radiusAmplitude, 'out', radiusPulse, 'amplitude');
-  b.wire(radiusSpread, 'out', radiusPulse, 'spread');
-  b.wire(id01, 'id01', goldenAngle, 'id01');
-  b.wire(id01, 'id01', angularOffset, 'id01');
-  b.wire(id01, 'id01', hue, 'id01');
-  b.wire(id01, 'id01', effectiveRadius, 'id01');
+
+  // Wire Array 't' output to field blocks
+  b.wire(array, 't', goldenAngle, 'id01');
+  b.wire(array, 't', angularOffset, 'id01');
+  b.wire(array, 't', hue, 'id01');
+  b.wire(array, 't', effectiveRadius, 'id01');
+
+  // Wire spin
   b.wire(spin, 'out', angularOffset, 'spin');
+
+  // Wire golden angle + offset to total angle
   b.wire(goldenAngle, 'angle', totalAngle, 'a');
   b.wire(angularOffset, 'offset', totalAngle, 'b');
+
+  // Wire center, radius, angle to polar to cartesian
   b.wire(centerX, 'out', pos, 'centerX');
   b.wire(centerY, 'out', pos, 'centerY');
-  b.wire(radiusPulse, 'value', effectiveRadius, 'radius');
+  b.wire(radiusBase, 'out', effectiveRadius, 'radius');
   b.wire(totalAngle, 'out', pos, 'angle');
-  b.wire(effectiveRadius, 'radius', pos, 'radius');
-  b.wire(pos, 'pos', jitter, 'pos');
-  b.wire(domain, 'rand', jitter, 'rand');
-  b.wire(jitterOscX, 'out', jitter, 'amountX');
-  b.wire(jitterOscY, 'out', jitter, 'amountY');
+  b.wire(effectiveRadius, 'out', pos, 'radius');
+
+  // Wire hue and sat/val to color
   b.wire(hue, 'hue', color, 'hue');
-  b.wire(satOsc, 'out', color, 'sat');
+  b.wire(sat, 'out', color, 'sat');
   b.wire(val, 'out', color, 'val');
-  b.wire(time, 'phaseA', sizePulse, 'phase');
-  b.wire(id01, 'id01', sizePulse, 'id01');
-  b.wire(sizeBase, 'out', sizePulse, 'base');
-  b.wire(sizeAmplitude, 'out', sizePulse, 'amplitude');
-  b.wire(sizeSpread, 'out', sizePulse, 'spread');
-  b.wire(jitter, 'pos', render, 'pos');
+
+  // Wire pos, color, size to render
+  b.wire(pos, 'pos', render, 'pos');
   b.wire(color, 'color', render, 'color');
-  b.wire(sizePulse, 'value', render, 'size');
+  b.wire(size, 'out', render, 'size');
 };
 
-// Pulsing patch - strong size oscillation with sawtooth
+// Pulsing patch - slow spin
 const patchPulsing: PatchBuilder = (b) => {
   const time = b.addBlock('InfiniteTimeRoot',
     { periodAMs: 1000, periodBMs: 4000 },
     { role: timeRootRole() }
   );
-  const domain = b.addBlock('DomainN', { n: 5000, seed: 42 });
-  const id01 = b.addBlock('FieldFromDomainId', {});
+
+  // Three-stage architecture
+  const circle = b.addBlock('Circle', { radius: 0.02 });
+  const array = b.addBlock('Array', { count: 5000 });
+  const layout = b.addBlock('GridLayout', { rows: 71, cols: 71 });
+
+  b.wire(circle, 'circle', array, 'element');
+  b.wire(array, 'elements', layout, 'elements');
+
   const centerX = b.addBlock('Const', { value: 0.5 });
   const centerY = b.addBlock('Const', { value: 0.5 });
-
-  // Sawtooth radius for sharp expand/contract
-  const radiusOsc = b.addBlock('Oscillator', { waveform: 'sawtooth', amplitude: 0.2, offset: 0.25 });
-  const radiusAmplitude = b.addBlock('Const', { value: 0.03 });
-  const radiusSpread = b.addBlock('Const', { value: 5.0 });
-  const radiusPulse = b.addBlock('FieldPulse', {});
-
+  const radiusBase = b.addBlock('Const', { value: 0.35 });
   const spin = b.addBlock('Const', { value: 1.0 });
   const goldenAngle = b.addBlock('FieldGoldenAngle', { turns: 50 });
   const angularOffset = b.addBlock('FieldAngularOffset', {});
   const totalAngle = b.addBlock('FieldAdd', {});
   const effectiveRadius = b.addBlock('FieldRadiusSqrt', {});
   const pos = b.addBlock('FieldPolarToCartesian', {});
-  const jitterX = b.addBlock('Const', { value: 0.005 });
-  const jitterY = b.addBlock('Const', { value: 0.005 });
-  const jitter = b.addBlock('FieldJitter2D', {});
   const sat = b.addBlock('Const', { value: 0.8 });
-
-  // Square wave brightness for strobe effect
-  const valOsc = b.addBlock('Oscillator', { waveform: 'square', amplitude: 0.3, offset: 0.7 });
+  const val = b.addBlock('Const', { value: 0.9 });
   const hue = b.addBlock('FieldHueFromPhase', {});
   const color = b.addBlock('HsvToRgb', {});
-
-  // Big pulsing size
-  const sizeOsc = b.addBlock('Oscillator', { waveform: 'sin', amplitude: 4, offset: 5 });
-  const sizeAmplitude = b.addBlock('Const', { value: 2 });
-  const sizeSpread = b.addBlock('Const', { value: 3.0 });
-  const sizePulse = b.addBlock('FieldPulse', {});
+  const size = b.addBlock('Const', { value: 5 });
   const render = b.addBlock('RenderInstances2D', {});
 
-  b.wire(time, 'phaseA', radiusOsc, 'phase');
-  b.wire(time, 'phaseA', valOsc, 'phase');
-  b.wire(time, 'phaseB', sizeOsc, 'phase');
-
-  b.wire(domain, 'domain', id01, 'domain');
-  b.wire(domain, 'domain', render, 'domain');
-  b.wire(time, 'phaseA', radiusPulse, 'phase');
+  // Wire phase to position and color
   b.wire(time, 'phaseA', angularOffset, 'phase');
   b.wire(time, 'phaseA', hue, 'phase');
-  b.wire(id01, 'id01', radiusPulse, 'id01');
-  b.wire(radiusOsc, 'out', radiusPulse, 'base');
-  b.wire(radiusAmplitude, 'out', radiusPulse, 'amplitude');
-  b.wire(radiusSpread, 'out', radiusPulse, 'spread');
-  b.wire(id01, 'id01', goldenAngle, 'id01');
-  b.wire(id01, 'id01', angularOffset, 'id01');
-  b.wire(id01, 'id01', hue, 'id01');
-  b.wire(id01, 'id01', effectiveRadius, 'id01');
+
+  // Wire Array 't' output to field blocks
+  b.wire(array, 't', goldenAngle, 'id01');
+  b.wire(array, 't', angularOffset, 'id01');
+  b.wire(array, 't', hue, 'id01');
+  b.wire(array, 't', effectiveRadius, 'id01');
+
+  // Wire spin
   b.wire(spin, 'out', angularOffset, 'spin');
+
+  // Wire golden angle + offset to total angle
   b.wire(goldenAngle, 'angle', totalAngle, 'a');
   b.wire(angularOffset, 'offset', totalAngle, 'b');
+
+  // Wire center, radius, angle to polar to cartesian
   b.wire(centerX, 'out', pos, 'centerX');
   b.wire(centerY, 'out', pos, 'centerY');
-  b.wire(radiusPulse, 'value', effectiveRadius, 'radius');
+  b.wire(radiusBase, 'out', effectiveRadius, 'radius');
   b.wire(totalAngle, 'out', pos, 'angle');
-  b.wire(effectiveRadius, 'radius', pos, 'radius');
-  b.wire(pos, 'pos', jitter, 'pos');
-  b.wire(domain, 'rand', jitter, 'rand');
-  b.wire(jitterX, 'out', jitter, 'amountX');
-  b.wire(jitterY, 'out', jitter, 'amountY');
+  b.wire(effectiveRadius, 'out', pos, 'radius');
+
+  // Wire hue and sat/val to color
   b.wire(hue, 'hue', color, 'hue');
   b.wire(sat, 'out', color, 'sat');
-  b.wire(valOsc, 'out', color, 'val');
-  b.wire(time, 'phaseA', sizePulse, 'phase');
-  b.wire(id01, 'id01', sizePulse, 'id01');
-  b.wire(sizeOsc, 'out', sizePulse, 'base');
-  b.wire(sizeAmplitude, 'out', sizePulse, 'amplitude');
-  b.wire(sizeSpread, 'out', sizePulse, 'spread');
-  b.wire(jitter, 'pos', render, 'pos');
+  b.wire(val, 'out', color, 'val');
+
+  // Wire pos, color, size to render
+  b.wire(pos, 'pos', render, 'pos');
   b.wire(color, 'color', render, 'color');
-  b.wire(sizePulse, 'value', render, 'size');
+  b.wire(size, 'out', render, 'size');
 };
 
 const patches: { name: string; builder: PatchBuilder }[] = [
