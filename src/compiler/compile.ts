@@ -130,7 +130,7 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
     }
 
     const normalized = normResult.patch;
-    console.log('[Compile] Pass 1 complete:', { blocks: normalized.blocks.size, edges: normalized.edges.length });
+    console.log('[Compile] Pass 1 complete:', { blocks: normalized.blocks.length, edges: normalized.edges.length });
 
     // Pass 2: Type Graph
     console.log('[Compile] Pass 2: Type Graph');
