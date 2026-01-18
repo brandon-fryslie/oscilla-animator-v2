@@ -16,9 +16,10 @@
 
 import type { Patch } from '../graph';
 import { normalize, type NormalizedPatch } from '../graph/normalize';
-import type { CompiledProgramIR } from './ir/program';
+import type { CompiledProgramIR, SlotMetaEntry, ValueSlot } from './ir/program';
 import { convertCompileErrorsToDiagnostics } from './diagnosticConversion';
 import type { EventHub } from '../events/EventHub';
+import { signalType } from '../core/canonical-types';
 
 // Import block registrations (side-effect imports to register blocks)
 import '../blocks/time-blocks';
@@ -284,11 +285,41 @@ function convertLinkedIRToProgram(
   const fieldNodes = builder.getFieldExprs();
   const eventNodes = builder.getEventExprs();
 
+  // Build slot metadata from slot types
+  const slotTypes = builder.getSlotTypes();
+  const slotMeta: SlotMetaEntry[] = [];
+
+  // Track offsets per storage class
+  const storageOffsets = {
+    f64: 0,
+    f32: 0,
+    i32: 0,
+    u32: 0,
+    object: 0,
+  };
+
+  // Build slotMeta entries for all allocated slots
+  // Slots are indexed from 0, so iterate through all slot IDs
+  for (let slotId = 0; slotId < builder.getSlotCount?.() || 0; slotId++) {
+    const slot = slotId as ValueSlot;
+    const type = slotTypes.get(slot) || signalType('float'); // Default to float if no type info
+
+    // Determine storage class from type
+    // For now, simple mapping: all numbers go to f64
+    const storage: SlotMetaEntry['storage'] = 'f64';
+
+    const offset = storageOffsets[storage]++;
+
+    slotMeta.push({
+      slot,
+      storage,
+      offset,
+      type,
+    });
+  }
+
   // Build output specs (TBD - for now return empty array)
   const outputs: any[] = [];
-
-  // Build slot metadata (TBD - for now return empty array)
-  const slotMeta: any[] = [];
 
   // Build debug index
   const debugIndex = {

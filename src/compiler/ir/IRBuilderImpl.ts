@@ -501,6 +501,13 @@ export class IRBuilderImpl implements IRBuilder {
     return this.slotCounter;
   }
 
+  /**
+   * Get slot type information for slotMeta generation.
+   */
+  getSlotTypes(): ReadonlyMap<ValueSlot, SignalType> {
+    return this.slotTypes;
+  }
+
   // =========================================================================
   // State Slots (Persistent Cross-Frame Storage)
   // =========================================================================
@@ -519,6 +526,10 @@ export class IRBuilderImpl implements IRBuilder {
 
   stepStateWrite(stateSlot: StateSlotId, value: SigExprId): void {
     this.steps.push({ kind: 'stateWrite', stateSlot, value });
+  }
+
+  stepEvalSig(expr: SigExprId, target: ValueSlot): void {
+    this.steps.push({ kind: 'evalSig', expr, target });
   }
 
   // =========================================================================

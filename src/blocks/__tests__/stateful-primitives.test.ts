@@ -152,8 +152,10 @@ describe('Hash Block', () => {
       const valueBlock = b.addBlock('Const', { value: 42 });
       const seedBlock = b.addBlock('Const', { value: 0 });
       const hashBlock = b.addBlock('Hash', {});
+      const testSig = b.addBlock('TestSignal', {});
       b.wire(valueBlock, 'out', hashBlock, 'value');
       b.wire(seedBlock, 'out', hashBlock, 'seed');
+      b.wire(hashBlock, 'out', testSig, 'value');
     });
 
     const result = compile(patch);
@@ -164,71 +166,69 @@ describe('Hash Block', () => {
     const state = createRuntimeState(program.slotMeta.length);
     const pool = new BufferPool();
 
+    // Find the evalSig step from TestSignal to get the slot
+    const schedule = program.schedule as any;
+    const evalSigStep = schedule.steps.find((s: any) => s.kind === 'evalSig');
+    expect(evalSigStep).toBeDefined();
+    const slot = evalSigStep?.target;
+
     // Execute multiple times - should get same result
     executeFrame(program, state, pool, 0);
-    const hash1 = state.cache.sigValues[state.cache.sigValues.length - 1];
+    const hash1 = state.values.f64[slot];
 
     executeFrame(program, state, pool, 100);
-    const hash2 = state.cache.sigValues[state.cache.sigValues.length - 1];
+    const hash2 = state.values.f64[slot];
 
     expect(hash1).toBe(hash2);
   });
 
   // Test verifies Hash block produces different results with different seeds
   it('different seeds produce different results', () => {
-    // Build two hash blocks with same value but different seeds
-    const patch1 = buildPatch((b) => {
+    // Build patch with two hash blocks with different seeds
+    const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot', {});
-      const valueBlock = b.addBlock('Const', { value: 42 });
-      const seedBlock = b.addBlock('Const', { value: 0 });
-      const hashBlock = b.addBlock('Hash', {});
-      b.wire(valueBlock, 'out', hashBlock, 'value');
-      b.wire(seedBlock, 'out', hashBlock, 'seed');
+      const value = b.addBlock('Const', { value: 42 });
+      const seed1 = b.addBlock('Const', { value: 0 });
+      const seed2 = b.addBlock('Const', { value: 1 });
+      const hash1 = b.addBlock('Hash', {});
+      const hash2 = b.addBlock('Hash', {});
+      const test1 = b.addBlock('TestSignal', {});
+      const test2 = b.addBlock('TestSignal', {});
+
+      b.wire(value, 'out', hash1, 'value');
+      b.wire(seed1, 'out', hash1, 'seed');
+      b.wire(hash1, 'out', test1, 'value');
+
+      b.wire(value, 'out', hash2, 'value');
+      b.wire(seed2, 'out', hash2, 'seed');
+      b.wire(hash2, 'out', test2, 'value');
     });
 
-    const patch2 = buildPatch((b) => {
-      b.addBlock('InfiniteTimeRoot', {});
-      const valueBlock = b.addBlock('Const', { value: 42 });
-      const seedBlock = b.addBlock('Const', { value: 1 });
-      const hashBlock = b.addBlock('Hash', {});
-      b.wire(valueBlock, 'out', hashBlock, 'value');
-      b.wire(seedBlock, 'out', hashBlock, 'seed');
-    });
+    const result = compile(patch);
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
 
-    const result1 = compile(patch1);
-    const result2 = compile(patch2);
-
-    console.log('[TEST] result1.kind:', result1.kind);
-    if (result1.kind !== 'ok') console.log('[TEST] result1.errors:', result1.errors);
-    console.log('[TEST] result2.kind:', result2.kind);
-    if (result2.kind !== 'ok') console.log('[TEST] result2.errors:', result2.errors);
-
-    expect(result1.kind).toBe('ok');
-    expect(result2.kind).toBe('ok');
-    if (result1.kind !== 'ok' || result2.kind !== 'ok') return;
-
-    const state1 = createRuntimeState(result1.program.slotMeta.length);
-    const state2 = createRuntimeState(result2.program.slotMeta.length);
+    const state = createRuntimeState(result.program.slotMeta.length);
     const pool = new BufferPool();
 
-    executeFrame(result1.program, state1, pool, 0);
-    executeFrame(result2.program, state2, pool, 0);
+    // Find the evalSig steps from TestSignal blocks to get slots
+    const schedule = result.program.schedule as any;
+    const evalSigSteps = schedule.steps.filter((s: any) => s.kind === 'evalSig');
+    expect(evalSigSteps).toHaveLength(2);
+    const slot1 = evalSigSteps[0].target;
+    const slot2 = evalSigSteps[1].target;
 
-    // Debug: check what's in the cache
-    const cacheValues1 = Array.from(state1.cache.sigValues);
-    const cacheValues2 = Array.from(state2.cache.sigValues);
-    console.log('state1.cache full:', cacheValues1);
-    console.log('state2.cache full:', cacheValues2);
+    executeFrame(result.program, state, pool, 0);
 
-    // Get last value from cache (where the hash output should be)
-    const hash1 = cacheValues1[cacheValues1.length - 1];
-    const hash2 = cacheValues2[cacheValues2.length - 1];
+    // Get values from slots where TestSignal stored them
+    const val1 = state.values.f64[slot1];
+    const val2 = state.values.f64[slot2];
 
-    expect(hash1).toBeGreaterThan(0);
-    expect(hash1).toBeLessThan(1);
-    expect(hash2).toBeGreaterThan(0);
-    expect(hash2).toBeLessThan(1);
-    expect(hash1).not.toBe(hash2);
+    expect(val1).toBeGreaterThan(0);
+    expect(val1).toBeLessThan(1);
+    expect(val2).toBeGreaterThan(0);
+    expect(val2).toBeLessThan(1);
+    expect(val1).not.toBe(val2);
   });
 
   // Test verifies Hash output is normalized to [0, 1) range
@@ -238,8 +238,10 @@ describe('Hash Block', () => {
       const valueBlock = b.addBlock('Const', { value: 999999 });
       const seedBlock = b.addBlock('Const', { value: 123456 });
       const hashBlock = b.addBlock('Hash', {});
+      const testSig = b.addBlock('TestSignal', {});
       b.wire(valueBlock, 'out', hashBlock, 'value');
       b.wire(seedBlock, 'out', hashBlock, 'seed');
+      b.wire(hashBlock, 'out', testSig, 'value');
     });
 
     const result = compile(patch);
@@ -250,10 +252,16 @@ describe('Hash Block', () => {
     const state = createRuntimeState(program.slotMeta.length);
     const pool = new BufferPool();
 
+    // Find the evalSig step from TestSignal to get the slot
+    const schedule = program.schedule as any;
+    const evalSigStep = schedule.steps.find((s: any) => s.kind === 'evalSig');
+    expect(evalSigStep).toBeDefined();
+    const slot = evalSigStep?.target;
+
     executeFrame(program, state, pool, 0);
 
-    // Find the hash output in cache
-    const hashValue = Array.from(state.cache.sigValues).find(v => v > 0 && v < 1) ?? -1;
+    // Get the hash output from the slot
+    const hashValue = state.values.f64[slot];
 
     expect(hashValue).toBeGreaterThanOrEqual(0);
     expect(hashValue).toBeLessThan(1);
@@ -265,7 +273,9 @@ describe('Hash Block', () => {
       b.addBlock('InfiniteTimeRoot', {});
       const valueBlock = b.addBlock('Const', { value: 42 });
       const hashBlock = b.addBlock('Hash', {});
+      const testSig = b.addBlock('TestSignal', {});
       b.wire(valueBlock, 'out', hashBlock, 'value');
+      b.wire(hashBlock, 'out', testSig, 'value');
       // Note: seed input not connected, should default to 0
     });
 
@@ -277,11 +287,17 @@ describe('Hash Block', () => {
     const state = createRuntimeState(program.slotMeta.length);
     const pool = new BufferPool();
 
+    // Find the evalSig step from TestSignal to get the slot
+    const schedule = program.schedule as any;
+    const evalSigStep = schedule.steps.find((s: any) => s.kind === 'evalSig');
+    expect(evalSigStep).toBeDefined();
+    const slot = evalSigStep?.target;
+
     // Should execute without error
     expect(() => executeFrame(program, state, pool, 0)).not.toThrow();
 
-    // Find hash output
-    const hashValue = Array.from(state.cache.sigValues).find(v => v >= 0 && v < 1) ?? -1;
+    // Get hash output from the slot
+    const hashValue = state.values.f64[slot];
     expect(hashValue).toBeGreaterThanOrEqual(0);
     expect(hashValue).toBeLessThan(1);
   });

@@ -159,6 +159,12 @@ export interface IRBuilder {
   /** Allocate a simple slot (without type information). */
   allocSlot(): ValueSlot;
 
+  /** Get slot count for iteration. */
+  getSlotCount(): number;
+
+  /** Get slot type information for slotMeta generation. */
+  getSlotTypes(): ReadonlyMap<ValueSlot, SignalType>;
+
   // =========================================================================
   // State Slot Allocation (Persistent Cross-Frame Storage)
   // =========================================================================
@@ -192,6 +198,16 @@ export interface IRBuilder {
    * @param value - Signal expression to evaluate and write
    */
   stepStateWrite(stateSlot: StateSlotId, value: SigExprId): void;
+
+  /**
+   * Schedule a signal evaluation step.
+   * Forces evaluation of a signal expression and stores the result in a slot.
+   * Used by test blocks to capture signal values for assertion.
+   *
+   * @param expr - Signal expression to evaluate
+   * @param target - Slot to store the evaluated value
+   */
+  stepEvalSig(expr: SigExprId, target: ValueSlot): void;
 
   // =========================================================================
   // Utility

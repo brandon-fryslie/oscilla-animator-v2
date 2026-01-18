@@ -30,7 +30,12 @@ import type { SigExprId } from '../types';
  *   b.wire(hash, 'out', testSig, 'value');
  * });
  *
- * // After executeFrame, the hash output will be in state.values.f64
+ * // After compile, find the evalSig step to get the slot:
+ * const schedule = program.schedule;
+ * const evalSigStep = schedule.steps.find(s => s.kind === 'evalSig');
+ * const slot = evalSigStep.target;
+ *
+ * // After executeFrame, the hash output will be in state.values.f64[slot]
  * ```
  */
 registerBlock({
@@ -54,11 +59,7 @@ registerBlock({
 
     // Emit a StepEvalSig to force evaluation of this signal
     const slot = ctx.b.allocSlot();
-    ctx.b.addStep({
-      kind: 'evalSig',
-      expr: value.id as SigExprId,
-      target: slot,
-    });
+    ctx.b.stepEvalSig(value.id as SigExprId, slot);
 
     // Sink block - no outputs
     return {
