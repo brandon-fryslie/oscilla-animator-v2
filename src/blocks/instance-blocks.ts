@@ -141,11 +141,11 @@ registerBlock({
 });
 
 // =============================================================================
-// DEPRECATED: CircleInstance (Replaced by CirclePrimitive + Array + GridLayout)
+// DEPRECATED: CircleInstance (Replaced by Circle + Array + GridLayout)
 // =============================================================================
 //
 // CircleInstance has been replaced by the three-stage architecture:
-// 1. CirclePrimitive (primitive) → Signal<float> (radius)
+// 1. Circle (primitive) → Signal<float> (radius)
 // 2. Array (cardinality) → Field<float> (many radii)
 // 3. GridLayout (operation) → Field<vec2> (positions)
 //
@@ -156,7 +156,7 @@ registerBlock({
   type: 'CircleInstance',
   label: 'Circle Instance (DEPRECATED)',
   category: 'instance',
-  description: '[DEPRECATED] Use CirclePrimitive → Array → GridLayout instead',
+  description: '[DEPRECATED] Use Circle → Array → GridLayout instead',
   form: 'primitive',
   capability: 'identity',
   inputs: [

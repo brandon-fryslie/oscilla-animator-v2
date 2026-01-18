@@ -10,17 +10,17 @@ import { signalType } from '../core/canonical-types';
 import { defaultSourceConstant } from '../types';
 
 // =============================================================================
-// CirclePrimitive
+// Circle
 // =============================================================================
 
 /**
- * CirclePrimitive - Creates a circle primitive (Signal<float> representing radius)
+ * Circle - Creates a circle primitive (Signal<float> representing radius)
  *
  * Stage 1: Primitive block that outputs a single circle signal.
  * NOT a field - this has cardinality ONE.
  *
  * To create many circles:
- * 1. CirclePrimitive → Signal<float> (radius)
+ * 1. Circle → Signal<float> (radius)
  * 2. Array → Field<float> (many radii)
  * 3. GridLayout → Field<vec2> (positions)
  *
@@ -28,9 +28,9 @@ import { defaultSourceConstant } from '../types';
  * Future versions may use a composite type.
  */
 registerBlock({
-  type: 'CirclePrimitive',
-  label: 'Circle Primitive',
-  category: 'primitive',
+  type: 'Circle',
+  label: 'Circle',
+  category: 'shape',
   description: 'Creates a circle primitive (ONE element)',
   form: 'primitive',
   capability: 'pure',

@@ -63,9 +63,9 @@ registerBlock({
 // =============================================================================
 
 registerBlock({
-  type: 'Circle',
-  label: 'Circle Layout',
-  category: 'geometry',
+  type: 'CircularLayout',
+  label: 'Circular Layout',
+  category: 'layout',
   description: 'Arranges domain elements in a circle',
   form: 'primitive',
   capability: 'pure',

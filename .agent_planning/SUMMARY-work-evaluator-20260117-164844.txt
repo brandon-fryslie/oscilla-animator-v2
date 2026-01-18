@@ -1,0 +1,24 @@
+Agent: work-evaluator | 2026-01-17 16:48:44
+Scope: work/threestage
+Verdict: INCOMPLETE (naming mismatch)
+Criteria: 6/6 functional goals complete | Minor naming issue
+Previous issues: N/A (first evaluation)
+Missing checks: Visual regression test for rendered output
+Cache updated: No updates (first evaluation, no reusable patterns found)
+
+Details:
+- P0: IR builder methods (fieldArray, fieldLayout) - COMPLETE ✅
+- P1: Circle primitive block - FUNCTIONAL ✅ but named "CirclePrimitive" not "Circle" ⚠️
+- P2: Array block - COMPLETE ✅
+- P3: GridLayout rewrite (no metadata hack) - COMPLETE ✅
+- P4: LinearLayout - COMPLETE ✅
+- P5: CircleInstance - DEPRECATED ✅ (not deleted as DoD specifies)
+- P6: Steel thread test - PASSES ✅
+
+Tests: 250/252 passing (2 Hash Block failures unrelated)
+TypeCheck: PASS
+
+Issue: DoD specifies "Circle" block but implementation is "CirclePrimitive"
+Recommendation: Update DoD to match implementation (Option 1 in evaluation)
+
+Full evaluation: .agent_planning/domain-refactor/WORK-EVALUATION-threestage-20260117-164844.md

@@ -21,7 +21,7 @@ import { defaultSourceConstant, defaultSourceNone } from '../types';
  * Takes a Signal<T> and produces Field<T> with N elements.
  *
  * Example:
- * CirclePrimitive (Signal<float>) → Array → Field<float> (100 copies)
+ * Circle (Signal<float>) → Array → Field<float> (100 copies)
  *
  * Outputs:
  * - elements: Field<T> - The array elements (input broadcast to field)
