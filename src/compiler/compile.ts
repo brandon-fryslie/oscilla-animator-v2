@@ -33,6 +33,7 @@ import '../blocks/geometry-blocks';
 import '../blocks/identity-blocks';
 import '../blocks/render-blocks';
 import '../blocks/field-operations-blocks';
+import '../blocks/test-blocks'; // Test blocks for signal evaluation in tests
 
 // Import passes
 import { pass2TypeGraph } from './passes-v2';

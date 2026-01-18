@@ -11,6 +11,8 @@ import { buildPatch } from '../../graph';
 import { executeFrame } from '../../runtime/ScheduleExecutor';
 import { createRuntimeState } from '../../runtime/RuntimeState';
 import { BufferPool } from '../../runtime/BufferPool';
+import { evaluateSignal } from '../../runtime/SignalEvaluator';
+import type { SigExprId } from '../../types';
 
 describe('UnitDelay Block', () => {
   it('outputs 0 on first frame (initial state)', () => {
