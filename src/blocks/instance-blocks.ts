@@ -140,69 +140,8 @@ registerBlock({
   },
 });
 
-// =============================================================================
-// DEPRECATED: CircleInstance (Replaced by Circle + Array + GridLayout)
-// =============================================================================
-//
-// CircleInstance has been replaced by the three-stage architecture:
+// NOTE: CircleInstance was removed in P5 (2026-01-19).
+// Use the three-stage architecture instead:
 // 1. Circle (primitive) → Signal<float> (radius)
 // 2. Array (cardinality) → Field<float> (many radii)
 // 3. GridLayout (operation) → Field<vec2> (positions)
-//
-// This block will be removed in P5.
-// For now, it's kept for backward compatibility with existing patches.
-
-registerBlock({
-  type: 'CircleInstance',
-  label: 'Circle Instance (DEPRECATED)',
-  category: 'instance',
-  description: '[DEPRECATED] Use Circle → Array → GridLayout instead',
-  form: 'primitive',
-  capability: 'identity',
-  inputs: [
-    { id: 'count', label: 'Count', type: signalType('int'), defaultValue: 100, defaultSource: defaultSourceConstant(100) },
-  ],
-  outputs: [
-    { id: 'position', label: 'Position', type: signalTypeField('vec2', 'default') },
-    { id: 'radius', label: 'Radius', type: signalTypeField('float', 'default') },
-    { id: 'index', label: 'Index', type: signalTypeField('int', 'default') },
-    { id: 't', label: 'T (normalized)', type: signalTypeField('float', 'default') },
-  ],
-  params: {
-    count: 100,
-    layoutKind: 'grid',
-    rows: 10,
-    cols: 10,
-  },
-  lower: ({ ctx, config }) => {
-    const count = (config?.count as number) ?? 100;
-    const layoutKind = (config?.layoutKind as string) ?? 'grid';
-    const rows = (config?.rows as number) ?? 10;
-    const cols = (config?.cols as number) ?? 10;
-
-    let layout: LayoutSpec;
-    if (layoutKind === 'grid') {
-      layout = { kind: 'grid', rows, cols };
-    } else {
-      layout = { kind: 'unordered' };
-    }
-
-    // Create instance using new IRBuilder method
-    const instanceId = ctx.b.createInstance(DOMAIN_CIRCLE, count, layout);
-
-    // Create field expressions for intrinsic properties
-    const positionField = ctx.b.fieldIntrinsic(instanceId, 'position', signalTypeField('vec2', 'default'));
-    const radiusField = ctx.b.fieldIntrinsic(instanceId, 'radius', signalTypeField('float', 'default'));
-    const indexField = ctx.b.fieldIntrinsic(instanceId, 'index', signalTypeField('int', 'default'));
-    const tField = ctx.b.fieldIntrinsic(instanceId, 'normalizedIndex', signalTypeField('float', 'default'));
-
-    return {
-      outputsById: {
-        position: { k: 'field', id: positionField, slot: ctx.b.allocSlot() },
-        radius: { k: 'field', id: radiusField, slot: ctx.b.allocSlot() },
-        index: { k: 'field', id: indexField, slot: ctx.b.allocSlot() },
-        t: { k: 'field', id: tField, slot: ctx.b.allocSlot() },
-      },
-    };
-  },
-});

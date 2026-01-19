@@ -31,7 +31,7 @@ registerBlock({
   lower: ({ ctx, config }) => {
     const seed = (config?.seed as number) ?? 0;
 
-    // Get instance context from CircleInstance or inferred from inputs
+    // Get instance context from Array block or inferred from inputs
     const instance = ctx.inferredInstance ?? ctx.instance;
     if (!instance) {
       throw new Error('StableIdHash requires instance context');
@@ -71,7 +71,7 @@ registerBlock({
     { id: 'indexInt', label: 'Index (int)', type: signalTypeField('int', 'default') },
   ],
   lower: ({ ctx }) => {
-    // Get instance context from CircleInstance or inferred from inputs
+    // Get instance context from Array block or inferred from inputs
     const instance = ctx.inferredInstance ?? ctx.instance;
     if (!instance) {
       throw new Error('DomainIndex requires instance context');

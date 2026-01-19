@@ -29,7 +29,7 @@ export interface LowerCtx {
 
   /**
    * Instance context (NEW - Domain Refactor Sprint 3).
-   * Set by instance blocks (CircleInstance, etc.) to provide instance context to downstream blocks.
+   * Set by instance blocks (Array, etc.) to provide instance context to downstream blocks.
    */
   readonly instance?: InstanceId;
 

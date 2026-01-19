@@ -88,7 +88,7 @@ registerBlock({
     const radiusValue = config?.radius as number ?? 100;
     const phaseOffset = config?.phaseOffset as number ?? 0;
 
-    // Get instance context from CircleInstance or inferred from inputs
+    // Get instance context from Array block or inferred from inputs
     const instance = ctx.inferredInstance ?? ctx.instance;
     if (!instance) {
       throw new Error('Circle requires instance context');

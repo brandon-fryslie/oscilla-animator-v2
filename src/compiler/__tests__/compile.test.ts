@@ -99,17 +99,20 @@ describe('compile', () => {
   });
 
   describe('instance compilation', () => {
-    it('compiles grid instance', () => {
+    it('compiles grid instance with Array + GridLayout', () => {
       const patch = buildPatch((b) => {
         b.addBlock('InfiniteTimeRoot', {});
-        // Use new CircleInstance block with grid layout
-        b.addBlock('CircleInstance', { count: 16, layoutKind: 'grid', rows: 4, cols: 4 });
+        // Three-stage architecture: Array creates instances, GridLayout applies layout
+        const array = b.addBlock('Array', { count: 16 });
+        b.addBlock('GridLayout', { rows: 4, cols: 4 });
+        // Wire Array.elements -> GridLayout.elements
+        b.wire(array, 'elements', 'GridLayout:0', 'elements');
       });
 
       const result = compile(patch);
 
       if (result.kind === 'error') {
-        console.error('COMPILE ERROR (CircleInstance grid):', JSON.stringify(result.errors, null, 2));
+        console.error('COMPILE ERROR (Array + GridLayout):', JSON.stringify(result.errors, null, 2));
       }
 
       expect(result.kind).toBe('ok');
@@ -124,17 +127,17 @@ describe('compile', () => {
       }
     });
 
-    it('compiles instance with count', () => {
+    it('compiles instance with count using Array block', () => {
       const patch = buildPatch((b) => {
         b.addBlock('InfiniteTimeRoot', {});
-        // Use new CircleInstance block with unordered layout
-        b.addBlock('CircleInstance', { count: 100, layoutKind: 'unordered' });
+        // Array block creates instances with unordered layout by default
+        b.addBlock('Array', { count: 100 });
       });
 
       const result = compile(patch);
 
       if (result.kind === 'error') {
-        console.error('COMPILE ERROR (CircleInstance):', JSON.stringify(result.errors, null, 2));
+        console.error('COMPILE ERROR (Array):', JSON.stringify(result.errors, null, 2));
       }
 
       expect(result.kind).toBe('ok');

@@ -28,7 +28,7 @@ registerBlock({
   ],
   params: {},
   lower: ({ ctx }) => {
-    // Get instance context from CircleInstance or inferred from inputs
+    // Get instance context from Array block or inferred from inputs
     const instance = ctx.inferredInstance ?? ctx.instance;
     if (!instance) {
       throw new Error('FieldFromDomainId requires instance context');
