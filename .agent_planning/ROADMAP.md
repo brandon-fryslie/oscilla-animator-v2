@@ -1,6 +1,6 @@
 # Oscilla Animator v2 - Project Roadmap
 
-Last updated: 2026-01-17-120000
+Last updated: 2026-01-18-230500
 
 ---
 
@@ -113,6 +113,52 @@ Last updated: 2026-01-17-120000
   - Update all field operations to use instance context
   - Update compiler passes and runtime
 
+#### 💡 continuity-crossfade [PROPOSED]
+- **State:** PROPOSED
+- **Epic:** Continuity System (Part 2)
+- **Spec:** `design-docs/CANONICAL-oscilla-v2.5-20260109/topics/11-continuity-system.md` §3.7
+- **Description:** Implement crossfade policy for continuity system - the fallback when element identity cannot be established
+- **Dependencies:** continuity-system (COMPLETED 2026-01-18)
+- **Existing Code:**
+  - Type defined: `ContinuityPolicy.crossfade` in `src/compiler/ir/types.ts:368`
+  - Default policy: `custom: { kind: 'crossfade', windowMs: 150, curve: 'smoothstep' }` in `src/runtime/ContinuityDefaults.ts:29`
+  - Placeholder: `case 'crossfade':` in `src/runtime/ContinuityApply.ts:311-317` (currently passthrough)
+- **Implementation Requirements:**
+  - **Buffer Crossfade (Primary)**: When old/new buffers have same format and count:
+    ```typescript
+    X_out[i] = lerp(X_old_eff[i], X_new_base[i], w(t))
+    // w(t) is blend weight: smoothstep/ease-in-out over windowMs
+    ```
+  - **RenderFrame Crossfade (Fallback)**: When buffer shapes differ:
+    - Keep last render frame frozen as FrameA
+    - Render new frame as FrameB
+    - Renderer draws both with alpha weights: `draw(FrameA, 1-w(t))`, `draw(FrameB, w(t))`
+    - Requires renderer integration with explicit pass ordering (determinism constraint)
+  - **State Requirements:**
+    - Store "old effective" buffer snapshot at domain change
+    - Track crossfade start time and progress
+    - Track blend weight w(t) per-target
+  - **Curve Functions:**
+    - `linear`: `w = t / windowMs`
+    - `smoothstep`: `w = 3t² - 2t³` where `t` is normalized progress
+    - `ease-in-out`: `w = t² * (3 - 2t)` (same as smoothstep mathematically)
+- **Use Cases:**
+  - `identityMode="none"` domains (no stable element IDs)
+  - Topology changes that can't be mapped
+  - `custom/untyped` semantic targets (default policy)
+  - Fallback when byId and byPosition mapping both fail
+- **Key Files to Modify:**
+  - `src/runtime/ContinuityApply.ts` - Main implementation
+  - `src/runtime/ContinuityState.ts` - Add crossfade state tracking
+  - Possibly `src/runtime/Renderer.ts` - For RenderFrame crossfade variant
+- **Test Scenarios:**
+  - Buffer crossfade with same count
+  - Crossfade progress over multiple frames
+  - Curve functions (smoothstep, linear)
+  - Transition to/from crossfade policy
+  - RenderFrame crossfade (if implemented)
+- **Complexity:** Medium - requires two-buffer management and time-window tracking
+
 ---
 
 ## 🟢 Phase 2: Rendering & UI [ACTIVE] (5/6 completed)
@@ -142,6 +188,23 @@ Last updated: 2026-01-17-120000
 - **Planning Files:** `.agent_planning/diagnostics-system/`
 - **Sprint 2 Planned:** Runtime diagnostics (NaN/performance monitoring), bus warnings, quick fixes, UI badges
 - **Architecture:** Event-driven with five-event contract (GraphCommitted, CompileBegin, CompileEnd, ProgramSwapped, RuntimeHealthSnapshot). Snapshot semantics for compile/authoring (replace), runtime (merge with expiry).
+
+#### ✅ continuity-ui [COMPLETED]
+- **State:** COMPLETED
+- **Epic:** None
+- **Spec:** `design-docs/CANONICAL-oscilla-v2.5-20260109/topics/11-continuity-system.md`
+- **Description:** UI integration for continuity system - live parameter editing, domain change logging, ContinuityPanel
+- **Completed:** 2026-01-18
+- **Sprint Summary:**
+  - **Sprint 1 (Live Param Recompile):** MobX reaction watches block params, debounced recompile (150ms), continuity state preserved across hot-swap. Slider uiHint added to Array block count param.
+  - **Sprint 2 (Continuity Logging):** Domain change detection compares old/new instance counts, throttled logging (5/sec per instance), logs to LogPanel.
+  - **Sprint 3 (Continuity Panel):** ContinuityStore (MobX), ContinuityPanel component, batched UI updates at 5Hz, domain change history tracking.
+- **Planning Files:** `.agent_planning/continuity-ui/`
+- **Key Files:**
+  - `src/stores/ContinuityStore.ts` - MobX store for continuity state
+  - `src/ui/components/app/ContinuityPanel.tsx` - Panel component
+  - `src/ui/dockview/panels/ContinuityPanel.tsx` - Dockview wrapper
+  - `src/main.ts` - Live recompile and batched updates
 
 #### ✅ ui-features-v2 [COMPLETED]
 - **State:** COMPLETED

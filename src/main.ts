@@ -10,6 +10,7 @@
 
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import { reaction, toJS } from 'mobx';
 import { rootStore } from './stores';
 import { buildPatch } from './graph';
 import { compile } from './compiler';
@@ -18,6 +19,7 @@ import { renderFrame } from './render';
 import { App } from './ui/components';
 import { timeRootRole, defaultSourceConstant } from './types';
 import { recordFrameTime, shouldEmitSnapshot, emitHealthSnapshot } from './runtime/HealthMonitor';
+import type { RuntimeState } from './runtime/RuntimeState';
 
 // =============================================================================
 // Global State
@@ -413,6 +415,233 @@ async function buildAndCompile(patchBuilder: PatchBuilder) {
   // Update global state
   currentProgram = program;
   currentState = createRuntimeState(program.slotMeta.length);
+
+  // Initialize instance counts for domain change tracking (Sprint 2)
+  const instances = program.schedule?.instances;
+  if (instances) {
+    for (const [id, decl] of instances) {
+      const count = typeof decl.count === 'number' ? decl.count : 0;
+      prevInstanceCounts.set(id, count);
+    }
+    log(`Initialized domain tracking: ${instances.size} instance(s)`);
+  }
+}
+
+// =============================================================================
+// Live Recompile (Continuity-UI Sprint 1)
+// Continuity Logging (Continuity-UI Sprint 2)
+// =============================================================================
+
+let recompileTimeout: ReturnType<typeof setTimeout> | null = null;
+const RECOMPILE_DEBOUNCE_MS = 150;
+
+/** Track previous instance counts for domain change detection */
+let prevInstanceCounts: Map<string, number> = new Map();
+
+/** Throttle state for domain change logging */
+const domainChangeLogThrottle = new Map<string, number>();
+const DOMAIN_LOG_INTERVAL_MS = 200; // Max 5 logs/sec per instance
+
+/**
+ * Log domain change if not throttled.
+ * Also records to ContinuityStore for UI display.
+ */
+function logDomainChange(instanceId: string, oldCount: number, newCount: number, tMs: number = 0) {
+  const now = performance.now();
+  const lastLog = domainChangeLogThrottle.get(instanceId) ?? 0;
+
+  if (now - lastLog >= DOMAIN_LOG_INTERVAL_MS) {
+    const delta = newCount - oldCount;
+    const deltaStr = delta > 0 ? `+${delta}` : `${delta}`;
+    log(`[Continuity] Domain change: ${instanceId} ${oldCount}→${newCount} (${deltaStr})`);
+
+    // Log mapping stats (simplified - all existing elements map, delta are new/removed)
+    if (delta > 0) {
+      log(`[Continuity]   Mapped: ${oldCount}, New: ${delta}`);
+    } else if (delta < 0) {
+      log(`[Continuity]   Mapped: ${newCount}, Removed: ${-delta}`);
+    }
+
+    // Record to ContinuityStore for UI (Sprint 3)
+    rootStore.continuity.recordDomainChange(
+      instanceId,
+      oldCount,
+      newCount,
+      tMs || now,
+      oldCount > 0 ? 'byId' : 'none' // Simplified: assume byId mapping for existing elements
+    );
+
+    domainChangeLogThrottle.set(instanceId, now);
+  }
+}
+
+/**
+ * Detect domain changes by comparing old/new instance counts
+ */
+function detectAndLogDomainChanges(oldProgram: any, newProgram: any) {
+  if (!oldProgram?.schedule?.instances || !newProgram?.schedule?.instances) {
+    return;
+  }
+
+  const oldInstances = oldProgram.schedule.instances as Map<string, { count: number }>;
+  const newInstances = newProgram.schedule.instances as Map<string, { count: number }>;
+
+  // Check for changes in existing instances
+  for (const [id, newDecl] of newInstances) {
+    const oldCount = prevInstanceCounts.get(id) ?? 0;
+    const newCount = typeof newDecl.count === 'number' ? newDecl.count : 0;
+
+    if (oldCount !== newCount && oldCount > 0) {
+      logDomainChange(id, oldCount, newCount);
+    }
+
+    // Update tracking
+    prevInstanceCounts.set(id, newCount);
+  }
+
+  // Check for removed instances
+  for (const [id, _oldDecl] of oldInstances) {
+    if (!newInstances.has(id)) {
+      const oldCount = prevInstanceCounts.get(id) ?? 0;
+      if (oldCount > 0) {
+        log(`[Continuity] Instance removed: ${id} (was ${oldCount} elements)`);
+      }
+      prevInstanceCounts.delete(id);
+    }
+  }
+}
+
+/**
+ * Recompile the current patch from store, preserving continuity state.
+ * Called when block params change in the UI.
+ */
+async function recompileFromStore() {
+  const patch = rootStore.patch.patch;
+  if (!patch) {
+    log('No patch to recompile', 'warn');
+    return;
+  }
+
+  log('Live recompile triggered...');
+
+  // Compile the patch from store
+  const result = compile(patch, {
+    events: rootStore.events,
+    patchRevision: rootStore.getPatchRevision(),
+    patchId: 'patch-0',
+  });
+
+  if (result.kind !== 'ok') {
+    log(`Recompile failed: ${result.errors.map(e => e.message).join(', ')}`, 'error');
+    // Keep running with old program
+    return;
+  }
+
+  const program = result.program;
+  const newSlotCount = program.slotMeta.length;
+  const oldSlotCount = currentState?.values.f64.length ?? 0;
+
+  // Detect and log domain changes (Sprint 2)
+  detectAndLogDomainChanges(currentProgram, program);
+
+  // Preserve continuity state during hot-swap
+  const oldContinuity = currentState?.continuity;
+
+  // Only recreate state if slot count changed
+  if (newSlotCount !== oldSlotCount) {
+    log(`Slot count changed: ${oldSlotCount} → ${newSlotCount}, resizing buffers`);
+    currentState = createRuntimeState(newSlotCount);
+
+    // Restore continuity state (it's independent of slot layout)
+    if (oldContinuity) {
+      currentState.continuity = oldContinuity;
+    }
+  }
+
+  // Update program
+  currentProgram = program;
+
+  // Emit ProgramSwapped event
+  rootStore.events.emit({
+    type: 'ProgramSwapped',
+    patchId: 'patch-0',
+    patchRevision: rootStore.getPatchRevision(),
+    compileId: `compile-live-${Date.now()}`,
+    swapMode: 'soft', // Continuity-preserving swap
+  });
+
+  log(`Recompiled: ${program.signalExprs.nodes.length} signals, ${program.fieldExprs.nodes.length} fields`);
+}
+
+/**
+ * Debounced recompile - waits for changes to settle before recompiling.
+ */
+function scheduleRecompile() {
+  if (recompileTimeout) {
+    clearTimeout(recompileTimeout);
+  }
+  recompileTimeout = setTimeout(async () => {
+    try {
+      await recompileFromStore();
+    } catch (err) {
+      log(`Recompile error: ${err}`, 'error');
+      console.error(err);
+    }
+  }, RECOMPILE_DEBOUNCE_MS);
+}
+
+/**
+ * Create a hash of block params for change detection.
+ * We need deep change detection since MobX only tracks shallow changes.
+ */
+function hashBlockParams(blocks: ReadonlyMap<string, any>): string {
+  const parts: string[] = [];
+  for (const [id, block] of blocks) {
+    parts.push(`${id}:${JSON.stringify(block.params)}`);
+  }
+  return parts.join('|');
+}
+
+// Track initial hash to skip first reaction fire
+let lastBlockParamsHash: string | null = null;
+let reactionSetup = false;
+
+/**
+ * Set up MobX reaction to watch for patch changes.
+ */
+function setupLiveRecompileReaction() {
+  if (reactionSetup) return;
+  reactionSetup = true;
+
+  // Initialize hash from current store state
+  lastBlockParamsHash = hashBlockParams(rootStore.patch.blocks);
+
+  // Watch for block changes (additions, removals, param changes)
+  reaction(
+    () => {
+      // Track both structure and params
+      const blocks = rootStore.patch.blocks;
+      const hash = hashBlockParams(blocks);
+      return { blockCount: blocks.size, hash };
+    },
+    ({ blockCount, hash }) => {
+      // Skip if hash hasn't changed (no actual param change)
+      if (hash === lastBlockParamsHash) {
+        return;
+      }
+      lastBlockParamsHash = hash;
+
+      log(`Block params changed, scheduling recompile...`);
+      scheduleRecompile();
+    },
+    {
+      fireImmediately: false,
+      // Use structural comparison for the tracked values
+      equals: (a, b) => a.blockCount === b.blockCount && a.hash === b.hash,
+    }
+  );
+
+  log('Live recompile reaction initialized');
 }
 
 // =============================================================================
@@ -427,6 +656,10 @@ let renderTime = 0;
 let minFrameTime = Infinity;
 let maxFrameTime = 0;
 let frameTimeSum = 0;
+
+// Batched continuity store updates (5Hz - Sprint 3)
+let lastContinuityStoreUpdate = 0;
+const CONTINUITY_STORE_UPDATE_INTERVAL = 200; // 5Hz
 
 function animate(tMs: number) {
   if (!currentProgram || !currentState || !ctx || !canvas || !pool) {
@@ -468,6 +701,12 @@ function animate(tMs: number) {
         rootStore.getPatchRevision(),
         tMs
       );
+    }
+
+    // Update continuity store (batched at 5Hz - Sprint 3)
+    if (tMs - lastContinuityStoreUpdate >= CONTINUITY_STORE_UPDATE_INTERVAL) {
+      rootStore.continuity.updateFromRuntime(currentState.continuity, tMs);
+      lastContinuityStoreUpdate = tMs;
     }
 
     // Track min/max
@@ -593,6 +832,9 @@ async function main() {
 
     // Build and compile with initial patch
     await buildAndCompile(patches[currentPatchIndex].builder);
+
+    // Set up live recompile reaction (Continuity-UI Sprint 1)
+    setupLiveRecompileReaction();
 
     log('Runtime initialized');
 

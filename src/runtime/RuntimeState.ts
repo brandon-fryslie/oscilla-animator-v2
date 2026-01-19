@@ -8,6 +8,8 @@
 import type { ValueSlot } from '../types';
 import type { EffectiveTime, TimeState } from './timeResolution';
 import { createTimeState } from './timeResolution';
+import type { ContinuityState } from './ContinuityState';
+import { createContinuityState } from './ContinuityState';
 
 /**
  * ValueStore - Slot-based value storage
@@ -208,6 +210,9 @@ export interface RuntimeState {
 
   /** Health monitoring metrics (Sprint 2+) */
   health: HealthMetrics;
+
+  /** Continuity state for smooth transitions (spec topics/11-continuity-system.md) */
+  continuity: ContinuityState;
 }
 
 /**
@@ -222,6 +227,7 @@ export function createRuntimeState(slotCount: number, stateSlotCount: number = 0
     external: createExternalInputs(),
     state: new Float64Array(stateSlotCount),
     health: createHealthMetrics(),
+    continuity: createContinuityState(),
   };
 }
 

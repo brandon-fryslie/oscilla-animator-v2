@@ -14,6 +14,7 @@ import { ReactFlowEditorPanel } from './panels/ReactFlowEditorPanel';
 import { PreviewPanel } from './panels/PreviewPanel';
 import { DiagnosticConsolePanel } from './panels/DiagnosticConsolePanel';
 import { LogPanel } from './panels/LogPanel';
+import { ContinuityPanel } from './panels/ContinuityPanel';
 
 /**
  * Panel group assignments for layout.
@@ -58,6 +59,7 @@ export const PANEL_DEFINITIONS: PanelDefinition[] = [
   // Bottom (split)
   { id: 'diagnostic-console', component: 'diagnostic-console', title: 'Console', group: 'bottom-left' },
   { id: 'log-panel', component: 'log-panel', title: 'Logs', group: 'bottom-left' },
+  { id: 'continuity-panel', component: 'continuity-panel', title: 'Continuity', group: 'bottom-left' },
 
   // Floating
   { id: 'preview', component: 'preview', title: 'Preview', group: 'preview-float', floating: true },
@@ -77,4 +79,5 @@ export const PANEL_COMPONENTS = {
   'preview': PreviewPanel,
   'diagnostic-console': DiagnosticConsolePanel,
   'log-panel': LogPanel,
+  'continuity-panel': ContinuityPanel,
 };

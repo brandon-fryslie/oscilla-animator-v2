@@ -38,7 +38,14 @@ registerBlock({
   capability: 'identity',
   inputs: [
     { id: 'element', label: 'Element', type: signalType('???'), optional: true, defaultSource: defaultSourceNone() },
-    { id: 'count', label: 'Count', type: signalType('int'), defaultValue: 100, defaultSource: defaultSourceConstant(100) },
+    {
+      id: 'count',
+      label: 'Count',
+      type: signalType('int'),
+      defaultValue: 100,
+      defaultSource: defaultSourceConstant(100),
+      uiHint: { kind: 'slider', min: 1, max: 10000, step: 1 },
+    },
   ],
   outputs: [
     { id: 'elements', label: 'Elements', type: signalTypeField('???', 'default') },
