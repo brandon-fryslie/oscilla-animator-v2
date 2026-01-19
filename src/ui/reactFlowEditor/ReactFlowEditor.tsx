@@ -166,16 +166,34 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = ({
   // Auto-arrange handler
   const handleAutoArrange = useCallback(async () => {
     if (isLayouting) return;
+
+    // Edge case: empty graph - no-op
+    if (nodesRef.current.length === 0) {
+      return;
+    }
+
     setIsLayouting(true);
 
     try {
+      // Edge case: single node - just zoom to it, skip layout computation
+      if (nodesRef.current.length === 1) {
+        setTimeout(() => fitView({ padding: 0.1 }), 50);
+        return;
+      }
+
+      // Multiple nodes - run ELK layout algorithm
       const { nodes: layoutedNodes } = await getLayoutedElements(
         nodesRef.current,
         edgesRef.current
       );
       setNodes(layoutedNodes);
+
       // Fit view after layout completes
       setTimeout(() => fitView({ padding: 0.1 }), 50);
+    } catch (error) {
+      console.error('[ReactFlowEditor] Auto-arrange failed:', error);
+      // Error is logged but UI continues to function
+      // TODO: Show user notification (toast/snackbar) when notification system is available
     } finally {
       setIsLayouting(false);
     }
