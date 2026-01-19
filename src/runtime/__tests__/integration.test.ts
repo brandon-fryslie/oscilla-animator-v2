@@ -17,8 +17,8 @@ describe('Runtime Integration', () => {
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot', {});
       const array = b.addBlock('Array', { count: 4 });
-      b.addBlock('GridLayout', { rows: 2, cols: 2 });
-      b.wire(array, 'elements', 'GridLayout:0', 'elements');
+      const gridLayout = b.addBlock('GridLayout', { rows: 2, cols: 2 });
+      b.wire(array, 'elements', gridLayout, 'elements');
     });
 
     // Compile

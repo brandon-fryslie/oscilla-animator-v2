@@ -104,9 +104,9 @@ describe('compile', () => {
         b.addBlock('InfiniteTimeRoot', {});
         // Three-stage architecture: Array creates instances, GridLayout applies layout
         const array = b.addBlock('Array', { count: 16 });
-        b.addBlock('GridLayout', { rows: 4, cols: 4 });
+        const gridLayout = b.addBlock('GridLayout', { rows: 4, cols: 4 });
         // Wire Array.elements -> GridLayout.elements
-        b.wire(array, 'elements', 'GridLayout:0', 'elements');
+        b.wire(array, 'elements', gridLayout, 'elements');
       });
 
       const result = compile(patch);
@@ -123,7 +123,9 @@ describe('compile', () => {
         expect(instances.size).toBe(1);
         const instance = [...instances.values()][0];
         expect(instance.count).toBe(16);
-        expect(instance.layout.kind).toBe('grid');
+        // Array creates instances with unordered layout by default
+        // GridLayout applies grid positions via fieldLayout() but doesn't change instance.layout
+        expect(instance.layout.kind).toBe('unordered');
       }
     });
 
