@@ -5,7 +5,7 @@
  * Sets up the demo patch and animation loop.
  *
  * Sprint 2: Integrates runtime health monitoring
- * Updated: Uses inputDefaults instead of separate Const blocks
+ * Uses registry defaults for all inputs
  */
 
 import React from 'react';
@@ -17,7 +17,7 @@ import { compile } from './compiler';
 import { createRuntimeState, BufferPool, executeFrame } from './runtime';
 import { renderFrame } from './render';
 import { App } from './ui/components';
-import { timeRootRole, defaultSourceConstant } from './types';
+import { timeRootRole } from './types';
 import { recordFrameTime, shouldEmitSnapshot, emitHealthSnapshot } from './runtime/HealthMonitor';
 import type { RuntimeState } from './runtime/RuntimeState';
 
@@ -46,19 +46,13 @@ function log(msg: string, level: 'info' | 'warn' | 'error' = 'info') {
 }
 
 // =============================================================================
-// Helper: Create constant default
-// =============================================================================
-
-const constant = (value: number) => defaultSourceConstant(value);
-
-// =============================================================================
 // Patch Builders
 // =============================================================================
 
 type PatchBuilder = (b: any) => void;
 
 // Original patch - using three-stage architecture: Circle → Array → GridLayout
-// Now uses inputDefaults instead of separate Const blocks for cleaner patches
+// Uses registry defaults for most inputs, explicit Const blocks only when needed
 const patchOriginal: PatchBuilder = (b) => {
   const time = b.addBlock('InfiniteTimeRoot',
     { periodAMs: 799, periodBMs: 32000 },
@@ -79,45 +73,32 @@ const patchOriginal: PatchBuilder = (b) => {
 
   const goldenAngle = b.addBlock('FieldGoldenAngle', { turns: 50 });
 
-  // FieldAngularOffset with spin override (default is 1.0, we want 2.0)
-  const angularOffset = b.addBlock('FieldAngularOffset', {}, {
-    inputDefaults: {
-      spin: constant(2.0),
-    },
-  });
+  // FieldAngularOffset with explicit spin value (default is 1.0, we want 2.0)
+  const spinConst = b.addBlock('Const', { value: 2.0 });
+  const angularOffset = b.addBlock('FieldAngularOffset', {});
 
   const totalAngle = b.addBlock('FieldAdd', {});
 
-  // FieldRadiusSqrt with radius override (default would come from registry)
-  const effectiveRadius = b.addBlock('FieldRadiusSqrt', {}, {
-    inputDefaults: {
-      radius: constant(0.35),
-    },
-  });
+  // FieldRadiusSqrt uses registry default (0.35)
+  const effectiveRadius = b.addBlock('FieldRadiusSqrt', {});
 
   // FieldPolarToCartesian - centerX/centerY already have 0.5 defaults in registry
   const pos = b.addBlock('FieldPolarToCartesian', {});
 
   const hue = b.addBlock('FieldHueFromPhase', {});
 
-  // HsvToRgb with sat/val overrides
-  const color = b.addBlock('HsvToRgb', {}, {
-    inputDefaults: {
-      sat: constant(0.85),
-      val: constant(0.9),
-    },
-  });
+  // HsvToRgb uses registry defaults (sat=1.0, val=1.0)
+  const color = b.addBlock('HsvToRgb', {});
 
-  // RenderInstances2D with size override
-  const render = b.addBlock('RenderInstances2D', {}, {
-    inputDefaults: {
-      size: constant(3),
-    },
-  });
+  // RenderInstances2D uses registry default (size=5)
+  const render = b.addBlock('RenderInstances2D', {});
 
   // Wire phase to position and color (phaseA has rail default in registry)
   b.wire(time, 'phaseA', angularOffset, 'phase');
   b.wire(time, 'phaseA', hue, 'phase');
+
+  // Wire explicit spin value
+  b.wire(spinConst, 'out', angularOffset, 'spin');
 
   // Wire Array 't' output (normalized index 0-1) to field blocks
   b.wire(array, 't', goldenAngle, 'id01');
@@ -163,27 +144,12 @@ const patchBreathing: PatchBuilder = (b) => {
   const angularOffset = b.addBlock('FieldAngularOffset', {});
   const totalAngle = b.addBlock('FieldAdd', {});
 
-  const effectiveRadius = b.addBlock('FieldRadiusSqrt', {}, {
-    inputDefaults: {
-      radius: constant(0.35),
-    },
-  });
-
+  // Use registry defaults
+  const effectiveRadius = b.addBlock('FieldRadiusSqrt', {});
   const pos = b.addBlock('FieldPolarToCartesian', {});
   const hue = b.addBlock('FieldHueFromPhase', {});
-
-  const color = b.addBlock('HsvToRgb', {}, {
-    inputDefaults: {
-      sat: constant(0.9),
-      val: constant(0.95),
-    },
-  });
-
-  const render = b.addBlock('RenderInstances2D', {}, {
-    inputDefaults: {
-      size: constant(4),
-    },
-  });
+  const color = b.addBlock('HsvToRgb', {});
+  const render = b.addBlock('RenderInstances2D', {});
 
   // Wire oscillators to time
   b.wire(time, 'phaseB', spinOsc, 'phase');
@@ -234,39 +200,25 @@ const patchWobbly: PatchBuilder = (b) => {
 
   const goldenAngle = b.addBlock('FieldGoldenAngle', { turns: 50 });
 
-  const angularOffset = b.addBlock('FieldAngularOffset', {}, {
-    inputDefaults: {
-      spin: constant(3.0),
-    },
-  });
+  // FieldAngularOffset with explicit spin value (default is 1.0, we want 3.0)
+  const spinConst = b.addBlock('Const', { value: 3.0 });
+  const angularOffset = b.addBlock('FieldAngularOffset', {});
 
   const totalAngle = b.addBlock('FieldAdd', {});
 
-  const effectiveRadius = b.addBlock('FieldRadiusSqrt', {}, {
-    inputDefaults: {
-      radius: constant(0.35),
-    },
-  });
-
+  // Use registry defaults
+  const effectiveRadius = b.addBlock('FieldRadiusSqrt', {});
   const pos = b.addBlock('FieldPolarToCartesian', {});
   const hue = b.addBlock('FieldHueFromPhase', {});
-
-  const color = b.addBlock('HsvToRgb', {}, {
-    inputDefaults: {
-      sat: constant(0.95),
-      val: constant(0.95),
-    },
-  });
-
-  const render = b.addBlock('RenderInstances2D', {}, {
-    inputDefaults: {
-      size: constant(4),
-    },
-  });
+  const color = b.addBlock('HsvToRgb', {});
+  const render = b.addBlock('RenderInstances2D', {});
 
   // Wire phase to position and color
   b.wire(time, 'phaseA', angularOffset, 'phase');
   b.wire(time, 'phaseA', hue, 'phase');
+
+  // Wire explicit spin value
+  b.wire(spinConst, 'out', angularOffset, 'spin');
 
   // Wire Array 't' output to field blocks
   b.wire(array, 't', goldenAngle, 'id01');
@@ -312,27 +264,12 @@ const patchPulsing: PatchBuilder = (b) => {
 
   const totalAngle = b.addBlock('FieldAdd', {});
 
-  const effectiveRadius = b.addBlock('FieldRadiusSqrt', {}, {
-    inputDefaults: {
-      radius: constant(0.35),
-    },
-  });
-
+  // Use registry defaults
+  const effectiveRadius = b.addBlock('FieldRadiusSqrt', {});
   const pos = b.addBlock('FieldPolarToCartesian', {});
   const hue = b.addBlock('FieldHueFromPhase', {});
-
-  const color = b.addBlock('HsvToRgb', {}, {
-    inputDefaults: {
-      sat: constant(0.8),
-      val: constant(0.9),
-    },
-  });
-
-  const render = b.addBlock('RenderInstances2D', {}, {
-    inputDefaults: {
-      size: constant(5),
-    },
-  });
+  const color = b.addBlock('HsvToRgb', {});
+  const render = b.addBlock('RenderInstances2D', {});
 
   // Wire phase to position and color
   b.wire(time, 'phaseA', angularOffset, 'phase');
