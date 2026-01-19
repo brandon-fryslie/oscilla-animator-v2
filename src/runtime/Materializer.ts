@@ -16,6 +16,7 @@ import type {
   OpCode,
   PureFn,
   SigExpr,
+  IntrinsicPropertyName,
 } from '../compiler/ir/types';
 import type { BufferPool, BufferFormat } from './BufferPool';
 import { getBufferFormat } from './BufferPool';
@@ -138,10 +139,14 @@ function fillBuffer(
     }
 
     case 'source': {
-      // Fill from instance source
-      // Use intrinsic property if available (new-style), otherwise fall back to sourceId
-      const sourceKey = (expr as any).intrinsic ?? expr.sourceId;
-      fillBufferSource(sourceKey, buffer, instance);
+      // Fill from instance source (old system - kept for backward compatibility)
+      fillBufferSource(expr.sourceId, buffer, instance);
+      break;
+    }
+
+    case 'intrinsic': {
+      // Fill from intrinsic property (new system - properly typed)
+      fillBufferIntrinsic(expr.intrinsic, buffer, instance);
       break;
     }
 
@@ -282,7 +287,140 @@ function applyPureFn(
 }
 
 /**
- * Fill buffer from instance source
+ * Fill buffer from intrinsic property (new system with exhaustive checks).
+ * Intrinsics are per-element properties automatically available for any instance.
+ */
+function fillBufferIntrinsic(
+  intrinsic: IntrinsicPropertyName,
+  buffer: ArrayBufferView,
+  instance: InstanceDecl
+): void {
+  const count = typeof instance.count === 'number' ? instance.count : 0;
+  const N = count;
+
+  switch (intrinsic) {
+    case 'index': {
+      // Element index (0, 1, 2, ..., N-1)
+      const arr = buffer as Float32Array;
+      for (let i = 0; i < N; i++) {
+        arr[i] = i;
+      }
+      break;
+    }
+
+    case 'normalizedIndex': {
+      // Normalized index (0.0 to 1.0)
+      const arr = buffer as Float32Array;
+      for (let i = 0; i < N; i++) {
+        arr[i] = N > 1 ? i / (N - 1) : 0;
+      }
+      break;
+    }
+
+    case 'randomId': {
+      // Deterministic per-element random (0.0 to 1.0)
+      const arr = buffer as Float32Array;
+      for (let i = 0; i < N; i++) {
+        arr[i] = pseudoRandom(i);
+      }
+      break;
+    }
+
+    case 'position': {
+      // Layout-based position (vec2)
+      fillLayoutPosition(buffer, instance);
+      break;
+    }
+
+    case 'radius': {
+      // Layout-based radius (float)
+      fillLayoutRadius(buffer, instance);
+      break;
+    }
+
+    default: {
+      // TypeScript exhaustiveness check: if all cases are handled, this never executes
+      const _exhaustive: never = intrinsic;
+      throw new Error(`Unknown intrinsic: ${_exhaustive}`);
+    }
+  }
+}
+
+/**
+ * Pseudo-random generator for deterministic per-element randomness.
+ * Uses sine-based hash for smooth, deterministic results.
+ */
+function pseudoRandom(seed: number): number {
+  const x = Math.sin(seed * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+/**
+ * Fill buffer with layout-based positions (vec2).
+ * Applies the instance's layout specification to compute positions.
+ */
+function fillLayoutPosition(buffer: ArrayBufferView, instance: InstanceDecl): void {
+  const count = typeof instance.count === 'number' ? instance.count : 0;
+  const N = count;
+  const layout = instance.layout;
+  const arr = buffer as Float32Array;
+
+  if (layout.kind === 'grid') {
+    const rows = layout.rows || 1;
+    const cols = layout.cols || 1;
+    for (let i = 0; i < N; i++) {
+      const row = Math.floor(i / cols);
+      const col = i % cols;
+      arr[i * 2 + 0] = cols > 1 ? col / (cols - 1) : 0.5;
+      arr[i * 2 + 1] = rows > 1 ? row / (rows - 1) : 0.5;
+    }
+  } else if (layout.kind === 'circular') {
+    const radius = layout.radius || 0.3;
+    const cx = 0.5;
+    const cy = 0.5;
+    const TWO_PI = Math.PI * 2;
+    for (let i = 0; i < N; i++) {
+      const angle = TWO_PI * (i / N);
+      arr[i * 2 + 0] = cx + radius * Math.cos(angle);
+      arr[i * 2 + 1] = cy + radius * Math.sin(angle);
+    }
+  } else if (layout.kind === 'linear') {
+    const spacing = layout.spacing || 0.01;
+    for (let i = 0; i < N; i++) {
+      arr[i * 2 + 0] = 0.5;
+      arr[i * 2 + 1] = i * spacing;
+    }
+  } else {
+    // Default: unordered or unknown layouts default to (0.5, 0.5)
+    for (let i = 0; i < N; i++) {
+      arr[i * 2 + 0] = 0.5;
+      arr[i * 2 + 1] = 0.5;
+    }
+  }
+}
+
+/**
+ * Fill buffer with layout-based radius (float).
+ * For circular layouts, uses the layout radius; for others, uses a default.
+ */
+function fillLayoutRadius(buffer: ArrayBufferView, instance: InstanceDecl): void {
+  const count = typeof instance.count === 'number' ? instance.count : 0;
+  const N = count;
+  const layout = instance.layout;
+  const arr = buffer as Float32Array;
+
+  let radius = 0.02; // Default radius for grid/linear layouts
+  if (layout.kind === 'circular') {
+    radius = layout.radius || 0.3;
+  }
+
+  for (let i = 0; i < N; i++) {
+    arr[i] = radius;
+  }
+}
+
+/**
+ * Fill buffer from instance source (old system - kept for backward compatibility).
  */
 function fillBufferSource(
   sourceId: 'pos0' | 'idRand' | 'index' | 'normalizedIndex',

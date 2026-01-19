@@ -171,13 +171,12 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
     console.log('[Compile] Pass 7: Schedule Construction');
     const scheduleIR = pass7Schedule(unlinkedIR, acyclicPatch);
 
-    // Pass 8: Link Resolution
-    // TODO: Implement pass8LinkResolution
-    // const linkedIR = pass8LinkResolution(unlinkedIR, acyclicPatch);
+    // Pass 8: Link Resolution (optional)
+    // Note: Pass 8 is only needed for camera blocks with deferred lowering.
+    // Pass 6 handles standard input resolution via resolveInputsWithMultiInput.
+    // The pass8LinkResolution implementation exists but is not currently used.
 
     // Convert to CompiledProgramIR
-    // TODO: Implement convertLinkedIRToProgram
-    // const compiledIR = convertLinkedIRToProgram(linkedIR, scheduleIR);
     console.log('[Compile] Converting to program IR');
     const compiledIR = convertLinkedIRToProgram(unlinkedIR, scheduleIR);
 
@@ -271,34 +270,6 @@ function emitFailure(
   return {
     kind: 'error',
     errors,
-  };
-}
-
-/**
- * Create a stub CompiledProgramIR for testing.
- * TODO: Replace with real convertLinkedIRToProgram implementation.
- */
-function createStubProgramIR(scheduleIR: any, unlinkedIR: any): CompiledProgramIR {
-  // Extract actual signal nodes from the builder if available
-  const builder = unlinkedIR?.builder;
-  const signalNodes = builder?.getSigExprs?.() || [];
-  const fieldNodes = builder?.getFieldExprs?.() || [];
-
-  return {
-    irVersion: 1,
-    signalExprs: { nodes: signalNodes },
-    fieldExprs: { nodes: fieldNodes },
-    eventExprs: { nodes: [] },
-    constants: { json: [] },
-    schedule: scheduleIR as any,
-    outputs: [],
-    slotMeta: [],
-    debugIndex: {
-      stepToBlock: new Map(),
-      slotToBlock: new Map(),
-      ports: [],
-      slotToPort: new Map(),
-    },
   };
 }
 
