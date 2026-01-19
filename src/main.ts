@@ -225,7 +225,7 @@ const patchWobbly: PatchBuilder = (b) => {
   );
 
   // Three-stage architecture
-  const circle = b.addBlock('Circle', { radius: 0.02 });
+  const circle = b.addBlock('Circle', { radius: 10 });
   const array = b.addBlock('Array', { count: 5000 });
   const layout = b.addBlock('GridLayout', { rows: 71, cols: 71 });
 
@@ -561,16 +561,30 @@ async function recompileFromStore() {
   // Update program
   currentProgram = program;
 
-  // Emit ProgramSwapped event
+  // Extract instance counts for diagnostic logging
+  const schedule = program.schedule as unknown as { instances?: ReadonlyMap<string, { count: number }> };
+  const instanceCounts = new Map<string, number>();
+  if (schedule?.instances) {
+    for (const [id, decl] of schedule.instances) {
+      instanceCounts.set(id, decl.count);
+    }
+  }
+
+  // Emit ProgramSwapped event with instance counts
   rootStore.events.emit({
     type: 'ProgramSwapped',
     patchId: 'patch-0',
     patchRevision: rootStore.getPatchRevision(),
     compileId: `compile-live-${Date.now()}`,
     swapMode: 'soft', // Continuity-preserving swap
+    instanceCounts,
   });
 
-  log(`Recompiled: ${program.signalExprs.nodes.length} signals, ${program.fieldExprs.nodes.length} fields`);
+  // Log recompile with instance counts
+  const instanceInfo = [...instanceCounts.entries()]
+    .map(([id, count]) => `${id}=${count}`)
+    .join(', ');
+  log(`Recompiled: ${program.signalExprs.nodes.length} signals, ${program.fieldExprs.nodes.length} fields, instances: [${instanceInfo}]`);
 }
 
 /**

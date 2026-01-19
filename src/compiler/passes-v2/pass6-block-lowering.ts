@@ -11,6 +11,7 @@ import type { ValueRefPacked } from "../ir/lowerTypes";
 import type { InstanceId } from "../ir/Indices";
 import { getBlockDefinition, type LowerCtx } from "../../blocks/registry";
 import { BLOCK_DEFS_BY_TYPE } from "../../blocks/registry";
+import type { EventHub } from "../../events/EventHub";
 // Multi-Input Blocks Integration
 import {
   type Writer,
@@ -49,6 +50,14 @@ export interface UnlinkedIRFragments {
 /**
  * Options for pass6BlockLowering
  */
+export interface Pass6Options {
+  /** EventHub for emitting BlockLowered events */
+  events?: EventHub;
+  /** Compile ID for event correlation */
+  compileId?: string;
+  /** Patch revision for event context */
+  patchRevision?: number;
+}
 // =============================================================================
 // Helper Functions
 // =============================================================================
@@ -445,7 +454,8 @@ function lowerBlockInstance(
  * Output: UnlinkedIRFragments with IR nodes
  */
 export function pass6BlockLowering(
-  validated: AcyclicOrLegalGraph
+  validated: AcyclicOrLegalGraph,
+  options?: Pass6Options
 ): UnlinkedIRFragments {
   const builder = new IRBuilderImpl();
 
@@ -507,6 +517,25 @@ export function pass6BlockLowering(
 
       if (outputRefs.size > 0) {
         blockOutputs.set(blockIndex, outputRefs);
+      }
+
+      // Emit BlockLowered event if EventHub is available
+      if (options?.events) {
+        const instanceContext = instanceContextByBlock.get(blockIndex);
+        // For instance-creating blocks (Array), get the count from params
+        const instanceCount = block.type === 'Array'
+          ? (block.params.count as number | undefined)
+          : undefined;
+
+        options.events.emit({
+          type: 'BlockLowered',
+          compileId: options.compileId || 'unknown',
+          patchRevision: options.patchRevision || 0,
+          blockId: block.id,
+          blockType: block.type,
+          instanceId: instanceContext,
+          instanceCount,
+        });
       }
     }
   }

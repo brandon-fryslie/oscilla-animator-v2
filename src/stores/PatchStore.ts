@@ -14,6 +14,7 @@ import { makeObservable, observable, computed, action } from 'mobx';
 import type { Block, Edge, Endpoint, Patch, BlockType } from '../graph/Patch';
 import type { BlockId, BlockRole, DefaultSource } from '../types';
 import { emptyPatchData, type PatchData } from './internal';
+import type { EventHub } from '../events/EventHub';
 
 /**
  * Opaque type for immutable patch access.
@@ -34,6 +35,12 @@ export class PatchStore {
   private _data: PatchData;
   private _nextBlockId = 0;
   private _nextEdgeId = 0;
+
+  // Optional EventHub for emitting ParamChanged events
+  // Set via setEventHub() after construction (due to circular dependency with RootStore)
+  private eventHub: EventHub | null = null;
+  private patchId: string = 'patch-0';
+  private getPatchRevision: (() => number) | null = null;
 
   constructor() {
     this._data = emptyPatchData();
@@ -56,6 +63,24 @@ export class PatchStore {
       loadPatch: action,
       clear: action,
     });
+  }
+
+  // =============================================================================
+  // Event Integration
+  // =============================================================================
+
+  /**
+   * Sets the EventHub for emitting ParamChanged events.
+   * Called by RootStore after construction to avoid circular dependency.
+   */
+  setEventHub(
+    eventHub: EventHub,
+    patchId: string,
+    getPatchRevision: () => number
+  ): void {
+    this.eventHub = eventHub;
+    this.patchId = patchId;
+    this.getPatchRevision = getPatchRevision;
   }
 
   // =============================================================================
@@ -153,6 +178,7 @@ export class PatchStore {
 
   /**
    * Updates block parameters (shallow merge).
+   * Emits ParamChanged event for each parameter changed.
    */
   updateBlockParams(
     id: BlockId,
@@ -161,6 +187,26 @@ export class PatchStore {
     const block = this._data.blocks.get(id);
     if (!block) {
       throw new Error(`Block not found: ${id}`);
+    }
+
+    // Emit ParamChanged events before updating (capture old values)
+    if (this.eventHub && this.getPatchRevision) {
+      for (const [key, newValue] of Object.entries(params)) {
+        const oldValue = block.params[key];
+        // Only emit if value actually changed
+        if (oldValue !== newValue) {
+          this.eventHub.emit({
+            type: 'ParamChanged',
+            patchId: this.patchId,
+            patchRevision: this.getPatchRevision(),
+            blockId: id,
+            blockType: block.type,
+            paramKey: key,
+            oldValue,
+            newValue,
+          });
+        }
+      }
     }
 
     this._data.blocks.set(id, {

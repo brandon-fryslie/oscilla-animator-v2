@@ -30,7 +30,7 @@ export type { AcyclicOrLegalGraph } from "../ir/patches";
 
 // Pass 6: Block Lowering
 export { pass6BlockLowering } from "./pass6-block-lowering";
-export type { UnlinkedIRFragments } from "./pass6-block-lowering";
+export type { UnlinkedIRFragments, Pass6Options } from "./pass6-block-lowering";
 
 // Pass 7: Schedule Construction
 export { pass7Schedule } from "./pass7-schedule";

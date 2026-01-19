@@ -114,6 +114,8 @@ export interface ProgramSwappedEvent {
   readonly patchRevision: number;
   readonly compileId: string;
   readonly swapMode: 'hard' | 'soft';
+  /** Instance counts from the new program's schedule (optional diagnostic info) */
+  readonly instanceCounts?: ReadonlyMap<string, number>;
 }
 
 // =============================================================================
@@ -177,9 +179,65 @@ export interface RuntimeHealthSnapshotEvent {
  * }
  * ```
  */
+// =============================================================================
+// ParamChanged Event
+// =============================================================================
+
+/**
+ * Emitted when a block's parameters are updated.
+ *
+ * Triggers:
+ * - User edits block params via inspector
+ * - Slider changes
+ * - Programmatic param updates
+ *
+ * DiagnosticHub Action:
+ * - Log to LogPanel for param flow visibility
+ */
+export interface ParamChangedEvent {
+  readonly type: 'ParamChanged';
+  readonly patchId: string;
+  readonly patchRevision: number;
+  readonly blockId: string;
+  readonly blockType: string;
+  readonly paramKey: string;
+  readonly oldValue: unknown;
+  readonly newValue: unknown;
+}
+
+// =============================================================================
+// BlockLowered Event
+// =============================================================================
+
+/**
+ * Emitted when a block is lowered during Pass 6 compilation.
+ *
+ * Triggers:
+ * - Block lowering during compilation
+ * - Instance-creating blocks (e.g., Array) produce instanceCount
+ *
+ * DiagnosticHub Action:
+ * - Log instance creation for compiler visibility
+ */
+export interface BlockLoweredEvent {
+  readonly type: 'BlockLowered';
+  readonly compileId: string;
+  readonly patchRevision: number;
+  readonly blockId: string;
+  readonly blockType: string;
+  readonly instanceId?: string;
+  readonly instanceCount?: number;
+}
+
+// =============================================================================
+// EditorEvent Discriminated Union
+// =============================================================================
+
 export type EditorEvent =
   | GraphCommittedEvent
   | CompileBeginEvent
   | CompileEndEvent
   | ProgramSwappedEvent
-  | RuntimeHealthSnapshotEvent;
+  | RuntimeHealthSnapshotEvent
+  | ParamChangedEvent
+  | BlockLoweredEvent;

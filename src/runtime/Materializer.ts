@@ -65,7 +65,10 @@ export function materialize(
   }
 
   // Resolve count
-  const count = typeof instance.count === 'number' ? instance.count : 0;
+  if (typeof instance.count !== 'number') {
+    throw new Error(`instance.count ${instanceId} is not a number: ${instance.count}`);
+  }
+  const count = instance.count;
 
   // Allocate buffer
   const format = getBufferFormat(expr.type.payload);
@@ -94,14 +97,20 @@ function fillBuffer(
   state: RuntimeState,
   pool: BufferPool
 ): void {
-  const count = typeof instance.count === 'number' ? instance.count : 0;
+  if (typeof instance.count !== 'number') {
+    throw new Error(`instance.count ${instance.id} is not a number: ${instance.count}`);
+  }
+  const count = instance.count;
   const N = count;
 
   switch (expr.kind) {
     case 'const': {
       // Fill with constant value
       const arr = buffer as Float32Array | Uint8ClampedArray;
-      const value = typeof expr.value === 'number' ? expr.value : 0;
+      if (typeof expr.value !== 'number') {
+        throw new Error(`instance.count ${expr.kind} ${expr.type} is not a number: ${expr.value}`);
+      }
+      const value = expr.value;
 
       if (expr.type.payload === 'color') {
         // Color: broadcast to RGBA

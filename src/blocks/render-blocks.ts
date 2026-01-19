@@ -27,7 +27,7 @@ registerBlock({
   inputs: [
     { id: 'pos', label: 'Position', type: signalTypeField('vec2', 'default') },
     { id: 'color', label: 'Color', type: signalTypeField('color', 'default') },
-    { id: 'size', label: 'Size', type: signalTypeField('float', 'default') },
+    { id: 'size', label: 'Size', type: signalTypeField('float', 'default'), defaultSource: defaultSourceConstant(5) },
   ],
   outputs: [],
   params: {
@@ -75,8 +75,8 @@ registerBlock({
   inputs: [
     { id: 'pos', label: 'Position', type: signalTypeField('vec2', 'default') },
     { id: 'color', label: 'Color', type: signalTypeField('color', 'default') },
-    { id: 'width', label: 'Width', type: signalTypeField('float', 'default') },
-    { id: 'height', label: 'Height', type: signalTypeField('float', 'default') },
+    { id: 'width', label: 'Width', type: signalTypeField('float', 'default'), defaultSource: defaultSourceConstant(10) },
+    { id: 'height', label: 'Height', type: signalTypeField('float', 'default'), defaultSource: defaultSourceConstant(10) },
   ],
   outputs: [],
   params: {
@@ -126,7 +126,7 @@ registerBlock({
   inputs: [
     { id: 'pos', label: 'Position', type: signalTypeField('vec2', 'default') },
     { id: 'color', label: 'Color', type: signalTypeField('color', 'default') },
-    { id: 'size', label: 'Size', type: signalTypeField('float', 'default') },
+    { id: 'size', label: 'Size', type: signalTypeField('float', 'default'), defaultSource: defaultSourceConstant(5) },
     { id: 'shape', label: 'Shape', type: signalType('int'), defaultSource: defaultSourceConstant(0) }, // 0=circle, 1=square, 2=triangle
   ],
   outputs: [],

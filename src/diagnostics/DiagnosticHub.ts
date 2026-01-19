@@ -74,6 +74,9 @@ export class DiagnosticHub {
   // Callback to notify store of changes (for MobX reactivity)
   private onRevisionChange: (() => void) | null = null;
 
+  // Callback for logging to DiagnosticsStore (for param flow visibility)
+  private onLog: ((entry: { level: 'info' | 'warn' | 'error' | 'debug'; message: string }) => void) | null = null;
+
   // =============================================================================
   // Constructor
   // =============================================================================
@@ -111,7 +114,15 @@ export class DiagnosticHub {
       events.on('RuntimeHealthSnapshot', (event) => this.handleRuntimeHealthSnapshot(event))
     );
 
-    console.log('[DiagnosticHub] Subscribed to 5 core events');
+    // Subscribe to param flow visibility events
+    this.unsubscribers.push(
+      events.on('ParamChanged', (event) => this.handleParamChanged(event))
+    );
+    this.unsubscribers.push(
+      events.on('BlockLowered', (event) => this.handleBlockLowered(event))
+    );
+
+    console.log('[DiagnosticHub] Subscribed to 7 events (5 core + 2 param flow)');
   }
 
   // =============================================================================
@@ -282,6 +293,67 @@ export class DiagnosticHub {
 
     // Increment revision to trigger UI updates
     this.incrementRevision();
+  }
+
+  // =============================================================================
+  // Param Flow Visibility Event Handlers
+  // =============================================================================
+
+  /**
+   * Handles ParamChanged event.
+   *
+   * Action:
+   * - Log to LogPanel for param flow visibility
+   */
+  private handleParamChanged(event: {
+    type: 'ParamChanged';
+    patchId: string;
+    patchRevision: number;
+    blockId: string;
+    blockType: string;
+    paramKey: string;
+    oldValue: unknown;
+    newValue: unknown;
+  }): void {
+    if (event.patchId !== this.patchId) return;
+
+    // Format values for display
+    const formatValue = (v: unknown): string => {
+      if (typeof v === 'number') return v.toString();
+      if (typeof v === 'string') return `"${v}"`;
+      if (v === undefined) return 'undefined';
+      if (v === null) return 'null';
+      return JSON.stringify(v);
+    };
+
+    this.log({
+      level: 'info',
+      message: `[Param] ${event.blockType}#${event.blockId}.${event.paramKey}: ${formatValue(event.oldValue)} → ${formatValue(event.newValue)}`,
+    });
+  }
+
+  /**
+   * Handles BlockLowered event.
+   *
+   * Action:
+   * - Log instance creation for compiler visibility
+   */
+  private handleBlockLowered(event: {
+    type: 'BlockLowered';
+    compileId: string;
+    patchRevision: number;
+    blockId: string;
+    blockType: string;
+    instanceId?: string;
+    instanceCount?: number;
+  }): void {
+    // Only log for blocks that create instances (e.g., Array)
+    if (event.instanceCount !== undefined) {
+      this.log({
+        level: 'info',
+        message: `[Compiler] ${event.blockType}#${event.blockId} created instance ${event.instanceId || 'unknown'} with count=${event.instanceCount}`,
+      });
+    }
   }
 
   // =============================================================================
@@ -459,6 +531,24 @@ export class DiagnosticHub {
   setOnRevisionChange(callback: () => void): void {
     this.onRevisionChange = callback;
     console.log('[DiagnosticHub] onRevisionChange callback registered');
+  }
+
+  /**
+   * Sets the callback for logging to DiagnosticsStore.
+   * Used for param flow visibility events.
+   */
+  setOnLog(callback: (entry: { level: 'info' | 'warn' | 'error' | 'debug'; message: string }) => void): void {
+    this.onLog = callback;
+    console.log('[DiagnosticHub] onLog callback registered');
+  }
+
+  /**
+   * Logs an entry via the callback (if set).
+   */
+  private log(entry: { level: 'info' | 'warn' | 'error' | 'debug'; message: string }): void {
+    if (this.onLog) {
+      this.onLog(entry);
+    }
   }
 
   // =============================================================================

@@ -58,6 +58,12 @@ export class RootStore {
     // Wire up callback for MobX reactivity
     diagnosticHub.setOnRevisionChange(() => this.diagnostics.incrementRevision());
 
+    // Wire up logging callback for param flow visibility
+    diagnosticHub.setOnLog((entry) => this.diagnostics.log(entry));
+
+    // Wire up EventHub to PatchStore for ParamChanged events
+    this.patch.setEventHub(this.events, 'patch-0', () => this.patchRevision);
+
     // Wire patch mutations to emit GraphCommitted events
     this.setupGraphCommittedEmission();
   }

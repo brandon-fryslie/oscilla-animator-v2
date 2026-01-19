@@ -150,7 +150,11 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
 
     // Pass 6: Block Lowering
     console.log('[Compile] Pass 6: Block Lowering');
-    const unlinkedIR = pass6BlockLowering(acyclicPatch);
+    const unlinkedIR = pass6BlockLowering(acyclicPatch, {
+      events: options?.events,
+      compileId,
+      patchRevision: options?.patchRevision,
+    });
 
     // Check for errors from pass 6
     if (unlinkedIR.errors.length > 0) {

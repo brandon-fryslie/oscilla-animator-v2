@@ -593,7 +593,7 @@ registerBlock({
   capability: 'pure',
   inputs: [
     { id: 'id01', label: 'ID (0..1)', type: signalTypeField('float', 'default') },
-    { id: 'radius', label: 'Radius', type: signalTypeField('float', 'default') },
+    { id: 'radius', label: 'Radius', type: signalTypeField('float', 'default'), defaultSource: defaultSourceConstant(0.35) },
   ],
   outputs: [
     { id: 'out', label: 'Radius', type: signalTypeField('float', 'default') },
