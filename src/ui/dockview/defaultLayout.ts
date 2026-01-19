@@ -3,7 +3,7 @@
  *
  * Creates the initial Dockview layout structure:
  * - Left sidebar: Library (top), Inspector (bottom) - stacked
- * - Center: Rete, Flow, Table, Matrix - tabbed editors
+ * - Center: Flow, Table, Matrix - tabbed editors
  * - Bottom: Diagnostics (left), empty placeholder (right) - split
  * - Floating: Preview panel (draggable, resizable, dockable)
  *
@@ -20,7 +20,6 @@ import { PANEL_DEFINITIONS } from './panelRegistry';
 import type { EditorHandle } from '../editorCommon';
 
 interface LayoutCallbacks {
-  onReteEditorReady?: (handle: EditorHandle) => void;
   onReactFlowEditorReady?: (handle: EditorHandle) => void;
   onCanvasReady?: (canvas: HTMLCanvasElement) => void;
 }
@@ -34,7 +33,7 @@ interface LayoutCallbacks {
  * Target Structure:
  * +------------------+------------------------+
  * | left-top         |  center                |
- * | (Library)        |  (Rete|Flow|Table|Mat) |
+ * | (Library)        |  (Flow|Table|Matrix)   |
  * +------------------+                        |
  * | left-bottom      |                        |
  * | (Inspector)      |                        |
@@ -125,14 +124,12 @@ export function createDefaultLayout(api: DockviewApi, callbacks: LayoutCallbacks
     }
   });
 
-  // Add center panels (Rete, Flow, Table, Matrix)
+  // Add center panels (Flow, Table, Matrix)
   centerPanels.forEach((panel, index) => {
     const params: Record<string, unknown> = {};
 
     // Pass callbacks to panels that need them
-    if (panel.id === 'rete-editor' && callbacks.onReteEditorReady) {
-      params.onEditorReady = callbacks.onReteEditorReady;
-    } else if (panel.id === 'flow-editor' && callbacks.onReactFlowEditorReady) {
+    if (panel.id === 'flow-editor' && callbacks.onReactFlowEditorReady) {
       params.onEditorReady = callbacks.onReactFlowEditorReady;
     }
 

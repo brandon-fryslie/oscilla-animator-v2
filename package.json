@@ -24,15 +24,7 @@
     "mobx-react-lite": "^4.1.1",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
-    "reactflow": "^11.11.4",
-    "rete": "^2.0.6",
-    "rete-area-plugin": "^2.1.5",
-    "rete-auto-arrange-plugin": "^2.0.2",
-    "rete-connection-plugin": "^2.0.5",
-    "rete-context-menu-plugin": "^2.0.6",
-    "rete-history-plugin": "^2.1.1",
-    "rete-minimap-plugin": "^2.0.3",
-    "rete-react-plugin": "^2.1.0"
+    "reactflow": "^11.11.4"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",

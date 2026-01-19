@@ -21,7 +21,6 @@ export const DockviewContext = createContext<DockviewContextValue | null>(null);
 
 interface DockviewProviderProps {
   children?: React.ReactNode;
-  onReteEditorReady?: (handle: EditorHandle) => void;
   onReactFlowEditorReady?: (handle: EditorHandle) => void;
   onCanvasReady?: (canvas: HTMLCanvasElement) => void;
   onActivePanelChange?: (panelId: string | undefined) => void;
@@ -32,7 +31,6 @@ interface DockviewProviderProps {
  * Provides access to the Dockview API via context.
  */
 export const DockviewProvider: React.FC<DockviewProviderProps> = ({
-  onReteEditorReady,
   onReactFlowEditorReady,
   onCanvasReady,
   onActivePanelChange,
@@ -45,12 +43,11 @@ export const DockviewProvider: React.FC<DockviewProviderProps> = ({
 
       // Build default layout
       createDefaultLayout(event.api, {
-        onReteEditorReady,
         onReactFlowEditorReady,
         onCanvasReady,
       });
     },
-    [onReteEditorReady, onReactFlowEditorReady, onCanvasReady]
+    [onReactFlowEditorReady, onCanvasReady]
   );
 
   // Subscribe to active panel changes

@@ -9,7 +9,6 @@ import { BlockLibraryPanel } from './panels/BlockLibraryPanel';
 import { BlockInspectorPanel } from './panels/BlockInspectorPanel';
 import { TableViewPanel } from './panels/TableViewPanel';
 import { ConnectionMatrixPanel } from './panels/ConnectionMatrixPanel';
-import { ReteEditorPanel } from './panels/ReteEditorPanel';
 import { ReactFlowEditorPanel } from './panels/ReactFlowEditorPanel';
 import { PreviewPanel } from './panels/PreviewPanel';
 import { DiagnosticConsolePanel } from './panels/DiagnosticConsolePanel';
@@ -51,7 +50,6 @@ export const PANEL_DEFINITIONS: PanelDefinition[] = [
   { id: 'block-inspector', component: 'block-inspector', title: 'Inspector', group: 'left-bottom' },
 
   // Center (tabbed editors)
-  // { id: 'rete-editor', component: 'rete-editor', title: 'Rete', group: 'center' }, // Disabled - using Flow instead
   { id: 'flow-editor', component: 'flow-editor', title: 'Flow', group: 'center' },
   { id: 'table-view', component: 'table-view', title: 'Table', group: 'center' },
   { id: 'connection-matrix', component: 'connection-matrix', title: 'Matrix', group: 'center' },
@@ -74,7 +72,6 @@ export const PANEL_COMPONENTS = {
   'block-inspector': BlockInspectorPanel,
   'table-view': TableViewPanel,
   'connection-matrix': ConnectionMatrixPanel,
-  'rete-editor': ReteEditorPanel,
   'flow-editor': ReactFlowEditorPanel,
   'preview': PreviewPanel,
   'diagnostic-console': DiagnosticConsolePanel,

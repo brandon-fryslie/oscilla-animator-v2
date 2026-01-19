@@ -21,12 +21,11 @@ interface AppProps {
 export const App: React.FC<AppProps> = ({ onCanvasReady }) => {
   const [stats, setStats] = useState('FPS: --');
 
-  // Store handles for both editors
-  const reteHandleRef = useRef<EditorHandle | null>(null);
+  // Store handle for React Flow editor
   const reactFlowHandleRef = useRef<EditorHandle | null>(null);
   const editorContextRef = useRef<{ setEditorHandle: (handle: EditorHandle | null) => void } | null>(null);
-  const [activeEditorTab, setActiveEditorTab] = useState<'rete-editor' | 'flow-editor' | null>('rete-editor');
-  const [editorsReady, setEditorsReady] = useState<{ rete: boolean; flow: boolean }>({ rete: false, flow: false });
+  const [activeEditorTab, setActiveEditorTab] = useState<'flow-editor' | null>('flow-editor');
+  const [editorReady, setEditorReady] = useState(false);
 
   // Initialize ref with prop value so it's available immediately on first render
   const canvasCallbackRef = useRef<((canvas: HTMLCanvasElement) => void) | undefined>(onCanvasReady);
@@ -49,22 +48,15 @@ export const App: React.FC<AppProps> = ({ onCanvasReady }) => {
     };
   }, []);
 
-  // Handle editor ready callbacks - store handles only
-  const handleReteEditorReady = useCallback((adapter: EditorHandle) => {
-    reteHandleRef.current = adapter;
-    setEditorsReady(prev => ({ ...prev, rete: true }));
-  }, []);
-
+  // Handle editor ready callback
   const handleReactFlowEditorReady = useCallback((adapter: EditorHandle) => {
     reactFlowHandleRef.current = adapter;
-    setEditorsReady(prev => ({ ...prev, flow: true }));
+    setEditorReady(true);
   }, []);
 
   // Handle Dockview panel activation to update active editor
   const handleActivePanelChange = useCallback((panelId: string | undefined) => {
-    if (panelId === 'rete-editor') {
-      setActiveEditorTab('rete-editor');
-    } else if (panelId === 'flow-editor') {
+    if (panelId === 'flow-editor') {
       setActiveEditorTab('flow-editor');
     } else {
       // Non-editor panel activated, clear active editor
@@ -72,18 +64,16 @@ export const App: React.FC<AppProps> = ({ onCanvasReady }) => {
     }
   }, []);
 
-  // Update EditorContext when active editor changes or editors become ready
+  // Update EditorContext when active editor changes or editor becomes ready
   useEffect(() => {
     if (!editorContextRef.current) return;
 
-    if (activeEditorTab === 'rete-editor' && editorsReady.rete) {
-      editorContextRef.current.setEditorHandle(reteHandleRef.current);
-    } else if (activeEditorTab === 'flow-editor' && editorsReady.flow) {
+    if (activeEditorTab === 'flow-editor' && editorReady) {
       editorContextRef.current.setEditorHandle(reactFlowHandleRef.current);
     } else if (activeEditorTab === null) {
       editorContextRef.current.setEditorHandle(null);
     }
-  }, [activeEditorTab, editorsReady]);
+  }, [activeEditorTab, editorReady]);
 
   return (
     <EditorProvider>
@@ -107,7 +97,6 @@ export const App: React.FC<AppProps> = ({ onCanvasReady }) => {
         {/* Dockview workspace - all panels managed by Dockview */}
         <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
           <DockviewProvider
-            onReteEditorReady={handleReteEditorReady}
             onReactFlowEditorReady={handleReactFlowEditorReady}
             onCanvasReady={handleCanvasReady}
             onActivePanelChange={handleActivePanelChange}
