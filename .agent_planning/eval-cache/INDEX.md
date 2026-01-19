@@ -2,7 +2,7 @@
 
 **Purpose:** Reusable evaluation findings to speed up future work evaluations.
 
-**Last Updated:** 2026-01-17 04:48:00
+**Last Updated:** 2026-01-18 04:47:21
 
 ---
 
@@ -10,7 +10,15 @@
 
 ### Runtime Findings
 
-**runtime-dockview-integration.md** [NEW]
+**runtime-diagnostics-logging.md** [NEW]
+- Scope: compilation-pipeline/diagnostics-logging
+- Status: Architecture verified sound, UI verification pending
+- Confidence: FRESH
+- Reusable: Diagnostic flow architecture, MobX reactivity chain, patchId consistency verification
+- Key findings: Complete event flow verified, 55+ debug logs added, all unit tests pass
+- Next evaluation: User should verify browser UI or accept based on code quality
+
+**runtime-dockview-integration.md**
 - Scope: Dockview integration (foundation sprint)
 - Status: Critical integration requirements documented
 - Confidence: FRESH
