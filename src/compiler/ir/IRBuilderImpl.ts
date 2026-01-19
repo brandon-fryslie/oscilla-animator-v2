@@ -184,6 +184,11 @@ export class IRBuilderImpl implements IRBuilder {
     return id;
   }
 
+  /**
+   * @deprecated Use fieldIntrinsic() instead for instance-based fields.
+   * This method uses the old domain-based model and will be removed.
+   * Only kept for backward compatibility with domain unification tests.
+   */
   fieldSource(
     domain: DomainId,
     sourceId: 'pos0' | 'idRand' | 'index' | 'normalizedIndex',
@@ -292,8 +297,8 @@ export class IRBuilderImpl implements IRBuilder {
   }
 
   /**
+   * @deprecated Use fieldIntrinsic(instanceId, 'index', type) instead.
    * Legacy alias for fieldSource with sourceId='index'.
-   * Kept for backward compatibility with existing blocks.
    */
   fieldIndex(domain: DomainId, type: SignalType): FieldExprId {
     return this.fieldSource(domain, 'index', type);
