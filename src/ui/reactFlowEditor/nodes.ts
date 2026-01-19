@@ -6,8 +6,17 @@
  */
 
 import type { Node, Edge as ReactFlowEdge } from 'reactflow';
-import type { Block, BlockId, Edge } from '../../types';
-import type { BlockDef } from '../../blocks/registry';
+import type { Block, BlockId, Edge, DefaultSource } from '../../types';
+import type { BlockDef, InputDef } from '../../blocks/registry';
+
+/**
+ * Port data for ReactFlow rendering
+ */
+export interface PortData {
+  id: string;
+  label: string;
+  defaultSource?: DefaultSource;
+}
 
 /**
  * Custom data stored in each ReactFlow node.
@@ -17,14 +26,30 @@ export interface OscillaNodeData {
   blockId: BlockId;
   blockType: string;
   label: string;
-  inputs: Array<{ id: string; label: string }>;
-  outputs: Array<{ id: string; label: string }>;
+  inputs: PortData[];
+  outputs: PortData[];
 }
 
 /**
  * ReactFlow node type for Oscilla blocks.
  */
 export type OscillaNode = Node<OscillaNodeData>;
+
+/**
+ * Get effective default source for an input.
+ * Instance override takes precedence over registry default.
+ */
+function getEffectiveDefaultSource(
+  block: Block,
+  input: InputDef
+): DefaultSource | undefined {
+  // Instance override takes precedence
+  const instanceOverride = block.inputDefaults?.[input.id];
+  if (instanceOverride) return instanceOverride;
+
+  // Fall back to registry default
+  return (input as InputDef & { defaultSource?: DefaultSource }).defaultSource;
+}
 
 /**
  * Create ReactFlow node from Oscilla block.
@@ -41,6 +66,7 @@ export function createNodeFromBlock(block: Block, blockDef: BlockDef): OscillaNo
       inputs: blockDef.inputs.map((input) => ({
         id: input.id,
         label: input.label,
+        defaultSource: getEffectiveDefaultSource(block, input),
       })),
       outputs: blockDef.outputs.map((output) => ({
         id: output.id,

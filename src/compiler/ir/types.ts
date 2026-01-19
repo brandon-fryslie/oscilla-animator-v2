@@ -311,7 +311,7 @@ export type LayoutSpec =
   | { readonly kind: 'custom'; readonly positionField: FieldExprId };
 
 /**
- * Instance declaration (NEW).
+ * Instance declaration.
  * An instance is a specific instantiation of a domain type with count, layout, and lifecycle.
  */
 export interface InstanceDecl {
@@ -320,7 +320,53 @@ export interface InstanceDecl {
   readonly count: number | 'dynamic';
   readonly layout: LayoutSpec;
   readonly lifecycle: 'static' | 'dynamic' | 'pooled';
+  // Continuity System: Identity specification
+  readonly identityMode: 'stable' | 'none';
+  readonly elementIdSeed?: number; // For deterministic ID generation
 }
+
+// =============================================================================
+// Continuity System Types (spec: topics/11-continuity-system.md)
+// =============================================================================
+
+/**
+ * Runtime domain instance with identity information (spec §3.1).
+ * Used by continuity system for element mapping.
+ */
+export interface DomainInstance {
+  /** Number of elements in this domain */
+  readonly count: number;
+
+  /** Stable element IDs - required when identityMode='stable' */
+  readonly elementId: Uint32Array;
+
+  /** Identity mode - 'stable' enables per-element continuity */
+  readonly identityMode: 'stable' | 'none';
+
+  /** Optional spatial hints for fallback position-based mapping */
+  readonly posHintXY?: Float32Array;
+}
+
+/**
+ * Gauge specification for continuity (spec §2.4).
+ * A gauge is an operation that composes with the base value to produce the effective value.
+ */
+export type GaugeSpec =
+  | { readonly kind: 'add' }           // scalar/vec/linear RGBA: x_eff = x_base + Δ
+  | { readonly kind: 'mul' }           // scale continuity (rare): x_eff = x_base * Δ
+  | { readonly kind: 'affine' }        // x_eff = a*x_base + b (for clamped values)
+  | { readonly kind: 'phaseOffset01' }; // specialized for phase (wrap-aware)
+
+/**
+ * Continuity policy for a field target (spec §2.2).
+ * Every target has exactly one declared policy. No "optional" behavior exists.
+ */
+export type ContinuityPolicy =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'preserve'; readonly gauge: GaugeSpec }
+  | { readonly kind: 'slew'; readonly gauge: GaugeSpec; readonly tauMs: number }
+  | { readonly kind: 'crossfade'; readonly windowMs: number; readonly curve: 'linear' | 'smoothstep' | 'ease-in-out' }
+  | { readonly kind: 'project'; readonly projector: 'byId' | 'byPosition'; readonly post: 'slew'; readonly tauMs: number };
 
 
 // =============================================================================
@@ -339,7 +385,9 @@ export type Step =
   | StepEvalSig
   | StepMaterialize
   | StepRender
-  | StepStateWrite;
+  | StepStateWrite
+  | StepContinuityMapBuild
+  | StepContinuityApply;
 
 export interface StepEvalSig {
   readonly kind: 'evalSig';
@@ -371,6 +419,30 @@ export interface StepStateWrite {
   readonly kind: 'stateWrite';
   readonly stateSlot: StateSlotId;
   readonly value: SigExprId;
+}
+
+/**
+ * Step to build element mapping when domain changes (spec §5.1).
+ * Executed rarely (only at hot-swap boundaries).
+ */
+export interface StepContinuityMapBuild {
+  readonly kind: 'continuityMapBuild';
+  readonly instanceId: string; // InstanceId
+  readonly outputMapping: string; // Key to store mapping result
+}
+
+/**
+ * Step to apply continuity policy to a field target (spec §5.1).
+ * Executed per-frame for targets with policy != none.
+ */
+export interface StepContinuityApply {
+  readonly kind: 'continuityApply';
+  readonly targetKey: string; // StableTargetId
+  readonly instanceId: string; // InstanceId
+  readonly policy: ContinuityPolicy;
+  readonly baseSlot: ValueSlot;
+  readonly outputSlot: ValueSlot;
+  readonly semantic: 'position' | 'radius' | 'opacity' | 'color' | 'custom';
 }
 
 // =============================================================================

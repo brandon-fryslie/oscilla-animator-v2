@@ -75,6 +75,7 @@ export const ReactFlowEditor: React.FC<ReactFlowEditorProps> = ({
 }) => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const wrapperRef = React.useRef<HTMLDivElement>(null);
 
   // Register custom node types (memoized to prevent recreation)
   const nodeTypes = useMemo(() => ({ oscilla: OscillaNode }), []);
@@ -101,6 +102,25 @@ export const ReactFlowEditor: React.FC<ReactFlowEditorProps> = ({
     createConnectHandler(syncHandle),
     [syncHandle.patchStore]
   );
+
+  // Selection handlers - sync ReactFlow selection to SelectionStore
+  const handleNodeClick = useCallback(
+    (_event: React.MouseEvent, node: Node) => {
+      rootStore.selection.selectBlock(node.id as BlockId);
+    },
+    []
+  );
+
+  const handleEdgeClick = useCallback(
+    (_event: React.MouseEvent, edge: Edge) => {
+      rootStore.selection.selectEdge(edge.id);
+    },
+    []
+  );
+
+  const handlePaneClick = useCallback(() => {
+    rootStore.selection.clearSelection();
+  }, []);
 
   // Setup bidirectional sync and editor handle
   useEffect(() => {
@@ -161,21 +181,59 @@ export const ReactFlowEditor: React.FC<ReactFlowEditorProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
+  // Force wrapper dimensions for Dockview compatibility
+  React.useLayoutEffect(() => {
+    if (!wrapperRef.current) return;
+    const wrapper = wrapperRef.current;
+
+    // Force explicit dimensions
+    const updateDimensions = () => {
+      const rect = wrapper.getBoundingClientRect();
+      console.log('[ReactFlowEditor] Wrapper dimensions:', rect.width, 'x', rect.height);
+
+      // If parent has no dimensions, try to inherit from parent container
+      if (rect.width === 0 || rect.height === 0) {
+        const parent = wrapper.parentElement;
+        if (parent) {
+          const parentRect = parent.getBoundingClientRect();
+          console.log('[ReactFlowEditor] Parent dimensions:', parentRect.width, 'x', parentRect.height);
+          wrapper.style.width = parentRect.width > 0 ? '100%' : '100vw';
+          wrapper.style.height = parentRect.height > 0 ? '100%' : '100vh';
+        }
+      }
+    };
+
+    // Update dimensions immediately and on window resize
+    updateDimensions();
+    const resizeObserver = new ResizeObserver(updateDimensions);
+    resizeObserver.observe(wrapper);
+    window.addEventListener('resize', updateDimensions);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', updateDimensions);
+    };
+  }, []);
+
   return (
-    <div style={{ width: '100%', height: '100%' }}>
+    <div className="react-flow-wrapper" ref={wrapperRef}>
       <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={nodeTypes}
-        onNodesChange={handleNodesChange}
-        onEdgesChange={handleEdgesChange}
-        onConnect={handleConnect}
-        fitView
-        attributionPosition="bottom-left"
-      >
-        <Background />
-        <Controls />
-      </ReactFlow>
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          onNodesChange={handleNodesChange}
+          onEdgesChange={handleEdgesChange}
+          onConnect={handleConnect}
+          onNodeClick={handleNodeClick}
+          onEdgeClick={handleEdgeClick}
+          onPaneClick={handlePaneClick}
+          fitView
+          attributionPosition="bottom-left"
+          style={{ width: '100%', height: '100%' }}
+        >
+          <Background />
+          <Controls />
+        </ReactFlow>
     </div>
   );
 };

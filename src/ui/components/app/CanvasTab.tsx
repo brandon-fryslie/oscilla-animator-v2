@@ -6,13 +6,14 @@
  */
 
 import React, { useRef, useEffect } from 'react';
+import { observer } from 'mobx-react-lite';
 import { rootStore } from '../../../stores';
 
 interface CanvasTabProps {
   onCanvasReady?: (canvas: HTMLCanvasElement) => void;
 }
 
-export const CanvasTab: React.FC<CanvasTabProps> = ({ onCanvasReady }) => {
+export const CanvasTab: React.FC<CanvasTabProps> = observer(({ onCanvasReady }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -122,4 +123,4 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ onCanvasReady }) => {
       />
     </div>
   );
-};
+});

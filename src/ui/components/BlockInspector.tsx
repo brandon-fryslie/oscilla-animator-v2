@@ -3,16 +3,21 @@
  *
  * Detailed view of selected block OR block type preview.
  * Shows ports, connections, parameters, and default sources.
+ * Supports editing of displayName and block params.
  */
 
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { observer } from 'mobx-react-lite';
 import { rootStore } from '../../stores';
 import { colors } from '../theme';
-import { getBlockDefinition, type BlockDef } from '../../blocks/registry';
-import type { Block, Patch } from '../../graph/Patch';
-import type { BlockId, DefaultSource } from '../../types';
+import { getBlockDefinition, type BlockDef, type InputDef, type OutputDef } from '../../blocks/registry';
+import type { Block, Patch, Edge, PortRef } from '../../graph/Patch';
+import type { BlockId, PortId, DefaultSource, UIControlHint } from '../../types';
 import type { SignalType } from '../../core/canonical-types';
+
+// =============================================================================
+// Helper Functions
+// =============================================================================
 
 /**
  * Format a SignalType for display.
@@ -35,16 +40,28 @@ function formatDefaultSource(source: DefaultSource): string {
   }
 }
 
+// =============================================================================
+// Main Inspector Component
+// =============================================================================
+
 /**
  * Block Inspector component.
  */
 export const BlockInspector = observer(function BlockInspector() {
-  const { previewType, selectedBlockId } = rootStore.selection;
+  const { previewType, selectedBlockId, selectedEdgeId } = rootStore.selection;
   const patch = rootStore.patch.patch;
 
   // Preview mode takes precedence
   if (previewType) {
     return <TypePreview type={previewType} />;
+  }
+
+  // Edge selection mode
+  if (selectedEdgeId && patch) {
+    const edge = patch.edges.find(e => e.id === selectedEdgeId);
+    if (edge) {
+      return <EdgeInspector edge={edge} patch={patch} />;
+    }
   }
 
   // Block selection mode
@@ -65,9 +82,10 @@ export const BlockInspector = observer(function BlockInspector() {
   return <BlockDetails block={block} patch={patch} />;
 });
 
-/**
- * No selection state
- */
+// =============================================================================
+// No Selection State
+// =============================================================================
+
 function NoSelection() {
   return (
     <div style={{ padding: '16px', color: colors.textSecondary }}>
@@ -76,9 +94,10 @@ function NoSelection() {
   );
 }
 
-/**
- * TimeRoot block (hidden system block)
- */
+// =============================================================================
+// TimeRoot Block (Hidden System Block)
+// =============================================================================
+
 function TimeRootBlock() {
   return (
     <div style={{ padding: '16px', color: colors.textSecondary }}>
@@ -90,9 +109,94 @@ function TimeRootBlock() {
   );
 }
 
-/**
- * Block type preview (from library)
- */
+// =============================================================================
+// Edge Inspector
+// =============================================================================
+
+interface EdgeInspectorProps {
+  edge: Edge;
+  patch: Patch;
+}
+
+function EdgeInspector({ edge, patch }: EdgeInspectorProps) {
+  const sourceBlock = patch.blocks.get(edge.from.blockId as BlockId);
+  const targetBlock = patch.blocks.get(edge.to.blockId as BlockId);
+
+  const handleSourceClick = useCallback(() => {
+    rootStore.selection.selectBlock(edge.from.blockId as BlockId);
+  }, [edge.from.blockId]);
+
+  const handleTargetClick = useCallback(() => {
+    rootStore.selection.selectBlock(edge.to.blockId as BlockId);
+  }, [edge.to.blockId]);
+
+  return (
+    <div style={{ padding: '16px' }}>
+      <div style={{
+        padding: '8px 12px',
+        background: colors.primary + '22',
+        borderRadius: '4px',
+        marginBottom: '16px',
+        fontSize: '12px',
+        fontWeight: '600',
+        color: colors.primary
+      }}>
+        [EDGE]
+      </div>
+
+      <div style={{ marginBottom: '16px' }}>
+        <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: colors.textSecondary }}>
+          Source
+        </h4>
+        <div
+          onClick={handleSourceClick}
+          style={{
+            padding: '8px 12px',
+            background: colors.bgPanel,
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '13px',
+          }}
+        >
+          <span style={{ color: colors.primary, textDecoration: 'underline' }}>
+            {sourceBlock?.displayName || sourceBlock?.type || edge.from.blockId}
+          </span>
+          <span style={{ color: colors.textSecondary }}>.{edge.from.slotId}</span>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: '16px', textAlign: 'center', color: colors.textSecondary }}>
+        ↓
+      </div>
+
+      <div>
+        <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: colors.textSecondary }}>
+          Target
+        </h4>
+        <div
+          onClick={handleTargetClick}
+          style={{
+            padding: '8px 12px',
+            background: colors.bgPanel,
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '13px',
+          }}
+        >
+          <span style={{ color: colors.primary, textDecoration: 'underline' }}>
+            {targetBlock?.displayName || targetBlock?.type || edge.to.blockId}
+          </span>
+          <span style={{ color: colors.textSecondary }}>.{edge.to.slotId}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// Type Preview (from library)
+// =============================================================================
+
 interface TypePreviewProps {
   type: string;
 }
@@ -188,16 +292,18 @@ function TypePreview({ type }: TypePreviewProps) {
   );
 }
 
-/**
- * Block instance details
- */
+// =============================================================================
+// Block Instance Details
+// =============================================================================
+
 interface BlockDetailsProps {
   block: Block;
   patch: Patch;
 }
 
-function BlockDetails({ block, patch }: BlockDetailsProps) {
+const BlockDetails = observer(function BlockDetails({ block, patch }: BlockDetailsProps) {
   const typeInfo = getBlockDefinition(block.type);
+  const [selectedPort, setSelectedPort] = useState<PortRef | null>(null);
 
   if (!typeInfo) {
     return (
@@ -209,126 +315,864 @@ function BlockDetails({ block, patch }: BlockDetailsProps) {
 
   // Get connected edges
   const incomingEdges = patch.edges.filter(e => e.to.blockId === block.id);
+  const outgoingEdges = patch.edges.filter(e => e.from.blockId === block.id);
   const connectedInputPorts = new Set(incomingEdges.map(e => e.to.slotId));
+
+  // If a port is selected, show port inspector
+  if (selectedPort) {
+    return (
+      <PortInspector
+        portRef={selectedPort}
+        block={block}
+        typeInfo={typeInfo}
+        patch={patch}
+        onBack={() => setSelectedPort(null)}
+      />
+    );
+  }
 
   return (
     <div style={{ padding: '16px' }}>
-      <h3 style={{ margin: '0 0 8px', fontSize: '18px' }}>
-        {block.label || typeInfo.label}
-      </h3>
+      {/* Header with editable display name */}
+      <DisplayNameEditor block={block} typeInfo={typeInfo} />
+
       <p style={{ margin: '0 0 16px', color: colors.textSecondary, fontSize: '13px' }}>
         {typeInfo.type}
       </p>
 
+      {/* Inputs */}
       <div style={{ marginBottom: '16px' }}>
         <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: colors.textSecondary }}>
           Inputs
         </h4>
-        <ul style={{ margin: 0, paddingLeft: '20px', listStyle: 'none' }}>
+        <ul style={{ margin: 0, paddingLeft: '0', listStyle: 'none' }}>
           {typeInfo.inputs.map((port) => {
             const isConnected = connectedInputPorts.has(port.id);
-            const hasDefaultSource = port.defaultSource !== undefined;
             const connectedEdge = incomingEdges.find(e => e.to.slotId === port.id);
 
             return (
-              <li key={port.id} style={{ marginBottom: '8px', fontSize: '13px' }}>
-                <div>
-                  <strong>{port.label}</strong>
-                  <span style={{ color: colors.textSecondary }}> ({formatSignalType(port.type)})</span>
-                </div>
-                {isConnected && connectedEdge && (
-                  <div style={{
-                    marginLeft: '16px',
-                    fontSize: '12px',
-                    color: colors.primary,
-                    fontFamily: "'Courier New', monospace"
-                  }}>
-                    ← {connectedEdge.from.blockId}.{connectedEdge.from.slotId}
-                  </div>
-                )}
-                {!isConnected && hasDefaultSource && (
-                  <div style={{
-                    marginLeft: '16px',
-                    fontSize: '12px',
-                    color: colors.textSecondary
-                  }}>
-                    (not connected)
-                    <div style={{
-                      fontStyle: port.defaultSource?.kind === 'rail' ? 'italic' : 'normal',
-                      color: port.defaultSource?.kind === 'rail' ? colors.primary : colors.textSecondary
-                    }}>
-                      Default: {formatDefaultSource(port.defaultSource!)}
-                    </div>
-                  </div>
-                )}
-                {!isConnected && !hasDefaultSource && (
-                  <div style={{
-                    marginLeft: '16px',
-                    fontSize: '12px',
-                    color: colors.textMuted
-                  }}>
-                    (not connected)
-                  </div>
-                )}
-              </li>
+              <PortItem
+                key={port.id}
+                port={port}
+                kind="input"
+                isConnected={isConnected}
+                connectedEdge={connectedEdge}
+                patch={patch}
+                onClick={() => setSelectedPort({ blockId: block.id, portId: port.id as PortId })}
+              />
             );
           })}
         </ul>
       </div>
 
+      {/* Outputs */}
       <div style={{ marginBottom: '16px' }}>
         <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: colors.textSecondary }}>
           Outputs
         </h4>
-        <ul style={{ margin: 0, paddingLeft: '20px', listStyle: 'none' }}>
+        <ul style={{ margin: 0, paddingLeft: '0', listStyle: 'none' }}>
           {typeInfo.outputs.map((port) => {
-            const outgoingEdges = patch.edges.filter(e => e.from.blockId === block.id && e.from.slotId === port.id);
+            const portEdges = outgoingEdges.filter(e => e.from.slotId === port.id);
 
             return (
-              <li key={port.id} style={{ marginBottom: '8px', fontSize: '13px' }}>
-                <div>
-                  <strong>{port.label}</strong>
-                  <span style={{ color: colors.textSecondary }}> ({formatSignalType(port.type)})</span>
-                </div>
-                {outgoingEdges.length > 0 && (
-                  <div style={{
-                    marginLeft: '16px',
-                    fontSize: '12px',
-                    color: colors.primary,
-                    fontFamily: "'Courier New', monospace"
-                  }}>
-                    {outgoingEdges.map((edge, idx) => (
-                      <div key={idx}>
-                        → {edge.to.blockId}.{edge.to.slotId}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </li>
+              <OutputPortItem
+                key={port.id}
+                port={port}
+                edges={portEdges}
+                patch={patch}
+                onClick={() => setSelectedPort({ blockId: block.id, portId: port.id as PortId })}
+              />
             );
           })}
         </ul>
       </div>
 
-      {block.params && Object.keys(block.params).length > 0 && (
+      {/* Editable Parameters */}
+      <ParamsEditor block={block} typeInfo={typeInfo} />
+    </div>
+  );
+});
+
+// =============================================================================
+// Display Name Editor
+// =============================================================================
+
+interface DisplayNameEditorProps {
+  block: Block;
+  typeInfo: BlockDef;
+}
+
+const DisplayNameEditor = observer(function DisplayNameEditor({ block, typeInfo }: DisplayNameEditorProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(block.displayName || '');
+
+  const handleDoubleClick = useCallback(() => {
+    setEditValue(block.displayName || '');
+    setIsEditing(true);
+  }, [block.displayName]);
+
+  const handleBlur = useCallback(() => {
+    setIsEditing(false);
+    const newName = editValue.trim() || null;
+    if (newName !== block.displayName) {
+      rootStore.patch.updateBlockDisplayName(block.id, newName);
+    }
+  }, [block.id, block.displayName, editValue]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      (e.target as HTMLInputElement).blur();
+    } else if (e.key === 'Escape') {
+      setEditValue(block.displayName || '');
+      setIsEditing(false);
+    }
+  }, [block.displayName]);
+
+  if (isEditing) {
+    return (
+      <input
+        type="text"
+        value={editValue}
+        onChange={(e) => setEditValue(e.target.value)}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+        autoFocus
+        placeholder={typeInfo.label}
+        style={{
+          margin: '0 0 8px',
+          fontSize: '18px',
+          fontWeight: 'bold',
+          background: colors.bgPanel,
+          border: `1px solid ${colors.primary}`,
+          borderRadius: '4px',
+          padding: '4px 8px',
+          color: colors.textPrimary,
+          width: '100%',
+          boxSizing: 'border-box',
+        }}
+      />
+    );
+  }
+
+  return (
+    <h3
+      onDoubleClick={handleDoubleClick}
+      style={{
+        margin: '0 0 8px',
+        fontSize: '18px',
+        cursor: 'pointer',
+      }}
+      title="Double-click to edit"
+    >
+      {block.displayName || typeInfo.label}
+    </h3>
+  );
+});
+
+// =============================================================================
+// Port Items
+// =============================================================================
+
+interface PortItemProps {
+  port: InputDef;
+  kind: 'input';
+  isConnected: boolean;
+  connectedEdge?: Edge;
+  patch: Patch;
+  onClick: () => void;
+}
+
+function PortItem({ port, isConnected, connectedEdge, patch, onClick }: PortItemProps) {
+  const hasDefaultSource = port.defaultSource !== undefined;
+
+  const handleSourceClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (connectedEdge) {
+      rootStore.selection.selectBlock(connectedEdge.from.blockId as BlockId);
+    }
+  }, [connectedEdge]);
+
+  return (
+    <li
+      onClick={onClick}
+      style={{
+        marginBottom: '8px',
+        fontSize: '13px',
+        padding: '8px',
+        background: colors.bgPanel,
+        borderRadius: '4px',
+        cursor: 'pointer',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: colors.textSecondary }}>
-            Configuration
-          </h4>
-          <pre
-            style={{
-              margin: 0,
-              padding: '8px',
-              backgroundColor: colors.bgPanel,
-              borderRadius: '4px',
-              fontSize: '12px',
-              overflow: 'auto',
-            }}
+          <strong>{port.label}</strong>
+          <span style={{ color: colors.textSecondary }}> ({formatSignalType(port.type)})</span>
+        </div>
+        <span style={{ fontSize: '11px', color: colors.textMuted }}>→</span>
+      </div>
+      {isConnected && connectedEdge && (
+        <div style={{
+          marginTop: '4px',
+          fontSize: '12px',
+          color: colors.primary,
+          fontFamily: "'Courier New', monospace"
+        }}>
+          ←{' '}
+          <span
+            onClick={handleSourceClick}
+            style={{ textDecoration: 'underline', cursor: 'pointer' }}
           >
-            {JSON.stringify(block.params, null, 2)}
-          </pre>
+            {connectedEdge.from.blockId}
+          </span>
+          .{connectedEdge.from.slotId}
         </div>
       )}
+      {!isConnected && hasDefaultSource && (
+        <div style={{
+          marginTop: '4px',
+          fontSize: '12px',
+          color: colors.textSecondary
+        }}>
+          <span style={{ color: colors.textMuted }}>(not connected)</span>
+          <div style={{
+            fontStyle: port.defaultSource?.kind === 'rail' ? 'italic' : 'normal',
+            color: port.defaultSource?.kind === 'rail' ? colors.primary : colors.textSecondary
+          }}>
+            Default: {formatDefaultSource(port.defaultSource!)}
+          </div>
+        </div>
+      )}
+      {!isConnected && !hasDefaultSource && (
+        <div style={{
+          marginTop: '4px',
+          fontSize: '12px',
+          color: colors.textMuted
+        }}>
+          (not connected)
+        </div>
+      )}
+    </li>
+  );
+}
+
+interface OutputPortItemProps {
+  port: OutputDef;
+  edges: Edge[];
+  patch: Patch;
+  onClick: () => void;
+}
+
+function OutputPortItem({ port, edges, patch, onClick }: OutputPortItemProps) {
+  return (
+    <li
+      onClick={onClick}
+      style={{
+        marginBottom: '8px',
+        fontSize: '13px',
+        padding: '8px',
+        background: colors.bgPanel,
+        borderRadius: '4px',
+        cursor: 'pointer',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <strong>{port.label}</strong>
+          <span style={{ color: colors.textSecondary }}> ({formatSignalType(port.type)})</span>
+        </div>
+        <span style={{ fontSize: '11px', color: colors.textMuted }}>→</span>
+      </div>
+      {edges.length > 0 && (
+        <div style={{
+          marginTop: '4px',
+          fontSize: '12px',
+          color: colors.primary,
+          fontFamily: "'Courier New', monospace"
+        }}>
+          {edges.map((edge, idx) => (
+            <div
+              key={idx}
+              onClick={(e) => {
+                e.stopPropagation();
+                rootStore.selection.selectBlock(edge.to.blockId as BlockId);
+              }}
+              style={{ cursor: 'pointer' }}
+            >
+              →{' '}
+              <span style={{ textDecoration: 'underline' }}>
+                {edge.to.blockId}
+              </span>
+              .{edge.to.slotId}
+            </div>
+          ))}
+        </div>
+      )}
+      {edges.length === 0 && (
+        <div style={{
+          marginTop: '4px',
+          fontSize: '12px',
+          color: colors.textMuted
+        }}>
+          (not connected)
+        </div>
+      )}
+    </li>
+  );
+}
+
+// =============================================================================
+// Port Inspector (Sub-view)
+// =============================================================================
+
+interface PortInspectorProps {
+  portRef: PortRef;
+  block: Block;
+  typeInfo: BlockDef;
+  patch: Patch;
+  onBack: () => void;
+}
+
+function PortInspector({ portRef, block, typeInfo, patch, onBack }: PortInspectorProps) {
+  // Find port definition
+  const inputPort = typeInfo.inputs.find(p => p.id === portRef.portId);
+  const outputPort = typeInfo.outputs.find(p => p.id === portRef.portId);
+  const port = inputPort || outputPort;
+  const isInput = !!inputPort;
+
+  if (!port) {
+    return (
+      <div style={{ padding: '16px' }}>
+        <button onClick={onBack} style={backButtonStyle}>← Back</button>
+        <p style={{ color: colors.error }}>Port not found: {portRef.portId}</p>
+      </div>
+    );
+  }
+
+  // Get connections
+  const incomingEdges = isInput
+    ? patch.edges.filter(e => e.to.blockId === block.id && e.to.slotId === portRef.portId)
+    : [];
+  const outgoingEdges = !isInput
+    ? patch.edges.filter(e => e.from.blockId === block.id && e.from.slotId === portRef.portId)
+    : [];
+
+  return (
+    <div style={{ padding: '16px' }}>
+      <button onClick={onBack} style={backButtonStyle}>← Back</button>
+
+      <div style={{
+        padding: '8px 12px',
+        background: isInput ? '#3b82f622' : '#f9731622',
+        borderRadius: '4px',
+        marginBottom: '16px',
+        marginTop: '16px',
+        fontSize: '12px',
+        fontWeight: '600',
+        color: isInput ? '#3b82f6' : '#f97316'
+      }}>
+        [{isInput ? 'INPUT' : 'OUTPUT'} PORT]
+      </div>
+
+      <h3 style={{ margin: '0 0 8px', fontSize: '18px' }}>{port.label}</h3>
+      <p style={{ margin: '0 0 16px', color: colors.textSecondary, fontSize: '13px' }}>
+        {portRef.portId}
+      </p>
+
+      <div style={{ marginBottom: '16px' }}>
+        <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: colors.textSecondary }}>
+          Signal Type
+        </h4>
+        <div style={{
+          padding: '8px',
+          background: colors.bgPanel,
+          borderRadius: '4px',
+          fontSize: '13px',
+        }}>
+          {formatSignalType(port.type)}
+        </div>
+      </div>
+
+      {isInput && inputPort && (
+        <>
+          {inputPort.optional && (
+            <div style={{ marginBottom: '16px', fontSize: '12px', color: colors.textSecondary }}>
+              Optional port
+            </div>
+          )}
+
+          {inputPort.defaultSource && (
+            <div style={{ marginBottom: '16px' }}>
+              <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: colors.textSecondary }}>
+                Default Source
+              </h4>
+              <div style={{
+                padding: '8px',
+                background: colors.bgPanel,
+                borderRadius: '4px',
+                fontSize: '13px',
+                fontStyle: inputPort.defaultSource.kind === 'rail' ? 'italic' : 'normal',
+                color: inputPort.defaultSource.kind === 'rail' ? colors.primary : colors.textPrimary,
+              }}>
+                {formatDefaultSource(inputPort.defaultSource)}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      <div style={{ marginBottom: '16px' }}>
+        <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: colors.textSecondary }}>
+          Connections
+        </h4>
+        {isInput && incomingEdges.length === 0 && (
+          <div style={{ color: colors.textMuted, fontSize: '13px' }}>Not connected</div>
+        )}
+        {isInput && incomingEdges.map((edge, idx) => {
+          const sourceBlock = patch.blocks.get(edge.from.blockId as BlockId);
+          return (
+            <div
+              key={idx}
+              onClick={() => rootStore.selection.selectBlock(edge.from.blockId as BlockId)}
+              style={{
+                padding: '8px',
+                background: colors.bgPanel,
+                borderRadius: '4px',
+                marginBottom: '4px',
+                cursor: 'pointer',
+                fontSize: '13px',
+              }}
+            >
+              ←{' '}
+              <span style={{ color: colors.primary, textDecoration: 'underline' }}>
+                {sourceBlock?.displayName || sourceBlock?.type || edge.from.blockId}
+              </span>
+              <span style={{ color: colors.textSecondary }}>.{edge.from.slotId}</span>
+            </div>
+          );
+        })}
+        {!isInput && outgoingEdges.length === 0 && (
+          <div style={{ color: colors.textMuted, fontSize: '13px' }}>Not connected</div>
+        )}
+        {!isInput && outgoingEdges.map((edge, idx) => {
+          const targetBlock = patch.blocks.get(edge.to.blockId as BlockId);
+          return (
+            <div
+              key={idx}
+              onClick={() => rootStore.selection.selectBlock(edge.to.blockId as BlockId)}
+              style={{
+                padding: '8px',
+                background: colors.bgPanel,
+                borderRadius: '4px',
+                marginBottom: '4px',
+                cursor: 'pointer',
+                fontSize: '13px',
+              }}
+            >
+              →{' '}
+              <span style={{ color: colors.primary, textDecoration: 'underline' }}>
+                {targetBlock?.displayName || targetBlock?.type || edge.to.blockId}
+              </span>
+              <span style={{ color: colors.textSecondary }}>.{edge.to.slotId}</span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
+
+const backButtonStyle: React.CSSProperties = {
+  background: 'transparent',
+  border: `1px solid ${colors.border}`,
+  borderRadius: '4px',
+  padding: '4px 8px',
+  color: colors.textPrimary,
+  cursor: 'pointer',
+  fontSize: '12px',
+};
+
+// =============================================================================
+// Params Editor
+// =============================================================================
+
+interface ParamsEditorProps {
+  block: Block;
+  typeInfo: BlockDef;
+}
+
+const ParamsEditor = observer(function ParamsEditor({ block, typeInfo }: ParamsEditorProps) {
+  const params = block.params || {};
+  const paramKeys = Object.keys(params);
+
+  // Filter out internal params that shouldn't be shown
+  const editableParams = paramKeys.filter(key => {
+    // Hide payloadType - it's set by normalizer
+    if (key === 'payloadType') return false;
+    return true;
+  });
+
+  if (editableParams.length === 0) {
+    return null;
+  }
+
+  return (
+    <div>
+      <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: colors.textSecondary }}>
+        Configuration
+      </h4>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {editableParams.map(key => (
+          <ParamField
+            key={key}
+            blockId={block.id}
+            paramKey={key}
+            value={params[key]}
+            typeInfo={typeInfo}
+          />
+        ))}
+      </div>
+    </div>
+  );
+});
+
+// =============================================================================
+// Individual Param Field
+// =============================================================================
+
+interface ParamFieldProps {
+  blockId: BlockId;
+  paramKey: string;
+  value: unknown;
+  typeInfo: BlockDef;
+}
+
+const ParamField = observer(function ParamField({ blockId, paramKey, value, typeInfo }: ParamFieldProps) {
+  // Find uiHint if this param corresponds to an input
+  const inputDef = typeInfo.inputs.find(i => i.id === paramKey);
+  const uiHint = inputDef?.uiHint;
+
+  const handleChange = useCallback((newValue: unknown) => {
+    rootStore.patch.updateBlockParams(blockId, { [paramKey]: newValue });
+  }, [blockId, paramKey]);
+
+  // Render based on uiHint or inferred type
+  if (uiHint) {
+    return (
+      <div>
+        <label style={{ fontSize: '12px', color: colors.textSecondary, display: 'block', marginBottom: '4px' }}>
+          {paramKey}
+        </label>
+        <HintedControl hint={uiHint} value={value} onChange={handleChange} />
+      </div>
+    );
+  }
+
+  // Infer control from value type
+  if (typeof value === 'boolean') {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <input
+          type="checkbox"
+          checked={value}
+          onChange={(e) => handleChange(e.target.checked)}
+          style={{ accentColor: colors.primary }}
+        />
+        <label style={{ fontSize: '12px', color: colors.textSecondary }}>
+          {paramKey}
+        </label>
+      </div>
+    );
+  }
+
+  if (typeof value === 'number') {
+    return (
+      <div>
+        <label style={{ fontSize: '12px', color: colors.textSecondary, display: 'block', marginBottom: '4px' }}>
+          {paramKey}
+        </label>
+        <NumberInput value={value} onChange={handleChange} />
+      </div>
+    );
+  }
+
+  if (typeof value === 'string') {
+    return (
+      <div>
+        <label style={{ fontSize: '12px', color: colors.textSecondary, display: 'block', marginBottom: '4px' }}>
+          {paramKey}
+        </label>
+        <TextInput value={value} onChange={handleChange} />
+      </div>
+    );
+  }
+
+  // Object/array - show as JSON for now
+  if (typeof value === 'object' && value !== null) {
+    return (
+      <div>
+        <label style={{ fontSize: '12px', color: colors.textSecondary, display: 'block', marginBottom: '4px' }}>
+          {paramKey}
+        </label>
+        <pre style={{
+          margin: 0,
+          padding: '8px',
+          backgroundColor: colors.bgPanel,
+          borderRadius: '4px',
+          fontSize: '11px',
+          overflow: 'auto',
+        }}>
+          {JSON.stringify(value, null, 2)}
+        </pre>
+      </div>
+    );
+  }
+
+  // Fallback: text input
+  return (
+    <div>
+      <label style={{ fontSize: '12px', color: colors.textSecondary, display: 'block', marginBottom: '4px' }}>
+        {paramKey}
+      </label>
+      <TextInput value={String(value ?? '')} onChange={handleChange} />
+    </div>
+  );
+});
+
+// =============================================================================
+// Control Components
+// =============================================================================
+
+interface HintedControlProps {
+  hint: UIControlHint;
+  value: unknown;
+  onChange: (value: unknown) => void;
+}
+
+function HintedControl({ hint, value, onChange }: HintedControlProps) {
+  switch (hint.kind) {
+    case 'slider':
+      return (
+        <SliderControl
+          value={value as number}
+          min={hint.min}
+          max={hint.max}
+          step={hint.step}
+          onChange={onChange}
+        />
+      );
+    case 'int':
+      return (
+        <NumberInput
+          value={value as number}
+          step={hint.step ?? 1}
+          min={hint.min}
+          max={hint.max}
+          onChange={onChange}
+        />
+      );
+    case 'float':
+      return (
+        <NumberInput
+          value={value as number}
+          step={hint.step ?? 0.01}
+          min={hint.min}
+          max={hint.max}
+          onChange={onChange}
+        />
+      );
+    case 'select': {
+      const options = (hint as any).options as { value: string; label: string }[];
+      return (
+        <select
+          value={String(value)}
+          onChange={(e) => onChange(e.target.value)}
+          style={selectStyle}
+        >
+          {options.map(opt => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+      );
+    }
+    case 'boolean':
+      return (
+        <input
+          type="checkbox"
+          checked={!!value}
+          onChange={(e) => onChange(e.target.checked)}
+          style={{ accentColor: colors.primary }}
+        />
+      );
+    case 'color':
+      return (
+        <input
+          type="color"
+          value={String(value || '#000000')}
+          onChange={(e) => onChange(e.target.value)}
+          style={{ width: '100%', height: '32px', cursor: 'pointer' }}
+        />
+      );
+    case 'text':
+      return <TextInput value={String(value ?? '')} onChange={onChange} />;
+    case 'xy': {
+      const xy = value as { x?: number; y?: number } | undefined;
+      return (
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <NumberInput
+            value={xy?.x ?? 0}
+            onChange={(v) => onChange({ ...xy, x: v })}
+            placeholder="X"
+          />
+          <NumberInput
+            value={xy?.y ?? 0}
+            onChange={(v) => onChange({ ...xy, y: v })}
+            placeholder="Y"
+          />
+        </div>
+      );
+    }
+    default:
+      return <TextInput value={String(value ?? '')} onChange={onChange} />;
+  }
+}
+
+interface NumberInputProps {
+  value: number;
+  onChange: (value: number) => void;
+  step?: number;
+  min?: number;
+  max?: number;
+  placeholder?: string;
+}
+
+function NumberInput({ value, onChange, step = 0.1, min, max, placeholder }: NumberInputProps) {
+  const [localValue, setLocalValue] = useState(String(value));
+
+  // Sync local value when prop changes
+  React.useEffect(() => {
+    setLocalValue(String(value));
+  }, [value]);
+
+  const handleBlur = useCallback(() => {
+    const parsed = parseFloat(localValue);
+    if (!isNaN(parsed) && parsed !== value) {
+      const clamped = Math.max(min ?? -Infinity, Math.min(max ?? Infinity, parsed));
+      onChange(clamped);
+    } else if (isNaN(parsed)) {
+      setLocalValue(String(value));
+    }
+  }, [localValue, value, onChange, min, max]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      (e.target as HTMLInputElement).blur();
+    }
+  }, []);
+
+  return (
+    <input
+      type="number"
+      value={localValue}
+      onChange={(e) => setLocalValue(e.target.value)}
+      onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
+      step={step}
+      min={min}
+      max={max}
+      placeholder={placeholder}
+      style={inputStyle}
+    />
+  );
+}
+
+interface TextInputProps {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}
+
+function TextInput({ value, onChange, placeholder }: TextInputProps) {
+  const [localValue, setLocalValue] = useState(value);
+
+  React.useEffect(() => {
+    setLocalValue(value);
+  }, [value]);
+
+  const handleBlur = useCallback(() => {
+    if (localValue !== value) {
+      onChange(localValue);
+    }
+  }, [localValue, value, onChange]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      (e.target as HTMLInputElement).blur();
+    }
+  }, []);
+
+  return (
+    <input
+      type="text"
+      value={localValue}
+      onChange={(e) => setLocalValue(e.target.value)}
+      onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
+      placeholder={placeholder}
+      style={inputStyle}
+    />
+  );
+}
+
+interface SliderControlProps {
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (value: number) => void;
+}
+
+function SliderControl({ value, min, max, step, onChange }: SliderControlProps) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <input
+        type="range"
+        value={value}
+        min={min}
+        max={max}
+        step={step}
+        onChange={(e) => onChange(parseFloat(e.target.value))}
+        style={{ flex: 1, accentColor: colors.primary }}
+      />
+      <span style={{ fontSize: '12px', minWidth: '40px', textAlign: 'right' }}>
+        {value.toFixed(2)}
+      </span>
+    </div>
+  );
+}
+
+// =============================================================================
+// Styles
+// =============================================================================
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '6px 8px',
+  fontSize: '13px',
+  background: colors.bgPanel,
+  border: `1px solid ${colors.border}`,
+  borderRadius: '4px',
+  color: colors.textPrimary,
+  boxSizing: 'border-box',
+};
+
+const selectStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '6px 8px',
+  fontSize: '13px',
+  background: colors.bgPanel,
+  border: `1px solid ${colors.border}`,
+  borderRadius: '4px',
+  color: colors.textPrimary,
+  cursor: 'pointer',
+};

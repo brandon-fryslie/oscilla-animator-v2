@@ -28,6 +28,11 @@ If you're wondering "why is it this way?", check here.
 | D11 | Transform taxonomy | Adapter + Lens subtypes | Adapters = type conversion, Lenses = value transformation |
 | D12 | Modulation Table scope | UI view only | Does NOT define system architecture |
 | D13 | Historical doc authority | Canonical spec wins | Source docs may reflect outdated systems |
+| D14 | Domain definition | Ontological (what kind) | Classification, not topology |
+| D15 | Three-stage architecture | Primitive → Array → Layout | Separate concerns for composability |
+| D16 | Domain/Instance split | Separate types | DomainSpec + InstanceDecl |
+| D17 | Domain subtyping | Adopted | Enables generic operations |
+| D18 | Intrinsic access | Deferred | Implementation will determine |
 
 ---
 
@@ -1138,6 +1143,176 @@ Add as Topic 15 (T3: Optional - UI implementation detail). Self-contained UI spe
 
 ---
 
+---
+
+## Update 4: Domain System Reconceptualization (2026-01-18)
+
+**Sources Analyzed**: 2 files (WHAT-IS-A-DOMAIN.md, WHAT-IS-A-DOMAIN-PART-4-REFACTOR.md)
+**Topics Updated**: 2 (01-type-system, 02-block-system)
+**Resolutions Made**: 5
+**New Terms**: 10 (DomainSpec, DomainTypeId, Instance, InstanceDecl, InstanceId, InstanceRef, Primitive Block, Array Block, Layout Block)
+
+This is a **major architectural update** that redefines the core concept of "Domain" and introduces the three-stage architecture.
+
+---
+
+### D14: Domain Definition (Ontological vs Topological)
+
+**Date**: 2026-01-18
+
+**Category**: Critical Restructuring (T2)
+
+**The Problem**:
+The canonical spec defined "Domain" as a compile-time index set (topology/cardinality), but WHAT-IS-A-DOMAIN.md proposed "Domain" as an ontological classification (what kind of thing).
+
+**Options Considered**:
+
+1. **Option A: Adopt new ontological definition**
+   - Domain = classification (shape, circle, particle)
+   - Instance = collection (count, lifecycle)
+   - Requires type system restructuring
+
+2. **Option B: Keep topological definition**
+   - Reject new conceptual expansion
+   - Simpler but loses conceptual power
+
+3. **Option C: Two-level system**
+   - Domain has kind + shape
+   - Compromise with added complexity
+
+**Resolution**: **Option A** - Adopt ontological definition
+
+**Rationale**:
+- Cleaner separation of concerns (what vs how many vs where)
+- Enables composability (same primitive, different layouts)
+- Better type safety (domain subtyping)
+- The implementation had already adopted this direction
+
+**Impact**:
+- `Domain` now means "ontological classification"
+- `DomainDecl` deprecated, replaced by `InstanceDecl`
+- `DomainSpec` introduced for domain type definitions
+- Topic 01 major restructuring
+
+**Approved**: 2026-01-18 by Brandon Fryslie (via QUESTIONS file annotation)
+
+---
+
+### D15: Three-Stage Architecture (Primitive → Array → Layout)
+
+**Date**: 2026-01-18
+
+**Category**: Critical Architecture (T2)
+
+**The Problem**:
+The system conflated three orthogonal concerns: what kind of element, how many elements, and where elements are positioned.
+
+**Options Considered**:
+
+1. **Option A: Adopt three-stage architecture**
+   - Primitive blocks create one element (Signal)
+   - Array block transforms one → many (Field)
+   - Layout blocks compute positions
+
+2. **Option B: Keep existing DomainN pattern**
+   - Single block creates domain with count and layout
+
+3. **Option C: Incremental adoption**
+   - Support both patterns during transition
+
+**Resolution**: **Option A** - Adopt three-stage architecture
+
+**Rationale**:
+- Maximum composability (same elements, different layouts, reuse)
+- Clean type system (cardinality transform is explicit)
+- Pool-based performance (allocate once, toggle visibility)
+- Already adopted in implementation
+
+**Impact**:
+- New block categories: Primitive, Instance, Layout
+- `DomainN` and `GridDomain` deprecated
+- `Array` block is fundamental cardinality transform
+- Topic 02 major restructuring
+
+**Approved**: 2026-01-18 by Brandon Fryslie
+
+---
+
+### D16: Domain/Instance Type Split
+
+**Date**: 2026-01-18
+
+**Category**: Type System (T2)
+
+**The Problem**:
+`DomainDecl` conflated domain classification with instantiation details.
+
+**Resolution**: Split into separate types
+
+**Types Introduced**:
+- `DomainSpec` - Ontological classification (id, parent, intrinsics)
+- `DomainTypeId` - Branded string for domain types
+- `InstanceDecl` - Per-patch collection (domainType, maxCount, lifecycle)
+- `InstanceId` - Branded string for instances
+- `InstanceRef` - Reference including both domainType and instanceId
+
+**Rationale**: Orthogonal concerns should have orthogonal types.
+
+**Impact**: Major type system restructuring in Topic 01
+
+**Approved**: 2026-01-18 by Brandon Fryslie
+
+---
+
+### D17: Domain Subtyping Hierarchy
+
+**Date**: 2026-01-18
+
+**Category**: Type System (T2)
+
+**The Problem**:
+Should domains support inheritance/subtyping?
+
+**Resolution**: **Adopted** - Domains form a subtyping hierarchy
+
+**Semantics**:
+- `shape` is base domain for geometric primitives
+- `circle`, `rectangle`, `polygon` extend `shape`
+- Operations valid for parent are valid for subtypes
+- `Field<circle>` can be passed where `Field<shape>` expected (covariance)
+
+**Rationale**: Enables generic operations on domain categories.
+
+**User Note**: "In what way does this increase complexity?" - Subtyping rules for type checking, but the benefit outweighs the cost.
+
+**Approved**: 2026-01-18 by Brandon Fryslie
+
+---
+
+### D18: Intrinsic Properties Access (Deferred)
+
+**Date**: 2026-01-18
+
+**Category**: Design Decision (Deferred)
+
+**The Problem**:
+How should users access domain-provided intrinsic properties?
+
+**Options Discussed**:
+1. Outputs on Array block (explicit wiring)
+2. "Get Property" blocks (context-aware)
+3. Inline expression syntax
+4. Hybrid approach
+
+**Resolution**: **Deferred** - Canonical decision postponed
+
+**User Guidance**:
+> They will not be explicit block outputs, but more likely intrinsic values that can be referenced from within any block of that domain type. There is no need to 'wire' an intrinsic value as they are intrinsic. i.e., rendering a Circle does not need a wire to transmit the value of radius from the circle block - the circle has an intrinsic radius already.
+
+**Impact**: To be determined during implementation
+
+---
+
 ## Statistics
 
 | Phase | Date | Sources | Topics | Resolutions |
@@ -1148,5 +1323,6 @@ Add as Topic 15 (T3: Optional - UI implementation detail). Self-contained UI spe
 | **Phase 2 (Continuity)** | 2026-01-10 | +1 | +1 | +1 |
 | **Phase 2 (Modulation)** | 2026-01-10 | +3 | +1 | +3 |
 | **Phase 3 (Graph Editor)** | 2026-01-11 | +1 | +1 | +2 |
-| **Total** | — | **55** | **15** | **79** |
+| **Phase 4 (Domain System)** | 2026-01-18 | +2 | +0 | +5 |
+| **Total** | — | **57** | **15** | **84** |
 

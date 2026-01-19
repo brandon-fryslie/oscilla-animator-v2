@@ -50,7 +50,7 @@ export const PANEL_DEFINITIONS: PanelDefinition[] = [
   { id: 'block-inspector', component: 'block-inspector', title: 'Inspector', group: 'left-bottom' },
 
   // Center (tabbed editors)
-  { id: 'rete-editor', component: 'rete-editor', title: 'Rete', group: 'center' },
+  // { id: 'rete-editor', component: 'rete-editor', title: 'Rete', group: 'center' }, // Disabled - using Flow instead
   { id: 'flow-editor', component: 'flow-editor', title: 'Flow', group: 'center' },
   { id: 'table-view', component: 'table-view', title: 'Table', group: 'center' },
   { id: 'connection-matrix', component: 'connection-matrix', title: 'Matrix', group: 'center' },

@@ -38,6 +38,22 @@ function generateDefaultSourceId(blockId: BlockId, portId: string): BlockId {
 }
 
 /**
+ * Get the effective default source for an input port.
+ * Instance-level overrides take precedence over registry defaults.
+ */
+function getEffectiveDefaultSource(
+  block: Block,
+  input: InputDef
+): DefaultSource | undefined {
+  // Check instance override first (per-block customization)
+  const instanceOverride = block.inputDefaults?.[input.id];
+  if (instanceOverride) return instanceOverride;
+
+  // Fall back to registry default (from block definition)
+  return (input as InputDef & { defaultSource?: DefaultSource }).defaultSource;
+}
+
+/**
  * Analyze blocks for unconnected inputs with default sources.
  */
 function analyzeDefaultSources(patch: Patch): DefaultSourceInsertion[] {
@@ -51,8 +67,8 @@ function analyzeDefaultSources(patch: Patch): DefaultSourceInsertion[] {
       // Skip if already connected
       if (hasIncomingEdge(blockId, input.id, patch.edges)) continue;
 
-      // Skip if no default source defined
-      const ds = (input as InputDef & { defaultSource?: DefaultSource }).defaultSource;
+      // Get effective default (instance override or registry default)
+      const ds = getEffectiveDefaultSource(block, input);
       if (!ds) continue;
 
       // Create derived block based on default source kind

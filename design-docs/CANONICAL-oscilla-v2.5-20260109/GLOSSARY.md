@@ -149,15 +149,191 @@ type AxisTag<T> =
 
 ### Domain
 
-**Definition**: Compile-time declared stable index set defining element topology.
+**Definition**: A classification that defines a kind of element. It answers the question: "What type of thing are we talking about?"
 
-**Type**: concept / compile-time resource
+**Type**: concept / compile-time classification
 
-**Canonical Form**: `Domain`, `DomainId`, `DomainDecl`
+**Canonical Form**: `Domain`, `DomainTypeId`, `DomainSpec`
+
+**Specifies**:
+1. What kind of thing elements are (shape, particle, control)
+2. What operations make sense for that element type
+3. What intrinsic properties elements have
+
+**Is NOT**:
+- A count of elements (that's an Instance)
+- A spatial arrangement (that's Layout)
+- A specific instantiation (that's InstanceDecl)
 
 **Source**: [01-type-system.md](./topics/01-type-system.md)
 
-**Note**: NOT a wire value. Referenced by SignalType's Cardinality axis.
+**Note**: Domains form a subtyping hierarchy (e.g., circle extends shape).
+
+---
+
+### DomainSpec
+
+**Definition**: Compile-time type specification for a domain, including its parent (for subtyping) and intrinsic properties.
+
+**Type**: type
+
+**Canonical Form**: `DomainSpec`
+
+**Structure**:
+```typescript
+interface DomainSpec {
+  readonly id: DomainTypeId;
+  readonly parent: DomainTypeId | null;
+  readonly intrinsics: readonly IntrinsicSpec[];
+}
+```
+
+**Source**: [01-type-system.md](./topics/01-type-system.md)
+
+---
+
+### DomainTypeId
+
+**Definition**: Branded string identifier for a domain type classification.
+
+**Type**: type
+
+**Canonical Form**: `DomainTypeId`
+
+**Structure**: `string & { readonly __brand: 'DomainTypeId' }`
+
+**Examples**: `'shape'`, `'circle'`, `'rectangle'`, `'control'`, `'event'`
+
+**Source**: [01-type-system.md](./topics/01-type-system.md)
+
+---
+
+### Instance
+
+**Definition**: A specific collection of domain elements with a count and lifecycle.
+
+**Type**: concept
+
+**Canonical Form**: `Instance`, `InstanceId`, `InstanceDecl`
+
+**Specifies**:
+- Which domain type elements belong to
+- Pool size (maxCount)
+- Current active count
+- Lifecycle (static, pooled)
+
+**Source**: [01-type-system.md](./topics/01-type-system.md)
+
+**Note**: Created by the Array block. Referenced by Cardinality axis.
+
+---
+
+### InstanceDecl
+
+**Definition**: Per-patch declaration specifying a collection of domain elements.
+
+**Type**: type
+
+**Canonical Form**: `InstanceDecl`
+
+**Structure**:
+```typescript
+interface InstanceDecl {
+  readonly id: InstanceId;
+  readonly domainType: DomainTypeId;
+  readonly primitiveId: PrimitiveId;
+  readonly maxCount: number;
+  readonly countExpr?: SigExprId;
+  readonly lifecycle: 'static' | 'pooled';
+}
+```
+
+**Source**: [01-type-system.md](./topics/01-type-system.md)
+
+---
+
+### InstanceId
+
+**Definition**: Branded string identifier for a specific instance collection.
+
+**Type**: type
+
+**Canonical Form**: `InstanceId`
+
+**Structure**: `string & { readonly __brand: 'InstanceId' }`
+
+**Source**: [01-type-system.md](./topics/01-type-system.md)
+
+---
+
+### InstanceRef
+
+**Definition**: Reference to an instance, including both domain type and instance ID.
+
+**Type**: type
+
+**Canonical Form**: `InstanceRef`
+
+**Structure**:
+```typescript
+interface InstanceRef {
+  readonly kind: 'instance';
+  readonly domainType: DomainTypeId;
+  readonly instanceId: InstanceId;
+}
+```
+
+**Source**: [01-type-system.md](./topics/01-type-system.md)
+
+---
+
+### Primitive Block
+
+**Definition**: A block that creates a single element of a specific domain type. Outputs `Signal<T>` (cardinality: one).
+
+**Type**: concept (block category)
+
+**Canonical Form**: `Primitive Block`
+
+**Examples**: Circle, Rectangle, Polygon
+
+**Source**: [02-block-system.md](./topics/02-block-system.md)
+
+**Note**: Part of the three-stage architecture: Primitive → Array → Layout.
+
+---
+
+### Array Block
+
+**Definition**: The cardinality transform block that converts one element into many. Creates an Instance.
+
+**Type**: block
+
+**Canonical Form**: `Array`
+
+**Behavior**: `Signal<T>` → `Field<T, instance>`
+
+**Outputs**: elements, index, t (normalized 0..1), active (bool)
+
+**Source**: [02-block-system.md](./topics/02-block-system.md)
+
+**Note**: The ONLY place where instances are created.
+
+---
+
+### Layout Block
+
+**Definition**: A block that operates on field inputs and outputs positions. Determines spatial arrangement.
+
+**Type**: concept (block category)
+
+**Canonical Form**: `Layout Block`
+
+**Examples**: Grid Layout, Spiral Layout, Random Scatter, Along Path
+
+**Source**: [02-block-system.md](./topics/02-block-system.md)
+
+**Note**: Layout is orthogonal to domain and instance.
 
 ---
 
@@ -1077,15 +1253,22 @@ type ValueSummary =
 
 | Deprecated | Use Instead | Notes |
 |------------|-------------|-------|
-| `DomainTag` | `PayloadType` | Domain is topology |
+| `DomainTag` | `PayloadType` | Domain is now ontological classification |
 | `ValueType` | `PayloadType` | More precise name |
 | `World` | `Extent` | 5-axis coordinate |
 | `Type` / `TypeDesc` | `SignalType` | Complete contract |
 | `config` / `scalar` (world) | `cardinality = zero` | Explicit axis |
 | `signal` (world) | `one + continuous` | Explicit axes |
-| `field` (world) | `many(domain) + continuous` | Explicit axes |
+| `field` (world) | `many(instance) + continuous` | Now references InstanceRef, not DomainRef |
 | `event` (world) | `discrete` temporality | Orthogonal axis |
 | `Block.type` | `Block.kind` | Reserved for types |
 | `structural` (role) | `derived` | System-generated |
 | State block | `UnitDelay` | Proper name |
 | custom combine | (removed) | Built-in only |
+| `DomainDecl` | `InstanceDecl` | Domain is classification, not instantiation |
+| `DomainId` (for instances) | `InstanceId` | Domain is classification, instance is collection |
+| `DomainRef` | `InstanceRef` | References instance, not domain type |
+| `DomainDef` | `InstanceDecl` | Old conflated IR type |
+| `DomainN` block | Primitive + Array | Conflated domain with instantiation |
+| `GridDomain` block | Primitive + Array + Grid Layout | Conflated three concerns |
+| `domain.shape.grid_2d` | Layout block | Layout is separate from domain/instance |

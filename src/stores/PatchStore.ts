@@ -12,7 +12,7 @@
 
 import { makeObservable, observable, computed, action } from 'mobx';
 import type { Block, Edge, Endpoint, Patch, BlockType } from '../graph/Patch';
-import type { BlockId, BlockRole } from '../types';
+import type { BlockId, BlockRole, DefaultSource } from '../types';
 import { emptyPatchData, type PatchData } from './internal';
 
 /**
@@ -49,6 +49,7 @@ export class PatchStore {
       removeBlock: action,
       updateBlockParams: action,
       updateBlockDisplayName: action,
+      updateBlockInputDefault: action,
       addEdge: action,
       removeEdge: action,
       updateEdge: action,
@@ -180,6 +181,37 @@ export class PatchStore {
     this._data.blocks.set(id, {
       ...block,
       displayName,
+    });
+  }
+
+  /**
+   * Updates or clears a per-instance input default.
+   *
+   * Set defaultSource to override the registry default for this input.
+   * Set undefined to clear the override and use registry default.
+   */
+  updateBlockInputDefault(
+    id: BlockId,
+    inputId: string,
+    defaultSource: DefaultSource | undefined
+  ): void {
+    const block = this._data.blocks.get(id);
+    if (!block) {
+      throw new Error(`Block not found: ${id}`);
+    }
+
+    // Create new defaults map
+    const newDefaults = { ...block.inputDefaults };
+    if (defaultSource) {
+      newDefaults[inputId] = defaultSource;
+    } else {
+      delete newDefaults[inputId];
+    }
+
+    // Update block with new defaults (or undefined if empty)
+    this._data.blocks.set(id, {
+      ...block,
+      inputDefaults: Object.keys(newDefaults).length > 0 ? newDefaults : undefined,
     });
   }
 

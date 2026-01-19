@@ -3,11 +3,50 @@
  *
  * Renders port-specific handles for proper multi-port connections.
  * Each input/output port gets its own Handle with unique ID.
+ * Input ports show default source indicators when applicable.
  */
 
 import React from 'react';
 import { Handle, Position, type NodeProps } from 'reactflow';
-import type { OscillaNodeData } from './nodes';
+import type { OscillaNodeData, PortData } from './nodes';
+import type { DefaultSource } from '../../types';
+
+/**
+ * Format a default source for display in tooltip.
+ */
+function formatDefaultSource(ds: DefaultSource): string {
+  switch (ds.kind) {
+    case 'constant':
+      // Format the value nicely
+      const value = ds.value;
+      if (typeof value === 'number') {
+        return `Default: ${value}`;
+      } else if (Array.isArray(value)) {
+        return `Default: [${value.join(', ')}]`;
+      } else if (typeof value === 'object' && value !== null) {
+        return `Default: ${JSON.stringify(value)}`;
+      }
+      return `Default: ${String(value)}`;
+    case 'rail':
+      return `Default: ${ds.railId} rail`;
+    case 'none':
+      return 'No default';
+  }
+}
+
+/**
+ * Get indicator color based on default source kind.
+ */
+function getIndicatorColor(ds: DefaultSource): string {
+  switch (ds.kind) {
+    case 'constant':
+      return '#4CAF50'; // Green for constants
+    case 'rail':
+      return '#2196F3'; // Blue for rails
+    default:
+      return 'transparent';
+  }
+}
 
 /**
  * Custom node component that renders handles for each port.
@@ -25,22 +64,43 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = ({ data }) => {
         fontSize: '14px',
       }}
     >
-      {/* Input Handles (Left Side) */}
+      {/* Input Handles (Left Side) with Default Indicators */}
       {data.inputs.map((input, index) => (
-        <Handle
-          key={`input-${input.id}`}
-          type="target"
-          position={Position.Left}
-          id={input.id}
-          style={{
-            top: `${((index + 1) * 100) / (data.inputs.length + 1)}%`,
-            background: '#4a90e2',
-            width: '10px',
-            height: '10px',
-            border: '2px solid #1e1e1e',
-          }}
-          title={input.label}
-        />
+        <React.Fragment key={`input-${input.id}`}>
+          <Handle
+            type="target"
+            position={Position.Left}
+            id={input.id}
+            style={{
+              top: `${((index + 1) * 100) / (data.inputs.length + 1)}%`,
+              background: '#4a90e2',
+              width: '10px',
+              height: '10px',
+              border: '2px solid #1e1e1e',
+            }}
+            title={
+              input.defaultSource && input.defaultSource.kind !== 'none'
+                ? `${input.label} - ${formatDefaultSource(input.defaultSource)}`
+                : input.label
+            }
+          />
+          {/* Default Source Indicator */}
+          {input.defaultSource && input.defaultSource.kind !== 'none' && (
+            <div
+              style={{
+                position: 'absolute',
+                left: '-3px',
+                top: `calc(${((index + 1) * 100) / (data.inputs.length + 1)}% - 12px)`,
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                background: getIndicatorColor(input.defaultSource),
+                pointerEvents: 'none',
+              }}
+              title={formatDefaultSource(input.defaultSource)}
+            />
+          )}
+        </React.Fragment>
       ))}
 
       {/* Node Label */}

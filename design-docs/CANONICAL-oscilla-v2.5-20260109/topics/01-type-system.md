@@ -103,40 +103,35 @@ This pattern eliminates optional fields while preserving compile-time default se
 ## Cardinality (How Many Lanes)
 
 ```typescript
-type DomainId = string;
-type DomainRef = { kind: 'domain'; id: DomainId };
-
 type Cardinality =
-  | { kind: 'zero' }                      // compile-time constant, no runtime lanes
-  | { kind: 'one' }                       // single lane
-  | { kind: 'many'; domain: DomainRef };  // N lanes aligned by domain
+  | { kind: 'zero' }                          // compile-time constant, no runtime lanes
+  | { kind: 'one' }                           // single lane (Signal)
+  | { kind: 'many'; instance: InstanceRef };  // N lanes aligned by instance (Field)
 ```
 
 ### Cardinality Semantics
 
-| Cardinality | Old Term | Runtime Representation | Use Case |
-|-------------|----------|------------------------|----------|
-| `zero` | `static`, `config`, `scalar` | Inlined constant | Parameters, constants |
-| `one` | `signal` | Single slot | Per-frame values |
-| `many(domain)` | `field(domain)` | Array of N slots | Per-element values |
+| Cardinality | Concept | Runtime Representation | Use Case |
+|-------------|---------|------------------------|----------|
+| `zero` | Constant | Inlined constant | Parameters, constants |
+| `one` | Signal | Single slot | Per-frame values |
+| `many(instance)` | Field | Array of N slots | Per-element values |
 
-### Important: Domain is NOT a Wire Value
+### Important: Instance vs Domain
 
-Domain is a **compile-time resource**, not a value that flows on wires:
+**Domain** is the element classification (what kind of thing).
+**Instance** is a specific collection of those elements (how many, which pool).
 
 ```typescript
-// WRONG: Domain as wire value
-wire: domain -> someBlock  // This does NOT exist
-
-// RIGHT: Domain referenced by type
-port.type = {
-  extent: {
-    cardinality: { kind: 'instantiated', value: { kind: 'many', domain: { kind: 'domain', id: 'D1' } } }
-  }
+// Instance reference includes both the domain type AND instance ID
+interface InstanceRef {
+  readonly kind: 'instance';
+  readonly domainType: DomainTypeId;  // e.g., 'circle'
+  readonly instanceId: InstanceId;     // e.g., 'inst_1'
 }
 ```
 
-At runtime, domain becomes loop bounds + layout constants (erased as object).
+At runtime, instances become loop bounds + active masks (erased as objects).
 
 ---
 
@@ -298,26 +293,132 @@ For migration from v2:
 
 ## Domain System
 
-### Domain as Compile-Time Resource
+### What is a Domain?
+
+A **domain** is a classification that defines a kind of element. It answers the question: "What *type of thing* are we talking about?"
+
+A domain specifies:
+1. **What kind of thing elements are** — The ontological category (shape, particle, control)
+2. **What operations make sense** — Valid transformations for that element type
+3. **What intrinsic properties elements have** — Inherent attributes from domain membership
+
+A domain is **NOT**:
+- A count of elements (that's instantiation)
+- A spatial arrangement or layout (that's layout)
+- A specific instantiation or configuration (that's an instance)
+
+### Domain vs Instance: The Key Distinction
+
+**Domain** and **instantiation** are orthogonal concerns:
+
+| Concept | Question | Example |
+|---------|----------|---------|
+| **Domain** | "What kind of thing?" | shape, circle, particle |
+| **Instance** | "How many of them?" | 100 circles (from pool of 200) |
+| **Layout** | "Where are they?" | grid, spiral, random scatter |
+
+You can have:
+- 100 circles in a grid
+- 100 circles along a spiral
+- 50 rectangles scattered randomly
+
+Same domain (shape) can have different instantiations. Same layout can apply to different domains.
+
+### Domain Type Specification (DomainSpec)
 
 ```typescript
-type DomainDecl =
-  | { kind: 'domain_decl'; id: DomainId; shape: { kind: 'fixed_count'; count: number } }
-  | { kind: 'domain_decl'; id: DomainId; shape: { kind: 'grid_2d'; width: number; height: number } }
-  | { kind: 'domain_decl'; id: DomainId; shape: { kind: 'voices'; maxVoices: number } }
-  | { kind: 'domain_decl'; id: DomainId; shape: { kind: 'mesh_vertices'; assetId: string } };
+type DomainTypeId = string & { readonly __brand: 'DomainTypeId' };
+
+interface DomainSpec {
+  readonly id: DomainTypeId;
+  readonly parent: DomainTypeId | null;           // For subtyping
+  readonly intrinsics: readonly IntrinsicSpec[];  // Inherent properties
+}
+
+interface IntrinsicSpec {
+  readonly name: string;
+  readonly type: PayloadType;
+  readonly computation: 'inherent' | 'derived';
+}
 ```
 
-### Domain Properties
+### Domain Hierarchy (Subtyping)
 
-- Domains are **patch-level resources**
-- Referenced by SignalType via Cardinality axis
-- At runtime: erased to loop bounds + layout constants
-- **v0 invariant**: Every domain compiles to dense lanes 0..N-1
+Domains form a hierarchy where subtypes inherit from parent domains:
 
-### Domain Alignment (v0)
+```
+shape (base domain)
+├── circle    → intrinsics: radius, center
+├── rectangle → intrinsics: width, height, cornerRadius
+├── polygon   → intrinsics: vertices[], vertexCount
+├── ellipse   → intrinsics: rx, ry, center
+└── line      → intrinsics: start, end, length
+```
 
-Two `many` values are aligned iff they reference the **same DomainId**. No mapping/resampling in v0.
+**Subtyping rules:**
+- Operations valid for `shape` are valid for all subtypes
+- Subtypes may have additional intrinsics
+- `Field<circle>` can be passed where `Field<shape>` expected (covariance)
+
+### Instance Declaration (InstanceDecl)
+
+Instances are per-patch declarations that create collections of domain elements:
+
+```typescript
+type InstanceId = string & { readonly __brand: 'InstanceId' };
+
+interface InstanceDecl {
+  readonly id: InstanceId;
+  readonly domainType: DomainTypeId;      // What kind of element
+  readonly primitiveId: PrimitiveId;       // Source primitive
+  readonly maxCount: number;               // Pool size (allocated once)
+  readonly countExpr?: SigExprId;          // Dynamic count signal
+  readonly lifecycle: 'static' | 'pooled';
+}
+```
+
+### Instance Reference in Cardinality
+
+The Cardinality axis references instances (not domains directly):
+
+```typescript
+interface InstanceRef {
+  readonly kind: 'instance';
+  readonly domainType: DomainTypeId;
+  readonly instanceId: InstanceId;
+}
+
+type Cardinality =
+  | { readonly kind: 'zero' }
+  | { readonly kind: 'one' }
+  | { readonly kind: 'many'; readonly instance: InstanceRef };
+```
+
+### Domain Catalog (MVP)
+
+**Immediate priority:**
+
+| Domain | Elements | Intrinsics |
+|--------|----------|------------|
+| `shape` | 2D geometric primitives | position, bounds, area, centroid |
+| `circle` | Circles (extends shape) | radius, center |
+| `rectangle` | Rectangles (extends shape) | width, height, cornerRadius |
+| `control` | Animatable parameters | value, min, max, default |
+| `event` | Discrete occurrences | time, payload, fired |
+
+**Roadmap:**
+- `mesh`, `path`, `text`, `particle`, `audio`
+
+### Domain Properties (Runtime)
+
+- Domain types are **compile-time** constructs
+- Instances are **patch-level** resources
+- At runtime: erased to loop bounds + active mask
+- **Invariant**: Every instance compiles to dense lanes 0..maxCount-1
+
+### Instance Alignment
+
+Two `many` values are aligned iff they reference the **same InstanceId**. No mapping/resampling in v0.
 
 ---
 
@@ -371,7 +472,17 @@ const phaseSignal: SignalType = {
 const colorField: SignalType = {
   payload: 'color',
   extent: {
-    cardinality: { kind: 'instantiated', value: { kind: 'many', domain: { kind: 'domain', id: 'particles' } } },
+    cardinality: {
+      kind: 'instantiated',
+      value: {
+        kind: 'many',
+        instance: {
+          kind: 'instance',
+          domainType: 'circle' as DomainTypeId,
+          instanceId: 'inst_1' as InstanceId
+        }
+      }
+    },
     temporality: { kind: 'instantiated', value: { kind: 'continuous' } },
     binding: { kind: 'default' },
     perspective: { kind: 'default' },

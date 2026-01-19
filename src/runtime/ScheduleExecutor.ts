@@ -232,6 +232,20 @@ export function executeFrame(
         break;
       }
 
+      case 'continuityMapBuild': {
+        // Continuity System: Build element mapping when domain changes
+        // TODO (Sprint 3): Implement domain change detection and mapping
+        // For now, skip - continuity not yet active
+        break;
+      }
+
+      case 'continuityApply': {
+        // Continuity System: Apply continuity policy to field target
+        // TODO (Sprint 3): Implement gauge/slew application
+        // For now, skip - continuity not yet active
+        break;
+      }
+
       default: {
         const _exhaustive: never = step;
         throw new Error(`Unknown step kind: ${(_exhaustive as Step).kind}`);

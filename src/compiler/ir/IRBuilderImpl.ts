@@ -442,7 +442,9 @@ export class IRBuilderImpl implements IRBuilder {
     domainType: DomainTypeId,
     count: number,
     layout: LayoutSpec,
-    lifecycle: 'static' | 'dynamic' | 'pooled' = 'static'
+    lifecycle: 'static' | 'dynamic' | 'pooled' = 'static',
+    identityMode: 'stable' | 'none' = 'stable',
+    elementIdSeed?: number
   ): InstanceId {
     const id = instanceId(`instance_${this.instances.size}`);
     this.instances.set(id, {
@@ -451,6 +453,8 @@ export class IRBuilderImpl implements IRBuilder {
       count,
       layout,
       lifecycle,
+      identityMode,
+      elementIdSeed,
     });
     return id;
   }

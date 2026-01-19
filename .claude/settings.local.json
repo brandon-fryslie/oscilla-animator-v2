@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(osascript:*)",
+      "mcp__cherry-chrome__chrome_list_connections",
+      "Bash(lsof:*)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "chromedevtools/chrome-devtools-mcp"
+  ],
+  "disabledMcpjsonServers": [
+    "cherry-chrome"
+  ]
+}

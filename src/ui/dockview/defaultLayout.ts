@@ -145,13 +145,15 @@ export function createDefaultLayout(api: DockviewApi, callbacks: LayoutCallbacks
         direction: 'within', // Add as tab in same group
       },
       params: Object.keys(params).length > 0 ? params : undefined,
+      minimumHeight: 200, // Ensure panels have minimum height for React Flow
+      minimumWidth: 200,  // Ensure panels have minimum width for React Flow
     });
   });
 
-  // Activate the rete editor tab
-  const retePanel = api.getPanel('rete-editor');
-  if (retePanel) {
-    retePanel.api.setActive();
+  // Activate the flow editor tab (now the primary editor)
+  const flowPanel = api.getPanel('flow-editor');
+  if (flowPanel) {
+    flowPanel.api.setActive();
   }
 
   // Add left-bottom panels (Inspector, etc.)
@@ -200,7 +202,7 @@ export function createDefaultLayout(api: DockviewApi, callbacks: LayoutCallbacks
   leftTopGroup.api.setSize({ width: 280 });
 
   // Set bottom bar height
-  bottomLeftGroup.api.setSize({ height: 120 });
+  bottomLeftGroup.api.setSize({ height: 240 });
 
   // ============================================================================
   // PHASE 4: Add floating preview panel (LAST)

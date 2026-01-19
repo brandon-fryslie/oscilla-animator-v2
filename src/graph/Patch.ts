@@ -5,7 +5,7 @@
  * It consists of Blocks connected by Edges.
  */
 
-import type { BlockId, PortId, BlockRole } from '../types';
+import type { BlockId, PortId, BlockRole, DefaultSource } from '../types';
 
 // =============================================================================
 // Block
@@ -23,6 +23,12 @@ export interface Block {
   readonly domainId: string | null;
   /** Semantic role for editor behavior (REQUIRED) */
   readonly role: BlockRole;
+  /**
+   * Per-instance input default overrides.
+   * Keys are input port IDs. When set, overrides the registry default.
+   * Omit or set to undefined to use registry default.
+   */
+  readonly inputDefaults?: Readonly<Record<string, DefaultSource>>;
 }
 
 export type BlockType = string;
@@ -94,6 +100,7 @@ export class PatchBuilder {
       displayName?: string | null;
       domainId?: string | null;
       role?: BlockRole;
+      inputDefaults?: Record<string, DefaultSource>;
     }
   ): BlockId {
     const id = `b${this.nextBlockId++}` as BlockId;
@@ -106,6 +113,7 @@ export class PatchBuilder {
       displayName: options?.displayName ?? null,
       domainId: options?.domainId ?? null,
       role: options?.role ?? { kind: 'user', meta: {} },
+      inputDefaults: options?.inputDefaults,
     });
     return id;
   }

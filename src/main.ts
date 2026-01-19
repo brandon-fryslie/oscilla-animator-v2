@@ -5,6 +5,7 @@
  * Sets up the demo patch and animation loop.
  *
  * Sprint 2: Integrates runtime health monitoring
+ * Updated: Uses inputDefaults instead of separate Const blocks
  */
 
 import React from 'react';
@@ -15,7 +16,7 @@ import { compile } from './compiler';
 import { createRuntimeState, BufferPool, executeFrame } from './runtime';
 import { renderFrame } from './render';
 import { App } from './ui/components';
-import { timeRootRole } from './types';
+import { timeRootRole, defaultSourceConstant } from './types';
 import { recordFrameTime, shouldEmitSnapshot, emitHealthSnapshot } from './runtime/HealthMonitor';
 
 // =============================================================================
@@ -43,12 +44,19 @@ function log(msg: string, level: 'info' | 'warn' | 'error' = 'info') {
 }
 
 // =============================================================================
+// Helper: Create constant default
+// =============================================================================
+
+const constant = (value: number) => defaultSourceConstant(value);
+
+// =============================================================================
 // Patch Builders
 // =============================================================================
 
 type PatchBuilder = (b: any) => void;
 
 // Original patch - using three-stage architecture: Circle → Array → GridLayout
+// Now uses inputDefaults instead of separate Const blocks for cleaner patches
 const patchOriginal: PatchBuilder = (b) => {
   const time = b.addBlock('InfiniteTimeRoot',
     { periodAMs: 799, periodBMs: 32000 },
@@ -67,23 +75,45 @@ const patchOriginal: PatchBuilder = (b) => {
   b.wire(circle, 'circle', array, 'element');
   b.wire(array, 'elements', layout, 'elements');
 
-  const centerX = b.addBlock('Const', { value: 0.5 });
-  const centerY = b.addBlock('Const', { value: 0.5 });
-  const radiusBase = b.addBlock('Const', { value: 0.35 });
-  const spin = b.addBlock('Const', { value: 2.0 });
   const goldenAngle = b.addBlock('FieldGoldenAngle', { turns: 50 });
-  const angularOffset = b.addBlock('FieldAngularOffset', {});
-  const totalAngle = b.addBlock('FieldAdd', {});
-  const effectiveRadius = b.addBlock('FieldRadiusSqrt', {});
-  const pos = b.addBlock('FieldPolarToCartesian', {});
-  const sat = b.addBlock('Const', { value: 0.85 });
-  const val = b.addBlock('Const', { value: 0.9 });
-  const hue = b.addBlock('FieldHueFromPhase', {});
-  const color = b.addBlock('HsvToRgb', {});
-  const size = b.addBlock('Const', { value: 3 });
-  const render = b.addBlock('RenderInstances2D', {});
 
-  // Wire phase to position and color
+  // FieldAngularOffset with spin override (default is 1.0, we want 2.0)
+  const angularOffset = b.addBlock('FieldAngularOffset', {}, {
+    inputDefaults: {
+      spin: constant(2.0),
+    },
+  });
+
+  const totalAngle = b.addBlock('FieldAdd', {});
+
+  // FieldRadiusSqrt with radius override (default would come from registry)
+  const effectiveRadius = b.addBlock('FieldRadiusSqrt', {}, {
+    inputDefaults: {
+      radius: constant(0.35),
+    },
+  });
+
+  // FieldPolarToCartesian - centerX/centerY already have 0.5 defaults in registry
+  const pos = b.addBlock('FieldPolarToCartesian', {});
+
+  const hue = b.addBlock('FieldHueFromPhase', {});
+
+  // HsvToRgb with sat/val overrides
+  const color = b.addBlock('HsvToRgb', {}, {
+    inputDefaults: {
+      sat: constant(0.85),
+      val: constant(0.9),
+    },
+  });
+
+  // RenderInstances2D with size override
+  const render = b.addBlock('RenderInstances2D', {}, {
+    inputDefaults: {
+      size: constant(3),
+    },
+  });
+
+  // Wire phase to position and color (phaseA has rail default in registry)
   b.wire(time, 'phaseA', angularOffset, 'phase');
   b.wire(time, 'phaseA', hue, 'phase');
 
@@ -93,29 +123,20 @@ const patchOriginal: PatchBuilder = (b) => {
   b.wire(array, 't', hue, 'id01');
   b.wire(array, 't', effectiveRadius, 'id01');
 
-  // Wire spin to angular offset
-  b.wire(spin, 'out', angularOffset, 'spin');
-
   // Wire golden angle + offset to total angle
   b.wire(goldenAngle, 'angle', totalAngle, 'a');
   b.wire(angularOffset, 'offset', totalAngle, 'b');
 
-  // Wire center, radius, angle to polar to cartesian
-  b.wire(centerX, 'out', pos, 'centerX');
-  b.wire(centerY, 'out', pos, 'centerY');
-  b.wire(radiusBase, 'out', effectiveRadius, 'radius');
+  // Wire angle to polar to cartesian
   b.wire(totalAngle, 'out', pos, 'angle');
   b.wire(effectiveRadius, 'out', pos, 'radius');
 
-  // Wire hue and sat/val to color
+  // Wire hue to color
   b.wire(hue, 'hue', color, 'hue');
-  b.wire(sat, 'out', color, 'sat');
-  b.wire(val, 'out', color, 'val');
 
-  // Wire pos, color, size to render
+  // Wire pos, color to render
   b.wire(pos, 'pos', render, 'pos');
   b.wire(color, 'color', render, 'color');
-  b.wire(size, 'out', render, 'size');
 };
 
 // Breathing patch - oscillating spin speed
@@ -133,24 +154,34 @@ const patchBreathing: PatchBuilder = (b) => {
   b.wire(circle, 'circle', array, 'element');
   b.wire(array, 'elements', layout, 'elements');
 
-  const centerX = b.addBlock('Const', { value: 0.5 });
-  const centerY = b.addBlock('Const', { value: 0.5 });
-  const radiusBase = b.addBlock('Const', { value: 0.35 });
-
   // Oscillating spin - speeds up and slows down
   const spinOsc = b.addBlock('Oscillator', { waveform: 'sin', amplitude: 1.5, offset: 1.0 });
 
   const goldenAngle = b.addBlock('FieldGoldenAngle', { turns: 50 });
   const angularOffset = b.addBlock('FieldAngularOffset', {});
   const totalAngle = b.addBlock('FieldAdd', {});
-  const effectiveRadius = b.addBlock('FieldRadiusSqrt', {});
+
+  const effectiveRadius = b.addBlock('FieldRadiusSqrt', {}, {
+    inputDefaults: {
+      radius: constant(0.35),
+    },
+  });
+
   const pos = b.addBlock('FieldPolarToCartesian', {});
-  const sat = b.addBlock('Const', { value: 0.9 });
-  const val = b.addBlock('Const', { value: 0.95 });
   const hue = b.addBlock('FieldHueFromPhase', {});
-  const color = b.addBlock('HsvToRgb', {});
-  const size = b.addBlock('Const', { value: 4 });
-  const render = b.addBlock('RenderInstances2D', {});
+
+  const color = b.addBlock('HsvToRgb', {}, {
+    inputDefaults: {
+      sat: constant(0.9),
+      val: constant(0.95),
+    },
+  });
+
+  const render = b.addBlock('RenderInstances2D', {}, {
+    inputDefaults: {
+      size: constant(4),
+    },
+  });
 
   // Wire oscillators to time
   b.wire(time, 'phaseB', spinOsc, 'phase');
@@ -172,22 +203,16 @@ const patchBreathing: PatchBuilder = (b) => {
   b.wire(goldenAngle, 'angle', totalAngle, 'a');
   b.wire(angularOffset, 'offset', totalAngle, 'b');
 
-  // Wire center, radius, angle to polar to cartesian
-  b.wire(centerX, 'out', pos, 'centerX');
-  b.wire(centerY, 'out', pos, 'centerY');
-  b.wire(radiusBase, 'out', effectiveRadius, 'radius');
+  // Wire to polar to cartesian
   b.wire(totalAngle, 'out', pos, 'angle');
   b.wire(effectiveRadius, 'out', pos, 'radius');
 
-  // Wire hue and sat/val to color
+  // Wire hue to color
   b.wire(hue, 'hue', color, 'hue');
-  b.wire(sat, 'out', color, 'sat');
-  b.wire(val, 'out', color, 'val');
 
-  // Wire pos, color, size to render
+  // Wire pos, color to render
   b.wire(pos, 'pos', render, 'pos');
   b.wire(color, 'color', render, 'color');
-  b.wire(size, 'out', render, 'size');
 };
 
 // Wobbly patch - fast spin
@@ -205,21 +230,37 @@ const patchWobbly: PatchBuilder = (b) => {
   b.wire(circle, 'circle', array, 'element');
   b.wire(array, 'elements', layout, 'elements');
 
-  const centerX = b.addBlock('Const', { value: 0.5 });
-  const centerY = b.addBlock('Const', { value: 0.5 });
-  const radiusBase = b.addBlock('Const', { value: 0.35 });
-  const spin = b.addBlock('Const', { value: 3.0 });
   const goldenAngle = b.addBlock('FieldGoldenAngle', { turns: 50 });
-  const angularOffset = b.addBlock('FieldAngularOffset', {});
+
+  const angularOffset = b.addBlock('FieldAngularOffset', {}, {
+    inputDefaults: {
+      spin: constant(3.0),
+    },
+  });
+
   const totalAngle = b.addBlock('FieldAdd', {});
-  const effectiveRadius = b.addBlock('FieldRadiusSqrt', {});
+
+  const effectiveRadius = b.addBlock('FieldRadiusSqrt', {}, {
+    inputDefaults: {
+      radius: constant(0.35),
+    },
+  });
+
   const pos = b.addBlock('FieldPolarToCartesian', {});
-  const sat = b.addBlock('Const', { value: 0.95 });
-  const val = b.addBlock('Const', { value: 0.95 });
   const hue = b.addBlock('FieldHueFromPhase', {});
-  const color = b.addBlock('HsvToRgb', {});
-  const size = b.addBlock('Const', { value: 4 });
-  const render = b.addBlock('RenderInstances2D', {});
+
+  const color = b.addBlock('HsvToRgb', {}, {
+    inputDefaults: {
+      sat: constant(0.95),
+      val: constant(0.95),
+    },
+  });
+
+  const render = b.addBlock('RenderInstances2D', {}, {
+    inputDefaults: {
+      size: constant(4),
+    },
+  });
 
   // Wire phase to position and color
   b.wire(time, 'phaseA', angularOffset, 'phase');
@@ -231,29 +272,20 @@ const patchWobbly: PatchBuilder = (b) => {
   b.wire(array, 't', hue, 'id01');
   b.wire(array, 't', effectiveRadius, 'id01');
 
-  // Wire spin
-  b.wire(spin, 'out', angularOffset, 'spin');
-
   // Wire golden angle + offset to total angle
   b.wire(goldenAngle, 'angle', totalAngle, 'a');
   b.wire(angularOffset, 'offset', totalAngle, 'b');
 
-  // Wire center, radius, angle to polar to cartesian
-  b.wire(centerX, 'out', pos, 'centerX');
-  b.wire(centerY, 'out', pos, 'centerY');
-  b.wire(radiusBase, 'out', effectiveRadius, 'radius');
+  // Wire to polar to cartesian
   b.wire(totalAngle, 'out', pos, 'angle');
   b.wire(effectiveRadius, 'out', pos, 'radius');
 
-  // Wire hue and sat/val to color
+  // Wire hue to color
   b.wire(hue, 'hue', color, 'hue');
-  b.wire(sat, 'out', color, 'sat');
-  b.wire(val, 'out', color, 'val');
 
-  // Wire pos, color, size to render
+  // Wire pos, color to render
   b.wire(pos, 'pos', render, 'pos');
   b.wire(color, 'color', render, 'color');
-  b.wire(size, 'out', render, 'size');
 };
 
 // Pulsing patch - slow spin
@@ -271,21 +303,34 @@ const patchPulsing: PatchBuilder = (b) => {
   b.wire(circle, 'circle', array, 'element');
   b.wire(array, 'elements', layout, 'elements');
 
-  const centerX = b.addBlock('Const', { value: 0.5 });
-  const centerY = b.addBlock('Const', { value: 0.5 });
-  const radiusBase = b.addBlock('Const', { value: 0.35 });
-  const spin = b.addBlock('Const', { value: 1.0 });
   const goldenAngle = b.addBlock('FieldGoldenAngle', { turns: 50 });
+
+  // spin = 1.0 is the registry default, so no override needed
   const angularOffset = b.addBlock('FieldAngularOffset', {});
+
   const totalAngle = b.addBlock('FieldAdd', {});
-  const effectiveRadius = b.addBlock('FieldRadiusSqrt', {});
+
+  const effectiveRadius = b.addBlock('FieldRadiusSqrt', {}, {
+    inputDefaults: {
+      radius: constant(0.35),
+    },
+  });
+
   const pos = b.addBlock('FieldPolarToCartesian', {});
-  const sat = b.addBlock('Const', { value: 0.8 });
-  const val = b.addBlock('Const', { value: 0.9 });
   const hue = b.addBlock('FieldHueFromPhase', {});
-  const color = b.addBlock('HsvToRgb', {});
-  const size = b.addBlock('Const', { value: 5 });
-  const render = b.addBlock('RenderInstances2D', {});
+
+  const color = b.addBlock('HsvToRgb', {}, {
+    inputDefaults: {
+      sat: constant(0.8),
+      val: constant(0.9),
+    },
+  });
+
+  const render = b.addBlock('RenderInstances2D', {}, {
+    inputDefaults: {
+      size: constant(5),
+    },
+  });
 
   // Wire phase to position and color
   b.wire(time, 'phaseA', angularOffset, 'phase');
@@ -297,29 +342,20 @@ const patchPulsing: PatchBuilder = (b) => {
   b.wire(array, 't', hue, 'id01');
   b.wire(array, 't', effectiveRadius, 'id01');
 
-  // Wire spin
-  b.wire(spin, 'out', angularOffset, 'spin');
-
   // Wire golden angle + offset to total angle
   b.wire(goldenAngle, 'angle', totalAngle, 'a');
   b.wire(angularOffset, 'offset', totalAngle, 'b');
 
-  // Wire center, radius, angle to polar to cartesian
-  b.wire(centerX, 'out', pos, 'centerX');
-  b.wire(centerY, 'out', pos, 'centerY');
-  b.wire(radiusBase, 'out', effectiveRadius, 'radius');
+  // Wire to polar to cartesian
   b.wire(totalAngle, 'out', pos, 'angle');
   b.wire(effectiveRadius, 'out', pos, 'radius');
 
-  // Wire hue and sat/val to color
+  // Wire hue to color
   b.wire(hue, 'hue', color, 'hue');
-  b.wire(sat, 'out', color, 'sat');
-  b.wire(val, 'out', color, 'val');
 
-  // Wire pos, color, size to render
+  // Wire pos, color to render
   b.wire(pos, 'pos', render, 'pos');
   b.wire(color, 'color', render, 'color');
-  b.wire(size, 'out', render, 'size');
 };
 
 const patches: { name: string; builder: PatchBuilder }[] = [

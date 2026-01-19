@@ -72,6 +72,7 @@ export function syncPatchToReactFlow(
     // Create edges from patch edges
     const edges = patch.edges.map(createEdgeFromPatchEdge);
 
+    console.log('[syncPatchToReactFlow] Setting', nodes.length, 'nodes and', edges.length, 'edges');
     setNodes(nodes);
     setEdges(edges);
   } finally {

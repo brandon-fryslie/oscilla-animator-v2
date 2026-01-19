@@ -163,13 +163,13 @@ Even when underlying `x_base(t)` jumps due to scrubbing, looping, hot-swap, or t
 
 ### I11: Stable Element Identity
 
-**Rule**: Domains provide stable element IDs, not "array indices we hope stay stable."
+**Rule**: Instances provide stable element IDs, not "array indices we hope stay stable."
 
 **Rationale**: Required for: temporal effects, physics, per-element state, selection UI, caches.
 
 **Consequences of Violation**: Can't do trails, history, physics, or coherent UI.
 
-**Enforcement**: Domain as first-class identity handle.
+**Enforcement**: Instance as first-class identity handle; pool-based allocation with stable indices.
 
 ---
 
@@ -199,7 +199,7 @@ Even when underlying `x_base(t)` jumps due to scrubbing, looping, hot-swap, or t
 
 ### I14: Explicit Cache Keys
 
-**Rule**: Every cache depends on: (time, domain, upstream slots, params, state version).
+**Rule**: Every cache depends on: (time, instance, upstream slots, params, state version).
 
 **Rationale**: Without explicit cache keys, oscillate between "slow" and "wrong."
 

@@ -28,7 +28,7 @@ export const LogPanel = observer(function LogPanel() {
       style={{
         padding: '0.75rem',
         fontFamily: "'SF Mono', Monaco, Consolas, monospace",
-        fontSize: '0.75rem',
+        fontSize: '0.875rem',
         lineHeight: '1.4',
         height: '100%',
         overflow: 'auto',

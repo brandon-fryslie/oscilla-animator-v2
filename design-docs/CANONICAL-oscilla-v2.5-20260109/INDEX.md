@@ -1,12 +1,12 @@
 ---
-status: UPDATING
+status: CANONICAL
 generated: 2026-01-09T17:00:00Z
-updated: 2026-01-11T10:54:00Z
+updated: 2026-01-18T14:00:00Z
 approved_by: Brandon Fryslie
-approval_method: full_walkthrough + integrated_debugger_update + event_system_integration + continuity_integration + graph_editor_ui_integration
-source_documents: 55
+approval_method: full_walkthrough + domain_system_reconceptualization
+source_documents: 57
 topics: 15
-updating_reason: "Restructuring to three-tier encyclopedia format (foundational/structural/optional)"
+resolutions: 84
 update_history:
   - date: 2026-01-10T19:45:00Z
     sources_added: 23
@@ -19,23 +19,47 @@ update_history:
     topics_updated: []
     resolutions_made: 2
     notes: "Archived 6 conversation exports as design history; integrated graph editor UI spec"
-  - date: 2026-01-11T10:54:00Z
-    action: "Downgraded to UPDATING - restructuring to three-tier format"
-    reason: "Previous auto-resolved integrations need re-evaluation with tier-aware analysis"
+  - date: 2026-01-18T14:00:00Z
+    action: "Domain System Reconceptualization"
+    sources_integrated: [design-docs/WHAT-IS-A-DOMAIN.md, design-docs/WHAT-IS-A-DOMAIN-PART-4-REFACTOR.md]
+    topics_updated: [01-type-system, 02-block-system]
+    resolutions_made: 5
+    notes: "Major restructuring: Domain=ontological classification; Three-stage architecture (Primitive→Array→Layout); New types: DomainSpec, InstanceDecl, InstanceRef"
 ---
 
 # Oscilla v2.5: Canonical Specification Index
 
-> **STATUS: 🔄 UPDATING**
-> Restructuring to three-tier encyclopedia format (foundational/structural/optional).
-> Previous auto-resolved integrations being re-evaluated.
-> Started: 2026-01-11T10:54:00Z
+> **STATUS: ✅ CANONICAL**
+> Last updated: 2026-01-18T14:00:00Z
+> Approved by: Brandon Fryslie
 
 Generated: 2026-01-09T17:00:00Z
-Last Updated: 2026-01-11T06:15:00Z
+Last Updated: 2026-01-18T14:00:00Z
 Approved by: Brandon Fryslie
-Source Documents: 55 files (27 original + 16 debugger + 1 anti-jank + 6 event-system + 3 modulation-table + 1 continuity + 1 graph-editor-ui)
-Total Resolutions: 79 (53 original + 20 debugger integration + 1 continuity + 3 modulation-table + 2 graph-editor-ui integration)
+Source Documents: 57 files
+Total Resolutions: 84
+
+---
+
+## For Agents
+
+**Day-to-day implementation:** Read [ESSENTIAL-SPEC.md](./ESSENTIAL-SPEC.md) (~25k tokens)
+
+This condensed spec contains all invariants, glossary core terms, and T1 content from:
+- Type System (PayloadType, Extent, SignalType, Domain/Instance)
+- Block System (roles, three-stage architecture, stateful primitives)
+- Compilation (pipeline, NormalizedGraph, scheduling, slot allocation)
+- Runtime (execution model, state management, hot-swap)
+
+**When to read full topics:**
+| Task | Full Topic |
+|------|------------|
+| Implementing diagnostics | 07-diagnostics-system.md, 08-observation-system.md |
+| Implementing UI panels | 09-debug-ui-spec.md, 14-modulation-table-ui.md, 15-graph-editor-ui.md |
+| Disputed design questions | RESOLUTION-LOG.md |
+| Deep type system details | 01-type-system.md |
+| Continuity/anti-jank work | 11-continuity-system.md |
+| Event coordination | 12-event-hub.md, 13-event-diagnostics-integration.md |
 
 ---
 
@@ -43,6 +67,7 @@ Total Resolutions: 79 (53 original + 20 debugger integration + 1 continuity + 3 
 
 | Document | Description |
 |----------|-------------|
+| [ESSENTIAL-SPEC](./ESSENTIAL-SPEC.md) | **Condensed spec for agents** (~25k tokens) |
 | [SUMMARY](./SUMMARY.md) | Executive overview—start here |
 | [INVARIANTS](./INVARIANTS.md) | Non-negotiable rules (27 laws) |
 | [GLOSSARY](./GLOSSARY.md) | Term definitions (50+ terms) |
@@ -52,8 +77,8 @@ Total Resolutions: 79 (53 original + 20 debugger integration + 1 continuity + 3 
 
 | # | Topic | Description | Key Concepts |
 |---|-------|-------------|--------------|
-| 01 | [Type System](./topics/01-type-system.md) | Five-axis type model | PayloadType, Extent, SignalType, AxisTag |
-| 02 | [Block System](./topics/02-block-system.md) | Compute units and roles | Block, BlockRole, DerivedBlockMeta |
+| 01 | [Type System](./topics/01-type-system.md) | Five-axis type model | PayloadType, Extent, SignalType, DomainSpec, InstanceDecl |
+| 02 | [Block System](./topics/02-block-system.md) | Compute units and roles | Block, BlockRole, Primitive → Array → Layout |
 | 03 | [Time System](./topics/03-time-system.md) | Time sources and rails | TimeRoot, Rails, tMs, phase |
 | 04 | [Compilation](./topics/04-compilation.md) | Graph normalization and IR | NormalizedGraph, CompiledProgramIR |
 | 05 | [Runtime](./topics/05-runtime.md) | Execution model and state | State slots, scheduling, erasure |
@@ -93,7 +118,11 @@ Looking for something specific? Here's where to find it:
 |---------|----------|
 | PayloadType, Extent, SignalType | [01-type-system.md](./topics/01-type-system.md) |
 | Cardinality, Temporality, Binding | [01-type-system.md](./topics/01-type-system.md) |
+| Domain, DomainSpec, DomainTypeId | [01-type-system.md](./topics/01-type-system.md) |
+| Instance, InstanceDecl, InstanceRef | [01-type-system.md](./topics/01-type-system.md) |
 | Block, BlockRole, DerivedBlockMeta | [02-block-system.md](./topics/02-block-system.md) |
+| Primitive Block, Array Block, Layout Block | [02-block-system.md](./topics/02-block-system.md) |
+| Three-stage architecture | [02-block-system.md](./topics/02-block-system.md) |
 | UnitDelay, Lag, Phasor, SampleAndHold | [02-block-system.md](./topics/02-block-system.md) |
 | TimeRoot, Rails, tMs | [03-time-system.md](./topics/03-time-system.md) |
 | NormalizedGraph, CompiledProgramIR | [04-compilation.md](./topics/04-compilation.md) |

@@ -4,7 +4,23 @@ A clean rewrite of the Oscilla animation system.
 
 ## Spec Reference
 
-All implementation must conform to the unified specification in `design-docs/spec/`. See `design-docs/spec/INDEX.md` for the complete spec index.
+All implementation must conform to the canonical specification in `design-docs/CANONICAL-oscilla-v2.5-20260109/`.
+
+### Spec Reading Strategy
+
+For implementation work, read the **condensed essential spec first**:
+- `design-docs/CANONICAL-oscilla-v2.5-20260109/ESSENTIAL-SPEC.md` (~25k tokens)
+
+This contains all invariants, core glossary terms, and T1 content from type system, block system, compilation, and runtime.
+
+**Only read full topic files when working in that specific area:**
+- Diagnostics: 07-diagnostics-system.md, 08-observation-system.md
+- UI panels: 09-debug-ui-spec.md, 14-modulation-table-ui.md, 15-graph-editor-ui.md
+- Continuity/anti-jank: 11-continuity-system.md
+- Event coordination: 12-event-hub.md, 13-event-diagnostics-integration.md
+- Design disputes: RESOLUTION-LOG.md
+
+See `design-docs/CANONICAL-oscilla-v2.5-20260109/INDEX.md` for full topic navigation.
 
 ## Key Principles
 

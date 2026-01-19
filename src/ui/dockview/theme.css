@@ -72,6 +72,11 @@
 /* Panel content padding removed - let components control their own padding */
 .oscilla-dockview .dockview-panel-content {
   overflow: hidden;
+  position: relative; /* Enable absolute positioning for children */
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Ensure separators are visible */

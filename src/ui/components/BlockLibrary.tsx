@@ -6,7 +6,6 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { observer } from 'mobx-react-lite';
 import { rootStore } from '../../stores';
 import {
   getBlockCategories,
@@ -78,7 +77,7 @@ function useDebounce<T>(value: T, delay: number): T {
 /**
  * Block Library Component
  */
-export const BlockLibrary: React.FC = observer(() => {
+export const BlockLibrary: React.FC = () => {
   // State
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearchQuery = useDebounce(searchQuery, SEARCH_DEBOUNCE_MS);
@@ -244,7 +243,7 @@ export const BlockLibrary: React.FC = observer(() => {
       </div>
     </div>
   );
-});
+};
 
 /**
  * Block Category Section

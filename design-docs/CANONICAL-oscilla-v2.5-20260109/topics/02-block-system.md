@@ -234,24 +234,174 @@ Lag is technically a composite (could be built from UnitDelay + arithmetic), but
 
 ---
 
-## Basic 12 Blocks (MVP)
+## Three-Stage Architecture: Primitive → Array → Layout
+
+The system separates three orthogonal concerns for element creation and positioning:
+
+### Stage 1: Primitives (Domain Classification)
+
+**Primitive blocks** define a single element of a specific domain type:
+
+```
+[Circle]
+  inputs: { radius: Signal<float> }
+  outputs: { circle: Signal<circle> }
+
+  Creates ONE circle
+  Domain: circle
+  Cardinality: one (Signal)
+```
+
+Primitives define WHAT kind of thing, not HOW MANY.
+
+### Stage 2: Array (Cardinality Transform)
+
+The **Array block** transforms one element into many elements:
+
+```
+[Array]
+  inputs: { element: Signal<any-domain>, count: Signal<int> }
+  outputs: { elements: Field<same-domain>, index: Field<int>, t: Field<float>, active: Field<bool> }
+
+  Transforms Signal<T> → Field<T, instance>
+  Creates instance with pool-based allocation
+  Cardinality: one → many
+```
+
+Array is the ONLY place where instances are created. It's the cardinality transform.
+
+### Stage 3: Layout (Spatial Arrangement)
+
+**Layout blocks** operate on existing fields and output positions:
+
+```
+[Grid Layout]
+  inputs: { elements: Field<any>, rows: Signal<int>, cols: Signal<int> }
+  outputs: { position: Field<vec2, same-instance> }
+
+  Operates on existing field (instance)
+  Computes positions based on layout algorithm
+  Position is just another field (not special-cased)
+```
+
+Layout assigns WHERE elements are, separate from WHAT they are and HOW MANY exist.
+
+### Data Flow Example
+
+```
+[Circle] ──Signal<circle>──▶ [Array] ──Field<circle, inst>──▶ [Grid] ──position──▶ [Render]
+  r=0.02                      count=100                        10×10
+                              maxCount=200
+```
+
+1. **Circle**: ONE circle primitive
+2. **Array**: 100 instances (from pool of 200)
+3. **Grid**: Positions for those 100 circles
+4. **Render**: Draw them
+
+### Why This Architecture
+
+**Composability:**
+```
+                    ┌──▶ [Grid] ──▶ [Render A]
+[Circle] ──▶ [Array]─┼──▶ [Spiral] ──▶ [Render B]
+                    └──▶ [Random] ──▶ [Render C]
+
+Same 100 circles, three different layouts, three views.
+```
+
+**Type Safety:**
+- `Signal<circle>` — cardinality: one
+- `Field<circle, inst>` — cardinality: many (over instance inst)
+
+Operations know which they accept. Mismatch = compile error.
+
+**Performance:**
+- Pool allocated once (maxCount elements)
+- Active mask toggles visibility (cheap)
+- No reallocation when count changes
+
+---
+
+## Primitive Blocks (MVP)
+
+Primitive blocks create single elements of specific domain types:
+
+| Block | Domain Type | Inputs | Output |
+|-------|-------------|--------|--------|
+| **Circle** | `circle` | radius, center | `Signal<circle>` |
+| **Rectangle** | `rectangle` | width, height | `Signal<rectangle>` |
+| **Polygon** | `polygon` | vertices | `Signal<polygon>` |
+
+### Array Block
+
+The Array block is the cardinality transform:
+
+```typescript
+registerBlock({
+  type: 'Array',
+  category: 'instance',
+  inputs: [
+    { id: 'element', label: 'Element', type: signalType('any-domain') },
+    { id: 'count', label: 'Count', type: signalType('int') },
+  ],
+  outputs: [
+    { id: 'elements', label: 'Elements', type: signalTypeField('same-as:element', 'self') },
+    { id: 'index', label: 'Index', type: signalTypeField('int', 'self') },
+    { id: 't', label: 't [0,1]', type: signalTypeField('float', 'self') },
+    { id: 'active', label: 'Active', type: signalTypeField('bool', 'self') },
+  ],
+  params: {
+    maxCount: 200,  // Pool size
+  },
+});
+```
+
+### Layout Blocks (MVP)
+
+Layout blocks compute positions for field elements:
+
+| Block | Algorithm | Key Inputs |
+|-------|-----------|------------|
+| **Grid Layout** | Row-major grid | rows, cols |
+| **Spiral Layout** | Archimedean spiral | turns, spacing |
+| **Random Scatter** | Random positions | bounds, seed |
+| **Along Path** | Path-following | path, spacing |
+
+---
+
+## Basic Blocks (MVP)
 
 The minimal block set for a working system:
 
 | # | Block | Category | Description |
 |---|-------|----------|-------------|
 | 1 | **TimeRoot** | Time | Time source (system-managed) |
-| 2 | **DomainN** | Domain | Create N-element domain |
-| 3 | **Id/U01** | Domain | Element ID normalized to [0,1] |
-| 4 | **Hash** | Math | Deterministic hash |
-| 5 | **Noise** | Math | Procedural noise |
-| 6 | **Add** | Math | Addition |
-| 7 | **Mul** | Math | Multiplication |
-| 8 | **Length** | Math | Vector length |
-| 9 | **Normalize** | Math | Vector normalize |
-| 10 | **UnitDelay** | State | One-frame delay |
-| 11 | **HSV->RGB** | Color | Color conversion |
-| 12 | **RenderInstances2D** | Render | Render sink |
+| 2 | **Circle** | Primitive | Creates single circle (`Signal<circle>`) |
+| 3 | **Array** | Instance | Cardinality transform (Signal → Field) |
+| 4 | **Grid Layout** | Layout | Grid position assignment |
+| 5 | **Hash** | Math | Deterministic hash |
+| 6 | **Noise** | Math | Procedural noise |
+| 7 | **Add** | Math | Addition |
+| 8 | **Mul** | Math | Multiplication |
+| 9 | **Length** | Math | Vector length |
+| 10 | **Normalize** | Math | Vector normalize |
+| 11 | **UnitDelay** | State | One-frame delay |
+| 12 | **HSV->RGB** | Color | Color conversion |
+| 13 | **RenderInstances2D** | Render | Render sink |
+
+### Block Categories
+
+| Category | Purpose | Examples |
+|----------|---------|----------|
+| **Primitive** | Create single elements (Signal) | Circle, Rectangle, Polygon |
+| **Instance** | Cardinality transforms | Array |
+| **Layout** | Spatial arrangement | Grid, Spiral, Random, AlongPath |
+| **Math** | Arithmetic operations | Add, Mul, Hash, Noise |
+| **State** | Stateful primitives | UnitDelay, Lag, Phasor |
+| **Color** | Color operations | HSV->RGB |
+| **Render** | Output sinks | RenderInstances2D |
+| **Time** | Time sources | TimeRoot |
 
 ---
 
@@ -307,7 +457,6 @@ Use **useful defaults**, not zeros. Prefer rails for animation:
 | `phase` | `phaseA` rail |
 | `bool` | `Constant(true)` |
 | `unit` | `phaseA` rail or `Constant(0.5)` |
-| `domain` | `DomainN(100)` |
 
 ---
 
@@ -411,6 +560,10 @@ This is a **presentation choice**, not an architectural one.
 | Phantom block | Derived block | Same issue |
 | Implicit block | Derived block with specific meta.kind | Be specific |
 | State block | UnitDelay | Proper name |
+| `DomainN` | Primitive + Array | Conflates domain and instance |
+| `GridDomain` | Primitive + Array + Grid Layout | Conflates domain, instance, and layout |
+| `DomainDef` | `InstanceDecl` | Old conflated type |
+| `DomainId` (for instance) | `InstanceId` | Domain is classification, instance is collection |
 
 ---
 
