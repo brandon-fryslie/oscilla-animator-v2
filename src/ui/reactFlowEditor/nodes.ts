@@ -8,6 +8,8 @@
 import type { Node, Edge as ReactFlowEdge } from 'reactflow';
 import type { Block, BlockId, Edge, DefaultSource } from '../../types';
 import type { BlockDef, InputDef } from '../../blocks/registry';
+import type { PayloadType, SignalType } from '../../core/canonical-types';
+import { formatTypeForTooltip, getTypeColor } from './typeValidation';
 
 /**
  * Port data for ReactFlow rendering
@@ -16,6 +18,12 @@ export interface PortData {
   id: string;
   label: string;
   defaultSource?: DefaultSource;
+  /** Payload type for coloring handles */
+  payloadType: PayloadType;
+  /** Full type for tooltip */
+  typeTooltip: string;
+  /** Color for handle based on type */
+  typeColor: string;
 }
 
 /**
@@ -46,6 +54,25 @@ function getDefaultSource(
 }
 
 /**
+ * Create port data with type information.
+ */
+function createPortData(
+  id: string,
+  label: string,
+  type: SignalType,
+  defaultSource?: DefaultSource
+): PortData {
+  return {
+    id,
+    label,
+    defaultSource,
+    payloadType: type.payload,
+    typeTooltip: formatTypeForTooltip(type),
+    typeColor: getTypeColor(type.payload),
+  };
+}
+
+/**
  * Create ReactFlow node from Oscilla block.
  */
 export function createNodeFromBlock(block: Block, blockDef: BlockDef): OscillaNode {
@@ -57,15 +84,12 @@ export function createNodeFromBlock(block: Block, blockDef: BlockDef): OscillaNo
       blockId: block.id,
       blockType: block.type,
       label: block.displayName || blockDef.label,
-      inputs: blockDef.inputs.map((input) => ({
-        id: input.id,
-        label: input.label,
-        defaultSource: getDefaultSource(input),
-      })),
-      outputs: blockDef.outputs.map((output) => ({
-        id: output.id,
-        label: output.label,
-      })),
+      inputs: blockDef.inputs.map((input) =>
+        createPortData(input.id, input.label, input.type, getDefaultSource(input))
+      ),
+      outputs: blockDef.outputs.map((output) =>
+        createPortData(output.id, output.label, output.type)
+      ),
     },
   };
 }

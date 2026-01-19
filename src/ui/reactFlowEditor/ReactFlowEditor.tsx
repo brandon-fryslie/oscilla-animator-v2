@@ -6,15 +6,18 @@
  * Syncs bidirectionally with PatchStore.
  */
 
-import React, { useEffect, useCallback, useMemo } from 'react';
+import React, { useEffect, useCallback, useMemo, useState, useRef } from 'react';
 import ReactFlow, {
   Background,
   Controls,
+  Panel,
+  ReactFlowProvider,
   useNodesState,
   useEdgesState,
-  addEdge,
+  useReactFlow,
   type Node,
   type Edge,
+  type Connection,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { rootStore } from '../../stores';
@@ -30,12 +33,15 @@ import {
   type SyncHandle,
 } from './sync';
 import { OscillaNode } from './OscillaNode';
+import { getLayoutedElements } from './layout';
+import { validateConnection } from './typeValidation';
 import './ReactFlowEditor.css';
 
 export interface ReactFlowEditorHandle {
   addBlock(blockId: BlockId, blockType: string): Promise<void>;
   removeBlock(blockId: BlockId): Promise<void>;
   zoomToFit(): Promise<void>;
+  autoArrange(): Promise<void>;
 }
 
 interface ReactFlowEditorProps {
@@ -64,18 +70,38 @@ function createReactFlowEditorAdapter(
       await handle.zoomToFit();
     },
 
+    async autoArrange(): Promise<void> {
+      await handle.autoArrange();
+    },
+
     getRawHandle(): unknown {
       return handle;
     },
   };
 }
 
-export const ReactFlowEditor: React.FC<ReactFlowEditorProps> = ({
+/**
+ * Inner component that has access to useReactFlow hook.
+ */
+interface ReactFlowEditorInnerProps {
+  onEditorReady?: (handle: EditorHandle) => void;
+  wrapperRef: React.RefObject<HTMLDivElement | null>;
+}
+
+const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = ({
   onEditorReady,
+  wrapperRef,
 }) => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const wrapperRef = React.useRef<HTMLDivElement>(null);
+  const [isLayouting, setIsLayouting] = useState(false);
+  const { fitView } = useReactFlow();
+
+  // Store refs for handle access to latest state
+  const nodesRef = useRef(nodes);
+  const edgesRef = useRef(edges);
+  nodesRef.current = nodes;
+  edgesRef.current = edges;
 
   // Register custom node types (memoized to prevent recreation)
   const nodeTypes = useMemo(() => ({ oscilla: OscillaNode }), []);
@@ -122,6 +148,43 @@ export const ReactFlowEditor: React.FC<ReactFlowEditorProps> = ({
     rootStore.selection.clearSelection();
   }, []);
 
+  // Connection validation - prevent incompatible type connections
+  const isValidConnection = useCallback((connection: Connection) => {
+    if (!connection.source || !connection.target) return false;
+
+    const result = validateConnection(
+      connection.source,
+      connection.sourceHandle || '',
+      connection.target,
+      connection.targetHandle || '',
+      rootStore.patch.patch
+    );
+
+    return result.valid;
+  }, []);
+
+  // Auto-arrange handler
+  const handleAutoArrange = useCallback(async () => {
+    if (isLayouting) return;
+    setIsLayouting(true);
+
+    try {
+      const { nodes: layoutedNodes } = await getLayoutedElements(
+        nodesRef.current,
+        edgesRef.current
+      );
+      setNodes(layoutedNodes);
+      // Fit view after layout completes
+      setTimeout(() => fitView({ padding: 0.1 }), 50);
+    } finally {
+      setIsLayouting(false);
+    }
+  }, [isLayouting, setNodes, fitView]);
+
+  // Store autoArrange ref for handle access
+  const autoArrangeRef = useRef(handleAutoArrange);
+  autoArrangeRef.current = handleAutoArrange;
+
   // Setup bidirectional sync and editor handle
   useEffect(() => {
     // Initial sync from PatchStore
@@ -141,8 +204,11 @@ export const ReactFlowEditor: React.FC<ReactFlowEditorProps> = ({
       },
 
       async zoomToFit(): Promise<void> {
-        // ReactFlow handles this via Controls component
-        console.log('Zoom to fit requested');
+        fitView({ padding: 0.1 });
+      },
+
+      async autoArrange(): Promise<void> {
+        await autoArrangeRef.current();
       },
     };
 
@@ -154,7 +220,7 @@ export const ReactFlowEditor: React.FC<ReactFlowEditorProps> = ({
     return () => {
       disposeReaction();
     };
-  }, [onEditorReady, setNodes, setEdges]);
+  }, [onEditorReady, setNodes, setEdges, fitView]);
 
   // Handle delete key
   const handleKeyDown = useCallback(
@@ -213,27 +279,52 @@ export const ReactFlowEditor: React.FC<ReactFlowEditorProps> = ({
       resizeObserver.disconnect();
       window.removeEventListener('resize', updateDimensions);
     };
-  }, []);
+  }, [wrapperRef]);
+
+  return (
+    <ReactFlow
+      nodes={nodes}
+      edges={edges}
+      nodeTypes={nodeTypes}
+      onNodesChange={handleNodesChange}
+      onEdgesChange={handleEdgesChange}
+      onConnect={handleConnect}
+      onNodeClick={handleNodeClick}
+      onEdgeClick={handleEdgeClick}
+      onPaneClick={handlePaneClick}
+      isValidConnection={isValidConnection}
+      fitView
+      attributionPosition="bottom-left"
+      style={{ width: '100%', height: '100%' }}
+    >
+      <Background />
+      <Controls />
+      <Panel position="top-left" className="react-flow-panel">
+        <button
+          onClick={handleAutoArrange}
+          disabled={isLayouting}
+          className="auto-arrange-btn"
+        >
+          {isLayouting ? 'Arranging...' : 'Auto Arrange'}
+        </button>
+      </Panel>
+    </ReactFlow>
+  );
+};
+
+export const ReactFlowEditor: React.FC<ReactFlowEditorProps> = ({
+  onEditorReady,
+}) => {
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
   return (
     <div className="react-flow-wrapper" ref={wrapperRef}>
-      <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          nodeTypes={nodeTypes}
-          onNodesChange={handleNodesChange}
-          onEdgesChange={handleEdgesChange}
-          onConnect={handleConnect}
-          onNodeClick={handleNodeClick}
-          onEdgeClick={handleEdgeClick}
-          onPaneClick={handlePaneClick}
-          fitView
-          attributionPosition="bottom-left"
-          style={{ width: '100%', height: '100%' }}
-        >
-          <Background />
-          <Controls />
-        </ReactFlow>
+      <ReactFlowProvider>
+        <ReactFlowEditorInner
+          onEditorReady={onEditorReady}
+          wrapperRef={wrapperRef}
+        />
+      </ReactFlowProvider>
     </div>
   );
 };

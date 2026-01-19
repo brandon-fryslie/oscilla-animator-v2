@@ -3,7 +3,7 @@
  *
  * Renders port-specific handles for proper multi-port connections.
  * Each input/output port gets its own Handle with unique ID.
- * Input ports show default source indicators when applicable.
+ * Handles are color-coded by payload type with type tooltips.
  */
 
 import React from 'react';
@@ -49,7 +49,25 @@ function getIndicatorColor(ds: DefaultSource): string {
 }
 
 /**
+ * Build tooltip text for a port.
+ */
+function buildPortTooltip(port: PortData, isInput: boolean): string {
+  const parts: string[] = [];
+
+  // Port label and type
+  parts.push(`${port.label}: ${port.typeTooltip}`);
+
+  // Default source info for inputs
+  if (isInput && port.defaultSource && port.defaultSource.kind !== 'none') {
+    parts.push(formatDefaultSource(port.defaultSource));
+  }
+
+  return parts.join('\n');
+}
+
+/**
  * Custom node component that renders handles for each port.
+ * Handles are color-coded by payload type.
  */
 export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = ({ data }) => {
   return (
@@ -64,7 +82,7 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = ({ data }) => {
         fontSize: '14px',
       }}
     >
-      {/* Input Handles (Left Side) with Default Indicators */}
+      {/* Input Handles (Left Side) with Type Colors */}
       {data.inputs.map((input, index) => (
         <React.Fragment key={`input-${input.id}`}>
           <Handle
@@ -73,16 +91,12 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = ({ data }) => {
             id={input.id}
             style={{
               top: `${((index + 1) * 100) / (data.inputs.length + 1)}%`,
-              background: '#4a90e2',
+              background: input.typeColor,
               width: '10px',
               height: '10px',
               border: '2px solid #1e1e1e',
             }}
-            title={
-              input.defaultSource && input.defaultSource.kind !== 'none'
-                ? `${input.label} - ${formatDefaultSource(input.defaultSource)}`
-                : input.label
-            }
+            title={buildPortTooltip(input, true)}
           />
           {/* Default Source Indicator */}
           {input.defaultSource && input.defaultSource.kind !== 'none' && (
@@ -126,7 +140,7 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = ({ data }) => {
         )}
       </div>
 
-      {/* Output Handles (Right Side) */}
+      {/* Output Handles (Right Side) with Type Colors */}
       {data.outputs.map((output, index) => (
         <Handle
           key={`output-${output.id}`}
@@ -135,12 +149,12 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = ({ data }) => {
           id={output.id}
           style={{
             top: `${((index + 1) * 100) / (data.outputs.length + 1)}%`,
-            background: '#f39c12',
+            background: output.typeColor,
             width: '10px',
             height: '10px',
             border: '2px solid #1e1e1e',
           }}
-          title={output.label}
+          title={buildPortTooltip(output, false)}
         />
       ))}
     </div>

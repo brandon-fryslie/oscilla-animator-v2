@@ -40,6 +40,14 @@ function formatDefaultSource(source: DefaultSource): string {
   }
 }
 
+/**
+ * Generate the deterministic ID for a derived default source block.
+ * Must match the pattern in pass1-default-sources.ts
+ */
+function getDerivedDefaultSourceId(blockId: BlockId, portId: string): BlockId {
+  return `_ds_${blockId}_${portId}` as BlockId;
+}
+
 // =============================================================================
 // Main Inspector Component
 // =============================================================================
@@ -355,6 +363,7 @@ const BlockDetails = observer(function BlockDetails({ block, patch }: BlockDetai
                 key={port.id}
                 port={port}
                 kind="input"
+                blockId={block.id}
                 isConnected={isConnected}
                 connectedEdge={connectedEdge}
                 patch={patch}
@@ -476,13 +485,14 @@ const DisplayNameEditor = observer(function DisplayNameEditor({ block, typeInfo 
 interface PortItemProps {
   port: InputDef;
   kind: 'input';
+  blockId: BlockId;
   isConnected: boolean;
   connectedEdge?: Edge;
   patch: Patch;
   onClick: () => void;
 }
 
-function PortItem({ port, isConnected, connectedEdge, patch, onClick }: PortItemProps) {
+const PortItem = observer(function PortItem({ port, blockId, isConnected, connectedEdge, patch, onClick }: PortItemProps) {
   const hasDefaultSource = port.defaultSource !== undefined;
 
   const handleSourceClick = useCallback((e: React.MouseEvent) => {
@@ -491,6 +501,13 @@ function PortItem({ port, isConnected, connectedEdge, patch, onClick }: PortItem
       rootStore.selection.selectBlock(connectedEdge.from.blockId as BlockId);
     }
   }, [connectedEdge]);
+
+  // Find the derived default source block if it exists
+  const derivedBlockId = hasDefaultSource && !isConnected
+    ? getDerivedDefaultSourceId(blockId, port.id)
+    : null;
+
+  const derivedBlock = derivedBlockId ? patch.blocks.get(derivedBlockId) : undefined;
 
   return (
     <li
@@ -535,12 +552,20 @@ function PortItem({ port, isConnected, connectedEdge, patch, onClick }: PortItem
           color: colors.textSecondary
         }}>
           <span style={{ color: colors.textMuted }}>(not connected)</span>
-          <div style={{
-            fontStyle: port.defaultSource?.kind === 'rail' ? 'italic' : 'normal',
-            color: port.defaultSource?.kind === 'rail' ? colors.primary : colors.textSecondary
-          }}>
-            Default: {formatDefaultSource(port.defaultSource!)}
-          </div>
+          {port.defaultSource!.kind === 'constant' && derivedBlock ? (
+            <DefaultSourceEditor
+              derivedBlockId={derivedBlockId!}
+              value={derivedBlock.params.value}
+              portLabel={port.label}
+            />
+          ) : (
+            <div style={{
+              fontStyle: port.defaultSource?.kind === 'rail' ? 'italic' : 'normal',
+              color: port.defaultSource?.kind === 'rail' ? colors.primary : colors.textSecondary
+            }}>
+              Default: {formatDefaultSource(port.defaultSource!)}
+            </div>
+          )}
         </div>
       )}
       {!isConnected && !hasDefaultSource && (
@@ -554,7 +579,94 @@ function PortItem({ port, isConnected, connectedEdge, patch, onClick }: PortItem
       )}
     </li>
   );
+});
+
+// =============================================================================
+// Default Source Editor
+// =============================================================================
+
+interface DefaultSourceEditorProps {
+  derivedBlockId: BlockId;
+  value: unknown;
+  portLabel: string;
 }
+
+const DefaultSourceEditor = observer(function DefaultSourceEditor({
+  derivedBlockId,
+  value,
+  portLabel
+}: DefaultSourceEditorProps) {
+  const [localValue, setLocalValue] = useState(String(value));
+
+  // Sync local value when prop changes
+  React.useEffect(() => {
+    setLocalValue(String(value));
+  }, [value]);
+
+  const handleBlur = useCallback(() => {
+    const parsed = typeof value === 'number' ? parseFloat(localValue) : localValue;
+
+    if (typeof value === 'number') {
+      if (!isNaN(parsed as number) && parsed !== value) {
+        rootStore.patch.updateBlockParams(derivedBlockId, { value: parsed });
+      } else if (isNaN(parsed as number)) {
+        setLocalValue(String(value));
+      }
+    } else {
+      if (parsed !== value) {
+        rootStore.patch.updateBlockParams(derivedBlockId, { value: parsed });
+      }
+    }
+  }, [localValue, value, derivedBlockId]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      (e.target as HTMLInputElement).blur();
+    } else if (e.key === 'Escape') {
+      setLocalValue(String(value));
+      (e.target as HTMLInputElement).blur();
+    }
+  }, [value]);
+
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+  }, []);
+
+  return (
+    <div style={{ marginTop: '4px' }}>
+      <label
+        style={{
+          fontSize: '11px',
+          color: colors.textMuted,
+          display: 'block',
+          marginBottom: '2px'
+        }}
+      >
+        Default value:
+      </label>
+      <input
+        type={typeof value === 'number' ? 'number' : 'text'}
+        value={localValue}
+        onChange={(e) => setLocalValue(e.target.value)}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+        onClick={handleClick}
+        step={typeof value === 'number' ? 0.01 : undefined}
+        placeholder={portLabel}
+        style={{
+          width: '100%',
+          padding: '4px 6px',
+          fontSize: '12px',
+          background: colors.bgContent,
+          border: `1px solid ${colors.border}`,
+          borderRadius: '3px',
+          color: colors.textPrimary,
+          boxSizing: 'border-box',
+        }}
+      />
+    </div>
+  );
+});
 
 interface OutputPortItemProps {
   port: OutputDef;
