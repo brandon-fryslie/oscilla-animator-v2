@@ -3,7 +3,8 @@
     "allow": [
       "Bash(osascript:*)",
       "mcp__cherry-chrome__chrome_list_connections",
-      "Bash(lsof:*)"
+      "Bash(lsof:*)",
+      "Skill(do:it)"
     ]
   },
   "enableAllProjectMcpServers": true,

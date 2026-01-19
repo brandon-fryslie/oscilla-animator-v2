@@ -10,19 +10,10 @@ import { rootStore } from '../../stores';
 import {
   getBlockCategories,
   getBlockTypesByCategory,
-  getBlockDefinition,
   type BlockDef,
 } from '../../blocks/registry';
-import type { SignalType } from '../../core/canonical-types';
 import { useEditor } from '../editorCommon';
 import './BlockLibrary.css';
-
-/**
- * Format a SignalType for display.
- */
-function formatSignalType(type: SignalType): string {
-  return type.payload;
-}
 
 // Type aliases for clarity
 type BlockCategory = string;
@@ -156,13 +147,6 @@ export const BlockLibrary: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [searchQuery, handleSearchClear]);
 
-  // Keyboard navigation
-  useEffect(() => {
-    if (debouncedSearchQuery && searchQuery === debouncedSearchQuery) {
-      handleSearchClear();
-    }
-  }, [handleSearchClear]);
-
   const categories = getBlockCategories();
 
   // Filter out timeRoot blocks (P5: TimeRoot Hidden)
@@ -199,6 +183,7 @@ export const BlockLibrary: React.FC = () => {
         <h2 className="block-library__title">Blocks</h2>
 
         <div className="block-library__search">
+          <span className="block-library__search-icon">⌕</span>
           <input
             ref={searchInputRef}
             type="text"
@@ -240,6 +225,13 @@ export const BlockLibrary: React.FC = () => {
             onFocus={() => setFocusedCategory(category)}
           />
         ))}
+
+        {debouncedSearchQuery && totalResults === 0 && (
+          <div className="block-library__empty">
+            <div className="block-library__empty-icon">🔍</div>
+            <div>No blocks match "{debouncedSearchQuery}"</div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -290,20 +282,23 @@ const BlockCategorySection: React.FC<BlockCategorySectionProps> = ({
   return (
     <div
       className={`block-category ${collapsed ? 'collapsed' : ''} ${focused ? 'focused' : ''}`}
+      data-category={category}
       onFocus={onFocus}
     >
       <div className="block-category__header" onClick={() => onToggle(category)}>
-        <span className="block-category__icon">{collapsed ? '▶' : '▼'}</span>
+        <span className="block-category__dot" />
+        <span className="block-category__icon">▼</span>
         <h3 className="block-category__title">{category}</h3>
         <span className="block-category__count">{filteredTypes.length}</span>
       </div>
 
       {!collapsed && (
         <div className="block-category__types">
-          {filteredTypes.map((type: BlockDef, index: number) => (
+          {filteredTypes.map((type: BlockDef) => (
             <BlockTypeItem
               key={type.type}
               type={type}
+              category={category}
               onClick={onBlockClick}
               onDoubleClick={onBlockDoubleClick}
             />
@@ -319,28 +314,48 @@ const BlockCategorySection: React.FC<BlockCategorySectionProps> = ({
  */
 interface BlockTypeItemProps {
   type: BlockTypeInfo;
+  category: string;
   onClick: (type: BlockTypeInfo) => void;
   onDoubleClick: (type: BlockTypeInfo) => void;
 }
 
 const BlockTypeItem: React.FC<BlockTypeItemProps> = ({
   type,
+  category,
   onClick,
   onDoubleClick,
 }) => {
+  const inputCount = type.inputs.length;
+  const outputCount = type.outputs.length;
+  const isPrimitive = type.form === 'primitive';
+
   return (
     <div
       className="block-type-item"
       onClick={() => onClick(type)}
       onDoubleClick={() => onDoubleClick(type)}
     >
-      <div className="block-type-item__icon">
-        {/* TODO: Add block icon based on category/capability */}
-        📦
-      </div>
+      <div className="block-type-item__icon" />
       <div className="block-type-item__info">
-        <div className="block-type-item__label">{type.label}</div>
-        <div className="block-type-item__type">{type.type}</div>
+        <div className="block-type-item__header">
+          <span className="block-type-item__label">{type.label}</span>
+          <span
+            className={`block-type-item__badge ${isPrimitive ? 'block-type-item__badge--primitive' : 'block-type-item__badge--macro'}`}
+          >
+            {isPrimitive ? 'P' : 'M'}
+          </span>
+        </div>
+        <div className="block-type-item__meta">
+          <span className="block-type-item__type">{type.type}</span>
+          <span className="block-type-item__ports">
+            <span className="block-type-item__port-in">{inputCount}</span>
+            <span className="block-type-item__port-arrow">→</span>
+            <span className="block-type-item__port-out">{outputCount}</span>
+          </span>
+        </div>
+        {type.description && (
+          <div className="block-type-item__description">{type.description}</div>
+        )}
       </div>
     </div>
   );
