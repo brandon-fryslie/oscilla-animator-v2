@@ -17,7 +17,7 @@ import type {
   DomainTypeId,
 } from './Indices';
 import type { TimeModelIR } from './schedule';
-import type { PureFn, OpCode, InstanceDecl, LayoutSpec, Step } from './types';
+import type { PureFn, OpCode, InstanceDecl, LayoutSpec, Step, IntrinsicPropertyName } from './types';
 
 // =============================================================================
 // IRBuilder Interface
@@ -59,11 +59,15 @@ export interface IRBuilder {
 
   /**
    * Create a field from an intrinsic property.
+   *
+   * Intrinsics are per-element properties automatically available for any instance.
+   * Valid intrinsic names: 'index', 'normalizedIndex', 'randomId', 'position', 'radius'
+   *
    * @param instanceId - The instance to query
-   * @param intrinsic - Intrinsic property name ('position', 'index', 'radius', etc.)
+   * @param intrinsic - Intrinsic property name (type-checked at compile time)
    * @param type - Signal type for the field
    */
-  fieldIntrinsic(instanceId: InstanceId, intrinsic: string, type: SignalType): FieldExprId;
+  fieldIntrinsic(instanceId: InstanceId, intrinsic: IntrinsicPropertyName, type: SignalType): FieldExprId;
 
   /**
    * Create an array field expression (Stage 2: Signal<T> → Field<T>).

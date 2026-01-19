@@ -52,7 +52,7 @@ function log(msg: string, level: 'info' | 'warn' | 'error' = 'info') {
 type PatchBuilder = (b: any) => void;
 
 // Original patch - using three-stage architecture: Circle → Array → GridLayout
-// Uses registry defaults for most inputs, explicit Const blocks only when needed
+// Explicit wiring for all inputs (adapter pass not implemented yet)
 const patchOriginal: PatchBuilder = (b) => {
   const time = b.addBlock('InfiniteTimeRoot',
     { periodAMs: 799, periodBMs: 32000 },
@@ -79,18 +79,24 @@ const patchOriginal: PatchBuilder = (b) => {
 
   const totalAngle = b.addBlock('FieldAdd', {});
 
-  // FieldRadiusSqrt uses registry default (0.35)
+  // FieldRadiusSqrt needs FIELD input - explicit Const → FieldBroadcast → radius
+  const radiusConst = b.addBlock('Const', { value: 0.35, payloadType: 'float' });
+  const radiusBroadcast = b.addBlock('FieldBroadcast', { payloadType: 'float' });
   const effectiveRadius = b.addBlock('FieldRadiusSqrt', {});
 
-  // FieldPolarToCartesian - centerX/centerY already have 0.5 defaults in registry
+  // FieldPolarToCartesian - centerX/centerY already have 0.5 defaults in registry (signals, not fields)
   const pos = b.addBlock('FieldPolarToCartesian', {});
 
   const hue = b.addBlock('FieldHueFromPhase', {});
 
-  // HsvToRgb uses registry defaults (sat=1.0, val=1.0)
+  // HsvToRgb - sat/val are SIGNAL inputs, Const works directly
+  const satConst = b.addBlock('Const', { value: 0.85, payloadType: 'float' });
+  const valConst = b.addBlock('Const', { value: 0.9, payloadType: 'float' });
   const color = b.addBlock('HsvToRgb', {});
 
-  // RenderInstances2D uses registry default (size=5)
+  // RenderInstances2D.size needs FIELD input - explicit Const → FieldBroadcast → size
+  const sizeConst = b.addBlock('Const', { value: 3, payloadType: 'float' });
+  const sizeBroadcast = b.addBlock('FieldBroadcast', { payloadType: 'float' });
   const render = b.addBlock('RenderInstances2D', {});
 
   // Wire phase to position and color (phaseA has rail default in registry)
@@ -106,6 +112,10 @@ const patchOriginal: PatchBuilder = (b) => {
   b.wire(array, 't', hue, 'id01');
   b.wire(array, 't', effectiveRadius, 'id01');
 
+  // Wire radius: Const → FieldBroadcast → FieldRadiusSqrt
+  b.wire(radiusConst, 'out', radiusBroadcast, 'signal');
+  b.wire(radiusBroadcast, 'field', effectiveRadius, 'radius');
+
   // Wire golden angle + offset to total angle
   b.wire(goldenAngle, 'angle', totalAngle, 'a');
   b.wire(angularOffset, 'offset', totalAngle, 'b');
@@ -114,8 +124,14 @@ const patchOriginal: PatchBuilder = (b) => {
   b.wire(totalAngle, 'out', pos, 'angle');
   b.wire(effectiveRadius, 'out', pos, 'radius');
 
-  // Wire hue to color
+  // Wire hue to color, plus explicit sat/val
   b.wire(hue, 'hue', color, 'hue');
+  b.wire(satConst, 'out', color, 'sat');
+  b.wire(valConst, 'out', color, 'val');
+
+  // Wire size: Const → FieldBroadcast → RenderInstances2D
+  b.wire(sizeConst, 'out', sizeBroadcast, 'signal');
+  b.wire(sizeBroadcast, 'field', render, 'size');
 
   // Wire pos, color to render
   b.wire(pos, 'pos', render, 'pos');
@@ -316,6 +332,24 @@ async function buildAndCompile(patchBuilder: PatchBuilder) {
   const patch = buildPatch(patchBuilder);
 
   log(`Patch built: ${patch.blocks.size} blocks, ${patch.edges.length} edges`);
+
+  // Debug: Show Const blocks and their values
+  for (const [id, block] of patch.blocks) {
+    if (block.type === 'Const' || block.type === 'FieldBroadcast' || block.type === 'FieldRadiusSqrt') {
+      log(`  ${block.type} ${id}: params=${JSON.stringify(block.params)}`);
+    }
+  }
+
+  // Debug: Show edges involving radius blocks
+  log(`  Edges involving radius, broadcast, or FieldRadiusSqrt:`);
+  for (const edge of patch.edges) {
+    const fromBlock = patch.blocks.get(edge.from.blockId);
+    const toBlock = patch.blocks.get(edge.to.blockId);
+    if (fromBlock?.type === 'Const' || fromBlock?.type === 'FieldBroadcast' ||
+        toBlock?.type === 'FieldRadiusSqrt' || toBlock?.type === 'FieldBroadcast') {
+      log(`    ${edge.from.blockId}:${edge.from.slotId} -> ${edge.to.blockId}:${edge.to.slotId}`);
+    }
+  }
 
   // Load patch into store
   rootStore.patch.loadPatch(patch);
@@ -601,6 +635,7 @@ function setupLiveRecompileReaction() {
 
 let frameCount = 0;
 let lastFpsUpdate = performance.now();
+let lastElementCountLog: number | null = null;
 let fps = 0;
 let execTime = 0;
 let renderTime = 0;
@@ -670,11 +705,48 @@ function animate(tMs: number) {
     const now = performance.now();
     if (now - lastFpsUpdate > 500) {
       fps = Math.round((frameCount * 1000) / (now - lastFpsUpdate));
-      const statsText = `FPS: ${fps} | ${execTime.toFixed(1)}/${renderTime.toFixed(1)}ms | Min/Max: ${minFrameTime.toFixed(1)}/${maxFrameTime.toFixed(1)}ms`;
+
+      // Calculate total elements being rendered
+      const totalElements = frame.passes.reduce((sum, pass) => sum + pass.count, 0);
+      const statsText = `FPS: ${fps} | Elements: ${totalElements} | ${execTime.toFixed(1)}/${renderTime.toFixed(1)}ms`;
 
       // Update stats via global callback set by App component
       if ((window as any).__setStats) {
         (window as any).__setStats(statsText);
+      }
+
+      // Log element count to diagnostics (every 2 seconds)
+      if (now - (lastElementCountLog ?? 0) > 2000) {
+        log(`Rendering ${totalElements} elements across ${frame.passes.length} pass(es)`);
+
+        // Debug: Show first pass details
+        if (frame.passes.length > 0) {
+          const pass = frame.passes[0];
+          const pos = pass.position as Float32Array;
+          const sizeVal = typeof pass.size === 'number' ? pass.size : (pass.size as Float32Array);
+          const sizeStr = typeof pass.size === 'number' ? `uniform=${pass.size}` : `arr[0]=${(sizeVal as Float32Array)[0]?.toFixed(3)}`;
+          log(`  Pass 0: count=${pass.count}, size=${sizeStr}`);
+
+          // Check position range (sample first 1000)
+          let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+          const sampleSize = Math.min(pass.count, 1000);
+          for (let i = 0; i < sampleSize; i++) {
+            const x = pos[i * 2];
+            const y = pos[i * 2 + 1];
+            if (!isNaN(x) && !isNaN(y)) {
+              minX = Math.min(minX, x);
+              maxX = Math.max(maxX, x);
+              minY = Math.min(minY, y);
+              maxY = Math.max(maxY, y);
+            }
+          }
+          log(`  Position range (${sampleSize} samples): X=[${minX.toFixed(3)}, ${maxX.toFixed(3)}], Y=[${minY.toFixed(3)}, ${maxY.toFixed(3)}]`);
+
+          // Sample some actual positions
+          log(`  Sample positions: [0]=(${pos[0]?.toFixed(4)}, ${pos[1]?.toFixed(4)}), [100]=(${pos[200]?.toFixed(4)}, ${pos[201]?.toFixed(4)}), [500]=(${pos[1000]?.toFixed(4)}, ${pos[1001]?.toFixed(4)})`);
+        }
+
+        lastElementCountLog = now;
       }
 
       frameCount = 0;

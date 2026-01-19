@@ -128,9 +128,21 @@ export interface SigExprStateRead {
 // Field Expressions
 // =============================================================================
 
+/**
+ * Valid intrinsic property names (closed union).
+ * These are per-element properties automatically available for any instance.
+ */
+export type IntrinsicPropertyName =
+  | 'index'
+  | 'normalizedIndex'
+  | 'randomId'
+  | 'position'
+  | 'radius';
+
 export type FieldExpr =
   | FieldExprConst
   | FieldExprSource
+  | FieldExprIntrinsic
   | FieldExprBroadcast
   | FieldExprMap
   | FieldExprZip
@@ -153,6 +165,17 @@ export interface FieldExprSource {
   // NEW: Instance-based model (Sprint 2)
   readonly instanceId?: string; // InstanceId
   readonly intrinsic?: string;  // Intrinsic property name
+}
+
+/**
+ * Intrinsic field expression - properly typed intrinsic access.
+ * Replaces the hacky use of FieldExprSource with 'as any' casts.
+ */
+export interface FieldExprIntrinsic {
+  readonly kind: 'intrinsic';
+  readonly instanceId: InstanceId;
+  readonly intrinsic: IntrinsicPropertyName;
+  readonly type: SignalType;
 }
 
 export interface FieldExprBroadcast {

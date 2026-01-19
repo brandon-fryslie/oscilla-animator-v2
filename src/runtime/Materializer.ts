@@ -139,7 +139,9 @@ function fillBuffer(
 
     case 'source': {
       // Fill from instance source
-      fillBufferSource(expr.sourceId, buffer, instance);
+      // Use intrinsic property if available (new-style), otherwise fall back to sourceId
+      const sourceKey = (expr as any).intrinsic ?? expr.sourceId;
+      fillBufferSource(sourceKey, buffer, instance);
       break;
     }
 

@@ -37,6 +37,7 @@ import type {
   InstanceDecl,
   LayoutSpec,
   Step,
+  IntrinsicPropertyName,
 } from './types';
 
 // =============================================================================
@@ -194,20 +195,17 @@ export class IRBuilderImpl implements IRBuilder {
   }
 
   /**
-   * Create a field from an intrinsic property (NEW).
+   * Create a field from an intrinsic property.
+   * Uses proper FieldExprIntrinsic type - no 'as any' casts needed.
    */
-  fieldIntrinsic(instanceId: InstanceId, intrinsic: string, type: SignalType): FieldExprId {
+  fieldIntrinsic(instanceId: InstanceId, intrinsic: IntrinsicPropertyName, type: SignalType): FieldExprId {
     const id = fieldExprId(this.fieldExprs.length);
-    // Store as a new-style FieldExprSource with instanceId and intrinsic
-    // For now, we'll add these as extra properties that coexist with old ones
     this.fieldExprs.push({
-      kind: 'source',
-      domain: domainId('deprecated'), // Placeholder for old field
-      sourceId: 'index', // Placeholder for old field
-      instanceId: instanceId as any, // NEW field
-      intrinsic: intrinsic as any, // NEW field
+      kind: 'intrinsic',
+      instanceId,
+      intrinsic,
       type,
-    } as any);
+    });
     return id;
   }
 
@@ -317,6 +315,9 @@ export class IRBuilderImpl implements IRBuilder {
     switch (expr.kind) {
       case 'source':
         return expr.domain;
+      case 'intrinsic':
+        // Intrinsics don't have a domain - they use instance-based model
+        return undefined;
       case 'mapIndexed':
         return expr.domain;
       case 'map':
