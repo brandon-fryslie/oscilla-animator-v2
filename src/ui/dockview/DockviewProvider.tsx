@@ -89,7 +89,6 @@ export const DockviewProvider: React.FC<DockviewProviderProps> = ({
         defaultTabComponent={TabWithoutClose}
         onReady={handleReady}
         floatingGroupBounds="boundedWithinViewport"
-        singleTabMode="fullwidth"
       />
     </DockviewContext.Provider>
   );

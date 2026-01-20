@@ -28,6 +28,8 @@ export interface EffectiveTime {
   /** Pulse signal: 1.0 when either phase wrapped, 0.0 otherwise */
   pulse: number;
 
+  /** Progress within finite time (0-1), only set for finite time roots */
+  progress?: number;
 }
 
 /**

@@ -42,6 +42,120 @@ export function recordFrameTime(state: RuntimeState, frameTimeMs: number): void 
   h.frameTimesIndex = (h.frameTimesIndex + 1) % h.frameTimes.length;
 }
 
+/**
+ * Record frame delta (time between rAF callbacks)
+ *
+ * This is the key metric for detecting timing jitter that causes wagon wheel effects.
+ * At 60fps, ideal delta is 16.67ms. Variance indicates timing instability.
+ *
+ * @param state - Runtime state with health metrics
+ * @param rafTimestamp - The timestamp from requestAnimationFrame callback
+ */
+export function recordFrameDelta(state: RuntimeState, rafTimestamp: number): void {
+  const h = state.health;
+
+  if (h.prevRafTimestamp !== null) {
+    const delta = rafTimestamp - h.prevRafTimestamp;
+
+    // Write to ring buffer (last 60 frames for ~1 second of history)
+    h.frameDeltas[h.frameDeltasIndex] = delta;
+    h.frameDeltasIndex = (h.frameDeltasIndex + 1) % h.frameDeltas.length;
+
+    // Accumulate stats for snapshot window
+    h.frameCountInWindow++;
+    h.frameDeltaSum += delta;
+    h.frameDeltaSumSq += delta * delta;
+    h.minFrameDelta = Math.min(h.minFrameDelta, delta);
+    h.maxFrameDelta = Math.max(h.maxFrameDelta, delta);
+
+    // Count dropped frames (> 20ms suggests missed vsync at 60Hz)
+    if (delta > 20) {
+      h.droppedFrameCount++;
+    }
+  }
+
+  h.prevRafTimestamp = rafTimestamp;
+}
+
+/**
+ * Compute frame timing statistics from current snapshot window
+ *
+ * Returns statistics useful for diagnosing timing issues:
+ * - avgDelta: Mean frame delta (should be ~16.67ms at 60fps)
+ * - stdDev: Standard deviation (jitter indicator, should be <1ms ideally)
+ * - jitterRatio: stdDev/avgDelta as percentage (>5% may cause visible stutter)
+ * - droppedFrames: Count of frames >20ms
+ * - minDelta/maxDelta: Range of deltas
+ */
+export function computeFrameTimingStats(state: RuntimeState): FrameTimingStats {
+  const h = state.health;
+
+  if (h.frameCountInWindow === 0) {
+    return {
+      avgDelta: 0,
+      stdDev: 0,
+      jitterRatio: 0,
+      droppedFrames: 0,
+      frameCount: 0,
+      minDelta: 0,
+      maxDelta: 0,
+    };
+  }
+
+  const n = h.frameCountInWindow;
+  const avgDelta = h.frameDeltaSum / n;
+
+  // Variance = E[X²] - E[X]²
+  const variance = h.frameDeltaSumSq / n - avgDelta * avgDelta;
+  const stdDev = Math.sqrt(Math.max(0, variance));
+
+  // Jitter ratio as percentage of average delta
+  const jitterRatio = avgDelta > 0 ? (stdDev / avgDelta) * 100 : 0;
+
+  return {
+    avgDelta,
+    stdDev,
+    jitterRatio,
+    droppedFrames: h.droppedFrameCount,
+    frameCount: n,
+    minDelta: h.minFrameDelta === Infinity ? 0 : h.minFrameDelta,
+    maxDelta: h.maxFrameDelta,
+  };
+}
+
+/**
+ * Reset frame timing stats for next snapshot window
+ */
+export function resetFrameTimingStats(state: RuntimeState): void {
+  const h = state.health;
+  h.droppedFrameCount = 0;
+  h.frameCountInWindow = 0;
+  h.frameDeltaSum = 0;
+  h.frameDeltaSumSq = 0;
+  h.minFrameDelta = Infinity;
+  h.maxFrameDelta = 0;
+}
+
+/**
+ * Frame timing statistics
+ */
+export interface FrameTimingStats {
+  /** Average frame delta in ms */
+  avgDelta: number;
+  /** Standard deviation of frame deltas in ms */
+  stdDev: number;
+  /** Jitter ratio: stdDev/avgDelta as percentage */
+  jitterRatio: number;
+  /** Count of dropped frames (delta > 20ms) */
+  droppedFrames: number;
+  /** Total frame count in window */
+  frameCount: number;
+  /** Minimum frame delta in window */
+  minDelta: number;
+  /** Maximum frame delta in window */
+  maxDelta: number;
+}
+
 // =============================================================================
 // NaN/Inf Detection (Batched)
 // =============================================================================

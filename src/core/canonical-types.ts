@@ -7,13 +7,36 @@
  * The type system separates concerns into:
  * - PayloadType: What the value is made of (float, vec2, color, etc.)
  * - Extent: Where/when/about-what a value exists (5 independent axes)
- * - SignalType: Complete type contract (payload + extent)
+ * - SignalType: Complete type contract (payload + extent + unit)
+ * - NumericUnit: Optional unit annotation for numeric types (phase, radians, etc.)
  *
  * Key design principles:
  * - No optional fields - use discriminated unions (AxisTag pattern)
  * - Runtime erasure - all type info resolved at compile time
  * - Single source of truth - this is the authoritative type system
  */
+
+// =============================================================================
+// NumericUnit - Optional Unit Annotation
+// =============================================================================
+
+/**
+ * Unit annotation for numeric payload types.
+ *
+ * Enables compile-time detection of unit mismatches (phase vs radians, etc.).
+ * This is OPTIONAL - absence of unit annotation means no validation.
+ *
+ * Units are erased at runtime; validation happens during compilation.
+ */
+export type NumericUnit =
+  | 'phase'      // [0, 1) cyclic - used by sin/cos/tan kernels, phaseA/phaseB
+  | 'radians'    // [0, 2π) or unbounded - field polar conversions
+  | 'normalized' // [0, 1] clamped - easing, opacity, normalizedIndex
+  | 'scalar'     // Dimensionless float - arithmetic results
+  | 'ms'         // Milliseconds - time rail
+  | '#'          // Count/index (integer) - array indices
+  | 'degrees'    // [0, 360) - user-facing angles (future)
+  | 'seconds';   // Time in seconds - user-facing (future)
 
 // =============================================================================
 // PayloadType - What the value is made of
@@ -320,20 +343,31 @@ export function extent(overrides: Partial<Extent>): Extent {
  * The full type description for a port or wire.
  *
  * Replaces the old TypeDesc with a cleaner separation of concerns.
+ *
+ * Unit annotation is OPTIONAL - used for compile-time validation only.
  */
 export interface SignalType {
   readonly payload: PayloadType;
   readonly extent: Extent;
+  readonly unit?: NumericUnit; // NEW: Optional unit annotation
 }
 
 /**
- * Create a SignalType with specified payload and extent.
+ * Create a SignalType with specified payload, extent, and optional unit.
  */
-export function signalType(payload: PayloadType, extentOverrides?: Partial<Extent>): SignalType {
-  return {
+export function signalType(
+  payload: PayloadType,
+  extentOverrides?: Partial<Extent>,
+  unit?: NumericUnit
+): SignalType {
+  const type: SignalType = {
     payload,
     extent: extentOverrides ? extent(extentOverrides) : extentDefault(),
   };
+  if (unit !== undefined) {
+    (type as { unit?: NumericUnit }).unit = unit;
+  }
+  return type;
 }
 
 // =============================================================================
@@ -534,11 +568,11 @@ export function worldToAxes(
 /**
  * Create a Signal SignalType (one + continuous).
  */
-export function signalTypeSignal(payload: PayloadType): SignalType {
+export function signalTypeSignal(payload: PayloadType, unit?: NumericUnit): SignalType {
   return signalType(payload, {
     cardinality: axisInstantiated(cardinalityOne()),
     temporality: axisInstantiated(temporalityContinuous()),
-  });
+  }, unit);
 }
 
 /**
@@ -546,7 +580,7 @@ export function signalTypeSignal(payload: PayloadType): SignalType {
  *
  * Accepts either an InstanceRef or a plain instanceId string (uses 'default' domain type).
  */
-export function signalTypeField(payload: PayloadType, instance: InstanceRef | string): SignalType {
+export function signalTypeField(payload: PayloadType, instance: InstanceRef | string, unit?: NumericUnit): SignalType {
   const instanceRefValue = typeof instance === 'string'
     ? instanceRef('default', instance)
     : instance;
@@ -554,27 +588,27 @@ export function signalTypeField(payload: PayloadType, instance: InstanceRef | st
   return signalType(payload, {
     cardinality: axisInstantiated(cardinalityMany(instanceRefValue)),
     temporality: axisInstantiated(temporalityContinuous()),
-  });
+  }, unit);
 }
 
 /**
  * Create a Trigger SignalType (one + discrete).
  */
-export function signalTypeTrigger(payload: PayloadType): SignalType {
+export function signalTypeTrigger(payload: PayloadType, unit?: NumericUnit): SignalType {
   return signalType(payload, {
     cardinality: axisInstantiated(cardinalityOne()),
     temporality: axisInstantiated(temporalityDiscrete()),
-  });
+  }, unit);
 }
 
 /**
  * Create a Static/Scalar SignalType (zero + continuous).
  */
-export function signalTypeStatic(payload: PayloadType): SignalType {
+export function signalTypeStatic(payload: PayloadType, unit?: NumericUnit): SignalType {
   return signalType(payload, {
     cardinality: axisInstantiated(cardinalityZero()),
     temporality: axisInstantiated(temporalityContinuous()),
-  });
+  }, unit);
 }
 
 /**
@@ -582,7 +616,7 @@ export function signalTypeStatic(payload: PayloadType): SignalType {
  *
  * Accepts either an InstanceRef or a plain instanceId string (uses 'default' domain type).
  */
-export function signalTypePerLaneEvent(payload: PayloadType, instance: InstanceRef | string): SignalType {
+export function signalTypePerLaneEvent(payload: PayloadType, instance: InstanceRef | string, unit?: NumericUnit): SignalType {
   const instanceRefValue = typeof instance === 'string'
     ? instanceRef('default', instance)
     : instance;
@@ -590,5 +624,5 @@ export function signalTypePerLaneEvent(payload: PayloadType, instance: InstanceR
   return signalType(payload, {
     cardinality: axisInstantiated(cardinalityMany(instanceRefValue)),
     temporality: axisInstantiated(temporalityDiscrete()),
-  });
+  }, unit);
 }

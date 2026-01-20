@@ -5,7 +5,8 @@
       "mcp__cherry-chrome__chrome_list_connections",
       "Bash(lsof:*)",
       "Skill(do:it)",
-      "Skill(do:it-skill)"
+      "Skill(do:it-skill)",
+      "Skill(do:plan-skill)"
     ]
   },
   "enableAllProjectMcpServers": true,

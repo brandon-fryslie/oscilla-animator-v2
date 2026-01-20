@@ -18,6 +18,7 @@ import type { Patch, BlockId } from '../../types';
 import type { PatchStore } from '../../stores/PatchStore';
 import { getBlockDefinition } from '../../blocks/registry';
 import { createNodeFromBlock, createEdgeFromPatchEdge, type OscillaNode } from './nodes';
+import { rootStore } from '../../stores';
 
 // Flag to prevent sync loops
 let isSyncing = false;
@@ -53,7 +54,11 @@ export function syncPatchToReactFlow(
     for (const block of patch.blocks.values()) {
       const def = getBlockDefinition(block.type);
       if (!def) {
-        console.warn(`Block definition not found: ${block.type}`);
+        rootStore.diagnostics.log({
+          level: 'warn',
+          message: `Block definition not found: ${block.type}`,
+          data: { blockId: block.id, blockType: block.type },
+        });
         continue;
       }
 
@@ -167,7 +172,8 @@ export function createConnectHandler(handle: SyncHandle): OnConnect {
 
     isSyncing = true;
     try {
-      handle.patchStore.addEdge(
+      // Add to PatchStore (source of truth)
+      const edgeId = handle.patchStore.addEdge(
         {
           kind: 'port',
           blockId: connection.source,
@@ -179,6 +185,17 @@ export function createConnectHandler(handle: SyncHandle): OnConnect {
           slotId: connection.targetHandle || '',
         }
       );
+
+      // Also add to ReactFlow state directly (since reaction is blocked by isSyncing)
+      const newEdge: ReactFlowEdge = {
+        id: edgeId,
+        source: connection.source,
+        target: connection.target,
+        sourceHandle: connection.sourceHandle || undefined,
+        targetHandle: connection.targetHandle || undefined,
+        type: 'default',
+      };
+      handle.setEdges((edges) => [...edges, newEdge]);
     } finally {
       isSyncing = false;
     }
@@ -195,7 +212,11 @@ export function addBlockToReactFlow(
 ): void {
   const def = getBlockDefinition(blockType);
   if (!def) {
-    console.warn(`Block definition not found: ${blockType}`);
+    rootStore.diagnostics.log({
+      level: 'warn',
+      message: `Block definition not found: ${blockType}`,
+      data: { blockId, blockType },
+    });
     return;
   }
 

@@ -26,6 +26,29 @@ export interface CompilationStats {
 }
 
 // =============================================================================
+// Frame Timing Stats Types
+// =============================================================================
+
+/**
+ * Frame timing statistics for diagnosing animation smoothness issues.
+ *
+ * Key metrics:
+ * - avgDelta: Should be ~16.67ms at 60fps
+ * - stdDev: Jitter indicator - should be <1ms for smooth animation
+ * - jitterRatio: stdDev/avgDelta as % - >5% may cause visible stutter
+ * - droppedFrames: Frames >20ms (missed vsync)
+ */
+export interface FrameTimingStats {
+  avgDelta: number;
+  stdDev: number;
+  jitterRatio: number;
+  droppedFrames: number;
+  frameCount: number;
+  minDelta: number;
+  maxDelta: number;
+}
+
+// =============================================================================
 // Log Types
 // =============================================================================
 
@@ -83,6 +106,21 @@ export class DiagnosticsStore {
     recentMs: [],
   };
 
+  // Frame timing statistics (updated at 5Hz from HealthMonitor)
+  private _frameTiming: FrameTimingStats = {
+    avgDelta: 0,
+    stdDev: 0,
+    jitterRatio: 0,
+    droppedFrames: 0,
+    frameCount: 0,
+    minDelta: 0,
+    maxDelta: 0,
+  };
+
+  // Historical frame timing for trend analysis (last 30 snapshots = ~6 seconds)
+  private _frameTimingHistory: FrameTimingStats[] = [];
+  private static readonly MAX_TIMING_HISTORY = 30;
+
   // =============================================================================
   // Constructor
   // =============================================================================
@@ -92,7 +130,7 @@ export class DiagnosticsStore {
 
     makeObservable<
       DiagnosticsStore,
-      '_revision' | '_logs' | '_compilationStats' | 'incrementRevision'
+      '_revision' | '_logs' | '_compilationStats' | '_frameTiming' | '_frameTimingHistory' | 'incrementRevision'
     >(this, {
       // Observable revision counter
       _revision: observable,
@@ -114,6 +152,13 @@ export class DiagnosticsStore {
       // Compilation Stats API
       _compilationStats: observable,
       compilationStats: computed,
+
+      // Frame Timing API
+      _frameTiming: observable,
+      _frameTimingHistory: observable,
+      frameTiming: computed,
+      frameTimingHistory: computed,
+      updateFrameTiming: action,
       avgCompileMs: computed,
       medianCompileMs: computed,
       recordCompilation: action,
@@ -319,6 +364,39 @@ export class DiagnosticsStore {
     this._compilationStats.recentMs.push(durationMs);
     if (this._compilationStats.recentMs.length > 20) {
       this._compilationStats.recentMs.shift();
+    }
+  }
+
+  // =============================================================================
+  // Frame Timing API
+  // =============================================================================
+
+  /**
+   * Returns current frame timing statistics.
+   */
+  get frameTiming(): FrameTimingStats {
+    return this._frameTiming;
+  }
+
+  /**
+   * Returns historical frame timing for trend analysis.
+   * Last 30 snapshots (~6 seconds at 5Hz).
+   */
+  get frameTimingHistory(): readonly FrameTimingStats[] {
+    return this._frameTimingHistory;
+  }
+
+  /**
+   * Updates frame timing statistics.
+   * Called by the animation loop at snapshot intervals (5Hz).
+   */
+  updateFrameTiming(stats: FrameTimingStats): void {
+    this._frameTiming = stats;
+
+    // Add to history
+    this._frameTimingHistory.push(stats);
+    if (this._frameTimingHistory.length > DiagnosticsStore.MAX_TIMING_HISTORY) {
+      this._frameTimingHistory.shift();
     }
   }
 }

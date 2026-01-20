@@ -416,6 +416,26 @@ export class DiagnosticHub {
   }
 
   /**
+   * Returns diagnostics filtered by severity.
+   *
+   * @param severity Severity level to filter by
+   * @returns Diagnostics with that severity
+   */
+  getBySeverity(severity: Diagnostic['severity']): Diagnostic[] {
+    return this.filter(this.getActive(), { severity });
+  }
+
+  /**
+   * Returns diagnostics filtered by domain.
+   *
+   * @param domain Domain to filter by
+   * @returns Diagnostics in that domain
+   */
+  getByDomain(domain: Diagnostic['domain']): Diagnostic[] {
+    return this.filter(this.getActive(), { domain });
+  }
+
+  /**
    * Filters diagnostics by criteria.
    *
    * @param diagnostics Diagnostics to filter

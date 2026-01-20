@@ -18,7 +18,7 @@ import { createRuntimeState, BufferPool, executeFrame } from './runtime';
 import { renderFrame } from './render';
 import { App } from './ui/components';
 import { timeRootRole, type BlockId } from './types';
-import { recordFrameTime, shouldEmitSnapshot, emitHealthSnapshot } from './runtime/HealthMonitor';
+import { recordFrameTime, recordFrameDelta, shouldEmitSnapshot, emitHealthSnapshot, computeFrameTimingStats, resetFrameTimingStats } from './runtime/HealthMonitor';
 import type { RuntimeState } from './runtime/RuntimeState';
 
 // =============================================================================
@@ -61,7 +61,7 @@ const patchOriginal: PatchBuilder = (b) => {
   // 1. Circle (primitive) → Signal<float>
   // 2. Array (cardinality) → Field<float>
   // 3. GridLayout (operation) → Field<vec2>
-  const circle = b.addBlock('Circle', { radius: 0.02 });
+  const circle = b.addBlock('Square');
   const array = b.addBlock('Array', { count: 5000 });
   const layout = b.addBlock('GridLayout', { rows: 71, cols: 71 });
 
@@ -722,6 +722,9 @@ function animate(tMs: number) {
   }
 
   try {
+    // Record frame delta FIRST (using rAF timestamp for precision)
+    recordFrameDelta(currentState, tMs);
+
     const frameStart = performance.now();
 
     // Execute frame
@@ -748,6 +751,12 @@ function animate(tMs: number) {
 
     // Emit health snapshot if throttle interval elapsed (Sprint 2)
     if (shouldEmitSnapshot(currentState)) {
+      // Compute frame timing stats before emitting
+      const timingStats = computeFrameTimingStats(currentState);
+
+      // Update diagnostics store with timing stats
+      rootStore.diagnostics.updateFrameTiming(timingStats);
+
       emitHealthSnapshot(
         currentState,
         rootStore.events,
@@ -755,6 +764,9 @@ function animate(tMs: number) {
         rootStore.getPatchRevision(),
         tMs
       );
+
+      // Reset timing stats for next window
+      resetFrameTimingStats(currentState);
     }
 
     // Update continuity store (batched at 5Hz - Sprint 3)

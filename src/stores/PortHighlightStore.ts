@@ -25,8 +25,8 @@ export class PortHighlightStore {
     makeObservable(this, {
       hoveredPort: observable,
       compatiblePorts: computed,
-      setHoveredPort: action,
-      clearHoveredPort: action,
+      setHoveredPort: action.bound,
+      clearHoveredPort: action.bound,
       isPortCompatible: action,
       isPortHighlighted: action,
     });

@@ -5,9 +5,9 @@
  * These are NOT instances - they have cardinality ONE.
  */
 
-import { registerBlock } from './registry';
-import { signalType } from '../core/canonical-types';
-import { defaultSourceConst } from '../types';
+import {registerBlock} from './registry';
+import {signalType} from '../core/canonical-types';
+import {defaultSourceConst} from '../types';
 
 // =============================================================================
 // Circle
@@ -28,41 +28,47 @@ import { defaultSourceConst } from '../types';
  * Future versions may use a composite type.
  */
 registerBlock({
-  type: 'Circle',
-  label: 'Circle',
-  category: 'shape',
-  description: 'Creates a circle primitive (ONE element)',
-  form: 'primitive',
-  capability: 'pure',
-  inputs: [
-    { id: 'radius', label: 'Radius', type: signalType('float'), defaultValue: 0.02, defaultSource: defaultSourceConst(0.02) },
-  ],
-  outputs: [
-    { id: 'circle', label: 'Circle', type: signalType('float') },
-  ],
-  params: {
-    radius: 0.02,
-  },
-  lower: ({ ctx, inputsById, config }) => {
-    const radiusInput = inputsById.radius;
+    type: 'Circle',
+    label: 'Circle',
+    category: 'shape',
+    description: 'Creates a circle primitive (ONE element)',
+    form: 'primitive',
+    capability: 'pure',
+    inputs: [
+        {
+            id: 'radius',
+            label: 'Radius',
+            type: signalType('float'),
+            defaultValue: 0.02,
+            defaultSource: defaultSourceConst(0.02)
+        },
+    ],
+    outputs: [
+        {id: 'circle', label: 'Circle', type: signalType('float')},
+    ],
+    params: {
+        radius: 0.02,
+    },
+    lower: ({ctx, inputsById, config}) => {
+        const radiusInput = inputsById.radius;
 
-    // Get radius signal - either from input or from config
-    let radiusSig;
-    if (radiusInput && radiusInput.k === 'sig') {
-      radiusSig = radiusInput.id;
-    } else {
-      radiusSig = ctx.b.sigConst((config?.radius as number) ?? 0.02, signalType('float'));
-    }
+        // Get radius signal - either from input or from config
+        let radiusSig;
+        if (radiusInput && radiusInput.k === 'sig') {
+            radiusSig = radiusInput.id;
+        } else {
+            radiusSig = ctx.b.sigConst((config?.radius as number) ?? 0.02, signalType('float'));
+        }
 
-    const slot = ctx.b.allocSlot();
+        const slot = ctx.b.allocSlot();
 
-    // Output the radius signal as the "circle" signal
-    return {
-      outputsById: {
-        circle: { k: 'sig', id: radiusSig, slot },
-      },
-    };
-  },
+        // Output the radius signal as the "circle" signal
+        return {
+            outputsById: {
+                circle: {k: 'sig', id: radiusSig, slot},
+            },
+        };
+    },
 });
 
 // =============================================================================
@@ -84,39 +90,46 @@ registerBlock({
  * Future versions may use a composite type.
  */
 registerBlock({
-  type: 'Square',
-  label: 'Square',
-  category: 'shape',
-  description: 'Creates a square primitive (ONE element)',
-  form: 'primitive',
-  capability: 'pure',
-  inputs: [
-    { id: 'size', label: 'Size', type: signalType('float'), defaultValue: 0.02, defaultSource: defaultSourceConst(0.02) },
-  ],
-  outputs: [
-    { id: 'square', label: 'Square', type: signalType('float') },
-  ],
-  params: {
-    size: 0.02,
-  },
-  lower: ({ ctx, inputsById, config }) => {
-    const sizeInput = inputsById.size;
+    type: 'Square',
+    label: 'Square',
+    category: 'shape',
+    description: 'Creates a square primitive (ONE element)',
+    form: 'primitive',
+    capability: 'pure',
+    inputs: [
+        {
+            id: 'size',
+            label: 'Size',
+            type: signalType('float'),
+            defaultValue: 0.02,
+            defaultSource: defaultSourceConst(0.02),
+            uiHint: {kind: 'slider', min: 0.01, max: 0.5, step: 0.01},
+        },
+    ],
+    outputs: [
+        {id: 'square', label: 'Square', type: signalType('float')},
+    ],
+    params: {
+        size: 0.02,
+    },
+    lower: ({ctx, inputsById, config}) => {
+        const sizeInput = inputsById.size;
 
-    // Get size signal - either from input or from config
-    let sizeSig;
-    if (sizeInput && sizeInput.k === 'sig') {
-      sizeSig = sizeInput.id;
-    } else {
-      sizeSig = ctx.b.sigConst((config?.size as number) ?? 0.02, signalType('float'));
-    }
+        // Get size signal - either from input or from config
+        let sizeSig;
+        if (sizeInput && sizeInput.k === 'sig') {
+            sizeSig = sizeInput.id;
+        } else {
+            sizeSig = ctx.b.sigConst((config?.size as number) ?? 0.02, signalType('float'));
+        }
 
-    const slot = ctx.b.allocSlot();
+        const slot = ctx.b.allocSlot();
 
-    // Output the size signal as the "square" signal
-    return {
-      outputsById: {
-        square: { k: 'sig', id: sizeSig, slot },
-      },
-    };
-  },
+        // Output the size signal as the "square" signal
+        return {
+            outputsById: {
+                square: {k: 'sig', id: sizeSig, slot},
+            },
+        };
+    },
 });

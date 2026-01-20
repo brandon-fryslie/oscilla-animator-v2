@@ -68,6 +68,16 @@ function createTestRuntimeState(): RuntimeState {
       samplingBatchStart: 0,
       nanBatchCount: 0,
       infBatchCount: 0,
+      // Frame timing metrics
+      prevRafTimestamp: null,
+      frameDeltas: new Array(60).fill(0),
+      frameDeltasIndex: 0,
+      droppedFrameCount: 0,
+      frameCountInWindow: 0,
+      frameDeltaSum: 0,
+      frameDeltaSumSq: 0,
+      minFrameDelta: Infinity,
+      maxFrameDelta: 0,
     },
     continuity: createContinuityState(),
     continuityConfig: {

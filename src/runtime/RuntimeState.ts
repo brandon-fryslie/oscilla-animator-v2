@@ -164,6 +164,35 @@ export interface HealthMetrics {
 
   /** Infinity occurrences in current batch window (resets every 100ms) */
   infBatchCount: number;
+
+  // === Frame Timing Metrics (for detecting timing jitter/aliasing) ===
+
+  /** Previous rAF timestamp (for computing frame delta) */
+  prevRafTimestamp: number | null;
+
+  /** Ring buffer of frame deltas (time between rAF callbacks, ms) - last 60 frames */
+  frameDeltas: number[];
+
+  /** Current write position in frameDeltas ring buffer */
+  frameDeltasIndex: number;
+
+  /** Count of dropped frames (delta > 20ms) in current snapshot window */
+  droppedFrameCount: number;
+
+  /** Total frames in current snapshot window */
+  frameCountInWindow: number;
+
+  /** Sum of frame deltas for variance calculation */
+  frameDeltaSum: number;
+
+  /** Sum of squared frame deltas for variance calculation */
+  frameDeltaSumSq: number;
+
+  /** Minimum frame delta in current window */
+  minFrameDelta: number;
+
+  /** Maximum frame delta in current window */
+  maxFrameDelta: number;
 }
 
 /**
@@ -183,6 +212,16 @@ export function createHealthMetrics(): HealthMetrics {
     samplingBatchStart: 0,
     nanBatchCount: 0,
     infBatchCount: 0,
+    // Frame timing metrics
+    prevRafTimestamp: null,
+    frameDeltas: new Array(60).fill(0),
+    frameDeltasIndex: 0,
+    droppedFrameCount: 0,
+    frameCountInWindow: 0,
+    frameDeltaSum: 0,
+    frameDeltaSumSq: 0,
+    minFrameDelta: Infinity,
+    maxFrameDelta: 0,
   };
 }
 

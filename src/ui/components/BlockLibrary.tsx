@@ -37,7 +37,11 @@ function loadCollapsedCategories(): Set<BlockCategory> {
     const parsed = JSON.parse(stored);
     return new Set(Array.isArray(parsed) ? parsed : []);
   } catch (e) {
-    console.warn('Failed to load collapsed categories from localStorage:', e);
+    rootStore.diagnostics.log({
+      level: 'warn',
+      message: 'Failed to load collapsed categories from localStorage',
+      data: { error: String(e) },
+    });
     return new Set();
   }
 }
@@ -49,7 +53,11 @@ function saveCollapsedCategories(collapsed: Set<BlockCategory>): void {
   try {
     localStorage.setItem(COLLAPSE_STATE_KEY, JSON.stringify(Array.from(collapsed)));
   } catch (e) {
-    console.warn('Failed to save collapsed categories to localStorage:', e);
+    rootStore.diagnostics.log({
+      level: 'warn',
+      message: 'Failed to save collapsed categories to localStorage',
+      data: { error: String(e) },
+    });
   }
 }
 

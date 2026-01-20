@@ -56,6 +56,9 @@ export const DiagnosticConsole: React.FC = observer(() => {
   const avgMs = rootStore.diagnostics.avgCompileMs;
   const medianMs = rootStore.diagnostics.medianCompileMs;
 
+  // Get frame timing stats (reactive)
+  const timing = rootStore.diagnostics.frameTiming;
+
   return (
     <div
       style={{
@@ -66,6 +69,32 @@ export const DiagnosticConsole: React.FC = observer(() => {
         color: '#eee',
       }}
     >
+      {/* Frame Timing Stats Bar */}
+      {timing.frameCount > 0 && (
+        <div
+          style={{
+            padding: '6px 12px',
+            borderBottom: '1px solid #0f3460',
+            fontFamily: 'monospace',
+            fontSize: '11px',
+            background: '#0a0a18',
+            color: timing.jitterRatio > 5 ? '#f88' : timing.jitterRatio > 2 ? '#fa8' : '#8a8',
+          }}
+        >
+          <span style={{ color: '#8af' }}>Frame Timing:</span>{' '}
+          {(1000 / timing.avgDelta).toFixed(0)}fps |{' '}
+          {timing.avgDelta.toFixed(2)}ms avg |{' '}
+          <span style={{ color: timing.stdDev > 2 ? '#f88' : timing.stdDev > 1 ? '#fa8' : '#8a8' }}>
+            {timing.stdDev.toFixed(2)}ms jitter
+          </span>{' '}
+          ({timing.jitterRatio.toFixed(1)}%) |{' '}
+          [{timing.minDelta.toFixed(1)}-{timing.maxDelta.toFixed(1)}ms] |{' '}
+          <span style={{ color: timing.droppedFrames > 0 ? '#f88' : '#8a8' }}>
+            {timing.droppedFrames} dropped
+          </span>
+        </div>
+      )}
+
       {/* Compilation Stats Bar */}
       {stats.count > 0 && (
         <div
@@ -78,7 +107,7 @@ export const DiagnosticConsole: React.FC = observer(() => {
             background: '#0a0a18',
           }}
         >
-          Compilations: {stats.count} | Last: {stats.recentMs[stats.recentMs.length - 1]?.toFixed(1) ?? '-'}ms | Avg: {avgMs.toFixed(1)}ms | Med: {medianMs.toFixed(1)}ms | Min: {stats.minMs === Infinity ? '-' : stats.minMs.toFixed(1)}ms | Max: {stats.maxMs.toFixed(1)}ms
+          <span style={{ color: '#8af' }}>Compilations:</span> {stats.count} | Last: {stats.recentMs[stats.recentMs.length - 1]?.toFixed(1) ?? '-'}ms | Avg: {avgMs.toFixed(1)}ms | Med: {medianMs.toFixed(1)}ms | Min: {stats.minMs === Infinity ? '-' : stats.minMs.toFixed(1)}ms | Max: {stats.maxMs.toFixed(1)}ms
         </div>
       )}
 
