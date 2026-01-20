@@ -24,7 +24,7 @@ export const TOPOLOGY_ELLIPSE: TopologyDef = Object.freeze({
     { name: 'ry', type: 'float' as const, default: 0.02 },
     { name: 'rotation', type: 'float' as const, default: 0 },
   ]),
-  render: (ctx, p) => {
+  render: (ctx: CanvasRenderingContext2D, p: Record<string, number>) => {
     ctx.beginPath();
     ctx.ellipse(0, 0, p.rx, p.ry, p.rotation, 0, Math.PI * 2);
     ctx.fill();
@@ -50,7 +50,7 @@ export const TOPOLOGY_RECT: TopologyDef = Object.freeze({
     { name: 'rotation', type: 'float' as const, default: 0 },
     { name: 'cornerRadius', type: 'float' as const, default: 0 },
   ]),
-  render: (ctx, p) => {
+  render: (ctx: CanvasRenderingContext2D, p: Record<string, number>) => {
     ctx.save();
     ctx.rotate(p.rotation);
     if (p.cornerRadius > 0) {

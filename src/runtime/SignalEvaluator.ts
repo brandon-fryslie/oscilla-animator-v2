@@ -145,6 +145,13 @@ function evaluateSigExpr(
       return state.state[expr.stateSlot as number];
     }
 
+    case 'shapeRef': {
+      // ShapeRef expressions represent shape topology + params
+      // At signal evaluation time, we don't evaluate shapes - they're handled by the renderer
+      // Return 0 as a placeholder (shapes are not numeric values)
+      return 0;
+    }
+
     default: {
       const _exhaustive: never = expr;
       throw new Error(`Unknown signal expr kind: ${(_exhaustive as SigExpr).kind}`);
