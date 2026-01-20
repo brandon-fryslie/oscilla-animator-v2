@@ -1,6 +1,6 @@
 # Oscilla Animator v2 - Project Roadmap
 
-Last updated: 2026-01-19-174500
+Last updated: 2026-01-19-175500
 
 ---
 
@@ -71,13 +71,19 @@ Last updated: 2026-01-19-174500
 - **Planning Files:** `.agent_planning/phase1-remaining/`
 - **Status Note:** ~10% complete, major work pending
 
-#### 📋 compilation-pipeline [PLANNING]
-- **State:** PLANNING
+#### ✅ compilation-pipeline [COMPLETED]
+- **State:** COMPLETED
 - **Epic:** Phase 1 Unified Plan (P3)
 - **Spec:** `design-docs/CANONICAL-oscilla-v2.5-20260109/topics/04-compilation.md`
 - **Description:** Code cleanup after successful implementation of all 8 compilation passes
-- **Planning Files:** `.agent_planning/compilation-pipeline/` (READY 2026-01-19)
-- **Status Note:** All 8 passes implemented and working. 372 tests passing, 0 failures. Remaining work is code hygiene: remove unused state API stubs, document Pass 8 decision, resolve seed management TODO. Estimated 1.5 hours.
+- **Planning Files:** `.agent_planning/compilation-pipeline/`
+- **Beads Issue:** oscilla-animator-v2-k0v (closed)
+- **Completed:** 2026-01-19
+- **Summary:** All 8 passes implemented and working. Code cleanup completed: removed unused state API stubs, documented Pass 8 decision, resolved seed management TODO. 372 tests passing, 0 failures.
+- **Commits:**
+  - 3bbc970 - "docs(compiler): Document Pass 8 status and decision"
+  - 217be30 - "refactor(compiler): Remove unused state API stubs"
+  - b0f8005 - "docs(compiler): Resolve seed management TODO in Pass 6"
 - **Key Finding:** "Passes 5-10" was a miscount. There are only 8 passes (1-8), all complete:
   1. ✅ Normalization
   2. ✅ Type Graph
@@ -86,11 +92,12 @@ Last updated: 2026-01-19-174500
   5. ✅ SCC Validation
   6. ✅ Block Lowering
   7. ✅ Schedule Construction
-  8. ✅ Link Resolution (exists but not used, Pass 6 handles all resolution)
+  8. ✅ Link Resolution (reference implementation, not used - Pass 6 handles all resolution)
 - **Completed Sprints:**
   - Domain Unification - 11 tests passing, domain tracking through field composition
   - Graph Normalization Adapters - Type-aware adapter insertion (signal→field broadcast), strict type checking in Pass 2, extensible adapter registry
   - Domain→Instance Migration - Replaced vestigial DomainId with InstanceId throughout IR. DomainId type removed entirely. inferFieldInstance() replaces inferFieldDomain().
+  - Pipeline Cleanup - Removed 4 unused state API stubs, documented Pass 8, resolved seed TODO
 
 #### 📋 runtime-execution [PLANNING]
 - **State:** PLANNING
