@@ -202,3 +202,20 @@
 - TimeRoot italic styling and color
 - DefaultSource type structure
 - pass1-default-sources.ts lookup logic (port override → registry default)
+
+### 2026-01-20 10:55:00 - Path Foundation (path-foundation)
+**No cache invalidation needed.**
+
+**Rationale:**
+- Added optional controlPointField to SigExprShapeRef (backwards compatible)
+- Extended StepRender with optional controlPoints field (backwards compatible)
+- Extended RenderPassIR with optional controlPoints field (backwards compatible)
+- Added path rendering in Canvas2DRenderer (new capability, doesn't affect existing rendering)
+- Modified pass7-schedule.ts resolveShapeInfo() to return controlPointField (extension only)
+- Modified ScheduleExecutor to materialize and pass control points (optional path, doesn't affect particle rendering)
+
+**Impact:**
+- All changes are additive/optional
+- Existing ellipse/rect rendering unchanged
+- Path rendering is new capability (doesn't modify existing shape rendering)
+- No existing cache files describe these modified files in detail

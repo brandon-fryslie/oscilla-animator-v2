@@ -70,6 +70,10 @@ import type {
 // Import shape types
 import type { TopologyId } from '../../shapes/types';
 
+// Import time model types
+import type { TimeModelIR } from './schedule';
+
+
 // =============================================================================
 // Signal Expressions
 // =============================================================================
@@ -98,19 +102,19 @@ export interface SigExprSlot {
 
 export interface SigExprTime {
   readonly kind: 'time';
-  readonly mode: 't01' | 'dt' | 'tAbs';
+  readonly which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'pulse' | 'progress';
   readonly type: SignalType;
 }
 
 export interface SigExprExternal {
   readonly kind: 'external';
-  readonly sourceId: string;
+  readonly which: 'mouseX' | 'mouseY' | 'mouseOver';
   readonly type: SignalType;
 }
 
 export interface SigExprMap {
   readonly kind: 'map';
-  readonly inputs: readonly SigExprId[];
+  readonly input: SigExprId;
   readonly fn: PureFn;
   readonly type: SignalType;
 }
@@ -197,6 +201,7 @@ export interface FieldExprMap {
   readonly input: FieldExprId;
   readonly fn: PureFn;
   readonly type: SignalType;
+  readonly instanceId?: InstanceId;
 }
 
 export interface FieldExprZip {
@@ -204,27 +209,29 @@ export interface FieldExprZip {
   readonly inputs: readonly FieldExprId[];
   readonly fn: PureFn;
   readonly type: SignalType;
+  readonly instanceId?: InstanceId;
 }
 
 export interface FieldExprZipSig {
   readonly kind: 'zipSig';
-  readonly fieldInputs: readonly FieldExprId[];
-  readonly sigInputs: readonly SigExprId[];
+  readonly field: FieldExprId;
+  readonly signals: readonly SigExprId[];
   readonly fn: PureFn;
   readonly type: SignalType;
+  readonly instanceId?: InstanceId;
 }
 
 export interface FieldExprArray {
   readonly kind: 'array';
   readonly instanceId: InstanceId;
-  readonly values: readonly number[];
   readonly type: SignalType;
 }
 
 export interface FieldExprLayout {
   readonly kind: 'layout';
+  readonly input: FieldExprId;
+  readonly layoutSpec: LayoutSpec;
   readonly instanceId: InstanceId;
-  readonly property: 'position' | 'radius';
   readonly type: SignalType;
 }
 
@@ -232,11 +239,36 @@ export interface FieldExprLayout {
 // Event Expressions
 // =============================================================================
 
-export type EventExpr = EventExprConst;
+export type EventExpr =
+  | EventExprConst
+  | EventExprPulse
+  | EventExprWrap
+  | EventExprCombine
+  | EventExprNever;
 
 export interface EventExprConst {
   readonly kind: 'const';
   readonly fired: boolean;
+}
+
+export interface EventExprPulse {
+  readonly kind: 'pulse';
+  readonly source: 'timeRoot';
+}
+
+export interface EventExprWrap {
+  readonly kind: 'wrap';
+  readonly signal: SigExprId;
+}
+
+export interface EventExprCombine {
+  readonly kind: 'combine';
+  readonly events: readonly EventExprId[];
+  readonly mode: 'any' | 'all';
+}
+
+export interface EventExprNever {
+  readonly kind: 'never';
 }
 
 // =============================================================================
@@ -246,10 +278,12 @@ export interface EventExprConst {
 /**
  * PureFn - Pure function representation for map/zip operations
  *
- * Either a primitive opcode or a composed function.
+ * Can be a primitive opcode, a kernel function, or an expression string.
  */
 export type PureFn =
-  | { readonly kind: 'opcode'; readonly op: OpCode }
+  | { readonly kind: 'opcode'; readonly opcode: OpCode }
+  | { readonly kind: 'kernel'; readonly name: string }
+  | { readonly kind: 'expr'; readonly expr: string }
   | { readonly kind: 'composed'; readonly ops: readonly OpCode[] };
 
 /**
@@ -376,7 +410,7 @@ export type ContinuityPolicy =
 // Time Model
 // =============================================================================
 
-export type TimeModel = { readonly kind: 'infinite' };
+export type TimeModel = TimeModelIR;
 
 // =============================================================================
 // Execution Steps

@@ -78,7 +78,18 @@ export function materialize(
   // Fill buffer based on expression kind
   fillBuffer(expr, buffer, instance, fields, signals, instances, state, pool);
 
-  // Cache result
+  // Cache result (with size limit to prevent unbounded growth)
+  const MAX_CACHED_FIELDS = 200;
+  if (state.cache.fieldBuffers.size >= MAX_CACHED_FIELDS) {
+    // Evict oldest entries (those with lowest stamps)
+    const entries = [...state.cache.fieldStamps.entries()];
+    entries.sort((a, b) => a[1] - b[1]);
+    const toEvict = entries.slice(0, Math.floor(MAX_CACHED_FIELDS / 4));
+    for (const [key] of toEvict) {
+      state.cache.fieldBuffers.delete(key);
+      state.cache.fieldStamps.delete(key);
+    }
+  }
   state.cache.fieldBuffers.set(cacheKey, buffer);
   state.cache.fieldStamps.set(cacheKey, state.cache.frameId);
 

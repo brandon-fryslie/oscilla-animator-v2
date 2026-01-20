@@ -13,7 +13,7 @@
  * This differs from OpcodeInterpreter which operates on radians directly for field-level math.
  */
 
-import type { SigExpr } from '../compiler/ir/types';
+import type { SigExpr, PureFn } from '../compiler/ir/types';
 import type { SigExprId } from '../types';
 import type { RuntimeState } from './RuntimeState';
 import { applyOpcode } from './OpcodeInterpreter';
@@ -163,16 +163,33 @@ function evaluateSigExpr(
  * Apply a pure function to values
  */
 function applyPureFn(
-  fn: { kind: 'opcode'; opcode: string } | { kind: 'expr'; expr: string } | { kind: 'kernel'; name: string },
+  fn: PureFn,
   values: number[]
 ): number {
-  if (fn.kind === 'opcode') {
-    return applyOpcode(fn.opcode, values);
+  switch (fn.kind) {
+    case 'opcode':
+      return applyOpcode(fn.opcode, values);
+
+    case 'kernel':
+      return applySignalKernel(fn.name, values);
+
+    case 'expr':
+      throw new Error(`PureFn kind 'expr' not yet implemented`);
+
+    case 'composed': {
+      // Apply each opcode in sequence
+      let result = values[0];
+      for (const op of fn.ops) {
+        result = applyOpcode(op, [result]);
+      }
+      return result;
+    }
+
+    default: {
+      const _exhaustive: never = fn;
+      throw new Error(`Unknown PureFn kind: ${(_exhaustive as PureFn).kind}`);
+    }
   }
-  if (fn.kind === 'kernel') {
-    return applySignalKernel(fn.name, values);
-  }
-  throw new Error(`PureFn kind ${fn.kind} not implemented`);
 }
 
 /**

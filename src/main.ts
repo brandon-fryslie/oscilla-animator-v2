@@ -739,6 +739,9 @@ function animate(tMs: number) {
     ctx.restore();
     renderTime = performance.now() - renderStart;
 
+    // Release all buffers back to pool for reuse next frame
+    pool.releaseAll();
+
     // Calculate frame time
     const frameTime = performance.now() - frameStart;
 

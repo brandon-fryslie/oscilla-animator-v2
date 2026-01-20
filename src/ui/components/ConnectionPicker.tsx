@@ -96,7 +96,7 @@ export const ConnectionPicker = observer(function ConnectionPicker({
           blockId,
           blockName: block.displayName || blockDef.label,
           portId: portId as PortId,
-          portLabel: port.label,
+          portLabel: port.label || portId,
           typeDisplay: formatTypeForDisplay(port.type),
           isCompatible,
         });

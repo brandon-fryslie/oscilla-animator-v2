@@ -85,9 +85,9 @@ export function resolveTime(
   const dt = timeState.prevTAbsMs !== null ? tAbsMs - timeState.prevTAbsMs : 0;
   timeState.prevTAbsMs = tAbsMs;
 
-  // Default periods
-  const periodAMs = timeModel.periodAMs ?? 4000;
-  const periodBMs = timeModel.periodBMs ?? 8000;
+  // Default periods (used for infinite models)
+  const periodAMs = (timeModel.kind === 'infinite' ? timeModel.periodAMs : undefined) ?? 4000;
+  const periodBMs = (timeModel.kind === 'infinite' ? timeModel.periodBMs : undefined) ?? 8000;
 
   // Compute phases
   const rawPhaseA = periodAMs > 0 ? (tAbsMs / periodAMs) % 1.0 : 0;
