@@ -207,19 +207,22 @@ Last updated: 2026-01-19-173200
 - **Verification:** `/SPRINT2A-VERIFICATION.md`
 - **Current Commit:** cfafede - Auto-layout & minimap plugins integrated
 - **Sub-tasks:**
-  - 📋 auto-arrange-layout (oscilla-animator-v2-8fp) - Planning in progress
+  - ✅ auto-arrange-layout (oscilla-animator-v2-8fp) - COMPLETED 2026-01-19
 
-#### 📋 auto-arrange-layout [PLANNING]
-- **State:** PLANNING
+#### ✅ auto-arrange-layout [COMPLETED]
+- **State:** COMPLETED
 - **Epic:** patch-editor-ui Sprint 2B Phase 1
 - **Description:** Complete and verify auto-arrange layout functionality in React Flow editor using ELK algorithm
 - **Planning Files:** `.agent_planning/auto-arrange-layout/`
-- **Beads Issue:** oscilla-animator-v2-8fp
-- **Status Note:** Implementation ~80% complete (layout.ts exists, button integrated). Needs edge cases, error handling, E2E tests, and verification.
+- **Beads Issue:** oscilla-animator-v2-8fp (closed)
+- **Completed:** 2026-01-19
+- **Summary:** ELK layout algorithm fully integrated with edge case handling (empty graph, single node) and error handling. 9 comprehensive tests ensure no overlaps, correct spacing, and proper zoom-to-fit. All acceptance criteria met.
+- **Commit:** 8a7480f - "feat(ui): Add auto-arrange layout with edge case handling and tests"
 - **Key Files:**
-  - `src/ui/reactFlowEditor/layout.ts` - ELK layout algorithm
-  - `src/ui/reactFlowEditor/ReactFlowEditor.tsx:166-182, 302-310` - Button and handler
-- **Requirements:** LEFT-RIGHT flow, 100px node spacing, 80px layer spacing, no overlaps
+  - `src/ui/reactFlowEditor/layout.ts` - ELK layout algorithm (100px node spacing, 80px layer spacing)
+  - `src/ui/reactFlowEditor/ReactFlowEditor.tsx:166-195, 302-310` - Button, handler, edge cases
+  - `src/ui/reactFlowEditor/__tests__/layout.test.ts` - 9 comprehensive tests
+- **Test Results:** 367 tests passing (9 new layout tests), no regressions
 
 #### 📋 domain-editor-ui [PLANNING]
 - **State:** PLANNING
