@@ -1,0 +1,48 @@
+Agent: status-planner | 2026-01-20 11:04:00
+Topic: expression-dsl
+Sprints: 3 (HIGH: 2, MEDIUM: 1, LOW: 0)
+Files:
+  - EVALUATION-20260120-110100.md [STATUS REPORT]
+  - SPRINT-20260120-110100-research-PLAN.md [MEDIUM]
+  - SPRINT-20260120-110100-research-DOD.md [MEDIUM]
+  - SPRINT-20260120-110100-research-CONTEXT.md [MEDIUM]
+  - SPRINT-20260120-110200-core-impl-PLAN.md [HIGH after research]
+  - SPRINT-20260120-110200-core-impl-DOD.md [HIGH after research]
+  - SPRINT-20260120-110200-core-impl-CONTEXT.md [HIGH after research]
+  - SPRINT-20260120-110300-integration-PLAN.md [HIGH after core-impl]
+  - SPRINT-20260120-110300-integration-DOD.md [HIGH after core-impl]
+  - SPRINT-20260120-110300-integration-CONTEXT.md [HIGH after core-impl]
+Items: 24 (P0: 12, P1: 5, P2: 2, Deferred: 5)
+
+Sprint 1: Research (MEDIUM confidence)
+  - Resolve parser approach decision
+  - Define type inference rules
+  - Specify error handling strategy
+  - Document grammar specification
+  - Create function catalog
+  - Output: Design decisions + specifications
+
+Sprint 2: Core Implementation (HIGH confidence after Sprint 1)
+  - Implement parser, AST, type checker, IR compiler
+  - Create public API: compileExpression()
+  - Comprehensive test suite (140+ tests)
+  - Module documentation
+  - Output: Functional expression DSL compiler
+
+Sprint 3: Integration (HIGH confidence after Sprint 2)
+  - Create Expression block
+  - Build expression input UI
+  - End-to-end integration tests
+  - User documentation
+  - Manual testing
+  - Output: User-facing feature ready for artists
+
+Dependency Chain: Research → Core Impl → Integration
+
+Estimated Total:
+  - Code: ~2650-2850 LOC
+  - Tests: ~800-1000 LOC
+  - Docs: 5 specification docs + user guide + README
+  - Time: 3 sprints (sequential)
+
+Next: /do:it expression-dsl (start with research sprint)
