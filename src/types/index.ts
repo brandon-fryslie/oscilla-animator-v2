@@ -195,34 +195,43 @@ export interface Slot {
 }
 
 /**
- * DefaultSource - discriminated union for default input sources.
+ * Default source for an input port.
+ * Every input has a default source - there is no 'none' option.
  *
- * Every input port has exactly one source. If no explicit edge is connected,
- * the DefaultSource provides the fallback behavior.
- *
- * Variants:
- * - 'rail': Reference to a named rail (e.g., 'phaseA', 'phaseB')
- * - 'constant': A constant value
- * - 'none': No default (port reads as undefined/zero/empty)
+ * If blockType is 'TimeRoot', wires to the existing TimeRoot.
+ * Otherwise, creates a derived block instance for this port.
  */
-export type DefaultSource =
-  | { readonly kind: 'rail'; readonly railId: string }
-  | { readonly kind: 'constant'; readonly value: unknown }
-  | { readonly kind: 'none' };
+export type DefaultSource = {
+  readonly blockType: string;
+  readonly output: string;
+  readonly params?: Record<string, unknown>;
+};
 
 /**
- * Helper functions to create DefaultSource instances
+ * Generic default source - any block type
  */
-export function defaultSourceRail(railId: string): DefaultSource {
-  return { kind: 'rail', railId };
+export function defaultSource(
+  blockType: string,
+  output: string,
+  params?: Record<string, unknown>
+): DefaultSource {
+  return { blockType, output, params };
 }
 
-export function defaultSourceConstant(value: unknown): DefaultSource {
-  return { kind: 'constant', value };
+/**
+ * Constant default - creates a Const block instance
+ */
+export function defaultSourceConst(value: unknown): DefaultSource {
+  return { blockType: 'Const', output: 'out', params: { value } };
 }
 
-export function defaultSourceNone(): DefaultSource {
-  return { kind: 'none' };
+/**
+ * TimeRoot output default - wires to existing TimeRoot
+ */
+export function defaultSourceTimeRoot(
+  output: 'tMs' | 'phaseA' | 'phaseB' | 'pulse' | 'palette' | 'energy'
+): DefaultSource {
+  return { blockType: 'TimeRoot', output };
 }
 
 // =============================================================================
