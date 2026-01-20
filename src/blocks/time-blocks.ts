@@ -18,15 +18,14 @@ registerBlock({
   description: 'Root block for patches with infinite time',
   form: 'primitive',
   capability: 'time',
-  inputs: [],
-  outputs: [
-    { id: 'tMs', label: 'Time (ms)', type: signalType('float') },
+  inputs: {
+    periodMs: { value: 1000, exposedAsPort: false },
+  },
+  outputs: {
+    tMs: { label: 'Time (ms)', type: signalType('float') },
     // Phase outputs use 'phase' type: values in [0, 1) range representing normalized time cycles
-    { id: 'phaseA', label: 'Phase A', type: signalType('phase') },
-    { id: 'phaseB', label: 'Phase B', type: signalType('phase') },
-  ],
-  params: {
-    periodMs: 1000,
+    phaseA: { label: 'Phase A', type: signalType('phase') },
+    phaseB: { label: 'Phase B', type: signalType('phase') },
   },
   lower: ({ ctx }) => {
     // TimeRoot blocks don't produce IR directly

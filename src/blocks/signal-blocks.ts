@@ -18,7 +18,7 @@ import type { SigExprId } from '../compiler/ir/Indices';
  *
  * The output type is '???' (polymorphic) - resolved by the normalizer
  * based on what this block is wired to. The resolved type is stored
- * in the `payloadType` param.
+ * in the `payloadType` input.
  *
  * Supported payload types: float, int, bool, phase, unit
  * (vec2 and color require separate blocks due to value structure)
@@ -30,15 +30,21 @@ registerBlock({
   description: 'Outputs a constant value (type inferred from target)',
   form: 'primitive',
   capability: 'pure',
-  inputs: [],
-  outputs: [
+  inputs: {
+    value: {
+      value: 0,
+      uiHint: { kind: 'slider', min: 1, max: 10000, step: 1 },
+      exposedAsPort: false,
+    },
+    payloadType: {
+      value: undefined,
+      hidden: true,
+      exposedAsPort: false,
+    },
+  },
+  outputs: {
     // Output type is polymorphic - resolved by normalizer from target port
-    { id: 'out', label: 'Output', type: signalType('???') },
-  ],
-  params: {
-    value: 0,
-    uiHint: { kind: 'slider', min: 1, max: 10000, step: 1 },
-    // payloadType is set by normalizer after type inference
+    out: { label: 'Output', type: signalType('???') },
   },
   lower: ({ ctx, config }) => {
     const payloadType = config?.payloadType as PayloadType | undefined;
@@ -153,17 +159,15 @@ registerBlock({
   description: 'Generates waveforms (sin, cos, triangle, square, sawtooth)',
   form: 'primitive',
   capability: 'pure',
-  inputs: [
+  inputs: {
     // Phase input expects values in [0, 1) range - the kernel converts to radians
-    { id: 'phase', label: 'Phase', type: signalType('phase') },
-  ],
-  outputs: [
-    { id: 'out', label: 'Output', type: signalType('float') },
-  ],
-  params: {
-    waveform: 'sin',
-    amplitude: 1.0,
-    offset: 0.0,
+    phase: { label: 'Phase', type: signalType('phase') },
+    waveform: { value: 'sin', exposedAsPort: false },
+    amplitude: { value: 1.0, exposedAsPort: false },
+    offset: { value: 0.0, exposedAsPort: false },
+  },
+  outputs: {
+    out: { label: 'Output', type: signalType('float') },
   },
   lower: ({ ctx, inputsById, config }) => {
     // Get the phase input
@@ -217,14 +221,12 @@ registerBlock({
   description: 'Delays signal by one frame. Output on frame N = input from frame N-1',
   form: 'primitive',
   capability: 'state',
-  inputs: [
-    { id: 'in', label: 'Input', type: signalType('float') },
-  ],
-  outputs: [
-    { id: 'out', label: 'Output', type: signalType('float') },
-  ],
-  params: {
-    initialValue: 0,
+  inputs: {
+    in: { label: 'Input', type: signalType('float') },
+    initialValue: { value: 0, exposedAsPort: false },
+  },
+  outputs: {
+    out: { label: 'Output', type: signalType('float') },
   },
   lower: ({ ctx, inputsById, config }) => {
     // Get the input signal
@@ -266,14 +268,13 @@ registerBlock({
   description: 'Deterministic hash function for seeded randomness. Output in [0, 1)',
   form: 'primitive',
   capability: 'pure',
-  inputs: [
-    { id: 'value', label: 'Value', type: signalType('float') },
-    { id: 'seed', label: 'Seed', type: signalType('float'), optional: true },
-  ],
-  outputs: [
-    { id: 'out', label: 'Output', type: signalType('float') },
-  ],
-  params: {},
+  inputs: {
+    value: { label: 'Value', type: signalType('float') },
+    seed: { label: 'Seed', type: signalType('float'), optional: true },
+  },
+  outputs: {
+    out: { label: 'Output', type: signalType('float') },
+  },
   lower: ({ ctx, inputsById }) => {
     // Get required value input
     const value = inputsById.value;
@@ -315,14 +316,13 @@ registerBlock({
   description: 'Normalize index by count: output = index / count. Safe division handles count=0',
   form: 'primitive',
   capability: 'pure',
-  inputs: [
-    { id: 'index', label: 'Index', type: signalType('float') },
-    { id: 'count', label: 'Count', type: signalType('float') },
-  ],
-  outputs: [
-    { id: 'out', label: 'Output', type: signalType('float') },
-  ],
-  params: {},
+  inputs: {
+    index: { label: 'Index', type: signalType('float') },
+    count: { label: 'Count', type: signalType('float') },
+  },
+  outputs: {
+    out: { label: 'Output', type: signalType('float') },
+  },
   lower: ({ ctx, inputsById }) => {
     // Get required inputs
     const index = inputsById.index;

@@ -18,15 +18,13 @@ registerBlock({
   description: 'Generates stable random values from domain element IDs',
   form: 'primitive',
   capability: 'identity',
-  inputs: [
-    { id: 'domain', label: 'Domain', type: signalType('float') },
-  ],
-  outputs: [
-    { id: 'rand', label: 'Random [0,1]', type: signalTypeField('float', 'default') },
-    { id: 'id01', label: 'ID [0,1]', type: signalTypeField('float', 'default') },
-  ],
-  params: {
-    seed: 0,
+  inputs: {
+    domain: { label: 'Domain', type: signalType('float') },
+    seed: { value: 0, exposedAsPort: false },
+  },
+  outputs: {
+    rand: { label: 'Random [0,1]', type: signalTypeField('float', 'default') },
+    id01: { label: 'ID [0,1]', type: signalTypeField('float', 'default') },
   },
   lower: ({ ctx, config }) => {
     const seed = (config?.seed as number) ?? 0;
@@ -65,11 +63,11 @@ registerBlock({
   description: 'Provides the normalized index [0,1] for each domain element',
   form: 'primitive',
   capability: 'identity',
-  inputs: [],
-  outputs: [
-    { id: 'index', label: 'Index', type: signalTypeField('float', 'default') },
-    { id: 'indexInt', label: 'Index (int)', type: signalTypeField('int', 'default') },
-  ],
+  inputs: {},
+  outputs: {
+    index: { label: 'Index', type: signalTypeField('float', 'default') },
+    indexInt: { label: 'Index (int)', type: signalTypeField('int', 'default') },
+  },
   lower: ({ ctx }) => {
     // Get instance context from Array block or inferred from inputs
     const instance = ctx.inferredInstance ?? ctx.instance;

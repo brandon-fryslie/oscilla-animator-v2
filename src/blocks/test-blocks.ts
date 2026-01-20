@@ -45,11 +45,10 @@ registerBlock({
   description: 'Captures a signal value for testing (sink block)',
   form: 'primitive',
   capability: 'pure',
-  inputs: [
-    { id: 'value', label: 'Value', type: signalType('float') },
-  ],
-  outputs: [],
-  params: {},
+  inputs: {
+    value: { label: 'Value', type: signalType('float') },
+  },
+  outputs: {},
   lower: ({ ctx, inputsById }) => {
     const value = inputsById.value;
 
