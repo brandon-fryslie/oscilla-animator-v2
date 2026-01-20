@@ -604,13 +604,21 @@ function scheduleRecompile() {
 }
 
 /**
- * Create a hash of block params for change detection.
+ * Create a hash of block params and inputPorts for change detection.
  * We need deep change detection since MobX only tracks shallow changes.
+ * Including inputPorts ensures defaultSource changes trigger recompilation.
  */
 function hashBlockParams(blocks: ReadonlyMap<string, any>): string {
   const parts: string[] = [];
   for (const [id, block] of blocks) {
-    parts.push(`${id}:${JSON.stringify(block.params)}`);
+    // Hash both params and inputPorts (for defaultSource changes)
+    const inputPortsData: Record<string, any> = {};
+    if (block.inputPorts) {
+      for (const [portId, port] of block.inputPorts) {
+        inputPortsData[portId] = port;
+      }
+    }
+    parts.push(`${id}:${JSON.stringify(block.params)}:${JSON.stringify(inputPortsData)}`);
   }
   return parts.join('|');
 }

@@ -267,7 +267,7 @@ interface PortInspectorStandaloneProps {
   patch: Patch;
 }
 
-function PortInspectorStandalone({ portRef, block, blockDef, patch }: PortInspectorStandaloneProps) {
+const PortInspectorStandalone = observer(function PortInspectorStandalone({ portRef, block, blockDef, patch }: PortInspectorStandaloneProps) {
   const [showConnectionPicker, setShowConnectionPicker] = useState(false);
 
   const inputDef = blockDef.inputs.find(p => p.id === portRef.portId);
@@ -288,6 +288,12 @@ function PortInspectorStandalone({ portRef, block, blockDef, patch }: PortInspec
     : patch.edges.filter(e => e.from.blockId === block.id && e.from.slotId === portRef.portId);
 
   const isConnected = connectedEdges.length > 0;
+
+  // Get effective default source (port override or registry default)
+  const instancePort = block.inputPorts.get(portRef.portId);
+  const effectiveDefaultSource = isInput && inputDef
+    ? (instancePort?.defaultSource ?? inputDef.defaultSource)
+    : undefined;
 
   const handleViewBlock = useCallback(() => {
     rootStore.selection.selectBlock(block.id);
@@ -348,22 +354,17 @@ function PortInspectorStandalone({ portRef, block, blockDef, patch }: PortInspec
         </div>
       </div>
 
-      {isInput && inputDef && inputDef.defaultSource && (
-        <div style={{ marginBottom: '16px' }}>
-          <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: colors.textSecondary }}>
-            Default Source
-          </h4>
-          <div style={{
-            padding: '8px',
-            background: colors.bgPanel,
-            borderRadius: '4px',
-            fontSize: '13px',
-            fontStyle: inputDef.defaultSource.blockType === 'TimeRoot' ? 'italic' : 'normal',
-            color: inputDef.defaultSource.blockType === 'TimeRoot' ? colors.primary : colors.textPrimary,
-          }}>
-            {formatDefaultSource(inputDef.defaultSource)}
-          </div>
-        </div>
+      {/* Editable default source for input ports */}
+      {isInput && inputDef && effectiveDefaultSource && (
+        <PortDefaultSourceEditor
+          blockId={block.id}
+          portId={portRef.portId}
+          portType={inputDef.type}
+          currentDefaultSource={effectiveDefaultSource}
+          registryDefaultSource={inputDef.defaultSource}
+          isConnected={isConnected}
+          inputDef={inputDef}
+        />
       )}
 
       <div style={{ marginBottom: '16px' }}>
@@ -496,7 +497,7 @@ function PortInspectorStandalone({ portRef, block, blockDef, patch }: PortInspec
       </div>
     </div>
   );
-}
+});
 
 
 // =============================================================================

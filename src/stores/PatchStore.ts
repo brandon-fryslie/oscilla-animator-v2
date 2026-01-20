@@ -255,6 +255,7 @@ export class PatchStore {
   /**
    * Updates an input port's properties.
    * This is the API for editing port.defaultSource and other per-instance port properties.
+   * Emits GraphCommitted event to trigger recompilation.
    */
   updateInputPort(blockId: BlockId, portId: string, updates: Partial<InputPort>): void {
     const block = this._data.blocks.get(blockId);
@@ -285,6 +286,22 @@ export class PatchStore {
       ...block,
       inputPorts: updatedInputPorts,
     });
+
+    // Emit GraphCommitted event to trigger recompilation
+    // Port defaultSource changes affect the compiled graph
+    if (this.eventHub && this.getPatchRevision) {
+      this.eventHub.emit({
+        type: 'GraphCommitted',
+        patchId: this.patchId,
+        patchRevision: this.getPatchRevision() + 1, // Increment revision
+        reason: 'userEdit',
+        diffSummary: {
+          blocksAdded: 0,
+          blocksRemoved: 0,
+          edgesChanged: 0,
+        },
+      });
+    }
   }
 
   /**
