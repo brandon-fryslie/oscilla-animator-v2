@@ -310,9 +310,6 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = ({
 
   // Auto-arrange on startup and when blocks are added/deleted
   useEffect(() => {
-    let initTimeoutId: ReturnType<typeof setTimeout> | null = null;
-    let changeTimeoutId: ReturnType<typeof setTimeout> | null = null;
-
     const currentCount = nodes.length;
     const prevCount = prevNodeCountRef.current;
 
@@ -320,7 +317,7 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = ({
     if (!hasInitializedRef.current && currentCount > 0) {
       hasInitializedRef.current = true;
       // Delay to ensure layout is ready
-      initTimeoutId = setTimeout(() => autoArrangeRef.current(), 100);
+      setTimeout(() => autoArrangeRef.current(), 100);
     }
 
     // After initialization, trigger auto-arrange when node count changes (add/delete)
@@ -328,17 +325,11 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = ({
       // Only trigger if we're not already layouting
       if (!isLayouting) {
         // Small delay to let React settle
-        changeTimeoutId = setTimeout(() => autoArrangeRef.current(), 50);
+        setTimeout(() => autoArrangeRef.current(), 50);
       }
     }
 
     prevNodeCountRef.current = currentCount;
-
-    // Cleanup timeouts on unmount or when dependencies change
-    return () => {
-      if (initTimeoutId) clearTimeout(initTimeoutId);
-      if (changeTimeoutId) clearTimeout(changeTimeoutId);
-    };
   }, [nodes.length, isLayouting]);
 
   // Setup bidirectional sync and editor handle

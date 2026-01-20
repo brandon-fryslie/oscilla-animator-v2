@@ -686,7 +686,7 @@ function setupLiveRecompileReaction() {
   log('Live recompile reaction initialized');
 }
 
- /**
+/**
  * Cleanup function for testing/hot reload.
  * Disposes the live recompile reaction.
  */
