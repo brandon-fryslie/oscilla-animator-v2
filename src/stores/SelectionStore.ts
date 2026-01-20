@@ -12,13 +12,14 @@
 
 import { makeObservable, observable, computed, action } from 'mobx';
 import type { Block, Edge, PortRef } from '../graph/Patch';
-import type { BlockId } from '../types';
+import type { BlockId, PortId } from '../types';
 import type { PatchStore } from './PatchStore';
 
 export class SelectionStore {
   // Observable state - IDs only
   selectedBlockId: BlockId | null = null;
   selectedEdgeId: string | null = null;
+  selectedPort: PortRef | null = null;
   hoveredBlockId: BlockId | null = null;
   hoveredPortRef: PortRef | null = null;
 
@@ -29,6 +30,7 @@ export class SelectionStore {
     makeObservable(this, {
       selectedBlockId: observable,
       selectedEdgeId: observable,
+      selectedPort: observable,
       hoveredBlockId: observable,
       hoveredPortRef: observable,
       previewType: observable,
@@ -41,6 +43,8 @@ export class SelectionStore {
       highlightedEdgeIds: computed,
       selectBlock: action,
       selectEdge: action,
+      selectPort: action,
+      clearPortSelection: action,
       hoverBlock: action,
       hoverPort: action,
       clearSelection: action,
@@ -159,22 +163,42 @@ export class SelectionStore {
 
   /**
    * Selects a block by ID.
-   * Clears edge selection and preview mode.
+   * Clears edge, port selection, and preview mode.
    */
   selectBlock(id: BlockId | null): void {
     this.selectedBlockId = id;
     this.selectedEdgeId = null;
+    this.selectedPort = null;
     this.previewType = null;
   }
 
   /**
    * Selects an edge by ID.
-   * Clears block selection and preview mode.
+   * Clears block, port selection, and preview mode.
    */
   selectEdge(id: string | null): void {
     this.selectedEdgeId = id;
     this.selectedBlockId = null;
+    this.selectedPort = null;
     this.previewType = null;
+  }
+
+  /**
+   * Selects a port by reference.
+   * Clears block, edge selection, and preview mode.
+   */
+  selectPort(blockId: BlockId, portId: PortId): void {
+    this.selectedPort = { blockId, portId };
+    this.selectedBlockId = null;
+    this.selectedEdgeId = null;
+    this.previewType = null;
+  }
+
+  /**
+   * Clears port selection only.
+   */
+  clearPortSelection(): void {
+    this.selectedPort = null;
   }
 
   /**
@@ -197,6 +221,7 @@ export class SelectionStore {
   clearSelection(): void {
     this.selectedBlockId = null;
     this.selectedEdgeId = null;
+    this.selectedPort = null;
     this.hoveredBlockId = null;
     this.hoveredPortRef = null;
     this.previewType = null;
@@ -204,12 +229,13 @@ export class SelectionStore {
 
   /**
    * Sets preview mode for a block type.
-   * Clears block and edge selection.
+   * Clears block, edge, and port selection.
    */
   setPreviewType(type: string | null): void {
     this.previewType = type;
     this.selectedBlockId = null;
     this.selectedEdgeId = null;
+    this.selectedPort = null;
   }
 
   /**

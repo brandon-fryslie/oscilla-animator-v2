@@ -6,10 +6,12 @@
  * Handles are color-coded by payload type with type tooltips.
  */
 
-import React from 'react';
+import React, { useCallback } from 'react';
 import { Handle, Position, type NodeProps } from 'reactflow';
+import { observer } from 'mobx-react-lite';
 import type { OscillaNodeData, PortData } from './nodes';
-import type { DefaultSource } from '../../types';
+import type { DefaultSource, PortId } from '../../types';
+import { rootStore } from '../../stores';
 
 /**
  * Format a default source for display in tooltip.
@@ -70,7 +72,17 @@ function buildPortTooltip(port: PortData, isInput: boolean): string {
  * Custom node component that renders handles for each port.
  * Handles are color-coded by payload type.
  */
-export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = ({ data }) => {
+export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ data }) => {
+  const { selectedPort } = rootStore.selection;
+
+  const handlePortClick = useCallback(
+    (portId: PortId, e: React.MouseEvent) => {
+      e.stopPropagation();
+      rootStore.selection.selectPort(data.blockId, portId);
+    },
+    [data.blockId]
+  );
+
   return (
     <div
       style={{
@@ -86,6 +98,9 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = ({ data }) => {
       {/* Input Handles (Left Side) with Labels and Type Colors */}
       {data.inputs.map((input, index) => {
         const topPercent = ((index + 1) * 100) / (data.inputs.length + 1);
+        const isSelected =
+          selectedPort?.blockId === data.blockId && selectedPort?.portId === input.id;
+
         return (
           <React.Fragment key={`input-${input.id}`}>
             {/* Port Label */}
@@ -96,10 +111,11 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = ({ data }) => {
                 top: `${topPercent}%`,
                 transform: 'translate(-100%, -50%)',
                 fontSize: '11px',
-                color: '#aaa',
+                color: isSelected ? '#fff' : '#aaa',
                 whiteSpace: 'nowrap',
                 pointerEvents: 'none',
                 paddingRight: '4px',
+                fontWeight: isSelected ? 'bold' : 'normal',
               }}
             >
               {input.label}
@@ -110,6 +126,7 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = ({ data }) => {
               type="target"
               position={Position.Left}
               id={input.id}
+              onClick={(e) => handlePortClick(input.id as PortId, e)}
               style={{
                 top: `${topPercent}%`,
                 background: input.isConnected ? input.typeColor : '#1e1e1e',
@@ -117,6 +134,8 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = ({ data }) => {
                 height: '16px',
                 border: `2px solid ${input.typeColor}`,
                 borderRadius: '50%',
+                boxShadow: isSelected ? `0 0 8px 2px ${input.typeColor}` : undefined,
+                cursor: 'pointer',
               }}
               title={buildPortTooltip(input, true)}
             />
@@ -162,6 +181,9 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = ({ data }) => {
       {/* Output Handles (Right Side) with Labels and Type Colors */}
       {data.outputs.map((output, index) => {
         const topPercent = ((index + 1) * 100) / (data.outputs.length + 1);
+        const isSelected =
+          selectedPort?.blockId === data.blockId && selectedPort?.portId === output.id;
+
         return (
           <React.Fragment key={`output-${output.id}`}>
             {/* Port Label */}
@@ -172,10 +194,11 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = ({ data }) => {
                 top: `${topPercent}%`,
                 transform: 'translate(100%, -50%)',
                 fontSize: '11px',
-                color: '#aaa',
+                color: isSelected ? '#fff' : '#aaa',
                 whiteSpace: 'nowrap',
                 pointerEvents: 'none',
                 paddingLeft: '4px',
+                fontWeight: isSelected ? 'bold' : 'normal',
               }}
             >
               {output.label}
@@ -186,6 +209,7 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = ({ data }) => {
               type="source"
               position={Position.Right}
               id={output.id}
+              onClick={(e) => handlePortClick(output.id as PortId, e)}
               style={{
                 top: `${topPercent}%`,
                 background: output.isConnected ? output.typeColor : '#1e1e1e',
@@ -193,6 +217,8 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = ({ data }) => {
                 height: '16px',
                 border: `2px solid ${output.typeColor}`,
                 borderRadius: '50%',
+                boxShadow: isSelected ? `0 0 8px 2px ${output.typeColor}` : undefined,
+                cursor: 'pointer',
               }}
               title={buildPortTooltip(output, false)}
             />
@@ -201,4 +227,4 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = ({ data }) => {
       })}
     </div>
   );
-};
+});
