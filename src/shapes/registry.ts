@@ -2,18 +2,21 @@
  * Topology Registry
  *
  * Provides lookup for topology definitions by ID.
- * Registry is immutable and populated at module load time.
+ * Registry is populated at module load time with built-in topologies
+ * and can be extended at compile-time with dynamically created topologies (paths).
  */
 
-import type { TopologyId, TopologyDef } from './types';
+import type { TopologyId, TopologyDef, PathTopologyDef } from './types';
 import { TOPOLOGY_ELLIPSE, TOPOLOGY_RECT } from './topologies';
 
 /**
  * Registry of all available topologies
  *
- * Immutable map of TopologyId → TopologyDef
+ * Mutable map of TopologyId → TopologyDef.
+ * Built-in topologies are registered at module load.
+ * Dynamic topologies (e.g., paths) are registered during compilation.
  */
-const TOPOLOGY_REGISTRY: ReadonlyMap<TopologyId, TopologyDef> = new Map([
+const TOPOLOGY_REGISTRY: Map<TopologyId, TopologyDef> = new Map([
   [TOPOLOGY_ELLIPSE.id, TOPOLOGY_ELLIPSE],
   [TOPOLOGY_RECT.id, TOPOLOGY_RECT],
 ]);
@@ -50,4 +53,16 @@ export function hasTopology(id: TopologyId): boolean {
  */
 export function getAllTopologyIds(): readonly TopologyId[] {
   return Array.from(TOPOLOGY_REGISTRY.keys());
+}
+
+/**
+ * Register a dynamic topology (e.g., path topologies created by blocks)
+ *
+ * This is called during block lowering to register procedurally-created topologies.
+ * If a topology with the same ID already exists, it will be replaced (idempotent).
+ *
+ * @param topology - Topology definition to register
+ */
+export function registerDynamicTopology(topology: TopologyDef | PathTopologyDef): void {
+  TOPOLOGY_REGISTRY.set(topology.id, topology);
 }

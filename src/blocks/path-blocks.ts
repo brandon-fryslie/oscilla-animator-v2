@@ -10,6 +10,7 @@ import { registerBlock } from './registry';
 import { signalType, signalTypeField } from '../core/canonical-types';
 import { DOMAIN_CONTROL } from '../core/domain-registry';
 import { PathVerb, type PathTopologyDef } from '../shapes/types';
+import { registerDynamicTopology } from '../shapes/registry';
 import { defaultSourceConst } from '../types';
 
 // =============================================================================
@@ -129,6 +130,9 @@ registerBlock({
 
     // Create path topology (compile-time)
     const topology = createPolygonTopology(sides);
+
+    // Register topology in global registry for runtime lookup
+    registerDynamicTopology(topology);
 
     // Create instance over DOMAIN_CONTROL with N control points
     const controlInstance = ctx.b.createInstance(
