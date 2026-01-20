@@ -10,8 +10,9 @@
  * Per Continuity-UI Sprint 3: SPRINT-20260118-continuity-panel-PLAN.md
  */
 
-import { makeObservable, observable, action, runInAction } from 'mobx';
+import { makeObservable, observable, action, computed, runInAction } from 'mobx';
 import type { ContinuityState, StableTargetId, MappingState } from '../runtime/ContinuityState';
+import type { RuntimeState } from '../runtime/RuntimeState';
 
 // =============================================================================
 // Summary Types
@@ -74,6 +75,7 @@ export interface DomainChangeEvent {
  * - Active continuity targets
  * - Current mappings
  * - Domain change history
+ * - Continuity config controls
  */
 export class ContinuityStore {
   /** Active continuity targets */
@@ -94,6 +96,9 @@ export class ContinuityStore {
   /** Total domain changes since session start */
   totalDomainChanges: number = 0;
 
+  /** Reference to RuntimeState for accessing continuityConfig */
+  private runtimeStateRef: RuntimeState | null = null;
+
   constructor() {
     makeObservable(this, {
       targets: observable,
@@ -102,10 +107,79 @@ export class ContinuityStore {
       lastDomainChangeMs: observable,
       recentChanges: observable,
       totalDomainChanges: observable,
+      decayExponent: computed,
+      tauMultiplier: computed,
+      setRuntimeStateRef: action,
       updateFromRuntime: action,
       recordDomainChange: action,
+      setDecayExponent: action,
+      setTauMultiplier: action,
+      resetToDefaults: action,
+      clearContinuityState: action,
       clear: action,
     });
+  }
+
+  /**
+   * Set the RuntimeState reference for accessing config.
+   * Called from main.ts after RuntimeState is created.
+   */
+  setRuntimeStateRef(state: RuntimeState): void {
+    this.runtimeStateRef = state;
+  }
+
+  /**
+   * Get current decay exponent from RuntimeState config.
+   */
+  get decayExponent(): number {
+    return this.runtimeStateRef?.continuityConfig.decayExponent ?? 0.7;
+  }
+
+  /**
+   * Get current tau multiplier from RuntimeState config.
+   */
+  get tauMultiplier(): number {
+    return this.runtimeStateRef?.continuityConfig.tauMultiplier ?? 1.0;
+  }
+
+  /**
+   * Set decay exponent (0.1-2.0).
+   */
+  setDecayExponent(value: number): void {
+    if (this.runtimeStateRef) {
+      this.runtimeStateRef.continuityConfig.decayExponent = value;
+    }
+  }
+
+  /**
+   * Set tau multiplier (0.5-3.0).
+   */
+  setTauMultiplier(value: number): void {
+    if (this.runtimeStateRef) {
+      this.runtimeStateRef.continuityConfig.tauMultiplier = value;
+    }
+  }
+
+  /**
+   * Reset continuity config to defaults.
+   */
+  resetToDefaults(): void {
+    if (this.runtimeStateRef) {
+      this.runtimeStateRef.continuityConfig.decayExponent = 0.7;
+      this.runtimeStateRef.continuityConfig.tauMultiplier = 1.0;
+    }
+  }
+
+  /**
+   * Clear all continuity state (buffers, mappings, history).
+   */
+  clearContinuityState(): void {
+    if (this.runtimeStateRef) {
+      this.runtimeStateRef.continuity.targets.clear();
+      this.runtimeStateRef.continuity.mappings.clear();
+      this.runtimeStateRef.continuity.lastTModelMs = 0;
+      this.runtimeStateRef.continuity.domainChangeThisFrame = false;
+    }
   }
 
   /**
