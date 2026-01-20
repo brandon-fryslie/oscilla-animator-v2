@@ -2,21 +2,13 @@
 
 **Purpose:** Reusable evaluation findings to speed up future work evaluations.
 
-**Last Updated:** 2026-01-20 05:48:46
+**Last Updated:** 2026-01-20 07:52:00
 
 ---
 
 ## Available Cache Files
 
 ### Runtime Findings
-
-**runtime-unit-annotations.md** [NEW - FRESH]
-- Scope: unit-safe-types/unit-annotations
-- Status: Implementation complete, all DoD criteria met and exceeded
-- Confidence: FRESH (2026-01-20 05:48:46)
-- Reusable: Unit validation behavior, kernel signatures, test patterns, migration guide
-- Key findings: 8-unit taxonomy, Pass 2 validation, 28 kernel signatures, backwards compatible
-- Next evaluation: Check if canonical-types.ts, pass2-types.ts, or kernel-signatures.ts changed
 
 **runtime-continuity-controls-v2.md** [UPDATED - STALE]
 - Scope: continuity-controls-v2
@@ -77,9 +69,21 @@
 
 ## Invalidated Cache
 
+### 2026-01-20 07:52:00 - Unified Inputs Architecture (param-ui-hints)
+**Removed:**
+- runtime-unit-annotations.md - Contained stale block definition examples using array format
+
+**Rationale:**
+- Block definitions migrated from array to Record format (inputs/outputs)
+- Old cache showed: `inputs: [{ id: 'x', type: ... }]`
+- New format: `inputs: { x: { type: ... } }`
+- Test patterns for registerBlock() changed
+- Compiler iteration patterns changed (Object.entries() vs array methods)
+- Config-only inputs now use exposedAsPort: false
+
 ### 2026-01-20 05:48:46 - Sprint 2: Unit Annotation System (unit-safe-types)
 **Added:**
-- runtime-unit-annotations.md - Complete unit validation system with 8-unit taxonomy
+- runtime-unit-annotations.md - Complete unit validation system with 8-unit taxonomy (REMOVED 2026-01-20 07:52:00)
 
 **Key Capabilities:**
 - NumericUnit type system (phase, radians, normalized, scalar, ms, #, degrees, seconds)
@@ -169,3 +173,11 @@
 - TimeRoot italic styling and color
 - DefaultSource type structure
 - pass1-default-sources.ts lookup logic (port override → registry default)
+
+**runtime-unified-inputs.md** [NEW - FRESH]
+- Scope: param-ui-hints/unified-inputs
+- Status: Automated checks COMPLETE, Manual verification PENDING
+- Confidence: FRESH
+- Reusable: Block registration patterns, exposedAsPort handling, Object.entries iteration patterns
+- Key findings: All 14 blocks migrated to Record format, params removed, uiHint works on any input
+- Next evaluation: Check if InputDef/OutputDef types change, or block registration patterns change

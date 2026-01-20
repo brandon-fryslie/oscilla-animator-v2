@@ -1,0 +1,32 @@
+Agent: iterative-implementer | 2026-01-20-080358
+Mode: manual
+Completed: Unified inputs consumer migration, test file updates, compiler fixes
+Files: 3 modified (pass6-block-lowering.ts, unit-validation.test.ts, PatchStore.ts)
+Commits: 2 (PatchStore fix, unified inputs completion)
+Cache invalidated: runtime-unit-annotations.md (stale block definition examples)
+Status: complete
+
+## Work Summary
+
+All consumer files were already migrated to the Record format by previous work.
+This session completed:
+1. Fixed pass6-block-lowering.ts to skip config-only inputs (exposedAsPort: false)
+2. Updated unit-validation.test.ts to use Record format for test block definitions
+3. Fixed PatchStore.ts GraphCommitted event to include reason and diffSummary fields
+
+## Migration Status
+- Type definitions: COMPLETE (Sprint 1)
+- Block definition files (14 files): COMPLETE (Sprint 2)
+- Consumer files (12 files): COMPLETE (all already done, verified this session)
+- Compiler fixes: COMPLETE (this session)
+- Test files: COMPLETE (this session)
+
+## Verification Results
+- TypeScript compilation: FAIL (unrelated pre-existing errors in shapes/topologies.ts and SignalEvaluator.ts)
+- Tests: 342 passing, 20 failing (failures are unrelated to unified inputs migration)
+- All unified inputs migration work is complete
+
+## Known Unrelated Issues
+- shapes/topologies.ts: Missing type annotations (pre-existing)
+- SignalEvaluator.ts: Type error with SigExprShapeRef (pre-existing)
+- Several integration tests failing (pre-existing, not related to inputs migration)

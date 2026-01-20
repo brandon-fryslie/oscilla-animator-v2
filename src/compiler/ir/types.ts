@@ -432,9 +432,9 @@ export interface StepRender {
   readonly size?:
     | { readonly k: 'sig'; readonly id: SigExprId }
     | { readonly k: 'slot'; readonly slot: ValueSlot };
-  /** Optional shape - signal (uniform) or slot (per-particle after continuity) */
+  /** Optional shape - UPDATED: Now includes topology + param signals (Option A) */
   readonly shape?:
-    | { readonly k: 'sig'; readonly id: SigExprId }
+    | { readonly k: 'sig'; readonly topologyId: TopologyId; readonly paramSignals: readonly SigExprId[] }
     | { readonly k: 'slot'; readonly slot: ValueSlot };
 }
 

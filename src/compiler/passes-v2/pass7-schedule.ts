@@ -15,11 +15,12 @@
  * deterministic execution order.
  */
 
-import type { Step, StepRender, StepMaterialize, StepContinuityMapBuild, StepContinuityApply, TimeModel, InstanceId, InstanceDecl, FieldExprId, SigExprId, ValueSlot, ContinuityPolicy } from '../ir/types';
+import type { Step, StepRender, StepMaterialize, StepContinuityMapBuild, StepContinuityApply, TimeModel, InstanceId, InstanceDecl, FieldExprId, SigExprId, SigExpr, ValueSlot, ContinuityPolicy } from '../ir/types';
 import type { UnlinkedIRFragments } from './pass6-block-lowering';
 import type { AcyclicOrLegalGraph, NormalizedEdge, Block, BlockIndex } from '../ir/patches';
 import type { TimeModelIR } from '../ir/schedule';
 import type { ValueRefPacked } from '../ir/lowerTypes';
+import type { TopologyId } from '../../shapes/types';
 import { getBlockDefinition } from '../../blocks/registry';
 import { getPolicyForSemantic } from '../../runtime/ContinuityDefaults';
 
@@ -175,6 +176,27 @@ function collectRenderTargets(
 }
 
 /**
+ * Resolve shape info from a signal expression.
+ * Returns topologyId and paramSignals if the signal is a shapeRef, undefined otherwise.
+ */
+function resolveShapeInfo(
+  sigId: SigExprId,
+  signals: readonly SigExpr[]
+): { topologyId: TopologyId; paramSignals: readonly SigExprId[] } | undefined {
+  const expr = signals[sigId as number];
+  if (!expr) return undefined;
+
+  if (expr.kind === 'shapeRef') {
+    return {
+      topologyId: expr.topologyId,
+      paramSignals: expr.paramSignals,
+    };
+  }
+
+  return undefined;
+}
+
+/**
  * Build the complete continuity pipeline:
  * 1. ContinuityMapBuild steps (one per instance)
  * 2. Materialize steps (one per field target)
@@ -186,6 +208,7 @@ function collectRenderTargets(
 function buildContinuityPipeline(
   targets: RenderTargetInfo[],
   instances: ReadonlyMap<InstanceId, InstanceDecl>,
+  signals: readonly SigExpr[],
   slotAllocator: () => ValueSlot
 ): {
   mapBuildSteps: StepContinuityMapBuild[];
@@ -273,15 +296,22 @@ function buildContinuityPipeline(
       }
     }
 
-    // Process shape (semantic: custom) if it's a field
+    // Process shape (semantic: custom) if it's a field or signal
     let shapeOutput: StepRender['shape'] = undefined;
     if (shape) {
       if (shape.k === 'field') {
         const shapeSlots = getFieldSlots(shape.id, 'custom');
         shapeOutput = { k: 'slot', slot: shapeSlots.outputSlot };
       } else {
-        // Signal - pass through unchanged
-        shapeOutput = shape;
+        // Signal - resolve topology + param signals
+        const shapeInfo = resolveShapeInfo(shape.id, signals);
+        if (shapeInfo) {
+          shapeOutput = {
+            k: 'sig',
+            topologyId: shapeInfo.topologyId,
+            paramSignals: shapeInfo.paramSignals,
+          };
+        }
       }
     }
 
@@ -344,13 +374,16 @@ export function pass7Schedule(
     instances
   );
 
+  // Get signal expressions for shape resolution
+  const signals = unlinkedIR.builder.getSigExprs();
+
   // Build the complete continuity pipeline
   const {
     mapBuildSteps,
     materializeSteps,
     continuityApplySteps,
     renderSteps,
-  } = buildContinuityPipeline(renderTargets, instances, slotAllocator);
+  } = buildContinuityPipeline(renderTargets, instances, signals, slotAllocator);
 
   // Collect steps from builder (stateWrite steps from stateful blocks)
   const builderSteps = unlinkedIR.builder.getSteps();

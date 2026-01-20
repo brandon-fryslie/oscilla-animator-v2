@@ -1,0 +1,137 @@
+Agent: iterative-implementer | 2026-01-20 07:53:00
+Mode: manual  
+Completed: Core shape types and IR foundation | Files: 6 | Commits: 0 (pending)
+Tests: Not yet run (implementation incomplete)
+Cache invalidated: Not applicable (work in progress)
+Status: in_progress - architectural decision needed
+
+## Work Completed
+
+### Shape Foundation Types (3 new files)
+
+1. **src/shapes/types.ts** - Core shape type definitions
+   - TopologyId, TopologyDef, ParamDef, ShapeRef, SlotRef types
+   - Foundation for unified shape model
+
+2. **src/shapes/topologies.ts** - Built-in topologies
+   - TOPOLOGY_ELLIPSE: params=[rx, ry, rotation], render with ctx.ellipse()
+   - TOPOLOGY_RECT: params=[width, height, rotation, cornerRadius], render with ctx.fillRect()
+   - Immutable, frozen objects
+
+3. **src/shapes/registry.ts** - Topology lookup
+   - getTopology(id): TopologyDef
+   - hasTopology(id): boolean
+   - getAllTopologyIds(): TopologyId[]
+   - Immutable registry
+
+### IR Type System Updates (3 modified files)
+
+4. **src/compiler/ir/types.ts**
+   - Added SigExprShapeRef to SigExpr union
+   - SigExprShapeRef interface: topologyId + paramSignals[]
+
+5. **src/compiler/ir/IRBuilder.ts**
+   - Added sigShapeRef(topologyId, paramSignals, type) method
+
+6. **src/compiler/ir/IRBuilderImpl.ts**
+   - Implemented sigShapeRef method
+
+## Architectural Decision Required
+
+The DoD specifies "ShapeRef flows through IR" but there are multiple valid approaches:
+
+### Option A: ShapeRef as Render Step Metadata (RECOMMENDED)
+```typescript
+interface StepRender {
+  topologyId: TopologyId;        // NEW: Which topology to render
+  paramSlots: ValueSlot[];       // NEW: Where to find params (rx, ry, etc)
+  positionSlot: ValueSlot;
+  colorSlot: ValueSlot;
+  // ... rest unchanged
+}
+```
+
+**Pros:**
+- Clean separation: topology = compile-time constant, params = runtime values
+- No need to extend signal evaluation for non-numeric types
+- Matches existing render step pattern
+- Extensible for future path topologies
+
+**Cons:**
+- Requires StepRender type changes
+
+### Option B: ShapeRef as Signal Type
+```typescript
+// SigExprShapeRef evaluates to... what? (not a number)
+// Requires special handling in SignalEvaluator
+```
+
+**Pros:**
+- "Flows through IR" more literally
+
+**Cons:**
+- Signals are expected to evaluate to numbers
+- Adds complexity to evaluation system
+- Less clear semantics
+
+### Option C: Topology Index Encoding
+```typescript
+// shape signal = 0 (ellipse), 1 (rect), etc.
+// params passed separately
+```
+
+**Pros:**
+- Minimal changes to existing system
+
+**Cons:**
+- Less type-safe
+- Hardcodes topology indices
+- Harder to extend
+
+## Recommendation: Option A
+
+Update StepRender to include topologyId + paramSlots directly. This matches the spec intent ("Schedule carries topology + param slot refs") and keeps the signal system focused on numeric values.
+
+## Remaining Work (after decision)
+
+1. **Update primitive-blocks.ts**
+   - Ellipse: Create signals for rx, ry, rotation
+   - Rect: Create signals for width, height, rotation, cornerRadius
+   - Store signals in slots, pass slot refs to...
+
+2. **Update StepRender type** (if Option A chosen)
+   - Add topologyId and paramSlots fields
+
+3. **Update pass7-schedule.ts**
+   - Collect shape topology + param slots from blocks
+   - Attach to render step
+
+4. **Update ScheduleExecutor.ts**
+   - Evaluate param signals to get values
+   - Pass topology + params to renderer
+
+5. **Update Canvas2DRenderer.ts**
+   - Remove hardcoded switch (case 0, 1, 2)
+   - Implement: `getTopology(topologyId).render(ctx, params)`
+
+6. **Update RenderPassIR types**
+   - Add topology information
+
+7. **Run validation**
+   - npm run typecheck
+   - npm test  
+   - Update steel-thread.test.ts if needed
+
+## Files Modified
+- src/shapes/types.ts (new)
+- src/shapes/topologies.ts (new)
+- src/shapes/registry.ts (new)
+- src/compiler/ir/types.ts
+- src/compiler/ir/IRBuilder.ts
+- src/compiler/ir/IRBuilderImpl.ts
+
+## Next Steps
+
+**User decision needed:** Which architectural approach?
+
+Once decided, estimated remaining time: 45-60 minutes to complete implementation and validation.

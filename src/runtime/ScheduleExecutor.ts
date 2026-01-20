@@ -11,6 +11,7 @@ import type { Step, InstanceDecl, DomainInstance } from '../compiler/ir/types';
 import type { SigExprId, IrInstanceId as InstanceId } from '../types';
 import type { RuntimeState } from './RuntimeState';
 import type { BufferPool } from './BufferPool';
+import type { TopologyId } from '../shapes/types';
 import { resolveTime } from './timeResolution';
 import { materialize } from './Materializer';
 import { evaluateSignal } from './SignalEvaluator';
@@ -29,12 +30,21 @@ export interface RenderFrameIR {
 }
 
 /**
+ * Shape descriptor for unified shape model.
+ * Contains topology ID and evaluated parameter values.
+ */
+export interface ShapeDescriptor {
+  readonly topologyId: TopologyId;
+  readonly params: Record<string, number>;
+}
+
+/**
  * RenderPassIR - Single render pass
  *
- * Shape encoding:
- *   0 = circle
- *   1 = square
- *   2 = triangle
+ * Shape can be:
+ * - ShapeDescriptor: Uniform shape with topology + params for all particles
+ * - ArrayBufferView: Per-particle shape buffer (for Field<shape>)
+ * - number: Legacy shape encoding (0=circle, 1=square, 2=triangle) - deprecated
  */
 export interface RenderPassIR {
   kind: 'instances2d';
@@ -42,7 +52,7 @@ export interface RenderPassIR {
   position: ArrayBufferView;
   color: ArrayBufferView;
   size: number | ArrayBufferView; // Can be uniform size or per-particle sizes
-  shape: number | ArrayBufferView; // Can be uniform shape or per-particle shapes
+  shape: ShapeDescriptor | ArrayBufferView | number; // Unified shape model or legacy encoding
 }
 
 /**
@@ -176,8 +186,8 @@ export function executeFrame(
           size = 10;
         }
 
-        // Shape can be a signal (uniform) or slot (per-particle after continuity)
-        let shape: number | ArrayBufferView;
+        // Shape can be a signal (uniform with topology) or slot (per-particle after continuity)
+        let shape: ShapeDescriptor | ArrayBufferView | number;
         if (step.shape !== undefined) {
           if (step.shape.k === 'slot') {
             // Slot - read continuity-applied buffer
@@ -187,11 +197,25 @@ export function executeFrame(
             }
             shape = shapeBuffer;
           } else {
-            // Signal - evaluate once for uniform shape
-            shape = evaluateSignal(step.shape.id, signals, state);
+            // Signal with topology - evaluate param signals and build descriptor
+            const { topologyId, paramSignals } = step.shape;
+            const params: Record<string, number> = {};
+
+            // Get topology definition to know param names
+            // For now, use param index as fallback (param0, param1, etc)
+            // The renderer will match these to topology param definitions
+            for (let i = 0; i < paramSignals.length; i++) {
+              const value = evaluateSignal(paramSignals[i], signals, state);
+              params[`param${i}`] = value;
+            }
+
+            shape = {
+              topologyId,
+              params,
+            };
           }
         } else {
-          // Default shape when no input connected (0 = circle)
+          // Default shape when no input connected (0 = circle, legacy encoding)
           shape = 0;
         }
 

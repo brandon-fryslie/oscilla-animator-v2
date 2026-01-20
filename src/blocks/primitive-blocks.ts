@@ -51,13 +51,19 @@ registerBlock({
             defaultSource: defaultSourceConst(0.02),
             uiHint: {kind: 'slider', min: 0.001, max: 0.5, step: 0.001},
         },
+        rotation: {
+            label: 'Rotation',
+            type: signalType('float'),
+            value: 0,
+            defaultSource: defaultSourceConst(0),
+            uiHint: {kind: 'slider', min: 0, max: 6.28, step: 0.01},
+        },
     },
     outputs: {
         shape: {label: 'Shape', type: signalType('shape')},
     },
     lower: ({ctx, inputsById, config}) => {
-        // For now, output rx as a placeholder until shape type is fully implemented
-        // TODO: Output proper shape descriptor when shape type exists
+        // Resolve rx parameter
         const rxInput = inputsById.rx;
         let rxSig;
         if (rxInput && rxInput.k === 'sig') {
@@ -66,11 +72,36 @@ registerBlock({
             rxSig = ctx.b.sigConst((config?.rx as number) ?? 0.02, signalType('float'));
         }
 
+        // Resolve ry parameter
+        const ryInput = inputsById.ry;
+        let rySig;
+        if (ryInput && ryInput.k === 'sig') {
+            rySig = ryInput.id;
+        } else {
+            rySig = ctx.b.sigConst((config?.ry as number) ?? 0.02, signalType('float'));
+        }
+
+        // Resolve rotation parameter
+        const rotationInput = inputsById.rotation;
+        let rotationSig;
+        if (rotationInput && rotationInput.k === 'sig') {
+            rotationSig = rotationInput.id;
+        } else {
+            rotationSig = ctx.b.sigConst((config?.rotation as number) ?? 0, signalType('float'));
+        }
+
+        // Create shape reference with topology 'ellipse' and param signals
+        const shapeRefSig = ctx.b.sigShapeRef(
+            'ellipse',
+            [rxSig, rySig, rotationSig],
+            signalType('shape')
+        );
+
         const slot = ctx.b.allocSlot();
 
         return {
             outputsById: {
-                shape: {k: 'sig', id: rxSig, slot},
+                shape: {k: 'sig', id: shapeRefSig, slot},
             },
         };
     },
@@ -112,13 +143,26 @@ registerBlock({
             defaultSource: defaultSourceConst(0.02),
             uiHint: {kind: 'slider', min: 0.001, max: 0.5, step: 0.001},
         },
+        rotation: {
+            label: 'Rotation',
+            type: signalType('float'),
+            value: 0,
+            defaultSource: defaultSourceConst(0),
+            uiHint: {kind: 'slider', min: 0, max: 6.28, step: 0.01},
+        },
+        cornerRadius: {
+            label: 'Corner Radius',
+            type: signalType('float'),
+            value: 0,
+            defaultSource: defaultSourceConst(0),
+            uiHint: {kind: 'slider', min: 0, max: 0.1, step: 0.001},
+        },
     },
     outputs: {
         shape: {label: 'Shape', type: signalType('shape')},
     },
     lower: ({ctx, inputsById, config}) => {
-        // For now, output width as a placeholder until shape type is fully implemented
-        // TODO: Output proper shape descriptor when shape type exists
+        // Resolve width parameter
         const widthInput = inputsById.width;
         let widthSig;
         if (widthInput && widthInput.k === 'sig') {
@@ -127,11 +171,45 @@ registerBlock({
             widthSig = ctx.b.sigConst((config?.width as number) ?? 0.04, signalType('float'));
         }
 
+        // Resolve height parameter
+        const heightInput = inputsById.height;
+        let heightSig;
+        if (heightInput && heightInput.k === 'sig') {
+            heightSig = heightInput.id;
+        } else {
+            heightSig = ctx.b.sigConst((config?.height as number) ?? 0.02, signalType('float'));
+        }
+
+        // Resolve rotation parameter
+        const rotationInput = inputsById.rotation;
+        let rotationSig;
+        if (rotationInput && rotationInput.k === 'sig') {
+            rotationSig = rotationInput.id;
+        } else {
+            rotationSig = ctx.b.sigConst((config?.rotation as number) ?? 0, signalType('float'));
+        }
+
+        // Resolve cornerRadius parameter
+        const cornerRadiusInput = inputsById.cornerRadius;
+        let cornerRadiusSig;
+        if (cornerRadiusInput && cornerRadiusInput.k === 'sig') {
+            cornerRadiusSig = cornerRadiusInput.id;
+        } else {
+            cornerRadiusSig = ctx.b.sigConst((config?.cornerRadius as number) ?? 0, signalType('float'));
+        }
+
+        // Create shape reference with topology 'rect' and param signals
+        const shapeRefSig = ctx.b.sigShapeRef(
+            'rect',
+            [widthSig, heightSig, rotationSig, cornerRadiusSig],
+            signalType('shape')
+        );
+
         const slot = ctx.b.allocSlot();
 
         return {
             outputsById: {
-                shape: {k: 'sig', id: widthSig, slot},
+                shape: {k: 'sig', id: shapeRefSig, slot},
             },
         };
     },
