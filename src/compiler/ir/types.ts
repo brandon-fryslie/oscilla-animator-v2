@@ -13,6 +13,7 @@
  * - Instance System: Domain instances, layouts, and declarations
  * - Continuity System: Policies and gauges for anti-jank
  * - Time Model: infinite time representation
+ * - Shape System: Unified shape model with topologies
  */
 
 // Import canonical types as source of truth
@@ -66,6 +67,9 @@ import type {
   SlotId,
 } from './Indices';
 
+// Import shape types
+import type { TopologyId } from '../../shapes/types';
+
 // =============================================================================
 // Signal Expressions
 // =============================================================================
@@ -77,7 +81,8 @@ export type SigExpr =
   | SigExprExternal
   | SigExprMap
   | SigExprZip
-  | SigExprStateRead;
+  | SigExprStateRead
+  | SigExprShapeRef;
 
 export interface SigExprConst {
   readonly kind: 'const';
@@ -121,6 +126,19 @@ export interface SigExprStateRead {
   readonly kind: 'stateRead';
   readonly stateSlot: StateSlotId;
   readonly type: SignalType;
+}
+
+/**
+ * SigExprShapeRef - Shape reference expression
+ *
+ * Represents a shape with a specific topology and runtime parameter slots.
+ * The topology is compile-time constant, while param values are runtime.
+ */
+export interface SigExprShapeRef {
+  readonly kind: 'shapeRef';
+  readonly topologyId: TopologyId;
+  readonly paramSignals: readonly SigExprId[]; // Signals for each topology param
+  readonly type: SignalType; // Should be signalType('shape')
 }
 
 // =============================================================================

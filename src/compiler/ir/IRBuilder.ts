@@ -16,6 +16,7 @@ import type {
   InstanceId,
   DomainTypeId,
 } from './Indices';
+import type { TopologyId } from '../../shapes/types';
 import type { TimeModelIR } from './schedule';
 import type { PureFn, OpCode, InstanceDecl, LayoutSpec, Step, IntrinsicPropertyName, ContinuityPolicy } from './types';
 
@@ -49,6 +50,16 @@ export interface IRBuilder {
 
   /** Zip multiple signals with a function. */
   sigZip(inputs: readonly SigExprId[], fn: PureFn, type: SignalType): SigExprId;
+
+  /**
+   * Create a shape reference signal.
+   *
+   * @param topologyId - Topology identifier (e.g., 'ellipse', 'rect')
+   * @param paramSignals - Signal IDs for each topology parameter
+   * @param type - Signal type (should be signalType('shape'))
+   * @returns SigExprId for the shape reference
+   */
+  sigShapeRef(topologyId: TopologyId, paramSignals: readonly SigExprId[], type: SignalType): SigExprId;
 
   // =========================================================================
   // Field Expressions

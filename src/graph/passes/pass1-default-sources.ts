@@ -137,6 +137,10 @@ function analyzeDefaultSources(patch: Patch): DefaultSourceInsertion[] {
     if (!blockDef) continue;
 
     for (const [inputId, input] of Object.entries(blockDef.inputs)) {
+      // CRITICAL FIX: Skip config-only inputs (exposedAsPort: false)
+      // These are NOT ports and should NOT have edges or default sources materialized
+      if (input.exposedAsPort === false) continue;
+
       // Skip if already connected
       if (hasIncomingEdge(blockId, inputId, patch.edges)) continue;
 
@@ -176,9 +180,11 @@ function applyDefaultSourceInsertions(
       // Populate ports for the derived block
       const blockDef = getBlockDefinition(ins.block.type);
       if (blockDef) {
-        // Create input ports
+        // Create input ports (ONLY for exposed ports)
         const inputPorts = new Map();
         for (const [inputId, inputDef] of Object.entries(blockDef.inputs)) {
+          // Skip config-only inputs when creating ports
+          if (inputDef.exposedAsPort === false) continue;
           inputPorts.set(inputId, { id: inputId });
         }
         // Create output ports

@@ -159,7 +159,6 @@ export class PatchStore {
     const inputPorts = new Map<string, InputPort>();
     if (blockDef) {
       for (const [inputId, inputDef] of Object.entries(blockDef.inputs)) {
-        if (inputDef.exposedAsPort === false) continue;
         inputPorts.set(inputId, { id: inputId });
       }
     }

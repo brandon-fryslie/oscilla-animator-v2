@@ -60,6 +60,10 @@ export function pass0PolymorphicTypes(patch: Patch): Patch {
     // Strategy 2: Backward resolution - polymorphic INPUT infers from source output
     if (!inferredPayloadType) {
       for (const [inputId, input] of Object.entries(blockDef.inputs)) {
+        // CRITICAL FIX: Skip config-only inputs (exposedAsPort: false)
+        // These are NOT ports and cannot have incoming edges for type inference
+        if (input.exposedAsPort === false) continue;
+
         if (!input.type || input.type.payload !== '???') continue;
 
         const incomingEdge = patch.edges.find(

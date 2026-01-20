@@ -237,6 +237,10 @@ export function resolveBlockInputs(
   if (!blockDef) return resolved;
 
   for (const [slotId, inputSlot] of Object.entries(blockDef.inputs)) {
+    // CRITICAL FIX: Skip config-only inputs (exposedAsPort: false)
+    // These are NOT ports and should NOT have writers resolved for them
+    if (inputSlot.exposedAsPort === false) continue;
+
     const endpoint: InputEndpoint = {
       blockId: block.id,
       slotId,
