@@ -142,26 +142,29 @@ export function initializeGaugeOnDomainChange(
  * allows elements to gradually settle into their new positions.
  *
  * Uses a "rooted exponential" for ease-in behavior (smooth start, quick snap at end):
- * decay = exp(-dt/τ)^0.7
- * This creates a decay that's gentle at first, then accelerates to snap into place.
+ * decay = exp(-dt/τ)^exponent
+ * Default exponent=0.7 creates a decay that's gentle at first, then accelerates to snap into place.
+ * User can tune exponent via continuityConfig (0.1 = very gentle, 2.0 = more linear).
  *
  * @param gaugeBuffer - Gauge buffer to decay in place
  * @param tauMs - Time constant in milliseconds (same as slew tau)
  * @param dtMs - Delta time in milliseconds
  * @param length - Number of elements in buffer
+ * @param exponent - Decay curve exponent (from RuntimeState.continuityConfig.decayExponent)
  */
 export function decayGauge(
   gaugeBuffer: Float32Array,
   tauMs: number,
   dtMs: number,
-  length: number
+  length: number,
+  exponent: number
 ): void {
-  // Ease-in exponential decay: gauge[i] *= exp(-dt/τ)^0.7
-  // The exponent 0.7 creates an ease-in curve (slow start, fast finish)
-  // After τ ms: decayed to ~46% of original (e^-1)^0.7 ≈ 0.457
+  // Ease-in exponential decay: gauge[i] *= exp(-dt/τ)^exponent
+  // The exponent shapes the curve (lower = slower start, higher = more linear)
+  // After τ ms with exponent=0.7: decayed to ~46% of original (e^-1)^0.7 ≈ 0.457
   // After 5τ: decayed to ~2.7% (snaps quickly at the end)
   const baseDecay = Math.exp(-dtMs / tauMs);
-  const decay = Math.pow(baseDecay, 0.7);
+  const decay = Math.pow(baseDecay, exponent);
   for (let i = 0; i < length; i++) {
     gaugeBuffer[i] *= decay;
   }
@@ -455,6 +458,11 @@ export function applyContinuity(
   const outputBuffer =
     baseSlot === outputSlot ? baseBuffer : getBuffer(outputSlot);
 
+  // Read config for decay exponent and tau multiplier
+  const config = state.continuityConfig;
+  const decayExponent = config?.decayExponent ?? 0.7;
+  const tauMultiplier = config?.tauMultiplier ?? 1.0;
+
   // Apply policy
   switch (policy.kind) {
     case 'none':
@@ -469,23 +477,28 @@ export function applyContinuity(
       applyAdditiveGauge(baseBuffer, targetState.gaugeBuffer, outputBuffer, bufferLength);
       break;
 
-    case 'slew':
-      // Slew toward base value
+    case 'slew': {
+      // Slew toward base value (apply tau multiplier)
+      const effectiveTau = policy.tauMs * tauMultiplier;
       applySlewFilter(
         baseBuffer,
         targetState.slewBuffer,
         outputBuffer,
-        policy.tauMs,
+        effectiveTau,
         dtMs,
         bufferLength
       );
       break;
+    }
 
-    case 'project':
+    case 'project': {
       // Project policy: Map elements by ID, decay gauge, apply gauge, then slew (spec §3)
       // 1. Decay gauge toward zero (for animated properties like rotating spirals)
       // 2. Apply gauge: gauged = base + gauge (preserves continuity at boundary)
       // 3. Slew toward gauged values (smooths any transitions)
+
+      // Apply tau multiplier to policy tau
+      const effectiveTau = policy.tauMs * tauMultiplier;
 
       // Debug logging for gauge decay (only when gauge is non-zero)
       if (DEBUG_CONTINUITY && semantic === 'position' &&
@@ -494,8 +507,8 @@ export function applyContinuity(
           targetState.gaugeBuffer[0].toFixed(4), targetState.gaugeBuffer[1].toFixed(4));
       }
 
-      // Decay gauge toward zero over time
-      decayGauge(targetState.gaugeBuffer, policy.tauMs, dtMs, bufferLength);
+      // Decay gauge toward zero over time (using config exponent)
+      decayGauge(targetState.gaugeBuffer, effectiveTau, dtMs, bufferLength, decayExponent);
 
       // Debug logging after decay (only when gauge is non-zero)
       if (DEBUG_CONTINUITY && semantic === 'position' &&
@@ -512,11 +525,12 @@ export function applyContinuity(
         outputBuffer,       // Target: gauged values (base + gauge)
         targetState.slewBuffer,
         outputBuffer,
-        policy.tauMs,
+        effectiveTau,
         dtMs,
         bufferLength
       );
       break;
+    }
 
     case 'crossfade': {
       // Crossfade for unmappable cases (spec §3.7)
