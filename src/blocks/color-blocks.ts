@@ -20,19 +20,17 @@ registerBlock({
   description: 'Generates animated color from phase via hue rotation',
   form: 'primitive',
   capability: 'pure',
-  inputs: [
-    { id: 'phase', label: 'Phase', type: signalType('float') },
-    { id: 'hue', label: 'Hue Offset', type: signalType('float') },
-    { id: 'sat', label: 'Saturation', type: signalType('float') },
-    { id: 'val', label: 'Value', type: signalType('float') },
-  ],
-  outputs: [
-    { id: 'color', label: 'Color', type: signalType('color') },
-  ],
-  params: {
-    hueOffset: 0,
-    saturation: 1.0,
-    value: 1.0,
+  inputs: {
+    phase: { label: 'Phase', type: signalType('float') },
+    hue: { label: 'Hue Offset', type: signalType('float') },
+    sat: { label: 'Saturation', type: signalType('float') },
+    val: { label: 'Value', type: signalType('float') },
+    hueOffset: { value: 0, exposedAsPort: false },
+    saturation: { value: 1.0, exposedAsPort: false },
+    value: { value: 1.0, exposedAsPort: false },
+  },
+  outputs: {
+    color: { label: 'Color', type: signalType('color') },
   },
   lower: ({ ctx, inputsById }) => {
     const phase = inputsById.phase;
@@ -78,14 +76,14 @@ registerBlock({
   description: 'Converts HSV values to RGB color',
   form: 'primitive',
   capability: 'pure',
-  inputs: [
-    { id: 'hue', label: 'Hue', type: signalType('float') },
-    { id: 'sat', label: 'Saturation', type: signalType('float') },
-    { id: 'val', label: 'Value', type: signalType('float') },
-  ],
-  outputs: [
-    { id: 'color', label: 'Color', type: signalType('color') },
-  ],
+  inputs: {
+    hue: { label: 'Hue', type: signalType('float') },
+    sat: { label: 'Saturation', type: signalType('float') },
+    val: { label: 'Value', type: signalType('float') },
+  },
+  outputs: {
+    color: { label: 'Color', type: signalType('color') },
+  },
   lower: ({ ctx, inputsById }) => {
     const hue = inputsById.hue;
     const sat = inputsById.sat;
@@ -118,14 +116,14 @@ registerBlock({
   description: 'Converts HSV values (field or signal) to RGB color field',
   form: 'primitive',
   capability: 'pure',
-  inputs: [
-    { id: 'hue', label: 'Hue', type: signalTypeField('float', 'default') },
-    { id: 'sat', label: 'Saturation', type: signalType('float'), defaultSource: defaultSourceConst(1.0) },
-    { id: 'val', label: 'Value', type: signalType('float'), defaultSource: defaultSourceConst(1.0) },
-  ],
-  outputs: [
-    { id: 'color', label: 'Color', type: signalTypeField('color', 'default') },
-  ],
+  inputs: {
+    hue: { label: 'Hue', type: signalTypeField('float', 'default') },
+    sat: { label: 'Saturation', type: signalType('float'), defaultSource: defaultSourceConst(1.0) },
+    val: { label: 'Value', type: signalType('float'), defaultSource: defaultSourceConst(1.0) },
+  },
+  outputs: {
+    color: { label: 'Color', type: signalTypeField('color', 'default') },
+  },
   lower: ({ ctx, inputsById }) => {
     const hue = inputsById.hue;
     const sat = inputsById.sat;

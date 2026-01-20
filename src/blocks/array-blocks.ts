@@ -36,25 +36,26 @@ registerBlock({
   description: 'Creates multiple copies of an element (Signal<T> → Field<T>)',
   form: 'primitive',
   capability: 'identity',
-  inputs: [
-    { id: 'element', label: 'Element', type: signalType('???'), optional: true, defaultSource: defaultSource('Square', 'square') },
-    {
-      id: 'count',
+  inputs: {
+    element: {
+      label: 'Element',
+      type: signalType('???'),
+      optional: true,
+      defaultSource: defaultSource('Ellipse', 'shape'),
+    },
+    count: {
       label: 'Count',
       type: signalType('int'),
-      defaultValue: 100,
+      value: 100,
       defaultSource: defaultSourceConst(100),
       uiHint: { kind: 'slider', min: 1, max: 10000, step: 1 },
     },
-  ],
-  outputs: [
-    { id: 'elements', label: 'Elements', type: signalTypeField('???', 'default') },
-    { id: 'index', label: 'Index', type: signalTypeField('int', 'default') },
-    { id: 't', label: 'T (0-1)', type: signalTypeField('float', 'default') },
-    { id: 'active', label: 'Active', type: signalTypeField('bool', 'default') },
-  ],
-  params: {
-    count: 100,
+  },
+  outputs: {
+    elements: { label: 'Elements', type: signalTypeField('???', 'default') },
+    index: { label: 'Index', type: signalTypeField('int', 'default') },
+    t: { label: 'T (0-1)', type: signalTypeField('float', 'default') },
+    active: { label: 'Active', type: signalTypeField('bool', 'default') },
   },
   lower: ({ ctx, inputsById, config }) => {
     const count = (config?.count as number) ?? 100;
