@@ -4,7 +4,7 @@
  * Verifies that Pass 2 detects unit mismatches and emits appropriate warnings.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { pass2TypeGraph } from '../pass2-types';
 import type { NormalizedPatch } from '../../ir/patches';
 import { signalTypeSignal } from '../../../core/canonical-types';
@@ -35,11 +35,10 @@ describe('Unit Validation', () => {
       description: 'Outputs phase [0,1)',
       form: 'primitive',
       capability: 'pure',
-      inputs: [],
-      outputs: [
-        { id: 'phase', label: 'Phase', type: signalTypeSignal('float', 'phase') },
-      ],
-      params: {},
+      inputs: {},
+      outputs: {
+        phase: { label: 'Phase', type: signalTypeSignal('float', 'phase') },
+      },
       lower: () => ({ outputsById: {} }),
     });
 
@@ -50,11 +49,10 @@ describe('Unit Validation', () => {
       description: 'Expects radians input',
       form: 'primitive',
       capability: 'pure',
-      inputs: [
-        { id: 'angle', label: 'Angle', type: signalTypeSignal('float', 'radians') },
-      ],
-      outputs: [],
-      params: {},
+      inputs: {
+        angle: { label: 'Angle', type: signalTypeSignal('float', 'radians') },
+      },
+      outputs: {},
       lower: () => ({ outputsById: {} }),
     });
 
@@ -96,11 +94,10 @@ describe('Unit Validation', () => {
       description: 'Outputs phase [0,1)',
       form: 'primitive',
       capability: 'pure',
-      inputs: [],
-      outputs: [
-        { id: 'phase', label: 'Phase', type: signalTypeSignal('float', 'phase') },
-      ],
-      params: {},
+      inputs: {},
+      outputs: {
+        phase: { label: 'Phase', type: signalTypeSignal('float', 'phase') },
+      },
       lower: () => ({ outputsById: {} }),
     });
 
@@ -111,11 +108,10 @@ describe('Unit Validation', () => {
       description: 'Expects phase input',
       form: 'primitive',
       capability: 'pure',
-      inputs: [
-        { id: 'phase', label: 'Phase', type: signalTypeSignal('float', 'phase') },
-      ],
-      outputs: [],
-      params: {},
+      inputs: {
+        phase: { label: 'Phase', type: signalTypeSignal('float', 'phase') },
+      },
+      outputs: {},
       lower: () => ({ outputsById: {} }),
     });
 
@@ -154,11 +150,10 @@ describe('Unit Validation', () => {
       description: 'No unit annotation',
       form: 'primitive',
       capability: 'pure',
-      inputs: [],
-      outputs: [
-        { id: 'value', label: 'Value', type: signalTypeSignal('float') },
-      ],
-      params: {},
+      inputs: {},
+      outputs: {
+        value: { label: 'Value', type: signalTypeSignal('float') },
+      },
       lower: () => ({ outputsById: {} }),
     });
 
@@ -169,11 +164,10 @@ describe('Unit Validation', () => {
       description: 'No unit annotation',
       form: 'primitive',
       capability: 'pure',
-      inputs: [
-        { id: 'value', label: 'Value', type: signalTypeSignal('float') },
-      ],
-      outputs: [],
-      params: {},
+      inputs: {
+        value: { label: 'Value', type: signalTypeSignal('float') },
+      },
+      outputs: {},
       lower: () => ({ outputsById: {} }),
     });
 

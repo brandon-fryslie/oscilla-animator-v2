@@ -328,6 +328,10 @@ function lowerBlockInstance(
     const inputs: ValueRefPacked[] = [];
     let hasUnresolvedInputs = false;
     for (const [portId, inputDef] of Object.entries(blockDef.inputs)) {
+      // CRITICAL: Skip config-only inputs (exposedAsPort: false)
+      // These are not wirable ports and should not require resolution
+      if (inputDef.exposedAsPort === false) continue;
+
       const resolved = inputsById[portId];
       if (resolved !== undefined) {
         inputs.push(resolved);
