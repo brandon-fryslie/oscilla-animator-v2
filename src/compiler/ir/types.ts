@@ -133,11 +133,15 @@ export interface SigExprStateRead {
  *
  * Represents a shape with a specific topology and runtime parameter slots.
  * The topology is compile-time constant, while param values are runtime.
+ *
+ * For path shapes, controlPointField provides the Field<vec2> of control points
+ * over DOMAIN_CONTROL. This enables paths with modifiable control points.
  */
 export interface SigExprShapeRef {
   readonly kind: 'shapeRef';
   readonly topologyId: TopologyId;
   readonly paramSignals: readonly SigExprId[]; // Signals for each topology param
+  readonly controlPointField?: FieldExprId; // Optional control points for paths
   readonly type: SignalType; // Should be signalType('shape')
 }
 
