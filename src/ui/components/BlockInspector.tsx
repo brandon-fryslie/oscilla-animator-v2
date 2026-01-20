@@ -32,8 +32,8 @@ import { ConnectionPicker } from './ConnectionPicker';
 /**
  * Format a SignalType for display.
  */
-function formatSignalType(type: SignalType): string {
-  return type.payload;
+function formatSignalType(type: SignalType | undefined): string {
+  return type?.payload ?? '(no type)';
 }
 
 /**
@@ -62,7 +62,9 @@ function getDerivedDefaultSourceId(blockId: BlockId, portId: string): BlockId {
  * - '???' (polymorphic) is compatible with anything
  * - Otherwise, payload types must match
  */
-function areTypesCompatible(sourceType: SignalType, targetType: SignalType): boolean {
+function areTypesCompatible(sourceType: SignalType | undefined, targetType: SignalType | undefined): boolean {
+  // Handle undefined types
+  if (!sourceType || !targetType) return false;
   // Polymorphic types are compatible with anything
   if (sourceType.payload === '???' || targetType.payload === '???') {
     return true;
@@ -75,14 +77,14 @@ function areTypesCompatible(sourceType: SignalType, targetType: SignalType): boo
  * Get slider min value for Const default source editor.
  * Priority: inputDef.uiHint > inputDef.defaultSource.params.value-based > type-based defaults
  */
-function getConstSliderMin(inputDef: InputDef | undefined, portType: SignalType): number {
+function getConstSliderMin(inputDef: InputDef | undefined, portType: SignalType | undefined): number {
   // Check uiHint first
   const hint = inputDef?.uiHint;
   if (hint && 'min' in hint && hint.min !== undefined) {
     return hint.min;
   }
   // Type-based defaults
-  switch (portType.payload) {
+  switch (portType?.payload) {
     case 'int': return 0;
     case 'phase': return 0;
     case 'float': return 0;
@@ -94,14 +96,14 @@ function getConstSliderMin(inputDef: InputDef | undefined, portType: SignalType)
  * Get slider max value for Const default source editor.
  * Priority: inputDef.uiHint > type-based defaults
  */
-function getConstSliderMax(inputDef: InputDef | undefined, portType: SignalType): number {
+function getConstSliderMax(inputDef: InputDef | undefined, portType: SignalType | undefined): number {
   // Check uiHint first
   const hint = inputDef?.uiHint;
   if (hint && 'max' in hint && hint.max !== undefined) {
     return hint.max;
   }
   // Type-based defaults
-  switch (portType.payload) {
+  switch (portType?.payload) {
     case 'int': return 100;  // Reasonable default for integers
     case 'phase': return 1;
     case 'float': return 1;
@@ -113,14 +115,14 @@ function getConstSliderMax(inputDef: InputDef | undefined, portType: SignalType)
  * Get slider step value for Const default source editor.
  * Priority: inputDef.uiHint > type-based defaults
  */
-function getConstSliderStep(inputDef: InputDef | undefined, portType: SignalType): number {
+function getConstSliderStep(inputDef: InputDef | undefined, portType: SignalType | undefined): number {
   // Check uiHint first
   const hint = inputDef?.uiHint;
   if (hint && 'step' in hint && hint.step !== undefined) {
     return hint.step;
   }
   // Type-based defaults
-  switch (portType.payload) {
+  switch (portType?.payload) {
     case 'int': return 1;
     case 'phase': return 0.01;
     case 'float': return 0.01;

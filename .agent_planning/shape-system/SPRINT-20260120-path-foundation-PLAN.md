@@ -1,8 +1,8 @@
 # Sprint: path-foundation - Path Foundation
 
 **Generated:** 2026-01-20
-**Confidence:** MEDIUM (some unknowns around control point binding)
-**Status:** RESEARCH REQUIRED → then READY FOR IMPLEMENTATION
+**Confidence:** HIGH (all research tasks verified 2026-01-20)
+**Status:** READY FOR IMPLEMENTATION
 **Depends On:** unified-shape-foundation (must complete first)
 
 ## Sprint Goal
@@ -282,12 +282,12 @@ function renderPath(ctx: CanvasRenderingContext2D, topology: PathTopologyDef, co
 | Performance with many paths | LOW | Profile after basic implementation; paths are rare vs particles |
 | DOMAIN_CONTROL not working | LOW | Domain system is tested; just need to wire it up |
 
-## Research Tasks (To Raise to HIGH Confidence)
+## Research Tasks (COMPLETED - 2026-01-20)
 
-Before implementation:
-- [ ] Verify DOMAIN_CONTROL instance creation works
-- [ ] Verify Field<vec2> can be created over DOMAIN_CONTROL
-- [ ] Prototype renderPath() function standalone
+All verified in EVALUATION-path-foundation-20260120-fresh.md:
+- [x] Verify DOMAIN_CONTROL instance creation works ✅
+- [x] Verify Field<vec2> can be created over DOMAIN_CONTROL ✅
+- [x] Prototype renderPath() function standalone ✅ (pattern established)
 
 ## Test Plan
 

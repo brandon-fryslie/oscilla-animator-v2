@@ -1,0 +1,140 @@
+Agent: iterative-implementer | 2026-01-20 10:13:00
+Mode: manual
+Completed: Path foundation (P0-P2 partial) | Files: 6 | Commits: 5
+Tests: All passing (362 passed, 34 skipped)
+Cache invalidated: Not yet done (TODO)
+Status: in_progress
+
+Implementation Summary (path-foundation sprint):
+
+COMPLETED:
+-----------
+✓ P0: Path Types Defined
+  - PathVerb enum (MOVE, LINE, CUBIC, QUAD, CLOSE) in src/shapes/types.ts
+  - PathTopologyDef interface extending TopologyDef
+  - Includes verbs, pointsPerVerb, totalControlPoints, closed fields
+  - Fully documented with JSDoc
+
+✓ P1: DOMAIN_CONTROL Extended
+  - Added 'index' intrinsic (int) to DOMAIN_CONTROL
+  - Added 'position' intrinsic (vec2) to DOMAIN_CONTROL
+  - Enables Field<vec2> over DOMAIN_CONTROL for path control points
+
+✓ P2-Partial: IR Types Extended
+  - SigExprShapeRef now includes optional controlPointField: FieldExprId
+  - IRBuilder.sigShapeRef() accepts optional controlPointField parameter
+  - IRBuilderImpl updated to pass controlPointField through
+
+✓ P2-Partial: ProceduralPolygon Block Created
+  - Block registered with type 'ProceduralPolygon'
+  - Inputs: sides (int), radiusX (float), radiusY (float)
+  - Outputs: shape (Signal<shape>), controlPoints (Field<vec2>)
+  - Creates PathTopologyDef for N-sided polygon
+  - Creates instance over DOMAIN_CONTROL with N points
+  - Computes control point positions using polygonVertex kernel
+  - Block compiles without errors
+
+IN PROGRESS / REMAINING:
+------------------------
+⚠ P2: Topology Registration
+  - createPolygonTopology() creates PathTopologyDef
+  - But topology NOT registered in shapes/registry.ts
+  - Need dynamic topology registration OR pre-register polygon-3 through polygon-12
+
+⚠ P4: Path Rendering (CRITICAL - BLOCKS DoD)
+  - Canvas2DRenderer does NOT yet handle PathTopologyDef
+  - Need to add renderPath() function to handle verbs
+  - Need to materialize control point field buffer
+  - Need to pass control point buffer through render pipeline
+
+Missing for Path Rendering:
+1. Pass7 (schedule.ts): Detect SigExprShapeRef.controlPointField, schedule materialization
+2. ScheduleExecutor: Materialize controlPointField, pass buffer to RenderPassIR
+3. RenderPassIR: Add controlPointBuffer field
+4. Canvas2DRenderer: Implement renderPath() function that reads verbs + control points
+
+⚠ P3: Control Point Modulation
+  - FieldMap should work with control point fields (existing infrastructure)
+  - Not tested yet due to missing rendering
+
+⚠ P5: Pipeline Integration
+  - Schedule/executor need updates to handle controlPointField
+  - Not tested yet
+
+⚠ P6: Kernels
+  - polygonVertex kernel NOT implemented in runtime/kernels
+  - Need: (index: int, sides: int, radiusX: float, radiusY: float) → vec2
+  - Formula: angle = index * (2π / sides); return vec2(radiusX * cos(angle), radiusY * sin(angle))
+
+MISSING TESTS:
+--------------
+- PathTopologyDef creation
+- ProceduralPolygon block lowering
+- Path compilation end-to-end
+- Path rendering (visual verification)
+
+FILES MODIFIED:
+---------------
+1. src/shapes/types.ts - Added PathVerb enum and PathTopologyDef interface
+2. src/core/domain-registry.ts - Added index/position intrinsics to DOMAIN_CONTROL
+3. src/compiler/ir/types.ts - Extended SigExprShapeRef with controlPointField
+4. src/compiler/ir/IRBuilder.ts - Updated sigShapeRef signature
+5. src/compiler/ir/IRBuilderImpl.ts - Updated sigShapeRef implementation
+6. src/blocks/path-blocks.ts - Created ProceduralPolygon block
+7. src/compiler/compile.ts - Registered path-blocks module
+
+COMMITS:
+--------
+e291b10 feat(shapes): Add PathVerb enum and PathTopologyDef
+8a1a245 feat(domain): Add index and position intrinsics to DOMAIN_CONTROL
+229a1d7 feat(compiler): Add controlPointField to SigExprShapeRef
+b612b82 feat(blocks): Add ProceduralPolygon block (WIP)
+ed0221c feat(compiler): Register path-blocks module
+
+VALIDATION:
+-----------
+✓ npm run typecheck: PASS (no errors)
+✓ npm test: PASS (362 tests passed)
+✗ Pentagon rendering: NOT YET TESTABLE (rendering not implemented)
+
+ARCHITECTURE DECISIONS:
+-----------------------
+1. User Decision: Extend SigExprShapeRef with optional controlPointField
+   - Chosen over separate SigExprPathRef type
+   - Keeps unified shape model, adds path-specific field
+   - Control points are Field<vec2> over DOMAIN_CONTROL instance
+
+2. PathTopologyDef extends TopologyDef
+   - Adds verbs, pointsPerVerb, totalControlPoints, closed
+   - Topology is compile-time constant (known after lowering)
+   - Control point positions are runtime (Field<vec2>)
+
+3. ProceduralPolygon creates both topology AND control points
+   - Topology: static structure (N vertices, LINE segments)
+   - Control points: dynamic positions (computed from radiusX/radiusY)
+   - Users can modify control points via FieldMap for deformation
+
+NEXT STEPS:
+-----------
+1. CRITICAL: Implement path rendering in Canvas2DRenderer
+   - Add renderPath() function
+   - Handle PathVerb MOVE, LINE, CLOSE
+   - Read control points from buffer
+
+2. Update RenderPassIR to include controlPointBuffer
+
+3. Update Pass7 to materialize controlPointField
+
+4. Update ScheduleExecutor to evaluate controlPointField
+
+5. Add polygonVertex kernel to runtime
+
+6. Write tests for path system
+
+7. Visual verification: Create ProceduralPolygon(5), verify pentagon renders
+
+READY FOR EVALUATION: NO
+- Core types and infrastructure complete
+- Block compiles successfully
+- But pentagon won't render until P4 (path rendering) is implemented
+- Estimate: 2-3 hours remaining work for full DoD completion

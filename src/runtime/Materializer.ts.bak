@@ -814,27 +814,6 @@ function applyKernelZipSig(
     for (let i = 0; i < N; i++) {
       outArr[i] = TWO_PI * (indexArr[i] + phase);
     }
-  } else if (kernelName === 'polygonVertex') {
-    // Polygon vertex: index -> vec2 position on regular polygon
-    // Input field: index (int)
-    // Signals: [sides, radiusX, radiusY]
-    if (sigValues.length !== 3) {
-      throw new Error('polygonVertex requires 3 signals (sides, radiusX, radiusY)');
-    }
-    const outArr = out as Float32Array;
-    const indexArr = fieldInput as Float32Array;
-    const sides = Math.max(3, Math.round(sigValues[0])); // Ensure at least 3 sides
-    const radiusX = sigValues[1];
-    const radiusY = sigValues[2];
-    const TWO_PI = Math.PI * 2;
-
-    for (let i = 0; i < N; i++) {
-      const index = Math.round(indexArr[i]);
-      // Angle for this vertex: starts at -90 degrees (top) and goes clockwise
-      const angle = (index / sides) * TWO_PI - Math.PI / 2;
-      outArr[i * 2 + 0] = radiusX * Math.cos(angle);
-      outArr[i * 2 + 1] = radiusY * Math.sin(angle);
-    }
   } else {
     throw new Error(`Unknown zipSig kernel function: ${kernelName}`);
   }

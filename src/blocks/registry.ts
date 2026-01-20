@@ -89,7 +89,7 @@ export type Capability = 'time' | 'identity' | 'state' | 'render' | 'io' | 'pure
  */
 export interface InputDef {
   readonly label?: string;           // Display label (defaults to key name)
-  readonly type?: SignalType;        // Required if exposedAsPort !== false
+  readonly type: SignalType;         // Required - all inputs have a type
   readonly value?: unknown;          // Default value (was in params)
   readonly defaultSource?: DefaultSource;
   readonly uiHint?: UIControlHint;

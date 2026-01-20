@@ -2,7 +2,7 @@
 
 **Purpose:** Reusable evaluation findings to speed up future work evaluations.
 
-**Last Updated:** 2026-01-20 07:52:00
+**Last Updated:** 2026-01-20 16:00:00
 
 ---
 
@@ -47,6 +47,15 @@
 - Status: Structurally complete
 - Confidence: STALE (use runtime-dual-editor-reactflow-p0.md instead)
 
+**runtime-unified-inputs.md** [UPDATED]
+- Scope: param-ui-hints/unified-inputs
+- Status: COMPLETE (all DoD criteria verified)
+- Confidence: FRESH (verified 2026-01-20 09:20:00)
+- Reusable: Block registration patterns, exposedAsPort handling, Object.entries iteration patterns
+- Key findings: All 14 blocks migrated to Record format, params removed, uiHint works on any input, config-only filtering works correctly
+- Next evaluation: Check if InputDef/OutputDef types change, or block registration patterns change
+
+
 ---
 
 ## Cache Maintenance
@@ -68,6 +77,26 @@
 ---
 
 ## Invalidated Cache
+
+### 2026-01-20 16:00:00 - Unified Shape Foundation (unified-shape-foundation)
+**Marked STALE:**
+- runtime-unified-inputs.md - primitive-blocks.ts modified with sigShapeRef usage
+
+**Rationale:**
+- Implemented unified shape model with topology system
+- Modified src/blocks/primitive-blocks.ts: Ellipse/Rect now use sigShapeRef with param signals
+- Modified src/compiler/ir/types.ts: Added SigExprShapeRef, updated StepRender with topology + paramSignals
+- Modified src/compiler/passes-v2/pass7-schedule.ts: Added resolveShapeInfo() for shape signal resolution
+- Modified src/runtime/ScheduleExecutor.ts: Added ShapeDescriptor, evaluates param signals at runtime
+- Modified src/render/Canvas2DRenderer.ts: Uses getTopology().render() instead of hardcoded switches
+- New files: src/shapes/{types.ts, topologies.ts, registry.ts} define topology system
+- Block definition patterns changed: Added rotation and cornerRadius inputs to Ellipse/Rect
+
+**Impact:**
+- Primitive shape blocks now have additional inputs (rotation, cornerRadius)
+- Compiler IR now has SigExprShapeRef expression type
+- Runtime creates ShapeDescriptor objects instead of numeric encodings
+- Renderer dispatches to topology render functions instead of switch statements
 
 ### 2026-01-20 07:52:00 - Unified Inputs Architecture (param-ui-hints)
 **Removed:**
@@ -173,11 +202,3 @@
 - TimeRoot italic styling and color
 - DefaultSource type structure
 - pass1-default-sources.ts lookup logic (port override → registry default)
-
-**runtime-unified-inputs.md** [NEW - FRESH]
-- Scope: param-ui-hints/unified-inputs
-- Status: Automated checks COMPLETE, Manual verification PENDING
-- Confidence: FRESH
-- Reusable: Block registration patterns, exposedAsPort handling, Object.entries iteration patterns
-- Key findings: All 14 blocks migrated to Record format, params removed, uiHint works on any input
-- Next evaluation: Check if InputDef/OutputDef types change, or block registration patterns change

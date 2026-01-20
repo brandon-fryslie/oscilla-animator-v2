@@ -1,8 +1,8 @@
 # Definition of Done: path-foundation
 
 **Sprint:** Path Foundation
-**Confidence:** MEDIUM (research tasks must complete to reach HIGH)
-**Depends On:** unified-shape-foundation
+**Confidence:** HIGH (research tasks verified 2026-01-20)
+**Depends On:** unified-shape-foundation ✅ COMPLETE
 
 ## Acceptance Criteria
 
@@ -73,11 +73,11 @@
 - [ ] Polygon visible and correctly shaped
 - [ ] Can modify radiusX/radiusY and see changes
 
-## Research Tasks (Must Complete Before Implementation)
+## Research Tasks (COMPLETED 2026-01-20)
 
-- [ ] Verify DOMAIN_CONTROL instance creation in existing codebase
-- [ ] Verify Field<vec2> over DOMAIN_CONTROL
-- [ ] Prototype standalone path rendering function
+- [x] Verify DOMAIN_CONTROL instance creation in existing codebase ✅
+- [x] Verify Field<vec2> over DOMAIN_CONTROL ✅
+- [x] Prototype standalone path rendering function ✅
 
 ## Verification Commands
 
