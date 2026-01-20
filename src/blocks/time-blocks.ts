@@ -21,8 +21,9 @@ registerBlock({
   inputs: [],
   outputs: [
     { id: 'tMs', label: 'Time (ms)', type: signalType('float') },
-    { id: 'phaseA', label: 'Phase A', type: signalType('float') },
-    { id: 'phaseB', label: 'Phase B', type: signalType('float') },
+    // Phase outputs use 'phase' type: values in [0, 1) range representing normalized time cycles
+    { id: 'phaseA', label: 'Phase A', type: signalType('phase') },
+    { id: 'phaseB', label: 'Phase B', type: signalType('phase') },
   ],
   params: {
     periodMs: 1000,
@@ -32,8 +33,8 @@ registerBlock({
     // Their outputs are provided by the time system (pass 3)
     // We create placeholder signals that reference the time system
     const tMs = ctx.b.sigTime('tMs', signalType('float'));
-    const phaseA = ctx.b.sigTime('phaseA', signalType('float'));
-    const phaseB = ctx.b.sigTime('phaseB', signalType('float'));
+    const phaseA = ctx.b.sigTime('phaseA', signalType('phase'));
+    const phaseB = ctx.b.sigTime('phaseB', signalType('phase'));
 
     const tMsSlot = ctx.b.allocSlot();
     const phaseASlot = ctx.b.allocSlot();
@@ -48,4 +49,3 @@ registerBlock({
     };
   },
 });
-

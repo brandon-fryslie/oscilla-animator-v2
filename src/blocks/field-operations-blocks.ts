@@ -431,7 +431,8 @@ registerBlock({
   capability: 'pure',
   inputs: [
     { id: 'id01', label: 'ID (0..1)', type: signalTypeField('float', 'default') },
-    { id: 'phase', label: 'Phase', type: signalType('float'), defaultSource: defaultSourceTimeRoot('phaseA') },
+    // Phase input expects normalized time cycle [0, 1)
+    { id: 'phase', label: 'Phase', type: signalType('phase'), defaultSource: defaultSourceTimeRoot('phaseA') },
     { id: 'base', label: 'Base', type: signalType('float'), defaultSource: defaultSourceConst(0.5) },
     { id: 'amplitude', label: 'Amplitude', type: signalType('float'), defaultSource: defaultSourceConst(1.0) },
     { id: 'spread', label: 'Spread', type: signalType('float'), defaultSource: defaultSourceConst(1.0) },
@@ -452,7 +453,7 @@ registerBlock({
     }
 
     // Broadcast signal inputs to fields
-    const phaseSig = phase?.k === 'sig' ? phase.id : ctx.b.sigConst(0, signalType('float'));
+    const phaseSig = phase?.k === 'sig' ? phase.id : ctx.b.sigConst(0, signalType('phase'));
     const baseSig = base?.k === 'sig' ? base.id : ctx.b.sigConst(0, signalType('float'));
     const ampSig = amplitude?.k === 'sig' ? amplitude.id : ctx.b.sigConst(1, signalType('float'));
     const spreadSig = spread?.k === 'sig' ? spread.id : ctx.b.sigConst(1, signalType('float'));
@@ -537,7 +538,8 @@ registerBlock({
   capability: 'pure',
   inputs: [
     { id: 'id01', label: 'ID (0..1)', type: signalTypeField('float', 'default') },
-    { id: 'phase', label: 'Phase', type: signalType('float'), defaultSource: defaultSourceTimeRoot('phaseA') },
+    // Phase input expects normalized time cycle [0, 1)
+    { id: 'phase', label: 'Phase', type: signalType('phase'), defaultSource: defaultSourceTimeRoot('phaseA') },
     { id: 'spin', label: 'Spin', type: signalType('float'), defaultSource: defaultSourceConst(1.0) },
   ],
   outputs: [
@@ -554,7 +556,7 @@ registerBlock({
     }
 
     // Broadcast signal inputs to fields
-    const phaseSig = phase?.k === 'sig' ? phase.id : ctx.b.sigConst(0, signalType('float'));
+    const phaseSig = phase?.k === 'sig' ? phase.id : ctx.b.sigConst(0, signalType('phase'));
     const spinSig = spin?.k === 'sig' ? spin.id : ctx.b.sigConst(1, signalType('float'));
 
     const phaseField = ctx.b.fieldBroadcast(phaseSig, signalTypeField('float', 'default'));
@@ -704,7 +706,8 @@ registerBlock({
   capability: 'pure',
   inputs: [
     { id: 'id01', label: 'ID (0..1)', type: signalTypeField('float', 'default') },
-    { id: 'phase', label: 'Phase', type: signalType('float'), defaultSource: defaultSourceTimeRoot('phaseA') },
+    // Phase input expects normalized time cycle [0, 1)
+    { id: 'phase', label: 'Phase', type: signalType('phase'), defaultSource: defaultSourceTimeRoot('phaseA') },
   ],
   outputs: [
     { id: 'hue', label: 'Hue', type: signalTypeField('float', 'default') },
@@ -719,7 +722,7 @@ registerBlock({
     }
 
     // Broadcast phase to field
-    const phaseSig = phase?.k === 'sig' ? phase.id : ctx.b.sigConst(0, signalType('float'));
+    const phaseSig = phase?.k === 'sig' ? phase.id : ctx.b.sigConst(0, signalType('phase'));
     const phaseField = ctx.b.fieldBroadcast(phaseSig, signalTypeField('float', 'default'));
 
     // hue = (id01 + phase) mod 1.0

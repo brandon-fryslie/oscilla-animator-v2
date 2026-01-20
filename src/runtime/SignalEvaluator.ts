@@ -7,6 +7,10 @@
  * Adheres to architectural law: ONE SOURCE OF TRUTH
  *
  * Sprint 2: Adds NaN/Inf detection with batched reporting
+ *
+ * IMPORTANT: Signal kernels (sin, cos, tan) expect PHASE [0,1), not radians.
+ * They automatically convert phase to radians (phase * 2π) before applying Math functions.
+ * This differs from OpcodeInterpreter which operates on radians directly for field-level math.
  */
 
 import type { SigExpr } from '../compiler/ir/types';
@@ -167,6 +171,10 @@ function applyPureFn(
 /**
  * Apply kernel function at signal level
  *
+ * IMPORTANT: Signal kernels sin/cos/tan expect PHASE [0,1), not radians.
+ * They convert phase to radians internally (phase * 2π) before applying Math functions.
+ * This is the standard expectation for oscillator blocks.
+ *
  * Signal kernels operate on scalar values (single numbers).
  * Note: vec2 kernels are not supported at signal level - use field-level versions.
  */
@@ -176,19 +184,24 @@ function applySignalKernel(name: string, values: number[]): number {
       if (values.length !== 1) {
         throw new Error(`Signal kernel 'sin' expects 1 input, got ${values.length}`);
       }
-      return Math.sin(values[0]);
+      // Kernel sin expects PHASE [0,1), converts to radians (0-2π) for full cycle
+      // Used by Oscillator block and other signal-level waveform generators
+      return Math.sin(values[0] * 2 * Math.PI);
 
     case 'cos':
       if (values.length !== 1) {
         throw new Error(`Signal kernel 'cos' expects 1 input, got ${values.length}`);
       }
-      return Math.cos(values[0]);
+      // Kernel cos expects PHASE [0,1), converts to radians (0-2π) for full cycle
+      // Used by Oscillator block and other signal-level waveform generators
+      return Math.cos(values[0] * 2 * Math.PI);
 
     case 'tan':
       if (values.length !== 1) {
         throw new Error(`Signal kernel 'tan' expects 1 input, got ${values.length}`);
       }
-      return Math.tan(values[0]);
+      // Kernel tan expects PHASE [0,1), converts to radians (0-2π) for full cycle
+      return Math.tan(values[0] * 2 * Math.PI);
 
     // Waveform kernels - input is phase (0..1), output is -1..1 or 0..1
     case 'triangle': {

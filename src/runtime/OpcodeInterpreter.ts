@@ -5,6 +5,10 @@
  * Eliminates triple duplication of opcode dispatch logic.
  *
  * Adheres to architectural law: SINGLE ENFORCER
+ *
+ * IMPORTANT: Opcode-level sin/cos/tan operate on RADIANS, not phase.
+ * These are used for field-level math where angles may already be in radians.
+ * For phase-based oscillators, use SignalEvaluator kernels which accept phase [0,1).
  */
 
 /**
@@ -36,10 +40,16 @@ function applyUnaryOp(op: string, x: number): number {
     case 'abs':
       return Math.abs(x);
     case 'sin':
+      // Opcode sin operates on RADIANS (not phase)
+      // Used for field-level math where angles are already in radians
       return Math.sin(x);
     case 'cos':
+      // Opcode cos operates on RADIANS (not phase)
+      // Used for field-level math where angles are already in radians
       return Math.cos(x);
     case 'tan':
+      // Opcode tan operates on RADIANS (not phase)
+      // Used for field-level math where angles are already in radians
       return Math.tan(x);
     case 'wrap01':
       return ((x % 1) + 1) % 1;

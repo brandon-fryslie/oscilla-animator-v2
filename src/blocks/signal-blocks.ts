@@ -37,6 +37,7 @@ registerBlock({
   ],
   params: {
     value: 0,
+    uiHint: { kind: 'slider', min: 1, max: 10000, step: 1 },
     // payloadType is set by normalizer after type inference
   },
   lower: ({ ctx, config }) => {
@@ -153,7 +154,8 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   inputs: [
-    { id: 'phase', label: 'Phase', type: signalType('float') },
+    // Phase input expects values in [0, 1) range - the kernel converts to radians
+    { id: 'phase', label: 'Phase', type: signalType('phase') },
   ],
   outputs: [
     { id: 'out', label: 'Output', type: signalType('float') },
@@ -176,6 +178,7 @@ registerBlock({
 
     // Create oscillator signal expression using sigMap
     // Map the waveform function over the phase input
+    // Note: SignalEvaluator kernels (sin, cos, etc.) expect phase [0,1) and convert to radians
     const waveFn = ctx.b.kernel(waveform); // sin, cos, etc.
     let sigId: SigExprId = ctx.b.sigMap(phaseValue.id as SigExprId, waveFn, signalType('float'));
 
