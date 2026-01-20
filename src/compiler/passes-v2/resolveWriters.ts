@@ -236,10 +236,10 @@ export function resolveBlockInputs(
   const blockDef = getBlockDefinition(block.type);
   if (!blockDef) return resolved;
 
-  for (const inputSlot of blockDef.inputs) {
+  for (const [slotId, inputSlot] of Object.entries(blockDef.inputs)) {
     const endpoint: InputEndpoint = {
       blockId: block.id,
-      slotId: inputSlot.id,
+      slotId,
     };
 
     // Enumerate writers (DSConst edges are included via GraphNormalizer)
@@ -255,7 +255,7 @@ export function resolveBlockInputs(
     const portType = inputSlot.type;
 
     // Build resolved spec
-    resolved.set(inputSlot.id, {
+    resolved.set(slotId, {
       endpoint,
       portType,
       writers: sortedWriters,

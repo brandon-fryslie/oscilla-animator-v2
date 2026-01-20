@@ -147,10 +147,15 @@ function getPortType(
   const blockDef = getBlockDefinition(block.type);
   if (!blockDef) return null;
 
-  const slot = [...blockDef.inputs, ...blockDef.outputs].find(s => s.id === portId);
-  if (slot === null || slot === undefined) return null;
+  // Check inputs first
+  const inputDef = blockDef.inputs[portId];
+  if (inputDef?.type) return inputDef.type;
 
-  return slot.type;
+  // Then check outputs
+  const outputDef = blockDef.outputs[portId];
+  if (outputDef?.type) return outputDef.type;
+
+  return null;
 }
 
 /**
@@ -175,8 +180,8 @@ export function pass2TypeGraph(
     if (!blockDef) continue;
 
     const outputTypes = new Map<string, SignalType>();
-    for (const slot of blockDef.outputs) {
-      outputTypes.set(slot.id, slot.type);
+    for (const [portId, outputDef] of Object.entries(blockDef.outputs)) {
+      outputTypes.set(portId, outputDef.type);
     }
 
     blockOutputTypes.set(block.id, outputTypes);

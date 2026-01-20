@@ -327,18 +327,18 @@ function lowerBlockInstance(
 
     const inputs: ValueRefPacked[] = [];
     let hasUnresolvedInputs = false;
-    for (const inputPort of blockDef.inputs) {
-      const resolved = inputsById[inputPort.id];
+    for (const [portId, inputDef] of Object.entries(blockDef.inputs)) {
+      const resolved = inputsById[portId];
       if (resolved !== undefined) {
         inputs.push(resolved);
-      } else if (inputPort.optional) {
+      } else if (inputDef.optional) {
         // Optional inputs can be undefined - lowering function must handle this
         // Don't add to inputs array, but allow lowering to proceed
       } else {
         // Accumulate error for unresolved required input
         errors.push({
           code: "NotImplemented",
-          message: `Unresolved input "${inputPort.id}" for block "${block.type}" (${block.id}). All inputs should be resolved by multi-input resolution.`,
+          message: `Unresolved input "${portId}" for block "${block.type}" (${block.id}). All inputs should be resolved by multi-input resolution.`,
           where: { blockId: block.id },
         });
         hasUnresolvedInputs = true;
@@ -362,8 +362,8 @@ function lowerBlockInstance(
       blockType: block.type,
       instanceId: block.id,
       label: block.label,
-      inTypes: blockDef.inputs.map((port) => port.type),
-      outTypes: blockDef.outputs.map((port) => port.type),
+      inTypes: Object.values(blockDef.inputs).map(input => input.type).filter((t): t is NonNullable<typeof t> => t !== undefined),
+      outTypes: Object.values(blockDef.outputs).map(output => output.type),
       b: builder,
       seedConstId: 0, // Seed value not used by current intrinsics (randomId uses element index only)
       inferredInstance,
@@ -377,7 +377,7 @@ function lowerBlockInstance(
 
     // All blocks MUST use outputsById pattern
     // Allow empty outputsById only if block has no declared outputs
-    const hasOutputs = blockDef.outputs.length > 0;
+    const hasOutputs = Object.keys(blockDef.outputs).length > 0;
     if (result.outputsById === undefined || (hasOutputs && Object.keys(result.outputsById).length === 0)) {
       errors.push({
         code: "IRValidationFailed",
@@ -388,7 +388,7 @@ function lowerBlockInstance(
     }
 
     // Map outputs to port IDs using outputsById
-    const portOrder = blockDef.outputs.map((p) => p.id);
+    const portOrder = Object.keys(blockDef.outputs);
     for (const portId of portOrder) {
       const ref = result.outputsById[portId];
       if (ref === undefined) {
