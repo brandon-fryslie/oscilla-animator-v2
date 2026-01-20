@@ -98,19 +98,19 @@ export interface SigExprSlot {
 
 export interface SigExprTime {
   readonly kind: 'time';
-  readonly which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'pulse' | 'progress';
+  readonly mode: 't01' | 'dt' | 'tAbs';
   readonly type: SignalType;
 }
 
 export interface SigExprExternal {
   readonly kind: 'external';
-  readonly which: 'mouseX' | 'mouseY' | 'mouseOver';
+  readonly sourceId: string;
   readonly type: SignalType;
 }
 
 export interface SigExprMap {
   readonly kind: 'map';
-  readonly input: SigExprId;
+  readonly inputs: readonly SigExprId[];
   readonly fn: PureFn;
   readonly type: SignalType;
 }
@@ -122,6 +122,10 @@ export interface SigExprZip {
   readonly type: SignalType;
 }
 
+/**
+ * State read signal expression.
+ * Reads a persistent state value from the state store.
+ */
 export interface SigExprStateRead {
   readonly kind: 'stateRead';
   readonly stateSlot: StateSlotId;
@@ -129,13 +133,8 @@ export interface SigExprStateRead {
 }
 
 /**
- * SigExprShapeRef - Shape reference expression
- *
- * Represents a shape with a specific topology and runtime parameter slots.
- * The topology is compile-time constant, while param values are runtime.
- *
- * For path shapes, controlPointField provides the Field<vec2> of control points
- * over DOMAIN_CONTROL. This enables paths with modifiable control points.
+ * Shape reference signal expression.
+ * References a shape topology with runtime parameters.
  */
 export interface SigExprShapeRef {
   readonly kind: 'shapeRef';
@@ -198,7 +197,6 @@ export interface FieldExprMap {
   readonly input: FieldExprId;
   readonly fn: PureFn;
   readonly type: SignalType;
-  readonly instanceId?: InstanceId; // Propagated from input
 }
 
 export interface FieldExprZip {
@@ -206,37 +204,27 @@ export interface FieldExprZip {
   readonly inputs: readonly FieldExprId[];
   readonly fn: PureFn;
   readonly type: SignalType;
-  readonly instanceId?: InstanceId; // Unified from inputs
 }
 
 export interface FieldExprZipSig {
   readonly kind: 'zipSig';
-  readonly field: FieldExprId;
-  readonly signals: readonly SigExprId[];
+  readonly fieldInputs: readonly FieldExprId[];
+  readonly sigInputs: readonly SigExprId[];
   readonly fn: PureFn;
   readonly type: SignalType;
-  readonly instanceId?: InstanceId; // Propagated from field input
 }
 
-/**
- * Array field expression - represents Signal<T> → Field<T> transform.
- * Created by Array block (Stage 2 of three-stage architecture).
- */
 export interface FieldExprArray {
   readonly kind: 'array';
   readonly instanceId: InstanceId;
+  readonly values: readonly number[];
   readonly type: SignalType;
 }
 
-/**
- * Layout field expression - represents field operation that outputs positions.
- * Created by layout blocks (Stage 3 of three-stage architecture).
- */
 export interface FieldExprLayout {
   readonly kind: 'layout';
-  readonly input: FieldExprId;
-  readonly layoutSpec: LayoutSpec;
   readonly instanceId: InstanceId;
+  readonly property: 'position' | 'radius';
   readonly type: SignalType;
 }
 
@@ -244,41 +232,32 @@ export interface FieldExprLayout {
 // Event Expressions
 // =============================================================================
 
-export type EventExpr =
-  | EventExprPulse
-  | EventExprWrap
-  | EventExprCombine
-  | EventExprNever;
+export type EventExpr = EventExprConst;
 
-export interface EventExprPulse {
-  readonly kind: 'pulse';
-  readonly source: 'timeRoot';
-}
-
-export interface EventExprWrap {
-  readonly kind: 'wrap';
-  readonly signal: SigExprId;
-}
-
-export interface EventExprCombine {
-  readonly kind: 'combine';
-  readonly events: readonly EventExprId[];
-  readonly mode: 'any' | 'all';
-}
-
-export interface EventExprNever {
-  readonly kind: 'never';
+export interface EventExprConst {
+  readonly kind: 'const';
+  readonly fired: boolean;
 }
 
 // =============================================================================
 // Pure Functions
 // =============================================================================
 
+/**
+ * PureFn - Pure function representation for map/zip operations
+ *
+ * Either a primitive opcode or a composed function.
+ */
 export type PureFn =
-  | { kind: 'opcode'; opcode: OpCode }
-  | { kind: 'expr'; expr: string }
-  | { kind: 'kernel'; name: string };
+  | { readonly kind: 'opcode'; readonly op: OpCode }
+  | { readonly kind: 'composed'; readonly ops: readonly OpCode[] };
 
+/**
+ * OpCode - Primitive operations available in the IR
+ *
+ * Used in map/zip functions to transform signals/fields.
+ * All operations are pure (no side effects).
+ */
 export enum OpCode {
   // Arithmetic
   Add = 'add',
@@ -397,11 +376,10 @@ export type ContinuityPolicy =
 // Time Model
 // =============================================================================
 
-export type TimeModel =
-  | { kind: 'infinite'; windowMs?: number; periodAMs?: number; periodBMs?: number };
+export type TimeModel = { readonly kind: 'infinite' };
 
 // =============================================================================
-// Schedule Steps
+// Execution Steps
 // =============================================================================
 
 export type Step =
@@ -421,7 +399,7 @@ export interface StepEvalSig {
 export interface StepMaterialize {
   readonly kind: 'materialize';
   readonly field: FieldExprId;
-  readonly instanceId: string; // InstanceId - UPDATED for Sprint 6
+  readonly instanceId: string; // InstanceId
   readonly target: ValueSlot;
 }
 
@@ -440,6 +418,8 @@ export interface StepRender {
   readonly shape?:
     | { readonly k: 'sig'; readonly topologyId: TopologyId; readonly paramSignals: readonly SigExprId[] }
     | { readonly k: 'slot'; readonly slot: ValueSlot };
+  /** Optional control points for path rendering - P5c: Add control points field */
+  readonly controlPoints?: { readonly k: 'slot'; readonly slot: ValueSlot };
 }
 
 export interface StepStateWrite {
@@ -449,25 +429,25 @@ export interface StepStateWrite {
 }
 
 /**
- * Step to build element mapping when domain changes (spec §5.1).
- * Executed rarely (only at hot-swap boundaries).
+ * Continuity map build step (spec §5.1).
+ * Detects domain changes and builds element mappings.
  */
 export interface StepContinuityMapBuild {
   readonly kind: 'continuityMapBuild';
   readonly instanceId: string; // InstanceId
-  readonly outputMapping: string; // Key to store mapping result
+  readonly outputMapping: string; // Mapping identifier
 }
 
 /**
- * Step to apply continuity policy to a field target (spec §5.1).
- * Executed per-frame for targets with policy != none.
+ * Continuity apply step (spec §5.1).
+ * Applies continuity policy to a field target.
  */
 export interface StepContinuityApply {
   readonly kind: 'continuityApply';
-  readonly targetKey: string; // StableTargetId
+  readonly targetKey: string; // Unique identifier for this target
   readonly instanceId: string; // InstanceId
   readonly policy: ContinuityPolicy;
-  readonly baseSlot: ValueSlot;
-  readonly outputSlot: ValueSlot;
+  readonly baseSlot: ValueSlot; // Input buffer (base values)
+  readonly outputSlot: ValueSlot; // Output buffer (continuity-applied values)
   readonly semantic: 'position' | 'radius' | 'opacity' | 'color' | 'custom';
 }

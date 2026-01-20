@@ -31,6 +31,7 @@ registerBlock({
   inputs: {
     signal: { label: 'Signal', type: signalType('???') },
     payloadType: {
+      type: signalType('???'),
       value: undefined,
       hidden: true,
       exposedAsPort: false,

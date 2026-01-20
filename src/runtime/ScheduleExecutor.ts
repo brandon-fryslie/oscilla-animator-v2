@@ -45,6 +45,8 @@ export interface ShapeDescriptor {
  * - ShapeDescriptor: Uniform shape with topology + params for all particles
  * - ArrayBufferView: Per-particle shape buffer (for Field<shape>)
  * - number: Legacy shape encoding (0=circle, 1=square, 2=triangle) - deprecated
+ *
+ * P5d: Added controlPoints buffer for path rendering
  */
 export interface RenderPassIR {
   kind: 'instances2d';
@@ -53,6 +55,7 @@ export interface RenderPassIR {
   color: ArrayBufferView;
   size: number | ArrayBufferView; // Can be uniform size or per-particle sizes
   shape: ShapeDescriptor | ArrayBufferView | number; // Unified shape model or legacy encoding
+  controlPoints?: ArrayBufferView; // P5d: Optional control points for path rendering
 }
 
 /**
@@ -219,6 +222,16 @@ export function executeFrame(
           shape = 0;
         }
 
+        // P5d: Read control points buffer if present
+        let controlPoints: ArrayBufferView | undefined;
+        if (step.controlPoints) {
+          const cpBuffer = state.values.objects.get(step.controlPoints.slot) as ArrayBufferView;
+          if (!cpBuffer) {
+            throw new Error(`Control points buffer not found in slot ${step.controlPoints.slot}`);
+          }
+          controlPoints = cpBuffer;
+        }
+
         // Resolve count from instance
         const count = typeof instance.count === 'number' ? instance.count : 0;
 
@@ -229,6 +242,7 @@ export function executeFrame(
           color,
           size,
           shape,
+          ...(controlPoints && { controlPoints }), // P5d: Include control points if present
         });
         break;
       }

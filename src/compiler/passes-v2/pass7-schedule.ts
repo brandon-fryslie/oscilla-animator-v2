@@ -177,12 +177,12 @@ function collectRenderTargets(
 
 /**
  * Resolve shape info from a signal expression.
- * Returns topologyId and paramSignals if the signal is a shapeRef, undefined otherwise.
+ * Returns topologyId, paramSignals, and optional controlPointField if the signal is a shapeRef.
  */
 function resolveShapeInfo(
   sigId: SigExprId,
   signals: readonly SigExpr[]
-): { topologyId: TopologyId; paramSignals: readonly SigExprId[] } | undefined {
+): { topologyId: TopologyId; paramSignals: readonly SigExprId[]; controlPointField?: FieldExprId } | undefined {
   const expr = signals[sigId as number];
   if (!expr) return undefined;
 
@@ -190,6 +190,7 @@ function resolveShapeInfo(
     return {
       topologyId: expr.topologyId,
       paramSignals: expr.paramSignals,
+      controlPointField: expr.controlPointField, // P5b: Include control point field
     };
   }
 
@@ -298,12 +299,14 @@ function buildContinuityPipeline(
 
     // Process shape (semantic: custom) if it's a field or signal
     let shapeOutput: StepRender['shape'] = undefined;
+    let controlPointsOutput: StepRender['controlPoints'] = undefined;
+
     if (shape) {
       if (shape.k === 'field') {
         const shapeSlots = getFieldSlots(shape.id, 'custom');
         shapeOutput = { k: 'slot', slot: shapeSlots.outputSlot };
       } else {
-        // Signal - resolve topology + param signals
+        // Signal - resolve topology + param signals + control points
         const shapeInfo = resolveShapeInfo(shape.id, signals);
         if (shapeInfo) {
           shapeOutput = {
@@ -311,6 +314,12 @@ function buildContinuityPipeline(
             topologyId: shapeInfo.topologyId,
             paramSignals: shapeInfo.paramSignals,
           };
+
+          // P5b: If shape has control point field, materialize it
+          if (shapeInfo.controlPointField !== undefined) {
+            const cpSlots = getFieldSlots(shapeInfo.controlPointField, 'custom');
+            controlPointsOutput = { k: 'slot', slot: cpSlots.outputSlot };
+          }
         }
       }
     }
@@ -323,6 +332,7 @@ function buildContinuityPipeline(
       colorSlot: colorSlots.outputSlot,
       ...(sizeOutput && { size: sizeOutput }),
       ...(shapeOutput && { shape: shapeOutput }),
+      ...(controlPointsOutput && { controlPoints: controlPointsOutput }), // P5c: Add control points to render step
     };
 
     renderSteps.push(renderStep);

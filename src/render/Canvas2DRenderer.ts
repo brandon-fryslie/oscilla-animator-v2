@@ -1,12 +1,20 @@
 /**
- * Canvas 2D Renderer - Unified Shape Model
+ * Canvas 2D Renderer - Unified Shape Model with Path Support
  *
  * Uses canvas API with topology-based shape dispatch.
- * No more hardcoded shape switches - dispatches to topology.render().
+ * No more hardcoded shape switches - dispatches to topology.render() or path rendering.
  */
 
 import type { RenderFrameIR, RenderPassIR, ShapeDescriptor } from '../runtime/ScheduleExecutor';
 import { getTopology } from '../shapes/registry';
+import type { PathTopologyDef, PathVerb, TopologyDef } from '../shapes/types';
+
+/**
+ * Type guard to check if a topology is a PathTopologyDef
+ */
+function isPathTopology(topology: TopologyDef): topology is PathTopologyDef {
+  return 'verbs' in topology;
+}
 
 /**
  * Render a frame to a 2D canvas context
@@ -44,12 +52,14 @@ function renderPass(
 }
 
 /**
- * Render 2D instances with unified shape model
+ * Render 2D instances with unified shape model and path support
  *
  * Shape can be:
  * - ShapeDescriptor: Topology + params (uniform for all particles)
  * - ArrayBufferView: Per-particle shape buffer (Field<shape>)
  * - number: Legacy encoding (0=circle, 1=square, 2=triangle) - deprecated
+ *
+ * P4: Paths are detected by checking if topology has 'verbs' property
  */
 function renderInstances2D(
   ctx: CanvasRenderingContext2D,
@@ -65,6 +75,16 @@ function renderInstances2D(
   // Determine shape mode
   const shapeMode = determineShapeMode(pass.shape);
 
+  // P4: Check if this is a path shape that needs control points
+  const isPath = shapeMode.kind === 'topology' && isPathTopology(shapeMode.topology);
+  const controlPoints = pass.controlPoints as Float32Array | undefined;
+
+  // For path shapes, we expect exactly 1 "particle" (the path itself)
+  // The control points field contains the actual path geometry
+  if (isPath && pass.count !== 1) {
+    console.warn(`Path shape expected count=1, got count=${pass.count}`);
+  }
+
   for (let i = 0; i < pass.count; i++) {
     const x = position[i * 2] * width;
     const y = position[i * 2 + 1] * height;
@@ -78,9 +98,20 @@ function renderInstances2D(
 
     switch (shapeMode.kind) {
       case 'topology': {
-        // Unified shape model - use topology render function
         const { topology, params } = shapeMode;
-        topology.render(ctx, params);
+
+        // P4: Check if this is a path topology
+        if (isPathTopology(topology)) {
+          // Render path using control points
+          if (!controlPoints) {
+            console.warn('Path topology requires control points buffer');
+            break;
+          }
+          renderPath(ctx, topology, controlPoints, params, width, height);
+        } else {
+          // Regular topology - use topology render function
+          topology.render(ctx, params);
+        }
         break;
       }
 
@@ -110,10 +141,99 @@ function renderInstances2D(
 }
 
 /**
+ * P4: Render a path using control points
+ *
+ * Walks through the verb sequence, consuming control points as needed.
+ * Control points are in normalized [0,1] space and scaled to canvas dimensions.
+ */
+function renderPath(
+  ctx: CanvasRenderingContext2D,
+  topology: PathTopologyDef,
+  controlPoints: Float32Array,
+  params: Record<string, number>,
+  width: number,
+  height: number
+): void {
+  ctx.beginPath();
+
+  let pointIndex = 0;
+
+  for (let i = 0; i < topology.verbs.length; i++) {
+    const verb = topology.verbs[i];
+
+    switch (verb) {
+      case 0: { // PathVerb.MOVE
+        const x = (controlPoints[pointIndex * 2] - 0.5) * width;
+        const y = (controlPoints[pointIndex * 2 + 1] - 0.5) * height;
+        ctx.moveTo(x, y);
+        pointIndex++;
+        break;
+      }
+
+      case 1: { // PathVerb.LINE
+        const x = (controlPoints[pointIndex * 2] - 0.5) * width;
+        const y = (controlPoints[pointIndex * 2 + 1] - 0.5) * height;
+        ctx.lineTo(x, y);
+        pointIndex++;
+        break;
+      }
+
+      case 2: { // PathVerb.CUBIC
+        // Cubic bezier: control1, control2, end
+        const cp1x = (controlPoints[pointIndex * 2] - 0.5) * width;
+        const cp1y = (controlPoints[pointIndex * 2 + 1] - 0.5) * height;
+        pointIndex++;
+
+        const cp2x = (controlPoints[pointIndex * 2] - 0.5) * width;
+        const cp2y = (controlPoints[pointIndex * 2 + 1] - 0.5) * height;
+        pointIndex++;
+
+        const endx = (controlPoints[pointIndex * 2] - 0.5) * width;
+        const endy = (controlPoints[pointIndex * 2 + 1] - 0.5) * height;
+        pointIndex++;
+
+        ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, endx, endy);
+        break;
+      }
+
+      case 3: { // PathVerb.QUAD
+        // Quadratic bezier: control, end
+        const cpx = (controlPoints[pointIndex * 2] - 0.5) * width;
+        const cpy = (controlPoints[pointIndex * 2 + 1] - 0.5) * height;
+        pointIndex++;
+
+        const endx = (controlPoints[pointIndex * 2] - 0.5) * width;
+        const endy = (controlPoints[pointIndex * 2 + 1] - 0.5) * height;
+        pointIndex++;
+
+        ctx.quadraticCurveTo(cpx, cpy, endx, endy);
+        break;
+      }
+
+      case 4: { // PathVerb.CLOSE
+        ctx.closePath();
+        break;
+      }
+
+      default: {
+        console.warn(`Unknown path verb: ${verb}`);
+        break;
+      }
+    }
+  }
+
+  // Fill the path
+  ctx.fill();
+
+  // Optionally stroke based on params (future enhancement)
+  // if (params.stroke) { ctx.stroke(); }
+}
+
+/**
  * Shape rendering mode
  */
 type ShapeMode =
-  | { kind: 'topology'; topology: ReturnType<typeof getTopology>; params: Record<string, number> }
+  | { kind: 'topology'; topology: TopologyDef; params: Record<string, number> }
   | { kind: 'perParticle'; buffer: ArrayBufferView }
   | { kind: 'legacy'; encoding: number };
 

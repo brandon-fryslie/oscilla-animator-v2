@@ -19,7 +19,7 @@ registerBlock({
   form: 'primitive',
   capability: 'time',
   inputs: {
-    periodMs: { value: 1000, exposedAsPort: false },
+    periodMs: { type: signalType('float'), value: 1000, exposedAsPort: false },
   },
   outputs: {
     tMs: { label: 'Time (ms)', type: signalType('float') },

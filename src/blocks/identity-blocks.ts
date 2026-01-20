@@ -20,7 +20,7 @@ registerBlock({
   capability: 'identity',
   inputs: {
     domain: { label: 'Domain', type: signalType('float') },
-    seed: { value: 0, exposedAsPort: false },
+    seed: { type: signalType('int'), value: 0, exposedAsPort: false },
   },
   outputs: {
     rand: { label: 'Random [0,1]', type: signalTypeField('float', 'default') },

@@ -32,11 +32,13 @@ registerBlock({
   capability: 'pure',
   inputs: {
     value: {
+      type: signalType('float'),
       value: 0,
       uiHint: { kind: 'slider', min: 1, max: 10000, step: 1 },
       exposedAsPort: false,
     },
     payloadType: {
+      type: signalType('???'),
       value: undefined,
       hidden: true,
       exposedAsPort: false,
@@ -162,9 +164,9 @@ registerBlock({
   inputs: {
     // Phase input expects values in [0, 1) range - the kernel converts to radians
     phase: { label: 'Phase', type: signalType('phase') },
-    waveform: { value: 'sin', exposedAsPort: false },
-    amplitude: { value: 1.0, exposedAsPort: false },
-    offset: { value: 0.0, exposedAsPort: false },
+    waveform: { type: signalType('float'), value: 0, exposedAsPort: false },
+    amplitude: { type: signalType('float'), value: 1.0, exposedAsPort: false },
+    offset: { type: signalType('float'), value: 0.0, exposedAsPort: false },
   },
   outputs: {
     out: { label: 'Output', type: signalType('float') },
@@ -223,7 +225,7 @@ registerBlock({
   capability: 'state',
   inputs: {
     in: { label: 'Input', type: signalType('float') },
-    initialValue: { value: 0, exposedAsPort: false },
+    initialValue: { type: signalType('float'), value: 0, exposedAsPort: false },
   },
   outputs: {
     out: { label: 'Output', type: signalType('float') },

@@ -1,0 +1,150 @@
+Agent: iterative-implementer | 2026-01-20 10:30
+Mode: manual (no tests for paths yet)
+Sprint: path-foundation
+Completed: P6 (polygonVertex kernel), P5a (dynamic topology registration)
+Files Modified: 3 (Materializer.ts, registry.ts, path-blocks.ts)
+Commits: 2 (6860a1c, 3e87b5b)
+Cache: No cache invalidation needed (new feature, no eval cache for paths)
+Status: in_progress
+
+## Work Completed
+
+### P6: polygonVertex Kernel ✅
+- Added kernel to applyKernelZipSig() in Materializer.ts
+- Signature: (index, sides, radiusX, radiusY) -> vec2
+- Computes regular polygon vertices on ellipse
+- Starts at -90 degrees (top), goes clockwise
+- Commit: 6860a1c
+
+### P5a: Dynamic Topology Registration ✅
+- Made topology registry mutable
+- Added registerDynamicTopology() function
+- ProceduralPolygon block registers path topologies during lowering
+- Solves architecture gap for procedurally-created topologies
+- Commit: 3e87b5b
+
+## Remaining Work
+
+### P5b-e: Complete Pipeline Integration (CRITICAL PATH)
+
+**Files to modify:**
+1. src/compiler/passes-v2/pass7-schedule.ts
+   - Extend resolveShapeInfo() to return controlPointField
+   - Add controlPointField slot allocation like position/color
+   - Add controlPoints to StepRender type
+
+2. src/compiler/ir/types.ts
+   - Add controlPoints field to StepRender interface
+
+3. src/runtime/ScheduleExecutor.ts
+   - Add controlPoints field to RenderPassIR
+   - Materialize control point field using Materializer
+   - Pass control point buffer to renderer
+
+**Technical approach:**
+```typescript
+// pass7-schedule.ts
+function resolveShapeInfo(...): {
+  topologyId: TopologyId;
+  paramSignals: readonly SigExprId[];
+  controlPointField?: FieldExprId;  // ADD THIS
+}
+
+// StepRender
+export interface StepRender {
+  // ... existing fields ...
+  readonly controlPoints?: { k: 'slot'; slot: ValueSlot };  // ADD THIS
+}
+
+// ScheduleExecutor RenderPassIR
+export interface RenderPassIR {
+  // ... existing fields ...
+  controlPoints?: ArrayBufferView;  // ADD THIS
+}
+```
+
+### P4: Path Rendering (depends on P5)
+
+**File:** src/render/Canvas2DRenderer.ts
+
+**Approach:**
+1. In determineShapeMode(), check if topology is PathTopologyDef
+2. If yes, return { kind: 'path', topology, controlPoints }
+3. Add 'path' case to renderInstances2D switch
+4. Implement renderPath() function
+
+**Technical details:**
+```typescript
+function renderPath(
+  ctx: CanvasRenderingContext2D,
+  topology: PathTopologyDef,
+  controlPoints: Float32Array
+): void {
+  ctx.beginPath();
+  let pointIndex = 0;
+  for (let i = 0; i < topology.verbs.length; i++) {
+    const verb = topology.verbs[i];
+    switch (verb) {
+      case PathVerb.MOVE:
+        ctx.moveTo(controlPoints[pointIndex * 2], controlPoints[pointIndex * 2 + 1]);
+        pointIndex++;
+        break;
+      case PathVerb.LINE:
+        ctx.lineTo(controlPoints[pointIndex * 2], controlPoints[pointIndex * 2 + 1]);
+        pointIndex++;
+        break;
+      case PathVerb.CLOSE:
+        ctx.closePath();
+        break;
+    }
+  }
+  ctx.fill(); // or stroke based on params
+}
+```
+
+### P3: Field Operations Verification
+
+**Likely already works** - existing FieldMap infrastructure should handle control point fields.
+Can verify once P4/P5 are complete by testing:
+- `fieldMap(controlPoints, scale)` for stretch
+- Individual point manipulation for joint angle changes
+
+## Architecture Notes
+
+### Topology Flow
+1. Block creates PathTopologyDef during lowering
+2. Block calls registerDynamicTopology(topology) 
+3. Block creates SigExprShapeRef with topologyId + controlPointField
+4. Compiler extracts controlPointField in pass7
+5. Runtime materializes control points each frame
+6. Renderer gets topology via getTopology() + control point buffer
+7. Renderer iterates verbs using control points
+
+### Control Point Flow
+1. DOMAIN_CONTROL instance created (N control points)
+2. 'index' intrinsic provides 0, 1, 2, ... 
+3. polygonVertex kernel: (index, sides, radiusX, radiusY) -> vec2
+4. Result is Field<vec2> with control point positions
+5. Field flows through IR as controlPointField
+6. Materialized each frame into Float32Array
+7. Passed to renderer as controlPoints buffer
+
+## Blockers
+
+None. All dependencies met:
+- P0-P2 complete (types, intrinsics, ProceduralPolygon block) ✅
+- P6 complete (polygonVertex kernel) ✅
+- P5a complete (dynamic topology registration) ✅
+
+Next step: Implement P5b-e (pipeline integration)
+
+## Files Modified
+
+- src/runtime/Materializer.ts (P6: added polygonVertex kernel)
+- src/shapes/registry.ts (P5a: mutable registry + registerDynamicTopology)
+- src/blocks/path-blocks.ts (P5a: register topology on creation)
+
+## Commits
+
+- 6860a1c: feat(kernel): Add polygonVertex kernel for path rendering
+- 3e87b5b: feat(shapes): Add dynamic topology registration
