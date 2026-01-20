@@ -109,6 +109,11 @@ export class IRBuilderImpl implements IRBuilder {
     this.sigExprs.push({ kind: 'zip', inputs, fn, type });
     return id;
   }
+  sigShapeRef(topologyId: string, paramSignals: readonly SigExprId[], type: SignalType): SigExprId {
+    const id = sigExprId(this.sigExprs.length);
+    this.sigExprs.push({ kind: 'shapeRef', topologyId, paramSignals, type });
+    return id;
+  }
 
   /**
    * Binary operation helper - creates a sig expression that zips two inputs with an opcode.

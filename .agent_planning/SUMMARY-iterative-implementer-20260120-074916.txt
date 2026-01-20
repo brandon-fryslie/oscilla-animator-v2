@@ -1,0 +1,89 @@
+Agent: iterative-implementer | 2026-01-20 07:35:00
+Mode: manual
+Completed: Fixed config-only inputs (exposedAsPort: false) not being treated as ports | Files: 5 | Commits: 2
+Cache: Invalidated 0 entries (no eval cache exists yet)
+Status: in_progress
+
+## Problem Fixed
+
+After the unified-inputs migration, tests were failing because:
+1. Pass 1 (default-sources) was creating edges to ALL inputs, including config inputs (`exposedAsPort: false`)
+2. These config inputs (like Const's `value` and `payloadType`) don't have SignalType definitions
+3. Pass 2 (type-graph) then failed with "Unknown port type" errors
+
+## Solution Implemented
+
+Inputs with `exposedAsPort: false` are CONFIG values, not ports. They are now:
+- EXCLUDED from port iteration
+- EXCLUDED from default source materialization
+- NOT have edges pointing to them
+- NOT included in port maps on Block instances
+
+### Files Fixed
+
+1. **src/graph/passes/pass1-default-sources.ts** (line 142, 187)
+   - Skip config inputs when analyzing default sources
+   - Skip config inputs when populating ports on derived blocks
+
+2. **src/stores/PatchStore.ts** (line 162, 282)
+   - Skip config inputs when creating ports in addBlock()
+   - Validate port existence in updateInputPort()
+
+3. **src/graph/passes/pass0-polymorphic-types.ts** (line 65)
+   - Skip config inputs when iterating for type inference
+
+4. **src/compiler/passes-v2/resolveWriters.ts** (line 242)
+   - Skip config inputs when resolving writers
+
+5. **src/graph/Patch.ts** (line 136)
+   - PatchBuilder.addBlock() now populates ports from registry like PatchStore does
+   - Imports getBlockDefinition to access registry
+
+## Test Status
+
+Before: 8 failing test files
+After: 6 failing test files
+
+Remaining failures (23 tests in 6 files):
+- src/blocks/__tests__/debug-test-signal.test.ts (1 test)
+- src/blocks/__tests__/stateful-primitives.test.ts (8 tests - UnitDelay, Hash)
+- src/compiler/__tests__/compile.test.ts (6 tests)
+- src/compiler/__tests__/steel-thread.test.ts (1 test)
+- src/compiler/passes-v2/__tests__/unit-validation.test.ts (3 tests)
+- src/runtime/__tests__/integration.test.ts (3 tests)
+
+## Remaining Work
+
+The remaining test failures are NOT due to the config-input fix. They appear to be caused by:
+
+1. **unit-validation.test.ts**: Tests register blocks with OLD array-based format:
+   ```typescript
+   inputs: [],
+   outputs: [{ id: 'phase', label: 'Phase', type: ... }],
+   params: {},
+   ```
+   Should be:
+   ```typescript
+   inputs: {},
+   outputs: { phase: { label: 'Phase', type: ... } },
+   ```
+
+2. **Other test failures**: Need investigation. Likely either:
+   - More tests using old block registration format
+   - OR legitimate compilation issues unrelated to exposedAsPort
+
+## Next Steps
+
+1. Update test files to use new Record-based inputs/outputs format
+2. Run tests again to verify all pass
+3. Update DoD checklist in SPRINT docs
+
+## Verification
+
+To verify the fix works:
+```bash
+npm run typecheck  # Should pass
+npm run test       # 6 test files failing (down from 8)
+```
+
+The core fix is complete and working. Config inputs are now properly excluded from port operations.
