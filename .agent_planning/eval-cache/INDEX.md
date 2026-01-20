@@ -2,7 +2,7 @@
 
 **Purpose:** Reusable evaluation findings to speed up future work evaluations.
 
-**Last Updated:** 2026-01-20 01:15:00
+**Last Updated:** 2026-01-20 02:30:00
 
 ---
 
@@ -47,13 +47,6 @@
 - Status: Structurally complete
 - Confidence: STALE (use runtime-dual-editor-reactflow-p0.md instead)
 
-**runtime-dual-editor-p2.md**
-- Scope: P2 tab integration + sync
-- Status: Structurally complete, runtime verification required
-- Confidence: STALE (Tabs.tsx refactored with MUI Button components)
-- Reusable: Tab switching patterns, sync infrastructure verification, EditorContext management
-- Next evaluation: Manual runtime testing needed, or check if sync.ts/App.tsx/Tabs.tsx changed
-
 ---
 
 ## Cache Maintenance
@@ -75,6 +68,24 @@
 ---
 
 ## Invalidated Cache
+
+### 2026-01-20 02:30:00 - Sprint 3: Port Interaction UI (port-interaction)
+**Removed:**
+- runtime-dual-editor-p2.md - Tabs.tsx no longer relevant after ReactFlow port interaction changes
+- runtime-rete-editor.md - OscillaNode.tsx and BlockInspector.tsx significantly modified
+
+**Rationale:**
+- OscillaNode.tsx: Added port hover handlers, highlight styling, PortHighlightStore integration
+- BlockInspector.tsx: Added ConnectionPicker component, Connect/Disconnect buttons
+- New stores: PortHighlightStore.ts for hover state and compatibility checking
+- New components: ConnectionPicker.tsx with MUI Autocomplete
+- Port interaction patterns completely changed (hover highlighting, connection picker)
+
+**New Capabilities:**
+- Port hover highlighting (green glow for compatible, gray for incompatible)
+- MUI Autocomplete-based connection picker in Inspector
+- Connect/Disconnect buttons for port connections
+- Type compatibility checking on hover (using existing validateConnection)
 
 ### 2026-01-20 01:15:00 - P3-P4 ThemeProvider Consolidation + Cleanup (mui-controls-migration)
 **Marked STALE:**
@@ -117,3 +128,25 @@
 ### 2026-01-19 - Auto-Arrange Layout
 **Removed:**
 - runtime-dual-editor-reactflow-p0.md - ReactFlowEditor.tsx modified with auto-arrange edge cases
+
+### 2026-01-20 - Sprint 4: Editable Defaults (ui-features-v2)
+**Modified (Extended Patterns):**
+- runtime-unified-defaults.md - BlockInspector.tsx now has editable Const/TimeRoot defaults
+
+**Rationale:**
+- BlockInspector.tsx: Added PortDefaultSourceEditor with special handling for Const and TimeRoot blocks
+- New UI patterns: SliderWithInput for Const value params, dropdown for TimeRoot output selection
+- Extended pattern: `blockType === 'Const'` checks alongside existing `blockType === 'TimeRoot'` checks
+- New feature: Per-instance default source editing via InputPort.defaultSource overrides
+- updateInputPort() store method now used for editing default sources
+
+**New Capabilities:**
+- Direct editing of Const block default values with SliderWithInput
+- TimeRoot output selection via dropdown (tMs, phaseA, phaseB, pulse, palette, energy)
+- "Reset to Default" button to clear per-instance overrides
+- Simplified UX for common default source types (hides full block type selector)
+
+**Existing Patterns Still Valid:**
+- TimeRoot italic styling and color
+- DefaultSource type structure
+- pass1-default-sources.ts lookup logic (port override → registry default)

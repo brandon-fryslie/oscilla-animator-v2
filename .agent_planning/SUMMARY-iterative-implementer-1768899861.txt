@@ -1,0 +1,67 @@
+Agent: iterative-implementer | 2026-01-20 02:30:00
+Mode: manual
+Completed: Port hover highlighting + Inspector connection controls | Files: 5 | Commits: 2
+Tests: Not applicable (manual mode - no tests for this feature)
+Cache invalidated: runtime-dual-editor-p2.md, runtime-rete-editor.md (removed), INDEX.md (updated)
+Status: complete
+
+## Work Completed
+
+### Port Hover Highlighting (Bead: oscilla-animator-v2-0yp)
+- Created PortHighlightStore.ts - MobX observable store for hover state
+- Integrated PortHighlightStore into RootStore and exported from stores module
+- Added hover handlers (onMouseEnter/onMouseLeave) to OscillaNode Handle components
+- Implemented compatibility-based highlighting:
+  - Green glow (#4ade80) for compatible ports
+  - Reduced opacity (0.3) for incompatible ports
+  - Only highlights unconnected ports
+- Uses existing validateConnection() from typeValidation.ts
+
+### Inspector Connection Controls (Bead: oscilla-animator-v2-nu6)
+- Created ConnectionPicker.tsx component with MUI Autocomplete
+- Filters compatible ports by type and connection status
+- Groups options by block name for easy navigation
+- Added Connect/Disconnect buttons to PortInspectorStandalone
+- Supports both INPUT and OUTPUT port connections
+- Shows connection picker on "Connect..." button click
+
+## Verification Strategy
+
+Manual mode - validated through:
+1. TypeScript compilation (npm run typecheck) - passed with only pre-existing test errors
+2. Code review - all components properly integrated with MobX observers
+3. Type safety - Endpoint type properly used with 'kind: port' field
+
+## Files Modified
+
+New files:
+- src/stores/PortHighlightStore.ts (169 lines)
+- src/ui/components/ConnectionPicker.tsx (143 lines)
+
+Modified files:
+- src/stores/RootStore.ts - Added PortHighlightStore instantiation
+- src/stores/index.ts - Exported PortHighlightStore
+- src/ui/reactFlowEditor/OscillaNode.tsx - Added hover handlers and highlight styles
+- src/ui/components/BlockInspector.tsx - Added ConnectionPicker and Connect/Disconnect buttons
+
+## Commits
+
+c5414a4 - feat(ui): Add port hover highlighting with PortHighlightStore
+55d0113 - feat(ui): Add ConnectionPicker and Inspector connection controls
+
+## Architecture Notes
+
+- PortHighlightStore follows existing store pattern (MobX observable with computed properties)
+- Uses existing validateConnection() for type compatibility checking
+- OscillaNode already observer - no changes needed for reactivity
+- ConnectionPicker uses MUI Autocomplete (already installed)
+- Proper Endpoint type usage with 'kind: port' field
+
+## Ready for User Testing
+
+Features are implementation-complete and type-safe. User should test:
+1. Hover over an unconnected port → see compatible ports glow green
+2. Click on a port in Inspector → see "Connect..." button
+3. Click "Connect..." → see MUI Autocomplete picker with filtered compatible ports
+4. Select a port from picker → edge created, connection shown in Inspector
+5. Click "Disconnect" → edge removed

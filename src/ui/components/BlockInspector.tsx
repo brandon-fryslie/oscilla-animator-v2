@@ -1310,10 +1310,10 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
   const timeRootOutputs = ['tMs', 'phaseA', 'phaseB', 'pulse', 'palette', 'energy'];
 
   return (
-    <div style={{ marginBottom: '16px' }}>
+    <div style={{ marginBottom: '16px', opacity: isConnected ? 0.6 : 1 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
         <h4 style={{ margin: 0, fontSize: '14px', color: colors.textSecondary }}>
-          Default Source
+          Default Source {isConnected && <span style={{ fontSize: '11px', fontWeight: 'normal' }}>(inactive - port connected)</span>}
         </h4>
         {hasOverride && (
           <button
@@ -1328,6 +1328,19 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
             Reset
           </button>
         )}
+      </div>
+
+      {/* Block Type Selector - ALWAYS visible */}
+      <div style={{ marginBottom: '12px' }}>
+        <label style={{ fontSize: '12px', color: colors.textSecondary, display: 'block', marginBottom: '4px' }}>
+          Block Type
+        </label>
+        <MuiSelectInput
+          value={currentBlockType}
+          onChange={handleBlockTypeChange}
+          options={validBlockTypes.map(bt => ({ value: bt.blockType, label: bt.label }))}
+          size="small"
+        />
       </div>
 
       {/* Const Block - Direct Value Editor */}
@@ -1348,7 +1361,7 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
       {isTimeRootBlock && (
         <div style={{ marginBottom: '12px' }}>
           <label style={{ fontSize: '12px', color: colors.textSecondary, display: 'block', marginBottom: '4px' }}>
-            TimeRoot Output
+            Output
           </label>
           <MuiSelectInput
             value={currentOutputPort}
@@ -1359,22 +1372,9 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
         </div>
       )}
 
-      {/* Other Blocks - Show full configuration */}
+      {/* Other Blocks - Output Port Selector and Params */}
       {!isConstBlock && !isTimeRootBlock && (
         <>
-          {/* Block Type Selector */}
-          <div style={{ marginBottom: '12px' }}>
-            <label style={{ fontSize: '12px', color: colors.textSecondary, display: 'block', marginBottom: '4px' }}>
-              Block Type
-            </label>
-            <MuiSelectInput
-              value={currentBlockType}
-              onChange={handleBlockTypeChange}
-              options={validBlockTypes.map(bt => ({ value: bt.blockType, label: bt.label }))}
-              size="small"
-            />
-          </div>
-
           {/* Output Port Selector */}
           {currentBlockDef && currentBlockDef.outputs.length > 1 && (
             <div style={{ marginBottom: '12px' }}>
@@ -1390,7 +1390,7 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
             </div>
           )}
 
-          {/* Params Editor */}
+          {/* Params Editor - for blocks with inputs */}
           {currentBlockDef && currentBlockDef.inputs && currentBlockDef.inputs.length > 0 && (
             <div>
               <label style={{ fontSize: '12px', color: colors.textSecondary, display: 'block', marginBottom: '4px' }}>
