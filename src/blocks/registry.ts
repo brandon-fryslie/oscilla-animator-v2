@@ -81,24 +81,34 @@ export type Capability = 'time' | 'identity' | 'state' | 'render' | 'io' | 'pure
 
 /**
  * Input definition for a block.
+ *
+ * UNIFIED DESIGN (2026-01-20):
+ * - Both wirable ports AND config-only parameters use this type
+ * - `exposedAsPort` distinguishes between ports (true) and config (false)
+ * - Object key (in BlockDef.inputs Record) is the identifier
  */
 export interface InputDef {
-  readonly id: string;
-  readonly label: string;
-  readonly type: SignalType;
-  readonly optional?: boolean;
-  readonly defaultValue?: unknown;
+  readonly label?: string;           // Display label (defaults to key name)
+  readonly type?: SignalType;        // Required if exposedAsPort !== false
+  readonly value?: unknown;          // Default value (was in params)
   readonly defaultSource?: DefaultSource;
   readonly uiHint?: UIControlHint;
+  readonly exposedAsPort?: boolean;  // Default: true (backward compat)
+  readonly optional?: boolean;       // For ports: optional wiring?
+  readonly hidden?: boolean;         // Hide from UI (normalizer params)
 }
 
 /**
  * Output definition for a block.
+ *
+ * UNIFIED DESIGN (2026-01-20):
+ * - Now a Record for symmetry with inputs
+ * - Object key (in BlockDef.outputs Record) is the identifier
  */
 export interface OutputDef {
-  readonly id: string;
-  readonly label: string;
-  readonly type: SignalType;
+  readonly label?: string;           // Display label (defaults to key name)
+  readonly type: SignalType;         // Required
+  readonly hidden?: boolean;         // For symmetry
 }
 
 /**
@@ -118,12 +128,9 @@ export interface BlockDef {
   readonly form: BlockForm;
   readonly capability: Capability;
 
-  // Port definitions
-  readonly inputs: readonly InputDef[];
-  readonly outputs: readonly OutputDef[];
-
-  // Block parameters
-  readonly params?: Record<string, unknown>;
+  // Port definitions (UNIFIED DESIGN 2026-01-20)
+  readonly inputs: Record<string, InputDef>;
+  readonly outputs: Record<string, OutputDef>;
 
   // IR lowering function
   readonly lower: (args: LowerArgs) => LowerResult;
@@ -161,21 +168,13 @@ export function registerBlock(def: BlockDef): void {
     throw new Error(`Block type already registered: ${def.type}`);
   }
 
-  // Validate port IDs are unique
-  const inputIds = new Set(def.inputs.map((p) => p.id));
-  const outputIds = new Set(def.outputs.map((p) => p.id));
+  // Validate: object keys are inherently unique, but check input/output collision
+  const inputKeys = Object.keys(def.inputs);
+  const outputKeys = Object.keys(def.outputs);
 
-  if (inputIds.size !== def.inputs.length) {
-    throw new Error(`Duplicate input port IDs in block ${def.type}`);
-  }
-  if (outputIds.size !== def.outputs.length) {
-    throw new Error(`Duplicate output port IDs in block ${def.type}`);
-  }
-
-  // Check input/output ID collision
-  for (const outId of outputIds) {
-    if (inputIds.has(outId)) {
-      throw new Error(`Port ID used as both input and output in block ${def.type}: ${outId}`);
+  for (const key of outputKeys) {
+    if (key in def.inputs) {
+      throw new Error(`Port ID used as both input and output in block ${def.type}: ${key}`);
     }
   }
 
@@ -211,4 +210,22 @@ export function getBlockTypesByCategory(category: string): readonly BlockDef[] {
     }
   }
   return blocks;
+}
+
+// =============================================================================
+// Helper Functions (for working with Record-based ports)
+// =============================================================================
+
+/**
+ * Get input definitions that are exposed as wirable ports.
+ */
+export function getExposedInputs(def: BlockDef): Array<[string, InputDef]> {
+  return Object.entries(def.inputs).filter(([_, d]) => d.exposedAsPort !== false);
+}
+
+/**
+ * Get output definitions that are not hidden.
+ */
+export function getExposedOutputs(def: BlockDef): Array<[string, OutputDef]> {
+  return Object.entries(def.outputs).filter(([_, d]) => !d.hidden);
 }
