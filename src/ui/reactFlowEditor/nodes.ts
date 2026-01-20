@@ -66,7 +66,7 @@ function createPortData(
   defaultSource?: DefaultSource
 ): PortData {
   // For inputs without a type (non-port inputs), use a default
-  const effectiveType = type || { kind: 'signal', payload: 'float' };
+  const effectiveType: SignalType = type || { kind: 'signal', payload: 'float', extent: { cardinality: undefined, temporality: undefined } };
 
   return {
     id,

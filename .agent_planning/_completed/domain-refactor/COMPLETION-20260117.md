@@ -200,18 +200,6 @@ interface DomainRef {
   id: DomainId;
 }
 
-type DomainShape =
-  | { kind: 'fixed_count'; count: number }
-  | { kind: 'grid_2d'; width: number; height: number }
-  | { kind: 'voices'; maxVoices: number }
-  | { kind: 'mesh_vertices'; assetId: string };
-
-interface DomainDecl {
-  kind: 'domain_decl';
-  id: DomainId;
-  shape: DomainShape;
-}
-
 // Cardinality referenced domain
 type Cardinality =
   | { kind: 'zero' }

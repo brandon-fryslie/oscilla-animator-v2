@@ -69,8 +69,8 @@ export const ConnectionPicker = observer(function ConnectionPicker({
 
       const portsToCheck = searchDirection === 'input' ? blockDef.inputs : blockDef.outputs;
 
-      for (const port of portsToCheck) {
-        const portId = port.id as PortId;
+      for (const [portId, port] of Object.entries(portsToCheck)) {
+        // portId comes from Object.entries
 
         // Skip if this port is already connected
         const isConnected =

@@ -143,16 +143,16 @@ function getValidDefaultSourceBlockTypes(portType: SignalType): { blockType: str
     if (def.capability === 'state') continue;
 
     // Must have at least one output
-    if (def.outputs.length === 0) continue;
+    if (Object.keys(def.outputs).length === 0) continue;
 
     // Must have at least one type-compatible output
-    const hasCompatibleOutput = def.outputs.some(output => areTypesCompatible(output.type, portType));
+    const hasCompatibleOutput = Object.values(def.outputs).some(output => areTypesCompatible(output.type, portType));
     if (!hasCompatibleOutput) continue;
 
     validBlocks.push({
       blockType: def.type,
-      label: def.label,
-      outputs: def.outputs,
+      label: def.label || "",
+      outputs: Object.values(def.outputs),
     });
   }
 
@@ -270,8 +270,8 @@ interface PortInspectorStandaloneProps {
 const PortInspectorStandalone = observer(function PortInspectorStandalone({ portRef, block, blockDef, patch }: PortInspectorStandaloneProps) {
   const [showConnectionPicker, setShowConnectionPicker] = useState(false);
 
-  const inputDef = blockDef.inputs.find(p => p.id === portRef.portId);
-  const outputDef = blockDef.outputs.find(p => p.id === portRef.portId);
+  const inputDef = blockDef.inputs[portRef.portId];
+  const outputDef = blockDef.outputs[portRef.portId];
   const portDef = inputDef || outputDef;
   const isInput = !!inputDef;
 
@@ -350,7 +350,7 @@ const PortInspectorStandalone = observer(function PortInspectorStandalone({ port
           borderRadius: '4px',
           fontSize: '13px',
         }}>
-          {formatSignalType(portDef.type)}
+          {formatSignalType(portDef.type!)}
         </div>
       </div>
 
@@ -359,7 +359,7 @@ const PortInspectorStandalone = observer(function PortInspectorStandalone({ port
         <PortDefaultSourceEditor
           blockId={block.id}
           portId={portRef.portId}
-          portType={inputDef.type}
+          portType={inputDef.type!}
           currentDefaultSource={effectiveDefaultSource}
           registryDefaultSource={inputDef.defaultSource}
           isConnected={isConnected}
@@ -632,12 +632,12 @@ function TypePreview({ type }: TypePreviewProps) {
           Inputs
         </h4>
         <ul style={{ margin: 0, paddingLeft: '20px', listStyle: 'none' }}>
-          {typeInfo.inputs.map((input) => {
+          {Object.entries(typeInfo.inputs).map(([inputId, input]) => {
             const hasDefaultSource = input.defaultSource !== undefined;
             return (
-              <li key={input.id} style={{ marginBottom: '8px', fontSize: '13px' }}>
+              <li key={inputId} style={{ marginBottom: '8px', fontSize: '13px' }}>
                 <div>
-                  <strong>{input.label}</strong>: {formatSignalType(input.type)}
+                  <strong>{input.label}</strong>: {formatSignalType(input.type!)}
                   {input.optional && (
                     <span style={{ color: colors.textSecondary }}> (optional)</span>
                   )}
@@ -663,9 +663,9 @@ function TypePreview({ type }: TypePreviewProps) {
           Outputs
         </h4>
         <ul style={{ margin: 0, paddingLeft: '20px', listStyle: 'none' }}>
-          {typeInfo.outputs.map((output) => (
-            <li key={output.id} style={{ marginBottom: '4px', fontSize: '13px' }}>
-              <strong>{output.label}</strong>: {formatSignalType(output.type)}
+          {Object.entries(typeInfo.outputs).map(([outputId, output]) => (
+            <li key={outputId} style={{ marginBottom: '4px', fontSize: '13px' }}>
+              <strong>{output.label}</strong>: {formatSignalType(output.type!)}
             </li>
           ))}
         </ul>
@@ -737,20 +737,21 @@ const BlockDetails = observer(function BlockDetails({ block, patch }: BlockDetai
           Inputs
         </h4>
         <ul style={{ margin: 0, paddingLeft: '0', listStyle: 'none' }}>
-          {typeInfo.inputs.map((port) => {
-            const isConnected = connectedInputPorts.has(port.id);
-            const connectedEdge = incomingEdges.find(e => e.to.slotId === port.id);
+          {Object.entries(typeInfo.inputs).map(([portId, port]) => {
+            const isConnected = connectedInputPorts.has(portId);
+            const connectedEdge = incomingEdges.find(e => e.to.slotId === portId);
 
             return (
               <PortItem
-                key={port.id}
+                key={portId}
                 port={port}
+                portId={portId}
                 kind="input"
                 blockId={block.id}
                 isConnected={isConnected}
                 connectedEdge={connectedEdge}
                 patch={patch}
-                onClick={() => setSelectedPort({ blockId: block.id, portId: port.id as PortId })}
+                onClick={() => setSelectedPort({ blockId: block.id, portId: portId as PortId })}
               />
             );
           })}
@@ -763,16 +764,16 @@ const BlockDetails = observer(function BlockDetails({ block, patch }: BlockDetai
           Outputs
         </h4>
         <ul style={{ margin: 0, paddingLeft: '0', listStyle: 'none' }}>
-          {typeInfo.outputs.map((port) => {
-            const portEdges = outgoingEdges.filter(e => e.from.slotId === port.id);
+          {Object.entries(typeInfo.outputs).map(([portId, port]) => {
+            const portEdges = outgoingEdges.filter(e => e.from.slotId === portId);
 
             return (
               <OutputPortItem
-                key={port.id}
+                key={portId}
                 port={port}
                 edges={portEdges}
                 patch={patch}
-                onClick={() => setSelectedPort({ blockId: block.id, portId: port.id as PortId })}
+                onClick={() => setSelectedPort({ blockId: block.id, portId: portId as PortId })}
               />
             );
           })}
@@ -869,13 +870,14 @@ interface PortItemProps {
   port: InputDef;
   kind: 'input';
   blockId: BlockId;
+  portId: string;
   isConnected: boolean;
   connectedEdge?: Edge;
   patch: Patch;
   onClick: () => void;
 }
 
-const PortItem = observer(function PortItem({ port, blockId, isConnected, connectedEdge, patch, onClick }: PortItemProps) {
+const PortItem = observer(function PortItem({ port, portId, blockId, isConnected, connectedEdge, patch, onClick }: PortItemProps) {
   const hasDefaultSource = port.defaultSource !== undefined;
 
   const handleSourceClick = useCallback((e: React.MouseEvent) => {
@@ -887,7 +889,7 @@ const PortItem = observer(function PortItem({ port, blockId, isConnected, connec
 
   // Find the derived default source block if it exists
   const derivedBlockId = hasDefaultSource && !isConnected
-    ? getDerivedDefaultSourceId(blockId, port.id)
+    ? getDerivedDefaultSourceId(blockId, portId)
     : null;
 
   const derivedBlock = derivedBlockId ? patch.blocks.get(derivedBlockId) : undefined;
@@ -907,7 +909,7 @@ const PortItem = observer(function PortItem({ port, blockId, isConnected, connec
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <strong>{port.label}</strong>
-          <span style={{ color: colors.textSecondary }}> ({formatSignalType(port.type)})</span>
+          <span style={{ color: colors.textSecondary }}> ({formatSignalType(port.type!)})</span>
         </div>
         <span style={{ fontSize: '11px', color: colors.textMuted }}>→</span>
       </div>
@@ -939,7 +941,7 @@ const PortItem = observer(function PortItem({ port, blockId, isConnected, connec
             <DefaultSourceEditor
               derivedBlockId={derivedBlockId!}
               value={derivedBlock.params.value}
-              portLabel={port.label}
+              portLabel={port.label || ""}
             />
           ) : (
             <div style={{
@@ -1074,7 +1076,7 @@ function OutputPortItem({ port, edges, patch, onClick }: OutputPortItemProps) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <strong>{port.label}</strong>
-          <span style={{ color: colors.textSecondary }}> ({formatSignalType(port.type)})</span>
+          <span style={{ color: colors.textSecondary }}> ({formatSignalType(port.type!)})</span>
         </div>
         <span style={{ fontSize: '11px', color: colors.textMuted }}>→</span>
       </div>
@@ -1130,8 +1132,8 @@ interface PortInspectorProps {
 
 function PortInspector({ portRef, block, typeInfo, patch, onBack }: PortInspectorProps) {
   // Find port definition
-  const inputPort = typeInfo.inputs.find(p => p.id === portRef.portId);
-  const outputPort = typeInfo.outputs.find(p => p.id === portRef.portId);
+  const inputPort = typeInfo.inputs[portRef.portId];
+  const outputPort = typeInfo.outputs[portRef.portId];
   const port = inputPort || outputPort;
   const isInput = !!inputPort;
 
@@ -1192,7 +1194,7 @@ function PortInspector({ portRef, block, typeInfo, patch, onBack }: PortInspecto
           borderRadius: '4px',
           fontSize: '13px',
         }}>
-          {formatSignalType(port.type)}
+          {formatSignalType(port.type!)}
         </div>
       </div>
 
@@ -1209,7 +1211,7 @@ function PortInspector({ portRef, block, typeInfo, patch, onBack }: PortInspecto
             <PortDefaultSourceEditor
               blockId={block.id}
               portId={portRef.portId}
-              portType={inputPort.type}
+              portType={inputPort.type!}
               currentDefaultSource={effectiveDefaultSource}
               registryDefaultSource={inputPort.defaultSource}
               isConnected={isConnected}
@@ -1314,18 +1316,18 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
     if (!blockDef) return;
 
     // Use first output port as default
-    const firstOutput = blockDef.outputs[0];
-    if (!firstOutput) return;
+    const firstOutputEntry = Object.entries(blockDef.outputs)[0];
+    if (!firstOutputEntry) return;
+    const [outputId, firstOutput] = firstOutputEntry;
 
     // Create new default source with default params from block definition
     const newDefaultSource: DefaultSource = {
       blockType: newBlockType,
-      output: firstOutput.id,
-      params: blockDef.params || {},
+      output: outputId,
+      params: {},
     };
 
     rootStore.patch.updateInputPort(blockId, portId, { defaultSource: newDefaultSource });
-  }, [blockId, portId]);
 
   const handleOutputPortChange = useCallback((newOutputPort: string) => {
     const newDefaultSource: DefaultSource = {
@@ -1399,7 +1401,7 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
         <MuiSelectInput
           value={currentBlockType}
           onChange={handleBlockTypeChange}
-          options={validBlockTypes.map(bt => ({ value: bt.blockType, label: bt.label }))}
+          options={validBlockTypes.map(bt => ({ value: bt.blockType, label: bt.label || "" }))}
           size="small"
         />
       </div>
@@ -1427,7 +1429,7 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
           <MuiSelectInput
             value={currentOutputPort}
             onChange={handleOutputPortChange}
-            options={timeRootOutputs.map(out => ({ value: out, label: out }))}
+            options={timeRootOutputs.map(out => ({ value: out, label: out || "" }))}
             size="small"
           />
         </div>
@@ -1437,7 +1439,7 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
       {!isConstBlock && !isTimeRootBlock && (
         <>
           {/* Output Port Selector */}
-          {currentBlockDef && currentBlockDef.outputs.length > 1 && (
+          {currentBlockDef && Object.keys(currentBlockDef.outputs).length > 1 && (
             <div style={{ marginBottom: '12px' }}>
               <label style={{ fontSize: '12px', color: colors.textSecondary, display: 'block', marginBottom: '4px' }}>
                 Output Port
@@ -1445,29 +1447,29 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
               <MuiSelectInput
                 value={currentOutputPort}
                 onChange={handleOutputPortChange}
-                options={currentBlockDef.outputs.map(out => ({ value: out.id, label: out.label }))}
+                options={Object.entries(currentBlockDef.outputs).map(([outId, out]) => ({ value: outId, label: out.label || "" }))}
                 size="small"
               />
             </div>
           )}
 
           {/* Params Editor - for blocks with inputs */}
-          {currentBlockDef && currentBlockDef.inputs && currentBlockDef.inputs.length > 0 && (
+          {currentBlockDef && currentBlockDef.inputs && Object.keys(currentBlockDef.inputs).length > 0 && (
             <div>
               <label style={{ fontSize: '12px', color: colors.textSecondary, display: 'block', marginBottom: '4px' }}>
                 Parameters
               </label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {currentBlockDef.inputs.map(input => {
-                  const paramValue = currentParams[input.id] ?? input.defaultValue;
+                {Object.entries(currentBlockDef.inputs).map(([inputId, input]) => {
+                  const paramValue = currentParams[inputId] ?? input.value;
                   return (
                     <DefaultSourceParamField
-                      key={input.id}
-                      paramKey={input.id}
-                      paramLabel={input.label}
+                      key={inputId}
+                      paramKey={inputId}
+                      paramLabel={input.label || ""}
                       value={paramValue}
                       uiHint={input.uiHint}
-                      onChange={(value) => handleParamChange(input.id, value)}
+                      onChange={(value) => handleParamChange(inputId, value)}
                     />
                   );
                 })}
@@ -1631,7 +1633,7 @@ interface ParamFieldProps {
 
 const ParamField = observer(function ParamField({ blockId, paramKey, value, typeInfo }: ParamFieldProps) {
   // Find uiHint if this param corresponds to an input
-  const inputDef = typeInfo.inputs.find(i => i.id === paramKey);
+  const inputDef = typeInfo.inputs[paramKey];
   const uiHint = inputDef?.uiHint;
 
   const handleChange = useCallback((newValue: unknown) => {
@@ -1834,3 +1836,4 @@ function HintedControl({ hint, value, onChange }: HintedControlProps) {
       );
   }
 }
+});
