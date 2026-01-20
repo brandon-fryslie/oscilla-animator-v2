@@ -119,6 +119,8 @@ const DOMAIN_TYPES: ReadonlyMap<DomainTypeId, DomainType> = new Map([
     id: DOMAIN_CONTROL,
     parent: null,
     intrinsics: [
+      INTRINSICS.index,
+      INTRINSICS.position,
       INTRINSICS.value,
       INTRINSICS.min,
       INTRINSICS.max,
