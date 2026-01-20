@@ -30,14 +30,13 @@ function formatSignalType(type: SignalType): string {
  * Format a DefaultSource for display.
  */
 function formatDefaultSource(source: DefaultSource): string {
-  switch (source.kind) {
-    case 'rail':
-      return `rail:${source.railId}`;
-    case 'constant':
-      return `${JSON.stringify(source.value)}`;
-    case 'none':
-      return '(none)';
+  if (source.blockType === 'TimeRoot') {
+    return `TimeRoot.${source.output}`;
   }
+  if (source.blockType === 'Const' && source.params?.value !== undefined) {
+    return `${JSON.stringify(source.params.value)}`;
+  }
+  return `${source.blockType}.${source.output}`;
 }
 
 /**
@@ -264,7 +263,7 @@ function TypePreview({ type }: TypePreviewProps) {
                     marginLeft: '16px',
                     fontSize: '12px',
                     color: colors.textSecondary,
-                    fontStyle: input.defaultSource?.kind === 'rail' ? 'italic' : 'normal'
+                    fontStyle: input.defaultSource?.blockType === 'TimeRoot' ? 'italic' : 'normal'
                   }}>
                     Default: {formatDefaultSource(input.defaultSource!)}
                   </div>
@@ -552,7 +551,7 @@ const PortItem = observer(function PortItem({ port, blockId, isConnected, connec
           color: colors.textSecondary
         }}>
           <span style={{ color: colors.textMuted }}>(not connected)</span>
-          {port.defaultSource!.kind === 'constant' && derivedBlock ? (
+          {port.defaultSource!.blockType === 'Const' && derivedBlock ? (
             <DefaultSourceEditor
               derivedBlockId={derivedBlockId!}
               value={derivedBlock.params.value}
@@ -560,8 +559,8 @@ const PortItem = observer(function PortItem({ port, blockId, isConnected, connec
             />
           ) : (
             <div style={{
-              fontStyle: port.defaultSource?.kind === 'rail' ? 'italic' : 'normal',
-              color: port.defaultSource?.kind === 'rail' ? colors.primary : colors.textSecondary
+              fontStyle: port.defaultSource?.blockType === 'TimeRoot' ? 'italic' : 'normal',
+              color: port.defaultSource?.blockType === 'TimeRoot' ? colors.primary : colors.textSecondary
             }}>
               Default: {formatDefaultSource(port.defaultSource!)}
             </div>
@@ -823,8 +822,8 @@ function PortInspector({ portRef, block, typeInfo, patch, onBack }: PortInspecto
                 background: colors.bgPanel,
                 borderRadius: '4px',
                 fontSize: '13px',
-                fontStyle: inputPort.defaultSource.kind === 'rail' ? 'italic' : 'normal',
-                color: inputPort.defaultSource.kind === 'rail' ? colors.primary : colors.textPrimary,
+                fontStyle: inputPort.defaultSource.blockType === 'TimeRoot' ? 'italic' : 'normal',
+                color: inputPort.defaultSource.blockType === 'TimeRoot' ? colors.primary : colors.textPrimary,
               }}>
                 {formatDefaultSource(inputPort.defaultSource)}
               </div>

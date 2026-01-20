@@ -15,37 +15,35 @@ import type { DefaultSource } from '../../types';
  * Format a default source for display in tooltip.
  */
 function formatDefaultSource(ds: DefaultSource): string {
-  switch (ds.kind) {
-    case 'constant':
-      // Format the value nicely
-      const value = ds.value;
-      if (typeof value === 'number') {
-        return `Default: ${value}`;
-      } else if (Array.isArray(value)) {
-        return `Default: [${value.join(', ')}]`;
-      } else if (typeof value === 'object' && value !== null) {
-        return `Default: ${JSON.stringify(value)}`;
-      }
-      return `Default: ${String(value)}`;
-    case 'rail':
-      return `Default: ${ds.railId} rail`;
-    case 'none':
-      return 'No default';
+  if (ds.blockType === 'TimeRoot') {
+    return `Default: TimeRoot.${ds.output}`;
   }
+
+  if (ds.blockType === 'Const' && ds.params?.value !== undefined) {
+    // Format the value nicely
+    const value = ds.params.value;
+    if (typeof value === 'number') {
+      return `Default: ${value}`;
+    } else if (Array.isArray(value)) {
+      return `Default: [${value.join(', ')}]`;
+    } else if (typeof value === 'object' && value !== null) {
+      return `Default: ${JSON.stringify(value)}`;
+    }
+    return `Default: ${String(value)}`;
+  }
+
+  // Generic block default
+  return `Default: ${ds.blockType}.${ds.output}`;
 }
 
 /**
- * Get indicator color based on default source kind.
+ * Get indicator color based on default source type.
  */
 function getIndicatorColor(ds: DefaultSource): string {
-  switch (ds.kind) {
-    case 'constant':
-      return '#4CAF50'; // Green for constants
-    case 'rail':
-      return '#2196F3'; // Blue for rails
-    default:
-      return 'transparent';
+  if (ds.blockType === 'TimeRoot') {
+    return '#2196F3'; // Blue for TimeRoot
   }
+  return '#4CAF50'; // Green for other blocks (including Const)
 }
 
 /**
@@ -58,7 +56,7 @@ function buildPortTooltip(port: PortData, isInput: boolean): string {
   parts.push(`${port.label}: ${port.typeTooltip}`);
 
   // Default source info for inputs
-  if (isInput && port.defaultSource && port.defaultSource.kind !== 'none') {
+  if (isInput && port.defaultSource) {
     parts.push(formatDefaultSource(port.defaultSource));
   }
 
@@ -99,7 +97,7 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = ({ data }) => {
             title={buildPortTooltip(input, true)}
           />
           {/* Default Source Indicator */}
-          {input.defaultSource && input.defaultSource.kind !== 'none' && (
+          {input.defaultSource && (
             <div
               style={{
                 position: 'absolute',
