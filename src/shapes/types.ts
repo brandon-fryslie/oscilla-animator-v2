@@ -62,3 +62,56 @@ export interface ShapeRef {
  * This is an index into the runtime value arrays.
  */
 export type SlotRef = number;
+
+// =============================================================================
+// Path System
+// =============================================================================
+
+/**
+ * PathVerb - Path command type
+ *
+ * Defines the type of path operation. Each verb consumes a specific number
+ * of control points from the control point field.
+ */
+export enum PathVerb {
+  /** Move to a point (1 control point) */
+  MOVE = 0,
+  /** Line to a point (1 control point) */
+  LINE = 1,
+  /** Cubic bezier curve (3 control points: control1, control2, end) */
+  CUBIC = 2,
+  /** Quadratic bezier curve (2 control points: control, end) */
+  QUAD = 3,
+  /** Close path (0 control points) */
+  CLOSE = 4,
+}
+
+/**
+ * PathTopologyDef - Path topology definition
+ *
+ * Extends TopologyDef with path-specific data:
+ * - verbs: Sequence of path commands (MOVE, LINE, CUBIC, etc.)
+ * - pointsPerVerb: Number of control points consumed by each verb
+ * - totalControlPoints: Total number of control points needed
+ * - closed: Whether the path is closed (affects fill/stroke rendering)
+ *
+ * Control points are provided at runtime via a Field<vec2> over DOMAIN_CONTROL.
+ * The topology defines WHAT to draw (the structure), while the control point
+ * field defines WHERE to draw it (the positions).
+ *
+ * Example for a triangle:
+ *   verbs: [MOVE, LINE, LINE, CLOSE]
+ *   pointsPerVerb: [1, 1, 1, 0]
+ *   totalControlPoints: 3
+ *   closed: true
+ */
+export interface PathTopologyDef extends TopologyDef {
+  /** Sequence of path commands */
+  readonly verbs: readonly PathVerb[];
+  /** Number of control points consumed by each verb */
+  readonly pointsPerVerb: readonly number[];
+  /** Total number of control points needed */
+  readonly totalControlPoints: number;
+  /** Whether the path is closed */
+  readonly closed: boolean;
+}
