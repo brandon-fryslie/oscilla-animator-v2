@@ -458,10 +458,37 @@ export function applyContinuity(
   const outputBuffer =
     baseSlot === outputSlot ? baseBuffer : getBuffer(outputSlot);
 
-  // Read config for decay exponent and tau multiplier
+  // Read config for decay exponent, tau multiplier, and base tau
   const config = state.continuityConfig;
   const decayExponent = config?.decayExponent ?? 0.7;
   const tauMultiplier = config?.tauMultiplier ?? 1.0;
+  const baseTauMs = config?.baseTauMs ?? 150;
+
+  // Compute base tau factor: (baseTauMs / 150)
+  // This normalizes around the canonical 150ms average semantic tau
+  const baseTauFactor = baseTauMs / 150;
+
+  // Handle test pulse request (inject into gauge buffer before applying policy)
+  const pulseRequest = config?.testPulseRequest;
+  if (pulseRequest && pulseRequest.appliedFrameId !== state.cache.frameId) {
+    // Check if this target matches the pulse semantic (or if no semantic filter)
+    const shouldApplyPulse = !pulseRequest.targetSemantic || pulseRequest.targetSemantic === semantic;
+
+    if (shouldApplyPulse) {
+      // Inject pulse into gauge buffer
+      const magnitude = pulseRequest.magnitude;
+      for (let i = 0; i < bufferLength; i++) {
+        targetState.gaugeBuffer[i] += magnitude;
+      }
+
+      // Mark pulse as applied this frame
+      pulseRequest.appliedFrameId = state.cache.frameId;
+
+      if (DEBUG_CONTINUITY) {
+        console.log(`[Continuity] Test pulse applied to ${semantic}: magnitude=${magnitude}, bufferLength=${bufferLength}`);
+      }
+    }
+  }
 
   // Apply policy
   switch (policy.kind) {
@@ -478,8 +505,8 @@ export function applyContinuity(
       break;
 
     case 'slew': {
-      // Slew toward base value (apply tau multiplier)
-      const effectiveTau = policy.tauMs * tauMultiplier;
+      // Slew toward base value (apply tau multiplier and base tau factor)
+      const effectiveTau = policy.tauMs * baseTauFactor * tauMultiplier;
       applySlewFilter(
         baseBuffer,
         targetState.slewBuffer,
@@ -497,8 +524,8 @@ export function applyContinuity(
       // 2. Apply gauge: gauged = base + gauge (preserves continuity at boundary)
       // 3. Slew toward gauged values (smooths any transitions)
 
-      // Apply tau multiplier to policy tau
-      const effectiveTau = policy.tauMs * tauMultiplier;
+      // Apply tau multiplier and base tau factor to policy tau
+      const effectiveTau = policy.tauMs * baseTauFactor * tauMultiplier;
 
       // Debug logging for gauge decay (only when gauge is non-zero)
       if (DEBUG_CONTINUITY && semantic === 'position' &&
@@ -605,4 +632,10 @@ export function applyContinuity(
 export function finalizeContinuityFrame(state: RuntimeState): void {
   state.continuity.lastTModelMs = state.time?.tMs ?? 0;
   state.continuity.domainChangeThisFrame = false;
+
+  // Clear test pulse request after it's been applied
+  // (Note: appliedFrameId check prevents double-apply within same frame)
+  if (state.continuityConfig?.testPulseRequest?.appliedFrameId === state.cache.frameId) {
+    state.continuityConfig.testPulseRequest = null;
+  }
 }
