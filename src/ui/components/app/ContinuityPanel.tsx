@@ -9,11 +9,12 @@
  * Per Continuity-UI Sprint 3.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { rootStore } from '../../../stores';
 import { colors } from '../../theme';
 import type { TargetSummary, MappingSummary, DomainChangeEvent } from '../../../stores/ContinuityStore';
+import { ContinuityControls } from './ContinuityControls';
 
 export const ContinuityPanel = observer(function ContinuityPanel() {
   const {
@@ -24,6 +25,8 @@ export const ContinuityPanel = observer(function ContinuityPanel() {
     recentChanges,
     totalDomainChanges,
   } = rootStore.continuity;
+
+  const [controlsExpanded, setControlsExpanded] = useState(false);
 
   return (
     <div
@@ -67,6 +70,15 @@ export const ContinuityPanel = observer(function ContinuityPanel() {
           Total changes: {totalDomainChanges}
         </div>
       </div>
+
+      {/* Controls Section (Collapsible) */}
+      <Section
+        title={`${controlsExpanded ? '▼' : '▶'} Controls`}
+        onClick={() => setControlsExpanded(!controlsExpanded)}
+        style={{ cursor: 'pointer', userSelect: 'none' }}
+      >
+        {controlsExpanded && <ContinuityControls />}
+      </Section>
 
       {/* Recent Changes */}
       <Section title={`Recent Changes (${recentChanges.length})`}>
@@ -124,18 +136,22 @@ export const ContinuityPanel = observer(function ContinuityPanel() {
 interface SectionProps {
   title: string;
   children: React.ReactNode;
+  onClick?: () => void;
+  style?: React.CSSProperties;
 }
 
-function Section({ title, children }: SectionProps) {
+function Section({ title, children, onClick, style }: SectionProps) {
   return (
     <div style={{ marginBottom: '1rem' }}>
       <h5
+        onClick={onClick}
         style={{
           margin: '0 0 0.5rem 0',
           color: colors.textMuted,
           fontSize: '0.75rem',
           textTransform: 'uppercase',
           letterSpacing: '0.05em',
+          ...style,
         }}
       >
         {title}
