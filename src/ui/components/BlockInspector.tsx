@@ -1027,6 +1027,14 @@ function PortInspector({ portRef, block, typeInfo, patch, onBack }: PortInspecto
     ? patch.edges.filter(e => e.from.blockId === block.id && e.from.slotId === portRef.portId)
     : [];
 
+  const isConnected = incomingEdges.length > 0;
+
+  // Get effective default source (port override or registry default)
+  const instancePort = block.inputPorts.get(portRef.portId);
+  const effectiveDefaultSource = isInput && inputPort
+    ? (instancePort?.defaultSource ?? inputPort.defaultSource)
+    : undefined;
+
   return (
     <div>
       <button onClick={onBack} style={backButtonStyle}>← Back</button>
@@ -1071,10 +1079,22 @@ function PortInspector({ portRef, block, typeInfo, patch, onBack }: PortInspecto
             </div>
           )}
 
-          {inputPort.defaultSource && (
+          {/* Show default source editor for unconnected inputs */}
+          {!isConnected && effectiveDefaultSource && (
+            <PortDefaultSourceEditor
+              blockId={block.id}
+              portId={portRef.portId}
+              portType={inputPort.type}
+              currentDefaultSource={effectiveDefaultSource}
+              registryDefaultSource={inputPort.defaultSource}
+            />
+          )}
+
+          {/* Read-only display for connected inputs */}
+          {isConnected && inputPort.defaultSource && (
             <div style={{ marginBottom: '16px' }}>
               <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: colors.textSecondary }}>
-                Default Source
+                Default Source (when unconnected)
               </h4>
               <div style={{
                 padding: '8px',
@@ -1151,6 +1171,244 @@ function PortInspector({ portRef, block, typeInfo, patch, onBack }: PortInspecto
     </div>
   );
 }
+// =============================================================================
+// Port Default Source Editor
+// =============================================================================
+
+interface PortDefaultSourceEditorProps {
+  blockId: BlockId;
+  portId: string;
+  portType: SignalType;
+  currentDefaultSource: DefaultSource;
+  registryDefaultSource?: DefaultSource;
+}
+
+const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
+  blockId,
+  portId,
+  portType,
+  currentDefaultSource,
+  registryDefaultSource,
+}: PortDefaultSourceEditorProps) {
+  const validBlockTypes = getValidDefaultSourceBlockTypes(portType);
+
+  // Current selection
+  const currentBlockType = currentDefaultSource.blockType;
+  const currentOutputPort = currentDefaultSource.output;
+  const currentParams = currentDefaultSource.params || {};
+
+  const handleBlockTypeChange = useCallback((newBlockType: string) => {
+    const blockDef = BLOCK_DEFS_BY_TYPE.get(newBlockType);
+    if (!blockDef) return;
+
+    // Use first output port as default
+    const firstOutput = blockDef.outputs[0];
+    if (!firstOutput) return;
+
+    // Create new default source with default params from block definition
+    const newDefaultSource: DefaultSource = {
+      blockType: newBlockType,
+      output: firstOutput.id,
+      params: blockDef.params || {},
+    };
+
+    rootStore.patch.updateInputPort(blockId, portId, { defaultSource: newDefaultSource });
+  }, [blockId, portId]);
+
+  const handleOutputPortChange = useCallback((newOutputPort: string) => {
+    const newDefaultSource: DefaultSource = {
+      ...currentDefaultSource,
+      output: newOutputPort,
+    };
+
+    rootStore.patch.updateInputPort(blockId, portId, { defaultSource: newDefaultSource });
+  }, [blockId, portId, currentDefaultSource]);
+
+  const handleParamChange = useCallback((paramKey: string, value: unknown) => {
+    const newDefaultSource: DefaultSource = {
+      ...currentDefaultSource,
+      params: {
+        ...currentParams,
+        [paramKey]: value,
+      },
+    };
+
+    rootStore.patch.updateInputPort(blockId, portId, { defaultSource: newDefaultSource });
+  }, [blockId, portId, currentDefaultSource, currentParams]);
+
+  const handleReset = useCallback(() => {
+    if (registryDefaultSource) {
+      // Reset to registry default by removing the override
+      rootStore.patch.updateInputPort(blockId, portId, { defaultSource: undefined });
+    }
+  }, [blockId, portId, registryDefaultSource]);
+
+  const currentBlockDef = BLOCK_DEFS_BY_TYPE.get(currentBlockType);
+  const hasOverride = registryDefaultSource && (
+    currentBlockType !== registryDefaultSource.blockType ||
+    currentOutputPort !== registryDefaultSource.output ||
+    JSON.stringify(currentParams) !== JSON.stringify(registryDefaultSource.params || {})
+  );
+
+  return (
+    <div style={{ marginBottom: '16px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+        <h4 style={{ margin: 0, fontSize: '14px', color: colors.textSecondary }}>
+          Default Source
+        </h4>
+        {hasOverride && (
+          <button
+            onClick={handleReset}
+            style={{
+              ...backButtonStyle,
+              fontSize: '11px',
+              padding: '2px 6px',
+            }}
+            title="Reset to registry default"
+          >
+            Reset
+          </button>
+        )}
+      </div>
+
+      {/* Block Type Selector */}
+      <div style={{ marginBottom: '12px' }}>
+        <label style={{ fontSize: '12px', color: colors.textSecondary, display: 'block', marginBottom: '4px' }}>
+          Block Type
+        </label>
+        <MuiSelectInput
+          value={currentBlockType}
+          onChange={handleBlockTypeChange}
+          options={validBlockTypes.map(bt => ({ value: bt.blockType, label: bt.label }))}
+          size="small"
+        />
+      </div>
+
+      {/* Output Port Selector */}
+      {currentBlockDef && currentBlockDef.outputs.length > 1 && (
+        <div style={{ marginBottom: '12px' }}>
+          <label style={{ fontSize: '12px', color: colors.textSecondary, display: 'block', marginBottom: '4px' }}>
+            Output Port
+          </label>
+          <MuiSelectInput
+            value={currentOutputPort}
+            onChange={handleOutputPortChange}
+            options={currentBlockDef.outputs.map(out => ({ value: out.id, label: out.label }))}
+            size="small"
+          />
+        </div>
+      )}
+
+      {/* Params Editor */}
+      {currentBlockDef && currentBlockDef.inputs && currentBlockDef.inputs.length > 0 && (
+        <div>
+          <label style={{ fontSize: '12px', color: colors.textSecondary, display: 'block', marginBottom: '4px' }}>
+            Parameters
+          </label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {currentBlockDef.inputs.map(input => {
+              const paramValue = currentParams[input.id] ?? input.defaultValue;
+              return (
+                <DefaultSourceParamField
+                  key={input.id}
+                  paramKey={input.id}
+                  paramLabel={input.label}
+                  value={paramValue}
+                  uiHint={input.uiHint}
+                  onChange={(value) => handleParamChange(input.id, value)}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
+
+// =============================================================================
+// Default Source Param Field
+// =============================================================================
+
+interface DefaultSourceParamFieldProps {
+  paramKey: string;
+  paramLabel: string;
+  value: unknown;
+  uiHint?: UIControlHint;
+  onChange: (value: unknown) => void;
+}
+
+const DefaultSourceParamField = observer(function DefaultSourceParamField({
+  paramKey,
+  paramLabel,
+  value,
+  uiHint,
+  onChange,
+}: DefaultSourceParamFieldProps) {
+  // Render based on uiHint or inferred type
+  if (uiHint) {
+    return (
+      <div>
+        <label style={{ fontSize: '11px', color: colors.textMuted, display: 'block', marginBottom: '2px' }}>
+          {paramLabel}
+        </label>
+        <HintedControl hint={uiHint} value={value} onChange={onChange} />
+      </div>
+    );
+  }
+
+  // Infer control from value type
+  if (typeof value === 'boolean') {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <MuiCheckboxInput
+          checked={value}
+          onChange={onChange}
+          label={paramLabel}
+        />
+      </div>
+    );
+  }
+
+  if (typeof value === 'number') {
+    return (
+      <div>
+        <MuiNumberInput
+          value={value}
+          onChange={onChange}
+          label={paramLabel}
+          size="small"
+        />
+      </div>
+    );
+  }
+
+  if (typeof value === 'string') {
+    return (
+      <div>
+        <MuiTextInput
+          value={value}
+          onChange={onChange}
+          label={paramLabel}
+          size="small"
+        />
+      </div>
+    );
+  }
+
+  // Fallback: text input
+  return (
+    <div>
+      <MuiTextInput
+        value={String(value ?? '')}
+        onChange={onChange}
+        label={paramLabel}
+        size="small"
+      />
+    </div>
+  );
+});
+
 
 const backButtonStyle: React.CSSProperties = {
   background: 'transparent',
