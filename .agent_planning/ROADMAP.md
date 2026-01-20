@@ -1,6 +1,6 @@
 # Oscilla Animator v2 - Project Roadmap
 
-Last updated: 2026-01-19-173200
+Last updated: 2026-01-19-174500
 
 ---
 
@@ -71,13 +71,22 @@ Last updated: 2026-01-19-173200
 - **Planning Files:** `.agent_planning/phase1-remaining/`
 - **Status Note:** ~10% complete, major work pending
 
-#### 🔄 compilation-pipeline [IN PROGRESS]
-- **State:** IN PROGRESS
+#### 📋 compilation-pipeline [PLANNING]
+- **State:** PLANNING
 - **Epic:** Phase 1 Unified Plan (P3)
 - **Spec:** `design-docs/CANONICAL-oscilla-v2.5-20260109/topics/04-compilation.md`
-- **Description:** Passes 5-10: execution class, tables, schedule, slots, debug
-- **Planning Files:** `.agent_planning/compilation-pipeline/`
-- **Status Note:** Domain unification COMPLETE (2026-01-09). Graph normalization adapter system COMPLETE (2026-01-12). Domain→Instance migration COMPLETE (2026-01-19). Passes 5-10 remaining.
+- **Description:** Code cleanup after successful implementation of all 8 compilation passes
+- **Planning Files:** `.agent_planning/compilation-pipeline/` (READY 2026-01-19)
+- **Status Note:** All 8 passes implemented and working. 372 tests passing, 0 failures. Remaining work is code hygiene: remove unused state API stubs, document Pass 8 decision, resolve seed management TODO. Estimated 1.5 hours.
+- **Key Finding:** "Passes 5-10" was a miscount. There are only 8 passes (1-8), all complete:
+  1. ✅ Normalization
+  2. ✅ Type Graph
+  3. ✅ Time Topology
+  4. ✅ Dependency Graph
+  5. ✅ SCC Validation
+  6. ✅ Block Lowering
+  7. ✅ Schedule Construction
+  8. ✅ Link Resolution (exists but not used, Pass 6 handles all resolution)
 - **Completed Sprints:**
   - Domain Unification - 11 tests passing, domain tracking through field composition
   - Graph Normalization Adapters - Type-aware adapter insertion (signal→field broadcast), strict type checking in Pass 2, extensible adapter registry
