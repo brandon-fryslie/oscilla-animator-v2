@@ -12,7 +12,7 @@ import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
 import { rootStore } from '../../stores';
 import type { Patch, Block, Edge } from '../../graph/Patch';
 import type { BlockId } from '../../types';
-import { darkTheme, colors } from '../theme';
+import { colors } from '../theme';
 
 interface MatrixRow {
   id: string;
