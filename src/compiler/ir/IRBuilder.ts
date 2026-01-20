@@ -287,20 +287,8 @@ export interface IRBuilder {
    */
   getInstances(): ReadonlyMap<InstanceId, InstanceDecl>;
 
-  /** Get timepoint markers. */
-  getTimepointMarkers(): { start: number; end: number } | null;
-
   /** Get schedule. */
   getSchedule(): TimeModelIR;
-
-  /** Declare state. */
-  declareState(id: StateId, type: SignalType, initialValue?: unknown): void;
-
-  /** Read state. */
-  readState(id: StateId, type: SignalType): SigExprId;
-
-  /** Write state. */
-  writeState(id: StateId, value: SigExprId): void;
 
   // =========================================================================
   // Build Results
