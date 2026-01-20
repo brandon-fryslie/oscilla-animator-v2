@@ -9,7 +9,6 @@
  * 5. Pass 5: Cycle Validation (SCC) - Check for illegal cycles
  * 6. Pass 6: Block Lowering - Lower blocks to IR expressions
  * 7. Pass 7: Schedule Construction - Build execution schedule
- * 8. Pass 8: Link Resolution - Resolve all connections
  *
  * Integrated with event emission for diagnostics.
  */
@@ -43,8 +42,6 @@ import { pass4DepGraph } from './passes-v2';
 import { pass5CycleValidation } from './passes-v2';
 import { pass6BlockLowering } from './passes-v2';
 import { pass7Schedule } from './passes-v2';
-// Pass 8 is not yet fully implemented
-// import { pass8LinkResolution } from './passes-v2';
 
 // =============================================================================
 // Compile Errors & Results
@@ -95,12 +92,6 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
   const compileId = options?.patchId ? `${options.patchId}:${options.patchRevision || 0}` : 'unknown';
   const startTime = performance.now();
 
-  console.log('[Compile] Starting compilation:', {
-    patchId: options?.patchId || 'unknown',
-    patchRevision: options?.patchRevision || 0,
-    compileId,
-  });
-
   // Emit CompileBegin event
   if (options) {
     options.events.emit({
@@ -114,7 +105,6 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
 
   try {
     // Pass 1: Normalization
-    console.log('[Compile] Pass 1: Normalization');
     const normResult = normalize(patch);
 
     if (normResult.kind === 'error') {
@@ -125,31 +115,24 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
           : `Duplicate block ID: ${(e as any).id}`,
       }));
 
-      console.log('[Compile] Pass 1 failed:', compileErrors);
       return emitFailure(options, startTime, compileId, compileErrors);
     }
 
     const normalized = normResult.patch;
-    console.log('[Compile] Pass 1 complete:', { blocks: normalized.blocks.length, edges: normalized.edges.length });
 
     // Pass 2: Type Graph
-    console.log('[Compile] Pass 2: Type Graph');
     const typedPatch = pass2TypeGraph(normalized);
 
     // Pass 3: Time Topology
-    console.log('[Compile] Pass 3: Time Topology');
     const timeResolvedPatch = pass3Time(typedPatch);
 
     // Pass 4: Dependency Graph
-    console.log('[Compile] Pass 4: Dependency Graph');
     const depGraphPatch = pass4DepGraph(timeResolvedPatch);
 
     // Pass 5: Cycle Validation (SCC)
-    console.log('[Compile] Pass 5: Cycle Validation');
     const acyclicPatch = pass5CycleValidation(depGraphPatch);
 
     // Pass 6: Block Lowering
-    console.log('[Compile] Pass 6: Block Lowering');
     const unlinkedIR = pass6BlockLowering(acyclicPatch, {
       events: options?.events,
       compileId,
@@ -163,21 +146,13 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
         message: e.message,
         blockId: e.where?.blockId,
       }));
-      console.log('[Compile] Pass 6 errors:', compileErrors);
       return emitFailure(options, startTime, compileId, compileErrors);
     }
 
     // Pass 7: Schedule Construction
-    console.log('[Compile] Pass 7: Schedule Construction');
     const scheduleIR = pass7Schedule(unlinkedIR, acyclicPatch);
 
-    // Pass 8: Link Resolution (optional)
-    // Note: Pass 8 is only needed for camera blocks with deferred lowering.
-    // Pass 6 handles standard input resolution via resolveInputsWithMultiInput.
-    // The pass8LinkResolution implementation exists but is not currently used.
-
     // Convert to CompiledProgramIR
-    console.log('[Compile] Converting to program IR');
     const compiledIR = convertLinkedIRToProgram(unlinkedIR, scheduleIR);
 
     // Emit CompileEnd event (success)
@@ -198,11 +173,6 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
           occurrenceCount: 1,
         },
       };
-      console.log('[Compile] Emitting CompileEnd (success):', {
-        patchId: options.patchId || 'unknown',
-        patchRevision: options.patchRevision || 0,
-        diagnosticsCount: 1,
-      });
       options.events.emit({
         type: 'CompileEnd',
         compileId,
@@ -214,7 +184,6 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
       });
     }
 
-    console.log('[Compile] Compilation successful');
     return {
       kind: 'ok',
       program: compiledIR,
@@ -250,12 +219,6 @@ function emitFailure(
   if (options) {
     const durationMs = performance.now() - startTime;
     const diagnostics = convertCompileErrorsToDiagnostics(errors, options.patchRevision || 0, compileId);
-    console.log('[Compile] Emitting CompileEnd (failure):', {
-      patchId: options.patchId || 'unknown',
-      patchRevision: options.patchRevision || 0,
-      diagnosticsCount: diagnostics.length,
-      diagnostics: diagnostics.map(d => ({ id: d.id, code: d.code, title: d.title })),
-    });
     options.events.emit({
       type: 'CompileEnd',
       compileId,

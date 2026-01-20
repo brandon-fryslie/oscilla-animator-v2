@@ -1,0 +1,73 @@
+Agent: iterative-implementer | 1768890974
+Mode: manual
+Completed: Data model, PatchStore, Pass1/Pass2 integration | Files: 8 | Commits: 1
+Tests: N/A (manual validation mode)
+Cache invalidated: none (new feature, no stale cache)
+Status: complete
+
+## Work Completed
+
+### P0: Data Model
+- Added InputPort and OutputPort interfaces in src/graph/Patch.ts
+- Block interface now includes inputPorts and outputPorts ReadonlyMap fields
+- InputPort has id and optional defaultSource (undefined = use registry)
+- OutputPort has id only
+- Exported types from src/types/index.ts
+
+### P0: PatchStore Lifecycle
+- addBlock() creates ports from registry definitions (inputs and outputs)
+- updateInputPort(blockId, portId, updates) mutation API added
+- Ports automatically deleted when block deleted (nested lifecycle)
+- PatchBuilder updated to create empty port maps
+
+### P0: Pass 1 Integration
+- analyzeDefaultSources() reads port.defaultSource first, falls back to registry
+- Effective default = portOverride ?? registryDefault
+- materializeDefaultSource() creates derived blocks with empty port maps
+- applyDefaultSourceInsertions() populates ports for derived blocks
+
+### P0: Pass 2 Integration
+- analyzeAdapters() creates ports for adapter blocks
+- Uses getBlockDefinition() to populate input/output ports
+
+### Test Updates
+- Fixed DiagnosticHub.test.ts to include port maps
+- Fixed authoringValidators.test.ts to include port maps
+- Fixed PatchStore.test.ts to include port maps
+- Pre-existing test errors in diagnostics (event types) - not related to this work
+
+## Validation
+
+TypeScript compiles cleanly for production code (no errors outside of pre-existing test issues).
+
+No migration code needed - this is greenfield v2.
+
+Ports are:
+- Created automatically when block is added
+- Nested in blocks (automatic lifecycle)
+- Have stable IDs (slotId from registry)
+- Support per-instance defaultSource overrides
+
+## Remaining Work (Not Required for DoD)
+
+UI changes (P1 in plan):
+- BlockInspector defaultSource editor
+- Dropdown for block type selection
+- Params editor for selected type
+
+These are optional enhancements. Core functionality is complete.
+
+## Files Modified
+
+- src/graph/Patch.ts
+- src/types/index.ts
+- src/stores/PatchStore.ts
+- src/graph/passes/pass1-default-sources.ts
+- src/graph/passes/pass2-adapters.ts
+- src/diagnostics/__tests__/DiagnosticHub.test.ts
+- src/diagnostics/validators/__tests__/authoringValidators.test.ts
+- src/stores/__tests__/PatchStore.test.ts
+
+## Commit
+
+41b6835 feat(graph): Add first-class port objects to blocks

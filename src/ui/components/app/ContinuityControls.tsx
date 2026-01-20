@@ -113,40 +113,46 @@ export const ContinuityControls = observer(function ContinuityControls() {
 
         {/* Action Buttons */}
         <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-          <button
+          <Button
+            variant="outlined"
+            size="small"
             onClick={() => rootStore.continuity.resetToDefaults()}
-            style={{
+            sx={{
               flex: 1,
-              padding: '0.375rem',
               fontSize: '0.75rem',
-              background: colors.bgPanel,
+              textTransform: 'none',
+              borderColor: colors.border,
               color: colors.textPrimary,
-              border: `1px solid ${colors.border}`,
-              borderRadius: '4px',
-              cursor: 'pointer',
+              '&:hover': {
+                borderColor: colors.textPrimary,
+                background: 'rgba(255, 255, 255, 0.05)',
+              },
             }}
           >
             Reset to Defaults
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="outlined"
+            size="small"
             onClick={() => {
               if (window.confirm('Clear all continuity state?')) {
                 rootStore.continuity.clearContinuityState();
               }
             }}
-            style={{
+            sx={{
               flex: 1,
-              padding: '0.375rem',
               fontSize: '0.75rem',
-              background: colors.bgPanel,
+              textTransform: 'none',
+              borderColor: colors.warning,
               color: colors.warning,
-              border: `1px solid ${colors.warning}`,
-              borderRadius: '4px',
-              cursor: 'pointer',
+              '&:hover': {
+                borderColor: colors.warning,
+                background: 'rgba(255, 106, 0, 0.1)',
+              },
             }}
           >
             Clear State
-          </button>
+          </Button>
         </div>
       </div>
     </ThemeProvider>

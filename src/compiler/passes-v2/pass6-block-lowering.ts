@@ -400,7 +400,7 @@ function lowerBlockInstance(
         continue;
       }
 
-      // Register slot for signal/field outputs (required for pass8 validation)
+      // Register slot for signal/field outputs
       if (ref.k === 'sig') {
         builder.registerSigSlot(ref.id, ref.slot);
       } else if (ref.k === 'field') {

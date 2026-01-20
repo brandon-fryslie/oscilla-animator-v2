@@ -6,6 +6,7 @@
  */
 
 import React, { useState } from 'react';
+import { Button } from '@mui/material';
 import { colors } from '../../theme';
 
 export interface TabConfig {
@@ -53,38 +54,29 @@ export const Tabs: React.FC<TabsProps> = ({ tabs, initialTab, onTabChange }) => 
         {tabs.map((tab) => {
           const isActive = tab.id === activeTab;
           return (
-            <button
+            <Button
               key={tab.id}
               onClick={() => handleTabClick(tab.id)}
-              style={{
+              variant="text"
+              size="small"
+              sx={{
                 padding: '6px 12px',
                 background: isActive ? colors.bgContent : 'transparent',
-                border: 'none',
                 borderRadius: '4px 4px 0 0',
                 color: isActive ? colors.primary : colors.textSecondary,
                 fontSize: '0.875rem',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
+                textTransform: 'none',
+                minWidth: 'auto',
                 transition: 'background 0.15s, color 0.15s',
-              }}
-              onMouseEnter={(e) => {
-                if (!isActive) {
-                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                  e.currentTarget.style.color = colors.textPrimary;
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isActive) {
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.color = colors.textSecondary;
-                }
+                '&:hover': {
+                  background: isActive ? colors.bgContent : 'rgba(255, 255, 255, 0.05)',
+                  color: isActive ? colors.primary : colors.textPrimary,
+                },
               }}
             >
-              {tab.icon && <span>{tab.icon}</span>}
+              {tab.icon && <span style={{ marginRight: '6px' }}>{tab.icon}</span>}
               <span>{tab.label}</span>
-            </button>
+            </Button>
           );
         })}
       </div>

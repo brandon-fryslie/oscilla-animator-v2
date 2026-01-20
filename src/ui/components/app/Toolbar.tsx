@@ -5,6 +5,7 @@
  */
 
 import React from 'react';
+import { Button } from '@mui/material';
 import { colors } from '../../theme';
 
 interface ToolbarProps {
@@ -53,48 +54,60 @@ export const Toolbar: React.FC<ToolbarProps> = ({ stats = 'FPS: --' }) => {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-        <button
-          className="toolbar-btn"
-          style={{
-            padding: '6px 12px',
-            background: 'transparent',
-            border: '1px solid #0f3460',
-            borderRadius: '4px',
+        <Button
+          variant="text"
+          size="small"
+          sx={{
             color: '#888',
             fontSize: '0.75rem',
-            cursor: 'pointer',
+            textTransform: 'none',
+            minWidth: 'auto',
+            padding: '6px 12px',
+            border: '1px solid #0f3460',
+            '&:hover': {
+              border: '1px solid #0f3460',
+              background: 'rgba(255, 255, 255, 0.05)',
+            },
           }}
         >
           New
-        </button>
-        <button
-          className="toolbar-btn"
-          style={{
-            padding: '6px 12px',
-            background: 'transparent',
-            border: '1px solid #0f3460',
-            borderRadius: '4px',
+        </Button>
+        <Button
+          variant="text"
+          size="small"
+          sx={{
             color: '#888',
             fontSize: '0.75rem',
-            cursor: 'pointer',
+            textTransform: 'none',
+            minWidth: 'auto',
+            padding: '6px 12px',
+            border: '1px solid #0f3460',
+            '&:hover': {
+              border: '1px solid #0f3460',
+              background: 'rgba(255, 255, 255, 0.05)',
+            },
           }}
         >
           Open
-        </button>
-        <button
-          className="toolbar-btn"
-          style={{
-            padding: '6px 12px',
-            background: 'transparent',
-            border: '1px solid #0f3460',
-            borderRadius: '4px',
+        </Button>
+        <Button
+          variant="text"
+          size="small"
+          sx={{
             color: '#888',
             fontSize: '0.75rem',
-            cursor: 'pointer',
+            textTransform: 'none',
+            minWidth: 'auto',
+            padding: '6px 12px',
+            border: '1px solid #0f3460',
+            '&:hover': {
+              border: '1px solid #0f3460',
+              background: 'rgba(255, 255, 255, 0.05)',
+            },
           }}
         >
           Save
-        </button>
+        </Button>
       </div>
     </header>
   );

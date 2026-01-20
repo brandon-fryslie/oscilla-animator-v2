@@ -18,6 +18,7 @@
 
 import React, { useState } from 'react';
 import { observer } from 'mobx-react-lite';
+import { ToggleButton, ToggleButtonGroup } from '@mui/material';
 import { rootStore } from '../../../stores';
 import type { Diagnostic, Severity, TargetRef } from '../../../diagnostics/types';
 
@@ -50,6 +51,11 @@ export const DiagnosticConsole: React.FC = observer(() => {
   const warnCount = diagnostics.filter((d: Diagnostic) => d.severity === 'warn').length;
   const infoCount = diagnostics.filter((d: Diagnostic) => d.severity === 'info').length;
 
+  // Get compilation stats (reactive)
+  const stats = rootStore.diagnostics.compilationStats;
+  const avgMs = rootStore.diagnostics.avgCompileMs;
+  const medianMs = rootStore.diagnostics.medianCompileMs;
+
   return (
     <div
       style={{
@@ -60,6 +66,22 @@ export const DiagnosticConsole: React.FC = observer(() => {
         color: '#eee',
       }}
     >
+      {/* Compilation Stats Bar */}
+      {stats.count > 0 && (
+        <div
+          style={{
+            padding: '6px 12px',
+            borderBottom: '1px solid #0f3460',
+            fontFamily: 'monospace',
+            fontSize: '11px',
+            color: '#8a8',
+            background: '#0a0a18',
+          }}
+        >
+          Compilations: {stats.count} | Last: {stats.recentMs[stats.recentMs.length - 1]?.toFixed(1) ?? '-'}ms | Avg: {avgMs.toFixed(1)}ms | Med: {medianMs.toFixed(1)}ms | Min: {stats.minMs === Infinity ? '-' : stats.minMs.toFixed(1)}ms | Max: {stats.maxMs.toFixed(1)}ms
+        </div>
+      )}
+
       {/* Header with filter buttons */}
       <div
         style={{
@@ -72,33 +94,78 @@ export const DiagnosticConsole: React.FC = observer(() => {
       >
         <span style={{ fontWeight: 'bold', marginRight: 'auto' }}>Diagnostics</span>
 
-        <FilterButton
-          label="All"
-          count={diagnostics.length}
-          active={filter === 'all'}
-          onClick={() => setFilter('all')}
-        />
-        <FilterButton
-          label="Errors"
-          count={errorCount}
-          active={filter === 'error'}
-          onClick={() => setFilter('error')}
-          color="#e74c3c"
-        />
-        <FilterButton
-          label="Warnings"
-          count={warnCount}
-          active={filter === 'warn'}
-          onClick={() => setFilter('warn')}
-          color="#f39c12"
-        />
-        <FilterButton
-          label="Info"
-          count={infoCount}
-          active={filter === 'info'}
-          onClick={() => setFilter('info')}
-          color="#3498db"
-        />
+        <ToggleButtonGroup
+          value={filter}
+          exclusive
+          onChange={(_, newFilter) => {
+            if (newFilter !== null) {
+              setFilter(newFilter);
+            }
+          }}
+          size="small"
+          sx={{
+            gap: '4px',
+            '& .MuiToggleButton-root': {
+              border: 'none',
+              borderRadius: '4px',
+              padding: '4px 10px',
+              fontSize: '12px',
+              textTransform: 'none',
+              color: '#666',
+              '&.Mui-selected': {
+                color: '#fff',
+                fontWeight: 'bold',
+              },
+              '&:hover': {
+                background: 'rgba(255, 255, 255, 0.05)',
+              },
+            },
+            '& .MuiToggleButton-root.Mui-selected:hover': {
+              background: 'rgba(255, 255, 255, 0.1)',
+            },
+          }}
+        >
+          <ToggleButton
+            value="all"
+            sx={{
+              '&.Mui-selected': {
+                background: '#666',
+              },
+            }}
+          >
+            All ({diagnostics.length})
+          </ToggleButton>
+          <ToggleButton
+            value="error"
+            sx={{
+              '&.Mui-selected': {
+                background: '#e74c3c',
+              },
+            }}
+          >
+            Errors ({errorCount})
+          </ToggleButton>
+          <ToggleButton
+            value="warn"
+            sx={{
+              '&.Mui-selected': {
+                background: '#f39c12',
+              },
+            }}
+          >
+            Warnings ({warnCount})
+          </ToggleButton>
+          <ToggleButton
+            value="info"
+            sx={{
+              '&.Mui-selected': {
+                background: '#3498db',
+              },
+            }}
+          >
+            Info ({infoCount})
+          </ToggleButton>
+        </ToggleButtonGroup>
       </div>
 
       {/* Diagnostic list */}
@@ -130,45 +197,6 @@ export const DiagnosticConsole: React.FC = observer(() => {
     </div>
   );
 });
-
-// =============================================================================
-// FilterButton Component
-// =============================================================================
-
-interface FilterButtonProps {
-  label: string;
-  count: number;
-  active: boolean;
-  onClick: () => void;
-  color?: string;
-}
-
-const FilterButton: React.FC<FilterButtonProps> = ({
-  label,
-  count,
-  active,
-  onClick,
-  color = '#666',
-}) => {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        padding: '4px 10px',
-        border: 'none',
-        borderRadius: '4px',
-        background: active ? color : 'transparent',
-        color: active ? '#fff' : color,
-        cursor: 'pointer',
-        fontSize: '12px',
-        fontWeight: active ? 'bold' : 'normal',
-        transition: 'all 0.2s',
-      }}
-    >
-      {label} ({count})
-    </button>
-  );
-};
 
 // =============================================================================
 // DiagnosticRow Component

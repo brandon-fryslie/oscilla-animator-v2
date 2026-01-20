@@ -14,6 +14,18 @@ import type { DiagnosticHub } from '../diagnostics/DiagnosticHub';
 import type { Diagnostic, DiagnosticFilter } from '../diagnostics/types';
 
 // =============================================================================
+// Compilation Stats Types
+// =============================================================================
+
+export interface CompilationStats {
+  count: number;
+  totalMs: number;
+  minMs: number;
+  maxMs: number;
+  recentMs: number[]; // Last 20 for median calculation
+}
+
+// =============================================================================
 // Log Types
 // =============================================================================
 
@@ -61,6 +73,15 @@ export class DiagnosticsStore {
   private _logs: LogEntry[] = [];
   private _nextId = 0;
 
+  // Compilation statistics (per-session)
+  private _compilationStats: CompilationStats = {
+    count: 0,
+    totalMs: 0,
+    minMs: Infinity,
+    maxMs: 0,
+    recentMs: [],
+  };
+
   // =============================================================================
   // Constructor
   // =============================================================================
@@ -70,7 +91,7 @@ export class DiagnosticsStore {
 
     makeObservable<
       DiagnosticsStore,
-      '_revision' | '_logs' | 'incrementRevision'
+      '_revision' | '_logs' | '_compilationStats' | 'incrementRevision'
     >(this, {
       // Observable revision counter
       _revision: observable,
@@ -88,6 +109,13 @@ export class DiagnosticsStore {
       logs: computed,
       log: action,
       clearLogs: action,
+
+      // Compilation Stats API
+      _compilationStats: observable,
+      compilationStats: computed,
+      avgCompileMs: computed,
+      medianCompileMs: computed,
+      recordCompilation: action,
     });
   }
 
@@ -97,7 +125,6 @@ export class DiagnosticsStore {
    */
   incrementRevision(): void {
     this._revision++;
-    console.log('[DiagnosticsStore] Revision incremented to:', this._revision);
   }
 
   // =============================================================================
@@ -229,5 +256,62 @@ export class DiagnosticsStore {
    */
   clearLogs(): void {
     this._logs = [];
+  }
+
+  // =============================================================================
+  // Compilation Stats API
+  // =============================================================================
+
+  /**
+   * Returns current compilation statistics.
+   */
+  get compilationStats(): CompilationStats {
+    return this._compilationStats;
+  }
+
+  /**
+   * Returns average compilation time in milliseconds.
+   * Returns 0 if no compilations recorded.
+   */
+  get avgCompileMs(): number {
+    if (this._compilationStats.count === 0) return 0;
+    return this._compilationStats.totalMs / this._compilationStats.count;
+  }
+
+  /**
+   * Returns median compilation time in milliseconds.
+   * Uses the recent compilations (last 20) for calculation.
+   * Returns 0 if no compilations recorded.
+   */
+  get medianCompileMs(): number {
+    const recent = this._compilationStats.recentMs;
+    if (recent.length === 0) return 0;
+
+    const sorted = [...recent].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+
+    if (sorted.length % 2 === 0) {
+      return (sorted[mid - 1] + sorted[mid]) / 2;
+    }
+    return sorted[mid];
+  }
+
+  /**
+   * Records a compilation duration.
+   * Called when a CompileEnd event is received with status 'success'.
+   *
+   * @param durationMs - The compilation duration in milliseconds
+   */
+  recordCompilation(durationMs: number): void {
+    this._compilationStats.count++;
+    this._compilationStats.totalMs += durationMs;
+    this._compilationStats.minMs = Math.min(this._compilationStats.minMs, durationMs);
+    this._compilationStats.maxMs = Math.max(this._compilationStats.maxMs, durationMs);
+
+    // Keep last 20 for median calculation
+    this._compilationStats.recentMs.push(durationMs);
+    if (this._compilationStats.recentMs.length > 20) {
+      this._compilationStats.recentMs.shift();
+    }
   }
 }

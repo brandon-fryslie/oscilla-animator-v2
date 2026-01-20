@@ -36,8 +36,6 @@ let pool: BufferPool | null = null;
 // =============================================================================
 
 function log(msg: string, level: 'info' | 'warn' | 'error' = 'info') {
-  console.log(`[${level}] ${msg}`);
-
   // Log to diagnostics store (id and timestamp added by store)
   rootStore.diagnostics.log({
     level,
@@ -382,16 +380,13 @@ async function buildAndCompile(patchBuilder: PatchBuilder) {
   rootStore.patch.loadPatch(patch);
 
   // Compile with event emission for diagnostics
-  console.log('[main] Starting compilation with patch revision:', rootStore.getPatchRevision());
   const result = compile(patch, {
     events: rootStore.events,
     patchRevision: rootStore.getPatchRevision(),
     patchId: 'patch-0',
   });
 
-  console.log('[main] Compile result:', result.kind);
   if (result.kind !== 'ok') {
-    console.log('[main] Compile errors:', result.errors);
     log(`Compile failed: ${JSON.stringify(result.errors)}`, 'error');
     throw new Error('Compile failed');
   }
@@ -891,6 +886,13 @@ async function main() {
 
     // Set up live recompile reaction (Continuity-UI Sprint 1)
     setupLiveRecompileReaction();
+
+    // Subscribe to CompileEnd events for compilation statistics
+    rootStore.events.on('CompileEnd', (event) => {
+      if (event.status === 'success') {
+        rootStore.diagnostics.recordCompilation(event.durationMs);
+      }
+    });
 
     log('Runtime initialized');
 

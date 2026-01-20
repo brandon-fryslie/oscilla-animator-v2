@@ -20,6 +20,7 @@ import ReactFlow, {
   type Connection,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
+import { Button } from '@mui/material';
 import { rootStore } from '../../stores';
 import type { BlockId } from '../../types';
 import type { EditorHandle } from '../editorCommon';
@@ -347,13 +348,28 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = ({
       <Background />
       <Controls />
       <Panel position="top-left" className="react-flow-panel">
-        <button
+        <Button
+          variant="outlined"
+          size="small"
           onClick={handleAutoArrange}
           disabled={isLayouting}
-          className="auto-arrange-btn"
+          sx={{
+            textTransform: 'none',
+            fontSize: '0.75rem',
+            borderColor: '#0f3460',
+            color: isLayouting ? '#666' : '#eee',
+            '&:hover': {
+              borderColor: '#4ecdc4',
+              background: 'rgba(78, 205, 196, 0.1)',
+            },
+            '&:disabled': {
+              borderColor: '#0f3460',
+              color: '#666',
+            },
+          }}
         >
           {isLayouting ? 'Arranging...' : 'Auto Arrange'}
-        </button>
+        </Button>
       </Panel>
     </ReactFlow>
   );

@@ -6,6 +6,8 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { IconButton } from '@mui/material';
+import CloseIcon from '@mui/icons-material/Close';
 import { rootStore } from '../../stores';
 import {
   getBlockCategories,
@@ -194,13 +196,25 @@ export const BlockLibrary: React.FC = () => {
             aria-label="Search blocks"
           />
           {searchQuery && (
-            <button
-              className="block-library__search-clear"
+            <IconButton
               onClick={handleSearchClear}
+              size="small"
               aria-label="Clear search"
+              sx={{
+                position: 'absolute',
+                right: '4px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                padding: '4px',
+                color: '#888',
+                '&:hover': {
+                  color: '#fff',
+                  background: 'rgba(255, 255, 255, 0.1)',
+                },
+              }}
             >
-              ×
-            </button>
+              <CloseIcon fontSize="small" />
+            </IconButton>
           )}
         </div>
 

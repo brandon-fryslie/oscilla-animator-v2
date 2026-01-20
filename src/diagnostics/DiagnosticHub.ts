@@ -95,8 +95,6 @@ export class DiagnosticHub {
   ) {
     this.patchGetter = patchGetter;
 
-    console.log('[DiagnosticHub] Created for patchId:', patchId);
-
     // Subscribe to five core events
     this.unsubscribers.push(
       events.on('GraphCommitted', (event) => this.handleGraphCommitted(event))
@@ -121,8 +119,6 @@ export class DiagnosticHub {
     this.unsubscribers.push(
       events.on('BlockLowered', (event) => this.handleBlockLowered(event))
     );
-
-    console.log('[DiagnosticHub] Subscribed to 7 events (5 core + 2 param flow)');
   }
 
   // =============================================================================
@@ -142,22 +138,13 @@ export class DiagnosticHub {
     patchId: string;
     patchRevision: number;
   }): void {
-    console.log('[DiagnosticHub] GraphCommitted event received:', {
-      eventPatchId: event.patchId,
-      hubPatchId: this.patchId,
-      patchRevision: event.patchRevision,
-    });
-
     if (event.patchId !== this.patchId) {
-      console.log('[DiagnosticHub] PatchId mismatch - event ignored!');
       return;
     }
 
     // Run authoring validators
     const patch = this.patchGetter();
     const diagnostics = runAuthoringValidators(patch, event.patchRevision);
-
-    console.log('[DiagnosticHub] Authoring validators produced:', diagnostics.length, 'diagnostics');
 
     // Replace authoring snapshot
     this.authoringSnapshot = diagnostics;
@@ -177,14 +164,7 @@ export class DiagnosticHub {
     patchId: string;
     patchRevision: number;
   }): void {
-    console.log('[DiagnosticHub] CompileBegin event received:', {
-      eventPatchId: event.patchId,
-      hubPatchId: this.patchId,
-      patchRevision: event.patchRevision,
-    });
-
     if (event.patchId !== this.patchId) {
-      console.log('[DiagnosticHub] PatchId mismatch - event ignored!');
       return;
     }
 
@@ -204,21 +184,12 @@ export class DiagnosticHub {
     patchRevision: number;
     diagnostics: readonly Diagnostic[];
   }): void {
-    console.log('[DiagnosticHub] CompileEnd event received:', {
-      eventPatchId: event.patchId,
-      hubPatchId: this.patchId,
-      patchRevision: event.patchRevision,
-      diagnosticsCount: event.diagnostics.length,
-    });
-
     if (event.patchId !== this.patchId) {
-      console.log('[DiagnosticHub] PatchId mismatch - event ignored!');
       return;
     }
 
     // Replace compile snapshot (not merge!)
     this.compileSnapshots.set(event.patchRevision, [...event.diagnostics]);
-    console.log('[DiagnosticHub] Compile snapshot replaced for revision:', event.patchRevision, 'with', event.diagnostics.length, 'diagnostics');
 
     // Clear pending compile
     if (this.pendingCompileRevision === event.patchRevision) {
@@ -241,15 +212,7 @@ export class DiagnosticHub {
     patchId: string;
     patchRevision: number;
   }): void {
-    console.log('[DiagnosticHub] ProgramSwapped event received:', {
-      eventPatchId: event.patchId,
-      hubPatchId: this.patchId,
-      oldActiveRevision: this.activeRevision,
-      newActiveRevision: event.patchRevision,
-    });
-
     if (event.patchId !== this.patchId) {
-      console.log('[DiagnosticHub] PatchId mismatch - event ignored!');
       return;
     }
 
@@ -275,11 +238,6 @@ export class DiagnosticHub {
     };
   }): void {
     if (!event.diagnosticsDelta) return;
-
-    console.log('[DiagnosticHub] RuntimeHealthSnapshot event received:', {
-      raisedCount: event.diagnosticsDelta.raised.length,
-      resolvedCount: event.diagnosticsDelta.resolved.length,
-    });
 
     // Add raised diagnostics
     for (const diag of event.diagnosticsDelta.raised) {
@@ -399,7 +357,6 @@ export class DiagnosticHub {
       }
     }
 
-    console.log('[DiagnosticHub] getActive() called - returning', result.length, 'diagnostics (activeRevision:', this.activeRevision, ')');
     return result;
   }
 
@@ -517,7 +474,6 @@ export class DiagnosticHub {
    */
   private incrementRevision(): void {
     this.diagnosticsRevision++;
-    console.log('[DiagnosticHub] Revision incremented to:', this.diagnosticsRevision);
     // Notify store of change for MobX reactivity
     if (this.onRevisionChange) {
       this.onRevisionChange();
@@ -530,7 +486,6 @@ export class DiagnosticHub {
    */
   setOnRevisionChange(callback: () => void): void {
     this.onRevisionChange = callback;
-    console.log('[DiagnosticHub] onRevisionChange callback registered');
   }
 
   /**
@@ -539,7 +494,6 @@ export class DiagnosticHub {
    */
   setOnLog(callback: (entry: { level: 'info' | 'warn' | 'error' | 'debug'; message: string }) => void): void {
     this.onLog = callback;
-    console.log('[DiagnosticHub] onLog callback registered');
   }
 
   /**

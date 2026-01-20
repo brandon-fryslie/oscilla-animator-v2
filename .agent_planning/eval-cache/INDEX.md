@@ -2,7 +2,7 @@
 
 **Purpose:** Reusable evaluation findings to speed up future work evaluations.
 
-**Last Updated:** 2026-01-19 14:53:00
+**Last Updated:** 2026-01-20 00:18:00
 
 ---
 
@@ -10,7 +10,23 @@
 
 ### Runtime Findings
 
-**runtime-diagnostics-logging.md** [NEW]
+**runtime-continuity-controls-v2.md** [UPDATED - STALE]
+- Scope: continuity-controls-v2
+- Status: Implementation complete, all DoD criteria met
+- Confidence: STALE (MUI component patterns changed - new common controls created)
+- Reusable: SliderWithInput component usage, baseTauMs factor application, test pulse patterns
+- Key findings: Complete MUI slider migration, base duration control, test pulse feature with visual feedback
+- Next evaluation: Check if SliderWithInput.tsx, ContinuityControls.tsx, or ContinuityApply.ts changed
+
+**runtime-unified-defaults.md**
+- Scope: buses-and-rails/unified-defaults
+- Status: Implementation complete, but codebase has unrelated TypeScript errors
+- Confidence: FRESH
+- Reusable: DefaultSource type usage, compiler pass patterns, UI blockType checks
+- Key findings: Complete type unification, TimeRoot/derived split in pass1, all tests passing
+- Next evaluation: Check if DefaultSource type, pass1, or UI code changed
+
+**runtime-diagnostics-logging.md**
 - Scope: compilation-pipeline/diagnostics-logging
 - Status: Architecture verified sound, UI verification pending
 - Confidence: FRESH
@@ -59,6 +75,13 @@
 ---
 
 ## Invalidated Cache
+
+### 2026-01-20 - MUI Controls Migration
+**Removed:**
+- runtime-ui-store-wiring.md - BlockInspector.tsx completely refactored with MUI components
+
+**Marked STALE:**
+- runtime-continuity-controls-v2.md - New common UI control patterns (NumberInput, TextInput, etc.) established
 
 ### Sprint 3 - Instance Blocks
 **Removed:**

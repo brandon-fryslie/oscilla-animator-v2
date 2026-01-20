@@ -8,17 +8,20 @@
 
 ## Executive Summary
 
-| Category | Count | P0 | P1 | P2 | P3 |
-|----------|-------|----|----|----|----|
-| Deprecated APIs | 12 | 0 | 3 | 6 | 3 |
-| Dual Code Paths | 3 | 0 | 2 | 1 | 0 |
-| Unfinished Migrations | 5 | 0 | 2 | 3 | 0 |
-| Legacy Fallbacks | 4 | 0 | 1 | 2 | 1 |
-| Stub Test Files | 5 | 0 | 1 | 4 | 0 |
-| **Total** | **29** | **0** | **9** | **16** | **4** |
+| Category | Count | P0 | P1 | P2 | P3 | Resolved |
+|----------|-------|----|----|----|----|----------|
+| Deprecated APIs | 12 | 0 | 3 | 6 | 3 | 0 |
+| Dual Code Paths | 3 | 0 | 2 | 1 | 0 | 1 ✅ |
+| Unfinished Migrations | 5 | 0 | 2 | 3 | 0 | 0 |
+| Legacy Fallbacks | 4 | 0 | 1 | 2 | 1 | 1 ✅ |
+| Stub Test Files | 5 | 0 | 1 | 4 | 0 | 0 |
+| **Total** | **29** | **0** | **9** | **16** | **4** | **2** |
 
 **Overall Health**: ⚠️ Needs Attention
 **Primary Risk**: Domain→Instance migration is incomplete, creating maintenance burden with parallel code paths
+
+**Resolved This Session**:
+- Finding 3: DiagnosticsStore Legacy API removed (dead code cleanup)
 
 ---
 
@@ -107,38 +110,21 @@ export interface IRProgram { ... }
 
 ---
 
-## Finding 3: DiagnosticsStore Legacy API (P2)
+## Finding 3: DiagnosticsStore Legacy API (P2) ✅ RESOLVED
 
 ### Summary
-`DiagnosticsStore` maintains dual API: new DiagnosticHub integration and legacy `addError`/`addWarning` methods.
+`DiagnosticsStore` maintained dual API: new DiagnosticHub integration and legacy `addError`/`addWarning` methods.
 
-### Evidence
-```typescript
-// src/stores/DiagnosticsStore.ts:11-13
-// Migration Note:
-// - Old API (addError, addWarning, log) is preserved for backwards compatibility
-// - New API (getActive, getByRevision, filter) uses DiagnosticHub
+### Status: RESOLVED (2026-01-19)
 
-// src/stores/DiagnosticsStore.ts:72-74
-private _legacyErrors: LegacyDiagnostic[] = [];
-private _legacyWarnings: LegacyDiagnostic[] = [];
-```
+Dead legacy code removed:
+- Removed `LegacyDiagnostic` interface
+- Removed `_legacyErrors`, `_legacyWarnings` arrays
+- Removed `addError()`, `addWarning()`, `legacyErrors`, `legacyWarnings`
+- Removed `clearDiagnostics()` (only cleared legacy state)
+- Kept `log()` and `logs` as they ARE actively used (LogPanel, main.ts, RootStore)
 
-**Key observation**: The legacy APIs (`addError`, `addWarning`) are **NOT used anywhere** in application code:
-- No uses in `src/ui/`
-- No uses in `src/compiler/`
-- Only the definition and exports exist
-
-### Impact
-- Dead code adding maintenance burden
-- False impression that legacy API is still needed
-
-### Recommendation
-Delete the unused legacy API since nothing calls it:
-- Remove `LegacyDiagnostic` interface
-- Remove `_legacyErrors`, `_legacyWarnings` arrays
-- Remove `addError()`, `addWarning()`, `legacyErrors`, `legacyWarnings`
-- Remove `clearDiagnostics()` (only clears legacy state)
+**Verification**: TypeScript compiles, all 372 tests pass.
 
 ---
 
@@ -331,8 +317,8 @@ Track if settings panel work is planned; otherwise ignore.
 
 ### Medium Priority (P2) - Plan for backlog
 
-3. **Remove unused DiagnosticsStore legacy API**
-   - [ ] Delete `LegacyDiagnostic` and related code
+3. **Remove unused DiagnosticsStore legacy API** ✅ DONE
+   - [x] Delete `LegacyDiagnostic` and related code
 
 4. **Clean up CompileError**
    - [ ] Remove deprecated `kind`, `location`, `severity` fields

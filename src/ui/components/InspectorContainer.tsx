@@ -9,6 +9,8 @@
  */
 
 import React, { type ReactNode } from 'react';
+import { IconButton } from '@mui/material';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import './InspectorContainer.css';
 
 export interface InspectorContainerProps {
@@ -60,13 +62,23 @@ export const InspectorContainer: React.FC<InspectorContainerProps> = ({
       {/* Optional back button */}
       {onBack && (
         <div className="inspector-back">
-          <button
-            type="button"
-            className="inspector-back-button"
+          <IconButton
             onClick={onBack}
+            size="small"
+            sx={{
+              color: '#888',
+              fontSize: '0.875rem',
+              textTransform: 'none',
+              gap: '4px',
+              '&:hover': {
+                color: '#eee',
+                background: 'rgba(255, 255, 255, 0.05)',
+              },
+            }}
           >
-            ← {backLabel}
-          </button>
+            <ArrowBackIcon fontSize="small" />
+            <span style={{ fontSize: '0.875rem' }}>{backLabel}</span>
+          </IconButton>
         </div>
       )}
 

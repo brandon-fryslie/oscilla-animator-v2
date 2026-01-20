@@ -249,17 +249,12 @@ export function executeFrame(
         );
 
         if (changed) {
-          // DEBUG: Only log when actual change detected
-          const oldDomain = state.continuity.prevDomains.get(instanceId);
-          console.log(`\n[DOMAIN CHANGE] instanceId=${instanceId}, ${oldDomain?.count ?? 'none'} -> ${count}, mapping=${mapping?.kind ?? 'null'}`);
-
           // Store mapping (may be null for crossfade fallback)
           if (mapping) {
             state.continuity.mappings.set(instanceId, mapping);
           } else {
             // No mapping possible - crossfade will handle it
             state.continuity.mappings.delete(instanceId);
-            console.log(`[DOMAIN CHANGE] WARNING: No mapping possible - continuity will be lost!`);
           }
           state.continuity.domainChangeThisFrame = true;
         }

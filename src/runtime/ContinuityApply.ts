@@ -307,7 +307,7 @@ export function initializeSlewWithMapping(
  */
 // Debug flag - set to true to enable logging
 // NOTE: This logs ONLY on domain changes, not every frame
-const DEBUG_CONTINUITY = true;
+const DEBUG_CONTINUITY = false;
 
 export function applyContinuity(
   step: StepContinuityApply,
