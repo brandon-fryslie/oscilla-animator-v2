@@ -15,7 +15,7 @@
  */
 
 import React, { useState } from 'react';
-import { Slider, TextField, Grid, Typography } from '@mui/material';
+import { Slider, TextField, Typography, Box } from '@mui/material';
 
 export interface SliderWithInputProps {
   /** Control label */
@@ -51,7 +51,7 @@ export function SliderWithInput({
   helperText,
   disabled = false,
   unit,
-}: SliderWithInputProps): JSX.Element {
+}: SliderWithInputProps): React.ReactElement {
   // Local state for text field to allow typing without immediate validation
   const [inputValue, setInputValue] = useState<string>(value.toString());
 
@@ -94,8 +94,8 @@ export function SliderWithInput({
 
   return (
     <div style={{ marginBottom: '0.5rem' }}>
-      <Grid container spacing={1} alignItems="center">
-        <Grid item xs>
+      <Box display="flex" alignItems="center" gap={1}>
+        <Box flex={1}>
           <Typography variant="body2" component="label" style={{ display: 'block', marginBottom: '0.25rem' }}>
             {label}
           </Typography>
@@ -109,33 +109,31 @@ export function SliderWithInput({
             valueLabelDisplay="on"
             size="small"
           />
-        </Grid>
-        <Grid item>
-          <TextField
-            value={inputValue}
-            onChange={handleInputChange}
-            onBlur={handleInputBlur}
-            onKeyPress={handleKeyPress}
-            disabled={disabled}
-            size="small"
-            variant="outlined"
-            InputProps={{
-              endAdornment: unit ? (
-                <Typography variant="caption" style={{ marginLeft: '0.25rem', opacity: 0.7 }}>
-                  {unit}
-                </Typography>
-              ) : undefined,
-            }}
-            sx={{
-              width: unit ? '85px' : '65px',
-              '& .MuiInputBase-input': {
-                fontSize: '0.75rem',
-                padding: '0.375rem 0.5rem',
-              },
-            }}
-          />
-        </Grid>
-      </Grid>
+        </Box>
+        <TextField
+          value={inputValue}
+          onChange={handleInputChange}
+          onBlur={handleInputBlur}
+          onKeyPress={handleKeyPress}
+          disabled={disabled}
+          size="small"
+          variant="outlined"
+          InputProps={{
+            endAdornment: unit ? (
+              <Typography variant="caption" style={{ marginLeft: '0.25rem', opacity: 0.7 }}>
+                {unit}
+              </Typography>
+            ) : undefined,
+          }}
+          sx={{
+            width: unit ? '85px' : '65px',
+            '& .MuiInputBase-input': {
+              fontSize: '0.75rem',
+              padding: '0.375rem 0.5rem',
+            },
+          }}
+        />
+      </Box>
       {helperText && (
         <Typography
           variant="caption"

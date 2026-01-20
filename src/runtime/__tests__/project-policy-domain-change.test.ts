@@ -72,6 +72,8 @@ function createTestRuntimeState(): RuntimeState {
     continuity: createContinuityState(),
     continuityConfig: {
       decayExponent: 0.7,
+      baseTauMs: 150,
+      testPulseRequest: null,
       tauMultiplier: 1.0,
     },
   };
