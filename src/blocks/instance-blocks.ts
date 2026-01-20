@@ -35,17 +35,13 @@ registerBlock({
   description: 'Arranges elements in a grid pattern',
   form: 'primitive',
   capability: 'pure',
-  inputs: [
-    { id: 'elements', label: 'Elements', type: signalTypeField('???', 'default') },
-    { id: 'rows', label: 'Rows', type: signalType('int'), defaultValue: 10, defaultSource: defaultSourceConst(10) },
-    { id: 'cols', label: 'Columns', type: signalType('int'), defaultValue: 10, defaultSource: defaultSourceConst(10) },
-  ],
-  outputs: [
-    { id: 'position', label: 'Position', type: signalTypeField('vec2', 'default') },
-  ],
-  params: {
-    rows: 10,
-    cols: 10,
+  inputs: {
+    elements: { label: 'Elements', type: signalTypeField('???', 'default') },
+    rows: { label: 'Rows', type: signalType('int'), value: 10, defaultSource: defaultSourceConst(10) },
+    cols: { label: 'Columns', type: signalType('int'), value: 10, defaultSource: defaultSourceConst(10) },
+  },
+  outputs: {
+    position: { label: 'Position', type: signalTypeField('vec2', 'default') },
   },
   lower: ({ ctx, inputsById, config }) => {
     const elementsInput = inputsById.elements;
@@ -96,15 +92,12 @@ registerBlock({
   description: 'Arranges elements in a linear pattern',
   form: 'primitive',
   capability: 'pure',
-  inputs: [
-    { id: 'elements', label: 'Elements', type: signalTypeField('???', 'default') },
-    { id: 'spacing', label: 'Spacing', type: signalType('float'), defaultValue: 0.1, defaultSource: defaultSourceConst(0.1) },
-  ],
-  outputs: [
-    { id: 'position', label: 'Position', type: signalTypeField('vec2', 'default') },
-  ],
-  params: {
-    spacing: 0.1,
+  inputs: {
+    elements: { label: 'Elements', type: signalTypeField('???', 'default') },
+    spacing: { label: 'Spacing', type: signalType('float'), value: 0.1, defaultSource: defaultSourceConst(0.1) },
+  },
+  outputs: {
+    position: { label: 'Position', type: signalTypeField('vec2', 'default') },
   },
   lower: ({ ctx, inputsById, config }) => {
     const elementsInput = inputsById.elements;

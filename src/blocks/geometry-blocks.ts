@@ -19,15 +19,15 @@ registerBlock({
   description: 'Converts polar coordinates (angle, radius) to cartesian (x, y)',
   form: 'primitive',
   capability: 'pure',
-  inputs: [
-    { id: 'angle', label: 'Angle', type: signalType('float') },
-    { id: 'radius', label: 'Radius', type: signalType('float') },
-    { id: 'centerX', label: 'Center X', type: signalType('float') },
-    { id: 'centerY', label: 'Center Y', type: signalType('float') },
-  ],
-  outputs: [
-    { id: 'pos', label: 'Position', type: signalType('vec2') },
-  ],
+  inputs: {
+    angle: { label: 'Angle', type: signalType('float') },
+    radius: { label: 'Radius', type: signalType('float') },
+    centerX: { label: 'Center X', type: signalType('float') },
+    centerY: { label: 'Center Y', type: signalType('float') },
+  },
+  outputs: {
+    pos: { label: 'Position', type: signalType('vec2') },
+  },
   lower: ({ ctx, inputsById }) => {
     const angle = inputsById.angle;
     const radius = inputsById.radius;
@@ -69,24 +69,20 @@ registerBlock({
   description: 'Arranges domain elements in a circle',
   form: 'primitive',
   capability: 'pure',
-  inputs: [
-    { id: 'radius', label: 'Radius', type: signalType('float') },
-    { id: 'phase', label: 'Phase Offset', type: signalType('float') },
-  ],
-  outputs: [
-    { id: 'pos', label: 'Position', type: signalTypeField('vec2', 'default') },
-    { id: 'angle', label: 'Angle', type: signalTypeField('float', 'default') },
-  ],
-  params: {
-    radius: 100,
-    phaseOffset: 0,
+  inputs: {
+    radius: { label: 'Radius', type: signalType('float'), value: 100 },
+    phase: { label: 'Phase Offset', type: signalType('float'), value: 0 },
+  },
+  outputs: {
+    pos: { label: 'Position', type: signalTypeField('vec2', 'default') },
+    angle: { label: 'Angle', type: signalTypeField('float', 'default') },
   },
   lower: ({ ctx, inputsById, config }) => {
     const radius = inputsById.radius;
     const phase = inputsById.phase;
 
     const radiusValue = config?.radius as number ?? 100;
-    const phaseOffset = config?.phaseOffset as number ?? 0;
+    const phaseOffset = config?.phase as number ?? 0;
 
     // Get instance context from Array block or inferred from inputs
     const instance = ctx.inferredInstance ?? ctx.instance;
@@ -133,15 +129,15 @@ registerBlock({
   description: 'Offsets a position by x and y amounts with optional randomization',
   form: 'primitive',
   capability: 'pure',
-  inputs: [
-    { id: 'posIn', label: 'Position In', type: signalType('vec2') },
-    { id: 'amountX', label: 'Offset X', type: signalType('float') },
-    { id: 'amountY', label: 'Offset Y', type: signalType('float') },
-    { id: 'rand', label: 'Random', type: signalType('float') },
-  ],
-  outputs: [
-    { id: 'posOut', label: 'Position Out', type: signalType('vec2') },
-  ],
+  inputs: {
+    posIn: { label: 'Position In', type: signalType('vec2') },
+    amountX: { label: 'Offset X', type: signalType('float') },
+    amountY: { label: 'Offset Y', type: signalType('float') },
+    rand: { label: 'Random', type: signalType('float') },
+  },
+  outputs: {
+    posOut: { label: 'Position Out', type: signalType('vec2') },
+  },
   lower: ({ ctx, inputsById }) => {
     const pos = inputsById.posIn;
     const amountX = inputsById.amountX;

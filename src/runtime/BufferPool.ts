@@ -31,6 +31,7 @@ export function getBufferFormat(payload: PayloadType): BufferFormat {
     case 'bool':
     case 'unit':
     case 'phase':
+    case 'shape': // TODO: Shape as f32 placeholder for now
       return 'f32';
     // 2D vectors
     case 'vec2':

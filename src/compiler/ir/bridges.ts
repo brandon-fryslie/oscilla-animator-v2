@@ -215,6 +215,11 @@ export function payloadTypeToShapeDescIR(payload: PayloadType): ShapeDescIR {
     case 'bool':
       return { kind: 'bool' };
 
+    case 'shape':
+      // TODO: Shape is a complex type - for now treat as number (size placeholder)
+      // Future: Shape will need its own IR representation with kind + params
+      return { kind: 'number' };
+
     case '???':
       throw new Error(
         `Cannot bridge polymorphic type '???' to runtime shape. ` +

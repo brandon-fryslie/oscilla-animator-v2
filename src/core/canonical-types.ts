@@ -55,6 +55,7 @@ export type PayloadType =
   | 'phase'   // Phase values [0, 1) with wrap semantics
   | 'bool'    // Boolean values
   | 'unit'    // Unit interval [0, 1]
+  | 'shape'   // Shape descriptor (ellipse, rect, path)
   | '???';    // Polymorphic - infer from context (resolved by normalizer)
 
 // =============================================================================

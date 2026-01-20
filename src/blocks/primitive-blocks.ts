@@ -1,8 +1,14 @@
 /**
- * Primitive Blocks
+ * Primitive Blocks - Shape Primitives
  *
- * Primitive blocks create Signal<T> values (Stage 1 of three-stage architecture).
- * These are NOT instances - they have cardinality ONE.
+ * Shape blocks create Signal<shape> values representing drawable shapes.
+ * These map directly to HTML5 Canvas primitives:
+ * - Ellipse (includes circles when rx=ry)
+ * - Rect (rectangles)
+ * - Path (arbitrary paths - future)
+ *
+ * Shapes are NOT fields - they have cardinality ONE.
+ * Use Array to create Field<shape> for many instances.
  */
 
 import {registerBlock} from './registry';
@@ -10,126 +16,130 @@ import {signalType} from '../core/canonical-types';
 import {defaultSourceConst} from '../types';
 
 // =============================================================================
-// Circle
+// Ellipse
 // =============================================================================
 
 /**
- * Circle - Creates a circle primitive (Signal<float> representing radius)
+ * Ellipse - Creates an ellipse shape (circle when rx=ry)
  *
- * Stage 1: Primitive block that outputs a single circle signal.
- * NOT a field - this has cardinality ONE.
+ * Maps directly to Canvas ellipse() API.
+ * For circles, just set rx=ry.
  *
- * To create many circles:
- * 1. Circle → Signal<float> (radius)
- * 2. Array → Field<float> (many radii)
- * 3. GridLayout → Field<vec2> (positions)
- *
- * Note: In the current implementation, a circle is represented by its radius.
- * Future versions may use a composite type.
+ * Outputs a shape signal that can be:
+ * 1. Passed to Array to create many instances
+ * 2. Connected directly to a renderer
  */
 registerBlock({
-    type: 'Circle',
-    label: 'Circle',
+    type: 'Ellipse',
+    label: 'Ellipse',
     category: 'shape',
-    description: 'Creates a circle primitive (ONE element)',
+    description: 'Creates an ellipse shape (circle when rx=ry)',
     form: 'primitive',
     capability: 'pure',
-    inputs: [
-        {
-            id: 'radius',
-            label: 'Radius',
+    inputs: {
+        rx: {
+            label: 'Radius X',
             type: signalType('float'),
-            defaultValue: 0.02,
-            defaultSource: defaultSourceConst(0.02)
-        },
-    ],
-    outputs: [
-        {id: 'circle', label: 'Circle', type: signalType('float')},
-    ],
-    params: {
-        radius: 0.02,
-    },
-    lower: ({ctx, inputsById, config}) => {
-        const radiusInput = inputsById.radius;
-
-        // Get radius signal - either from input or from config
-        let radiusSig;
-        if (radiusInput && radiusInput.k === 'sig') {
-            radiusSig = radiusInput.id;
-        } else {
-            radiusSig = ctx.b.sigConst((config?.radius as number) ?? 0.02, signalType('float'));
-        }
-
-        const slot = ctx.b.allocSlot();
-
-        // Output the radius signal as the "circle" signal
-        return {
-            outputsById: {
-                circle: {k: 'sig', id: radiusSig, slot},
-            },
-        };
-    },
-});
-
-// =============================================================================
-// Square
-// =============================================================================
-
-/**
- * Square - Creates a square primitive (Signal<float> representing size)
- *
- * Stage 1: Primitive block that outputs a single square signal.
- * NOT a field - this has cardinality ONE.
- *
- * To create many squares:
- * 1. Square → Signal<float> (size)
- * 2. Array → Field<float> (many sizes)
- * 3. GridLayout → Field<vec2> (positions)
- *
- * Note: In the current implementation, a square is represented by its size.
- * Future versions may use a composite type.
- */
-registerBlock({
-    type: 'Square',
-    label: 'Square',
-    category: 'shape',
-    description: 'Creates a square primitive (ONE element)',
-    form: 'primitive',
-    capability: 'pure',
-    inputs: [
-        {
-            id: 'size',
-            label: 'Size',
-            type: signalType('float'),
-            defaultValue: 0.02,
+            value: 0.02,
             defaultSource: defaultSourceConst(0.02),
-            uiHint: {kind: 'slider', min: 0.01, max: 0.5, step: 0.01},
+            uiHint: {kind: 'slider', min: 0.001, max: 0.5, step: 0.001},
         },
-    ],
-    outputs: [
-        {id: 'square', label: 'Square', type: signalType('float')},
-    ],
-    params: {
-        size: 0.02,
+        ry: {
+            label: 'Radius Y',
+            type: signalType('float'),
+            value: 0.02,
+            defaultSource: defaultSourceConst(0.02),
+            uiHint: {kind: 'slider', min: 0.001, max: 0.5, step: 0.001},
+        },
+    },
+    outputs: {
+        shape: {label: 'Shape', type: signalType('shape')},
     },
     lower: ({ctx, inputsById, config}) => {
-        const sizeInput = inputsById.size;
-
-        // Get size signal - either from input or from config
-        let sizeSig;
-        if (sizeInput && sizeInput.k === 'sig') {
-            sizeSig = sizeInput.id;
+        // For now, output rx as a placeholder until shape type is fully implemented
+        // TODO: Output proper shape descriptor when shape type exists
+        const rxInput = inputsById.rx;
+        let rxSig;
+        if (rxInput && rxInput.k === 'sig') {
+            rxSig = rxInput.id;
         } else {
-            sizeSig = ctx.b.sigConst((config?.size as number) ?? 0.02, signalType('float'));
+            rxSig = ctx.b.sigConst((config?.rx as number) ?? 0.02, signalType('float'));
         }
 
         const slot = ctx.b.allocSlot();
 
-        // Output the size signal as the "square" signal
         return {
             outputsById: {
-                square: {k: 'sig', id: sizeSig, slot},
+                shape: {k: 'sig', id: rxSig, slot},
             },
         };
     },
 });
+
+// =============================================================================
+// Rect
+// =============================================================================
+
+/**
+ * Rect - Creates a rectangle shape
+ *
+ * Maps directly to Canvas fillRect()/strokeRect() API.
+ * For squares, just set width=height.
+ *
+ * Outputs a shape signal that can be:
+ * 1. Passed to Array to create many instances
+ * 2. Connected directly to a renderer
+ */
+registerBlock({
+    type: 'Rect',
+    label: 'Rect',
+    category: 'shape',
+    description: 'Creates a rectangle shape (square when width=height)',
+    form: 'primitive',
+    capability: 'pure',
+    inputs: {
+        width: {
+            label: 'Width',
+            type: signalType('float'),
+            value: 0.04,
+            defaultSource: defaultSourceConst(0.04),
+            uiHint: {kind: 'slider', min: 0.001, max: 0.5, step: 0.001},
+        },
+        height: {
+            label: 'Height',
+            type: signalType('float'),
+            value: 0.02,
+            defaultSource: defaultSourceConst(0.02),
+            uiHint: {kind: 'slider', min: 0.001, max: 0.5, step: 0.001},
+        },
+    },
+    outputs: {
+        shape: {label: 'Shape', type: signalType('shape')},
+    },
+    lower: ({ctx, inputsById, config}) => {
+        // For now, output width as a placeholder until shape type is fully implemented
+        // TODO: Output proper shape descriptor when shape type exists
+        const widthInput = inputsById.width;
+        let widthSig;
+        if (widthInput && widthInput.k === 'sig') {
+            widthSig = widthInput.id;
+        } else {
+            widthSig = ctx.b.sigConst((config?.width as number) ?? 0.04, signalType('float'));
+        }
+
+        const slot = ctx.b.allocSlot();
+
+        return {
+            outputsById: {
+                shape: {k: 'sig', id: widthSig, slot},
+            },
+        };
+    },
+});
+
+// =============================================================================
+// Path (Future)
+// =============================================================================
+
+// TODO: Path block for arbitrary shapes via canvas path commands
+// Will support: moveTo, lineTo, quadraticCurveTo, bezierCurveTo, arc, closePath

@@ -20,13 +20,12 @@ registerBlock({
   description: 'Generates normalized (0..1) ID for each element in a domain',
   form: 'primitive',
   capability: 'identity',
-  inputs: [
-    { id: 'domain', label: 'Domain', type: signalType('int') }, // Domain count
-  ],
-  outputs: [
-    { id: 'id01', label: 'ID (0..1)', type: signalTypeField('float', 'default') },
-  ],
-  params: {},
+  inputs: {
+    domain: { label: 'Domain', type: signalType('int') }, // Domain count
+  },
+  outputs: {
+    id01: { label: 'ID (0..1)', type: signalTypeField('float', 'default') },
+  },
   lower: ({ ctx }) => {
     // Get instance context from Array block or inferred from inputs
     const instance = ctx.inferredInstance ?? ctx.instance;
@@ -59,14 +58,13 @@ registerBlock({
   description: 'Per-element addition of two fields',
   form: 'primitive',
   capability: 'pure',
-  inputs: [
-    { id: 'a', label: 'A', type: signalTypeField('float', 'default') },
-    { id: 'b', label: 'B', type: signalTypeField('float', 'default') },
-  ],
-  outputs: [
-    { id: 'out', label: 'Output', type: signalTypeField('float', 'default') },
-  ],
-  params: {},
+  inputs: {
+    a: { label: 'A', type: signalTypeField('float', 'default') },
+    b: { label: 'B', type: signalTypeField('float', 'default') },
+  },
+  outputs: {
+    out: { label: 'Output', type: signalTypeField('float', 'default') },
+  },
   lower: ({ ctx, inputsById }) => {
     const a = inputsById.a;
     const b = inputsById.b;
@@ -100,14 +98,13 @@ registerBlock({
   description: 'Per-element multiplication of two fields',
   form: 'primitive',
   capability: 'pure',
-  inputs: [
-    { id: 'a', label: 'A', type: signalTypeField('float', 'default') },
-    { id: 'b', label: 'B', type: signalTypeField('float', 'default') },
-  ],
-  outputs: [
-    { id: 'result', label: 'Result', type: signalTypeField('float', 'default') },
-  ],
-  params: {},
+  inputs: {
+    a: { label: 'A', type: signalTypeField('float', 'default') },
+    b: { label: 'B', type: signalTypeField('float', 'default') },
+  },
+  outputs: {
+    result: { label: 'Result', type: signalTypeField('float', 'default') },
+  },
   lower: ({ ctx, inputsById }) => {
     const a = inputsById.a;
     const b = inputsById.b;
@@ -141,14 +138,13 @@ registerBlock({
   description: 'Scale a field by a signal',
   form: 'primitive',
   capability: 'pure',
-  inputs: [
-    { id: 'field', label: 'Field', type: signalTypeField('float', 'default') },
-    { id: 'scale', label: 'Scale', type: signalType('float'), defaultSource: defaultSourceConst(1.0) },
-  ],
-  outputs: [
-    { id: 'result', label: 'Result', type: signalTypeField('float', 'default') },
-  ],
-  params: {},
+  inputs: {
+    field: { label: 'Field', type: signalTypeField('float', 'default') },
+    scale: { label: 'Scale', type: signalType('float'), defaultSource: defaultSourceConst(1.0) },
+  },
+  outputs: {
+    result: { label: 'Result', type: signalTypeField('float', 'default') },
+  },
   lower: ({ ctx, inputsById }) => {
     const field = inputsById.field;
     const scale = inputsById.scale;
@@ -185,13 +181,12 @@ registerBlock({
   description: 'Per-element sine of a field',
   form: 'primitive',
   capability: 'pure',
-  inputs: [
-    { id: 'input', label: 'Input', type: signalTypeField('float', 'default') },
-  ],
-  outputs: [
-    { id: 'result', label: 'Result', type: signalTypeField('float', 'default') },
-  ],
-  params: {},
+  inputs: {
+    input: { label: 'Input', type: signalTypeField('float', 'default') },
+  },
+  outputs: {
+    result: { label: 'Result', type: signalTypeField('float', 'default') },
+  },
   lower: ({ ctx, inputsById }) => {
     const input = inputsById.input;
 
@@ -224,13 +219,12 @@ registerBlock({
   description: 'Per-element cosine of a field',
   form: 'primitive',
   capability: 'pure',
-  inputs: [
-    { id: 'input', label: 'Input', type: signalTypeField('float', 'default') },
-  ],
-  outputs: [
-    { id: 'result', label: 'Result', type: signalTypeField('float', 'default') },
-  ],
-  params: {},
+  inputs: {
+    input: { label: 'Input', type: signalTypeField('float', 'default') },
+  },
+  outputs: {
+    result: { label: 'Result', type: signalTypeField('float', 'default') },
+  },
   lower: ({ ctx, inputsById }) => {
     const input = inputsById.input;
 
@@ -263,14 +257,13 @@ registerBlock({
   description: 'Per-element modulo of two fields',
   form: 'primitive',
   capability: 'pure',
-  inputs: [
-    { id: 'a', label: 'A', type: signalTypeField('float', 'default') },
-    { id: 'b', label: 'B', type: signalTypeField('float', 'default') },
-  ],
-  outputs: [
-    { id: 'result', label: 'Result', type: signalTypeField('float', 'default') },
-  ],
-  params: {},
+  inputs: {
+    a: { label: 'A', type: signalTypeField('float', 'default') },
+    b: { label: 'B', type: signalTypeField('float', 'default') },
+  },
+  outputs: {
+    result: { label: 'Result', type: signalTypeField('float', 'default') },
+  },
   lower: ({ ctx, inputsById }) => {
     const a = inputsById.a;
     const b = inputsById.b;
@@ -304,16 +297,15 @@ registerBlock({
   description: 'Convert polar coordinates (angle, radius) to Cartesian (x, y)',
   form: 'primitive',
   capability: 'pure',
-  inputs: [
-    { id: 'angle', label: 'Angle', type: signalTypeField('float', 'default') },
-    { id: 'radius', label: 'Radius', type: signalTypeField('float', 'default') },
-    { id: 'centerX', label: 'Center X', type: signalType('float'), optional: true, defaultValue: 0.5, defaultSource: defaultSourceConst(0.5) },
-    { id: 'centerY', label: 'Center Y', type: signalType('float'), optional: true, defaultValue: 0.5, defaultSource: defaultSourceConst(0.5) },
-  ],
-  outputs: [
-    { id: 'pos', label: 'Position', type: signalTypeField('vec2', 'default') },
-  ],
-  params: {},
+  inputs: {
+    angle: { label: 'Angle', type: signalTypeField('float', 'default') },
+    radius: { label: 'Radius', type: signalTypeField('float', 'default') },
+    centerX: { label: 'Center X', type: signalType('float'), optional: true, value: 0.5, defaultSource: defaultSourceConst(0.5) },
+    centerY: { label: 'Center Y', type: signalType('float'), optional: true, value: 0.5, defaultSource: defaultSourceConst(0.5) },
+  },
+  outputs: {
+    pos: { label: 'Position', type: signalTypeField('vec2', 'default') },
+  },
   lower: ({ ctx, inputsById }) => {
     const angle = inputsById.angle;
     const radius = inputsById.radius;
@@ -364,16 +356,15 @@ registerBlock({
   description: 'Convert Cartesian coordinates (x, y) to polar (angle, radius)',
   form: 'primitive',
   capability: 'pure',
-  inputs: [
-    { id: 'pos', label: 'Position', type: signalTypeField('vec2', 'default') },
-    { id: 'centerX', label: 'Center X', type: signalType('float'), optional: true, defaultValue: 0.5, defaultSource: defaultSourceConst(0.5) },
-    { id: 'centerY', label: 'Center Y', type: signalType('float'), optional: true, defaultValue: 0.5, defaultSource: defaultSourceConst(0.5) },
-  ],
-  outputs: [
-    { id: 'angle', label: 'Angle', type: signalTypeField('float', 'default') },
-    { id: 'radius', label: 'Radius', type: signalTypeField('float', 'default') },
-  ],
-  params: {},
+  inputs: {
+    pos: { label: 'Position', type: signalTypeField('vec2', 'default') },
+    centerX: { label: 'Center X', type: signalType('float'), optional: true, value: 0.5, defaultSource: defaultSourceConst(0.5) },
+    centerY: { label: 'Center Y', type: signalType('float'), optional: true, value: 0.5, defaultSource: defaultSourceConst(0.5) },
+  },
+  outputs: {
+    angle: { label: 'Angle', type: signalTypeField('float', 'default') },
+    radius: { label: 'Radius', type: signalTypeField('float', 'default') },
+  },
   lower: ({ ctx, inputsById }) => {
     const pos = inputsById.pos;
     const centerX = inputsById.centerX;
@@ -429,18 +420,17 @@ registerBlock({
   description: 'Per-element pulsing animation based on phase and spread',
   form: 'primitive',
   capability: 'pure',
-  inputs: [
-    { id: 'id01', label: 'ID (0..1)', type: signalTypeField('float', 'default') },
+  inputs: {
+    id01: { label: 'ID (0..1)', type: signalTypeField('float', 'default') },
     // Phase input expects normalized time cycle [0, 1)
-    { id: 'phase', label: 'Phase', type: signalType('phase'), defaultSource: defaultSourceTimeRoot('phaseA') },
-    { id: 'base', label: 'Base', type: signalType('float'), defaultSource: defaultSourceConst(0.5) },
-    { id: 'amplitude', label: 'Amplitude', type: signalType('float'), defaultSource: defaultSourceConst(1.0) },
-    { id: 'spread', label: 'Spread', type: signalType('float'), defaultSource: defaultSourceConst(1.0) },
-  ],
-  outputs: [
-    { id: 'value', label: 'Value', type: signalTypeField('float', 'default') },
-  ],
-  params: {},
+    phase: { label: 'Phase', type: signalType('phase'), defaultSource: defaultSourceTimeRoot('phaseA') },
+    base: { label: 'Base', type: signalType('float'), defaultSource: defaultSourceConst(0.5) },
+    amplitude: { label: 'Amplitude', type: signalType('float'), defaultSource: defaultSourceConst(1.0) },
+    spread: { label: 'Spread', type: signalType('float'), defaultSource: defaultSourceConst(1.0) },
+  },
+  outputs: {
+    value: { label: 'Value', type: signalTypeField('float', 'default') },
+  },
   lower: ({ ctx, inputsById }) => {
     const id01 = inputsById.id01;
     const phase = inputsById.phase;
@@ -494,13 +484,13 @@ registerBlock({
   description: 'Generate golden angle distribution for each element',
   form: 'primitive',
   capability: 'pure',
-  inputs: [
-    { id: 'id01', label: 'ID (0..1)', type: signalTypeField('float', 'default') },
-  ],
-  outputs: [
-    { id: 'angle', label: 'Angle', type: signalTypeField('float', 'default') },
-  ],
-  params: { turns: 50 },
+  inputs: {
+    id01: { label: 'ID (0..1)', type: signalTypeField('float', 'default') },
+    turns: { label: 'Turns', type: signalType('float'), value: 50, exposedAsPort: false, hidden: true },
+  },
+  outputs: {
+    angle: { label: 'Angle', type: signalTypeField('float', 'default') },
+  },
   lower: ({ ctx, inputsById, config }) => {
     const id01 = inputsById.id01;
 
@@ -536,16 +526,15 @@ registerBlock({
   description: 'Per-element angular offset based on phase and spin',
   form: 'primitive',
   capability: 'pure',
-  inputs: [
-    { id: 'id01', label: 'ID (0..1)', type: signalTypeField('float', 'default') },
+  inputs: {
+    id01: { label: 'ID (0..1)', type: signalTypeField('float', 'default') },
     // Phase input expects normalized time cycle [0, 1)
-    { id: 'phase', label: 'Phase', type: signalType('phase'), defaultSource: defaultSourceTimeRoot('phaseA') },
-    { id: 'spin', label: 'Spin', type: signalType('float'), defaultSource: defaultSourceConst(1.0) },
-  ],
-  outputs: [
-    { id: 'offset', label: 'Offset', type: signalTypeField('float', 'default') },
-  ],
-  params: {},
+    phase: { label: 'Phase', type: signalType('phase'), defaultSource: defaultSourceTimeRoot('phaseA') },
+    spin: { label: 'Spin', type: signalType('float'), defaultSource: defaultSourceConst(1.0) },
+  },
+  outputs: {
+    offset: { label: 'Offset', type: signalTypeField('float', 'default') },
+  },
   lower: ({ ctx, inputsById }) => {
     const id01 = inputsById.id01;
     const phase = inputsById.phase;
@@ -593,14 +582,13 @@ registerBlock({
   description: 'Square root radius distribution for even area coverage',
   form: 'primitive',
   capability: 'pure',
-  inputs: [
-    { id: 'id01', label: 'ID (0..1)', type: signalTypeField('float', 'default') },
-    { id: 'radius', label: 'Radius', type: signalTypeField('float', 'default'), defaultSource: defaultSourceConst(0.35) },
-  ],
-  outputs: [
-    { id: 'out', label: 'Radius', type: signalTypeField('float', 'default') },
-  ],
-  params: {},
+  inputs: {
+    id01: { label: 'ID (0..1)', type: signalTypeField('float', 'default') },
+    radius: { label: 'Radius', type: signalTypeField('float', 'default'), defaultSource: defaultSourceConst(0.35) },
+  },
+  outputs: {
+    out: { label: 'Radius', type: signalTypeField('float', 'default') },
+  },
   lower: ({ ctx, inputsById }) => {
     const id01 = inputsById.id01;
     const radius = inputsById.radius;
@@ -643,16 +631,15 @@ registerBlock({
   description: 'Add per-element random jitter to 2D positions',
   form: 'primitive',
   capability: 'pure',
-  inputs: [
-    { id: 'pos', label: 'Position', type: signalTypeField('vec2', 'default') },
-    { id: 'rand', label: 'Random', type: signalTypeField('float', 'default') },
-    { id: 'amountX', label: 'Amount X', type: signalType('float'), defaultSource: defaultSourceConst(0.01) },
-    { id: 'amountY', label: 'Amount Y', type: signalType('float'), defaultSource: defaultSourceConst(0.01) },
-  ],
-  outputs: [
-    { id: 'out', label: 'Position', type: signalTypeField('vec2', 'default') },
-  ],
-  params: {},
+  inputs: {
+    pos: { label: 'Position', type: signalTypeField('vec2', 'default') },
+    rand: { label: 'Random', type: signalTypeField('float', 'default') },
+    amountX: { label: 'Amount X', type: signalType('float'), defaultSource: defaultSourceConst(0.01) },
+    amountY: { label: 'Amount Y', type: signalType('float'), defaultSource: defaultSourceConst(0.01) },
+  },
+  outputs: {
+    out: { label: 'Position', type: signalTypeField('vec2', 'default') },
+  },
   lower: ({ ctx, inputsById }) => {
     const pos = inputsById.pos;
     const rand = inputsById.rand;
@@ -704,15 +691,14 @@ registerBlock({
   description: 'Generate per-element hue values from phase and ID',
   form: 'primitive',
   capability: 'pure',
-  inputs: [
-    { id: 'id01', label: 'ID (0..1)', type: signalTypeField('float', 'default') },
+  inputs: {
+    id01: { label: 'ID (0..1)', type: signalTypeField('float', 'default') },
     // Phase input expects normalized time cycle [0, 1)
-    { id: 'phase', label: 'Phase', type: signalType('phase'), defaultSource: defaultSourceTimeRoot('phaseA') },
-  ],
-  outputs: [
-    { id: 'hue', label: 'Hue', type: signalTypeField('float', 'default') },
-  ],
-  params: {},
+    phase: { label: 'Phase', type: signalType('phase'), defaultSource: defaultSourceTimeRoot('phaseA') },
+  },
+  outputs: {
+    hue: { label: 'Hue', type: signalTypeField('float', 'default') },
+  },
   lower: ({ ctx, inputsById }) => {
     const id01 = inputsById.id01;
     const phase = inputsById.phase;

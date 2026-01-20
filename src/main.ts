@@ -49,7 +49,7 @@ function log(msg: string, level: 'info' | 'warn' | 'error' = 'info') {
 
 type PatchBuilder = (b: any) => void;
 
-// Original patch - using three-stage architecture: Circle → Array → GridLayout
+// Original patch - using three-stage architecture: Ellipse → Array → GridLayout
 // Explicit wiring for all inputs (adapter pass not implemented yet)
 const patchOriginal: PatchBuilder = (b) => {
   const time = b.addBlock('InfiniteTimeRoot',
@@ -57,16 +57,12 @@ const patchOriginal: PatchBuilder = (b) => {
     { role: timeRootRole() }
   );
 
-  // Three-stage architecture:
-  // 1. Circle (primitive) → Signal<float>
-  // 2. Array (cardinality) → Field<float>
-  // 3. GridLayout (operation) → Field<vec2>
-  const circle = b.addBlock('Square');
+  const ellipse = b.addBlock('Ellipse', { rx: 0.02, ry: 0.02 });
   const array = b.addBlock('Array', { count: 5000 });
   const layout = b.addBlock('GridLayout', { rows: 71, cols: 71 });
 
-  // Wire Circle → Array → GridLayout
-  b.wire(circle, 'circle', array, 'element');
+  // Wire Ellipse → Array → GridLayout
+  b.wire(ellipse, 'shape', array, 'element');
   b.wire(array, 'elements', layout, 'elements');
 
   const goldenAngle = b.addBlock('FieldGoldenAngle', { turns: 50 });

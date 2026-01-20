@@ -25,6 +25,7 @@ export const TYPE_COLORS: Record<PayloadType, string> = {
   phase: '#06b6d4',   // Cyan
   bool: '#f97316',    // Orange
   unit: '#a855f7',    // Purple
+  shape: '#facc15',   // Yellow
   '???': '#9ca3af',   // Gray (polymorphic)
 };
 

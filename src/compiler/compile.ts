@@ -108,12 +108,43 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
     const normResult = normalize(patch);
 
     if (normResult.kind === 'error') {
-      const compileErrors: CompileError[] = normResult.errors.map((e) => ({
-        kind: e.kind,
-        message: e.kind === 'DanglingEdge'
-          ? `Edge references missing block (${e.missing})`
-          : `Duplicate block ID: ${(e as any).id}`,
-      }));
+      const compileErrors: CompileError[] = normResult.errors.map((e) => {
+        switch (e.kind) {
+          case 'DanglingEdge':
+            return {
+              kind: e.kind,
+              message: `Edge references missing block (${e.missing})`,
+              blockId: e.edge.from.blockId,
+            };
+          case 'DuplicateBlockId':
+            return {
+              kind: e.kind,
+              message: `Duplicate block ID: ${e.id}`,
+              blockId: e.id,
+            };
+          case 'UnknownPort':
+            return {
+              kind: 'UnknownBlockType',
+              message: `Port '${e.portId}' does not exist on block '${e.blockId}' (${e.direction})`,
+              blockId: e.blockId,
+              portId: e.portId,
+            };
+          case 'NoAdapterFound':
+            return {
+              kind: 'TypeMismatch',
+              message: `No adapter found for type conversion: ${e.fromType} → ${e.toType}`,
+              blockId: e.edge.to.blockId,
+              portId: e.edge.to.slotId,
+            };
+          default: {
+            const _exhaustive: never = e;
+            return {
+              kind: 'UnknownBlockType',
+              message: `Unknown normalization error: ${JSON.stringify(_exhaustive)}`,
+            };
+          }
+        }
+      });
 
       return emitFailure(options, startTime, compileId, compileErrors);
     }

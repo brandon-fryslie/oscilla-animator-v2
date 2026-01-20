@@ -323,6 +323,7 @@ export class DiagnosticHub {
    *
    * "Active" means:
    * - Compile diagnostics for activeRevision (if available)
+   * - OR compile diagnostics for pendingCompileRevision (if compile failed, no ProgramSwapped)
    * - Authoring diagnostics (always current)
    * - Runtime diagnostics (current session)
    *
@@ -333,7 +334,21 @@ export class DiagnosticHub {
     const seen = new Set<string>();
 
     // Add compile diagnostics for active revision
-    const compileDiags = this.compileSnapshots.get(this.activeRevision);
+    let compileDiags = this.compileSnapshots.get(this.activeRevision);
+
+    // If no diagnostics for active revision, check for failed compile at pending revision
+    // This handles the case where compilation failed (no ProgramSwapped emitted)
+    if (!compileDiags && this.pendingCompileRevision !== null) {
+      compileDiags = this.compileSnapshots.get(this.pendingCompileRevision);
+    }
+
+    // Also check for the most recent compile snapshot if we still have nothing
+    // This ensures compile errors are visible even if revision tracking is off
+    if (!compileDiags && this.compileSnapshots.size > 0) {
+      const maxRevision = Math.max(...this.compileSnapshots.keys());
+      compileDiags = this.compileSnapshots.get(maxRevision);
+    }
+
     if (compileDiags) {
       for (const diag of compileDiags) {
         result.push(diag);

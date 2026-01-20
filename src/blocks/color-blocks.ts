@@ -25,9 +25,6 @@ registerBlock({
     hue: { label: 'Hue Offset', type: signalType('float') },
     sat: { label: 'Saturation', type: signalType('float') },
     val: { label: 'Value', type: signalType('float') },
-    hueOffset: { value: 0, exposedAsPort: false },
-    saturation: { value: 1.0, exposedAsPort: false },
-    value: { value: 1.0, exposedAsPort: false },
   },
   outputs: {
     color: { label: 'Color', type: signalType('color') },

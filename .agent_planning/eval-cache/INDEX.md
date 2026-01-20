@@ -2,13 +2,21 @@
 
 **Purpose:** Reusable evaluation findings to speed up future work evaluations.
 
-**Last Updated:** 2026-01-20 02:30:00
+**Last Updated:** 2026-01-20 05:48:46
 
 ---
 
 ## Available Cache Files
 
 ### Runtime Findings
+
+**runtime-unit-annotations.md** [NEW - FRESH]
+- Scope: unit-safe-types/unit-annotations
+- Status: Implementation complete, all DoD criteria met and exceeded
+- Confidence: FRESH (2026-01-20 05:48:46)
+- Reusable: Unit validation behavior, kernel signatures, test patterns, migration guide
+- Key findings: 8-unit taxonomy, Pass 2 validation, 28 kernel signatures, backwards compatible
+- Next evaluation: Check if canonical-types.ts, pass2-types.ts, or kernel-signatures.ts changed
 
 **runtime-continuity-controls-v2.md** [UPDATED - STALE]
 - Scope: continuity-controls-v2
@@ -68,6 +76,17 @@
 ---
 
 ## Invalidated Cache
+
+### 2026-01-20 05:48:46 - Sprint 2: Unit Annotation System (unit-safe-types)
+**Added:**
+- runtime-unit-annotations.md - Complete unit validation system with 8-unit taxonomy
+
+**Key Capabilities:**
+- NumericUnit type system (phase, radians, normalized, scalar, ms, #, degrees, seconds)
+- Pass 2 unit validation (checkUnitCompatibility)
+- 28 kernel signatures in kernel-signatures.ts
+- Backwards compatible (optional units)
+- Zero runtime cost (units erased at compile time)
 
 ### 2026-01-20 02:30:00 - Sprint 3: Port Interaction UI (port-interaction)
 **Removed:**

@@ -20,13 +20,13 @@ registerBlock({
   description: 'Adds two signals',
   form: 'primitive',
   capability: 'pure',
-  inputs: [
-    { id: 'a', label: 'A', type: signalType('float') },
-    { id: 'b', label: 'B', type: signalType('float') },
-  ],
-  outputs: [
-    { id: 'out', label: 'Output', type: signalType('float') },
-  ],
+  inputs: {
+    a: { label: 'A', type: signalType('float') },
+    b: { label: 'B', type: signalType('float') },
+  },
+  outputs: {
+    out: { label: 'Output', type: signalType('float') },
+  },
   lower: ({ ctx, inputsById }) => {
     const a = inputsById.a;
     const b = inputsById.b;
@@ -58,13 +58,13 @@ registerBlock({
   description: 'Subtracts two signals',
   form: 'primitive',
   capability: 'pure',
-  inputs: [
-    { id: 'a', label: 'A', type: signalType('float') },
-    { id: 'b', label: 'B', type: signalType('float') },
-  ],
-  outputs: [
-    { id: 'out', label: 'Output', type: signalType('float') },
-  ],
+  inputs: {
+    a: { label: 'A', type: signalType('float') },
+    b: { label: 'B', type: signalType('float') },
+  },
+  outputs: {
+    out: { label: 'Output', type: signalType('float') },
+  },
   lower: ({ ctx, inputsById }) => {
     const a = inputsById.a;
     const b = inputsById.b;
@@ -96,13 +96,13 @@ registerBlock({
   description: 'Multiplies two signals',
   form: 'primitive',
   capability: 'pure',
-  inputs: [
-    { id: 'a', label: 'A', type: signalType('float') },
-    { id: 'b', label: 'B', type: signalType('float') },
-  ],
-  outputs: [
-    { id: 'out', label: 'Output', type: signalType('float') },
-  ],
+  inputs: {
+    a: { label: 'A', type: signalType('float') },
+    b: { label: 'B', type: signalType('float') },
+  },
+  outputs: {
+    out: { label: 'Output', type: signalType('float') },
+  },
   lower: ({ ctx, inputsById }) => {
     const a = inputsById.a;
     const b = inputsById.b;
@@ -134,13 +134,13 @@ registerBlock({
   description: 'Divides two signals',
   form: 'primitive',
   capability: 'pure',
-  inputs: [
-    { id: 'a', label: 'A', type: signalType('float') },
-    { id: 'b', label: 'B', type: signalType('float') },
-  ],
-  outputs: [
-    { id: 'out', label: 'Output', type: signalType('float') },
-  ],
+  inputs: {
+    a: { label: 'A', type: signalType('float') },
+    b: { label: 'B', type: signalType('float') },
+  },
+  outputs: {
+    out: { label: 'Output', type: signalType('float') },
+  },
   lower: ({ ctx, inputsById }) => {
     const a = inputsById.a;
     const b = inputsById.b;
@@ -172,13 +172,13 @@ registerBlock({
   description: 'Computes modulo of two signals',
   form: 'primitive',
   capability: 'pure',
-  inputs: [
-    { id: 'a', label: 'A', type: signalType('float') },
-    { id: 'b', label: 'B', type: signalType('float') },
-  ],
-  outputs: [
-    { id: 'out', label: 'Output', type: signalType('float') },
-  ],
+  inputs: {
+    a: { label: 'A', type: signalType('float') },
+    b: { label: 'B', type: signalType('float') },
+  },
+  outputs: {
+    out: { label: 'Output', type: signalType('float') },
+  },
   lower: ({ ctx, inputsById }) => {
     const a = inputsById.a;
     const b = inputsById.b;

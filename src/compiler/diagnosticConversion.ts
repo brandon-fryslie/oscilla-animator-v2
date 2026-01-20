@@ -33,9 +33,10 @@ const ERROR_KIND_TO_CODE: Record<string, DiagnosticCode> = {
   TypeMismatch: 'E_TYPE_MISMATCH',
   CycleDetected: 'E_CYCLE_DETECTED',
   MissingInput: 'E_MISSING_INPUT',
-  DanglingEdge: 'E_UNKNOWN_BLOCK_TYPE', // Treat as unknown block (edge references non-existent block)
-  DuplicateBlockId: 'E_UNKNOWN_BLOCK_TYPE', // Treat as structural issue
+  DanglingEdge: 'E_MISSING_INPUT', // Edge references non-existent block
+  DuplicateBlockId: 'E_CYCLE_DETECTED', // Structural issue (reuse cycle code for now)
   LoweringError: 'E_UNKNOWN_BLOCK_TYPE', // Generic fallback
+  UnknownPort: 'E_UNKNOWN_BLOCK_TYPE', // Port not found (block type may not be registered)
 };
 
 // =============================================================================

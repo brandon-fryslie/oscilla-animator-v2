@@ -24,15 +24,12 @@ registerBlock({
   description: 'Renders circles at positions with color and size',
   form: 'primitive',
   capability: 'render',
-  inputs: [
-    { id: 'pos', label: 'Position', type: signalTypeField('vec2', 'default') },
-    { id: 'color', label: 'Color', type: signalTypeField('color', 'default') },
-    { id: 'size', label: 'Size', type: signalTypeField('float', 'default'), defaultSource: defaultSourceConst(5) },
-  ],
-  outputs: [],
-  params: {
-    defaultSize: 10,
+  inputs: {
+    pos: { label: 'Position', type: signalTypeField('vec2', 'default') },
+    color: { label: 'Color', type: signalTypeField('color', 'default') },
+    size: { label: 'Size', type: signalTypeField('float', 'default'), defaultSource: defaultSourceConst(5) },
   },
+  outputs: {},
   lower: ({ ctx, inputsById, config }) => {
     const pos = inputsById.pos;
     const color = inputsById.color;
@@ -72,17 +69,13 @@ registerBlock({
   description: 'Renders rectangles at positions with color and size',
   form: 'primitive',
   capability: 'render',
-  inputs: [
-    { id: 'pos', label: 'Position', type: signalTypeField('vec2', 'default') },
-    { id: 'color', label: 'Color', type: signalTypeField('color', 'default') },
-    { id: 'width', label: 'Width', type: signalTypeField('float', 'default'), defaultSource: defaultSourceConst(10) },
-    { id: 'height', label: 'Height', type: signalTypeField('float', 'default'), defaultSource: defaultSourceConst(10) },
-  ],
-  outputs: [],
-  params: {
-    defaultWidth: 10,
-    defaultHeight: 10,
+  inputs: {
+    pos: { label: 'Position', type: signalTypeField('vec2', 'default') },
+    color: { label: 'Color', type: signalTypeField('color', 'default') },
+    width: { label: 'Width', type: signalTypeField('float', 'default'), defaultSource: defaultSourceConst(10) },
+    height: { label: 'Height', type: signalTypeField('float', 'default'), defaultSource: defaultSourceConst(10) },
   },
+  outputs: {},
   lower: ({ ctx, inputsById, config }) => {
     const pos = inputsById.pos;
     const color = inputsById.color;
@@ -123,13 +116,13 @@ registerBlock({
   description: 'Renders 2D instances (particles/sprites) at positions with color and size',
   form: 'primitive',
   capability: 'render',
-  inputs: [
-    { id: 'pos', label: 'Position', type: signalTypeField('vec2', 'default') },
-    { id: 'color', label: 'Color', type: signalTypeField('color', 'default') },
-    { id: 'size', label: 'Size', type: signalTypeField('float', 'default'), defaultSource: defaultSourceConst(5) },
-    { id: 'shape', label: 'Shape', type: signalType('int'), defaultSource: defaultSourceConst(0) }, // 0=circle, 1=square, 2=triangle
-  ],
-  outputs: [],
+  inputs: {
+    pos: { label: 'Position', type: signalTypeField('vec2', 'default') },
+    color: { label: 'Color', type: signalTypeField('color', 'default') },
+    size: { label: 'Size', type: signalTypeField('float', 'default'), defaultSource: defaultSourceConst(5) },
+    shape: { label: 'Shape', type: signalType('int'), defaultSource: defaultSourceConst(0) }, // 0=circle, 1=square, 2=triangle
+  },
+  outputs: {},
   lower: ({ ctx, inputsById }) => {
     const pos = inputsById.pos;
     const color = inputsById.color;

@@ -2,7 +2,7 @@
  * Steel Thread Test - Animated Particles
  *
  * Tests the minimal viable pipeline using three-stage block architecture:
- * Circle (primitive) → Array (cardinality) → GridLayout (operation) → Render
+ * Ellipse (shape) → Array (cardinality) → GridLayout (operation) → Render
  */
 
 import { describe, it, expect } from 'vitest';
@@ -22,15 +22,15 @@ describe('Steel Thread - Animated Particles', () => {
       const time = b.addBlock('InfiniteTimeRoot', { periodMs: 5000 });
 
       // Three-stage architecture:
-      // 1. Circle (primitive) → Signal<float>
-      // 2. Array (cardinality) → Field<float>
+      // 1. Ellipse (shape) → Signal<shape>
+      // 2. Array (cardinality) → Field<shape>
       // 3. GridLayout (operation) → Field<vec2>
-      const circle = b.addBlock('Circle', { radius: 0.02 });
+      const ellipse = b.addBlock('Ellipse', { rx: 0.02, ry: 0.02 });
       const array = b.addBlock('Array', { count: 100 });
       const layout = b.addBlock('GridLayout', { rows: 10, cols: 10 });
 
-      // Wire Circle → Array → GridLayout
-      b.wire(circle, 'circle', array, 'element');
+      // Wire Ellipse → Array → GridLayout
+      b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
       const centerX = b.addBlock('Const', { value: 0.5 });
       const centerY = b.addBlock('Const', { value: 0.5 });
