@@ -31,6 +31,11 @@ export interface BlockOptions {
   role?: BlockRole;
 }
 
+export interface EdgeOptions {
+  enabled?: boolean;
+  sortKey?: number;
+}
+
 export class PatchStore {
   // Private mutable state - THE source of truth
   private _data: PatchData;
@@ -298,9 +303,7 @@ export class PatchStore {
         diffSummary: {
           blocksAdded: 0,
           blocksRemoved: 0,
-          edgesAdded: 0,
-          edgesRemoved: 0,
-          paramsChanged: 0,
+          edgesChanged: 0,
         },
       });
     }
@@ -310,13 +313,14 @@ export class PatchStore {
    * Adds a new edge to the patch.
    * Returns the generated edge ID.
    */
-  addEdge(from: Endpoint, to: Endpoint): string {
+  addEdge(from: Endpoint, to: Endpoint, options?: EdgeOptions): string {
     const id = `e${this._nextEdgeId++}`;
     const edge: Edge = {
       id,
       from,
       to,
-      enabled: true,
+      enabled: options?.enabled ?? true,
+      ...(options?.sortKey !== undefined && { sortKey: options.sortKey }),
     };
     this._data.edges.push(edge);
     return id;
@@ -353,6 +357,37 @@ export class PatchStore {
       blocks: new Map(patch.blocks),
       edges: [...patch.edges],
     };
+
+    // Update ID generators to avoid conflicts with loaded IDs
+    // Find max block ID
+    let maxBlockId = -1;
+    for (const blockId of patch.blocks.keys()) {
+      const match = blockId.match(/^b(\d+)$/);
+      if (match) {
+        const id = parseInt(match[1], 10);
+        if (id > maxBlockId) {
+          maxBlockId = id;
+        }
+      }
+    }
+    if (maxBlockId >= 0) {
+      this._nextBlockId = maxBlockId + 1;
+    }
+
+    // Find max edge ID
+    let maxEdgeId = -1;
+    for (const edge of patch.edges) {
+      const match = edge.id.match(/^e(\d+)$/);
+      if (match) {
+        const id = parseInt(match[1], 10);
+        if (id > maxEdgeId) {
+          maxEdgeId = id;
+        }
+      }
+    }
+    if (maxEdgeId >= 0) {
+      this._nextEdgeId = maxEdgeId + 1;
+    }
   }
 
   /**

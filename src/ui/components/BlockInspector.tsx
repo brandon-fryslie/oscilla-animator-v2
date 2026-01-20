@@ -1130,6 +1130,17 @@ interface PortInspectorProps {
   onBack: () => void;
 }
 
+const backButtonStyle: React.CSSProperties = {
+  background: 'transparent',
+  border: `1px solid ${colors.border}`,
+  borderRadius: '4px',
+  padding: '4px 8px',
+  color: colors.textPrimary,
+  cursor: 'pointer',
+  fontSize: '12px',
+};
+
+
 function PortInspector({ portRef, block, typeInfo, patch, onBack }: PortInspectorProps) {
   // Find port definition
   const inputPort = typeInfo.inputs[portRef.portId];
@@ -1328,6 +1339,7 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
     };
 
     rootStore.patch.updateInputPort(blockId, portId, { defaultSource: newDefaultSource });
+  }, [blockId, portId]);
 
   const handleOutputPortChange = useCallback((newOutputPort: string) => {
     const newDefaultSource: DefaultSource = {
@@ -1565,16 +1577,6 @@ const DefaultSourceParamField = observer(function DefaultSourceParamField({
   );
 });
 
-
-const backButtonStyle: React.CSSProperties = {
-  background: 'transparent',
-  border: `1px solid ${colors.border}`,
-  borderRadius: '4px',
-  padding: '4px 8px',
-  color: colors.textPrimary,
-  cursor: 'pointer',
-  fontSize: '12px',
-};
 
 // =============================================================================
 // Params Editor
@@ -1836,4 +1838,3 @@ function HintedControl({ hint, value, onChange }: HintedControlProps) {
       );
   }
 }
-});

@@ -9,6 +9,7 @@ import type { Node, Edge as ReactFlowEdge } from 'reactflow';
 import type { Block, BlockId, Edge, DefaultSource } from '../../types';
 import type { BlockDef, InputDef } from '../../blocks/registry';
 import type { PayloadType, SignalType } from '../../core/canonical-types';
+import { signalType } from '../../core/canonical-types';
 import { formatTypeForTooltip, getTypeColor } from './typeValidation';
 
 /**
@@ -66,7 +67,7 @@ function createPortData(
   defaultSource?: DefaultSource
 ): PortData {
   // For inputs without a type (non-port inputs), use a default
-  const effectiveType: SignalType = type || { kind: 'signal', payload: 'float', extent: { cardinality: undefined, temporality: undefined } };
+  const effectiveType: SignalType = type || signalType('float');
 
   return {
     id,
