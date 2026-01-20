@@ -1,12 +1,19 @@
 /**
  * Instance Unification Tests
  *
- * Verifies that instance/domain compatibility checking works correctly during
- * field expression composition and at render sinks.
+ * Verifies that instance tracking works correctly during field expression
+ * composition and at render sinks.
  *
- * Note: These tests validate the domain unification logic used for field expressions.
- * With the new instance model, fields are tied to instances and unification ensures
- * that field operations only combine fields from the same instance.
+ * Key insight: Intrinsics ARE bound to an instance. The `FieldExprIntrinsic`
+ * has `instanceId: InstanceId` because intrinsics provide per-element
+ * properties FOR that specific instance. Therefore `inferFieldInstance()`
+ * returns the instanceId for intrinsics, NOT undefined.
+ *
+ * Instance binding:
+ * - intrinsic, array, layout → return their instanceId (bound to instance)
+ * - map, zipSig → propagate from input
+ * - zip → unify from inputs (must all be same instance)
+ * - const, broadcast → undefined (truly instance-agnostic)
  */
 
 import { describe, it, expect } from 'vitest';
@@ -14,163 +21,171 @@ import { IRBuilderImpl } from '../ir/IRBuilderImpl';
 import { OpCode } from '../ir/types';
 import { signalTypeField, signalTypeSignal } from '../../core/canonical-types';
 import { DOMAIN_CIRCLE } from '../../core/domain-registry';
-import { domainId } from '../ir/Indices';
 
 describe('Instance Unification', () => {
-  describe('domain inference', () => {
-    it('infers domain from FieldExprSource', () => {
+  describe('intrinsic field instance inference', () => {
+    it('returns instanceId for index intrinsic', () => {
       const b = new IRBuilderImpl();
-      // Create instance using new API
-      const instanceId = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
-      // Use the instance's internal domain for field creation
-      const domain = domainId(`domain_0`); // First domain created
-      const type = signalTypeField('float', domain);
-      const field = b.fieldSource(domain, 'index', type);
+      const instance = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
+      const type = signalTypeField('float', instance);
+      const field = b.fieldIntrinsic(instance, 'index', type);
 
-      expect(b.inferFieldDomain(field)).toBe(domain);
+      // Intrinsics ARE bound to their instance
+      expect(b.inferFieldInstance(field)).toBe(instance);
     });
 
-    it('propagates domain through FieldExprMap', () => {
+    it('returns instanceId for normalizedIndex intrinsic', () => {
       const b = new IRBuilderImpl();
-      const instanceId = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
-      const domain = domainId(`domain_0`);
-      const type = signalTypeField('float', domain);
-      const source = b.fieldSource(domain, 'index', type);
-      const mapped = b.fieldMap(source, { kind: 'opcode', opcode: OpCode.Sin }, type);
+      const instance = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
+      const type = signalTypeField('float', instance);
+      const field = b.fieldIntrinsic(instance, 'normalizedIndex', type);
 
-      expect(b.inferFieldDomain(mapped)).toBe(domain);
+      expect(b.inferFieldInstance(field)).toBe(instance);
     });
 
-    it('propagates domain through FieldExprZipSig', () => {
+    it('returns instanceId for randomId intrinsic', () => {
       const b = new IRBuilderImpl();
-      const instanceId = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
-      const domain = domainId(`domain_0`);
-      const fieldType = signalTypeField('float', domain);
-      const sigType = signalTypeSignal('float');
-      const field = b.fieldSource(domain, 'index', fieldType);
-      const signal = b.sigConst(2.0, sigType);
-      const zipped = b.fieldZipSig(field, [signal], { kind: 'opcode', opcode: OpCode.Mul }, fieldType);
+      const instance = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
+      const type = signalTypeField('float', instance);
+      const field = b.fieldIntrinsic(instance, 'randomId', type);
 
-      expect(b.inferFieldDomain(zipped)).toBe(domain);
+      expect(b.inferFieldInstance(field)).toBe(instance);
     });
+  });
 
+  describe('instance-agnostic field operations', () => {
     it('returns undefined for broadcast fields', () => {
       const b = new IRBuilderImpl();
-      const instanceId = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
-      const domain = domainId(`domain_0`);
-      const type = signalTypeField('float', domain);
+      const instance = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
+      const type = signalTypeField('float', instance);
       const sig = b.sigConst(1.0, signalTypeSignal('float'));
       const broadcast = b.fieldBroadcast(sig, type);
 
-      expect(b.inferFieldDomain(broadcast)).toBeUndefined();
+      // Broadcasts are instance-agnostic
+      expect(b.inferFieldInstance(broadcast)).toBeUndefined();
     });
 
     it('returns undefined for const fields', () => {
       const b = new IRBuilderImpl();
-      const instanceId = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
-      const domain = domainId(`domain_0`);
-      const type = signalTypeField('float', domain);
+      const instance = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
+      const type = signalTypeField('float', instance);
       const constField = b.fieldConst(42, type);
 
-      expect(b.inferFieldDomain(constField)).toBeUndefined();
+      // Consts are instance-agnostic
+      expect(b.inferFieldInstance(constField)).toBeUndefined();
     });
   });
 
-  describe('fieldZip domain validation', () => {
-    it('accepts fields from the same domain', () => {
+  describe('array and layout field instance inference', () => {
+    it('returns instanceId for array fields', () => {
       const b = new IRBuilderImpl();
-      const instanceId = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
-      const domain = domainId(`domain_0`);
-      const type = signalTypeField('float', domain);
-      const field1 = b.fieldSource(domain, 'index', type);
-      const field2 = b.fieldSource(domain, 'normalizedIndex', type);
+      const instance = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
+      const type = signalTypeField('float', instance);
+      const arrayField = b.fieldArray(instance, type);
 
-      // Should not throw
-      const zipped = b.fieldZip([field1, field2], { kind: 'opcode', opcode: OpCode.Add }, type);
-      expect(b.inferFieldDomain(zipped)).toBe(domain);
+      expect(b.inferFieldInstance(arrayField)).toBe(instance);
     });
 
-    it('rejects fields from different domains', () => {
+    it('returns instanceId for layout fields', () => {
       const b = new IRBuilderImpl();
-      // Create two separate instances (creates two domains)
+      const instance = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'grid', rows: 2, cols: 5 });
+      const type = signalTypeField('vec2', instance);
+      const arrayField = b.fieldArray(instance, type);
+      const layoutField = b.fieldLayout(arrayField, { kind: 'grid', rows: 2, cols: 5 }, instance, type);
+
+      expect(b.inferFieldInstance(layoutField)).toBe(instance);
+    });
+  });
+
+  describe('field composition with intrinsics', () => {
+    it('propagates instanceId through map on intrinsic', () => {
+      const b = new IRBuilderImpl();
+      const instance = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
+      const type = signalTypeField('float', instance);
+      const intrinsic = b.fieldIntrinsic(instance, 'index', type);
+      const mapped = b.fieldMap(intrinsic, { kind: 'opcode', opcode: OpCode.Sin }, type);
+
+      // Instance propagates from input
+      expect(b.inferFieldInstance(mapped)).toBe(instance);
+    });
+
+    it('propagates instanceId through zipSig on intrinsic', () => {
+      const b = new IRBuilderImpl();
+      const instance = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
+      const fieldType = signalTypeField('float', instance);
+      const sigType = signalTypeSignal('float');
+      const intrinsic = b.fieldIntrinsic(instance, 'index', fieldType);
+      const signal = b.sigConst(2.0, sigType);
+      const zipped = b.fieldZipSig(intrinsic, [signal], { kind: 'opcode', opcode: OpCode.Mul }, fieldType);
+
+      expect(b.inferFieldInstance(zipped)).toBe(instance);
+    });
+
+    it('unifies instance for zip of intrinsics from same instance', () => {
+      const b = new IRBuilderImpl();
+      const instance = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
+      const type = signalTypeField('float', instance);
+      const field1 = b.fieldIntrinsic(instance, 'index', type);
+      const field2 = b.fieldIntrinsic(instance, 'normalizedIndex', type);
+
+      const zipped = b.fieldZip([field1, field2], { kind: 'opcode', opcode: OpCode.Add }, type);
+      expect(b.inferFieldInstance(zipped)).toBe(instance);
+    });
+
+    it('throws error for zip of intrinsics from different instances', () => {
+      const b = new IRBuilderImpl();
       const instance1 = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
       const instance2 = b.createInstance(DOMAIN_CIRCLE, 20, { kind: 'unordered' });
-      const domain1 = domainId(`domain_0`);
-      const domain2 = domainId(`domain_1`);
-      const type1 = signalTypeField('float', domain1);
-      const type2 = signalTypeField('float', domain2);
-      const field1 = b.fieldSource(domain1, 'index', type1);
-      const field2 = b.fieldSource(domain2, 'index', type2);
+      const type1 = signalTypeField('float', instance1);
+      const type2 = signalTypeField('float', instance2);
+      const field1 = b.fieldIntrinsic(instance1, 'index', type1);
+      const field2 = b.fieldIntrinsic(instance2, 'index', type2);
 
+      // Zipping fields from different instances should throw
       expect(() => {
         b.fieldZip([field1, field2], { kind: 'opcode', opcode: OpCode.Add }, type1);
-      }).toThrow(/Domain mismatch/);
+      }).toThrow(/Instance mismatch/);
     });
 
-    it('handles broadcast fields (no domain) gracefully', () => {
+    it('propagates instance through zip of intrinsic and broadcast', () => {
       const b = new IRBuilderImpl();
-      const instanceId = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
-      const domain = domainId(`domain_0`);
-      const type = signalTypeField('float', domain);
-      const source = b.fieldSource(domain, 'index', type);
+      const instance = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
+      const type = signalTypeField('float', instance);
+      const intrinsic = b.fieldIntrinsic(instance, 'index', type);
       const sig = b.sigConst(1.0, signalTypeSignal('float'));
       const broadcast = b.fieldBroadcast(sig, type);
 
-      // Broadcast has no domain, so zip should use source's domain
-      const zipped = b.fieldZip([source, broadcast], { kind: 'opcode', opcode: OpCode.Add }, type);
-      expect(b.inferFieldDomain(zipped)).toBe(domain);
+      // Broadcast is instance-agnostic, so zip takes instance from intrinsic
+      const zipped = b.fieldZip([intrinsic, broadcast], { kind: 'opcode', opcode: OpCode.Add }, type);
+      expect(b.inferFieldInstance(zipped)).toBe(instance);
     });
 
-    it('accepts multiple broadcast fields without error', () => {
+    it('propagates instance through map after zip of intrinsics', () => {
       const b = new IRBuilderImpl();
-      const instanceId = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
-      const domain = domainId(`domain_0`);
-      const type = signalTypeField('float', domain);
+      const instance = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
+      const type = signalTypeField('float', instance);
+      const field1 = b.fieldIntrinsic(instance, 'index', type);
+      const field2 = b.fieldIntrinsic(instance, 'normalizedIndex', type);
+      const zipped = b.fieldZip([field1, field2], { kind: 'opcode', opcode: OpCode.Add }, type);
+      const mapped = b.fieldMap(zipped, { kind: 'opcode', opcode: OpCode.Sin }, type);
+
+      expect(b.inferFieldInstance(mapped)).toBe(instance);
+    });
+  });
+
+  describe('multiple broadcasts', () => {
+    it('returns undefined for zip of multiple broadcasts (all instance-agnostic)', () => {
+      const b = new IRBuilderImpl();
+      const instance = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
+      const type = signalTypeField('float', instance);
       const sig1 = b.sigConst(1.0, signalTypeSignal('float'));
       const sig2 = b.sigConst(2.0, signalTypeSignal('float'));
       const broadcast1 = b.fieldBroadcast(sig1, type);
       const broadcast2 = b.fieldBroadcast(sig2, type);
 
-      // Two broadcasts with no domain should be allowed
+      // Two broadcasts - no instance constraint
       const zipped = b.fieldZip([broadcast1, broadcast2], { kind: 'opcode', opcode: OpCode.Add }, type);
-      expect(b.inferFieldDomain(zipped)).toBeUndefined();
-    });
-  });
-
-  describe('domain propagation through composition', () => {
-    it('propagates domain through map after zip', () => {
-      const b = new IRBuilderImpl();
-      const instanceId = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
-      const domain = domainId(`domain_0`);
-      const type = signalTypeField('float', domain);
-      const field1 = b.fieldSource(domain, 'index', type);
-      const field2 = b.fieldSource(domain, 'normalizedIndex', type);
-      const zipped = b.fieldZip([field1, field2], { kind: 'opcode', opcode: OpCode.Add }, type);
-      const mapped = b.fieldMap(zipped, { kind: 'opcode', opcode: OpCode.Sin }, type);
-
-      expect(b.inferFieldDomain(mapped)).toBe(domain);
-    });
-
-    it('detects mismatch in nested zip operations', () => {
-      const b = new IRBuilderImpl();
-      // Create two separate instances
-      const instance1 = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
-      const instance2 = b.createInstance(DOMAIN_CIRCLE, 20, { kind: 'unordered' });
-      const domain1 = domainId(`domain_0`);
-      const domain2 = domainId(`domain_1`);
-      const type1 = signalTypeField('float', domain1);
-      const type2 = signalTypeField('float', domain2);
-      const field1 = b.fieldSource(domain1, 'index', type1);
-      const field2 = b.fieldSource(domain2, 'index', type2);
-      const field3 = b.fieldSource(domain1, 'normalizedIndex', type1);
-
-      // Zip field1 and field3 (same domain) - should work
-      const zipped1 = b.fieldZip([field1, field3], { kind: 'opcode', opcode: OpCode.Add }, type1);
-
-      // Try to zip zipped1 with field2 (different domain) - should fail
-      expect(() => {
-        b.fieldZip([zipped1, field2], { kind: 'opcode', opcode: OpCode.Mul }, type1);
-      }).toThrow(/Domain mismatch/);
+      expect(b.inferFieldInstance(zipped)).toBeUndefined();
     });
   });
 });

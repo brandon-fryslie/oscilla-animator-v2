@@ -2,7 +2,7 @@
 
 **Purpose:** Reusable evaluation findings to speed up future work evaluations.
 
-**Last Updated:** 2026-01-18 04:47:21
+**Last Updated:** 2026-01-19 14:53:00
 
 ---
 
@@ -25,13 +25,6 @@
 - Reusable: CSS import requirements, theme class setup, panel wrapper patterns, layout creation patterns
 - Key findings: Missing CSS import and theme class block runtime rendering
 - Next evaluation: After fixes applied, verify visual layout + tab switching
-
-**runtime-dual-editor-reactflow-p0.md**
-- Scope: P0 directory restructure + EditorHandle abstraction
-- Status: Structurally complete, runtime verification pending
-- Confidence: FRESH
-- Reusable: Structural verification approach, risk assessment
-- Next evaluation: Check if files changed before re-verifying
 
 **runtime-dual-editor-p0.md**
 - Scope: P0 implementation (legacy, superseded by runtime-dual-editor-reactflow-p0.md)
@@ -65,7 +58,12 @@
 
 ---
 
-## Invalidated Cache (Sprint 3 - Instance Blocks)
+## Invalidated Cache
 
+### Sprint 3 - Instance Blocks
 **Removed:**
 - runtime-block-registry.md - Block registry modified with instance/inferredInstance fields
+
+### 2026-01-19 - Auto-Arrange Layout
+**Removed:**
+- runtime-dual-editor-reactflow-p0.md - ReactFlowEditor.tsx modified with auto-arrange edge cases

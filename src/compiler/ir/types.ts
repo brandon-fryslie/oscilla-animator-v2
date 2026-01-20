@@ -36,7 +36,6 @@ export type {
   StepId,
   ExprId,
   StateId,
-  DomainId,
   SlotId,
   InstanceId,
 } from './Indices';
@@ -54,7 +53,6 @@ export {
   stepId,
   exprId,
   stateId,
-  domainId,
   slotId,
   instanceId,
 } from './Indices';
@@ -63,7 +61,6 @@ import type {
   SigExprId,
   FieldExprId,
   EventExprId,
-  DomainId,
   SlotId,
 } from './Indices';
 
@@ -141,13 +138,11 @@ export type IntrinsicPropertyName =
 
 export type FieldExpr =
   | FieldExprConst
-  | FieldExprSource
   | FieldExprIntrinsic
   | FieldExprBroadcast
   | FieldExprMap
   | FieldExprZip
   | FieldExprZipSig
-  | FieldExprMapIndexed
   | FieldExprArray
   | FieldExprLayout;
 
@@ -157,19 +152,9 @@ export interface FieldExprConst {
   readonly type: SignalType;
 }
 
-export interface FieldExprSource {
-  readonly kind: 'source';
-  readonly domain: DomainId;
-  readonly sourceId: 'pos0' | 'idRand' | 'index' | 'normalizedIndex';
-  readonly type: SignalType;
-  // NEW: Instance-based model (Sprint 2)
-  readonly instanceId?: string; // InstanceId
-  readonly intrinsic?: string;  // Intrinsic property name
-}
-
 /**
  * Intrinsic field expression - properly typed intrinsic access.
- * Replaces the hacky use of FieldExprSource with 'as any' casts.
+ * Provides per-element properties automatically available for any instance.
  */
 export interface FieldExprIntrinsic {
   readonly kind: 'intrinsic';
@@ -189,7 +174,7 @@ export interface FieldExprMap {
   readonly input: FieldExprId;
   readonly fn: PureFn;
   readonly type: SignalType;
-  readonly domain?: DomainId; // Propagated from input
+  readonly instanceId?: InstanceId; // Propagated from input
 }
 
 export interface FieldExprZip {
@@ -197,7 +182,7 @@ export interface FieldExprZip {
   readonly inputs: readonly FieldExprId[];
   readonly fn: PureFn;
   readonly type: SignalType;
-  readonly domain?: DomainId; // Unified from inputs
+  readonly instanceId?: InstanceId; // Unified from inputs
 }
 
 export interface FieldExprZipSig {
@@ -206,15 +191,7 @@ export interface FieldExprZipSig {
   readonly signals: readonly SigExprId[];
   readonly fn: PureFn;
   readonly type: SignalType;
-  readonly domain?: DomainId; // From field input
-}
-
-export interface FieldExprMapIndexed {
-  readonly kind: 'mapIndexed';
-  readonly domain: DomainId;
-  readonly fn: PureFn;
-  readonly signals?: readonly SigExprId[];
-  readonly type: SignalType;
+  readonly instanceId?: InstanceId; // Propagated from field input
 }
 
 /**
@@ -428,14 +405,18 @@ export interface StepMaterialize {
 export interface StepRender {
   readonly kind: 'render';
   readonly instanceId: string; // InstanceId - UPDATED for Sprint 6
-  readonly position: FieldExprId;
-  readonly color: FieldExprId;
+  /** Slot containing position buffer (after continuity applied) */
+  readonly positionSlot: ValueSlot;
+  /** Slot containing color buffer (after continuity applied) */
+  readonly colorSlot: ValueSlot;
+  /** Optional size - signal (uniform) or slot (per-particle after continuity) */
   readonly size?:
     | { readonly k: 'sig'; readonly id: SigExprId }
-    | { readonly k: 'field'; readonly id: FieldExprId };
+    | { readonly k: 'slot'; readonly slot: ValueSlot };
+  /** Optional shape - signal (uniform) or slot (per-particle after continuity) */
   readonly shape?:
     | { readonly k: 'sig'; readonly id: SigExprId }
-    | { readonly k: 'field'; readonly id: FieldExprId };
+    | { readonly k: 'slot'; readonly slot: ValueSlot };
 }
 
 export interface StepStateWrite {

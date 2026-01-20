@@ -22,6 +22,36 @@ import type { MappingState, StableTargetId } from './ContinuityState';
 import { getOrCreateTargetState } from './ContinuityState';
 
 // =============================================================================
+// Helper Functions
+// =============================================================================
+
+/**
+ * Smoothstep interpolation curve (spec §3.7).
+ * Provides smooth acceleration/deceleration.
+ *
+ * @param t - Normalized time [0, 1]
+ * @returns Smoothed value [0, 1]
+ */
+export function smoothstep(t: number): number {
+  // Clamp t to [0, 1]
+  const x = Math.max(0, Math.min(1, t));
+  // Smoothstep formula: 3t² - 2t³
+  return x * x * (3 - 2 * x);
+}
+
+/**
+ * Linear interpolation.
+ *
+ * @param a - Start value
+ * @param b - End value
+ * @param t - Blend factor [0, 1]
+ * @returns Interpolated value
+ */
+export function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+// =============================================================================
 // Gauge Operations
 // =============================================================================
 
@@ -57,14 +87,16 @@ export function applyAdditiveGauge(
  * @param newBase - New base values
  * @param gaugeBuffer - Output gauge buffer to initialize
  * @param mapping - Element mapping (null for no mapping)
- * @param count - Number of elements in new domain
+ * @param elementCount - Number of elements in new domain
+ * @param stride - Number of floats per element (1 for float, 2 for vec2)
  */
 export function initializeGaugeOnDomainChange(
   oldEffective: Float32Array | null,
   newBase: Float32Array,
   gaugeBuffer: Float32Array,
   mapping: MappingState | null,
-  count: number
+  elementCount: number,
+  stride: number = 1
 ): void {
   if (!oldEffective || !mapping) {
     // No previous state - all elements start at base
@@ -72,23 +104,66 @@ export function initializeGaugeOnDomainChange(
     return;
   }
 
+  const oldElementCount = oldEffective.length / stride;
+
   if (mapping.kind === 'identity') {
     // Same indices - preserve Δ so x_eff stays continuous
-    for (let i = 0; i < count; i++) {
-      gaugeBuffer[i] = oldEffective[i] - newBase[i];
+    for (let i = 0; i < elementCount; i++) {
+      for (let s = 0; s < stride; s++) {
+        const bufIdx = i * stride + s;
+        gaugeBuffer[bufIdx] = oldEffective[bufIdx] - newBase[bufIdx];
+      }
     }
   } else if (mapping.kind === 'byId' || mapping.kind === 'byPosition') {
     // Mapped indices
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < elementCount; i++) {
       const oldIdx = mapping.newToOld[i];
-      if (oldIdx >= 0 && oldIdx < oldEffective.length) {
+      if (oldIdx >= 0 && oldIdx < oldElementCount) {
         // Mapped element: preserve effective value
-        gaugeBuffer[i] = oldEffective[oldIdx] - newBase[i];
+        for (let s = 0; s < stride; s++) {
+          const newBufIdx = i * stride + s;
+          const oldBufIdx = oldIdx * stride + s;
+          gaugeBuffer[newBufIdx] = oldEffective[oldBufIdx] - newBase[newBufIdx];
+        }
       } else {
         // New element: start at base (no jump)
-        gaugeBuffer[i] = 0;
+        for (let s = 0; s < stride; s++) {
+          gaugeBuffer[i * stride + s] = 0;
+        }
       }
     }
+  }
+}
+
+/**
+ * Decay gauge buffer toward zero using ease-in exponential decay (spec §3 project policy).
+ * For animated properties (e.g., rotating spirals), gauge offsets computed at domain
+ * change time become incorrect as the base animation continues. Decaying the gauge
+ * allows elements to gradually settle into their new positions.
+ *
+ * Uses a "rooted exponential" for ease-in behavior (smooth start, quick snap at end):
+ * decay = exp(-dt/τ)^0.7
+ * This creates a decay that's gentle at first, then accelerates to snap into place.
+ *
+ * @param gaugeBuffer - Gauge buffer to decay in place
+ * @param tauMs - Time constant in milliseconds (same as slew tau)
+ * @param dtMs - Delta time in milliseconds
+ * @param length - Number of elements in buffer
+ */
+export function decayGauge(
+  gaugeBuffer: Float32Array,
+  tauMs: number,
+  dtMs: number,
+  length: number
+): void {
+  // Ease-in exponential decay: gauge[i] *= exp(-dt/τ)^0.7
+  // The exponent 0.7 creates an ease-in curve (slow start, fast finish)
+  // After τ ms: decayed to ~46% of original (e^-1)^0.7 ≈ 0.457
+  // After 5τ: decayed to ~2.7% (snaps quickly at the end)
+  const baseDecay = Math.exp(-dtMs / tauMs);
+  const decay = Math.pow(baseDecay, 0.7);
+  for (let i = 0; i < length; i++) {
+    gaugeBuffer[i] *= decay;
   }
 }
 
@@ -162,37 +237,54 @@ export function initializeSlewBuffer(
  * @param newBase - New base values (for unmapped elements)
  * @param slewBuffer - Slew buffer to initialize
  * @param mapping - Element mapping
- * @param count - Number of elements in new domain
+ * @param elementCount - Number of elements in new domain
+ * @param stride - Number of floats per element (1 for float, 2 for vec2)
  */
 export function initializeSlewWithMapping(
   oldSlew: Float32Array | null,
   newBase: Float32Array,
   slewBuffer: Float32Array,
   mapping: MappingState | null,
-  count: number
+  elementCount: number,
+  stride: number = 1
 ): void {
+  const bufferLength = elementCount * stride;
+
   if (!oldSlew || !mapping) {
     // No previous state - start at base values
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < bufferLength; i++) {
       slewBuffer[i] = newBase[i];
     }
     return;
   }
 
+  const oldElementCount = oldSlew.length / stride;
+
   if (mapping.kind === 'identity') {
-    // Same indices - copy old slew state
-    for (let i = 0; i < count; i++) {
-      slewBuffer[i] = i < oldSlew.length ? oldSlew[i] : newBase[i];
+    // Same indices - copy old slew state for existing elements, base for new
+    for (let i = 0; i < elementCount; i++) {
+      for (let s = 0; s < stride; s++) {
+        const bufIdx = i * stride + s;
+        if (i < oldElementCount) {
+          slewBuffer[bufIdx] = oldSlew[bufIdx];
+        } else {
+          slewBuffer[bufIdx] = newBase[bufIdx];
+        }
+      }
     }
   } else if (mapping.kind === 'byId' || mapping.kind === 'byPosition') {
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < elementCount; i++) {
       const oldIdx = mapping.newToOld[i];
-      if (oldIdx >= 0 && oldIdx < oldSlew.length) {
+      if (oldIdx >= 0 && oldIdx < oldElementCount) {
         // Mapped: transfer slew state
-        slewBuffer[i] = oldSlew[oldIdx];
+        for (let s = 0; s < stride; s++) {
+          slewBuffer[i * stride + s] = oldSlew[oldIdx * stride + s];
+        }
       } else {
         // New element: start at base (will slew from there)
-        slewBuffer[i] = newBase[i];
+        for (let s = 0; s < stride; s++) {
+          slewBuffer[i * stride + s] = newBase[i * stride + s];
+        }
       }
     }
   }
@@ -210,57 +302,153 @@ export function initializeSlewWithMapping(
  * @param state - Runtime state
  * @param getBuffer - Function to get buffer for a slot
  */
+// Debug flag - set to true to enable logging
+// NOTE: This logs ONLY on domain changes, not every frame
+const DEBUG_CONTINUITY = true;
+
 export function applyContinuity(
   step: StepContinuityApply,
   state: RuntimeState,
   getBuffer: (slot: ValueSlot) => Float32Array
 ): void {
-  const { targetKey, instanceId, policy, baseSlot, outputSlot } = step;
+  const { targetKey, instanceId, policy, baseSlot, outputSlot, semantic } = step;
   const targetId = targetKey as StableTargetId;
 
   // Get current base buffer
   const baseBuffer = getBuffer(baseSlot);
-  const count = baseBuffer.length;
+  const bufferLength = baseBuffer.length;
+
+  // Compute stride based on semantic (position is vec2, others are float)
+  const stride = semantic === 'position' ? 2 : 1;
+  const elementCount = bufferLength / stride;
+
+  // Check if target state already existed before we call getOrCreate
+  const existingTargetState = state.continuity.targets.get(targetId);
+  const hadPreviousState = existingTargetState !== undefined;
+
+  // CRITICAL: Capture old buffer values BEFORE getOrCreateTargetState replaces them
+  // When count changes, getOrCreateTargetState creates new zero-filled buffers,
+  // discarding the old values we need for continuity
+  //
+  // IMPORTANT: We need to capture snapshots whenever the buffer SIZE changes
+  // (existingTargetState.count !== bufferLength), because getOrCreateTargetState
+  // will allocate new buffers and zero them out
+  let oldSlewSnapshot: Float32Array | null = null;
+  let oldGaugeSnapshot: Float32Array | null = null;
+  if (hadPreviousState && existingTargetState!.count !== bufferLength) {
+    // Buffer size change - save old values before they're overwritten by getOrCreateTargetState
+    oldSlewSnapshot = new Float32Array(existingTargetState!.slewBuffer);
+    oldGaugeSnapshot = new Float32Array(existingTargetState!.gaugeBuffer);
+    if (DEBUG_CONTINUITY && semantic === 'position') {
+      console.log(`[Continuity] Buffer size change detected: ${existingTargetState!.count} -> ${bufferLength}`);
+      console.log(`[Continuity] Old slew sample [0,1]:`, oldSlewSnapshot[0], oldSlewSnapshot[1]);
+      console.log(`[Continuity] Old gauge sample [0,1]:`, oldGaugeSnapshot[0], oldGaugeSnapshot[1]);
+    }
+  }
 
   // Get or create continuity state for this target
-  const targetState = getOrCreateTargetState(state.continuity, targetId, count);
+  // NOTE: This may replace the state with new zero-filled buffers if count changed
+  const targetState = getOrCreateTargetState(state.continuity, targetId, bufferLength);
 
   // Compute dt for slew (I30: use t_model_ms only)
   const tModelMs = state.time?.tMs ?? 0;
   const dtMs = Math.max(0, tModelMs - state.continuity.lastTModelMs);
 
+  // If this is a newly created target state (slew buffer is all zeros),
+  // initialize it to the base values to avoid starting from zero
+  if (!hadPreviousState) {
+    // Initialize slew buffer to base values for smooth first-frame behavior
+    initializeSlewBuffer(baseBuffer, targetState.slewBuffer, bufferLength);
+    // Initialize gauge to zero (no offset needed on first frame)
+    targetState.gaugeBuffer.fill(0);
+  }
+
   // Get mapping if domain changed
   const mapping = state.continuity.mappings.get(instanceId) ?? null;
 
-  // Handle domain change - reinitialize buffers
-  if (state.continuity.domainChangeThisFrame) {
-    // Save old effective values before modification
-    const oldEffective =
-      targetState.slewBuffer.length > 0 && targetState.slewBuffer.length <= count
+  // For crossfade, capture old effective values for blending
+  // Use the pre-captured snapshot (before getOrCreateTargetState zeroed it)
+  let oldEffectiveSnapshot: Float32Array | null = null;
+  if (state.continuity.domainChangeThisFrame && hadPreviousState) {
+    // Use snapshot if count changed, otherwise copy from current state
+    oldEffectiveSnapshot = oldSlewSnapshot ?? (
+      existingTargetState!.slewBuffer.length > 0
+        ? new Float32Array(existingTargetState!.slewBuffer)
+        : null
+    );
+  }
+
+  // Handle domain change - reinitialize buffers (for non-crossfade policies)
+  // Crossfade handles its own initialization differently
+  if (state.continuity.domainChangeThisFrame && policy.kind !== 'crossfade') {
+    // Use pre-captured snapshots (from before getOrCreateTargetState zeroed buffers)
+    // If count didn't change, oldSlewSnapshot/oldGaugeSnapshot are null, use current targetState
+    const oldEffective = oldSlewSnapshot ?? (
+      targetState.slewBuffer.length > 0 && targetState.slewBuffer.length <= bufferLength
         ? new Float32Array(targetState.slewBuffer)
-        : null;
-    const oldSlew =
+        : null
+    );
+    const oldSlew = oldSlewSnapshot ?? (
       targetState.slewBuffer.length > 0
         ? new Float32Array(targetState.slewBuffer)
-        : null;
+        : null
+    );
 
-    // Initialize gauge to preserve effective values
+    if (DEBUG_CONTINUITY && semantic === 'position') {
+      console.log(`[Continuity] Domain change for ${semantic}:`, {
+        hadPreviousState,
+        hadOldSlewSnapshot: oldSlewSnapshot !== null,
+        hadOldGaugeSnapshot: oldGaugeSnapshot !== null,
+        oldEffectiveLen: oldEffective?.length,
+        oldSlewLen: oldSlew?.length,
+        oldGaugeLen: oldGaugeSnapshot?.length,
+        newBufferLen: bufferLength,
+        mappingKind: mapping?.kind,
+        policy: policy.kind,
+      });
+      if (oldEffective) {
+        console.log(`[Continuity] oldEffective sample [0,1]:`, oldEffective[0], oldEffective[1]);
+      }
+      if (oldGaugeSnapshot) {
+        console.log(`[Continuity] oldGauge snapshot sample [0,1]:`, oldGaugeSnapshot[0], oldGaugeSnapshot[1]);
+      }
+      console.log(`[Continuity] newBase sample [0,1]:`, baseBuffer[0], baseBuffer[1]);
+    }
+
+    // For ALL policies that use gauge (preserve, slew, project):
+    // Initialize gauge to preserve effective values at boundary (spec §2.5)
+    // This ensures mapped elements maintain their visual position at the boundary
     initializeGaugeOnDomainChange(
       oldEffective,
       baseBuffer,
       targetState.gaugeBuffer,
       mapping,
-      count
+      elementCount,
+      stride
     );
 
+    if (DEBUG_CONTINUITY && semantic === 'position') {
+      console.log(`[Continuity] gauge after init sample [0,1]:`, targetState.gaugeBuffer[0], targetState.gaugeBuffer[1]);
+      const effectivePos0 = baseBuffer[0] + targetState.gaugeBuffer[0];
+      const effectivePos1 = baseBuffer[1] + targetState.gaugeBuffer[1];
+      console.log(`[Continuity] effective position [0,1] (base+gauge):`, effectivePos0, effectivePos1);
+    }
+
     // Initialize slew with mapped values
+    // For project: Old effective -> slews toward base (no offset)
+    // For slew with gauge: Old effective -> slews toward base+gauge
     initializeSlewWithMapping(
       oldSlew,
       baseBuffer,
       targetState.slewBuffer,
       mapping,
-      count
+      elementCount,
+      stride
     );
+
+    if (DEBUG_CONTINUITY && semantic === 'position') {
+      console.log(`[Continuity] slew after init sample [0,1]:`, targetState.slewBuffer[0], targetState.slewBuffer[1]);
+    }
   }
 
   // Get output buffer (may be same as base for in-place)
@@ -278,7 +466,7 @@ export function applyContinuity(
 
     case 'preserve':
       // Apply gauge only (hard continuity)
-      applyAdditiveGauge(baseBuffer, targetState.gaugeBuffer, outputBuffer, count);
+      applyAdditiveGauge(baseBuffer, targetState.gaugeBuffer, outputBuffer, bufferLength);
       break;
 
     case 'slew':
@@ -289,32 +477,108 @@ export function applyContinuity(
         outputBuffer,
         policy.tauMs,
         dtMs,
-        count
+        bufferLength
       );
       break;
 
     case 'project':
-      // Apply gauge then slew (for position - spec §2.3)
-      // First: x_gauged = x_base + Δ
-      applyAdditiveGauge(baseBuffer, targetState.gaugeBuffer, outputBuffer, count);
-      // Then: slew toward gauged values
+      // Project policy: Map elements by ID, decay gauge, apply gauge, then slew (spec §3)
+      // 1. Decay gauge toward zero (for animated properties like rotating spirals)
+      // 2. Apply gauge: gauged = base + gauge (preserves continuity at boundary)
+      // 3. Slew toward gauged values (smooths any transitions)
+
+      // Debug logging for gauge decay (only when gauge is non-zero)
+      if (DEBUG_CONTINUITY && semantic === 'position' &&
+          (targetState.gaugeBuffer[0] !== 0 || targetState.gaugeBuffer[1] !== 0)) {
+        console.log(`[Continuity] gauge pre-decay [0,1]:`,
+          targetState.gaugeBuffer[0].toFixed(4), targetState.gaugeBuffer[1].toFixed(4));
+      }
+
+      // Decay gauge toward zero over time
+      decayGauge(targetState.gaugeBuffer, policy.tauMs, dtMs, bufferLength);
+
+      // Debug logging after decay (only when gauge is non-zero)
+      if (DEBUG_CONTINUITY && semantic === 'position' &&
+          (targetState.gaugeBuffer[0] !== 0 || targetState.gaugeBuffer[1] !== 0)) {
+        console.log(`[Continuity] gauge post-decay [0,1]:`,
+          targetState.gaugeBuffer[0].toFixed(4), targetState.gaugeBuffer[1].toFixed(4));
+      }
+
+      // Apply gauge: x_gauged = x_base + Δ
+      applyAdditiveGauge(baseBuffer, targetState.gaugeBuffer, outputBuffer, bufferLength);
+
+      // Slew toward gauged values
       applySlewFilter(
-        outputBuffer,
+        outputBuffer,       // Target: gauged values (base + gauge)
         targetState.slewBuffer,
         outputBuffer,
         policy.tauMs,
         dtMs,
-        count
+        bufferLength
       );
       break;
 
-    case 'crossfade':
-      // TODO: Implement crossfade for unmappable cases (spec §3.7)
-      // For now, pass through - crossfade requires two-buffer blending
-      if (outputBuffer !== baseBuffer) {
-        outputBuffer.set(baseBuffer);
+    case 'crossfade': {
+      // Crossfade for unmappable cases (spec §3.7)
+      // Blend old effective buffer with new base buffer over time window
+      const { windowMs, curve } = policy;
+
+      // On domain change, snapshot the old effective values to blend from
+      // We use the pre-captured oldEffectiveSnapshot to get values before any reinitialization
+      if (state.continuity.domainChangeThisFrame) {
+        // Allocate buffer for old values if needed
+        if (!targetState.crossfadeOldBuffer || targetState.crossfadeOldBuffer.length !== bufferLength) {
+          targetState.crossfadeOldBuffer = new Float32Array(bufferLength);
+        }
+
+        // Use the snapshot captured at the start of applyContinuity
+        if (oldEffectiveSnapshot && oldEffectiveSnapshot.length > 0) {
+          // Copy from snapshot (the real old values before any modification)
+          const copyCount = Math.min(oldEffectiveSnapshot.length, bufferLength);
+          for (let i = 0; i < copyCount; i++) {
+            targetState.crossfadeOldBuffer[i] = oldEffectiveSnapshot[i];
+          }
+          // New elements beyond old count start at base
+          for (let i = copyCount; i < bufferLength; i++) {
+            targetState.crossfadeOldBuffer[i] = baseBuffer[i];
+          }
+        } else {
+          // No previous state - start from base (instant transition)
+          targetState.crossfadeOldBuffer.set(baseBuffer);
+        }
+
+        // Mark crossfade start time
+        targetState.crossfadeStartMs = tModelMs;
+      }
+
+      // Compute blend weight based on elapsed time
+      const startMs = targetState.crossfadeStartMs ?? tModelMs;
+      const elapsed = Math.max(0, tModelMs - startMs);
+      const t = Math.min(1.0, elapsed / windowMs);
+
+      // Apply curve function
+      const w = curve === 'smoothstep' || curve === 'ease-in-out'
+        ? smoothstep(t)
+        : t; // linear
+
+      if (w >= 1.0 || !targetState.crossfadeOldBuffer) {
+        // Crossfade complete or not initialized - pass through base
+        if (outputBuffer !== baseBuffer) {
+          outputBuffer.set(baseBuffer);
+        }
+        // Clear crossfade state when complete
+        if (w >= 1.0) {
+          targetState.crossfadeStartMs = undefined;
+        }
+      } else {
+        // Blend old and new: X_out[i] = lerp(X_old_eff[i], X_new_base[i], w)
+        const oldBuffer = targetState.crossfadeOldBuffer;
+        for (let i = 0; i < bufferLength; i++) {
+          outputBuffer[i] = lerp(oldBuffer[i], baseBuffer[i], w);
+        }
       }
       break;
+    }
   }
 }
 

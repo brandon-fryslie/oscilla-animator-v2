@@ -1,10 +1,10 @@
 # Oscilla Animator v2 - Project Roadmap
 
-Last updated: 2026-01-18-230500
+Last updated: 2026-01-19-173200
 
 ---
 
-## 🟢 Phase 1: Core Foundation [ACTIVE] (4/11 completed)
+## 🟢 Phase 1: Core Foundation [ACTIVE] (5/11 completed)
 
 **Goal:** Implement the core compilation pipeline and runtime system according to the unified spec
 
@@ -77,10 +77,11 @@ Last updated: 2026-01-18-230500
 - **Spec:** `design-docs/CANONICAL-oscilla-v2.5-20260109/topics/04-compilation.md`
 - **Description:** Passes 5-10: execution class, tables, schedule, slots, debug
 - **Planning Files:** `.agent_planning/compilation-pipeline/`
-- **Status Note:** Domain unification COMPLETE (2026-01-09). Graph normalization adapter system COMPLETE (2026-01-12). Passes 5-10 remaining.
+- **Status Note:** Domain unification COMPLETE (2026-01-09). Graph normalization adapter system COMPLETE (2026-01-12). Domain→Instance migration COMPLETE (2026-01-19). Passes 5-10 remaining.
 - **Completed Sprints:**
   - Domain Unification - 11 tests passing, domain tracking through field composition
   - Graph Normalization Adapters - Type-aware adapter insertion (signal→field broadcast), strict type checking in Pass 2, extensible adapter registry
+  - Domain→Instance Migration - Replaced vestigial DomainId with InstanceId throughout IR. DomainId type removed entirely. inferFieldInstance() replaces inferFieldDomain().
 
 #### 📋 runtime-execution [PLANNING]
 - **State:** PLANNING
@@ -113,51 +114,25 @@ Last updated: 2026-01-18-230500
   - Update all field operations to use instance context
   - Update compiler passes and runtime
 
-#### 💡 continuity-crossfade [PROPOSED]
-- **State:** PROPOSED
+#### ✅ continuity-crossfade [COMPLETED]
+- **State:** COMPLETED
 - **Epic:** Continuity System (Part 2)
 - **Spec:** `design-docs/CANONICAL-oscilla-v2.5-20260109/topics/11-continuity-system.md` §3.7
 - **Description:** Implement crossfade policy for continuity system - the fallback when element identity cannot be established
 - **Dependencies:** continuity-system (COMPLETED 2026-01-18)
-- **Existing Code:**
-  - Type defined: `ContinuityPolicy.crossfade` in `src/compiler/ir/types.ts:368`
-  - Default policy: `custom: { kind: 'crossfade', windowMs: 150, curve: 'smoothstep' }` in `src/runtime/ContinuityDefaults.ts:29`
-  - Placeholder: `case 'crossfade':` in `src/runtime/ContinuityApply.ts:311-317` (currently passthrough)
-- **Implementation Requirements:**
-  - **Buffer Crossfade (Primary)**: When old/new buffers have same format and count:
-    ```typescript
-    X_out[i] = lerp(X_old_eff[i], X_new_base[i], w(t))
-    // w(t) is blend weight: smoothstep/ease-in-out over windowMs
-    ```
-  - **RenderFrame Crossfade (Fallback)**: When buffer shapes differ:
-    - Keep last render frame frozen as FrameA
-    - Render new frame as FrameB
-    - Renderer draws both with alpha weights: `draw(FrameA, 1-w(t))`, `draw(FrameB, w(t))`
-    - Requires renderer integration with explicit pass ordering (determinism constraint)
-  - **State Requirements:**
-    - Store "old effective" buffer snapshot at domain change
-    - Track crossfade start time and progress
-    - Track blend weight w(t) per-target
-  - **Curve Functions:**
-    - `linear`: `w = t / windowMs`
-    - `smoothstep`: `w = 3t² - 2t³` where `t` is normalized progress
-    - `ease-in-out`: `w = t² * (3 - 2t)` (same as smoothstep mathematically)
-- **Use Cases:**
-  - `identityMode="none"` domains (no stable element IDs)
-  - Topology changes that can't be mapped
-  - `custom/untyped` semantic targets (default policy)
-  - Fallback when byId and byPosition mapping both fail
-- **Key Files to Modify:**
-  - `src/runtime/ContinuityApply.ts` - Main implementation
-  - `src/runtime/ContinuityState.ts` - Add crossfade state tracking
-  - Possibly `src/runtime/Renderer.ts` - For RenderFrame crossfade variant
-- **Test Scenarios:**
-  - Buffer crossfade with same count
-  - Crossfade progress over multiple frames
-  - Curve functions (smoothstep, linear)
-  - Transition to/from crossfade policy
-  - RenderFrame crossfade (if implemented)
-- **Complexity:** Medium - requires two-buffer management and time-window tracking
+- **Completed:** 2026-01-19
+- **Summary:** Sprint 3 Continuity items implemented - crossfade policy with buffer blending, domain change detection and mapping (continuityMapBuild step), gauge/slew application (continuityApply step). 69 continuity tests passing, 358 total tests passing.
+- **Key Files Modified:**
+  - `src/runtime/ContinuityApply.ts` - Crossfade case implementation with smoothstep/lerp helpers
+  - `src/runtime/ContinuityState.ts` - Added crossfadeStartMs and crossfadeOldBuffer to TargetContinuityState
+  - `src/runtime/ScheduleExecutor.ts` - Implemented continuityMapBuild and continuityApply step execution
+  - `src/runtime/__tests__/ContinuityApply.test.ts` - Unit tests for smoothstep/lerp
+  - `src/runtime/__tests__/continuity-integration.test.ts` - Integration tests for crossfade blending
+- **Implementation Details:**
+  - Buffer crossfade: `X_out[i] = lerp(X_old_eff[i], X_new_base[i], w(t))` where w(t) uses smoothstep curve
+  - Old effective values captured BEFORE slew buffer reinitialization to preserve actual previous state
+  - Domain change detection creates identity/byId/byPosition mappings based on instance identity mode
+  - Crossfade state tracking with start time and old buffer snapshot
 
 ---
 
@@ -231,6 +206,20 @@ Last updated: 2026-01-18-230500
 - **Planning Files:** `.agent_planning/patch-editor-ui/`
 - **Verification:** `/SPRINT2A-VERIFICATION.md`
 - **Current Commit:** cfafede - Auto-layout & minimap plugins integrated
+- **Sub-tasks:**
+  - 📋 auto-arrange-layout (oscilla-animator-v2-8fp) - Planning in progress
+
+#### 📋 auto-arrange-layout [PLANNING]
+- **State:** PLANNING
+- **Epic:** patch-editor-ui Sprint 2B Phase 1
+- **Description:** Complete and verify auto-arrange layout functionality in React Flow editor using ELK algorithm
+- **Planning Files:** `.agent_planning/auto-arrange-layout/`
+- **Beads Issue:** oscilla-animator-v2-8fp
+- **Status Note:** Implementation ~80% complete (layout.ts exists, button integrated). Needs edge cases, error handling, E2E tests, and verification.
+- **Key Files:**
+  - `src/ui/reactFlowEditor/layout.ts` - ELK layout algorithm
+  - `src/ui/reactFlowEditor/ReactFlowEditor.tsx:166-182, 302-310` - Button and handler
+- **Requirements:** LEFT-RIGHT flow, 100px node spacing, 80px layer spacing, no overlaps
 
 #### 📋 domain-editor-ui [PLANNING]
 - **State:** PLANNING

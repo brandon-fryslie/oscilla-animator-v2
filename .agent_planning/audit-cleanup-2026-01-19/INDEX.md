@@ -8,15 +8,28 @@ Three migration/cleanup tasks identified from the code quality audit focused on 
 
 | Plan | Priority | Status | Summary |
 |------|----------|--------|---------|
-| [Pass 8 Cleanup](PLAN-pass8-cleanup.md) | P1 | PLANNED | Remove dead code, clean up misleading TODOs |
-| [IRBuilder Dual Fields](PLAN-irbuilder-dual-fields.md) | P1 | PLANNED | Complete domain → instance migration |
-| [CircleInstance Removal](PLAN-circleinstance-removal.md) | P2 | PLANNED | Remove deprecated block |
+| [Pass 8 Cleanup](PLAN-pass8-cleanup.md) | P1 | ✅ COMPLETE | Remove dead code, clean up misleading TODOs |
+| [IRBuilder Dual Fields](PLAN-irbuilder-dual-fields.md) | P1 | ✅ COMPLETE | Complete domain → instance migration |
+| [CircleInstance Removal](PLAN-circleinstance-removal.md) | P2 | ✅ COMPLETE | Remove deprecated block |
 
-## Recommended Execution Order
+## Audit Reports
 
-1. **Pass 8 Cleanup** - Quick win, removes confusion
-2. **CircleInstance Removal** - Self-contained, no dependencies
-3. **IRBuilder Dual Fields** - Most complex, do last
+| Report | Date | Scope |
+|--------|------|-------|
+| [Deprecated/Dual Paths/Legacy](AUDIT-deprecated-dual-paths-legacy.md) | 2026-01-19 | Full codebase scan for deprecated code, dual code paths, unfinished migrations, legacy fallbacks |
+
+## Execution Summary
+
+All three plans were executed on 2026-01-19:
+
+1. **Pass 8 Cleanup** ✅ - Removed dead `createStubProgramIR()` function, cleaned up misleading TODOs
+2. **CircleInstance Removal** ✅ - Migrated tests to Array+GridLayout, removed deprecated block
+3. **IRBuilder Dual Fields** ✅ - Migration was already complete, added @deprecated annotations
+
+### Commits
+
+- `effeebf` - chore(ir): Mark fieldSource and fieldIndex as deprecated
+- Earlier commits had already completed the bulk of the work (CircleInstance removal, Pass 8 cleanup)
 
 ## Source
 

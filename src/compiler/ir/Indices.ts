@@ -54,11 +54,6 @@ export type ExprId = string & { readonly __brand: 'ExprId' };
 /** Stable string ID for state bindings. */
 export type StateId = string & { readonly __brand: 'StateId' };
 
-/**
- * Stable string ID for domains (OLD - will be removed in Sprint 8).
- * @deprecated Use DomainTypeId and InstanceId instead.
- */
-export type DomainId = string & { readonly __brand: 'DomainId' };
 
 /**
  * Stable string ID for domain types (NEW).
@@ -129,12 +124,6 @@ export function stateId(s: string): StateId {
   return s as StateId;
 }
 
-/**
- * @deprecated Use domainTypeId() or instanceId() instead.
- */
-export function domainId(s: string): DomainId {
-  return s as DomainId;
-}
 
 /**
  * Create a DomainTypeId (NEW).

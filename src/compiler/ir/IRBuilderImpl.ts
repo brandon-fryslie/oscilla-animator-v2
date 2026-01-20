@@ -11,7 +11,6 @@ import type {
   FieldExprId,
   EventExprId,
   ValueSlot,
-  DomainId,
   StateId,
   StateSlotId,
   InstanceId,
@@ -22,7 +21,6 @@ import {
   fieldExprId,
   eventExprId,
   valueSlot,
-  domainId,
   stateId,
   stateSlotId,
   instanceId,
@@ -38,6 +36,7 @@ import type {
   LayoutSpec,
   Step,
   IntrinsicPropertyName,
+  ContinuityPolicy,
 } from './types';
 
 // =============================================================================
@@ -185,21 +184,6 @@ export class IRBuilderImpl implements IRBuilder {
   }
 
   /**
-   * @deprecated Use fieldIntrinsic() instead for instance-based fields.
-   * This method uses the old domain-based model and will be removed.
-   * Only kept for backward compatibility with domain unification tests.
-   */
-  fieldSource(
-    domain: DomainId,
-    sourceId: 'pos0' | 'idRand' | 'index' | 'normalizedIndex',
-    type: SignalType
-  ): FieldExprId {
-    const id = fieldExprId(this.fieldExprs.length);
-    this.fieldExprs.push({ kind: 'source', domain, sourceId, type });
-    return id;
-  }
-
-  /**
    * Create a field from an intrinsic property.
    * Uses proper FieldExprIntrinsic type - no 'as any' casts needed.
    */
@@ -256,16 +240,16 @@ export class IRBuilderImpl implements IRBuilder {
   }
 
   fieldMap(input: FieldExprId, fn: PureFn, type: SignalType): FieldExprId {
-    const domain = this.inferFieldDomain(input);
+    const instanceId = this.inferFieldInstance(input);
     const id = fieldExprId(this.fieldExprs.length);
-    this.fieldExprs.push({ kind: 'map', input, fn, type, domain });
+    this.fieldExprs.push({ kind: 'map', input, fn, type, instanceId });
     return id;
   }
 
   fieldZip(inputs: readonly FieldExprId[], fn: PureFn, type: SignalType): FieldExprId {
-    const domain = this.inferZipDomain(inputs);
+    const instanceId = this.inferZipInstance(inputs);
     const id = fieldExprId(this.fieldExprs.length);
-    this.fieldExprs.push({ kind: 'zip', inputs, fn, type, domain });
+    this.fieldExprs.push({ kind: 'zip', inputs, fn, type, instanceId });
     return id;
   }
 
@@ -275,92 +259,69 @@ export class IRBuilderImpl implements IRBuilder {
     fn: PureFn,
     type: SignalType
   ): FieldExprId {
-    const domain = this.inferFieldDomain(field);
+    const instanceId = this.inferFieldInstance(field);
     const id = fieldExprId(this.fieldExprs.length);
-    this.fieldExprs.push({ kind: 'zipSig', field, signals, fn, type, domain });
+    this.fieldExprs.push({ kind: 'zipSig', field, signals, fn, type, instanceId });
     return id;
   }
 
-  /**
-   * Map over domain indices with optional signal inputs.
-   * This creates a field from scratch, so domain must be explicit.
-   */
-  fieldMapIndexed(
-    domain: DomainId,
-    fn: PureFn,
-    type: SignalType,
-    signals?: readonly SigExprId[]
-  ): FieldExprId {
-    const id = fieldExprId(this.fieldExprs.length);
-    this.fieldExprs.push({ kind: 'mapIndexed', domain, fn, type, signals });
-    return id;
-  }
-
-  /**
-   * @deprecated Use fieldIntrinsic(instanceId, 'index', type) instead.
-   * Legacy alias for fieldSource with sourceId='index'.
-   */
-  fieldIndex(domain: DomainId, type: SignalType): FieldExprId {
-    return this.fieldSource(domain, 'index', type);
-  }
-
   // =========================================================================
-  // Domain Inference
+  // Instance Inference
   // =========================================================================
 
   /**
-   * Infer domain from a field expression (public for render sink validation).
-   * Returns the domain ID if the field is bound to a specific domain,
-   * or undefined if the field has no inherent domain (e.g., broadcast, const).
+   * Infer the instance a field expression operates over.
+   * Returns the InstanceId if the field is bound to a specific instance,
+   * or undefined if the field is instance-agnostic (const, broadcast).
+   *
+   * Instance binding:
+   * - intrinsic, array, layout → return their instanceId (bound to instance)
+   * - map, zipSig → propagate from input
+   * - zip → unify from inputs (must all be same instance)
+   * - const, broadcast → undefined (instance-agnostic)
    */
-  inferFieldDomain(fieldId: FieldExprId): DomainId | undefined {
+  inferFieldInstance(fieldId: FieldExprId): InstanceId | undefined {
     const expr = this.fieldExprs[fieldId as number];
     if (!expr) return undefined;
 
     switch (expr.kind) {
-      case 'source':
-        return expr.domain;
       case 'intrinsic':
-        // Intrinsics don't have a domain - they use instance-based model
-        return undefined;
-      case 'mapIndexed':
-        return expr.domain;
-      case 'map':
-        return (expr as any).domain ?? this.inferFieldDomain(expr.input);
-      case 'zip':
-        return (expr as any).domain ?? this.inferZipDomain(expr.inputs);
-      case 'zipSig':
-        return (expr as any).domain ?? this.inferFieldDomain(expr.field);
-      case 'broadcast':
-      case 'const':
-        return undefined; // No inherent domain
       case 'array':
       case 'layout':
-        return undefined; // These use instance-based model
+        return expr.instanceId; // These ARE bound to an instance
+      case 'map':
+        return expr.instanceId ?? this.inferFieldInstance(expr.input);
+      case 'zip':
+        return expr.instanceId ?? this.inferZipInstance(expr.inputs);
+      case 'zipSig':
+        return expr.instanceId ?? this.inferFieldInstance(expr.field);
+      case 'broadcast':
+      case 'const':
+        return undefined; // Truly instance-agnostic
     }
   }
 
   /**
-   * Infer domain from zip inputs, throwing an error if they differ.
-   * Returns the unified domain, or undefined if all inputs are domain-free.
+   * Infer instance from zip inputs, throwing an error if they differ.
+   * Returns the unified instance, or undefined if all inputs are instance-agnostic.
    */
-  private inferZipDomain(inputs: readonly FieldExprId[]): DomainId | undefined {
-    const domains: DomainId[] = [];
+  private inferZipInstance(inputs: readonly FieldExprId[]): InstanceId | undefined {
+    const instances: InstanceId[] = [];
     for (const id of inputs) {
-      const d = this.inferFieldDomain(id);
-      if (d !== undefined) {
-        domains.push(d);
+      const inst = this.inferFieldInstance(id);
+      if (inst !== undefined) {
+        instances.push(inst);
       }
     }
 
-    if (domains.length === 0) return undefined;
+    if (instances.length === 0) return undefined;
 
-    const first = domains[0];
-    for (let i = 1; i < domains.length; i++) {
-      if (domains[i] !== first) {
+    const first = instances[0];
+    for (let i = 1; i < instances.length; i++) {
+      if (instances[i] !== first) {
         throw new Error(
-          `Domain mismatch in fieldZip: '${first}' vs '${domains[i]}'. ` +
-          `All field inputs must share the same domain.`
+          `Instance mismatch in fieldZip: '${first}' vs '${instances[i]}'. ` +
+          `All field inputs must share the same instance.`
         );
       }
     }
@@ -540,6 +501,34 @@ export class IRBuilderImpl implements IRBuilder {
 
   stepEvalSig(expr: SigExprId, target: ValueSlot): void {
     this.steps.push({ kind: 'evalSig', expr, target });
+  }
+
+  stepMaterialize(field: FieldExprId, instanceId: InstanceId, target: ValueSlot): void {
+    this.steps.push({ kind: 'materialize', field, instanceId, target });
+  }
+
+  stepContinuityMapBuild(instanceId: InstanceId): void {
+    // outputMapping key is derived from instanceId for consistency
+    this.steps.push({ kind: 'continuityMapBuild', instanceId, outputMapping: `mapping_${instanceId}` });
+  }
+
+  stepContinuityApply(
+    targetKey: string,
+    instanceId: InstanceId,
+    policy: ContinuityPolicy,
+    baseSlot: ValueSlot,
+    outputSlot: ValueSlot,
+    semantic: 'position' | 'radius' | 'opacity' | 'color' | 'custom'
+  ): void {
+    this.steps.push({
+      kind: 'continuityApply',
+      targetKey,
+      instanceId,
+      policy,
+      baseSlot,
+      outputSlot,
+      semantic,
+    });
   }
 
   // =========================================================================

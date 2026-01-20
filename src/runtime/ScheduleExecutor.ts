@@ -7,13 +7,16 @@
 
 import type { CompiledProgramIR, ValueSlot } from '../compiler/ir/program';
 import type { ScheduleIR } from '../compiler/passes-v2/pass7-schedule';
-import type { Step, InstanceDecl } from '../compiler/ir/types';
+import type { Step, InstanceDecl, DomainInstance } from '../compiler/ir/types';
 import type { SigExprId, IrInstanceId as InstanceId } from '../types';
 import type { RuntimeState } from './RuntimeState';
 import type { BufferPool } from './BufferPool';
 import { resolveTime } from './timeResolution';
 import { materialize } from './Materializer';
 import { evaluateSignal } from './SignalEvaluator';
+import { detectDomainChange } from './ContinuityMapping';
+import { applyContinuity, finalizeContinuityFrame } from './ContinuityApply';
+import { createStableDomainInstance, createUnstableDomainInstance } from './DomainIdentity';
 
 /**
  * RenderFrameIR - Output from frame execution
@@ -129,58 +132,41 @@ export function executeFrame(
           state,
           pool
         );
-        const { storage, slot } = resolveSlotOffset(program, step.target);
-
-        if (storage === 'object') {
-          // For object storage, use slot as Map key (not offset)
-          state.values.objects.set(slot, buffer);
-        } else {
-          throw new Error(`materialize expects object storage, got ${storage}`);
-        }
+        // Store directly in objects map using slot as key
+        // (Object storage doesn't need slotMeta offset lookup)
+        state.values.objects.set(step.target, buffer);
         break;
       }
 
       case 'render': {
-        // Assemble render pass
+        // Assemble render pass - read from slots (after continuity applied)
         const instance = instances.get(step.instanceId as InstanceId);
         if (!instance) {
           throw new Error(`Instance ${step.instanceId} not found`);
         }
 
-        const position = materialize(
-          step.position,
-          step.instanceId, // string
-          fields,
-          signals,
-          instances as ReadonlyMap<string, InstanceDecl>,
-          state,
-          pool
-        );
+        // Read position buffer from slot (continuity-applied)
+        const position = state.values.objects.get(step.positionSlot) as ArrayBufferView;
+        if (!position) {
+          throw new Error(`Position buffer not found in slot ${step.positionSlot}`);
+        }
 
-        const color = materialize(
-          step.color,
-          step.instanceId, // string
-          fields,
-          signals,
-          instances as ReadonlyMap<string, InstanceDecl>,
-          state,
-          pool
-        );
+        // Read color buffer from slot (continuity-applied)
+        const color = state.values.objects.get(step.colorSlot) as ArrayBufferView;
+        if (!color) {
+          throw new Error(`Color buffer not found in slot ${step.colorSlot}`);
+        }
 
-        // Size can be a signal (uniform) or field (per-particle)
+        // Size can be a signal (uniform) or slot (per-particle after continuity)
         let size: number | ArrayBufferView;
         if (step.size !== undefined) {
-          if (step.size.k === 'field') {
-            // Field - materialize per-particle values
-            size = materialize(
-              step.size.id,
-              step.instanceId, // string
-              fields,
-              signals,
-              instances as ReadonlyMap<string, InstanceDecl>,
-              state,
-              pool
-            );
+          if (step.size.k === 'slot') {
+            // Slot - read continuity-applied buffer
+            const sizeBuffer = state.values.objects.get(step.size.slot) as ArrayBufferView;
+            if (!sizeBuffer) {
+              throw new Error(`Size buffer not found in slot ${step.size.slot}`);
+            }
+            size = sizeBuffer;
           } else {
             // Signal - evaluate once for uniform size
             size = evaluateSignal(step.size.id, signals, state);
@@ -190,20 +176,16 @@ export function executeFrame(
           size = 10;
         }
 
-        // Shape can be a signal (uniform) or field (per-particle)
+        // Shape can be a signal (uniform) or slot (per-particle after continuity)
         let shape: number | ArrayBufferView;
         if (step.shape !== undefined) {
-          if (step.shape.k === 'field') {
-            // Field - materialize per-particle values
-            shape = materialize(
-              step.shape.id,
-              step.instanceId, // string
-              fields,
-              signals,
-              instances as ReadonlyMap<string, InstanceDecl>,
-              state,
-              pool
-            );
+          if (step.shape.k === 'slot') {
+            // Slot - read continuity-applied buffer
+            const shapeBuffer = state.values.objects.get(step.shape.slot) as ArrayBufferView;
+            if (!shapeBuffer) {
+              throw new Error(`Shape buffer not found in slot ${step.shape.slot}`);
+            }
+            shape = shapeBuffer;
           } else {
             // Signal - evaluate once for uniform shape
             shape = evaluateSignal(step.shape.id, signals, state);
@@ -233,16 +215,114 @@ export function executeFrame(
       }
 
       case 'continuityMapBuild': {
-        // Continuity System: Build element mapping when domain changes
-        // TODO (Sprint 3): Implement domain change detection and mapping
-        // For now, skip - continuity not yet active
+        // Continuity System: Build element mapping when domain changes (spec §5.1)
+        const { instanceId } = step;
+
+        // Get instance declaration
+        const instance = instances.get(instanceId as InstanceId);
+        if (!instance) {
+          // Instance not found - skip
+          break;
+        }
+
+        // Resolve count (dynamic counts need evaluation)
+        const count = typeof instance.count === 'number' ? instance.count : 0;
+        if (count === 0) break;
+
+        // Create DomainInstance from InstanceDecl
+        // Use identity mode from instance declaration
+        let newDomain: DomainInstance;
+        if (instance.identityMode === 'stable') {
+          // Stable identity: generate deterministic element IDs
+          const seed = instance.elementIdSeed ?? 0;
+          newDomain = createStableDomainInstance(count, seed);
+        } else {
+          // No identity: crossfade fallback required
+          newDomain = createUnstableDomainInstance(count);
+        }
+
+        // Detect domain change and compute mapping
+        const { changed, mapping } = detectDomainChange(
+          instanceId,
+          newDomain,
+          state.continuity.prevDomains
+        );
+
+        if (changed) {
+          // DEBUG: Only log when actual change detected
+          const oldDomain = state.continuity.prevDomains.get(instanceId);
+          console.log(`\n[DOMAIN CHANGE] instanceId=${instanceId}, ${oldDomain?.count ?? 'none'} -> ${count}, mapping=${mapping?.kind ?? 'null'}`);
+
+          // Store mapping (may be null for crossfade fallback)
+          if (mapping) {
+            state.continuity.mappings.set(instanceId, mapping);
+          } else {
+            // No mapping possible - crossfade will handle it
+            state.continuity.mappings.delete(instanceId);
+            console.log(`[DOMAIN CHANGE] WARNING: No mapping possible - continuity will be lost!`);
+          }
+          state.continuity.domainChangeThisFrame = true;
+        }
+
+        // Update prevDomains for next frame comparison
+        state.continuity.prevDomains.set(instanceId, newDomain);
         break;
       }
 
       case 'continuityApply': {
-        // Continuity System: Apply continuity policy to field target
-        // TODO (Sprint 3): Implement gauge/slew application
-        // For now, skip - continuity not yet active
+        // Continuity System: Apply continuity policy to field target (spec §5.1)
+        const { policy, baseSlot, outputSlot } = step;
+
+        // Get base buffer from materialized values
+        const baseBuffer = state.values.objects.get(baseSlot) as ArrayBufferView | undefined;
+        if (!baseBuffer) {
+          // Base buffer not materialized yet - skip
+          // This can happen if the materialize step hasn't run
+          break;
+        }
+
+        // Skip continuity for non-float buffers (like Uint8ClampedArray colors)
+        // Continuity operations require float math; colors need proper float-space handling
+        // TODO: Add float-space color continuity support (convert to linear RGB, apply continuity, convert back)
+        if (!(baseBuffer instanceof Float32Array)) {
+          // Just pass through the base buffer unchanged
+          state.values.objects.set(outputSlot, baseBuffer);
+          break;
+        }
+
+        // Skip if policy is 'none' - no continuity processing needed
+        if (policy.kind === 'none') {
+          // For 'none' policy, just copy base to output
+          state.values.objects.set(outputSlot, baseBuffer);
+          break;
+        }
+
+        // Ensure output buffer exists (allocate from pool if needed)
+        let outputBuffer = state.values.objects.get(outputSlot) as Float32Array | undefined;
+        if (!outputBuffer || outputBuffer.length !== baseBuffer.length) {
+          // Allocate output buffer with same size as base
+          outputBuffer = pool.alloc('f32', baseBuffer.length) as Float32Array;
+          state.values.objects.set(outputSlot, outputBuffer);
+        }
+
+        // Apply continuity policy (gauge, slew, crossfade, or project)
+        applyContinuity(
+          step,
+          state,
+          (slot: ValueSlot) => {
+            if (slot === baseSlot) {
+              return baseBuffer;
+            }
+            if (slot === outputSlot) {
+              return outputBuffer!;
+            }
+            const buffer = state.values.objects.get(slot) as Float32Array | undefined;
+            if (!buffer) {
+              throw new Error(`Continuity: Buffer not found for slot ${slot}`);
+            }
+            return buffer;
+          }
+        );
         break;
       }
 
@@ -262,6 +342,10 @@ export function executeFrame(
       state.state[step.stateSlot as number] = value;
     }
   }
+
+  // 3.5 Finalize continuity frame (spec §5.1)
+  // Updates time tracking and clears frame-local flags
+  finalizeContinuityFrame(state);
 
   // 4. Build RenderFrameIR
   const frame: RenderFrameIR = {

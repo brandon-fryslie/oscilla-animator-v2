@@ -14,7 +14,7 @@ import type {
   FieldExprId,
   EventExprId,
   ValueSlot,
-  DomainId,
+  InstanceId,
   StateId,
 } from './Indices';
 import type { IRBuilder } from './IRBuilder';
@@ -24,14 +24,14 @@ import type { IRBuilder } from './IRBuilder';
 // =============================================================================
 
 /**
- * Packed value reference - represents a signal, field, event, domain, or scalar.
+ * Packed value reference - represents a signal, field, event, instance, or scalar.
  * Used throughout the compiler pipeline for tracking IR expressions.
  */
 export type ValueRefPacked =
   | { readonly k: 'sig'; readonly id: SigExprId; readonly slot: ValueSlot }
   | { readonly k: 'field'; readonly id: FieldExprId; readonly slot: ValueSlot }
   | { readonly k: 'event'; readonly id: EventExprId; readonly slot: ValueSlot }
-  | { readonly k: 'domain'; readonly id: DomainId }
+  | { readonly k: 'instance'; readonly id: InstanceId }
   | { readonly k: 'scalar'; readonly value: unknown };
 
 // =============================================================================
@@ -45,7 +45,7 @@ export type LoweredOutput =
   | LoweredSignal
   | LoweredField
   | LoweredScalar
-  | LoweredDomain;
+  | LoweredInstance;
 
 export interface LoweredSignal {
   readonly kind: 'signal';
@@ -65,9 +65,9 @@ export interface LoweredScalar {
   readonly type: SignalType;
 }
 
-export interface LoweredDomain {
-  readonly kind: 'domain';
-  readonly domainId: DomainId;
+export interface LoweredInstance {
+  readonly kind: 'instance';
+  readonly instanceId: InstanceId;
   readonly count: number;
 }
 
@@ -78,7 +78,7 @@ export type LoweredInput =
   | LoweredSignalInput
   | LoweredFieldInput
   | LoweredScalarInput
-  | LoweredDomainInput
+  | LoweredInstanceInput
   | LoweredUnconnectedInput;
 
 export interface LoweredSignalInput {
@@ -100,9 +100,9 @@ export interface LoweredScalarInput {
   readonly type: SignalType;
 }
 
-export interface LoweredDomainInput {
-  readonly kind: 'domain';
-  readonly domainId: DomainId;
+export interface LoweredInstanceInput {
+  readonly kind: 'instance';
+  readonly instanceId: InstanceId;
   readonly count: number;
 }
 
@@ -143,5 +143,5 @@ export type BlockLowerFn = (ctx: LowerContext) => LoweredBlock;
 export interface LoweredIR {
   readonly blocks: ReadonlyMap<string, LoweredBlock>;
   readonly outputs: ReadonlyMap<string, ReadonlyMap<string, LoweredOutput>>;
-  readonly domains: ReadonlyMap<DomainId, { count: number }>;
+  readonly instances: ReadonlyMap<InstanceId, { count: number }>;
 }

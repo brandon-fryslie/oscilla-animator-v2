@@ -37,8 +37,8 @@ export const DiagnosticConsole: React.FC = observer(() => {
   const diagnostics = rootStore.diagnostics.activeDiagnostics;
   const revision = rootStore.diagnostics.revision;
 
-  // Debug logging
-  console.log('[DiagnosticConsole] Rendering with diagnostics:', diagnostics.length, 'revision:', revision);
+  // Debug logging (disabled - floods console)
+  // console.log('[DiagnosticConsole] Rendering with diagnostics:', diagnostics.length, 'revision:', revision);
 
   // Filter diagnostics by severity
   const filteredDiagnostics = filter === 'all'

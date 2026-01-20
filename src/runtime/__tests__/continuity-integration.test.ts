@@ -32,6 +32,9 @@ import {
   applySlewFilter,
   initializeSlewWithMapping,
   finalizeContinuityFrame,
+  applyContinuity,
+  smoothstep,
+  lerp,
 } from '../ContinuityApply';
 import { createRuntimeState } from '../RuntimeState';
 import type { DomainInstance } from '../../compiler/ir/types';
@@ -360,6 +363,166 @@ describe('Continuity Integration', () => {
       expect(extended[5]).toBe(5);
       expect(extended[6]).toBe(6);
       expect(extended[7]).toBe(7);
+    });
+  });
+
+  describe('Scenario: Crossfade policy (spec §3.7)', () => {
+    it('blends old and new buffers linearly over time window', () => {
+      // Setup: Create runtime state with continuity
+      const continuity = createContinuityState();
+      const state = {
+        time: { tMs: 0 },
+        continuity,
+        values: { objects: new Map() },
+      } as any;
+
+      // Create target state
+      const targetState = getOrCreateTargetState(continuity, 'custom:inst:x' as any, 3);
+
+      // Simulate old effective values in slew buffer
+      targetState.slewBuffer.set([10, 20, 30]);
+
+      // New base values (what we're transitioning to)
+      const baseBuffer = new Float32Array([100, 200, 300]);
+      const outputBuffer = new Float32Array(3);
+
+      // Store in mock slot
+      state.values.objects.set(0, baseBuffer);
+      state.values.objects.set(1, outputBuffer);
+
+      // Trigger domain change
+      continuity.domainChangeThisFrame = true;
+
+      // Create crossfade step
+      const step = {
+        kind: 'continuityApply',
+        targetKey: 'custom:inst:x',
+        instanceId: 'inst',
+        policy: { kind: 'crossfade', windowMs: 100, curve: 'linear' },
+        baseSlot: 0,
+        outputSlot: 1,
+        semantic: 'custom',
+      } as any;
+
+      // First frame: domain change triggers crossfade start
+      applyContinuity(step, state, (slot: any) => state.values.objects.get(slot));
+
+      // At t=0, w=0, output should be old values
+      expect(outputBuffer[0]).toBeCloseTo(10, 2);
+      expect(outputBuffer[1]).toBeCloseTo(20, 2);
+      expect(outputBuffer[2]).toBeCloseTo(30, 2);
+
+      // Clear domain change flag
+      continuity.domainChangeThisFrame = false;
+
+      // Advance time to 50ms (halfway through 100ms window)
+      state.time.tMs = 50;
+      applyContinuity(step, state, (slot: any) => state.values.objects.get(slot));
+
+      // At t=50ms, w=0.5 (linear), output should be midpoint
+      expect(outputBuffer[0]).toBeCloseTo(55, 2); // lerp(10, 100, 0.5)
+      expect(outputBuffer[1]).toBeCloseTo(110, 2); // lerp(20, 200, 0.5)
+      expect(outputBuffer[2]).toBeCloseTo(165, 2); // lerp(30, 300, 0.5)
+
+      // Advance time to 100ms (end of window)
+      state.time.tMs = 100;
+      applyContinuity(step, state, (slot: any) => state.values.objects.get(slot));
+
+      // At t=100ms, w=1.0, output should be new base values
+      expect(outputBuffer[0]).toBeCloseTo(100, 2);
+      expect(outputBuffer[1]).toBeCloseTo(200, 2);
+      expect(outputBuffer[2]).toBeCloseTo(300, 2);
+    });
+
+    it('uses smoothstep curve when specified', () => {
+      const continuity = createContinuityState();
+      const state = {
+        time: { tMs: 0 },
+        continuity,
+        values: { objects: new Map() },
+      } as any;
+
+      const targetState = getOrCreateTargetState(continuity, 'custom:inst:y' as any, 1);
+      targetState.slewBuffer.set([0]);
+
+      const baseBuffer = new Float32Array([100]);
+      const outputBuffer = new Float32Array(1);
+      state.values.objects.set(0, baseBuffer);
+      state.values.objects.set(1, outputBuffer);
+
+      continuity.domainChangeThisFrame = true;
+
+      const step = {
+        kind: 'continuityApply',
+        targetKey: 'custom:inst:y',
+        instanceId: 'inst',
+        policy: { kind: 'crossfade', windowMs: 100, curve: 'smoothstep' },
+        baseSlot: 0,
+        outputSlot: 1,
+        semantic: 'custom',
+      } as any;
+
+      // First frame at t=0 - triggers crossfade start
+      applyContinuity(step, state, (slot: any) => state.values.objects.get(slot));
+      // At t=0, w=0, output = old value = 0
+      expect(outputBuffer[0]).toBeCloseTo(0, 2);
+
+      continuity.domainChangeThisFrame = false;
+
+      // At t=50ms, smoothstep(0.5) = 0.5
+      state.time.tMs = 50;
+      applyContinuity(step, state, (slot: any) => state.values.objects.get(slot));
+
+      // smoothstep(0.5) = 0.5, so output = lerp(0, 100, 0.5) = 50
+      expect(outputBuffer[0]).toBeCloseTo(50, 2);
+
+      // At t=25ms from start, smoothstep(0.25) = 0.15625
+      state.time.tMs = 25;
+      applyContinuity(step, state, (slot: any) => state.values.objects.get(slot));
+      // lerp(0, 100, 0.15625) = 15.625
+      expect(outputBuffer[0]).toBeCloseTo(15.625, 2);
+
+      // At t=75ms from start, smoothstep(0.75) = 0.84375
+      state.time.tMs = 75;
+      applyContinuity(step, state, (slot: any) => state.values.objects.get(slot));
+      // lerp(0, 100, 0.84375) = 84.375
+      expect(outputBuffer[0]).toBeCloseTo(84.375, 2);
+    });
+
+    it('handles crossfade when no previous state exists', () => {
+      const continuity = createContinuityState();
+      const state = {
+        time: { tMs: 0 },
+        continuity,
+        values: { objects: new Map() },
+      } as any;
+
+      // No previous target state - first time seeing this target
+      const baseBuffer = new Float32Array([100, 200, 300]);
+      const outputBuffer = new Float32Array(3);
+      state.values.objects.set(0, baseBuffer);
+      state.values.objects.set(1, outputBuffer);
+
+      continuity.domainChangeThisFrame = true;
+
+      const step = {
+        kind: 'continuityApply',
+        targetKey: 'custom:new:z',
+        instanceId: 'new',
+        policy: { kind: 'crossfade', windowMs: 100, curve: 'linear' },
+        baseSlot: 0,
+        outputSlot: 1,
+        semantic: 'custom',
+      } as any;
+
+      // First frame - no old buffer means instant transition to base
+      applyContinuity(step, state, (slot: any) => state.values.objects.get(slot));
+
+      // With no previous state, crossfade old buffer is initialized from base
+      // So at t=0, w=0, output = lerp(base, base, 0) = base
+      expect(outputBuffer[0]).toBeCloseTo(100, 2);
+      expect(outputBuffer[1]).toBeCloseTo(200, 2);
+      expect(outputBuffer[2]).toBeCloseTo(300, 2);
     });
   });
 });

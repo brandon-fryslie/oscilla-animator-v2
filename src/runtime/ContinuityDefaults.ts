@@ -13,7 +13,7 @@ import type { ContinuityPolicy } from '../compiler/ir/types';
  * Canonical default policies by semantic role.
  *
  * Per spec §2.3 and §4.2:
- * - position: project + slew(120ms) - map by element ID, then slew
+ * - position: project + slew(360ms) - map by element ID, then slew (slower for smoother transitions)
  * - radius: slew(120ms) - medium response
  * - opacity: slew(80ms) - fast response, responsive to edits
  * - color: slew(150ms) - slow to avoid jarring color shifts
@@ -22,7 +22,7 @@ import type { ContinuityPolicy } from '../compiler/ir/types';
  * These are NOT "optional" - they are the system defaults.
  */
 export const CANONICAL_CONTINUITY_POLICIES: Record<string, ContinuityPolicy> = {
-  position: { kind: 'project', projector: 'byId', post: 'slew', tauMs: 120 },
+  position: { kind: 'project', projector: 'byId', post: 'slew', tauMs: 360 },
   radius: { kind: 'slew', gauge: { kind: 'add' }, tauMs: 120 },
   opacity: { kind: 'slew', gauge: { kind: 'add' }, tauMs: 80 },
   color: { kind: 'slew', gauge: { kind: 'add' }, tauMs: 150 },
@@ -36,13 +36,13 @@ export const CANONICAL_CONTINUITY_POLICIES: Record<string, ContinuityPolicy> = {
  * |--------|--------|----------|
  * | opacity | 80 | Fast |
  * | radius | 120 | Medium |
- * | position | 120 | Medium |
+ * | position | 360 | Slow (smooth domain transitions) |
  * | color | 150 | Slow |
  */
 export const CANONICAL_TIME_CONSTANTS: Record<string, number> = {
   opacity: 80,
   radius: 120,
-  position: 120,
+  position: 360,
   color: 150,
   custom: 150,
 };

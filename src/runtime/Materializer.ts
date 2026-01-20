@@ -138,12 +138,6 @@ function fillBuffer(
       break;
     }
 
-    case 'source': {
-      // Fill from instance source (old system - kept for backward compatibility)
-      fillBufferSource(expr.sourceId, buffer, instance);
-      break;
-    }
-
     case 'intrinsic': {
       // Fill from intrinsic property (new system - properly typed)
       fillBufferIntrinsic(expr.intrinsic, buffer, instance);
@@ -197,13 +191,6 @@ function fillBuffer(
       );
       const sigValues = expr.signals.map((id) => evaluateSignal(id, signals, state));
       applyZipSig(buffer, fieldInput, sigValues, expr.fn, N, expr.type);
-      break;
-    }
-
-    case 'mapIndexed': {
-      // MapIndexed: generate from index + signals
-      const sigValues = expr.signals?.map((id) => evaluateSignal(id, signals, state)) ?? [];
-      applyMapIndexed(buffer, expr.fn, sigValues, N, instance, expr.type);
       break;
     }
 
@@ -420,79 +407,6 @@ function fillLayoutRadius(buffer: ArrayBufferView, instance: InstanceDecl): void
 }
 
 /**
- * Fill buffer from instance source (old system - kept for backward compatibility).
- */
-function fillBufferSource(
-  sourceId: 'pos0' | 'idRand' | 'index' | 'normalizedIndex',
-  buffer: ArrayBufferView,
-  instance: InstanceDecl
-): void {
-  const count = typeof instance.count === 'number' ? instance.count : 0;
-  const N = count;
-
-  switch (sourceId) {
-    case 'index': {
-      const arr = buffer as Float32Array;
-      for (let i = 0; i < N; i++) {
-        arr[i] = i;
-      }
-      break;
-    }
-
-    case 'normalizedIndex': {
-      const arr = buffer as Float32Array;
-      for (let i = 0; i < N; i++) {
-        arr[i] = N > 1 ? i / (N - 1) : 0;
-      }
-      break;
-    }
-
-    case 'pos0': {
-      // Position source depends on instance layout
-      const layout = instance.layout;
-
-      if (layout.kind === 'grid') {
-        const rows = layout.rows || 1;
-        const cols = layout.cols || 1;
-        const arr = buffer as Float32Array;
-        for (let i = 0; i < N; i++) {
-          const row = Math.floor(i / cols);
-          const col = i % cols;
-          arr[i * 2 + 0] = cols > 1 ? col / (cols - 1) : 0.5;
-          arr[i * 2 + 1] = rows > 1 ? row / (rows - 1) : 0.5;
-        }
-      } else {
-        // For non-grid layouts, default to (0, 0)
-        // TODO: Implement other layouts (circular, linear, etc.)
-        const arr = buffer as Float32Array;
-        for (let i = 0; i < N; i++) {
-          arr[i * 2 + 0] = 0;
-          arr[i * 2 + 1] = 0;
-        }
-      }
-      break;
-    }
-
-    case 'idRand': {
-      // Deterministic random from element ID
-      // For now, use index-based seeding
-      // TODO: Support explicit element IDs if instance provides them
-      const arr = buffer as Float32Array;
-      for (let i = 0; i < N; i++) {
-        const elementId = `${instance.id}:${i}`;
-        arr[i] = hashToFloat01(elementId);
-      }
-      break;
-    }
-
-    default: {
-      const _exhaustive: never = sourceId;
-      throw new Error(`Unknown source ID: ${String(_exhaustive)}`);
-    }
-  }
-}
-
-/**
  * Apply map function to buffer
  */
 function applyMap(
@@ -602,48 +516,6 @@ function applyZipSig(
     applyKernelZipSig(out, fieldInput, sigValues, fn.name, N, type);
   } else {
     throw new Error(`ZipSig function kind ${fn.kind} not implemented`);
-  }
-}
-
-/**
- * Apply mapIndexed function
- */
-function applyMapIndexed(
-  out: ArrayBufferView,
-  fn: PureFn,
-  sigValues: number[],
-  N: number,
-  instance: InstanceDecl,
-  type: SignalType
-): void {
-  const outArr = out as Float32Array;
-
-  if (fn.kind === 'kernel') {
-    // Named kernel functions
-    if (fn.name === 'gridPos') {
-      // Generate grid positions
-      const layout = instance.layout;
-      if (layout.kind === 'grid') {
-        const rows = layout.rows || 1;
-        const cols = layout.cols || 1;
-        for (let i = 0; i < N; i++) {
-          const row = Math.floor(i / cols);
-          const col = i % cols;
-          outArr[i * 2 + 0] = cols > 1 ? col / (cols - 1) : 0.5;
-          outArr[i * 2 + 1] = rows > 1 ? row / (rows - 1) : 0.5;
-        }
-      } else {
-        // Default to (0.5, 0.5) for non-grid layouts
-        for (let i = 0; i < N; i++) {
-          outArr[i * 2 + 0] = 0.5;
-          outArr[i * 2 + 1] = 0.5;
-        }
-      }
-    } else {
-      throw new Error(`Unknown kernel function: ${fn.name}`);
-    }
-  } else {
-    throw new Error(`MapIndexed function kind ${fn.kind} not implemented`);
   }
 }
 

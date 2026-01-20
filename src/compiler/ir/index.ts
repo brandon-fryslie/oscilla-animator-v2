@@ -12,21 +12,20 @@ export type {
   TimeModelInfinite,
 } from './schedule';
 
-// Lowering types - value references and legacy types for compiler passes
+// Lowering types - value references and types for compiler passes
 export type {
   ValueRefPacked,
   LowerContext,
-  // Legacy types
   LoweredOutput,
   LoweredSignal,
   LoweredField,
   LoweredScalar,
-  LoweredDomain,
+  LoweredInstance,
   LoweredInput,
   LoweredSignalInput,
   LoweredFieldInput,
   LoweredScalarInput,
-  LoweredDomainInput,
+  LoweredInstanceInput,
   LoweredUnconnectedInput,
   LoweredBlock,
   BlockLowerFn,

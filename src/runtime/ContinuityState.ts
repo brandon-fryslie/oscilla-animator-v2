@@ -74,6 +74,7 @@ export type MappingState =
  * Each continuity target has:
  * - gaugeBuffer: Offset values (Δ) for x_eff = x_base + Δ
  * - slewBuffer: Current smoothed values (y) for slew filter
+ * - crossfade state for buffer blending (spec §3.7)
  */
 export interface TargetContinuityState {
   /** Gauge offset buffer (Δ) - x_eff = x_base + Δ */
@@ -84,6 +85,12 @@ export interface TargetContinuityState {
 
   /** Current element count */
   count: number;
+
+  /** Crossfade: When crossfade started (t_model_ms) */
+  crossfadeStartMs?: number;
+
+  /** Crossfade: Snapshot of old effective values for blending */
+  crossfadeOldBuffer?: Float32Array;
 }
 
 // =============================================================================

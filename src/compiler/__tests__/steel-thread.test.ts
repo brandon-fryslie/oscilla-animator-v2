@@ -129,6 +129,8 @@ describe('Steel Thread - Animated Particles', () => {
     // Verify position buffer has correct size
     const posBuffer = pass.position as Float32Array;
     expect(posBuffer.length).toBe(100 * 2); // 100 particles, 2 floats per position
+    // Copy the values since the buffer will be reused for frame 2
+    const frame1Positions = new Float32Array(posBuffer);
 
     // Verify color buffer has correct size
     const colorBuffer = pass.color as Uint8ClampedArray;
@@ -167,11 +169,13 @@ describe('Steel Thread - Animated Particles', () => {
     const pos2 = frame2.passes[0].position as Float32Array;
 
     // Positions should be different from frame 1
+    // Note: posBuffer and pos2 may be the same buffer object (reused by pool)
+    // So we compare against frame1Positions which we copied earlier
     let hasDifference = false;
     for (let i = 0; i < 100; i++) {
       if (
-        Math.abs(posBuffer[i * 2 + 0] - pos2[i * 2 + 0]) > 0.001 ||
-        Math.abs(posBuffer[i * 2 + 1] - pos2[i * 2 + 1]) > 0.001
+        Math.abs(frame1Positions[i * 2 + 0] - pos2[i * 2 + 0]) > 0.001 ||
+        Math.abs(frame1Positions[i * 2 + 1] - pos2[i * 2 + 1]) > 0.001
       ) {
         hasDifference = true;
         break;

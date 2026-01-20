@@ -16,10 +16,12 @@ export {
   type FrameCache,
   type RuntimeState,
   type ExternalInputs,
+  type ContinuityConfig,
   createValueStore,
   createFrameCache,
   createRuntimeState,
   createExternalInputs,
+  createContinuityConfig,
   updateSmoothing,
   advanceFrame,
 } from './RuntimeState';

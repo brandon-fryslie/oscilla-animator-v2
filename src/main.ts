@@ -17,7 +17,7 @@ import { compile } from './compiler';
 import { createRuntimeState, BufferPool, executeFrame } from './runtime';
 import { renderFrame } from './render';
 import { App } from './ui/components';
-import { timeRootRole } from './types';
+import { timeRootRole, type BlockId } from './types';
 import { recordFrameTime, shouldEmitSnapshot, emitHealthSnapshot } from './runtime/HealthMonitor';
 import type { RuntimeState } from './runtime/RuntimeState';
 
@@ -138,63 +138,90 @@ const patchOriginal: PatchBuilder = (b) => {
   b.wire(color, 'color', render, 'color');
 };
 
-// Breathing patch - oscillating spin speed
-const patchBreathing: PatchBuilder = (b) => {
+// Domain Change Test patch - SLOW ROTATING spiral for testing continuity
+// Instructions:
+// 1. Let the spiral rotate slowly for ~5 seconds - memorize the shape
+// 2. Select the Array block and change count from 50 → 60
+// 3. Watch the spiral for ~5 seconds - does it maintain its shape while rotating?
+// 4. Change count back from 60 → 50
+// 5. Watch the spiral - does it still look like the original spiral from step 1?
+//
+// Expected: Spiral maintains perfect golden angle distribution throughout
+// Bug: Elements drift from their correct spiral positions (gaps/clumps appear)
+const patchDomainTest: PatchBuilder = (b) => {
   const time = b.addBlock('InfiniteTimeRoot',
-    { periodAMs: 2000, periodBMs: 8000 },
+    { periodAMs: 8000, periodBMs: 8000 }, // 8 second rotation - slow enough to observe
     { role: timeRootRole() }
   );
 
-  // Three-stage architecture
+  // Simple 3-stage: Circle → Array
   const circle = b.addBlock('Circle', { radius: 0.02 });
-  const array = b.addBlock('Array', { count: 5000 });
-  const layout = b.addBlock('GridLayout', { rows: 71, cols: 71 });
+  const array = b.addBlock('Array', { count: 50 }); // Start with 50
 
   b.wire(circle, 'circle', array, 'element');
-  b.wire(array, 'elements', layout, 'elements');
 
-  // Oscillating spin - speeds up and slows down
-  const spinOsc = b.addBlock('Oscillator', { waveform: 'sin', amplitude: 1.5, offset: 1.0 });
+  // Golden angle spiral - very distinctive, easy to spot distortion
+  const goldenAngle = b.addBlock('FieldGoldenAngle', { turns: 8 });
 
-  const goldenAngle = b.addBlock('FieldGoldenAngle', { turns: 50 });
+  // SLOW rotation via angular offset
+  const spinConst = b.addBlock('Const', { value: 1.0, payloadType: 'float' });
   const angularOffset = b.addBlock('FieldAngularOffset', {});
   const totalAngle = b.addBlock('FieldAdd', {});
 
-  // Use registry defaults
+  // Radius: sqrt distribution
+  const radiusConst = b.addBlock('Const', { value: 0.35, payloadType: 'float' });
+  const radiusBroadcast = b.addBlock('FieldBroadcast', { payloadType: 'float' });
   const effectiveRadius = b.addBlock('FieldRadiusSqrt', {});
+
+  // Position from polar coordinates
   const pos = b.addBlock('FieldPolarToCartesian', {});
+
+  // Color based on index - makes individual elements trackable
   const hue = b.addBlock('FieldHueFromPhase', {});
+  const satConst = b.addBlock('Const', { value: 1.0, payloadType: 'float' });
+  const valConst = b.addBlock('Const', { value: 1.0, payloadType: 'float' });
   const color = b.addBlock('HsvToRgb', {});
+
+  // Large particles for visibility
+  const sizeConst = b.addBlock('Const', { value: 10, payloadType: 'float' });
+  const sizeBroadcast = b.addBlock('FieldBroadcast', { payloadType: 'float' });
   const render = b.addBlock('RenderInstances2D', {});
 
-  // Wire oscillators to time
-  b.wire(time, 'phaseB', spinOsc, 'phase');
-
-  // Wire phase to position and color
+  // Wire phase to angular offset and hue
   b.wire(time, 'phaseA', angularOffset, 'phase');
   b.wire(time, 'phaseA', hue, 'phase');
 
-  // Wire Array 't' output to field blocks
+  // Wire spin
+  b.wire(spinConst, 'out', angularOffset, 'spin');
+
+  // Wire Array 't' to field blocks
   b.wire(array, 't', goldenAngle, 'id01');
   b.wire(array, 't', angularOffset, 'id01');
   b.wire(array, 't', hue, 'id01');
   b.wire(array, 't', effectiveRadius, 'id01');
 
-  // Wire oscillating spin
-  b.wire(spinOsc, 'out', angularOffset, 'spin');
+  // Wire radius
+  b.wire(radiusConst, 'out', radiusBroadcast, 'signal');
+  b.wire(radiusBroadcast, 'field', effectiveRadius, 'radius');
 
-  // Wire golden angle + offset to total angle
+  // Wire angles
   b.wire(goldenAngle, 'angle', totalAngle, 'a');
   b.wire(angularOffset, 'offset', totalAngle, 'b');
 
-  // Wire to polar to cartesian
+  // Wire to position
   b.wire(totalAngle, 'out', pos, 'angle');
   b.wire(effectiveRadius, 'out', pos, 'radius');
 
-  // Wire hue to color
+  // Wire color
   b.wire(hue, 'hue', color, 'hue');
+  b.wire(satConst, 'out', color, 'sat');
+  b.wire(valConst, 'out', color, 'val');
 
-  // Wire pos, color to render
+  // Wire size
+  b.wire(sizeConst, 'out', sizeBroadcast, 'signal');
+  b.wire(sizeBroadcast, 'field', render, 'size');
+
+  // Wire to render
   b.wire(pos, 'pos', render, 'pos');
   b.wire(color, 'color', render, 'color');
 };
@@ -315,7 +342,7 @@ const patchPulsing: PatchBuilder = (b) => {
 
 const patches: { name: string; builder: PatchBuilder }[] = [
   { name: 'Original', builder: patchOriginal },
-  { name: 'Breathing', builder: patchBreathing },
+  { name: 'Domain Test', builder: patchDomainTest },
   { name: 'Wobbly', builder: patchWobbly },
   { name: 'Pulsing', builder: patchPulsing },
 ];
@@ -343,8 +370,8 @@ async function buildAndCompile(patchBuilder: PatchBuilder) {
   // Debug: Show edges involving radius blocks
   log(`  Edges involving radius, broadcast, or FieldRadiusSqrt:`);
   for (const edge of patch.edges) {
-    const fromBlock = patch.blocks.get(edge.from.blockId);
-    const toBlock = patch.blocks.get(edge.to.blockId);
+    const fromBlock = patch.blocks.get(edge.from.blockId as BlockId);
+    const toBlock = patch.blocks.get(edge.to.blockId as BlockId);
     if (fromBlock?.type === 'Const' || fromBlock?.type === 'FieldBroadcast' ||
         toBlock?.type === 'FieldRadiusSqrt' || toBlock?.type === 'FieldBroadcast') {
       log(`    ${edge.from.blockId}:${edge.from.slotId} -> ${edge.to.blockId}:${edge.to.slotId}`);

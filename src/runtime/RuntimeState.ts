@@ -51,7 +51,7 @@ export interface FrameCache {
   /** Frame stamps for signal cache validation */
   sigStamps: Uint32Array;
 
-  /** Cached field buffers (indexed by FieldExprId:DomainId key) */
+  /** Cached field buffers (indexed by FieldExprId:InstanceId key) */
   fieldBuffers: Map<string, ArrayBufferView>;
 
   /** Frame stamps for field cache validation */
@@ -187,6 +187,30 @@ export function createHealthMetrics(): HealthMetrics {
 }
 
 /**
+ * ContinuityConfig - User-configurable continuity parameters
+ *
+ * Controls the behavior of continuity system transitions.
+ * Persisted in RuntimeState to survive hot-swap.
+ */
+export interface ContinuityConfig {
+  /** Decay exponent for gauge decay (0.1-2.0, default 0.7) */
+  decayExponent: number;
+
+  /** Global multiplier for all transition times (0.5-3.0, default 1.0) */
+  tauMultiplier: number;
+}
+
+/**
+ * Create default continuity config
+ */
+export function createContinuityConfig(): ContinuityConfig {
+  return {
+    decayExponent: 0.7,
+    tauMultiplier: 1.0,
+  };
+}
+
+/**
  * RuntimeState - Complete frame execution state
  */
 export interface RuntimeState {
@@ -213,6 +237,9 @@ export interface RuntimeState {
 
   /** Continuity state for smooth transitions (spec topics/11-continuity-system.md) */
   continuity: ContinuityState;
+
+  /** Continuity config for user-controlled parameters (survives hot-swap) */
+  continuityConfig: ContinuityConfig;
 }
 
 /**
@@ -228,6 +255,7 @@ export function createRuntimeState(slotCount: number, stateSlotCount: number = 0
     state: new Float64Array(stateSlotCount),
     health: createHealthMetrics(),
     continuity: createContinuityState(),
+    continuityConfig: createContinuityConfig(),
   };
 }
 

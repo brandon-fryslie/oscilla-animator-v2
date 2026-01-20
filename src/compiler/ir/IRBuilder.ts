@@ -17,7 +17,7 @@ import type {
   DomainTypeId,
 } from './Indices';
 import type { TimeModelIR } from './schedule';
-import type { PureFn, OpCode, InstanceDecl, LayoutSpec, Step, IntrinsicPropertyName } from './types';
+import type { PureFn, OpCode, InstanceDecl, LayoutSpec, Step, IntrinsicPropertyName, ContinuityPolicy } from './types';
 
 // =============================================================================
 // IRBuilder Interface
@@ -212,6 +212,46 @@ export interface IRBuilder {
    * @param target - Slot to store the evaluated value
    */
   stepEvalSig(expr: SigExprId, target: ValueSlot): void;
+
+  /**
+   * Schedule a field materialization step.
+   * Materializes a field expression and stores the result in a slot.
+   *
+   * @param field - Field expression to materialize
+   * @param instanceId - Instance context for materialization
+   * @param target - Slot to store the materialized buffer
+   */
+  stepMaterialize(field: FieldExprId, instanceId: InstanceId, target: ValueSlot): void;
+
+  /**
+   * Schedule a continuity map build step.
+   * Builds element mapping when domain changes (hot-swap boundaries).
+   * Executed rarely, only when domain changes.
+   *
+   * @param instanceId - Instance to build mapping for
+   */
+  stepContinuityMapBuild(instanceId: InstanceId): void;
+
+  /**
+   * Schedule a continuity apply step.
+   * Applies continuity policy to a field target.
+   * Executed per-frame for targets with policy != none.
+   *
+   * @param targetKey - Stable target ID for continuity state lookup
+   * @param instanceId - Instance context
+   * @param policy - Continuity policy to apply
+   * @param baseSlot - Slot containing base (materialized) values
+   * @param outputSlot - Slot to store continuity-applied values
+   * @param semantic - Semantic role of target (position, color, etc.)
+   */
+  stepContinuityApply(
+    targetKey: string,
+    instanceId: InstanceId,
+    policy: ContinuityPolicy,
+    baseSlot: ValueSlot,
+    outputSlot: ValueSlot,
+    semantic: 'position' | 'radius' | 'opacity' | 'color' | 'custom'
+  ): void;
 
   // =========================================================================
   // Utility

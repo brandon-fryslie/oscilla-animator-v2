@@ -11,6 +11,8 @@ import {
   applySlewFilter,
   initializeSlewBuffer,
   initializeSlewWithMapping,
+  smoothstep,
+  lerp,
 } from '../ContinuityApply';
 import type { MappingState } from '../ContinuityState';
 
@@ -369,6 +371,44 @@ describe('ContinuityApply', () => {
       const alpha = 1 - Math.exp(-1);
       const expected = y0 + alpha * (100 - y0);
       expect(output[0]).toBeCloseTo(expected, 2);
+    });
+  });
+
+  describe('crossfade helper functions', () => {
+    it('smoothstep returns 0 at t=0', () => {
+      expect(smoothstep(0)).toBe(0);
+    });
+
+    it('smoothstep returns 1 at t=1', () => {
+      expect(smoothstep(1)).toBe(1);
+    });
+
+    it('smoothstep returns 0.5 at t=0.5', () => {
+      expect(smoothstep(0.5)).toBe(0.5);
+    });
+
+    it('smoothstep clamps below 0', () => {
+      expect(smoothstep(-0.5)).toBe(0);
+    });
+
+    it('smoothstep clamps above 1', () => {
+      expect(smoothstep(1.5)).toBe(1);
+    });
+
+    it('lerp blends correctly at t=0', () => {
+      expect(lerp(10, 20, 0)).toBe(10);
+    });
+
+    it('lerp blends correctly at t=1', () => {
+      expect(lerp(10, 20, 1)).toBe(20);
+    });
+
+    it('lerp blends correctly at t=0.5', () => {
+      expect(lerp(10, 20, 0.5)).toBe(15);
+    });
+
+    it('lerp handles negative values', () => {
+      expect(lerp(-10, 10, 0.5)).toBe(0);
     });
   });
 });

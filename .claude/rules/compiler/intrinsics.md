@@ -184,14 +184,34 @@ this.fieldExprs.push({
 
 No casts, proper types, clear semantics.
 
-### Backward Compatibility
+## Instance Inference
 
-The old `FieldExprSource` case is kept for backward compatibility with any legacy IR that might still use it. The materializer handles both:
+**Key insight: Intrinsics ARE bound to an instance.**
 
-- `case 'source'`: Calls `fillBufferSource()` (old system)
-- `case 'intrinsic'`: Calls `fillBufferIntrinsic()` (new system)
+The `FieldExprIntrinsic` has `instanceId: InstanceId` because intrinsics provide per-element properties FOR that specific instance. Therefore `inferFieldInstance()` returns the instanceId for intrinsics, NOT undefined.
 
-New blocks should always use `fieldIntrinsic()` which creates `FieldExprIntrinsic`.
+Instance binding rules:
+- **intrinsic, array, layout** → return their `instanceId` (they ARE bound to an instance)
+- **map, zipSig** → propagate instanceId from input
+- **zip** → unify instanceId from inputs (must all be same instance, throws on mismatch)
+- **const, broadcast** → `undefined` (truly instance-agnostic)
+
+```typescript
+// Example: instance inference
+const b = new IRBuilderImpl();
+const instance = b.createInstance(DOMAIN_CIRCLE, 10, { kind: 'unordered' });
+const indexField = b.fieldIntrinsic(instance, 'index', type);
+const mapped = b.fieldMap(indexField, fn, type);
+
+// Both return the same instance
+b.inferFieldInstance(indexField) // → instance
+b.inferFieldInstance(mapped)     // → instance (propagated from input)
+```
+
+This enables the compiler to track which instance a field expression operates over, providing access to:
+- `InstanceDecl.domainType` - what kind of elements (circle, shape, etc.)
+- `InstanceDecl.count` - how many elements
+- `InstanceDecl.layout` - spatial arrangement
 
 ## Testing
 
