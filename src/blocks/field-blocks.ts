@@ -28,14 +28,16 @@ registerBlock({
   description: 'Broadcasts a signal value to all elements of a field (type inferred)',
   form: 'primitive',
   capability: 'pure',
-  inputs: [
-    { id: 'signal', label: 'Signal', type: signalType('???') },
-  ],
-  outputs: [
-    { id: 'field', label: 'Field', type: signalTypeField('???', 'default') },
-  ],
-  params: {
-    // payloadType is set by normalizer after type inference
+  inputs: {
+    signal: { label: 'Signal', type: signalType('???') },
+    payloadType: {
+      value: undefined,
+      hidden: true,
+      exposedAsPort: false,
+    },
+  },
+  outputs: {
+    field: { label: 'Field', type: signalTypeField('???', 'default') },
   },
   lower: ({ ctx, inputsById, config }) => {
     const payloadType = config?.payloadType as PayloadType | undefined;
