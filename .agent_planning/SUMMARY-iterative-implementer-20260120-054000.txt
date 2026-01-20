@@ -1,0 +1,90 @@
+Agent: iterative-implementer | 2026-01-20 05:40:00
+Mode: research+implementation
+Completed: Unit Annotation System (Sprint 2) | Files: 5 | Commits: 4
+Tests: 362 passing, 34 skipped (all pass)
+Cache invalidated: N/A (no cache entries affected)
+Status: COMPLETE
+
+=== DELIVERABLES ===
+
+1. Type System (canonical-types.ts)
+   - Added NumericUnit type (8 units: phase, radians, normalized, scalar, ms, #, degrees, seconds)
+   - Extended SignalType with optional unit field
+   - Updated all signalType* helpers to accept unit parameter
+   - 100% backwards compatible
+
+2. Kernel Signatures (kernel-signatures.ts)
+   - Created KernelSignature interface
+   - Declared 20+ kernel signatures
+   - Documented phase vs radians distinction
+   - Separated declaration from implementation
+
+3. Compiler Validation (pass2-types.ts)
+   - Added checkUnitCompatibility() to Pass 2
+   - Soft validation: warnings, not errors
+   - Backwards compatible: no annotation = no warning
+
+4. Tests (unit-validation.test.ts)
+   - 3 new tests for unit mismatch detection
+   - All 362 tests pass
+   - Verified warning behavior
+
+5. Documentation (UNIT-MIGRATION-GUIDE.md)
+   - Complete migration guide
+   - Examples and patterns
+   - Phase vs radians explanation
+   - FAQ and testing guide
+
+=== RESEARCH PHASE ===
+
+Completed all unknowns:
+- Unit taxonomy: Audited kernels, found 8 core units
+- Validation scope: Pass 2 type graph (optimal insertion point)
+- Auto-conversion: Explicit-only for v1 (safer, teaches users)
+- Kernel signature format: Simple Record<string, KernelSignature>
+
+=== VALIDATION ===
+
+All DOD criteria met:
+- [x] NumericUnit type exists
+- [x] SignalType accepts optional unit field
+- [x] Kernel signatures declared (20+)
+- [x] Compiler validates units (warnings)
+- [x] npm run typecheck passes
+- [x] npm run test passes
+- [x] No runtime performance regression
+- [x] Unit taxonomy documented
+- [x] Migration guide created
+
+Validation behavior verified:
+- [x] Phase→radians: warning emitted
+- [x] Matching units: no warning
+- [x] No annotation: no warning (backwards compatible)
+
+=== KEY DECISIONS ===
+
+1. Optional units: Gradual adoption, zero breaking changes
+2. Soft validation: Warnings only, doesn't block compilation
+3. Explicit conversion: No auto-insert for v1
+4. console.warn for MVP: DiagnosticHub integration is Sprint 3
+
+=== PERFORMANCE ===
+
+- Compile time: No measurable impact
+- Runtime: Zero impact (units erased)
+- Memory: Negligible (optional string field)
+
+=== COMMITS ===
+
+4a4ab8a - feat(types): Add NumericUnit annotation system
+fe2add3 - feat(compiler): Add unit compatibility validation to Pass 2
+cfb7b7a - test(compiler): Add unit validation tests
+b9341e7 - docs(types): Add unit annotation migration guide
+
+=== FUTURE WORK ===
+
+Sprint 3: DiagnosticHub integration (proper UI warnings)
+Sprint 4+: Auto-conversion blocks
+Sprint 5+: Unit arithmetic validation
+
+System is ready for gradual adoption. Next: Add units to time rails, Oscillator, trig blocks.
