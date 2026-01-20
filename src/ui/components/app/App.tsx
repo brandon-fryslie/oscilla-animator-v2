@@ -10,9 +10,11 @@
  */
 
 import React, { useCallback, useState, useEffect, useRef } from 'react';
+import { ThemeProvider } from '@mui/material/styles';
 import { Toolbar } from './Toolbar';
 import { EditorProvider, type EditorHandle, useEditor } from '../../editorCommon';
 import { DockviewProvider } from '../../dockview';
+import { darkTheme } from '../../theme';
 
 interface AppProps {
   onCanvasReady?: (canvas: HTMLCanvasElement) => void;
@@ -76,34 +78,36 @@ export const App: React.FC<AppProps> = ({ onCanvasReady }) => {
   }, [activeEditorTab, editorReady]);
 
   return (
-    <EditorProvider>
-      {/* Capture EditorContext methods */}
-      <EditorContextCapture contextRef={editorContextRef} />
+    <ThemeProvider theme={darkTheme}>
+      <EditorProvider>
+        {/* Capture EditorContext methods */}
+        <EditorContextCapture contextRef={editorContextRef} />
 
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          height: '100vh',
-          overflow: 'hidden',
-          background: '#1a1a2e',
-          color: '#eee',
-          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-        }}
-      >
-        {/* Toolbar - outside Dockview */}
-        <Toolbar stats={stats} />
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100vh',
+            overflow: 'hidden',
+            background: '#1a1a2e',
+            color: '#eee',
+            fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+          }}
+        >
+          {/* Toolbar - outside Dockview */}
+          <Toolbar stats={stats} />
 
-        {/* Dockview workspace - all panels managed by Dockview */}
-        <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-          <DockviewProvider
-            onReactFlowEditorReady={handleReactFlowEditorReady}
-            onCanvasReady={handleCanvasReady}
-            onActivePanelChange={handleActivePanelChange}
-          />
+          {/* Dockview workspace - all panels managed by Dockview */}
+          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+            <DockviewProvider
+              onReactFlowEditorReady={handleReactFlowEditorReady}
+              onCanvasReady={handleCanvasReady}
+              onActivePanelChange={handleActivePanelChange}
+            />
+          </div>
         </div>
-      </div>
-    </EditorProvider>
+      </EditorProvider>
+    </ThemeProvider>
   );
 };
 

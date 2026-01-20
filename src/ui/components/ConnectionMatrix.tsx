@@ -9,7 +9,6 @@
 import React, { useMemo } from 'react';
 import { observer } from 'mobx-react-lite';
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
-import { ThemeProvider } from '@mui/material/styles';
 import { rootStore } from '../../stores';
 import type { Patch, Block, Edge } from '../../graph/Patch';
 import type { BlockId } from '../../types';
@@ -249,7 +248,6 @@ export const ConnectionMatrix = observer(function ConnectionMatrix() {
   }
 
   return (
-    <ThemeProvider theme={darkTheme}>
       <div style={{
         height: '100%',
         width: '100%',
@@ -296,6 +294,5 @@ export const ConnectionMatrix = observer(function ConnectionMatrix() {
           }}
         />
       </div>
-    </ThemeProvider>
   );
 });

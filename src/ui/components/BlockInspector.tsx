@@ -8,9 +8,8 @@
 
 import React, { useState, useCallback } from 'react';
 import { observer } from 'mobx-react-lite';
-import { ThemeProvider } from '@mui/material/styles';
 import { rootStore } from '../../stores';
-import { colors, darkTheme } from '../theme';
+import { colors } from '../theme';
 import { getBlockDefinition, type BlockDef, type InputDef, type OutputDef } from '../../blocks/registry';
 import type { Block, Patch, Edge, PortRef } from '../../graph/Patch';
 import type { BlockId, PortId, DefaultSource, UIControlHint } from '../../types';
@@ -70,9 +69,7 @@ export const BlockInspector = observer(function BlockInspector() {
   // Preview mode takes precedence
   if (previewType) {
     return (
-      <ThemeProvider theme={darkTheme}>
         <TypePreview type={previewType} />
-      </ThemeProvider>
     );
   }
 
@@ -81,9 +78,7 @@ export const BlockInspector = observer(function BlockInspector() {
     const edge = patch.edges.find(e => e.id === selectedEdgeId);
     if (edge) {
       return (
-        <ThemeProvider theme={darkTheme}>
           <EdgeInspector edge={edge} patch={patch} />
-        </ThemeProvider>
       );
     }
   }
@@ -104,9 +99,7 @@ export const BlockInspector = observer(function BlockInspector() {
   }
 
   return (
-    <ThemeProvider theme={darkTheme}>
       <BlockDetails block={block} patch={patch} />
-    </ThemeProvider>
   );
 });
 

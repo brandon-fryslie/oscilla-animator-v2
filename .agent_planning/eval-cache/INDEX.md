@@ -2,7 +2,7 @@
 
 **Purpose:** Reusable evaluation findings to speed up future work evaluations.
 
-**Last Updated:** 2026-01-20 00:18:00
+**Last Updated:** 2026-01-20 00:50:00
 
 ---
 
@@ -13,7 +13,7 @@
 **runtime-continuity-controls-v2.md** [UPDATED - STALE]
 - Scope: continuity-controls-v2
 - Status: Implementation complete, all DoD criteria met
-- Confidence: STALE (MUI component patterns changed - new common controls created)
+- Confidence: STALE (MUI component patterns changed - new common controls created, ContinuityControls.tsx refactored with MUI buttons)
 - Reusable: SliderWithInput component usage, baseTauMs factor application, test pulse patterns
 - Key findings: Complete MUI slider migration, base duration control, test pulse feature with visual feedback
 - Next evaluation: Check if SliderWithInput.tsx, ContinuityControls.tsx, or ContinuityApply.ts changed
@@ -50,7 +50,7 @@
 **runtime-dual-editor-p2.md**
 - Scope: P2 tab integration + sync
 - Status: Structurally complete, runtime verification required
-- Confidence: FRESH
+- Confidence: STALE (Tabs.tsx refactored with MUI Button components)
 - Reusable: Tab switching patterns, sync infrastructure verification, EditorContext management
 - Next evaluation: Manual runtime testing needed, or check if sync.ts/App.tsx/Tabs.tsx changed
 
@@ -75,6 +75,16 @@
 ---
 
 ## Invalidated Cache
+
+### 2026-01-20 00:50:00 - P2 Button Migration (mui-controls-migration)
+**Marked STALE:**
+- runtime-continuity-controls-v2.md - ContinuityControls.tsx action buttons migrated to MUI Button
+- runtime-dual-editor-p2.md - Tabs.tsx refactored with MUI Button components
+
+**Rationale:**
+- 7 component files modified with MUI buttons (Toolbar, Tabs, DiagnosticConsole, ContinuityControls, BlockLibrary, ReactFlowEditor, InspectorContainer)
+- Button interaction patterns changed from native to MUI components
+- Visual appearance and hover states now use MUI theme
 
 ### 2026-01-20 - MUI Controls Migration
 **Removed:**
