@@ -3,6 +3,7 @@
  *
  * Inserts derived blocks for unconnected inputs with defaultSource.
  * TimeRoot defaults wire to existing TimeRoot; other defaults create derived blocks.
+ * Iterates until all nested default sources are materialized.
  */
 
 import type { BlockId, PortId, BlockRole, DefaultSource } from '../../types';
@@ -183,11 +184,31 @@ function applyDefaultSourceInsertions(
 
 /**
  * Materialize default sources for unconnected inputs.
+ * Iterates until all nested default sources are resolved.
  *
  * @param patch - Patch from Pass 0
  * @returns Patch with derived blocks inserted and TimeRoot wired
  */
 export function pass1DefaultSources(patch: Patch): Patch {
-  const insertions = analyzeDefaultSources(patch);
-  return applyDefaultSourceInsertions(patch, insertions);
+  let currentPatch = patch;
+  let iteration = 0;
+  const MAX_ITERATIONS = 100; // Safety limit to prevent infinite loops
+
+  while (iteration < MAX_ITERATIONS) {
+    const insertions = analyzeDefaultSources(currentPatch);
+
+    if (insertions.length === 0) {
+      // No more default sources to materialize
+      break;
+    }
+
+    currentPatch = applyDefaultSourceInsertions(currentPatch, insertions);
+    iteration++;
+  }
+
+  if (iteration >= MAX_ITERATIONS) {
+    throw new Error('Pass 1 exceeded maximum iterations - possible circular default source dependency');
+  }
+
+  return currentPatch;
 }
