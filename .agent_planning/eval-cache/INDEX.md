@@ -2,7 +2,7 @@
 
 **Purpose:** Reusable evaluation findings to speed up future work evaluations.
 
-**Last Updated:** 2026-01-20 00:50:00
+**Last Updated:** 2026-01-20 01:15:00
 
 ---
 
@@ -13,7 +13,7 @@
 **runtime-continuity-controls-v2.md** [UPDATED - STALE]
 - Scope: continuity-controls-v2
 - Status: Implementation complete, all DoD criteria met
-- Confidence: STALE (MUI component patterns changed - new common controls created, ContinuityControls.tsx refactored with MUI buttons)
+- Confidence: STALE (ThemeProvider removed - now inherited from App root)
 - Reusable: SliderWithInput component usage, baseTauMs factor application, test pulse patterns
 - Key findings: Complete MUI slider migration, base duration control, test pulse feature with visual feedback
 - Next evaluation: Check if SliderWithInput.tsx, ContinuityControls.tsx, or ContinuityApply.ts changed
@@ -75,6 +75,23 @@
 ---
 
 ## Invalidated Cache
+
+### 2026-01-20 01:15:00 - P3-P4 ThemeProvider Consolidation + Cleanup (mui-controls-migration)
+**Marked STALE:**
+- runtime-continuity-controls-v2.md - ContinuityControls.tsx ThemeProvider removed
+- (All MUI-using components now inherit theme from App root)
+
+**Rationale:**
+- Established single ThemeProvider at App.tsx root level
+- Removed nested ThemeProviders from ContinuityControls, BlockInspector, ConnectionMatrix
+- Theme import pattern changed: only App.tsx imports darkTheme
+- All MUI components now inherit theme via React context (no local theme wrappers)
+- Architectural improvement: ONE SOURCE OF TRUTH for theme
+
+**Component Theme Strategy:**
+- Before: Each component with MUI wrapped itself in `<ThemeProvider theme={darkTheme}>`
+- After: Single `<ThemeProvider theme={darkTheme}>` at App root wraps entire app
+- Impact: Better performance (no nested contexts), consistent theme inheritance
 
 ### 2026-01-20 00:50:00 - P2 Button Migration (mui-controls-migration)
 **Marked STALE:**

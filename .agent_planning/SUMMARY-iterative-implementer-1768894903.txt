@@ -1,0 +1,52 @@
+Agent: iterative-implementer | 2026-01-20 01:15:00
+Mode: manual
+Completed: P3-P4 (ThemeProvider Consolidation + Cleanup) | Files: 5 | Commits: 2
+Cache invalidated: runtime-continuity-controls-v2.md (marked STALE)
+Status: complete
+
+## Work Completed
+
+### P3: ThemeProvider Consolidation
+- Added single ThemeProvider at App.tsx root level
+- Removed nested ThemeProviders from 3 components:
+  * ContinuityControls.tsx
+  * BlockInspector.tsx (3 instances)
+  * ConnectionMatrix.tsx
+- Verified no remaining ThemeProvider usage except at root
+- Follows "ONE SOURCE OF TRUTH" architectural law
+- Improved render performance (no nested theme context)
+
+### P4: Cleanup and Polish
+- Removed unused darkTheme import from ConnectionMatrix.tsx
+- Verified npm run typecheck: no new errors
+- Verified npm test: no regressions
+- All type errors are pre-existing (DiagnosticHub tests)
+- All test failures are pre-existing (DiagnosticHub tests)
+
+## Commits
+1. 9e58966 - feat(ui): Consolidate ThemeProvider to app root (P3)
+2. d704edf - chore(ui): Remove unused darkTheme import (P4)
+
+## Files Modified
+1. src/ui/components/app/App.tsx - Added ThemeProvider wrapper
+2. src/ui/components/app/ContinuityControls.tsx - Removed ThemeProvider
+3. src/ui/components/BlockInspector.tsx - Removed ThemeProvider (3 instances)
+4. src/ui/components/ConnectionMatrix.tsx - Removed ThemeProvider + unused import
+5. .agent_planning/mui-controls-migration/TODO.md - Updated status
+
+## Testing
+- Typecheck: PASS (only pre-existing errors in DiagnosticHub tests)
+- Tests: PASS (357 passing, 4 pre-existing failures in DiagnosticHub tests)
+- Manual: Pending user verification in browser
+
+## Architecture Impact
+- Established single source of truth for MUI theme
+- All MUI components inherit darkTheme via React context
+- Better performance: no nested ThemeProvider contexts
+- Cleaner imports: only App.tsx imports darkTheme
+
+## Next Steps
+User should verify visual appearance in browser:
+- All MUI controls display with dark theme
+- Buttons, inputs, sliders use consistent colors
+- No visual regressions from theme consolidation
