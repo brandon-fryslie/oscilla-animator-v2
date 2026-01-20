@@ -6,7 +6,7 @@
 
 import { registerBlock } from './registry';
 import { signalType, signalTypeField } from '../core/canonical-types';
-import { defaultSourceConstant, defaultSourceRail, defaultSourceNone } from '../types';
+import { defaultSourceConst } from '../types';
 import type { SigExprId, FieldExprId } from '../compiler/ir/Indices';
 
 // =============================================================================
@@ -143,7 +143,7 @@ registerBlock({
   capability: 'pure',
   inputs: [
     { id: 'field', label: 'Field', type: signalTypeField('float', 'default') },
-    { id: 'scale', label: 'Scale', type: signalType('float'), defaultSource: defaultSourceConstant(1.0) },
+    { id: 'scale', label: 'Scale', type: signalType('float'), defaultSource: defaultSourceConst(1.0) },
   ],
   outputs: [
     { id: 'result', label: 'Result', type: signalTypeField('float', 'default') },
@@ -307,8 +307,8 @@ registerBlock({
   inputs: [
     { id: 'angle', label: 'Angle', type: signalTypeField('float', 'default') },
     { id: 'radius', label: 'Radius', type: signalTypeField('float', 'default') },
-    { id: 'centerX', label: 'Center X', type: signalType('float'), optional: true, defaultValue: 0.5, defaultSource: defaultSourceConstant(0.5) },
-    { id: 'centerY', label: 'Center Y', type: signalType('float'), optional: true, defaultValue: 0.5, defaultSource: defaultSourceConstant(0.5) },
+    { id: 'centerX', label: 'Center X', type: signalType('float'), optional: true, defaultValue: 0.5, defaultSource: defaultSourceConst(0.5) },
+    { id: 'centerY', label: 'Center Y', type: signalType('float'), optional: true, defaultValue: 0.5, defaultSource: defaultSourceConst(0.5) },
   ],
   outputs: [
     { id: 'pos', label: 'Position', type: signalTypeField('vec2', 'default') },
@@ -366,8 +366,8 @@ registerBlock({
   capability: 'pure',
   inputs: [
     { id: 'pos', label: 'Position', type: signalTypeField('vec2', 'default') },
-    { id: 'centerX', label: 'Center X', type: signalType('float'), optional: true, defaultValue: 0.5, defaultSource: defaultSourceConstant(0.5) },
-    { id: 'centerY', label: 'Center Y', type: signalType('float'), optional: true, defaultValue: 0.5, defaultSource: defaultSourceConstant(0.5) },
+    { id: 'centerX', label: 'Center X', type: signalType('float'), optional: true, defaultValue: 0.5, defaultSource: defaultSourceConst(0.5) },
+    { id: 'centerY', label: 'Center Y', type: signalType('float'), optional: true, defaultValue: 0.5, defaultSource: defaultSourceConst(0.5) },
   ],
   outputs: [
     { id: 'angle', label: 'Angle', type: signalTypeField('float', 'default') },
@@ -431,10 +431,10 @@ registerBlock({
   capability: 'pure',
   inputs: [
     { id: 'id01', label: 'ID (0..1)', type: signalTypeField('float', 'default') },
-    { id: 'phase', label: 'Phase', type: signalType('float'), defaultSource: defaultSourceRail('phaseA') },
-    { id: 'base', label: 'Base', type: signalType('float'), defaultSource: defaultSourceConstant(0.5) },
-    { id: 'amplitude', label: 'Amplitude', type: signalType('float'), defaultSource: defaultSourceConstant(1.0) },
-    { id: 'spread', label: 'Spread', type: signalType('float'), defaultSource: defaultSourceConstant(1.0) },
+    { id: 'phase', label: 'Phase', type: signalType('float'), defaultSource: defaultSourceTimeRoot('phaseA') },
+    { id: 'base', label: 'Base', type: signalType('float'), defaultSource: defaultSourceConst(0.5) },
+    { id: 'amplitude', label: 'Amplitude', type: signalType('float'), defaultSource: defaultSourceConst(1.0) },
+    { id: 'spread', label: 'Spread', type: signalType('float'), defaultSource: defaultSourceConst(1.0) },
   ],
   outputs: [
     { id: 'value', label: 'Value', type: signalTypeField('float', 'default') },
@@ -537,8 +537,8 @@ registerBlock({
   capability: 'pure',
   inputs: [
     { id: 'id01', label: 'ID (0..1)', type: signalTypeField('float', 'default') },
-    { id: 'phase', label: 'Phase', type: signalType('float'), defaultSource: defaultSourceRail('phaseA') },
-    { id: 'spin', label: 'Spin', type: signalType('float'), defaultSource: defaultSourceConstant(1.0) },
+    { id: 'phase', label: 'Phase', type: signalType('float'), defaultSource: defaultSourceTimeRoot('phaseA') },
+    { id: 'spin', label: 'Spin', type: signalType('float'), defaultSource: defaultSourceConst(1.0) },
   ],
   outputs: [
     { id: 'offset', label: 'Offset', type: signalTypeField('float', 'default') },
@@ -593,7 +593,7 @@ registerBlock({
   capability: 'pure',
   inputs: [
     { id: 'id01', label: 'ID (0..1)', type: signalTypeField('float', 'default') },
-    { id: 'radius', label: 'Radius', type: signalTypeField('float', 'default'), defaultSource: defaultSourceConstant(0.35) },
+    { id: 'radius', label: 'Radius', type: signalTypeField('float', 'default'), defaultSource: defaultSourceConst(0.35) },
   ],
   outputs: [
     { id: 'out', label: 'Radius', type: signalTypeField('float', 'default') },
@@ -644,8 +644,8 @@ registerBlock({
   inputs: [
     { id: 'pos', label: 'Position', type: signalTypeField('vec2', 'default') },
     { id: 'rand', label: 'Random', type: signalTypeField('float', 'default') },
-    { id: 'amountX', label: 'Amount X', type: signalType('float'), defaultSource: defaultSourceConstant(0.01) },
-    { id: 'amountY', label: 'Amount Y', type: signalType('float'), defaultSource: defaultSourceConstant(0.01) },
+    { id: 'amountX', label: 'Amount X', type: signalType('float'), defaultSource: defaultSourceConst(0.01) },
+    { id: 'amountY', label: 'Amount Y', type: signalType('float'), defaultSource: defaultSourceConst(0.01) },
   ],
   outputs: [
     { id: 'out', label: 'Position', type: signalTypeField('vec2', 'default') },
@@ -704,7 +704,7 @@ registerBlock({
   capability: 'pure',
   inputs: [
     { id: 'id01', label: 'ID (0..1)', type: signalTypeField('float', 'default') },
-    { id: 'phase', label: 'Phase', type: signalType('float'), defaultSource: defaultSourceRail('phaseA') },
+    { id: 'phase', label: 'Phase', type: signalType('float'), defaultSource: defaultSourceTimeRoot('phaseA') },
   ],
   outputs: [
     { id: 'hue', label: 'Hue', type: signalTypeField('float', 'default') },

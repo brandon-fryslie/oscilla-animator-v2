@@ -6,7 +6,7 @@
 
 import { registerBlock } from './registry';
 import { signalType, signalTypeField } from '../core/canonical-types';
-import { defaultSourceConstant } from '../types';
+import { defaultSourceConst } from '../types';
 import type { SigExprId, FieldExprId } from '../compiler/ir/Indices';
 
 // =============================================================================
@@ -120,8 +120,8 @@ registerBlock({
   capability: 'pure',
   inputs: [
     { id: 'hue', label: 'Hue', type: signalTypeField('float', 'default') },
-    { id: 'sat', label: 'Saturation', type: signalType('float'), defaultSource: defaultSourceConstant(1.0) },
-    { id: 'val', label: 'Value', type: signalType('float'), defaultSource: defaultSourceConstant(1.0) },
+    { id: 'sat', label: 'Saturation', type: signalType('float'), defaultSource: defaultSourceConst(1.0) },
+    { id: 'val', label: 'Value', type: signalType('float'), defaultSource: defaultSourceConst(1.0) },
   ],
   outputs: [
     { id: 'color', label: 'Color', type: signalTypeField('color', 'default') },

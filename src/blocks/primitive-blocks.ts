@@ -7,7 +7,7 @@
 
 import { registerBlock } from './registry';
 import { signalType } from '../core/canonical-types';
-import { defaultSourceConstant } from '../types';
+import { defaultSourceConst } from '../types';
 
 // =============================================================================
 // Circle
@@ -35,7 +35,7 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   inputs: [
-    { id: 'radius', label: 'Radius', type: signalType('float'), defaultValue: 0.02, defaultSource: defaultSourceConstant(0.02) },
+    { id: 'radius', label: 'Radius', type: signalType('float'), defaultValue: 0.02, defaultSource: defaultSourceConst(0.02) },
   ],
   outputs: [
     { id: 'circle', label: 'Circle', type: signalType('float') },
@@ -91,7 +91,7 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   inputs: [
-    { id: 'size', label: 'Size', type: signalType('float'), defaultValue: 0.02, defaultSource: defaultSourceConstant(0.02) },
+    { id: 'size', label: 'Size', type: signalType('float'), defaultValue: 0.02, defaultSource: defaultSourceConst(0.02) },
   ],
   outputs: [
     { id: 'square', label: 'Square', type: signalType('float') },

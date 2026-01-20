@@ -8,7 +8,7 @@
 import { registerBlock } from './registry';
 import { signalType, signalTypeField } from '../core/canonical-types';
 import { DOMAIN_CIRCLE } from '../core/domain-registry';
-import { defaultSourceConstant, defaultSourceNone } from '../types';
+import { defaultSourceConst, defaultSource } from '../types';
 
 // =============================================================================
 // Array Block
@@ -37,13 +37,13 @@ registerBlock({
   form: 'primitive',
   capability: 'identity',
   inputs: [
-    { id: 'element', label: 'Element', type: signalType('???'), optional: true, defaultSource: defaultSourceNone() },
+    { id: 'element', label: 'Element', type: signalType('???'), optional: true, defaultSource: defaultSource('Square', 'square') },
     {
       id: 'count',
       label: 'Count',
       type: signalType('int'),
       defaultValue: 100,
-      defaultSource: defaultSourceConstant(100),
+      defaultSource: defaultSourceConst(100),
       uiHint: { kind: 'slider', min: 1, max: 10000, step: 1 },
     },
   ],

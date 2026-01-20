@@ -9,7 +9,7 @@
 import { registerBlock } from './registry';
 import { signalType, signalTypeField } from '../core/canonical-types';
 import { DOMAIN_CIRCLE } from '../core/domain-registry';
-import { defaultSourceConstant } from '../types';
+import { defaultSourceConst } from '../types';
 import type { LayoutSpec } from '../compiler/ir/types';
 
 // =============================================================================
@@ -37,8 +37,8 @@ registerBlock({
   capability: 'pure',
   inputs: [
     { id: 'elements', label: 'Elements', type: signalTypeField('???', 'default') },
-    { id: 'rows', label: 'Rows', type: signalType('int'), defaultValue: 10, defaultSource: defaultSourceConstant(10) },
-    { id: 'cols', label: 'Columns', type: signalType('int'), defaultValue: 10, defaultSource: defaultSourceConstant(10) },
+    { id: 'rows', label: 'Rows', type: signalType('int'), defaultValue: 10, defaultSource: defaultSourceConst(10) },
+    { id: 'cols', label: 'Columns', type: signalType('int'), defaultValue: 10, defaultSource: defaultSourceConst(10) },
   ],
   outputs: [
     { id: 'position', label: 'Position', type: signalTypeField('vec2', 'default') },
@@ -98,7 +98,7 @@ registerBlock({
   capability: 'pure',
   inputs: [
     { id: 'elements', label: 'Elements', type: signalTypeField('???', 'default') },
-    { id: 'spacing', label: 'Spacing', type: signalType('float'), defaultValue: 0.1, defaultSource: defaultSourceConstant(0.1) },
+    { id: 'spacing', label: 'Spacing', type: signalType('float'), defaultValue: 0.1, defaultSource: defaultSourceConst(0.1) },
   ],
   outputs: [
     { id: 'position', label: 'Position', type: signalTypeField('vec2', 'default') },
