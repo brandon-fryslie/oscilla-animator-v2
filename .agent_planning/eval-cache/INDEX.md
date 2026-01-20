@@ -47,10 +47,10 @@
 - Status: Structurally complete
 - Confidence: STALE (use runtime-dual-editor-reactflow-p0.md instead)
 
-**runtime-unified-inputs.md** [UPDATED]
+**runtime-unified-inputs.md** [UPDATED - STALE]
 - Scope: param-ui-hints/unified-inputs
 - Status: COMPLETE (all DoD criteria verified)
-- Confidence: FRESH (verified 2026-01-20 09:20:00)
+- Confidence: STALE (types.ts IR definitions updated 2026-01-20 14:30)
 - Reusable: Block registration patterns, exposedAsPort handling, Object.entries iteration patterns
 - Key findings: All 14 blocks migrated to Record format, params removed, uiHint works on any input, config-only filtering works correctly
 - Next evaluation: Check if InputDef/OutputDef types change, or block registration patterns change
@@ -219,3 +219,26 @@
 - Existing ellipse/rect rendering unchanged
 - Path rendering is new capability (doesn't modify existing shape rendering)
 - No existing cache files describe these modified files in detail
+
+### 2026-01-20 14:30:00 - Type System Alignment (type-fixes)
+**Marked STALE:**
+- runtime-unified-inputs.md - types.ts modified with IR type updates
+
+**Rationale:**
+- Modified src/compiler/ir/types.ts: Updated all IR types to match IRBuilderImpl implementation
+  - SigExprTime: Changed 'mode' to 'which'
+  - SigExprExternal: Changed 'sourceId' to 'which'
+  - SigExprMap: Changed 'inputs' to 'input' (singular)
+  - PureFn: Changed 'op' to 'opcode', added 'kernel' and 'expr' variants
+  - FieldExpr*: Added instanceId fields, updated FieldExprZipSig field names
+  - EventExpr: Added pulse/wrap/combine/never variants
+  - TimeModel: Now imports TimeModelIR with periodAMs/periodBMs
+- Modified src/runtime/SignalEvaluator.ts: Updated to use PureFn type properly
+- Modified src/runtime/timeResolution.ts: Added time model kind check
+- Modified src/ui/components/ConnectionPicker.tsx: Added fallback for undefined port labels
+
+**Impact:**
+- IR type definitions now match implementation exactly
+- All runtime consumers updated to use correct field names
+- Type safety improved (no more 'as any' casts needed)
+- TimeModel properly supports phase period configuration
