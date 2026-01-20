@@ -70,6 +70,12 @@ function createTestRuntimeState(): RuntimeState {
       infBatchCount: 0,
     },
     continuity: createContinuityState(),
+    continuityConfig: {
+      decayMs: 200,
+      decayExponent: 0.5,
+      slewMs: 50,
+      slewExponent: 0.5,
+    },
   };
 }
 

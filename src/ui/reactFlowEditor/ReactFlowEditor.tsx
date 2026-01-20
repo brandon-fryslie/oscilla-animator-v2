@@ -191,9 +191,12 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = ({
       // Fit view after layout completes
       setTimeout(() => fitView({ padding: 0.1 }), 50);
     } catch (error) {
-      console.error('[ReactFlowEditor] Auto-arrange failed:', error);
-      // Error is logged but UI continues to function
-      // TODO: Show user notification (toast/snackbar) when notification system is available
+      // Log to diagnostics system (appears in LogPanel)
+      rootStore.diagnostics.log({
+        level: 'error',
+        message: `Auto-arrange failed: ${error instanceof Error ? error.message : String(error)}`,
+        data: { error },
+      });
     } finally {
       setIsLayouting(false);
     }
@@ -202,6 +205,34 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = ({
   // Store autoArrange ref for handle access
   const autoArrangeRef = useRef(handleAutoArrange);
   autoArrangeRef.current = handleAutoArrange;
+
+  // Track previous node count to detect additions/deletions
+  const prevNodeCountRef = useRef<number | null>(null);
+  const hasInitializedRef = useRef(false);
+
+  // Auto-arrange on startup and when blocks are added/deleted
+  useEffect(() => {
+    const currentCount = nodes.length;
+    const prevCount = prevNodeCountRef.current;
+
+    // On first render with nodes, trigger auto-arrange once
+    if (!hasInitializedRef.current && currentCount > 0) {
+      hasInitializedRef.current = true;
+      // Delay to ensure layout is ready
+      setTimeout(() => autoArrangeRef.current(), 100);
+    }
+
+    // After initialization, trigger auto-arrange when node count changes (add/delete)
+    if (hasInitializedRef.current && prevCount !== null && prevCount !== currentCount) {
+      // Only trigger if we're not already layouting
+      if (!isLayouting) {
+        // Small delay to let React settle
+        setTimeout(() => autoArrangeRef.current(), 50);
+      }
+    }
+
+    prevNodeCountRef.current = currentCount;
+  }, [nodes.length, isLayouting]);
 
   // Setup bidirectional sync and editor handle
   useEffect(() => {
@@ -273,14 +304,12 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = ({
     // Force explicit dimensions
     const updateDimensions = () => {
       const rect = wrapper.getBoundingClientRect();
-      console.log('[ReactFlowEditor] Wrapper dimensions:', rect.width, 'x', rect.height);
 
       // If parent has no dimensions, try to inherit from parent container
       if (rect.width === 0 || rect.height === 0) {
         const parent = wrapper.parentElement;
         if (parent) {
           const parentRect = parent.getBoundingClientRect();
-          console.log('[ReactFlowEditor] Parent dimensions:', parentRect.width, 'x', parentRect.height);
           wrapper.style.width = parentRect.width > 0 ? '100%' : '100vw';
           wrapper.style.height = parentRect.height > 0 ? '100%' : '100vh';
         }

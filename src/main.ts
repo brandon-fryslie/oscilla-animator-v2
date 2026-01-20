@@ -414,6 +414,9 @@ async function buildAndCompile(patchBuilder: PatchBuilder) {
   currentProgram = program;
   currentState = createRuntimeState(program.slotMeta.length);
 
+  // Set RuntimeState reference in ContinuityStore for config access
+  rootStore.continuity.setRuntimeStateRef(currentState);
+
   // Initialize instance counts for domain change tracking (Sprint 2)
   const instances = program.schedule?.instances;
   if (instances) {
@@ -554,6 +557,9 @@ async function recompileFromStore() {
     if (oldContinuity) {
       currentState.continuity = oldContinuity;
     }
+
+    // Set RuntimeState reference in ContinuityStore for config access
+    rootStore.continuity.setRuntimeStateRef(currentState);
   }
 
   // Update program
