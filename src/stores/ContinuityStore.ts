@@ -119,11 +119,14 @@ export class ContinuityStore {
       configVersion: observable,
       decayExponent: computed,
       tauMultiplier: computed,
+      baseTauMs: computed,
       setRuntimeStateRef: action,
       updateFromRuntime: action,
       recordDomainChange: action,
       setDecayExponent: action,
       setTauMultiplier: action,
+      setBaseTauMs: action,
+      triggerTestPulse: action,
       resetToDefaults: action,
       clearContinuityState: action,
       clear: action,
@@ -159,6 +162,16 @@ export class ContinuityStore {
   }
 
   /**
+   * Get current base tau duration (ms) from RuntimeState config.
+   * Depends on configVersion to trigger reactivity when values change.
+   */
+  get baseTauMs(): number {
+    // Access configVersion to establish MobX dependency
+    void this.configVersion;
+    return this.runtimeStateRef?.continuityConfig.baseTauMs ?? 150;
+  }
+
+  /**
    * Set decay exponent (0.1-2.0).
    */
   setDecayExponent(value: number): void {
@@ -179,12 +192,41 @@ export class ContinuityStore {
   }
 
   /**
+   * Set base tau duration in milliseconds (50-500ms).
+   */
+  setBaseTauMs(value: number): void {
+    if (this.runtimeStateRef) {
+      this.runtimeStateRef.continuityConfig.baseTauMs = value;
+      this.configVersion++;
+    }
+  }
+
+  /**
+   * Trigger a test pulse to preview continuity behavior.
+   * Injects a pulse into position targets' gauge buffers.
+   *
+   * @param magnitude - Pulse size (default: 50 for 50px offset)
+   * @param targetSemantic - Target semantic ('position' | 'radius' | etc., or undefined for all)
+   */
+  triggerTestPulse(magnitude: number = 50, targetSemantic?: string): void {
+    if (this.runtimeStateRef) {
+      this.runtimeStateRef.continuityConfig.testPulseRequest = {
+        magnitude,
+        targetSemantic,
+        appliedFrameId: undefined, // Will be set when applied
+      };
+      this.configVersion++;
+    }
+  }
+
+  /**
    * Reset continuity config to defaults.
    */
   resetToDefaults(): void {
     if (this.runtimeStateRef) {
       this.runtimeStateRef.continuityConfig.decayExponent = 0.7;
       this.runtimeStateRef.continuityConfig.tauMultiplier = 1.0;
+      this.runtimeStateRef.continuityConfig.baseTauMs = 150;
       this.configVersion++;
     }
   }

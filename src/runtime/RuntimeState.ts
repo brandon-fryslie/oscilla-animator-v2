@@ -198,6 +198,22 @@ export interface ContinuityConfig {
 
   /** Global multiplier for all transition times (0.5-3.0, default 1.0) */
   tauMultiplier: number;
+
+  /** Base tau duration in milliseconds (50-500ms, default 150ms)
+   * Applied as factor: effectiveTau = policyTau × (baseTauMs / 150) × tauMultiplier
+   * This gives an absolute-time feel to the control
+   */
+  baseTauMs: number;
+
+  /** Test pulse request (null when no pulse requested) */
+  testPulseRequest?: {
+    /** Pulse magnitude (e.g., 50 for 50px offset) */
+    magnitude: number;
+    /** Target semantic ('position' | 'radius' | etc., or null for all) */
+    targetSemantic?: string;
+    /** Frame ID when pulse was applied (prevents double-apply) */
+    appliedFrameId?: number;
+  } | null;
 }
 
 /**
@@ -207,6 +223,8 @@ export function createContinuityConfig(): ContinuityConfig {
   return {
     decayExponent: 0.7,
     tauMultiplier: 1.0,
+    baseTauMs: 150,
+    testPulseRequest: null,
   };
 }
 
