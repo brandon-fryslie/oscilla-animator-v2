@@ -66,11 +66,9 @@ export class PortHighlightStore {
       const portsToCheck = hoveredDirection === 'output' ? blockDef.inputs : blockDef.outputs;
       const targetDirection = hoveredDirection === 'output' ? 'input' : 'output';
 
-      for (const port of portsToCheck) {
-        const portId = port.id as PortId;
-
+      for (const [portId, port] of Object.entries(portsToCheck)) {
         // Skip if this port is already connected
-        const isTargetConnected = this.isPortConnected(patch, blockId, portId, targetDirection);
+        const isTargetConnected = this.isPortConnected(patch, blockId, portId as PortId, targetDirection);
         if (isTargetConnected) continue;
 
         // Check type compatibility
@@ -81,7 +79,7 @@ export class PortHighlightStore {
             hoveredBlockId,
             hoveredPortId,
             blockId,
-            portId,
+            portId as PortId,
             patch
           );
           isCompatible = result.valid;
@@ -89,7 +87,7 @@ export class PortHighlightStore {
           // Hovering INPUT, checking OUTPUT
           const result = validateConnection(
             blockId,
-            portId,
+            portId as PortId,
             hoveredBlockId,
             hoveredPortId,
             patch

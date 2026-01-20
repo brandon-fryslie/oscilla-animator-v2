@@ -62,7 +62,7 @@ function getPortType(
   if (!blockDef) return null;
 
   const ports = direction === 'input' ? blockDef.inputs : blockDef.outputs;
-  const port = ports.find(p => p.id === portId);
+  const port = ports[portId];
   return port?.type ?? null;
 }
 
@@ -141,16 +141,16 @@ function analyzeAdapters(
       // Create input ports from registry
       const inputPorts = new Map();
       if (adapterBlockDef) {
-        for (const inputDef of adapterBlockDef.inputs) {
-          inputPorts.set(inputDef.id, { id: inputDef.id });
+        for (const [inputId, inputDef] of Object.entries(adapterBlockDef.inputs)) {
+          inputPorts.set(inputId, { id: inputId });
         }
       }
 
       // Create output ports from registry
       const outputPorts = new Map();
       if (adapterBlockDef) {
-        for (const outputDef of adapterBlockDef.outputs) {
-          outputPorts.set(outputDef.id, { id: outputDef.id });
+        for (const [outputId, outputDef] of Object.entries(adapterBlockDef.outputs)) {
+          outputPorts.set(outputId, { id: outputId });
         }
       }
 

@@ -51,7 +51,7 @@ export function pass0PolymorphicTypes(patch: Patch): Patch {
       if (!targetDef) continue;
 
       const targetInput = targetDef.inputs[outgoingEdge.to.slotId];
-      if (!targetInput || targetInput.type?.payload === '???') continue;
+      if (!targetInput || !targetInput.type || targetInput.type.payload === '???') continue;
 
       inferredPayloadType = targetInput.type.payload;
       break;
@@ -60,7 +60,7 @@ export function pass0PolymorphicTypes(patch: Patch): Patch {
     // Strategy 2: Backward resolution - polymorphic INPUT infers from source output
     if (!inferredPayloadType) {
       for (const [inputId, input] of Object.entries(blockDef.inputs)) {
-        if (input.type?.payload !== '???') continue;
+        if (!input.type || input.type.payload !== '???') continue;
 
         const incomingEdge = patch.edges.find(
           e => e.enabled !== false &&

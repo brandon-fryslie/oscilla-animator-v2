@@ -61,17 +61,20 @@ function getDefaultSource(
 function createPortData(
   id: string,
   label: string,
-  type: SignalType,
+  type: SignalType | undefined,
   isConnected: boolean,
   defaultSource?: DefaultSource
 ): PortData {
+  // For inputs without a type (non-port inputs), use a default
+  const effectiveType = type || { kind: 'signal', payload: 'float' };
+
   return {
     id,
     label,
     defaultSource,
-    payloadType: type.payload,
-    typeTooltip: formatTypeForTooltip(type),
-    typeColor: getTypeColor(type.payload),
+    payloadType: effectiveType.payload,
+    typeTooltip: formatTypeForTooltip(effectiveType),
+    typeColor: getTypeColor(effectiveType.payload),
     isConnected,
   };
 }
@@ -107,21 +110,21 @@ export function createNodeFromBlock(
       blockId: block.id,
       blockType: block.type,
       label: block.displayName || blockDef.label,
-      inputs: blockDef.inputs.map((input) =>
+      inputs: Object.entries(blockDef.inputs).map(([inputId, input]) =>
         createPortData(
-          input.id,
-          input.label,
+          inputId,
+          input.label || inputId,
           input.type,
-          connectedInputs.has(input.id),
+          connectedInputs.has(inputId),
           getDefaultSource(input)
         )
       ),
-      outputs: blockDef.outputs.map((output) =>
+      outputs: Object.entries(blockDef.outputs).map(([outputId, output]) =>
         createPortData(
-          output.id,
-          output.label,
+          outputId,
+          output.label || outputId,
           output.type,
-          connectedOutputs.has(output.id)
+          connectedOutputs.has(outputId)
         )
       ),
     },

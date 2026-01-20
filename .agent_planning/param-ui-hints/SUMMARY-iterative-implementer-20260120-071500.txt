@@ -1,0 +1,99 @@
+Agent: iterative-implementer | 2026-01-20 07:15:00
+Mode: manual
+Completed: Block migrations (all 14 files), type definitions, 1 consumer file | Files: 17 | Commits: 3
+Cache invalidated: Will invalidate after completing remaining consumer updates
+Status: in_progress
+
+## Completed Work
+
+### Sprint 1: Type Definitions ✓
+- Updated InputDef: Added label?, type?, value?, exposedAsPort?, optional?, hidden?
+- Updated OutputDef: Added label?, hidden?
+- Updated BlockDef: inputs/outputs now Record<string, InputDef/OutputDef>
+- Removed params field from BlockDef
+- Added helper functions: getExposedInputs(), getExposedOutputs()
+- Updated registerBlock() validation for Record format
+
+### Sprint 2: Block Migrations ✓ (14 files)
+- math-blocks.ts: All math operations (Add, Subtract, Multiply, Divide, Modulo)
+- primitive-blocks.ts: Ellipse, Rect (merged params into inputs with value)
+- signal-blocks.ts: Const, Oscillator, UnitDelay, Hash, Id01
+- time-blocks.ts: Already migrated previously
+- color-blocks.ts: ColorLFO, HSVToColor, HsvToRgb
+- geometry-blocks.ts: PolarToCartesian, CircularLayout, OffsetPosition
+- render-blocks.ts: RenderCircle, RenderRect, RenderInstances2D
+- identity-blocks.ts: StableIdHash, DomainIndex
+- test-blocks.ts: TestSignal
+- instance-blocks.ts: GridLayout, LinearLayout (params merged with exposedAsPort: false)
+- array-blocks.ts: Already migrated
+- field-blocks.ts: Already migrated
+- field-operations-blocks.ts: All 19 field operation blocks (including FieldGoldenAngle with turns param)
+
+### Sprint 3: Consumer Updates (Partial - 1/12 files)
+✓ pass0-polymorphic-types.ts: Updated for Record-based ports
+
+## Remaining Work
+
+### Sprint 3: Consumer Updates (11 files remaining)
+
+**Graph Passes (2 files):**
+- pass1-default-sources.ts: Change for-of loops to Object.entries(), remove input.id access
+- pass2-adapters.ts: Similar pattern updates
+
+**Compiler Passes (3 files):**
+- pass2-types.ts: Update port iteration
+- pass6-block-lowering.ts: Update port access patterns
+- resolveWriters.ts: Update port iteration
+
+**UI Components (4 files):**
+- BlockInspector.tsx: Large file, many port iterations and lookups
+- BlockLibrary.tsx: Port display logic
+- ConnectionPicker.tsx: Port selection logic
+- OscillaNode.tsx: Node rendering
+
+**ReactFlow Editor (2 files):**
+- nodes.ts: Node creation logic
+- typeValidation.ts: Type checking logic
+
+**Stores (2 files):**
+- PatchStore.ts: Patch manipulation logic
+- PortHighlightStore.ts: Port highlighting logic
+
+### Sprint 4: Verification
+- Run typecheck (will pass after consumer updates)
+- Run build
+- Run tests
+- Manual verification of UI controls
+
+## Technical Notes
+
+**Conversion Pattern:**
+```typescript
+// BEFORE
+for (const input of blockDef.inputs) {
+  console.log(input.id, input.label);
+}
+const targetInput = blockDef.inputs.find(i => i.id === portId);
+const portCount = blockDef.inputs.length;
+
+// AFTER
+for (const [inputId, input] of Object.entries(blockDef.inputs)) {
+  console.log(inputId, input.label);  // label may be undefined, defaults to inputId
+}
+const targetInput = blockDef.inputs[portId];
+const portCount = Object.keys(blockDef.inputs).length;
+```
+
+**Type Safety Notes:**
+- InputDef.type is now optional (undefined for config-only inputs with exposedAsPort: false)
+- InputDef.label is now optional (defaults to key name)
+- Access patterns need null-safe operators where appropriate
+
+## Next Steps
+
+1. Continue updating remaining 11 consumer files
+2. Run full typecheck to verify
+3. Run tests to ensure functionality
+4. Manual verification of UI controls (sliders for Const.value, Circle.radius)
+5. Invalidate eval cache for modified files
+6. Write final summary

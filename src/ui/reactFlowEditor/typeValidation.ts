@@ -105,7 +105,7 @@ export function getPortType(
   if (!blockDef) return null;
 
   const slots = direction === 'input' ? blockDef.inputs : blockDef.outputs;
-  const slot = slots.find((s) => s.id === portId);
+  const slot = slots[portId];
   return slot?.type ?? null;
 }
 
@@ -122,7 +122,7 @@ export function getPortTypeFromBlockType(
   if (!blockDef) return null;
 
   const slots = direction === 'input' ? blockDef.inputs : blockDef.outputs;
-  const slot = slots.find((s) => s.id === portId);
+  const slot = slots[portId];
   return slot?.type ?? null;
 }
 

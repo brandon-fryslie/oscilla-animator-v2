@@ -347,8 +347,8 @@ const BlockTypeItem: React.FC<BlockTypeItemProps> = ({
   onClick,
   onDoubleClick,
 }) => {
-  const inputCount = type.inputs.length;
-  const outputCount = type.outputs.length;
+  const inputCount = Object.keys(type.inputs).length;
+  const outputCount = Object.keys(type.outputs).length;
   const isPrimitive = type.form === 'primitive';
 
   return (

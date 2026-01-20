@@ -153,16 +153,16 @@ export class PatchStore {
     // Create input ports from registry
     const inputPorts = new Map<string, InputPort>();
     if (blockDef) {
-      for (const inputDef of blockDef.inputs) {
-        inputPorts.set(inputDef.id, { id: inputDef.id });
+      for (const [inputId, inputDef] of Object.entries(blockDef.inputs)) {
+        inputPorts.set(inputId, { id: inputId });
       }
     }
 
     // Create output ports from registry
     const outputPorts = new Map<string, OutputPort>();
     if (blockDef) {
-      for (const outputDef of blockDef.outputs) {
-        outputPorts.set(outputDef.id, { id: outputDef.id });
+      for (const [outputId, outputDef] of Object.entries(blockDef.outputs)) {
+        outputPorts.set(outputId, { id: outputId });
       }
     }
 
@@ -268,7 +268,7 @@ export class PatchStore {
     if (!port) {
       // Port not in block's map - check if it exists in registry
       const blockDef = getBlockDefinition(block.type);
-      const inputDef = blockDef?.inputs.find(i => i.id === portId);
+      const inputDef = blockDef?.inputs[portId];
       if (!inputDef) {
         throw new Error(`Port ${portId} not found on block ${blockId}`);
       }
@@ -298,27 +298,26 @@ export class PatchStore {
         diffSummary: {
           blocksAdded: 0,
           blocksRemoved: 0,
-          edgesChanged: 0,
+          edgesAdded: 0,
+          edgesRemoved: 0,
+          paramsChanged: 0,
         },
       });
     }
   }
 
   /**
-   * Adds an edge to the patch.
+   * Adds a new edge to the patch.
    * Returns the generated edge ID.
    */
-  addEdge(from: Endpoint, to: Endpoint, options?: { enabled?: boolean; sortKey?: number }): string {
+  addEdge(from: Endpoint, to: Endpoint): string {
     const id = `e${this._nextEdgeId++}`;
-
     const edge: Edge = {
       id,
       from,
       to,
-      enabled: options?.enabled ?? true,
-      sortKey: options?.sortKey,
+      enabled: true,
     };
-
     this._data.edges.push(edge);
     return id;
   }
@@ -327,54 +326,33 @@ export class PatchStore {
    * Removes an edge from the patch.
    */
   removeEdge(id: string): void {
-    this._data.edges = this._data.edges.filter((e) => e.id !== id);
+    this._data.edges = this._data.edges.filter((edge) => edge.id !== id);
   }
 
   /**
    * Updates edge properties.
    */
-  updateEdge(
-    id: string,
-    updates: Partial<Pick<Edge, 'enabled' | 'sortKey'>>
-  ): void {
-    const edgeIndex = this._data.edges.findIndex((e) => e.id === id);
-    if (edgeIndex === -1) {
+  updateEdge(id: string, updates: Partial<Edge>): void {
+    const index = this._data.edges.findIndex((edge) => edge.id === id);
+    if (index === -1) {
       throw new Error(`Edge not found: ${id}`);
     }
 
-    this._data.edges[edgeIndex] = {
-      ...this._data.edges[edgeIndex],
+    this._data.edges[index] = {
+      ...this._data.edges[index],
       ...updates,
     };
   }
 
   /**
-   * Replaces entire patch (for loading from file).
+   * Loads a complete patch, replacing the current one.
+   * This is used for file load, undo/redo, etc.
    */
   loadPatch(patch: Patch): void {
-    this._data.blocks = new Map(patch.blocks);
-    this._data.edges = [...patch.edges];
-
-    // Update ID generators to avoid conflicts
-    let maxBlockId = -1;
-    let maxEdgeId = -1;
-
-    for (const blockId of this._data.blocks.keys()) {
-      const match = blockId.match(/^b(\d+)$/);
-      if (match) {
-        maxBlockId = Math.max(maxBlockId, parseInt(match[1], 10));
-      }
-    }
-
-    for (const edge of this._data.edges) {
-      const match = edge.id.match(/^e(\d+)$/);
-      if (match) {
-        maxEdgeId = Math.max(maxEdgeId, parseInt(match[1], 10));
-      }
-    }
-
-    this._nextBlockId = maxBlockId + 1;
-    this._nextEdgeId = maxEdgeId + 1;
+    this._data = {
+      blocks: new Map(patch.blocks),
+      edges: [...patch.edges],
+    };
   }
 
   /**
@@ -382,7 +360,5 @@ export class PatchStore {
    */
   clear(): void {
     this._data = emptyPatchData();
-    this._nextBlockId = 0;
-    this._nextEdgeId = 0;
   }
 }
