@@ -60,6 +60,9 @@ function buildPortTooltip(port: PortData, isInput: boolean): string {
     parts.push(formatDefaultSource(port.defaultSource));
   }
 
+  // Connection status
+  parts.push(port.isConnected ? 'Connected' : 'Not connected');
+
   return parts.join('\n');
 }
 
@@ -80,40 +83,63 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = ({ data }) => {
         fontSize: '14px',
       }}
     >
-      {/* Input Handles (Left Side) with Type Colors */}
-      {data.inputs.map((input, index) => (
-        <React.Fragment key={`input-${input.id}`}>
-          <Handle
-            type="target"
-            position={Position.Left}
-            id={input.id}
-            style={{
-              top: `${((index + 1) * 100) / (data.inputs.length + 1)}%`,
-              background: input.typeColor,
-              width: '10px',
-              height: '10px',
-              border: '2px solid #1e1e1e',
-            }}
-            title={buildPortTooltip(input, true)}
-          />
-          {/* Default Source Indicator */}
-          {input.defaultSource && (
+      {/* Input Handles (Left Side) with Labels and Type Colors */}
+      {data.inputs.map((input, index) => {
+        const topPercent = ((index + 1) * 100) / (data.inputs.length + 1);
+        return (
+          <React.Fragment key={`input-${input.id}`}>
+            {/* Port Label */}
             <div
               style={{
                 position: 'absolute',
-                left: '-3px',
-                top: `calc(${((index + 1) * 100) / (data.inputs.length + 1)}% - 12px)`,
-                width: '6px',
-                height: '6px',
-                borderRadius: '50%',
-                background: getIndicatorColor(input.defaultSource),
+                left: '-8px',
+                top: `${topPercent}%`,
+                transform: 'translate(-100%, -50%)',
+                fontSize: '11px',
+                color: '#aaa',
+                whiteSpace: 'nowrap',
                 pointerEvents: 'none',
+                paddingRight: '4px',
               }}
-              title={formatDefaultSource(input.defaultSource)}
+            >
+              {input.label}
+            </div>
+
+            {/* Handle */}
+            <Handle
+              type="target"
+              position={Position.Left}
+              id={input.id}
+              style={{
+                top: `${topPercent}%`,
+                background: input.isConnected ? input.typeColor : '#1e1e1e',
+                width: '16px',
+                height: '16px',
+                border: `2px solid ${input.typeColor}`,
+                borderRadius: '50%',
+              }}
+              title={buildPortTooltip(input, true)}
             />
-          )}
-        </React.Fragment>
-      ))}
+
+            {/* Default Source Indicator (only for unconnected ports with defaults) */}
+            {!input.isConnected && input.defaultSource && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '-3px',
+                  top: `calc(${topPercent}% - 12px)`,
+                  width: '6px',
+                  height: '6px',
+                  borderRadius: '50%',
+                  background: getIndicatorColor(input.defaultSource),
+                  pointerEvents: 'none',
+                }}
+                title={formatDefaultSource(input.defaultSource)}
+              />
+            )}
+          </React.Fragment>
+        );
+      })}
 
       {/* Node Label */}
       <div
@@ -126,35 +152,53 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = ({ data }) => {
         {data.label}
       </div>
 
-      {/* Port Labels */}
-      <div style={{ fontSize: '11px', color: '#999' }}>
-        {data.inputs.length > 0 && (
-          <div style={{ marginBottom: '4px' }}>
-            Inputs: {data.inputs.map((i) => i.label).join(', ')}
-          </div>
-        )}
-        {data.outputs.length > 0 && (
-          <div>Outputs: {data.outputs.map((o) => o.label).join(', ')}</div>
-        )}
+      {/* Port Labels Summary (removed to reduce clutter) */}
+      <div style={{ fontSize: '11px', color: '#666', textAlign: 'center' }}>
+        {data.inputs.length > 0 && `${data.inputs.length} in`}
+        {data.inputs.length > 0 && data.outputs.length > 0 && ' • '}
+        {data.outputs.length > 0 && `${data.outputs.length} out`}
       </div>
 
-      {/* Output Handles (Right Side) with Type Colors */}
-      {data.outputs.map((output, index) => (
-        <Handle
-          key={`output-${output.id}`}
-          type="source"
-          position={Position.Right}
-          id={output.id}
-          style={{
-            top: `${((index + 1) * 100) / (data.outputs.length + 1)}%`,
-            background: output.typeColor,
-            width: '10px',
-            height: '10px',
-            border: '2px solid #1e1e1e',
-          }}
-          title={buildPortTooltip(output, false)}
-        />
-      ))}
+      {/* Output Handles (Right Side) with Labels and Type Colors */}
+      {data.outputs.map((output, index) => {
+        const topPercent = ((index + 1) * 100) / (data.outputs.length + 1);
+        return (
+          <React.Fragment key={`output-${output.id}`}>
+            {/* Port Label */}
+            <div
+              style={{
+                position: 'absolute',
+                right: '-8px',
+                top: `${topPercent}%`,
+                transform: 'translate(100%, -50%)',
+                fontSize: '11px',
+                color: '#aaa',
+                whiteSpace: 'nowrap',
+                pointerEvents: 'none',
+                paddingLeft: '4px',
+              }}
+            >
+              {output.label}
+            </div>
+
+            {/* Handle */}
+            <Handle
+              type="source"
+              position={Position.Right}
+              id={output.id}
+              style={{
+                top: `${topPercent}%`,
+                background: output.isConnected ? output.typeColor : '#1e1e1e',
+                width: '16px',
+                height: '16px',
+                border: `2px solid ${output.typeColor}`,
+                borderRadius: '50%',
+              }}
+              title={buildPortTooltip(output, false)}
+            />
+          </React.Fragment>
+        );
+      })}
     </div>
   );
 };

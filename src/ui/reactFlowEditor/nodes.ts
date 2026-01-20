@@ -24,6 +24,8 @@ export interface PortData {
   typeTooltip: string;
   /** Color for handle based on type */
   typeColor: string;
+  /** Whether this port is connected to an edge */
+  isConnected: boolean;
 }
 
 /**
@@ -60,6 +62,7 @@ function createPortData(
   id: string,
   label: string,
   type: SignalType,
+  isConnected: boolean,
   defaultSource?: DefaultSource
 ): PortData {
   return {
@@ -69,13 +72,33 @@ function createPortData(
     payloadType: type.payload,
     typeTooltip: formatTypeForTooltip(type),
     typeColor: getTypeColor(type.payload),
+    isConnected,
   };
 }
 
 /**
  * Create ReactFlow node from Oscilla block.
  */
-export function createNodeFromBlock(block: Block, blockDef: BlockDef): OscillaNode {
+export function createNodeFromBlock(
+  block: Block,
+  blockDef: BlockDef,
+  edges?: readonly Edge[]
+): OscillaNode {
+  // Determine connected ports if edges provided
+  const connectedInputs = new Set<string>();
+  const connectedOutputs = new Set<string>();
+
+  if (edges) {
+    for (const edge of edges) {
+      if (edge.to.blockId === block.id) {
+        connectedInputs.add(edge.to.slotId);
+      }
+      if (edge.from.blockId === block.id) {
+        connectedOutputs.add(edge.from.slotId);
+      }
+    }
+  }
+
   return {
     id: block.id,
     type: 'oscilla',
@@ -85,10 +108,21 @@ export function createNodeFromBlock(block: Block, blockDef: BlockDef): OscillaNo
       blockType: block.type,
       label: block.displayName || blockDef.label,
       inputs: blockDef.inputs.map((input) =>
-        createPortData(input.id, input.label, input.type, getDefaultSource(input))
+        createPortData(
+          input.id,
+          input.label,
+          input.type,
+          connectedInputs.has(input.id),
+          getDefaultSource(input)
+        )
       ),
       outputs: blockDef.outputs.map((output) =>
-        createPortData(output.id, output.label, output.type)
+        createPortData(
+          output.id,
+          output.label,
+          output.type,
+          connectedOutputs.has(output.id)
+        )
       ),
     },
   };

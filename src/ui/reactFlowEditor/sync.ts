@@ -57,7 +57,8 @@ export function syncPatchToReactFlow(
         continue;
       }
 
-      const node = createNodeFromBlock(block, def);
+      // Pass edges to compute connection status
+      const node = createNodeFromBlock(block, def, patch.edges);
       // Position nodes in simple grid layout
       node.position = { x, y };
       nodes.push(node);
@@ -207,7 +208,8 @@ export function addBlockToReactFlow(
       domainId: null,
       role: { kind: 'user', meta: {} },
     } as any,
-    def
+    def,
+    [] // No edges for new block
   );
 
   // Position at reasonable default (center logic would require viewport access)
