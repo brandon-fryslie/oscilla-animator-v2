@@ -18,7 +18,7 @@ import type {
 } from './Indices';
 import type { TopologyId } from '../../shapes/types';
 import type { TimeModelIR } from './schedule';
-import type { PureFn, OpCode, InstanceDecl, LayoutSpec, Step, IntrinsicPropertyName, ContinuityPolicy } from './types';
+import type { PureFn, OpCode, InstanceDecl, LayoutSpec, Step, IntrinsicPropertyName, ContinuityPolicy, SigExpr, FieldExpr } from './types';
 
 // =============================================================================
 // IRBuilder Interface
@@ -313,4 +313,16 @@ export interface IRBuilder {
 
   /** Get state slot count. */
   getStateSlotCount(): number;
+
+  /**
+   * Get all signal expressions.
+   * @returns Readonly array of all signal expressions
+   */
+  getSigExprs(): readonly SigExpr[];
+
+  /**
+   * Get all field expressions.
+   * @returns Readonly array of all field expressions
+   */
+  getFieldExprs(): readonly FieldExpr[];
 }
