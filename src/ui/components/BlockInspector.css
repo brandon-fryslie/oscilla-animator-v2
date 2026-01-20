@@ -1,0 +1,51 @@
+/**
+ * BlockInspector Styles
+ *
+ * Scrollable container for Block Inspector panel.
+ * Pattern matches BlockLibrary.css for consistency.
+ */
+
+.block-inspector {
+  /* Base colors (fallbacks if CSS vars not available) */
+  --bg-content: #0f0f23;
+  --bg-panel: #16213e;
+  --border-color: #0f3460;
+  --primary: #4ecdc4;
+
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-content);
+}
+
+/* ============================================================================
+ * Scrollable Content Area
+ * ========================================================================== */
+
+.block-inspector__content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 16px;
+  min-height: 0; /* Critical for flex child scrolling */
+}
+
+/* Custom scrollbar styling */
+.block-inspector__content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.block-inspector__content::-webkit-scrollbar-track {
+  background-color: var(--bg-content);
+}
+
+.block-inspector__content::-webkit-scrollbar-thumb {
+  background-color: var(--border-color);
+  border-radius: 4px;
+}
+
+.block-inspector__content::-webkit-scrollbar-thumb:hover {
+  background-color: var(--primary);
+}
