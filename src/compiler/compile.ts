@@ -33,6 +33,8 @@ import '../blocks/geometry-blocks';
 import '../blocks/identity-blocks';
 import '../blocks/render-blocks';
 import '../blocks/field-operations-blocks';
+import '../blocks/path-blocks'; // NEW - Path foundation sprint
+
 import '../blocks/test-blocks'; // Test blocks for signal evaluation in tests
 
 // Import passes
