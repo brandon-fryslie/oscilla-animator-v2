@@ -58,10 +58,25 @@ function getDerivedDefaultSourceId(blockId: BlockId, portId: string): BlockId {
 }
 
 /**
+ * Check if two signal types are compatible for wiring.
+ * - '???' (polymorphic) is compatible with anything
+ * - Otherwise, payload types must match
+ */
+function areTypesCompatible(sourceType: SignalType, targetType: SignalType): boolean {
+  // Polymorphic types are compatible with anything
+  if (sourceType.payload === '???' || targetType.payload === '???') {
+    return true;
+  }
+  // Otherwise payload types must match
+  return sourceType.payload === targetType.payload;
+}
+
+/**
  * Get valid block types for use as default sources.
  * A valid default source block:
  * - Must NOT be stateful (capability !== 'state')
  * - Must have at least one output
+ * - Must have at least one output compatible with the target port type
  */
 function getValidDefaultSourceBlockTypes(portType: SignalType): { blockType: string; label: string; outputs: readonly OutputDef[] }[] {
   const validBlocks: { blockType: string; label: string; outputs: readonly OutputDef[] }[] = [];
@@ -73,8 +88,10 @@ function getValidDefaultSourceBlockTypes(portType: SignalType): { blockType: str
     // Must have at least one output
     if (def.outputs.length === 0) continue;
 
-    // For now, include all non-stateful blocks with outputs
-    // Type compatibility checking is simplified - '???' payload is polymorphic
+    // Must have at least one type-compatible output
+    const hasCompatibleOutput = def.outputs.some(output => areTypesCompatible(output.type, portType));
+    if (!hasCompatibleOutput) continue;
+
     validBlocks.push({
       blockType: def.type,
       label: def.label,
@@ -1129,34 +1146,16 @@ function PortInspector({ portRef, block, typeInfo, patch, onBack }: PortInspecto
             </div>
           )}
 
-          {/* Show default source editor for unconnected inputs */}
-          {!isConnected && effectiveDefaultSource && (
+          {/* Show default source editor for ALL input ports - whether connected or not */}
+          {effectiveDefaultSource && (
             <PortDefaultSourceEditor
               blockId={block.id}
               portId={portRef.portId}
               portType={inputPort.type}
               currentDefaultSource={effectiveDefaultSource}
               registryDefaultSource={inputPort.defaultSource}
+              isConnected={isConnected}
             />
-          )}
-
-          {/* Read-only display for connected inputs */}
-          {isConnected && inputPort.defaultSource && (
-            <div style={{ marginBottom: '16px' }}>
-              <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: colors.textSecondary }}>
-                Default Source (when unconnected)
-              </h4>
-              <div style={{
-                padding: '8px',
-                background: colors.bgPanel,
-                borderRadius: '4px',
-                fontSize: '13px',
-                fontStyle: inputPort.defaultSource.blockType === 'TimeRoot' ? 'italic' : 'normal',
-                color: inputPort.defaultSource.blockType === 'TimeRoot' ? colors.primary : colors.textPrimary,
-              }}>
-                {formatDefaultSource(inputPort.defaultSource)}
-              </div>
-            </div>
           )}
         </>
       )}
@@ -1231,6 +1230,7 @@ interface PortDefaultSourceEditorProps {
   portType: SignalType;
   currentDefaultSource: DefaultSource;
   registryDefaultSource?: DefaultSource;
+  isConnected?: boolean;
 }
 
 const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
@@ -1239,6 +1239,7 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
   portType,
   currentDefaultSource,
   registryDefaultSource,
+  isConnected,
 }: PortDefaultSourceEditorProps) {
   const validBlockTypes = getValidDefaultSourceBlockTypes(portType);
 
@@ -1300,6 +1301,14 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
     JSON.stringify(currentParams) !== JSON.stringify(registryDefaultSource.params || {})
   );
 
+  // Special handling for Const block - show direct slider for value param
+  const isConstBlock = currentBlockType === 'Const';
+  const constValue = isConstBlock ? (currentParams.value as number ?? 0) : 0;
+
+  // Special handling for TimeRoot block - show output dropdown
+  const isTimeRootBlock = currentBlockType === 'TimeRoot';
+  const timeRootOutputs = ['tMs', 'phaseA', 'phaseB', 'pulse', 'palette', 'energy'];
+
   return (
     <div style={{ marginBottom: '16px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
@@ -1321,56 +1330,90 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
         )}
       </div>
 
-      {/* Block Type Selector */}
-      <div style={{ marginBottom: '12px' }}>
-        <label style={{ fontSize: '12px', color: colors.textSecondary, display: 'block', marginBottom: '4px' }}>
-          Block Type
-        </label>
-        <MuiSelectInput
-          value={currentBlockType}
-          onChange={handleBlockTypeChange}
-          options={validBlockTypes.map(bt => ({ value: bt.blockType, label: bt.label }))}
-          size="small"
-        />
-      </div>
+      {/* Const Block - Direct Value Editor */}
+      {isConstBlock && (
+        <div style={{ marginBottom: '12px' }}>
+          <SliderWithInput
+            label="Value"
+            value={constValue}
+            onChange={(value) => handleParamChange('value', value)}
+            min={0}
+            max={1}
+            step={0.01}
+          />
+        </div>
+      )}
 
-      {/* Output Port Selector */}
-      {currentBlockDef && currentBlockDef.outputs.length > 1 && (
+      {/* TimeRoot Block - Output Selector */}
+      {isTimeRootBlock && (
         <div style={{ marginBottom: '12px' }}>
           <label style={{ fontSize: '12px', color: colors.textSecondary, display: 'block', marginBottom: '4px' }}>
-            Output Port
+            TimeRoot Output
           </label>
           <MuiSelectInput
             value={currentOutputPort}
             onChange={handleOutputPortChange}
-            options={currentBlockDef.outputs.map(out => ({ value: out.id, label: out.label }))}
+            options={timeRootOutputs.map(out => ({ value: out, label: out }))}
             size="small"
           />
         </div>
       )}
 
-      {/* Params Editor */}
-      {currentBlockDef && currentBlockDef.inputs && currentBlockDef.inputs.length > 0 && (
-        <div>
-          <label style={{ fontSize: '12px', color: colors.textSecondary, display: 'block', marginBottom: '4px' }}>
-            Parameters
-          </label>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {currentBlockDef.inputs.map(input => {
-              const paramValue = currentParams[input.id] ?? input.defaultValue;
-              return (
-                <DefaultSourceParamField
-                  key={input.id}
-                  paramKey={input.id}
-                  paramLabel={input.label}
-                  value={paramValue}
-                  uiHint={input.uiHint}
-                  onChange={(value) => handleParamChange(input.id, value)}
-                />
-              );
-            })}
+      {/* Other Blocks - Show full configuration */}
+      {!isConstBlock && !isTimeRootBlock && (
+        <>
+          {/* Block Type Selector */}
+          <div style={{ marginBottom: '12px' }}>
+            <label style={{ fontSize: '12px', color: colors.textSecondary, display: 'block', marginBottom: '4px' }}>
+              Block Type
+            </label>
+            <MuiSelectInput
+              value={currentBlockType}
+              onChange={handleBlockTypeChange}
+              options={validBlockTypes.map(bt => ({ value: bt.blockType, label: bt.label }))}
+              size="small"
+            />
           </div>
-        </div>
+
+          {/* Output Port Selector */}
+          {currentBlockDef && currentBlockDef.outputs.length > 1 && (
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ fontSize: '12px', color: colors.textSecondary, display: 'block', marginBottom: '4px' }}>
+                Output Port
+              </label>
+              <MuiSelectInput
+                value={currentOutputPort}
+                onChange={handleOutputPortChange}
+                options={currentBlockDef.outputs.map(out => ({ value: out.id, label: out.label }))}
+                size="small"
+              />
+            </div>
+          )}
+
+          {/* Params Editor */}
+          {currentBlockDef && currentBlockDef.inputs && currentBlockDef.inputs.length > 0 && (
+            <div>
+              <label style={{ fontSize: '12px', color: colors.textSecondary, display: 'block', marginBottom: '4px' }}>
+                Parameters
+              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {currentBlockDef.inputs.map(input => {
+                  const paramValue = currentParams[input.id] ?? input.defaultValue;
+                  return (
+                    <DefaultSourceParamField
+                      key={input.id}
+                      paramKey={input.id}
+                      paramLabel={input.label}
+                      value={paramValue}
+                      uiHint={input.uiHint}
+                      onChange={(value) => handleParamChange(input.id, value)}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
