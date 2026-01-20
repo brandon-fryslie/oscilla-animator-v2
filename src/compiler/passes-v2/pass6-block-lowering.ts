@@ -365,7 +365,7 @@ function lowerBlockInstance(
       inTypes: blockDef.inputs.map((port) => port.type),
       outTypes: blockDef.outputs.map((port) => port.type),
       b: builder,
-      seedConstId: 0, // TODO: Proper seed management
+      seedConstId: 0, // Seed value not used by current intrinsics (randomId uses element index only)
       inferredInstance,
     };
 
