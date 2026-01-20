@@ -33,6 +33,10 @@ export class RootStore {
   // Patch revision tracking (for diagnostics)
   private patchRevision: number = 0;
 
+  // Disposal tracking
+  private diagnosticHub: DiagnosticHub;
+  private graphCommittedDisposer: (() => void) | null = null;
+
   constructor() {
     // Configure MobX strict mode before creating stores
     configureMobX();
@@ -48,21 +52,21 @@ export class RootStore {
     this.events = new EventHub();
 
     // Create DiagnosticHub and DiagnosticsStore
-    const diagnosticHub = new DiagnosticHub(
+    this.diagnosticHub = new DiagnosticHub(
       this.events,
       'patch-0',
       () => this.patch.patch
     );
-    this.diagnostics = new DiagnosticsStore(diagnosticHub);
+    this.diagnostics = new DiagnosticsStore(this.diagnosticHub);
 
     // Create ContinuityStore
     this.continuity = new ContinuityStore();
 
     // Wire up callback for MobX reactivity
-    diagnosticHub.setOnRevisionChange(() => this.diagnostics.incrementRevision());
+    this.diagnosticHub.setOnRevisionChange(() => this.diagnostics.incrementRevision());
 
     // Wire up logging callback for param flow visibility
-    diagnosticHub.setOnLog((entry) => this.diagnostics.log(entry));
+    this.diagnosticHub.setOnLog((entry) => this.diagnostics.log(entry));
 
     // Wire up EventHub to PatchStore for ParamChanged events
     this.patch.setEventHub(this.events, 'patch-0', () => this.patchRevision);
@@ -86,7 +90,7 @@ export class RootStore {
    * - Identify affectedBlockIds
    */
   private setupGraphCommittedEmission(): void {
-    reaction(
+    this.graphCommittedDisposer = reaction(
       () => ({
         blockCount: this.patch.blocks.size,
         edgeCount: this.patch.edges.length,
@@ -114,5 +118,18 @@ export class RootStore {
    */
   getPatchRevision(): number {
     return this.patchRevision;
+  }
+
+  /**
+   * Disposes of all owned resources.
+   * Should be called when the RootStore is no longer needed (e.g., hot reload, app unmount).
+   */
+  dispose(): void {
+    // Dispose MobX reaction
+    this.graphCommittedDisposer?.();
+    this.graphCommittedDisposer = null;
+
+    // Dispose DiagnosticHub
+    this.diagnosticHub.dispose();
   }
 }

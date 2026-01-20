@@ -53,7 +53,7 @@ type PatchBuilder = (b: any) => void;
 // Explicit wiring for all inputs (adapter pass not implemented yet)
 const patchOriginal: PatchBuilder = (b) => {
   const time = b.addBlock('InfiniteTimeRoot',
-    { periodAMs: 799, periodBMs: 120000 },  // 120 sec period for slower jitter
+    { periodAMs: 4000, periodBMs: 120000 },  // 4 sec rotation, 120 sec jitter cycle
     { role: timeRootRole() }
   );
 
