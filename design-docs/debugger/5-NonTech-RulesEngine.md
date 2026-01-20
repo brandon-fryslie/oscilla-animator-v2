@@ -214,17 +214,6 @@ Recommended eps by domain:
 Severity: info (if intentional), warn if it should drive motion
 Heuristic to decide warn:
 	•	If bus is phaseA or pulse or energy and flatline → warn
-
-Fixes
-	•	Add a clock/modulator publisher (guided)
-	•	Change TimeRoot to cyclic if phaseA is flatline
-	•	Increase speed / period settings if phase too slow
-
-FixActionSpecs:
-	•	SuggestAddPublisher {busId, preset:'Oscillator'|'Noise'|'Clock'}
-	•	SetTimeRootMode {mode:'cyclic', periodMs}
-	•	AdjustBusPublisherParam {publisherId, param:'frequency', value} (implemented via default sources/lens params)
-
 ⸻
 
 Rule F: Too sharp (high jitter / unpleasant motion)

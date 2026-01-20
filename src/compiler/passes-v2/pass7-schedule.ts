@@ -388,11 +388,5 @@ export function pass7Schedule(
  * Convert TimeModelIR to TimeModel for schedule.
  */
 function convertTimeModel(timeModelIR: TimeModelIR): TimeModel {
-  if (timeModelIR.kind === 'finite') {
-    return {
-      kind: 'finite',
-      durationMs: timeModelIR.durationMs,
-    };
-  }
   return { kind: 'infinite' };
 }

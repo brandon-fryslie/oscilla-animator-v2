@@ -62,19 +62,19 @@ The single authoritative time source. Exactly one per patch. **System-managed** 
 | `dt` | one | continuous | float | Delta time since last frame (ms) |
 | `phaseA` | one | continuous | phase | Primary phase (0..1) |
 | `phaseB` | one | continuous | phase | Secondary phase (0..1) |
-| `progress` | one | continuous | unit | 0..1 for finite only |
 | `pulse` | one | discrete | unit | Frame tick trigger |
 | `palette` | one | continuous | color | Default color atmosphere (HSV rainbow) |
 | `energy` | one | continuous | float | Animation intensity (0..1, audio-reactive ready) |
 
 ### TimeRoot Kinds
 
-Only two TimeRoot kinds exist:
+Only one TimeRoot kind exists:
 
-| Kind | Description | `progress` Output |
-|------|-------------|-------------------|
-| `finite` | Has duration, loops or ends | Active (0..1 over duration) |
-| `infinite` | Runs forever | Constant 0 |
+| Kind | Description                | `progress` Output |
+|------|----------------------------|-------------------|
+| `infinite` | Runs forever               | Constant 0 |
+
+Note: finite timeroot was removed from spec. 
 
 ### TimeRoot SignalTypes (v2.5)
 
@@ -287,15 +287,6 @@ Primary and secondary phase rails:
 - **SignalType**: `one + continuous + phase`
 - **Range**: [0, 1)
 - **Semantics**: Cyclic, wrapping
-
-### progress
-
-For finite TimeRoot only:
-
-- **Type**: `unit`
-- **SignalType**: `one + continuous + unit`
-- **Range**: [0, 1]
-- **Semantics**: Linear progress through duration
 
 ### pulse
 

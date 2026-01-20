@@ -12,7 +12,7 @@
  * - PureFn: Pure function representations
  * - Instance System: Domain instances, layouts, and declarations
  * - Continuity System: Policies and gauges for anti-jank
- * - Time Model: Finite vs infinite time representation
+ * - Time Model: infinite time representation
  */
 
 // Import canonical types as source of truth
@@ -376,7 +376,6 @@ export type ContinuityPolicy =
 // =============================================================================
 
 export type TimeModel =
-  | { kind: 'finite'; durationMs: number; periodAMs?: number; periodBMs?: number }
   | { kind: 'infinite'; windowMs?: number; periodAMs?: number; periodBMs?: number };
 
 // =============================================================================

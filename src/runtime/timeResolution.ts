@@ -28,8 +28,6 @@ export interface EffectiveTime {
   /** Pulse signal: 1.0 when either phase wrapped, 0.0 otherwise */
   pulse: number;
 
-  /** Progress 0..1 (finite models only) */
-  progress?: number;
 }
 
 /**
@@ -104,14 +102,6 @@ export function resolveTime(
   // Update state
   timeState.prevPhaseA = phaseA;
   timeState.prevPhaseB = phaseB;
-
-  if (timeModel.kind === 'finite') {
-    const tMs = tAbsMs;
-    const clampedMs = Math.max(0, Math.min(tAbsMs, timeModel.durationMs));
-    const progress = timeModel.durationMs > 0 ? clampedMs / timeModel.durationMs : 0;
-
-    return { tAbsMs, tMs, dt, phaseA, phaseB, pulse, progress };
-  }
 
   // Infinite model
   return { tAbsMs, tMs: tAbsMs, dt, phaseA, phaseB, pulse };

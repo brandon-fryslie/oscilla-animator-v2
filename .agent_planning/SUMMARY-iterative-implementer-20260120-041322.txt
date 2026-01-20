@@ -1,0 +1,52 @@
+Agent: iterative-implementer | 2026-01-20
+Mode: manual
+Completed: P0-P3 memory leak fixes | Files: 4 | Commits: 5
+Cache invalidated: None (no cache entries for modified files)
+Status: complete - ready for manual testing
+
+## Work Completed
+
+### P0: DiagnosticsStore Log Cap (src/stores/DiagnosticsStore.ts)
+- Added MAX_LOGS = 1000 constant
+- Implemented FIFO eviction in log() method
+- Preserves clearLogs() functionality
+- Prevents unbounded log memory growth
+
+### P1: RootStore Reaction Disposal (src/stores/RootStore.ts)
+- Stored DiagnosticHub as class property
+- Stored reaction disposer from setupGraphCommittedEmission()
+- Added dispose() method for cleanup
+- Prevents reaction leak during hot reload
+
+### P2: main.ts Reaction Disposal (src/main.ts)
+- Stored reaction disposer in module scope
+- Exported cleanupReaction() function
+- Guard prevents duplicate reactions
+- Prevents reaction leak during development
+
+### P3: ReactFlowEditor setTimeout Cleanup (src/ui/reactFlowEditor/ReactFlowEditor.tsx)
+- Tracked setTimeout IDs in useEffect (lines 313-314)
+- Assigned IDs at lines 323, 331
+- Return cleanup function (lines 337-341)
+- Prevents orphaned timeouts on unmount
+
+## Commits
+- 992cc88: fix(diagnostics): Cap log entries at 1000 to prevent memory leak
+- 8e397d1: fix(stores): Add disposal method to RootStore for reaction cleanup
+- 7b512ce: fix(main): Add cleanup function for live recompile reaction  
+- 927ceef: fix(ui): Add setTimeout cleanup in ReactFlowEditor useEffect
+- 66cc2c1: chore: Remove backup files from memory leak fixes
+
+## Verification Status
+
+TypeScript compilation: Pre-existing test errors in DiagnosticHub.test.ts (not from our changes)
+Production code: All modified files compile without errors
+Manual testing: Ready for user to test hot reload and memory behavior
+
+## Next Steps
+
+Manual verification recommended:
+1. Run app and confirm no console errors
+2. Edit parameters for 2+ minutes, check Chrome DevTools memory
+3. Test hot reload (edit + save source file)
+4. Verify no memory growth warnings

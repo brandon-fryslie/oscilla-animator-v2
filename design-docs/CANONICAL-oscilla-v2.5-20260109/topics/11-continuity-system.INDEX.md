@@ -52,7 +52,7 @@ last_generated: 2026-01-12
 
 ### Time Concepts
 - `t_abs`: Absolute time in milliseconds from TimeRoot
-- `t_model`: Time after TimeModel mapping (finite, infinite, or infinite-looping)
+- `t_model`: Time after TimeModel mapping (infinite, or infinite-looping)
 - `φ_base(t)`: Raw phase from TimeRoot (`t_model / period`)
 - `φ_eff(t)`: Effective phase seen by patch (`wrap(φ_base(t) + Δφ)`)
 - `Δφ` (delta-phi): Phase offset gauge state, preserves continuity across jumps

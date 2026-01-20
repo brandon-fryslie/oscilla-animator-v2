@@ -14,7 +14,6 @@ source_hash: 9d52fe0a03f2
 - **TimeRoot**: Single authoritative time source (system-managed, one per patch) [L53-69]
 - **phaseA/phaseB**: Phase rails (range [0,1), wrap-aware) [L282-289]
 - **dt**: Delta time since last frame [L273-280]
-- **progress**: [0..1] for finite TimeRoot only [L291-299]
 - **pulse**: Frame tick trigger (discrete) [L300-307]
 - **palette**: Default color atmosphere [L308-316]
 - **energy**: Animation intensity signal [L317-326]
@@ -27,7 +26,6 @@ source_hash: 9d52fe0a03f2
 ## TimeRoot Kinds
 | Kind | progress Output | Behavior |
 |------|-----------------|----------|
-| `finite` | Active (0..1 over duration) | Has duration, loops or ends |
 | `infinite` | Constant 0 | Runs forever |
 
 ## Outputs (SignalType)
@@ -36,7 +34,6 @@ source_hash: 9d52fe0a03f2
 - `phaseA`, `phaseB`: one + continuous + phase
 - `pulse`: one + discrete + unit
 - `palette`: one + continuous + color
-- `progress`: one + continuous + unit (finite only)
 - `energy`: one + continuous + float
 
 ## Phase Arithmetic [L205-222]

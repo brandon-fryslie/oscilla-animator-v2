@@ -61,8 +61,6 @@ Payload:
 	•	durationMs
 	•	diagnostics: compile-snapshot diagnostics list (structured, typed)
 	•	programMeta (only if ok; tiny metadata)
-	•	timelineHint (finite/infinite + window)
-	•	timeRootKind (CycleRoot / TransportRoot / AmbientRoot etc.)
 	•	optional: busUsageSummary (counts by busId: publishers/listeners, empty buses)
 
 Why a single event:

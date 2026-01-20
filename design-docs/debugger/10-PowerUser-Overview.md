@@ -252,7 +252,6 @@ Diff outputs (must be deterministic)
 	•	Added/removed buses, publishers, listeners, blocks
 	•	Changed sort orders (sortKey diffs)
 	•	Changed type paths (adapter/lens changes)
-	•	TimeModel changes (finite→cyclic etc.)
 	•	“Potential jank risk” classification (see below)
 
 Jank risk classification

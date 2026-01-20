@@ -218,21 +218,4 @@ describe('TimeModel', () => {
     }
   });
 
-  it('FiniteTimeRoot sets finite time model with duration', () => {
-    const patch = buildPatch((b) => {
-      b.addBlock('FiniteTimeRoot', { durationMs: 5000 });
-    });
-
-    const result = compile(patch);
-
-    expect(result.kind).toBe('ok');
-    if (result.kind === 'ok') {
-      // TimeModel is in schedule wrapper for now
-      const schedule = result.program.schedule as ScheduleIR;
-      expect(schedule.timeModel.kind).toBe('finite');
-      if (schedule.timeModel.kind === 'finite') {
-        expect(schedule.timeModel.durationMs).toBe(5000);
-      }
-    }
-  });
 });

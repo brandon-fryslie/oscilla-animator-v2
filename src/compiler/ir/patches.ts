@@ -103,14 +103,8 @@ export interface TimeSignals {
   /** Signal expression ID for dt (delta time) */
   readonly dt?: SigExprId;
 
-  /** Signal expression ID for pulse (finite only) */
+  /** Signal expression ID for pulse (frame ticker) */
   readonly pulse?: SigExprId | null;
-
-  /** Signal expression ID for progress (finite only) */
-  readonly progress?: SigExprId | null;
-
-  /** Signal expression ID for progress01 (finite only) */
-  readonly progress01?: SigExprId;
 }
 
 // =============================================================================

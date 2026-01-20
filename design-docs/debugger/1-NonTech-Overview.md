@@ -21,7 +21,6 @@ The Debug Surface Area
 A) Debug HUD (always available, minimal)
 
 A small strip near the player with 4 lights:
-	•	Clock: Finite / Cyclic / Infinite (with period/window)
 	•	Health: OK / Warning / Error
 	•	Performance: FPS + “heavy fields” count
 	•	Stability: “Scrub-safe” / “Live-only” indicator
@@ -81,7 +80,6 @@ What Each Tab Contains
 1) Overview Tab: “What’s happening right now?”
 
 A single page summary:
-	•	Patch mode: Infinite / Cyclic / Finite
 	•	Primary clock: TimeRoot name
 	•	Current phase(s): phaseA/phaseB meters
 	•	Bus heatmap: small grid showing which buses are active (color intensity)
@@ -129,8 +127,6 @@ Everything is visible as chips. No wires.
 Non-technical users need to know whether they made a real loop, an internal loop, or a replay.
 
 Time Tab shows:
-	•	TimeRoot kind (Finite/Cyclic/Infinite)
-	•	If cyclic: period + pingpong/loop
 	•	If infinite: “window” used for preview (and why)
 	•	Phase publication:
 	•	“phaseA is driven by TimeRoot” (badge)
@@ -232,10 +228,6 @@ Instead of “CycleDetected” or “TypeMismatch,” show:
 “Too Heavy”
 	•	“This is costly to compute.”
 	•	fix: reduce elements, remove field→signal reduce, reduce lens stack depth
-
-“Time Disagreement”
-	•	“Your patch loop and the player loop don’t match.”
-	•	fix: align TimeRoot, set cyclic, or adjust preview window
 
 Everything in this taxonomy links to the relevant panel and provides a one-click remedy.
 

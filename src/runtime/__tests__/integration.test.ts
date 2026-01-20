@@ -86,38 +86,6 @@ describe('Runtime Integration', () => {
     expect(state.cache.frameId).toBe(2);
   });
 
-  it('resolves time correctly for finite models', () => {
-    const patch = buildPatch((b) => {
-      b.addBlock('FiniteTimeRoot', { durationMs: 1000 });
-    });
-
-    const result = compile(patch);
-    expect(result.kind).toBe('ok');
-    if (result.kind !== 'ok') return;
-
-    const program = result.program;
-    const state = createRuntimeState(program.slotMeta.length);
-    const pool = new BufferPool();
-
-    // Execute at various times
-    executeFrame(program, state, pool, 0);
-    expect(state.time?.tMs).toBe(0);
-    expect(state.time?.progress).toBe(0);
-
-    executeFrame(program, state, pool, 500);
-    expect(state.time?.tMs).toBe(500);
-    expect(state.time?.progress).toBe(0.5);
-
-    executeFrame(program, state, pool, 1000);
-    expect(state.time?.tMs).toBe(1000);
-    expect(state.time?.progress).toBe(1);
-
-    // Beyond duration - tMs stays monotonic, progress clamps to 1
-    executeFrame(program, state, pool, 1500);
-    expect(state.time?.tMs).toBe(1500);  // tMs is monotonic, never clamps
-    expect(state.time?.progress).toBe(1);
-  });
-
   it('resolves time correctly for infinite models', () => {
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot', {});

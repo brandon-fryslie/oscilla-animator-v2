@@ -91,7 +91,6 @@ When time discontinuities occur (scrub/loop/seek/hot-swap), the raw phase from T
 **Operations that cause time discontinuities:**
 - Scrubbing the playhead
 - Jumping to a time position
-- Looping finite time at boundary
 - Hot-swapping patches
 - Switching TimeRoots
 - Changing playback speed
@@ -116,7 +115,7 @@ Even when `t_model` jumps.
 ```typescript
 // Time values
 t_abs       // absolute time in milliseconds from TimeRoot
-t_model     // time after TimeModel mapping (finite, infinite, etc)
+t_model     // time after TimeModel mapping ( infinite, etc)
 
 // Phase values
 φ_base(t)   // raw phase in ℝ, computed from t_model

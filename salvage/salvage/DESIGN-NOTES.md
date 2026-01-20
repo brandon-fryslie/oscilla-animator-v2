@@ -32,7 +32,7 @@ Blocks have capabilities that restrict what they can do:
 | Capability | Description | Examples |
 |------------|-------------|----------|
 | `pure` | No side effects, no state, no authority | Oscillator, AddSignal, FieldMap |
-| `time` | Creates the time axis (exactly one per patch) | FiniteTimeRoot, InfiniteTimeRoot |
+| `time` | Creates the time axis (exactly one per patch) | , InfiniteTimeRoot |
 | `identity` | Creates domains (per-element identity spaces) | DomainN, GridDomain, SVGSampleDomain |
 | `state` | Allocates mutable state | Integrate, History, PulseDivider, EnvelopeAD |
 | `render` | Emits render trees (final output) | RenderInstances2D, RenderPaths2D |
@@ -45,7 +45,6 @@ Pure blocks are the default. Kernel primitives (non-pure) are on an allowlist.
 ## Block Catalog (77 blocks)
 
 ### Time (2)
-- `FiniteTimeRoot` - Bounded time with duration
 - `InfiniteTimeRoot` - Unbounded looping time with period
 
 ### Domain/Identity (3)

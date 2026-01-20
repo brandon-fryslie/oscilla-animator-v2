@@ -6,12 +6,30 @@
  */
 
 import React, { createContext, useState, useCallback, useEffect } from 'react';
-import { DockviewReact, type DockviewReadyEvent, type DockviewApi } from 'dockview';
+import {
+  DockviewReact,
+  DockviewDefaultTab,
+  type DockviewReadyEvent,
+  type DockviewApi,
+  type IDockviewPanelHeaderProps,
+} from 'dockview';
 import 'dockview/dist/styles/dockview.css';
 import { PANEL_COMPONENTS } from './panelRegistry';
 import { createDefaultLayout } from './defaultLayout';
 import type { EditorHandle } from '../editorCommon';
 import './theme.css';
+
+/**
+ * Custom tab component that hides the close button.
+ * We don't have a way to reopen closed panels yet.
+ */
+const TabWithoutClose: React.FC<IDockviewPanelHeaderProps> = (props) => {
+  return <DockviewDefaultTab {...props} hideClose />;
+};
+
+// Note: Popout functionality would go here when ready
+// Dockview supports `panel.api.popout()` to open panels in new windows
+// Requires setting `popoutUrl` prop on DockviewReact
 
 export interface DockviewContextValue {
   api: DockviewApi | null;
@@ -68,8 +86,10 @@ export const DockviewProvider: React.FC<DockviewProviderProps> = ({
       <DockviewReact
         className="oscilla-dockview"
         components={PANEL_COMPONENTS}
+        defaultTabComponent={TabWithoutClose}
         onReady={handleReady}
         floatingGroupBounds="boundedWithinViewport"
+        singleTabMode="fullwidth"
       />
     </DockviewContext.Provider>
   );

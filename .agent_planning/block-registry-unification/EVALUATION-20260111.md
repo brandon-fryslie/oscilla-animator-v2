@@ -123,7 +123,6 @@ interface BlockDef {
 ### DELETE (after merging)
 - `src/compiler/blocks/registry.ts` - legacy compiler registry
 - `src/compiler/blocks/time/InfiniteTimeRoot.ts` - duplicate block
-- `src/compiler/blocks/time/FiniteTimeRoot.ts` - duplicate block
 - `src/compiler/blocks/signal/*.ts` - duplicate blocks
 - `src/compiler/blocks/domain/*.ts` - duplicate blocks
 - `src/compiler/blocks/render/*.ts` - duplicate blocks

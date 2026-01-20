@@ -25,7 +25,7 @@ WHAT WAS DONE:
 
 3. All Blocks Migrated (24 total):
    - Signal blocks (5): ConstFloat, AddSignal, MulSignal, Oscillator, MousePosition
-   - Time blocks (2): InfiniteTimeRoot, FiniteTimeRoot (use 'float' not 'time')
+   - Time blocks (1): InfiniteTimeRoot (use 'float' not 'time')
    - Domain blocks (6): DomainN, GridDomain, FieldBroadcast, FieldMap, FieldZipSig, FieldFromDomainId
    - Render blocks (11): All updated to use SignalType
 

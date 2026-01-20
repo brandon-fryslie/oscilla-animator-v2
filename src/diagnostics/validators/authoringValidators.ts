@@ -68,7 +68,6 @@ function validateTimeRoot(patch: Patch, patchRevision: number): Diagnostic[] {
   for (const block of patch.blocks.values()) {
     if (
       block.type === 'InfiniteTimeRoot' ||
-      block.type === 'FiniteTimeRoot' ||
       block.type === 'TimeRoot'
     ) {
       timeRoots.push(block.id);
@@ -88,7 +87,7 @@ function validateTimeRoot(patch: Patch, patchRevision: number): Diagnostic[] {
         domain: 'authoring',
         primaryTarget: target,
         title: 'No TimeRoot',
-        message: 'Patch must have exactly one TimeRoot block. Add an InfiniteTimeRoot or FiniteTimeRoot.',
+        message: 'Patch must have exactly one TimeRoot block. Add an InfiniteTimeRoot.',
         scope: { patchRevision },
         metadata: {
           firstSeenAt: Date.now(),

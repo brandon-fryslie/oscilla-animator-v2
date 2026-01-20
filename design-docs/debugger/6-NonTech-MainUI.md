@@ -11,7 +11,6 @@ Probe mode is for investigation. Non-technical users still need the UI to telegr
 1.1 Placement
 	•	Above the preview canvas, replace the current basic player bar with a compact strip:
 	•	Status Light (dot)
-	•	Time Mode badge (Finite / Cycle / Infinite)
 	•	FPS / Frame cost micro readout (optional but recommended)
 	•	Issues pill (count of errors/warnings)
 

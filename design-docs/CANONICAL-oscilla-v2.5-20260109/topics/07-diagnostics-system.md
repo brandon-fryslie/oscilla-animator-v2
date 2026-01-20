@@ -191,7 +191,7 @@ interface CompileEndEvent {
   durationMs: number;
   diagnostics: Diagnostic[];  // Authoritative snapshot
   programMeta?: {
-    timelineHint: 'finite' | 'cyclic' | 'infinite';
+    timelineHint: 'infinite';
     busUsageSummary?: Record<string, { publishers: number; listeners: number }>;
   };
 }
@@ -373,7 +373,7 @@ type DiagnosticAction =
   | { kind: 'insertBlock'; blockType: string; position?: 'before' | 'after'; nearBlockId?: string }
   | { kind: 'removeBlock'; blockId: string }
   | { kind: 'addAdapter'; fromPort: PortTargetRef; adapterType: string }
-  | { kind: 'createTimeRoot'; timeRootKind: 'Finite' | 'Cycle' | 'Infinite' }
+  | { kind: 'createTimeRoot'; timeRootKind: 'Infinite' }
   | { kind: 'muteDiagnostic'; diagnosticId: string }
   | { kind: 'openDocs'; docUrl: string };
 ```

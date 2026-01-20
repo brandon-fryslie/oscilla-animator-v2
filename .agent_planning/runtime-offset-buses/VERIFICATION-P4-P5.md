@@ -89,7 +89,7 @@ Default sources are materialized as `DSConst` blocks by `GraphNormalizer.normali
 The user's request mentions "Rails (time, phaseA, phaseB, pulse, palette)" as system-level signals available from TimeRoot.
 
 **Current State:**
-- TimeRoot blocks exist: `InfiniteTimeRoot`, `FiniteTimeRoot`
+- TimeRoot blocks exist: `InfiniteTimeRoot`
 - TimeRoot outputs: `t`, `dt`, `phase`, `pulse` (legacy names)
 - No rail blocks exist yet
 - No palette or energy outputs

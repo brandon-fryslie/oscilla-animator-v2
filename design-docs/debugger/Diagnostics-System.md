@@ -171,7 +171,7 @@ interface CompileFinishedEvent {
   durationMs: number;
   diagnostics: Diagnostic[];  // Authoritative snapshot
   programMeta?: {
-    timelineHint: 'finite' | 'cyclic' | 'infinite';
+    timelineHint: 'infinite';
 
     busUsageSummary?: Record<string, { publishers: number; listeners: number }>;
   };
@@ -339,7 +339,6 @@ type DiagnosticAction =
   | { kind: 'insertBlock'; blockType: string; position?: 'before' | 'after'; nearBlockId?: string }
   | { kind: 'removeBlock'; blockId: string }
   | { kind: 'addAdapter'; fromPort: PortTargetRef; adapterType: string }
-  | { kind: 'createTimeRoot'; timeRootKind: 'Finite' | 'Cycle' | 'Infinite' }
   | { kind: 'muteDiagnostic'; diagnosticId: string }
   | { kind: 'openDocs'; docUrl: string };
 ```
@@ -407,7 +406,6 @@ private runAuthoringValidators(patchRevision: number): Diagnostic[] {
 
   // Validator: Check for missing TimeRoot
   const timeRootBlocks = blocks.filter(block =>
-    block.type === 'FiniteTimeRoot' ||
 
     block.type === 'InfiniteTimeRoot'
   );

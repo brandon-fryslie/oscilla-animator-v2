@@ -14,24 +14,44 @@ interface CanvasTabProps {
   onCanvasReady?: (canvas: HTMLCanvasElement) => void;
 }
 
+// Target aspect ratio (4:3 like the original 800x600)
+const TARGET_ASPECT_RATIO = 4 / 3;
+
 export const CanvasTab: React.FC<CanvasTabProps> = observer(({ onCanvasReady }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
 
-  // Resize canvas to match container
+  // Resize canvas to fit container while maintaining aspect ratio
   const updateCanvasSize = useCallback(() => {
     const container = containerRef.current;
     const canvas = canvasRef.current;
     if (!container || !canvas) return;
 
-    // Get container dimensions (account for any padding)
+    // Get container dimensions
     const rect = container.getBoundingClientRect();
-    const width = Math.floor(rect.width);
-    const height = Math.floor(rect.height);
+    const containerWidth = Math.floor(rect.width);
+    const containerHeight = Math.floor(rect.height);
+
+    if (containerWidth <= 0 || containerHeight <= 0) return;
+
+    // Calculate canvas size that fits container while maintaining aspect ratio
+    const containerAspect = containerWidth / containerHeight;
+    let width: number;
+    let height: number;
+
+    if (containerAspect > TARGET_ASPECT_RATIO) {
+      // Container is wider than target - fit to height, letterbox sides
+      height = containerHeight;
+      width = Math.floor(height * TARGET_ASPECT_RATIO);
+    } else {
+      // Container is taller than target - fit to width, letterbox top/bottom
+      width = containerWidth;
+      height = Math.floor(width / TARGET_ASPECT_RATIO);
+    }
 
     // Only update if size actually changed (avoid unnecessary re-renders)
-    if (width > 0 && height > 0 && (width !== canvasSize.width || height !== canvasSize.height)) {
+    if (width !== canvasSize.width || height !== canvasSize.height) {
       setCanvasSize({ width, height });
       // Update canvas element dimensions directly for immediate effect
       canvas.width = width;
