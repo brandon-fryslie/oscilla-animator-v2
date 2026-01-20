@@ -1,7 +1,8 @@
 /**
  * Pass 1: Default Source Materialization
  *
- * Inserts Const blocks for unconnected inputs with defaultSource.
+ * Inserts derived blocks for unconnected inputs with defaultSource.
+ * TimeRoot defaults wire to existing TimeRoot; other defaults create derived blocks.
  */
 
 import type { BlockId, PortId, BlockRole, DefaultSource } from '../../types';
@@ -9,9 +10,9 @@ import type { Block, Edge, Patch } from '../Patch';
 import { getBlockDefinition, type InputDef } from '../../blocks/registry';
 
 interface DefaultSourceInsertion {
-  /** The derived block to insert (e.g., Const, ConstVec2, ConstColor) */
-  block: Block;
-  /** The edge from derived block to the target input */
+  /** The derived block to insert (null for TimeRoot - already exists) */
+  block: Block | null;
+  /** The edge from source block to the target input */
   edge: Edge;
 }
 
@@ -38,6 +39,84 @@ function generateDefaultSourceId(blockId: BlockId, portId: string): BlockId {
 }
 
 /**
+ * Find the TimeRoot block in the patch.
+ */
+function findTimeRoot(patch: Patch): Block | null {
+  for (const [, block] of patch.blocks) {
+    if (block.type === 'TimeRoot') {
+      return block;
+    }
+  }
+  return null;
+}
+
+/**
+ * Materialize a default source into a block and edge.
+ */
+function materializeDefaultSource(
+  ds: DefaultSource,
+  targetBlockId: BlockId,
+  targetPortId: string,
+  targetBlock: Block,
+  patch: Patch
+): DefaultSourceInsertion {
+
+  if (ds.blockType === 'TimeRoot') {
+    // Wire directly to existing TimeRoot
+    const timeRoot = findTimeRoot(patch);
+    if (!timeRoot) {
+      throw new Error('DefaultSource references TimeRoot but no TimeRoot exists in patch');
+    }
+
+    const edge: Edge = {
+      id: `${timeRoot.id}_${ds.output}_to_${targetBlockId}_${targetPortId}`,
+      from: { kind: 'port', blockId: timeRoot.id, slotId: ds.output },
+      to: { kind: 'port', blockId: targetBlockId, slotId: targetPortId },
+      enabled: true,
+    };
+
+    return { block: null, edge };
+  }
+
+  // Create derived block instance
+  const derivedId = generateDefaultSourceId(targetBlockId, targetPortId);
+
+  const derivedRole: BlockRole = {
+    kind: 'derived',
+    meta: {
+      kind: 'defaultSource',
+      target: { kind: 'port', port: { blockId: targetBlockId, portId: targetPortId as PortId } },
+    },
+  };
+
+  const derivedBlock: Block = {
+    id: derivedId,
+    type: ds.blockType,
+    params: ds.params ?? {},
+    displayName: null,
+    domainId: targetBlock.domainId,
+    role: derivedRole,
+  };
+
+  const edge: Edge = {
+    id: `${derivedId}_to_${targetBlockId}_${targetPortId}`,
+    from: {
+      kind: 'port',
+      blockId: derivedId,
+      slotId: ds.output,
+    },
+    to: {
+      kind: 'port',
+      blockId: targetBlockId,
+      slotId: targetPortId,
+    },
+    enabled: true,
+  };
+
+  return { block: derivedBlock, edge };
+}
+
+/**
  * Analyze blocks for unconnected inputs with default sources.
  */
 function analyzeDefaultSources(patch: Patch): DefaultSourceInsertion[] {
@@ -55,46 +134,9 @@ function analyzeDefaultSources(patch: Patch): DefaultSourceInsertion[] {
       const ds = (input as InputDef & { defaultSource?: DefaultSource }).defaultSource;
       if (!ds) continue;
 
-      // Create derived block based on default source kind
-      const derivedId = generateDefaultSourceId(blockId, input.id);
-
-      if (ds.kind === 'constant') {
-        const derivedRole: BlockRole = {
-          kind: 'derived',
-          meta: {
-            kind: 'defaultSource',
-            target: { kind: 'port', port: { blockId, portId: input.id as PortId } },
-          },
-        };
-
-        // All types now use the unified polymorphic Const block
-        const derivedBlock: Block = {
-          id: derivedId,
-          type: 'Const',
-          params: { value: ds.value, payloadType: input.type.payload },
-          displayName: null,
-          domainId: block.domainId,
-          role: derivedRole,
-        };
-
-        const edge: Edge = {
-          id: `${derivedId}_to_${blockId}_${input.id}`,
-          from: {
-            kind: 'port',
-            blockId: derivedId,
-            slotId: 'out',
-          },
-          to: {
-            kind: 'port',
-            blockId,
-            slotId: input.id,
-          },
-          enabled: true,
-        };
-
-        insertions.push({ block: derivedBlock, edge });
-      }
-      // TODO: Handle 'rail' kind for phaseA/phaseB etc.
+      // Materialize the default source
+      const insertion = materializeDefaultSource(ds, blockId, input.id, block, patch);
+      insertions.push(insertion);
     }
   }
 
@@ -115,7 +157,9 @@ function applyDefaultSourceInsertions(
   // Create new blocks map with derived blocks
   const newBlocks = new Map(patch.blocks);
   for (const ins of insertions) {
-    newBlocks.set(ins.block.id, ins.block);
+    if (ins.block !== null) {
+      newBlocks.set(ins.block.id, ins.block);
+    }
   }
 
   // Create new edges array with default source edges
@@ -134,7 +178,7 @@ function applyDefaultSourceInsertions(
  * Materialize default sources for unconnected inputs.
  *
  * @param patch - Patch from Pass 0
- * @returns Patch with Const blocks inserted
+ * @returns Patch with derived blocks inserted and TimeRoot wired
  */
 export function pass1DefaultSources(patch: Patch): Patch {
   const insertions = analyzeDefaultSources(patch);
