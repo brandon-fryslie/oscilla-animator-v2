@@ -3,9 +3,10 @@
  *
  * Manages the canvas element for 2D rendering.
  * Exposes canvas ref to parent for animation loop integration.
+ * Auto-scales canvas to fill container while maintaining animation centering.
  */
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { observer } from 'mobx-react-lite';
 import { rootStore } from '../../../stores';
 
@@ -14,14 +15,57 @@ interface CanvasTabProps {
 }
 
 export const CanvasTab: React.FC<CanvasTabProps> = observer(({ onCanvasReady }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
 
+  // Resize canvas to match container
+  const updateCanvasSize = useCallback(() => {
+    const container = containerRef.current;
+    const canvas = canvasRef.current;
+    if (!container || !canvas) return;
+
+    // Get container dimensions (account for any padding)
+    const rect = container.getBoundingClientRect();
+    const width = Math.floor(rect.width);
+    const height = Math.floor(rect.height);
+
+    // Only update if size actually changed (avoid unnecessary re-renders)
+    if (width > 0 && height > 0 && (width !== canvasSize.width || height !== canvasSize.height)) {
+      setCanvasSize({ width, height });
+      // Update canvas element dimensions directly for immediate effect
+      canvas.width = width;
+      canvas.height = height;
+    }
+  }, [canvasSize.width, canvasSize.height]);
+
+  // Set up ResizeObserver to track container size changes
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const resizeObserver = new ResizeObserver(() => {
+      updateCanvasSize();
+    });
+
+    resizeObserver.observe(container);
+
+    // Initial size update
+    updateCanvasSize();
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [updateCanvasSize]);
+
+  // Notify parent when canvas is ready
   useEffect(() => {
     if (canvasRef.current && onCanvasReady) {
       onCanvasReady(canvasRef.current);
     }
   }, [onCanvasReady]);
 
+  // Set up mouse interactions for pan/zoom
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -102,22 +146,22 @@ export const CanvasTab: React.FC<CanvasTabProps> = observer(({ onCanvasReady }) 
 
   return (
     <div
+      ref={containerRef}
       style={{
-        flex: 1,
+        width: '100%',
+        height: '100%',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         background: '#0f0f23',
-        minHeight: '300px',
         overflow: 'hidden',
       }}
     >
       <canvas
         ref={canvasRef}
-        width={800}
-        height={600}
+        width={canvasSize.width}
+        height={canvasSize.height}
         style={{
-          borderRadius: '4px',
           cursor: 'grab',
         }}
       />

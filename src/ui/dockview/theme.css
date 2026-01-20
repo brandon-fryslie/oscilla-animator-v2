@@ -79,11 +79,53 @@
   flex-direction: column;
 }
 
-/* Ensure separators are visible */
+/* Ensure separators are visible and easier to grab */
 .oscilla-dockview .split-view-view > .split-view-container > .separator {
   background-color: #0f3460;
 }
 
 .oscilla-dockview .split-view-view > .split-view-container > .separator:hover {
   background-color: #4ecdc4;
+}
+
+/* Make resize handles larger and easier to grab */
+.oscilla-dockview .sash {
+  --sash-size: 8px !important;
+}
+
+/* Floating panel resize handles */
+.oscilla-dockview .dv-resize-container .dv-resize-handle-top,
+.oscilla-dockview .dv-resize-container .dv-resize-handle-bottom {
+  height: 8px !important;
+}
+
+.oscilla-dockview .dv-resize-container .dv-resize-handle-left,
+.oscilla-dockview .dv-resize-container .dv-resize-handle-right {
+  width: 8px !important;
+}
+
+.oscilla-dockview .dv-resize-container .dv-resize-handle-topleft,
+.oscilla-dockview .dv-resize-container .dv-resize-handle-topright,
+.oscilla-dockview .dv-resize-container .dv-resize-handle-bottomleft,
+.oscilla-dockview .dv-resize-container .dv-resize-handle-bottomright {
+  width: 12px !important;
+  height: 12px !important;
+}
+
+/* Highlight resize handles on hover */
+.oscilla-dockview .dv-resize-container .dv-resize-handle-top:hover,
+.oscilla-dockview .dv-resize-container .dv-resize-handle-bottom:hover {
+  background-color: rgba(78, 205, 196, 0.3);
+}
+
+.oscilla-dockview .dv-resize-container .dv-resize-handle-left:hover,
+.oscilla-dockview .dv-resize-container .dv-resize-handle-right:hover {
+  background-color: rgba(78, 205, 196, 0.3);
+}
+
+.oscilla-dockview .dv-resize-container .dv-resize-handle-topleft:hover,
+.oscilla-dockview .dv-resize-container .dv-resize-handle-topright:hover,
+.oscilla-dockview .dv-resize-container .dv-resize-handle-bottomleft:hover,
+.oscilla-dockview .dv-resize-container .dv-resize-handle-bottomright:hover {
+  background-color: rgba(78, 205, 196, 0.5);
 }

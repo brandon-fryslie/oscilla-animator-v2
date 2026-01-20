@@ -644,7 +644,6 @@ function hashBlockParams(blocks: ReadonlyMap<string, any>): string {
 }
 
 // Track initial hash to skip first reaction fire
-let reactionDisposer: (() => void) | null = null;
 let lastBlockParamsHash: string | null = null;
 let reactionSetup = false;
 
@@ -659,7 +658,7 @@ function setupLiveRecompileReaction() {
   lastBlockParamsHash = hashBlockParams(rootStore.patch.blocks);
 
   // Watch for block changes (additions, removals, param changes)
-  reactionDisposer = reaction(
+  reaction(
     () => {
       // Track both structure and params
       const blocks = rootStore.patch.blocks;
@@ -685,17 +684,6 @@ function setupLiveRecompileReaction() {
 
   log('Live recompile reaction initialized');
 }
-
- /**
- * Cleanup function for testing/hot reload.
- * Disposes the live recompile reaction.
- */
-export function cleanupReaction() {
-  reactionDisposer?.();
-  reactionDisposer = null;
-  reactionSetup = false;
-}
-
 
 // =============================================================================
 // Animation Loop
