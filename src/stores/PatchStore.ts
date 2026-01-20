@@ -262,9 +262,17 @@ export class PatchStore {
       throw new Error(`Block ${blockId} not found`);
     }
 
-    const port = block.inputPorts.get(portId);
+    // Get existing port or create from registry definition
+    let port = block.inputPorts.get(portId);
     if (!port) {
-      throw new Error(`Port ${portId} not found on block ${blockId}`);
+      // Port not in block's map - check if it exists in registry
+      const blockDef = getBlockDefinition(block.type);
+      const inputDef = blockDef?.inputs.find(i => i.id === portId);
+      if (!inputDef) {
+        throw new Error(`Port ${portId} not found on block ${blockId}`);
+      }
+      // Create the port entry
+      port = { id: portId };
     }
 
     // Update port

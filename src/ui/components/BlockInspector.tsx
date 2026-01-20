@@ -72,6 +72,63 @@ function areTypesCompatible(sourceType: SignalType, targetType: SignalType): boo
 }
 
 /**
+ * Get slider min value for Const default source editor.
+ * Priority: inputDef.uiHint > inputDef.defaultSource.params.value-based > type-based defaults
+ */
+function getConstSliderMin(inputDef: InputDef | undefined, portType: SignalType): number {
+  // Check uiHint first
+  const hint = inputDef?.uiHint;
+  if (hint && 'min' in hint && hint.min !== undefined) {
+    return hint.min;
+  }
+  // Type-based defaults
+  switch (portType.payload) {
+    case 'int': return 0;
+    case 'phase': return 0;
+    case 'float': return 0;
+    default: return 0;
+  }
+}
+
+/**
+ * Get slider max value for Const default source editor.
+ * Priority: inputDef.uiHint > type-based defaults
+ */
+function getConstSliderMax(inputDef: InputDef | undefined, portType: SignalType): number {
+  // Check uiHint first
+  const hint = inputDef?.uiHint;
+  if (hint && 'max' in hint && hint.max !== undefined) {
+    return hint.max;
+  }
+  // Type-based defaults
+  switch (portType.payload) {
+    case 'int': return 100;  // Reasonable default for integers
+    case 'phase': return 1;
+    case 'float': return 1;
+    default: return 1;
+  }
+}
+
+/**
+ * Get slider step value for Const default source editor.
+ * Priority: inputDef.uiHint > type-based defaults
+ */
+function getConstSliderStep(inputDef: InputDef | undefined, portType: SignalType): number {
+  // Check uiHint first
+  const hint = inputDef?.uiHint;
+  if (hint && 'step' in hint && hint.step !== undefined) {
+    return hint.step;
+  }
+  // Type-based defaults
+  switch (portType.payload) {
+    case 'int': return 1;
+    case 'phase': return 0.01;
+    case 'float': return 0.01;
+    default: return 0.01;
+  }
+}
+
+/**
  * Get valid block types for use as default sources.
  * A valid default source block:
  * - Must NOT be stateful (capability !== 'state')
@@ -1155,6 +1212,7 @@ function PortInspector({ portRef, block, typeInfo, patch, onBack }: PortInspecto
               currentDefaultSource={effectiveDefaultSource}
               registryDefaultSource={inputPort.defaultSource}
               isConnected={isConnected}
+              inputDef={inputPort}
             />
           )}
         </>
@@ -1231,6 +1289,7 @@ interface PortDefaultSourceEditorProps {
   currentDefaultSource: DefaultSource;
   registryDefaultSource?: DefaultSource;
   isConnected?: boolean;
+  inputDef?: InputDef;  // For accessing uiHint
 }
 
 const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
@@ -1240,6 +1299,7 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
   currentDefaultSource,
   registryDefaultSource,
   isConnected,
+  inputDef,
 }: PortDefaultSourceEditorProps) {
   const validBlockTypes = getValidDefaultSourceBlockTypes(portType);
 
@@ -1350,9 +1410,9 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
             label="Value"
             value={constValue}
             onChange={(value) => handleParamChange('value', value)}
-            min={0}
-            max={1}
-            step={0.01}
+            min={getConstSliderMin(inputDef, portType)}
+            max={getConstSliderMax(inputDef, portType)}
+            step={getConstSliderStep(inputDef, portType)}
           />
         </div>
       )}
