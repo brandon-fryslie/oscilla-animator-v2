@@ -10,7 +10,8 @@ import React, { useState, useCallback } from 'react';
 import { observer } from 'mobx-react-lite';
 import { rootStore } from '../../stores';
 import { colors } from '../theme';
-import { getBlockDefinition, type BlockDef, type InputDef, type OutputDef } from '../../blocks/registry';
+import { getBlockDefinition, type BlockDef, type InputDef, type OutputDef, BLOCK_DEFS_BY_TYPE } from '../../blocks/registry';
+import './BlockInspector.css';
 import type { Block, Patch, Edge, PortRef } from '../../graph/Patch';
 import type { BlockId, PortId, DefaultSource, UIControlHint } from '../../types';
 import type { SignalType } from '../../core/canonical-types';
@@ -55,6 +56,36 @@ function getDerivedDefaultSourceId(blockId: BlockId, portId: string): BlockId {
   return `_ds_${blockId}_${portId}` as BlockId;
 }
 
+/**
+ * Get valid block types for use as default sources.
+ * A valid default source block:
+ * - Must NOT be stateful (capability !== 'state')
+ * - Must have at least one output
+ */
+function getValidDefaultSourceBlockTypes(portType: SignalType): { blockType: string; label: string; outputs: readonly OutputDef[] }[] {
+  const validBlocks: { blockType: string; label: string; outputs: readonly OutputDef[] }[] = [];
+
+  for (const [blockType, def] of BLOCK_DEFS_BY_TYPE.entries()) {
+    // Skip stateful blocks
+    if (def.capability === 'state') continue;
+
+    // Must have at least one output
+    if (def.outputs.length === 0) continue;
+
+    // For now, include all non-stateful blocks with outputs
+    // Type compatibility checking is simplified - '???' payload is polymorphic
+    validBlocks.push({
+      blockType: def.type,
+      label: def.label,
+      outputs: def.outputs,
+    });
+  }
+
+  // Sort by label for easier selection
+  return validBlocks.sort((a, b) => a.label.localeCompare(b.label));
+}
+
+
 // =============================================================================
 // Main Inspector Component
 // =============================================================================
@@ -63,43 +94,62 @@ function getDerivedDefaultSourceId(blockId: BlockId, portId: string): BlockId {
  * Block Inspector component.
  */
 export const BlockInspector = observer(function BlockInspector() {
-  const { previewType, selectedBlockId, selectedEdgeId } = rootStore.selection;
+  const { previewType, selectedBlockId, selectedEdgeId, selectedPort } = rootStore.selection;
   const patch = rootStore.patch.patch;
+
+  // Determine content based on selection state
+  let content: React.ReactNode;
 
   // Preview mode takes precedence
   if (previewType) {
-    return (
-        <TypePreview type={previewType} />
-    );
-  }
-
-  // Edge selection mode
-  if (selectedEdgeId && patch) {
+    content = <TypePreview type={previewType} />;
+  } else if (selectedPort && patch) {
+    // Port selection mode
+    const block = patch.blocks.get(selectedPort.blockId as BlockId);
+    const blockDef = block ? getBlockDefinition(block.type) : null;
+    if (block && blockDef) {
+      content = (
+        <PortInspectorStandalone 
+          portRef={selectedPort} 
+          block={block} 
+          blockDef={blockDef} 
+          patch={patch} 
+        />
+      );
+    } else {
+      content = <NoSelection />;
+    }
+  } else if (selectedEdgeId && patch) {
+    // Edge selection mode
     const edge = patch.edges.find(e => e.id === selectedEdgeId);
     if (edge) {
-      return (
-          <EdgeInspector edge={edge} patch={patch} />
-      );
+      content = <EdgeInspector edge={edge} patch={patch} />;
+    } else {
+      content = <NoSelection />;
+    }
+  } else if (!selectedBlockId || !patch) {
+    // No selection
+    content = <NoSelection />;
+  } else {
+    const block = patch.blocks.get(selectedBlockId);
+    if (!block) {
+      content = <NoSelection />;
+    } else if (block.role?.kind === 'timeRoot') {
+      // TimeRoot block
+      content = <TimeRootBlock />;
+    } else {
+      // Regular block
+      content = <BlockDetails block={block} patch={patch} />;
     }
   }
 
-  // Block selection mode
-  if (!selectedBlockId || !patch) {
-    return <NoSelection />;
-  }
-
-  const block = patch.blocks.get(selectedBlockId);
-  if (!block) {
-    return <NoSelection />;
-  }
-
-  // Check if block is timeRoot
-  if (block.role?.kind === 'timeRoot') {
-    return <TimeRootBlock />;
-  }
-
+  // Wrap all content in scrollable container
   return (
-      <BlockDetails block={block} patch={patch} />
+    <div className="block-inspector">
+      <div className="block-inspector__content">
+        {content}
+      </div>
+    </div>
   );
 });
 
@@ -109,8 +159,8 @@ export const BlockInspector = observer(function BlockInspector() {
 
 function NoSelection() {
   return (
-    <div style={{ padding: '16px', color: colors.textSecondary }}>
-      <p>Select a block to inspect.</p>
+    <div style={{ color: colors.textSecondary }}>
+      <p>Select a block or port to inspect.</p>
     </div>
   );
 }
@@ -121,7 +171,7 @@ function NoSelection() {
 
 function TimeRootBlock() {
   return (
-    <div style={{ padding: '16px', color: colors.textSecondary }}>
+    <div style={{ color: colors.textSecondary }}>
       <p>System block (hidden)</p>
       <p style={{ fontSize: '12px', marginTop: '8px' }}>
         Time root blocks are system-managed and not shown in most views.
@@ -129,6 +179,201 @@ function TimeRootBlock() {
     </div>
   );
 }
+
+
+// =============================================================================
+// Port Inspector Panel (Top-Level)
+// =============================================================================
+
+interface PortInspectorStandaloneProps {
+  portRef: PortRef;
+  block: Block;
+  blockDef: BlockDef;
+  patch: Patch;
+}
+
+function PortInspectorStandalone({ portRef, block, blockDef, patch }: PortInspectorStandaloneProps) {
+  const inputDef = blockDef.inputs.find(p => p.id === portRef.portId);
+  const outputDef = blockDef.outputs.find(p => p.id === portRef.portId);
+  const portDef = inputDef || outputDef;
+  const isInput = !!inputDef;
+
+  if (!portDef) {
+    return (
+      <div>
+        <p style={{ color: colors.error }}>Port not found: {portRef.portId}</p>
+      </div>
+    );
+  }
+
+  const connectedEdges = isInput
+    ? patch.edges.filter(e => e.to.blockId === block.id && e.to.slotId === portRef.portId)
+    : patch.edges.filter(e => e.from.blockId === block.id && e.from.slotId === portRef.portId);
+
+  const handleViewBlock = useCallback(() => {
+    rootStore.selection.selectBlock(block.id);
+  }, [block.id]);
+
+  const handleDisconnect = useCallback((edgeId: string) => {
+    rootStore.patch.removeEdge(edgeId);
+  }, []);
+
+  return (
+    <div>
+      <div style={{
+        padding: '8px 12px',
+        background: isInput ? '#3b82f622' : '#f9731622',
+        borderRadius: '4px',
+        marginBottom: '16px',
+        fontSize: '12px',
+        fontWeight: '600',
+        color: isInput ? '#3b82f6' : '#f97316'
+      }}>
+        [{isInput ? 'INPUT' : 'OUTPUT'} PORT]
+      </div>
+
+      <h3 style={{ margin: '0 0 8px', fontSize: '18px' }}>{portDef.label}</h3>
+      <p style={{ margin: '0 0 16px', color: colors.textSecondary, fontSize: '13px' }}>
+        {portRef.portId}
+      </p>
+
+      <div style={{ marginBottom: '16px' }}>
+        <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: colors.textSecondary }}>
+          Signal Type
+        </h4>
+        <div style={{
+          padding: '8px',
+          background: colors.bgPanel,
+          borderRadius: '4px',
+          fontSize: '13px',
+        }}>
+          {formatSignalType(portDef.type)}
+        </div>
+      </div>
+
+      {isInput && inputDef && inputDef.defaultSource && (
+        <div style={{ marginBottom: '16px' }}>
+          <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: colors.textSecondary }}>
+            Default Source
+          </h4>
+          <div style={{
+            padding: '8px',
+            background: colors.bgPanel,
+            borderRadius: '4px',
+            fontSize: '13px',
+            fontStyle: inputDef.defaultSource.blockType === 'TimeRoot' ? 'italic' : 'normal',
+            color: inputDef.defaultSource.blockType === 'TimeRoot' ? colors.primary : colors.textPrimary,
+          }}>
+            {formatDefaultSource(inputDef.defaultSource)}
+          </div>
+        </div>
+      )}
+
+      <div style={{ marginBottom: '16px' }}>
+        <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: colors.textSecondary }}>
+          {isInput ? 'Connection' : `Connections (${connectedEdges.length})`}
+        </h4>
+
+        {connectedEdges.length === 0 && (
+          <div style={{ color: colors.textMuted, fontSize: '13px' }}>
+            Not connected
+          </div>
+        )}
+
+        {isInput && connectedEdges.map((edge, idx) => {
+          const sourceBlock = patch.blocks.get(edge.from.blockId as BlockId);
+          return (
+            <div key={idx} style={{ marginBottom: '8px' }}>
+              <div
+                onClick={() => rootStore.selection.selectBlock(edge.from.blockId as BlockId)}
+                style={{
+                  padding: '8px',
+                  background: colors.bgPanel,
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  marginBottom: '4px',
+                }}
+              >
+                ← <span style={{ color: colors.primary, textDecoration: 'underline' }}>
+                  {sourceBlock?.displayName || sourceBlock?.type || edge.from.blockId}
+                </span>
+                <span style={{ color: colors.textSecondary }}>.{edge.from.slotId}</span>
+              </div>
+              <button
+                onClick={() => handleDisconnect(edge.id)}
+                style={{
+                  padding: '4px 8px',
+                  background: colors.error,
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                }}
+              >
+                Disconnect
+              </button>
+            </div>
+          );
+        })}
+
+        {!isInput && connectedEdges.map((edge, idx) => {
+          const targetBlock = patch.blocks.get(edge.to.blockId as BlockId);
+          return (
+            <div
+              key={idx}
+              onClick={() => rootStore.selection.selectBlock(edge.to.blockId as BlockId)}
+              style={{
+                padding: '8px',
+                background: colors.bgPanel,
+                borderRadius: '4px',
+                marginBottom: '4px',
+                cursor: 'pointer',
+                fontSize: '13px',
+              }}
+            >
+              → <span style={{ color: colors.primary, textDecoration: 'underline' }}>
+                {targetBlock?.displayName || targetBlock?.type || edge.to.blockId}
+              </span>
+              <span style={{ color: colors.textSecondary }}>.{edge.to.slotId}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ marginBottom: '16px' }}>
+        <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: colors.textSecondary }}>
+          Parent Block
+        </h4>
+        <div style={{
+          padding: '8px',
+          background: colors.bgPanel,
+          borderRadius: '4px',
+          fontSize: '13px',
+          marginBottom: '8px',
+        }}>
+          {block.displayName || blockDef.label} ({block.id})
+        </div>
+        <button
+          onClick={handleViewBlock}
+          style={{
+            padding: '6px 12px',
+            background: colors.primary,
+            color: '#fff',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '13px',
+          }}
+        >
+          View Block
+        </button>
+      </div>
+    </div>
+  );
+}
+
 
 // =============================================================================
 // Edge Inspector
@@ -152,7 +397,7 @@ function EdgeInspector({ edge, patch }: EdgeInspectorProps) {
   }, [edge.to.blockId]);
 
   return (
-    <div style={{ padding: '16px' }}>
+    <div>
       <div style={{
         padding: '8px 12px',
         background: colors.primary + '22',
@@ -227,14 +472,14 @@ function TypePreview({ type }: TypePreviewProps) {
 
   if (!typeInfo) {
     return (
-      <div style={{ padding: '16px', color: colors.error }}>
+      <div style={{ color: colors.error }}>
         <p>Unknown block type: {type}</p>
       </div>
     );
   }
 
   return (
-    <div style={{ padding: '16px' }}>
+    <div>
       <div style={{
         padding: '8px 12px',
         background: colors.primary + '22',
@@ -328,7 +573,7 @@ const BlockDetails = observer(function BlockDetails({ block, patch }: BlockDetai
 
   if (!typeInfo) {
     return (
-      <div style={{ padding: '16px', color: colors.error }}>
+      <div style={{ color: colors.error }}>
         <p>Unknown block type: {block.type}</p>
       </div>
     );
@@ -353,7 +598,7 @@ const BlockDetails = observer(function BlockDetails({ block, patch }: BlockDetai
   }
 
   return (
-    <div style={{ padding: '16px' }}>
+    <div>
       {/* Header with editable display name */}
       <DisplayNameEditor block={block} typeInfo={typeInfo} />
 
@@ -767,7 +1012,7 @@ function PortInspector({ portRef, block, typeInfo, patch, onBack }: PortInspecto
 
   if (!port) {
     return (
-      <div style={{ padding: '16px' }}>
+      <div>
         <button onClick={onBack} style={backButtonStyle}>← Back</button>
         <p style={{ color: colors.error }}>Port not found: {portRef.portId}</p>
       </div>
@@ -783,7 +1028,7 @@ function PortInspector({ portRef, block, typeInfo, patch, onBack }: PortInspecto
     : [];
 
   return (
-    <div style={{ padding: '16px' }}>
+    <div>
       <button onClick={onBack} style={backButtonStyle}>← Back</button>
 
       <div style={{
@@ -1091,24 +1336,24 @@ function HintedControl({ hint, value, onChange }: HintedControlProps) {
       );
     case 'int':
       return (
-        <MuiNumberInput
+        <SliderWithInput
+          label=""
           value={value as number}
+          min={hint.min ?? 0}
+          max={hint.max ?? 10000}
           step={hint.step ?? 1}
-          min={hint.min}
-          max={hint.max}
           onChange={onChange}
-          size="small"
         />
       );
     case 'float':
       return (
-        <MuiNumberInput
+        <SliderWithInput
+          label=""
           value={value as number}
+          min={hint.min ?? 0}
+          max={hint.max ?? 1}
           step={hint.step ?? 0.01}
-          min={hint.min}
-          max={hint.max}
           onChange={onChange}
-          size="small"
         />
       );
     case 'select': {
@@ -1147,18 +1392,22 @@ function HintedControl({ hint, value, onChange }: HintedControlProps) {
     case 'xy': {
       const xy = value as { x?: number; y?: number } | undefined;
       return (
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <MuiNumberInput
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <SliderWithInput
+            label="X"
             value={xy?.x ?? 0}
+            min={-1000}
+            max={1000}
+            step={1}
             onChange={(v) => onChange({ ...xy, x: v })}
-            placeholder="X"
-            size="small"
           />
-          <MuiNumberInput
+          <SliderWithInput
+            label="Y"
             value={xy?.y ?? 0}
+            min={-1000}
+            max={1000}
+            step={1}
             onChange={(v) => onChange({ ...xy, y: v })}
-            placeholder="Y"
-            size="small"
           />
         </div>
       );
