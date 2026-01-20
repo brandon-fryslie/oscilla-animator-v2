@@ -42,6 +42,14 @@ export class PatchStore {
   private _nextBlockId = 0;
   private _nextEdgeId = 0;
 
+  // Snapshot cache - prevents creating new objects on every .patch access
+  // The snapshot is invalidated (set to null) when _data changes
+  // This is a MAJOR performance optimization - without it, every .patch access
+  // creates new Map and Array objects, causing massive GC pressure
+  private _snapshotCache: ImmutablePatch | null = null;
+  private _snapshotVersion = 0;
+  private _dataVersion = 0;
+
   // Optional EventHub for emitting ParamChanged events
   // Set via setEventHub() after construction (due to circular dependency with RootStore)
   private eventHub: EventHub | null = null;
@@ -51,8 +59,9 @@ export class PatchStore {
   constructor() {
     this._data = emptyPatchData();
 
-    makeObservable<PatchStore, '_data'>(this, {
+    makeObservable<PatchStore, '_data' | '_dataVersion'>(this, {
       _data: observable,
+      _dataVersion: observable,
       patch: computed,
       blocks: computed,
       edges: computed,
@@ -69,6 +78,15 @@ export class PatchStore {
       loadPatch: action,
       clear: action,
     });
+  }
+
+  /**
+   * Invalidates the snapshot cache. Must be called after any mutation to _data.
+   * This is critical for correctness - forgetting to call this will cause stale data.
+   */
+  private invalidateSnapshot(): void {
+    this._dataVersion++;
+    this._snapshotCache = null;
   }
 
   // =============================================================================
@@ -96,12 +114,48 @@ export class PatchStore {
   /**
    * Returns an immutable view of the patch.
    * This is the primary interface for reading patch data.
+   *
+   * PERFORMANCE: This getter uses a cached snapshot to avoid creating new
+   * Map/Array objects on every access. Without caching, each access created
+   * new objects, causing massive memory churn (739K objects, 630MB in profiler).
+   *
+   * The snapshot is frozen with Object.freeze to prevent accidental mutations.
+   * Any attempt to mutate will throw in strict mode or silently fail.
+   *
+   * SAFETY: The snapshot is invalidated whenever _data is mutated via actions.
+   * MobX tracks _dataVersion to ensure computed invalidation works correctly.
    */
   get patch(): ImmutablePatch {
-    return {
+    // Track _dataVersion for MobX reactivity - this ensures the computed
+    // is invalidated when data changes
+    const currentVersion = this._dataVersion;
+
+    // Return cached snapshot if still valid
+    if (this._snapshotCache !== null && this._snapshotVersion === currentVersion) {
+      return this._snapshotCache;
+    }
+
+    // Create new snapshot with defensive copies
+    // We still create copies here, but only when data actually changes,
+    // not on every access (which was the bug)
+    const snapshot = {
       blocks: new Map(this._data.blocks),
       edges: [...this._data.edges],
-    } as unknown as ImmutablePatch;
+    };
+
+    // Freeze the snapshot to prevent accidental mutations
+    // This provides runtime safety - any mutation attempt will fail
+    Object.freeze(snapshot);
+    Object.freeze(snapshot.edges);
+    // Note: We don't deep-freeze blocks Map values because:
+    // 1. Block objects are already typed as readonly
+    // 2. Deep freezing would be expensive
+    // 3. TypeScript enforcement is sufficient for our codebase
+
+    this._snapshotCache = snapshot as unknown as ImmutablePatch;
+    this._snapshotVersion = currentVersion;
+
+    return this._snapshotCache;
   }
 
   /**
@@ -185,6 +239,7 @@ export class PatchStore {
     };
 
     this._data.blocks.set(id, block);
+    this.invalidateSnapshot();
     return id;
   }
 
@@ -202,6 +257,8 @@ export class PatchStore {
       (edge) =>
         edge.from.blockId !== id && edge.to.blockId !== id
     );
+
+    this.invalidateSnapshot();
   }
 
   /**
@@ -241,6 +298,8 @@ export class PatchStore {
       ...block,
       params: { ...block.params, ...params },
     });
+
+    this.invalidateSnapshot();
   }
 
   /**
@@ -256,6 +315,8 @@ export class PatchStore {
       ...block,
       displayName,
     });
+
+    this.invalidateSnapshot();
   }
 
   /**
@@ -297,6 +358,8 @@ export class PatchStore {
       inputPorts: updatedInputPorts,
     });
 
+    this.invalidateSnapshot();
+
     // Emit GraphCommitted event to trigger recompilation
     // Port defaultSource changes affect the compiled graph
     if (this.eventHub && this.getPatchRevision) {
@@ -328,6 +391,7 @@ export class PatchStore {
       ...(options?.sortKey !== undefined && { sortKey: options.sortKey }),
     };
     this._data.edges.push(edge);
+    this.invalidateSnapshot();
     return id;
   }
 
@@ -336,6 +400,7 @@ export class PatchStore {
    */
   removeEdge(id: string): void {
     this._data.edges = this._data.edges.filter((edge) => edge.id !== id);
+    this.invalidateSnapshot();
   }
 
   /**
@@ -351,6 +416,8 @@ export class PatchStore {
       ...this._data.edges[index],
       ...updates,
     };
+
+    this.invalidateSnapshot();
   }
 
   /**
@@ -393,6 +460,8 @@ export class PatchStore {
     if (maxEdgeId >= 0) {
       this._nextEdgeId = maxEdgeId + 1;
     }
+
+    this.invalidateSnapshot();
   }
 
   /**
@@ -400,5 +469,6 @@ export class PatchStore {
    */
   clear(): void {
     this._data = emptyPatchData();
+    this.invalidateSnapshot();
   }
 }

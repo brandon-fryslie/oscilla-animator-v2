@@ -15,7 +15,7 @@
  * deterministic execution order.
  */
 
-import type { Step, StepRender, StepMaterialize, StepContinuityMapBuild, StepContinuityApply, TimeModel, InstanceId, InstanceDecl, FieldExprId, SigExprId, SigExpr, ValueSlot, ContinuityPolicy } from '../ir/types';
+import type { Step, StepRender, StepMaterialize, StepContinuityMapBuild, StepContinuityApply, TimeModel, InstanceId, InstanceDecl, FieldExprId, SigExprId, SigExpr, FieldExpr, ValueSlot, ContinuityPolicy } from '../ir/types';
 import type { UnlinkedIRFragments } from './pass6-block-lowering';
 import type { AcyclicOrLegalGraph, NormalizedEdge, Block, BlockIndex } from '../ir/patches';
 import type { TimeModelIR } from '../ir/schedule';
@@ -123,21 +123,17 @@ interface RenderTargetInfo {
 
 /**
  * Collect render target info from render blocks.
+ * Instance is inferred from the position field, not grabbed blindly.
  */
 function collectRenderTargets(
   blocks: readonly Block[],
   edges: readonly NormalizedEdge[],
   blockOutputs: Map<BlockIndex, Map<string, ValueRefPacked>>,
-  instances: ReadonlyMap<InstanceId, InstanceDecl>
+  instances: ReadonlyMap<InstanceId, InstanceDecl>,
+  fieldExprs: readonly FieldExpr[]
 ): RenderTargetInfo[] {
   const targets: RenderTargetInfo[] = [];
   const renderBlocks = findRenderBlocks(blocks);
-
-  // MVP - Use first instance (demo patch has single instance)
-  const instanceId = instances.keys().next().value;
-  if (!instanceId) {
-    return targets;
-  }
 
   for (const { block, index } of renderBlocks) {
     // Trace inputs through edges to blockOutputs
@@ -151,6 +147,13 @@ function collectRenderTargets(
       continue;
     }
     if (colorRef?.k !== 'field') {
+      continue;
+    }
+
+    // Infer instance from position field (not first instance!)
+    const instanceId = inferFieldInstanceFromExprs(posRef.id, fieldExprs);
+    if (!instanceId) {
+      console.warn(`Could not infer instance from position field ${posRef.id}`);
       continue;
     }
 
@@ -173,6 +176,37 @@ function collectRenderTargets(
   }
 
   return targets;
+}
+
+/**
+ * Infer instance from a field expression by walking the expression tree.
+ * Mirrors IRBuilderImpl.inferFieldInstance() logic.
+ */
+function inferFieldInstanceFromExprs(
+  fieldId: FieldExprId,
+  fieldExprs: readonly FieldExpr[]
+): InstanceId | undefined {
+  const expr = fieldExprs[fieldId as number];
+  if (!expr) return undefined;
+
+  switch (expr.kind) {
+    case 'intrinsic':
+    case 'array':
+    case 'layout':
+      return expr.instanceId;
+    case 'map':
+      return expr.instanceId ?? inferFieldInstanceFromExprs(expr.input, fieldExprs);
+    case 'zip':
+      // Take first input's instance (they should all match per validation)
+      return expr.instanceId ?? (expr.inputs.length > 0 ? inferFieldInstanceFromExprs(expr.inputs[0], fieldExprs) : undefined);
+    case 'zipSig':
+      return expr.instanceId ?? inferFieldInstanceFromExprs(expr.field, fieldExprs);
+    case 'broadcast':
+    case 'const':
+      return undefined;
+    default:
+      return undefined;
+  }
 }
 
 /**
@@ -376,16 +410,18 @@ export function pass7Schedule(
     return nextSlot++ as ValueSlot;
   };
 
-  // Collect render targets from render blocks
+  // Get expressions for instance inference and shape resolution
+  const fieldExprs = unlinkedIR.builder.getFieldExprs();
+  const signals = unlinkedIR.builder.getSigExprs();
+
+  // Collect render targets from render blocks (instance inferred from position field)
   const renderTargets = collectRenderTargets(
     validated.blocks,
     validated.edges,
     unlinkedIR.blockOutputs,
-    instances
+    instances,
+    fieldExprs
   );
-
-  // Get signal expressions for shape resolution
-  const signals = unlinkedIR.builder.getSigExprs();
 
   // Build the complete continuity pipeline
   const {

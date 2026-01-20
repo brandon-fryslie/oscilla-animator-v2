@@ -53,9 +53,10 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
         },
       }}
     >
-      {items.map((item, index) => (
-        <React.Fragment key={index}>
+      {items.flatMap((item, index) => {
+        const elements = [
           <MenuItem
+            key={`item-${index}`}
             onClick={() => handleItemClick(item.action)}
             disabled={item.disabled}
             sx={{
@@ -75,10 +76,15 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
               </ListItemIcon>
             )}
             <ListItemText>{item.label}</ListItemText>
-          </MenuItem>
-          {item.dividerAfter && <Divider sx={{ borderColor: '#444' }} />}
-        </React.Fragment>
-      ))}
+          </MenuItem>,
+        ];
+
+        if (item.dividerAfter) {
+          elements.push(<Divider key={`divider-${index}`} sx={{ borderColor: '#444' }} />);
+        }
+
+        return elements;
+      })}
     </Menu>
   );
 };

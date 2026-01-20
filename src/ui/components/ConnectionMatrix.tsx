@@ -6,7 +6,7 @@
  * Cells show connection status with counts for multiple edges.
  */
 
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
 import { rootStore } from '../../stores';
@@ -59,7 +59,27 @@ function categorizeBlocks(patch: Patch) {
  * ConnectionMatrix component.
  */
 export const ConnectionMatrix = observer(function ConnectionMatrix() {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [hasHeight, setHasHeight] = useState(false);
   const patch = rootStore.patch.patch;
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const updateHeight = () => {
+      const height = container.getBoundingClientRect().height;
+      setHasHeight(height > 0);
+    };
+
+    const resizeObserver = new ResizeObserver(updateHeight);
+    resizeObserver.observe(container);
+    updateHeight();
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, []);
 
   const { rows, columns } = useMemo(() => {
     if (!patch) {
@@ -248,51 +268,61 @@ export const ConnectionMatrix = observer(function ConnectionMatrix() {
   }
 
   return (
-      <div style={{
+      <div
+        ref={containerRef}
+        style={{
         height: '100%',
         width: '100%',
         background: colors.bgContent,
-      }}>
-        <DataGrid
-          rows={rows}
-          columns={columns}
-          hideFooter
-          disableColumnMenu
-          disableRowSelectionOnClick
-          rowHeight={32}
-          columnHeaderHeight={40}
-          sx={{
-            border: 'none',
-            '& .MuiDataGrid-columnHeaders': {
-              backgroundColor: colors.bgPanel,
-              borderBottom: `1px solid ${colors.border}`,
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              color: colors.textSecondary,
-            },
-            '& .MuiDataGrid-columnHeader': {
-              padding: '0 8px',
-            },
-            '& .MuiDataGrid-columnHeaderTitle': {
-              fontWeight: 600,
-              overflow: 'visible',
-              textOverflow: 'clip',
-              whiteSpace: 'nowrap',
-            },
-            '& .MuiDataGrid-cell': {
-              borderBottom: `1px solid ${colors.border}`,
-              padding: '0 8px',
-            },
-            '& .MuiDataGrid-row': {
-              '&:hover': {
-                backgroundColor: 'rgba(255, 255, 255, 0.03)',
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: 0,
+        }}
+      >
+        {hasHeight ? (
+          <DataGrid
+            rows={rows}
+            columns={columns}
+            hideFooter
+            disableColumnMenu
+            disableRowSelectionOnClick
+            rowHeight={32}
+            columnHeaderHeight={40}
+            sx={{
+              border: 'none',
+              flex: 1,
+              minHeight: 0,
+              '& .MuiDataGrid-columnHeaders': {
+                backgroundColor: colors.bgPanel,
+                borderBottom: `1px solid ${colors.border}`,
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                color: colors.textSecondary,
               },
-            },
-            '& .MuiDataGrid-virtualScroller': {
-              backgroundColor: colors.bgContent,
-            },
-          }}
-        />
+              '& .MuiDataGrid-columnHeader': {
+                padding: '0 8px',
+              },
+              '& .MuiDataGrid-columnHeaderTitle': {
+                fontWeight: 600,
+                overflow: 'visible',
+                textOverflow: 'clip',
+                whiteSpace: 'nowrap',
+              },
+              '& .MuiDataGrid-cell': {
+                borderBottom: `1px solid ${colors.border}`,
+                padding: '0 8px',
+              },
+              '& .MuiDataGrid-row': {
+                '&:hover': {
+                  backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                },
+              },
+              '& .MuiDataGrid-virtualScroller': {
+                backgroundColor: colors.bgContent,
+              },
+            }}
+          />
+        ) : null}
       </div>
   );
 });

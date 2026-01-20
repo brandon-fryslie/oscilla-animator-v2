@@ -27,8 +27,8 @@ export class PortHighlightStore {
       compatiblePorts: computed,
       setHoveredPort: action.bound,
       clearHoveredPort: action.bound,
-      isPortCompatible: action,
-      isPortHighlighted: action,
+      isPortCompatible: action.bound,
+      isPortHighlighted: action.bound,
     });
   }
 
