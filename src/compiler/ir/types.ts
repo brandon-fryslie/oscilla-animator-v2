@@ -1,16 +1,18 @@
 /**
  * Intermediate Representation (IR) Types
  *
- * The IR is a low-level representation of the animation program.
- * It consists of:
+ * Expression types and execution step definitions used by the compiler IR.
+ * These types are actively used by CompiledProgramIR in ./program.ts.
+ *
+ * Contents:
  * - SigExpr: Signal expressions (evaluated once per frame)
  * - FieldExpr: Field expressions (evaluated per-element at sinks)
  * - EventExpr: Event expressions (edge-triggered)
- * - Steps: Execution schedule
- *
- * @deprecated This file contains legacy IR types.
- * The authoritative IR schema is in ./program.ts (CompiledProgramIR).
- * This file will be removed once runtime migration is complete.
+ * - Steps: Execution schedule step types
+ * - PureFn: Pure function representations
+ * - Instance System: Domain instances, layouts, and declarations
+ * - Continuity System: Policies and gauges for anti-jank
+ * - Time Model: Finite vs infinite time representation
  */
 
 // Import canonical types as source of truth
@@ -447,30 +449,4 @@ export interface StepContinuityApply {
   readonly baseSlot: ValueSlot;
   readonly outputSlot: ValueSlot;
   readonly semantic: 'position' | 'radius' | 'opacity' | 'color' | 'custom';
-}
-
-// =============================================================================
-// Complete IR Program (LEGACY - Use CompiledProgramIR instead)
-// =============================================================================
-
-/**
- * @deprecated Use CompiledProgramIR from ./program.ts instead.
- * This type will be removed once runtime migration is complete.
- *
- * Key differences in CompiledProgramIR:
- * - Dense arrays instead of ReadonlyMap
- * - Required slotMeta with offsets
- * - Axes exposed on every slot type
- * - Outputs contract for frame extraction
- * - Debug index for provenance
- */
-export interface IRProgram {
-  readonly timeModel: TimeModel;
-  readonly signals: ReadonlyMap<SigExprId, SigExpr>;
-  readonly fields: ReadonlyMap<FieldExprId, FieldExpr>;
-  readonly events: ReadonlyMap<EventExprId, EventExpr>;
-  readonly instances: ReadonlyMap<string, InstanceDecl>; // UPDATED for Sprint 6 (was domains)
-  readonly steps: readonly Step[];
-  readonly slotCount: number;
-  readonly stateSlotCount?: number;
 }
