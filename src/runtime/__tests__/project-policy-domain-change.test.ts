@@ -71,10 +71,8 @@ function createTestRuntimeState(): RuntimeState {
     },
     continuity: createContinuityState(),
     continuityConfig: {
-      decayMs: 200,
-      decayExponent: 0.5,
-      slewMs: 50,
-      slewExponent: 0.5,
+      decayExponent: 0.7,
+      tauMultiplier: 1.0,
     },
   };
 }
