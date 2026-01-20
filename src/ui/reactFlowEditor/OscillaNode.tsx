@@ -10,7 +10,7 @@ import React, { useCallback } from 'react';
 import { Handle, Position, type NodeProps } from 'reactflow';
 import { observer } from 'mobx-react-lite';
 import type { OscillaNodeData, PortData } from './nodes';
-import type { DefaultSource, PortId } from '../../types';
+import type { DefaultSource, PortId, BlockId } from '../../types';
 import { rootStore } from '../../stores';
 
 /**
@@ -83,6 +83,18 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
     [data.blockId]
   );
 
+  const handlePortContextMenu = useCallback(
+    (portId: PortId, isInput: boolean, e: React.MouseEvent) => {
+      e.stopPropagation();
+      // Call global handler exposed by ReactFlowEditor
+      const handler = (window as any).__reactFlowPortContextMenu;
+      if (handler) {
+        handler(data.blockId as BlockId, portId, isInput, e);
+      }
+    },
+    [data.blockId]
+  );
+
   return (
     <div
       style={{
@@ -127,6 +139,7 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
               position={Position.Left}
               id={input.id}
               onClick={(e) => handlePortClick(input.id as PortId, e)}
+              onContextMenu={(e) => handlePortContextMenu(input.id as PortId, true, e)}
               style={{
                 top: `${topPercent}%`,
                 background: input.isConnected ? input.typeColor : '#1e1e1e',
@@ -210,6 +223,7 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
               position={Position.Right}
               id={output.id}
               onClick={(e) => handlePortClick(output.id as PortId, e)}
+              onContextMenu={(e) => handlePortContextMenu(output.id as PortId, false, e)}
               style={{
                 top: `${topPercent}%`,
                 background: output.isConnected ? output.typeColor : '#1e1e1e',

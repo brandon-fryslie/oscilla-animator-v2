@@ -18,11 +18,13 @@ import ReactFlow, {
   type Node,
   type Edge,
   type Connection,
+  type NodeMouseHandler,
+  type EdgeMouseHandler,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { Button } from '@mui/material';
 import { rootStore } from '../../stores';
-import type { BlockId } from '../../types';
+import type { BlockId, PortId } from '../../types';
 import type { EditorHandle } from '../editorCommon';
 import {
   syncPatchToReactFlow,
@@ -36,6 +38,9 @@ import {
 import { OscillaNode } from './OscillaNode';
 import { getLayoutedElements } from './layout';
 import { validateConnection } from './typeValidation';
+import { BlockContextMenu } from './menus/BlockContextMenu';
+import { EdgeContextMenu } from './menus/EdgeContextMenu';
+import { PortContextMenu } from './menus/PortContextMenu';
 import './ReactFlowEditor.css';
 
 export interface ReactFlowEditorHandle {
@@ -48,6 +53,31 @@ export interface ReactFlowEditorHandle {
 interface ReactFlowEditorProps {
   onEditorReady?: (handle: EditorHandle) => void;
 }
+
+/**
+ * Context menu state types.
+ */
+interface BlockMenuState {
+  type: 'block';
+  blockId: BlockId;
+  position: { top: number; left: number };
+}
+
+interface EdgeMenuState {
+  type: 'edge';
+  edgeId: string;
+  position: { top: number; left: number };
+}
+
+interface PortMenuState {
+  type: 'port';
+  blockId: BlockId;
+  portId: PortId;
+  isInput: boolean;
+  position: { top: number; left: number };
+}
+
+type ContextMenuState = BlockMenuState | EdgeMenuState | PortMenuState | null;
 
 /**
  * Create EditorHandle adapter for ReactFlowEditorHandle.
@@ -96,7 +126,8 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = ({
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [isLayouting, setIsLayouting] = useState(false);
-  const { fitView } = useReactFlow();
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
+  const { fitView, setCenter } = useReactFlow();
 
   // Store refs for handle access to latest state
   const nodesRef = useRef(nodes);
@@ -147,7 +178,73 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = ({
 
   const handlePaneClick = useCallback(() => {
     rootStore.selection.clearSelection();
+    setContextMenu(null); // Close context menu when clicking pane
   }, []);
+
+  // Context menu handlers
+  const handleNodeContextMenu = useCallback<NodeMouseHandler>(
+    (event, node) => {
+      event.preventDefault();
+      setContextMenu({
+        type: 'block',
+        blockId: node.id as BlockId,
+        position: { top: event.clientY, left: event.clientX },
+      });
+    },
+    []
+  );
+
+  const handleEdgeContextMenu = useCallback<EdgeMouseHandler>(
+    (event, edge) => {
+      event.preventDefault();
+      setContextMenu({
+        type: 'edge',
+        edgeId: edge.id,
+        position: { top: event.clientY, left: event.clientX },
+      });
+    },
+    []
+  );
+
+  // Port context menu handler - called from OscillaNode
+  const handlePortContextMenu = useCallback(
+    (blockId: BlockId, portId: PortId, isInput: boolean, event: React.MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setContextMenu({
+        type: 'port',
+        blockId,
+        portId,
+        isInput,
+        position: { top: event.clientY, left: event.clientX },
+      });
+    },
+    []
+  );
+
+  // Expose port context menu handler via global store for OscillaNode access
+  // (Alternative: use React Context, but this is simpler for now)
+  useEffect(() => {
+    (window as any).__reactFlowPortContextMenu = handlePortContextMenu;
+    return () => {
+      delete (window as any).__reactFlowPortContextMenu;
+    };
+  }, [handlePortContextMenu]);
+
+  // Navigate to block helper - centers and selects block
+  const navigateToBlock = useCallback(
+    (blockId: BlockId) => {
+      const node = nodesRef.current.find((n) => n.id === blockId);
+      if (node) {
+        rootStore.selection.selectBlock(blockId);
+        setCenter(node.position.x + 90, node.position.y + 50, {
+          zoom: 1.2,
+          duration: 300,
+        });
+      }
+    },
+    [setCenter]
+  );
 
   // Connection validation - prevent incompatible type connections
   const isValidConnection = useCallback((connection: Connection) => {
@@ -330,48 +427,79 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = ({
   }, [wrapperRef]);
 
   return (
-    <ReactFlow
-      nodes={nodes}
-      edges={edges}
-      nodeTypes={nodeTypes}
-      onNodesChange={handleNodesChange}
-      onEdgesChange={handleEdgesChange}
-      onConnect={handleConnect}
-      onNodeClick={handleNodeClick}
-      onEdgeClick={handleEdgeClick}
-      onPaneClick={handlePaneClick}
-      isValidConnection={isValidConnection}
-      fitView
-      attributionPosition="bottom-left"
-      style={{ width: '100%', height: '100%' }}
-    >
-      <Background />
-      <Controls />
-      <Panel position="top-left" className="react-flow-panel">
-        <Button
-          variant="outlined"
-          size="small"
-          onClick={handleAutoArrange}
-          disabled={isLayouting}
-          sx={{
-            textTransform: 'none',
-            fontSize: '0.75rem',
-            borderColor: '#0f3460',
-            color: isLayouting ? '#666' : '#eee',
-            '&:hover': {
-              borderColor: '#4ecdc4',
-              background: 'rgba(78, 205, 196, 0.1)',
-            },
-            '&:disabled': {
+    <>
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={nodeTypes}
+        onNodesChange={handleNodesChange}
+        onEdgesChange={handleEdgesChange}
+        onConnect={handleConnect}
+        onNodeClick={handleNodeClick}
+        onEdgeClick={handleEdgeClick}
+        onPaneClick={handlePaneClick}
+        onNodeContextMenu={handleNodeContextMenu}
+        onEdgeContextMenu={handleEdgeContextMenu}
+        isValidConnection={isValidConnection}
+        fitView
+        attributionPosition="bottom-left"
+        style={{ width: '100%', height: '100%' }}
+      >
+        <Background />
+        <Controls />
+        <Panel position="top-left" className="react-flow-panel">
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={handleAutoArrange}
+            disabled={isLayouting}
+            sx={{
+              textTransform: 'none',
+              fontSize: '0.75rem',
               borderColor: '#0f3460',
-              color: '#666',
-            },
-          }}
-        >
-          {isLayouting ? 'Arranging...' : 'Auto Arrange'}
-        </Button>
-      </Panel>
-    </ReactFlow>
+              color: isLayouting ? '#666' : '#eee',
+              '&:hover': {
+                borderColor: '#4ecdc4',
+                background: 'rgba(78, 205, 196, 0.1)',
+              },
+              '&:disabled': {
+                borderColor: '#0f3460',
+                color: '#666',
+              },
+            }}
+          >
+            {isLayouting ? 'Arranging...' : 'Auto Arrange'}
+          </Button>
+        </Panel>
+      </ReactFlow>
+
+      {/* Context Menus */}
+      {contextMenu?.type === 'block' && (
+        <BlockContextMenu
+          blockId={contextMenu.blockId}
+          anchorPosition={contextMenu.position}
+          onClose={() => setContextMenu(null)}
+          onCenter={navigateToBlock}
+        />
+      )}
+      {contextMenu?.type === 'edge' && (
+        <EdgeContextMenu
+          edgeId={contextMenu.edgeId}
+          anchorPosition={contextMenu.position}
+          onClose={() => setContextMenu(null)}
+          onNavigateToBlock={navigateToBlock}
+        />
+      )}
+      {contextMenu?.type === 'port' && (
+        <PortContextMenu
+          blockId={contextMenu.blockId}
+          portId={contextMenu.portId}
+          isInput={contextMenu.isInput}
+          anchorPosition={contextMenu.position}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
+    </>
   );
 };
 

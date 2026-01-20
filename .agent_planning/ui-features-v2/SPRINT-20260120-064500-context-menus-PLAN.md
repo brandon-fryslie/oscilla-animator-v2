@@ -1,7 +1,8 @@
 # Sprint: context-menus - Context Menus for Graph Elements
 Generated: 2026-01-20T06:45:00Z
-Confidence: MEDIUM
-Status: RESEARCH REQUIRED
+Updated: 2026-01-20T08:45:00Z
+Confidence: HIGH
+Status: READY FOR IMPLEMENTATION
 
 ## Sprint Goal
 
@@ -9,24 +10,35 @@ Add right-click context menus for blocks, ports, and edges in the ReactFlow edit
 
 ## Known Elements
 
-- ReactFlow provides `onNodeContextMenu`, `onEdgeContextMenu` callbacks
-- Can add custom context menu handlers on port handles
+- ReactFlow provides `onNodeContextMenu`, `onEdgeContextMenu`, `onPaneContextMenu` callbacks
+- MUI (@mui/material) already installed - has Menu component
 - Actions will use existing PatchStore methods
 
-## Unknowns to Resolve
+## Research Findings (2026-01-20)
 
-1. **Context menu library choice**
-   - Option A: Build custom (simple div with absolute positioning)
-   - Option B: Use existing library (radix-ui, react-contexify, etc.)
-   - Need to research: What's already in the project's dependencies?
+### Context Menu Library: MUI Menu
+MUI is already installed (`@mui/material: ^7.3.7`). Use MUI Menu component for consistency with DataGrid.
 
-2. **Menu positioning**
-   - How to position menu at click location
-   - Handle viewport boundaries (menu near edge of screen)
+### Menu Positioning Pattern (from ReactFlow docs)
+```javascript
+const onNodeContextMenu = useCallback((event, node) => {
+  event.preventDefault();
+  const pane = ref.current.getBoundingClientRect();
+  setMenu({
+    id: node.id,
+    top: event.clientY < pane.height - 200 && event.clientY,
+    left: event.clientX < pane.width - 200 && event.clientX,
+    right: event.clientX >= pane.width - 200 && pane.width - event.clientX,
+    bottom: event.clientY >= pane.height - 200 && pane.height - event.clientY,
+  });
+}, []);
+```
 
-3. **Port context menu trigger**
-   - ReactFlow handles don't have native context menu support
-   - May need wrapper element around Handle component
+### Port Context Menu
+Add `onContextMenu` handler directly to Handle component in OscillaNode. ReactFlow Handles are DOM elements that support standard events.
+
+### Closing Menu
+Use `onPaneClick` to close menu when clicking elsewhere.
 
 ## Tentative Deliverables
 
@@ -37,12 +49,12 @@ Add right-click context menus for blocks, ports, and edges in the ReactFlow edit
 - Port context menu (disconnect, connect to..., reset default)
 - Edge context menu (delete, navigate source/target)
 
-## Research Tasks
+## Research Tasks (COMPLETED)
 
-- [ ] Check package.json for existing UI libraries that include context menus
-- [ ] Prototype context menu positioning approach
-- [ ] Test ReactFlow handle context menu capability
-- [ ] Design menu item interface for consistency
+- [x] Check package.json for existing UI libraries → MUI installed
+- [x] Prototype context menu positioning approach → ReactFlow docs pattern
+- [x] Test ReactFlow handle context menu capability → Standard DOM events work
+- [x] Design menu item interface → Use MUI Menu/MenuItem components
 
 ## Tentative Implementation
 
