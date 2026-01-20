@@ -23,6 +23,7 @@ import {
   ColorInput as MuiColorInput,
   SliderWithInput,
 } from './common';
+import { ConnectionPicker } from './ConnectionPicker';
 
 // =============================================================================
 // Helper Functions
@@ -109,11 +110,11 @@ export const BlockInspector = observer(function BlockInspector() {
     const blockDef = block ? getBlockDefinition(block.type) : null;
     if (block && blockDef) {
       content = (
-        <PortInspectorStandalone 
-          portRef={selectedPort} 
-          block={block} 
-          blockDef={blockDef} 
-          patch={patch} 
+        <PortInspectorStandalone
+          portRef={selectedPort}
+          block={block}
+          blockDef={blockDef}
+          patch={patch}
         />
       );
     } else {
@@ -193,6 +194,8 @@ interface PortInspectorStandaloneProps {
 }
 
 function PortInspectorStandalone({ portRef, block, blockDef, patch }: PortInspectorStandaloneProps) {
+  const [showConnectionPicker, setShowConnectionPicker] = useState(false);
+
   const inputDef = blockDef.inputs.find(p => p.id === portRef.portId);
   const outputDef = blockDef.outputs.find(p => p.id === portRef.portId);
   const portDef = inputDef || outputDef;
@@ -210,6 +213,8 @@ function PortInspectorStandalone({ portRef, block, blockDef, patch }: PortInspec
     ? patch.edges.filter(e => e.to.blockId === block.id && e.to.slotId === portRef.portId)
     : patch.edges.filter(e => e.from.blockId === block.id && e.from.slotId === portRef.portId);
 
+  const isConnected = connectedEdges.length > 0;
+
   const handleViewBlock = useCallback(() => {
     rootStore.selection.selectBlock(block.id);
   }, [block.id]);
@@ -217,6 +222,24 @@ function PortInspectorStandalone({ portRef, block, blockDef, patch }: PortInspec
   const handleDisconnect = useCallback((edgeId: string) => {
     rootStore.patch.removeEdge(edgeId);
   }, []);
+
+  const handleConnect = useCallback((sourceBlockId: BlockId, sourcePortId: PortId) => {
+    // Determine source and target based on port direction
+    if (isInput) {
+      // Target is INPUT, source is OUTPUT
+      rootStore.patch.addEdge(
+        { kind: 'port', blockId: sourceBlockId, slotId: sourcePortId },
+        { kind: 'port', blockId: block.id, slotId: portRef.portId }
+      );
+    } else {
+      // Target is OUTPUT, source is INPUT
+      rootStore.patch.addEdge(
+        { kind: 'port', blockId: block.id, slotId: portRef.portId },
+        { kind: 'port', blockId: sourceBlockId, slotId: sourcePortId }
+      );
+    }
+    setShowConnectionPicker(false);
+  }, [isInput, block.id, portRef.portId]);
 
   return (
     <div>
@@ -274,10 +297,37 @@ function PortInspectorStandalone({ portRef, block, blockDef, patch }: PortInspec
           {isInput ? 'Connection' : `Connections (${connectedEdges.length})`}
         </h4>
 
-        {connectedEdges.length === 0 && (
-          <div style={{ color: colors.textMuted, fontSize: '13px' }}>
-            Not connected
+        {connectedEdges.length === 0 && !showConnectionPicker && (
+          <div>
+            <div style={{ color: colors.textMuted, fontSize: '13px', marginBottom: '8px' }}>
+              Not connected
+            </div>
+            <button
+              onClick={() => setShowConnectionPicker(true)}
+              style={{
+                padding: '6px 12px',
+                background: colors.primary,
+                color: '#fff',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '13px',
+              }}
+            >
+              + Connect...
+            </button>
           </div>
+        )}
+
+        {showConnectionPicker && (
+          <ConnectionPicker
+            targetBlockId={block.id}
+            targetPortId={portRef.portId as PortId}
+            direction={isInput ? 'input' : 'output'}
+            patch={patch}
+            onSelect={handleConnect}
+            onCancel={() => setShowConnectionPicker(false)}
+          />
         )}
 
         {isInput && connectedEdges.map((edge, idx) => {

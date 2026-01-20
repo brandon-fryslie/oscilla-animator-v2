@@ -14,6 +14,7 @@ import { makeObservable, observable, computed, action } from 'mobx';
 import type { PortRef, Patch } from '../graph/Patch';
 import type { BlockId, PortId } from '../types';
 import { getPortType, validateConnection } from '../ui/reactFlowEditor/typeValidation';
+import { getBlockDefinition } from '../blocks/registry';
 import type { PatchStore } from './PatchStore';
 
 export class PortHighlightStore {
@@ -58,7 +59,7 @@ export class PortHighlightStore {
 
     // Iterate all blocks and check each port
     for (const [blockId, block] of patch.blocks) {
-      const blockDef = this.patchStore.getBlockDefinition(block.type);
+      const blockDef = getBlockDefinition(block.type);
       if (!blockDef) continue;
 
       // Check opposite direction ports
