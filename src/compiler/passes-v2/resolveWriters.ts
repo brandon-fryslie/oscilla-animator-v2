@@ -252,7 +252,7 @@ export function resolveBlockInputs(
     const combine = resolveCombinePolicy(inputSlot);
 
     // Get port type - inputSlot.type is SignalType
-    const portType = inputSlot.type;
+    const portType = inputSlot.type!; // Type is required for port inputs
 
     // Build resolved spec
     resolved.set(slotId, {

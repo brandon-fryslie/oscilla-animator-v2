@@ -33,13 +33,13 @@ export function pass0PolymorphicTypes(patch: Patch): Patch {
     let inferredPayloadType: string | undefined;
 
     // Strategy 1: Forward resolution - polymorphic OUTPUT infers from target input
-    for (const output of blockDef.outputs) {
+    for (const [outputId, output] of Object.entries(blockDef.outputs)) {
       if (output.type.payload !== '???') continue;
 
       const outgoingEdge = patch.edges.find(
         e => e.enabled !== false &&
              e.from.blockId === blockId &&
-             e.from.slotId === output.id
+             e.from.slotId === outputId
       );
 
       if (!outgoingEdge) continue;
@@ -50,8 +50,8 @@ export function pass0PolymorphicTypes(patch: Patch): Patch {
       const targetDef = getBlockDefinition(targetBlock.type);
       if (!targetDef) continue;
 
-      const targetInput = targetDef.inputs.find(i => i.id === outgoingEdge.to.slotId);
-      if (!targetInput || targetInput.type.payload === '???') continue;
+      const targetInput = targetDef.inputs[outgoingEdge.to.slotId];
+      if (!targetInput || targetInput.type?.payload === '???') continue;
 
       inferredPayloadType = targetInput.type.payload;
       break;
@@ -59,13 +59,13 @@ export function pass0PolymorphicTypes(patch: Patch): Patch {
 
     // Strategy 2: Backward resolution - polymorphic INPUT infers from source output
     if (!inferredPayloadType) {
-      for (const input of blockDef.inputs) {
-        if (input.type.payload !== '???') continue;
+      for (const [inputId, input] of Object.entries(blockDef.inputs)) {
+        if (input.type?.payload !== '???') continue;
 
         const incomingEdge = patch.edges.find(
           e => e.enabled !== false &&
                e.to.blockId === blockId &&
-               e.to.slotId === input.id
+               e.to.slotId === inputId
         );
 
         if (!incomingEdge) continue;
@@ -76,7 +76,7 @@ export function pass0PolymorphicTypes(patch: Patch): Patch {
         const sourceDef = getBlockDefinition(sourceBlock.type);
         if (!sourceDef) continue;
 
-        const sourceOutput = sourceDef.outputs.find(o => o.id === incomingEdge.from.slotId);
+        const sourceOutput = sourceDef.outputs[incomingEdge.from.slotId];
         if (!sourceOutput) continue;
 
         // If source output is also polymorphic, check if it was already resolved
