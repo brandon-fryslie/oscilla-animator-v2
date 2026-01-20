@@ -6,7 +6,7 @@
 
 import { registerBlock } from './registry';
 import { signalType, signalTypeField } from '../core/canonical-types';
-import { defaultSourceConst } from '../types';
+import { defaultSourceConst, defaultSourceTimeRoot } from '../types';
 import type { SigExprId, FieldExprId } from '../compiler/ir/Indices';
 
 // =============================================================================

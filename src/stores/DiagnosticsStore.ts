@@ -7,27 +7,15 @@
  * Architecture:
  * - DiagnosticHub: Core state manager (subscribes to events)
  * - DiagnosticsStore: MobX wrapper (reactive UI layer)
- *
- * Migration Note:
- * - Old API (addError, addWarning, log) is preserved for backwards compatibility
- * - New API (getActive, getByRevision, filter) uses DiagnosticHub
  */
 
 import { makeObservable, computed, action, observable } from 'mobx';
 import type { DiagnosticHub } from '../diagnostics/DiagnosticHub';
-import type { Diagnostic, DiagnosticFilter, Severity } from '../diagnostics/types';
+import type { Diagnostic, DiagnosticFilter } from '../diagnostics/types';
 
 // =============================================================================
-// Legacy Types (Backwards Compatibility)
+// Log Types
 // =============================================================================
-
-export interface LegacyDiagnostic {
-  id: string;
-  message: string;
-  source?: string;
-  blockId?: string;
-  timestamp: number;
-}
 
 export type LogLevel = 'info' | 'warn' | 'error' | 'debug';
 
@@ -69,9 +57,7 @@ export class DiagnosticsStore {
   // This is incremented via a callback from DiagnosticHub
   private _revision: number = 0;
 
-  // Legacy state (for backwards compatibility)
-  private _legacyErrors: LegacyDiagnostic[] = [];
-  private _legacyWarnings: LegacyDiagnostic[] = [];
+  // Log entries
   private _logs: LogEntry[] = [];
   private _nextId = 0;
 
@@ -84,30 +70,23 @@ export class DiagnosticsStore {
 
     makeObservable<
       DiagnosticsStore,
-      '_revision' | '_legacyErrors' | '_legacyWarnings' | '_logs' | 'incrementRevision'
+      '_revision' | '_logs' | 'incrementRevision'
     >(this, {
       // Observable revision counter
       _revision: observable,
       incrementRevision: action,
 
-      // New API (DiagnosticHub)
+      // DiagnosticHub API
       revision: computed,
       activeDiagnostics: computed,
       errorCount: computed,
       warningCount: computed,
       hasErrors: computed,
 
-      // Legacy API
-      _legacyErrors: observable,
-      _legacyWarnings: observable,
+      // Log API
       _logs: observable,
-      legacyErrors: computed,
-      legacyWarnings: computed,
       logs: computed,
-      addError: action,
-      addWarning: action,
       log: action,
-      clearDiagnostics: action,
       clearLogs: action,
     });
   }
@@ -224,54 +203,14 @@ export class DiagnosticsStore {
   }
 
   // =============================================================================
-  // Legacy API (Backwards Compatibility)
+  // Log API
   // =============================================================================
-
-  /**
-   * Legacy errors (old API).
-   * Preserved for backwards compatibility.
-   */
-  get legacyErrors(): readonly LegacyDiagnostic[] {
-    return this._legacyErrors;
-  }
-
-  /**
-   * Legacy warnings (old API).
-   * Preserved for backwards compatibility.
-   */
-  get legacyWarnings(): readonly LegacyDiagnostic[] {
-    return this._legacyWarnings;
-  }
 
   /**
    * Log entries.
    */
   get logs(): readonly LogEntry[] {
     return this._logs;
-  }
-
-  /**
-   * Adds a legacy error diagnostic.
-   * Preserved for backwards compatibility.
-   */
-  addError(error: Omit<LegacyDiagnostic, 'id' | 'timestamp'>): void {
-    this._legacyErrors.push({
-      ...error,
-      id: `error-${this._nextId++}`,
-      timestamp: Date.now(),
-    });
-  }
-
-  /**
-   * Adds a legacy warning diagnostic.
-   * Preserved for backwards compatibility.
-   */
-  addWarning(warning: Omit<LegacyDiagnostic, 'id' | 'timestamp'>): void {
-    this._legacyWarnings.push({
-      ...warning,
-      id: `warning-${this._nextId++}`,
-      timestamp: Date.now(),
-    });
   }
 
   /**
@@ -283,14 +222,6 @@ export class DiagnosticsStore {
       id: `log-${this._nextId++}`,
       timestamp: Date.now(),
     });
-  }
-
-  /**
-   * Clears legacy diagnostics.
-   */
-  clearDiagnostics(): void {
-    this._legacyErrors = [];
-    this._legacyWarnings = [];
   }
 
   /**

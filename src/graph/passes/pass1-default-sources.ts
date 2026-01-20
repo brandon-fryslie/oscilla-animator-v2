@@ -55,6 +55,7 @@ function findTimeRoot(patch: Patch): Block | null {
  */
 function materializeDefaultSource(
   ds: DefaultSource,
+  targetInput: InputDef,
   targetBlockId: BlockId,
   targetPortId: string,
   targetBlock: Block,
@@ -89,10 +90,16 @@ function materializeDefaultSource(
     },
   };
 
+  // Build params - for Const blocks, include payloadType from input type
+  let params = ds.params ?? {};
+  if (ds.blockType === 'Const') {
+    params = { ...params, payloadType: targetInput.type.payload };
+  }
+
   const derivedBlock: Block = {
     id: derivedId,
     type: ds.blockType,
-    params: ds.params ?? {},
+    params,
     displayName: null,
     domainId: targetBlock.domainId,
     role: derivedRole,
@@ -135,7 +142,7 @@ function analyzeDefaultSources(patch: Patch): DefaultSourceInsertion[] {
       if (!ds) continue;
 
       // Materialize the default source
-      const insertion = materializeDefaultSource(ds, blockId, input.id, block, patch);
+      const insertion = materializeDefaultSource(ds, input, blockId, input.id, block, patch);
       insertions.push(insertion);
     }
   }
