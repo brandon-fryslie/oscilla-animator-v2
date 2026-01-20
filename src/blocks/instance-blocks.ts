@@ -37,8 +37,8 @@ registerBlock({
   capability: 'pure',
   inputs: {
     elements: { label: 'Elements', type: signalTypeField('???', 'default') },
-    rows: { label: 'Rows', type: signalType('int'), value: 10, defaultSource: defaultSourceConst(10) },
-    cols: { label: 'Columns', type: signalType('int'), value: 10, defaultSource: defaultSourceConst(10) },
+    rows: { label: 'Rows', type: signalType('int'), value: 10, defaultSource: defaultSourceConst(10), exposedAsPort: false },
+    cols: { label: 'Columns', type: signalType('int'), value: 10, defaultSource: defaultSourceConst(10), exposedAsPort: false },
   },
   outputs: {
     position: { label: 'Position', type: signalTypeField('vec2', 'default') },
@@ -94,7 +94,7 @@ registerBlock({
   capability: 'pure',
   inputs: {
     elements: { label: 'Elements', type: signalTypeField('???', 'default') },
-    spacing: { label: 'Spacing', type: signalType('float'), value: 0.1, defaultSource: defaultSourceConst(0.1) },
+    spacing: { label: 'Spacing', type: signalType('float'), value: 0.1, defaultSource: defaultSourceConst(0.1), exposedAsPort: false },
   },
   outputs: {
     position: { label: 'Position', type: signalTypeField('vec2', 'default') },
