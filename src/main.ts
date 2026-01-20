@@ -434,7 +434,7 @@ async function buildAndCompile(patchBuilder: PatchBuilder) {
 // =============================================================================
 
 let recompileTimeout: ReturnType<typeof setTimeout> | null = null;
-const RECOMPILE_DEBOUNCE_MS = 150;
+const RECOMPILE_DEBOUNCE_MS = 16; // ~1 frame at 60fps for responsive parameter control
 
 /** Track previous instance counts for domain change detection */
 let prevInstanceCounts: Map<string, number> = new Map();

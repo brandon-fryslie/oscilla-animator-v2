@@ -99,14 +99,24 @@ export class ContinuityStore {
   /** Reference to RuntimeState for accessing continuityConfig */
   private runtimeStateRef: RuntimeState | null = null;
 
+  /**
+   * Observable config version counter.
+   * Incremented when config values change to trigger MobX reactivity.
+   * This is needed because RuntimeState.continuityConfig is a plain object,
+   * not MobX observable, so we need a way to notify observers.
+   * @internal
+   */
+  configVersion: number = 0;
+
   constructor() {
-    makeObservable(this, {
+    makeObservable<ContinuityStore, 'configVersion'>(this, {
       targets: observable,
       mappings: observable,
       domainChangeThisFrame: observable,
       lastDomainChangeMs: observable,
       recentChanges: observable,
       totalDomainChanges: observable,
+      configVersion: observable,
       decayExponent: computed,
       tauMultiplier: computed,
       setRuntimeStateRef: action,
@@ -130,15 +140,21 @@ export class ContinuityStore {
 
   /**
    * Get current decay exponent from RuntimeState config.
+   * Depends on configVersion to trigger reactivity when values change.
    */
   get decayExponent(): number {
+    // Access configVersion to establish MobX dependency
+    void this.configVersion;
     return this.runtimeStateRef?.continuityConfig.decayExponent ?? 0.7;
   }
 
   /**
    * Get current tau multiplier from RuntimeState config.
+   * Depends on configVersion to trigger reactivity when values change.
    */
   get tauMultiplier(): number {
+    // Access configVersion to establish MobX dependency
+    void this.configVersion;
     return this.runtimeStateRef?.continuityConfig.tauMultiplier ?? 1.0;
   }
 
@@ -148,6 +164,7 @@ export class ContinuityStore {
   setDecayExponent(value: number): void {
     if (this.runtimeStateRef) {
       this.runtimeStateRef.continuityConfig.decayExponent = value;
+      this.configVersion++;
     }
   }
 
@@ -157,6 +174,7 @@ export class ContinuityStore {
   setTauMultiplier(value: number): void {
     if (this.runtimeStateRef) {
       this.runtimeStateRef.continuityConfig.tauMultiplier = value;
+      this.configVersion++;
     }
   }
 
@@ -167,6 +185,7 @@ export class ContinuityStore {
     if (this.runtimeStateRef) {
       this.runtimeStateRef.continuityConfig.decayExponent = 0.7;
       this.runtimeStateRef.continuityConfig.tauMultiplier = 1.0;
+      this.configVersion++;
     }
   }
 
