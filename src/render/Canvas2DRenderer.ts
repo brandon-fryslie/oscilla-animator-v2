@@ -59,7 +59,10 @@ function renderPass(
  * - ArrayBufferView: Per-particle shape buffer (Field<shape>)
  * - number: Legacy encoding (0=circle, 1=square, 2=triangle) - deprecated
  *
- * P4: Paths are detected by checking if topology has 'verbs' property
+ * For path shapes:
+ * - Control points define the shape template (e.g., 5 vertices for pentagon)
+ * - Each particle renders the same shape at its position
+ * - Control points are relative offsets, scaled by the particle size
  */
 function renderInstances2D(
   ctx: CanvasRenderingContext2D,
@@ -75,15 +78,8 @@ function renderInstances2D(
   // Determine shape mode
   const shapeMode = determineShapeMode(pass.shape);
 
-  // P4: Check if this is a path shape that needs control points
-  const isPath = shapeMode.kind === 'topology' && isPathTopology(shapeMode.topology);
+  // Get control points for path shapes (used as shape template)
   const controlPoints = pass.controlPoints as Float32Array | undefined;
-
-  // For path shapes, we expect exactly 1 "particle" (the path itself)
-  // The control points field contains the actual path geometry
-  if (isPath && pass.count !== 1) {
-    console.warn(`Path shape expected count=1, got count=${pass.count}`);
-  }
 
   for (let i = 0; i < pass.count; i++) {
     const x = position[i * 2] * width;
@@ -100,28 +96,28 @@ function renderInstances2D(
       case 'topology': {
         const { topology, params } = shapeMode;
 
-        // P4: Check if this is a path topology
         if (isPathTopology(topology)) {
-          // Render path using control points
+          // Path topology - render using control points as shape template
           if (!controlPoints) {
-            console.warn('Path topology requires control points buffer');
-            break;
+            throw new Error(
+              `Path topology '${topology.id}' requires control points buffer. ` +
+              `Ensure the shape signal includes a control point field.`
+            );
           }
-          renderPath(ctx, topology, controlPoints, params, width, height);
+          renderPathAtParticle(ctx, topology, controlPoints, size, width, height);
         } else {
-          // Regular topology - use topology render function
+          // Regular topology (ellipse, rect) - use topology render function
           topology.render(ctx, params);
         }
         break;
       }
 
       case 'perParticle': {
-        // Per-particle shapes (Field<shape>) - not yet implemented
-        // For now, fall back to default circle
-        ctx.beginPath();
-        ctx.arc(0, 0, size / 2, 0, Math.PI * 2);
-        ctx.fill();
-        break;
+        // Per-particle shapes (Field<shape>) - not implemented
+        throw new Error(
+          'Per-particle shapes (Field<shape>) are not yet implemented. ' +
+          'Use a uniform shape signal instead.'
+        );
       }
 
       case 'legacy': {
@@ -141,16 +137,19 @@ function renderInstances2D(
 }
 
 /**
- * P4: Render a path using control points
+ * Render a path shape at a particle position.
  *
- * Walks through the verb sequence, consuming control points as needed.
- * Control points are in normalized [0,1] space and scaled to canvas dimensions.
+ * Control points define the shape template (relative offsets from center).
+ * The shape is scaled by particle size and drawn at the current transform origin.
+ *
+ * Control points from polygonVertex kernel are in normalized space centered at (0,0)
+ * with radius defined by radiusX/radiusY. We scale them to canvas pixels.
  */
-function renderPath(
+function renderPathAtParticle(
   ctx: CanvasRenderingContext2D,
   topology: PathTopologyDef,
   controlPoints: Float32Array,
-  params: Record<string, number>,
+  _size: number, // Currently unused - control points already include radius
   width: number,
   height: number
 ): void {
@@ -163,33 +162,35 @@ function renderPath(
 
     switch (verb) {
       case 0: { // PathVerb.MOVE
-        const x = (controlPoints[pointIndex * 2] - 0.5) * width;
-        const y = (controlPoints[pointIndex * 2 + 1] - 0.5) * height;
-        ctx.moveTo(x, y);
+        // Control points are in normalized space (-radiusX to +radiusX, -radiusY to +radiusY)
+        // Scale to canvas pixels (multiply by canvas size since they're normalized fractions)
+        const px = controlPoints[pointIndex * 2] * width;
+        const py = controlPoints[pointIndex * 2 + 1] * height;
+        ctx.moveTo(px, py);
         pointIndex++;
         break;
       }
 
       case 1: { // PathVerb.LINE
-        const x = (controlPoints[pointIndex * 2] - 0.5) * width;
-        const y = (controlPoints[pointIndex * 2 + 1] - 0.5) * height;
-        ctx.lineTo(x, y);
+        const px = controlPoints[pointIndex * 2] * width;
+        const py = controlPoints[pointIndex * 2 + 1] * height;
+        ctx.lineTo(px, py);
         pointIndex++;
         break;
       }
 
       case 2: { // PathVerb.CUBIC
         // Cubic bezier: control1, control2, end
-        const cp1x = (controlPoints[pointIndex * 2] - 0.5) * width;
-        const cp1y = (controlPoints[pointIndex * 2 + 1] - 0.5) * height;
+        const cp1x = controlPoints[pointIndex * 2] * width;
+        const cp1y = controlPoints[pointIndex * 2 + 1] * height;
         pointIndex++;
 
-        const cp2x = (controlPoints[pointIndex * 2] - 0.5) * width;
-        const cp2y = (controlPoints[pointIndex * 2 + 1] - 0.5) * height;
+        const cp2x = controlPoints[pointIndex * 2] * width;
+        const cp2y = controlPoints[pointIndex * 2 + 1] * height;
         pointIndex++;
 
-        const endx = (controlPoints[pointIndex * 2] - 0.5) * width;
-        const endy = (controlPoints[pointIndex * 2 + 1] - 0.5) * height;
+        const endx = controlPoints[pointIndex * 2] * width;
+        const endy = controlPoints[pointIndex * 2 + 1] * height;
         pointIndex++;
 
         ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, endx, endy);
@@ -198,12 +199,12 @@ function renderPath(
 
       case 3: { // PathVerb.QUAD
         // Quadratic bezier: control, end
-        const cpx = (controlPoints[pointIndex * 2] - 0.5) * width;
-        const cpy = (controlPoints[pointIndex * 2 + 1] - 0.5) * height;
+        const cpx = controlPoints[pointIndex * 2] * width;
+        const cpy = controlPoints[pointIndex * 2 + 1] * height;
         pointIndex++;
 
-        const endx = (controlPoints[pointIndex * 2] - 0.5) * width;
-        const endy = (controlPoints[pointIndex * 2 + 1] - 0.5) * height;
+        const endx = controlPoints[pointIndex * 2] * width;
+        const endy = controlPoints[pointIndex * 2 + 1] * height;
         pointIndex++;
 
         ctx.quadraticCurveTo(cpx, cpy, endx, endy);
@@ -216,17 +217,13 @@ function renderPath(
       }
 
       default: {
-        console.warn(`Unknown path verb: ${verb}`);
-        break;
+        throw new Error(`Unknown path verb: ${verb}. Valid verbs are 0-4 (MOVE, LINE, CUBIC, QUAD, CLOSE).`);
       }
     }
   }
 
   // Fill the path
   ctx.fill();
-
-  // Optionally stroke based on params (future enhancement)
-  // if (params.stroke) { ctx.stroke(); }
 }
 
 /**
