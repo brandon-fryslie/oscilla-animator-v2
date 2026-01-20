@@ -16,6 +16,7 @@ export { PatchStore, type ImmutablePatch, type BlockOptions } from './PatchStore
 export { SelectionStore } from './SelectionStore';
 export { ViewportStore, type Pan } from './ViewportStore';
 export { PlaybackStore } from './PlaybackStore';
+export { PortHighlightStore } from './PortHighlightStore';
 export {
   DiagnosticsStore,
   type LogLevel,

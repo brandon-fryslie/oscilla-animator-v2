@@ -290,6 +290,8 @@ type Step =
   | { kind: 'render'; sinkId: string; input: SlotRef };
 ```
 
+> **Implementation Note**: Type and field naming conventions (e.g., snake_case vs camelCase) are not prescribed by this spec—implementations should follow standard conventions for their language and project.
+
 ### Scheduling Order
 
 1. Read external inputs
@@ -312,6 +314,8 @@ type FieldSlot  = { kind: 'field_slot'; id: number; domain: DomainId };
 type EventSlot  = { kind: 'event_slot'; id: number };
 type StateSlot  = { kind: 'state_slot'; id: number };
 ```
+
+> **Implementation Note**: Implementations may use a unified slot type (e.g., `ValueSlot`) with runtime metadata instead of distinct typed slots, provided slot semantics are preserved through type information stored elsewhere (such as `SlotMetaEntry`).
 
 ### Slot Allocation by Cardinality
 

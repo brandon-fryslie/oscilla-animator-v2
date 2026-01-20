@@ -4,6 +4,7 @@
  * Renders port-specific handles for proper multi-port connections.
  * Each input/output port gets its own Handle with unique ID.
  * Handles are color-coded by payload type with type tooltips.
+ * Supports port hover highlighting for compatible ports.
  */
 
 import React, { useCallback } from 'react';
@@ -69,11 +70,45 @@ function buildPortTooltip(port: PortData, isInput: boolean): string {
 }
 
 /**
+ * Get highlight style for a port based on compatibility.
+ */
+function getPortHighlightStyle(
+  blockId: BlockId,
+  portId: PortId,
+  isConnected: boolean
+): React.CSSProperties | undefined {
+  const { hoveredPort, isPortCompatible } = rootStore.portHighlight;
+
+  // Don't highlight if no port is hovered
+  if (!hoveredPort) return undefined;
+
+  // Don't highlight connected ports
+  if (isConnected) return undefined;
+
+  // Check if this port is compatible
+  const isCompatible = isPortCompatible(blockId, portId);
+
+  if (isCompatible) {
+    // Green glow for compatible ports
+    return {
+      boxShadow: '0 0 12px 4px #4ade80',
+      filter: 'brightness(1.3)',
+    };
+  } else {
+    // Gray out incompatible ports
+    return {
+      opacity: 0.3,
+    };
+  }
+}
+
+/**
  * Custom node component that renders handles for each port.
  * Handles are color-coded by payload type.
  */
 export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ data }) => {
   const { selectedPort } = rootStore.selection;
+  const { setHoveredPort, clearHoveredPort } = rootStore.portHighlight;
 
   const handlePortClick = useCallback(
     (portId: PortId, e: React.MouseEvent) => {
@@ -95,6 +130,17 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
     [data.blockId]
   );
 
+  const handlePortMouseEnter = useCallback(
+    (portId: PortId, direction: 'input' | 'output') => {
+      setHoveredPort(data.blockId, portId, direction);
+    },
+    [data.blockId, setHoveredPort]
+  );
+
+  const handlePortMouseLeave = useCallback(() => {
+    clearHoveredPort();
+  }, [clearHoveredPort]);
+
   return (
     <div
       style={{
@@ -112,6 +158,11 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
         const topPercent = ((index + 1) * 100) / (data.inputs.length + 1);
         const isSelected =
           selectedPort?.blockId === data.blockId && selectedPort?.portId === input.id;
+        const highlightStyle = getPortHighlightStyle(
+          data.blockId,
+          input.id as PortId,
+          input.isConnected
+        );
 
         return (
           <React.Fragment key={`input-${input.id}`}>
@@ -140,6 +191,8 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
               id={input.id}
               onClick={(e) => handlePortClick(input.id as PortId, e)}
               onContextMenu={(e) => handlePortContextMenu(input.id as PortId, true, e)}
+              onMouseEnter={() => handlePortMouseEnter(input.id as PortId, 'input')}
+              onMouseLeave={handlePortMouseLeave}
               style={{
                 top: `${topPercent}%`,
                 background: input.isConnected ? input.typeColor : '#1e1e1e',
@@ -149,6 +202,8 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
                 borderRadius: '50%',
                 boxShadow: isSelected ? `0 0 8px 2px ${input.typeColor}` : undefined,
                 cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                ...highlightStyle,
               }}
               title={buildPortTooltip(input, true)}
             />
@@ -196,6 +251,11 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
         const topPercent = ((index + 1) * 100) / (data.outputs.length + 1);
         const isSelected =
           selectedPort?.blockId === data.blockId && selectedPort?.portId === output.id;
+        const highlightStyle = getPortHighlightStyle(
+          data.blockId,
+          output.id as PortId,
+          output.isConnected
+        );
 
         return (
           <React.Fragment key={`output-${output.id}`}>
@@ -224,6 +284,8 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
               id={output.id}
               onClick={(e) => handlePortClick(output.id as PortId, e)}
               onContextMenu={(e) => handlePortContextMenu(output.id as PortId, false, e)}
+              onMouseEnter={() => handlePortMouseEnter(output.id as PortId, 'output')}
+              onMouseLeave={handlePortMouseLeave}
               style={{
                 top: `${topPercent}%`,
                 background: output.isConnected ? output.typeColor : '#1e1e1e',
@@ -233,6 +295,8 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
                 borderRadius: '50%',
                 boxShadow: isSelected ? `0 0 8px 2px ${output.typeColor}` : undefined,
                 cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                ...highlightStyle,
               }}
               title={buildPortTooltip(output, false)}
             />

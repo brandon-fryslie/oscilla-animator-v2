@@ -16,6 +16,7 @@ import { ViewportStore } from './ViewportStore';
 import { PlaybackStore } from './PlaybackStore';
 import { DiagnosticsStore } from './DiagnosticsStore';
 import { ContinuityStore } from './ContinuityStore';
+import { PortHighlightStore } from './PortHighlightStore';
 import { EventHub } from '../events/EventHub';
 import { DiagnosticHub } from '../diagnostics/DiagnosticHub';
 
@@ -26,6 +27,7 @@ export class RootStore {
   readonly playback: PlaybackStore;
   readonly diagnostics: DiagnosticsStore;
   readonly continuity: ContinuityStore;
+  readonly portHighlight: PortHighlightStore;
   readonly events: EventHub;
 
   // Patch revision tracking (for diagnostics)
@@ -40,6 +42,7 @@ export class RootStore {
     this.selection = new SelectionStore(this.patch); // Inject PatchStore dependency
     this.viewport = new ViewportStore();
     this.playback = new PlaybackStore();
+    this.portHighlight = new PortHighlightStore(this.patch); // Inject PatchStore dependency
 
     // Create EventHub
     this.events = new EventHub();

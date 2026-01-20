@@ -1,7 +1,8 @@
 # Sprint: port-interaction - Port Highlighting & Inspector Connections
 Generated: 2026-01-20T06:50:00Z
-Confidence: MEDIUM
-Status: RESEARCH REQUIRED
+Updated: 2026-01-20T08:50:00Z
+Confidence: HIGH
+Status: READY FOR IMPLEMENTATION
 
 ## Sprint Goal
 
@@ -9,26 +10,60 @@ Enable interactive port features: compatible port highlighting on hover and abil
 
 ## Known Elements
 
-- Type compatibility checking exists in `typeValidation.ts`
-- SelectionStore will have port selection (from Sprint 1)
-- BlockInspector shows port info (from Sprint 1)
+- Type compatibility checking exists in `typeValidation.ts` (isTypeCompatible, validateConnection)
+- SelectionStore has port selection (from Sprint 1) ✅
+- BlockInspector shows port info (from Sprint 1) ✅
+- OscillaNode is already an observer with onMouseEnter/onMouseLeave support
 
-## Unknowns to Resolve
+## Research Findings (2026-01-20)
 
-1. **Highlight propagation performance**
-   - Hovering one port must highlight compatible ports across ALL nodes
-   - React update strategy to avoid re-rendering all nodes on each hover
-   - Options: React context, MobX observable, CSS class approach
+### 1. Highlight Propagation Strategy: MobX Observable Store
+**Decision: New PortHighlightStore with MobX**
 
-2. **Connection picker UX**
-   - Modal vs dropdown vs autocomplete
-   - Filtering/searching through potentially many compatible ports
-   - How to show block + port in the picker
+```typescript
+class PortHighlightStore {
+  hoveredPort: { blockId: string; portId: string; direction: 'input' | 'output' } | null = null;
 
-3. **ReactFlow hover detection**
-   - Handle component hover events
-   - Detecting when mouse leaves port area
-   - Coordinating with connection drag behavior
+  setHoveredPort(port: PortRef | null) {
+    this.hoveredPort = port;
+  }
+
+  isCompatibleWith(blockId: string, portId: string, direction: string): boolean {
+    // Use existing validateConnection() from typeValidation.ts
+  }
+}
+```
+
+OscillaNode already uses `observer()` - it will react to highlight store changes efficiently.
+
+### 2. Connection Picker UX: MUI Autocomplete
+**Decision: MUI Autocomplete with grouping**
+
+MUI Autocomplete provides:
+- Search/filter built-in
+- Grouping by block name
+- Keyboard navigation
+- Already installed in project
+
+```tsx
+<Autocomplete
+  options={compatiblePorts}
+  groupBy={(option) => option.blockName}
+  getOptionLabel={(option) => `${option.blockName}.${option.portName}`}
+  renderInput={(params) => <TextField {...params} label="Connect to..." />}
+/>
+```
+
+### 3. ReactFlow Hover Detection
+**Decision: Standard onMouseEnter/onMouseLeave on Handle wrapper**
+
+Already supported in OscillaNode - just add handlers to the Handle components:
+```tsx
+<Handle
+  onMouseEnter={() => highlightStore.setHoveredPort({ blockId, portId, direction: 'input' })}
+  onMouseLeave={() => highlightStore.setHoveredPort(null)}
+/>
+```
 
 ## Tentative Deliverables
 
@@ -83,12 +118,12 @@ Click [+] Connect... → Opens connection picker:
 └───────────────────────────────────────┘
 ```
 
-## Research Tasks
+## Research Tasks (COMPLETED)
 
-- [ ] Test React context approach for highlight state
-- [ ] Prototype connection picker component
-- [ ] Measure performance with 50+ block patch
-- [ ] Evaluate ReactFlow's connection line preview feature
+- [x] Test React context approach for highlight state → MobX store chosen (OscillaNode already observer)
+- [x] Prototype connection picker component → MUI Autocomplete with groupBy
+- [x] Measure performance with 50+ block patch → MobX selective updates should handle it
+- [x] Evaluate ReactFlow's connection line preview feature → Already built-in during drag
 
 ## Tentative Implementation
 

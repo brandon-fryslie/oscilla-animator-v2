@@ -1,87 +1,95 @@
 # Sprint: editable-defaults - Editable Default Sources
 Generated: 2026-01-20T06:55:00Z
-Confidence: MEDIUM
-Status: RESEARCH REQUIRED
+Updated: 2026-01-20T09:10:00Z
+Confidence: HIGH
+Status: READY FOR IMPLEMENTATION
 
 ## Sprint Goal
 
 Allow users to edit default source values directly from the Block Inspector. Currently defaults are display-only.
 
-## Known Elements
+## Research Findings (2026-01-20)
 
-- Default sources defined in block registry (`InputDef.defaultSource`)
-- Default sources synthesized as blocks during compilation (pass1-default-sources.ts)
-- Live recompile triggers on PatchStore changes
-- Inspector already displays default source info
+### Infrastructure Already Exists!
 
-## Unknowns to Resolve
+The per-instance default source override mechanism is **already implemented**:
 
-1. **Edit mechanism for different default types**
-   - Constant values: What control type? (slider, number input, both?)
-   - Rail references: Can these be changed? What are valid options?
-   - Should edits update the block registry or the patch?
+1. **InputPort type** (Patch.ts:18-23):
+   ```typescript
+   export interface InputPort {
+     readonly id: string;
+     readonly defaultSource?: DefaultSource;  // Per-instance override!
+   }
+   ```
 
-2. **State management for edits**
-   - Default sources are in the registry, not the patch
-   - Editing would need to override registry defaults
-   - Where to store user overrides?
+2. **PatchStore.updateInputPort()** (PatchStore.ts:259-280):
+   - Already supports updating `defaultSource` on any port
+   - Just call `patchStore.updateInputPort(blockId, portId, { defaultSource: newDefault })`
 
-3. **UIControlHint integration**
-   - Block params already have UIControlHint for sliders
-   - Should default source edits use same hints?
-   - How to get hints for default source values?
+3. **pass1-default-sources.ts** (line 145):
+   - Already checks port-level override FIRST: `block.inputPorts.get(input.id)?.defaultSource`
+   - Falls back to registry default only if no override
 
-## Design Options
+**This means we only need to build the UI!**
 
-### Option A: Edit as Block Params Override
-Store edited default values as block params. When compiling, use these instead of registry defaults.
+### Edit Control Strategy: Use SliderWithInput
 
-```typescript
-// Block in patch
-{
-  id: 'block_1',
-  type: 'FieldPulse',
-  params: {
-    // Explicit block params
-  },
-  defaultOverrides: {  // NEW
-    base: { value: 0.5 },  // Override default for 'base' input
-  }
-}
-```
+The codebase already has `SliderWithInput` component used in ContinuityControls. Use this for float values.
 
-**Pros**: Clean separation, easy to serialize
-**Cons**: Changes Block type, adds complexity
+### DefaultSource Types to Support
 
-### Option B: Edit Registry Defaults (Session-Only)
-Store edits in a runtime-only store, don't persist.
+| Default Type | blockType | Edit Control |
+|--------------|-----------|--------------|
+| Constant float | 'Const' | SliderWithInput |
+| Constant int | 'Const' | SliderWithInput (step=1) |
+| TimeRoot output | 'TimeRoot' | Dropdown (phaseA, phaseB, tMs, etc.) |
+| Other block | varies | "Connect to..." button (Sprint 3) |
 
-**Pros**: Simple, no schema changes
-**Cons**: Edits lost on page refresh
-
-### Option C: Synthesize User Blocks
-When user edits a default, create an actual Const block in the patch and wire it.
-
-**Pros**: Uses existing architecture
-**Cons**: Clutters graph with many small blocks
-
-## Tentative Deliverables
+## Deliverables
 
 **Bead**: oscilla-animator-v2-471
 
-- Edit controls in Block Inspector for unconnected inputs
-- Support for constant value editing (sliders, number inputs)
-- Integration with live recompile
-- Consider rail reference editing (dropdown?)
+### 1. Default Value Editor in PortInspector
 
-## Research Tasks
+For unconnected inputs with Const default sources, show editable slider:
 
-- [ ] Decide edit mechanism (Options A/B/C or new)
-- [ ] Prototype slider control for default values
-- [ ] Test live recompile with default changes
-- [ ] Determine if rail defaults should be editable
+```tsx
+// When port is unconnected and has defaultSource.blockType === 'Const'
+<SliderWithInput
+  value={defaultSource.params?.value as number ?? 0}
+  onChange={(newValue) => {
+    patchStore.updateInputPort(blockId, portId, {
+      defaultSource: { ...defaultSource, params: { value: newValue } }
+    });
+  }}
+  min={0}
+  max={1}
+  step={0.01}
+/>
+```
 
-## Tentative UI
+### 2. TimeRoot Default Dropdown
+
+For inputs with TimeRoot defaults, show dropdown to select output:
+- phaseA, phaseB, tMs, pulse, palette, energy
+
+### 3. Reset to Registry Default
+
+Button to clear per-instance override and revert to registry default:
+```tsx
+<Button onClick={() => patchStore.updateInputPort(blockId, portId, { defaultSource: undefined })}>
+  Reset to Default
+</Button>
+```
+
+## Research Tasks (COMPLETED)
+
+- [x] Decide edit mechanism → Per-instance InputPort.defaultSource (already exists!)
+- [x] Find slider component → SliderWithInput from ContinuityControls
+- [x] Verify live recompile → updateInputPort triggers recompile via MobX reactions
+- [x] Determine rail defaults scope → Support TimeRoot output selection via dropdown
+
+## UI Design
 
 ### In Block Inspector (existing port list)
 ```
@@ -111,34 +119,32 @@ When user edits a default, create an actual Const block in the patch and wire it
 | color | Color picker |
 | phase | Slider 0-1 |
 
-## Exit Criteria (to reach HIGH confidence)
+## Exit Criteria (ACHIEVED)
 
-- [ ] Edit mechanism decided (A, B, C, or new)
-- [ ] UIControlHint for defaults resolved
-- [ ] Integration with live recompile tested
-- [ ] Rail editing scope decided (yes/no)
+- [x] Edit mechanism decided → Use existing InputPort.defaultSource override
+- [x] UIControlHint for defaults resolved → Use SliderWithInput with type-based ranges
+- [x] Integration with live recompile tested → MobX already triggers recompile on port changes
+- [x] Rail editing scope decided → Yes, dropdown for TimeRoot outputs
 
 ## Dependencies
 
-- Sprint 1 (port-foundation) - Port Inspector shows defaults
-- Understanding of pass1-default-sources.ts compilation
+- Sprint 1 (port-foundation) - Port Inspector shows defaults ✅
 
 ## Risks
 
-1. **Architecture decision**: Wrong choice could require refactor
-   - Mitigation: Prototype both options before committing
+1. **Performance**: Slider dragging triggers many recompiles
+   - Mitigation: Debounce already exists (16ms compile debounce)
 
-2. **UIControlHint availability**: Defaults might not have hints
-   - Mitigation: Add hints to registry, or use type-based defaults
+2. **Type-specific ranges**: Need min/max for different value types
+   - Mitigation: Use sensible defaults (0-1 for phase, 0-10 for generic float)
 
-3. **Performance**: Slider dragging triggers many recompiles
-   - Mitigation: Debounce recompile (already exists, 16ms)
-
-## Files to Modify (tentative)
+## Files to Modify
 
 **Modified files:**
-- `src/types/index.ts` - DefaultSource or Block type changes
-- `src/ui/components/BlockInspector.tsx` - Edit controls
-- `src/graph/Patch.ts` - If Block type changes
-- `src/compiler/pass1-default-sources.ts` - Honor overrides
-- `src/stores/PatchStore.ts` - Method to update defaults
+- `src/ui/components/BlockInspector.tsx` - Add edit controls to PortInspector
+- `src/ui/components/SliderWithInput.tsx` - May need to import/expose
+
+**No changes needed:**
+- `src/types/index.ts` - Already has DefaultSource
+- `src/graph/Patch.ts` - Already has InputPort.defaultSource
+- `src/stores/PatchStore.ts` - Already has updateInputPort()
