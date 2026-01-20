@@ -53,7 +53,7 @@ type PatchBuilder = (b: any) => void;
 // Explicit wiring for all inputs (adapter pass not implemented yet)
 const patchOriginal: PatchBuilder = (b) => {
   const time = b.addBlock('InfiniteTimeRoot',
-    { periodAMs: 799, periodBMs: 32000 },
+    { periodAMs: 799, periodBMs: 120000 },  // 120 sec period for slower jitter
     { role: timeRootRole() }
   );
 
@@ -131,8 +131,28 @@ const patchOriginal: PatchBuilder = (b) => {
   b.wire(sizeConst, 'out', sizeBroadcast, 'signal');
   b.wire(sizeBroadcast, 'field', render, 'size');
 
-  // Wire pos, color to render
-  b.wire(pos, 'pos', render, 'pos');
+  // Add animated per-element jitter to positions for dynamic visual effect
+  // Combine phase (time) with element index for animated randomness
+  const jitterAmountX = b.addBlock('Const', { value: 0.015, payloadType: 'float' });
+  const jitterAmountY = b.addBlock('Const', { value: 0.015, payloadType: 'float' });
+  const jitter = b.addBlock('FieldJitter2D', {});
+
+  // Broadcast phase to field, then add to 't' for animated per-element jitter
+  const phaseBroadcast = b.addBlock('FieldBroadcast', { payloadType: 'float' });
+  const jitterRand = b.addBlock('FieldAdd', {});
+
+  b.wire(time, 'phaseB', phaseBroadcast, 'signal');  // Use phaseB for slower jitter animation
+  b.wire(phaseBroadcast, 'field', jitterRand, 'a');
+  b.wire(array, 't', jitterRand, 'b');
+
+  // Wire jitter: pos + animated rand → jittered pos
+  b.wire(pos, 'pos', jitter, 'pos');
+  b.wire(jitterRand, 'out', jitter, 'rand');
+  b.wire(jitterAmountX, 'out', jitter, 'amountX');
+  b.wire(jitterAmountY, 'out', jitter, 'amountY');
+
+  // Wire jittered pos, color to render
+  b.wire(jitter, 'out', render, 'pos');
   b.wire(color, 'color', render, 'color');
 };
 

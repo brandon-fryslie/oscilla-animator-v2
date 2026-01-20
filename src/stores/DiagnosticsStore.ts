@@ -69,7 +69,8 @@ export class DiagnosticsStore {
   // This is incremented via a callback from DiagnosticHub
   private _revision: number = 0;
 
-  // Log entries
+  // Log entries (capped at MAX_LOGS to prevent unbounded memory growth)
+  private static readonly MAX_LOGS = 1000;
   private _logs: LogEntry[] = [];
   private _nextId = 0;
 
@@ -242,6 +243,7 @@ export class DiagnosticsStore {
 
   /**
    * Adds a log entry.
+   * Logs are capped at MAX_LOGS entries (FIFO eviction).
    */
   log(entry: Omit<LogEntry, 'id' | 'timestamp'>): void {
     this._logs.push({
@@ -249,6 +251,11 @@ export class DiagnosticsStore {
       id: `log-${this._nextId++}`,
       timestamp: Date.now(),
     });
+
+    // Cap log size to prevent unbounded memory growth
+    if (this._logs.length > DiagnosticsStore.MAX_LOGS) {
+      this._logs.shift();
+    }
   }
 
   /**
