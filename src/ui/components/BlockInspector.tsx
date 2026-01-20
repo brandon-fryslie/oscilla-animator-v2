@@ -8,12 +8,21 @@
 
 import React, { useState, useCallback } from 'react';
 import { observer } from 'mobx-react-lite';
+import { ThemeProvider } from '@mui/material/styles';
 import { rootStore } from '../../stores';
-import { colors } from '../theme';
+import { colors, darkTheme } from '../theme';
 import { getBlockDefinition, type BlockDef, type InputDef, type OutputDef } from '../../blocks/registry';
 import type { Block, Patch, Edge, PortRef } from '../../graph/Patch';
 import type { BlockId, PortId, DefaultSource, UIControlHint } from '../../types';
 import type { SignalType } from '../../core/canonical-types';
+import {
+  NumberInput as MuiNumberInput,
+  TextInput as MuiTextInput,
+  SelectInput as MuiSelectInput,
+  CheckboxInput as MuiCheckboxInput,
+  ColorInput as MuiColorInput,
+  SliderWithInput,
+} from './common';
 
 // =============================================================================
 // Helper Functions
@@ -60,14 +69,22 @@ export const BlockInspector = observer(function BlockInspector() {
 
   // Preview mode takes precedence
   if (previewType) {
-    return <TypePreview type={previewType} />;
+    return (
+      <ThemeProvider theme={darkTheme}>
+        <TypePreview type={previewType} />
+      </ThemeProvider>
+    );
   }
 
   // Edge selection mode
   if (selectedEdgeId && patch) {
     const edge = patch.edges.find(e => e.id === selectedEdgeId);
     if (edge) {
-      return <EdgeInspector edge={edge} patch={patch} />;
+      return (
+        <ThemeProvider theme={darkTheme}>
+          <EdgeInspector edge={edge} patch={patch} />
+        </ThemeProvider>
+      );
     }
   }
 
@@ -86,7 +103,11 @@ export const BlockInspector = observer(function BlockInspector() {
     return <TimeRootBlock />;
   }
 
-  return <BlockDetails block={block} patch={patch} />;
+  return (
+    <ThemeProvider theme={darkTheme}>
+      <BlockDetails block={block} patch={patch} />
+    </ThemeProvider>
+  );
 });
 
 // =============================================================================
@@ -983,15 +1004,11 @@ const ParamField = observer(function ParamField({ blockId, paramKey, value, type
   if (typeof value === 'boolean') {
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <input
-          type="checkbox"
+        <MuiCheckboxInput
           checked={value}
-          onChange={(e) => handleChange(e.target.checked)}
-          style={{ accentColor: colors.primary }}
+          onChange={handleChange}
+          label={paramKey}
         />
-        <label style={{ fontSize: '12px', color: colors.textSecondary }}>
-          {paramKey}
-        </label>
       </div>
     );
   }
@@ -999,10 +1016,12 @@ const ParamField = observer(function ParamField({ blockId, paramKey, value, type
   if (typeof value === 'number') {
     return (
       <div>
-        <label style={{ fontSize: '12px', color: colors.textSecondary, display: 'block', marginBottom: '4px' }}>
-          {paramKey}
-        </label>
-        <NumberInput value={value} onChange={handleChange} />
+        <MuiNumberInput
+          value={value}
+          onChange={handleChange}
+          label={paramKey}
+          size="small"
+        />
       </div>
     );
   }
@@ -1010,10 +1029,12 @@ const ParamField = observer(function ParamField({ blockId, paramKey, value, type
   if (typeof value === 'string') {
     return (
       <div>
-        <label style={{ fontSize: '12px', color: colors.textSecondary, display: 'block', marginBottom: '4px' }}>
-          {paramKey}
-        </label>
-        <TextInput value={value} onChange={handleChange} />
+        <MuiTextInput
+          value={value}
+          onChange={handleChange}
+          label={paramKey}
+          size="small"
+        />
       </div>
     );
   }
@@ -1042,10 +1063,12 @@ const ParamField = observer(function ParamField({ blockId, paramKey, value, type
   // Fallback: text input
   return (
     <div>
-      <label style={{ fontSize: '12px', color: colors.textSecondary, display: 'block', marginBottom: '4px' }}>
-        {paramKey}
-      </label>
-      <TextInput value={String(value ?? '')} onChange={handleChange} />
+      <MuiTextInput
+        value={String(value ?? '')}
+        onChange={handleChange}
+        label={paramKey}
+        size="small"
+      />
     </div>
   );
 });
@@ -1064,7 +1087,8 @@ function HintedControl({ hint, value, onChange }: HintedControlProps) {
   switch (hint.kind) {
     case 'slider':
       return (
-        <SliderControl
+        <SliderWithInput
+          label=""
           value={value as number}
           min={hint.min}
           max={hint.max}
@@ -1074,216 +1098,85 @@ function HintedControl({ hint, value, onChange }: HintedControlProps) {
       );
     case 'int':
       return (
-        <NumberInput
+        <MuiNumberInput
           value={value as number}
           step={hint.step ?? 1}
           min={hint.min}
           max={hint.max}
           onChange={onChange}
+          size="small"
         />
       );
     case 'float':
       return (
-        <NumberInput
+        <MuiNumberInput
           value={value as number}
           step={hint.step ?? 0.01}
           min={hint.min}
           max={hint.max}
           onChange={onChange}
+          size="small"
         />
       );
     case 'select': {
       const options = (hint as any).options as { value: string; label: string }[];
       return (
-        <select
+        <MuiSelectInput
           value={String(value)}
-          onChange={(e) => onChange(e.target.value)}
-          style={selectStyle}
-        >
-          {options.map(opt => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
+          onChange={onChange}
+          options={options}
+          size="small"
+        />
       );
     }
     case 'boolean':
       return (
-        <input
-          type="checkbox"
+        <MuiCheckboxInput
           checked={!!value}
-          onChange={(e) => onChange(e.target.checked)}
-          style={{ accentColor: colors.primary }}
+          onChange={onChange}
         />
       );
     case 'color':
       return (
-        <input
-          type="color"
+        <MuiColorInput
           value={String(value || '#000000')}
-          onChange={(e) => onChange(e.target.value)}
-          style={{ width: '100%', height: '32px', cursor: 'pointer' }}
+          onChange={onChange}
         />
       );
     case 'text':
-      return <TextInput value={String(value ?? '')} onChange={onChange} />;
+      return (
+        <MuiTextInput
+          value={String(value ?? '')}
+          onChange={onChange}
+          size="small"
+        />
+      );
     case 'xy': {
       const xy = value as { x?: number; y?: number } | undefined;
       return (
         <div style={{ display: 'flex', gap: '8px' }}>
-          <NumberInput
+          <MuiNumberInput
             value={xy?.x ?? 0}
             onChange={(v) => onChange({ ...xy, x: v })}
             placeholder="X"
+            size="small"
           />
-          <NumberInput
+          <MuiNumberInput
             value={xy?.y ?? 0}
             onChange={(v) => onChange({ ...xy, y: v })}
             placeholder="Y"
+            size="small"
           />
         </div>
       );
     }
     default:
-      return <TextInput value={String(value ?? '')} onChange={onChange} />;
+      return (
+        <MuiTextInput
+          value={String(value ?? '')}
+          onChange={onChange}
+          size="small"
+        />
+      );
   }
 }
-
-interface NumberInputProps {
-  value: number;
-  onChange: (value: number) => void;
-  step?: number;
-  min?: number;
-  max?: number;
-  placeholder?: string;
-}
-
-function NumberInput({ value, onChange, step = 0.1, min, max, placeholder }: NumberInputProps) {
-  const [localValue, setLocalValue] = useState(String(value));
-
-  // Sync local value when prop changes
-  React.useEffect(() => {
-    setLocalValue(String(value));
-  }, [value]);
-
-  const handleBlur = useCallback(() => {
-    const parsed = parseFloat(localValue);
-    if (!isNaN(parsed) && parsed !== value) {
-      const clamped = Math.max(min ?? -Infinity, Math.min(max ?? Infinity, parsed));
-      onChange(clamped);
-    } else if (isNaN(parsed)) {
-      setLocalValue(String(value));
-    }
-  }, [localValue, value, onChange, min, max]);
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      (e.target as HTMLInputElement).blur();
-    }
-  }, []);
-
-  return (
-    <input
-      type="number"
-      value={localValue}
-      onChange={(e) => setLocalValue(e.target.value)}
-      onBlur={handleBlur}
-      onKeyDown={handleKeyDown}
-      step={step}
-      min={min}
-      max={max}
-      placeholder={placeholder}
-      style={inputStyle}
-    />
-  );
-}
-
-interface TextInputProps {
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-}
-
-function TextInput({ value, onChange, placeholder }: TextInputProps) {
-  const [localValue, setLocalValue] = useState(value);
-
-  React.useEffect(() => {
-    setLocalValue(value);
-  }, [value]);
-
-  const handleBlur = useCallback(() => {
-    if (localValue !== value) {
-      onChange(localValue);
-    }
-  }, [localValue, value, onChange]);
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      (e.target as HTMLInputElement).blur();
-    }
-  }, []);
-
-  return (
-    <input
-      type="text"
-      value={localValue}
-      onChange={(e) => setLocalValue(e.target.value)}
-      onBlur={handleBlur}
-      onKeyDown={handleKeyDown}
-      placeholder={placeholder}
-      style={inputStyle}
-    />
-  );
-}
-
-interface SliderControlProps {
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  onChange: (value: number) => void;
-}
-
-function SliderControl({ value, min, max, step, onChange }: SliderControlProps) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-      <input
-        type="range"
-        value={value}
-        min={min}
-        max={max}
-        step={step}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
-        style={{ flex: 1, accentColor: colors.primary }}
-      />
-      <span style={{ fontSize: '12px', minWidth: '40px', textAlign: 'right' }}>
-        {value.toFixed(2)}
-      </span>
-    </div>
-  );
-}
-
-// =============================================================================
-// Styles
-// =============================================================================
-
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '6px 8px',
-  fontSize: '13px',
-  background: colors.bgPanel,
-  border: `1px solid ${colors.border}`,
-  borderRadius: '4px',
-  color: colors.textPrimary,
-  boxSizing: 'border-box',
-};
-
-const selectStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '6px 8px',
-  fontSize: '13px',
-  background: colors.bgPanel,
-  border: `1px solid ${colors.border}`,
-  borderRadius: '4px',
-  color: colors.textPrimary,
-  cursor: 'pointer',
-};
