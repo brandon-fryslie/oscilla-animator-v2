@@ -5,6 +5,7 @@
  * 1. Extracting SignalType from blocks
  * 2. Building block output types map
  * 3. Validating type compatibility for edges
+ * 4. Validating unit compatibility (warnings only)
  *
  * This pass establishes the type system foundation for all subsequent passes.
  *
@@ -13,7 +14,7 @@
  */
 
 import type { Block } from "../../graph/Patch";
-import type { SignalType } from "../../core/canonical-types";
+import type { SignalType, NumericUnit } from "../../core/canonical-types";
 import {
   getAxisValue,
   DEFAULTS_V0,
@@ -97,6 +98,46 @@ function isTypeCompatible(from: SignalType, to: SignalType): boolean {
 }
 
 /**
+ * Check unit compatibility for wired connections.
+ *
+ * This is a SOFT validation - emits warnings but does not block compilation.
+ * Enables gradual adoption of unit annotations without breaking existing patches.
+ *
+ * Rules:
+ * - No unit annotation → no warning (backwards compatible)
+ * - Both have units but different → warning
+ * - Same unit or one is undefined → no warning
+ *
+ * TODO: Integrate with DiagnosticHub instead of console.warn
+ *
+ * @param from - Source type descriptor
+ * @param to - Target type descriptor
+ * @param connectionId - Human-readable connection identifier for warnings
+ */
+function checkUnitCompatibility(
+  from: SignalType,
+  to: SignalType,
+  connectionId: string
+): void {
+  const fromUnit = from.unit;
+  const toUnit = to.unit;
+
+  // No validation if either side has no unit annotation
+  if (fromUnit === undefined || toUnit === undefined) {
+    return;
+  }
+
+  // Warn if units don't match
+  if (fromUnit !== toUnit) {
+    console.warn(
+      `[Unit Mismatch] ${connectionId}: ` +
+      `connecting ${fromUnit} to ${toUnit}. ` +
+      `Consider adding a conversion block or verifying unit expectations.`
+    );
+  }
+}
+
+/**
  * Get the type of a port on a block.
  */
 function getPortType(
@@ -176,6 +217,7 @@ export function pass2TypeGraph(
       continue;
     }
 
+    // Validate type compatibility (HARD error)
     if (!isTypeCompatible(fromType, toType)) {
       const fromCard = getAxisValue(fromType.extent.cardinality, DEFAULTS_V0.cardinality);
       const fromTemp = getAxisValue(fromType.extent.temporality, DEFAULTS_V0.temporality);
@@ -190,6 +232,13 @@ export function pass2TypeGraph(
         message: `Type mismatch: cannot connect ${fromCard.kind}+${fromTemp.kind}<${fromType.payload}> to ${toCard.kind}+${toTemp.kind}<${toType.payload}>`,
       });
     }
+
+    // Validate unit compatibility (SOFT warning)
+    checkUnitCompatibility(
+      fromType,
+      toType,
+      `${fromBlock.type}[${edge.fromPort}] → ${toBlock.type}[${edge.toPort}]`
+    );
   }
 
   if (errors.length > 0) {
