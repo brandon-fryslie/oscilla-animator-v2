@@ -135,6 +135,25 @@ function analyzeAdapters(
         },
       };
 
+      // Get block definition to create ports
+      const adapterBlockDef = getBlockDefinition(adapterSpec.blockType);
+
+      // Create input ports from registry
+      const inputPorts = new Map();
+      if (adapterBlockDef) {
+        for (const inputDef of adapterBlockDef.inputs) {
+          inputPorts.set(inputDef.id, { id: inputDef.id });
+        }
+      }
+
+      // Create output ports from registry
+      const outputPorts = new Map();
+      if (adapterBlockDef) {
+        for (const outputDef of adapterBlockDef.outputs) {
+          outputPorts.set(outputDef.id, { id: outputDef.id });
+        }
+      }
+
       // For polymorphic adapters, set payloadType from the source type
       // This resolves '???' types at adapter creation time
       const adapterBlock: Block = {
@@ -144,6 +163,8 @@ function analyzeAdapters(
         displayName: null,
         domainId: toBlock.domainId, // Inherit domain from target
         role: adapterRole,
+        inputPorts,
+        outputPorts,
       };
 
       const edgeToAdapter: Edge = {

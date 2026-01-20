@@ -20,6 +20,8 @@ function createTestPatch(blockCount: number, options: { timeRoots: number }): Pa
       displayName: `TimeRoot ${i}`,
       domainId: null,
       role: { kind: 'timeRoot', meta: {} } as BlockRole,
+      inputPorts: new Map(),
+      outputPorts: new Map(),
     });
   }
 
@@ -33,6 +35,8 @@ function createTestPatch(blockCount: number, options: { timeRoots: number }): Pa
       displayName: `Block ${i}`,
       domainId: null,
       role: { kind: 'user', meta: { userDefined: true } } as BlockRole,
+      inputPorts: new Map(),
+      outputPorts: new Map(),
     });
   }
 

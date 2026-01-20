@@ -240,6 +240,8 @@ describe('PatchStore', () => {
             displayName: null,
             domainId: null,
             role: { kind: 'user' as const, meta: {} },
+            inputPorts: new Map(),
+            outputPorts: new Map(),
           }],
         ]),
         edges: [],
@@ -261,6 +263,8 @@ describe('PatchStore', () => {
             displayName: null,
             domainId: null,
             role: { kind: 'user' as const, meta: {} },
+            inputPorts: new Map(),
+            outputPorts: new Map(),
           }],
         ]),
         edges: [

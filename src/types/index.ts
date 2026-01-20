@@ -6,7 +6,7 @@
  */
 
 // Re-export graph types
-export type { Block, Edge, Endpoint, Patch, PortRef, BlockType } from '../graph/Patch';
+export type { Block, Edge, Endpoint, Patch, PortRef, BlockType, InputPort, OutputPort } from '../graph/Patch';
 
 // =============================================================================
 // Core Type System (from core/canonical-types.ts)

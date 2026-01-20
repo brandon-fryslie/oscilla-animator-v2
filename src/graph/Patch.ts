@@ -5,7 +5,30 @@
  * It consists of Blocks connected by Edges.
  */
 
-import type { BlockId, PortId, BlockRole } from '../types';
+import type { BlockId, PortId, BlockRole, DefaultSource } from '../types';
+
+// =============================================================================
+// Port Types
+// =============================================================================
+
+/**
+ * Input port - a first-class object on a block.
+ * Contains per-instance properties like defaultSource overrides.
+ */
+export interface InputPort {
+  /** Port ID (slotId from registry) */
+  readonly id: string;
+  /** Per-instance default source override (undefined = use registry default) */
+  readonly defaultSource?: DefaultSource;
+}
+
+/**
+ * Output port - a first-class object on a block.
+ */
+export interface OutputPort {
+  /** Port ID (slotId from registry) */
+  readonly id: string;
+}
 
 // =============================================================================
 // Block
@@ -23,6 +46,10 @@ export interface Block {
   readonly domainId: string | null;
   /** Semantic role for editor behavior (REQUIRED) */
   readonly role: BlockRole;
+  /** Input ports - first-class objects with per-instance properties */
+  readonly inputPorts: ReadonlyMap<string, InputPort>;
+  /** Output ports - first-class objects with per-instance properties */
+  readonly outputPorts: ReadonlyMap<string, OutputPort>;
 }
 
 export type BlockType = string;
@@ -106,6 +133,8 @@ export class PatchBuilder {
       displayName: options?.displayName ?? null,
       domainId: options?.domainId ?? null,
       role: options?.role ?? { kind: 'user', meta: {} },
+      inputPorts: new Map(),
+      outputPorts: new Map(),
     });
     return id;
   }

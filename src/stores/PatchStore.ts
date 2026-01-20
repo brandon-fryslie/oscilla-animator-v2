@@ -11,10 +11,11 @@
  */
 
 import { makeObservable, observable, computed, action } from 'mobx';
-import type { Block, Edge, Endpoint, Patch, BlockType } from '../graph/Patch';
+import type { Block, Edge, Endpoint, Patch, BlockType, InputPort, OutputPort } from '../graph/Patch';
 import type { BlockId, BlockRole } from '../types';
 import { emptyPatchData, type PatchData } from './internal';
 import type { EventHub } from '../events/EventHub';
+import { getBlockDefinition } from '../blocks/registry';
 
 /**
  * Opaque type for immutable patch access.
@@ -56,6 +57,7 @@ export class PatchStore {
       removeBlock: action,
       updateBlockParams: action,
       updateBlockDisplayName: action,
+      updateInputPort: action,
       addEdge: action,
       removeEdge: action,
       updateEdge: action,
@@ -137,6 +139,7 @@ export class PatchStore {
 
   /**
    * Adds a new block to the patch.
+   * Creates ports from registry definitions.
    * Returns the generated BlockId.
    */
   addBlock(
@@ -145,6 +148,23 @@ export class PatchStore {
     options?: BlockOptions
   ): BlockId {
     const id = `b${this._nextBlockId++}` as BlockId;
+    const blockDef = getBlockDefinition(type);
+
+    // Create input ports from registry
+    const inputPorts = new Map<string, InputPort>();
+    if (blockDef) {
+      for (const inputDef of blockDef.inputs) {
+        inputPorts.set(inputDef.id, { id: inputDef.id });
+      }
+    }
+
+    // Create output ports from registry
+    const outputPorts = new Map<string, OutputPort>();
+    if (blockDef) {
+      for (const outputDef of blockDef.outputs) {
+        outputPorts.set(outputDef.id, { id: outputDef.id });
+      }
+    }
 
     const block: Block = {
       id,
@@ -154,6 +174,8 @@ export class PatchStore {
       displayName: options?.displayName ?? null,
       domainId: options?.domainId ?? null,
       role: options?.role ?? { kind: 'user', meta: {} },
+      inputPorts,
+      outputPorts,
     };
 
     this._data.blocks.set(id, block);
@@ -163,6 +185,7 @@ export class PatchStore {
   /**
    * Removes a block from the patch.
    * Also removes all edges connected to this block.
+   * Ports are automatically removed (nested in block).
    */
   removeBlock(id: BlockId): void {
     // Remove the block
@@ -226,6 +249,33 @@ export class PatchStore {
     this._data.blocks.set(id, {
       ...block,
       displayName,
+    });
+  }
+
+  /**
+   * Updates an input port's properties.
+   * This is the API for editing port.defaultSource and other per-instance port properties.
+   */
+  updateInputPort(blockId: BlockId, portId: string, updates: Partial<InputPort>): void {
+    const block = this._data.blocks.get(blockId);
+    if (!block) {
+      throw new Error(`Block ${blockId} not found`);
+    }
+
+    const port = block.inputPorts.get(portId);
+    if (!port) {
+      throw new Error(`Port ${portId} not found on block ${blockId}`);
+    }
+
+    // Update port
+    const updatedPort: InputPort = { ...port, ...updates };
+    const updatedInputPorts = new Map(block.inputPorts);
+    updatedInputPorts.set(portId, updatedPort);
+
+    // Update block with new ports map
+    this._data.blocks.set(blockId, {
+      ...block,
+      inputPorts: updatedInputPorts,
     });
   }
 

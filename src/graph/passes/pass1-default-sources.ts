@@ -104,6 +104,8 @@ function materializeDefaultSource(
     displayName: null,
     domainId: targetBlock.domainId,
     role: derivedRole,
+    inputPorts: new Map(), // Will be populated recursively if this block has inputs
+    outputPorts: new Map(), // Will be populated recursively
   };
 
   const edge: Edge = {
@@ -138,12 +140,17 @@ function analyzeDefaultSources(patch: Patch): DefaultSourceInsertion[] {
       // Skip if already connected
       if (hasIncomingEdge(blockId, input.id, patch.edges)) continue;
 
-      // Get default source from registry (block definition)
-      const ds = (input as InputDef & { defaultSource?: DefaultSource }).defaultSource;
-      if (!ds) continue;
+      // Get effective default source:
+      // 1. Check port-level override first
+      const portOverride = block.inputPorts.get(input.id)?.defaultSource;
+      // 2. Fall back to registry default
+      const registryDefault = (input as InputDef & { defaultSource?: DefaultSource }).defaultSource;
+      const effectiveDefault = portOverride ?? registryDefault;
 
-      // Materialize the default source
-      const insertion = materializeDefaultSource(ds, input, blockId, input.id, block, patch);
+      if (!effectiveDefault) continue;
+
+      // Materialize the effective default source
+      const insertion = materializeDefaultSource(effectiveDefault, input, blockId, input.id, block, patch);
       insertions.push(insertion);
     }
   }
@@ -166,7 +173,29 @@ function applyDefaultSourceInsertions(
   const newBlocks = new Map(patch.blocks);
   for (const ins of insertions) {
     if (ins.block !== null) {
-      newBlocks.set(ins.block.id, ins.block);
+      // Populate ports for the derived block
+      const blockDef = getBlockDefinition(ins.block.type);
+      if (blockDef) {
+        // Create input ports
+        const inputPorts = new Map();
+        for (const inputDef of blockDef.inputs) {
+          inputPorts.set(inputDef.id, { id: inputDef.id });
+        }
+        // Create output ports
+        const outputPorts = new Map();
+        for (const outputDef of blockDef.outputs) {
+          outputPorts.set(outputDef.id, { id: outputDef.id });
+        }
+        // Update the block with ports
+        const blockWithPorts: Block = {
+          ...ins.block,
+          inputPorts,
+          outputPorts,
+        };
+        newBlocks.set(blockWithPorts.id, blockWithPorts);
+      } else {
+        newBlocks.set(ins.block.id, ins.block);
+      }
     }
   }
 
