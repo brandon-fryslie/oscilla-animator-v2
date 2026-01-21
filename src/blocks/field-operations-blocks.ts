@@ -501,7 +501,8 @@ registerBlock({
     // Golden angle ≈ 2.39996... radians (137.508°)
     // angle = id01 * turns * goldenAngle
     const goldenAngleFn = ctx.b.kernel('fieldGoldenAngle');
-    const result = ctx.b.fieldMap(id01.id, goldenAngleFn, signalTypeField('float', 'default'));
+    // Use fieldZip (not fieldMap) because fieldGoldenAngle is a field kernel
+    const result = ctx.b.fieldZip([id01.id], goldenAngleFn, signalTypeField('float', 'default'));
 
     const slot = ctx.b.allocSlot();
 

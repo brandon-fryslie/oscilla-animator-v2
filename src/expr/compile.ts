@@ -247,27 +247,22 @@ function compileCall(node: ExprNode & { kind: 'call' }, ctx: CompileContext): Si
     }
 
     case 'sqrt': {
-      // Synthesize: x ** 0.5
-      // For now, use a simple approximation or require Sqrt opcode
-      // Since OpCode doesn't have Sqrt, we'll use kernel 'sqrt'
-      const fn = ctx.builder.kernel('sqrt');
+      const fn = ctx.builder.opcode(OpCode.Sqrt);
       return ctx.builder.sigMap(args[0], fn, type);
     }
 
     case 'floor': {
-      // Floor opcode doesn't exist in current OpCode enum
-      // Use kernel 'floor'
-      const fn = ctx.builder.kernel('floor');
+      const fn = ctx.builder.opcode(OpCode.Floor);
       return ctx.builder.sigMap(args[0], fn, type);
     }
 
     case 'ceil': {
-      const fn = ctx.builder.kernel('ceil');
+      const fn = ctx.builder.opcode(OpCode.Ceil);
       return ctx.builder.sigMap(args[0], fn, type);
     }
 
     case 'round': {
-      const fn = ctx.builder.kernel('round');
+      const fn = ctx.builder.opcode(OpCode.Round);
       return ctx.builder.sigMap(args[0], fn, type);
     }
 

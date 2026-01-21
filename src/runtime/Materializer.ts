@@ -3,6 +3,31 @@
  *
  * Converts FieldExpr IR nodes into typed array buffers.
  * Pure IR path - no legacy fallbacks.
+ *
+ * LAYER CONTRACT:
+ * ─────────────────────────────────────────────────────────────
+ * Materializer responsibilities:
+ * 1. IR → buffer orchestration (materialize, fillBuffer)
+ * 2. Cache management (field buffer caching)
+ * 3. Intrinsic field production (index, normalizedIndex, randomId)
+ * 4. Layout field production (position, radius via layout spec)
+ * 5. Dispatch to field kernels for vec2/color/field operations
+ *
+ * Materializer does NOT:
+ * - Define scalar math (that's OpcodeInterpreter)
+ * - Define signal kernels (that's SignalEvaluator)
+ * - Define geometry/coord semantics (that's block-level)
+ *
+ * FIELD KERNEL REGISTRY (applyKernel/applyKernelZipSig):
+ * - makeVec2, hsvToRgb, jitter2d, fieldJitter2D
+ * - attract2d, fieldAngularOffset, fieldRadiusSqrt, fieldAdd
+ * - fieldPolarToCartesian, fieldPulse, fieldHueFromPhase
+ * - applyOpacity, circleLayout, circleAngle, polygonVertex
+ * - fieldGoldenAngle
+ *
+ * Field kernels operate on typed array buffers (vec2/color/float).
+ * They are coord-space agnostic - blocks define world/local semantics.
+ * ─────────────────────────────────────────────────────────────
  */
 
 import type {
@@ -420,6 +445,12 @@ function fillLayoutRadius(buffer: ArrayBufferView, instance: InstanceDecl): void
 /**
  * Apply map function to buffer
  */
+/**
+ * Apply map function to buffer
+ *
+ * LAYER CONTRACT: Map only supports opcodes for scalar math.
+ * Kernels are not allowed in map context - use zip or zipSig for field kernels.
+ */
 function applyMap(
   out: ArrayBufferView,
   input: ArrayBufferView,
@@ -436,42 +467,11 @@ function applyMap(
       outArr[i] = applyOpcode(op, [inArr[i]]);
     }
   } else if (fn.kind === 'kernel') {
-    // Handle single-input kernel functions
-    switch (fn.name) {
-      case 'sqrt':
-        for (let i = 0; i < N; i++) {
-          outArr[i] = Math.sqrt(inArr[i]);
-        }
-        break;
-      case 'floor':
-        for (let i = 0; i < N; i++) {
-          outArr[i] = Math.floor(inArr[i]);
-        }
-        break;
-      case 'ceil':
-        for (let i = 0; i < N; i++) {
-          outArr[i] = Math.ceil(inArr[i]);
-        }
-        break;
-      case 'round':
-        for (let i = 0; i < N; i++) {
-          outArr[i] = Math.round(inArr[i]);
-        }
-        break;
-      case 'fieldGoldenAngle': {
-        // Golden angle ≈ 2.39996... radians (137.508°)
-        // Formula: angle = id01 * turns * goldenAngle
-        // Default turns = 50 (baked in for now)
-        const goldenAngle = Math.PI * (3 - Math.sqrt(5)); // ≈ 2.39996
-        const turns = 50;
-        for (let i = 0; i < N; i++) {
-          outArr[i] = inArr[i] * turns * goldenAngle;
-        }
-        break;
-      }
-      default:
-        throw new Error(`Unknown map kernel: ${fn.name}`);
-    }
+    // Map is not the place for kernels - they belong in zip/zipSig
+    throw new Error(
+      `Map only supports opcodes, not kernels. ` +
+      `Kernel '${fn.name}' should use zip or zipSig instead.`
+    );
   } else {
     throw new Error(`Map function kind ${fn.kind} not implemented`);
   }
@@ -741,6 +741,21 @@ function applyKernel(
 
       outArr[i * 2 + 0] = posArr[i * 2 + 0] + offsetX;
       outArr[i * 2 + 1] = posArr[i * 2 + 1] + offsetY;
+    }
+  } else if (kernelName === 'fieldGoldenAngle') {
+    // Golden angle: angle = id01 * turns * goldenAngle
+    // Inputs: [id01] (single field input)
+    // Note: turns=50 is baked in; future: make configurable via signal
+    if (inputs.length !== 1) {
+      throw new Error('fieldGoldenAngle requires exactly 1 input (id01)');
+    }
+    const outArr = out as Float32Array;
+    const id01Arr = inputs[0] as Float32Array;
+    const goldenAngle = Math.PI * (3 - Math.sqrt(5)); // ≈ 2.39996
+    const turns = 50;
+
+    for (let i = 0; i < N; i++) {
+      outArr[i] = id01Arr[i] * turns * goldenAngle;
     }
   } else {
     throw new Error(`Unknown kernel function: ${kernelName}`);

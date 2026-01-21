@@ -299,6 +299,7 @@ export enum OpCode {
   Mul = 'mul',
   Div = 'div',
   Mod = 'mod',
+  Pow = 'pow',
   Neg = 'neg',
   Abs = 'abs',
 
@@ -323,6 +324,16 @@ export enum OpCode {
 
   // Hash
   Hash = 'hash',
+
+  // Math functions (unary)
+  Floor = 'floor',
+  Ceil = 'ceil',
+  Round = 'round',
+  Fract = 'fract',
+  Sqrt = 'sqrt',
+  Exp = 'exp',
+  Log = 'log',
+  Sign = 'sign',
 }
 
 // =============================================================================
