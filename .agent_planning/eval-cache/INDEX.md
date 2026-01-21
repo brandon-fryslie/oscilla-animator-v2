@@ -2,13 +2,21 @@
 
 **Purpose:** Reusable evaluation findings to speed up future work evaluations.
 
-**Last Updated:** 2026-01-20 16:00:00
+**Last Updated:** 2026-01-20 22:02:02
 
 ---
 
 ## Available Cache Files
 
 ### Runtime Findings
+
+**findings-compilation-inspector.md** [NEW - FRESH]
+- Scope: work/compilation-inspector
+- Status: Implementation complete, unit tests complete, 1 TypeScript error blocks build
+- Confidence: FRESH
+- Reusable: Service integration patterns, JSON serialization (circular/function/Map/Set), MobX reactive UI patterns, compiler capture points
+- Key findings: 831 lines of tests (47 tests passing), all 7 passes captured, memory bounded (max 2), TypeScript error at line 219
+- Next evaluation: After TypeScript fix, after runtime verification (Q5, Q6, manual checklist)
 
 **runtime-continuity-controls-v2.md** [UPDATED - STALE]
 - Scope: continuity-controls-v2
@@ -77,6 +85,24 @@
 ---
 
 ## Invalidated Cache
+
+### 2026-01-20 22:02:02 - Compilation Inspector (compilation-inspector)
+**Added:**
+- findings-compilation-inspector.md - Complete implementation with comprehensive tests
+
+**Rationale:**
+- New service: CompilationInspectorService (390 lines) with MobX reactivity
+- Comprehensive unit tests: 831 lines, 47 tests covering all edge cases
+- Compiler integration: 10 capture/lifecycle calls across compile.ts
+- UI components: CompilationInspector, IRTreeView, IRNodeDetail
+- Panel registration: Added to panelRegistry with 'compilation-inspector' ID
+- Known blocker: TypeScript error at test line 219 (type safety issue)
+
+**Impact:**
+- New debugging capability: inspect intermediate compilation passes
+- Reusable patterns: JSON serialization with circular ref handling
+- Service integration pattern: begin/capture/end lifecycle
+- Test coverage patterns: 831 lines testing service, serialization, memory bounds
 
 ### 2026-01-20 16:00:00 - Unified Shape Foundation (unified-shape-foundation)
 **Marked STALE:**

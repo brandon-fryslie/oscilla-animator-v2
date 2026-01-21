@@ -213,10 +213,11 @@ describe('CompilationInspectorService', () => {
 
       const snapshot = compilationInspector.getLatestSnapshot();
       const pass = snapshot?.passes[0];
+      expect(pass).toBeDefined();
 
-      expect(pass?.inputSize).toBeGreaterThan(0);
-      expect(pass?.outputSize).toBeGreaterThan(0);
-      expect(pass?.outputSize).toBeGreaterThan(pass?.inputSize);
+      expect(pass!.inputSize).toBeGreaterThan(0);
+      expect(pass!.outputSize).toBeGreaterThan(0);
+      expect(pass!.outputSize).toBeGreaterThan(pass!.inputSize);
     });
   });
 
