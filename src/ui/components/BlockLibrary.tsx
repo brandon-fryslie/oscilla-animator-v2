@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { observer } from 'mobx-react-lite';
 import { IconButton } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import { useStores } from '../../stores';
@@ -78,7 +79,7 @@ function useDebounce<T>(value: T, delay: number): T {
 /**
  * Block Library Component
  */
-export const BlockLibrary: React.FC = () => {
+export const BlockLibrary: React.FC = observer(() => {
   const { selection, patch, diagnostics } = useStores();
   // State
   const [searchQuery, setSearchQuery] = useState('');
@@ -112,7 +113,7 @@ export const BlockLibrary: React.FC = () => {
   const handleBlockClick = useCallback((type: BlockTypeInfo) => {
     // Set preview type in selection store to trigger inspector preview
     selection.setPreviewType(type.type);
-  }, []); // TODO: add selection to dependency array for correctness (currently relying on closure)
+  }, [selection]);
 
   const handleBlockDoubleClick = useCallback(
     (type: BlockTypeInfo) => {
@@ -128,8 +129,8 @@ export const BlockLibrary: React.FC = () => {
           selection.selectBlock(blockId);
         });
       }
-    }, // TODO: add selection, patch, editorHandle to dependency array for correctness
-    [editorHandle]
+    },
+    [selection, patch, editorHandle]
   );
 
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -258,7 +259,7 @@ export const BlockLibrary: React.FC = () => {
       </div>
     </div>
   );
-};
+});
 
 /**
  * Block Category Section

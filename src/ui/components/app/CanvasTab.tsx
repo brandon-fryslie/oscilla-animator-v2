@@ -163,7 +163,7 @@ export const CanvasTab: React.FC<CanvasTabProps> = observer(({ onCanvasReady }) 
       canvas.removeEventListener('mouseleave', handleMouseLeave);
       canvas.removeEventListener('dblclick', handleDoubleClick);
     };
-  }, []);
+  }, [viewport]);
 
   return (
     <div

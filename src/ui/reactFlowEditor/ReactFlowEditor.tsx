@@ -7,6 +7,7 @@
  */
 
 import React, { useEffect, useCallback, useMemo, useState, useRef } from 'react';
+import { observer } from 'mobx-react-lite';
 import ReactFlow, {
   Background,
   Controls,
@@ -121,7 +122,7 @@ interface ReactFlowEditorInnerProps {
   wrapperRef: React.RefObject<HTMLDivElement | null>;
 }
 
-const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = ({
+const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = observer(({
   onEditorReady,
   wrapperRef,
 }) => {
@@ -573,7 +574,7 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = ({
       )}
     </>
   );
-};
+});
 
 export const ReactFlowEditor: React.FC<ReactFlowEditorProps> = ({
   onEditorReady,
