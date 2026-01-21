@@ -15,7 +15,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { BlockLibrary } from '../BlockLibrary';
 import { EditorProvider } from '../../editorCommon';
-import { rootStore } from '../../../stores';
+import { rootStore, StoreProvider } from '../../../stores';
 import { getBlockCategories, getBlockTypesByCategory } from '../../../blocks/registry';
 
 // Mock localStorage
@@ -42,7 +42,11 @@ Object.defineProperty(window, 'localStorage', {
 
 // Wrapper component to provide required context
 function TestWrapper({ children }: { children: React.ReactNode }) {
-  return <EditorProvider>{children}</EditorProvider>;
+  return (
+    <StoreProvider store={rootStore}>
+      <EditorProvider>{children}</EditorProvider>
+    </StoreProvider>
+  );
 }
 
 describe('BlockLibrary', () => {

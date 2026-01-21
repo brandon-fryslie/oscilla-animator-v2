@@ -8,7 +8,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { IconButton } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
-import { rootStore } from '../../stores';
+import { useStores } from '../../stores';
 import {
   getBlockCategories,
   getBlockTypesByCategory,
@@ -30,14 +30,14 @@ const SEARCH_DEBOUNCE_MS = 150;
 /**
  * Load collapsed categories from localStorage.
  */
-function loadCollapsedCategories(): Set<BlockCategory> {
+function loadCollapsedCategories(diagnostics: any): Set<BlockCategory> {
   try {
     const stored = localStorage.getItem(COLLAPSE_STATE_KEY);
     if (!stored) return new Set();
     const parsed = JSON.parse(stored);
     return new Set(Array.isArray(parsed) ? parsed : []);
   } catch (e) {
-    rootStore.diagnostics.log({
+    diagnostics.log({
       level: 'warn',
       message: 'Failed to load collapsed categories from localStorage',
       data: { error: String(e) },
@@ -49,11 +49,11 @@ function loadCollapsedCategories(): Set<BlockCategory> {
 /**
  * Save collapsed categories to localStorage.
  */
-function saveCollapsedCategories(collapsed: Set<BlockCategory>): void {
+function saveCollapsedCategories(collapsed: Set<BlockCategory>, diagnostics: any): void {
   try {
     localStorage.setItem(COLLAPSE_STATE_KEY, JSON.stringify(Array.from(collapsed)));
   } catch (e) {
-    rootStore.diagnostics.log({
+    diagnostics.log({
       level: 'warn',
       message: 'Failed to save collapsed categories to localStorage',
       data: { error: String(e) },
@@ -79,13 +79,14 @@ function useDebounce<T>(value: T, delay: number): T {
  * Block Library Component
  */
 export const BlockLibrary: React.FC = () => {
+  const { selection, patch, diagnostics } = useStores();
   // State
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearchQuery = useDebounce(searchQuery, SEARCH_DEBOUNCE_MS);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const [collapsedCategories, setCollapsedCategories] = useState<Set<BlockCategory>>(
-    loadCollapsedCategories
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<BlockCategory>>(() =>
+    loadCollapsedCategories(diagnostics)
   );
 
   // Track which category currently has focus (for keyboard navigation)
@@ -103,20 +104,20 @@ export const BlockLibrary: React.FC = () => {
       } else {
         next.add(category);
       }
-      saveCollapsedCategories(next);
+      saveCollapsedCategories(next, diagnostics);
       return next;
     });
-  }, []);
+  }, [diagnostics]);
 
   const handleBlockClick = useCallback((type: BlockTypeInfo) => {
     // Set preview type in selection store to trigger inspector preview
-    rootStore.selection.setPreviewType(type.type);
-  }, []);
+    selection.setPreviewType(type.type);
+  }, []); // TODO: add selection to dependency array for correctness (currently relying on closure)
 
   const handleBlockDoubleClick = useCallback(
     (type: BlockTypeInfo) => {
       // Add block to PatchStore
-      const blockId = rootStore.patch.addBlock(type.type, {}, {
+      const blockId = patch.addBlock(type.type, {}, {
         displayName: type.label,
       });
 
@@ -124,10 +125,10 @@ export const BlockLibrary: React.FC = () => {
       if (editorHandle) {
         editorHandle.addBlock(blockId, type.type).then(() => {
           // Select the new block
-          rootStore.selection.selectBlock(blockId);
+          selection.selectBlock(blockId);
         });
       }
-    },
+    }, // TODO: add selection, patch, editorHandle to dependency array for correctness
     [editorHandle]
   );
 
@@ -177,10 +178,10 @@ export const BlockLibrary: React.FC = () => {
       const nonTimeRootTypes = types.filter((t: BlockDef) => t.capability !== 'time');
       const filtered = debouncedSearchQuery
         ? nonTimeRootTypes.filter((t: BlockDef) =>
-            t.type.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-            t.label.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-            (t.description?.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ?? false)
-          )
+          t.type.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+          t.label.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+          (t.description?.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ?? false)
+        )
         : nonTimeRootTypes;
       count += filtered.length;
     });

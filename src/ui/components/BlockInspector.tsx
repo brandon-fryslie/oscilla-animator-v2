@@ -8,7 +8,7 @@
 
 import React, { useState, useCallback } from 'react';
 import { observer } from 'mobx-react-lite';
-import { rootStore } from '../../stores';
+import { useStores } from '../../stores';
 import { colors } from '../theme';
 import { getBlockDefinition, type BlockDef, type InputDef, type OutputDef, BLOCK_DEFS_BY_TYPE } from '../../blocks/registry';
 import './BlockInspector.css';
@@ -171,8 +171,9 @@ function getValidDefaultSourceBlockTypes(portType: SignalType): { blockType: str
  * Block Inspector component.
  */
 export const BlockInspector = observer(function BlockInspector() {
-  const { previewType, selectedBlockId, selectedEdgeId, selectedPort } = rootStore.selection;
-  const patch = rootStore.patch.patch;
+  const { selection, patch: patchStore } = useStores();
+  const { previewType, selectedBlockId, selectedEdgeId, selectedPort } = selection;
+  const patch = patchStore.patch;
 
   // Determine content based on selection state
   let content: React.ReactNode;
@@ -270,6 +271,7 @@ interface PortInspectorStandaloneProps {
 }
 
 const PortInspectorStandalone = observer(function PortInspectorStandalone({ portRef, block, blockDef, patch }: PortInspectorStandaloneProps) {
+  const { selection, patch: patchStore } = useStores();
   const [showConnectionPicker, setShowConnectionPicker] = useState(false);
 
   const inputDef = blockDef.inputs[portRef.portId];
@@ -298,30 +300,30 @@ const PortInspectorStandalone = observer(function PortInspectorStandalone({ port
     : undefined;
 
   const handleViewBlock = useCallback(() => {
-    rootStore.selection.selectBlock(block.id);
-  }, [block.id]);
+    selection.selectBlock(block.id);
+  }, [selection, block.id]);
 
   const handleDisconnect = useCallback((edgeId: string) => {
-    rootStore.patch.removeEdge(edgeId);
-  }, []);
+    patchStore.removeEdge(edgeId);
+  }, [patchStore]);
 
   const handleConnect = useCallback((sourceBlockId: BlockId, sourcePortId: PortId) => {
     // Determine source and target based on port direction
     if (isInput) {
       // Target is INPUT, source is OUTPUT
-      rootStore.patch.addEdge(
+      patchStore.addEdge(
         { kind: 'port', blockId: sourceBlockId, slotId: sourcePortId },
         { kind: 'port', blockId: block.id, slotId: portRef.portId }
       );
     } else {
       // Target is OUTPUT, source is INPUT
-      rootStore.patch.addEdge(
+      patchStore.addEdge(
         { kind: 'port', blockId: block.id, slotId: portRef.portId },
         { kind: 'port', blockId: sourceBlockId, slotId: sourcePortId }
       );
     }
     setShowConnectionPicker(false);
-  }, [isInput, block.id, portRef.portId]);
+  }, [patchStore, isInput, block.id, portRef.portId]);
 
   return (
     <div>
@@ -412,7 +414,7 @@ const PortInspectorStandalone = observer(function PortInspectorStandalone({ port
           return (
             <div key={idx} style={{ marginBottom: '8px' }}>
               <div
-                onClick={() => rootStore.selection.selectBlock(edge.from.blockId as BlockId)}
+                onClick={() => selection.selectBlock(edge.from.blockId as BlockId)}
                 style={{
                   padding: '8px',
                   background: colors.bgPanel,
@@ -450,7 +452,7 @@ const PortInspectorStandalone = observer(function PortInspectorStandalone({ port
           return (
             <div
               key={idx}
-              onClick={() => rootStore.selection.selectBlock(edge.to.blockId as BlockId)}
+              onClick={() => selection.selectBlock(edge.to.blockId as BlockId)}
               style={{
                 padding: '8px',
                 background: colors.bgPanel,
@@ -512,16 +514,17 @@ interface EdgeInspectorProps {
 }
 
 function EdgeInspector({ edge, patch }: EdgeInspectorProps) {
+  const { selection } = useStores();
   const sourceBlock = patch.blocks.get(edge.from.blockId as BlockId);
   const targetBlock = patch.blocks.get(edge.to.blockId as BlockId);
 
   const handleSourceClick = useCallback(() => {
-    rootStore.selection.selectBlock(edge.from.blockId as BlockId);
-  }, [edge.from.blockId]);
+    selection.selectBlock(edge.from.blockId as BlockId);
+  }, [selection, edge.from.blockId]);
 
   const handleTargetClick = useCallback(() => {
-    rootStore.selection.selectBlock(edge.to.blockId as BlockId);
-  }, [edge.to.blockId]);
+    selection.selectBlock(edge.to.blockId as BlockId);
+  }, [selection, edge.to.blockId]);
 
   return (
     <div>
@@ -798,6 +801,7 @@ interface DisplayNameEditorProps {
 }
 
 const DisplayNameEditor = observer(function DisplayNameEditor({ block, typeInfo }: DisplayNameEditorProps) {
+  const { patch: patchStore } = useStores();
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(block.displayName || '');
 
@@ -810,7 +814,7 @@ const DisplayNameEditor = observer(function DisplayNameEditor({ block, typeInfo 
     setIsEditing(false);
     const newName = editValue.trim() || null;
     if (newName !== block.displayName) {
-      rootStore.patch.updateBlockDisplayName(block.id, newName);
+      patchStore.updateBlockDisplayName(block.id, newName);
     }
   }, [block.id, block.displayName, editValue]);
 
@@ -880,12 +884,13 @@ interface PortItemProps {
 }
 
 const PortItem = observer(function PortItem({ port, portId, blockId, isConnected, connectedEdge, patch, onClick }: PortItemProps) {
+  const { selection } = useStores();
   const hasDefaultSource = port.defaultSource !== undefined;
 
   const handleSourceClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     if (connectedEdge) {
-      rootStore.selection.selectBlock(connectedEdge.from.blockId as BlockId);
+      selection.selectBlock(connectedEdge.from.blockId as BlockId);
     }
   }, [connectedEdge]);
 
@@ -983,6 +988,7 @@ const DefaultSourceEditor = observer(function DefaultSourceEditor({
   value,
   portLabel
 }: DefaultSourceEditorProps) {
+  const { patch: patchStore } = useStores();
   const [localValue, setLocalValue] = useState(String(value));
 
   // Sync local value when prop changes
@@ -995,13 +1001,13 @@ const DefaultSourceEditor = observer(function DefaultSourceEditor({
 
     if (typeof value === 'number') {
       if (!isNaN(parsed as number) && parsed !== value) {
-        rootStore.patch.updateBlockParams(derivedBlockId, { value: parsed });
+        patchStore.updateBlockParams(derivedBlockId, { value: parsed });
       } else if (isNaN(parsed as number)) {
         setLocalValue(String(value));
       }
     } else {
       if (parsed !== value) {
-        rootStore.patch.updateBlockParams(derivedBlockId, { value: parsed });
+        patchStore.updateBlockParams(derivedBlockId, { value: parsed });
       }
     }
   }, [localValue, value, derivedBlockId]);
@@ -1063,6 +1069,7 @@ interface OutputPortItemProps {
 }
 
 function OutputPortItem({ port, edges, patch, onClick }: OutputPortItemProps) {
+  const { selection } = useStores();
   return (
     <li
       onClick={onClick}
@@ -1094,7 +1101,7 @@ function OutputPortItem({ port, edges, patch, onClick }: OutputPortItemProps) {
               key={idx}
               onClick={(e) => {
                 e.stopPropagation();
-                rootStore.selection.selectBlock(edge.to.blockId as BlockId);
+                selection.selectBlock(edge.to.blockId as BlockId);
               }}
               style={{ cursor: 'pointer' }}
             >
@@ -1144,6 +1151,7 @@ const backButtonStyle: React.CSSProperties = {
 
 
 function PortInspector({ portRef, block, typeInfo, patch, onBack }: PortInspectorProps) {
+  const { selection } = useStores();
   // Find port definition
   const inputPort = typeInfo.inputs[portRef.portId];
   const outputPort = typeInfo.outputs[portRef.portId];
@@ -1246,7 +1254,7 @@ function PortInspector({ portRef, block, typeInfo, patch, onBack }: PortInspecto
           return (
             <div
               key={idx}
-              onClick={() => rootStore.selection.selectBlock(edge.from.blockId as BlockId)}
+              onClick={() => selection.selectBlock(edge.from.blockId as BlockId)}
               style={{
                 padding: '8px',
                 background: colors.bgPanel,
@@ -1272,7 +1280,7 @@ function PortInspector({ portRef, block, typeInfo, patch, onBack }: PortInspecto
           return (
             <div
               key={idx}
-              onClick={() => rootStore.selection.selectBlock(edge.to.blockId as BlockId)}
+              onClick={() => selection.selectBlock(edge.to.blockId as BlockId)}
               style={{
                 padding: '8px',
                 background: colors.bgPanel,
@@ -1317,6 +1325,7 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
   isConnected,
   inputDef,
 }: PortDefaultSourceEditorProps) {
+  const { patch: patchStore } = useStores();
   const validBlockTypes = getValidDefaultSourceBlockTypes(portType);
 
   // Current selection
@@ -1340,7 +1349,7 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
       params: {},
     };
 
-    rootStore.patch.updateInputPort(blockId, portId, { defaultSource: newDefaultSource });
+    patchStore.updateInputPort(blockId, portId, { defaultSource: newDefaultSource });
   }, [blockId, portId]);
 
   const handleOutputPortChange = useCallback((newOutputPort: string) => {
@@ -1349,7 +1358,7 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
       output: newOutputPort,
     };
 
-    rootStore.patch.updateInputPort(blockId, portId, { defaultSource: newDefaultSource });
+    patchStore.updateInputPort(blockId, portId, { defaultSource: newDefaultSource });
   }, [blockId, portId, currentDefaultSource]);
 
   const handleParamChange = useCallback((paramKey: string, value: unknown) => {
@@ -1361,13 +1370,13 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
       },
     };
 
-    rootStore.patch.updateInputPort(blockId, portId, { defaultSource: newDefaultSource });
+    patchStore.updateInputPort(blockId, portId, { defaultSource: newDefaultSource });
   }, [blockId, portId, currentDefaultSource, currentParams]);
 
   const handleReset = useCallback(() => {
     if (registryDefaultSource) {
       // Reset to registry default by removing the override
-      rootStore.patch.updateInputPort(blockId, portId, { defaultSource: undefined });
+      patchStore.updateInputPort(blockId, portId, { defaultSource: undefined });
     }
   }, [blockId, portId, registryDefaultSource]);
 
@@ -1635,6 +1644,7 @@ interface ExpressionEditorProps {
 }
 
 const ExpressionEditor = observer(function ExpressionEditor({ blockId, value }: ExpressionEditorProps) {
+  const { patch: patchStore } = useStores();
   const [localValue, setLocalValue] = useState(value);
 
   // Update local value when prop changes
@@ -1650,7 +1660,7 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value }: 
 
   const handleBlur = useCallback(() => {
     if (localValue !== value) {
-      rootStore.patch.updateBlockParams(blockId, { expression: localValue });
+      patchStore.updateBlockParams(blockId, { expression: localValue });
     }
   }, [blockId, localValue, value]);
 
@@ -1706,6 +1716,7 @@ interface ParamFieldProps {
 }
 
 const ParamField = observer(function ParamField({ blockId, paramKey, value, typeInfo }: ParamFieldProps) {
+  const { patch: patchStore } = useStores();
   // Special case: Expression block with expression parameter
   // Render multiline textarea instead of single-line text input
   if (typeInfo.type === 'Expression' && paramKey === 'expression') {
@@ -1718,7 +1729,7 @@ const ParamField = observer(function ParamField({ blockId, paramKey, value, type
   const uiHint = inputDef?.uiHint;
 
   const handleChange = useCallback((newValue: unknown) => {
-    rootStore.patch.updateBlockParams(blockId, { [paramKey]: newValue });
+    patchStore.updateBlockParams(blockId, { [paramKey]: newValue });
   }, [blockId, paramKey]);
 
   // Render based on uiHint or inferred type
