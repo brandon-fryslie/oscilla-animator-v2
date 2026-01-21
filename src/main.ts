@@ -21,6 +21,7 @@ import { timeRootRole, type BlockId, type ValueSlot } from './types';
 import { recordFrameTime, recordFrameDelta, shouldEmitSnapshot, emitHealthSnapshot, computeFrameTimingStats, resetFrameTimingStats } from './runtime/HealthMonitor';
 import type { RuntimeState } from './runtime/RuntimeState';
 import { debugService } from './services/DebugService';
+import { mapDebugEdges } from './services/mapDebugEdges';
 
 // =============================================================================
 // Global State
@@ -421,7 +422,7 @@ async function buildAndCompile(patchBuilder: PatchBuilder) {
     const fromBlock = patch.blocks.get(edge.from.blockId as BlockId);
     const toBlock = patch.blocks.get(edge.to.blockId as BlockId);
     if (fromBlock?.type === 'Const' || fromBlock?.type === 'FieldBroadcast' ||
-        toBlock?.type === 'FieldRadiusSqrt' || toBlock?.type === 'FieldBroadcast') {
+      toBlock?.type === 'FieldRadiusSqrt' || toBlock?.type === 'FieldBroadcast') {
       log(`    ${edge.from.blockId}:${edge.from.slotId} -> ${edge.to.blockId}:${edge.to.slotId}`);
     }
   }
@@ -464,6 +465,12 @@ async function buildAndCompile(patchBuilder: PatchBuilder) {
   currentState.tap = {
     recordSlotValue: (slotId: ValueSlot, value: number) => debugService.updateSlotValue(slotId, value),
   };
+
+  // Build and set edge-to-slot mapping for DebugService
+  // Logic moved out of compiler to strictly adhere to One Source of Truth / Isolation laws
+  const edgeMap = mapDebugEdges(patch, program);
+  debugService.setEdgeToSlotMap(edgeMap);
+
   // Set RuntimeState reference in ContinuityStore for config access
   store!.continuity.setRuntimeStateRef(currentState);
 
@@ -607,6 +614,10 @@ async function recompileFromStore() {
     currentState.tap = {
       recordSlotValue: (slotId: ValueSlot, value: number) => debugService.updateSlotValue(slotId, value),
     };
+
+    // Update debug mapping on recompile
+    const edgeMap = mapDebugEdges(store!.patch.patch, program);
+    debugService.setEdgeToSlotMap(edgeMap);
 
     // Restore continuity state (it's independent of slot layout)
     if (oldContinuity) {

@@ -434,13 +434,34 @@ export function pass7Schedule(
   // Collect steps from builder (stateWrite steps from stateful blocks)
   const builderSteps = unlinkedIR.builder.getSteps();
 
+  // Generate evalSig steps for all signals with registered slots.
+  // This enables the debug tap to record signal values for the debug probe.
+  //
+  // NOTE: Only Signal edges support debug probing. Field edges (arrays) use
+  // `materialize` steps which don't have a tap point yet. Field visualization
+  // requires different treatment (summary stats, spatial view) and is deferred
+  // until after the field refactor.
+  //
+  // See: .agent_planning/debug-probe/README.md
+  const sigSlots = unlinkedIR.builder.getSigSlots();
+  const evalSigSteps: Step[] = [];
+  for (const [sigId, slot] of sigSlots) {
+    evalSigSteps.push({
+      kind: 'evalSig',
+      expr: sigId as SigExprId,
+      target: slot,
+    });
+  }
+
   // Combine all steps in correct execution order:
-  // 1. ContinuityMapBuild (detect domain changes, compute mappings)
-  // 2. Materialize (evaluate fields to buffers)
-  // 3. ContinuityApply (apply gauge/slew/crossfade to buffers)
-  // 4. Render (use continuity-applied buffers)
-  // 5. StateWrite (persist state for next frame)
+  // 1. EvalSig (evaluate signals to slots - enables debug probe)
+  // 2. ContinuityMapBuild (detect domain changes, compute mappings)
+  // 3. Materialize (evaluate fields to buffers)
+  // 4. ContinuityApply (apply gauge/slew/crossfade to buffers)
+  // 5. Render (use continuity-applied buffers)
+  // 6. StateWrite (persist state for next frame)
   const steps: Step[] = [
+    ...evalSigSteps,
     ...mapBuildSteps,
     ...materializeSteps,
     ...continuityApplySteps,

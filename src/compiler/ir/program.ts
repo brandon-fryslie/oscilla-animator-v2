@@ -199,6 +199,12 @@ export interface DebugIndexIR {
   /** Maps slots to ports */
   readonly slotToPort: ReadonlyMap<ValueSlot, PortId>;
 
+  /**
+   * Maps numeric BlockId to permanent string ID.
+   * Required because compiled program uses numeric BlockId but patch uses string ID.
+   */
+  readonly blockMap: ReadonlyMap<BlockId, string>;
+
   /** Optional: maps steps to ports */
   readonly stepToPort?: ReadonlyMap<StepId, PortId>;
 

@@ -217,5 +217,72 @@ describe('TimeModel', () => {
       expect(schedule.timeModel.kind).toBe('infinite');
     }
   });
+});
 
+describe('Debug Probe Support', () => {
+  it('generates evalSig steps for signals with registered slots (enables debug tap)', () => {
+    // This test verifies that the compiler generates evalSig steps,
+    // which are necessary for the runtime tap to record slot values.
+    // Without evalSig steps, the debug probe cannot show signal values.
+    const patch = buildPatch((b) => {
+      const time = b.addBlock('InfiniteTimeRoot', { periodMs: 1000 });
+      const osc = b.addBlock('Oscillator', { waveform: 'sin' });
+      b.wire(time, 'phaseA', osc, 'phase');
+    });
+
+    const result = compile(patch);
+
+    expect(result.kind).toBe('ok');
+    if (result.kind === 'ok') {
+      const schedule = result.program.schedule as ScheduleIR;
+      const evalSigSteps = schedule.steps.filter(s => s.kind === 'evalSig');
+
+      // Should have at least one evalSig step for the oscillator output
+      expect(evalSigSteps.length).toBeGreaterThan(0);
+
+      // Each evalSig step should have expr and target
+      for (const step of evalSigSteps) {
+        if (step.kind === 'evalSig') {
+          expect(typeof step.expr).toBe('number');
+          expect(typeof step.target).toBe('number');
+        }
+      }
+    }
+  });
+
+  it('evalSig steps come before materialize steps in schedule', () => {
+    // Execution order matters: signals must be evaluated before fields materialize
+    // Use a simple patch that compiles - just TimeRoot + Oscillator
+    const patch = buildPatch((b) => {
+      const time = b.addBlock('InfiniteTimeRoot', { periodMs: 1000 });
+      const osc = b.addBlock('Oscillator', { waveform: 'sin' });
+      b.wire(time, 'phaseA', osc, 'phase');
+    });
+
+    const result = compile(patch);
+
+    expect(result.kind).toBe('ok');
+    if (result.kind === 'ok') {
+      const schedule = result.program.schedule as ScheduleIR;
+      const steps = schedule.steps;
+
+      // Find indices of step types
+      const firstEvalSig = steps.findIndex(s => s.kind === 'evalSig');
+      const firstMaterialize = steps.findIndex(s => s.kind === 'materialize');
+      const firstRender = steps.findIndex(s => s.kind === 'render');
+
+      // evalSig should exist (for signal outputs)
+      expect(firstEvalSig).toBeGreaterThanOrEqual(0);
+
+      // If materialize exists, evalSig should come first
+      if (firstMaterialize !== -1) {
+        expect(firstEvalSig).toBeLessThan(firstMaterialize);
+      }
+
+      // If render exists, evalSig should come first
+      if (firstRender !== -1) {
+        expect(firstEvalSig).toBeLessThan(firstRender);
+      }
+    }
+  });
 });

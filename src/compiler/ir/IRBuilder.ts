@@ -18,7 +18,7 @@ import type {
 } from './Indices';
 import type { TopologyId } from '../../shapes/types';
 import type { TimeModelIR } from './schedule';
-import type { PureFn, OpCode, InstanceDecl, LayoutSpec, Step, IntrinsicPropertyName, ContinuityPolicy, SigExpr, FieldExpr } from './types';
+import type { PureFn, OpCode, InstanceDecl, LayoutSpec, Step, IntrinsicPropertyName, ContinuityPolicy, SigExpr, FieldExpr, EventExpr } from './types';
 
 // =============================================================================
 // IRBuilder Interface
@@ -331,4 +331,17 @@ export interface IRBuilder {
    * @returns Readonly array of all field expressions
    */
   getFieldExprs(): readonly FieldExpr[];
+
+  /**
+   * Get all event expressions.
+   * @returns Readonly array of all event expressions
+   */
+  getEventExprs(): readonly EventExpr[];
+
+  /**
+   * Get signal-to-slot mappings.
+   * Used by scheduler to generate evalSig steps for debug probing.
+   * @returns Map from signal expr ID to slot
+   */
+  getSigSlots(): ReadonlyMap<number, ValueSlot>;
 }

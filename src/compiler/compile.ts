@@ -16,10 +16,13 @@
 import type { Patch } from '../graph';
 import { normalize, type NormalizedPatch } from '../graph/normalize';
 import type { CompiledProgramIR, SlotMetaEntry, ValueSlot } from './ir/program';
+import type { UnlinkedIRFragments } from './passes-v2/pass6-block-lowering';
+import type { ScheduleIR } from './passes-v2/pass7-schedule';
+import type { AcyclicOrLegalGraph } from './ir/patches';
 import { convertCompileErrorsToDiagnostics } from './diagnosticConversion';
 import type { EventHub } from '../events/EventHub';
 import { signalType } from '../core/canonical-types';
-import { debugService } from '../services/DebugService';
+// debugService import removed for strict compiler isolation (One Source of Truth)
 import { compilationInspector } from '../services/CompilationInspectorService';
 
 // Import block registrations (side-effect imports to register blocks)
@@ -239,10 +242,10 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
     }
 
     // Convert to CompiledProgramIR
-    const compiledIR = convertLinkedIRToProgram(unlinkedIR, scheduleIR);
+    const compiledIR = convertLinkedIRToProgram(unlinkedIR, scheduleIR, acyclicPatch);
 
-    // Build edge-to-slot map for debug service (Sprint 1: Debug Probe)
-    buildEdgeToSlotMap(patch, typedPatch, unlinkedIR);
+    // Build edge-to-slot map logic removed from compiler (migrated to main.ts)
+
 
     // End compilation inspection (success)
     try {
@@ -356,8 +359,9 @@ function emitFailure(
  * @returns CompiledProgramIR
  */
 function convertLinkedIRToProgram(
-  unlinkedIR: any,
-  scheduleIR: any
+  unlinkedIR: UnlinkedIRFragments,
+  scheduleIR: ScheduleIR,
+  acyclicPatch: AcyclicOrLegalGraph
 ): CompiledProgramIR {
   // Extract data from the IR builder
   const builder = unlinkedIR.builder;
@@ -402,11 +406,56 @@ function convertLinkedIRToProgram(
   const outputs: any[] = [];
 
   // Build debug index
+  const stepToBlock = new Map();
+  const slotToBlock = new Map();
+  const ports: any[] = [];
+  const slotToPort = new Map();
+  const blockMap = new Map(); // Map numeric BlockId -> string ID
+
+  // Populate debug index from unlinkedIR.blockOutputs (provenance)
+  if (unlinkedIR.blockOutputs) {
+    let portCounter = 0;
+
+    // Build block map from acyclicPatch
+    // We need to look up blocks by index to get their string ID
+    const blocks = acyclicPatch.blocks || []; // AcyclicOrLegalGraph has blocks array
+    for (let i = 0; i < blocks.length; i++) {
+      blockMap.set(i, blocks[i].id);
+    }
+
+    for (const [blockIndex, outputs] of unlinkedIR.blockOutputs.entries()) {
+      for (const [portId, ref] of outputs.entries()) {
+        // Only map slots
+        if (ref.k === 'sig' || ref.k === 'field' || ref.k === 'event') {
+          const slot = ref.slot;
+
+          // Generate stable port ID
+          // We don't have a PortId type factory exposed here easily, so cast
+          const portIndex = portCounter++;
+
+          // Record slot->port mapping
+          slotToPort.set(slot, portIndex);
+
+          // Add port binding info
+          ports.push({
+            port: portIndex,
+            block: blockIndex,
+            portName: portId,
+            direction: 'out',
+            domain: ref.k === 'field' ? 'field' : ref.k === 'event' ? 'event' : 'signal', // Simplified
+            role: 'userWire',
+          });
+        }
+      }
+    }
+  }
+
   const debugIndex = {
-    stepToBlock: new Map(),
-    slotToBlock: new Map(),
-    ports: [],
-    slotToPort: new Map(),
+    stepToBlock,
+    slotToBlock,
+    ports,
+    slotToPort,
+    blockMap,
   };
 
   return {
@@ -422,58 +471,6 @@ function convertLinkedIRToProgram(
   };
 }
 
-/**
- * Build edge-to-slot map for DebugService (Sprint 1: Debug Probe)
- *
- * Maps each edge to its corresponding slot in the runtime ValueStore.
- * This enables UI to query runtime values by hovering edges.
- *
- * Algorithm:
- * 1. For each edge in the patch
- * 2. Look up the target port in the IR's debugIndex
- * 3. Find the slot assigned to that port
- * 4. Get the signal type from typedPatch
- * 5. Store mapping: edge.id → { slotId, type }
- *
- * @param patch - Original patch with edges
- * @param typedPatch - Typed patch from pass2 (has type info)
- * @param unlinkedIR - IR from pass6 (has debugIndex with port→slot mapping)
- */
-function buildEdgeToSlotMap(patch: Patch, typedPatch: any, unlinkedIR: any): void {
-  const edgeMetaMap = new Map<string, { slotId: ValueSlot; type: any }>();
-  const debugIndex = unlinkedIR.builder?.debugIndex;
+// buildEdgeToSlotMap function removed - logic moved to external helper (mapDebugEdges.ts)
+// for strict architectural isolation.
 
-  // If no debugIndex, we can't build the map
-  if (!debugIndex || !debugIndex.slotToPort) {
-    console.warn('[DebugService] No debugIndex available, edge-to-slot map will be empty');
-    debugService.setEdgeToSlotMap(edgeMetaMap);
-    return;
-  }
-
-  // Build reverse map: port → slot
-  const portToSlot = new Map<string, ValueSlot>();
-  for (const [slot, portKey] of debugIndex.slotToPort.entries()) {
-    portToSlot.set(portKey, slot as ValueSlot);
-  }
-
-  // For each edge, resolve its target port to a slot
-  for (const edge of patch.edges) {
-    // Build port key: "blockId:portId"
-    const targetPortKey = `${edge.to.blockId}:${edge.to.slotId}`;
-    const slotId = portToSlot.get(targetPortKey);
-
-    if (slotId !== undefined) {
-      // Get type from typedPatch (or default to float)
-      // typedPatch should have a typeGraph with edge types
-      const edgeType = typedPatch.typeGraph?.edges?.get(edge.id)?.type || signalType('float');
-
-      edgeMetaMap.set(edge.id, {
-        slotId,
-        type: edgeType,
-      });
-    }
-  }
-
-  // Pass to DebugService
-  debugService.setEdgeToSlotMap(edgeMetaMap);
-}
