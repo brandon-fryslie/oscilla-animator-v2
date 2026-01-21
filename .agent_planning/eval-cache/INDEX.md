@@ -2,17 +2,13 @@
 
 **Purpose:** Reusable evaluation findings to speed up future work evaluations.
 
-**Last Updated:** 2026-01-21 12:58:00
+**Last Updated:** 2026-01-21 17:03:00
 
 ---
 
 ## Available Cache Files
 
 ### Runtime Findings
-
-**findings-compilation-inspector.md** [REMOVED - STALE]
-- Removed: Modified compile.ts IR generation (sqrt/floor/ceil/round now opcodes)
-- Reason: Cache included IR generation patterns for math functions
 
 **runtime-continuity-controls-v2.md** [UPDATED - STALE]
 - Scope: continuity-controls-v2
@@ -360,3 +356,20 @@
 - Clear distinction from radian-based opcode sin/cos/tan
 - Backward compatible via deprecation shims
 - All oscillator-related tests passing (12/12 compile tests)
+
+### 2026-01-21 17:03:00 - Rete.js Removal Complete (rete-removal)
+**Removed:**
+- runtime-dockview-integration.md - Mentioned Rete editor in layout documentation
+- runtime-sprint2a-validation.md - Mentioned rete-history-plugin
+
+**Rationale:**
+- Rete.js has been completely removed from the codebase
+- All Rete files, dependencies, and integration points eliminated
+- Only React Flow editor remains (single editor implementation)
+- Cache files with Rete references are now obsolete
+
+**Impact:**
+- EditorHandle type simplified to only support 'reactflow'
+- Dockview layout only contains flow-editor (no rete-editor)
+- No rete packages in package.json or package-lock.json
+- All comments updated to remove Rete references
