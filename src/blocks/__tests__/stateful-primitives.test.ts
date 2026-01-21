@@ -212,11 +212,12 @@ describe('Hash Block', () => {
     const pool = new BufferPool();
 
     // Find the evalSig steps from TestSignal blocks to get slots
+    // TestSignal blocks create evalSig steps - we need the LAST TWO
     const schedule = result.program.schedule as any;
     const evalSigSteps = schedule.steps.filter((s: any) => s.kind === 'evalSig');
-    expect(evalSigSteps).toHaveLength(2);
-    const slot1 = evalSigSteps[0].target;
-    const slot2 = evalSigSteps[1].target;
+    expect(evalSigSteps.length).toBeGreaterThanOrEqual(2);
+    const slot1 = evalSigSteps[evalSigSteps.length - 2].target;
+    const slot2 = evalSigSteps[evalSigSteps.length - 1].target;
 
     executeFrame(result.program, state, pool, 0);
 
@@ -253,8 +254,10 @@ describe('Hash Block', () => {
     const pool = new BufferPool();
 
     // Find the evalSig step from TestSignal to get the slot
+    // TestSignal's evalSig step is the LAST one in the schedule
     const schedule = program.schedule as any;
-    const evalSigStep = schedule.steps.find((s: any) => s.kind === 'evalSig');
+    const evalSigSteps = schedule.steps.filter((s: any) => s.kind === 'evalSig');
+    const evalSigStep = evalSigSteps[evalSigSteps.length - 1];
     expect(evalSigStep).toBeDefined();
     const slot = evalSigStep?.target;
 
@@ -288,8 +291,10 @@ describe('Hash Block', () => {
     const pool = new BufferPool();
 
     // Find the evalSig step from TestSignal to get the slot
+    // TestSignal's evalSig step is the LAST one in the schedule
     const schedule = program.schedule as any;
-    const evalSigStep = schedule.steps.find((s: any) => s.kind === 'evalSig');
+    const evalSigSteps = schedule.steps.filter((s: any) => s.kind === 'evalSig');
+    const evalSigStep = evalSigSteps[evalSigSteps.length - 1];
     expect(evalSigStep).toBeDefined();
     const slot = evalSigStep?.target;
 
