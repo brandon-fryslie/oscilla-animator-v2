@@ -2,15 +2,32 @@
  * Signal Evaluator - SINGLE SOURCE OF TRUTH
  *
  * Unified signal evaluation for both ScheduleExecutor and Materializer.
- * Eliminates ~90 lines of code duplication.
- *
  * Adheres to architectural law: ONE SOURCE OF TRUTH
  *
- * Sprint 2: Adds NaN/Inf detection with batched reporting
+ * LAYER CONTRACT:
+ * ─────────────────────────────────────────────────────────────
+ * Signal kernels are DOMAIN-SPECIFIC scalar→scalar functions:
  *
- * IMPORTANT: Signal kernels (sin, cos, tan) expect PHASE [0,1), not radians.
- * They automatically convert phase to radians (phase * 2π) before applying Math functions.
- * This differs from OpcodeInterpreter which operates on radians directly for field-level math.
+ * OSCILLATORS (phase [0,1) → [-1,1]):
+ *   oscSin, oscCos, oscTan, triangle, square, sawtooth
+ *
+ * EASING (t [0,1] → u [0,1]):
+ *   easeInQuad, easeOutQuad, easeInOutQuad,
+ *   easeInCubic, easeOutCubic, easeInOutCubic,
+ *   easeInElastic, easeOutElastic, easeOutBounce
+ *
+ * SHAPING:
+ *   smoothstep, step
+ *
+ * NOISE (any real → [0,1)):
+ *   noise
+ * ─────────────────────────────────────────────────────────────
+ *
+ * IMPORTANT: Generic math (abs, floor, sqrt, etc.) belongs in
+ * OpcodeInterpreter, NOT here. Signal kernels have domain semantics.
+ *
+ * Signal kernels sin/cos/tan (oscSin/oscCos/oscTan) expect PHASE [0,1).
+ * Opcode sin/cos/tan expect RADIANS.
  */
 
 import type { SigExpr, PureFn } from '../compiler/ir/types';
@@ -255,101 +272,7 @@ function applySignalKernel(name: string, values: number[]): number {
       return 2 * t - 1;
     }
 
-    // === MATH FUNCTIONS ===
-
-    case 'abs': {
-      if (values.length !== 1) {
-        throw new Error(`Signal kernel 'abs' expects 1 input, got ${values.length}`);
-      }
-      return Math.abs(values[0]);
-    }
-
-    case 'floor': {
-      if (values.length !== 1) {
-        throw new Error(`Signal kernel 'floor' expects 1 input, got ${values.length}`);
-      }
-      return Math.floor(values[0]);
-    }
-
-    case 'ceil': {
-      if (values.length !== 1) {
-        throw new Error(`Signal kernel 'ceil' expects 1 input, got ${values.length}`);
-      }
-      return Math.ceil(values[0]);
-    }
-
-    case 'round': {
-      if (values.length !== 1) {
-        throw new Error(`Signal kernel 'round' expects 1 input, got ${values.length}`);
-      }
-      return Math.round(values[0]);
-    }
-
-    case 'fract': {
-      if (values.length !== 1) {
-        throw new Error(`Signal kernel 'fract' expects 1 input, got ${values.length}`);
-      }
-      // Fractional part (always positive, like GLSL)
-      const x = values[0];
-      return x - Math.floor(x);
-    }
-
-    case 'sqrt': {
-      if (values.length !== 1) {
-        throw new Error(`Signal kernel 'sqrt' expects 1 input, got ${values.length}`);
-      }
-      return Math.sqrt(values[0]);
-    }
-
-    case 'exp': {
-      if (values.length !== 1) {
-        throw new Error(`Signal kernel 'exp' expects 1 input, got ${values.length}`);
-      }
-      return Math.exp(values[0]);
-    }
-
-    case 'log': {
-      if (values.length !== 1) {
-        throw new Error(`Signal kernel 'log' expects 1 input, got ${values.length}`);
-      }
-      return Math.log(values[0]);
-    }
-
-    case 'pow': {
-      if (values.length !== 2) {
-        throw new Error(`Signal kernel 'pow' expects 2 inputs, got ${values.length}`);
-      }
-      return Math.pow(values[0], values[1]);
-    }
-
-    case 'min': {
-      if (values.length !== 2) {
-        throw new Error(`Signal kernel 'min' expects 2 inputs, got ${values.length}`);
-      }
-      return Math.min(values[0], values[1]);
-    }
-
-    case 'max': {
-      if (values.length !== 2) {
-        throw new Error(`Signal kernel 'max' expects 2 inputs, got ${values.length}`);
-      }
-      return Math.max(values[0], values[1]);
-    }
-
-    case 'clamp': {
-      if (values.length !== 3) {
-        throw new Error(`Signal kernel 'clamp' expects 3 inputs (value, min, max), got ${values.length}`);
-      }
-      return Math.min(Math.max(values[0], values[1]), values[2]);
-    }
-
-    case 'mix': {
-      if (values.length !== 3) {
-        throw new Error(`Signal kernel 'mix' expects 3 inputs (a, b, t), got ${values.length}`);
-      }
-      // Linear interpolation: a + (b - a) * t
-      return values[0] + (values[1] - values[0]) * values[2];
-    }
+    // === SHAPING FUNCTIONS ===
 
     case 'smoothstep': {
       if (values.length !== 3) {
@@ -367,13 +290,6 @@ function applySignalKernel(name: string, values: number[]): number {
       }
       // Returns 0 if x < edge, 1 otherwise
       return values[1] < values[0] ? 0 : 1;
-    }
-
-    case 'sign': {
-      if (values.length !== 1) {
-        throw new Error(`Signal kernel 'sign' expects 1 input, got ${values.length}`);
-      }
-      return Math.sign(values[0]);
     }
 
     // === EASING FUNCTIONS (input 0..1, output 0..1) ===
