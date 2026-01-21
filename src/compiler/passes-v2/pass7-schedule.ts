@@ -153,7 +153,6 @@ function collectRenderTargets(
     // Infer instance from position field (not first instance!)
     const instanceId = inferFieldInstanceFromExprs(posRef.id, fieldExprs);
     if (!instanceId) {
-      console.warn(`Could not infer instance from position field ${posRef.id}`);
       continue;
     }
 

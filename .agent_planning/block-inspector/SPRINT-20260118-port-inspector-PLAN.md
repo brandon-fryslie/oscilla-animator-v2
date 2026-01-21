@@ -2,7 +2,7 @@
 
 **Generated:** 2026-01-18
 **Confidence:** HIGH
-**Status:** READY FOR IMPLEMENTATION (after selection-editing sprint)
+**Status:** ✅ COMPLETE (verified 2026-01-21)
 
 ## Sprint Goal
 
@@ -21,12 +21,12 @@ Add interactive port inspector with click-to-navigate, and support all UIControl
 ### P0: Port Sub-Inspector
 
 **Acceptance Criteria:**
-- [ ] Clicking a port in the inspector opens a port detail view
-- [ ] Port view shows: port ID, label, signal type, optional status
-- [ ] Port view shows default source (if any)
-- [ ] Port view shows connection status (connected or not)
-- [ ] If connected: shows source block name with clickable link
-- [ ] Clicking source block link selects that block (navigates to it)
+- [x] Clicking a port in the inspector opens a port detail view
+- [x] Port view shows: port ID, label, signal type, optional status
+- [x] Port view shows default source (if any)
+- [x] Port view shows connection status (connected or not)
+- [x] If connected: shows source block name with clickable link
+- [x] Clicking source block link selects that block (navigates to it)
 
 **Technical Notes:**
 - Add `selectedPortRef: PortRef | null` to SelectionStore or local state
@@ -43,10 +43,10 @@ Add interactive port inspector with click-to-navigate, and support all UIControl
 ### P1: Connection Navigation
 
 **Acceptance Criteria:**
-- [ ] Input port shows source block (if connected) as clickable link
-- [ ] Output port shows all target blocks as clickable links
-- [ ] Clicking link calls `rootStore.selection.selectBlock(targetId)`
-- [ ] Inspector immediately shows the navigated-to block
+- [x] Input port shows source block (if connected) as clickable link
+- [x] Output port shows all target blocks as clickable links
+- [x] Clicking link calls `rootStore.selection.selectBlock(targetId)`
+- [x] Inspector immediately shows the navigated-to block
 
 **Technical Notes:**
 - Already have `incomingEdges` and `outgoingEdges` computed in BlockDetails
@@ -56,15 +56,15 @@ Add interactive port inspector with click-to-navigate, and support all UIControl
 ### P2: Full UIControlHint Support
 
 **Acceptance Criteria:**
-- [ ] `slider` hint → MUI Slider component
-- [ ] `int` hint → number input with step=1
-- [ ] `float` hint → number input with decimal support
-- [ ] `select` hint → MUI Select with options
-- [ ] `boolean` hint → MUI Switch/Checkbox
-- [ ] `color` hint → color input or picker
-- [ ] `text` hint → text input
-- [ ] `xy` hint → x/y pair inputs
-- [ ] Fallback: unknown hint types show as text input
+- [x] `slider` hint → MUI Slider component
+- [x] `int` hint → number input with step=1
+- [x] `float` hint → number input with decimal support
+- [x] `select` hint → MUI Select with options
+- [x] `boolean` hint → MUI Switch/Checkbox
+- [x] `color` hint → color input or picker
+- [x] `text` hint → text input
+- [x] `xy` hint → x/y pair inputs
+- [x] Fallback: unknown hint types show as text input
 
 **Technical Notes:**
 - Read `uiHint` from block definition's params or inputs
@@ -74,10 +74,10 @@ Add interactive port inspector with click-to-navigate, and support all UIControl
 ### P3: Edge Inspector (optional, time permitting)
 
 **Acceptance Criteria:**
-- [ ] Clicking an edge in ReactFlow shows edge inspector
-- [ ] Edge inspector shows: source block/port, target block/port
-- [ ] Both ends are clickable navigation links
-- [ ] Shows edge enabled/disabled status
+- [x] Clicking an edge in ReactFlow shows edge inspector
+- [x] Edge inspector shows: source block/port, target block/port
+- [x] Both ends are clickable navigation links
+- [x] Shows edge enabled/disabled status
 
 **Technical Notes:**
 - Use `onEdgeClick` ReactFlow callback

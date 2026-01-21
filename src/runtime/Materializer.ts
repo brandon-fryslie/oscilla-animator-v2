@@ -1106,6 +1106,41 @@ function applyKernelZipSig(
       outArr[i * 2 + 0] = radiusX * Math.cos(angle);
       outArr[i * 2 + 1] = radiusY * Math.sin(angle);
     }
+  } else if (kernelName === 'starVertex') {
+    // ════════════════════════════════════════════════════════════════
+    // starVertex: Generate star shape vertices
+    // ────────────────────────────────────────────────────────────────
+    // Field input: index (integer vertex index, 0 to 2*points-1)
+    // Signals: [points: float, outerRadius: float, innerRadius: float]
+    // Output: vec2
+    // Domain: points >= 3 (rounded), radii are shape units
+    // Coord-space: Produces LOCAL-SPACE control points centered at (0,0)
+    //   This is geometry definition, not instance placement
+    // Formula: even indices use outerRadius, odd indices use innerRadius
+    //   angle = (index/totalVertices)*2π - π/2 (start at top)
+    //   vertex = (radius*cos(angle), radius*sin(angle))
+    // ════════════════════════════════════════════════════════════════
+    if (sigValues.length !== 3) {
+      throw new Error('starVertex requires 3 signals (points, outerRadius, innerRadius)');
+    }
+    const outArr = out as Float32Array;
+    const indexArr = fieldInput as Float32Array;
+    const points = Math.max(3, Math.round(sigValues[0])); // Ensure at least 3 points
+    const outerRadius = sigValues[1];
+    const innerRadius = sigValues[2];
+    const TWO_PI = Math.PI * 2;
+    const totalVertices = points * 2; // Alternating outer/inner
+
+    for (let i = 0; i < N; i++) {
+      const index = Math.round(indexArr[i]);
+      // Even indices (0, 2, 4, ...) use outer radius
+      // Odd indices (1, 3, 5, ...) use inner radius
+      const radius = (index % 2 === 0) ? outerRadius : innerRadius;
+      // Angle distributes all vertices evenly around the circle
+      const angle = (index / totalVertices) * TWO_PI - Math.PI / 2;
+      outArr[i * 2 + 0] = radius * Math.cos(angle);
+      outArr[i * 2 + 1] = radius * Math.sin(angle);
+    }
   } else {
     throw new Error(`Unknown zipSig kernel function: ${kernelName}`);
   }

@@ -1644,13 +1644,25 @@ interface ExpressionEditorProps {
 }
 
 const ExpressionEditor = observer(function ExpressionEditor({ blockId, value }: ExpressionEditorProps) {
-  const { patch: patchStore } = useStores();
+  const { patch: patchStore, diagnostics: diagnosticsStore } = useStores();
   const [localValue, setLocalValue] = useState(value);
 
   // Update local value when prop changes
   React.useEffect(() => {
     setLocalValue(value);
   }, [value]);
+
+  // Get expression-related errors for this block
+  const expressionError = React.useMemo(() => {
+    const allDiagnostics = diagnosticsStore.activeDiagnostics;
+    const blockErrors = allDiagnostics.filter(
+      (diag) =>
+        diag.primaryTarget.kind === 'block' &&
+        diag.primaryTarget.blockId === blockId &&
+        (diag.code === 'E_EXPR_SYNTAX' || diag.code === 'E_EXPR_TYPE' || diag.code === 'E_EXPR_COMPILE')
+    );
+    return blockErrors.length > 0 ? blockErrors[0] : null;
+  }, [blockId, diagnosticsStore.activeDiagnostics]);
 
   const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newValue = e.target.value;
@@ -1662,7 +1674,7 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value }: 
     if (localValue !== value) {
       patchStore.updateBlockParams(blockId, { expression: localValue });
     }
-  }, [blockId, localValue, value]);
+  }, [blockId, localValue, value, patchStore]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
@@ -1670,6 +1682,8 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value }: 
       e.currentTarget.blur();
     }
   }, []);
+
+  const hasError = expressionError !== null;
 
   return (
     <div>
@@ -1687,7 +1701,7 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value }: 
         style={{
           width: '100%',
           padding: '8px',
-          border: `1px solid ${colors.border}`,
+          border: `1px solid ${hasError ? colors.error : colors.border}`,
           borderRadius: '4px',
           backgroundColor: colors.bgPanel,
           color: colors.textPrimary,
@@ -1700,6 +1714,19 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value }: 
       <div style={{ fontSize: '10px', color: colors.textSecondary, textAlign: 'right', marginTop: '2px' }}>
         {localValue.length} / 500
       </div>
+      {hasError && (
+        <div style={{
+          fontSize: '11px',
+          color: colors.error,
+          marginTop: '4px',
+          padding: '4px 8px',
+          backgroundColor: 'rgba(255, 0, 0, 0.1)',
+          borderRadius: '4px',
+          borderLeft: `3px solid ${colors.error}`,
+        }}>
+          {expressionError.message}
+        </div>
+      )}
     </div>
   );
 });

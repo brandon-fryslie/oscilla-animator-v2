@@ -26,9 +26,17 @@ All three plans were executed on 2026-01-19:
 2. **CircleInstance Removal** ✅ - Migrated tests to Array+GridLayout, removed deprecated block
 3. **IRBuilder Dual Fields** ✅ - Migration was already complete, added @deprecated annotations
 
+**Verification (2026-01-21):** Re-verified IRBuilder Dual Fields cleanup. Confirmed:
+- FieldExprIntrinsic uses instanceId/intrinsic (no old domain/sourceId fields)
+- IRBuilder.fieldIntrinsic() is clean (no `as any` casts)
+- Materializer.ts uses expr.intrinsic properly
+- No deprecated placeholders remain in codebase
+- All objectives from PLAN-irbuilder-dual-fields.md are met
+
 ### Commits
 
 - `effeebf` - chore(ir): Mark fieldSource and fieldIndex as deprecated
+- `3d9cf2a` - feat(ir): Clean up deprecated domain system (P0)
 - Earlier commits had already completed the bulk of the work (CircleInstance removal, Pass 8 cleanup)
 
 ## Source

@@ -2,7 +2,7 @@
 
 **Generated:** 2026-01-18
 **Confidence:** HIGH
-**Status:** READY FOR IMPLEMENTATION
+**Status:** ✅ COMPLETE (verified 2026-01-21)
 
 ## Sprint Goal
 
@@ -20,10 +20,10 @@ Wire ReactFlow selection to SelectionStore and add editable param fields to Bloc
 ### P0: Selection Wiring (ReactFlow → SelectionStore)
 
 **Acceptance Criteria:**
-- [ ] Clicking a node in ReactFlow calls `rootStore.selection.selectBlock(blockId)`
-- [ ] Clicking canvas background clears selection (`selectBlock(null)`)
-- [ ] BlockInspector immediately shows the selected block when clicked in editor
-- [ ] Delete key still works (existing behavior preserved)
+- [x] Clicking a node in ReactFlow calls `rootStore.selection.selectBlock(blockId)`
+- [x] Clicking canvas background clears selection (`selectBlock(null)`)
+- [x] BlockInspector immediately shows the selected block when clicked in editor
+- [x] Delete key still works (existing behavior preserved)
 
 **Technical Notes:**
 - Use ReactFlow's `onNodeClick` callback, not `onSelectionChange`
@@ -52,11 +52,11 @@ const handlePaneClick = useCallback(() => {
 ### P1: Editable Block Params
 
 **Acceptance Criteria:**
-- [ ] Number params show editable input (not JSON)
-- [ ] Text/string params show editable input
-- [ ] Editing a value calls `rootStore.patch.updateBlockParams()`
-- [ ] Changes are immediately reflected in the inspector
-- [ ] Const block value can be edited
+- [x] Number params show editable input (not JSON)
+- [x] Text/string params show editable input
+- [x] Editing a value calls `rootStore.patch.updateBlockParams()`
+- [x] Changes are immediately reflected in the inspector
+- [x] Const block value can be edited
 
 **Technical Notes:**
 - Create ParamField component that switches on value type
@@ -72,10 +72,10 @@ const handlePaneClick = useCallback(() => {
 ### P2: DisplayName Editing
 
 **Acceptance Criteria:**
-- [ ] DisplayName shows as editable text field (or click-to-edit)
-- [ ] Empty displayName shows placeholder with block type
-- [ ] Editing calls `rootStore.patch.updateBlockDisplayName()`
-- [ ] Change is reflected immediately
+- [x] DisplayName shows as editable text field (or click-to-edit)
+- [x] Empty displayName shows placeholder with block type
+- [x] Editing calls `rootStore.patch.updateBlockDisplayName()`
+- [x] Change is reflected immediately
 
 **Technical Notes:**
 - DisplayName is nullable (null = show type label)

@@ -114,6 +114,11 @@ export type DiagnosticCode =
   | 'P_INFINITY_DETECTED' // Infinity value produced during evaluation
   | 'P_FRAME_BUDGET_EXCEEDED' // Frame eval exceeded time budget
 
+  // --- Expression DSL Errors (Sprint 3 - Expression Integration) ---
+  | 'E_EXPR_SYNTAX' // Expression syntax error (parse failure)
+  | 'E_EXPR_TYPE' // Expression type error (type check failure)
+  | 'E_EXPR_COMPILE' // Expression compilation error (IR generation failure)
+
   // --- Authoring Hints ---
   | 'I_SILENT_VALUE_USED' // Unconnected input using default value
 

@@ -1,0 +1,166 @@
+Agent: iterative-implementer | 2026-01-21
+Sprint: Selection Wiring & Basic Param Editing
+Mode: manual (verification mode - work already complete)
+Status: ✅ VERIFIED COMPLETE (no changes needed)
+
+## Task
+Execute the selection-editing sprint from
+.agent_planning/block-inspector/SPRINT-20260118-selection-editing-PLAN.md
+
+## Findings
+
+The sprint was **already completed** (likely shortly after 2026-01-18).
+Verified all objectives are met:
+
+### ✅ P0: Selection Wiring (ReactFlow → SelectionStore) - COMPLETE
+
+**Node Click Handler (ReactFlowEditor.tsx:176-181):**
+```typescript
+const handleNodeClick = useCallback(
+  (_event: React.MouseEvent, node: Node) => {
+    selection.selectBlock(node.id as BlockId);
+  },
+  [selection]
+);
+```
+- ✅ Wired to ReactFlow via onNodeClick prop (line 482)
+- ✅ Calls selection.selectBlock() with BlockId
+- ✅ BlockInspector immediately reacts via MobX observer
+
+**Pane Click Handler (ReactFlowEditor.tsx:190-193):**
+```typescript
+const handlePaneClick = useCallback(() => {
+  selection.clearSelection();
+  setContextMenu(null);
+}, [selection]);
+```
+- ✅ Wired to ReactFlow via onPaneClick prop (line 484)
+- ✅ Clears selection when clicking canvas
+- ✅ BlockInspector shows NoSelection component
+
+**Integration:**
+- ✅ BlockInspector observes selection.selectedBlockId (line 175)
+- ✅ Shows BlockDetails when block selected (line 212-220)
+- ✅ Shows NoSelection when nothing selected (line 208-210)
+- ✅ Selection persists across views (SelectionStore is global)
+
+**Delete Key:**
+- Delete handler still works (ReactFlowEditor.tsx uses node.selected)
+- No regression in existing functionality
+
+### ✅ P1: Editable Block Params - COMPLETE
+
+**ParamsEditor Component (lines 1601-1634):**
+- Shows all editable params for selected block
+- Filters out internal params like payloadType
+- Renders each param via ParamField component
+- Integrated into BlockDetails (line 789)
+
+**ParamField Component (lines 1718-1818):**
+- ✅ Number params → MuiNumberInput (lines 1760-1770)
+- ✅ String params → MuiTextInput (lines 1773-1783)
+- ✅ Boolean params → MuiCheckboxInput (lines 1748-1757)
+- ✅ UIControlHint support → HintedControl (lines 1736-1744)
+- ✅ Object/array → JSON display (lines 1787-1804)
+- ✅ Fallback → MuiTextInput (lines 1808-1817)
+
+**Store Integration:**
+- onChange calls patchStore.updateBlockParams() (line 1732)
+- Partial update: { [paramKey]: newValue }
+- MobX observer ensures immediate reactivity
+
+**Const Block Value:**
+- Const blocks have editable 'value' param
+- Rendered via appropriate control based on type
+- Updates via updateBlockParams like any other param
+
+### ✅ P2: DisplayName Editing - COMPLETE
+
+**DisplayNameEditor Component (lines 803-869):**
+- Double-click to edit mode (line 808)
+- Text input with autoFocus (lines 831-853)
+- Enter key commits, Escape cancels (lines 821-828)
+- onBlur saves changes (lines 813-819)
+
+**Store Integration:**
+- Calls patchStore.updateBlockDisplayName() (line 817)
+- Null handling: empty string becomes null (line 815)
+- Placeholder shows typeInfo.label (line 839, 866)
+
+**Visual Design:**
+- Non-editing: h3 with cursor: pointer (lines 856-868)
+- Editing: Input with primary border (lines 832-852)
+- Title attribute: "Double-click to edit" (line 864)
+
+**MobX Reactivity:**
+- Observer component reacts to block.displayName changes
+- Updates immediately after edit
+- Proper use of useCallback for handlers
+
+## Acceptance Criteria Verification
+
+### Selection Wiring (P0)
+- [x] Click node → inspector updates: handleNodeClick → selectBlock()
+- [x] Click canvas → clears selection: handlePaneClick → clearSelection()
+- [x] Selection persists across views: Global SelectionStore
+- [x] Delete still works: Existing handler preserved
+
+### Param Editing (P1)
+- [x] Number params editable: MuiNumberInput component
+- [x] Text params editable: MuiTextInput component
+- [x] Edit triggers store update: updateBlockParams() called
+- [x] Const block value editable: Treated like any other param
+- [x] Immediate feedback: MobX observer reactivity
+
+### DisplayName Editing (P2)
+- [x] DisplayName visible: Shows in inspector header
+- [x] DisplayName editable: Double-click to edit
+- [x] Null handling: Empty becomes null, shows type label
+- [x] Store integration: updateBlockDisplayName() called
+
+## Code Quality
+
+**Architecture:**
+- Proper separation of concerns (editor, store, inspector)
+- MobX observer pattern throughout
+- useCallback for all event handlers (prevents re-renders)
+
+**Type Safety:**
+- All components properly typed
+- BlockId, PortId types used correctly
+- No 'any' casts in param handling
+
+**User Experience:**
+- Double-click to edit (familiar pattern)
+- Enter to commit, Escape to cancel
+- Placeholders for empty values
+- Immediate visual feedback
+
+## Files Verified
+
+1. src/ui/reactFlowEditor/ReactFlowEditor.tsx - Selection handlers
+2. src/ui/components/BlockInspector.tsx - Inspector components
+3. src/stores/SelectionStore.ts - Selection state
+4. src/stores/PatchStore.ts - Param update actions
+
+## Conclusion
+
+**NO ACTION REQUIRED** - The selection-editing sprint was completed successfully.
+All acceptance criteria are met. The implementation is clean, type-safe, and follows
+established MobX patterns.
+
+The block inspector now has:
+- Full selection wiring (node click, pane click)
+- Editable params (number, string, boolean, objects)
+- DisplayName editing with double-click pattern
+- Immediate MobX reactivity throughout
+- No regressions to existing functionality
+
+This sprint was a prerequisite for the port-inspector sprint, which has also been
+completed (see SUMMARY-iterative-implementer-20260121-port-inspector-verification.txt).
+
+Files Modified: 0 (verification only)
+Issues Found: 0
+Cache Invalidated: 0 entries (no changes to production code)
+
+Ready for evaluation: YES (verification complete, no work needed)

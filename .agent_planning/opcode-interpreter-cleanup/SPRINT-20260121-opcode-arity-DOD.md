@@ -29,9 +29,19 @@ All of the following must be true:
 - [ ] At least 10 new arity error test cases
 - [ ] All 560+ existing tests still pass
 
-### 5. No Regressions
-- [ ] `npm test` passes with 0 failures
-- [ ] No changes to SignalEvaluator.ts or Materializer.ts required
+### 5. Caller Audit (CRITICAL)
+- [x] All `sigZip([left, right], subFn/divFn/modFn, ...)` calls verified - always 2 args
+- [x] `expr/compile.ts` - binary operators construct exactly 2-element arrays
+- [x] `math-blocks.ts` - all binary op blocks use exactly 2 inputs
+- [x] `signal-blocks.ts` - Div used with exactly 2 inputs
+- [x] `typecheck.ts` validates lerp/clamp have exactly 3 params
+- [x] Materializer applyZip uses `inputs.length` from compile-time IR
+- [x] Materializer applyZipSig constructs from IR with fixed structure
+- [x] No runtime code paths can construct wrong-arity calls
+
+### 6. No Regressions
+- [ ] `npm test` passes with 0 failures (8 pre-existing Patch failures unrelated)
+- [x] No changes to SignalEvaluator.ts or Materializer.ts required
 
 ## Verification Command
 ```bash

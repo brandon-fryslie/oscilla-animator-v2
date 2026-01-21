@@ -2,30 +2,31 @@
 
 **Sprint:** Selection Wiring & Basic Param Editing
 **Generated:** 2026-01-18
+**Status:** ✅ COMPLETE (verified 2026-01-21)
 
 ## Acceptance Criteria
 
 ### Selection Wiring
 
-- [ ] **Click node → inspector updates**: User clicks a block node in ReactFlow editor, BlockInspector immediately shows that block's details
-- [ ] **Click canvas → clears selection**: Clicking empty canvas area clears selection, inspector shows "Select a block to inspect"
-- [ ] **Selection persists across views**: Selection state survives switching between editor tabs (if applicable)
-- [ ] **Delete still works**: Pressing Delete/Backspace removes selected nodes (no regression)
+- [x] **Click node → inspector updates**: User clicks a block node in ReactFlow editor, BlockInspector immediately shows that block's details
+- [x] **Click canvas → clears selection**: Clicking empty canvas area clears selection, inspector shows "Select a block to inspect"
+- [x] **Selection persists across views**: Selection state survives switching between editor tabs (if applicable)
+- [x] **Delete still works**: Pressing Delete/Backspace removes selected nodes (no regression)
 
 ### Param Editing
 
-- [ ] **Number params editable**: Numeric params display as input fields, not JSON
-- [ ] **Text params editable**: String params display as text inputs
-- [ ] **Edit triggers store update**: Changing a param value updates the block via PatchStore
-- [ ] **Const block value editable**: Specifically, Const blocks can have their `value` param edited
-- [ ] **Immediate feedback**: Inspector shows updated value after edit (MobX reactivity)
+- [x] **Number params editable**: Numeric params display as input fields, not JSON
+- [x] **Text params editable**: String params display as text inputs
+- [x] **Edit triggers store update**: Changing a param value updates the block via PatchStore
+- [x] **Const block value editable**: Specifically, Const blocks can have their `value` param edited
+- [x] **Immediate feedback**: Inspector shows updated value after edit (MobX reactivity)
 
 ### DisplayName Editing
 
-- [ ] **DisplayName visible**: Current displayName (or placeholder) shown in inspector header
-- [ ] **DisplayName editable**: User can edit the displayName
-- [ ] **Null handling**: Empty displayName shows type label as placeholder
-- [ ] **Store integration**: Edit calls `updateBlockDisplayName()` correctly
+- [x] **DisplayName visible**: Current displayName (or placeholder) shown in inspector header
+- [x] **DisplayName editable**: User can edit the displayName
+- [x] **Null handling**: Empty displayName shows type label as placeholder
+- [x] **Store integration**: Edit calls `updateBlockDisplayName()` correctly
 
 ## Verification Method
 

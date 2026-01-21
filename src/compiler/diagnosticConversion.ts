@@ -25,6 +25,7 @@ import { generateDiagnosticId } from '../diagnostics/diagnosticId';
  *
  * Sprint 1: Basic mapping for P0 error types.
  * Sprint 2+: Expand with additional error types.
+ * Sprint 3: Expression DSL error codes
  */
 const ERROR_KIND_TO_CODE: Record<string, DiagnosticCode> = {
   NoTimeRoot: 'E_TIME_ROOT_MISSING',
@@ -37,6 +38,10 @@ const ERROR_KIND_TO_CODE: Record<string, DiagnosticCode> = {
   DuplicateBlockId: 'E_CYCLE_DETECTED', // Structural issue (reuse cycle code for now)
   LoweringError: 'E_UNKNOWN_BLOCK_TYPE', // Generic fallback
   UnknownPort: 'E_UNKNOWN_BLOCK_TYPE', // Port not found (block type may not be registered)
+  // Expression DSL errors (Sprint 3)
+  ExprSyntaxError: 'E_EXPR_SYNTAX',
+  ExprTypeError: 'E_EXPR_TYPE',
+  ExprCompileError: 'E_EXPR_COMPILE',
 };
 
 // =============================================================================

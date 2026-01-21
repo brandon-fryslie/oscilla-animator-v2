@@ -422,9 +422,21 @@ function lowerBlockInstance(
   } catch (error) {
     // Lowering failed - record error (will be thrown at end of pass with all other errors)
     const errorMsg = `Block lowering failed for "${block.type}": ${error instanceof Error ? error.message : String(error)}`;
+    
+    // Detect expression errors by checking error message for ExprXxxError codes
+    let errorKind = "NotImplemented";
+    if (error instanceof Error && block.type === 'Expression') {
+      if (error.message.includes('ExprSyntaxError')) {
+        errorKind = 'ExprSyntaxError';
+      } else if (error.message.includes('ExprTypeError')) {
+        errorKind = 'ExprTypeError';
+      } else if (error.message.includes('ExprCompileError')) {
+        errorKind = 'ExprCompileError';
+      }
+    }
 
     errors.push({
-      code: "NotImplemented",
+      code: errorKind,
       message: errorMsg,
       where: { blockId: block.id },
     });

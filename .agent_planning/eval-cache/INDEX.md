@@ -10,10 +10,10 @@
 
 ### Runtime Findings
 
-**runtime-continuity-controls-v2.md** [UPDATED - STALE]
+**runtime-continuity-controls-v2.md** [FRESH]
 - Scope: continuity-controls-v2
 - Status: Implementation complete, all DoD criteria met
-- Confidence: STALE (ThemeProvider removed - now inherited from App root)
+- Confidence: FRESH (verified 2026-01-21 - ThemeProvider correctly removed, inherits from App root)
 - Reusable: SliderWithInput component usage, baseTauMs factor application, test pulse patterns
 - Key findings: Complete MUI slider migration, base duration control, test pulse feature with visual feedback
 - Next evaluation: Check if SliderWithInput.tsx, ContinuityControls.tsx, or ContinuityApply.ts changed

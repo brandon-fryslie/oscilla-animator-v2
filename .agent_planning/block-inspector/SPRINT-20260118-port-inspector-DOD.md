@@ -2,43 +2,44 @@
 
 **Sprint:** Port Sub-Inspector & Full Control Support
 **Generated:** 2026-01-18
+**Status:** ✅ COMPLETE (verified 2026-01-21)
 
 ## Acceptance Criteria
 
 ### Port Sub-Inspector
 
-- [ ] **Port clickable**: Each port in the inspector is clickable
-- [ ] **Port detail view**: Clicking a port shows detailed port information
-- [ ] **Port info displayed**: Shows port ID, label, signal type, optional status
-- [ ] **Default source shown**: If port has defaultSource, it's displayed
-- [ ] **Connection shown**: Connected port shows source/target info
-- [ ] **Back navigation**: Can return from port view to block view
+- [x] **Port clickable**: Each port in the inspector is clickable
+- [x] **Port detail view**: Clicking a port shows detailed port information
+- [x] **Port info displayed**: Shows port ID, label, signal type, optional status
+- [x] **Default source shown**: If port has defaultSource, it's displayed
+- [x] **Connection shown**: Connected port shows source/target info
+- [x] **Back navigation**: Can return from port view to block view
 
 ### Connection Navigation
 
-- [ ] **Source links clickable**: Connected input port shows source block as link
-- [ ] **Target links clickable**: Output port shows target blocks as links
-- [ ] **Link navigates**: Clicking link selects that block in inspector
-- [ ] **Visual feedback**: Links have hover state (underline, color change)
+- [x] **Source links clickable**: Connected input port shows source block as link
+- [x] **Target links clickable**: Output port shows target blocks as links
+- [x] **Link navigates**: Clicking link selects that block in inspector
+- [x] **Visual feedback**: Links have hover state (underline, color change)
 
 ### Full UIControlHint Support
 
-- [ ] **Slider control**: `uiHint: { kind: 'slider' }` renders as MUI Slider
-- [ ] **Int control**: `uiHint: { kind: 'int' }` renders as integer input
-- [ ] **Float control**: `uiHint: { kind: 'float' }` renders as decimal input
-- [ ] **Select control**: `uiHint: { kind: 'select' }` renders as dropdown
-- [ ] **Boolean control**: `uiHint: { kind: 'boolean' }` renders as toggle
-- [ ] **Color control**: `uiHint: { kind: 'color' }` renders as color picker
-- [ ] **Text control**: `uiHint: { kind: 'text' }` renders as text input
-- [ ] **XY control**: `uiHint: { kind: 'xy' }` renders as x/y pair inputs
-- [ ] **Fallback**: Unknown hints fall back to text input
+- [x] **Slider control**: `uiHint: { kind: 'slider' }` renders as MUI Slider
+- [x] **Int control**: `uiHint: { kind: 'int' }` renders as integer input
+- [x] **Float control**: `uiHint: { kind: 'float' }` renders as decimal input
+- [x] **Select control**: `uiHint: { kind: 'select' }` renders as dropdown
+- [x] **Boolean control**: `uiHint: { kind: 'boolean' }` renders as toggle
+- [x] **Color control**: `uiHint: { kind: 'color' }` renders as color picker
+- [x] **Text control**: `uiHint: { kind: 'text' }` renders as text input
+- [x] **XY control**: `uiHint: { kind: 'xy' }` renders as x/y pair inputs
+- [x] **Fallback**: Unknown hints fall back to text input
 
 ### Edge Inspector (if included)
 
-- [ ] **Edge clickable**: Clicking edge in ReactFlow shows edge inspector
-- [ ] **Edge info displayed**: Shows source/target block and port
-- [ ] **Navigation works**: Both ends are clickable links
-- [ ] **Status shown**: Edge enabled/disabled status visible
+- [x] **Edge clickable**: Clicking edge in ReactFlow shows edge inspector
+- [x] **Edge info displayed**: Shows source/target block and port
+- [x] **Navigation works**: Both ends are clickable links
+- [x] **Status shown**: Edge enabled/disabled status visible
 
 ## Verification Method
 
