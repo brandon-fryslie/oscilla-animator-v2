@@ -381,6 +381,7 @@ function convertLinkedIRToProgram(
     i32: 0,
     u32: 0,
     object: 0,
+    shape2d: 0,
   };
 
   // Build slotMeta entries for all allocated slots
@@ -390,8 +391,8 @@ function convertLinkedIRToProgram(
     const type = slotTypes.get(slot) || signalType('float'); // Default to float if no type info
 
     // Determine storage class from type
-    // For now, simple mapping: all numbers go to f64
-    const storage: SlotMetaEntry['storage'] = 'f64';
+    // Shape payloads use dedicated shape2d bank; all numbers go to f64
+    const storage: SlotMetaEntry['storage'] = type.payload === 'shape' ? 'shape2d' : 'f64';
 
     const offset = storageOffsets[storage]++;
 

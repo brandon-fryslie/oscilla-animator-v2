@@ -13,10 +13,49 @@ import { createContinuityState } from './ContinuityState';
 import type { DebugTap } from './DebugTap';
 
 /**
+ * Shape2D packed record word layout (8 x u32 words per shape)
+ *
+ * Fixed-width record for efficient shape storage and dispatch.
+ * See: .agent_planning/_future/12-shapes-types.md
+ */
+export const SHAPE2D_WORDS = 8;
+
+export enum Shape2DWord {
+  /** Numeric topology ID (dispatch key) */
+  TopologyId = 0,
+  /** FieldSlot ID containing control points (vec2) */
+  PointsFieldSlot = 1,
+  /** Number of vec2 points expected (validation / fast path) */
+  PointsCount = 2,
+  /** Optional: scalar slot or style table ID (0 means default) */
+  StyleRef = 3,
+  /** Bitfield: fill/stroke, fillRule, closed, etc. */
+  Flags = 4,
+  /** Reserved for future use */
+  Reserved0 = 5,
+  Reserved1 = 6,
+  Reserved2 = 7,
+}
+
+/**
+ * Shape2D flags bitfield values
+ */
+export const Shape2DFlags = {
+  /** Shape path is closed */
+  CLOSED: 1 << 0,
+  /** Use fill rendering */
+  FILL: 1 << 1,
+  /** Use stroke rendering */
+  STROKE: 1 << 2,
+  /** Fill rule: 0 = nonzero, 1 = evenodd */
+  EVENODD_FILL: 1 << 3,
+} as const;
+
+/**
  * ValueStore - Slot-based value storage
  *
  * Stores evaluated signal values by slot ID.
- * Uses Float64Array for numeric values, Map for objects.
+ * Uses typed arrays for performance, Map for complex types.
  */
 export interface ValueStore {
   /** Numeric values (most signals) */
@@ -24,16 +63,83 @@ export interface ValueStore {
 
   /** Object values (colors, complex types) */
   objects: Map<ValueSlot, unknown>;
+
+  /**
+   * Packed shape2d values (8 x u32 words per shape)
+   *
+   * Layout: [shape0_word0..shape0_word7, shape1_word0..shape1_word7, ...]
+   * Access: shape2d[offset * SHAPE2D_WORDS + Shape2DWord.TopologyId]
+   */
+  shape2d: Uint32Array;
 }
 
 /**
  * Create a ValueStore with the given slot count
+ *
+ * @param slotCount - Total number of slots for f64 storage
+ * @param shape2dSlotCount - Number of shape2d slots (defaults to 0)
  */
-export function createValueStore(slotCount: number): ValueStore {
+export function createValueStore(slotCount: number, shape2dSlotCount: number = 0): ValueStore {
   return {
     f64: new Float64Array(slotCount),
     objects: new Map(),
+    shape2d: new Uint32Array(shape2dSlotCount * SHAPE2D_WORDS),
   };
+}
+
+// =============================================================================
+// Shape2D Pack/Unpack Utilities
+// =============================================================================
+
+/**
+ * Unpacked shape2d record for easier manipulation
+ */
+export interface Shape2DRecord {
+  /** Numeric topology ID (dispatch key) */
+  topologyId: number;
+  /** FieldSlot ID containing control points (vec2) */
+  pointsFieldSlot: number;
+  /** Number of vec2 points expected */
+  pointsCount: number;
+  /** Style reference (0 = default) */
+  styleRef: number;
+  /** Flags bitfield */
+  flags: number;
+}
+
+/**
+ * Read a shape2d record from the packed bank
+ *
+ * @param bank - The shape2d Uint32Array bank
+ * @param offset - Slot offset (not byte offset)
+ * @returns Unpacked shape2d record
+ */
+export function readShape2D(bank: Uint32Array, offset: number): Shape2DRecord {
+  const baseIndex = offset * SHAPE2D_WORDS;
+  return {
+    topologyId: bank[baseIndex + Shape2DWord.TopologyId],
+    pointsFieldSlot: bank[baseIndex + Shape2DWord.PointsFieldSlot],
+    pointsCount: bank[baseIndex + Shape2DWord.PointsCount],
+    styleRef: bank[baseIndex + Shape2DWord.StyleRef],
+    flags: bank[baseIndex + Shape2DWord.Flags],
+  };
+}
+
+/**
+ * Write a shape2d record to the packed bank
+ *
+ * @param bank - The shape2d Uint32Array bank
+ * @param offset - Slot offset (not byte offset)
+ * @param record - Shape2d record to write
+ */
+export function writeShape2D(bank: Uint32Array, offset: number, record: Shape2DRecord): void {
+  const baseIndex = offset * SHAPE2D_WORDS;
+  bank[baseIndex + Shape2DWord.TopologyId] = record.topologyId;
+  bank[baseIndex + Shape2DWord.PointsFieldSlot] = record.pointsFieldSlot;
+  bank[baseIndex + Shape2DWord.PointsCount] = record.pointsCount;
+  bank[baseIndex + Shape2DWord.StyleRef] = record.styleRef;
+  bank[baseIndex + Shape2DWord.Flags] = record.flags;
+  // Reserved words are left as 0
 }
 
 /**

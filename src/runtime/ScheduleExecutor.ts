@@ -127,7 +127,7 @@ export interface RenderPassIR {
 function resolveSlotOffset(
   program: CompiledProgramIR,
   slot: ValueSlot
-): { storage: 'f64' | 'f32' | 'i32' | 'u32' | 'object'; offset: number; slot: ValueSlot } {
+): { storage: 'f64' | 'f32' | 'i32' | 'u32' | 'object' | 'shape2d'; offset: number; slot: ValueSlot } {
   const meta = program.slotMeta.find((m) => m.slot === slot);
   if (!meta) {
     throw new Error(`Slot ${slot} not found in slotMeta`);

@@ -9,6 +9,7 @@
 
 import React, { useCallback, useState, useEffect } from 'react';
 import { observer } from 'mobx-react-lite';
+import { Slider, Checkbox, FormControlLabel, Select, MenuItem, Typography, Box, type SelectChangeEvent } from '@mui/material';
 import type { BlockId, UIControlHint } from '../../types';
 import { useStores } from '../../stores';
 
@@ -45,9 +46,9 @@ export const FloatControl: React.FC<ParameterControlProps> = observer(({ blockId
     setLocalValue(numValue);
   }, [numValue]);
 
-  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = parseFloat(e.target.value);
-    setLocalValue(newValue);
+  const handleChange = useCallback((_event: Event, newValue: number | number[]) => {
+    const val = Array.isArray(newValue) ? newValue[0] : newValue;
+    setLocalValue(val);
 
     // Clear existing timer
     if (updateTimer !== null) {
@@ -56,33 +57,44 @@ export const FloatControl: React.FC<ParameterControlProps> = observer(({ blockId
 
     // Debounce: update PatchStore after 100ms of no changes
     const timer = window.setTimeout(() => {
-      patch.updateBlockParams(blockId, { [paramId]: newValue });
+      patch.updateBlockParams(blockId, { [paramId]: val });
     }, 100);
 
     setUpdateTimer(timer);
   }, [blockId, paramId, patch, updateTimer]);
 
   return (
-    <div style={{ marginBottom: '4px', fontSize: '11px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '2px' }}>
-        <span style={{ color: '#aaa', minWidth: '60px', fontSize: '10px' }}>{label}:</span>
-        <span style={{ color: '#fff', fontWeight: 'bold', fontSize: '10px' }}>{localValue.toFixed(2)}</span>
-      </div>
-      <input
-        type="range"
+    <Box sx={{ mb: 0.5 }} onPointerDown={(e) => e.stopPropagation()} className="nodrag">
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.25 }}>
+        <Typography variant="caption" sx={{ color: '#aaa', minWidth: '60px', fontSize: '10px' }}>
+          {label}:
+        </Typography>
+        <Typography variant="caption" sx={{ color: '#fff', fontWeight: 'bold', fontSize: '10px' }}>
+          {localValue.toFixed(2)}
+        </Typography>
+      </Box>
+      <Slider
+        value={localValue}
+        onChange={handleChange}
         min={min}
         max={max}
         step={step}
-        value={localValue}
-        onChange={handleChange}
-        style={{
-          width: '100%',
-          height: '4px',
-          cursor: 'pointer',
-          accentColor: '#4a90e2',
+        size="small"
+        sx={{
+          py: 0.5,
+          '& .MuiSlider-thumb': {
+            width: 12,
+            height: 12,
+          },
+          '& .MuiSlider-rail': {
+            height: 3,
+          },
+          '& .MuiSlider-track': {
+            height: 3,
+          },
         }}
       />
-    </div>
+    </Box>
   );
 });
 
@@ -99,15 +111,20 @@ export const BoolControl: React.FC<ParameterControlProps> = observer(({ blockId,
   }, [blockId, paramId, patch]);
 
   return (
-    <div style={{ marginBottom: '4px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-      <input
-        type="checkbox"
-        checked={boolValue}
-        onChange={handleChange}
-        style={{ cursor: 'pointer' }}
-      />
-      <span style={{ color: '#aaa', fontSize: '10px' }}>{label}</span>
-    </div>
+    <FormControlLabel
+      control={
+        <Checkbox
+          checked={boolValue}
+          onChange={handleChange}
+          onPointerDown={(e) => e.stopPropagation()}
+          className="nodrag"
+          size="small"
+          sx={{ py: 0, '& .MuiSvgIcon-root': { fontSize: 16 } }}
+        />
+      }
+      label={<Typography variant="caption" sx={{ color: '#aaa', fontSize: '10px' }}>{label}</Typography>}
+      sx={{ mb: 0.5, ml: 0 }}
+    />
   );
 });
 
@@ -122,42 +139,43 @@ export const EnumControl: React.FC<ParameterControlProps> = observer(({ blockId,
   // Extract options from hint
   const options = hint && hint.kind === 'select' ? hint.options : [];
 
-  const handleChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleChange = useCallback((e: SelectChangeEvent<string>) => {
     patch.updateBlockParams(blockId, { [paramId]: e.target.value });
   }, [blockId, paramId, patch]);
 
   if (options.length === 0) {
     return (
-      <div style={{ marginBottom: '4px', fontSize: '10px', color: '#f00' }}>
+      <Typography variant="caption" sx={{ mb: 0.5, display: 'block', color: '#f00', fontSize: '10px' }}>
         {label}: (no options)
-      </div>
+      </Typography>
     );
   }
 
   return (
-    <div style={{ marginBottom: '4px', fontSize: '11px' }}>
-      <div style={{ color: '#aaa', fontSize: '10px', marginBottom: '2px' }}>{label}:</div>
-      <select
+    <Box sx={{ mb: 0.5 }} onPointerDown={(e) => e.stopPropagation()} className="nodrag">
+      <Typography variant="caption" sx={{ color: '#aaa', fontSize: '10px', mb: 0.25, display: 'block' }}>
+        {label}:
+      </Typography>
+      <Select
         value={stringValue}
         onChange={handleChange}
-        style={{
-          width: '100%',
-          padding: '2px 4px',
+        size="small"
+        fullWidth
+        sx={{
           fontSize: '10px',
-          background: '#2a2a2a',
-          color: '#e0e0e0',
-          border: '1px solid #555',
-          borderRadius: '3px',
-          cursor: 'pointer',
+          '& .MuiSelect-select': {
+            py: 0.5,
+            px: 1,
+          },
         }}
       >
         {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>
+          <MenuItem key={opt.value} value={opt.value} sx={{ fontSize: '10px' }}>
             {opt.label}
-          </option>
+          </MenuItem>
         ))}
-      </select>
-    </div>
+      </Select>
+    </Box>
   );
 });
 

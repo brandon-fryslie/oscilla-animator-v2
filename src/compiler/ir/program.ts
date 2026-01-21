@@ -134,7 +134,7 @@ export interface SlotMetaEntry {
   readonly slot: ValueSlot;
 
   /** Physical storage class (backing store selection) */
-  readonly storage: 'f64' | 'f32' | 'i32' | 'u32' | 'object';
+  readonly storage: 'f64' | 'f32' | 'i32' | 'u32' | 'object' | 'shape2d';
 
   /**
    * REQUIRED: absolute offset into the backing store for this storage class.

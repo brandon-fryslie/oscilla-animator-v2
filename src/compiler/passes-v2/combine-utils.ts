@@ -121,6 +121,17 @@ export function validateCombineMode(
     };
   }
 
+  if (payload === 'shape') {
+    // Shape domain only supports 'last', 'first', and 'layer' (not numeric combines)
+    if (mode === 'layer') {
+      return { valid: true };
+    }
+    return {
+      valid: false,
+      reason: 'Shape domain only supports combineMode "last", "first", and "layer"',
+    };
+  }
+
   // Boolean and other domains only support 'last' and 'first'
   return {
     valid: false,

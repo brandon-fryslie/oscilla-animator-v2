@@ -41,6 +41,7 @@ function createTestRuntimeState(): RuntimeState {
     values: {
       f64: new Float64Array(0),
       objects: new Map(),
+      shape2d: new Uint32Array(0),
     },
     state: new Float64Array(0),
     cache: {
