@@ -73,11 +73,10 @@ function compileLiteral(node: ExprNode & { kind: 'literal' }, ctx: CompileContex
  * Compile identifier node to input signal reference.
  */
 function compileIdentifier(node: ExprNode & { kind: 'identifier' }, ctx: CompileContext): SigExprId {
-  const sigId = ctx.inputs.get(node.name);
-  if (!sigId) {
+  if (!ctx.inputs.has(node.name)) {
     throw new Error(`Undefined input '${node.name}' during compilation (should have been caught by type checker)`);
   }
-  return sigId;
+  return ctx.inputs.get(node.name)!;
 }
 
 /**

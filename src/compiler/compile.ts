@@ -19,6 +19,7 @@ import type { CompiledProgramIR, SlotMetaEntry, ValueSlot } from './ir/program';
 import { convertCompileErrorsToDiagnostics } from './diagnosticConversion';
 import type { EventHub } from '../events/EventHub';
 import { signalType } from '../core/canonical-types';
+import { debugService } from '../services/DebugService';
 
 // Import block registrations (side-effect imports to register blocks)
 import '../blocks/time-blocks';
@@ -189,6 +190,9 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
     // Convert to CompiledProgramIR
     const compiledIR = convertLinkedIRToProgram(unlinkedIR, scheduleIR);
 
+    // Build edge-to-slot map for debug service (Sprint 1: Debug Probe)
+    buildEdgeToSlotMap(patch, typedPatch, unlinkedIR);
+
     // Emit CompileEnd event (success)
     if (options) {
       const durationMs = performance.now() - startTime;
@@ -342,4 +346,60 @@ function convertLinkedIRToProgram(
     slotMeta,
     debugIndex,
   };
+}
+
+/**
+ * Build edge-to-slot map for DebugService (Sprint 1: Debug Probe)
+ *
+ * Maps each edge to its corresponding slot in the runtime ValueStore.
+ * This enables UI to query runtime values by hovering edges.
+ *
+ * Algorithm:
+ * 1. For each edge in the patch
+ * 2. Look up the target port in the IR's debugIndex
+ * 3. Find the slot assigned to that port
+ * 4. Get the signal type from typedPatch
+ * 5. Store mapping: edge.id → { slotId, type }
+ *
+ * @param patch - Original patch with edges
+ * @param typedPatch - Typed patch from pass2 (has type info)
+ * @param unlinkedIR - IR from pass6 (has debugIndex with port→slot mapping)
+ */
+function buildEdgeToSlotMap(patch: Patch, typedPatch: any, unlinkedIR: any): void {
+  const edgeMetaMap = new Map<string, { slotId: ValueSlot; type: any }>();
+  const debugIndex = unlinkedIR.builder?.debugIndex;
+
+  // If no debugIndex, we can't build the map
+  if (!debugIndex || !debugIndex.slotToPort) {
+    console.warn('[DebugService] No debugIndex available, edge-to-slot map will be empty');
+    debugService.setEdgeToSlotMap(edgeMetaMap);
+    return;
+  }
+
+  // Build reverse map: port → slot
+  const portToSlot = new Map<string, ValueSlot>();
+  for (const [slot, portKey] of debugIndex.slotToPort.entries()) {
+    portToSlot.set(portKey, slot as ValueSlot);
+  }
+
+  // For each edge, resolve its target port to a slot
+  for (const edge of patch.edges) {
+    // Build port key: "blockId:portId"
+    const targetPortKey = `${edge.to.blockId}:${edge.to.slotId}`;
+    const slotId = portToSlot.get(targetPortKey);
+
+    if (slotId !== undefined) {
+      // Get type from typedPatch (or default to float)
+      // typedPatch should have a typeGraph with edge types
+      const edgeType = typedPatch.typeGraph?.edges?.get(edge.id)?.type || signalType('float');
+
+      edgeMetaMap.set(edge.id, {
+        slotId,
+        type: edgeType,
+      });
+    }
+  }
+
+  // Pass to DebugService
+  debugService.setEdgeToSlotMap(edgeMetaMap);
 }
