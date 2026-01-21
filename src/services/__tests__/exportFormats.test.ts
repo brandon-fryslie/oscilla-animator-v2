@@ -1,0 +1,275 @@
+/**
+ * Export Format Utilities Tests
+ *
+ * Tests format utilities for patch export.
+ */
+
+import { describe, it, expect } from 'vitest';
+import {
+  formatBlockShorthand,
+  formatConnectionLine,
+  formatConfigValue,
+  isNonDefault,
+} from '../exportFormats';
+import type { Block, Edge } from '../../graph/Patch';
+import type { BlockDef } from '../../blocks/registry';
+import { blockId } from '../../types';
+
+describe('exportFormats', () => {
+  describe('formatConfigValue', () => {
+    it('formats primitives correctly', () => {
+      expect(formatConfigValue(42)).toBe('42');
+      expect(formatConfigValue(3.14)).toBe('3.14');
+      expect(formatConfigValue(true)).toBe('true');
+      expect(formatConfigValue(false)).toBe('false');
+      expect(formatConfigValue('hello')).toBe('hello');
+      expect(formatConfigValue(null)).toBe('null');
+      expect(formatConfigValue(undefined)).toBe('undefined');
+    });
+
+    it('formats arrays correctly', () => {
+      expect(formatConfigValue([1, 2, 3])).toBe('[1, 2, 3]');
+      expect(formatConfigValue([])).toBe('[]');
+      expect(formatConfigValue([true, false])).toBe('[true, false]');
+    });
+
+    it('formats objects correctly', () => {
+      expect(formatConfigValue({ x: 1, y: 2 })).toBe('{x: 1, y: 2}');
+      expect(formatConfigValue({})).toBe('{}');
+    });
+
+    it('formats expression strings as-is', () => {
+      expect(formatConfigValue('index*0.1')).toBe('index*0.1');
+      expect(formatConfigValue('sin(t)')).toBe('sin(t)');
+    });
+
+    it('formats nested structures', () => {
+      expect(formatConfigValue([{ x: 1 }, { x: 2 }])).toBe('[{x: 1}, {x: 2}]');
+      expect(formatConfigValue({ arr: [1, 2] })).toBe('{arr: [1, 2]}');
+    });
+  });
+
+  describe('isNonDefault', () => {
+    it('returns false for matching primitives', () => {
+      expect(isNonDefault(42, 42)).toBe(false);
+      expect(isNonDefault('hello', 'hello')).toBe(false);
+      expect(isNonDefault(true, true)).toBe(false);
+    });
+
+    it('returns true for different primitives', () => {
+      expect(isNonDefault(42, 100)).toBe(true);
+      expect(isNonDefault('hello', 'world')).toBe(true);
+      expect(isNonDefault(true, false)).toBe(true);
+    });
+
+    it('returns true when default is undefined', () => {
+      expect(isNonDefault(42, undefined)).toBe(true);
+      expect(isNonDefault('value', undefined)).toBe(true);
+    });
+
+    it('compares arrays correctly', () => {
+      expect(isNonDefault([1, 2, 3], [1, 2, 3])).toBe(false);
+      expect(isNonDefault([1, 2], [1, 2, 3])).toBe(true);
+      expect(isNonDefault([1, 2, 3], [1, 3, 3])).toBe(true);
+    });
+
+    it('compares objects correctly', () => {
+      expect(isNonDefault({ x: 1, y: 2 }, { x: 1, y: 2 })).toBe(false);
+      expect(isNonDefault({ x: 1 }, { x: 1, y: 2 })).toBe(true);
+      expect(isNonDefault({ x: 1, y: 2 }, { x: 1, y: 3 })).toBe(true);
+    });
+  });
+
+  describe('formatBlockShorthand', () => {
+    it('formats block without definition (no config)', () => {
+      const block: Block = {
+        id: blockId('b1'),
+        type: 'Array',
+        params: { count: 100 },
+        displayName: null,
+        domainId: null,
+        role: { kind: 'user', meta: {} },
+        inputPorts: new Map(),
+        outputPorts: new Map(),
+      };
+
+      expect(formatBlockShorthand(block, undefined)).toBe('b1:Array');
+    });
+
+    it('omits parentheses when all values are default', () => {
+      const block: Block = {
+        id: blockId('b1'),
+        type: 'Array',
+        params: { count: 100 },
+        displayName: null,
+        domainId: null,
+        role: { kind: 'user', meta: {} },
+        inputPorts: new Map(),
+        outputPorts: new Map(),
+      };
+
+      const definition: BlockDef = {
+        type: 'Array',
+        label: 'Array',
+        category: 'Instance',
+        form: 'primitive',
+        capability: 'pure',
+        inputs: {
+          count: { type: { payload: 'float' } as any, value: 100 },
+        },
+        outputs: {
+          instances: { type: { payload: 'instances' } as any },
+        },
+        lower: () => ({ outputsById: {} }),
+      };
+
+      expect(formatBlockShorthand(block, definition)).toBe('b1:Array');
+    });
+
+    it('includes non-default config values', () => {
+      const block: Block = {
+        id: blockId('b1'),
+        type: 'Array',
+        params: { count: 5000 },
+        displayName: null,
+        domainId: null,
+        role: { kind: 'user', meta: {} },
+        inputPorts: new Map(),
+        outputPorts: new Map(),
+      };
+
+      const definition: BlockDef = {
+        type: 'Array',
+        label: 'Array',
+        category: 'Instance',
+        form: 'primitive',
+        capability: 'pure',
+        inputs: {
+          count: { type: { payload: 'float' } as any, value: 100 },
+        },
+        outputs: {
+          instances: { type: { payload: 'instances' } as any },
+        },
+        lower: () => ({ outputsById: {} }),
+      };
+
+      expect(formatBlockShorthand(block, definition)).toBe('b1:Array(count=5000)');
+    });
+
+    it('includes multiple non-default config values', () => {
+      const block: Block = {
+        id: blockId('b3'),
+        type: 'ProceduralPolygon',
+        params: { sides: 5, rx: 0.2 },
+        displayName: null,
+        domainId: null,
+        role: { kind: 'user', meta: {} },
+        inputPorts: new Map(),
+        outputPorts: new Map(),
+      };
+
+      const definition: BlockDef = {
+        type: 'ProceduralPolygon',
+        label: 'Procedural Polygon',
+        category: 'Shape',
+        form: 'primitive',
+        capability: 'pure',
+        inputs: {
+          sides: { type: { payload: 'float' } as any, value: 3 },
+          rx: { type: { payload: 'float' } as any, value: 0.5 },
+        },
+        outputs: {
+          shape: { type: { payload: 'shape' } as any },
+        },
+        lower: () => ({ outputsById: {} }),
+      };
+
+      expect(formatBlockShorthand(block, definition)).toBe(
+        'b3:ProceduralPolygon(sides=5, rx=0.2)'
+      );
+    });
+
+    it('formats expression values', () => {
+      const block: Block = {
+        id: blockId('b4'),
+        type: 'HSVColor',
+        params: { h: 'index*0.1' },
+        displayName: null,
+        domainId: null,
+        role: { kind: 'user', meta: {} },
+        inputPorts: new Map(),
+        outputPorts: new Map(),
+      };
+
+      const definition: BlockDef = {
+        type: 'HSVColor',
+        label: 'HSV Color',
+        category: 'Color',
+        form: 'primitive',
+        capability: 'pure',
+        inputs: {
+          h: { type: { payload: 'float' } as any, value: 0 },
+        },
+        outputs: {
+          color: { type: { payload: 'color' } as any },
+        },
+        lower: () => ({ outputsById: {} }),
+      };
+
+      expect(formatBlockShorthand(block, definition)).toBe('b4:HSVColor(h=index*0.1)');
+    });
+  });
+
+  describe('formatConnectionLine', () => {
+    it('formats valid connection correctly', () => {
+      const blocks = new Map<string, Block>([
+        [
+          'b1',
+          {
+            id: blockId('b1'),
+            type: 'Array',
+            params: {},
+            displayName: null,
+            domainId: null,
+            role: { kind: 'user', meta: {} },
+            inputPorts: new Map(),
+            outputPorts: new Map([['instances', { id: 'instances' }]]),
+          },
+        ],
+        [
+          'b2',
+          {
+            id: blockId('b2'),
+            type: 'CircleLayout',
+            params: {},
+            displayName: null,
+            domainId: null,
+            role: { kind: 'user', meta: {} },
+            inputPorts: new Map([['instances', { id: 'instances' }]]),
+            outputPorts: new Map(),
+          },
+        ],
+      ]);
+
+      const edge: Edge = {
+        id: 'e1',
+        from: { kind: 'port', blockId: 'b1', slotId: 'instances' },
+        to: { kind: 'port', blockId: 'b2', slotId: 'instances' },
+      };
+
+      expect(formatConnectionLine(edge, blocks)).toBe('b1.instances → b2.instances');
+    });
+
+    it('handles invalid edge (missing block) gracefully', () => {
+      const blocks = new Map<string, Block>();
+      const edge: Edge = {
+        id: 'e1',
+        from: { kind: 'port', blockId: 'b1', slotId: 'out' },
+        to: { kind: 'port', blockId: 'b2', slotId: 'in' },
+      };
+
+      const result = formatConnectionLine(edge, blocks);
+      expect(result).toContain('[INVALID]');
+    });
+  });
+});
