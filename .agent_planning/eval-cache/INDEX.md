@@ -22,7 +22,6 @@
 - Key findings: Complete MUI slider migration, base duration control, test pulse feature with visual feedback
 - Next evaluation: Check if SliderWithInput.tsx, ContinuityControls.tsx, or ContinuityApply.ts changed
 
-**runtime-unified-defaults.md** [UPDATED - STALE]
 - Scope: buses-and-rails/unified-defaults
 - Status: Implementation complete, but codebase has unrelated TypeScript errors
 - Confidence: STALE (IR types.ts updated 2026-01-21 for OpCode enum)
@@ -51,7 +50,6 @@
 - Status: Structurally complete
 - Confidence: STALE (use runtime-dual-editor-reactflow-p0.md instead)
 
-**runtime-unified-inputs.md** [UPDATED - STALE]
 - Scope: param-ui-hints/unified-inputs
 - Status: COMPLETE (all DoD criteria verified)
 - Confidence: STALE (types.ts IR definitions updated 2026-01-21 with OpCode enum additions)
@@ -107,8 +105,6 @@
 - findings-compilation-inspector.md - IR generation patterns changed
 
 **Marked STALE:**
-- runtime-unified-defaults.md - types.ts OpCode enum updated with 9 new opcodes
-- runtime-unified-inputs.md - types.ts OpCode enum updated with 9 new opcodes
 
 **Rationale:**
 - Modified src/compiler/ir/types.ts: Added Sqrt, Floor, Ceil, Round, Pow, Fract, Exp, Log, Sign to OpCode enum
@@ -167,7 +163,6 @@
 
 ### 2026-01-20 16:00:00 - Unified Shape Foundation (unified-shape-foundation)
 **Marked STALE:**
-- runtime-unified-inputs.md - primitive-blocks.ts modified with sigShapeRef usage
 
 **Rationale:**
 - Implemented unified shape model with topology system
@@ -270,7 +265,6 @@
 
 ### 2026-01-20 - Sprint 4: Editable Defaults (ui-features-v2)
 **Modified (Extended Patterns):**
-- runtime-unified-defaults.md - BlockInspector.tsx now has editable Const/TimeRoot defaults
 
 **Rationale:**
 - BlockInspector.tsx: Added PortDefaultSourceEditor with special handling for Const and TimeRoot blocks
@@ -309,7 +303,6 @@
 
 ### 2026-01-20 14:30:00 - Type System Alignment (type-fixes)
 **Marked STALE:**
-- runtime-unified-inputs.md - types.ts modified with IR type updates
 
 **Rationale:**
 - Modified src/compiler/ir/types.ts: Updated all IR types to match IRBuilderImpl implementation

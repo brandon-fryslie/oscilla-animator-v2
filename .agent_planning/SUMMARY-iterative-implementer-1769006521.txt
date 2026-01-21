@@ -1,0 +1,63 @@
+Agent: iterative-implementer | 2026-01-21 07:48:41 UTC
+Mode: manual
+Completed: P0 (palette/energy outputs), P1 (independent periods), P2 (phase types) | Files: 14 | Commits: 1
+Tests: 544 passing, 3 failing (pre-existing)
+Cache invalidated: runtime-unified-defaults.md, runtime-unified-inputs.md
+Status: complete
+
+Summary
+=======
+
+Successfully completed all three work items from PLAN-20260112.md for the time-model sprint:
+
+P0: Palette and Energy Outputs
+- Added palette output (HSV rainbow based on phaseA)
+- Added energy output (sine wave based on phaseA)  
+- Updated TimeSignals, EffectiveTime, SigExprTime interfaces
+- Added signal generation in pass3-time.ts
+- Palette stored in objects map slot 0 for proper color handling
+- Computation: palette = HSV(phaseA, 1.0, 0.5) → RGB, energy = 0.5 + 0.5 * sin(phaseA * 2π)
+
+P1: Independent Period Configuration  
+- Replaced single periodMs parameter with periodAMs (default 1000) and periodBMs (default 2000)
+- Updated InfiniteTimeRoot block definition
+- Updated pass3-time.ts to extract both periods to TimeModel
+- Updated all 4 test fixtures to use new parameter names
+
+P2: Phase PayloadType Correction
+- Already complete: phaseA and phaseB outputs already use 'phase' type
+
+Files Modified
+==============
+- src/blocks/time-blocks.ts - Added palette/energy outputs, updated params
+- src/compiler/passes-v2/pass3-time.ts - Generate palette/energy signals, extract periods
+- src/runtime/timeResolution.ts - Compute palette and energy values
+- src/runtime/SignalEvaluator.ts - Evaluate palette and energy time signals
+- src/runtime/ScheduleExecutor.ts - Store palette in objects map
+- src/compiler/ir/patches.ts - Updated TimeSignals interface
+- src/compiler/ir/types.ts - Updated SigExprTime interface
+- src/compiler/ir/IRBuilder.ts - Updated sigTime method signature
+- src/compiler/ir/IRBuilderImpl.ts - Updated sigTime implementation
+- src/compiler/__tests__/compile.test.ts - Updated 3 test fixtures
+- src/compiler/__tests__/steel-thread.test.ts - Updated 1 test fixture
+- src/runtime/__tests__/continuity-integration.test.ts - Updated test fixture
+- src/runtime/__tests__/project-policy-domain-change.test.ts - Updated 7 test fixtures
+- dist/index.html - Build artifact
+
+Validation
+==========
+- TypeScript compilation: ✓ PASS
+- Build: ✓ PASS
+- Tests: 544 passing, 3 failing (Hash block tests - pre-existing failures confirmed)
+
+Technical Notes
+===============
+Color Handling: Palette is an RGBA object, which cannot be returned directly from evaluateSignal 
+(returns number). Solution: Store palette in objects map at reserved slot 0 and return the slot 
+reference. This follows the existing pattern for object-typed signals.
+
+Phase Independence: TimeModelInfinite interface already supported periodAMs/periodBMs fields.
+Only needed to wire up the block params to the model extraction.
+
+Cache Invalidation: Removed runtime-unified-defaults.md and runtime-unified-inputs.md which 
+contained stale information about TimeRoot outputs and IR types.
