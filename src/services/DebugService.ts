@@ -65,7 +65,6 @@ class DebugService {
    */
   setEdgeToSlotMap(map: Map<string, EdgeMetadata>): void {
     this.edgeToSlotMap = map;
-    console.log(`[DebugService] Mapped ${map.size} edges to slots`);
   }
 
   /**

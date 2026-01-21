@@ -2,8 +2,14 @@
  * SimpleDebugPanel - Minimal Debug Value Display
  *
  * Fixed bottom-right panel that shows runtime values for hovered edges.
- * Sprint 1: Text-only display with basic formatting.
- * Sprint 3: Will be replaced by DebugProbePopover with smart positioning.
+ *
+ * LIMITATION: Only works for Signal edges (scalar values).
+ * Field edges (arrays/buffers) don't show values because:
+ * - Fields use `materialize` steps, not `evalSig` steps
+ * - Displaying arrays requires visualization (histogram, min/max, spatial view)
+ * - Field support deferred until after field refactor
+ *
+ * See: .agent_planning/debug-probe/README.md
  */
 
 import React from 'react';
