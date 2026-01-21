@@ -7,7 +7,7 @@
 
 import React, { useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { rootStore } from '../../stores';
+import { useStores } from '../../stores';
 import { colors } from '../theme';
 
 /**
@@ -28,7 +28,8 @@ interface DomainInfo {
  */
 export const DomainsPanel = observer(function DomainsPanel() {
   const [expandedDomains, setExpandedDomains] = useState<Set<string>>(new Set());
-  const patch = rootStore.patch.patch;
+  const { patch: patchStore } = useStores();
+  const patch = patchStore.patch;
 
   // Extract domain information from patch
   const extractDomains = (): DomainInfo[] => {

@@ -11,12 +11,13 @@
 
 import React, { useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { rootStore } from '../../../stores';
+import { useStores } from '../../../stores';
 import { colors } from '../../theme';
 import type { TargetSummary, MappingSummary, DomainChangeEvent } from '../../../stores/ContinuityStore';
 import { ContinuityControls } from './ContinuityControls';
 
 export const ContinuityPanel = observer(function ContinuityPanel() {
+  const { continuity } = useStores();
   const {
     targets,
     mappings,
@@ -24,7 +25,7 @@ export const ContinuityPanel = observer(function ContinuityPanel() {
     domainChangeThisFrame,
     recentChanges,
     totalDomainChanges,
-  } = rootStore.continuity;
+  } = continuity;
 
   const [controlsExpanded, setControlsExpanded] = useState(false);
 
@@ -250,8 +251,8 @@ function MappingItem({ mapping }: { mapping: MappingSummary }) {
     mapping.kind === 'identity'
       ? '#6bff6b'
       : mapping.kind === 'byId'
-      ? colors.primary
-      : '#ffd93d';
+        ? colors.primary
+        : '#ffd93d';
 
   return (
     <div

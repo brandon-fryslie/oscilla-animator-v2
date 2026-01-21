@@ -9,7 +9,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { observer } from 'mobx-react-lite';
-import { rootStore } from '../../stores';
+import { useStores } from '../../stores';
 import { colors } from '../theme';
 import type { Block } from '../../graph/Patch';
 import type { BlockId } from '../../types';
@@ -39,8 +39,9 @@ interface BlockRowData {
  */
 export const TableView = observer(function TableView() {
   const [expandedBlocks, setExpandedBlocks] = useState<Set<BlockId>>(new Set());
-  const patch = rootStore.patch.patch;
-  const selectedBlockId = rootStore.selection.selectedBlockId;
+  const { patch: patchStore, selection } = useStores();
+  const patch = patchStore.patch;
+  const selectedBlockId = selection.selectedBlockId;
 
   const toggleExpanded = (blockId: BlockId) => {
     setExpandedBlocks(prev => {
@@ -55,11 +56,11 @@ export const TableView = observer(function TableView() {
   };
 
   const handleRowClick = (blockId: BlockId) => {
-    rootStore.selection.selectBlock(blockId);
+    selection.selectBlock(blockId);
   };
 
   const handleConnectionClick = (blockId: BlockId) => {
-    rootStore.selection.selectBlock(blockId);
+    selection.selectBlock(blockId);
   };
 
   // Analyze blocks (P5: Filter out timeRoot blocks)
@@ -225,8 +226,8 @@ const BlockRow: React.FC<BlockRowProps> = ({
     background: isSelected
       ? `${colors.primary}22`
       : isHovered
-      ? 'rgba(255, 255, 255, 0.03)'
-      : 'transparent',
+        ? 'rgba(255, 255, 255, 0.03)'
+        : 'transparent',
   };
 
   return (
@@ -311,7 +312,8 @@ interface ExpandedRowProps {
 }
 
 const ExpandedRow: React.FC<ExpandedRowProps> = observer(({ data, onConnectionClick }) => {
-  const patch = rootStore.patch.patch;
+  const { patch: patchStore } = useStores();
+  const patch = patchStore.patch;
 
   if (!patch) return null;
 

@@ -17,16 +17,17 @@
 import React, { useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { Button } from '@mui/material';
-import { rootStore } from '../../../stores';
+import { useStores } from '../../../stores';
 import { colors } from '../../theme';
 import { SliderWithInput } from '../common/SliderWithInput';
 
 export const ContinuityControls = observer(function ContinuityControls() {
-  const { decayExponent, tauMultiplier, baseTauMs } = rootStore.continuity;
+  const { continuity } = useStores();
+  const { decayExponent, tauMultiplier, baseTauMs } = continuity;
   const [pulseActive, setPulseActive] = useState(false);
 
   const handleTestPulse = () => {
-    rootStore.continuity.triggerTestPulse(50, 'position');
+    continuity.triggerTestPulse(50, 'position');
     setPulseActive(true);
 
     // Clear pulse indicator after 2 seconds (visual feedback)
@@ -48,7 +49,7 @@ export const ContinuityControls = observer(function ContinuityControls() {
         min={0.1}
         max={2.0}
         step={0.1}
-        onChange={(v) => rootStore.continuity.setDecayExponent(v)}
+        onChange={(v) => continuity.setDecayExponent(v)}
         helperText="<0.7 = gentler start, >0.7 = more linear"
       />
 
@@ -59,7 +60,7 @@ export const ContinuityControls = observer(function ContinuityControls() {
         min={0.5}
         max={3.0}
         step={0.1}
-        onChange={(v) => rootStore.continuity.setTauMultiplier(v)}
+        onChange={(v) => continuity.setTauMultiplier(v)}
         helperText="Multiplier for all transition times"
       />
 
@@ -71,7 +72,7 @@ export const ContinuityControls = observer(function ContinuityControls() {
         max={500}
         step={10}
         unit="ms"
-        onChange={(v) => rootStore.continuity.setBaseTauMs(v)}
+        onChange={(v) => continuity.setBaseTauMs(v)}
         helperText="Base transition time (before multiplier)"
       />
 
@@ -115,7 +116,7 @@ export const ContinuityControls = observer(function ContinuityControls() {
         <Button
           variant="outlined"
           size="small"
-          onClick={() => rootStore.continuity.resetToDefaults()}
+          onClick={() => continuity.resetToDefaults()}
           sx={{
             flex: 1,
             fontSize: '0.75rem',
@@ -135,7 +136,7 @@ export const ContinuityControls = observer(function ContinuityControls() {
           size="small"
           onClick={() => {
             if (window.confirm('Clear all continuity state?')) {
-              rootStore.continuity.clearContinuityState();
+              continuity.clearContinuityState();
             }
           }}
           sx={{
