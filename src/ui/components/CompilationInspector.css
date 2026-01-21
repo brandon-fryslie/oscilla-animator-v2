@@ -1,0 +1,545 @@
+/**
+ * CompilationInspector Styles
+ *
+ * Styles for compilation pipeline inspector components:
+ * - CompilationInspector (main panel)
+ * - IRTreeView (tree component)
+ * - IRNodeDetail (detail panel)
+ */
+
+/* =============================================================================
+ * Base Colors
+ * ========================================================================== */
+
+.compilation-inspector {
+  --bg-content: #0f0f23;
+  --bg-panel: #16213e;
+  --bg-hover: rgba(255, 255, 255, 0.05);
+  --border-color: #0f3460;
+  --primary: #8e44ad;
+  --primary-light: #9b59b6;
+  --text-primary: #eee;
+  --text-secondary: #888;
+  --text-muted: #666;
+  --success: #4ecdc4;
+  --error: #ff6b6b;
+  --warning: #ffd93d;
+
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-content);
+  color: var(--text-primary);
+}
+
+/* =============================================================================
+ * Header
+ * ========================================================================== */
+
+.compilation-inspector-header {
+  flex-shrink: 0;
+  padding: 12px 16px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.compilation-inspector-header-info {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 0.813rem;
+}
+
+.compilation-inspector-compile-id,
+.compilation-inspector-status,
+.compilation-inspector-duration {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+}
+
+.compilation-inspector-compile-id span,
+.compilation-inspector-duration span {
+  color: var(--text-primary);
+  font-family: 'Courier New', monospace;
+}
+
+.status-badge {
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+}
+
+.status-success {
+  background: rgba(78, 205, 196, 0.2);
+  color: var(--success);
+}
+
+.status-failure {
+  background: rgba(255, 107, 107, 0.2);
+  color: var(--error);
+}
+
+/* =============================================================================
+ * Tabs
+ * ========================================================================== */
+
+.compilation-inspector-tabs {
+  flex-shrink: 0;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.pass-tab-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-transform: none;
+}
+
+.pass-tab-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(142, 68, 173, 0.2);
+  color: var(--primary-light);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.pass-tab-name {
+  font-weight: 500;
+}
+
+.pass-tab-duration {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+/* =============================================================================
+ * Search
+ * ========================================================================== */
+
+.compilation-inspector-search {
+  flex-shrink: 0;
+  padding: 12px 16px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.search-result-count {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  background: rgba(142, 68, 173, 0.2);
+  color: var(--primary-light);
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* =============================================================================
+ * Pass Info
+ * ========================================================================== */
+
+.compilation-inspector-pass-info {
+  flex-shrink: 0;
+  padding: 12px 16px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.813rem;
+}
+
+.pass-info-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pass-info-label {
+  color: var(--text-secondary);
+  min-width: 80px;
+}
+
+.pass-info-value {
+  color: var(--text-primary);
+  font-family: 'Courier New', monospace;
+}
+
+.pass-info-errors {
+  color: var(--error);
+}
+
+.pass-info-error-count {
+  color: var(--error);
+  font-weight: 700;
+}
+
+/* =============================================================================
+ * Toggle Buttons
+ * ========================================================================== */
+
+.compilation-inspector-toggle {
+  flex-shrink: 0;
+  padding: 12px 16px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  gap: 8px;
+}
+
+.toggle-button {
+  padding: 6px 16px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 0.813rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.toggle-button:hover {
+  background: var(--bg-hover);
+  border-color: var(--text-secondary);
+  color: var(--text-primary);
+}
+
+.toggle-button-active {
+  background: rgba(142, 68, 173, 0.2);
+  border-color: var(--primary);
+  color: var(--primary-light);
+}
+
+.toggle-button-active:hover {
+  background: rgba(142, 68, 173, 0.3);
+}
+
+/* =============================================================================
+ * Content Area
+ * ========================================================================== */
+
+.compilation-inspector-content {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* JSON View */
+.compilation-inspector-json {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+}
+
+.compilation-inspector-json pre {
+  margin: 0;
+  font-family: 'Courier New', monospace;
+  font-size: 0.813rem;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+/* Tree Container */
+.compilation-inspector-tree-container {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  min-height: 0;
+}
+
+.compilation-inspector-tree {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+  min-width: 0;
+}
+
+.compilation-inspector-detail {
+  flex-shrink: 0;
+  width: 400px;
+  overflow: auto;
+  border-left: 1px solid var(--border-color);
+  background: var(--bg-panel);
+}
+
+/* Scrollbar styling */
+.compilation-inspector-tree::-webkit-scrollbar,
+.compilation-inspector-detail::-webkit-scrollbar,
+.compilation-inspector-json::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.compilation-inspector-tree::-webkit-scrollbar-track,
+.compilation-inspector-detail::-webkit-scrollbar-track,
+.compilation-inspector-json::-webkit-scrollbar-track {
+  background-color: var(--bg-content);
+}
+
+.compilation-inspector-tree::-webkit-scrollbar-thumb,
+.compilation-inspector-detail::-webkit-scrollbar-thumb,
+.compilation-inspector-json::-webkit-scrollbar-thumb {
+  background-color: var(--border-color);
+  border-radius: 4px;
+}
+
+.compilation-inspector-tree::-webkit-scrollbar-thumb:hover,
+.compilation-inspector-detail::-webkit-scrollbar-thumb:hover,
+.compilation-inspector-json::-webkit-scrollbar-thumb:hover {
+  background-color: var(--primary);
+}
+
+/* =============================================================================
+ * Errors Section
+ * ========================================================================== */
+
+.compilation-inspector-errors {
+  flex-shrink: 0;
+  max-height: 200px;
+  overflow: auto;
+  padding: 16px;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border-color);
+}
+
+.compilation-inspector-errors h4 {
+  margin: 0 0 12px;
+  font-size: 0.875rem;
+  color: var(--error);
+}
+
+.compilation-error {
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: rgba(255, 107, 107, 0.1);
+  border-left: 3px solid var(--error);
+  border-radius: 4px;
+  font-size: 0.813rem;
+}
+
+.compilation-error-message {
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.compilation-error-location {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-family: 'Courier New', monospace;
+}
+
+/* =============================================================================
+ * Empty State
+ * ========================================================================== */
+
+.compilation-inspector-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  text-align: center;
+}
+
+.compilation-inspector-empty p {
+  margin: 8px 0;
+}
+
+/* =============================================================================
+ * IRTreeView
+ * ========================================================================== */
+
+.ir-tree-view {
+  font-family: 'Courier New', monospace;
+  font-size: 0.813rem;
+  line-height: 1.6;
+  user-select: none;
+}
+
+.tree-node {
+  position: relative;
+}
+
+.tree-node-header,
+.tree-node-leaf {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background 0.15s;
+}
+
+.tree-node-header:hover,
+.tree-node-leaf:hover {
+  background: var(--bg-hover);
+}
+
+.tree-node-highlighted {
+  background: rgba(255, 211, 61, 0.15);
+  border: 1px solid var(--warning);
+}
+
+.tree-node-toggle {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+  font-size: 10px;
+  transition: color 0.15s;
+}
+
+.tree-node-toggle:hover {
+  color: var(--primary-light);
+}
+
+.tree-node-toggle-empty {
+  cursor: default;
+}
+
+.tree-node-key {
+  color: #9cdcfe;
+  font-weight: 500;
+}
+
+.tree-node-value {
+  color: #ce9178;
+}
+
+.tree-node-type {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.tree-node-children {
+  /* Container for child nodes */
+}
+
+/* =============================================================================
+ * IRNodeDetail
+ * ========================================================================== */
+
+.ir-node-detail {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.ir-node-detail-header {
+  flex-shrink: 0;
+  padding: 12px 16px;
+  background: var(--bg-content);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ir-node-detail-path {
+  flex: 1;
+  font-size: 0.813rem;
+  color: var(--text-primary);
+  font-family: 'Courier New', monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ir-node-detail-close {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 3px;
+  font-size: 16px;
+  transition: all 0.15s;
+}
+
+.ir-node-detail-close:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.ir-node-detail-toggle {
+  flex-shrink: 0;
+  padding: 12px 16px;
+  background: var(--bg-content);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  gap: 8px;
+}
+
+.ir-node-detail-content {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+}
+
+.ir-node-detail-json {
+  margin: 0;
+  font-family: 'Courier New', monospace;
+  font-size: 0.813rem;
+  line-height: 1.5;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.ir-node-detail-formatted {
+  font-size: 0.813rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+/* Scrollbar for detail content */
+.ir-node-detail-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.ir-node-detail-content::-webkit-scrollbar-track {
+  background-color: var(--bg-content);
+}
+
+.ir-node-detail-content::-webkit-scrollbar-thumb {
+  background-color: var(--border-color);
+  border-radius: 4px;
+}
+
+.ir-node-detail-content::-webkit-scrollbar-thumb:hover {
+  background-color: var(--primary);
+}
