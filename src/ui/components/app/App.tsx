@@ -7,6 +7,7 @@
  * - Dockview workspace (all panels)
  *
  * Handles editor context switching when users switch between editor tabs.
+ * Provides global keyboard shortcuts.
  */
 
 import React, { useCallback, useState, useEffect, useRef } from 'react';
@@ -15,6 +16,9 @@ import { Toolbar } from './Toolbar';
 import { EditorProvider, type EditorHandle, useEditor } from '../../editorCommon';
 import { DockviewProvider } from '../../dockview';
 import { darkTheme } from '../../theme';
+import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
+import { useExportPatch } from '../../hooks/useExportPatch';
+import { Toast } from '../common/Toast';
 
 interface AppProps {
   onCanvasReady?: (canvas: HTMLCanvasElement) => void;
@@ -28,6 +32,11 @@ export const App: React.FC<AppProps> = ({ onCanvasReady }) => {
   const editorContextRef = useRef<{ setEditorHandle: (handle: EditorHandle | null) => void } | null>(null);
   const [activeEditorTab, setActiveEditorTab] = useState<'flow-editor' | null>('flow-editor');
   const [editorReady, setEditorReady] = useState(false);
+
+  // Toast state for keyboard shortcuts
+  const [toastOpen, setToastOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastSeverity, setToastSeverity] = useState<'success' | 'error'>('success');
 
   // Initialize ref with prop value so it's available immediately on first render
   const canvasCallbackRef = useRef<((canvas: HTMLCanvasElement) => void) | undefined>(onCanvasReady);
@@ -77,6 +86,30 @@ export const App: React.FC<AppProps> = ({ onCanvasReady }) => {
     }
   }, [activeEditorTab, editorReady]);
 
+  // Export hook for keyboard shortcuts
+  const exportPatch = useExportPatch();
+
+  // Keyboard shortcut handlers
+  const handleExportShortcut = useCallback(async () => {
+    const result = await exportPatch();
+    setToastMessage(result.message);
+    setToastSeverity(result.success ? 'success' : 'error');
+    setToastOpen(true);
+
+    if (!result.success && result.error) {
+      console.error('Export error:', result.error);
+    }
+  }, [exportPatch]);
+
+  // Register keyboard shortcuts
+  useKeyboardShortcuts({
+    onExport: handleExportShortcut,
+  });
+
+  const handleToastClose = () => {
+    setToastOpen(false);
+  };
+
   return (
     <ThemeProvider theme={darkTheme}>
       <EditorProvider>
@@ -106,6 +139,14 @@ export const App: React.FC<AppProps> = ({ onCanvasReady }) => {
             />
           </div>
         </div>
+
+        {/* Toast for keyboard shortcut feedback */}
+        <Toast
+          open={toastOpen}
+          message={toastMessage}
+          severity={toastSeverity}
+          onClose={handleToastClose}
+        />
       </EditorProvider>
     </ThemeProvider>
   );
