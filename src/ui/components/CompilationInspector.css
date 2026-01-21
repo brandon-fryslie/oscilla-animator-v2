@@ -236,8 +236,9 @@
 
 .compilation-inspector-content {
   flex: 1;
-  overflow: hidden;
+  overflow: auto;
   display: flex;
+  min-height: 0;
   flex-direction: column;
   min-height: 0;
 }
@@ -260,7 +261,7 @@
 /* Tree Container */
 .compilation-inspector-tree-container {
   flex: 1;
-  overflow: hidden;
+  overflow: auto;
   display: flex;
   min-height: 0;
 }
