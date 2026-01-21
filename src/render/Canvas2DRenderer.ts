@@ -3,6 +3,40 @@
  *
  * Uses canvas API with topology-based shape dispatch.
  * No more hardcoded shape switches - dispatches to topology.render() or path rendering.
+ *
+ * ROADMAP PHASE 6 - FUTURE DIRECTION:
+ *
+ * Current state: Renderer interprets heterogeneous shapes and scales control points
+ * Target state: Renderer as pure sink for explicit DrawOps
+ *
+ * Key changes planned:
+ * 1. Remove shape interpretation logic
+ *    - No more ShapeDescriptor decoding
+ *    - No more determineShapeMode branching
+ *    - No more param name mapping
+ *
+ * 2. Local-space geometry + instance transforms
+ *    Current: Control points scaled by width/height in renderPathAtParticle
+ *    Future: Control points in local space, instance transforms applied:
+ *      ctx.translate(x * width, y * height);
+ *      ctx.rotate(rotation);
+ *      ctx.scale(size, size);
+ *      drawPath(localSpacePoints); // No width/height scaling
+ *
+ * 3. Numeric topology IDs (not strings)
+ *    Current: String lookup in topology registry
+ *    Future: Array index lookup by numeric topologyId
+ *
+ * 4. Explicit style controls
+ *    Current: Only fillColor implicit via ctx.fillStyle
+ *    Future: PathStyle with fill/stroke/width/dash/blend
+ *
+ * 5. Pass-level validation (not per-instance)
+ *    Current: Throws inside particle loop
+ *    Future: Validate once per pass, fast loop
+ *
+ * See: src/render/future-types.ts for target DrawPathInstancesOp
+ *      .agent_planning/_future/9-renderer.md
  */
 
 import type { RenderFrameIR, RenderPassIR, ShapeDescriptor } from '../runtime/ScheduleExecutor';
@@ -144,6 +178,31 @@ function renderInstances2D(
  *
  * Control points from polygonVertex kernel are in normalized space centered at (0,0)
  * with radius defined by radiusX/radiusY. We scale them to canvas pixels.
+ *
+ * ROADMAP PHASE 6 - COORDINATE SPACE ISSUE:
+ * Current: Control points are in normalized [0,1] world space, scaled by width/height
+ * Future: Control points in LOCAL SPACE (centered at origin, |p|≈O(1))
+ *
+ * Current rendering flow:
+ *   1. Materializer outputs control points in normalized [0,1] space
+ *   2. This function scales by width/height to get viewport pixels
+ *   3. Size parameter currently unused (control points include radius)
+ *
+ * Future rendering flow:
+ *   1. Materializer outputs control points in local space (e.g., radius 1.0)
+ *   2. Renderer applies instance transform BEFORE drawing:
+ *      ctx.translate(x, y);    // Already in pixels
+ *      ctx.rotate(rotation);   // Instance rotation
+ *      ctx.scale(size, size);  // Instance size
+ *   3. Draw path with local-space points (no width/height scaling)
+ *
+ * This change makes:
+ * - Geometry independent of viewport dimensions
+ * - Size/rotation modulators work uniformly
+ * - Control points reusable across different instance layouts
+ *
+ * MIGRATION: Will require changes to field kernels (polygonVertex, etc.)
+ * to output local-space coordinates instead of normalized world-space.
  */
 function renderPathAtParticle(
   ctx: CanvasRenderingContext2D,

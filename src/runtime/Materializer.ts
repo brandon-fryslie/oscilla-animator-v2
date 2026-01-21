@@ -101,6 +101,49 @@
  *
  * This design keeps kernels simple, reusable, and backend-independent.
  *
+ * ──────────────────────────────────────────────────────────────────────
+ * ROADMAP PHASE 6 - ALIGNMENT WITH FUTURE RENDERIR
+ * ──────────────────────────────────────────────────────────────────────
+ *
+ * The Materializer outputs are designed to align with the future
+ * DrawPathInstancesOp model (see src/render/future-types.ts).
+ *
+ * CURRENT STATE:
+ * - Control points (polygonVertex) → Field<vec2> in local space
+ * - Position fields (circleLayout) → Field<vec2> in world space [0,1]
+ * - Size/rotation/scale2 → Field<float> or uniform scalars
+ *
+ * FUTURE STATE (no changes needed to Materializer):
+ * - RenderAssembler will consume these fields and produce DrawPathInstancesOp
+ * - PathGeometry.points ← materialize(controlPointsFieldId) [local space]
+ * - InstanceTransforms.position ← materialize(positionFieldId) [world space]
+ * - InstanceTransforms.size ← materialize(sizeFieldId) or uniform
+ * - InstanceTransforms.rotation ← materialize(rotationFieldId) [optional]
+ * - InstanceTransforms.scale2 ← materialize(scale2FieldId) [optional]
+ *
+ * KEY INVARIANTS TO PRESERVE:
+ * 1. Control point fields MUST be in LOCAL SPACE (centered at origin)
+ *    - polygonVertex already does this correctly
+ *    - Future geometry kernels should follow same pattern
+ *
+ * 2. Position fields MUST be in WORLD SPACE normalized [0,1]
+ *    - circleLayout already does this correctly
+ *    - Renderer will multiply by viewport dimensions
+ *
+ * 3. Size is ISOTROPIC SCALE in world units
+ *    - scale2 is ANISOTROPIC multiplier on top of size
+ *    - Effective scale: S_eff = size * (scale2 ?? vec2(1,1))
+ *
+ * 4. No viewport scaling in Materializer
+ *    - Width/height multiplication is renderer concern
+ *    - Keep all field kernels dimension-agnostic
+ *
+ * This architecture ensures:
+ * - Geometry is reusable across layouts (local-space independence)
+ * - Instance transforms are composable (position/size/rotation/scale2)
+ * - Renderer is simple (apply transforms, draw local geometry)
+ * - Backend-independent (same buffers work for Canvas, WebGL, SVG)
+ *
  * ══════════════════════════════════════════════════════════════════════
  */
 

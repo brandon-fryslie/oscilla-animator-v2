@@ -23,6 +23,12 @@ import { createStableDomainInstance, createUnstableDomainInstance } from './Doma
  * RenderFrameIR - Output from frame execution
  *
  * Contains all render passes for the frame.
+ *
+ * ROADMAP PHASE 6: This is the current (v1) RenderIR structure.
+ * Future direction: See src/render/future-types.ts for target architecture
+ * - DrawPathInstancesOp with explicit geometry/instances/style separation
+ * - Local-space control points + world-space instance transforms
+ * - No shape interpretation in renderer (all resolved in RenderAssembler)
  */
 export interface RenderFrameIR {
   version: 1;
@@ -47,13 +53,34 @@ export interface ShapeDescriptor {
  * - number: Legacy shape encoding (0=circle, 1=square, 2=triangle) - deprecated
  *
  * P5d: Added controlPoints buffer for path rendering
+ *
+ * ROADMAP PHASE 6 - FUTURE DIRECTION:
+ * Current model: Renderer interprets ShapeDescriptor + controlPoints
+ * Target model: RenderAssembler produces explicit DrawPathInstancesOp
+ *
+ * Key changes planned:
+ * 1. controlPoints will be in LOCAL SPACE (centered at origin, |p|≈O(1))
+ *    Current: controlPoints scaled to normalized [0,1] world space
+ *    Future: Local-space geometry, instance transforms applied by renderer
+ *
+ * 2. Instance transforms separated from geometry
+ *    Current: position/size mixed with geometry in renderer
+ *    Future: Explicit InstanceTransforms with position/size/rotation/scale2
+ *
+ * 3. Renderer becomes pure sink
+ *    Current: Decodes ShapeDescriptor, maps params, scales control points
+ *    Future: Only executes DrawOps with concrete buffers
+ *
+ * See: src/render/future-types.ts for complete target types
+ *      .agent_planning/_future/8-before-render.md
+ *      .agent_planning/_future/9-renderer.md
  */
 export interface RenderPassIR {
   kind: 'instances2d';
   count: number;
   position: ArrayBufferView;
   color: ArrayBufferView;
-  size: number | ArrayBufferView; // Can be uniform size or per-particle sizes
+  size: number | ArrayBufferView; // Can be uniform size or per-instance sizes
   shape: ShapeDescriptor | ArrayBufferView | number; // Unified shape model or legacy encoding
   controlPoints?: ArrayBufferView; // P5d: Optional control points for path rendering
 }
