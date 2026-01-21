@@ -91,9 +91,8 @@ export function assembleRenderPass(
     position,
     color,
     size,
-    shape,
-    ...(controlPoints && { controlPoints }),
-    resolvedShape,
+    shape, // @deprecated - kept for backward compatibility
+    resolvedShape, // REQUIRED - renderer uses this
   };
 }
 
@@ -177,7 +176,7 @@ function resolveControlPoints(
 /**
  * Type guard for PathTopologyDef
  */
-function isPathTopology(topology: TopologyDef): topology is PathTopologyDef {
+export function isPathTopology(topology: TopologyDef): topology is PathTopologyDef {
   return 'verbs' in topology;
 }
 
@@ -196,6 +195,8 @@ function isShapeDescriptor(
  * This performs the topology lookup and param mapping that was previously
  * done in the renderer. Now the renderer receives pre-resolved data.
  *
+ * All shapes are resolved to proper topologies - no legacy numeric encoding.
+ *
  * @param shape - Shape descriptor, buffer, or legacy encoding
  * @param controlPoints - Optional control points for path shapes
  * @returns ResolvedShape for renderer
@@ -204,24 +205,43 @@ function resolveShapeFully(
   shape: ShapeDescriptor | ArrayBufferView | number,
   controlPoints?: ArrayBufferView
 ): ResolvedShape {
-  // Legacy numeric encoding
+  // Legacy numeric encoding - convert to proper topology
   if (typeof shape === 'number') {
+    // Map legacy encodings to actual topologies:
+    // 0 = circle -> ellipse with equal radii
+    // 1 = square -> rect with equal width/height
+    // 2 = triangle -> polygon (not yet implemented, fallback to ellipse)
+    const topologyId = shape === 1 ? 'rect' : 'ellipse';
+    const topology = getTopology(topologyId as TopologyId);
+
+    // Build params with defaults
+    const params: Record<string, number> = {};
+    topology.params.forEach((paramDef) => {
+      params[paramDef.name] = paramDef.default;
+    });
+
     return {
       resolved: true,
-      topologyId: shape as unknown as TopologyId,
-      mode: 'legacy',
-      legacyEncoding: shape,
+      topologyId: topologyId as TopologyId,
+      mode: 'primitive',
+      params,
     };
   }
 
   // Per-particle shape buffer (Field<shape>) - not yet fully supported
+  // Fall back to ellipse (circle) for now
   if (!isShapeDescriptor(shape)) {
-    // For now, treat per-particle as legacy fallback
+    const topology = getTopology('ellipse' as TopologyId);
+    const params: Record<string, number> = {};
+    topology.params.forEach((paramDef) => {
+      params[paramDef.name] = paramDef.default;
+    });
+
     return {
       resolved: true,
-      topologyId: 0 as unknown as TopologyId,
-      mode: 'legacy',
-      legacyEncoding: 0, // Default to circle
+      topologyId: 'ellipse' as TopologyId,
+      mode: 'primitive',
+      params,
     };
   }
 

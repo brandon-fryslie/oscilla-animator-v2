@@ -39,16 +39,10 @@
  *      .agent_planning/_future/9-renderer.md
  */
 
-import type { RenderFrameIR, RenderPassIR, ShapeDescriptor, ResolvedShape } from '../runtime/ScheduleExecutor';
+import type { RenderFrameIR, RenderPassIR, ResolvedShape } from '../runtime/ScheduleExecutor';
+import { isPathTopology } from '../runtime/RenderAssembler';
 import { getTopology } from '../shapes/registry';
 import type { PathTopologyDef, PathVerb, TopologyDef } from '../shapes/types';
-
-/**
- * Type guard to check if a topology is a PathTopologyDef
- */
-function isPathTopology(topology: TopologyDef): topology is PathTopologyDef {
-  return 'verbs' in topology;
-}
 
 /**
  * Render a frame to a 2D canvas context
@@ -109,15 +103,13 @@ function renderInstances2D(
   const sizes = typeof pass.size === 'number' ? null : pass.size as Float32Array;
   const uniformSize = typeof pass.size === 'number' ? pass.size : 3;
 
-  // Use resolvedShape if available, otherwise fall back to shape interpretation
-  const shapeMode = pass.resolvedShape
-    ? convertResolvedShapeToMode(pass.resolvedShape)
-    : determineShapeMode(pass.shape);
+  // Use resolvedShape (REQUIRED - always present from RenderAssembler)
+  const shapeMode = convertResolvedShapeToMode(pass.resolvedShape);
 
-  // Get control points for path shapes (from resolvedShape or pass.controlPoints)
-  const controlPoints = (pass.resolvedShape?.mode === 'path' && pass.resolvedShape.controlPoints)
-    ? pass.resolvedShape.controlPoints as Float32Array
-    : pass.controlPoints as Float32Array | undefined;
+  // Get control points for path shapes from resolvedShape
+  const controlPoints = pass.resolvedShape.mode === 'path'
+    ? pass.resolvedShape.controlPoints as Float32Array | undefined
+    : undefined;
 
   for (let i = 0; i < pass.count; i++) {
     const x = position[i * 2] * width;
@@ -130,44 +122,21 @@ function renderInstances2D(
     ctx.save();
     ctx.translate(x, y);
 
-    switch (shapeMode.kind) {
-      case 'topology': {
-        const { topology, params } = shapeMode;
+    // Render shape - only 'topology' mode (path or primitive)
+    const { topology, params } = shapeMode;
 
-        if (isPathTopology(topology)) {
-          // Path topology - render using control points as shape template
-          if (!controlPoints) {
-            throw new Error(
-              `Path topology '${topology.id}' requires control points buffer. ` +
-              `Ensure the shape signal includes a control point field.`
-            );
-          }
-          renderPathAtParticle(ctx, topology, controlPoints, size, width, height);
-        } else {
-          // Regular topology (ellipse, rect) - use topology render function
-          topology.render(ctx, params);
-        }
-        break;
-      }
-
-      case 'perParticle': {
-        // Per-particle shapes (Field<shape>) - not implemented
+    if (isPathTopology(topology)) {
+      // Path topology - render using control points as shape template
+      if (!controlPoints) {
         throw new Error(
-          'Per-particle shapes (Field<shape>) are not yet implemented. ' +
-          'Use a uniform shape signal instead.'
+          `Path topology '${topology.id}' requires control points buffer. ` +
+          `Ensure the shape signal includes a control point field.`
         );
       }
-
-      case 'legacy': {
-        // Legacy numeric encoding - deprecated, kept for compatibility
-        renderLegacyShape(ctx, shapeMode.encoding, size);
-        break;
-      }
-
-      default: {
-        const _exhaustive: never = shapeMode;
-        throw new Error(`Unknown shape mode: ${(_exhaustive as any).kind}`);
-      }
+      renderPathAtParticle(ctx, topology, controlPoints, size, width, height);
+    } else {
+      // Primitive topology (ellipse, rect) - use topology render function
+      topology.render(ctx, params);
     }
 
     ctx.restore();
@@ -290,115 +259,24 @@ function renderPathAtParticle(
 }
 
 /**
- * Shape rendering mode
+ * Shape rendering mode - topology only (legacy and perParticle removed)
  */
-type ShapeMode =
-  | { kind: 'topology'; topology: TopologyDef; params: Record<string, number> }
-  | { kind: 'perParticle'; buffer: ArrayBufferView }
-  | { kind: 'legacy'; encoding: number };
+type ShapeMode = { topology: TopologyDef; params: Record<string, number> };
 
 /**
  * Convert ResolvedShape to ShapeMode
  *
- * When RenderAssembler provides a pre-resolved shape, we convert it
- * to ShapeMode without doing param mapping. This moves shape
- * interpretation out of the render hot path.
+ * RenderAssembler provides pre-resolved shapes with:
+ * - Topology lookup already done (but we still need to get the render function)
+ * - Params resolved with defaults applied
  *
- * Note: We still need topology lookup for render() function, but
- * params are already resolved with defaults applied.
+ * This is a simple conversion - no interpretation logic.
  */
 function convertResolvedShapeToMode(resolved: ResolvedShape): ShapeMode {
-  switch (resolved.mode) {
-    case 'legacy':
-      return { kind: 'legacy', encoding: resolved.legacyEncoding ?? 0 };
-
-    case 'path':
-    case 'primitive': {
-      // Get topology for render function
-      const topology = getTopology(resolved.topologyId);
-      return {
-        kind: 'topology',
-        topology,
-        params: resolved.params ?? {},
-      };
-    }
-
-    default: {
-      const _exhaustive: never = resolved.mode;
-      throw new Error(`Unknown resolved shape mode: ${_exhaustive}`);
-    }
-  }
-}
-
-/**
- * Determine shape rendering mode from pass.shape
- */
-function determineShapeMode(shape: ShapeDescriptor | ArrayBufferView | number): ShapeMode {
-  if (typeof shape === 'number') {
-    // Legacy encoding
-    return { kind: 'legacy', encoding: shape };
-  }
-
-  if (isShapeDescriptor(shape)) {
-    // Unified shape model with topology
-    const topology = getTopology(shape.topologyId);
-
-    // Map param indices to param names from topology definition
-    const params: Record<string, number> = {};
-    topology.params.forEach((paramDef, i) => {
-      const value = shape.params[`param${i}`];
-      if (value !== undefined) {
-        params[paramDef.name] = value;
-      } else {
-        // Use default if param not provided
-        params[paramDef.name] = paramDef.default;
-      }
-    });
-
-    return { kind: 'topology', topology, params };
-  }
-
-  // Per-particle buffer (Field<shape>)
-  return { kind: 'perParticle', buffer: shape };
-}
-
-/**
- * Type guard for ShapeDescriptor
- */
-function isShapeDescriptor(shape: ShapeDescriptor | ArrayBufferView | number): shape is ShapeDescriptor {
-  return typeof shape === 'object' && 'topologyId' in shape && 'params' in shape;
-}
-
-/**
- * Render legacy shape encoding (deprecated)
- *
- * Legacy encoding:
- *   0 = circle
- *   1 = square
- *   2 = triangle
- */
-function renderLegacyShape(ctx: CanvasRenderingContext2D, encoding: number, size: number): void {
-  switch (encoding) {
-    case 0: // circle
-      ctx.beginPath();
-      ctx.arc(0, 0, size / 2, 0, Math.PI * 2);
-      ctx.fill();
-      break;
-    case 1: // square
-      ctx.fillRect(-size / 2, -size / 2, size, size);
-      break;
-    case 2: // triangle
-      ctx.beginPath();
-      ctx.moveTo(0, -size / 2);
-      ctx.lineTo(size / 2, size / 2);
-      ctx.lineTo(-size / 2, size / 2);
-      ctx.closePath();
-      ctx.fill();
-      break;
-    default:
-      // fallback to circle
-      ctx.beginPath();
-      ctx.arc(0, 0, size / 2, 0, Math.PI * 2);
-      ctx.fill();
-  }
+  // Get topology for render function
+  const topology = getTopology(resolved.topologyId);
+  return {
+    topology,
+    params: resolved.params,
+  };
 }

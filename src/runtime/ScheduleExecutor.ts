@@ -52,7 +52,8 @@ export interface ShapeDescriptor {
  * structure which contains everything the renderer needs without
  * any further lookups.
  *
- * This is an intermediate step toward the full DrawPathInstancesOp model.
+ * This is the REQUIRED shape format for RenderPassIR.
+ * The renderer trusts this structure completely.
  */
 export interface ResolvedShape {
   /** Discriminator for resolved shape */
@@ -65,71 +66,56 @@ export interface ResolvedShape {
    * Shape mode for rendering dispatch:
    * - 'path': Use path rendering with verbs and control points
    * - 'primitive': Use topology.render() with params
-   * - 'legacy': Use legacy numeric encoding
    */
-  readonly mode: 'path' | 'primitive' | 'legacy';
+  readonly mode: 'path' | 'primitive';
 
   /** Resolved params with topology defaults applied */
-  readonly params?: Record<string, number>;
+  readonly params: Record<string, number>;
 
   /** Path verbs for path mode (if applicable) */
   readonly verbs?: Uint8Array;
 
   /** Control points for path mode (if applicable) */
   readonly controlPoints?: ArrayBufferView;
-
-  /** Legacy encoding (if legacy mode) */
-  readonly legacyEncoding?: number;
 }
 
 /**
  * RenderPassIR - Single render pass
  *
- * Shape can be:
- * - ShapeDescriptor: Uniform shape with topology + params for all particles
- * - ArrayBufferView: Per-particle shape buffer (for Field<shape>)
- * - number: Legacy shape encoding (0=circle, 1=square, 2=triangle) - deprecated
+ * The renderer receives pre-resolved shape data via `resolvedShape`.
+ * Shape resolution happens in RenderAssembler, making the renderer
+ * a pure sink with no interpretation logic.
  *
- * P5d: Added controlPoints buffer for path rendering
+ * PHASE 6 COMPLETE:
+ * - `resolvedShape` is REQUIRED (not optional)
+ * - Control points are in `resolvedShape.controlPoints` (no side-channel)
+ * - Legacy `shape` field kept for backward compatibility but not used
  *
- * ROADMAP PHASE 6 - FUTURE DIRECTION:
- * Current model: Renderer interprets ShapeDescriptor + controlPoints
- * Target model: RenderAssembler produces explicit DrawPathInstancesOp
- *
- * Key changes planned:
- * 1. controlPoints will be in LOCAL SPACE (centered at origin, |p|≈O(1))
- *    Current: controlPoints scaled to normalized [0,1] world space
- *    Future: Local-space geometry, instance transforms applied by renderer
- *
- * 2. Instance transforms separated from geometry
- *    Current: position/size mixed with geometry in renderer
- *    Future: Explicit InstanceTransforms with position/size/rotation/scale2
- *
- * 3. Renderer becomes pure sink
- *    Current: Decodes ShapeDescriptor, maps params, scales control points
- *    Future: Only executes DrawOps with concrete buffers
- *
- * See: src/render/future-types.ts for complete target types
- *      .agent_planning/_future/8-before-render.md
- *      .agent_planning/_future/9-renderer.md
+ * See: src/render/future-types.ts for DrawPathInstancesOp (future target)
  */
 export interface RenderPassIR {
   kind: 'instances2d';
   count: number;
   position: ArrayBufferView;
   color: ArrayBufferView;
-  size: number | ArrayBufferView; // Can be uniform size or per-instance sizes
-  shape: ShapeDescriptor | ArrayBufferView | number; // Unified shape model or legacy encoding
-  controlPoints?: ArrayBufferView; // P5d: Optional control points for path rendering
+  size: number | ArrayBufferView;
 
   /**
-   * Pre-resolved shape (if available).
-   *
-   * When present, renderer SHOULD use this instead of interpreting `shape`.
-   * This enables gradual migration: assembler can produce resolved shapes
-   * while maintaining backward compatibility with unresolved format.
+   * @deprecated Use resolvedShape instead. Kept for backward compatibility.
    */
-  resolvedShape?: ResolvedShape;
+  shape: ShapeDescriptor | ArrayBufferView | number;
+
+  /**
+   * Pre-resolved shape (REQUIRED).
+   *
+   * RenderAssembler produces this with:
+   * - Topology lookup already done
+   * - Params resolved with defaults
+   * - Control points embedded (for path shapes)
+   *
+   * Renderer MUST use this, not the `shape` field.
+   */
+  resolvedShape: ResolvedShape;
 }
 
 /**

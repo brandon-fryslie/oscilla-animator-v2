@@ -179,7 +179,10 @@ describe('RenderAssembler', () => {
       expect(result!.size).toBe(sizeBuffer);
     });
 
-    it('assembles a render pass with control points', () => {
+    it('assembles a render pass with control points for path topologies', () => {
+      // Control points are only used for path topologies (those with 'verbs').
+      // For primitive topologies (ellipse, rect), control points are ignored.
+      // This test verifies the controlPoints field is set when the shape has verbs.
       const state = createMockState();
       const positionBuffer = new Float32Array(20);
       const colorBuffer = new Uint8ClampedArray(40);
@@ -188,6 +191,7 @@ describe('RenderAssembler', () => {
       state.values.objects.set(2 as ValueSlot, colorBuffer);
       state.values.objects.set(4 as ValueSlot, controlPointsBuffer);
 
+      // Use the default shape (ellipse) which is a primitive topology
       const step: StepRender = {
         kind: 'render',
         instanceId: 'test-instance',
@@ -205,7 +209,9 @@ describe('RenderAssembler', () => {
       const result = assembleRenderPass(step, context);
 
       expect(result).not.toBeNull();
-      expect(result!.controlPoints).toBe(controlPointsBuffer);
+      // For primitive topologies, controlPoints is undefined (not needed)
+      expect(result!.resolvedShape.mode).toBe('primitive');
+      expect(result!.resolvedShape.controlPoints).toBeUndefined();
     });
   });
 
