@@ -41,6 +41,8 @@ import { validateConnection } from './typeValidation';
 import { BlockContextMenu } from './menus/BlockContextMenu';
 import { EdgeContextMenu } from './menus/EdgeContextMenu';
 import { PortContextMenu } from './menus/PortContextMenu';
+import { SimpleDebugPanel } from '../components/SimpleDebugPanel';
+import { useDebugProbe } from '../hooks/useDebugProbe';
 import './ReactFlowEditor.css';
 
 export interface ReactFlowEditorHandle {
@@ -128,6 +130,11 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = ({
   const [isLayouting, setIsLayouting] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const { fitView, setCenter } = useReactFlow();
+
+  // Debug probe state (Sprint 1: Debug Probe)
+  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
+  const [debugPanelEnabled, setDebugPanelEnabled] = useState(true);
+  const edgeValue = useDebugProbe(debugPanelEnabled ? hoveredEdgeId : null);
 
   // Store refs for handle access to latest state
   const nodesRef = useRef(nodes);
@@ -218,6 +225,21 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = ({
         isInput,
         position: { top: event.clientY, left: event.clientX },
       });
+    },
+    []
+  );
+
+  // Edge hover handlers (Sprint 1: Debug Probe)
+  const handleEdgeMouseEnter = useCallback<EdgeMouseHandler>(
+    (_event, edge) => {
+      setHoveredEdgeId(edge.id);
+    },
+    []
+  );
+
+  const handleEdgeMouseLeave = useCallback<EdgeMouseHandler>(
+    () => {
+      setHoveredEdgeId(null);
     },
     []
   );
@@ -435,6 +457,16 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = ({
     };
   }, [wrapperRef]);
 
+  // Build edge label for debug panel
+  const edgeLabel = useMemo(() => {
+    if (!hoveredEdgeId) return null;
+
+    const edge = edges.find((e) => e.id === hoveredEdgeId);
+    if (!edge) return null;
+
+    return `${edge.source}:${edge.sourceHandle} → ${edge.target}:${edge.targetHandle}`;
+  }, [hoveredEdgeId, edges]);
+
   return (
     <>
       <ReactFlow
@@ -449,6 +481,8 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = ({
         onPaneClick={handlePaneClick}
         onNodeContextMenu={handleNodeContextMenu}
         onEdgeContextMenu={handleEdgeContextMenu}
+        onEdgeMouseEnter={handleEdgeMouseEnter}
+        onEdgeMouseLeave={handleEdgeMouseLeave}
         isValidConnection={isValidConnection}
         fitView
         attributionPosition="bottom-left"
@@ -480,7 +514,34 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = ({
             {isLayouting ? 'Arranging...' : 'Auto Arrange'}
           </Button>
         </Panel>
+        <Panel position="top-right" className="react-flow-panel">
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={() => setDebugPanelEnabled(!debugPanelEnabled)}
+            sx={{
+              textTransform: 'none',
+              fontSize: '0.75rem',
+              borderColor: debugPanelEnabled ? '#4ecdc4' : '#0f3460',
+              color: debugPanelEnabled ? '#4ecdc4' : '#666',
+              background: debugPanelEnabled ? 'rgba(78, 205, 196, 0.1)' : 'transparent',
+              '&:hover': {
+                borderColor: '#4ecdc4',
+                background: 'rgba(78, 205, 196, 0.1)',
+              },
+            }}
+          >
+            {debugPanelEnabled ? 'Debug: ON' : 'Debug: OFF'}
+          </Button>
+        </Panel>
       </ReactFlow>
+
+      {/* Debug Panel (Sprint 1: Debug Probe) */}
+      <SimpleDebugPanel
+        edgeValue={edgeValue}
+        edgeLabel={edgeLabel}
+        enabled={debugPanelEnabled}
+      />
 
       {/* Context Menus */}
       {contextMenu?.type === 'block' && (

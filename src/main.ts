@@ -17,9 +17,10 @@ import { compile } from './compiler';
 import { createRuntimeState, BufferPool, executeFrame } from './runtime';
 import { renderFrame } from './render';
 import { App } from './ui/components';
-import { timeRootRole, type BlockId } from './types';
+import { timeRootRole, type BlockId, type ValueSlot } from './types';
 import { recordFrameTime, recordFrameDelta, shouldEmitSnapshot, emitHealthSnapshot, computeFrameTimingStats, resetFrameTimingStats } from './runtime/HealthMonitor';
 import type { RuntimeState } from './runtime/RuntimeState';
+import { debugService } from './services/DebugService';
 
 // =============================================================================
 // Global State
@@ -425,6 +426,11 @@ async function buildAndCompile(patchBuilder: PatchBuilder) {
   currentProgram = program;
   currentState = createRuntimeState(program.slotMeta.length);
 
+
+  // Wire DebugService tap for runtime observation (Sprint 1: Debug Probe)
+  currentState.tap = {
+    recordSlotValue: (slotId: ValueSlot, value: number) => debugService.updateSlotValue(slotId, value),
+  };
   // Set RuntimeState reference in ContinuityStore for config access
   rootStore.continuity.setRuntimeStateRef(currentState);
 
@@ -563,6 +569,11 @@ async function recompileFromStore() {
   if (newSlotCount !== oldSlotCount) {
     log(`Slot count changed: ${oldSlotCount} → ${newSlotCount}, resizing buffers`);
     currentState = createRuntimeState(newSlotCount);
+
+    // Wire DebugService tap for runtime observation (Sprint 1: Debug Probe)
+    currentState.tap = {
+      recordSlotValue: (slotId: ValueSlot, value: number) => debugService.updateSlotValue(slotId, value),
+    };
 
     // Restore continuity state (it's independent of slot layout)
     if (oldContinuity) {

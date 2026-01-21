@@ -89,7 +89,9 @@ describe('Expression Block Lowering', () => {
     expect(result.outputsById.out.k).toBe('sig');
 
     // Verify it's a constant 0 (check IR)
-    const sigId = result.outputsById.out.id;
+    const outputRef = result.outputsById.out;
+    expect(outputRef.k).toBe('sig');
+    const sigId = (outputRef as any).id;
     const sigExpr = builder['sigExprs'][sigId as any]; // Access internal array
     expect(sigExpr.kind).toBe('const');
     expect((sigExpr as any).value).toBe(0);
@@ -108,7 +110,9 @@ describe('Expression Block Lowering', () => {
     expect(result.outputsById.out.k).toBe('sig');
 
     // Verify it's a constant 42
-    const sigId = result.outputsById.out.id;
+    const outputRef = result.outputsById.out;
+    expect(outputRef.k).toBe('sig');
+    const sigId = (outputRef as any).id;
     const sigExpr = builder['sigExprs'][sigId as any];
     expect(sigExpr.kind).toBe('const');
     expect((sigExpr as any).value).toBe(42);
@@ -135,7 +139,9 @@ describe('Expression Block Lowering', () => {
     expect(result.outputsById.out.k).toBe('sig');
 
     // Verify it's a zip expression (binary operation)
-    const sigId = result.outputsById.out.id;
+    const outputRef = result.outputsById.out;
+    expect(outputRef.k).toBe('sig');
+    const sigId = (outputRef as any).id;
     const sigExpr = builder['sigExprs'][sigId as any];
     expect(sigExpr.kind).toBe('zip'); // Binary ops use zip
   });
@@ -185,7 +191,9 @@ describe('Expression Block Lowering', () => {
     expect(result.outputsById.out.k).toBe('sig');
 
     // Verify it's a map expression (unary operation/function)
-    const sigId = result.outputsById.out.id;
+    const outputRef = result.outputsById.out;
+    expect(outputRef.k).toBe('sig');
+    const sigId = (outputRef as any).id;
     const sigExpr = builder['sigExprs'][sigId as any];
     expect(sigExpr.kind).toBe('map'); // Functions use map
   });
