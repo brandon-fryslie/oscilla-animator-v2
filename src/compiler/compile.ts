@@ -20,6 +20,7 @@ import { convertCompileErrorsToDiagnostics } from './diagnosticConversion';
 import type { EventHub } from '../events/EventHub';
 import { signalType } from '../core/canonical-types';
 import { debugService } from '../services/DebugService';
+import { compilationInspector } from '../services/CompilationInspectorService';
 
 // Import block registrations (side-effect imports to register blocks)
 import '../blocks/time-blocks';
@@ -96,6 +97,13 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
   const compileId = options?.patchId ? `${options.patchId}:${options.patchRevision || 0}` : 'unknown';
   const startTime = performance.now();
 
+  // Begin compilation inspection
+  try {
+    compilationInspector.beginCompile(compileId);
+  } catch (e) {
+    console.warn('[CompilationInspector] Failed to begin compile:', e);
+  }
+
   // Emit CompileBegin event
   if (options) {
     options.events.emit({
@@ -155,17 +163,48 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
 
     const normalized = normResult.patch;
 
+    // Capture normalization pass
+    try {
+      compilationInspector.capturePass('normalization', patch, normalized);
+    } catch (e) {
+      console.warn('[CompilationInspector] Failed to capture normalization:', e);
+    }
+
     // Pass 2: Type Graph
     const typedPatch = pass2TypeGraph(normalized);
+
+    try {
+      compilationInspector.capturePass('type-graph', normalized, typedPatch);
+    } catch (e) {
+      console.warn('[CompilationInspector] Failed to capture type-graph:', e);
+    }
 
     // Pass 3: Time Topology
     const timeResolvedPatch = pass3Time(typedPatch);
 
+    try {
+      compilationInspector.capturePass('time', typedPatch, timeResolvedPatch);
+    } catch (e) {
+      console.warn('[CompilationInspector] Failed to capture time:', e);
+    }
+
     // Pass 4: Dependency Graph
     const depGraphPatch = pass4DepGraph(timeResolvedPatch);
 
+    try {
+      compilationInspector.capturePass('depgraph', timeResolvedPatch, depGraphPatch);
+    } catch (e) {
+      console.warn('[CompilationInspector] Failed to capture depgraph:', e);
+    }
+
     // Pass 5: Cycle Validation (SCC)
     const acyclicPatch = pass5CycleValidation(depGraphPatch);
+
+    try {
+      compilationInspector.capturePass('scc', depGraphPatch, acyclicPatch);
+    } catch (e) {
+      console.warn('[CompilationInspector] Failed to capture scc:', e);
+    }
 
     // Pass 6: Block Lowering
     const unlinkedIR = pass6BlockLowering(acyclicPatch, {
@@ -173,6 +212,12 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
       compileId,
       patchRevision: options?.patchRevision,
     });
+
+    try {
+      compilationInspector.capturePass('block-lowering', acyclicPatch, unlinkedIR);
+    } catch (e) {
+      console.warn('[CompilationInspector] Failed to capture block-lowering:', e);
+    }
 
     // Check for errors from pass 6
     if (unlinkedIR.errors.length > 0) {
@@ -187,11 +232,24 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
     // Pass 7: Schedule Construction
     const scheduleIR = pass7Schedule(unlinkedIR, acyclicPatch);
 
+    try {
+      compilationInspector.capturePass('schedule', unlinkedIR, scheduleIR);
+    } catch (e) {
+      console.warn('[CompilationInspector] Failed to capture schedule:', e);
+    }
+
     // Convert to CompiledProgramIR
     const compiledIR = convertLinkedIRToProgram(unlinkedIR, scheduleIR);
 
     // Build edge-to-slot map for debug service (Sprint 1: Debug Probe)
     buildEdgeToSlotMap(patch, typedPatch, unlinkedIR);
+
+    // End compilation inspection (success)
+    try {
+      compilationInspector.endCompile('success');
+    } catch (e) {
+      console.warn('[CompilationInspector] Failed to end compile:', e);
+    }
 
     // Emit CompileEnd event (success)
     if (options) {
@@ -240,6 +298,13 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
       message: errorMessage,
     }];
 
+    // End compilation inspection (failure)
+    try {
+      compilationInspector.endCompile('failure');
+    } catch (e2) {
+      console.warn('[CompilationInspector] Failed to end compile:', e2);
+    }
+
     return emitFailure(options, startTime, compileId, compileErrors);
   }
 }
@@ -254,6 +319,15 @@ function emitFailure(
   compileId: string,
   errors: CompileError[]
 ): CompileFailure {
+  // End compilation inspection (failure) if not already called
+  try {
+    if (compilationInspector['currentSnapshot']) {
+      compilationInspector.endCompile('failure');
+    }
+  } catch (e) {
+    console.warn('[CompilationInspector] Failed to end compile:', e);
+  }
+
   if (options) {
     const durationMs = performance.now() - startTime;
     const diagnostics = convertCompileErrorsToDiagnostics(errors, options.patchRevision || 0, compileId);
