@@ -23,7 +23,7 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { Button } from '@mui/material';
-import { rootStore } from '../../stores';
+import { useStores } from '../../stores';
 import type { BlockId, PortId } from '../../types';
 import type { EditorHandle } from '../editorCommon';
 import {
@@ -125,6 +125,9 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = ({
   onEditorReady,
   wrapperRef,
 }) => {
+  // Get store from context
+  const rootStore = useStores();
+
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [isLayouting, setIsLayouting] = useState(false);
