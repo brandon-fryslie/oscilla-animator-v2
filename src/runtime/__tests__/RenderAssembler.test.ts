@@ -147,7 +147,8 @@ describe('RenderAssembler', () => {
       expect(result!.position).toBe(positionBuffer);
       expect(result!.color).toBe(colorBuffer);
       expect(result!.size).toBe(10); // default size
-      expect(result!.shape).toBe(0); // default shape (circle)
+      // Default shape is now proper ShapeDescriptor (no legacy numeric 0)
+      expect(result!.shape).toEqual({ topologyId: 'ellipse', params: { radiusX: 1, radiusY: 1 } });
     });
 
     it('assembles a render pass with slot-based size', () => {
