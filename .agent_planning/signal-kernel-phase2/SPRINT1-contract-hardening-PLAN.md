@@ -2,6 +2,8 @@
 
 **Sprint ID:** signal-kernel-phase2-sprint1
 **Created:** 2026-01-21
+**Completed:** 2026-01-21
+**Status:** ✅ COMPLETE
 **Confidence:** HIGH
 
 ## Goal
@@ -90,10 +92,10 @@ case 'smoothstep': {
 
 ## Definition of Done
 
-- [ ] wrapPhase helper added
-- [ ] clamp01 helper added
-- [ ] oscSin/oscCos/oscTan use wrapPhase
-- [ ] All 9 easing functions use clamp01
-- [ ] smoothstep handles edge0===edge1
-- [ ] All existing tests pass
-- [ ] Edge case tests added
+- [x] wrapPhase helper added
+- [x] clamp01 helper added
+- [x] oscSin/oscCos/oscTan use wrapPhase
+- [x] All 9 easing functions use clamp01
+- [x] smoothstep handles edge0===edge1
+- [x] All existing tests pass (610 tests)
+- [x] Edge case tests added (53 new tests)

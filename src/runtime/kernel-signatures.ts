@@ -50,39 +50,55 @@ export interface KernelSignature {
  * Kernels not listed have no unit constraints (accept/output any unit).
  */
 export const KERNEL_SIGNATURES: Readonly<Record<string, KernelSignature>> = {
-  // === TRIGONOMETRIC FUNCTIONS (Signal-level) ===
-  // These expect PHASE [0,1) and convert to radians internally
+  // === OSCILLATOR FUNCTIONS (Signal-level) ===
+  // These expect PHASE [0,1), auto-wrap internally, output [-1,1]
 
+  oscSin: {
+    inputs: [{ expectedUnit: 'phase', description: 'Phase [0,1) - wraps internally' }],
+    output: { unit: 'scalar', description: 'Sine value [-1,1]' },
+  },
+
+  oscCos: {
+    inputs: [{ expectedUnit: 'phase', description: 'Phase [0,1) - wraps internally' }],
+    output: { unit: 'scalar', description: 'Cosine value [-1,1]' },
+  },
+
+  oscTan: {
+    inputs: [{ expectedUnit: 'phase', description: 'Phase [0,1) - wraps internally' }],
+    output: { unit: 'scalar', description: 'Tangent value (unbounded)' },
+  },
+
+  // DEPRECATED: Legacy aliases - use oscSin/oscCos/oscTan instead
   sin: {
-    inputs: [{ expectedUnit: 'phase', description: 'Phase [0,1) - converts to radians internally' }],
+    inputs: [{ expectedUnit: 'phase', description: 'DEPRECATED: Use oscSin instead' }],
     output: { unit: 'scalar', description: 'Sine value [-1,1]' },
   },
 
   cos: {
-    inputs: [{ expectedUnit: 'phase', description: 'Phase [0,1) - converts to radians internally' }],
+    inputs: [{ expectedUnit: 'phase', description: 'DEPRECATED: Use oscCos instead' }],
     output: { unit: 'scalar', description: 'Cosine value [-1,1]' },
   },
 
   tan: {
-    inputs: [{ expectedUnit: 'phase', description: 'Phase [0,1) - converts to radians internally' }],
+    inputs: [{ expectedUnit: 'phase', description: 'DEPRECATED: Use oscTan instead' }],
     output: { unit: 'scalar', description: 'Tangent value' },
   },
 
   // === WAVEFORM FUNCTIONS (Signal-level) ===
-  // These also expect phase [0,1)
+  // These expect phase [0,1), auto-wrap internally, output [-1,1]
 
   triangle: {
-    inputs: [{ expectedUnit: 'phase', description: 'Phase [0,1)' }],
+    inputs: [{ expectedUnit: 'phase', description: 'Phase [0,1) - wraps internally' }],
     output: { unit: 'scalar', description: 'Triangle wave [-1,1]' },
   },
 
   square: {
-    inputs: [{ expectedUnit: 'phase', description: 'Phase [0,1)' }],
+    inputs: [{ expectedUnit: 'phase', description: 'Phase [0,1) - wraps internally' }],
     output: { unit: 'scalar', description: 'Square wave [-1,1]' },
   },
 
   sawtooth: {
-    inputs: [{ expectedUnit: 'phase', description: 'Phase [0,1)' }],
+    inputs: [{ expectedUnit: 'phase', description: 'Phase [0,1) - wraps internally' }],
     output: { unit: 'scalar', description: 'Sawtooth wave [-1,1]' },
   },
 
@@ -124,50 +140,50 @@ export const KERNEL_SIGNATURES: Readonly<Record<string, KernelSignature>> = {
   },
 
   // === EASING FUNCTIONS ===
-  // Input and output are normalized [0,1]
+  // Input clamped to [0,1], output [0,1]
 
   easeInQuad: {
-    inputs: [{ expectedUnit: 'normalized', description: 'Progress [0,1]' }],
+    inputs: [{ expectedUnit: 'normalized', description: 'Progress [0,1] - clamped internally' }],
     output: { unit: 'normalized', description: 'Eased value [0,1]' },
   },
 
   easeOutQuad: {
-    inputs: [{ expectedUnit: 'normalized', description: 'Progress [0,1]' }],
+    inputs: [{ expectedUnit: 'normalized', description: 'Progress [0,1] - clamped internally' }],
     output: { unit: 'normalized', description: 'Eased value [0,1]' },
   },
 
   easeInOutQuad: {
-    inputs: [{ expectedUnit: 'normalized', description: 'Progress [0,1]' }],
+    inputs: [{ expectedUnit: 'normalized', description: 'Progress [0,1] - clamped internally' }],
     output: { unit: 'normalized', description: 'Eased value [0,1]' },
   },
 
   easeInCubic: {
-    inputs: [{ expectedUnit: 'normalized', description: 'Progress [0,1]' }],
+    inputs: [{ expectedUnit: 'normalized', description: 'Progress [0,1] - clamped internally' }],
     output: { unit: 'normalized', description: 'Eased value [0,1]' },
   },
 
   easeOutCubic: {
-    inputs: [{ expectedUnit: 'normalized', description: 'Progress [0,1]' }],
+    inputs: [{ expectedUnit: 'normalized', description: 'Progress [0,1] - clamped internally' }],
     output: { unit: 'normalized', description: 'Eased value [0,1]' },
   },
 
   easeInOutCubic: {
-    inputs: [{ expectedUnit: 'normalized', description: 'Progress [0,1]' }],
+    inputs: [{ expectedUnit: 'normalized', description: 'Progress [0,1] - clamped internally' }],
     output: { unit: 'normalized', description: 'Eased value [0,1]' },
   },
 
   easeInElastic: {
-    inputs: [{ expectedUnit: 'normalized', description: 'Progress [0,1]' }],
+    inputs: [{ expectedUnit: 'normalized', description: 'Progress [0,1] - clamped internally' }],
     output: { unit: 'normalized', description: 'Eased value [0,1]' },
   },
 
   easeOutElastic: {
-    inputs: [{ expectedUnit: 'normalized', description: 'Progress [0,1]' }],
+    inputs: [{ expectedUnit: 'normalized', description: 'Progress [0,1] - clamped internally' }],
     output: { unit: 'normalized', description: 'Eased value [0,1]' },
   },
 
   easeOutBounce: {
-    inputs: [{ expectedUnit: 'normalized', description: 'Progress [0,1]' }],
+    inputs: [{ expectedUnit: 'normalized', description: 'Progress [0,1] - clamped internally' }],
     output: { unit: 'normalized', description: 'Eased value [0,1]' },
   },
 

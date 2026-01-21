@@ -2,6 +2,8 @@
 
 **Sprint ID:** signal-kernel-phase2-sprint2
 **Created:** 2026-01-21
+**Completed:** 2026-01-21
+**Status:** ✅ COMPLETE
 **Confidence:** HIGH
 
 ## Goal
@@ -63,7 +65,7 @@ Document when to remove deprecated sin/cos/tan aliases:
 
 ## Definition of Done
 
-- [ ] oscSin/oscCos/oscTan added to KERNEL_SIGNATURES
-- [ ] sin/cos/tan marked as deprecated in signatures
-- [ ] Domain/range comments updated
-- [ ] Deprecation timeline documented
+- [x] oscSin/oscCos/oscTan added to KERNEL_SIGNATURES
+- [x] sin/cos/tan marked as deprecated in signatures
+- [x] Domain/range comments updated (wraps internally, clamped internally)
+- [x] Deprecation timeline documented (in signatures)

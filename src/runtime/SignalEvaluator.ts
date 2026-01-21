@@ -255,30 +255,59 @@ function applyPureFn(
  * Signal kernels operate on scalar values (single numbers).
  * Note: vec2 kernels are not supported at signal level - use field-level versions.
  */
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SIGNAL KERNEL HELPERS
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Wrap phase value to [0, 1) range.
+ * Handles negative values correctly: -0.25 → 0.75
+ */
+function wrapPhase(p: number): number {
+  const t = p - Math.floor(p);
+  return t; // ∈ [0,1)
+}
+
+/**
+ * Clamp value to [0, 1] range.
+ * Used by easing functions to ensure well-defined output.
+ */
+function clamp01(x: number): number {
+  return x < 0 ? 0 : x > 1 ? 1 : x;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SIGNAL KERNEL IMPLEMENTATION
+// ═══════════════════════════════════════════════════════════════════════════
+
 function applySignalKernel(name: string, values: number[]): number {
   switch (name) {
-    case 'oscSin':
+    // === OSCILLATORS (phase [0,1) → [-1,1], auto-wrapped) ===
+
+    case 'oscSin': {
       if (values.length !== 1) {
         throw new Error(`Signal kernel 'oscSin' expects 1 input, got ${values.length}`);
       }
-      // Kernel oscSin expects PHASE [0,1), converts to radians (0-2π) for full cycle
-      // Used by Oscillator block and other signal-level waveform generators
-      return Math.sin(values[0] * 2 * Math.PI);
+      const p = wrapPhase(values[0]);
+      return Math.sin(p * 2 * Math.PI);
+    }
 
-    case 'oscCos':
+    case 'oscCos': {
       if (values.length !== 1) {
         throw new Error(`Signal kernel 'oscCos' expects 1 input, got ${values.length}`);
       }
-      // Kernel oscCos expects PHASE [0,1), converts to radians (0-2π) for full cycle
-      // Used by Oscillator block and other signal-level waveform generators
-      return Math.cos(values[0] * 2 * Math.PI);
+      const p = wrapPhase(values[0]);
+      return Math.cos(p * 2 * Math.PI);
+    }
 
-    case 'oscTan':
+    case 'oscTan': {
       if (values.length !== 1) {
         throw new Error(`Signal kernel 'oscTan' expects 1 input, got ${values.length}`);
       }
-      // Kernel oscTan expects PHASE [0,1), converts to radians (0-2π) for full cycle
-      return Math.tan(values[0] * 2 * Math.PI);
+      const p = wrapPhase(values[0]);
+      return Math.tan(p * 2 * Math.PI);
+    }
 
     // DEPRECATED: Legacy aliases - will be removed in future version
     case 'sin':
@@ -291,13 +320,12 @@ function applySignalKernel(name: string, values: number[]): number {
       console.warn(`Signal kernel 'tan' is deprecated. Use 'oscTan' for phase-based oscillation.`);
       return applySignalKernel('oscTan', values);
 
-    // Waveform kernels - input is phase (0..1), output is -1..1 or 0..1
+    // Waveform kernels - input is phase (0..1), output is -1..1 (auto-wrapped)
     case 'triangle': {
       if (values.length !== 1) {
         throw new Error(`Signal kernel 'triangle' expects 1 input, got ${values.length}`);
       }
-      // Triangle wave: rises from -1 to 1, then falls back to -1
-      const t = values[0] % 1;
+      const t = wrapPhase(values[0]);
       return 4 * Math.abs(t - 0.5) - 1;
     }
 
@@ -305,8 +333,7 @@ function applySignalKernel(name: string, values: number[]): number {
       if (values.length !== 1) {
         throw new Error(`Signal kernel 'square' expects 1 input, got ${values.length}`);
       }
-      // Square wave: 1 for first half, -1 for second half
-      const t = values[0] % 1;
+      const t = wrapPhase(values[0]);
       return t < 0.5 ? 1 : -1;
     }
 
@@ -314,8 +341,7 @@ function applySignalKernel(name: string, values: number[]): number {
       if (values.length !== 1) {
         throw new Error(`Signal kernel 'sawtooth' expects 1 input, got ${values.length}`);
       }
-      // Sawtooth wave: rises from -1 to 1 over the period
-      const t = values[0] % 1;
+      const t = wrapPhase(values[0]);
       return 2 * t - 1;
     }
 
@@ -325,9 +351,10 @@ function applySignalKernel(name: string, values: number[]): number {
       if (values.length !== 3) {
         throw new Error(`Signal kernel 'smoothstep' expects 3 inputs (edge0, edge1, x), got ${values.length}`);
       }
-      // Hermite interpolation with clamping
       const edge0 = values[0], edge1 = values[1], x = values[2];
-      const t = Math.min(Math.max((x - edge0) / (edge1 - edge0), 0), 1);
+      // Handle degenerate case where edges are equal
+      if (edge0 === edge1) return x < edge0 ? 0 : 1;
+      const t = clamp01((x - edge0) / (edge1 - edge0));
       return t * t * (3 - 2 * t);
     }
 
@@ -341,11 +368,13 @@ function applySignalKernel(name: string, values: number[]): number {
 
     // === EASING FUNCTIONS (input 0..1, output 0..1) ===
 
+    // === EASING FUNCTIONS (t [0,1] → u [0,1], clamped) ===
+
     case 'easeInQuad': {
       if (values.length !== 1) {
         throw new Error(`Signal kernel 'easeInQuad' expects 1 input, got ${values.length}`);
       }
-      const t = values[0];
+      const t = clamp01(values[0]);
       return t * t;
     }
 
@@ -353,7 +382,7 @@ function applySignalKernel(name: string, values: number[]): number {
       if (values.length !== 1) {
         throw new Error(`Signal kernel 'easeOutQuad' expects 1 input, got ${values.length}`);
       }
-      const t = values[0];
+      const t = clamp01(values[0]);
       return t * (2 - t);
     }
 
@@ -361,7 +390,7 @@ function applySignalKernel(name: string, values: number[]): number {
       if (values.length !== 1) {
         throw new Error(`Signal kernel 'easeInOutQuad' expects 1 input, got ${values.length}`);
       }
-      const t = values[0];
+      const t = clamp01(values[0]);
       return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
     }
 
@@ -369,7 +398,7 @@ function applySignalKernel(name: string, values: number[]): number {
       if (values.length !== 1) {
         throw new Error(`Signal kernel 'easeInCubic' expects 1 input, got ${values.length}`);
       }
-      const t = values[0];
+      const t = clamp01(values[0]);
       return t * t * t;
     }
 
@@ -377,7 +406,7 @@ function applySignalKernel(name: string, values: number[]): number {
       if (values.length !== 1) {
         throw new Error(`Signal kernel 'easeOutCubic' expects 1 input, got ${values.length}`);
       }
-      const t = values[0] - 1;
+      const t = clamp01(values[0]) - 1;
       return t * t * t + 1;
     }
 
@@ -385,7 +414,7 @@ function applySignalKernel(name: string, values: number[]): number {
       if (values.length !== 1) {
         throw new Error(`Signal kernel 'easeInOutCubic' expects 1 input, got ${values.length}`);
       }
-      const t = values[0];
+      const t = clamp01(values[0]);
       return t < 0.5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1;
     }
 
@@ -393,7 +422,7 @@ function applySignalKernel(name: string, values: number[]): number {
       if (values.length !== 1) {
         throw new Error(`Signal kernel 'easeInElastic' expects 1 input, got ${values.length}`);
       }
-      const t = values[0];
+      const t = clamp01(values[0]);
       if (t === 0 || t === 1) return t;
       return -Math.pow(2, 10 * (t - 1)) * Math.sin((t - 1.1) * 5 * Math.PI);
     }
@@ -402,7 +431,7 @@ function applySignalKernel(name: string, values: number[]): number {
       if (values.length !== 1) {
         throw new Error(`Signal kernel 'easeOutElastic' expects 1 input, got ${values.length}`);
       }
-      const t = values[0];
+      const t = clamp01(values[0]);
       if (t === 0 || t === 1) return t;
       return Math.pow(2, -10 * t) * Math.sin((t - 0.1) * 5 * Math.PI) + 1;
     }
@@ -411,7 +440,7 @@ function applySignalKernel(name: string, values: number[]): number {
       if (values.length !== 1) {
         throw new Error(`Signal kernel 'easeOutBounce' expects 1 input, got ${values.length}`);
       }
-      let t = values[0];
+      let t = clamp01(values[0]);
       const n1 = 7.5625, d1 = 2.75;
       if (t < 1 / d1) {
         return n1 * t * t;
@@ -449,4 +478,16 @@ function applySignalKernel(name: string, values: number[]): number {
     default:
       throw new Error(`Unknown signal kernel: ${name}`);
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TEST HELPER - Exported only for unit testing
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Test helper to directly invoke applySignalKernel.
+ * ONLY use in tests - not for production code.
+ */
+export function testApplySignalKernel(name: string, values: number[]): number {
+  return applySignalKernel(name, values);
 }
