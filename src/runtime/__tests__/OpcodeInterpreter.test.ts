@@ -222,3 +222,49 @@ describe('OpcodeInterpreter - Error Handling', () => {
     expect(() => applyOpcode('pow', [2, 3, 4])).toThrow(/exactly 2 argument/);
   });
 });
+
+describe('OpcodeInterpreter - Strict Arity Enforcement', () => {
+  describe('Binary ops require exactly 2 arguments', () => {
+    it('sub: throws on 1 argument', () => {
+      expect(() => applyOpcode('sub', [5])).toThrow(/not unary/);
+    });
+
+    it('sub: throws on 3+ arguments', () => {
+      expect(() => applyOpcode('sub', [5, 3, 2])).toThrow(/exactly 2 argument/);
+    });
+
+    it('div: throws on 1 argument', () => {
+      expect(() => applyOpcode('div', [6])).toThrow(/not unary/);
+    });
+
+    it('div: throws on 3+ arguments', () => {
+      expect(() => applyOpcode('div', [6, 3, 2])).toThrow(/exactly 2 argument/);
+    });
+
+    it('mod: throws on 1 argument', () => {
+      expect(() => applyOpcode('mod', [7])).toThrow(/not unary/);
+    });
+
+    it('mod: throws on 3+ arguments', () => {
+      expect(() => applyOpcode('mod', [7, 3, 2])).toThrow(/exactly 2 argument/);
+    });
+  });
+
+  describe('Ternary ops require exactly 3 arguments', () => {
+    it('clamp: throws on 2 arguments', () => {
+      expect(() => applyOpcode('clamp', [0.5, 0])).toThrow(/exactly 3 argument/);
+    });
+
+    it('clamp: throws on 4+ arguments', () => {
+      expect(() => applyOpcode('clamp', [0.5, 0, 1, 2])).toThrow(/exactly 3 argument/);
+    });
+
+    it('lerp: throws on 2 arguments', () => {
+      expect(() => applyOpcode('lerp', [0, 10])).toThrow(/exactly 3 argument/);
+    });
+
+    it('lerp: throws on 4+ arguments', () => {
+      expect(() => applyOpcode('lerp', [0, 10, 0.5, 1])).toThrow(/exactly 3 argument/);
+    });
+  });
+});

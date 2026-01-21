@@ -145,25 +145,26 @@ function applyNaryOp(op: string, values: number[]): number {
     case 'add':
       return values.reduce((a, b) => a + b, 0);
     case 'sub':
-      return values.length >= 2 ? values[0] - values[1] : -values[0];
+      expectArity('sub', values.length, 2);
+      return values[0] - values[1];
     case 'mul':
       return values.reduce((a, b) => a * b, 1);
     case 'div':
-      return values.length >= 2 ? values[0] / values[1] : 1 / values[0];
+      expectArity('div', values.length, 2);
+      return values[0] / values[1];
     case 'mod':
-      return values.length >= 2 ? values[0] % values[1] : 0;
+      expectArity('mod', values.length, 2);
+      return values[0] % values[1];
     case 'min':
       return Math.min(...values);
     case 'max':
       return Math.max(...values);
     case 'clamp':
-      return values.length >= 3
-        ? Math.max(values[1], Math.min(values[2], values[0]))
-        : values[0];
+      expectArity('clamp', values.length, 3);
+      return Math.max(values[1], Math.min(values[2], values[0]));
     case 'lerp':
-      return values.length >= 3
-        ? values[0] * (1 - values[2]) + values[1] * values[2]
-        : values[0];
+      expectArity('lerp', values.length, 3);
+      return values[0] * (1 - values[2]) + values[1] * values[2];
     case 'pow':
       expectArity('pow', values.length, 2);
       return Math.pow(values[0], values[1]);
@@ -182,10 +183,6 @@ function applyNaryOp(op: string, values: number[]): number {
       return h / 0x100000000;
     }
     default:
-      // Try unary if single value
-      if (values.length === 1) {
-        return applyUnaryOp(op, values[0]);
-      }
       throw new Error(`OpCode ${op} not implemented for ${values.length} args`);
   }
 }
