@@ -1625,6 +1625,76 @@ const ParamsEditor = observer(function ParamsEditor({ block, typeInfo }: ParamsE
 });
 
 // =============================================================================
+// =============================================================================
+// Expression Editor (for Expression DSL blocks)
+// =============================================================================
+
+interface ExpressionEditorProps {
+  blockId: BlockId;
+  value: string;
+}
+
+const ExpressionEditor = observer(function ExpressionEditor({ blockId, value }: ExpressionEditorProps) {
+  const [localValue, setLocalValue] = useState(value);
+
+  // Update local value when prop changes
+  React.useEffect(() => {
+    setLocalValue(value);
+  }, [value]);
+
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newValue = e.target.value;
+    if (newValue.length > 500) return; // Character limit
+    setLocalValue(newValue);
+  }, []);
+
+  const handleBlur = useCallback(() => {
+    if (localValue !== value) {
+      rootStore.patch.updateBlockParams(blockId, { expression: localValue });
+    }
+  }, [blockId, localValue, value]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      // Ctrl/Cmd+Enter: trigger immediate update (blur will save)
+      e.currentTarget.blur();
+    }
+  }, []);
+
+  return (
+    <div>
+      <label style={{ fontSize: '12px', color: colors.textSecondary, display: 'block', marginBottom: '4px' }}>
+        Expression
+      </label>
+      <textarea
+        value={localValue}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+        placeholder="e.g., sin(in0 * 2) + 0.5"
+        rows={3}
+        maxLength={500}
+        style={{
+          width: '100%',
+          padding: '8px',
+          border: `1px solid ${colors.border}`,
+          borderRadius: '4px',
+          backgroundColor: colors.bgPanel,
+          color: colors.textPrimary,
+          fontFamily: 'monospace',
+          fontSize: '12px',
+          resize: 'vertical',
+          boxSizing: 'border-box',
+        }}
+      />
+      <div style={{ fontSize: '10px', color: colors.textSecondary, textAlign: 'right', marginTop: '2px' }}>
+        {localValue.length} / 500
+      </div>
+    </div>
+  );
+});
+
+
 // Individual Param Field
 // =============================================================================
 
@@ -1636,6 +1706,13 @@ interface ParamFieldProps {
 }
 
 const ParamField = observer(function ParamField({ blockId, paramKey, value, typeInfo }: ParamFieldProps) {
+  // Special case: Expression block with expression parameter
+  // Render multiline textarea instead of single-line text input
+  if (typeInfo.type === 'Expression' && paramKey === 'expression') {
+    return <ExpressionEditor blockId={blockId} value={String(value ?? '')} />;
+  }
+
+
   // Find uiHint if this param corresponds to an input
   const inputDef = typeInfo.inputs[paramKey];
   const uiHint = inputDef?.uiHint;

@@ -1,0 +1,13 @@
+Agent: status-planner | 2026-01-20 16:43:54
+Topic: expression-dsl
+Sprint: integration
+Confidence: HIGH
+Files:
+  - SPRINT-20260120-164354-integration-PLAN.md [HIGH]
+  - SPRINT-20260120-164354-integration-DOD.md [HIGH]
+  - SPRINT-20260120-164354-integration-CONTEXT.md [HIGH]
+Items: 6 (P0: 4, P1: 2, P2: 1)
+Scope: Wire Expression DSL into application (block definition, lowering, UI, tests)
+Dependencies: All complete (Sprint 1 & 2 done, all infrastructure ready)
+Risks: Low (isolated module, stable APIs, clear integration points)
+Estimated Effort: 6-9 hours

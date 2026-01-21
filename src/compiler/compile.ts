@@ -28,6 +28,7 @@ import '../blocks/array-blocks'; // NEW - Sprint 9: Three-stage architecture (St
 import '../blocks/instance-blocks'; // NEW - Sprint 3 (replaces domain-blocks)
 import '../blocks/field-blocks';
 import '../blocks/math-blocks';
+import '../blocks/expression-blocks'; // NEW - Expression DSL Integration Sprint 3
 import '../blocks/color-blocks';
 import '../blocks/geometry-blocks';
 import '../blocks/identity-blocks';

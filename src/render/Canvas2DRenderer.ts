@@ -81,6 +81,11 @@ function renderInstances2D(
   // Get control points for path shapes (used as shape template)
   const controlPoints = pass.controlPoints as Float32Array | undefined;
 
+  // DEBUG: Log shape info once per frame
+  if (pass.count > 0) {
+    console.log('[Renderer] shape:', pass.shape, 'shapeMode:', shapeMode.kind, 'controlPoints:', controlPoints?.length);
+  }
+
   for (let i = 0; i < pass.count; i++) {
     const x = position[i * 2] * width;
     const y = position[i * 2 + 1] * height;

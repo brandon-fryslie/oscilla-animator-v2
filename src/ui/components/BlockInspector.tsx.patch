@@ -1,0 +1,18 @@
+--- a/src/ui/components/BlockInspector.tsx
++++ b/src/ui/components/BlockInspector.tsx
+@@ -1635,6 +1635,15 @@ interface ParamFieldProps {
+   typeInfo: BlockDef;
+ }
+
++const ParamField = observer(function ParamField({ blockId, paramKey, value, typeInfo }: ParamFieldProps) {
++  // Special case: Expression block with expression parameter
++  // Render multiline textarea instead of single-line text input
++  if (typeInfo.type === 'Expression' && paramKey === 'expression') {
++    return <ExpressionEditor blockId={blockId} value={String(value ?? '')} />;
++  }
++
++  // ... rest of ParamField implementation
++
+ const ParamField = observer(function ParamField({ blockId, paramKey, value, typeInfo }: ParamFieldProps) {
+   // Find uiHint if this param corresponds to an input
+   const inputDef = typeInfo.inputs[paramKey];
