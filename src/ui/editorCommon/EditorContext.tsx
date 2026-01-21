@@ -1,7 +1,7 @@
 /**
  * EditorContext - React Context for Generic Editor Access
  *
- * Provides access to the current editor (Rete or ReactFlow) from child components.
+ * Provides access to the current editor (ReactFlow) from child components.
  * Used by BlockLibrary to add blocks on double-click, and other UI components
  * that need to interact with the editor.
  */

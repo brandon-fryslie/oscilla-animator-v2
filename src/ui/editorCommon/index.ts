@@ -2,8 +2,7 @@
  * Editor Common Module Exports
  *
  * Generic abstractions for editor implementations.
- * Allows UI components to work with any editor (Rete, ReactFlow, etc.)
- * through a consistent interface.
+ * Provides a consistent interface for UI components to interact with the editor.
  */
 
 export type { EditorHandle } from './EditorHandle';
