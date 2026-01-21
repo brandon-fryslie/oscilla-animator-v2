@@ -80,7 +80,7 @@ describe('compile', () => {
     it('compiles connected signal blocks', () => {
       const patch = buildPatch((b) => {
         const time = b.addBlock('InfiniteTimeRoot', { periodMs: 1000 });
-        const osc = b.addBlock('Oscillator', { waveform: 'sin' });
+        const osc = b.addBlock('Oscillator', { waveform: 'oscSin' });
         b.wire(time, 'phaseA', osc, 'phase');
       });
 
@@ -158,7 +158,7 @@ describe('compile', () => {
     it('broadcasts signal to field', () => {
       const patch = buildPatch((b) => {
         const time = b.addBlock('InfiniteTimeRoot', {});
-        const osc = b.addBlock('Oscillator', { waveform: 'sin' });
+        const osc = b.addBlock('Oscillator', { waveform: 'oscSin' });
         const broadcast = b.addBlock('FieldBroadcast', {});
 
         b.wire(time, 'phaseA', osc, 'phase');
@@ -226,7 +226,7 @@ describe('Debug Probe Support', () => {
     // Without evalSig steps, the debug probe cannot show signal values.
     const patch = buildPatch((b) => {
       const time = b.addBlock('InfiniteTimeRoot', { periodMs: 1000 });
-      const osc = b.addBlock('Oscillator', { waveform: 'sin' });
+      const osc = b.addBlock('Oscillator', { waveform: 'oscSin' });
       b.wire(time, 'phaseA', osc, 'phase');
     });
 
@@ -255,7 +255,7 @@ describe('Debug Probe Support', () => {
     // Use a simple patch that compiles - just TimeRoot + Oscillator
     const patch = buildPatch((b) => {
       const time = b.addBlock('InfiniteTimeRoot', { periodMs: 1000 });
-      const osc = b.addBlock('Oscillator', { waveform: 'sin' });
+      const osc = b.addBlock('Oscillator', { waveform: 'oscSin' });
       b.wire(time, 'phaseA', osc, 'phase');
     });
 

@@ -158,7 +158,7 @@ registerBlock({
   type: 'Oscillator',
   label: 'Oscillator',
   category: 'signal',
-  description: 'Generates waveforms (sin, cos, triangle, square, sawtooth)',
+  description: 'Generates waveforms (oscSin, oscCos, triangle, square, sawtooth)',
   form: 'primitive',
   capability: 'pure',
   inputs: {
@@ -178,14 +178,14 @@ registerBlock({
       throw new Error('Oscillator phase input must be a signal');
     }
 
-    const waveform = (config?.waveform as string) ?? 'sin';
+    const waveform = (config?.waveform as string) ?? 'oscSin';
     const amplitude = (config?.amplitude as number) ?? 1.0;
     const offset = (config?.offset as number) ?? 0.0;
 
     // Create oscillator signal expression using sigMap
     // Map the waveform function over the phase input
-    // Note: SignalEvaluator kernels (sin, cos, etc.) expect phase [0,1) and convert to radians
-    const waveFn = ctx.b.kernel(waveform); // sin, cos, etc.
+    // Note: SignalEvaluator kernels (oscSin, oscCos, etc.) expect phase [0,1) and convert to radians
+    const waveFn = ctx.b.kernel(waveform); // oscSin, oscCos, etc.
     let sigId: SigExprId = ctx.b.sigMap(phaseValue.id as SigExprId, waveFn, signalType('float'));
 
     // Apply amplitude if not 1.0

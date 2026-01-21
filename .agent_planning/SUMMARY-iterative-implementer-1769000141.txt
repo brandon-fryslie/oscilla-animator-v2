@@ -1,0 +1,37 @@
+Agent: iterative-implementer | 2026-01-21T12:57:40Z
+Mode: manual
+Completed: Sprint 2 (clean-materializer-map) | Files: 3 | Commits: 1
+Tests: 510 passing, 3 failing (pre-existing Hash Block failures, unrelated to sprint work)
+Cache invalidated: N/A (no eval cache present)
+Status: complete
+
+Sprint 2: Remove Scalar Kernels from Materializer Map - COMPLETE
+
+Work Items Completed:
+✅ P0: applyMap simplified to opcodes-only (completed in prior commit)
+✅ P1: fieldGoldenAngle moved to applyKernel (completed in prior commit)
+✅ P2: Updated IR to route sqrt/floor/ceil/round through opcodes
+✅ P3: Materializer header has contract comment (completed in prior commit)
+
+Additional Work:
+✅ Added missing opcodes to OpCode enum: Sqrt, Floor, Ceil, Round, Pow, Fract, Exp, Log, Sign
+✅ Updated src/expr/compile.ts to use opcodes instead of kernels for math ops
+✅ Verified no other IR routes math operations through kernel path
+
+Files Modified:
+- src/compiler/ir/types.ts (added 9 opcodes to OpCode enum)
+- src/expr/compile.ts (changed sqrt/floor/ceil/round from kernel to opcode)
+
+Verification:
+- Build: SUCCESS (pnpm build completed in 9.44s)
+- Tests: 510/513 passing (3 pre-existing failures in Hash Block tests, unrelated)
+
+Impact:
+- All scalar math operations now route through opcodes
+- Map function only supports opcodes, throws error for kernels
+- Field kernels properly segregated to applyKernel function
+- Layer contracts enforced: opcodes for scalar math, kernels for field operations
+
+Next Steps:
+- Sprint 2 complete, ready for Sprint 3 or next phase
+- Hash Block test failures should be addressed separately (not part of this sprint)

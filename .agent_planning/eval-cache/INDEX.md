@@ -2,7 +2,7 @@
 
 **Purpose:** Reusable evaluation findings to speed up future work evaluations.
 
-**Last Updated:** 2026-01-20 22:19:03
+**Last Updated:** 2026-01-21 12:58:00
 
 ---
 
@@ -10,13 +10,9 @@
 
 ### Runtime Findings
 
-**findings-compilation-inspector.md** [UPDATED - FRESH]
-- Scope: work/compilation-inspector
-- Status: COMPLETE - All automated quality gates passed
-- Confidence: FRESH
-- Reusable: Service integration patterns, JSON serialization (circular/function/Map/Set), MobX reactive UI patterns, compiler capture points
-- Key findings: 831 lines of tests (47 tests passing), all 7 passes captured, memory bounded (max 2), TypeScript error FIXED (commit 3ed1525)
-- Next evaluation: After CompilationInspectorService.ts or compile.ts changes
+**findings-compilation-inspector.md** [REMOVED - STALE]
+- Removed: Modified compile.ts IR generation (sqrt/floor/ceil/round now opcodes)
+- Reason: Cache included IR generation patterns for math functions
 
 **runtime-continuity-controls-v2.md** [UPDATED - STALE]
 - Scope: continuity-controls-v2
@@ -26,10 +22,10 @@
 - Key findings: Complete MUI slider migration, base duration control, test pulse feature with visual feedback
 - Next evaluation: Check if SliderWithInput.tsx, ContinuityControls.tsx, or ContinuityApply.ts changed
 
-**runtime-unified-defaults.md**
+**runtime-unified-defaults.md** [UPDATED - STALE]
 - Scope: buses-and-rails/unified-defaults
 - Status: Implementation complete, but codebase has unrelated TypeScript errors
-- Confidence: FRESH
+- Confidence: STALE (IR types.ts updated 2026-01-21 for OpCode enum)
 - Reusable: DefaultSource type usage, compiler pass patterns, UI blockType checks
 - Key findings: Complete type unification, TimeRoot/derived split in pass1, all tests passing
 - Next evaluation: Check if DefaultSource type, pass1, or UI code changed
@@ -58,7 +54,7 @@
 **runtime-unified-inputs.md** [UPDATED - STALE]
 - Scope: param-ui-hints/unified-inputs
 - Status: COMPLETE (all DoD criteria verified)
-- Confidence: STALE (types.ts IR definitions updated 2026-01-20 14:30)
+- Confidence: STALE (types.ts IR definitions updated 2026-01-21 with OpCode enum additions)
 - Reusable: Block registration patterns, exposedAsPort handling, Object.entries iteration patterns
 - Key findings: All 14 blocks migrated to Record format, params removed, uiHint works on any input, config-only filtering works correctly
 - Next evaluation: Check if InputDef/OutputDef types change, or block registration patterns change
@@ -85,6 +81,46 @@
 ---
 
 ## Invalidated Cache
+
+### 2026-01-21 12:58:00 - Sprint 3: remove-duplicate-math (kernel-refactor-phase1)
+**No cache invalidation needed.**
+
+**Rationale:**
+- Modified src/runtime/SignalEvaluator.ts: Removed duplicate math kernel functions
+  - Removed: abs, floor, ceil, round, fract, sqrt, exp, log, pow, min, max, clamp, mix, sign
+  - Kept: oscSin, oscCos, oscTan, triangle, square, sawtooth (oscillators)
+  - Kept: easeInQuad, easeOutQuad, etc. (easing functions)
+  - Kept: smoothstep, step (shaping functions)
+  - Kept: noise (noise function)
+- Updated header comment with LAYER CONTRACT documentation
+- No IR generation patterns changed (only runtime evaluation)
+- No compiler integration patterns changed
+- No existing cache files describe SignalEvaluator.ts kernel implementation patterns
+
+**Impact:**
+- Signal kernels now contain only domain-specific functions
+- Generic math routed through OpcodeInterpreter (established in Sprint 1)
+- Layer separation clearly documented in header comment
+
+### 2026-01-21 12:58:00 - Sprint 2: clean-materializer-map (kernel-refactor-phase1)
+**Removed:**
+- findings-compilation-inspector.md - IR generation patterns changed
+
+**Marked STALE:**
+- runtime-unified-defaults.md - types.ts OpCode enum updated with 9 new opcodes
+- runtime-unified-inputs.md - types.ts OpCode enum updated with 9 new opcodes
+
+**Rationale:**
+- Modified src/compiler/ir/types.ts: Added Sqrt, Floor, Ceil, Round, Pow, Fract, Exp, Log, Sign to OpCode enum
+- Modified src/expr/compile.ts: Changed sqrt/floor/ceil/round from kernel to opcode IR generation
+- Modified src/runtime/Materializer.ts: Previously updated with opcode-only applyMap and fieldGoldenAngle in applyKernel
+- findings-compilation-inspector.md included compiler IR capture patterns and compile.ts integration
+- Cache files referencing types.ts IR definitions marked stale due to OpCode enum changes
+
+**Impact:**
+- IR generation for math functions now uses opcode path instead of kernel path
+- OpCode enum now complete with all standard math functions
+- Materializer.ts map function enforces opcode-only policy
 
 ### 2026-01-20 22:19:03 - Compilation Inspector COMPLETE (compilation-inspector)
 **Updated:**

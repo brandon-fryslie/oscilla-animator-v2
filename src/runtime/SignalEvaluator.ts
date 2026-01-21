@@ -26,7 +26,7 @@
  * IMPORTANT: Generic math (abs, floor, sqrt, etc.) belongs in
  * OpcodeInterpreter, NOT here. Signal kernels have domain semantics.
  *
- * Signal kernels sin/cos/tan (oscSin/oscCos/oscTan) expect PHASE [0,1).
+ * Signal kernels oscSin/oscCos/oscTan (oscSin/oscCos/oscTan) expect PHASE [0,1).
  * Opcode sin/cos/tan expect RADIANS.
  */
 
@@ -212,7 +212,7 @@ function applyPureFn(
 /**
  * Apply kernel function at signal level
  *
- * IMPORTANT: Signal kernels sin/cos/tan expect PHASE [0,1), not radians.
+ * IMPORTANT: Signal kernels oscSin/oscCos/oscTan expect PHASE [0,1), not radians.
  * They convert phase to radians internally (phase * 2π) before applying Math functions.
  * This is the standard expectation for oscillator blocks.
  *
@@ -221,28 +221,39 @@ function applyPureFn(
  */
 function applySignalKernel(name: string, values: number[]): number {
   switch (name) {
-    case 'sin':
+    case 'oscSin':
       if (values.length !== 1) {
-        throw new Error(`Signal kernel 'sin' expects 1 input, got ${values.length}`);
+        throw new Error(`Signal kernel 'oscSin' expects 1 input, got ${values.length}`);
       }
-      // Kernel sin expects PHASE [0,1), converts to radians (0-2π) for full cycle
+      // Kernel oscSin expects PHASE [0,1), converts to radians (0-2π) for full cycle
       // Used by Oscillator block and other signal-level waveform generators
       return Math.sin(values[0] * 2 * Math.PI);
 
-    case 'cos':
+    case 'oscCos':
       if (values.length !== 1) {
-        throw new Error(`Signal kernel 'cos' expects 1 input, got ${values.length}`);
+        throw new Error(`Signal kernel 'oscCos' expects 1 input, got ${values.length}`);
       }
-      // Kernel cos expects PHASE [0,1), converts to radians (0-2π) for full cycle
+      // Kernel oscCos expects PHASE [0,1), converts to radians (0-2π) for full cycle
       // Used by Oscillator block and other signal-level waveform generators
       return Math.cos(values[0] * 2 * Math.PI);
 
-    case 'tan':
+    case 'oscTan':
       if (values.length !== 1) {
-        throw new Error(`Signal kernel 'tan' expects 1 input, got ${values.length}`);
+        throw new Error(`Signal kernel 'oscTan' expects 1 input, got ${values.length}`);
       }
-      // Kernel tan expects PHASE [0,1), converts to radians (0-2π) for full cycle
+      // Kernel oscTan expects PHASE [0,1), converts to radians (0-2π) for full cycle
       return Math.tan(values[0] * 2 * Math.PI);
+
+    // DEPRECATED: Legacy aliases - will be removed in future version
+    case 'sin':
+      console.warn(`Signal kernel 'sin' is deprecated. Use 'oscSin' for phase-based oscillation.`);
+      return applySignalKernel('oscSin', values);
+    case 'cos':
+      console.warn(`Signal kernel 'cos' is deprecated. Use 'oscCos' for phase-based oscillation.`);
+      return applySignalKernel('oscCos', values);
+    case 'tan':
+      console.warn(`Signal kernel 'tan' is deprecated. Use 'oscTan' for phase-based oscillation.`);
+      return applySignalKernel('oscTan', values);
 
     // Waveform kernels - input is phase (0..1), output is -1..1 or 0..1
     case 'triangle': {
