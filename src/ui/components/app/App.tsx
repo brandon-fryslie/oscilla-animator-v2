@@ -19,13 +19,27 @@ import { darkTheme } from '../../theme';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { useExportPatch } from '../../hooks/useExportPatch';
 import { Toast } from '../common/Toast';
+import { useStores, type RootStore } from '../../../stores';
 
 interface AppProps {
   onCanvasReady?: (canvas: HTMLCanvasElement) => void;
+  onStoreReady?: (store: RootStore) => void;
 }
 
-export const App: React.FC<AppProps> = ({ onCanvasReady }) => {
+export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady }) => {
   const [stats, setStats] = useState('FPS: --');
+
+  // Get store from context and expose to non-React code via callback
+  const rootStore = useStores();
+
+  // Notify main.ts when store is available (once on mount)
+  const storeReadyRef = useRef(false);
+  useEffect(() => {
+    if (!storeReadyRef.current && onStoreReady) {
+      storeReadyRef.current = true;
+      onStoreReady(rootStore);
+    }
+  }, [rootStore, onStoreReady]);
 
   // Store handle for React Flow editor
   const reactFlowHandleRef = useRef<EditorHandle | null>(null);

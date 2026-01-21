@@ -19,7 +19,7 @@
 import React, { useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { ToggleButton, ToggleButtonGroup } from '@mui/material';
-import { rootStore } from '../../../stores';
+import { useStores } from '../../../stores';
 import type { Diagnostic, Severity, TargetRef } from '../../../diagnostics/types';
 
 // =============================================================================
@@ -32,11 +32,12 @@ import type { Diagnostic, Severity, TargetRef } from '../../../diagnostics/types
  * MobX observer: Re-renders when diagnostics change.
  */
 export const DiagnosticConsole: React.FC = observer(() => {
+  const { diagnostics: diagnosticsStore } = useStores();
   const [filter, setFilter] = useState<Severity | 'all'>('all');
 
   // Get active diagnostics (reactive - triggers re-render when changed)
-  const diagnostics = rootStore.diagnostics.activeDiagnostics;
-  const revision = rootStore.diagnostics.revision;
+  const diagnostics = diagnosticsStore.activeDiagnostics;
+  const revision = diagnosticsStore.revision;
 
   // Debug logging (disabled - floods console)
   // console.log('[DiagnosticConsole] Rendering with diagnostics:', diagnostics.length, 'revision:', revision);
@@ -52,12 +53,12 @@ export const DiagnosticConsole: React.FC = observer(() => {
   const infoCount = diagnostics.filter((d: Diagnostic) => d.severity === 'info').length;
 
   // Get compilation stats (reactive)
-  const stats = rootStore.diagnostics.compilationStats;
-  const avgMs = rootStore.diagnostics.avgCompileMs;
-  const medianMs = rootStore.diagnostics.medianCompileMs;
+  const stats = diagnosticsStore.compilationStats;
+  const avgMs = diagnosticsStore.avgCompileMs;
+  const medianMs = diagnosticsStore.medianCompileMs;
 
   // Get frame timing stats (reactive)
-  const timing = rootStore.diagnostics.frameTiming;
+  const timing = diagnosticsStore.frameTiming;
 
   return (
     <div

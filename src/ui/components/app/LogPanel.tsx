@@ -6,11 +6,12 @@
 
 import React, { useEffect, useRef } from 'react';
 import { observer } from 'mobx-react-lite';
-import { rootStore } from '../../../stores';
+import { useStores } from '../../../stores';
 import { colors } from '../../theme';
 import type { LogEntry } from '../../../stores/DiagnosticsStore';
 
 export const LogPanel = observer(function LogPanel() {
+  const { diagnostics } = useStores();
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new logs arrive
@@ -18,9 +19,9 @@ export const LogPanel = observer(function LogPanel() {
     if (containerRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
-  }, [rootStore.diagnostics.logs.length]);
+  }, [diagnostics.logs.length]);
 
-  const logs = rootStore.diagnostics.logs;
+  const logs = diagnostics.logs;
 
   return (
     <div

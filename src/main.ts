@@ -11,13 +11,12 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { reaction, toJS } from 'mobx';
-import { rootStore } from './stores';
 import { buildPatch } from './graph';
 import { compile } from './compiler';
 import { createRuntimeState, BufferPool, executeFrame } from './runtime';
 import { renderFrame } from './render';
 import { App } from './ui/components';
-import { StoreProvider } from './stores';
+import { StoreProvider, type RootStore } from './stores';
 import { timeRootRole, type BlockId, type ValueSlot } from './types';
 import { recordFrameTime, recordFrameDelta, shouldEmitSnapshot, emitHealthSnapshot, computeFrameTimingStats, resetFrameTimingStats } from './runtime/HealthMonitor';
 import type { RuntimeState } from './runtime/RuntimeState';
@@ -33,13 +32,17 @@ let canvas: HTMLCanvasElement | null = null;
 let ctx: CanvasRenderingContext2D | null = null;
 let pool: BufferPool | null = null;
 
+// Store reference - set via callback from React when StoreProvider mounts
+let store: RootStore | null = null;
+
 // =============================================================================
 // Logging
 // =============================================================================
 
 function log(msg: string, level: 'info' | 'warn' | 'error' = 'info') {
   // Log to diagnostics store (id and timestamp added by store)
-  rootStore.diagnostics.log({
+  // Guard against early calls before store is ready
+  store?.diagnostics.log({
     level,
     message: msg,
   });
@@ -395,12 +398,12 @@ async function buildAndCompile(patchBuilder: PatchBuilder) {
   }
 
   // Load patch into store
-  rootStore.patch.loadPatch(patch);
+  store!.patch.loadPatch(patch);
 
   // Compile with event emission for diagnostics
   const result = compile(patch, {
-    events: rootStore.events,
-    patchRevision: rootStore.getPatchRevision(),
+    events: store!.events,
+    patchRevision: store!.getPatchRevision(),
     patchId: 'patch-0',
   });
 
@@ -415,10 +418,10 @@ async function buildAndCompile(patchBuilder: PatchBuilder) {
   );
 
   // Emit ProgramSwapped to update active revision for diagnostics
-  rootStore.events.emit({
+  store!.events.emit({
     type: 'ProgramSwapped',
     patchId: 'patch-0',
-    patchRevision: rootStore.getPatchRevision(),
+    patchRevision: store!.getPatchRevision(),
     compileId: 'compile-0',
     swapMode: 'hard',
   });
@@ -433,7 +436,7 @@ async function buildAndCompile(patchBuilder: PatchBuilder) {
     recordSlotValue: (slotId: ValueSlot, value: number) => debugService.updateSlotValue(slotId, value),
   };
   // Set RuntimeState reference in ContinuityStore for config access
-  rootStore.continuity.setRuntimeStateRef(currentState);
+  store!.continuity.setRuntimeStateRef(currentState);
 
   // Initialize instance counts for domain change tracking (Sprint 2)
   const instances = program.schedule?.instances;
@@ -482,7 +485,7 @@ function logDomainChange(instanceId: string, oldCount: number, newCount: number,
     }
 
     // Record to ContinuityStore for UI (Sprint 3)
-    rootStore.continuity.recordDomainChange(
+    store!.continuity.recordDomainChange(
       instanceId,
       oldCount,
       newCount,
@@ -535,7 +538,7 @@ function detectAndLogDomainChanges(oldProgram: any, newProgram: any) {
  * Called when block params change in the UI.
  */
 async function recompileFromStore() {
-  const patch = rootStore.patch.patch;
+  const patch = store!.patch.patch;
   if (!patch) {
     log('No patch to recompile', 'warn');
     return;
@@ -545,8 +548,8 @@ async function recompileFromStore() {
 
   // Compile the patch from store
   const result = compile(patch, {
-    events: rootStore.events,
-    patchRevision: rootStore.getPatchRevision(),
+    events: store!.events,
+    patchRevision: store!.getPatchRevision(),
     patchId: 'patch-0',
   });
 
@@ -582,7 +585,7 @@ async function recompileFromStore() {
     }
 
     // Set RuntimeState reference in ContinuityStore for config access
-    rootStore.continuity.setRuntimeStateRef(currentState);
+    store!.continuity.setRuntimeStateRef(currentState);
   }
 
   // Update program
@@ -598,10 +601,10 @@ async function recompileFromStore() {
   }
 
   // Emit ProgramSwapped event with instance counts
-  rootStore.events.emit({
+  store!.events.emit({
     type: 'ProgramSwapped',
     patchId: 'patch-0',
-    patchRevision: rootStore.getPatchRevision(),
+    patchRevision: store!.getPatchRevision(),
     compileId: `compile-live-${Date.now()}`,
     swapMode: 'soft', // Continuity-preserving swap
     instanceCounts,
@@ -664,13 +667,13 @@ function setupLiveRecompileReaction() {
   reactionSetup = true;
 
   // Initialize hash from current store state
-  lastBlockParamsHash = hashBlockParams(rootStore.patch.blocks);
+  lastBlockParamsHash = hashBlockParams(store!.patch.blocks);
 
   // Watch for block changes (additions, removals, param changes)
   reactionDisposer = reaction(
     () => {
       // Track both structure and params
-      const blocks = rootStore.patch.blocks;
+      const blocks = store!.patch.blocks;
       const hash = hashBlockParams(blocks);
       return { blockCount: blocks.size, hash };
     },
@@ -742,7 +745,7 @@ function animate(tMs: number) {
 
     // Render to canvas with zoom/pan transform from store
     const renderStart = performance.now();
-    const { zoom, pan } = rootStore.viewport;
+    const { zoom, pan } = store!.viewport;
     ctx.save();
     ctx.translate(canvas.width / 2 + pan.x * zoom, canvas.height / 2 + pan.y * zoom);
     ctx.scale(zoom, zoom);
@@ -766,13 +769,13 @@ function animate(tMs: number) {
       const timingStats = computeFrameTimingStats(currentState);
 
       // Update diagnostics store with timing stats
-      rootStore.diagnostics.updateFrameTiming(timingStats);
+      store!.diagnostics.updateFrameTiming(timingStats);
 
       emitHealthSnapshot(
         currentState,
-        rootStore.events,
+        store!.events,
         'patch-0',
-        rootStore.getPatchRevision(),
+        store!.getPatchRevision(),
         tMs
       );
 
@@ -782,7 +785,7 @@ function animate(tMs: number) {
 
     // Update continuity store (batched at 5Hz - Sprint 3)
     if (tMs - lastContinuityStoreUpdate >= CONTINUITY_STORE_UPDATE_INTERVAL) {
-      rootStore.continuity.updateFromRuntime(currentState.continuity, tMs);
+      store!.continuity.updateFromRuntime(currentState.continuity, tMs);
       lastContinuityStoreUpdate = tMs;
     }
 
@@ -916,6 +919,42 @@ function createPatchSwitcherUI() {
 // Main Entry Point
 // =============================================================================
 
+/**
+ * Called when React's StoreProvider has mounted and store is available.
+ * This is where we initialize the runtime that depends on the store.
+ */
+async function initializeRuntime(rootStore: RootStore) {
+  // Set the module-level store reference
+  store = rootStore;
+
+  log('Store ready, initializing runtime...');
+
+  // Initialize buffer pool
+  pool = new BufferPool();
+
+  // Create patch switcher UI
+  createPatchSwitcherUI();
+
+  // Build and compile with initial patch
+  await buildAndCompile(patches[currentPatchIndex].builder);
+
+  // Set up live recompile reaction (Continuity-UI Sprint 1)
+  setupLiveRecompileReaction();
+
+  // Subscribe to CompileEnd events for compilation statistics
+  store.events.on('CompileEnd', (event) => {
+    if (event.status === 'success') {
+      store!.diagnostics.recordCompilation(event.durationMs);
+    }
+  });
+
+  log('Runtime initialized');
+
+  // Start animation loop
+  log('Starting animation loop...');
+  requestAnimationFrame(animate);
+}
+
 async function main() {
   try {
     // Get app container
@@ -924,48 +963,33 @@ async function main() {
       throw new Error('App container not found');
     }
 
-    // Create React root and render App
+    // Create React root and render App wrapped in StoreProvider
+    // StoreProvider creates and owns the store; App exposes it via onStoreReady callback
     const root = createRoot(appContainer);
     root.render(
-      React.createElement(App, {
-        onCanvasReady: (canvasEl: HTMLCanvasElement) => {
-          canvas = canvasEl;
-          ctx = canvas.getContext('2d');
-          log('Canvas ready');
-        },
-      })
+      React.createElement(
+        StoreProvider,
+        null, // No store prop - StoreProvider creates its own
+        React.createElement(App, {
+          onCanvasReady: (canvasEl: HTMLCanvasElement) => {
+            canvas = canvasEl;
+            ctx = canvas.getContext('2d');
+            log('Canvas ready');
+          },
+          onStoreReady: (rootStore: RootStore) => {
+            // Initialize runtime once store is available
+            initializeRuntime(rootStore).catch((err) => {
+              console.error('Failed to initialize runtime:', err);
+            });
+          },
+        })
+      )
     );
 
-    log('React root initialized');
-
-    // Initialize buffer pool
-    pool = new BufferPool();
-
-    // Create patch switcher UI
-    createPatchSwitcherUI();
-
-    // Build and compile with initial patch
-    await buildAndCompile(patches[currentPatchIndex].builder);
-
-    // Set up live recompile reaction (Continuity-UI Sprint 1)
-    setupLiveRecompileReaction();
-
-    // Subscribe to CompileEnd events for compilation statistics
-    rootStore.events.on('CompileEnd', (event) => {
-      if (event.status === 'success') {
-        rootStore.diagnostics.recordCompilation(event.durationMs);
-      }
-    });
-
-    log('Runtime initialized');
-
-    // Start animation loop
-    log('Starting animation loop...');
-    requestAnimationFrame(animate);
+    console.log('React root initialized, waiting for store...');
 
   } catch (err) {
     console.error('Failed to initialize application:', err);
-    log(`Failed to initialize: ${err}`, 'error');
   }
 }
 
