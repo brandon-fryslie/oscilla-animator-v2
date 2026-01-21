@@ -329,3 +329,25 @@
 - All runtime consumers updated to use correct field names
 - Type safety improved (no more 'as any' casts needed)
 - TimeModel properly supports phase period configuration
+
+### 2026-01-21 06:10:00 - Sprint 4: rename-oscillators (kernel-refactor-phase1)
+**No cache invalidation needed.**
+
+**Rationale:**
+- Modified src/runtime/SignalEvaluator.ts: Renamed oscillator kernel cases
+  - Renamed: 'sin' → 'oscSin', 'cos' → 'oscCos', 'tan' → 'oscTan'
+  - Added: Backward compatibility shims with deprecation warnings
+  - Updated: Comments to reference new kernel names
+- Modified src/blocks/signal-blocks.ts: Updated Oscillator block
+  - Changed default waveform: 'sin' → 'oscSin'
+  - Updated description and comments
+- Modified src/compiler/__tests__/compile.test.ts: Updated 4 test cases to use 'oscSin'
+- No IR type definitions changed
+- No compiler integration patterns changed
+- No existing cache files describe SignalEvaluator.ts kernel naming patterns
+
+**Impact:**
+- Signal kernels now use explicit oscillator naming (oscSin/oscCos/oscTan)
+- Clear distinction from radian-based opcode sin/cos/tan
+- Backward compatible via deprecation shims
+- All oscillator-related tests passing (12/12 compile tests)

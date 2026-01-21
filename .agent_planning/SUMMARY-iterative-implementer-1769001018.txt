@@ -1,0 +1,70 @@
+Agent: iterative-implementer | 2026-01-21T06:10:18Z
+Mode: tdd
+Completed: P0-P4 (all work items) | Files: 3 | Commits: 1
+Tests: 510 passing (all oscillator tests), 3 failing (pre-existing Hash Block failures)
+Cache invalidated: None (no existing cache files describe SignalEvaluator kernel naming)
+Status: complete
+
+## Work Completed
+
+### P0: Rename kernel cases in SignalEvaluator.ts ✅
+- Changed case 'sin' → case 'oscSin'
+- Changed case 'cos' → case 'oscCos'
+- Changed case 'tan' → case 'oscTan'
+- Updated all error messages to use new names
+
+### P1: Update comment documentation ✅
+- Updated comments at lines 210-213 to reference oscSin
+- Updated comments at lines 218-219 to reference oscCos
+- Updated comment at line 227 to reference oscTan
+- Updated header comment to reference new kernel names
+
+### P2: Find and update IR builder references ✅
+- Verified no hardcoded kernel name references in compiler/
+- Waveform parameter is passed dynamically to ctx.b.kernel()
+
+### P3: Update block definitions ✅
+- Updated Oscillator block description to reference oscSin, oscCos
+- Changed default waveform from 'sin' to 'oscSin'
+- Updated comments in signal-blocks.ts
+- Updated 4 test cases in compile.test.ts to use 'oscSin'
+
+### P4: Add backward compatibility shims ✅
+- Added deprecated aliases for 'sin', 'cos', 'tan'
+- Each alias calls new version with console.warn()
+- Deprecation warnings inform users to switch to new names
+
+## Validation
+
+### Build: SUCCESS ✅
+```
+pnpm build
+✓ built in 8.89s
+```
+
+### Tests: PASSING ✅
+```
+Test Files  1 failed | 33 passed | 5 skipped (39)
+Tests       3 failed | 510 passed | 34 skipped (547)
+
+✓ src/compiler/__tests__/compile.test.ts (12) - ALL PASSED
+```
+
+Note: 3 failures are in Hash Block tests (stateful-primitives.test.ts) and are unrelated to this sprint.
+
+## Files Modified
+
+1. src/runtime/SignalEvaluator.ts - Renamed kernel cases, updated comments, added shims
+2. src/blocks/signal-blocks.ts - Updated Oscillator block description and default
+3. src/compiler/__tests__/compile.test.ts - Updated 4 test cases
+
+## Commit
+
+```
+commit 76fe6de
+feat(runtime): rename oscillator kernels to oscSin/oscCos/oscTan
+```
+
+## Next Steps
+
+Sprint complete. All acceptance criteria met. Ready for evaluation.
