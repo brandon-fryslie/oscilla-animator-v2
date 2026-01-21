@@ -2,13 +2,28 @@
  * Opcode Interpreter - SINGLE ENFORCER
  *
  * Unified opcode evaluation for all runtime modules.
- * Eliminates triple duplication of opcode dispatch logic.
+ * This is the ONLY place that defines scalar numeric operations.
  *
  * Adheres to architectural law: SINGLE ENFORCER
  *
- * IMPORTANT: Opcode-level sin/cos/tan operate on RADIANS, not phase.
- * These are used for field-level math where angles may already be in radians.
- * For phase-based oscillators, use SignalEvaluator kernels which accept phase [0,1).
+ * OPCODE REFERENCE:
+ * ─────────────────────────────────────────────────────────────
+ * UNARY (exactly 1 arg):
+ *   neg, abs, sin, cos, tan, wrap01,
+ *   floor, ceil, round, fract, sqrt, exp, log, sign
+ *
+ * BINARY (exactly 2 args):
+ *   sub, div, mod, pow, hash
+ *
+ * TERNARY (exactly 3 args):
+ *   clamp, lerp
+ *
+ * VARIADIC (1+ args):
+ *   add, mul, min, max
+ * ─────────────────────────────────────────────────────────────
+ *
+ * IMPORTANT: sin/cos/tan operate on RADIANS, not phase.
+ * For phase-based oscillators, use SignalEvaluator kernels.
  */
 
 /**
@@ -24,6 +39,15 @@ export function applyOpcode(opcode: string, values: number[]): number {
     return applyUnaryOp(opcode, values[0]);
   }
   return applyNaryOp(opcode, values);
+}
+
+/**
+ * Validate opcode arity - throws if mismatch
+ */
+function expectArity(op: string, got: number, expected: number): void {
+  if (got !== expected) {
+    throw new Error(`OpCode '${op}' requires exactly ${expected} argument(s), got ${got}`);
+  }
 }
 
 /**
@@ -53,6 +77,22 @@ function applyUnaryOp(op: string, x: number): number {
       return Math.tan(x);
     case 'wrap01':
       return ((x % 1) + 1) % 1;
+    case 'floor':
+      return Math.floor(x);
+    case 'ceil':
+      return Math.ceil(x);
+    case 'round':
+      return Math.round(x);
+    case 'fract':
+      return x - Math.floor(x);
+    case 'sqrt':
+      return Math.sqrt(x);
+    case 'exp':
+      return Math.exp(x);
+    case 'log':
+      return Math.log(x);
+    case 'sign':
+      return Math.sign(x);
     default:
       throw new Error(`OpCode ${op} is not unary`);
   }
@@ -89,6 +129,9 @@ function applyNaryOp(op: string, values: number[]): number {
       return values.length >= 3
         ? values[0] * (1 - values[2]) + values[1] * values[2]
         : values[0];
+    case 'pow':
+      expectArity('pow', values.length, 2);
+      return Math.pow(values[0], values[1]);
     case 'hash': {
       // Deterministic hash function for seeded randomness
       // Input: (value, seed) → Output: [0, 1)
