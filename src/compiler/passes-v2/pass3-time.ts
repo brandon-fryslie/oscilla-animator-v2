@@ -75,8 +75,15 @@ export function pass3Time(typedPatch: TypedPatch): TimeResolvedPatch {
 function extractTimeModel(
   timeRoot: Block
 ): TimeModelIR {
-  // Default to infinite time model
-  return { kind: 'infinite' };
+  // Extract period parameters for infinite time model
+  const periodAMs = typeof timeRoot.params.periodAMs === 'number' ? timeRoot.params.periodAMs : 1000;
+  const periodBMs = typeof timeRoot.params.periodBMs === 'number' ? timeRoot.params.periodBMs : 2000;
+  
+  return { 
+    kind: 'infinite',
+    periodAMs,
+    periodBMs,
+  };
 }
 
 /**
@@ -92,6 +99,8 @@ function generateTimeSignals(timeModel: TimeModelIR): TimeSignals {
   const phaseA = builder.sigTime('phaseA', signalType('phase'));
   const phaseB = builder.sigTime('phaseB', signalType('phase'));
   const dt = builder.sigTime('dt', signalType('float'));
+  const palette = builder.sigTime('palette', signalType('color'));
+  const energy = builder.sigTime('energy', signalType('float'));
 
   return {
     tModelMs,
@@ -99,5 +108,7 @@ function generateTimeSignals(timeModel: TimeModelIR): TimeSignals {
     phaseB,
     dt,
     pulse: null,
+    palette,
+    energy,
   };
 }

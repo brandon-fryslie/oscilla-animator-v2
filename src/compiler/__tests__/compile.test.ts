@@ -79,7 +79,7 @@ describe('compile', () => {
 
     it('compiles connected signal blocks', () => {
       const patch = buildPatch((b) => {
-        const time = b.addBlock('InfiniteTimeRoot', { periodMs: 1000 });
+        const time = b.addBlock('InfiniteTimeRoot', { periodAMs: 1000, periodBMs: 2000 });
         const osc = b.addBlock('Oscillator', { waveform: 'oscSin' });
         b.wire(time, 'phaseA', osc, 'phase');
       });
@@ -225,7 +225,7 @@ describe('Debug Probe Support', () => {
     // which are necessary for the runtime tap to record slot values.
     // Without evalSig steps, the debug probe cannot show signal values.
     const patch = buildPatch((b) => {
-      const time = b.addBlock('InfiniteTimeRoot', { periodMs: 1000 });
+      const time = b.addBlock('InfiniteTimeRoot', { periodAMs: 1000, periodBMs: 2000 });
       const osc = b.addBlock('Oscillator', { waveform: 'oscSin' });
       b.wire(time, 'phaseA', osc, 'phase');
     });
@@ -254,7 +254,7 @@ describe('Debug Probe Support', () => {
     // Execution order matters: signals must be evaluated before fields materialize
     // Use a simple patch that compiles - just TimeRoot + Oscillator
     const patch = buildPatch((b) => {
-      const time = b.addBlock('InfiniteTimeRoot', { periodMs: 1000 });
+      const time = b.addBlock('InfiniteTimeRoot', { periodAMs: 1000, periodBMs: 2000 });
       const osc = b.addBlock('Oscillator', { waveform: 'oscSin' });
       b.wire(time, 'phaseA', osc, 'phase');
     });

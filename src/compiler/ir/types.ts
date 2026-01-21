@@ -102,7 +102,7 @@ export interface SigExprSlot {
 
 export interface SigExprTime {
   readonly kind: 'time';
-  readonly which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'pulse' | 'progress';
+  readonly which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'pulse' | 'progress' | 'palette' | 'energy';
   readonly type: SignalType;
 }
 

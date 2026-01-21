@@ -105,6 +105,12 @@ export interface TimeSignals {
 
   /** Signal expression ID for pulse (frame ticker) */
   readonly pulse?: SigExprId | null;
+
+  /** Signal expression ID for palette (phase-derived color) */
+  readonly palette?: SigExprId;
+
+  /** Signal expression ID for energy (phase-derived energy) */
+  readonly energy?: SigExprId;
 }
 
 // =============================================================================

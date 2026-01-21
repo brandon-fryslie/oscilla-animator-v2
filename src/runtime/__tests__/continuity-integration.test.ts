@@ -213,7 +213,16 @@ describe('Continuity Integration', () => {
 
     it('finalizes frame correctly', () => {
       const state = createRuntimeState(100);
-      state.time = { tAbsMs: 100, tMs: 100, dt: 16, phaseA: 0, phaseB: 0, pulse: 0 };
+      state.time = { 
+        tAbsMs: 100, 
+        tMs: 100, 
+        dt: 16, 
+        phaseA: 0, 
+        phaseB: 0, 
+        pulse: 0,
+        palette: { r: 0.5, g: 0, b: 0, a: 1.0 },
+        energy: 0.5,
+      };
       state.continuity.domainChangeThisFrame = true;
 
       finalizeContinuityFrame(state);

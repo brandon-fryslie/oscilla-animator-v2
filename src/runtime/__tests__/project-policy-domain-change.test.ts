@@ -28,7 +28,16 @@ import type { ValueSlot } from '../../types';
  */
 function createTestRuntimeState(): RuntimeState {
   return {
-    time: { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0 },
+    time: { 
+      tAbsMs: 0, 
+      tMs: 0, 
+      phaseA: 0, 
+      phaseB: 0, 
+      dt: 16, 
+      pulse: 0,
+      palette: { r: 0.5, g: 0, b: 0, a: 1.0 },
+      energy: 0.5,
+    },
     values: {
       f64: new Float64Array(0),
       objects: new Map(),
@@ -96,7 +105,16 @@ describe('Project Policy Domain Change', () => {
    */
   it('mapped elements maintain position at domain change boundary', () => {
     const state = createTestRuntimeState();
-    state.time = { tAbsMs: 1000, tMs: 1000, phaseA: 0, phaseB: 0, dt: 16, pulse: 0 };
+    state.time = { 
+      tAbsMs: 1000, 
+      tMs: 1000, 
+      phaseA: 0, 
+      phaseB: 0, 
+      dt: 16, 
+      pulse: 0,
+      palette: { r: 0.5, g: 0, b: 0, a: 1.0 },
+      energy: 0.5,
+    };
 
     // Simulate: We have 5 elements with positions around (0.5, 0.5)
     // Position is vec2, so buffer has 10 floats (5 elements * 2 components)
@@ -201,7 +219,16 @@ describe('Project Policy Domain Change', () => {
    */
   it('applyContinuity preserves position at domain change boundary', () => {
     const state = createTestRuntimeState();
-    state.time = { tAbsMs: 1000, tMs: 1000, phaseA: 0, phaseB: 0, dt: 16, pulse: 0 };
+    state.time = { 
+      tAbsMs: 1000, 
+      tMs: 1000, 
+      phaseA: 0, 
+      phaseB: 0, 
+      dt: 16, 
+      pulse: 0,
+      palette: { r: 0.5, g: 0, b: 0, a: 1.0 },
+      energy: 0.5,
+    };
     state.continuity.lastTModelMs = 984; // Previous frame was 16ms ago
 
     // Set up slots for buffers
@@ -294,7 +321,16 @@ describe('Project Policy Domain Change', () => {
    */
   it('handles decrease in element count', () => {
     const state = createTestRuntimeState();
-    state.time = { tAbsMs: 1000, tMs: 1000, phaseA: 0, phaseB: 0, dt: 16, pulse: 0 };
+    state.time = { 
+      tAbsMs: 1000, 
+      tMs: 1000, 
+      phaseA: 0, 
+      phaseB: 0, 
+      dt: 16, 
+      pulse: 0,
+      palette: { r: 0.5, g: 0, b: 0, a: 1.0 },
+      energy: 0.5,
+    };
 
     // Start with 5 elements
     const oldPositions = new Float32Array([
@@ -413,7 +449,16 @@ describe('Project Policy Domain Change', () => {
       isDomainChange: boolean,
       newToOldMapping: Int32Array | null
     ) => {
-      state.time = { tAbsMs: tMs, tMs, phaseA: 0, phaseB: 0, dt: 16, pulse: 0 };
+      state.time = { 
+        tAbsMs: tMs, 
+        tMs, 
+        phaseA: 0, 
+        phaseB: 0, 
+        dt: 16, 
+        pulse: 0,
+        palette: { r: 0.5, g: 0, b: 0, a: 1.0 },
+        energy: 0.5,
+      };
 
       // Update output buffer size if needed
       if (outputBuffer.length !== basePositions.length) {
@@ -580,7 +625,16 @@ describe('Project Policy Domain Change', () => {
 
     // Run initial frames
     for (let t = 0; t <= 100; t += 16) {
-      state.time = { tAbsMs: t, tMs: t, phaseA: 0, phaseB: 0, dt: 16, pulse: 0 };
+      state.time = { 
+        tAbsMs: t, 
+        tMs: t, 
+        phaseA: 0, 
+        phaseB: 0, 
+        dt: 16, 
+        pulse: 0,
+        palette: { r: 0.5, g: 0, b: 0, a: 1.0 },
+        energy: 0.5,
+      };
       state.continuity.domainChangeThisFrame = false;
       applyContinuity(step, state, (slot) => state.values.objects.get(slot) as Float32Array);
       state.continuity.lastTModelMs = t;
@@ -606,7 +660,16 @@ describe('Project Policy Domain Change', () => {
     };
     state.continuity.mappings.set(instanceId, mapping);
     state.continuity.domainChangeThisFrame = true;
-    state.time = { tAbsMs: 116, tMs: 116, phaseA: 0, phaseB: 0, dt: 16, pulse: 0 };
+    state.time = { 
+      tAbsMs: 116, 
+      tMs: 116, 
+      phaseA: 0, 
+      phaseB: 0, 
+      dt: 16, 
+      pulse: 0,
+      palette: { r: 0.5, g: 0, b: 0, a: 1.0 },
+      energy: 0.5,
+    };
 
     // Apply domain change frame
     applyContinuity(step, state, (slot) => state.values.objects.get(slot) as Float32Array);
@@ -631,7 +694,16 @@ describe('Project Policy Domain Change', () => {
 
     // Run for ~5 tau (5 * 120ms = 600ms) to see gauge decay nearly to zero
     for (let t = 132; t <= 716; t += 16) {
-      state.time = { tAbsMs: t, tMs: t, phaseA: 0, phaseB: 0, dt: 16, pulse: 0 };
+      state.time = { 
+        tAbsMs: t, 
+        tMs: t, 
+        phaseA: 0, 
+        phaseB: 0, 
+        dt: 16, 
+        pulse: 0,
+        palette: { r: 0.5, g: 0, b: 0, a: 1.0 },
+        energy: 0.5,
+      };
 
       // IMPORTANT: Base positions continue to change (simulating rotating spiral)
       // This is what causes drift if gauge doesn't decay

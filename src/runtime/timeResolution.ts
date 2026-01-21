@@ -30,6 +30,12 @@ export interface EffectiveTime {
 
   /** Progress within finite time (0-1), only set for finite time roots */
   progress?: number;
+
+  /** Palette: phase-derived RGBA color */
+  palette: { r: number; g: number; b: number; a: number };
+
+  /** Energy: phase-derived energy [0,1] */
+  energy: number;
 }
 
 /**
@@ -74,6 +80,31 @@ export function wrapPhase(value: number): number {
 }
 
 /**
+ * Convert HSV color to RGB.
+ * All values are in [0, 1] range.
+ */
+function hsvToRgb(h: number, s: number, v: number): { r: number; g: number; b: number; a: number } {
+  const i = Math.floor(h * 6);
+  const f = h * 6 - i;
+  const p = v * (1 - s);
+  const q = v * (1 - f * s);
+  const t = v * (1 - (1 - f) * s);
+
+  let r: number, g: number, b: number;
+  switch (i % 6) {
+    case 0: r = v; g = t; b = p; break;
+    case 1: r = q; g = v; b = p; break;
+    case 2: r = p; g = v; b = t; break;
+    case 3: r = p; g = q; b = v; break;
+    case 4: r = t; g = p; b = v; break;
+    case 5: r = v; g = p; b = q; break;
+    default: r = 0; g = 0; b = 0;
+  }
+
+  return { r, g, b, a: 1.0 };
+}
+
+/**
  * Resolve effective time from absolute time and time model.
  */
 export function resolveTime(
@@ -105,6 +136,12 @@ export function resolveTime(
   timeState.prevPhaseA = phaseA;
   timeState.prevPhaseB = phaseB;
 
+  // Compute palette: HSV(phaseA, 1.0, 0.5) -> RGB
+  const palette = hsvToRgb(phaseA, 1.0, 0.5);
+
+  // Compute energy: 0.5 + 0.5 * sin(phaseA * 2π)
+  const energy = 0.5 + 0.5 * Math.sin(phaseA * 2 * Math.PI);
+
   // Infinite model
-  return { tAbsMs, tMs: tAbsMs, dt, phaseA, phaseB, pulse };
+  return { tAbsMs, tMs: tAbsMs, dt, phaseA, phaseB, pulse, palette, energy };
 }

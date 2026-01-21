@@ -19,13 +19,16 @@ registerBlock({
   form: 'primitive',
   capability: 'time',
   inputs: {
-    periodMs: { type: signalType('float'), value: 1000, exposedAsPort: false },
+    periodAMs: { type: signalType('float'), value: 1000, exposedAsPort: false },
+    periodBMs: { type: signalType('float'), value: 2000, exposedAsPort: false },
   },
   outputs: {
     tMs: { label: 'Time (ms)', type: signalType('float') },
     // Phase outputs use 'phase' type: values in [0, 1) range representing normalized time cycles
     phaseA: { label: 'Phase A', type: signalType('phase') },
     phaseB: { label: 'Phase B', type: signalType('phase') },
+    palette: { label: 'Palette', type: signalType('color') },
+    energy: { label: 'Energy', type: signalType('float') },
   },
   lower: ({ ctx }) => {
     // TimeRoot blocks don't produce IR directly
@@ -34,16 +37,22 @@ registerBlock({
     const tMs = ctx.b.sigTime('tMs', signalType('float'));
     const phaseA = ctx.b.sigTime('phaseA', signalType('phase'));
     const phaseB = ctx.b.sigTime('phaseB', signalType('phase'));
+    const palette = ctx.b.sigTime('palette', signalType('color'));
+    const energy = ctx.b.sigTime('energy', signalType('float'));
 
     const tMsSlot = ctx.b.allocSlot();
     const phaseASlot = ctx.b.allocSlot();
     const phaseBSlot = ctx.b.allocSlot();
+    const paletteSlot = ctx.b.allocSlot();
+    const energySlot = ctx.b.allocSlot();
 
     return {
       outputsById: {
         tMs: { k: 'sig', id: tMs, slot: tMsSlot },
         phaseA: { k: 'sig', id: phaseA, slot: phaseASlot },
         phaseB: { k: 'sig', id: phaseB, slot: phaseBSlot },
+        palette: { k: 'sig', id: palette, slot: paletteSlot },
+        energy: { k: 'sig', id: energy, slot: energySlot },
       },
     };
   },

@@ -130,6 +130,11 @@ export function executeFrame(
   const time = resolveTime(tAbsMs, timeModel, state.timeState);
   state.time = time;
 
+  // Store palette color object in objects map for signal evaluation
+  // Use a reserved slot number for palette (slot 0 is reserved for time palette)
+  const PALETTE_SLOT = 0 as ValueSlot;
+  state.values.objects.set(PALETTE_SLOT, time.palette);
+
   // 3. Execute schedule steps in TWO PHASES
   // Phase 1: Execute evalSig, materialize, render (skip stateWrite)
   // Phase 2: Execute all stateWrite steps

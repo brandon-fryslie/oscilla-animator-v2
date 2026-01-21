@@ -19,7 +19,7 @@ describe('Steel Thread - Animated Particles', () => {
   it('should compile and execute the minimal animated particles patch', () => {
     // Build the patch using three-stage block architecture
     const patch = buildPatch((b) => {
-      const time = b.addBlock('InfiniteTimeRoot', { periodMs: 5000 });
+      const time = b.addBlock('InfiniteTimeRoot', { periodAMs: 5000, periodBMs: 10000 });
 
       // Three-stage architecture:
       // 1. Ellipse (shape) → Signal<shape>

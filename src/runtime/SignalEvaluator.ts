@@ -147,7 +147,7 @@ function evaluateSigExpr(
     }
 
         case 'time': {
-      const timeExpr = expr as { which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'pulse' | 'progress' };
+      const timeExpr = expr as { which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'pulse' | 'progress' | 'palette' | 'energy' };
       switch (timeExpr.which) {
         case 'tMs':
           return state.time.tMs;
@@ -161,6 +161,11 @@ function evaluateSigExpr(
           return state.time.pulse;
         case 'progress':
           return state.time.progress ?? 0;
+        case 'palette':
+          // Palette is stored in objects map at reserved slot 0
+          return 0; // Slot number for palette
+        case 'energy':
+          return state.time.energy;
         default: {
           const _exhaustive: never = timeExpr.which;
           throw new Error(`Unknown time signal: ${String(_exhaustive)}`);
