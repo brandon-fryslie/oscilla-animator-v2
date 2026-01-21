@@ -10,6 +10,7 @@ import type { EffectiveTime, TimeState } from './timeResolution';
 import { createTimeState } from './timeResolution';
 import type { ContinuityState } from './ContinuityState';
 import { createContinuityState } from './ContinuityState';
+import type { DebugTap } from './DebugTap';
 
 /**
  * ValueStore - Slot-based value storage
@@ -297,6 +298,9 @@ export interface RuntimeState {
 
   /** Continuity config for user-controlled parameters (survives hot-swap) */
   continuityConfig: ContinuityConfig;
+
+  /** Optional debug tap for runtime observation (Sprint 1: Debug Probe) */
+  tap?: DebugTap;
 }
 
 /**

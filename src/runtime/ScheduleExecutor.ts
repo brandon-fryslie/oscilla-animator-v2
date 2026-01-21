@@ -119,11 +119,14 @@ export function executeFrame(
       case 'evalSig': {
         // Evaluate signal and store in slot using slotMeta.offset
         const value = evaluateSignal(step.expr, signals, state);
-        const { storage, offset } = resolveSlotOffset(program, step.target);
+        const { storage, offset, slot } = resolveSlotOffset(program, step.target);
 
         if (storage === 'f64') {
           // DoD: Use slotMeta.offset for typed array access
           state.values.f64[offset] = value;
+
+          // Debug tap: Record slot value (Sprint 1: Debug Probe)
+          state.tap?.recordSlotValue?.(slot, value);
         } else {
           throw new Error(`evalSig expects f64 storage, got ${storage}`);
         }
