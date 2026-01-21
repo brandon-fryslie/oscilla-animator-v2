@@ -1,33 +1,64 @@
 /**
- * Signal Evaluator - SINGLE SOURCE OF TRUTH
+ * ══════════════════════════════════════════════════════════════════════
+ * SIGNAL EVALUATOR - SINGLE SOURCE OF TRUTH
+ * ══════════════════════════════════════════════════════════════════════
  *
- * Unified signal evaluation for both ScheduleExecutor and Materializer.
+ * Unified signal evaluation for ScheduleExecutor and Materializer.
  * Adheres to architectural law: ONE SOURCE OF TRUTH
  *
- * LAYER CONTRACT:
- * ─────────────────────────────────────────────────────────────
- * Signal kernels are DOMAIN-SPECIFIC scalar→scalar functions:
+ * ──────────────────────────────────────────────────────────────────────
+ * LAYER CONTRACT: SIGNAL KERNELS
+ * ──────────────────────────────────────────────────────────────────────
  *
- * OSCILLATORS (phase [0,1) → [-1,1]):
- *   oscSin, oscCos, oscTan, triangle, square, sawtooth
+ * Signal kernels are DOMAIN-SPECIFIC scalar→scalar functions.
+ * They have specific input domains and output ranges.
  *
- * EASING (t [0,1] → u [0,1]):
- *   easeInQuad, easeOutQuad, easeInOutQuad,
- *   easeInCubic, easeOutCubic, easeInOutCubic,
+ * WHAT BELONGS HERE:
+ * - Oscillators (phase [0,1) → value [-1,1])
+ * - Easing functions (t [0,1] → u [0,1])
+ * - Shaping functions (smoothstep, step)
+ * - Noise (deterministic, seeded)
+ *
+ * WHAT DOES NOT BELONG HERE:
+ * - Generic math (abs, floor, sqrt, pow) → use OpcodeInterpreter
+ * - Vec2/geometry operations → use Materializer field kernels
+ * - Field-level operations → use Materializer
+ *
+ * ──────────────────────────────────────────────────────────────────────
+ * SIGNAL KERNEL REFERENCE
+ * ──────────────────────────────────────────────────────────────────────
+ *
+ * OSCILLATORS (phase [0,1) → [-1,1], auto-wrapped):
+ *   oscSin     - Sine oscillator: sin(phase * 2π)
+ *   oscCos     - Cosine oscillator: cos(phase * 2π)
+ *   oscTan     - Tangent oscillator: tan(phase * 2π)
+ *   triangle   - Triangle wave: 4|phase - 0.5| - 1
+ *   square     - Square wave: phase < 0.5 ? 1 : -1
+ *   sawtooth   - Sawtooth wave: 2 * phase - 1
+ *
+ * EASING (t [0,1] → u [0,1], clamped):
+ *   easeInQuad, easeOutQuad, easeInOutQuad
+ *   easeInCubic, easeOutCubic, easeInOutCubic
  *   easeInElastic, easeOutElastic, easeOutBounce
  *
  * SHAPING:
- *   smoothstep, step
+ *   smoothstep(edge0, edge1, x) - Hermite interpolation
+ *   step(edge, x) - Step function: x < edge ? 0 : 1
  *
- * NOISE (any real → [0,1)):
- *   noise
- * ─────────────────────────────────────────────────────────────
+ * NOISE:
+ *   noise(x) - Deterministic 1D noise, output [0,1)
  *
- * IMPORTANT: Generic math (abs, floor, sqrt, etc.) belongs in
- * OpcodeInterpreter, NOT here. Signal kernels have domain semantics.
+ * ──────────────────────────────────────────────────────────────────────
+ * IMPORTANT: PHASE vs RADIANS
+ * ──────────────────────────────────────────────────────────────────────
  *
- * Signal kernels oscSin/oscCos/oscTan (oscSin/oscCos/oscTan) expect PHASE [0,1).
- * Opcode sin/cos/tan expect RADIANS.
+ * Signal kernels oscSin/oscCos/oscTan expect PHASE [0,1).
+ * They convert to radians internally: sin(phase * 2π).
+ *
+ * Opcode sin/cos/tan expect RADIANS directly.
+ * Use opcodes for field-level math; use kernels for oscillator blocks.
+ *
+ * ══════════════════════════════════════════════════════════════════════
  */
 
 import type { SigExpr, PureFn } from '../compiler/ir/types';

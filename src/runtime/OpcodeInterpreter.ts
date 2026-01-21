@@ -1,29 +1,64 @@
 /**
- * Opcode Interpreter - SINGLE ENFORCER
+ * ══════════════════════════════════════════════════════════════════════
+ * OPCODE INTERPRETER - SINGLE ENFORCER
+ * ══════════════════════════════════════════════════════════════════════
  *
- * Unified opcode evaluation for all runtime modules.
  * This is the ONLY place that defines scalar numeric operations.
+ * All runtime modules (SignalEvaluator, Materializer) delegate here.
  *
- * Adheres to architectural law: SINGLE ENFORCER
+ * ARCHITECTURAL LAW: SINGLE ENFORCER
+ * - No other module may implement scalar math
+ * - No duplication of these operations anywhere
  *
- * OPCODE REFERENCE:
- * ─────────────────────────────────────────────────────────────
- * UNARY (exactly 1 arg):
- *   neg, abs, sin, cos, tan, wrap01,
- *   floor, ceil, round, fract, sqrt, exp, log, sign
+ * ──────────────────────────────────────────────────────────────────────
+ * OPCODE REFERENCE
+ * ──────────────────────────────────────────────────────────────────────
  *
- * BINARY (exactly 2 args):
- *   sub, div, mod, pow, hash
+ * UNARY (exactly 1 argument):
+ *   neg      - Negation: -x
+ *   abs      - Absolute value: |x|
+ *   sin      - Sine (RADIANS): Math.sin(x)
+ *   cos      - Cosine (RADIANS): Math.cos(x)
+ *   tan      - Tangent (RADIANS): Math.tan(x)
+ *   wrap01   - Wrap to [0,1): ((x % 1) + 1) % 1
+ *   floor    - Floor: Math.floor(x)
+ *   ceil     - Ceiling: Math.ceil(x)
+ *   round    - Round: Math.round(x)
+ *   fract    - Fractional part: x - floor(x)
+ *   sqrt     - Square root: Math.sqrt(x)
+ *   exp      - Exponential: Math.exp(x)
+ *   log      - Natural log: Math.log(x)
+ *   sign     - Sign: -1, 0, or 1
  *
- * TERNARY (exactly 3 args):
- *   clamp, lerp
+ * BINARY (exactly 2 arguments):
+ *   sub      - Subtraction: a - b
+ *   div      - Division: a / b
+ *   mod      - Modulo: a % b
+ *   pow      - Power: a^b
+ *   hash     - Deterministic hash: (value, seed) → [0,1)
  *
- * VARIADIC (1+ args):
- *   add, mul, min, max
- * ─────────────────────────────────────────────────────────────
+ * TERNARY (exactly 3 arguments):
+ *   clamp    - Clamp: clamp(x, min, max)
+ *   lerp     - Linear interp: lerp(a, b, t)
  *
- * IMPORTANT: sin/cos/tan operate on RADIANS, not phase.
- * For phase-based oscillators, use SignalEvaluator kernels.
+ * VARIADIC (1+ arguments):
+ *   add      - Sum: a + b + c + ...
+ *   mul      - Product: a * b * c * ...
+ *   min      - Minimum: min(a, b, c, ...)
+ *   max      - Maximum: max(a, b, c, ...)
+ *
+ * ──────────────────────────────────────────────────────────────────────
+ * IMPORTANT: RADIANS vs PHASE
+ * ──────────────────────────────────────────────────────────────────────
+ *
+ * Opcode sin/cos/tan operate on RADIANS (raw Math functions).
+ * Use these for field-level math where angles are already in radians.
+ *
+ * For PHASE-based oscillators (input [0,1) → output [-1,1]):
+ * Use SignalEvaluator kernels: oscSin, oscCos, oscTan, triangle, etc.
+ * These convert phase to radians internally (phase * 2π).
+ *
+ * ══════════════════════════════════════════════════════════════════════
  */
 
 /**

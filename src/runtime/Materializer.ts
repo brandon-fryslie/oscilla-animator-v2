@@ -1,33 +1,73 @@
 /**
- * Field Materializer
+ * ══════════════════════════════════════════════════════════════════════
+ * FIELD MATERIALIZER
+ * ══════════════════════════════════════════════════════════════════════
  *
  * Converts FieldExpr IR nodes into typed array buffers.
  * Pure IR path - no legacy fallbacks.
  *
- * LAYER CONTRACT:
- * ─────────────────────────────────────────────────────────────
- * Materializer responsibilities:
+ * ──────────────────────────────────────────────────────────────────────
+ * LAYER CONTRACT
+ * ──────────────────────────────────────────────────────────────────────
+ *
+ * MATERIALIZER RESPONSIBILITIES:
  * 1. IR → buffer orchestration (materialize, fillBuffer)
- * 2. Cache management (field buffer caching)
+ * 2. Buffer cache management (frame-stamped caching)
  * 3. Intrinsic field production (index, normalizedIndex, randomId)
- * 4. Layout field production (position, radius via layout spec)
- * 5. Dispatch to field kernels for vec2/color/field operations
+ * 4. Layout field production (position, radius from layout spec)
+ * 5. Dispatch to field kernel registry
  *
- * Materializer does NOT:
- * - Define scalar math (that's OpcodeInterpreter)
- * - Define signal kernels (that's SignalEvaluator)
- * - Define geometry/coord semantics (that's block-level)
+ * MATERIALIZER DOES NOT:
+ * - Define scalar math (→ OpcodeInterpreter)
+ * - Define signal kernels (→ SignalEvaluator)
+ * - Define coord-space semantics (→ block-level contracts)
  *
- * FIELD KERNEL REGISTRY (applyKernel/applyKernelZipSig):
- * - makeVec2, hsvToRgb, jitter2d, fieldJitter2D
- * - attract2d, fieldAngularOffset, fieldRadiusSqrt, fieldAdd
- * - fieldPolarToCartesian, fieldPulse, fieldHueFromPhase
- * - applyOpacity, circleLayout, circleAngle, polygonVertex
- * - fieldGoldenAngle
+ * ──────────────────────────────────────────────────────────────────────
+ * FIELD KERNEL REGISTRY (applyKernel / applyKernelZipSig)
+ * ──────────────────────────────────────────────────────────────────────
  *
  * Field kernels operate on typed array buffers (vec2/color/float).
- * They are coord-space agnostic - blocks define world/local semantics.
- * ─────────────────────────────────────────────────────────────
+ * They are COORD-SPACE AGNOSTIC - blocks define world/local semantics.
+ *
+ * VEC2 CONSTRUCTION:
+ *   makeVec2(x, y) → vec2
+ *
+ * POLAR/CARTESIAN:
+ *   fieldPolarToCartesian(cx, cy, r, angle) → vec2
+ *
+ * LAYOUT:
+ *   circleLayout(normalizedIndex, radius, phase) → vec2
+ *   circleAngle(normalizedIndex, phase) → float (radians)
+ *   polygonVertex(index, sides, radiusX, radiusY) → vec2
+ *
+ * EFFECTS:
+ *   jitter2d / fieldJitter2D(pos, rand, amtX, amtY) → vec2
+ *   attract2d(pos, targetX, targetY, phase, strength) → vec2
+ *   fieldPulse(id01, phase, base, amp, spread) → float
+ *
+ * FIELD MATH:
+ *   fieldAdd(a, b) → float
+ *   fieldAngularOffset(id01, phase, spin) → float
+ *   fieldRadiusSqrt(id01, radius) → float
+ *   fieldGoldenAngle(id01) → float
+ *
+ * COLOR:
+ *   hsvToRgb(h, s, v) → color
+ *   hsvToRgb(hueField, sat, val) → color (zipSig variant)
+ *   fieldHueFromPhase(id01, phase) → float
+ *   applyOpacity(color, opacity) → color
+ *
+ * ──────────────────────────────────────────────────────────────────────
+ * IMPORTANT: COORD-SPACE AGNOSTIC
+ * ──────────────────────────────────────────────────────────────────────
+ *
+ * Field kernels do not know or care about coordinate spaces.
+ * - fieldPolarToCartesian: just computes cx + r*cos(a), cy + r*sin(a)
+ * - The meaning (local vs world) comes from the BLOCK that uses it
+ *
+ * This keeps kernels simple and reusable across different contexts.
+ *
+ * ══════════════════════════════════════════════════════════════════════
  */
 
 import type {
