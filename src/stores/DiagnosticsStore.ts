@@ -152,6 +152,10 @@ export class DiagnosticsStore {
       // Compilation Stats API
       _compilationStats: observable,
       compilationStats: computed,
+      avgCompileMs: computed,
+      medianCompileMs: computed,
+      lastCompileMs: computed,
+      recordCompilation: action,
 
       // Frame Timing API
       _frameTiming: observable,
@@ -159,9 +163,6 @@ export class DiagnosticsStore {
       frameTiming: computed,
       frameTimingHistory: computed,
       updateFrameTiming: action,
-      avgCompileMs: computed,
-      medianCompileMs: computed,
-      recordCompilation: action,
     });
   }
 
@@ -346,6 +347,15 @@ export class DiagnosticsStore {
       return (sorted[mid - 1] + sorted[mid]) / 2;
     }
     return sorted[mid];
+  }
+
+  /**
+   * Returns the most recent compilation time in milliseconds.
+   * Returns 0 if no compilations recorded.
+   */
+  get lastCompileMs(): number {
+    const recent = this._compilationStats.recentMs;
+    return recent.length > 0 ? recent[recent.length - 1] : 0;
   }
 
   /**

@@ -56,6 +56,7 @@ export const DiagnosticConsole: React.FC = observer(() => {
   const stats = diagnosticsStore.compilationStats;
   const avgMs = diagnosticsStore.avgCompileMs;
   const medianMs = diagnosticsStore.medianCompileMs;
+  const lastMs = diagnosticsStore.lastCompileMs;
 
   // Get frame timing stats (reactive)
   const timing = diagnosticsStore.frameTiming;
@@ -108,7 +109,7 @@ export const DiagnosticConsole: React.FC = observer(() => {
             background: '#0a0a18',
           }}
         >
-          <span style={{ color: '#8af' }}>Compilations:</span> {stats.count} | Last: {stats.recentMs[stats.recentMs.length - 1]?.toFixed(1) ?? '-'}ms | Avg: {avgMs.toFixed(1)}ms | Med: {medianMs.toFixed(1)}ms | Min: {stats.minMs === Infinity ? '-' : stats.minMs.toFixed(1)}ms | Max: {stats.maxMs.toFixed(1)}ms
+          <span style={{ color: '#8af' }}>Compilations:</span> {stats.count} | Last: {lastMs.toFixed(1)}ms | Avg: {avgMs.toFixed(1)}ms | Med: {medianMs.toFixed(1)}ms | Min: {stats.minMs === Infinity ? '-' : stats.minMs.toFixed(1)}ms | Max: {stats.maxMs.toFixed(1)}ms
         </div>
       )}
 
