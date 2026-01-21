@@ -8,7 +8,7 @@
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { observer } from 'mobx-react-lite';
-import { rootStore } from '../../../stores';
+import { useStores } from '../../../stores';
 
 interface CanvasTabProps {
   onCanvasReady?: (canvas: HTMLCanvasElement) => void;
@@ -18,6 +18,7 @@ interface CanvasTabProps {
 const TARGET_ASPECT_RATIO = 4 / 3;
 
 export const CanvasTab: React.FC<CanvasTabProps> = observer(({ onCanvasReady }) => {
+  const { viewport } = useStores();
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
@@ -98,17 +99,17 @@ export const CanvasTab: React.FC<CanvasTabProps> = observer(({ onCanvasReady }) 
       const mouseY = e.clientY - rect.top;
 
       const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-      const newZoom = Math.max(0.1, Math.min(10, rootStore.viewport.zoom * zoomFactor));
+      const newZoom = Math.max(0.1, Math.min(10, viewport.zoom * zoomFactor));
 
       const dx = mouseX - canvas.width / 2;
       const dy = mouseY - canvas.height / 2;
 
-      rootStore.viewport.panBy(
-        (dx * (1 - zoomFactor)) / rootStore.viewport.zoom,
-        (dy * (1 - zoomFactor)) / rootStore.viewport.zoom
+      viewport.panBy(
+        (dx * (1 - zoomFactor)) / viewport.zoom,
+        (dy * (1 - zoomFactor)) / viewport.zoom
       );
 
-      rootStore.viewport.setZoom(newZoom);
+      viewport.setZoom(newZoom);
     };
 
     // Mouse drag pan
@@ -127,7 +128,7 @@ export const CanvasTab: React.FC<CanvasTabProps> = observer(({ onCanvasReady }) 
       if (!isDragging) return;
       const dx = e.clientX - lastMouseX;
       const dy = e.clientY - lastMouseY;
-      rootStore.viewport.panBy(dx / rootStore.viewport.zoom, dy / rootStore.viewport.zoom);
+      viewport.panBy(dx / viewport.zoom, dy / viewport.zoom);
       lastMouseX = e.clientX;
       lastMouseY = e.clientY;
     };
@@ -144,7 +145,7 @@ export const CanvasTab: React.FC<CanvasTabProps> = observer(({ onCanvasReady }) 
 
     // Double-click to reset view
     const handleDoubleClick = () => {
-      rootStore.viewport.resetView();
+      viewport.resetView();
     };
 
     canvas.addEventListener('wheel', handleWheel, { passive: false });

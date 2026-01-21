@@ -16,9 +16,9 @@ import type { Node, Edge as ReactFlowEdge, OnNodesChange, OnEdgesChange, OnConne
 import { applyNodeChanges, applyEdgeChanges } from 'reactflow';
 import type { Patch, BlockId } from '../../types';
 import type { PatchStore } from '../../stores/PatchStore';
+import type { DiagnosticsStore } from '../../stores/DiagnosticsStore';
 import { getBlockDefinition } from '../../blocks/registry';
 import { createNodeFromBlock, createEdgeFromPatchEdge, type OscillaNode } from './nodes';
-import { rootStore } from '../../stores';
 
 // Flag to prevent sync loops
 let isSyncing = false;
@@ -40,7 +40,8 @@ export interface SyncHandle {
 export function syncPatchToReactFlow(
   patch: Patch,
   setNodes: React.Dispatch<React.SetStateAction<Node[]>>,
-  setEdges: React.Dispatch<React.SetStateAction<ReactFlowEdge[]>>
+  setEdges: React.Dispatch<React.SetStateAction<ReactFlowEdge[]>>,
+  diagnostics: DiagnosticsStore
 ): void {
   if (isSyncing) return;
   isSyncing = true;
@@ -54,7 +55,7 @@ export function syncPatchToReactFlow(
     for (const block of patch.blocks.values()) {
       const def = getBlockDefinition(block.type);
       if (!def) {
-        rootStore.diagnostics.log({
+        diagnostics.log({
           level: 'warn',
           message: `Block definition not found: ${block.type}`,
           data: { blockId: block.id, blockType: block.type },
@@ -89,7 +90,7 @@ export function syncPatchToReactFlow(
  * Setup MobX reaction to sync PatchStore changes back to ReactFlow.
  * This enables external changes (e.g., from TableView) to reflect in editor.
  */
-export function setupPatchToReactFlowReaction(handle: SyncHandle): () => void {
+export function setupPatchToReactFlowReaction(handle: SyncHandle, diagnostics: DiagnosticsStore): () => void {
   return reaction(
     () => ({
       blockCount: handle.patchStore.blocks.size,
@@ -102,7 +103,8 @@ export function setupPatchToReactFlowReaction(handle: SyncHandle): () => void {
         syncPatchToReactFlow(
           handle.patchStore.patch,
           handle.setNodes,
-          handle.setEdges
+          handle.setEdges,
+          diagnostics
         );
       }
     }
@@ -208,11 +210,12 @@ export function createConnectHandler(handle: SyncHandle): OnConnect {
 export function addBlockToReactFlow(
   blockId: BlockId,
   blockType: string,
-  setNodes: React.Dispatch<React.SetStateAction<Node[]>>
+  setNodes: React.Dispatch<React.SetStateAction<Node[]>>,
+  diagnostics: DiagnosticsStore
 ): void {
   const def = getBlockDefinition(blockType);
   if (!def) {
-    rootStore.diagnostics.log({
+    diagnostics.log({
       level: 'warn',
       message: `Block definition not found: ${blockType}`,
       data: { blockId, blockType },

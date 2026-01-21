@@ -126,7 +126,7 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = ({
   wrapperRef,
 }) => {
   // Get store from context
-  const rootStore = useStores();
+  const { patch: patchStore, selection, diagnostics } = useStores();
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -149,11 +149,11 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = ({
   const nodeTypes = useMemo(() => ({ oscilla: OscillaNode }), []);
 
   // Setup sync handle
-  const syncHandle: SyncHandle = {
-    patchStore: rootStore.patch,
+  const syncHandle: SyncHandle = useMemo(() => ({
+    patchStore: patchStore,
     setNodes,
     setEdges,
-  };
+  }), [patchStore, setNodes, setEdges]);
 
   // Create event handlers that sync to PatchStore
   const handleNodesChange = useCallback(
@@ -174,22 +174,22 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = ({
   // Selection handlers - sync ReactFlow selection to SelectionStore
   const handleNodeClick = useCallback(
     (_event: React.MouseEvent, node: Node) => {
-      rootStore.selection.selectBlock(node.id as BlockId);
+      selection.selectBlock(node.id as BlockId);
     },
-    []
+    [selection]
   );
 
   const handleEdgeClick = useCallback(
     (_event: React.MouseEvent, edge: Edge) => {
-      rootStore.selection.selectEdge(edge.id);
+      selection.selectEdge(edge.id);
     },
-    []
+    [selection]
   );
 
   const handlePaneClick = useCallback(() => {
-    rootStore.selection.clearSelection();
+    selection.clearSelection();
     setContextMenu(null); // Close context menu when clicking pane
-  }, []);
+  }, [selection]);
 
   // Context menu handlers
   const handleNodeContextMenu = useCallback<NodeMouseHandler>(
@@ -261,14 +261,14 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = ({
     (blockId: BlockId) => {
       const node = nodesRef.current.find((n) => n.id === blockId);
       if (node) {
-        rootStore.selection.selectBlock(blockId);
+        selection.selectBlock(blockId);
         setCenter(node.position.x + 90, node.position.y + 50, {
           zoom: 1.2,
           duration: 300,
         });
       }
     },
-    [setCenter]
+    [setCenter, selection]
   );
 
   // Connection validation - prevent incompatible type connections
@@ -280,11 +280,10 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = ({
       connection.sourceHandle || '',
       connection.target,
       connection.targetHandle || '',
-      rootStore.patch.patch
+      patchStore.patch
     );
-
     return result.valid;
-  }, []);
+  }, [patchStore]);
 
   // Auto-arrange handler
   const handleAutoArrange = useCallback(async () => {
@@ -315,7 +314,7 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = ({
       setTimeout(() => fitView({ padding: 0.1 }), 50);
     } catch (error) {
       // Log to diagnostics system (appears in LogPanel)
-      rootStore.diagnostics.log({
+      diagnostics.log({
         level: 'error',
         message: `Auto-arrange failed: ${error instanceof Error ? error.message : String(error)}`,
         data: { error },
@@ -323,7 +322,7 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = ({
     } finally {
       setIsLayouting(false);
     }
-  }, [isLayouting, setNodes, fitView]);
+  }, [isLayouting, setNodes, fitView, diagnostics]);
 
   // Store autoArrange ref for handle access
   const autoArrangeRef = useRef(handleAutoArrange);
@@ -369,15 +368,15 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = ({
   // Setup bidirectional sync and editor handle
   useEffect(() => {
     // Initial sync from PatchStore
-    syncPatchToReactFlow(rootStore.patch.patch, setNodes, setEdges);
+    syncPatchToReactFlow(patchStore.patch, setNodes, setEdges, diagnostics);
 
     // Setup MobX reaction for external changes
-    const disposeReaction = setupPatchToReactFlowReaction(syncHandle);
+    const disposeReaction = setupPatchToReactFlowReaction(syncHandle, diagnostics);
 
     // Create handle for EditorContext
     const handle: ReactFlowEditorHandle = {
       async addBlock(blockId: BlockId, blockType: string): Promise<void> {
-        addBlockToReactFlow(blockId, blockType, setNodes);
+        addBlockToReactFlow(blockId, blockType, setNodes, diagnostics);
       },
 
       async removeBlock(blockId: BlockId): Promise<void> {
@@ -401,7 +400,7 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = ({
     return () => {
       disposeReaction();
     };
-  }, [onEditorReady, setNodes, setEdges, fitView]);
+  }, [onEditorReady, fitView, patchStore, diagnostics]);
 
   // Handle delete key
   const handleKeyDown = useCallback(
@@ -410,17 +409,17 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = ({
         // Get selected nodes
         const selectedNodes = nodes.filter((node) => node.selected);
         for (const node of selectedNodes) {
-          rootStore.patch.removeBlock(node.id as BlockId);
+          patchStore.removeBlock(node.id as BlockId);
         }
 
         // Get selected edges
         const selectedEdges = edges.filter((edge) => edge.selected);
         for (const edge of selectedEdges) {
-          rootStore.patch.removeEdge(edge.id);
+          patchStore.removeEdge(edge.id);
         }
       }
     },
-    [nodes, edges]
+    [nodes, edges, patchStore]
   );
 
   useEffect(() => {
