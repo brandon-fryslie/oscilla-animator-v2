@@ -5,7 +5,13 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./src/ui/components/__tests__/setup.ts'],
-    exclude: ['**/node_modules/**', '**/dist/**', 'salvage/**'],
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      'salvage/**',
+      '**/tests/e2e/**', // Exclude Playwright E2E tests
+      '**/*.spec.ts', // Exclude Playwright test files
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],
