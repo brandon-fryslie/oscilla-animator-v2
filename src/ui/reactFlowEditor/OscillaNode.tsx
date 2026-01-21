@@ -13,6 +13,7 @@ import { observer } from 'mobx-react-lite';
 import type { OscillaNodeData, PortData } from './nodes';
 import type { DefaultSource, PortId, BlockId } from '../../types';
 import { rootStore } from '../../stores';
+import { ParameterControl } from './ParameterControls';
 
 /**
  * Format a default source for display in tooltip.
@@ -245,6 +246,28 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
         {data.inputs.length > 0 && data.outputs.length > 0 && ' • '}
         {data.outputs.length > 0 && `${data.outputs.length} out`}
       </div>
+
+      {/* Parameter Controls */}
+      {data.params.length > 0 && (
+        <div
+          style={{
+            marginTop: '8px',
+            paddingTop: '8px',
+            borderTop: '1px solid #333',
+          }}
+        >
+          {data.params.map((param) => (
+            <ParameterControl
+              key={param.id}
+              blockId={data.blockId}
+              paramId={param.id}
+              label={param.label}
+              value={param.value}
+              hint={param.hint}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Output Handles (Right Side) with Labels and Type Colors */}
       {data.outputs.map((output, index) => {

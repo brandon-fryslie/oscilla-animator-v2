@@ -30,6 +30,16 @@ export interface PortData {
 }
 
 /**
+ * Parameter data for ReactFlow rendering
+ */
+export interface ParamData {
+  id: string;
+  label: string;
+  value: unknown;
+  hint?: import('../../types').UIControlHint;
+}
+
+/**
  * Custom data stored in each ReactFlow node.
  * Links back to the canonical block in PatchStore.
  */
@@ -39,6 +49,7 @@ export interface OscillaNodeData {
   label: string;
   inputs: PortData[];
   outputs: PortData[];
+  params: ParamData[];
 }
 
 /**
@@ -103,6 +114,20 @@ export function createNodeFromBlock(
     }
   }
 
+  // Extract parameters from block.params and match with input definitions
+  const params: ParamData[] = [];
+  for (const [inputId, inputDef] of Object.entries(blockDef.inputs)) {
+    // Only include params for non-port inputs (config-only inputs)
+    if (inputDef.exposedAsPort === false && block.params[inputId] !== undefined) {
+      params.push({
+        id: inputId,
+        label: inputDef.label || inputId,
+        value: block.params[inputId],
+        hint: inputDef.uiHint,
+      });
+    }
+  }
+
   return {
     id: block.id,
     type: 'oscilla',
@@ -128,6 +153,7 @@ export function createNodeFromBlock(
           connectedOutputs.has(outputId)
         )
       ),
+      params,
     },
   };
 }
