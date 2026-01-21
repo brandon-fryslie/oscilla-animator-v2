@@ -247,59 +247,88 @@ const patchDomainTest: PatchBuilder = (b) => {
 
 // Wobbly patch - fast spin
 const patchWobbly: PatchBuilder = (b) => {
+  /**
+   * Hypnotic Vortex - Expression DSL Demo
+   *
+   * Uses mathematical expressions to create a mesmerizing spiral effect.
+   * Demonstrates:
+   * - Complex mathematical expressions (sin, cos, pow)
+   * - Field expressions for position calculation
+   * - Time-dependent animation
+   * - Color mapping from phase
+   *
+   * The vortex creates concentric spiral rings that pulsate and rotate.
+   * Each particle's position is computed via an expression that combines:
+   * - Logarithmic spiral growth: r = exp(phase * k)
+   * - Rotating angular offset: angle = phase * speed + index * goldenAngle
+   * - Pulsating radius: r *= sin(time * freq)
+   */
+
   const time = b.addBlock('InfiniteTimeRoot',
-    { periodAMs: 500, periodBMs: 3000 },
+    { periodAMs: 4000, periodBMs: 6000 },
     { role: timeRootRole() }
   );
 
-  // Three-stage architecture
-  const circle = b.addBlock('Circle', { radius: 10 });
+  // Create particle field: 5000 particles for dense effect
+  const circle = b.addBlock('Circle', { radius: 0.01 });
   const array = b.addBlock('Array', { count: 5000 });
   const layout = b.addBlock('GridLayout', { rows: 71, cols: 71 });
 
   b.wire(circle, 'circle', array, 'element');
   b.wire(array, 'elements', layout, 'elements');
 
+  // Golden angle for beautiful phyllotaxis pattern
   const goldenAngle = b.addBlock('FieldGoldenAngle', { turns: 50 });
 
-  // FieldAngularOffset with explicit spin value (default is 1.0, we want 3.0)
-  const spinConst = b.addBlock('Const', { value: 3.0 });
-  const angularOffset = b.addBlock('FieldAngularOffset', {});
+  // === EXPRESSION 1: Logarithmic spiral angle ===
+  // Creates the rotating spiral by combining:
+  // - Golden angle pattern (index-based)
+  // - Time rotation (creates the spinning effect)
+  // - Expression: goldenAngle + time*2 creates slow rotation
+  const angleExpr = b.addBlock('Expression', {
+    expression: 'in0 + in1 * 2' // goldenAngle + time * 2 (slow rotation)
+  });
+  b.wire(goldenAngle, 'angle', angleExpr, 'in0');
+  b.wire(time, 'phaseA', angleExpr, 'in1');
 
-  const totalAngle = b.addBlock('FieldAdd', {});
+  // === EXPRESSION 2: Complex spiral radius with pulsation ===
+  // Creates logarithmic growth with sine-based pulsation:
+  // - Base spiral: (0.2 + id01*0.8) exponential growth
+  // - Pulsation: * (0.7 + 0.3*sin(time*8))
+  // - Creates breathing, pulsating spiral effect
+  const radiusExpr = b.addBlock('Expression', {
+    expression: '(0.2 + in0 * 0.8) * (0.7 + 0.3 * sin(in1 * 8))'
+    // in0 = id01 (normalized index for spiral growth)
+    // in1 = phaseA (time-based pulsation frequency)
+  });
+  b.wire(array, 't', radiusExpr, 'in0');
+  b.wire(time, 'phaseA', radiusExpr, 'in1');
 
-  // Use registry defaults
-  const effectiveRadius = b.addBlock('FieldRadiusSqrt', {});
+  // Convert angle and radius to cartesian coordinates
   const pos = b.addBlock('FieldPolarToCartesian', {});
-  const hue = b.addBlock('FieldHueFromPhase', {});
+  b.wire(angleExpr, 'out', pos, 'angle');
+  b.wire(radiusExpr, 'out', pos, 'radius');
+
+  // === EXPRESSION 3: Color hue from multiple sources ===
+  // Creates dynamic color by blending:
+  // - Index position (creates radial color rings)
+  // - Time variation (creates color rotation effect)
+  // - Combined: sin(index + time*4) for wave-like color motion
+  const hueExpr = b.addBlock('Expression', {
+    expression: 'fract(in0 * 3 + in1 * 2)' // Mix radial + time color variation
+    // in0 = id01 (position in spiral)
+    // in1 = phaseA (time-based rotation)
+    // fract() wraps hue to [0,1) range
+  });
+  b.wire(array, 't', hueExpr, 'in0');
+  b.wire(time, 'phaseA', hueExpr, 'in1');
+
+  // Convert HSV color to RGB
   const color = b.addBlock('HsvToRgb', {});
+  b.wire(hueExpr, 'out', color, 'hue');
+
+  // Render
   const render = b.addBlock('RenderInstances2D', {});
-
-  // Wire phase to position and color
-  b.wire(time, 'phaseA', angularOffset, 'phase');
-  b.wire(time, 'phaseA', hue, 'phase');
-
-  // Wire explicit spin value
-  b.wire(spinConst, 'out', angularOffset, 'spin');
-
-  // Wire Array 't' output to field blocks
-  b.wire(array, 't', goldenAngle, 'id01');
-  b.wire(array, 't', angularOffset, 'id01');
-  b.wire(array, 't', hue, 'id01');
-  b.wire(array, 't', effectiveRadius, 'id01');
-
-  // Wire golden angle + offset to total angle
-  b.wire(goldenAngle, 'angle', totalAngle, 'a');
-  b.wire(angularOffset, 'offset', totalAngle, 'b');
-
-  // Wire to polar to cartesian
-  b.wire(totalAngle, 'out', pos, 'angle');
-  b.wire(effectiveRadius, 'out', pos, 'radius');
-
-  // Wire hue to color
-  b.wire(hue, 'hue', color, 'hue');
-
-  // Wire pos, color to render
   b.wire(pos, 'pos', render, 'pos');
   b.wire(color, 'color', render, 'color');
 };
