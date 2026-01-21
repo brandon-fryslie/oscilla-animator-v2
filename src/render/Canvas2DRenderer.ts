@@ -39,7 +39,7 @@
  *      .agent_planning/_future/9-renderer.md
  */
 
-import type { RenderFrameIR, RenderPassIR, ShapeDescriptor } from '../runtime/ScheduleExecutor';
+import type { RenderFrameIR, RenderPassIR, ShapeDescriptor, ResolvedShape } from '../runtime/ScheduleExecutor';
 import { getTopology } from '../shapes/registry';
 import type { PathTopologyDef, PathVerb, TopologyDef } from '../shapes/types';
 
@@ -109,11 +109,15 @@ function renderInstances2D(
   const sizes = typeof pass.size === 'number' ? null : pass.size as Float32Array;
   const uniformSize = typeof pass.size === 'number' ? pass.size : 3;
 
-  // Determine shape mode
-  const shapeMode = determineShapeMode(pass.shape);
+  // Use resolvedShape if available, otherwise fall back to shape interpretation
+  const shapeMode = pass.resolvedShape
+    ? convertResolvedShapeToMode(pass.resolvedShape)
+    : determineShapeMode(pass.shape);
 
-  // Get control points for path shapes (used as shape template)
-  const controlPoints = pass.controlPoints as Float32Array | undefined;
+  // Get control points for path shapes (from resolvedShape or pass.controlPoints)
+  const controlPoints = (pass.resolvedShape?.mode === 'path' && pass.resolvedShape.controlPoints)
+    ? pass.resolvedShape.controlPoints as Float32Array
+    : pass.controlPoints as Float32Array | undefined;
 
   for (let i = 0; i < pass.count; i++) {
     const x = position[i * 2] * width;
@@ -292,6 +296,39 @@ type ShapeMode =
   | { kind: 'topology'; topology: TopologyDef; params: Record<string, number> }
   | { kind: 'perParticle'; buffer: ArrayBufferView }
   | { kind: 'legacy'; encoding: number };
+
+/**
+ * Convert ResolvedShape to ShapeMode
+ *
+ * When RenderAssembler provides a pre-resolved shape, we convert it
+ * to ShapeMode without doing param mapping. This moves shape
+ * interpretation out of the render hot path.
+ *
+ * Note: We still need topology lookup for render() function, but
+ * params are already resolved with defaults applied.
+ */
+function convertResolvedShapeToMode(resolved: ResolvedShape): ShapeMode {
+  switch (resolved.mode) {
+    case 'legacy':
+      return { kind: 'legacy', encoding: resolved.legacyEncoding ?? 0 };
+
+    case 'path':
+    case 'primitive': {
+      // Get topology for render function
+      const topology = getTopology(resolved.topologyId);
+      return {
+        kind: 'topology',
+        topology,
+        params: resolved.params ?? {},
+      };
+    }
+
+    default: {
+      const _exhaustive: never = resolved.mode;
+      throw new Error(`Unknown resolved shape mode: ${_exhaustive}`);
+    }
+  }
+}
 
 /**
  * Determine shape rendering mode from pass.shape

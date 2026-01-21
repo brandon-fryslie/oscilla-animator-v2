@@ -10,7 +10,7 @@ Below is the “future” structure of what happens immediately before the rende
 
 1) The missing stage: Render Preparation / Render Assembly
 
-Call it RenderAssembler (or keep it inside your ScheduleExecutor if you prefer, but it should be logically separate). Inputs/outputs:
+Call it RenderAssembler. it must be logically separate, in a separate file (RenderAssembler.ts). Inputs/outputs:
 
 Input
 •	CompiledProgramIR / current compiled schedule

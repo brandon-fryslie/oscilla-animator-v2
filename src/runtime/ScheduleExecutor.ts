@@ -18,6 +18,7 @@ import { evaluateSignal } from './SignalEvaluator';
 import { detectDomainChange } from './ContinuityMapping';
 import { applyContinuity, finalizeContinuityFrame } from './ContinuityApply';
 import { createStableDomainInstance, createUnstableDomainInstance } from './DomainIdentity';
+import { assembleRenderPass, type AssemblerContext } from './RenderAssembler';
 
 /**
  * RenderFrameIR - Output from frame execution
@@ -42,6 +43,43 @@ export interface RenderFrameIR {
 export interface ShapeDescriptor {
   readonly topologyId: TopologyId;
   readonly params: Record<string, number>;
+}
+
+/**
+ * ResolvedShape - Pre-resolved shape for rendering
+ *
+ * When RenderAssembler resolves a ShapeDescriptor, it produces this
+ * structure which contains everything the renderer needs without
+ * any further lookups.
+ *
+ * This is an intermediate step toward the full DrawPathInstancesOp model.
+ */
+export interface ResolvedShape {
+  /** Discriminator for resolved shape */
+  readonly resolved: true;
+
+  /** Original topology ID */
+  readonly topologyId: TopologyId;
+
+  /**
+   * Shape mode for rendering dispatch:
+   * - 'path': Use path rendering with verbs and control points
+   * - 'primitive': Use topology.render() with params
+   * - 'legacy': Use legacy numeric encoding
+   */
+  readonly mode: 'path' | 'primitive' | 'legacy';
+
+  /** Resolved params with topology defaults applied */
+  readonly params?: Record<string, number>;
+
+  /** Path verbs for path mode (if applicable) */
+  readonly verbs?: Uint8Array;
+
+  /** Control points for path mode (if applicable) */
+  readonly controlPoints?: ArrayBufferView;
+
+  /** Legacy encoding (if legacy mode) */
+  readonly legacyEncoding?: number;
 }
 
 /**
@@ -83,6 +121,15 @@ export interface RenderPassIR {
   size: number | ArrayBufferView; // Can be uniform size or per-instance sizes
   shape: ShapeDescriptor | ArrayBufferView | number; // Unified shape model or legacy encoding
   controlPoints?: ArrayBufferView; // P5d: Optional control points for path rendering
+
+  /**
+   * Pre-resolved shape (if available).
+   *
+   * When present, renderer SHOULD use this instead of interpreting `shape`.
+   * This enables gradual migration: assembler can produce resolved shapes
+   * while maintaining backward compatibility with unresolved format.
+   */
+  resolvedShape?: ResolvedShape;
 }
 
 /**
@@ -187,98 +234,18 @@ export function executeFrame(
       }
 
       case 'render': {
-        // Assemble render pass - read from slots (after continuity applied)
-        const instance = instances.get(step.instanceId as InstanceId);
-        if (!instance) {
-          throw new Error(`Instance ${step.instanceId} not found`);
+        // Delegate to RenderAssembler for render pass assembly
+        // This enforces the invariant: "Renderer is sink-only"
+        const assemblerContext: AssemblerContext = {
+          signals,
+          instances: instances as ReadonlyMap<string, InstanceDecl>,
+          state,
+        };
+
+        const pass = assembleRenderPass(step, assemblerContext);
+        if (pass) {
+          passes.push(pass);
         }
-
-        // Read position buffer from slot (continuity-applied)
-        const position = state.values.objects.get(step.positionSlot) as ArrayBufferView;
-        if (!position) {
-          throw new Error(`Position buffer not found in slot ${step.positionSlot}`);
-        }
-
-        // Read color buffer from slot (continuity-applied)
-        const color = state.values.objects.get(step.colorSlot) as ArrayBufferView;
-        if (!color) {
-          throw new Error(`Color buffer not found in slot ${step.colorSlot}`);
-        }
-
-        // Size can be a signal (uniform) or slot (per-particle after continuity)
-        let size: number | ArrayBufferView;
-        if (step.size !== undefined) {
-          if (step.size.k === 'slot') {
-            // Slot - read continuity-applied buffer
-            const sizeBuffer = state.values.objects.get(step.size.slot) as ArrayBufferView;
-            if (!sizeBuffer) {
-              throw new Error(`Size buffer not found in slot ${step.size.slot}`);
-            }
-            size = sizeBuffer;
-          } else {
-            // Signal - evaluate once for uniform size
-            size = evaluateSignal(step.size.id, signals, state);
-          }
-        } else {
-          // Default size when no input connected
-          size = 10;
-        }
-
-        // Shape can be a signal (uniform with topology) or slot (per-particle after continuity)
-        let shape: ShapeDescriptor | ArrayBufferView | number;
-        if (step.shape !== undefined) {
-          if (step.shape.k === 'slot') {
-            // Slot - read continuity-applied buffer
-            const shapeBuffer = state.values.objects.get(step.shape.slot) as ArrayBufferView;
-            if (!shapeBuffer) {
-              throw new Error(`Shape buffer not found in slot ${step.shape.slot}`);
-            }
-            shape = shapeBuffer;
-          } else {
-            // Signal with topology - evaluate param signals and build descriptor
-            const { topologyId, paramSignals } = step.shape;
-            const params: Record<string, number> = {};
-
-            // Get topology definition to know param names
-            // For now, use param index as fallback (param0, param1, etc)
-            // The renderer will match these to topology param definitions
-            for (let i = 0; i < paramSignals.length; i++) {
-              const value = evaluateSignal(paramSignals[i], signals, state);
-              params[`param${i}`] = value;
-            }
-
-            shape = {
-              topologyId,
-              params,
-            };
-          }
-        } else {
-          // Default shape when no input connected (0 = circle, legacy encoding)
-          shape = 0;
-        }
-
-        // P5d: Read control points buffer if present
-        let controlPoints: ArrayBufferView | undefined;
-        if (step.controlPoints) {
-          const cpBuffer = state.values.objects.get(step.controlPoints.slot) as ArrayBufferView;
-          if (!cpBuffer) {
-            throw new Error(`Control points buffer not found in slot ${step.controlPoints.slot}`);
-          }
-          controlPoints = cpBuffer;
-        }
-
-        // Resolve count from instance
-        const count = typeof instance.count === 'number' ? instance.count : 0;
-
-        passes.push({
-          kind: 'instances2d',
-          count,
-          position,
-          color,
-          size,
-          shape,
-          ...(controlPoints && { controlPoints }), // P5d: Include control points if present
-        });
         break;
       }
 
