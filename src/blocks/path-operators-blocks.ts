@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from './registry';
-import { signalType, signalTypeField } from '../core/canonical-types';
+import { signalType, signalTypeField, domainTypeId } from '../core/canonical-types';
 import type { FieldExprId, SigExprId } from '../compiler/ir/Indices';
 import { defaultSourceConst } from '../types';
 
@@ -160,7 +160,7 @@ registerBlock({
 
     // Create instance for the layout positions
     const layoutInstance = ctx.b.createInstance(
-      'default',  // Use default domain for layout instances
+      domainTypeId('default'),  // Use default domain for layout instances
       count,
       { kind: 'unordered' },
       'static'

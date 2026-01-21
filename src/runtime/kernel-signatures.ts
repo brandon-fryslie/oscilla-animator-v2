@@ -200,6 +200,108 @@ export const KERNEL_SIGNATURES: Readonly<Record<string, KernelSignature>> = {
     ],
     output: { unit: 'scalar', description: 'Position (vec2)' },
   },
+
+  // === VEC2 CONSTRUCTION ===
+
+  makeVec2: {
+    inputs: [
+      { expectedUnit: 'scalar', description: 'X component' },
+      { expectedUnit: 'scalar', description: 'Y component' },
+    ],
+    output: { unit: 'scalar', description: 'Vec2 position - coord-space AGNOSTIC' },
+  },
+
+  // === COLOR KERNELS ===
+
+  hsvToRgb: {
+    inputs: [
+      { expectedUnit: 'normalized', description: 'Hue [0,1] - wraps' },
+      { expectedUnit: 'normalized', description: 'Saturation [0,1] - clamped' },
+      { expectedUnit: 'normalized', description: 'Value [0,1] - clamped' },
+    ],
+    output: { unit: 'scalar', description: 'RGBA color' },
+  },
+
+  applyOpacity: {
+    inputs: [
+      { expectedUnit: 'scalar', description: 'Color field (RGBA)' },
+      { expectedUnit: 'normalized', description: 'Opacity [0,1] - clamped' },
+    ],
+    output: { unit: 'scalar', description: 'RGBA color with applied opacity' },
+  },
+
+  // === JITTER / EFFECTS ===
+
+  jitter2d: {
+    inputs: [
+      { expectedUnit: 'scalar', description: 'Position (vec2) - coord-space AGNOSTIC' },
+      { expectedUnit: 'scalar', description: 'Random seed value' },
+      { expectedUnit: 'scalar', description: 'Amount X - same units as position' },
+      { expectedUnit: 'scalar', description: 'Amount Y - same units as position' },
+    ],
+    output: { unit: 'scalar', description: 'Jittered position (vec2) - preserves input space' },
+  },
+
+  fieldJitter2D: {
+    inputs: [
+      { expectedUnit: 'scalar', description: 'Position (vec2) - coord-space AGNOSTIC' },
+      { expectedUnit: 'scalar', description: 'Random seed value' },
+      { expectedUnit: 'scalar', description: 'Amount X - same units as position' },
+      { expectedUnit: 'scalar', description: 'Amount Y - same units as position' },
+    ],
+    output: { unit: 'scalar', description: 'Jittered position (vec2) - preserves input space' },
+  },
+
+  attract2d: {
+    inputs: [
+      { expectedUnit: 'scalar', description: 'Position (vec2) - coord-space AGNOSTIC' },
+      { expectedUnit: 'scalar', description: 'Target X - same space as position' },
+      { expectedUnit: 'scalar', description: 'Target Y - same space as position' },
+      { expectedUnit: 'phase', description: 'Phase [0,1) - modulates drift' },
+      { expectedUnit: 'normalized', description: 'Strength [0,1]' },
+    ],
+    output: { unit: 'scalar', description: 'Attracted position (vec2) - preserves input space' },
+  },
+
+  // === FIELD MATH ===
+
+  fieldAdd: {
+    inputs: [
+      { expectedUnit: 'scalar', description: 'Field A (float)' },
+      { expectedUnit: 'scalar', description: 'Field B (float)' },
+    ],
+    output: { unit: 'scalar', description: 'Element-wise sum' },
+  },
+
+  fieldRadiusSqrt: {
+    inputs: [
+      { expectedUnit: 'normalized', description: 'Normalized index [0,1]' },
+      { expectedUnit: 'scalar', description: 'Radius - units preserved' },
+    ],
+    output: { unit: 'scalar', description: 'Scaled radius: radius * sqrt(id01)' },
+  },
+
+  // === GEOMETRY KERNELS ===
+
+  polygonVertex: {
+    inputs: [
+      { expectedUnit: '#', description: 'Vertex index (integer)' },
+      { expectedUnit: '#', description: 'Number of sides (≥3)' },
+      { expectedUnit: 'scalar', description: 'Radius X - LOCAL-SPACE units' },
+      { expectedUnit: 'scalar', description: 'Radius Y - LOCAL-SPACE units' },
+    ],
+    output: { unit: 'scalar', description: 'Vertex position (vec2) - LOCAL-SPACE centered at (0,0)' },
+  },
+
+  starVertex: {
+    inputs: [
+      { expectedUnit: '#', description: 'Vertex index (integer)' },
+      { expectedUnit: '#', description: 'Number of points' },
+      { expectedUnit: 'scalar', description: 'Outer radius - LOCAL-SPACE units' },
+      { expectedUnit: 'scalar', description: 'Inner radius - LOCAL-SPACE units' },
+    ],
+    output: { unit: 'scalar', description: 'Vertex position (vec2) - LOCAL-SPACE centered at (0,0)' },
+  },
 };
 
 /**
