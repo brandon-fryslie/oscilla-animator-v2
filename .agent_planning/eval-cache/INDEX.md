@@ -45,10 +45,10 @@
 - Key findings: Missing CSS import and theme class block runtime rendering
 - Next evaluation: After fixes applied, verify visual layout + tab switching
 
-**runtime-dual-editor-p0.md**
+**runtime-dual-editor-p0.md** [REMOVED - STALE]
+- Removed: Modified ReactFlow editor files (OscillaNode.tsx, ParameterControls.tsx, nodes.ts)
+- Reason: Sprint 2B added parameter controls to ReactFlow nodes
 - Scope: P0 implementation (legacy, superseded by runtime-dual-editor-reactflow-p0.md)
-- Status: Structurally complete
-- Confidence: STALE (use runtime-dual-editor-reactflow-p0.md instead)
 
 - Scope: param-ui-hints/unified-inputs
 - Status: COMPLETE (all DoD criteria verified)
@@ -79,6 +79,22 @@
 ---
 
 ## Invalidated Cache
+
+### 2026-01-21 08:09:00 - Sprint 2B: patch-editor-ui Feature 4 & 5
+**Cache invalidated: runtime-dual-editor-p0.md**
+
+**Rationale:**
+- Modified src/ui/reactFlowEditor/OscillaNode.tsx: Added parameter control rendering
+- Created src/ui/reactFlowEditor/ParameterControls.tsx: New component for inline editing
+- Modified src/ui/reactFlowEditor/nodes.ts: Added ParamData interface and parameter extraction
+- Created tests/e2e/editor/*.spec.ts: New Playwright E2E tests for Sprint 2B features
+- Modified vitest.config.ts: Exclude Playwright tests from Vitest
+
+**Impact:**
+- ReactFlow nodes now display inline parameter controls (sliders, checkboxes, dropdowns)
+- Bidirectional sync between node controls and PatchStore
+- E2E test coverage for auto-layout, minimap, custom rendering, and parameters
+- All 547 unit tests still pass
 
 ### 2026-01-21 12:58:00 - Sprint 3: remove-duplicate-math (kernel-refactor-phase1)
 **No cache invalidation needed.**
