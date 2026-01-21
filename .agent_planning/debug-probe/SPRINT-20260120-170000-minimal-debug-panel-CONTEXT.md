@@ -49,9 +49,8 @@ Sprint 1 establishes the foundation. Sprint 2 extends and enriches it. Read this
 **Problem**: Need to resolve edge → runtime value, but full DebugGraph (from spec) includes topology we don't need yet.
 
 **Options Considered**:
-1. Build full DebugGraph now (buses, publishers, listeners, pipelines)
+1. Build full DebugGraph now 
 2. Build minimal edge-to-slot map
-3. Build port-to-bus map (intermediate)
 
 **Chosen**: Option 2 (Minimal edge-to-slot map)
 
@@ -64,11 +63,10 @@ Sprint 1 establishes the foundation. Sprint 2 extends and enriches it. Read this
 
 **Trade-off**:
 - ❌ Can't query "what feeds this port" (Sprint 2 adds this)
-- ❌ Can't show publisher/listener chains (Sprint 2 adds this)
 - ✅ Can show current edge value (sufficient for Sprint 1)
 - ✅ Proves the tap→service→UI flow works
 
-**Future Impact**: Sprint 2 extends this with DebugGraph.byPort, buses, publishers. The basic map structure stays, topology gets added around it.
+**Future Impact**: Sprint 2 extends this with DebugGraph.byPort. The basic map structure stays, topology gets added around it.
 
 ---
 

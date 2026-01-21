@@ -4,10 +4,7 @@
       "command": "node",
       "args": [
         "/Users/bmf/code/cherry-chrome-mcp/build/src/index.js"
-      ],
-      "env": {
-        "USE_SMART_TOOLS": "true"
-      }
+      ]
     },
     "chromedevtools/chrome-devtools-mcp": {
       "type": "stdio",

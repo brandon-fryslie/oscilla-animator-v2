@@ -2,7 +2,21 @@
 
 **Created**: 2026-01-20 22:09:00
 **For**: Debugging agent / developer
-**Status**: blocked - user reports no hover functionality
+**Status**: RESOLVED 2026-01-21
+
+## Resolution
+
+**Root Cause**: `pass7-schedule.ts` was not generating `evalSig` steps for signals with registered slots. Without these steps, the runtime tap that records slot values was never called.
+
+**Fix**: Added `evalSig` step generation to `pass7-schedule.ts`:
+1. Added `getSigSlots()` method to IRBuilder interface
+2. Generate `evalSig` steps for all signals with registered slots before other schedule steps
+
+**Limitation**: Only Signal edges show values. Field edges (arrays) don't have tap points yet - deferred until after field refactor.
+
+---
+
+## Original Issue (for reference)
 
 ---
 
