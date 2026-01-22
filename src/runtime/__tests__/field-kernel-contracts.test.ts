@@ -428,4 +428,130 @@ describe('Field Kernel Contract Tests', () => {
       expect(out[1]).toBe(0);
     });
   });
+
+  // ══════════════════════════════════════════════════════════════════════
+  // LAYOUT KERNEL TESTS
+  // ══════════════════════════════════════════════════════════════════════
+
+  describe('lineLayout', () => {
+    it('interpolates between start and end points', () => {
+      const out = new Float32Array(6); // 3 positions
+      const t = new Float32Array([0, 0.5, 1]); // start, middle, end
+      const type = { payload: 'vec2', cardinality: 'many' } as const;
+
+      applyFieldKernelZipSig(out, t, [0.1, 0.2, 0.9, 0.8], 'lineLayout', 3, type as any);
+
+      // t=0 should be at start (0.1, 0.2)
+      expect(out[0]).toBeCloseTo(0.1);
+      expect(out[1]).toBeCloseTo(0.2);
+      // t=0.5 should be at midpoint (0.5, 0.5)
+      expect(out[2]).toBeCloseTo(0.5);
+      expect(out[3]).toBeCloseTo(0.5);
+      // t=1 should be at end (0.9, 0.8)
+      expect(out[4]).toBeCloseTo(0.9);
+      expect(out[5]).toBeCloseTo(0.8);
+    });
+
+    it('clamps t to [0,1]', () => {
+      const out = new Float32Array(4);
+      const t = new Float32Array([-0.5, 1.5]); // Out of range
+      const type = { payload: 'vec2', cardinality: 'many' } as const;
+
+      applyFieldKernelZipSig(out, t, [0, 0, 1, 1], 'lineLayout', 2, type as any);
+
+      // -0.5 clamped to 0 → (0, 0)
+      expect(out[0]).toBe(0);
+      expect(out[1]).toBe(0);
+      // 1.5 clamped to 1 → (1, 1)
+      expect(out[2]).toBe(1);
+      expect(out[3]).toBe(1);
+    });
+
+    it('requires 4 signals', () => {
+      const out = new Float32Array(2);
+      const t = new Float32Array([0.5]);
+      const type = { payload: 'vec2', cardinality: 'many' } as const;
+
+      expect(() => 
+        applyFieldKernelZipSig(out, t, [0.1, 0.2], 'lineLayout', 1, type as any)
+      ).toThrow(/4 signals/);
+    });
+  });
+
+  describe('gridLayout', () => {
+    it('arranges elements in a 2x2 grid', () => {
+      const out = new Float32Array(8); // 4 positions
+      const index = new Float32Array([0, 1, 2, 3]);
+      const type = { payload: 'vec2', cardinality: 'many' } as const;
+
+      applyFieldKernelZipSig(out, index, [2, 2], 'gridLayout', 4, type as any);
+
+      // 2x2 grid: positions at corners
+      // index 0: col=0, row=0 → (0, 0)
+      expect(out[0]).toBe(0);
+      expect(out[1]).toBe(0);
+      // index 1: col=1, row=0 → (1, 0)
+      expect(out[2]).toBe(1);
+      expect(out[3]).toBe(0);
+      // index 2: col=0, row=1 → (0, 1)
+      expect(out[4]).toBe(0);
+      expect(out[5]).toBe(1);
+      // index 3: col=1, row=1 → (1, 1)
+      expect(out[6]).toBe(1);
+      expect(out[7]).toBe(1);
+    });
+
+    it('handles single column (centers at 0.5)', () => {
+      const out = new Float32Array(4);
+      const index = new Float32Array([0, 1]);
+      const type = { payload: 'vec2', cardinality: 'many' } as const;
+
+      applyFieldKernelZipSig(out, index, [1, 2], 'gridLayout', 2, type as any);
+
+      // Single column: x=0.5 for both
+      expect(out[0]).toBe(0.5); // x
+      expect(out[1]).toBe(0);   // y (row 0)
+      expect(out[2]).toBe(0.5); // x
+      expect(out[3]).toBe(1);   // y (row 1)
+    });
+
+    it('handles single row (centers at 0.5)', () => {
+      const out = new Float32Array(4);
+      const index = new Float32Array([0, 1]);
+      const type = { payload: 'vec2', cardinality: 'many' } as const;
+
+      applyFieldKernelZipSig(out, index, [2, 1], 'gridLayout', 2, type as any);
+
+      // Single row: y=0.5 for both
+      expect(out[0]).toBe(0);   // x (col 0)
+      expect(out[1]).toBe(0.5); // y
+      expect(out[2]).toBe(1);   // x (col 1)
+      expect(out[3]).toBe(0.5); // y
+    });
+
+    it('requires 2 signals', () => {
+      const out = new Float32Array(2);
+      const index = new Float32Array([0]);
+      const type = { payload: 'vec2', cardinality: 'many' } as const;
+
+      expect(() => 
+        applyFieldKernelZipSig(out, index, [2], 'gridLayout', 1, type as any)
+      ).toThrow(/2 signals/);
+    });
+
+    it('produces world-space positions in [0,1]', () => {
+      const out = new Float32Array(20); // 10 positions
+      const index = new Float32Array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+      const type = { payload: 'vec2', cardinality: 'many' } as const;
+
+      applyFieldKernelZipSig(out, index, [5, 2], 'gridLayout', 10, type as any);
+
+      for (let i = 0; i < 10; i++) {
+        expect(out[i * 2]).toBeGreaterThanOrEqual(0);
+        expect(out[i * 2]).toBeLessThanOrEqual(1);
+        expect(out[i * 2 + 1]).toBeGreaterThanOrEqual(0);
+        expect(out[i * 2 + 1]).toBeLessThanOrEqual(1);
+      }
+    });
+  });
 });

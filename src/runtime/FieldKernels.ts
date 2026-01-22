@@ -34,7 +34,7 @@
  *
  * ZIPSIG KERNELS (field + signal inputs):
  *   applyOpacity, hsvToRgb, circleLayout, circleAngle,
- *   polygonVertex, starVertex
+ *   polygonVertex, starVertex, lineLayout, gridLayout
  *
  * ──────────────────────────────────────────────────────────────────────
  * ARCHITECTURAL RULES
@@ -537,6 +537,69 @@ export function applyFieldKernelZipSig(
       const angle = (idx / (points * 2)) * TWO_PI - Math.PI / 2;
       outArr[i * 2 + 0] = radius * Math.cos(angle);
       outArr[i * 2 + 1] = radius * Math.sin(angle);
+    }
+  } else if (fieldOp === 'lineLayout') {
+    // ════════════════════════════════════════════════════════════════
+    // lineLayout: Arrange elements along a line
+    // ────────────────────────────────────────────────────────────────
+    // Field input: t (normalizedIndex in [0,1])
+    // Signals: [x0: float, y0: float, x1: float, y1: float]
+    // Output: vec2
+    // Domain: t in [0,1] for interpolation
+    // Coord-space: Produces WORLD-SPACE positions in [0,1]
+    // Formula: lerp from (x0,y0) to (x1,y1)
+    //   x = (1-t)*x0 + t*x1
+    //   y = (1-t)*y0 + t*y1
+    // ════════════════════════════════════════════════════════════════
+    if (sigValues.length !== 4) {
+      throw new Error('lineLayout requires 4 signals (x0, y0, x1, y1)');
+    }
+    const outArr = out as Float32Array;
+    const tArr = fieldInput as Float32Array;
+    const x0 = sigValues[0];
+    const y0 = sigValues[1];
+    const x1 = sigValues[2];
+    const y1 = sigValues[3];
+
+    for (let i = 0; i < N; i++) {
+      const t = Math.max(0, Math.min(1, tArr[i])); // Clamp to [0,1]
+      outArr[i * 2 + 0] = (1 - t) * x0 + t * x1;
+      outArr[i * 2 + 1] = (1 - t) * y0 + t * y1;
+    }
+  } else if (fieldOp === 'gridLayout') {
+    // ════════════════════════════════════════════════════════════════
+    // gridLayout: Arrange elements in a grid pattern
+    // ────────────────────────────────────────────────────────────────
+    // Field input: index (integer index 0..N-1)
+    // Signals: [cols: float, rows: float]
+    // Output: vec2
+    // Domain: cols >= 1, rows >= 1
+    // Coord-space: Produces WORLD-SPACE positions in [0,1]
+    // Formula:
+    //   col = floor(index) % cols
+    //   row = floor(floor(index) / cols)
+    //   x = cols > 1 ? col / (cols - 1) : 0.5
+    //   y = rows > 1 ? row / (rows - 1) : 0.5
+    // ════════════════════════════════════════════════════════════════
+    if (sigValues.length !== 2) {
+      throw new Error('gridLayout requires 2 signals (cols, rows)');
+    }
+    const outArr = out as Float32Array;
+    const indexArr = fieldInput as Float32Array;
+    const cols = Math.max(1, Math.round(sigValues[0]));
+    const rows = Math.max(1, Math.round(sigValues[1]));
+
+    for (let i = 0; i < N; i++) {
+      const idx = Math.max(0, Math.floor(indexArr[i]));
+      const col = idx % cols;
+      const row = Math.floor(idx / cols) % rows; // Wrap rows to prevent out of bounds
+      
+      // Normalize to [0,1] - center single column/row at 0.5
+      const x = cols > 1 ? col / (cols - 1) : 0.5;
+      const y = rows > 1 ? row / (rows - 1) : 0.5;
+      
+      outArr[i * 2 + 0] = x;
+      outArr[i * 2 + 1] = y;
     }
   } else {
     throw new Error(`Unknown field kernel (zipSig): ${fieldOp}`);
