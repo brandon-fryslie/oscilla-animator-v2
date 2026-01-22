@@ -1,12 +1,12 @@
 ---
 status: CANONICAL
 generated: 2026-01-09T17:00:00Z
-updated: 2026-01-22T12:00:00Z
+updated: 2026-01-22T18:00:00Z
 approved_by: Brandon Fryslie
-approval_method: full_walkthrough + domain_system_reconceptualization + cardinality_generic_integration
-source_documents: 58
-topics: 15
-resolutions: 91
+approval_method: full_walkthrough + domain_system_reconceptualization + cardinality_generic_integration + payload_generic_integration + kernel_roadmap_integration
+source_documents: 67
+topics: 16
+resolutions: 103
 update_history:
   - date: 2026-01-10T19:45:00Z
     sources_added: 23
@@ -31,22 +31,35 @@ update_history:
     topics_updated: [02-block-system, 04-compilation]
     resolutions_made: 7
     notes: "Formalized cardinality-generic block contract; Added StateId to GLOSSARY; Fixed stale DomainRef→InstanceRef in GLOSSARY; Rejected registry metadata; Deferred diagnostic codes and cardinality-transform naming"
+  - date: 2026-01-22T14:30:00Z
+    action: "Payload-Generic Blocks & State Mapping Refinement"
+    sources_integrated: [design-docs/_new/0-CardinalityGeneric-Block-Types-Impact.md, design-docs/_new/0-PayloadGeneriic-Block-Type-Spec.md]
+    topics_updated: [02-block-system, 04-compilation, 05-runtime]
+    resolutions_made: 5
+    notes: "Formalized payload-generic block contract; Range-based StateMappings replace StateKey; Added vec3 to PayloadType; Stride concept; Deprecated Polymorphism section; Unit constraints deferred"
+  - date: 2026-01-22T18:00:00Z
+    action: "Kernel Roadmap & Local-Space Geometry Integration"
+    sources_integrated: [design-docs/_new/kernel-roadmap/0-kernel-roadmap.md, design-docs/_new/kernel-roadmap/1-local-space.md, design-docs/_new/kernel-roadmap/2-local-space-end-to-end-spec.md, design-docs/_new/kernel-roadmap/3-local-space-spec-deeper.md, design-docs/_new/kernel-roadmap/5-opcode-interpreter.md, design-docs/_new/kernel-roadmap/6-signal-kernel.md, design-docs/_new/kernel-roadmap/7-field-kernel.md]
+    topics_created: [16-coordinate-spaces]
+    topics_updated: [01-type-system, 05-runtime, 06-renderer]
+    resolutions_made: 7
+    notes: "New Topic 16 (Coordinate Spaces); Three-layer execution architecture; DrawPathInstancesOp replaces RenderIR; shape2d added to PayloadType; scale semantics (renamed from size); Typed banks as T3 note; Convention-based coord enforcement"
 ---
 
 # Oscilla v2.5: Canonical Specification Index
 
 > **STATUS: 🔄 UPDATING**
-> Integration in progress. New sources: `0-CardinalityGeneric-Block-Types-Impact.md`, `0-PayloadGeneriic-Block-Type-Spec.md`
-> Started: 2026-01-22T14:00:00Z
-
-> Previous status: ✅ CANONICAL (2026-01-22T12:00:00Z)
+> Integration in progress. New sources: `_new/renderer/8-before-render.md`, `_new/renderer/9-renderer.md`, `_new/renderer/10-multiple-backends.md`, `_new/renderer/11-svg.md`
+> Started: 2026-01-22T20:00:00Z
+>
+> Previous: Last updated 2026-01-22T18:00:00Z (integrated 7 new sources: kernel roadmap, local-space geometry, execution architecture)
 > Approved by: Brandon Fryslie
 
 Generated: 2026-01-09T17:00:00Z
-Last Updated: 2026-01-22T12:00:00Z
+Last Updated: 2026-01-22T18:00:00Z
 Approved by: Brandon Fryslie
-Source Documents: 58 files
-Total Resolutions: 91
+Source Documents: 67 files
+Total Resolutions: 103
 
 ---
 
@@ -67,6 +80,8 @@ This condensed spec contains all invariants, glossary core terms, and T1 content
 | Implementing UI panels | 09-debug-ui-spec.md, 14-modulation-table-ui.md, 15-graph-editor-ui.md |
 | Disputed design questions | RESOLUTION-LOG.md |
 | Deep type system details | 01-type-system.md |
+| Coordinate spaces / transforms | 16-coordinate-spaces.md |
+| Renderer / RenderIR | 06-renderer.md |
 | Continuity/anti-jank work | 11-continuity-system.md |
 | Event coordination | 12-event-hub.md, 13-event-diagnostics-integration.md |
 
@@ -102,6 +117,7 @@ This condensed spec contains all invariants, glossary core terms, and T1 content
 | 13 | [Event-Diagnostics Integration](./topics/13-event-diagnostics-integration.md) | How events drive diagnostics | DiagnosticHub subscriptions, snapshot semantics |
 | 14 | [Modulation Table UI](./topics/14-modulation-table-ui.md) | Table view for port connections (UI only) | Transform chains, Adapters, Lenses |
 | 15 | [Graph Editor UI](./topics/15-graph-editor-ui.md) | Linear auto-layout graph editor | Chain, Pivot Block, Perspective Rotation, Focus/Dimming |
+| 16 | [Coordinate Spaces](./topics/16-coordinate-spaces.md) | Three-space coordinate model | Local/World/Viewport, scale, transforms |
 
 ## Recommended Reading Order
 
@@ -133,12 +149,24 @@ Looking for something specific? Here's where to find it:
 | Primitive Block, Array Block, Layout Block | [02-block-system.md](./topics/02-block-system.md) |
 | Three-stage architecture | [02-block-system.md](./topics/02-block-system.md) |
 | Cardinality-Generic Block, lane-locality | [02-block-system.md](./topics/02-block-system.md) |
+| Payload-Generic Block, AllowedPayloads | [02-block-system.md](./topics/02-block-system.md) |
 | UnitDelay, Lag, Phasor, SampleAndHold | [02-block-system.md](./topics/02-block-system.md) |
 | TimeRoot, Rails, tMs | [03-time-system.md](./topics/03-time-system.md) |
 | NormalizedGraph, CompiledProgramIR | [04-compilation.md](./topics/04-compilation.md) |
 | Expression forms, broadcast, ZipSig | [04-compilation.md](./topics/04-compilation.md) |
+| Payload specialization, stride | [04-compilation.md](./topics/04-compilation.md) |
 | State slots, scheduling | [05-runtime.md](./topics/05-runtime.md) |
-| RenderInstances2D, batching | [06-renderer.md](./topics/06-renderer.md) |
+| StateId, StateMappingScalar, StateMappingField | [05-runtime.md](./topics/05-runtime.md) |
+| Lane, stride, state migration | [05-runtime.md](./topics/05-runtime.md) |
+| RenderFrameIR, DrawPathInstancesOp, batching | [06-renderer.md](./topics/06-renderer.md) |
+| PathGeometryTemplate, PathInstanceSet, PathStyle | [06-renderer.md](./topics/06-renderer.md) |
+| Local Space, World Space, Viewport Space | [16-coordinate-spaces.md](./topics/16-coordinate-spaces.md) |
+| scale, scale2, transform chain | [16-coordinate-spaces.md](./topics/16-coordinate-spaces.md) |
+| Coordinate-space enforcement, naming conventions | [16-coordinate-spaces.md](./topics/16-coordinate-spaces.md) |
+| Three-layer architecture, Opcode/Signal Kernel/Field Kernel | [05-runtime.md](./topics/05-runtime.md) |
+| Materializer, typed banks | [05-runtime.md](./topics/05-runtime.md) |
+| shape2d, handle type | [01-type-system.md](./topics/01-type-system.md) |
+| RenderInstances2D | [06-renderer.md](./topics/06-renderer.md) |
 | Diagnostic, DiagnosticHub, TargetRef | [07-diagnostics-system.md](./topics/07-diagnostics-system.md) |
 | DiagnosticCode, Severity, Events | [07-diagnostics-system.md](./topics/07-diagnostics-system.md) |
 | DebugGraph, DebugSnapshot, DebugTap | [08-observation-system.md](./topics/08-observation-system.md) |

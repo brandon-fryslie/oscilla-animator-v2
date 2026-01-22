@@ -1454,6 +1454,284 @@ The canonical spec describes blocks that work on both Signal and Field (e.g., Ad
 
 ---
 
+---
+
+## Update 6: Payload-Generic Blocks & State Mapping Refinement (2026-01-22, second pass)
+
+**Sources Analyzed**: 2 files (0-CardinalityGeneric-Block-Types-Impact.md, 0-PayloadGeneriic-Block-Type-Spec.md)
+**Topics Updated**: 3 (02-block-system, 04-compilation, 05-runtime)
+**Resolutions Made**: 5
+**New Terms**: 6 (Payload-Generic Block, StateMappingScalar, StateMappingField, Lane, Stride; vec3 added to PayloadType)
+**Deprecated**: Polymorphism/Monomorphization section (replaced by Payload-Generic concept), StateKey type
+
+---
+
+### D26: Range-Based State Mappings (Replace StateKey)
+
+**Date**: 2026-01-22
+
+**Category**: Structural Update (T2)
+
+**Source**: 0-CardinalityGeneric-Block-Types-Impact.md vs Topic 05 StateKey
+
+**The Problem**:
+Topic 05 used `StateKey { blockId, laneIndex }` which embeds lane index as semantic identity. D19 introduced StateId but the code examples weren't updated. The source document argues lane index is positional (can be remapped by continuity) and should NOT be part of identity.
+
+**Resolution**: Replace StateKey with range-based StateMappingScalar and StateMappingField types. StateId identifies the state array; lane index is a buffer offset. Field-state migration uses continuity's lane mapping when identity is stable.
+
+**Impact**:
+- Topic 05: Complete rewrite of State Management section
+- Topic 02: Updated state allocation text to reference StateMappings
+- Topic 04: Updated State Slot Allocation to show mapping types
+- GLOSSARY: StateId updated, StateKey deprecated, StateMappingScalar/Field added
+
+**Approved**: 2026-01-22 by Brandon Fryslie
+
+---
+
+### D27: Payload-Generic Block Formalization
+
+**Date**: 2026-01-22
+
+**Category**: Structural Addition (T2)
+
+**Source**: 0-PayloadGeneriic-Block-Type-Spec.md
+
+**The Problem**:
+The system has blocks that work across multiple payload types (Add works for float, vec2, vec3) but this was modeled as generic "Polymorphism" with type variables. The new source formalizes this as "Payload-Generic" — a block classification property with a 4-property contract, parallel to Cardinality-Generic.
+
+**Resolution**: Add "Payload-Generic Blocks" section to Topic 02. Remove deprecated "Polymorphism" section from Topic 04. The payload-generic contract is: closed payload set, total specialization, no implicit coercions, deterministic resolution.
+
+**Registry metadata (§8 of source doc) REJECTED** per D20 precedent — unneeded currently.
+
+**Impact**:
+- Topic 02: New section parallel to Cardinality-Generic
+- Topic 04: Polymorphism section replaced with Payload Specialization
+- GLOSSARY: Payload-Generic Block term added, Polymorphism deprecated
+
+**Approved**: 2026-01-22 by Brandon Fryslie
+
+---
+
+### D28: Add `vec3` to PayloadType
+
+**Date**: 2026-01-22
+
+**Category**: Type System Extension (T2)
+
+**Source**: 0-PayloadGeneriic-Block-Type-Spec.md
+
+**The Problem**:
+PayloadType did not include `vec3`. Source doc uses vec3 throughout for 3D operations (normalize, length, cross product). 3D is in spec scope (full spec incoming).
+
+**Resolution**: Add `vec3` to PayloadType. Stride = 3 floats.
+
+**Impact**: GLOSSARY PayloadType values updated. Stride table extended.
+
+**Approved**: 2026-01-22 by Brandon Fryslie
+
+---
+
+### D29: Stride Concept in State/Slot Allocation
+
+**Date**: 2026-01-22
+
+**Category**: Structural Addition (T2)
+
+**Source**: Both source documents
+
+**The Problem**:
+The spec said "one state cell" and "N state cells" without specifying how multi-component payloads (vec2, vec3, color) affect buffer size. Stride is fundamental to correct allocation.
+
+**Resolution**: Add stride concept to Topic 04 slot allocation and Topic 05 state management. Stride = number of floats per element. State stride may exceed payload stride for multi-value primitives.
+
+**Impact**: Topic 04 + 05 updated with stride tables and concepts. GLOSSARY: Stride term added.
+
+**Approved**: 2026-01-22 by Brandon Fryslie
+
+---
+
+### D30: Unit Constraints (NumericUnit) — Deferred
+
+**Date**: 2026-01-22
+
+**Category**: Deferred (Future Spec)
+
+**Source**: 0-PayloadGeneriic-Block-Type-Spec.md §2.2
+
+**The Proposal**: Add `unit?: NumericUnit` to SignalType for dimensional analysis (e.g., Sin requires radians).
+
+**Resolution**: Deferred. Full spec incoming — will be integrated when provided.
+
+**Approved**: 2026-01-22 by Brandon Fryslie
+
+---
+
+---
+
+## Update 7: Kernel Roadmap & Local-Space Geometry Integration (2026-01-22, third pass)
+
+**Sources Analyzed**: 7 files (kernel-roadmap/0-kernel-roadmap.md, 1-local-space.md, 2-local-space-end-to-end-spec.md, 3-local-space-spec-deeper.md, 5-opcode-interpreter.md, 6-signal-kernel.md, 7-field-kernel.md)
+**Topics Created**: 1 (16-coordinate-spaces)
+**Topics Updated**: 3 (01-type-system, 05-runtime, 06-renderer)
+**Resolutions Made**: 7
+**New Terms**: ~15 (Local Space, World Space, Viewport Space, scale, scale2, shape2d, RenderFrameIR, DrawPathInstancesOp, PathGeometryTemplate, PathInstanceSet, PathStyle, Opcode Layer, Signal Kernel, Field Kernel, Materializer)
+**Deprecated**: RenderIR (instance-centric), RenderInstance, GeometryAsset, MaterialAsset, `size` (renamed to `scale`)
+
+---
+
+### D31: Coordinate Space Model — New Topic 16
+
+**Date**: 2026-01-22
+
+**Category**: Structural Addition (T2)
+
+**Source**: 1-local-space.md, 2-local-space-end-to-end-spec.md, 3-local-space-spec-deeper.md
+
+**The Problem**:
+The canonical spec had NO formal definition of coordinate spaces. Layout blocks produce positions in [0..1], the renderer maps to pixels, but the three-space model was never formally defined.
+
+**Resolution**: Create new Topic 16 (Coordinate Spaces & Transforms) defining:
+- Local Space (L): Geometry/control points, centered at (0,0), magnitude O(1)
+- World Space (W): Instance placement, normalized [0..1]
+- Viewport Space (V): Backend-specific pixels/viewBox units
+- Transform chain: `pW = positionW + R(θ) · (scale × pL)`
+
+**Rationale**: Cross-cutting concern affecting blocks, compilation, runtime, and rendering. Deserves its own topic to prevent fragmentation.
+
+**Approved**: 2026-01-22 by Brandon Fryslie
+
+---
+
+### D32: `scale` Semantics (renamed from `size`)
+
+**Date**: 2026-01-22
+
+**Category**: Structural Addition (T2)
+
+**Source**: 2-local-space-end-to-end-spec.md, 3-local-space-spec-deeper.md
+
+**The Problem**:
+The source documents defined `size` as the isotropic local→world scale factor. User requested renaming to `scale` for clarity.
+
+**Resolution**: Accept the canonical definition with terminology change:
+- `scale` (was `size`): Isotropic local→world scale factor, `Signal<float>` or `Field<float>`
+- `scale2`: Optional anisotropic, `Signal<vec2>` or `Field<vec2>`
+- Reference dimension: `min(viewportWidth, viewportHeight)`
+- Combination: `S_effective = (scale × scale2.x, scale × scale2.y)`
+- Transform order: translate → rotate → scale → draw
+
+**Rationale**: Structural decision that propagates everywhere. "scale" is more precise than "size" for a scale factor.
+
+**Approved**: 2026-01-22 by Brandon Fryslie
+
+---
+
+### D33: Three-Layer Execution Architecture
+
+**Date**: 2026-01-22
+
+**Category**: Structural Addition (T2 boundary rules, T3 specifics)
+
+**Source**: 0-kernel-roadmap.md, 5-opcode-interpreter.md, 6-signal-kernel.md, 7-field-kernel.md
+
+**The Problem**:
+The canonical spec described runtime execution (Steps/Ops) but didn't specify the internal execution architecture. The source documents propose a strict three-layer model with boundary rules.
+
+**Resolution**: Add to Topic 05 (Runtime) as a new section defining:
+- Opcode Layer: Pure generic math, `number[] → number`, no domain semantics
+- Signal Kernel Layer: Domain-specific `scalar → scalar`, fixed arity, documented domain/range
+- Field Kernel Layer: Vec2/color/field ops, lane-wise application
+- Materializer as orchestrator (not a layer)
+- Boundary rules defining what belongs in each layer
+
+**Rationale**: The boundary rules (what belongs where) are architectural value. Specific kernel names are T3 implementation detail.
+
+**Approved**: 2026-01-22 by Brandon Fryslie
+
+---
+
+### D34: RenderIR Replacement — DrawPathInstancesOp
+
+**Date**: 2026-01-22
+
+**Category**: Structural Replacement (T2)
+
+**Source**: 3-local-space-spec-deeper.md vs Topic 06
+
+**The Problem**:
+The existing RenderIR was instance-centric (each instance references geometry, material, transform). The source proposes a draw-op-centric model where shared geometry + style is the grouping unit.
+
+**Resolution**: Replace old RenderIR with `RenderFrameIR` using `DrawPathInstancesOp`:
+- `PathGeometryTemplate`: Local-space points + topology
+- `PathInstanceSet`: World-space transforms (SoA layout)
+- `PathStyle`: Fill/stroke/opacity per draw-op
+
+**Rationale**: Old RenderIR was abstract/aspirational and never implemented. New model is concrete, supports natural batching, aligns with SVG `<defs>/<use>`, and integrates with the coordinate space architecture.
+
+**Approved**: 2026-01-22 by Brandon Fryslie
+
+---
+
+### D35: `shape2d` Added to PayloadType
+
+**Date**: 2026-01-22
+
+**Category**: Type System Extension (T2)
+
+**Source**: 3-local-space-spec-deeper.md
+
+**The Problem**:
+The source documents describe `shape2d` as a packed 8-word type for referencing geometry. The question was whether it belongs in PayloadType or as a separate concept.
+
+**Resolution**: Add `shape2d` to PayloadType as a **handle type**. Stride = 8 (u32 words). Handle types are distinct from arithmetic types: no add, mul, or interpolation. Valid operations: equality, assignment, pass-through.
+
+**Note**: The recommendation was Option B (keep separate), but user chose Option A. This works because shape2d is clearly documented as a handle type with restricted operations.
+
+**Approved**: 2026-01-22 by Brandon Fryslie
+
+---
+
+### D36: Typed Scalar/Field Banks (T3 Implementation Note)
+
+**Date**: 2026-01-22
+
+**Category**: T3 Addition (Implementation Detail)
+
+**Source**: 3-local-space-spec-deeper.md
+
+**The Problem**:
+The source proposes typed banks (scalarsF32, scalarsI32, scalarsShape2D, etc.) instead of a single Float32Array.
+
+**Resolution**: Add as T3 implementation note in Topic 05. The abstract RuntimeState (single `scalars: Float32Array`) remains canonical. Typed banks are documented as a valid optimization that implementations may choose.
+
+**Rationale**: Typed banks are an optimization, not architecture. The abstract model is simpler and sufficient for specification purposes.
+
+**Approved**: 2026-01-22 by Brandon Fryslie
+
+---
+
+### D37: Coordinate-Space Enforcement (Convention-Based)
+
+**Date**: 2026-01-22
+
+**Category**: Design Decision
+
+**Source**: 1-local-space.md, 3-local-space-spec-deeper.md
+
+**The Problem**:
+Should coordinate spaces be enforced via type-level axis or block-level naming conventions?
+
+**Resolution**: Convention-based enforcement for current version. Block ports document which coordinate space they operate in via naming patterns (`controlPoints` = local, `position` = world). Future: type-level `coordSpace` axis may be added if convention proves insufficient.
+
+**Rationale**: Convention + block contracts are sufficient for v2. Adding a type axis is expensive and can be done later if needed.
+
+**Approved**: 2026-01-22 by Brandon Fryslie
+
+---
+
+---
+
 ## Statistics
 
 | Phase | Date | Sources | Topics | Resolutions |
@@ -1466,5 +1744,7 @@ The canonical spec describes blocks that work on both Signal and Field (e.g., Ad
 | **Phase 3 (Graph Editor)** | 2026-01-11 | +1 | +1 | +2 |
 | **Phase 4 (Domain System)** | 2026-01-18 | +2 | +0 | +5 |
 | **Phase 5 (Cardinality-Generic)** | 2026-01-22 | +1 | +0 | +7 |
-| **Total** | — | **58** | **15** | **91** |
+| **Phase 6 (Payload-Generic + State)** | 2026-01-22 | +2 | +0 | +5 |
+| **Phase 7 (Kernel Roadmap + Local-Space)** | 2026-01-22 | +7 | +1 | +7 |
+| **Total** | — | **67** | **16** | **103** |
 

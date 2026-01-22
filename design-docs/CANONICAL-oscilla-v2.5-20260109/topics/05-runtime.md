@@ -101,42 +101,91 @@ interface RuntimeState {
 
 Only stateful primitives (UnitDelay, Lag, Phasor, SampleAndHold) have state slots.
 
-### State Keying
+### State Identity: StateId
 
-State is keyed by `(blockId, laneIndex)`:
+State is keyed by stable `StateId` — a semantic identifier that survives recompilation. StateId identifies the **state array** (the conceptual unit), not individual lanes.
+
+```
+StateId = blockId + primitive_kind [+ state_key_disambiguator]
+```
+
+- For scalar state: StateId maps to one slot (stride floats)
+- For field state: StateId maps to a contiguous range of `laneCount × stride` floats
+- Lane index is NOT part of StateId — it is a positional offset within the array
+
+### State Mapping Types
+
+The compiler emits state mappings that describe how StateIds map to buffer positions:
 
 ```typescript
-interface StateKey {
-  blockId: BlockId;      // Stable UUID
-  laneIndex: number;     // 0 for scalar, 0..N-1 for field
+// Scalar state (cardinality: one)
+interface StateMappingScalar {
+  stateId: StateId;     // stable semantic identity
+  slotIndex: number;    // unstable positional offset
+  stride: number;       // floats per state element (often 1)
+  initial: number[];    // length = stride, per-element initial values
+}
+
+// Field state (cardinality: many)
+interface StateMappingField {
+  stateId: StateId;         // stable (identifies the whole state array)
+  instanceId: InstanceId;   // ties buffer to lane set identity
+  slotStart: number;        // unstable start offset
+  laneCount: number;        // N at compile time
+  stride: number;           // floats per lane state (>=1)
+  initial: number[];        // length = stride (per-lane init template)
 }
 ```
 
 ### State Allocation by Cardinality
 
-| Cardinality | State Allocation |
-|-------------|------------------|
-| `one` | Single value |
-| `many(domain)` | Array of N(domain) values |
-| `zero` | No state (compile-time constant) |
+| Cardinality | State Allocation | Mapping Type |
+|-------------|------------------|--------------|
+| `one` | `stride` floats | `StateMappingScalar` |
+| `many(instance)` | `laneCount × stride` floats | `StateMappingField` |
+| `zero` | No state (compile-time constant) | None |
+
+### Stride
+
+The `stride` field represents how many floats each state element requires:
+- Simple state (e.g., UnitDelay on float): stride = 1
+- Multi-component state (e.g., UnitDelay on vec3): stride = 3
+- Multi-value state (e.g., filter storing y and dy): stride = 2 (even for float payload)
 
 ### State Migration (Invariant I3)
 
 When hot-swapping, state migrates based on StateId:
 
+**Scalar state** (StateMappingScalar):
+
 | Condition | Action |
 |-----------|--------|
-| Same StateId + same type/layout | Copy |
-| Same StateId + compatible layout | Transform |
-| Different StateId or incompatible | Reset + diagnostic |
+| Same StateId + same stride | Copy |
+| Same StateId + different stride | Reset + diagnostic |
+| StateId in old but not new | Discard (block deleted) |
+| StateId in new but not old | Use initial values (new block) |
+
+**Field state** (StateMappingField):
+
+| Condition | Action |
+|-----------|--------|
+| Same StateId + stable identity mode | Migrate per-lane using continuity's lane mapping (old lane → new lane) |
+| Same StateId + non-stable identity | Reset all lanes (strict) or copy by index (declared fallback) |
+| Lane count grew | Copy existing lanes, initialize new lanes with `initial` |
+| Lane count shrank | Copy only retained lanes |
+| StateId in old but not new | Discard |
+| StateId in new but not old | Use initial values |
 
 ```typescript
 interface StateMigration {
   stateId: StateId;
-  action: 'copy' | 'transform' | 'reset';
-  diagnostic?: string;  // Shown to user if reset
+  action: 'copy' | 'remap' | 'reset';
+  laneMappingUsed?: boolean;  // true if continuity mapping applied
+  diagnostic?: string;        // Shown to user if reset
 }
 ```
+
+**Important**: For field-state migration, lane index is NOT semantic identity. When the continuity system provides stable element IDs (identityMode='stable'), the migrator builds an `oldLaneIndex → newLaneIndex` mapping and copies state per lane via that mapping. Without stable identity, use the declared fallback policy.
 
 ---
 
@@ -445,10 +494,111 @@ For non-fatal errors:
 
 ---
 
+## Three-Layer Execution Architecture
+
+The runtime organizes computation into three layers with strict boundary rules. This defines what belongs in each layer, preventing monolithic "do everything" functions.
+
+### Layer 1: Opcode Layer
+
+Pure scalar numeric operations. Generic math with no domain semantics.
+
+**Contract**:
+- Input/Output: `number[] → number`
+- No phase/coordinate semantics
+- No domain knowledge (doesn't know what values represent)
+- Fixed arity per opcode
+
+**Examples**: `sin`, `cos`, `add`, `mul`, `clamp`, `lerp`, `hash`, `abs`, `floor`, `pow`
+
+**Boundary rule**: If the operation makes sense for arbitrary numbers regardless of their domain meaning, it belongs here.
+
+### Layer 2: Signal Kernel Layer
+
+Domain-specific `scalar → scalar` functions with documented domain/range contracts.
+
+**Contract**:
+- Input/Output: scalar → scalar (fixed arity)
+- Documented domain and range for each kernel
+- Phase-aware, easing-aware, noise-aware
+
+**Categories**:
+
+| Category | Examples | Domain → Range |
+|----------|----------|---------------|
+| Oscillators | `oscSin`, `oscCos`, `triangle`, `square`, `sawtooth` | phase ∈ [0,1] → [-1,1] |
+| Easing | `easeInQuad`, `easeOutCubic`, `smoothstep` | t ∈ [0,1] → u ∈ [0,1] |
+| Noise | `noise1` | any real → [0,1) |
+
+**Boundary rule**: If the operation is scalar→scalar but requires knowledge of what the value represents (phase, normalized time, etc.), it belongs here.
+
+### Layer 3: Field Kernel Layer
+
+Vec2/color/field operations applied lane-wise across field buffers.
+
+**Contract**:
+- Input: field buffers (vec2, color, float arrays)
+- Output: field buffers
+- Lane-wise application (per-element)
+- May allocate temporary buffers
+
+**Categories**:
+
+| Category | Examples |
+|----------|----------|
+| Geometry | `polarToCartesian`, `polygonVertex`, `circleLayout` |
+| Color | `hsvToRgb`, `hueFromPhase`, `applyOpacity` |
+| Effects | `jitter2d`, `attract2d`, `fieldPulse` |
+
+**Boundary rule**: If the operation works on multi-component values (vec2, color) or operates across field lanes, it belongs here.
+
+### Materializer (Orchestrator)
+
+The materializer orchestrates execution across layers:
+
+1. Interpret IR → allocate buffers
+2. Execute intrinsics (domain loop bounds, active masks)
+3. Dispatch to appropriate layer based on operation type
+4. Call field kernels for lane-wise operations
+5. Write to render sinks
+
+The materializer is NOT a layer — it's the coordinator that invokes the three layers in the correct order.
+
+### Layer Boundary Summary
+
+| Question | Answer | Layer |
+|----------|--------|-------|
+| Is it generic math on numbers? | Yes | Opcode |
+| Is it scalar→scalar with domain meaning? | Yes | Signal Kernel |
+| Does it work on vec2/color/fields? | Yes | Field Kernel |
+| Does it orchestrate execution? | Yes | Materializer |
+
+---
+
+## Typed Scalar/Field Banks (T3 Implementation Note)
+
+The abstract `RuntimeState` (defined above) uses `Float32Array` for all scalar storage and `Map<number, Float32Array>` for fields. An implementation may use typed banks for better type safety and stride-aware allocation:
+
+```typescript
+// T3: Implementation option — typed banks
+interface TypedRuntimeState {
+  scalarsF32: Float32Array;
+  scalarsI32: Int32Array;
+  scalarsShape2D: Uint32Array;       // packed shape references
+  fieldsF32: Map<number, Float32Array>;
+  fieldsVec2: Map<number, Float32Array>;  // stride=2
+  fieldsColor: Map<number, Uint8ClampedArray>;
+}
+```
+
+This is an optimization, not architecture. The abstract `RuntimeState` definition (single `scalars: Float32Array`) remains canonical. Implementations may use typed banks to avoid stride calculations and enable more efficient access patterns, but must maintain equivalent semantics.
+
+---
+
 ## See Also
 
 - [04-compilation](./04-compilation.md) - How IR is generated
 - [03-time-system](./03-time-system.md) - Time management
 - [06-renderer](./06-renderer.md) - Render output
+- [16-coordinate-spaces](./16-coordinate-spaces.md) - Coordinate space model
 - [Glossary: StateSlot](../GLOSSARY.md#stateslot)
 - [Invariant: I8](../INVARIANTS.md#i8-slot-addressed-execution)

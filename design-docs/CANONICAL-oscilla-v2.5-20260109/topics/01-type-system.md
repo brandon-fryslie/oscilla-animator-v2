@@ -30,20 +30,44 @@ The type system has three layers:
 The base data type of a value - what the payload is made of.
 
 ```typescript
-type PayloadType = 'float' | 'int' | 'vec2' | 'color' | 'phase' | 'bool' | 'unit';
+type PayloadType = 'float' | 'int' | 'vec2' | 'vec3' | 'color' | 'phase' | 'bool' | 'unit' | 'shape2d';
 ```
 
 ### PayloadType Semantics
 
-| Type | Description | Size | Range/Units |
-|------|-------------|------|-------------|
-| `float` | 32-bit floating point | 4 bytes | IEEE 754 |
-| `int` | 32-bit signed integer | 4 bytes | -2^31 to 2^31-1 |
-| `vec2` | 2D vector (x, y) | 8 bytes | Two floats |
-| `color` | RGBA color | 16 bytes | Four floats, 0..1 each |
-| `phase` | Cyclic phase value | 4 bytes | 0..1 with wrap semantics |
-| `bool` | Boolean | 1 byte | true/false |
-| `unit` | Unit interval | 4 bytes | 0..1 clamped |
+| Type | Description | Stride | Range/Units |
+|------|-------------|--------|-------------|
+| `float` | 32-bit floating point | 1 | IEEE 754 |
+| `int` | 32-bit signed integer | 1 | -2^31 to 2^31-1 |
+| `vec2` | 2D vector (x, y) | 2 | Two floats |
+| `vec3` | 3D vector (x, y, z) | 3 | Three floats |
+| `color` | RGBA color | 4 | Four floats, 0..1 each |
+| `phase` | Cyclic phase value | 1 | 0..1 with wrap semantics |
+| `bool` | Boolean | 1 | true/false |
+| `unit` | Unit interval | 1 | 0..1 clamped |
+| `shape2d` | 2D shape reference | 8 | Packed u32 words (handle type) |
+
+### shape2d: Handle Type
+
+`shape2d` is a **handle/reference type** — it refers to a geometry definition rather than representing a computable value. Unlike arithmetic types (float, vec2, etc.), you cannot add, multiply, or interpolate shape2d values.
+
+```typescript
+// shape2d packed layout (8 × u32 words)
+const SHAPE2D_WORDS = 8;
+enum Shape2DWord {
+  TopologyId = 0,       // u32 — identifies shape topology
+  PointsFieldSlot = 1,  // u32 — field slot ID for control points
+  PointsCount = 2,      // u32 — number of control points
+  StyleRef = 3,         // u32 — style reference
+  Flags = 4,            // u32 — bitfield (closed, etc.)
+  Reserved1 = 5,
+  Reserved2 = 6,
+  Reserved3 = 7,
+}
+```
+
+**Valid operations**: equality comparison, assignment, pass-through
+**Invalid operations**: arithmetic, interpolation, combine modes (except `last`/`first`)
 
 ### Important Notes
 
@@ -51,6 +75,7 @@ type PayloadType = 'float' | 'int' | 'vec2' | 'color' | 'phase' | 'bool' | 'unit
 - `number` is **TypeScript-only** (implementation detail)
 - PayloadType does **NOT** include `'event'` or `'domain'`
 - `phase` has special arithmetic rules (see [Phase Semantics](#phase-type-semantics))
+- `shape2d` is a handle type — see above for restrictions
 
 ---
 

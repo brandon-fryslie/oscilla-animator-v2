@@ -87,7 +87,9 @@
 
 ### Type System
 
-**PayloadType**: Base data type - `'float' | 'int' | 'vec2' | 'color' | 'phase' | 'bool' | 'unit'`
+**PayloadType**: Base data type - `'float' | 'int' | 'vec2' | 'vec3' | 'color' | 'phase' | 'bool' | 'unit' | 'shape2d'`
+
+**Stride**: Floats per element. `float/int/phase/bool/unit=1`, `vec2=2`, `vec3=3`, `color=4`, `shape2d=8` (u32 words, handle type)
 
 **Extent**: 5-axis coordinate (cardinality, temporality, binding, perspective, branch)
 
@@ -128,6 +130,14 @@
 **EdgeRole**: `user` | `default` | `busTap` | `auto`
 
 **Stateful Primitives (4)**: UnitDelay, Lag, Phasor, SampleAndHold
+
+**Cardinality-Generic Block**: Per-lane semantics, works for both Signal and Field. Lane-local, cardinality-preserving.
+
+**Payload-Generic Block**: Semantics defined over closed set of payload types. Fully specialized at compile time.
+
+**Lane**: Individual element within a Field (positional offset, not semantic identity).
+
+**StateId**: Stable identifier for a state array (not individual lanes). Format: `blockId + primitive_kind`.
 
 ### Architecture
 
@@ -176,15 +186,17 @@
 
 ### PayloadType Semantics
 
-| Type | Size | Range/Notes |
-|------|------|-------------|
-| `float` | 4 bytes | IEEE 754 |
-| `int` | 4 bytes | Signed 32-bit |
-| `vec2` | 8 bytes | Two floats |
-| `color` | 16 bytes | RGBA, 0..1 each |
-| `phase` | 4 bytes | 0..1 with wrap |
-| `bool` | 1 byte | true/false |
-| `unit` | 4 bytes | 0..1 clamped |
+| Type | Stride | Range/Notes |
+|------|--------|-------------|
+| `float` | 1 | IEEE 754 |
+| `int` | 1 | Signed 32-bit |
+| `vec2` | 2 | Two floats |
+| `vec3` | 3 | Three floats |
+| `color` | 4 | RGBA, 0..1 each |
+| `phase` | 1 | 0..1 with wrap |
+| `bool` | 1 | true/false |
+| `unit` | 1 | 0..1 clamped |
+| `shape2d` | 8 | Packed u32 words (handle — no arithmetic) |
 
 ### Extent (Five-Axis Coordinate)
 
@@ -330,6 +342,19 @@ Blocks whose computation is **per-lane** and valid for both Signal (one) and Fie
 
 Compiler specializes each instance to either scalar or field step — no runtime generics.
 
+### Payload-Generic Blocks
+
+Blocks whose semantics are defined over a **closed set of payload types**, fully specialized at compile time:
+
+**Contract**: (1) Closed admissible payload set, (2) Total per-payload specialization, (3) No implicit coercions, (4) Deterministic resolution.
+
+**Are generic**: Add/Mul (`{float, vec2, vec3}`), Normalize (`{vec2, vec3}`), UnitDelay/Lag (over `{float, vec2, vec3, color}`)
+**Are NOT generic**: Cast blocks (fixed types), TimeRoot, Render, Array
+
+**Validity shapes**: Homogeneous unary (`T→T`), Homogeneous binary (`T×T→T`), Mixed binary (`T×float→T`), Predicate (`T×T→bool`), Reduction-like (`T→float`)
+
+Compiler emits fully specialized IR (e.g., `Add_f32`, `Add_vec2`, `Add_vec3`) — no runtime payload dispatch.
+
 ### Cycle Validation
 
 Every strongly connected component must contain at least one stateful primitive.
@@ -412,11 +437,11 @@ type Step =
 
 ### Slot Allocation
 
-| Cardinality | Slot Type |
-|-------------|-----------|
-| `zero` | Inlined constant |
-| `one` | ScalarSlot |
-| `many(domain)` | FieldSlot |
+| Cardinality | Slot Type | Buffer Size |
+|-------------|-----------|-------------|
+| `zero` | Inlined constant | 0 |
+| `one` | ScalarSlot | stride floats |
+| `many(instance)` | FieldSlot | laneCount × stride floats |
 
 ### Runtime Erasure
 
@@ -454,13 +479,13 @@ interface RuntimeState {
 
 ### State Management
 
-State keyed by `(blockId, laneIndex)`:
+State keyed by stable `StateId` (identifies state array, not individual lanes):
 
-| Cardinality | State Allocation |
-|-------------|------------------|
-| `one` | Single value |
-| `many(domain)` | N(domain) values |
-| `zero` | No state |
+| Cardinality | State Allocation | Mapping Type |
+|-------------|------------------|--------------|
+| `one` | `stride` floats | `StateMappingScalar { stateId, slotIndex, stride, initial }` |
+| `many(instance)` | `laneCount × stride` floats | `StateMappingField { stateId, instanceId, slotStart, laneCount, stride, initial }` |
+| `zero` | No state | None |
 
 ### State Migration
 
@@ -483,6 +508,65 @@ State keyed by `(blockId, laneIndex)`:
 - **No runtime type dispatch**: Compile-time slot selection
 - **Dense arrays**: Not sparse maps
 - **No Math.random()**: Seeded randomness only
+
+### Three-Layer Execution Architecture
+
+| Layer | I/O | Semantics | Examples |
+|-------|-----|-----------|---------|
+| **Opcode** | `number[] → number` | Pure generic math, no domain knowledge | sin, cos, add, mul, lerp |
+| **Signal Kernel** | `scalar → scalar` | Domain-specific, fixed arity | oscSin, easeInQuad, noise1 |
+| **Field Kernel** | field buffers lane-wise | Vec2/color/field ops | circleLayout, hsvToRgb, jitter2d |
+
+**Materializer** orchestrates (not a layer): IR → buffers → dispatch → sinks.
+
+---
+
+## Coordinate Spaces (Topic 16)
+
+### Three-Space Model
+
+| Space | Role | Range |
+|-------|------|-------|
+| **Local (L)** | Geometry/control points | Centered (0,0), O(1) |
+| **World (W)** | Instance placement | [0..1] normalized |
+| **Viewport (V)** | Backend output | Pixels/viewBox |
+
+### Transform Chain
+
+```
+pW = positionW + R(θ) · (scale × pL)
+pV = pW × viewportDimensions
+```
+
+### `scale` Semantics
+
+- `scale`: Isotropic local→world factor (`Signal<float>` or `Field<float>`)
+- `scale2`: Optional anisotropic (`Signal<vec2>` or `Field<vec2>`)
+- Backend: `scalePx = scale × min(W, H)`
+- Combined: `S_effective = (scale × scale2.x, scale × scale2.y)`
+
+### Enforcement
+
+Convention-based: `controlPoints` = local, `position` = world. Type-level axis deferred.
+
+---
+
+## Renderer (Core)
+
+### RenderFrameIR (Draw-Op-Centric)
+
+```typescript
+interface RenderFrameIR { passes: RenderPassIR[]; }
+type RenderPassIR = { kind: 'drawPathInstances'; op: DrawPathInstancesOp };
+
+interface DrawPathInstancesOp {
+  geometry: PathGeometryTemplate;  // Local-space points + topology
+  instances: PathInstanceSet;       // World-space transforms (SoA)
+  style: PathStyle;                 // Fill/stroke/opacity
+}
+```
+
+Each op is inherently a batch (shared geometry+style = one draw call).
 
 ---
 

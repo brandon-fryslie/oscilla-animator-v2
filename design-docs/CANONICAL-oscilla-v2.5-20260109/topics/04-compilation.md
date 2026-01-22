@@ -323,13 +323,31 @@ type StateSlot  = { kind: 'state_slot'; id: number };
 |-------------|-----------|
 | `zero` | Inlined constant (no slot) |
 | `one` | ScalarSlot |
-| `many(domain)` | FieldSlot |
+| `many(instance)` | FieldSlot |
+
+### Slot Stride by PayloadType
+
+Slot allocation accounts for the **stride** (number of float components) of the resolved payload:
+
+| PayloadType | Stride (floats) |
+|-------------|-----------------|
+| `float`, `int`, `phase`, `bool`, `unit` | 1 |
+| `vec2` | 2 |
+| `vec3` | 3 |
+| `color` | 4 (RGBA) |
+
+For FieldSlots, buffer size = `laneCount × stride`. The compiler must know stride and allocate buffers accordingly — runtime must not infer stride from payload names.
 
 ### State Slot Allocation
 
-For stateful blocks:
-- `cardinality = one` → one state cell
-- `cardinality = many(domain)` → N(domain) state cells
+For stateful blocks, state is allocated using stable `StateId` and range-based mappings:
+
+- `cardinality = one` → `StateMappingScalar { stateId, slotIndex, stride, initial }`
+- `cardinality = many(instance)` → `StateMappingField { stateId, instanceId, slotStart, laneCount, stride, initial }`
+
+State stride may exceed payload stride when a primitive stores multiple values per lane (e.g., a filter storing both y and dy has state stride 2 even for float payload).
+
+See [05-runtime](./05-runtime.md) for migration semantics.
 
 ---
 
@@ -500,40 +518,18 @@ Every error includes location info for UI display:
 
 ---
 
-## Polymorphism
+## Payload Specialization
 
-### Generic Blocks
+Payload-generic blocks (see [02-block-system](./02-block-system.md#payload-generic-blocks)) are fully specialized at compile time:
 
-Blocks can be generic over (World, Domain) using constraints:
+- Every block instance compiles to **concrete IR ops** with no runtime polymorphism
+- Payload type resolved during type unification
+- Lowering selected by resolved `(cardinality, payload)` pair
+- One `Add` block definition works for `Signal<float>`, `Field<float>`, `Signal<vec2>`, `Field<vec3>`, etc.
+- Compiler emits payload-aware opcodes (e.g., `Add_f32`, `Add_vec2`, `Add_vec3`) or a single opcode with known stride
+- Disallowed payload combinations produce compile-time errors (PAYLOAD_NOT_ALLOWED, PAYLOAD_COMBINATION_NOT_ALLOWED)
 
-```typescript
-// Add block: generic over cardinality and payload
-const AddBlock: BlockSig = {
-  name: "Add",
-  buildTypes(env) {
-    const A = env.tc.freshVar("A");
-    const B = env.tc.freshVar("B");
-    const O = env.tc.freshVar("O");
-
-    return {
-      inputs: { a: { kind: 'var', v: A }, b: { kind: 'var', v: B } },
-      outputs: { out: { kind: 'var', v: O } },
-      constraints: [
-        { kind: "Typeclass", a, cls: "Numeric" },
-        { kind: "SameDomain", a, b },
-        { kind: "Promote", out: O, a: A, b: B, rule: "SignalField" },
-      ],
-    };
-  },
-};
-```
-
-### Monomorphization
-
-Every block instance compiles to **concrete IR ops** with no runtime polymorphism:
-- Type variables resolved at compile time
-- Lowering selected by concrete `(world, domain)`
-- One `Add` block works for `signal<float>`, `field<float>`, `signal<vec2>`, etc.
+No boxing, no per-lane type checks, no runtime dispatch on payload.
 
 ---
 

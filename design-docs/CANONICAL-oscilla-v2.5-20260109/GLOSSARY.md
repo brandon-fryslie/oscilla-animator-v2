@@ -20,7 +20,14 @@ Use these definitions consistently. When in doubt, this is the canonical source.
 
 **Canonical Form**: `PayloadType`
 
-**Values**: `'float' | 'int' | 'vec2' | 'color' | 'phase' | 'bool' | 'unit'`
+**Values**: `'float' | 'int' | 'vec2' | 'vec3' | 'color' | 'phase' | 'bool' | 'unit' | 'shape2d'`
+
+**Stride by PayloadType**:
+- `float`, `int`, `phase`, `bool`, `unit` → 1 float
+- `vec2` → 2 floats
+- `vec3` → 3 floats
+- `color` → 4 floats (RGBA)
+- `shape2d` → 8 u32 words (handle type, not arithmetic)
 
 **Source**: [01-type-system.md](./topics/01-type-system.md)
 
@@ -361,17 +368,345 @@ interface InstanceRef {
 
 ---
 
+### Payload-Generic Block
+
+**Definition**: A block whose semantics are defined over a closed set of payload types such that: the block's behavior is well-defined for each allowed payload, the compiler selects the correct concrete implementation per payload at compile time, and any disallowed payload is a compile-time type error.
+
+**Type**: concept (block classification property)
+
+**Canonical Form**: `Payload-Generic Block`
+
+**Contract**:
+1. Closed admissible payload set (AllowedPayloads per port)
+2. Total per-payload specialization (every allowed payload has implementation path)
+3. No implicit coercions (explicit cast blocks required)
+4. Deterministic resolution (fully specialized IR)
+
+**Relationship**: Orthogonal to cardinality-generic. A block may be one, the other, both, or neither.
+
+**Examples**: Add (`{float, vec2, vec3}`), Mul (`{float, vec2, vec3}` + mixed scalar), Normalize (`{vec2, vec3}`)
+
+**Source**: [02-block-system.md](./topics/02-block-system.md)
+
+**Note**: No runtime dispatch on payload. Compiler emits fully specialized IR per resolved payload type.
+
+---
+
 ### StateId
 
-**Definition**: Stable identifier for a block's conceptual state that survives recompilation. Derived from stable anchors (blockId + primitive identity + state key + instance context).
+**Definition**: Stable identifier for a block's conceptual state array that survives recompilation. Derived from stable anchors: `blockId + primitive_kind [+ state_key_disambiguator]`.
 
 **Type**: type
 
 **Canonical Form**: `StateId`
 
-**Semantics**: Identifies conceptual state, not storage offset. Used for state migration during hot-swap (see I3).
+**Semantics**:
+- Identifies the **state array** (the conceptual unit), not individual lanes
+- For scalar state: maps to `stride` floats at a slot index
+- For field state: maps to a contiguous range of `laneCount × stride` floats
+- Lane index is NOT part of StateId — it is a positional offset within the buffer
+- Used for state migration during hot-swap (see I3)
 
 **Source**: [05-runtime.md](./topics/05-runtime.md), [02-block-system.md](./topics/02-block-system.md)
+
+---
+
+### Lane
+
+**Definition**: An individual element within a Field. When a value has cardinality `many(instance)`, it contains N lanes — one per element in the instance.
+
+**Type**: concept
+
+**Canonical Form**: `lane`
+
+**Usage**: Lane index is a positional offset (0..N-1) within a field buffer. Lanes can be remapped by continuity; lane index is NOT semantic identity.
+
+**Source**: [01-type-system.md](./topics/01-type-system.md), [02-block-system.md](./topics/02-block-system.md)
+
+---
+
+### Stride
+
+**Definition**: The number of float values per element in a state buffer or slot allocation. Determined by payload type or by the state requirements of a specific primitive.
+
+**Type**: concept (numeric property)
+
+**Canonical Form**: `stride`
+
+**Values by PayloadType**:
+- `float`, `int`, `phase`, `bool`, `unit` → 1
+- `vec2` → 2
+- `vec3` → 3
+- `color` → 4
+
+**Note**: State stride may exceed payload stride when a primitive stores multiple values per lane (e.g., a filter storing y and dy has state stride 2 even for float payload).
+
+**Source**: [04-compilation.md](./topics/04-compilation.md), [05-runtime.md](./topics/05-runtime.md)
+
+---
+
+### StateMappingScalar
+
+**Definition**: State migration mapping for a scalar (cardinality: one) stateful block. Maps a stable StateId to an unstable buffer position.
+
+**Type**: type
+
+**Canonical Form**: `StateMappingScalar`
+
+**Structure**:
+```typescript
+interface StateMappingScalar {
+  stateId: StateId;     // stable semantic identity
+  slotIndex: number;    // unstable positional offset
+  stride: number;       // floats per state element
+  initial: number[];    // length = stride
+}
+```
+
+**Source**: [05-runtime.md](./topics/05-runtime.md)
+
+---
+
+### StateMappingField
+
+**Definition**: State migration mapping for a field (cardinality: many) stateful block. Identifies the entire state buffer for all lanes of an instance.
+
+**Type**: type
+
+**Canonical Form**: `StateMappingField`
+
+**Structure**:
+```typescript
+interface StateMappingField {
+  stateId: StateId;         // stable (identifies the whole state array)
+  instanceId: InstanceId;   // ties buffer to lane set identity
+  slotStart: number;        // unstable start offset
+  laneCount: number;        // N at compile time
+  stride: number;           // floats per lane state (>=1)
+  initial: number[];        // length = stride (per-lane init template)
+}
+```
+
+**Note**: Lane index is NOT part of StateId. Migration for field-state uses continuity's lane mapping when identity is stable.
+
+**Source**: [05-runtime.md](./topics/05-runtime.md)
+
+---
+
+### shape2d
+
+**Definition**: A handle/reference PayloadType representing a 2D shape geometry. Unlike arithmetic types, shape2d values cannot be added, multiplied, or interpolated — they are structural references to geometry definitions.
+
+**Type**: PayloadType (handle subclass)
+
+**Canonical Form**: `shape2d`
+
+**Stride**: 8 (u32 words)
+
+**Layout**: TopologyId, PointsFieldSlot, PointsCount, StyleRef, Flags, Reserved×3
+
+**Valid operations**: equality, assignment, pass-through
+**Invalid operations**: arithmetic, interpolation, combine modes (except last/first)
+
+**Source**: [01-type-system.md](./topics/01-type-system.md)
+
+---
+
+## Coordinate Spaces
+
+### Local Space
+
+**Definition**: The coordinate system in which geometry and control points are defined. Each shape's geometry is authored relative to its own origin at (0,0) with magnitude O(1).
+
+**Type**: concept (coordinate space)
+
+**Canonical Form**: `Local Space`, `L`
+
+**Source**: [16-coordinate-spaces.md](./topics/16-coordinate-spaces.md)
+
+**Note**: Local space has no relation to final screen position or size. Defined per geometry template, not per instance.
+
+---
+
+### World Space
+
+**Definition**: The normalized coordinate system for instance placement. Range [0..1] in both axes. Layout blocks produce positions in world space.
+
+**Type**: concept (coordinate space)
+
+**Canonical Form**: `World Space`, `W`
+
+**Source**: [16-coordinate-spaces.md](./topics/16-coordinate-spaces.md)
+
+**Note**: All position outputs from layout blocks are in world space.
+
+---
+
+### Viewport Space
+
+**Definition**: The backend-specific output coordinate system (pixels, SVG viewBox units, WebGL clip space). The renderer maps world space to viewport space.
+
+**Type**: concept (coordinate space)
+
+**Canonical Form**: `Viewport Space`, `V`
+
+**Source**: [16-coordinate-spaces.md](./topics/16-coordinate-spaces.md)
+
+**Note**: Not visible to patch logic — patches work exclusively in world space.
+
+---
+
+### scale
+
+**Definition**: The isotropic local→world scale factor expressed in world-normalized units. Type: `Signal<float>` or `Field<float>`. Backend mapping: `scalePx = scale × min(viewportWidth, viewportHeight)`.
+
+**Type**: concept (transform parameter)
+
+**Canonical Form**: `scale`
+
+**Reference dimension**: `min(viewportWidth, viewportHeight)` — ensures aspect-independent sizing.
+
+**Source**: [16-coordinate-spaces.md](./topics/16-coordinate-spaces.md)
+
+**Note**: Formerly called `size` in source documents; renamed to `scale` per D32.
+
+---
+
+### scale2
+
+**Definition**: Optional anisotropic scale factor. Type: `Signal<vec2>` or `Field<vec2>`. Combined with scale: `S_effective = (scale × scale2.x, scale × scale2.y)`.
+
+**Type**: concept (transform parameter)
+
+**Canonical Form**: `scale2`
+
+**Source**: [16-coordinate-spaces.md](./topics/16-coordinate-spaces.md)
+
+---
+
+## Render IR
+
+### RenderFrameIR
+
+**Definition**: The render intermediate representation produced by the materializer. A sequence of draw operations (passes), each combining local-space geometry with world-space instance transforms.
+
+**Type**: type
+
+**Canonical Form**: `RenderFrameIR`
+
+**Structure**:
+```typescript
+interface RenderFrameIR {
+  passes: RenderPassIR[];
+}
+```
+
+**Source**: [06-renderer.md](./topics/06-renderer.md)
+
+**Note**: Replaces the previous `RenderIR` (instance-centric model) with a draw-op-centric model.
+
+---
+
+### DrawPathInstancesOp
+
+**Definition**: Primary render operation combining a local-space geometry template with world-space instance transforms and shared style.
+
+**Type**: type
+
+**Canonical Form**: `DrawPathInstancesOp`
+
+**Structure**:
+```typescript
+interface DrawPathInstancesOp {
+  geometry: PathGeometryTemplate;
+  instances: PathInstanceSet;
+  style: PathStyle;
+}
+```
+
+**Source**: [06-renderer.md](./topics/06-renderer.md)
+
+**Note**: Enables natural batching — instances sharing geometry+style are pre-grouped.
+
+---
+
+### PathGeometryTemplate
+
+**Definition**: Geometry defined in local space. Contains control points centered at (0,0) with topology identification.
+
+**Type**: type
+
+**Canonical Form**: `PathGeometryTemplate`
+
+**Source**: [06-renderer.md](./topics/06-renderer.md)
+
+---
+
+### PathInstanceSet
+
+**Definition**: Per-instance world-space transforms in SoA (Structure of Arrays) layout for efficient batching. Contains parallel arrays of positions, rotations, and scales.
+
+**Type**: type
+
+**Canonical Form**: `PathInstanceSet`
+
+**Source**: [06-renderer.md](./topics/06-renderer.md)
+
+---
+
+## Execution Architecture
+
+### Opcode Layer
+
+**Definition**: Layer 1 of the three-layer execution architecture. Pure scalar numeric operations (`number[] → number`) with no domain semantics. Generic math only.
+
+**Type**: concept (architectural layer)
+
+**Canonical Form**: `Opcode Layer`
+
+**Examples**: sin, cos, add, mul, clamp, lerp, hash
+
+**Source**: [05-runtime.md](./topics/05-runtime.md)
+
+---
+
+### Signal Kernel
+
+**Definition**: Layer 2 of the three-layer execution architecture. Domain-specific `scalar → scalar` functions with documented domain/range contracts.
+
+**Type**: concept (architectural layer)
+
+**Canonical Form**: `Signal Kernel`
+
+**Categories**: Oscillators (phase→[-1,1]), Easing (t∈[0,1]→u∈[0,1]), Noise (any→[0,1))
+
+**Source**: [05-runtime.md](./topics/05-runtime.md)
+
+---
+
+### Field Kernel
+
+**Definition**: Layer 3 of the three-layer execution architecture. Vec2/color/field operations applied lane-wise across field buffers.
+
+**Type**: concept (architectural layer)
+
+**Canonical Form**: `Field Kernel`
+
+**Categories**: Geometry, Color, Effects
+
+**Source**: [05-runtime.md](./topics/05-runtime.md)
+
+---
+
+### Materializer
+
+**Definition**: The orchestrator that interprets IR, allocates buffers, dispatches to the three execution layers (opcode, signal kernel, field kernel), and writes to render sinks. Not a layer itself.
+
+**Type**: concept (architectural component)
+
+**Canonical Form**: `Materializer`
+
+**Source**: [05-runtime.md](./topics/05-runtime.md)
 
 ---
 
@@ -712,13 +1047,15 @@ type NormalizedGraph = {
 
 ### RenderIR
 
-**Definition**: Generic render intermediate produced by patch.
+**Definition**: Generic render intermediate produced by patch. Now superseded by `RenderFrameIR` (draw-op-centric model).
 
-**Type**: type
+**Type**: type (deprecated — use `RenderFrameIR`)
 
-**Canonical Form**: `RenderIR`
+**Canonical Form**: `RenderFrameIR`
 
 **Source**: [06-renderer.md](./topics/06-renderer.md)
+
+**Note**: The old instance-centric RenderIR is replaced by the draw-op-centric RenderFrameIR per D34.
 
 ---
 
@@ -1310,3 +1647,11 @@ type ValueSummary =
 | `DomainN` block | Primitive + Array | Conflated domain with instantiation |
 | `GridDomain` block | Primitive + Array + Grid Layout | Conflated three concerns |
 | `domain.shape.grid_2d` | Layout block | Layout is separate from domain/instance |
+| `StateKey { blockId, laneIndex }` | `StateId` + `StateMappingScalar`/`StateMappingField` | Lane index is not semantic identity |
+| Polymorphism / Monomorphization | Payload-Generic Block + Cardinality-Generic Block | Replaced with explicit classification properties |
+| Generic blocks (type variables) | Payload-Generic Block | Formal contract replaces ad-hoc polymorphism |
+| `RenderIR` (instance-centric) | `RenderFrameIR` (draw-op-centric) | DrawPathInstancesOp replaces RenderInstance model |
+| `RenderInstance` | `DrawPathInstancesOp` + `PathInstanceSet` | Instances are now per-op transform arrays |
+| `GeometryAsset` | `PathGeometryTemplate` | Local-space geometry with topology |
+| `MaterialAsset` | `PathStyle` | Style per draw-op, not per-instance |
+| `size` (as parameter name) | `scale` | Renamed for clarity — isotropic local→world scale factor |

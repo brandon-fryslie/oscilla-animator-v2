@@ -222,11 +222,11 @@ The vast majority of blocks are **PURE and STATELESS**. Only these four primitiv
 
 | Cardinality | State Allocation |
 |-------------|------------------|
-| `one` | One state cell |
-| `many(domain)` | N(domain) state cells (one per lane) |
+| `one` | One state cell (stride floats) |
+| `many(instance)` | N(instance) × stride floats (one per lane) |
 | `zero` | No runtime state |
 
-State is keyed by `(blockId, laneIndex)` tuple.
+State is keyed by stable `StateId` (not by positional slot index). See [05-runtime](./05-runtime.md) for the `StateMappingScalar` and `StateMappingField` types.
 
 ### Note on Lag
 
@@ -472,6 +472,91 @@ A block must NOT be declared cardinality-generic if it:
 1. **Crosses lanes**: output[i] depends on input[j≠i] (blur, boids, sorting, kNN)
 2. **Transforms cardinality**: maps Signal → Field, Field → Signal, or relabels instances
 3. **Mutates instance set**: creates, destroys, reorders, or filters lanes
+
+---
+
+## Payload-Generic Blocks
+
+A **payload-generic block** is a block whose semantics are defined over a closed set of payload types such that the compiler selects the correct concrete implementation per payload at compile time, with no runtime dispatch on payload.
+
+Payload-generic is **orthogonal** to cardinality-generic: a block may be one, the other, both, or neither.
+
+### Formal Contract
+
+A block B is payload-generic iff:
+
+1. **Closed admissible payload set**: For each port, B declares an explicit set `AllowedPayloads(port)`. No open extension.
+
+2. **Total per-payload specialization**: For every payload P in AllowedPayloads that can appear after unification, there exists a concrete implementation path for B under P.
+
+3. **No implicit coercions**: Payload changes require explicit cast blocks (e.g., `FloatToVec2`, `PackVec3`, `ToColor`). Payload-generic blocks must not silently reinterpret or coerce representations.
+
+4. **Deterministic resolution**: Given resolved payload types, the compiler's choice of specialization is deterministic and emits fully specialized IR.
+
+### Which Blocks Are Payload-Generic
+
+| Category | Blocks | Allowed Payloads | Notes |
+|----------|--------|------------------|-------|
+| **Math** | Add, Mul | `{float, vec2, vec3}` | Componentwise |
+| **Math** | Length | `{vec2, vec3} → float` | Reduction-like |
+| **Math** | Normalize | `{vec2, vec3}` | Homogeneous unary |
+| **Color** | HSV→RGB | `{color}` | Single payload (not generic) |
+| **State** | UnitDelay, Lag | Payload-generic over `{float, vec2, vec3, color}` | Per-lane state sized by stride |
+
+### Which Blocks Are NOT Payload-Generic
+
+| Category | Blocks | Reason |
+|----------|--------|--------|
+| **Conversion** | FloatToVec2, PackVec3, ToColor | Explicit cast (fixed input/output) |
+| **Instance** | Array | Cardinality, not payload |
+| **Time** | TimeRoot | Fixed outputs |
+| **Render** | RenderInstances2D | Fixed port types |
+
+### Runtime Semantics Categories
+
+Payload-generic blocks define semantics as either:
+
+- **Componentwise**: Apply the same scalar operator per component
+  - Example: `Add(vec3, vec3)` = `vec3(x1+x2, y1+y2, z1+z2)`
+- **Type-specific**: Defined explicitly per payload
+  - Example: `Mul(color, float)` might be brightness scale; `Mul(color, color)` might be disallowed
+
+### Validity Shapes (Signature Families)
+
+A payload-generic block must match one of these signature forms:
+
+1. **Homogeneous unary**: `T → T` for T ∈ S
+2. **Homogeneous binary**: `T × T → T` for T ∈ S
+3. **Mixed binary (scalar + vector)**: `T × float → T` for T ∈ {vec2, vec3, color}
+4. **Predicate**: `T × T → bool` for T ∈ S
+5. **Reduction-like**: `T → float` (must be explicit, not generic by default)
+
+If a block does not match one of these forms, it is not payload-generic; it is a family of explicit blocks.
+
+### What Is NOT Allowed
+
+A block must NOT be declared payload-generic if it:
+
+1. **Implicit representation reinterpretation**: Treating vec3 as three unrelated lanes, treating color as vec4 without specifying color semantics, treating int as float via implicit cast.
+2. **Semantic ambiguity across payloads**: If the operation means something different for different payloads without explicit declaration (e.g., "Normalize" for float is ambiguous).
+3. **Partial coverage**: "Works for float and vec2, but vec3 later" is forbidden. Either include now with implementation or exclude now.
+
+### Compilation: Fully Specialized IR
+
+The compiler emits fully specialized IR per payload — no runtime dispatch:
+
+- `OpCode.Add_f32` / `Add_vec2` / `Add_vec3` (or one opcode with known stride), selected at compile time
+- Stride determined by payload: `float=1`, `vec2=2`, `vec3=3`, `color=4`
+- Runtime kernels operate on dense arrays with known stride
+- No per-lane or per-sample type checks, no boxing
+
+### Diagnostics
+
+Compiler must produce explicit errors for payload failures:
+
+- **PAYLOAD_NOT_ALLOWED**: Payload resolved to a value not supported by block kind at a port
+- **PAYLOAD_COMBINATION_NOT_ALLOWED**: For multi-input blocks, the pair/tuple is not in the allowed combination table
+- **IMPLICIT_CAST_DISALLOWED**: Any attempt to coerce payload without an explicit cast block
 
 ---
 

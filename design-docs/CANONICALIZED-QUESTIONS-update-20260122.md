@@ -1,239 +1,137 @@
 ---
-command: /canonicalize-architecture ./design-docs design-docs/_new/0-CardinalityGeneric-Block-Types-Impact.md design-docs/_new/0-PayloadGeneriic-Block-Type-Spec.md
-files: design-docs/_new/0-CardinalityGeneric-Block-Types-Impact.md design-docs/_new/0-PayloadGeneriic-Block-Type-Spec.md
+command: /canonicalize-architecture ./design-docs design-docs/_new/renderer
+files: design-docs/_new/renderer/8-before-render.md design-docs/_new/renderer/9-renderer.md design-docs/_new/renderer/10-multiple-backends.md design-docs/_new/renderer/11-svg.md
 indexed: true
-source_files:
-  - design-docs/_new/0-CardinalityGeneric-Block-Types-Impact.md
-  - design-docs/_new/0-PayloadGeneriic-Block-Type-Spec.md
-topics:
-  - block-system
-  - compilation
-  - runtime
-  - type-system
 ---
 
-# Questions: Cardinality-Generic State & Payload-Generic Blocks
+# Update Questions: Renderer Architecture Integration
+
+**Date**: 2026-01-22
+**Items requiring resolution**: 5
 
 ---
 
-## Q1: State Keying — `(blockId, laneIndex)` vs Range-Based StateId
+## Q1: GeometryRegistry String Keys vs Numeric Topology IDs
 
-**Tag**: CONTRADICTION-T2
-**Severity**: HIGH
-**Source**: 0-CardinalityGeneric-Block-Types-Impact.md vs 05-runtime.md / 02-block-system.md
+**Tag**: CONTRADICTION-T3
+**Severity**: NORMAL (T3 - can change freely)
 
-**The Problem**:
-
-The canonical spec (Topic 05) currently says:
-
-> State is keyed by `(blockId, laneIndex)` tuple.
-
+**Existing Canonical (Topic 06, "Asset Management" section)**:
 ```typescript
-interface StateKey {
-  blockId: BlockId;      // Stable UUID
-  laneIndex: number;     // 0 for scalar, 0..N-1 for field
+interface GeometryRegistry {
+  builtIn: Map<string, GeometryAsset>;
+  loaded: Map<string, GeometryAsset>;
+  generated: Map<string, GeometryAsset>;
 }
 ```
 
-But D19 (2026-01-22) already introduced `StateId` as "stable identifier for a block's conceptual state that survives recompilation." And the new source document argues that:
+**New Sources (all 4 files)**:
+Numeric topology IDs with O(1) array indexing. No string maps.
+```
+topologies[topologyId]  // array indexing, not hash map
+```
 
-1. **StateId should identify the state array, not individual lanes** — Lane index is positional and can be remapped by continuity
-2. **Field-cardinality state needs range-based mapping** with `slotStart`, `laneCount`, `stride`, and `instanceId`
-3. **Hot-swap migration for fields should use continuity's lane mapping** (not naive index copy)
+**Assessment**: The "Asset Management" section is residual from an earlier spec that predates the PathGeometryTemplate model (D34). The canonical PathGeometryTemplate already uses `topologyId: number`. This section should be replaced.
 
-The canonical spec already has StateId in the GLOSSARY but Topic 05 still shows the older `(blockId, laneIndex)` keying pattern.
+**Proposed Resolution**: Remove the "Asset Management" section and replace with a "Topology Registry" section that uses numeric IDs and array lookup, consistent with PathGeometryTemplate.
 
-**Existing Resolution Context**: D19 added StateId to GLOSSARY with definition: "Derived from stable anchors (blockId + primitive identity + state key + instance context)." This aligns with the new source but Topic 05 code examples haven't been updated.
-
-**Options**:
-
-A. **Update Topic 05 to use range-based StateMappings**
-   - Replace `StateKey { blockId, laneIndex }` with the range-based model
-   - Scalar state: `StateMappingScalar { stateId, slotIndex, stride, initial }`
-   - Field state: `StateMappingField { stateId, instanceId, slotStart, laneCount, stride, initial }`
-   - Hot-swap uses continuity mapping for stable-identity fields
-   - Non-stable identity uses explicit fallback policy (reset or index-copy)
-
-B. **Keep existing `(blockId, laneIndex)` as simplified model**
-   - Note range-based mapping as future implementation detail
-   - Defer stride/instanceId to implementation
-
-**Recommendation**: Option A — This is consistent with D19 and the cardinality-generic integration. The old StateKey is stale.
+**Status**: ACCEPTED
 
 ---
 
-## Q2: Payload-Generic Block — New Block Classification Property
-
-**Tag**: NEW-TOPIC (within existing topic)
-**Severity**: HIGH
-**Source**: 0-PayloadGeneriic-Block-Type-Spec.md vs 02-block-system.md
-
-**The Problem**:
-
-Source 2 proposes "Payload-Generic Block" as a formal block classification property — orthogonal to cardinality-generic. The canonical spec does not yet have this concept.
-
-The relationship to existing spec:
-- **Cardinality-generic** (already in canonical): Block works for both Signal and Field
-- **Payload-generic** (proposed): Block works for multiple PayloadTypes (float, vec2, vec3, color, etc.)
-- **Both orthogonal**: A block can be both, one, or neither
-
-The formal contract has 4 properties:
-1. Closed admissible payload set (no open extension)
-2. Total specialization (every allowed payload has an implementation path)
-3. No implicit coercions (requires explicit cast blocks)
-4. Deterministic resolution (compiler's choice is deterministic)
-
-**Existing Context**: Topic 04 (Compilation) already mentions polymorphism/monomorphization. Topic 02 already has the cardinality-generic section. Adding payload-generic would parallel the cardinality-generic formalization (D19).
-
-**Options**:
-
-A. **Add "Payload-Generic Blocks" section to Topic 02**
-   - Parallel to existing "Cardinality-Generic Blocks" section
-   - Include formal contract (4 properties)
-   - Include "which blocks are payload-generic" table
-   - Include "what is NOT allowed" constraints
-   - Add note on compilation (fully specialized IR, no runtime payload dispatch)
-   - Reject registry metadata (per D20 precedent — we rejected cardinality-generic registry metadata)
-
-B. **Defer payload-generic formalization**
-   - Note concept exists but don't formalize until implementation demands it
-   - Keep the current implicit polymorphism section in Topic 04
-
-C. **Add as T3 optional note only**
-   - Brief mention in Topic 02 without full section
-   - Implementation can refer to source doc directly
-
-**Recommendation**: Option A — This mirrors D19's approach for cardinality-generic. The concept is well-defined and immediately useful for implementation. However, reject the registry metadata (§8) per D20 precedent.
-
----
-
-## Q3: `vec3` as PayloadType
-
-**Tag**: AMBIGUITY
-**Severity**: MEDIUM
-**Source**: 0-PayloadGeneriic-Block-Type-Spec.md vs GLOSSARY.md
-
-**The Problem**:
-
-The canonical GLOSSARY defines PayloadType as:
-> `'float' | 'int' | 'vec2' | 'color' | 'phase' | 'bool' | 'unit'`
-
-Source 2 repeatedly uses `vec3` as a payload type (in examples: Add, Mul, Normalize work on `{float, vec2, vec3}`). The canonical spec does NOT include `vec3`.
-
-**Options**:
-
-A. **Add `vec3` to PayloadType**
-   - Expand to: `'float' | 'int' | 'vec2' | 'vec3' | 'color' | 'phase' | 'bool' | 'unit'`
-   - Needed for 3D operations (normalize, length, cross product)
-   - `vec3` = 3 components, distinct from `color` (4 components, RGBA semantics)
-
-B. **Keep PayloadType as-is, note `vec3` as future extension**
-   - Current system is 2D-focused
-   - `vec3` can be added when 3D support is implemented
-   - Source doc is aspirational
-
-C. **Include `vec3` but mark as optional/deferred**
-   - Add to type but mark as "post-MVP" or "when 3D is implemented"
-
-**Note**: This is related to whether 3D shapes/layouts are in scope. The canonical spec doesn't currently reference 3D geometry.
-
----
-
-## Q4: Unit Constraints on Blocks (NumericUnit)
-
-**Tag**: AMBIGUITY
-**Severity**: LOW
-**Source**: 0-PayloadGeneriic-Block-Type-Spec.md §2.2 vs 01-type-system.md
-
-**The Problem**:
-
-Source 2 references unit constraints on blocks:
-> "Sin allows `float(unit=radians)` and `phase(unit=phase)` but not `float(unit=ms)`"
-> "If your SignalType includes `unit?: NumericUnit`..."
-
-The canonical type system (`SignalType = { payload, extent }`) does NOT include a `unit` field. NumericUnit is not in the GLOSSARY.
-
-**Options**:
-
-A. **Add `unit?: NumericUnit` to SignalType**
-   - Enables dimensional analysis and unit safety
-   - Prevents connecting milliseconds to radians
-
-B. **Reject unit annotations entirely**
-   - Too complex for current implementation
-   - Unit safety is a future concern
-   - PayloadType `phase` already handles the phase-vs-float distinction
-
-C. **Note as future extension, don't add to canonical now**
-   - Acknowledge the concept
-   - Defer to when implementation demands it
-
-**Recommendation**: Option C — This is an interesting idea but adds complexity to the type system that isn't needed for MVP. PayloadType `phase` already distinguishes phase from raw float, which handles the most important case.
-
----
-
-## Q5: Stride in State/Slot Allocation
+## Q2: RenderAssembler — Where Does It Live?
 
 **Tag**: COMPLEMENT
-**Severity**: MEDIUM
-**Source**: 0-CardinalityGeneric-Block-Types-Impact.md + 0-PayloadGeneriic-Block-Type-Spec.md vs 04-compilation.md
+**Severity**: MEDIUM (architectural placement decision)
 
-**The Problem**:
+**New Sources**: Source doc 8-before-render.md defines RenderAssembler as a runtime component that produces RenderFrameIR. It lives in runtime, NOT renderer.
 
-Both source documents reference the concept of **stride** — the number of floats per state/slot element:
-- Source 1: "stride exists because many stateful primitives need more than one float per lane (e.g., a filter could store y and dy)"
-- Source 2: "vec2 → 2 components, vec3 → 3 components, color → 4 components (RGBA)"
+**Current Canonical**: Topic 06 describes RenderFrameIR but doesn't specify who produces it. Topic 05 describes schedule execution but doesn't mention render assembly as a distinct stage.
 
-The canonical spec currently says:
-- State allocation: "One state cell" or "N(domain) state cells" — doesn't mention stride
-- Slot allocation: Allocated by cardinality but doesn't specify stride per payload type
+**Proposed Resolution**: Add RenderAssembler to Topic 05 (Runtime) as the final stage of frame execution:
+1. Schedule executes → fills scalar banks, evaluates fields
+2. RenderAssembler walks render sinks → materializes fields, resolves shapes
+3. RenderAssembler outputs RenderFrameIR → renderer consumes
+
+This is architecturally significant because it enforces I15 (renderer is sink-only) by ensuring ALL interpretation happens before the renderer.
+
+**Status**: ACCEPTED
+
+---
+
+## Q3: Backend Interface — Tier Classification
+
+**Tag**: COMPLEMENT
+**Severity**: LOW (tier decision)
+
+**New Sources**: Define `RenderBackend<TTarget>` interface with `beginFrame/executePass/endFrame`.
+
+**Question**: What tier should the backend interface be?
 
 **Options**:
+- **T2 (Structural)**: If we consider the backend abstraction as an architectural seam that many things depend on
+- **T3 (Optional)**: If we consider it an implementation detail that can change freely
 
-A. **Add stride concept to state allocation and slot allocation**
-   - StateMappingField: `stride: number` (floats per lane state element)
-   - Slot formatting: `float|int|phase|unit → 1, vec2 → 2, vec3 → 3 (if added), color → 4`
-   - This is implementation detail but matters for correctness
+**Assessment**: The INTERFACE (generic backend contract) is T2 because it defines the seam between runtime and rendering. The SPECIFIC BACKENDS (Canvas2D, SVG, WebGL) are T3 because they can change freely.
 
-B. **Defer stride to implementation**
-   - Note that "dense array" implies stride but don't formalize
-   - Implementation already handles different payload sizes
+**Proposed Resolution**: Add RenderBackend interface to Topic 06 as T2 content. SVG/WebGL/Canvas specifics remain T3 notes.
 
-**Recommendation**: Option A — Stride is fundamental to correct buffer allocation. Without it, the spec can't precisely describe how state buffers are laid out for multi-component types.
+**Status**: ACCEPTED
 
 ---
 
-## Internal Contradiction: Lane-Index in StateId
+## Q4: Per-Instance Shape Pass Kind
 
-**Tag**: CONTRADICTION-INTERNAL
-**Severity**: LOW (already resolved in source document itself)
-**Source**: 0-CardinalityGeneric-Block-Types-Impact.md (internal)
+**Tag**: GAP
+**Severity**: LOW (future feature)
 
-**The Problem**:
+**New Sources (9-renderer.md)**: Defines two explicit pass kinds:
+- `'instances2d_uniformShape'` — All instances share one geometry
+- `'instances2d_shapeField'` — Each instance has its own shape reference
 
-Within the conversation, Claude initially proposed `StateId = blockId + kind + lane_index`, and ChatGPT corrected this to identify the state **array**, not individual lanes. The document self-resolves this:
+**Current Canonical**: RenderPassIR only has one kind: `'drawPathInstances'`.
 
-> "The stable unit of identity is the state array, not each lane"
-> "Lane index is positional within an instance and can be remapped by continuity; treating it as part of StateId bakes in the thing you're trying to avoid."
+**Assessment**: Per-instance shapes are a future feature (Field<shape2d>). The current spec supports only uniform shape per pass. Adding the second pass kind is forward-looking.
 
-**Resolution**: The document self-resolves. StateId identifies arrays, lane index is an offset into the buffer. This aligns with D19's GLOSSARY definition ("identifies conceptual state, not storage offset").
+**Proposed Resolution**: Add as T3 note in Topic 06 — "Future: per-instance shape pass kind will be added when Field<shape2d> is implemented."
 
-**Status**: RESOLVED (no action needed)
+**Status**: ACCEPTED
 
 ---
 
-## Summary
+## Q5: PathTopologyDef Contents
 
-| Question | Tag | Severity | Requires Resolution |
-|----------|-----|----------|---------------------|
-| Q1: State Keying model | CONTRADICTION-T2 | HIGH | YES |
-| Q2: Payload-Generic formalization | NEW-TOPIC | HIGH | YES |
-| Q3: `vec3` as PayloadType | AMBIGUITY | MEDIUM | YES |
-| Q4: Unit constraints (NumericUnit) | AMBIGUITY | LOW | Recommended: defer |
-| Q5: Stride in allocation | COMPLEMENT | MEDIUM | YES |
-| Internal: Lane-index | INTERNAL | LOW | No (self-resolved) |
+**Tag**: GAP
+**Severity**: MEDIUM (missing type definition)
 
-**CRITICAL items**: 0
-**HIGH items requiring resolution**: 2 (Q1, Q2)
-**MEDIUM items**: 2 (Q3, Q5)
-**LOW/Resolved**: 2 (Q4, internal)
+**New Sources**: Topologies contain:
+```typescript
+type PathTopologyDef = {
+  verbs: Uint8Array;           // moveTo, lineTo, quadTo, cubicTo, close
+  pointsPerVerb: Uint8Array;   // arity of each verb
+}
+```
+
+**Current Canonical**: PathGeometryTemplate has `topologyId: number` and `closed: boolean`, but the topology registry contents are never defined.
+
+**Assessment**: This is a genuine gap — we define the ID but not what it points to. The new sources fill this gap.
+
+**Proposed Resolution**: Add PathTopologyDef to Topic 06 (Renderer) and GLOSSARY. This is T2 content because topologies are a structural concept that renderer backends depend on.
+
+**Status**: ACCEPTED
+
+---
+
+## Resolution Summary
+
+| # | Tag | Severity | Description |
+|---|-----|----------|-------------|
+| Q1 | CONTRADICTION-T3 | NORMAL | GeometryRegistry → Topology Registry |
+| Q2 | COMPLEMENT | MEDIUM | RenderAssembler placement in runtime |
+| Q3 | COMPLEMENT | LOW | Backend interface tier classification |
+| Q4 | GAP | LOW | Per-instance shape pass kind |
+| Q5 | GAP | MEDIUM | PathTopologyDef type definition |
+
+**Blockers**: 0
+**Must resolve before integration**: Q1, Q2, Q5
+**Can defer**: Q3, Q4

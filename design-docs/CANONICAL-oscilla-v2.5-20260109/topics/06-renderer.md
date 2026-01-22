@@ -48,63 +48,90 @@ If the renderer grows bespoke inputs like "radius," "wobble," "spiral mode," it 
 
 ## Render IR (Invariant I16)
 
-### Generic Render Intermediate
+### Draw-Op-Centric Model
 
-The patch produces a render IR, not direct draw calls:
+The patch produces a `RenderFrameIR` — a sequence of draw operations, each combining a geometry template with instance transforms and style:
 
 ```typescript
-interface RenderIR {
-  instances: RenderInstance[];
-  geometries: GeometryAsset[];
-  materials: MaterialAsset[];
-  layers: LayerConfig[];
+interface RenderFrameIR {
+  passes: RenderPassIR[];
+}
+
+type RenderPassIR =
+  | { kind: 'drawPathInstances'; op: DrawPathInstancesOp };
+```
+
+### DrawPathInstancesOp
+
+The primary render operation. Combines local-space geometry with world-space instance transforms:
+
+```typescript
+interface DrawPathInstancesOp {
+  geometry: PathGeometryTemplate;  // Local-space points + topology
+  instances: PathInstanceSet;       // World-space transforms per instance
+  style: PathStyle;                 // Fill/stroke/opacity
 }
 ```
 
-### Render Instance
+### PathGeometryTemplate
+
+Defines geometry in **local space** (see [Topic 16: Coordinate Spaces](./16-coordinate-spaces.md)):
 
 ```typescript
-interface RenderInstance {
-  id: InstanceId;
-  geometry: GeometryRef;      // Reference to geometry asset
-  material: MaterialRef;       // Reference to material
-  transform: Transform2D;      // Position, rotation, scale
-  layer: LayerId;              // Z-ordering
-  style: StyleOverrides;       // Per-instance overrides
+interface PathGeometryTemplate {
+  topologyId: number;             // Identifies the shape topology
+  points: Float32Array;           // Local-space control points (vec2[])
+  pointCount: number;             // Number of control points
+  closed: boolean;                // Closed path?
 }
 ```
 
-### Geometry Assets
+### PathInstanceSet
+
+Per-instance world-space transforms. Parallel arrays (SoA layout) for efficient batching:
 
 ```typescript
-type GeometryAsset =
-  | { kind: 'circle'; radius: number }
-  | { kind: 'rect'; width: number; height: number }
-  | { kind: 'path'; data: string }  // SVG path data
-  | { kind: 'mesh'; vertices: Float32Array; indices: Uint16Array }
-  | { kind: 'text'; content: string; font: FontRef };
+interface PathInstanceSet {
+  count: number;                    // Number of instances
+  positionsWorld: Float32Array;     // vec2[] — world-space positions [0..1]
+  rotations: Float32Array;          // float[] — rotation per instance (radians)
+  scales: Float32Array;             // float[] — isotropic scale per instance
+  scales2?: Float32Array;           // vec2[] — optional anisotropic scale
+}
 ```
 
-### Material Assets
+### PathStyle
+
+Style specification for all instances sharing a geometry template:
 
 ```typescript
-interface MaterialAsset {
-  id: MaterialId;
+interface PathStyle {
   fill: FillSpec;
   stroke: StrokeSpec;
+  opacity: number;
   blend: BlendMode;
-  effects: Effect[];
+  layer: LayerId;
 }
 
 type FillSpec =
+  | { kind: 'none' }
   | { kind: 'solid'; color: Color }
-  | { kind: 'gradient'; stops: GradientStop[] }
-  | { kind: 'pattern'; patternId: PatternId };
+  | { kind: 'gradient'; stops: GradientStop[] };
 
 type StrokeSpec =
   | { kind: 'none' }
   | { kind: 'solid'; color: Color; width: number };
 ```
+
+### Why Draw-Op-Centric?
+
+The draw-op model (vs the previous instance-centric model) provides:
+
+- **Natural batching**: Instances sharing geometry + style are already grouped in one op
+- **Local-space geometry**: Explicit separation of shape definition from placement
+- **SoA transforms**: Parallel arrays enable efficient iteration
+- **Aligns with SVG**: Maps directly to `<defs>/<use>` pattern
+- **Aligns with coordinate spaces**: Geometry in local space, transforms in world space
 
 ---
 
@@ -141,27 +168,26 @@ Canvas/WebGL performance lives and dies by:
 - Minimizing state changes
 - Minimizing path building
 - Minimizing draw calls
-- Grouping by material/style
+- Grouping by geometry+style
 
-### Batch Keys
+### Natural Batching in Draw-Op Model
 
-Render output includes enough info to batch deterministically:
+Each `DrawPathInstancesOp` is inherently a batch — all instances sharing the same geometry template and style are already grouped. The renderer's job is to:
 
-```typescript
-interface BatchKey {
-  geometry: GeometryRef;   // Same geometry
-  material: MaterialRef;   // Same material
-  layer: LayerId;          // Same z-layer
-  blend: BlendMode;        // Same blend mode
-}
+1. Sort passes by (layer, blend mode)
+2. Execute each pass as a single draw operation
+3. Minimize state changes between passes
+
+### Batch Efficiency
+
+The draw-op model eliminates the need for runtime batch key computation:
+
+```
+Traditional: N instances → compute batch keys → group → draw K batches
+Draw-op:     K ops (pre-grouped) → sort → draw K ops
 ```
 
-### Batching Strategy
-
-1. Sort instances by (layer, material, geometry, blend)
-2. Group consecutive instances with same BatchKey
-3. Emit one draw call per batch
-4. Minimize state changes between batches
+The compilation/materialization phase handles grouping before the renderer sees it.
 
 ---
 
@@ -275,24 +301,33 @@ For high-performance rendering:
 ### Frame Render Flow
 
 ```
-1. Collect RenderIR from all sinks
+1. Collect RenderFrameIR from all sinks
          ↓
-2. Sort instances by layer
+2. Sort passes by (layer, blend mode)
          ↓
-3. Group into batches by BatchKey
+3. Cull offscreen passes
          ↓
-4. Cull offscreen batches
+4. Set up render state (viewport, clear)
          ↓
-5. Set up render state (viewport, clear)
+5. For each pass:
+   - Map world→viewport transforms (see Topic 16)
+   - Build path from local-space geometry template
+   - Set style state (fill, stroke, blend)
+   - Draw all instances with mapped transforms
          ↓
-6. For each layer:
-   - Set layer blend mode
-   - For each batch:
-     - Set material state
-     - Draw instances
-         ↓
-7. Present to screen
+6. Present to screen
 ```
+
+### World→Viewport Mapping
+
+The renderer performs the final coordinate space transform (see [Topic 16](./16-coordinate-spaces.md)):
+
+```
+positionVP = positionW × (viewportWidth, viewportHeight)
+scalePx = scale × min(viewportWidth, viewportHeight)
+```
+
+This is the ONLY place world→viewport conversion happens. Patch logic works entirely in world space.
 
 ### Pipeline Timing
 
@@ -334,10 +369,10 @@ interface RenderDiagnostics {
 
 ```typescript
 type RenderError =
-  | { kind: 'invalid_geometry'; geometryId: GeometryRef }
-  | { kind: 'missing_material'; materialId: MaterialRef }
+  | { kind: 'invalid_geometry'; topologyId: number }
+  | { kind: 'invalid_style'; passIndex: number }
   | { kind: 'buffer_overflow'; requested: number; available: number }
-  | { kind: 'invalid_transform'; transform: Transform2D };
+  | { kind: 'invalid_transform'; instanceIndex: number };
 ```
 
 ### Fallback Rendering
@@ -377,5 +412,6 @@ interface GeometryRegistry {
 
 - [05-runtime](./05-runtime.md) - How patches execute
 - [02-block-system](./02-block-system.md) - RenderInstances2D block
+- [16-coordinate-spaces](./16-coordinate-spaces.md) - Local/World/Viewport spaces
 - [Invariant: I15](../INVARIANTS.md#i15-renderer-is-a-sink-not-an-engine)
 - [Invariant: I17](../INVARIANTS.md#i17-planned-batching)

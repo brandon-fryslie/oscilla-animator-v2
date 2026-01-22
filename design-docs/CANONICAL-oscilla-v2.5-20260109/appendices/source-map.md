@@ -24,7 +24,14 @@ Which original documents contributed to which parts of this specification.
 | [06-renderer.md](../topics/06-renderer.md) | `renderer/09-renderer.md`, `renderer/RENDER-PIPELINE.md` |
 | [15-graph-editor-ui.md](../topics/15-graph-editor-ui.md) | `spec/10-linear-graph-editor.md` |
 | [02-block-system.md](../topics/02-block-system.md) (Cardinality-Generic section) | `_new/0-CardinalityGeneric-Block-Type-Spec.md` |
-| [04-compilation.md](../topics/04-compilation.md) (Expression Forms note) | `_new/0-CardinalityGeneric-Block-Type-Spec.md` |
+| [02-block-system.md](../topics/02-block-system.md) (Payload-Generic section) | `_new/0-PayloadGeneriic-Block-Type-Spec.md` |
+| [04-compilation.md](../topics/04-compilation.md) (Expression Forms, Payload Specialization) | `_new/0-CardinalityGeneric-Block-Type-Spec.md`, `_new/0-PayloadGeneriic-Block-Type-Spec.md` |
+| [05-runtime.md](../topics/05-runtime.md) (State Mappings) | `_new/0-CardinalityGeneric-Block-Types-Impact.md` |
+| [16-coordinate-spaces.md](../topics/16-coordinate-spaces.md) | `_new/kernel-roadmap/1-local-space.md`, `_new/kernel-roadmap/2-local-space-end-to-end-spec.md`, `_new/kernel-roadmap/3-local-space-spec-deeper.md` |
+| [05-runtime.md](../topics/05-runtime.md) (Three-Layer Architecture) | `_new/kernel-roadmap/0-kernel-roadmap.md`, `_new/kernel-roadmap/5-opcode-interpreter.md`, `_new/kernel-roadmap/6-signal-kernel.md`, `_new/kernel-roadmap/7-field-kernel.md` |
+| [05-runtime.md](../topics/05-runtime.md) (Typed Banks) | `_new/kernel-roadmap/3-local-space-spec-deeper.md` |
+| [06-renderer.md](../topics/06-renderer.md) (RenderFrameIR, DrawPathInstancesOp) | `_new/kernel-roadmap/3-local-space-spec-deeper.md` |
+| [01-type-system.md](../topics/01-type-system.md) (shape2d) | `_new/kernel-roadmap/3-local-space-spec-deeper.md` |
 
 ---
 
