@@ -11,6 +11,7 @@ import { observer } from 'mobx-react-lite';
 import ReactFlow, {
   Background,
   Controls,
+  MiniMap,
   Panel,
   ReactFlowProvider,
   useNodesState,
@@ -487,6 +488,24 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = observer(({
       >
         <Background />
         <Controls />
+        <MiniMap 
+          nodeColor={(node) => {
+            // Use node type for colors - match dark theme
+            const type = node.data?.blockType || '';
+            if (type.includes('Render')) return '#4ecdc4';
+            if (type.includes('Field')) return '#a18cd1';
+            if (type.includes('Sin') || type.includes('Cos')) return '#ff6b6b';
+            return '#0f3460';
+          }}
+          maskColor="rgba(10, 20, 40, 0.85)"
+          style={{
+            backgroundColor: 'rgba(13, 27, 42, 0.9)',
+            borderRadius: '8px',
+            border: '1px solid rgba(78, 205, 196, 0.2)',
+          }}
+          zoomable
+          pannable
+        />
         <Panel position="top-left" className="react-flow-panel">
           <Button
             variant="outlined"
