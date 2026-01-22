@@ -106,6 +106,19 @@ export interface RenderPassIR {
   scale: number;
 
   /**
+   * Per-instance rotation in radians.
+   * When provided, each instance is rotated around its center.
+   */
+  rotation?: Float32Array;
+
+  /**
+   * Per-instance anisotropic scale (x, y pairs).
+   * When provided, allows non-uniform scaling per instance.
+   * Array length should be count * 2 (interleaved x, y).
+   */
+  scale2?: Float32Array;
+
+  /**
    * Pre-resolved shape (REQUIRED).
    *
    * RenderAssembler produces this with:

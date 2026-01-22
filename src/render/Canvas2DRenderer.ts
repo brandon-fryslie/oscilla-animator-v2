@@ -109,6 +109,10 @@ function renderInstances2D(
     );
   }
 
+  // Extract optional per-instance transforms
+  const rotation = pass.rotation;
+  const scale2 = pass.scale2;
+
   // Fast inner loop - no validation checks
   for (let i = 0; i < pass.count; i++) {
     const x = position[i * 2] * width;
@@ -118,6 +122,16 @@ function renderInstances2D(
 
     ctx.save();
     ctx.translate(x, y);
+
+    // Apply per-instance rotation if provided
+    if (rotation) {
+      ctx.rotate(rotation[i]);
+    }
+
+    // Apply per-instance anisotropic scale if provided
+    if (scale2) {
+      ctx.scale(scale2[i * 2], scale2[i * 2 + 1]);
+    }
 
     if (isPathTopology(topology)) {
       // Path topology - control points validated above
