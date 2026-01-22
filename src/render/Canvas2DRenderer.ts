@@ -144,47 +144,45 @@ function renderInstances2D(
 }
 
 /**
- * Render a path shape at a particle position.
+ * Render a path shape at a particle position using local-space geometry.
  *
- * Control points define the shape template (relative offsets from center).
- * The shape is scaled by particle size and drawn at the current transform origin.
+ * PHASE 6 LOCAL-SPACE MODEL:
+ * Control points define the shape template in LOCAL SPACE (centered at origin).
+ * Instance transforms (position, size, rotation) are applied via canvas transforms.
  *
- * Control points from polygonVertex kernel are in normalized space centered at (0,0)
- * with radius defined by radiusX/radiusY. We scale them to canvas pixels.
+ * Coordinate spaces:
+ * - LOCAL SPACE: Control points are centered at (0,0) with |p| ≈ O(1)
+ *   Example: Regular polygon with radius 1.0, vertices at (cos θ, sin θ)
+ * - WORLD SPACE: Instance position is normalized [0,1]
+ * - VIEWPORT SPACE: Final pixel coordinates
  *
- * ROADMAP PHASE 6 - COORDINATE SPACE ISSUE:
- * Current: Control points are in normalized [0,1] world space, scaled by width/height
- * Future: Control points in LOCAL SPACE (centered at origin, |p|≈O(1))
+ * Transform sequence (already inside ctx.save/restore with translate applied):
+ * 1. ctx.scale(sizePx, sizePx) - scale local geometry to viewport
+ * 2. Draw path with local-space points (no width/height multipliers)
  *
- * Current rendering flow:
- *   1. Materializer outputs control points in normalized [0,1] space
- *   2. This function scales by width/height to get viewport pixels
- *   3. Size parameter currently unused (control points include radius)
+ * Size conversion:
+ * - size is in world-normalized units (e.g., 0.05 = 5% of reference dimension)
+ * - Reference dimension D = min(width, height) to preserve isotropy
+ * - sizePx = size * D
  *
- * Future rendering flow:
- *   1. Materializer outputs control points in local space (e.g., radius 1.0)
- *   2. Renderer applies instance transform BEFORE drawing:
- *      ctx.translate(x, y);    // Already in pixels
- *      ctx.rotate(rotation);   // Instance rotation
- *      ctx.scale(size, size);  // Instance size
- *   3. Draw path with local-space points (no width/height scaling)
- *
- * This change makes:
- * - Geometry independent of viewport dimensions
- * - Size/rotation modulators work uniformly
- * - Control points reusable across different instance layouts
- *
- * MIGRATION: Will require changes to field kernels (polygonVertex, etc.)
- * to output local-space coordinates instead of normalized world-space.
+ * This makes all shapes respond uniformly to size modulation.
  */
 function renderPathAtParticle(
   ctx: CanvasRenderingContext2D,
   topology: PathTopologyDef,
   controlPoints: Float32Array,
-  _size: number, // Currently unused - control points already include radius
+  size: number,
   width: number,
   height: number
 ): void {
+  // Calculate reference dimension for isotropic scaling
+  const D = Math.min(width, height);
+  const sizePx = size * D;
+
+  // Apply instance scale transform
+  // This scales the local-space geometry to viewport pixels
+  ctx.scale(sizePx, sizePx);
+
   ctx.beginPath();
 
   let pointIndex = 0;
@@ -194,18 +192,17 @@ function renderPathAtParticle(
 
     switch (verb) {
       case 0: { // PathVerb.MOVE
-        // Control points are in normalized space (-radiusX to +radiusX, -radiusY to +radiusY)
-        // Scale to canvas pixels (multiply by canvas size since they're normalized fractions)
-        const px = controlPoints[pointIndex * 2] * width;
-        const py = controlPoints[pointIndex * 2 + 1] * height;
+        // Control points are in LOCAL SPACE - use directly (no width/height scaling)
+        const px = controlPoints[pointIndex * 2];
+        const py = controlPoints[pointIndex * 2 + 1];
         ctx.moveTo(px, py);
         pointIndex++;
         break;
       }
 
       case 1: { // PathVerb.LINE
-        const px = controlPoints[pointIndex * 2] * width;
-        const py = controlPoints[pointIndex * 2 + 1] * height;
+        const px = controlPoints[pointIndex * 2];
+        const py = controlPoints[pointIndex * 2 + 1];
         ctx.lineTo(px, py);
         pointIndex++;
         break;
@@ -213,16 +210,16 @@ function renderPathAtParticle(
 
       case 2: { // PathVerb.CUBIC
         // Cubic bezier: control1, control2, end
-        const cp1x = controlPoints[pointIndex * 2] * width;
-        const cp1y = controlPoints[pointIndex * 2 + 1] * height;
+        const cp1x = controlPoints[pointIndex * 2];
+        const cp1y = controlPoints[pointIndex * 2 + 1];
         pointIndex++;
 
-        const cp2x = controlPoints[pointIndex * 2] * width;
-        const cp2y = controlPoints[pointIndex * 2 + 1] * height;
+        const cp2x = controlPoints[pointIndex * 2];
+        const cp2y = controlPoints[pointIndex * 2 + 1];
         pointIndex++;
 
-        const endx = controlPoints[pointIndex * 2] * width;
-        const endy = controlPoints[pointIndex * 2 + 1] * height;
+        const endx = controlPoints[pointIndex * 2];
+        const endy = controlPoints[pointIndex * 2 + 1];
         pointIndex++;
 
         ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, endx, endy);
@@ -231,12 +228,12 @@ function renderPathAtParticle(
 
       case 3: { // PathVerb.QUAD
         // Quadratic bezier: control, end
-        const cpx = controlPoints[pointIndex * 2] * width;
-        const cpy = controlPoints[pointIndex * 2 + 1] * height;
+        const cpx = controlPoints[pointIndex * 2];
+        const cpy = controlPoints[pointIndex * 2 + 1];
         pointIndex++;
 
-        const endx = controlPoints[pointIndex * 2] * width;
-        const endy = controlPoints[pointIndex * 2 + 1] * height;
+        const endx = controlPoints[pointIndex * 2];
+        const endy = controlPoints[pointIndex * 2 + 1];
         pointIndex++;
 
         ctx.quadraticCurveTo(cpx, cpy, endx, endy);
