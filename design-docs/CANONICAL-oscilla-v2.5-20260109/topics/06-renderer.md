@@ -8,8 +8,8 @@ order: 6
 
 > The renderer is a sink, not an engine. All creative logic comes from the patch.
 
-**Related Topics**: [05-runtime](./05-runtime.md), [02-block-system](./02-block-system.md)
-**Key Terms**: [RenderInstances2D](../GLOSSARY.md#renderinstances2d), [RenderIR](../GLOSSARY.md#renderir)
+**Related Topics**: [05-runtime](./05-runtime.md), [02-block-system](./02-block-system.md), [16-coordinate-spaces](./16-coordinate-spaces.md)
+**Key Terms**: [RenderInstances2D](../GLOSSARY.md#renderinstances2d), [RenderFrameIR](../GLOSSARY.md#renderframeir), [RenderBackend](../GLOSSARY.md#renderbackend), [PathTopologyDef](../GLOSSARY.md#pathtopologydef)
 **Relevant Invariants**: [I15](../INVARIANTS.md#i15-renderer-is-a-sink-not-an-engine), [I16](../INVARIANTS.md#i16-real-render-ir), [I17](../INVARIANTS.md#i17-planned-batching), [I18](../INVARIANTS.md#i18-temporal-stability-in-rendering)
 
 ---
@@ -79,11 +79,37 @@ Defines geometry in **local space** (see [Topic 16: Coordinate Spaces](./16-coor
 
 ```typescript
 interface PathGeometryTemplate {
-  topologyId: number;             // Identifies the shape topology
+  topologyId: number;             // References PathTopologyDef by numeric ID
   points: Float32Array;           // Local-space control points (vec2[])
   pointCount: number;             // Number of control points
-  closed: boolean;                // Closed path?
 }
+```
+
+The `closed` property derives from the topology verbs (last verb = close).
+
+### PathTopologyDef
+
+Immutable structural definition of a path shape — what verbs it uses and how many points each verb consumes. Registered at compile/init time and referenced by numeric ID.
+
+```typescript
+interface PathTopologyDef {
+  verbs: Uint8Array;             // Sequence of path verbs (moveTo, lineTo, quadTo, cubicTo, close)
+  pointsPerVerb: Uint8Array;    // Number of control points each verb consumes
+}
+```
+
+**Properties**:
+- Immutable once registered — control points change per-frame, topology does not
+- Registered in a topology registry with O(1) numeric array lookup
+- The topology defines the shape structure; PathGeometryTemplate provides concrete points
+
+**Verb constants** (T3 implementation detail):
+```typescript
+const VERB_MOVE = 0;    // 1 point
+const VERB_LINE = 1;    // 1 point
+const VERB_QUAD = 2;    // 2 points (control + end)
+const VERB_CUBIC = 3;   // 3 points (2 controls + end)
+const VERB_CLOSE = 4;   // 0 points
 ```
 
 ### PathInstanceSet
@@ -385,26 +411,37 @@ On error:
 
 ---
 
-## Asset Management
+## Topology Registry
 
-### Geometry Assets
+### Numeric ID Lookup
 
-Geometries are compile-time or load-time resources:
+Topologies are registered at compile/init time and referenced by numeric ID for O(1) array lookup:
 
 ```typescript
-interface GeometryRegistry {
-  builtIn: Map<string, GeometryAsset>;  // circle, rect, etc.
-  loaded: Map<string, GeometryAsset>;   // SVG, mesh files
-  generated: Map<string, GeometryAsset>;  // Runtime-generated
+// Topology registry: array indexed by topologyId
+const topologies: PathTopologyDef[] = [];
+
+function getTopology(id: number): PathTopologyDef {
+  return topologies[id];  // O(1), no hash maps, no string lookups
 }
 ```
 
-### Asset Lifecycle
+### Registry Lifecycle
 
-1. **Load**: Parse asset file (SVG, mesh)
-2. **Register**: Add to registry with stable ID
-3. **Reference**: Blocks reference by ID
-4. **Cache**: GPU-side caching for WebGL
+1. **Register**: At compile/init time, add PathTopologyDef and receive numeric ID
+2. **Reference**: PathGeometryTemplate references by numeric `topologyId`
+3. **Lookup**: Renderer uses array indexing (not string maps)
+4. **Immutable**: Topology definitions never change after registration
+
+### Built-in Topologies
+
+Standard topologies are pre-registered:
+- Circle (N-gon approximation)
+- Rectangle (4-vertex closed path)
+- Regular polygon (N vertices on unit circle)
+- Line segment
+
+Custom topologies are registered at compile time from user-defined paths.
 
 ---
 
