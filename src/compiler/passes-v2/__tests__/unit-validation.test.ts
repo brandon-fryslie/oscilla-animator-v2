@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { pass2TypeGraph } from '../pass2-types';
 import type { NormalizedPatch } from '../../ir/patches';
-import { signalTypeSignal } from '../../../core/canonical-types';
+import { signalTypeSignal, unitPhase01, unitRadians, unitScalar } from '../../../core/canonical-types';
 import { registerBlock } from '../../../blocks/registry';
 
 describe('Unit Validation', () => {
@@ -26,7 +26,7 @@ describe('Unit Validation', () => {
     console.warn = originalWarn;
   });
 
-  it('should emit warning when connecting phase to radians', () => {
+  it('should reject connecting phase01 to radians (unit mismatch is hard error)', () => {
     // Register test blocks with unit annotations
     registerBlock({
       type: 'TestPhaseSource',
@@ -37,7 +37,7 @@ describe('Unit Validation', () => {
       capability: 'pure',
       inputs: {},
       outputs: {
-        phase: { label: 'Phase', type: signalTypeSignal('float', 'phase') },
+        phase: { label: 'Phase', type: signalTypeSignal('float', unitPhase01()) },
       },
       lower: () => ({ outputsById: {} }),
     });
@@ -50,7 +50,7 @@ describe('Unit Validation', () => {
       form: 'primitive',
       capability: 'pure',
       inputs: {
-        angle: { label: 'Angle', type: signalTypeSignal('float', 'radians') },
+        angle: { label: 'Angle', type: signalTypeSignal('float', unitRadians()) },
       },
       outputs: {},
       lower: () => ({ outputsById: {} }),
@@ -76,14 +76,8 @@ describe('Unit Validation', () => {
       blockOutputTypes: new Map(),
     };
 
-    // Run pass2
-    pass2TypeGraph(patch);
-
-    // Verify warning was emitted
-    expect(warnings.length).toBeGreaterThan(0);
-    expect(warnings[0]).toContain('Unit Mismatch');
-    expect(warnings[0]).toContain('phase');
-    expect(warnings[0]).toContain('radians');
+    // Unit mismatch is now a hard error (requires adapter)
+    expect(() => pass2TypeGraph(patch)).toThrow(/Type mismatch/);
   });
 
   it('should not warn when units match', () => {
@@ -96,7 +90,7 @@ describe('Unit Validation', () => {
       capability: 'pure',
       inputs: {},
       outputs: {
-        phase: { label: 'Phase', type: signalTypeSignal('float', 'phase') },
+        phase: { label: 'Phase', type: signalTypeSignal('float', unitPhase01()) },
       },
       lower: () => ({ outputsById: {} }),
     });
@@ -109,7 +103,7 @@ describe('Unit Validation', () => {
       form: 'primitive',
       capability: 'pure',
       inputs: {
-        phase: { label: 'Phase', type: signalTypeSignal('float', 'phase') },
+        phase: { label: 'Phase', type: signalTypeSignal('float', unitPhase01()) },
       },
       outputs: {},
       lower: () => ({ outputsById: {} }),

@@ -6,10 +6,22 @@
  *
  * This is the SINGLE source of truth for type coercion adapters.
  * The compiler does NO coercion - all adapters are inserted here.
+ *
+ * Spec Reference: design-docs/_new/0-Units-and-Adapters.md Part B
+ *
+ * Required adapters for v2.5 (§B4.1):
+ * - Phase/angle: PhaseToScalar01, ScalarToPhase01, PhaseToRadians, RadiansToPhase01,
+ *                DegreesToRadians, RadiansToDegrees
+ * - Time: MsToSeconds, SecondsToMs
+ * - Normalization: ScalarToNorm01Clamp, Norm01ToScalar
+ *
+ * Disallowed adapters (§B4.2):
+ * - Phase01ToNorm01 (semantic ambiguity — use PhaseToScalar01 or PhaseToRadians)
+ * - Any int↔float without explicit rounding policy
  */
 
-import type { SignalType, Cardinality, Temporality, PayloadType } from '../core/canonical-types';
-import { getAxisValue, DEFAULTS_V0 } from '../core/canonical-types';
+import type { SignalType, PayloadType, Unit } from '../core/canonical-types';
+import { getAxisValue, DEFAULTS_V0, unitsEqual } from '../core/canonical-types';
 
 // =============================================================================
 // Adapter Specification
@@ -38,6 +50,7 @@ export interface AdapterSpec {
  */
 export interface TypeSignature {
   readonly payload: PayloadType | 'any';
+  readonly unit: Unit | 'any';
   readonly cardinality: 'zero' | 'one' | 'many' | 'any';
   readonly temporality: 'continuous' | 'discrete' | 'any';
 }
@@ -57,18 +70,134 @@ export interface AdapterRule {
 
 /**
  * Registered adapter rules.
- * Order matters - first matching rule wins.
+ * Order matters — more specific rules before general rules; first match wins.
  */
 const ADAPTER_RULES: AdapterRule[] = [
+  // ==========================================================================
+  // Unit-conversion adapters (Spec §B4.1)
+  // Adapters are cardinality-preserving (§B6), so cardinality/temporality = 'any'
+  // ==========================================================================
+
+  // --- Phase / Scalar ---
+  {
+    from: { payload: 'float', unit: { kind: 'phase01' }, cardinality: 'any', temporality: 'any' },
+    to: { payload: 'float', unit: { kind: 'scalar' }, cardinality: 'any', temporality: 'any' },
+    adapter: {
+      blockType: 'Adapter_PhaseToScalar01',
+      inputPortId: 'in',
+      outputPortId: 'out',
+      description: 'Phase [0,1) → scalar (semantic boundary)',
+    },
+  },
+  {
+    from: { payload: 'float', unit: { kind: 'scalar' }, cardinality: 'any', temporality: 'any' },
+    to: { payload: 'float', unit: { kind: 'phase01' }, cardinality: 'any', temporality: 'any' },
+    adapter: {
+      blockType: 'Adapter_ScalarToPhase01',
+      inputPortId: 'in',
+      outputPortId: 'out',
+      description: 'Scalar → phase [0,1) with wrapping',
+    },
+  },
+
+  // --- Phase / Radians ---
+  {
+    from: { payload: 'float', unit: { kind: 'phase01' }, cardinality: 'any', temporality: 'any' },
+    to: { payload: 'float', unit: { kind: 'radians' }, cardinality: 'any', temporality: 'any' },
+    adapter: {
+      blockType: 'Adapter_PhaseToRadians',
+      inputPortId: 'in',
+      outputPortId: 'out',
+      description: 'Phase [0,1) → radians [0,2π)',
+    },
+  },
+  {
+    from: { payload: 'float', unit: { kind: 'radians' }, cardinality: 'any', temporality: 'any' },
+    to: { payload: 'float', unit: { kind: 'phase01' }, cardinality: 'any', temporality: 'any' },
+    adapter: {
+      blockType: 'Adapter_RadiansToPhase01',
+      inputPortId: 'in',
+      outputPortId: 'out',
+      description: 'Radians → phase [0,1) with wrapping',
+    },
+  },
+
+  // --- Degrees / Radians ---
+  {
+    from: { payload: 'float', unit: { kind: 'degrees' }, cardinality: 'any', temporality: 'any' },
+    to: { payload: 'float', unit: { kind: 'radians' }, cardinality: 'any', temporality: 'any' },
+    adapter: {
+      blockType: 'Adapter_DegreesToRadians',
+      inputPortId: 'in',
+      outputPortId: 'out',
+      description: 'Degrees → radians',
+    },
+  },
+  {
+    from: { payload: 'float', unit: { kind: 'radians' }, cardinality: 'any', temporality: 'any' },
+    to: { payload: 'float', unit: { kind: 'degrees' }, cardinality: 'any', temporality: 'any' },
+    adapter: {
+      blockType: 'Adapter_RadiansToDegrees',
+      inputPortId: 'in',
+      outputPortId: 'out',
+      description: 'Radians → degrees',
+    },
+  },
+
+  // --- Time ---
+  {
+    from: { payload: 'int', unit: { kind: 'ms' }, cardinality: 'any', temporality: 'any' },
+    to: { payload: 'float', unit: { kind: 'seconds' }, cardinality: 'any', temporality: 'any' },
+    adapter: {
+      blockType: 'Adapter_MsToSeconds',
+      inputPortId: 'in',
+      outputPortId: 'out',
+      description: 'Milliseconds (int) → seconds (float)',
+    },
+  },
+  {
+    from: { payload: 'float', unit: { kind: 'seconds' }, cardinality: 'any', temporality: 'any' },
+    to: { payload: 'int', unit: { kind: 'ms' }, cardinality: 'any', temporality: 'any' },
+    adapter: {
+      blockType: 'Adapter_SecondsToMs',
+      inputPortId: 'in',
+      outputPortId: 'out',
+      description: 'Seconds (float) → milliseconds (int, rounded)',
+    },
+  },
+
+  // --- Normalization ---
+  {
+    from: { payload: 'float', unit: { kind: 'scalar' }, cardinality: 'any', temporality: 'any' },
+    to: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'any', temporality: 'any' },
+    adapter: {
+      blockType: 'Adapter_ScalarToNorm01Clamp',
+      inputPortId: 'in',
+      outputPortId: 'out',
+      description: 'Scalar → normalized [0,1] with clamping',
+    },
+  },
+  {
+    from: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'any', temporality: 'any' },
+    to: { payload: 'float', unit: { kind: 'scalar' }, cardinality: 'any', temporality: 'any' },
+    adapter: {
+      blockType: 'Adapter_Norm01ToScalar',
+      inputPortId: 'in',
+      outputPortId: 'out',
+      description: 'Normalized [0,1] → scalar (identity)',
+    },
+  },
+
   // ==========================================================================
   // Cardinality promotion: one -> many (broadcast)
   // ==========================================================================
 
-  // Polymorphic broadcast - works for any payload type (float, vec2, color, etc.)
-  // The FieldBroadcast block is payload-generic and resolves type from context
+  // Polymorphic broadcast — works for any payload type (float, vec2, color, etc.)
+  // The FieldBroadcast block is payload-generic and resolves type from context.
+  // Must be AFTER unit adapters (more specific rules first).
   {
-    from: { payload: 'any', cardinality: 'one', temporality: 'continuous' },
-    to: { payload: 'any', cardinality: 'many', temporality: 'continuous' },
+    from: { payload: 'any', unit: 'any', cardinality: 'one', temporality: 'continuous' },
+    to: { payload: 'any', unit: 'any', cardinality: 'many', temporality: 'continuous' },
     adapter: {
       blockType: 'FieldBroadcast',
       inputPortId: 'signal',
@@ -76,11 +205,6 @@ const ADAPTER_RULES: AdapterRule[] = [
       description: 'Broadcast signal to field (polymorphic)',
     },
   },
-
-  // TODO: Add more adapters as needed:
-  // - FieldReduce for many -> one
-  // - float <-> int conversions
-  // - etc.
 ];
 
 // =============================================================================
@@ -96,6 +220,7 @@ export function extractSignature(type: SignalType): TypeSignature {
 
   return {
     payload: type.payload,
+    unit: type.unit,
     cardinality: cardinality.kind,
     temporality: temporality.kind,
   };
@@ -103,13 +228,17 @@ export function extractSignature(type: SignalType): TypeSignature {
 
 /**
  * Check if a type signature matches a pattern.
- *
- * Payload-generic blocks use BlockPayloadMetadata for validation.
  */
 function signatureMatches(actual: TypeSignature, pattern: TypeSignature): boolean {
   // Payload must match unless pattern allows 'any'
   if (pattern.payload !== 'any' && actual.payload !== pattern.payload) {
     return false;
+  }
+  // Unit must match unless pattern allows 'any'
+  if (pattern.unit !== 'any') {
+    const actualUnit = actual.unit;
+    if (actualUnit === 'any') return false; // actual shouldn't be 'any' in practice
+    if (!unitsEqual(actualUnit as Unit, pattern.unit)) return false;
   }
   if (pattern.cardinality !== 'any' && actual.cardinality !== pattern.cardinality) {
     return false;
@@ -140,13 +269,21 @@ export function findAdapter(from: SignalType, to: SignalType): AdapterSpec | nul
     return null;
   }
 
-  // Search for matching adapter rule
+  // Search for matching adapter rule (first match wins)
   for (const rule of ADAPTER_RULES) {
     if (signatureMatches(fromSig, rule.from) && signatureMatches(toSig, rule.to)) {
       // For rules with 'any' payload on both sides, require actual payloads to match
       if (rule.from.payload === 'any' && rule.to.payload === 'any') {
         if (fromSig.payload !== toSig.payload) {
-          continue; // Payload mismatch, try next rule
+          continue;
+        }
+      }
+      // For rules with 'any' unit on both sides, require actual units to match
+      if (rule.from.unit === 'any' && rule.to.unit === 'any') {
+        const fromUnit = fromSig.unit;
+        const toUnit = toSig.unit;
+        if (fromUnit !== 'any' && toUnit !== 'any' && !unitsEqual(fromUnit as Unit, toUnit as Unit)) {
+          continue;
         }
       }
       return rule.adapter;
@@ -158,13 +295,19 @@ export function findAdapter(from: SignalType, to: SignalType): AdapterSpec | nul
 
 /**
  * Check if two type signatures are directly compatible (no adapter needed).
- *
- * Payload-generic blocks use BlockPayloadMetadata for validation.
  */
 function typesAreCompatible(from: TypeSignature, to: TypeSignature): boolean {
-  const payloadMatch = from.payload === to.payload;
+  // Payload must match
+  if (from.payload !== to.payload) return false;
+
+  // Unit must match
+  const fromUnit = from.unit;
+  const toUnit = to.unit;
+  if (fromUnit !== 'any' && toUnit !== 'any') {
+    if (!unitsEqual(fromUnit as Unit, toUnit as Unit)) return false;
+  }
+
   return (
-    payloadMatch &&
     from.cardinality === to.cardinality &&
     from.temporality === to.temporality
   );

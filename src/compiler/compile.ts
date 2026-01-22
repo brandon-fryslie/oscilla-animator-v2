@@ -41,6 +41,7 @@ import '../blocks/render-blocks';
 import '../blocks/field-operations-blocks';
 import '../blocks/path-blocks'; // NEW - Path foundation sprint
 import '../blocks/path-operators-blocks'; // NEW - Path operators sprint
+import '../blocks/adapter-blocks'; // Unit-conversion adapters (Spec §B4.1)
 
 import '../blocks/test-blocks'; // Test blocks for signal evaluation in tests
 
