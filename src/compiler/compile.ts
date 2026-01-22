@@ -297,6 +297,8 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
     const errorMessage = error.message || 'Unknown compilation error';
 
     console.error('[Compile] Exception caught:', error);
+    console.error('[Compile] Error message:', errorMessage);
+    console.error('[Compile] Error stack:', error.stack);
     const compileErrors: CompileError[] = [{
       kind: errorKind,
       message: errorMessage,

@@ -112,7 +112,7 @@ const patchGoldenSpiral: PatchBuilder = (b) => {
 
   b.wire(array, 't', goldenAngle, 'id01');
   b.wire(array, 't', angularOffset, 'id01');
-  b.wire(time, 'phaseA', angularOffset, 'phase');
+  b.wire(time, 'tMs', angularOffset, 'phase'); // Use tMs (float) instead of phaseA (phase)
   b.wire(goldenAngle, 'angle', totalAngle, 'a');
   b.wire(angularOffset, 'offset', totalAngle, 'b');
 
@@ -124,20 +124,22 @@ const patchGoldenSpiral: PatchBuilder = (b) => {
   b.wire(effectiveRadius, 'out', pos, 'radius');
 
   const jitter = b.addBlock('FieldJitter2D', { amountX: 0.015, amountY: 0.015 });
-  const phaseBroadcast = b.addBlock('FieldBroadcast', { payloadType: 'float' });
+  // Use tMs instead of phaseB to avoid phase->float type mismatch
+  const timeBroadcast = b.addBlock('FieldBroadcast', { payloadType: 'float' });
   const jitterRand = b.addBlock('FieldAdd', {});
 
-  b.wire(time, 'phaseB', phaseBroadcast, 'signal');
-  b.wire(phaseBroadcast, 'field', jitterRand, 'a');
+  b.wire(time, 'tMs', timeBroadcast, 'signal');
+  b.wire(timeBroadcast, 'field', jitterRand, 'a');
   b.wire(array, 't', jitterRand, 'b');
   b.wire(pos, 'pos', jitter, 'pos');
   b.wire(jitterRand, 'out', jitter, 'rand');
 
+  // Use tMs instead of phaseA to avoid phase->float type mismatch
   const hue = b.addBlock('FieldHueFromPhase', {});
   const color = b.addBlock('HsvToRgb', { sat: 0.85, val: 0.9 });
 
   b.wire(array, 't', hue, 'id01');
-  b.wire(time, 'phaseA', hue, 'phase');
+  b.wire(time, 'tMs', hue, 'phase'); // Use tMs (float) instead of phaseA (phase)
   b.wire(hue, 'hue', color, 'hue');
 
   const render = b.addBlock('RenderInstances2D', {});
@@ -167,7 +169,7 @@ const patchDomainTest: PatchBuilder = (b) => {
 
   b.wire(array, 't', goldenAngle, 'id01');
   b.wire(array, 't', angularOffset, 'id01');
-  b.wire(time, 'phaseA', angularOffset, 'phase');
+  b.wire(time, 'tMs', angularOffset, 'phase'); // Use tMs (float) instead of phaseA (phase)
   b.wire(goldenAngle, 'angle', totalAngle, 'a');
   b.wire(angularOffset, 'offset', totalAngle, 'b');
 
@@ -960,6 +962,8 @@ async function main() {
             // Initialize runtime once store is available
             initializeRuntime(rootStore).catch((err) => {
               console.error('Failed to initialize runtime:', err);
+              console.error('Runtime error message:', err?.message);
+              console.error('Runtime error stack:', err?.stack);
             });
           },
         })
