@@ -6,9 +6,10 @@
  */
 
 import type { Patch, BlockId } from '../../types';
-import type { SignalType, PayloadType } from '../../core/canonical-types';
+import type { SignalType, PayloadType, Unit } from '../../core/canonical-types';
 import { getAxisValue, DEFAULTS_V0 } from '../../core/canonical-types';
 import { getBlockDefinition } from '../../blocks/registry';
+import { findAdapter, type AdapterSpec } from '../../graph/adapters';
 
 // =============================================================================
 // Type Colors - Visual differentiation by payload type
@@ -38,8 +39,31 @@ export function getTypeColor(payload: PayloadType): string {
 // =============================================================================
 
 /**
+ * Format a unit kind for display.
+ * Returns short human-readable unit labels.
+ */
+export function formatUnitForDisplay(unit: Unit): string {
+  switch (unit.kind) {
+    case 'scalar': return '';
+    case 'phase01': return 'phase';
+    case 'radians': return 'rad';
+    case 'degrees': return 'deg';
+    case 'norm01': return '0..1';
+    case 'ms': return 'ms';
+    case 'seconds': return 's';
+    case 'count': return '#';
+    case 'ndc2': return 'ndc2';
+    case 'ndc3': return 'ndc3';
+    case 'world2': return 'world2';
+    case 'world3': return 'world3';
+    case 'rgba01': return 'rgba';
+    case 'none': return '';
+  }
+}
+
+/**
  * Format a SignalType for display.
- * Returns strings like "Signal<float>" or "Field<color>"
+ * Returns strings like "Signal<float:phase>" or "Field<color>"
  */
 export function formatTypeForDisplay(type: SignalType): string {
   const card = getAxisValue(type.extent.cardinality, DEFAULTS_V0.cardinality);
@@ -59,10 +83,14 @@ export function formatTypeForDisplay(type: SignalType): string {
       break;
   }
 
+  // Unit suffix (only show non-trivial units)
+  const unitStr = formatUnitForDisplay(type.unit);
+  const payloadUnit = unitStr ? `${type.payload}:${unitStr}` : type.payload;
+
   // Temporality suffix
   const tempSuffix = temp.kind === 'discrete' ? ' [event]' : '';
 
-  return `${cardStr}<${type.payload}>${tempSuffix}`;
+  return `${cardStr}<${payloadUnit}>${tempSuffix}`;
 }
 
 /**
@@ -150,7 +178,7 @@ function canTransformDomain(fromDomain: string, toDomain: string): boolean {
 // =============================================================================
 
 /**
- * Check if two types are compatible.
+ * Check if two types are directly compatible (no adapter needed).
  * Based on pass2-types.ts isTypeCompatible().
  */
 function isTypeCompatible(from: SignalType, to: SignalType): boolean {
@@ -160,8 +188,12 @@ function isTypeCompatible(from: SignalType, to: SignalType): boolean {
   const toTemp = getAxisValue(to.extent.temporality, DEFAULTS_V0.temporality);
 
   // Payload must match exactly
-  // Payload-generic blocks use BlockPayloadMetadata for validation
   if (from.payload !== to.payload) {
+    return false;
+  }
+
+  // Unit must match (per spec: no implicit conversion)
+  if (from.unit.kind !== to.unit.kind) {
     return false;
   }
 
@@ -205,6 +237,8 @@ function isTypeCompatible(from: SignalType, to: SignalType): boolean {
 export interface ConnectionValidationResult {
   valid: boolean;
   reason?: string;
+  /** Set when connection is valid only because an adapter will be auto-inserted */
+  adapter?: AdapterSpec;
 }
 
 /**
@@ -234,13 +268,19 @@ export function validateConnection(
     return { valid: false, reason: 'Unknown target port' };
   }
 
-  // Check compatibility
-  if (!isTypeCompatible(sourceType, targetType)) {
-    return {
-      valid: false,
-      reason: `Type mismatch: ${formatTypeForDisplay(sourceType)} → ${formatTypeForDisplay(targetType)}`,
-    };
+  // Check direct compatibility
+  if (isTypeCompatible(sourceType, targetType)) {
+    return { valid: true };
   }
 
-  return { valid: true };
+  // Types don't match directly — check if an adapter can bridge them
+  const adapter = findAdapter(sourceType, targetType);
+  if (adapter) {
+    return { valid: true, adapter };
+  }
+
+  return {
+    valid: false,
+    reason: `Type mismatch: ${formatTypeForDisplay(sourceType)} → ${formatTypeForDisplay(targetType)}`,
+  };
 }

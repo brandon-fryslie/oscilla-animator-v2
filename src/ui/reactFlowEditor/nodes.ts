@@ -10,7 +10,8 @@ import type { Block, BlockId, Edge, DefaultSource } from '../../types';
 import type { BlockDef, InputDef } from '../../blocks/registry';
 import type { PayloadType, SignalType } from '../../core/canonical-types';
 import { signalType } from '../../core/canonical-types';
-import { formatTypeForTooltip, getTypeColor } from './typeValidation';
+import { formatTypeForTooltip, getTypeColor, getPortTypeFromBlockType, formatUnitForDisplay } from './typeValidation';
+import { findAdapter } from '../../graph/adapters';
 
 /**
  * Connection info for a port
@@ -205,9 +206,13 @@ export function createNodeFromBlock(
 
 /**
  * Create ReactFlow edge from Oscilla edge.
+ * Optionally computes adapter label from source/target block types.
  */
-export function createEdgeFromPatchEdge(edge: Edge): ReactFlowEdge {
-  return {
+export function createEdgeFromPatchEdge(
+  edge: Edge,
+  blocks?: ReadonlyMap<BlockId, Block>
+): ReactFlowEdge {
+  const rfEdge: ReactFlowEdge = {
     id: edge.id,
     source: edge.from.blockId,
     target: edge.to.blockId,
@@ -215,6 +220,28 @@ export function createEdgeFromPatchEdge(edge: Edge): ReactFlowEdge {
     targetHandle: edge.to.slotId,
     type: 'default',
   };
+
+  // Compute adapter label if block context is available
+  if (blocks) {
+    const sourceBlock = blocks.get(edge.from.blockId as BlockId);
+    const targetBlock = blocks.get(edge.to.blockId as BlockId);
+    if (sourceBlock && targetBlock) {
+      const sourceType = getPortTypeFromBlockType(sourceBlock.type, edge.from.slotId, 'output');
+      const targetType = getPortTypeFromBlockType(targetBlock.type, edge.to.slotId, 'input');
+      if (sourceType && targetType) {
+        const adapter = findAdapter(sourceType, targetType);
+        if (adapter) {
+          const fromUnit = formatUnitForDisplay(sourceType.unit);
+          const toUnit = formatUnitForDisplay(targetType.unit);
+          rfEdge.label = `${fromUnit}→${toUnit}`;
+          rfEdge.labelStyle = { fontSize: 10, fill: '#888' };
+          rfEdge.style = { stroke: '#f59e0b', strokeDasharray: '4 2' };
+        }
+      }
+    }
+  }
+
+  return rfEdge;
 }
 
 /**

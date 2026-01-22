@@ -19,6 +19,8 @@ import type { PatchStore } from '../../stores/PatchStore';
 import type { DiagnosticsStore } from '../../stores/DiagnosticsStore';
 import { getBlockDefinition } from '../../blocks/registry';
 import { createNodeFromBlock, createEdgeFromPatchEdge, type OscillaNode } from './nodes';
+import { getPortTypeFromBlockType, formatUnitForDisplay } from './typeValidation';
+import { findAdapter } from '../../graph/adapters';
 
 // Flag to prevent sync loops
 let isSyncing = false;
@@ -85,8 +87,8 @@ export function syncPatchToReactFlow(
       }
     }
 
-    // Create edges from patch edges
-    const edges = patch.edges.map(createEdgeFromPatchEdge);
+    // Create edges from patch edges (with adapter labels)
+    const edges = patch.edges.map(e => createEdgeFromPatchEdge(e, patch.blocks));
 
     setNodes(nodes);
     setEdges(edges);
@@ -206,6 +208,25 @@ export function createConnectHandler(handle: SyncHandle): OnConnect {
         targetHandle: connection.targetHandle || undefined,
         type: 'default',
       };
+
+      // Compute adapter label for the new edge
+      const sourceBlock = handle.patchStore.patch.blocks.get(connection.source as BlockId);
+      const targetBlock = handle.patchStore.patch.blocks.get(connection.target as BlockId);
+      if (sourceBlock && targetBlock) {
+        const sourceType = getPortTypeFromBlockType(sourceBlock.type, connection.sourceHandle || '', 'output');
+        const targetType = getPortTypeFromBlockType(targetBlock.type, connection.targetHandle || '', 'input');
+        if (sourceType && targetType) {
+          const adapter = findAdapter(sourceType, targetType);
+          if (adapter) {
+            const fromUnit = formatUnitForDisplay(sourceType.unit);
+            const toUnit = formatUnitForDisplay(targetType.unit);
+            newEdge.label = `${fromUnit}→${toUnit}`;
+            newEdge.labelStyle = { fontSize: 10, fill: '#888' };
+            newEdge.style = { stroke: '#f59e0b', strokeDasharray: '4 2' };
+          }
+        }
+      }
+
       handle.setEdges((edges) => [...edges, newEdge]);
     } finally {
       isSyncing = false;
