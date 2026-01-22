@@ -63,22 +63,31 @@ registerBlock({
       throw new Error('GridLayout requires a field input (from Array block)');
     }
 
-    const rows = (config?.rows as number) ?? 10;
-    const cols = (config?.cols as number) ?? 10;
-    const layout: LayoutSpec = { kind: 'grid', rows, cols };
-
-    // Get instance context from the field input
-    // The instance context should be set by the Array block
     const instanceId = ctx.inferredInstance;
     if (!instanceId) {
       throw new Error('GridLayout requires instance context from upstream Array block');
     }
 
-    // Create layout field using fieldLayout()
-    const positionField = ctx.b.fieldLayout(
-      elementsInput.id,
-      layout,
+    // Get grid dimensions as signals
+    const rowsSig = inputsById.rows?.k === 'sig'
+      ? inputsById.rows.id
+      : ctx.b.sigConst((config?.rows as number) ?? 10, signalType('int'));
+    const colsSig = inputsById.cols?.k === 'sig'
+      ? inputsById.cols.id
+      : ctx.b.sigConst((config?.cols as number) ?? 10, signalType('int'));
+
+    // Create index field for the instance (gridLayout expects integer indices)
+    const indexField = ctx.b.fieldIntrinsic(
       instanceId,
+      'index',
+      signalTypeField('float', 'default')
+    );
+
+    // Apply gridLayout kernel: index + [cols, rows] → vec2 positions
+    const positionField = ctx.b.fieldZipSig(
+      indexField,
+      [colsSig, rowsSig],
+      { kind: 'kernel', name: 'gridLayout' },
       signalTypeField('vec2', 'default')
     );
 
