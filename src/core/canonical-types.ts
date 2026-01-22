@@ -17,26 +17,95 @@
  */
 
 // =============================================================================
-// NumericUnit - Optional Unit Annotation
+// Unit - Closed Discriminated Union (Spec §A3)
 // =============================================================================
 
 /**
- * Unit annotation for numeric payload types.
+ * Unit annotation for typed values.
  *
- * Enables compile-time detection of unit mismatches (phase vs radians, etc.).
- * This is OPTIONAL - absence of unit annotation means no validation.
+ * Every typed value has (payload, unit, extent). Unit is ALWAYS present.
+ * Units are semantic, not representational: phase01 != scalar even though
+ * both are float32 at runtime.
  *
- * Units are erased at runtime; validation happens during compilation.
+ * Spec Reference: 0-Units-and-Adapters.md §A3
  */
-export type NumericUnit =
-  | 'phase'      // [0, 1) cyclic - used by sin/cos/tan kernels, phaseA/phaseB
-  | 'radians'    // [0, 2π) or unbounded - field polar conversions
-  | 'normalized' // [0, 1] clamped - easing, opacity, normalizedIndex
-  | 'scalar'     // Dimensionless float - arithmetic results
-  | 'ms'         // Milliseconds - time rail
-  | '#'          // Count/index (integer) - array indices
-  | 'degrees'    // [0, 360) - user-facing angles (future)
-  | 'seconds';   // Time in seconds - user-facing (future)
+export type Unit =
+  | { readonly kind: 'none' }         // For payloads without units (bool, shape)
+  | { readonly kind: 'scalar' }       // Dimensionless numeric
+  | { readonly kind: 'norm01' }       // Clamped [0, 1]
+  | { readonly kind: 'phase01' }      // Cyclic [0, 1) with wrap semantics
+  | { readonly kind: 'radians' }      // Angle in radians
+  | { readonly kind: 'degrees' }      // Angle in degrees
+  | { readonly kind: 'ms' }           // Milliseconds
+  | { readonly kind: 'seconds' }      // Seconds
+  | { readonly kind: 'count' }        // Integer count/index
+  | { readonly kind: 'ndc2' }         // Normalized device coords vec2 [0,1]^2
+  | { readonly kind: 'ndc3' }         // Normalized device coords vec3 [0,1]^3
+  | { readonly kind: 'world2' }       // World-space vec2
+  | { readonly kind: 'world3' }       // World-space vec3
+  | { readonly kind: 'rgba01' };      // Float color RGBA each in [0,1]
+
+// --- Unit Constructors ---
+export function unitNone(): Unit { return { kind: 'none' }; }
+export function unitScalar(): Unit { return { kind: 'scalar' }; }
+export function unitNorm01(): Unit { return { kind: 'norm01' }; }
+export function unitPhase01(): Unit { return { kind: 'phase01' }; }
+export function unitRadians(): Unit { return { kind: 'radians' }; }
+export function unitDegrees(): Unit { return { kind: 'degrees' }; }
+export function unitMs(): Unit { return { kind: 'ms' }; }
+export function unitSeconds(): Unit { return { kind: 'seconds' }; }
+export function unitCount(): Unit { return { kind: 'count' }; }
+export function unitNdc2(): Unit { return { kind: 'ndc2' }; }
+export function unitNdc3(): Unit { return { kind: 'ndc3' }; }
+export function unitWorld2(): Unit { return { kind: 'world2' }; }
+export function unitWorld3(): Unit { return { kind: 'world3' }; }
+export function unitRgba01(): Unit { return { kind: 'rgba01' }; }
+
+/**
+ * Compare two units for deep equality.
+ */
+export function unitsEqual(a: Unit, b: Unit): boolean {
+  return a.kind === b.kind;
+}
+
+// --- Payload-Unit Validation (Spec §A4) ---
+
+const ALLOWED_UNITS: Record<PayloadType, readonly Unit['kind'][]> = {
+  float: ['scalar', 'norm01', 'phase01', 'radians', 'degrees', 'ms', 'seconds'],
+  int: ['count', 'ms'],
+  vec2: ['ndc2', 'world2'],
+  color: ['rgba01'],
+  bool: ['none'],
+  shape: ['none'],
+};
+
+/**
+ * Check if a (payload, unit) combination is valid per spec §A4.
+ */
+export function isValidPayloadUnit(payload: PayloadType, unit: Unit): boolean {
+  const allowed = ALLOWED_UNITS[payload];
+  if (!allowed) return false;
+  return allowed.includes(unit.kind);
+}
+
+/**
+ * Get the default unit for a payload type.
+ * Used for ergonomic helpers where unit can be omitted.
+ */
+export function defaultUnitForPayload(payload: PayloadType): Unit {
+  switch (payload) {
+    case 'float': return unitScalar();
+    case 'int': return unitCount();
+    case 'vec2': return unitWorld2();
+    case 'color': return unitRgba01();
+    case 'bool': return unitNone();
+    case 'shape': return unitNone();
+  }
+}
+
+// --- Legacy Compat (deprecated, will be removed) ---
+/** @deprecated Use Unit type instead */
+export type NumericUnit = Unit['kind'];
 
 // =============================================================================
 // PayloadType - What the value is made of
@@ -45,6 +114,7 @@ export type NumericUnit =
 /**
  * The base data type of a value.
  *
+ * Note: 'phase' is NOT a payload - it's float with unit:phase01.
  * Note: 'event' and 'domain' are NOT PayloadTypes - they are axis/resource concepts.
  */
 export type PayloadType =
@@ -52,9 +122,7 @@ export type PayloadType =
   | 'int'     // Integer values
   | 'vec2'    // 2D positions/vectors
   | 'color'   // Color values (RGBA)
-  | 'phase'   // Phase values [0, 1) with wrap semantics
   | 'bool'    // Boolean values
-  | 'unit'    // Unit interval [0, 1]
   | 'shape';  // Shape descriptor (ellipse, rect, path)
 
 // =============================================================================
@@ -342,32 +410,51 @@ export function extent(overrides: Partial<Extent>): Extent {
 /**
  * The full type description for a port or wire.
  *
- * Replaces the old TypeDesc with a cleaner separation of concerns.
- *
- * Unit annotation is OPTIONAL - used for compile-time validation only.
+ * Every value has (payload, unit, extent). Unit is mandatory.
+ * Spec Reference: 0-Units-and-Adapters.md §A1
  */
 export interface SignalType {
   readonly payload: PayloadType;
   readonly extent: Extent;
-  readonly unit?: NumericUnit; // NEW: Optional unit annotation
+  readonly unit: Unit;
 }
 
 /**
- * Create a SignalType with specified payload, extent, and optional unit.
+ * Create a SignalType with specified payload and unit.
+ *
+ * Overload 1: signalType(payload) - uses default unit for payload
+ * Overload 2: signalType(payload, unit) - explicit unit
+ * Overload 3: signalType(payload, unit, extentOverrides) - full control
+ *
+ * Legacy: signalType(payload, extentOverrides) still works during migration.
  */
 export function signalType(
   payload: PayloadType,
-  extentOverrides?: Partial<Extent>,
-  unit?: NumericUnit
+  unitOrExtent?: Unit | Partial<Extent>,
+  extentOverrides?: Partial<Extent>
 ): SignalType {
-  const type: SignalType = {
-    payload,
-    extent: extentOverrides ? extent(extentOverrides) : extentDefault(),
-  };
-  if (unit !== undefined) {
-    (type as { unit?: NumericUnit }).unit = unit;
+  let unit: Unit;
+  let extOverrides: Partial<Extent> | undefined;
+
+  if (unitOrExtent === undefined) {
+    // signalType('float') -> use default unit
+    unit = defaultUnitForPayload(payload);
+    extOverrides = undefined;
+  } else if ('kind' in unitOrExtent) {
+    // signalType('float', unitPhase01(), {...})
+    unit = unitOrExtent as Unit;
+    extOverrides = extentOverrides;
+  } else {
+    // Legacy: signalType('float', { cardinality: ... })
+    unit = defaultUnitForPayload(payload);
+    extOverrides = unitOrExtent as Partial<Extent>;
   }
-  return type;
+
+  return {
+    payload,
+    unit,
+    extent: extOverrides ? extent(extOverrides) : extentDefault(),
+  };
 }
 
 // =============================================================================
@@ -568,11 +655,12 @@ export function worldToAxes(
 /**
  * Create a Signal SignalType (one + continuous).
  */
-export function signalTypeSignal(payload: PayloadType, unit?: NumericUnit): SignalType {
-  return signalType(payload, {
+export function signalTypeSignal(payload: PayloadType, unit?: Unit): SignalType {
+  const u = unit ?? defaultUnitForPayload(payload);
+  return signalType(payload, u, {
     cardinality: axisInstantiated(cardinalityOne()),
     temporality: axisInstantiated(temporalityContinuous()),
-  }, unit);
+  });
 }
 
 /**
@@ -580,35 +668,38 @@ export function signalTypeSignal(payload: PayloadType, unit?: NumericUnit): Sign
  *
  * Accepts either an InstanceRef or a plain instanceId string (uses 'default' domain type).
  */
-export function signalTypeField(payload: PayloadType, instance: InstanceRef | string, unit?: NumericUnit): SignalType {
+export function signalTypeField(payload: PayloadType, instance: InstanceRef | string, unit?: Unit): SignalType {
   const instanceRefValue = typeof instance === 'string'
     ? instanceRef('default', instance)
     : instance;
+  const u = unit ?? defaultUnitForPayload(payload);
 
-  return signalType(payload, {
+  return signalType(payload, u, {
     cardinality: axisInstantiated(cardinalityMany(instanceRefValue)),
     temporality: axisInstantiated(temporalityContinuous()),
-  }, unit);
+  });
 }
 
 /**
  * Create a Trigger SignalType (one + discrete).
  */
-export function signalTypeTrigger(payload: PayloadType, unit?: NumericUnit): SignalType {
-  return signalType(payload, {
+export function signalTypeTrigger(payload: PayloadType, unit?: Unit): SignalType {
+  const u = unit ?? defaultUnitForPayload(payload);
+  return signalType(payload, u, {
     cardinality: axisInstantiated(cardinalityOne()),
     temporality: axisInstantiated(temporalityDiscrete()),
-  }, unit);
+  });
 }
 
 /**
  * Create a Static/Scalar SignalType (zero + continuous).
  */
-export function signalTypeStatic(payload: PayloadType, unit?: NumericUnit): SignalType {
-  return signalType(payload, {
+export function signalTypeStatic(payload: PayloadType, unit?: Unit): SignalType {
+  const u = unit ?? defaultUnitForPayload(payload);
+  return signalType(payload, u, {
     cardinality: axisInstantiated(cardinalityZero()),
     temporality: axisInstantiated(temporalityContinuous()),
-  }, unit);
+  });
 }
 
 /**
@@ -616,13 +707,14 @@ export function signalTypeStatic(payload: PayloadType, unit?: NumericUnit): Sign
  *
  * Accepts either an InstanceRef or a plain instanceId string (uses 'default' domain type).
  */
-export function signalTypePerLaneEvent(payload: PayloadType, instance: InstanceRef | string, unit?: NumericUnit): SignalType {
+export function signalTypePerLaneEvent(payload: PayloadType, instance: InstanceRef | string, unit?: Unit): SignalType {
   const instanceRefValue = typeof instance === 'string'
     ? instanceRef('default', instance)
     : instance;
+  const u = unit ?? defaultUnitForPayload(payload);
 
-  return signalType(payload, {
+  return signalType(payload, u, {
     cardinality: axisInstantiated(cardinalityMany(instanceRefValue)),
     temporality: axisInstantiated(temporalityDiscrete()),
-  }, unit);
+  });
 }

@@ -191,18 +191,15 @@ export function bridgeBindingToIdentityIR(
  * - int → { kind: 'number' }
  * - vec2 → { kind: 'vec', lanes: 2, element: 'number' }
  * - color → { kind: 'vec', lanes: 4, element: 'number' } (RGBA)
- * - phase → { kind: 'number' } (specialized number with wrap semantics)
  * - bool → { kind: 'bool' }
- * - unit → { kind: 'number' } (unit interval [0,1])
  *
+ * Note: 'phase' and 'unit' are NOT PayloadTypes - they are float with units.
  * Note: Physical storage class is determined separately by SlotMetaEntry.storage
  */
 export function payloadTypeToShapeDescIR(payload: PayloadType): ShapeDescIR {
   switch (payload) {
     case 'float':
     case 'int':
-    case 'phase':
-    case 'unit':
       return { kind: 'number' };
 
     case 'vec2':

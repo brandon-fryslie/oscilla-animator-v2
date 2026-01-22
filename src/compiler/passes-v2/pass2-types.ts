@@ -72,6 +72,12 @@ function isTypeCompatible(from: SignalType, to: SignalType): boolean {
     return false;
   }
 
+  // Unit must match exactly (Spec §A5)
+  // No implicit unit conversion - adapters handle that
+  if (from.unit && to.unit && from.unit.kind !== to.unit.kind) {
+    return false;
+  }
+
   // Temporality must match exactly
   if (fromTemp.kind !== toTemp.kind) {
     return false;

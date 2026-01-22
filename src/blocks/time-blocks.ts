@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from './registry';
-import { signalType } from '../core/canonical-types';
+import { signalType, unitPhase01 } from '../core/canonical-types';
 
 // =============================================================================
 // InfiniteTimeRoot
@@ -29,9 +29,9 @@ registerBlock({
   },
   outputs: {
     tMs: { label: 'Time (ms)', type: signalType('float') },
-    // Phase outputs use 'phase' type: values in [0, 1) range representing normalized time cycles
-    phaseA: { label: 'Phase A', type: signalType('phase') },
-    phaseB: { label: 'Phase B', type: signalType('phase') },
+    // Phase outputs use float payload with phase01 unit: values in [0, 1) range representing normalized time cycles
+    phaseA: { label: 'Phase A', type: signalType('float', unitPhase01()) },
+    phaseB: { label: 'Phase B', type: signalType('float', unitPhase01()) },
     palette: { label: 'Palette', type: signalType('color') },
     energy: { label: 'Energy', type: signalType('float') },
   },
@@ -40,8 +40,8 @@ registerBlock({
     // Their outputs are provided by the time system (pass 3)
     // We create placeholder signals that reference the time system
     const tMs = ctx.b.sigTime('tMs', signalType('float'));
-    const phaseA = ctx.b.sigTime('phaseA', signalType('phase'));
-    const phaseB = ctx.b.sigTime('phaseB', signalType('phase'));
+    const phaseA = ctx.b.sigTime('phaseA', signalType('float', unitPhase01()));
+    const phaseB = ctx.b.sigTime('phaseB', signalType('float', unitPhase01()));
     const palette = ctx.b.sigTime('palette', signalType('color'));
     const energy = ctx.b.sigTime('energy', signalType('float'));
 

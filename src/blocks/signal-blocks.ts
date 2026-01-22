@@ -5,7 +5,7 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
-import { signalType, type PayloadType } from '../core/canonical-types';
+import { signalType, type PayloadType, unitPhase01, unitNorm01 } from '../core/canonical-types';
 import { OpCode, stableStateId } from '../compiler/ir/types';
 import type { SigExprId } from '../compiler/ir/Indices';
 
@@ -21,7 +21,7 @@ import type { SigExprId } from '../compiler/ir/Indices';
  * what this block connects to. The resolved type is stored in `payloadType`.
  *
  * Payload-Generic Contract (per spec §1):
- * - Closed admissible payload set: float, int, bool, phase, unit, vec2, color
+ * - Closed admissible payload set: float, int, bool, vec2, color
  * - Per-payload specialization is total (see lower function)
  * - No implicit coercions
  * - Deterministic resolution via payloadType param
@@ -111,17 +111,6 @@ registerBlock({
         sigId = ctx.b.sigConst(rawValue ? 1 : 0, signalType('bool'));
         break;
       }
-      case 'phase':
-      case 'unit': {
-        if (typeof rawValue !== 'number') {
-          throw new Error(`Const<${payloadType}> requires number value, got ${typeof rawValue}`);
-        }
-        if (rawValue < 0 || rawValue > 1) {
-          throw new Error(`Const<${payloadType}> value must be in [0, 1], got ${rawValue}`);
-        }
-        sigId = ctx.b.sigConst(rawValue, signalType(payloadType));
-        break;
-      }
       case 'vec2': {
         const val = rawValue as { x?: number; y?: number };
         if (typeof val !== 'object' || val === null) {
@@ -184,7 +173,7 @@ registerBlock({
   },
   inputs: {
     // Phase input expects values in [0, 1) range - the kernel converts to radians
-    phase: { label: 'Phase', type: signalType('phase') },
+    phase: { label: 'Phase', type: signalType('float', unitPhase01()) },
     waveform: { type: signalType('float'), value: 0, exposedAsPort: false },
     amplitude: { type: signalType('float'), value: 1.0, exposedAsPort: false },
     offset: { type: signalType('float'), value: 0.0, exposedAsPort: false },

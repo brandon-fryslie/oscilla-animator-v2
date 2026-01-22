@@ -6,6 +6,10 @@
  *
  * Type rules reference: .agent_planning/expression-dsl/TYPE-RULES.md
  * Function signatures: src/expr/FUNCTIONS.md
+ *
+ * Note: 'phase' and 'unit' are no longer PayloadTypes. They are 'float' with
+ * unit annotations (handled by the canonical type system, not the expression DSL).
+ * The expression DSL only deals with PayloadType.
  */
 
 import type { ExprNode, Position } from './ast';
@@ -44,6 +48,9 @@ interface FunctionSignature {
 
 /**
  * Built-in function signatures (from FUNCTIONS.md).
+ *
+ * Note: wrap() now returns 'float' (not 'phase'). The unit system handles
+ * the semantic distinction between phase and float.
  */
 const FUNCTION_SIGNATURES: Record<string, FunctionSignature> = {
   // Trigonometric
@@ -68,8 +75,8 @@ const FUNCTION_SIGNATURES: Record<string, FunctionSignature> = {
   smoothstep: { params: ['float', 'float', 'float'], returnType: 'float' },
   clamp: { params: ['float', 'float', 'float'], returnType: 'float' },
 
-  // Phase
-  wrap: { params: ['float'], returnType: 'phase' },
+  // Phase (now returns float - unit annotation happens at higher level)
+  wrap: { params: ['float'], returnType: 'float' },
   fract: { params: ['float'], returnType: 'float' },
 };
 
@@ -161,15 +168,8 @@ function typecheckUnary(node: ExprNode & { kind: 'unary' }, env: TypeEnv): ExprN
         throw new TypeError(
           `Unary negation requires numeric operand, got ${argType}`,
           node.pos,
-          ['int', 'float', 'phase'],
+          ['int', 'float'],
           argType
-        );
-      }
-      // Negating unit is not allowed
-      if (argType === 'unit') {
-        throw new TypeError(
-          `Cannot negate unit type (produces negative values, violating [0,1] constraint)`,
-          node.pos
         );
       }
       return withType({ ...node, arg }, argType);
@@ -181,7 +181,7 @@ function typecheckUnary(node: ExprNode & { kind: 'unary' }, env: TypeEnv): ExprN
         throw new TypeError(
           `Unary plus requires numeric operand, got ${argType}`,
           node.pos,
-          ['int', 'float', 'phase', 'unit'],
+          ['int', 'float'],
           argType
         );
       }
@@ -245,14 +245,6 @@ function typecheckArithmetic(
   leftType: PayloadType,
   rightType: PayloadType
 ): ExprNode {
-  // Phase arithmetic restrictions
-  if (leftType === 'phase' && rightType === 'phase') {
-    throw new TypeError(
-      `Cannot ${opToVerb(node.op)} phase + phase. Use phase + float for offset.`,
-      node.pos
-    );
-  }
-
   // Both must be numeric
   if (!isNumeric(leftType) || !isNumeric(rightType)) {
     throw new TypeError(
@@ -459,7 +451,7 @@ function typecheckCall(node: ExprNode & { kind: 'call' }, env: TypeEnv): ExprNod
  * Check if a type is numeric.
  */
 function isNumeric(type: PayloadType): boolean {
-  return type === 'int' || type === 'float' || type === 'phase' || type === 'unit';
+  return type === 'int' || type === 'float';
 }
 
 /**
@@ -477,21 +469,6 @@ function unifyNumeric(left: PayloadType, right: PayloadType): PayloadType {
 
   // float + float → float
   if (left === 'float' && right === 'float') return 'float';
-
-  // phase + float → phase (phase offset)
-  if ((left === 'phase' && right === 'float') || (left === 'float' && right === 'phase')) {
-    return 'phase';
-  }
-
-  // phase + int → phase (int coerced to float)
-  if ((left === 'phase' && right === 'int') || (left === 'int' && right === 'phase')) {
-    return 'phase';
-  }
-
-  // unit + anything → float (loses unit constraint)
-  if (left === 'unit' || right === 'unit') {
-    return 'float';
-  }
 
   // Fallback to float for other numeric combinations
   if (isNumeric(left) && isNumeric(right)) {
@@ -514,16 +491,6 @@ function unifyTypes(left: PayloadType, right: PayloadType): PayloadType | undefi
     return 'float';
   }
 
-  // phase + float → phase
-  if ((left === 'phase' && right === 'float') || (left === 'float' && right === 'phase')) {
-    return 'phase';
-  }
-
-  // unit + float → unit
-  if ((left === 'unit' && right === 'float') || (left === 'float' && right === 'unit')) {
-    return 'unit';
-  }
-
   // Incompatible
   return undefined;
 }
@@ -537,18 +504,6 @@ function canCoerceTo(from: PayloadType, to: PayloadType): boolean {
 
   // int → float (safe)
   if (from === 'int' && to === 'float') return true;
-
-  // int → phase (safe, with wrap)
-  if (from === 'int' && to === 'phase') return true;
-
-  // int → unit (safe, with clamp)
-  if (from === 'int' && to === 'unit') return true;
-
-  // phase → float (allowed implicitly)
-  if (from === 'phase' && to === 'float') return true;
-
-  // unit → float (allowed implicitly)
-  if (from === 'unit' && to === 'float') return true;
 
   return false;
 }

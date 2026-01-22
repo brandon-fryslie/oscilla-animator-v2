@@ -7,7 +7,7 @@
 import type { Block } from '../../graph/Patch';
 import type { TimeModelIR, TimeSignals, TypedPatch, TimeResolvedPatch } from '../ir';
 import { IRBuilderImpl } from '../ir/IRBuilderImpl';
-import { signalType } from '../../core/canonical-types';
+import { signalType, unitPhase01 } from '../../core/canonical-types';
 
 // =============================================================================
 // Error Types
@@ -78,8 +78,8 @@ function extractTimeModel(
   // Extract period parameters for infinite time model
   const periodAMs = typeof timeRoot.params.periodAMs === 'number' ? timeRoot.params.periodAMs : 1000;
   const periodBMs = typeof timeRoot.params.periodBMs === 'number' ? timeRoot.params.periodBMs : 2000;
-  
-  return { 
+
+  return {
     kind: 'infinite',
     periodAMs,
     periodBMs,
@@ -96,8 +96,8 @@ function generateTimeSignals(timeModel: TimeModelIR): TimeSignals {
   const tModelMs = builder.sigTime('tMs', signalType('float'));
 
   // Infinite time model
-  const phaseA = builder.sigTime('phaseA', signalType('phase'));
-  const phaseB = builder.sigTime('phaseB', signalType('phase'));
+  const phaseA = builder.sigTime('phaseA', signalType('float', unitPhase01()));
+  const phaseB = builder.sigTime('phaseB', signalType('float', unitPhase01()));
   const dt = builder.sigTime('dt', signalType('float'));
   const palette = builder.sigTime('palette', signalType('color'));
   const energy = builder.sigTime('energy', signalType('float'));

@@ -16,13 +16,18 @@
  * - ms: Milliseconds - Time values
  */
 
-import type { NumericUnit } from '../core/canonical-types';
+import type { Unit } from '../core/canonical-types';
+
+/**
+ * Unit kind string for kernel signatures (lighter weight than full Unit objects).
+ */
+type UnitKind = Unit['kind'];
 
 /**
  * Kernel input signature - declares expected unit for an input parameter
  */
 export interface KernelInputSignature {
-  readonly expectedUnit?: NumericUnit;
+  readonly expectedUnit?: UnitKind;
   readonly description?: string;
 }
 
@@ -30,7 +35,7 @@ export interface KernelInputSignature {
  * Kernel output signature - declares unit of output value
  */
 export interface KernelOutputSignature {
-  readonly unit?: NumericUnit;
+  readonly unit?: UnitKind;
   readonly description?: string;
 }
 
@@ -54,33 +59,33 @@ export const KERNEL_SIGNATURES: Readonly<Record<string, KernelSignature>> = {
   // These expect PHASE [0,1), auto-wrap internally, output [-1,1]
 
   oscSin: {
-    inputs: [{ expectedUnit: 'phase', description: 'Phase [0,1) - wraps internally' }],
+    inputs: [{ expectedUnit: 'phase01', description: 'Phase [0,1) - wraps internally' }],
     output: { unit: 'scalar', description: 'Sine value [-1,1]' },
   },
 
   oscCos: {
-    inputs: [{ expectedUnit: 'phase', description: 'Phase [0,1) - wraps internally' }],
+    inputs: [{ expectedUnit: 'phase01', description: 'Phase [0,1) - wraps internally' }],
     output: { unit: 'scalar', description: 'Cosine value [-1,1]' },
   },
 
   oscTan: {
-    inputs: [{ expectedUnit: 'phase', description: 'Phase [0,1) - wraps internally' }],
+    inputs: [{ expectedUnit: 'phase01', description: 'Phase [0,1) - wraps internally' }],
     output: { unit: 'scalar', description: 'Tangent value (unbounded)' },
   },
 
   // DEPRECATED: Legacy aliases - use oscSin/oscCos/oscTan instead
   sin: {
-    inputs: [{ expectedUnit: 'phase', description: 'DEPRECATED: Use oscSin instead' }],
+    inputs: [{ expectedUnit: 'phase01', description: 'DEPRECATED: Use oscSin instead' }],
     output: { unit: 'scalar', description: 'Sine value [-1,1]' },
   },
 
   cos: {
-    inputs: [{ expectedUnit: 'phase', description: 'DEPRECATED: Use oscCos instead' }],
+    inputs: [{ expectedUnit: 'phase01', description: 'DEPRECATED: Use oscCos instead' }],
     output: { unit: 'scalar', description: 'Cosine value [-1,1]' },
   },
 
   tan: {
-    inputs: [{ expectedUnit: 'phase', description: 'DEPRECATED: Use oscTan instead' }],
+    inputs: [{ expectedUnit: 'phase01', description: 'DEPRECATED: Use oscTan instead' }],
     output: { unit: 'scalar', description: 'Tangent value' },
   },
 
@@ -88,17 +93,17 @@ export const KERNEL_SIGNATURES: Readonly<Record<string, KernelSignature>> = {
   // These expect phase [0,1), auto-wrap internally, output [-1,1]
 
   triangle: {
-    inputs: [{ expectedUnit: 'phase', description: 'Phase [0,1) - wraps internally' }],
+    inputs: [{ expectedUnit: 'phase01', description: 'Phase [0,1) - wraps internally' }],
     output: { unit: 'scalar', description: 'Triangle wave [-1,1]' },
   },
 
   square: {
-    inputs: [{ expectedUnit: 'phase', description: 'Phase [0,1) - wraps internally' }],
+    inputs: [{ expectedUnit: 'phase01', description: 'Phase [0,1) - wraps internally' }],
     output: { unit: 'scalar', description: 'Square wave [-1,1]' },
   },
 
   sawtooth: {
-    inputs: [{ expectedUnit: 'phase', description: 'Phase [0,1) - wraps internally' }],
+    inputs: [{ expectedUnit: 'phase01', description: 'Phase [0,1) - wraps internally' }],
     output: { unit: 'scalar', description: 'Sawtooth wave [-1,1]' },
   },
 
@@ -107,8 +112,8 @@ export const KERNEL_SIGNATURES: Readonly<Record<string, KernelSignature>> = {
 
   circleAngle: {
     inputs: [
-      { expectedUnit: 'normalized', description: 'Normalized index [0,1]' },
-      { expectedUnit: 'phase', description: 'Phase offset [0,1)' },
+      { expectedUnit: 'norm01', description: 'Normalized index [0,1]' },
+      { expectedUnit: 'phase01', description: 'Phase offset [0,1)' },
     ],
     output: { unit: 'radians', description: 'Angle in radians [0, 2π)' },
   },
