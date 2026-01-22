@@ -146,13 +146,15 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
   return (
     <div
       style={{
-        padding: '10px 15px',
-        borderRadius: '5px',
-        border: '2px solid #555',
-        background: '#1e1e1e',
-        color: '#e0e0e0',
+        padding: '12px 16px',
+        borderRadius: '10px',
+        border: '1px solid rgba(78, 205, 196, 0.2)',
+        background: 'linear-gradient(180deg, #1a1a2e 0%, #16213e 100%)',
+        color: '#e2e8f0',
         minWidth: '180px',
-        fontSize: '14px',
+        fontSize: '13px',
+        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.05) inset',
+        backdropFilter: 'blur(4px)',
       }}
     >
       {/* Input Handles (Left Side) with Labels and Type Colors */}
@@ -198,14 +200,20 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
               onMouseLeave={handlePortMouseLeave}
               style={{
                 top: `${topPercent}%`,
-                background: input.isConnected ? input.typeColor : '#1e1e1e',
-                width: '16px',
-                height: '16px',
+                background: input.isConnected 
+                  ? input.typeColor 
+                  : `linear-gradient(135deg, ${input.typeColor}40 0%, #1a1a2e 100%)`,
+                width: '14px',
+                height: '14px',
                 border: `2px solid ${input.typeColor}`,
                 borderRadius: '50%',
-                boxShadow: isSelected ? `0 0 8px 2px ${input.typeColor}` : undefined,
+                boxShadow: isSelected 
+                  ? `0 0 12px 3px ${input.typeColor}80, inset 0 0 4px ${input.typeColor}` 
+                  : input.isConnected 
+                    ? `0 0 6px 1px ${input.typeColor}40`
+                    : 'none',
                 cursor: 'pointer',
-                transition: 'all 0.2s ease',
+                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                 ...highlightStyle,
               }}
             />
@@ -234,27 +242,58 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
       <div
         style={{
           textAlign: 'center',
-          fontWeight: 'bold',
-          marginBottom: '8px',
+          fontWeight: 600,
+          marginBottom: '6px',
+          fontSize: '14px',
+          letterSpacing: '0.3px',
+          color: '#f1f5f9',
         }}
       >
         {data.label}
       </div>
 
       {/* Port Labels Summary (removed to reduce clutter) */}
-      <div style={{ fontSize: '11px', color: '#666', textAlign: 'center' }}>
-        {data.inputs.length > 0 && `${data.inputs.length} in`}
-        {data.inputs.length > 0 && data.outputs.length > 0 && ' • '}
-        {data.outputs.length > 0 && `${data.outputs.length} out`}
+      <div style={{ 
+        fontSize: '10px', 
+        color: '#64748b', 
+        textAlign: 'center',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '8px',
+      }}>
+        {data.inputs.length > 0 && (
+          <span style={{ 
+            color: '#3b82f6',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '3px',
+          }}>
+            <span style={{ opacity: 0.7 }}>◀</span> {data.inputs.length}
+          </span>
+        )}
+        {data.inputs.length > 0 && data.outputs.length > 0 && (
+          <span style={{ color: '#334155' }}>•</span>
+        )}
+        {data.outputs.length > 0 && (
+          <span style={{ 
+            color: '#22c55e',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '3px',
+          }}>
+            {data.outputs.length} <span style={{ opacity: 0.7 }}>▶</span>
+          </span>
+        )}
       </div>
 
       {/* Parameter Controls */}
       {data.params.length > 0 && (
         <div
           style={{
-            marginTop: '8px',
-            paddingTop: '8px',
-            borderTop: '1px solid #333',
+            marginTop: '10px',
+            paddingTop: '10px',
+            borderTop: '1px solid rgba(100, 116, 139, 0.2)',
           }}
         >
           {data.params.map((param) => (
@@ -313,14 +352,20 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
               onMouseLeave={handlePortMouseLeave}
               style={{
                 top: `${topPercent}%`,
-                background: output.isConnected ? output.typeColor : '#1e1e1e',
-                width: '16px',
-                height: '16px',
+                background: output.isConnected 
+                  ? output.typeColor 
+                  : `linear-gradient(135deg, ${output.typeColor}40 0%, #1a1a2e 100%)`,
+                width: '14px',
+                height: '14px',
                 border: `2px solid ${output.typeColor}`,
                 borderRadius: '50%',
-                boxShadow: isSelected ? `0 0 8px 2px ${output.typeColor}` : undefined,
+                boxShadow: isSelected 
+                  ? `0 0 12px 3px ${output.typeColor}80, inset 0 0 4px ${output.typeColor}` 
+                  : output.isConnected 
+                    ? `0 0 6px 1px ${output.typeColor}40`
+                    : 'none',
                 cursor: 'pointer',
-                transition: 'all 0.2s ease',
+                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                 ...highlightStyle,
               }}
             />

@@ -12,6 +12,9 @@ import { applyFieldKernelZipSig } from '../FieldKernels';
  * These tests ensure the foundational assumptions hold.
  */
 
+// Type helper for vec2 output
+const vec2Type = { payload: 'vec2', cardinality: 'many' } as const;
+
 describe('Local-Space Sanity Tests', () => {
   describe('Control Point Centering', () => {
     it('polygonVertex produces control points centered at origin', () => {
@@ -29,7 +32,7 @@ describe('Local-Space Sanity Tests', () => {
       // Signals: [sides, radiusX, radiusY]
       const signals = [sides, 1.0, 1.0];
       
-      applyFieldKernelZipSig(out, indices, signals, 'polygonVertex', N, 'vec2');
+      applyFieldKernelZipSig(out, indices, signals, 'polygonVertex', N, vec2Type as any);
       
       // Sum all vertices
       let sumX = 0, sumY = 0;
@@ -58,7 +61,7 @@ describe('Local-Space Sanity Tests', () => {
       // Signals: [points, outerRadius, innerRadius]
       const signals = [points, 1.0, 0.5];
       
-      applyFieldKernelZipSig(out, indices, signals, 'starVertex', N, 'vec2');
+      applyFieldKernelZipSig(out, indices, signals, 'starVertex', N, vec2Type as any);
       
       // Sum all vertices
       let sumX = 0, sumY = 0;
@@ -84,7 +87,7 @@ describe('Local-Space Sanity Tests', () => {
       const out = new Float32Array(N * 2);
       const signals = [sides, 1.0, 1.0]; // Unit radius
       
-      applyFieldKernelZipSig(out, indices, signals, 'polygonVertex', N, 'vec2');
+      applyFieldKernelZipSig(out, indices, signals, 'polygonVertex', N, vec2Type as any);
       
       // Each vertex should be at distance 1.0 from origin
       for (let i = 0; i < N; i++) {
@@ -105,7 +108,7 @@ describe('Local-Space Sanity Tests', () => {
       const out = new Float32Array(N * 2);
       const signals = [sides, 2.0, 2.0]; // Radius 2.0
       
-      applyFieldKernelZipSig(out, indices, signals, 'polygonVertex', N, 'vec2');
+      applyFieldKernelZipSig(out, indices, signals, 'polygonVertex', N, vec2Type as any);
       
       for (let i = 0; i < N; i++) {
         const x = out[i * 2];
@@ -125,7 +128,7 @@ describe('Local-Space Sanity Tests', () => {
       const out = new Float32Array(N * 2);
       const signals = [sides, 2.0, 1.0]; // radiusX=2, radiusY=1
       
-      applyFieldKernelZipSig(out, indices, signals, 'polygonVertex', N, 'vec2');
+      applyFieldKernelZipSig(out, indices, signals, 'polygonVertex', N, vec2Type as any);
       
       // Square: top/bottom at y=±1, left/right at x=±2
       // Find max extents
@@ -151,7 +154,7 @@ describe('Local-Space Sanity Tests', () => {
       const out = new Float32Array(N * 2);
       const signals = [sides, 1.0, 1.0];
       
-      applyFieldKernelZipSig(out, indices, signals, 'polygonVertex', N, 'vec2');
+      applyFieldKernelZipSig(out, indices, signals, 'polygonVertex', N, vec2Type as any);
       
       // First vertex (index 0) should be at top: (0, -1)
       // (Canvas convention: y increases downward, so top is negative y)
