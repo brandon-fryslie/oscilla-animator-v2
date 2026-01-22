@@ -36,6 +36,11 @@ registerBlock({
   description: 'Creates multiple copies of an element (Signal<T> → Field<T>)',
   form: 'primitive',
   capability: 'identity',
+  cardinality: {
+    cardinalityMode: 'transform',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
   inputs: {
     element: {
       label: 'Element',

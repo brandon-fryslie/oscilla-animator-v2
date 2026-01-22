@@ -42,6 +42,11 @@ const ERROR_KIND_TO_CODE: Record<string, DiagnosticCode> = {
   ExprSyntaxError: 'E_EXPR_SYNTAX',
   ExprTypeError: 'E_EXPR_TYPE',
   ExprCompileError: 'E_EXPR_COMPILE',
+  // Cardinality errors (Sprint 2A - Cardinality-Generic Blocks)
+  CardinalityMismatch: 'E_CARDINALITY_MISMATCH',
+  InstanceMismatch: 'E_INSTANCE_MISMATCH',
+  LaneCoupledDisallowed: 'E_LANE_COUPLED_DISALLOWED',
+  ImplicitBroadcastDisallowed: 'E_IMPLICIT_BROADCAST_DISALLOWED',
 };
 
 // =============================================================================

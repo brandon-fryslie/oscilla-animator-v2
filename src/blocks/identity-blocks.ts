@@ -18,6 +18,11 @@ registerBlock({
   description: 'Generates stable random values from domain element IDs',
   form: 'primitive',
   capability: 'identity',
+  cardinality: {
+    cardinalityMode: 'fieldOnly',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'disallowSignalMix',
+  },
   inputs: {
     domain: { label: 'Domain', type: signalType('float') },
     seed: { type: signalType('int'), value: 0, exposedAsPort: false },
@@ -63,6 +68,11 @@ registerBlock({
   description: 'Provides the normalized index [0,1] for each domain element',
   form: 'primitive',
   capability: 'identity',
+  cardinality: {
+    cardinalityMode: 'fieldOnly',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'disallowSignalMix',
+  },
   inputs: {},
   outputs: {
     index: { label: 'Index', type: signalTypeField('float', 'default') },

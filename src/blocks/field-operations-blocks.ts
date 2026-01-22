@@ -20,6 +20,11 @@ registerBlock({
   description: 'Generates normalized (0..1) ID for each element in a domain',
   form: 'primitive',
   capability: 'identity',
+  cardinality: {
+    cardinalityMode: 'fieldOnly',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'disallowSignalMix',
+  },
   inputs: {
     domain: { label: 'Domain', type: signalType('int') }, // Domain count
   },
@@ -58,6 +63,11 @@ registerBlock({
   description: 'Per-element addition of two fields',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'fieldOnly',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
   inputs: {
     a: { label: 'A', type: signalTypeField('float', 'default') },
     b: { label: 'B', type: signalTypeField('float', 'default') },
@@ -98,6 +108,11 @@ registerBlock({
   description: 'Per-element multiplication of two fields',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'fieldOnly',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
   inputs: {
     a: { label: 'A', type: signalTypeField('float', 'default') },
     b: { label: 'B', type: signalTypeField('float', 'default') },
@@ -138,6 +153,11 @@ registerBlock({
   description: 'Scale a field by a signal',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'fieldOnly',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
   inputs: {
     field: { label: 'Field', type: signalTypeField('float', 'default') },
     scale: { label: 'Scale', type: signalType('float'), defaultSource: defaultSourceConst(1.0) },
@@ -181,6 +201,11 @@ registerBlock({
   description: 'Per-element sine of a field',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'fieldOnly',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'disallowSignalMix',
+  },
   inputs: {
     input: { label: 'Input', type: signalTypeField('float', 'default') },
   },
@@ -219,6 +244,11 @@ registerBlock({
   description: 'Per-element cosine of a field',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'fieldOnly',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'disallowSignalMix',
+  },
   inputs: {
     input: { label: 'Input', type: signalTypeField('float', 'default') },
   },
@@ -257,6 +287,11 @@ registerBlock({
   description: 'Per-element modulo of two fields',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'fieldOnly',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'disallowSignalMix',
+  },
   inputs: {
     a: { label: 'A', type: signalTypeField('float', 'default') },
     b: { label: 'B', type: signalTypeField('float', 'default') },
@@ -297,6 +332,11 @@ registerBlock({
   description: 'Convert polar coordinates (angle, radius) to Cartesian (x, y)',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'fieldOnly',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
   inputs: {
     angle: { label: 'Angle', type: signalTypeField('float', 'default') },
     radius: { label: 'Radius', type: signalTypeField('float', 'default') },
@@ -356,6 +396,11 @@ registerBlock({
   description: 'Convert Cartesian coordinates (x, y) to polar (angle, radius)',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'fieldOnly',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
   inputs: {
     pos: { label: 'Position', type: signalTypeField('vec2', 'default') },
     centerX: { label: 'Center X', type: signalType('float'), optional: true, value: 0.5, defaultSource: defaultSourceConst(0.5) },
@@ -420,6 +465,11 @@ registerBlock({
   description: 'Per-element pulsing animation based on phase and spread',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'fieldOnly',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
   inputs: {
     id01: { label: 'ID (0..1)', type: signalTypeField('float', 'default') },
     // Phase input expects normalized time cycle [0, 1)
@@ -484,6 +534,11 @@ registerBlock({
   description: 'Generate golden angle distribution for each element',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'fieldOnly',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'disallowSignalMix',
+  },
   inputs: {
     id01: { label: 'ID (0..1)', type: signalTypeField('float', 'default') },
     turns: { label: 'Turns', type: signalType('float'), value: 50, exposedAsPort: false, hidden: true },
@@ -527,6 +582,11 @@ registerBlock({
   description: 'Per-element angular offset based on phase and spin',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'fieldOnly',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
   inputs: {
     id01: { label: 'ID (0..1)', type: signalTypeField('float', 'default') },
     // Phase input expects normalized time cycle [0, 1)
@@ -583,6 +643,11 @@ registerBlock({
   description: 'Square root radius distribution for even area coverage',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'fieldOnly',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'disallowSignalMix',
+  },
   inputs: {
     id01: { label: 'ID (0..1)', type: signalTypeField('float', 'default') },
     radius: { label: 'Radius', type: signalTypeField('float', 'default'), defaultSource: defaultSourceConst(0.35) },
@@ -632,6 +697,11 @@ registerBlock({
   description: 'Add per-element random jitter to 2D positions',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'fieldOnly',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
   inputs: {
     pos: { label: 'Position', type: signalTypeField('vec2', 'default') },
     rand: { label: 'Random', type: signalTypeField('float', 'default') },
@@ -692,6 +762,11 @@ registerBlock({
   description: 'Generate per-element hue values from phase and ID',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'fieldOnly',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
   inputs: {
     id01: { label: 'ID (0..1)', type: signalTypeField('float', 'default') },
     // Phase input expects normalized time cycle [0, 1)

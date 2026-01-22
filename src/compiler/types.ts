@@ -30,7 +30,12 @@ export type CompileErrorCode =
   | 'NotImplemented'
   | 'IRValidationFailed'
   | 'UpstreamError'
-  | 'TransformError';
+  | 'TransformError'
+  // Cardinality errors (Sprint 2A - Cardinality-Generic Blocks)
+  | 'CardinalityMismatch'
+  | 'InstanceMismatch'
+  | 'LaneCoupledDisallowed'
+  | 'ImplicitBroadcastDisallowed';
 
 /**
  * Compile error structure (unified for passes-v2).

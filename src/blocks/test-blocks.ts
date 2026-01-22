@@ -45,6 +45,11 @@ registerBlock({
   description: 'Captures a signal value for testing (sink block)',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'signalOnly',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'disallowSignalMix',
+  },
   inputs: {
     value: { label: 'Value', type: signalType('float') },
   },

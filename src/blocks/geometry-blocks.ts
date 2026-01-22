@@ -19,6 +19,11 @@ registerBlock({
   description: 'Converts polar coordinates (angle, radius) to cartesian (x, y)',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
   inputs: {
     angle: { label: 'Angle', type: signalType('float') },
     radius: { label: 'Radius', type: signalType('float') },
@@ -69,6 +74,11 @@ registerBlock({
   description: 'Arranges domain elements in a circle',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
   inputs: {
     radius: { label: 'Radius', type: signalType('float'), value: 100 },
     phase: { label: 'Phase Offset', type: signalType('float'), value: 0 },
@@ -129,6 +139,11 @@ registerBlock({
   description: 'Offsets a position by x and y amounts with optional randomization',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
   inputs: {
     posIn: { label: 'Position In', type: signalType('vec2') },
     amountX: { label: 'Offset X', type: signalType('float') },

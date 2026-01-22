@@ -548,6 +548,16 @@ export class IRBuilderImpl implements IRBuilder {
     this.steps.push({ kind: 'stateWrite', stateSlot, value });
   }
 
+  fieldStateRead(stateSlot: StateSlotId, instanceId: InstanceId, type: SignalType): FieldExprId {
+    const id = fieldExprId(this.fieldExprs.length);
+    this.fieldExprs.push({ kind: 'stateRead', stateSlot, instanceId, type });
+    return id;
+  }
+
+  stepFieldStateWrite(stateSlot: StateSlotId, value: FieldExprId): void {
+    this.steps.push({ kind: 'fieldStateWrite', stateSlot, value });
+  }
+
   stepEvalSig(expr: SigExprId, target: ValueSlot): void {
     this.steps.push({ kind: 'evalSig', expr, target });
   }

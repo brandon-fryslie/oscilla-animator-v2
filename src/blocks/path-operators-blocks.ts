@@ -45,6 +45,11 @@ registerBlock({
   description: 'Extract per-point properties from path control points',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'fieldOnly',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'disallowSignalMix',
+  },
   inputs: {
     controlPoints: {
       label: 'Control Points',
@@ -130,6 +135,11 @@ registerBlock({
   description: 'Place instances evenly along a circular path (MVP version)',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'transform',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
   inputs: {
     radius: {
       label: 'Radius',

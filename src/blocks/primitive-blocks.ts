@@ -36,6 +36,11 @@ registerBlock({
     description: 'Creates an ellipse shape (circle when rx=ry)',
     form: 'primitive',
     capability: 'pure',
+    cardinality: {
+        cardinalityMode: 'signalOnly',
+        laneCoupling: 'laneLocal',
+        broadcastPolicy: 'disallowSignalMix',
+    },
     inputs: {
         rx: {
             label: 'Radius X',
@@ -128,6 +133,11 @@ registerBlock({
     description: 'Creates a rectangle shape (square when width=height)',
     form: 'primitive',
     capability: 'pure',
+    cardinality: {
+        cardinalityMode: 'signalOnly',
+        laneCoupling: 'laneLocal',
+        broadcastPolicy: 'disallowSignalMix',
+    },
     inputs: {
         width: {
             label: 'Width',

@@ -33,6 +33,11 @@ registerBlock({
   description: 'Compute signal from mathematical expression',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
 
   // Inputs include both wirable ports AND config parameters
   // Config parameters have exposedAsPort: false

@@ -171,7 +171,8 @@ export type FieldExpr =
   | FieldExprZip
   | FieldExprZipSig
   | FieldExprArray
-  | FieldExprLayout;
+  | FieldExprLayout
+  | FieldExprStateRead;
 
 export interface FieldExprConst {
   readonly kind: 'const';
@@ -231,6 +232,17 @@ export interface FieldExprLayout {
   readonly kind: 'layout';
   readonly input: FieldExprId;
   readonly layoutSpec: LayoutSpec;
+  readonly instanceId: InstanceId;
+  readonly type: SignalType;
+}
+
+/**
+ * Per-lane state read for stateful cardinality-generic blocks.
+ * Each lane reads its corresponding state slot value.
+ */
+export interface FieldExprStateRead {
+  readonly kind: 'stateRead';
+  readonly stateSlot: StateSlotId;
   readonly instanceId: InstanceId;
   readonly type: SignalType;
 }
@@ -432,6 +444,7 @@ export type Step =
   | StepMaterialize
   | StepRender
   | StepStateWrite
+  | StepFieldStateWrite
   | StepContinuityMapBuild
   | StepContinuityApply;
 
@@ -469,6 +482,16 @@ export interface StepStateWrite {
   readonly kind: 'stateWrite';
   readonly stateSlot: StateSlotId;
   readonly value: SigExprId;
+}
+
+/**
+ * Per-lane state write for stateful cardinality-generic blocks.
+ * Each lane writes its corresponding value to state.
+ */
+export interface StepFieldStateWrite {
+  readonly kind: 'fieldStateWrite';
+  readonly stateSlot: StateSlotId;
+  readonly value: FieldExprId;
 }
 
 /**

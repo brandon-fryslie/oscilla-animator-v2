@@ -20,7 +20,7 @@ import {
   DEFAULTS_V0,
 } from "../../core/canonical-types";
 import type { NormalizedPatch, TypedPatch, BlockIndex } from "../ir/patches";
-import { getBlockDefinition } from "../../blocks/registry";
+import { getBlockDefinition, getBlockCardinalityMetadata, isCardinalityGeneric } from "../../blocks/registry";
 
 // Move these types into a better place
 
@@ -95,6 +95,81 @@ function isTypeCompatible(from: SignalType, to: SignalType): boolean {
   }
 
   return true;
+}
+
+/**
+ * Check if cardinality mixing is allowed for a block.
+ *
+ * For cardinality-generic blocks (preserve + laneLocal), Signal+Field mixing
+ * is allowed based on the broadcastPolicy:
+ * - 'allowZipSig': Signals may be consumed alongside fields via FieldExprZipSig
+ * - 'requireBroadcastExpr': Compiler must materialize FieldExprBroadcast explicitly
+ * - 'disallowSignalMix': Only all-field or all-signal instantiations allowed
+ *
+ * @param blockType - Block type to check
+ * @param inputCardinalities - Array of input cardinality kinds ('one' or 'many')
+ * @returns true if mixing is allowed, false if disallowed
+ */
+function isCardinalityMixingAllowed(
+  blockType: string,
+  inputCardinalities: Array<'one' | 'many'>
+): boolean {
+  const meta = getBlockCardinalityMetadata(blockType);
+  if (!meta) return true; // No metadata = no restriction
+
+  // Check if there's mixing (both 'one' and 'many' present)
+  const hasOne = inputCardinalities.includes('one');
+  const hasMany = inputCardinalities.includes('many');
+  const hasMixing = hasOne && hasMany;
+
+  if (!hasMixing) return true; // No mixing = always allowed
+
+  // Mixing present - check policy
+  switch (meta.broadcastPolicy) {
+    case 'allowZipSig':
+    case 'requireBroadcastExpr':
+      // Mixing allowed - compiler will handle via ZipSig or Broadcast
+      return true;
+    case 'disallowSignalMix':
+      // Mixing not allowed
+      return false;
+  }
+}
+
+/**
+ * Resolve output cardinality for a cardinality-generic block.
+ *
+ * For preserve blocks: output cardinality = max(input cardinalities)
+ * - If all inputs are 'one': output is 'one'
+ * - If any input is 'many': output is 'many'
+ *
+ * @param blockType - Block type
+ * @param inputCardinalities - Array of input cardinality kinds
+ * @returns Resolved output cardinality kind
+ */
+function resolveOutputCardinality(
+  blockType: string,
+  inputCardinalities: Array<'one' | 'many'>
+): 'one' | 'many' {
+  const meta = getBlockCardinalityMetadata(blockType);
+  if (!meta) {
+    // No metadata - fall back to checking if any input is 'many'
+    return inputCardinalities.includes('many') ? 'many' : 'one';
+  }
+
+  switch (meta.cardinalityMode) {
+    case 'preserve':
+      // Output cardinality matches input cardinality
+      // If any input is 'many', output is 'many'
+      return inputCardinalities.includes('many') ? 'many' : 'one';
+    case 'signalOnly':
+      return 'one';
+    case 'fieldOnly':
+      return 'many';
+    case 'transform':
+      // Transform blocks explicitly change cardinality - handled by block definition
+      return inputCardinalities.includes('many') ? 'many' : 'one';
+  }
 }
 
 /**

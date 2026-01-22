@@ -253,6 +253,27 @@ export interface IRBuilder {
   stepStateWrite(stateSlot: StateSlotId, value: SigExprId): void;
 
   /**
+   * Create a field expression that reads from per-lane state.
+   * Used by stateful cardinality-generic blocks operating on fields.
+   * Each lane reads its corresponding state value.
+   *
+   * @param stateSlot - State slot to read from (base slot for lane 0)
+   * @param instanceId - Instance defining the lane count
+   * @param type - Field type for the read values
+   * @returns FieldExprId for the per-lane read expression
+   */
+  fieldStateRead(stateSlot: StateSlotId, instanceId: InstanceId, type: SignalType): FieldExprId;
+
+  /**
+   * Schedule a per-lane state write step.
+   * Each lane writes its corresponding value to state.
+   *
+   * @param stateSlot - State slot to write to (base slot for lane 0)
+   * @param value - Field expression to evaluate and write per-lane
+   */
+  stepFieldStateWrite(stateSlot: StateSlotId, value: FieldExprId): void;
+
+  /**
    * Schedule a signal evaluation step.
    * Forces evaluation of a signal expression and stores the result in a slot.
    * Used by test blocks to capture signal values for assertion.

@@ -30,6 +30,11 @@ registerBlock({
   description: 'Outputs a constant value (type inferred from target)',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
   inputs: {
     value: {
       type: signalType('float'),
@@ -161,6 +166,11 @@ registerBlock({
   description: 'Generates waveforms (oscSin, oscCos, triangle, square, sawtooth)',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
   inputs: {
     // Phase input expects values in [0, 1) range - the kernel converts to radians
     phase: { label: 'Phase', type: signalType('phase') },
@@ -223,6 +233,11 @@ registerBlock({
   description: 'Delays signal by one frame. Output on frame N = input from frame N-1',
   form: 'primitive',
   capability: 'state',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
   inputs: {
     in: { label: 'Input', type: signalType('float') },
     initialValue: { type: signalType('float'), value: 0, exposedAsPort: false },
@@ -274,6 +289,11 @@ registerBlock({
   description: 'Deterministic hash function for seeded randomness. Output in [0, 1)',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
   inputs: {
     value: { label: 'Value', type: signalType('float') },
     seed: { label: 'Seed', type: signalType('float'), optional: true },
@@ -322,6 +342,11 @@ registerBlock({
   description: 'Normalize index by count: output = index / count. Safe division handles count=0',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
   inputs: {
     index: { label: 'Index', type: signalType('float') },
     count: { label: 'Count', type: signalType('float') },

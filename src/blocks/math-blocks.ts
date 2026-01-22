@@ -20,6 +20,11 @@ registerBlock({
   description: 'Adds two signals',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
   inputs: {
     a: { label: 'A', type: signalType('float') },
     b: { label: 'B', type: signalType('float') },
@@ -58,6 +63,11 @@ registerBlock({
   description: 'Subtracts two signals',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
   inputs: {
     a: { label: 'A', type: signalType('float') },
     b: { label: 'B', type: signalType('float') },
@@ -96,6 +106,11 @@ registerBlock({
   description: 'Multiplies two signals',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
   inputs: {
     a: { label: 'A', type: signalType('float') },
     b: { label: 'B', type: signalType('float') },
@@ -134,6 +149,11 @@ registerBlock({
   description: 'Divides two signals',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
   inputs: {
     a: { label: 'A', type: signalType('float') },
     b: { label: 'B', type: signalType('float') },
@@ -172,6 +192,11 @@ registerBlock({
   description: 'Computes modulo of two signals',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
   inputs: {
     a: { label: 'A', type: signalType('float') },
     b: { label: 'B', type: signalType('float') },

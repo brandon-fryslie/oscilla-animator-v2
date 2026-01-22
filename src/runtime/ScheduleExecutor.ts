@@ -221,6 +221,9 @@ export function executeFrame(
         // Store directly in objects map using slot as key
         // (Object storage doesn't need slotMeta offset lookup)
         state.values.objects.set(step.target, buffer);
+
+        // Debug tap: Record field value
+        state.tap?.recordFieldValue?.(step.target, buffer);
         break;
       }
 
@@ -352,6 +355,11 @@ export function executeFrame(
         break;
       }
 
+      case 'fieldStateWrite': {
+        // Per-lane state write is handled in PHASE 2 (after all reads complete)
+        break;
+      }
+
       default: {
         const _exhaustive: never = step;
         throw new Error(`Unknown step kind: ${(_exhaustive as Step).kind}`);
@@ -366,6 +374,39 @@ export function executeFrame(
       // Write to persistent state array
       const value = evaluateSignal(step.value, signals, state);
       state.state[step.stateSlot as number] = value;
+    }
+    if (step.kind === 'fieldStateWrite') {
+      // Per-lane state write: evaluate field and write each lane
+      // Get the field expression to find the instance
+      const expr = fields[step.value as number];
+      if (!expr) continue;
+      
+      // Determine count from the field expression's instance
+      let count = 0;
+      if ('instanceId' in expr && expr.instanceId) {
+        const instanceDecl = instances.get(expr.instanceId as unknown as InstanceId);
+        count = instanceDecl && typeof instanceDecl.count === 'number' ? instanceDecl.count : 0;
+      }
+      if (count === 0) continue;
+      
+      // Materialize the field to get values - use a string instanceId from the expression
+      const instanceIdStr = 'instanceId' in expr ? String(expr.instanceId) : '';
+      const tempBuffer = materialize(
+        step.value,
+        instanceIdStr,
+        fields,
+        signals,
+        instances as ReadonlyMap<string, InstanceDecl>,
+        state,
+        pool
+      );
+      
+      // Write each lane to state
+      const baseSlot = step.stateSlot as number;
+      const src = tempBuffer as Float32Array;
+      for (let i = 0; i < count && i < src.length; i++) {
+        state.state[baseSlot + i] = src[i];
+      }
     }
   }
 

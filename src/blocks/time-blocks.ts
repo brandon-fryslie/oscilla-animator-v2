@@ -18,6 +18,11 @@ registerBlock({
   description: 'Root block for patches with infinite time',
   form: 'primitive',
   capability: 'time',
+  cardinality: {
+    cardinalityMode: 'signalOnly',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'disallowSignalMix',
+  },
   inputs: {
     periodAMs: { type: signalType('float'), value: 1000, exposedAsPort: false },
     periodBMs: { type: signalType('float'), value: 2000, exposedAsPort: false },

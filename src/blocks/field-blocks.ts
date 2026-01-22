@@ -28,6 +28,11 @@ registerBlock({
   description: 'Broadcasts a signal value to all elements of a field (type inferred)',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'transform',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'requireBroadcastExpr',
+  },
   inputs: {
     signal: { label: 'Signal', type: signalType('???') },
     payloadType: {

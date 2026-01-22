@@ -94,6 +94,11 @@ registerBlock({
   description: 'Creates a procedural regular polygon with N sides',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'signalOnly',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'disallowSignalMix',
+  },
   inputs: {
     sides: {
       label: 'Sides',
@@ -287,6 +292,11 @@ registerBlock({
   description: 'Creates a procedural star shape with alternating outer and inner radii',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'signalOnly',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'disallowSignalMix',
+  },
   inputs: {
     points: {
       label: 'Points',

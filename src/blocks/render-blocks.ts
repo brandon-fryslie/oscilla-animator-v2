@@ -24,6 +24,11 @@ registerBlock({
   description: 'Renders circles at positions with color and size',
   form: 'primitive',
   capability: 'render',
+  cardinality: {
+    cardinalityMode: 'fieldOnly',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'disallowSignalMix',
+  },
   inputs: {
     pos: { label: 'Position', type: signalTypeField('vec2', 'default') },
     color: { label: 'Color', type: signalTypeField('color', 'default') },
@@ -69,6 +74,11 @@ registerBlock({
   description: 'Renders rectangles at positions with color and size',
   form: 'primitive',
   capability: 'render',
+  cardinality: {
+    cardinalityMode: 'fieldOnly',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'disallowSignalMix',
+  },
   inputs: {
     pos: { label: 'Position', type: signalTypeField('vec2', 'default') },
     color: { label: 'Color', type: signalTypeField('color', 'default') },
@@ -116,6 +126,11 @@ registerBlock({
   description: 'Renders 2D instances at positions with color. Shape comes from wired element.',
   form: 'primitive',
   capability: 'render',
+  cardinality: {
+    cardinalityMode: 'fieldOnly',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
   inputs: {
     pos: { label: 'Position', type: signalTypeField('vec2', 'default') },
     color: { label: 'Color', type: signalTypeField('color', 'default') },

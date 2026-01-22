@@ -408,6 +408,17 @@ function fillBuffer(
       break;
     }
 
+    case 'stateRead': {
+      // Per-lane state read for stateful cardinality-generic blocks
+      // Each lane reads its corresponding state slot value
+      const arr = buffer as Float32Array;
+      const baseSlot = expr.stateSlot as number;
+      for (let i = 0; i < N; i++) {
+        arr[i] = state.state[baseSlot + i] ?? 0;
+      }
+      break;
+    }
+
     default: {
       const _exhaustive: never = expr;
       throw new Error(`Unknown field expr kind: ${(_exhaustive as FieldExpr).kind}`);

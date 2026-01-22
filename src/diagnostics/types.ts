@@ -96,6 +96,12 @@ export type DiagnosticCode =
   | 'E_TYPE_MISMATCH' // Port types cannot unify
   | 'E_DOMAIN_MISMATCH' // Domain cardinalities conflict
 
+  // --- Cardinality Errors (Sprint 2A - Cardinality-Generic Blocks) ---
+  | 'E_CARDINALITY_MISMATCH' // Block output cardinality differs from required preserved cardinality
+  | 'E_INSTANCE_MISMATCH' // Two many inputs unify to different InstanceRefs
+  | 'E_LANE_COUPLED_DISALLOWED' // Block is lane-coupled but used in generic context
+  | 'E_IMPLICIT_BROADCAST_DISALLOWED' // Signal consumed in Field context without explicit broadcast
+
   // --- Graph Structure Errors ---
   | 'E_CYCLE_DETECTED' // Cycle with no stateful boundary
   | 'E_MISSING_INPUT' // Required input not connected
@@ -140,6 +146,10 @@ export type DiagnosticPayload =
   | { code: 'E_TYPE_MISMATCH'; expected: string; actual: string }
   | { code: 'E_CYCLE_DETECTED'; cycleBlocks: string[] }
   | { code: 'W_GRAPH_DISCONNECTED_BLOCK'; distance: number }
+  | { code: 'E_CARDINALITY_MISMATCH'; inputCardinality: string; outputCardinality: string }
+  | { code: 'E_INSTANCE_MISMATCH'; instanceA: string; instanceB: string; portA: string; portB: string }
+  | { code: 'E_LANE_COUPLED_DISALLOWED'; blockType: string; reason: string }
+  | { code: 'E_IMPLICIT_BROADCAST_DISALLOWED'; signalPort: string; fieldContext: string }
   | undefined;
 
 // =============================================================================

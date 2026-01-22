@@ -20,6 +20,11 @@ registerBlock({
   description: 'Generates animated color from phase via hue rotation',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
   inputs: {
     phase: { label: 'Phase', type: signalType('float') },
     hue: { label: 'Hue Offset', type: signalType('float') },
@@ -73,6 +78,11 @@ registerBlock({
   description: 'Converts HSV values to RGB color',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
   inputs: {
     hue: { label: 'Hue', type: signalType('float') },
     sat: { label: 'Saturation', type: signalType('float') },
@@ -113,6 +123,11 @@ registerBlock({
   description: 'Converts HSV values (field or signal) to RGB color field',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
   inputs: {
     hue: { label: 'Hue', type: signalTypeField('float', 'default') },
     sat: { label: 'Saturation', type: signalType('float'), defaultSource: defaultSourceConst(1.0) },

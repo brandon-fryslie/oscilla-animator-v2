@@ -35,6 +35,11 @@ registerBlock({
   description: 'Arranges elements in a grid pattern',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'disallowSignalMix',
+  },
   inputs: {
     elements: { label: 'Elements', type: signalTypeField('???', 'default') },
     rows: { label: 'Rows', type: signalType('int'), value: 10, defaultSource: defaultSourceConst(10), exposedAsPort: false },
@@ -92,6 +97,11 @@ registerBlock({
   description: 'Arranges elements in a linear pattern',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'disallowSignalMix',
+  },
   inputs: {
     elements: { label: 'Elements', type: signalTypeField('???', 'default') },
     spacing: { label: 'Spacing', type: signalType('float'), value: 0.1, defaultSource: defaultSourceConst(0.1), exposedAsPort: false },

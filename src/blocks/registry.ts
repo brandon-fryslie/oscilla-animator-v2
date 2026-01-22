@@ -79,6 +79,49 @@ export type BlockForm = 'primitive' | 'macro';
  */
 export type Capability = 'time' | 'identity' | 'state' | 'render' | 'io' | 'pure';
 
+// =============================================================================
+// Cardinality-Generic Block Metadata (Spec §8)
+// =============================================================================
+
+/**
+ * How this block affects cardinality.
+ *
+ * - 'preserve': Cardinality-generic (output cardinality == input cardinality)
+ * - 'transform': Explicitly changes cardinality (e.g., reduce, gather)
+ * - 'signalOnly': Only valid for Signal (one) inputs
+ * - 'fieldOnly': Only valid for Field (many) inputs
+ */
+export type CardinalityMode = 'preserve' | 'transform' | 'signalOnly' | 'fieldOnly';
+
+/**
+ * Whether block couples across lanes.
+ *
+ * - 'laneLocal': out[i] depends only on in[i] - eligible for cardinality-generic
+ * - 'laneCoupled': out[i] depends on in[j≠i] - NOT eligible (blur, boids, etc.)
+ */
+export type LaneCoupling = 'laneLocal' | 'laneCoupled';
+
+/**
+ * How Signal+Field mixing is handled.
+ *
+ * - 'allowZipSig': Signals may be consumed alongside fields via FieldExprZipSig
+ * - 'requireBroadcastExpr': Compiler must materialize FieldExprBroadcast explicitly
+ * - 'disallowSignalMix': Only all-field or all-signal instantiations allowed
+ */
+export type BroadcastPolicy = 'allowZipSig' | 'requireBroadcastExpr' | 'disallowSignalMix';
+
+/**
+ * Cardinality metadata for compile-time specialization.
+ * This metadata is compile-time only and does not exist at runtime.
+ *
+ * Spec Reference: .agent_planning/_future/0-CardinalityGeneric-Block-Type-Spec.md §8
+ */
+export interface BlockCardinalityMetadata {
+  readonly cardinalityMode: CardinalityMode;
+  readonly laneCoupling: LaneCoupling;
+  readonly broadcastPolicy: BroadcastPolicy;
+}
+
 /**
  * Input definition for a block.
  *
@@ -127,6 +170,15 @@ export interface BlockDef {
   // Compilation metadata
   readonly form: BlockForm;
   readonly capability: Capability;
+
+  /**
+   * Cardinality metadata for cardinality-generic blocks.
+   * Required for blocks that can work with both Signal and Field cardinalities.
+   * If omitted, block is treated as having fixed cardinality based on port types.
+   *
+   * Spec Reference: .agent_planning/_future/0-CardinalityGeneric-Block-Type-Spec.md §8
+   */
+  readonly cardinality?: BlockCardinalityMetadata;
 
   // Port definitions (UNIFIED DESIGN 2026-01-20)
   readonly inputs: Record<string, InputDef>;
@@ -229,3 +281,34 @@ export function getExposedInputs(def: BlockDef): Array<[string, InputDef]> {
 export function getExposedOutputs(def: BlockDef): Array<[string, OutputDef]> {
   return Object.entries(def.outputs).filter(([_, d]) => !d.hidden);
 }
+
+// =============================================================================
+// Cardinality Query Functions (for compiler passes)
+// =============================================================================
+
+/**
+ * Get cardinality metadata for a block type.
+ * Returns undefined if block has no cardinality metadata (fixed cardinality).
+ */
+export function getBlockCardinalityMetadata(blockType: string): BlockCardinalityMetadata | undefined {
+  const def = registry.get(blockType);
+  return def?.cardinality;
+}
+
+/**
+ * Check if a block is cardinality-generic (preserve mode + lane-local).
+ */
+export function isCardinalityGeneric(blockType: string): boolean {
+  const meta = getBlockCardinalityMetadata(blockType);
+  return meta?.cardinalityMode === 'preserve' && meta?.laneCoupling === 'laneLocal';
+}
+
+/**
+ * Default cardinality metadata for blocks that don't specify it.
+ * Assumes signalOnly for backwards compatibility with existing blocks.
+ */
+export const DEFAULT_CARDINALITY_METADATA: BlockCardinalityMetadata = {
+  cardinalityMode: 'signalOnly',
+  laneCoupling: 'laneLocal',
+  broadcastPolicy: 'disallowSignalMix',
+};
