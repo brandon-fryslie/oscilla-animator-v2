@@ -51,27 +51,43 @@ describe('Authoring Validators', () => {
     it('detects missing TimeRoot', () => {
       const patch = createTestPatch(10, { timeRoots: 0 });
       const diagnostics = runAuthoringValidators(patch, 1);
+      const timeRootDiagnostics = diagnostics.filter(d => d.code === 'E_TIME_ROOT_MISSING');
 
-      expect(diagnostics).toHaveLength(1);
-      expect(diagnostics[0].code).toBe('E_TIME_ROOT_MISSING');
-      expect(diagnostics[0].severity).toBe('error');
-      expect(diagnostics[0].primaryTarget.kind).toBe('graphSpan');
+      expect(timeRootDiagnostics).toHaveLength(1);
+      expect(timeRootDiagnostics[0].severity).toBe('error');
+      expect(timeRootDiagnostics[0].primaryTarget.kind).toBe('graphSpan');
     });
 
     it('detects multiple TimeRoots', () => {
       const patch = createTestPatch(10, { timeRoots: 2 });
       const diagnostics = runAuthoringValidators(patch, 1);
+      const timeRootDiagnostics = diagnostics.filter(d => d.code === 'E_TIME_ROOT_MULTIPLE');
 
-      expect(diagnostics).toHaveLength(1);
-      expect(diagnostics[0].code).toBe('E_TIME_ROOT_MULTIPLE');
-      expect(diagnostics[0].severity).toBe('error');
+      expect(timeRootDiagnostics).toHaveLength(1);
+      expect(timeRootDiagnostics[0].severity).toBe('error');
     });
 
-    it('produces no diagnostics for patch with exactly one TimeRoot', () => {
+    it('produces no timeroot errors for patch with exactly one TimeRoot', () => {
       const patch = createTestPatch(10, { timeRoots: 1 });
       const diagnostics = runAuthoringValidators(patch, 1);
+      const timeRootDiagnostics = diagnostics.filter(d => 
+        d.code === 'E_TIME_ROOT_MISSING' || d.code === 'E_TIME_ROOT_MULTIPLE'
+      );
 
-      expect(diagnostics).toHaveLength(0);
+      expect(timeRootDiagnostics).toHaveLength(0);
+    });
+  });
+
+  describe('Connectivity validation', () => {
+    it('detects disconnected blocks', () => {
+      const patch = createTestPatch(5, { timeRoots: 1 });
+      const diagnostics = runAuthoringValidators(patch, 1);
+      const disconnectedDiagnostics = diagnostics.filter(d => d.code === 'W_GRAPH_DISCONNECTED_BLOCK');
+
+      // All blocks are disconnected (no edges in test patch)
+      // 1 TimeRoot (warning because no outgoing) + 4 regular blocks (warning because no edges)
+      expect(disconnectedDiagnostics.length).toBeGreaterThan(0);
+      expect(disconnectedDiagnostics[0].severity).toBe('warn');
     });
   });
 
