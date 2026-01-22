@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from './registry';
-import { signalType, signalTypeField } from '../core/canonical-types';
+import { signalType, signalTypeField, unitPhase01 } from '../core/canonical-types';
 import { defaultSourceConst, defaultSourceTimeRoot } from '../types';
 import type { SigExprId, FieldExprId } from '../compiler/ir/Indices';
 
@@ -473,7 +473,7 @@ registerBlock({
   inputs: {
     id01: { label: 'ID (0..1)', type: signalTypeField('float', 'default') },
     // Phase input expects normalized time cycle [0, 1)
-    phase: { label: 'Phase', type: signalType('phase'), defaultSource: defaultSourceTimeRoot('phaseA') },
+    phase: { label: 'Phase', type: signalType('float', unitPhase01()), defaultSource: defaultSourceTimeRoot('phaseA') },
     base: { label: 'Base', type: signalType('float'), defaultSource: defaultSourceConst(0.5) },
     amplitude: { label: 'Amplitude', type: signalType('float'), defaultSource: defaultSourceConst(1.0) },
     spread: { label: 'Spread', type: signalType('float'), defaultSource: defaultSourceConst(1.0) },
@@ -493,7 +493,7 @@ registerBlock({
     }
 
     // Broadcast signal inputs to fields
-    const phaseSig = phase?.k === 'sig' ? phase.id : ctx.b.sigConst(0, signalType('phase'));
+    const phaseSig = phase?.k === 'sig' ? phase.id : ctx.b.sigConst(0, signalType('float', unitPhase01()));
     const baseSig = base?.k === 'sig' ? base.id : ctx.b.sigConst(0, signalType('float'));
     const ampSig = amplitude?.k === 'sig' ? amplitude.id : ctx.b.sigConst(1, signalType('float'));
     const spreadSig = spread?.k === 'sig' ? spread.id : ctx.b.sigConst(1, signalType('float'));
