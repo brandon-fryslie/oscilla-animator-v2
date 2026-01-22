@@ -12,7 +12,7 @@ import { Handle, Position, type NodeProps } from 'reactflow';
 import { observer } from 'mobx-react-lite';
 import type { OscillaNodeData, PortData } from './nodes';
 import type { DefaultSource, PortId, BlockId } from '../../types';
-import { rootStore } from '../../stores';
+import { useStores } from '../../stores';
 import { ParameterControl } from './ParameterControls';
 
 /**
@@ -76,9 +76,10 @@ function buildPortTooltip(port: PortData, isInput: boolean): string {
 function getPortHighlightStyle(
   blockId: BlockId,
   portId: PortId,
-  isConnected: boolean
+  isConnected: boolean,
+  portHighlight: ReturnType<typeof useStores>['portHighlight']
 ): React.CSSProperties | undefined {
-  const { hoveredPort, isPortCompatible } = rootStore.portHighlight;
+  const { hoveredPort, isPortCompatible } = portHighlight;
 
   // Don't highlight if no port is hovered
   if (!hoveredPort) return undefined;
@@ -108,15 +109,16 @@ function getPortHighlightStyle(
  * Handles are color-coded by payload type.
  */
 export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ data }) => {
-  const { selectedPort } = rootStore.selection;
-  const { setHoveredPort, clearHoveredPort } = rootStore.portHighlight;
+  const { selection, portHighlight } = useStores();
+  const { selectedPort } = selection;
+  const { setHoveredPort, clearHoveredPort } = portHighlight;
 
   const handlePortClick = useCallback(
     (portId: PortId, e: React.MouseEvent) => {
       e.stopPropagation();
-      rootStore.selection.selectPort(data.blockId, portId);
+      selection.selectPort(data.blockId, portId);
     },
-    [data.blockId]
+    [data.blockId, selection]
   );
 
   const handlePortContextMenu = useCallback(
@@ -162,7 +164,8 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
         const highlightStyle = getPortHighlightStyle(
           data.blockId,
           input.id as PortId,
-          input.isConnected
+          input.isConnected,
+          portHighlight
         );
 
         return (
@@ -277,7 +280,8 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
         const highlightStyle = getPortHighlightStyle(
           data.blockId,
           output.id as PortId,
-          output.isConnected
+          output.isConnected,
+          portHighlight
         );
 
         return (

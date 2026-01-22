@@ -9,6 +9,7 @@
  */
 
 import React, { useMemo } from 'react';
+import { observer } from 'mobx-react-lite';
 import {
   ContentCopy as DuplicateIcon,
   Delete as DeleteIcon,
@@ -16,7 +17,7 @@ import {
   CenterFocusStrong as CenterIcon,
 } from '@mui/icons-material';
 import type { BlockId } from '../../../types';
-import { rootStore } from '../../../stores';
+import { useStores } from '../../../stores';
 import { ContextMenu, type ContextMenuItem } from '../ContextMenu';
 
 export interface BlockContextMenuProps {
@@ -26,18 +27,20 @@ export interface BlockContextMenuProps {
   onCenter: (blockId: BlockId) => void;
 }
 
-export const BlockContextMenu: React.FC<BlockContextMenuProps> = ({
+export const BlockContextMenu: React.FC<BlockContextMenuProps> = observer(({
   blockId,
   anchorPosition,
   onClose,
   onCenter,
 }) => {
+  const { patch } = useStores();
+
   const items = useMemo<ContextMenuItem[]>(() => {
-    const block = rootStore.patch.blocks.get(blockId);
+    const block = patch.blocks.get(blockId);
     if (!block) return [];
 
     // Count connected edges
-    const connectedEdges = rootStore.patch.edges.filter(
+    const connectedEdges = patch.edges.filter(
       (edge) => edge.from.blockId === blockId || edge.to.blockId === blockId
     );
     const hasConnections = connectedEdges.length > 0;
@@ -48,7 +51,7 @@ export const BlockContextMenu: React.FC<BlockContextMenuProps> = ({
         icon: <DuplicateIcon fontSize="small" />,
         action: () => {
           // Create copy with same type and params
-          const newId = rootStore.patch.addBlock(block.type, { ...block.params }, {
+          const newId = patch.addBlock(block.type, { ...block.params }, {
             displayName: block.displayName ? `${block.displayName} (copy)` : null,
             domainId: block.domainId,
             role: block.role,
@@ -73,7 +76,7 @@ export const BlockContextMenu: React.FC<BlockContextMenuProps> = ({
         action: () => {
           // Remove all edges connected to this block
           for (const edge of connectedEdges) {
-            rootStore.patch.removeEdge(edge.id);
+            patch.removeEdge(edge.id);
           }
         },
         disabled: !hasConnections,
@@ -82,12 +85,12 @@ export const BlockContextMenu: React.FC<BlockContextMenuProps> = ({
         label: 'Delete Block',
         icon: <DeleteIcon fontSize="small" />,
         action: () => {
-          rootStore.patch.removeBlock(blockId);
+          patch.removeBlock(blockId);
         },
         danger: true,
       },
     ];
-  }, [blockId, onCenter]);
+  }, [blockId, onCenter, patch]);
 
   return <ContextMenu items={items} anchorPosition={anchorPosition} onClose={onClose} />;
-};
+});

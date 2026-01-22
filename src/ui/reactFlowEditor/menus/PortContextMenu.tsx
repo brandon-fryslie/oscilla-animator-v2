@@ -10,12 +10,13 @@
  */
 
 import React, { useMemo } from 'react';
+import { observer } from 'mobx-react-lite';
 import {
   LinkOff as DisconnectIcon,
   RestartAlt as ResetIcon,
 } from '@mui/icons-material';
 import type { BlockId, PortId } from '../../../types';
-import { rootStore } from '../../../stores';
+import { useStores } from '../../../stores';
 import { ContextMenu, type ContextMenuItem } from '../ContextMenu';
 
 export interface PortContextMenuProps {
@@ -26,20 +27,22 @@ export interface PortContextMenuProps {
   onClose: () => void;
 }
 
-export const PortContextMenu: React.FC<PortContextMenuProps> = ({
+export const PortContextMenu: React.FC<PortContextMenuProps> = observer(({
   blockId,
   portId,
   isInput,
   anchorPosition,
   onClose,
 }) => {
+  const { patch } = useStores();
+
   const items = useMemo<ContextMenuItem[]>(() => {
-    const block = rootStore.patch.blocks.get(blockId);
+    const block = patch.blocks.get(blockId);
     if (!block) return [];
 
     if (isInput) {
       // Input port: Disconnect, Reset to Default
-      const connectedEdge = rootStore.patch.edges.find(
+      const connectedEdge = patch.edges.find(
         (edge) => edge.to.blockId === blockId && edge.to.slotId === portId
       );
       const hasConnection = !!connectedEdge;
@@ -54,7 +57,7 @@ export const PortContextMenu: React.FC<PortContextMenuProps> = ({
           icon: <DisconnectIcon fontSize="small" />,
           action: () => {
             if (connectedEdge) {
-              rootStore.patch.removeEdge(connectedEdge.id);
+              patch.removeEdge(connectedEdge.id);
             }
           },
           disabled: !hasConnection,
@@ -65,7 +68,7 @@ export const PortContextMenu: React.FC<PortContextMenuProps> = ({
           action: () => {
             // Remove connection if any
             if (connectedEdge) {
-              rootStore.patch.removeEdge(connectedEdge.id);
+              patch.removeEdge(connectedEdge.id);
             }
             // Clear any per-instance default source override
             // (This would require a new PatchStore method - for now just disconnect)
@@ -76,7 +79,7 @@ export const PortContextMenu: React.FC<PortContextMenuProps> = ({
       ];
     } else {
       // Output port: Disconnect All
-      const connectedEdges = rootStore.patch.edges.filter(
+      const connectedEdges = patch.edges.filter(
         (edge) => edge.from.blockId === blockId && edge.from.slotId === portId
       );
       const hasConnections = connectedEdges.length > 0;
@@ -87,14 +90,14 @@ export const PortContextMenu: React.FC<PortContextMenuProps> = ({
           icon: <DisconnectIcon fontSize="small" />,
           action: () => {
             for (const edge of connectedEdges) {
-              rootStore.patch.removeEdge(edge.id);
+              patch.removeEdge(edge.id);
             }
           },
           disabled: !hasConnections,
         },
       ];
     }
-  }, [blockId, portId, isInput]);
+  }, [blockId, portId, isInput, patch]);
 
   return <ContextMenu items={items} anchorPosition={anchorPosition} onClose={onClose} />;
-};
+});
