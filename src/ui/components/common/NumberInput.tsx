@@ -1,7 +1,7 @@
 /**
  * NumberInput Component
  *
- * MUI TextField configured for numeric input with validation and clamping.
+ * Mantine TextInput configured for numeric input with validation and clamping.
  *
  * Features:
  * - Blur/Enter key commit pattern
@@ -9,12 +9,11 @@
  * - Invalid input handling (revert to previous value)
  * - Optional unit label suffix
  * - Compact size for panel layouts
- *
- * Created for mui-controls-migration sprint
+ * - Beautiful dark theme styling
  */
 
 import React, { useState, useCallback } from 'react';
-import { TextField, Typography } from '@mui/material';
+import { TextInput, rem, Text } from '@mantine/core';
 
 export interface NumberInputProps {
   /** Current value */
@@ -33,8 +32,8 @@ export interface NumberInputProps {
   helperText?: string;
   /** Disable control */
   disabled?: boolean;
-  /** Size variant (default: 'small') */
-  size?: 'small' | 'medium';
+  /** Size variant (default: 'sm') */
+  size?: 'xs' | 'sm' | 'md';
   /** Unit label (e.g., "ms", "px") */
   unit?: string;
   /** Placeholder text */
@@ -53,7 +52,7 @@ export function NumberInput({
   label,
   helperText,
   disabled = false,
-  size = 'small',
+  size = 'sm',
   unit,
   placeholder,
 }: NumberInputProps): React.ReactElement {
@@ -95,31 +94,52 @@ export function NumberInput({
   );
 
   return (
-    <TextField
+    <TextInput
       value={localValue}
       onChange={handleInputChange}
       onBlur={handleBlur}
       onKeyDown={handleKeyDown}
       disabled={disabled}
       label={label}
-      helperText={helperText}
+      description={helperText}
       placeholder={placeholder}
       size={size}
-      variant="outlined"
       type="number"
-      inputProps={{
-        step,
-        min,
-        max,
-      }}
-      InputProps={{
-        endAdornment: unit ? (
-          <Typography variant="caption" style={{ marginLeft: '0.25rem', opacity: 0.7 }}>
+      inputMode="decimal"
+      rightSection={
+        unit ? (
+          <Text size="xs" c="dimmed" style={{ marginRight: rem(8) }}>
             {unit}
-          </Typography>
-        ) : undefined,
+          </Text>
+        ) : undefined
+      }
+      styles={{
+        input: {
+          background: 'rgba(0, 0, 0, 0.2)',
+          border: '1px solid rgba(139, 92, 246, 0.2)',
+          '&:focus': {
+            borderColor: 'var(--mantine-color-violet-5)',
+          },
+          // Hide native number spinners
+          '&::-webkit-outer-spin-button, &::-webkit-inner-spin-button': {
+            WebkitAppearance: 'none',
+            margin: 0,
+          },
+          MozAppearance: 'textfield',
+        },
+        label: {
+          marginBottom: rem(4),
+          fontSize: rem(12),
+          fontWeight: 500,
+          color: 'var(--mantine-color-gray-4)',
+        },
+        description: {
+          marginTop: rem(4),
+          fontSize: rem(11),
+          fontStyle: 'italic',
+          opacity: 0.7,
+        },
       }}
-      fullWidth
     />
   );
 }

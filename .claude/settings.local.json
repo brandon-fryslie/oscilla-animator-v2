@@ -6,7 +6,8 @@
       "Bash(lsof:*)",
       "Skill(do:it)",
       "Skill(do:it-skill)",
-      "Skill(do:plan-skill)"
+      "Skill(do:plan-skill)",
+      "Skill(do:plan)"
     ]
   },
   "enableAllProjectMcpServers": true,
@@ -15,5 +16,6 @@
   ],
   "disabledMcpjsonServers": [
     "cherry-chrome"
-  ]
+  ],
+  "spinnerTipsEnabled": false
 }

@@ -54,8 +54,14 @@ class DebugService {
   /** Edge-to-slot-and-type mapping (set by compiler after compilation) */
   private edgeToSlotMap = new Map<string, EdgeMetadata>();
 
+  /** Port-to-slot-and-type mapping (for unconnected output queries) */
+  private portToSlotMap = new Map<string, EdgeMetadata>();
+
   /** Slot values (updated by runtime via tap) */
   private slotValues = new Map<ValueSlot, number>();
+
+  /** Whether runtime has started (at least one value written) */
+  private runtimeStarted = false;
 
   /**
    * Set the edge-to-slot mapping.
@@ -68,14 +74,45 @@ class DebugService {
   }
 
   /**
-   * Update a slot value.
-   * Called by runtime tap after each slot write.
+   * Set the port-to-slot mapping.
+   * Called by compiler after successful compilation.
+   * Enables querying unconnected output port values.
+   *
+   * @param map - Map from "blockId:portName" to slot metadata
+   */
+  setPortToSlotMap(map: Map<string, EdgeMetadata>): void {
+    this.portToSlotMap = map;
+  }
+
+  /**
+   * Update a scalar slot value.
+   * Called by runtime tap after each signal slot write.
    *
    * @param slotId - Slot ID
    * @param value - Numeric value
    */
   updateSlotValue(slotId: ValueSlot, value: number): void {
+    this.runtimeStarted = true;
     this.slotValues.set(slotId, value);
+  }
+
+  /**
+   * Update a field (buffer) slot value.
+   * Called by runtime tap after each field materialization.
+   *
+   * For debug display, we store the first element as a representative value.
+   * In the future, we could store stats (min, max, mean) or the full buffer.
+   *
+   * @param slotId - Slot ID
+   * @param buffer - Materialized buffer
+   */
+  updateFieldValue(slotId: ValueSlot, buffer: ArrayBufferView): void {
+    this.runtimeStarted = true;
+    // Store first element as representative value for display
+    // This works for Float32Array, Int32Array, etc.
+    const typedArray = buffer as Float32Array;
+    const firstValue = typedArray.length > 0 ? typedArray[0] : 0;
+    this.slotValues.set(slotId, firstValue);
   }
 
   /**
@@ -83,17 +120,70 @@ class DebugService {
    * Called by UI (useDebugProbe hook).
    *
    * @param edgeId - ReactFlow edge ID
-   * @returns Value and type, or undefined if edge not mapped
+   * @returns Value and type
+   * @throws If edge not in mapping (compiler bug) or runtime hasn't produced value yet
    */
   getEdgeValue(edgeId: string): EdgeValueResult | undefined {
     const meta = this.edgeToSlotMap.get(edgeId);
     if (!meta) {
+      // Edge should be in mapping if it exists in the patch and was compiled
+      // This is a compiler/mapping bug, not a normal "no data" case
+      throw new Error(
+        `[DebugService.getEdgeValue] Edge '${edgeId}' not found in edge-to-slot mapping. ` +
+        `This indicates the compiler did not register this edge's source output in debugIndex.`
+      );
+    }
+
+    const value = this.slotValues.get(meta.slotId);
+    if (value === undefined) {
+      // Before runtime starts, no values exist - this is expected
+      if (!this.runtimeStarted) {
+        return undefined;
+      }
+      // After runtime starts, every mapped slot should be written every frame
+      // If not, it's a scheduling bug
+      throw new Error(
+        `[DebugService.getEdgeValue] Slot ${meta.slotId} for edge '${edgeId}' has no value. ` +
+        `Runtime has started but this slot was never written to - this is a scheduling bug.`
+      );
+    }
+
+    return {
+      value,
+      slotId: meta.slotId,
+      type: meta.type,
+    };
+  }
+
+  /**
+   * Query port value by block ID and port name.
+   * Useful for querying unconnected output ports that have no edge.
+   *
+   * @param blockId - Block ID
+   * @param portName - Port name (output port)
+   * @returns Value and type, or undefined if port not in mapping (input ports, uncompiled blocks)
+   * @throws If runtime started but slot has no value (bug)
+   */
+  getPortValue(blockId: string, portName: string): EdgeValueResult | undefined {
+    const key = `${blockId}:${portName}`;
+    const meta = this.portToSlotMap.get(key);
+    if (!meta) {
+      // Port not in mapping is expected for input ports or blocks that weren't compiled
+      // This is different from edges - we don't know if this port SHOULD be mapped
       return undefined;
     }
 
     const value = this.slotValues.get(meta.slotId);
     if (value === undefined) {
-      return undefined;
+      // Before runtime starts, no values exist - this is expected
+      if (!this.runtimeStarted) {
+        return undefined;
+      }
+      // After runtime starts, every mapped slot should be written every frame
+      throw new Error(
+        `[DebugService.getPortValue] Slot ${meta.slotId} for port '${key}' has no value. ` +
+        `Runtime has started but this slot was never written to - this is a scheduling bug.`
+      );
     }
 
     return {
@@ -109,7 +199,9 @@ class DebugService {
    */
   clear(): void {
     this.edgeToSlotMap.clear();
+    this.portToSlotMap.clear();
     this.slotValues.clear();
+    this.runtimeStarted = false;
   }
 }
 

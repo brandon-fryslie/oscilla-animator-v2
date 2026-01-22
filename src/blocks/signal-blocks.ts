@@ -60,15 +60,15 @@ registerBlock({
       exposedAsPort: false,
     },
     payloadType: {
-      type: signalType('???'),
+      type: signalType('float'),  // Metadata storage - not a wirable port
       value: undefined,
       hidden: true,
       exposedAsPort: false,
     },
   },
   outputs: {
-    // Output type is polymorphic - resolved by normalizer from target port
-    out: { label: 'Output', type: signalType('???') },
+    // Default to 'float' - actual type resolved via payloadType config
+    out: { label: 'Output', type: signalType('float') },
   },
   lower: ({ ctx, config }) => {
     const payloadType = config?.payloadType as PayloadType | undefined;
@@ -152,12 +152,6 @@ registerBlock({
         const packFn = ctx.b.kernel('packColor');
         sigId = ctx.b.sigZip([rSig, gSig, bSig, aSig], packFn, signalType('color'));
         break;
-      }
-      case '???': {
-        throw new Error(
-          `Cannot lower Const block with unresolved type '???'. ` +
-          `Type must be resolved by normalizer before lowering.`
-        );
       }
       default: {
         throw new Error(`Unsupported payload type for Const: ${payloadType}`);

@@ -2,13 +2,20 @@
  * Toolbar Component
  *
  * Top toolbar with app title, performance stats, and export functionality.
+ * Uses Mantine for a gorgeous, modern look.
  */
 
 import React, { useState } from 'react';
-import { Button } from '@mui/material';
-import { ContentCopy } from '@mui/icons-material';
+import {
+  Group,
+  Button,
+  Text,
+  Badge,
+  Box,
+  Tooltip,
+  rem,
+} from '@mantine/core';
 import { observer } from 'mobx-react-lite';
-import { colors } from '../../theme';
 import { useExportPatch } from '../../hooks/useExportPatch';
 import { Toast } from '../common/Toast';
 
@@ -39,122 +46,151 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --' }) 
 
   return (
     <>
-      <header
+      <Box
+        component="header"
         style={{
           flexShrink: 0,
-          height: '48px',
-          background: '#16213e',
-          borderBottom: '1px solid #0f3460',
-          display: 'flex',
-          alignItems: 'center',
-          padding: '0 1rem',
-          gap: '1rem',
+          height: rem(52),
+          background: 'linear-gradient(180deg, rgba(30, 30, 46, 0.98) 0%, rgba(24, 24, 37, 0.98) 100%)',
+          borderBottom: '1px solid rgba(139, 92, 246, 0.15)',
+          backdropFilter: 'blur(8px)',
         }}
       >
-        <h1
-          style={{
-            fontSize: '1rem',
-            fontWeight: '500',
-            color: colors.primary,
-            margin: 0,
-          }}
-        >
-          Oscilla v2
-        </h1>
+        <Group h="100%" px="md" justify="space-between">
+          {/* Logo and Title */}
+          <Group gap="sm">
+            <Box
+              style={{
+                width: rem(32),
+                height: rem(32),
+                borderRadius: rem(8),
+                background: 'linear-gradient(135deg, #8B5CF6 0%, #EC4899 50%, #F59E0B 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 2px 8px rgba(139, 92, 246, 0.3)',
+              }}
+            >
+              <Text fw={700} size="sm" c="white">O</Text>
+            </Box>
+            <Text
+              fw={600}
+              size="lg"
+              variant="gradient"
+              gradient={{ from: 'violet', to: 'grape', deg: 45 }}
+            >
+              Oscilla v2
+            </Text>
+            <Badge
+              size="xs"
+              variant="gradient"
+              gradient={{ from: 'violet', to: 'grape', deg: 90 }}
+              style={{ textTransform: 'uppercase' }}
+            >
+              Alpha
+            </Badge>
+          </Group>
 
-        <div style={{ flex: 1 }} />
+          {/* Stats and Actions */}
+          <Group gap="md">
+            {/* Performance Stats */}
+            <Badge
+              variant="outline"
+              color="dark"
+              size="lg"
+              radius="md"
+              styles={{
+                root: {
+                  fontFamily: 'var(--mantine-font-family-monospace)',
+                  fontWeight: 500,
+                  fontSize: rem(11),
+                  padding: `${rem(4)} ${rem(12)}`,
+                  borderColor: 'rgba(139, 92, 246, 0.3)',
+                  backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                },
+              }}
+            >
+              {stats}
+            </Badge>
 
-        <div
-          id="stats"
-          style={{
-            fontFamily: "'SF Mono', Monaco, Consolas, monospace",
-            fontSize: '0.75rem',
-            color: '#888',
-            padding: '4px 8px',
-            background: 'rgba(0, 0, 0, 0.2)',
-            borderRadius: '4px',
-          }}
-        >
-          {stats}
-        </div>
+            {/* Action Buttons */}
+            <Group gap="xs">
+              <Tooltip label="Create new patch" position="bottom" withArrow>
+                <Button
+                  variant="subtle"
+                  color="gray"
+                  size="xs"
+                  styles={{
+                    root: {
+                      border: '1px solid rgba(139, 92, 246, 0.2)',
+                      '&:hover': {
+                        backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                        borderColor: 'rgba(139, 92, 246, 0.4)',
+                      },
+                    },
+                  }}
+                >
+                  New
+                </Button>
+              </Tooltip>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <Button
-            variant="text"
-            size="small"
-            sx={{
-              color: '#888',
-              fontSize: '0.75rem',
-              textTransform: 'none',
-              minWidth: 'auto',
-              padding: '6px 12px',
-              border: '1px solid #0f3460',
-              '&:hover': {
-                border: '1px solid #0f3460',
-                background: 'rgba(255, 255, 255, 0.05)',
-              },
-            }}
-          >
-            New
-          </Button>
-          <Button
-            variant="text"
-            size="small"
-            sx={{
-              color: '#888',
-              fontSize: '0.75rem',
-              textTransform: 'none',
-              minWidth: 'auto',
-              padding: '6px 12px',
-              border: '1px solid #0f3460',
-              '&:hover': {
-                border: '1px solid #0f3460',
-                background: 'rgba(255, 255, 255, 0.05)',
-              },
-            }}
-          >
-            Open
-          </Button>
-          <Button
-            variant="text"
-            size="small"
-            sx={{
-              color: '#888',
-              fontSize: '0.75rem',
-              textTransform: 'none',
-              minWidth: 'auto',
-              padding: '6px 12px',
-              border: '1px solid #0f3460',
-              '&:hover': {
-                border: '1px solid #0f3460',
-                background: 'rgba(255, 255, 255, 0.05)',
-              },
-            }}
-          >
-            Save
-          </Button>
-          <Button
-            variant="text"
-            size="small"
-            onClick={handleExport}
-            startIcon={<ContentCopy sx={{ fontSize: '0.75rem' }} />}
-            sx={{
-              color: '#888',
-              fontSize: '0.75rem',
-              textTransform: 'none',
-              minWidth: 'auto',
-              padding: '6px 12px',
-              border: '1px solid #0f3460',
-              '&:hover': {
-                border: '1px solid #0f3460',
-                background: 'rgba(255, 255, 255, 0.05)',
-              },
-            }}
-          >
-            Export
-          </Button>
-        </div>
-      </header>
+              <Tooltip label="Open existing patch" position="bottom" withArrow>
+                <Button
+                  variant="subtle"
+                  color="gray"
+                  size="xs"
+                  styles={{
+                    root: {
+                      border: '1px solid rgba(139, 92, 246, 0.2)',
+                      '&:hover': {
+                        backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                        borderColor: 'rgba(139, 92, 246, 0.4)',
+                      },
+                    },
+                  }}
+                >
+                  Open
+                </Button>
+              </Tooltip>
+
+              <Tooltip label="Save current patch" position="bottom" withArrow>
+                <Button
+                  variant="subtle"
+                  color="gray"
+                  size="xs"
+                  styles={{
+                    root: {
+                      border: '1px solid rgba(139, 92, 246, 0.2)',
+                      '&:hover': {
+                        backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                        borderColor: 'rgba(139, 92, 246, 0.4)',
+                      },
+                    },
+                  }}
+                >
+                  Save
+                </Button>
+              </Tooltip>
+
+              <Tooltip label="Export to clipboard (Cmd+E)" position="bottom" withArrow>
+                <Button
+                  variant="gradient"
+                  gradient={{ from: 'violet', to: 'grape', deg: 90 }}
+                  size="xs"
+                  onClick={handleExport}
+                  styles={{
+                    root: {
+                      boxShadow: '0 2px 8px rgba(139, 92, 246, 0.25)',
+                    },
+                  }}
+                >
+                  Export
+                </Button>
+              </Tooltip>
+            </Group>
+          </Group>
+        </Group>
+      </Box>
 
       <Toast
         open={toastOpen}

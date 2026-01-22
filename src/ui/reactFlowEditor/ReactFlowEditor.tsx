@@ -43,7 +43,6 @@ import { BlockContextMenu } from './menus/BlockContextMenu';
 import { EdgeContextMenu } from './menus/EdgeContextMenu';
 import { PortContextMenu } from './menus/PortContextMenu';
 import { SimpleDebugPanel } from '../components/SimpleDebugPanel';
-import { useDebugProbe } from '../hooks/useDebugProbe';
 import './ReactFlowEditor.css';
 
 export interface ReactFlowEditorHandle {
@@ -127,18 +126,13 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = observer(({
   wrapperRef,
 }) => {
   // Get store from context
-  const { patch: patchStore, selection, diagnostics } = useStores();
+  const { patch: patchStore, selection, diagnostics, debug } = useStores();
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [isLayouting, setIsLayouting] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const { fitView, setCenter } = useReactFlow();
-
-  // Debug probe state (Sprint 1: Debug Probe)
-  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
-  const [debugPanelEnabled, setDebugPanelEnabled] = useState(true);
-  const edgeValue = useDebugProbe(debugPanelEnabled ? hoveredEdgeId : null);
 
   // Store refs for handle access to latest state
   const nodesRef = useRef(nodes);
@@ -233,19 +227,19 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = observer(({
     []
   );
 
-  // Edge hover handlers (Sprint 1: Debug Probe)
+  // Edge hover handlers (Sprint 1: Debug Probe) - now using DebugStore
   const handleEdgeMouseEnter = useCallback<EdgeMouseHandler>(
     (_event, edge) => {
-      setHoveredEdgeId(edge.id);
+      debug.setHoveredEdge(edge.id);
     },
-    []
+    [debug]
   );
 
   const handleEdgeMouseLeave = useCallback<EdgeMouseHandler>(
     () => {
-      setHoveredEdgeId(null);
+      debug.setHoveredEdge(null);
     },
-    []
+    [debug]
   );
 
   // Expose port context menu handler via global store for OscillaNode access
@@ -462,13 +456,13 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = observer(({
 
   // Build edge label for debug panel
   const edgeLabel = useMemo(() => {
-    if (!hoveredEdgeId) return null;
+    if (!debug.hoveredEdgeId) return null;
 
-    const edge = edges.find((e) => e.id === hoveredEdgeId);
+    const edge = edges.find((e) => e.id === debug.hoveredEdgeId);
     if (!edge) return null;
 
     return `${edge.source}:${edge.sourceHandle} → ${edge.target}:${edge.targetHandle}`;
-  }, [hoveredEdgeId, edges]);
+  }, [debug.hoveredEdgeId, edges]);
 
   return (
     <>
@@ -521,29 +515,29 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = observer(({
           <Button
             variant="outlined"
             size="small"
-            onClick={() => setDebugPanelEnabled(!debugPanelEnabled)}
+            onClick={() => debug.toggleEnabled()}
             sx={{
               textTransform: 'none',
               fontSize: '0.75rem',
-              borderColor: debugPanelEnabled ? '#4ecdc4' : '#0f3460',
-              color: debugPanelEnabled ? '#4ecdc4' : '#666',
-              background: debugPanelEnabled ? 'rgba(78, 205, 196, 0.1)' : 'transparent',
+              borderColor: debug.enabled ? '#4ecdc4' : '#0f3460',
+              color: debug.enabled ? '#4ecdc4' : '#666',
+              background: debug.enabled ? 'rgba(78, 205, 196, 0.1)' : 'transparent',
               '&:hover': {
                 borderColor: '#4ecdc4',
                 background: 'rgba(78, 205, 196, 0.1)',
               },
             }}
           >
-            {debugPanelEnabled ? 'Debug: ON' : 'Debug: OFF'}
+            {debug.enabled ? 'Debug: ON' : 'Debug: OFF'}
           </Button>
         </Panel>
       </ReactFlow>
 
       {/* Debug Panel (Sprint 1: Debug Probe) */}
       <SimpleDebugPanel
-        edgeValue={edgeValue}
+        edgeValue={debug.edgeValue}
         edgeLabel={edgeLabel}
-        enabled={debugPanelEnabled}
+        enabled={debug.enabled}
       />
 
       {/* Context Menus */}

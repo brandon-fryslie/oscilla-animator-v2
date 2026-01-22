@@ -1,18 +1,16 @@
 /**
  * CheckboxInput Component
  *
- * MUI Checkbox with FormControlLabel for boolean inputs.
+ * Mantine Checkbox for boolean inputs.
  *
  * Features:
  * - Integrated label
- * - Theme primary color
+ * - Beautiful violet primary color
  * - Compact layout for panels
- *
- * Created for mui-controls-migration sprint
  */
 
 import React from 'react';
-import { Checkbox, FormControlLabel } from '@mui/material';
+import { Checkbox, rem } from '@mantine/core';
 
 export interface CheckboxInputProps {
   /** Current checked state */
@@ -38,27 +36,28 @@ export function CheckboxInput({
     onChange(event.target.checked);
   };
 
-  const checkbox = (
+  return (
     <Checkbox
       checked={checked}
       onChange={handleChange}
       disabled={disabled}
-      size="small"
-      color="primary"
-    />
-  );
-
-  // If no label, return checkbox alone
-  if (!label) {
-    return checkbox;
-  }
-
-  // Otherwise wrap in FormControlLabel
-  return (
-    <FormControlLabel
-      control={checkbox}
       label={label}
-      disabled={disabled}
+      size="sm"
+      color="violet"
+      styles={{
+        input: {
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          '&:checked': {
+            backgroundColor: 'var(--mantine-color-violet-6)',
+            borderColor: 'var(--mantine-color-violet-6)',
+          },
+        },
+        label: {
+          fontSize: rem(13),
+          color: 'var(--mantine-color-gray-3)',
+          cursor: disabled ? 'not-allowed' : 'pointer',
+        },
+      }}
     />
   );
 }

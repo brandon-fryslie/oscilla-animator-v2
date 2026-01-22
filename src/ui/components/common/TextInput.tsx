@@ -1,18 +1,17 @@
 /**
  * TextInput Component
  *
- * MUI TextField configured for text input with blur/commit pattern.
+ * Mantine TextInput configured with blur/commit pattern.
  *
  * Features:
  * - Blur/Enter key commit pattern
  * - Local state management to avoid cursor jumps during typing
  * - Compact size for panel layouts
- *
- * Created for mui-controls-migration sprint
+ * - Beautiful dark theme styling
  */
 
 import React, { useState, useCallback } from 'react';
-import { TextField } from '@mui/material';
+import { TextInput as MantineTextInput, rem } from '@mantine/core';
 
 export interface TextInputProps {
   /** Current value */
@@ -27,8 +26,8 @@ export interface TextInputProps {
   helperText?: string;
   /** Disable control */
   disabled?: boolean;
-  /** Size variant (default: 'small') */
-  size?: 'small' | 'medium';
+  /** Size variant (default: 'sm') */
+  size?: 'xs' | 'sm' | 'md';
 }
 
 /**
@@ -41,7 +40,7 @@ export function TextInput({
   placeholder,
   helperText,
   disabled = false,
-  size = 'small',
+  size = 'sm',
 }: TextInputProps): React.ReactElement {
   // Local state to allow typing without immediate commits
   const [localValue, setLocalValue] = useState<string>(value);
@@ -74,7 +73,7 @@ export function TextInput({
   );
 
   return (
-    <TextField
+    <MantineTextInput
       value={localValue}
       onChange={handleInputChange}
       onBlur={handleBlur}
@@ -82,10 +81,29 @@ export function TextInput({
       disabled={disabled}
       label={label}
       placeholder={placeholder}
-      helperText={helperText}
+      description={helperText}
       size={size}
-      variant="outlined"
-      fullWidth
+      styles={{
+        input: {
+          background: 'rgba(0, 0, 0, 0.2)',
+          border: '1px solid rgba(139, 92, 246, 0.2)',
+          '&:focus': {
+            borderColor: 'var(--mantine-color-violet-5)',
+          },
+        },
+        label: {
+          marginBottom: rem(4),
+          fontSize: rem(12),
+          fontWeight: 500,
+          color: 'var(--mantine-color-gray-4)',
+        },
+        description: {
+          marginTop: rem(4),
+          fontSize: rem(11),
+          fontStyle: 'italic',
+          opacity: 0.7,
+        },
+      }}
     />
   );
 }

@@ -66,13 +66,10 @@ function isTypeCompatible(from: SignalType, to: SignalType): boolean {
   const toCard = getAxisValue(to.extent.cardinality, DEFAULTS_V0.cardinality);
   const toTemp = getAxisValue(to.extent.temporality, DEFAULTS_V0.temporality);
 
-  // Payload must match exactly, except '???' which is polymorphic
-  // '???' unifies with any concrete type (resolved by normalizer at runtime)
+  // Payload must match exactly
+  // Payload-generic blocks use BlockPayloadMetadata for validation, not type unification
   if (from.payload !== to.payload) {
-    // '???' is compatible with anything - it will be resolved
-    if (from.payload !== '???' && to.payload !== '???') {
-      return false;
-    }
+    return false;
   }
 
   // Temporality must match exactly

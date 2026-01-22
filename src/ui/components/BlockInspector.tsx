@@ -59,17 +59,12 @@ function getDerivedDefaultSourceId(blockId: BlockId, portId: string): BlockId {
 
 /**
  * Check if two signal types are compatible for wiring.
- * - '???' (polymorphic) is compatible with anything
- * - Otherwise, payload types must match
+ * Payload types must match. Payload-generic blocks use BlockPayloadMetadata.
  */
 function areTypesCompatible(sourceType: SignalType | undefined, targetType: SignalType | undefined): boolean {
   // Handle undefined types
   if (!sourceType || !targetType) return false;
-  // Polymorphic types are compatible with anything
-  if (sourceType.payload === '???' || targetType.payload === '???') {
-    return true;
-  }
-  // Otherwise payload types must match
+  // Payload types must match
   return sourceType.payload === targetType.payload;
 }
 
@@ -1425,7 +1420,7 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
           value={currentBlockType}
           onChange={handleBlockTypeChange}
           options={validBlockTypes.map(bt => ({ value: bt.blockType, label: bt.label || "" }))}
-          size="small"
+          size="sm"
         />
       </div>
 
@@ -1453,7 +1448,7 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
             value={currentOutputPort}
             onChange={handleOutputPortChange}
             options={timeRootOutputs.map(out => ({ value: out, label: out || "" }))}
-            size="small"
+            size="sm"
           />
         </div>
       )}
@@ -1471,7 +1466,7 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
                 value={currentOutputPort}
                 onChange={handleOutputPortChange}
                 options={Object.entries(currentBlockDef.outputs).map(([outId, out]) => ({ value: outId, label: out.label || "" }))}
-                size="small"
+                size="sm"
               />
             </div>
           )}
@@ -1556,7 +1551,7 @@ const DefaultSourceParamField = observer(function DefaultSourceParamField({
           value={value}
           onChange={onChange}
           label={paramLabel}
-          size="small"
+          size="sm"
         />
       </div>
     );
@@ -1569,7 +1564,7 @@ const DefaultSourceParamField = observer(function DefaultSourceParamField({
           value={value}
           onChange={onChange}
           label={paramLabel}
-          size="small"
+          size="sm"
         />
       </div>
     );
@@ -1582,7 +1577,7 @@ const DefaultSourceParamField = observer(function DefaultSourceParamField({
         value={String(value ?? '')}
         onChange={onChange}
         label={paramLabel}
-        size="small"
+        size="sm"
       />
     </div>
   );
@@ -1791,7 +1786,7 @@ const ParamField = observer(function ParamField({ blockId, paramKey, value, type
           value={value}
           onChange={handleChange}
           label={paramKey}
-          size="small"
+          size="sm"
         />
       </div>
     );
@@ -1804,7 +1799,7 @@ const ParamField = observer(function ParamField({ blockId, paramKey, value, type
           value={value}
           onChange={handleChange}
           label={paramKey}
-          size="small"
+          size="sm"
         />
       </div>
     );
@@ -1838,7 +1833,7 @@ const ParamField = observer(function ParamField({ blockId, paramKey, value, type
         value={String(value ?? '')}
         onChange={handleChange}
         label={paramKey}
-        size="small"
+        size="sm"
       />
     </div>
   );
@@ -1896,7 +1891,7 @@ function HintedControl({ hint, value, onChange }: HintedControlProps) {
           value={String(value)}
           onChange={onChange}
           options={options}
-          size="small"
+          size="sm"
         />
       );
     }
@@ -1919,7 +1914,7 @@ function HintedControl({ hint, value, onChange }: HintedControlProps) {
         <MuiTextInput
           value={String(value ?? '')}
           onChange={onChange}
-          size="small"
+          size="sm"
         />
       );
     case 'xy': {
@@ -1950,7 +1945,7 @@ function HintedControl({ hint, value, onChange }: HintedControlProps) {
         <MuiTextInput
           value={String(value ?? '')}
           onChange={onChange}
-          size="small"
+          size="sm"
         />
       );
   }

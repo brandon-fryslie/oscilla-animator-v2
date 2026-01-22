@@ -6,7 +6,7 @@
  *
  * Architecture:
  * - Fixed inputs (in0-in4): Simplifies v1, avoids dynamic port complexity
- * - Polymorphic types ('???'): Actual types inferred during lowering
+ * - Payload-Generic inputs: Accept any concrete payload type
  * - Expression config parameter: Text string, not wirable
  * - Compilation: Delegated to Expression DSL (src/expr/)
  *
@@ -16,14 +16,14 @@
  * - ISOLATION: Expression DSL stays in src/expr/, minimal integration surface
  */
 
-import { registerBlock } from './registry';
-import { signalType } from '../core/canonical-types';
+import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
+import { signalType, type PayloadType } from '../core/canonical-types';
 import { compileExpression } from '../expr';
 import type { SigExprId, SigExpr } from '../compiler/ir/types';
 import type { SignalType } from '../core/canonical-types';
 
 // =============================================================================
-// Expression
+// Expression (Payload-Generic)
 // =============================================================================
 
 registerBlock({
@@ -38,6 +38,19 @@ registerBlock({
     laneCoupling: 'laneLocal',
     broadcastPolicy: 'allowZipSig',
   },
+  payload: {
+    allowedPayloads: {
+      in0: ALL_CONCRETE_PAYLOADS,
+      in1: ALL_CONCRETE_PAYLOADS,
+      in2: ALL_CONCRETE_PAYLOADS,
+      in3: ALL_CONCRETE_PAYLOADS,
+      in4: ALL_CONCRETE_PAYLOADS,
+      out: ALL_CONCRETE_PAYLOADS,
+    },
+    // Expression block has dynamic type resolution based on expression text
+    // The output type depends on the expression, not a fixed combination
+    semantics: 'typeSpecific',
+  },
 
   // Inputs include both wirable ports AND config parameters
   // Config parameters have exposedAsPort: false
@@ -46,31 +59,31 @@ registerBlock({
     // User wires signals to in0, in1, etc. and references them by name in expression
     in0: {
       label: 'In 0',
-      type: signalType('???'), // Polymorphic - actual type inferred during lowering
-      optional: true,          // Unwired inputs are unavailable in expression
+      type: signalType('float'), // Default type - actual type inferred during lowering
+      optional: true,            // Unwired inputs are unavailable in expression
       exposedAsPort: true,
     },
     in1: {
       label: 'In 1',
-      type: signalType('???'),
+      type: signalType('float'),
       optional: true,
       exposedAsPort: true,
     },
     in2: {
       label: 'In 2',
-      type: signalType('???'),
+      type: signalType('float'),
       optional: true,
       exposedAsPort: true,
     },
     in3: {
       label: 'In 3',
-      type: signalType('???'),
+      type: signalType('float'),
       optional: true,
       exposedAsPort: true,
     },
     in4: {
       label: 'In 4',
-      type: signalType('???'),
+      type: signalType('float'),
       optional: true,
       exposedAsPort: true,
     },
@@ -78,17 +91,17 @@ registerBlock({
     // Note: Inspector UI will detect Expression block and render this as multiline
     expression: {
       label: 'Expression',
-      type: signalType('???'),      // Not used for config-only params
-      exposedAsPort: false,        // Config-only, not wirable
-      value: '',                   // Default: empty expression
-      uiHint: { kind: 'text' },    // Text input (Inspector will make it multiline)
+      type: signalType('float'),  // Config-only, type not used
+      exposedAsPort: false,       // Config-only, not wirable
+      value: '',                  // Default: empty expression
+      uiHint: { kind: 'text' },   // Text input (Inspector will make it multiline)
     },
   },
 
   outputs: {
     out: {
       label: 'Output',
-      type: signalType('???'), // Output type inferred during lowering
+      type: signalType('float'), // Default - actual type inferred during lowering
     },
   },
 
@@ -136,8 +149,8 @@ registerBlock({
       const sigExprs = (ctx.b as any).sigExprs as SigExpr[];
       const sigExpr = sigExprs[sigId as any];
       if (!sigExpr) {
-        // Fallback to polymorphic if signal not found (shouldn't happen)
-        return signalType('???');
+        // Fallback to float if signal not found (shouldn't happen)
+        return signalType('float');
       }
       return sigExpr.type;
     };

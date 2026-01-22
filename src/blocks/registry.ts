@@ -192,8 +192,8 @@ export const STANDARD_NUMERIC_PAYLOADS: readonly PayloadType[] = ['float', 'int'
 export const STANDARD_SCALAR_PAYLOADS: readonly PayloadType[] = ['float', 'int', 'bool', 'phase', 'unit'];
 export const STANDARD_VECTOR_PAYLOADS: readonly PayloadType[] = ['vec2'];
 export const STANDARD_COLOR_PAYLOADS: readonly PayloadType[] = ['color'];
-/** All concrete payload types (everything except '???') */
-export const ALL_CONCRETE_PAYLOADS: readonly PayloadType[] = ['float', 'int', 'bool', 'phase', 'unit', 'vec2', 'color'];
+/** All concrete payload types */
+export const ALL_CONCRETE_PAYLOADS: readonly PayloadType[] = ['float', 'int', 'bool', 'phase', 'unit', 'vec2', 'color', 'shape'];
 
 /**
  * Input definition for a block.

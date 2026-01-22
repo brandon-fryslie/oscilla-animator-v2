@@ -26,14 +26,13 @@ export const TYPE_COLORS: Record<PayloadType, string> = {
   bool: '#f97316',    // Orange
   unit: '#a855f7',    // Purple
   shape: '#facc15',   // Yellow
-  '???': '#9ca3af',   // Gray (polymorphic)
 };
 
 /**
  * Get color for a payload type.
  */
 export function getTypeColor(payload: PayloadType): string {
-  return TYPE_COLORS[payload] ?? TYPE_COLORS['???'];
+  return TYPE_COLORS[payload] ?? TYPE_COLORS['float'];
 }
 
 // =============================================================================
@@ -162,11 +161,10 @@ function isTypeCompatible(from: SignalType, to: SignalType): boolean {
   const toCard = getAxisValue(to.extent.cardinality, DEFAULTS_V0.cardinality);
   const toTemp = getAxisValue(to.extent.temporality, DEFAULTS_V0.temporality);
 
-  // Payload must match (except '???' is polymorphic)
+  // Payload must match exactly
+  // Payload-generic blocks use BlockPayloadMetadata for validation
   if (from.payload !== to.payload) {
-    if (from.payload !== '???' && to.payload !== '???') {
-      return false;
-    }
+    return false;
   }
 
   // Temporality must match

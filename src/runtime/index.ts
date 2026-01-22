@@ -43,3 +43,18 @@ export {
   type StateMigrationResult,
   type StateMigrationDetail,
 } from './StateMigration';
+export {
+  assembleDrawPathInstancesOp,
+  assembleRenderFrame_v2,
+  type AssemblerContext,
+} from './RenderAssembler';
+
+// Re-export future types for convenience
+export type {
+  DrawPathInstancesOp,
+  PathGeometry,
+  InstanceTransforms,
+  PathStyle,
+  RenderFrameIR_Future,
+  DrawOp,
+} from '../render/future-types';

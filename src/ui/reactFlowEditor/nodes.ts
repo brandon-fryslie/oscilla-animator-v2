@@ -13,6 +13,20 @@ import { signalType } from '../../core/canonical-types';
 import { formatTypeForTooltip, getTypeColor } from './typeValidation';
 
 /**
+ * Connection info for a port
+ */
+export interface PortConnectionInfo {
+  /** Block ID of the connected block */
+  blockId: string;
+  /** Block display name */
+  blockLabel: string;
+  /** Port ID on the connected block */
+  portId: string;
+  /** Edge ID for debug value lookup */
+  edgeId: string;
+}
+
+/**
  * Port data for ReactFlow rendering
  */
 export interface PortData {
@@ -27,6 +41,8 @@ export interface PortData {
   typeColor: string;
   /** Whether this port is connected to an edge */
   isConnected: boolean;
+  /** Connection info if connected */
+  connection?: PortConnectionInfo;
 }
 
 /**
@@ -75,7 +91,8 @@ function createPortData(
   label: string,
   type: SignalType | undefined,
   isConnected: boolean,
-  defaultSource?: DefaultSource
+  defaultSource?: DefaultSource,
+  connection?: PortConnectionInfo
 ): PortData {
   // For inputs without a type (non-port inputs), use a default
   const effectiveType: SignalType = type || signalType('float');
@@ -88,28 +105,53 @@ function createPortData(
     typeTooltip: formatTypeForTooltip(effectiveType),
     typeColor: getTypeColor(effectiveType.payload),
     isConnected,
+    connection,
   };
 }
 
 /**
  * Create ReactFlow node from Oscilla block.
+ *
+ * @param block - The block to convert
+ * @param blockDef - Block definition from registry
+ * @param edges - All edges in the patch (for connection info)
+ * @param blocks - All blocks in the patch (for looking up connected block labels)
+ * @param blockDefs - Block definitions map (for looking up connected block labels)
  */
 export function createNodeFromBlock(
   block: Block,
   blockDef: BlockDef,
-  edges?: readonly Edge[]
+  edges?: readonly Edge[],
+  blocks?: ReadonlyMap<BlockId, Block>,
+  blockDefs?: ReadonlyMap<string, BlockDef>
 ): OscillaNode {
-  // Determine connected ports if edges provided
-  const connectedInputs = new Set<string>();
-  const connectedOutputs = new Set<string>();
+  // Build connection info maps for this block's ports
+  const inputConnections = new Map<string, PortConnectionInfo>();
+  const outputConnections = new Map<string, PortConnectionInfo>();
 
-  if (edges) {
+  if (edges && blocks && blockDefs) {
     for (const edge of edges) {
+      // Input connection: edge goes TO this block
       if (edge.to.blockId === block.id) {
-        connectedInputs.add(edge.to.slotId);
+        const sourceBlock = blocks.get(edge.from.blockId as BlockId);
+        const sourceBlockDef = sourceBlock ? blockDefs.get(sourceBlock.type) : undefined;
+        inputConnections.set(edge.to.slotId, {
+          blockId: edge.from.blockId,
+          blockLabel: sourceBlock?.displayName || sourceBlockDef?.label || edge.from.blockId,
+          portId: edge.from.slotId,
+          edgeId: edge.id,
+        });
       }
+      // Output connection: edge comes FROM this block
       if (edge.from.blockId === block.id) {
-        connectedOutputs.add(edge.from.slotId);
+        const targetBlock = blocks.get(edge.to.blockId as BlockId);
+        const targetBlockDef = targetBlock ? blockDefs.get(targetBlock.type) : undefined;
+        outputConnections.set(edge.from.slotId, {
+          blockId: edge.to.blockId,
+          blockLabel: targetBlock?.displayName || targetBlockDef?.label || edge.to.blockId,
+          portId: edge.to.slotId,
+          edgeId: edge.id,
+        });
       }
     }
   }
@@ -141,8 +183,9 @@ export function createNodeFromBlock(
           inputId,
           input.label || inputId,
           input.type,
-          connectedInputs.has(inputId),
-          getDefaultSource(input)
+          inputConnections.has(inputId),
+          getDefaultSource(input),
+          inputConnections.get(inputId)
         )
       ),
       outputs: Object.entries(blockDef.outputs).map(([outputId, output]) =>
@@ -150,7 +193,9 @@ export function createNodeFromBlock(
           outputId,
           output.label || outputId,
           output.type,
-          connectedOutputs.has(outputId)
+          outputConnections.has(outputId),
+          undefined,
+          outputConnections.get(outputId)
         )
       ),
       params,

@@ -26,8 +26,8 @@ import type { ValueSlot } from '../types';
  */
 export interface DebugTap {
   /**
-   * Record a slot value after it's written.
-   * Called by ScheduleExecutor after each slot write.
+   * Record a scalar slot value after it's written.
+   * Called by ScheduleExecutor after each signal slot write.
    *
    * Sprint 1: Records every slot, every frame.
    * Sprint 2: Will add DebugLevel filtering.
@@ -36,6 +36,18 @@ export interface DebugTap {
    * @param value - Numeric value written to slot
    */
   recordSlotValue?(slotId: ValueSlot, value: number): void;
+
+  /**
+   * Record a field (buffer) slot value after materialization.
+   * Called by ScheduleExecutor after each field is materialized.
+   *
+   * Fields produce arrays of data (one value per element in the instance).
+   * For debug purposes, we might want first element, stats, or full buffer.
+   *
+   * @param slotId - Slot ID for the field
+   * @param buffer - Materialized buffer (Float32Array or similar)
+   */
+  recordFieldValue?(slotId: ValueSlot, buffer: ArrayBufferView): void;
 
   /**
    * Future methods (Sprint 2+):

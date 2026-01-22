@@ -220,12 +220,6 @@ export function payloadTypeToShapeDescIR(payload: PayloadType): ShapeDescIR {
       // Future: Shape will need its own IR representation with kind + params
       return { kind: 'number' };
 
-    case '???':
-      throw new Error(
-        `Cannot bridge polymorphic type '???' to runtime shape. ` +
-        `Type must be resolved by normalizer before compilation.`
-      );
-
     default:
       exhaustiveCheck(payload);
   }

@@ -4,22 +4,26 @@
  * Blocks that work with fields (signal arrays over domains).
  */
 
-import { registerBlock } from './registry';
+import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
 import { signalType, signalTypeField, type PayloadType } from '../core/canonical-types';
 import type { SigExprId } from '../compiler/ir/Indices';
 
 // =============================================================================
-// FieldBroadcast (Polymorphic)
+// FieldBroadcast (Payload-Generic)
 // =============================================================================
 
 /**
- * Polymorphic field broadcast block.
+ * Payload-Generic field broadcast block.
  *
- * The input/output types are '???' (polymorphic) - resolved by the normalizer
- * based on context. When an adapter inserts this block, the normalizer will
- * resolve the type from the source (input edge) and propagate to output.
+ * Broadcasts a signal value to all elements of a field.
+ * The payload type is resolved by pass0-polymorphic-types based on
+ * the source signal. The resolved type is stored in `payloadType`.
  *
- * Supported payload types: float, vec2, color, int, bool, phase, unit
+ * Payload-Generic Contract (per spec §1):
+ * - Closed admissible payload set: float, vec2, color, int, bool, phase, unit
+ * - Per-payload specialization is total
+ * - No implicit coercions
+ * - Deterministic resolution via payloadType param
  */
 registerBlock({
   type: 'FieldBroadcast',
@@ -33,22 +37,33 @@ registerBlock({
     laneCoupling: 'laneLocal',
     broadcastPolicy: 'requireBroadcastExpr',
   },
+  payload: {
+    allowedPayloads: {
+      signal: ALL_CONCRETE_PAYLOADS,
+      field: ALL_CONCRETE_PAYLOADS,
+    },
+    combinations: ALL_CONCRETE_PAYLOADS.map(p => ({
+      inputs: [p] as PayloadType[],
+      output: p,
+    })),
+    semantics: 'typeSpecific',
+  },
   inputs: {
-    signal: { label: 'Signal', type: signalType('???') },
+    signal: { label: 'Signal', type: signalType('float') },
     payloadType: {
-      type: signalType('???'),
+      type: signalType('float'),
       value: undefined,
       hidden: true,
       exposedAsPort: false,
     },
   },
   outputs: {
-    field: { label: 'Field', type: signalTypeField('???', 'default') },
+    field: { label: 'Field', type: signalTypeField('float', 'default') },
   },
   lower: ({ ctx, inputsById, config }) => {
     const payloadType = config?.payloadType as PayloadType | undefined;
 
-    if (payloadType === undefined || payloadType === '???') {
+    if (payloadType === undefined) {
       throw new Error(
         `FieldBroadcast block missing payloadType. Type must be resolved by normalizer before lowering.`
       );

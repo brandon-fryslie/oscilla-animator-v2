@@ -7,8 +7,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { observer } from 'mobx-react-lite';
-import { IconButton } from '@mui/material';
-import CloseIcon from '@mui/icons-material/Close';
+import { ActionIcon, rem } from '@mantine/core';
 import { useStores } from '../../stores';
 import {
   getBlockCategories,
@@ -206,25 +205,21 @@ export const BlockLibrary: React.FC = observer(() => {
             aria-label="Search blocks"
           />
           {searchQuery && (
-            <IconButton
+            <ActionIcon
               onClick={handleSearchClear}
-              size="small"
+              size="sm"
+              variant="subtle"
+              color="gray"
               aria-label="Clear search"
-              sx={{
+              style={{
                 position: 'absolute',
-                right: '4px',
+                right: rem(4),
                 top: '50%',
                 transform: 'translateY(-50%)',
-                padding: '4px',
-                color: '#888',
-                '&:hover': {
-                  color: '#fff',
-                  background: 'rgba(255, 255, 255, 0.1)',
-                },
               }}
             >
-              <CloseIcon fontSize="small" />
-            </IconButton>
+              <span style={{ fontSize: rem(14), lineHeight: 1 }}>×</span>
+            </ActionIcon>
           )}
         </div>
 

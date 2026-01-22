@@ -5,15 +5,17 @@
  * Each input/output port gets its own Handle with unique ID.
  * Handles are color-coded by payload type with type tooltips.
  * Supports port hover highlighting for compatible ports.
+ * Shows detailed port info popover on hover.
  */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Handle, Position, type NodeProps } from 'reactflow';
 import { observer } from 'mobx-react-lite';
 import type { OscillaNodeData, PortData } from './nodes';
 import type { DefaultSource, PortId, BlockId } from '../../types';
 import { useStores } from '../../stores';
 import { ParameterControl } from './ParameterControls';
+import { PortInfoPopover } from './PortInfoPopover';
 
 /**
  * Format a default source for display in tooltip.
@@ -51,26 +53,6 @@ function getIndicatorColor(ds: DefaultSource): string {
 }
 
 /**
- * Build tooltip text for a port.
- */
-function buildPortTooltip(port: PortData, isInput: boolean): string {
-  const parts: string[] = [];
-
-  // Port label and type
-  parts.push(`${port.label}: ${port.typeTooltip}`);
-
-  // Default source info for inputs
-  if (isInput && port.defaultSource) {
-    parts.push(formatDefaultSource(port.defaultSource));
-  }
-
-  // Connection status
-  parts.push(port.isConnected ? 'Connected' : 'Not connected');
-
-  return parts.join('\n');
-}
-
-/**
  * Get highlight style for a port based on compatibility.
  */
 function getPortHighlightStyle(
@@ -104,6 +86,13 @@ function getPortHighlightStyle(
   }
 }
 
+/** State for hovered port popover */
+interface HoveredPortState {
+  port: PortData;
+  isInput: boolean;
+  anchorEl: HTMLElement;
+}
+
 /**
  * Custom node component that renders handles for each port.
  * Handles are color-coded by payload type.
@@ -112,6 +101,9 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
   const { selection, portHighlight } = useStores();
   const { selectedPort } = selection;
   const { setHoveredPort, clearHoveredPort } = portHighlight;
+
+  // Track hovered port for popover
+  const [hoveredPortState, setHoveredPortState] = useState<HoveredPortState | null>(null);
 
   const handlePortClick = useCallback(
     (portId: PortId, e: React.MouseEvent) => {
@@ -134,14 +126,21 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
   );
 
   const handlePortMouseEnter = useCallback(
-    (portId: PortId, direction: 'input' | 'output') => {
-      setHoveredPort(data.blockId, portId, direction);
+    (port: PortData, isInput: boolean, e: React.MouseEvent) => {
+      const direction = isInput ? 'input' : 'output';
+      setHoveredPort(data.blockId, port.id as PortId, direction);
+      setHoveredPortState({
+        port,
+        isInput,
+        anchorEl: e.currentTarget as HTMLElement,
+      });
     },
     [data.blockId, setHoveredPort]
   );
 
   const handlePortMouseLeave = useCallback(() => {
     clearHoveredPort();
+    setHoveredPortState(null);
   }, [clearHoveredPort]);
 
   return (
@@ -195,7 +194,7 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
               id={input.id}
               onClick={(e) => handlePortClick(input.id as PortId, e)}
               onContextMenu={(e) => handlePortContextMenu(input.id as PortId, true, e)}
-              onMouseEnter={() => handlePortMouseEnter(input.id as PortId, 'input')}
+              onMouseEnter={(e) => handlePortMouseEnter(input, true, e)}
               onMouseLeave={handlePortMouseLeave}
               style={{
                 top: `${topPercent}%`,
@@ -209,7 +208,6 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
                 transition: 'all 0.2s ease',
                 ...highlightStyle,
               }}
-              title={buildPortTooltip(input, true)}
             />
 
             {/* Default Source Indicator (only for unconnected ports with defaults) */}
@@ -311,7 +309,7 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
               id={output.id}
               onClick={(e) => handlePortClick(output.id as PortId, e)}
               onContextMenu={(e) => handlePortContextMenu(output.id as PortId, false, e)}
-              onMouseEnter={() => handlePortMouseEnter(output.id as PortId, 'output')}
+              onMouseEnter={(e) => handlePortMouseEnter(output, false, e)}
               onMouseLeave={handlePortMouseLeave}
               style={{
                 top: `${topPercent}%`,
@@ -325,11 +323,18 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
                 transition: 'all 0.2s ease',
                 ...highlightStyle,
               }}
-              title={buildPortTooltip(output, false)}
             />
           </React.Fragment>
         );
       })}
+
+      {/* Port Info Popover - rendered once for whichever port is hovered */}
+      <PortInfoPopover
+        port={hoveredPortState?.port ?? null}
+        isInput={hoveredPortState?.isInput ?? true}
+        anchorEl={hoveredPortState?.anchorEl ?? null}
+        blockId={data.blockId}
+      />
     </div>
   );
 });

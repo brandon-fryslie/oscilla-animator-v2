@@ -1,0 +1,22 @@
+Agent: manual-planner | 2026-01-22
+Bead: oscilla-animator-v2-46m
+Topic: renderer-local-space
+Status: BLOCKED (waiting on oscilla-animator-v2-583)
+
+Files Created:
+  - PLAN-20260122.md (Comprehensive implementation plan)
+  - DOD-20260122.md (Definition of Done with 27 acceptance criteria)
+  - CONTEXT-20260122.md (Complete implementation context)
+  - SPRINT-20260122.md (Task breakdown with 8 tasks, ~1 hour)
+
+Key Changes:
+  - Remove width/height viewport scaling from path rendering
+  - Apply instance transforms: rotate → scale
+  - Use local-space control points directly
+  - Compute sizePx = size * min(width, height)
+
+Priority: P1 (High)
+Dependencies: BLOCKED by oscilla-animator-v2-583 (RenderAssembler v2)
+Blocks: 4lm, qch, 0uk, ry2 (4 downstream beads)
+
+Next Action: Wait for RenderAssembler v2 completion, then /do:it renderer-local-space

@@ -47,13 +47,22 @@ export function syncPatchToReactFlow(
   isSyncing = true;
 
   try {
+    // Build blockDefs map for looking up connected block labels
+    const blockDefs = new Map<string, ReturnType<typeof getBlockDefinition>>();
+    for (const block of patch.blocks.values()) {
+      if (!blockDefs.has(block.type)) {
+        const def = getBlockDefinition(block.type);
+        if (def) blockDefs.set(block.type, def);
+      }
+    }
+
     // Create nodes from blocks
     const nodes: OscillaNode[] = [];
     let x = 100;
     let y = 100;
 
     for (const block of patch.blocks.values()) {
-      const def = getBlockDefinition(block.type);
+      const def = blockDefs.get(block.type);
       if (!def) {
         diagnostics.log({
           level: 'warn',
@@ -63,8 +72,8 @@ export function syncPatchToReactFlow(
         continue;
       }
 
-      // Pass edges to compute connection status
-      const node = createNodeFromBlock(block, def, patch.edges);
+      // Pass edges, blocks, and blockDefs to compute connection info
+      const node = createNodeFromBlock(block, def, patch.edges, patch.blocks, blockDefs as any);
       // Position nodes in simple grid layout
       node.position = { x, y };
       nodes.push(node);

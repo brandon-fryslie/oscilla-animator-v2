@@ -1,0 +1,28 @@
+Agent: status-planner | 2026-01-22-031548
+Topic: per-instance-shapes
+Sprint: 1 (MEDIUM confidence)
+Files:
+  - SPRINT-2026-01-22-031548-per-instance-shapes-PLAN.md [MEDIUM]
+  - SPRINT-2026-01-22-031548-per-instance-shapes-DOD.md [MEDIUM]
+  - SPRINT-2026-01-22-031548-per-instance-shapes-CONTEXT.md [MEDIUM]
+Work Items: 7 (P0: 2, P1: 2, P2: 2, P3: 1)
+
+Blocking Dependency: oscilla-animator-v2-583 (RenderAssembler v2) MUST be complete first
+Status: This sprint CANNOT start until dependency is closed
+
+Key Deliverables:
+  1. Shape buffer resolution ({ k: 'slot' } case)
+  2. Topology grouping algorithm (O(N) single-pass)
+  3. Multi-op emission (one DrawPathInstancesOp per topology group)
+  4. Instance buffer slicing (position, color per group)
+  5. Renderer integration (loop over all ops)
+  6. Shape2D buffer format documentation
+  7. Comprehensive error handling and validation
+
+Confidence Level: MEDIUM
+  - Shape2D buffer format defined in spec but not yet implemented in materializer
+  - Performance targets estimated, need user confirmation
+  - Algorithm clear but needs validation with realistic scenarios
+  - EXIT CRITERIA: dependency closed, buffer format agreed, materializer capability confirmed
+
+Next: Block on oscilla-animator-v2-583, then research Shape2D buffer format with user

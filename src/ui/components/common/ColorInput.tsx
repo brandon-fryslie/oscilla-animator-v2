@@ -1,22 +1,17 @@
 /**
  * ColorInput Component
  *
- * Native color input wrapped with MUI styling to match TextField appearance.
- * MUI doesn't provide a color picker component, so we use the native HTML
- * input type="color" with custom styling for consistency.
+ * Mantine ColorInput with gorgeous styling.
  *
  * Features:
- * - Native color picker functionality
- * - Styled to match MUI TextField
- * - Optional label
+ * - Beautiful color picker with swatches
  * - Preview swatch integrated
- *
- * Created for mui-controls-migration sprint
+ * - Dark theme optimized styling
+ * - Optional label
  */
 
 import React from 'react';
-import { Box, Typography, InputAdornment } from '@mui/material';
-import { colors } from '../../theme';
+import { ColorInput as MantineColorInput, rem } from '@mantine/core';
 
 export interface ColorInputProps {
   /** Current color value (hex string) */
@@ -29,6 +24,13 @@ export interface ColorInputProps {
   disabled?: boolean;
 }
 
+// Beautiful default swatches for quick selection
+const DEFAULT_SWATCHES = [
+  '#fa5252', '#e64980', '#be4bdb', '#7950f2', '#4c6ef5',
+  '#228be6', '#15aabf', '#12b886', '#40c057', '#82c91e',
+  '#fab005', '#fd7e14', '#868e96', '#212529', '#ffffff',
+];
+
 /**
  * Reusable color picker component.
  */
@@ -38,82 +40,41 @@ export function ColorInput({
   label,
   disabled = false,
 }: ColorInputProps): React.ReactElement {
-  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    onChange(event.target.value);
-  };
-
   return (
-    <Box>
-      {label && (
-        <Typography
-          variant="body2"
-          component="label"
-          style={{ display: 'block', marginBottom: '0.25rem' }}
-        >
-          {label}
-        </Typography>
-      )}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1,
-          border: `1px solid ${colors.border}`,
-          borderRadius: '4px',
-          padding: '6px 8px',
-          background: colors.bgPanel,
-          '&:hover': {
-            borderColor: colors.textSecondary,
+    <MantineColorInput
+      value={value || '#000000'}
+      onChange={onChange}
+      label={label}
+      disabled={disabled}
+      size="sm"
+      format="hex"
+      swatches={DEFAULT_SWATCHES}
+      swatchesPerRow={5}
+      styles={{
+        input: {
+          background: 'rgba(0, 0, 0, 0.2)',
+          border: '1px solid rgba(139, 92, 246, 0.2)',
+          fontFamily: 'monospace',
+          '&:focus': {
+            borderColor: 'var(--mantine-color-violet-5)',
           },
-          '&:focus-within': {
-            borderColor: colors.primary,
-            borderWidth: '2px',
-            padding: '5px 7px', // Adjust for thicker border
-          },
-        }}
-      >
-        {/* Color swatch preview */}
-        <Box
-          sx={{
-            width: 24,
-            height: 24,
-            borderRadius: '4px',
-            backgroundColor: value || '#000000',
-            border: `1px solid ${colors.border}`,
-            flexShrink: 0,
-          }}
-        />
-
-        {/* Native color input */}
-        <input
-          type="color"
-          value={value || '#000000'}
-          onChange={handleChange}
-          disabled={disabled}
-          style={{
-            flex: 1,
-            height: '24px',
-            border: 'none',
-            background: 'transparent',
-            cursor: disabled ? 'not-allowed' : 'pointer',
-            opacity: disabled ? 0.5 : 1,
-          }}
-        />
-
-        {/* Hex value display */}
-        <Typography
-          variant="caption"
-          style={{
-            fontFamily: 'monospace',
-            fontSize: '0.75rem',
-            color: colors.textSecondary,
-            minWidth: '60px',
-            textAlign: 'right',
-          }}
-        >
-          {value || '#000000'}
-        </Typography>
-      </Box>
-    </Box>
+        },
+        dropdown: {
+          background: 'linear-gradient(135deg, rgba(30, 30, 40, 0.98) 0%, rgba(20, 20, 30, 0.98) 100%)',
+          backdropFilter: 'blur(12px)',
+          border: '1px solid rgba(139, 92, 246, 0.3)',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
+        },
+        label: {
+          marginBottom: rem(4),
+          fontSize: rem(12),
+          fontWeight: 500,
+          color: 'var(--mantine-color-gray-4)',
+        },
+        colorPreview: {
+          border: '1px solid rgba(139, 92, 246, 0.3)',
+        },
+      }}
+    />
   );
 }

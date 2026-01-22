@@ -12,6 +12,8 @@
 
 import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { ThemeProvider } from '@mui/material/styles';
+import { MantineProvider, createTheme as createMantineTheme, virtualColor } from '@mantine/core';
+import '@mantine/core/styles.css';
 import { Toolbar } from './Toolbar';
 import { EditorProvider, type EditorHandle, useEditor } from '../../editorCommon';
 import { DockviewProvider } from '../../dockview';
@@ -20,6 +22,84 @@ import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { useExportPatch } from '../../hooks/useExportPatch';
 import { Toast } from '../common/Toast';
 import { useStores, type RootStore } from '../../../stores';
+
+// Mantine dark theme configuration - gorgeous modern look
+const mantineTheme = createMantineTheme({
+  primaryColor: 'violet',
+  colors: {
+    // Custom dark colors for our UI
+    dark: [
+      '#C1C2C5',
+      '#A6A7AB',
+      '#909296',
+      '#5C5F66',
+      '#373A40',
+      '#2C2E33',
+      '#25262B',
+      '#1A1B1E',
+      '#141517',
+      '#101113',
+    ],
+    // Accent color for highlights
+    accent: [
+      '#E8DEFF',
+      '#D0BFFF',
+      '#B197FC',
+      '#9775FA',
+      '#845EF7',
+      '#7950F2',
+      '#7048E8',
+      '#6741D9',
+      '#5F3DC4',
+      '#5235AB',
+    ],
+    // Vibrant gradient for special elements
+    vibrant: virtualColor({
+      name: 'vibrant',
+      dark: 'violet',
+      light: 'violet',
+    }),
+  },
+  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  fontFamilyMonospace: '"SF Mono", Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+  headings: {
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+    fontWeight: '600',
+  },
+  radius: {
+    xs: '4px',
+    sm: '6px',
+    md: '8px',
+    lg: '12px',
+    xl: '16px',
+  },
+  defaultRadius: 'md',
+  components: {
+    Button: {
+      defaultProps: {
+        size: 'sm',
+      },
+      styles: {
+        root: {
+          fontWeight: 500,
+        },
+      },
+    },
+    ActionIcon: {
+      defaultProps: {
+        variant: 'subtle',
+      },
+    },
+    TextInput: {
+      styles: {
+        input: {
+          backgroundColor: 'var(--mantine-color-dark-7)',
+          borderColor: 'var(--mantine-color-dark-5)',
+        },
+      },
+    },
+  },
+});
 
 interface AppProps {
   onCanvasReady?: (canvas: HTMLCanvasElement) => void;
@@ -125,8 +205,9 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady }) => {
   };
 
   return (
-    <ThemeProvider theme={darkTheme}>
-      <EditorProvider>
+    <MantineProvider theme={mantineTheme} defaultColorScheme="dark">
+      <ThemeProvider theme={darkTheme}>
+        <EditorProvider>
         {/* Capture EditorContext methods */}
         <EditorContextCapture contextRef={editorContextRef} />
 
@@ -162,7 +243,8 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady }) => {
           onClose={handleToastClose}
         />
       </EditorProvider>
-    </ThemeProvider>
+      </ThemeProvider>
+    </MantineProvider>
   );
 };
 

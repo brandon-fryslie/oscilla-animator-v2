@@ -1,19 +1,17 @@
 /**
  * SelectInput Component
  *
- * MUI Select wrapped in FormControl for dropdown selection.
+ * Mantine Select for dropdown selection.
  *
  * Features:
  * - Type-safe option values
  * - Optional label and helper text
  * - Compact size for panel layouts
- * - Dark theme styling (from theme.ts)
- *
- * Created for mui-controls-migration sprint
+ * - Beautiful dark theme styling with gradients
  */
 
 import React from 'react';
-import { FormControl, InputLabel, Select, MenuItem, FormHelperText } from '@mui/material';
+import { Select, rem } from '@mantine/core';
 
 export interface SelectOption {
   value: string;
@@ -33,8 +31,8 @@ export interface SelectInputProps {
   helperText?: string;
   /** Disable control */
   disabled?: boolean;
-  /** Size variant (default: 'small') */
-  size?: 'small' | 'medium';
+  /** Size variant (default: 'sm') */
+  size?: 'xs' | 'sm' | 'md';
 }
 
 /**
@@ -47,32 +45,59 @@ export function SelectInput({
   label,
   helperText,
   disabled = false,
-  size = 'small',
+  size = 'sm',
 }: SelectInputProps): React.ReactElement {
-  // Generate unique ID for label association
-  const labelId = React.useId();
-
-  const handleChange = (event: any) => {
-    onChange(event.target.value as string);
+  const handleChange = (newValue: string | null) => {
+    if (newValue !== null) {
+      onChange(newValue);
+    }
   };
 
   return (
-    <FormControl fullWidth size={size} disabled={disabled}>
-      {label && <InputLabel id={labelId}>{label}</InputLabel>}
-      <Select
-        labelId={label ? labelId : undefined}
-        value={value}
-        onChange={handleChange}
-        label={label}
-        variant="outlined"
-      >
-        {options.map((option) => (
-          <MenuItem key={option.value} value={option.value}>
-            {option.label}
-          </MenuItem>
-        ))}
-      </Select>
-      {helperText && <FormHelperText>{helperText}</FormHelperText>}
-    </FormControl>
+    <Select
+      value={value}
+      onChange={handleChange}
+      data={options}
+      label={label}
+      description={helperText}
+      disabled={disabled}
+      size={size}
+      allowDeselect={false}
+      styles={{
+        input: {
+          background: 'rgba(0, 0, 0, 0.2)',
+          border: '1px solid rgba(139, 92, 246, 0.2)',
+          '&:focus': {
+            borderColor: 'var(--mantine-color-violet-5)',
+          },
+        },
+        dropdown: {
+          background: 'linear-gradient(135deg, rgba(30, 30, 40, 0.98) 0%, rgba(20, 20, 30, 0.98) 100%)',
+          backdropFilter: 'blur(12px)',
+          border: '1px solid rgba(139, 92, 246, 0.3)',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
+        },
+        option: {
+          '&[data-selected]': {
+            backgroundColor: 'var(--mantine-color-violet-6)',
+          },
+          '&[data-hovered]': {
+            backgroundColor: 'rgba(139, 92, 246, 0.15)',
+          },
+        },
+        label: {
+          marginBottom: rem(4),
+          fontSize: rem(12),
+          fontWeight: 500,
+          color: 'var(--mantine-color-gray-4)',
+        },
+        description: {
+          marginTop: rem(4),
+          fontSize: rem(11),
+          fontStyle: 'italic',
+          opacity: 0.7,
+        },
+      }}
+    />
   );
 }

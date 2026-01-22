@@ -13,7 +13,7 @@
  * This is where we enforce the invariant "Renderer is sink-only."
  *
  * CURRENT STATE (v1): Produces RenderPassIR with ShapeDescriptor
- * FUTURE STATE (v2): Will produce DrawPathInstancesOp (see future-types.ts)
+ * FUTURE STATE (v2): Produces DrawPathInstancesOp (see future-types.ts)
  */
 
 import type { RenderPassIR, ShapeDescriptor, ResolvedShape } from './ScheduleExecutor';
@@ -22,6 +22,13 @@ import type { RuntimeState } from './RuntimeState';
 import { evaluateSignal } from './SignalEvaluator';
 import { getTopology } from '../shapes/registry';
 import type { PathTopologyDef, TopologyDef, TopologyId } from '../shapes/types';
+import type {
+  DrawPathInstancesOp,
+  PathGeometry,
+  InstanceTransforms,
+  PathStyle,
+  RenderFrameIR_Future,
+} from '../render/future-types';
 
 /**
  * AssemblerContext - Context needed for render assembly
@@ -290,4 +297,224 @@ export function assembleAllPasses(
  */
 export function isRenderStep(step: { kind: string }): step is StepRender {
   return step.kind === 'render';
+}
+
+// ============================================================================
+// V2 RENDER ASSEMBLY - DrawPathInstancesOp
+// ============================================================================
+
+/**
+ * Build PathGeometry from resolved shape
+ *
+ * Extracts local-space control points and path metadata into PathGeometry structure.
+ * Control points are assumed to be in local space (centered at origin).
+ *
+ * @param resolvedShape - Resolved shape with topology and control points
+ * @param controlPoints - Control points buffer in local space
+ * @returns PathGeometry structure for v2 rendering
+ */
+function buildPathGeometry(
+  resolvedShape: ResolvedShape,
+  controlPoints: Float32Array
+): PathGeometry {
+  if (resolvedShape.mode !== 'path') {
+    throw new Error(
+      `buildPathGeometry: Expected path topology, got ${resolvedShape.mode}`
+    );
+  }
+
+  if (!resolvedShape.verbs) {
+    throw new Error('buildPathGeometry: Path topology missing verbs');
+  }
+
+  // Note: topologyId is currently string, but PathGeometry expects number
+  // This is a known gap documented in the planning files
+  const topologyId = resolvedShape.topologyId as unknown as number;
+
+  return {
+    topologyId,
+    verbs: resolvedShape.verbs,
+    points: controlPoints,
+    pointsCount: controlPoints.length / 2,
+    flags: resolvedShape.params.closed ? 1 : 0,
+  };
+}
+
+/**
+ * Build InstanceTransforms from render step data
+ *
+ * Constructs world-space instance transform data.
+ * Position is in normalized [0,1] space.
+ * Size is isotropic scale (combined with optional scale2 for anisotropic).
+ *
+ * @param count - Number of instances
+ * @param position - Position buffer (x,y interleaved, normalized [0,1])
+ * @param size - Uniform size or per-instance sizes (isotropic scale)
+ * @param rotation - Optional per-instance rotations (radians)
+ * @param scale2 - Optional per-instance anisotropic scale (x,y interleaved)
+ * @returns InstanceTransforms structure for v2 rendering
+ */
+function buildInstanceTransforms(
+  count: number,
+  position: Float32Array,
+  size: number,
+  rotation?: Float32Array,
+  scale2?: Float32Array
+): InstanceTransforms {
+  return {
+    count,
+    position,
+    size,
+    rotation,
+    scale2,
+  };
+}
+
+/**
+ * Build PathStyle from color buffer
+ *
+ * Extracts explicit style information from color buffer.
+ * Future work will add stroke, opacity, blend modes, etc.
+ *
+ * @param color - Color buffer (RGBA per instance or uniform)
+ * @param fillRule - Fill rule ('nonzero' or 'evenodd')
+ * @returns PathStyle structure for v2 rendering
+ */
+function buildPathStyle(
+  color: Uint8ClampedArray,
+  fillRule?: 'nonzero' | 'evenodd'
+): PathStyle {
+  return {
+    fillColor: color,
+    fillRule,
+  };
+}
+
+/**
+ * Assemble a DrawPathInstancesOp from a render step
+ *
+ * This is the v2 assembly path that produces explicit geometry/instances/style
+ * structures. Unlike v1, this separates concerns and uses local-space geometry.
+ *
+ * @param step - The render step to assemble
+ * @param context - Assembly context with signals, instances, and state
+ * @returns DrawPathInstancesOp or null if assembly fails or shape is not a path
+ */
+export function assembleDrawPathInstancesOp(
+  step: StepRender,
+  context: AssemblerContext
+): DrawPathInstancesOp | null {
+  const { signals, instances, state } = context;
+
+  // Get instance declaration
+  const instance = instances.get(step.instanceId);
+  if (!instance) {
+    console.warn(`RenderAssembler: Instance ${step.instanceId} not found`);
+    return null;
+  }
+
+  // Resolve count from instance
+  const count = typeof instance.count === 'number' ? instance.count : 0;
+  if (count === 0) {
+    return null; // Empty instance, skip
+  }
+
+  // Read position buffer from slot
+  const positionBuffer = state.values.objects.get(step.positionSlot) as ArrayBufferView;
+  if (!positionBuffer) {
+    throw new Error(`RenderAssembler: Position buffer not found in slot ${step.positionSlot}`);
+  }
+
+  // Position must be Float32Array for v2
+  if (!(positionBuffer instanceof Float32Array)) {
+    throw new Error(
+      `RenderAssembler: Position buffer must be Float32Array, got ${positionBuffer.constructor.name}`
+    );
+  }
+
+  // Read color buffer from slot
+  const colorBuffer = state.values.objects.get(step.colorSlot) as ArrayBufferView;
+  if (!colorBuffer) {
+    throw new Error(`RenderAssembler: Color buffer not found in slot ${step.colorSlot}`);
+  }
+
+  // Color must be Uint8ClampedArray for v2
+  if (!(colorBuffer instanceof Uint8ClampedArray)) {
+    throw new Error(
+      `RenderAssembler: Color buffer must be Uint8ClampedArray, got ${colorBuffer.constructor.name}`
+    );
+  }
+
+  // Resolve scale (uniform signal)
+  const scale = resolveScale(step.scale, signals, state);
+
+  // Resolve shape
+  const shape = resolveShape(step.shape, signals, state);
+
+  // Read control points buffer if present
+  const controlPointsBuffer = resolveControlPoints(step.controlPoints, state);
+
+  // Fully resolve shape
+  const resolvedShape = resolveShapeFully(shape, controlPointsBuffer);
+
+  // V2 only supports path topologies (primitives will be handled separately)
+  if (resolvedShape.mode !== 'path') {
+    // For now, return null for primitive topologies
+    // Future work: DrawPrimitiveInstancesOp
+    return null;
+  }
+
+  // Control points are required for path rendering
+  if (!controlPointsBuffer || !(controlPointsBuffer instanceof Float32Array)) {
+    throw new Error(
+      'RenderAssembler: Path topology requires control points buffer (Float32Array)'
+    );
+  }
+
+  // Build v2 structures
+  const geometry = buildPathGeometry(resolvedShape, controlPointsBuffer);
+  const instanceTransforms = buildInstanceTransforms(
+    count,
+    positionBuffer,
+    scale,
+    undefined, // rotation - not yet wired through IR
+    undefined  // scale2 - not yet wired through IR
+  );
+  const style = buildPathStyle(colorBuffer, 'nonzero');
+
+  return {
+    kind: 'drawPathInstances',
+    geometry,
+    instances: instanceTransforms,
+    style,
+  };
+}
+
+/**
+ * Assemble all render steps into a v2 RenderFrameIR_Future
+ *
+ * This produces the target v2 frame structure with explicit draw operations.
+ * Unlike v1, this uses local-space geometry with world-space instance transforms.
+ *
+ * @param renderSteps - Array of render steps to assemble
+ * @param context - Assembly context
+ * @returns RenderFrameIR_Future with DrawPathInstancesOp operations
+ */
+export function assembleRenderFrame_v2(
+  renderSteps: readonly StepRender[],
+  context: AssemblerContext
+): RenderFrameIR_Future {
+  const ops: DrawPathInstancesOp[] = [];
+
+  for (const step of renderSteps) {
+    const op = assembleDrawPathInstancesOp(step, context);
+    if (op) {
+      ops.push(op);
+    }
+  }
+
+  return {
+    version: 2,
+    ops,
+  };
 }

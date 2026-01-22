@@ -40,10 +40,10 @@ describe('Connection Validation - Behavioral Tests', () => {
       expect(result.valid).toBe(true);
     });
 
-    it('allows polymorphic ??? type to connect to concrete types', () => {
+    it('allows payload-generic Const to connect to concrete types', () => {
       const { patch, ids } = createTestPatch();
 
-      // Const outputs polymorphic type, should connect to float input
+      // Const outputs float (payload-generic default), should connect to float input
       const result = validateConnection(ids.const, 'out', ids.add, 'a', patch);
 
       expect(result.valid).toBe(true);

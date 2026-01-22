@@ -1,7 +1,7 @@
 /**
- * Pass 0: Polymorphic Type Resolution
+ * Pass 0: Payload-Generic Type Resolution
  *
- * Resolves '???' (polymorphic) types by propagating concrete types bidirectionally.
+ * Resolves payload types for payload-generic blocks by propagating concrete types bidirectionally.
  *
  * Type inference works in two directions:
  * 1. Forward (output -> target input): For blocks like Const, infer type from what it connects to
@@ -12,10 +12,10 @@
 
 import type { BlockId } from '../../types';
 import type { Block, Patch } from '../Patch';
-import { getBlockDefinition } from '../../blocks/registry';
+import { getBlockDefinition, isPayloadGeneric } from '../../blocks/registry';
 
 /**
- * Resolve '???' (polymorphic) types by propagating concrete types.
+ * Resolve payload types for payload-generic blocks by propagating concrete types.
  *
  * @param patch - Raw patch
  * @returns Patch with resolved payloadType in block params
@@ -30,12 +30,13 @@ export function pass0PolymorphicTypes(patch: Patch): Patch {
     // Already resolved?
     if (block.params.payloadType !== undefined) continue;
 
+    // Only process payload-generic blocks
+    if (!isPayloadGeneric(block.type)) continue;
+
     let inferredPayloadType: string | undefined;
 
-    // Strategy 1: Forward resolution - polymorphic OUTPUT infers from target input
-    for (const [outputId, output] of Object.entries(blockDef.outputs)) {
-      if (output.type.payload !== '???') continue;
-
+    // Strategy 1: Forward resolution - infer output type from what it connects to
+    for (const [outputId] of Object.entries(blockDef.outputs)) {
       const outgoingEdge = patch.edges.find(
         e => e.enabled !== false &&
              e.from.blockId === blockId &&
@@ -51,20 +52,18 @@ export function pass0PolymorphicTypes(patch: Patch): Patch {
       if (!targetDef) continue;
 
       const targetInput = targetDef.inputs[outgoingEdge.to.slotId];
-      if (!targetInput || !targetInput.type || targetInput.type.payload === '???') continue;
+      if (!targetInput || !targetInput.type) continue;
 
       inferredPayloadType = targetInput.type.payload;
       break;
     }
 
-    // Strategy 2: Backward resolution - polymorphic INPUT infers from source output
+    // Strategy 2: Backward resolution - infer input type from source
     if (!inferredPayloadType) {
       for (const [inputId, input] of Object.entries(blockDef.inputs)) {
         // CRITICAL FIX: Skip config-only inputs (exposedAsPort: false)
         // These are NOT ports and cannot have incoming edges for type inference
         if (input.exposedAsPort === false) continue;
-
-        if (!input.type || input.type.payload !== '???') continue;
 
         const incomingEdge = patch.edges.find(
           e => e.enabled !== false &&
@@ -83,11 +82,11 @@ export function pass0PolymorphicTypes(patch: Patch): Patch {
         const sourceOutput = sourceDef.outputs[incomingEdge.from.slotId];
         if (!sourceOutput) continue;
 
-        // If source output is also polymorphic, check if it was already resolved
-        if (sourceOutput.type.payload === '???') {
+        // If source is also payload-generic, check if it was already resolved
+        if (isPayloadGeneric(sourceBlock.type)) {
           const resolvedPayload = sourceBlock.params.payloadType ||
                                   updatedBlocks.get(sourceBlock.id)?.params.payloadType;
-          if (resolvedPayload && resolvedPayload !== '???') {
+          if (resolvedPayload) {
             inferredPayloadType = resolvedPayload as string;
             break;
           }

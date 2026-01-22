@@ -109,14 +109,12 @@ function analyzeAdapters(
       continue;
     }
 
-    // If source type is polymorphic ('???'), check if it was resolved via params
+    // If source is payload-generic, check if type was resolved via params
     // This handles blocks like Const that have their type inferred from targets
-    if (fromType.payload === '???') {
-      const resolvedPayload = fromBlock.params.payloadType;
-      if (resolvedPayload && resolvedPayload !== '???') {
-        // Create a new type with the resolved payload
-        fromType = { ...fromType, payload: resolvedPayload as typeof fromType.payload };
-      }
+    const resolvedPayload = fromBlock.params.payloadType;
+    if (resolvedPayload) {
+      // Create a new type with the resolved payload
+      fromType = { ...fromType, payload: resolvedPayload as typeof fromType.payload };
     }
 
     // Look for adapter
@@ -154,8 +152,7 @@ function analyzeAdapters(
         }
       }
 
-      // For polymorphic adapters, set payloadType from the source type
-      // This resolves '???' types at adapter creation time
+      // For payload-generic adapters, set payloadType from the source type
       const adapterBlock: Block = {
         id: adapterId,
         type: adapterSpec.blockType,

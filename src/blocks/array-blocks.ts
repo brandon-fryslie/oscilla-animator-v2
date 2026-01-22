@@ -5,13 +5,13 @@
  * They create instances and provide cardinality transform.
  */
 
-import { registerBlock } from './registry';
-import { signalType, signalTypeField } from '../core/canonical-types';
+import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
+import { signalType, signalTypeField, type PayloadType } from '../core/canonical-types';
 import { DOMAIN_CIRCLE } from '../core/domain-registry';
 import { defaultSourceConst, defaultSource } from '../types';
 
 // =============================================================================
-// Array Block
+// Array Block (Payload-Generic)
 // =============================================================================
 
 /**
@@ -19,6 +19,8 @@ import { defaultSourceConst, defaultSource } from '../types';
  *
  * Stage 2: Cardinality transform block.
  * Takes a Signal<T> and produces Field<T> with N elements.
+ *
+ * Payload-Generic: Accepts any concrete payload type for element input.
  *
  * Example:
  * Circle (Signal<float>) → Array → Field<float> (100 copies)
@@ -41,10 +43,21 @@ registerBlock({
     laneCoupling: 'laneLocal',
     broadcastPolicy: 'allowZipSig',
   },
+  payload: {
+    allowedPayloads: {
+      element: ALL_CONCRETE_PAYLOADS,
+      elements: ALL_CONCRETE_PAYLOADS,
+    },
+    combinations: ALL_CONCRETE_PAYLOADS.map(p => ({
+      inputs: [p] as PayloadType[],
+      output: p,
+    })),
+    semantics: 'typeSpecific',
+  },
   inputs: {
     element: {
       label: 'Element',
-      type: signalType('???'),
+      type: signalType('shape'),  // Default type for typical usage
       optional: true,
       defaultSource: defaultSource('Ellipse', 'shape'),
     },
@@ -57,7 +70,7 @@ registerBlock({
     },
   },
   outputs: {
-    elements: { label: 'Elements', type: signalTypeField('???', 'default') },
+    elements: { label: 'Elements', type: signalTypeField('shape', 'default') },
     index: { label: 'Index', type: signalTypeField('int', 'default') },
     t: { label: 'T (0-1)', type: signalTypeField('float', 'default') },
     active: { label: 'Active', type: signalTypeField('bool', 'default') },

@@ -1,21 +1,19 @@
 /**
  * SliderWithInput Component
  *
- * MUI Slider with integrated TextField for direct numeric input.
- * Follows MUI pattern: https://mui.com/material-ui/react-slider/#slider-with-input-field
+ * Mantine Slider with integrated TextInput for direct numeric input.
  *
  * Features:
- * - Always-visible value label (valueLabelDisplay="on")
+ * - Always-visible value label
  * - Bidirectional sync between slider and text field
  * - Clamping to min/max range
  * - Validation for non-numeric and out-of-range input
  * - Optional unit label (e.g., "ms")
- *
- * Created for continuity-controls-v2 sprint
+ * - Beautiful violet-themed styling
  */
 
 import React, { useState } from 'react';
-import { Slider, TextField, Typography, Box } from '@mui/material';
+import { Slider, TextInput, Text, Group, Box, rem } from '@mantine/core';
 
 export interface SliderWithInputProps {
   /** Control label */
@@ -61,9 +59,8 @@ export function SliderWithInput({
   }, [value]);
 
   // Handle slider change
-  const handleSliderChange = (_event: Event, newValue: number | number[]) => {
-    const val = Array.isArray(newValue) ? newValue[0] : newValue;
-    onChange(val);
+  const handleSliderChange = (newValue: number) => {
+    onChange(newValue);
   };
 
   // Handle text input change (allow typing, defer validation)
@@ -86,19 +83,19 @@ export function SliderWithInput({
   };
 
   // Handle Enter key to commit input
-  const handleKeyPress = (event: React.KeyboardEvent) => {
+  const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === 'Enter') {
       handleInputBlur();
     }
   };
 
   return (
-    <div style={{ marginBottom: '0.5rem' }}>
-      <Box display="flex" alignItems="center" gap={1}>
-        <Box flex={1}>
-          <Typography variant="body2" component="label" style={{ display: 'block', marginBottom: '0.25rem' }}>
-            {label}
-          </Typography>
+    <Box mb="xs">
+      <Text size="xs" fw={500} c="gray.4" mb={4}>
+        {label}
+      </Text>
+      <Group gap="sm" align="center">
+        <Box style={{ flex: 1 }}>
           <Slider
             value={value}
             onChange={handleSliderChange}
@@ -106,47 +103,68 @@ export function SliderWithInput({
             max={max}
             step={step}
             disabled={disabled}
-            valueLabelDisplay="on"
-            size="small"
+            size="sm"
+            color="violet"
+            label={(val) => val.toFixed(2)}
+            styles={{
+              track: {
+                background: 'rgba(139, 92, 246, 0.2)',
+              },
+              bar: {
+                background: 'linear-gradient(90deg, var(--mantine-color-violet-6) 0%, var(--mantine-color-violet-4) 100%)',
+              },
+              thumb: {
+                borderColor: 'var(--mantine-color-violet-5)',
+                boxShadow: '0 0 8px rgba(139, 92, 246, 0.5)',
+              },
+              label: {
+                background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.9) 0%, rgba(99, 102, 241, 0.9) 100%)',
+                backdropFilter: 'blur(4px)',
+              },
+            }}
           />
         </Box>
-        <TextField
+        <TextInput
           value={inputValue}
           onChange={handleInputChange}
           onBlur={handleInputBlur}
-          onKeyPress={handleKeyPress}
+          onKeyDown={handleKeyDown}
           disabled={disabled}
-          size="small"
-          variant="outlined"
-          InputProps={{
-            endAdornment: unit ? (
-              <Typography variant="caption" style={{ marginLeft: '0.25rem', opacity: 0.7 }}>
+          size="xs"
+          rightSection={
+            unit ? (
+              <Text size="xs" c="dimmed">
                 {unit}
-              </Typography>
-            ) : undefined,
-          }}
-          sx={{
-            width: unit ? '85px' : '65px',
-            '& .MuiInputBase-input': {
-              fontSize: '0.75rem',
-              padding: '0.375rem 0.5rem',
+              </Text>
+            ) : undefined
+          }
+          styles={{
+            root: {
+              width: unit ? rem(85) : rem(65),
+            },
+            input: {
+              background: 'rgba(0, 0, 0, 0.2)',
+              border: '1px solid rgba(139, 92, 246, 0.2)',
+              fontSize: rem(12),
+              padding: `${rem(6)} ${rem(8)}`,
+              textAlign: 'center',
+              '&:focus': {
+                borderColor: 'var(--mantine-color-violet-5)',
+              },
             },
           }}
         />
-      </Box>
+      </Group>
       {helperText && (
-        <Typography
-          variant="caption"
-          style={{
-            display: 'block',
-            marginTop: '0.25rem',
-            fontStyle: 'italic',
-            opacity: 0.7,
-          }}
+        <Text
+          size="xs"
+          c="dimmed"
+          mt={4}
+          style={{ fontStyle: 'italic' }}
         >
           {helperText}
-        </Typography>
+        </Text>
       )}
-    </div>
+    </Box>
   );
 }

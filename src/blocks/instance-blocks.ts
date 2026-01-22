@@ -6,14 +6,14 @@
  * - Stage 3 blocks (layouts) apply spatial operations to fields
  */
 
-import { registerBlock } from './registry';
-import { signalType, signalTypeField } from '../core/canonical-types';
+import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
+import { signalType, signalTypeField, type PayloadType } from '../core/canonical-types';
 import { DOMAIN_CIRCLE } from '../core/domain-registry';
 import { defaultSourceConst } from '../types';
 import type { LayoutSpec } from '../compiler/ir/types';
 
 // =============================================================================
-// Layout Blocks (Stage 3: Field Operations)
+// Layout Blocks (Stage 3: Field Operations) - Payload-Generic
 // =============================================================================
 
 /**
@@ -21,6 +21,8 @@ import type { LayoutSpec } from '../compiler/ir/types';
  *
  * Stage 3: Field operation block.
  * Takes Field<T> input and outputs Field<vec2> positions.
+ *
+ * Payload-Generic: Accepts any concrete payload type for elements input.
  *
  * Example:
  * Array (Field<float>) → GridLayout → Field<vec2> (grid positions)
@@ -40,8 +42,14 @@ registerBlock({
     laneCoupling: 'laneLocal',
     broadcastPolicy: 'disallowSignalMix',
   },
+  payload: {
+    allowedPayloads: {
+      elements: ALL_CONCRETE_PAYLOADS,
+    },
+    semantics: 'typeSpecific',
+  },
   inputs: {
-    elements: { label: 'Elements', type: signalTypeField('???', 'default') },
+    elements: { label: 'Elements', type: signalTypeField('float', 'default') },
     rows: { label: 'Rows', type: signalType('int'), value: 10, defaultSource: defaultSourceConst(10), exposedAsPort: false },
     cols: { label: 'Columns', type: signalType('int'), value: 10, defaultSource: defaultSourceConst(10), exposedAsPort: false },
   },
@@ -89,6 +97,8 @@ registerBlock({
  *
  * Stage 3: Field operation block.
  * Takes Field<T> input and outputs Field<vec2> positions.
+ *
+ * Payload-Generic: Accepts any concrete payload type for elements input.
  */
 registerBlock({
   type: 'LinearLayout',
@@ -102,8 +112,14 @@ registerBlock({
     laneCoupling: 'laneLocal',
     broadcastPolicy: 'disallowSignalMix',
   },
+  payload: {
+    allowedPayloads: {
+      elements: ALL_CONCRETE_PAYLOADS,
+    },
+    semantics: 'typeSpecific',
+  },
   inputs: {
-    elements: { label: 'Elements', type: signalTypeField('???', 'default') },
+    elements: { label: 'Elements', type: signalTypeField('float', 'default') },
     spacing: { label: 'Spacing', type: signalType('float'), value: 0.1, defaultSource: defaultSourceConst(0.1), exposedAsPort: false },
   },
   outputs: {

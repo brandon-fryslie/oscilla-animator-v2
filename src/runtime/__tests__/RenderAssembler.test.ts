@@ -19,7 +19,8 @@ import type { RuntimeState } from '../RuntimeState';
 import { createRuntimeState } from '../RuntimeState';
 import type { ValueSlot, SigExprId } from '../../types';
 import { registerDynamicTopology } from '../../shapes/registry';
-import type { PathTopologyDef } from '../../shapes/types';
+import type { PathTopologyDef, RenderSpace2D } from '../../shapes/types';
+import { PathVerb } from '../../shapes/types';
 
 // Helper to create a scalar signal type
 const SCALAR_TYPE: SignalType = signalType('float');
@@ -52,13 +53,26 @@ function createMockInstance(count: number): InstanceDecl {
 // Register a test path topology for v2 tests
 const TEST_PATH_TOPOLOGY: PathTopologyDef = {
   id: 'test-pentagon',
-  kind: 'path',
   params: [
-    { name: 'radiusX', default: 0.02 },
-    { name: 'radiusY', default: 0.02 },
-    { name: 'closed', default: 1 },
+    { name: 'radiusX', type: 'float', default: 0.02 },
+    { name: 'radiusY', type: 'float', default: 0.02 },
+    { name: 'closed', type: 'float', default: 1 },
   ],
-  verbs: [0, 1, 1, 1, 1, 4], // MOVE, LINE x4, CLOSE
+  render: (ctx: CanvasRenderingContext2D, p: Record<string, number>, space: RenderSpace2D) => {
+    // Minimal render implementation for testing
+    ctx.beginPath();
+    ctx.moveTo(0, -1);
+    ctx.lineTo(0.95, -0.31);
+    ctx.lineTo(0.59, 0.81);
+    ctx.lineTo(-0.59, 0.81);
+    ctx.lineTo(-0.95, -0.31);
+    ctx.closePath();
+    ctx.fill();
+  },
+  verbs: [PathVerb.MOVE, PathVerb.LINE, PathVerb.LINE, PathVerb.LINE, PathVerb.LINE, PathVerb.CLOSE],
+  pointsPerVerb: [1, 1, 1, 1, 1, 0],
+  totalControlPoints: 5,
+  closed: true,
 };
 
 // Register test topology before tests run

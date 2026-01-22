@@ -17,28 +17,55 @@ export interface EdgeMetadata {
 }
 
 /**
+ * Result from mapDebugEdges containing both edge and port mappings.
+ */
+export interface DebugMappings {
+    /** Map from edge ID to slot metadata */
+    edgeMap: Map<string, EdgeMetadata>;
+    /** Map from "blockId:portName" to slot metadata (for unconnected outputs) */
+    portMap: Map<string, EdgeMetadata>;
+}
+
+/**
  * Map patch edges to runtime slots using the compiled program's debug index.
- * 
- * This function effectively "joins" the static patch structure with the 
+ *
+ * This function effectively "joins" the static patch structure with the
  * compiled runtime structure using the DebugIndex as the bridge.
- * 
+ *
  * @param patch - The source patch containing edges to be mapped
  * @param program - The compiled program containing the debug index
  * @returns Map from Edge ID to EdgeMetadata
  */
 export function mapDebugEdges(patch: Patch, program: CompiledProgramIR): Map<string, EdgeMetadata> {
+    return mapDebugMappings(patch, program).edgeMap;
+}
+
+/**
+ * Map patch edges and ports to runtime slots using the compiled program's debug index.
+ *
+ * Returns both edge-based mappings (for connected ports) and port-based mappings
+ * (for querying unconnected output ports by blockId:portName).
+ *
+ * @param patch - The source patch containing edges to be mapped
+ * @param program - The compiled program containing the debug index
+ * @returns Both edge and port mappings
+ */
+export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): DebugMappings {
     const edgeMetaMap = new Map<string, EdgeMetadata>();
     const debugIndex = program.debugIndex;
 
-    // Guard: If debug index is missing required data, return empty map
-    if (!debugIndex || !debugIndex.ports || !debugIndex.blockMap || !debugIndex.slotToPort) {
-        console.error('[mapDebugEdges] CRITICAL: Incomplete debug index, debug probe will not work', {
-            debugIndexExists: !!debugIndex,
-            portsExists: !!debugIndex?.ports,
-            blockMapExists: !!debugIndex?.blockMap,
-            slotToPortExists: !!debugIndex?.slotToPort,
-        });
-        return edgeMetaMap;
+    // Guard: If debug index is missing required data, throw - silent failures hide bugs
+    if (!debugIndex) {
+        throw new Error('[mapDebugEdges] debugIndex is null/undefined - compiler did not produce debug information');
+    }
+    if (!debugIndex.ports) {
+        throw new Error('[mapDebugEdges] debugIndex.ports is missing - compiler debug index is incomplete');
+    }
+    if (!debugIndex.blockMap) {
+        throw new Error('[mapDebugEdges] debugIndex.blockMap is missing - compiler debug index is incomplete');
+    }
+    if (!debugIndex.slotToPort) {
+        throw new Error('[mapDebugEdges] debugIndex.slotToPort is missing - compiler debug index is incomplete');
     }
 
     // 1. Build a fast lookup: "blockStringID:portName" -> Slot
@@ -188,5 +215,13 @@ export function mapDebugEdges(patch: Patch, program: CompiledProgramIR): Map<str
         }
     }
 
-    return edgeMetaMap;
+    // 3. Build port map for direct port queries (useful for unconnected outputs)
+    const portMetaMap = new Map<string, EdgeMetadata>();
+    for (const [portKey, slotId] of targetToSlot.entries()) {
+        const meta = program.slotMeta.find(m => m.slot === slotId);
+        const type = meta?.type || signalType('float');
+        portMetaMap.set(portKey, { slotId, type });
+    }
+
+    return { edgeMap: edgeMetaMap, portMap: portMetaMap };
 }

@@ -65,7 +65,7 @@ const ADAPTER_RULES: AdapterRule[] = [
   // ==========================================================================
 
   // Polymorphic broadcast - works for any payload type (float, vec2, color, etc.)
-  // The FieldBroadcast block is polymorphic ('???') and resolves type from context
+  // The FieldBroadcast block is payload-generic and resolves type from context
   {
     from: { payload: 'any', cardinality: 'one', temporality: 'continuous' },
     to: { payload: 'any', cardinality: 'many', temporality: 'continuous' },
@@ -104,11 +104,11 @@ export function extractSignature(type: SignalType): TypeSignature {
 /**
  * Check if a type signature matches a pattern.
  *
- * The '???' payload type is polymorphic and matches any payload pattern.
+ * Payload-generic blocks use BlockPayloadMetadata for validation.
  */
 function signatureMatches(actual: TypeSignature, pattern: TypeSignature): boolean {
-  // '???' is polymorphic - matches any payload
-  if (pattern.payload !== 'any' && actual.payload !== pattern.payload && actual.payload !== '???') {
+  // Payload must match unless pattern allows 'any'
+  if (pattern.payload !== 'any' && actual.payload !== pattern.payload) {
     return false;
   }
   if (pattern.cardinality !== 'any' && actual.cardinality !== pattern.cardinality) {
@@ -144,9 +144,8 @@ export function findAdapter(from: SignalType, to: SignalType): AdapterSpec | nul
   for (const rule of ADAPTER_RULES) {
     if (signatureMatches(fromSig, rule.from) && signatureMatches(toSig, rule.to)) {
       // For rules with 'any' payload on both sides, require actual payloads to match
-      // (e.g., can't broadcast float signal to color field)
       if (rule.from.payload === 'any' && rule.to.payload === 'any') {
-        if (fromSig.payload !== toSig.payload && fromSig.payload !== '???' && toSig.payload !== '???') {
+        if (fromSig.payload !== toSig.payload) {
           continue; // Payload mismatch, try next rule
         }
       }
@@ -160,12 +159,10 @@ export function findAdapter(from: SignalType, to: SignalType): AdapterSpec | nul
 /**
  * Check if two type signatures are directly compatible (no adapter needed).
  *
- * The '???' payload is polymorphic and compatible with any payload.
+ * Payload-generic blocks use BlockPayloadMetadata for validation.
  */
 function typesAreCompatible(from: TypeSignature, to: TypeSignature): boolean {
-  const payloadMatch = from.payload === to.payload ||
-                       from.payload === '???' ||
-                       to.payload === '???';
+  const payloadMatch = from.payload === to.payload;
   return (
     payloadMatch &&
     from.cardinality === to.cardinality &&
