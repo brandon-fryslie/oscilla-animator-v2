@@ -4,24 +4,29 @@
  * Blocks that produce and transform scalar signals.
  */
 
-import { registerBlock } from './registry';
+import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
 import { signalType, type PayloadType } from '../core/canonical-types';
 import { OpCode, stableStateId } from '../compiler/ir/types';
 import type { SigExprId } from '../compiler/ir/Indices';
 
 // =============================================================================
-// Const (Polymorphic)
+// Const (Payload-Generic)
 // =============================================================================
 
 /**
- * Polymorphic constant block.
+ * Payload-Generic constant block.
  *
- * The output type is '???' (polymorphic) - resolved by the normalizer
- * based on what this block is wired to. The resolved type is stored
- * in the `payloadType` input.
+ * This block outputs a constant value with type determined by context.
+ * The payload type is resolved by pass0-polymorphic-types based on
+ * what this block connects to. The resolved type is stored in `payloadType`.
  *
- * Supported payload types: float, int, bool, phase, unit
- * (vec2 and color require separate blocks due to value structure)
+ * Payload-Generic Contract (per spec §1):
+ * - Closed admissible payload set: float, int, bool, phase, unit, vec2, color
+ * - Per-payload specialization is total (see lower function)
+ * - No implicit coercions
+ * - Deterministic resolution via payloadType param
+ *
+ * Semantics: typeSpecific (each payload has different value structure)
  */
 registerBlock({
   type: 'Const',
@@ -34,6 +39,18 @@ registerBlock({
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
     broadcastPolicy: 'allowZipSig',
+  },
+  payload: {
+    allowedPayloads: {
+      out: ALL_CONCRETE_PAYLOADS,
+    },
+    // Const has no inputs that affect output type - it's a source block
+    // The output type is determined by context (what it connects to)
+    combinations: ALL_CONCRETE_PAYLOADS.map(p => ({
+      inputs: [] as PayloadType[],
+      output: p,
+    })),
+    semantics: 'typeSpecific',
   },
   inputs: {
     value: {

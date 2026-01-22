@@ -86,26 +86,32 @@ describe('Payload Metadata', () => {
       expect(result).toBe(true);
     });
 
-    it('isPayloadAllowed returns undefined for blocks without constraints', () => {
+    it('isPayloadAllowed returns true for Const allowed payloads', () => {
       const result = isPayloadAllowed('Const', 'out', 'float');
-      // Without explicit constraints, returns undefined
-      expect(result === undefined || result === true).toBe(true);
+      expect(result).toBe(true);
     });
 
-    it('getPayloadCombinations returns undefined for blocks without combinations', () => {
+    it('isPayloadAllowed returns true for Const vec2 payload', () => {
+      const result = isPayloadAllowed('Const', 'out', 'vec2');
+      expect(result).toBe(true);
+    });
+
+    it('getPayloadCombinations returns combinations for Const', () => {
       const combos = getPayloadCombinations('Const');
-      expect(combos === undefined || Array.isArray(combos)).toBe(true);
+      expect(combos).toBeDefined();
+      expect(Array.isArray(combos)).toBe(true);
+      expect(combos!.length).toBeGreaterThan(0);
     });
 
-    it('findPayloadCombination returns undefined when no match', () => {
+    it('findPayloadCombination returns undefined for Const with inputs (it has no inputs)', () => {
+      // Const has no input ports that affect type - it's a source block
       const combo = findPayloadCombination('Const', ['float', 'float']);
-      expect(combo === undefined || combo !== undefined).toBe(true);
+      expect(combo).toBeUndefined();
     });
 
-    it('isPayloadGeneric returns false for blocks without metadata', () => {
-      // Blocks without payload metadata are not payload-generic
+    it('isPayloadGeneric returns true for Const', () => {
       const result = isPayloadGeneric('Const');
-      expect(typeof result).toBe('boolean');
+      expect(result).toBe(true);
     });
   });
 

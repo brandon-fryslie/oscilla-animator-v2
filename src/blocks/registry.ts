@@ -189,9 +189,11 @@ export const DEFAULT_PAYLOAD_METADATA: BlockPayloadMetadata = {
  * Standard allowed payloads for common block patterns.
  */
 export const STANDARD_NUMERIC_PAYLOADS: readonly PayloadType[] = ['float', 'int', 'vec2', 'color', 'phase'];
-export const STANDARD_SCALAR_PAYLOADS: readonly PayloadType[] = ['float', 'int', 'phase'];
+export const STANDARD_SCALAR_PAYLOADS: readonly PayloadType[] = ['float', 'int', 'bool', 'phase', 'unit'];
 export const STANDARD_VECTOR_PAYLOADS: readonly PayloadType[] = ['vec2'];
 export const STANDARD_COLOR_PAYLOADS: readonly PayloadType[] = ['color'];
+/** All concrete payload types (everything except '???') */
+export const ALL_CONCRETE_PAYLOADS: readonly PayloadType[] = ['float', 'int', 'bool', 'phase', 'unit', 'vec2', 'color'];
 
 /**
  * Input definition for a block.
