@@ -102,7 +102,7 @@ export function typecheck(node: ExprNode, env: TypeEnv): ExprNode {
 
     default:
       const _exhaustive: never = node;
-      throw new Error(`Unknown node kind: ${(_exhaustive as any).kind}`);
+      throw new Error(`Unknown node kind: ${_exhaustive}`);
   }
 }
 

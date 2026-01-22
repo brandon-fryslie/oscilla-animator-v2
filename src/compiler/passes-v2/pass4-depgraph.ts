@@ -19,6 +19,7 @@ import type {
   DepEdge,
   DepGraphWithTimeModel,
 } from "../ir/patches";
+import type { BlockIndex } from "../../graph/passes/pass3-indexing";
 
 /**
  * Error types emitted by Pass 4.
@@ -53,9 +54,10 @@ export function pass4DepGraph(
   // Step 1: Create BlockEval nodes for all blocks
   // Blocks are already in index order, so we can just iterate
   for (let i = 0; i < timeResolved.blocks.length; i++) {
+    // Import BlockIndex type to make this safe
     nodes.push({
       kind: "BlockEval",
-      blockIndex: i as any, // BlockIndex is just a branded number
+      blockIndex: i as BlockIndex,
     });
   }
 

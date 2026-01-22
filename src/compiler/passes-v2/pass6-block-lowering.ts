@@ -165,7 +165,7 @@ function resolveInputsWithMultiInput(
     const combinedRef = createCombineNode(
       combine.mode,
       writerRefs,
-      portType as any,
+      portType,
       builder
     );
 

@@ -75,7 +75,8 @@ function renderPass(
   if (pass.kind === 'instances2d') {
     renderInstances2D(ctx, pass, width, height);
   } else {
-    throw new Error(`Unknown pass kind: ${(pass as any).kind}`);
+    const _exhaustive: never = pass;
+    throw new Error(`Unknown pass kind: ${_exhaustive}`);
   }
 }
 

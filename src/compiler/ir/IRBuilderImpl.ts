@@ -81,8 +81,7 @@ export class IRBuilderImpl implements IRBuilder {
 
   sigSlot(slot: ValueSlot, type: SignalType): SigExprId {
     const id = sigExprId(this.sigExprs.length);
-    // Note: Using slot as SlotId - needs type alignment
-    this.sigExprs.push({ kind: 'slot', slot: slot as any, type });
+    this.sigExprs.push({ kind: 'slot', slot, type });
     return id;
   }
 

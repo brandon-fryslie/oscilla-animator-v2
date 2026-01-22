@@ -57,7 +57,7 @@ export function compile(node: ExprNode, ctx: CompileContext): SigExprId {
 
     default:
       const _exhaustive: never = node;
-      throw new Error(`Unknown node kind: ${(_exhaustive as any).kind}`);
+      throw new Error(`Unknown node kind: ${_exhaustive}`);
   }
 }
 
