@@ -112,7 +112,7 @@ const patchGoldenSpiral: PatchBuilder = (b) => {
 
   b.wire(array, 't', goldenAngle, 'id01');
   b.wire(array, 't', angularOffset, 'id01');
-  b.wire(time, 'tMs', angularOffset, 'phase'); // Use tMs (float) instead of phaseA (phase)
+  b.wire(time, 'phaseA', angularOffset, 'phase');
   b.wire(goldenAngle, 'angle', totalAngle, 'a');
   b.wire(angularOffset, 'offset', totalAngle, 'b');
 
@@ -124,7 +124,7 @@ const patchGoldenSpiral: PatchBuilder = (b) => {
   b.wire(effectiveRadius, 'out', pos, 'radius');
 
   const jitter = b.addBlock('FieldJitter2D', { amountX: 0.015, amountY: 0.015 });
-  // Use tMs instead of phaseB to avoid phase->float type mismatch
+  // Broadcast time (scalar) for jitter seed variation
   const timeBroadcast = b.addBlock('FieldBroadcast', { payloadType: 'float' });
   const jitterRand = b.addBlock('FieldAdd', {});
 
@@ -134,12 +134,11 @@ const patchGoldenSpiral: PatchBuilder = (b) => {
   b.wire(pos, 'pos', jitter, 'pos');
   b.wire(jitterRand, 'out', jitter, 'rand');
 
-  // Use tMs instead of phaseA to avoid phase->float type mismatch
   const hue = b.addBlock('FieldHueFromPhase', {});
   const color = b.addBlock('HsvToRgb', { sat: 0.85, val: 0.9 });
 
   b.wire(array, 't', hue, 'id01');
-  b.wire(time, 'tMs', hue, 'phase'); // Use tMs (float) instead of phaseA (phase)
+  b.wire(time, 'phaseA', hue, 'phase');
   b.wire(hue, 'hue', color, 'hue');
 
   const render = b.addBlock('RenderInstances2D', {});
@@ -169,7 +168,7 @@ const patchDomainTest: PatchBuilder = (b) => {
 
   b.wire(array, 't', goldenAngle, 'id01');
   b.wire(array, 't', angularOffset, 'id01');
-  b.wire(time, 'tMs', angularOffset, 'phase'); // Use tMs (float) instead of phaseA (phase)
+  b.wire(time, 'phaseA', angularOffset, 'phase');
   b.wire(goldenAngle, 'angle', totalAngle, 'a');
   b.wire(angularOffset, 'offset', totalAngle, 'b');
 
