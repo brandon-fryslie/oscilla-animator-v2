@@ -9,10 +9,11 @@
  * - Track currently hovered edge for probing
  * - Provide reactive value lookups
  * - Format values based on signal type
+ * - Report debug service health status
  */
 
 import { makeAutoObservable, runInAction } from 'mobx';
-import { debugService, type EdgeValueResult } from '../services/DebugService';
+import { debugService, type EdgeValueResult, type DebugServiceStatus } from '../services/DebugService';
 import type { SignalType } from '../core/canonical-types';
 
 /**
@@ -128,6 +129,14 @@ export class DebugStore {
   get formattedValue(): string | null {
     if (!this._cachedEdgeValue) return null;
     return formatDebugValue(this._cachedEdgeValue.value, this._cachedEdgeValue.type);
+  }
+
+  /**
+   * Get debug service health status.
+   * Used by UI to display mapping errors.
+   */
+  get status(): DebugServiceStatus {
+    return debugService.getStatus();
   }
 
   /**

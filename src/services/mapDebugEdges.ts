@@ -17,6 +17,22 @@ export interface EdgeMetadata {
 }
 
 /**
+ * Details about an edge that couldn't be mapped to a slot.
+ */
+export interface UnmappedEdgeInfo {
+    /** Edge ID */
+    edgeId: string;
+    /** Source block ID */
+    fromBlockId: string;
+    /** Source port name */
+    fromPort: string;
+    /** Target block ID */
+    toBlockId: string;
+    /** Target port name */
+    toPort: string;
+}
+
+/**
  * Result from mapDebugEdges containing both edge and port mappings.
  */
 export interface DebugMappings {
@@ -24,6 +40,8 @@ export interface DebugMappings {
     edgeMap: Map<string, EdgeMetadata>;
     /** Map from "blockId:portName" to slot metadata (for unconnected outputs) */
     portMap: Map<string, EdgeMetadata>;
+    /** Edges that couldn't be mapped (for error reporting) */
+    unmappedEdges: UnmappedEdgeInfo[];
 }
 
 /**
@@ -191,7 +209,9 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
         }
     }
 
-    // 2. Iterate edges and resolve
+    // 2. Iterate edges and resolve, tracking unmapped edges
+    const unmappedEdges: UnmappedEdgeInfo[] = [];
+
     for (const edge of patch.edges) {
         // We want the value flowing FROM the source
         const sourceKey = `${edge.from.blockId}:${edge.from.slotId}`;
@@ -212,6 +232,15 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
                 slotId,
                 type
             });
+        } else {
+            // Track unmapped edge for error reporting
+            unmappedEdges.push({
+                edgeId: edge.id,
+                fromBlockId: edge.from.blockId,
+                fromPort: edge.from.slotId,
+                toBlockId: edge.to.blockId,
+                toPort: edge.to.slotId,
+            });
         }
     }
 
@@ -223,5 +252,5 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
         portMetaMap.set(portKey, { slotId, type });
     }
 
-    return { edgeMap: edgeMetaMap, portMap: portMetaMap };
+    return { edgeMap: edgeMetaMap, portMap: portMetaMap, unmappedEdges };
 }

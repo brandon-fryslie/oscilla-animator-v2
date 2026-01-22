@@ -2,6 +2,7 @@
  * SimpleDebugPanel - Minimal Debug Value Display
  *
  * Fixed bottom-right panel that shows runtime values for hovered edges.
+ * Also displays mapping errors when debug system is not fully operational.
  *
  * LIMITATION: Only works for Signal edges (scalar values).
  * Field edges (arrays/buffers) don't show values because:
@@ -13,7 +14,7 @@
  */
 
 import React from 'react';
-import type { EdgeValueResult } from '../../services/DebugService';
+import type { EdgeValueResult, DebugServiceStatus } from '../../services/DebugService';
 import type { SignalType } from '../../core/canonical-types';
 
 /**
@@ -62,20 +63,28 @@ export interface SimpleDebugPanelProps {
 
   /** Whether panel is enabled */
   enabled: boolean;
+
+  /** Debug service status for error display */
+  status?: DebugServiceStatus | null;
 }
 
 /**
  * SimpleDebugPanel component.
  * Shows current value for hovered edge in bottom-right corner.
+ * Displays mapping errors if debug system is not healthy.
  */
 export const SimpleDebugPanel: React.FC<SimpleDebugPanelProps> = ({
   edgeValue,
   edgeLabel,
   enabled,
+  status,
 }) => {
   if (!enabled) {
     return null;
   }
+
+  // Show error banner if there are unmapped edges
+  const hasErrors = status && !status.isHealthy && status.unmappedEdges.length > 0;
 
   return (
     <div
@@ -83,15 +92,19 @@ export const SimpleDebugPanel: React.FC<SimpleDebugPanelProps> = ({
         position: 'fixed',
         bottom: 20,
         right: 20,
-        width: 320,
+        width: 360,
         background: 'rgba(16, 24, 40, 0.95)',
-        border: '1px solid rgba(78, 205, 196, 0.3)',
+        border: hasErrors 
+          ? '1px solid rgba(239, 68, 68, 0.5)' 
+          : '1px solid rgba(78, 205, 196, 0.3)',
         borderRadius: 8,
         padding: 16,
         fontFamily: 'system-ui, sans-serif',
         fontSize: 13,
         color: '#e2e8f0',
-        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
+        boxShadow: hasErrors 
+          ? '0 4px 12px rgba(239, 68, 68, 0.2)' 
+          : '0 4px 12px rgba(0, 0, 0, 0.4)',
         zIndex: 1000,
         pointerEvents: 'none', // Don't block interactions
       }}
@@ -99,6 +112,76 @@ export const SimpleDebugPanel: React.FC<SimpleDebugPanelProps> = ({
       <div style={{ fontWeight: 600, marginBottom: 12, color: '#4ecdc4' }}>
         Debug Probe
       </div>
+
+      {/* Error Banner */}
+      {hasErrors && (
+        <div
+          style={{
+            background: 'rgba(239, 68, 68, 0.15)',
+            border: '1px solid rgba(239, 68, 68, 0.4)',
+            borderRadius: 6,
+            padding: 10,
+            marginBottom: 12,
+          }}
+        >
+          <div style={{ 
+            color: '#ef4444', 
+            fontWeight: 600, 
+            fontSize: 12, 
+            marginBottom: 6,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+          }}>
+            <span>⚠</span>
+            MAPPING ERROR
+          </div>
+          <div style={{ color: '#fca5a5', fontSize: 11, marginBottom: 6 }}>
+            Failed to map {status!.unmappedEdges.length} edge{status!.unmappedEdges.length > 1 ? 's' : ''}:
+          </div>
+          <div style={{ 
+            maxHeight: 80, 
+            overflowY: 'auto', 
+            fontSize: 10, 
+            fontFamily: 'monospace',
+            color: '#fda4af',
+          }}>
+            {status!.unmappedEdges.slice(0, 5).map((edge, idx) => (
+              <div key={idx} style={{ marginBottom: 2 }}>
+                {edge.fromBlockId}.{edge.fromPort} → {edge.toBlockId}.{edge.toPort}
+              </div>
+            ))}
+            {status!.unmappedEdges.length > 5 && (
+              <div style={{ color: '#fca5a5', fontStyle: 'italic' }}>
+                ...and {status!.unmappedEdges.length - 5} more
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Stats */}
+      {status && (
+        <div style={{ 
+          fontSize: 11, 
+          color: '#64748b', 
+          marginBottom: 10,
+          paddingBottom: 10,
+          borderBottom: '1px solid rgba(100, 116, 139, 0.2)',
+        }}>
+          <span style={{ color: status.isHealthy ? '#4ade80' : '#fbbf24' }}>
+            {status.totalEdgesMapped}
+          </span>
+          {' '}edges mapped
+          {status.totalPortsMapped > 0 && (
+            <>
+              {' • '}
+              <span style={{ color: '#4ade80' }}>{status.totalPortsMapped}</span>
+              {' '}ports
+            </>
+          )}
+        </div>
+      )}
 
       {edgeValue ? (
         <>

@@ -9,6 +9,7 @@
 
 import type { ValueSlot } from '../types';
 import type { SignalType } from '../core/canonical-types';
+import type { UnmappedEdgeInfo } from './mapDebugEdges';
 
 /**
  * Edge metadata stored alongside slot mapping.
@@ -34,6 +35,20 @@ export interface EdgeValueResult {
 
   /** Signal type for formatting */
   type: SignalType;
+}
+
+/**
+ * Debug service health status.
+ */
+export interface DebugServiceStatus {
+  /** Total edges successfully mapped to slots */
+  totalEdgesMapped: number;
+  /** Total ports successfully mapped to slots */
+  totalPortsMapped: number;
+  /** List of edges that couldn't be mapped */
+  unmappedEdges: UnmappedEdgeInfo[];
+  /** Whether debug system is fully operational (no unmapped edges) */
+  isHealthy: boolean;
 }
 
 /**
@@ -63,6 +78,9 @@ class DebugService {
   /** Whether runtime has started (at least one value written) */
   private runtimeStarted = false;
 
+  /** Edges that couldn't be mapped (for error reporting) */
+  private unmappedEdges: UnmappedEdgeInfo[] = [];
+
   /**
    * Set the edge-to-slot mapping.
    * Called by compiler after successful compilation.
@@ -82,6 +100,29 @@ class DebugService {
    */
   setPortToSlotMap(map: Map<string, EdgeMetadata>): void {
     this.portToSlotMap = map;
+  }
+
+  /**
+   * Set unmapped edges for error reporting.
+   * Called by compiler after mapDebugEdges identifies edges that couldn't be mapped.
+   *
+   * @param edges - List of edges that couldn't be mapped
+   */
+  setUnmappedEdges(edges: UnmappedEdgeInfo[]): void {
+    this.unmappedEdges = edges;
+  }
+
+  /**
+   * Get debug service health status.
+   * Used by UI to show mapping errors to user.
+   */
+  getStatus(): DebugServiceStatus {
+    return {
+      totalEdgesMapped: this.edgeToSlotMap.size,
+      totalPortsMapped: this.portToSlotMap.size,
+      unmappedEdges: this.unmappedEdges,
+      isHealthy: this.unmappedEdges.length === 0,
+    };
   }
 
   /**
@@ -201,6 +242,7 @@ class DebugService {
     this.edgeToSlotMap.clear();
     this.portToSlotMap.clear();
     this.slotValues.clear();
+    this.unmappedEdges = [];
     this.runtimeStarted = false;
   }
 }

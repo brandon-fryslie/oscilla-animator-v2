@@ -538,6 +538,7 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = observer(({
         edgeValue={debug.edgeValue}
         edgeLabel={edgeLabel}
         enabled={debug.enabled}
+        status={debug.status}
       />
 
       {/* Context Menus */}

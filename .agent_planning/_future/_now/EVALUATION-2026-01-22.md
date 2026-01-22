@@ -1,11 +1,16 @@
 # Evaluation: .agent_planning/_future/_now Implementation Status
 
 **Generated**: 2026-01-22
+**Updated**: 2026-01-22T13:45Z
 **Verdict**: COMPLETE - All actionable implementation work finished
 
 ## Summary
 
-All 17 spec files in `.agent_planning/_future/_now` have been evaluated. The kernel refactor roadmap and all actionable implementation tasks are **COMPLETE**. The remaining specs are design documents describing future architectural direction.
+All spec files in `.agent_planning/_future/_now` have been evaluated. The kernel refactor roadmap and all actionable implementation tasks are **COMPLETE**. The remaining specs are design documents describing future architectural direction (multiple backends, SVG, 3D).
+
+**Note**: Directory contents changed - specs 0-7 were moved elsewhere. Current directory contains:
+- Implementation specs: 8, 9, 15 (COMPLETE)
+- Design specs: 10, 11, 12, 13, 14, 16, 17 (Future work)
 
 ## Spec-by-Spec Analysis
 

@@ -65,9 +65,10 @@ function setupDebugProbe(state: RuntimeState, patch: Patch, program: any): void 
   };
 
   // Build and set debug mappings (edge→slot and port→slot)
-  const { edgeMap, portMap } = mapDebugMappings(patch, program);
+  const { edgeMap, portMap, unmappedEdges } = mapDebugMappings(patch, program);
   debugService.setEdgeToSlotMap(edgeMap);
   debugService.setPortToSlotMap(portMap);
+  debugService.setUnmappedEdges(unmappedEdges);
 }
 
 // =============================================================================
