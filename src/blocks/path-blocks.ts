@@ -154,15 +154,16 @@ registerBlock({
     );
 
     // Get radiusX and radiusY signals
+    // Local-space convention: Default radius is 1.0 (unit local-space)
     const radiusXInput = inputsById.radiusX;
     const radiusXSig = radiusXInput?.k === 'sig'
       ? radiusXInput.id
-      : ctx.b.sigConst((config?.radiusX as number) ?? 0.1, signalType('float'));
+      : ctx.b.sigConst((config?.radiusX as number) ?? 1.0, signalType('float'));
 
     const radiusYInput = inputsById.radiusY;
     const radiusYSig = radiusYInput?.k === 'sig'
       ? radiusYInput.id
-      : ctx.b.sigConst((config?.radiusY as number) ?? 0.1, signalType('float'));
+      : ctx.b.sigConst((config?.radiusY as number) ?? 1.0, signalType('float'));
 
     const sidesSig = ctx.b.sigConst(sides, signalType('int'));
 
@@ -346,15 +347,16 @@ registerBlock({
     );
 
     // Get outerRadius and innerRadius signals
+    // Local-space convention: Default radii are unit scale (1.0 outer, 0.4 inner for nice star)
     const outerRadiusInput = inputsById.outerRadius;
     const outerRadiusSig = outerRadiusInput?.k === 'sig'
       ? outerRadiusInput.id
-      : ctx.b.sigConst((config?.outerRadius as number) ?? 0.15, signalType('float'));
+      : ctx.b.sigConst((config?.outerRadius as number) ?? 1.0, signalType('float'));
 
     const innerRadiusInput = inputsById.innerRadius;
     const innerRadiusSig = innerRadiusInput?.k === 'sig'
       ? innerRadiusInput.id
-      : ctx.b.sigConst((config?.innerRadius as number) ?? 0.06, signalType('float'));
+      : ctx.b.sigConst((config?.innerRadius as number) ?? 0.4, signalType('float'));
 
     const pointsSig = ctx.b.sigConst(points, signalType('int'));
 
