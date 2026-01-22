@@ -4,39 +4,26 @@
  * Uses canvas API with topology-based shape dispatch.
  * No more hardcoded shape switches - dispatches to topology.render() or path rendering.
  *
- * ROADMAP PHASE 6 - FUTURE DIRECTION:
+ * Architecture:
+ * - Renderer is a pure sink: receives pre-resolved RenderFrameIR
+ * - No shape interpretation - RenderAssembler does all resolution
+ * - Pass-level validation - fast inner loops with no checks
+ * - Local-space geometry with instance transforms
  *
- * Current state: Renderer interprets heterogeneous shapes and scales control points
- * Target state: Renderer as pure sink for explicit DrawOps
+ * Coordinate spaces:
+ * - LOCAL SPACE: Control points centered at (0,0), |p| ≈ O(1)
+ * - WORLD SPACE: Instance positions normalized [0,1]
+ * - VIEWPORT SPACE: Final pixel coordinates
  *
- * Key changes planned:
- * 1. Remove shape interpretation logic
- *    - No more ShapeDescriptor decoding
- *    - No more determineShapeMode branching
- *    - No more param name mapping
+ * Transform sequence per instance:
+ *   ctx.translate(x * width, y * height)  // world → viewport
+ *   ctx.scale(sizePx, sizePx)             // local → viewport scale
+ *   drawPath(localSpacePoints)            // no additional scaling
  *
- * 2. Local-space geometry + instance transforms
- *    Current: Control points scaled by width/height in renderPathAtParticle
- *    Future: Control points in local space, instance transforms applied:
- *      ctx.translate(x * width, y * height);
- *      ctx.rotate(rotation);
- *      ctx.scale(size, size);
- *      drawPath(localSpacePoints); // No width/height scaling
- *
- * 3. Numeric topology IDs (not strings)
- *    Current: String lookup in topology registry
- *    Future: Array index lookup by numeric topologyId
- *
- * 4. Explicit style controls
- *    Current: Only fillColor implicit via ctx.fillStyle
- *    Future: PathStyle with fill/stroke/width/dash/blend
- *
- * 5. Pass-level validation (not per-instance)
- *    Current: Throws inside particle loop
- *    Future: Validate once per pass, fast loop
- *
- * See: src/render/future-types.ts for target DrawPathInstancesOp
- *      .agent_planning/_future/9-renderer.md
+ * Future enhancements (see .agent_planning/_future/9-renderer.md):
+ * - Numeric topology IDs (array index vs string lookup)
+ * - Explicit PathStyle (fill/stroke/width/dash/blend)
+ * - Per-instance rotation and anisotropic scale
  */
 
 import type { RenderFrameIR, RenderPassIR, ResolvedShape } from '../runtime/ScheduleExecutor';
@@ -84,15 +71,15 @@ function renderPass(
 /**
  * Render 2D instances with unified shape model and path support
  *
- * Shape can be:
- * - ShapeDescriptor: Topology + params (uniform for all particles)
- * - ArrayBufferView: Per-particle shape buffer (Field<shape>)
- * - number: Legacy encoding (0=circle, 1=square, 2=triangle) - deprecated
+ * ResolvedShape from RenderAssembler contains:
+ * - topologyId: Identifies shape topology (path verbs or primitive)
+ * - params: Shape parameters with defaults applied
+ * - mode: 'path' | 'primitive' for dispatch
+ * - controlPoints: Float32Array for path shapes (local space)
  *
  * For path shapes:
- * - Control points define the shape template (e.g., 5 vertices for pentagon)
- * - Each particle renders the same shape at its position
- * - Control points are relative offsets, scaled by the particle size
+ * - Control points define shape template in local space
+ * - Each instance renders the same shape with instance transforms
  */
 function renderInstances2D(
   ctx: CanvasRenderingContext2D,
@@ -104,39 +91,39 @@ function renderInstances2D(
   const color = pass.color as Uint8ClampedArray;
   const scale = pass.scale;
 
-  // Use resolvedShape (REQUIRED - always present from RenderAssembler)
-  const shapeMode = convertResolvedShapeToMode(pass.resolvedShape);
+  // Get topology for render function (single lookup per pass)
+  const topology = getTopology(pass.resolvedShape.topologyId);
+  const params = pass.resolvedShape.params;
 
   // Get control points for path shapes from resolvedShape
   const controlPoints = pass.resolvedShape.mode === 'path'
     ? pass.resolvedShape.controlPoints as Float32Array | undefined
     : undefined;
 
+  // PASS-LEVEL VALIDATION: Validate once before the loop, not per-instance
+  // This follows spec 9-renderer.md: "pass-level validation + no checks inside hot loops"
+  if (isPathTopology(topology) && !controlPoints) {
+    throw new Error(
+      `Path topology '${topology.id}' requires control points buffer. ` +
+      `Ensure the shape signal includes a control point field.`
+    );
+  }
+
+  // Fast inner loop - no validation checks
   for (let i = 0; i < pass.count; i++) {
     const x = position[i * 2] * width;
     const y = position[i * 2 + 1] * height;
 
     ctx.fillStyle = `rgba(${color[i * 4]},${color[i * 4 + 1]},${color[i * 4 + 2]},${color[i * 4 + 3] / 255})`;
 
-    // Render shape based on mode
     ctx.save();
     ctx.translate(x, y);
 
-    // Render shape - only 'topology' mode (path or primitive)
-    const { topology, params } = shapeMode;
-
     if (isPathTopology(topology)) {
-      // Path topology - render using control points as shape template
-      if (!controlPoints) {
-        throw new Error(
-          `Path topology '${topology.id}' requires control points buffer. ` +
-          `Ensure the shape signal includes a control point field.`
-        );
-      }
-      renderPathAtParticle(ctx, topology, controlPoints, scale, width, height);
+      // Path topology - control points validated above
+      renderPathAtParticle(ctx, topology, controlPoints!, scale, width, height);
     } else {
       // Primitive topology (ellipse, rect) - use topology render function
-      // Pass render-space context for normalized→pixel conversion
       topology.render(ctx, params, { width, height, scale });
     }
 
@@ -254,27 +241,4 @@ function renderPathAtParticle(
 
   // Fill the path
   ctx.fill();
-}
-
-/**
- * Shape rendering mode - topology only (legacy and perParticle removed)
- */
-type ShapeMode = { topology: TopologyDef; params: Record<string, number> };
-
-/**
- * Convert ResolvedShape to ShapeMode
- *
- * RenderAssembler provides pre-resolved shapes with:
- * - Topology lookup already done (but we still need to get the render function)
- * - Params resolved with defaults applied
- *
- * This is a simple conversion - no interpretation logic.
- */
-function convertResolvedShapeToMode(resolved: ResolvedShape): ShapeMode {
-  // Get topology for render function
-  const topology = getTopology(resolved.topologyId);
-  return {
-    topology,
-    params: resolved.params,
-  };
 }
