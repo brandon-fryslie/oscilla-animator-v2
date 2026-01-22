@@ -918,8 +918,6 @@ async function main() {
       )
     );
 
-    console.log('React root initialized, waiting for store...');
-
   } catch (err) {
     console.error('Failed to initialize application:', err);
   }

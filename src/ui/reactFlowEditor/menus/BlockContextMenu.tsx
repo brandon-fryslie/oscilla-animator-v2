@@ -56,7 +56,6 @@ export const BlockContextMenu: React.FC<BlockContextMenuProps> = ({
 
           // TODO: Position the new block offset from original (requires access to node position)
           // For now, just create it at default position
-          console.log('Duplicated block:', blockId, '→', newId);
         },
         dividerAfter: true,
       },
