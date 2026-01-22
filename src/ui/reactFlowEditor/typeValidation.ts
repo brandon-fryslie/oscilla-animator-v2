@@ -127,6 +127,26 @@ export function getPortTypeFromBlockType(
 }
 
 // =============================================================================
+// Domain Transformation (Stub)
+// =============================================================================
+
+/**
+ * Check if a domain transformation exists between two domains.
+ *
+ * TODO: Implement domain transformation system when available.
+ * For now, this is a stub that always returns false.
+ *
+ * @param fromDomain - Source domain
+ * @param toDomain - Target domain
+ * @returns true if a transformation exists, false otherwise
+ */
+function canTransformDomain(fromDomain: string, toDomain: string): boolean {
+  // Stub: No transformation system implemented yet
+  // When domain transformation system is ready, check it here
+  return false;
+}
+
+// =============================================================================
 // Type Compatibility
 // =============================================================================
 
@@ -157,15 +177,24 @@ function isTypeCompatible(from: SignalType, to: SignalType): boolean {
     return false;
   }
 
-  // For 'many' cardinality, instance must match
+  // For 'many' cardinality, check domain compatibility
   if (fromCard.kind === 'many' && toCard.kind === 'many') {
     const fromInstance = fromCard.instance;
     const toInstance = toCard.instance;
     if (!fromInstance || !toInstance) return false;
-    return (
-      fromInstance.domainType === toInstance.domainType &&
-      fromInstance.instanceId === toInstance.instanceId
-    );
+
+    // Instance IDs must match (same field instance)
+    if (fromInstance.instanceId !== toInstance.instanceId) {
+      return false;
+    }
+
+    // Domain types must match exactly OR have a valid transformation
+    if (fromInstance.domainType === toInstance.domainType) {
+      return true;
+    }
+
+    // Check if domain transformation exists (stub for now)
+    return canTransformDomain(fromInstance.domainType, toInstance.domainType);
   }
 
   return true;
