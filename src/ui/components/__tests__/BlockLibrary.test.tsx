@@ -15,8 +15,11 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { BlockLibrary } from '../BlockLibrary';
 import { EditorProvider } from '../../editorCommon';
-import { rootStore, StoreProvider } from '../../../stores';
+import { RootStore, StoreProvider } from '../../../stores';
 import { getBlockCategories, getBlockTypesByCategory } from '../../../blocks/registry';
+
+// Create a fresh store instance for tests (not the global singleton)
+let testStore: RootStore;
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -43,7 +46,7 @@ Object.defineProperty(window, 'localStorage', {
 // Wrapper component to provide required context
 function TestWrapper({ children }: { children: React.ReactNode }) {
   return (
-    <StoreProvider store={rootStore}>
+    <StoreProvider store={testStore}>
       <EditorProvider>{children}</EditorProvider>
     </StoreProvider>
   );
@@ -51,9 +54,11 @@ function TestWrapper({ children }: { children: React.ReactNode }) {
 
 describe('BlockLibrary', () => {
   beforeEach(() => {
+    // Create fresh store instance for each test
+    testStore = new RootStore();
     localStorageMock.clear();
-    rootStore.selection.clearSelection();
-    rootStore.selection.clearPreview();
+    testStore.selection.clearSelection();
+    testStore.selection.clearPreview();
   });
 
   afterEach(() => {
@@ -204,12 +209,12 @@ describe('BlockLibrary', () => {
       const firstType = types[0];
       const blockElement = screen.getByText(firstType.label);
 
-      const initialBlockCount = rootStore.patch.blocks.size;
+      const initialBlockCount = testStore.patch.blocks.size;
       fireEvent.doubleClick(blockElement);
 
       await waitFor(() => {
         // Block should be added to PatchStore
-        expect(rootStore.patch.blocks.size).toBe(initialBlockCount + 1);
+        expect(testStore.patch.blocks.size).toBe(initialBlockCount + 1);
       });
     });
   });

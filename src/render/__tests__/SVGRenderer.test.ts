@@ -151,14 +151,18 @@ describe('SVGRenderer', () => {
       renderer = new SVGRenderer(container, 800, 600);
 
       const op = createTriangleOp();
-      op.style.fillColor = new Uint8ClampedArray([
-        255, 0, 0, 255,   // red
-        0, 255, 0, 255,   // green
-      ]);
-
       const frame: RenderFrameIR_Future = {
         version: 2,
-        ops: [op],
+        ops: [{
+          ...op,
+          style: {
+            ...op.style,
+            fillColor: new Uint8ClampedArray([
+              255, 0, 0, 255,   // red
+              0, 255, 0, 255,   // green
+            ]),
+          },
+        }],
       };
 
       renderer.render(frame);
@@ -172,12 +176,16 @@ describe('SVGRenderer', () => {
       renderer = new SVGRenderer(container, 800, 600);
 
       const op = createTriangleOp();
-      op.style.strokeColor = new Uint8ClampedArray([0, 0, 255, 255]);
-      op.style.strokeWidth = 0.01;
-
       const frame: RenderFrameIR_Future = {
         version: 2,
-        ops: [op],
+        ops: [{
+          ...op,
+          style: {
+            ...op.style,
+            strokeColor: new Uint8ClampedArray([0, 0, 255, 255]),
+            strokeWidth: 0.01,
+          },
+        }],
       };
 
       renderer.render(frame);
