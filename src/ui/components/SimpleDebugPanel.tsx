@@ -27,10 +27,6 @@ function formatValue(value: number, type: SignalType): string {
   const payload = type.payload;
 
   switch (payload) {
-    case 'phase':
-      // Phase is 0..1, display as percentage
-      return `${(value * 100).toFixed(1)}%`;
-
     case 'color':
       // Color is packed RGB, display as hex
       // For now, just show the raw number (proper color unpacking in Sprint 2)

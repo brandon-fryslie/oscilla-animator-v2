@@ -47,7 +47,7 @@ registerBlock({
     semantics: 'typeSpecific',
   },
   inputs: {
-    elements: { label: 'Elements', type: signalTypeField('float', 'default') },
+    elements: { label: 'Elements', type: signalTypeField('shape', 'default') },
     rows: { label: 'Rows', type: signalType('int'), value: 10, defaultSource: defaultSourceConst(10), exposedAsPort: false },
     cols: { label: 'Columns', type: signalType('int'), value: 10, defaultSource: defaultSourceConst(10), exposedAsPort: false },
   },

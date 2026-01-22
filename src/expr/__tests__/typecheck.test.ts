@@ -27,14 +27,14 @@ describe('Type Checker', () => {
   describe('Identifier Type Lookup', () => {
     it('looks up identifier type from env', () => {
       const ast = parse(tokenize('phase'));
-      const env = new Map([['phase', 'phase' as const]]);
+      const env = new Map([['phase', 'float' as const]]);
       const typed = typecheck(ast, env);
-      expect(typed.type).toBe('phase');
+      expect(typed.type).toBe('float');
     });
 
     it('throws error for undefined identifier', () => {
       const ast = parse(tokenize('unknown'));
-      const env = new Map([['phase', 'phase' as const]]);
+      const env = new Map([['phase', 'float' as const]]);
       expect(() => typecheck(ast, env)).toThrow(/Undefined input 'unknown'/);
     });
   });
@@ -54,20 +54,11 @@ describe('Type Checker', () => {
       expect(typed.type).toBe('float');
     });
 
-    it('phase + float → phase', () => {
+    it('float + float → float', () => {
       const ast = parse(tokenize('phase + 0.5'));
-      const env = new Map([['phase', 'phase' as const]]);
+      const env = new Map([['phase', 'float' as const]]);
       const typed = typecheck(ast, env);
-      expect(typed.type).toBe('phase');
-    });
-
-    it('rejects phase + phase', () => {
-      const ast = parse(tokenize('a + b'));
-      const env = new Map([
-        ['a', 'phase' as const],
-        ['b', 'phase' as const],
-      ]);
-      expect(() => typecheck(ast, env)).toThrow(/Cannot.*phase \+ phase/);
+      expect(typed.type).toBe('float');
     });
   });
 
@@ -186,7 +177,7 @@ describe('Type Checker', () => {
   describe('Error Messages', () => {
     it('suggests similar identifier', () => {
       const ast = parse(tokenize('phas'));
-      const env = new Map([['phase', 'phase' as const]]);
+      const env = new Map([['phase', 'float' as const]]);
       try {
         typecheck(ast, env);
         expect.fail('Should have thrown');

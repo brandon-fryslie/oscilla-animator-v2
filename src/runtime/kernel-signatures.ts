@@ -130,8 +130,8 @@ export const KERNEL_SIGNATURES: Readonly<Record<string, KernelSignature>> = {
 
   fieldAngularOffset: {
     inputs: [
-      { expectedUnit: 'normalized', description: 'Normalized index [0,1]' },
-      { expectedUnit: 'phase', description: 'Phase [0,1)' },
+      { expectedUnit: 'norm01', description: 'Normalized index [0,1]' },
+      { expectedUnit: 'phase01', description: 'Phase [0,1)' },
       { expectedUnit: 'scalar', description: 'Spin multiplier' },
     ],
     output: { unit: 'radians', description: 'Angular offset in radians' },
@@ -139,7 +139,7 @@ export const KERNEL_SIGNATURES: Readonly<Record<string, KernelSignature>> = {
 
   fieldGoldenAngle: {
     inputs: [
-      { expectedUnit: 'normalized', description: 'Normalized index [0,1]' },
+      { expectedUnit: 'norm01', description: 'Normalized index [0,1]' },
     ],
     output: { unit: 'radians', description: 'Golden angle * turns in radians' },
   },
@@ -148,56 +148,56 @@ export const KERNEL_SIGNATURES: Readonly<Record<string, KernelSignature>> = {
   // Input clamped to [0,1], output [0,1]
 
   easeInQuad: {
-    inputs: [{ expectedUnit: 'normalized', description: 'Progress [0,1] - clamped internally' }],
-    output: { unit: 'normalized', description: 'Eased value [0,1]' },
+    inputs: [{ expectedUnit: 'norm01', description: 'Progress [0,1] - clamped internally' }],
+    output: { unit: 'norm01', description: 'Eased value [0,1]' },
   },
 
   easeOutQuad: {
-    inputs: [{ expectedUnit: 'normalized', description: 'Progress [0,1] - clamped internally' }],
-    output: { unit: 'normalized', description: 'Eased value [0,1]' },
+    inputs: [{ expectedUnit: 'norm01', description: 'Progress [0,1] - clamped internally' }],
+    output: { unit: 'norm01', description: 'Eased value [0,1]' },
   },
 
   easeInOutQuad: {
-    inputs: [{ expectedUnit: 'normalized', description: 'Progress [0,1] - clamped internally' }],
-    output: { unit: 'normalized', description: 'Eased value [0,1]' },
+    inputs: [{ expectedUnit: 'norm01', description: 'Progress [0,1] - clamped internally' }],
+    output: { unit: 'norm01', description: 'Eased value [0,1]' },
   },
 
   easeInCubic: {
-    inputs: [{ expectedUnit: 'normalized', description: 'Progress [0,1] - clamped internally' }],
-    output: { unit: 'normalized', description: 'Eased value [0,1]' },
+    inputs: [{ expectedUnit: 'norm01', description: 'Progress [0,1] - clamped internally' }],
+    output: { unit: 'norm01', description: 'Eased value [0,1]' },
   },
 
   easeOutCubic: {
-    inputs: [{ expectedUnit: 'normalized', description: 'Progress [0,1] - clamped internally' }],
-    output: { unit: 'normalized', description: 'Eased value [0,1]' },
+    inputs: [{ expectedUnit: 'norm01', description: 'Progress [0,1] - clamped internally' }],
+    output: { unit: 'norm01', description: 'Eased value [0,1]' },
   },
 
   easeInOutCubic: {
-    inputs: [{ expectedUnit: 'normalized', description: 'Progress [0,1] - clamped internally' }],
-    output: { unit: 'normalized', description: 'Eased value [0,1]' },
+    inputs: [{ expectedUnit: 'norm01', description: 'Progress [0,1] - clamped internally' }],
+    output: { unit: 'norm01', description: 'Eased value [0,1]' },
   },
 
   easeInElastic: {
-    inputs: [{ expectedUnit: 'normalized', description: 'Progress [0,1] - clamped internally' }],
-    output: { unit: 'normalized', description: 'Eased value [0,1]' },
+    inputs: [{ expectedUnit: 'norm01', description: 'Progress [0,1] - clamped internally' }],
+    output: { unit: 'norm01', description: 'Eased value [0,1]' },
   },
 
   easeOutElastic: {
-    inputs: [{ expectedUnit: 'normalized', description: 'Progress [0,1] - clamped internally' }],
-    output: { unit: 'normalized', description: 'Eased value [0,1]' },
+    inputs: [{ expectedUnit: 'norm01', description: 'Progress [0,1] - clamped internally' }],
+    output: { unit: 'norm01', description: 'Eased value [0,1]' },
   },
 
   easeOutBounce: {
-    inputs: [{ expectedUnit: 'normalized', description: 'Progress [0,1] - clamped internally' }],
-    output: { unit: 'normalized', description: 'Eased value [0,1]' },
+    inputs: [{ expectedUnit: 'norm01', description: 'Progress [0,1] - clamped internally' }],
+    output: { unit: 'norm01', description: 'Eased value [0,1]' },
   },
 
   // === FIELD ANIMATION FUNCTIONS ===
 
   fieldPulse: {
     inputs: [
-      { expectedUnit: 'normalized', description: 'Normalized index [0,1]' },
-      { expectedUnit: 'phase', description: 'Phase [0,1)' },
+      { expectedUnit: 'norm01', description: 'Normalized index [0,1]' },
+      { expectedUnit: 'phase01', description: 'Phase [0,1)' },
       { expectedUnit: 'scalar', description: 'Base value' },
       { expectedUnit: 'scalar', description: 'Amplitude' },
       { expectedUnit: 'scalar', description: 'Spread' },
@@ -207,17 +207,17 @@ export const KERNEL_SIGNATURES: Readonly<Record<string, KernelSignature>> = {
 
   fieldHueFromPhase: {
     inputs: [
-      { expectedUnit: 'normalized', description: 'Normalized index [0,1]' },
-      { expectedUnit: 'phase', description: 'Phase [0,1)' },
+      { expectedUnit: 'norm01', description: 'Normalized index [0,1]' },
+      { expectedUnit: 'phase01', description: 'Phase [0,1)' },
     ],
-    output: { unit: 'normalized', description: 'Hue [0,1]' },
+    output: { unit: 'norm01', description: 'Hue [0,1]' },
   },
 
   circleLayout: {
     inputs: [
-      { expectedUnit: 'normalized', description: 'Normalized index [0,1]' },
+      { expectedUnit: 'norm01', description: 'Normalized index [0,1]' },
       { expectedUnit: 'scalar', description: 'Radius' },
-      { expectedUnit: 'phase', description: 'Phase offset [0,1)' },
+      { expectedUnit: 'phase01', description: 'Phase offset [0,1)' },
     ],
     output: { unit: 'scalar', description: 'Position (vec2)' },
   },
@@ -236,19 +236,19 @@ export const KERNEL_SIGNATURES: Readonly<Record<string, KernelSignature>> = {
 
   hsvToRgb: {
     inputs: [
-      { expectedUnit: 'normalized', description: 'Hue [0,1] - wraps' },
-      { expectedUnit: 'normalized', description: 'Saturation [0,1] - clamped' },
-      { expectedUnit: 'normalized', description: 'Value [0,1] - clamped' },
+      { expectedUnit: 'norm01', description: 'Hue [0,1] - wraps' },
+      { expectedUnit: 'norm01', description: 'Saturation [0,1] - clamped' },
+      { expectedUnit: 'norm01', description: 'Value [0,1] - clamped' },
     ],
-    output: { unit: 'scalar', description: 'RGBA color' },
+    output: { unit: 'rgba01', description: 'RGBA color' },
   },
 
   applyOpacity: {
     inputs: [
-      { expectedUnit: 'scalar', description: 'Color field (RGBA)' },
-      { expectedUnit: 'normalized', description: 'Opacity [0,1] - clamped' },
+      { expectedUnit: 'rgba01', description: 'Color field (RGBA)' },
+      { expectedUnit: 'norm01', description: 'Opacity [0,1] - clamped' },
     ],
-    output: { unit: 'scalar', description: 'RGBA color with applied opacity' },
+    output: { unit: 'rgba01', description: 'RGBA color with applied opacity' },
   },
 
   // === JITTER / EFFECTS ===
@@ -278,8 +278,8 @@ export const KERNEL_SIGNATURES: Readonly<Record<string, KernelSignature>> = {
       { expectedUnit: 'scalar', description: 'Position (vec2) - coord-space AGNOSTIC' },
       { expectedUnit: 'scalar', description: 'Target X - same space as position' },
       { expectedUnit: 'scalar', description: 'Target Y - same space as position' },
-      { expectedUnit: 'phase', description: 'Phase [0,1) - modulates drift' },
-      { expectedUnit: 'normalized', description: 'Strength [0,1]' },
+      { expectedUnit: 'phase01', description: 'Phase [0,1) - modulates drift' },
+      { expectedUnit: 'norm01', description: 'Strength [0,1]' },
     ],
     output: { unit: 'scalar', description: 'Attracted position (vec2) - preserves input space' },
   },
@@ -296,7 +296,7 @@ export const KERNEL_SIGNATURES: Readonly<Record<string, KernelSignature>> = {
 
   fieldRadiusSqrt: {
     inputs: [
-      { expectedUnit: 'normalized', description: 'Normalized index [0,1]' },
+      { expectedUnit: 'norm01', description: 'Normalized index [0,1]' },
       { expectedUnit: 'scalar', description: 'Radius - units preserved' },
     ],
     output: { unit: 'scalar', description: 'Scaled radius: radius * sqrt(id01)' },
@@ -306,8 +306,8 @@ export const KERNEL_SIGNATURES: Readonly<Record<string, KernelSignature>> = {
 
   polygonVertex: {
     inputs: [
-      { expectedUnit: '#', description: 'Vertex index (integer)' },
-      { expectedUnit: '#', description: 'Number of sides (≥3)' },
+      { expectedUnit: 'count', description: 'Vertex index (integer)' },
+      { expectedUnit: 'count', description: 'Number of sides (≥3)' },
       { expectedUnit: 'scalar', description: 'Radius X - LOCAL-SPACE units' },
       { expectedUnit: 'scalar', description: 'Radius Y - LOCAL-SPACE units' },
     ],
@@ -316,8 +316,8 @@ export const KERNEL_SIGNATURES: Readonly<Record<string, KernelSignature>> = {
 
   starVertex: {
     inputs: [
-      { expectedUnit: '#', description: 'Vertex index (integer)' },
-      { expectedUnit: '#', description: 'Number of points' },
+      { expectedUnit: 'count', description: 'Vertex index (integer)' },
+      { expectedUnit: 'count', description: 'Number of points' },
       { expectedUnit: 'scalar', description: 'Outer radius - LOCAL-SPACE units' },
       { expectedUnit: 'scalar', description: 'Inner radius - LOCAL-SPACE units' },
     ],

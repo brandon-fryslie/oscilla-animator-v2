@@ -104,10 +104,12 @@ type AxisTag<T> =
 
 **Values**:
 - `{ kind: 'zero' }` - compile-time constant
-- `{ kind: 'one' }` - single lane
-- `{ kind: 'many'; domain: DomainRef }` - N lanes aligned by domain
+- `{ kind: 'one' }` - single lane (Signal)
+- `{ kind: 'many'; instance: InstanceRef }` - N lanes aligned by instance (Field)
 
 **Source**: [01-type-system.md](./topics/01-type-system.md)
+
+**Note**: An InstanceRef is an instance of a Domain - it points to the actual instantiation of domain objects (domainType + instanceId).
 
 ---
 
@@ -334,6 +336,42 @@ interface InstanceRef {
 **Source**: [02-block-system.md](./topics/02-block-system.md)
 
 **Note**: Layout is orthogonal to domain and instance.
+
+---
+
+### Cardinality-Generic Block
+
+**Definition**: A block whose semantic function is per-lane and valid for both Signal (one lane) and Field (many lanes). Lane-local, cardinality-preserving, instance-aligned, and deterministic per lane.
+
+**Type**: concept (block classification property)
+
+**Canonical Form**: `Cardinality-Generic Block`
+
+**Contract**:
+1. Lane-locality (no cross-lane dependence)
+2. Cardinality preservation (output matches input cardinality)
+3. Instance alignment preservation (same InstanceRef on all many operands)
+4. Deterministic per-lane execution
+
+**Examples**: Add, Mul, Hash, Noise, UnitDelay, Lag, Phasor, SampleAndHold
+
+**Source**: [02-block-system.md](./topics/02-block-system.md)
+
+**Note**: The compiler specializes each instance to either scalar or field evaluation — no runtime branching on cardinality.
+
+---
+
+### StateId
+
+**Definition**: Stable identifier for a block's conceptual state that survives recompilation. Derived from stable anchors (blockId + primitive identity + state key + instance context).
+
+**Type**: type
+
+**Canonical Form**: `StateId`
+
+**Semantics**: Identifies conceptual state, not storage offset. Used for state migration during hot-swap (see I3).
+
+**Source**: [05-runtime.md](./topics/05-runtime.md), [02-block-system.md](./topics/02-block-system.md)
 
 ---
 

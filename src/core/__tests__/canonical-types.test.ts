@@ -70,13 +70,13 @@ import {
 
 describe('PayloadType', () => {
   it('includes all core payload types', () => {
-    const payloads: PayloadType[] = ['float', 'int', 'vec2', 'color', 'phase', 'bool', 'unit'];
-    expect(payloads.length).toBe(7);
+    const payloads: PayloadType[] = ['float', 'int', 'vec2', 'color', 'bool', 'shape'];
+    expect(payloads.length).toBe(6);
   });
 
   it('does NOT include event or domain (these are axis concepts)', () => {
     // TypeScript will catch this at compile time, but documenting intent
-    const validPayloads: PayloadType[] = ['float', 'int', 'vec2', 'color', 'phase', 'bool', 'unit'];
+    const validPayloads: PayloadType[] = ['float', 'int', 'vec2', 'color', 'bool', 'shape'];
     expect(validPayloads).not.toContain('event');
     expect(validPayloads).not.toContain('domain');
   });
@@ -416,7 +416,7 @@ describe('derived SignalType helpers', () => {
   });
 
   it('signalTypeTrigger creates one + discrete', () => {
-    const st = signalTypeTrigger('unit');
+    const st = signalTypeTrigger('bool');
     const card = st.extent.cardinality;
     const temp = st.extent.temporality;
     expect(card.kind).toBe('instantiated');

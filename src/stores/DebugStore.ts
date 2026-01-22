@@ -23,10 +23,6 @@ export function formatDebugValue(value: number, type: SignalType): string {
   const payload = type.payload;
 
   switch (payload) {
-    case 'phase':
-      // Phase is 0..1, display as percentage
-      return `${(value * 100).toFixed(1)}%`;
-
     case 'color':
       // Color is packed RGB, display as hex
       return `#${Math.floor(value).toString(16).padStart(6, '0')}`;

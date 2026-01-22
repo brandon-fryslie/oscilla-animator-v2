@@ -333,6 +333,17 @@ For stateful blocks:
 
 ---
 
+## Expression Forms (Implementation Note)
+
+Before lowering to final Ops, the compiler may use intermediate expression forms that distinguish signal-path and field-path computations:
+
+- **Signal path**: Map, Zip, StateRead over scalar values
+- **Field path**: Map, Zip, ZipSig (field + signal operands), Broadcast (signal → field)
+
+When a cardinality-generic block mixes Signal and Field inputs, the compiler represents broadcast explicitly in the IR (never implicit at runtime). The choice between "zip-with-signal" and "explicit broadcast then zip" is an implementation decision — both are valid as long as behavior is deterministic.
+
+---
+
 ## CompiledProgramIR
 
 The output of compilation - what the runtime executes.

@@ -1313,6 +1313,147 @@ How should users access domain-provided intrinsic properties?
 
 ---
 
+---
+
+## Update 5: Cardinality-Generic Block Type Spec Integration (2026-01-22)
+
+**Sources Analyzed**: 1 file (0-CardinalityGeneric-Block-Type-Spec.md)
+**Topics Updated**: 2 (02-block-system, 04-compilation)
+**Resolutions Made**: 7
+**New Terms**: 2 (Cardinality-Generic Block, StateId)
+
+---
+
+### D19: Cardinality-Generic Block Formal Contract
+
+**Date**: 2026-01-22
+
+**Category**: Structural Addition (T2)
+
+**Source**: 0-CardinalityGeneric-Block-Type-Spec.md
+
+**The Problem**:
+The canonical spec describes blocks that work on both Signal and Field (e.g., Add, UnitDelay) but never formally defines the contract that makes this possible.
+
+**Resolution**: Add "Cardinality-Generic Block" as a formal concept in Topic 02 (Block System) with 4-property contract: lane-locality, cardinality preservation, instance alignment, deterministic per-lane execution.
+
+**Rationale**: Formalizing an implicit concept enables:
+- Compiler validation of block correctness
+- Clear classification of which blocks can operate in both modes
+- Documentation of what's allowed vs forbidden
+
+**Impact**: Topic 02 new section, GLOSSARY new term
+
+**Approved**: 2026-01-22 by Brandon Fryslie
+
+---
+
+### D20: Block Registry Metadata (Rejected)
+
+**Date**: 2026-01-22
+
+**Category**: Rejected Proposal
+
+**Source**: 0-CardinalityGeneric-Block-Type-Spec.md §8
+
+**The Proposal**: Add compile-time registry metadata (cardinalityMode, laneCoupling, broadcastPolicy) to each block kind.
+
+**Resolution**: **REJECTED** - Unneeded currently. The cardinality-generic contract is sufficient without explicit metadata fields. The compiler can derive these properties from block definitions.
+
+**Rationale**: Over-specified for current needs. Adds complexity without proportional benefit.
+
+**Approved**: 2026-01-22 by Brandon Fryslie
+
+---
+
+### D21: IR Expression Forms (T3 Implementation Detail)
+
+**Date**: 2026-01-22
+
+**Category**: T3 Addition
+
+**Source**: 0-CardinalityGeneric-Block-Type-Spec.md §4.2
+
+**The Proposal**: Add explicit intermediate expression forms (SigExprMap, FieldExprMap, FieldExprZipSig, FieldExprBroadcast) to the compilation topic.
+
+**Resolution**: Add as minimal T3 implementation note in Topic 04. Keep low-level detail minimal, focus on conceptual data (explicit broadcast, no implicit runtime broadcast).
+
+**Rationale**: The concept of "explicit broadcast in IR" matters. The specific expression form names are implementation detail.
+
+**Impact**: Topic 04 - minimal section added
+
+**Approved**: 2026-01-22 by Brandon Fryslie
+
+---
+
+### D22: Diagnostic Codes for Cardinality-Generic (Deferred)
+
+**Date**: 2026-01-22
+
+**Category**: Deferred (T3)
+
+**Source**: 0-CardinalityGeneric-Block-Type-Spec.md §7
+
+**The Proposal**: Add 4 new diagnostic codes (CARDINALITY_MISMATCH, INSTANCE_MISMATCH, LANE_COUPLED_BLOCK_DISALLOWED, IMPLICIT_BROADCAST_DISALLOWED).
+
+**Resolution**: Omit for now. T3 implementation detail — codes can be added when implemented.
+
+**Rationale**: Diagnostic codes are implementation detail. Existing type error handling covers the core semantics (instance mismatch is already a type error).
+
+**Approved**: 2026-01-22 by Brandon Fryslie
+
+---
+
+### D23: Cardinality-Transform Naming (Deferred)
+
+**Date**: 2026-01-22
+
+**Category**: Deferred (Future Spec)
+
+**Source**: 0-CardinalityGeneric-Block-Type-Spec.md §1.2, §6.2
+
+**The Proposal**: Formally define "Cardinality-Transform Block" as complement of cardinality-generic.
+
+**Resolution**: Deferred to future spec. Concept exists (Array block, reduce operations) but formal naming postponed.
+
+**Approved**: 2026-01-22 by Brandon Fryslie
+
+---
+
+### D24: Broadcast Policy (Deferred)
+
+**Date**: 2026-01-22
+
+**Category**: Deferred (Future Spec)
+
+**Source**: 0-CardinalityGeneric-Block-Type-Spec.md §2.2, §4.2
+
+**The Proposal**: Specify whether compiler uses ZipSig or explicit Broadcast+Zip.
+
+**Resolution**: Omit for now. Implementation decision — both approaches are valid. Future spec may standardize.
+
+**Approved**: 2026-01-22 by Brandon Fryslie
+
+---
+
+### D25: Glossary Stale Entry Fix (DomainRef → InstanceRef)
+
+**Date**: 2026-01-22
+
+**Category**: Maintenance (Housekeeping)
+
+**Source**: GLOSSARY.md Cardinality entry vs. D16 resolution
+
+**The Problem**: GLOSSARY Cardinality entry used deprecated `domain: DomainRef` instead of `instance: InstanceRef` per D16.
+
+**Resolution**: Fixed. Updated to `instance: InstanceRef` with note clarifying that InstanceRef points to the actual instantiation of domain objects.
+
+**Impact**: GLOSSARY.md only
+
+**Approved**: 2026-01-22 by Brandon Fryslie
+
+---
+
 ## Statistics
 
 | Phase | Date | Sources | Topics | Resolutions |
@@ -1324,5 +1465,6 @@ How should users access domain-provided intrinsic properties?
 | **Phase 2 (Modulation)** | 2026-01-10 | +3 | +1 | +3 |
 | **Phase 3 (Graph Editor)** | 2026-01-11 | +1 | +1 | +2 |
 | **Phase 4 (Domain System)** | 2026-01-18 | +2 | +0 | +5 |
-| **Total** | — | **57** | **15** | **84** |
+| **Phase 5 (Cardinality-Generic)** | 2026-01-22 | +1 | +0 | +7 |
+| **Total** | — | **58** | **15** | **91** |
 

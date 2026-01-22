@@ -1,0 +1,31 @@
+Agent: status-planner | 2026-01-22-120534
+Topic: units-and-adapters
+Sprints: 2 (HIGH: 2, MEDIUM: 0, LOW: 0)
+Files:
+  - SPRINT-2026-01-22-120534-unit-system-PLAN.md [HIGH]
+  - SPRINT-2026-01-22-120534-unit-system-DOD.md [HIGH]
+  - SPRINT-2026-01-22-120534-unit-system-CONTEXT.md [HIGH]
+  - SPRINT-2026-01-22-120534-adapter-registry-PLAN.md [HIGH]
+  - SPRINT-2026-01-22-120534-adapter-registry-DOD.md [HIGH]
+  - SPRINT-2026-01-22-120534-adapter-registry-CONTEXT.md [HIGH]
+Items: 15 (P0: 7, P1: 5, P2: 3, P3: 0)
+
+Sprint 1: unit-system
+  - P0: Define Unit Discriminated Union
+  - P0: Update SignalType to Require Unit
+  - P0: Implement Payload-Unit Validation Table
+  - P1: Migrate Existing Unit Usages
+  - P1: Update Helper Functions
+  - P2: Update Unit Comparison Logic
+  - P2: Update Compiler Type Checking
+  - P3: Update Documentation and Migration Guide
+
+Sprint 2: adapter-registry (DEPENDS ON Sprint 1)
+  - P0: Define Adapter Block Definitions (10 blocks)
+  - P0: Extend Adapter Registry with Unit-Based Rules
+  - P0: Add DerivedBlockMeta Variant for Adapters
+  - P1: Implement Adapter Anchor Generation
+  - P1: Extend Pass2 to Materialize Adapters as Derived Blocks
+  - P2: Add Adapter Diagnostics
+  - P2: Test Adapter Materialization End-to-End
+  - P3: Update Adapter Registry Documentation

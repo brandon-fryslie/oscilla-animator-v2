@@ -160,12 +160,8 @@ describe('payloadTypeToShapeDescIR', () => {
     expect(payloadTypeToShapeDescIR('int')).toEqual({ kind: 'number' });
   });
 
-  it('maps phase to number shape', () => {
-    expect(payloadTypeToShapeDescIR('phase')).toEqual({ kind: 'number' });
-  });
-
-  it('maps unit to number shape', () => {
-    expect(payloadTypeToShapeDescIR('unit')).toEqual({ kind: 'number' });
+  it('maps shape to number shape (placeholder)', () => {
+    expect(payloadTypeToShapeDescIR('shape')).toEqual({ kind: 'number' });
   });
 
   it('maps bool to bool shape', () => {
@@ -353,9 +349,8 @@ describe('bridging edge cases', () => {
       'int',
       'vec2',
       'color',
-      'phase',
       'bool',
-      'unit',
+      'shape',
     ];
 
     for (const payload of payloads) {

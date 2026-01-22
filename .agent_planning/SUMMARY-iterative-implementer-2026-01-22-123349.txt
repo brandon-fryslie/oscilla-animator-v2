@@ -1,0 +1,26 @@
+Agent: iterative-implementer | 2026-01-22-123349
+Mode: manual
+Completed: Block definition migration to Unit type system | Files: 2 | Commits: 1
+Tests: N/A (manual validation via tsc)
+Cache invalidated: None (no eval cache exists yet)
+Status: complete
+
+Migration Summary:
+- Removed 'phase' and 'unit' from PayloadType union arrays in registry.ts
+- Updated field-operations-blocks.ts to use signalType('float', unitPhase01()) instead of signalType('phase')
+- Verified all production block files compile without errors
+- Test files remain to be updated separately (per user instructions)
+
+Key Pattern Applied:
+  Old: signalType('phase')
+  New: signalType('float', unitPhase01())
+
+Files Modified:
+- src/blocks/registry.ts: Removed 'phase'/'unit' from ALL_CONCRETE_PAYLOADS, STANDARD_NUMERIC_PAYLOADS, STANDARD_SCALAR_PAYLOADS
+- src/blocks/field-operations-blocks.ts: Migrated phase inputs to use unitPhase01()
+
+Verification:
+- npx tsc --noEmit shows 0 errors in src/blocks/ production files
+- Only test file errors remain (expected, to be handled separately)
+
+Note: time-blocks.ts and signal-blocks.ts were already migrated in commit fc3bf7d

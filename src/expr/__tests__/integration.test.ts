@@ -120,16 +120,17 @@ describe('compileExpression Integration', () => {
   });
 
   it('returns error for type error', () => {
+    // bool + bool is not allowed - arithmetic requires numeric types
     const result = compileExpression(
       'x + y',
       new Map([
-        ['x', signalType('phase')],
-        ['y', signalType('phase')],
+        ['x', signalType('bool')],
+        ['y', signalType('bool')],
       ]),
       builder,
       new Map([
-        ['x', builder.sigConst(0, signalType('phase'))],
-        ['y', builder.sigConst(0, signalType('phase'))],
+        ['x', builder.sigConst(0, signalType('bool'))],
+        ['y', builder.sigConst(0, signalType('bool'))],
       ])
     );
 

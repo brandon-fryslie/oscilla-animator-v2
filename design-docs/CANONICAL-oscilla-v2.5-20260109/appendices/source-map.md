@@ -23,6 +23,8 @@ Which original documents contributed to which parts of this specification.
 | [05-runtime.md](../topics/05-runtime.md) | `runtime/05-runtime.md`, `5-RuntimeState.md`, `6-program.md`, `7-Canonical-IR-Program-Contract.md` |
 | [06-renderer.md](../topics/06-renderer.md) | `renderer/09-renderer.md`, `renderer/RENDER-PIPELINE.md` |
 | [15-graph-editor-ui.md](../topics/15-graph-editor-ui.md) | `spec/10-linear-graph-editor.md` |
+| [02-block-system.md](../topics/02-block-system.md) (Cardinality-Generic section) | `_new/0-CardinalityGeneric-Block-Type-Spec.md` |
+| [04-compilation.md](../topics/04-compilation.md) (Expression Forms note) | `_new/0-CardinalityGeneric-Block-Type-Spec.md` |
 
 ---
 

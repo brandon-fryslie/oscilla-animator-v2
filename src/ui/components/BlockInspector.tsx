@@ -81,7 +81,6 @@ function getConstSliderMin(inputDef: InputDef | undefined, portType: SignalType 
   // Type-based defaults
   switch (portType?.payload) {
     case 'int': return 0;
-    case 'phase': return 0;
     case 'float': return 0;
     default: return 0;
   }
@@ -100,7 +99,6 @@ function getConstSliderMax(inputDef: InputDef | undefined, portType: SignalType 
   // Type-based defaults
   switch (portType?.payload) {
     case 'int': return 100;  // Reasonable default for integers
-    case 'phase': return 1;
     case 'float': return 1;
     default: return 1;
   }
@@ -119,7 +117,6 @@ function getConstSliderStep(inputDef: InputDef | undefined, portType: SignalType
   // Type-based defaults
   switch (portType?.payload) {
     case 'int': return 1;
-    case 'phase': return 0.01;
     case 'float': return 0.01;
     default: return 0.01;
   }

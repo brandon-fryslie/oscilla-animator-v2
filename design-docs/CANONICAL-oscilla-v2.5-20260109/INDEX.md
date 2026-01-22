@@ -1,12 +1,12 @@
 ---
 status: CANONICAL
 generated: 2026-01-09T17:00:00Z
-updated: 2026-01-18T14:00:00Z
+updated: 2026-01-22T12:00:00Z
 approved_by: Brandon Fryslie
-approval_method: full_walkthrough + domain_system_reconceptualization
-source_documents: 57
+approval_method: full_walkthrough + domain_system_reconceptualization + cardinality_generic_integration
+source_documents: 58
 topics: 15
-resolutions: 84
+resolutions: 91
 update_history:
   - date: 2026-01-10T19:45:00Z
     sources_added: 23
@@ -25,19 +25,28 @@ update_history:
     topics_updated: [01-type-system, 02-block-system]
     resolutions_made: 5
     notes: "Major restructuring: Domain=ontological classification; Three-stage architecture (Primitive→Array→Layout); New types: DomainSpec, InstanceDecl, InstanceRef"
+  - date: 2026-01-22T12:00:00Z
+    action: "Cardinality-Generic Block Integration"
+    sources_integrated: [design-docs/_new/0-CardinalityGeneric-Block-Type-Spec.md]
+    topics_updated: [02-block-system, 04-compilation]
+    resolutions_made: 7
+    notes: "Formalized cardinality-generic block contract; Added StateId to GLOSSARY; Fixed stale DomainRef→InstanceRef in GLOSSARY; Rejected registry metadata; Deferred diagnostic codes and cardinality-transform naming"
 ---
 
 # Oscilla v2.5: Canonical Specification Index
 
-> **STATUS: ✅ CANONICAL**
-> Last updated: 2026-01-18T14:00:00Z
+> **STATUS: 🔄 UPDATING**
+> Integration in progress. New sources: `0-CardinalityGeneric-Block-Types-Impact.md`, `0-PayloadGeneriic-Block-Type-Spec.md`
+> Started: 2026-01-22T14:00:00Z
+
+> Previous status: ✅ CANONICAL (2026-01-22T12:00:00Z)
 > Approved by: Brandon Fryslie
 
 Generated: 2026-01-09T17:00:00Z
-Last Updated: 2026-01-18T14:00:00Z
+Last Updated: 2026-01-22T12:00:00Z
 Approved by: Brandon Fryslie
-Source Documents: 57 files
-Total Resolutions: 84
+Source Documents: 58 files
+Total Resolutions: 91
 
 ---
 
@@ -123,9 +132,11 @@ Looking for something specific? Here's where to find it:
 | Block, BlockRole, DerivedBlockMeta | [02-block-system.md](./topics/02-block-system.md) |
 | Primitive Block, Array Block, Layout Block | [02-block-system.md](./topics/02-block-system.md) |
 | Three-stage architecture | [02-block-system.md](./topics/02-block-system.md) |
+| Cardinality-Generic Block, lane-locality | [02-block-system.md](./topics/02-block-system.md) |
 | UnitDelay, Lag, Phasor, SampleAndHold | [02-block-system.md](./topics/02-block-system.md) |
 | TimeRoot, Rails, tMs | [03-time-system.md](./topics/03-time-system.md) |
 | NormalizedGraph, CompiledProgramIR | [04-compilation.md](./topics/04-compilation.md) |
+| Expression forms, broadcast, ZipSig | [04-compilation.md](./topics/04-compilation.md) |
 | State slots, scheduling | [05-runtime.md](./topics/05-runtime.md) |
 | RenderInstances2D, batching | [06-renderer.md](./topics/06-renderer.md) |
 | Diagnostic, DiagnosticHub, TargetRef | [07-diagnostics-system.md](./topics/07-diagnostics-system.md) |

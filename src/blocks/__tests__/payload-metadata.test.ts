@@ -119,18 +119,18 @@ describe('Payload Metadata', () => {
     it('validates payload constraints correctly', () => {
       const meta: BlockPayloadMetadata = {
         allowedPayloads: {
-          input: ['float', 'phase'],
+          input: ['float', 'int'],
           out: ['float'],
         },
         semantics: 'typeSpecific',
         combinations: [
           { inputs: ['float'], output: 'float' },
-          { inputs: ['phase'], output: 'float' },
+          { inputs: ['int'], output: 'float' },
         ],
       };
 
       expect(meta.allowedPayloads.input).toContain('float');
-      expect(meta.allowedPayloads.input).toContain('phase');
+      expect(meta.allowedPayloads.input).toContain('int');
       expect(meta.allowedPayloads.input).not.toContain('vec2');
 
       expect(meta.combinations).toHaveLength(2);
@@ -174,11 +174,11 @@ describe('Payload Metadata', () => {
 
     it('typeSpecific semantics means explicit per-type behavior', () => {
       const meta: BlockPayloadMetadata = {
-        allowedPayloads: { input: ['float', 'phase'] },
+        allowedPayloads: { input: ['float', 'int'] },
         semantics: 'typeSpecific',
         combinations: [
           { inputs: ['float'], output: 'float' },
-          { inputs: ['phase'], output: 'float' },
+          { inputs: ['int'], output: 'float' },
         ],
       };
       expect(meta.semantics).toBe('typeSpecific');

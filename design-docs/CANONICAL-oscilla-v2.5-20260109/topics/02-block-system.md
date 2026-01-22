@@ -405,6 +405,76 @@ The minimal block set for a working system:
 
 ---
 
+## Cardinality-Generic Blocks
+
+A **cardinality-generic block** is a block whose semantic function is defined per-lane and is valid for both:
+- **Signal** (cardinality: one) — a single lane
+- **Field** (cardinality: many(instance)) — N lanes aligned to a specific InstanceRef
+
+Cardinality-generic blocks are lane-local and do not perform reduction or aggregation across lanes.
+
+### Formal Contract
+
+A block B is cardinality-generic iff:
+
+1. **Lane-locality**: For every output lane i, the value depends only on input lane i values, any Signal (broadcast) inputs, and per-lane state — never on lane j ≠ i.
+
+2. **Cardinality preservation**: Output cardinality equals the primary data input cardinality. (Blocks that transform cardinality — Signal → Field or Field → Signal — are NOT cardinality-generic.)
+
+3. **Instance alignment preservation**: If cardinality is many(instance), all many inputs and outputs carry the same InstanceRef after type resolution. Mismatch is a type error.
+
+4. **Deterministic per-lane execution**: Given identical inputs, state, and time, the block produces identical outputs per lane independent of physical ordering or batching.
+
+### Which Blocks Are Cardinality-Generic
+
+| Category | Blocks | Notes |
+|----------|--------|-------|
+| **Math** | Add, Mul, Hash, Noise, Length, Normalize | Pure, stateless, lane-local |
+| **State** | UnitDelay, Lag, Phasor, SampleAndHold | Stateful but lane-local (per-lane state) |
+| **Color** | HSV→RGB | Pure conversion |
+
+### Which Blocks Are NOT Cardinality-Generic
+
+| Category | Blocks | Reason |
+|----------|--------|--------|
+| **Instance** | Array | Cardinality transform (Signal → Field) |
+| **Reduce** | (future) Min, Max, Sum, Avg over field | Field → Signal aggregation |
+| **Layout** | Grid, Spiral, Random | Position computation (may be lane-coupled) |
+| **Render** | RenderInstances2D | Sink (consumes fields) |
+| **Time** | TimeRoot | Signal-only source |
+
+### Compilation: No Runtime Generics
+
+The compiler emits fully specialized code — each cardinality-generic block instance becomes either:
+- A **scalar evaluation step** (one lane), or
+- A **field evaluation step** (N lanes in a tight loop)
+
+These are distinct step kinds in the IR. The runtime never branches on cardinality.
+
+### Mixing Signal and Field Inputs
+
+Cardinality-generic blocks may accept both Signal and Field inputs:
+- Signal inputs are **broadcast** (constant across all lanes within a frame)
+- The compiler represents this as an explicit broadcast or zip-with-signal form in the IR
+- No implicit broadcasting at runtime
+
+### Stateful Cardinality-Generic Blocks
+
+For stateful blocks operating at cardinality many(instance):
+- State storage is a dense buffer of length `S * N` where S is the state payload stride and N is the instance count
+- Each lane has independent state at index i
+- State is keyed by stable StateId (survives recompilation)
+- Migration follows I3 rules: copy if compatible, reset + diagnostic if not
+
+### What Is NOT Allowed
+
+A block must NOT be declared cardinality-generic if it:
+1. **Crosses lanes**: output[i] depends on input[j≠i] (blur, boids, sorting, kNN)
+2. **Transforms cardinality**: maps Signal → Field, Field → Signal, or relabels instances
+3. **Mutates instance set**: creates, destroys, reorders, or filters lanes
+
+---
+
 ## Combine System
 
 Multi-writer inputs use combine modes to aggregate values.

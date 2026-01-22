@@ -22,9 +22,7 @@ export const TYPE_COLORS: Record<PayloadType, string> = {
   int: '#6366f1',     // Indigo
   vec2: '#22c55e',    // Green
   color: '#ec4899',   // Magenta/Pink
-  phase: '#06b6d4',   // Cyan
   bool: '#f97316',    // Orange
-  unit: '#a855f7',    // Purple
   shape: '#facc15',   // Yellow
 };
 

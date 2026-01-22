@@ -319,6 +319,17 @@ Primitive → Array → Layout
 | **Phasor** | 0..1 phase accumulator with wrap |
 | **SampleAndHold** | Latch on trigger |
 
+### Cardinality-Generic Blocks
+
+Blocks whose computation is **per-lane** and valid for both Signal (one) and Field (many):
+
+**Contract**: (1) lane-local, (2) cardinality-preserving, (3) instance-aligned, (4) deterministic per-lane.
+
+**Are generic**: Math (Add, Mul, Hash, Noise), Stateful (UnitDelay, Lag, Phasor, SampleAndHold)
+**Are NOT generic**: Array (transform), Reduce (aggregation), Layout (lane-coupled), Render (sink)
+
+Compiler specializes each instance to either scalar or field step — no runtime generics.
+
 ### Cycle Validation
 
 Every strongly connected component must contain at least one stateful primitive.

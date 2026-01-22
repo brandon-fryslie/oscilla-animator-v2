@@ -20,7 +20,7 @@ describe('DebugService', () => {
         it('should store and retrieve edge-to-slot mapping', () => {
             const edgeMap = new Map([
                 ['edge1', { slotId: 10 as ValueSlot, type: signalType('float') }],
-                ['edge2', { slotId: 20 as ValueSlot, type: signalType('phase') }],
+                ['edge2', { slotId: 20 as ValueSlot, type: signalType('float') }],
             ]);
 
             debugService.setEdgeToSlotMap(edgeMap);
@@ -42,7 +42,7 @@ describe('DebugService', () => {
             expect(result2).toEqual({
                 value: 0.75,
                 slotId: 20 as ValueSlot,
-                type: signalType('phase'),
+                type: signalType('float'),
             });
         });
 
@@ -246,7 +246,7 @@ describe('DebugService', () => {
         it('should simulate runtime→debugService→UI flow', () => {
             // 1. Compiler produces edge-to-slot map
             const edgeMap = new Map([
-                ['osc1-out->sin1-phase', { slotId: 5 as ValueSlot, type: signalType('phase') }],
+                ['osc1-out->sin1-phase', { slotId: 5 as ValueSlot, type: signalType('float') }],
                 ['sin1-out->render', { slotId: 8 as ValueSlot, type: signalType('float') }],
             ]);
             debugService.setEdgeToSlotMap(edgeMap);
@@ -269,7 +269,7 @@ describe('DebugService', () => {
             // 3. UI queries values (DebugStore or useDebugProbe)
             const phaseEdgeResult = debugService.getEdgeValue('osc1-out->sin1-phase');
             expect(phaseEdgeResult).toBeDefined();
-            expect(phaseEdgeResult?.type).toEqual(signalType('phase'));
+            expect(phaseEdgeResult?.type).toEqual(signalType('float'));
             expect(phaseEdgeResult?.value).toBe(0.25);
         });
     });
