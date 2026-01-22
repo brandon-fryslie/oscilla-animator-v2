@@ -136,6 +136,8 @@ export function getPortTypeFromBlockType(
  * TODO: Implement domain transformation system when available.
  * For now, this is a stub that always returns false.
  *
+ * Related epic: oscilla-animator-v2-s02 (Domain Transformation System/Adapters)
+ *
  * @param fromDomain - Source domain
  * @param toDomain - Target domain
  * @returns true if a transformation exists, false otherwise
