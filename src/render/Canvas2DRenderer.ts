@@ -72,11 +72,12 @@ function renderPass(
   width: number,
   height: number
 ): void {
-  if (pass.kind === 'instances2d') {
-    renderInstances2D(ctx, pass, width, height);
-  } else {
-    const _exhaustive: never = pass;
-    throw new Error(`Unknown pass kind: ${_exhaustive}`);
+  switch (pass.kind) {
+    case 'instances2d':
+      renderInstances2D(ctx, pass, width, height);
+      break;
+    // Note: RenderPassIR only has 'instances2d' kind currently
+    // Add additional cases here as more pass types are added
   }
 }
 

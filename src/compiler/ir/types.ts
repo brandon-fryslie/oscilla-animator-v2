@@ -159,9 +159,7 @@ export interface SigExprShapeRef {
 export type IntrinsicPropertyName =
   | 'index'
   | 'normalizedIndex'
-  | 'randomId'
-  | 'position'
-  | 'radius';
+  | 'randomId';
 
 export type FieldExpr =
   | FieldExprConst
@@ -171,7 +169,6 @@ export type FieldExpr =
   | FieldExprZip
   | FieldExprZipSig
   | FieldExprArray
-  | FieldExprLayout
   | FieldExprStateRead;
 
 export interface FieldExprConst {
@@ -224,14 +221,6 @@ export interface FieldExprZipSig {
 
 export interface FieldExprArray {
   readonly kind: 'array';
-  readonly instanceId: InstanceId;
-  readonly type: SignalType;
-}
-
-export interface FieldExprLayout {
-  readonly kind: 'layout';
-  readonly input: FieldExprId;
-  readonly layoutSpec: LayoutSpec;
   readonly instanceId: InstanceId;
   readonly type: SignalType;
 }
@@ -358,27 +347,14 @@ export enum OpCode {
 import type { DomainTypeId, InstanceId } from './Indices';
 
 /**
- * Layout specification for an instance.
- * Layout determines spatial arrangement (orthogonal to domain type).
- */
-export type LayoutSpec =
-  | { readonly kind: 'unordered' }
-  | { readonly kind: 'grid'; readonly rows: number; readonly cols: number }
-  | { readonly kind: 'circular'; readonly radius: number }
-  | { readonly kind: 'linear'; readonly spacing: number }
-  | { readonly kind: 'random'; readonly bounds: { x: number; y: number; w: number; h: number }; readonly seed: number }
-  | { readonly kind: 'along-path'; readonly pathInstanceId: string }
-  | { readonly kind: 'custom'; readonly positionField: FieldExprId };
-
-/**
  * Instance declaration.
- * An instance is a specific instantiation of a domain type with count, layout, and lifecycle.
+ * An instance is a specific instantiation of a domain type with count and lifecycle.
+ * Layout is now handled entirely through field kernels (circleLayout, lineLayout, gridLayout).
  */
 export interface InstanceDecl {
   readonly id: string; // InstanceId
   readonly domainType: string; // DomainTypeId
   readonly count: number | 'dynamic';
-  readonly layout: LayoutSpec;
   readonly lifecycle: 'static' | 'dynamic' | 'pooled';
   // Continuity System: Identity specification
   readonly identityMode: 'stable' | 'none';

@@ -18,7 +18,7 @@ import type {
 } from './Indices';
 import type { TopologyId } from '../../shapes/types';
 import type { TimeModelIR } from './schedule';
-import type { PureFn, OpCode, InstanceDecl, LayoutSpec, Step, IntrinsicPropertyName, ContinuityPolicy, SigExpr, FieldExpr, EventExpr, StableStateId, StateMapping } from './types';
+import type { PureFn, OpCode, InstanceDecl, Step, IntrinsicPropertyName, ContinuityPolicy, SigExpr, FieldExpr, EventExpr, StableStateId, StateMapping } from './types';
 
 // =============================================================================
 // IRBuilder Interface
@@ -78,7 +78,7 @@ export interface IRBuilder {
    * Create a field from an intrinsic property.
    *
    * Intrinsics are per-element properties automatically available for any instance.
-   * Valid intrinsic names: 'index', 'normalizedIndex', 'randomId', 'position', 'radius'
+   * Valid intrinsic names: 'index', 'normalizedIndex', 'randomId'
    *
    * @param instanceId - The instance to query
    * @param intrinsic - Intrinsic property name (type-checked at compile time)
@@ -93,21 +93,6 @@ export interface IRBuilder {
    * @param type - Signal type for the array elements
    */
   fieldArray(instanceId: InstanceId, type: SignalType): FieldExprId;
-
-  /**
-   * Create a layout field expression (Stage 3: Field operation for positions).
-   * Applies a layout specification to compute positions for field elements.
-   * @param input - The field to apply layout to
-   * @param layoutSpec - Layout specification (grid, circular, etc.)
-   * @param instanceId - The instance being laid out
-   * @param type - Signal type for the output (typically vec2)
-   */
-  fieldLayout(
-    input: FieldExprId,
-    layoutSpec: LayoutSpec,
-    instanceId: InstanceId,
-    type: SignalType
-  ): FieldExprId;
 
   /** Broadcast a signal to a field. */
   fieldBroadcast(signal: SigExprId, type: SignalType): FieldExprId;
@@ -340,14 +325,12 @@ export interface IRBuilder {
    * Create an instance.
    * @param domainType - Domain type ID (shape, circle, etc.)
    * @param count - Number of elements
-   * @param layout - Layout specification
    * @param lifecycle - Lifecycle mode (default: 'static')
    * @returns InstanceId for the created instance
    */
   createInstance(
     domainType: DomainTypeId,
     count: number,
-    layout: LayoutSpec,
     lifecycle?: 'static' | 'dynamic' | 'pooled'
   ): InstanceId;
 

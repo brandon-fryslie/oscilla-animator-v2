@@ -361,53 +361,6 @@ function fillBuffer(
       break;
     }
 
-    case 'layout': {
-      // Layout field expression: Stage 3 of three-stage architecture
-      // Applies layout specification to compute positions
-      const layout = expr.layoutSpec;
-      const arr = buffer as Float32Array;
-
-      if (layout.kind === 'grid') {
-        const rows = layout.rows || 1;
-        const cols = layout.cols || 1;
-        for (let i = 0; i < N; i++) {
-          const row = Math.floor(i / cols);
-          const col = i % cols;
-          arr[i * 2 + 0] = cols > 1 ? col / (cols - 1) : 0.5;
-          arr[i * 2 + 1] = rows > 1 ? row / (rows - 1) : 0.5;
-        }
-      } else if (layout.kind === 'circular') {
-        const radius = layout.radius || 0.3;
-        const cx = 0.5;
-        const cy = 0.5;
-        const TWO_PI = Math.PI * 2;
-        for (let i = 0; i < N; i++) {
-          const angle = TWO_PI * (i / N);
-          arr[i * 2 + 0] = cx + radius * Math.cos(angle);
-          arr[i * 2 + 1] = cy + radius * Math.sin(angle);
-        }
-      } else if (layout.kind === 'linear') {
-        const spacing = layout.spacing || 0.01;
-        for (let i = 0; i < N; i++) {
-          arr[i * 2 + 0] = 0.5;
-          arr[i * 2 + 1] = i * spacing;
-        }
-      } else if (layout.kind === 'unordered') {
-        // Unordered: no specific layout, default to (0.5, 0.5)
-        for (let i = 0; i < N; i++) {
-          arr[i * 2 + 0] = 0.5;
-          arr[i * 2 + 1] = 0.5;
-        }
-      } else {
-        // Default: center all elements
-        for (let i = 0; i < N; i++) {
-          arr[i * 2 + 0] = 0.5;
-          arr[i * 2 + 1] = 0.5;
-        }
-      }
-      break;
-    }
-
     case 'stateRead': {
       // Per-lane state read for stateful cardinality-generic blocks
       // Each lane reads its corresponding state slot value
@@ -466,18 +419,6 @@ function fillBufferIntrinsic(
       break;
     }
 
-    case 'position': {
-      // Layout-based position (vec2)
-      fillLayoutPosition(buffer, instance);
-      break;
-    }
-
-    case 'radius': {
-      // Layout-based radius (float)
-      fillLayoutRadius(buffer, instance);
-      break;
-    }
-
     default: {
       // TypeScript exhaustiveness check: if all cases are handled, this never executes
       const _exhaustive: never = intrinsic;
@@ -495,73 +436,6 @@ function pseudoRandom(seed: number): number {
   return x - Math.floor(x);
 }
 
-/**
- * Fill buffer with layout-based positions (vec2).
- * Applies the instance's layout specification to compute positions.
- */
-function fillLayoutPosition(buffer: ArrayBufferView, instance: InstanceDecl): void {
-  const count = typeof instance.count === 'number' ? instance.count : 0;
-  const N = count;
-  const layout = instance.layout;
-  const arr = buffer as Float32Array;
-
-  if (layout.kind === 'grid') {
-    const rows = layout.rows || 1;
-    const cols = layout.cols || 1;
-    for (let i = 0; i < N; i++) {
-      const row = Math.floor(i / cols);
-      const col = i % cols;
-      arr[i * 2 + 0] = cols > 1 ? col / (cols - 1) : 0.5;
-      arr[i * 2 + 1] = rows > 1 ? row / (rows - 1) : 0.5;
-    }
-  } else if (layout.kind === 'circular') {
-    const radius = layout.radius || 0.3;
-    const cx = 0.5;
-    const cy = 0.5;
-    const TWO_PI = Math.PI * 2;
-    for (let i = 0; i < N; i++) {
-      const angle = TWO_PI * (i / N);
-      arr[i * 2 + 0] = cx + radius * Math.cos(angle);
-      arr[i * 2 + 1] = cy + radius * Math.sin(angle);
-    }
-  } else if (layout.kind === 'linear') {
-    const spacing = layout.spacing || 0.01;
-    for (let i = 0; i < N; i++) {
-      arr[i * 2 + 0] = 0.5;
-      arr[i * 2 + 1] = i * spacing;
-    }
-  } else {
-    // Default: unordered or unknown layouts default to (0.5, 0.5)
-    for (let i = 0; i < N; i++) {
-      arr[i * 2 + 0] = 0.5;
-      arr[i * 2 + 1] = 0.5;
-    }
-  }
-}
-
-/**
- * Fill buffer with layout-based radius (float).
- * For circular layouts, uses the layout radius; for others, uses a default.
- */
-function fillLayoutRadius(buffer: ArrayBufferView, instance: InstanceDecl): void {
-  const count = typeof instance.count === 'number' ? instance.count : 0;
-  const N = count;
-  const layout = instance.layout;
-  const arr = buffer as Float32Array;
-
-  let radius = 0.02; // Default radius for grid/linear layouts
-  if (layout.kind === 'circular') {
-    radius = layout.radius || 0.3;
-  }
-
-  for (let i = 0; i < N; i++) {
-    arr[i] = radius;
-  }
-}
-
-/**
- * Apply map function to buffer
- */
 /**
  * Apply map function to buffer
  *

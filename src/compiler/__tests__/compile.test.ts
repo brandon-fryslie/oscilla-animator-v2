@@ -123,16 +123,16 @@ describe('compile', () => {
         expect(instances.size).toBe(1);
         const instance = [...instances.values()][0];
         expect(instance.count).toBe(16);
-        // Array creates instances with unordered layout by default
-        // GridLayout applies grid positions via fieldLayout() but doesn't change instance.layout
-        expect(instance.layout.kind).toBe('unordered');
+        // Array creates instances, GridLayout applies positions via gridLayout kernel
+        // Instance no longer has layout property - layout is purely via field kernels
+        expect(instance.lifecycle).toBe('static');
       }
     });
 
     it('compiles instance with count using Array block', () => {
       const patch = buildPatch((b) => {
         b.addBlock('InfiniteTimeRoot', {});
-        // Array block creates instances with unordered layout by default
+        // Array block creates instances (layout handled separately via field kernels)
         b.addBlock('Array', { count: 100 });
       });
 

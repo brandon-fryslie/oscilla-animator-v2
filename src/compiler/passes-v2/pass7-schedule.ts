@@ -194,7 +194,7 @@ function inferFieldInstanceFromExprs(
   switch (expr.kind) {
     case 'intrinsic':
     case 'array':
-    case 'layout':
+    case 'stateRead':
       return expr.instanceId;
     case 'map':
       return expr.instanceId ?? inferFieldInstanceFromExprs(expr.input, fieldExprs);

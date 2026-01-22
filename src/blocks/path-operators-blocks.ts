@@ -172,7 +172,6 @@ registerBlock({
     const layoutInstance = ctx.b.createInstance(
       domainTypeId('default'),  // Use default domain for layout instances
       count,
-      { kind: 'unordered' },
       'static'
     );
 

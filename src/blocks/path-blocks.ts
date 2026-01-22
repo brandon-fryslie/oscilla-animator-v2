@@ -143,18 +143,9 @@ registerBlock({
     const controlInstance = ctx.b.createInstance(
       DOMAIN_CONTROL,
       sides,
-      { kind: 'unordered' },
       'static'
     );
 
-    // Get control point positions from 'position' intrinsic
-    const controlPositions = ctx.b.fieldIntrinsic(
-      controlInstance,
-      'position',
-      signalTypeField('vec2', 'control')
-    );
-
-    // Initialize positions to regular polygon vertices
     // Use index to compute angle: angle = index * (2π / sides)
     const indexField = ctx.b.fieldIntrinsic(
       controlInstance,
@@ -344,18 +335,9 @@ registerBlock({
     const controlInstance = ctx.b.createInstance(
       DOMAIN_CONTROL,
       totalVertices,
-      { kind: 'unordered' },
       'static'
     );
 
-    // Get control point positions from 'position' intrinsic
-    const controlPositions = ctx.b.fieldIntrinsic(
-      controlInstance,
-      'position',
-      signalTypeField('vec2', 'control')
-    );
-
-    // Initialize positions to star vertices
     // Use index to determine if outer (even) or inner (odd)
     const indexField = ctx.b.fieldIntrinsic(
       controlInstance,

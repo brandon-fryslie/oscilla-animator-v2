@@ -79,8 +79,8 @@ registerBlock({
     const count = (config?.count as number) ?? 100;
     const elementInput = inputsById.element;
 
-    // Create instance with unordered layout (layout will be provided by layout blocks)
-    const instanceId = ctx.b.createInstance(DOMAIN_CIRCLE, count, { kind: 'unordered' });
+    // Create instance (layout is now handled via field kernels, not instance metadata)
+    const instanceId = ctx.b.createInstance(DOMAIN_CIRCLE, count);
 
     // Create field expressions
     // 1. Elements field - broadcasts the input signal across the array

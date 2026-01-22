@@ -33,7 +33,6 @@ import type {
   FieldExpr,
   EventExpr,
   InstanceDecl,
-  LayoutSpec,
   Step,
   IntrinsicPropertyName,
   ContinuityPolicy,
@@ -220,27 +219,6 @@ export class IRBuilderImpl implements IRBuilder {
     return id;
   }
 
-  /**
-   * Create a layout field expression (Stage 3: Field operation for positions).
-   * Applies a layout specification to compute positions for field elements.
-   */
-  fieldLayout(
-    input: FieldExprId,
-    layoutSpec: LayoutSpec,
-    instanceId: InstanceId,
-    type: SignalType
-  ): FieldExprId {
-    const id = fieldExprId(this.fieldExprs.length);
-    this.fieldExprs.push({
-      kind: 'layout',
-      input,
-      layoutSpec,
-      instanceId,
-      type,
-    });
-    return id;
-  }
-
   fieldBroadcast(signal: SigExprId, type: SignalType): FieldExprId {
     const id = fieldExprId(this.fieldExprs.length);
     this.fieldExprs.push({ kind: 'broadcast', signal, type });
@@ -283,7 +261,7 @@ export class IRBuilderImpl implements IRBuilder {
    * or undefined if the field is instance-agnostic (const, broadcast).
    *
    * Instance binding:
-   * - intrinsic, array, layout → return their instanceId (bound to instance)
+   * - intrinsic, array, stateRead → return their instanceId (bound to instance)
    * - map, zipSig → propagate from input
    * - zip → unify from inputs (must all be same instance)
    * - const, broadcast → undefined (instance-agnostic)
@@ -295,7 +273,7 @@ export class IRBuilderImpl implements IRBuilder {
     switch (expr.kind) {
       case 'intrinsic':
       case 'array':
-      case 'layout':
+      case 'stateRead':
         return expr.instanceId; // These ARE bound to an instance
       case 'map':
         return expr.instanceId ?? this.inferFieldInstance(expr.input);
@@ -412,11 +390,11 @@ export class IRBuilderImpl implements IRBuilder {
 
   /**
    * Create an instance (NEW).
+   * Layout is now handled entirely through field kernels (circleLayout, lineLayout, gridLayout).
    */
   createInstance(
     domainType: DomainTypeId,
     count: number,
-    layout: LayoutSpec,
     lifecycle: 'static' | 'dynamic' | 'pooled' = 'static',
     identityMode: 'stable' | 'none' = 'stable',
     elementIdSeed?: number
@@ -426,7 +404,6 @@ export class IRBuilderImpl implements IRBuilder {
       id: id as string,
       domainType: domainType as string,
       count,
-      layout,
       lifecycle,
       identityMode,
       elementIdSeed,

@@ -3,14 +3,13 @@
  *
  * Instance and layout blocks following three-stage architecture:
  * - Stage 2 blocks (Array) create instances
- * - Stage 3 blocks (layouts) apply spatial operations to fields
+ * - Stage 3 blocks (layouts) apply spatial operations to fields using field kernels
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
 import { signalType, signalTypeField, type PayloadType } from '../core/canonical-types';
 import { DOMAIN_CIRCLE } from '../core/domain-registry';
 import { defaultSourceConst } from '../types';
-import type { LayoutSpec } from '../compiler/ir/types';
 
 // =============================================================================
 // Layout Blocks (Stage 3: Field Operations) - Payload-Generic
@@ -27,8 +26,7 @@ import type { LayoutSpec } from '../compiler/ir/types';
  * Example:
  * Array (Field<float>) → GridLayout → Field<vec2> (grid positions)
  *
- * This is NOT a metadata hack - it uses ctx.b.fieldLayout() to create
- * a proper layout field expression in the IR.
+ * Uses the gridLayout field kernel per 15-layout.md spec.
  */
 registerBlock({
   type: 'GridLayout',
@@ -102,24 +100,25 @@ registerBlock({
 });
 
 /**
- * LinearLayout - Arranges field elements in a linear pattern
+ * LinearLayout - Arranges field elements in a vertical line
  *
  * Stage 3: Field operation block.
- * Takes Field<T> input and outputs Field<vec2> positions.
+ * Takes Field<T> input and outputs Field<vec2> positions along a vertical line.
  *
- * Payload-Generic: Accepts any concrete payload type for elements input.
+ * Uses the lineLayout field kernel per 15-layout.md spec.
+ * For more control over line direction, use LineLayout instead.
  */
 registerBlock({
   type: 'LinearLayout',
   label: 'Linear Layout',
   category: 'layout',
-  description: 'Arranges elements in a linear pattern',
+  description: 'Arranges elements in a vertical line',
   form: 'primitive',
   capability: 'pure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
-    broadcastPolicy: 'disallowSignalMix',
+    broadcastPolicy: 'allowZipSig',
   },
   payload: {
     allowedPayloads: {
@@ -129,7 +128,7 @@ registerBlock({
   },
   inputs: {
     elements: { label: 'Elements', type: signalTypeField('float', 'default') },
-    spacing: { label: 'Spacing', type: signalType('float'), value: 0.1, defaultSource: defaultSourceConst(0.1), exposedAsPort: false },
+    spacing: { label: 'Length', type: signalType('float'), value: 0.8, defaultSource: defaultSourceConst(0.8), exposedAsPort: true },
   },
   outputs: {
     position: { label: 'Position', type: signalTypeField('vec2', 'default') },
@@ -141,20 +140,33 @@ registerBlock({
       throw new Error('LinearLayout requires a field input (from Array block)');
     }
 
-    const spacing = (config?.spacing as number) ?? 0.1;
-    const layout: LayoutSpec = { kind: 'linear', spacing };
-
     // Get instance context from the field input
     const instanceId = ctx.inferredInstance;
     if (!instanceId) {
       throw new Error('LinearLayout requires instance context from upstream Array block');
     }
 
-    // Create layout field using fieldLayout()
-    const positionField = ctx.b.fieldLayout(
-      elementsInput.id,
-      layout,
+    // Get length parameter (renamed from spacing for clarity)
+    const length = (config?.spacing as number) ?? 0.8;
+    
+    // Create vertical line: center X, Y spans from (1-length)/2 to (1+length)/2
+    const x0Sig = ctx.b.sigConst(0.5, signalType('float'));
+    const y0Sig = ctx.b.sigConst((1 - length) / 2, signalType('float'));
+    const x1Sig = ctx.b.sigConst(0.5, signalType('float'));
+    const y1Sig = ctx.b.sigConst((1 + length) / 2, signalType('float'));
+
+    // Create normalizedIndex field for the instance
+    const normalizedIndexField = ctx.b.fieldIntrinsic(
       instanceId,
+      'normalizedIndex',
+      signalTypeField('float', 'default')
+    );
+
+    // Apply lineLayout kernel: normalizedIndex + [x0, y0, x1, y1] → vec2 positions
+    const positionField = ctx.b.fieldZipSig(
+      normalizedIndexField,
+      [x0Sig, y0Sig, x1Sig, y1Sig],
+      { kind: 'kernel', name: 'lineLayout' },
       signalTypeField('vec2', 'default')
     );
 
