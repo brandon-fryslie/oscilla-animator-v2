@@ -24,11 +24,12 @@
  * - Multiply by viewport width/height (→ backend renderers)
  *
  * ──────────────────────────────────────────────────────────────────────
- * FIELD KERNEL REGISTRY (applyKernel / applyKernelZipSig)
+ * FIELD KERNEL REGISTRY (applyFieldKernel / applyFieldKernelZipSig)
  * ──────────────────────────────────────────────────────────────────────
  *
  * Field kernels operate on typed array buffers (vec2/color/float).
- * They are COORD-SPACE AGNOSTIC - blocks define world/local semantics.
+ * Most kernels are COORD-SPACE AGNOSTIC and do not assume world vs local.
+ * Kernels that are explicitly world/local-space state that in their contract.
  *
  * VEC2 CONSTRUCTION:
  *   makeVec2(x, y) → vec2
@@ -415,19 +416,6 @@ function fillBuffer(
 }
 
 /**
- * Apply a pure function to values
- */
-function applyPureFn(
-  fn: { kind: 'opcode'; opcode: string } | { kind: 'expr'; expr: string } | { kind: 'kernel'; name: string },
-  values: number[]
-): number {
-  if (fn.kind === 'opcode') {
-    return applyOpcode(fn.opcode, values);
-  }
-  throw new Error(`PureFn kind ${fn.kind} not implemented in field evaluation`);
-}
-
-/**
  * Fill buffer from intrinsic property (new system with exhaustive checks).
  * Intrinsics are per-element properties automatically available for any instance.
  */
@@ -576,6 +564,11 @@ function applyMap(
   N: number,
   type: SignalType
 ): void {
+  if (type.payload !== 'float') {
+    throw new Error(
+      `Map with opcode only supports scalar float fields, got payload=${type.payload}`
+    );
+  }
   const outArr = out as Float32Array;
   const inArr = input as Float32Array;
 
@@ -606,6 +599,11 @@ function applyZip(
   type: SignalType
 ): void {
   if (fn.kind === 'opcode') {
+    if (type.payload !== 'float') {
+      throw new Error(
+        `Zip with opcode only supports scalar float fields, got payload=${type.payload}`
+      );
+    }
     const outArr = out as Float32Array;
     const inArrs = inputs.map((buf) => buf as Float32Array);
     const op = fn.opcode;
@@ -636,6 +634,11 @@ function applyZipSig(
   const inArr = fieldInput as Float32Array;
 
   if (fn.kind === 'opcode') {
+    if (type.payload !== 'float') {
+      throw new Error(
+        `ZipSig with opcode only supports scalar float fields, got payload=${type.payload}`
+      );
+    }
     const op = fn.opcode;
     for (let i = 0; i < N; i++) {
       const values = [inArr[i], ...sigValues];

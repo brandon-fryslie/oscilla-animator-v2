@@ -24,6 +24,20 @@ import { getTopology } from '../shapes/registry';
 import type { PathTopologyDef, TopologyDef, TopologyId } from '../shapes/types';
 
 /**
+ * DEFAULT_SHAPE - Canonical fallback shape descriptor
+ *
+ * Used when no explicit shape is provided. All paths should eventually
+ * provide explicit shapes, but this ensures totality during transition.
+ *
+ * Uses 'ellipse' topology with default radii (1, 1) which renders as a circle
+ * when scaled by instance size.
+ */
+export const DEFAULT_SHAPE: ShapeDescriptor = {
+  topologyId: 'ellipse' as TopologyId,
+  params: { radiusX: 1, radiusY: 1 },
+};
+
+/**
  * AssemblerContext - Context needed for render assembly
  */
 export interface AssemblerContext {
@@ -122,14 +136,20 @@ function resolveSize(
 
 /**
  * Resolve shape from step specification
+ *
+ * Returns ShapeDescriptor for topology-based shapes.
+ * Returns ArrayBufferView for per-particle shapes (not yet fully supported).
+ *
+ * NO LEGACY NUMERIC ENCODING - all shapes use proper topology IDs.
  */
 function resolveShape(
   shapeSpec: StepRender['shape'],
   signals: readonly SigExpr[],
   state: RuntimeState
-): ShapeDescriptor | ArrayBufferView | number {
+): ShapeDescriptor | ArrayBufferView {
   if (shapeSpec === undefined) {
-    return 0; // Default shape (circle, legacy encoding)
+    // Use canonical default shape (ellipse with unit radii)
+    return DEFAULT_SHAPE;
   }
 
   if (shapeSpec.k === 'slot') {
@@ -195,54 +215,22 @@ function isShapeDescriptor(
  * This performs the topology lookup and param mapping that was previously
  * done in the renderer. Now the renderer receives pre-resolved data.
  *
- * All shapes are resolved to proper topologies - no legacy numeric encoding.
+ * NO LEGACY NUMERIC ENCODING - all shapes must be proper ShapeDescriptor.
  *
- * @param shape - Shape descriptor, buffer, or legacy encoding
+ * @param shape - Shape descriptor or per-particle buffer
  * @param controlPoints - Optional control points for path shapes
  * @returns ResolvedShape for renderer
  */
 function resolveShapeFully(
-  shape: ShapeDescriptor | ArrayBufferView | number,
+  shape: ShapeDescriptor | ArrayBufferView,
   controlPoints?: ArrayBufferView
 ): ResolvedShape {
-  // Legacy numeric encoding - convert to proper topology
-  if (typeof shape === 'number') {
-    // Map legacy encodings to actual topologies:
-    // 0 = circle -> ellipse with equal radii
-    // 1 = square -> rect with equal width/height
-    // 2 = triangle -> polygon (not yet implemented, fallback to ellipse)
-    const topologyId = shape === 1 ? 'rect' : 'ellipse';
-    const topology = getTopology(topologyId as TopologyId);
-
-    // Build params with defaults
-    const params: Record<string, number> = {};
-    topology.params.forEach((paramDef) => {
-      params[paramDef.name] = paramDef.default;
-    });
-
-    return {
-      resolved: true,
-      topologyId: topologyId as TopologyId,
-      mode: 'primitive',
-      params,
-    };
-  }
-
-  // Per-particle shape buffer (Field<shape>) - not yet fully supported
-  // Fall back to ellipse (circle) for now
+  // Per-particle shape buffer (Field<shape>) - not yet implemented
   if (!isShapeDescriptor(shape)) {
-    const topology = getTopology('ellipse' as TopologyId);
-    const params: Record<string, number> = {};
-    topology.params.forEach((paramDef) => {
-      params[paramDef.name] = paramDef.default;
-    });
-
-    return {
-      resolved: true,
-      topologyId: 'ellipse' as TopologyId,
-      mode: 'primitive',
-      params,
-    };
+    throw new Error(
+      'Per-particle shapes (Field<shape>) are not yet implemented. ' +
+      'Use a uniform shape signal (Signal<shape>) instead.'
+    );
   }
 
   // ShapeDescriptor - look up topology and resolve params
