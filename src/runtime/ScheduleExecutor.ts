@@ -106,11 +106,6 @@ export interface RenderPassIR {
   scale: number;
 
   /**
-   * @deprecated Use resolvedShape instead. Kept for backward compatibility.
-   */
-  shape: ShapeDescriptor | ArrayBufferView | number;
-
-  /**
    * Pre-resolved shape (REQUIRED).
    *
    * RenderAssembler produces this with:
@@ -118,7 +113,7 @@ export interface RenderPassIR {
    * - Params resolved with defaults
    * - Control points embedded (for path shapes)
    *
-   * Renderer MUST use this, not the `shape` field.
+   * This is the ONLY shape representation - no legacy encoding.
    */
   resolvedShape: ResolvedShape;
 }

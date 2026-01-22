@@ -98,8 +98,7 @@ export function assembleRenderPass(
     position,
     color,
     scale,
-    shape, // @deprecated - kept for backward compatibility
-    resolvedShape, // REQUIRED - renderer uses this
+    resolvedShape, // Pre-resolved shape data for renderer
   };
 }
 
