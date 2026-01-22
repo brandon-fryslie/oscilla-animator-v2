@@ -14,8 +14,8 @@ interface CanvasTabProps {
   onCanvasReady?: (canvas: HTMLCanvasElement) => void;
 }
 
-// Target aspect ratio (4:3 like the original 800x600)
-const TARGET_ASPECT_RATIO = 4 / 3;
+// Target aspect ratio (1:1 square)
+const TARGET_ASPECT_RATIO = 1;
 
 export const CanvasTab: React.FC<CanvasTabProps> = observer(({ onCanvasReady }) => {
   const { viewport } = useStores();
