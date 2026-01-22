@@ -13,7 +13,16 @@ import { createRoot } from 'react-dom/client';
 import { reaction, toJS } from 'mobx';
 import { buildPatch, type Patch } from './graph';
 import { compile } from './compiler';
-import { createRuntimeState, BufferPool, executeFrame, migrateState, createInitialState } from './runtime';
+import {
+  createSessionState,
+  createRuntimeStateFromSession,
+  extractSessionState,
+  BufferPool,
+  executeFrame,
+  migrateState,
+  createInitialState,
+  type SessionState,
+} from './runtime';
 import { renderFrame } from './render';
 import { App } from './ui/components';
 import { StoreProvider, type RootStore } from './stores';
@@ -28,7 +37,8 @@ import { mapDebugMappings } from './services/mapDebugEdges';
 // =============================================================================
 
 let currentProgram: any = null;
-let currentState: any = null;
+let currentState: RuntimeState | null = null;
+let sessionState: SessionState | null = null; // Long-lived, survives hot-swap
 let canvas: HTMLCanvasElement | null = null;
 let ctx: CanvasRenderingContext2D | null = null;
 let pool: BufferPool | null = null;
@@ -408,70 +418,57 @@ async function compileAndSwap(isInitial: boolean = false) {
   const newStateSlotCount = newSchedule?.stateSlotCount ?? 0;
   const newStateMappings = newSchedule?.stateMappings ?? [];
 
-  // For recompile: detect domain changes and get old state info
+  // For recompile: detect domain changes
   if (!isInitial && currentProgram) {
     detectAndLogDomainChanges(currentProgram, program);
   }
 
   // Get old state info for migration
-  const oldSlotCount = currentState?.values.f64.length ?? 0;
   const oldSchedule = currentProgram?.schedule as { stateSlotCount?: number; stateMappings?: readonly any[] } | undefined;
-  const oldStateSlotCount = oldSchedule?.stateSlotCount ?? 0;
   const oldStateMappings = oldSchedule?.stateMappings ?? [];
-
-  // Preserve continuity state
-  const oldContinuity = currentState?.continuity;
-  const oldContinuityConfig = currentState?.continuityConfig;
   const oldPrimitiveState = currentState?.state;
 
-  // Check if we need to recreate runtime state
-  const valueSlotChanged = newSlotCount !== oldSlotCount;
-  const stateSlotChanged = newStateSlotCount !== oldStateSlotCount;
-  const needNewState = isInitial || valueSlotChanged || stateSlotChanged;
-
-  if (needNewState) {
-    if (!isInitial) {
-      log(`Hot-swap: value slots ${oldSlotCount}→${newSlotCount}, state slots ${oldStateSlotCount}→${newStateSlotCount}`);
-    }
-
-    // Create new runtime state
-    currentState = createRuntimeState(newSlotCount, newStateSlotCount);
-
-    // Handle primitive state
-    if (!isInitial && oldPrimitiveState && newStateMappings.length > 0) {
-      // Migrate using stable StateIds
-      const getLaneMapping = (instanceId: string) => {
-        return oldContinuity?.mappings.get(instanceId) ?? null;
-      };
-
-      const migrationResult = migrateState(
-        oldPrimitiveState,
-        currentState.state,
-        oldStateMappings,
-        newStateMappings,
-        getLaneMapping
-      );
-
-      if (migrationResult.migrated) {
-        log(`State migration: ${migrationResult.scalarsMigrated} scalar, ${migrationResult.fieldsMigrated} field states migrated, ${migrationResult.initialized} initialized, ${migrationResult.discarded} discarded`);
-      }
-    } else if (newStateMappings.length > 0) {
-      // Initialize fresh (first compile or no old state)
-      const initialState = createInitialState(newStateSlotCount, newStateMappings);
-      currentState.state.set(initialState);
-    }
-
-    // Restore continuity state (it's independent of slot layout)
-    if (!isInitial && oldContinuity) {
-      currentState.continuity = oldContinuity;
-    }
-    if (!isInitial && oldContinuityConfig) {
-      currentState.continuityConfig = oldContinuityConfig;
-    }
-
-    // Set RuntimeState reference in ContinuityStore
-    store!.continuity.setRuntimeStateRef(currentState);
+  // Initialize session state on first compile
+  if (isInitial) {
+    sessionState = createSessionState();
   }
+
+  // Always create fresh ProgramState on compile (this is the cleaner lifecycle)
+  const oldSlotCount = currentState?.values.f64.length ?? 0;
+  const oldStateSlotCount = oldSchedule?.stateSlotCount ?? 0;
+  if (!isInitial) {
+    log(`Hot-swap: value slots ${oldSlotCount}→${newSlotCount}, state slots ${oldStateSlotCount}→${newStateSlotCount}`);
+  }
+
+  // Create new RuntimeState from preserved SessionState + fresh ProgramState
+  currentState = createRuntimeStateFromSession(sessionState!, newSlotCount, newStateSlotCount);
+
+  // Handle primitive state migration
+  if (!isInitial && oldPrimitiveState && newStateMappings.length > 0) {
+    // Migrate using stable StateIds (sessionState.continuity has lane mappings)
+    const getLaneMapping = (instanceId: string) => {
+      return sessionState!.continuity.mappings.get(instanceId) ?? null;
+    };
+
+    const migrationResult = migrateState(
+      oldPrimitiveState,
+      currentState.state,
+      oldStateMappings,
+      newStateMappings,
+      getLaneMapping
+    );
+
+    if (migrationResult.migrated) {
+      log(`State migration: ${migrationResult.scalarsMigrated} scalar, ${migrationResult.fieldsMigrated} field states migrated, ${migrationResult.initialized} initialized, ${migrationResult.discarded} discarded`);
+    }
+  } else if (newStateMappings.length > 0) {
+    // Initialize fresh (first compile or no old state)
+    const initialState = createInitialState(newStateSlotCount, newStateMappings);
+    currentState.state.set(initialState);
+  }
+
+  // Set RuntimeState reference in ContinuityStore
+  store!.continuity.setRuntimeStateRef(currentState);
 
   // ALWAYS update debug probe (mappings can change even if slot count doesn't)
   setupDebugProbe(currentState!, patch, program);

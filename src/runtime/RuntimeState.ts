@@ -374,27 +374,90 @@ export function createContinuityConfig(): ContinuityConfig {
   };
 }
 
+// =============================================================================
+// Session vs Program State Split
+// =============================================================================
+//
+// SessionState: Long-lived state that survives hot-swap (created once at startup)
+// ProgramState: Per-compile state that is recreated on each hot-swap
+//
+// This split makes lifecycle explicit: SessionState is never recreated,
+// ProgramState is recreated on every compile with state migration.
+
 /**
- * RuntimeState - Complete frame execution state
+ * SessionState - Long-lived state that survives hot-swap
+ *
+ * Created once at application startup and never recreated.
+ * Contains state that must persist across recompilations.
  */
-export interface RuntimeState {
+export interface SessionState {
+  /** Time state for wrap detection (persistent across frames and compiles) */
+  timeState: TimeState;
+
+  /** External inputs (mouse, MIDI, etc.) */
+  external: ExternalInputs;
+
+  /** Health monitoring metrics */
+  health: HealthMetrics;
+
+  /** Continuity state for smooth transitions (survives hot-swap) */
+  continuity: ContinuityState;
+
+  /** Continuity config for user-controlled parameters */
+  continuityConfig: ContinuityConfig;
+
+  /** Optional debug tap for runtime observation */
+  tap?: DebugTap;
+}
+
+/**
+ * ProgramState - Per-compile state, recreated on hot-swap
+ *
+ * Created fresh on each compile. Stateful primitive state is
+ * migrated using StableStateIds (see StateMigration.ts).
+ */
+export interface ProgramState {
   /** Per-frame value storage (slot-based) */
   values: ValueStore;
 
   /** Frame cache (per-frame memoization) - cache owns frameId */
   cache: FrameCache;
 
-  /** Time state for wrap detection (persistent across frames) */
-  timeState: TimeState;
+  /** Current effective time (set each frame) */
+  time: EffectiveTime | null;
+
+  /** Stateful primitive state (migrated via StableStateIds on hot-swap) */
+  state: Float64Array;
+}
+
+/**
+ * RuntimeState - Complete frame execution state
+ *
+ * Composes SessionState (long-lived) and ProgramState (per-compile).
+ * The flat structure is kept for backwards compatibility with existing code.
+ */
+export interface RuntimeState {
+  // === ProgramState fields (recreated on compile) ===
+
+  /** Per-frame value storage (slot-based) */
+  values: ValueStore;
+
+  /** Frame cache (per-frame memoization) - cache owns frameId */
+  cache: FrameCache;
 
   /** Current effective time (set each frame) */
   time: EffectiveTime | null;
 
+  /** Stateful primitive state (migrated via StableStateIds on hot-swap) */
+  state: Float64Array;
+
+  // === SessionState fields (survive hot-swap) ===
+
+  /** Time state for wrap detection (persistent across frames) */
+  timeState: TimeState;
+
   /** External inputs (mouse, MIDI, etc.) */
   external: ExternalInputs;
-
-  /** Persistent state array (survives across frames) */
-  state: Float64Array;
 
   /** Health monitoring metrics (Sprint 2+) */
   health: HealthMetrics;
@@ -410,19 +473,94 @@ export interface RuntimeState {
 }
 
 /**
- * Create a RuntimeState
+ * Create a SessionState (called once at startup)
  */
-export function createRuntimeState(slotCount: number, stateSlotCount: number = 0): RuntimeState {
+export function createSessionState(): SessionState {
   return {
-    values: createValueStore(slotCount),
-    cache: createFrameCache(),
     timeState: createTimeState(),
-    time: null,
     external: createExternalInputs(),
-    state: new Float64Array(stateSlotCount),
     health: createHealthMetrics(),
     continuity: createContinuityState(),
     continuityConfig: createContinuityConfig(),
+  };
+}
+
+/**
+ * Create a ProgramState (called on each compile)
+ */
+export function createProgramState(slotCount: number, stateSlotCount: number = 0): ProgramState {
+  return {
+    values: createValueStore(slotCount),
+    cache: createFrameCache(),
+    time: null,
+    state: new Float64Array(stateSlotCount),
+  };
+}
+
+/**
+ * Create a RuntimeState by composing SessionState and ProgramState
+ *
+ * @deprecated Use createSessionState() + createProgramState() for new code.
+ * This function is kept for backwards compatibility.
+ */
+export function createRuntimeState(slotCount: number, stateSlotCount: number = 0): RuntimeState {
+  const session = createSessionState();
+  const program = createProgramState(slotCount, stateSlotCount);
+  return {
+    // ProgramState
+    values: program.values,
+    cache: program.cache,
+    time: program.time,
+    state: program.state,
+    // SessionState
+    timeState: session.timeState,
+    external: session.external,
+    health: session.health,
+    continuity: session.continuity,
+    continuityConfig: session.continuityConfig,
+  };
+}
+
+/**
+ * Create a RuntimeState from existing SessionState and new ProgramState
+ *
+ * Used during hot-swap to preserve session state while replacing program state.
+ */
+export function createRuntimeStateFromSession(
+  session: SessionState,
+  slotCount: number,
+  stateSlotCount: number = 0
+): RuntimeState {
+  const program = createProgramState(slotCount, stateSlotCount);
+  return {
+    // ProgramState (fresh)
+    values: program.values,
+    cache: program.cache,
+    time: program.time,
+    state: program.state,
+    // SessionState (preserved)
+    timeState: session.timeState,
+    external: session.external,
+    health: session.health,
+    continuity: session.continuity,
+    continuityConfig: session.continuityConfig,
+    tap: session.tap,
+  };
+}
+
+/**
+ * Extract SessionState from a RuntimeState
+ *
+ * Useful for preserving session state during hot-swap.
+ */
+export function extractSessionState(state: RuntimeState): SessionState {
+  return {
+    timeState: state.timeState,
+    external: state.external,
+    health: state.health,
+    continuity: state.continuity,
+    continuityConfig: state.continuityConfig,
+    tap: state.tap,
   };
 }
 
