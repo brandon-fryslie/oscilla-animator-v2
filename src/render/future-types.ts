@@ -38,20 +38,36 @@
 /**
  * Path Style - Explicit styling for path rendering
  *
- * Separates style from geometry. Future work will add:
- * - strokeColor, strokeWidth, lineJoin, lineCap
- * - dashPattern, dashPhase
- * - blendMode, globalAlpha
+ * Separates style from geometry. Supports fill, stroke, or both.
+ * Stroke properties are optional; absence means no stroke.
+ * 
+ * VIEWPORT SCALING:
+ * - Stroke width is in normalized world units (0-1 range relative to viewport)
+ * - Final pixel width: strokeWidthPx = strokeWidth × D, where D = min(width, height)
+ * - Dash pattern lengths also scale: dashPx[i] = dashPattern[i] × D
+ * - This ensures strokes scale uniformly with viewport size
  */
 export interface PathStyle {
-  /** Fill color (required) */
-  readonly fillColor: Uint8ClampedArray; // RGBA per instance or uniform
+  /** Fill color (optional - if absent, no fill rendered) */
+  readonly fillColor?: Uint8ClampedArray; // RGBA per instance or uniform
 
-  /** Stroke color (optional, not yet implemented) */
+  /** Stroke color (optional - if absent, no stroke rendered) */
   readonly strokeColor?: Uint8ClampedArray;
 
-  /** Stroke width (optional, not yet implemented) */
+  /** Stroke width in world units (optional, defaults to 0.01 if strokeColor present) */
   readonly strokeWidth?: number | Float32Array;
+
+  /** Line join style for stroke corners */
+  readonly lineJoin?: 'miter' | 'bevel' | 'round';
+
+  /** Line cap style for stroke endpoints */
+  readonly lineCap?: 'butt' | 'round' | 'square';
+
+  /** Dash pattern in world units (alternating dash/gap lengths) */
+  readonly dashPattern?: number[];
+
+  /** Dash offset in world units (for animating dashed strokes) */
+  readonly dashOffset?: number;
 
   /** Fill rule: 'nonzero' | 'evenodd' */
   readonly fillRule?: 'nonzero' | 'evenodd';
