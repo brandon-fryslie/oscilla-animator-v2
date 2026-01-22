@@ -20,7 +20,8 @@ import {
   DEFAULTS_V0,
 } from "../../core/canonical-types";
 import type { NormalizedPatch, TypedPatch, BlockIndex } from "../ir/patches";
-import { getBlockDefinition, getBlockCardinalityMetadata, isCardinalityGeneric } from "../../blocks/registry";
+import { getBlockDefinition, getBlockCardinalityMetadata, isCardinalityGeneric, getBlockPayloadMetadata, isPayloadAllowed, findPayloadCombination } from "../../blocks/registry";
+import type { PayloadType } from "../../core/canonical-types";
 
 // Move these types into a better place
 
@@ -170,6 +171,73 @@ function resolveOutputCardinality(
       // Transform blocks explicitly change cardinality - handled by block definition
       return inputCardinalities.includes('many') ? 'many' : 'one';
   }
+}
+
+// =============================================================================
+// Payload Validation (Payload-Generic Blocks)
+// =============================================================================
+
+/**
+ * Error for payload constraint violation.
+ */
+export interface PayloadNotAllowedError {
+  kind: "PayloadNotAllowed";
+  blockIndex: BlockIndex;
+  portName: string;
+  payload: PayloadType;
+  allowedPayloads: readonly PayloadType[];
+  message: string;
+}
+
+/**
+ * Error for invalid payload combination.
+ */
+export interface PayloadCombinationError {
+  kind: "PayloadCombinationNotAllowed";
+  blockIndex: BlockIndex;
+  blockType: string;
+  inputPayloads: readonly PayloadType[];
+  message: string;
+}
+
+/**
+ * Check if a payload is allowed for a specific port on a block.
+ *
+ * @param blockType - Block type
+ * @param portName - Port name
+ * @param payload - Payload type to check
+ * @returns true if allowed (or no constraints), false if explicitly disallowed
+ */
+function isPayloadAllowedForPort(
+  blockType: string,
+  portName: string,
+  payload: PayloadType
+): boolean {
+  const result = isPayloadAllowed(blockType, portName, payload);
+  // undefined means no constraints = allowed
+  return result === undefined || result === true;
+}
+
+/**
+ * Validate payload combination for a block's inputs.
+ *
+ * @param blockType - Block type
+ * @param inputPayloads - Array of input payload types
+ * @returns Output payload if valid, undefined if no constraints, null if invalid
+ */
+function validatePayloadCombination(
+  blockType: string,
+  inputPayloads: readonly PayloadType[]
+): PayloadType | undefined | null {
+  const combo = findPayloadCombination(blockType, inputPayloads);
+  if (combo) return combo.output;
+
+  // Check if block has combination constraints
+  const meta = getBlockPayloadMetadata(blockType);
+  if (!meta?.combinations) return undefined; // No constraints
+
+  // Has constraints but no match = invalid
+  return null;
 }
 
 /**

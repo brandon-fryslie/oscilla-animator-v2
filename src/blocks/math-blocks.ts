@@ -4,7 +4,7 @@
  * Blocks that perform mathematical operations on signals.
  */
 
-import { registerBlock } from './registry';
+import { registerBlock, STANDARD_NUMERIC_PAYLOADS } from './registry';
 import { signalType } from '../core/canonical-types';
 import { OpCode } from '../compiler/ir/types';
 import type { SigExprId } from '../compiler/ir/Indices';
@@ -24,6 +24,14 @@ registerBlock({
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
     broadcastPolicy: 'allowZipSig',
+  },
+  payload: {
+    allowedPayloads: {
+      a: STANDARD_NUMERIC_PAYLOADS,
+      b: STANDARD_NUMERIC_PAYLOADS,
+      out: STANDARD_NUMERIC_PAYLOADS,
+    },
+    semantics: 'componentwise',
   },
   inputs: {
     a: { label: 'A', type: signalType('float') },
@@ -68,6 +76,14 @@ registerBlock({
     laneCoupling: 'laneLocal',
     broadcastPolicy: 'allowZipSig',
   },
+  payload: {
+    allowedPayloads: {
+      a: STANDARD_NUMERIC_PAYLOADS,
+      b: STANDARD_NUMERIC_PAYLOADS,
+      out: STANDARD_NUMERIC_PAYLOADS,
+    },
+    semantics: 'componentwise',
+  },
   inputs: {
     a: { label: 'A', type: signalType('float') },
     b: { label: 'B', type: signalType('float') },
@@ -110,6 +126,14 @@ registerBlock({
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
     broadcastPolicy: 'allowZipSig',
+  },
+  payload: {
+    allowedPayloads: {
+      a: STANDARD_NUMERIC_PAYLOADS,
+      b: STANDARD_NUMERIC_PAYLOADS,
+      out: STANDARD_NUMERIC_PAYLOADS,
+    },
+    semantics: 'componentwise',
   },
   inputs: {
     a: { label: 'A', type: signalType('float') },
@@ -154,6 +178,14 @@ registerBlock({
     laneCoupling: 'laneLocal',
     broadcastPolicy: 'allowZipSig',
   },
+  payload: {
+    allowedPayloads: {
+      a: STANDARD_NUMERIC_PAYLOADS,
+      b: STANDARD_NUMERIC_PAYLOADS,
+      out: STANDARD_NUMERIC_PAYLOADS,
+    },
+    semantics: 'componentwise',
+  },
   inputs: {
     a: { label: 'A', type: signalType('float') },
     b: { label: 'B', type: signalType('float') },
@@ -196,6 +228,14 @@ registerBlock({
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
     broadcastPolicy: 'allowZipSig',
+  },
+  payload: {
+    allowedPayloads: {
+      a: STANDARD_NUMERIC_PAYLOADS,
+      b: STANDARD_NUMERIC_PAYLOADS,
+      out: STANDARD_NUMERIC_PAYLOADS,
+    },
+    semantics: 'componentwise',
   },
   inputs: {
     a: { label: 'A', type: signalType('float') },

@@ -35,7 +35,12 @@ export type CompileErrorCode =
   | 'CardinalityMismatch'
   | 'InstanceMismatch'
   | 'LaneCoupledDisallowed'
-  | 'ImplicitBroadcastDisallowed';
+  | 'ImplicitBroadcastDisallowed'
+  // Payload errors (Sprint 2B - Payload-Generic Blocks)
+  | 'PayloadNotAllowed'
+  | 'PayloadCombinationNotAllowed'
+  | 'UnitMismatch'
+  | 'ImplicitCastDisallowed';
 
 /**
  * Compile error structure (unified for passes-v2).

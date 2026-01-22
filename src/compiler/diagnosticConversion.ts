@@ -47,6 +47,11 @@ const ERROR_KIND_TO_CODE: Record<string, DiagnosticCode> = {
   InstanceMismatch: 'E_INSTANCE_MISMATCH',
   LaneCoupledDisallowed: 'E_LANE_COUPLED_DISALLOWED',
   ImplicitBroadcastDisallowed: 'E_IMPLICIT_BROADCAST_DISALLOWED',
+  // Payload errors (Sprint 2B - Payload-Generic Blocks)
+  PayloadNotAllowed: 'E_PAYLOAD_NOT_ALLOWED',
+  PayloadCombinationNotAllowed: 'E_PAYLOAD_COMBINATION_NOT_ALLOWED',
+  UnitMismatch: 'E_UNIT_MISMATCH',
+  ImplicitCastDisallowed: 'E_IMPLICIT_CAST_DISALLOWED',
 };
 
 // =============================================================================

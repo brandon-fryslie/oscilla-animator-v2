@@ -122,6 +122,77 @@ export interface BlockCardinalityMetadata {
   readonly broadcastPolicy: BroadcastPolicy;
 }
 
+// =============================================================================
+// Payload-Generic Block Metadata (Spec §8)
+// =============================================================================
+
+import type { PayloadType } from '../core/canonical-types';
+
+/**
+ * Semantics category for payload-generic blocks.
+ *
+ * - 'componentwise': Apply same scalar operator per component (vec3 = vec3(x1+x2, y1+y2, z1+z2))
+ * - 'typeSpecific': Defined explicitly per payload via combination table
+ */
+export type PayloadSemantics = 'componentwise' | 'typeSpecific';
+
+/**
+ * Implementation reference for a payload combination.
+ *
+ * - opcode: Use a specific OpCode (preferred for primitives)
+ * - kernel: Use a named kernel implementation
+ * - composed: Use a sequence of opcodes
+ */
+export type PayloadImplRef =
+  | { kind: 'opcode'; opcode: string }
+  | { kind: 'kernel'; name: string }
+  | { kind: 'composed'; opcodes: readonly string[] };
+
+/**
+ * A single payload combination rule for multi-input blocks.
+ * Defines what input payload tuple produces what output, and how.
+ */
+export interface PayloadCombination {
+  /** Input payload types (tuple for multi-input, single for unary) */
+  readonly inputs: readonly PayloadType[];
+  /** Output payload type */
+  readonly output: PayloadType;
+  /** Implementation to use for this combination */
+  readonly impl?: PayloadImplRef;
+}
+
+/**
+ * Payload metadata for compile-time specialization.
+ * This metadata is compile-time only and does not exist at runtime.
+ *
+ * Spec Reference: .agent_planning/_future/0-PayloadGeneriic-Block-Type-Spec.md §8
+ */
+export interface BlockPayloadMetadata {
+  /** Allowed payload types per port (key = port name) */
+  readonly allowedPayloads: Record<string, readonly PayloadType[]>;
+  /** Valid input->output combinations (for type validation) */
+  readonly combinations?: readonly PayloadCombination[];
+  /** How this block interprets payloads */
+  readonly semantics: PayloadSemantics;
+}
+
+/**
+ * Default payload metadata for blocks without explicit constraints.
+ * All concrete payload types are allowed, componentwise semantics.
+ */
+export const DEFAULT_PAYLOAD_METADATA: BlockPayloadMetadata = {
+  allowedPayloads: {},
+  semantics: 'componentwise',
+};
+
+/**
+ * Standard allowed payloads for common block patterns.
+ */
+export const STANDARD_NUMERIC_PAYLOADS: readonly PayloadType[] = ['float', 'int', 'vec2', 'color', 'phase'];
+export const STANDARD_SCALAR_PAYLOADS: readonly PayloadType[] = ['float', 'int', 'phase'];
+export const STANDARD_VECTOR_PAYLOADS: readonly PayloadType[] = ['vec2'];
+export const STANDARD_COLOR_PAYLOADS: readonly PayloadType[] = ['color'];
+
 /**
  * Input definition for a block.
  *
@@ -179,6 +250,15 @@ export interface BlockDef {
    * Spec Reference: .agent_planning/_future/0-CardinalityGeneric-Block-Type-Spec.md §8
    */
   readonly cardinality?: BlockCardinalityMetadata;
+
+  /**
+   * Payload metadata for payload-generic blocks.
+   * Defines allowed payload types per port and valid combinations.
+   * If omitted, block accepts any payload that type-checks.
+   *
+   * Spec Reference: .agent_planning/_future/0-PayloadGeneriic-Block-Type-Spec.md §8
+   */
+  readonly payload?: BlockPayloadMetadata;
 
   // Port definitions (UNIFIED DESIGN 2026-01-20)
   readonly inputs: Record<string, InputDef>;
@@ -312,3 +392,81 @@ export const DEFAULT_CARDINALITY_METADATA: BlockCardinalityMetadata = {
   laneCoupling: 'laneLocal',
   broadcastPolicy: 'disallowSignalMix',
 };
+
+// =============================================================================
+// Payload-Generic Metadata Query Functions
+// =============================================================================
+
+/**
+ * Get the payload metadata for a block type.
+ * Returns undefined if not defined.
+ */
+export function getBlockPayloadMetadata(blockType: string): BlockPayloadMetadata | undefined {
+  const def = registry.get(blockType);
+  return def?.payload;
+}
+
+/**
+ * Check if a payload type is allowed for a specific port on a block.
+ *
+ * @param blockType - The block type
+ * @param portName - The port name (input or output key)
+ * @param payload - The payload type to check
+ * @returns true if allowed, false if disallowed, undefined if no constraints
+ */
+export function isPayloadAllowed(
+  blockType: string,
+  portName: string,
+  payload: PayloadType
+): boolean | undefined {
+  const meta = getBlockPayloadMetadata(blockType);
+  if (!meta) return undefined;
+
+  const allowed = meta.allowedPayloads[portName];
+  if (!allowed || allowed.length === 0) return undefined;
+
+  return allowed.includes(payload);
+}
+
+/**
+ * Get valid payload combinations for a block.
+ * Returns undefined if the block has no combination constraints.
+ */
+export function getPayloadCombinations(blockType: string): readonly PayloadCombination[] | undefined {
+  const meta = getBlockPayloadMetadata(blockType);
+  return meta?.combinations;
+}
+
+/**
+ * Check if an input payload tuple produces a valid combination.
+ *
+ * @param blockType - The block type
+ * @param inputPayloads - Tuple of input payload types
+ * @returns The output payload if valid, undefined if no match or no constraints
+ */
+export function findPayloadCombination(
+  blockType: string,
+  inputPayloads: readonly PayloadType[]
+): PayloadCombination | undefined {
+  const combos = getPayloadCombinations(blockType);
+  if (!combos) return undefined;
+
+  return combos.find((combo) => {
+    if (combo.inputs.length !== inputPayloads.length) return false;
+    return combo.inputs.every((p, i) => p === inputPayloads[i]);
+  });
+}
+
+/**
+ * Check if a block is payload-generic (has payload metadata with multiple allowed types).
+ */
+export function isPayloadGeneric(blockType: string): boolean {
+  const meta = getBlockPayloadMetadata(blockType);
+  if (!meta) return false;
+
+  // Check if any port allows multiple payload types
+  for (const allowed of Object.values(meta.allowedPayloads)) {
+    if (allowed.length > 1) return true;
+  }
+  return false;
+}

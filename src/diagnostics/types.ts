@@ -102,6 +102,12 @@ export type DiagnosticCode =
   | 'E_LANE_COUPLED_DISALLOWED' // Block is lane-coupled but used in generic context
   | 'E_IMPLICIT_BROADCAST_DISALLOWED' // Signal consumed in Field context without explicit broadcast
 
+  // --- Payload Errors (Sprint 2B - Payload-Generic Blocks) ---
+  | 'E_PAYLOAD_NOT_ALLOWED' // Payload type not in block's allowedPayloads for port
+  | 'E_PAYLOAD_COMBINATION_NOT_ALLOWED' // Input payload tuple not in block's combination table
+  | 'E_UNIT_MISMATCH' // Units present but disallowed by block's unit contract
+  | 'E_IMPLICIT_CAST_DISALLOWED' // Attempt to coerce payload without explicit cast block
+
   // --- Graph Structure Errors ---
   | 'E_CYCLE_DETECTED' // Cycle with no stateful boundary
   | 'E_MISSING_INPUT' // Required input not connected
@@ -150,6 +156,10 @@ export type DiagnosticPayload =
   | { code: 'E_INSTANCE_MISMATCH'; instanceA: string; instanceB: string; portA: string; portB: string }
   | { code: 'E_LANE_COUPLED_DISALLOWED'; blockType: string; reason: string }
   | { code: 'E_IMPLICIT_BROADCAST_DISALLOWED'; signalPort: string; fieldContext: string }
+  | { code: 'E_PAYLOAD_NOT_ALLOWED'; port: string; payload: string; allowedPayloads: string[] }
+  | { code: 'E_PAYLOAD_COMBINATION_NOT_ALLOWED'; inputPayloads: string[]; blockType: string }
+  | { code: 'E_UNIT_MISMATCH'; port: string; expectedUnit: string; actualUnit: string }
+  | { code: 'E_IMPLICIT_CAST_DISALLOWED'; fromPayload: string; toPayload: string; port: string }
   | undefined;
 
 // =============================================================================
