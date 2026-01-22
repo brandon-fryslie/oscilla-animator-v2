@@ -589,8 +589,7 @@ registerBlock({
   },
   inputs: {
     id01: { label: 'ID (0..1)', type: signalTypeField('float', 'default') },
-    // Phase input accepts float (will be used as normalized [0, 1) cycle)
-    phase: { label: 'Phase', type: signalType('float'), defaultSource: defaultSourceTimeRoot('phaseA') },
+    phase: { label: 'Phase', type: signalType('float', unitPhase01()), defaultSource: defaultSourceTimeRoot('phaseA') },
     spin: { label: 'Spin', type: signalType('float'), defaultSource: defaultSourceConst(1.0) },
   },
   outputs: {
@@ -769,8 +768,7 @@ registerBlock({
   },
   inputs: {
     id01: { label: 'ID (0..1)', type: signalTypeField('float', 'default') },
-    // Phase input accepts float (will be used as normalized [0, 1) cycle)
-    phase: { label: 'Phase', type: signalType('float'), defaultSource: defaultSourceTimeRoot('phaseA') },
+    phase: { label: 'Phase', type: signalType('float', unitPhase01()), defaultSource: defaultSourceTimeRoot('phaseA') },
   },
   outputs: {
     hue: { label: 'Hue', type: signalTypeField('float', 'default') },

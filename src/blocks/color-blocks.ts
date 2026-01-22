@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from './registry';
-import { signalType, signalTypeField } from '../core/canonical-types';
+import { signalType, signalTypeField, unitPhase01 } from '../core/canonical-types';
 import { defaultSourceConst } from '../types';
 import type { SigExprId, FieldExprId } from '../compiler/ir/Indices';
 
@@ -26,7 +26,7 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    phase: { label: 'Phase', type: signalType('float') },
+    phase: { label: 'Phase', type: signalType('float', unitPhase01()) },
     hue: { label: 'Hue Offset', type: signalType('float') },
     sat: { label: 'Saturation', type: signalType('float') },
     val: { label: 'Value', type: signalType('float') },

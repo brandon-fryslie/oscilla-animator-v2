@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from './registry';
-import { signalType, signalTypeField } from '../core/canonical-types';
+import { signalType, signalTypeField, unitPhase01 } from '../core/canonical-types';
 import type { SigExprId } from '../compiler/ir/Indices';
 
 // =============================================================================
@@ -81,7 +81,7 @@ registerBlock({
   },
   inputs: {
     radius: { label: 'Radius', type: signalType('float'), value: 100 },
-    phase: { label: 'Phase Offset', type: signalType('float'), value: 0 },
+    phase: { label: 'Phase Offset', type: signalType('float', unitPhase01()), value: 0 },
   },
   outputs: {
     pos: { label: 'Position', type: signalTypeField('vec2', 'default') },

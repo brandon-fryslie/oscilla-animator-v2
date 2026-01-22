@@ -7,7 +7,7 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
-import { signalType, signalTypeField, type PayloadType } from '../core/canonical-types';
+import { signalType, signalTypeField, unitPhase01, type PayloadType } from '../core/canonical-types';
 import { DOMAIN_CIRCLE } from '../core/domain-registry';
 import { defaultSourceConst } from '../types';
 
@@ -127,7 +127,7 @@ registerBlock({
     semantics: 'typeSpecific',
   },
   inputs: {
-    elements: { label: 'Elements', type: signalTypeField('float', 'default') },
+    elements: { label: 'Elements', type: signalTypeField('shape', 'default') },
     spacing: { label: 'Length', type: signalType('float'), value: 0.8, defaultSource: defaultSourceConst(0.8), exposedAsPort: true },
   },
   outputs: {
@@ -212,9 +212,9 @@ registerBlock({
     semantics: 'typeSpecific',
   },
   inputs: {
-    elements: { label: 'Elements', type: signalTypeField('float', 'default') },
+    elements: { label: 'Elements', type: signalTypeField('shape', 'default') },
     radius: { label: 'Radius', type: signalType('float'), value: 0.3, defaultSource: defaultSourceConst(0.3), exposedAsPort: true },
-    phase: { label: 'Phase', type: signalType('float'), value: 0, defaultSource: defaultSourceConst(0), exposedAsPort: true },
+    phase: { label: 'Phase', type: signalType('float', unitPhase01()), value: 0, defaultSource: defaultSourceConst(0), exposedAsPort: true },
   },
   outputs: {
     position: { label: 'Position', type: signalTypeField('vec2', 'default') },
@@ -291,7 +291,7 @@ registerBlock({
     semantics: 'typeSpecific',
   },
   inputs: {
-    elements: { label: 'Elements', type: signalTypeField('float', 'default') },
+    elements: { label: 'Elements', type: signalTypeField('shape', 'default') },
     x0: { label: 'Start X', type: signalType('float'), value: 0.1, defaultSource: defaultSourceConst(0.1), exposedAsPort: true },
     y0: { label: 'Start Y', type: signalType('float'), value: 0.5, defaultSource: defaultSourceConst(0.5), exposedAsPort: true },
     x1: { label: 'End X', type: signalType('float'), value: 0.9, defaultSource: defaultSourceConst(0.9), exposedAsPort: true },
