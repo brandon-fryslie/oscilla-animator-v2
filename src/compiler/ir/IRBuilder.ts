@@ -18,7 +18,7 @@ import type {
 } from './Indices';
 import type { TopologyId } from '../../shapes/types';
 import type { TimeModelIR } from './schedule';
-import type { PureFn, OpCode, InstanceDecl, LayoutSpec, Step, IntrinsicPropertyName, ContinuityPolicy, SigExpr, FieldExpr, EventExpr } from './types';
+import type { PureFn, OpCode, InstanceDecl, LayoutSpec, Step, IntrinsicPropertyName, ContinuityPolicy, SigExpr, FieldExpr, EventExpr, StableStateId, StateMapping } from './types';
 
 // =============================================================================
 // IRBuilder Interface
@@ -191,13 +191,45 @@ export interface IRBuilder {
   // =========================================================================
 
   /**
-   * Allocate a persistent state slot with an initial value.
-   * State slots survive across frames and are used for feedback/delay.
+   * Allocate a persistent state slot with stable identity.
    *
-   * @param initialValue - Initial value for the state slot (default: 0)
+   * State slots survive across frames and are used for feedback/delay.
+   * The stableId provides semantic identity that survives recompilation,
+   * enabling state migration during hot-swap.
+   *
+   * For scalar state (signal cardinality):
+   * ```typescript
+   * const slot = builder.allocStateSlot(
+   *   stableStateId(blockId, 'delay'),
+   *   { initialValue: 0 }
+   * );
+   * ```
+   *
+   * For field state (many cardinality):
+   * ```typescript
+   * const slot = builder.allocStateSlot(
+   *   stableStateId(blockId, 'slew'),
+   *   { initialValue: 0, instanceId, laneCount: 1000 }
+   * );
+   * ```
+   *
+   * @param stableId - Stable semantic identity (survives recompilation)
+   * @param options - State allocation options
    * @returns StateSlotId for referencing this state slot
    */
-  allocStateSlot(initialValue?: number): StateSlotId;
+  allocStateSlot(
+    stableId: StableStateId,
+    options?: {
+      /** Initial value per element (default: 0) */
+      initialValue?: number;
+      /** Floats per state element (default: 1) */
+      stride?: number;
+      /** Instance ID for field state (omit for scalar) */
+      instanceId?: InstanceId;
+      /** Lane count for field state (required if instanceId provided) */
+      laneCount?: number;
+    }
+  ): StateSlotId;
 
   /**
    * Create a signal expression that reads from a state slot.
@@ -314,7 +346,10 @@ export interface IRBuilder {
   /** Get all emitted steps (state writes, etc). */
   getSteps(): readonly Step[];
 
-  /** Get state slots. */
+  /** Get state mappings with stable IDs for hot-swap migration. */
+  getStateMappings(): readonly StateMapping[];
+
+  /** Get state slots (legacy format, use getStateMappings for hot-swap). */
   getStateSlots(): readonly { initialValue: number }[];
 
   /** Get state slot count. */

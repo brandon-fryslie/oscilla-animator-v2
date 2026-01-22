@@ -15,7 +15,7 @@
  * deterministic execution order.
  */
 
-import type { Step, StepRender, StepMaterialize, StepContinuityMapBuild, StepContinuityApply, TimeModel, InstanceId, InstanceDecl, FieldExprId, SigExprId, SigExpr, FieldExpr, ValueSlot, ContinuityPolicy } from '../ir/types';
+import type { Step, StepRender, StepMaterialize, StepContinuityMapBuild, StepContinuityApply, TimeModel, InstanceId, InstanceDecl, FieldExprId, SigExprId, SigExpr, FieldExpr, ValueSlot, ContinuityPolicy, StateMapping } from '../ir/types';
 import type { UnlinkedIRFragments } from './pass6-block-lowering';
 import type { AcyclicOrLegalGraph, NormalizedEdge, Block, BlockIndex } from '../ir/patches';
 import type { TimeModelIR } from '../ir/schedule';
@@ -36,7 +36,8 @@ import { getPolicyForSemantic } from '../../runtime/ContinuityDefaults';
  * - instances: Instance declarations (count, layout, etc)
  * - steps: Ordered execution steps
  * - stateSlotCount: Number of persistent state slots
- * - stateSlots: Initial values for state slots
+ * - stateSlots: Initial values for state slots (legacy format)
+ * - stateMappings: State mappings with stable IDs for hot-swap migration
  */
 export interface ScheduleIR {
   /** Time model configuration */
@@ -51,8 +52,11 @@ export interface ScheduleIR {
   /** Number of persistent state slots */
   readonly stateSlotCount: number;
 
-  /** Initial values for state slots */
+  /** Initial values for state slots (legacy format, use stateMappings for hot-swap) */
   readonly stateSlots: readonly StateSlotDef[];
+
+  /** State mappings with stable IDs for hot-swap migration */
+  readonly stateMappings: readonly StateMapping[];
 }
 
 /**
@@ -467,6 +471,7 @@ export function pass7Schedule(
   const stateSlots: StateSlotDef[] = unlinkedIR.builder.getStateSlots().map(s => ({
     initialValue: s.initialValue,
   }));
+  const stateMappings = unlinkedIR.builder.getStateMappings();
 
   return {
     timeModel,
@@ -474,6 +479,7 @@ export function pass7Schedule(
     steps,
     stateSlotCount,
     stateSlots,
+    stateMappings,
   };
 }
 

@@ -37,6 +37,8 @@ import type {
   Step,
   IntrinsicPropertyName,
   ContinuityPolicy,
+  StableStateId,
+  StateMapping,
 } from './types';
 
 // =============================================================================
@@ -61,7 +63,9 @@ export class IRBuilderImpl implements IRBuilder {
   private eventSlots = new Map<EventExprId, ValueSlot>();
 
   // State slot tracking for persistent cross-frame storage
-  private stateSlots: { initialValue: number }[] = [];
+  // OLD: private stateSlots: { initialValue: number }[] = [];
+  // NEW: Store state mappings with stable IDs
+  private stateMappings: StateMapping[] = [];
 
   // Step tracking for schedule generation
   private steps: Step[] = [];
@@ -487,10 +491,51 @@ export class IRBuilderImpl implements IRBuilder {
   // State Slots (Persistent Cross-Frame Storage)
   // =========================================================================
 
-  allocStateSlot(initialValue: number = 0): StateSlotId {
-    const id = stateSlotId(this.stateSlotCounter++);
-    this.stateSlots.push({ initialValue });
-    return id;
+  allocStateSlot(
+    stableId: StableStateId,
+    options?: {
+      initialValue?: number;
+      stride?: number;
+      instanceId?: InstanceId;
+      laneCount?: number;
+    }
+  ): StateSlotId {
+    const initialValue = options?.initialValue ?? 0;
+    const stride = options?.stride ?? 1;
+    const initial = Array(stride).fill(initialValue);
+
+    const slotIndex = this.stateSlotCounter;
+
+    if (options?.instanceId !== undefined) {
+      // Field state (many cardinality)
+      const laneCount = options.laneCount;
+      if (laneCount === undefined) {
+        throw new Error('allocStateSlot: laneCount required when instanceId is provided');
+      }
+      this.stateMappings.push({
+        kind: 'field',
+        stateId: stableId,
+        instanceId: options.instanceId as string,
+        slotStart: slotIndex,
+        laneCount,
+        stride,
+        initial,
+      });
+      // Reserve slots for all lanes
+      this.stateSlotCounter += laneCount * stride;
+    } else {
+      // Scalar state (signal cardinality)
+      this.stateMappings.push({
+        kind: 'scalar',
+        stateId: stableId,
+        slotIndex,
+        stride,
+        initial,
+      });
+      this.stateSlotCounter += stride;
+    }
+
+    return stateSlotId(slotIndex);
   }
 
   sigStateRead(stateSlot: StateSlotId, type: SignalType): SigExprId {
@@ -627,8 +672,35 @@ export class IRBuilderImpl implements IRBuilder {
     return this.eventSlots;
   }
 
+  /**
+   * Get state mappings with stable IDs for hot-swap migration.
+   */
+  getStateMappings(): readonly StateMapping[] {
+    return this.stateMappings;
+  }
+
+  /**
+   * Get legacy state slots format (for backwards compatibility).
+   * @deprecated Use getStateMappings() instead
+   */
   getStateSlots(): readonly { initialValue: number }[] {
-    return this.stateSlots;
+    // Convert new format back to old format for backwards compatibility
+    const slots: { initialValue: number }[] = [];
+    for (const mapping of this.stateMappings) {
+      if (mapping.kind === 'scalar') {
+        for (let i = 0; i < mapping.stride; i++) {
+          slots.push({ initialValue: mapping.initial[i] });
+        }
+      } else {
+        // Field state: expand all lanes
+        for (let lane = 0; lane < mapping.laneCount; lane++) {
+          for (let i = 0; i < mapping.stride; i++) {
+            slots.push({ initialValue: mapping.initial[i] });
+          }
+        }
+      }
+    }
+    return slots;
   }
 
   getStateSlotCount(): number {

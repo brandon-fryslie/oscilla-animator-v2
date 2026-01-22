@@ -11,9 +11,9 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { reaction, toJS } from 'mobx';
-import { buildPatch } from './graph';
+import { buildPatch, type Patch } from './graph';
 import { compile } from './compiler';
-import { createRuntimeState, BufferPool, executeFrame } from './runtime';
+import { createRuntimeState, BufferPool, executeFrame, migrateState, createInitialState } from './runtime';
 import { renderFrame } from './render';
 import { App } from './ui/components';
 import { StoreProvider, type RootStore } from './stores';
@@ -21,7 +21,7 @@ import { timeRootRole, type BlockId, type ValueSlot } from './types';
 import { recordFrameTime, recordFrameDelta, shouldEmitSnapshot, emitHealthSnapshot, computeFrameTimingStats, resetFrameTimingStats } from './runtime/HealthMonitor';
 import type { RuntimeState } from './runtime/RuntimeState';
 import { debugService } from './services/DebugService';
-import { mapDebugEdges } from './services/mapDebugEdges';
+import { mapDebugMappings } from './services/mapDebugEdges';
 
 // =============================================================================
 // Global State
@@ -35,6 +35,30 @@ let pool: BufferPool | null = null;
 
 // Store reference - set via callback from React when StoreProvider mounts
 let store: RootStore | null = null;
+
+// =============================================================================
+// Debug Probe Setup (Single Source of Truth)
+// =============================================================================
+
+/**
+ * Wire DebugService to the runtime state and update debug mappings.
+ * Called after every compile/recompile to ensure debug state stays in sync.
+ *
+ * This is the ONLY place debug probe setup should happen.
+ * Called from compileAndSwap() after both initial and hot-swap compiles.
+ */
+function setupDebugProbe(state: RuntimeState, patch: Patch, program: any): void {
+  // Wire tap callbacks for runtime value observation
+  state.tap = {
+    recordSlotValue: (slotId: ValueSlot, value: number) => debugService.updateSlotValue(slotId, value),
+    recordFieldValue: (slotId: ValueSlot, buffer: ArrayBufferView) => debugService.updateFieldValue(slotId, buffer),
+  };
+
+  // Build and set debug mappings (edge→slot and port→slot)
+  const { edgeMap, portMap } = mapDebugMappings(patch, program);
+  debugService.setEdgeToSlotMap(edgeMap);
+  debugService.setPortToSlotMap(portMap);
+}
 
 // =============================================================================
 // Logging
@@ -294,7 +318,11 @@ let currentPatchIndex = 0;
 // Build and Compile
 // =============================================================================
 
-async function buildAndCompile(patchBuilder: PatchBuilder) {
+/**
+ * Build a patch from a PatchBuilder and load it into the store.
+ * Does NOT compile - call compileAndSwap() after this.
+ */
+function build(patchBuilder: PatchBuilder): Patch {
   log(`Building patch...`);
 
   const patch = buildPatch(patchBuilder);
@@ -322,7 +350,33 @@ async function buildAndCompile(patchBuilder: PatchBuilder) {
   // Load patch into store
   store!.patch.loadPatch(patch);
 
-  // Compile with event emission for diagnostics
+  return patch;
+}
+
+/**
+ * Compile the current patch from store and swap to the new program.
+ *
+ * This is the SINGLE compile path - used for both initial compile and recompile.
+ * Handles:
+ * - State migration with stable StateIds
+ * - Continuity preservation
+ * - Debug probe setup
+ * - Domain change detection
+ *
+ * @param isInitial - True for first compile (hard swap), false for recompile (soft swap)
+ */
+async function compileAndSwap(isInitial: boolean = false) {
+  const patch = store!.patch.patch;
+  if (!patch) {
+    log('No patch to compile', 'warn');
+    return;
+  }
+
+  if (!isInitial) {
+    log('Live recompile triggered...');
+  }
+
+  // Compile the patch
   const result = compile(patch, {
     events: store!.events,
     patchRevision: store!.getPatchRevision(),
@@ -330,8 +384,13 @@ async function buildAndCompile(patchBuilder: PatchBuilder) {
   });
 
   if (result.kind !== 'ok') {
-    log(`Compile failed: ${JSON.stringify(result.errors)}`, 'error');
-    throw new Error('Compile failed');
+    const errorMsg = result.errors.map(e => e.message).join(', ');
+    log(`Compile failed: ${isInitial ? JSON.stringify(result.errors) : errorMsg}`, 'error');
+    if (isInitial) {
+      throw new Error('Compile failed');
+    }
+    // For recompile, keep running with old program
+    return;
   }
 
   const program = result.program;
@@ -339,41 +398,118 @@ async function buildAndCompile(patchBuilder: PatchBuilder) {
     `Compiled: ${program.signalExprs.nodes.length} signals, ${program.fieldExprs.nodes.length} fields, ${program.slotMeta.length} slots`,
   );
 
-  // Emit ProgramSwapped to update active revision for diagnostics
+  // Get schedule info
+  const newSchedule = program.schedule as {
+    stateSlotCount?: number;
+    stateMappings?: readonly any[];
+    instances?: ReadonlyMap<string, any>;
+  };
+  const newSlotCount = program.slotMeta.length;
+  const newStateSlotCount = newSchedule?.stateSlotCount ?? 0;
+  const newStateMappings = newSchedule?.stateMappings ?? [];
+
+  // For recompile: detect domain changes and get old state info
+  if (!isInitial && currentProgram) {
+    detectAndLogDomainChanges(currentProgram, program);
+  }
+
+  // Get old state info for migration
+  const oldSlotCount = currentState?.values.f64.length ?? 0;
+  const oldSchedule = currentProgram?.schedule as { stateSlotCount?: number; stateMappings?: readonly any[] } | undefined;
+  const oldStateSlotCount = oldSchedule?.stateSlotCount ?? 0;
+  const oldStateMappings = oldSchedule?.stateMappings ?? [];
+
+  // Preserve continuity state
+  const oldContinuity = currentState?.continuity;
+  const oldContinuityConfig = currentState?.continuityConfig;
+  const oldPrimitiveState = currentState?.state;
+
+  // Check if we need to recreate runtime state
+  const valueSlotChanged = newSlotCount !== oldSlotCount;
+  const stateSlotChanged = newStateSlotCount !== oldStateSlotCount;
+  const needNewState = isInitial || valueSlotChanged || stateSlotChanged;
+
+  if (needNewState) {
+    if (!isInitial) {
+      log(`Hot-swap: value slots ${oldSlotCount}→${newSlotCount}, state slots ${oldStateSlotCount}→${newStateSlotCount}`);
+    }
+
+    // Create new runtime state
+    currentState = createRuntimeState(newSlotCount, newStateSlotCount);
+
+    // Handle primitive state
+    if (!isInitial && oldPrimitiveState && newStateMappings.length > 0) {
+      // Migrate using stable StateIds
+      const getLaneMapping = (instanceId: string) => {
+        return oldContinuity?.mappings.get(instanceId) ?? null;
+      };
+
+      const migrationResult = migrateState(
+        oldPrimitiveState,
+        currentState.state,
+        oldStateMappings,
+        newStateMappings,
+        getLaneMapping
+      );
+
+      if (migrationResult.migrated) {
+        log(`State migration: ${migrationResult.scalarsMigrated} scalar, ${migrationResult.fieldsMigrated} field states migrated, ${migrationResult.initialized} initialized, ${migrationResult.discarded} discarded`);
+      }
+    } else if (newStateMappings.length > 0) {
+      // Initialize fresh (first compile or no old state)
+      const initialState = createInitialState(newStateSlotCount, newStateMappings);
+      currentState.state.set(initialState);
+    }
+
+    // Restore continuity state (it's independent of slot layout)
+    if (!isInitial && oldContinuity) {
+      currentState.continuity = oldContinuity;
+    }
+    if (!isInitial && oldContinuityConfig) {
+      currentState.continuityConfig = oldContinuityConfig;
+    }
+
+    // Set RuntimeState reference in ContinuityStore
+    store!.continuity.setRuntimeStateRef(currentState);
+  }
+
+  // ALWAYS update debug probe (mappings can change even if slot count doesn't)
+  setupDebugProbe(currentState!, patch, program);
+
+  // Update program
+  currentProgram = program;
+
+  // Extract instance counts for diagnostics
+  const instanceCounts = new Map<string, number>();
+  if (newSchedule?.instances) {
+    for (const [id, decl] of newSchedule.instances) {
+      const count = typeof decl.count === 'number' ? decl.count : 0;
+      instanceCounts.set(id, count);
+      if (isInitial) {
+        prevInstanceCounts.set(id, count);
+      }
+    }
+  }
+
+  if (isInitial) {
+    log(`Initialized domain tracking: ${instanceCounts.size} instance(s)`);
+  }
+
+  // Emit ProgramSwapped event
   store!.events.emit({
     type: 'ProgramSwapped',
     patchId: 'patch-0',
     patchRevision: store!.getPatchRevision(),
-    compileId: 'compile-0',
-    swapMode: 'hard',
+    compileId: isInitial ? 'compile-0' : `compile-live-${Date.now()}`,
+    swapMode: isInitial ? 'hard' : 'soft',
+    instanceCounts: isInitial ? undefined : instanceCounts,
   });
 
-  // Update global state
-  currentProgram = program;
-  currentState = createRuntimeState(program.slotMeta.length);
-
-
-  // Wire DebugService tap for runtime observation (Sprint 1: Debug Probe)
-  currentState.tap = {
-    recordSlotValue: (slotId: ValueSlot, value: number) => debugService.updateSlotValue(slotId, value),
-  };
-
-  // Build and set edge-to-slot mapping for DebugService
-  // Logic moved out of compiler to strictly adhere to One Source of Truth / Isolation laws
-  const edgeMap = mapDebugEdges(patch, program);
-  debugService.setEdgeToSlotMap(edgeMap);
-
-  // Set RuntimeState reference in ContinuityStore for config access
-  store!.continuity.setRuntimeStateRef(currentState);
-
-  // Initialize instance counts for domain change tracking (Sprint 2)
-  const instances = program.schedule?.instances;
-  if (instances) {
-    for (const [id, decl] of instances) {
-      const count = typeof decl.count === 'number' ? decl.count : 0;
-      prevInstanceCounts.set(id, count);
-    }
-    log(`Initialized domain tracking: ${instances.size} instance(s)`);
+  if (!isInitial) {
+    const instanceInfo = [...instanceCounts.entries()]
+      .map(([id, count]) => `${id}=${count}`)
+      .join(', ');
+    log(`Recompiled: ${program.signalExprs.nodes.length} signals, ${program.fieldExprs.nodes.length} fields, instances: [${instanceInfo}]`);
   }
 }
 
@@ -462,94 +598,6 @@ function detectAndLogDomainChanges(oldProgram: any, newProgram: any) {
 }
 
 /**
- * Recompile the current patch from store, preserving continuity state.
- * Called when block params change in the UI.
- */
-async function recompileFromStore() {
-  const patch = store!.patch.patch;
-  if (!patch) {
-    log('No patch to recompile', 'warn');
-    return;
-  }
-
-  log('Live recompile triggered...');
-
-  // Compile the patch from store
-  const result = compile(patch, {
-    events: store!.events,
-    patchRevision: store!.getPatchRevision(),
-    patchId: 'patch-0',
-  });
-
-  if (result.kind !== 'ok') {
-    log(`Recompile failed: ${result.errors.map(e => e.message).join(', ')}`, 'error');
-    // Keep running with old program
-    return;
-  }
-
-  const program = result.program;
-  const newSlotCount = program.slotMeta.length;
-  const oldSlotCount = currentState?.values.f64.length ?? 0;
-
-  // Detect and log domain changes (Sprint 2)
-  detectAndLogDomainChanges(currentProgram, program);
-
-  // Preserve continuity state during hot-swap
-  const oldContinuity = currentState?.continuity;
-
-  // Only recreate state if slot count changed
-  if (newSlotCount !== oldSlotCount) {
-    log(`Slot count changed: ${oldSlotCount} → ${newSlotCount}, resizing buffers`);
-    currentState = createRuntimeState(newSlotCount);
-
-    // Wire DebugService tap for runtime observation (Sprint 1: Debug Probe)
-    currentState.tap = {
-      recordSlotValue: (slotId: ValueSlot, value: number) => debugService.updateSlotValue(slotId, value),
-    };
-
-    // Update debug mapping on recompile
-    const edgeMap = mapDebugEdges(store!.patch.patch, program);
-    debugService.setEdgeToSlotMap(edgeMap);
-
-    // Restore continuity state (it's independent of slot layout)
-    if (oldContinuity) {
-      currentState.continuity = oldContinuity;
-    }
-
-    // Set RuntimeState reference in ContinuityStore for config access
-    store!.continuity.setRuntimeStateRef(currentState);
-  }
-
-  // Update program
-  currentProgram = program;
-
-  // Extract instance counts for diagnostic logging
-  const schedule = program.schedule as unknown as { instances?: ReadonlyMap<string, { count: number }> };
-  const instanceCounts = new Map<string, number>();
-  if (schedule?.instances) {
-    for (const [id, decl] of schedule.instances) {
-      instanceCounts.set(id, decl.count);
-    }
-  }
-
-  // Emit ProgramSwapped event with instance counts
-  store!.events.emit({
-    type: 'ProgramSwapped',
-    patchId: 'patch-0',
-    patchRevision: store!.getPatchRevision(),
-    compileId: `compile-live-${Date.now()}`,
-    swapMode: 'soft', // Continuity-preserving swap
-    instanceCounts,
-  });
-
-  // Log recompile with instance counts
-  const instanceInfo = [...instanceCounts.entries()]
-    .map(([id, count]) => `${id}=${count}`)
-    .join(', ');
-  log(`Recompiled: ${program.signalExprs.nodes.length} signals, ${program.fieldExprs.nodes.length} fields, instances: [${instanceInfo}]`);
-}
-
-/**
  * Debounced recompile - waits for changes to settle before recompiling.
  */
 function scheduleRecompile() {
@@ -558,7 +606,7 @@ function scheduleRecompile() {
   }
   recompileTimeout = setTimeout(async () => {
     try {
-      await recompileFromStore();
+      await compileAndSwap(false); // false = recompile, not initial
     } catch (err) {
       log(`Recompile error: ${err}`, 'error');
       console.error(err);
@@ -797,7 +845,8 @@ async function switchPatch(index: number) {
   if (index < 0 || index >= patches.length) return;
   currentPatchIndex = index;
   log(`Switching to patch: ${patches[index].name}`);
-  await buildAndCompile(patches[index].builder);
+  build(patches[index].builder);
+  await compileAndSwap(true);
   updateButtonStyles();
 }
 
@@ -868,7 +917,8 @@ async function initializeRuntime(rootStore: RootStore) {
   createPatchSwitcherUI();
 
   // Build and compile with initial patch
-  await buildAndCompile(patches[currentPatchIndex].builder);
+  build(patches[currentPatchIndex].builder);
+  await compileAndSwap(true);
 
   // Set up live recompile reaction (Continuity-UI Sprint 1)
   setupLiveRecompileReaction();

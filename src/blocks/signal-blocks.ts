@@ -6,7 +6,7 @@
 
 import { registerBlock } from './registry';
 import { signalType, type PayloadType } from '../core/canonical-types';
-import { OpCode } from '../compiler/ir/types';
+import { OpCode, stableStateId } from '../compiler/ir/types';
 import type { SigExprId } from '../compiler/ir/Indices';
 
 // =============================================================================
@@ -239,8 +239,12 @@ registerBlock({
 
     const initialValue = (config?.initialValue as number) ?? 0;
 
-    // Allocate persistent state slot (initialized to initialValue)
-    const stateSlot = ctx.b.allocStateSlot(initialValue);
+    // Allocate persistent state slot with stable ID (for hot-swap migration)
+    // ctx.instanceId is the blockId which provides stable identity
+    const stateSlot = ctx.b.allocStateSlot(
+      stableStateId(ctx.instanceId, 'delay'),
+      { initialValue }
+    );
 
     // Read previous value FIRST (before any writes in this frame)
     const prevId = ctx.b.sigStateRead(stateSlot, signalType('float'));

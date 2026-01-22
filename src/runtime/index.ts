@@ -31,3 +31,9 @@ export {
   type RenderFrameIR,
   type RenderPassIR,
 } from './ScheduleExecutor';
+export {
+  migrateState,
+  createInitialState,
+  type StateMigrationResult,
+  type StateMigrationDetail,
+} from './StateMigration';

@@ -494,3 +494,71 @@ export interface StepContinuityApply {
   readonly outputSlot: ValueSlot; // Output buffer (continuity-applied values)
   readonly semantic: 'position' | 'radius' | 'opacity' | 'color' | 'custom';
 }
+
+// =============================================================================
+// Stable State Identity (for hot-swap migration)
+// =============================================================================
+
+/**
+ * Stable state ID - semantic identity that survives recompilation.
+ *
+ * Format: "blockId:stateKind" (e.g., "b3:delay", "b7:slew")
+ *
+ * The lane index is NOT part of StableStateId - lanes are remapped using
+ * the continuity mapping service during hot-swap.
+ */
+export type StableStateId = string & { readonly __brand: 'StableStateId' };
+
+/**
+ * Create a stable state ID from block ID and state kind.
+ *
+ * @param blockId - The block's stable ID (survives recompilation)
+ * @param stateKind - Type of state (e.g., 'delay', 'slew', 'phase')
+ */
+export function stableStateId(blockId: string, stateKind: string): StableStateId {
+  return `${blockId}:${stateKind}` as StableStateId;
+}
+
+/**
+ * State mapping for scalar (signal cardinality) state.
+ *
+ * Used for stateful primitives operating on a single value per frame.
+ */
+export interface StateMappingScalar {
+  readonly kind: 'scalar';
+  /** Stable semantic identity */
+  readonly stateId: StableStateId;
+  /** Positional slot index (changes each compile) */
+  readonly slotIndex: number;
+  /** Floats per state element (usually 1) */
+  readonly stride: number;
+  /** Initial values (length = stride) */
+  readonly initial: readonly number[];
+}
+
+/**
+ * State mapping for field (many cardinality) state.
+ *
+ * Used for stateful primitives operating on per-lane state arrays.
+ * Lane remapping during hot-swap uses the continuity mapping service.
+ */
+export interface StateMappingField {
+  readonly kind: 'field';
+  /** Stable semantic identity */
+  readonly stateId: StableStateId;
+  /** Instance this state tracks (for lane mapping) */
+  readonly instanceId: string;
+  /** Start offset in state array (positional, changes each compile) */
+  readonly slotStart: number;
+  /** Number of lanes at compile time */
+  readonly laneCount: number;
+  /** Floats per lane (>=1) */
+  readonly stride: number;
+  /** Per-lane initial values template (length = stride) */
+  readonly initial: readonly number[];
+}
+
+/**
+ * Union of scalar and field state mappings.
+ */
+export type StateMapping = StateMappingScalar | StateMappingField;
