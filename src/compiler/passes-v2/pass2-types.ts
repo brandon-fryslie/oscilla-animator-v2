@@ -14,7 +14,7 @@
  */
 
 import type { Block } from "../../graph/Patch";
-import type { SignalType, NumericUnit } from "../../core/canonical-types";
+import type { SignalType } from "../../core/canonical-types";
 import {
   getAxisValue,
   DEFAULTS_V0,
@@ -74,7 +74,7 @@ function isTypeCompatible(from: SignalType, to: SignalType): boolean {
 
   // Unit must match exactly (Spec §A5)
   // No implicit unit conversion - adapters handle that
-  if (from.unit && to.unit && from.unit.kind !== to.unit.kind) {
+  if (from.unit.kind !== to.unit.kind) {
     return false;
   }
 
@@ -243,45 +243,6 @@ function validatePayloadCombination(
   return null;
 }
 
-/**
- * Check unit compatibility for wired connections.
- *
- * This is a SOFT validation - emits warnings but does not block compilation.
- * Enables gradual adoption of unit annotations without breaking existing patches.
- *
- * Rules:
- * - No unit annotation → no warning (backwards compatible)
- * - Both have units but different → warning
- * - Same unit or one is undefined → no warning
- *
- * TODO: Integrate with DiagnosticHub instead of console.warn
- *
- * @param from - Source type descriptor
- * @param to - Target type descriptor
- * @param connectionId - Human-readable connection identifier for warnings
- */
-function checkUnitCompatibility(
-  from: SignalType,
-  to: SignalType,
-  connectionId: string
-): void {
-  const fromUnit = from.unit;
-  const toUnit = to.unit;
-
-  // No validation if either side has no unit annotation
-  if (fromUnit === undefined || toUnit === undefined) {
-    return;
-  }
-
-  // Warn if units don't match
-  if (fromUnit !== toUnit) {
-    console.warn(
-      `[Unit Mismatch] ${connectionId}: ` +
-      `connecting ${fromUnit} to ${toUnit}. ` +
-      `Consider adding a conversion block or verifying unit expectations.`
-    );
-  }
-}
 
 /**
  * Get the type of a port on a block.
@@ -384,12 +345,6 @@ export function pass2TypeGraph(
       });
     }
 
-    // Validate unit compatibility (SOFT warning)
-    checkUnitCompatibility(
-      fromType,
-      toType,
-      `${fromBlock.type}[${edge.fromPort}] → ${toBlock.type}[${edge.toPort}]`
-    );
   }
 
   if (errors.length > 0) {
