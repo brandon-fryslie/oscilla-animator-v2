@@ -203,14 +203,16 @@ describe('Stroke Rendering', () => {
     });
 
     it('handles per-instance stroke widths', () => {
-      const op = createSquareOp({
-        strokeColor: new Uint8ClampedArray([0, 0, 0, 255]),
-        strokeWidth: new Float32Array([0.01, 0.02]),
-      });
-      op.instances = {
-        count: 2,
-        position: new Float32Array([0.25, 0.5, 0.75, 0.5]),
-        size: 0.1,
+      const op: DrawPathInstancesOp = {
+        ...createSquareOp({
+          strokeColor: new Uint8ClampedArray([0, 0, 0, 255]),
+          strokeWidth: new Float32Array([0.01, 0.02]),
+        }),
+        instances: {
+          count: 2,
+          position: new Float32Array([0.25, 0.5, 0.75, 0.5]),
+          size: 0.1,
+        },
       };
 
       renderDrawPathInstancesOp(ctx, op, 1000, 600);

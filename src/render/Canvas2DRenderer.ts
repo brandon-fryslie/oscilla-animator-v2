@@ -64,9 +64,36 @@ function rgbaToCSS(color: Uint8ClampedArray, offset: number): string {
 }
 
 /**
- * Render a frame to a 2D canvas context
+ * Render a frame to a 2D canvas context.
+ * 
+ * Supports both v1 (RenderFrameIR) and v2 (RenderFrameIR_Future) formats.
+ * Dispatches to appropriate render path based on frame structure.
+ * 
+ * @param ctx - Canvas rendering context
+ * @param frame - Frame to render (v1 or v2 format)
+ * @param width - Viewport width in pixels
+ * @param height - Viewport height in pixels
  */
 export function renderFrame(
+  ctx: CanvasRenderingContext2D,
+  frame: RenderFrameIR | RenderFrameIR_Future,
+  width: number,
+  height: number
+): void {
+  // Check for v2 format (has 'ops' array and version: 2)
+  if ('ops' in frame && 'version' in frame && frame.version === 2) {
+    renderFrameV2(ctx, frame as RenderFrameIR_Future, width, height);
+    return;
+  }
+
+  // V1 format: has 'passes' array
+  renderFrameV1(ctx, frame as RenderFrameIR, width, height);
+}
+
+/**
+ * Render a v1 frame (RenderPassIR passes)
+ */
+function renderFrameV1(
   ctx: CanvasRenderingContext2D,
   frame: RenderFrameIR,
   width: number,
