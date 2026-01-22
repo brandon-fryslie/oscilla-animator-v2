@@ -6,13 +6,29 @@
 import { describe, it, expect, vi } from 'vitest';
 import { assembleRenderPass, assembleAllPasses, isRenderStep, type AssemblerContext } from '../RenderAssembler';
 import type { StepRender, InstanceDecl, SigExpr } from '../../compiler/ir/types';
+import type { SignalType } from '../../core/canonical-types';
+import { signalType, extentDefault } from '../../core/canonical-types';
 import type { RuntimeState } from '../RuntimeState';
 import { createRuntimeState } from '../RuntimeState';
 import type { ValueSlot, SigExprId } from '../../types';
 
+// Helper to create a scalar signal type
+const SCALAR_TYPE: SignalType = signalType('float');
+
 // Create a minimal runtime state for testing
 function createMockState(): RuntimeState {
   const state = createRuntimeState(100);
+  // Set effective time so signal evaluation works
+  state.time = {
+    tAbsMs: 0,
+    tMs: 0,
+    dt: 0,
+    phaseA: 0,
+    phaseB: 0,
+    pulse: 0,
+    palette: { r: 1, g: 1, b: 1, a: 1 },
+    energy: 0.5,
+  };
   return state;
 }
 
@@ -119,7 +135,7 @@ describe('RenderAssembler', () => {
       expect(() => assembleRenderPass(step, context)).toThrow(/Color buffer not found/);
     });
 
-    it('assembles a render pass with default size and shape', () => {
+    it('throws when scale is not provided', () => {
       const state = createMockState();
       const positionBuffer = new Float32Array(20);
       const colorBuffer = new Uint8ClampedArray(40);
@@ -131,10 +147,73 @@ describe('RenderAssembler', () => {
         instanceId: 'test-instance',
         positionSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
+        // scale is undefined - should throw
       };
 
       const context: AssemblerContext = {
         signals: [],
+        instances: new Map([['test-instance', createMockInstance(10)]]),
+        state,
+      };
+
+      expect(() => assembleRenderPass(step, context)).toThrow(/scale is required/);
+    });
+
+    it('throws when shape is not provided', () => {
+      const state = createMockState();
+      const positionBuffer = new Float32Array(20);
+      const colorBuffer = new Uint8ClampedArray(40);
+      state.values.objects.set(1 as ValueSlot, positionBuffer);
+      state.values.objects.set(2 as ValueSlot, colorBuffer);
+
+      // Create a signal expression for scale
+      const signals: SigExpr[] = [
+        { kind: 'const', value: 1.0, type: SCALAR_TYPE },
+      ];
+
+      const step: StepRender = {
+        kind: 'render',
+        instanceId: 'test-instance',
+        positionSlot: 1 as ValueSlot,
+        colorSlot: 2 as ValueSlot,
+        scale: { k: 'sig', id: 0 as SigExprId },
+        // shape is undefined - should throw
+      };
+
+      const context: AssemblerContext = {
+        signals,
+        instances: new Map([['test-instance', createMockInstance(10)]]),
+        state,
+      };
+
+      expect(() => assembleRenderPass(step, context)).toThrow(/shape is required/);
+    });
+
+    it('assembles a render pass with explicit scale and shape', () => {
+      const state = createMockState();
+      const positionBuffer = new Float32Array(20);
+      const colorBuffer = new Uint8ClampedArray(40);
+      state.values.objects.set(1 as ValueSlot, positionBuffer);
+      state.values.objects.set(2 as ValueSlot, colorBuffer);
+
+      // Create signal expressions for scale and shape params
+      const signals: SigExpr[] = [
+        { kind: 'const', value: 1.0, type: SCALAR_TYPE },  // scale
+        { kind: 'const', value: 0.02, type: SCALAR_TYPE }, // rx param
+        { kind: 'const', value: 0.02, type: SCALAR_TYPE }, // ry param
+      ];
+
+      const step: StepRender = {
+        kind: 'render',
+        instanceId: 'test-instance',
+        positionSlot: 1 as ValueSlot,
+        colorSlot: 2 as ValueSlot,
+        scale: { k: 'sig', id: 0 as SigExprId },
+        shape: { k: 'sig', topologyId: 'ellipse', paramSignals: [1 as SigExprId, 2 as SigExprId] },
+      };
+
+      const context: AssemblerContext = {
+        signals,
         instances: new Map([['test-instance', createMockInstance(10)]]),
         state,
       };
@@ -146,38 +225,8 @@ describe('RenderAssembler', () => {
       expect(result!.count).toBe(10);
       expect(result!.position).toBe(positionBuffer);
       expect(result!.color).toBe(colorBuffer);
-      expect(result!.size).toBe(10); // default size
-      // Default shape is now proper ShapeDescriptor (no legacy numeric 0)
-      expect(result!.shape).toEqual({ topologyId: 'ellipse', params: { radiusX: 1, radiusY: 1 } });
-    });
-
-    it('assembles a render pass with slot-based size', () => {
-      const state = createMockState();
-      const positionBuffer = new Float32Array(20);
-      const colorBuffer = new Uint8ClampedArray(40);
-      const sizeBuffer = new Float32Array(10);
-      state.values.objects.set(1 as ValueSlot, positionBuffer);
-      state.values.objects.set(2 as ValueSlot, colorBuffer);
-      state.values.objects.set(3 as ValueSlot, sizeBuffer);
-
-      const step: StepRender = {
-        kind: 'render',
-        instanceId: 'test-instance',
-        positionSlot: 1 as ValueSlot,
-        colorSlot: 2 as ValueSlot,
-        size: { k: 'slot', slot: 3 as ValueSlot },
-      };
-
-      const context: AssemblerContext = {
-        signals: [],
-        instances: new Map([['test-instance', createMockInstance(10)]]),
-        state,
-      };
-
-      const result = assembleRenderPass(step, context);
-
-      expect(result).not.toBeNull();
-      expect(result!.size).toBe(sizeBuffer);
+      expect(result!.scale).toBe(1.0);
+      expect(result!.resolvedShape.topologyId).toBe('ellipse');
     });
 
     it('assembles a render pass with control points for path topologies', () => {
@@ -192,17 +241,26 @@ describe('RenderAssembler', () => {
       state.values.objects.set(2 as ValueSlot, colorBuffer);
       state.values.objects.set(4 as ValueSlot, controlPointsBuffer);
 
-      // Use the default shape (ellipse) which is a primitive topology
+      // Create signal expressions for scale and shape params
+      const signals: SigExpr[] = [
+        { kind: 'const', value: 1.0, type: SCALAR_TYPE },  // scale
+        { kind: 'const', value: 0.02, type: SCALAR_TYPE }, // rx param
+        { kind: 'const', value: 0.02, type: SCALAR_TYPE }, // ry param
+      ];
+
+      // Use ellipse shape which is a primitive topology
       const step: StepRender = {
         kind: 'render',
         instanceId: 'test-instance',
         positionSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
+        scale: { k: 'sig', id: 0 as SigExprId },
+        shape: { k: 'sig', topologyId: 'ellipse', paramSignals: [1 as SigExprId, 2 as SigExprId] },
         controlPoints: { k: 'slot', slot: 4 as ValueSlot },
       };
 
       const context: AssemblerContext = {
-        signals: [],
+        signals,
         instances: new Map([['test-instance', createMockInstance(10)]]),
         state,
       };
@@ -225,23 +283,34 @@ describe('RenderAssembler', () => {
       state.values.objects.set(3 as ValueSlot, new Float32Array(40));
       state.values.objects.set(4 as ValueSlot, new Uint8ClampedArray(80));
 
+      // Create signal expressions for scale and shape
+      const signals: SigExpr[] = [
+        { kind: 'const', value: 1.0, type: SCALAR_TYPE },  // scale
+        { kind: 'const', value: 0.02, type: SCALAR_TYPE }, // rx param
+        { kind: 'const', value: 0.02, type: SCALAR_TYPE }, // ry param
+      ];
+
       const steps: StepRender[] = [
         {
           kind: 'render',
           instanceId: 'instance-a',
           positionSlot: 1 as ValueSlot,
           colorSlot: 2 as ValueSlot,
+          scale: { k: 'sig', id: 0 as SigExprId },
+          shape: { k: 'sig', topologyId: 'ellipse', paramSignals: [1 as SigExprId, 2 as SigExprId] },
         },
         {
           kind: 'render',
           instanceId: 'instance-b',
           positionSlot: 3 as ValueSlot,
           colorSlot: 4 as ValueSlot,
+          scale: { k: 'sig', id: 0 as SigExprId },
+          shape: { k: 'sig', topologyId: 'ellipse', paramSignals: [1 as SigExprId, 2 as SigExprId] },
         },
       ];
 
       const context: AssemblerContext = {
-        signals: [],
+        signals,
         instances: new Map([
           ['instance-a', createMockInstance(10)],
           ['instance-b', createMockInstance(20)],
@@ -261,23 +330,34 @@ describe('RenderAssembler', () => {
       state.values.objects.set(1 as ValueSlot, new Float32Array(20));
       state.values.objects.set(2 as ValueSlot, new Uint8ClampedArray(40));
 
+      // Create signal expressions for scale and shape
+      const signals: SigExpr[] = [
+        { kind: 'const', value: 1.0, type: SCALAR_TYPE },  // scale
+        { kind: 'const', value: 0.02, type: SCALAR_TYPE }, // rx param
+        { kind: 'const', value: 0.02, type: SCALAR_TYPE }, // ry param
+      ];
+
       const steps: StepRender[] = [
         {
           kind: 'render',
           instanceId: 'valid-instance',
           positionSlot: 1 as ValueSlot,
           colorSlot: 2 as ValueSlot,
+          scale: { k: 'sig', id: 0 as SigExprId },
+          shape: { k: 'sig', topologyId: 'ellipse', paramSignals: [1 as SigExprId, 2 as SigExprId] },
         },
         {
           kind: 'render',
           instanceId: 'empty-instance',
           positionSlot: 1 as ValueSlot,
           colorSlot: 2 as ValueSlot,
+          scale: { k: 'sig', id: 0 as SigExprId },
+          shape: { k: 'sig', topologyId: 'ellipse', paramSignals: [1 as SigExprId, 2 as SigExprId] },
         },
       ];
 
       const context: AssemblerContext = {
-        signals: [],
+        signals,
         instances: new Map([
           ['valid-instance', createMockInstance(10)],
           ['empty-instance', createMockInstance(0)], // count = 0, will be filtered

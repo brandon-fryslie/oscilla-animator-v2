@@ -24,20 +24,6 @@ import { getTopology } from '../shapes/registry';
 import type { PathTopologyDef, TopologyDef, TopologyId } from '../shapes/types';
 
 /**
- * DEFAULT_SHAPE - Canonical fallback shape descriptor
- *
- * Used when no explicit shape is provided. All paths should eventually
- * provide explicit shapes, but this ensures totality during transition.
- *
- * Uses 'ellipse' topology with default radii (1, 1) which renders as a circle
- * when scaled by instance size.
- */
-export const DEFAULT_SHAPE: ShapeDescriptor = {
-  topologyId: 'ellipse' as TopologyId,
-  params: { radiusX: 1, radiusY: 1 },
-};
-
-/**
  * AssemblerContext - Context needed for render assembly
  */
 export interface AssemblerContext {
@@ -87,8 +73,8 @@ export function assembleRenderPass(
     throw new Error(`RenderAssembler: Color buffer not found in slot ${step.colorSlot}`);
   }
 
-  // Resolve size (uniform signal or per-particle buffer)
-  const size = resolveSize(step.size, signals, state);
+  // Resolve scale (uniform signal, defaults to 1.0 from block registry)
+  const scale = resolveScale(step.scale, signals, state);
 
   // Resolve shape (descriptor with topology or per-particle buffer)
   const shape = resolveShape(step.shape, signals, state);
@@ -104,33 +90,37 @@ export function assembleRenderPass(
     count,
     position,
     color,
-    size,
+    scale,
     shape, // @deprecated - kept for backward compatibility
     resolvedShape, // REQUIRED - renderer uses this
   };
 }
 
 /**
- * Resolve size from step specification
+ * Resolve scale from step specification
+ *
+ * Scale is a uniform multiplier for shape dimensions.
+ * MUST be provided - no fallback values in render pipeline.
  */
-function resolveSize(
-  sizeSpec: StepRender['size'],
+function resolveScale(
+  scaleSpec: StepRender['scale'],
   signals: readonly SigExpr[],
   state: RuntimeState
-): number | ArrayBufferView {
-  if (sizeSpec === undefined) {
-    return 10; // Default size
+): number {
+  if (scaleSpec === undefined) {
+    throw new Error(
+      'RenderAssembler: scale is required. ' +
+      'Ensure RenderInstances2D block has a scale input (default 1.0 from registry).'
+    );
   }
 
-  if (sizeSpec.k === 'slot') {
-    const sizeBuffer = state.values.objects.get(sizeSpec.slot) as ArrayBufferView;
-    if (!sizeBuffer) {
-      throw new Error(`RenderAssembler: Size buffer not found in slot ${sizeSpec.slot}`);
-    }
-    return sizeBuffer;
+  if (scaleSpec.k === 'sig') {
+    return evaluateSignal(scaleSpec.id, signals, state);
   } else {
-    // Signal ('sig') - evaluate for uniform size
-    return evaluateSignal(sizeSpec.id, signals, state);
+    throw new Error(
+      `RenderAssembler: scale must be a signal, got ${scaleSpec.k}. ` +
+      'Per-particle scale is not supported.'
+    );
   }
 }
 
@@ -140,6 +130,7 @@ function resolveSize(
  * Returns ShapeDescriptor for topology-based shapes.
  * Returns ArrayBufferView for per-particle shapes (not yet fully supported).
  *
+ * MUST be provided - no fallback values in render pipeline.
  * NO LEGACY NUMERIC ENCODING - all shapes use proper topology IDs.
  */
 function resolveShape(
@@ -148,8 +139,10 @@ function resolveShape(
   state: RuntimeState
 ): ShapeDescriptor | ArrayBufferView {
   if (shapeSpec === undefined) {
-    // Use canonical default shape (ellipse with unit radii)
-    return DEFAULT_SHAPE;
+    throw new Error(
+      'RenderAssembler: shape is required. ' +
+      'Ensure a shape block (Ellipse, Rect, etc.) is wired to the render pipeline.'
+    );
   }
 
   if (shapeSpec.k === 'slot') {

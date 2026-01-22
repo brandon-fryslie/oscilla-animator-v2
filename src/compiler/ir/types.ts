@@ -455,11 +455,9 @@ export interface StepRender {
   readonly positionSlot: ValueSlot;
   /** Slot containing color buffer (after continuity applied) */
   readonly colorSlot: ValueSlot;
-  /** Optional size - signal (uniform) or slot (per-particle after continuity) */
-  readonly size?:
-    | { readonly k: 'sig'; readonly id: SigExprId }
-    | { readonly k: 'slot'; readonly slot: ValueSlot };
-  /** Optional shape - UPDATED: Now includes topology + param signals (Option A) */
+  /** Scale multiplier for shape dimensions (uniform signal, default 1.0) */
+  readonly scale?: { readonly k: 'sig'; readonly id: SigExprId };
+  /** Shape - topology + param signals (REQUIRED) */
   readonly shape?:
     | { readonly k: 'sig'; readonly topologyId: TopologyId; readonly paramSignals: readonly SigExprId[] }
     | { readonly k: 'slot'; readonly slot: ValueSlot };

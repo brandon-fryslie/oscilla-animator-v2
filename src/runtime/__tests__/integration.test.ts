@@ -45,12 +45,12 @@ describe('Runtime Integration', () => {
     expect(frame.version).toBe(1);
     expect(frame.passes).toBeInstanceOf(Array);
 
-    // Verify frame advances (starts at 0, increments to 1)
-    expect(state.cache.frameId).toBe(1);
+    // Verify frame advances (starts at 1, increments to 2)
+    expect(state.cache.frameId).toBe(2);
 
     // Execute at t=1000
     const frame2 = executeFrame(program, state, pool, 1000);
-    expect(state.cache.frameId).toBe(2);
+    expect(state.cache.frameId).toBe(3);
     expect(frame2.version).toBe(1);
   });
 
@@ -72,18 +72,18 @@ describe('Runtime Integration', () => {
     const state = createRuntimeState(program.slotMeta.length);
     const pool = new BufferPool();
 
-    // Initial state
-    expect(state.cache.frameId).toBe(0);
+    // Initial state (frameId starts at 1)
+    expect(state.cache.frameId).toBe(1);
 
     // Execute frame
     executeFrame(program, state, pool, 0);
 
-    // After first frame, frameId should be 1
-    expect(state.cache.frameId).toBe(1);
+    // After first frame, frameId should be 2
+    expect(state.cache.frameId).toBe(2);
 
     // Execute second frame
     executeFrame(program, state, pool, 100);
-    expect(state.cache.frameId).toBe(2);
+    expect(state.cache.frameId).toBe(3);
   });
 
   it('resolves time correctly for infinite models', () => {

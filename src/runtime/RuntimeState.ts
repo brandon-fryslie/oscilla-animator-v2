@@ -173,7 +173,7 @@ export function createFrameCache(
   maxFieldExprs: number = 1000
 ): FrameCache {
   return {
-    frameId: 0,
+    frameId: 1, // Start at 1 so initial sigStamps[n]=0 don't match
     sigValues: new Float64Array(maxSigExprs),
     sigStamps: new Uint32Array(maxSigExprs),
     fieldBuffers: new Map(),

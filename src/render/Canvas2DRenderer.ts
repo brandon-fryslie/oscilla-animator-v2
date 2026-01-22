@@ -100,8 +100,7 @@ function renderInstances2D(
 ): void {
   const position = pass.position as Float32Array;
   const color = pass.color as Uint8ClampedArray;
-  const sizes = typeof pass.size === 'number' ? null : pass.size as Float32Array;
-  const uniformSize = typeof pass.size === 'number' ? pass.size : 3;
+  const scale = pass.scale;
 
   // Use resolvedShape (REQUIRED - always present from RenderAssembler)
   const shapeMode = convertResolvedShapeToMode(pass.resolvedShape);
@@ -114,7 +113,6 @@ function renderInstances2D(
   for (let i = 0; i < pass.count; i++) {
     const x = position[i * 2] * width;
     const y = position[i * 2 + 1] * height;
-    const size = sizes ? sizes[i] : uniformSize;
 
     ctx.fillStyle = `rgba(${color[i * 4]},${color[i * 4 + 1]},${color[i * 4 + 2]},${color[i * 4 + 3] / 255})`;
 
@@ -133,10 +131,11 @@ function renderInstances2D(
           `Ensure the shape signal includes a control point field.`
         );
       }
-      renderPathAtParticle(ctx, topology, controlPoints, size, width, height);
+      renderPathAtParticle(ctx, topology, controlPoints, scale, width, height);
     } else {
       // Primitive topology (ellipse, rect) - use topology render function
-      topology.render(ctx, params);
+      // Pass render-space context for normalized→pixel conversion
+      topology.render(ctx, params, { width, height, scale });
     }
 
     ctx.restore();

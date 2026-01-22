@@ -5,14 +5,14 @@
  * These are immutable and registered at module load time.
  */
 
-import type { TopologyDef } from './types';
+import type { TopologyDef, RenderSpace2D } from './types';
 
 /**
  * TOPOLOGY_ELLIPSE - Ellipse topology
  *
- * Parameters:
- * - rx: X-axis radius
- * - ry: Y-axis radius
+ * Parameters (normalized world coordinates):
+ * - rx: X-axis radius (0..1 relative to viewport width)
+ * - ry: Y-axis radius (0..1 relative to viewport height)
  * - rotation: Rotation in radians
  *
  * Renders using ctx.ellipse() centered at origin (after translate).
@@ -24,9 +24,12 @@ export const TOPOLOGY_ELLIPSE: TopologyDef = Object.freeze({
     { name: 'ry', type: 'float' as const, default: 0.02 },
     { name: 'rotation', type: 'float' as const, default: 0 },
   ]),
-  render: (ctx: CanvasRenderingContext2D, p: Record<string, number>) => {
+  render: (ctx: CanvasRenderingContext2D, p: Record<string, number>, space: RenderSpace2D) => {
+    // Convert normalized radii to device pixels, applying scale multiplier
+    const rxPx = p.rx * space.width * space.scale;
+    const ryPx = p.ry * space.height * space.scale;
     ctx.beginPath();
-    ctx.ellipse(0, 0, p.rx, p.ry, p.rotation, 0, Math.PI * 2);
+    ctx.ellipse(0, 0, rxPx, ryPx, p.rotation ?? 0, 0, Math.PI * 2);
     ctx.fill();
   },
 });
@@ -34,11 +37,11 @@ export const TOPOLOGY_ELLIPSE: TopologyDef = Object.freeze({
 /**
  * TOPOLOGY_RECT - Rectangle topology
  *
- * Parameters:
- * - width: Rectangle width
- * - height: Rectangle height
+ * Parameters (normalized world coordinates):
+ * - width: Rectangle width (0..1 relative to viewport width)
+ * - height: Rectangle height (0..1 relative to viewport height)
  * - rotation: Rotation in radians
- * - cornerRadius: Corner radius for rounded rectangles
+ * - cornerRadius: Corner radius (0..1, scaled by min dimension)
  *
  * Renders using ctx.fillRect() or ctx.roundRect() centered at origin.
  */
@@ -50,15 +53,20 @@ export const TOPOLOGY_RECT: TopologyDef = Object.freeze({
     { name: 'rotation', type: 'float' as const, default: 0 },
     { name: 'cornerRadius', type: 'float' as const, default: 0 },
   ]),
-  render: (ctx: CanvasRenderingContext2D, p: Record<string, number>) => {
+  render: (ctx: CanvasRenderingContext2D, p: Record<string, number>, space: RenderSpace2D) => {
+    // Convert normalized dimensions to device pixels, applying scale multiplier
+    const wPx = p.width * space.width * space.scale;
+    const hPx = p.height * space.height * space.scale;
+    const crPx = p.cornerRadius * Math.min(space.width, space.height) * space.scale;
+    
     ctx.save();
-    ctx.rotate(p.rotation);
-    if (p.cornerRadius > 0) {
+    ctx.rotate(p.rotation ?? 0);
+    if (crPx > 0) {
       ctx.beginPath();
-      ctx.roundRect(-p.width / 2, -p.height / 2, p.width, p.height, p.cornerRadius);
+      ctx.roundRect(-wPx / 2, -hPx / 2, wPx, hPx, crPx);
       ctx.fill();
     } else {
-      ctx.fillRect(-p.width / 2, -p.height / 2, p.width, p.height);
+      ctx.fillRect(-wPx / 2, -hPx / 2, wPx, hPx);
     }
     ctx.restore();
   },

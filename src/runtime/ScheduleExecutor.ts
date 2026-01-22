@@ -98,7 +98,12 @@ export interface RenderPassIR {
   count: number;
   position: ArrayBufferView;
   color: ArrayBufferView;
-  size: number | ArrayBufferView;
+  
+  /**
+   * Scale multiplier for shape dimensions (default 1.0 = no scaling).
+   * Applied to normalized shape params before viewport conversion.
+   */
+  scale: number;
 
   /**
    * @deprecated Use resolvedShape instead. Kept for backward compatibility.

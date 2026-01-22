@@ -117,7 +117,7 @@ interface RenderTargetInfo {
   instanceId: InstanceId;
   position: FieldExprId;
   color: FieldExprId;
-  size?: { k: 'sig'; id: SigExprId } | { k: 'field'; id: FieldExprId };
+  scale?: { k: 'sig'; id: SigExprId };
   shape?: { k: 'sig'; id: SigExprId } | { k: 'field'; id: FieldExprId };
 }
 
@@ -139,7 +139,7 @@ function collectRenderTargets(
     // Trace inputs through edges to blockOutputs
     const posRef = getInputRef(index, 'pos', edges, blockOutputs);
     const colorRef = getInputRef(index, 'color', edges, blockOutputs);
-    const sizeRef = getInputRef(index, 'size', edges, blockOutputs);
+    const scaleRef = getInputRef(index, 'scale', edges, blockOutputs);
     const shapeRef = getInputRef(index, 'shape', edges, blockOutputs);
 
     // Validate required inputs (position and color)
@@ -156,9 +156,8 @@ function collectRenderTargets(
       continue;
     }
 
-    // Build optional size/shape
-    const size = sizeRef?.k === 'field' ? { k: 'field' as const, id: sizeRef.id }
-               : sizeRef?.k === 'sig' ? { k: 'sig' as const, id: sizeRef.id }
+    // Build optional scale (uniform signal only - no per-particle scale)
+    const scale = scaleRef?.k === 'sig' ? { k: 'sig' as const, id: scaleRef.id }
                : undefined;
 
     const shape = shapeRef?.k === 'field' ? { k: 'field' as const, id: shapeRef.id }
@@ -169,7 +168,7 @@ function collectRenderTargets(
       instanceId,
       position: posRef.id,
       color: colorRef.id,
-      size,
+      scale,
       shape,
     });
   }
@@ -262,7 +261,7 @@ function buildContinuityPipeline(
   const fieldSlots = new Map<FieldExprId, { baseSlot: ValueSlot; outputSlot: ValueSlot }>();
 
   for (const target of targets) {
-    const { instanceId, position, color, size, shape } = target;
+    const { instanceId, position, color, scale, shape } = target;
 
     // 1. Emit ContinuityMapBuild for this instance (if not already)
     if (!mapBuildEmitted.has(instanceId)) {
@@ -318,16 +317,11 @@ function buildContinuityPipeline(
     // Process color (semantic: color)
     const colorSlots = getFieldSlots(color, 'color');
 
-    // Process size (semantic: radius) if it's a field
-    let sizeOutput: StepRender['size'] = undefined;
-    if (size) {
-      if (size.k === 'field') {
-        const sizeSlots = getFieldSlots(size.id, 'radius');
-        sizeOutput = { k: 'slot', slot: sizeSlots.outputSlot };
-      } else {
-        // Signal - pass through unchanged
-        sizeOutput = size;
-      }
+    // Process scale (uniform signal only - no per-particle scale)
+    let scaleOutput: StepRender['scale'] = undefined;
+    if (scale) {
+      // Scale is always a signal (uniform)
+      scaleOutput = scale;
     }
 
     // Process shape (semantic: custom) if it's a field or signal
@@ -363,7 +357,7 @@ function buildContinuityPipeline(
       instanceId,
       positionSlot: posSlots.outputSlot,
       colorSlot: colorSlots.outputSlot,
-      ...(sizeOutput && { size: sizeOutput }),
+      ...(scaleOutput && { scale: scaleOutput }),
       ...(shapeOutput && { shape: shapeOutput }),
       ...(controlPointsOutput && { controlPoints: controlPointsOutput }), // P5c: Add control points to render step
     };

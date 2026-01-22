@@ -55,345 +55,237 @@ function log(msg: string, level: 'info' | 'warn' | 'error' = 'info') {
 
 type PatchBuilder = (b: any) => void;
 
-// Original patch - using three-stage architecture: Ellipse → Array → GridLayout
-// Explicit wiring for all inputs (adapter pass not implemented yet)
-const patchOriginal: PatchBuilder = (b) => {
-  const time = b.addBlock('InfiniteTimeRoot',
-    { periodAMs: 4000, periodBMs: 120000 },  // 4 sec rotation, 120 sec jitter cycle
-    { role: timeRootRole() }
-  );
+/**
+ * Golden Spiral - Main demo patch
+ *
+ * 5000 ellipses in a golden angle spiral with animated rotation and jitter.
+ * Classic phyllotaxis pattern with HSV color mapping.
+ */
+const patchGoldenSpiral: PatchBuilder = (b) => {
+  const time = b.addBlock('InfiniteTimeRoot', {
+    periodAMs: 4000,
+    periodBMs: 120000,
+  }, { role: timeRootRole() });
 
   const ellipse = b.addBlock('Ellipse', { rx: 0.02, ry: 0.02 });
   const array = b.addBlock('Array', { count: 5000 });
-  const layout = b.addBlock('GridLayout', { rows: 71, cols: 71 });
-
-  // Wire Ellipse → Array → GridLayout
   b.wire(ellipse, 'shape', array, 'element');
-  b.wire(array, 'elements', layout, 'elements');
 
   const goldenAngle = b.addBlock('FieldGoldenAngle', { turns: 50 });
-
-  // FieldAngularOffset with explicit spin value (default is 1.0, we want 2.0)
-  const spinConst = b.addBlock('Const', { value: 2.0 });
-  const angularOffset = b.addBlock('FieldAngularOffset', {});
-
+  const angularOffset = b.addBlock('FieldAngularOffset', { spin: 2.0 });
   const totalAngle = b.addBlock('FieldAdd', {});
 
-  // FieldRadiusSqrt needs FIELD input - explicit Const → FieldBroadcast → radius
-  const radiusConst = b.addBlock('Const', { value: 0.35, payloadType: 'float' });
-  const radiusBroadcast = b.addBlock('FieldBroadcast', { payloadType: 'float' });
-  const effectiveRadius = b.addBlock('FieldRadiusSqrt', {});
-
-  // FieldPolarToCartesian - centerX/centerY already have 0.5 defaults in registry (signals, not fields)
-  const pos = b.addBlock('FieldPolarToCartesian', {});
-
-  const hue = b.addBlock('FieldHueFromPhase', {});
-
-  // HsvToRgb - sat/val are SIGNAL inputs, Const works directly
-  const satConst = b.addBlock('Const', { value: 0.85, payloadType: 'float' });
-  const valConst = b.addBlock('Const', { value: 0.9, payloadType: 'float' });
-  const color = b.addBlock('HsvToRgb', {});
-
-  // RenderInstances2D.size needs FIELD input - explicit Const → FieldBroadcast → size
-  const sizeConst = b.addBlock('Const', { value: 3, payloadType: 'float' });
-  const sizeBroadcast = b.addBlock('FieldBroadcast', { payloadType: 'float' });
-  const render = b.addBlock('RenderInstances2D', {});
-
-  // Wire phase to position and color (phaseA has rail default in registry)
-  b.wire(time, 'phaseA', angularOffset, 'phase');
-  b.wire(time, 'phaseA', hue, 'phase');
-
-  // Wire explicit spin value
-  b.wire(spinConst, 'out', angularOffset, 'spin');
-
-  // Wire Array 't' output (normalized index 0-1) to field blocks
   b.wire(array, 't', goldenAngle, 'id01');
   b.wire(array, 't', angularOffset, 'id01');
-  b.wire(array, 't', hue, 'id01');
-  b.wire(array, 't', effectiveRadius, 'id01');
-
-  // Wire radius: Const → FieldBroadcast → FieldRadiusSqrt
-  b.wire(radiusConst, 'out', radiusBroadcast, 'signal');
-  b.wire(radiusBroadcast, 'field', effectiveRadius, 'radius');
-
-  // Wire golden angle + offset to total angle
+  b.wire(time, 'phaseA', angularOffset, 'phase');
   b.wire(goldenAngle, 'angle', totalAngle, 'a');
   b.wire(angularOffset, 'offset', totalAngle, 'b');
 
-  // Wire angle to polar to cartesian
+  const effectiveRadius = b.addBlock('FieldRadiusSqrt', { radius: 0.35 });
+  b.wire(array, 't', effectiveRadius, 'id01');
+
+  const pos = b.addBlock('FieldPolarToCartesian', {});
   b.wire(totalAngle, 'out', pos, 'angle');
   b.wire(effectiveRadius, 'out', pos, 'radius');
 
-  // Wire hue to color, plus explicit sat/val
-  b.wire(hue, 'hue', color, 'hue');
-  b.wire(satConst, 'out', color, 'sat');
-  b.wire(valConst, 'out', color, 'val');
-
-  // Wire size: Const → FieldBroadcast → RenderInstances2D
-  b.wire(sizeConst, 'out', sizeBroadcast, 'signal');
-  b.wire(sizeBroadcast, 'field', render, 'size');
-
-  // Add animated per-element jitter to positions for dynamic visual effect
-  // Combine phase (time) with element index for animated randomness
-  const jitterAmountX = b.addBlock('Const', { value: 0.015, payloadType: 'float' });
-  const jitterAmountY = b.addBlock('Const', { value: 0.015, payloadType: 'float' });
-  const jitter = b.addBlock('FieldJitter2D', {});
-
-  // Broadcast phase to field, then add to 't' for animated per-element jitter
+  const jitter = b.addBlock('FieldJitter2D', { amountX: 0.015, amountY: 0.015 });
   const phaseBroadcast = b.addBlock('FieldBroadcast', { payloadType: 'float' });
   const jitterRand = b.addBlock('FieldAdd', {});
 
-  b.wire(time, 'phaseB', phaseBroadcast, 'signal');  // Use phaseB for slower jitter animation
+  b.wire(time, 'phaseB', phaseBroadcast, 'signal');
   b.wire(phaseBroadcast, 'field', jitterRand, 'a');
   b.wire(array, 't', jitterRand, 'b');
-
-  // Wire jitter: pos + animated rand → jittered pos
   b.wire(pos, 'pos', jitter, 'pos');
   b.wire(jitterRand, 'out', jitter, 'rand');
-  b.wire(jitterAmountX, 'out', jitter, 'amountX');
-  b.wire(jitterAmountY, 'out', jitter, 'amountY');
 
-  // Wire jittered pos, color to render
+  const hue = b.addBlock('FieldHueFromPhase', {});
+  const color = b.addBlock('HsvToRgb', { sat: 0.85, val: 0.9 });
+
+  b.wire(array, 't', hue, 'id01');
+  b.wire(time, 'phaseA', hue, 'phase');
+  b.wire(hue, 'hue', color, 'hue');
+
+  const render = b.addBlock('RenderInstances2D', {});
   b.wire(jitter, 'out', render, 'pos');
   b.wire(color, 'color', render, 'color');
+  b.wire(ellipse, 'shape', render, 'shape');
 };
 
-// Domain Change Test patch - SLOW ROTATING spiral for testing continuity
-// Instructions:
-// 1. Let the spiral rotate slowly for ~5 seconds - memorize the shape
-// 2. Select the Array block and change count from 50 → 60
-// 3. Watch the spiral for ~5 seconds - does it maintain its shape while rotating?
-// 4. Change count back from 60 → 50
-// 5. Watch the spiral - does it still look like the original spiral from step 1?
-//
-// Expected: Spiral maintains perfect golden angle distribution throughout
-// Bug: Elements drift from their correct spiral positions (gaps/clumps appear)
+/**
+ * Domain Test - Slow spiral for continuity testing
+ *
+ * 50 large ellipses for observing element identity during count changes.
+ */
 const patchDomainTest: PatchBuilder = (b) => {
-  const time = b.addBlock('InfiniteTimeRoot',
-    { periodAMs: 8000, periodBMs: 8000 }, // 8 second rotation - slow enough to observe
-    { role: timeRootRole() }
-  );
+  const time = b.addBlock('InfiniteTimeRoot', {
+    periodAMs: 8000,
+    periodBMs: 8000,
+  }, { role: timeRootRole() });
 
-  // Simple 3-stage: Circle → Array
-  const circle = b.addBlock('Circle', { radius: 0.02 });
-  const array = b.addBlock('Array', { count: 50 }); // Start with 50
+  const ellipse = b.addBlock('Ellipse', { rx: 0.025, ry: 0.025 });
+  const array = b.addBlock('Array', { count: 50 });
+  b.wire(ellipse, 'shape', array, 'element');
 
-  b.wire(circle, 'circle', array, 'element');
-
-  // Golden angle spiral - very distinctive, easy to spot distortion
   const goldenAngle = b.addBlock('FieldGoldenAngle', { turns: 8 });
-
-  // SLOW rotation via angular offset
-  const spinConst = b.addBlock('Const', { value: 1.0, payloadType: 'float' });
-  const angularOffset = b.addBlock('FieldAngularOffset', {});
+  const angularOffset = b.addBlock('FieldAngularOffset', { spin: 1.0 });
   const totalAngle = b.addBlock('FieldAdd', {});
 
-  // Radius: sqrt distribution
-  const radiusConst = b.addBlock('Const', { value: 0.35, payloadType: 'float' });
-  const radiusBroadcast = b.addBlock('FieldBroadcast', { payloadType: 'float' });
-  const effectiveRadius = b.addBlock('FieldRadiusSqrt', {});
-
-  // Position from polar coordinates
-  const pos = b.addBlock('FieldPolarToCartesian', {});
-
-  // Color based on index - makes individual elements trackable
-  const hue = b.addBlock('FieldHueFromPhase', {});
-  const satConst = b.addBlock('Const', { value: 1.0, payloadType: 'float' });
-  const valConst = b.addBlock('Const', { value: 1.0, payloadType: 'float' });
-  const color = b.addBlock('HsvToRgb', {});
-
-  // Large particles for visibility
-  const sizeConst = b.addBlock('Const', { value: 10, payloadType: 'float' });
-  const sizeBroadcast = b.addBlock('FieldBroadcast', { payloadType: 'float' });
-  const render = b.addBlock('RenderInstances2D', {});
-
-  // Wire phase to angular offset and hue
-  b.wire(time, 'phaseA', angularOffset, 'phase');
-  b.wire(time, 'phaseA', hue, 'phase');
-
-  // Wire spin
-  b.wire(spinConst, 'out', angularOffset, 'spin');
-
-  // Wire Array 't' to field blocks
   b.wire(array, 't', goldenAngle, 'id01');
   b.wire(array, 't', angularOffset, 'id01');
-  b.wire(array, 't', hue, 'id01');
-  b.wire(array, 't', effectiveRadius, 'id01');
-
-  // Wire radius
-  b.wire(radiusConst, 'out', radiusBroadcast, 'signal');
-  b.wire(radiusBroadcast, 'field', effectiveRadius, 'radius');
-
-  // Wire angles
+  b.wire(time, 'phaseA', angularOffset, 'phase');
   b.wire(goldenAngle, 'angle', totalAngle, 'a');
   b.wire(angularOffset, 'offset', totalAngle, 'b');
 
-  // Wire to position
+  const effectiveRadius = b.addBlock('FieldRadiusSqrt', { radius: 0.35 });
+  b.wire(array, 't', effectiveRadius, 'id01');
+
+  const pos = b.addBlock('FieldPolarToCartesian', {});
   b.wire(totalAngle, 'out', pos, 'angle');
   b.wire(effectiveRadius, 'out', pos, 'radius');
 
-  // Wire color
+  const hue = b.addBlock('FieldHueFromPhase', {});
+  const color = b.addBlock('HsvToRgb', { sat: 1.0, val: 1.0 });
+
+  b.wire(array, 't', hue, 'id01');
+  b.wire(time, 'phaseA', hue, 'phase');
   b.wire(hue, 'hue', color, 'hue');
-  b.wire(satConst, 'out', color, 'sat');
-  b.wire(valConst, 'out', color, 'val');
 
-  // Wire size
-  b.wire(sizeConst, 'out', sizeBroadcast, 'signal');
-  b.wire(sizeBroadcast, 'field', render, 'size');
-
-  // Wire to render
+  const render = b.addBlock('RenderInstances2D', {});
   b.wire(pos, 'pos', render, 'pos');
   b.wire(color, 'color', render, 'color');
+  b.wire(ellipse, 'shape', render, 'shape');
 };
 
-// Wobbly patch - fast spin
-const patchWobbly: PatchBuilder = (b) => {
-  /**
-   * Hypnotic Vortex - Expression DSL Demo
-   *
-   * Uses mathematical expressions to create a mesmerizing spiral effect.
-   * Demonstrates:
-   * - Complex mathematical expressions (sin, cos, pow)
-   * - Field expressions for position calculation
-   * - Time-dependent animation
-   * - Color mapping from phase
-   *
-   * The vortex creates concentric spiral rings that pulsate and rotate.
-   * Each particle's position is computed via an expression that combines:
-   * - Logarithmic spiral growth: r = exp(phase * k)
-   * - Rotating angular offset: angle = phase * speed + index * goldenAngle
-   * - Pulsating radius: r *= sin(time * freq)
-   */
+/**
+ * Tile Grid - Rectangle mosaic with wave animation
+ *
+ * Grid of rectangles with diagonal color gradient and wave motion.
+ * Demonstrates Rect primitive with Expression-based positioning.
+ */
+const patchTileGrid: PatchBuilder = (b) => {
+  const time = b.addBlock('InfiniteTimeRoot', {
+    periodAMs: 3000,
+    periodBMs: 7000,
+  }, { role: timeRootRole() });
 
-  const time = b.addBlock('InfiniteTimeRoot',
-    { periodAMs: 4000, periodBMs: 6000 },
-    { role: timeRootRole() }
-  );
+  // Rectangles - wider than tall for tile effect
+  const rect = b.addBlock('Rect', { width: 0.018, height: 0.012 });
+  const array = b.addBlock('Array', { count: 2500 }); // 50x50 grid
+  b.wire(rect, 'shape', array, 'element');
 
-  // Create particle field: 5000 particles for dense effect
-  const circle = b.addBlock('Circle', { radius: 0.01 });
-  const array = b.addBlock('Array', { count: 5000 });
-  const layout = b.addBlock('GridLayout', { rows: 71, cols: 71 });
-
-  b.wire(circle, 'circle', array, 'element');
-  b.wire(array, 'elements', layout, 'elements');
-
-  // Golden angle for beautiful phyllotaxis pattern
-  const goldenAngle = b.addBlock('FieldGoldenAngle', { turns: 50 });
-
-  // === EXPRESSION 1: Logarithmic spiral angle ===
-  // Creates the rotating spiral by combining:
-  // - Golden angle pattern (index-based)
-  // - Time rotation (creates the spinning effect)
-  // - Expression: goldenAngle + time*2 creates slow rotation
-  const angleExpr = b.addBlock('Expression', {
-    expression: 'in0 + in1 * 2' // goldenAngle + time * 2 (slow rotation)
+  // Use FieldPolarToCartesian with computed angle/radius for grid+wave
+  // Grid position encoded as angle (column) and radius (row)
+  const gridAngle = b.addBlock('Expression', {
+    expression: 'fract(in0 * 50) * 6.28', // column as angle (0-2π)
   });
-  b.wire(goldenAngle, 'angle', angleExpr, 'in0');
-  b.wire(time, 'phaseA', angleExpr, 'in1');
-
-  // === EXPRESSION 2: Complex spiral radius with pulsation ===
-  // Creates logarithmic growth with sine-based pulsation:
-  // - Base spiral: (0.2 + id01*0.8) exponential growth
-  // - Pulsation: * (0.7 + 0.3*sin(time*8))
-  // - Creates breathing, pulsating spiral effect
-  const radiusExpr = b.addBlock('Expression', {
-    expression: '(0.2 + in0 * 0.8) * (0.7 + 0.3 * sin(in1 * 8))'
-    // in0 = id01 (normalized index for spiral growth)
-    // in1 = phaseA (time-based pulsation frequency)
+  const gridRadius = b.addBlock('Expression', {
+    expression: '0.05 + floor(in0 * 50) / 50 * 0.4', // row as radius
   });
-  b.wire(array, 't', radiusExpr, 'in0');
-  b.wire(time, 'phaseA', radiusExpr, 'in1');
+  b.wire(array, 't', gridAngle, 'in0');
+  b.wire(array, 't', gridRadius, 'in0');
 
-  // Convert angle and radius to cartesian coordinates
+  // Add wave distortion to radius
+  const waveRadius = b.addBlock('Expression', {
+    expression: 'in0 + sin(in1 + in2 * 4) * 0.02', // radius + sine wave
+  });
+  b.wire(gridRadius, 'out', waveRadius, 'in0');
+  b.wire(gridAngle, 'out', waveRadius, 'in1');
+  b.wire(time, 'phaseA', waveRadius, 'in2');
+
+  // Animate angle rotation
+  const animAngle = b.addBlock('Expression', {
+    expression: 'in0 + in1 * 0.5', // slow rotation
+  });
+  b.wire(gridAngle, 'out', animAngle, 'in0');
+  b.wire(time, 'phaseA', animAngle, 'in1');
+
   const pos = b.addBlock('FieldPolarToCartesian', {});
-  b.wire(angleExpr, 'out', pos, 'angle');
-  b.wire(radiusExpr, 'out', pos, 'radius');
+  b.wire(animAngle, 'out', pos, 'angle');
+  b.wire(waveRadius, 'out', pos, 'radius');
 
-  // === EXPRESSION 3: Color hue from multiple sources ===
-  // Creates dynamic color by blending:
-  // - Index position (creates radial color rings)
-  // - Time variation (creates color rotation effect)
-  // - Combined: sin(index + time*4) for wave-like color motion
+  // Diagonal rainbow gradient
   const hueExpr = b.addBlock('Expression', {
-    expression: 'fract(in0 * 3 + in1 * 2)' // Mix radial + time color variation
-    // in0 = id01 (position in spiral)
-    // in1 = phaseA (time-based rotation)
-    // fract() wraps hue to [0,1) range
+    expression: 'fract(in0 / 50 + in1 * 0.3)', // radial gradient + time
   });
   b.wire(array, 't', hueExpr, 'in0');
-  b.wire(time, 'phaseA', hueExpr, 'in1');
+  b.wire(time, 'phaseB', hueExpr, 'in1');
 
-  // Convert HSV color to RGB
-  const color = b.addBlock('HsvToRgb', {});
+  const color = b.addBlock('HsvToRgb', { sat: 0.7, val: 0.95 });
   b.wire(hueExpr, 'out', color, 'hue');
 
-  // Render
   const render = b.addBlock('RenderInstances2D', {});
   b.wire(pos, 'pos', render, 'pos');
   b.wire(color, 'color', render, 'color');
+  b.wire(rect, 'shape', render, 'shape');
 };
 
-// Pulsing patch - slow spin
-const patchPulsing: PatchBuilder = (b) => {
-  const time = b.addBlock('InfiniteTimeRoot',
-    { periodAMs: 1000, periodBMs: 4000 },
-    { role: timeRootRole() }
-  );
+/**
+ * Orbital Rings - Concentric ellipse orbits
+ *
+ * Multiple rings of ellipses orbiting at different speeds.
+ * Each ring has different rotation rate and color.
+ */
+const patchOrbitalRings: PatchBuilder = (b) => {
+  const time = b.addBlock('InfiniteTimeRoot', {
+    periodAMs: 2000,
+    periodBMs: 5000,
+  }, { role: timeRootRole() });
 
-  // Three-stage architecture
-  const circle = b.addBlock('Circle', { radius: 0.02 });
-  const array = b.addBlock('Array', { count: 5000 });
-  const layout = b.addBlock('GridLayout', { rows: 71, cols: 71 });
+  // Elongated ellipses for comet-like appearance
+  const ellipse = b.addBlock('Ellipse', { rx: 0.015, ry: 0.008 });
+  const array = b.addBlock('Array', { count: 600 }); // 6 rings x 100 particles
+  b.wire(ellipse, 'shape', array, 'element');
 
-  b.wire(circle, 'circle', array, 'element');
-  b.wire(array, 'elements', layout, 'elements');
+  // Ring index (0-5) and position within ring (0-1)
+  const ringIndex = b.addBlock('Expression', {
+    expression: 'floor(in0 * 6)', // which ring (0-5)
+  });
+  const ringPos = b.addBlock('Expression', {
+    expression: 'fract(in0 * 6)', // position in ring (0-1)
+  });
+  b.wire(array, 't', ringIndex, 'in0');
+  b.wire(array, 't', ringPos, 'in0');
 
-  const goldenAngle = b.addBlock('FieldGoldenAngle', { turns: 50 });
+  // Radius varies by ring (inner to outer)
+  const radius = b.addBlock('Expression', {
+    expression: '0.1 + in0 * 0.065', // rings from 0.1 to 0.425
+  });
+  b.wire(ringIndex, 'out', radius, 'in0');
 
-  // spin = 1.0 is the registry default, so no override needed
-  const angularOffset = b.addBlock('FieldAngularOffset', {});
+  // Angle: position in ring + time rotation (outer rings faster)
+  const angle = b.addBlock('Expression', {
+    expression: 'in0 * 6.28 + in1 * (1 + in2 * 0.5) * 6.28', // full rotation + speed varies by ring
+  });
+  b.wire(ringPos, 'out', angle, 'in0');
+  b.wire(time, 'phaseA', angle, 'in1');
+  b.wire(ringIndex, 'out', angle, 'in2');
 
-  const totalAngle = b.addBlock('FieldAdd', {});
-
-  // Use registry defaults
-  const effectiveRadius = b.addBlock('FieldRadiusSqrt', {});
+  // Polar to cartesian
   const pos = b.addBlock('FieldPolarToCartesian', {});
-  const hue = b.addBlock('FieldHueFromPhase', {});
-  const color = b.addBlock('HsvToRgb', {});
+  b.wire(angle, 'out', pos, 'angle');
+  b.wire(radius, 'out', pos, 'radius');
+
+  // Color by ring - each ring has its own hue
+  const hue = b.addBlock('Expression', {
+    expression: 'in0 / 6 + in1 * 0.1', // ring-based hue + slight time shift
+  });
+  b.wire(ringIndex, 'out', hue, 'in0');
+  b.wire(time, 'phaseB', hue, 'in1');
+
+  const color = b.addBlock('HsvToRgb', { sat: 0.9, val: 1.0 });
+  b.wire(hue, 'out', color, 'hue');
+
   const render = b.addBlock('RenderInstances2D', {});
-
-  // Wire phase to position and color
-  b.wire(time, 'phaseA', angularOffset, 'phase');
-  b.wire(time, 'phaseA', hue, 'phase');
-
-  // Wire Array 't' output to field blocks
-  b.wire(array, 't', goldenAngle, 'id01');
-  b.wire(array, 't', angularOffset, 'id01');
-  b.wire(array, 't', hue, 'id01');
-  b.wire(array, 't', effectiveRadius, 'id01');
-
-  // Wire golden angle + offset to total angle
-  b.wire(goldenAngle, 'angle', totalAngle, 'a');
-  b.wire(angularOffset, 'offset', totalAngle, 'b');
-
-  // Wire to polar to cartesian
-  b.wire(totalAngle, 'out', pos, 'angle');
-  b.wire(effectiveRadius, 'out', pos, 'radius');
-
-  // Wire hue to color
-  b.wire(hue, 'hue', color, 'hue');
-
-  // Wire pos, color to render
   b.wire(pos, 'pos', render, 'pos');
   b.wire(color, 'color', render, 'color');
+  b.wire(ellipse, 'shape', render, 'shape');
 };
 
 const patches: { name: string; builder: PatchBuilder }[] = [
-  { name: 'Original', builder: patchOriginal },
+  { name: 'Golden Spiral', builder: patchGoldenSpiral },
   { name: 'Domain Test', builder: patchDomainTest },
-  { name: 'Wobbly', builder: patchWobbly },
-  { name: 'Pulsing', builder: patchPulsing },
+  { name: 'Tile Grid', builder: patchTileGrid },
+  { name: 'Orbital Rings', builder: patchOrbitalRings },
 ];
 
 let currentPatchIndex = 0;
@@ -857,9 +749,9 @@ function animate(tMs: number) {
         if (frame.passes.length > 0) {
           const pass = frame.passes[0];
           const pos = pass.position as Float32Array;
-          const sizeVal = typeof pass.size === 'number' ? pass.size : (pass.size as Float32Array);
-          const sizeStr = typeof pass.size === 'number' ? `uniform=${pass.size}` : `arr[0]=${(sizeVal as Float32Array)[0]?.toFixed(3)}`;
-          log(`  Pass 0: count=${pass.count}, size=${sizeStr}`);
+          log(`  Pass 0: count=${pass.count}, scale=${pass.scale}`);
+          log(`  Pass 0: count=${pass.count}, scale=${pass.scale}`);
+          log(`  Pass 0: count=${pass.count}, scale=${pass.scale}`);
 
           // Check position range (sample first 1000)
           let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;

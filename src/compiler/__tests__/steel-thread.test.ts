@@ -50,8 +50,6 @@ describe('Steel Thread - Animated Particles', () => {
       // Color from composable primitives
       const hue = b.addBlock('FieldHueFromPhase', {});
       const color = b.addBlock('HsvToRgb', {});
-
-      const size = b.addBlock('Const', { value: 3 });
       const render = b.addBlock('RenderInstances2D', {});
 
       // Wire phase to position and color
@@ -83,10 +81,10 @@ describe('Steel Thread - Animated Particles', () => {
       b.wire(sat, 'out', color, 'sat');
       b.wire(val, 'out', color, 'val');
 
-      // Wire pos, color, size to render
+      // Wire pos, color, shape to render
       b.wire(pos, 'pos', render, 'pos');
       b.wire(color, 'color', render, 'color');
-      b.wire(size, 'out', render, 'size');
+      b.wire(ellipse, 'shape', render, 'shape');
     });
 
     // Compile the patch
@@ -136,10 +134,9 @@ describe('Steel Thread - Animated Particles', () => {
     const colorBuffer = pass.color as Uint8ClampedArray;
     expect(colorBuffer.length).toBe(100 * 4); // 100 particles, 4 bytes per color (RGBA)
 
-    // Verify size buffer has correct size (per-element field, not uniform)
-    const sizeBuffer = pass.size as Float32Array;
-    expect(sizeBuffer).toBeInstanceOf(Float32Array);
-    expect(sizeBuffer.length).toBe(100); // 100 particles, 1 float per particle
+    // Verify scale is a number (uniform signal)
+    expect(typeof pass.scale).toBe('number');
+    expect(pass.scale).toBe(1); // Default scale from RenderInstances2D block
 
     // Verify positions are finite numbers (actual range depends on animation parameters)
     for (let i = 0; i < 100; i++) {
