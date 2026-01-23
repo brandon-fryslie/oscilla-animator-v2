@@ -207,51 +207,27 @@ const patchTileGrid: PatchBuilder = (b) => {
 
   // Rectangles - wider than tall for tile effect
   const rect = b.addBlock('Rect', { width: 0.018, height: 0.012 });
-  const array = b.addBlock('Array', { count: 2500 }); // 50x50 grid
+  const array = b.addBlock('Array', { count: 400 }); // 20x20 grid
   b.wire(rect, 'shape', array, 'element');
 
-  // Use FieldPolarToCartesian with computed angle/radius for grid+wave
-  // Grid position encoded as angle (column) and radius (row)
-  const gridAngle = b.addBlock('Expression', {
-    expression: 'fract(in0 * 50) * 6.28', // column as angle (0-2π)
-  });
-  const gridRadius = b.addBlock('Expression', {
-    expression: '0.05 + floor(in0 * 50) / 50 * 0.4', // row as radius
-  });
-  b.wire(array, 't', gridAngle, 'in0');
-  b.wire(array, 't', gridRadius, 'in0');
+  // Grid layout: arranges elements in a 20x20 grid
+  const grid = b.addBlock('GridLayout', { rows: 20, cols: 20 });
+  b.wire(array, 'elements', grid, 'elements');
 
-  // Add wave distortion to radius
-  const waveRadius = b.addBlock('Expression', {
-    expression: 'in0 + sin(in1 + in2 * 4) * 0.02', // radius + sine wave
-  });
-  b.wire(gridRadius, 'out', waveRadius, 'in0');
-  b.wire(gridAngle, 'out', waveRadius, 'in1');
-  b.wire(time, 'phaseA', waveRadius, 'in2');
+  // Rainbow gradient color from element position + time
+  const hue = b.addBlock('FieldHueFromPhase', {});
+  b.wire(time, 'phaseB', hue, 'phase');
+  b.wire(array, 't', hue, 'id01');
 
-  // Animate angle rotation
-  const animAngle = b.addBlock('Expression', {
-    expression: 'in0 + in1 * 0.5', // slow rotation
-  });
-  b.wire(gridAngle, 'out', animAngle, 'in0');
-  b.wire(time, 'phaseA', animAngle, 'in1');
-
-  const pos = b.addBlock('FieldPolarToCartesian', {});
-  b.wire(animAngle, 'out', pos, 'angle');
-  b.wire(waveRadius, 'out', pos, 'radius');
-
-  // Diagonal rainbow gradient
-  const hueExpr = b.addBlock('Expression', {
-    expression: 'fract(in0 / 50 + in1 * 0.3)', // radial gradient + time
-  });
-  b.wire(array, 't', hueExpr, 'in0');
-  b.wire(time, 'phaseB', hueExpr, 'in1');
-
-  const color = b.addBlock('HsvToRgb', { sat: 0.7, val: 0.95 });
-  b.wire(hueExpr, 'out', color, 'hue');
+  const sat = b.addBlock('Const', { value: 0.7 });
+  const val = b.addBlock('Const', { value: 0.95 });
+  const color = b.addBlock('HsvToRgb', {});
+  b.wire(hue, 'hue', color, 'hue');
+  b.wire(sat, 'out', color, 'sat');
+  b.wire(val, 'out', color, 'val');
 
   const render = b.addBlock('RenderInstances2D', {});
-  b.wire(pos, 'pos', render, 'pos');
+  b.wire(grid, 'position', render, 'pos');
   b.wire(color, 'color', render, 'color');
   b.wire(rect, 'shape', render, 'shape');
 };
@@ -270,47 +246,45 @@ const patchOrbitalRings: PatchBuilder = (b) => {
 
   // Elongated ellipses for comet-like appearance
   const ellipse = b.addBlock('Ellipse', { rx: 0.015, ry: 0.008 });
-  const array = b.addBlock('Array', { count: 600 }); // 6 rings x 100 particles
+  const array = b.addBlock('Array', { count: 300 });
   b.wire(ellipse, 'shape', array, 'element');
 
-  // Ring index (0-5) and position within ring (0-1)
-  const ringIndex = b.addBlock('Expression', {
-    expression: 'floor(in0 * 6)', // which ring (0-5)
-  });
-  const ringPos = b.addBlock('Expression', {
-    expression: 'fract(in0 * 6)', // position in ring (0-1)
-  });
-  b.wire(array, 't', ringIndex, 'in0');
-  b.wire(array, 't', ringPos, 'in0');
-
-  // Radius varies by ring (inner to outer)
-  const radius = b.addBlock('Expression', {
-    expression: '0.1 + in0 * 0.065', // rings from 0.1 to 0.425
-  });
-  b.wire(ringIndex, 'out', radius, 'in0');
-
-  // Angle: position in ring + time rotation (outer rings faster)
-  const angle = b.addBlock('Expression', {
-    expression: 'in0 * 6.28 + in1 * (1 + in2 * 0.5) * 6.28', // full rotation + speed varies by ring
-  });
-  b.wire(ringPos, 'out', angle, 'in0');
-  b.wire(time, 'phaseA', angle, 'in1');
-  b.wire(ringIndex, 'out', angle, 'in2');
-
-  // Polar to cartesian
+  // Golden spiral with fast spin for orbital motion
+  const goldenAngle = b.addBlock('FieldGoldenAngle', { turns: 50 });
+  const angularOffset = b.addBlock('FieldAngularOffset', {});
+  const totalAngle = b.addBlock('FieldAdd', {});
+  const effectiveRadius = b.addBlock('FieldRadiusSqrt', {});
   const pos = b.addBlock('FieldPolarToCartesian', {});
-  b.wire(angle, 'out', pos, 'angle');
-  b.wire(radius, 'out', pos, 'radius');
 
-  // Color by ring - each ring has its own hue
-  const hue = b.addBlock('Expression', {
-    expression: 'in0 / 6 + in1 * 0.1', // ring-based hue + slight time shift
-  });
-  b.wire(ringIndex, 'out', hue, 'in0');
-  b.wire(time, 'phaseB', hue, 'in1');
+  const spin = b.addBlock('Const', { value: 1.5 }); // fast orbiting
+  const centerX = b.addBlock('Const', { value: 0.5 });
+  const centerY = b.addBlock('Const', { value: 0.5 });
+  const radiusMax = b.addBlock('Const', { value: 0.4 });
 
-  const color = b.addBlock('HsvToRgb', { sat: 0.9, val: 1.0 });
-  b.wire(hue, 'out', color, 'hue');
+  b.wire(array, 't', goldenAngle, 'id01');
+  b.wire(array, 't', angularOffset, 'id01');
+  b.wire(array, 't', effectiveRadius, 'id01');
+  b.wire(time, 'phaseA', angularOffset, 'phase');
+  b.wire(spin, 'out', angularOffset, 'spin');
+  b.wire(goldenAngle, 'angle', totalAngle, 'a');
+  b.wire(angularOffset, 'offset', totalAngle, 'b');
+  b.wire(centerX, 'out', pos, 'centerX');
+  b.wire(centerY, 'out', pos, 'centerY');
+  b.wire(radiusMax, 'out', effectiveRadius, 'radius');
+  b.wire(totalAngle, 'out', pos, 'angle');
+  b.wire(effectiveRadius, 'out', pos, 'radius');
+
+  // Color: hue varies by element position + time shift
+  const hue = b.addBlock('FieldHueFromPhase', {});
+  b.wire(time, 'phaseB', hue, 'phase');
+  b.wire(array, 't', hue, 'id01');
+
+  const sat = b.addBlock('Const', { value: 0.9 });
+  const val = b.addBlock('Const', { value: 1.0 });
+  const color = b.addBlock('HsvToRgb', {});
+  b.wire(hue, 'hue', color, 'hue');
+  b.wire(sat, 'out', color, 'sat');
+  b.wire(val, 'out', color, 'val');
 
   const render = b.addBlock('RenderInstances2D', {});
   b.wire(pos, 'pos', render, 'pos');
