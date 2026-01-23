@@ -1,0 +1,62 @@
+Agent: spec-writer | 2026-01-22T22:00:00Z
+Task: Write canonical spec topic 17-layout-system.md
+Status: COMPLETE
+
+Files Created:
+- /Users/bmf/code/oscilla-animator-v2/design-docs/CANONICAL-oscilla-v2.5-20260109/topics/17-layout-system.md (380 lines)
+
+Files Modified:
+- /Users/bmf/code/oscilla-animator-v2/design-docs/CANONICAL-oscilla-v2.5-20260109/INDEX.md (updated metadata, added topic 17)
+
+Content Delivered:
+1. Complete layout system specification with:
+   - Layout as Field<vec2> from field expressions + kernels
+   - Closed intrinsic set: {index, normalizedIndex, randomId}
+   - Three canonical layout kernels with NORMATIVE per-lane math:
+     * circleLayout(t, radius, phase)
+     * lineLayout(t, x0, y0, x1, y1)
+     * gridLayout(k, cols, rows)
+   - World-normalized coordinate output [0,1]×[0,1]
+   - Kernel contract pattern (Field + Signals → Field<vec2>)
+   - Removed constructs: FieldExprLayout, position/radius intrinsics, InstanceDecl.layout
+   - StepRender relationship and validation rules
+   - Migration guide from legacy system
+
+2. Updated INDEX.md with:
+   - New topic entry in table
+   - Updated metadata (77 source docs, 17 topics, 115 resolutions)
+   - Added search hints for layout system concepts
+   - Added update history entry for layout integration
+
+Key Decisions Implemented:
+- Q3 resolved: FieldExprLayout REMOVED (migration target)
+- Q4 resolved: Kernel math is NORMATIVE (full per-lane specification)
+- Intrinsic set CLOSED (no position, no radius)
+- Layout kernels produce positions in normalized world space [0,1]×[0,1]
+- Each kernel has full contract: inputs, output, per-lane computation, buffer storage
+
+Tier Classification:
+- T1 (Foundational): Layout is field expressions, intrinsic set closed, world-normalized output
+- T2 (Structural): Three canonical kernels, kernel contract pattern, per-lane semantics
+- Migration path documented for removing legacy constructs
+
+Related Topics Referenced:
+- 01-type-system (PayloadType vec2, Cardinality many, Field definition)
+- 04-compilation (Field expressions, kernel resolution, FieldExprZipSig)
+- 16-coordinate-spaces (World space [0,1]×[0,1], coordinate conventions)
+- 06-renderer (StepRender contract, positionSlot validation)
+
+Validation: All requirements from user request satisfied
+- Front matter: correct (parent, topic, order)
+- Layout definition: Field<vec2> from kernels, NOT intrinsics
+- Kernel math: FULL NORMATIVE per-lane computation for all three kernels
+- Intrinsic constraints: Closed set, no position/radius
+- StepRender relationship: positionXYSlot receives kernel output
+- Migration guide: Removal of FieldExprLayout, position/radius intrinsics, InstanceDecl.layout
+- See Also section: Complete with cross-references
+
+Cache Invalidation: NOT APPLICABLE
+- This is a new spec file creation, not a code modification
+- No eval-cache entries need invalidation
+
+Next Steps: None (task complete)
