@@ -345,18 +345,33 @@ describe('Level 3 Field Variant Tests', () => {
       }
     }
 
-    // Under perspective, screenPos.xy should vary with z
-    let hasVariation = false;
-    for (let i = 1; i < N; i++) {
-      if (perspVisible[i] && perspVisible[0]) {
-        if (perspScreenPos[i * 2 + 0] !== perspScreenPos[0] ||
-            perspScreenPos[i * 2 + 1] !== perspScreenPos[1]) {
-          hasVariation = true;
-          break;
-        }
+    // Under perspective, screenPos.xy should vary with z:
+    // different z values must produce different screen positions from each other
+    // Collect unique screen positions for visible instances
+    const visibleScreenXs: number[] = [];
+    for (let i = 0; i < N; i++) {
+      if (perspVisible[i]) {
+        visibleScreenXs.push(perspScreenPos[i * 2 + 0]);
       }
     }
-    expect(hasVariation).toBe(true);
+    // At least 3 visible instances
+    expect(visibleScreenXs.length).toBeGreaterThanOrEqual(3);
+
+    // Verify non-uniformity: at least 2 distinct screen X values among visible instances
+    const uniqueXs = new Set(visibleScreenXs);
+    expect(uniqueXs.size).toBeGreaterThanOrEqual(2);
+
+    // Stronger: each consecutive visible pair should differ (monotonic variation with z)
+    for (let i = 1; i < N; i++) {
+      if (perspVisible[i] && perspVisible[i - 1]) {
+        const prevX = perspScreenPos[(i - 1) * 2 + 0];
+        const currX = perspScreenPos[i * 2 + 0];
+        const prevY = perspScreenPos[(i - 1) * 2 + 1];
+        const currY = perspScreenPos[i * 2 + 1];
+        // Each different z produces a different screen position
+        expect(currX !== prevX || currY !== prevY).toBe(true);
+      }
+    }
   });
 });
 
@@ -392,18 +407,26 @@ describe('Level 3 Integration Tests', () => {
     }
 
     // Perspective: screenPos !== worldPos.xy for off-center instances
-    let hasDifference = false;
+    // Check that instances far from the grid center (0.5, 0.5) show more deviation
+    let offCenterCount = 0;
+    let offCenterDifferent = 0;
     for (let i = 0; i < N; i++) {
-      if (perspVisible[i]) {
-        const worldX = positions[i * 3 + 0];
-        const worldY = positions[i * 3 + 1];
+      if (!perspVisible[i]) continue;
+      const worldX = positions[i * 3 + 0];
+      const worldY = positions[i * 3 + 1];
+      const distFromCenter = Math.sqrt((worldX - 0.5) ** 2 + (worldY - 0.5) ** 2);
+
+      // Off-center: distance > 0.2 from grid center
+      if (distFromCenter > 0.2) {
+        offCenterCount++;
         if (perspScreen[i * 2 + 0] !== worldX || perspScreen[i * 2 + 1] !== worldY) {
-          hasDifference = true;
-          break;
+          offCenterDifferent++;
         }
       }
     }
-    expect(hasDifference).toBe(true);
+    // Multiple off-center instances exist and all differ from ortho identity
+    expect(offCenterCount).toBeGreaterThanOrEqual(4);
+    expect(offCenterDifferent).toBe(offCenterCount);
 
     // Both produce valid (non-NaN, non-Inf) outputs
     for (let i = 0; i < N; i++) {

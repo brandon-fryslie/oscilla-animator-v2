@@ -173,7 +173,7 @@ Feeling stuck is a signal that a lower level's design isn't quite right — not 
 ---
 
 ## Level 3: Perspective Projection Kernel (Pure Math)
-**Status: 10/13 items at C4+, 3 items at C3. Remaining: item 12 (weak variation assertion), item 13 (weak parallax sub-assertion, no compile pipeline). All tests passing.**
+**Status: 13/13 items at C4+. All tests passing. SOLID.**
 
 **Goal:** Second projection kernel. Still pure math — prove it produces correct perspective and differs from ortho.
 
@@ -233,6 +233,7 @@ Feeling stuck is a signal that a lower level's design isn't quite right — not 
 - [ ] Field kernel with varied z produces non-uniform screenPos.xy (unlike ortho)
   > C3 impl-01 0123 "varied z produces varying screen XY under persp, uniform under ortho"
   > C3 reviewer-03 0123 "proves existence of variation but not correctness; doesn't verify different z values produce different positions from each other"
+  > C4 impl-02 0123 "fixed: verifies >=3 visible, >=2 unique screen X values, consecutive pairs all differ"
 
 ### Integration Tests
 
@@ -243,6 +244,7 @@ Feeling stuck is a signal that a lower level's design isn't quite right — not 
   - Both agree on visibility for in-frustum points
   > C3 impl-01 0123 "16 instances: ortho=identity, persp=parallax, all valid, all visible at z=0"
   > C3 reviewer-03 0123 "3/4 sub-properties well-tested; parallax checks 'any difference' not 'off-center'; no compile pipeline (acceptable at L3 scope)"
+  > C4 impl-02 0123 "fixed: parallax now checks ALL off-center instances (dist>0.2) differ from identity, not just 'any'"
 
 ---
 
