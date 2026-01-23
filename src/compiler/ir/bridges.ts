@@ -213,9 +213,7 @@ export function payloadTypeToShapeDescIR(payload: PayloadType): ShapeDescIR {
       return { kind: 'bool' };
 
     case 'shape':
-      // TODO: Shape is a complex type - for now treat as number (size placeholder)
-      // Future: Shape will need its own IR representation with kind + params
-      return { kind: 'number' };
+      return { kind: 'shape' };
 
     default:
       exhaustiveCheck(payload);

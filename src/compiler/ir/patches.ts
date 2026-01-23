@@ -16,7 +16,7 @@
  * It never sees raw Patch directly.
  */
 
-import type { SigExprId } from "./types";
+import type { SigExprId, EventExprId } from "./types";
 import type { SignalType, InstanceRef } from "../../core/canonical-types";
 import type { TimeModelIR } from "./schedule";
 
@@ -103,8 +103,8 @@ export interface TimeSignals {
   /** Signal expression ID for dt (delta time) */
   readonly dt?: SigExprId;
 
-  /** Signal expression ID for pulse (frame ticker) */
-  readonly pulse?: SigExprId | null;
+  /** Event expression ID for pulse (fires on phase wrap) */
+  readonly pulse: EventExprId | null;
 
   /** Signal expression ID for palette (phase-derived color) */
   readonly palette?: SigExprId;

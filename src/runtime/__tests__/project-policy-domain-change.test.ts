@@ -78,6 +78,15 @@ function createTestRuntimeState(): RuntimeState {
       samplingBatchStart: 0,
       nanBatchCount: 0,
       infBatchCount: 0,
+      // Assembler performance metrics
+      assemblerGroupingMs: new Array(10).fill(0),
+      assemblerGroupingMsIndex: 0,
+      assemblerSlicingMs: new Array(10).fill(0),
+      assemblerSlicingMsIndex: 0,
+      assemblerTotalMs: new Array(10).fill(0),
+      assemblerTotalMsIndex: 0,
+      topologyGroupCacheHits: 0,
+      topologyGroupCacheMisses: 0,
       // Frame timing metrics
       prevRafTimestamp: null,
       frameDeltas: new Array(60).fill(0),

@@ -18,6 +18,7 @@ export { ViewportStore, type Pan } from './ViewportStore';
 export { PlaybackStore } from './PlaybackStore';
 export { PortHighlightStore } from './PortHighlightStore';
 export { DebugStore, formatDebugValue } from './DebugStore';
+export { LayoutStore, type NodePosition } from './LayoutStore';
 export {
   DiagnosticsStore,
   type LogLevel,

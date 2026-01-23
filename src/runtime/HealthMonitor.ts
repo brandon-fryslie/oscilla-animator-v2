@@ -339,6 +339,18 @@ export function emitHealthSnapshot(
     raised.push({ ...diag, id });
   }
 
+  // Calculate assembler stats from ring buffers
+  const validGrouping = h.assemblerGroupingMs.filter((t) => t > 0);
+  const validSlicing = h.assemblerSlicingMs.filter((t) => t > 0);
+  const validTotal = h.assemblerTotalMs.filter((t) => t > 0);
+  const assemblerStats = validTotal.length > 0 ? {
+    avgGroupingMs: validGrouping.length > 0 ? validGrouping.reduce((a, b) => a + b, 0) / validGrouping.length : 0,
+    avgSlicingMs: validSlicing.length > 0 ? validSlicing.reduce((a, b) => a + b, 0) / validSlicing.length : 0,
+    avgTotalMs: validTotal.reduce((a, b) => a + b, 0) / validTotal.length,
+    cacheHits: h.topologyGroupCacheHits,
+    cacheMisses: h.topologyGroupCacheMisses,
+  } : undefined;
+
   // Emit RuntimeHealthSnapshot event
   events.emit({
     type: 'RuntimeHealthSnapshot',
@@ -355,6 +367,7 @@ export function emitHealthSnapshot(
       nanCount: h.nanCount,
       infCount: h.infCount,
     },
+    assemblerStats,
     diagnosticsDelta: raised.length > 0 ? { raised, resolved: [] } : undefined,
   });
 

@@ -29,7 +29,7 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: auto;
   background: var(--bg-content);
   color: var(--text-primary);
 }
@@ -235,17 +235,12 @@
  * ========================================================================== */
 
 .compilation-inspector-content {
-  flex: 1;
-  overflow: hidden;
   display: flex;
-  min-height: 0;
   flex-direction: column;
 }
 
 /* JSON View */
 .compilation-inspector-json {
-  flex: 1;
-  overflow: auto;
   padding: 16px;
 }
 
@@ -259,15 +254,11 @@
 
 /* Tree Container */
 .compilation-inspector-tree-container {
-  flex: 1;
-  overflow: auto;
   display: flex;
-  min-height: 0;
 }
 
 .compilation-inspector-tree {
   flex: 1;
-  overflow: auto;
   padding: 16px;
   min-width: 0;
 }

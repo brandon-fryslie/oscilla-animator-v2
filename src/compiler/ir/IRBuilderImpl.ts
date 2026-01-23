@@ -88,7 +88,7 @@ export class IRBuilderImpl implements IRBuilder {
     return id;
   }
 
-  sigTime(which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'pulse' | 'progress' | 'palette' | 'energy', type: SignalType): SigExprId {
+  sigTime(which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'progress' | 'palette' | 'energy', type: SignalType): SigExprId {
     const id = sigExprId(this.sigExprs.length);
     this.sigExprs.push({ kind: 'time', which, type });
     return id;

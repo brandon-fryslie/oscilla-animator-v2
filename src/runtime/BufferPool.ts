@@ -12,13 +12,17 @@
 
 import type { PayloadType } from '../core/canonical-types';
 
+/** Shape2D words per record (must match RuntimeState.SHAPE2D_WORDS) */
+const SHAPE2D_WORDS = 8;
+
 /**
  * Buffer format types
  */
 export type BufferFormat =
   | 'f32'      // Single float
   | 'vec2f32'  // 2D vector
-  | 'rgba8';   // Color (RGBA, clamped uint8)
+  | 'rgba8'    // Color (RGBA, clamped uint8)
+  | 'shape2d'; // Shape descriptor (8 x u32 words per shape)
 
 /**
  * Get buffer format for a payload type
@@ -29,8 +33,10 @@ export function getBufferFormat(payload: PayloadType): BufferFormat {
     case 'float':
     case 'int':
     case 'bool':
-    case 'shape': // TODO: Shape as f32 placeholder for now
       return 'f32';
+    // Shape descriptors -> shape2d
+    case 'shape':
+      return 'shape2d';
     // 2D vectors
     case 'vec2':
       return 'vec2f32';
@@ -166,6 +172,9 @@ function allocateBuffer(format: BufferFormat, count: number): ArrayBufferView {
 
     case 'rgba8':
       return new Uint8ClampedArray(count * 4);
+
+    case 'shape2d':
+      return new Uint32Array(count * SHAPE2D_WORDS);
 
     default: {
       const _exhaustive: never = format;

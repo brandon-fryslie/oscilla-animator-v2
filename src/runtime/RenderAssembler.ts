@@ -324,7 +324,57 @@ interface TopologyGroup {
 }
 
 /**
- * Group instances by topology identity
+ * Topology group cache - WeakMap keyed on shape buffer identity
+ *
+ * Why WeakMap:
+ * - Key is the buffer object itself (identity-based)
+ * - Same buffer reference = same content (materializer reuses refs for unchanged fields)
+ * - Buffer GC'd → cache entry automatically cleaned
+ * - No manual invalidation logic needed
+ */
+const topologyGroupCache = new WeakMap<
+  Uint32Array,
+  { count: number; groups: Map<string, TopologyGroup> }
+>();
+
+/** Cache hit/miss counters - read by instrumentation */
+export let topologyGroupCacheHits = 0;
+export let topologyGroupCacheMisses = 0;
+
+/** Reset cache counters (for snapshot windows) */
+export function resetTopologyCacheCounters(): void {
+  topologyGroupCacheHits = 0;
+  topologyGroupCacheMisses = 0;
+}
+
+/**
+ * Group instances by topology identity (cached)
+ *
+ * Cache hit: same buffer reference AND same count → reuse (zero allocations).
+ * Cache miss: different buffer or different count → recompute and store.
+ *
+ * @param shapeBuffer - Packed Shape2D buffer (Uint32Array)
+ * @param instanceCount - Number of instances
+ * @returns Map of topology groups keyed by "topologyId:controlPointsSlot"
+ */
+export function groupInstancesByTopology(
+  shapeBuffer: Uint32Array,
+  instanceCount: number
+): Map<string, TopologyGroup> {
+  const cached = topologyGroupCache.get(shapeBuffer);
+  if (cached && cached.count === instanceCount) {
+    topologyGroupCacheHits++;
+    return cached.groups;
+  }
+
+  topologyGroupCacheMisses++;
+  const groups = computeTopologyGroups(shapeBuffer, instanceCount);
+  topologyGroupCache.set(shapeBuffer, { count: instanceCount, groups });
+  return groups;
+}
+
+/**
+ * Compute topology groups (inner logic, uncached)
  *
  * Single-pass O(N) grouping algorithm. Instances with the same topology
  * and control points buffer are grouped together for batched rendering.
@@ -333,7 +383,7 @@ interface TopologyGroup {
  * @param instanceCount - Number of instances
  * @returns Map of topology groups keyed by "topologyId:controlPointsSlot"
  */
-function groupInstancesByTopology(
+export function computeTopologyGroups(
   shapeBuffer: Uint32Array,
   instanceCount: number
 ): Map<string, TopologyGroup> {
@@ -381,28 +431,51 @@ interface SlicedBuffers {
 }
 
 /**
+ * Check if indices form a contiguous run
+ *
+ * O(1) check: compare first and last index with expected span.
+ * Assumes indices are sorted (grouping algorithm appends in order).
+ *
+ * @param indices - Sorted array of instance indices
+ * @returns True if indices are contiguous [start, start+1, ..., start+N-1]
+ */
+export function isContiguous(indices: number[]): boolean {
+  if (indices.length <= 1) return true;
+  return indices[indices.length - 1] - indices[0] === indices.length - 1;
+}
+
+/**
  * Slice instance buffers for a topology group
  *
  * Extracts position and color data for instances in the group.
- * Creates new buffers with data copied from the full buffers.
+ * Uses zero-copy subarray views when indices are contiguous,
+ * falls back to copy for non-contiguous indices.
  *
  * @param fullPosition - Full position buffer (x,y interleaved)
  * @param fullColor - Full color buffer (RGBA interleaved)
- * @param instanceIndices - Indices of instances to extract
+ * @param instanceIndices - Sorted indices of instances to extract
  * @returns Sliced position and color buffers
  */
-function sliceInstanceBuffers(
+export function sliceInstanceBuffers(
   fullPosition: Float32Array,
   fullColor: Uint8ClampedArray,
   instanceIndices: number[]
 ): SlicedBuffers {
   const N = instanceIndices.length;
 
-  // Allocate sliced buffers
+  if (isContiguous(instanceIndices)) {
+    // Zero-copy views — same underlying ArrayBuffer
+    const start = instanceIndices[0];
+    return {
+      position: fullPosition.subarray(start * 2, (start + N) * 2),
+      color: fullColor.subarray(start * 4, (start + N) * 4),
+    };
+  }
+
+  // Non-contiguous: copy (existing logic)
   const position = new Float32Array(N * 2);  // vec2 per instance
   const color = new Uint8ClampedArray(N * 4); // RGBA per instance
 
-  // Copy data for selected instances
   for (let i = 0; i < N; i++) {
     const srcIdx = instanceIndices[i];
 
@@ -418,6 +491,29 @@ function sliceInstanceBuffers(
   }
 
   return { position, color };
+}
+
+/**
+ * Record assembler timing metrics to HealthMetrics ring buffers
+ */
+function recordAssemblerTiming(
+  state: RuntimeState,
+  timing: { groupingMs: number; slicingMs: number; totalMs: number }
+): void {
+  const h = state.health;
+
+  h.assemblerGroupingMs[h.assemblerGroupingMsIndex] = timing.groupingMs;
+  h.assemblerGroupingMsIndex = (h.assemblerGroupingMsIndex + 1) % h.assemblerGroupingMs.length;
+
+  h.assemblerSlicingMs[h.assemblerSlicingMsIndex] = timing.slicingMs;
+  h.assemblerSlicingMsIndex = (h.assemblerSlicingMsIndex + 1) % h.assemblerSlicingMs.length;
+
+  h.assemblerTotalMs[h.assemblerTotalMsIndex] = timing.totalMs;
+  h.assemblerTotalMsIndex = (h.assemblerTotalMsIndex + 1) % h.assemblerTotalMs.length;
+
+  // Sync cache counters from module-level counters
+  h.topologyGroupCacheHits = topologyGroupCacheHits;
+  h.topologyGroupCacheMisses = topologyGroupCacheMisses;
 }
 
 /**
@@ -444,8 +540,12 @@ function assemblePerInstanceShapes(
   count: number,
   state: RuntimeState
 ): DrawPathInstancesOp[] {
+  const t0 = performance.now();
+
   // Group instances by topology
   const groups = groupInstancesByTopology(shapeBuffer, count);
+
+  const tGrouped = performance.now();
 
   const ops: DrawPathInstancesOp[] = [];
 
@@ -523,6 +623,15 @@ function assemblePerInstanceShapes(
       style,
     });
   }
+
+  const tSliced = performance.now();
+
+  // Record timing to health metrics
+  recordAssemblerTiming(state, {
+    groupingMs: tGrouped - t0,
+    slicingMs: tSliced - tGrouped,
+    totalMs: tSliced - t0,
+  });
 
   return ops;
 }

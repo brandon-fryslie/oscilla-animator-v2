@@ -15,6 +15,7 @@ import type { TopologyId } from '../shapes/types';
 import { resolveTime } from './timeResolution';
 import { materialize } from './Materializer';
 import { evaluateSignal } from './SignalEvaluator';
+import { writeShape2D } from './RuntimeState';
 import { detectDomainChange } from './ContinuityMapping';
 import { applyContinuity, finalizeContinuityFrame } from './ContinuityApply';
 import { createStableDomainInstance, createUnstableDomainInstance } from './DomainIdentity';
@@ -196,22 +197,33 @@ export function executeFrame(
     switch (step.kind) {
       case 'evalSig': {
         // Evaluate signal and store in slot using slotMeta.offset
-        const value = evaluateSignal(step.expr, signals, state);
         const { storage, offset, slot } = resolveSlotOffset(program, step.target);
 
-        if (storage === 'f64') {
-          // DoD: Use slotMeta.offset for typed array access
+        if (storage === 'shape2d') {
+          // Shape signal: write Shape2D record to shape2d bank
+          const exprNode = signals[step.expr as number];
+          if (exprNode.kind === 'shapeRef') {
+            writeShape2D(state.values.shape2d, offset, {
+              topologyId: exprNode.topologyId as unknown as number,
+              pointsFieldSlot: (exprNode.controlPointField as number) ?? 0,
+              pointsCount: 0,
+              styleRef: 0,
+              flags: 0,
+            });
+          }
+        } else if (storage === 'f64') {
+          const value = evaluateSignal(step.expr, signals, state);
           state.values.f64[offset] = value;
 
           // Debug tap: Record slot value (Sprint 1: Debug Probe)
           state.tap?.recordSlotValue?.(slot, value);
-        } else {
-          throw new Error(`evalSig expects f64 storage, got ${storage}`);
-        }
 
-        // Cache the result
-        state.cache.sigValues[step.expr as number] = value;
-        state.cache.sigStamps[step.expr as number] = state.cache.frameId;
+          // Cache the result
+          state.cache.sigValues[step.expr as number] = value;
+          state.cache.sigStamps[step.expr as number] = state.cache.frameId;
+        } else {
+          throw new Error(`evalSig: unsupported storage type '${storage}'`);
+        }
         break;
       }
 

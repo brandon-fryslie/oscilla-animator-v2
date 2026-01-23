@@ -40,7 +40,7 @@ export interface IRBuilder {
   sigSlot(slot: ValueSlot, type: SignalType): SigExprId;
 
   /** Create a time-derived signal. */
-  sigTime(which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'pulse' | 'progress' | 'palette' | 'energy', type: SignalType): SigExprId;
+  sigTime(which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'progress' | 'palette' | 'energy', type: SignalType): SigExprId;
 
   /** Create an external input signal. */
   sigExternal(which: 'mouseX' | 'mouseY' | 'mouseOver', type: SignalType): SigExprId;

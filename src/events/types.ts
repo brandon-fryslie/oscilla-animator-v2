@@ -148,6 +148,13 @@ export interface RuntimeHealthSnapshotEvent {
     readonly nanCount: number;
     readonly infCount: number;
   };
+  readonly assemblerStats?: {
+    readonly avgGroupingMs: number;
+    readonly avgSlicingMs: number;
+    readonly avgTotalMs: number;
+    readonly cacheHits: number;
+    readonly cacheMisses: number;
+  };
   readonly diagnosticsDelta?: {
     readonly raised: readonly Diagnostic[];
     readonly resolved: readonly string[];

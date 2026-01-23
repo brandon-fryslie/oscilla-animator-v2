@@ -13,6 +13,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
+import { MantineProvider } from '@mantine/core';
 import { BlockLibrary } from '../BlockLibrary';
 import { EditorProvider } from '../../editorCommon';
 import { RootStore, StoreProvider } from '../../../stores';
@@ -46,9 +47,11 @@ Object.defineProperty(window, 'localStorage', {
 // Wrapper component to provide required context
 function TestWrapper({ children }: { children: React.ReactNode }) {
   return (
-    <StoreProvider store={testStore}>
-      <EditorProvider>{children}</EditorProvider>
-    </StoreProvider>
+    <MantineProvider>
+      <StoreProvider store={testStore}>
+        <EditorProvider>{children}</EditorProvider>
+      </StoreProvider>
+    </MantineProvider>
   );
 }
 

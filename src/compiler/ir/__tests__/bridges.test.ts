@@ -160,8 +160,8 @@ describe('payloadTypeToShapeDescIR', () => {
     expect(payloadTypeToShapeDescIR('int')).toEqual({ kind: 'number' });
   });
 
-  it('maps shape to number shape (placeholder)', () => {
-    expect(payloadTypeToShapeDescIR('shape')).toEqual({ kind: 'number' });
+  it('maps shape to shape kind', () => {
+    expect(payloadTypeToShapeDescIR('shape')).toEqual({ kind: 'shape' });
   });
 
   it('maps bool to bool shape', () => {

@@ -99,6 +99,7 @@ function generateTimeSignals(timeModel: TimeModelIR): TimeSignals {
   const phaseA = builder.sigTime('phaseA', signalType('float', unitPhase01()));
   const phaseB = builder.sigTime('phaseB', signalType('float', unitPhase01()));
   const dt = builder.sigTime('dt', signalType('float'));
+  const pulse = builder.eventPulse('timeRoot');
   const palette = builder.sigTime('palette', signalType('color'));
   const energy = builder.sigTime('energy', signalType('float'));
 
@@ -107,7 +108,7 @@ function generateTimeSignals(timeModel: TimeModelIR): TimeSignals {
     phaseA,
     phaseB,
     dt,
-    pulse: null,
+    pulse,
     palette,
     energy,
   };

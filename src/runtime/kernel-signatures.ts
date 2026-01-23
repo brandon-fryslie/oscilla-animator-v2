@@ -8,7 +8,7 @@
  * They do NOT affect runtime behavior. Kernels still operate as they always have.
  *
  * Unit System Semantics:
- * - phase: [0, 1) cyclic - Signal kernels (sin/cos/tan) expect this and convert to radians internally
+ * - phase: [0, 1) cyclic - Signal kernels (oscSin/oscCos/oscTan) expect this and convert to radians internally
  * - radians: [0, 2π) - Field kernels (polar, circular layout) work directly in radians
  * - normalized: [0, 1] clamped - Easing functions, opacity, normalizedIndex
  * - scalar: Dimensionless float - Arithmetic results, generic numbers
@@ -73,21 +73,6 @@ export const KERNEL_SIGNATURES: Readonly<Record<string, KernelSignature>> = {
     output: { unit: 'scalar', description: 'Tangent value (unbounded)' },
   },
 
-  // DEPRECATED: Legacy aliases - use oscSin/oscCos/oscTan instead
-  sin: {
-    inputs: [{ expectedUnit: 'phase01', description: 'DEPRECATED: Use oscSin instead' }],
-    output: { unit: 'scalar', description: 'Sine value [-1,1]' },
-  },
-
-  cos: {
-    inputs: [{ expectedUnit: 'phase01', description: 'DEPRECATED: Use oscCos instead' }],
-    output: { unit: 'scalar', description: 'Cosine value [-1,1]' },
-  },
-
-  tan: {
-    inputs: [{ expectedUnit: 'phase01', description: 'DEPRECATED: Use oscTan instead' }],
-    output: { unit: 'scalar', description: 'Tangent value' },
-  },
 
   // === WAVEFORM FUNCTIONS (Signal-level) ===
   // These expect phase [0,1), auto-wrap internally, output [-1,1]

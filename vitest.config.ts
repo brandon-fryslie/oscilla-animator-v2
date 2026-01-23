@@ -5,6 +5,9 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./src/ui/components/__tests__/setup.ts'],
+    benchmark: {
+      include: ['**/__benchmarks__/*.bench.ts'],
+    },
     exclude: [
       '**/node_modules/**',
       '**/dist/**',

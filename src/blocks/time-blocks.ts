@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from './registry';
-import { signalType, unitPhase01 } from '../core/canonical-types';
+import { signalType, signalTypeTrigger, unitPhase01 } from '../core/canonical-types';
 
 // =============================================================================
 // InfiniteTimeRoot
@@ -32,6 +32,7 @@ registerBlock({
     // Phase outputs use float payload with phase01 unit: values in [0, 1) range representing normalized time cycles
     phaseA: { label: 'Phase A', type: signalType('float', unitPhase01()) },
     phaseB: { label: 'Phase B', type: signalType('float', unitPhase01()) },
+    pulse: { label: 'Pulse', type: signalTypeTrigger('bool') },
     palette: { label: 'Palette', type: signalType('color') },
     energy: { label: 'Energy', type: signalType('float') },
   },
@@ -42,12 +43,14 @@ registerBlock({
     const tMs = ctx.b.sigTime('tMs', signalType('float'));
     const phaseA = ctx.b.sigTime('phaseA', signalType('float', unitPhase01()));
     const phaseB = ctx.b.sigTime('phaseB', signalType('float', unitPhase01()));
+    const pulse = ctx.b.eventPulse('timeRoot');
     const palette = ctx.b.sigTime('palette', signalType('color'));
     const energy = ctx.b.sigTime('energy', signalType('float'));
 
     const tMsSlot = ctx.b.allocSlot();
     const phaseASlot = ctx.b.allocSlot();
     const phaseBSlot = ctx.b.allocSlot();
+    const pulseSlot = ctx.b.allocSlot();
     const paletteSlot = ctx.b.allocSlot();
     const energySlot = ctx.b.allocSlot();
 
@@ -56,6 +59,7 @@ registerBlock({
         tMs: { k: 'sig', id: tMs, slot: tMsSlot },
         phaseA: { k: 'sig', id: phaseA, slot: phaseASlot },
         phaseB: { k: 'sig', id: phaseB, slot: phaseBSlot },
+        pulse: { k: 'event', id: pulse, slot: pulseSlot },
         palette: { k: 'sig', id: palette, slot: paletteSlot },
         energy: { k: 'sig', id: energy, slot: energySlot },
       },

@@ -272,6 +272,26 @@ export interface HealthMetrics {
   /** Infinity occurrences in current batch window (resets every 100ms) */
   infBatchCount: number;
 
+  // === Assembler Performance Metrics ===
+
+  /** Ring buffer of assembler grouping times (ms per frame, last 10 frames) */
+  assemblerGroupingMs: number[];
+  assemblerGroupingMsIndex: number;
+
+  /** Ring buffer of assembler slicing times (ms per frame, last 10 frames) */
+  assemblerSlicingMs: number[];
+  assemblerSlicingMsIndex: number;
+
+  /** Ring buffer of assembler total times (ms per frame, last 10 frames) */
+  assemblerTotalMs: number[];
+  assemblerTotalMsIndex: number;
+
+  /** Topology group cache hits in current snapshot window */
+  topologyGroupCacheHits: number;
+
+  /** Topology group cache misses in current snapshot window */
+  topologyGroupCacheMisses: number;
+
   // === Frame Timing Metrics (for detecting timing jitter/aliasing) ===
 
   /** Previous rAF timestamp (for computing frame delta) */
@@ -319,6 +339,15 @@ export function createHealthMetrics(): HealthMetrics {
     samplingBatchStart: 0,
     nanBatchCount: 0,
     infBatchCount: 0,
+    // Assembler performance metrics
+    assemblerGroupingMs: new Array(10).fill(0),
+    assemblerGroupingMsIndex: 0,
+    assemblerSlicingMs: new Array(10).fill(0),
+    assemblerSlicingMsIndex: 0,
+    assemblerTotalMs: new Array(10).fill(0),
+    assemblerTotalMsIndex: 0,
+    topologyGroupCacheHits: 0,
+    topologyGroupCacheMisses: 0,
     // Frame timing metrics
     prevRafTimestamp: null,
     frameDeltas: new Array(60).fill(0),

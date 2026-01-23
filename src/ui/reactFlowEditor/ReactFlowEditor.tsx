@@ -4,6 +4,12 @@
  * Alternative node editor using ReactFlow library.
  * Provides pan/zoom, node creation, connection management.
  * Syncs bidirectionally with PatchStore.
+ *
+ * Layout strategy:
+ * - Initial load: compute ELK layout BEFORE rendering (no flash)
+ * - Mutations (add/remove block/edge): reconcile without re-layout
+ * - Auto Arrange button: explicit user request to re-layout
+ * - Drag: persisted to LayoutStore
  */
 
 import React, { useEffect, useCallback, useMemo, useState, useRef } from 'react';
@@ -29,8 +35,8 @@ import { useStores } from '../../stores';
 import type { BlockId, PortId } from '../../types';
 import type { EditorHandle } from '../editorCommon';
 import {
-  syncPatchToReactFlow,
-  setupPatchToReactFlowReaction,
+  buildNodesAndEdges,
+  setupStructureReaction,
   createNodesChangeHandler,
   createEdgesChangeHandler,
   createConnectHandler,
@@ -127,11 +133,12 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = observer(({
   wrapperRef,
 }) => {
   // Get store from context
-  const { patch: patchStore, selection, diagnostics, debug } = useStores();
+  const { patch: patchStore, selection, diagnostics, debug, layout: layoutStore } = useStores();
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [isLayouting, setIsLayouting] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const { fitView, setCenter } = useReactFlow();
 
@@ -144,17 +151,19 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = observer(({
   // Register custom node types (memoized to prevent recreation)
   const nodeTypes = useMemo(() => ({ oscilla: OscillaNode }), []);
 
-  // Setup sync handle
+  // Setup sync handle (includes LayoutStore and getNodes)
   const syncHandle: SyncHandle = useMemo(() => ({
-    patchStore: patchStore,
+    patchStore,
+    layoutStore,
     setNodes,
     setEdges,
-  }), [patchStore, setNodes, setEdges]);
+    getNodes: () => nodesRef.current,
+  }), [patchStore, layoutStore, setNodes, setEdges]);
 
   // Create event handlers that sync to PatchStore
   const handleNodesChange = useCallback(
     createNodesChangeHandler(syncHandle),
-    [syncHandle.patchStore]
+    [syncHandle.patchStore, syncHandle.layoutStore]
   );
 
   const handleEdgesChange = useCallback(
@@ -244,7 +253,6 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = observer(({
   );
 
   // Expose port context menu handler via global store for OscillaNode access
-  // (Alternative: use React Context, but this is simpler for now)
   useEffect(() => {
     (window as any).__reactFlowPortContextMenu = handlePortContextMenu;
     return () => {
@@ -281,7 +289,7 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = observer(({
     return result.valid;
   }, [patchStore]);
 
-  // Auto-arrange handler
+  // Auto-arrange handler (explicit user action only)
   const handleAutoArrange = useCallback(async () => {
     if (isLayouting) return;
 
@@ -306,10 +314,14 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = observer(({
       );
       setNodes(layoutedNodes);
 
+      // Persist computed positions to LayoutStore
+      for (const node of layoutedNodes) {
+        layoutStore.setPosition(node.id as BlockId, node.position);
+      }
+
       // Fit view after layout completes
       setTimeout(() => fitView({ padding: 0.1 }), 50);
     } catch (error) {
-      // Log to diagnostics system (appears in LogPanel)
       diagnostics.log({
         level: 'error',
         message: `Auto-arrange failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -318,65 +330,103 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = observer(({
     } finally {
       setIsLayouting(false);
     }
-  }, [isLayouting, setNodes, fitView, diagnostics]);
+  }, [isLayouting, setNodes, fitView, diagnostics, layoutStore]);
 
   // Store autoArrange ref for handle access
   const autoArrangeRef = useRef(handleAutoArrange);
   autoArrangeRef.current = handleAutoArrange;
 
-  // Track previous node count to detect additions/deletions
-  const prevNodeCountRef = useRef<number | null>(null);
-  const hasInitializedRef = useRef(false);
-
-  // Auto-arrange on startup and when blocks are added/deleted
+  // Initialize: compute ELK layout BEFORE first render (no flash)
   useEffect(() => {
-    let initTimeoutId: ReturnType<typeof setTimeout> | null = null;
-    let changeTimeoutId: ReturnType<typeof setTimeout> | null = null;
+    let cancelled = false;
 
-    const currentCount = nodes.length;
-    const prevCount = prevNodeCountRef.current;
+    async function initializeLayout() {
+      const patch = patchStore.patch;
 
-    // On first render with nodes, trigger auto-arrange once
-    if (!hasInitializedRef.current && currentCount > 0) {
-      hasInitializedRef.current = true;
-      // Delay to ensure layout is ready
-      initTimeoutId = setTimeout(() => autoArrangeRef.current(), 100);
-    }
+      // Empty patch: nothing to layout
+      if (patch.blocks.size === 0) {
+        setIsInitialized(true);
+        return;
+      }
 
-    // After initialization, trigger auto-arrange when node count changes (add/delete)
-    if (hasInitializedRef.current && prevCount !== null && prevCount !== currentCount) {
-      // Only trigger if we're not already layouting
-      if (!isLayouting) {
-        // Small delay to let React settle
-        changeTimeoutId = setTimeout(() => autoArrangeRef.current(), 50);
+      // Build nodes/edges with placeholder positions
+      const { nodes: initialNodes, edges: initialEdges } = buildNodesAndEdges(patch, diagnostics);
+
+      // Single node: just center it
+      if (initialNodes.length === 1) {
+        initialNodes[0].position = { x: 100, y: 100 };
+        layoutStore.setPosition(initialNodes[0].id as BlockId, initialNodes[0].position);
+        if (!cancelled) {
+          setNodes(initialNodes);
+          setEdges(initialEdges);
+          setIsInitialized(true);
+          setTimeout(() => fitView({ padding: 0.1 }), 50);
+        }
+        return;
+      }
+
+      // Compute ELK layout (async)
+      try {
+        const { nodes: layoutedNodes } = await getLayoutedElements(initialNodes, initialEdges);
+
+        if (cancelled) return;
+
+        // Persist positions to LayoutStore
+        for (const node of layoutedNodes) {
+          layoutStore.setPosition(node.id as BlockId, node.position);
+        }
+
+        // Set state - first render will show correct positions
+        setNodes(layoutedNodes);
+        setEdges(initialEdges);
+        setIsInitialized(true);
+
+        // Fit view after initial render
+        setTimeout(() => fitView({ padding: 0.1 }), 50);
+      } catch (error) {
+        if (cancelled) return;
+
+        // Fallback: use grid layout if ELK fails
+        diagnostics.log({
+          level: 'error',
+          message: `Initial layout failed, using grid fallback: ${error instanceof Error ? error.message : String(error)}`,
+          data: { error },
+        });
+
+        let x = 100, y = 100;
+        for (const node of initialNodes) {
+          node.position = { x, y };
+          layoutStore.setPosition(node.id as BlockId, { x, y });
+          x += 250;
+          if (x > 1000) { x = 100; y += 150; }
+        }
+
+        setNodes(initialNodes);
+        setEdges(initialEdges);
+        setIsInitialized(true);
       }
     }
 
-    prevNodeCountRef.current = currentCount;
+    initializeLayout();
 
-    // Cleanup timeouts on unmount or when dependencies change
-    return () => {
-      if (initTimeoutId) clearTimeout(initTimeoutId);
-      if (changeTimeoutId) clearTimeout(changeTimeoutId);
-    };
-  }, [nodes.length, isLayouting]);
+    return () => { cancelled = true; };
+  }, [patchStore, diagnostics, layoutStore, setNodes, setEdges, fitView]);
 
-  // Setup bidirectional sync and editor handle
+  // Setup structure reaction AFTER initialization
   useEffect(() => {
-    // Initial sync from PatchStore
-    syncPatchToReactFlow(patchStore.patch, setNodes, setEdges, diagnostics);
+    if (!isInitialized) return;
 
-    // Setup MobX reaction for external changes
-    const disposeReaction = setupPatchToReactFlowReaction(syncHandle, diagnostics);
+    const disposeReaction = setupStructureReaction(syncHandle, diagnostics);
 
     // Create handle for EditorContext
     const handle: ReactFlowEditorHandle = {
       async addBlock(blockId: BlockId, blockType: string): Promise<void> {
-        addBlockToReactFlow(blockId, blockType, setNodes, diagnostics);
+        addBlockToReactFlow(blockId, blockType, nodesRef.current, layoutStore, setNodes, diagnostics);
       },
 
       async removeBlock(blockId: BlockId): Promise<void> {
         setNodes((nodes) => nodes.filter((node) => node.id !== blockId));
+        layoutStore.removePosition(blockId);
       },
 
       async zoomToFit(): Promise<void> {
@@ -388,15 +438,14 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = observer(({
       },
     };
 
-    // Create adapter and notify parent (App.tsx will manage EditorContext)
+    // Create adapter and notify parent
     const adapter = createReactFlowEditorAdapter(handle);
     onEditorReady?.(adapter);
 
-    // Cleanup
     return () => {
       disposeReaction();
     };
-  }, [onEditorReady, fitView, patchStore, diagnostics]);
+  }, [isInitialized, onEditorReady, fitView, patchStore, diagnostics, layoutStore, syncHandle, setNodes]);
 
   // Handle delete key
   const handleKeyDown = useCallback(
@@ -428,11 +477,9 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = observer(({
     if (!wrapperRef.current) return;
     const wrapper = wrapperRef.current;
 
-    // Force explicit dimensions
     const updateDimensions = () => {
       const rect = wrapper.getBoundingClientRect();
 
-      // If parent has no dimensions, try to inherit from parent container
       if (rect.width === 0 || rect.height === 0) {
         const parent = wrapper.parentElement;
         if (parent) {
@@ -443,7 +490,6 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = observer(({
       }
     };
 
-    // Update dimensions immediately and on window resize
     updateDimensions();
     const resizeObserver = new ResizeObserver(updateDimensions);
     resizeObserver.observe(wrapper);
@@ -464,6 +510,23 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = observer(({
 
     return `${edge.source}:${edge.sourceHandle} → ${edge.target}:${edge.targetHandle}`;
   }, [debug.hoveredEdgeId, edges]);
+
+  // Loading state: don't render ReactFlow until layout is computed
+  if (!isInitialized) {
+    return (
+      <div className="react-flow-loading" style={{
+        width: '100%',
+        height: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: '#666',
+        fontSize: '0.875rem',
+      }}>
+        Computing layout...
+      </div>
+    );
+  }
 
   return (
     <>
@@ -488,9 +551,8 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = observer(({
       >
         <Background />
         <Controls />
-        <MiniMap 
+        <MiniMap
           nodeColor={(node) => {
-            // Use node type for colors - match dark theme
             const type = node.data?.blockType || '';
             if (type.includes('Render')) return '#4ecdc4';
             if (type.includes('Field')) return '#a18cd1';

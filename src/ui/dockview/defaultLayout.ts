@@ -49,6 +49,7 @@ export function createDefaultLayout(api: DockviewApi, callbacks: LayoutCallbacks
   const leftBottomPanels = PANEL_DEFINITIONS.filter((p) => p.group === 'left-bottom');
   const centerPanels = PANEL_DEFINITIONS.filter((p) => p.group === 'center');
   const bottomLeftPanels = PANEL_DEFINITIONS.filter((p) => p.group === 'bottom-left');
+  const bottomRightPanels = PANEL_DEFINITIONS.filter((p) => p.group === 'bottom-right');
   const floatingPanels = PANEL_DEFINITIONS.filter((p) => p.floating);
 
   // Validate we have required panels
@@ -189,7 +190,18 @@ export function createDefaultLayout(api: DockviewApi, callbacks: LayoutCallbacks
     }
   });
 
-  // Note: bottom-right group intentionally left empty (available for docking)
+  // Add bottom-right panels (Debug miniview, etc.)
+  bottomRightPanels.forEach((panel) => {
+    api.addPanel({
+      id: panel.id,
+      component: panel.component,
+      title: panel.title,
+      position: {
+        referenceGroup: groups['bottom-right'].id,
+        direction: 'within',
+      },
+    });
+  });
 
   // ============================================================================
   // PHASE 3: Set initial group sizes

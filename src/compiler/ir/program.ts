@@ -186,7 +186,8 @@ export type ShapeDescIR =
   | { readonly kind: 'vec'; readonly lanes: 2 | 3 | 4; readonly element: 'number' }
   | { readonly kind: 'struct'; readonly fields: readonly StructFieldIR[] }
   | { readonly kind: 'array'; readonly length: number; readonly element: ShapeDescIR }
-  | { readonly kind: 'object'; readonly class: string };
+  | { readonly kind: 'object'; readonly class: string }
+  | { readonly kind: 'shape' }; // Shape2D descriptor (topology + params)
 
 export interface StructFieldIR {
   readonly name: string;

@@ -17,6 +17,7 @@ import { makeAutoObservable, runInAction } from 'mobx';
 import { debugService, type EdgeValueResult, type DebugServiceStatus } from '../services/DebugService';
 import type { SignalType } from '../core/canonical-types';
 import type { ValueSlot } from '../types';
+import type { DebugTargetKey } from '../ui/debug-viz/types';
 
 /**
  * Format a numeric value based on its signal type.
@@ -52,6 +53,9 @@ export class DebugStore {
 
   /** Currently tracked field slot (for cleanup on unhover) */
   private _trackedFieldSlot: ValueSlot | null = null;
+
+  /** Currently tracked history key (for signal micro-history) */
+  private _trackedHistoryKey: DebugTargetKey | null = null;
 
   /** Polling interval handle */
   private pollInterval: ReturnType<typeof setInterval> | null = null;
@@ -91,19 +95,25 @@ export class DebugStore {
    * If edge is a field, automatically tracks it for demand-driven materialization.
    */
   setHoveredEdge(edgeId: string | null): void {
-    // Untrack previous field if switching edges
+    // Untrack previous if switching edges
     if (this.hoveredEdgeId !== edgeId) {
       this.untrackCurrentField();
+      this.untrackCurrentHistory();
     }
 
     this.hoveredEdgeId = edgeId;
 
     if (edgeId && this.enabled) {
-      // Check if this edge is a field and track it
       const meta = debugService.getEdgeMetadata(edgeId);
       if (meta?.cardinality === 'field') {
+        // Field edge: track for demand-driven materialization
         debugService.trackField(meta.slotId);
         this._trackedFieldSlot = meta.slotId;
+      } else if (meta?.cardinality === 'signal') {
+        // Signal edge: track in HistoryService for micro-history
+        const key: DebugTargetKey = { kind: 'edge', edgeId };
+        debugService.historyService.track(key);
+        this._trackedHistoryKey = key;
       }
       this.startPolling();
     } else {
@@ -212,10 +222,21 @@ export class DebugStore {
   }
 
   /**
+   * Untrack the currently tracked history key.
+   */
+  private untrackCurrentHistory(): void {
+    if (this._trackedHistoryKey !== null) {
+      debugService.historyService.untrack(this._trackedHistoryKey);
+      this._trackedHistoryKey = null;
+    }
+  }
+
+  /**
    * Cleanup resources.
    */
   dispose(): void {
     this.stopPolling();
     this.untrackCurrentField();
+    this.untrackCurrentHistory();
   }
 }

@@ -15,6 +15,7 @@ import { DiagnosticConsolePanel } from './panels/DiagnosticConsolePanel';
 import { LogPanel } from './panels/LogPanel';
 import { ContinuityPanel } from './panels/ContinuityPanel';
 import { CompilationInspectorPanel } from './panels/CompilationInspectorPanel';
+import { DebugMiniViewPanel } from './panels/DebugMiniViewPanel';
 
 /**
  * Panel group assignments for layout.
@@ -60,6 +61,7 @@ export const PANEL_DEFINITIONS: PanelDefinition[] = [
   { id: 'log-panel', component: 'log-panel', title: 'Logs', group: 'bottom-left' },
   { id: 'continuity-panel', component: 'continuity-panel', title: 'Continuity', group: 'bottom-left' },
   { id: 'compilation-inspector', component: 'compilation-inspector', title: 'Compilation', group: 'bottom-left' },
+  { id: 'debug-miniview', component: 'debug-miniview', title: 'Debug', group: 'bottom-right' },
 
   // Floating
   { id: 'preview', component: 'preview', title: 'Preview', group: 'preview-float', floating: true },
@@ -80,4 +82,5 @@ export const PANEL_COMPONENTS = {
   'log-panel': LogPanel,
   'continuity-panel': ContinuityPanel,
   'compilation-inspector': CompilationInspectorPanel,
+  'debug-miniview': DebugMiniViewPanel,
 };

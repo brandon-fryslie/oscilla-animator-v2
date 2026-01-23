@@ -147,7 +147,7 @@ function evaluateSigExpr(
     }
 
         case 'time': {
-      const timeExpr = expr as { which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'pulse' | 'progress' | 'palette' | 'energy' };
+      const timeExpr = expr as { which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'progress' | 'palette' | 'energy' };
       switch (timeExpr.which) {
         case 'tMs':
           return state.time.tMs;
@@ -157,8 +157,6 @@ function evaluateSigExpr(
           return state.time.phaseA;
         case 'phaseB':
           return state.time.phaseB;
-        case 'pulse':
-          return state.time.pulse;
         case 'progress':
           return state.time.progress ?? 0;
         case 'palette':
@@ -199,9 +197,9 @@ function evaluateSigExpr(
     }
 
     case 'shapeRef': {
-      // ShapeRef expressions represent shape topology + params
-      // At signal evaluation time, we don't evaluate shapes - they're handled by the renderer
-      // Return 0 as a placeholder (shapes are not numeric values)
+      // ShapeRef signals are not evaluated as numeric values.
+      // The ScheduleExecutor handles shape2d record writes directly.
+      // Return 0 as a safe numeric fallback if this is ever called.
       return 0;
     }
 
@@ -309,16 +307,6 @@ function applySignalKernel(name: string, values: number[]): number {
       return Math.tan(p * 2 * Math.PI);
     }
 
-    // DEPRECATED: Legacy aliases - will be removed in future version
-    case 'sin':
-      console.warn(`Signal kernel 'sin' is deprecated. Use 'oscSin' for phase-based oscillation.`);
-      return applySignalKernel('oscSin', values);
-    case 'cos':
-      console.warn(`Signal kernel 'cos' is deprecated. Use 'oscCos' for phase-based oscillation.`);
-      return applySignalKernel('oscCos', values);
-    case 'tan':
-      console.warn(`Signal kernel 'tan' is deprecated. Use 'oscTan' for phase-based oscillation.`);
-      return applySignalKernel('oscTan', values);
 
     // Waveform kernels - input is phase (0..1), output is -1..1 (auto-wrapped)
     case 'triangle': {

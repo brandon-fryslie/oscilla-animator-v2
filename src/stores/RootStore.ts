@@ -18,6 +18,7 @@ import { DiagnosticsStore } from './DiagnosticsStore';
 import { ContinuityStore } from './ContinuityStore';
 import { PortHighlightStore } from './PortHighlightStore';
 import { DebugStore } from './DebugStore';
+import { LayoutStore } from './LayoutStore';
 import { EventHub } from '../events/EventHub';
 import { DiagnosticHub } from '../diagnostics/DiagnosticHub';
 
@@ -30,6 +31,7 @@ export class RootStore {
   readonly continuity: ContinuityStore;
   readonly portHighlight: PortHighlightStore;
   readonly debug: DebugStore;
+  readonly layout: LayoutStore;
   readonly events: EventHub;
 
   // Patch revision tracking (for diagnostics)
@@ -66,6 +68,9 @@ export class RootStore {
 
     // Create DebugStore
     this.debug = new DebugStore();
+
+    // Create LayoutStore (node positions - UI state, not topology)
+    this.layout = new LayoutStore();
 
     // Wire up callback for MobX reactivity
     this.diagnosticHub.setOnRevisionChange(() => this.diagnostics.incrementRevision());

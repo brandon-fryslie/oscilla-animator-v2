@@ -1,14 +1,14 @@
 /**
  * Bidirectional Sync between PatchStore and ReactFlow Editor
  *
- * PatchStore is the source of truth.
- * ReactFlow editor is a UI layer that syncs with PatchStore.
+ * PatchStore is the source of truth for graph TOPOLOGY (blocks, edges).
+ * LayoutStore is the source of truth for node POSITIONS.
  *
- * Sync flow:
- * 1. PatchStore → ReactFlow: Load initial state, react to external changes
- * 2. ReactFlow → PatchStore: User edits in editor update PatchStore
- *
- * Uses isSyncing guard to prevent infinite loops.
+ * Sync strategy:
+ * - Reconciliation: adds/removes/updates nodes without destroying positions
+ * - Positions are read from LayoutStore, never from PatchStore
+ * - User drags persist to LayoutStore
+ * - Full re-layout only on explicit user action (Auto Arrange)
  */
 
 import { reaction } from 'mobx';
@@ -16,6 +16,7 @@ import type { Node, Edge as ReactFlowEdge, OnNodesChange, OnEdgesChange, OnConne
 import { applyNodeChanges, applyEdgeChanges } from 'reactflow';
 import type { Patch, BlockId } from '../../types';
 import type { PatchStore } from '../../stores/PatchStore';
+import type { LayoutStore } from '../../stores/LayoutStore';
 import type { DiagnosticsStore } from '../../stores/DiagnosticsStore';
 import { getBlockDefinition } from '../../blocks/registry';
 import { createNodeFromBlock, createEdgeFromPatchEdge, type OscillaNode } from './nodes';
@@ -27,96 +28,196 @@ let isSyncing = false;
 
 /**
  * Sync state holder.
- * Stores ReactFlow nodes/edges state setters and PatchStore reference.
  */
 export interface SyncHandle {
   patchStore: PatchStore;
+  layoutStore: LayoutStore;
   setNodes: React.Dispatch<React.SetStateAction<Node[]>>;
   setEdges: React.Dispatch<React.SetStateAction<ReactFlowEdge[]>>;
+  getNodes: () => Node[];
 }
 
 /**
- * Load PatchStore state into ReactFlow.
- * Called on initial mount and when PatchStore changes externally.
+ * Default position offset for new blocks without a stored position.
+ * Places them to the right and below existing nodes.
  */
-export function syncPatchToReactFlow(
-  patch: Patch,
-  setNodes: React.Dispatch<React.SetStateAction<Node[]>>,
-  setEdges: React.Dispatch<React.SetStateAction<ReactFlowEdge[]>>,
-  diagnostics: DiagnosticsStore
-): void {
-  if (isSyncing) return;
-  isSyncing = true;
+const NEW_BLOCK_OFFSET = { x: 50, y: 50 };
 
-  try {
-    // Build blockDefs map for looking up connected block labels
-    const blockDefs = new Map<string, ReturnType<typeof getBlockDefinition>>();
-    for (const block of patch.blocks.values()) {
-      if (!blockDefs.has(block.type)) {
-        const def = getBlockDefinition(block.type);
-        if (def) blockDefs.set(block.type, def);
-      }
-    }
-
-    // Create nodes from blocks
-    const nodes: OscillaNode[] = [];
-    let x = 100;
-    let y = 100;
-
-    for (const block of patch.blocks.values()) {
-      const def = blockDefs.get(block.type);
-      if (!def) {
-        diagnostics.log({
-          level: 'warn',
-          message: `Block definition not found: ${block.type}`,
-          data: { blockId: block.id, blockType: block.type },
-        });
-        continue;
-      }
-
-      // Pass edges, blocks, and blockDefs to compute connection info
-      const node = createNodeFromBlock(block, def, patch.edges, patch.blocks, blockDefs as any);
-      // Position nodes in simple grid layout
-      node.position = { x, y };
-      nodes.push(node);
-
-      x += 250;
-      if (x > 1000) {
-        x = 100;
-        y += 150;
-      }
-    }
-
-    // Create edges from patch edges (with adapter labels)
-    const edges = patch.edges.map(e => createEdgeFromPatchEdge(e, patch.blocks));
-
-    setNodes(nodes);
-    setEdges(edges);
-  } finally {
-    isSyncing = false;
+/**
+ * Find a position for a new block that doesn't overlap existing nodes.
+ * Uses a simple bounding-box approach: place to the right of the rightmost node.
+ */
+function findEmptyPosition(existingNodes: Node[]): { x: number; y: number } {
+  if (existingNodes.length === 0) {
+    return { x: 100, y: 100 };
   }
+
+  // Find bounding box of existing nodes
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const node of existingNodes) {
+    const nodeRight = node.position.x + (node.width ?? 200);
+    const nodeBottom = node.position.y + (node.height ?? 120);
+    if (nodeRight > maxX) maxX = nodeRight;
+    if (nodeBottom > maxY) maxY = nodeBottom;
+  }
+
+  // Place new block to the right with some padding
+  return { x: maxX + NEW_BLOCK_OFFSET.x, y: 100 };
 }
 
 /**
- * Setup MobX reaction to sync PatchStore changes back to ReactFlow.
- * This enables external changes (e.g., from TableView) to reflect in editor.
+ * Build nodes and edges from a Patch, using LayoutStore for positions.
+ * This is the core reconciliation function.
+ *
+ * For each block in patch:
+ *  - If a node already exists: preserve its position, update data
+ *  - If no node exists: use LayoutStore position, or find empty space
+ *
+ * Removed blocks are filtered out.
  */
-export function setupPatchToReactFlowReaction(handle: SyncHandle, diagnostics: DiagnosticsStore): () => void {
+export function reconcileNodes(
+  patch: Patch,
+  currentNodes: Node[],
+  layoutStore: LayoutStore,
+  diagnostics: DiagnosticsStore
+): { nodes: Node[]; edges: ReactFlowEdge[] } {
+  // Build blockDefs map for looking up connected block labels
+  const blockDefs = new Map<string, ReturnType<typeof getBlockDefinition>>();
+  for (const block of patch.blocks.values()) {
+    if (!blockDefs.has(block.type)) {
+      const def = getBlockDefinition(block.type);
+      if (def) blockDefs.set(block.type, def);
+    }
+  }
+
+  // Build map of existing nodes by ID for fast lookup
+  const existingNodeMap = new Map<string, Node>();
+  for (const node of currentNodes) {
+    existingNodeMap.set(node.id, node);
+  }
+
+  // Reconcile nodes
+  const nodes: OscillaNode[] = [];
+  const patchBlockIds = new Set<string>();
+
+  for (const block of patch.blocks.values()) {
+    patchBlockIds.add(block.id);
+
+    const def = blockDefs.get(block.type);
+    if (!def) {
+      diagnostics.log({
+        level: 'warn',
+        message: `Block definition not found: ${block.type}`,
+        data: { blockId: block.id, blockType: block.type },
+      });
+      continue;
+    }
+
+    // Create node with updated data
+    const node = createNodeFromBlock(block, def, patch.edges, patch.blocks, blockDefs as any);
+
+    // Determine position (priority: existing node > LayoutStore > empty space)
+    const existingNode = existingNodeMap.get(block.id);
+    if (existingNode) {
+      // Preserve current rendered position
+      node.position = { ...existingNode.position };
+    } else {
+      // New node: check LayoutStore
+      const storedPos = layoutStore.getPosition(block.id as BlockId);
+      if (storedPos) {
+        node.position = { x: storedPos.x, y: storedPos.y };
+      } else {
+        // No stored position: find empty space
+        node.position = findEmptyPosition([...nodes, ...currentNodes]);
+        // Persist this computed position
+        layoutStore.setPosition(block.id as BlockId, node.position);
+      }
+    }
+
+    nodes.push(node);
+  }
+
+  // Clean up positions for removed blocks
+  for (const node of currentNodes) {
+    if (!patchBlockIds.has(node.id)) {
+      layoutStore.removePosition(node.id as BlockId);
+    }
+  }
+
+  // Build edges from patch (edges don't have positions)
+  const edges = patch.edges.map(e => createEdgeFromPatchEdge(e, patch.blocks));
+
+  return { nodes, edges };
+}
+
+/**
+ * Build initial nodes and edges from a Patch (for layout computation).
+ * Returns nodes with placeholder positions (0,0) - caller should run ELK layout.
+ */
+export function buildNodesAndEdges(
+  patch: Patch,
+  diagnostics: DiagnosticsStore
+): { nodes: OscillaNode[]; edges: ReactFlowEdge[] } {
+  const blockDefs = new Map<string, ReturnType<typeof getBlockDefinition>>();
+  for (const block of patch.blocks.values()) {
+    if (!blockDefs.has(block.type)) {
+      const def = getBlockDefinition(block.type);
+      if (def) blockDefs.set(block.type, def);
+    }
+  }
+
+  const nodes: OscillaNode[] = [];
+  for (const block of patch.blocks.values()) {
+    const def = blockDefs.get(block.type);
+    if (!def) {
+      diagnostics.log({
+        level: 'warn',
+        message: `Block definition not found: ${block.type}`,
+        data: { blockId: block.id, blockType: block.type },
+      });
+      continue;
+    }
+
+    const node = createNodeFromBlock(block, def, patch.edges, patch.blocks, blockDefs as any);
+    // Placeholder position - will be computed by ELK
+    node.position = { x: 0, y: 0 };
+    nodes.push(node);
+  }
+
+  const edges = patch.edges.map(e => createEdgeFromPatchEdge(e, patch.blocks));
+
+  return { nodes, edges };
+}
+
+/**
+ * Setup MobX reaction to reconcile PatchStore changes into ReactFlow.
+ * This handles external changes (e.g., from TableView, delete key, etc.).
+ * PRESERVES node positions - only adds/removes/updates node data.
+ */
+export function setupStructureReaction(
+  handle: SyncHandle,
+  diagnostics: DiagnosticsStore
+): () => void {
   return reaction(
     () => ({
       blockCount: handle.patchStore.blocks.size,
       edgeCount: handle.patchStore.edges.length,
-      // Trigger on any change - MobX will detect
     }),
     () => {
-      if (!isSyncing) {
-        // Re-sync editor from PatchStore
-        syncPatchToReactFlow(
+      if (isSyncing) return;
+      isSyncing = true;
+      try {
+        const result = reconcileNodes(
           handle.patchStore.patch,
-          handle.setNodes,
-          handle.setEdges,
+          handle.getNodes(),
+          handle.layoutStore,
           diagnostics
         );
+        handle.setNodes(result.nodes);
+        handle.setEdges(result.edges);
+      } finally {
+        isSyncing = false;
       }
     }
   );
@@ -124,7 +225,8 @@ export function setupPatchToReactFlowReaction(handle: SyncHandle, diagnostics: D
 
 /**
  * Create onNodesChange handler for ReactFlow.
- * Handles node deletion.
+ * Handles node deletion and position changes.
+ * Persists drag positions to LayoutStore.
  */
 export function createNodesChangeHandler(handle: SyncHandle): OnNodesChange {
   return (changes) => {
@@ -133,16 +235,20 @@ export function createNodesChangeHandler(handle: SyncHandle): OnNodesChange {
     // Apply changes to local state first
     handle.setNodes((nodes) => applyNodeChanges(changes, nodes));
 
-    // Handle removal changes - sync to PatchStore
+    // Handle specific change types
     for (const change of changes) {
       if (change.type === 'remove') {
         const nodeId = change.id as BlockId;
         isSyncing = true;
         try {
           handle.patchStore.removeBlock(nodeId);
+          handle.layoutStore.removePosition(nodeId);
         } finally {
           isSyncing = false;
         }
+      } else if (change.type === 'position' && change.position) {
+        // Persist drag position to LayoutStore
+        handle.layoutStore.setPosition(change.id as BlockId, change.position);
       }
     }
   };
@@ -235,11 +341,14 @@ export function createConnectHandler(handle: SyncHandle): OnConnect {
 }
 
 /**
- * Add a block to ReactFlow at the center of the viewport.
+ * Add a block to ReactFlow at a smart position.
+ * Finds empty space near existing nodes.
  */
 export function addBlockToReactFlow(
   blockId: BlockId,
   blockType: string,
+  currentNodes: Node[],
+  layoutStore: LayoutStore,
   setNodes: React.Dispatch<React.SetStateAction<Node[]>>,
   diagnostics: DiagnosticsStore
 ): void {
@@ -266,8 +375,12 @@ export function addBlockToReactFlow(
     [] // No edges for new block
   );
 
-  // Position at reasonable default (center logic would require viewport access)
-  node.position = { x: 250, y: 250 };
+  // Find empty position near existing nodes
+  const position = findEmptyPosition(currentNodes);
+  node.position = position;
+
+  // Persist to LayoutStore
+  layoutStore.setPosition(blockId, position);
 
   setNodes((nodes) => [...nodes, node]);
 }

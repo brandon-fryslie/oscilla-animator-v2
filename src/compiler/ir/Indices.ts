@@ -34,6 +34,9 @@ export type FieldExprId = number & { readonly __brand: 'FieldExprId' };
 /** Dense index for event expressions. */
 export type EventExprId = number & { readonly __brand: 'EventExprId' };
 
+/** Dense index for event slots (distinct from ValueSlot — events use boolean storage). */
+export type EventSlotId = number & { readonly __brand: 'EventSlotId' };
+
 /** Dense index for transform chains. */
 export type TransformChainId = number & { readonly __brand: 'TransformChainId' };
 
