@@ -7,7 +7,8 @@
       "Skill(do:it)",
       "Skill(do:it-skill)",
       "Skill(do:plan-skill)",
-      "Skill(do:plan)"
+      "Skill(do:plan)",
+      "Skill(superpowers:brainstorming)"
     ]
   },
   "enableAllProjectMcpServers": true,
