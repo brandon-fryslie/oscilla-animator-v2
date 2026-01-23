@@ -311,12 +311,16 @@ Feeling stuck is a signal that a lower level's design isn't quite right — not 
 
 - [ ] RenderAssembler has a projection step that accepts: world position buffers + camera params
   > C3 impl-02 0123 "projectInstances() accepts Float32Array(N*3) + CameraParams, exported from RenderAssembler"
+  > C4 reviewer-05 0123 "signature verified for both camera modes, function accepts inputs as arguments not state"
 - [ ] RenderAssembler projection step outputs: `screenPosition: Float32Array`, `screenRadius: Float32Array`, `depth: Float32Array`, `visible: Uint8Array`
   > C3 impl-02 0123 "ProjectionOutput struct with correct types, tested N=9"
+  > C4 reviewer-05 0123 "all four types verified, lengths checked for correct stride (2 for positions, 1 for others)"
 - [ ] RenderAssembler does NOT mutate world-space input buffers (snapshot before === snapshot after)
   > C3 impl-02 0123 "snapshot comparison before/after both ortho and persp, toEqual verified"
+  > C5 reviewer-05 0123 "snapshot before/after both modes, exceeds requirements"
 - [ ] RenderPass struct contains all four screen-space fields with correct lengths
   > C3 impl-02 0123 "screenPosition(N*2), screenRadius(N), depth(N), visible(N) all verified"
+  > C3 reviewer-05 0123 "tests ProjectionOutput not RenderPassIR; gap covered by integration tests when implemented"
 
 ### Integration Tests
 
