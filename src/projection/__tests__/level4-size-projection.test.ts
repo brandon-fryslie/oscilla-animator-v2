@@ -33,25 +33,35 @@ describe('Level 4 Unit Tests', () => {
 
   it('projectWorldRadiusToScreenRadius(0.05, (0.5, 0.5, 0), perspDefaults) → some value != 0.05', () => {
     const result = projectWorldRadiusToScreenRadiusPerspective(0.05, 0.5, 0.5, 0, perspCam);
+    // Perspective changes the radius (it's NOT identity)
     expect(result).not.toBe(0.05);
     expect(Number.isFinite(result)).toBe(true);
     expect(result).toBeGreaterThan(0);
+
+    // Verify against expected formula: screenR = worldR / (viewZ * tan(fovY/2))
+    // For (0.5, 0.5, 0): camera at (0.5, ~1.65, ~1.64), forward toward (0.5, 0.5, 0)
+    // viewZ = distance from camera to target along view axis ≈ 2.0 (derivation distance)
+    // Expected: 0.05 / (2.0 * tan(22.5°)) ≈ 0.05 / (2.0 * 0.4142) ≈ 0.0604
+    // Use approximate match to verify formula correctness
+    expect(result).toBeCloseTo(0.05 / (2.0 * Math.tan(perspCam.fovY * 0.5)), 2);
   });
 
   it('Under perspective: same radius at z=0 vs z=0.5 → farther instance has smaller screen radius', () => {
-    // Camera is at approximately (0.5, 1.65, 1.64) looking at (0.5, 0.5, 0)
-    // z=0 is the target plane, z=0.5 is closer to the camera (camera z ≈ 1.64)
-    // "Farther" from camera means larger viewZ distance
-    const rAtZ0 = projectWorldRadiusToScreenRadiusPerspective(0.05, 0.5, 0.5, 0.0, perspCam);
+    // Camera is at approximately (0.5, 1.65, 1.64) looking at target (0.5, 0.5, 0).
+    // viewZ = projection onto forward axis; camera distance from target ≈ 2.0.
+    // z=0.5 is closer to camera (smaller viewZ) → larger screen radius
+    // z=0.0 is farther from camera (viewZ ≈ 2.0) → smaller screen radius
+    // z=-1.0 is even farther → even smaller
     const rAtZ05 = projectWorldRadiusToScreenRadiusPerspective(0.05, 0.5, 0.5, 0.5, perspCam);
-
-    // z=0.5 is closer to camera → larger screen radius
-    // z=0.0 is farther from camera → smaller screen radius
-    expect(rAtZ05).toBeGreaterThan(rAtZ0);
-
-    // Alternative: test z=0 vs z=-1 (z=-1 is even farther from camera)
+    const rAtZ0 = projectWorldRadiusToScreenRadiusPerspective(0.05, 0.5, 0.5, 0.0, perspCam);
     const rAtZNeg1 = projectWorldRadiusToScreenRadiusPerspective(0.05, 0.5, 0.5, -1.0, perspCam);
-    expect(rAtZNeg1).toBeLessThan(rAtZ0); // Farther → smaller
+
+    // Closer → larger, farther → smaller (monotonic with distance)
+    expect(rAtZ05).toBeGreaterThan(rAtZ0);
+    expect(rAtZ0).toBeGreaterThan(rAtZNeg1);
+    // All positive and finite
+    expect(rAtZ05).toBeGreaterThan(0);
+    expect(rAtZNeg1).toBeGreaterThan(0);
   });
 
   it('Under ortho: same radius at z=0 vs z=0.5 → screen radius is identical', () => {
@@ -61,11 +71,15 @@ describe('Level 4 Unit Tests', () => {
   });
 
   it('Screen radius is never negative or NaN', () => {
-    // Test many positions under both modes
+    // Test many positions under both modes, including edge cases
     const positions: [number, number, number][] = [
       [0.5, 0.5, 0], [0, 0, 0], [1, 1, 0],
       [0.5, 0.5, 0.5], [0.5, 0.5, -1],
       [0.1, 0.9, 0.3], [0.8, 0.2, -0.5],
+      // Behind camera: z=10 is behind the camera at z≈1.64 (viewZ <= 0)
+      [0.5, 0.5, 10],
+      // Very far from camera
+      [0.5, 0.5, -50],
     ];
 
     for (const [x, y, z] of positions) {
@@ -77,6 +91,10 @@ describe('Level 4 Unit Tests', () => {
       expect(perspR).toBeGreaterThanOrEqual(0);
       expect(Number.isNaN(perspR)).toBe(false);
     }
+
+    // Specifically verify behind-camera returns 0 (not negative or NaN)
+    const behindCam = projectWorldRadiusToScreenRadiusPerspective(0.05, 0.5, 0.5, 10, perspCam);
+    expect(behindCam).toBe(0);
   });
 
   it('Screen radius of 0 worldRadius is 0 (zero stays zero)', () => {
@@ -125,42 +143,61 @@ describe('Level 4 Integration Tests', () => {
   });
 
   it('Ratio between screen radii under perspective matches 1/distance falloff', () => {
-    const perspCam2 = PERSP_CAMERA_DEFAULTS;
+    // The formula: screenR = worldR / (viewZ * tan(fovY/2))
+    // For two points with same worldR at different viewZ distances:
+    //   rA / rB = viewZ_B / viewZ_A  (the 1/distance property)
+    //
+    // We independently compute viewZ for each point to verify the ratio.
+    // Camera at (0.5, ~1.65, ~1.64), target (0.5, 0.5, 0), distance=2.0
+    // Forward vector = normalize(target - camPos)
+    const cam = PERSP_CAMERA_DEFAULTS;
+    const fwdX = cam.camTargetX - cam.camPosX;
+    const fwdY = cam.camTargetY - cam.camPosY;
+    const fwdZ = cam.camTargetZ - cam.camPosZ;
+    const fwdLen = Math.sqrt(fwdX * fwdX + fwdY * fwdY + fwdZ * fwdZ);
+    const nfX = fwdX / fwdLen;
+    const nfY = fwdY / fwdLen;
+    const nfZ = fwdZ / fwdLen;
 
-    // Two instances at different distances from camera (same XY)
-    const rClose = projectWorldRadiusToScreenRadiusPerspective(0.05, 0.5, 0.5, 0.5, perspCam2);
-    const rFar = projectWorldRadiusToScreenRadiusPerspective(0.05, 0.5, 0.5, 0.0, perspCam2);
+    // Compute viewZ for points at (0.5, 0.5, z) for z = 0.5, 0.25, 0.0
+    function computeViewZ(z: number): number {
+      const dx = 0.5 - cam.camPosX;
+      const dy = 0.5 - cam.camPosY;
+      const dz = z - cam.camPosZ;
+      return dx * nfX + dy * nfY + dz * nfZ;
+    }
 
-    // Both are at (0.5, 0.5) which is center of the scene.
-    // The ratio should be viewZ_far / viewZ_close (inverse distance relationship).
-    // We can verify the ratio is consistent with 1/d scaling.
+    const viewZClose = computeViewZ(0.5);
+    const viewZMiddle = computeViewZ(0.25);
+    const viewZFar = computeViewZ(0.0);
 
-    // Compute expected ratio: if screenR = worldR / (viewZ * tan(fov/2))
-    // then ratio = rClose/rFar = viewZ_far / viewZ_close
-    const ratio = rClose / rFar;
+    // All in front of camera
+    expect(viewZClose).toBeGreaterThan(0);
+    expect(viewZMiddle).toBeGreaterThan(0);
+    expect(viewZFar).toBeGreaterThan(0);
+    // Ordering: close < middle < far (viewZ increases with distance)
+    expect(viewZClose).toBeLessThan(viewZMiddle);
+    expect(viewZMiddle).toBeLessThan(viewZFar);
 
-    // The ratio should be > 1 (close is bigger)
-    expect(ratio).toBeGreaterThan(1);
-
-    // Verify with a third point: if 1/d scaling holds, then
-    // r1/r2 should equal d2/d1 for any two points along the same view ray
-    const rMiddle = projectWorldRadiusToScreenRadiusPerspective(0.05, 0.5, 0.5, 0.25, perspCam2);
-
-    // Close/Middle should be less than Close/Far
-    const ratioCloseMiddle = rClose / rMiddle;
-    const ratioCloseFar = rClose / rFar;
-    expect(ratioCloseMiddle).toBeLessThan(ratioCloseFar);
+    // Get actual screen radii from the function
+    const rClose = projectWorldRadiusToScreenRadiusPerspective(0.05, 0.5, 0.5, 0.5, cam);
+    const rMiddle = projectWorldRadiusToScreenRadiusPerspective(0.05, 0.5, 0.5, 0.25, cam);
+    const rFar = projectWorldRadiusToScreenRadiusPerspective(0.05, 0.5, 0.5, 0.0, cam);
 
     // All positive
     expect(rClose).toBeGreaterThan(0);
     expect(rMiddle).toBeGreaterThan(0);
     expect(rFar).toBeGreaterThan(0);
 
-    // Verify the 1/d property more precisely:
-    // screenR = worldR / (viewZ * tan(fov/2))
-    // For two points at same (x,y) but different z, both on the same view ray through center:
-    // rA / rB = viewZ_B / viewZ_A
-    // This is exact within floating-point tolerance
-    expect(ratio).toBeCloseTo(ratioCloseFar, 5);
+    // Verify the 1/distance property:
+    // rClose/rFar should equal viewZFar/viewZClose
+    const actualRatio = rClose / rFar;
+    const expectedRatio = viewZFar / viewZClose;
+    expect(actualRatio).toBeCloseTo(expectedRatio, 10);
+
+    // Also verify rClose/rMiddle = viewZMiddle/viewZClose
+    const actualRatio2 = rClose / rMiddle;
+    const expectedRatio2 = viewZMiddle / viewZClose;
+    expect(actualRatio2).toBeCloseTo(expectedRatio2, 10);
   });
 });
