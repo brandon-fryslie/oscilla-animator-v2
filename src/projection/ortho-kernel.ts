@@ -143,3 +143,53 @@ export function projectFieldOrtho(
     outVisible[i] = (worldZ >= near && worldZ <= far) ? 1 : 0;
   }
 }
+
+// =============================================================================
+// Size Projection (Ortho)
+// =============================================================================
+
+/**
+ * Project a world-space radius to screen-space radius under orthographic projection.
+ *
+ * Under ortho: screenRadius === worldRadius (identity, no foreshortening).
+ * The worldPos parameter is accepted for interface compatibility with the
+ * perspective variant but is unused.
+ *
+ * @param worldRadius - World-space radius
+ * @param _worldX - World X (unused in ortho)
+ * @param _worldY - World Y (unused in ortho)
+ * @param _worldZ - World Z (unused in ortho)
+ * @param _camera - Ortho camera params (unused for size)
+ * @returns Screen-space radius (=== worldRadius for ortho)
+ */
+export function projectWorldRadiusToScreenRadiusOrtho(
+  worldRadius: number,
+  _worldX: number,
+  _worldY: number,
+  _worldZ: number,
+  _camera: OrthoCameraParams,
+): number {
+  return worldRadius;
+}
+
+/**
+ * Project a field of world-space radii to screen-space under ortho.
+ * Identity: output === input for all instances.
+ *
+ * @param worldRadii - Input: Float32Array(N) world-space radii
+ * @param worldPositions - Input: Float32Array(N*3) world positions (unused in ortho)
+ * @param N - Number of instances
+ * @param _camera - Ortho camera params (unused for size)
+ * @param outScreenRadii - Output: Float32Array(N) screen-space radii
+ */
+export function projectFieldRadiusOrtho(
+  worldRadii: Float32Array,
+  _worldPositions: Float32Array,
+  N: number,
+  _camera: OrthoCameraParams,
+  outScreenRadii: Float32Array,
+): void {
+  for (let i = 0; i < N; i++) {
+    outScreenRadii[i] = worldRadii[i];
+  }
+}

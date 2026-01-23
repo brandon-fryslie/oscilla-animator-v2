@@ -320,3 +320,95 @@ export function projectFieldPerspective(
     outVisible[i] = (viewZ >= near && viewZ <= far) ? 1 : 0;
   }
 }
+
+// =============================================================================
+// Size Projection (Perspective)
+// =============================================================================
+
+/**
+ * Project a world-space radius to screen-space radius under perspective projection.
+ *
+ * Under perspective, apparent size shrinks with distance from camera (1/viewZ falloff).
+ * The formula: screenRadius = worldRadius / (viewZ * tanHalfFov)
+ * This is the same factor used in the perspective divide for positions.
+ *
+ * @param worldRadius - World-space radius
+ * @param worldX - World X (needed for view-space distance computation)
+ * @param worldY - World Y
+ * @param worldZ - World Z
+ * @param camera - Perspective camera parameters
+ * @returns Screen-space radius (foreshortened by distance)
+ */
+export function projectWorldRadiusToScreenRadiusPerspective(
+  worldRadius: number,
+  worldX: number,
+  worldY: number,
+  worldZ: number,
+  camera: PerspectiveCameraParams,
+): number {
+  if (worldRadius === 0) return 0;
+
+  const basis = computeViewBasis(
+    camera.camPosX, camera.camPosY, camera.camPosZ,
+    camera.camTargetX, camera.camTargetY, camera.camTargetZ,
+    camera.camUpX, camera.camUpY, camera.camUpZ,
+  );
+
+  // Compute view-space Z (distance along view axis)
+  const dx = worldX - camera.camPosX;
+  const dy = worldY - camera.camPosY;
+  const dz = worldZ - camera.camPosZ;
+  const viewZ = dx * basis.forwardX + dy * basis.forwardY + dz * basis.forwardZ;
+
+  if (viewZ <= 0) return 0;
+
+  // Same perspective scaling as position projection
+  const tanHalfFov = Math.tan(camera.fovY * 0.5);
+  return worldRadius / (viewZ * tanHalfFov);
+}
+
+/**
+ * Project a field of world-space radii to screen-space under perspective.
+ * Foreshortening: farther instances have smaller screen radii.
+ *
+ * @param worldRadii - Input: Float32Array(N) world-space radii
+ * @param worldPositions - Input: Float32Array(N*3) world positions
+ * @param N - Number of instances
+ * @param camera - Perspective camera params
+ * @param outScreenRadii - Output: Float32Array(N) screen-space radii
+ */
+export function projectFieldRadiusPerspective(
+  worldRadii: Float32Array,
+  worldPositions: Float32Array,
+  N: number,
+  camera: PerspectiveCameraParams,
+  outScreenRadii: Float32Array,
+): void {
+  const basis = computeViewBasis(
+    camera.camPosX, camera.camPosY, camera.camPosZ,
+    camera.camTargetX, camera.camTargetY, camera.camTargetZ,
+    camera.camUpX, camera.camUpY, camera.camUpZ,
+  );
+
+  const tanHalfFov = Math.tan(camera.fovY * 0.5);
+
+  for (let i = 0; i < N; i++) {
+    const worldRadius = worldRadii[i];
+    if (worldRadius === 0) {
+      outScreenRadii[i] = 0;
+      continue;
+    }
+
+    const dx = worldPositions[i * 3 + 0] - camera.camPosX;
+    const dy = worldPositions[i * 3 + 1] - camera.camPosY;
+    const dz = worldPositions[i * 3 + 2] - camera.camPosZ;
+    const viewZ = dx * basis.forwardX + dy * basis.forwardY + dz * basis.forwardZ;
+
+    if (viewZ <= 0) {
+      outScreenRadii[i] = 0;
+      continue;
+    }
+
+    outScreenRadii[i] = worldRadius / (viewZ * tanHalfFov);
+  }
+}

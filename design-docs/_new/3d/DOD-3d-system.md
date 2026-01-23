@@ -200,6 +200,7 @@ Feeling stuck is a signal that a lower level's design isn't quite right — not 
 ---
 
 ## Level 4: Size Projection (World Radius → Screen Radius)
+**Status: 8/8 items at C3. All tests passing.**
 
 **Goal:** Sizes project correctly under both modes. Still standalone math, but now combining position + size.
 
@@ -211,26 +212,26 @@ Feeling stuck is a signal that a lower level's design isn't quite right — not 
 ### Unit Tests
 
 - [ ] `projectWorldRadiusToScreenRadius(0.05, (0.5, 0.5, 0), orthoDefaults)` → `0.05` (identity)
-  >
+  > C3 impl-01 0123 "ortho returns worldRadius unchanged, toBe(0.05)"
 - [ ] `projectWorldRadiusToScreenRadius(0.05, (0.5, 0.5, 0), perspDefaults)` → some value != 0.05 (perspective changes it)
-  >
+  > C3 impl-01 0123 "perspective returns different value, >0, finite"
 - [ ] Under perspective: same radius at z=0 vs z=0.5 → the farther instance has smaller screen radius
-  >
+  > C3 impl-01 0123 "z=0 farther from cam → smaller; z=-1 even smaller"
 - [ ] Under ortho: same radius at z=0 vs z=0.5 → screen radius is identical (ortho doesn't foreshorten)
-  >
+  > C3 impl-01 0123 "ortho identity: z has no effect on radius, toBe() verified"
 - [ ] Screen radius is never negative or NaN
-  >
+  > C3 impl-01 0123 "7 positions tested under both modes, all >=0 and not NaN"
 - [ ] Screen radius of 0 worldRadius is 0 (zero stays zero)
-  >
+  > C3 impl-01 0123 "zero in → zero out for both ortho and perspective"
 
 ### Integration Tests
 
 - [ ] Compile patch with 5 instances at varied z, uniform worldRadius=0.05:
   - Ortho: all screenRadii === 0.05
   - Perspective: screenRadii are monotonically ordered by z-distance from camera
-  >
+  > C3 impl-01 0123 "5 instances z=-0.5..0.75: ortho all 0.05, persp monotonically increasing with z"
 - [ ] The ratio between screen radii under perspective matches expected `1/distance` falloff (within floating-point tolerance)
-  >
+  > C3 impl-01 0123 "ratio rClose/rFar = viewZ_far/viewZ_close, 1/d property verified"
 
 ---
 
