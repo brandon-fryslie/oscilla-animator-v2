@@ -9,6 +9,10 @@ import { PatchStore } from '../PatchStore';
 import { SelectionStore } from '../SelectionStore';
 import type { Endpoint } from '../../graph/Patch';
 
+// Import blocks to ensure they're registered
+import '../../blocks/signal-blocks';
+import '../../blocks/math-blocks';
+
 describe('SelectionStore', () => {
   let patchStore: PatchStore;
   let selectionStore: SelectionStore;
@@ -30,8 +34,8 @@ describe('SelectionStore', () => {
     });
 
     it('should clear edge selection when selecting block', () => {
-      const blockId = patchStore.addBlock('Source');
-      const targetId = patchStore.addBlock('Target');
+      const blockId = patchStore.addBlock('Oscillator');
+      const targetId = patchStore.addBlock('Add');
 
       const from: Endpoint = { kind: 'port', blockId, slotId: 'out' };
       const to: Endpoint = { kind: 'port', blockId: targetId, slotId: 'in' };
@@ -61,8 +65,8 @@ describe('SelectionStore', () => {
 
   describe('edge selection', () => {
     it('should select an edge by ID', () => {
-      const id1 = patchStore.addBlock('Source');
-      const id2 = patchStore.addBlock('Target');
+      const id1 = patchStore.addBlock('Oscillator');
+      const id2 = patchStore.addBlock('Add');
 
       const from: Endpoint = { kind: 'port', blockId: id1, slotId: 'out' };
       const to: Endpoint = { kind: 'port', blockId: id2, slotId: 'in' };
@@ -76,10 +80,10 @@ describe('SelectionStore', () => {
     });
 
     it('should clear block selection when selecting edge', () => {
-      const blockId = patchStore.addBlock('Block');
+      const blockId = patchStore.addBlock('Oscillator');
 
-      const id1 = patchStore.addBlock('Source');
-      const id2 = patchStore.addBlock('Target');
+      const id1 = patchStore.addBlock('Oscillator');
+      const id2 = patchStore.addBlock('Add');
 
       const from: Endpoint = { kind: 'port', blockId: id1, slotId: 'out' };
       const to: Endpoint = { kind: 'port', blockId: id2, slotId: 'in' };
@@ -94,8 +98,8 @@ describe('SelectionStore', () => {
     });
 
     it('should return undefined if selected edge was deleted', () => {
-      const id1 = patchStore.addBlock('Source');
-      const id2 = patchStore.addBlock('Target');
+      const id1 = patchStore.addBlock('Oscillator');
+      const id2 = patchStore.addBlock('Add');
 
       const from: Endpoint = { kind: 'port', blockId: id1, slotId: 'out' };
       const to: Endpoint = { kind: 'port', blockId: id2, slotId: 'in' };
@@ -147,9 +151,9 @@ describe('SelectionStore', () => {
 
   describe('clearSelection', () => {
     it('should clear all selection state', () => {
-      const blockId = patchStore.addBlock('Block');
-      const id1 = patchStore.addBlock('Source');
-      const id2 = patchStore.addBlock('Target');
+      const blockId = patchStore.addBlock('Oscillator');
+      const id1 = patchStore.addBlock('Oscillator');
+      const id2 = patchStore.addBlock('Add');
 
       const from: Endpoint = { kind: 'port', blockId: id1, slotId: 'out' };
       const to: Endpoint = { kind: 'port', blockId: id2, slotId: 'in' };
@@ -192,9 +196,9 @@ describe('SelectionStore', () => {
   describe('emphasis patterns - related blocks and edges', () => {
     it('should compute relatedBlockIds for upstream connections', () => {
       // Create: sourceA -> target, sourceB -> target
-      const sourceA = patchStore.addBlock('SourceA');
-      const sourceB = patchStore.addBlock('SourceB');
-      const target = patchStore.addBlock('Target');
+      const sourceA = patchStore.addBlock('Oscillator');
+      const sourceB = patchStore.addBlock('Oscillator');
+      const target = patchStore.addBlock('Add');
 
       const fromA: Endpoint = { kind: 'port', blockId: sourceA, slotId: 'out' };
       const fromB: Endpoint = { kind: 'port', blockId: sourceB, slotId: 'out' };
@@ -215,9 +219,9 @@ describe('SelectionStore', () => {
 
     it('should compute relatedBlockIds for downstream connections', () => {
       // Create: source -> targetA, source -> targetB
-      const source = patchStore.addBlock('Source');
-      const targetA = patchStore.addBlock('TargetA');
-      const targetB = patchStore.addBlock('TargetB');
+      const source = patchStore.addBlock('Oscillator');
+      const targetA = patchStore.addBlock('Add');
+      const targetB = patchStore.addBlock('Add');
 
       const fromSource: Endpoint = { kind: 'port', blockId: source, slotId: 'out' };
       const toA: Endpoint = { kind: 'port', blockId: targetA, slotId: 'in' };
@@ -238,9 +242,9 @@ describe('SelectionStore', () => {
 
     it('should compute relatedBlockIds for both upstream and downstream', () => {
       // Create: upstream -> middle -> downstream
-      const upstream = patchStore.addBlock('Upstream');
-      const middle = patchStore.addBlock('Middle');
-      const downstream = patchStore.addBlock('Downstream');
+      const upstream = patchStore.addBlock('Oscillator');
+      const middle = patchStore.addBlock('Add');
+      const downstream = patchStore.addBlock('Subtract');
 
       const fromUp: Endpoint = { kind: 'port', blockId: upstream, slotId: 'out' };
       const toMiddle: Endpoint = { kind: 'port', blockId: middle, slotId: 'in' };
@@ -261,14 +265,14 @@ describe('SelectionStore', () => {
     });
 
     it('should return empty set for relatedBlockIds when no block selected', () => {
-      patchStore.addBlock('Block');
+      patchStore.addBlock('Oscillator');
 
       expect(selectionStore.relatedBlockIds.size).toBe(0);
     });
 
     it('should exclude self-loops from relatedBlockIds', () => {
       // Create a self-loop: block -> block
-      const block = patchStore.addBlock('Block');
+      const block = patchStore.addBlock('Oscillator');
 
       const from: Endpoint = { kind: 'port', blockId: block, slotId: 'out' };
       const to: Endpoint = { kind: 'port', blockId: block, slotId: 'in' };
@@ -283,9 +287,9 @@ describe('SelectionStore', () => {
 
     it('should compute relatedEdgeIds', () => {
       // Create: A -> B, B -> C
-      const a = patchStore.addBlock('A');
-      const b = patchStore.addBlock('B');
-      const c = patchStore.addBlock('C');
+      const a = patchStore.addBlock('Oscillator');
+      const b = patchStore.addBlock('Add');
+      const c = patchStore.addBlock('Subtract');
 
       const fromA: Endpoint = { kind: 'port', blockId: a, slotId: 'out' };
       const toB: Endpoint = { kind: 'port', blockId: b, slotId: 'in' };
@@ -306,8 +310,8 @@ describe('SelectionStore', () => {
     });
 
     it('should return empty set for relatedEdgeIds when no block selected', () => {
-      const a = patchStore.addBlock('A');
-      const b = patchStore.addBlock('B');
+      const a = patchStore.addBlock('Oscillator');
+      const b = patchStore.addBlock('Add');
 
       const from: Endpoint = { kind: 'port', blockId: a, slotId: 'out' };
       const to: Endpoint = { kind: 'port', blockId: b, slotId: 'in' };
@@ -319,7 +323,7 @@ describe('SelectionStore', () => {
 
     it('should include self-loop edges in relatedEdgeIds', () => {
       // Create a self-loop: block -> block
-      const block = patchStore.addBlock('Block');
+      const block = patchStore.addBlock('Oscillator');
 
       const from: Endpoint = { kind: 'port', blockId: block, slotId: 'out' };
       const to: Endpoint = { kind: 'port', blockId: block, slotId: 'in' };
@@ -335,9 +339,9 @@ describe('SelectionStore', () => {
 
     it('should compute highlightedBlockIds', () => {
       // Create: A -> B -> C
-      const a = patchStore.addBlock('A');
-      const b = patchStore.addBlock('B');
-      const c = patchStore.addBlock('C');
+      const a = patchStore.addBlock('Oscillator');
+      const b = patchStore.addBlock('Add');
+      const c = patchStore.addBlock('Subtract');
 
       const fromA: Endpoint = { kind: 'port', blockId: a, slotId: 'out' };
       const toB: Endpoint = { kind: 'port', blockId: b, slotId: 'in' };
@@ -360,10 +364,10 @@ describe('SelectionStore', () => {
 
     it('should compute highlightedEdgeIds', () => {
       // Create: A -> B, B -> C, C -> D
-      const a = patchStore.addBlock('A');
-      const b = patchStore.addBlock('B');
-      const c = patchStore.addBlock('C');
-      const d = patchStore.addBlock('D');
+      const a = patchStore.addBlock('Oscillator');
+      const b = patchStore.addBlock('Add');
+      const c = patchStore.addBlock('Subtract');
+      const d = patchStore.addBlock('Multiply');
 
       const fromA: Endpoint = { kind: 'port', blockId: a, slotId: 'out' };
       const toB: Endpoint = { kind: 'port', blockId: b, slotId: 'in' };
@@ -388,7 +392,7 @@ describe('SelectionStore', () => {
     });
 
     it('should return empty sets for highlighted IDs when no block selected', () => {
-      patchStore.addBlock('Block');
+      patchStore.addBlock('Oscillator');
 
       expect(selectionStore.highlightedBlockIds.size).toBe(0);
       expect(selectionStore.highlightedEdgeIds.size).toBe(0);

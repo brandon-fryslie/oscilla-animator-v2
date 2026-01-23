@@ -9,6 +9,10 @@ import { PatchStore } from '../PatchStore';
 import { reaction } from 'mobx';
 import type { Endpoint } from '../../graph/Patch';
 
+// Import blocks to ensure they're registered
+import '../../blocks/signal-blocks';
+import '../../blocks/math-blocks';
+
 describe('PatchStore', () => {
   let store: PatchStore;
 
@@ -43,8 +47,8 @@ describe('PatchStore', () => {
     });
 
     it('should generate unique IDs', () => {
-      const id1 = store.addBlock('A');
-      const id2 = store.addBlock('B');
+      const id1 = store.addBlock('Oscillator');
+      const id2 = store.addBlock('Add');
       expect(id1).not.toBe(id2);
     });
   });
@@ -59,8 +63,8 @@ describe('PatchStore', () => {
     });
 
     it('should remove edges connected to the block', () => {
-      const id1 = store.addBlock('Source');
-      const id2 = store.addBlock('Target');
+      const id1 = store.addBlock('Oscillator');
+      const id2 = store.addBlock('Add');
 
       const from: Endpoint = { kind: 'port', blockId: id1, slotId: 'out' };
       const to: Endpoint = { kind: 'port', blockId: id2, slotId: 'in' };
@@ -119,8 +123,8 @@ describe('PatchStore', () => {
 
   describe('addEdge', () => {
     it('should add an edge with generated ID', () => {
-      const id1 = store.addBlock('Source');
-      const id2 = store.addBlock('Target');
+      const id1 = store.addBlock('Oscillator');
+      const id2 = store.addBlock('Add');
 
       const from: Endpoint = { kind: 'port', blockId: id1, slotId: 'out' };
       const to: Endpoint = { kind: 'port', blockId: id2, slotId: 'in' };
@@ -135,8 +139,8 @@ describe('PatchStore', () => {
     });
 
     it('should add an edge with options', () => {
-      const id1 = store.addBlock('Source');
-      const id2 = store.addBlock('Target');
+      const id1 = store.addBlock('Oscillator');
+      const id2 = store.addBlock('Add');
 
       const from: Endpoint = { kind: 'port', blockId: id1, slotId: 'out' };
       const to: Endpoint = { kind: 'port', blockId: id2, slotId: 'in' };
@@ -150,8 +154,8 @@ describe('PatchStore', () => {
 
   describe('removeEdge', () => {
     it('should remove an edge', () => {
-      const id1 = store.addBlock('Source');
-      const id2 = store.addBlock('Target');
+      const id1 = store.addBlock('Oscillator');
+      const id2 = store.addBlock('Add');
 
       const from: Endpoint = { kind: 'port', blockId: id1, slotId: 'out' };
       const to: Endpoint = { kind: 'port', blockId: id2, slotId: 'in' };
@@ -166,8 +170,8 @@ describe('PatchStore', () => {
 
   describe('updateEdge', () => {
     it('should update edge properties', () => {
-      const id1 = store.addBlock('Source');
-      const id2 = store.addBlock('Target');
+      const id1 = store.addBlock('Oscillator');
+      const id2 = store.addBlock('Add');
 
       const from: Endpoint = { kind: 'port', blockId: id1, slotId: 'out' };
       const to: Endpoint = { kind: 'port', blockId: id2, slotId: 'in' };
@@ -198,7 +202,7 @@ describe('PatchStore', () => {
       );
 
       // Add a bus block
-      store.addBlock('Bus', {}, { role: { kind: 'bus', meta: {} } });
+      store.addBlock('Oscillator', {}, { role: { kind: 'bus', meta: {} } });
       expect(calls).toEqual([1]);
 
       // Add a non-bus block (shouldn't trigger because length doesn't change)
@@ -206,7 +210,7 @@ describe('PatchStore', () => {
       expect(calls).toEqual([1]);
 
       // Add another bus
-      store.addBlock('Bus2', {}, { role: { kind: 'bus', meta: {} } });
+      store.addBlock('Add', {}, { role: { kind: 'bus', meta: {} } });
       expect(calls).toEqual([1, 2]);
 
       dispose();
@@ -220,7 +224,7 @@ describe('PatchStore', () => {
         (length) => calls.push(length)
       );
 
-      store.addBlock('Domain', {}, { role: { kind: 'domain', meta: {} } });
+      store.addBlock('Oscillator', {}, { role: { kind: 'domain', meta: {} } });
       expect(calls).toEqual([1]);
 
       dispose();
@@ -229,13 +233,13 @@ describe('PatchStore', () => {
 
   describe('loadPatch', () => {
     it('should replace entire patch', () => {
-      store.addBlock('Old');
+      store.addBlock('Oscillator');
 
       const newPatch = {
         blocks: new Map([
           ['b0' as any, {
             id: 'b0' as any,
-            type: 'New',
+            type: 'Oscillator',
             params: {},
             displayName: null,
             domainId: null,
@@ -258,7 +262,7 @@ describe('PatchStore', () => {
         blocks: new Map([
           ['b10' as any, {
             id: 'b10' as any,
-            type: 'Test',
+            type: 'Oscillator',
             params: {},
             displayName: null,
             domainId: null,
@@ -279,7 +283,7 @@ describe('PatchStore', () => {
       store.loadPatch(patch);
 
       // Next IDs should be higher than loaded IDs
-      const newBlockId = store.addBlock('New');
+      const newBlockId = store.addBlock('Add');
       expect(newBlockId).toMatch(/^b\d+$/);
       expect(parseInt(newBlockId.slice(1))).toBeGreaterThan(10);
     });
@@ -287,7 +291,7 @@ describe('PatchStore', () => {
 
   describe('clear', () => {
     it('should clear all blocks and edges', () => {
-      store.addBlock('Test');
+      store.addBlock('Oscillator');
       expect(store.blocks.size).toBeGreaterThan(0);
 
       store.clear();
@@ -300,7 +304,7 @@ describe('PatchStore', () => {
     it('should allow mutations inside actions', () => {
       // This should not throw
       expect(() => {
-        store.addBlock('Test');
+        store.addBlock('Oscillator');
       }).not.toThrow();
     });
   });

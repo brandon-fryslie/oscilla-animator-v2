@@ -62,6 +62,7 @@ function setupDebugProbe(state: RuntimeState, patch: Patch, program: any): void 
   state.tap = {
     recordSlotValue: (slotId: ValueSlot, value: number) => debugService.updateSlotValue(slotId, value),
     recordFieldValue: (slotId: ValueSlot, buffer: ArrayBufferView) => debugService.updateFieldValue(slotId, buffer),
+    getTrackedFieldSlots: () => debugService.getTrackedFieldSlots(),
   };
 
   // Build and set debug mappings (edge→slot and port→slot)

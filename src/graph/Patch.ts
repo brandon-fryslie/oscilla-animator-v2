@@ -6,7 +6,7 @@
  */
 
 import type { BlockId, PortId, BlockRole, DefaultSource } from '../types';
-import { getBlockDefinition } from '../blocks/registry';
+import { requireBlockDef } from '../blocks/registry';
 
 // =============================================================================
 // Port Types
@@ -125,25 +125,21 @@ export class PatchBuilder {
     }
   ): BlockId {
     const id = `b${this.nextBlockId++}` as BlockId;
-    const blockDef = getBlockDefinition(type);
+    const blockDef = requireBlockDef(type);
 
     // Create input ports from registry (ONLY for exposed ports)
     const inputPorts = new Map<string, InputPort>();
-    if (blockDef) {
-      for (const [inputId, inputDef] of Object.entries(blockDef.inputs)) {
-        // CRITICAL FIX: Skip config-only inputs (exposedAsPort: false)
-        // These are NOT ports and should NOT have port entries
-        if (inputDef.exposedAsPort === false) continue;
-        inputPorts.set(inputId, { id: inputId });
-      }
+    for (const [inputId, inputDef] of Object.entries(blockDef.inputs)) {
+      // Skip config-only inputs (exposedAsPort: false)
+      // These are NOT ports and should NOT have port entries
+      if (inputDef.exposedAsPort === false) continue;
+      inputPorts.set(inputId, { id: inputId });
     }
 
     // Create output ports from registry
     const outputPorts = new Map<string, OutputPort>();
-    if (blockDef) {
-      for (const [outputId, outputDef] of Object.entries(blockDef.outputs)) {
-        outputPorts.set(outputId, { id: outputId });
-      }
+    for (const [outputId, outputDef] of Object.entries(blockDef.outputs)) {
+      outputPorts.set(outputId, { id: outputId });
     }
 
     this.blocks.set(id, {

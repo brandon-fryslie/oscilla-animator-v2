@@ -181,16 +181,23 @@ describe('compile', () => {
 
   describe('error handling', () => {
     it('reports unknown block types', () => {
+      // Construct patch manually to bypass PatchBuilder's requireBlockDef check
       const patch = buildPatch((b) => {
         b.addBlock('InfiniteTimeRoot', {});
-        b.addBlock('NonExistentBlock', {});
+      });
+      // Inject an unknown block directly into the patch
+      (patch.blocks as Map<any, any>).set('b99' as any, {
+        id: 'b99' as any,
+        type: 'NonExistentBlock',
+        params: {},
+        displayName: null,
+        domainId: null,
+        role: { kind: 'user', meta: {} },
+        inputPorts: new Map(),
+        outputPorts: new Map(),
       });
 
       const result = compile(patch);
-
-      if (result.kind === 'error') {
-        console.error('COMPILE ERROR (NonExistentBlock):', JSON.stringify(result.errors, null, 2));
-      }
 
       expect(result.kind).toBe('error');
       if (result.kind === 'error') {

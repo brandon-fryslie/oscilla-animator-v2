@@ -6,7 +6,7 @@
  */
 
 import type { Patch } from '../graph/Patch';
-import { getBlockDefinition } from '../blocks/registry';
+import { requireBlockDef } from '../blocks/registry';
 import type { DiagnosticsStore } from '../stores/DiagnosticsStore';
 import {
   formatBlockShorthand,
@@ -115,22 +115,20 @@ function exportNormal(
     lines.push('|----|------|--------|');
 
     for (const [blockId, block] of patch.blocks) {
-      const def = getBlockDefinition(block.type);
+      const def = requireBlockDef(block.type);
       const configParts: string[] = [];
 
-      if (def) {
-        for (const [key, currentValue] of Object.entries(block.params)) {
-          const inputDef = def.inputs[key];
-          if (!inputDef) continue;
+      for (const [key, currentValue] of Object.entries(block.params)) {
+        const inputDef = def.inputs[key];
+        if (!inputDef) continue;
 
-          const defaultValue = inputDef.value;
-          if (!opts.includeDefaults && !isNonDefault(currentValue, defaultValue)) {
-            continue;
-          }
-
-          const formattedValue = formatConfigValue(currentValue);
-          configParts.push(`${key}=${formattedValue}`);
+        const defaultValue = inputDef.value;
+        if (!opts.includeDefaults && !isNonDefault(currentValue, defaultValue)) {
+          continue;
         }
+
+        const formattedValue = formatConfigValue(currentValue);
+        configParts.push(`${key}=${formattedValue}`);
       }
 
       const configCell = configParts.length > 0 ? configParts.join(', ') : '';
@@ -180,8 +178,7 @@ function exportVerbose(
 
   let hasDetails = false;
   for (const [blockId, block] of patch.blocks) {
-    const def = getBlockDefinition(block.type);
-    if (!def) continue;
+    const def = requireBlockDef(block.type);
 
     const nonDefaults: Array<[string, unknown, unknown]> = [];
     for (const [key, currentValue] of Object.entries(block.params)) {

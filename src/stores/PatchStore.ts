@@ -15,7 +15,7 @@ import type { Block, Edge, Endpoint, Patch, BlockType, InputPort, OutputPort } f
 import type { BlockId, BlockRole } from '../types';
 import { emptyPatchData, type PatchData } from './internal';
 import type { EventHub } from '../events/EventHub';
-import { getBlockDefinition } from '../blocks/registry';
+import { requireBlockDef } from '../blocks/registry';
 
 /**
  * Opaque type for immutable patch access.
@@ -207,23 +207,19 @@ export class PatchStore {
     options?: BlockOptions
   ): BlockId {
     const id = `b${this._nextBlockId++}` as BlockId;
-    const blockDef = getBlockDefinition(type);
+    const blockDef = requireBlockDef(type);
 
     // Create input ports from registry
     const inputPorts = new Map<string, InputPort>();
-    if (blockDef) {
-      for (const [inputId, inputDef] of Object.entries(blockDef.inputs)) {
-        if (inputDef.exposedAsPort === false) continue;
-        inputPorts.set(inputId, { id: inputId });
-      }
+    for (const [inputId, inputDef] of Object.entries(blockDef.inputs)) {
+      if (inputDef.exposedAsPort === false) continue;
+      inputPorts.set(inputId, { id: inputId });
     }
 
     // Create output ports from registry
     const outputPorts = new Map<string, OutputPort>();
-    if (blockDef) {
-      for (const [outputId, outputDef] of Object.entries(blockDef.outputs)) {
-        outputPorts.set(outputId, { id: outputId });
-      }
+    for (const [outputId, outputDef] of Object.entries(blockDef.outputs)) {
+      outputPorts.set(outputId, { id: outputId });
     }
 
     const block: Block = {
@@ -334,8 +330,8 @@ export class PatchStore {
     let port = block.inputPorts.get(portId);
     if (!port) {
       // Port not in block's map - check if it exists in registry
-      const blockDef = getBlockDefinition(block.type);
-      const inputDef = blockDef?.inputs[portId];
+      const blockDef = requireBlockDef(block.type);
+      const inputDef = blockDef.inputs[portId];
       if (!inputDef) {
         throw new Error(`Port ${portId} not found on block ${blockId}`);
       }

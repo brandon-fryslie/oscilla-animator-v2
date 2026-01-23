@@ -15,9 +15,10 @@
 
 import type { Patch } from '../graph';
 import { normalize, type NormalizedPatch } from '../graph/normalize';
-import type { CompiledProgramIR, SlotMetaEntry, ValueSlot } from './ir/program';
+import type { CompiledProgramIR, SlotMetaEntry, ValueSlot, FieldSlotEntry } from './ir/program';
 import type { UnlinkedIRFragments } from './passes-v2/pass6-block-lowering';
 import type { ScheduleIR } from './passes-v2/pass7-schedule';
+import type { FieldExpr, FieldExprId, InstanceId } from './ir/types';
 import type { AcyclicOrLegalGraph } from './ir/patches';
 import { convertCompileErrorsToDiagnostics } from './diagnosticConversion';
 import type { EventHub } from '../events/EventHub';
@@ -373,6 +374,23 @@ function convertLinkedIRToProgram(
   const fieldNodes = builder.getFieldExprs();
   const eventNodes = builder.getEventExprs();
 
+  // Build fieldSlotRegistry from blockOutputs (field outputs that can be materialized on demand)
+  const fieldSlotRegistry = new Map<ValueSlot, FieldSlotEntry>();
+  const fieldSlotSet = new Set<number>(); // Track which slots are field outputs
+  if (unlinkedIR.blockOutputs) {
+    for (const [, outputs] of unlinkedIR.blockOutputs.entries()) {
+      for (const [, ref] of outputs.entries()) {
+        if (ref.k === 'field') {
+          const instanceId = inferFieldInstanceFromExprs(ref.id, fieldNodes);
+          if (instanceId) {
+            fieldSlotRegistry.set(ref.slot, { fieldId: ref.id, instanceId });
+            fieldSlotSet.add(ref.slot as number);
+          }
+        }
+      }
+    }
+  }
+
   // Build slot metadata from slot types
   const slotTypes = builder.getSlotTypes();
   const slotMeta: SlotMetaEntry[] = [];
@@ -394,8 +412,11 @@ function convertLinkedIRToProgram(
     const type = slotTypes.get(slot) || signalType('float'); // Default to float if no type info
 
     // Determine storage class from type
-    // Shape payloads use dedicated shape2d bank; all numbers go to f64
-    const storage: SlotMetaEntry['storage'] = type.payload === 'shape' ? 'shape2d' : 'f64';
+    // Field output slots store buffer references in the objects Map
+    // Shape payloads use dedicated shape2d bank; all other signals go to f64
+    const storage: SlotMetaEntry['storage'] = fieldSlotSet.has(slotId)
+      ? 'object'
+      : type.payload === 'shape' ? 'shape2d' : 'f64';
 
     const offset = storageOffsets[storage]++;
 
@@ -404,6 +425,28 @@ function convertLinkedIRToProgram(
       storage,
       offset,
       type,
+    });
+  }
+
+  // Add slotMeta entries for slots allocated by Pass 7 (continuity pipeline buffers).
+  // These slots store object references (Float32Array buffers) and start after the builder's slot range.
+  const builderSlotCount = builder.getSlotCount?.() || 0;
+  const steps = scheduleIR.steps;
+  let maxSlotUsed = builderSlotCount - 1;
+  for (const step of steps) {
+    if (step.kind === 'materialize' && (step.target as number) >= builderSlotCount) {
+      maxSlotUsed = Math.max(maxSlotUsed, step.target as number);
+    }
+    if (step.kind === 'continuityApply') {
+      maxSlotUsed = Math.max(maxSlotUsed, step.baseSlot as number, step.outputSlot as number);
+    }
+  }
+  for (let slotId = builderSlotCount; slotId <= maxSlotUsed; slotId++) {
+    slotMeta.push({
+      slot: slotId as ValueSlot,
+      storage: 'object',
+      offset: storageOffsets.object++,
+      type: signalType('float'),
     });
   }
 
@@ -473,9 +516,37 @@ function convertLinkedIRToProgram(
     outputs,
     slotMeta,
     debugIndex,
+    fieldSlotRegistry,
   };
 }
 
-// buildEdgeToSlotMap function removed - logic moved to external helper (mapDebugEdges.ts)
-// for strict architectural isolation.
+/**
+ * Infer instance from a field expression by walking the expression tree.
+ * Used to build fieldSlotRegistry for demand-driven materialization.
+ */
+function inferFieldInstanceFromExprs(
+  fieldId: FieldExprId,
+  fieldExprs: readonly FieldExpr[]
+): InstanceId | undefined {
+  const expr = fieldExprs[fieldId as number];
+  if (!expr) return undefined;
+
+  switch (expr.kind) {
+    case 'intrinsic':
+    case 'array':
+    case 'stateRead':
+      return expr.instanceId;
+    case 'map':
+      return expr.instanceId ?? inferFieldInstanceFromExprs(expr.input, fieldExprs);
+    case 'zip':
+      return expr.instanceId ?? (expr.inputs.length > 0 ? inferFieldInstanceFromExprs(expr.inputs[0], fieldExprs) : undefined);
+    case 'zipSig':
+      return expr.instanceId ?? inferFieldInstanceFromExprs(expr.field, fieldExprs);
+    case 'broadcast':
+    case 'const':
+      return undefined;
+    default:
+      return undefined;
+  }
+}
 

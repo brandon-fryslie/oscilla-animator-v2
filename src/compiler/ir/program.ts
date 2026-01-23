@@ -10,6 +10,7 @@
 import type { SigExpr, FieldExpr, EventExpr } from './types';
 import type { SignalType, ResolvedExtent } from '../../core/canonical-types';
 import type { ScheduleIR } from '../passes-v2/pass7-schedule';
+import type { FieldExprId, InstanceId } from './Indices';
 
 // =============================================================================
 // Version and Core Types
@@ -73,6 +74,22 @@ export interface CompiledProgramIR {
 
   // Debug provenance
   readonly debugIndex: DebugIndexIR;
+
+  /**
+   * Field slot registry for demand-driven materialization.
+   * Maps field output slots to their expression + instance, so the runtime
+   * can materialize tracked fields on demand (for debug inspection).
+   */
+  readonly fieldSlotRegistry: ReadonlyMap<ValueSlot, FieldSlotEntry>;
+}
+
+/**
+ * Entry in the field slot registry.
+ * Provides everything needed to materialize a field on demand.
+ */
+export interface FieldSlotEntry {
+  readonly fieldId: FieldExprId;
+  readonly instanceId: InstanceId;
 }
 
 // =============================================================================

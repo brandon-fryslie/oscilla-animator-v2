@@ -50,9 +50,10 @@ export interface DebugTap {
   recordFieldValue?(slotId: ValueSlot, buffer: ArrayBufferView): void;
 
   /**
-   * Future methods (Sprint 2+):
-   * - onDebugGraph?(graph: DebugGraph): void;
-   * - recordBusNow?(busId: BusId, value: number): void;
-   * - recordSignalSample?(exprId: SigExprId, value: number): void;
+   * Get the set of field slots currently being tracked for debug inspection.
+   * Called by ScheduleExecutor to determine which fields need demand-driven materialization.
+   *
+   * Returns undefined or empty set if no fields are being tracked.
    */
+  getTrackedFieldSlots?(): ReadonlySet<ValueSlot> | undefined;
 }

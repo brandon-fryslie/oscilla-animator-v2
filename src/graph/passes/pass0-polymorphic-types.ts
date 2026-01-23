@@ -31,7 +31,10 @@ export function pass0PolymorphicTypes(patch: Patch): Patch {
     if (block.params.payloadType !== undefined) continue;
 
     // Only process payload-generic blocks
-    if (!isPayloadGeneric(block.type)) continue;
+    if (!blockDef.payload) continue;
+    // Check if actually payload-generic (has multiple allowed types on any port)
+    const isGeneric = Object.values(blockDef.payload.allowedPayloads).some(a => a.length > 1);
+    if (!isGeneric) continue;
 
     let inferredPayloadType: string | undefined;
 

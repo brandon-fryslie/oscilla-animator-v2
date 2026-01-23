@@ -5,7 +5,7 @@
  * Simplified for v2 - pure IR path, no legacy complexity.
  */
 
-import type { CompiledProgramIR, ValueSlot } from '../compiler/ir/program';
+import type { CompiledProgramIR, ValueSlot, FieldSlotEntry } from '../compiler/ir/program';
 import type { ScheduleIR } from '../compiler/passes-v2/pass7-schedule';
 import type { Step, InstanceDecl, DomainInstance } from '../compiler/ir/types';
 import type { SigExprId, IrInstanceId as InstanceId } from '../types';
@@ -371,6 +371,44 @@ export function executeFrame(
       default: {
         const _exhaustive: never = step;
         throw new Error(`Unknown step kind: ${(_exhaustive as Step).kind}`);
+      }
+    }
+  }
+
+  // PHASE 1.5: Demand-driven field materialization for debug tracking
+  // Materialize any tracked field slots that weren't already written by the render pipeline
+  if (state.tap) {
+    const trackedSlots = state.tap.getTrackedFieldSlots?.();
+    if (trackedSlots && trackedSlots.size > 0) {
+      for (const slot of trackedSlots) {
+        // Skip if already materialized by the render pipeline
+        if (state.values.objects.has(slot)) {
+          // Already written - just ensure debug tap is notified
+          const existing = state.values.objects.get(slot);
+          if (existing instanceof Float32Array) {
+            state.tap.recordFieldValue?.(slot, existing);
+          }
+          continue;
+        }
+
+        // Look up field expression info from registry
+        const entry = program.fieldSlotRegistry.get(slot);
+        if (!entry) continue;
+
+        // Materialize the field on demand
+        const buffer = materialize(
+          entry.fieldId,
+          entry.instanceId as unknown as string,
+          fields,
+          signals,
+          instances as ReadonlyMap<string, InstanceDecl>,
+          state,
+          pool
+        );
+
+        // Store in objects map and notify debug tap
+        state.values.objects.set(slot, buffer);
+        state.tap.recordFieldValue?.(slot, buffer);
       }
     }
   }

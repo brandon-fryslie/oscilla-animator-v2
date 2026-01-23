@@ -8,7 +8,7 @@
 
 import type { BlockId, PortId, BlockRole, DefaultSource } from '../../types';
 import type { Block, Edge, Patch } from '../Patch';
-import { getBlockDefinition, type InputDef } from '../../blocks/registry';
+import { getBlockDefinition, requireBlockDef, type InputDef } from '../../blocks/registry';
 
 interface DefaultSourceInsertion {
   /** The derived block to insert (null for TimeRoot - already exists) */
@@ -178,30 +178,26 @@ function applyDefaultSourceInsertions(
   for (const ins of insertions) {
     if (ins.block !== null) {
       // Populate ports for the derived block
-      const blockDef = getBlockDefinition(ins.block.type);
-      if (blockDef) {
-        // Create input ports (ONLY for exposed ports)
-        const inputPorts = new Map();
-        for (const [inputId, inputDef] of Object.entries(blockDef.inputs)) {
-          // Skip config-only inputs when creating ports
-          if (inputDef.exposedAsPort === false) continue;
-          inputPorts.set(inputId, { id: inputId });
-        }
-        // Create output ports
-        const outputPorts = new Map();
-        for (const [outputId, outputDef] of Object.entries(blockDef.outputs)) {
-          outputPorts.set(outputId, { id: outputId });
-        }
-        // Update the block with ports
-        const blockWithPorts: Block = {
-          ...ins.block,
-          inputPorts,
-          outputPorts,
-        };
-        newBlocks.set(blockWithPorts.id, blockWithPorts);
-      } else {
-        newBlocks.set(ins.block.id, ins.block);
+      const blockDef = requireBlockDef(ins.block.type);
+      // Create input ports (ONLY for exposed ports)
+      const inputPorts = new Map();
+      for (const [inputId, inputDef] of Object.entries(blockDef.inputs)) {
+        // Skip config-only inputs when creating ports
+        if (inputDef.exposedAsPort === false) continue;
+        inputPorts.set(inputId, { id: inputId });
       }
+      // Create output ports
+      const outputPorts = new Map();
+      for (const [outputId, outputDef] of Object.entries(blockDef.outputs)) {
+        outputPorts.set(outputId, { id: outputId });
+      }
+      // Update the block with ports
+      const blockWithPorts: Block = {
+        ...ins.block,
+        inputPorts,
+        outputPorts,
+      };
+      newBlocks.set(blockWithPorts.id, blockWithPorts);
     }
   }
 

@@ -10,7 +10,7 @@ import { Autocomplete, TextField } from '@mui/material';
 import { observer } from 'mobx-react-lite';
 import type { BlockId, PortId } from '../../types';
 import type { Patch } from '../../graph/Patch';
-import { getBlockDefinition } from '../../blocks/registry';
+import { requireBlockDef } from '../../blocks/registry';
 import { validateConnection, formatTypeForDisplay } from '../reactFlowEditor/typeValidation';
 import { colors } from '../theme';
 
@@ -64,8 +64,7 @@ export const ConnectionPicker = observer(function ConnectionPicker({
     const searchDirection = direction === 'input' ? 'output' : 'input';
 
     for (const [blockId, block] of patch.blocks) {
-      const blockDef = getBlockDefinition(block.type);
-      if (!blockDef) continue;
+      const blockDef = requireBlockDef(block.type);
 
       const portsToCheck = searchDirection === 'input' ? blockDef.inputs : blockDef.outputs;
 

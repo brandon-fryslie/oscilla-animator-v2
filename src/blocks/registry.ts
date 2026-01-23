@@ -28,13 +28,13 @@ export interface LowerCtx {
   readonly seedConstId: number;
 
   /**
-   * Instance context (NEW - Domain Refactor Sprint 3).
+   * Instance context
    * Set by instance blocks (Array, etc.) to provide instance context to downstream blocks.
    */
   readonly instance?: InstanceId;
 
   /**
-   * Inferred instance context (NEW - Domain Refactor Sprint 3).
+   * Inferred instance context
    * Automatically inferred from connected field inputs during lowering.
    */
   readonly inferredInstance?: InstanceId;
@@ -288,10 +288,24 @@ const registry = new Map<string, BlockDef>();
 export const BLOCK_DEFS_BY_TYPE: ReadonlyMap<string, BlockDef> = registry;
 
 /**
- * Get block definition by type.
+ * Get block definition by type, or undefined if not registered.
+ * Use this only in UI/tolerance contexts where a missing block is recoverable.
+ * For compiler/runtime paths, use requireBlockDef instead.
  */
 export function getBlockDefinition(blockType: string): BlockDef | undefined {
   return registry.get(blockType);
+}
+
+/**
+ * Get block definition by type, throwing if not registered.
+ * Use this in compiler/runtime paths where a missing block is always a bug.
+ */
+export function requireBlockDef(blockType: string): BlockDef {
+  const def = registry.get(blockType);
+  if (!def) {
+    throw new Error(`Unknown block type: "${blockType}" is not registered`);
+  }
+  return def;
 }
 
 /**
@@ -370,15 +384,16 @@ export function getExposedOutputs(def: BlockDef): Array<[string, OutputDef]> {
 
 /**
  * Get cardinality metadata for a block type.
+ * Throws if block type is not registered.
  * Returns undefined if block has no cardinality metadata (fixed cardinality).
  */
 export function getBlockCardinalityMetadata(blockType: string): BlockCardinalityMetadata | undefined {
-  const def = registry.get(blockType);
-  return def?.cardinality;
+  return requireBlockDef(blockType).cardinality;
 }
 
 /**
  * Check if a block is cardinality-generic (preserve mode + lane-local).
+ * Throws if block type is not registered.
  */
 export function isCardinalityGeneric(blockType: string): boolean {
   const meta = getBlockCardinalityMetadata(blockType);
@@ -401,11 +416,11 @@ export const DEFAULT_CARDINALITY_METADATA: BlockCardinalityMetadata = {
 
 /**
  * Get the payload metadata for a block type.
- * Returns undefined if not defined.
+ * Throws if block type is not registered.
+ * Returns undefined if block has no payload metadata.
  */
 export function getBlockPayloadMetadata(blockType: string): BlockPayloadMetadata | undefined {
-  const def = registry.get(blockType);
-  return def?.payload;
+  return requireBlockDef(blockType).payload;
 }
 
 /**
@@ -432,6 +447,7 @@ export function isPayloadAllowed(
 
 /**
  * Get valid payload combinations for a block.
+ * Throws if block type is not registered.
  * Returns undefined if the block has no combination constraints.
  */
 export function getPayloadCombinations(blockType: string): readonly PayloadCombination[] | undefined {

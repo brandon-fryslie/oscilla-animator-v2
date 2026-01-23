@@ -7,7 +7,7 @@
 import type { BlockId, PortId, BlockRole } from '../../types';
 import type { SignalType } from '../../core/canonical-types';
 import type { Block, Edge, Patch } from '../Patch';
-import { getBlockDefinition } from '../../blocks/registry';
+import { getBlockDefinition, requireBlockDef } from '../../blocks/registry';
 import { findAdapter, type AdapterSpec } from '../adapters';
 
 // =============================================================================
@@ -134,22 +134,18 @@ function analyzeAdapters(
       };
 
       // Get block definition to create ports
-      const adapterBlockDef = getBlockDefinition(adapterSpec.blockType);
+      const adapterBlockDef = requireBlockDef(adapterSpec.blockType);
 
       // Create input ports from registry
       const inputPorts = new Map();
-      if (adapterBlockDef) {
-        for (const [inputId, inputDef] of Object.entries(adapterBlockDef.inputs)) {
-          inputPorts.set(inputId, { id: inputId });
-        }
+      for (const [inputId, inputDef] of Object.entries(adapterBlockDef.inputs)) {
+        inputPorts.set(inputId, { id: inputId });
       }
 
       // Create output ports from registry
       const outputPorts = new Map();
-      if (adapterBlockDef) {
-        for (const [outputId, outputDef] of Object.entries(adapterBlockDef.outputs)) {
-          outputPorts.set(outputId, { id: outputId });
-        }
+      for (const [outputId, outputDef] of Object.entries(adapterBlockDef.outputs)) {
+        outputPorts.set(outputId, { id: outputId });
       }
 
       // For payload-generic adapters, set payloadType from the source type

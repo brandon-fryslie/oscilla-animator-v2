@@ -8,6 +8,10 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { RootStore } from '../RootStore';
 import type { Endpoint } from '../../graph/Patch';
 
+// Import blocks to ensure they're registered
+import '../../blocks/signal-blocks';
+import '../../blocks/math-blocks';
+
 describe('Store Integration', () => {
   let root: RootStore;
 
@@ -48,8 +52,8 @@ describe('Store Integration', () => {
     });
 
     it('should clear selectedEdge when edge is deleted', () => {
-      const id1 = root.patch.addBlock('Source');
-      const id2 = root.patch.addBlock('Target');
+      const id1 = root.patch.addBlock('Oscillator');
+      const id2 = root.patch.addBlock('Add');
 
       const from: Endpoint = { kind: 'port', blockId: id1, slotId: 'out' };
       const to: Endpoint = { kind: 'port', blockId: id2, slotId: 'in' };
@@ -65,8 +69,8 @@ describe('Store Integration', () => {
     });
 
     it('should clear selectedEdge when source block is deleted', () => {
-      const id1 = root.patch.addBlock('Source');
-      const id2 = root.patch.addBlock('Target');
+      const id1 = root.patch.addBlock('Oscillator');
+      const id2 = root.patch.addBlock('Add');
 
       const from: Endpoint = { kind: 'port', blockId: id1, slotId: 'out' };
       const to: Endpoint = { kind: 'port', blockId: id2, slotId: 'in' };
@@ -129,7 +133,7 @@ describe('Store Integration', () => {
     });
 
     it('should derive buses from patch blocks', () => {
-      const busId = root.patch.addBlock('Bus', {}, { role: { kind: 'bus', meta: {} } });
+      const busId = root.patch.addBlock('Oscillator', {}, { role: { kind: 'bus', meta: {} } });
 
       // Buses are computed from patch blocks
       expect(root.patch.buses.length).toBe(1);
@@ -140,7 +144,7 @@ describe('Store Integration', () => {
   describe('MobX strict mode enforcement', () => {
     it('should allow mutations inside actions', () => {
       expect(() => {
-        root.patch.addBlock('Test');
+        root.patch.addBlock('Oscillator');
       }).not.toThrow();
 
       expect(() => {

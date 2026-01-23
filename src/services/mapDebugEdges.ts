@@ -14,6 +14,9 @@ export interface EdgeMetadata {
 
     /** Signal type for formatting (e.g., "Float", "Phase", "Color") */
     type: SignalType;
+
+    /** Cardinality: signal (scalar) or field (buffer of N values) */
+    cardinality: 'signal' | 'field';
 }
 
 /**
@@ -99,6 +102,8 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
 
     // Now build the main lookup map
     const targetToSlot = new Map<string, ValueSlot>();
+    // Track cardinality per port key for EdgeMetadata
+    const portCardinality = new Map<string, 'signal' | 'field'>();
 
     for (const portBinding of debugIndex.ports) {
         // Resolve BlockIndex to StringID
@@ -206,6 +211,9 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
 
         if (slot !== undefined) {
             targetToSlot.set(key, slot);
+            // Track cardinality from port binding domain
+            const cardinality: 'signal' | 'field' = portBinding.domain === 'field' ? 'field' : 'signal';
+            portCardinality.set(key, cardinality);
         }
     }
 
@@ -218,19 +226,14 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
         const slotId = targetToSlot.get(sourceKey);
 
         if (slotId !== undefined) {
-            // For type, we can default to float if not found,
-            // but ideally we'd have the typed patch.
-            // Since mapDebugEdges signature only has `patch`, we can't look up exact type
-            // from TypedPatch.
-            // However, we can look up the type from the SlotMeta in the program!
-            // `program.slotMeta` has types.
-
             const meta = program.slotMeta.find(m => m.slot === slotId);
             const type = meta?.type || signalType('float');
+            const cardinality = portCardinality.get(sourceKey) || 'signal';
 
             edgeMetaMap.set(edge.id, {
                 slotId,
-                type
+                type,
+                cardinality,
             });
         } else {
             // Track unmapped edge for error reporting
@@ -249,7 +252,8 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
     for (const [portKey, slotId] of targetToSlot.entries()) {
         const meta = program.slotMeta.find(m => m.slot === slotId);
         const type = meta?.type || signalType('float');
-        portMetaMap.set(portKey, { slotId, type });
+        const cardinality = portCardinality.get(portKey) || 'signal';
+        portMetaMap.set(portKey, { slotId, type, cardinality });
     }
 
     return { edgeMap: edgeMetaMap, portMap: portMetaMap, unmappedEdges };

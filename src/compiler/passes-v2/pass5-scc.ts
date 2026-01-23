@@ -110,10 +110,11 @@ function strongConnect(
       if (node.kind === "BlockEval") {
         const block = blocks[node.blockIndex];
         const blockDef = getBlockDefinition(block.type);
+        if (!blockDef) return false;
         // Check if block breaks combinatorial cycles (has state)
         // For now, we'll check if the block type contains "State" or "Delay"
         // This is a heuristic - proper implementation would check block definition metadata
-        return blockDef?.type?.includes('State') || blockDef?.type?.includes('Delay');
+        return blockDef.type.includes('State') || blockDef.type.includes('Delay');
       }
       return false;
     });

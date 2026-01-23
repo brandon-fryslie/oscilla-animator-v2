@@ -7,6 +7,7 @@
  * Responsibilities:
  * - Track debug panel enabled state
  * - Track currently hovered edge for probing
+ * - Manage field tracking (demand-driven materialization)
  * - Provide reactive value lookups
  * - Format values based on signal type
  * - Report debug service health status
@@ -15,6 +16,7 @@
 import { makeAutoObservable, runInAction } from 'mobx';
 import { debugService, type EdgeValueResult, type DebugServiceStatus } from '../services/DebugService';
 import type { SignalType } from '../core/canonical-types';
+import type { ValueSlot } from '../types';
 
 /**
  * Format a numeric value based on its signal type.
@@ -48,6 +50,9 @@ export class DebugStore {
   /** Cached edge value result (updated via polling) */
   private _cachedEdgeValue: EdgeValueResult | null = null;
 
+  /** Currently tracked field slot (for cleanup on unhover) */
+  private _trackedFieldSlot: ValueSlot | null = null;
+
   /** Polling interval handle */
   private pollInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -64,6 +69,7 @@ export class DebugStore {
     this.enabled = !this.enabled;
     if (!this.enabled) {
       this.stopPolling();
+      this.untrackCurrentField();
       this._cachedEdgeValue = null;
     }
   }
@@ -75,18 +81,30 @@ export class DebugStore {
     this.enabled = enabled;
     if (!enabled) {
       this.stopPolling();
+      this.untrackCurrentField();
       this._cachedEdgeValue = null;
     }
   }
 
   /**
    * Set the hovered edge ID for probing.
-   * Starts polling for value updates.
+   * If edge is a field, automatically tracks it for demand-driven materialization.
    */
   setHoveredEdge(edgeId: string | null): void {
+    // Untrack previous field if switching edges
+    if (this.hoveredEdgeId !== edgeId) {
+      this.untrackCurrentField();
+    }
+
     this.hoveredEdgeId = edgeId;
 
     if (edgeId && this.enabled) {
+      // Check if this edge is a field and track it
+      const meta = debugService.getEdgeMetadata(edgeId);
+      if (meta?.cardinality === 'field') {
+        debugService.trackField(meta.slotId);
+        this._trackedFieldSlot = meta.slotId;
+      }
       this.startPolling();
     } else {
       this.stopPolling();
@@ -112,7 +130,6 @@ export class DebugStore {
 
   /**
    * Query current value for a port by block ID and port name.
-   * Useful for querying unconnected output ports.
    */
   getPortValue(blockId: string, portName: string): EdgeValueResult | undefined {
     if (!this.enabled) return undefined;
@@ -124,12 +141,18 @@ export class DebugStore {
    */
   get formattedValue(): string | null {
     if (!this._cachedEdgeValue) return null;
-    return formatDebugValue(this._cachedEdgeValue.value, this._cachedEdgeValue.type);
+    switch (this._cachedEdgeValue.kind) {
+      case 'signal':
+        return formatDebugValue(this._cachedEdgeValue.value, this._cachedEdgeValue.type);
+      case 'field':
+        return `[${this._cachedEdgeValue.count}] ${this._cachedEdgeValue.mean.toFixed(2)}`;
+      case 'field-untracked':
+        return null;
+    }
   }
 
   /**
    * Get debug service health status.
-   * Used by UI to display mapping errors.
    */
   get status(): DebugServiceStatus {
     return debugService.getStatus();
@@ -140,11 +163,7 @@ export class DebugStore {
    */
   private startPolling(): void {
     this.stopPolling();
-
-    // Query immediately
     this.pollValue();
-
-    // Set up 1Hz polling
     this.pollInterval = setInterval(() => this.pollValue(), 1000);
   }
 
@@ -169,10 +188,27 @@ export class DebugStore {
       return;
     }
 
-    const result = debugService.getEdgeValue(this.hoveredEdgeId);
-    runInAction(() => {
-      this._cachedEdgeValue = result || null;
-    });
+    try {
+      const result = debugService.getEdgeValue(this.hoveredEdgeId);
+      runInAction(() => {
+        this._cachedEdgeValue = result || null;
+      });
+    } catch {
+      // Don't crash the polling loop on errors
+      runInAction(() => {
+        this._cachedEdgeValue = null;
+      });
+    }
+  }
+
+  /**
+   * Untrack the currently tracked field slot.
+   */
+  private untrackCurrentField(): void {
+    if (this._trackedFieldSlot !== null) {
+      debugService.untrackField(this._trackedFieldSlot);
+      this._trackedFieldSlot = null;
+    }
   }
 
   /**
@@ -180,5 +216,6 @@ export class DebugStore {
    */
   dispose(): void {
     this.stopPolling();
+    this.untrackCurrentField();
   }
 }

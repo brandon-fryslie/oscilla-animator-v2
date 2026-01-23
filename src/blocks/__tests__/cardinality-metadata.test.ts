@@ -140,10 +140,10 @@ describe('Cardinality Metadata', () => {
   });
 
   describe('Query functions', () => {
-    it('getBlockCardinalityMetadata returns undefined for blocks without metadata', () => {
-      // Create a hypothetical block type that doesn't exist
-      const meta = getBlockCardinalityMetadata('NonExistentBlock');
-      expect(meta).toBeUndefined();
+    it('getBlockCardinalityMetadata throws for non-existent block type', () => {
+      expect(() => getBlockCardinalityMetadata('NonExistentBlock')).toThrow(
+        'Unknown block type: "NonExistentBlock" is not registered'
+      );
     });
 
     it('isCardinalityGeneric returns false for non-preserve blocks', () => {

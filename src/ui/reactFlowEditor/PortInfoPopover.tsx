@@ -235,7 +235,7 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
           )}
 
           {/* Debug Value (when connected and debug enabled) */}
-          {debugValue && (
+          {debugValue && debugValue.kind === 'signal' && (
             <>
               <Divider color="#444" />
               <Box>
@@ -250,6 +250,25 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
                   style={{ fontFamily: 'monospace' }}
                 >
                   {formatDebugValue(debugValue.value, debugValue.type)}
+                </Text>
+              </Box>
+            </>
+          )}
+          {debugValue && debugValue.kind === 'field' && (
+            <>
+              <Divider color="#444" />
+              <Box>
+                <Text size="xs" c="dimmed">
+                  Field [{debugValue.count}]
+                </Text>
+                <Text
+                  size="sm"
+                  fw={600}
+                  c="violet"
+                  mt={2}
+                  style={{ fontFamily: 'monospace' }}
+                >
+                  mean: {debugValue.mean.toFixed(3)}
                 </Text>
               </Box>
             </>
