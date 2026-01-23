@@ -1,9 +1,10 @@
 # Sprint: per-instance-shapes - Per-Instance Shape Support
 Generated: 2026-01-22-031548
-Confidence: MEDIUM
-Status: RESEARCH REQUIRED
+Updated: 2026-01-22-230000
+Confidence: HIGH
+Status: READY FOR IMPLEMENTATION
 Source: Bead oscilla-animator-v2-f2w
-Dependency: Bead oscilla-animator-v2-583 (RenderAssembler v2) MUST be complete
+Dependency: Bead oscilla-animator-v2-583 (RenderAssembler v2) — CLOSED ✅
 
 ## Sprint Goal
 Enable per-instance shape specification using `Field<shape>` so each instance can have a different shape topology and control points, grouped by topology for efficient batched rendering.
@@ -170,23 +171,14 @@ Update renderer to handle multiple DrawPathInstancesOp operations from a single 
 #### Technical Notes
 Renderer changes are minimal - already loops over operations. Just ensure `assembleRenderFrame_v2` returns all ops from all groups.
 
-### P2: Shape2D Buffer Format Documentation
+### ~~P2: Shape2D Buffer Format Documentation~~ — ALREADY DONE
 
-**Dependencies**: None (documentation task)
-**Spec Reference**: `.agent_planning/_future/3-local-space-spec-deeper.md` section 4.2
-
-#### Description
-Document the Shape2D packed buffer layout so materializer and assembler implementations stay synchronized.
-
-#### Acceptance Criteria
-- [ ] Buffer layout documented with byte offsets and word indices
-- [ ] Each field documented (topologyId, pointsFieldSlot, pointsCount, styleRef, flags)
-- [ ] Alignment requirements specified (u32 aligned)
-- [ ] Example buffer values provided
-- [ ] Documentation in both assembler code comments and separate doc file
-
-#### Technical Notes
-Create `docs/shape2d-buffer-format.md` with canonical layout spec.
+Canonical layout documented in `src/runtime/RuntimeState.ts`:
+- `SHAPE2D_WORDS = 8` (8 x u32 per shape)
+- `Shape2DWord` enum with all offsets
+- `readShape2D`/`writeShape2D` pack/unpack utilities
+- `Shape2DFlags` bitfield values
+- `Shape2DRecord` interface
 
 ### P3: Error Handling and Validation
 
@@ -224,11 +216,10 @@ for (const [key, group] of groups) {
 
 ## Dependencies
 
-**BLOCKING DEPENDENCY:**
-- Bead oscilla-animator-v2-583: RenderAssembler v2 MUST be complete
-  - Status: in_progress (as of 2026-01-22)
-  - This sprint CANNOT start until oscilla-animator-v2-583 is closed
-  - Reason: per-instance shapes extend v2 assembly, cannot work on v1 code
+**BLOCKING DEPENDENCY (RESOLVED):**
+- Bead oscilla-animator-v2-583: RenderAssembler v2 — CLOSED ✅
+  - Closed: 2026-01-22T04:13:29
+  - 22 tests passing, DrawPathInstancesOp production verified
 
 **Parallel Work:**
 - Shape topology numeric IDs (oscilla-animator-v2-4h6): RECOMMENDED but not blocking
@@ -263,23 +254,19 @@ for (const [key, group] of groups) {
 - Future optimization: use views/offsets instead of copying
 - Document memory usage characteristics
 
-## Exit Criteria (to reach HIGH confidence)
+## Exit Criteria (RESOLVED — all met)
 
-The following research must be completed before implementation:
-
-- [ ] Shape2D buffer format agreed upon and documented
-- [ ] Materializer produces Shape2D buffers (or mock data available for testing)
-- [ ] Performance target defined (max acceptable frame time with N instances across M topologies)
-- [ ] User confirms topology grouping approach is correct
-- [ ] Renderer v2 (oscilla-animator-v2-583) is complete and verified working
+- [x] Shape2D buffer format agreed upon and documented — `RuntimeState.ts` has `SHAPE2D_WORDS`, `Shape2DWord` enum, `readShape2D`/`writeShape2D`
+- [x] Shape2D buffers available for testing — `ValueStore.shape2d: Uint32Array` bank exists, pack/unpack utilities ready
+- [x] Performance target defined — 100 instances / 5 topologies > 30fps (DOD)
+- [x] Topology grouping approach confirmed — group by `(topologyId, pointsFieldSlot)` key
+- [x] Renderer v2 complete — oscilla-animator-v2-583 CLOSED, Canvas2DRenderer already loops multiple ops
 
 ## Next Steps
 
-1. **Block on dependency**: Wait for oscilla-animator-v2-583 to close
-2. **Research**: Define Shape2D buffer format with user (see EXIT CRITERIA)
-3. **Verify materializer**: Check if materializer produces Shape2D buffers or needs implementation
-4. **Implementation**: Once HIGH confidence reached, create detailed implementation plan
-5. **Testing**: Create test cases with multiple topology groups
+1. **Implement**: Follow P0→P1→P2→P3 order in this plan
+2. **Test**: Unit tests for grouping/slicing, integration test for full pipeline
+3. **Verify**: Run with realistic scenarios (10-20 topologies)
 
 ## Notes
 
