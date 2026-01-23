@@ -2,7 +2,7 @@
  * PortHighlightStore - Port Hover & Compatibility State
  *
  * Tracks which port is currently hovered and computes which ports are compatible.
- * Used to highlight compatible ports when hovering over an unconnected port.
+ * Used to highlight compatible ports when hovering over a port.
  *
  * Architectural invariants:
  * - Only stores hover state (not connection data)
@@ -11,9 +11,9 @@
  */
 
 import { makeObservable, observable, computed, action } from 'mobx';
-import type { PortRef, Patch } from '../graph/Patch';
+import type { PortRef } from '../graph/Patch';
 import type { BlockId, PortId } from '../types';
-import { getPortType, validateConnection } from '../ui/reactFlowEditor/typeValidation';
+import { validateConnection } from '../ui/reactFlowEditor/typeValidation';
 import { requireBlockDef } from '../blocks/registry';
 import type { PatchStore } from './PatchStore';
 
@@ -50,13 +50,6 @@ export class PortHighlightStore {
     const compatible = new Set<string>();
     const { blockId: hoveredBlockId, portId: hoveredPortId, direction: hoveredDirection } = this.hoveredPort;
 
-    // Check if hovered port is already connected
-    const isHoveredConnected = this.isPortConnected(patch, hoveredBlockId, hoveredPortId, hoveredDirection);
-    if (isHoveredConnected) {
-      // Don't highlight anything for connected ports
-      return new Set();
-    }
-
     // Iterate all blocks and check each port
     for (const [blockId, block] of patch.blocks) {
       const blockDef = requireBlockDef(block.type);
@@ -66,10 +59,6 @@ export class PortHighlightStore {
       const targetDirection = hoveredDirection === 'output' ? 'input' : 'output';
 
       for (const [portId, port] of Object.entries(portsToCheck)) {
-        // Skip if this port is already connected
-        const isTargetConnected = this.isPortConnected(patch, blockId, portId as PortId, targetDirection);
-        if (isTargetConnected) continue;
-
         // Check type compatibility
         let isCompatible = false;
         if (hoveredDirection === 'output') {
@@ -142,25 +131,4 @@ export class PortHighlightStore {
     return this.isPortCompatible(blockId, portId);
   }
 
-  // =============================================================================
-  // Helper Methods
-  // =============================================================================
-
-  /**
-   * Check if a port is connected.
-   */
-  private isPortConnected(
-    patch: Patch,
-    blockId: BlockId,
-    portId: PortId,
-    direction: 'input' | 'output'
-  ): boolean {
-    if (direction === 'input') {
-      // Check for incoming edges
-      return patch.edges.some(e => e.to.blockId === blockId && e.to.slotId === portId);
-    } else {
-      // Check for outgoing edges
-      return patch.edges.some(e => e.from.blockId === blockId && e.from.slotId === portId);
-    }
-  }
 }

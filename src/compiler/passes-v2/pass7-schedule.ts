@@ -15,7 +15,8 @@
  * deterministic execution order.
  */
 
-import type { Step, StepRender, StepMaterialize, StepContinuityMapBuild, StepContinuityApply, TimeModel, InstanceId, InstanceDecl, FieldExprId, SigExprId, SigExpr, FieldExpr, ValueSlot, ContinuityPolicy, StateMapping } from '../ir/types';
+import type { Step, StepEvalEvent, StepRender, StepMaterialize, StepContinuityMapBuild, StepContinuityApply, TimeModel, InstanceId, InstanceDecl, FieldExprId, SigExprId, SigExpr, FieldExpr, ValueSlot, ContinuityPolicy, StateMapping, EventSlotId } from '../ir/types';
+import type { EventExprId } from '../ir/Indices';
 import type { UnlinkedIRFragments } from './pass6-block-lowering';
 import type { AcyclicOrLegalGraph, NormalizedEdge, Block, BlockIndex } from '../ir/patches';
 import type { TimeModelIR } from '../ir/schedule';
@@ -57,6 +58,12 @@ export interface ScheduleIR {
 
   /** State mappings with stable IDs for hot-swap migration */
   readonly stateMappings: readonly StateMapping[];
+
+  /** Number of event slots (for sizing eventScalars Uint8Array) */
+  readonly eventSlotCount: number;
+
+  /** Number of event expressions (for sizing eventPrevPredicate Uint8Array) */
+  readonly eventExprCount: number;
 }
 
 /**
@@ -450,18 +457,32 @@ export function pass7Schedule(
     });
   }
 
+  // Generate evalEvent steps for all registered event slots.
+  // Events are evaluated after continuityApply and before render.
+  const eventSlots = unlinkedIR.builder.getEventSlots();
+  const evalEventSteps: StepEvalEvent[] = [];
+  for (const [eventId, eventSlot] of eventSlots) {
+    evalEventSteps.push({
+      kind: 'evalEvent',
+      expr: eventId,
+      target: eventSlot,
+    });
+  }
+
   // Combine all steps in correct execution order:
   // 1. EvalSig (evaluate signals to slots - enables debug probe)
   // 2. ContinuityMapBuild (detect domain changes, compute mappings)
   // 3. Materialize (evaluate fields to buffers)
   // 4. ContinuityApply (apply gauge/slew/crossfade to buffers)
-  // 5. Render (use continuity-applied buffers)
-  // 6. StateWrite (persist state for next frame)
+  // 5. EvalEvent (evaluate discrete events)
+  // 6. Render (use continuity-applied buffers)
+  // 7. StateWrite (persist state for next frame)
   const steps: Step[] = [
     ...evalSigSteps,
     ...mapBuildSteps,
     ...materializeSteps,
     ...continuityApplySteps,
+    ...evalEventSteps,
     ...renderSteps,
     ...builderSteps,
   ];
@@ -473,6 +494,10 @@ export function pass7Schedule(
   }));
   const stateMappings = unlinkedIR.builder.getStateMappings();
 
+  // Get event counts for runtime allocation
+  const eventSlotCount = unlinkedIR.builder.getEventSlotCount();
+  const eventExprCount = unlinkedIR.builder.getEventExprs().length;
+
   return {
     timeModel,
     instances,
@@ -480,6 +505,8 @@ export function pass7Schedule(
     stateSlotCount,
     stateSlots,
     stateMappings,
+    eventSlotCount,
+    eventExprCount,
   };
 }
 

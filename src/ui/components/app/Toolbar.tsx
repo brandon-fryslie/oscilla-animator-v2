@@ -5,7 +5,7 @@
  * Uses Mantine for a gorgeous, modern look.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Group,
   Button,
@@ -13,6 +13,7 @@ import {
   Badge,
   Box,
   Tooltip,
+  Select,
   rem,
 } from '@mantine/core';
 import { observer } from 'mobx-react-lite';
@@ -28,6 +29,31 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --' }) 
   const [toastOpen, setToastOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastSeverity, setToastSeverity] = useState<'success' | 'error'>('success');
+
+  // Preset dropdown state - reads from window globals set by main.ts
+  const [presets, setPresets] = useState<Array<{ label: string; value: string }>>([]);
+  const [currentPreset, setCurrentPreset] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Poll for presets availability (set by main.ts after runtime init)
+    const check = () => {
+      const win = window as any;
+      if (win.__oscilla_presets) {
+        setPresets(win.__oscilla_presets);
+        setCurrentPreset(win.__oscilla_currentPreset ?? '0');
+      }
+    };
+    check();
+    const interval = setInterval(check, 200);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handlePresetChange = (value: string | null) => {
+    if (value === null) return;
+    setCurrentPreset(value);
+    const switchFn = (window as any).__oscilla_switchPreset;
+    if (switchFn) switchFn(value);
+  };
 
   const handleExport = async () => {
     const result = await exportPatch();
@@ -91,8 +117,41 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --' }) 
             </Badge>
           </Group>
 
-          {/* Stats and Actions */}
+          {/* Preset Selector + Stats and Actions */}
           <Group gap="md">
+            {/* Preset Dropdown */}
+            {presets.length > 0 && (
+              <Select
+                data={presets}
+                value={currentPreset}
+                onChange={handlePresetChange}
+                size="xs"
+                w={180}
+                allowDeselect={false}
+                styles={{
+                  input: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                    borderColor: 'rgba(139, 92, 246, 0.3)',
+                    color: '#ccc',
+                    fontSize: rem(12),
+                    '&:focus': {
+                      borderColor: 'rgba(139, 92, 246, 0.6)',
+                    },
+                  },
+                  dropdown: {
+                    backgroundColor: '#1e1e2e',
+                    borderColor: 'rgba(139, 92, 246, 0.3)',
+                  },
+                  option: {
+                    fontSize: rem(12),
+                    '&[data-selected]': {
+                      backgroundColor: 'rgba(139, 92, 246, 0.3)',
+                    },
+                  },
+                }}
+              />
+            )}
+
             {/* Performance Stats */}
             <Badge
               variant="outline"

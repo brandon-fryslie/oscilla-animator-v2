@@ -11,9 +11,12 @@
  */
 
 /**
- * TopologyId - String identifier for a topology
+ * TopologyId - Numeric identifier for a topology (array index)
+ *
+ * Built-in topologies: 0-99
+ * Dynamic topologies: 100+
  */
-export type TopologyId = string;
+export type TopologyId = number;
 
 /**
  * ParamDef - Parameter definition for a topology

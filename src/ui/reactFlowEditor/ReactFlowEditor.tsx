@@ -421,7 +421,7 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = observer(({
     // Create handle for EditorContext
     const handle: ReactFlowEditorHandle = {
       async addBlock(blockId: BlockId, blockType: string): Promise<void> {
-        addBlockToReactFlow(blockId, blockType, nodesRef.current, layoutStore, setNodes, diagnostics);
+        addBlockToReactFlow(blockId, blockType, nodesRef.current, layoutStore, patchStore, setNodes, diagnostics);
       },
 
       async removeBlock(blockId: BlockId): Promise<void> {

@@ -18,7 +18,7 @@ import type { Patch, BlockId } from '../../types';
 import type { PatchStore } from '../../stores/PatchStore';
 import type { LayoutStore } from '../../stores/LayoutStore';
 import type { DiagnosticsStore } from '../../stores/DiagnosticsStore';
-import { getBlockDefinition } from '../../blocks/registry';
+import { getBlockDefinition, type BlockDef } from '../../blocks/registry';
 import { createNodeFromBlock, createEdgeFromPatchEdge, type OscillaNode } from './nodes';
 import { getPortTypeFromBlockType, formatUnitForDisplay } from './typeValidation';
 import { findAdapter } from '../../graph/adapters';
@@ -37,33 +37,122 @@ export interface SyncHandle {
   getNodes: () => Node[];
 }
 
-/**
- * Default position offset for new blocks without a stored position.
- * Places them to the right and below existing nodes.
- */
-const NEW_BLOCK_OFFSET = { x: 50, y: 50 };
+/** Default node dimensions for positioning calculations */
+const NODE_WIDTH = 200;
+const NODE_HEIGHT = 120;
+/** Horizontal gap when placing a new block to the right of a source */
+const PLACEMENT_GAP_X = 80;
+/** Vertical offset to avoid exact overlap with source */
+const PLACEMENT_GAP_Y = 20;
 
 /**
- * Find a position for a new block that doesn't overlap existing nodes.
- * Uses a simple bounding-box approach: place to the right of the rightmost node.
+ * Find a position for a new block.
+ * Strategy:
+ * 1. If the new block has inputs that match an existing block's outputs,
+ *    place it to the right of that block (dataflow convention).
+ * 2. Otherwise, find empty space at the right edge of the graph.
+ */
+function findSmartPosition(
+  newBlockDef: BlockDef,
+  existingNodes: Node[],
+  patchStore: PatchStore
+): { x: number; y: number } {
+  if (existingNodes.length === 0) {
+    return { x: 100, y: 100 };
+  }
+
+  // Try to find a compatible source block:
+  // Look at the new block's input port types and find existing blocks
+  // that have matching output types
+  const newInputTypes = Object.values(newBlockDef.inputs)
+    .filter(input => input.exposedAsPort !== false)
+    .map(input => input.type.payload);
+
+  if (newInputTypes.length > 0) {
+    // Score each existing node by how many of its outputs match our inputs
+    let bestNode: Node | null = null;
+    let bestScore = 0;
+
+    for (const node of existingNodes) {
+      const nodeData = node.data as { blockType?: string } | undefined;
+      if (!nodeData?.blockType) continue;
+
+      const nodeDef = getBlockDefinition(nodeData.blockType);
+      if (!nodeDef) continue;
+
+      // Count matching output types
+      const outputTypes = Object.values(nodeDef.outputs).map(o => o.type.payload);
+      let score = 0;
+      for (const outputPayload of outputTypes) {
+        if (newInputTypes.includes(outputPayload)) {
+          score++;
+        }
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestNode = node;
+      }
+    }
+
+    if (bestNode) {
+      // Place to the right of the best matching source block
+      const sourceRight = bestNode.position.x + (bestNode.width ?? NODE_WIDTH);
+      const sourceY = bestNode.position.y;
+
+      // Check if that spot is already occupied — if so, offset vertically
+      const targetX = sourceRight + PLACEMENT_GAP_X;
+      let targetY = sourceY;
+
+      // Find nodes near the target position and offset if overlapping
+      for (const node of existingNodes) {
+        const nodeLeft = node.position.x;
+        const nodeTop = node.position.y;
+        const nodeRight = nodeLeft + (node.width ?? NODE_WIDTH);
+        const nodeBottom = nodeTop + (node.height ?? NODE_HEIGHT);
+
+        // Check overlap with our target rectangle
+        if (
+          targetX < nodeRight + 20 &&
+          targetX + NODE_WIDTH > nodeLeft - 20 &&
+          targetY < nodeBottom + 20 &&
+          targetY + NODE_HEIGHT > nodeTop - 20
+        ) {
+          // Overlap — shift below this node
+          targetY = nodeBottom + PLACEMENT_GAP_Y;
+        }
+      }
+
+      return { x: targetX, y: targetY };
+    }
+  }
+
+  // Fallback: place to the right of the rightmost node
+  let maxX = -Infinity;
+  for (const node of existingNodes) {
+    const nodeRight = node.position.x + (node.width ?? NODE_WIDTH);
+    if (nodeRight > maxX) maxX = nodeRight;
+  }
+
+  return { x: maxX + PLACEMENT_GAP_X, y: 100 };
+}
+
+/**
+ * Simple fallback positioning (no block type info available).
+ * Used during reconciliation for blocks without stored positions.
  */
 function findEmptyPosition(existingNodes: Node[]): { x: number; y: number } {
   if (existingNodes.length === 0) {
     return { x: 100, y: 100 };
   }
 
-  // Find bounding box of existing nodes
   let maxX = -Infinity;
-  let maxY = -Infinity;
   for (const node of existingNodes) {
-    const nodeRight = node.position.x + (node.width ?? 200);
-    const nodeBottom = node.position.y + (node.height ?? 120);
+    const nodeRight = node.position.x + (node.width ?? NODE_WIDTH);
     if (nodeRight > maxX) maxX = nodeRight;
-    if (nodeBottom > maxY) maxY = nodeBottom;
   }
 
-  // Place new block to the right with some padding
-  return { x: maxX + NEW_BLOCK_OFFSET.x, y: 100 };
+  return { x: maxX + PLACEMENT_GAP_X, y: 100 };
 }
 
 /**
@@ -342,13 +431,15 @@ export function createConnectHandler(handle: SyncHandle): OnConnect {
 
 /**
  * Add a block to ReactFlow at a smart position.
- * Finds empty space near existing nodes.
+ * Places near a compatible source block (matching output→input types),
+ * or to the right of the graph if no match found.
  */
 export function addBlockToReactFlow(
   blockId: BlockId,
   blockType: string,
   currentNodes: Node[],
   layoutStore: LayoutStore,
+  patchStore: PatchStore,
   setNodes: React.Dispatch<React.SetStateAction<Node[]>>,
   diagnostics: DiagnosticsStore
 ): void {
@@ -375,8 +466,8 @@ export function addBlockToReactFlow(
     [] // No edges for new block
   );
 
-  // Find empty position near existing nodes
-  const position = findEmptyPosition(currentNodes);
+  // Smart position: near compatible source block
+  const position = findSmartPosition(def, currentNodes, patchStore);
   node.position = position;
 
   // Persist to LayoutStore

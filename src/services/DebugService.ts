@@ -243,7 +243,7 @@ class DebugService {
    * - Field + tracked: returns FieldValueResult (throws if no value after runtime started)
    * - Field + untracked: returns FieldUntrackedResult (no throw)
    *
-   * @throws If edge not in mapping (compiler bug)
+   * @returns undefined if edge not in mapping (runtime not yet compiled this edge)
    * @throws If signal/tracked-field slot has no value after runtime started (scheduling bug)
    */
   getEdgeValue(edgeId: string): EdgeValueResult | undefined {

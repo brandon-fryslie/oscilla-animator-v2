@@ -58,16 +58,12 @@ function getIndicatorColor(ds: DefaultSource): string {
 function getPortHighlightStyle(
   blockId: BlockId,
   portId: PortId,
-  isConnected: boolean,
   portHighlight: ReturnType<typeof useStores>['portHighlight']
 ): React.CSSProperties | undefined {
   const { hoveredPort, isPortCompatible } = portHighlight;
 
   // Don't highlight if no port is hovered
   if (!hoveredPort) return undefined;
-
-  // Don't highlight connected ports
-  if (isConnected) return undefined;
 
   // Check if this port is compatible
   const isCompatible = isPortCompatible(blockId, portId);
@@ -165,7 +161,6 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
         const highlightStyle = getPortHighlightStyle(
           data.blockId,
           input.id as PortId,
-          input.isConnected,
           portHighlight
         );
 
@@ -317,7 +312,6 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
         const highlightStyle = getPortHighlightStyle(
           data.blockId,
           output.id as PortId,
-          output.isConnected,
           portHighlight
         );
 

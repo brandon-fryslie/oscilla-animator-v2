@@ -10,6 +10,7 @@ import type {
   SigExprId,
   FieldExprId,
   EventExprId,
+  EventSlotId,
   ValueSlot,
   StateId,
   StateSlotId,
@@ -20,6 +21,7 @@ import {
   sigExprId,
   fieldExprId,
   eventExprId,
+  eventSlotId,
   valueSlot,
   stateId,
   stateSlotId,
@@ -59,7 +61,8 @@ export class IRBuilderImpl implements IRBuilder {
   // Slot registrations for debug/validation
   private sigSlots = new Map<number, ValueSlot>();
   private fieldSlots = new Map<number, ValueSlot>();
-  private eventSlots = new Map<EventExprId, ValueSlot>();
+  private eventSlots = new Map<EventExprId, EventSlotId>();
+  private eventSlotCounter = 0;
 
   // State slot tracking for persistent cross-frame storage
   // OLD: private stateSlots: { initialValue: number }[] = [];
@@ -579,8 +582,10 @@ export class IRBuilderImpl implements IRBuilder {
     this.fieldSlots.set(fieldId, slot);
   }
 
-  registerEventSlot(eventId: EventExprId, slot: ValueSlot): void {
+  allocEventSlot(eventId: EventExprId): EventSlotId {
+    const slot = eventSlotId(this.eventSlotCounter++);
     this.eventSlots.set(eventId, slot);
+    return slot;
   }
 
   // =========================================================================
@@ -655,8 +660,12 @@ export class IRBuilderImpl implements IRBuilder {
     return this.fieldSlots;
   }
 
-  getEventSlots(): ReadonlyMap<EventExprId, ValueSlot> {
+  getEventSlots(): ReadonlyMap<EventExprId, EventSlotId> {
     return this.eventSlots;
+  }
+
+  getEventSlotCount(): number {
+    return this.eventSlotCounter;
   }
 
   /**

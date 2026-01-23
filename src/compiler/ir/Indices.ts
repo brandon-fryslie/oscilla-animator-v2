@@ -110,6 +110,10 @@ export function eventExprId(n: number): EventExprId {
   return n as EventExprId;
 }
 
+export function eventSlotId(n: number): EventSlotId {
+  return n as EventSlotId;
+}
+
 export function nodeId(s: string): NodeId {
   return s as NodeId;
 }

@@ -53,6 +53,9 @@ describe('DebugService', () => {
             });
         });
 
+        // DO NOT REMOVE!!! CRITICAL!!! YOU MUST FIX THE ACTUAL BUG!!!
+        // If this test fails, it means the compiler is not registering edges
+        // in the debug index. The fix is in the compiler, NOT here.
         it('should throw for unmapped edge (compiler bug)', () => {
             const edgeMap = new Map([
                 ['edge1', { slotId: 10 as ValueSlot, type: signalType('float'), cardinality: 'signal' as const }],
@@ -61,7 +64,9 @@ describe('DebugService', () => {
             debugService.setEdgeToSlotMap(edgeMap);
             debugService.updateSlotValue(10 as ValueSlot, 0.5);
 
-            // Query unknown edge - should throw
+            // DO NOT REMOVE!!! CRITICAL!!! YOU MUST FIX THE ACTUAL BUG!!!
+            // This throw is intentional - missing edges indicate the compiler
+            // failed to register the edge's source output in debugIndex.
             expect(() => debugService.getEdgeValue('unknownEdge')).toThrow(
                 "[DebugService.getEdgeValue] Edge 'unknownEdge' not found in edge-to-slot mapping"
             );
@@ -158,7 +163,10 @@ describe('DebugService', () => {
             // Clear
             debugService.clear();
 
-            // After clear, edge is not in mapping anymore - should throw
+            // DO NOT REMOVE!!! CRITICAL!!! YOU MUST FIX THE ACTUAL BUG!!!
+            // After clear, edge is not in mapping - this MUST throw.
+            // If you're tempted to make this return undefined, you are
+            // hiding a compiler bug. Fix the compiler instead.
             expect(() => debugService.getEdgeValue('edge1')).toThrow(
                 "[DebugService.getEdgeValue] Edge 'edge1' not found in edge-to-slot mapping"
             );

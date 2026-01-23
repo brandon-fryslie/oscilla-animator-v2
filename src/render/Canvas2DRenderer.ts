@@ -78,16 +78,17 @@ export function renderFrame(
   ctx: CanvasRenderingContext2D,
   frame: RenderFrameIR | RenderFrameIR_Future,
   width: number,
-  height: number
+  height: number,
+  skipClear = false
 ): void {
   // Check for v2 format (has 'ops' array and version: 2)
   if ('ops' in frame && 'version' in frame && frame.version === 2) {
-    renderFrameV2(ctx, frame as RenderFrameIR_Future, width, height);
+    renderFrameV2(ctx, frame as RenderFrameIR_Future, width, height, skipClear);
     return;
   }
 
   // V1 format: has 'passes' array
-  renderFrameV1(ctx, frame as RenderFrameIR, width, height);
+  renderFrameV1(ctx, frame as RenderFrameIR, width, height, skipClear);
 }
 
 /**
@@ -97,11 +98,13 @@ function renderFrameV1(
   ctx: CanvasRenderingContext2D,
   frame: RenderFrameIR,
   width: number,
-  height: number
+  height: number,
+  skipClear = false
 ): void {
-  // Clear canvas once
-  ctx.fillStyle = '#000000';
-  ctx.fillRect(0, 0, width, height);
+  if (!skipClear) {
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, width, height);
+  }
 
   // Render each pass
   for (const pass of frame.passes) {
@@ -330,11 +333,13 @@ export function renderFrameV2(
   ctx: CanvasRenderingContext2D,
   frame: RenderFrameIR_Future,
   width: number,
-  height: number
+  height: number,
+  skipClear = false
 ): void {
-  // Clear canvas once
-  ctx.fillStyle = '#000000';
-  ctx.fillRect(0, 0, width, height);
+  if (!skipClear) {
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, width, height);
+  }
 
   // Render each operation
   for (const op of frame.ops) {

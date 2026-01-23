@@ -10,6 +10,7 @@ import type {
   SigExprId,
   FieldExprId,
   EventExprId,
+  EventSlotId,
   ValueSlot,
   StateId,
   StateSlotId,
@@ -155,8 +156,8 @@ export interface IRBuilder {
   /** Register a field expression with a slot. */
   registerFieldSlot(fieldId: FieldExprId, slot: ValueSlot): void;
 
-  /** Register an event expression with a slot. */
-  registerEventSlot(eventId: EventExprId, slot: ValueSlot): void;
+  /** Allocate an event slot for an event expression. Returns a distinct EventSlotId. */
+  allocEventSlot(eventId: EventExprId): EventSlotId;
 
   // =========================================================================
   // Slot Allocation (Simple)
@@ -383,4 +384,10 @@ export interface IRBuilder {
    * @returns Map from signal expr ID to slot
    */
   getSigSlots(): ReadonlyMap<number, ValueSlot>;
+
+  /** Get event expression to EventSlotId mappings. */
+  getEventSlots(): ReadonlyMap<EventExprId, EventSlotId>;
+
+  /** Get total number of allocated event slots. */
+  getEventSlotCount(): number;
 }

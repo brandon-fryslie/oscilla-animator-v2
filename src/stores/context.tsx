@@ -11,7 +11,7 @@ import { RootStore } from './RootStore';
 const StoreContext = createContext<RootStore | null>(null);
 
 export interface StoreProviderProps {
-  children: React.ReactNode;
+  children?: React.ReactNode;
   store?: RootStore; // Optional for testing
 }
 

@@ -44,6 +44,8 @@ function createTestRuntimeState(): RuntimeState {
       shape2d: new Uint32Array(0),
     },
     state: new Float64Array(0),
+    eventScalars: new Uint8Array(0),
+    eventPrevPredicate: new Uint8Array(0),
     cache: {
       frameId: 0,
       sigValues: new Float64Array(100),

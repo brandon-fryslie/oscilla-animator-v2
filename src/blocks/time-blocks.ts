@@ -50,7 +50,7 @@ registerBlock({
     const tMsSlot = ctx.b.allocSlot();
     const phaseASlot = ctx.b.allocSlot();
     const phaseBSlot = ctx.b.allocSlot();
-    const pulseSlot = ctx.b.allocSlot();
+    const pulseSlot = ctx.b.allocEventSlot(pulse);
     const paletteSlot = ctx.b.allocSlot();
     const energySlot = ctx.b.allocSlot();
 

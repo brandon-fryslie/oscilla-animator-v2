@@ -34,6 +34,7 @@ export type {
   SigExprId,
   FieldExprId,
   EventExprId,
+  EventSlotId,
   TransformChainId,
   NodeId,
   StepId,
@@ -52,6 +53,7 @@ export {
   sigExprId,
   fieldExprId,
   eventExprId,
+  eventSlotId,
   nodeId,
   stepId,
   exprId,
@@ -64,6 +66,7 @@ import type {
   SigExprId,
   FieldExprId,
   EventExprId,
+  EventSlotId,
   SlotId,
 } from './Indices';
 
@@ -422,7 +425,8 @@ export type Step =
   | StepStateWrite
   | StepFieldStateWrite
   | StepContinuityMapBuild
-  | StepContinuityApply;
+  | StepContinuityApply
+  | StepEvalEvent;
 
 export interface StepEvalSig {
   readonly kind: 'evalSig';
@@ -492,6 +496,16 @@ export interface StepContinuityApply {
   readonly baseSlot: ValueSlot; // Input buffer (base values)
   readonly outputSlot: ValueSlot; // Output buffer (continuity-applied values)
   readonly semantic: 'position' | 'radius' | 'opacity' | 'color' | 'custom';
+}
+
+/**
+ * Event evaluation step.
+ * Evaluates an event expression and writes result to event storage.
+ */
+export interface StepEvalEvent {
+  readonly kind: 'evalEvent';
+  readonly expr: EventExprId;
+  readonly target: EventSlotId;
 }
 
 // =============================================================================

@@ -457,6 +457,12 @@ export interface ProgramState {
 
   /** Stateful primitive state (migrated via StableStateIds on hot-swap) */
   state: Float64Array;
+
+  /** Event scalar storage (0=not fired, 1=fired this tick). Cleared each frame. */
+  eventScalars: Uint8Array;
+
+  /** Previous predicate values for wrap edge detection (indexed by EventExprId). */
+  eventPrevPredicate: Uint8Array;
 }
 
 /**
@@ -479,6 +485,12 @@ export interface RuntimeState {
 
   /** Stateful primitive state (migrated via StableStateIds on hot-swap) */
   state: Float64Array;
+
+  /** Event scalar storage (0=not fired, 1=fired this tick). Cleared each frame. */
+  eventScalars: Uint8Array;
+
+  /** Previous predicate values for wrap edge detection (indexed by EventExprId). */
+  eventPrevPredicate: Uint8Array;
 
   // === SessionState fields (survive hot-swap) ===
 
@@ -517,12 +529,19 @@ export function createSessionState(): SessionState {
 /**
  * Create a ProgramState (called on each compile)
  */
-export function createProgramState(slotCount: number, stateSlotCount: number = 0): ProgramState {
+export function createProgramState(
+  slotCount: number,
+  stateSlotCount: number = 0,
+  eventSlotCount: number = 0,
+  eventExprCount: number = 0
+): ProgramState {
   return {
     values: createValueStore(slotCount),
     cache: createFrameCache(),
     time: null,
     state: new Float64Array(stateSlotCount),
+    eventScalars: new Uint8Array(eventSlotCount),
+    eventPrevPredicate: new Uint8Array(eventExprCount),
   };
 }
 
@@ -532,15 +551,22 @@ export function createProgramState(slotCount: number, stateSlotCount: number = 0
  * @deprecated Use createSessionState() + createProgramState() for new code.
  * This function is kept for backwards compatibility.
  */
-export function createRuntimeState(slotCount: number, stateSlotCount: number = 0): RuntimeState {
+export function createRuntimeState(
+  slotCount: number,
+  stateSlotCount: number = 0,
+  eventSlotCount: number = 0,
+  eventExprCount: number = 0
+): RuntimeState {
   const session = createSessionState();
-  const program = createProgramState(slotCount, stateSlotCount);
+  const program = createProgramState(slotCount, stateSlotCount, eventSlotCount, eventExprCount);
   return {
     // ProgramState
     values: program.values,
     cache: program.cache,
     time: program.time,
     state: program.state,
+    eventScalars: program.eventScalars,
+    eventPrevPredicate: program.eventPrevPredicate,
     // SessionState
     timeState: session.timeState,
     external: session.external,
@@ -558,15 +584,19 @@ export function createRuntimeState(slotCount: number, stateSlotCount: number = 0
 export function createRuntimeStateFromSession(
   session: SessionState,
   slotCount: number,
-  stateSlotCount: number = 0
+  stateSlotCount: number = 0,
+  eventSlotCount: number = 0,
+  eventExprCount: number = 0
 ): RuntimeState {
-  const program = createProgramState(slotCount, stateSlotCount);
+  const program = createProgramState(slotCount, stateSlotCount, eventSlotCount, eventExprCount);
   return {
     // ProgramState (fresh)
     values: program.values,
     cache: program.cache,
     time: program.time,
     state: program.state,
+    eventScalars: program.eventScalars,
+    eventPrevPredicate: program.eventPrevPredicate,
     // SessionState (preserved)
     timeState: session.timeState,
     external: session.external,

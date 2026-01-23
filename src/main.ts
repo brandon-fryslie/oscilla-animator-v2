@@ -67,6 +67,9 @@ function setupDebugProbe(state: RuntimeState, patch: Patch, program: any): void 
 
   // Build and set debug mappings (edge→slot and port→slot)
   const { edgeMap, portMap, unmappedEdges } = mapDebugMappings(patch, program);
+  if (unmappedEdges.length > 0) {
+    console.warn('[DebugProbe] Unmapped edges:', unmappedEdges.map(e => `${e.edgeId}: ${e.fromBlockId}.${e.fromPort} → ${e.toBlockId}.${e.toPort}`));
+  }
   debugService.setEdgeToSlotMap(edgeMap);
   debugService.setPortToSlotMap(portMap);
   debugService.setUnmappedEdges(unmappedEdges);
@@ -557,6 +560,91 @@ const patches: { name: string; builder: PatchBuilder }[] = [
 let currentPatchIndex = 0;
 
 // =============================================================================
+// LocalStorage Persistence
+// =============================================================================
+
+const STORAGE_KEY = 'oscilla-v2-patch';
+
+interface SerializedPatch {
+  blocks: Array<{
+    id: string;
+    type: string;
+    params: Record<string, unknown>;
+    label?: string;
+    displayName: string | null;
+    domainId: string | null;
+    role: { kind: string; meta: Record<string, unknown> };
+    inputPorts: Array<{ id: string; defaultSource?: unknown }>;
+    outputPorts: Array<{ id: string }>;
+  }>;
+  edges: Array<{
+    id: string;
+    from: { kind: 'port'; blockId: string; slotId: string };
+    to: { kind: 'port'; blockId: string; slotId: string };
+    enabled?: boolean;
+    sortKey?: number;
+  }>;
+  presetIndex: number;
+}
+
+function serializePatch(patch: Patch, presetIndex: number): string {
+  const serialized: SerializedPatch = {
+    blocks: Array.from(patch.blocks.entries()).map(([, block]) => ({
+      id: block.id,
+      type: block.type,
+      params: { ...block.params },
+      ...(block.label && { label: block.label }),
+      displayName: block.displayName,
+      domainId: block.domainId,
+      role: block.role as { kind: string; meta: Record<string, unknown> },
+      inputPorts: Array.from(block.inputPorts.values()),
+      outputPorts: Array.from(block.outputPorts.values()),
+    })),
+    edges: patch.edges.map(e => ({ ...e })),
+    presetIndex,
+  };
+  return JSON.stringify(serialized);
+}
+
+function deserializePatch(json: string): { patch: Patch; presetIndex: number } | null {
+  try {
+    const data: SerializedPatch = JSON.parse(json);
+    const blocks = new Map<BlockId, any>();
+    for (const b of data.blocks) {
+      blocks.set(b.id as BlockId, {
+        ...b,
+        inputPorts: new Map(b.inputPorts.map(p => [p.id, p])),
+        outputPorts: new Map(b.outputPorts.map(p => [p.id, p])),
+      });
+    }
+    return {
+      patch: { blocks, edges: data.edges },
+      presetIndex: data.presetIndex,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function savePatchToStorage(patch: Patch, presetIndex: number): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, serializePatch(patch, presetIndex));
+  } catch {
+    // Storage full or unavailable - silently ignore
+  }
+}
+
+function loadPatchFromStorage(): { patch: Patch; presetIndex: number } | null {
+  try {
+    const json = localStorage.getItem(STORAGE_KEY);
+    if (!json) return null;
+    return deserializePatch(json);
+  } catch {
+    return null;
+  }
+}
+
+// =============================================================================
 // Build and Compile
 // =============================================================================
 
@@ -649,6 +737,8 @@ async function compileAndSwap(isInitial: boolean = false) {
   const newSlotCount = program.slotMeta.length;
   const newStateSlotCount = newSchedule?.stateSlotCount ?? 0;
   const newStateMappings = newSchedule?.stateMappings ?? [];
+  const newEventSlotCount = (newSchedule as { eventSlotCount?: number })?.eventSlotCount ?? 0;
+  const newEventExprCount = (newSchedule as { eventExprCount?: number })?.eventExprCount ?? 0;
 
   // For recompile: detect domain changes
   if (!isInitial && currentProgram) {
@@ -673,7 +763,7 @@ async function compileAndSwap(isInitial: boolean = false) {
   }
 
   // Create new RuntimeState from preserved SessionState + fresh ProgramState
-  currentState = createRuntimeStateFromSession(sessionState!, newSlotCount, newStateSlotCount);
+  currentState = createRuntimeStateFromSession(sessionState!, newSlotCount, newStateSlotCount, newEventSlotCount, newEventExprCount);
 
   // Handle primitive state migration
   if (!isInitial && oldPrimitiveState && newStateMappings.length > 0) {
@@ -962,11 +1052,18 @@ function animate(tMs: number) {
     // Render to canvas with zoom/pan transform from store
     const renderStart = performance.now();
     const { zoom, pan } = store!.viewport;
+
+    // Clear in device space (identity transform) to avoid ghosting/trails
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Apply camera transform and draw scene
     ctx.save();
     ctx.translate(canvas.width / 2 + pan.x * zoom, canvas.height / 2 + pan.y * zoom);
     ctx.scale(zoom, zoom);
     ctx.translate(-canvas.width / 2, -canvas.height / 2);
-    renderFrame(ctx, frame, canvas.width, canvas.height);
+    renderFrame(ctx, frame, canvas.width, canvas.height, /* skipClear */ true);
     ctx.restore();
     renderTime = performance.now() - renderStart;
 
@@ -1080,56 +1177,18 @@ function animate(tMs: number) {
 async function switchPatch(index: number) {
   if (index < 0 || index >= patches.length) return;
   currentPatchIndex = index;
+  (window as any).__oscilla_currentPreset = String(index);
   log(`Switching to patch: ${patches[index].name}`);
   build(patches[index].builder);
   await compileAndSwap(true);
-  updateButtonStyles();
+  savePatchToStorage(store!.patch.patch, currentPatchIndex);
 }
 
-function updateButtonStyles() {
-  const buttons = document.querySelectorAll('.patch-btn');
-  buttons.forEach((btn, i) => {
-    if (i === currentPatchIndex) {
-      (btn as HTMLButtonElement).style.background = '#4a9eff';
-      (btn as HTMLButtonElement).style.color = '#fff';
-    } else {
-      (btn as HTMLButtonElement).style.background = '#333';
-      (btn as HTMLButtonElement).style.color = '#ccc';
-    }
-  });
-}
-
-function createPatchSwitcherUI() {
-  const container = document.createElement('div');
-  container.id = 'patch-switcher';
-  container.style.cssText = `
-    position: fixed;
-    top: 10px;
-    left: 10px;
-    z-index: 1000;
-    display: flex;
-    gap: 8px;
-    font-family: system-ui, sans-serif;
-  `;
-
-  patches.forEach((p, i) => {
-    const btn = document.createElement('button');
-    btn.className = 'patch-btn';
-    btn.textContent = p.name;
-    btn.style.cssText = `
-      padding: 8px 16px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 14px;
-      transition: background 0.2s;
-    `;
-    btn.onclick = () => switchPatch(i);
-    container.appendChild(btn);
-  });
-
-  document.body.appendChild(container);
-  updateButtonStyles();
+function exposePresetsToUI() {
+  // Expose preset data and switch function to React UI via window
+  (window as any).__oscilla_presets = patches.map((p, i) => ({ label: p.name, value: String(i) }));
+  (window as any).__oscilla_currentPreset = String(currentPatchIndex);
+  (window as any).__oscilla_switchPreset = (index: string) => switchPatch(Number(index));
 }
 
 // =============================================================================
@@ -1149,12 +1208,27 @@ async function initializeRuntime(rootStore: RootStore) {
   // Initialize buffer pool
   pool = new BufferPool();
 
-  // Create patch switcher UI
-  createPatchSwitcherUI();
+  // Try to restore from localStorage, otherwise use default preset
+  const saved = loadPatchFromStorage();
+  if (saved) {
+    log(`Restoring patch from localStorage (preset index: ${saved.presetIndex})`);
+    currentPatchIndex = saved.presetIndex;
+    store.patch.loadPatch(saved.patch);
+    await compileAndSwap(true);
+  } else {
+    build(patches[currentPatchIndex].builder);
+    await compileAndSwap(true);
+  }
 
-  // Build and compile with initial patch
-  build(patches[currentPatchIndex].builder);
-  await compileAndSwap(true);
+  // Expose presets to React toolbar UI
+  exposePresetsToUI();
+
+  // Auto-persist patch to localStorage on changes (debounced by MobX)
+  reaction(
+    () => store!.patch.patch,
+    (patch) => savePatchToStorage(patch, currentPatchIndex),
+    { delay: 500 }
+  );
 
   // Set up live recompile reaction (Continuity-UI Sprint 1)
   setupLiveRecompileReaction();

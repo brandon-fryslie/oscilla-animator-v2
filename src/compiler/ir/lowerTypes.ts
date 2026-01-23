@@ -13,6 +13,7 @@ import type {
   SigExprId,
   FieldExprId,
   EventExprId,
+  EventSlotId,
   ValueSlot,
   InstanceId,
   StateId,
@@ -30,7 +31,7 @@ import type { IRBuilder } from './IRBuilder';
 export type ValueRefPacked =
   | { readonly k: 'sig'; readonly id: SigExprId; readonly slot: ValueSlot }
   | { readonly k: 'field'; readonly id: FieldExprId; readonly slot: ValueSlot }
-  | { readonly k: 'event'; readonly id: EventExprId; readonly slot: ValueSlot }
+  | { readonly k: 'event'; readonly id: EventExprId; readonly slot: EventSlotId }
   | { readonly k: 'instance'; readonly id: InstanceId }
   | { readonly k: 'scalar'; readonly value: unknown };
 

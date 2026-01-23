@@ -15,6 +15,7 @@ import type { TopologyId } from '../shapes/types';
 import { resolveTime } from './timeResolution';
 import { materialize } from './Materializer';
 import { evaluateSignal } from './SignalEvaluator';
+import { evaluateEvent } from './EventEvaluator';
 import { writeShape2D } from './RuntimeState';
 import { detectDomainChange } from './ContinuityMapping';
 import { applyContinuity, finalizeContinuityFrame } from './ContinuityApply';
@@ -176,6 +177,9 @@ export function executeFrame(
   // 2. Resolve effective time
   const time = resolveTime(tAbsMs, timeModel, state.timeState);
   state.time = time;
+
+  // 2.5. Clear event scalars (events fire for exactly one tick, spec §6.1)
+  state.eventScalars.fill(0);
 
   // Store palette color object in objects map for signal evaluation
   // Use a reserved slot number for palette (slot 0 is reserved for time palette)
@@ -372,6 +376,21 @@ export function executeFrame(
             return buffer;
           }
         );
+        break;
+      }
+
+      case 'evalEvent': {
+        // Evaluate event expression and write to eventScalars (monotone OR)
+        // Monotone OR: only write 1, never write 0 back — ensures any-fired-stays-fired
+        const fired = evaluateEvent(
+          step.expr,
+          program.eventExprs.nodes,
+          state,
+          signals
+        );
+        if (fired) {
+          state.eventScalars[step.target as number] = 1;
+        }
         break;
       }
 
