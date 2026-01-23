@@ -55,7 +55,7 @@ export interface IRBuilder {
   /**
    * Create a shape reference signal.
    *
-   * @param topologyId - Topology identifier (e.g., 'ellipse', 'rect', 'polygon-5')
+   * @param topologyId - Numeric topology identifier (e.g., TOPOLOGY_ID_ELLIPSE, TOPOLOGY_ID_RECT)
    * @param paramSignals - Signal IDs for each topology parameter
    * @param type - Signal type (should be signalType('shape'))
    * @param controlPointField - Optional Field<vec2> for path control points

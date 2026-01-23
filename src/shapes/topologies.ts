@@ -2,10 +2,13 @@
  * Built-in Topology Definitions
  *
  * Contains the predefined topologies (ellipse, rect) with their render functions.
- * These are immutable and registered at module load time.
+ * These are registered at module load time by the registry, which assigns
+ * numeric IDs (TOPOLOGY_ID_ELLIPSE = 0, TOPOLOGY_ID_RECT = 1).
+ *
+ * These definitions omit the `id` field — the registry assigns it during initialization.
  */
 
-import type { TopologyDef, RenderSpace2D } from './types';
+import type { AbstractTopologyDef, RenderSpace2D } from './types';
 
 /**
  * TOPOLOGY_ELLIPSE - Ellipse topology
@@ -17,8 +20,7 @@ import type { TopologyDef, RenderSpace2D } from './types';
  *
  * Renders using ctx.ellipse() centered at origin (after translate).
  */
-export const TOPOLOGY_ELLIPSE: TopologyDef = Object.freeze({
-  id: 'ellipse',
+export const TOPOLOGY_ELLIPSE: AbstractTopologyDef = Object.freeze({
   params: Object.freeze([
     { name: 'rx', type: 'float' as const, default: 0.02 },
     { name: 'ry', type: 'float' as const, default: 0.02 },
@@ -45,8 +47,7 @@ export const TOPOLOGY_ELLIPSE: TopologyDef = Object.freeze({
  *
  * Renders using ctx.fillRect() or ctx.roundRect() centered at origin.
  */
-export const TOPOLOGY_RECT: TopologyDef = Object.freeze({
-  id: 'rect',
+export const TOPOLOGY_RECT: AbstractTopologyDef = Object.freeze({
   params: Object.freeze([
     { name: 'width', type: 'float' as const, default: 0.04 },
     { name: 'height', type: 'float' as const, default: 0.02 },
@@ -58,7 +59,7 @@ export const TOPOLOGY_RECT: TopologyDef = Object.freeze({
     const wPx = p.width * space.width * space.scale;
     const hPx = p.height * space.height * space.scale;
     const crPx = p.cornerRadius * Math.min(space.width, space.height) * space.scale;
-    
+
     ctx.save();
     ctx.rotate(p.rotation ?? 0);
     if (crPx > 0) {

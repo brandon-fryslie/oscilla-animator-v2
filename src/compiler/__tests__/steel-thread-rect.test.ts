@@ -5,7 +5,7 @@
  * Rect (shape) → Array (cardinality) → position/color fields → Render
  *
  * This test ensures the shape2d payload flows correctly:
- * - Rect block produces shapeRef signal with 'rect' topologyId
+ * - Rect block produces shapeRef signal with numeric rect topologyId
  * - Compile produces correct IR with shape2d storage
  * - RenderAssembler resolves shape via topology registry
  * - Output RenderPassIR has resolvedShape with mode='primitive' and rect params
@@ -20,6 +20,7 @@ import {
   BufferPool,
   executeFrame,
 } from '../../runtime';
+import { TOPOLOGY_ID_ELLIPSE, TOPOLOGY_ID_RECT } from '../../shapes/registry';
 
 describe('Steel Thread - Rect Shape Pipeline', () => {
   it('should compile and execute a patch using Rect topology', () => {
@@ -102,7 +103,7 @@ describe('Steel Thread - Rect Shape Pipeline', () => {
     // Verify the render step has a shape with 'rect' topology
     const renderStep = renderSteps[0] as any;
     expect(renderStep.shape).toBeDefined();
-    expect(renderStep.shape.topologyId).toBe('rect');
+    expect(renderStep.shape.topologyId).toBe(TOPOLOGY_ID_RECT);
     // Rect has 4 params: width, height, rotation, cornerRadius
     expect(renderStep.shape.paramSignals.length).toBe(4);
 
@@ -136,7 +137,7 @@ describe('Steel Thread - Rect Shape Pipeline', () => {
     // Verify resolvedShape is properly resolved with rect topology
     expect(pass.resolvedShape).toBeDefined();
     expect(pass.resolvedShape.resolved).toBe(true);
-    expect(pass.resolvedShape.topologyId).toBe('rect');
+    expect(pass.resolvedShape.topologyId).toBe(TOPOLOGY_ID_RECT);
     expect(pass.resolvedShape.mode).toBe('primitive');
 
     // Verify rect params are resolved with registry defaults
@@ -189,7 +190,7 @@ describe('Steel Thread - Rect Shape Pipeline', () => {
     expect(hasDifference).toBe(true);
 
     // Verify frame 2 also has correct rect shape
-    expect(frame2.passes[0].resolvedShape.topologyId).toBe('rect');
+    expect(frame2.passes[0].resolvedShape.topologyId).toBe(TOPOLOGY_ID_RECT);
     expect(frame2.passes[0].resolvedShape.mode).toBe('primitive');
     expect(frame2.passes[0].resolvedShape.params.width).toBeCloseTo(0.04, 5);
   });
@@ -297,8 +298,8 @@ describe('Steel Thread - Rect Shape Pipeline', () => {
     expect(rectFrame.passes.length).toBe(1);
 
     // Verify different topologies
-    expect(ellipseFrame.passes[0].resolvedShape.topologyId).toBe('ellipse');
-    expect(rectFrame.passes[0].resolvedShape.topologyId).toBe('rect');
+    expect(ellipseFrame.passes[0].resolvedShape.topologyId).toBe(TOPOLOGY_ID_ELLIPSE);
+    expect(rectFrame.passes[0].resolvedShape.topologyId).toBe(TOPOLOGY_ID_RECT);
 
     // Verify different param names (ellipse: rx/ry, rect: width/height)
     expect(ellipseFrame.passes[0].resolvedShape.params).toHaveProperty('rx');

@@ -18,6 +18,7 @@ import {
   BufferPool,
   executeFrame,
 } from '../../runtime';
+import { TOPOLOGY_ID_ELLIPSE, TOPOLOGY_ID_RECT } from '../../shapes/registry';
 
 describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
   it('should render two topologies with animated scale and opacity', () => {
@@ -177,8 +178,8 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
 
     // Both have different topology IDs
     const topologyIds = renderSteps.map((s: any) => s.shape.topologyId);
-    expect(topologyIds).toContain('ellipse');
-    expect(topologyIds).toContain('rect');
+    expect(topologyIds).toContain(TOPOLOGY_ID_ELLIPSE);
+    expect(topologyIds).toContain(TOPOLOGY_ID_RECT);
 
     // === FRAME 1: t=0 ===
     const pool = new BufferPool();
@@ -188,8 +189,8 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
     expect(frame1.version).toBe(1);
     expect(frame1.passes.length).toBe(2);
 
-    const ellipsePass1 = frame1.passes.find(p => p.resolvedShape.topologyId === 'ellipse')!;
-    const rectPass1 = frame1.passes.find(p => p.resolvedShape.topologyId === 'rect')!;
+    const ellipsePass1 = frame1.passes.find(p => p.resolvedShape.topologyId === TOPOLOGY_ID_ELLIPSE)!;
+    const rectPass1 = frame1.passes.find(p => p.resolvedShape.topologyId === TOPOLOGY_ID_RECT)!;
     expect(ellipsePass1).toBeDefined();
     expect(rectPass1).toBeDefined();
 
@@ -210,13 +211,13 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
 
     // Verify shapes are properly resolved
     expect(ellipsePass1.resolvedShape.resolved).toBe(true);
-    expect(ellipsePass1.resolvedShape.topologyId).toBe('ellipse');
+    expect(ellipsePass1.resolvedShape.topologyId).toBe(TOPOLOGY_ID_ELLIPSE);
     expect(ellipsePass1.resolvedShape.mode).toBe('primitive');
     expect(ellipsePass1.resolvedShape.params).toHaveProperty('rx');
     expect(ellipsePass1.resolvedShape.params).toHaveProperty('ry');
 
     expect(rectPass1.resolvedShape.resolved).toBe(true);
-    expect(rectPass1.resolvedShape.topologyId).toBe('rect');
+    expect(rectPass1.resolvedShape.topologyId).toBe(TOPOLOGY_ID_RECT);
     expect(rectPass1.resolvedShape.mode).toBe('primitive');
     expect(rectPass1.resolvedShape.params).toHaveProperty('width');
     expect(rectPass1.resolvedShape.params).toHaveProperty('height');
@@ -292,8 +293,8 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
     const f1RectScale = rectPass1.scale;
 
     const frame2 = executeFrame(program, state, pool, 1000);
-    const ellipsePass2 = frame2.passes.find(p => p.resolvedShape.topologyId === 'ellipse')!;
-    const rectPass2 = frame2.passes.find(p => p.resolvedShape.topologyId === 'rect')!;
+    const ellipsePass2 = frame2.passes.find(p => p.resolvedShape.topologyId === TOPOLOGY_ID_ELLIPSE)!;
+    const rectPass2 = frame2.passes.find(p => p.resolvedShape.topologyId === TOPOLOGY_ID_RECT)!;
 
     // Positions should change (animated)
     let ellipseMoved = false;
@@ -343,15 +344,15 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
     expect(alphaDistributionChanged).toBe(true);
 
     // Shapes are stable across frames
-    expect(ellipsePass2.resolvedShape.topologyId).toBe('ellipse');
-    expect(rectPass2.resolvedShape.topologyId).toBe('rect');
+    expect(ellipsePass2.resolvedShape.topologyId).toBe(TOPOLOGY_ID_ELLIPSE);
+    expect(rectPass2.resolvedShape.topologyId).toBe(TOPOLOGY_ID_RECT);
     expect(ellipsePass2.resolvedShape.mode).toBe('primitive');
     expect(rectPass2.resolvedShape.mode).toBe('primitive');
 
     // === FRAME 3: t=2000ms - verify continued animation ===
     const frame3 = executeFrame(program, state, pool, 2000);
-    const ellipsePass3 = frame3.passes.find(p => p.resolvedShape.topologyId === 'ellipse')!;
-    const rectPass3 = frame3.passes.find(p => p.resolvedShape.topologyId === 'rect')!;
+    const ellipsePass3 = frame3.passes.find(p => p.resolvedShape.topologyId === TOPOLOGY_ID_ELLIPSE)!;
+    const rectPass3 = frame3.passes.find(p => p.resolvedShape.topologyId === TOPOLOGY_ID_RECT)!;
 
     // Scale continues to change
     expect(ellipsePass3.scale).not.toBeCloseTo(ellipsePass2.scale, 2);

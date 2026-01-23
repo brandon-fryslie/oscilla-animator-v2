@@ -27,9 +27,9 @@ import { defaultSourceConst } from '../types';
  * - CLOSE path
  *
  * @param sides - Number of sides (must be >= 3)
- * @returns PathTopologyDef for the polygon
+ * @returns PathTopologyDef WITHOUT id field (id assigned by registry)
  */
-function createPolygonTopology(sides: number): PathTopologyDef {
+function createPolygonTopology(sides: number): Omit<PathTopologyDef, 'id'> {
   if (sides < 3) {
     throw new Error(`Polygon must have at least 3 sides, got ${sides}`);
   }
@@ -51,7 +51,6 @@ function createPolygonTopology(sides: number): PathTopologyDef {
   const totalControlPoints = sides;
 
   return {
-    id: `polygon-${sides}`,
     params: [],  // No topology params for procedural polygons
     closed: true,
     verbs,
@@ -133,11 +132,11 @@ registerBlock({
       throw new Error(`Polygon must have at least 3 sides, got ${sides}`);
     }
 
-    // Create path topology (compile-time)
+    // Create path topology (compile-time, without id field)
     const topology = createPolygonTopology(sides);
 
-    // Register topology in global registry for runtime lookup
-    registerDynamicTopology(topology);
+    // Register topology and get assigned numeric ID
+    const topologyId = registerDynamicTopology(topology, `polygon-${sides}`);
 
     // Create instance over DOMAIN_CONTROL with N control points
     const controlInstance = ctx.b.createInstance(
@@ -177,9 +176,9 @@ registerBlock({
       signalTypeField('vec2', 'control')
     );
 
-    // Create shape reference with topology + control point field
+    // Create shape reference with numeric topology ID
     const shapeRefSig = ctx.b.sigShapeRef(
-      topology.id,
+      topologyId,  // Numeric ID returned from registerDynamicTopology
       [],  // No topology params
       signalType('shape'),
       computedPositions  // Control point field
@@ -214,9 +213,9 @@ registerBlock({
  * - CLOSE path
  *
  * @param points - Number of star points (must be >= 3)
- * @returns PathTopologyDef for the star
+ * @returns PathTopologyDef WITHOUT id field (id assigned by registry)
  */
-function createStarTopology(points: number): PathTopologyDef {
+function createStarTopology(points: number): Omit<PathTopologyDef, 'id'> {
   if (points < 3) {
     throw new Error(`Star must have at least 3 points, got ${points}`);
   }
@@ -241,7 +240,6 @@ function createStarTopology(points: number): PathTopologyDef {
   const totalControlPoints = totalVertices;
 
   return {
-    id: `star-${points}`,
     params: [],  // No topology params for procedural stars
     closed: true,
     verbs,
@@ -323,11 +321,11 @@ registerBlock({
       throw new Error(`Star must have at least 3 points, got ${points}`);
     }
 
-    // Create star topology (compile-time)
+    // Create star topology (compile-time, without id field)
     const topology = createStarTopology(points);
 
-    // Register topology in global registry for runtime lookup
-    registerDynamicTopology(topology);
+    // Register topology and get assigned numeric ID
+    const topologyId = registerDynamicTopology(topology, `star-${points}`);
 
     // Total vertices = 2 * points (alternating outer/inner)
     const totalVertices = points * 2;
@@ -370,9 +368,9 @@ registerBlock({
       signalTypeField('vec2', 'control')
     );
 
-    // Create shape reference with topology + control point field
+    // Create shape reference with numeric topology ID
     const shapeRefSig = ctx.b.sigShapeRef(
-      topology.id,
+      topologyId,  // Numeric ID returned from registerDynamicTopology
       [],  // No topology params
       signalType('shape'),
       computedPositions  // Control point field

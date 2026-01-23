@@ -13,6 +13,7 @@
 
 import {registerBlock} from './registry';
 import {signalType} from '../core/canonical-types';
+import {TOPOLOGY_ID_ELLIPSE, TOPOLOGY_ID_RECT} from '../shapes/registry';
 import {defaultSourceConst} from '../types';
 
 // =============================================================================
@@ -95,9 +96,9 @@ registerBlock({
             rotationSig = ctx.b.sigConst((config?.rotation as number) ?? 0, signalType('float'));
         }
 
-        // Create shape reference with topology 'ellipse' and param signals
+        // Create shape reference with ellipse topology and param signals
         const shapeRefSig = ctx.b.sigShapeRef(
-            'ellipse',
+            TOPOLOGY_ID_ELLIPSE,
             [rxSig, rySig, rotationSig],
             signalType('shape')
         );
@@ -208,9 +209,9 @@ registerBlock({
             cornerRadiusSig = ctx.b.sigConst((config?.cornerRadius as number) ?? 0, signalType('float'));
         }
 
-        // Create shape reference with topology 'rect' and param signals
+        // Create shape reference with rect topology and param signals
         const shapeRefSig = ctx.b.sigShapeRef(
-            'rect',
+            TOPOLOGY_ID_RECT,
             [widthSig, heightSig, rotationSig, cornerRadiusSig],
             signalType('shape')
         );

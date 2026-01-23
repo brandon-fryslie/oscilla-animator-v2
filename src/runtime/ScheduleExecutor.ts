@@ -208,7 +208,7 @@ export function executeFrame(
           const exprNode = signals[step.expr as number];
           if (exprNode.kind === 'shapeRef') {
             writeShape2D(state.values.shape2d, offset, {
-              topologyId: exprNode.topologyId as unknown as number,
+              topologyId: exprNode.topologyId,
               pointsFieldSlot: (exprNode.controlPointField as number) ?? 0,
               pointsCount: 0,
               styleRef: 0,

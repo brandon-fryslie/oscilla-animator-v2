@@ -18,8 +18,8 @@ import { signalType, extentDefault } from '../../core/canonical-types';
 import type { RuntimeState } from '../RuntimeState';
 import { createRuntimeState } from '../RuntimeState';
 import type { ValueSlot, SigExprId } from '../../types';
-import { registerDynamicTopology } from '../../shapes/registry';
-import type { PathTopologyDef, RenderSpace2D } from '../../shapes/types';
+import { registerDynamicTopology, TOPOLOGY_ID_ELLIPSE } from '../../shapes/registry';
+import type { RenderSpace2D } from '../../shapes/types';
 import { PathVerb } from '../../shapes/types';
 
 // Helper to create a scalar signal type
@@ -50,9 +50,8 @@ function createMockInstance(count: number): InstanceDecl {
   } as InstanceDecl;
 }
 
-// Register a test path topology for v2 tests
-const TEST_PATH_TOPOLOGY: PathTopologyDef = {
-  id: 'test-pentagon',
+// Register a test path topology for v2 tests (id assigned by registry)
+const TEST_PENTAGON_ID = registerDynamicTopology({
   params: [
     { name: 'radiusX', type: 'float', default: 0.02 },
     { name: 'radiusY', type: 'float', default: 0.02 },
@@ -73,10 +72,7 @@ const TEST_PATH_TOPOLOGY: PathTopologyDef = {
   pointsPerVerb: [1, 1, 1, 1, 1, 0],
   totalControlPoints: 5,
   closed: true,
-};
-
-// Register test topology before tests run
-registerDynamicTopology(TEST_PATH_TOPOLOGY);
+}, 'test-pentagon');
 
 describe('RenderAssembler', () => {
   describe('isRenderStep', () => {
@@ -247,7 +243,7 @@ describe('RenderAssembler', () => {
         positionSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
         scale: { k: 'sig', id: 0 as SigExprId },
-        shape: { k: 'sig', topologyId: 'ellipse', paramSignals: [1 as SigExprId, 2 as SigExprId] },
+        shape: { k: 'sig', topologyId: TOPOLOGY_ID_ELLIPSE, paramSignals: [1 as SigExprId, 2 as SigExprId] },
       };
 
       const context: AssemblerContext = {
@@ -264,7 +260,7 @@ describe('RenderAssembler', () => {
       expect(result!.position).toBe(positionBuffer);
       expect(result!.color).toBe(colorBuffer);
       expect(result!.scale).toBe(1.0);
-      expect(result!.resolvedShape.topologyId).toBe('ellipse');
+      expect(result!.resolvedShape.topologyId).toBe(TOPOLOGY_ID_ELLIPSE);
     });
 
     it('assembles a render pass with control points for path topologies', () => {
@@ -293,7 +289,7 @@ describe('RenderAssembler', () => {
         positionSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
         scale: { k: 'sig', id: 0 as SigExprId },
-        shape: { k: 'sig', topologyId: 'ellipse', paramSignals: [1 as SigExprId, 2 as SigExprId] },
+        shape: { k: 'sig', topologyId: TOPOLOGY_ID_ELLIPSE, paramSignals: [1 as SigExprId, 2 as SigExprId] },
         controlPoints: { k: 'slot', slot: 4 as ValueSlot },
       };
 
@@ -335,7 +331,7 @@ describe('RenderAssembler', () => {
           positionSlot: 1 as ValueSlot,
           colorSlot: 2 as ValueSlot,
           scale: { k: 'sig', id: 0 as SigExprId },
-          shape: { k: 'sig', topologyId: 'ellipse', paramSignals: [1 as SigExprId, 2 as SigExprId] },
+          shape: { k: 'sig', topologyId: TOPOLOGY_ID_ELLIPSE, paramSignals: [1 as SigExprId, 2 as SigExprId] },
         },
         {
           kind: 'render',
@@ -343,7 +339,7 @@ describe('RenderAssembler', () => {
           positionSlot: 3 as ValueSlot,
           colorSlot: 4 as ValueSlot,
           scale: { k: 'sig', id: 0 as SigExprId },
-          shape: { k: 'sig', topologyId: 'ellipse', paramSignals: [1 as SigExprId, 2 as SigExprId] },
+          shape: { k: 'sig', topologyId: TOPOLOGY_ID_ELLIPSE, paramSignals: [1 as SigExprId, 2 as SigExprId] },
         },
       ];
 
@@ -382,7 +378,7 @@ describe('RenderAssembler', () => {
           positionSlot: 1 as ValueSlot,
           colorSlot: 2 as ValueSlot,
           scale: { k: 'sig', id: 0 as SigExprId },
-          shape: { k: 'sig', topologyId: 'ellipse', paramSignals: [1 as SigExprId, 2 as SigExprId] },
+          shape: { k: 'sig', topologyId: TOPOLOGY_ID_ELLIPSE, paramSignals: [1 as SigExprId, 2 as SigExprId] },
         },
         {
           kind: 'render',
@@ -390,7 +386,7 @@ describe('RenderAssembler', () => {
           positionSlot: 1 as ValueSlot,
           colorSlot: 2 as ValueSlot,
           scale: { k: 'sig', id: 0 as SigExprId },
-          shape: { k: 'sig', topologyId: 'ellipse', paramSignals: [1 as SigExprId, 2 as SigExprId] },
+          shape: { k: 'sig', topologyId: TOPOLOGY_ID_ELLIPSE, paramSignals: [1 as SigExprId, 2 as SigExprId] },
         },
       ];
 
@@ -471,7 +467,7 @@ describe('RenderAssembler', () => {
         positionSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
         scale: { k: 'sig', id: 0 as SigExprId },
-        shape: { k: 'sig', topologyId: 'ellipse', paramSignals: [1 as SigExprId, 2 as SigExprId] },
+        shape: { k: 'sig', topologyId: TOPOLOGY_ID_ELLIPSE, paramSignals: [1 as SigExprId, 2 as SigExprId] },
       };
 
       const context: AssemblerContext = {
@@ -516,7 +512,7 @@ describe('RenderAssembler', () => {
         scale: { k: 'sig', id: 0 as SigExprId },
         shape: {
           k: 'sig',
-          topologyId: 'test-pentagon',
+          topologyId: TEST_PENTAGON_ID,
           paramSignals: [1 as SigExprId, 2 as SigExprId, 3 as SigExprId],
         },
         controlPoints: { k: 'slot', slot: 3 as ValueSlot },
@@ -579,7 +575,7 @@ describe('RenderAssembler', () => {
         scale: { k: 'sig', id: 0 as SigExprId },
         shape: {
           k: 'sig',
-          topologyId: 'test-pentagon',
+          topologyId: TEST_PENTAGON_ID,
           paramSignals: [1 as SigExprId, 2 as SigExprId, 3 as SigExprId],
         },
         controlPoints: { k: 'slot', slot: 3 as ValueSlot },
@@ -621,7 +617,7 @@ describe('RenderAssembler', () => {
         scale: { k: 'sig', id: 0 as SigExprId },
         shape: {
           k: 'sig',
-          topologyId: 'test-pentagon',
+          topologyId: TEST_PENTAGON_ID,
           paramSignals: [1 as SigExprId, 2 as SigExprId, 3 as SigExprId],
         },
         controlPoints: { k: 'slot', slot: 3 as ValueSlot },
@@ -662,7 +658,7 @@ describe('RenderAssembler', () => {
         scale: { k: 'sig', id: 0 as SigExprId },
         shape: {
           k: 'sig',
-          topologyId: 'test-pentagon',
+          topologyId: TEST_PENTAGON_ID,
           paramSignals: [1 as SigExprId, 2 as SigExprId, 3 as SigExprId],
         },
         // controlPoints not specified!
@@ -708,7 +704,7 @@ describe('RenderAssembler', () => {
           scale: { k: 'sig', id: 0 as SigExprId },
           shape: {
             k: 'sig',
-            topologyId: 'test-pentagon',
+            topologyId: TEST_PENTAGON_ID,
             paramSignals: [1 as SigExprId, 2 as SigExprId, 3 as SigExprId],
           },
           controlPoints: { k: 'slot', slot: 3 as ValueSlot },
@@ -721,7 +717,7 @@ describe('RenderAssembler', () => {
           scale: { k: 'sig', id: 0 as SigExprId },
           shape: {
             k: 'sig',
-            topologyId: 'test-pentagon',
+            topologyId: TEST_PENTAGON_ID,
             paramSignals: [1 as SigExprId, 2 as SigExprId, 3 as SigExprId],
           },
           controlPoints: { k: 'slot', slot: 6 as ValueSlot },
@@ -771,7 +767,7 @@ describe('RenderAssembler', () => {
           scale: { k: 'sig', id: 0 as SigExprId },
           shape: {
             k: 'sig',
-            topologyId: 'test-pentagon',
+            topologyId: TEST_PENTAGON_ID,
             paramSignals: [1 as SigExprId, 2 as SigExprId, 3 as SigExprId],
           },
           controlPoints: { k: 'slot', slot: 3 as ValueSlot },
@@ -782,7 +778,7 @@ describe('RenderAssembler', () => {
           positionSlot: 4 as ValueSlot,
           colorSlot: 5 as ValueSlot,
           scale: { k: 'sig', id: 0 as SigExprId },
-          shape: { k: 'sig', topologyId: 'ellipse', paramSignals: [1 as SigExprId, 2 as SigExprId] },
+          shape: { k: 'sig', topologyId: TOPOLOGY_ID_ELLIPSE, paramSignals: [1 as SigExprId, 2 as SigExprId] },
         },
       ];
 
@@ -817,7 +813,7 @@ describe('RenderAssembler', () => {
           positionSlot: 1 as ValueSlot,
           colorSlot: 2 as ValueSlot,
           scale: { k: 'sig', id: 0 as SigExprId },
-          shape: { k: 'sig', topologyId: 'ellipse', paramSignals: [] },
+          shape: { k: 'sig', topologyId: TOPOLOGY_ID_ELLIPSE, paramSignals: [] },
         },
       ];
 

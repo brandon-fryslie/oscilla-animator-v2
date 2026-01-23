@@ -17,7 +17,7 @@ import type { RuntimeState } from '../RuntimeState';
 import { createRuntimeState, SHAPE2D_WORDS, writeShape2D } from '../RuntimeState';
 import type { ValueSlot, SigExprId } from '../../types';
 import { registerDynamicTopology } from '../../shapes/registry';
-import type { PathTopologyDef, RenderSpace2D } from '../../shapes/types';
+import type { RenderSpace2D } from '../../shapes/types';
 import { PathVerb } from '../../shapes/types';
 
 // Helper to create a scalar signal type
@@ -47,9 +47,8 @@ function createMockInstance(count: number): InstanceDecl {
   } as InstanceDecl;
 }
 
-// Register test path topologies
-const CIRCLE_TOPOLOGY: PathTopologyDef = {
-  id: '100',
+// Register test path topologies (without id — assigned by registry)
+const CIRCLE_ID = registerDynamicTopology({
   params: [
     { name: 'radius', type: 'float', default: 0.02 },
     { name: 'closed', type: 'float', default: 1 },
@@ -63,10 +62,9 @@ const CIRCLE_TOPOLOGY: PathTopologyDef = {
   pointsPerVerb: [1, 1, 1, 1, 0],
   totalControlPoints: 4,
   closed: true,
-};
+}, 'test-circle');
 
-const SQUARE_TOPOLOGY: PathTopologyDef = {
-  id: '101',
+const SQUARE_ID = registerDynamicTopology({
   params: [
     { name: 'size', type: 'float', default: 0.04 },
     { name: 'closed', type: 'float', default: 1 },
@@ -85,10 +83,9 @@ const SQUARE_TOPOLOGY: PathTopologyDef = {
   pointsPerVerb: [1, 1, 1, 1, 0],
   totalControlPoints: 4,
   closed: true,
-};
+}, 'test-square');
 
-const TRIANGLE_TOPOLOGY: PathTopologyDef = {
-  id: '102',
+const TRIANGLE_ID = registerDynamicTopology({
   params: [
     { name: 'size', type: 'float', default: 0.03 },
     { name: 'closed', type: 'float', default: 1 },
@@ -105,17 +102,7 @@ const TRIANGLE_TOPOLOGY: PathTopologyDef = {
   pointsPerVerb: [1, 1, 1, 0],
   totalControlPoints: 3,
   closed: true,
-};
-
-// Register test topologies
-registerDynamicTopology(CIRCLE_TOPOLOGY);
-registerDynamicTopology(SQUARE_TOPOLOGY);
-registerDynamicTopology(TRIANGLE_TOPOLOGY);
-
-// Topology IDs (cast to numbers for Shape2D buffer)
-const CIRCLE_ID = 100;
-const SQUARE_ID = 101;
-const TRIANGLE_ID = 102;
+}, 'test-triangle');
 
 describe('RenderAssembler - Per-Instance Shapes', () => {
   describe('Shape Buffer Validation', () => {

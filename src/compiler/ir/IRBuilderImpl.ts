@@ -5,6 +5,7 @@
  */
 
 import type { SignalType } from '../../core/canonical-types';
+import type { TopologyId } from '../../shapes/types';
 import type { IRBuilder } from './IRBuilder';
 import type {
   SigExprId,
@@ -114,7 +115,7 @@ export class IRBuilderImpl implements IRBuilder {
     this.sigExprs.push({ kind: 'zip', inputs, fn, type });
     return id;
   }
-  sigShapeRef(topologyId: string, paramSignals: readonly SigExprId[], type: SignalType, controlPointField?: FieldExprId): SigExprId {
+  sigShapeRef(topologyId: TopologyId, paramSignals: readonly SigExprId[], type: SignalType, controlPointField?: FieldExprId): SigExprId {
     const id = sigExprId(this.sigExprs.length);
     this.sigExprs.push({ kind: 'shapeRef', topologyId, paramSignals, controlPointField, type });
     return id;

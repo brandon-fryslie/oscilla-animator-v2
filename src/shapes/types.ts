@@ -70,6 +70,15 @@ export interface TopologyDef {
 }
 
 /**
+ * AbstractTopologyDef - A topology definition before ID assignment
+ *
+ * Used for topology definitions that will be registered with the registry,
+ * which assigns numeric IDs. Built-in topologies and dynamic topologies
+ * both start as AbstractTopologyDef before registration.
+ */
+export type AbstractTopologyDef = Omit<TopologyDef, 'id'>;
+
+/**
  * ShapeRef - Reference to a shape with runtime parameter slots
  *
  * Contains:

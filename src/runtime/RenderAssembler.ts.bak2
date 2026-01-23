@@ -311,7 +311,7 @@ export function isRenderStep(step: { kind: string }): step is StepRender {
  * rendered together in a single DrawPathInstancesOp for efficiency.
  */
 interface TopologyGroup {
-  /** Numeric topology ID */
+  /** Numeric topology ID (cast from string) */
   topologyId: number;
   /** Control points buffer slot */
   controlPointsSlot: number;
@@ -556,7 +556,16 @@ function assemblePerInstanceShapes(
     }
 
     // Validate topology exists (group-level validation, not per-instance)
+    // Validate topology exists (group-level validation, not per-instance)
     const topology = getTopology(group.topologyId);
+    // Validate topology exists (group-level validation, not per-instance)
+    const topology = getTopology(group.topologyId);
+    if (!topology) {
+      throw new Error(
+        `RenderAssembler: Topology ${group.topologyId} not found ` +
+        `(referenced by ${group.instanceIndices.length} instances: ${group.instanceIndices.join(', ')})`
+      );
+    }
 
     if (!isPathTopology(topology)) {
       console.warn(
@@ -653,8 +662,12 @@ function buildPathGeometry(
     throw new Error('buildPathGeometry: Path topology missing verbs');
   }
 
+  // Note: topologyId is currently string, but PathGeometry expects number
+  // This is a known gap documented in the planning files
+  const topologyId = resolvedShape.topologyId as unknown as number;
+
   return {
-    topologyId: resolvedShape.topologyId,
+    topologyId,
     verbs: resolvedShape.verbs,
     points: controlPoints,
     pointsCount: controlPoints.length / 2,

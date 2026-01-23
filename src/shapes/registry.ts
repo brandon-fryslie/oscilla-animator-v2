@@ -10,7 +10,7 @@
  * - Dynamic topologies: IDs 100+ (auto-assigned)
  */
 
-import type { TopologyId, TopologyDef, PathTopologyDef } from './types';
+import type { TopologyId, TopologyDef, PathTopologyDef, AbstractTopologyDef } from './types';
 
 /**
  * Registry of all available topologies (array-indexed by TopologyId)
@@ -93,7 +93,7 @@ export function getAllTopologyIds(): readonly TopologyId[] {
  * @returns Assigned numeric TopologyId
  */
 export function registerDynamicTopology(
-  topology: Omit<TopologyDef | PathTopologyDef, 'id'>,
+  topology: AbstractTopologyDef | Omit<PathTopologyDef, 'id'>,
   debugName?: string
 ): TopologyId {
   const id = nextDynamicId++;
@@ -120,10 +120,13 @@ export function getTopologyIdByName(name: string): TopologyId | undefined {
  *
  * Must be called AFTER topologies are defined but BEFORE any code uses the registry.
  */
-function initializeBuiltinTopologies(ellipse: TopologyDef, rect: TopologyDef): void {
+function initializeBuiltinTopologies(
+  ellipse: AbstractTopologyDef,
+  rect: AbstractTopologyDef
+): void {
   // Pre-assign reserved IDs
-  TOPOLOGY_REGISTRY[TOPOLOGY_ID_ELLIPSE] = { ...ellipse, id: TOPOLOGY_ID_ELLIPSE };
-  TOPOLOGY_REGISTRY[TOPOLOGY_ID_RECT] = { ...rect, id: TOPOLOGY_ID_RECT };
+  TOPOLOGY_REGISTRY[TOPOLOGY_ID_ELLIPSE] = { ...ellipse, id: TOPOLOGY_ID_ELLIPSE } as TopologyDef;
+  TOPOLOGY_REGISTRY[TOPOLOGY_ID_RECT] = { ...rect, id: TOPOLOGY_ID_RECT } as TopologyDef;
 
   // Register debug names
   TOPOLOGY_BY_NAME.set('ellipse', TOPOLOGY_ID_ELLIPSE);
