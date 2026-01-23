@@ -31,57 +31,64 @@ function makeResult(): ProjectionResult {
 describe('Level 3 Unit Tests: Scalar Kernel', () => {
   const cam = PERSP_CAMERA_DEFAULTS;
 
-  it('projectWorldToScreenPerspective((0.5, 0.5, 0), defaultPerspCam) → screenPos near center but NOT identical to ortho', () => {
+  it('projectWorldToScreenPerspective((0.5, 0.5, 0), defaultPerspCam) → screenPos near center but NOT identical to ortho for off-axis points', () => {
     const perspResult = makeResult();
     const orthoResult = makeResult();
 
+    // (0.5, 0.5, 0) IS the camera target (on optical axis).
+    // It should project to approximately (0.5, 0.5) under perspective.
     projectWorldToScreenPerspective(0.5, 0.5, 0, cam, perspResult);
-    projectWorldToScreenOrtho(0.5, 0.5, 0, ORTHO_CAMERA_DEFAULTS, orthoResult);
-
-    // Perspective should produce valid output
     expect(Number.isFinite(perspResult.screenX)).toBe(true);
     expect(Number.isFinite(perspResult.screenY)).toBe(true);
     expect(perspResult.visible).toBe(true);
+    // On-axis point should project near (0.5, 0.5) — verify tight tolerance
+    expect(perspResult.screenX).toBeCloseTo(0.5, 5);
+    expect(perspResult.screenY).toBeCloseTo(0.5, 5);
 
-    // Should NOT be bitwise equal to ortho result for off-axis point
-    // (0.5, 0.5, 0) is the camera target, so it might be near center
-    // but the tilted camera means the projection differs from ortho
-    // The key assertion: it differs from ortho's identity mapping
-    const orthoMatchesIdentity =
-      orthoResult.screenX === 0.5 && orthoResult.screenY === 0.5;
-    expect(orthoMatchesIdentity).toBe(true); // Ortho IS identity
+    // Now test an OFF-axis point: (0.8, 0.3, 0)
+    // Under ortho it maps to identity: screenPos === (0.8, 0.3)
+    // Under perspective it should differ due to the tilted camera
+    const perspOff = makeResult();
+    const orthoOff = makeResult();
+    projectWorldToScreenPerspective(0.8, 0.3, 0, cam, perspOff);
+    projectWorldToScreenOrtho(0.8, 0.3, 0, ORTHO_CAMERA_DEFAULTS, orthoOff);
 
-    // Under perspective with a tilted camera, (0.5, 0.5, 0) which is the
-    // target point should project approximately to center (0.5, 0.5)
-    // but may not be exactly (0.5, 0.5) due to the tilt
-    // The test says "NOT (0.5, 0.5) unless point is exactly on optical axis"
-    // Since camTarget is (0.5, 0.5, 0) and the camera looks at the target,
-    // the target IS on the optical axis. So it should be near (0.5, 0.5).
-    expect(perspResult.screenX).toBeCloseTo(0.5, 1);
-    expect(perspResult.screenY).toBeCloseTo(0.5, 1);
+    // Ortho IS identity
+    expect(orthoOff.screenX).toBe(0.8);
+    expect(orthoOff.screenY).toBe(0.3);
+
+    // Perspective should NOT be bitwise equal to ortho for off-axis point
+    const matchesOrtho =
+      perspOff.screenX === orthoOff.screenX && perspOff.screenY === orthoOff.screenY;
+    expect(matchesOrtho).toBe(false);
   });
 
   it('Points farther from center have more displacement under perspective than ortho (parallax property)', () => {
-    const perspCenter = makeResult();
+    // The parallax property: the perspective-ortho DIFFERENCE grows with distance
+    // from the optical center. A point at 0.7 should have less persp-ortho deviation
+    // than a point at 0.9.
+    const perspMid = makeResult();
     const perspEdge = makeResult();
-    const orthoCenter = makeResult();
-    const orthoEdge = makeResult();
 
-    // Center point
-    projectWorldToScreenPerspective(0.5, 0.5, 0, cam, perspCenter);
-    projectWorldToScreenOrtho(0.5, 0.5, 0, ORTHO_CAMERA_DEFAULTS, orthoCenter);
-
-    // Edge point
+    // Mid-distance point (0.7, 0.5) — moderately off-axis
+    projectWorldToScreenPerspective(0.7, 0.5, 0, cam, perspMid);
+    // Edge point (0.9, 0.5) — further off-axis
     projectWorldToScreenPerspective(0.9, 0.5, 0, cam, perspEdge);
-    projectWorldToScreenOrtho(0.9, 0.5, 0, ORTHO_CAMERA_DEFAULTS, orthoEdge);
 
-    // Displacement from center under each mode
-    const perspDisplacementEdge = Math.abs(perspEdge.screenX - perspCenter.screenX);
-    const orthoDisplacementEdge = Math.abs(orthoEdge.screenX - orthoCenter.screenX);
+    // Ortho identity: screen coords === world coords
+    // So persp-ortho deviation = |perspScreen - worldPos|
+    const deviationMid = Math.sqrt(
+      (perspMid.screenX - 0.7) ** 2 + (perspMid.screenY - 0.5) ** 2
+    );
+    const deviationEdge = Math.sqrt(
+      (perspEdge.screenX - 0.9) ** 2 + (perspEdge.screenY - 0.5) ** 2
+    );
 
-    // Under perspective, the displacement should differ from ortho
-    // (perspective foreshortening changes spatial relationships)
-    expect(perspDisplacementEdge).not.toBeCloseTo(orthoDisplacementEdge, 3);
+    // The edge point (further from center) has MORE perspective deviation than the mid point
+    expect(deviationEdge).toBeGreaterThan(deviationMid);
+    // Both deviations are non-zero (perspective differs from ortho for off-axis points)
+    expect(deviationMid).toBeGreaterThan(0);
+    expect(deviationEdge).toBeGreaterThan(0);
   });
 
   it('camPos is computed deterministically from tilt/yaw/distance/target', () => {
@@ -113,23 +120,48 @@ describe('Level 3 Unit Tests: Scalar Kernel', () => {
   it('visible = false for points behind camera', () => {
     const r = makeResult();
 
-    // Camera is above and behind the scene (positive Y and Z from target)
-    // A point far behind the camera should be invisible
-    // Camera is at approximately (0.5, 1.65, 1.64) looking at (0.5, 0.5, 0)
-    // Points with large positive Z (beyond the camera) should be behind it
+    // Camera is at approximately (0.5, 1.65, 1.64) looking at target (0.5, 0.5, 0).
+    // The forward vector points from camera toward target (negative Y, negative Z direction).
+    // A point at z=10 is on the opposite side of the camera from the target,
+    // meaning its view-space Z (dot with forward) is negative — behind camera.
     projectWorldToScreenPerspective(0.5, 0.5, 10, cam, r);
-    // viewZ for this point should be negative (behind camera) since
-    // camera is at z≈1.64 looking toward z=0, so z=10 is behind camera
+    expect(r.visible).toBe(false);
+
+    // Also test a point directly behind the camera (past camPos along -forward)
+    // Camera at (0.5, 1.65, 1.64), so (0.5, 3.0, 3.0) is further above/behind
+    projectWorldToScreenPerspective(0.5, 3.0, 3.0, cam, r);
     expect(r.visible).toBe(false);
   });
 
   it('visible = false for points outside near/far planes', () => {
     const r = makeResult();
 
-    // Very far away point (in front of camera but beyond far plane)
-    // Camera looks from z≈1.64 toward z=0. Points at very negative z are far away.
+    // Far plane test: Very far away point (in front of camera but beyond far=100)
+    // Camera looks from z≈1.64 toward z=0. Points at very negative z are far from camera.
     projectWorldToScreenPerspective(0.5, 0.5, -200, cam, r);
-    // This is far in front of camera — distance > far=100
+    expect(r.visible).toBe(false);
+
+    // Near plane test: Point too close to camera (within near=0.01)
+    // Camera is at approximately (0.5, 1.65, 1.64). A point very close
+    // to camPos along the view axis has viewZ < near=0.01.
+    // Place point just barely in front of camera (almost at camera position)
+    const camX = PERSP_CAMERA_DEFAULTS.camPosX;
+    const camY = PERSP_CAMERA_DEFAULTS.camPosY;
+    const camZ = PERSP_CAMERA_DEFAULTS.camPosZ;
+    // Move a tiny amount toward target (forward direction)
+    const targetX = PERSP_CAMERA_DEFAULTS.camTargetX;
+    const targetY = PERSP_CAMERA_DEFAULTS.camTargetY;
+    const targetZ = PERSP_CAMERA_DEFAULTS.camTargetZ;
+    // Forward vector (unnormalized): target - camPos
+    const fwdX = targetX - camX;
+    const fwdY = targetY - camY;
+    const fwdZ = targetZ - camZ;
+    const fwdLen = Math.sqrt(fwdX * fwdX + fwdY * fwdY + fwdZ * fwdZ);
+    // Place point 0.005 units in front of camera (less than near=0.01)
+    const nearPtX = camX + (fwdX / fwdLen) * 0.005;
+    const nearPtY = camY + (fwdY / fwdLen) * 0.005;
+    const nearPtZ = camZ + (fwdZ / fwdLen) * 0.005;
+    projectWorldToScreenPerspective(nearPtX, nearPtY, nearPtZ, cam, r);
     expect(r.visible).toBe(false);
   });
 
@@ -138,19 +170,19 @@ describe('Level 3 Unit Tests: Scalar Kernel', () => {
     const r = makeResult();
 
     // Camera looks from above/behind toward (0.5, 0.5, 0)
-    // Points at z=0, z=-0.5, z=-1, z=-2 are progressively farther from camera
-    // along the view axis
+    // Points along optical axis at z=0, -0.2, -0.5, -1.0, -2.0 are progressively
+    // farther from camera along the view axis (camera is at z≈1.64, looking toward z=0)
     const zValues = [0, -0.2, -0.5, -1.0, -2.0];
 
+    // Pre-check: all points must be visible for this test to be meaningful
     for (const z of zValues) {
       projectWorldToScreenPerspective(0.5, 0.5, z, cam, r);
-      if (r.visible) {
-        depths.push(r.depth);
-      }
+      expect(r.visible).toBe(true);
+      depths.push(r.depth);
     }
 
-    // Should have multiple visible points
-    expect(depths.length).toBeGreaterThanOrEqual(3);
+    // All 5 points visible
+    expect(depths.length).toBe(5);
 
     // Depth should be monotonically increasing (farther points have higher depth)
     for (let i = 1; i < depths.length; i++) {
@@ -203,19 +235,25 @@ describe('Level 3 Parallax Property Tests', () => {
   });
 
   it('The instance closer to camera is displaced MORE from center than the one farther (verify direction)', () => {
+    // Camera at (0.5, ~1.65, ~1.64) looking at (0.5, 0.5, 0).
+    // Point at z=0.5 is closer to camera along view axis (smaller viewZ distance)
+    // than point at z=0.0 (which is farther along the view axis from camera).
+    // Verify by checking depth: closer point has smaller depth.
     const rNear = makeResult();
     const rFar = makeResult();
 
-    // Camera is above/behind the scene at roughly (0.5, 1.65, 1.64)
-    // z=0.5 is closer to camera than z=0 (camera is at positive z)
     projectWorldToScreenPerspective(0.3, 0.3, 0.5, perspCam, rNear);
     projectWorldToScreenPerspective(0.3, 0.3, 0.0, perspCam, rFar);
 
-    // Both should be visible
+    // Both must be visible for this test to be meaningful
     expect(rNear.visible).toBe(true);
     expect(rFar.visible).toBe(true);
 
-    // The closer instance should have more displacement from screen center
+    // Verify which is actually closer: the closer point has smaller depth
+    expect(rNear.depth).toBeLessThan(rFar.depth);
+
+    // The closer instance (smaller depth) should have more displacement from screen center
+    // because perspective magnifies off-axis points when closer to camera
     const dispNear = Math.sqrt(
       (rNear.screenX - 0.5) ** 2 + (rNear.screenY - 0.5) ** 2
     );
