@@ -411,7 +411,7 @@ describe('RenderAssembler', () => {
   });
 
   describe('assembleDrawPathInstancesOp (v2)', () => {
-    it('returns null when instance not found', () => {
+    it('returns empty array when instance not found', () => {
       const state = createMockState();
       const step: StepRender = {
         kind: 'render',
@@ -430,10 +430,10 @@ describe('RenderAssembler', () => {
       const result = assembleDrawPathInstancesOp(step, context);
       warnSpy.mockRestore();
 
-      expect(result).toBeNull();
+      expect(result).toEqual([]);
     });
 
-    it('returns null when instance count is 0', () => {
+    it('returns empty array when instance count is 0', () => {
       const state = createMockState();
       const step: StepRender = {
         kind: 'render',
@@ -449,10 +449,10 @@ describe('RenderAssembler', () => {
       };
 
       const result = assembleDrawPathInstancesOp(step, context);
-      expect(result).toBeNull();
+      expect(result).toEqual([]);
     });
 
-    it('returns null for primitive topologies (not yet supported in v2)', () => {
+    it('returns empty array for primitive topologies (not yet supported in v2)', () => {
       const state = createMockState();
       const positionBuffer = new Float32Array(20);
       const colorBuffer = new Uint8ClampedArray(40);
@@ -481,8 +481,8 @@ describe('RenderAssembler', () => {
       };
 
       const result = assembleDrawPathInstancesOp(step, context);
-      // Primitive topologies return null in v2 (not yet supported)
-      expect(result).toBeNull();
+      // Primitive topologies return empty array in v2 (not yet supported)
+      expect(result).toEqual([]);
     });
 
     it('assembles DrawPathInstancesOp for path topologies', () => {
@@ -530,27 +530,28 @@ describe('RenderAssembler', () => {
 
       const result = assembleDrawPathInstancesOp(step, context);
 
-      expect(result).not.toBeNull();
-      expect(result!.kind).toBe('drawPathInstances');
+      expect(result).toHaveLength(1);
+      const op = result[0];
+      expect(op.kind).toBe('drawPathInstances');
 
       // Validate geometry structure
-      expect(result!.geometry.topologyId).toBeDefined();
-      expect(result!.geometry.verbs).toBeInstanceOf(Uint8Array);
-      expect(result!.geometry.verbs.length).toBe(6); // MOVE, LINE x4, CLOSE
-      expect(result!.geometry.points).toBe(controlPointsBuffer);
-      expect(result!.geometry.pointsCount).toBe(5);
-      expect(result!.geometry.flags).toBe(1); // closed
+      expect(op.geometry.topologyId).toBeDefined();
+      expect(op.geometry.verbs).toBeInstanceOf(Uint8Array);
+      expect(op.geometry.verbs.length).toBe(6); // MOVE, LINE x4, CLOSE
+      expect(op.geometry.points).toBe(controlPointsBuffer);
+      expect(op.geometry.pointsCount).toBe(5);
+      expect(op.geometry.flags).toBe(1); // closed
 
       // Validate instance transforms
-      expect(result!.instances.count).toBe(2);
-      expect(result!.instances.position).toBe(positionBuffer);
-      expect(result!.instances.size).toBe(2.5);
-      expect(result!.instances.rotation).toBeUndefined();
-      expect(result!.instances.scale2).toBeUndefined();
+      expect(op.instances.count).toBe(2);
+      expect(op.instances.position).toBe(positionBuffer);
+      expect(op.instances.size).toBe(2.5);
+      expect(op.instances.rotation).toBeUndefined();
+      expect(op.instances.scale2).toBeUndefined();
 
       // Validate style
-      expect(result!.style.fillColor).toBe(colorBuffer);
-      expect(result!.style.fillRule).toBe('nonzero');
+      expect(op.style.fillColor).toBe(colorBuffer);
+      expect(op.style.fillRule).toBe('nonzero');
     });
 
     it('throws when position buffer is not Float32Array', () => {

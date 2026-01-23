@@ -29,6 +29,8 @@ import type {
   PathStyle,
   RenderFrameIR_Future,
 } from '../render/future-types';
+import { SHAPE2D_WORDS, Shape2DWord, type Shape2DRecord, readShape2D } from './RuntimeState';
+import type { ValueSlot } from '../types';
 
 /**
  * AssemblerContext - Context needed for render assembly
@@ -303,6 +305,229 @@ export function isRenderStep(step: { kind: string }): step is StepRender {
 // ============================================================================
 
 /**
+ * TopologyGroup - Instances grouped by topology identity
+ *
+ * Instances with the same topology and control points buffer can be
+ * rendered together in a single DrawPathInstancesOp for efficiency.
+ */
+interface TopologyGroup {
+  /** Numeric topology ID (cast from string) */
+  topologyId: number;
+  /** Control points buffer slot */
+  controlPointsSlot: number;
+  /** Number of control points */
+  pointsCount: number;
+  /** Flags bitfield (closed, fill, etc.) */
+  flags: number;
+  /** Indices of instances in this group */
+  instanceIndices: number[];
+}
+
+/**
+ * Group instances by topology identity
+ *
+ * Single-pass O(N) grouping algorithm. Instances with the same topology
+ * and control points buffer are grouped together for batched rendering.
+ *
+ * @param shapeBuffer - Packed Shape2D buffer (Uint32Array)
+ * @param instanceCount - Number of instances
+ * @returns Map of topology groups keyed by "topologyId:controlPointsSlot"
+ */
+function groupInstancesByTopology(
+  shapeBuffer: Uint32Array,
+  instanceCount: number
+): Map<string, TopologyGroup> {
+  // Validate buffer length at pass level (not per-instance)
+  const expectedLength = instanceCount * SHAPE2D_WORDS;
+  if (shapeBuffer.length < expectedLength) {
+    throw new Error(
+      `RenderAssembler: Shape buffer length mismatch. ` +
+      `Expected >=${expectedLength} (${instanceCount} instances × ${SHAPE2D_WORDS} words), ` +
+      `got ${shapeBuffer.length}`
+    );
+  }
+
+  const groups = new Map<string, TopologyGroup>();
+
+  for (let i = 0; i < instanceCount; i++) {
+    const shapeRef = readShape2D(shapeBuffer, i);
+
+    // Group key: topologyId + controlPointsSlot
+    // Instances with same topology AND same control points buffer can batch
+    const key = `${shapeRef.topologyId}:${shapeRef.pointsFieldSlot}`;
+
+    if (!groups.has(key)) {
+      groups.set(key, {
+        topologyId: shapeRef.topologyId,
+        controlPointsSlot: shapeRef.pointsFieldSlot,
+        pointsCount: shapeRef.pointsCount,
+        flags: shapeRef.flags,
+        instanceIndices: [],
+      });
+    }
+
+    groups.get(key)!.instanceIndices.push(i);
+  }
+
+  return groups;
+}
+
+/**
+ * Sliced instance buffers for a topology group
+ */
+interface SlicedBuffers {
+  position: Float32Array;
+  color: Uint8ClampedArray;
+}
+
+/**
+ * Slice instance buffers for a topology group
+ *
+ * Extracts position and color data for instances in the group.
+ * Creates new buffers with data copied from the full buffers.
+ *
+ * @param fullPosition - Full position buffer (x,y interleaved)
+ * @param fullColor - Full color buffer (RGBA interleaved)
+ * @param instanceIndices - Indices of instances to extract
+ * @returns Sliced position and color buffers
+ */
+function sliceInstanceBuffers(
+  fullPosition: Float32Array,
+  fullColor: Uint8ClampedArray,
+  instanceIndices: number[]
+): SlicedBuffers {
+  const N = instanceIndices.length;
+
+  // Allocate sliced buffers
+  const position = new Float32Array(N * 2);  // vec2 per instance
+  const color = new Uint8ClampedArray(N * 4); // RGBA per instance
+
+  // Copy data for selected instances
+  for (let i = 0; i < N; i++) {
+    const srcIdx = instanceIndices[i];
+
+    // Position (x, y)
+    position[i * 2]     = fullPosition[srcIdx * 2];
+    position[i * 2 + 1] = fullPosition[srcIdx * 2 + 1];
+
+    // Color (R, G, B, A)
+    color[i * 4]     = fullColor[srcIdx * 4];
+    color[i * 4 + 1] = fullColor[srcIdx * 4 + 1];
+    color[i * 4 + 2] = fullColor[srcIdx * 4 + 2];
+    color[i * 4 + 3] = fullColor[srcIdx * 4 + 3];
+  }
+
+  return { position, color };
+}
+
+/**
+ * Assemble DrawPathInstancesOp operations for per-instance shapes
+ *
+ * Handles the `{ k: 'slot' }` shape case by grouping instances by topology
+ * and emitting one DrawPathInstancesOp per group.
+ *
+ * @param step - Render step with per-instance shapes
+ * @param shapeBuffer - Shape2D buffer (Uint32Array)
+ * @param fullPosition - Full position buffer
+ * @param fullColor - Full color buffer
+ * @param scale - Uniform scale
+ * @param count - Instance count
+ * @param state - Runtime state
+ * @returns Array of DrawPathInstancesOp operations
+ */
+function assemblePerInstanceShapes(
+  step: StepRender,
+  shapeBuffer: Uint32Array,
+  fullPosition: Float32Array,
+  fullColor: Uint8ClampedArray,
+  scale: number,
+  count: number,
+  state: RuntimeState
+): DrawPathInstancesOp[] {
+  // Group instances by topology
+  const groups = groupInstancesByTopology(shapeBuffer, count);
+
+  const ops: DrawPathInstancesOp[] = [];
+
+  for (const [key, group] of groups) {
+    // Skip empty groups
+    if (group.instanceIndices.length === 0) {
+      continue;
+    }
+
+    // Validate topology exists (group-level validation, not per-instance)
+    const topologyIdStr = String(group.topologyId); // Cast number → string
+    const topology = getTopology(topologyIdStr as TopologyId);
+    if (!topology) {
+      throw new Error(
+        `RenderAssembler: Topology ${group.topologyId} not found ` +
+        `(referenced by ${group.instanceIndices.length} instances: ${group.instanceIndices.join(', ')})`
+      );
+    }
+
+    if (!isPathTopology(topology)) {
+      console.warn(
+        `RenderAssembler: Non-path topology ${group.topologyId} not yet supported ` +
+        `(instances: ${group.instanceIndices.join(', ')})`
+      );
+      continue; // Skip non-path topologies
+    }
+
+    // Get control points buffer for this group
+    const controlPointsBuffer = state.values.objects.get(
+      group.controlPointsSlot as ValueSlot
+    ) as Float32Array;
+
+    if (!controlPointsBuffer || !(controlPointsBuffer instanceof Float32Array)) {
+      throw new Error(
+        `RenderAssembler: Control points buffer not found for topology ${group.topologyId} ` +
+        `(slot ${group.controlPointsSlot}, instances: ${group.instanceIndices.join(', ')})`
+      );
+    }
+
+    // Slice instance buffers for this group
+    const { position, color } = sliceInstanceBuffers(
+      fullPosition,
+      fullColor,
+      group.instanceIndices
+    );
+
+    // Build geometry
+    const geometry: PathGeometry = {
+      topologyId: group.topologyId,
+      verbs: new Uint8Array(topology.verbs),
+      points: controlPointsBuffer,
+      pointsCount: group.pointsCount,
+      flags: group.flags,
+    };
+
+    // Build instance transforms
+    const instanceTransforms: InstanceTransforms = {
+      count: group.instanceIndices.length,
+      position,
+      size: scale, // Uniform scale
+      // rotation: undefined,  // Not yet wired through IR
+      // scale2: undefined,    // Not yet wired through IR
+    };
+
+    // Build style
+    const style: PathStyle = {
+      fillColor: color,
+      fillRule: 'nonzero',
+    };
+
+    ops.push({
+      kind: 'drawPathInstances',
+      geometry,
+      instances: instanceTransforms,
+      style,
+    });
+  }
+
+  return ops;
+}
+
+/**
  * Build PathGeometry from resolved shape
  *
  * Extracts local-space control points and path metadata into PathGeometry structure.
@@ -390,32 +615,35 @@ function buildPathStyle(
 }
 
 /**
- * Assemble a DrawPathInstancesOp from a render step
+ * Assemble DrawPathInstancesOp operations from a render step
  *
  * This is the v2 assembly path that produces explicit geometry/instances/style
  * structures. Unlike v1, this separates concerns and uses local-space geometry.
  *
+ * NOW SUPPORTS PER-INSTANCE SHAPES: When shape is a buffer (`{ k: 'slot' }`),
+ * instances are grouped by topology and multiple ops are emitted.
+ *
  * @param step - The render step to assemble
  * @param context - Assembly context with signals, instances, and state
- * @returns DrawPathInstancesOp or null if assembly fails or shape is not a path
+ * @returns Array of DrawPathInstancesOp operations (one or more)
  */
 export function assembleDrawPathInstancesOp(
   step: StepRender,
   context: AssemblerContext
-): DrawPathInstancesOp | null {
+): DrawPathInstancesOp[] {
   const { signals, instances, state } = context;
 
   // Get instance declaration
   const instance = instances.get(step.instanceId);
   if (!instance) {
     console.warn(`RenderAssembler: Instance ${step.instanceId} not found`);
-    return null;
+    return [];
   }
 
   // Resolve count from instance
   const count = typeof instance.count === 'number' ? instance.count : 0;
   if (count === 0) {
-    return null; // Empty instance, skip
+    return []; // Empty instance, skip
   }
 
   // Read position buffer from slot
@@ -450,17 +678,29 @@ export function assembleDrawPathInstancesOp(
   // Resolve shape
   const shape = resolveShape(step.shape, signals, state);
 
-  // Read control points buffer if present
-  const controlPointsBuffer = resolveControlPoints(step.controlPoints, state);
+  // Check if per-instance shapes (shape buffer)
+  if (shape instanceof Uint32Array) {
+    // Per-instance shapes: group by topology and emit multiple ops
+    return assemblePerInstanceShapes(
+      step,
+      shape,
+      positionBuffer,
+      colorBuffer,
+      scale,
+      count,
+      state
+    );
+  }
 
-  // Fully resolve shape
+  // Uniform shape: existing single-op path
+  const controlPointsBuffer = resolveControlPoints(step.controlPoints, state);
   const resolvedShape = resolveShapeFully(shape, controlPointsBuffer);
 
   // V2 only supports path topologies (primitives will be handled separately)
   if (resolvedShape.mode !== 'path') {
-    // For now, return null for primitive topologies
+    // For now, return empty array for primitive topologies
     // Future work: DrawPrimitiveInstancesOp
-    return null;
+    return [];
   }
 
   // Control points are required for path rendering
@@ -481,12 +721,12 @@ export function assembleDrawPathInstancesOp(
   );
   const style = buildPathStyle(colorBuffer, 'nonzero');
 
-  return {
+  return [{
     kind: 'drawPathInstances',
     geometry,
     instances: instanceTransforms,
     style,
-  };
+  }];
 }
 
 /**
@@ -494,6 +734,8 @@ export function assembleDrawPathInstancesOp(
  *
  * This produces the target v2 frame structure with explicit draw operations.
  * Unlike v1, this uses local-space geometry with world-space instance transforms.
+ *
+ * NOW SUPPORTS PER-INSTANCE SHAPES: Multiple ops can be emitted per render step.
  *
  * @param renderSteps - Array of render steps to assemble
  * @param context - Assembly context
@@ -506,10 +748,8 @@ export function assembleRenderFrame_v2(
   const ops: DrawPathInstancesOp[] = [];
 
   for (const step of renderSteps) {
-    const op = assembleDrawPathInstancesOp(step, context);
-    if (op) {
-      ops.push(op);
-    }
+    const stepOps = assembleDrawPathInstancesOp(step, context);
+    ops.push(...stepOps);  // Flatten array of ops from each step
   }
 
   return {
