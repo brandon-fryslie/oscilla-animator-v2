@@ -318,11 +318,266 @@ const patchOrbitalRings: PatchBuilder = (b) => {
   b.wire(ellipse, 'shape', render, 'shape');
 };
 
+/**
+ * Rect Mosaic - Animated rectangle spiral with jitter and opacity
+ *
+ * Rectangles in a golden spiral with per-element jitter for organic feel.
+ * Animated scale pulsing and opacity fade create depth illusion.
+ * Demonstrates Rect topology + scale + opacity through shape2d pipeline.
+ */
+const patchRectMosaic: PatchBuilder = (b) => {
+  const time = b.addBlock('InfiniteTimeRoot', {
+    periodAMs: 4000,
+    periodBMs: 7000,
+  }, { role: timeRootRole() });
+
+  // Rectangle shape
+  const rect = b.addBlock('Rect', { width: 0.03, height: 0.015 });
+  const array = b.addBlock('Array', { count: 400 });
+  b.wire(rect, 'shape', array, 'element');
+
+  // Position: golden spiral with jitter for organic randomness
+  const centerX = b.addBlock('Const', { value: 0.5 });
+  const centerY = b.addBlock('Const', { value: 0.5 });
+  const radius = b.addBlock('Const', { value: 0.45 });
+  const spin = b.addBlock('Const', { value: 0.2 });
+
+  const goldenAngle = b.addBlock('FieldGoldenAngle', { turns: 80 });
+  const angularOffset = b.addBlock('FieldAngularOffset', {});
+  const totalAngle = b.addBlock('FieldAdd', {});
+  const effectiveRadius = b.addBlock('FieldRadiusSqrt', {});
+  const pos = b.addBlock('FieldPolarToCartesian', {});
+
+  b.wire(time, 'phaseA', angularOffset, 'phase');
+  b.wire(array, 't', goldenAngle, 'id01');
+  b.wire(array, 't', angularOffset, 'id01');
+  b.wire(array, 't', effectiveRadius, 'id01');
+  b.wire(spin, 'out', angularOffset, 'spin');
+
+  b.wire(goldenAngle, 'angle', totalAngle, 'a');
+  b.wire(angularOffset, 'offset', totalAngle, 'b');
+
+  b.wire(centerX, 'out', pos, 'centerX');
+  b.wire(centerY, 'out', pos, 'centerY');
+  b.wire(radius, 'out', effectiveRadius, 'radius');
+  b.wire(totalAngle, 'out', pos, 'angle');
+  b.wire(effectiveRadius, 'out', pos, 'radius');
+
+  // Add jitter for organic per-element randomness
+  const jitter = b.addBlock('FieldJitter2D', { amountX: 0.02, amountY: 0.02 });
+  const timeBroadcast = b.addBlock('FieldBroadcast', { payloadType: 'float' });
+  const jitterRand = b.addBlock('FieldAdd', {});
+  b.wire(time, 'tMs', timeBroadcast, 'signal');
+  b.wire(timeBroadcast, 'field', jitterRand, 'a');
+  b.wire(array, 't', jitterRand, 'b');
+  b.wire(pos, 'pos', jitter, 'pos');
+  b.wire(jitterRand, 'out', jitter, 'rand');
+
+  // Color from index + time
+  const hue = b.addBlock('FieldHueFromPhase', {});
+  b.wire(time, 'phaseB', hue, 'phase');
+  b.wire(array, 't', hue, 'id01');
+
+  const color = b.addBlock('HsvToRgb', {});
+  const sat = b.addBlock('Const', { value: 0.85 });
+  const val = b.addBlock('Const', { value: 0.95 });
+  b.wire(hue, 'hue', color, 'hue');
+  b.wire(sat, 'out', color, 'sat');
+  b.wire(val, 'out', color, 'val');
+
+  // Per-element animated opacity: wave that sweeps across elements
+  const opacityPulse = b.addBlock('FieldPulse', {});
+  const opacityBase = b.addBlock('Const', { value: 0.4 });
+  const opacityAmp = b.addBlock('Const', { value: 0.6 });
+  const opacitySpread = b.addBlock('Const', { value: 2.0 });
+  b.wire(array, 't', opacityPulse, 'id01');
+  b.wire(time, 'phaseB', opacityPulse, 'phase');
+  b.wire(opacityBase, 'out', opacityPulse, 'base');
+  b.wire(opacityAmp, 'out', opacityPulse, 'amplitude');
+  b.wire(opacitySpread, 'out', opacityPulse, 'spread');
+
+  const opacity = b.addBlock('ApplyOpacity', {});
+  b.wire(color, 'color', opacity, 'color');
+  b.wire(opacityPulse, 'value', opacity, 'opacity');
+
+  // Animated scale: pulsing
+  const scaleExpr = b.addBlock('Expression', {
+    expression: '1.0 + 0.5 * sin(in0 * 6.28 + 1.57)', // quarter-phase offset from opacity
+  });
+  b.wire(time, 'phaseA', scaleExpr, 'in0');
+
+  // Render with rect shape, animated scale and opacity
+  const render = b.addBlock('RenderInstances2D', {});
+  b.wire(jitter, 'out', render, 'pos');
+  b.wire(opacity, 'out', render, 'color');
+  b.wire(rect, 'shape', render, 'shape');
+  b.wire(scaleExpr, 'out', render, 'scale');
+};
+
+/**
+ * Shape Kaleidoscope - Dual topology demo
+ *
+ * Two interlocking spirals: ellipses rotating clockwise, rectangles counter-clockwise.
+ * Both topologies render simultaneously in the same patch (two render passes).
+ * Animated scale pulses shapes in and out. Spread out for visibility.
+ * Demonstrates the full shape2d pipeline with multiple topologies.
+ */
+const patchShapeKaleidoscope: PatchBuilder = (b) => {
+  const time = b.addBlock('InfiniteTimeRoot', {
+    periodAMs: 6000,
+    periodBMs: 10000,
+  }, { role: timeRootRole() });
+
+  // Animated scale: pulsing between 0.6 and 1.8
+  const eScaleExpr = b.addBlock('Expression', {
+    expression: '1.2 + 0.6 * sin(in0 * 6.28)', // pulse with phaseA
+  });
+  b.wire(time, 'phaseA', eScaleExpr, 'in0');
+
+  const rScaleExpr = b.addBlock('Expression', {
+    expression: '1.5 + 0.8 * sin(in0 * 6.28 + 3.14)', // counter-pulse with phaseB
+  });
+  b.wire(time, 'phaseB', rScaleExpr, 'in0');
+
+  // === LAYER 1: Ellipses (clockwise spiral) ===
+  const ellipse = b.addBlock('Ellipse', { rx: 0.015, ry: 0.015 });
+  const ellipseArray = b.addBlock('Array', { count: 150 });
+  b.wire(ellipse, 'shape', ellipseArray, 'element');
+
+  // Ellipse positions: golden spiral spinning clockwise, wide spread
+  const eGolden = b.addBlock('FieldGoldenAngle', { turns: 50 });
+  const eAngular = b.addBlock('FieldAngularOffset', {});
+  const eTotalAngle = b.addBlock('FieldAdd', {});
+  const eRadius = b.addBlock('FieldRadiusSqrt', {});
+  const ePos = b.addBlock('FieldPolarToCartesian', {});
+  const eSpin = b.addBlock('Const', { value: 0.8 }); // clockwise
+
+  b.wire(ellipseArray, 't', eGolden, 'id01');
+  b.wire(ellipseArray, 't', eAngular, 'id01');
+  b.wire(ellipseArray, 't', eRadius, 'id01');
+  b.wire(time, 'phaseA', eAngular, 'phase');
+  b.wire(eSpin, 'out', eAngular, 'spin');
+  b.wire(eGolden, 'angle', eTotalAngle, 'a');
+  b.wire(eAngular, 'offset', eTotalAngle, 'b');
+
+  const eCenterX = b.addBlock('Const', { value: 0.5 });
+  const eCenterY = b.addBlock('Const', { value: 0.5 });
+  const eRadiusMax = b.addBlock('Const', { value: 0.45 }); // wider spread
+  b.wire(eCenterX, 'out', ePos, 'centerX');
+  b.wire(eCenterY, 'out', ePos, 'centerY');
+  b.wire(eRadiusMax, 'out', eRadius, 'radius');
+  b.wire(eTotalAngle, 'out', ePos, 'angle');
+  b.wire(eRadius, 'out', ePos, 'radius');
+
+  // Ellipse color: warm hues
+  const eHue = b.addBlock('FieldHueFromPhase', {});
+  b.wire(time, 'phaseA', eHue, 'phase');
+  b.wire(ellipseArray, 't', eHue, 'id01');
+
+  const eColor = b.addBlock('HsvToRgb', {});
+  const eSat = b.addBlock('Const', { value: 1.0 });
+  const eVal = b.addBlock('Const', { value: 1.0 });
+  b.wire(eHue, 'hue', eColor, 'hue');
+  b.wire(eSat, 'out', eColor, 'sat');
+  b.wire(eVal, 'out', eColor, 'val');
+
+  // Ellipse per-element opacity: wave sweeps across elements
+  const eOpacityPulse = b.addBlock('FieldPulse', {});
+  const eOpBase = b.addBlock('Const', { value: 0.3 });
+  const eOpAmp = b.addBlock('Const', { value: 0.7 });
+  const eOpSpread = b.addBlock('Const', { value: 1.5 });
+  b.wire(ellipseArray, 't', eOpacityPulse, 'id01');
+  b.wire(time, 'phaseA', eOpacityPulse, 'phase');
+  b.wire(eOpBase, 'out', eOpacityPulse, 'base');
+  b.wire(eOpAmp, 'out', eOpacityPulse, 'amplitude');
+  b.wire(eOpSpread, 'out', eOpacityPulse, 'spread');
+
+  const eOpacity = b.addBlock('ApplyOpacity', {});
+  b.wire(eColor, 'color', eOpacity, 'color');
+  b.wire(eOpacityPulse, 'value', eOpacity, 'opacity');
+
+  const eRender = b.addBlock('RenderInstances2D', {});
+  b.wire(ePos, 'pos', eRender, 'pos');
+  b.wire(eOpacity, 'out', eRender, 'color'); // opacity-modulated color
+  b.wire(ellipse, 'shape', eRender, 'shape');
+  b.wire(eScaleExpr, 'out', eRender, 'scale'); // animated scale
+
+  // === LAYER 2: Rectangles (counter-clockwise spiral) ===
+  const rect = b.addBlock('Rect', { width: 0.025, height: 0.012 });
+  const rectArray = b.addBlock('Array', { count: 100 });
+  b.wire(rect, 'shape', rectArray, 'element');
+
+  // Rect positions: golden spiral spinning counter-clockwise, wide spread
+  const rGolden = b.addBlock('FieldGoldenAngle', { turns: 30 });
+  const rAngular = b.addBlock('FieldAngularOffset', {});
+  const rTotalAngle = b.addBlock('FieldAdd', {});
+  const rRadius = b.addBlock('FieldRadiusSqrt', {});
+  const rPos = b.addBlock('FieldPolarToCartesian', {});
+  const rSpinConst = b.addBlock('Const', { value: -0.6 }); // counter-clockwise
+
+  b.wire(rectArray, 't', rGolden, 'id01');
+  b.wire(rectArray, 't', rAngular, 'id01');
+  b.wire(rectArray, 't', rRadius, 'id01');
+  b.wire(time, 'phaseB', rAngular, 'phase');
+  b.wire(rSpinConst, 'out', rAngular, 'spin');
+  b.wire(rGolden, 'angle', rTotalAngle, 'a');
+  b.wire(rAngular, 'offset', rTotalAngle, 'b');
+
+  const rCenterX = b.addBlock('Const', { value: 0.5 });
+  const rCenterY = b.addBlock('Const', { value: 0.5 });
+  const rRadiusMax = b.addBlock('Const', { value: 0.42 }); // wider spread
+  b.wire(rCenterX, 'out', rPos, 'centerX');
+  b.wire(rCenterY, 'out', rPos, 'centerY');
+  b.wire(rRadiusMax, 'out', rRadius, 'radius');
+  b.wire(rTotalAngle, 'out', rPos, 'angle');
+  b.wire(rRadius, 'out', rPos, 'radius');
+
+  // Rect color: complementary hues (offset by 0.5)
+  const rPhaseOffset = b.addBlock('Expression', {
+    expression: 'in0 + 0.5',
+  });
+  b.wire(time, 'phaseB', rPhaseOffset, 'in0');
+
+  const rHue = b.addBlock('FieldHueFromPhase', {});
+  b.wire(rPhaseOffset, 'out', rHue, 'phase');
+  b.wire(rectArray, 't', rHue, 'id01');
+
+  const rColor = b.addBlock('HsvToRgb', {});
+  const rSat = b.addBlock('Const', { value: 0.7 });
+  const rVal = b.addBlock('Const', { value: 0.95 });
+  b.wire(rHue, 'hue', rColor, 'hue');
+  b.wire(rSat, 'out', rColor, 'sat');
+  b.wire(rVal, 'out', rColor, 'val');
+
+  // Rect per-element opacity: counter-phase wave
+  const rOpacityPulse = b.addBlock('FieldPulse', {});
+  const rOpBase = b.addBlock('Const', { value: 0.4 });
+  const rOpAmp = b.addBlock('Const', { value: 0.6 });
+  const rOpSpread = b.addBlock('Const', { value: 2.5 });
+  b.wire(rectArray, 't', rOpacityPulse, 'id01');
+  b.wire(time, 'phaseB', rOpacityPulse, 'phase');
+  b.wire(rOpBase, 'out', rOpacityPulse, 'base');
+  b.wire(rOpAmp, 'out', rOpacityPulse, 'amplitude');
+  b.wire(rOpSpread, 'out', rOpacityPulse, 'spread');
+
+  const rOpacity = b.addBlock('ApplyOpacity', {});
+  b.wire(rColor, 'color', rOpacity, 'color');
+  b.wire(rOpacityPulse, 'value', rOpacity, 'opacity');
+
+  const rRender = b.addBlock('RenderInstances2D', {});
+  b.wire(rPos, 'pos', rRender, 'pos');
+  b.wire(rOpacity, 'out', rRender, 'color'); // opacity-modulated color
+  b.wire(rect, 'shape', rRender, 'shape');
+  b.wire(rScaleExpr, 'out', rRender, 'scale'); // animated counter-pulse scale
+};
+
 const patches: { name: string; builder: PatchBuilder }[] = [
   { name: 'Golden Spiral', builder: patchGoldenSpiral },
   { name: 'Domain Test', builder: patchDomainTest },
   { name: 'Tile Grid', builder: patchTileGrid },
   { name: 'Orbital Rings', builder: patchOrbitalRings },
+  { name: 'Rect Mosaic', builder: patchRectMosaic },
+  { name: 'Shape Kaleidoscope', builder: patchShapeKaleidoscope },
 ];
 
 let currentPatchIndex = 0;

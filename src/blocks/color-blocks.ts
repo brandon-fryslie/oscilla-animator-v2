@@ -167,4 +167,55 @@ registerBlock({
   },
 });
 
+// =============================================================================
+// ApplyOpacity
+// =============================================================================
+
+registerBlock({
+  type: 'ApplyOpacity',
+  label: 'Apply Opacity',
+  category: 'color',
+  description: 'Applies per-element opacity to a color field (modulates alpha channel)',
+  form: 'primitive',
+  capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
+  inputs: {
+    color: { label: 'Color', type: signalTypeField('color', 'default') },
+    opacity: { label: 'Opacity', type: signalTypeField('float', 'default') },
+  },
+  outputs: {
+    out: { label: 'Color', type: signalTypeField('color', 'default') },
+  },
+  lower: ({ ctx, inputsById }) => {
+    const color = inputsById.color;
+    const opacity = inputsById.opacity;
+
+    if (!color || color.k !== 'field') {
+      throw new Error('ApplyOpacity color must be a field');
+    }
+    if (!opacity || opacity.k !== 'field') {
+      throw new Error('ApplyOpacity opacity must be a field');
+    }
+
+    const opacityFn = ctx.b.kernel('perElementOpacity');
+    const result = ctx.b.fieldZip(
+      [color.id as FieldExprId, opacity.id as FieldExprId],
+      opacityFn,
+      signalTypeField('color', 'default')
+    );
+    const slot = ctx.b.allocSlot();
+
+    return {
+      outputsById: {
+        out: { k: 'field', id: result, slot },
+      },
+      instanceContext: ctx.inferredInstance,
+    };
+  },
+});
+
 // NOTE: ConstColor was removed - use the unified polymorphic Const block instead

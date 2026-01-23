@@ -364,6 +364,28 @@ export function applyFieldKernel(
     for (let i = 0; i < N; i++) {
       outArr[i] = id01Arr[i] * turns * goldenAngle;
     }
+  } else if (fieldOp === 'perElementOpacity') {
+    // ════════════════════════════════════════════════════════════════
+    // perElementOpacity: Apply per-element opacity to color field
+    // ────────────────────────────────────────────────────────────────
+    // Inputs: [color: rgba, opacity: float]
+    // Output: color (rgba) with per-element alpha
+    // Domain: opacity clamped to [0,1]
+    // Coord-space: N/A - color values are space-independent
+    // ════════════════════════════════════════════════════════════════
+    if (inputs.length !== 2) {
+      throw new Error('perElementOpacity requires exactly 2 inputs (color, opacity)');
+    }
+    const outArr = out as Uint8ClampedArray;
+    const colorArr = inputs[0] as Uint8ClampedArray;
+    const opacityArr = inputs[1] as Float32Array;
+    for (let i = 0; i < N; i++) {
+      const opacity = Math.max(0, Math.min(1, opacityArr[i]));
+      outArr[i * 4 + 0] = colorArr[i * 4 + 0];
+      outArr[i * 4 + 1] = colorArr[i * 4 + 1];
+      outArr[i * 4 + 2] = colorArr[i * 4 + 2];
+      outArr[i * 4 + 3] = Math.round(opacity * 255);
+    }
   } else {
     throw new Error(`Unknown field kernel: ${fieldOp}`);
   }

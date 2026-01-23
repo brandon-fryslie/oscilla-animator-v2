@@ -1,0 +1,25 @@
+
+# Runtime primitives
+
+These 4 items are four IR/runtime primitives, not user blocks, and in the spec I wrote they’re all part of one coherent mechanism (i.e., you implement all four as “the event bridge + event ops” surface), not “pick one.”
+	•	EventExprFromBool (IR expression kind): turns an already-computed signal bool into an event fired this frame.
+	•	SigExprEventFired (IR expression kind): exposes an event’s fired boolean this frame back into the signal world so you can do things like gate, select, etc.
+	•	StepEventOp (IR step kind, or several concrete step kinds): the execution-time place where stateful event operators live (delay/debounce/rate-limit), because they can’t be expressed as pure EventExpr without memory.
+	•	StepStateWriteIfEvent (IR step kind): explicit event-conditional state update (sample&hold, accumulator, toggle) without smuggling events as signals or inventing implicit branching in signal evaluation.
+
+They are not blocks in the patch UI. They are compiler/runtime features that let you implement a clean set of event blocks without hacks or ambiguity.
+
+# MVP event blocks
+
+	1.	Pulse (Time Trigger)
+Emits an Event when a periodic timer condition is met (e.g., every N ms, or on phase wrap).
+	2.	Edge Detect (Rising/Falling)
+Takes a Signal<bool> (or Signal<float> with threshold) and emits an Event on rising and/or falling transitions.
+	3.	Event Combine (Any/All)
+Takes multiple Event inputs and emits one Event using any (OR) or all (AND-same-frame).
+	4.	Debounce / Delay
+Takes an Event and emits a new Event after a delay or with debounce semantics (rate control / anti-spam).
+	5.	Sample & Hold
+Inputs: Event (trigger), Signal<T> (value). Output: Signal<T> that updates only when the event fires, otherwise holds last value.
+	6.	Toggle / Accumulator
+Inputs: Event (trigger), optional reset. Output: Signal<bool> (toggle) or Signal<float/int> (accumulator increment per event).
