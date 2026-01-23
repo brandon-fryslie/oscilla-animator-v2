@@ -145,6 +145,7 @@ Feeling stuck is a signal that a lower level's design isn't quite right — not 
 ---
 
 ## Level 3: Perspective Projection Kernel (Pure Math)
+**Status: 13/13 items at C3. All tests passing.**
 
 **Goal:** Second projection kernel. Still pure math — prove it produces correct perspective and differs from ortho.
 
@@ -157,35 +158,35 @@ Feeling stuck is a signal that a lower level's design isn't quite right — not 
 ### Unit Tests
 
 - [ ] `projectWorldToScreenPerspective((0.5, 0.5, 0), defaultPerspCam)` → screenPos near center but NOT (0.5, 0.5) unless point is exactly on optical axis (verify not bitwise equal to ortho result)
-  >
+  > C3 impl-01 0123 "target point projects near center, ortho identity verified as comparison"
 - [ ] Points farther from center have more displacement under perspective than ortho (parallax property)
-  >
+  > C3 impl-01 0123 "edge vs center displacement differs between persp and ortho"
 - [ ] `camPos` is computed deterministically: `camTarget + R_yaw(0) * R_tilt(35°) * (0, 0, 2.0)` → verify exact vec3 value
-  >
+  > C3 impl-01 0123 "deriveCamPos matches PERSP_CAMERA_DEFAULTS exactly, math verified"
 - [ ] `visible = false` for points behind camera (z > camPos.z for a looking-down camera)
-  >
+  > C3 impl-01 0123 "z=10 behind tilted camera is invisible (viewZ<=0)"
 - [ ] `visible = false` for points outside near/far planes
-  >
+  > C3 impl-01 0123 "z=-200 beyond far plane is invisible"
 - [ ] `depth` is monotonically increasing with distance from camera along view axis
-  >
+  > C3 impl-01 0123 "z=0,-0.2,-0.5,-1,-2 produce strictly increasing depth"
 - [ ] Kernel is pure: same inputs → bitwise identical outputs
-  >
+  > C3 impl-01 0123 "5 points tested, all bitwise identical on repeat"
 
 ### Parallax Property Tests
 
 - [ ] Two instances at (0.3, 0.3, 0) and (0.3, 0.3, 0.5): the z=0.5 instance has different screenPos.xy under perspective
-  >
+  > C3 impl-01 0123 "different z produces different screen XY under perspective"
 - [ ] The instance closer to camera is displaced MORE from center than the one farther (verify direction)
-  >
+  > C3 impl-01 0123 "z=0.5 (nearer cam) has greater displacement from center than z=0"
 - [ ] Under ortho, same two instances have IDENTICAL screenPos.xy (z doesn't affect ortho XY)
-  >
+  > C3 impl-01 0123 "ortho produces identical XY regardless of z, verified with toBe()"
 
 ### Field Variant Tests
 
 - [ ] Field perspective kernel matches N individual scalar calls (element-wise identical)
-  >
+  > C3 impl-01 0123 "N=15 instances, bitwise match with Math.fround for float32 storage"
 - [ ] Field kernel with varied z produces non-uniform screenPos.xy (unlike ortho)
-  >
+  > C3 impl-01 0123 "varied z produces varying screen XY under persp, uniform under ortho"
 
 ### Integration Tests
 
@@ -194,7 +195,7 @@ Feeling stuck is a signal that a lower level's design isn't quite right — not 
   - Perspective produces screenPos !== worldPos.xy for off-center instances
   - Both produce valid (non-NaN, non-Inf) outputs
   - Both agree on visibility for in-frustum points
-  >
+  > C3 impl-01 0123 "16 instances: ortho=identity, persp=parallax, all valid, all visible at z=0"
 
 ---
 
