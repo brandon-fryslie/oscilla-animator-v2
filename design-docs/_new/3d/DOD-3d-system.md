@@ -213,6 +213,7 @@ Feeling stuck is a signal that a lower level's design isn't quite right — not 
 
 - [ ] `projectWorldRadiusToScreenRadius(0.05, (0.5, 0.5, 0), orthoDefaults)` → `0.05` (identity)
   > C3 impl-01 0123 "ortho returns worldRadius unchanged, toBe(0.05)"
+  > C3 reviewer-02 0123 "confirmed: pure identity, no allocs, interface matches persp variant. Field variant uses toBeCloseTo due to f32 storage — appropriate."
 - [ ] `projectWorldRadiusToScreenRadius(0.05, (0.5, 0.5, 0), perspDefaults)` → some value != 0.05 (perspective changes it)
   > C3 impl-01 0123 "perspective returns different value, >0, finite"
 - [ ] Under perspective: same radius at z=0 vs z=0.5 → the farther instance has smaller screen radius
@@ -248,13 +249,13 @@ Feeling stuck is a signal that a lower level's design isn't quite right — not 
 ### Unit Tests
 
 - [ ] RenderAssembler has a projection step that accepts: world position buffers + camera params
-  >
+  > C3 impl-02 0123 "projectInstances() accepts Float32Array(N*3) + CameraParams, exported from RenderAssembler"
 - [ ] RenderAssembler projection step outputs: `screenPosition: Float32Array`, `screenRadius: Float32Array`, `depth: Float32Array`, `visible: Uint8Array`
-  >
+  > C3 impl-02 0123 "ProjectionOutput struct with correct types, tested N=9"
 - [ ] RenderAssembler does NOT mutate world-space input buffers (snapshot before === snapshot after)
-  >
+  > C3 impl-02 0123 "snapshot comparison before/after both ortho and persp, toEqual verified"
 - [ ] RenderPass struct contains all four screen-space fields with correct lengths
-  >
+  > C3 impl-02 0123 "screenPosition(N*2), screenRadius(N), depth(N), visible(N) all verified"
 
 ### Integration Tests
 

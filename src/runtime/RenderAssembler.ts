@@ -31,6 +31,90 @@ import type {
 } from '../render/future-types';
 import { SHAPE2D_WORDS, Shape2DWord, type Shape2DRecord, readShape2D } from './RuntimeState';
 import type { ValueSlot } from '../types';
+import {
+  projectFieldOrtho,
+  projectFieldRadiusOrtho,
+  ORTHO_CAMERA_DEFAULTS,
+  type OrthoCameraParams,
+} from '../projection/ortho-kernel';
+import {
+  projectFieldPerspective,
+  projectFieldRadiusPerspective,
+  PERSP_CAMERA_DEFAULTS,
+  type PerspectiveCameraParams,
+} from '../projection/perspective-kernel';
+
+// =============================================================================
+// Projection Types
+// =============================================================================
+
+/**
+ * Projection mode: viewer-level variable (NOT stored in compiled state).
+ * Selects which kernel the RenderAssembler calls each frame.
+ * Changing this requires zero reconstruction — just a different code path.
+ */
+export type ProjectionMode = 'orthographic' | 'perspective';
+
+/**
+ * Camera parameters for projection (union of ortho and perspective).
+ */
+export type CameraParams =
+  | { mode: 'orthographic'; params: OrthoCameraParams }
+  | { mode: 'perspective'; params: PerspectiveCameraParams };
+
+/**
+ * Projection output for a set of instances.
+ * Separate buffers — world-space inputs are never mutated.
+ */
+export interface ProjectionOutput {
+  /** Screen-space positions (Float32Array, stride 2, normalized [0,1]) */
+  screenPosition: Float32Array;
+  /** Per-instance screen-space radius */
+  screenRadius: Float32Array;
+  /** Per-instance depth (Float32Array, length N) */
+  depth: Float32Array;
+  /** Per-instance visibility (Uint8Array, length N, 1=visible 0=culled) */
+  visible: Uint8Array;
+}
+
+/**
+ * Project world-space instances to screen-space.
+ *
+ * This is the projection stage called by the RenderAssembler.
+ * World-space buffers are READ-ONLY — output is written to separate buffers.
+ *
+ * @param worldPositions - World-space vec3 positions (Float32Array, stride 3). READ-ONLY.
+ * @param worldRadius - Uniform world-space radius for all instances
+ * @param count - Number of instances
+ * @param camera - Camera parameters (mode + params)
+ * @returns Separate screen-space output buffers
+ */
+export function projectInstances(
+  worldPositions: Float32Array,
+  worldRadius: number,
+  count: number,
+  camera: CameraParams,
+): ProjectionOutput {
+  // Allocate output buffers (separate from world-space inputs)
+  const screenPosition = new Float32Array(count * 2);
+  const screenRadius = new Float32Array(count);
+  const depth = new Float32Array(count);
+  const visible = new Uint8Array(count);
+
+  // Uniform radii input for field radius projection
+  const worldRadii = new Float32Array(count);
+  worldRadii.fill(worldRadius);
+
+  if (camera.mode === 'orthographic') {
+    projectFieldOrtho(worldPositions, count, camera.params, screenPosition, depth, visible);
+    projectFieldRadiusOrtho(worldRadii, worldPositions, count, camera.params, screenRadius);
+  } else {
+    projectFieldPerspective(worldPositions, count, camera.params, screenPosition, depth, visible);
+    projectFieldRadiusPerspective(worldRadii, worldPositions, count, camera.params, screenRadius);
+  }
+
+  return { screenPosition, screenRadius, depth, visible };
+}
 
 /**
  * AssemblerContext - Context needed for render assembly
@@ -42,6 +126,8 @@ export interface AssemblerContext {
   instances: ReadonlyMap<string, InstanceDecl>;
   /** Runtime state for reading slots and evaluating signals */
   state: RuntimeState;
+  /** Camera params for projection (optional — if omitted, no projection is performed) */
+  camera?: CameraParams;
 }
 
 /**
@@ -93,6 +179,24 @@ export function assembleRenderPass(
 
   // Fully resolve shape for renderer (includes topology lookup)
   const resolvedShape = resolveShapeFully(shape, controlPoints);
+
+  // Run projection if camera is provided
+  const camera = context.camera;
+  if (camera && position instanceof Float32Array) {
+    const projection = projectInstances(position, scale, count, camera);
+    return {
+      kind: 'instances2d',
+      count,
+      position, // Original world-space position (preserved, not mutated)
+      color,
+      scale,
+      resolvedShape,
+      screenPosition: projection.screenPosition,
+      screenRadius: projection.screenRadius,
+      depth: projection.depth,
+      visible: projection.visible,
+    };
+  }
 
   return {
     kind: 'instances2d',

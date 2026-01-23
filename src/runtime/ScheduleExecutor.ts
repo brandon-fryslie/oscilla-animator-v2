@@ -100,7 +100,7 @@ export interface RenderPassIR {
   count: number;
   position: ArrayBufferView;
   color: ArrayBufferView;
-  
+
   /**
    * Scale multiplier for shape dimensions (default 1.0 = no scaling).
    * Applied to normalized shape params before viewport conversion.
@@ -131,6 +131,38 @@ export interface RenderPassIR {
    * This is the ONLY shape representation - no legacy encoding.
    */
   resolvedShape: ResolvedShape;
+
+  // =========================================================================
+  // Screen-space fields (3D projection output)
+  // =========================================================================
+
+  /**
+   * Screen-space positions (Float32Array, stride 2, normalized [0,1]).
+   * Produced by the projection stage from world-space vec3 positions.
+   * Backends map [0,1] → pixels via viewport dimensions.
+   */
+  screenPosition?: Float32Array;
+
+  /**
+   * Per-instance screen-space radius.
+   * Under ortho: identity (=== worldRadius).
+   * Under perspective: foreshortened by distance.
+   */
+  screenRadius?: Float32Array;
+
+  /**
+   * Per-instance depth value (Float32Array, length N).
+   * Monotonically increasing with distance from camera.
+   * Used for depth sorting (Level 7).
+   */
+  depth?: Float32Array;
+
+  /**
+   * Per-instance visibility flag (Uint8Array, length N).
+   * 1 = visible (within frustum), 0 = culled.
+   * Culled instances are excluded from rendering (Level 7).
+   */
+  visible?: Uint8Array;
 }
 
 /**
