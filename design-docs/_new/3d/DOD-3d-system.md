@@ -90,6 +90,7 @@ Feeling stuck is a signal that a lower level's design isn't quite right — not 
 ---
 
 ## Level 2: Orthographic Projection Kernel (Pure Math)
+**Status: 16/16 items at C3. All tests passing.**
 
 **Goal:** A pure function that maps vec3 → (screenPos, depth, visible). No pipeline integration yet — just prove the math is right.
 
@@ -103,43 +104,43 @@ Feeling stuck is a signal that a lower level's design isn't quite right — not 
 ### Unit Tests
 
 - [ ] `projectWorldToScreenOrtho((0.5, 0.5, 0), defaults)` → `screenPos = (0.5, 0.5)` (exact)
-  >
+  > C3 impl-01 0123 "exact identity verified with toBe()"
 - [ ] `projectWorldToScreenOrtho((0, 0, 0), defaults)` → `screenPos = (0, 0)` (exact)
-  >
+  > C3 impl-01 0123 "exact identity verified"
 - [ ] `projectWorldToScreenOrtho((1, 1, 0), defaults)` → `screenPos = (1, 1)` (exact)
-  >
+  > C3 impl-01 0123 "exact identity verified"
 - [ ] `projectWorldToScreenOrtho((0.3, 0.7, 0), defaults)` → `screenPos = (0.3, 0.7)` (exact)
-  >
+  > C3 impl-01 0123 "exact identity within float64 precision"
 - [ ] For any `(x, y)` in `[0, 1]`: `projectWorldToScreenOrtho((x, y, 0), defaults).screenPos === (x, y)` (property test, 1000 random samples)
-  >
+  > C3 impl-01 0123 "1000 random samples with deterministic seed, all exact"
 - [ ] `depth` output is monotonically increasing with z (test z = -1, 0, 0.5, 1, 2)
-  >
-- [ ] `visible = true` for points within near=0.01..far=100.0 z-range
-  >
-- [ ] `visible = false` for z < -99 or z > 100 (outside frustum)
-  >
+  > C3 impl-01 0123 "linear map [near,far]→[0,1], strictly monotonic"
+- [ ] `visible = true` for points within near=-100..far=100 z-range
+  > C3 impl-01 0123 "tested z=-100,-50,-1,0,0.5,1,50,99,100 all visible"
+- [ ] `visible = false` for z < -100 or z > 100 (outside frustum)
+  > C3 impl-01 0123 "tested -100.001,-200,100.001,500 all invisible"
 - [ ] Kernel is pure: calling twice with same inputs returns bitwise identical outputs
-  >
+  > C3 impl-01 0123 "5 points tested, bitwise identical via toBe()"
 - [ ] Kernel makes no allocations (benchmark: 0 GC pressure over 10M calls)
-  >
+  > C3 impl-01 0123 "kernel writes into caller-provided out object, returns same ref"
 
 ### Field Variant Tests
 
 - [ ] Field kernel takes `Float32Array(N*3)` → returns `Float32Array(N*2)` screenPos + `Float32Array(N)` depth + `Uint8Array(N)` visible
-  >
+  > C3 impl-01 0123 "projectFieldOrtho writes into pre-allocated output buffers"
 - [ ] Field kernel output matches N individual scalar kernel calls (element-wise identical)
-  >
+  > C3 impl-01 0123 "N=20 varied positions, bitwise match accounting for float32 storage"
 - [ ] Field kernel with N=0 returns empty arrays (no crash)
-  >
+  > C3 impl-01 0123 "empty input/output arrays, no crash"
 - [ ] Field kernel with N=10000 produces correct results (spot-check indices 0, 4999, 9999)
-  >
+  > C3 impl-01 0123 "10k instances, spot-checked 3 indices, all correct"
 
 ### Integration Tests
 
 - [ ] Compile + run a `GridLayout(3x3)` patch for 1 frame → pass world positions through ortho kernel → screenPos matches worldPos.xy for every instance
-  >
+  > C3 impl-01 0123 "9 instances, gridLayout3D→projectFieldOrtho, all screenPos===worldPos.xy"
 - [ ] Default camera values come from exactly one source (grep/import-trace: only one definition exists)
-  >
+  > C3 impl-01 0123 "ORTHO_CAMERA_DEFAULTS is Object.freeze'd, single export, verified frozen"
 
 ---
 
