@@ -1033,6 +1033,72 @@ type NormalizedGraph = {
 
 ## Renderer
 
+### RenderAssembler
+
+**Definition**: The runtime component that produces RenderFrameIR by walking render sinks, materializing field buffers, resolving shape2d handles, reading scalar banks, and executing camera projection. Lives in runtime, not renderer.
+
+**Type**: concept (architectural component)
+
+**Canonical Form**: `RenderAssembler`
+
+**Responsibilities**:
+1. Materialize required fields via Materializer
+2. Read scalar banks for uniforms
+3. Execute camera projection (world → screen transform)
+4. Resolve shape2d → (topologyId, pointsBuffer, flags/style)
+5. Group into passes and output RenderFrameIR
+
+**Source**: [05-runtime.md](./topics/05-runtime.md), [18-camera-projection.md](./topics/18-camera-projection.md)
+
+**Note**: Enforces I15 (Renderer is sink-only). All IR interpretation happens here, not in renderer.
+
+---
+
+### RenderBackend
+
+**Definition**: Generic interface implemented by each render target (Canvas2D, SVG, WebGL). Consumes RenderFrameIR, performs rasterization only.
+
+**Type**: interface
+
+**Canonical Form**: `RenderBackend<TTarget>`
+
+**Structure**:
+```typescript
+interface RenderBackend<TTarget> {
+  beginFrame(target: TTarget, frameInfo: FrameInfo): void;
+  executePass(pass: RenderPassIR): void;
+  endFrame(): void;
+}
+```
+
+**Source**: [06-renderer.md](./topics/06-renderer.md)
+
+**Note**: Backends must not force changes to the meaning of RenderIR. Backend-specific adaptations are backend-local.
+
+---
+
+### PathTopologyDef
+
+**Definition**: Immutable structural definition of a path shape — the verbs (move, line, quad, cubic, close) and their arities. Registered at compile/init time and referenced by numeric ID.
+
+**Type**: type
+
+**Canonical Form**: `PathTopologyDef`
+
+**Structure**:
+```typescript
+interface PathTopologyDef {
+  verbs: Uint8Array;           // Sequence of path verbs
+  pointsPerVerb: Uint8Array;   // Number of control points each verb consumes
+}
+```
+
+**Source**: [06-renderer.md](./topics/06-renderer.md)
+
+**Note**: Immutable once registered. Control points change per-frame; topology does not. `closed` derives from verbs (last verb = close).
+
+---
+
 ### RenderInstances2D
 
 **Definition**: Primary render sink block.
@@ -1056,6 +1122,84 @@ type NormalizedGraph = {
 **Source**: [06-renderer.md](./topics/06-renderer.md)
 
 **Note**: The old instance-centric RenderIR is replaced by the draw-op-centric RenderFrameIR per D34.
+
+---
+
+### projectWorldToScreenOrtho
+
+**Definition**: Orthographic projection kernel that transforms `Field<vec3>` worldPosition into screen-space coordinates. Default projection mode. Guarantees identity mapping at z=0 (worldX = screenX, worldY = screenY).
+
+**Type**: kernel (pure function)
+
+**Canonical Form**: `projectWorldToScreenOrtho`
+
+**Output Contract**: `{ screenPosition: Field<vec2>, depth: Field<float>, visible: Field<bool> }`
+
+**Source**: [18-camera-projection.md](./topics/18-camera-projection.md)
+
+**Note**: Not a graph block. Executed by RenderAssembler as mandatory post-schedule stage.
+
+---
+
+### projectWorldToScreenPerspective
+
+**Definition**: Perspective projection kernel with camera position, tilt, yaw, and field-of-view. Used for momentary preview (Shift) or when Camera block sets projection=1.
+
+**Type**: kernel (pure function)
+
+**Canonical Form**: `projectWorldToScreenPerspective`
+
+**Output Contract**: `{ screenPosition: Field<vec2>, depth: Field<float>, visible: Field<bool> }`
+
+**Source**: [18-camera-projection.md](./topics/18-camera-projection.md)
+
+**Note**: Preview mode must not change compilation, state, or export.
+
+---
+
+### Camera Block
+
+**Definition**: Render-side declaration block that modulates projection parameters. Exactly 0 or 1 per patch. Has input ports (modulatable) but does not produce outputs for other nodes.
+
+**Type**: block (render-side declaration)
+
+**Canonical Form**: `Camera`
+
+**Cardinality**: 0 or 1 per patch (2+ is compile error)
+
+**Ports**: center (vec2), distance (float), tilt (float), yaw (float), fovY (float), near (float), far (float), projection (int: 0=ortho, 1=perspective)
+
+**Source**: [18-camera-projection.md](./topics/18-camera-projection.md)
+
+**Note**: Same category as render sinks. Multi-camera only when multi-view render target model exists (future).
+
+---
+
+### visible
+
+**Definition**: Contract output field from projection kernel indicating whether each instance should be drawn. Renderers MUST NOT re-derive visibility.
+
+**Type**: concept (projection output field)
+
+**Canonical Form**: `visible` (field name), `Field<bool>` (type)
+
+**Source**: [18-camera-projection.md](./topics/18-camera-projection.md)
+
+**Note**: Single-enforcer principle — visibility determined once by projection kernel, not by renderer.
+
+---
+
+### depth
+
+**Definition**: Normalized distance from camera, range [0, 1], where 0=near plane, 1=far plane. Primary key for stable depth ordering (far-to-near).
+
+**Type**: concept (projection output field)
+
+**Canonical Form**: `depth` (field name), `Field<float>` (type)
+
+**Source**: [18-camera-projection.md](./topics/18-camera-projection.md)
+
+**Note**: Renderer must draw in stable depth order every pass. Historically referred to as `depthSlot`.
 
 ---
 
@@ -1653,5 +1797,6 @@ type ValueSummary =
 | `RenderIR` (instance-centric) | `RenderFrameIR` (draw-op-centric) | DrawPathInstancesOp replaces RenderInstance model |
 | `RenderInstance` | `DrawPathInstancesOp` + `PathInstanceSet` | Instances are now per-op transform arrays |
 | `GeometryAsset` | `PathGeometryTemplate` | Local-space geometry with topology |
+| `GeometryRegistry` | Topology registry + numeric ID lookup | No string maps; O(1) array indexing |
 | `MaterialAsset` | `PathStyle` | Style per draw-op, not per-instance |
 | `size` (as parameter name) | `scale` | Renamed for clarity — isotropic local→world scale factor |

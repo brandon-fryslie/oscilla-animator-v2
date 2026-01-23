@@ -1732,6 +1732,121 @@ Should coordinate spaces be enforced via type-level axis or block-level naming c
 
 ---
 
+---
+
+## Update 8: Renderer Architecture Integration (2026-01-22, fourth pass)
+
+**Sources Analyzed**: 4 files (renderer/8-before-render.md, 9-renderer.md, 10-multiple-backends.md, 11-svg.md)
+**Topics Updated**: 2 (05-runtime, 06-renderer)
+**Resolutions Made**: 5
+**New Terms**: 3 (RenderAssembler, RenderBackend, PathTopologyDef)
+**Deprecated**: GeometryRegistry (string-keyed maps)
+
+---
+
+### D38: GeometryRegistry → Topology Registry (Numeric IDs)
+
+**Date**: 2026-01-22
+
+**Category**: T3 Correction
+
+**Source**: All 4 new renderer docs vs Topic 06 "Asset Management" section
+
+**The Problem**:
+Topic 06 described `GeometryRegistry` with `Map<string, GeometryAsset>` (string-keyed). This contradicts the numeric topology ID model established in D34 (PathGeometryTemplate uses `topologyId: number`).
+
+**Resolution**: Remove "Asset Management" section. Replace with "Topology Registry" section using numeric IDs and O(1) array lookup. No string maps, no hash maps.
+
+**Rationale**: The old section was residual from before D34. PathGeometryTemplate already uses numeric IDs. Consistency requires the registry to match.
+
+**Impact**: Topic 06 section replaced. GeometryRegistry deprecated in GLOSSARY.
+
+**Approved**: 2026-01-22 by Brandon Fryslie
+
+---
+
+### D39: RenderAssembler Placement (Runtime, Not Renderer)
+
+**Date**: 2026-01-22
+
+**Category**: Structural Addition (T2)
+
+**Source**: renderer/8-before-render.md
+
+**The Problem**:
+The canonical spec describes RenderFrameIR (what the renderer consumes) and schedule execution (what the runtime does), but there is no defined component that bridges them — who resolves shape2d handles, materializes fields, and produces the concrete RenderFrameIR?
+
+**Resolution**: Add "RenderAssembler" to Topic 05 (Runtime) as the final stage of frame execution. It lives in runtime, NOT renderer, because it enforces I15 (renderer is sink-only) by ensuring all IR interpretation happens before the renderer.
+
+**Pipeline**: Schedule executes → RenderAssembler walks sinks → materializes → resolves shapes → outputs RenderFrameIR → Renderer consumes.
+
+**Rationale**: The renderer must be a pure sink. Anything that "interprets" IR concepts (slot IDs, field exprs, shape2d handles) belongs in runtime.
+
+**Impact**: Topic 05 new section. GLOSSARY: RenderAssembler term added.
+
+**Approved**: 2026-01-22 by Brandon Fryslie
+
+---
+
+### D40: Backend Interface (T2 Seam)
+
+**Date**: 2026-01-22
+
+**Category**: Structural Addition (T2 interface, T3 implementations)
+
+**Source**: renderer/10-multiple-backends.md
+
+**The Problem**:
+The canonical spec described Canvas2D as primary target with future WebGL/SVG, but never defined the backend abstraction.
+
+**Resolution**: Add `RenderBackend<TTarget>` interface to Topic 06 as T2 content (architectural seam). Specific backends (Canvas2D, SVG, WebGL) are T3 implementation notes. Non-negotiable rule: backends must not force changes to the meaning of RenderIR.
+
+**Impact**: Topic 06: Backend Interface section replaces Target Formats. GLOSSARY: RenderBackend term added.
+
+**Approved**: 2026-01-22 by Brandon Fryslie
+
+---
+
+### D41: Per-Instance Shape Pass Kind (Deferred)
+
+**Date**: 2026-01-22
+
+**Category**: T3 Future Note
+
+**Source**: renderer/9-renderer.md
+
+**The Problem**:
+RenderPassIR currently only has one kind (`'drawPathInstances'`). When Field<shape2d> is implemented, a second pass kind will be needed for per-instance shapes.
+
+**Resolution**: Add as T3 future note in Topic 06. No changes to current RenderPassIR type. The second pass kind (`'drawPathInstancesField'`) will be added when Field<shape2d> is implemented.
+
+**Rationale**: Forward-looking documentation without premature implementation.
+
+**Approved**: 2026-01-22 by Brandon Fryslie
+
+---
+
+### D42: PathTopologyDef (Gap Fill)
+
+**Date**: 2026-01-22
+
+**Category**: Structural Addition (T2)
+
+**Source**: renderer/9-renderer.md, renderer/10-multiple-backends.md
+
+**The Problem**:
+PathGeometryTemplate references `topologyId: number` but the spec never defines what a topology contains.
+
+**Resolution**: Add `PathTopologyDef` type to Topic 06 and GLOSSARY. Contains: `verbs: Uint8Array` (path verb sequence) and `pointsPerVerb: Uint8Array` (arity per verb). Immutable once registered. The `closed` flag derives from verbs (last verb = close), so it's removed from PathGeometryTemplate.
+
+**Impact**: Topic 06: PathTopologyDef added after PathGeometryTemplate. PathGeometryTemplate simplified (removed `closed` boolean). GLOSSARY: PathTopologyDef term added.
+
+**Approved**: 2026-01-22 by Brandon Fryslie
+
+---
+
+---
+
 ## Statistics
 
 | Phase | Date | Sources | Topics | Resolutions |
@@ -1746,5 +1861,6 @@ Should coordinate spaces be enforced via type-level axis or block-level naming c
 | **Phase 5 (Cardinality-Generic)** | 2026-01-22 | +1 | +0 | +7 |
 | **Phase 6 (Payload-Generic + State)** | 2026-01-22 | +2 | +0 | +5 |
 | **Phase 7 (Kernel Roadmap + Local-Space)** | 2026-01-22 | +7 | +1 | +7 |
-| **Total** | — | **67** | **16** | **103** |
+| **Phase 8 (Renderer Architecture)** | 2026-01-22 | +4 | +0 | +5 |
+| **Total** | — | **71** | **16** | **108** |
 

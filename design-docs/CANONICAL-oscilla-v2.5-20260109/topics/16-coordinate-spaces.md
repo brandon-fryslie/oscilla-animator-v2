@@ -54,16 +54,35 @@ Local space is the coordinate system in which geometry and control points are de
 World space is the normalized coordinate system for instance placement. Layout blocks produce positions in world space.
 
 **Properties**:
-- Range: [0..1] in both axes
-- Represents the abstract "canvas" before backend mapping
-- All position outputs from layout blocks are in world space
-- Array block instances exist in world space
+- Range: Normalized cube [0,1]³ (x, y, z)
+- The z=0 plane is the canonical 2D surface
+- All position outputs from layout blocks are in world space (xy)
+- Depth (z) is optional and defaults to 0.0 when not authored
+- Represents the abstract "canvas" before camera projection
+
+### 3D Extension
+
+World space is defined as the full normalized cube [0,1]³:
+- **x**: [0,1], left to right
+- **y**: [0,1], bottom to top
+- **z**: [0,1], near to far (depth)
+
+The 2D subset (z=0 plane) remains fully valid. Layout kernels produce `Field<vec2>` in the xy plane; depth is authored separately via `positionZSlot` (see [18-camera-projection](./18-camera-projection.md)).
+
+### Identity Property at z=0
+
+When using the default orthographic projection with default parameters, positions at z=0 pass through the projection kernel unchanged:
+- `screenX = worldX` (exact in IEEE 754)
+- `screenY = worldY` (exact in IEEE 754)
+
+This ensures all existing 2D layouts work identically with the 3D pipeline.
 
 ### Relationship to Existing Concepts
 
-- Layout blocks already produce positions in [0..1] — this formalizes that convention
+- Layout blocks produce positions in [0,1]×[0,1] (xy plane) — this formalizes that convention
 - Array block creates instances with world positions
-- Position fields (`Field<vec2>`) with layout semantics are world-space values
+- Position fields (`Field<vec2>`) with layout semantics are world-space xy values
+- Depth fields (`Field<float>`) represent world-space z values
 
 ---
 
@@ -95,23 +114,26 @@ The full transform from local geometry to viewport output:
 
 ```
 pW = positionW + R(θ) · (scale × pL)
-pV = pW × viewportDimensions
+pScreen = projectWorldToScreen(pW, cameraParams)
+pV = pScreen × viewportDimensions
 ```
 
 Where:
 - `pL` = point in local space
-- `positionW` = instance position in world space (from layout)
+- `positionW` = instance position in world space (from layout + depth compose)
 - `θ` = instance rotation
 - `scale` = isotropic local→world scale factor
-- `pW` = resulting point in world space
+- `pW` = resulting point in world space (vec3: xy from layout, z from depth)
+- `pScreen` = screen-space position after camera projection (vec2)
 - `pV` = final point in viewport space
 
 ### Transform Order
 
 1. **Scale** local geometry by `scale` (and optionally `scale2`)
 2. **Rotate** by θ
-3. **Translate** to world position
-4. **Map** world → viewport (renderer only)
+3. **Translate** to world position (compose xy + z)
+4. **Project** world → screen via projection kernel (see [18-camera-projection](./18-camera-projection.md))
+5. **Map** screen → viewport (renderer only)
 
 ---
 
@@ -218,6 +240,9 @@ This would enable compile-time enforcement of coordinate space mismatches. Defer
 - [02-block-system](./02-block-system.md) - Block port coordinate conventions
 - [05-runtime](./05-runtime.md) - Field buffer semantics
 - [06-renderer](./06-renderer.md) - World→viewport mapping
+- [17-layout-system](./17-layout-system.md) - Layout kernels producing world-space positions
+- [18-camera-projection](./18-camera-projection.md) - Camera projection (world→screen)
+- [19-2_5d-profile](./19-2_5d-profile.md) - Constrained 2.5D authoring mode
 - [Glossary: Local Space](../GLOSSARY.md#local-space)
 - [Glossary: World Space](../GLOSSARY.md#world-space)
 - [Glossary: scale](../GLOSSARY.md#scale)

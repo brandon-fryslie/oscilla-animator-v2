@@ -30,7 +30,7 @@ The type system has three layers:
 The base data type of a value - what the payload is made of.
 
 ```typescript
-type PayloadType = 'float' | 'int' | 'vec2' | 'vec3' | 'color' | 'phase' | 'bool' | 'unit' | 'shape2d';
+type PayloadType = 'float' | 'int' | 'vec2' | 'vec3' | 'color' | 'phase' | 'bool' | 'unit' | 'shape2d' | 'shape3d';
 ```
 
 ### PayloadType Semantics
@@ -45,7 +45,12 @@ type PayloadType = 'float' | 'int' | 'vec2' | 'vec3' | 'color' | 'phase' | 'bool
 | `phase` | Cyclic phase value | 1 | 0..1 with wrap semantics |
 | `bool` | Boolean | 1 | true/false |
 | `unit` | Unit interval | 1 | 0..1 clamped |
-| `shape2d` | 2D shape reference | 8 | Packed u32 words (handle type) |
+| `shape2d` | 2D shape reference | 8 | Packed u32 words (opaque handle) |
+| `shape3d` | 3D shape reference (T3) | 12 | Packed u32 words (opaque handle, future) |
+
+### Opaque Handle Payloads
+
+`shape2d` and `shape3d` are **opaque handle payloads** — they refer to geometry definitions rather than representing computable values. Unlike arithmetic types (float, vec2, etc.), you cannot add, multiply, or interpolate handle values.
 
 ### shape2d: Handle Type
 
@@ -68,6 +73,53 @@ enum Shape2DWord {
 
 **Valid operations**: equality comparison, assignment, pass-through
 **Invalid operations**: arithmetic, interpolation, combine modes (except `last`/`first`)
+
+### shape3d: Handle Type (T3 Future Extension)
+
+`shape3d` extends the handle concept to 3D geometry. It follows the same opaque-handle rules as `shape2d`.
+
+```typescript
+// shape3d packed layout (12 × u32 words) — T3, not yet implemented
+const SHAPE3D_WORDS = 12;
+enum Shape3DWord {
+  TopologyId = 0,
+  PointsFieldSlot = 1,
+  PointsCount = 2,
+  StyleRef = 3,
+  Flags = 4,
+  NormalsFieldSlot = 5,   // u32 — field slot for vertex normals
+  MaterialRef = 6,         // u32 — material reference
+  Reserved1 = 7,
+  Reserved2 = 8,
+  Reserved3 = 9,
+  Reserved4 = 10,
+  Reserved5 = 11,
+}
+```
+
+### CombineMode Restrictions by PayloadType
+
+CombineMode defines how multiple writers to the same bus are resolved. Not all modes are valid for all payload types.
+
+| PayloadType | Allowed CombineModes | Rationale |
+|-------------|---------------------|-----------|
+| `float` | sum, product, min, max, last, first | Full arithmetic |
+| `int` | sum, product, min, max, last, first | Full arithmetic |
+| `vec2` | sum, last, first | Component-wise sum; min/max ambiguous |
+| `vec3` | sum, last, first | Component-wise sum; min/max ambiguous |
+| `color` | sum, last, first, blend | Color-specific blend mode |
+| `phase` | last, first | Phase arithmetic is restricted |
+| `bool` | or, and, last, first | Boolean logic |
+| `unit` | last, first | Clamped semantics prohibit accumulation |
+| `shape2d` | last, first | **Opaque handle — non-arithmetic** |
+| `shape3d` | last, first | **Opaque handle — non-arithmetic** |
+
+### CombineMode Invariants
+
+1. **No payload type change**: CombineMode never changes the PayloadType of the bus
+2. **No cardinality increase**: CombineMode never increases cardinality (no fan-out)
+3. **No composite allocation**: CombineMode never allocates new composite values
+4. **Pure function over fixed-size representation**: CombineMode must be definable as a pure function `(accumulator: T, incoming: T) → T` where T is a fixed-size value
 
 ### Important Notes
 

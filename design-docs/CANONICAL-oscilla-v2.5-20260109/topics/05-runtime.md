@@ -594,6 +594,75 @@ This is an optimization, not architecture. The abstract `RuntimeState` definitio
 
 ---
 
+## Render Assembly (RenderAssembler)
+
+### Purpose
+
+RenderAssembler is the final stage of frame execution. It bridges the gap between schedule evaluation (which produces slot/expr outputs) and the renderer (which consumes concrete buffers). It lives in the runtime, NOT the renderer.
+
+This stage enforces Invariant I15 (Renderer is sink-only) by ensuring ALL interpretation of IR concepts happens before the renderer sees anything.
+
+### Execution Pipeline
+
+```
+1. Schedule executes → fills scalar banks, evaluates field exprs
+         ↓
+2. RenderAssembler walks render sinks:
+   a. Materializes required fields via Materializer
+   b. Reads scalar banks for uniforms (scale, rotation, opacity)
+   c. Resolves shape2d handles → (topologyId, pointsBuffer, flags/style)
+   d. Composes world position: positionXY(Field<vec2>) + positionZ(Field<float>, default 0.0) → Field<vec3>
+   e. Resolves camera parameters (preview override → Camera block → system defaults)
+   f. Runs projection kernel → screenPosition(Field<vec2>), depth(Field<float>), visible(Field<bool>)
+   g. Computes depth ordering (two-phase: fast-path detection, then stable sort if needed)
+   h. Groups into passes by shared geometry+style
+         ↓
+3. RenderAssembler outputs RenderFrameIR
+   - Only concrete typed arrays
+   - Only numeric topology IDs
+   - No slot/expr IDs, no IR references
+   - Includes screenPosition, depth permutation, visible mask
+         ↓
+4. Renderer consumes RenderFrameIR (pure sink)
+```
+
+For full camera/projection pipeline details, see [18-camera-projection](./18-camera-projection.md).
+
+### Responsibilities
+
+1. **Materialize field references** — Call `Materializer.materialize(fieldExprId, instanceId, ...)` for every field the pass needs
+2. **Read scalar values** — Read scalar slot banks directly for uniforms
+3. **Resolve shape2d** — Unpack the shape2d handle type (8 u32 words):
+   - Read topologyId from packed struct
+   - Fetch points field buffer by slot/expr ID
+   - Validate verbs/arity/pointCount match (once per pass)
+4. **Emit normalized passes** — No "shape modes", no "param name mapping", no side channels
+
+### Shape2D Resolution
+
+The shape2d PayloadType (handle type, stride=8) is resolved here:
+
+```
+shape2d packed words → {
+  topologyId: words[0]          → PathTopologyDef lookup
+  pointsFieldSlot: words[1]     → Materializer.materialize() → Float32Array
+  pointsCount: words[2]         → Validation against topology
+  styleRef: words[3]            → PathStyle construction
+  flags: words[4]               → closed/fillRule/etc
+}
+```
+
+The renderer never sees shape2d handles — it only receives resolved PathGeometryTemplate.
+
+### What RenderAssembler Does NOT Do
+
+- **No canvas/GPU calls** — That's the renderer
+- **No creative logic** — That's the patch
+- **No field evaluation** — That's the Materializer (which it calls)
+- **No topology definition** — That's the topology registry
+
+---
+
 ## See Also
 
 - [04-compilation](./04-compilation.md) - How IR is generated

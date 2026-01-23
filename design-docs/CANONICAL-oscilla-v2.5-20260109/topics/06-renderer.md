@@ -149,6 +149,18 @@ type StrokeSpec =
   | { kind: 'solid'; color: Color; width: number };
 ```
 
+### Per-Instance Shapes (T3, Future)
+
+When `Field<shape2d>` is implemented, a second pass kind will be added:
+
+```typescript
+type RenderPassIR =
+  | { kind: 'drawPathInstances'; op: DrawPathInstancesOp }       // Uniform shape
+  | { kind: 'drawPathInstancesField'; op: DrawPathFieldOp };     // Per-instance shapes (future)
+```
+
+This enables each instance to reference its own geometry template. Deferred until Field<shape2d> is implemented.
+
 ### Why Draw-Op-Centric?
 
 The draw-op model (vs the previous instance-centric model) provides:
@@ -298,27 +310,62 @@ function cullInstance(instance: RenderInstance, viewport: Viewport): boolean {
 
 ---
 
-## Target Formats
+## Backend Interface
 
-### Canvas 2D
+### RenderBackend Contract
 
-Primary render target for v0:
-- Standard HTML Canvas
-- Path-based rendering
-- Hardware acceleration where available
+Each render target implements a generic backend interface. The backend is a pure consumer of RenderFrameIR — it performs rasterization, not interpretation.
 
-### WebGL (Future)
+```typescript
+interface RenderBackend<TTarget> {
+  beginFrame(target: TTarget, frameInfo: FrameInfo): void;
+  executePass(pass: RenderPassIR): void;
+  endFrame(): void;
+}
+```
 
-For high-performance rendering:
-- Instanced rendering for large domains
-- Custom shaders for effects
-- Better batching characteristics
+**Non-negotiable rule**: Backends must not force changes to the meaning of RenderIR. If a backend can't draw something directly, the adaptation is either:
+- A deterministic, cache-keyed lowering step (e.g., path → mesh for WebGL) in a backend-specific prepass
+- A capability negotiation that causes compilation to choose different ops
 
-### Export Formats (Future)
+But backend needs never leak into "what a shape is" in the patch.
 
-- Video (frame sequence)
-- GIF
-- SVG (for vector export)
+### Canvas2D Backend
+
+Primary render target (v0):
+- Uses topology verbs + points to build a Path2D each instance
+- Fills/strokes per instance (or per batch if style uniform)
+- Reference implementation — simple and correct
+
+### SVG Backend (T3 Implementation Notes)
+
+SVG-specific strategies:
+- **Geometry caching**: Convert topology+points to `d` string once per geometry key, reuse across instances
+- **`<defs>/<use>` pattern**: Shared geometry in `<defs>`, instances as `<use>` with per-instance transforms/styles
+- **DOM pooling**: Maintain stable element identity across frames; update attributes, don't recreate nodes
+- **Cache key**: `topologyId + ':' + pointsFieldId + ':' + fieldStamp`
+
+For efficient SVG instancing, **local-space geometry is required** — geometry templates produce a single `d` string reused by all instances with per-instance `transform` attributes.
+
+### WebGL/WebGPU Backend (Future, T3)
+
+For path rendering on GPU:
+- Tessellate paths to triangle meshes (cache by topology+points key)
+- Use instanced rendering for transforms
+- Backend-local lowering, not IR-level
+
+### Capability Negotiation (T3, Future)
+
+```typescript
+type BackendCaps = {
+  supportsPaths: boolean;
+  supportsInstancedPaths: boolean;
+  supportsMeshes: boolean;
+  supportsGradients: boolean;
+};
+```
+
+Strategy: Always emit highest-level IR (paths); let backend lower if needed. Best for correctness and simplicity.
 
 ---
 
@@ -391,6 +438,17 @@ interface RenderDiagnostics {
 
 ## Error Handling
 
+### Pass-Level Prevalidation
+
+Validate once per pass, then loop instances with no checks:
+
+1. Topology exists (topologyId is valid in registry)
+2. Points buffer exists and is non-null
+3. pointsCount matches expected for topology (sum of pointsPerVerb)
+4. Instance arrays are correct length (count × stride)
+
+If validation fails: throw/diagnose before the hot loop. This is both faster and easier to debug than per-instance checks.
+
 ### Render Errors
 
 ```typescript
@@ -398,7 +456,9 @@ type RenderError =
   | { kind: 'invalid_geometry'; topologyId: number }
   | { kind: 'invalid_style'; passIndex: number }
   | { kind: 'buffer_overflow'; requested: number; available: number }
-  | { kind: 'invalid_transform'; instanceIndex: number };
+  | { kind: 'invalid_transform'; instanceIndex: number }
+  | { kind: 'topology_not_found'; topologyId: number }
+  | { kind: 'points_count_mismatch'; expected: number; actual: number };
 ```
 
 ### Fallback Rendering
@@ -406,7 +466,7 @@ type RenderError =
 On error:
 - Log error with attribution
 - Render placeholder (pink square, error marker)
-- Continue with other instances
+- Continue with other passes
 - Surface in UI
 
 ---

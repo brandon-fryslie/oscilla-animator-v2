@@ -1,12 +1,12 @@
 ---
 status: CANONICAL
 generated: 2026-01-09T17:00:00Z
-updated: 2026-01-22T18:00:00Z
+updated: 2026-01-22T23:00:00Z
 approved_by: Brandon Fryslie
-approval_method: full_walkthrough + domain_system_reconceptualization + cardinality_generic_integration + payload_generic_integration + kernel_roadmap_integration
-source_documents: 67
-topics: 16
-resolutions: 103
+approval_method: full_walkthrough + domain_system_reconceptualization + cardinality_generic_integration + payload_generic_integration + kernel_roadmap_integration + renderer_architecture_integration + layout_system_integration + camera_projection_integration
+source_documents: 77
+topics: 20
+resolutions: 115
 update_history:
   - date: 2026-01-10T19:45:00Z
     sources_added: 23
@@ -44,22 +44,46 @@ update_history:
     topics_updated: [01-type-system, 05-runtime, 06-renderer]
     resolutions_made: 7
     notes: "New Topic 16 (Coordinate Spaces); Three-layer execution architecture; DrawPathInstancesOp replaces RenderIR; shape2d added to PayloadType; scale semantics (renamed from size); Typed banks as T3 note; Convention-based coord enforcement"
+  - date: 2026-01-22T20:30:00Z
+    action: "Renderer Architecture Integration"
+    sources_integrated: [design-docs/_new/renderer/8-before-render.md, design-docs/_new/renderer/9-renderer.md, design-docs/_new/renderer/10-multiple-backends.md, design-docs/_new/renderer/11-svg.md]
+    topics_updated: [05-runtime, 06-renderer]
+    resolutions_made: 5
+    notes: "RenderAssembler (runtime component); RenderBackend interface; PathTopologyDef; Topology registry (numeric IDs); SVG backend strategies; Per-instance shape future note; GeometryRegistry deprecated"
+  - date: 2026-01-22T22:00:00Z
+    action: "Layout System Integration"
+    sources_integrated: [design-docs/_new/shapes-and-layout/15-layout.md, design-docs/_new/shapes-and-layout/17-layout-2.6d.md]
+    topics_created: [17-layout-system]
+    topics_updated: []
+    resolutions_made: 7
+    notes: "New Topic 17 (Layout System); Layout as Field<vec2> from kernels; circleLayout/lineLayout/gridLayout with normative per-lane math; Intrinsic set closed to {index, normalizedIndex, randomId}; FieldExprLayout deprecated; InstanceDecl.layout removed; Layout kernel contract pattern"
+  - date: 2026-01-22T23:00:00Z
+    action: "Camera & Projection Integration"
+    sources_integrated: [design-docs/CANONICALIZED-QUESTIONS-shapes-layout-20260122.md (camera/projection questions)]
+    topics_created: [18-camera-projection]
+    topics_updated: []
+    resolutions_made: 0
+    notes: "New Topic 18 (Camera & Projection); Projection kernels (ortho/perspective); Camera block; RenderAssembler pipeline; Depth ordering; StepRender position contract; Added 6 terms to GLOSSARY"
+  - date: 2026-01-22T23:30:00Z
+    action: "2.5D Profile & Cross-Topic Updates"
+    sources_integrated: [design-docs/_new/shapes-and-layout/17-layout-2.6d.md, design-docs/_new/shapes-and-layout/12-shapes-types.md, design-docs/_new/shapes-and-layout/13-shapes-3d.md, design-docs/_new/3d/4-CombineMode-Layer-Answer.md]
+    topics_created: [19-2_5d-profile]
+    topics_updated: [01-type-system, 05-runtime, 16-coordinate-spaces]
+    resolutions_made: 4
+    notes: "New Topic 19 (2.5D Profile); CombineMode restrictions table + 4 invariants in T01; shape3d packed layout (T3) in T01; World extended to [0,1]³ in T16; Camera pipeline steps in T05 RenderAssembler"
 ---
 
 # Oscilla v2.5: Canonical Specification Index
 
-> **STATUS: 🔄 UPDATING**
-> Integration in progress. New sources: `_new/renderer/8-before-render.md`, `_new/renderer/9-renderer.md`, `_new/renderer/10-multiple-backends.md`, `_new/renderer/11-svg.md`
-> Started: 2026-01-22T20:00:00Z
->
-> Previous: Last updated 2026-01-22T18:00:00Z (integrated 7 new sources: kernel roadmap, local-space geometry, execution architecture)
+> **STATUS: ✅ CANONICAL**
+> Last updated: 2026-01-22T23:30:00Z (added topics 18, 19; updated topics 01, 05, 16)
 > Approved by: Brandon Fryslie
 
 Generated: 2026-01-09T17:00:00Z
-Last Updated: 2026-01-22T18:00:00Z
+Last Updated: 2026-01-22T22:00:00Z
 Approved by: Brandon Fryslie
-Source Documents: 67 files
-Total Resolutions: 103
+Source Documents: 77 files
+Total Resolutions: 115
 
 ---
 
@@ -81,6 +105,9 @@ This condensed spec contains all invariants, glossary core terms, and T1 content
 | Disputed design questions | RESOLUTION-LOG.md |
 | Deep type system details | 01-type-system.md |
 | Coordinate spaces / transforms | 16-coordinate-spaces.md |
+| Layout kernels / positioning | 17-layout-system.md |
+| Camera, projection, depth ordering | 18-camera-projection.md |
+| 2.5D / 3D profiles, constraint authoring | 19-2_5d-profile.md |
 | Renderer / RenderIR | 06-renderer.md |
 | Continuity/anti-jank work | 11-continuity-system.md |
 | Event coordination | 12-event-hub.md, 13-event-diagnostics-integration.md |
@@ -118,6 +145,9 @@ This condensed spec contains all invariants, glossary core terms, and T1 content
 | 14 | [Modulation Table UI](./topics/14-modulation-table-ui.md) | Table view for port connections (UI only) | Transform chains, Adapters, Lenses |
 | 15 | [Graph Editor UI](./topics/15-graph-editor-ui.md) | Linear auto-layout graph editor | Chain, Pivot Block, Perspective Rotation, Focus/Dimming |
 | 16 | [Coordinate Spaces](./topics/16-coordinate-spaces.md) | Three-space coordinate model | Local/World/Viewport, scale, transforms |
+| 17 | [Layout System](./topics/17-layout-system.md) | Field-based positioning via kernels | circleLayout, lineLayout, gridLayout, intrinsics |
+| 18 | [Camera & Projection](./topics/18-camera-projection.md) | Projection kernels and camera pipeline | projectWorldToScreenOrtho, Camera Block, depth ordering |
+| 19 | [2.5D Profile](./topics/19-2_5d-profile.md) | Constrained authoring mode (T3) | PatchProfile, depth policy, tilt-only camera |
 
 ## Recommended Reading Order
 
@@ -160,9 +190,15 @@ Looking for something specific? Here's where to find it:
 | Lane, stride, state migration | [05-runtime.md](./topics/05-runtime.md) |
 | RenderFrameIR, DrawPathInstancesOp, batching | [06-renderer.md](./topics/06-renderer.md) |
 | PathGeometryTemplate, PathInstanceSet, PathStyle | [06-renderer.md](./topics/06-renderer.md) |
+| PathTopologyDef, topology registry, verbs | [06-renderer.md](./topics/06-renderer.md) |
+| RenderBackend, backend interface, SVG backend | [06-renderer.md](./topics/06-renderer.md) |
+| RenderAssembler, shape2d resolution, render assembly | [05-runtime.md](./topics/05-runtime.md) |
 | Local Space, World Space, Viewport Space | [16-coordinate-spaces.md](./topics/16-coordinate-spaces.md) |
 | scale, scale2, transform chain | [16-coordinate-spaces.md](./topics/16-coordinate-spaces.md) |
 | Coordinate-space enforcement, naming conventions | [16-coordinate-spaces.md](./topics/16-coordinate-spaces.md) |
+| Layout kernels, circleLayout, lineLayout, gridLayout | [17-layout-system.md](./topics/17-layout-system.md) |
+| Intrinsics (index, normalizedIndex, randomId) | [17-layout-system.md](./topics/17-layout-system.md) |
+| Position fields, world-normalized layout | [17-layout-system.md](./topics/17-layout-system.md) |
 | Three-layer architecture, Opcode/Signal Kernel/Field Kernel | [05-runtime.md](./topics/05-runtime.md) |
 | Materializer, typed banks | [05-runtime.md](./topics/05-runtime.md) |
 | shape2d, handle type | [01-type-system.md](./topics/01-type-system.md) |
@@ -180,6 +216,13 @@ Looking for something specific? Here's where to find it:
 | Transform, Adapter, Lens, Modulation Table UI | [14-modulation-table-ui.md](./topics/14-modulation-table-ui.md) |
 | Chain, Pivot Block, Perspective Rotation | [15-graph-editor-ui.md](./topics/15-graph-editor-ui.md) |
 | Focused Subgraph, Dimmed Subgraph | [15-graph-editor-ui.md](./topics/15-graph-editor-ui.md) |
+| projectWorldToScreenOrtho, projectWorldToScreenPerspective | [18-camera-projection.md](./topics/18-camera-projection.md) |
+| Camera Block, visible, depth ordering | [18-camera-projection.md](./topics/18-camera-projection.md) |
+| Projection kernels, RenderAssembler camera pipeline | [18-camera-projection.md](./topics/18-camera-projection.md) |
+| StepRender position contract (positionXY, positionZ) | [18-camera-projection.md](./topics/18-camera-projection.md) |
+| PatchProfile, 2D/2.5D/3D profiles | [19-2_5d-profile.md](./topics/19-2_5d-profile.md) |
+| Depth policy, bounded depth authoring | [19-2_5d-profile.md](./topics/19-2_5d-profile.md) |
+| Tilt-only camera, constrained camera controls | [19-2_5d-profile.md](./topics/19-2_5d-profile.md) |
 | All term definitions | [GLOSSARY.md](./GLOSSARY.md) |
 | All invariant rules (I1-I31) | [INVARIANTS.md](./INVARIANTS.md) |
 
@@ -205,7 +248,6 @@ This specification series was generated through a structured canonicalization pr
    - 2 invariants added (I28, I29)
    - 5 new glossary terms
    - Total resolutions: 53 → 73
-   - Status: CANONICAL (fully approved)
 
 Resolution history is preserved in [RESOLUTION-LOG.md](./RESOLUTION-LOG.md).
 

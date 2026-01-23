@@ -32,6 +32,10 @@ Which original documents contributed to which parts of this specification.
 | [05-runtime.md](../topics/05-runtime.md) (Typed Banks) | `_new/kernel-roadmap/3-local-space-spec-deeper.md` |
 | [06-renderer.md](../topics/06-renderer.md) (RenderFrameIR, DrawPathInstancesOp) | `_new/kernel-roadmap/3-local-space-spec-deeper.md` |
 | [01-type-system.md](../topics/01-type-system.md) (shape2d) | `_new/kernel-roadmap/3-local-space-spec-deeper.md` |
+| [05-runtime.md](../topics/05-runtime.md) (RenderAssembler) | `_new/renderer/8-before-render.md` |
+| [06-renderer.md](../topics/06-renderer.md) (Topology Registry, PathTopologyDef) | `_new/renderer/9-renderer.md` |
+| [06-renderer.md](../topics/06-renderer.md) (Backend Interface, RenderBackend) | `_new/renderer/10-multiple-backends.md` |
+| [06-renderer.md](../topics/06-renderer.md) (SVG Backend) | `_new/renderer/11-svg.md` |
 
 ---
 
@@ -106,6 +110,11 @@ Which original documents contributed to which parts of this specification.
 | Render IR | `1-Core-Laws.md:D.15`, `renderer/RENDER-PIPELINE.md` |
 | Batching | `1-Core-Laws.md:D.16`, `renderer/RENDER-PIPELINE.md` |
 | Temporal stability | `1-Core-Laws.md:D.17`, `00-invariants.md` |
+| PathTopologyDef | `_new/renderer/9-renderer.md` |
+| Topology Registry | `_new/renderer/9-renderer.md` |
+| Backend Interface | `_new/renderer/10-multiple-backends.md` |
+| SVG Backend | `_new/renderer/11-svg.md` |
+| Pass-level prevalidation | `_new/renderer/9-renderer.md` |
 
 ---
 
