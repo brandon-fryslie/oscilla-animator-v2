@@ -863,9 +863,11 @@ function hashBlockParams(blocks: ReadonlyMap<string, any>): string {
   return parts.join('|');
 }
 
-// Track initial hash to skip first reaction fire
+// Track state to skip unnecessary reaction fires
 let reactionDisposer: (() => void) | null = null;
 let lastBlockParamsHash: string | null = null;
+let lastBlockCount: number = 0;
+let lastEdgeCount: number = 0;
 let reactionSetup = false;
 
 /**
@@ -875,31 +877,36 @@ function setupLiveRecompileReaction() {
   if (reactionSetup) return;
   reactionSetup = true;
 
-  // Initialize hash from current store state
+  // Initialize tracking state from current store
   lastBlockParamsHash = hashBlockParams(store!.patch.blocks);
+  lastBlockCount = store!.patch.blocks.size;
+  lastEdgeCount = store!.patch.edges.length;
 
-  // Watch for block changes (additions, removals, param changes)
+  // Watch for block AND edge changes (additions, removals, param changes)
   reactionDisposer = reaction(
     () => {
-      // Track both structure and params
+      // Track structure (blocks + edges) and params
       const blocks = store!.patch.blocks;
+      const edgeCount = store!.patch.edges.length;
       const hash = hashBlockParams(blocks);
-      return { blockCount: blocks.size, hash };
+      return { blockCount: blocks.size, edgeCount, hash };
     },
-    ({ blockCount, hash }) => {
-      // Skip if hash hasn't changed (no actual param change)
-      if (hash === lastBlockParamsHash) {
+    ({ blockCount, edgeCount, hash }) => {
+      // Skip if nothing meaningful changed
+      if (hash === lastBlockParamsHash && blockCount === lastBlockCount && edgeCount === lastEdgeCount) {
         return;
       }
       lastBlockParamsHash = hash;
+      lastBlockCount = blockCount;
+      lastEdgeCount = edgeCount;
 
-      log(`Block params changed, scheduling recompile...`);
+      log(`Patch changed (blocks=${blockCount}, edges=${edgeCount}), scheduling recompile...`);
       scheduleRecompile();
     },
     {
       fireImmediately: false,
       // Use structural comparison for the tracked values
-      equals: (a, b) => a.blockCount === b.blockCount && a.hash === b.hash,
+      equals: (a, b) => a.blockCount === b.blockCount && a.edgeCount === b.edgeCount && a.hash === b.hash,
     }
   );
 

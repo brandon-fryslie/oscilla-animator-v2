@@ -447,30 +447,6 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = observer(({
     };
   }, [isInitialized, onEditorReady, fitView, patchStore, diagnostics, layoutStore, syncHandle, setNodes]);
 
-  // Handle delete key
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent) => {
-      if (event.key === 'Delete' || event.key === 'Backspace') {
-        // Get selected nodes
-        const selectedNodes = nodes.filter((node) => node.selected);
-        for (const node of selectedNodes) {
-          patchStore.removeBlock(node.id as BlockId);
-        }
-
-        // Get selected edges
-        const selectedEdges = edges.filter((edge) => edge.selected);
-        for (const edge of selectedEdges) {
-          patchStore.removeEdge(edge.id);
-        }
-      }
-    },
-    [nodes, edges, patchStore]
-  );
-
-  useEffect(() => {
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleKeyDown]);
 
   // Force wrapper dimensions for Dockview compatibility
   React.useLayoutEffect(() => {
