@@ -14,16 +14,16 @@ Levels are organized by state:
 
 | Location | Level | File | Status |
 |----------|-------|------|--------|
-| `_completed/` | 1 | level-01-vec3.md | C4 — all items verified, L2-L9 pass |
-| `_completed/` | 2 | level-02-ortho-kernel.md | C4 — all items verified, L3-L9 pass |
-| `_completed/` | 3 | level-03-perspective-kernel.md | C4 — all items verified, L4-L9 pass |
-| `_completed/` | 4 | level-04-size-projection.md | C4 — all items verified, L5-L9 pass |
-| `_completed/` | 5 | level-05-pipeline-wiring.md | C4 — all items verified, L6-L9 pass |
-| `_completed/` | 6 | level-06-mode-toggle.md | C4 — all items verified, L7-L9 pass |
-| `_completed/` | 7 | level-07-depth-culling.md | C4 — stable sort, culling, L8-L9 pass |
-| `_completed/` | 8 | level-08-backend-contract.md | C4 — both backends screen-space only, L9 pass |
-| `dod/` (floor) | 9 | level-09-continuity-decoupling.md | C4 — world-space only, zero projection imports, write-trap pure |
-| `dod/` (active) | 10 | level-10-golden-tests.md | Not started |
+| `_completed/` | 1 | level-01-vec3.md | C4 — all items verified, L2-L10 pass |
+| `_completed/` | 2 | level-02-ortho-kernel.md | C4 — all items verified, L3-L10 pass |
+| `_completed/` | 3 | level-03-perspective-kernel.md | C4 — all items verified, L4-L10 pass |
+| `_completed/` | 4 | level-04-size-projection.md | C4 — all items verified, L5-L10 pass |
+| `_completed/` | 5 | level-05-pipeline-wiring.md | C4 — all items verified, L6-L10 pass |
+| `_completed/` | 6 | level-06-mode-toggle.md | C4 — all items verified, L7-L10 pass |
+| `_completed/` | 7 | level-07-depth-culling.md | C4 — stable sort, culling, L8-L10 pass |
+| `_completed/` | 8 | level-08-backend-contract.md | C4 — both backends screen-space only, L9-L10 pass |
+| `_completed/` | 9 | level-09-continuity-decoupling.md | C4 — world-space only, zero projection imports, L10 pass |
+| `dod/` (final) | 10 | level-10-golden-tests.md | C4 — 18/18 active items verified, 3D system certified |
 
 ### Advancement Protocol
 

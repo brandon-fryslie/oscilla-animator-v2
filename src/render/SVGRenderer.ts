@@ -21,7 +21,7 @@
  *   renderer.dispose();
  */
 
-import type { RenderFrameIR_Future, DrawPathInstancesOp, PathGeometry, PathStyle } from './future-types';
+import type { RenderFrameIR_Future, DrawPathInstancesOp, DrawPrimitiveInstancesOp, PathGeometry, PrimitiveGeometry, PathStyle } from './future-types';
 import type { RenderFrameIR, RenderPassIR, ResolvedShape } from '../runtime/ScheduleExecutor';
 import { isPathTopology } from '../runtime/RenderAssembler';
 import { getTopology } from '../shapes/registry';
@@ -205,6 +205,8 @@ export class SVGRenderer {
     for (const op of frame.ops) {
       if (op.kind === 'drawPathInstances') {
         this.renderDrawPathInstancesOp(op);
+      } else if (op.kind === 'drawPrimitiveInstances') {
+        this.renderDrawPrimitiveInstancesOp(op);
       }
     }
   }
@@ -455,6 +457,101 @@ export class SVGRenderer {
       }
 
       this.renderGroup.appendChild(use);
+    }
+  }
+
+  /**
+   * Render a single DrawPrimitiveInstancesOp (v2 primitives).
+   * 
+   * For primitives (ellipse, rect), we create inline SVG elements instead of using <defs>/<use>
+   * since primitives are simple enough and don't need geometry sharing optimization.
+   */
+  private renderDrawPrimitiveInstancesOp(op: DrawPrimitiveInstancesOp): void {
+    const { geometry, instances, style } = op;
+    const { count, position, size, rotation, scale2 } = instances;
+
+    // Get topology for parameter interpretation
+    const topology = getTopology(geometry.topologyId);
+    
+    // Reference dimension for scaling
+    const D = Math.min(this.width, this.height);
+
+    // Determine fill mode
+    const hasFill = style.fillColor !== undefined && style.fillColor.length > 0;
+    const uniformFillColor = hasFill && style.fillColor!.length === 4;
+
+    // Render each instance
+    for (let i = 0; i < count; i++) {
+      const x = position[i * 2] * this.width;
+      const y = position[i * 2 + 1] * this.height;
+      const instanceSize = typeof size === 'number' ? size : size[i];
+      const sizePx = instanceSize * D;
+
+      // Create SVG element based on topology
+      let element: SVGElement;
+      
+      if (topology.id === 'ellipse') {
+        // Ellipse primitive
+        const rx = geometry.params.rx ?? 0.5;
+        const ry = geometry.params.ry ?? 0.5;
+        
+        const ellipse = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
+        ellipse.setAttribute('cx', String(x));
+        ellipse.setAttribute('cy', String(y));
+        
+        // Apply size and scale2 to radii
+        const sx = scale2 ? scale2[i * 2] : 1;
+        const sy = scale2 ? scale2[i * 2 + 1] : 1;
+        ellipse.setAttribute('rx', String(rx * sizePx * sx));
+        ellipse.setAttribute('ry', String(ry * sizePx * sy));
+        
+        element = ellipse;
+      } else if (topology.id === 'rect') {
+        // Rectangle primitive
+        const width = geometry.params.width ?? 1.0;
+        const height = geometry.params.height ?? 1.0;
+        
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        
+        // Apply size and scale2 to dimensions
+        const sx = scale2 ? scale2[i * 2] : 1;
+        const sy = scale2 ? scale2[i * 2 + 1] : 1;
+        const w = width * sizePx * sx;
+        const h = height * sizePx * sy;
+        
+        // Center the rect at (x, y)
+        rect.setAttribute('x', String(x - w / 2));
+        rect.setAttribute('y', String(y - h / 2));
+        rect.setAttribute('width', String(w));
+        rect.setAttribute('height', String(h));
+        
+        element = rect;
+      } else {
+        // Fallback: render as circle
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', String(x));
+        circle.setAttribute('cy', String(y));
+        circle.setAttribute('r', String(sizePx));
+        element = circle;
+      }
+
+      // Apply rotation if present
+      if (rotation) {
+        const rot = rotation[i] * (180 / Math.PI); // Convert radians to degrees
+        element.setAttribute('transform', `rotate(${rot} ${x} ${y})`);
+      }
+
+      // Apply fill
+      if (hasFill) {
+        element.setAttribute('fill', uniformFillColor
+          ? rgbaToCSS(style.fillColor!, 0)
+          : rgbaToCSS(style.fillColor!, i * 4)
+        );
+      } else {
+        element.setAttribute('fill', 'none');
+      }
+
+      this.renderGroup.appendChild(element);
     }
   }
 
