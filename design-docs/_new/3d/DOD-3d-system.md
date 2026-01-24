@@ -14,8 +14,8 @@ Levels are organized by state:
 
 | Location | Level | File | Status |
 |----------|-------|------|--------|
-| `dod/` (active) | 1 | level-01-vec3.md | Not started |
-| `_upcoming/` | 2 | level-02-ortho-kernel.md | Not started |
+| `dod/` (floor) | 1 | level-01-vec3.md | C4 — all items verified, L2-L6 pass |
+| `dod/` (active) | 2 | level-02-ortho-kernel.md | Not started |
 | `_upcoming/` | 3 | level-03-perspective-kernel.md | Not started |
 | `_upcoming/` | 4 | level-04-size-projection.md | Not started |
 | `_upcoming/` | 5 | level-05-pipeline-wiring.md | Not started |
