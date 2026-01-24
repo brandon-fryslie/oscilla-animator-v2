@@ -20,6 +20,7 @@ import { PortHighlightStore } from './PortHighlightStore';
 import { DebugStore } from './DebugStore';
 import { LayoutStore } from './LayoutStore';
 import { CameraStore } from './CameraStore';
+import { SettingsStore } from './SettingsStore';
 import { EventHub } from '../events/EventHub';
 import { DiagnosticHub } from '../diagnostics/DiagnosticHub';
 
@@ -34,6 +35,7 @@ export class RootStore {
   readonly debug: DebugStore;
   readonly layout: LayoutStore;
   readonly camera: CameraStore;
+  readonly settings: SettingsStore;
   readonly events: EventHub;
 
   // Patch revision tracking (for diagnostics)
@@ -76,6 +78,9 @@ export class RootStore {
 
     // Create CameraStore (3D preview state - viewer only)
     this.camera = new CameraStore();
+
+    // Create SettingsStore
+    this.settings = new SettingsStore();
 
     // Wire up callback for MobX reactivity
     this.diagnosticHub.setOnRevisionChange(() => this.diagnostics.incrementRevision());
@@ -149,5 +154,8 @@ export class RootStore {
 
     // Dispose DebugStore
     this.debug.dispose();
+
+    // Dispose SettingsStore
+    this.settings.dispose();
   }
 }
