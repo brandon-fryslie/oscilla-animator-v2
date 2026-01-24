@@ -27,6 +27,7 @@ export const TYPE_COLORS: Record<PayloadType, string> = {
   color: '#ec4899',   // Magenta/Pink
   bool: '#f97316',    // Orange
   shape: '#facc15',   // Yellow
+  cameraProjection: '#8b5cf6', // Purple (enum-like projection mode)
 };
 
 /**
@@ -50,6 +51,7 @@ export function formatUnitForDisplay(unit: Unit): string {
     case 'phase01': return 'phase';
     case 'radians': return 'rad';
     case 'degrees': return 'deg';
+    case 'deg': return 'deg';
     case 'norm01': return '0..1';
     case 'ms': return 'ms';
     case 'seconds': return 's';

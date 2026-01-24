@@ -99,6 +99,8 @@ export function getSampleEncoding(payload: PayloadType): SampleEncoding {
       return { payload, stride: 0, components: [], sampleable: false };
     case 'shape':
       return { payload, stride: 0, components: [], sampleable: false };
+    case 'cameraProjection':
+      return { payload, stride: 1, components: ['projection'], sampleable: true };
     default: {
       const _exhaustive: never = payload;
       throw new Error(`Unknown PayloadType: ${_exhaustive}`);

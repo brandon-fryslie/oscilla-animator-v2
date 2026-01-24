@@ -47,6 +47,9 @@ export function getBufferFormat(payload: PayloadType): BufferFormat {
     // Colors
     case 'color':
       return 'rgba8';
+    // Camera projection enum (scalar f32)
+    case 'cameraProjection':
+      return 'f32';
   }
 }
 
