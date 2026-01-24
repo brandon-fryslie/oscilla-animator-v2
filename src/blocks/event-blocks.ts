@@ -57,6 +57,7 @@ registerBlock({
   description: 'Latches input value when event fires, holds until next fire',
   form: 'primitive',
   capability: 'state',
+  isStateful: true,
   inputs: {
     value: { label: 'Value', type: signalType('float') },
     trigger: { label: 'Trigger', type: signalTypeTrigger('bool') },

@@ -233,6 +233,7 @@ registerBlock({
   description: 'Delays signal by one frame. Output on frame N = input from frame N-1',
   form: 'primitive',
   capability: 'state',
+  isStateful: true,
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
