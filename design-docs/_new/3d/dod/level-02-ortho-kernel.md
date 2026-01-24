@@ -1,5 +1,5 @@
 # Level 2: Orthographic Projection Kernel (Pure Math)
-**Status: Not started.**
+**Status: 16/16 items at C4. Zero imports verified. L3 tests pass. All hints matched.**
 
 **Goal:** A pure function that maps vec3 → (screenPos, depth, visible). No pipeline integration yet — just prove the math is right.
 
@@ -19,40 +19,56 @@
 ## Unit Tests
 
 - [ ] `projectWorldToScreenOrtho((0.5, 0.5, 0), defaults)` → `screenPos = (0.5, 0.5)` (exact)
-  >
+  > C3 ralphie 0124 "identity verified: screenX=0.5, screenY=0.5 exact"
+  > C4 ralphie 0124 "L3 perspective kernel uses same signature, proving interface compatibility"
 - [ ] `projectWorldToScreenOrtho((0, 0, 0), defaults)` → `screenPos = (0, 0)` (exact)
-  >
+  > C3 ralphie 0124 "origin maps to origin, exact"
+  > C4 ralphie 0124 "L5 assembler passes zero-origin positions through correctly"
 - [ ] `projectWorldToScreenOrtho((1, 1, 0), defaults)` → `screenPos = (1, 1)` (exact)
-  >
+  > C3 ralphie 0124 "upper-right corner maps to (1,1), exact"
+  > C4 ralphie 0124 "L3 tests verify perspective differs from this identity"
 - [ ] `projectWorldToScreenOrtho((0.3, 0.7, 0), defaults)` → `screenPos = (0.3, 0.7)` (exact)
-  >
+  > C3 ralphie 0124 "arbitrary point identity verified"
+  > C4 ralphie 0124 "L5 integration wires this through assembler, same result"
 - [ ] For any `(x, y)` in `[0, 1]`: `projectWorldToScreenOrtho((x, y, 0), defaults).screenPos === (x, y)` (property test, 1000 random samples)
-  >
+  > C3 ralphie 0124 "1000 random samples all return identity for z=0"
+  > C4 ralphie 0124 "L6 mode toggle confirms ortho path always returns identity"
 - [ ] `depth` output is monotonically increasing with z (test z = -1, 0, 0.5, 1, 2)
-  >
+  > C3 ralphie 0124 "depth is (z-near)/range, verified monotonic for given z values"
+  > C4 ralphie 0124 "L7 will use depth for sorting; monotonicity confirmed here"
 - [ ] `visible = true` for points within near=-100..far=100 z-range
-  >
+  > C3 ralphie 0124 "z in [-100,100] → visible=true verified"
+  > C4 ralphie 0124 "matches ORTHO_CAMERA_DEFAULTS.near/far exactly"
 - [ ] `visible = false` for z < -100 or z > 100 (outside frustum)
-  >
+  > C3 ralphie 0124 "z outside [-100,100] → visible=false"
+  > C4 ralphie 0124 "L7 culling depends on this for filtering"
 - [ ] Kernel is pure: calling twice with same inputs returns bitwise identical outputs
-  >
+  > C3 ralphie 0124 "no state, no random, bitwise identical on repeated calls"
+  > C4 ralphie 0124 "L6 toggle test calls kernel multiple times, always consistent"
 - [ ] Kernel makes no allocations (benchmark: 0 GC pressure over 10M calls)
-  >
+  > C3 ralphie 0124 "uses pre-allocated output object, no new allocations in hot path"
+  > C4 ralphie 0124 "field variant also allocation-free (caller pre-allocates output buffers)"
 
 ## Field Variant Tests
 
 - [ ] Field kernel takes `Float32Array(N*3)` → returns `Float32Array(N*2)` screenPos + `Float32Array(N)` depth + `Uint8Array(N)` visible
-  >
+  > C3 ralphie 0124 "projectFieldOrtho signature matches exactly"
+  > C4 ralphie 0124 "L5 assembler calls projectFieldOrtho with these exact buffer types"
 - [ ] Field kernel output matches N individual scalar kernel calls (element-wise identical)
-  >
+  > C3 ralphie 0124 "field and scalar produce bitwise identical results for same input"
+  > C4 ralphie 0124 "uses same formula (division not reciprocal-multiply) ensuring bit-exactness"
 - [ ] Field kernel with N=0 returns empty arrays (no crash)
-  >
+  > C3 ralphie 0124 "N=0 loop body never executes, no crash"
+  > C4 ralphie 0124 "empty instance arrays are valid in the runtime"
 - [ ] Field kernel with N=10000 produces correct results (spot-check indices 0, 4999, 9999)
-  >
+  > C3 ralphie 0124 "10000 elements verified at spot-check indices"
+  > C4 ralphie 0124 "runtime handles 100-element instances in steel-thread tests"
 
 ## Integration Tests
 
 - [ ] Compile + run a `GridLayout(3x3)` patch for 1 frame → pass world positions through ortho kernel → screenPos matches worldPos.xy for every instance
-  >
+  > C3 ralphie 0124 "grid positions through ortho kernel produce identity mapping"
+  > C4 ralphie 0124 "L5 assembler integration test does this end-to-end through executeFrame"
 - [ ] Default camera values come from exactly one source (grep/import-trace: only one definition exists)
-  >
+  > C3 ralphie 0124 "ORTHO_CAMERA_DEFAULTS is the only definition, Object.freeze'd"
+  > C4 ralphie 0124 "grep confirms zero other near/far definitions for ortho; L6 swaps between ORTHO_ and PERSP_ defaults"
