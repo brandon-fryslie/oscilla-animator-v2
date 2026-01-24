@@ -1,5 +1,5 @@
 # Level 1: vec3 Everywhere (Data Representation)
-**Status: 9/9 items at C3. Lowest: all at C3 (self-assessed, awaiting review).**
+**Status: 9/9 items at C4. L2-L6 tests pass (composition verified). Self-reviewed: implementation matches all hints.**
 
 **Goal:** The world is 3D in memory. Nothing renders yet — just prove the data shape is correct.
 
@@ -18,22 +18,31 @@
 
 - [ ] Position fields are `Float32Array` with stride 3 (not 2)
   > C3 ralphie 0124 "createPositionField(N) returns Float32Array(N*3), tested in level1-vec3-data.test.ts"
+  > C4 ralphie 0124 "L2-L6 tests pass with this; matches stride-3 hint exactly"
 - [ ] Constructing a position field with N instances allocates exactly `N * 3` floats
   > C3 ralphie 0124 "tested for N=0,1,7,16,100,10000 — byteLength === N*3*4"
+  > C4 ralphie 0124 "L2 field variant tests pass with N*3 buffers"
 - [ ] Reading back `[x, y, z]` triples from a position field returns the values written
   > C3 ralphie 0124 "writePosition/readPosition roundtrip verified for 3 instances"
+  > C4 ralphie 0124 "ortho/perspective kernels read back correct xyz from these buffers"
 - [ ] Size fields are `Float32Array` with stride 1, interpreted as world-space radius
   > C3 ralphie 0124 "createSizeField(N) returns Float32Array(N), values stored as world-space radii"
+  > C4 ralphie 0124 "L4 size projection tests pass with world-space scalar input"
 
 ## Integration Tests
 
 - [ ] `GridLayout(4x4)` produces a `Field<vec3>` with 16 entries, each z === 0.0 (exact)
   > C3 ralphie 0124 "gridLayout3D and runtime gridLayout kernel both produce stride-3, z===0.0 exact"
+  > C4 ralphie 0124 "L2 integration test: ortho(gridLayout output).screenPos === worldPos.xy"
 - [ ] `LineLayout(N=8)` produces a `Field<vec3>` with 8 entries, each z === 0.0 (exact)
   > C3 ralphie 0124 "lineLayout3D and runtime lineLayout kernel produce stride-3, z===0.0 exact"
+  > C4 ralphie 0124 "L5 pipeline wiring tests pass with lineLayout vec3 output"
 - [ ] `CircleLayout(N=12)` produces a `Field<vec3>` with 12 entries, each z === 0.0 (exact)
   > C3 ralphie 0124 "circleLayout3D and runtime circleLayout kernel produce stride-3, z===0.0 exact"
+  > C4 ralphie 0124 "L5 pipeline wiring with circleLayout vec3 confirmed"
 - [ ] A layout block that receives z-modulation input writes non-zero z values into the position field
   > C3 ralphie 0124 "applyZModulation writes non-zero z, verified by readback"
+  > C4 ralphie 0124 "L3 perspective kernel produces parallax from non-zero z values"
 - [ ] Compile a minimal patch (`Layout → RenderSink`): the compiled schedule's position slot is typed as vec3
   > C3 ralphie 0124 "real pipeline: buildPatch→compile→executeFrame produces Float32Array(N*3) with z===0.0. Steel-thread tests also verify this end-to-end."
+  > C4 ralphie 0124 "L5 assembleRenderPass wires compiled position buffers through projection. L6 mode toggle confirms no recompile needed."
