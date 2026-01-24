@@ -37,14 +37,13 @@ import {
   projectFieldOrtho,
   projectFieldRadiusOrtho,
   ORTHO_CAMERA_DEFAULTS,
-  type OrthoCameraParams,
 } from '../projection/ortho-kernel';
 import {
   projectFieldPerspective,
   projectFieldRadiusPerspective,
-  PERSP_CAMERA_DEFAULTS,
-  type PerspectiveCameraParams,
+  deriveCamPos,
 } from '../projection/perspective-kernel';
+import type { ResolvedCameraParams } from './CameraResolver';
 
 // =============================================================================
 // Internal Types (v1 compatibility)
@@ -77,18 +76,9 @@ interface ResolvedShape {
 // =============================================================================
 
 /**
- * Projection mode: viewer-level variable (NOT stored in compiled state).
- * Selects which kernel the RenderAssembler calls each frame.
- * Changing this requires zero reconstruction — just a different code path.
+ * Projection mode derived from ResolvedCameraParams.projection.
  */
-export type ProjectionMode = 'orthographic' | 'perspective';
-
-/**
- * Camera parameters for projection (union of ortho and perspective).
- */
-export type CameraParams =
-  | { mode: 'orthographic'; params: OrthoCameraParams }
-  | { mode: 'perspective'; params: PerspectiveCameraParams };
+export type ProjectionMode = 'ortho' | 'persp';
 
 /**
  * Projection output for a set of instances.
@@ -213,18 +203,19 @@ export function depthSortAndCompact(
  *
  * This is the projection stage called by the RenderAssembler.
  * World-space buffers are READ-ONLY — output is written to separate buffers.
+ * Camera params come from the frame globals resolver (ResolvedCameraParams).
  *
  * @param worldPositions - World-space vec3 positions (Float32Array, stride 3). READ-ONLY.
  * @param worldRadius - Uniform world-space radius for all instances
  * @param count - Number of instances
- * @param camera - Camera parameters (mode + params)
+ * @param resolved - Resolved camera parameters from frame globals
  * @returns Separate screen-space output buffers
  */
 export function projectInstances(
   worldPositions: Float32Array,
   worldRadius: number,
   count: number,
-  camera: CameraParams,
+  resolved: ResolvedCameraParams,
 ): ProjectionOutput {
   // Allocate output buffers (separate from world-space inputs)
   const screenPosition = new Float32Array(count * 2);
@@ -236,12 +227,27 @@ export function projectInstances(
   const worldRadii = new Float32Array(count);
   worldRadii.fill(worldRadius);
 
-  if (camera.mode === 'orthographic') {
-    projectFieldOrtho(worldPositions, count, camera.params, screenPosition, depth, visible);
-    projectFieldRadiusOrtho(worldRadii, worldPositions, count, camera.params, screenRadius);
+  if (resolved.projection === 'ortho') {
+    projectFieldOrtho(worldPositions, count, ORTHO_CAMERA_DEFAULTS, screenPosition, depth, visible);
+    projectFieldRadiusOrtho(worldRadii, worldPositions, count, ORTHO_CAMERA_DEFAULTS, screenRadius);
   } else {
-    projectFieldPerspective(worldPositions, count, camera.params, screenPosition, depth, visible);
-    projectFieldRadiusPerspective(worldRadii, worldPositions, count, camera.params, screenRadius);
+    // Derive kernel params from ResolvedCameraParams
+    const [camPosX, camPosY, camPosZ] = deriveCamPos(
+      resolved.centerX, resolved.centerY, 0, // camera target = (centerX, centerY, 0) in world
+      resolved.tiltRad, resolved.yawRad, resolved.distance
+    );
+    const perspParams = {
+      camPosX, camPosY, camPosZ,
+      camTargetX: resolved.centerX,
+      camTargetY: resolved.centerY,
+      camTargetZ: 0,
+      camUpX: 0, camUpY: 1, camUpZ: 0,
+      fovY: resolved.fovYRad,
+      near: resolved.near,
+      far: resolved.far,
+    };
+    projectFieldPerspective(worldPositions, count, perspParams, screenPosition, depth, visible);
+    projectFieldRadiusPerspective(worldRadii, worldPositions, count, perspParams, screenRadius);
   }
 
   return { screenPosition, screenRadius, depth, visible };
@@ -257,8 +263,8 @@ export interface AssemblerContext {
   instances: ReadonlyMap<string, InstanceDecl>;
   /** Runtime state for reading slots and evaluating signals */
   state: RuntimeState;
-  /** Camera params for projection (optional — if omitted, no projection is performed) */
-  camera?: CameraParams;
+  /** Resolved camera params from frame globals (always present, defaults if no Camera block) */
+  resolvedCamera: ResolvedCameraParams;
 }
 
 /**
@@ -697,10 +703,10 @@ function assemblePerInstanceShapes(
     ? (state.values.objects.get(step.scale2Slot) as Float32Array | undefined)
     : undefined;
 
-  // Run projection if camera is provided
-  const camera = context.camera;
-  let projection: ProjectionOutput | undefined;
-  if (camera) {
+  // Run projection using resolved camera params
+  const resolved = context.resolvedCamera;
+  let projection: ProjectionOutput;
+  {
     // Determine position stride: vec3 (stride 3) or vec2 (stride 2, promote to vec3 with z=0)
     const posLength = fullPosition.length;
     let worldPos3: Float32Array;
@@ -717,7 +723,7 @@ function assemblePerInstanceShapes(
       }
     }
 
-    projection = projectInstances(worldPos3, scale, count, camera);
+    projection = projectInstances(worldPos3, scale, count, resolved);
   }
 
   for (const [key, group] of groups) {
@@ -745,62 +751,46 @@ function assemblePerInstanceShapes(
       ? sliceScale2Buffer(fullScale2, group.instanceIndices)
       : undefined;
 
-    // If projection is enabled, compact this group's instances
-    let instanceTransforms: InstanceTransforms;
-    let compactedColor: Uint8ClampedArray;
+    // Slice projection outputs for this group
+    const groupScreenPos = new Float32Array(group.instanceIndices.length * 2);
+    const groupScreenRadius = new Float32Array(group.instanceIndices.length);
+    const groupDepth = new Float32Array(group.instanceIndices.length);
+    const groupVisible = new Uint8Array(group.instanceIndices.length);
 
-    if (projection) {
-      // Slice projection outputs for this group
-      const groupScreenPos = new Float32Array(group.instanceIndices.length * 2);
-      const groupScreenRadius = new Float32Array(group.instanceIndices.length);
-      const groupDepth = new Float32Array(group.instanceIndices.length);
-      const groupVisible = new Uint8Array(group.instanceIndices.length);
-
-      for (let i = 0; i < group.instanceIndices.length; i++) {
-        const srcIdx = group.instanceIndices[i];
-        groupScreenPos[i * 2] = projection.screenPosition[srcIdx * 2];
-        groupScreenPos[i * 2 + 1] = projection.screenPosition[srcIdx * 2 + 1];
-        groupScreenRadius[i] = projection.screenRadius[srcIdx];
-        groupDepth[i] = projection.depth[srcIdx];
-        groupVisible[i] = projection.visible[srcIdx];
-      }
-
-      const groupProjection: ProjectionOutput = {
-        screenPosition: groupScreenPos,
-        screenRadius: groupScreenRadius,
-        depth: groupDepth,
-        visible: groupVisible,
-      };
-
-      // Depth-sort and compact for this group
-      const compacted = depthSortAndCompact(
-        groupProjection,
-        group.instanceIndices.length,
-        color,
-        rotation,
-        scale2
-      );
-
-      instanceTransforms = {
-        count: compacted.count,
-        position: compacted.screenPosition,
-        size: compacted.screenRadius,
-        rotation: compacted.rotation,
-        scale2: compacted.scale2,
-        depth: compacted.depth,
-      };
-      compactedColor = compacted.color as Uint8ClampedArray;
-    } else {
-      // No projection: use original data
-      instanceTransforms = {
-        count: group.instanceIndices.length,
-        position,
-        size: scale, // Uniform scale
-        rotation,
-        scale2,
-      };
-      compactedColor = color;
+    for (let i = 0; i < group.instanceIndices.length; i++) {
+      const srcIdx = group.instanceIndices[i];
+      groupScreenPos[i * 2] = projection.screenPosition[srcIdx * 2];
+      groupScreenPos[i * 2 + 1] = projection.screenPosition[srcIdx * 2 + 1];
+      groupScreenRadius[i] = projection.screenRadius[srcIdx];
+      groupDepth[i] = projection.depth[srcIdx];
+      groupVisible[i] = projection.visible[srcIdx];
     }
+
+    const groupProjection: ProjectionOutput = {
+      screenPosition: groupScreenPos,
+      screenRadius: groupScreenRadius,
+      depth: groupDepth,
+      visible: groupVisible,
+    };
+
+    // Depth-sort and compact for this group
+    const compacted = depthSortAndCompact(
+      groupProjection,
+      group.instanceIndices.length,
+      color,
+      rotation,
+      scale2
+    );
+
+    const instanceTransforms: InstanceTransforms = {
+      count: compacted.count,
+      position: compacted.screenPosition,
+      size: compacted.screenRadius,
+      rotation: compacted.rotation,
+      scale2: compacted.scale2,
+      depth: compacted.depth,
+    };
+    const compactedColor = compacted.color as Uint8ClampedArray;
 
     // Build style (shared by both path and primitive)
     const style: PathStyle = {
@@ -1132,9 +1122,8 @@ export function assembleDrawPathInstancesOp(
     ? (state.values.objects.get(step.scale2Slot) as Float32Array | undefined)
     : undefined;
 
-  // Run projection if camera is provided
-  const camera = context.camera;
-  if (camera) {
+  // Run projection using resolved camera params
+  {
     // Determine position stride: vec3 (stride 3) or vec2 (stride 2, promote to vec3 with z=0)
     const posLength = positionBuffer.length;
     let worldPos3: Float32Array;
@@ -1151,7 +1140,7 @@ export function assembleDrawPathInstancesOp(
       }
     }
 
-    const projection = projectInstances(worldPos3, scale, count, camera);
+    const projection = projectInstances(worldPos3, scale, count, context.resolvedCamera);
 
     // Depth-sort and compact: remove invisible instances, sort by depth (front-to-back)
     const compacted = depthSortAndCompact(projection, count, colorBuffer, rotation, scale2);
@@ -1198,47 +1187,6 @@ export function assembleDrawPathInstancesOp(
       }];
     }
   }
-
-  // No projection: use original world-space data
-  const instanceTransforms = buildInstanceTransforms(
-    count,
-    positionBuffer,
-    scale,
-    rotation,
-    scale2
-  );
-
-  // Build style
-  const style = buildPathStyle(colorBuffer, 'nonzero');
-
-  // Dispatch based on topology mode
-  if (resolvedShape.mode === 'path') {
-    // PATH TOPOLOGY: Build DrawPathInstancesOp
-    if (!controlPointsBuffer || !(controlPointsBuffer instanceof Float32Array)) {
-      throw new Error(
-        'RenderAssembler: Path topology requires control points buffer (Float32Array)'
-      );
-    }
-
-    const geometry = buildPathGeometry(resolvedShape, controlPointsBuffer);
-
-    return [{
-      kind: 'drawPathInstances',
-      geometry,
-      instances: instanceTransforms,
-      style,
-    }];
-  } else {
-    // PRIMITIVE TOPOLOGY: Build DrawPrimitiveInstancesOp
-    const geometry = buildPrimitiveGeometry(resolvedShape);
-
-    return [{
-      kind: 'drawPrimitiveInstances',
-      geometry,
-      instances: instanceTransforms,
-      style,
-    }];
-  }
 }
 
 /**
@@ -1249,7 +1197,7 @@ export function assembleDrawPathInstancesOp(
  *
  * NOW SUPPORTS PER-INSTANCE SHAPES: Multiple ops can be emitted per render step.
  * SUPPORTS PRIMITIVES: Handles both DrawPathInstancesOp and DrawPrimitiveInstancesOp.
- * SUPPORTS PROJECTION: When camera is present in context, applies 3D projection and depth-sorting.
+ * SUPPORTS PROJECTION: Always applies projection from resolved camera params.
  *
  * @param renderSteps - Array of render steps to assemble
  * @param context - Assembly context

@@ -21,7 +21,8 @@ import { writeShape2D } from './RuntimeState';
 import { detectDomainChange } from './ContinuityMapping';
 import { applyContinuity, finalizeContinuityFrame } from './ContinuityApply';
 import { createStableDomainInstance, createUnstableDomainInstance } from './DomainIdentity';
-import { assembleRenderFrame, type AssemblerContext, type CameraParams } from './RenderAssembler';
+import { assembleRenderFrame, type AssemblerContext } from './RenderAssembler';
+import { resolveCameraFromGlobals } from './CameraResolver';
 
 /**
  * Slot lookup cache entry
@@ -39,7 +40,6 @@ interface SlotLookup {
  * @param state - Runtime state
  * @param pool - Buffer pool
  * @param tAbsMs - Absolute time in milliseconds
- * @param camera - Optional camera params for projection (viewer-level, not compiled state)
  * @returns RenderFrameIR for this frame
  */
 export function executeFrame(
@@ -47,7 +47,6 @@ export function executeFrame(
   state: RuntimeState,
   pool: BufferPool,
   tAbsMs: number,
-  camera?: CameraParams,
 ): RenderFrameIR {
   // Extract schedule components
   const schedule = program.schedule as ScheduleIR;
@@ -105,13 +104,9 @@ export function executeFrame(
   const signals = program.signalExprs.nodes;
   const fields = program.fieldExprs.nodes;
 
-  // Create AssemblerContext once (used for v2 frame assembly after Phase 1)
-  const assemblerContext: AssemblerContext = {
-    signals,
-    instances: instances as ReadonlyMap<string, InstanceDecl>,
-    state,
-    camera,
-  };
+  // Resolve camera from program render globals (will be populated after signal evaluation)
+  // Note: assemblerContext is constructed after Phase 1 when slots are populated
+  let assemblerContext: AssemblerContext;
 
   // Collect render steps for v2 batch assembly
   const renderSteps: StepRender[] = [];
@@ -353,6 +348,17 @@ export function executeFrame(
       }
     }
   }
+
+  // Resolve camera from program render globals (slots now populated by signal evaluation)
+  const resolvedCamera = resolveCameraFromGlobals(program, state);
+
+  // Build assembler context with resolved camera
+  assemblerContext = {
+    signals,
+    instances: instances as ReadonlyMap<string, InstanceDecl>,
+    state,
+    resolvedCamera,
+  };
 
   // Build v2 frame from collected render steps
   const frame = assembleRenderFrame(renderSteps, assemblerContext);

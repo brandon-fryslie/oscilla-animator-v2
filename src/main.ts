@@ -24,8 +24,6 @@ import {
   type SessionState,
 } from './runtime';
 import { renderFrame } from './render';
-import { PERSP_CAMERA_DEFAULTS } from './projection/perspective-kernel';
-import type { CameraParams } from './runtime/RenderAssembler';
 import { App } from './ui/components';
 import { StoreProvider, type RootStore } from './stores';
 import { timeRootRole, type BlockId, type ValueSlot } from './types';
@@ -1052,12 +1050,9 @@ function animate(tMs: number) {
 
     const frameStart = performance.now();
 
-    // Execute frame (pass camera through pipeline when 3D preview is active)
+    // Execute frame (camera resolved from program.renderGlobals)
     const execStart = performance.now();
-    const camera: CameraParams | undefined = store!.camera.isActive
-      ? { mode: 'perspective', params: PERSP_CAMERA_DEFAULTS }
-      : undefined;
-    const frame = executeFrame(currentProgram, currentState, pool, tMs, camera);
+    const frame = executeFrame(currentProgram, currentState, pool, tMs);
     execTime = performance.now() - execStart;
 
     // Render to canvas with zoom/pan transform from store
@@ -1242,18 +1237,6 @@ async function initializeRuntime(rootStore: RootStore) {
   });
 
   log('Runtime initialized');
-
-  // 3D preview: Shift key listener (momentary perspective toggle)
-  window.addEventListener('keydown', (e: KeyboardEvent) => {
-    if (e.key === 'Shift') store!.camera.setShiftHeld(true);
-  });
-  window.addEventListener('keyup', (e: KeyboardEvent) => {
-    if (e.key === 'Shift') store!.camera.setShiftHeld(false);
-  });
-  // Reset on window blur (prevents stuck shift state)
-  window.addEventListener('blur', () => {
-    store!.camera.setShiftHeld(false);
-  });
 
   // Start animation loop
   log('Starting animation loop...');
