@@ -198,15 +198,15 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
     expect(ellipsePass1.count).toBe(25);
     expect(rectPass1.count).toBe(20);
 
-    // Verify buffer types and sizes
+    // Verify buffer types and sizes (vec3 stride)
     expect(ellipsePass1.position).toBeInstanceOf(Float32Array);
     expect(ellipsePass1.color).toBeInstanceOf(Uint8ClampedArray);
-    expect((ellipsePass1.position as Float32Array).length).toBe(25 * 2);
+    expect((ellipsePass1.position as Float32Array).length).toBe(25 * 3); // 25 × 3 floats (x, y, z)
     expect((ellipsePass1.color as Uint8ClampedArray).length).toBe(25 * 4);
 
     expect(rectPass1.position).toBeInstanceOf(Float32Array);
     expect(rectPass1.color).toBeInstanceOf(Uint8ClampedArray);
-    expect((rectPass1.position as Float32Array).length).toBe(20 * 2);
+    expect((rectPass1.position as Float32Array).length).toBe(20 * 3); // 20 × 3 floats (x, y, z)
     expect((rectPass1.color as Uint8ClampedArray).length).toBe(20 * 4);
 
     // Verify shapes are properly resolved
@@ -264,8 +264,9 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
     for (const pass of frame1.passes) {
       const pos = pass.position as Float32Array;
       for (let i = 0; i < pass.count; i++) {
-        expect(Number.isFinite(pos[i * 2])).toBe(true);
-        expect(Number.isFinite(pos[i * 2 + 1])).toBe(true);
+        expect(Number.isFinite(pos[i * 3 + 0])).toBe(true);
+        expect(Number.isFinite(pos[i * 3 + 1])).toBe(true);
+        expect(pos[i * 3 + 2]).toBe(0.0); // z should always be 0.0
       }
     }
 
@@ -300,8 +301,8 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
     let ellipseMoved = false;
     const ePos2 = ellipsePass2.position as Float32Array;
     for (let i = 0; i < 25; i++) {
-      if (Math.abs(f1EllipsePos[i * 2] - ePos2[i * 2]) > 0.001 ||
-          Math.abs(f1EllipsePos[i * 2 + 1] - ePos2[i * 2 + 1]) > 0.001) {
+      if (Math.abs(f1EllipsePos[i * 3 + 0] - ePos2[i * 3 + 0]) > 0.001 ||
+          Math.abs(f1EllipsePos[i * 3 + 1] - ePos2[i * 3 + 1]) > 0.001) {
         ellipseMoved = true;
         break;
       }
@@ -311,8 +312,8 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
     let rectMoved = false;
     const rPos2 = rectPass2.position as Float32Array;
     for (let i = 0; i < 20; i++) {
-      if (Math.abs(f1RectPos[i * 2] - rPos2[i * 2]) > 0.001 ||
-          Math.abs(f1RectPos[i * 2 + 1] - rPos2[i * 2 + 1]) > 0.001) {
+      if (Math.abs(f1RectPos[i * 3 + 0] - rPos2[i * 3 + 0]) > 0.001 ||
+          Math.abs(f1RectPos[i * 3 + 1] - rPos2[i * 3 + 1]) > 0.001) {
         rectMoved = true;
         break;
       }

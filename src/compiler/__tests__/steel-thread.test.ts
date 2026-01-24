@@ -124,9 +124,9 @@ describe('Steel Thread - Animated Particles', () => {
     expect(pass.position).toBeInstanceOf(Float32Array);
     expect(pass.color).toBeInstanceOf(Uint8ClampedArray);
 
-    // Verify position buffer has correct size
+    // Verify position buffer has correct size (vec3 stride)
     const posBuffer = pass.position as Float32Array;
-    expect(posBuffer.length).toBe(100 * 2); // 100 particles, 2 floats per position
+    expect(posBuffer.length).toBe(100 * 3); // 100 particles, 3 floats per position (x, y, z)
     // Copy the values since the buffer will be reused for frame 2
     const frame1Positions = new Float32Array(posBuffer);
 
@@ -140,10 +140,12 @@ describe('Steel Thread - Animated Particles', () => {
 
     // Verify positions are finite numbers (actual range depends on animation parameters)
     for (let i = 0; i < 100; i++) {
-      const x = posBuffer[i * 2 + 0];
-      const y = posBuffer[i * 2 + 1];
+      const x = posBuffer[i * 3 + 0];
+      const y = posBuffer[i * 3 + 1];
+      const z = posBuffer[i * 3 + 2];
       expect(Number.isFinite(x)).toBe(true);
       expect(Number.isFinite(y)).toBe(true);
+      expect(z).toBe(0.0); // z should always be 0.0
     }
 
     // Verify colors are valid RGBA
@@ -171,8 +173,8 @@ describe('Steel Thread - Animated Particles', () => {
     let hasDifference = false;
     for (let i = 0; i < 100; i++) {
       if (
-        Math.abs(frame1Positions[i * 2 + 0] - pos2[i * 2 + 0]) > 0.001 ||
-        Math.abs(frame1Positions[i * 2 + 1] - pos2[i * 2 + 1]) > 0.001
+        Math.abs(frame1Positions[i * 3 + 0] - pos2[i * 3 + 0]) > 0.001 ||
+        Math.abs(frame1Positions[i * 3 + 1] - pos2[i * 3 + 1]) > 0.001
       ) {
         hasDifference = true;
         break;

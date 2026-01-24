@@ -207,9 +207,30 @@ export const KERNEL_SIGNATURES: Readonly<Record<string, KernelSignature>> = {
     output: { unit: 'scalar', description: 'Position (vec3)' },
   },
 
-  // === VEC2 CONSTRUCTION ===
+  // === LAYOUT KERNELS ===
 
-  makeVec2: {
+  lineLayout: {
+    inputs: [
+      { expectedUnit: 'norm01', description: 'Normalized index [0,1]' },
+      { expectedUnit: 'scalar', description: 'Start X' },
+      { expectedUnit: 'scalar', description: 'Start Y' },
+      { expectedUnit: 'scalar', description: 'End X' },
+      { expectedUnit: 'scalar', description: 'End Y' },
+    ],
+    output: { unit: 'scalar', description: 'Position (vec3)' },
+  },
+
+  gridLayout: {
+    inputs: [
+      { expectedUnit: 'count', description: 'Element index (integer)' },
+      { expectedUnit: 'count', description: 'Columns' },
+      { expectedUnit: 'count', description: 'Rows' },
+    ],
+    output: { unit: 'scalar', description: 'Position (vec3)' },
+  },
+
+  // === VEC CONSTRUCTION ===
+
   makeVec3: {
     inputs: [
       { expectedUnit: 'scalar', description: 'X component' },
@@ -218,6 +239,7 @@ export const KERNEL_SIGNATURES: Readonly<Record<string, KernelSignature>> = {
     output: { unit: 'scalar', description: 'Vec3 position (z=0.0)' },
   },
 
+  makeVec2: {
     inputs: [
       { expectedUnit: 'scalar', description: 'X component' },
       { expectedUnit: 'scalar', description: 'Y component' },
