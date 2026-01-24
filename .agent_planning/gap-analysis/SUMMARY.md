@@ -28,9 +28,9 @@ Core pipeline (compilation, runtime, blocks, rendering) is mature with all prior
 |------|-----|-----|--------|
 | Topics 07-15 | NOT AUDITED | AUDITED | First full-spectrum analysis |
 | Topics 18-19 | NOT AUDITED | AUDITED | New spec topics |
-| C-24 (depth sort) | N/A | CRITICAL | Depth sort inverted in RenderAssembler |
-| C-25 (per-frame alloc) | N/A | CRITICAL | new Float32Array every frame |
-| C-26 (no fast-path) | N/A | CRITICAL | Missing monotone check |
+| C-24 (depth sort) | CRITICAL | DONE | Fixed: comparator db-da (far-to-near), commit f8b0569 |
+| C-25 (per-frame alloc) | CRITICAL | DEFERRED | Tracked as bead oscilla-animator-v2-la0 (P3) |
+| C-26 (no fast-path) | CRITICAL | DONE | Added monotone check before sort, commit 988f967 |
 | CameraDeclIR | N/A | DONE (type only) | commit d7d6119 |
 | cameraProjection PayloadType | N/A | TO-REVIEW | Spec says Signal<int>, impl uses dedicated type |
 
