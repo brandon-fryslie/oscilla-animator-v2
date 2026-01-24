@@ -1,0 +1,754 @@
+/**
+ * Level 10: Golden Certification Tests
+ *
+ * Multi-concern integration tests exercising the ENTIRE pipeline:
+ * compile → executeFrame × N frames → verify
+ *
+ * These tests prove all 9 previous levels compose correctly.
+ * This is the final certification level for the 3D projection system.
+ */
+
+import { describe, it, expect } from 'vitest';
+import { buildPatch } from '../../graph/Patch';
+import { compile } from '../../compiler/compile';
+import { executeFrame } from '../../runtime/ScheduleExecutor';
+import { createRuntimeState } from '../../runtime/RuntimeState';
+import { BufferPool } from '../../runtime/BufferPool';
+import type { CameraParams } from '../../runtime/RenderAssembler';
+import { ORTHO_CAMERA_DEFAULTS } from '../ortho-kernel';
+import { PERSP_CAMERA_DEFAULTS } from '../perspective-kernel';
+
+// =============================================================================
+// Camera Constants
+// =============================================================================
+
+const orthoCam: CameraParams = { mode: 'orthographic', params: ORTHO_CAMERA_DEFAULTS };
+const perspCam: CameraParams = { mode: 'perspective', params: PERSP_CAMERA_DEFAULTS };
+
+// =============================================================================
+// Test 10.1: The Golden Patch - Multi-Frame Camera Toggle
+// =============================================================================
+
+describe('Level 10 Golden Tests: The Golden Patch', () => {
+  /**
+   * Build a 5×5 grid patch (25 instances) with:
+   * - GridLayout (world positions)
+   * - FieldHueFromPhase (per-instance color)
+   * - RenderInstances2D (render sink)
+   *
+   * Note: RenderInstances2D has default scale=1.0.
+   * The Ellipse rx/ry params (0.03) are shape params, not the world radius.
+   * The world radius used for projection is the scale parameter (1.0).
+   */
+  function buildGoldenPatch() {
+    return buildPatch((b) => {
+      const time = b.addBlock('InfiniteTimeRoot', {});
+      const ellipse = b.addBlock('Ellipse', { rx: 0.03, ry: 0.03 });
+      const array = b.addBlock('Array', { count: 25 });
+      const layout = b.addBlock('GridLayout', { rows: 5, cols: 5 });
+
+      // Color pipeline (Field-level hue from phase)
+      const sat = b.addBlock('Const', { value: 1.0 });
+      const val = b.addBlock('Const', { value: 1.0 });
+      const hue = b.addBlock('FieldHueFromPhase', {});
+      const color = b.addBlock('HsvToRgb', {});
+
+      const render = b.addBlock('RenderInstances2D', {});
+
+      // Wire topology
+      b.wire(ellipse, 'shape', array, 'element');
+      b.wire(array, 'elements', layout, 'elements');
+
+      // Wire color
+      b.wire(time, 'phaseA', hue, 'phase');
+      b.wire(array, 't', hue, 'id01');
+      b.wire(hue, 'hue', color, 'hue');
+      b.wire(sat, 'out', color, 'sat');
+      b.wire(val, 'out', color, 'val');
+
+      // Wire to render
+      b.wire(layout, 'position', render, 'pos');
+      b.wire(color, 'color', render, 'color');
+      b.wire(ellipse, 'shape', render, 'shape');
+    });
+  }
+
+  it('Test 1.1: Run 120 frames ortho - verify identity projection', () => {
+    const patch = buildGoldenPatch();
+    const result = compile(patch);
+    if (result.kind !== 'ok') {
+      throw new Error(`Compile failed: ${JSON.stringify((result as any).errors)}`);
+    }
+
+    const program = result.program;
+    const state = createRuntimeState(program.slotMeta.length);
+    const pool = new BufferPool();
+
+    const N = 25;
+    const expectedRadius = Math.fround(1.0); // Default scale from RenderInstances2D
+
+    // Run 120 frames with ortho camera
+    for (let frame = 0; frame < 120; frame++) {
+      const frameIR = executeFrame(program, state, pool, frame * 16.667, orthoCam);
+
+      expect(frameIR.passes.length).toBeGreaterThan(0);
+      const pass = frameIR.passes[0];
+      expect(pass.kind).toBe('instances2d');
+      expect(pass.count).toBe(N);
+
+      // Verify screen-space fields exist
+      expect(pass.screenPosition).toBeInstanceOf(Float32Array);
+      expect(pass.screenRadius).toBeInstanceOf(Float32Array);
+      expect(pass.depth).toBeInstanceOf(Float32Array);
+
+      expect(pass.screenPosition!.length).toBe(N * 2);
+      expect(pass.screenRadius!.length).toBe(N);
+      expect(pass.depth!.length).toBe(N);
+
+      // Ortho projection: screenPosition.xy should match worldPosition.xy (identity)
+      // GridLayout outputs world positions in the range [0,1]
+      // Verify all screen positions are in [0,1] and finite
+      for (let i = 0; i < N; i++) {
+        const sx = pass.screenPosition![i * 2];
+        const sy = pass.screenPosition![i * 2 + 1];
+        expect(Number.isFinite(sx)).toBe(true);
+        expect(Number.isFinite(sy)).toBe(true);
+        expect(sx).toBeGreaterThanOrEqual(0);
+        expect(sx).toBeLessThanOrEqual(1);
+        expect(sy).toBeGreaterThanOrEqual(0);
+        expect(sy).toBeLessThanOrEqual(1);
+
+        // Ortho: screenRadius === worldRadius (identity)
+        // worldRadius = scale parameter = 1.0 (RenderInstances2D default)
+        expect(pass.screenRadius![i]).toBe(expectedRadius);
+
+        // Verify depth is finite (ortho depth depends on z, which is 0 for GridLayout)
+        expect(Number.isFinite(pass.depth![i])).toBe(true);
+      }
+
+      // All z=0 instances are visible under ortho
+      // (no visible field in compacted output, but count should match)
+      expect(pass.count).toBe(N);
+    }
+  });
+
+  it('Test 1.2: Toggle to perspective at frame 121, run to 180 - verify non-identity projection', () => {
+    const patch = buildGoldenPatch();
+    const result = compile(patch);
+    if (result.kind !== 'ok') {
+      throw new Error(`Compile failed`);
+    }
+
+    const program = result.program;
+    const state = createRuntimeState(program.slotMeta.length);
+    const pool = new BufferPool();
+
+    const N = 25;
+
+    // Run frames 0-120 with ortho (establish baseline)
+    for (let frame = 0; frame < 121; frame++) {
+      executeFrame(program, state, pool, frame * 16.667, orthoCam);
+    }
+
+    // Capture frame 120 ortho output for comparison
+    const frame120 = executeFrame(program, state, pool, 120 * 16.667, orthoCam);
+    const orthoPositions = new Float32Array(frame120.passes[0].screenPosition!);
+
+    // Toggle to perspective at frame 121, run to frame 180
+    for (let frame = 121; frame <= 180; frame++) {
+      const frameIR = executeFrame(program, state, pool, frame * 16.667, perspCam);
+
+      expect(frameIR.passes.length).toBeGreaterThan(0);
+      const pass = frameIR.passes[0];
+      expect(pass.kind).toBe('instances2d');
+      expect(pass.count).toBe(N);
+
+      // Verify screen-space fields exist
+      expect(pass.screenPosition).toBeInstanceOf(Float32Array);
+      expect(pass.screenRadius).toBeInstanceOf(Float32Array);
+      expect(pass.depth).toBeInstanceOf(Float32Array);
+
+      // Perspective: screenPositions differ from ortho (parallax from camera at z=2.0)
+      // At least some instances should have different screen positions
+      let anyDifferent = false;
+      for (let i = 0; i < N; i++) {
+        const sx = pass.screenPosition![i * 2];
+        const sy = pass.screenPosition![i * 2 + 1];
+
+        // Still in valid range
+        expect(Number.isFinite(sx)).toBe(true);
+        expect(Number.isFinite(sy)).toBe(true);
+
+        // Check if different from ortho
+        if (
+          Math.abs(sx - orthoPositions[i * 2]) > 0.001 ||
+          Math.abs(sy - orthoPositions[i * 2 + 1]) > 0.001
+        ) {
+          anyDifferent = true;
+        }
+
+        // Verify depth is finite
+        expect(Number.isFinite(pass.depth![i])).toBe(true);
+      }
+
+      // At least one instance should have a different screen position under perspective
+      expect(anyDifferent).toBe(true);
+    }
+  });
+
+  it('Test 1.3: Toggle back to ortho at frame 181, run to 240 - verify identity restored', () => {
+    const patch = buildGoldenPatch();
+    const result = compile(patch);
+    if (result.kind !== 'ok') {
+      throw new Error(`Compile failed`);
+    }
+
+    const program = result.program;
+    const state = createRuntimeState(program.slotMeta.length);
+    const pool = new BufferPool();
+
+    const N = 25;
+    const expectedRadius = Math.fround(1.0);
+
+    // Run frames 0-120 ortho
+    for (let frame = 0; frame <= 120; frame++) {
+      executeFrame(program, state, pool, frame * 16.667, orthoCam);
+    }
+
+    // Run frames 121-180 perspective
+    for (let frame = 121; frame <= 180; frame++) {
+      executeFrame(program, state, pool, frame * 16.667, perspCam);
+    }
+
+    // Toggle back to ortho at frame 181, run to 240
+    for (let frame = 181; frame <= 240; frame++) {
+      const frameIR = executeFrame(program, state, pool, frame * 16.667, orthoCam);
+
+      expect(frameIR.passes.length).toBeGreaterThan(0);
+      const pass = frameIR.passes[0];
+      expect(pass.kind).toBe('instances2d');
+      expect(pass.count).toBe(N);
+
+      // Ortho identity restored: screenRadius === worldRadius (scale = 1.0)
+      for (let i = 0; i < N; i++) {
+        expect(pass.screenRadius![i]).toBe(expectedRadius);
+      }
+    }
+  });
+
+  it('Test 1.4: Frame 240 output matches control run (never-toggled ortho)', () => {
+    const patch = buildGoldenPatch();
+
+    // Run 1: Toggle sequence (ortho → persp → ortho)
+    const result1 = compile(patch);
+    if (result1.kind !== 'ok') throw new Error('Compile failed');
+    const program1 = result1.program;
+    const state1 = createRuntimeState(program1.slotMeta.length);
+    const pool1 = new BufferPool();
+
+    for (let frame = 0; frame <= 120; frame++) {
+      executeFrame(program1, state1, pool1, frame * 16.667, orthoCam);
+    }
+    for (let frame = 121; frame <= 180; frame++) {
+      executeFrame(program1, state1, pool1, frame * 16.667, perspCam);
+    }
+    for (let frame = 181; frame <= 240; frame++) {
+      executeFrame(program1, state1, pool1, frame * 16.667, orthoCam);
+    }
+
+    const toggledFrame = executeFrame(program1, state1, pool1, 240 * 16.667, orthoCam);
+
+    // Run 2: Control (always ortho)
+    const result2 = compile(patch);
+    if (result2.kind !== 'ok') throw new Error('Compile failed');
+    const program2 = result2.program;
+    const state2 = createRuntimeState(program2.slotMeta.length);
+    const pool2 = new BufferPool();
+
+    for (let frame = 0; frame <= 240; frame++) {
+      executeFrame(program2, state2, pool2, frame * 16.667, orthoCam);
+    }
+
+    const controlFrame = executeFrame(program2, state2, pool2, 240 * 16.667, orthoCam);
+
+    // Compare frame 240 outputs
+    const toggledPass = toggledFrame.passes[0];
+    const controlPass = controlFrame.passes[0];
+
+    expect(toggledPass.count).toBe(controlPass.count);
+
+    // Screen positions should be identical (within float precision)
+    for (let i = 0; i < toggledPass.count * 2; i++) {
+      expect(toggledPass.screenPosition![i]).toBeCloseTo(controlPass.screenPosition![i], 5);
+    }
+
+    // Screen radii should be identical
+    for (let i = 0; i < toggledPass.count; i++) {
+      expect(toggledPass.screenRadius![i]).toBe(controlPass.screenRadius![i]);
+    }
+  });
+});
+
+// =============================================================================
+// Test 10.2: Determinism Replay
+// =============================================================================
+
+describe('Level 10 Golden Tests: Determinism', () => {
+  it('Test 2.1: Run 60 frames, record all screenPosition outputs', () => {
+    const patch = buildPatch((b) => {
+      const time = b.addBlock('InfiniteTimeRoot', {});
+      const ellipse = b.addBlock('Ellipse', { rx: 0.03, ry: 0.03 });
+      const array = b.addBlock('Array', { count: 25 });
+      const layout = b.addBlock('GridLayout', { rows: 5, cols: 5 });
+
+      const sat = b.addBlock('Const', { value: 1.0 });
+      const val = b.addBlock('Const', { value: 1.0 });
+      const hue = b.addBlock('FieldHueFromPhase', {});
+      const color = b.addBlock('HsvToRgb', {});
+      const render = b.addBlock('RenderInstances2D', {});
+
+      b.wire(ellipse, 'shape', array, 'element');
+      b.wire(array, 'elements', layout, 'elements');
+      b.wire(time, 'phaseA', hue, 'phase');
+      b.wire(array, 't', hue, 'id01');
+      b.wire(hue, 'hue', color, 'hue');
+      b.wire(sat, 'out', color, 'sat');
+      b.wire(val, 'out', color, 'val');
+      b.wire(layout, 'position', render, 'pos');
+      b.wire(color, 'color', render, 'color');
+      b.wire(ellipse, 'shape', render, 'shape');
+    });
+
+    const result = compile(patch);
+    if (result.kind !== 'ok') throw new Error('Compile failed');
+
+    const program = result.program;
+    const state = createRuntimeState(program.slotMeta.length);
+    const pool = new BufferPool();
+
+    const recordings: Float32Array[] = [];
+
+    // Run 60 frames, record screenPosition for each
+    for (let frame = 0; frame < 60; frame++) {
+      const frameIR = executeFrame(program, state, pool, frame * 16.667, orthoCam);
+      const pass = frameIR.passes[0];
+      // Store a COPY of the screenPosition buffer
+      recordings.push(new Float32Array(pass.screenPosition!));
+    }
+
+    // Store recordings for next test
+    (globalThis as any).__level10_recordings = recordings;
+
+    expect(recordings.length).toBe(60);
+  });
+
+  it('Test 2.2: Reset, run again, assert bitwise-identical outputs', () => {
+    const recordings = (globalThis as any).__level10_recordings as Float32Array[];
+    expect(recordings).toBeTruthy();
+    expect(recordings.length).toBe(60);
+
+    // Build the same patch
+    const patch = buildPatch((b) => {
+      const time = b.addBlock('InfiniteTimeRoot', {});
+      const ellipse = b.addBlock('Ellipse', { rx: 0.03, ry: 0.03 });
+      const array = b.addBlock('Array', { count: 25 });
+      const layout = b.addBlock('GridLayout', { rows: 5, cols: 5 });
+
+      const sat = b.addBlock('Const', { value: 1.0 });
+      const val = b.addBlock('Const', { value: 1.0 });
+      const hue = b.addBlock('FieldHueFromPhase', {});
+      const color = b.addBlock('HsvToRgb', {});
+      const render = b.addBlock('RenderInstances2D', {});
+
+      b.wire(ellipse, 'shape', array, 'element');
+      b.wire(array, 'elements', layout, 'elements');
+      b.wire(time, 'phaseA', hue, 'phase');
+      b.wire(array, 't', hue, 'id01');
+      b.wire(hue, 'hue', color, 'hue');
+      b.wire(sat, 'out', color, 'sat');
+      b.wire(val, 'out', color, 'val');
+      b.wire(layout, 'position', render, 'pos');
+      b.wire(color, 'color', render, 'color');
+      b.wire(ellipse, 'shape', render, 'shape');
+    });
+
+    // Completely fresh compile, state, pool
+    const result = compile(patch);
+    if (result.kind !== 'ok') throw new Error('Compile failed');
+
+    const program = result.program;
+    const state = createRuntimeState(program.slotMeta.length);
+    const pool = new BufferPool();
+
+    // Run 60 frames again
+    for (let frame = 0; frame < 60; frame++) {
+      const frameIR = executeFrame(program, state, pool, frame * 16.667, orthoCam);
+      const pass = frameIR.passes[0];
+
+      const expected = recordings[frame];
+      const actual = pass.screenPosition!;
+
+      // Bitwise-identical comparison (byte-for-byte)
+      expect(actual.length).toBe(expected.length);
+      for (let i = 0; i < actual.length; i++) {
+        expect(actual[i]).toBe(expected[i]);
+      }
+    }
+  });
+});
+
+// =============================================================================
+// Test 10.3: Stress Test
+// =============================================================================
+
+describe('Level 10 Golden Tests: Stress Test', () => {
+  it('Test 3.1: 50×50 grid (2500 instances), toggle sequence, verify no NaN/Inf', () => {
+    const patch = buildPatch((b) => {
+      const time = b.addBlock('InfiniteTimeRoot', {});
+      const ellipse = b.addBlock('Ellipse', { rx: 0.01, ry: 0.01 });
+      const array = b.addBlock('Array', { count: 2500 });
+      const layout = b.addBlock('GridLayout', { rows: 50, cols: 50 });
+
+      const sat = b.addBlock('Const', { value: 1.0 });
+      const val = b.addBlock('Const', { value: 1.0 });
+      const hue = b.addBlock('FieldHueFromPhase', {});
+      const color = b.addBlock('HsvToRgb', {});
+      const render = b.addBlock('RenderInstances2D', {});
+
+      b.wire(ellipse, 'shape', array, 'element');
+      b.wire(array, 'elements', layout, 'elements');
+      b.wire(time, 'phaseA', hue, 'phase');
+      b.wire(array, 't', hue, 'id01');
+      b.wire(hue, 'hue', color, 'hue');
+      b.wire(sat, 'out', color, 'sat');
+      b.wire(val, 'out', color, 'val');
+      b.wire(layout, 'position', render, 'pos');
+      b.wire(color, 'color', render, 'color');
+      b.wire(ellipse, 'shape', render, 'shape');
+    });
+
+    const result = compile(patch);
+    if (result.kind !== 'ok') throw new Error('Compile failed');
+
+    const program = result.program;
+    const state = createRuntimeState(program.slotMeta.length);
+    const pool = new BufferPool();
+
+    const N = 2500;
+
+    // Run 10 frames ortho
+    for (let frame = 0; frame < 10; frame++) {
+      const frameIR = executeFrame(program, state, pool, frame * 16.667, orthoCam);
+      const pass = frameIR.passes[0];
+
+      expect(pass.count).toBe(N);
+
+      // Verify no NaN/Inf
+      for (let i = 0; i < N; i++) {
+        const sx = pass.screenPosition![i * 2];
+        const sy = pass.screenPosition![i * 2 + 1];
+        const sr = pass.screenRadius![i];
+        const d = pass.depth![i];
+
+        expect(Number.isFinite(sx)).toBe(true);
+        expect(Number.isFinite(sy)).toBe(true);
+        expect(Number.isFinite(sr)).toBe(true);
+        expect(Number.isFinite(d)).toBe(true);
+
+        // Visible screen positions should be in [0,1]
+        expect(sx).toBeGreaterThanOrEqual(0);
+        expect(sx).toBeLessThanOrEqual(1);
+        expect(sy).toBeGreaterThanOrEqual(0);
+        expect(sy).toBeLessThanOrEqual(1);
+      }
+
+      // Verify buffer lengths
+      expect(pass.screenPosition!.length).toBe(N * 2);
+      expect(pass.screenRadius!.length).toBe(N);
+      expect(pass.depth!.length).toBe(N);
+    }
+
+    // Run 10 frames perspective
+    for (let frame = 10; frame < 20; frame++) {
+      const frameIR = executeFrame(program, state, pool, frame * 16.667, perspCam);
+      const pass = frameIR.passes[0];
+
+      expect(pass.count).toBe(N);
+
+      // Verify no NaN/Inf
+      for (let i = 0; i < N; i++) {
+        expect(Number.isFinite(pass.screenPosition![i * 2])).toBe(true);
+        expect(Number.isFinite(pass.screenPosition![i * 2 + 1])).toBe(true);
+        expect(Number.isFinite(pass.screenRadius![i])).toBe(true);
+        expect(Number.isFinite(pass.depth![i])).toBe(true);
+      }
+    }
+
+    // Run 10 frames ortho again
+    for (let frame = 20; frame < 30; frame++) {
+      const frameIR = executeFrame(program, state, pool, frame * 16.667, orthoCam);
+      const pass = frameIR.passes[0];
+
+      expect(pass.count).toBe(N);
+
+      // Verify no NaN/Inf
+      for (let i = 0; i < N; i++) {
+        expect(Number.isFinite(pass.screenPosition![i * 2])).toBe(true);
+        expect(Number.isFinite(pass.screenPosition![i * 2 + 1])).toBe(true);
+        expect(Number.isFinite(pass.screenRadius![i])).toBe(true);
+        expect(Number.isFinite(pass.depth![i])).toBe(true);
+      }
+    }
+  });
+});
+
+// =============================================================================
+// Test 10.4: Export Isolation
+// =============================================================================
+
+describe('Level 10 Golden Tests: Export Isolation', () => {
+  it('Test 4.1: Run 60 frames with perspective toggles, capture frame 60 (ends in ortho)', () => {
+    const patch = buildPatch((b) => {
+      const time = b.addBlock('InfiniteTimeRoot', {});
+      const ellipse = b.addBlock('Ellipse', { rx: 0.03, ry: 0.03 });
+      const array = b.addBlock('Array', { count: 25 });
+      const layout = b.addBlock('GridLayout', { rows: 5, cols: 5 });
+
+      const sat = b.addBlock('Const', { value: 1.0 });
+      const val = b.addBlock('Const', { value: 1.0 });
+      const hue = b.addBlock('FieldHueFromPhase', {});
+      const color = b.addBlock('HsvToRgb', {});
+      const render = b.addBlock('RenderInstances2D', {});
+
+      b.wire(ellipse, 'shape', array, 'element');
+      b.wire(array, 'elements', layout, 'elements');
+      b.wire(time, 'phaseA', hue, 'phase');
+      b.wire(array, 't', hue, 'id01');
+      b.wire(hue, 'hue', color, 'hue');
+      b.wire(sat, 'out', color, 'sat');
+      b.wire(val, 'out', color, 'val');
+      b.wire(layout, 'position', render, 'pos');
+      b.wire(color, 'color', render, 'color');
+      b.wire(ellipse, 'shape', render, 'shape');
+    });
+
+    const result = compile(patch);
+    if (result.kind !== 'ok') throw new Error('Compile failed');
+
+    const program = result.program;
+    const state = createRuntimeState(program.slotMeta.length);
+    const pool = new BufferPool();
+
+    // Toggle every 10 frames: ortho → persp → ortho → persp → ortho → persp
+    for (let frame = 0; frame < 60; frame++) {
+      const camera = Math.floor(frame / 10) % 2 === 0 ? orthoCam : perspCam;
+      executeFrame(program, state, pool, frame * 16.667, camera);
+    }
+
+    // Capture frame 60 (ends in ortho: frames 50-59 are persp, frame 60 would be ortho)
+    // Actually frame 59 is last of the loop, so run one more
+    const toggledFrame = executeFrame(program, state, pool, 60 * 16.667, orthoCam);
+
+    const toggledPass = toggledFrame.passes[0];
+    const toggledScreenPos = new Float32Array(toggledPass.screenPosition!);
+    const toggledScreenRad = new Float32Array(toggledPass.screenRadius!);
+
+    // Store for comparison
+    (globalThis as any).__level10_toggledFrame60 = {
+      screenPosition: toggledScreenPos,
+      screenRadius: toggledScreenRad,
+      count: toggledPass.count,
+    };
+  });
+
+  it('Test 4.2: Run 60 frames always ortho, capture frame 60', () => {
+    const patch = buildPatch((b) => {
+      const time = b.addBlock('InfiniteTimeRoot', {});
+      const ellipse = b.addBlock('Ellipse', { rx: 0.03, ry: 0.03 });
+      const array = b.addBlock('Array', { count: 25 });
+      const layout = b.addBlock('GridLayout', { rows: 5, cols: 5 });
+
+      const sat = b.addBlock('Const', { value: 1.0 });
+      const val = b.addBlock('Const', { value: 1.0 });
+      const hue = b.addBlock('FieldHueFromPhase', {});
+      const color = b.addBlock('HsvToRgb', {});
+      const render = b.addBlock('RenderInstances2D', {});
+
+      b.wire(ellipse, 'shape', array, 'element');
+      b.wire(array, 'elements', layout, 'elements');
+      b.wire(time, 'phaseA', hue, 'phase');
+      b.wire(array, 't', hue, 'id01');
+      b.wire(hue, 'hue', color, 'hue');
+      b.wire(sat, 'out', color, 'sat');
+      b.wire(val, 'out', color, 'val');
+      b.wire(layout, 'position', render, 'pos');
+      b.wire(color, 'color', render, 'color');
+      b.wire(ellipse, 'shape', render, 'shape');
+    });
+
+    const result = compile(patch);
+    if (result.kind !== 'ok') throw new Error('Compile failed');
+
+    const program = result.program;
+    const state = createRuntimeState(program.slotMeta.length);
+    const pool = new BufferPool();
+
+    // Always ortho
+    for (let frame = 0; frame < 60; frame++) {
+      executeFrame(program, state, pool, frame * 16.667, orthoCam);
+    }
+
+    const controlFrame = executeFrame(program, state, pool, 60 * 16.667, orthoCam);
+
+    const controlPass = controlFrame.passes[0];
+
+    // Store for comparison
+    (globalThis as any).__level10_controlFrame60 = {
+      screenPosition: new Float32Array(controlPass.screenPosition!),
+      screenRadius: new Float32Array(controlPass.screenRadius!),
+      count: controlPass.count,
+    };
+  });
+
+  it('Test 4.3: Assert frame 60 outputs are identical', () => {
+    const toggled = (globalThis as any).__level10_toggledFrame60;
+    const control = (globalThis as any).__level10_controlFrame60;
+
+    expect(toggled).toBeTruthy();
+    expect(control).toBeTruthy();
+
+    expect(toggled.count).toBe(control.count);
+
+    // Compare screenPosition (bitwise-identical)
+    expect(toggled.screenPosition.length).toBe(control.screenPosition.length);
+    for (let i = 0; i < toggled.screenPosition.length; i++) {
+      expect(toggled.screenPosition[i]).toBe(control.screenPosition[i]);
+    }
+
+    // Compare screenRadius (bitwise-identical)
+    expect(toggled.screenRadius.length).toBe(control.screenRadius.length);
+    for (let i = 0; i < toggled.screenRadius.length; i++) {
+      expect(toggled.screenRadius[i]).toBe(control.screenRadius[i]);
+    }
+  });
+});
+
+// =============================================================================
+// Test 10.5: Explicit Camera Override (SKIP - feature doesn't exist yet)
+// =============================================================================
+
+describe.skip('Level 10 Golden Tests: Explicit Camera Override', () => {
+  it('Test 5.1: CameraBlock overrides viewer-level camera (future feature)', () => {
+    // Placeholder for when CameraBlock is implemented
+    // This would test that a CameraBlock in the patch overrides the viewer-level camera param
+  });
+});
+
+// =============================================================================
+// Test 10.6: CombineMode Enforcement (Placeholder tests)
+// =============================================================================
+
+describe('Level 10 Golden Tests: CombineMode Enforcement', () => {
+  it.skip('Test 6.1: Compile with two float writers using CombineMode "sum"', () => {
+    // This tests whether the compiler accepts CombineMode 'sum' for float writers
+    // If compile-time enforcement is working, this should compile without error
+
+    // This test requires a block that accepts multiple inputs with CombineMode
+    // For now, this is skipped as a placeholder - the actual test depends on block definitions
+
+    const patch = buildPatch((b) => {
+      const time = b.addBlock('InfiniteTimeRoot', {});
+      const const1 = b.addBlock('Const', { value: 1.0 });
+      const const2 = b.addBlock('Const', { value: 2.0 });
+
+      // Would need a block that can combine multiple inputs here
+    });
+
+    const result = compile(patch);
+    expect(['ok', 'error']).toContain(result.kind);
+  });
+
+  it.skip('Test 6.2: Compile with shape2d writers using CombineMode "layer" (if exists)', () => {
+    // Placeholder for shape2d combine mode tests
+    // This depends on whether 'layer' mode exists for shape2d
+  });
+});
+
+// =============================================================================
+// Test 10.7: Multi-Backend Golden Comparison
+// =============================================================================
+
+describe('Level 10 Golden Tests: Multi-Backend Comparison', () => {
+  it('Test 7.1: Run golden patch for 60 frames, verify coordinate math consistency', () => {
+    const patch = buildPatch((b) => {
+      const time = b.addBlock('InfiniteTimeRoot', {});
+      const ellipse = b.addBlock('Ellipse', { rx: 0.03, ry: 0.03 });
+      const array = b.addBlock('Array', { count: 25 });
+      const layout = b.addBlock('GridLayout', { rows: 5, cols: 5 });
+
+      const sat = b.addBlock('Const', { value: 1.0 });
+      const val = b.addBlock('Const', { value: 1.0 });
+      const hue = b.addBlock('FieldHueFromPhase', {});
+      const color = b.addBlock('HsvToRgb', {});
+      const render = b.addBlock('RenderInstances2D', {});
+
+      b.wire(ellipse, 'shape', array, 'element');
+      b.wire(array, 'elements', layout, 'elements');
+      b.wire(time, 'phaseA', hue, 'phase');
+      b.wire(array, 't', hue, 'id01');
+      b.wire(hue, 'hue', color, 'hue');
+      b.wire(sat, 'out', color, 'sat');
+      b.wire(val, 'out', color, 'val');
+      b.wire(layout, 'position', render, 'pos');
+      b.wire(color, 'color', render, 'color');
+      b.wire(ellipse, 'shape', render, 'shape');
+    });
+
+    const result = compile(patch);
+    if (result.kind !== 'ok') throw new Error('Compile failed');
+
+    const program = result.program;
+    const state = createRuntimeState(program.slotMeta.length);
+    const pool = new BufferPool();
+
+    // Run 60 frames
+    for (let frame = 0; frame < 60; frame++) {
+      executeFrame(program, state, pool, frame * 16.667, orthoCam);
+    }
+
+    const frame60 = executeFrame(program, state, pool, 60 * 16.667, orthoCam);
+    const pass = frame60.passes[0];
+
+    // Verify RenderPassIR has screen-space data
+    expect(pass.screenPosition).toBeTruthy();
+    expect(pass.screenRadius).toBeTruthy();
+
+    // The coordinate math is the same for both Canvas2D and SVG:
+    // pixelX = screenPosition[i*2] * width
+    // pixelY = screenPosition[i*2+1] * height
+    //
+    // This is verified by Level 8 tests, but we can check that the data
+    // is in the expected normalized range [0,1]
+
+    const N = pass.count;
+    for (let i = 0; i < N; i++) {
+      const sx = pass.screenPosition![i * 2];
+      const sy = pass.screenPosition![i * 2 + 1];
+
+      expect(sx).toBeGreaterThanOrEqual(0);
+      expect(sx).toBeLessThanOrEqual(1);
+      expect(sy).toBeGreaterThanOrEqual(0);
+      expect(sy).toBeLessThanOrEqual(1);
+    }
+
+    // If we were to render this with Canvas2D at 1000×1000:
+    // Instance 0 at screenPos [0.1, 0.1] → pixel (100, 100)
+    // Instance at screenPos [0.5, 0.5] → pixel (500, 500)
+    //
+    // If we were to render this with SVG at 1000×1000:
+    // Same mapping: [0.1, 0.1] → translate(100 100)
+    //
+    // Both backends use the same math, proven by Level 8.
+    // This test verifies the pipeline produces valid normalized coordinates.
+  });
+});

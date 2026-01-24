@@ -1,0 +1,137 @@
+Level 9: Continuity-Projection Decoupling Verification
+========================================================
+
+COMPLETION STATUS: ✓ Complete
+Validation Mode: TDD (test-driven verification)
+Tests: 13/13 passing
+Files Modified: 1 new test file
+Commits: 1
+
+## Summary
+
+Successfully wrote comprehensive verification tests proving that continuity and projection systems are completely decoupled. This is a verification-only level — no implementation code was needed, confirming that the existing architecture already satisfies the decoupling invariant.
+
+## Core Invariant Verified
+
+**Continuity operates on world-space data (independent of projection)**
+
+- Continuity reads/writes world-space position buffers (vec2, stride-2)
+- Continuity reads/writes world-space radius fields (float, stride-1)
+- Projection is pure (read-only, no writes to world-space buffers)
+- Continuity state is IDENTICAL regardless of camera mode (ortho vs perspective)
+
+## Test Groups (13 tests total)
+
+### 1. Unit Tests: World-Space Data (4 tests)
+
+- **Test 1**: Continuity uses stride-based buffers (position: stride-2, radius: stride-1)
+- **Test 2**: No references to screenRadius or screen-space fields
+- **Test 3**: Static analysis confirms zero imports from projection modules
+- **Test 4**: Continuity mapping keyed by instanceId, not screen coordinates
+
+All unit tests verify through source code analysis that continuity modules have no dependency on projection.
+
+### 2. Integration Tests: Camera Toggle Independence (4 tests)
+
+- **Test 5**: Run 30 frames with ortho camera, capture continuity state
+- **Test 6**: Run 30 frames with perspective camera, capture continuity state
+- **Test 7**: Assert mappings are identical (same instance→slot assignments)
+- **Test 8**: Assert gauge/slew buffers are identical (world-space values)
+
+These tests prove that switching camera mode has zero effect on continuity state.
+
+### 3. Integration Tests: Projection Purity (3 tests)
+
+- **Test 9**: Create world-position buffer for write-detection
+- **Test 10**: Run ortho projection, verify zero writes to world buffer
+- **Test 11**: Run perspective projection, verify zero writes to world buffer
+
+These tests use before/after snapshots to prove projection functions are pure (read-only).
+
+### 4. Integration Tests: Remap During Toggle (2 tests)
+
+- **Test 12**: Reduce instance count (10→8), verify remap completes, then toggle camera (no remap)
+- **Test 13**: Verify surviving instances maintain stable IDs through both remap and toggle
+
+These tests prove that continuity mapping is based on instance identity, not projection.
+
+## Implementation Notes
+
+### Key Files Read (Static Analysis)
+
+- `ContinuityApply.ts`: stride-based buffer operations, no projection imports
+- `ContinuityMapping.ts`: instance identity-based mapping, world-space posHintXY
+- `ContinuityState.ts`: state management, no projection types
+- `ContinuityDefaults.ts`: policy definitions, no projection dependencies
+
+### Integration Test Approach
+
+Tests use `executeFrame` to run full pipeline:
+1. Create minimal CompiledProgramIR with continuity steps
+2. Run 30 frames to establish stable continuity state
+3. Capture state snapshots for comparison
+4. Verify camera mode has zero effect on continuity
+
+### Projection Purity Test
+
+Used byte-for-byte comparison instead of Proxy (TypedArray Proxy has limitations):
+1. Take snapshot before projection
+2. Call `projectInstances` (should be read-only)
+3. Compare all buffer elements (must be unchanged)
+
+## Architecture Validation
+
+This level confirms the design from earlier levels:
+
+- **Level 5**: Projection integrated into RenderAssembler (pure functions)
+- **Level 6**: Camera mode toggle (viewer-level variable, not compiled state)
+- **Level 9**: Continuity decoupled from projection (world-space only)
+
+The invariant holds: **Continuity is unaware of projection**. Both systems operate on world-space data, making them independently composable.
+
+## Files Created
+
+```
+src/projection/__tests__/level9-continuity-decoupling.test.ts (504 lines, 13 tests)
+```
+
+## Test Results
+
+```
+✓ Level 9 Unit Tests: Continuity Uses World-Space Data (4)
+✓ Level 9 Integration: Continuity Unaffected by Toggle (4)
+✓ Level 9 Integration: Projection is Pure (Read-Only) (3)
+✓ Level 9 Integration: Continuity Remap During Toggle (2)
+
+Test Files: 1 passed
+Tests: 13 passed
+Duration: ~10ms
+```
+
+## Validation Criteria (All Met)
+
+✓ Unit tests verify continuity uses world-space buffers (not screen-space)
+✓ Static analysis confirms zero projection imports in continuity modules
+✓ Integration tests prove camera mode has no effect on continuity state
+✓ Projection purity tests confirm zero writes to world-space buffers
+✓ Remap tests prove mapping is identity-based, not projection-based
+
+## Next Steps
+
+Level 9 is complete. This was the final verification level for the 3D projection system. The architecture is proven:
+
+- Projection kernels are pure math (Levels 2-3)
+- Size projection handles foreshortening (Level 4)
+- Projection integrates into RenderAssembler (Level 5)
+- Camera mode is a viewer-level toggle (Level 6)
+- Depth sorting and culling work correctly (Level 7)
+- Backends consume only screen-space data (Level 8)
+- Continuity is decoupled from projection (Level 9)
+
+Ready to move to next feature area or finalize 3D system integration.
+
+---
+Completed: 2026-01-24 08:06:45
+Agent: iterative-implementer
+Mode: TDD (verification)
+Status: ✓ All tests passing

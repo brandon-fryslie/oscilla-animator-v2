@@ -693,7 +693,7 @@ export function isContiguous(indices: number[]): boolean {
  * Uses zero-copy subarray views when indices are contiguous,
  * falls back to copy for non-contiguous indices.
  *
- * @param fullPosition - Full position buffer (x,y,z interleaved)
+ * @param fullPosition - Full position buffer (x,y OR x,y,z interleaved)
  * @param fullColor - Full color buffer (RGBA interleaved)
  * @param instanceIndices - Sorted indices of instances to extract
  * @returns Sliced position and color buffers
@@ -705,26 +705,29 @@ export function sliceInstanceBuffers(
 ): SlicedBuffers {
   const N = instanceIndices.length;
 
+  // Determine stride from buffer length
+  const stride = fullPosition.length / fullColor.length * 4; // color is RGBA (stride 4)
+
   if (isContiguous(instanceIndices)) {
     // Zero-copy views — same underlying ArrayBuffer
     const start = instanceIndices[0];
     return {
-      position: fullPosition.subarray(start * 3, (start + N) * 3),
+      position: fullPosition.subarray(start * stride, (start + N) * stride),
       color: fullColor.subarray(start * 4, (start + N) * 4),
     };
   }
 
-  // Non-contiguous: copy (existing logic)
-  const position = new Float32Array(N * 3);  // vec3 per instance
+  // Non-contiguous: copy
+  const position = new Float32Array(N * stride);
   const color = new Uint8ClampedArray(N * 4); // RGBA per instance
 
   for (let i = 0; i < N; i++) {
     const srcIdx = instanceIndices[i];
 
-    // Position (x, y, z)
-    position[i * 3]     = fullPosition[srcIdx * 3];
-    position[i * 3 + 1] = fullPosition[srcIdx * 3 + 1];
-    position[i * 3 + 2] = fullPosition[srcIdx * 3 + 2];
+    // Position (stride-dependent)
+    for (let j = 0; j < stride; j++) {
+      position[i * stride + j] = fullPosition[srcIdx * stride + j];
+    }
 
     // Color (R, G, B, A)
     color[i * 4]     = fullColor[srcIdx * 4];
@@ -771,7 +774,7 @@ function recordAssemblerTiming(
  * @param fullColor - Full color buffer
  * @param scale - Uniform scale
  * @param count - Instance count
- * @param state - Runtime state
+ * @param context - Assembly context (includes camera for projection)
  * @returns Array of DrawOp operations (path or primitive)
  */
 function assemblePerInstanceShapes(
@@ -781,8 +784,9 @@ function assemblePerInstanceShapes(
   fullColor: Uint8ClampedArray,
   scale: number,
   count: number,
-  state: RuntimeState
+  context: AssemblerContext
 ): DrawOp[] {
+  const { state } = context;
   const t0 = performance.now();
 
   // Group instances by topology
@@ -800,6 +804,29 @@ function assemblePerInstanceShapes(
   const fullScale2 = step.scale2Slot
     ? (state.values.objects.get(step.scale2Slot) as Float32Array | undefined)
     : undefined;
+
+  // Run projection if camera is provided
+  const camera = context.camera;
+  let projection: ProjectionOutput | undefined;
+  if (camera) {
+    // Determine position stride: vec3 (stride 3) or vec2 (stride 2, promote to vec3 with z=0)
+    const posLength = fullPosition.length;
+    let worldPos3: Float32Array;
+    if (posLength === count * 3) {
+      // Already stride-3 vec3
+      worldPos3 = fullPosition;
+    } else {
+      // Stride-2 vec2: promote to vec3 with z=0
+      worldPos3 = new Float32Array(count * 3);
+      for (let i = 0; i < count; i++) {
+        worldPos3[i * 3] = fullPosition[i * 2];
+        worldPos3[i * 3 + 1] = fullPosition[i * 2 + 1];
+        // worldPos3[i * 3 + 2] = 0 (Float32Array is zero-initialized)
+      }
+    }
+
+    projection = projectInstances(worldPos3, scale, count, camera);
+  }
 
   for (const [key, group] of groups) {
     // Skip empty groups
@@ -826,18 +853,66 @@ function assemblePerInstanceShapes(
       ? sliceScale2Buffer(fullScale2, group.instanceIndices)
       : undefined;
 
-    // Build instance transforms (shared by both path and primitive)
-    const instanceTransforms: InstanceTransforms = {
-      count: group.instanceIndices.length,
-      position,
-      size: scale, // Uniform scale
-      rotation,
-      scale2,
-    };
+    // If projection is enabled, compact this group's instances
+    let instanceTransforms: InstanceTransforms;
+    let compactedColor: Uint8ClampedArray;
+
+    if (projection) {
+      // Slice projection outputs for this group
+      const groupScreenPos = new Float32Array(group.instanceIndices.length * 2);
+      const groupScreenRadius = new Float32Array(group.instanceIndices.length);
+      const groupDepth = new Float32Array(group.instanceIndices.length);
+      const groupVisible = new Uint8Array(group.instanceIndices.length);
+
+      for (let i = 0; i < group.instanceIndices.length; i++) {
+        const srcIdx = group.instanceIndices[i];
+        groupScreenPos[i * 2] = projection.screenPosition[srcIdx * 2];
+        groupScreenPos[i * 2 + 1] = projection.screenPosition[srcIdx * 2 + 1];
+        groupScreenRadius[i] = projection.screenRadius[srcIdx];
+        groupDepth[i] = projection.depth[srcIdx];
+        groupVisible[i] = projection.visible[srcIdx];
+      }
+
+      const groupProjection: ProjectionOutput = {
+        screenPosition: groupScreenPos,
+        screenRadius: groupScreenRadius,
+        depth: groupDepth,
+        visible: groupVisible,
+      };
+
+      // Depth-sort and compact for this group
+      const compacted = depthSortAndCompact(
+        groupProjection,
+        group.instanceIndices.length,
+        color,
+        rotation,
+        scale2
+      );
+
+      instanceTransforms = {
+        count: compacted.count,
+        position: compacted.screenPosition,
+        size: compacted.screenRadius,
+        rotation: compacted.rotation,
+        scale2: compacted.scale2,
+        depth: compacted.depth,
+      };
+      compactedColor = compacted.color as Uint8ClampedArray;
+    } else {
+      // No projection: use original data
+      instanceTransforms = {
+        count: group.instanceIndices.length,
+        position,
+        size: scale, // Uniform scale
+        rotation,
+        scale2,
+      };
+      compactedColor = color;
+    }
 
     // Build style (shared by both path and primitive)
     const style: PathStyle = {
-      fillColor: color,
+      fillColor: compactedColor,
       fillRule: 'nonzero',
     };
 
@@ -1026,18 +1101,20 @@ function buildPrimitiveGeometry(
  * Size is isotropic scale (combined with optional scale2 for anisotropic).
  *
  * @param count - Number of instances
- * @param position - Position buffer (x,y,z interleaved, normalized [0,1])
+ * @param position - Position buffer (x,y OR x,y,z interleaved, normalized [0,1])
  * @param size - Uniform size or per-instance sizes (isotropic scale)
  * @param rotation - Optional per-instance rotations (radians)
  * @param scale2 - Optional per-instance anisotropic scale (x,y interleaved)
+ * @param depth - Optional per-instance depth (when projected)
  * @returns InstanceTransforms structure for v2 rendering
  */
 function buildInstanceTransforms(
   count: number,
   position: Float32Array,
-  size: number,
+  size: number | Float32Array,
   rotation?: Float32Array,
-  scale2?: Float32Array
+  scale2?: Float32Array,
+  depth?: Float32Array
 ): InstanceTransforms {
   return {
     count,
@@ -1045,6 +1122,7 @@ function buildInstanceTransforms(
     size,
     rotation,
     scale2,
+    depth,
   };
 }
 
@@ -1078,6 +1156,7 @@ function buildPathStyle(
  * instances are grouped by topology and multiple ops are emitted.
  *
  * SUPPORTS PRIMITIVES: Emits DrawPrimitiveInstancesOp for ellipse, rect, etc.
+ * SUPPORTS PROJECTION: When camera is present, applies 3D projection and depth-sorting.
  *
  * @param step - The render step to assemble
  * @param context - Assembly context with signals, instances, and state
@@ -1144,7 +1223,7 @@ export function assembleDrawPathInstancesOp(
       colorBuffer,
       scale,
       count,
-      state
+      context  // Pass full context (includes camera)
     );
   }
 
@@ -1161,7 +1240,74 @@ export function assembleDrawPathInstancesOp(
     ? (state.values.objects.get(step.scale2Slot) as Float32Array | undefined)
     : undefined;
 
-  // Build instance transforms (shared by both path and primitive)
+  // Run projection if camera is provided
+  const camera = context.camera;
+  if (camera) {
+    // Determine position stride: vec3 (stride 3) or vec2 (stride 2, promote to vec3 with z=0)
+    const posLength = positionBuffer.length;
+    let worldPos3: Float32Array;
+    if (posLength === count * 3) {
+      // Already stride-3 vec3
+      worldPos3 = positionBuffer;
+    } else {
+      // Stride-2 vec2: promote to vec3 with z=0
+      worldPos3 = new Float32Array(count * 3);
+      for (let i = 0; i < count; i++) {
+        worldPos3[i * 3] = positionBuffer[i * 2];
+        worldPos3[i * 3 + 1] = positionBuffer[i * 2 + 1];
+        // worldPos3[i * 3 + 2] = 0 (Float32Array is zero-initialized)
+      }
+    }
+
+    const projection = projectInstances(worldPos3, scale, count, camera);
+
+    // Depth-sort and compact: remove invisible instances, sort by depth (front-to-back)
+    const compacted = depthSortAndCompact(projection, count, colorBuffer, rotation, scale2);
+
+    // Build instance transforms with projected data
+    const instanceTransforms = buildInstanceTransforms(
+      compacted.count,
+      compacted.screenPosition,
+      compacted.screenRadius,
+      compacted.rotation,
+      compacted.scale2,
+      compacted.depth
+    );
+
+    // Build style
+    const style = buildPathStyle(compacted.color as Uint8ClampedArray, 'nonzero');
+
+    // Dispatch based on topology mode
+    if (resolvedShape.mode === 'path') {
+      // PATH TOPOLOGY: Build DrawPathInstancesOp
+      if (!controlPointsBuffer || !(controlPointsBuffer instanceof Float32Array)) {
+        throw new Error(
+          'RenderAssembler: Path topology requires control points buffer (Float32Array)'
+        );
+      }
+
+      const geometry = buildPathGeometry(resolvedShape, controlPointsBuffer);
+
+      return [{
+        kind: 'drawPathInstances',
+        geometry,
+        instances: instanceTransforms,
+        style,
+      }];
+    } else {
+      // PRIMITIVE TOPOLOGY: Build DrawPrimitiveInstancesOp
+      const geometry = buildPrimitiveGeometry(resolvedShape);
+
+      return [{
+        kind: 'drawPrimitiveInstances',
+        geometry,
+        instances: instanceTransforms,
+        style,
+      }];
+    }
+  }
+
+  // No projection: use original world-space data
   const instanceTransforms = buildInstanceTransforms(
     count,
     positionBuffer,
@@ -1170,7 +1316,7 @@ export function assembleDrawPathInstancesOp(
     scale2
   );
 
-  // Build style (shared by both path and primitive)
+  // Build style
   const style = buildPathStyle(colorBuffer, 'nonzero');
 
   // Dispatch based on topology mode
@@ -1211,6 +1357,7 @@ export function assembleDrawPathInstancesOp(
  *
  * NOW SUPPORTS PER-INSTANCE SHAPES: Multiple ops can be emitted per render step.
  * SUPPORTS PRIMITIVES: Handles both DrawPathInstancesOp and DrawPrimitiveInstancesOp.
+ * SUPPORTS PROJECTION: When camera is present in context, applies 3D projection and depth-sorting.
  *
  * @param renderSteps - Array of render steps to assemble
  * @param context - Assembly context

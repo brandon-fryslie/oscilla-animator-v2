@@ -226,7 +226,7 @@ describe('Level 9 Integration: Continuity Unaffected by Toggle', () => {
 
   it('Test 5: Patch with continuity enabled, run 30 frames (ortho) to establish stable mapping', () => {
     const program = createMinimalProgramWithContinuity(10);
-    const state = createRuntimeState();
+    const state = createRuntimeState(program.slotMeta.length);
     const pool = new BufferPool();
 
     // Prepare world-space position buffer
@@ -265,7 +265,7 @@ describe('Level 9 Integration: Continuity Unaffected by Toggle', () => {
     const program = createMinimalProgramWithContinuity(10);
 
     // Create fresh state with same initial conditions
-    const state = createRuntimeState();
+    const state = createRuntimeState(program.slotMeta.length);
     const pool = new BufferPool();
 
     const worldPositions = createWorldPositions(10);

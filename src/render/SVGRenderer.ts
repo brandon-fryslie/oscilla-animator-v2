@@ -326,7 +326,7 @@ export class SVGRenderer {
     const cacheKey = this.geometryCache.get(
       topology.id,
       controlPoints,
-      () => pathToSvgD(topology.verbs, controlPoints, controlPoints.length / 2)
+      () => pathToSvgD(new Uint8Array(topology.verbs), controlPoints, controlPoints.length / 2)
     );
 
     // Check if we already have this def

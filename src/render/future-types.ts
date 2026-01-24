@@ -127,9 +127,12 @@ export interface PrimitiveGeometry {
  *
  * INVARIANT: Transforms are in WORLD SPACE
  * - position: normalized [0,1] coordinates (multiply by viewport dimensions)
+ *   - WHEN PROJECTED: screen-space vec2 positions (stride-2, normalized [0,1])
  * - size: isotropic scalar scale in world units
+ *   - WHEN PROJECTED: per-instance Float32Array of screenRadius
  * - rotation: radians (optional)
  * - scale2: anisotropic vec2 scale (optional, combines with size as S_effective)
+ * - depth: per-instance depth values (optional, for test verification of depth-sorting)
  *
  * Effective scale: S_effective = size * (scale2 ?? vec2(1, 1))
  */
@@ -137,10 +140,12 @@ export interface InstanceTransforms {
   /** Number of instances */
   readonly count: number;
 
-  /** Positions in normalized [0,1] space (x,y interleaved) */
+  /** Positions in normalized [0,1] space (x,y interleaved)
+   * WHEN PROJECTED: screen-space positions (stride-2, normalized [0,1]) */
   readonly position: Float32Array;
 
-  /** Uniform size OR per-instance sizes (isotropic scale) */
+  /** Uniform size OR per-instance sizes (isotropic scale)
+   * WHEN PROJECTED: per-instance Float32Array of screenRadius */
   readonly size: number | Float32Array;
 
   /** Optional per-instance rotations (radians) */
@@ -148,6 +153,10 @@ export interface InstanceTransforms {
 
   /** Optional per-instance anisotropic scale (x,y interleaved) */
   readonly scale2?: Float32Array;
+
+  /** Optional per-instance depth (for test verification of depth-sorting)
+   * Present when camera projection was applied */
+  readonly depth?: Float32Array;
 }
 
 /**
