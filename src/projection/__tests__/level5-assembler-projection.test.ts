@@ -280,24 +280,22 @@ describe('Level 5 Integration Tests: Full Pipeline', () => {
     const pass = frame.passes[0];
     expect(pass.kind).toBe('instances2d');
 
-    // CRITICAL: All four screen-space fields must be populated
+    // CRITICAL: Screen-space fields must be populated (post-compaction, no visible field)
     // This proves the camera param flowed through the pipeline
     expect(pass.screenPosition).toBeInstanceOf(Float32Array);
     expect(pass.screenRadius).toBeInstanceOf(Float32Array);
     expect(pass.depth).toBeInstanceOf(Float32Array);
-    expect(pass.visible).toBeInstanceOf(Uint8Array);
 
-    // Verify correct lengths (9 instances)
+    // After L7 compaction: count reflects visible instances only.
+    // All 9 instances are at z=0, within ortho frustum, so all visible.
     const N = 9;
+    expect(pass.count).toBe(N);
     expect(pass.screenPosition!.length).toBe(N * 2); // stride 2
     expect(pass.screenRadius!.length).toBe(N);
     expect(pass.depth!.length).toBe(N);
-    expect(pass.visible!.length).toBe(N);
 
-    // Verify all instances are visible (proves projection ran and didn't cull)
+    // Verify all instances have finite screen-space values (proves projection ran)
     for (let i = 0; i < N; i++) {
-      expect(pass.visible![i]).toBe(1);
-
       // Verify screen-space values are finite (not NaN/Infinity from uninitialized buffers)
       expect(Number.isFinite(pass.screenPosition![i * 2])).toBe(true);
       expect(Number.isFinite(pass.screenPosition![i * 2 + 1])).toBe(true);

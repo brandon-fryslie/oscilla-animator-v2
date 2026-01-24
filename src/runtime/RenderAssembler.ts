@@ -78,6 +78,109 @@ export interface ProjectionOutput {
 }
 
 /**
+ * Depth-sort and compact projection output.
+ *
+ * Removes invisible instances and sorts visible ones by depth (front-to-back, stable).
+ * Returns compacted arrays with only visible instances.
+ *
+ * @param projection - Raw projection output with all instances
+ * @param count - Total instance count (including invisible)
+ * @param color - Per-instance color buffer (Float32Array, stride 4: RGBA)
+ * @param rotation - Optional per-instance rotation
+ * @param scale2 - Optional per-instance anisotropic scale
+ * @returns Compacted output with only visible instances, depth-sorted
+ */
+export function depthSortAndCompact(
+  projection: ProjectionOutput,
+  count: number,
+  color: ArrayBufferView,
+  rotation?: Float32Array,
+  scale2?: Float32Array,
+): {
+  count: number;
+  screenPosition: Float32Array;
+  screenRadius: Float32Array;
+  depth: Float32Array;
+  color: ArrayBufferView;
+  rotation?: Float32Array;
+  scale2?: Float32Array;
+} {
+  const { screenPosition, screenRadius, depth, visible } = projection;
+
+  // Build index array for visible instances
+  const indices: number[] = [];
+  for (let i = 0; i < count; i++) {
+    if (visible[i] === 1) {
+      indices.push(i);
+    }
+  }
+
+  // Stable sort by depth (front-to-back: smaller depth first)
+  indices.sort((a, b) => {
+    const da = depth[a];
+    const db = depth[b];
+    if (da !== db) return da - db;
+    return a - b; // Stable: preserve original order for equal depths
+  });
+
+  const visibleCount = indices.length;
+
+  // Compact screen-space arrays
+  const compactedScreenPos = new Float32Array(visibleCount * 2);
+  const compactedRadius = new Float32Array(visibleCount);
+  const compactedDepth = new Float32Array(visibleCount);
+
+  for (let out = 0; out < visibleCount; out++) {
+    const src = indices[out];
+    compactedScreenPos[out * 2] = screenPosition[src * 2];
+    compactedScreenPos[out * 2 + 1] = screenPosition[src * 2 + 1];
+    compactedRadius[out] = screenRadius[src];
+    compactedDepth[out] = depth[src];
+  }
+
+  // Compact color buffer (stride 4: RGBA)
+  const colorF32 = color as Float32Array;
+  const colorStride = colorF32.length / count;
+  const compactedColor = new Float32Array(visibleCount * colorStride);
+  for (let out = 0; out < visibleCount; out++) {
+    const src = indices[out];
+    for (let c = 0; c < colorStride; c++) {
+      compactedColor[out * colorStride + c] = colorF32[src * colorStride + c];
+    }
+  }
+
+  // Compact rotation if present
+  let compactedRotation: Float32Array | undefined;
+  if (rotation) {
+    compactedRotation = new Float32Array(visibleCount);
+    for (let out = 0; out < visibleCount; out++) {
+      compactedRotation[out] = rotation[indices[out]];
+    }
+  }
+
+  // Compact scale2 if present (stride 2)
+  let compactedScale2: Float32Array | undefined;
+  if (scale2) {
+    compactedScale2 = new Float32Array(visibleCount * 2);
+    for (let out = 0; out < visibleCount; out++) {
+      const src = indices[out];
+      compactedScale2[out * 2] = scale2[src * 2];
+      compactedScale2[out * 2 + 1] = scale2[src * 2 + 1];
+    }
+  }
+
+  return {
+    count: visibleCount,
+    screenPosition: compactedScreenPos,
+    screenRadius: compactedRadius,
+    depth: compactedDepth,
+    color: compactedColor,
+    rotation: compactedRotation,
+    scale2: compactedScale2,
+  };
+}
+
+/**
  * Project world-space instances to screen-space.
  *
  * This is the projection stage called by the RenderAssembler.
@@ -209,19 +312,22 @@ export function assembleRenderPass(
     }
 
     const projection = projectInstances(worldPos3, scale, count, camera);
+
+    // Depth-sort and compact: remove invisible instances, sort by depth (front-to-back)
+    const compacted = depthSortAndCompact(projection, count, color, rotation, scale2);
+
     return {
       kind: 'instances2d',
-      count,
+      count: compacted.count,
       position, // Original world-space position (preserved, not mutated)
-      color,
+      color: compacted.color,
       scale,
-      rotation,  // C-13: Include rotation if present
-      scale2,    // C-13: Include scale2 if present
+      rotation: compacted.rotation,
+      scale2: compacted.scale2,
       resolvedShape,
-      screenPosition: projection.screenPosition,
-      screenRadius: projection.screenRadius,
-      depth: projection.depth,
-      visible: projection.visible,
+      screenPosition: compacted.screenPosition,
+      screenRadius: compacted.screenRadius,
+      depth: compacted.depth,
     };
   }
 
