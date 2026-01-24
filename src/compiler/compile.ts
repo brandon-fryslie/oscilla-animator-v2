@@ -15,7 +15,7 @@
 
 import type { Patch } from '../graph';
 import { normalize, type NormalizedPatch } from '../graph/normalize';
-import type { CompiledProgramIR, SlotMetaEntry, ValueSlot, FieldSlotEntry } from './ir/program';
+import type { CompiledProgramIR, SlotMetaEntry, ValueSlot, FieldSlotEntry, OutputSpecIR } from './ir/program';
 import type { UnlinkedIRFragments } from './passes-v2/pass6-block-lowering';
 import type { ScheduleIR } from './passes-v2/pass7-schedule';
 import type { FieldExpr, FieldExprId, InstanceId } from './ir/types';
@@ -449,8 +449,23 @@ function convertLinkedIRToProgram(
     });
   }
 
-  // Build output specs (TBD - for now return empty array)
-  const outputs: any[] = [];
+  // Build output specs
+  // Allocate a slot for the render frame output (RenderFrameIR object)
+  const renderFrameSlot = (maxSlotUsed + 1) as ValueSlot;
+
+  // Add SlotMetaEntry for render frame slot (object storage for RenderFrameIR)
+  slotMeta.push({
+    slot: renderFrameSlot,
+    storage: 'object',
+    offset: storageOffsets.object++,
+    type: signalType('float'), // Type is irrelevant for RenderFrameIR object slot
+  });
+
+  // Create OutputSpecIR for render frame
+  const outputs: OutputSpecIR[] = [{
+    kind: 'renderFrame',
+    slot: renderFrameSlot,
+  }];
 
   // Build debug index
   const stepToBlock = new Map();
@@ -548,4 +563,3 @@ function inferFieldInstanceFromExprs(
       return undefined;
   }
 }
-
