@@ -47,10 +47,6 @@ export function CheckboxInput({
       styles={{
         input: {
           cursor: disabled ? 'not-allowed' : 'pointer',
-          '&:checked': {
-            backgroundColor: 'var(--mantine-color-violet-6)',
-            borderColor: 'var(--mantine-color-violet-6)',
-          },
         },
         label: {
           fontSize: rem(13),

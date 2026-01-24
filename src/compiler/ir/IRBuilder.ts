@@ -156,6 +156,16 @@ export interface IRBuilder {
   /** Register a field expression with a slot. */
   registerFieldSlot(fieldId: FieldExprId, slot: ValueSlot): void;
 
+  /**
+   * Create a signal that reads the fired/not-fired state of an event slot as float (0.0 or 1.0).
+   * This is the canonical event→signal bridge (spec §9.2).
+   *
+   * @param eventSlot - Event slot to read from
+   * @param type - Signal type (should be signalType('float'))
+   * @returns SigExprId for the read expression
+   */
+  sigEventRead(eventSlot: EventSlotId, type: SignalType): SigExprId;
+
   /** Allocate an event slot for an event expression. Returns a distinct EventSlotId. */
   allocEventSlot(eventId: EventExprId): EventSlotId;
 

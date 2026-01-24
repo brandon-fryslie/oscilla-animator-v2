@@ -87,9 +87,6 @@ export function TextInput({
         input: {
           background: 'rgba(0, 0, 0, 0.2)',
           border: '1px solid rgba(139, 92, 246, 0.2)',
-          '&:focus': {
-            borderColor: 'var(--mantine-color-violet-5)',
-          },
         },
         label: {
           marginBottom: rem(4),

@@ -1,127 +1,155 @@
 ---
-scope: full
+scope: update
 spec_source: design-docs/CANONICAL-oscilla-v2.5-20260109/
 impl_source: src/
-generated: 2026-01-23T07:45:00Z
+generated: 2026-01-23T12:00:00Z
+previous_run: 2026-01-23T07:45:00Z
 topics_audited: 8
-topics_with_gaps: 8
-totals: { done: 133, partial: 45, wrong: 15, missing: 38, na: 22 }
+totals: { trivial: 16, critical: 23, to-review: 8, unimplemented: 36, done: ~155 }
 ---
 
-# Gap Analysis: Full Core Spec (Topics 01-06, 16, 17)
+# Gap Analysis: Full Core Spec (Topics 01-06, 16, 17) — UPDATE
 
 ## Executive Summary
 
-The core implementation is **substantially built** (133 DONE items) with a working compilation pipeline, three-layer runtime execution, and rendering. The biggest gaps are: (1) structural naming/typing divergences from spec terminology (Block.type vs .kind, flat CombineMode, extra BlockRole variants), (2) missing stateful primitives and MVP blocks (Lag, Phasor, SampleAndHold, Noise, Length, Normalize), and (3) runtime infrastructure gaps (event model, deterministic replay, structured errors). The renderer and coordinate spaces are well-aligned but missing the z-dimension, layer system, and topology numeric IDs.
+The core implementation remains substantially built (~133 DONE items) with a working pipeline. Since the last analysis, event blocks have been added (editor-level EventHub), kernel work has progressed, and rendering has been fixed. The biggest **actionable** gaps remain: (1) normalizedIndex N=1 bug (one-line fix), (2) Block.type→kind rename, (3) CombineMode structural fix, and (4) missing PayloadTypes (vec3 especially, blocking 3D). Multiple TO-REVIEW items need user decisions before work can proceed (phase representation, BlockRole variants, bus/rail in DerivedBlockMeta).
 
-**Recommended starting point**: Fix the quick correctness wins in Topic 17 (normalizedIndex N=1 bug, circleLayout clamp) and Topic 06 (topology registry to numeric IDs), then tackle the Block.type→kind rename and CombineMode structural fix as foundational cleanup.
+**Recommended starting point**: Fix C-7 (normalizedIndex, 1-line), then tackle C-3 (Block.type→kind rename), then resolve R-1/R-3/R-4 (user decisions that unblock multiple items).
 
-## Work Queue
+## Changes Since Last Run
 
-Topologically sorted at topic level, with work items listed per topic. A planner picks a specific work item and reads its section in the context file.
+| Item | Was | Now | Reason |
+|------|-----|-----|--------|
+| EventHub infrastructure | UNIMPLEMENTED | DONE | Added in "Add basics of event blocks" commit — editor-level events working |
+| TopologyId numeric IDs | WRONG (string registry) | DONE | Now uses numeric TopologyId throughout |
+| Per-instance shape support | PARTIAL | DONE | "feat(runtime): Add per-instance shape support in RenderAssembler" |
+| Render pipeline structure | Organization unclear | CRITICAL | Classified as C-9 — instances2d vs DrawPathInstancesOp |
 
-| Order | Topic | Work Items | Blocked By | Context File |
-|-------|-------|------------|------------|--------------|
-| 1 | 01 — Type System | WI-1: CombineMode discriminated union, WI-2: shape→shape2d rename, WI-3: Phase arithmetic enforcement, WI-4: isField/isSignal/isTrigger predicates, WI-5: InstanceRef branded types, WI-6: InstanceDecl in core, WI-7: DefaultSemantics<T>, WI-8: vec3/unit PayloadType | — | [context-01-type-system.md](./context-01-type-system.md) |
-| 2 | 02 — Block System | WI-1: Block.type→kind rename, WI-2: BlockRole simplify, WI-3: DerivedBlockMeta fix, WI-4: Edge.role field, WI-5: PortBinding+CombineMode, WI-6: Lag, WI-7: Phasor, WI-8: SampleAndHold, WI-9: Noise, WI-10: Length/Normalize, WI-11: validateRoleInvariants, WI-12: Palette rail | Topic 01 (WI-1 CombineMode) | [context-02-block-system.md](./context-02-block-system.md) |
-| 3 | 03 — Time System | WI-1: tMs monotonic enforcement, WI-2: Pulse fires every frame, WI-3: Phase continuity on speed change, WI-4: dt output port, WI-5: Phase type as distinct payload, WI-6: tMs type int vs float, WI-7: Rails as derived blocks, WI-8: PhaseToFloat/FloatToPhase, WI-9: Math.random lint rule | Topic 01 (phase type) | [context-03-time-system.md](./context-03-time-system.md) |
-| 4 | 04 — Compilation | WI-1: DomainDecl in NormalizedPatch, WI-2: Anchor-based stable IDs, WI-3: Type propagation pass, WI-4: ReduceOp, WI-5: Hash-consing (I13), WI-6: Op-level IR (spec divergence), WI-7: Stride-aware buffers, WI-8: unit PayloadType, WI-9: Structured errors, WI-10: CacheKey, WI-11: Payload-specialized opcodes | Topic 01 (types), Topic 02 (blocks) | [context-04-compilation.md](./context-04-compilation.md) |
-| 5 | 17 — Layout System | WI-1: normalizedIndex N=1 fix, WI-2: circleLayout phase radians, WI-3: circleLayout clamp | — | [context-17-layout-system.md](./context-17-layout-system.md) |
-| 6 | 16 — Coordinate Spaces | WI-1: z coordinate (3D extension), WI-2: scale2 combination verification | Topic 06 (DrawPathInstancesOp) | [context-16-coordinate-spaces.md](./context-16-coordinate-spaces.md) |
-| 7 | 05 — Runtime | WI-1: External input sampling, WI-2: Event system model, WI-3: RenderAssembler completeness, WI-4: Atomic hot-swap, WI-5: Deterministic replay, WI-6: Value traceability, WI-7: RuntimeError, WI-8: Cache invalidation, WI-9: Trace buffer, WI-10: Event ordering | Topic 04 (compilation) | [context-05-runtime.md](./context-05-runtime.md) |
-| 8 | 06 — Renderer | WI-1: Topology numeric IDs, WI-2: DrawPathInstancesOp unification, WI-3: Layer system, WI-4: Culling, WI-5: Render diagnostics, WI-6: RenderError + fallback, WI-7: RenderBackend interface | Topic 05 (runtime) | [context-06-renderer.md](./context-06-renderer.md) |
+## Priority Work Queue
 
-Parallelizable (no cross-topic dependencies):
+### P1: Critical — No Dependencies (start immediately)
+| # | Item | Topic | Description | Context File |
+|---|------|-------|-------------|--------------|
+| 1 | C-7 | 03 Time | normalizedIndex returns 0 for N=1, should be 0.5 | [context-17](./critical/context-17-layout-system.md) |
+| 2 | C-14 | 17 Layout | circleLayout missing input clamp | [critical/topic-17](./critical/topic-17-layout-system.md) |
+| 3 | C-15 | 05 Runtime | Materializer string cache keys (I8 violation) | [critical/topic-05](./critical/topic-05-runtime.md) |
+| 4 | C-17 | 02 Block | Edge has no role field | [critical/topic-02](./critical/topic-02-block-system.md) |
+| 5 | C-18 | 02 Block | SCC check uses string heuristic | [critical/topic-02](./critical/topic-02-block-system.md) |
+| 6 | C-19 | 03 Time | tMs type is float, spec says int | [critical/topic-03](./critical/topic-03-time-system.md) |
+| 7 | C-20 | 03 Time | Pulse fires on wrap only, not every frame | [critical/topic-03](./critical/topic-03-time-system.md) |
+| 8 | C-21 | 03 Time | tMs monotonicity not enforced (I1) | [critical/topic-03](./critical/topic-03-time-system.md) |
+| 9 | C-22 | 03 Time | dt output missing from TimeRoot | [critical/topic-03](./critical/topic-03-time-system.md) |
+| 10 | C-23 | 01 Type | No stride table in type system | [critical/topic-01](./critical/topic-01-type-system.md) |
+| 11 | C-3 | 02 Block | Block.type → Block.kind rename | [context-02](./critical/context-02-block-system.md) |
+| 12 | C-1 | 01 Type | CombineMode discriminated union | [context-01](./critical/context-01-type-system.md) |
 
-| Topic | Work Items | Context File |
-|-------|------------|--------------|
-| 17 — Layout System | WI-1: normalizedIndex fix, WI-3: circleLayout clamp | [context-17-layout-system.md](./context-17-layout-system.md) |
-| 02 — Block System | WI-6-10: Stateful primitives + MVP blocks (additive) | [context-02-block-system.md](./context-02-block-system.md) |
-| 06 — Renderer | WI-1: Topology numeric IDs (isolated refactor) | [context-06-renderer.md](./context-06-renderer.md) |
+### P2: Critical — Has Dependencies (resolve blockers first)
+| # | Item | Topic | Blocked By | Context File |
+|---|------|-------|------------|--------------|
+| 13 | C-2 | 01 Type | R-1 decision (phase) | [context-01](./critical/context-01-type-system.md) |
+| 14 | C-4 | 02 Block | R-4 decision (BlockRole) | [context-02](./critical/context-02-block-system.md) |
+| 15 | C-5 | 02 Block | R-3 decision (bus/rail) | [critical/topic-02](./critical/topic-02-block-system.md) |
+| 16 | C-6 | 02 Block | R-3 decision (busTap) | [critical/topic-02](./critical/topic-02-block-system.md) |
+| 17 | C-8 | 05 Runtime | Design needed (EventPayload) | [critical/topic-05](./critical/topic-05-runtime.md) |
+| 18 | C-9 | 06 Renderer | Migration path (ms5 epic) | [critical/topic-06](./critical/topic-06-renderer.md) |
+| 19 | C-10 | 17 Layout | R-5 decision (phase semantics) | [context-17](./critical/context-17-layout-system.md) |
+| 20 | C-11 | 06 Renderer | PathVerb spec reconciliation | [critical/topic-06](./critical/topic-06-renderer.md) |
+| 21 | C-12 | 06 Renderer | PathStyle missing blend/layer | [critical/topic-06](./critical/topic-06-renderer.md) |
+| 22 | C-13 | 06 Renderer | rotation/scale2 not wired through v2 | [critical/topic-06](./critical/topic-06-renderer.md) |
+| 23 | C-16 | 05 Runtime | Runtime type dispatch per step | [critical/topic-05](./critical/topic-05-runtime.md) |
 
-## Per-Topic Breakdown
+### P3: To-Review — User Must Decide
+| # | Item | Topic | Question | File |
+|---|------|-------|----------|------|
+| 11 | R-1 | 01 Type | Phase as float+unit or distinct PayloadType? | [to-review/topic-01](./to-review/topic-01-type-system.md) |
+| 12 | R-2 | 01 Type | Keep Unit type system or revert to payload-only? | [to-review/topic-01](./to-review/topic-01-type-system.md) |
+| 13 | R-3 | 02 Block | Bus/rail in DerivedBlockMeta — removed intentionally? | [to-review/topic-02](./to-review/topic-02-block-system.md) |
+| 14 | R-4 | 02 Block | Extra BlockRole variants — keep or collapse to spec? | [to-review/topic-02](./to-review/topic-02-block-system.md) |
+| 15 | R-5 | 03 Time | Phase as [0,1] or radians? (follows R-1) | [to-review/topic-03](./to-review/topic-03-time-system.md) |
+| 16 | R-6 | 05 Runtime | Float64 vs Float32 for scalars? | [to-review/topic-05](./to-review/topic-05-runtime.md) |
+| 17 | R-7 | 05 Runtime | Stamp-based vs CacheKey caching? | [to-review/topic-05](./to-review/topic-05-runtime.md) |
+| 18 | R-8 | 04 Compilation | Expression trees vs op-level IR? | [to-review/topic-04](./to-review/topic-04-compilation.md) |
 
-### Topic 01: Type System
-| DONE | PARTIAL | WRONG | MISSING | N/A |
-|------|---------|-------|---------|-----|
-| 18 | 5 | 3 | 4 | 3 |
+### P4: Unimplemented — Blocks Higher Priority
+| # | Item | Topic | Unblocks | Context File |
+|---|------|-------|----------|--------------|
+| 19 | U-19 | 04 Compilation | Stride-aware buffers (blocks C-2) | [unimplemented/topic-04](./unimplemented/topic-04-compilation.md) |
+| 20 | U-26 | 16 Coords | vec3 positions (blocks camera system) | [unimplemented/topic-16](./unimplemented/topic-16-coordinate-spaces.md) |
 
-**Key WRONG**: CombineMode flat string instead of discriminated union; `shape` vs `shape2d`; DEFAULTS_V0 structure.
-**Key MISSING**: Phase arithmetic enforcement; isField/isSignal predicates; InstanceDecl in core.
+### P5: Unimplemented — Standalone (after P1-P4 resolved)
+| # | Item | Topic | Description |
+|---|------|-------|-------------|
+| 21 | U-1 | 01 Type | Phase arithmetic enforcement |
+| 22 | U-2 | 01 Type | InstanceDecl in core |
+| 23 | U-3 | 01 Type | DefaultSemantics<T> |
+| 24 | U-4 | 02 Block | Lag stateful primitive |
+| 25 | U-5 | 02 Block | Phasor stateful primitive |
+| 26 | U-6 | 02 Block | SampleAndHold (needs C-8 event model) |
+| 27 | U-7 | 02 Block | PortBinding with CombineMode |
+| 28 | U-8 | 02 Block | Noise, Length, Normalize blocks |
+| 29 | U-9 | 03 Time | dt output port |
+| 30 | U-10 | 03 Time | Rails as derived blocks |
+| 31 | U-11 | 03 Time | PhaseToFloat/FloatToPhase helpers |
+| 32 | U-12 | 05 Runtime | Deterministic replay (I21) |
+| 33 | U-13 | 05 Runtime | Atomic hot-swap |
+| 34 | U-14 | 05 Runtime | Value traceability (I20) |
+| 35 | U-15 | 05 Runtime | RuntimeError type |
+| 36 | U-16 | 05 Runtime | External input sampling |
+| 37 | U-17 | 04 Compilation | Hash-consing (I13) |
+| 38 | U-18 | 04 Compilation | ReduceOp |
+| 39 | U-20 | 04 Compilation | Structured compilation errors |
+| 40 | U-21 | 06 Renderer | Layer system |
+| 41 | U-22 | 06 Renderer | Culling |
+| 42 | U-23 | 06 Renderer | RenderDiagnostics |
+| 43 | U-24 | 06 Renderer | RenderError + fallback |
+| 44 | U-25 | 06 Renderer | RenderBackend interface |
+| 45 | U-27 | 16 Coords | Camera/projection system |
+| 46 | U-28 | 06 Renderer | FillSpec/StrokeSpec discriminated unions |
+| 47 | U-29 | 06 Renderer | Temporal stability mechanism (I18) |
+| 48 | U-30 | 17 Layout | Spiral layout kernel |
+| 49 | U-31 | 17 Layout | Random layout kernel |
+| 50 | U-32 | 04 Compilation | DomainDecl in NormalizedGraph |
+| 51 | U-33 | 04 Compilation | Explicit ScalarSlotDecl/FieldSlotDecl |
+| 52 | U-34 | 04 Compilation | wireState/bus anchor IDs |
+| 53 | U-35 | 05 Runtime | State migration compatible-layout transform |
+| 54 | U-36 | 05 Runtime | Dense pre-allocated field storage |
 
-### Topic 02: Block System
-| DONE | PARTIAL | WRONG | MISSING | N/A |
-|------|---------|-------|---------|-----|
-| 22 | 7 | 3 | 8 | 3 |
+### Trivial (cosmetic, no action unless cleanup pass)
+- 2 items in trivial/topic-01-type-system.md (shape→shape2d rename, DEFAULTS_V0 structure)
+- 5 items in trivial/topic-04-compilation.md (NormalizedGraph naming, step kinds, anchor format)
+- 2 items in trivial/topic-05-runtime.md (Float64 vs Float32, flat state array)
+- 6 items in trivial/topic-06-renderer.md (naming differences in future-types.ts)
 
-**Key WRONG**: Block.type vs .kind; BlockRole extra variants; DerivedBlockMeta missing bus/rail.
-**Key MISSING**: 3 stateful primitives (Lag, Phasor, SampleAndHold); 3 MVP blocks (Noise, Length, Normalize); Edge.role; PortBinding+CombineMode.
+## Dependency Graph
 
-### Topic 03: Time System
-| DONE | PARTIAL | WRONG | MISSING | N/A |
-|------|---------|-------|---------|-----|
-| 14 | 5 | 2 | 4 | 2 |
+```
+C-7 (P1, no deps) → standalone fix
+C-3 (P1, no deps) → standalone rename
+C-1 (P1, no deps) → blocks U-7
 
-**Key WRONG**: Phase modeled as float+unit not distinct PayloadType; dt output missing.
-**Key MISSING**: Rails as derived blocks; Phase arithmetic rules; PhaseToFloat helpers.
+R-1 decision ──blocks──> C-2 (PayloadType) ──blocks──> U-19, U-26
+R-3 decision ──blocks──> C-5 (DerivedBlockMeta), C-6 (EdgeRole)
+R-4 decision ──blocks──> C-4 (BlockRole)
+R-5 decision ──blocks──> C-10 (circleLayout phase)
 
-### Topic 04: Compilation
-| DONE | PARTIAL | WRONG | MISSING | N/A |
-|------|---------|-------|---------|-----|
-| 22 | 8 | 3 | 6 | 3 |
-
-**Key WRONG**: Expression trees vs Op-level IR (valid alternative but divergent); stride not in field allocation; unified ValueSlot lacks semantic labeling.
-**Key MISSING**: Hash-consing (I13); ReduceOp; CacheKey; Loop lowering; unit PayloadType.
-
-### Topic 05: Runtime
-| DONE | PARTIAL | WRONG | MISSING | N/A |
-|------|---------|-------|---------|-----|
-| 22 | 8 | 2 | 7 | 3 |
-
-**Key WRONG**: Float64Array vs Float32Array; event model (boolean flags vs EventPayload[]).
-**Key MISSING**: Deterministic replay; Value traceability; RuntimeError; Atomic hot-swap; Trace buffer.
-
-### Topic 06: Renderer
-| DONE | PARTIAL | WRONG | MISSING | N/A |
-|------|---------|-------|---------|-----|
-| 12 | 7 | 2 | 7 | 5 |
-
-**Key WRONG**: Topology registry uses Map<string> not array<number>; PathGeometryTemplate divergence.
-**Key MISSING**: Layer system; Culling; Batching/sorting; RenderDiagnostics; RenderError; RenderBackend interface.
-
-### Topic 16: Coordinate Spaces
-| DONE | PARTIAL | WRONG | MISSING | N/A |
-|------|---------|-------|---------|-----|
-| 9 | 2 | 0 | 2 | 3 |
-
-**Key MISSING**: z coordinate (3D world space); Camera projection.
-
-### Topic 17: Layout System
-| DONE | PARTIAL | WRONG | MISSING | N/A |
-|------|---------|-------|---------|-----|
-| 14 | 3 | 2 | 1 | 0 |
-
-**Key WRONG**: normalizedIndex returns 0 for N=1 (should be 0.5); circleLayout phase treated as [0,1] not radians.
-**Key MISSING**: circleLayout input clamping.
+C-8 (event model) ──blocks──> U-6 (SampleAndHold)
+C-2 (PayloadType) ──blocks──> U-26 (vec3) ──blocks──> U-27 (camera)
+C-9 (RenderPassIR) ──blocks──> U-21 (layers)
+```
 
 ## Cross-Cutting Concerns
 
-### Naming/Terminology
-Many divergences are naming-only: Block.type→kind, shape→shape2d, DomainN→Primitive+Array. A coordinated rename pass would fix multiple WRONG items across topics 01-04.
+### Phase/Unit Representation (R-1, R-2, R-5)
+The implementation chose float+unit:phase01 instead of a distinct PayloadType. This is a coherent architectural choice that enables richer unit annotations. User must decide whether to update spec or code. This decision cascades to: C-2, C-10, U-1, U-11.
 
-### Phase Type Identity
-The decision to model phase as `float + unit:phase01` rather than a distinct PayloadType propagates across Topics 01, 03, and 04. This is a coherent design choice but prevents mechanical enforcement of phase arithmetic rules (I22). Fixing this requires either: (a) adding `phase` to PayloadType and updating all phase-related code, or (b) documenting why the current approach is preferred and updating the spec.
+### Block Role Architecture (R-3, R-4)
+Implementation has more BlockRole variants than spec and removed bus/rail from DerivedBlockMeta. These are deliberate implementation decisions with code comments explaining the rationale. User must decide direction.
 
-### Event System
-The boolean-flag event model (Topics 03, 05) is simpler than spec's EventPayload[] but prevents SampleAndHold (Topic 02) from working correctly. This is a systemic gap affecting multiple topics.
+### Render Pipeline Migration (C-9, ms5 epic)
+The instances2d → DrawPathInstancesOp migration is tracked as a separate epic (oscilla-animator-v2-ms5 in beads). This is the largest structural change needed in the renderer.
 
-### Stride Awareness
-Field buffer allocation (Topics 04, 05) doesn't account for multi-component PayloadTypes (vec2=2, color=4). State slots correctly handle stride, but value slots and field materialization don't. This causes the objects Map to be used for vec2/color instead of strided Float32Arrays.
+### 3D World Model (U-26, U-27)
+The 3D spec docs (design-docs/_new/3d/) define a comprehensive always-3D world model with orthographic default projection. This requires vec3 PayloadType first, then vec3 layouts, then camera/projection stage. Major effort but well-defined.
 
-### Spec vs Implementation Architecture Choices
-Several WRONG items are valid architectural alternatives:
-- Expression trees vs Op-level IR (Topic 04, WI-6) — expression trees are more flexible
-- Float64 vs Float32 (Topic 05) — higher precision, no truncation bugs
-- Stamp-based cache vs CacheKey (Topics 04, 05) — simpler, correct (just over-invalidates)
-
-These should be evaluated for spec update rather than code change.
+### Event Model Gap (C-8)
+Editor-level events (EventHub) exist but runtime-level EventPayload[] does not. This blocks SampleAndHold and any data-carrying event semantics. Needs architectural design.

@@ -113,7 +113,7 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
     (portId: PortId, isInput: boolean, e: React.MouseEvent) => {
       e.stopPropagation();
       // Call global handler exposed by ReactFlowEditor
-      const handler = (window as any).__reactFlowPortContextMenu;
+      const handler = window.__reactFlowPortContextMenu;
       if (handler) {
         handler(data.blockId as BlockId, portId, isInput, e);
       }

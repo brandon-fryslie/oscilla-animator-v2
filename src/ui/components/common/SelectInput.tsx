@@ -67,9 +67,6 @@ export function SelectInput({
         input: {
           background: 'rgba(0, 0, 0, 0.2)',
           border: '1px solid rgba(139, 92, 246, 0.2)',
-          '&:focus': {
-            borderColor: 'var(--mantine-color-violet-5)',
-          },
         },
         dropdown: {
           background: 'linear-gradient(135deg, rgba(30, 30, 40, 0.98) 0%, rgba(20, 20, 30, 0.98) 100%)',
@@ -77,14 +74,7 @@ export function SelectInput({
           border: '1px solid rgba(139, 92, 246, 0.3)',
           boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
         },
-        option: {
-          '&[data-selected]': {
-            backgroundColor: 'var(--mantine-color-violet-6)',
-          },
-          '&[data-hovered]': {
-            backgroundColor: 'rgba(139, 92, 246, 0.15)',
-          },
-        },
+        option: {},
         label: {
           marginBottom: rem(4),
           fontSize: rem(12),

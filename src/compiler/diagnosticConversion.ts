@@ -114,8 +114,9 @@ export function convertCompileErrorToDiagnostic(
   // Generate title (short summary)
   const title = formatTitle(error.kind);
 
-  // Generate stable ID
-  const id = generateDiagnosticId(code, primaryTarget, patchRevision);
+  // Generate stable ID (use error.kind as signature to disambiguate
+  // multiple errors for the same block that map to the same code)
+  const id = generateDiagnosticId(code, primaryTarget, patchRevision, error.kind);
 
   return {
     id,

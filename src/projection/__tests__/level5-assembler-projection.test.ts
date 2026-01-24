@@ -4,6 +4,10 @@
  * Tests proving the projection kernels are called at the right place in the pipeline.
  * World-space in, screen-space out. Ortho default working end-to-end.
  */
+/// <reference types="node" />
+import { readFileSync } from 'node:fs';
+import { dirname, join, basename } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect, vi } from 'vitest';
 import {
   projectInstances,
@@ -17,6 +21,11 @@ import { ORTHO_CAMERA_DEFAULTS } from '../ortho-kernel';
 import { PERSP_CAMERA_DEFAULTS } from '../perspective-kernel';
 import { createPositionField, writePosition } from '../fields';
 import { gridLayout3D } from '../layout-kernels';
+import { compile } from '../../compiler/compile';
+import { buildPatch } from '../../graph';
+import { executeFrame } from '../../runtime/ScheduleExecutor';
+import { createRuntimeState } from '../../runtime/RuntimeState';
+import { BufferPool } from '../../runtime/BufferPool';
 
 // =============================================================================
 // Unit Tests
@@ -208,59 +217,118 @@ describe('Level 5 Integration Tests: Full Pipeline', () => {
     }
   });
 
-  it('Pipeline runs signals → fields → continuity → projection → render IR in that order (instrument/spy to verify call sequence)', () => {
-    // DoD L5 Integration Test 3:
+  it('Pipeline runs signals → fields → projection → render IR with correct ordering (real end-to-end test)', () => {
+    // DoD L5 Integration Test 3 (REWRITTEN):
     // Pipeline runs signals → fields → continuity → projection → render IR in that order
-    // (instrument/spy to verify call sequence)
     //
-    // Since the full compilation pipeline is not yet 3D-aware, this test verifies
-    // the PROJECTION STAGE data flow: world positions MUST be produced before projection runs.
-    // The test proves that projectInstances is called AFTER world positions are available.
+    // STRATEGY: Compile a real patch, call executeFrame with camera param,
+    // verify the RenderPassIR has all four screen-space fields populated with correct values.
+    // This inherently proves ordering: if fields weren't materialized before projection,
+    // projection would read uninitialized buffers and produce zeros/garbage.
 
+    // Build a simplified steel-thread patch: Array(9) → GridLayout(3x3) + color → RenderInstances2D
+    const patch = buildPatch((b) => {
+      const time = b.addBlock('InfiniteTimeRoot', {});
+
+      // Shape
+      const ellipse = b.addBlock('Ellipse', { rx: 0.03, ry: 0.03 });
+      const array = b.addBlock('Array', { count: 9 });
+      const layout = b.addBlock('GridLayout', { rows: 3, cols: 3 });
+
+      // Color (Field-level)
+      const sat = b.addBlock('Const', { value: 1.0 });
+      const val = b.addBlock('Const', { value: 1.0 });
+      const hue = b.addBlock('FieldHueFromPhase', {});
+      const color = b.addBlock('HsvToRgb', {});
+
+      const render = b.addBlock('RenderInstances2D', {});
+
+      // Wire topology
+      b.wire(ellipse, 'shape', array, 'element');
+      b.wire(array, 'elements', layout, 'elements');
+
+      // Wire color (Field-level hue from time phase + Array 't')
+      b.wire(time, 'phaseA', hue, 'phase');
+      b.wire(array, 't', hue, 'id01');
+      b.wire(hue, 'hue', color, 'hue');
+      b.wire(sat, 'out', color, 'sat');
+      b.wire(val, 'out', color, 'val');
+
+      // Wire to render
+      b.wire(layout, 'pos', render, 'pos');
+      b.wire(color, 'color', render, 'color');
+      b.wire(ellipse, 'shape', render, 'shape');
+    });
+
+    // Compile the patch
+    const result = compile(patch);
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+
+    const program = result.program;
+
+    // Create runtime state and buffer pool
+    const state = createRuntimeState(program.slotMeta.length);
+    const pool = new BufferPool();
+
+    // Execute one frame WITH the ortho camera parameter
+    const frame = executeFrame(program, state, pool, 0, orthoCam);
+
+    // Verify frame has at least one render pass
+    expect(frame.passes.length).toBeGreaterThan(0);
+
+    // Extract the first render pass
+    const pass = frame.passes[0];
+    expect(pass).toBeDefined();
+    expect(pass.kind).toBe('instances2d');
+
+    // CRITICAL: Verify all four screen-space fields are populated
+    expect(pass.screenPosition).toBeDefined();
+    expect(pass.screenRadius).toBeDefined();
+    expect(pass.depth).toBeDefined();
+    expect(pass.visible).toBeDefined();
+
+    // Verify correct array lengths (9 instances)
     const N = 9;
-    const positions = createPositionField(N);
+    expect(pass.screenPosition?.length).toBe(N * 2); // stride 2
+    expect(pass.screenRadius?.length).toBe(N);
+    expect(pass.depth?.length).toBe(N);
+    expect(pass.visible?.length).toBe(N);
 
-    // Spy on the gridLayout3D function (represents "fields" stage producing world positions)
-    const layoutSpy = vi.fn(() => {
-      gridLayout3D(positions, N, 3, 3);
-    });
+    // Verify ortho identity property: screenPos.xy === worldPos.xy for z=0
+    // GridLayout produces positions in [0, 1] × [0, 1], z=0
+    // Under ortho projection, screen positions should match world positions
+    const worldPositions = pass.position as Float32Array; // 2D positions from GridLayout
 
-    // Spy on projectInstances (represents "projection" stage consuming world positions)
-    const originalProjectInstances = projectInstances;
-    let projectionCallTime: number | null = null;
-    let layoutCallTime: number | null = null;
-
-    const projectionSpy = vi.fn((...args: Parameters<typeof projectInstances>) => {
-      projectionCallTime = performance.now();
-      return originalProjectInstances(...args);
-    });
-
-    // Execute in correct order: layout (fields) → projection
-    layoutCallTime = performance.now();
-    layoutSpy();
-
-    // Small delay to ensure time difference is measurable
-    const startProjection = performance.now();
-    const result = projectionSpy(positions, 0.03, N, orthoCam);
-
-    // Verify call sequence: layout must be called before projection
-    expect(layoutSpy).toHaveBeenCalled();
-    expect(projectionSpy).toHaveBeenCalled();
-    expect(layoutCallTime).toBeLessThan(projectionCallTime!);
-
-    // Verify projection received the world positions produced by layout
-    expect(projectionSpy).toHaveBeenCalledWith(positions, 0.03, N, orthoCam);
-
-    // Verify projection produced valid output (proves data flow worked)
-    expect(result.screenPosition.length).toBe(N * 2);
-    expect(result.depth.length).toBe(N);
-    expect(result.visible.length).toBe(N);
-
-    // Verify world positions are consumed as-is (ortho identity for z=0)
     for (let i = 0; i < N; i++) {
-      expect(result.screenPosition[i * 2]).toBe(positions[i * 3]);
-      expect(result.screenPosition[i * 2 + 1]).toBe(positions[i * 3 + 1]);
+      const worldX = worldPositions[i * 2];
+      const worldY = worldPositions[i * 2 + 1];
+      const screenX = pass.screenPosition![i * 2];
+      const screenY = pass.screenPosition![i * 2 + 1];
+
+      // Ortho identity: screen === world for z=0
+      expect(screenX).toBe(worldX);
+      expect(screenY).toBe(worldY);
+
+      // Verify screenRadius matches world radius (0.03, through Float32Array storage)
+      expect(pass.screenRadius![i]).toBe(Math.fround(0.03));
+
+      // Verify all instances are visible
+      expect(pass.visible![i]).toBe(1);
+
+      // Verify depth values are finite (uniform for z=0)
+      expect(Number.isFinite(pass.depth![i])).toBe(true);
     }
+
+    // PROOF OF ORDERING:
+    // If this test passes, it proves the pipeline ordering is correct:
+    // 1. Signals were evaluated (Const blocks produced values)
+    // 2. Fields were materialized (GridLayout produced world positions)
+    // 3. Projection ran (screen-space fields are populated with correct ortho identity values)
+    // 4. RenderPassIR was assembled (all fields are present and correct)
+    //
+    // If ordering were wrong (e.g., projection before field materialization),
+    // the screen-space fields would be zeros/garbage, not the correct ortho-projected values.
   });
 
   it('No world-to-screen math exists in backend code (grep: backends import no projection functions)', () => {
@@ -272,12 +340,11 @@ describe('Level 5 Integration Tests: Full Pipeline', () => {
     // Backends should NOT import anything from src/projection/*.
 
     // Read backend source files
-    const fs = require('fs');
-    const path = require('path');
+    const testDir = dirname(fileURLToPath(import.meta.url));
 
     const backendFiles = [
-      path.join(__dirname, '../../render/Canvas2DRenderer.ts'),
-      path.join(__dirname, '../../render/SVGRenderer.ts'),
+      join(testDir, '../../render/Canvas2DRenderer.ts'),
+      join(testDir, '../../render/SVGRenderer.ts'),
     ];
 
     const projectionModules = [
@@ -288,7 +355,7 @@ describe('Level 5 Integration Tests: Full Pipeline', () => {
     ];
 
     for (const backendFile of backendFiles) {
-      const content = fs.readFileSync(backendFile, 'utf-8');
+      const content = readFileSync(backendFile, 'utf-8');
 
       // Check for imports from projection modules
       for (const projModule of projectionModules) {
@@ -297,7 +364,7 @@ describe('Level 5 Integration Tests: Full Pipeline', () => {
 
         if (match) {
           throw new Error(
-            `Backend ${path.basename(backendFile)} imports from projection module: ${match.join(', ')}\n` +
+            `Backend ${basename(backendFile)} imports from projection module: ${match.join(', ')}\n` +
             'Backends must be screen-space-only and not perform projection math.'
           );
         }
@@ -314,7 +381,7 @@ describe('Level 5 Integration Tests: Full Pipeline', () => {
         const match = content.match(pattern);
         if (match) {
           throw new Error(
-            `Backend ${path.basename(backendFile)} contains forbidden projection code: ${match[0]}\n` +
+            `Backend ${basename(backendFile)} contains forbidden projection code: ${match[0]}\n` +
             'Backends must consume only screen-space data from RenderAssembler.'
           );
         }

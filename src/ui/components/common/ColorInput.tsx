@@ -55,9 +55,6 @@ export function ColorInput({
           background: 'rgba(0, 0, 0, 0.2)',
           border: '1px solid rgba(139, 92, 246, 0.2)',
           fontFamily: 'monospace',
-          '&:focus': {
-            borderColor: 'var(--mantine-color-violet-5)',
-          },
         },
         dropdown: {
           background: 'linear-gradient(135deg, rgba(30, 30, 40, 0.98) 0%, rgba(20, 20, 30, 0.98) 100%)',

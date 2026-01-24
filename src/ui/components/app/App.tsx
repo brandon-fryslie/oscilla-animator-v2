@@ -18,8 +18,7 @@ import { Toolbar } from './Toolbar';
 import { EditorProvider, type EditorHandle, useEditor } from '../../editorCommon';
 import { DockviewProvider } from '../../dockview';
 import { darkTheme } from '../../theme';
-import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
-import { useExportPatch } from '../../hooks/useExportPatch';
+import { useGlobalHotkeys, type HotkeyFeedback } from '../../hotkeys';
 import { Toast } from '../common/Toast';
 import { useStores, type RootStore } from '../../../stores';
 
@@ -147,9 +146,9 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady }) => {
 
   // Make setStats available globally for main.ts
   useEffect(() => {
-    (window as any).__setStats = setStats;
+    window.__setStats = setStats;
     return () => {
-      delete (window as any).__setStats;
+      delete window.__setStats;
     };
   }, []);
 
@@ -180,25 +179,12 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady }) => {
     }
   }, [activeEditorTab, editorReady]);
 
-  // Export hook for keyboard shortcuts
-  const exportPatch = useExportPatch();
-
-  // Keyboard shortcut handlers
-  const handleExportShortcut = useCallback(async () => {
-    const result = await exportPatch();
-    setToastMessage(result.message);
-    setToastSeverity(result.success ? 'success' : 'error');
+  // Global hotkey feedback handler
+  const handleHotkeyFeedback = useCallback((feedback: HotkeyFeedback) => {
+    setToastMessage(feedback.message);
+    setToastSeverity(feedback.severity);
     setToastOpen(true);
-
-    if (!result.success && result.error) {
-      console.error('Export error:', result.error);
-    }
-  }, [exportPatch]);
-
-  // Register keyboard shortcuts
-  useKeyboardShortcuts({
-    onExport: handleExportShortcut,
-  });
+  }, []);
 
   const handleToastClose = () => {
     setToastOpen(false);
@@ -210,6 +196,7 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady }) => {
         <EditorProvider>
         {/* Capture EditorContext methods */}
         <EditorContextCapture contextRef={editorContextRef} />
+        <GlobalHotkeys onFeedback={handleHotkeyFeedback} />
 
         <div
           style={{
@@ -246,6 +233,14 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady }) => {
       </ThemeProvider>
     </MantineProvider>
   );
+};
+
+/**
+ * Registers global hotkeys. Must be inside EditorProvider.
+ */
+const GlobalHotkeys: React.FC<{ onFeedback: (feedback: HotkeyFeedback) => void }> = ({ onFeedback }) => {
+  useGlobalHotkeys({ onFeedback });
+  return null;
 };
 
 /**

@@ -203,6 +203,11 @@ function evaluateSigExpr(
       return 0;
     }
 
+    case 'eventRead': {
+      // Read event scalar as float: 0 → 0.0, 1 → 1.0 (spec §9.2)
+      return state.eventScalars[expr.eventSlot as number] ?? 0;
+    }
+
     default: {
       const _exhaustive: never = expr;
       throw new Error(`Unknown signal expr kind: ${(_exhaustive as SigExpr).kind}`);

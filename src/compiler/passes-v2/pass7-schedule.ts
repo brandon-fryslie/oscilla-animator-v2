@@ -447,14 +447,23 @@ export function pass7Schedule(
   // until after the field refactor.
   //
   // See: .agent_planning/debug-probe/README.md
+  //
+  // Signals that depend on eventRead must be evaluated AFTER events (Phase 5→6).
+  // Pre-event signals go in Phase 1, post-event signals go after evalEvent.
   const sigSlots = unlinkedIR.builder.getSigSlots();
-  const evalSigSteps: Step[] = [];
+  const evalSigStepsPre: Step[] = [];
+  const evalSigStepsPost: Step[] = [];
   for (const [sigId, slot] of sigSlots) {
-    evalSigSteps.push({
+    const step: Step = {
       kind: 'evalSig',
       expr: sigId as SigExprId,
       target: slot,
-    });
+    };
+    if (sigDependsOnEvent(sigId as number, signals)) {
+      evalSigStepsPost.push(step);
+    } else {
+      evalSigStepsPre.push(step);
+    }
   }
 
   // Generate evalEvent steps for all registered event slots.
@@ -470,19 +479,21 @@ export function pass7Schedule(
   }
 
   // Combine all steps in correct execution order:
-  // 1. EvalSig (evaluate signals to slots - enables debug probe)
+  // 1. EvalSig-pre (signals NOT dependent on events)
   // 2. ContinuityMapBuild (detect domain changes, compute mappings)
   // 3. Materialize (evaluate fields to buffers)
   // 4. ContinuityApply (apply gauge/slew/crossfade to buffers)
-  // 5. EvalEvent (evaluate discrete events)
-  // 6. Render (use continuity-applied buffers)
-  // 7. StateWrite (persist state for next frame)
+  // 5. EvalEvent (evaluate discrete events → eventScalars)
+  // 6. EvalSig-post (signals that depend on eventRead)
+  // 7. Render (use continuity-applied buffers)
+  // 8. StateWrite (persist state for next frame)
   const steps: Step[] = [
-    ...evalSigSteps,
+    ...evalSigStepsPre,
     ...mapBuildSteps,
     ...materializeSteps,
     ...continuityApplySteps,
     ...evalEventSteps,
+    ...evalSigStepsPost,
     ...renderSteps,
     ...builderSteps,
   ];
@@ -508,6 +519,42 @@ export function pass7Schedule(
     eventSlotCount,
     eventExprCount,
   };
+}
+
+/**
+ * Check if a signal expression transitively depends on an eventRead.
+ * Used to schedule event-dependent signals after event evaluation.
+ */
+function sigDependsOnEvent(sigId: number, signals: readonly SigExpr[]): boolean {
+  const visited = new Set<number>();
+
+  function check(id: number): boolean {
+    if (visited.has(id)) return false;
+    visited.add(id);
+
+    const expr = signals[id];
+    if (!expr) return false;
+
+    switch (expr.kind) {
+      case 'eventRead':
+        return true;
+      case 'map':
+        return check(expr.input as number);
+      case 'zip':
+        return expr.inputs.some(input => check(input as number));
+      case 'const':
+      case 'slot':
+      case 'time':
+      case 'external':
+      case 'stateRead':
+      case 'shapeRef':
+        return false;
+      default:
+        return false;
+    }
+  }
+
+  return check(sigId);
 }
 
 /**

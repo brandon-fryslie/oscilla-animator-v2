@@ -13,6 +13,26 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { colors } from '../theme';
 import './CompilationInspector.css';
 
+/** Serialized Map from IR JSON serialization */
+interface SerializedMap {
+  __type: 'Map';
+  entries: Record<string, unknown>;
+}
+
+/** Serialized Set from IR JSON serialization */
+interface SerializedSet {
+  __type: 'Set';
+  values: unknown[];
+}
+
+function isSerializedMap(value: object): value is SerializedMap {
+  return '__type' in value && (value as SerializedMap).__type === 'Map';
+}
+
+function isSerializedSet(value: object): value is SerializedSet {
+  return '__type' in value && (value as SerializedSet).__type === 'Set';
+}
+
 export interface IRTreeViewProps {
   /** IR data to display */
   data: unknown;
@@ -376,15 +396,13 @@ function getChildren(value: unknown): ChildEntry[] {
   if (typeof value !== 'object') return [];
 
   // Serialized Map
-  if ('__type' in value && (value as any).__type === 'Map') {
-    const entries = (value as any).entries as Record<string, unknown>;
-    return Object.entries(entries).map(([k, v]) => ({ key: k, value: v }));
+  if (isSerializedMap(value)) {
+    return Object.entries(value.entries).map(([k, v]) => ({ key: k, value: v }));
   }
 
   // Serialized Set
-  if ('__type' in value && (value as any).__type === 'Set') {
-    const values = (value as any).values as unknown[];
-    return values.map((v, idx) => ({ key: String(idx), value: v }));
+  if (isSerializedSet(value)) {
+    return value.values.map((v, idx) => ({ key: String(idx), value: v }));
   }
 
   // Array

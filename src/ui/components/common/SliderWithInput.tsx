@@ -148,9 +148,6 @@ export function SliderWithInput({
               fontSize: rem(12),
               padding: `${rem(6)} ${rem(8)}`,
               textAlign: 'center',
-              '&:focus': {
-                borderColor: 'var(--mantine-color-violet-5)',
-              },
             },
           }}
         />

@@ -13,6 +13,7 @@
  */
 
 import type { ValueSlot } from '../../types';
+import type { PayloadType } from '../../core/canonical-types';
 import type { DebugTargetKey, HistoryView, Stride } from './types';
 import { serializeKey, getSampleEncoding } from './types';
 
@@ -40,7 +41,7 @@ export interface ResolvedKeyMetadata {
   /** Cardinality of this edge/port */
   cardinality: 'signal' | 'field';
   /** Payload type for stride computation */
-  payloadType: string; // PayloadType
+  payloadType: PayloadType;
 }
 
 /**
@@ -130,7 +131,7 @@ export class HistoryService {
     if (meta.cardinality !== 'signal') return;
 
     // Guard: must be sampleable with stride=1
-    const encoding = getSampleEncoding(meta.payloadType as any);
+    const encoding = getSampleEncoding(meta.payloadType);
     if (!encoding.sampleable) return;
     if (encoding.stride !== 1) return;
 
@@ -234,7 +235,7 @@ export class HistoryService {
         continue;
       }
 
-      const encoding = getSampleEncoding(meta.payloadType as any);
+      const encoding = getSampleEncoding(meta.payloadType);
       if (!encoding.sampleable || encoding.stride !== 1) {
         // Stride incompatible — pause
         if (entry.slotId !== null) {

@@ -175,10 +175,14 @@ function renderInstances2D(
   const rotation = pass.rotation;
   const scale2 = pass.scale2;
 
+  // Use screen-space position/radius when available (3D projection output)
+  const posSource = pass.screenPosition ?? position;
+  const perInstanceRadius = pass.screenRadius;
+
   // Fast inner loop - no validation checks
   for (let i = 0; i < pass.count; i++) {
-    const x = position[i * 2] * width;
-    const y = position[i * 2 + 1] * height;
+    const x = posSource[i * 2] * width;
+    const y = posSource[i * 2 + 1] * height;
 
     ctx.fillStyle = `rgba(${color[i * 4]},${color[i * 4 + 1]},${color[i * 4 + 2]},${color[i * 4 + 3] / 255})`;
 
@@ -195,12 +199,15 @@ function renderInstances2D(
       ctx.scale(scale2[i * 2], scale2[i * 2 + 1]);
     }
 
+    // Use per-instance screen radius when available (perspective foreshortening)
+    const effectiveScale = perInstanceRadius ? perInstanceRadius[i] : scale;
+
     if (isPathTopology(topology)) {
       // Path topology - control points validated above
-      renderPathAtParticle(ctx, topology, controlPoints!, scale, width, height);
+      renderPathAtParticle(ctx, topology, controlPoints!, effectiveScale, width, height);
     } else {
       // Primitive topology (ellipse, rect) - use topology render function
-      topology.render(ctx, params, { width, height, scale });
+      topology.render(ctx, params, { width, height, scale: effectiveScale });
     }
 
     ctx.restore();

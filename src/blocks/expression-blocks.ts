@@ -144,10 +144,8 @@ registerBlock({
     // Helper: Get actual type from signal expression
     // IRBuilder tracks types for all signal expressions
     const getSigType = (sigId: SigExprId): SignalType => {
-      // Access IRBuilder internal array to get signal type
-      // This is safe because signals are immutable once created
-      const sigExprs = (ctx.b as any).sigExprs as SigExpr[];
-      const sigExpr = sigExprs[sigId as any];
+      const sigExprs = ctx.b.getSigExprs();
+      const sigExpr = sigExprs[sigId as number];
       if (!sigExpr) {
         // Fallback to float if signal not found (shouldn't happen)
         return signalType('float');

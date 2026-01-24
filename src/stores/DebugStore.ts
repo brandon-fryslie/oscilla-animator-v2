@@ -63,6 +63,8 @@ export class DebugStore {
   constructor() {
     makeAutoObservable(this, {
       // Don't make poll interval observable
+      // status reads from non-observable debugService, so exclude from computed
+      status: false,
     });
   }
 

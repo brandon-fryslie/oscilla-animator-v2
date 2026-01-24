@@ -254,9 +254,9 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = observer(({
 
   // Expose port context menu handler via global store for OscillaNode access
   useEffect(() => {
-    (window as any).__reactFlowPortContextMenu = handlePortContextMenu;
+    window.__reactFlowPortContextMenu = handlePortContextMenu;
     return () => {
-      delete (window as any).__reactFlowPortContextMenu;
+      delete window.__reactFlowPortContextMenu;
     };
   }, [handlePortContextMenu]);
 

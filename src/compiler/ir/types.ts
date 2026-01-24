@@ -89,7 +89,8 @@ export type SigExpr =
   | SigExprMap
   | SigExprZip
   | SigExprStateRead
-  | SigExprShapeRef;
+  | SigExprShapeRef
+  | SigExprEventRead;
 
 export interface SigExprConst {
   readonly kind: 'const';
@@ -149,6 +150,17 @@ export interface SigExprShapeRef {
   readonly paramSignals: readonly SigExprId[]; // Signals for each topology param
   readonly controlPointField?: FieldExprId; // Optional control points for paths
   readonly type: SignalType; // Should be signalType('shape')
+}
+
+/**
+ * Event read signal expression.
+ * Reads the fired/not-fired state of an event slot as a float (0.0 or 1.0).
+ * This is the canonical event→signal bridge (spec §9.2).
+ */
+export interface SigExprEventRead {
+  readonly kind: 'eventRead';
+  readonly eventSlot: EventSlotId;
+  readonly type: SignalType;
 }
 
 // =============================================================================

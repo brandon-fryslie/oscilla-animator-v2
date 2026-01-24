@@ -12,6 +12,26 @@ import React, { useState, useMemo } from 'react';
 import { colors } from '../theme';
 import './CompilationInspector.css';
 
+/** Serialized Map from IR JSON serialization */
+interface SerializedMap {
+  __type: 'Map';
+  entries: Record<string, unknown>;
+}
+
+/** Serialized Set from IR JSON serialization */
+interface SerializedSet {
+  __type: 'Set';
+  values: unknown[];
+}
+
+function isSerializedMap(value: object): value is SerializedMap {
+  return '__type' in value && (value as SerializedMap).__type === 'Map';
+}
+
+function isSerializedSet(value: object): value is SerializedSet {
+  return '__type' in value && (value as SerializedSet).__type === 'Set';
+}
+
 export interface IRNodeDetailProps {
   /** Path to the node */
   path: string[];
@@ -155,8 +175,8 @@ function formatValuePretty(value: unknown): React.ReactNode {
   // Objects (including serialized Maps/Sets)
   if (typeof value === 'object') {
     // Serialized Map
-    if ('__type' in value && (value as any).__type === 'Map') {
-      const entries = Object.entries((value as any).entries || {});
+    if (isSerializedMap(value)) {
+      const entries = Object.entries(value.entries || {});
       if (entries.length === 0) {
         return <span style={{ color: colors.textSecondary }}>Map (empty)</span>;
       }
@@ -183,8 +203,8 @@ function formatValuePretty(value: unknown): React.ReactNode {
     }
 
     // Serialized Set
-    if ('__type' in value && (value as any).__type === 'Set') {
-      const values = (value as any).values || [];
+    if (isSerializedSet(value)) {
+      const values = value.values || [];
       if (values.length === 0) {
         return <span style={{ color: colors.textSecondary }}>Set (empty)</span>;
       }
@@ -258,16 +278,13 @@ function formatValueInline(value: unknown): React.ReactNode {
     return <span style={{ color: colors.textSecondary }}>[{value.length}]</span>;
   }
   if (typeof value === 'object') {
-    if ('__type' in value) {
-      const typed = value as { __type: string };
-      if (typed.__type === 'Map') {
-        const count = Object.keys((value as any).entries || {}).length;
-        return <span style={{ color: colors.textSecondary }}>Map({count})</span>;
-      }
-      if (typed.__type === 'Set') {
-        const count = ((value as any).values || []).length;
-        return <span style={{ color: colors.textSecondary }}>Set({count})</span>;
-      }
+    if (isSerializedMap(value)) {
+      const count = Object.keys(value.entries || {}).length;
+      return <span style={{ color: colors.textSecondary }}>Map({count})</span>;
+    }
+    if (isSerializedSet(value)) {
+      const count = (value.values || []).length;
+      return <span style={{ color: colors.textSecondary }}>Set({count})</span>;
     }
     const count = Object.keys(value).length;
     return <span style={{ color: colors.textSecondary }}>{`{${count}}`}</span>;

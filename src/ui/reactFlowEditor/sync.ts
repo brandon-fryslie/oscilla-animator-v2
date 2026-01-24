@@ -172,7 +172,7 @@ export function reconcileNodes(
   diagnostics: DiagnosticsStore
 ): { nodes: Node[]; edges: ReactFlowEdge[] } {
   // Build blockDefs map for looking up connected block labels
-  const blockDefs = new Map<string, ReturnType<typeof getBlockDefinition>>();
+  const blockDefs = new Map<string, BlockDef>();
   for (const block of patch.blocks.values()) {
     if (!blockDefs.has(block.type)) {
       const def = getBlockDefinition(block.type);
@@ -204,7 +204,7 @@ export function reconcileNodes(
     }
 
     // Create node with updated data
-    const node = createNodeFromBlock(block, def, patch.edges, patch.blocks, blockDefs as any);
+    const node = createNodeFromBlock(block, def, patch.edges, patch.blocks, blockDefs);
 
     // Determine position (priority: existing node > LayoutStore > empty space)
     const existingNode = existingNodeMap.get(block.id);
@@ -248,7 +248,7 @@ export function buildNodesAndEdges(
   patch: Patch,
   diagnostics: DiagnosticsStore
 ): { nodes: OscillaNode[]; edges: ReactFlowEdge[] } {
-  const blockDefs = new Map<string, ReturnType<typeof getBlockDefinition>>();
+  const blockDefs = new Map<string, BlockDef>();
   for (const block of patch.blocks.values()) {
     if (!blockDefs.has(block.type)) {
       const def = getBlockDefinition(block.type);
@@ -268,7 +268,7 @@ export function buildNodesAndEdges(
       continue;
     }
 
-    const node = createNodeFromBlock(block, def, patch.edges, patch.blocks, blockDefs as any);
+    const node = createNodeFromBlock(block, def, patch.edges, patch.blocks, blockDefs);
     // Placeholder position - will be computed by ELK
     node.position = { x: 0, y: 0 };
     nodes.push(node);
@@ -461,7 +461,9 @@ export function addBlockToReactFlow(
       params: {},
       domainId: null,
       role: { kind: 'user', meta: {} },
-    } as any,
+      inputPorts: new Map(),
+      outputPorts: new Map(),
+    },
     def,
     [] // No edges for new block
   );

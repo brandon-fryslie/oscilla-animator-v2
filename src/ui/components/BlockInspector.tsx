@@ -1882,7 +1882,7 @@ function HintedControl({ hint, value, onChange }: HintedControlProps) {
         />
       );
     case 'select': {
-      const options = (hint as any).options as { value: string; label: string }[];
+      const options = hint.options;
       return (
         <MuiSelectInput
           value={String(value)}

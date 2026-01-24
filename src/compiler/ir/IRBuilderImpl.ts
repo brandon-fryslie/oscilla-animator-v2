@@ -525,6 +525,12 @@ export class IRBuilderImpl implements IRBuilder {
     return id;
   }
 
+  sigEventRead(eventSlot: EventSlotId, type: SignalType): SigExprId {
+    const id = sigExprId(this.sigExprs.length);
+    this.sigExprs.push({ kind: 'eventRead', eventSlot, type });
+    return id;
+  }
+
   stepStateWrite(stateSlot: StateSlotId, value: SigExprId): void {
     this.steps.push({ kind: 'stateWrite', stateSlot, value });
   }

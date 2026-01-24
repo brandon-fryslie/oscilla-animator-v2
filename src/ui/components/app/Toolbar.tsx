@@ -17,6 +17,7 @@ import {
   rem,
 } from '@mantine/core';
 import { observer } from 'mobx-react-lite';
+import { useStore } from '../../../stores';
 import { useExportPatch } from '../../hooks/useExportPatch';
 import { Toast } from '../common/Toast';
 
@@ -25,6 +26,7 @@ interface ToolbarProps {
 }
 
 export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --' }) => {
+  const camera = useStore('camera');
   const exportPatch = useExportPatch();
   const [toastOpen, setToastOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -37,10 +39,9 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --' }) 
   useEffect(() => {
     // Poll for presets availability (set by main.ts after runtime init)
     const check = () => {
-      const win = window as any;
-      if (win.__oscilla_presets) {
-        setPresets(win.__oscilla_presets);
-        setCurrentPreset(win.__oscilla_currentPreset ?? '0');
+      if (window.__oscilla_presets) {
+        setPresets(window.__oscilla_presets);
+        setCurrentPreset(window.__oscilla_currentPreset ?? '0');
       }
     };
     check();
@@ -51,7 +52,7 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --' }) 
   const handlePresetChange = (value: string | null) => {
     if (value === null) return;
     setCurrentPreset(value);
-    const switchFn = (window as any).__oscilla_switchPreset;
+    const switchFn = window.__oscilla_switchPreset;
     if (switchFn) switchFn(value);
   };
 
@@ -134,9 +135,6 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --' }) 
                     borderColor: 'rgba(139, 92, 246, 0.3)',
                     color: '#ccc',
                     fontSize: rem(12),
-                    '&:focus': {
-                      borderColor: 'rgba(139, 92, 246, 0.6)',
-                    },
                   },
                   dropdown: {
                     backgroundColor: '#1e1e2e',
@@ -144,9 +142,6 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --' }) 
                   },
                   option: {
                     fontSize: rem(12),
-                    '&[data-selected]': {
-                      backgroundColor: 'rgba(139, 92, 246, 0.3)',
-                    },
                   },
                 }}
               />
@@ -182,10 +177,6 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --' }) 
                   styles={{
                     root: {
                       border: '1px solid rgba(139, 92, 246, 0.2)',
-                      '&:hover': {
-                        backgroundColor: 'rgba(139, 92, 246, 0.1)',
-                        borderColor: 'rgba(139, 92, 246, 0.4)',
-                      },
                     },
                   }}
                 >
@@ -201,10 +192,6 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --' }) 
                   styles={{
                     root: {
                       border: '1px solid rgba(139, 92, 246, 0.2)',
-                      '&:hover': {
-                        backgroundColor: 'rgba(139, 92, 246, 0.1)',
-                        borderColor: 'rgba(139, 92, 246, 0.4)',
-                      },
                     },
                   }}
                 >
@@ -220,14 +207,32 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --' }) 
                   styles={{
                     root: {
                       border: '1px solid rgba(139, 92, 246, 0.2)',
-                      '&:hover': {
-                        backgroundColor: 'rgba(139, 92, 246, 0.1)',
-                        borderColor: 'rgba(139, 92, 246, 0.4)',
-                      },
                     },
                   }}
                 >
                   Save
+                </Button>
+              </Tooltip>
+
+              <Tooltip label="3D Preview (hold Shift)" position="bottom" withArrow>
+                <Button
+                  variant={camera.isActive ? 'gradient' : 'subtle'}
+                  gradient={{ from: 'violet', to: 'grape', deg: 90 }}
+                  color="gray"
+                  size="xs"
+                  onClick={() => camera.toggle()}
+                  styles={{
+                    root: {
+                      border: camera.isActive
+                        ? 'none'
+                        : '1px solid rgba(139, 92, 246, 0.2)',
+                      boxShadow: camera.isActive
+                        ? '0 2px 8px rgba(139, 92, 246, 0.25)'
+                        : 'none',
+                    },
+                  }}
+                >
+                  3D
                 </Button>
               </Tooltip>
 

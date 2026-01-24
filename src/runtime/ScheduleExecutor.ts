@@ -20,7 +20,7 @@ import { writeShape2D } from './RuntimeState';
 import { detectDomainChange } from './ContinuityMapping';
 import { applyContinuity, finalizeContinuityFrame } from './ContinuityApply';
 import { createStableDomainInstance, createUnstableDomainInstance } from './DomainIdentity';
-import { assembleRenderPass, type AssemblerContext } from './RenderAssembler';
+import { assembleRenderPass, type AssemblerContext, type CameraParams } from './RenderAssembler';
 
 /**
  * RenderFrameIR - Output from frame execution
@@ -189,13 +189,15 @@ function resolveSlotOffset(
  * @param state - Runtime state
  * @param pool - Buffer pool
  * @param tAbsMs - Absolute time in milliseconds
+ * @param camera - Optional camera params for projection (viewer-level, not compiled state)
  * @returns RenderFrameIR for this frame
  */
 export function executeFrame(
   program: CompiledProgramIR,
   state: RuntimeState,
   pool: BufferPool,
-  tAbsMs: number
+  tAbsMs: number,
+  camera?: CameraParams,
 ): RenderFrameIR {
   // Extract schedule components
   const schedule = program.schedule as ScheduleIR;
@@ -290,6 +292,7 @@ export function executeFrame(
           signals,
           instances: instances as ReadonlyMap<string, InstanceDecl>,
           state,
+          camera,
         };
 
         const pass = assembleRenderPass(step, assemblerContext);
@@ -489,7 +492,7 @@ export function executeFrame(
       // Get the field expression to find the instance
       const expr = fields[step.value as number];
       if (!expr) continue;
-      
+
       // Determine count from the field expression's instance
       let count = 0;
       if ('instanceId' in expr && expr.instanceId) {
@@ -497,7 +500,7 @@ export function executeFrame(
         count = instanceDecl && typeof instanceDecl.count === 'number' ? instanceDecl.count : 0;
       }
       if (count === 0) continue;
-      
+
       // Materialize the field to get values - use a string instanceId from the expression
       const instanceIdStr = 'instanceId' in expr ? String(expr.instanceId) : '';
       const tempBuffer = materialize(
@@ -509,7 +512,7 @@ export function executeFrame(
         state,
         pool
       );
-      
+
       // Write each lane to state
       const baseSlot = step.stateSlot as number;
       const src = tempBuffer as Float32Array;

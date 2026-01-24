@@ -117,15 +117,6 @@ export function NumberInput({
         input: {
           background: 'rgba(0, 0, 0, 0.2)',
           border: '1px solid rgba(139, 92, 246, 0.2)',
-          '&:focus': {
-            borderColor: 'var(--mantine-color-violet-5)',
-          },
-          // Hide native number spinners
-          '&::-webkit-outer-spin-button, &::-webkit-inner-spin-button': {
-            WebkitAppearance: 'none',
-            margin: 0,
-          },
-          MozAppearance: 'textfield',
         },
         label: {
           marginBottom: rem(4),

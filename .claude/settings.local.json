@@ -13,10 +13,10 @@
   },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
-    "chromedevtools/chrome-devtools-mcp"
+    "cherry-chrome"
   ],
   "disabledMcpjsonServers": [
-    "cherry-chrome"
+    "chromedevtools/chrome-devtools-mcp"
   ],
   "spinnerTipsEnabled": false
 }

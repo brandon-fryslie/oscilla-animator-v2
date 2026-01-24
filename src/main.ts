@@ -24,6 +24,9 @@ import {
   type SessionState,
 } from './runtime';
 import { renderFrame } from './render';
+import { applyViewerProjection } from './render/viewerProjection';
+import { PERSP_CAMERA_DEFAULTS } from './projection/perspective-kernel';
+import type { CameraParams } from './runtime/RenderAssembler';
 import { App } from './ui/components';
 import { StoreProvider, type RootStore } from './stores';
 import { timeRootRole, type BlockId, type ValueSlot } from './types';
@@ -557,7 +560,8 @@ const patches: { name: string; builder: PatchBuilder }[] = [
   { name: 'Shape Kaleidoscope', builder: patchShapeKaleidoscope },
 ];
 
-let currentPatchIndex = 0;
+const DEFAULT_PATCH_INDEX = 5; // Shape Kaleidoscope
+let currentPatchIndex = DEFAULT_PATCH_INDEX;
 
 // =============================================================================
 // LocalStorage Persistence
@@ -717,7 +721,12 @@ async function compileAndSwap(isInitial: boolean = false) {
     const errorMsg = result.errors.map(e => e.message).join(', ');
     log(`Compile failed: ${isInitial ? JSON.stringify(result.errors) : errorMsg}`, 'error');
     if (isInitial) {
-      throw new Error('Compile failed');
+      // INVARIANT: Initial compile MUST succeed. Failure means the demo patch
+      // is structurally broken (e.g., missing required inputs, unknown block types).
+      // This throw exists to surface those bugs immediately. Do NOT remove it or
+      // wrap it in a try/catch - fix the underlying patch instead.
+      // See: src/__tests__/initial-compile-invariant.test.ts
+      throw new Error(`Initial compile failed: ${errorMsg}`);
     }
     // For recompile, keep running with old program
     return;
@@ -1049,6 +1058,15 @@ function animate(tMs: number) {
     const frame = executeFrame(currentProgram, currentState, pool, tMs);
     execTime = performance.now() - execStart;
 
+    // Viewer-side 3D projection (does not affect runtime/continuity)
+    if (store!.camera.isActive) {
+      const camera: CameraParams = {
+        mode: 'perspective',
+        params: PERSP_CAMERA_DEFAULTS,
+      };
+      applyViewerProjection(frame, camera);
+    }
+
     // Render to canvas with zoom/pan transform from store
     const renderStart = performance.now();
     const { zoom, pan } = store!.viewport;
@@ -1118,8 +1136,8 @@ function animate(tMs: number) {
       const statsText = `FPS: ${fps} | Elements: ${totalElements} | ${execTime.toFixed(1)}/${renderTime.toFixed(1)}ms`;
 
       // Update stats via global callback set by App component
-      if ((window as any).__setStats) {
-        (window as any).__setStats(statsText);
+      if (window.__setStats) {
+        window.__setStats(statsText);
       }
 
       // Log element count to diagnostics (every 2 seconds)
@@ -1177,7 +1195,7 @@ function animate(tMs: number) {
 async function switchPatch(index: number) {
   if (index < 0 || index >= patches.length) return;
   currentPatchIndex = index;
-  (window as any).__oscilla_currentPreset = String(index);
+  window.__oscilla_currentPreset = String(index);
   log(`Switching to patch: ${patches[index].name}`);
   build(patches[index].builder);
   await compileAndSwap(true);
@@ -1186,9 +1204,10 @@ async function switchPatch(index: number) {
 
 function exposePresetsToUI() {
   // Expose preset data and switch function to React UI via window
-  (window as any).__oscilla_presets = patches.map((p, i) => ({ label: p.name, value: String(i) }));
-  (window as any).__oscilla_currentPreset = String(currentPatchIndex);
-  (window as any).__oscilla_switchPreset = (index: string) => switchPatch(Number(index));
+  window.__oscilla_presets = patches.map((p, i) => ({ label: p.name, value: String(i) }));
+  window.__oscilla_currentPreset = String(currentPatchIndex);
+  window.__oscilla_defaultPreset = String(DEFAULT_PATCH_INDEX);
+  window.__oscilla_switchPreset = (index: string) => switchPatch(Number(index));
 }
 
 // =============================================================================
@@ -1241,6 +1260,18 @@ async function initializeRuntime(rootStore: RootStore) {
   });
 
   log('Runtime initialized');
+
+  // 3D preview: Shift key listener (momentary perspective toggle)
+  window.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.key === 'Shift') store!.camera.setShiftHeld(true);
+  });
+  window.addEventListener('keyup', (e: KeyboardEvent) => {
+    if (e.key === 'Shift') store!.camera.setShiftHeld(false);
+  });
+  // Reset on window blur (prevents stuck shift state)
+  window.addEventListener('blur', () => {
+    store!.camera.setShiftHeld(false);
+  });
 
   // Start animation loop
   log('Starting animation loop...');

@@ -34,6 +34,7 @@ import '../blocks/array-blocks'; // NEW - Sprint 9: Three-stage architecture (St
 import '../blocks/instance-blocks'; // NEW - Sprint 3 (replaces domain-blocks)
 import '../blocks/field-blocks';
 import '../blocks/math-blocks';
+import '../blocks/event-blocks';
 import '../blocks/expression-blocks'; // NEW - Expression DSL Integration Sprint 3
 import '../blocks/color-blocks';
 import '../blocks/geometry-blocks';
@@ -290,12 +291,10 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
       kind: 'ok',
       program: compiledIR,
     };
-  } catch (e) {
+  } catch (e: unknown) {
     // Catch errors from any pass
-    const error = e as any;
-
-    // Extract error code if available (from structured errors like Pass3Error)
-    const errorKind = error.code || 'CompilationFailed';
+    const error = e instanceof Error ? e : new Error(String(e));
+    const errorKind = (e as { code?: string }).code || 'CompilationFailed';
     const errorMessage = error.message || 'Unknown compilation error';
 
     console.error('[Compile] Exception caught:', error);
