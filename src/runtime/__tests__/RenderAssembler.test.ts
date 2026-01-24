@@ -531,13 +531,15 @@ describe('RenderAssembler', () => {
       const op = result[0];
       expect(op.kind).toBe('drawPathInstances');
 
-      // Validate geometry structure
-      expect(op.geometry.topologyId).toBeDefined();
-      expect(op.geometry.verbs).toBeInstanceOf(Uint8Array);
-      expect(op.geometry.verbs.length).toBe(6); // MOVE, LINE x4, CLOSE
-      expect(op.geometry.points).toBe(controlPointsBuffer);
-      expect(op.geometry.pointsCount).toBe(5);
-      expect(op.geometry.flags).toBe(1); // closed
+      // Validate geometry structure (using type guard to narrow type)
+      if (op.kind === 'drawPathInstances') {
+        expect(op.geometry.topologyId).toBeDefined();
+        expect(op.geometry.verbs).toBeInstanceOf(Uint8Array);
+        expect(op.geometry.verbs.length).toBe(6); // MOVE, LINE x4, CLOSE
+        expect(op.geometry.points).toBe(controlPointsBuffer);
+        expect(op.geometry.pointsCount).toBe(5);
+        expect(op.geometry.flags).toBe(1); // closed
+      }
 
       // Validate instance transforms
       expect(op.instances.count).toBe(2);

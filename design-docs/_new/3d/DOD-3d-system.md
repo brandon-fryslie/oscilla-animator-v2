@@ -14,15 +14,15 @@ Levels are organized by state:
 
 | Location | Level | File | Status |
 |----------|-------|------|--------|
-| `_completed/` | 1 | level-01-vec3.md | C4 — all items verified, L2-L6 pass |
-| `_completed/` | 2 | level-02-ortho-kernel.md | C4 — all items verified, L3-L6 pass |
-| `_completed/` | 3 | level-03-perspective-kernel.md | C4 — all items verified, L4-L6 pass |
-| `_completed/` | 4 | level-04-size-projection.md | C4 — all items verified, L5-L6 pass |
-| `_completed/` | 5 | level-05-pipeline-wiring.md | C4 — all items verified, L6 pass |
-| `dod/` (floor) | 6 | level-06-mode-toggle.md | C4 — all items verified, toggle and continuity proven |
-| `dod/` (active) | 7 | level-07-depth-culling.md | C4 — stable sort, culling, end-to-end verified |
-| `_upcoming/` | 8 | level-08-backend-contract.md | Not started |
-| `_upcoming/` | 9 | level-09-continuity-decoupling.md | Not started |
+| `_completed/` | 1 | level-01-vec3.md | C4 — all items verified, L2-L8 pass |
+| `_completed/` | 2 | level-02-ortho-kernel.md | C4 — all items verified, L3-L8 pass |
+| `_completed/` | 3 | level-03-perspective-kernel.md | C4 — all items verified, L4-L8 pass |
+| `_completed/` | 4 | level-04-size-projection.md | C4 — all items verified, L5-L8 pass |
+| `_completed/` | 5 | level-05-pipeline-wiring.md | C4 — all items verified, L6-L8 pass |
+| `_completed/` | 6 | level-06-mode-toggle.md | C4 — all items verified, L7-L8 pass |
+| `_completed/` | 7 | level-07-depth-culling.md | C4 — stable sort, culling, end-to-end verified |
+| `dod/` (floor) | 8 | level-08-backend-contract.md | C4 — both backends screen-space only, no projection imports |
+| `dod/` (active) | 9 | level-09-continuity-decoupling.md | Not started |
 | `_upcoming/` | 10 | level-10-golden-tests.md | Not started |
 
 ### Advancement Protocol
