@@ -2,46 +2,58 @@
 scope: update
 spec_source: design-docs/CANONICAL-oscilla-v2.5-20260109/
 impl_source: src/
-generated: 2026-01-24T12:00:00Z
-previous_run: 2026-01-23T07:45:00Z
+generated: 2026-01-24T13:00:00Z
+previous_run: 2026-01-24T12:35:00Z
 topics_audited: 8
-totals: { trivial: 16, critical: 20, to-review: 5, unimplemented: 35, done: ~158 }
+totals: { trivial: 16, critical: 4, to-review: 4, unimplemented: 34, done: ~174 }
 ---
 
 # Gap Analysis: Full Core Spec (Topics 01-06, 16, 17) — UPDATE
 
 ## Executive Summary
 
-The core implementation remains substantially built (~158 DONE items) with a working pipeline. User decisions on R-1 (phase=float+unit), R-3 (remove bus/rail from spec), and R-4 (spec is minimum for BlockRole) have been resolved — spec updated accordingly. This resolved C-4, C-5, C-6, R-5, and simplified C-2. The biggest **actionable** gaps remain: (1) normalizedIndex N=1 bug (one-line fix), (2) Block.type→kind rename, (3) CombineMode structural fix, and (4) vec3 PayloadType (blocking 3D).
+P1 critical items all resolved. P2 items C-13 (rotation/scale2 wiring) and C-16 (runtime type dispatch) now also fixed. Remaining critical items have external dependencies or require user decisions. The biggest **actionable** gaps are now: (1) vec3/shape2d PayloadType additions (C-2, blocks 3D), (2) EventPayload design (C-8, blocks SampleAndHold), and (3) Render pipeline migration (C-9, ms5 epic).
 
-**Recommended starting point**: Fix C-7 (normalizedIndex, 1-line), then tackle C-3 (Block.type→kind rename), then C-1 (CombineMode).
+**Next priority**: P2 critical items with dependencies (C-2, C-8, C-9) and P3 user decisions (R-2, R-6, R-7, R-8).
 
 ## Changes Since Last Run
 
 | Item | Was | Now | Reason |
 |------|-----|-----|--------|
-| EventHub infrastructure | UNIMPLEMENTED | DONE | Added in "Add basics of event blocks" commit — editor-level events working |
-| TopologyId numeric IDs | WRONG (string registry) | DONE | Now uses numeric TopologyId throughout |
-| Per-instance shape support | PARTIAL | DONE | "feat(runtime): Add per-instance shape support in RenderAssembler" |
-| Render pipeline structure | Organization unclear | CRITICAL | Classified as C-9 — instances2d vs DrawPathInstancesOp |
+| C-7 normalizedIndex N=1 | CRITICAL | DONE | Fixed: returns 0.5 for N=1 |
+| C-14 circleLayout clamp | CRITICAL | DONE | Added input clamp to [0,1] |
+| C-15 string cache keys | CRITICAL | DONE | Replaced with nested Map<number, Map<number, ...>> |
+| C-17 Edge role field | CRITICAL | DONE | Added role?: EdgeRole to Edge interface |
+| C-18 SCC string heuristic | CRITICAL | DONE | Added isStateful flag to BlockDef |
+| C-20 Pulse fires on wrap | CRITICAL | DONE | Changed to fire every frame (spec: frame-tick trigger) |
+| C-21 tMs monotonicity | CRITICAL | DONE | Added prevTMs tracking with Math.max enforcement |
+| C-22 dt output missing | CRITICAL | DONE | Added dt output to TimeRoot block |
+| C-23 No stride table | CRITICAL | DONE | Added PAYLOAD_STRIDE + strideOf() to canonical-types |
+| C-1 CombineMode flat union | CRITICAL | DONE | Added mul/layer/or/and modes + category mapping |
+| C-3 Block.type→kind | CRITICAL | N/A | Block.type is canonical choice, no rename needed |
+| C-19 tMs float vs int | CRITICAL | N/A | Float is correct for sub-ms precision |
+| BufferPool vec3 | UNHANDLED | DONE | Added vec3f32 format after PayloadType gained vec3 |
+| RenderAssembler stride | BUGGY | DONE | Fixed mixed stride-2/stride-3 in sliceInstanceBuffers |
+| C-16 runtime type dispatch | CRITICAL | DONE | Pre-computed slot→{storage,offset} map replaces .find() |
+| C-13 rotation/scale2 | CRITICAL | DONE | Added rotationSlot/scale2Slot to StepRender, wired through assembler |
 
 ## Priority Work Queue
 
-### P1: Critical — No Dependencies (start immediately)
-| # | Item | Topic | Description | Context File |
-|---|------|-------|-------------|--------------|
-| 1 | C-7 | 03 Time | normalizedIndex returns 0 for N=1, should be 0.5 | [context-17](./critical/context-17-layout-system.md) |
-| 2 | C-14 | 17 Layout | circleLayout missing input clamp | [critical/topic-17](./critical/topic-17-layout-system.md) |
-| 3 | C-15 | 05 Runtime | Materializer string cache keys (I8 violation) | [critical/topic-05](./critical/topic-05-runtime.md) |
-| 4 | C-17 | 02 Block | Edge has no role field | [critical/topic-02](./critical/topic-02-block-system.md) |
-| 5 | C-18 | 02 Block | SCC check uses string heuristic | [critical/topic-02](./critical/topic-02-block-system.md) |
-| 6 | C-19 | 03 Time | tMs type is float, spec says int | [critical/topic-03](./critical/topic-03-time-system.md) |
-| 7 | C-20 | 03 Time | Pulse fires on wrap only, not every frame | [critical/topic-03](./critical/topic-03-time-system.md) |
-| 8 | C-21 | 03 Time | tMs monotonicity not enforced (I1) | [critical/topic-03](./critical/topic-03-time-system.md) |
-| 9 | C-22 | 03 Time | dt output missing from TimeRoot | [critical/topic-03](./critical/topic-03-time-system.md) |
-| 10 | C-23 | 01 Type | No stride table in type system | [critical/topic-01](./critical/topic-01-type-system.md) |
-| 11 | C-3 | 02 Block | Block.type → Block.kind rename | [context-02](./critical/context-02-block-system.md) |
-| 12 | C-1 | 01 Type | CombineMode discriminated union | [context-01](./critical/context-01-type-system.md) |
+### P1: Critical — No Dependencies (ALL RESOLVED)
+
+All P1 items fixed in commits 129c2e5..c3694de:
+- C-7: normalizedIndex 0→0.5 ✅
+- C-14: circleLayout input clamp ✅
+- C-15: Nested Map cache keys ✅
+- C-17: Edge role field ✅
+- C-18: isStateful flag in BlockDef ✅
+- C-20: Pulse fires every frame ✅
+- C-21: tMs monotonicity enforced ✅
+- C-22: dt output on TimeRoot ✅
+- C-23: PAYLOAD_STRIDE + strideOf() ✅
+- C-1: CombineMode expanded (mul/layer/or/and + category map) ✅
+- C-3: Block.type is canonical (no rename needed) ✅
+- C-19: tMs float is correct (sub-ms precision) ✅
 
 ### P2: Critical — Has Dependencies (resolve blockers first)
 | # | Item | Topic | Blocked By | Context File |
@@ -49,11 +61,11 @@ The core implementation remains substantially built (~158 DONE items) with a wor
 | 13 | C-2 | 01 Type | vec3/shape2d additions | [context-01](./critical/context-01-type-system.md) |
 | 14 | C-8 | 05 Runtime | Design needed (EventPayload) | [critical/topic-05](./critical/topic-05-runtime.md) |
 | 15 | C-9 | 06 Renderer | Migration path (ms5 epic) | [critical/topic-06](./critical/topic-06-renderer.md) |
-| 16 | C-10 | 17 Layout | Phase clamp semantics | [context-17](./critical/context-17-layout-system.md) |
-| 17 | C-11 | 06 Renderer | PathVerb spec reconciliation | [critical/topic-06](./critical/topic-06-renderer.md) |
+| ~~16~~ | ~~C-10~~ | ~~17 Layout~~ | ~~Phase clamp~~ ✅ | R-5 resolved: phase01 is correct, no code change needed |
+| ~~17~~ | ~~C-11~~ | ~~06 Renderer~~ | ~~PathVerb spec~~ ✅ | Code is canonical (internally consistent), spec needs update |
 | 18 | C-12 | 06 Renderer | PathStyle missing blend/layer | [critical/topic-06](./critical/topic-06-renderer.md) |
-| 19 | C-13 | 06 Renderer | rotation/scale2 not wired through v2 | [critical/topic-06](./critical/topic-06-renderer.md) |
-| 20 | C-16 | 05 Runtime | Runtime type dispatch per step | [critical/topic-05](./critical/topic-05-runtime.md) |
+| ~~19~~ | ~~C-13~~ | ~~06 Renderer~~ | ~~rotation/scale2 wired~~ ✅ | DONE (commit c7206be) |
+| ~~20~~ | ~~C-16~~ | ~~05 Runtime~~ | ~~Pre-computed slot lookup~~ ✅ | DONE (commit 129ea87) |
 
 ### P3: To-Review — User Must Decide
 | # | Item | Topic | Question | File |
@@ -89,7 +101,7 @@ The core implementation remains substantially built (~158 DONE items) with a wor
 | 26 | U-6 | 02 Block | SampleAndHold (needs C-8 event model) |
 | 27 | U-7 | 02 Block | PortBinding with CombineMode |
 | 28 | U-8 | 02 Block | Noise, Length, Normalize blocks |
-| 29 | U-9 | 03 Time | dt output port |
+| 29 | U-9 | 03 Time | ~~dt output port~~ (DONE via C-22) |
 | 30 | U-10 | 03 Time | Rails as derived blocks |
 | 31 | U-11 | 03 Time | PhaseToFloat/FloatToPhase helpers |
 | 32 | U-12 | 05 Runtime | Deterministic replay (I21) |
@@ -125,9 +137,8 @@ The core implementation remains substantially built (~158 DONE items) with a wor
 ## Dependency Graph
 
 ```
-C-7 (P1, no deps) → standalone fix
-C-3 (P1, no deps) → standalone rename
-C-1 (P1, no deps) → blocks U-7
+C-7 ✅  C-3 ✅  C-1 ✅ → unblocks U-7
+C-13 ✅ (rotation/scale2 plumbed)  C-16 ✅ (slot lookup O(1))
 
 C-2 (vec3/shape2d) ──blocks──> U-26 (vec3) ──blocks──> U-27 (camera)
 C-8 (event model) ──blocks──> U-6 (SampleAndHold)

@@ -402,7 +402,7 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    pos: { label: 'Position', type: signalTypeField('vec3', 'default') },
+    pos: { label: 'Position', type: signalTypeField('vec2', 'default') },
     centerX: { label: 'Center X', type: signalType('float'), optional: true, value: 0.5, defaultSource: defaultSourceConst(0.5) },
     centerY: { label: 'Center Y', type: signalType('float'), optional: true, value: 0.5, defaultSource: defaultSourceConst(0.5) },
   },

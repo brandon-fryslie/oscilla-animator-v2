@@ -30,7 +30,7 @@ registerBlock({
     broadcastPolicy: 'disallowSignalMix',
   },
   inputs: {
-    pos: { label: 'Position', type: signalTypeField('vec2', 'default') },
+    pos: { label: 'Position', type: signalTypeField('vec3', 'default') },
     color: { label: 'Color', type: signalTypeField('color', 'default') },
     size: { label: 'Size', type: signalTypeField('float', 'default'), defaultSource: defaultSourceConst(5) },
   },
@@ -80,7 +80,7 @@ registerBlock({
     broadcastPolicy: 'disallowSignalMix',
   },
   inputs: {
-    pos: { label: 'Position', type: signalTypeField('vec2', 'default') },
+    pos: { label: 'Position', type: signalTypeField('vec3', 'default') },
     color: { label: 'Color', type: signalTypeField('color', 'default') },
     width: { label: 'Width', type: signalTypeField('float', 'default'), defaultSource: defaultSourceConst(10) },
     height: { label: 'Height', type: signalTypeField('float', 'default'), defaultSource: defaultSourceConst(10) },
@@ -132,7 +132,7 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    pos: { label: 'Position', type: signalTypeField('vec2', 'default') },
+    pos: { label: 'Position', type: signalTypeField('vec3', 'default') },
     color: { label: 'Color', type: signalTypeField('color', 'default') },
     shape: { label: 'Shape', type: signalType('shape') },
     scale: {

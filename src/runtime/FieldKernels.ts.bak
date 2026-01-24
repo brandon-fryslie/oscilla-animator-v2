@@ -700,6 +700,6 @@ export function hsvToRgb(h: number, s: number, v: number): [number, number, numb
   return [
     Math.round((r1 + m) * 255),
     Math.round((g1 + m) * 255),
-    Math.round((b1 + m) * 255),
+    Math.round((r1 + m) * 255),
   ];
 }

@@ -19,12 +19,12 @@ import { defaultSourceConst } from '../types';
  * GridLayout - Arranges field elements in a grid pattern
  *
  * Stage 3: Field operation block.
- * Takes Field<T> input and outputs Field<vec2> positions.
+ * Takes Field<T> input and outputs Field<vec3> positions.
  *
  * Payload-Generic: Accepts any concrete payload type for elements input.
  *
  * Example:
- * Array (Field<float>) → GridLayout → Field<vec2> (grid positions)
+ * Array (Field<float>) → GridLayout → Field<vec3> (grid positions)
  *
  * Uses the gridLayout field kernel per 15-layout.md spec.
  */
@@ -52,7 +52,7 @@ registerBlock({
     cols: { label: 'Columns', type: signalType('int'), value: 10, defaultSource: defaultSourceConst(10), exposedAsPort: false },
   },
   outputs: {
-    position: { label: 'Position', type: signalTypeField('vec2', 'default') },
+    position: { label: 'Position', type: signalTypeField('vec3', 'default') },
   },
   lower: ({ ctx, inputsById, config }) => {
     const elementsInput = inputsById.elements;
@@ -81,12 +81,12 @@ registerBlock({
       signalTypeField('float', 'default')
     );
 
-    // Apply gridLayout kernel: index + [cols, rows] → vec2 positions
+    // Apply gridLayout kernel: index + [cols, rows] → vec3 positions
     const positionField = ctx.b.fieldZipSig(
       indexField,
       [colsSig, rowsSig],
       { kind: 'kernel', name: 'gridLayout' },
-      signalTypeField('vec2', 'default')
+      signalTypeField('vec3', 'default')
     );
 
     return {
@@ -103,7 +103,7 @@ registerBlock({
  * LinearLayout - Arranges field elements in a vertical line
  *
  * Stage 3: Field operation block.
- * Takes Field<T> input and outputs Field<vec2> positions along a vertical line.
+ * Takes Field<T> input and outputs Field<vec3> positions along a vertical line.
  *
  * Uses the lineLayout field kernel per 15-layout.md spec.
  * For more control over line direction, use LineLayout instead.
@@ -131,7 +131,7 @@ registerBlock({
     spacing: { label: 'Length', type: signalType('float'), value: 0.8, defaultSource: defaultSourceConst(0.8), exposedAsPort: true },
   },
   outputs: {
-    position: { label: 'Position', type: signalTypeField('vec2', 'default') },
+    position: { label: 'Position', type: signalTypeField('vec3', 'default') },
   },
   lower: ({ ctx, inputsById, config }) => {
     const elementsInput = inputsById.elements;
@@ -148,7 +148,7 @@ registerBlock({
 
     // Get length parameter (renamed from spacing for clarity)
     const length = (config?.spacing as number) ?? 0.8;
-    
+
     // Create vertical line: center X, Y spans from (1-length)/2 to (1+length)/2
     const x0Sig = ctx.b.sigConst(0.5, signalType('float'));
     const y0Sig = ctx.b.sigConst((1 - length) / 2, signalType('float'));
@@ -162,12 +162,12 @@ registerBlock({
       signalTypeField('float', 'default')
     );
 
-    // Apply lineLayout kernel: normalizedIndex + [x0, y0, x1, y1] → vec2 positions
+    // Apply lineLayout kernel: normalizedIndex + [x0, y0, x1, y1] → vec3 positions
     const positionField = ctx.b.fieldZipSig(
       normalizedIndexField,
       [x0Sig, y0Sig, x1Sig, y1Sig],
       { kind: 'kernel', name: 'lineLayout' },
-      signalTypeField('vec2', 'default')
+      signalTypeField('vec3', 'default')
     );
 
     return {
@@ -188,7 +188,7 @@ registerBlock({
  * CircleLayout - Arranges field elements in a circle using circleLayout kernel
  *
  * Stage 3: Field operation block.
- * Takes Field<T> input and outputs Field<vec2> positions on a circle.
+ * Takes Field<T> input and outputs Field<vec3> positions on a circle.
  *
  * This uses the circleLayout field kernel directly instead of LayoutSpec.
  * From .agent_planning/_future/_now/15-layout.md spec.
@@ -217,7 +217,7 @@ registerBlock({
     phase: { label: 'Phase', type: signalType('float', unitPhase01()), value: 0, defaultSource: defaultSourceConst(0), exposedAsPort: true },
   },
   outputs: {
-    position: { label: 'Position', type: signalTypeField('vec2', 'default') },
+    position: { label: 'Position', type: signalTypeField('vec3', 'default') },
   },
   lower: ({ ctx, inputsById, config }) => {
     const elementsInput = inputsById.elements;
@@ -232,8 +232,8 @@ registerBlock({
     }
 
     // Get radius and phase as signals
-    const radiusSig = inputsById.radius?.k === 'sig' 
-      ? inputsById.radius.id 
+    const radiusSig = inputsById.radius?.k === 'sig'
+      ? inputsById.radius.id
       : ctx.b.sigConst((config?.radius as number) ?? 0.3, signalType('float'));
     const phaseSig = inputsById.phase?.k === 'sig'
       ? inputsById.phase.id
@@ -246,12 +246,12 @@ registerBlock({
       signalTypeField('float', 'default')
     );
 
-    // Apply circleLayout kernel: normalizedIndex + [radius, phase] → vec2 positions
+    // Apply circleLayout kernel: normalizedIndex + [radius, phase] → vec3 positions
     const positionField = ctx.b.fieldZipSig(
       normalizedIndexField,
       [radiusSig, phaseSig],
       { kind: 'kernel', name: 'circleLayout' },
-      signalTypeField('vec2', 'default')
+      signalTypeField('vec3', 'default')
     );
 
     return {
@@ -267,7 +267,7 @@ registerBlock({
  * LineLayout - Arranges field elements along a line using lineLayout kernel
  *
  * Stage 3: Field operation block.
- * Takes Field<T> input and outputs Field<vec2> positions along a line.
+ * Takes Field<T> input and outputs Field<vec3> positions along a line.
  *
  * This uses the lineLayout field kernel directly instead of LayoutSpec.
  * From .agent_planning/_future/_now/15-layout.md spec.
@@ -298,7 +298,7 @@ registerBlock({
     y1: { label: 'End Y', type: signalType('float'), value: 0.5, defaultSource: defaultSourceConst(0.5), exposedAsPort: true },
   },
   outputs: {
-    position: { label: 'Position', type: signalTypeField('vec2', 'default') },
+    position: { label: 'Position', type: signalTypeField('vec3', 'default') },
   },
   lower: ({ ctx, inputsById, config }) => {
     const elementsInput = inputsById.elements;
@@ -313,14 +313,14 @@ registerBlock({
     }
 
     // Get line endpoints as signals
-    const x0Sig = inputsById.x0?.k === 'sig' 
-      ? inputsById.x0.id 
+    const x0Sig = inputsById.x0?.k === 'sig'
+      ? inputsById.x0.id
       : ctx.b.sigConst((config?.x0 as number) ?? 0.1, signalType('float'));
     const y0Sig = inputsById.y0?.k === 'sig'
       ? inputsById.y0.id
       : ctx.b.sigConst((config?.y0 as number) ?? 0.5, signalType('float'));
-    const x1Sig = inputsById.x1?.k === 'sig' 
-      ? inputsById.x1.id 
+    const x1Sig = inputsById.x1?.k === 'sig'
+      ? inputsById.x1.id
       : ctx.b.sigConst((config?.x1 as number) ?? 0.9, signalType('float'));
     const y1Sig = inputsById.y1?.k === 'sig'
       ? inputsById.y1.id
@@ -333,12 +333,12 @@ registerBlock({
       signalTypeField('float', 'default')
     );
 
-    // Apply lineLayout kernel: normalizedIndex + [x0, y0, x1, y1] → vec2 positions
+    // Apply lineLayout kernel: normalizedIndex + [x0, y0, x1, y1] → vec3 positions
     const positionField = ctx.b.fieldZipSig(
       normalizedIndexField,
       [x0Sig, y0Sig, x1Sig, y1Sig],
       { kind: 'kernel', name: 'lineLayout' },
-      signalTypeField('vec2', 'default')
+      signalTypeField('vec3', 'default')
     );
 
     return {
@@ -354,4 +354,4 @@ registerBlock({
 // Use the three-stage architecture instead:
 // 1. Circle (primitive) → Signal<float> (radius)
 // 2. Array (cardinality) → Field<float> (many radii)
-// 3. CircleLayout (operation) → Field<vec2> (circular positions)
+// 3. CircleLayout (operation) → Field<vec3> (circular positions)

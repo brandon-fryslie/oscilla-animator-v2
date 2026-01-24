@@ -210,14 +210,6 @@ export const KERNEL_SIGNATURES: Readonly<Record<string, KernelSignature>> = {
   // === VEC2 CONSTRUCTION ===
 
   makeVec2: {
-  makeVec3: {
-    inputs: [
-      { expectedUnit: 'scalar', description: 'X component' },
-      { expectedUnit: 'scalar', description: 'Y component' },
-    ],
-    output: { unit: 'scalar', description: 'Vec3 position (z=0.0)' },
-  },
-
     inputs: [
       { expectedUnit: 'scalar', description: 'X component' },
       { expectedUnit: 'scalar', description: 'Y component' },
