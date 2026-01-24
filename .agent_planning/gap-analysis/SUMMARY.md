@@ -2,40 +2,36 @@
 scope: update
 spec_source: design-docs/CANONICAL-oscilla-v2.5-20260109/
 impl_source: src/
-generated: 2026-01-24T13:00:00Z
-previous_run: 2026-01-24T12:35:00Z
+generated: 2026-01-24T19:00:00Z
+previous_run: 2026-01-24T13:00:00Z
 topics_audited: 8
-totals: { trivial: 16, critical: 4, to-review: 4, unimplemented: 34, done: ~174 }
+totals: { trivial: 16, critical: 3, to-review: 4, unimplemented: 34, done: ~177 }
 ---
 
 # Gap Analysis: Full Core Spec (Topics 01-06, 16, 17) — UPDATE
 
 ## Executive Summary
 
-P1 critical items all resolved. P2 items C-13 (rotation/scale2 wiring) and C-16 (runtime type dispatch) now also fixed. Remaining critical items have external dependencies or require user decisions. The biggest **actionable** gaps are now: (1) vec3/shape2d PayloadType additions (C-2, blocks 3D), (2) EventPayload design (C-8, blocks SampleAndHold), and (3) Render pipeline migration (C-9, ms5 epic).
+P1 critical items all resolved. P2 items C-2 (vec3), C-13 (rotation/scale2), and C-16 (runtime type dispatch) now also fixed. All layout kernels produce vec3 stride-3 output; BufferPool, Materializer, and RenderAssembler all handle vec3 correctly. All 1259 tests pass.
 
-**Next priority**: P2 critical items with dependencies (C-2, C-8, C-9) and P3 user decisions (R-2, R-6, R-7, R-8).
+Remaining critical items (C-8, C-9, C-12) all have external dependencies and cannot be acted on yet. The `shape→shape2d` rename portion of C-2 is WON'T FIX (97 uses across 34 files, pure churn with no functional value).
+
+**Next priority**: P2 critical items when their blockers resolve (C-8 needs event design, C-9 tracked as ms5 epic, C-12 needs layer system) and P3 user decisions (R-2, R-6, R-7, R-8).
 
 ## Changes Since Last Run
 
 | Item | Was | Now | Reason |
 |------|-----|-----|--------|
-| C-7 normalizedIndex N=1 | CRITICAL | DONE | Fixed: returns 0.5 for N=1 |
-| C-14 circleLayout clamp | CRITICAL | DONE | Added input clamp to [0,1] |
-| C-15 string cache keys | CRITICAL | DONE | Replaced with nested Map<number, Map<number, ...>> |
-| C-17 Edge role field | CRITICAL | DONE | Added role?: EdgeRole to Edge interface |
-| C-18 SCC string heuristic | CRITICAL | DONE | Added isStateful flag to BlockDef |
-| C-20 Pulse fires on wrap | CRITICAL | DONE | Changed to fire every frame (spec: frame-tick trigger) |
-| C-21 tMs monotonicity | CRITICAL | DONE | Added prevTMs tracking with Math.max enforcement |
-| C-22 dt output missing | CRITICAL | DONE | Added dt output to TimeRoot block |
-| C-23 No stride table | CRITICAL | DONE | Added PAYLOAD_STRIDE + strideOf() to canonical-types |
-| C-1 CombineMode flat union | CRITICAL | DONE | Added mul/layer/or/and modes + category mapping |
-| C-3 Block.type→kind | CRITICAL | N/A | Block.type is canonical choice, no rename needed |
-| C-19 tMs float vs int | CRITICAL | N/A | Float is correct for sub-ms precision |
-| BufferPool vec3 | UNHANDLED | DONE | Added vec3f32 format after PayloadType gained vec3 |
-| RenderAssembler stride | BUGGY | DONE | Fixed mixed stride-2/stride-3 in sliceInstanceBuffers |
-| C-16 runtime type dispatch | CRITICAL | DONE | Pre-computed slot→{storage,offset} map replaces .find() |
-| C-13 rotation/scale2 | CRITICAL | DONE | Added rotationSlot/scale2Slot to StepRender, wired through assembler |
+| C-2 vec3 additions | CRITICAL | DONE | All layout kernels produce vec3 stride-3; tests updated (commit 09e404f) |
+| C-2 shape→shape2d | CRITICAL | WON'T FIX | 97 uses/34 files, pure churn, no functional value |
+| kernel-signatures syntax | BROKEN | DONE | Fixed malformed makeVec2/makeVec3 entries (commit 09e404f) |
+| .bak files | PRESENT | REMOVED | No longer needed (commit 46de4d5) |
+
+### Previously Resolved (all in prior runs)
+| C-7, C-14, C-15, C-17, C-18, C-20, C-21, C-22, C-23, C-1 | CRITICAL | DONE |
+| C-3, C-19 | CRITICAL | N/A (no change needed) |
+| BufferPool vec3, RenderAssembler stride | BUGGY | DONE |
+| C-16 runtime type dispatch, C-13 rotation/scale2 | CRITICAL | DONE |
 
 ## Priority Work Queue
 
@@ -58,7 +54,7 @@ All P1 items fixed in commits 129c2e5..c3694de:
 ### P2: Critical — Has Dependencies (resolve blockers first)
 | # | Item | Topic | Blocked By | Context File |
 |---|------|-------|------------|--------------|
-| 13 | C-2 | 01 Type | vec3/shape2d additions | [context-01](./critical/context-01-type-system.md) |
+| ~~13~~ | ~~C-2~~ | ~~01 Type~~ | ~~vec3 additions~~ ✅ | DONE (vec3 complete, shape→shape2d WON'T FIX) |
 | 14 | C-8 | 05 Runtime | Design needed (EventPayload) | [critical/topic-05](./critical/topic-05-runtime.md) |
 | 15 | C-9 | 06 Renderer | Migration path (ms5 epic) | [critical/topic-06](./critical/topic-06-renderer.md) |
 | ~~16~~ | ~~C-10~~ | ~~17 Layout~~ | ~~Phase clamp~~ ✅ | R-5 resolved: phase01 is correct, no code change needed |
@@ -139,10 +135,11 @@ All P1 items fixed in commits 129c2e5..c3694de:
 ```
 C-7 ✅  C-3 ✅  C-1 ✅ → unblocks U-7
 C-13 ✅ (rotation/scale2 plumbed)  C-16 ✅ (slot lookup O(1))
+C-2 ✅ (vec3 complete) → unblocks U-26 (vec3 positions) → unblocks U-27 (camera)
 
-C-2 (vec3/shape2d) ──blocks──> U-26 (vec3) ──blocks──> U-27 (camera)
 C-8 (event model) ──blocks──> U-6 (SampleAndHold)
 C-9 (RenderPassIR) ──blocks──> U-21 (layers)
+C-12 (PathStyle blend/layer) ──blocks──> nothing directly (cosmetic until layer system)
 ```
 
 ## Cross-Cutting Concerns
@@ -157,7 +154,7 @@ Spec updated: BlockRole is minimum (implementations may extend). Bus/rail remove
 The instances2d → DrawPathInstancesOp migration is tracked as a separate epic (oscilla-animator-v2-ms5 in beads). This is the largest structural change needed in the renderer.
 
 ### 3D World Model (U-26, U-27)
-The 3D spec docs (design-docs/_new/3d/) define a comprehensive always-3D world model with orthographic default projection. This requires vec3 PayloadType first, then vec3 layouts, then camera/projection stage. Major effort but well-defined.
+The 3D spec docs (design-docs/_new/3d/) define a comprehensive always-3D world model with orthographic default projection. Vec3 PayloadType and vec3 layouts are now complete (C-2 done). Remaining: vec3 positions in coordinate-space system (U-26), then camera/projection stage (U-27). These are now unblocked.
 
 ### Event Model Gap (C-8)
 Editor-level events (EventHub) exist but runtime-level EventPayload[] does not. This blocks SampleAndHold and any data-carrying event semantics. Needs architectural design.

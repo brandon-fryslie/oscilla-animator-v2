@@ -1,33 +1,17 @@
-# Sprint: P2-Remaining — Blocked Critical Items
+# Sprint: P2-Blocked — Remaining Critical Items (All Blocked)
 
-Generated: 2026-01-24T13:00:00Z
-Confidence: HIGH: 0, MEDIUM: 2, LOW: 2
-Status: RESEARCH REQUIRED
+Generated: 2026-01-24T19:00:00Z
+Confidence: HIGH: 0, MEDIUM: 1, LOW: 2
+Status: BLOCKED (all items have unresolved dependencies)
 
 ## Sprint Goal
 
-Resolve remaining 4 critical gap-analysis items. All are blocked by dependencies that must be resolved first.
+Resolve remaining 3 critical gap-analysis items. All are blocked by external dependencies that must be designed or implemented first.
 
 ## Work Items
 
-### C-2: vec3/shape2d PayloadType additions [MEDIUM]
-**Blocked by**: 3D DoD Level 1 (vec3 data shape) — already in progress on branch
-**What**: Add vec3 and shape2d to PayloadType union, with stride lookups
-**Status**: Partially done — vec3 already added to PayloadType and PAYLOAD_STRIDE. Working dir has vec2→vec3 layout migration in progress.
-
-#### Unknowns to Resolve
-- shape→shape2d rename: is this a breaking change or purely cosmetic?
-- Are there consumers of `'shape'` string literal that would break?
-
-#### Exit Criteria
-- 3D DoD Level 1 invariant verified (Float32Array stride-3 positions from Materializer)
-- All layout blocks emit vec3 output
-- Tests updated for vec3
-
----
-
-### C-8: EventPayload design [LOW]
-**Blocked by**: Architectural design decision
+### C-8: EventPayload Design [LOW]
+**Blocked by**: Architectural design decision (no existing event payload model)
 **What**: Replace boolean event flags (Uint8Array) with `Map<number, EventPayload[]>` for data-carrying events
 **Blocks**: U-6 (SampleAndHold block)
 
@@ -44,10 +28,10 @@ Resolve remaining 4 critical gap-analysis items. All are blocked by dependencies
 
 ---
 
-### C-9: RenderPassIR → DrawPathInstancesOp migration [MEDIUM]
+### C-9: RenderPassIR → DrawPathInstancesOp Migration [MEDIUM]
 **Blocked by**: ms5 epic in beads (oscilla-animator-v2-ms5)
 **What**: Migrate from `kind: 'instances2d'` flat buffer format to spec-compliant `DrawPathInstancesOp` with separated geometry/instances/style
-**Status**: v2 assembly path already exists (`assembleRenderFrame_v2`). The migration is about making v2 the primary path and removing v1.
+**Status**: v2 assembly path exists (`assembleRenderFrame_v2`). Migration is about making v2 the primary path and removing v1.
 
 #### Unknowns to Resolve
 - When to cut over: v1 and v2 paths currently coexist
@@ -61,7 +45,7 @@ Resolve remaining 4 critical gap-analysis items. All are blocked by dependencies
 
 ---
 
-### C-12: PathStyle blend/layer fields [LOW]
+### C-12: PathStyle Blend/Layer Fields [LOW]
 **Blocked by**: U-21 (Layer system design)
 **What**: Add `blend: BlendMode` and `layer: LayerId` fields to PathStyle
 **Blocks**: Nothing directly (cosmetic until layer system exists)
@@ -80,15 +64,17 @@ Resolve remaining 4 critical gap-analysis items. All are blocked by dependencies
 ## Dependencies
 
 ```
-3D DoD Level 1 ──blocks──> C-2
-C-8 (event design) ──blocks──> U-6 (SampleAndHold)
-ms5 epic ──blocks──> C-9
-U-21 (layer system) ──blocks──> C-12
+Architectural design ──blocks──> C-8
+ms5 epic completion ──blocks──> C-9
+U-21 layer system design ──blocks──> C-12
 ```
 
 ## Risks
 
-- C-2 is nearly complete (vec3 work in progress) — risk is test migration, not implementation
-- C-8 is the most uncertain — requires fresh architectural design
-- C-9 is large but well-understood — tracked separately in beads
-- C-12 is low priority until layer system is designed
+- C-8 is the most uncertain — requires fresh architectural design before implementation
+- C-9 is large but well-understood — tracked separately in beads as a multi-task epic
+- C-12 is low priority until layer system is designed — no functional impact until then
+
+## Recommendation
+
+None of these items are actionable until their blockers resolve. The next actionable work is in the ms5 render pipeline epic (C-9's dependency), which has sub-tasks ready in beads.

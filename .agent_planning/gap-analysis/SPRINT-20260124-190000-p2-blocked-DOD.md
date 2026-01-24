@@ -1,16 +1,9 @@
-# Definition of Done: P2-Remaining Critical Items
+# Definition of Done: P2-Blocked Critical Items
 
-Generated: 2026-01-24T13:00:00Z
-Status: RESEARCH REQUIRED (all items blocked)
+Generated: 2026-01-24T19:00:00Z
+Status: BLOCKED (all items have unresolved dependencies)
 
 ## Acceptance Criteria
-
-### C-2: vec3/shape2d PayloadType
-- [ ] PayloadType includes `'vec3'` with stride 3
-- [ ] PayloadType renames `'shape'` to `'shape2d'` (or confirms shape2d not needed as separate from shape)
-- [ ] All layout blocks output vec3 (stride 3) position buffers
-- [ ] `executeFrame()` with layout blocks produces Float32Array(N*3) positions
-- [ ] All 1259+ existing tests pass (with appropriate vec3 updates)
 
 ### C-8: EventPayload Design
 - [ ] `EventPayload` type defined with value, timestamp, and source fields
@@ -38,3 +31,10 @@ Status: RESEARCH REQUIRED (all items blocked)
 - `npm run typecheck` passes
 - `npm run test` passes (all tests)
 - For C-9: visual comparison of rendered output before/after migration
+
+## Blocker Resolution Required
+
+These items cannot be implemented until:
+1. C-8: EventPayload architectural design is completed
+2. C-9: ms5 epic sub-tasks are resolved (see beads)
+3. C-12: Layer system (U-21) is designed
