@@ -8,11 +8,9 @@ import { describe, it, expect } from 'vitest';
 import {
   projectInstances,
   depthSortAndCompact,
-  type CameraParams,
   type ProjectionOutput,
 } from '../../runtime/RenderAssembler';
-import { ORTHO_CAMERA_DEFAULTS } from '../ortho-kernel';
-import { PERSP_CAMERA_DEFAULTS } from '../perspective-kernel';
+import { DEFAULT_CAMERA, type ResolvedCameraParams } from '../../runtime/CameraResolver';
 import { createPositionField, writePosition } from '../fields';
 import { gridLayout3D } from '../layout-kernels';
 import { compile } from '../../compiler/compile';
@@ -20,6 +18,24 @@ import { buildPatch } from '../../graph';
 import { executeFrame } from '../../runtime/ScheduleExecutor';
 import { createRuntimeState } from '../../runtime/RuntimeState';
 import { BufferPool } from '../../runtime/BufferPool';
+
+// =============================================================================
+// Camera Constants
+// =============================================================================
+
+const orthoCam: ResolvedCameraParams = DEFAULT_CAMERA;
+
+const perspCam: ResolvedCameraParams = {
+  projection: 'persp',
+  centerX: 0.5,
+  centerY: 0.5,
+  distance: 2.0,
+  tiltRad: (35 * Math.PI) / 180,
+  yawRad: 0,
+  fovYRad: (45 * Math.PI) / 180,
+  near: 0.01,
+  far: 100,
+};
 
 // =============================================================================
 // Unit Tests
@@ -162,8 +178,6 @@ describe('Level 7 Unit Tests: Depth Sort and Cull', () => {
 // =============================================================================
 
 describe('Level 7 Integration Tests: Ortho Depth Ordering', () => {
-  const orthoCam: CameraParams = { mode: 'orthographic', params: ORTHO_CAMERA_DEFAULTS };
-
   it('Patch with Group A (z=0.0) and Group B (z=0.4): Group B in front (closer to camera)', () => {
     // Ortho camera has near=-100, far=100. Depth = (z-near)/range = (z+100)/200.
     // z=0.0 → depth = 100/200 = 0.5
@@ -258,9 +272,6 @@ describe('Level 7 Integration Tests: Ortho Depth Ordering', () => {
 // =============================================================================
 
 describe('Level 7 Integration Tests: Perspective Depth Ordering', () => {
-  const perspCam: CameraParams = { mode: 'perspective', params: PERSP_CAMERA_DEFAULTS };
-  const orthoCam: CameraParams = { mode: 'orthographic', params: ORTHO_CAMERA_DEFAULTS };
-
   it('Same patch under perspective: depth ordering preserved (B still in front of A)', () => {
     const N = 8;
     const positions = createPositionField(N);
@@ -327,8 +338,6 @@ describe('Level 7 Integration Tests: Perspective Depth Ordering', () => {
 // =============================================================================
 
 describe('Level 7 Integration Tests: Culling', () => {
-  const perspCam: CameraParams = { mode: 'perspective', params: PERSP_CAMERA_DEFAULTS };
-
   it('Instances beyond frustum far plane are culled; others remain', () => {
     // Perspective camera: near=0.01, far=100, camera at z≈1.64
     // Point at z=150: distance from camera = sqrt((0.5-0.5)² + ...) very far
@@ -392,8 +401,6 @@ describe('Level 7 Integration Tests: Culling', () => {
 // =============================================================================
 
 describe('Level 7 End-to-End: Real Pipeline Depth Sort + Cull', () => {
-  const orthoCam: CameraParams = { mode: 'orthographic', params: ORTHO_CAMERA_DEFAULTS };
-
   it('Real pipeline executeFrame produces compacted, depth-sorted RenderPassIR', () => {
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot', {});
@@ -428,8 +435,8 @@ describe('Level 7 End-to-End: Real Pipeline Depth Sort + Cull', () => {
     const state = createRuntimeState(program.slotMeta.length);
     const pool = new BufferPool();
 
-    // Execute one frame with ortho camera
-    const frame = executeFrame(program, state, pool, 0, orthoCam);
+    // Execute one frame (no camera parameter — uses default ortho)
+    const frame = executeFrame(program, state, pool, 0);
 
     expect(frame.ops.length).toBeGreaterThan(0);
     const op = frame.ops[0];

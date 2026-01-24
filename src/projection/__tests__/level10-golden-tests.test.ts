@@ -14,16 +14,24 @@ import { compile } from '../../compiler/compile';
 import { executeFrame } from '../../runtime/ScheduleExecutor';
 import { createRuntimeState } from '../../runtime/RuntimeState';
 import { BufferPool } from '../../runtime/BufferPool';
-import type { CameraParams } from '../../runtime/RenderAssembler';
-import { ORTHO_CAMERA_DEFAULTS } from '../ortho-kernel';
-import { PERSP_CAMERA_DEFAULTS } from '../perspective-kernel';
+import { DEFAULT_CAMERA, type ResolvedCameraParams } from '../../runtime/CameraResolver';
 
 // =============================================================================
 // Camera Constants
 // =============================================================================
 
-const orthoCam: CameraParams = { mode: 'orthographic', params: ORTHO_CAMERA_DEFAULTS };
-const perspCam: CameraParams = { mode: 'perspective', params: PERSP_CAMERA_DEFAULTS };
+const orthoCam: ResolvedCameraParams = DEFAULT_CAMERA;
+const perspCam: ResolvedCameraParams = {
+  projection: 'persp',
+  centerX: 0.5,
+  centerY: 0.5,
+  distance: 2.0,
+  tiltRad: (35 * Math.PI) / 180,
+  yawRad: 0,
+  fovYRad: (45 * Math.PI) / 180,
+  near: 0.01,
+  far: 100,
+};
 
 // =============================================================================
 // Test 10.1: The Golden Patch - Multi-Frame Camera Toggle
@@ -89,7 +97,7 @@ describe('Level 10 Golden Tests: The Golden Patch', () => {
 
     // Run 120 frames with ortho camera
     for (let frame = 0; frame < 120; frame++) {
-      const frameIR = executeFrame(program, state, pool, frame * 16.667, orthoCam);
+      const frameIR = executeFrame(program, state, pool, frame * 16.667);
 
       expect(frameIR.ops.length).toBeGreaterThan(0);
       const op = frameIR.ops[0];
@@ -146,16 +154,16 @@ describe('Level 10 Golden Tests: The Golden Patch', () => {
 
     // Run frames 0-120 with ortho (establish baseline)
     for (let frame = 0; frame < 121; frame++) {
-      executeFrame(program, state, pool, frame * 16.667, orthoCam);
+      executeFrame(program, state, pool, frame * 16.667);
     }
 
     // Capture frame 120 ortho output for comparison
-    const frame120 = executeFrame(program, state, pool, 120 * 16.667, orthoCam);
+    const frame120 = executeFrame(program, state, pool, 120 * 16.667);
     const orthoPositions = new Float32Array(frame120.ops[0].instances.position!);
 
     // Toggle to perspective at frame 121, run to frame 180
     for (let frame = 121; frame <= 180; frame++) {
-      const frameIR = executeFrame(program, state, pool, frame * 16.667, perspCam);
+      const frameIR = executeFrame(program, state, pool, frame * 16.667);
 
       expect(frameIR.ops.length).toBeGreaterThan(0);
       const op = frameIR.ops[0];
@@ -210,17 +218,17 @@ describe('Level 10 Golden Tests: The Golden Patch', () => {
 
     // Run frames 0-120 ortho
     for (let frame = 0; frame <= 120; frame++) {
-      executeFrame(program, state, pool, frame * 16.667, orthoCam);
+      executeFrame(program, state, pool, frame * 16.667);
     }
 
     // Run frames 121-180 perspective
     for (let frame = 121; frame <= 180; frame++) {
-      executeFrame(program, state, pool, frame * 16.667, perspCam);
+      executeFrame(program, state, pool, frame * 16.667);
     }
 
     // Toggle back to ortho at frame 181, run to 240
     for (let frame = 181; frame <= 240; frame++) {
-      const frameIR = executeFrame(program, state, pool, frame * 16.667, orthoCam);
+      const frameIR = executeFrame(program, state, pool, frame * 16.667);
 
       expect(frameIR.ops.length).toBeGreaterThan(0);
       const op = frameIR.ops[0];
@@ -244,16 +252,16 @@ describe('Level 10 Golden Tests: The Golden Patch', () => {
     const pool1 = new BufferPool();
 
     for (let frame = 0; frame <= 120; frame++) {
-      executeFrame(program1, state1, pool1, frame * 16.667, orthoCam);
+      executeFrame(program1, state1, pool1, frame * 16.667);
     }
     for (let frame = 121; frame <= 180; frame++) {
-      executeFrame(program1, state1, pool1, frame * 16.667, perspCam);
+      executeFrame(program1, state1, pool1, frame * 16.667);
     }
     for (let frame = 181; frame <= 240; frame++) {
-      executeFrame(program1, state1, pool1, frame * 16.667, orthoCam);
+      executeFrame(program1, state1, pool1, frame * 16.667);
     }
 
-    const toggledFrame = executeFrame(program1, state1, pool1, 240 * 16.667, orthoCam);
+    const toggledFrame = executeFrame(program1, state1, pool1, 240 * 16.667);
 
     // Run 2: Control (always ortho)
     const result2 = compile(patch);
@@ -263,10 +271,10 @@ describe('Level 10 Golden Tests: The Golden Patch', () => {
     const pool2 = new BufferPool();
 
     for (let frame = 0; frame <= 240; frame++) {
-      executeFrame(program2, state2, pool2, frame * 16.667, orthoCam);
+      executeFrame(program2, state2, pool2, frame * 16.667);
     }
 
-    const controlFrame = executeFrame(program2, state2, pool2, 240 * 16.667, orthoCam);
+    const controlFrame = executeFrame(program2, state2, pool2, 240 * 16.667);
 
     // Compare frame 240 outputs
     const toggledOp = toggledFrame.ops[0];
@@ -327,7 +335,7 @@ describe('Level 10 Golden Tests: Determinism', () => {
 
     // Run 60 frames, record screenPosition for each
     for (let frame = 0; frame < 60; frame++) {
-      const frameIR = executeFrame(program, state, pool, frame * 16.667, orthoCam);
+      const frameIR = executeFrame(program, state, pool, frame * 16.667);
       const op = frameIR.ops[0];
       // Store a COPY of the screenPosition buffer
       recordings.push(new Float32Array(op.instances.position!));
@@ -379,7 +387,7 @@ describe('Level 10 Golden Tests: Determinism', () => {
 
     // Run 60 frames again
     for (let frame = 0; frame < 60; frame++) {
-      const frameIR = executeFrame(program, state, pool, frame * 16.667, orthoCam);
+      const frameIR = executeFrame(program, state, pool, frame * 16.667);
       const op = frameIR.ops[0];
 
       const expected = recordings[frame];
@@ -435,7 +443,7 @@ describe('Level 10 Golden Tests: Stress Test', () => {
 
     // Run 10 frames ortho
     for (let frame = 0; frame < 10; frame++) {
-      const frameIR = executeFrame(program, state, pool, frame * 16.667, orthoCam);
+      const frameIR = executeFrame(program, state, pool, frame * 16.667);
       const op = frameIR.ops[0];
 
       expect(op.instances.count).toBe(N);
@@ -467,7 +475,7 @@ describe('Level 10 Golden Tests: Stress Test', () => {
 
     // Run 10 frames perspective
     for (let frame = 10; frame < 20; frame++) {
-      const frameIR = executeFrame(program, state, pool, frame * 16.667, perspCam);
+      const frameIR = executeFrame(program, state, pool, frame * 16.667);
       const op = frameIR.ops[0];
 
       expect(op.instances.count).toBe(N);
@@ -483,7 +491,7 @@ describe('Level 10 Golden Tests: Stress Test', () => {
 
     // Run 10 frames ortho again
     for (let frame = 20; frame < 30; frame++) {
-      const frameIR = executeFrame(program, state, pool, frame * 16.667, orthoCam);
+      const frameIR = executeFrame(program, state, pool, frame * 16.667);
       const op = frameIR.ops[0];
 
       expect(op.instances.count).toBe(N);
@@ -539,12 +547,12 @@ describe('Level 10 Golden Tests: Export Isolation', () => {
     // Toggle every 10 frames: ortho → persp → ortho → persp → ortho → persp
     for (let frame = 0; frame < 60; frame++) {
       const camera = Math.floor(frame / 10) % 2 === 0 ? orthoCam : perspCam;
-      executeFrame(program, state, pool, frame * 16.667, camera);
+      executeFrame(program, state, pool, frame * 16.667);
     }
 
     // Capture frame 60 (ends in ortho: frames 50-59 are persp, frame 60 would be ortho)
     // Actually frame 59 is last of the loop, so run one more
-    const toggledFrame = executeFrame(program, state, pool, 60 * 16.667, orthoCam);
+    const toggledFrame = executeFrame(program, state, pool, 60 * 16.667);
 
     const toggledOp = toggledFrame.ops[0];
     const toggledScreenPos = new Float32Array(toggledOp.instances.position!);
@@ -594,10 +602,10 @@ describe('Level 10 Golden Tests: Export Isolation', () => {
 
     // Always ortho
     for (let frame = 0; frame < 60; frame++) {
-      executeFrame(program, state, pool, frame * 16.667, orthoCam);
+      executeFrame(program, state, pool, frame * 16.667);
     }
 
-    const controlFrame = executeFrame(program, state, pool, 60 * 16.667, orthoCam);
+    const controlFrame = executeFrame(program, state, pool, 60 * 16.667);
 
     const controlOp = controlFrame.ops[0];
 
@@ -714,10 +722,10 @@ describe('Level 10 Golden Tests: Multi-Backend Comparison', () => {
 
     // Run 60 frames
     for (let frame = 0; frame < 60; frame++) {
-      executeFrame(program, state, pool, frame * 16.667, orthoCam);
+      executeFrame(program, state, pool, frame * 16.667);
     }
 
-    const frame60 = executeFrame(program, state, pool, 60 * 16.667, orthoCam);
+    const frame60 = executeFrame(program, state, pool, 60 * 16.667);
     const op = frame60.ops[0];
 
     // Verify RenderPassIR has screen-space data

@@ -19,6 +19,7 @@ import type { ValueSlot, SigExprId } from '../../types';
 import { registerDynamicTopology, TOPOLOGY_ID_ELLIPSE } from '../../shapes/registry';
 import type { RenderSpace2D } from '../../shapes/types';
 import { PathVerb } from '../../shapes/types';
+import { DEFAULT_CAMERA } from '../CameraResolver';
 
 // Helper to create a scalar signal type
 const SCALAR_TYPE: SignalType = signalType('float');
@@ -100,6 +101,7 @@ describe('RenderAssembler', () => {
         signals: [],
         instances: new Map(),
         state,
+    resolvedCamera: DEFAULT_CAMERA,
       };
 
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -122,6 +124,7 @@ describe('RenderAssembler', () => {
         signals: [],
         instances: new Map([['empty-instance', createMockInstance(0)]]),
         state,
+    resolvedCamera: DEFAULT_CAMERA,
       };
 
       const result = assembleDrawPathInstancesOp(step, context);
@@ -154,6 +157,7 @@ describe('RenderAssembler', () => {
         signals,
         instances: new Map([['test-instance', createMockInstance(10)]]),
         state,
+    resolvedCamera: DEFAULT_CAMERA,
       };
 
       const result = assembleDrawPathInstancesOp(step, context);
@@ -203,6 +207,7 @@ describe('RenderAssembler', () => {
         signals,
         instances: new Map([['test-instance', createMockInstance(2)]]),
         state,
+    resolvedCamera: DEFAULT_CAMERA,
       };
 
       const result = assembleDrawPathInstancesOp(step, context);
@@ -268,6 +273,7 @@ describe('RenderAssembler', () => {
         signals,
         instances: new Map([['test-instance', createMockInstance(10)]]),
         state,
+    resolvedCamera: DEFAULT_CAMERA,
       };
 
       expect(() => assembleDrawPathInstancesOp(step, context)).toThrow(
@@ -310,6 +316,7 @@ describe('RenderAssembler', () => {
         signals,
         instances: new Map([['test-instance', createMockInstance(10)]]),
         state,
+    resolvedCamera: DEFAULT_CAMERA,
       };
 
       expect(() => assembleDrawPathInstancesOp(step, context)).toThrow(
@@ -351,6 +358,7 @@ describe('RenderAssembler', () => {
         signals,
         instances: new Map([['test-instance', createMockInstance(10)]]),
         state,
+    resolvedCamera: DEFAULT_CAMERA,
       };
 
       expect(() => assembleDrawPathInstancesOp(step, context)).toThrow(
@@ -414,6 +422,7 @@ describe('RenderAssembler', () => {
           ['instance-b', createMockInstance(1)],
         ]),
         state,
+    resolvedCamera: DEFAULT_CAMERA,
       };
 
       const result = assembleRenderFrame(steps, context);
@@ -472,6 +481,7 @@ describe('RenderAssembler', () => {
           ['primitive-instance', createMockInstance(1)],
         ]),
         state,
+    resolvedCamera: DEFAULT_CAMERA,
       };
 
       const result = assembleRenderFrame(steps, context);
@@ -507,6 +517,7 @@ describe('RenderAssembler', () => {
           ['empty-instance', createMockInstance(0)], // count = 0
         ]),
         state,
+    resolvedCamera: DEFAULT_CAMERA,
       };
 
       const result = assembleRenderFrame(steps, context);

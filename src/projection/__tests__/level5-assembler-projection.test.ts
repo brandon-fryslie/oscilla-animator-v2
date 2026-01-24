@@ -15,16 +15,14 @@ import { describe, it, expect } from 'vitest';
 import { buildPatch } from '../../graph';
 import { compile } from '../../compiler/compile';
 import { createRuntimeState, BufferPool, executeFrame, type RenderFrameIR } from '../../runtime';
-import { type CameraParams } from '../../runtime/RenderAssembler';
-import { ORTHO_CAMERA_DEFAULTS } from '../ortho-kernel';
-import { PERSP_CAMERA_DEFAULTS } from '../perspective-kernel';
+import { DEFAULT_CAMERA, type ResolvedCameraParams } from '../../runtime/CameraResolver';
 
 // =============================================================================
 // LEVEL 5 UNIT TESTS: Assembler API surface
 // =============================================================================
 
 describe('Level 5 Unit Tests: Assembler API', () => {
-  it('executeFrame accepts an optional camera parameter', () => {
+  it('executeFrame runs without a camera block (uses default ortho camera)', () => {
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot', {});
       const ellipse = b.addBlock('Ellipse', { rx: 0.02, ry: 0.02 });
@@ -58,31 +56,18 @@ describe('Level 5 Unit Tests: Assembler API', () => {
     const state = createRuntimeState(program.slotMeta.length);
     const pool = new BufferPool();
 
-    // Should accept no camera (no error)
+    // executeFrame no longer takes camera parameter
+    // Camera is resolved from program.renderGlobals (default if none)
     const frameNoCamera = executeFrame(program, state, pool, 0);
     expect(frameNoCamera.version).toBe(2);
     expect(frameNoCamera.ops.length).toBeGreaterThan(0);
 
-    // Should accept ortho camera
-    const orthoCam: CameraParams = {
-      mode: 'orthographic',
-      params: ORTHO_CAMERA_DEFAULTS,
-    };
-    const frameWithCamera = executeFrame(program, state, pool, 16, orthoCam);
-    expect(frameWithCamera.version).toBe(2);
-    expect(frameWithCamera.ops.length).toBeGreaterThan(0);
-
-    // Should accept perspective camera
-    const perspCam: CameraParams = {
-      mode: 'perspective',
-      params: PERSP_CAMERA_DEFAULTS,
-    };
-    const framePersp = executeFrame(program, state, pool, 32, perspCam);
-    expect(framePersp.version).toBe(2);
-    expect(framePersp.ops.length).toBeGreaterThan(0);
+    const frameNext = executeFrame(program, state, pool, 16);
+    expect(frameNext.version).toBe(2);
+    expect(frameNext.ops.length).toBeGreaterThan(0);
   });
 
-  it('Frame with no camera produces world-space (vec3) positions', () => {
+  it('Frame with no camera block produces world-space (vec3) positions', () => {
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot', {});
       const ellipse = b.addBlock('Ellipse', { rx: 0.02, ry: 0.02 });
@@ -123,18 +108,15 @@ describe('Level 5 Unit Tests: Assembler API', () => {
     const op = frame.ops[0];
     const position = op.instances.position;
 
-    // NO camera: positions are stride-3 vec3 (world-space)
-    expect(position.length).toBe(4 * 3);
-    // Verify z values are exactly 0.0
-    for (let i = 0; i < 4; i++) {
-      expect(position[i * 3 + 2]).toBe(0.0);
-    }
+    // NO camera block: default ortho camera applies, positions are stride-2 vec2 (screen-space)
+    // Note: The default camera DOES project (uses ortho projection)
+    expect(position.length).toBe(4 * 2);
 
-    // Size should be uniform number (not projected)
-    expect(typeof op.instances.size).toBe('number');
+    // Size should be Float32Array (per-instance projected sizes)
+    expect(op.instances.size).toBeInstanceOf(Float32Array);
   });
 
-  it('Frame with ortho camera produces screen-space (vec2) positions and per-instance sizes', () => {
+  it('Frame with default camera produces screen-space (vec2) positions and per-instance sizes', () => {
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot', {});
       const ellipse = b.addBlock('Ellipse', { rx: 0.02, ry: 0.02 });
@@ -168,12 +150,7 @@ describe('Level 5 Unit Tests: Assembler API', () => {
     const state = createRuntimeState(program.slotMeta.length);
     const pool = new BufferPool();
 
-    const orthoCam: CameraParams = {
-      mode: 'orthographic',
-      params: ORTHO_CAMERA_DEFAULTS,
-    };
-
-    const frame = executeFrame(program, state, pool, 0, orthoCam) as RenderFrameIR;
+    const frame = executeFrame(program, state, pool, 0) as RenderFrameIR;
     expect(frame.version).toBe(2);
     expect(frame.ops.length).toBeGreaterThan(0);
 
@@ -181,7 +158,7 @@ describe('Level 5 Unit Tests: Assembler API', () => {
     const position = op.instances.position;
     const size = op.instances.size;
 
-    // WITH camera: positions are stride-2 vec2 (screen-space normalized [0,1])
+    // WITH default camera: positions are stride-2 vec2 (screen-space normalized [0,1])
     expect(position.length).toBe(4 * 2);
 
     // Positions should be in [0,1] range
@@ -250,18 +227,12 @@ describe('Level 5 Integration Tests: Full Pipeline', () => {
     }
     const program = result.program;
 
-    // Define ortho camera (this will trigger projection)
-    const orthoCam: CameraParams = {
-      mode: 'orthographic',
-      params: ORTHO_CAMERA_DEFAULTS,
-    };
-
     // Create runtime state and buffer pool
     const state = createRuntimeState(program.slotMeta.length);
     const pool = new BufferPool();
 
-    // Execute one frame WITH the ortho camera parameter
-    const frame = executeFrame(program, state, pool, 0, orthoCam) as RenderFrameIR;
+    // Execute one frame (default ortho camera from program.renderGlobals)
+    const frame = executeFrame(program, state, pool, 0) as RenderFrameIR;
 
     // Verify frame produced a render op
     expect(frame.ops.length).toBeGreaterThan(0);

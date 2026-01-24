@@ -21,8 +21,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { projectInstances } from '../../runtime/RenderAssembler';
-import { ORTHO_CAMERA_DEFAULTS } from '../ortho-kernel';
-import { PERSP_CAMERA_DEFAULTS } from '../perspective-kernel';
+import { DEFAULT_CAMERA, type ResolvedCameraParams } from '../../runtime/CameraResolver';
 import { detectDomainChange, buildMappingById } from '../../runtime/ContinuityMapping';
 import { applyContinuity } from '../../runtime/ContinuityApply';
 import { createContinuityState, type ContinuityState } from '../../runtime/ContinuityState';
@@ -234,13 +233,13 @@ describe('Level 9 Integration: Continuity Unaffected by Toggle', () => {
     state.values.objects.set(10 as ValueSlot, worldPositions);
 
     // Run 30 frames with ortho camera
-    const camera = { mode: 'orthographic' as const, params: ORTHO_CAMERA_DEFAULTS };
+    const camera: ResolvedCameraParams = DEFAULT_CAMERA;
 
     for (let frame = 0; frame < 30; frame++) {
       // Re-set world positions each frame (simulating materialization)
       state.values.objects.set(10 as ValueSlot, worldPositions);
 
-      executeFrame(program, state, pool, frame * 16.667, camera);
+      executeFrame(program, state, pool, frame * 16.667);
     }
 
     // Verify continuity state exists
@@ -272,13 +271,23 @@ describe('Level 9 Integration: Continuity Unaffected by Toggle', () => {
     state.values.objects.set(10 as ValueSlot, worldPositions);
 
     // Run 30 frames with perspective camera
-    const camera = { mode: 'perspective' as const, params: PERSP_CAMERA_DEFAULTS };
+    const camera: ResolvedCameraParams = {
+  projection: 'persp',
+  centerX: 0.5,
+  centerY: 0.5,
+  distance: 2.0,
+  tiltRad: (35 * Math.PI) / 180,
+  yawRad: 0,
+  fovYRad: (45 * Math.PI) / 180,
+  near: 0.01,
+  far: 100,
+};
 
     for (let frame = 0; frame < 30; frame++) {
       // Re-set world positions each frame
       state.values.objects.set(10 as ValueSlot, worldPositions);
 
-      executeFrame(program, state, pool, frame * 16.667, camera);
+      executeFrame(program, state, pool, frame * 16.667);
     }
 
     // Verify continuity state exists
@@ -365,7 +374,7 @@ describe('Level 9 Integration: Projection is Pure (Read-Only)', () => {
     const beforeSnapshot = new Float32Array(worldPositions);
 
     const count = 10;
-    const camera = { mode: 'orthographic' as const, params: ORTHO_CAMERA_DEFAULTS };
+    const camera: ResolvedCameraParams = DEFAULT_CAMERA;
 
     // Call projectInstances (should be read-only)
     const output = projectInstances(worldPositions, 0.05, count, camera);
@@ -387,7 +396,17 @@ describe('Level 9 Integration: Projection is Pure (Read-Only)', () => {
     const beforeSnapshot = new Float32Array(worldPositions);
 
     const count = 10;
-    const camera = { mode: 'perspective' as const, params: PERSP_CAMERA_DEFAULTS };
+    const camera: ResolvedCameraParams = {
+  projection: 'persp',
+  centerX: 0.5,
+  centerY: 0.5,
+  distance: 2.0,
+  tiltRad: (35 * Math.PI) / 180,
+  yawRad: 0,
+  fovYRad: (45 * Math.PI) / 180,
+  near: 0.01,
+  far: 100,
+};
 
     // Call projectInstances (should be read-only)
     const output = projectInstances(worldPositions, 0.05, count, camera);
