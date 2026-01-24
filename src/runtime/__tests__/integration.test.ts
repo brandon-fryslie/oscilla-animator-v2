@@ -42,8 +42,8 @@ describe('Runtime Integration', () => {
     const frame = executeFrame(program, state, pool, 0);
 
     // Verify frame structure
-    expect(frame.version).toBe(1);
-    expect(frame.passes).toBeInstanceOf(Array);
+    expect(frame.version).toBe(2);
+    expect(frame.ops).toBeInstanceOf(Array);
 
     // Verify frame advances (starts at 1, increments to 2)
     expect(state.cache.frameId).toBe(2);
@@ -51,7 +51,7 @@ describe('Runtime Integration', () => {
     // Execute at t=1000
     const frame2 = executeFrame(program, state, pool, 1000);
     expect(state.cache.frameId).toBe(3);
-    expect(frame2.version).toBe(1);
+    expect(frame2.version).toBe(2);
   });
 
   it('evaluates constant signals', () => {

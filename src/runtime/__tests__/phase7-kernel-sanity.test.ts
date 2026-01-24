@@ -82,8 +82,8 @@ describe('Phase 7 - Layer 2: Signal Kernel Sanity', () => {
 
     // Execute and verify program runs
     const frame = executeFrame(program, state, pool, 0);
-    expect(frame.version).toBe(1);
-    expect(frame.passes).toBeInstanceOf(Array);
+    expect(frame.version).toBe(2);
+    expect(frame.ops).toBeInstanceOf(Array);
   });
 });
 
@@ -110,7 +110,7 @@ describe('Phase 7 - Layer 3: Field Kernel Sanity', () => {
     const pool = new BufferPool();
 
     const frame = executeFrame(program, state, pool, 0);
-    expect(frame.version).toBe(1);
+    expect(frame.version).toBe(2);
   });
 });
 
@@ -138,6 +138,6 @@ describe('Phase 7 - Layer 4: End-to-End Smoke Tests', () => {
 
     // Execute and verify basic functionality
     const frame = executeFrame(program, state, pool, 0);
-    expect(frame.version).toBe(1);
+    expect(frame.version).toBe(2);
   });
 });

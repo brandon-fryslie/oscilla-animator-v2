@@ -17,6 +17,7 @@ import {
   createRuntimeState,
   BufferPool,
   executeFrame,
+  type RenderFrameIR_Future,
 } from '../../runtime';
 import { TOPOLOGY_ID_ELLIPSE, TOPOLOGY_ID_RECT } from '../../shapes/registry';
 
@@ -184,44 +185,46 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
     // === FRAME 1: t=0 ===
     const pool = new BufferPool();
     const state = createRuntimeState(program.slotMeta.length);
-    const frame1 = executeFrame(program, state, pool, 0);
+    const frame1 = executeFrame(program, state, pool, 0) as RenderFrameIR_Future;
 
-    expect(frame1.version).toBe(1);
-    expect(frame1.passes.length).toBe(2);
+    expect(frame1.version).toBe(2);
+    expect(frame1.ops.length).toBe(2);
 
-    const ellipsePass1 = frame1.passes.find(p => p.resolvedShape.topologyId === TOPOLOGY_ID_ELLIPSE)!;
-    const rectPass1 = frame1.passes.find(p => p.resolvedShape.topologyId === TOPOLOGY_ID_RECT)!;
-    expect(ellipsePass1).toBeDefined();
-    expect(rectPass1).toBeDefined();
+    const ellipseOp1 = frame1.ops.find(op => op.geometry.topologyId === TOPOLOGY_ID_ELLIPSE)!;
+    const rectOp1 = frame1.ops.find(op => op.geometry.topologyId === TOPOLOGY_ID_RECT)!;
+    expect(ellipseOp1).toBeDefined();
+    expect(rectOp1).toBeDefined();
 
     // Verify counts
-    expect(ellipsePass1.count).toBe(25);
-    expect(rectPass1.count).toBe(20);
+    expect(ellipseOp1.instances.count).toBe(25);
+    expect(rectOp1.instances.count).toBe(20);
 
-    // Verify buffer types and sizes (vec3 stride)
-    expect(ellipsePass1.position).toBeInstanceOf(Float32Array);
-    expect(ellipsePass1.color).toBeInstanceOf(Uint8ClampedArray);
-    expect((ellipsePass1.position as Float32Array).length).toBe(25 * 3); // 25 × 3 floats (x, y, z)
-    expect((ellipsePass1.color as Uint8ClampedArray).length).toBe(25 * 4);
+    // Verify buffer types and sizes (NO camera, so position is stride-3)
+    expect(ellipseOp1.instances.position).toBeInstanceOf(Float32Array);
+    expect(ellipseOp1.style.fillColor).toBeInstanceOf(Uint8ClampedArray);
+    expect(ellipseOp1.instances.position.length).toBe(25 * 3); // 25 × 3 floats (x, y, z)
+    expect(ellipseOp1.style.fillColor!.length).toBe(25 * 4);
 
-    expect(rectPass1.position).toBeInstanceOf(Float32Array);
-    expect(rectPass1.color).toBeInstanceOf(Uint8ClampedArray);
-    expect((rectPass1.position as Float32Array).length).toBe(20 * 3); // 20 × 3 floats (x, y, z)
-    expect((rectPass1.color as Uint8ClampedArray).length).toBe(20 * 4);
+    expect(rectOp1.instances.position).toBeInstanceOf(Float32Array);
+    expect(rectOp1.style.fillColor).toBeInstanceOf(Uint8ClampedArray);
+    expect(rectOp1.instances.position.length).toBe(20 * 3); // 20 × 3 floats (x, y, z)
+    expect(rectOp1.style.fillColor!.length).toBe(20 * 4);
 
     // Verify shapes are properly resolved
-    expect(ellipsePass1.resolvedShape.resolved).toBe(true);
-    expect(ellipsePass1.resolvedShape.topologyId).toBe(TOPOLOGY_ID_ELLIPSE);
-    expect(ellipsePass1.resolvedShape.mode).toBe('primitive');
-    expect(ellipsePass1.resolvedShape.params).toHaveProperty('rx');
-    expect(ellipsePass1.resolvedShape.params).toHaveProperty('ry');
+    expect(ellipseOp1.kind).toBe('drawPrimitiveInstances');
+    expect(ellipseOp1.geometry.topologyId).toBe(TOPOLOGY_ID_ELLIPSE);
+    if (ellipseOp1.kind === 'drawPrimitiveInstances') {
+      expect(ellipseOp1.geometry.params).toHaveProperty('rx');
+      expect(ellipseOp1.geometry.params).toHaveProperty('ry');
+    }
 
-    expect(rectPass1.resolvedShape.resolved).toBe(true);
-    expect(rectPass1.resolvedShape.topologyId).toBe(TOPOLOGY_ID_RECT);
-    expect(rectPass1.resolvedShape.mode).toBe('primitive');
-    expect(rectPass1.resolvedShape.params).toHaveProperty('width');
-    expect(rectPass1.resolvedShape.params).toHaveProperty('height');
-    expect(rectPass1.resolvedShape.params).toHaveProperty('cornerRadius');
+    expect(rectOp1.kind).toBe('drawPrimitiveInstances');
+    expect(rectOp1.geometry.topologyId).toBe(TOPOLOGY_ID_RECT);
+    if (rectOp1.kind === 'drawPrimitiveInstances') {
+      expect(rectOp1.geometry.params).toHaveProperty('width');
+      expect(rectOp1.geometry.params).toHaveProperty('height');
+      expect(rectOp1.geometry.params).toHaveProperty('cornerRadius');
+    }
 
     // === VERIFY SCALE IS ANIMATED (not default 1.0) ===
     // At t=0, sin(0) = 0, so:
@@ -229,12 +232,12 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
     // rect scale = 0.8 + 0.4*sin(0+π) = 0.8 + 0.4*0 = 0.8
     // phaseA at t=0: phase = 0/4000 = 0
     // phaseB at t=0: phase = 0/8000 = 0
-    expect(ellipsePass1.scale).toBeCloseTo(1.5, 1); // 1.5 + 0.5*sin(0*2π) = 1.5
-    expect(rectPass1.scale).toBeCloseTo(0.8, 1);    // 0.8 + 0.4*sin(0*2π+π) = 0.8
+    expect(ellipseOp1.instances.size).toBeCloseTo(1.5, 1); // 1.5 + 0.5*sin(0*2π) = 1.5
+    expect(rectOp1.instances.size).toBeCloseTo(0.8, 1);    // 0.8 + 0.4*sin(0*2π+π) = 0.8
 
     // === VERIFY PER-ELEMENT OPACITY (different alpha per element) ===
-    const eColorBuf1 = ellipsePass1.color as Uint8ClampedArray;
-    const rColorBuf1 = rectPass1.color as Uint8ClampedArray;
+    const eColorBuf1 = ellipseOp1.style.fillColor!;
+    const rColorBuf1 = rectOp1.style.fillColor!;
 
     // Per-element opacity: elements should have DIFFERENT alpha values
     // FieldPulse produces: base + amplitude * sin(2π * (phase + id01 * spread))
@@ -260,10 +263,10 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
     }
     expect(hasReducedAlpha).toBe(true); // at least some elements have reduced opacity
 
-    // Verify positions are finite
-    for (const pass of frame1.passes) {
-      const pos = pass.position as Float32Array;
-      for (let i = 0; i < pass.count; i++) {
+    // Verify positions are finite (stride-3 for no camera)
+    for (const op of frame1.ops) {
+      const pos = op.instances.position;
+      for (let i = 0; i < op.instances.count; i++) {
         expect(Number.isFinite(pos[i * 3 + 0])).toBe(true);
         expect(Number.isFinite(pos[i * 3 + 1])).toBe(true);
         expect(pos[i * 3 + 2]).toBe(0.0); // z should always be 0.0
@@ -271,9 +274,9 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
     }
 
     // Verify colors have valid RGB values
-    for (const pass of frame1.passes) {
-      const col = pass.color as Uint8ClampedArray;
-      for (let i = 0; i < pass.count; i++) {
+    for (const op of frame1.ops) {
+      const col = op.style.fillColor!;
+      for (let i = 0; i < op.instances.count; i++) {
         expect(col[i * 4 + 0]).toBeGreaterThanOrEqual(0);
         expect(col[i * 4 + 0]).toBeLessThanOrEqual(255);
         expect(col[i * 4 + 1]).toBeGreaterThanOrEqual(0);
@@ -288,18 +291,18 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
 
     // === FRAME 2: t=1000ms - verify animation ===
     // Copy frame 1 data for comparison
-    const f1EllipsePos = new Float32Array(ellipsePass1.position as Float32Array);
-    const f1RectPos = new Float32Array(rectPass1.position as Float32Array);
-    const f1EllipseScale = ellipsePass1.scale;
-    const f1RectScale = rectPass1.scale;
+    const f1EllipsePos = new Float32Array(ellipseOp1.instances.position);
+    const f1RectPos = new Float32Array(rectOp1.instances.position);
+    const f1EllipseScale = ellipseOp1.instances.size as number;
+    const f1RectScale = rectOp1.instances.size as number;
 
-    const frame2 = executeFrame(program, state, pool, 1000);
-    const ellipsePass2 = frame2.passes.find(p => p.resolvedShape.topologyId === TOPOLOGY_ID_ELLIPSE)!;
-    const rectPass2 = frame2.passes.find(p => p.resolvedShape.topologyId === TOPOLOGY_ID_RECT)!;
+    const frame2 = executeFrame(program, state, pool, 1000) as RenderFrameIR_Future;
+    const ellipseOp2 = frame2.ops.find(op => op.geometry.topologyId === TOPOLOGY_ID_ELLIPSE)!;
+    const rectOp2 = frame2.ops.find(op => op.geometry.topologyId === TOPOLOGY_ID_RECT)!;
 
     // Positions should change (animated)
     let ellipseMoved = false;
-    const ePos2 = ellipsePass2.position as Float32Array;
+    const ePos2 = ellipseOp2.instances.position;
     for (let i = 0; i < 25; i++) {
       if (Math.abs(f1EllipsePos[i * 3 + 0] - ePos2[i * 3 + 0]) > 0.001 ||
           Math.abs(f1EllipsePos[i * 3 + 1] - ePos2[i * 3 + 1]) > 0.001) {
@@ -310,7 +313,7 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
     expect(ellipseMoved).toBe(true);
 
     let rectMoved = false;
-    const rPos2 = rectPass2.position as Float32Array;
+    const rPos2 = rectOp2.instances.position;
     for (let i = 0; i < 20; i++) {
       if (Math.abs(f1RectPos[i * 3 + 0] - rPos2[i * 3 + 0]) > 0.001 ||
           Math.abs(f1RectPos[i * 3 + 1] - rPos2[i * 3 + 1]) > 0.001) {
@@ -321,18 +324,18 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
     expect(rectMoved).toBe(true);
 
     // Scale should change between frames (animated)
-    expect(ellipsePass2.scale).not.toBeCloseTo(f1EllipseScale, 2);
-    expect(rectPass2.scale).not.toBeCloseTo(f1RectScale, 2);
+    expect(ellipseOp2.instances.size).not.toBeCloseTo(f1EllipseScale, 2);
+    expect(rectOp2.instances.size).not.toBeCloseTo(f1RectScale, 2);
 
     // Scale should be positive and reasonable
-    expect(ellipsePass2.scale).toBeGreaterThan(0);
-    expect(ellipsePass2.scale).toBeLessThan(5);
-    expect(rectPass2.scale).toBeGreaterThan(0);
-    expect(rectPass2.scale).toBeLessThan(5);
+    expect(ellipseOp2.instances.size as number).toBeGreaterThan(0);
+    expect(ellipseOp2.instances.size as number).toBeLessThan(5);
+    expect(rectOp2.instances.size as number).toBeGreaterThan(0);
+    expect(rectOp2.instances.size as number).toBeLessThan(5);
 
     // Per-element opacity should change between frames (phase advances)
-    const eColorBuf2 = ellipsePass2.color as Uint8ClampedArray;
-    const rColorBuf2 = rectPass2.color as Uint8ClampedArray;
+    const eColorBuf2 = ellipseOp2.style.fillColor!;
+    const rColorBuf2 = rectOp2.style.fillColor!;
 
     // Alpha distribution should shift as phase changes
     let alphaDistributionChanged = false;
@@ -345,22 +348,22 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
     expect(alphaDistributionChanged).toBe(true);
 
     // Shapes are stable across frames
-    expect(ellipsePass2.resolvedShape.topologyId).toBe(TOPOLOGY_ID_ELLIPSE);
-    expect(rectPass2.resolvedShape.topologyId).toBe(TOPOLOGY_ID_RECT);
-    expect(ellipsePass2.resolvedShape.mode).toBe('primitive');
-    expect(rectPass2.resolvedShape.mode).toBe('primitive');
+    expect(ellipseOp2.geometry.topologyId).toBe(TOPOLOGY_ID_ELLIPSE);
+    expect(rectOp2.geometry.topologyId).toBe(TOPOLOGY_ID_RECT);
+    expect(ellipseOp2.kind).toBe('drawPrimitiveInstances');
+    expect(rectOp2.kind).toBe('drawPrimitiveInstances');
 
     // === FRAME 3: t=2000ms - verify continued animation ===
-    const frame3 = executeFrame(program, state, pool, 2000);
-    const ellipsePass3 = frame3.passes.find(p => p.resolvedShape.topologyId === TOPOLOGY_ID_ELLIPSE)!;
-    const rectPass3 = frame3.passes.find(p => p.resolvedShape.topologyId === TOPOLOGY_ID_RECT)!;
+    const frame3 = executeFrame(program, state, pool, 2000) as RenderFrameIR_Future;
+    const ellipseOp3 = frame3.ops.find(op => op.geometry.topologyId === TOPOLOGY_ID_ELLIPSE)!;
+    const rectOp3 = frame3.ops.find(op => op.geometry.topologyId === TOPOLOGY_ID_RECT)!;
 
     // Scale continues to change
-    expect(ellipsePass3.scale).not.toBeCloseTo(ellipsePass2.scale, 2);
+    expect(ellipseOp3.instances.size).not.toBeCloseTo(ellipseOp2.instances.size as number, 2);
 
-    // All passes still valid
-    expect(frame3.passes.length).toBe(2);
-    expect(ellipsePass3.count).toBe(25);
-    expect(rectPass3.count).toBe(20);
+    // All ops still valid
+    expect(frame3.ops.length).toBe(2);
+    expect(ellipseOp3.instances.count).toBe(25);
+    expect(rectOp3.instances.count).toBe(20);
   });
 });

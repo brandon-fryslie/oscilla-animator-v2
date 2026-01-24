@@ -6,6 +6,7 @@
  * Layout blocks produce z=0.0 explicitly.
  */
 import { describe, it, expect } from 'vitest';
+import type { RenderFrameIR_Future } from '../../runtime';
 import {
   createPositionField,
   createSizeField,
@@ -221,11 +222,11 @@ describe('Level 1 Integration Tests', () => {
     const program = result.program;
     const state = createRuntimeState(program.slotMeta.length);
     const pool = new BufferPool();
-    const frame = executeFrame(program, state, pool, 0);
+    const frame = executeFrame(program, state, pool, 0) as RenderFrameIR_Future;
 
-    expect(frame.passes.length).toBeGreaterThan(0);
-    const pass = frame.passes[0];
-    const position = pass.position as Float32Array;
+    expect(frame.ops.length).toBeGreaterThan(0);
+    const op = frame.ops[0];
+    const position = op.instances.position;
 
     // L1 INVARIANT: position buffer is contiguous Float32Array with stride 3
     expect(position).toBeInstanceOf(Float32Array);
