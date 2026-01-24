@@ -22,6 +22,8 @@ export const TYPE_COLORS: Record<PayloadType, string> = {
   float: '#5a9fd4',   // Blue
   int: '#6366f1',     // Indigo
   vec2: '#22c55e',    // Green
+  vec3: '#10b981',    // Emerald (darker green for 3D)
+
   color: '#ec4899',   // Magenta/Pink
   bool: '#f97316',    // Orange
   shape: '#facc15',   // Yellow

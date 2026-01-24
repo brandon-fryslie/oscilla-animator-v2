@@ -204,6 +204,9 @@ export function payloadTypeToShapeDescIR(payload: PayloadType): ShapeDescIR {
 
     case 'vec2':
       return { kind: 'vec', lanes: 2, element: 'number' };
+    case 'vec3':
+      return { kind: 'vec', lanes: 3, element: 'number' };
+
 
     case 'color':
       // Color is RGBA (4 lanes)

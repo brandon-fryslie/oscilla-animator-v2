@@ -90,6 +90,9 @@ export function getSampleEncoding(payload: PayloadType): SampleEncoding {
       return { payload, stride: 1, components: ['value'], sampleable: true };
     case 'vec2':
       return { payload, stride: 2, components: ['x', 'y'], sampleable: true };
+    case 'vec3':
+      return { payload, stride: 3, components: ['x', 'y', 'z'], sampleable: true };
+
     case 'color':
       return { payload, stride: 4, components: ['r', 'g', 'b', 'a'], sampleable: true };
     case 'bool':

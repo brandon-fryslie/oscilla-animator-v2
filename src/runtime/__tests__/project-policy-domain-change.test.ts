@@ -55,6 +55,8 @@ function createTestRuntimeState(): RuntimeState {
     },
     timeState: {
       prevTAbsMs: null,
+      prevTMs: null,
+
       prevPhaseA: null,
       prevPhaseB: null,
       offsetA: 0,
