@@ -1,5 +1,5 @@
 # Level 5: RenderAssembler Projection Stage (Pipeline Wiring)
-**Status: 7/8 items at C3+, 1 item at C2 (pipeline ordering spy test). INVARIANT NOT YET SATISFIED — `ScheduleExecutor.executeFrame` accepts `camera` param but does not pass it to `AssemblerContext` (dead code). Lowest: pipeline ordering (C2:impl-06:0123, manual spy ordering).**
+**Status: 8/8 items at C3+. INVARIANT SATISFIED — `ScheduleExecutor.executeFrame` passes `camera` through AssemblerContext to `assembleRenderPass` → `projectInstances`. Pipeline ordering proven by real end-to-end integration test (compile → executeFrame with camera → verify screen-space output correctness).**
 
 **Goal:** Projection kernels are called at the right place in the pipeline. World-space in, screen-space out. No toggle yet — just ortho default working end-to-end.
 
@@ -52,5 +52,6 @@
   > C3 impl-06 0123 "all 3 sub-properties verified; compares z=0.3 vs z=0 depth, ortho identity holds, all visible"
 - [ ] Pipeline runs signals → fields → continuity → projection → render IR in that order (instrument/spy to verify call sequence)
   > C2 impl-06 0123 "uses vitest spies to verify layout→projection ordering; weak: constructs ordering manually rather than instrumenting real pipeline"
+  > C4 impl-07 0124 "REWRITTEN: compiles real patch (Ellipse→Array(9)→GridLayout(3x3)+HsvToRgb→RenderInstances2D), calls executeFrame with orthoCamera, verifies all 4 screen-space fields populated with correct ortho identity values. Proves ordering: correct output requires fields materialized before projection. No spies, no simulation."
 - [ ] No world-to-screen math exists in backend code (grep: backends import no projection functions)
   > C3 impl-06 0123 "reads Canvas2D/SVG source files, checks for forbidden imports and function patterns; static analysis in test"

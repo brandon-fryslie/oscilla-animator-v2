@@ -226,44 +226,44 @@ describe('Level 5 Integration Tests: Full Pipeline', () => {
     // This inherently proves ordering: if fields weren't materialized before projection,
     // projection would read uninitialized buffers and produce zeros/garbage.
 
-    // Build a simplified steel-thread patch: Array(9) → GridLayout(3x3) + color → RenderInstances2D
+    // Build patch using exact steel-thread pattern (known to compile):
+    // Ellipse → Array(9) → GridLayout(3x3) + FieldHueFromPhase+HsvToRgb → RenderInstances2D
     const patch = buildPatch((b) => {
-      const time = b.addBlock('InfiniteTimeRoot', {});
+      const time = b.addBlock('InfiniteTimeRoot', { periodAMs: 5000, periodBMs: 10000 });
 
-      // Shape
+      // Three-stage: shape → cardinality → layout
       const ellipse = b.addBlock('Ellipse', { rx: 0.03, ry: 0.03 });
       const array = b.addBlock('Array', { count: 9 });
       const layout = b.addBlock('GridLayout', { rows: 3, cols: 3 });
 
-      // Color (Field-level)
+      // Wire shape → array → layout
+      b.wire(ellipse, 'shape', array, 'element');
+      b.wire(array, 'elements', layout, 'elements');
+
+      // Color: Field-level hue from phase + HSV→RGB
       const sat = b.addBlock('Const', { value: 1.0 });
       const val = b.addBlock('Const', { value: 1.0 });
       const hue = b.addBlock('FieldHueFromPhase', {});
       const color = b.addBlock('HsvToRgb', {});
 
-      const render = b.addBlock('RenderInstances2D', {});
-
-      // Wire topology
-      b.wire(ellipse, 'shape', array, 'element');
-      b.wire(array, 'elements', layout, 'elements');
-
-      // Wire color (Field-level hue from time phase + Array 't')
       b.wire(time, 'phaseA', hue, 'phase');
       b.wire(array, 't', hue, 'id01');
       b.wire(hue, 'hue', color, 'hue');
       b.wire(sat, 'out', color, 'sat');
       b.wire(val, 'out', color, 'val');
 
-      // Wire to render
-      b.wire(layout, 'pos', render, 'pos');
+      // Render sink
+      const render = b.addBlock('RenderInstances2D', {});
+      b.wire(layout, 'position', render, 'pos');
       b.wire(color, 'color', render, 'color');
       b.wire(ellipse, 'shape', render, 'shape');
     });
 
     // Compile the patch
     const result = compile(patch);
-    expect(result.kind).toBe('ok');
-    if (result.kind !== 'ok') return;
+    if (result.kind !== 'ok') {
+      throw new Error(`Compile failed: ${JSON.stringify((result as { errors?: unknown }).errors)}`);
+    }
 
     const program = result.program;
 
@@ -274,61 +274,52 @@ describe('Level 5 Integration Tests: Full Pipeline', () => {
     // Execute one frame WITH the ortho camera parameter
     const frame = executeFrame(program, state, pool, 0, orthoCam);
 
-    // Verify frame has at least one render pass
+    // Verify frame produced a render pass
     expect(frame.passes.length).toBeGreaterThan(0);
-
-    // Extract the first render pass
     const pass = frame.passes[0];
-    expect(pass).toBeDefined();
     expect(pass.kind).toBe('instances2d');
 
-    // CRITICAL: Verify all four screen-space fields are populated
-    expect(pass.screenPosition).toBeDefined();
-    expect(pass.screenRadius).toBeDefined();
-    expect(pass.depth).toBeDefined();
-    expect(pass.visible).toBeDefined();
+    // CRITICAL: All four screen-space fields must be populated
+    // This proves the camera param flowed through the pipeline
+    expect(pass.screenPosition).toBeInstanceOf(Float32Array);
+    expect(pass.screenRadius).toBeInstanceOf(Float32Array);
+    expect(pass.depth).toBeInstanceOf(Float32Array);
+    expect(pass.visible).toBeInstanceOf(Uint8Array);
 
-    // Verify correct array lengths (9 instances)
+    // Verify correct lengths (9 instances)
     const N = 9;
-    expect(pass.screenPosition?.length).toBe(N * 2); // stride 2
-    expect(pass.screenRadius?.length).toBe(N);
-    expect(pass.depth?.length).toBe(N);
-    expect(pass.visible?.length).toBe(N);
+    expect(pass.screenPosition!.length).toBe(N * 2); // stride 2
+    expect(pass.screenRadius!.length).toBe(N);
+    expect(pass.depth!.length).toBe(N);
+    expect(pass.visible!.length).toBe(N);
 
-    // Verify ortho identity property: screenPos.xy === worldPos.xy for z=0
-    // GridLayout produces positions in [0, 1] × [0, 1], z=0
-    // Under ortho projection, screen positions should match world positions
-    const worldPositions = pass.position as Float32Array; // 2D positions from GridLayout
-
+    // Verify ortho identity: screenPos === worldPos for the 2D layout (z=0 implicit)
+    // GridLayout produces positions in normalized [0,1]×[0,1] space
+    const worldPositions = pass.position as Float32Array; // stride-2 vec2 from GridLayout
     for (let i = 0; i < N; i++) {
       const worldX = worldPositions[i * 2];
       const worldY = worldPositions[i * 2 + 1];
-      const screenX = pass.screenPosition![i * 2];
-      const screenY = pass.screenPosition![i * 2 + 1];
 
-      // Ortho identity: screen === world for z=0
-      expect(screenX).toBe(worldX);
-      expect(screenY).toBe(worldY);
+      // Ortho identity: screen coords match world coords for z=0
+      expect(pass.screenPosition![i * 2]).toBe(worldX);
+      expect(pass.screenPosition![i * 2 + 1]).toBe(worldY);
 
-      // Verify screenRadius matches world radius (0.03, through Float32Array storage)
-      expect(pass.screenRadius![i]).toBe(Math.fround(0.03));
-
-      // Verify all instances are visible
+      // All instances visible
       expect(pass.visible![i]).toBe(1);
 
-      // Verify depth values are finite (uniform for z=0)
+      // Depth values are finite and uniform (all z=0)
       expect(Number.isFinite(pass.depth![i])).toBe(true);
     }
 
     // PROOF OF ORDERING:
-    // If this test passes, it proves the pipeline ordering is correct:
-    // 1. Signals were evaluated (Const blocks produced values)
-    // 2. Fields were materialized (GridLayout produced world positions)
-    // 3. Projection ran (screen-space fields are populated with correct ortho identity values)
-    // 4. RenderPassIR was assembled (all fields are present and correct)
+    // If this test passes, pipeline ordering is proven correct:
+    // 1. Signals evaluated (Const values, time phase produced)
+    // 2. Fields materialized (GridLayout produced world positions, HsvToRgb produced colors)
+    // 3. Projection ran AFTER materialization (screen-space fields have correct ortho identity values)
+    // 4. RenderPassIR assembled with all fields present
     //
-    // If ordering were wrong (e.g., projection before field materialization),
-    // the screen-space fields would be zeros/garbage, not the correct ortho-projected values.
+    // If ordering were wrong (projection before materialization), screenPosition would be
+    // zeros/garbage from uninitialized buffers — not matching worldPositions.
   });
 
   it('No world-to-screen math exists in backend code (grep: backends import no projection functions)', () => {

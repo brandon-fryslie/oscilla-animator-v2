@@ -183,7 +183,23 @@ export function assembleRenderPass(
   // Run projection if camera is provided
   const camera = context.camera;
   if (camera && position instanceof Float32Array) {
-    const projection = projectInstances(position, scale, count, camera);
+    // Determine position stride: vec3 (stride 3) or vec2 (stride 2, promote to vec3 with z=0)
+    const posLength = position.length;
+    let worldPos3: Float32Array;
+    if (posLength === count * 3) {
+      // Already stride-3 vec3
+      worldPos3 = position;
+    } else {
+      // Stride-2 vec2: promote to vec3 with z=0
+      worldPos3 = new Float32Array(count * 3);
+      for (let i = 0; i < count; i++) {
+        worldPos3[i * 3] = position[i * 2];
+        worldPos3[i * 3 + 1] = position[i * 2 + 1];
+        // worldPos3[i * 3 + 2] = 0 (Float32Array is zero-initialized)
+      }
+    }
+
+    const projection = projectInstances(worldPos3, scale, count, camera);
     return {
       kind: 'instances2d',
       count,
