@@ -1,32 +1,45 @@
 ---
-scope: update
+scope: CLOSED
 spec_source: design-docs/CANONICAL-oscilla-v2.5-20260109/
 impl_source: src/
-generated: 2026-01-26T10:15:00Z
-previous_run: 2026-01-26T01:00:00Z
+generated: 2026-01-27T22:00:00Z
+previous_run: 2026-01-26T22:00:00Z
 topics_audited: 8
-totals: { trivial: 16, critical: 1 (blocked/deferred), to-review: 4, unimplemented: 30, done: ~191 }
-sprint_status: ALL CRITICAL RESOLVED | isStateful consistency fix applied | Next: P3 user decisions or U-8 utility blocks
+totals: { trivial: 16, critical: 0 actionable (1 deferred/blocked), to-review: 4, unimplemented: 27, done: ~197 }
+sprint_status: CLOSED — ALL CRITICAL RESOLVED | ALL SPRINTS COMPLETE | No actionable work remains
 confirmed: true
-test_suite: 1294/1294 pass (3 skipped)
+test_suite: 1311/1311 pass (3 skipped)
+closed: 2026-01-27T22:00:00Z
+closure_reason: All P1/P2 critical items resolved. C-12 correctly deferred (blocked by U-21). P3-P5 are separate planning scope.
 ---
 
 # Gap Analysis: Full Core Spec (Topics 01-06, 16, 17) — UPDATE
 
 ## Executive Summary
 
-**Sprint stateful-primitives: COMPLETE.** All 4 MVP stateful primitives now implemented: UnitDelay, SampleHold, Lag, Phasor. All 1294 tests pass, typecheck clean.
+**Sprint utility-blocks (U-8): COMPLETE.** All 3 MVP utility math blocks now implemented: Noise, Length, Normalize. All 1311 tests pass, typecheck clean.
 
 All P1 and P2 critical items done. C-12 (PathStyle blend/layer) remains deferred — blocked by U-21 (layer system design), no functional impact.
 
-**U-4 (Lag): DONE** — Exponential smoothing filter at `src/blocks/signal-blocks.ts:285-343`. Uses OpCode.Lerp, per-lane state, isStateful: true.
+**U-8 (Noise): DONE** — Deterministic procedural noise at `src/blocks/math-blocks.ts`. Uses OpCode.Hash with fixed seed=0.
 
-**U-5 (Phasor): DONE** — Phase accumulator with wrap at `src/blocks/signal-blocks.ts:350-421`. Uses sigTime('dt'), OpCode.Wrap01, unitPhase01 output.
+**U-8 (Length): DONE** — Euclidean vector magnitude at `src/blocks/math-blocks.ts`. Composes sqrt(x² + y² [+ z²]) from existing opcodes.
 
-**Next**: P3 user decisions (R-2, R-6, R-7, R-8), U-8 (utility blocks: Noise, Length, Normalize), and U-21 (layer system design, unblocks C-12).
+**U-8 (Normalize): DONE** — Unit vector normalization at `src/blocks/math-blocks.ts`. Divides components by length with epsilon guard for zero vectors.
+
+**Next**: P3 user decisions (R-2, R-6, R-7, R-8), U-21 (layer system design, unblocks C-12).
 
 ## Changes Since Last Run
 
+| Item | Was | Now | Reason |
+|------|-----|-----|--------|
+| U-8 Noise | NEXT SPRINT | DONE | Deterministic noise block (src/blocks/math-blocks.ts) |
+| U-8 Length | NEXT SPRINT | DONE | Vector magnitude block (src/blocks/math-blocks.ts) |
+| U-8 Normalize | NEXT SPRINT | DONE | Unit vector block (src/blocks/math-blocks.ts) |
+| Utility blocks | 0/3 DONE | 3/3 DONE | All MVP utility math blocks complete |
+| Test count | 1294 pass | 1311 pass | +17 new utility block tests |
+
+### Previously Resolved (prior run)
 | Item | Was | Now | Reason |
 |------|-----|-----|--------|
 | U-4 Lag | NEXT SPRINT | DONE | Exponential smoothing block (src/blocks/signal-blocks.ts:285-343) |
@@ -128,7 +141,7 @@ All P1 items fixed in commits 129c2e5..c3694de:
 | ~~25~~ | ~~U-5~~ | ~~02 Block~~ | ~~Phasor stateful primitive~~ ✅ DONE (implemented in signal-blocks.ts:350) |
 | ~~26~~ | ~~U-6~~ | ~~02 Block~~ | ~~SampleAndHold~~ ✅ DONE (implemented as SampleHold) |
 | 27 | U-7 | 02 Block | PortBinding with CombineMode |
-| 28 | U-8 | 02 Block | Noise, Length, Normalize blocks |
+| ~~28~~ | ~~U-8~~ | ~~02 Block~~ | ~~Noise, Length, Normalize blocks~~ ✅ DONE (src/blocks/math-blocks.ts) |
 | 29 | U-9 | 03 Time | ~~dt output port~~ (DONE via C-22) |
 | 30 | U-10 | 03 Time | Rails as derived blocks |
 | 31 | U-11 | 03 Time | PhaseToFloat/FloatToPhase helpers |
@@ -198,3 +211,10 @@ EventPayload infrastructure now complete. Dual-path approach: `eventScalars` (Ui
 - Phasor: DONE (`src/blocks/signal-blocks.ts:350`) — phase accumulator with wrap, sigTime dt, isStateful: true
 
 **Note**: UnitDelay and SampleHold `isStateful: true` inconsistency FIXED (commit 459b468). All 4 MVP stateful primitives now consistent.
+
+### Utility Math Blocks (U-8) — 3 of 3 DONE (ALL COMPLETE)
+- Noise: DONE (`src/blocks/math-blocks.ts`) — deterministic noise via OpCode.Hash, float→float [0,1)
+- Length: DONE (`src/blocks/math-blocks.ts`) — Euclidean magnitude via component decomposition (x,y,[z])→float
+- Normalize: DONE (`src/blocks/math-blocks.ts`) — unit vector via component decomposition (x,y,[z])→(x,y,z), epsilon guard for zero vectors
+
+**Design note**: Length and Normalize accept separate float component inputs (x, y, optional z) rather than packed vec2/vec3. This sidesteps the need for vector decomposition in the current IR architecture. Vec2/vec3 automatic wiring is a future enhancement.

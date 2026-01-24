@@ -36,6 +36,7 @@ export type Unit =
   | { readonly kind: 'phase01' }      // Cyclic [0, 1) with wrap semantics
   | { readonly kind: 'radians' }      // Angle in radians
   | { readonly kind: 'degrees' }      // Angle in degrees
+  | { readonly kind: 'deg' }          // Alias for degrees (camera spec uses 'deg')
   | { readonly kind: 'ms' }           // Milliseconds
   | { readonly kind: 'seconds' }      // Seconds
   | { readonly kind: 'count' }        // Integer count/index
@@ -52,6 +53,7 @@ export function unitNorm01(): Unit { return { kind: 'norm01' }; }
 export function unitPhase01(): Unit { return { kind: 'phase01' }; }
 export function unitRadians(): Unit { return { kind: 'radians' }; }
 export function unitDegrees(): Unit { return { kind: 'degrees' }; }
+export function unitDeg(): Unit { return { kind: 'deg' }; }
 export function unitMs(): Unit { return { kind: 'ms' }; }
 export function unitSeconds(): Unit { return { kind: 'seconds' }; }
 export function unitCount(): Unit { return { kind: 'count' }; }
@@ -71,13 +73,14 @@ export function unitsEqual(a: Unit, b: Unit): boolean {
 // --- Payload-Unit Validation (Spec §A4) ---
 
 const ALLOWED_UNITS: Record<PayloadType, readonly Unit['kind'][]> = {
-  float: ['scalar', 'norm01', 'phase01', 'radians', 'degrees', 'ms', 'seconds'],
+  float: ['scalar', 'norm01', 'phase01', 'radians', 'degrees', 'deg', 'ms', 'seconds'],
   int: ['count', 'ms'],
   vec2: ['ndc2', 'world2'],
   vec3: ['ndc3', 'world3'],
   color: ['rgba01'],
   bool: ['none'],
   shape: ['none'],
+  cameraProjection: ['none'], // Camera projection is an enum, no unit
 };
 
 /**
@@ -102,6 +105,7 @@ export function defaultUnitForPayload(payload: PayloadType): Unit {
     case 'color': return unitRgba01();
     case 'bool': return unitNone();
     case 'shape': return unitNone();
+    case 'cameraProjection': return unitNone();
   }
 }
 
@@ -126,7 +130,8 @@ export type PayloadType =
   | 'vec3'    // 3D positions/vectors
   | 'color'   // Color values (RGBA)
   | 'bool'    // Boolean values
-  | 'shape';  // Shape descriptor (ellipse, rect, path)
+  | 'shape'   // Shape descriptor (ellipse, rect, path)
+  | 'cameraProjection';  // Camera projection enum (0=ortho, 1=persp)
 
 
 /**
@@ -143,6 +148,7 @@ export const PAYLOAD_STRIDE: Record<PayloadType, number> = {
   vec3: 3,
   color: 4,
   shape: 8,  // Shape descriptor has 8 scalar fields
+  cameraProjection: 1,  // Single scalar slot (stored as numeric, interpreted as int32)
 };
 
 /**

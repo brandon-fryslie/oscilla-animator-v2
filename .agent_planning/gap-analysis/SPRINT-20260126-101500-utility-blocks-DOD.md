@@ -1,8 +1,9 @@
 # Definition of Done: utility-blocks (U-8)
 Generated: 2026-01-26T10:15:00Z
-Status: PARTIALLY READY (Noise is HIGH confidence; Length/Normalize are MEDIUM)
+Status: COMPLETE (all 3 blocks implemented, 1311 tests pass)
 Plan: SPRINT-20260126-101500-utility-blocks-PLAN.md
 Source: EVALUATION-20260126-101500.md
+Completed: 2026-01-26T17:00:00Z
 
 ## Acceptance Criteria
 
