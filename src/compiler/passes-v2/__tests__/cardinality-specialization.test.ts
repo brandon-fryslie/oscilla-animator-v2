@@ -78,7 +78,7 @@ describe('Cardinality Specialization', () => {
     });
 
     it('isCardinalityGeneric returns false for fieldOnly blocks', () => {
-      expect(isCardinalityGeneric('RenderCircle')).toBe(false);
+      expect(isCardinalityGeneric('RenderInstances2D')).toBe(false);
     });
 
     it('isCardinalityGeneric returns false for transform blocks', () => {

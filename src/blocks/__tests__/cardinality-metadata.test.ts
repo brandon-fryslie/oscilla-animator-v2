@@ -81,7 +81,7 @@ describe('Cardinality Metadata', () => {
 
   describe('Field-only blocks', () => {
     const fieldOnlyBlocks = [
-      'RenderCircle', 'RenderRect', 'RenderInstances2D',
+      'RenderInstances2D',
       'StableIdHash', 'DomainIndex',
       'FieldFromDomainId',
       'FieldAdd', 'FieldMultiply', 'FieldScale',
@@ -148,7 +148,7 @@ describe('Cardinality Metadata', () => {
 
     it('isCardinalityGeneric returns false for non-preserve blocks', () => {
       expect(isCardinalityGeneric('Array')).toBe(false); // transform
-      expect(isCardinalityGeneric('RenderCircle')).toBe(false); // fieldOnly
+      expect(isCardinalityGeneric('RenderInstances2D')).toBe(false); // fieldOnly
       expect(isCardinalityGeneric('InfiniteTimeRoot')).toBe(false); // signalOnly
     });
   });
