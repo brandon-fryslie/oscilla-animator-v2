@@ -238,7 +238,7 @@ describe('Level 6 Integration Tests: State Preservation Across Mode Toggle', () 
 
     // Run frame 50 with ortho (for later comparison)
     const frame50Ortho = executeFrame(program, state, pool, 50 * 16.67, orthoCam);
-    const screenPos50Ortho = new Float32Array(frame50Ortho.passes[0].screenPosition!);
+    const screenPos50Ortho = new Float32Array((frame50Ortho.ops[0] as any).instances.position);
 
     // Reset state to frame 49 snapshot (simulate rollback for toggle test)
     state.values.f64.set(runtimeSlotsBeforeFrame50);
@@ -323,21 +323,21 @@ describe('Level 6 Integration Tests: State Preservation Across Mode Toggle', () 
 
     // Run frame 50 with ortho → capture screenPositions A
     const frame50Ortho = executeFrame(program, state, pool, 50 * 16.67, orthoCam);
-    const screenPosA = new Float32Array(frame50Ortho.passes[0].screenPosition!);
+    const screenPosA = new Float32Array((frame50Ortho.ops[0] as any).instances.position);
 
     // DoD Checkbox 9: Toggle to perspective, run 1 frame (frame 51)
     executeFrame(program, state, pool, 51 * 16.67, perspCam);
 
     // DoD Checkbox 10: Toggle back to ortho, run 1 frame (frame 52)
     const frame52Ortho = executeFrame(program, state, pool, 52 * 16.67, orthoCam);
-    const screenPosAfterToggle = new Float32Array(frame52Ortho.passes[0].screenPosition!);
+    const screenPosAfterToggle = new Float32Array((frame52Ortho.ops[0] as any).instances.position);
 
     // Now verify bitwise identity by resetting to frame 50 and running frame 50→51→52 with ortho
     state.values.f64.set(stateSnapshot50);
     executeFrame(program, state, pool, 50 * 16.67, orthoCam); // frame 50
     executeFrame(program, state, pool, 51 * 16.67, orthoCam); // frame 51
     const frame52OrthoNoToggle = executeFrame(program, state, pool, 52 * 16.67, orthoCam);
-    const screenPosNoToggle = new Float32Array(frame52OrthoNoToggle.passes[0].screenPosition!);
+    const screenPosNoToggle = new Float32Array((frame52OrthoNoToggle.ops[0] as any).instances.position);
 
     // Bitwise identical: toggling to perspective and back doesn't corrupt ortho output
     expect(screenPosAfterToggle).toEqual(screenPosNoToggle);

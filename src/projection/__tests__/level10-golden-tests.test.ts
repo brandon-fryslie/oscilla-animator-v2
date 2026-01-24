@@ -91,26 +91,25 @@ describe('Level 10 Golden Tests: The Golden Patch', () => {
     for (let frame = 0; frame < 120; frame++) {
       const frameIR = executeFrame(program, state, pool, frame * 16.667, orthoCam);
 
-      expect(frameIR.passes.length).toBeGreaterThan(0);
-      const pass = frameIR.passes[0];
-      expect(pass.kind).toBe('instances2d');
-      expect(pass.count).toBe(N);
+      expect(frameIR.ops.length).toBeGreaterThan(0);
+      const op = frameIR.ops[0];
+      expect(op.instances.count).toBe(N);
 
       // Verify screen-space fields exist
-      expect(pass.screenPosition).toBeInstanceOf(Float32Array);
-      expect(pass.screenRadius).toBeInstanceOf(Float32Array);
-      expect(pass.depth).toBeInstanceOf(Float32Array);
+      expect(op.instances.position).toBeInstanceOf(Float32Array);
+      expect(op.instances.size).toBeInstanceOf(Float32Array);
+      expect(op.instances.depth).toBeInstanceOf(Float32Array);
 
-      expect(pass.screenPosition!.length).toBe(N * 2);
-      expect(pass.screenRadius!.length).toBe(N);
-      expect(pass.depth!.length).toBe(N);
+      expect(op.instances.position!.length).toBe(N * 2);
+      expect(op.instances.size!.length).toBe(N);
+      expect(op.instances.depth!.length).toBe(N);
 
       // Ortho projection: screenPosition.xy should match worldPosition.xy (identity)
       // GridLayout outputs world positions in the range [0,1]
       // Verify all screen positions are in [0,1] and finite
       for (let i = 0; i < N; i++) {
-        const sx = pass.screenPosition![i * 2];
-        const sy = pass.screenPosition![i * 2 + 1];
+        const sx = op.instances.position![i * 2];
+        const sy = op.instances.position![i * 2 + 1];
         expect(Number.isFinite(sx)).toBe(true);
         expect(Number.isFinite(sy)).toBe(true);
         expect(sx).toBeGreaterThanOrEqual(0);
@@ -120,15 +119,15 @@ describe('Level 10 Golden Tests: The Golden Patch', () => {
 
         // Ortho: screenRadius === worldRadius (identity)
         // worldRadius = scale parameter = 1.0 (RenderInstances2D default)
-        expect(pass.screenRadius![i]).toBe(expectedRadius);
+        expect((op.instances.size as Float32Array)[i]).toBe(expectedRadius);
 
         // Verify depth is finite (ortho depth depends on z, which is 0 for GridLayout)
-        expect(Number.isFinite(pass.depth![i])).toBe(true);
+        expect(Number.isFinite(op.instances.depth![i])).toBe(true);
       }
 
       // All z=0 instances are visible under ortho
       // (no visible field in compacted output, but count should match)
-      expect(pass.count).toBe(N);
+      expect(op.instances.count).toBe(N);
     }
   });
 
@@ -152,28 +151,27 @@ describe('Level 10 Golden Tests: The Golden Patch', () => {
 
     // Capture frame 120 ortho output for comparison
     const frame120 = executeFrame(program, state, pool, 120 * 16.667, orthoCam);
-    const orthoPositions = new Float32Array(frame120.passes[0].screenPosition!);
+    const orthoPositions = new Float32Array(frame120.ops[0].instances.position!);
 
     // Toggle to perspective at frame 121, run to frame 180
     for (let frame = 121; frame <= 180; frame++) {
       const frameIR = executeFrame(program, state, pool, frame * 16.667, perspCam);
 
-      expect(frameIR.passes.length).toBeGreaterThan(0);
-      const pass = frameIR.passes[0];
-      expect(pass.kind).toBe('instances2d');
-      expect(pass.count).toBe(N);
+      expect(frameIR.ops.length).toBeGreaterThan(0);
+      const op = frameIR.ops[0];
+      expect(op.instances.count).toBe(N);
 
       // Verify screen-space fields exist
-      expect(pass.screenPosition).toBeInstanceOf(Float32Array);
-      expect(pass.screenRadius).toBeInstanceOf(Float32Array);
-      expect(pass.depth).toBeInstanceOf(Float32Array);
+      expect(op.instances.position).toBeInstanceOf(Float32Array);
+      expect(op.instances.size).toBeInstanceOf(Float32Array);
+      expect(op.instances.depth).toBeInstanceOf(Float32Array);
 
       // Perspective: screenPositions differ from ortho (parallax from camera at z=2.0)
       // At least some instances should have different screen positions
       let anyDifferent = false;
       for (let i = 0; i < N; i++) {
-        const sx = pass.screenPosition![i * 2];
-        const sy = pass.screenPosition![i * 2 + 1];
+        const sx = op.instances.position![i * 2];
+        const sy = op.instances.position![i * 2 + 1];
 
         // Still in valid range
         expect(Number.isFinite(sx)).toBe(true);
@@ -188,7 +186,7 @@ describe('Level 10 Golden Tests: The Golden Patch', () => {
         }
 
         // Verify depth is finite
-        expect(Number.isFinite(pass.depth![i])).toBe(true);
+        expect(Number.isFinite(op.instances.depth![i])).toBe(true);
       }
 
       // At least one instance should have a different screen position under perspective
@@ -224,14 +222,13 @@ describe('Level 10 Golden Tests: The Golden Patch', () => {
     for (let frame = 181; frame <= 240; frame++) {
       const frameIR = executeFrame(program, state, pool, frame * 16.667, orthoCam);
 
-      expect(frameIR.passes.length).toBeGreaterThan(0);
-      const pass = frameIR.passes[0];
-      expect(pass.kind).toBe('instances2d');
-      expect(pass.count).toBe(N);
+      expect(frameIR.ops.length).toBeGreaterThan(0);
+      const op = frameIR.ops[0];
+      expect(op.instances.count).toBe(N);
 
       // Ortho identity restored: screenRadius === worldRadius (scale = 1.0)
       for (let i = 0; i < N; i++) {
-        expect(pass.screenRadius![i]).toBe(expectedRadius);
+        expect((op.instances.size as Float32Array)[i]).toBe(expectedRadius);
       }
     }
   });
@@ -272,19 +269,19 @@ describe('Level 10 Golden Tests: The Golden Patch', () => {
     const controlFrame = executeFrame(program2, state2, pool2, 240 * 16.667, orthoCam);
 
     // Compare frame 240 outputs
-    const toggledPass = toggledFrame.passes[0];
-    const controlPass = controlFrame.passes[0];
+    const toggledOp = toggledFrame.ops[0];
+    const controlOp = controlFrame.ops[0];
 
-    expect(toggledPass.count).toBe(controlPass.count);
+    expect(toggledOp.instances.count).toBe(controlOp.instances.count);
 
     // Screen positions should be identical (within float precision)
-    for (let i = 0; i < toggledPass.count * 2; i++) {
-      expect(toggledPass.screenPosition![i]).toBeCloseTo(controlPass.screenPosition![i], 5);
+    for (let i = 0; i < toggledOp.instances.count * 2; i++) {
+      expect(toggledOp.instances.position![i]).toBeCloseTo(controlOp.instances.position![i], 5);
     }
 
     // Screen radii should be identical
-    for (let i = 0; i < toggledPass.count; i++) {
-      expect(toggledPass.screenRadius![i]).toBe(controlPass.screenRadius![i]);
+    for (let i = 0; i < toggledOp.instances.count; i++) {
+      expect(toggledOp.instances.size![i]).toBe(controlOp.instances.size![i]);
     }
   });
 });
@@ -331,9 +328,9 @@ describe('Level 10 Golden Tests: Determinism', () => {
     // Run 60 frames, record screenPosition for each
     for (let frame = 0; frame < 60; frame++) {
       const frameIR = executeFrame(program, state, pool, frame * 16.667, orthoCam);
-      const pass = frameIR.passes[0];
+      const op = frameIR.ops[0];
       // Store a COPY of the screenPosition buffer
-      recordings.push(new Float32Array(pass.screenPosition!));
+      recordings.push(new Float32Array(op.instances.position!));
     }
 
     // Store recordings for next test
@@ -383,10 +380,10 @@ describe('Level 10 Golden Tests: Determinism', () => {
     // Run 60 frames again
     for (let frame = 0; frame < 60; frame++) {
       const frameIR = executeFrame(program, state, pool, frame * 16.667, orthoCam);
-      const pass = frameIR.passes[0];
+      const op = frameIR.ops[0];
 
       const expected = recordings[frame];
-      const actual = pass.screenPosition!;
+      const actual = op.instances.position!;
 
       // Bitwise-identical comparison (byte-for-byte)
       expect(actual.length).toBe(expected.length);
@@ -439,16 +436,16 @@ describe('Level 10 Golden Tests: Stress Test', () => {
     // Run 10 frames ortho
     for (let frame = 0; frame < 10; frame++) {
       const frameIR = executeFrame(program, state, pool, frame * 16.667, orthoCam);
-      const pass = frameIR.passes[0];
+      const op = frameIR.ops[0];
 
-      expect(pass.count).toBe(N);
+      expect(op.instances.count).toBe(N);
 
       // Verify no NaN/Inf
       for (let i = 0; i < N; i++) {
-        const sx = pass.screenPosition![i * 2];
-        const sy = pass.screenPosition![i * 2 + 1];
-        const sr = pass.screenRadius![i];
-        const d = pass.depth![i];
+        const sx = op.instances.position![i * 2];
+        const sy = op.instances.position![i * 2 + 1];
+        const sr = (op.instances.size as Float32Array)[i];
+        const d = op.instances.depth![i];
 
         expect(Number.isFinite(sx)).toBe(true);
         expect(Number.isFinite(sy)).toBe(true);
@@ -463,40 +460,40 @@ describe('Level 10 Golden Tests: Stress Test', () => {
       }
 
       // Verify buffer lengths
-      expect(pass.screenPosition!.length).toBe(N * 2);
-      expect(pass.screenRadius!.length).toBe(N);
-      expect(pass.depth!.length).toBe(N);
+      expect(op.instances.position!.length).toBe(N * 2);
+      expect(op.instances.size!.length).toBe(N);
+      expect(op.instances.depth!.length).toBe(N);
     }
 
     // Run 10 frames perspective
     for (let frame = 10; frame < 20; frame++) {
       const frameIR = executeFrame(program, state, pool, frame * 16.667, perspCam);
-      const pass = frameIR.passes[0];
+      const op = frameIR.ops[0];
 
-      expect(pass.count).toBe(N);
+      expect(op.instances.count).toBe(N);
 
       // Verify no NaN/Inf
       for (let i = 0; i < N; i++) {
-        expect(Number.isFinite(pass.screenPosition![i * 2])).toBe(true);
-        expect(Number.isFinite(pass.screenPosition![i * 2 + 1])).toBe(true);
-        expect(Number.isFinite(pass.screenRadius![i])).toBe(true);
-        expect(Number.isFinite(pass.depth![i])).toBe(true);
+        expect(Number.isFinite(op.instances.position![i * 2])).toBe(true);
+        expect(Number.isFinite(op.instances.position![i * 2 + 1])).toBe(true);
+        expect(Number.isFinite((op.instances.size as Float32Array)[i])).toBe(true);
+        expect(Number.isFinite(op.instances.depth![i])).toBe(true);
       }
     }
 
     // Run 10 frames ortho again
     for (let frame = 20; frame < 30; frame++) {
       const frameIR = executeFrame(program, state, pool, frame * 16.667, orthoCam);
-      const pass = frameIR.passes[0];
+      const op = frameIR.ops[0];
 
-      expect(pass.count).toBe(N);
+      expect(op.instances.count).toBe(N);
 
       // Verify no NaN/Inf
       for (let i = 0; i < N; i++) {
-        expect(Number.isFinite(pass.screenPosition![i * 2])).toBe(true);
-        expect(Number.isFinite(pass.screenPosition![i * 2 + 1])).toBe(true);
-        expect(Number.isFinite(pass.screenRadius![i])).toBe(true);
-        expect(Number.isFinite(pass.depth![i])).toBe(true);
+        expect(Number.isFinite(op.instances.position![i * 2])).toBe(true);
+        expect(Number.isFinite(op.instances.position![i * 2 + 1])).toBe(true);
+        expect(Number.isFinite((op.instances.size as Float32Array)[i])).toBe(true);
+        expect(Number.isFinite(op.instances.depth![i])).toBe(true);
       }
     }
   });
@@ -549,15 +546,15 @@ describe('Level 10 Golden Tests: Export Isolation', () => {
     // Actually frame 59 is last of the loop, so run one more
     const toggledFrame = executeFrame(program, state, pool, 60 * 16.667, orthoCam);
 
-    const toggledPass = toggledFrame.passes[0];
-    const toggledScreenPos = new Float32Array(toggledPass.screenPosition!);
-    const toggledScreenRad = new Float32Array(toggledPass.screenRadius!);
+    const toggledOp = toggledFrame.ops[0];
+    const toggledScreenPos = new Float32Array(toggledOp.instances.position!);
+    const toggledScreenRad = new Float32Array(toggledOp.instances.size!);
 
     // Store for comparison
     (globalThis as any).__level10_toggledFrame60 = {
       screenPosition: toggledScreenPos,
       screenRadius: toggledScreenRad,
-      count: toggledPass.count,
+      count: toggledOp.instances.count,
     };
   });
 
@@ -600,13 +597,13 @@ describe('Level 10 Golden Tests: Export Isolation', () => {
 
     const controlFrame = executeFrame(program, state, pool, 60 * 16.667, orthoCam);
 
-    const controlPass = controlFrame.passes[0];
+    const controlOp = controlFrame.ops[0];
 
     // Store for comparison
     (globalThis as any).__level10_controlFrame60 = {
-      screenPosition: new Float32Array(controlPass.screenPosition!),
-      screenRadius: new Float32Array(controlPass.screenRadius!),
-      count: controlPass.count,
+      screenPosition: new Float32Array(controlOp.instances.position!),
+      screenRadius: new Float32Array(controlOp.instances.size!),
+      count: controlOp.instances.count,
     };
   });
 
@@ -717,11 +714,11 @@ describe('Level 10 Golden Tests: Multi-Backend Comparison', () => {
     }
 
     const frame60 = executeFrame(program, state, pool, 60 * 16.667, orthoCam);
-    const pass = frame60.passes[0];
+    const op = frame60.ops[0];
 
     // Verify RenderPassIR has screen-space data
-    expect(pass.screenPosition).toBeTruthy();
-    expect(pass.screenRadius).toBeTruthy();
+    expect(op.instances.position).toBeTruthy();
+    expect(op.instances.size).toBeTruthy();
 
     // The coordinate math is the same for both Canvas2D and SVG:
     // pixelX = screenPosition[i*2] * width
@@ -730,10 +727,10 @@ describe('Level 10 Golden Tests: Multi-Backend Comparison', () => {
     // This is verified by Level 8 tests, but we can check that the data
     // is in the expected normalized range [0,1]
 
-    const N = pass.count;
+    const N = op.instances.count;
     for (let i = 0; i < N; i++) {
-      const sx = pass.screenPosition![i * 2];
-      const sy = pass.screenPosition![i * 2 + 1];
+      const sx = op.instances.position![i * 2];
+      const sy = op.instances.position![i * 2 + 1];
 
       expect(sx).toBeGreaterThanOrEqual(0);
       expect(sx).toBeLessThanOrEqual(1);

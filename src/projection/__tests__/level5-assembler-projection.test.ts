@@ -16,6 +16,8 @@ import { buildPatch } from '../../graph';
 import { compile } from '../../compiler/compile';
 import { createRuntimeState, BufferPool, executeFrame, type RenderFrameIR_Future } from '../../runtime';
 import { type CameraParams } from '../../runtime/RenderAssembler';
+import { ORTHO_CAMERA_DEFAULTS } from '../ortho-kernel';
+import { PERSP_CAMERA_DEFAULTS } from '../perspective-kernel';
 
 // =============================================================================
 // LEVEL 5 UNIT TESTS: Assembler API surface
@@ -63,12 +65,8 @@ describe('Level 5 Unit Tests: Assembler API', () => {
 
     // Should accept ortho camera
     const orthoCam: CameraParams = {
-      kind: 'ortho',
-      viewportWidth: 800,
-      viewportHeight: 600,
-      zoom: 1.0,
-      centerX: 0.5,
-      centerY: 0.5,
+      mode: 'orthographic',
+      params: ORTHO_CAMERA_DEFAULTS,
     };
     const frameWithCamera = executeFrame(program, state, pool, 16, orthoCam);
     expect(frameWithCamera.version).toBe(2);
@@ -76,14 +74,8 @@ describe('Level 5 Unit Tests: Assembler API', () => {
 
     // Should accept perspective camera
     const perspCam: CameraParams = {
-      kind: 'persp',
-      viewportWidth: 800,
-      viewportHeight: 600,
-      fov: 60,
-      near: 0.1,
-      far: 100,
-      cameraZ: 1.5,
-      lookAtZ: 0.0,
+      mode: 'perspective',
+      params: PERSP_CAMERA_DEFAULTS,
     };
     const framePersp = executeFrame(program, state, pool, 32, perspCam);
     expect(framePersp.version).toBe(2);
@@ -177,12 +169,8 @@ describe('Level 5 Unit Tests: Assembler API', () => {
     const pool = new BufferPool();
 
     const orthoCam: CameraParams = {
-      kind: 'ortho',
-      viewportWidth: 800,
-      viewportHeight: 600,
-      zoom: 1.0,
-      centerX: 0.5,
-      centerY: 0.5,
+      mode: 'orthographic',
+      params: ORTHO_CAMERA_DEFAULTS,
     };
 
     const frame = executeFrame(program, state, pool, 0, orthoCam) as RenderFrameIR_Future;
@@ -264,12 +252,8 @@ describe('Level 5 Integration Tests: Full Pipeline', () => {
 
     // Define ortho camera (this will trigger projection)
     const orthoCam: CameraParams = {
-      kind: 'ortho',
-      viewportWidth: 800,
-      viewportHeight: 600,
-      zoom: 1.0,
-      centerX: 0.5,
-      centerY: 0.5,
+      mode: 'orthographic',
+      params: ORTHO_CAMERA_DEFAULTS,
     };
 
     // Create runtime state and buffer pool

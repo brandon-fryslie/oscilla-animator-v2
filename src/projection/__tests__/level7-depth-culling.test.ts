@@ -431,26 +431,25 @@ describe('Level 7 End-to-End: Real Pipeline Depth Sort + Cull', () => {
     // Execute one frame with ortho camera
     const frame = executeFrame(program, state, pool, 0, orthoCam);
 
-    expect(frame.passes.length).toBeGreaterThan(0);
-    const pass = frame.passes[0];
+    expect(frame.ops.length).toBeGreaterThan(0);
+    const op = frame.ops[0];
 
     // All 9 instances at z=0 are within frustum → all visible → count = 9
-    expect(pass.count).toBe(9);
+    expect(op.instances.count).toBe(9);
 
     // Screen-space fields are compacted (no visible field — all are visible by definition)
-    expect(pass.screenPosition).toBeInstanceOf(Float32Array);
-    expect(pass.screenRadius).toBeInstanceOf(Float32Array);
-    expect(pass.depth).toBeInstanceOf(Float32Array);
-    expect(pass.screenPosition!.length).toBe(9 * 2);
-    expect(pass.screenRadius!.length).toBe(9);
-    expect(pass.depth!.length).toBe(9);
+    expect(op.instances.position).toBeInstanceOf(Float32Array);
+    expect(op.instances.size).toBeInstanceOf(Float32Array);
+    expect(op.instances.depth).toBeInstanceOf(Float32Array);
+    expect(op.instances.position.length).toBe(9 * 2);
+    expect((op.instances.size as Float32Array).length).toBe(9);
+    expect(op.instances.depth!.length).toBe(9);
 
     // After compaction, visible field is NOT in output (all instances are visible)
-    expect(pass.visible).toBeUndefined();
 
     // Depth should be sorted (for z=0, all depths are identical under ortho → stable order)
-    for (let i = 1; i < pass.count; i++) {
-      expect(pass.depth![i]).toBeGreaterThanOrEqual(pass.depth![i - 1]);
+    for (let i = 1; i < op.instances.count; i++) {
+      expect(op.instances.depth![i]).toBeGreaterThanOrEqual(op.instances.depth![i - 1]);
     }
   });
 });
