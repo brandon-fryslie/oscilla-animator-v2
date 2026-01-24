@@ -531,6 +531,7 @@ function convertLinkedIRToProgram(
     slotMeta,
     debugIndex,
     fieldSlotRegistry,
+    renderGlobals: [], // Camera system: populated by compiler pass when Camera block exists
   };
 }
 
