@@ -263,3 +263,186 @@ registerBlock({
     };
   },
 });
+
+// =============================================================================
+// Noise
+// =============================================================================
+
+registerBlock({
+  type: 'Noise',
+  label: 'Noise',
+  category: 'math',
+  description: 'Deterministic procedural noise. Output in [0, 1)',
+  form: 'primitive',
+  capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
+  inputs: {
+    x: { label: 'X', type: signalType('float') },
+  },
+  outputs: {
+    out: { label: 'Output', type: signalType('float') },
+  },
+  lower: ({ ctx, inputsById }) => {
+    const x = inputsById.x;
+    if (!x || x.k !== 'sig') {
+      throw new Error('Noise x input must be a signal');
+    }
+
+    // Use Hash opcode with fixed seed=0 for deterministic noise
+    const seedId = ctx.b.sigConst(0, signalType('float'));
+    const hashFn = ctx.b.opcode(OpCode.Hash);
+    const hashId = ctx.b.sigZip([x.id as SigExprId, seedId], hashFn, signalType('float'));
+    const slot = ctx.b.allocSlot();
+
+    return {
+      outputsById: {
+        out: { k: 'sig', id: hashId, slot },
+      },
+    };
+  },
+});
+
+// =============================================================================
+// Length
+// =============================================================================
+
+registerBlock({
+  type: 'Length',
+  label: 'Length',
+  category: 'math',
+  description: 'Euclidean length (magnitude) of a 2D or 3D vector',
+  form: 'primitive',
+  capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
+  inputs: {
+    x: { label: 'X', type: signalType('float') },
+    y: { label: 'Y', type: signalType('float') },
+    z: { label: 'Z', type: signalType('float'), optional: true },
+  },
+  outputs: {
+    out: { label: 'Output', type: signalType('float') },
+  },
+  lower: ({ ctx, inputsById }) => {
+    const x = inputsById.x;
+    const y = inputsById.y;
+    const z = inputsById.z;
+
+    if (!x || x.k !== 'sig' || !y || y.k !== 'sig') {
+      throw new Error('Length requires x and y signal inputs');
+    }
+
+    // Compute x² + y² [+ z²]
+    const mulFn = ctx.b.opcode(OpCode.Mul);
+    const addFn = ctx.b.opcode(OpCode.Add);
+    const sqrtFn = ctx.b.opcode(OpCode.Sqrt);
+
+    const x2 = ctx.b.sigZip([x.id as SigExprId, x.id as SigExprId], mulFn, signalType('float'));
+    const y2 = ctx.b.sigZip([y.id as SigExprId, y.id as SigExprId], mulFn, signalType('float'));
+    let sumSq = ctx.b.sigZip([x2, y2], addFn, signalType('float'));
+
+    if (z && z.k === 'sig') {
+      const z2 = ctx.b.sigZip([z.id as SigExprId, z.id as SigExprId], mulFn, signalType('float'));
+      sumSq = ctx.b.sigZip([sumSq, z2], addFn, signalType('float'));
+    }
+
+    const lengthId = ctx.b.sigMap(sumSq, sqrtFn, signalType('float'));
+    const slot = ctx.b.allocSlot();
+
+    return {
+      outputsById: {
+        out: { k: 'sig', id: lengthId, slot },
+      },
+    };
+  },
+});
+
+// =============================================================================
+// Normalize
+// =============================================================================
+
+registerBlock({
+  type: 'Normalize',
+  label: 'Normalize',
+  category: 'math',
+  description: 'Normalize a 2D or 3D vector to unit length',
+  form: 'primitive',
+  capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
+  inputs: {
+    x: { label: 'X', type: signalType('float') },
+    y: { label: 'Y', type: signalType('float') },
+    z: { label: 'Z', type: signalType('float'), optional: true },
+  },
+  outputs: {
+    outX: { label: 'X', type: signalType('float') },
+    outY: { label: 'Y', type: signalType('float') },
+    outZ: { label: 'Z', type: signalType('float') },
+  },
+  lower: ({ ctx, inputsById }) => {
+    const x = inputsById.x;
+    const y = inputsById.y;
+    const z = inputsById.z;
+
+    if (!x || x.k !== 'sig' || !y || y.k !== 'sig') {
+      throw new Error('Normalize requires x and y signal inputs');
+    }
+
+    const mulFn = ctx.b.opcode(OpCode.Mul);
+    const addFn = ctx.b.opcode(OpCode.Add);
+    const sqrtFn = ctx.b.opcode(OpCode.Sqrt);
+    const divFn = ctx.b.opcode(OpCode.Div);
+    const maxFn = ctx.b.opcode(OpCode.Max);
+
+    // Compute length = sqrt(x² + y² [+ z²])
+    const x2 = ctx.b.sigZip([x.id as SigExprId, x.id as SigExprId], mulFn, signalType('float'));
+    const y2 = ctx.b.sigZip([y.id as SigExprId, y.id as SigExprId], mulFn, signalType('float'));
+    let sumSq = ctx.b.sigZip([x2, y2], addFn, signalType('float'));
+
+    const hasZ = z && z.k === 'sig';
+    if (hasZ) {
+      const z2 = ctx.b.sigZip([z.id as SigExprId, z.id as SigExprId], mulFn, signalType('float'));
+      sumSq = ctx.b.sigZip([sumSq, z2], addFn, signalType('float'));
+    }
+
+    const lengthId = ctx.b.sigMap(sumSq, sqrtFn, signalType('float'));
+
+    // Guard against division by zero: use max(length, epsilon)
+    const epsilon = ctx.b.sigConst(1e-10, signalType('float'));
+    const safeLengthId = ctx.b.sigZip([lengthId, epsilon], maxFn, signalType('float'));
+
+    // Divide each component by length
+    const outXId = ctx.b.sigZip([x.id as SigExprId, safeLengthId], divFn, signalType('float'));
+    const outYId = ctx.b.sigZip([y.id as SigExprId, safeLengthId], divFn, signalType('float'));
+
+    let outZId: SigExprId;
+    if (hasZ) {
+      outZId = ctx.b.sigZip([z.id as SigExprId, safeLengthId], divFn, signalType('float'));
+    } else {
+      outZId = ctx.b.sigConst(0, signalType('float'));
+    }
+
+    const slotX = ctx.b.allocSlot();
+    const slotY = ctx.b.allocSlot();
+    const slotZ = ctx.b.allocSlot();
+
+    return {
+      outputsById: {
+        outX: { k: 'sig', id: outXId, slot: slotX },
+        outY: { k: 'sig', id: outYId, slot: slotY },
+        outZ: { k: 'sig', id: outZId, slot: slotZ },
+      },
+    };
+  },
+});

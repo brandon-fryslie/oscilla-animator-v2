@@ -1,9 +1,9 @@
-# Sprint: P2-Blocked — Remaining Critical Items (1 Blocked, 2 DONE)
+# Sprint: P2-Blocked — Remaining Critical Items (COMPLETE)
 
 Generated: 2026-01-24T19:00:00Z
-Updated: 2026-01-24T21:30:00Z
-Confidence: HIGH: 2 (done), MEDIUM: 0, LOW: 1 (blocked)
-Status: MOSTLY COMPLETE (C-8 and C-9 complete, C-12 still blocked)
+Updated: 2026-01-25T01:39:00Z
+Confidence: HIGH: 2 (done), MEDIUM: 0, LOW: 1 (blocked, deferred)
+Status: COMPLETE (C-8 and C-9 done; C-12 deferred to U-21 layer system design)
 
 ## Sprint Goal
 
@@ -92,11 +92,14 @@ U-21 layer system design ──blocks──> C-12
 
 ## Recommendation
 
-**Sprint Status**: 2/3 complete (66% done). C-12 remains blocked pending U-21 design work.
+**Sprint Status**: COMPLETE. 2/3 items done, 1/3 externally blocked (deferred to U-21).
+
+**Deferred**:
+- C-12: Deferred to U-21 (layer system design). No functional impact until then.
 
 **Next Steps**:
-1. C-12 can wait until layer system design (U-21) is prioritized
-2. U-6 (SampleAndHold block) is now unblocked and can be implemented
-3. Consider closing this sprint and opening a new one for U-6 implementation
+1. U-6 (SampleAndHold) is now unblocked — next implementation opportunity
+2. P3 user decisions (R-2, R-6, R-7, R-8) — next priority for user engagement
+3. U-21 (layer system design) — when prioritized, unblocks C-12
 
-**Achievement**: Critical event system infrastructure (C-8) and render pipeline migration (C-9) are both complete with full test coverage and no regressions.
+**Achievement**: All actionable critical gap-analysis work is done. Event system infrastructure (C-8) and render pipeline migration (C-9) complete with full test coverage and no regressions.

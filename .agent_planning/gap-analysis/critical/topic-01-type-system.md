@@ -3,26 +3,27 @@ topic: 01
 name: Type System
 spec_file: design-docs/CANONICAL-oscilla-v2.5-20260109/ESSENTIAL-SPEC.md
 category: critical
-audited: 2026-01-23T12:00:00Z
-item_count: 3
-priority_reasoning: CombineMode structural issue. Missing PayloadTypes. No stride table.
+audited: 2026-01-25T23:00:00Z
+item_count: 0
+priority_reasoning: All critical type system items resolved. C-1 (CombineMode), C-2 (vec3), C-23 (stride table) all DONE.
 ---
 
 # Topic 01: Type System — Critical Gaps
 
-## Items
+## Remaining Items
 
-### C-1: CombineMode is flat string union, not discriminated union
-**Problem**: CombineMode is `'last' | 'first' | 'sum' | 'average' | 'max' | 'min'` — a flat string union. Spec requires discriminated union with semantic grouping (numeric: sum/avg/min/max/mul, any: last/first/layer, boolean: or/and). Also missing `mul`, `layer`, `or`, `and` modes.
-**Evidence**: src/types/index.ts:140-146 — flat string literal union
-**Obvious fix?**: Yes — restructure to discriminated union, add missing modes (note: `layer` on shape2d is explicitly disallowed per 3D spec, so only allow on numeric/boolean payloads).
+(None — all resolved)
 
-### C-2: PayloadType missing vec3; shape→shape2d rename
-**Problem**: PayloadType is `'float' | 'int' | 'vec2' | 'color' | 'bool' | 'shape'`. Spec requires `'float' | 'int' | 'vec2' | 'vec3' | 'color' | 'bool' | 'unit' | 'shape2d'`. Missing: vec3 (blocks 3D). shape→shape2d is a rename. (Phase is correctly represented as float+unit:phase01, not a distinct PayloadType.)
-**Evidence**: src/core/canonical-types.ts:120-126
-**Obvious fix?**: Partially — adding vec3 is straightforward. shape→shape2d is a rename.
+## Resolved Items
 
-### C-23: No stride table in type system
-**Problem**: Spec defines explicit stride per PayloadType (float=1, int=1, bool=1, unit=1, vec2=2, vec3=3, color=4, shape2d=8). No canonical stride table exists in the type system module. Stride only appears in scattered IR state mappings.
-**Evidence**: src/core/canonical-types.ts — no STRIDE constant or strideOf() function
-**Obvious fix?**: Yes — add `STRIDE: Record<PayloadType, number>` constant to canonical-types.ts
+### C-1: CombineMode is flat string union, not discriminated union ✅
+**Status**: DONE (commit c3694de)
+**Resolution**: CombineMode expanded with mul/layer/or/and modes and semantic category map.
+
+### C-2: PayloadType missing vec3; shape→shape2d rename ✅
+**Status**: DONE (commit 09e404f)
+**Resolution**: vec3 added to PayloadType. All layout kernels produce vec3 stride-3. shape→shape2d rename WON'T FIX (97 uses/34 files, pure churn, no functional value).
+
+### C-23: No stride table in type system ✅
+**Status**: DONE (commit c3694de)
+**Resolution**: PAYLOAD_STRIDE constant and strideOf() function added to canonical-types.ts.

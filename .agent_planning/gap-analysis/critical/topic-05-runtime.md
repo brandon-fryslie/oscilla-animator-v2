@@ -3,21 +3,22 @@ topic: 05
 name: Runtime
 spec_file: design-docs/CANONICAL-oscilla-v2.5-20260109/ESSENTIAL-SPEC.md
 category: critical
-audited: 2026-01-24T19:00:00Z
-item_count: 1
-priority_reasoning: Runtime event model uses boolean flags instead of EventPayload[], blocking SampleAndHold. C-15 and C-16 resolved in prior sprints.
+audited: 2026-01-24T21:35:00Z
+item_count: 0
+priority_reasoning: All runtime critical items resolved. C-8 EventPayload complete, C-15 cache keys complete, C-16 slot lookup complete.
 ---
 
 # Topic 05: Runtime — Critical Gaps
 
 ## Remaining Items
 
-### C-8: Event model is boolean flags, not EventPayload[]
-**Status**: BLOCKED (needs event design)
-**Problem**: Runtime event handling uses simple boolean flags (Uint8Array with 0/1 values). Spec requires `Map<number, EventPayload[]>` for proper event payloads (value, timestamp, source). This blocks SampleAndHold and any event-carrying data.
-**Evidence**: src/runtime/RuntimeState.ts:461 — `eventScalars: Uint8Array`
-**Obvious fix?**: No — requires designing EventPayload type and integrating with schedule executor.
-**Blocked by**: Event model architectural design (no spec for EventPayload yet)
+(None — all resolved)
+
+## Resolved Items
+
+### C-8: Event model is boolean flags, not EventPayload[] ✅
+**Status**: DONE (commits 1e75e00, 46f26b9)
+**Resolution**: Added spec-compliant `EventPayload { key: string, value: number }` type and `events: Map<number, EventPayload[]>` to ProgramState/RuntimeState. Dual-path approach: boolean flags kept for fast path, Map added for data-carrying events. Events clear each frame (spec §6.1). 7 new tests. U-6 (SampleAndHold) now unblocked.
 
 ## Resolved Items
 

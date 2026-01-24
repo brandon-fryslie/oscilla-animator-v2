@@ -2,28 +2,47 @@
 scope: update
 spec_source: design-docs/CANONICAL-oscilla-v2.5-20260109/
 impl_source: src/
-generated: 2026-01-24T16:16:00Z
-previous_run: 2026-01-25T08:00:00Z
+generated: 2026-01-26T10:15:00Z
+previous_run: 2026-01-26T01:00:00Z
 topics_audited: 8
-totals: { trivial: 16, critical: 2, to-review: 4, unimplemented: 34, done: ~181 }
+totals: { trivial: 16, critical: 1 (blocked/deferred), to-review: 4, unimplemented: 30, done: ~191 }
+sprint_status: ALL CRITICAL RESOLVED | isStateful consistency fix applied | Next: P3 user decisions or U-8 utility blocks
 confirmed: true
-test_suite: 1277/1277 pass
+test_suite: 1294/1294 pass (3 skipped)
 ---
 
 # Gap Analysis: Full Core Spec (Topics 01-06, 16, 17) — UPDATE
 
 ## Executive Summary
 
-P1 critical items all resolved. P2 items C-2 (vec3), C-9 (render pipeline v1→v2), C-13 (rotation/scale2), and C-16 (runtime type dispatch) now also fixed. C-9/ms5.8 is COMPLETE: v1 render path fully removed, v2 is the canonical and only path. All 1277 tests pass.
+**Sprint stateful-primitives: COMPLETE.** All 4 MVP stateful primitives now implemented: UnitDelay, SampleHold, Lag, Phasor. All 1294 tests pass, typecheck clean.
 
-Remaining critical items (C-8, C-12) both have external dependencies and cannot be acted on directly. C-8 needs event model architecture design, C-12 needs layer system design (U-21).
+All P1 and P2 critical items done. C-12 (PathStyle blend/layer) remains deferred — blocked by U-21 (layer system design), no functional impact.
 
-The `shape→shape2d` rename portion of C-2 is WON'T FIX (97 uses across 34 files, pure churn with no functional value).
+**U-4 (Lag): DONE** — Exponential smoothing filter at `src/blocks/signal-blocks.ts:285-343`. Uses OpCode.Lerp, per-lane state, isStateful: true.
 
-**Next priority**: P3 user decisions (R-2, R-6, R-7, R-8) and P4/P5 unimplemented features when their blockers resolve.
+**U-5 (Phasor): DONE** — Phase accumulator with wrap at `src/blocks/signal-blocks.ts:350-421`. Uses sigTime('dt'), OpCode.Wrap01, unitPhase01 output.
+
+**Next**: P3 user decisions (R-2, R-6, R-7, R-8), U-8 (utility blocks: Noise, Length, Normalize), and U-21 (layer system design, unblocks C-12).
 
 ## Changes Since Last Run
 
+| Item | Was | Now | Reason |
+|------|-----|-----|--------|
+| U-4 Lag | NEXT SPRINT | DONE | Exponential smoothing block (src/blocks/signal-blocks.ts:285-343) |
+| U-5 Phasor | NEXT SPRINT | DONE | Phase accumulator with wrap (src/blocks/signal-blocks.ts:350-421) |
+| Stateful primitives | 2/4 DONE | 4/4 DONE | All MVP stateful primitives complete |
+| Test count | 1284 pass | 1294 pass | +10 new Lag/Phasor tests |
+
+### Previously Resolved (prior run)
+| Item | Was | Now | Reason |
+|------|-----|-----|--------|
+| C-8 EventPayload | BLOCKED | DONE | Spec-compliant EventPayload type + Map storage (commits 1e75e00, 46f26b9) |
+| Event storage | Uint8Array only | Dual-path | eventScalars (fast boolean) + events Map (data-carrying) coexist |
+| U-6 SampleAndHold | BLOCKED by C-8 | DONE | Already implemented as SampleHold (src/blocks/event-blocks.ts:53-113) |
+| Test count | 1277 pass | 1284 pass | +7 new EventPayload tests |
+
+### Previously Resolved (prior run)
 | Item | Was | Now | Reason |
 |------|-----|-----|--------|
 | C-9/ms5.8 v1→v2 switchover | UNBLOCKED | DONE | Full migration complete (commits 523a1d1..270d947) |
@@ -31,8 +50,6 @@ The `shape→shape2d` rename portion of C-2 is WON'T FIX (97 uses across 34 file
 | v2 projection support | MISSING | DONE | Camera projection added to assembleDrawPathInstancesOp |
 | SVG primitive support | MISSING | DONE | renderDrawPrimitiveInstancesOp in SVGRenderer |
 | RenderFrameIR_Future | FUTURE TYPE | CANONICAL | Renamed to RenderFrameIR, future-types.ts → types.ts |
-| assembleRenderFrame_v2 | V2 NAME | CANONICAL | Renamed to assembleRenderFrame |
-| Test count | 1284 pass | 1277 pass | 25 v1-only tests removed, net -7 |
 
 ### Previously Resolved (prior run)
 | Item | Was | Now | Reason |
@@ -70,7 +87,7 @@ All P1 items fixed in commits 129c2e5..c3694de:
 | # | Item | Topic | Blocked By | Context File |
 |---|------|-------|------------|--------------|
 | ~~13~~ | ~~C-2~~ | ~~01 Type~~ | ~~vec3 additions~~ ✅ | DONE (vec3 complete, shape→shape2d WON'T FIX) |
-| 14 | C-8 | 05 Runtime | Design needed (EventPayload) | [critical/topic-05](./critical/topic-05-runtime.md) |
+| ~~14~~ | ~~C-8~~ | ~~05 Runtime~~ | ~~Design needed (EventPayload)~~ ✅ | DONE — EventPayload infrastructure complete (commits 1e75e00, 46f26b9) |
 | ~~15~~ | ~~C-9~~ | ~~06 Renderer~~ | ~~Migration path (ms5 epic)~~ ✅ | DONE — v1→v2 complete, v1 removed (commits 523a1d1..270d947) |
 | ~~16~~ | ~~C-10~~ | ~~17 Layout~~ | ~~Phase clamp~~ ✅ | R-5 resolved: phase01 is correct, no code change needed |
 | ~~17~~ | ~~C-11~~ | ~~06 Renderer~~ | ~~PathVerb spec~~ ✅ | Code is canonical (internally consistent), spec needs update |
@@ -107,9 +124,9 @@ All P1 items fixed in commits 129c2e5..c3694de:
 | 21 | U-1 | 01 Type | Phase arithmetic enforcement |
 | 22 | U-2 | 01 Type | InstanceDecl in core |
 | 23 | U-3 | 01 Type | DefaultSemantics<T> |
-| 24 | U-4 | 02 Block | Lag stateful primitive |
-| 25 | U-5 | 02 Block | Phasor stateful primitive |
-| 26 | U-6 | 02 Block | SampleAndHold (needs C-8 event model) |
+| ~~24~~ | ~~U-4~~ | ~~02 Block~~ | ~~Lag stateful primitive~~ ✅ DONE (implemented in signal-blocks.ts:285) |
+| ~~25~~ | ~~U-5~~ | ~~02 Block~~ | ~~Phasor stateful primitive~~ ✅ DONE (implemented in signal-blocks.ts:350) |
+| ~~26~~ | ~~U-6~~ | ~~02 Block~~ | ~~SampleAndHold~~ ✅ DONE (implemented as SampleHold) |
 | 27 | U-7 | 02 Block | PortBinding with CombineMode |
 | 28 | U-8 | 02 Block | Noise, Length, Normalize blocks |
 | 29 | U-9 | 03 Time | ~~dt output port~~ (DONE via C-22) |
@@ -152,8 +169,8 @@ C-7 ✅  C-3 ✅  C-1 ✅ → unblocks U-7
 C-13 ✅ (rotation/scale2 plumbed)  C-16 ✅ (slot lookup O(1))
 C-2 ✅ (vec3 complete) → unblocks U-26 (vec3 positions) → unblocks U-27 (camera)
 
-C-8 (event model) ──blocks──> U-6 (SampleAndHold)
-C-9 (RenderPassIR) ──blocks──> U-21 (layers)
+C-8 ✅ (event model) ──unblocks──> U-6 ✅ (SampleHold already implemented)
+C-9 ✅ (RenderPassIR) ──unblocks──> U-21 (layers)
 C-12 (PathStyle blend/layer) ──blocks──> nothing directly (cosmetic until layer system)
 ```
 
@@ -171,5 +188,13 @@ The instances2d → DrawPathInstancesOp migration is tracked as a separate epic 
 ### 3D World Model (U-26, U-27)
 The 3D spec docs (design-docs/_new/3d/) define a comprehensive always-3D world model with orthographic default projection. Vec3 PayloadType and vec3 layouts are now complete (C-2 done). Remaining: vec3 positions in coordinate-space system (U-26), then camera/projection stage (U-27). These are now unblocked.
 
-### Event Model Gap (C-8)
-Editor-level events (EventHub) exist but runtime-level EventPayload[] does not. This blocks SampleAndHold and any data-carrying event semantics. Needs architectural design.
+### Event Model Gap (C-8) — RESOLVED
+EventPayload infrastructure now complete. Dual-path approach: `eventScalars` (Uint8Array) for fast boolean checks, `events: Map<number, EventPayload[]>` for data-carrying events. SampleAndHold (U-6) is DONE (implemented as SampleHold using boolean triggers). Spec-compliant: events clear per tick, key/value payload per spec §5.
+
+### Stateful Primitives — 4 of 4 DONE (ALL COMPLETE)
+- UnitDelay: DONE (`src/blocks/signal-blocks.ts:229`)
+- SampleHold: DONE (`src/blocks/event-blocks.ts:53`)
+- Lag: DONE (`src/blocks/signal-blocks.ts:285`) — exponential smoothing, per-lane state, isStateful: true
+- Phasor: DONE (`src/blocks/signal-blocks.ts:350`) — phase accumulator with wrap, sigTime dt, isStateful: true
+
+**Note**: UnitDelay and SampleHold `isStateful: true` inconsistency FIXED (commit 459b468). All 4 MVP stateful primitives now consistent.

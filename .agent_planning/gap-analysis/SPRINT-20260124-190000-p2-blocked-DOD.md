@@ -1,8 +1,8 @@
 # Definition of Done: P2 Critical Items
 
 Generated: 2026-01-24T19:00:00Z
-Updated: 2026-01-24T21:30:00Z
-Status: C-8 DONE ✅, C-9 DONE ✅, C-12 still BLOCKED
+Updated: 2026-01-25T01:39:00Z
+Status: SPRINT COMPLETE (C-8 ✅, C-9 ✅, C-12 deferred→U-21)
 
 ## Acceptance Criteria
 
@@ -51,4 +51,4 @@ Status: C-8 DONE ✅, C-9 DONE ✅, C-12 still BLOCKED
 
 1. C-8: DONE ✅ — EventPayload infrastructure complete (2026-01-24T21:30:00Z)
 2. C-9: DONE ✅ — v1→v2 migration complete, v1 code removed
-3. C-12: STILL BLOCKED — Layer system (U-21) not yet designed
+3. C-12: DEFERRED — Layer system (U-21) not yet designed. No action possible. Deferred to future sprint.
