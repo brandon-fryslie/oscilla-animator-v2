@@ -1,7 +1,7 @@
 /**
  * Stateful Primitives Test
  *
- * Tests for UnitDelay, Hash, and Id01 blocks.
+ * Tests for UnitDelay, Lag, Phasor, Hash, and Id01 blocks.
  * Tests the behavior of stateful and utility signal blocks.
  */
 
@@ -142,6 +142,245 @@ describe('UnitDelay Block', () => {
     // First frame: output should be 42 (custom initial), write 7
     executeFrame(program, state, pool, 0);
     expect(state.state[0]).toBe(7);
+  });
+});
+
+describe('Lag Block', () => {
+  it('compiles with a state slot', () => {
+    const patch = buildPatch((b) => {
+      b.addBlock('InfiniteTimeRoot', {});
+      const constBlock = b.addBlock('Const', { value: 10 });
+      const lagBlock = b.addBlock('Lag', { smoothing: 0.5 });
+      b.wire(constBlock, 'out', lagBlock, 'target');
+    });
+
+    const result = compile(patch);
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+
+    const schedule = result.program.schedule as any;
+    expect(schedule.stateSlotCount).toBe(1);
+    expect(schedule.stateSlots[0].initialValue).toBe(0);
+  });
+
+  it('smooths toward target value over multiple frames', () => {
+    const patch = buildPatch((b) => {
+      b.addBlock('InfiniteTimeRoot', {});
+      const constBlock = b.addBlock('Const', { value: 10 });
+      const lagBlock = b.addBlock('Lag', { smoothing: 0.5 });
+      b.wire(constBlock, 'out', lagBlock, 'target');
+    });
+
+    const result = compile(patch);
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+
+    const program = result.program;
+    const schedule = program.schedule as any;
+    const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount);
+    const pool = new BufferPool();
+
+    // Frame 1: lerp(0, 10, 0.5) = 5
+    executeFrame(program, state, pool, 0);
+    expect(state.state[0]).toBeCloseTo(5, 5);
+
+    // Frame 2: lerp(5, 10, 0.5) = 7.5
+    executeFrame(program, state, pool, 16);
+    expect(state.state[0]).toBeCloseTo(7.5, 5);
+
+    // Frame 3: lerp(7.5, 10, 0.5) = 8.75
+    executeFrame(program, state, pool, 32);
+    expect(state.state[0]).toBeCloseTo(8.75, 5);
+  });
+
+  it('smoothing=1 snaps immediately to target', () => {
+    const patch = buildPatch((b) => {
+      b.addBlock('InfiniteTimeRoot', {});
+      const constBlock = b.addBlock('Const', { value: 42 });
+      const lagBlock = b.addBlock('Lag', { smoothing: 1.0 });
+      b.wire(constBlock, 'out', lagBlock, 'target');
+    });
+
+    const result = compile(patch);
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+
+    const program = result.program;
+    const schedule = program.schedule as any;
+    const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount);
+    const pool = new BufferPool();
+
+    executeFrame(program, state, pool, 0);
+    expect(state.state[0]).toBeCloseTo(42, 5);
+  });
+
+  it('smoothing=0 produces no movement', () => {
+    const patch = buildPatch((b) => {
+      b.addBlock('InfiniteTimeRoot', {});
+      const constBlock = b.addBlock('Const', { value: 100 });
+      const lagBlock = b.addBlock('Lag', { smoothing: 0, initialValue: 5 });
+      b.wire(constBlock, 'out', lagBlock, 'target');
+    });
+
+    const result = compile(patch);
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+
+    const program = result.program;
+    const schedule = program.schedule as any;
+    const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount);
+    const pool = new BufferPool();
+
+    // Initialize state
+    for (let i = 0; i < schedule.stateSlots.length; i++) {
+      state.state[i] = schedule.stateSlots[i].initialValue;
+    }
+
+    executeFrame(program, state, pool, 0);
+    expect(state.state[0]).toBeCloseTo(5, 5); // No movement
+  });
+
+  it('respects custom initial value', () => {
+    const patch = buildPatch((b) => {
+      b.addBlock('InfiniteTimeRoot', {});
+      const constBlock = b.addBlock('Const', { value: 10 });
+      const lagBlock = b.addBlock('Lag', { smoothing: 0.5, initialValue: 20 });
+      b.wire(constBlock, 'out', lagBlock, 'target');
+    });
+
+    const result = compile(patch);
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+
+    const schedule = result.program.schedule as any;
+    expect(schedule.stateSlots[0].initialValue).toBe(20);
+  });
+});
+
+describe('Phasor Block', () => {
+  it('compiles with a state slot', () => {
+    const patch = buildPatch((b) => {
+      b.addBlock('InfiniteTimeRoot', {});
+      const freqBlock = b.addBlock('Const', { value: 1 }); // 1 Hz
+      const phasorBlock = b.addBlock('Phasor', {});
+      b.wire(freqBlock, 'out', phasorBlock, 'frequency');
+    });
+
+    const result = compile(patch);
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+
+    const schedule = result.program.schedule as any;
+    expect(schedule.stateSlotCount).toBe(1);
+    expect(schedule.stateSlots[0].initialValue).toBe(0);
+  });
+
+  it('accumulates phase based on frequency and dt', () => {
+    const patch = buildPatch((b) => {
+      b.addBlock('InfiniteTimeRoot', {});
+      const freqBlock = b.addBlock('Const', { value: 1 }); // 1 Hz
+      const phasorBlock = b.addBlock('Phasor', {});
+      b.wire(freqBlock, 'out', phasorBlock, 'frequency');
+    });
+
+    const result = compile(patch);
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+
+    const program = result.program;
+    const schedule = program.schedule as any;
+    const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount);
+    const pool = new BufferPool();
+
+    // Frame 1 at t=0, dt=0: phase stays at 0
+    executeFrame(program, state, pool, 0);
+    // dt=0 on first frame, so increment=0, phase stays 0
+    expect(state.state[0]).toBeCloseTo(0, 5);
+
+    // Frame 2 at t=1000 (dt=1000ms = 1s at 1Hz): phase = 0 + 1*1.0 = 1.0 → wraps to 0.0
+    executeFrame(program, state, pool, 1000);
+    expect(state.state[0]).toBeCloseTo(0, 1); // wraps
+
+    // Frame at t=1500 (dt=500ms = 0.5s at 1Hz): phase = 0 + 1*0.5 = 0.5
+    executeFrame(program, state, pool, 1500);
+    expect(state.state[0]).toBeCloseTo(0.5, 3);
+  });
+
+  it('wraps phase at 1.0', () => {
+    const patch = buildPatch((b) => {
+      b.addBlock('InfiniteTimeRoot', {});
+      const freqBlock = b.addBlock('Const', { value: 2 }); // 2 Hz
+      const phasorBlock = b.addBlock('Phasor', { initialPhase: 0.9 });
+      b.wire(freqBlock, 'out', phasorBlock, 'frequency');
+    });
+
+    const result = compile(patch);
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+
+    const program = result.program;
+    const schedule = program.schedule as any;
+    const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount);
+    const pool = new BufferPool();
+
+    // Initialize state with initialPhase
+    for (let i = 0; i < schedule.stateSlots.length; i++) {
+      state.state[i] = schedule.stateSlots[i].initialValue;
+    }
+
+    // Frame 1 at t=0 (dt=0): phase stays at 0.9
+    executeFrame(program, state, pool, 0);
+    expect(state.state[0]).toBeCloseTo(0.9, 5);
+
+    // Frame 2 at t=100 (dt=100ms at 2Hz): increment = 2 * 0.1 = 0.2
+    // phase = wrap01(0.9 + 0.2) = wrap01(1.1) = 0.1
+    executeFrame(program, state, pool, 100);
+    expect(state.state[0]).toBeCloseTo(0.1, 3);
+  });
+
+  it('frequency=0 produces no phase advancement', () => {
+    const patch = buildPatch((b) => {
+      b.addBlock('InfiniteTimeRoot', {});
+      const freqBlock = b.addBlock('Const', { value: 0 });
+      const phasorBlock = b.addBlock('Phasor', { initialPhase: 0.5 });
+      b.wire(freqBlock, 'out', phasorBlock, 'frequency');
+    });
+
+    const result = compile(patch);
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+
+    const program = result.program;
+    const schedule = program.schedule as any;
+    const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount);
+    const pool = new BufferPool();
+
+    // Initialize state
+    for (let i = 0; i < schedule.stateSlots.length; i++) {
+      state.state[i] = schedule.stateSlots[i].initialValue;
+    }
+
+    executeFrame(program, state, pool, 0);
+    expect(state.state[0]).toBeCloseTo(0.5, 5);
+
+    executeFrame(program, state, pool, 100);
+    expect(state.state[0]).toBeCloseTo(0.5, 5); // No movement
+  });
+
+  it('respects custom initial phase', () => {
+    const patch = buildPatch((b) => {
+      b.addBlock('InfiniteTimeRoot', {});
+      const freqBlock = b.addBlock('Const', { value: 1 });
+      const phasorBlock = b.addBlock('Phasor', { initialPhase: 0.75 });
+      b.wire(freqBlock, 'out', phasorBlock, 'frequency');
+    });
+
+    const result = compile(patch);
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+
+    const schedule = result.program.schedule as any;
+    expect(schedule.stateSlots[0].initialValue).toBe(0.75);
   });
 });
 
@@ -307,4 +546,3 @@ describe('Hash Block', () => {
     expect(hashValue).toBeLessThan(1);
   });
 });
-

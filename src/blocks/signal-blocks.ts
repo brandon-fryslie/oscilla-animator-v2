@@ -279,6 +279,148 @@ registerBlock({
 });
 
 // =============================================================================
+// Lag - Exponential smoothing filter
+// =============================================================================
+
+registerBlock({
+  type: 'Lag',
+  label: 'Lag (Smooth)',
+  category: 'signal',
+  description: 'Exponential smoothing toward target. y(t) = lerp(y(t-1), target, smoothing)',
+  form: 'primitive',
+  capability: 'state',
+  isStateful: true,
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
+  inputs: {
+    target: { label: 'Target', type: signalType('float') },
+    smoothing: { type: signalType('float'), value: 0.1, exposedAsPort: false },
+    initialValue: { type: signalType('float'), value: 0, exposedAsPort: false },
+  },
+  outputs: {
+    out: { label: 'Output', type: signalType('float') },
+  },
+  lower: ({ ctx, inputsById, config }) => {
+    const targetInput = inputsById.target;
+    if (!targetInput || targetInput.k !== 'sig') {
+      throw new Error('Lag target input must be a signal');
+    }
+
+    const smoothing = (config?.smoothing as number) ?? 0.1;
+    const initialValue = (config?.initialValue as number) ?? 0;
+
+    // Allocate persistent state slot with stable ID
+    const stateSlot = ctx.b.allocStateSlot(
+      stableStateId(ctx.instanceId, 'lag'),
+      { initialValue }
+    );
+
+    // Read previous value (Phase 1)
+    const prevId = ctx.b.sigStateRead(stateSlot, signalType('float'));
+
+    // Compute: lerp(prev, target, smoothing)
+    const smoothConst = ctx.b.sigConst(smoothing, signalType('float'));
+    const lerpFn = ctx.b.opcode(OpCode.Lerp);
+    const outputId = ctx.b.sigZip(
+      [prevId, targetInput.id as SigExprId, smoothConst],
+      lerpFn,
+      signalType('float')
+    );
+
+    // Write output to state for next frame (Phase 2)
+    ctx.b.stepStateWrite(stateSlot, outputId);
+
+    const slot = ctx.b.allocSlot();
+
+    return {
+      outputsById: {
+        out: { k: 'sig', id: outputId, slot },
+      },
+    };
+  },
+});
+
+// =============================================================================
+// Phasor - Phase accumulator with wrap
+// =============================================================================
+
+registerBlock({
+  type: 'Phasor',
+  label: 'Phasor',
+  category: 'signal',
+  description: 'Phase accumulator 0..1 with wrap. Distinct from Accumulator (unbounded)',
+  form: 'primitive',
+  capability: 'state',
+  isStateful: true,
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
+  inputs: {
+    frequency: { label: 'Frequency', type: signalType('float') },
+    initialPhase: { type: signalType('float'), value: 0, exposedAsPort: false },
+  },
+  outputs: {
+    out: { label: 'Phase', type: signalType('float', unitPhase01()) },
+  },
+  lower: ({ ctx, inputsById, config }) => {
+    const freqInput = inputsById.frequency;
+    if (!freqInput || freqInput.k !== 'sig') {
+      throw new Error('Phasor frequency input must be a signal');
+    }
+
+    const initialPhase = (config?.initialPhase as number) ?? 0;
+
+    // Allocate persistent state slot
+    const stateSlot = ctx.b.allocStateSlot(
+      stableStateId(ctx.instanceId, 'phasor'),
+      { initialValue: initialPhase }
+    );
+
+    // Read previous phase (Phase 1)
+    const prevPhase = ctx.b.sigStateRead(stateSlot, signalType('float'));
+
+    // Get dt from time system (in ms)
+    const dtMs = ctx.b.sigTime('dt', signalType('float'));
+
+    // Convert dt from ms to seconds: dtSec = dt * 0.001
+    const msToSec = ctx.b.sigConst(0.001, signalType('float'));
+    const mulFn = ctx.b.opcode(OpCode.Mul);
+    const dtSec = ctx.b.sigZip([dtMs, msToSec], mulFn, signalType('float'));
+
+    // Compute phase increment: increment = frequency * dtSec
+    const increment = ctx.b.sigZip(
+      [freqInput.id as SigExprId, dtSec],
+      mulFn,
+      signalType('float')
+    );
+
+    // Accumulate: rawPhase = prev + increment
+    const addFn = ctx.b.opcode(OpCode.Add);
+    const rawPhase = ctx.b.sigZip([prevPhase, increment], addFn, signalType('float'));
+
+    // Wrap to [0, 1): newPhase = wrap01(rawPhase)
+    const wrapFn = ctx.b.opcode(OpCode.Wrap01);
+    const newPhase = ctx.b.sigMap(rawPhase, wrapFn, signalType('float', unitPhase01()));
+
+    // Write new phase to state for next frame (Phase 2)
+    ctx.b.stepStateWrite(stateSlot, newPhase);
+
+    const slot = ctx.b.allocSlot();
+
+    return {
+      outputsById: {
+        out: { k: 'sig', id: newPhase, slot },
+      },
+    };
+  },
+});
+
+// =============================================================================
 // Hash - Deterministic hash function
 // =============================================================================
 
