@@ -74,6 +74,7 @@ const ALLOWED_UNITS: Record<PayloadType, readonly Unit['kind'][]> = {
   float: ['scalar', 'norm01', 'phase01', 'radians', 'degrees', 'ms', 'seconds'],
   int: ['count', 'ms'],
   vec2: ['ndc2', 'world2'],
+  vec3: ['ndc3', 'world3'],
   color: ['rgba01'],
   bool: ['none'],
   shape: ['none'],
@@ -97,6 +98,7 @@ export function defaultUnitForPayload(payload: PayloadType): Unit {
     case 'float': return unitScalar();
     case 'int': return unitCount();
     case 'vec2': return unitWorld2();
+    case 'vec3': return unitWorld3();
     case 'color': return unitRgba01();
     case 'bool': return unitNone();
     case 'shape': return unitNone();
@@ -121,9 +123,37 @@ export type PayloadType =
   | 'float'   // Floating-point values
   | 'int'     // Integer values
   | 'vec2'    // 2D positions/vectors
+  | 'vec3'    // 3D positions/vectors
   | 'color'   // Color values (RGBA)
   | 'bool'    // Boolean values
   | 'shape';  // Shape descriptor (ellipse, rect, path)
+
+
+/**
+ * Stride (number of scalar slots) per PayloadType.
+ *
+ * This table defines how many float32/int32 slots each payload type occupies
+ * in typed arrays. Used by the materializer and buffer allocation.
+ */
+export const PAYLOAD_STRIDE: Record<PayloadType, number> = {
+  float: 1,
+  int: 1,
+  bool: 1,
+  vec2: 2,
+  vec3: 3,
+  color: 4,
+  shape: 8,  // Shape descriptor has 8 scalar fields
+};
+
+/**
+ * Get the stride for a given PayloadType.
+ *
+ * @param type - The payload type
+ * @returns Number of scalar slots required
+ */
+export function strideOf(type: PayloadType): number {
+  return PAYLOAD_STRIDE[type];
+}
 
 // =============================================================================
 // AxisTag - No Optional Fields Pattern
