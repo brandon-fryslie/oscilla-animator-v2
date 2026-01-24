@@ -24,7 +24,6 @@ import {
   type SessionState,
 } from './runtime';
 import { renderFrame } from './render';
-import { applyViewerProjection } from './render/viewerProjection';
 import { PERSP_CAMERA_DEFAULTS } from './projection/perspective-kernel';
 import type { CameraParams } from './runtime/RenderAssembler';
 import { App } from './ui/components';
@@ -1053,19 +1052,13 @@ function animate(tMs: number) {
 
     const frameStart = performance.now();
 
-    // Execute frame
+    // Execute frame (pass camera through pipeline when 3D preview is active)
     const execStart = performance.now();
-    const frame = executeFrame(currentProgram, currentState, pool, tMs);
+    const camera: CameraParams | undefined = store!.camera.isActive
+      ? { mode: 'perspective', params: PERSP_CAMERA_DEFAULTS }
+      : undefined;
+    const frame = executeFrame(currentProgram, currentState, pool, tMs, camera);
     execTime = performance.now() - execStart;
-
-    // Viewer-side 3D projection (does not affect runtime/continuity)
-    if (store!.camera.isActive) {
-      const camera: CameraParams = {
-        mode: 'perspective',
-        params: PERSP_CAMERA_DEFAULTS,
-      };
-      applyViewerProjection(frame, camera);
-    }
 
     // Render to canvas with zoom/pan transform from store
     const renderStart = performance.now();
