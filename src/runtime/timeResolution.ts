@@ -25,7 +25,7 @@ export interface EffectiveTime {
   /** Phase B: secondary phase [0,1) */
   phaseB: number;
 
-  /** Pulse signal: 1.0 when either phase wrapped, 0.0 otherwise */
+  /** Pulse signal: 1.0 every frame (frame-tick trigger) */
   pulse: number;
 
   /** Progress within finite time (0-1), only set for finite time roots */
@@ -44,6 +44,9 @@ export interface EffectiveTime {
 export interface TimeState {
   /** Previous absolute time */
   prevTAbsMs: number | null;
+
+  /** Previous monotonic time (for I1 monotonicity enforcement) */
+  prevTMs: number | null;
 
   /** Previous phase A value (for wrap detection) */
   prevPhaseA: number | null;
@@ -64,6 +67,7 @@ export interface TimeState {
 export function createTimeState(): TimeState {
   return {
     prevTAbsMs: null,
+    prevTMs: null,
     prevPhaseA: null,
     prevPhaseB: null,
     offsetA: 0,
@@ -116,21 +120,27 @@ export function resolveTime(
   const dt = timeState.prevTAbsMs !== null ? tAbsMs - timeState.prevTAbsMs : 0;
   timeState.prevTAbsMs = tAbsMs;
 
+  // Enforce monotonicity (I1): tMs never decreases
+  const monotonicTMs = Math.max(tAbsMs, timeState.prevTMs ?? 0);
+  timeState.prevTMs = monotonicTMs;
+
   // Default periods (used for infinite models)
   const periodAMs = (timeModel.kind === 'infinite' ? timeModel.periodAMs : undefined) ?? 4000;
   const periodBMs = (timeModel.kind === 'infinite' ? timeModel.periodBMs : undefined) ?? 8000;
 
   // Compute phases
-  const rawPhaseA = periodAMs > 0 ? (tAbsMs / periodAMs) % 1.0 : 0;
+  const rawPhaseA = periodAMs > 0 ? (monotonicTMs / periodAMs) % 1.0 : 0;
   const phaseA = wrapPhase(rawPhaseA + timeState.offsetA);
 
-  const rawPhaseB = periodBMs > 0 ? (tAbsMs / periodBMs) % 1.0 : 0;
+  const rawPhaseB = periodBMs > 0 ? (monotonicTMs / periodBMs) % 1.0 : 0;
   const phaseB = wrapPhase(rawPhaseB + timeState.offsetB);
 
-  // Wrap detection for pulse
+  // Wrap detection (kept for future use, but pulse now fires every frame)
   const wrapA = timeState.prevPhaseA !== null && phaseA < timeState.prevPhaseA - 0.5;
   const wrapB = timeState.prevPhaseB !== null && phaseB < timeState.prevPhaseB - 0.5;
-  const pulse = (wrapA || wrapB) ? 1.0 : 0.0;
+
+  // C-20 FIX: Pulse is a frame-tick trigger that fires every frame
+  const pulse = 1.0;
 
   // Update state
   timeState.prevPhaseA = phaseA;
@@ -143,5 +153,5 @@ export function resolveTime(
   const energy = 0.5 + 0.5 * Math.sin(phaseA * 2 * Math.PI);
 
   // Infinite model
-  return { tAbsMs, tMs: tAbsMs, dt, phaseA, phaseB, pulse, palette, energy };
+  return { tAbsMs, tMs: monotonicTMs, dt, phaseA, phaseB, pulse, palette, energy };
 }
