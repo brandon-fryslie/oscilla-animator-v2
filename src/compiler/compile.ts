@@ -44,6 +44,7 @@ import '../blocks/field-operations-blocks';
 import '../blocks/path-blocks'; // NEW - Path foundation sprint
 import '../blocks/path-operators-blocks'; // NEW - Path operators sprint
 import '../blocks/adapter-blocks'; // Unit-conversion adapters (Spec §B4.1)
+import '../blocks/camera-block'; // NEW - Camera system
 
 import '../blocks/test-blocks'; // Test blocks for signal evaluation in tests
 
@@ -520,6 +521,14 @@ function convertLinkedIRToProgram(
     blockMap,
   };
 
+  // Collect render globals from builder
+  const renderGlobals = builder.getRenderGlobals();
+
+  // Validate camera uniqueness (spec §2.1)
+  if (renderGlobals.length > 1) {
+    throw new Error('E_CAMERA_MULTIPLE: Only one Camera block is permitted.');
+  }
+
   return {
     irVersion: 1,
     signalExprs: { nodes: signalNodes },
@@ -531,7 +540,7 @@ function convertLinkedIRToProgram(
     slotMeta,
     debugIndex,
     fieldSlotRegistry,
-    renderGlobals: [], // Camera system: populated by compiler pass when Camera block exists
+    renderGlobals, // NEW - Camera system: populated from builder
   };
 }
 
