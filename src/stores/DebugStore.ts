@@ -78,13 +78,18 @@ export class DebugStore {
     }
   }
 
+  /** Reference to settings store for two-way sync */
+  private settingsStore: SettingsStore | null = null;
+
   /**
    * Set up two-way sync with settings.
    * - Load initial value from settings
-   * - React to settings changes
-   * - Update settings when toggled programmatically
+   * - React to settings changes → update DebugStore
+   * - DebugStore toggles → update settings (via updateSettingsEnabled)
    */
   private setupSettingsSync(settingsStore: SettingsStore): void {
+    this.settingsStore = settingsStore;
+
     // Register settings token
     settingsStore.register(debugSettings);
 
@@ -92,23 +97,35 @@ export class DebugStore {
     const values = settingsStore.get(debugSettings) as DebugSettings;
     this.enabled = values.enabled;
 
-    // React to settings changes
+    // React to settings changes (settings panel → DebugStore)
     this.settingsSyncDisposer = reaction(
       () => (settingsStore.get(debugSettings) as DebugSettings).enabled,
       (enabled: boolean) => {
-        this.enabled = enabled;
-        if (!enabled) {
-          this.stopPolling();
-          this.untrackCurrentField();
-          this._cachedEdgeValue = null;
+        if (this.enabled !== enabled) {
+          this.enabled = enabled;
+          if (!enabled) {
+            this.stopPolling();
+            this.untrackCurrentField();
+            this._cachedEdgeValue = null;
+          }
         }
       }
     );
   }
 
   /**
+   * Writes current enabled state back to settings store.
+   * Called when debug is toggled via UI controls (not via settings panel).
+   */
+  private updateSettingsEnabled(): void {
+    if (this.settingsStore) {
+      this.settingsStore.update(debugSettings, { enabled: this.enabled });
+    }
+  }
+
+  /**
    * Toggle debug panel enabled state.
-   * Updates settings to persist the change.
+   * Syncs back to settings for persistence.
    */
   toggleEnabled(): void {
     this.enabled = !this.enabled;
@@ -117,14 +134,16 @@ export class DebugStore {
       this.untrackCurrentField();
       this._cachedEdgeValue = null;
     }
+    this.updateSettingsEnabled();
   }
 
   /**
    * Set debug panel enabled state.
-   * Updates settings to persist the change.
+   * Syncs back to settings for persistence.
    */
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
+    this.updateSettingsEnabled();
     if (!enabled) {
       this.stopPolling();
       this.untrackCurrentField();

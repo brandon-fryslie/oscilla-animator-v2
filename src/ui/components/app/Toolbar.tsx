@@ -14,7 +14,6 @@ import {
   Box,
   Tooltip,
   Select,
-  Drawer,
   ActionIcon,
   rem,
 } from '@mantine/core';
@@ -22,22 +21,20 @@ import { Settings as SettingsIcon } from '@mui/icons-material';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '../../../stores';
 import { useExportPatch } from '../../hooks/useExportPatch';
+import type { DockviewApi } from 'dockview';
 import { Toast } from '../common/Toast';
-import { SettingsPanel } from '../SettingsPanel';
 
 interface ToolbarProps {
   stats?: string;
+  dockviewApi?: DockviewApi | null;
 }
 
-export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --' }) => {
+export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', dockviewApi }) => {
   const camera = useStore('camera');
   const exportPatch = useExportPatch();
   const [toastOpen, setToastOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastSeverity, setToastSeverity] = useState<'success' | 'error'>('success');
-
-  // Settings drawer state
-  const [settingsDrawerOpen, setSettingsDrawerOpen] = useState(false);
 
   // Preset dropdown state - reads from window globals set by main.ts
   const [presets, setPresets] = useState<Array<{ label: string; value: string }>>([]);
@@ -248,7 +245,14 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --' }) 
                   variant="subtle"
                   color="gray"
                   size="lg"
-                  onClick={() => setSettingsDrawerOpen(true)}
+                  onClick={() => {
+                    if (dockviewApi) {
+                      const panel = dockviewApi.getPanel('settings');
+                      if (panel) {
+                        panel.api.setActive();
+                      }
+                    }
+                  }}
                   style={{
                     border: '1px solid rgba(139, 92, 246, 0.2)',
                   }}
@@ -276,35 +280,6 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --' }) 
           </Group>
         </Group>
       </Box>
-
-      {/* Settings Drawer */}
-      <Drawer
-        opened={settingsDrawerOpen}
-        onClose={() => setSettingsDrawerOpen(false)}
-        title="Settings"
-        position="right"
-        size="md"
-        styles={{
-          title: {
-            fontSize: rem(18),
-            fontWeight: 600,
-            color: 'var(--mantine-color-violet-4)',
-          },
-          header: {
-            background: 'rgba(30, 30, 46, 0.98)',
-            borderBottom: '1px solid rgba(139, 92, 246, 0.2)',
-          },
-          body: {
-            padding: 0,
-            background: '#1a1a2e',
-          },
-          content: {
-            background: '#1a1a2e',
-          },
-        }}
-      >
-        <SettingsPanel />
-      </Drawer>
 
       <Toast
         open={toastOpen}

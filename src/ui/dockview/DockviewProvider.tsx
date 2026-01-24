@@ -42,6 +42,7 @@ interface DockviewProviderProps {
   onReactFlowEditorReady?: (handle: EditorHandle) => void;
   onCanvasReady?: (canvas: HTMLCanvasElement) => void;
   onActivePanelChange?: (panelId: string | undefined) => void;
+  onApiReady?: (api: DockviewApi) => void;
 }
 
 /**
@@ -52,6 +53,7 @@ export const DockviewProvider: React.FC<DockviewProviderProps> = ({
   onReactFlowEditorReady,
   onCanvasReady,
   onActivePanelChange,
+  onApiReady,
 }) => {
   const [api, setApi] = useState<DockviewApi | null>(null);
 
@@ -64,8 +66,11 @@ export const DockviewProvider: React.FC<DockviewProviderProps> = ({
         onReactFlowEditorReady,
         onCanvasReady,
       });
+
+      // Notify parent that API is ready
+      onApiReady?.(event.api);
     },
-    [onReactFlowEditorReady, onCanvasReady]
+    [onReactFlowEditorReady, onCanvasReady, onApiReady]
   );
 
   // Subscribe to active panel changes

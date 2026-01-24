@@ -17,6 +17,7 @@ import '@mantine/core/styles.css';
 import { Toolbar } from './Toolbar';
 import { EditorProvider, type EditorHandle, useEditor } from '../../editorCommon';
 import { DockviewProvider } from '../../dockview';
+import type { DockviewApi } from 'dockview';
 import { darkTheme } from '../../theme';
 import { useGlobalHotkeys, type HotkeyFeedback } from '../../hotkeys';
 import { Toast } from '../common/Toast';
@@ -126,6 +127,9 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady }) => {
   const [activeEditorTab, setActiveEditorTab] = useState<'flow-editor' | null>('flow-editor');
   const [editorReady, setEditorReady] = useState(false);
 
+  // Dockview API for toolbar panel focus
+  const [dockviewApi, setDockviewApi] = useState<DockviewApi | null>(null);
+
   // Toast state for keyboard shortcuts
   const [toastOpen, setToastOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -209,8 +213,8 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady }) => {
             fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
           }}
         >
-          {/* Toolbar - outside Dockview */}
-          <Toolbar stats={stats} />
+          {/* Toolbar - outside Dockview, receives API via prop */}
+          <Toolbar stats={stats} dockviewApi={dockviewApi} />
 
           {/* Dockview workspace - all panels managed by Dockview */}
           <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
@@ -218,6 +222,7 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady }) => {
               onReactFlowEditorReady={handleReactFlowEditorReady}
               onCanvasReady={handleCanvasReady}
               onActivePanelChange={handleActivePanelChange}
+              onApiReady={setDockviewApi}
             />
           </div>
         </div>
