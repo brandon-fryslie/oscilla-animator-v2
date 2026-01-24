@@ -166,20 +166,12 @@ export interface RenderPassIR {
 }
 
 /**
- * Helper: Resolve slot to storage offset using slotMeta
- *
- * DoD: Runtime MUST use slotMeta.offset for typed array access (f64, f32, etc)
- * For object storage, we still use slot as the Map key
+ * Slot lookup cache entry
  */
-function resolveSlotOffset(
-  program: CompiledProgramIR,
-  slot: ValueSlot
-): { storage: 'f64' | 'f32' | 'i32' | 'u32' | 'object' | 'shape2d'; offset: number; slot: ValueSlot } {
-  const meta = program.slotMeta.find((m) => m.slot === slot);
-  if (!meta) {
-    throw new Error(`Slot ${slot} not found in slotMeta`);
-  }
-  return { storage: meta.storage, offset: meta.offset, slot };
+interface SlotLookup {
+  storage: 'f64' | 'f32' | 'i32' | 'u32' | 'object' | 'shape2d';
+  offset: number;
+  slot: ValueSlot;
 }
 
 /**
@@ -204,6 +196,26 @@ export function executeFrame(
   const timeModel = schedule.timeModel;
   const instances = schedule.instances;
   const steps = schedule.steps;
+
+  // C-16: Pre-compute slot lookup map to eliminate O(n*m) runtime dispatch
+  // Build once per frame (could be cached on program object for even better performance)
+  const slotLookupMap = new Map<ValueSlot, SlotLookup>();
+  for (const meta of program.slotMeta) {
+    slotLookupMap.set(meta.slot, {
+      storage: meta.storage,
+      offset: meta.offset,
+      slot: meta.slot,
+    });
+  }
+
+  // Helper: Resolve slot to storage offset using pre-computed map (O(1) lookup)
+  const resolveSlotOffset = (slot: ValueSlot): SlotLookup => {
+    const lookup = slotLookupMap.get(slot);
+    if (!lookup) {
+      throw new Error(`Slot ${slot} not found in slotMeta`);
+    }
+    return lookup;
+  };
 
   // 1. Advance frame (cache owns frameId)
   state.cache.frameId++;
@@ -235,7 +247,7 @@ export function executeFrame(
     switch (step.kind) {
       case 'evalSig': {
         // Evaluate signal and store in slot using slotMeta.offset
-        const { storage, offset, slot } = resolveSlotOffset(program, step.target);
+        const { storage, offset, slot } = resolveSlotOffset(step.target);
 
         if (storage === 'shape2d') {
           // Shape signal: write Shape2D record to shape2d bank
@@ -535,7 +547,7 @@ export function executeFrame(
   // 5. Store frame in output slot (DoD: outputs contract)
   if (program.outputs.length > 0) {
     const outputSpec = program.outputs[0];
-    const { storage, slot } = resolveSlotOffset(program, outputSpec.slot);
+    const { storage, slot } = resolveSlotOffset(outputSpec.slot);
 
     if (storage === 'object') {
       // For object storage, use slot as Map key
