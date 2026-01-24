@@ -6,7 +6,7 @@
 
 import { defineSettings } from '../defineSettings';
 
-export interface DebugSettings {
+export interface DebugSettings extends Record<string, unknown> {
   enabled: boolean;
 }
 

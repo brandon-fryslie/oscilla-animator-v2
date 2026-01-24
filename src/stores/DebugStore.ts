@@ -19,7 +19,7 @@ import type { SignalType } from '../core/canonical-types';
 import type { ValueSlot } from '../types';
 import type { DebugTargetKey } from '../ui/debug-viz/types';
 import type { SettingsStore } from './SettingsStore';
-import { debugSettings } from '../settings/tokens/debug-settings';
+import { debugSettings, type DebugSettings } from '../settings/tokens/debug-settings';
 
 /**
  * Format a numeric value based on its signal type.
@@ -89,13 +89,13 @@ export class DebugStore {
     settingsStore.register(debugSettings);
 
     // Load initial value
-    const values = settingsStore.get(debugSettings);
+    const values = settingsStore.get(debugSettings) as DebugSettings;
     this.enabled = values.enabled;
 
     // React to settings changes
     this.settingsSyncDisposer = reaction(
-      () => settingsStore.get(debugSettings).enabled,
-      (enabled) => {
+      () => (settingsStore.get(debugSettings) as DebugSettings).enabled,
+      (enabled: boolean) => {
         this.enabled = enabled;
         if (!enabled) {
           this.stopPolling();

@@ -39,9 +39,7 @@ export class SettingsStore {
   private persistDisposers = new Map<string, () => void>();
 
   constructor() {
-    makeAutoObservable(this, {
-      tokens: false, // Not observable - static registry
-    });
+    makeAutoObservable(this);
   }
 
   /**

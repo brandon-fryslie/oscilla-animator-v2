@@ -6,7 +6,7 @@
 
 import { defineSettings } from '../defineSettings';
 
-export interface EditorSettings {
+export interface EditorSettings extends Record<string, unknown> {
   showMinimap: boolean;
 }
 

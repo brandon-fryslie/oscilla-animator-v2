@@ -6,7 +6,7 @@
 
 import { defineSettings } from '../defineSettings';
 
-export interface AppSettings {
+export interface AppSettings extends Record<string, unknown> {
   defaultPatchIndex: number;
 }
 

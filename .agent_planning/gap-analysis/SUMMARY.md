@@ -2,19 +2,19 @@
 scope: update
 spec_source: design-docs/CANONICAL-oscilla-v2.5-20260109/
 impl_source: src/
-generated: 2026-01-23T12:00:00Z
+generated: 2026-01-24T12:00:00Z
 previous_run: 2026-01-23T07:45:00Z
 topics_audited: 8
-totals: { trivial: 16, critical: 23, to-review: 8, unimplemented: 36, done: ~155 }
+totals: { trivial: 16, critical: 20, to-review: 5, unimplemented: 35, done: ~158 }
 ---
 
 # Gap Analysis: Full Core Spec (Topics 01-06, 16, 17) — UPDATE
 
 ## Executive Summary
 
-The core implementation remains substantially built (~133 DONE items) with a working pipeline. Since the last analysis, event blocks have been added (editor-level EventHub), kernel work has progressed, and rendering has been fixed. The biggest **actionable** gaps remain: (1) normalizedIndex N=1 bug (one-line fix), (2) Block.type→kind rename, (3) CombineMode structural fix, and (4) missing PayloadTypes (vec3 especially, blocking 3D). Multiple TO-REVIEW items need user decisions before work can proceed (phase representation, BlockRole variants, bus/rail in DerivedBlockMeta).
+The core implementation remains substantially built (~158 DONE items) with a working pipeline. User decisions on R-1 (phase=float+unit), R-3 (remove bus/rail from spec), and R-4 (spec is minimum for BlockRole) have been resolved — spec updated accordingly. This resolved C-4, C-5, C-6, R-5, and simplified C-2. The biggest **actionable** gaps remain: (1) normalizedIndex N=1 bug (one-line fix), (2) Block.type→kind rename, (3) CombineMode structural fix, and (4) vec3 PayloadType (blocking 3D).
 
-**Recommended starting point**: Fix C-7 (normalizedIndex, 1-line), then tackle C-3 (Block.type→kind rename), then resolve R-1/R-3/R-4 (user decisions that unblock multiple items).
+**Recommended starting point**: Fix C-7 (normalizedIndex, 1-line), then tackle C-3 (Block.type→kind rename), then C-1 (CombineMode).
 
 ## Changes Since Last Run
 
@@ -46,29 +46,31 @@ The core implementation remains substantially built (~133 DONE items) with a wor
 ### P2: Critical — Has Dependencies (resolve blockers first)
 | # | Item | Topic | Blocked By | Context File |
 |---|------|-------|------------|--------------|
-| 13 | C-2 | 01 Type | R-1 decision (phase) | [context-01](./critical/context-01-type-system.md) |
-| 14 | C-4 | 02 Block | R-4 decision (BlockRole) | [context-02](./critical/context-02-block-system.md) |
-| 15 | C-5 | 02 Block | R-3 decision (bus/rail) | [critical/topic-02](./critical/topic-02-block-system.md) |
-| 16 | C-6 | 02 Block | R-3 decision (busTap) | [critical/topic-02](./critical/topic-02-block-system.md) |
-| 17 | C-8 | 05 Runtime | Design needed (EventPayload) | [critical/topic-05](./critical/topic-05-runtime.md) |
-| 18 | C-9 | 06 Renderer | Migration path (ms5 epic) | [critical/topic-06](./critical/topic-06-renderer.md) |
-| 19 | C-10 | 17 Layout | R-5 decision (phase semantics) | [context-17](./critical/context-17-layout-system.md) |
-| 20 | C-11 | 06 Renderer | PathVerb spec reconciliation | [critical/topic-06](./critical/topic-06-renderer.md) |
-| 21 | C-12 | 06 Renderer | PathStyle missing blend/layer | [critical/topic-06](./critical/topic-06-renderer.md) |
-| 22 | C-13 | 06 Renderer | rotation/scale2 not wired through v2 | [critical/topic-06](./critical/topic-06-renderer.md) |
-| 23 | C-16 | 05 Runtime | Runtime type dispatch per step | [critical/topic-05](./critical/topic-05-runtime.md) |
+| 13 | C-2 | 01 Type | vec3/shape2d additions | [context-01](./critical/context-01-type-system.md) |
+| 14 | C-8 | 05 Runtime | Design needed (EventPayload) | [critical/topic-05](./critical/topic-05-runtime.md) |
+| 15 | C-9 | 06 Renderer | Migration path (ms5 epic) | [critical/topic-06](./critical/topic-06-renderer.md) |
+| 16 | C-10 | 17 Layout | Phase clamp semantics | [context-17](./critical/context-17-layout-system.md) |
+| 17 | C-11 | 06 Renderer | PathVerb spec reconciliation | [critical/topic-06](./critical/topic-06-renderer.md) |
+| 18 | C-12 | 06 Renderer | PathStyle missing blend/layer | [critical/topic-06](./critical/topic-06-renderer.md) |
+| 19 | C-13 | 06 Renderer | rotation/scale2 not wired through v2 | [critical/topic-06](./critical/topic-06-renderer.md) |
+| 20 | C-16 | 05 Runtime | Runtime type dispatch per step | [critical/topic-05](./critical/topic-05-runtime.md) |
 
 ### P3: To-Review — User Must Decide
 | # | Item | Topic | Question | File |
 |---|------|-------|----------|------|
-| 11 | R-1 | 01 Type | Phase as float+unit or distinct PayloadType? | [to-review/topic-01](./to-review/topic-01-type-system.md) |
-| 12 | R-2 | 01 Type | Keep Unit type system or revert to payload-only? | [to-review/topic-01](./to-review/topic-01-type-system.md) |
-| 13 | R-3 | 02 Block | Bus/rail in DerivedBlockMeta — removed intentionally? | [to-review/topic-02](./to-review/topic-02-block-system.md) |
-| 14 | R-4 | 02 Block | Extra BlockRole variants — keep or collapse to spec? | [to-review/topic-02](./to-review/topic-02-block-system.md) |
-| 15 | R-5 | 03 Time | Phase as [0,1] or radians? (follows R-1) | [to-review/topic-03](./to-review/topic-03-time-system.md) |
-| 16 | R-6 | 05 Runtime | Float64 vs Float32 for scalars? | [to-review/topic-05](./to-review/topic-05-runtime.md) |
-| 17 | R-7 | 05 Runtime | Stamp-based vs CacheKey caching? | [to-review/topic-05](./to-review/topic-05-runtime.md) |
-| 18 | R-8 | 04 Compilation | Expression trees vs op-level IR? | [to-review/topic-04](./to-review/topic-04-compilation.md) |
+| 21 | R-2 | 01 Type | Keep Unit type system or revert to payload-only? | [to-review/topic-01](./to-review/topic-01-type-system.md) |
+| 22 | R-6 | 05 Runtime | Float64 vs Float32 for scalars? | [to-review/topic-05](./to-review/topic-05-runtime.md) |
+| 23 | R-7 | 05 Runtime | Stamp-based vs CacheKey caching? | [to-review/topic-05](./to-review/topic-05-runtime.md) |
+| 24 | R-8 | 04 Compilation | Expression trees vs op-level IR? | [to-review/topic-04](./to-review/topic-04-compilation.md) |
+
+### Resolved Reviews (spec updated)
+- **R-1**: Phase is float+unit:phase01 (spec updated)
+- **R-3**: Bus/rail removed from DerivedBlockMeta (spec updated)
+- **R-4**: BlockRole spec is minimum, implementations may extend (spec updated)
+- **R-5**: Phase is [0,1] via unit:phase01 (follows R-1)
+- **C-4**: BlockRole extra variants — now valid per spec
+- **C-5**: DerivedBlockMeta bus/rail — removed from spec
+- **C-6**: EdgeRole busTap — removed from spec
 
 ### P4: Unimplemented — Blocks Higher Priority
 | # | Item | Topic | Unblocks | Context File |
@@ -127,23 +129,18 @@ C-7 (P1, no deps) → standalone fix
 C-3 (P1, no deps) → standalone rename
 C-1 (P1, no deps) → blocks U-7
 
-R-1 decision ──blocks──> C-2 (PayloadType) ──blocks──> U-19, U-26
-R-3 decision ──blocks──> C-5 (DerivedBlockMeta), C-6 (EdgeRole)
-R-4 decision ──blocks──> C-4 (BlockRole)
-R-5 decision ──blocks──> C-10 (circleLayout phase)
-
+C-2 (vec3/shape2d) ──blocks──> U-26 (vec3) ──blocks──> U-27 (camera)
 C-8 (event model) ──blocks──> U-6 (SampleAndHold)
-C-2 (PayloadType) ──blocks──> U-26 (vec3) ──blocks──> U-27 (camera)
 C-9 (RenderPassIR) ──blocks──> U-21 (layers)
 ```
 
 ## Cross-Cutting Concerns
 
-### Phase/Unit Representation (R-1, R-2, R-5)
-The implementation chose float+unit:phase01 instead of a distinct PayloadType. This is a coherent architectural choice that enables richer unit annotations. User must decide whether to update spec or code. This decision cascades to: C-2, C-10, U-1, U-11.
+### Phase/Unit Representation (RESOLVED)
+Spec updated: phase is float with unit:phase01. U-1 (phase arithmetic enforcement) now means unit-aware arithmetic on float(phase01). U-11 (PhaseToFloat/FloatToPhase helpers) no longer needed as separate type conversions.
 
-### Block Role Architecture (R-3, R-4)
-Implementation has more BlockRole variants than spec and removed bus/rail from DerivedBlockMeta. These are deliberate implementation decisions with code comments explaining the rationale. User must decide direction.
+### Block Role Architecture (RESOLVED)
+Spec updated: BlockRole is minimum (implementations may extend). Bus/rail removed from DerivedBlockMeta. EdgeRole busTap removed.
 
 ### Render Pipeline Migration (C-9, ms5 epic)
 The instances2d → DrawPathInstancesOp migration is tracked as a separate epic (oscilla-animator-v2-ms5 in beads). This is the largest structural change needed in the renderer.
