@@ -21,7 +21,7 @@
  *   renderer.dispose();
  */
 
-import type { RenderFrameIR_Future, DrawPathInstancesOp, DrawPrimitiveInstancesOp, PathGeometry, PrimitiveGeometry, PathStyle } from './future-types';
+import type { RenderFrameIR, DrawPathInstancesOp, DrawPrimitiveInstancesOp, PathGeometry, PrimitiveGeometry, PathStyle } from './types';
 import { isPathTopology } from '../runtime/RenderAssembler';
 import { getTopology } from '../shapes/registry';
 import type { PathTopologyDef, TopologyDef } from '../shapes/types';
@@ -198,7 +198,7 @@ export class SVGRenderer {
    *
    * @param frame - Frame containing DrawOps
    */
-  render(frame: RenderFrameIR_Future): void {
+  render(frame: RenderFrameIR): void {
     this.clear();
 
     for (const op of frame.ops) {

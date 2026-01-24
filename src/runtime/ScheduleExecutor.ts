@@ -12,7 +12,7 @@ import type { SigExprId, IrInstanceId as InstanceId } from '../types';
 import type { RuntimeState } from './RuntimeState';
 import type { BufferPool } from './BufferPool';
 import type { TopologyId } from '../shapes/types';
-import type { RenderFrameIR_Future } from '../render/future-types';
+import type { RenderFrameIR } from '../render/types';
 import { resolveTime } from './timeResolution';
 import { materialize } from './Materializer';
 import { evaluateSignal } from './SignalEvaluator';
@@ -21,7 +21,7 @@ import { writeShape2D } from './RuntimeState';
 import { detectDomainChange } from './ContinuityMapping';
 import { applyContinuity, finalizeContinuityFrame } from './ContinuityApply';
 import { createStableDomainInstance, createUnstableDomainInstance } from './DomainIdentity';
-import { assembleRenderFrame_v2, type AssemblerContext, type CameraParams } from './RenderAssembler';
+import { assembleRenderFrame, type AssemblerContext, type CameraParams } from './RenderAssembler';
 
 /**
  * Slot lookup cache entry
@@ -40,7 +40,7 @@ interface SlotLookup {
  * @param pool - Buffer pool
  * @param tAbsMs - Absolute time in milliseconds
  * @param camera - Optional camera params for projection (viewer-level, not compiled state)
- * @returns RenderFrameIR_Future for this frame
+ * @returns RenderFrameIR for this frame
  */
 export function executeFrame(
   program: CompiledProgramIR,
@@ -48,7 +48,7 @@ export function executeFrame(
   pool: BufferPool,
   tAbsMs: number,
   camera?: CameraParams,
-): RenderFrameIR_Future {
+): RenderFrameIR {
   // Extract schedule components
   const schedule = program.schedule as ScheduleIR;
   const timeModel = schedule.timeModel;
@@ -349,7 +349,7 @@ export function executeFrame(
   }
 
   // Build v2 frame from collected render steps
-  const frame = assembleRenderFrame_v2(renderSteps, assemblerContext);
+  const frame = assembleRenderFrame(renderSteps, assemblerContext);
 
   // PHASE 2: Execute all stateWrite steps
   // This ensures state reads in Phase 1 saw previous frame's values
@@ -417,7 +417,7 @@ export function executeFrame(
     if (!outputFrame) {
       throw new Error('Output frame not found in slot');
     }
-    return outputFrame as RenderFrameIR_Future;
+    return outputFrame as RenderFrameIR;
   }
 
   // Fallback: no outputs defined (shouldn't happen with proper compilation)

@@ -41,7 +41,7 @@ export {
 } from './StateMigration';
 export {
   assembleDrawPathInstancesOp,
-  assembleRenderFrame_v2,
+  assembleRenderFrame,
   type AssemblerContext,
 } from './RenderAssembler';
 
@@ -53,6 +53,6 @@ export type {
   PrimitiveGeometry,
   InstanceTransforms,
   PathStyle,
-  RenderFrameIR_Future,
+  RenderFrameIR,
   DrawOp,
-} from '../render/future-types';
+} from '../render/types';

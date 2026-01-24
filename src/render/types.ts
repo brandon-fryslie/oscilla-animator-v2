@@ -1,13 +1,10 @@
 /**
- * Future RenderIR Types - Phase 6 Prep
+ * RenderIR Types - v2 Format
  *
- * ROADMAP: Phase 6 - RenderIR + renderer prep
- * See: .agent_planning/_future/8-before-render.md
- *      .agent_planning/_future/9-renderer.md
+ * See: design-docs/ for architecture and design notes
  *
- * This file defines the FUTURE shape of RenderIR that the kernel/materializer
- * layer is moving toward. These types are not yet used in production code,
- * but define the target architecture to ensure current work doesn't conflict.
+ * This file defines the v2 shape of RenderIR used in production.
+ * These types are the output of RenderAssembler and input to renderers.
  *
  * KEY PRINCIPLES:
  * 1. Local-space geometry: Control points centered at (0,0), |p|≈O(1)
@@ -160,11 +157,10 @@ export interface InstanceTransforms {
 }
 
 /**
- * DrawPathInstancesOp - FUTURE unified draw operation
+ * DrawPathInstancesOp - Instance-based path rendering operation
  *
- * This is the target shape for instance-based path rendering.
- * When fully implemented, this will replace the current RenderPassIR
- * structure for path rendering.
+ * This is the primary draw operation for path-based shapes.
+ * All shape resolution is done before the renderer receives this.
  *
  * KEY PROPERTIES:
  * 1. All shape resolution done BEFORE renderer receives this
@@ -172,12 +168,9 @@ export interface InstanceTransforms {
  * 3. Geometry is local-space, instances are world-space
  * 4. Style is explicit and separate from geometry
  * 5. Renderer is a pure sink: loop instances, apply transforms, draw
- *
- * CURRENT STATE: Definition only, not yet used
- * FUTURE STATE: Primary render operation emitted by RenderAssembler
  */
 export interface DrawPathInstancesOp {
-  /** Operation kind for future dispatch */
+  /** Operation kind for dispatch */
   readonly kind: 'drawPathInstances';
 
   /** Path geometry in local space */
@@ -217,22 +210,19 @@ export interface DrawPrimitiveInstancesOp {
 }
 
 /**
- * RenderFrameIR_Future - Target frame structure
+ * RenderFrameIR - Render frame structure (v2 format)
  *
- * Future RenderFrameIR will contain only fully-resolved draw operations.
+ * Contains fully-resolved draw operations.
  * No IR references, no shape descriptors, no slot IDs.
  *
- * The RenderAssembler (part of ScheduleExecutor) will:
- * 1. Execute schedule → fill scalar banks, define field expr IDs
- * 2. Materialize required fields via Materializer
- * 3. Resolve shape2d → (topologyId, pointsBuffer, flags)
- * 4. Emit this structure with concrete buffers only
- *
- * CURRENT STATE: Definition only, not yet used
- * FUTURE STATE: Output of RenderAssembler, input to renderer
+ * The RenderAssembler (part of ScheduleExecutor) produces this by:
+ * 1. Executing schedule → fill scalar banks, define field expr IDs
+ * 2. Materializing required fields via Materializer
+ * 3. Resolving shape2d → (topologyId, pointsBuffer, flags)
+ * 4. Emitting this structure with concrete buffers only
  */
-export interface RenderFrameIR_Future {
-  readonly version: 2; // Increment version to distinguish from current RenderFrameIR
+export interface RenderFrameIR {
+  readonly version: 2;
   readonly ops: readonly DrawOp[];
 }
 
@@ -247,25 +237,3 @@ export interface RenderFrameIR_Future {
  */
 export type DrawOp = DrawPathInstancesOp | DrawPrimitiveInstancesOp;
 // Future: | DrawImageInstancesOp | DrawTextOp | ...
-
-/**
- * MIGRATION PATH:
- *
- * Current (v1):
- *   RenderPassIR with ShapeDescriptor | ArrayBufferView | number
- *   → Renderer decodes shapes, maps params, scales control points
- *
- * Phase 6 Prep (current):
- *   Define future types, document intent, no breaking changes
- *
- * Phase 6 Implementation (future):
- *   1. Add RenderAssembler step in ScheduleExecutor.executeFrame
- *   2. RenderAssembler produces DrawPathInstancesOp from current RenderPassIR
- *   3. Renderer accepts both v1 and v2, dispatches accordingly
- *   4. Migrate renderer internals to use local-space + instance transforms
- *   5. Remove shape decoding, param mapping, control point scaling from renderer
- *
- * Phase 6 Complete (future):
- *   Only RenderFrameIR_Future used, v1 support removed
- *   Renderer is pure sink: execute DrawOps with no interpretation
- */

@@ -33,8 +33,8 @@ import type {
   DrawPathInstancesOp,
   DrawPrimitiveInstancesOp,
   PathStyle,
-  RenderFrameIR_Future,
-} from './future-types';
+  RenderFrameIR,
+} from './types';
 
 /**
  * Calculate stroke width in pixels from world units.
@@ -67,30 +67,13 @@ function rgbaToCSS(color: Uint8ClampedArray, offset: number): string {
   return `rgba(${color[offset]},${color[offset + 1]},${color[offset + 2]},${color[offset + 3] / 255})`;
 }
 
-/**
- * Render a frame to the canvas
- *
- * @param ctx - Canvas rendering context
- * @param frame - Frame to render (v2 format)
- * @param width - Viewport width in pixels
- * @param height - Viewport height in pixels
- */
+
+
+
+
 export function renderFrame(
   ctx: CanvasRenderingContext2D,
-  frame: RenderFrameIR_Future,
-  width: number,
-  height: number,
-  skipClear = false
-): void {
-  renderFrameV2(ctx, frame, width, height, skipClear);
-}
-
-
-
-
-export function renderFrameV2(
-  ctx: CanvasRenderingContext2D,
-  frame: RenderFrameIR_Future,
+  frame: RenderFrameIR,
   width: number,
   height: number,
   skipClear = false

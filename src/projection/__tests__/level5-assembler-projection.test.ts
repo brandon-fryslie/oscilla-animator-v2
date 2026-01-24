@@ -8,13 +8,13 @@
  * - Block graph compiled to Schedule IR
  * - Schedule IR executed by runtime
  * - executeFrame calls RenderAssembler
- * - RenderAssembler produces RenderFrameIR_Future with projected fields
+ * - RenderAssembler produces RenderFrameIR with projected fields
  */
 
 import { describe, it, expect } from 'vitest';
 import { buildPatch } from '../../graph';
 import { compile } from '../../compiler/compile';
-import { createRuntimeState, BufferPool, executeFrame, type RenderFrameIR_Future } from '../../runtime';
+import { createRuntimeState, BufferPool, executeFrame, type RenderFrameIR } from '../../runtime';
 import { type CameraParams } from '../../runtime/RenderAssembler';
 import { ORTHO_CAMERA_DEFAULTS } from '../ortho-kernel';
 import { PERSP_CAMERA_DEFAULTS } from '../perspective-kernel';
@@ -116,7 +116,7 @@ describe('Level 5 Unit Tests: Assembler API', () => {
     const state = createRuntimeState(program.slotMeta.length);
     const pool = new BufferPool();
 
-    const frame = executeFrame(program, state, pool, 0) as RenderFrameIR_Future;
+    const frame = executeFrame(program, state, pool, 0) as RenderFrameIR;
     expect(frame.version).toBe(2);
     expect(frame.ops.length).toBeGreaterThan(0);
 
@@ -173,7 +173,7 @@ describe('Level 5 Unit Tests: Assembler API', () => {
       params: ORTHO_CAMERA_DEFAULTS,
     };
 
-    const frame = executeFrame(program, state, pool, 0, orthoCam) as RenderFrameIR_Future;
+    const frame = executeFrame(program, state, pool, 0, orthoCam) as RenderFrameIR;
     expect(frame.version).toBe(2);
     expect(frame.ops.length).toBeGreaterThan(0);
 
@@ -261,7 +261,7 @@ describe('Level 5 Integration Tests: Full Pipeline', () => {
     const pool = new BufferPool();
 
     // Execute one frame WITH the ortho camera parameter
-    const frame = executeFrame(program, state, pool, 0, orthoCam) as RenderFrameIR_Future;
+    const frame = executeFrame(program, state, pool, 0, orthoCam) as RenderFrameIR;
 
     // Verify frame produced a render op
     expect(frame.ops.length).toBeGreaterThan(0);
@@ -295,7 +295,7 @@ describe('Level 5 Integration Tests: Full Pipeline', () => {
     // 1. Signals evaluated (Const values, time phase produced)
     // 2. Fields materialized (GridLayout produced world positions, HsvToRgb produced colors)
     // 3. Projection applied (orthoProject converted vec3 positions → vec2 screen coords + depth)
-    // 4. RenderFrameIR_Future assembled with screen-space fields
+    // 4. RenderFrameIR assembled with screen-space fields
 
     // Additional verification: check that positions are in screen-space [0,1] range
     for (let i = 0; i < N; i++) {

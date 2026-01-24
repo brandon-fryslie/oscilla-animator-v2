@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   assembleDrawPathInstancesOp,
-  assembleRenderFrame_v2,
+  assembleRenderFrame,
   type AssemblerContext,
 } from '../RenderAssembler';
 import type { StepRender, InstanceDecl, SigExpr } from '../../compiler/ir/types';
@@ -544,7 +544,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
     });
   });
 
-  describe('Integration with assembleRenderFrame_v2', () => {
+  describe('Integration with assembleRenderFrame', () => {
     it('flattens multiple ops from per-instance shapes', () => {
       const state = createMockState();
 
@@ -617,7 +617,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         state,
       };
 
-      const result = assembleRenderFrame_v2(steps, context);
+      const result = assembleRenderFrame(steps, context);
 
       // Step 1: 1 op (all circles)
       // Step 2: 2 ops (circles + squares)

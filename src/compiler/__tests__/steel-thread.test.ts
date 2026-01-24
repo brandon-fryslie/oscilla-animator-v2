@@ -13,7 +13,7 @@ import {
   createRuntimeState,
   BufferPool,
   executeFrame,
-  type RenderFrameIR_Future,
+  type RenderFrameIR,
   type DrawPathInstancesOp,
   type DrawPrimitiveInstancesOp,
 } from '../../runtime';

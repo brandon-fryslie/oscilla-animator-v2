@@ -3,7 +3,7 @@ import {
   calculateStrokeWidthPx,
   renderDrawPathInstancesOp,
 } from '../Canvas2DRenderer';
-import type { DrawPathInstancesOp } from '../future-types';
+import type { DrawPathInstancesOp } from '../types';
 
 describe('Stroke Rendering', () => {
   describe('calculateStrokeWidthPx', () => {

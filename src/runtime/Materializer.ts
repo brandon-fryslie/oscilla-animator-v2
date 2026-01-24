@@ -107,7 +107,7 @@
  * ──────────────────────────────────────────────────────────────────────
  *
  * The Materializer outputs are designed to align with the future
- * DrawPathInstancesOp model (see src/render/future-types.ts).
+ * DrawPathInstancesOp model (see src/render/types.ts).
  *
  * CURRENT STATE:
  * - Control points (polygonVertex) → Field<vec2> in local space

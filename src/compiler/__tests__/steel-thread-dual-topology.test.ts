@@ -17,7 +17,7 @@ import {
   createRuntimeState,
   BufferPool,
   executeFrame,
-  type RenderFrameIR_Future,
+  type RenderFrameIR,
 } from '../../runtime';
 import { TOPOLOGY_ID_ELLIPSE, TOPOLOGY_ID_RECT } from '../../shapes/registry';
 
@@ -185,7 +185,7 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
     // === FRAME 1: t=0 ===
     const pool = new BufferPool();
     const state = createRuntimeState(program.slotMeta.length);
-    const frame1 = executeFrame(program, state, pool, 0) as RenderFrameIR_Future;
+    const frame1 = executeFrame(program, state, pool, 0) as RenderFrameIR;
 
     expect(frame1.version).toBe(2);
     expect(frame1.ops.length).toBe(2);
@@ -296,7 +296,7 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
     const f1EllipseScale = ellipseOp1.instances.size as number;
     const f1RectScale = rectOp1.instances.size as number;
 
-    const frame2 = executeFrame(program, state, pool, 1000) as RenderFrameIR_Future;
+    const frame2 = executeFrame(program, state, pool, 1000) as RenderFrameIR;
     const ellipseOp2 = frame2.ops.find(op => op.geometry.topologyId === TOPOLOGY_ID_ELLIPSE)!;
     const rectOp2 = frame2.ops.find(op => op.geometry.topologyId === TOPOLOGY_ID_RECT)!;
 
@@ -354,7 +354,7 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
     expect(rectOp2.kind).toBe('drawPrimitiveInstances');
 
     // === FRAME 3: t=2000ms - verify continued animation ===
-    const frame3 = executeFrame(program, state, pool, 2000) as RenderFrameIR_Future;
+    const frame3 = executeFrame(program, state, pool, 2000) as RenderFrameIR;
     const ellipseOp3 = frame3.ops.find(op => op.geometry.topologyId === TOPOLOGY_ID_ELLIPSE)!;
     const rectOp3 = frame3.ops.find(op => op.geometry.topologyId === TOPOLOGY_ID_RECT)!;
 

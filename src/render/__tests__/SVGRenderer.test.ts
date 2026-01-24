@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { pathToSvgD, SVGRenderer } from '../SVGRenderer';
-import type { RenderFrameIR_Future, DrawPathInstancesOp } from '../future-types';
+import type { RenderFrameIR, DrawPathInstancesOp } from '../types';
 
 describe('SVGRenderer', () => {
   describe('pathToSvgD', () => {
@@ -117,7 +117,7 @@ describe('SVGRenderer', () => {
     it('renders DrawPathInstancesOp with <use> elements', () => {
       renderer = new SVGRenderer(container, 800, 600);
 
-      const frame: RenderFrameIR_Future = {
+      const frame: RenderFrameIR = {
         version: 2,
         ops: [createTriangleOp()],
       };
@@ -136,7 +136,7 @@ describe('SVGRenderer', () => {
       renderer = new SVGRenderer(container, 800, 600);
 
       const op = createTriangleOp();
-      const frame: RenderFrameIR_Future = {
+      const frame: RenderFrameIR = {
         version: 2,
         ops: [op],
       };
@@ -151,7 +151,7 @@ describe('SVGRenderer', () => {
       renderer = new SVGRenderer(container, 800, 600);
 
       const op = createTriangleOp();
-      const frame: RenderFrameIR_Future = {
+      const frame: RenderFrameIR = {
         version: 2,
         ops: [{
           ...op,
@@ -176,7 +176,7 @@ describe('SVGRenderer', () => {
       renderer = new SVGRenderer(container, 800, 600);
 
       const op = createTriangleOp();
-      const frame: RenderFrameIR_Future = {
+      const frame: RenderFrameIR = {
         version: 2,
         ops: [{
           ...op,
@@ -198,7 +198,7 @@ describe('SVGRenderer', () => {
     it('clears render group between frames', () => {
       renderer = new SVGRenderer(container, 800, 600);
 
-      const frame: RenderFrameIR_Future = {
+      const frame: RenderFrameIR = {
         version: 2,
         ops: [createTriangleOp()],
       };
@@ -213,7 +213,7 @@ describe('SVGRenderer', () => {
     it('exports SVG as string', () => {
       renderer = new SVGRenderer(container, 800, 600);
 
-      const frame: RenderFrameIR_Future = {
+      const frame: RenderFrameIR = {
         version: 2,
         ops: [createTriangleOp()],
       };

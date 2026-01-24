@@ -13,7 +13,7 @@
  * This is where we enforce the invariant "Renderer is sink-only."
  *
  * Assembles RenderFrameIR using DrawOp operations (v2 format).
- * Produces DrawPathInstancesOp and DrawPrimitiveInstancesOp (see future-types.ts)
+ * Produces DrawPathInstancesOp and DrawPrimitiveInstancesOp (see types.ts)
  */
 
 import type { StepRender, InstanceDecl, SigExpr } from '../compiler/ir/types';
@@ -29,8 +29,8 @@ import type {
   PrimitiveGeometry,
   InstanceTransforms,
   PathStyle,
-  RenderFrameIR_Future,
-} from '../render/future-types';
+  RenderFrameIR,
+} from '../render/types';
 import { SHAPE2D_WORDS, Shape2DWord, type Shape2DRecord, readShape2D } from './RuntimeState';
 import type { ValueSlot } from '../types';
 import {
@@ -1242,7 +1242,7 @@ export function assembleDrawPathInstancesOp(
 }
 
 /**
- * Assemble all render steps into a v2 RenderFrameIR_Future
+ * Assemble all render steps into a v2 RenderFrameIR
  *
  * This produces the target v2 frame structure with explicit draw operations.
  * Unlike v1, this uses local-space geometry with world-space instance transforms.
@@ -1253,12 +1253,12 @@ export function assembleDrawPathInstancesOp(
  *
  * @param renderSteps - Array of render steps to assemble
  * @param context - Assembly context
- * @returns RenderFrameIR_Future with DrawOp operations
+ * @returns RenderFrameIR with DrawOp operations
  */
-export function assembleRenderFrame_v2(
+export function assembleRenderFrame(
   renderSteps: readonly StepRender[],
   context: AssemblerContext
-): RenderFrameIR_Future {
+): RenderFrameIR {
   const ops: DrawOp[] = [];
 
   for (const step of renderSteps) {

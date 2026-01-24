@@ -3,7 +3,7 @@
  */
 
 // Canvas 2D renderer
-export { renderFrame, renderFrameV2, renderDrawPathInstancesOp, renderDrawPrimitiveInstancesOp } from './Canvas2DRenderer';
+export { renderFrame, renderDrawPathInstancesOp, renderDrawPrimitiveInstancesOp } from './Canvas2DRenderer';
 
 // SVG renderer
 export { SVGRenderer } from './SVGRenderer';
@@ -16,6 +16,6 @@ export type {
   InstanceTransforms,
   DrawPathInstancesOp,
   DrawPrimitiveInstancesOp,
-  RenderFrameIR_Future,
+  RenderFrameIR,
   DrawOp,
-} from './future-types';
+} from './types';

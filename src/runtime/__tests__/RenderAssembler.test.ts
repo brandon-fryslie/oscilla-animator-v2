@@ -6,7 +6,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   assembleDrawPathInstancesOp,
-  assembleRenderFrame_v2,
+  assembleRenderFrame,
   isRenderStep,
   type AssemblerContext,
 } from '../RenderAssembler';
@@ -359,7 +359,7 @@ describe('RenderAssembler', () => {
     });
   });
 
-  describe('assembleRenderFrame_v2', () => {
+  describe('assembleRenderFrame', () => {
     it('assembles multiple DrawPathInstancesOp operations', () => {
       const state = createMockState();
 
@@ -416,7 +416,7 @@ describe('RenderAssembler', () => {
         state,
       };
 
-      const result = assembleRenderFrame_v2(steps, context);
+      const result = assembleRenderFrame(steps, context);
 
       expect(result.version).toBe(2);
       expect(result.ops).toHaveLength(2);
@@ -474,7 +474,7 @@ describe('RenderAssembler', () => {
         state,
       };
 
-      const result = assembleRenderFrame_v2(steps, context);
+      const result = assembleRenderFrame(steps, context);
 
       // Both path and primitive instances produce ops
       expect(result.version).toBe(2);
@@ -509,7 +509,7 @@ describe('RenderAssembler', () => {
         state,
       };
 
-      const result = assembleRenderFrame_v2(steps, context);
+      const result = assembleRenderFrame(steps, context);
 
       expect(result.version).toBe(2);
       expect(result.ops).toHaveLength(0);

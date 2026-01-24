@@ -6,7 +6,7 @@
  * Layout blocks produce z=0.0 explicitly.
  */
 import { describe, it, expect } from 'vitest';
-import type { RenderFrameIR_Future } from '../../runtime';
+import type { RenderFrameIR } from '../../runtime';
 import {
   createPositionField,
   createSizeField,
@@ -222,7 +222,7 @@ describe('Level 1 Integration Tests', () => {
     const program = result.program;
     const state = createRuntimeState(program.slotMeta.length);
     const pool = new BufferPool();
-    const frame = executeFrame(program, state, pool, 0) as RenderFrameIR_Future;
+    const frame = executeFrame(program, state, pool, 0) as RenderFrameIR;
 
     expect(frame.ops.length).toBeGreaterThan(0);
     const op = frame.ops[0];
