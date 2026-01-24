@@ -101,6 +101,8 @@ export interface ProjectionOutput {
  * Removes invisible instances and sorts visible ones by depth (far-to-near / painter's algorithm, stable).
  * Returns compacted arrays with only visible instances.
  *
+ * Fast-path optimization: if depth is already monotone decreasing among visible instances, skip sort.
+ *
  * @param projection - Raw projection output with all instances
  * @param count - Total instance count (including invisible)
  * @param color - Per-instance color buffer (Float32Array, stride 4: RGBA)
@@ -133,15 +135,35 @@ export function depthSortAndCompact(
     }
   }
 
-  // Stable sort by depth (far-to-near / painter's algorithm: larger depth first)
-  indices.sort((a, b) => {
-    const da = depth[a];
-    const db = depth[b];
-    if (da !== db) return db - da;
-    return a - b; // Stable: preserve original order for equal depths
-  });
-
   const visibleCount = indices.length;
+
+  // Fast-path: check if depth is already monotone decreasing (far-to-near)
+  // Common case: flat layouts (all z=0) or already-ordered scenes
+  let alreadyOrdered = true;
+  if (visibleCount > 1) {
+    let prevVisibleDepth = Infinity;
+    for (let i = 0; i < count; i++) {
+      if (visible[i] === 1) {
+        if (depth[i] > prevVisibleDepth) {
+          // depth increased = ascending = NOT far-to-near
+          alreadyOrdered = false;
+          break;
+        }
+        prevVisibleDepth = depth[i];
+      }
+    }
+  }
+
+  // Only sort if not already ordered
+  if (!alreadyOrdered) {
+    // Stable sort by depth (far-to-near / painter's algorithm: larger depth first)
+    indices.sort((a, b) => {
+      const da = depth[a];
+      const db = depth[b];
+      if (da !== db) return db - da;
+      return a - b; // Stable: preserve original order for equal depths
+    });
+  }
 
   // Compact screen-space arrays
   const compactedScreenPos = new Float32Array(visibleCount * 2);
