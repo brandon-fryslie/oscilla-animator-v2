@@ -32,11 +32,7 @@ export {
   advanceFrame,
 } from './RuntimeState';
 export { materialize } from './Materializer';
-export {
-  executeFrame,
-  type RenderFrameIR,
-  type RenderPassIR,
-} from './ScheduleExecutor';
+export { executeFrame } from './ScheduleExecutor';
 export {
   migrateState,
   createInitialState,
@@ -49,10 +45,12 @@ export {
   type AssemblerContext,
 } from './RenderAssembler';
 
-// Re-export future types for convenience
+// Re-export v2 types (now the only types)
 export type {
   DrawPathInstancesOp,
+  DrawPrimitiveInstancesOp,
   PathGeometry,
+  PrimitiveGeometry,
   InstanceTransforms,
   PathStyle,
   RenderFrameIR_Future,

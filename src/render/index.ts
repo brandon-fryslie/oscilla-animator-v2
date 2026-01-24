@@ -2,15 +2,14 @@
  * Render - Convert RenderFrameIR to pixels
  */
 
-export type { RenderFrameIR, RenderPassIR } from './types';
-export { renderFrame } from './Canvas2DRenderer';
-
-// Future RenderIR types (Phase 6 prep - not yet used in production)
+// Re-export v2 types (now the only types)
 export type {
   PathStyle,
   PathGeometry,
+  PrimitiveGeometry,
   InstanceTransforms,
   DrawPathInstancesOp,
+  DrawPrimitiveInstancesOp,
   RenderFrameIR_Future,
   DrawOp,
 } from './future-types';

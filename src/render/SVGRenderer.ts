@@ -490,7 +490,7 @@ export class SVGRenderer {
       // Create SVG element based on topology
       let element: SVGElement;
       
-      if (topology.id === 0) // TOPOLOGY_ID_ELLIPSE {
+      if (topology.id === 0) { // TOPOLOGY_ID_ELLIPSE
         // Ellipse primitive
         const rx = geometry.params.rx ?? 0.5;
         const ry = geometry.params.ry ?? 0.5;

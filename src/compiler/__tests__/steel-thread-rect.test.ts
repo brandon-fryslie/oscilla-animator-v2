@@ -8,7 +8,7 @@
  * - Rect block produces shapeRef signal with numeric rect topologyId
  * - Compile produces correct IR with shape2d storage
  * - RenderAssembler resolves shape via topology registry
- * - Output RenderPassIR has resolvedShape with mode='primitive' and rect params
+ * - Output v2 DrawOp has geometry with correct topology and params
  */
 
 import { describe, it, expect } from 'vitest';
@@ -19,6 +19,8 @@ import {
   createRuntimeState,
   BufferPool,
   executeFrame,
+  type DrawPathInstancesOp,
+  type DrawPrimitiveInstancesOp,
 } from '../../runtime';
 import { TOPOLOGY_ID_ELLIPSE, TOPOLOGY_ID_RECT } from '../../shapes/registry';
 
@@ -26,7 +28,7 @@ describe('Steel Thread - Rect Shape Pipeline', () => {
   it('should compile and execute a patch using Rect topology', () => {
     // Build the patch: Rect → Array → position/color → Render
     const patch = buildPatch((b) => {
-      const time = b.addBlock('InfiniteTimeRoot', { periodAMs: 3000, periodBMs: 6000 });
+      const time = b.addBlock('InfiniteTimeRoot', { periodAMs: 3000, periodBMS: 6000 });
 
       // Rect shape (uses registry defaults: width=0.04, height=0.02)
       const rect = b.addBlock('Rect', {});
@@ -112,39 +114,34 @@ describe('Steel Thread - Rect Shape Pipeline', () => {
     const state = createRuntimeState(program.slotMeta.length);
     const frame = executeFrame(program, state, pool, 0);
 
-    // Verify frame structure
-    expect(frame.version).toBe(1);
-    expect(frame.passes.length).toBe(1);
+    // Verify frame structure (v2)
+    expect(frame.version).toBe(2);
+    expect(frame.ops.length).toBe(1);
 
-    const pass = frame.passes[0];
-    expect(pass.kind).toBe('instances2d');
-    expect(pass.count).toBe(50);
-    expect(pass.position).toBeInstanceOf(Float32Array);
-    expect(pass.color).toBeInstanceOf(Uint8ClampedArray);
+    const op = frame.ops[0] as DrawPrimitiveInstancesOp;
+    expect(op.kind).toBe('drawPrimitiveInstances');
+    expect(op.instances.count).toBe(50);
+    expect(op.instances.position).toBeInstanceOf(Float32Array);
+    expect(op.style.fillColor).toBeInstanceOf(Uint8ClampedArray);
 
     // Verify position buffer size (vec3 stride)
-    const posBuffer = pass.position as Float32Array;
+    const posBuffer = op.instances.position as Float32Array;
     expect(posBuffer.length).toBe(50 * 3); // 50 particles × 3 floats per position (x, y, z)
 
     // Verify color buffer size
-    const colorBuffer = pass.color as Uint8ClampedArray;
+    const colorBuffer = op.style.fillColor as Uint8ClampedArray;
     expect(colorBuffer.length).toBe(50 * 4); // 50 particles × 4 bytes per color
 
-    // Verify scale
-    expect(typeof pass.scale).toBe('number');
-    expect(pass.scale).toBe(1);
+    // Verify size buffer exists
+    expect(typeof op.instances.size).toBe("number");
+    expect(op.instances.size).toBe(1);
 
-    // Verify resolvedShape is properly resolved with rect topology
-    expect(pass.resolvedShape).toBeDefined();
-    expect(pass.resolvedShape.resolved).toBe(true);
-    expect(pass.resolvedShape.topologyId).toBe(TOPOLOGY_ID_RECT);
-    expect(pass.resolvedShape.mode).toBe('primitive');
-
-    // Verify rect params are resolved with registry defaults
-    expect(pass.resolvedShape.params.width).toBeCloseTo(0.04, 5);
-    expect(pass.resolvedShape.params.height).toBeCloseTo(0.02, 5);
-    expect(pass.resolvedShape.params.rotation).toBe(0);
-    expect(pass.resolvedShape.params.cornerRadius).toBe(0);
+    // Verify geometry has correct rect topology (primitive mode)
+    expect(op.geometry.topologyId).toBe(TOPOLOGY_ID_RECT);
+    expect(op.geometry.params.width).toBeCloseTo(0.04, 5);
+    expect(op.geometry.params.height).toBeCloseTo(0.02, 5);
+    expect(op.geometry.params.rotation).toBe(0);
+    expect(op.geometry.params.cornerRadius).toBe(0);
 
     // Verify positions are finite
     for (let i = 0; i < 50; i++) {
@@ -176,7 +173,8 @@ describe('Steel Thread - Rect Shape Pipeline', () => {
 
     // Execute another frame at t=1000ms to verify animation
     const frame2 = executeFrame(program, state, pool, 1000);
-    const pos2 = frame2.passes[0].position as Float32Array;
+    const op2 = frame2.ops[0] as DrawPrimitiveInstancesOp;
+    const pos2 = op2.instances.position as Float32Array;
 
     // Positions should differ between frames (animated)
     let hasDifference = false;
@@ -192,15 +190,14 @@ describe('Steel Thread - Rect Shape Pipeline', () => {
     expect(hasDifference).toBe(true);
 
     // Verify frame 2 also has correct rect shape
-    expect(frame2.passes[0].resolvedShape.topologyId).toBe(TOPOLOGY_ID_RECT);
-    expect(frame2.passes[0].resolvedShape.mode).toBe('primitive');
-    expect(frame2.passes[0].resolvedShape.params.width).toBeCloseTo(0.04, 5);
+    expect(op2.geometry.topologyId).toBe(TOPOLOGY_ID_RECT);
+    expect(op2.geometry.params.width).toBeCloseTo(0.04, 5);
   });
 
-  it('should produce different resolvedShape for Ellipse vs Rect', () => {
+  it('should produce different geometry for Ellipse vs Rect', () => {
     // Build Ellipse patch
     const ellipsePatch = buildPatch((b) => {
-      const time = b.addBlock('InfiniteTimeRoot', { periodAMs: 3000, periodBMs: 6000 });
+      const time = b.addBlock('InfiniteTimeRoot', { periodAMs: 3000, periodBMS: 6000 });
       const ellipse = b.addBlock('Ellipse', { rx: 0.02, ry: 0.02 });
       const array = b.addBlock('Array', { count: 10 });
       b.wire(ellipse, 'shape', array, 'element');
@@ -239,7 +236,7 @@ describe('Steel Thread - Rect Shape Pipeline', () => {
 
     // Build Rect patch
     const rectPatch = buildPatch((b) => {
-      const time = b.addBlock('InfiniteTimeRoot', { periodAMs: 3000, periodBMs: 6000 });
+      const time = b.addBlock('InfiniteTimeRoot', { periodAMS: 3000, periodBMS: 6000 });
       const rect = b.addBlock('Rect', {});
       const array = b.addBlock('Array', { count: 10 });
       b.wire(rect, 'shape', array, 'element');
@@ -296,27 +293,30 @@ describe('Steel Thread - Rect Shape Pipeline', () => {
     const rectFrame = executeFrame(rectResult.program, rectState, pool, 0);
 
     // Both should render successfully
-    expect(ellipseFrame.passes.length).toBe(1);
-    expect(rectFrame.passes.length).toBe(1);
+    expect(ellipseFrame.ops.length).toBe(1);
+    expect(rectFrame.ops.length).toBe(1);
+
+    const ellipseOp = ellipseFrame.ops[0] as DrawPrimitiveInstancesOp;
+    const rectOp = rectFrame.ops[0] as DrawPrimitiveInstancesOp;
 
     // Verify different topologies
-    expect(ellipseFrame.passes[0].resolvedShape.topologyId).toBe(TOPOLOGY_ID_ELLIPSE);
-    expect(rectFrame.passes[0].resolvedShape.topologyId).toBe(TOPOLOGY_ID_RECT);
+    expect(ellipseOp.geometry.topologyId).toBe(TOPOLOGY_ID_ELLIPSE);
+    expect(rectOp.geometry.topologyId).toBe(TOPOLOGY_ID_RECT);
 
     // Verify different param names (ellipse: rx/ry, rect: width/height)
-    expect(ellipseFrame.passes[0].resolvedShape.params).toHaveProperty('rx');
-    expect(ellipseFrame.passes[0].resolvedShape.params).toHaveProperty('ry');
-    expect(rectFrame.passes[0].resolvedShape.params).toHaveProperty('width');
-    expect(rectFrame.passes[0].resolvedShape.params).toHaveProperty('height');
+    expect(ellipseOp.geometry.params).toHaveProperty('rx');
+    expect(ellipseOp.geometry.params).toHaveProperty('ry');
+    expect(rectOp.geometry.params).toHaveProperty('width');
+    expect(rectOp.geometry.params).toHaveProperty('height');
 
-    // Both should be primitive mode (not path)
-    expect(ellipseFrame.passes[0].resolvedShape.mode).toBe('primitive');
-    expect(rectFrame.passes[0].resolvedShape.mode).toBe('primitive');
+    // Both should be primitive mode
+    expect(ellipseOp.kind).toBe('drawPrimitiveInstances');
+    expect(rectOp.kind).toBe('drawPrimitiveInstances');
 
     // Verify param values match registry defaults
-    expect(ellipseFrame.passes[0].resolvedShape.params.rx).toBeCloseTo(0.02, 5);
-    expect(ellipseFrame.passes[0].resolvedShape.params.ry).toBeCloseTo(0.02, 5);
-    expect(rectFrame.passes[0].resolvedShape.params.width).toBeCloseTo(0.04, 5);
-    expect(rectFrame.passes[0].resolvedShape.params.height).toBeCloseTo(0.02, 5);
+    expect(ellipseOp.geometry.params.rx).toBeCloseTo(0.02, 5);
+    expect(ellipseOp.geometry.params.ry).toBeCloseTo(0.02, 5);
+    expect(rectOp.geometry.params.width).toBeCloseTo(0.04, 5);
+    expect(rectOp.geometry.params.height).toBeCloseTo(0.02, 5);
   });
 });

@@ -7,11 +7,12 @@
 
 import type { CompiledProgramIR, ValueSlot, FieldSlotEntry } from '../compiler/ir/program';
 import type { ScheduleIR } from '../compiler/passes-v2/pass7-schedule';
-import type { Step, InstanceDecl, DomainInstance } from '../compiler/ir/types';
+import type { Step, InstanceDecl, DomainInstance, StepRender } from '../compiler/ir/types';
 import type { SigExprId, IrInstanceId as InstanceId } from '../types';
 import type { RuntimeState } from './RuntimeState';
 import type { BufferPool } from './BufferPool';
 import type { TopologyId } from '../shapes/types';
+import type { RenderFrameIR_Future } from '../render/future-types';
 import { resolveTime } from './timeResolution';
 import { materialize } from './Materializer';
 import { evaluateSignal } from './SignalEvaluator';
@@ -20,150 +21,7 @@ import { writeShape2D } from './RuntimeState';
 import { detectDomainChange } from './ContinuityMapping';
 import { applyContinuity, finalizeContinuityFrame } from './ContinuityApply';
 import { createStableDomainInstance, createUnstableDomainInstance } from './DomainIdentity';
-import { assembleRenderPass, type AssemblerContext, type CameraParams } from './RenderAssembler';
-
-/**
- * RenderFrameIR - Output from frame execution
- *
- * Contains all render passes for the frame.
- *
- * ROADMAP PHASE 6: This is the current (v1) RenderIR structure.
- * Future direction: See src/render/future-types.ts for target architecture
- * - DrawPathInstancesOp with explicit geometry/instances/style separation
- * - Local-space control points + world-space instance transforms
- * - No shape interpretation in renderer (all resolved in RenderAssembler)
- */
-export interface RenderFrameIR {
-  version: 1;
-  passes: RenderPassIR[];
-}
-
-/**
- * Shape descriptor for unified shape model.
- * Contains topology ID and evaluated parameter values.
- */
-export interface ShapeDescriptor {
-  readonly topologyId: TopologyId;
-  readonly params: Record<string, number>;
-}
-
-/**
- * ResolvedShape - Pre-resolved shape for rendering
- *
- * When RenderAssembler resolves a ShapeDescriptor, it produces this
- * structure which contains everything the renderer needs without
- * any further lookups.
- *
- * This is the REQUIRED shape format for RenderPassIR.
- * The renderer trusts this structure completely.
- */
-export interface ResolvedShape {
-  /** Discriminator for resolved shape */
-  readonly resolved: true;
-
-  /** Original topology ID */
-  readonly topologyId: TopologyId;
-
-  /**
-   * Shape mode for rendering dispatch:
-   * - 'path': Use path rendering with verbs and control points
-   * - 'primitive': Use topology.render() with params
-   */
-  readonly mode: 'path' | 'primitive';
-
-  /** Resolved params with topology defaults applied */
-  readonly params: Record<string, number>;
-
-  /** Path verbs for path mode (if applicable) */
-  readonly verbs?: Uint8Array;
-
-  /** Control points for path mode (if applicable) */
-  readonly controlPoints?: ArrayBufferView;
-}
-
-/**
- * RenderPassIR - Single render pass
- *
- * The renderer receives pre-resolved shape data via `resolvedShape`.
- * Shape resolution happens in RenderAssembler, making the renderer
- * a pure sink with no interpretation logic.
- *
- * PHASE 6 COMPLETE:
- * - `resolvedShape` is REQUIRED (not optional)
- * - Control points are in `resolvedShape.controlPoints` (no side-channel)
- * - Legacy `shape` field kept for backward compatibility but not used
- *
- * See: src/render/future-types.ts for DrawPathInstancesOp (future target)
- */
-export interface RenderPassIR {
-  kind: 'instances2d';
-  count: number;
-  position: ArrayBufferView;
-  color: ArrayBufferView;
-
-  /**
-   * Scale multiplier for shape dimensions (default 1.0 = no scaling).
-   * Applied to normalized shape params before viewport conversion.
-   */
-  scale: number;
-
-  /**
-   * Per-instance rotation in radians.
-   * When provided, each instance is rotated around its center.
-   */
-  rotation?: Float32Array;
-
-  /**
-   * Per-instance anisotropic scale (x, y pairs).
-   * When provided, allows non-uniform scaling per instance.
-   * Array length should be count * 2 (interleaved x, y).
-   */
-  scale2?: Float32Array;
-
-  /**
-   * Pre-resolved shape (REQUIRED).
-   *
-   * RenderAssembler produces this with:
-   * - Topology lookup already done
-   * - Params resolved with defaults
-   * - Control points embedded (for path shapes)
-   *
-   * This is the ONLY shape representation - no legacy encoding.
-   */
-  resolvedShape: ResolvedShape;
-
-  // =========================================================================
-  // Screen-space fields (3D projection output)
-  // =========================================================================
-
-  /**
-   * Screen-space positions (Float32Array, stride 2, normalized [0,1]).
-   * Produced by the projection stage from world-space vec3 positions.
-   * Backends map [0,1] → pixels via viewport dimensions.
-   */
-  screenPosition?: Float32Array;
-
-  /**
-   * Per-instance screen-space radius.
-   * Under ortho: identity (=== worldRadius).
-   * Under perspective: foreshortened by distance.
-   */
-  screenRadius?: Float32Array;
-
-  /**
-   * Per-instance depth value (Float32Array, length N).
-   * Monotonically increasing with distance from camera.
-   * Used for depth sorting (Level 7).
-   */
-  depth?: Float32Array;
-
-  /**
-   * Per-instance visibility flag (Uint8Array, length N).
-   * 1 = visible (within frustum), 0 = culled.
-   * Culled instances are excluded from rendering (Level 7).
-   */
-  visible?: Uint8Array;
-}
+import { assembleRenderFrame_v2, type AssemblerContext, type CameraParams } from './RenderAssembler';
 
 /**
  * Slot lookup cache entry
@@ -182,7 +40,7 @@ interface SlotLookup {
  * @param pool - Buffer pool
  * @param tAbsMs - Absolute time in milliseconds
  * @param camera - Optional camera params for projection (viewer-level, not compiled state)
- * @returns RenderFrameIR for this frame
+ * @returns RenderFrameIR_Future for this frame
  */
 export function executeFrame(
   program: CompiledProgramIR,
@@ -190,7 +48,7 @@ export function executeFrame(
   pool: BufferPool,
   tAbsMs: number,
   camera?: CameraParams,
-): RenderFrameIR {
+): RenderFrameIR_Future {
   // Extract schedule components
   const schedule = program.schedule as ScheduleIR;
   const timeModel = schedule.timeModel;
@@ -236,11 +94,21 @@ export function executeFrame(
   // Phase 1: Execute evalSig, materialize, render (skip stateWrite)
   // Phase 2: Execute all stateWrite steps
   // This ensures state reads see previous frame's values
-  const passes: RenderPassIR[] = [];
 
   // Get dense arrays from program
   const signals = program.signalExprs.nodes;
   const fields = program.fieldExprs.nodes;
+
+  // Create AssemblerContext once (used for v2 frame assembly after Phase 1)
+  const assemblerContext: AssemblerContext = {
+    signals,
+    instances: instances as ReadonlyMap<string, InstanceDecl>,
+    state,
+    camera,
+  };
+
+  // Collect render steps for v2 batch assembly
+  const renderSteps: StepRender[] = [];
 
   // PHASE 1: Execute all non-stateWrite steps
   for (const step of steps) {
@@ -298,19 +166,8 @@ export function executeFrame(
       }
 
       case 'render': {
-        // Delegate to RenderAssembler for render pass assembly
-        // This enforces the invariant: "Renderer is sink-only"
-        const assemblerContext: AssemblerContext = {
-          signals,
-          instances: instances as ReadonlyMap<string, InstanceDecl>,
-          state,
-          camera,
-        };
-
-        const pass = assembleRenderPass(step, assemblerContext);
-        if (pass) {
-          passes.push(pass);
-        }
+        // Collect render steps for v2 batch assembly (after Phase 1)
+        renderSteps.push(step);
         break;
       }
 
@@ -491,6 +348,9 @@ export function executeFrame(
     }
   }
 
+  // Build v2 frame from collected render steps
+  const frame = assembleRenderFrame_v2(renderSteps, assemblerContext);
+
   // PHASE 2: Execute all stateWrite steps
   // This ensures state reads in Phase 1 saw previous frame's values
   for (const step of steps) {
@@ -538,12 +398,6 @@ export function executeFrame(
   // Updates time tracking and clears frame-local flags
   finalizeContinuityFrame(state);
 
-  // 4. Build RenderFrameIR
-  const frame: RenderFrameIR = {
-    version: 1,
-    passes,
-  };
-
   // 5. Store frame in output slot (DoD: outputs contract)
   if (program.outputs.length > 0) {
     const outputSpec = program.outputs[0];
@@ -563,7 +417,7 @@ export function executeFrame(
     if (!outputFrame) {
       throw new Error('Output frame not found in slot');
     }
-    return outputFrame as RenderFrameIR;
+    return outputFrame as RenderFrameIR_Future;
   }
 
   // Fallback: no outputs defined (shouldn't happen with proper compilation)

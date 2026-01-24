@@ -13,13 +13,16 @@ import {
   createRuntimeState,
   BufferPool,
   executeFrame,
+  type RenderFrameIR_Future,
+  type DrawPathInstancesOp,
+  type DrawPrimitiveInstancesOp,
 } from '../../runtime';
 
 describe('Steel Thread - Animated Particles', () => {
   it('should compile and execute the minimal animated particles patch', () => {
     // Build the patch using three-stage block architecture
     const patch = buildPatch((b) => {
-      const time = b.addBlock('InfiniteTimeRoot', { periodAMs: 5000, periodBMs: 10000 });
+      const time = b.addBlock('InfiniteTimeRoot', { periodAMS: 5000, periodBMS: 10000 });
 
       // Three-stage architecture:
       // 1. Ellipse (shape) → Signal<shape>
@@ -114,29 +117,29 @@ describe('Steel Thread - Animated Particles', () => {
 
     const frame = executeFrame(program, state, pool, 0);
 
-    // Verify frame structure
-    expect(frame.version).toBe(1);
-    expect(frame.passes.length).toBe(1);
+    // Verify frame structure (v2)
+    expect(frame.version).toBe(2);
+    expect(frame.ops.length).toBe(1);
 
-    const pass = frame.passes[0];
-    expect(pass.kind).toBe('instances2d');
-    expect(pass.count).toBe(100);
-    expect(pass.position).toBeInstanceOf(Float32Array);
-    expect(pass.color).toBeInstanceOf(Uint8ClampedArray);
+    const op = frame.ops[0] as DrawPathInstancesOp | DrawPrimitiveInstancesOp;
+    expect(op.kind).toBe('drawPrimitiveInstances');
+    expect(op.instances.count).toBe(100);
+    expect(op.instances.position).toBeInstanceOf(Float32Array);
+    expect(op.style.fillColor).toBeInstanceOf(Uint8ClampedArray);
 
-    // Verify position buffer has correct size (vec3 stride)
-    const posBuffer = pass.position as Float32Array;
+    // Verify position buffer has correct size (vec3 stride, but no camera so still world-space)
+    const posBuffer = op.instances.position as Float32Array;
     expect(posBuffer.length).toBe(100 * 3); // 100 particles, 3 floats per position (x, y, z)
     // Copy the values since the buffer will be reused for frame 2
     const frame1Positions = new Float32Array(posBuffer);
 
     // Verify color buffer has correct size
-    const colorBuffer = pass.color as Uint8ClampedArray;
+    const colorBuffer = op.style.fillColor as Uint8ClampedArray;
     expect(colorBuffer.length).toBe(100 * 4); // 100 particles, 4 bytes per color (RGBA)
 
-    // Verify scale is a number (uniform signal)
-    expect(typeof pass.scale).toBe('number');
-    expect(pass.scale).toBe(1); // Default scale from RenderInstances2D block
+    // Verify size is uniform (no camera = no projection = uniform size)
+    expect(typeof op.instances.size).toBe('number');
+    expect(op.instances.size).toBe(1); // Default scale from RenderInstances2D block
 
     // Verify positions are finite numbers (actual range depends on animation parameters)
     for (let i = 0; i < 100; i++) {
@@ -165,7 +168,7 @@ describe('Steel Thread - Animated Particles', () => {
 
     // Execute another frame at t=1000ms to verify animation
     const frame2 = executeFrame(program, state, pool, 1000);
-    const pos2 = frame2.passes[0].position as Float32Array;
+    const pos2 = (frame2.ops[0] as DrawPathInstancesOp | DrawPrimitiveInstancesOp).instances.position as Float32Array;
 
     // Positions should be different from frame 1
     // Note: posBuffer and pos2 may be the same buffer object (reused by pool)
