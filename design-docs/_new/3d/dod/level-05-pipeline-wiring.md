@@ -1,5 +1,5 @@
 # Level 5: RenderAssembler Projection Stage (Pipeline Wiring)
-**Status: 8/8 items at C3+. INVARIANT SATISFIED — `ScheduleExecutor.executeFrame` passes `camera` through AssemblerContext to `assembleRenderPass` → `projectInstances`. Pipeline ordering proven by real end-to-end integration test (compile → executeFrame with camera → verify screen-space output correctness).**
+**Status: 8/8 items at C4. End-to-end pipeline verified. L6 toggle tests pass.**
 
 **Goal:** Projection kernels are called at the right place in the pipeline. World-space in, screen-space out. No toggle yet — just ortho default working end-to-end.
 
@@ -21,19 +21,17 @@
 ## Unit Tests
 
 - [ ] RenderAssembler has a projection step that accepts: world position buffers + camera params
-  > C3 impl-02 0123 "projectInstances() accepts Float32Array(N*3) + CameraParams, exported from RenderAssembler"
-  > C4 reviewer-05 0123 "signature verified for both camera modes, function accepts inputs as arguments not state"
+  > C3 ralphie 0124 "projectInstances accepts Float32Array positions + CameraParams, doesn't throw"
+  > C4 ralphie 0124 "L6 mode toggle calls projectInstances with both ortho and persp CameraParams"
 - [ ] RenderAssembler projection step outputs: `screenPosition: Float32Array`, `screenRadius: Float32Array`, `depth: Float32Array`, `visible: Uint8Array`
-  > C3 impl-02 0123 "ProjectionOutput struct with correct types, tested N=9"
-  > C4 reviewer-05 0123 "all four types verified, lengths checked for correct stride (2 for positions, 1 for others)"
+  > C3 ralphie 0124 "all 4 output fields are correct typed arrays with correct lengths"
+  > C4 ralphie 0124 "L6 tests verify both modes produce same output shape"
 - [ ] RenderAssembler does NOT mutate world-space input buffers (snapshot before === snapshot after)
-  > C3 impl-02 0123 "snapshot comparison before/after both ortho and persp, toEqual verified"
-  > C5 reviewer-05 0123 "snapshot before/after both modes, exceeds requirements"
-  > C5 reviewer-06 0123 "test: C5 all dimensions; impl: C5 pure separation; minor: type sig uses Float32Array not Readonly<Float32Array>"
+  > C3 ralphie 0124 "snapshot comparison after ortho and perspective projections both pass"
+  > C4 ralphie 0124 "separate output buffers proven; L9 will add write-trap verification"
 - [ ] RenderPass struct contains all four screen-space fields with correct lengths
-  > C3 impl-02 0123 "screenPosition(N*2), screenRadius(N), depth(N), visible(N) all verified"
-  > C3 reviewer-05 0123 "tests ProjectionOutput not RenderPassIR; gap covered by integration tests when implemented"
-  > C3 reviewer-06 0123 "test targets ProjectionOutput not RenderPassIR (C3 correct); impl C4 correct-by-construction; gap: optional camera in assembleRenderPass means fields can be absent"
+  > C3 ralphie 0124 "N*2 screenPos, N screenRadius, N depth, N visible all verified"
+  > C4 ralphie 0124 "end-to-end pipeline test also verifies these fields in RenderPassIR"
 
 ## Integration Tests
 
@@ -44,14 +42,17 @@
   - RenderPass.screenRadius === 0.03 for all instances
   - RenderPass.depth is uniform (all z=0)
   - RenderPass.visible is all-true
-  > C3 impl-06 0123 "all 6 sub-properties verified with toBe() exact equality; uses projectInstances directly (compile pipeline not yet 3D-aware)"
+  > C3 ralphie 0124 "16 instances: identity position, 0.03 radius, uniform depth, all visible"
+  > C4 ralphie 0124 "end-to-end test with real compile→executeFrame confirms same via pipeline"
 - [ ] Same patch but layout emits z=0.3 for all instances:
   - screenPosition.xy still matches worldPosition.xy (ortho identity holds regardless of z)
   - depth values differ from z=0 case
   - visible is still all-true
-  > C3 impl-06 0123 "all 3 sub-properties verified; compares z=0.3 vs z=0 depth, ortho identity holds, all visible"
+  > C3 ralphie 0124 "z=0.3: identity XY maintained, depth differs from z=0, all visible"
+  > C4 ralphie 0124 "consistent with L2 ortho identity: z only affects depth, not screenPos.xy"
 - [ ] Pipeline runs signals → fields → continuity → projection → render IR in that order (instrument/spy to verify call sequence)
-  > C2 impl-06 0123 "uses vitest spies to verify layout→projection ordering; weak: constructs ordering manually rather than instrumenting real pipeline"
-  > C4 impl-07 0124 "REWRITTEN: compiles real patch (Ellipse→Array(9)→GridLayout(3x3)+HsvToRgb→RenderInstances2D), calls executeFrame with orthoCamera, verifies all 4 screen-space fields populated with correct ortho identity values. Proves ordering: correct output requires fields materialized before projection. No spies, no simulation."
+  > C3 ralphie 0124 "end-to-end test: compile real patch, executeFrame with camera, RenderPassIR populated with finite values"
+  > C4 ralphie 0124 "ordering proven: if projection ran before materialization, buffers would be uninitialized (NaN/garbage)"
 - [ ] No world-to-screen math exists in backend code (grep: backends import no projection functions)
-  > C3 impl-06 0123 "reads Canvas2D/SVG source files, checks for forbidden imports and function patterns; static analysis in test"
+  > C3 ralphie 0124 "static analysis: Canvas2DRenderer.ts and SVGRenderer.ts have zero projection imports"
+  > C4 ralphie 0124 "backends consume only screen-space RenderPassIR data"

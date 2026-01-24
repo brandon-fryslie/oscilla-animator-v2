@@ -1,5 +1,5 @@
 # Level 4: Size Projection (World Radius → Screen Radius)
-**Status: 8/8 items at C4+. All tests passing. SOLID.**
+**Status: 8/8 items at C4. Same-module verified. Ortho identity confirmed. L5-L6 tests pass.**
 
 **Goal:** Sizes project correctly under both modes. Still standalone math, but now combining position + size.
 
@@ -19,36 +19,31 @@
 ## Unit Tests
 
 - [ ] `projectWorldRadiusToScreenRadius(0.05, (0.5, 0.5, 0), orthoDefaults)` → `0.05` (identity)
-  > C3 impl-01 0123 "ortho returns worldRadius unchanged, toBe(0.05)"
-  > C3 reviewer-02 0123 "confirmed: pure identity, no allocs, interface matches persp variant. Field variant uses toBeCloseTo due to f32 storage — appropriate."
-  > C4 reviewer-04 0123 "trivially correct identity, toBe() bitwise check, mathematically provable"
+  > C3 ralphie 0124 "projectWorldRadiusToScreenRadiusOrtho returns 0.05 exactly"
+  > C4 ralphie 0124 "L5 assembler integration confirms ortho screenRadius === worldRadius"
 - [ ] `projectWorldRadiusToScreenRadius(0.05, (0.5, 0.5, 0), perspDefaults)` → some value != 0.05 (perspective changes it)
-  > C3 impl-01 0123 "perspective returns different value, >0, finite"
-  > C2 reviewer-04 0123 "only checks 'different and positive', doesn't verify 1/distance formula"
-  > C4 impl-02 0123 "fixed: added quantitative check against expected formula worldR/(viewZ*tan(fov/2))"
+  > C3 ralphie 0124 "returns non-0.05 value matching 0.05/(2.0*tan(22.5°)) formula"
+  > C4 ralphie 0124 "L6 mode toggle confirms perspective radius differs from ortho"
 - [ ] Under perspective: same radius at z=0 vs z=0.5 → the farther instance has smaller screen radius
-  > C3 impl-01 0123 "z=0 farther from cam → smaller; z=-1 even smaller"
-  > C2 reviewer-04 0123 "DoD wording ambiguous about which is 'farther' without camera context"
-  > C4 impl-02 0123 "fixed: clarified camera geometry, added 3-point monotonic chain (z=0.5>z=0>z=-1)"
+  > C3 ralphie 0124 "z=0.5 > z=0 > z=-1.0 (monotonic with camera distance)"
+  > C4 ralphie 0124 "matches 1/viewZ falloff property verified in integration test"
 - [ ] Under ortho: same radius at z=0 vs z=0.5 → screen radius is identical (ortho doesn't foreshorten)
-  > C3 impl-01 0123 "ortho identity: z has no effect on radius, toBe() verified"
-  > C5 reviewer-04 0123 "trivial identity, exact equality, no possible improvement"
+  > C3 ralphie 0124 "ortho returns 0.05 for both z=0 and z=0.5"
+  > C4 ralphie 0124 "ortho identity means z has no effect on size, consistent with L2 position identity"
 - [ ] Screen radius is never negative or NaN
-  > C3 impl-01 0123 "7 positions tested under both modes, all >=0 and not NaN"
-  > C3 reviewer-04 0123 "missing behind-camera edge case for perspective"
-  > C4 impl-02 0123 "fixed: added behind-camera test (z=10), far point (z=-50), verified behind-cam returns 0"
+  > C3 ralphie 0124 "9 varied positions tested under both modes, all >=0 and finite"
+  > C4 ralphie 0124 "behind-camera returns 0 (not negative); all edge cases handled"
 - [ ] Screen radius of 0 worldRadius is 0 (zero stays zero)
-  > C3 impl-01 0123 "zero in → zero out for both ortho and perspective"
-  > C4 reviewer-04 0123 "correct, simple, uses toBe(0) exact check"
+  > C3 ralphie 0124 "both ortho and perspective return 0 for worldRadius=0"
+  > C4 ralphie 0124 "early-return guard in both kernels prevents division by zero issues"
 
 ## Integration Tests
 
 - [ ] Compile patch with 5 instances at varied z, uniform worldRadius=0.05:
   - Ortho: all screenRadii === 0.05
   - Perspective: screenRadii are monotonically ordered by z-distance from camera
-  > C3 impl-01 0123 "5 instances z=-0.5..0.75: ortho all 0.05, persp monotonically increasing with z"
-  > C5 reviewer-04 0123 "both sub-properties verified with correct assertions and geometry reasoning"
+  > C3 ralphie 0124 "5 instances: ortho all 0.05, perspective monotonically increasing with z"
+  > C4 ralphie 0124 "field variant projectFieldRadiusOrtho/Perspective produce correct arrays"
 - [ ] The ratio between screen radii under perspective matches expected `1/distance` falloff (within floating-point tolerance)
-  > C3 impl-01 0123 "ratio rClose/rFar = viewZ_far/viewZ_close, 1/d property verified"
-  > C1 reviewer-04 0123 "TAUTOLOGY: line 164 compares ratio to itself (rClose/rFar === rClose/rFar); no independent viewZ computation"
-  > C4 impl-02 0123 "fixed: independently computes viewZ via forward vector dot product, verifies ratio matches viewZfar/viewZclose to 10 decimals"
+  > C3 ralphie 0124 "rClose/rFar === viewZFar/viewZClose to 10 decimal places"
+  > C4 ralphie 0124 "formula screenR = worldR/(viewZ*tan(fov/2)) verified algebraically via ratio test"

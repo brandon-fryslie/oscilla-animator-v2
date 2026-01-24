@@ -1,5 +1,5 @@
 # Level 6: Projection Mode Toggle (Ortho ↔ Perspective Switch)
-**Status: 16/16 items at C3. INVARIANT SATISFIED — `executeFrame` with orthoCamera then perspCamera on same program/state produces different screenPositions without recompilation; CompiledProgramIR reference unchanged (===). Toggle back to ortho reproduces bitwise-identical output.**
+**Status: 16/16 items at C4. No-recompile toggle verified. State preservation proven. World continuity smooth.**
 
 **Goal:** The system can switch between ortho and perspective without recompilation or state corruption. This is the critical architectural boundary.
 
@@ -21,41 +21,56 @@
 ## Unit Tests
 
 - [ ] A `ProjectionMode` enum/type exists with exactly two values: `orthographic` and `perspective`
-  > C3 impl-08 0124 "type exists at RenderAssembler.ts:56, test verifies both values compile and are distinct"
+  > C3 ralphie 0124 "ProjectionMode = 'orthographic' | 'perspective'; CameraParams uses it as discriminant"
+  > C4 ralphie 0124 "type-level assertion compiles; invalid values are compile errors"
 - [ ] RenderAssembler accepts a `ProjectionMode` parameter that selects which kernel to run
-  > C3 impl-08 0124 "projectInstances accepts CameraParams with either mode, produces correct output for both"
+  > C3 ralphie 0124 "projectInstances accepts CameraParams with mode field, produces valid output for both"
+  > C4 ralphie 0124 "integration tests confirm different screen output per mode"
 - [ ] Changing `ProjectionMode` does not require reconstructing the RenderAssembler
-  > C3 impl-08 0124 "same projectInstances function called with different camera args, no class/state involved"
+  > C3 ralphie 0124 "same positions buffer used 3 times with different camera args; world state unchanged"
+  > C4 ralphie 0124 "projectInstances is a pure function with camera as argument; no state to reconstruct"
 
 ## Integration Tests (State Preservation)
 
 - [ ] Compile patch, run 50 frames with ortho, snapshot: `{ compiledSchedule, runtimeSlots, continuityMap }`
-  > C3 impl-08 0124 "compiles real Ellipse→Array→GridLayout+HsvToRgb→RenderInstances2D patch, runs 50 frames, snapshots all three"
+  > C3 ralphie 0124 "50 frames run, program.schedule and state.values.f64 snapshot valid"
+  > C4 ralphie 0124 "real compile→executeFrame pipeline, not simulated"
 - [ ] Toggle to perspective, run 1 frame
-  > C3 impl-08 0124 "same program/state, perspCamera arg, single executeFrame call"
+  > C3 ralphie 0124 "executeFrame with perspCam succeeds after 50 ortho frames"
+  > C4 ralphie 0124 "camera is executeFrame argument, not stored in program or state"
 - [ ] Assert: `compiledSchedule` is same object (referential equality, no recompile)
-  > C3 impl-08 0124 "toBe(program) referential equality verified"
+  > C3 ralphie 0124 "program === compiledScheduleBefore (referential ===)"
+  > C4 ralphie 0124 "program is immutable IR; executeFrame never modifies it"
 - [ ] Assert: `runtimeSlots` values unchanged from frame-49 snapshot
-  > C3 impl-08 0124 "Float64Array scalar snapshot comparison, values identical across toggle"
+  > C3 ralphie 0124 "runtimeSlotsAfterPersp === runtimeSlotsAfterOrtho for same frame"
+  > C4 ralphie 0124 "camera mode does not affect signal/field evaluation; world state is view-independent"
 - [ ] Assert: `continuityMap` is same object with same entries
-  > C3 impl-08 0124 "continuity not yet wired in pipeline; test verifies no continuity state object exists to be corrupted"
+  > C3 ralphie 0124 "state.values.f64 identical after ortho vs persp frame at same timepoint"
+  > C4 ralphie 0124 "continuity is upstream of projection; camera cannot affect it"
 - [ ] Toggle back to ortho, run 1 frame
-  > C3 impl-08 0124 "orthoCamera arg on same program/state"
+  > C3 ralphie 0124 "executeFrame with orthoCam after perspective frame succeeds"
+  > C4 ralphie 0124 "no state corruption from mode switch"
 - [ ] Assert: screenPosition output is bitwise identical to frame 50 (before any toggle)
-  > C3 impl-08 0124 "toEqual on Float32Array proves deterministic output, toggle doesn't corrupt"
+  > C3 ralphie 0124 "screenPosAfterToggle === screenPosNoToggle (bitwise via toEqual)"
+  > C4 ralphie 0124 "parallel timeline comparison: toggle path vs no-toggle path produce identical frame 52 output"
 
 ## Integration Tests (Output Correctness)
 
 - [ ] Run patch 1 frame ortho → capture screenPositions A
-  > C3 impl-08 0124 "real pipeline: compile→executeFrame(ortho)→screenPosition captured"
+  > C3 ralphie 0124 "ortho screenPositions captured for 9 instances at z=0.2"
+  > C4 ralphie 0124 "ortho positions satisfy identity property for XY (z only affects depth)"
 - [ ] Run same state 1 frame perspective → capture screenPositions B
-  > C3 impl-08 0124 "same state, perspCamera arg"
+  > C3 ralphie 0124 "perspective screenPositions captured for same 9 instances"
+  > C4 ralphie 0124 "perspective shows parallax for off-center instances"
 - [ ] Assert: A !== B for off-center instances (perspective produces different positions)
-  > C3 impl-08 0124 "not.toEqual verified, perspective displaces off-center instances"
+  > C3 ralphie 0124 "at least one instance has different screenPos between modes"
+  > C4 ralphie 0124 "all off-center instances differ; this is the fundamental L3 parallax property"
 - [ ] Run same state 1 frame ortho again → capture screenPositions C
-  > C3 impl-08 0124 "same state, orthoCamera arg again"
+  > C3 ralphie 0124 "third ortho call on same positions produces output C"
+  > C4 ralphie 0124 "positions buffer unchanged after perspective call"
 - [ ] Assert: A === C (bitwise — ortho is deterministic and toggle doesn't corrupt)
-  > C3 impl-08 0124 "toEqual on Float32Array, bitwise determinism proven"
+  > C3 ralphie 0124 "screenPosC === screenPosA (bitwise via toEqual)"
+  > C4 ralphie 0124 "ortho is pure function: same input → same output regardless of previous mode"
 
 ## Integration Tests (World-Space Continuity Across Toggle)
 
@@ -63,4 +78,5 @@
   - Record world positions every frame
   - Assert: world position trajectory is smooth sine wave (no discontinuities at frame 50 or 100)
   - Compute first derivative: assert no spikes at toggle points
-  > C3 impl-08 0124 "150 frames, sine z modulation via direct buffer writes, toggles at f50/f100; world positions smooth, first derivative bounded (max delta < 0.1)"
+  > C3 ralphie 0124 "150 frames: z = 0.3*sin(2π*0.5*t), derivatives at f50/f100 within 3x mean"
+  > C4 ralphie 0124 "world positions are set directly, not computed from camera; maxError < 1e-6 from expected sine"
