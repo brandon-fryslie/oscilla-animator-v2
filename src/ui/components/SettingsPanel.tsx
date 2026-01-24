@@ -26,7 +26,7 @@ import {
 import { useStore } from '../../stores';
 import { NumberInput } from './common/NumberInput';
 import { SelectInput } from './common/SelectInput';
-import { CheckboxInput } from './common/CheckboxInput';
+import { TextInput } from './common/TextInput';
 import type { SettingsToken, FieldUIHint } from '../../settings/types';
 
 export const SettingsPanel: React.FC = observer(() => {
@@ -204,9 +204,9 @@ const FieldControl: React.FC<{
 
     case 'text':
       return (
-        <NumberInput
-          value={value as number}
-          onChange={onChange}
+        <TextInput
+          value={value as string}
+          onChange={(v) => onChange(v)}
           label={hint.label}
           helperText={hint.description}
         />

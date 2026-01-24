@@ -1228,6 +1228,14 @@ async function initializeRuntime(rootStore: RootStore) {
     store.patch.loadPatch(saved.patch);
     await compileAndSwap(true);
   } else {
+    // Use settings-configured default patch index (falls back to DEFAULT_PATCH_INDEX)
+    const { appSettings } = await import('./settings/tokens/app-settings');
+    store.settings.register(appSettings);
+    const appValues = store.settings.get(appSettings);
+    const settingsIndex = appValues.defaultPatchIndex;
+    if (settingsIndex >= 0 && settingsIndex < patches.length) {
+      currentPatchIndex = settingsIndex;
+    }
     build(patches[currentPatchIndex].builder);
     await compileAndSwap(true);
   }

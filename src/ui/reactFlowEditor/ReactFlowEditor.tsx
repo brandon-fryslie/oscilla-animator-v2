@@ -33,7 +33,6 @@ import 'reactflow/dist/style.css';
 import { Button } from '@mui/material';
 import { useStores } from '../../stores';
 import { useSettings } from '../../settings';
-import type { EditorSettings } from '../../settings/tokens/editor-settings';
 import { editorSettings } from '../../settings/tokens/editor-settings';
 import type { BlockId, PortId } from '../../types';
 import type { EditorHandle } from '../editorCommon';
@@ -139,7 +138,7 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = observer(({
   const { patch: patchStore, selection, diagnostics, debug, layout: layoutStore } = useStores();
 
   // Editor settings
-  const [settings] = useSettings(editorSettings) as [EditorSettings, (partial: Partial<EditorSettings>) => void];
+  const [settings] = useSettings(editorSettings);
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);

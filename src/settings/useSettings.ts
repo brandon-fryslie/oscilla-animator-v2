@@ -17,7 +17,7 @@
  * Auto-registers the token on first use (idempotent).
  */
 
-import { useEffect } from 'react';
+import { useCallback } from 'react';
 import { useStore } from '../stores';
 import type { SettingsToken } from './types';
 
@@ -34,18 +34,20 @@ export function useSettings<T extends Record<string, unknown>>(
 ): [T, (partial: Partial<T>) => void] {
   const settingsStore = useStore('settings');
 
-  // Auto-register token on first use (idempotent)
-  useEffect(() => {
-    settingsStore.register(token);
-  }, [settingsStore, token]);
+  // Register synchronously — idempotent, safe to call on every render.
+  // Must happen before get() to ensure the token is in the registry.
+  settingsStore.register(token);
 
   // Get current values (observable)
   const values = settingsStore.get(token);
 
-  // Create update function
-  const update = (partial: Partial<T>) => {
-    settingsStore.update(token, partial);
-  };
+  // Stable update function
+  const update = useCallback(
+    (partial: Partial<T>) => {
+      settingsStore.update(token, partial);
+    },
+    [settingsStore, token]
+  );
 
   return [values, update];
 }
