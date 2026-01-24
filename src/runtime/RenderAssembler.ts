@@ -180,6 +180,15 @@ export function assembleRenderPass(
   // Fully resolve shape for renderer (includes topology lookup)
   const resolvedShape = resolveShapeFully(shape, controlPoints);
 
+  // C-13: Read rotation and scale2 from slots if present
+  const rotation = step.rotationSlot
+    ? (state.values.objects.get(step.rotationSlot) as Float32Array | undefined)
+    : undefined;
+
+  const scale2 = step.scale2Slot
+    ? (state.values.objects.get(step.scale2Slot) as Float32Array | undefined)
+    : undefined;
+
   // Run projection if camera is provided
   const camera = context.camera;
   if (camera && position instanceof Float32Array) {
@@ -206,6 +215,8 @@ export function assembleRenderPass(
       position, // Original world-space position (preserved, not mutated)
       color,
       scale,
+      rotation,  // C-13: Include rotation if present
+      scale2,    // C-13: Include scale2 if present
       resolvedShape,
       screenPosition: projection.screenPosition,
       screenRadius: projection.screenRadius,
@@ -220,6 +231,8 @@ export function assembleRenderPass(
     position,
     color,
     scale,
+    rotation,  // C-13: Include rotation if present
+    scale2,    // C-13: Include scale2 if present
     resolvedShape, // Pre-resolved shape data for renderer
   };
 }
@@ -571,7 +584,7 @@ export function isContiguous(indices: number[]): boolean {
  * Uses zero-copy subarray views when indices are contiguous,
  * falls back to copy for non-contiguous indices.
  *
- * @param fullPosition - Full position buffer (x,y interleaved)
+ * @param fullPosition - Full position buffer (x,y,z interleaved)
  * @param fullColor - Full color buffer (RGBA interleaved)
  * @param instanceIndices - Sorted indices of instances to extract
  * @returns Sliced position and color buffers
@@ -670,6 +683,15 @@ function assemblePerInstanceShapes(
 
   const ops: DrawPathInstancesOp[] = [];
 
+  // C-13: Read rotation and scale2 from slots if present
+  const fullRotation = step.rotationSlot
+    ? (state.values.objects.get(step.rotationSlot) as Float32Array | undefined)
+    : undefined;
+
+  const fullScale2 = step.scale2Slot
+    ? (state.values.objects.get(step.scale2Slot) as Float32Array | undefined)
+    : undefined;
+
   for (const [key, group] of groups) {
     // Skip empty groups
     if (group.instanceIndices.length === 0) {
@@ -706,6 +728,15 @@ function assemblePerInstanceShapes(
       group.instanceIndices
     );
 
+    // C-13: Slice rotation and scale2 if present
+    const rotation = fullRotation
+      ? sliceRotationBuffer(fullRotation, group.instanceIndices)
+      : undefined;
+
+    const scale2 = fullScale2
+      ? sliceScale2Buffer(fullScale2, group.instanceIndices)
+      : undefined;
+
     // Build geometry
     const geometry: PathGeometry = {
       topologyId: group.topologyId,
@@ -720,8 +751,8 @@ function assemblePerInstanceShapes(
       count: group.instanceIndices.length,
       position,
       size: scale, // Uniform scale
-      // rotation: undefined,  // Not yet wired through IR
-      // scale2: undefined,    // Not yet wired through IR
+      rotation,  // C-13: Include rotation if present
+      scale2,    // C-13: Include scale2 if present
     };
 
     // Build style
@@ -748,6 +779,66 @@ function assemblePerInstanceShapes(
   });
 
   return ops;
+}
+
+/**
+ * Slice rotation buffer for a topology group
+ *
+ * C-13: Helper to extract per-instance rotations for a subset of instances.
+ *
+ * @param fullRotation - Full rotation buffer (Float32Array, one value per instance)
+ * @param instanceIndices - Indices of instances to extract
+ * @returns Sliced rotation buffer
+ */
+function sliceRotationBuffer(
+  fullRotation: Float32Array,
+  instanceIndices: number[]
+): Float32Array {
+  const N = instanceIndices.length;
+
+  if (isContiguous(instanceIndices)) {
+    // Zero-copy view
+    const start = instanceIndices[0];
+    return fullRotation.subarray(start, start + N);
+  }
+
+  // Non-contiguous: copy
+  const rotation = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    rotation[i] = fullRotation[instanceIndices[i]];
+  }
+  return rotation;
+}
+
+/**
+ * Slice scale2 buffer for a topology group
+ *
+ * C-13: Helper to extract per-instance anisotropic scales for a subset of instances.
+ *
+ * @param fullScale2 - Full scale2 buffer (Float32Array, x,y pairs per instance)
+ * @param instanceIndices - Indices of instances to extract
+ * @returns Sliced scale2 buffer
+ */
+function sliceScale2Buffer(
+  fullScale2: Float32Array,
+  instanceIndices: number[]
+): Float32Array {
+  const N = instanceIndices.length;
+
+  if (isContiguous(instanceIndices)) {
+    // Zero-copy view
+    const start = instanceIndices[0];
+    return fullScale2.subarray(start * 2, (start + N) * 2);
+  }
+
+  // Non-contiguous: copy
+  const scale2 = new Float32Array(N * 2);
+  for (let i = 0; i < N; i++) {
+    const srcIdx = instanceIndices[i];
+    scale2[i * 2] = fullScale2[srcIdx * 2];
+    scale2[i * 2 + 1] = fullScale2[srcIdx * 2 + 1];
+  }
+  return scale2;
 }
 
 /**
@@ -791,7 +882,7 @@ function buildPathGeometry(
  * Size is isotropic scale (combined with optional scale2 for anisotropic).
  *
  * @param count - Number of instances
- * @param position - Position buffer (x,y interleaved, normalized [0,1])
+ * @param position - Position buffer (x,y,z interleaved, normalized [0,1])
  * @param size - Uniform size or per-instance sizes (isotropic scale)
  * @param rotation - Optional per-instance rotations (radians)
  * @param scale2 - Optional per-instance anisotropic scale (x,y interleaved)
@@ -929,14 +1020,23 @@ export function assembleDrawPathInstancesOp(
     );
   }
 
+  // C-13: Read rotation and scale2 from slots if present
+  const rotation = step.rotationSlot
+    ? (state.values.objects.get(step.rotationSlot) as Float32Array | undefined)
+    : undefined;
+
+  const scale2 = step.scale2Slot
+    ? (state.values.objects.get(step.scale2Slot) as Float32Array | undefined)
+    : undefined;
+
   // Build v2 structures
   const geometry = buildPathGeometry(resolvedShape, controlPointsBuffer);
   const instanceTransforms = buildInstanceTransforms(
     count,
     positionBuffer,
     scale,
-    undefined, // rotation - not yet wired through IR
-    undefined  // scale2 - not yet wired through IR
+    rotation,  // C-13: Include rotation if present
+    scale2     // C-13: Include scale2 if present
   );
   const style = buildPathStyle(colorBuffer, 'nonzero');
 

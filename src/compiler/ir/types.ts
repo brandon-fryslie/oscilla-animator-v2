@@ -468,6 +468,10 @@ export interface StepRender {
     | { readonly k: 'slot'; readonly slot: ValueSlot };
   /** Optional control points for path rendering - P5c: Add control points field */
   readonly controlPoints?: { readonly k: 'slot'; readonly slot: ValueSlot };
+  /** C-13: Per-instance rotation (radians) - slot containing Float32Array */
+  readonly rotationSlot?: ValueSlot;
+  /** C-13: Per-instance anisotropic scale (x,y pairs) - slot containing Float32Array */
+  readonly scale2Slot?: ValueSlot;
 }
 
 export interface StepStateWrite {
