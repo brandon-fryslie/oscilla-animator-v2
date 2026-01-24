@@ -22,7 +22,6 @@
  */
 
 import type { RenderFrameIR_Future, DrawPathInstancesOp, DrawPrimitiveInstancesOp, PathGeometry, PrimitiveGeometry, PathStyle } from './future-types';
-import type { RenderFrameIR, RenderPassIR, ResolvedShape } from '../runtime/ScheduleExecutor';
 import { isPathTopology } from '../runtime/RenderAssembler';
 import { getTopology } from '../shapes/registry';
 import type { PathTopologyDef, TopologyDef } from '../shapes/types';
@@ -211,115 +210,7 @@ export class SVGRenderer {
     }
   }
 
-  /**
-   * Render a v1 frame to SVG (RenderPassIR format).
-   *
-   * This method consumes ONLY screen-space data from RenderPassIR.
-   * It performs ONLY screenPos × viewport mapping, no projection or camera logic.
-   *
-   * @param frame - Frame containing RenderPassIR passes
-   */
-  renderV1(frame: RenderFrameIR): void {
-    this.clear();
 
-    for (const pass of frame.passes) {
-      this.renderPassIR(pass);
-    }
-  }
-
-  /**
-   * Render a single RenderPassIR to SVG.
-   *
-   * Backend Contract (Level 8):
-   * - Consumes ONLY screen-space fields: screenPosition, screenRadius, depth, visible
-   * - Performs ONLY coordinate mapping: [0,1] → viewport pixels
-   * - NO world-space, NO camera params, NO projection knowledge
-   *
-   * @param pass - RenderPassIR with screen-space data
-   */
-  private renderPassIR(pass: RenderPassIR): void {
-    if (pass.kind !== 'instances2d') {
-      return;
-    }
-
-    const position = pass.position as Float32Array;
-    const color = pass.color as Uint8ClampedArray;
-    const scale = pass.scale;
-
-    // Use screen-space position/radius when available (3D projection output)
-    const posSource = pass.screenPosition ?? position;
-    const perInstanceRadius = pass.screenRadius;
-
-    // Get topology for render function (single lookup per pass)
-    const topology = getTopology(pass.resolvedShape.topologyId);
-    const params = pass.resolvedShape.params;
-
-    // Get control points for path shapes from resolvedShape
-    const controlPoints = pass.resolvedShape.mode === 'path'
-      ? pass.resolvedShape.controlPoints as Float32Array | undefined
-      : undefined;
-
-    // PASS-LEVEL VALIDATION: Validate once before the loop, not per-instance
-    if (isPathTopology(topology) && !controlPoints) {
-      throw new Error(
-        `Path topology '${topology.id}' requires control points buffer. ` +
-        `Ensure the shape signal includes a control point field.`
-      );
-    }
-
-    // Extract optional per-instance transforms
-    const rotation = pass.rotation;
-    const scale2 = pass.scale2;
-
-    // Reference dimension for scaling
-    const D = Math.min(this.width, this.height);
-
-    // Render each instance
-    for (let i = 0; i < pass.count; i++) {
-      // Map screen-space [0,1] to viewport pixels
-      const x = posSource[i * 2] * this.width;
-      const y = posSource[i * 2 + 1] * this.height;
-
-      // Use per-instance screen radius when available (perspective foreshortening)
-      const effectiveScale = perInstanceRadius ? perInstanceRadius[i] : scale;
-      const sizePx = effectiveScale * D;
-
-      // Build transform string
-      let transform = `translate(${x} ${y})`;
-
-      if (rotation) {
-        const rot = rotation[i] * (180 / Math.PI); // Convert radians to degrees
-        transform += ` rotate(${rot})`;
-      }
-
-      if (scale2) {
-        transform += ` scale(${sizePx * scale2[i * 2]} ${sizePx * scale2[i * 2 + 1]})`;
-      } else {
-        transform += ` scale(${sizePx} ${sizePx})`;
-      }
-
-      // Get or create geometry definition
-      let defId: string;
-      if (isPathTopology(topology)) {
-        // Path topology - use control points
-        defId = this.getOrCreatePathDef(topology, controlPoints!);
-      } else {
-        // Primitive topology - render as circle (simplified for now)
-        // TODO: Support other primitives (rect, etc.)
-        defId = this.getOrCreateCircleDef();
-      }
-
-      // Create <use> element
-      const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
-      use.setAttribute('href', `#${defId}`);
-      use.setAttribute('transform', transform);
-
-      // Apply fill color
-      use.setAttribute('fill', rgbaToCSS(color, i * 4));
-
-      this.renderGroup.appendChild(use);
-    }
-  }
 
   /**
    * Get or create a path geometry definition in <defs>.

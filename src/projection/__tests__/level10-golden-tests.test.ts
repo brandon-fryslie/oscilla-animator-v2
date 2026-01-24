@@ -101,7 +101,7 @@ describe('Level 10 Golden Tests: The Golden Patch', () => {
       expect(op.instances.depth).toBeInstanceOf(Float32Array);
 
       expect(op.instances.position!.length).toBe(N * 2);
-      expect(op.instances.size!.length).toBe(N);
+      expect((op.instances.size as Float32Array).length).toBe(N);
       expect(op.instances.depth!.length).toBe(N);
 
       // Ortho projection: screenPosition.xy should match worldPosition.xy (identity)
@@ -281,7 +281,7 @@ describe('Level 10 Golden Tests: The Golden Patch', () => {
 
     // Screen radii should be identical
     for (let i = 0; i < toggledOp.instances.count; i++) {
-      expect(toggledOp.instances.size![i]).toBe(controlOp.instances.size![i]);
+      expect((toggledOp.instances.size as Float32Array)[i]).toBe((controlOp.instances.size as Float32Array)[i]);
     }
   });
 });
@@ -461,7 +461,7 @@ describe('Level 10 Golden Tests: Stress Test', () => {
 
       // Verify buffer lengths
       expect(op.instances.position!.length).toBe(N * 2);
-      expect(op.instances.size!.length).toBe(N);
+      expect((op.instances.size as Float32Array).length).toBe(N);
       expect(op.instances.depth!.length).toBe(N);
     }
 
@@ -548,7 +548,9 @@ describe('Level 10 Golden Tests: Export Isolation', () => {
 
     const toggledOp = toggledFrame.ops[0];
     const toggledScreenPos = new Float32Array(toggledOp.instances.position!);
-    const toggledScreenRad = new Float32Array(toggledOp.instances.size!);
+    const toggledScreenRad = typeof toggledOp.instances.size === 'number'
+      ? new Float32Array(toggledOp.instances.count).fill(toggledOp.instances.size)
+      : new Float32Array(toggledOp.instances.size!);
 
     // Store for comparison
     (globalThis as any).__level10_toggledFrame60 = {
@@ -602,7 +604,9 @@ describe('Level 10 Golden Tests: Export Isolation', () => {
     // Store for comparison
     (globalThis as any).__level10_controlFrame60 = {
       screenPosition: new Float32Array(controlOp.instances.position!),
-      screenRadius: new Float32Array(controlOp.instances.size!),
+      screenRadius: typeof controlOp.instances.size === 'number'
+        ? new Float32Array(controlOp.instances.count).fill(controlOp.instances.size)
+        : new Float32Array(controlOp.instances.size!),
       count: controlOp.instances.count,
     };
   });

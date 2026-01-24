@@ -12,11 +12,10 @@
  *
  * This is where we enforce the invariant "Renderer is sink-only."
  *
- * CURRENT STATE (v1): Produces RenderPassIR with ShapeDescriptor
- * FUTURE STATE (v2): Produces DrawPathInstancesOp and DrawPrimitiveInstancesOp (see future-types.ts)
+ * Assembles RenderFrameIR using DrawOp operations (v2 format).
+ * Produces DrawPathInstancesOp and DrawPrimitiveInstancesOp (see future-types.ts)
  */
 
-import type { RenderPassIR, ShapeDescriptor, ResolvedShape } from './ScheduleExecutor';
 import type { StepRender, InstanceDecl, SigExpr } from '../compiler/ir/types';
 import type { RuntimeState } from './RuntimeState';
 import { evaluateSignal } from './SignalEvaluator';
@@ -46,6 +45,32 @@ import {
   PERSP_CAMERA_DEFAULTS,
   type PerspectiveCameraParams,
 } from '../projection/perspective-kernel';
+
+// =============================================================================
+// Internal Types (v1 compatibility)
+// =============================================================================
+
+/**
+ * Shape descriptor with topology ID and parameter values
+ * @internal Used by shape resolution helpers
+ */
+interface ShapeDescriptor {
+  topologyId: TopologyId;
+  params: Record<string, number>;
+}
+
+/**
+ * Fully resolved shape data for rendering
+ * @internal Used by shape resolution helpers
+ */
+interface ResolvedShape {
+  resolved: true;
+  topologyId: TopologyId;
+  mode: 'path' | 'primitive';
+  params: Record<string, number>;
+  verbs?: Uint8Array;
+  controlPoints?: ArrayBufferView;
+}
 
 // =============================================================================
 // Projection Types
@@ -237,116 +262,6 @@ export interface AssemblerContext {
 }
 
 /**
- * Assemble a single render pass from a render step
- *
- * @param step - The render step to assemble
- * @param context - Assembly context with signals, instances, and state
- * @returns RenderPassIR or null if assembly fails
- */
-export function assembleRenderPass(
-  step: StepRender,
-  context: AssemblerContext
-): RenderPassIR | null {
-  const { signals, instances, state } = context;
-
-  // Get instance declaration
-  const instance = instances.get(step.instanceId);
-  if (!instance) {
-    console.warn(`RenderAssembler: Instance ${step.instanceId} not found`);
-    return null;
-  }
-
-  // Resolve count from instance
-  const count = typeof instance.count === 'number' ? instance.count : 0;
-  if (count === 0) {
-    return null; // Empty instance, skip
-  }
-
-  // Read position buffer from slot
-  const position = state.values.objects.get(step.positionSlot) as ArrayBufferView;
-  if (!position) {
-    throw new Error(`RenderAssembler: Position buffer not found in slot ${step.positionSlot}`);
-  }
-
-  // Read color buffer from slot
-  const color = state.values.objects.get(step.colorSlot) as ArrayBufferView;
-  if (!color) {
-    throw new Error(`RenderAssembler: Color buffer not found in slot ${step.colorSlot}`);
-  }
-
-  // Resolve scale (uniform signal, defaults to 1.0 from block registry)
-  const scale = resolveScale(step.scale, signals, state);
-
-  // Resolve shape (descriptor with topology or per-particle buffer)
-  const shape = resolveShape(step.shape, signals, state);
-
-  // Read control points buffer if present
-  const controlPoints = resolveControlPoints(step.controlPoints, state);
-
-  // Fully resolve shape for renderer (includes topology lookup)
-  const resolvedShape = resolveShapeFully(shape, controlPoints);
-
-  // C-13: Read rotation and scale2 from slots if present
-  const rotation = step.rotationSlot
-    ? (state.values.objects.get(step.rotationSlot) as Float32Array | undefined)
-    : undefined;
-
-  const scale2 = step.scale2Slot
-    ? (state.values.objects.get(step.scale2Slot) as Float32Array | undefined)
-    : undefined;
-
-  // Run projection if camera is provided
-  const camera = context.camera;
-  if (camera && position instanceof Float32Array) {
-    // Determine position stride: vec3 (stride 3) or vec2 (stride 2, promote to vec3 with z=0)
-    const posLength = position.length;
-    let worldPos3: Float32Array;
-    if (posLength === count * 3) {
-      // Already stride-3 vec3
-      worldPos3 = position;
-    } else {
-      // Stride-2 vec2: promote to vec3 with z=0
-      worldPos3 = new Float32Array(count * 3);
-      for (let i = 0; i < count; i++) {
-        worldPos3[i * 3] = position[i * 2];
-        worldPos3[i * 3 + 1] = position[i * 2 + 1];
-        // worldPos3[i * 3 + 2] = 0 (Float32Array is zero-initialized)
-      }
-    }
-
-    const projection = projectInstances(worldPos3, scale, count, camera);
-
-    // Depth-sort and compact: remove invisible instances, sort by depth (front-to-back)
-    const compacted = depthSortAndCompact(projection, count, color, rotation, scale2);
-
-    return {
-      kind: 'instances2d',
-      count: compacted.count,
-      position, // Original world-space position (preserved, not mutated)
-      color: compacted.color,
-      scale,
-      rotation: compacted.rotation,
-      scale2: compacted.scale2,
-      resolvedShape,
-      screenPosition: compacted.screenPosition,
-      screenRadius: compacted.screenRadius,
-      depth: compacted.depth,
-    };
-  }
-
-  return {
-    kind: 'instances2d',
-    count,
-    position,
-    color,
-    scale,
-    rotation,  // C-13: Include rotation if present
-    scale2,    // C-13: Include scale2 if present
-    resolvedShape, // Pre-resolved shape data for renderer
-  };
-}
-
-/**
  * Resolve scale from step specification
  *
  * Scale is a uniform multiplier for shape dimensions.
@@ -510,29 +425,6 @@ function resolveShapeFully(
       params,
     };
   }
-}
-
-/**
- * Assemble all render passes from render steps
- *
- * @param renderSteps - Array of render steps to assemble
- * @param context - Assembly context
- * @returns Array of assembled render passes
- */
-export function assembleAllPasses(
-  renderSteps: readonly StepRender[],
-  context: AssemblerContext
-): RenderPassIR[] {
-  const passes: RenderPassIR[] = [];
-
-  for (const step of renderSteps) {
-    const pass = assembleRenderPass(step, context);
-    if (pass) {
-      passes.push(pass);
-    }
-  }
-
-  return passes;
 }
 
 /**

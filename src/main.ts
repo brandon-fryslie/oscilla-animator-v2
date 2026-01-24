@@ -1125,7 +1125,7 @@ function animate(tMs: number) {
       fps = Math.round((frameCount * 1000) / (now - lastFpsUpdate));
 
       // Calculate total elements being rendered
-      const totalElements = frame.passes.reduce((sum, pass) => sum + pass.count, 0);
+      const totalElements = frame.ops.reduce((sum: number, op) => sum + op.instances.count, 0);
       const statsText = `FPS: ${fps} | Elements: ${totalElements} | ${execTime.toFixed(1)}/${renderTime.toFixed(1)}ms`;
 
       // Update stats via global callback set by App component
@@ -1135,34 +1135,15 @@ function animate(tMs: number) {
 
       // Log element count to diagnostics (every 2 seconds)
       if (now - (lastElementCountLog ?? 0) > 2000) {
-        log(`Rendering ${totalElements} elements across ${frame.passes.length} pass(es)`);
+        log(`Rendering ${totalElements} elements across ${frame.ops.length} draw operation(s)`);
 
-        // Debug: Show first pass details
-        if (frame.passes.length > 0) {
-          const pass = frame.passes[0];
-          const pos = pass.position as Float32Array;
-          log(`  Pass 0: count=${pass.count}, scale=${pass.scale}`);
-          log(`  Pass 0: count=${pass.count}, scale=${pass.scale}`);
-          log(`  Pass 0: count=${pass.count}, scale=${pass.scale}`);
 
-          // Check position range (sample first 1000)
-          let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-          const sampleSize = Math.min(pass.count, 1000);
-          for (let i = 0; i < sampleSize; i++) {
-            const x = pos[i * 2];
-            const y = pos[i * 2 + 1];
-            if (!isNaN(x) && !isNaN(y)) {
-              minX = Math.min(minX, x);
-              maxX = Math.max(maxX, x);
-              minY = Math.min(minY, y);
-              maxY = Math.max(maxY, y);
-            }
-          }
-          log(`  Position range (${sampleSize} samples): X=[${minX.toFixed(3)}, ${maxX.toFixed(3)}], Y=[${minY.toFixed(3)}, ${maxY.toFixed(3)}]`);
-
-          // Sample some actual positions
-          log(`  Sample positions: [0]=(${pos[0]?.toFixed(4)}, ${pos[1]?.toFixed(4)}), [100]=(${pos[200]?.toFixed(4)}, ${pos[201]?.toFixed(4)}), [500]=(${pos[1000]?.toFixed(4)}, ${pos[1001]?.toFixed(4)})`);
+        // Debug: Show first op details
+        if (frame.ops.length > 0) {
+          const op = frame.ops[0];
+          log(`  Op 0: count=${op.instances.count}`);
         }
+
 
         lastElementCountLog = now;
       }

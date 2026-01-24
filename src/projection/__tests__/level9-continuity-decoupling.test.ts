@@ -28,7 +28,7 @@ import { applyContinuity } from '../../runtime/ContinuityApply';
 import { createContinuityState, type ContinuityState } from '../../runtime/ContinuityState';
 import { createRuntimeState, type RuntimeState } from '../../runtime/RuntimeState';
 import { BufferPool } from '../../runtime/BufferPool';
-import { executeFrame, type RenderFrameIR } from '../../runtime/ScheduleExecutor';
+import { executeFrame } from '../../runtime/ScheduleExecutor';
 import type { CompiledProgramIR } from '../../compiler/ir/program';
 import type { DomainInstance, StepContinuityApply, ContinuityPolicy } from '../../compiler/ir/types';
 import type { ValueSlot } from '../../types';
