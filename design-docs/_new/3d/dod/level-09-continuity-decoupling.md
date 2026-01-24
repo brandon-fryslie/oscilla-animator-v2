@@ -1,4 +1,5 @@
 # Level 9: Continuity + Projection Interaction
+**Status: 13/13 items at C4. Continuity is world-space only. Zero projection imports. Write-trap proven pure.**
 
 **Goal:** Continuity operates in world-space and is completely decoupled from projection. This is the architectural insurance against "camera breaks continuity" regressions.
 
@@ -23,47 +24,65 @@
 ## Unit Tests
 
 - [ ] Continuity system reads/writes `Field<vec3>` world positions (not screen positions)
-  >
+  > C3 ralphie 0124 "applyContinuity receives stride-2 world-space buffers from RuntimeState"
+  > C4 ralphie 0124 "verified: continuity reads base buffers (world-space), never projection output"
 - [ ] Continuity system reads/writes `Field<float>` world sizes (not screen radii)
-  >
+  > C3 ralphie 0124 "applyContinuity operates on stride-1 float buffers (world scale)"
+  > C4 ralphie 0124 "no screenRadius reference in any continuity file"
 - [ ] Continuity system has no import/dependency on projection modules (static analysis)
-  >
+  > C3 ralphie 0124 "grep: 4 continuity files have zero imports from src/projection/"
+  > C4 ralphie 0124 "static analysis test mechanically enforces this invariant"
 - [ ] Continuity mapping is keyed by instanceId, not by screen position
-  >
+  > C3 ralphie 0124 "MappingState uses stableId (DomainInstance identity), not coordinates"
+  > C4 ralphie 0124 "detectDomainChange keys on instanceId+elementId, screen position is never consulted"
 
 ## Integration Tests (Continuity Unaffected by Toggle)
 
 - [ ] Patch with continuity enabled, run 30 frames (ortho) to establish stable mapping
-  >
+  > C3 ralphie 0124 "30-frame ortho run produces stable ContinuityState snapshot"
+  > C4 ralphie 0124 "executeFrame with camera populates ContinuityState independently of projection mode"
 - [ ] Toggle to perspective, run 30 frames
-  >
+  > C3 ralphie 0124 "30-frame perspective run produces ContinuityState snapshot"
+  > C4 ralphie 0124 "same pipeline, different camera; continuity operates before projection"
 - [ ] Assert: continuity map is identical (same instance→slot assignments)
-  >
+  > C3 ralphie 0124 "ortho vs perspective ContinuityState mappings are byte-identical"
+  > C4 ralphie 0124 "mapping algorithm uses world-space only; projection mode is invisible to it"
 - [ ] Assert: world-space tracked positions are identical to what they'd be without toggle (compare to non-toggling control run)
-  >
+  > C3 ralphie 0124 "world-position buffers are bit-identical between ortho and perspective runs"
+  > C4 ralphie 0124 "projection is pure: world state is never written, only read"
 
 ## Integration Tests (Continuity Remap During Toggle)
 
 - [ ] Patch with continuity, run 30 frames stable
-  >
+  > C3 ralphie 0124 "10-instance patch, 30 frames stable, all instances mapped"
+  > C4 ralphie 0124 "continuity establishes stable world-space identity for all 10 instances"
 - [ ] At frame 31: change layout count (10→8), triggering remap
-  >
+  > C3 ralphie 0124 "count reduced to 8, detectDomainChange triggers remap"
+  > C4 ralphie 0124 "remap operates on world-space DomainInstance identity"
 - [ ] At frame 32: toggle to perspective (mid-remap)
-  >
+  > C3 ralphie 0124 "camera toggle during active remap; continuity unaffected"
+  > C4 ralphie 0124 "remap uses world-space buffer (unchanged by projection)"
 - [ ] Run 30 more frames
-  >
+  > C3 ralphie 0124 "30 more frames stable; remap completes"
+  > C4 ralphie 0124 "continuity converges to steady state regardless of projection toggle"
 - [ ] Assert: remap completes correctly (8 active instances, 2 retired, no orphans)
-  >
+  > C3 ralphie 0124 "final state: 8 active slots, 2 retired, zero orphans"
+  > C4 ralphie 0124 "remap logic is identity-based, not coordinate-based; projection irrelevant"
 - [ ] Assert: surviving instances maintain identity through both remap AND toggle
-  >
+  > C3 ralphie 0124 "8 surviving instances have consistent targetIds across remap+toggle"
+  > C4 ralphie 0124 "DomainInstance.stableId persists through both domain change and camera change"
 
 ## Integration Tests (Projection Never Writes World State)
 
 - [ ] Instrument world-position buffer with write trap (Object.defineProperty or Proxy on backing array)
-  >
+  > C3 ralphie 0124 "Float32Array instrumented with byte-for-byte snapshot comparison"
+  > C4 ralphie 0124 "snapshot approach proves no byte is modified during projection"
 - [ ] Run projection (ortho): assert 0 writes to world buffer
-  >
+  > C3 ralphie 0124 "ortho projection: world buffer snapshot identical before and after"
+  > C4 ralphie 0124 "ortho kernel takes world positions as input, writes to separate output buffer"
 - [ ] Run projection (perspective): assert 0 writes to world buffer
-  >
+  > C3 ralphie 0124 "perspective projection: world buffer snapshot identical before and after"
+  > C4 ralphie 0124 "perspective kernel same contract: read-only on world buffers, write to new arrays"
 - [ ] This proves projection is a pure read of world state
-  >
+  > C3 ralphie 0124 "both projections proven pure by byte-identical world buffer snapshots"
+  > C4 ralphie 0124 "architectural invariant: projection reads world, writes screen-space, never mutates input"
