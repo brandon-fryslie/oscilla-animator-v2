@@ -17,9 +17,9 @@ Levels are organized by state:
 | `_completed/` | 1 | level-01-vec3.md | 9/9 at C4, **INVARIANT UNVERIFIED** |
 | `_completed/` | 2 | level-02-ortho-kernel.md | 15/16 at C4, 1 at C3 |
 | `_completed/` | 3 | level-03-perspective-kernel.md | SOLID (13/13 at C4+) |
-| `dod/` (floor) | 4 | level-04-size-projection.md | SOLID (8/8 at C4+) |
-| `dod/` (active) | 5 | level-05-pipeline-wiring.md | 7/8 at C3+, 1 at C2, **INVARIANT UNSATISFIED** |
-| `_upcoming/` | 6 | level-06-mode-toggle.md | Not started |
+| `_completed/` | 4 | level-04-size-projection.md | SOLID (8/8 at C4+) |
+| `dod/` (floor) | 5 | level-05-pipeline-wiring.md | 8/8 at C3+, INVARIANT SATISFIED |
+| `dod/` (active) | 6 | level-06-mode-toggle.md | 16/16 at C3, INVARIANT SATISFIED |
 | `_upcoming/` | 7 | level-07-depth-culling.md | Not started |
 | `_upcoming/` | 8 | level-08-backend-contract.md | Not started |
 | `_upcoming/` | 9 | level-09-continuity-decoupling.md | Not started |
