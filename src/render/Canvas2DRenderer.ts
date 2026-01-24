@@ -30,14 +30,19 @@ import type { RenderFrameIR, RenderPassIR, ResolvedShape } from '../runtime/Sche
 import { isPathTopology } from '../runtime/RenderAssembler';
 import { getTopology } from '../shapes/registry';
 import type { PathTopologyDef, PathVerb, TopologyDef } from '../shapes/types';
-import type { DrawPathInstancesOp, PathStyle, RenderFrameIR_Future } from './future-types';
+import type {
+  DrawPathInstancesOp,
+  DrawPrimitiveInstancesOp,
+  PathStyle,
+  RenderFrameIR_Future,
+} from './future-types';
 
 /**
  * Calculate stroke width in pixels from world units.
- * 
+ *
  * Uses D = min(width, height) for isotropic scaling.
  * This ensures strokes maintain consistent apparent thickness regardless of aspect ratio.
- * 
+ *
  * @param strokeWidth - Stroke width in world units (0-1 range)
  * @param width - Viewport width in pixels
  * @param height - Viewport height in pixels
@@ -54,7 +59,7 @@ export function calculateStrokeWidthPx(
 
 /**
  * Convert RGBA values to CSS color string.
- * 
+ *
  * @param color - Color buffer (Uint8ClampedArray)
  * @param offset - Offset into buffer (index * 4 for per-instance)
  * @returns CSS rgba() string
@@ -65,10 +70,10 @@ function rgbaToCSS(color: Uint8ClampedArray, offset: number): string {
 
 /**
  * Render a frame to a 2D canvas context.
- * 
+ *
  * Supports both v1 (RenderFrameIR) and v2 (RenderFrameIR_Future) formats.
  * Dispatches to appropriate render path based on frame structure.
- * 
+ *
  * @param ctx - Canvas rendering context
  * @param frame - Frame to render (v1 or v2 format)
  * @param width - Viewport width in pixels
@@ -250,12 +255,11 @@ function renderPathAtParticle(
   const D = Math.min(width, height);
   const sizePx = size * D;
 
-  // Apply instance scale transform
-  // This scales the local-space geometry to viewport pixels
+  // Apply isotropic scale transform
   ctx.scale(sizePx, sizePx);
 
+  // Build path from local-space control points
   ctx.beginPath();
-
   let pointIndex = 0;
 
   for (let i = 0; i < topology.verbs.length; i++) {
@@ -327,13 +331,13 @@ function renderPathAtParticle(
 }
 
 // ============================================================================
-// V2 Rendering API (DrawPathInstancesOp with full style support)
+// V2 Rendering API (DrawPathInstancesOp and DrawPrimitiveInstancesOp)
 // ============================================================================
 
 /**
  * Render a v2 frame to a 2D canvas context.
- * 
- * V2 frames contain fully-resolved DrawPathInstancesOp operations.
+ *
+ * V2 frames contain fully-resolved DrawOp operations (path and primitive).
  * No shape interpretation needed - just apply styles and draw.
  */
 export function renderFrameV2(
@@ -352,13 +356,15 @@ export function renderFrameV2(
   for (const op of frame.ops) {
     if (op.kind === 'drawPathInstances') {
       renderDrawPathInstancesOp(ctx, op, width, height);
+    } else if (op.kind === 'drawPrimitiveInstances') {
+      renderDrawPrimitiveInstancesOp(ctx, op, width, height);
     }
   }
 }
 
 /**
  * Render a single DrawPathInstancesOp.
- * 
+ *
  * Supports fill-only, stroke-only, or fill+stroke modes based on PathStyle.
  * Applies instance transforms (position, size, rotation, scale2) per instance.
  */
@@ -479,8 +485,77 @@ export function renderDrawPathInstancesOp(
 }
 
 /**
+ * Render a single DrawPrimitiveInstancesOp.
+ *
+ * Renders primitive topologies (ellipse, rect) using topology.render().
+ * Applies instance transforms (position, size, rotation, scale2) per instance.
+ */
+export function renderDrawPrimitiveInstancesOp(
+  ctx: CanvasRenderingContext2D,
+  op: DrawPrimitiveInstancesOp,
+  width: number,
+  height: number
+): void {
+  const { geometry, instances, style } = op;
+  const { count, position, size, rotation, scale2 } = instances;
+
+  // Get topology for render function
+  const topology = getTopology(geometry.topologyId);
+
+  // Determine rendering mode
+  const hasFill = style.fillColor !== undefined && style.fillColor.length > 0;
+
+  if (!hasFill) {
+    // No-op: nothing to render (primitives only support fill for now)
+    console.warn('DrawPrimitiveInstancesOp has no fill color, skipping');
+    return;
+  }
+
+  const uniformFillColor = style.fillColor!.length === 4;
+
+  // Fast inner loop - no validation checks
+  for (let i = 0; i < count; i++) {
+    const x = position[i * 2] * width;
+    const y = position[i * 2 + 1] * height;
+
+    // Set fill color
+    if (uniformFillColor) {
+      ctx.fillStyle = rgbaToCSS(style.fillColor!, 0);
+    } else {
+      ctx.fillStyle = rgbaToCSS(style.fillColor!, i * 4);
+    }
+
+    ctx.save();
+    ctx.translate(x, y);
+
+    // Apply per-instance rotation if provided
+    if (rotation) {
+      ctx.rotate(rotation[i]);
+    }
+
+    // Apply per-instance anisotropic scale if provided
+    if (scale2) {
+      ctx.scale(scale2[i * 2], scale2[i * 2 + 1]);
+    }
+
+    // Calculate instance size
+    const instanceSize = typeof size === 'number' ? size : size[i];
+
+    // Call topology.render() with params and RenderSpace2D
+    // The topology will handle its own drawing (ellipse, rect, etc.)
+    topology.render(ctx, geometry.params, {
+      width,
+      height,
+      scale: instanceSize,
+    });
+
+    ctx.restore();
+  }
+}
+
+/**
  * Build a canvas path from PathGeometry.
- * 
+ *
  * @param ctx - Canvas context (path already begun with beginPath())
  * @param geometry - Path geometry with verbs and local-space points
  */
@@ -541,7 +616,7 @@ function buildPathFromGeometry(
       }
 
       default: {
-        throw new Error(`Unknown path verb: ${verb}`);
+        throw new Error(`Unknown path verb: ${verb}. Valid verbs are 0-4 (MOVE, LINE, CUBIC, QUAD, CLOSE).`);
       }
     }
   }

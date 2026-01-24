@@ -448,7 +448,7 @@ describe('RenderAssembler', () => {
       expect(result).toEqual([]);
     });
 
-    it('returns empty array for primitive topologies (not yet supported in v2)', () => {
+    it('returns DrawPrimitiveInstancesOp for primitive topologies', () => {
       const state = createMockState();
       const positionBuffer = new Float32Array(20);
       const colorBuffer = new Uint8ClampedArray(40);
@@ -477,8 +477,9 @@ describe('RenderAssembler', () => {
       };
 
       const result = assembleDrawPathInstancesOp(step, context);
-      // Primitive topologies return empty array in v2 (not yet supported)
-      expect(result).toEqual([]);
+      // Primitive topologies now produce DrawPrimitiveInstancesOp
+      expect(result).toHaveLength(1);
+      expect(result[0].kind).toBe('drawPrimitiveInstances');
     });
 
     it('assembles DrawPathInstancesOp for path topologies', () => {
@@ -741,7 +742,7 @@ describe('RenderAssembler', () => {
       expect(result.ops[1].kind).toBe('drawPathInstances');
     });
 
-    it('filters out null operations (primitive topologies)', () => {
+    it('includes both path and primitive operations', () => {
       const state = createMockState();
 
       // One path instance, one primitive instance
@@ -793,10 +794,11 @@ describe('RenderAssembler', () => {
 
       const result = assembleRenderFrame_v2(steps, context);
 
-      // Only the path instance should be included (primitive returns null)
+      // Both path and primitive instances produce ops
       expect(result.version).toBe(2);
-      expect(result.ops).toHaveLength(1);
+      expect(result.ops).toHaveLength(2);
       expect(result.ops[0].kind).toBe('drawPathInstances');
+      expect(result.ops[1].kind).toBe('drawPrimitiveInstances');
     });
 
     it('returns empty ops array when all instances are empty', () => {
