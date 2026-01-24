@@ -21,6 +21,7 @@ const SHAPE2D_WORDS = 8;
 export type BufferFormat =
   | 'f32'      // Single float
   | 'vec2f32'  // 2D vector
+  | 'vec3f32'  // 3D vector
   | 'rgba8'    // Color (RGBA, clamped uint8)
   | 'shape2d'; // Shape descriptor (8 x u32 words per shape)
 
@@ -40,6 +41,9 @@ export function getBufferFormat(payload: PayloadType): BufferFormat {
     // 2D vectors
     case 'vec2':
       return 'vec2f32';
+    // 3D vectors
+    case 'vec3':
+      return 'vec3f32';
     // Colors
     case 'color':
       return 'rgba8';
@@ -169,6 +173,9 @@ function allocateBuffer(format: BufferFormat, count: number): ArrayBufferView {
 
     case 'vec2f32':
       return new Float32Array(count * 2);
+
+    case 'vec3f32':
+      return new Float32Array(count * 3);
 
     case 'rgba8':
       return new Uint8ClampedArray(count * 4);

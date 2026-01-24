@@ -146,15 +146,16 @@ describe('Buffer View Optimization', () => {
   });
 
   describe('sliceInstanceBuffers', () => {
-    // Create test buffers: 10 instances
-    const fullPosition = new Float32Array(10 * 2);
+    // Create test buffers: 10 instances (vec3 positions, stride-3)
+    const fullPosition = new Float32Array(10 * 3);
     const fullColor = new Uint8ClampedArray(10 * 4);
 
     beforeEach(() => {
-      // Fill with identifiable data
+      // Fill with identifiable data (vec3: x, y, z per instance)
       for (let i = 0; i < 10; i++) {
-        fullPosition[i * 2] = i * 10;       // x
-        fullPosition[i * 2 + 1] = i * 10 + 1; // y
+        fullPosition[i * 3] = i * 10;           // x
+        fullPosition[i * 3 + 1] = i * 10 + 1;   // y
+        fullPosition[i * 3 + 2] = 0;             // z
         fullColor[i * 4] = i * 25;     // R
         fullColor[i * 4 + 1] = i * 25 + 1; // G
         fullColor[i * 4 + 2] = i * 25 + 2; // B
@@ -169,10 +170,11 @@ describe('Buffer View Optimization', () => {
       expect(result.position.buffer).toBe(fullPosition.buffer);
       expect(result.color.buffer).toBe(fullColor.buffer);
 
-      // Correct data
+      // Correct data (stride-3: x, y, z per instance)
       expect(result.position[0]).toBe(30);  // index 3, x
       expect(result.position[1]).toBe(31);  // index 3, y
-      expect(result.position[4]).toBe(50);  // index 5, x
+      expect(result.position[2]).toBe(0);   // index 3, z
+      expect(result.position[6]).toBe(50);  // index 5, x
     });
 
     it('non-contiguous indices → returns copy (different ArrayBuffer)', () => {
@@ -182,10 +184,10 @@ describe('Buffer View Optimization', () => {
       expect(result.position.buffer).not.toBe(fullPosition.buffer);
       expect(result.color.buffer).not.toBe(fullColor.buffer);
 
-      // Correct data
+      // Correct data (stride-3: x, y, z per instance)
       expect(result.position[0]).toBe(0);   // index 0, x
-      expect(result.position[2]).toBe(30);  // index 3, x
-      expect(result.position[4]).toBe(70);  // index 7, x
+      expect(result.position[3]).toBe(30);  // index 3, x
+      expect(result.position[6]).toBe(70);  // index 7, x
     });
 
     it('single-element → subarray (trivially contiguous)', () => {
@@ -195,9 +197,10 @@ describe('Buffer View Optimization', () => {
       expect(result.position.buffer).toBe(fullPosition.buffer);
       expect(result.color.buffer).toBe(fullColor.buffer);
 
-      // Correct data
+      // Correct data (stride-3)
       expect(result.position[0]).toBe(50);
       expect(result.position[1]).toBe(51);
+      expect(result.position[2]).toBe(0);   // z
     });
 
     it('full range [0..N-1] → subarray of entire buffer', () => {
@@ -207,8 +210,8 @@ describe('Buffer View Optimization', () => {
       expect(result.position.buffer).toBe(fullPosition.buffer);
       expect(result.color.buffer).toBe(fullColor.buffer);
 
-      // Length matches
-      expect(result.position.length).toBe(20); // 10 * 2
+      // Length matches (vec3 stride-3 for position)
+      expect(result.position.length).toBe(30); // 10 * 3
       expect(result.color.length).toBe(40);    // 10 * 4
     });
 

@@ -587,21 +587,22 @@ export function sliceInstanceBuffers(
     // Zero-copy views — same underlying ArrayBuffer
     const start = instanceIndices[0];
     return {
-      position: fullPosition.subarray(start * 2, (start + N) * 2),
+      position: fullPosition.subarray(start * 3, (start + N) * 3),
       color: fullColor.subarray(start * 4, (start + N) * 4),
     };
   }
 
   // Non-contiguous: copy (existing logic)
-  const position = new Float32Array(N * 2);  // vec2 per instance
+  const position = new Float32Array(N * 3);  // vec3 per instance
   const color = new Uint8ClampedArray(N * 4); // RGBA per instance
 
   for (let i = 0; i < N; i++) {
     const srcIdx = instanceIndices[i];
 
-    // Position (x, y)
-    position[i * 2]     = fullPosition[srcIdx * 2];
-    position[i * 2 + 1] = fullPosition[srcIdx * 2 + 1];
+    // Position (x, y, z)
+    position[i * 3]     = fullPosition[srcIdx * 3];
+    position[i * 3 + 1] = fullPosition[srcIdx * 3 + 1];
+    position[i * 3 + 2] = fullPosition[srcIdx * 3 + 2];
 
     // Color (R, G, B, A)
     color[i * 4]     = fullColor[srcIdx * 4];

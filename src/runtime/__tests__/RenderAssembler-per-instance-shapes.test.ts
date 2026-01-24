@@ -368,10 +368,10 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       // 4 instances: 2 circles at indices 0,3; 2 squares at indices 1,2
       const instanceCount = 4;
       const positionBuffer = new Float32Array([
-        0.1, 0.1, // instance 0 (circle)
-        0.2, 0.2, // instance 1 (square)
-        0.3, 0.3, // instance 2 (square)
-        0.4, 0.4, // instance 3 (circle)
+        0.1, 0.1, 0, // instance 0 (circle) - vec3
+        0.2, 0.2, 0, // instance 1 (square) - vec3
+        0.3, 0.3, 0, // instance 2 (square) - vec3
+        0.4, 0.4, 0, // instance 3 (circle) - vec3
       ]);
       const colorBuffer = new Uint8ClampedArray([
         255, 0, 0, 255,   // instance 0 (red, circle)
@@ -425,8 +425,8 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       // Circle op should have instances 0 and 3
       expect(circleOp.instances.count).toBe(2);
       expect(circleOp.instances.position).toEqual(new Float32Array([
-        0.1, 0.1, // instance 0
-        0.4, 0.4, // instance 3
+        0.1, 0.1, 0, // instance 0 (vec3)
+        0.4, 0.4, 0, // instance 3 (vec3)
       ]));
       expect(circleOp.style.fillColor).toEqual(new Uint8ClampedArray([
         255, 0, 0, 255,   // red
@@ -436,8 +436,8 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       // Square op should have instances 1 and 2
       expect(squareOp.instances.count).toBe(2);
       expect(squareOp.instances.position).toEqual(new Float32Array([
-        0.2, 0.2, // instance 1
-        0.3, 0.3, // instance 2
+        0.2, 0.2, 0, // instance 1 (vec3)
+        0.3, 0.3, 0, // instance 2 (vec3)
       ]));
       expect(squareOp.style.fillColor).toEqual(new Uint8ClampedArray([
         0, 255, 0, 255, // green
