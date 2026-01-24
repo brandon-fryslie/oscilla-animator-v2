@@ -46,6 +46,7 @@ function createTestRuntimeState(): RuntimeState {
     state: new Float64Array(0),
     eventScalars: new Uint8Array(0),
     eventPrevPredicate: new Uint8Array(0),
+    events: new Map(),
     cache: {
       frameId: 0,
       sigValues: new Float64Array(100),

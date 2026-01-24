@@ -1,9 +1,9 @@
-# Sprint: P2-Blocked — Remaining Critical Items (2 Blocked, 1 Actionable)
+# Sprint: P2-Blocked — Remaining Critical Items (2 Blocked, 1 DONE)
 
 Generated: 2026-01-24T19:00:00Z
-Updated: 2026-01-25T22:05:00Z
-Confidence: HIGH: 1, MEDIUM: 0, LOW: 2
-Status: PARTIALLY READY (C-9 unblocked, C-8/C-12 still blocked)
+Updated: 2026-01-24T16:16:00Z
+Confidence: HIGH: 0 (done), MEDIUM: 0, LOW: 2
+Status: BLOCKED (C-9 complete, C-8/C-12 still blocked by design decisions)
 
 ## Sprint Goal
 
@@ -11,24 +11,23 @@ Resolve remaining 3 critical gap-analysis items. C-9 is now actionable (ms5.4/5/
 
 ## Work Items
 
-### C-9: RenderPassIR → DrawPathInstancesOp Migration [HIGH] — UNBLOCKED
-**Previously blocked by**: ms5 epic sub-tasks (ms5.4, ms5.5, ms5.7, ms5.15)
-**All blockers resolved**: ms5.4 (commit 99913ac), ms5.5 (commit dac2f95), ms5.7 (commits 2a84fd1+), ms5.15/C-13 (commit c7206be)
-**What**: Switch ScheduleExecutor from v1 assembleRenderPass to v2 assembleRenderFrame_v2, update consumers, remove v1 path.
-**Tracked as**: oscilla-animator-v2-ms5.8 in beads
+### C-9: RenderPassIR → DrawPathInstancesOp Migration [DONE] ✅
+**Completed**: 2026-01-24T16:16:00Z
+**Commits**: 523a1d1, df39229, 9dcf3cc, 9e4a4c4, d6b3510, e688b80, 270d947
 
-**Concrete Steps** (see EVALUATION-20260125-220500.md):
-1. Add DrawPrimitiveInstancesOp support to SVGRenderer
-2. Wire v2 into ScheduleExecutor (switch executeFrame)
-3. Update all consumers of RenderFrameIR
-4. Remove v1 assembly path
-5. Rename RenderFrameIR_Future → RenderFrameIR
+**What was done**:
+1. Added 3D projection support to v2 assembler (camera → screen-space)
+2. Added DrawPrimitiveInstancesOp support to SVGRenderer
+3. Wired v2 into ScheduleExecutor (assembleRenderFrame replaces assembleRenderPass)
+4. Migrated all tests from v1 (frame.passes) to v2 (frame.ops) format
+5. Removed all v1 code (assembleRenderPass, renderV1, RenderPassIR)
+6. Renamed RenderFrameIR_Future → RenderFrameIR, future-types.ts → types.ts
 
 **Acceptance Criteria:**
-- [ ] v2 assembly is the only path (v1 removed)
-- [ ] All backends (Canvas2D, SVG) consume DrawOp[] directly
-- [ ] No regressions in rendering output (all tests pass)
-- [ ] No regressions in performance
+- [x] v2 assembly is the only path (v1 removed)
+- [x] All backends (Canvas2D, SVG) consume DrawOp[] directly
+- [x] No regressions in rendering output (all 1277 tests pass)
+- [x] No regressions in performance
 
 ---
 

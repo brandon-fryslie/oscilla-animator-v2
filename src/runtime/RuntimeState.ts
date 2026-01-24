@@ -51,6 +51,40 @@ export const Shape2DFlags = {
   EVENODD_FILL: 1 << 3,
 } as const;
 
+// =============================================================================
+// Event Payload Types (Spec §5: Runtime)
+// =============================================================================
+
+/**
+ * EventPayload - Data-carrying event occurrence
+ *
+ * Spec reference: design-docs/CANONICAL-oscilla-v2.5-20260109/topics/05-runtime.md
+ *
+ * Events can carry numeric values (key + value pair).
+ * Used by SampleAndHold, Accumulator, and other event-to-continuous blocks.
+ */
+export interface EventPayload {
+  /** Event identifier (semantic key) */
+  key: string;
+
+  /** Event value (float or int) */
+  value: number;
+}
+
+/**
+ * EventBuffer - Per-slot event buffer
+ *
+ * Preallocated buffer for event payloads fired in a single tick.
+ * Events clear after one tick (Spec §6.1 / Invariant I4).
+ */
+export interface EventBuffer {
+  /** Events that occurred this tick (cleared each frame) */
+  events: EventPayload[];
+
+  /** Preallocated capacity (for memory management) */
+  capacity: number;
+}
+
 /**
  * ValueStore - Slot-based value storage
  *
@@ -466,6 +500,19 @@ export interface ProgramState {
 
   /** Previous predicate values for wrap edge detection (indexed by EventExprId). */
   eventPrevPredicate: Uint8Array;
+
+  /**
+   * Event payload storage (spec-compliant data-carrying events)
+   *
+   * Maps event slot ID to array of EventPayload occurrences this tick.
+   * Cleared each frame alongside eventScalars (spec §6.1 / Invariant I4).
+   *
+   * Usage:
+   * - Event-producing blocks push EventPayload to the array
+   * - Event-consuming blocks (SampleAndHold) read from the array
+   * - Cleared at frame start (monotone OR: only append, never remove mid-frame)
+   */
+  events: Map<number, EventPayload[]>;
 }
 
 /**
@@ -494,6 +541,14 @@ export interface RuntimeState {
 
   /** Previous predicate values for wrap edge detection (indexed by EventExprId). */
   eventPrevPredicate: Uint8Array;
+
+  /**
+   * Event payload storage (spec-compliant data-carrying events)
+   *
+   * Maps event slot ID to array of EventPayload occurrences this tick.
+   * Cleared each frame alongside eventScalars (spec §6.1 / Invariant I4).
+   */
+  events: Map<number, EventPayload[]>;
 
   // === SessionState fields (survive hot-swap) ===
 
@@ -545,6 +600,7 @@ export function createProgramState(
     state: new Float64Array(stateSlotCount),
     eventScalars: new Uint8Array(eventSlotCount),
     eventPrevPredicate: new Uint8Array(eventExprCount),
+    events: new Map(),
   };
 }
 
@@ -570,6 +626,7 @@ export function createRuntimeState(
     state: program.state,
     eventScalars: program.eventScalars,
     eventPrevPredicate: program.eventPrevPredicate,
+    events: program.events,
     // SessionState
     timeState: session.timeState,
     external: session.external,
@@ -600,6 +657,7 @@ export function createRuntimeStateFromSession(
     state: program.state,
     eventScalars: program.eventScalars,
     eventPrevPredicate: program.eventPrevPredicate,
+    events: program.events,
     // SessionState (preserved)
     timeState: session.timeState,
     external: session.external,

@@ -82,8 +82,14 @@ export function executeFrame(
   const time = resolveTime(tAbsMs, timeModel, state.timeState);
   state.time = time;
 
-  // 2.5. Clear event scalars (events fire for exactly one tick, spec §6.1)
+  // 2.5. Clear event scalars and payloads (events fire for exactly one tick, spec §6.1)
   state.eventScalars.fill(0);
+
+  // Clear event payload arrays (spec-compliant event storage)
+  // Monotone OR semantics: clear at frame start, only append during frame
+  state.events.forEach((payloads) => {
+    payloads.length = 0; // Clear array but reuse allocation
+  });
 
   // Store palette color object in objects map for signal evaluation
   // Use a reserved slot number for palette (slot 0 is reserved for time palette)

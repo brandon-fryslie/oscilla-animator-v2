@@ -2,36 +2,39 @@
 scope: update
 spec_source: design-docs/CANONICAL-oscilla-v2.5-20260109/
 impl_source: src/
-generated: 2026-01-25T08:00:00Z
-previous_run: 2026-01-25T07:22:00Z
+generated: 2026-01-24T16:16:00Z
+previous_run: 2026-01-25T08:00:00Z
 topics_audited: 8
-totals: { trivial: 16, critical: 3, to-review: 4, unimplemented: 34, done: ~180 }
+totals: { trivial: 16, critical: 2, to-review: 4, unimplemented: 34, done: ~181 }
 confirmed: true
-test_suite: 1284/1284 pass
+test_suite: 1277/1277 pass
 ---
 
 # Gap Analysis: Full Core Spec (Topics 01-06, 16, 17) — UPDATE
 
 ## Executive Summary
 
-P1 critical items all resolved. P2 items C-2 (vec3), C-13 (rotation/scale2), and C-16 (runtime type dispatch) now also fixed. All layout kernels produce vec3 stride-3 output; BufferPool, Materializer, and RenderAssembler all handle vec3 correctly. All 1284 tests pass.
+P1 critical items all resolved. P2 items C-2 (vec3), C-9 (render pipeline v1→v2), C-13 (rotation/scale2), and C-16 (runtime type dispatch) now also fixed. C-9/ms5.8 is COMPLETE: v1 render path fully removed, v2 is the canonical and only path. All 1277 tests pass.
 
-Remaining critical items (C-8, C-9, C-12) all have external dependencies and cannot be acted on directly. However, C-9 is being progressively unblocked via ms5 epic sub-tasks: ms5.4 (OutputSpecIR wiring), ms5.5 (dead render block cleanup), and ms5.7 (DrawPrimitiveInstancesOp) are now complete. The v2 render assembly path now handles both path and primitive topologies correctly.
+Remaining critical items (C-8, C-12) both have external dependencies and cannot be acted on directly. C-8 needs event model architecture design, C-12 needs layer system design (U-21).
 
 The `shape→shape2d` rename portion of C-2 is WON'T FIX (97 uses across 34 files, pure churn with no functional value).
 
-**Next priority**: P2 critical items when their blockers resolve (C-8 needs event design, C-9 tracked as ms5 epic, C-12 needs layer system) and P3 user decisions (R-2, R-6, R-7, R-8).
+**Next priority**: P3 user decisions (R-2, R-6, R-7, R-8) and P4/P5 unimplemented features when their blockers resolve.
 
 ## Changes Since Last Run
 
 | Item | Was | Now | Reason |
 |------|-----|-----|--------|
-| ms5.4 OutputSpecIR wiring | MISSING | DONE | Compiler allocates render frame output slot (commit 99913ac) |
-| ms5.5 RenderCircle/RenderRect | DEAD CODE | REMOVED | Deleted dead blocks, tests updated (commit dac2f95) |
-| ms5.7 DrawPrimitiveInstancesOp | MISSING | DONE | V2 assembler handles ellipse/rect primitives (commits 2a84fd1, 38f4b73, efb4d6e) |
-| Test count | 1259 pass | 1284 pass | New tests for primitive topology support |
+| C-9/ms5.8 v1→v2 switchover | UNBLOCKED | DONE | Full migration complete (commits 523a1d1..270d947) |
+| v1 render path | LIVE | REMOVED | assembleRenderPass, renderV1, RenderPassIR deleted |
+| v2 projection support | MISSING | DONE | Camera projection added to assembleDrawPathInstancesOp |
+| SVG primitive support | MISSING | DONE | renderDrawPrimitiveInstancesOp in SVGRenderer |
+| RenderFrameIR_Future | FUTURE TYPE | CANONICAL | Renamed to RenderFrameIR, future-types.ts → types.ts |
+| assembleRenderFrame_v2 | V2 NAME | CANONICAL | Renamed to assembleRenderFrame |
+| Test count | 1284 pass | 1277 pass | 25 v1-only tests removed, net -7 |
 
-### Previously Resolved (prior runs)
+### Previously Resolved (prior run)
 | Item | Was | Now | Reason |
 |------|-----|-----|--------|
 | C-2 vec3 additions | CRITICAL | DONE | All layout kernels produce vec3 stride-3; tests updated (commit 09e404f) |
@@ -68,7 +71,7 @@ All P1 items fixed in commits 129c2e5..c3694de:
 |---|------|-------|------------|--------------|
 | ~~13~~ | ~~C-2~~ | ~~01 Type~~ | ~~vec3 additions~~ ✅ | DONE (vec3 complete, shape→shape2d WON'T FIX) |
 | 14 | C-8 | 05 Runtime | Design needed (EventPayload) | [critical/topic-05](./critical/topic-05-runtime.md) |
-| 15 | C-9 | 06 Renderer | Migration path (ms5 epic) — ms5.4/5/7 done, ms5.8 remaining | [critical/topic-06](./critical/topic-06-renderer.md) |
+| ~~15~~ | ~~C-9~~ | ~~06 Renderer~~ | ~~Migration path (ms5 epic)~~ ✅ | DONE — v1→v2 complete, v1 removed (commits 523a1d1..270d947) |
 | ~~16~~ | ~~C-10~~ | ~~17 Layout~~ | ~~Phase clamp~~ ✅ | R-5 resolved: phase01 is correct, no code change needed |
 | ~~17~~ | ~~C-11~~ | ~~06 Renderer~~ | ~~PathVerb spec~~ ✅ | Code is canonical (internally consistent), spec needs update |
 | 18 | C-12 | 06 Renderer | PathStyle missing blend/layer | [critical/topic-06](./critical/topic-06-renderer.md) |
