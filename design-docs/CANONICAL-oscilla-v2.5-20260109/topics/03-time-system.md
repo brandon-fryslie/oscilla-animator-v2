@@ -91,7 +91,8 @@ const tMsType: SignalType = {
 };
 
 const phaseType: SignalType = {
-  payload: 'phase',
+  payload: 'float',
+  unit: 'phase01',
   extent: {
     cardinality: { kind: 'instantiated', value: { kind: 'one' } },
     temporality: { kind: 'instantiated', value: { kind: 'continuous' } },
@@ -189,10 +190,10 @@ The `palette` rail is the **chromatic reference frame** - a time-indexed color s
 
 ### Phase as PayloadType
 
-Phase is a distinct PayloadType with special semantics:
+Phase is `float` with `unit: 'phase01'`:
 
 ```typescript
-type PayloadType = 'float' | 'int' | 'vec2' | 'color' | 'phase' | 'bool' | 'unit';
+type PayloadType = 'float' | 'int' | 'vec2' | 'vec3' | 'color' | 'bool' | 'unit' | 'shape2d';
 ```
 
 ### Phase Wrap Semantics
@@ -343,7 +344,8 @@ v0 keeps time rails as `one` signals. If per-lane phase is needed later:
 ```typescript
 // Per-lane phasor (NOT a separate concept of "field time")
 const perLanePhasor: SignalType = {
-  payload: 'phase',
+  payload: 'float',
+  unit: 'phase01',
   extent: {
     cardinality: { kind: 'instantiated', value: { kind: 'many', domain: domainRef } },
     temporality: { kind: 'instantiated', value: { kind: 'continuous' } },

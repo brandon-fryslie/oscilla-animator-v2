@@ -25,7 +25,7 @@ index_version: 1.0
 
 ## Definitions
 
-- **PayloadType** [L33] - Base data type (float, int, vec2, color, phase, bool, unit)
+- **PayloadType** [L33] - Base data type (float, int, vec2, vec3, color, bool, unit, shape2d). Phase is float with unit:phase01.
 - **Extent** [L62-68] - Five-axis coordinate (cardinality, temporality, binding, perspective, branch)
 - **AxisTag** [L88-91] - Discriminated union for "default unless instantiated"
 - **Cardinality** [L109-113] - How many lanes (zero, one, many with domain)
@@ -43,14 +43,14 @@ index_version: 1.0
 
 ## Invariants
 
-- **I1**: PayloadType ∈ {'float', 'int', 'vec2', 'color', 'phase', 'bool', 'unit'} [L33]
+- **I1**: PayloadType ∈ {'float', 'int', 'vec2', 'vec3', 'color', 'bool', 'unit', 'shape2d'} [L33]
 - **I2**: Every AxisTag is discriminated union, never optional [L83-99]
 - **I3**: Default + default → default; default + instantiated(X) → instantiated(X); instantiated(X) + instantiated(X) → instantiated(X); instantiated(X) + instantiated(Y), X≠Y → TYPE ERROR [L269-274]
 - **I4**: Domain referenced only via Cardinality.many, not as wire value [L123-139]
 - **I5**: Discrete temporality never implicitly becomes continuous [L158-160]
 - **I6**: v0 defaults are: cardinality=one, temporality=continuous, binding=unbound [L248-254]
 - **I7**: Every domain compiles to dense lanes 0..N-1 [L316]
-- **I8**: Phase arithmetic: phase+float→phase, phase*float→phase, phase+phase→TYPE ERROR [L328-333]
+- **I8**: Phase arithmetic: float(phase01)+float→float(phase01), float(phase01)*float→float(phase01), float(phase01)+float(phase01)→TYPE ERROR
 
 ## Data Structures
 
@@ -85,7 +85,7 @@ index_version: 1.0
 - **DECISION: Domain as compile-time resource, not runtime wire value** [L123-139] - Erased to loop bounds at codegen
 - **DECISION: Strict axis unification (no implicit merges)** [L265-276] - Compile-time only, no best-effort heuristics
 - **DECISION: Canonical defaults in v0 with inherit semantics in v1+** [L248-261] - Future-proof extensibility
-- **DECISION: Phase has special arithmetic (non-associative, requires explicit conversion)** [L324-335] - Maintains cyclic semantics
+- **DECISION: Phase is float with unit:phase01, has special arithmetic (non-associative)** - Maintains cyclic semantics
 - **DECISION: Discrete temporality never implicitly becomes continuous** [L158-160] - Explicit causality via SampleAndHold operator
 
 ## Tier Classification

@@ -39,19 +39,16 @@ tier: T1
   - `{ kind: "user" }` — Explicit user action, persisted as authored
   - `{ kind: "derived"; meta: DerivedBlockMeta }` — Satisfies architectural invariants, can be regenerated
 
-- **DerivedBlockMeta** [L86-91] — 5 variants specify purpose of derived block:
+- **DerivedBlockMeta** [L86-91] — 3 variants specify purpose of derived block:
   - `defaultSource` — Fallback value for unconnected input port
   - `wireState` — State on a wire for feedback cycles
-  - `bus` — User-created global bus
-  - `rail` — System-provided immutable bus
   - `lens` — Type adapter/transform block
 
 - **PortBinding** [L48-53] — Port with id, direction (in|out), type (SignalType), combine (CombineMode)
 
-- **EdgeRole** [L111-115] — 4 variants:
+- **EdgeRole** [L111-115] — 3 variants:
   - `user` — Explicit user connection, persisted
   - `default` — From defaultSource block, suppressed when real connection exists
-  - `busTap` — Created via bus UI, editor enforces constraints
   - `auto` — Editor maintenance, can be deleted/regenerated
 
 - **CombineMode** [L265-268] — How multiple writers aggregate on an input:
@@ -166,7 +163,7 @@ Satisfies: every input has exactly one aggregated value per frame.
 Combine mode decides how explicit writers interact with the default.
 
 ### I9: Rails Are Immutable System-Provided Buses [L314-332]
-Cannot be deleted or renamed. Are derived blocks with `{ kind: "rail", target: { kind: "bus", busId } }`.
+Cannot be deleted or renamed.
 The palette rail is the chromatic reference frame.
 
 ### I10: State Allocation by Cardinality [L221-229]
@@ -202,14 +199,11 @@ type BlockRole =
 type DerivedBlockMeta =
   | { kind: "defaultSource"; target: { kind: "port"; port: PortRef } }
   | { kind: "wireState";     target: { kind: "wire"; wire: WireId } }
-  | { kind: "bus";           target: { kind: "bus"; busId: BusId } }
-  | { kind: "rail";          target: { kind: "bus"; busId: BusId } }
   | { kind: "lens";          target: { kind: "node"; node: NodeRef } };
 
 type EdgeRole =
   | { kind: "user" }
   | { kind: "default"; meta: { defaultSourceBlockId: BlockId } }
-  | { kind: "busTap";  meta: { busId: BusId } }
   | { kind: "auto";    meta: { reason: "portMoved" | "rehydrate" | "migrate" } };
 
 type CombineMode =

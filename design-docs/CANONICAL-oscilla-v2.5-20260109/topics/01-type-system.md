@@ -30,7 +30,7 @@ The type system has three layers:
 The base data type of a value - what the payload is made of.
 
 ```typescript
-type PayloadType = 'float' | 'int' | 'vec2' | 'vec3' | 'color' | 'phase' | 'bool' | 'unit' | 'shape2d' | 'shape3d';
+type PayloadType = 'float' | 'int' | 'vec2' | 'vec3' | 'color' | 'bool' | 'unit' | 'shape2d' | 'shape3d';
 ```
 
 ### PayloadType Semantics
@@ -42,7 +42,7 @@ type PayloadType = 'float' | 'int' | 'vec2' | 'vec3' | 'color' | 'phase' | 'bool
 | `vec2` | 2D vector (x, y) | 2 | Two floats |
 | `vec3` | 3D vector (x, y, z) | 3 | Three floats |
 | `color` | RGBA color | 4 | Four floats, 0..1 each |
-| `phase` | Cyclic phase value | 1 | 0..1 with wrap semantics |
+| `float(phase01)` | Float with unit:phase01 | 1 | 0..1 with wrap semantics |
 | `bool` | Boolean | 1 | true/false |
 | `unit` | Unit interval | 1 | 0..1 clamped |
 | `shape2d` | 2D shape reference | 8 | Packed u32 words (opaque handle) |
@@ -108,7 +108,7 @@ CombineMode defines how multiple writers to the same bus are resolved. Not all m
 | `vec2` | sum, last, first | Component-wise sum; min/max ambiguous |
 | `vec3` | sum, last, first | Component-wise sum; min/max ambiguous |
 | `color` | sum, last, first, blend | Color-specific blend mode |
-| `phase` | last, first | Phase arithmetic is restricted |
+| `float(phase01)` | last, first | Phase arithmetic is restricted |
 | `bool` | or, and, last, first | Boolean logic |
 | `unit` | last, first | Clamped semantics prohibit accumulation |
 | `shape2d` | last, first | **Opaque handle — non-arithmetic** |
@@ -126,7 +126,7 @@ CombineMode defines how multiple writers to the same bus are resolved. Not all m
 - `float` and `int` are **PayloadTypes** (domain model)
 - `number` is **TypeScript-only** (implementation detail)
 - PayloadType does **NOT** include `'event'` or `'domain'`
-- `phase` has special arithmetic rules (see [Phase Semantics](#phase-type-semantics))
+- Phase is `float` with `unit: 'phase01'` (see [Phase Semantics](#phase-type-semantics))
 - `shape2d` is a handle type — see above for restrictions
 
 ---
@@ -501,15 +501,13 @@ Two `many` values are aligned iff they reference the **same InstanceId**. No map
 
 ## Phase Type Semantics
 
-Phase has special arithmetic rules:
+Phase is `float` with `unit: 'phase01'`. Arithmetic rules:
 
 | Operation | Result | Notes |
 |-----------|--------|-------|
-| `phase + float` | `phase` | Offset |
-| `phase * float` | `phase` | Scale |
-| `phase + phase` | **TYPE ERROR** | Invalid |
-| `PhaseToFloat(phase)` | `float` | Explicit unwrap |
-| `FloatToPhase(float)` | `phase` | Explicit wrap |
+| `float(phase01) + float` | `float(phase01)` | Offset |
+| `float(phase01) * float` | `float(phase01)` | Scale |
+| `float(phase01) + float(phase01)` | **TYPE ERROR** | Invalid |
 
 ---
 
@@ -532,7 +530,8 @@ Phase has special arithmetic rules:
 
 ```typescript
 const phaseSignal: SignalType = {
-  payload: 'phase',
+  payload: 'float',
+  unit: 'phase01',
   extent: {
     cardinality: { kind: 'instantiated', value: { kind: 'one' } },
     temporality: { kind: 'instantiated', value: { kind: 'continuous' } },

@@ -32,6 +32,8 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import { Button } from '@mui/material';
 import { useStores } from '../../stores';
+import { useSettings } from '../../settings';
+import { editorSettings } from '../../settings/tokens/editor-settings';
 import type { BlockId, PortId } from '../../types';
 import type { EditorHandle } from '../editorCommon';
 import {
@@ -134,6 +136,9 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = observer(({
 }) => {
   // Get store from context
   const { patch: patchStore, selection, diagnostics, debug, layout: layoutStore } = useStores();
+
+  // Editor settings
+  const [settings] = useSettings(editorSettings);
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -527,23 +532,25 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorInnerProps> = observer(({
       >
         <Background />
         <Controls />
-        <MiniMap
-          nodeColor={(node) => {
-            const type = node.data?.blockType || '';
-            if (type.includes('Render')) return '#4ecdc4';
-            if (type.includes('Field')) return '#a18cd1';
-            if (type.includes('Sin') || type.includes('Cos')) return '#ff6b6b';
-            return '#0f3460';
-          }}
-          maskColor="rgba(10, 20, 40, 0.85)"
-          style={{
-            backgroundColor: 'rgba(13, 27, 42, 0.9)',
-            borderRadius: '8px',
-            border: '1px solid rgba(78, 205, 196, 0.2)',
-          }}
-          zoomable
-          pannable
-        />
+        {settings.showMinimap && (
+          <MiniMap
+            nodeColor={(node) => {
+              const type = node.data?.blockType || '';
+              if (type.includes('Render')) return '#4ecdc4';
+              if (type.includes('Field')) return '#a18cd1';
+              if (type.includes('Sin') || type.includes('Cos')) return '#ff6b6b';
+              return '#0f3460';
+            }}
+            maskColor="rgba(10, 20, 40, 0.85)"
+            style={{
+              backgroundColor: 'rgba(13, 27, 42, 0.9)',
+              borderRadius: '8px',
+              border: '1px solid rgba(78, 205, 196, 0.2)',
+            }}
+            zoomable
+            pannable
+          />
+        )}
         <Panel position="top-left" className="react-flow-panel">
           <Button
             variant="outlined"

@@ -5,7 +5,7 @@
  * runtime values via the DebugService singleton.
  *
  * Responsibilities:
- * - Track debug panel enabled state
+ * - Track debug panel enabled state (synced with settings)
  * - Track currently hovered edge for probing
  * - Manage field tracking (demand-driven materialization)
  * - Provide reactive value lookups
@@ -13,11 +13,13 @@
  * - Report debug service health status
  */
 
-import { makeAutoObservable, runInAction } from 'mobx';
+import { makeAutoObservable, runInAction, reaction } from 'mobx';
 import { debugService, type EdgeValueResult, type DebugServiceStatus } from '../services/DebugService';
 import type { SignalType } from '../core/canonical-types';
 import type { ValueSlot } from '../types';
 import type { DebugTargetKey } from '../ui/debug-viz/types';
+import type { SettingsStore } from './SettingsStore';
+import { debugSettings } from '../settings/tokens/debug-settings';
 
 /**
  * Format a numeric value based on its signal type.
@@ -60,16 +62,53 @@ export class DebugStore {
   /** Polling interval handle */
   private pollInterval: ReturnType<typeof setInterval> | null = null;
 
-  constructor() {
+  /** Settings sync disposal */
+  private settingsSyncDisposer: (() => void) | null = null;
+
+  constructor(settingsStore?: SettingsStore) {
     makeAutoObservable(this, {
       // Don't make poll interval observable
       // status reads from non-observable debugService, so exclude from computed
       status: false,
     });
+
+    // Sync with settings if provided
+    if (settingsStore) {
+      this.setupSettingsSync(settingsStore);
+    }
+  }
+
+  /**
+   * Set up two-way sync with settings.
+   * - Load initial value from settings
+   * - React to settings changes
+   * - Update settings when toggled programmatically
+   */
+  private setupSettingsSync(settingsStore: SettingsStore): void {
+    // Register settings token
+    settingsStore.register(debugSettings);
+
+    // Load initial value
+    const values = settingsStore.get(debugSettings);
+    this.enabled = values.enabled;
+
+    // React to settings changes
+    this.settingsSyncDisposer = reaction(
+      () => settingsStore.get(debugSettings).enabled,
+      (enabled) => {
+        this.enabled = enabled;
+        if (!enabled) {
+          this.stopPolling();
+          this.untrackCurrentField();
+          this._cachedEdgeValue = null;
+        }
+      }
+    );
   }
 
   /**
    * Toggle debug panel enabled state.
+   * Updates settings to persist the change.
    */
   toggleEnabled(): void {
     this.enabled = !this.enabled;
@@ -82,6 +121,7 @@ export class DebugStore {
 
   /**
    * Set debug panel enabled state.
+   * Updates settings to persist the change.
    */
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
@@ -240,5 +280,7 @@ export class DebugStore {
     this.stopPolling();
     this.untrackCurrentField();
     this.untrackCurrentHistory();
+    this.settingsSyncDisposer?.();
+    this.settingsSyncDisposer = null;
   }
 }

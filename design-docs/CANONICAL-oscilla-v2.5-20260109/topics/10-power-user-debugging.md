@@ -217,9 +217,9 @@ Time    Event                   Before          After
 ────────────────────────────────────────────────────────
 0.100   BusEvalStart(phaseA)
 0.101   PublisherEval(time)                     {t:'num', v:1500}
-0.102   AdapterApplied(tMs→phase)               {t:'phase', v:0.25}
-0.103   BusEvalEnd(phaseA)                      {t:'phase', v:0.25}
-0.104   ListenerDeliver(Repeat)                 {t:'phase', v:0.25}
+0.102   AdapterApplied(tMs→phase)               {t:'float', v:0.25, unit:'phase01'}
+0.103   BusEvalEnd(phaseA)                      {t:'float', v:0.25, unit:'phase01'}
+0.104   ListenerDeliver(Repeat)                 {t:'float', v:0.25, unit:'phase01'}
 ```
 
 Scrollable. Click event to highlight related operations. Can filter by event kind.

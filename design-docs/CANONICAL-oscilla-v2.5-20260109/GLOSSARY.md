@@ -20,10 +20,12 @@ Use these definitions consistently. When in doubt, this is the canonical source.
 
 **Canonical Form**: `PayloadType`
 
-**Values**: `'float' | 'int' | 'vec2' | 'vec3' | 'color' | 'phase' | 'bool' | 'unit' | 'shape2d'`
+**Values**: `'float' | 'int' | 'vec2' | 'vec3' | 'color' | 'bool' | 'unit' | 'shape2d'`
+
+Phase is represented as `float` with `unit: 'phase01'`.
 
 **Stride by PayloadType**:
-- `float`, `int`, `phase`, `bool`, `unit` → 1 float
+- `float`, `int`, `bool`, `unit` → 1 float
 - `vec2` → 2 floats
 - `vec3` → 3 floats
 - `color` → 4 floats (RGBA)
@@ -798,6 +800,7 @@ interface Block {
 type BlockRole =
   | { kind: "user" }
   | { kind: "derived"; meta: DerivedBlockMeta };
+// Minimum variants; implementations may extend with additional kinds.
 ```
 
 **Source**: [02-block-system.md](./topics/02-block-system.md)
@@ -815,8 +818,6 @@ type BlockRole =
 **Values**:
 - `defaultSource` - fallback value for port
 - `wireState` - state on a wire
-- `bus` - user-created global bus
-- `rail` - system-provided bus
 - `lens` - transform/adapter
 
 **Source**: [02-block-system.md](./topics/02-block-system.md)
@@ -831,7 +832,7 @@ type BlockRole =
 
 **Canonical Form**: `EdgeRole`
 
-**Values**: `user`, `default`, `busTap`, `auto`
+**Values**: `user`, `default`, `auto`
 
 **Source**: [02-block-system.md](./topics/02-block-system.md)
 
@@ -1675,7 +1676,7 @@ type ValueSummary =
   | { t: 'num'; v: number }
   | { t: 'vec2'; x: number; y: number }
   | { t: 'color'; rgba: number }
-  | { t: 'phase'; v: number }
+  | { t: 'float'; v: number; unit?: 'phase01' }
   | { t: 'bool'; v: 0|1 }
   | { t: 'trigger'; v: 0|1 }
   | { t: 'none' }

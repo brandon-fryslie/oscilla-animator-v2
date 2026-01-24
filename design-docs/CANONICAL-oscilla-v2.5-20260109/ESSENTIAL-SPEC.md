@@ -87,9 +87,11 @@
 
 ### Type System
 
-**PayloadType**: Base data type - `'float' | 'int' | 'vec2' | 'vec3' | 'color' | 'phase' | 'bool' | 'unit' | 'shape2d'`
+**PayloadType**: Base data type - `'float' | 'int' | 'vec2' | 'vec3' | 'color' | 'bool' | 'unit' | 'shape2d'`
 
-**Stride**: Floats per element. `float/int/phase/bool/unit=1`, `vec2=2`, `vec3=3`, `color=4`, `shape2d=8` (u32 words, handle type)
+**Stride**: Floats per element. `float/int/bool/unit=1`, `vec2=2`, `vec3=3`, `color=4`, `shape2d=8` (u32 words, handle type)
+
+**Phase**: Represented as `float` with `unit: 'phase01'`. Not a distinct PayloadType.
 
 **Extent**: 5-axis coordinate (cardinality, temporality, binding, perspective, branch)
 
@@ -123,11 +125,11 @@
 
 **Block**: Only compute unit. Has `id`, `kind` (NOT type), `role`, `inputs`, `outputs`
 
-**BlockRole**: `{ kind: 'user' }` | `{ kind: 'derived'; meta: DerivedBlockMeta }`
+**BlockRole**: `{ kind: 'user' }` | `{ kind: 'derived'; meta: DerivedBlockMeta }` (minimum variants; implementations may extend)
 
-**DerivedBlockMeta**: `defaultSource` | `wireState` | `bus` | `rail` | `lens`
+**DerivedBlockMeta**: `defaultSource` | `wireState` | `lens`
 
-**EdgeRole**: `user` | `default` | `busTap` | `auto`
+**EdgeRole**: `user` | `default` | `auto`
 
 **Stateful Primitives (4)**: UnitDelay, Lag, Phasor, SampleAndHold
 
@@ -175,8 +177,8 @@
 | Rail | Type | Description |
 |------|------|-------------|
 | `time` | `one + continuous + int` | tMs value |
-| `phaseA` | `one + continuous + phase` | Primary phase |
-| `phaseB` | `one + continuous + phase` | Secondary phase |
+| `phaseA` | `one + continuous + float(phase01)` | Primary phase |
+| `phaseB` | `one + continuous + float(phase01)` | Secondary phase |
 | `pulse` | `one + discrete + unit` | Frame tick |
 | `palette` | `one + continuous + color` | Chromatic reference |
 
@@ -193,7 +195,7 @@
 | `vec2` | 2 | Two floats |
 | `vec3` | 3 | Three floats |
 | `color` | 4 | RGBA, 0..1 each |
-| `phase` | 1 | 0..1 with wrap |
+| `float(phase01)` | 1 | float with unit:phase01, 0..1 with wrap semantics |
 | `bool` | 1 | true/false |
 | `unit` | 1 | 0..1 clamped |
 | `shape2d` | 8 | Packed u32 words (handle — no arithmetic) |
@@ -260,11 +262,13 @@ interface InstanceDecl {
 
 ### Phase Arithmetic
 
+Phase is `float` with `unit: 'phase01'`. Arithmetic rules:
+
 | Operation | Result |
 |-----------|--------|
-| `phase + float` | `phase` |
-| `phase * float` | `phase` |
-| `phase + phase` | TYPE ERROR |
+| `float(phase01) + float` | `float(phase01)` |
+| `float(phase01) * float` | `float(phase01)` |
+| `float(phase01) + float(phase01)` | TYPE ERROR |
 
 ---
 
@@ -299,8 +303,6 @@ type BlockRole =
 type DerivedBlockMeta =
   | { kind: "defaultSource"; target: { kind: "port"; port: PortRef } }
   | { kind: "wireState"; target: { kind: "wire"; wire: WireId } }
-  | { kind: "bus"; target: { kind: "bus"; busId: BusId } }
-  | { kind: "rail"; target: { kind: "bus"; busId: BusId } }
   | { kind: "lens"; target: { kind: "node"; node: NodeRef } };
 ```
 
@@ -369,7 +371,7 @@ Every input always has exactly one source. DefaultSource blocks provide fallback
 | `int` | `Constant(1)` |
 | `vec2` | `Constant([0.5, 0.5])` |
 | `color` | `HueRainbow(phaseA)` or white |
-| `phase` | `phaseA` rail |
+| `float(phase01)` | `phaseA` rail |
 | `bool` | `Constant(true)` |
 
 ---

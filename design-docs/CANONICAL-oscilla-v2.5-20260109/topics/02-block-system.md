@@ -63,6 +63,7 @@ Every block has an explicit role declaration. No guessing "is this system-genera
 type BlockRole =
   | { kind: "user" }
   | { kind: "derived"; meta: DerivedBlockMeta };
+// Minimum variants; implementations may extend with additional kinds.
 ```
 
 ### The Core Distinction
@@ -86,8 +87,6 @@ Metadata for derived blocks specifying their purpose:
 type DerivedBlockMeta =
   | { kind: "defaultSource"; target: { kind: "port"; port: PortRef } }
   | { kind: "wireState";     target: { kind: "wire"; wire: WireId } }
-  | { kind: "bus";           target: { kind: "bus"; busId: BusId } }
-  | { kind: "rail";          target: { kind: "bus"; busId: BusId } }
   | { kind: "lens";          target: { kind: "node"; node: NodeRef } };
 ```
 
@@ -97,8 +96,6 @@ type DerivedBlockMeta =
 |-----------|---------|--------|---------|
 | `defaultSource` | Provides fallback value | Unconnected input port | `Constant(0.5)` for float input |
 | `wireState` | State on a wire | Wire with feedback | `UnitDelay` for cycle |
-| `bus` | User-created global bus | Bus ID | Global `colorBus` |
-| `rail` | System-provided bus | Rail ID | `time`, `phaseA` rails |
 | `lens` | Transform/adapter | Node reference | Type conversion block |
 
 ---
@@ -111,7 +108,6 @@ Edges also carry roles for the same reasons:
 type EdgeRole =
   | { kind: "user" }
   | { kind: "default"; meta: { defaultSourceBlockId: BlockId } }
-  | { kind: "busTap";  meta: { busId: BusId } }
   | { kind: "auto";    meta: { reason: "portMoved" | "rehydrate" | "migrate" } };
 ```
 
@@ -121,7 +117,6 @@ type EdgeRole =
 |------|---------|-------------|
 | `user` | Explicit user connection | Persisted exactly as authored |
 | `default` | From defaultSource block | Suppressed when real connection exists |
-| `busTap` | Created via bus connection UI | Editor enforces bus constraints |
 | `auto` | Editor maintenance | Can be deleted/regenerated |
 
 ---
@@ -609,7 +604,7 @@ Use **useful defaults**, not zeros. Prefer rails for animation:
 | `int` | `Constant(1)` |
 | `vec2` | `Constant([0.5, 0.5])` |
 | `color` | `HueRainbow(phaseA)` or `Constant(white)` |
-| `phase` | `phaseA` rail |
+| `float(phase01)` | `phaseA` rail |
 | `bool` | `Constant(true)` |
 | `unit` | `phaseA` rail or `Constant(0.5)` |
 
@@ -624,14 +619,14 @@ Immutable system-provided buses. Cannot be deleted or renamed.
 | Rail | Output Type | Description |
 |------|-------------|-------------|
 | `time` | `one + continuous + int` | `tMs` value |
-| `phaseA` | `one + continuous + phase` | Primary phase |
-| `phaseB` | `one + continuous + phase` | Secondary phase |
+| `phaseA` | `one + continuous + float(phase01)` | Primary phase |
+| `phaseB` | `one + continuous + float(phase01)` | Secondary phase |
 | `pulse` | `one + discrete + unit` | Frame tick trigger |
 | `palette` | `one + continuous + color` | Chromatic reference frame |
 
 ### Rails Are Blocks
 
-Rails can have inputs overridden and be driven by feedback like any other block. They are derived blocks with `{ kind: "rail", target: { kind: "bus", busId } }`.
+Rails can have inputs overridden and be driven by feedback like any other block.
 
 The `palette` rail is the chromatic reference frame - a time-indexed color signal that provides the default color atmosphere for a patch. It exists whether or not the patch references it.
 

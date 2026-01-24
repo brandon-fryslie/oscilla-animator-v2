@@ -49,7 +49,7 @@ Before evaluating rules, compute incremental statistics from ring buffers. These
 
 For each bus with a ring buffer (last N samples, e.g., N=150 for 10s at 15Hz):
 
-**Numeric-like types** (`num`, `phase`, `vec2` components):
+**Numeric-like types** (`num`, `float(phase01)`, `vec2` components):
 ```typescript
 interface NumericStats {
   min: number;

@@ -70,17 +70,17 @@ export class RootStore {
     // Create ContinuityStore
     this.continuity = new ContinuityStore();
 
-    // Create DebugStore
-    this.debug = new DebugStore();
+    // Create SettingsStore (before DebugStore, which depends on it)
+    this.settings = new SettingsStore();
+
+    // Create DebugStore (inject SettingsStore for sync)
+    this.debug = new DebugStore(this.settings);
 
     // Create LayoutStore (node positions - UI state, not topology)
     this.layout = new LayoutStore();
 
     // Create CameraStore (3D preview state - viewer only)
     this.camera = new CameraStore();
-
-    // Create SettingsStore
-    this.settings = new SettingsStore();
 
     // Wire up callback for MobX reactivity
     this.diagnosticHub.setOnRevisionChange(() => this.diagnostics.incrementRevision());

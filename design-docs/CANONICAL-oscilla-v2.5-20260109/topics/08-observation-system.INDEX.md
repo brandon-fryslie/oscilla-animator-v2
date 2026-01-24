@@ -76,7 +76,7 @@ generated: 2026-01-12
 - { t: 'num'; v: number }
 - { t: 'vec2'; x: number; y: number }
 - { t: 'color'; rgba: number } (packed uint32)
-- { t: 'phase'; v: number } (0..1)
+- { t: 'float'; v: number; unit?: 'phase01' } (0..1 with wrap)
 - { t: 'bool'; v: 0 | 1 }
 - { t: 'trigger'; v: 0 | 1 } ("fired this sample")
 - { t: 'none' } (not sampled / no data)
