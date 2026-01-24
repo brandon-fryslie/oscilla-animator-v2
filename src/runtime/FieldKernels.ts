@@ -461,6 +461,7 @@ export function applyFieldKernelZipSig(
     // Coord-space: Produces WORLD-SPACE positions centered at (0.5, 0.5)
     //   This is one of the few kernels that outputs explicit world coords
     // Formula: angle = 2π*(index+phase), pos = center + radius*(cos,sin)
+    // C-14 FIX: Clamp index to [0,1] before use
     // ════════════════════════════════════════════════════════════════
     if (sigValues.length !== 2) {
       throw new Error('circleLayout requires 2 signals (radius, phase)');
@@ -474,7 +475,8 @@ export function applyFieldKernelZipSig(
     const cy = 0.5;
 
     for (let i = 0; i < N; i++) {
-      const angle = TWO_PI * (indexArr[i] + phase);
+      const t_i = Math.max(0, Math.min(1, indexArr[i])); // C-14 FIX: Clamp input
+      const angle = TWO_PI * (t_i + phase);
       outArr[i * 2 + 0] = cx + radius * Math.cos(angle);
       outArr[i * 2 + 1] = cy + radius * Math.sin(angle);
     }
@@ -615,11 +617,11 @@ export function applyFieldKernelZipSig(
       const idx = Math.max(0, Math.floor(indexArr[i]));
       const col = idx % cols;
       const row = Math.floor(idx / cols) % rows; // Wrap rows to prevent out of bounds
-      
+
       // Normalize to [0,1] - center single column/row at 0.5
       const x = cols > 1 ? col / (cols - 1) : 0.5;
       const y = rows > 1 ? row / (rows - 1) : 0.5;
-      
+
       outArr[i * 2 + 0] = x;
       outArr[i * 2 + 1] = y;
     }
