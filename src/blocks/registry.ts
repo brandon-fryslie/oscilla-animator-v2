@@ -245,6 +245,15 @@ export interface BlockDef {
   readonly capability: Capability;
 
   /**
+   * Whether this block has state that breaks combinatorial cycles.
+   * Used by SCC (cycle validation) pass to determine if a cycle is legal.
+   *
+   * - true: Block has memory/state (State, Delay, etc.) - allows cycles
+   * - false/undefined: Block is combinatorial - cycles through it are illegal
+   */
+  readonly isStateful?: boolean;
+
+  /**
    * Cardinality metadata for cardinality-generic blocks.
    * Required for blocks that can work with both Signal and Field cardinalities.
    * If omitted, block is treated as having fixed cardinality based on port types.

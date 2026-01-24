@@ -3,7 +3,7 @@
  *
  * Validates the dependency graph for cycles using Tarjan's strongly connected
  * component (SCC) algorithm. Legal cycles must have at least one state boundary
- * block (breaksCombinatorialCycle === true).
+ * block (isStateful === true).
  *
  * This pass ensures feedback loops are well-formed under the memory semantics.
  *
@@ -112,9 +112,7 @@ function strongConnect(
         const blockDef = getBlockDefinition(block.type);
         if (!blockDef) return false;
         // Check if block breaks combinatorial cycles (has state)
-        // For now, we'll check if the block type contains "State" or "Delay"
-        // This is a heuristic - proper implementation would check block definition metadata
-        return blockDef.type.includes('State') || blockDef.type.includes('Delay');
+        return blockDef.isStateful === true;
       }
       return false;
     });
@@ -141,7 +139,7 @@ function hasSelfLoop(graph: DepGraph, node: DepNode): boolean {
  *
  * Legal cycles:
  * - Trivial cycles (single node with no self-loop)
- * - Cycles containing at least one block with breaksCombinatorialCycle=true
+ * - Cycles containing at least one block with isStateful=true
  *
  * Illegal cycles:
  * - Multi-node cycles with no state boundary
