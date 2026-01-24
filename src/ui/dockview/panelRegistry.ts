@@ -16,6 +16,7 @@ import { LogPanel } from './panels/LogPanel';
 import { ContinuityPanel } from './panels/ContinuityPanel';
 import { CompilationInspectorPanel } from './panels/CompilationInspectorPanel';
 import { DebugMiniViewPanel } from './panels/DebugMiniViewPanel';
+import { SettingsPanelWrapper } from './panels/SettingsPanelWrapper';
 
 /**
  * Panel group assignments for layout.
@@ -56,6 +57,9 @@ export const PANEL_DEFINITIONS: PanelDefinition[] = [
   { id: 'table-view', component: 'table-view', title: 'Table', group: 'center' },
   { id: 'connection-matrix', component: 'connection-matrix', title: 'Matrix', group: 'center' },
 
+  // Right sidebar (settings not in default layout - can be opened manually)
+  { id: 'settings', component: 'settings', title: 'Settings', group: 'right-top' },
+
   // Bottom (split)
   { id: 'diagnostic-console', component: 'diagnostic-console', title: 'Console', group: 'bottom-left' },
   { id: 'log-panel', component: 'log-panel', title: 'Logs', group: 'bottom-left' },
@@ -83,4 +87,5 @@ export const PANEL_COMPONENTS = {
   'continuity-panel': ContinuityPanel,
   'compilation-inspector': CompilationInspectorPanel,
   'debug-miniview': DebugMiniViewPanel,
+  'settings': SettingsPanelWrapper,
 };
