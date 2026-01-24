@@ -40,7 +40,7 @@
  *
  * Separates style from geometry. Supports fill, stroke, or both.
  * Stroke properties are optional; absence means no stroke.
- * 
+ *
  * VIEWPORT SCALING:
  * - Stroke width is in normalized world units (0-1 range relative to viewport)
  * - Final pixel width: strokeWidthPx = strokeWidth × D, where D = min(width, height)
@@ -104,6 +104,25 @@ export interface PathGeometry {
 }
 
 /**
+ * Primitive Geometry - Topology-based primitive shapes
+ *
+ * For non-path topologies (ellipse, rect, etc.) that use topology.render().
+ * Parameters are passed directly to the topology's render function.
+ *
+ * INVARIANT: Parameters are in normalized world units
+ * - Dimensions (rx, ry, width, height): [0,1] range relative to viewport
+ * - Rotation: radians
+ * - The topology.render() function applies viewport scaling
+ */
+export interface PrimitiveGeometry {
+  /** Numeric topology ID from registry */
+  readonly topologyId: number;
+
+  /** Parameter values for the topology's render function */
+  readonly params: Record<string, number>;
+}
+
+/**
  * Instance Transforms - World-space placement and scaling
  *
  * INVARIANT: Transforms are in WORLD SPACE
@@ -163,6 +182,32 @@ export interface DrawPathInstancesOp {
 }
 
 /**
+ * DrawPrimitiveInstancesOp - Draw operation for primitive topologies
+ *
+ * For non-path shapes (ellipse, rect) that use topology.render().
+ * Parameters and instance transforms are pre-resolved by RenderAssembler.
+ *
+ * KEY PROPERTIES:
+ * 1. Geometry contains topology ID + resolved params
+ * 2. Renderer calls topology.render(ctx, params, renderSpace) per instance
+ * 3. Instance transforms applied before calling render
+ * 4. No control points - topology.render() handles the drawing
+ */
+export interface DrawPrimitiveInstancesOp {
+  /** Operation kind for dispatch */
+  readonly kind: 'drawPrimitiveInstances';
+
+  /** Primitive shape definition */
+  readonly geometry: PrimitiveGeometry;
+
+  /** Instance transforms in world space */
+  readonly instances: InstanceTransforms;
+
+  /** Style for filling (primitives use fill-only for now) */
+  readonly style: PathStyle;
+}
+
+/**
  * RenderFrameIR_Future - Target frame structure
  *
  * Future RenderFrameIR will contain only fully-resolved draw operations.
@@ -191,7 +236,7 @@ export interface RenderFrameIR_Future {
  * - DrawSpriteInstancesOp
  * - DrawGradientOp
  */
-export type DrawOp = DrawPathInstancesOp;
+export type DrawOp = DrawPathInstancesOp | DrawPrimitiveInstancesOp;
 // Future: | DrawImageInstancesOp | DrawTextOp | ...
 
 /**

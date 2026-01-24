@@ -13,7 +13,7 @@
  * This is where we enforce the invariant "Renderer is sink-only."
  *
  * CURRENT STATE (v1): Produces RenderPassIR with ShapeDescriptor
- * FUTURE STATE (v2): Produces DrawPathInstancesOp (see future-types.ts)
+ * FUTURE STATE (v2): Produces DrawPathInstancesOp and DrawPrimitiveInstancesOp (see future-types.ts)
  */
 
 import type { RenderPassIR, ShapeDescriptor, ResolvedShape } from './ScheduleExecutor';
@@ -24,7 +24,10 @@ import { getTopology } from '../shapes/registry';
 import type { PathTopologyDef, TopologyDef, TopologyId } from '../shapes/types';
 import type {
   DrawPathInstancesOp,
+  DrawPrimitiveInstancesOp,
+  DrawOp,
   PathGeometry,
+  PrimitiveGeometry,
   InstanceTransforms,
   PathStyle,
   RenderFrameIR_Future,
@@ -540,7 +543,7 @@ export function isRenderStep(step: { kind: string }): step is StepRender {
 }
 
 // ============================================================================
-// V2 RENDER ASSEMBLY - DrawPathInstancesOp
+// V2 RENDER ASSEMBLY - DrawPathInstancesOp and DrawPrimitiveInstancesOp
 // ============================================================================
 
 /**
@@ -757,10 +760,10 @@ function recordAssemblerTiming(
 }
 
 /**
- * Assemble DrawPathInstancesOp operations for per-instance shapes
+ * Assemble DrawOp operations for per-instance shapes
  *
  * Handles the `{ k: 'slot' }` shape case by grouping instances by topology
- * and emitting one DrawPathInstancesOp per group.
+ * and emitting one DrawPathInstancesOp or DrawPrimitiveInstancesOp per group.
  *
  * @param step - Render step with per-instance shapes
  * @param shapeBuffer - Shape2D buffer (Uint32Array)
@@ -769,7 +772,7 @@ function recordAssemblerTiming(
  * @param scale - Uniform scale
  * @param count - Instance count
  * @param state - Runtime state
- * @returns Array of DrawPathInstancesOp operations
+ * @returns Array of DrawOp operations (path or primitive)
  */
 function assemblePerInstanceShapes(
   step: StepRender,
@@ -779,7 +782,7 @@ function assemblePerInstanceShapes(
   scale: number,
   count: number,
   state: RuntimeState
-): DrawPathInstancesOp[] {
+): DrawOp[] {
   const t0 = performance.now();
 
   // Group instances by topology
@@ -787,7 +790,7 @@ function assemblePerInstanceShapes(
 
   const tGrouped = performance.now();
 
-  const ops: DrawPathInstancesOp[] = [];
+  const ops: DrawOp[] = [];
 
   // C-13: Read rotation and scale2 from slots if present
   const fullRotation = step.rotationSlot
@@ -807,26 +810,6 @@ function assemblePerInstanceShapes(
     // Validate topology exists (group-level validation, not per-instance)
     const topology = getTopology(group.topologyId);
 
-    if (!isPathTopology(topology)) {
-      console.warn(
-        `RenderAssembler: Non-path topology ${group.topologyId} not yet supported ` +
-        `(instances: ${group.instanceIndices.join(', ')})`
-      );
-      continue; // Skip non-path topologies
-    }
-
-    // Get control points buffer for this group
-    const controlPointsBuffer = state.values.objects.get(
-      group.controlPointsSlot as ValueSlot
-    ) as Float32Array;
-
-    if (!controlPointsBuffer || !(controlPointsBuffer instanceof Float32Array)) {
-      throw new Error(
-        `RenderAssembler: Control points buffer not found for topology ${group.topologyId} ` +
-        `(slot ${group.controlPointsSlot}, instances: ${group.instanceIndices.join(', ')})`
-      );
-    }
-
     // Slice instance buffers for this group
     const { position, color } = sliceInstanceBuffers(
       fullPosition,
@@ -843,36 +826,68 @@ function assemblePerInstanceShapes(
       ? sliceScale2Buffer(fullScale2, group.instanceIndices)
       : undefined;
 
-    // Build geometry
-    const geometry: PathGeometry = {
-      topologyId: group.topologyId,
-      verbs: new Uint8Array(topology.verbs),
-      points: controlPointsBuffer,
-      pointsCount: group.pointsCount,
-      flags: group.flags,
-    };
-
-    // Build instance transforms
+    // Build instance transforms (shared by both path and primitive)
     const instanceTransforms: InstanceTransforms = {
       count: group.instanceIndices.length,
       position,
       size: scale, // Uniform scale
-      rotation,  // C-13: Include rotation if present
-      scale2,    // C-13: Include scale2 if present
+      rotation,
+      scale2,
     };
 
-    // Build style
+    // Build style (shared by both path and primitive)
     const style: PathStyle = {
       fillColor: color,
       fillRule: 'nonzero',
     };
 
-    ops.push({
-      kind: 'drawPathInstances',
-      geometry,
-      instances: instanceTransforms,
-      style,
-    });
+    if (isPathTopology(topology)) {
+      // PATH TOPOLOGY: Build DrawPathInstancesOp
+      const controlPointsBuffer = state.values.objects.get(
+        group.controlPointsSlot as ValueSlot
+      ) as Float32Array;
+
+      if (!controlPointsBuffer || !(controlPointsBuffer instanceof Float32Array)) {
+        throw new Error(
+          `RenderAssembler: Control points buffer not found for topology ${group.topologyId} ` +
+          `(slot ${group.controlPointsSlot}, instances: ${group.instanceIndices.join(', ')})`
+        );
+      }
+
+      const geometry: PathGeometry = {
+        topologyId: group.topologyId,
+        verbs: new Uint8Array(topology.verbs),
+        points: controlPointsBuffer,
+        pointsCount: group.pointsCount,
+        flags: group.flags,
+      };
+
+      ops.push({
+        kind: 'drawPathInstances',
+        geometry,
+        instances: instanceTransforms,
+        style,
+      });
+    } else {
+      // PRIMITIVE TOPOLOGY: Build DrawPrimitiveInstancesOp
+      // Resolve params from topology defaults (per-instance params not yet supported)
+      const params: Record<string, number> = {};
+      topology.params.forEach((paramDef) => {
+        params[paramDef.name] = paramDef.default;
+      });
+
+      const geometry: PrimitiveGeometry = {
+        topologyId: group.topologyId,
+        params,
+      };
+
+      ops.push({
+        kind: 'drawPrimitiveInstances',
+        geometry,
+        instances: instanceTransforms,
+        style,
+      });
+    }
   }
 
   const tSliced = performance.now();
@@ -981,6 +996,29 @@ function buildPathGeometry(
 }
 
 /**
+ * Build PrimitiveGeometry from resolved shape
+ *
+ * Extracts topology ID and parameter values into PrimitiveGeometry structure.
+ *
+ * @param resolvedShape - Resolved shape with topology and params
+ * @returns PrimitiveGeometry structure for v2 rendering
+ */
+function buildPrimitiveGeometry(
+  resolvedShape: ResolvedShape
+): PrimitiveGeometry {
+  if (resolvedShape.mode !== 'primitive') {
+    throw new Error(
+      `buildPrimitiveGeometry: Expected primitive topology, got ${resolvedShape.mode}`
+    );
+  }
+
+  return {
+    topologyId: resolvedShape.topologyId,
+    params: resolvedShape.params,
+  };
+}
+
+/**
  * Build InstanceTransforms from render step data
  *
  * Constructs world-space instance transform data.
@@ -1031,7 +1069,7 @@ function buildPathStyle(
 }
 
 /**
- * Assemble DrawPathInstancesOp operations from a render step
+ * Assemble DrawOp operations from a render step
  *
  * This is the v2 assembly path that produces explicit geometry/instances/style
  * structures. Unlike v1, this separates concerns and uses local-space geometry.
@@ -1039,14 +1077,16 @@ function buildPathStyle(
  * NOW SUPPORTS PER-INSTANCE SHAPES: When shape is a buffer (`{ k: 'slot' }`),
  * instances are grouped by topology and multiple ops are emitted.
  *
+ * SUPPORTS PRIMITIVES: Emits DrawPrimitiveInstancesOp for ellipse, rect, etc.
+ *
  * @param step - The render step to assemble
  * @param context - Assembly context with signals, instances, and state
- * @returns Array of DrawPathInstancesOp operations (one or more)
+ * @returns Array of DrawOp operations (one or more, path or primitive)
  */
 export function assembleDrawPathInstancesOp(
   step: StepRender,
   context: AssemblerContext
-): DrawPathInstancesOp[] {
+): DrawOp[] {
   const { signals, instances, state } = context;
 
   // Get instance declaration
@@ -1108,23 +1148,9 @@ export function assembleDrawPathInstancesOp(
     );
   }
 
-  // Uniform shape: existing single-op path
+  // Uniform shape: resolve fully and emit single op
   const controlPointsBuffer = resolveControlPoints(step.controlPoints, state);
   const resolvedShape = resolveShapeFully(shape, controlPointsBuffer);
-
-  // V2 only supports path topologies (primitives will be handled separately)
-  if (resolvedShape.mode !== 'path') {
-    // For now, return empty array for primitive topologies
-    // Future work: DrawPrimitiveInstancesOp
-    return [];
-  }
-
-  // Control points are required for path rendering
-  if (!controlPointsBuffer || !(controlPointsBuffer instanceof Float32Array)) {
-    throw new Error(
-      'RenderAssembler: Path topology requires control points buffer (Float32Array)'
-    );
-  }
 
   // C-13: Read rotation and scale2 from slots if present
   const rotation = step.rotationSlot
@@ -1135,23 +1161,46 @@ export function assembleDrawPathInstancesOp(
     ? (state.values.objects.get(step.scale2Slot) as Float32Array | undefined)
     : undefined;
 
-  // Build v2 structures
-  const geometry = buildPathGeometry(resolvedShape, controlPointsBuffer);
+  // Build instance transforms (shared by both path and primitive)
   const instanceTransforms = buildInstanceTransforms(
     count,
     positionBuffer,
     scale,
-    rotation,  // C-13: Include rotation if present
-    scale2     // C-13: Include scale2 if present
+    rotation,
+    scale2
   );
+
+  // Build style (shared by both path and primitive)
   const style = buildPathStyle(colorBuffer, 'nonzero');
 
-  return [{
-    kind: 'drawPathInstances',
-    geometry,
-    instances: instanceTransforms,
-    style,
-  }];
+  // Dispatch based on topology mode
+  if (resolvedShape.mode === 'path') {
+    // PATH TOPOLOGY: Build DrawPathInstancesOp
+    if (!controlPointsBuffer || !(controlPointsBuffer instanceof Float32Array)) {
+      throw new Error(
+        'RenderAssembler: Path topology requires control points buffer (Float32Array)'
+      );
+    }
+
+    const geometry = buildPathGeometry(resolvedShape, controlPointsBuffer);
+
+    return [{
+      kind: 'drawPathInstances',
+      geometry,
+      instances: instanceTransforms,
+      style,
+    }];
+  } else {
+    // PRIMITIVE TOPOLOGY: Build DrawPrimitiveInstancesOp
+    const geometry = buildPrimitiveGeometry(resolvedShape);
+
+    return [{
+      kind: 'drawPrimitiveInstances',
+      geometry,
+      instances: instanceTransforms,
+      style,
+    }];
+  }
 }
 
 /**
@@ -1161,16 +1210,17 @@ export function assembleDrawPathInstancesOp(
  * Unlike v1, this uses local-space geometry with world-space instance transforms.
  *
  * NOW SUPPORTS PER-INSTANCE SHAPES: Multiple ops can be emitted per render step.
+ * SUPPORTS PRIMITIVES: Handles both DrawPathInstancesOp and DrawPrimitiveInstancesOp.
  *
  * @param renderSteps - Array of render steps to assemble
  * @param context - Assembly context
- * @returns RenderFrameIR_Future with DrawPathInstancesOp operations
+ * @returns RenderFrameIR_Future with DrawOp operations
  */
 export function assembleRenderFrame_v2(
   renderSteps: readonly StepRender[],
   context: AssemblerContext
 ): RenderFrameIR_Future {
-  const ops: DrawPathInstancesOp[] = [];
+  const ops: DrawOp[] = [];
 
   for (const step of renderSteps) {
     const stepOps = assembleDrawPathInstancesOp(step, context);

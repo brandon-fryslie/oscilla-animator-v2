@@ -22,6 +22,10 @@
  */
 
 import type { RenderFrameIR_Future, DrawPathInstancesOp, PathGeometry, PathStyle } from './future-types';
+import type { RenderFrameIR, RenderPassIR, ResolvedShape } from '../runtime/ScheduleExecutor';
+import { isPathTopology } from '../runtime/RenderAssembler';
+import { getTopology } from '../shapes/registry';
+import type { PathTopologyDef, TopologyDef } from '../shapes/types';
 
 /**
  * Cache for geometry d-strings.
@@ -34,7 +38,7 @@ class GeometryCache {
 
   /**
    * Get or create a cached d-string for a geometry.
-   * 
+   *
    * @param topologyId - Topology identifier
    * @param points - Points buffer (identity used for cache key)
    * @param factory - Factory to create d-string if not cached
@@ -69,10 +73,10 @@ class GeometryCache {
 
 /**
  * Convert path geometry to SVG d-string.
- * 
+ *
  * Supports all path verbs: MOVE (0), LINE (1), CUBIC (2), QUAD (3), CLOSE (4).
  * Points are in local space and used directly without scaling.
- * 
+ *
  * @param verbs - Path verbs array
  * @param points - Control points (x,y interleaved)
  * @param pointsCount - Number of points (points.length / 2)
@@ -147,11 +151,12 @@ export function pathToSvgD(
 /**
  * Convert RGBA buffer to CSS color string.
  */
-function rgbaToCSS(color: Uint8ClampedArray, offset: number): string {
-  const r = color[offset];
-  const g = color[offset + 1];
-  const b = color[offset + 2];
-  const a = color[offset + 3] / 255;
+function rgbaToCSS(color: Uint8ClampedArray | ArrayBufferView, offset: number): string {
+  const colorArray = color as Uint8ClampedArray;
+  const r = colorArray[offset];
+  const g = colorArray[offset + 1];
+  const b = colorArray[offset + 2];
+  const a = colorArray[offset + 3] / 255;
   return `rgba(${r},${g},${b},${a})`;
 }
 
@@ -191,7 +196,7 @@ export class SVGRenderer {
 
   /**
    * Render a v2 frame to SVG.
-   * 
+   *
    * @param frame - Frame containing DrawOps
    */
   render(frame: RenderFrameIR_Future): void {
@@ -205,7 +210,165 @@ export class SVGRenderer {
   }
 
   /**
-   * Render a single DrawPathInstancesOp.
+   * Render a v1 frame to SVG (RenderPassIR format).
+   *
+   * This method consumes ONLY screen-space data from RenderPassIR.
+   * It performs ONLY screenPos × viewport mapping, no projection or camera logic.
+   *
+   * @param frame - Frame containing RenderPassIR passes
+   */
+  renderV1(frame: RenderFrameIR): void {
+    this.clear();
+
+    for (const pass of frame.passes) {
+      this.renderPassIR(pass);
+    }
+  }
+
+  /**
+   * Render a single RenderPassIR to SVG.
+   *
+   * Backend Contract (Level 8):
+   * - Consumes ONLY screen-space fields: screenPosition, screenRadius, depth, visible
+   * - Performs ONLY coordinate mapping: [0,1] → viewport pixels
+   * - NO world-space, NO camera params, NO projection knowledge
+   *
+   * @param pass - RenderPassIR with screen-space data
+   */
+  private renderPassIR(pass: RenderPassIR): void {
+    if (pass.kind !== 'instances2d') {
+      return;
+    }
+
+    const position = pass.position as Float32Array;
+    const color = pass.color as Uint8ClampedArray;
+    const scale = pass.scale;
+
+    // Use screen-space position/radius when available (3D projection output)
+    const posSource = pass.screenPosition ?? position;
+    const perInstanceRadius = pass.screenRadius;
+
+    // Get topology for render function (single lookup per pass)
+    const topology = getTopology(pass.resolvedShape.topologyId);
+    const params = pass.resolvedShape.params;
+
+    // Get control points for path shapes from resolvedShape
+    const controlPoints = pass.resolvedShape.mode === 'path'
+      ? pass.resolvedShape.controlPoints as Float32Array | undefined
+      : undefined;
+
+    // PASS-LEVEL VALIDATION: Validate once before the loop, not per-instance
+    if (isPathTopology(topology) && !controlPoints) {
+      throw new Error(
+        `Path topology '${topology.id}' requires control points buffer. ` +
+        `Ensure the shape signal includes a control point field.`
+      );
+    }
+
+    // Extract optional per-instance transforms
+    const rotation = pass.rotation;
+    const scale2 = pass.scale2;
+
+    // Reference dimension for scaling
+    const D = Math.min(this.width, this.height);
+
+    // Render each instance
+    for (let i = 0; i < pass.count; i++) {
+      // Map screen-space [0,1] to viewport pixels
+      const x = posSource[i * 2] * this.width;
+      const y = posSource[i * 2 + 1] * this.height;
+
+      // Use per-instance screen radius when available (perspective foreshortening)
+      const effectiveScale = perInstanceRadius ? perInstanceRadius[i] : scale;
+      const sizePx = effectiveScale * D;
+
+      // Build transform string
+      let transform = `translate(${x} ${y})`;
+
+      if (rotation) {
+        const rot = rotation[i] * (180 / Math.PI); // Convert radians to degrees
+        transform += ` rotate(${rot})`;
+      }
+
+      if (scale2) {
+        transform += ` scale(${sizePx * scale2[i * 2]} ${sizePx * scale2[i * 2 + 1]})`;
+      } else {
+        transform += ` scale(${sizePx} ${sizePx})`;
+      }
+
+      // Get or create geometry definition
+      let defId: string;
+      if (isPathTopology(topology)) {
+        // Path topology - use control points
+        defId = this.getOrCreatePathDef(topology, controlPoints!);
+      } else {
+        // Primitive topology - render as circle (simplified for now)
+        // TODO: Support other primitives (rect, etc.)
+        defId = this.getOrCreateCircleDef();
+      }
+
+      // Create <use> element
+      const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+      use.setAttribute('href', `#${defId}`);
+      use.setAttribute('transform', transform);
+
+      // Apply fill color
+      use.setAttribute('fill', rgbaToCSS(color, i * 4));
+
+      this.renderGroup.appendChild(use);
+    }
+  }
+
+  /**
+   * Get or create a path geometry definition in <defs>.
+   */
+  private getOrCreatePathDef(topology: PathTopologyDef, controlPoints: Float32Array): string {
+    const cacheKey = this.geometryCache.get(
+      topology.id,
+      controlPoints,
+      () => pathToSvgD(topology.verbs, controlPoints, controlPoints.length / 2)
+    );
+
+    // Check if we already have this def
+    const existingId = `geom_${topology.id}_${this.geometryCache['bufferKeys'].get(controlPoints)}`;
+    const existing = this.defs.querySelector(`#${CSS.escape(existingId)}`);
+    if (existing) {
+      return existingId;
+    }
+
+    // Create new definition
+    const id = `geom_${this.defIdCounter++}`;
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('id', id);
+    path.setAttribute('d', cacheKey);
+    this.defs.appendChild(path);
+
+    return id;
+  }
+
+  /**
+   * Get or create a circle definition (for primitive topologies).
+   */
+  private getOrCreateCircleDef(): string {
+    const id = 'circle_prim';
+    const existing = this.defs.querySelector(`#${id}`);
+    if (existing) {
+      return id;
+    }
+
+    // Create circle centered at origin with radius 1 (will be scaled by instance transform)
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('id', id);
+    circle.setAttribute('cx', '0');
+    circle.setAttribute('cy', '0');
+    circle.setAttribute('r', '1');
+    this.defs.appendChild(circle);
+
+    return id;
+  }
+
+  /**
+   * Render a single DrawPathInstancesOp (v2 path).
    */
   private renderDrawPathInstancesOp(op: DrawPathInstancesOp): void {
     const { geometry, instances, style } = op;
@@ -232,7 +395,7 @@ export class SVGRenderer {
 
       // Build transform string
       let transform = `translate(${x} ${y})`;
-      
+
       if (rotation) {
         const rot = rotation[i] * (180 / Math.PI); // Convert radians to degrees
         transform += ` rotate(${rot})`;
@@ -251,7 +414,7 @@ export class SVGRenderer {
 
       // Apply fill
       if (hasFill) {
-        use.setAttribute('fill', uniformFillColor 
+        use.setAttribute('fill', uniformFillColor
           ? rgbaToCSS(style.fillColor!, 0)
           : rgbaToCSS(style.fillColor!, i * 4)
         );
@@ -272,7 +435,7 @@ export class SVGRenderer {
           : style.strokeWidth
             ? (style.strokeWidth as Float32Array)[i]
             : 0.01; // Default stroke width
-        
+
         // Convert to SVG units (account for instance scale)
         use.setAttribute('stroke-width', String(strokeWidth * D / sizePx));
 
@@ -296,8 +459,8 @@ export class SVGRenderer {
   }
 
   /**
-   * Get or create a geometry definition in <defs>.
-   * 
+   * Get or create a geometry definition in <defs> (v2 path).
+   *
    * @param geometry - Path geometry
    * @returns Definition ID for use in href
    */

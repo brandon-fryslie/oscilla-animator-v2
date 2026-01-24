@@ -2,10 +2,12 @@
 scope: update
 spec_source: design-docs/CANONICAL-oscilla-v2.5-20260109/
 impl_source: src/
-generated: 2026-01-24T19:00:00Z
-previous_run: 2026-01-24T13:00:00Z
+generated: 2026-01-25T07:22:00Z
+previous_run: 2026-01-25T03:20:00Z
 topics_audited: 8
 totals: { trivial: 16, critical: 3, to-review: 4, unimplemented: 34, done: ~177 }
+confirmed: true
+test_suite: 1259/1259 pass
 ---
 
 # Gap Analysis: Full Core Spec (Topics 01-06, 16, 17) — UPDATE
