@@ -42,6 +42,7 @@ import type {
   StableStateId,
   StateMapping,
 } from './types';
+import type { CameraDeclIR } from './program';
 
 // =============================================================================
 // IRBuilderImpl
@@ -75,6 +76,9 @@ export class IRBuilderImpl implements IRBuilder {
 
   // Slot type tracking for slotMeta generation
   private slotTypes = new Map<ValueSlot, SignalType>();
+
+  // Render globals tracking (Camera system)
+  private renderGlobals: CameraDeclIR[] = [];
 
   // =========================================================================
   // Signal Expressions
@@ -593,6 +597,18 @@ export class IRBuilderImpl implements IRBuilder {
     const slot = eventSlotId(this.eventSlotCounter++);
     this.eventSlots.set(eventId, slot);
     return slot;
+  }
+
+  // =========================================================================
+  // Render Globals
+  // =========================================================================
+
+  addRenderGlobal(decl: CameraDeclIR): void {
+    this.renderGlobals.push(decl);
+  }
+
+  getRenderGlobals(): readonly CameraDeclIR[] {
+    return this.renderGlobals;
   }
 
   // =========================================================================

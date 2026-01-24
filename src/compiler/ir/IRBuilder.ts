@@ -20,6 +20,7 @@ import type {
 import type { TopologyId } from '../../shapes/types';
 import type { TimeModelIR } from './schedule';
 import type { PureFn, OpCode, InstanceDecl, Step, IntrinsicPropertyName, ContinuityPolicy, SigExpr, FieldExpr, EventExpr, StableStateId, StateMapping } from './types';
+import type { CameraDeclIR } from './program';
 
 // =============================================================================
 // IRBuilder Interface
@@ -318,6 +319,26 @@ export interface IRBuilder {
     outputSlot: ValueSlot,
     semantic: 'position' | 'radius' | 'opacity' | 'color' | 'custom'
   ): void;
+
+  // =========================================================================
+  // Render Globals
+  // =========================================================================
+
+  /**
+   * Register a render-global declaration (e.g., CameraDeclIR).
+   * Render globals provide frame-level context for the render assembler.
+   *
+   * @param decl - Camera declaration with slots for projection parameters
+   */
+  addRenderGlobal(decl: CameraDeclIR): void;
+
+  /**
+   * Get all registered render globals.
+   * Used by compiler to populate program.renderGlobals.
+   *
+   * @returns Array of render global declarations
+   */
+  getRenderGlobals(): readonly CameraDeclIR[];
 
   // =========================================================================
   // Utility

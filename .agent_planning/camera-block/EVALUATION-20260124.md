@@ -1,3 +1,142 @@
+# Camera Block Sprint Plan
+Sprint: 2026-01-24
+
+## Sprint Goal
+Implement the Camera block as a first-class render-global declaration emitted by the compiler and resolved from ordinary signal slots each frame. Camera parameters are produced by normal signal evaluation steps and consumed by the render assembler via a deterministic frame-globals resolver. Remove all viewer-level/hardcoded camera injection paths.
+
+## Background
+The spec requires a Camera block with 9 input ports producing a CameraDeclIR render-global. The compiler must enforce uniqueness and the assembler must read resolved camera parameters from frame globals, not from external parameters or viewer-level toggles.
+
+---
+
+### P0: Type System Extensions (§1)
+
+**Acceptance Criteria:**
+- [ ] Add `cameraProjection` to the `PayloadType` union in `src/core/canonical-types.ts`
+- [ ] Add `cameraProjection` to `PAYLOAD_STRIDE` with stride = 1
+- [ ] Ensure unit kinds used by the Camera block exist exactly as: `norm01`, `scalar`, `deg`
+- [ ] Ensure `signalType(...)` (and any helpers that construct `SignalType`) accepts payload `cameraProjection` with no unit
+
+**Technical Notes:**
+- `cameraProjection` is stored as numeric in a single f64 slot and interpreted as int32 via `projI32 = (value | 0)`.
+- Projection decoding is deterministic: `projI32 === 1` => perspective, otherwise orthographic.
+- There is no implicit adapter/coercion between `float` and `cameraProjection`.
+
+---
+
+### P0: Camera Block Definition (§2)
+
+**Acceptance Criteria:**
+- [ ] Register Camera block in `src/blocks/camera-block.ts` with 9 input ports:
+  - projection: cameraProjection, one+continuous
+  - centerX: float norm01, one+continuous
+  - centerY: float norm01, one+continuous
+  - distance: float scalar, one+continuous
+  - tiltDeg: float deg, one+continuous
+  - yawDeg: float deg, one+continuous
+  - fovYDeg: float deg, one+continuous
+  - near: float scalar, one+continuous
+  - far: float scalar, one+continuous
+- [ ] All ports have default constant sources matching spec defaults.
+- [ ] No output ports.
+- [ ] Uniqueness constraint: only 0 or 1 Camera blocks allowed.
+- [ ] lower() allocates 9 ValueSlots (one per input port) and registers a `CameraDeclIR` render-global referencing those slots.
+
+**Technical Notes:**
+- File: `src/blocks/camera-block.ts`
+- Camera has no outputs; it is a render sink.
+- lower() MUST:
+  - allocate one `ValueSlot` per input port (projection, centerX, centerY, distance, tiltDeg, yawDeg, fovYDeg, near, far)
+  - return a normal LowerResult with empty outputs
+  - call `ctx.b.addRenderGlobal(cameraDecl)` where `cameraDecl: CameraDeclIR` references the 9 allocated slots
+- lower() MUST NOT introduce bespoke evaluation logic; the compiler's normal wiring emits the evaluation steps that write these 9 slots each frame.
+
+---
+
+### P0: Compiler Pass - Camera Declaration Collection (§4.2)
+
+**Acceptance Criteria:**
+- [ ] Add `renderGlobals` field to `CompiledProgramIR` with type `readonly CameraDeclIR[]`
+- [ ] Implement compiler pass that collects renderGlobals from IRBuilder
+- [ ] Enforce uniqueness: 0 or 1 CameraDeclIR allowed, else emit E_CAMERA_MULTIPLE error
+
+**Technical Notes:**
+- IRBuilder owns a `renderGlobals` accumulator.
+- The Camera block’s lower() registers its decl via `ctx.b.addRenderGlobal(decl)`.
+- This pass validates `program.renderGlobals`:
+  - 0 decls => `program.renderGlobals = []`
+  - 1 decl  => `program.renderGlobals = [decl]`
+  - 2+ decls => emit `E_CAMERA_MULTIPLE` and fail compilation.
+
+---
+
+### P0: Frame Globals Resolver (§5)
+
+**Acceptance Criteria:**
+- [ ] Implement frame globals resolver module that runs after schedule execution and before render assembly
+- [ ] Iterates `program.renderGlobals` and reads slots using slotMeta offsets
+- [ ] Applies deterministic sanitization (§5.2):
+    - Clamp distance, near, far, fovYDeg to spec ranges
+    - Wrap yawDeg to [0,360)
+    - projection: `projI32 = (val | 0)` then `projI32 === 1 ? 'persp' : 'ortho'`
+    - radians: `deg * Math.PI / 180` for tilt/yaw/fovY
+- [ ] Produces `ResolvedCameraParams` object consumed by assembler
+- [ ] Applies default camera params only if no Camera block is present
+
+**Technical Notes:**
+- Defaults are applied ONLY when `program.renderGlobals` is empty.
+- No-Camera-block default tilt is 0 (flat view); Camera block default tilt is 35° (tilted view). This is intentional.
+
+---
+
+### P0: RenderAssembler Integration (§6)
+
+**Acceptance Criteria:**
+- [ ] Remove `camera` parameter from `executeFrame`
+- [ ] Remove `camera` field from `AssemblerContext`
+- [ ] AssemblerContext gains required field `resolvedCamera: ResolvedCameraParams` and all projection code reads ONLY from this field
+- [ ] All camera-dependent shader uniforms and calculations read from resolvedCamera
+
+---
+
+### P0: Remove Hardcoded Camera Paths
+
+**Acceptance Criteria:**
+- [ ] Remove all viewer-level camera injection paths (Shift preview, toolbar toggle)
+- [ ] Remove usage of `PERSP_CAMERA_DEFAULTS` from main.ts and runtime
+- [ ] Ensure perspective activation only via Camera block with `projection=1`
+
+**Technical Notes:**
+- This sprint removes viewer-level camera injection (Shift preview and toolbar toggle) entirely.
+- After this change, the only way to get perspective is to add a Camera block to the patch and set `projection = 1` (or wire a signal into `projection`).
+
+---
+
+## Risks and Open Questions
+- Clarify exact semantics of centerX/centerY vs existing camTarget in kernel
+- Verify default camera parameter values and behavior
+- Confirm removal of CameraStore or its migration to UI-only role feeding into Camera block inputs
+
+---
+
+## Deliverables
+- Camera block source in `src/blocks/camera-block.ts`
+- CameraDeclIR type and compiler pass updates
+- Frame globals resolver module
+- RenderAssembler updates
+- Removal of executeFrame camera parameter and viewer toggles
+
+---
+
+## Timeline
+Sprint duration: one week starting 2026-01-24
+
+---
+
+## References
+- Spec document section 6 (Camera block)
+- Existing codebase and planning docs
+
 # Evaluation: camera-block
 Timestamp: 2026-01-24
 Git Commit: 108d2e9
