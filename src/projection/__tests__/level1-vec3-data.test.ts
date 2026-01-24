@@ -177,30 +177,68 @@ describe('Level 1 Integration Tests', () => {
     }
   });
 
-  it('Compiled position slot is typed as vec3 (stride 3 Float32Array)', () => {
-    // This test verifies that when we create a position field and pass it
-    // through the layout pipeline, the output maintains vec3 stride.
-    // The "compile" step here is simulated as: layout produces vec3 → consumer reads vec3.
-    const N = 4;
-    const positions = createPositionField(N);
-    gridLayout3D(positions, N, 2, 2);
+  it('Compile a minimal patch (Layout → RenderSink): the compiled schedule position slot is typed as vec3', async () => {
+    // This test uses the REAL compile→execute pipeline (not the projection module helpers).
+    // It proves the L1 INVARIANT: executeFrame() with a layout block produces stride-3 Float32Array
+    // via the Materializer's standard field-slot pipeline.
+    const { buildPatch } = await import('../../graph');
+    const { compile } = await import('../../compiler/compile');
+    const { createRuntimeState, BufferPool, executeFrame } = await import('../../runtime');
 
-    // The compiled schedule's position slot is a Float32Array with stride 3
-    expect(positions.length).toBe(N * 3);
-    expect(positions).toBeInstanceOf(Float32Array);
+    const N = 16;
+    const patch = buildPatch((b: any) => {
+      b.addBlock('InfiniteTimeRoot', { periodAMs: 5000, periodBMs: 10000 });
+      const ellipse = b.addBlock('Ellipse', { rx: 0.02, ry: 0.02 });
+      const array = b.addBlock('Array', { count: N });
+      const layout = b.addBlock('GridLayout', { rows: 4, cols: 4 });
+      b.wire(ellipse, 'shape', array, 'element');
+      b.wire(array, 'elements', layout, 'elements');
 
-    // Verify the data is accessible as stride-3 triples
+      // Color: constant white via HSV
+      const hue = b.addBlock('FieldHueFromPhase', {});
+      b.wire(array, 't', hue, 'id01');
+      const phase = b.addBlock('Const', { value: 0.0 });
+      b.wire(phase, 'out', hue, 'phase');
+      const sat = b.addBlock('Const', { value: 0.0 }); // S=0 → white
+      const val = b.addBlock('Const', { value: 1.0 });
+      const color = b.addBlock('HsvToRgb', {});
+      b.wire(hue, 'hue', color, 'hue');
+      b.wire(sat, 'out', color, 'sat');
+      b.wire(val, 'out', color, 'val');
+
+      // Render: wire layout position directly to render block
+      const render = b.addBlock('RenderInstances2D', {});
+      b.wire(layout, 'position', render, 'pos');
+      b.wire(color, 'color', render, 'color');
+      b.wire(ellipse, 'shape', render, 'shape');
+    });
+
+    const result = compile(patch);
+    if (result.kind !== 'ok') {
+      throw new Error(`Compile failed: ${JSON.stringify(result.errors)}`);
+    }
+
+    const program = result.program;
+    const state = createRuntimeState(program.slotMeta.length);
+    const pool = new BufferPool();
+    const frame = executeFrame(program, state, pool, 0);
+
+    expect(frame.passes.length).toBeGreaterThan(0);
+    const pass = frame.passes[0];
+    const position = pass.position as Float32Array;
+
+    // L1 INVARIANT: position buffer is contiguous Float32Array with stride 3
+    expect(position).toBeInstanceOf(Float32Array);
+    expect(position.length).toBe(N * 3); // 16 instances × 3 floats per position
+
+    // All z values must be exactly 0.0, all x/y must be finite
     for (let i = 0; i < N; i++) {
-      const offset = i * 3;
-      const x = positions[offset];
-      const y = positions[offset + 1];
-      const z = positions[offset + 2];
-      expect(typeof x).toBe('number');
-      expect(typeof y).toBe('number');
-      expect(typeof z).toBe('number');
-      expect(z).toBe(0.0);
+      const x = position[i * 3 + 0];
+      const y = position[i * 3 + 1];
+      const z = position[i * 3 + 2];
       expect(Number.isFinite(x)).toBe(true);
       expect(Number.isFinite(y)).toBe(true);
+      expect(z).toBe(0.0); // Explicit z=0.0, written by gridLayout kernel
     }
   });
 });
