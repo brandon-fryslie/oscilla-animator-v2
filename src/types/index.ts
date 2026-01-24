@@ -44,6 +44,8 @@ export {
   isSubdomainOf,
   getIntrinsics,
   hasIntrinsic,
+  PAYLOAD_STRIDE,
+  strideOf,
 } from '../core/canonical-types';
 
 export {
@@ -137,13 +139,47 @@ export function portId(s: string): PortId {
 // Combine Mode
 // =============================================================================
 
+/**
+ * Combine mode for input ports with multiple edges.
+ *
+ * Modes are categorized by the types they work with:
+ * - any: Works with any type
+ * - numeric: Works with numeric types (float, int, vec2, vec3, color)
+ * - boolean: Works with boolean type
+ */
 export type CombineMode =
-  | 'last'      // Last value wins
-  | 'first'     // First value wins
-  | 'sum'       // Numeric sum
-  | 'average'   // Numeric average
-  | 'max'       // Numeric maximum
-  | 'min';      // Numeric minimum
+  | 'last'      // any: Last value wins
+  | 'first'     // any: First value wins
+  | 'sum'       // numeric: Additive
+  | 'average'   // numeric: Arithmetic mean
+  | 'max'       // numeric: Maximum
+  | 'min'       // numeric: Minimum
+  | 'mul'       // numeric: Multiplicative
+  | 'layer'     // any: Layer composition
+  | 'or'        // boolean: Logical OR
+  | 'and';      // boolean: Logical AND
+
+/**
+ * Category for combine modes based on type compatibility.
+ */
+export type CombineModeCategory = 'numeric' | 'any' | 'boolean';
+
+/**
+ * Mapping of combine modes to their category.
+ * Used for validating that a combine mode is compatible with a port's type.
+ */
+export const COMBINE_MODE_CATEGORY: Record<CombineMode, CombineModeCategory> = {
+  last: 'any',
+  first: 'any',
+  sum: 'numeric',
+  average: 'numeric',
+  max: 'numeric',
+  min: 'numeric',
+  mul: 'numeric',
+  layer: 'any',
+  or: 'boolean',
+  and: 'boolean',
+};
 
 // Import SignalType for local use in interface definitions
 import type { SignalType } from '../core/canonical-types';
@@ -229,7 +265,7 @@ export function defaultSourceConst(value: unknown): DefaultSource {
  * TimeRoot output default - wires to existing TimeRoot
  */
 export function defaultSourceTimeRoot(
-  output: 'tMs' | 'phaseA' | 'phaseB' | 'pulse' | 'palette' | 'energy'
+  output: 'tMs' | 'dt' | 'phaseA' | 'phaseB' | 'pulse' | 'palette' | 'energy'
 ): DefaultSource {
   return { blockType: 'TimeRoot', output };
 }

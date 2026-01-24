@@ -5,7 +5,7 @@
  * It consists of Blocks connected by Edges.
  */
 
-import type { BlockId, PortId, BlockRole, DefaultSource } from '../types';
+import type { BlockId, PortId, BlockRole, DefaultSource, EdgeRole } from '../types';
 import { requireBlockDef } from '../blocks/registry';
 
 // =============================================================================
@@ -84,6 +84,9 @@ export interface Edge {
 
   /** Sort key for deterministic combine ordering */
   readonly sortKey?: number;
+
+  /** Semantic role for editor behavior (optional for backward compatibility) */
+  readonly role?: EdgeRole;
 }
 
 /**
@@ -156,7 +159,7 @@ export class PatchBuilder {
     return id;
   }
 
-  addEdge(from: Endpoint, to: Endpoint, options?: { enabled?: boolean; sortKey?: number }): this {
+  addEdge(from: Endpoint, to: Endpoint, options?: { enabled?: boolean; sortKey?: number; role?: EdgeRole }): this {
     const id = `e${this.nextEdgeId++}`;
     this.edges.push({
       id,
@@ -164,6 +167,7 @@ export class PatchBuilder {
       to,
       enabled: options?.enabled ?? true,
       sortKey: options?.sortKey,
+      role: options?.role,
     });
     return this;
   }
@@ -173,7 +177,7 @@ export class PatchBuilder {
     fromPort: string,
     toBlock: BlockId,
     toPort: string,
-    options?: { enabled?: boolean; sortKey?: number }
+    options?: { enabled?: boolean; sortKey?: number; role?: EdgeRole }
   ): this {
     return this.addEdge(
       { kind: 'port', blockId: fromBlock, slotId: fromPort as PortId },
