@@ -12,7 +12,7 @@
 > - **L6**: Toggle produces different output without recompile; same `CompiledProgramIR` reference (spec I6, I9).
 
 > **INVARIANT (must be true before Level 8 can start):**
-> The `RenderPassIR` emitted by `executeFrame` contains ONLY visible instances — `count` reflects the post-cull count, and `screenPosition`/`color`/`screenRadius` arrays are compacted to exclude culled instances. Instances are ordered by depth (front-to-back, stable). Backends never receive invisible instances and never need to interpret the `visible` flag themselves (spec I15: renderer is sink only — the backend draws exactly what it's given, no filtering logic).
+> The `RenderPassIR` emitted by `executeFrame` contains ONLY visible instances — `count` reflects the post-cull count, and `screenPosition`/`color`/`screenRadius` arrays are compacted to exclude culled instances. Instances are ordered by depth (far-to-near / painter's algorithm, stable). Backends never receive invisible instances and never need to interpret the `visible` flag themselves (spec I15: renderer is sink only — the backend draws exactly what it's given, no filtering logic).
 
 > **Implementation Hints (why this matters for later levels):**
 > - Depth sorting operates on the `depth: Float32Array` output from Level 5's projection stage. Don't sort world-space z values directly — under perspective, depth is view-space distance (not world z), and they can differ. The projection kernel already computed the correct depth; use it.
@@ -21,8 +21,8 @@
 
 ## Unit Tests
 
-- [ ] Given depth array `[0.5, 0.1, 0.9, 0.3]`, depth sort produces indices `[1, 3, 0, 2]` (front to back)
-  > C3 ralphie 0124 "depthSortAndCompact produces correct sort: depths 0.1, 0.3, 0.5, 0.9 with matching screen positions and colors"
+- [ ] Given depth array `[0.5, 0.1, 0.9, 0.3]`, depth sort produces indices `[2, 0, 3, 1]` (far to near)
+  > C3 ralphie 0124 "depthSortAndCompact produces correct sort: depths 0.9, 0.5, 0.3, 0.1 with matching screen positions and colors"
   > C4 ralphie 0124 "end-to-end pipeline produces depth-sorted RenderPassIR"
 - [ ] Depth sort is stable: equal depths preserve original order
   > C3 ralphie 0124 "5 instances with identical depth: screenRadius order matches original (0.01..0.05)"
@@ -33,20 +33,20 @@
 
 ## Integration Tests (Ortho)
 
-- [ ] Patch with Group A (z=0.0) and Group B (z=0.4): Group B appears in front (closer to camera at z=1.0)
-  > C3 ralphie 0124 "8 instances: z=0 (d=0.5) sorted before z=0.4 (d=0.502) under ortho"
+- [ ] Patch with Group A (z=0.0) and Group B (z=0.4): Group A in back (farther from camera)
+  > C3 ralphie 0124 "8 instances: z=0 (d=0.5) sorted after z=0.4 (d=0.502) under ortho (far-to-near)"
   > C4 ralphie 0124 "depth formula (z-near)/range verified: near=-100, far=100"
-- [ ] Verify by checking depth values: all Group B depths < all Group A depths
+- [ ] Verify by checking depth values: all Group B depths > all Group A depths
   > C3 ralphie 0124 "max(groupA.depths) < min(groupB.depths) verified"
   > C4 ralphie 0124 "monotonic depth from L2 ensures clean separation"
-- [ ] Backend draw order respects depth: Group B drawn after Group A (painter's algorithm)
-  > C3 ralphie 0124 "16 random z-values: after compaction, depth array is monotonically non-decreasing"
+- [ ] Backend draw order respects depth: Group B drawn first, Group A drawn last (painter's algorithm)
+  > C3 ralphie 0124 "16 random z-values: after compaction, depth array is monotonically non-increasing (far-to-near)"
   > C4 ralphie 0124 "backends receive pre-sorted arrays; no depth logic in backend code (L5 grep test)"
 
 ## Integration Tests (Perspective)
 
-- [ ] Same patch under perspective: depth ordering preserved (B still in front of A)
-  > C3 ralphie 0124 "8 instances: z=0.4 (closer to camera) has lower depth than z=0 under perspective"
+- [ ] Same patch under perspective: depth ordering preserved (A still in back, B in front)
+  > C3 ralphie 0124 "8 instances: z=0.0 (farther from camera) has higher depth than z=0.4 under perspective"
   > C4 ralphie 0124 "perspective depth is view-space distance, not world z; sort uses computed depth"
 - [ ] Screen positions now differ between groups (parallax), but ordering is same
   > C3 ralphie 0124 "instances at different z have different screen positions; depth order preserved"
