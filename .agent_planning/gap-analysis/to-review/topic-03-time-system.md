@@ -13,3 +13,5 @@ item_count: 0
 
 ### R-5: Phase as float+unit:phase01 vs distinct PayloadType
 **Resolution**: Follows R-1. Phase is float with unit:phase01. Spec updated.
+
+RESOLVED

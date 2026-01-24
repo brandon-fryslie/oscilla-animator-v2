@@ -20,7 +20,10 @@ User must decide: accept current approach (update spec), or fix code (revert to 
 **Why it might be better**: Unit system provides richer semantic tracking without multiplying PayloadTypes. Enables type-safe conversions between units of same payload. More extensible.
 **Question for user**: Should the spec be updated to reflect the Unit system, or should code revert to PayloadType-only model?
 
+RESOLUTION: Update spec to use Unit system
+
 ## Resolved
 
 ### R-1: Phase modeled as float+unit:phase01 rather than distinct PayloadType
 **Resolution**: User decided float+unit is correct. Spec updated to remove `phase` as a distinct PayloadType.
+

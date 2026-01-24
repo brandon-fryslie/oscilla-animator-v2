@@ -1,7 +1,7 @@
 /**
  * Level 7: Depth Ordering and Visibility
  *
- * Tests proving that instances are correctly sorted by depth (front-to-back, stable),
+ * Tests proving that instances are correctly sorted by depth (far-to-near / painter's algorithm, stable),
  * and culled instances are excluded from rendering.
  */
 import { describe, it, expect } from 'vitest';
@@ -42,7 +42,7 @@ const perspCam: ResolvedCameraParams = {
 // =============================================================================
 
 describe('Level 7 Unit Tests: Depth Sort and Cull', () => {
-  it('Given depth array [0.5, 0.1, 0.9, 0.3], depth sort produces indices [1, 3, 0, 2] (front to back)', () => {
+  it('Given depth array [0.5, 0.1, 0.9, 0.3], depth sort produces indices [2, 0, 3, 1] (far to near)', () => {
     const count = 4;
     const projection: ProjectionOutput = {
       screenPosition: new Float32Array([
@@ -65,35 +65,35 @@ describe('Level 7 Unit Tests: Depth Sort and Cull', () => {
 
     const result = depthSortAndCompact(projection, count, color);
 
-    // Expected order: idx 1 (d=0.1), idx 3 (d=0.3), idx 0 (d=0.5), idx 2 (d=0.9)
+    // Expected order: idx 2 (d=0.9), idx 0 (d=0.5), idx 3 (d=0.3), idx 1 (d=0.1)
     expect(result.count).toBe(4);
 
-    // Verify depth is sorted front-to-back
-    expect(result.depth[0]).toBeCloseTo(0.1);
-    expect(result.depth[1]).toBeCloseTo(0.3);
-    expect(result.depth[2]).toBeCloseTo(0.5);
-    expect(result.depth[3]).toBeCloseTo(0.9);
+    // Verify depth is sorted far-to-near (descending)
+    expect(result.depth[0]).toBeCloseTo(0.9);
+    expect(result.depth[1]).toBeCloseTo(0.5);
+    expect(result.depth[2]).toBeCloseTo(0.3);
+    expect(result.depth[3]).toBeCloseTo(0.1);
 
     // Verify screen positions follow the sort
-    expect(result.screenPosition[0]).toBeCloseTo(0.1); // idx 1's x
-    expect(result.screenPosition[1]).toBeCloseTo(0.1); // idx 1's y
-    expect(result.screenPosition[2]).toBeCloseTo(0.3); // idx 3's x
-    expect(result.screenPosition[3]).toBeCloseTo(0.3); // idx 3's y
-    expect(result.screenPosition[4]).toBeCloseTo(0.0); // idx 0's x
-    expect(result.screenPosition[5]).toBeCloseTo(0.0); // idx 0's y
-    expect(result.screenPosition[6]).toBeCloseTo(0.2); // idx 2's x
-    expect(result.screenPosition[7]).toBeCloseTo(0.2); // idx 2's y
+    expect(result.screenPosition[0]).toBeCloseTo(0.2); // idx 2's x
+    expect(result.screenPosition[1]).toBeCloseTo(0.2); // idx 2's y
+    expect(result.screenPosition[2]).toBeCloseTo(0.0); // idx 0's x
+    expect(result.screenPosition[3]).toBeCloseTo(0.0); // idx 0's y
+    expect(result.screenPosition[4]).toBeCloseTo(0.3); // idx 3's x
+    expect(result.screenPosition[5]).toBeCloseTo(0.3); // idx 3's y
+    expect(result.screenPosition[6]).toBeCloseTo(0.1); // idx 1's x
+    expect(result.screenPosition[7]).toBeCloseTo(0.1); // idx 1's y
 
     // Verify colors follow the sort
     const c = result.color as Float32Array;
-    // idx 1 (green) first
-    expect(c[0]).toBe(0); expect(c[1]).toBe(1); expect(c[2]).toBe(0); expect(c[3]).toBe(1);
-    // idx 3 (yellow) second
-    expect(c[4]).toBe(1); expect(c[5]).toBe(1); expect(c[6]).toBe(0); expect(c[7]).toBe(1);
-    // idx 0 (red) third
-    expect(c[8]).toBe(1); expect(c[9]).toBe(0); expect(c[10]).toBe(0); expect(c[11]).toBe(1);
-    // idx 2 (blue) fourth
-    expect(c[12]).toBe(0); expect(c[13]).toBe(0); expect(c[14]).toBe(1); expect(c[15]).toBe(1);
+    // idx 2 (blue) first
+    expect(c[0]).toBe(0); expect(c[1]).toBe(0); expect(c[2]).toBe(1); expect(c[3]).toBe(1);
+    // idx 0 (red) second
+    expect(c[4]).toBe(1); expect(c[5]).toBe(0); expect(c[6]).toBe(0); expect(c[7]).toBe(1);
+    // idx 3 (yellow) third
+    expect(c[8]).toBe(1); expect(c[9]).toBe(1); expect(c[10]).toBe(0); expect(c[11]).toBe(1);
+    // idx 1 (green) fourth
+    expect(c[12]).toBe(0); expect(c[13]).toBe(1); expect(c[14]).toBe(0); expect(c[15]).toBe(1);
   });
 
   it('Depth sort is stable: equal depths preserve original order', () => {
@@ -155,21 +155,21 @@ describe('Level 7 Unit Tests: Depth Sort and Cull', () => {
     expect(result.screenRadius.length).toBe(3);
     expect(result.depth.length).toBe(3);
 
-    // Sorted by depth among visible: idx 0 (d=0.3), idx 4 (d=0.4), idx 2 (d=0.5)
-    expect(result.depth[0]).toBeCloseTo(0.3); // idx 0
+    // Sorted by depth among visible (far-to-near): idx 2 (d=0.5), idx 4 (d=0.4), idx 0 (d=0.3)
+    expect(result.depth[0]).toBeCloseTo(0.5); // idx 2
     expect(result.depth[1]).toBeCloseTo(0.4); // idx 4
-    expect(result.depth[2]).toBeCloseTo(0.5); // idx 2
+    expect(result.depth[2]).toBeCloseTo(0.3); // idx 0
 
     // Verify screen positions match sorted visible order
-    expect(result.screenPosition[0]).toBeCloseTo(0.1); // idx 0
+    expect(result.screenPosition[0]).toBeCloseTo(0.3); // idx 2
     expect(result.screenPosition[2]).toBeCloseTo(0.5); // idx 4
-    expect(result.screenPosition[4]).toBeCloseTo(0.3); // idx 2
+    expect(result.screenPosition[4]).toBeCloseTo(0.1); // idx 0
 
-    // Verify colors follow (idx 0, 4, 2 in that order)
+    // Verify colors follow (idx 2, 4, 0 in that order)
     const c = result.color as Float32Array;
-    expect(c[0]).toBe(0); // idx 0's marker
+    expect(c[0]).toBe(2); // idx 2's marker
     expect(c[4]).toBe(4); // idx 4's marker
-    expect(c[8]).toBe(2); // idx 2's marker
+    expect(c[8]).toBe(0); // idx 0's marker
   });
 });
 
@@ -178,16 +178,11 @@ describe('Level 7 Unit Tests: Depth Sort and Cull', () => {
 // =============================================================================
 
 describe('Level 7 Integration Tests: Ortho Depth Ordering', () => {
-  it('Patch with Group A (z=0.0) and Group B (z=0.4): Group B in front (closer to camera)', () => {
+  it('Patch with Group A (z=0.0) and Group B (z=0.4): Group A in back (farther from camera)', () => {
     // Ortho camera has near=-100, far=100. Depth = (z-near)/range = (z+100)/200.
     // z=0.0 → depth = 100/200 = 0.5
     // z=0.4 → depth = 100.4/200 = 0.502
-    // So z=0.0 has LOWER depth (closer to near plane = in front)
-    // Wait: the ortho depth formula is (z - near) / (far - near)
-    // near=-100, far=100, range=200
-    // z=0.0: depth = (0-(-100))/200 = 0.5
-    // z=0.4: depth = (0.4-(-100))/200 = 0.502
-    // Front-to-back: lower depth first. So z=0 (d=0.5) comes before z=0.4 (d=0.502)
+    // Far-to-near: higher depth first. So z=0.4 (d=0.502) comes before z=0 (d=0.5)
 
     const N = 8;
     const positions = createPositionField(N);
@@ -209,19 +204,19 @@ describe('Level 7 Integration Tests: Ortho Depth Ordering', () => {
     // All 8 visible
     expect(result.count).toBe(8);
 
-    // Verify depth is sorted (front-to-back)
+    // Verify depth is sorted (far-to-near, descending)
     for (let i = 1; i < result.count; i++) {
-      expect(result.depth[i]).toBeGreaterThanOrEqual(result.depth[i - 1]);
+      expect(result.depth[i]).toBeLessThanOrEqual(result.depth[i - 1]);
     }
 
-    // Group A (z=0) has lower depth than Group B (z=0.4)
-    // So Group A instances come first in the sorted output
-    // Verify: first 4 depths are all 0.5, last 4 are all 0.502
-    expect(result.depth[0]).toBeCloseTo(0.5, 2);
-    expect(result.depth[4]).toBeCloseTo(0.502, 2);
+    // Group B (z=0.4) has higher depth than Group A (z=0.0)
+    // So Group B instances come first in the sorted output
+    // Verify: first 4 depths are all 0.502, last 4 are all 0.5
+    expect(result.depth[0]).toBeCloseTo(0.502, 2);
+    expect(result.depth[4]).toBeCloseTo(0.5, 2);
   });
 
-  it('Verify by checking depth values: all Group B depths > all Group A depths', () => {
+  it('Verify by checking depth values: all Group A depths < all Group B depths', () => {
     const N = 8;
     const positions = createPositionField(N);
     for (let i = 0; i < 4; i++) {
@@ -244,7 +239,7 @@ describe('Level 7 Integration Tests: Ortho Depth Ordering', () => {
     expect(minB).toBeGreaterThan(maxA);
   });
 
-  it('Backend draw order respects depth: after compaction, depth is monotonically non-decreasing', () => {
+  it('Backend draw order respects depth: after compaction, depth is monotonically non-increasing', () => {
     const N = 16;
     const positions = createPositionField(N);
     // Random z values between -5 and 5
@@ -260,9 +255,9 @@ describe('Level 7 Integration Tests: Ortho Depth Ordering', () => {
     // All should be visible (z between -5 and 5 is within near=-100..far=100)
     expect(result.count).toBe(N);
 
-    // Depth must be monotonically non-decreasing (front-to-back)
+    // Depth must be monotonically non-increasing (far-to-near)
     for (let i = 1; i < result.count; i++) {
-      expect(result.depth[i]).toBeGreaterThanOrEqual(result.depth[i - 1]);
+      expect(result.depth[i]).toBeLessThanOrEqual(result.depth[i - 1]);
     }
   });
 });
@@ -294,18 +289,18 @@ describe('Level 7 Integration Tests: Perspective Depth Ordering', () => {
 
     // Under perspective: z=0.4 is CLOSER to camera (camera at z≈1.64)
     // So Group B (z=0.4) has LOWER depth than Group A (z=0.0)
-    // After sort: Group B first (lower depth), Group A second
+    // After sort: Group A first (higher depth), Group B second
 
-    // Depth must be monotonically non-decreasing
+    // Depth must be monotonically non-increasing (far-to-near)
     for (let i = 1; i < result.count; i++) {
-      expect(result.depth[i]).toBeGreaterThanOrEqual(result.depth[i - 1]);
+      expect(result.depth[i]).toBeLessThanOrEqual(result.depth[i - 1]);
     }
 
-    // Group B (z=0.4, closer to camera) should have lower depth than Group A (z=0.0)
-    // Verify: first 4 entries have lower depth than last 4
-    const firstFourMax = Math.max(result.depth[0], result.depth[1], result.depth[2], result.depth[3]);
-    const lastFourMin = Math.min(result.depth[4], result.depth[5], result.depth[6], result.depth[7]);
-    expect(firstFourMax).toBeLessThan(lastFourMin);
+    // Group A (z=0.0, farther from camera) should have higher depth than Group B (z=0.4)
+    // Verify: first 4 entries have higher depth than last 4
+    const firstFourMin = Math.min(result.depth[0], result.depth[1], result.depth[2], result.depth[3]);
+    const lastFourMax = Math.max(result.depth[4], result.depth[5], result.depth[6], result.depth[7]);
+    expect(firstFourMin).toBeGreaterThan(lastFourMax);
   });
 
   it('Screen positions now differ between groups (parallax), but ordering is same', () => {
@@ -328,8 +323,8 @@ describe('Level 7 Integration Tests: Perspective Depth Ordering', () => {
     // even with same world XY. Verify parallax exists.
     const sx0 = result.screenPosition[0];
     const sx1 = result.screenPosition[2];
-    // Closer instances (z=0.5) should be at lower depth and sorted first
-    expect(result.depth[0]).toBeLessThan(result.depth[2]);
+    // Farther instances (z=0.0) should be at higher depth and sorted first
+    expect(result.depth[0]).toBeGreaterThan(result.depth[2]);
   });
 });
 
@@ -456,7 +451,7 @@ describe('Level 7 End-to-End: Real Pipeline Depth Sort + Cull', () => {
 
     // Depth should be sorted (for z=0, all depths are identical under ortho → stable order)
     for (let i = 1; i < op.instances.count; i++) {
-      expect(op.instances.depth![i]).toBeGreaterThanOrEqual(op.instances.depth![i - 1]);
+      expect(op.instances.depth![i]).toBeLessThanOrEqual(op.instances.depth![i - 1]);
     }
   });
 });

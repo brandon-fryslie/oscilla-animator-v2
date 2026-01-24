@@ -98,7 +98,7 @@ export interface ProjectionOutput {
 /**
  * Depth-sort and compact projection output.
  *
- * Removes invisible instances and sorts visible ones by depth (front-to-back, stable).
+ * Removes invisible instances and sorts visible ones by depth (far-to-near / painter's algorithm, stable).
  * Returns compacted arrays with only visible instances.
  *
  * @param projection - Raw projection output with all instances
@@ -133,11 +133,11 @@ export function depthSortAndCompact(
     }
   }
 
-  // Stable sort by depth (front-to-back: smaller depth first)
+  // Stable sort by depth (far-to-near / painter's algorithm: larger depth first)
   indices.sort((a, b) => {
     const da = depth[a];
     const db = depth[b];
-    if (da !== db) return da - db;
+    if (da !== db) return db - da;
     return a - b; // Stable: preserve original order for equal depths
   });
 
@@ -1142,7 +1142,7 @@ export function assembleDrawPathInstancesOp(
 
     const projection = projectInstances(worldPos3, scale, count, context.resolvedCamera);
 
-    // Depth-sort and compact: remove invisible instances, sort by depth (front-to-back)
+    // Depth-sort and compact: remove invisible instances, sort by depth (far-to-near / painter's algorithm)
     const compacted = depthSortAndCompact(projection, count, colorBuffer, rotation, scale2);
 
     // Build instance transforms with projected data

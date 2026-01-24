@@ -16,3 +16,5 @@ item_count: 0
 
 ### R-4: BlockRole with extra top-level variants (timeRoot, bus, domain, renderer)
 **Resolution**: User decided spec is MINIMUM. Spec updated — BlockRole definition now states implementations may extend with additional kinds.
+
+RESOLVED
