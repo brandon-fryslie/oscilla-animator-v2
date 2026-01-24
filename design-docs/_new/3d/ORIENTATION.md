@@ -168,7 +168,7 @@ At the top of each level section in the DoD, add a status line summarizing the l
 **Status: 5/7 items at C3+, 2 items at C2. Lowest: camPos derivation (C2:alice:0122, needs cleanup for Level 5).**
 ```
 
-A level is considered **complete** when all items have effective confidence C3+. It's considered **solid** when all items have effective confidence C4+ with at least two scorers agreeing.
+A level is considered **complete** (eligible for advancement) when all items have effective confidence C4+ with at least two scorers agreeing. C3 means tests pass but the level has NOT been reviewed or validated by the next level — it is NOT sufficient for advancement.
 
 ### When Scores Go Down
 
@@ -182,11 +182,9 @@ Scores naturally decrease when:
 
 ### Advancing to the Next Level
 
-You can START working on Level N+1 when Level N has **all items at C3 or higher.**
+You can advance to Level N+1 when Level N has **all items at C4 or higher** with at least two scorers agreeing, AND the level's INVARIANT is satisfied.
 
-You can CERTIFY Level N+1 (i.e., mark its items C4+) only when Level N has **all items at C4 or higher.**
-
-This means: you can build forward on "tests pass" confidence, but you can't declare things solid until the foundation is also solid.
+C3 means "tests pass, implementation reasonable" — but it has NOT been validated by the next level's tests or reviewed by another worker. C3 is **NOT sufficient for advancement.** The level must be reviewed and confirmed at C4+ before the floor can move.
 
 ## What to Read First
 

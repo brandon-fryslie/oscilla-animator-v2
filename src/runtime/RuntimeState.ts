@@ -147,6 +147,9 @@ export function writeShape2D(bank: Uint32Array, offset: number, record: Shape2DR
  *
  * Uses stamp-based invalidation (no array clearing between frames).
  * Cache is valid when stamp === frameId.
+ *
+ * C-15 FIX: Field buffers use nested Map structure Map<fieldId, Map<instanceId, buffer>>
+ * to eliminate string allocation in hot path.
  */
 export interface FrameCache {
   /** Current frame ID (monotonic, starts at 0) */
@@ -158,11 +161,11 @@ export interface FrameCache {
   /** Frame stamps for signal cache validation */
   sigStamps: Uint32Array;
 
-  /** Cached field buffers (indexed by FieldExprId:InstanceId key) */
-  fieldBuffers: Map<string, ArrayBufferView>;
+  /** Cached field buffers (nested Map: fieldId -> instanceId -> buffer) */
+  fieldBuffers: Map<number, Map<number, ArrayBufferView>>;
 
-  /** Frame stamps for field cache validation */
-  fieldStamps: Map<string, number>;
+  /** Frame stamps for field cache validation (nested Map: fieldId -> instanceId -> stamp) */
+  fieldStamps: Map<number, Map<number, number>>;
 }
 
 /**

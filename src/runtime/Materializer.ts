@@ -189,10 +189,16 @@ export function materialize(
   state: RuntimeState,
   pool: BufferPool
 ): ArrayBufferView {
-  // Check cache
-  const cacheKey = `${fieldId}:${instanceId}`;
-  const cached = state.cache.fieldBuffers.get(cacheKey);
-  const cachedStamp = state.cache.fieldStamps.get(cacheKey);
+  // Check cache - use nested Map structure (C-15 fix)
+  const fieldIdNum = fieldId as number;
+  const instanceIdNum = instanceId as any as number;
+
+  const innerCache = state.cache.fieldBuffers.get(fieldIdNum);
+  const cached = innerCache?.get(instanceIdNum);
+
+  const innerStamps = state.cache.fieldStamps.get(fieldIdNum);
+  const cachedStamp = innerStamps?.get(instanceIdNum);
+
   if (cached && cachedStamp === state.cache.frameId) {
     return cached;
   }
@@ -224,18 +230,35 @@ export function materialize(
 
   // Cache result (with size limit to prevent unbounded growth)
   const MAX_CACHED_FIELDS = 200;
-  if (state.cache.fieldBuffers.size >= MAX_CACHED_FIELDS) {
+  const totalCached = Array.from(state.cache.fieldBuffers.values())
+    .reduce((sum, inner) => sum + inner.size, 0);
+
+  if (totalCached >= MAX_CACHED_FIELDS) {
     // Evict oldest entries (those with lowest stamps)
-    const entries = [...state.cache.fieldStamps.entries()];
-    entries.sort((a, b) => a[1] - b[1]);
+    const entries: Array<[number, number, number]> = [];
+    for (const [fId, innerStamps] of state.cache.fieldStamps.entries()) {
+      for (const [iId, stamp] of innerStamps.entries()) {
+        entries.push([fId, iId, stamp]);
+      }
+    }
+    entries.sort((a, b) => a[2] - b[2]);
     const toEvict = entries.slice(0, Math.floor(MAX_CACHED_FIELDS / 4));
-    for (const [key] of toEvict) {
-      state.cache.fieldBuffers.delete(key);
-      state.cache.fieldStamps.delete(key);
+    for (const [fId, iId] of toEvict) {
+      state.cache.fieldBuffers.get(fId)?.delete(iId);
+      state.cache.fieldStamps.get(fId)?.delete(iId);
     }
   }
-  state.cache.fieldBuffers.set(cacheKey, buffer);
-  state.cache.fieldStamps.set(cacheKey, state.cache.frameId);
+
+  // Ensure inner maps exist
+  if (!state.cache.fieldBuffers.has(fieldIdNum)) {
+    state.cache.fieldBuffers.set(fieldIdNum, new Map());
+  }
+  if (!state.cache.fieldStamps.has(fieldIdNum)) {
+    state.cache.fieldStamps.set(fieldIdNum, new Map());
+  }
+
+  state.cache.fieldBuffers.get(fieldIdNum)!.set(instanceIdNum, buffer);
+  state.cache.fieldStamps.get(fieldIdNum)!.set(instanceIdNum, state.cache.frameId);
 
   return buffer;
 }
@@ -403,9 +426,10 @@ function fillBufferIntrinsic(
 
     case 'normalizedIndex': {
       // Normalized index (0.0 to 1.0)
+      // C-7 FIX: Single element should be centered at 0.5, not 0
       const arr = buffer as Float32Array;
       for (let i = 0; i < N; i++) {
-        arr[i] = N > 1 ? i / (N - 1) : 0;
+        arr[i] = N > 1 ? i / (N - 1) : 0.5;
       }
       break;
     }

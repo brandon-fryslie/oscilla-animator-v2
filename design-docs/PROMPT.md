@@ -9,6 +9,16 @@ You are implementing the 3D rendering system for Oscilla v2.
 
 ## Process
 
+**AUTONOMOUS EXECUTION — THIS IS NON-NEGOTIABLE:**
+- Do NOT stop to ask for permission at any point.
+- Do NOT present plans for review — they are auto-approved.
+- Do NOT ask "would you like me to proceed?" or "shall I continue?" — the answer is always YES.
+- Do NOT summarize what you found and wait — just do the work.
+- Do NOT ask the user to confirm level advancement — advance immediately when criteria are met.
+- The workflow is: read → plan → implement → score → advance → repeat.
+- Keep going autonomously until you run out of work in the current level or hit a genuine blocker (broken prerequisite, ambiguous spec requiring human clarification, architectural conflict with no clear resolution).
+- "Genuine blocker" does NOT include: needing to make implementation choices, choosing between valid approaches, or deciding what to work on next. Make those decisions yourself and keep moving.
+
 You MUST use the `/do:plan` and `/do:it` skills for all work. No exceptions.
 
 ### Step 1: Find Your Level
@@ -30,7 +40,8 @@ The plan skill will:
 - Evaluate current state
 - Surface ambiguities
 - Generate sprint plans with acceptance criteria
-- Get user approval
+
+Plans are auto-approved. Do not wait for user confirmation — proceed directly to Step 3.
 
 **The DoD checkbox IS the acceptance criterion.** The plan's job is to determine HOW to satisfy it in a way that exercises the real system.
 
@@ -83,12 +94,15 @@ This rubric describes what each confidence level means. You don't apply it yours
 
 ## Advancing a Level
 
-When your active level's INVARIANT is verified (all items C3+, invariant demonstrably true):
+When your active level has all items at C4+ (with 2+ scorers agreeing) AND the INVARIANT is verified, advance:
 
 1. Move the current floor file to `dod/_completed/`
 2. The active level becomes the new floor
 3. Move the next level from `dod/_upcoming/` into `dod/`
 4. Commit: `3d L{N}: level complete, advance to L{N+1}`
+5. Continue working on the new active level
+
+**C3 is NOT sufficient for advancement.** C3 means tests pass but the level has not been reviewed or validated by the next level. The level must reach C4+ before the floor moves.
 
 The `dod/` directory must always contain exactly two files: floor + active.
 
@@ -96,15 +110,20 @@ The `dod/` directory must always contain exactly two files: floor + active.
 
 - Do NOT work on more than one level per session.
 - Do NOT start a level unless the PREREQUISITES in your level file are all satisfied.
+- Do NOT stop to ask the user what to do next. Pick the next unscored checkbox and do it.
 - If a lower level's test breaks, STOP. Add `!` regression, fix, then resume.
 - Kernels are pure functions. No state, no side effects, no allocations, no runtime imports.
 - All position data: `Float32Array`, stride 3. All screen output: `Float32Array`, stride 2.
 - Read the Implementation Hints in the DoD. They exist because decisions that ignore them create walls at later levels.
 
-## After Completing Your Cycle
+## After Completing a Checkbox
 
-Report:
-- Which checkbox you worked on and what score you gave
-- Current level status: how many items at C3+, how many remain
+After scoring a checkbox, do NOT stop. Immediately pick the next unscored checkbox in the active level and repeat the plan→implement→score cycle. Only stop when:
+- All checkboxes in the active level are at C4+ with 2+ scorers (then advance the level and keep going)
+- You hit a genuine blocker requiring human input
+
+When you finally stop (end of session or blocker), report:
+- Which checkboxes you completed and their scores
+- Current level status: how many items at C4+, how many remain below C4
 - Any concerns about architectural decisions that might not hold at higher levels
-- Commit with message: `3d L{level}: {short checkbox description}`
+- All commits should use message format: `3d L{level}: {short checkbox description}`

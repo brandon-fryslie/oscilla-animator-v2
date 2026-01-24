@@ -14,12 +14,12 @@ Levels are organized by state:
 
 | Location | Level | File | Status |
 |----------|-------|------|--------|
-| `_completed/` | 1 | level-01-vec3.md | 9/9 at C4, **INVARIANT UNVERIFIED** |
-| `_completed/` | 2 | level-02-ortho-kernel.md | 15/16 at C4, 1 at C3 |
-| `_completed/` | 3 | level-03-perspective-kernel.md | SOLID (13/13 at C4+) |
-| `_completed/` | 4 | level-04-size-projection.md | SOLID (8/8 at C4+) |
-| `dod/` (floor) | 5 | level-05-pipeline-wiring.md | 8/8 at C3+, INVARIANT SATISFIED |
-| `dod/` (active) | 6 | level-06-mode-toggle.md | 16/16 at C3, INVARIANT SATISFIED |
+| `dod/` (active) | 1 | level-01-vec3.md | Not started |
+| `_upcoming/` | 2 | level-02-ortho-kernel.md | Not started |
+| `_upcoming/` | 3 | level-03-perspective-kernel.md | Not started |
+| `_upcoming/` | 4 | level-04-size-projection.md | Not started |
+| `_upcoming/` | 5 | level-05-pipeline-wiring.md | Not started |
+| `_upcoming/` | 6 | level-06-mode-toggle.md | Not started |
 | `_upcoming/` | 7 | level-07-depth-culling.md | Not started |
 | `_upcoming/` | 8 | level-08-backend-contract.md | Not started |
 | `_upcoming/` | 9 | level-09-continuity-decoupling.md | Not started |
@@ -68,8 +68,7 @@ Each checkbox has a **review log** indented below it. This is where ALL scores a
 
 ### Advancing a Level
 
-A level is **workable** (can start next level) when all items have effective confidence C3+ AND the level's INVARIANT is satisfied.
-A level is **solid** (can certify next level's items to C4+) when all items are C4+ with 2+ scorers agreeing.
+A level is **ready for advancement** when all items have effective confidence C4+ with 2+ scorers agreeing AND the level's INVARIANT is satisfied. C3 is NOT sufficient for advancement — it means tests pass but the work has not been reviewed or validated by the next level.
 
 ### Going Back Is Normal
 

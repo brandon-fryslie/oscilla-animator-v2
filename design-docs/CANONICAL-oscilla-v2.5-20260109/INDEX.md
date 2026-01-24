@@ -63,7 +63,7 @@ update_history:
     topics_created: [18-camera-projection]
     topics_updated: []
     resolutions_made: 0
-    notes: "New Topic 18 (Camera & Projection); Projection kernels (ortho/perspective); Camera block; RenderAssembler pipeline; Depth ordering; StepRender position contract; Added 6 terms to GLOSSARY"
+    notes: "New Topic 18 (Camera & Projection); Projection kernels (ortho/perspective);   Camera block; RenderAssembler pipeline; Depth ordering; StepRender position contract; Added 6 terms to GLOSSARY"
   - date: 2026-01-22T23:30:00Z
     action: "2.5D Profile & Cross-Topic Updates"
     sources_integrated: [design-docs/_new/shapes-and-layout/17-layout-2.6d.md, design-docs/_new/shapes-and-layout/12-shapes-types.md, design-docs/_new/shapes-and-layout/13-shapes-3d.md, design-docs/_new/3d/4-CombineMode-Layer-Answer.md]
