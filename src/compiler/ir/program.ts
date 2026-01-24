@@ -31,6 +31,31 @@ export type BlockId = number & { readonly __brand: 'BlockId' };
 export type PortId = number & { readonly __brand: 'PortId' };
 
 // =============================================================================
+// Render Globals (Camera System)
+// =============================================================================
+
+/**
+ * Camera Declaration IR
+ *
+ * Represents a Camera block's lowered output: 9 slots containing camera parameters.
+ * The compiler enforces uniqueness (max 1 camera block per program).
+ *
+ * Spec Reference: design-docs/_new/3d/camera-v2/01-basics.md §3
+ */
+export interface CameraDeclIR {
+  readonly kind: 'camera';
+  readonly projectionSlot: ValueSlot;  // cameraProjection payload (0=ortho, 1=persp)
+  readonly centerXSlot: ValueSlot;     // float unit=norm01
+  readonly centerYSlot: ValueSlot;     // float unit=norm01
+  readonly distanceSlot: ValueSlot;    // float unit=scalar
+  readonly tiltDegSlot: ValueSlot;     // float unit=deg
+  readonly yawDegSlot: ValueSlot;      // float unit=deg
+  readonly fovYDegSlot: ValueSlot;     // float unit=deg
+  readonly nearSlot: ValueSlot;        // float unit=scalar
+  readonly farSlot: ValueSlot;         // float unit=scalar
+}
+
+// =============================================================================
 // CompiledProgramIR - The Authoritative Contract
 // =============================================================================
 
@@ -81,6 +106,21 @@ export interface CompiledProgramIR {
    * can materialize tracked fields on demand (for debug inspection).
    */
   readonly fieldSlotRegistry: ReadonlyMap<ValueSlot, FieldSlotEntry>;
+
+  /**
+   * Render Globals (Camera System)
+   *
+   * Data-driven declarations for render-global state (currently only camera).
+   * Populated during compilation from render-global blocks (e.g., Camera block).
+   *
+   * Constraints:
+   * - renderGlobals.length is 0 or 1 (enforced by compiler pass)
+   * - If renderGlobals.length === 1, renderGlobals[0].kind === 'camera'
+   * - When empty, runtime uses default camera per spec §6.2
+   *
+   * Spec Reference: design-docs/_new/3d/camera-v2/01-basics.md §3
+   */
+  readonly renderGlobals: readonly CameraDeclIR[];
 }
 
 /**
