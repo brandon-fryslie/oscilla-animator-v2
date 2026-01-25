@@ -77,7 +77,7 @@ From `IRBuilder.ts` (lines 58-94):
 - `fieldConst()` - constant field ✅
 - `fieldSource()` - **DEPRECATED**, old domain model
 - **`fieldIntrinsic(instanceId, intrinsic, type)` ✅** - NEW, used by blocks
-- `fieldBroadcast()` - broadcast signal to field ✅
+- `Broadcast()` - broadcast signal to field ✅
 - `fieldMap()` - map function over field ✅
 - `fieldZip()` - zip multiple fields ✅
 - `fieldZipSig()` - zip field with signals ✅

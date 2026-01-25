@@ -206,8 +206,8 @@ registerBlock({
     // Full tangent calculation requires more complex field operations
     // Users can compute tangents manually if needed
     const zeroSig = ctx.b.sigConst(0, signalType('float'));
-    const zeroXField = ctx.b.fieldBroadcast(zeroSig, signalTypeField('float', 'default'));
-    const zeroYField = ctx.b.fieldBroadcast(zeroSig, signalTypeField('float', 'default'));
+    const zeroXField = ctx.b.Broadcast(zeroSig, signalTypeField('float', 'default'));
+    const zeroYField = ctx.b.Broadcast(zeroSig, signalTypeField('float', 'default'));
     const makeVec2Fn = ctx.b.kernel('makeVec2');
     const tangentsField = ctx.b.fieldZip(
       [zeroXField, zeroYField],

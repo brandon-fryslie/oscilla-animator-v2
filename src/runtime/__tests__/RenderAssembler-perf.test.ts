@@ -10,7 +10,6 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   groupInstancesByTopology,
   computeTopologyGroups,
-  sliceInstanceBuffers,
   isContiguous,
   topologyGroupCacheHits,
   topologyGroupCacheMisses,
@@ -145,85 +144,7 @@ describe('Buffer View Optimization', () => {
     });
   });
 
-  describe('sliceInstanceBuffers', () => {
-    // Create test buffers: 10 instances (vec3 positions, stride-3)
-    const fullPosition = new Float32Array(10 * 3);
-    const fullColor = new Uint8ClampedArray(10 * 4);
-
-    beforeEach(() => {
-      // Fill with identifiable data (vec3: x, y, z per instance)
-      for (let i = 0; i < 10; i++) {
-        fullPosition[i * 3] = i * 10;           // x
-        fullPosition[i * 3 + 1] = i * 10 + 1;   // y
-        fullPosition[i * 3 + 2] = 0;             // z
-        fullColor[i * 4] = i * 25;     // R
-        fullColor[i * 4 + 1] = i * 25 + 1; // G
-        fullColor[i * 4 + 2] = i * 25 + 2; // B
-        fullColor[i * 4 + 3] = 255;         // A
-      }
-    });
-
-    it('contiguous indices → returns subarray (same underlying ArrayBuffer)', () => {
-      const result = sliceInstanceBuffers(fullPosition, fullColor, [3, 4, 5]);
-
-      // Same underlying buffer (subarray, not copy)
-      expect(result.position.buffer).toBe(fullPosition.buffer);
-      expect(result.color.buffer).toBe(fullColor.buffer);
-
-      // Correct data (stride-3: x, y, z per instance)
-      expect(result.position[0]).toBe(30);  // index 3, x
-      expect(result.position[1]).toBe(31);  // index 3, y
-      expect(result.position[2]).toBe(0);   // index 3, z
-      expect(result.position[6]).toBe(50);  // index 5, x
-    });
-
-    it('non-contiguous indices → returns copy (different ArrayBuffer)', () => {
-      const result = sliceInstanceBuffers(fullPosition, fullColor, [0, 3, 7]);
-
-      // Different underlying buffer (copy)
-      expect(result.position.buffer).not.toBe(fullPosition.buffer);
-      expect(result.color.buffer).not.toBe(fullColor.buffer);
-
-      // Correct data (stride-3: x, y, z per instance)
-      expect(result.position[0]).toBe(0);   // index 0, x
-      expect(result.position[3]).toBe(30);  // index 3, x
-      expect(result.position[6]).toBe(70);  // index 7, x
-    });
-
-    it('single-element → subarray (trivially contiguous)', () => {
-      const result = sliceInstanceBuffers(fullPosition, fullColor, [5]);
-
-      // Same underlying buffer
-      expect(result.position.buffer).toBe(fullPosition.buffer);
-      expect(result.color.buffer).toBe(fullColor.buffer);
-
-      // Correct data (stride-3)
-      expect(result.position[0]).toBe(50);
-      expect(result.position[1]).toBe(51);
-      expect(result.position[2]).toBe(0);   // z
-    });
-
-    it('full range [0..N-1] → subarray of entire buffer', () => {
-      const result = sliceInstanceBuffers(fullPosition, fullColor, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
-
-      // Same underlying buffer
-      expect(result.position.buffer).toBe(fullPosition.buffer);
-      expect(result.color.buffer).toBe(fullColor.buffer);
-
-      // Length matches (vec3 stride-3 for position)
-      expect(result.position.length).toBe(30); // 10 * 3
-      expect(result.color.length).toBe(40);    // 10 * 4
-    });
-
-    it('contiguous subarray has correct color data', () => {
-      const result = sliceInstanceBuffers(fullPosition, fullColor, [2, 3, 4]);
-
-      expect(result.color[0]).toBe(50);  // index 2, R
-      expect(result.color[1]).toBe(51);  // index 2, G
-      expect(result.color[2]).toBe(52);  // index 2, B
-      expect(result.color[3]).toBe(255); // index 2, A
-    });
-  });
+  // NOTE: sliceInstanceBuffers tests removed - function is internal and not exported
 });
 
 describe('Assembler Timing Instrumentation', () => {

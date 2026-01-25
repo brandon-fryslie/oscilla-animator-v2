@@ -7,7 +7,7 @@ Status: COMPLETED
 
 ### P0: Adapter Matching
 
-- [x] `findAdapter()` returns FieldBroadcast for Const→Field connections
+- [x] `findAdapter()` returns Broadcast for Const→Field connections
 - [x] Unit variables treated as wildcards in adapter rule matching
 - [x] No type mismatch errors for Signal→Field when adapter exists
 
@@ -24,7 +24,7 @@ Status: COMPLETED
 
 ### P3: Verification
 
-- [x] Debug test confirms FieldBroadcast insertion
+- [x] Debug test confirms Broadcast insertion
 - [x] Steel thread tests compile (fail later on unrelated buffer issue)
 
 ## Verification Commands

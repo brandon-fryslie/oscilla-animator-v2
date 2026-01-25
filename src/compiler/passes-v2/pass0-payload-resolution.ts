@@ -9,7 +9,7 @@
  *
  * Type inference works in two directions:
  * 1. Forward (output -> target input): For blocks like Const, infer type from what it connects to
- * 2. Backward (source output -> input): For blocks like FieldBroadcast, infer type from source
+ * 2. Backward (source output -> input): For blocks like Broadcast, infer type from source
  *
  * The resolved payload type is stored in the block's params as `payloadType`.
  *
@@ -51,7 +51,12 @@ export function pass0PayloadResolution(normalized: NormalizedPatch): NormalizedP
     let inferredPayloadType: string | undefined;
 
     // Strategy 1: Forward resolution - infer output type from what it connects to
+    // Only consider GENERIC outputs (those listed in allowedPayloads with multiple types)
     for (const [outputId] of Object.entries(blockDef.outputs)) {
+      // Skip non-generic outputs - they have fixed types and shouldn't drive inference
+      const allowedPayloads = blockDef.payload?.allowedPayloads[outputId];
+      if (!allowedPayloads || allowedPayloads.length <= 1) continue;
+
       const outgoingEdge = normalized.edges.find(
         e => e.fromBlock === blockIndex && e.fromPort === outputId
       );
@@ -67,16 +72,22 @@ export function pass0PayloadResolution(normalized: NormalizedPatch): NormalizedP
       const targetInput = targetDef.inputs[outgoingEdge.toPort];
       if (!targetInput || !targetInput.type) continue;
 
+      // Use the target's definition type payload
       inferredPayloadType = targetInput.type.payload;
       break;
     }
 
     // Strategy 2: Backward resolution - infer input type from source
+    // Only consider GENERIC inputs (those listed in allowedPayloads with multiple types)
     if (!inferredPayloadType) {
       for (const [inputId, input] of Object.entries(blockDef.inputs)) {
         // Skip config-only inputs (exposedAsPort: false)
         // These are NOT ports and cannot have incoming edges for type inference
         if (input.exposedAsPort === false) continue;
+
+        // Skip non-generic inputs - they have fixed types and shouldn't drive inference
+        const allowedPayloads = blockDef.payload?.allowedPayloads[inputId];
+        if (!allowedPayloads || allowedPayloads.length <= 1) continue;
 
         const incomingEdge = normalized.edges.find(
           e => e.toBlock === blockIndex && e.toPort === inputId
@@ -93,17 +104,20 @@ export function pass0PayloadResolution(normalized: NormalizedPatch): NormalizedP
         const sourceOutput = sourceDef.outputs[incomingEdge.fromPort];
         if (!sourceOutput) continue;
 
-        // If source is also payload-generic, check if it was already resolved
-        if (isPayloadGeneric(sourceBlock.type)) {
+        // If source output is also generic, check if it was already resolved
+        const sourceAllowed = sourceDef.payload?.allowedPayloads[incomingEdge.fromPort];
+        if (sourceAllowed && sourceAllowed.length > 1) {
+          // Source is generic - check if already resolved
           const resolvedPayload = sourceBlock.params.payloadType ||
             updatedBlocks[incomingEdge.fromBlock]?.params.payloadType;
           if (resolvedPayload) {
             inferredPayloadType = resolvedPayload as string;
             break;
           }
-          continue;
+          continue; // Can't infer from unresolved generic
         }
 
+        // Source is non-generic - use its concrete type
         inferredPayloadType = sourceOutput.type.payload;
         break;
       }

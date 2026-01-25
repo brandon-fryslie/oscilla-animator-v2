@@ -246,7 +246,7 @@ export class IRBuilderImpl implements IRBuilder {
     return id;
   }
 
-  fieldBroadcast(signal: SigExprId, type: SignalType): FieldExprId {
+  Broadcast(signal: SigExprId, type: SignalType): FieldExprId {
     const id = fieldExprId(this.fieldExprs.length);
     this.fieldExprs.push({ kind: 'broadcast', signal, type });
     return id;

@@ -133,7 +133,8 @@ describe('RenderAssembler', () => {
 
     it('returns DrawPrimitiveInstancesOp for primitive topologies', () => {
       const state = createMockState();
-      const positionBuffer = new Float32Array(20);
+      // Position buffer must be stride-3 (vec3 world-space positions)
+      const positionBuffer = new Float32Array(30); // 10 instances * 3 components
       const colorBuffer = new Uint8ClampedArray(40);
       state.values.objects.set(1 as ValueSlot, positionBuffer);
       state.values.objects.set(2 as ValueSlot, colorBuffer);
@@ -168,7 +169,8 @@ describe('RenderAssembler', () => {
 
     it('assembles DrawPathInstancesOp for path topologies', () => {
       const state = createMockState();
-      const positionBuffer = new Float32Array([0.1, 0.2, 0.3, 0.4]); // 2 instances
+      // Position buffer must be stride-3 (vec3 world-space positions)
+      const positionBuffer = new Float32Array([0.1, 0.2, 0.0, 0.3, 0.4, 0.0]); // 2 instances * 3 components
       const colorBuffer = new Uint8ClampedArray([255, 0, 0, 255, 0, 255, 0, 255]); // 2 instances
       const controlPointsBuffer = new Float32Array([
         0, 1,    // point 0
@@ -291,7 +293,8 @@ describe('RenderAssembler', () => {
 
     it('throws when color buffer is not Uint8ClampedArray', () => {
       const state = createMockState();
-      const positionBuffer = new Float32Array(20);
+      // Position buffer must be stride-3 (vec3 world-space positions)
+      const positionBuffer = new Float32Array(30); // 10 instances * 3 components
       const colorBuffer = new Float32Array(40); // Wrong type!
       const controlPointsBuffer = new Float32Array(10);
 
@@ -334,7 +337,8 @@ describe('RenderAssembler', () => {
 
     it('throws when control points missing for path topology', () => {
       const state = createMockState();
-      const positionBuffer = new Float32Array(20);
+      // Position buffer must be stride-3 (vec3 world-space positions)
+      const positionBuffer = new Float32Array(30); // 10 instances * 3 components
       const colorBuffer = new Uint8ClampedArray(40);
       // No control points buffer!
 
@@ -379,11 +383,11 @@ describe('RenderAssembler', () => {
     it('assembles multiple DrawPathInstancesOp operations', () => {
       const state = createMockState();
 
-      // Set up buffers for two path instances
-      state.values.objects.set(1 as ValueSlot, new Float32Array([0.1, 0.2]));
+      // Set up buffers for two path instances (stride-3 positions for vec3 world-space)
+      state.values.objects.set(1 as ValueSlot, new Float32Array([0.1, 0.2, 0.0])); // 1 instance * 3 components
       state.values.objects.set(2 as ValueSlot, new Uint8ClampedArray([255, 0, 0, 255]));
       state.values.objects.set(3 as ValueSlot, new Float32Array([0, 1, 0.95, 0.31, 0.59, -0.81, -0.59, -0.81, -0.95, 0.31]));
-      state.values.objects.set(4 as ValueSlot, new Float32Array([0.5, 0.6]));
+      state.values.objects.set(4 as ValueSlot, new Float32Array([0.5, 0.6, 0.0])); // 1 instance * 3 components
       state.values.objects.set(5 as ValueSlot, new Uint8ClampedArray([0, 255, 0, 255]));
       state.values.objects.set(6 as ValueSlot, new Float32Array([0, 1, 0.95, 0.31, 0.59, -0.81, -0.59, -0.81, -0.95, 0.31]));
 
@@ -444,11 +448,11 @@ describe('RenderAssembler', () => {
     it('includes both path and primitive operations', () => {
       const state = createMockState();
 
-      // One path instance, one primitive instance
-      state.values.objects.set(1 as ValueSlot, new Float32Array([0.1, 0.2]));
+      // One path instance, one primitive instance (stride-3 positions for vec3 world-space)
+      state.values.objects.set(1 as ValueSlot, new Float32Array([0.1, 0.2, 0.0])); // 1 instance * 3 components
       state.values.objects.set(2 as ValueSlot, new Uint8ClampedArray([255, 0, 0, 255]));
       state.values.objects.set(3 as ValueSlot, new Float32Array([0, 1, 0.95, 0.31, 0.59, -0.81, -0.59, -0.81, -0.95, 0.31]));
-      state.values.objects.set(4 as ValueSlot, new Float32Array([0.5, 0.6]));
+      state.values.objects.set(4 as ValueSlot, new Float32Array([0.5, 0.6, 0.0])); // 1 instance * 3 components
       state.values.objects.set(5 as ValueSlot, new Uint8ClampedArray([0, 255, 0, 255]));
 
       const signals: SigExpr[] = [

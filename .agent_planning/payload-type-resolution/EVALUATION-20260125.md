@@ -17,7 +17,7 @@ This ensures payload resolution runs AFTER all normalization passes complete (in
 
 ## Executive Summary
 
-The error "Const block missing payloadType. Type must be resolved by normalizer before lowering" reveals a fundamental architectural flaw in the normalization pipeline ordering. Graph normalizer Pass 0 (payload resolution) runs BEFORE graph normalizer Pass 1 (default source materialization), but Pass 1 creates payload-generic blocks (Const, FieldBroadcast) that need Pass 0's resolution.
+The error "Const block missing payloadType. Type must be resolved by normalizer before lowering" reveals a fundamental architectural flaw in the normalization pipeline ordering. Graph normalizer Pass 0 (payload resolution) runs BEFORE graph normalizer Pass 1 (default source materialization), but Pass 1 creates payload-generic blocks (Const, Broadcast) that need Pass 0's resolution.
 
 **Key distinction**: There are TWO separate pipelines with their own pass numbering:
 1. **Graph Normalizer** (`src/graph/passes/`): Pass 0-3 → produces `NormalizedPatch`
@@ -44,7 +44,7 @@ This is not a simple bug fix - it requires rethinking how type information flows
                                  ↓
 ┌──────────────────────────────────────────────────────────────────────────┐
 │  NORMALIZER PASS 0: Payload Type Resolution                               │
-│  - Looks for payload-generic blocks (Const, FieldBroadcast)              │
+│  - Looks for payload-generic blocks (Const, Broadcast)              │
 │  - Tries to infer payloadType from edges                                 │
 │  - Finds NO Const blocks connected to sat/val (they're unconnected!)     │
 │  - Result: Nothing to resolve                                            │
@@ -131,7 +131,7 @@ This is a **chicken-and-egg problem**:
 - `src/graph/passes/pass1-default-sources.ts` - Block materialization
 - `src/types/index.ts` - DefaultSource factory functions
 - `src/blocks/signal-blocks.ts` - Const block (payload-generic)
-- `src/blocks/field-blocks.ts` - FieldBroadcast block (payload-generic)
+- `src/blocks/field-blocks.ts` - Broadcast block (payload-generic)
 
 ### Transitive Impact (all blocks with defaultSourceConst)
 - `src/blocks/color-blocks.ts` - HsvToRgb (sat, val defaults)
@@ -316,7 +316,7 @@ const payloadType = (config?.payloadType as PayloadType) ?? 'float';
 ## Questions for User
 
 1. **Priority**: Is this blocking current work, or can we do the proper architectural fix?
-2. **Scope**: Should we also address FieldBroadcast (the other payload-generic block)?
+2. **Scope**: Should we also address Broadcast (the other payload-generic block)?
 3. **Test Coverage**: Are there existing tests we can use to verify the fix, or do we need new ones?
 
 ## Evidence

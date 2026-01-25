@@ -309,9 +309,11 @@ export function executeFrame(
           break;
         }
 
-        // Continuity ops are defined over Float32 fields. Non-float buffers here are a compile/runtime contract violation.
+        // Continuity ops are currently only implemented for Float32 fields.
+        // Non-float buffers (e.g., Uint8ClampedArray for color) pass through unchanged.
         if (!(baseBuffer instanceof Float32Array)) {
-          throw new Error(`Continuity: expected Float32Array for baseSlot ${baseSlot}, got ${Object.prototype.toString.call(baseBuffer)}`);
+          state.values.objects.set(outputSlot, baseBuffer);
+          break;
         }
 
         // Skip if policy is 'none' - no continuity processing needed

@@ -97,7 +97,7 @@ export interface IRBuilder {
   fieldArray(instanceId: InstanceId, type: SignalType): FieldExprId;
 
   /** Broadcast a signal to a field. */
-  fieldBroadcast(signal: SigExprId, type: SignalType): FieldExprId;
+  Broadcast(signal: SigExprId, type: SignalType): FieldExprId;
 
   /** Map a function over a field. */
   fieldMap(input: FieldExprId, fn: PureFn, type: SignalType): FieldExprId;

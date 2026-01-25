@@ -91,9 +91,9 @@ export function pass0bDerivedPayloadResolution(patch: Patch): Patch {
 
 ## Chain Resolution Consideration
 
-If a derived Const connects to a derived FieldBroadcast:
+If a derived Const connects to a derived Broadcast:
 ```
-[derived Const] → [derived FieldBroadcast] → [user block input]
+[derived Const] → [derived Broadcast] → [user block input]
 ```
 
 Both need payloadType resolution. Options:

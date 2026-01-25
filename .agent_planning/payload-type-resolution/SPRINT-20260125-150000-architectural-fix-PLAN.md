@@ -74,6 +74,6 @@ Replace the interim double-Pass-0 workaround with a clean architectural solution
 
 ## Risks
 
-- **Chain resolution**: If a derived Const connects to a derived FieldBroadcast, need to handle
+- **Chain resolution**: If a derived Const connects to a derived Broadcast, need to handle
 - **Test coverage**: May need to add tests for edge cases
 - **Contract evolution**: Changing pass semantics could have hidden dependencies

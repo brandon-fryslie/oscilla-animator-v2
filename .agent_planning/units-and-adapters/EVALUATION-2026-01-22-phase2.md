@@ -14,7 +14,7 @@ Source: Audit of unit and adapter system migration
 
 ### Phase 2 (Adapter System) — NOT IMPLEMENTED
 - Spec written and authoritative: `design-docs/_new/0-Units-and-Adapters.md` Part B
-- Adapter infrastructure exists for cardinality (FieldBroadcast only)
+- Adapter infrastructure exists for cardinality (Broadcast only)
 - **None** of the 10 required unit-conversion adapter blocks are implemented
 - `TypeSignature` in adapter registry lacks `unit` field
 - No editor adapter attachment model

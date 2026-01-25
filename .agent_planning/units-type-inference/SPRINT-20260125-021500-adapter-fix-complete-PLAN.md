@@ -6,7 +6,7 @@ Status: COMPLETED
 
 ## Sprint Goal
 
-Fix the adapter insertion bug where FieldBroadcast adapters were not being inserted for Signal→Field connections when the source had a unit variable.
+Fix the adapter insertion bug where Broadcast adapters were not being inserted for Signal→Field connections when the source had a unit variable.
 
 ## Scope
 
@@ -22,7 +22,7 @@ Fix the adapter insertion bug where FieldBroadcast adapters were not being inser
 
 **Acceptance Criteria:**
 - [x] Unit variables match any concrete unit in adapter rules
-- [x] FieldBroadcast inserted for Const→Field connections
+- [x] Broadcast inserted for Const→Field connections
 - [x] Steel thread tests compile successfully (not failing on type mismatch)
 
 **Implementation:**
@@ -51,12 +51,12 @@ Fix the adapter insertion bug where FieldBroadcast adapters were not being inser
 ### P3: Verify adapter insertion ✅
 
 **Acceptance Criteria:**
-- [x] Debug test shows FieldBroadcast in normalized patch
-- [x] Edge routing correct: Const→FieldBroadcast→FieldRadiusSqrt
+- [x] Debug test shows Broadcast in normalized patch
+- [x] Edge routing correct: Const→Broadcast→FieldRadiusSqrt
 
 **Implementation:**
 - Updated debug test to test Signal→Field scenario
-- Verified FieldBroadcast appears in normalized blocks
+- Verified Broadcast appears in normalized blocks
 
 ## Results
 

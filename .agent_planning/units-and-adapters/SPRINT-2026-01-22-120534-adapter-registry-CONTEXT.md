@@ -208,7 +208,7 @@ import './adapter-blocks';
 
 **File**: `src/graph/adapters.ts` (MODIFY)
 
-**Current State**: Has basic cardinality adapter (FieldBroadcast), no unit adapters
+**Current State**: Has basic cardinality adapter (Broadcast), no unit adapters
 
 **Changes**:
 
@@ -244,7 +244,7 @@ function typesAreCompatible(from: TypeSignature, to: TypeSignature): boolean {
   );
 }
 
-// Add adapter rules AFTER FieldBroadcast rule (line ~84)
+// Add adapter rules AFTER Broadcast rule (line ~84)
 // Phase/Scalar
 {
   from: { payload: 'float', unit: unitPhase01(), cardinality: 'any', temporality: 'continuous' },

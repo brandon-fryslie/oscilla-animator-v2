@@ -9,7 +9,7 @@
 
 ## Summary
 
-The **Unit type system migration (Phase 1)** is **complete and compiling**. The **Adapter/Domain Transformation system (Phase 2)** is **designed but not implemented** beyond the existing FieldBroadcast (cardinality) adapter.
+The **Unit type system migration (Phase 1)** is **complete and compiling**. The **Adapter/Domain Transformation system (Phase 2)** is **designed but not implemented** beyond the existing Broadcast (cardinality) adapter.
 
 **Migration completeness: ~60%** — Type system 100%, Adapter blocks 0% (of spec requirement), Editor integration 0%.
 
@@ -39,7 +39,7 @@ The **Unit type system migration (Phase 1)** is **complete and compiling**. The 
 | Spec written (Part B of `0-Units-and-Adapters.md`) | Done | `design-docs/_new/0-Units-and-Adapters.md` |
 | Adapter registry structure (`AdapterSpec`, `AdapterRule`) | Done | `graph/adapters.ts` |
 | Adapter insertion pass (`pass2-adapters.ts`) | Done | Works for cardinality adapters only |
-| FieldBroadcast adapter (one->many) | Done | `blocks/field-blocks.ts` |
+| Broadcast adapter (one->many) | Done | `blocks/field-blocks.ts` |
 | **10 required unit-conversion adapter blocks** | Missing | Spec B4.1 |
 | **Unit-aware adapter lookup** (unit in TypeSignature) | Missing | `TypeSignature` lacks `unit` field |
 | **Editor adapter attachment model** | Missing | No `AdapterAttachment` in patch/graph |

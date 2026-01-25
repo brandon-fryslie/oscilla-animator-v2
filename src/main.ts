@@ -129,7 +129,7 @@ const patchGoldenSpiral: PatchBuilder = (b) => {
 
   const jitter = b.addBlock('FieldJitter2D', { amountX: 0.015, amountY: 0.015 });
   // Broadcast time (scalar) for jitter seed variation
-  const timeBroadcast = b.addBlock('FieldBroadcast', { payloadType: 'float' });
+  const timeBroadcast = b.addBlock('Broadcast', { payloadType: 'float' });
   const jitterRand = b.addBlock('FieldAdd', {});
 
   b.wire(time, 'tMs', timeBroadcast, 'signal');
@@ -342,7 +342,7 @@ const patchRectMosaic: PatchBuilder = (b) => {
 
   // Add jitter for organic per-element randomness
   const jitter = b.addBlock('FieldJitter2D', { amountX: 0.02, amountY: 0.02 });
-  const timeBroadcast = b.addBlock('FieldBroadcast', { payloadType: 'float' });
+  const timeBroadcast = b.addBlock('Broadcast', { payloadType: 'float' });
   const jitterRand = b.addBlock('FieldAdd', {});
   b.wire(time, 'tMs', timeBroadcast, 'signal');
   b.wire(timeBroadcast, 'field', jitterRand, 'a');
@@ -662,7 +662,7 @@ function build(patchBuilder: PatchBuilder): Patch {
 
   // Debug: Show Const blocks and their values
   for (const [id, block] of patch.blocks) {
-    if (block.type === 'Const' || block.type === 'FieldBroadcast' || block.type === 'FieldRadiusSqrt') {
+    if (block.type === 'Const' || block.type === 'Broadcast' || block.type === 'FieldRadiusSqrt') {
       log(`  ${block.type} ${id}: params=${JSON.stringify(block.params)}`);
     }
   }
@@ -672,8 +672,8 @@ function build(patchBuilder: PatchBuilder): Patch {
   for (const edge of patch.edges) {
     const fromBlock = patch.blocks.get(edge.from.blockId as BlockId);
     const toBlock = patch.blocks.get(edge.to.blockId as BlockId);
-    if (fromBlock?.type === 'Const' || fromBlock?.type === 'FieldBroadcast' ||
-      toBlock?.type === 'FieldRadiusSqrt' || toBlock?.type === 'FieldBroadcast') {
+    if (fromBlock?.type === 'Const' || fromBlock?.type === 'Broadcast' ||
+      toBlock?.type === 'FieldRadiusSqrt' || toBlock?.type === 'Broadcast') {
       log(`    ${edge.from.blockId}:${edge.from.slotId} -> ${edge.to.blockId}:${edge.to.slotId}`);
     }
   }

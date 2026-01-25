@@ -14,7 +14,7 @@ The codebase uses `'???'` as a PayloadType literal to indicate polymorphic/infer
 
 2. **Blocks using ??? for polymorphism**:
    - `Const` (signal-blocks.ts) - polymorphic constant
-   - `FieldBroadcast` (field-blocks.ts) - polymorphic signal→field
+   - `Broadcast` (field-blocks.ts) - polymorphic signal→field
    - `Expression` (expression-blocks.ts) - polymorphic expression with A-E inputs
    - `ArraySource` (array-blocks.ts) - polymorphic array source
    - `ForEach`, `ForEachWithIndex` (instance-blocks.ts) - polymorphic iteration
@@ -43,7 +43,7 @@ The codebase uses `'???'` as a PayloadType literal to indicate polymorphic/infer
 4. Update type resolution to use payload metadata
 
 ### Phase 2: Full ??? Removal (Future)
-- Migrate all other ??? blocks (Expression, FieldBroadcast, etc.)
+- Migrate all other ??? blocks (Expression, Broadcast, etc.)
 - Remove `???` from PayloadType union
 - Remove pass0-polymorphic-types.ts
 - Update all compatibility checks

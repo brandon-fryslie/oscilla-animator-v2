@@ -70,7 +70,7 @@ Update the adapter registry to include unit-based conversion rules. Add all 10 r
 - [ ] 10 adapter rules added to ADAPTER_RULES array
 - [ ] Each rule specifies exact from/to (payload, unit) pairs
 - [ ] findAdapter() matches on payload AND unit
-- [ ] Existing cardinality adapter (FieldBroadcast) coexists with unit adapters
+- [ ] Existing cardinality adapter (Broadcast) coexists with unit adapters
 - [ ] Order matters: more specific rules before general rules
 
 #### Technical Notes

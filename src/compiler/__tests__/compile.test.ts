@@ -163,7 +163,7 @@ describe('compile', () => {
       const patch = buildPatch((b) => {
         const time = b.addBlock('InfiniteTimeRoot', {});
         const osc = b.addBlock('Oscillator', { waveform: 'oscSin' });
-        const broadcast = b.addBlock('FieldBroadcast', {});
+        const broadcast = b.addBlock('Broadcast', {});
 
         b.wire(time, 'phaseA', osc, 'phase');
         b.wire(osc, 'out', broadcast, 'signal');
@@ -172,7 +172,7 @@ describe('compile', () => {
       const result = compile(patch);
 
       if (result.kind === 'error') {
-        console.error('COMPILE ERROR (FieldBroadcast):', JSON.stringify(result.errors, null, 2));
+        console.error('COMPILE ERROR (Broadcast):', JSON.stringify(result.errors, null, 2));
       }
 
       expect(result.kind).toBe('ok');

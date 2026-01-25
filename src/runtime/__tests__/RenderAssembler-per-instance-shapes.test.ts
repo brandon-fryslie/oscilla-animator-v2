@@ -109,7 +109,8 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
   describe('Shape Buffer Validation', () => {
     it('throws when shape buffer has wrong length', () => {
       const state = createMockState();
-      const positionBuffer = new Float32Array(20); // 10 instances
+      // Position buffer must be stride-3 (vec3 world-space positions)
+      const positionBuffer = new Float32Array(30); // 10 instances * 3 components
       const colorBuffer = new Uint8ClampedArray(40); // 10 instances
       const shapeBuffer = new Uint32Array(40); // Only 5 instances worth! (40 / 8 = 5)
 
@@ -149,7 +150,8 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       // 5 instances: 3 circles, 2 circles (all same topology)
       const instanceCount = 5;
-      const positionBuffer = new Float32Array(instanceCount * 2);
+      // Position buffer must be stride-3 (vec3 world-space positions)
+      const positionBuffer = new Float32Array(instanceCount * 3);
       const colorBuffer = new Uint8ClampedArray(instanceCount * 4);
       const shapeBuffer = new Uint32Array(instanceCount * SHAPE2D_WORDS);
       const controlPointsBuffer = new Float32Array([
@@ -158,8 +160,9 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       // Fill buffers with test data
       for (let i = 0; i < instanceCount; i++) {
-        positionBuffer[i * 2] = 0.1 + i * 0.1;
-        positionBuffer[i * 2 + 1] = 0.5;
+        positionBuffer[i * 3] = 0.1 + i * 0.1;
+        positionBuffer[i * 3 + 1] = 0.5;
+        positionBuffer[i * 3 + 2] = 0.0; // z component
         colorBuffer[i * 4] = 255;
         colorBuffer[i * 4 + 1] = 0;
         colorBuffer[i * 4 + 2] = 0;
@@ -213,7 +216,8 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       // 10 instances: 5 circles, 3 squares, 2 triangles
       const instanceCount = 10;
-      const positionBuffer = new Float32Array(instanceCount * 2);
+      // Position buffer must be stride-3 (vec3 world-space positions)
+      const positionBuffer = new Float32Array(instanceCount * 3);
       const colorBuffer = new Uint8ClampedArray(instanceCount * 4);
       const shapeBuffer = new Uint32Array(instanceCount * SHAPE2D_WORDS);
 
@@ -239,8 +243,9 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       const pointCounts = [4, 4, 4, 4, 4, 4, 4, 4, 3, 3];
 
       for (let i = 0; i < instanceCount; i++) {
-        positionBuffer[i * 2] = 0.1 + i * 0.05;
-        positionBuffer[i * 2 + 1] = 0.5;
+        positionBuffer[i * 3] = 0.1 + i * 0.05;
+        positionBuffer[i * 3 + 1] = 0.5;
+        positionBuffer[i * 3 + 2] = 0.0; // z component
         colorBuffer[i * 4] = i < 5 ? 255 : (i < 8 ? 0 : 128);
         colorBuffer[i * 4 + 1] = i < 5 ? 0 : (i < 8 ? 255 : 0);
         colorBuffer[i * 4 + 2] = i < 5 ? 0 : (i < 8 ? 0 : 255);
@@ -299,7 +304,8 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
 
       // 6 instances interleaved: circle, square, circle, square, circle, square
       const instanceCount = 6;
-      const positionBuffer = new Float32Array(instanceCount * 2);
+      // Position buffer must be stride-3 (vec3 world-space positions)
+      const positionBuffer = new Float32Array(instanceCount * 3);
       const colorBuffer = new Uint8ClampedArray(instanceCount * 4);
       const shapeBuffer = new Uint32Array(instanceCount * SHAPE2D_WORDS);
 
@@ -317,8 +323,9 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       const slots = [4, 5, 4, 5, 4, 5];
 
       for (let i = 0; i < instanceCount; i++) {
-        positionBuffer[i * 2] = i * 0.1;
-        positionBuffer[i * 2 + 1] = 0.5;
+        positionBuffer[i * 3] = i * 0.1;
+        positionBuffer[i * 3 + 1] = 0.5;
+        positionBuffer[i * 3 + 2] = 0.0; // z component
         colorBuffer[i * 4] = 255;
         colorBuffer[i * 4 + 1] = 0;
         colorBuffer[i * 4 + 2] = 0;
@@ -457,7 +464,8 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       const state = createMockState();
 
       const instanceCount = 2;
-      const positionBuffer = new Float32Array(instanceCount * 2);
+      // Position buffer must be stride-3 (vec3 world-space positions)
+      const positionBuffer = new Float32Array(instanceCount * 3);
       const colorBuffer = new Uint8ClampedArray(instanceCount * 4);
       const shapeBuffer = new Uint32Array(instanceCount * SHAPE2D_WORDS);
       const controlPointsBuffer = new Float32Array(8);
@@ -507,7 +515,8 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       const state = createMockState();
 
       const instanceCount = 2;
-      const positionBuffer = new Float32Array(instanceCount * 2);
+      // Position buffer must be stride-3 (vec3 world-space positions)
+      const positionBuffer = new Float32Array(instanceCount * 3);
       const colorBuffer = new Uint8ClampedArray(instanceCount * 4);
       const shapeBuffer = new Uint32Array(instanceCount * SHAPE2D_WORDS);
 
@@ -556,20 +565,21 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
     it('flattens multiple ops from per-instance shapes', () => {
       const state = createMockState();
 
-      // Step 1: 3 circles
-      const pos1 = new Float32Array(6);
+      // Step 1: 3 circles (stride-3 positions)
+      const pos1 = new Float32Array(9); // 3 * 3 components
       const color1 = new Uint8ClampedArray(12);
       const shape1 = new Uint32Array(3 * SHAPE2D_WORDS);
       const circlePoints = new Float32Array([0, 1, 1, 0, 0, -1, -1, 0]);
 
       for (let i = 0; i < 3; i++) {
         writeShape2D(shape1, i, { topologyId: CIRCLE_ID, pointsFieldSlot: 10, pointsCount: 4, styleRef: 0, flags: 1 });
-        pos1[i * 2] = i * 0.1;
-        pos1[i * 2 + 1] = 0.5;
+        pos1[i * 3] = i * 0.1;
+        pos1[i * 3 + 1] = 0.5;
+        pos1[i * 3 + 2] = 0.0;
       }
 
-      // Step 2: mixed 2 circles + 2 squares
-      const pos2 = new Float32Array(8);
+      // Step 2: mixed 2 circles + 2 squares (stride-3 positions)
+      const pos2 = new Float32Array(12); // 4 * 3 components
       const color2 = new Uint8ClampedArray(16);
       const shape2 = new Uint32Array(4 * SHAPE2D_WORDS);
       const squarePoints = new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]);
@@ -580,8 +590,9 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       writeShape2D(shape2, 3, { topologyId: SQUARE_ID, pointsFieldSlot: 11, pointsCount: 4, styleRef: 0, flags: 1 });
 
       for (let i = 0; i < 4; i++) {
-        pos2[i * 2] = i * 0.1;
-        pos2[i * 2 + 1] = 0.3;
+        pos2[i * 3] = i * 0.1;
+        pos2[i * 3 + 1] = 0.3;
+        pos2[i * 3 + 2] = 0.0;
       }
 
       state.values.objects.set(1 as ValueSlot, pos1);

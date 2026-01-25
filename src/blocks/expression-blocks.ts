@@ -147,8 +147,7 @@ registerBlock({
       const sigExprs = ctx.b.getSigExprs();
       const sigExpr = sigExprs[sigId as number];
       if (!sigExpr) {
-        // Fallback to float if signal not found (shouldn't happen)
-        return signalType('float');
+        throw new Error(`Signal expression ${sigId} not found - this indicates a compiler bug`);
       }
       return sigExpr.type;
     };

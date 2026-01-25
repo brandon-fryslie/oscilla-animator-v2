@@ -64,9 +64,23 @@ export interface ResolvedInputSpec {
   /** Combine policy (from Slot.combine or default) */
   readonly combine: CombinePolicy;
 
-  /** Whether this input is optional (can have 0 writers) */
-  readonly optional?: boolean;
+  /** Whether this input is optional (can have 0 writers). */
+  readonly optional: boolean;
 }
+
+/**
+ * Hook for resolving the effective (specialized) input port type.
+ *
+ * Pass6 (or a caller) should provide this to ensure:
+ * - payload-generic blocks are specialized
+ * - unit inference is reflected
+ * - multi-component payloads (e.g. color/vec2/vec3) propagate correctly
+ */
+export type InputPortTypeResolver = (args: {
+  readonly block: Block;
+  readonly slotId: string;
+  readonly inputDef: InputDef;
+}) => SignalType;
 
 // =============================================================================
 // Writer Sort Key (Deterministic Ordering)
@@ -221,15 +235,19 @@ export function resolveCombinePolicy(_input: InputDef): CombinePolicy {
  * 3. Resolve combine policy
  * 4. Return ResolvedInputSpec
  *
+ * Callers should pass `resolveInputPortType` when generics/units are involved.
+ *
  * @param block - Block instance
  * @param edges - All edges in the patch (NormalizedEdge format)
  * @param blocks - All blocks in the patch (for index lookup)
+ * @param resolveInputPortType - Optional resolver for specialized input port types
  * @returns Map of slotId → ResolvedInputSpec
  */
 export function resolveBlockInputs(
   block: Block,
   edges: readonly NormalizedEdge[],
-  blocks: readonly Block[]
+  blocks: readonly Block[],
+  resolveInputPortType?: InputPortTypeResolver
 ): Map<string, ResolvedInputSpec> {
   const resolved = new Map<string, ResolvedInputSpec>();
 
@@ -255,8 +273,12 @@ export function resolveBlockInputs(
     // Resolve combine policy
     const combine = resolveCombinePolicy(inputSlot);
 
-    // Get port type - inputSlot.type is SignalType
-    const portType = inputSlot.type!; // Type is required for port inputs
+    // Get the *effective* input port type.
+    // If a resolver is provided, it must reflect any specialization
+    // (payload generics, unit inference, multi-component payloads).
+    const portType = resolveInputPortType
+      ? resolveInputPortType({ block, slotId, inputDef: inputSlot })
+      : (inputSlot.type!); // Type is required for exposed port inputs
 
     // Build resolved spec
     resolved.set(slotId, {
@@ -264,7 +286,7 @@ export function resolveBlockInputs(
       portType,
       writers: sortedWriters,
       combine,
-      optional: inputSlot.optional,
+      optional: inputSlot.optional === true,
     });
   }
 
@@ -305,5 +327,6 @@ export function resolveInput(
     portType,
     writers: sortedWriters,
     combine,
+    optional: false,
   };
 }

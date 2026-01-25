@@ -19,7 +19,7 @@ Verdict: **CONTINUE**
 
 3. **All payload-generic blocks migrated**:
    - `Const` (signal-blocks.ts) - uses `ALL_CONCRETE_PAYLOADS`
-   - `FieldBroadcast` (field-blocks.ts) - uses `ALL_CONCRETE_PAYLOADS`
+   - `Broadcast` (field-blocks.ts) - uses `ALL_CONCRETE_PAYLOADS`
    - `Expression` (expression-blocks.ts) - uses `ALL_CONCRETE_PAYLOADS`
    - `Array` (array-blocks.ts) - uses `ALL_CONCRETE_PAYLOADS`
    - `GridLayout`, `LinearLayout`, `CircleLayout`, `PhyllotaxisLayout` (instance-blocks.ts) - use `ALL_CONCRETE_PAYLOADS`

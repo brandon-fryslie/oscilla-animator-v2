@@ -181,7 +181,7 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
       console.warn('[CompilationInspector] Failed to capture normalization:', e);
     }
 
-    // Pass 0: Payload type resolution (for payload-generic blocks like Const, FieldBroadcast)
+    // Pass 0: Payload type resolution (for payload-generic blocks like Const, Broadcast)
     // This must run after normalization (so all derived blocks exist) and before type constraints
     const withPayloadTypes = pass0PayloadResolution(normalized);
 
@@ -210,10 +210,10 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
     }
 
     // Pass 2: Type Graph
-    const typedPatch = pass2TypeGraph(normalized, typeConstraintsResult);
+    const typedPatch = pass2TypeGraph(withPayloadTypes, typeConstraintsResult);
 
     try {
-      compilationInspector.capturePass('type-graph', normalized, typedPatch);
+      compilationInspector.capturePass('type-graph', withPayloadTypes, typedPatch);
     } catch (e) {
       console.warn('[CompilationInspector] Failed to capture type-graph:', e);
     }

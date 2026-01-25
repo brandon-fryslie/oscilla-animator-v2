@@ -361,8 +361,8 @@ registerBlock({
     const centerYSig = centerY?.k === 'sig' ? centerY.id : ctx.b.sigConst(0.5, signalType('float'));
 
     // Broadcast center signals to fields
-    const centerXField = ctx.b.fieldBroadcast(centerXSig, signalTypeField('float', 'default'));
-    const centerYField = ctx.b.fieldBroadcast(centerYSig, signalTypeField('float', 'default'));
+    const centerXField = ctx.b.Broadcast(centerXSig, signalTypeField('float', 'default'));
+    const centerYField = ctx.b.Broadcast(centerYSig, signalTypeField('float', 'default'));
 
     // Zip all four fields together: centerX, centerY, radius, angle -> vec2
     // NOTE: Order must match kernel expectation in Materializer.ts
@@ -424,8 +424,8 @@ registerBlock({
     const centerYSig = centerY?.k === 'sig' ? centerY.id : ctx.b.sigConst(0.5, signalType('float'));
 
     // Broadcast center signals to fields
-    const centerXField = ctx.b.fieldBroadcast(centerXSig, signalTypeField('float', 'default'));
-    const centerYField = ctx.b.fieldBroadcast(centerYSig, signalTypeField('float', 'default'));
+    const centerXField = ctx.b.Broadcast(centerXSig, signalTypeField('float', 'default'));
+    const centerYField = ctx.b.Broadcast(centerYSig, signalTypeField('float', 'default'));
 
     // Zip all three fields together: pos, centerX, centerY -> (angle, radius)
     const polarFn = ctx.b.kernel('fieldCartesianToPolar');
@@ -498,10 +498,10 @@ registerBlock({
     const ampSig = amplitude?.k === 'sig' ? amplitude.id : ctx.b.sigConst(1, signalType('float'));
     const spreadSig = spread?.k === 'sig' ? spread.id : ctx.b.sigConst(1, signalType('float'));
 
-    const phaseField = ctx.b.fieldBroadcast(phaseSig, signalTypeField('float', 'default'));
-    const baseField = ctx.b.fieldBroadcast(baseSig, signalTypeField('float', 'default'));
-    const ampField = ctx.b.fieldBroadcast(ampSig, signalTypeField('float', 'default'));
-    const spreadField = ctx.b.fieldBroadcast(spreadSig, signalTypeField('float', 'default'));
+    const phaseField = ctx.b.Broadcast(phaseSig, signalTypeField('float', 'default'));
+    const baseField = ctx.b.Broadcast(baseSig, signalTypeField('float', 'default'));
+    const ampField = ctx.b.Broadcast(ampSig, signalTypeField('float', 'default'));
+    const spreadField = ctx.b.Broadcast(spreadSig, signalTypeField('float', 'default'));
 
     // Compute: base + amplitude * sin(2π * (phase + id01 * spread))
     const pulseFn = ctx.b.kernel('fieldPulse');
@@ -608,8 +608,8 @@ registerBlock({
     const phaseSig = phase?.k === 'sig' ? phase.id : ctx.b.sigConst(0, signalType('float'));
     const spinSig = spin?.k === 'sig' ? spin.id : ctx.b.sigConst(1, signalType('float'));
 
-    const phaseField = ctx.b.fieldBroadcast(phaseSig, signalTypeField('float', 'default'));
-    const spinField = ctx.b.fieldBroadcast(spinSig, signalTypeField('float', 'default'));
+    const phaseField = ctx.b.Broadcast(phaseSig, signalTypeField('float', 'default'));
+    const spinField = ctx.b.Broadcast(spinSig, signalTypeField('float', 'default'));
 
     // offset = 2π * phase * spin
     const offsetFn = ctx.b.kernel('fieldAngularOffset');
@@ -727,8 +727,8 @@ registerBlock({
     const amountXSig = amountX?.k === 'sig' ? amountX.id : ctx.b.sigConst(0, signalType('float'));
     const amountYSig = amountY?.k === 'sig' ? amountY.id : ctx.b.sigConst(0, signalType('float'));
 
-    const amountXField = ctx.b.fieldBroadcast(amountXSig, signalTypeField('float', 'default'));
-    const amountYField = ctx.b.fieldBroadcast(amountYSig, signalTypeField('float', 'default'));
+    const amountXField = ctx.b.Broadcast(amountXSig, signalTypeField('float', 'default'));
+    const amountYField = ctx.b.Broadcast(amountYSig, signalTypeField('float', 'default'));
 
     // pos += vec2(rand * amountX, rand * amountY)
     const jitterFn = ctx.b.kernel('fieldJitter2D');
@@ -783,7 +783,7 @@ registerBlock({
 
     // Broadcast phase to field
     const phaseSig = phase?.k === 'sig' ? phase.id : ctx.b.sigConst(0, signalType('float'));
-    const phaseField = ctx.b.fieldBroadcast(phaseSig, signalTypeField('float', 'default'));
+    const phaseField = ctx.b.Broadcast(phaseSig, signalTypeField('float', 'default'));
 
     // hue = (id01 + phase) mod 1.0
     const hueFn = ctx.b.kernel('fieldHueFromPhase');

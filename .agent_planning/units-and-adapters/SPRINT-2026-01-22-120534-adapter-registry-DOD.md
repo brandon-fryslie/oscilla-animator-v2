@@ -41,7 +41,7 @@ Plan: SPRINT-2026-01-22-120534-adapter-registry-PLAN.md
 - [ ] Each rule specifies exact (payload, unit) for from and to
 - [ ] Rules include cardinality: 'any' and temporality: 'continuous'
 - [ ] findAdapter() matches on payload AND unit AND cardinality AND temporality
-- [ ] Existing FieldBroadcast adapter coexists with unit adapters
+- [ ] Existing Broadcast adapter coexists with unit adapters
 - [ ] Order of rules: specific before general
 
 #### Adapter Lookup Works

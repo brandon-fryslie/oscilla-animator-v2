@@ -59,7 +59,7 @@ describe('Instance Unification', () => {
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
       const type = signalTypeField('float', instance);
       const sig = b.sigConst(1.0, signalTypeSignal('float'));
-      const broadcast = b.fieldBroadcast(sig, type);
+      const broadcast = b.Broadcast(sig, type);
 
       // Broadcasts are instance-agnostic
       expect(b.inferFieldInstance(broadcast)).toBeUndefined();
@@ -167,7 +167,7 @@ describe('Instance Unification', () => {
       const type = signalTypeField('float', instance);
       const intrinsic = b.fieldIntrinsic(instance, 'index', type);
       const sig = b.sigConst(1.0, signalTypeSignal('float'));
-      const broadcast = b.fieldBroadcast(sig, type);
+      const broadcast = b.Broadcast(sig, type);
 
       // Broadcast is instance-agnostic, so zip takes instance from intrinsic
       const zipped = b.fieldZip([intrinsic, broadcast], { kind: 'opcode', opcode: OpCode.Add }, type);
@@ -194,8 +194,8 @@ describe('Instance Unification', () => {
       const type = signalTypeField('float', instance);
       const sig1 = b.sigConst(1.0, signalTypeSignal('float'));
       const sig2 = b.sigConst(2.0, signalTypeSignal('float'));
-      const broadcast1 = b.fieldBroadcast(sig1, type);
-      const broadcast2 = b.fieldBroadcast(sig2, type);
+      const broadcast1 = b.Broadcast(sig1, type);
+      const broadcast2 = b.Broadcast(sig2, type);
 
       // Two broadcasts - no instance constraint
       const zipped = b.fieldZip([broadcast1, broadcast2], { kind: 'opcode', opcode: OpCode.Add }, type);

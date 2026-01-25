@@ -411,12 +411,14 @@ export function pass2TypeGraph(
       const toCard = getAxisValue(toType.extent.cardinality, DEFAULTS_V0.cardinality);
       const toTemp = getAxisValue(toType.extent.temporality, DEFAULTS_V0.temporality);
 
+      const fromBlockName = fromBlock.type;
+      const toBlockName = toBlock.type;
       errors.push({
         kind: "NoConversionPath",
         connectionId: `${edge.fromBlock}:${edge.fromPort}->${edge.toBlock}:${edge.toPort}`,
         fromType,
         toType,
-        message: `Type mismatch: cannot connect ${fromCard.kind}+${fromTemp.kind}<${fromType.payload}, unit:${fromType.unit.kind}> to ${toCard.kind}+${toTemp.kind}<${toType.payload}, unit:${toType.unit.kind}>`,
+        message: `Type mismatch: cannot connect ${fromCard.kind}+${fromTemp.kind}<${fromType.payload}, unit:${fromType.unit.kind}> to ${toCard.kind}+${toTemp.kind}<${toType.payload}, unit:${toType.unit.kind}> (${fromBlockName}.${edge.fromPort} -> ${toBlockName}.${edge.toPort})`,
       });
     }
 

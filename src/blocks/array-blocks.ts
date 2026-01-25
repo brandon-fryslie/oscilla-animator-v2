@@ -88,10 +88,10 @@ registerBlock({
     let elementsField;
     if (elementInput && elementInput.k === 'sig') {
       // Broadcast the signal to a field
-      elementsField = ctx.b.fieldBroadcast(elementInput.id, signalTypeField('float', 'default'));
+      elementsField = ctx.b.Broadcast(elementInput.id, signalTypeField('shape', 'default'));
     } else {
       // No input - use array field (identity)
-      elementsField = ctx.b.fieldArray(instanceId, signalTypeField('float', 'default'));
+      elementsField = ctx.b.fieldArray(instanceId, signalTypeField('shape', 'default'));
     }
 
     // 2. Intrinsic fields (index, t, active)
@@ -99,7 +99,7 @@ registerBlock({
     const tField = ctx.b.fieldIntrinsic(instanceId, 'normalizedIndex', signalTypeField('float', 'default'));
     // For static arrays, active is always true - we can use a constant broadcast
     const activeSignal = ctx.b.sigConst(true, signalType('bool'));
-    const activeField = ctx.b.fieldBroadcast(activeSignal, signalTypeField('bool', 'default'));
+    const activeField = ctx.b.Broadcast(activeSignal, signalTypeField('bool', 'default'));
 
     return {
       outputsById: {

@@ -9,7 +9,7 @@ import { signalType, signalTypeField, type PayloadType } from '../core/canonical
 import type { SigExprId } from '../compiler/ir/Indices';
 
 // =============================================================================
-// FieldBroadcast (Payload-Generic)
+// Broadcast (Payload-Generic)
 // =============================================================================
 
 /**
@@ -26,7 +26,7 @@ import type { SigExprId } from '../compiler/ir/Indices';
  * - Deterministic resolution via payloadType param
  */
 registerBlock({
-  type: 'FieldBroadcast',
+  type: 'Broadcast',
   label: 'Field Broadcast',
   category: 'field',
   description: 'Broadcasts a signal value to all elements of a field (type inferred)',
@@ -65,17 +65,17 @@ registerBlock({
 
     if (payloadType === undefined) {
       throw new Error(
-        `FieldBroadcast block missing payloadType. Type must be resolved by normalizer before lowering.`
+        `Broadcast block missing payloadType. Type must be resolved by normalizer before lowering.`
       );
     }
 
     const signalValue = inputsById.signal;
     if (!signalValue || signalValue.k !== 'sig') {
-      throw new Error('FieldBroadcast signal input must be a signal');
+      throw new Error('Broadcast signal input must be a signal');
     }
 
     // Create field broadcast operation with the resolved type
-    const fieldId = ctx.b.fieldBroadcast(
+    const fieldId = ctx.b.Broadcast(
       signalValue.id as SigExprId,
       signalTypeField(payloadType, 'default')
     );
@@ -86,7 +86,7 @@ registerBlock({
         field: { k: 'field', id: fieldId, slot },
       },
       // Propagate instance context from inputs
-      // FieldBroadcast is special - it can receive instance context even though
+      // Broadcast is special - it can receive instance context even though
       // it doesn't have field inputs (it's inserted by adapters in field contexts)
       instanceContext: ctx.inferredInstance,
     };

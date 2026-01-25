@@ -18,7 +18,7 @@
 
 - [ ] Tests for Pass 0b in isolation
 - [ ] Integration test for full pass pipeline
-- [ ] Test for derived Const → derived FieldBroadcast chain (if applicable)
+- [ ] Test for derived Const → derived Broadcast chain (if applicable)
 
 ## Documentation Requirements
 

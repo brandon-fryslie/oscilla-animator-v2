@@ -99,7 +99,7 @@ describe('Cardinality Metadata', () => {
   describe('Transform blocks (cardinality changers)', () => {
     const transformBlocks = [
       'Array',
-      'FieldBroadcast',
+      'Broadcast',
       'LayoutAlongPath',
     ];
 
@@ -121,8 +121,8 @@ describe('Cardinality Metadata', () => {
       expect(meta?.broadcastPolicy).toBe('disallowSignalMix');
     });
 
-    it('FieldBroadcast requires explicit broadcast expression', () => {
-      const meta = getBlockCardinalityMetadata('FieldBroadcast');
+    it('Broadcast requires explicit broadcast expression', () => {
+      const meta = getBlockCardinalityMetadata('Broadcast');
       expect(meta?.broadcastPolicy).toBe('requireBroadcastExpr');
     });
   });
