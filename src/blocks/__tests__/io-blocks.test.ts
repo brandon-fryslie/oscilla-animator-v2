@@ -172,27 +172,24 @@ describe('ExternalGate Block', () => {
     expect(def.cardinality!.cardinalityMode).toBe('preserve');
   });
 
-  it('lower function produces sigExternal + comparison', () => {
+  it('lower function implements >= using 1 - (threshold > input)', () => {
     let externalCalled = false;
-    let constCalled = false;
-    let zipCalled = false;
+    let constCalls: number[] = [];
+    let zipCalls: Array<{ inputs: any[]; opcode: string }> = [];
 
     const mockB = {
       sigExternal: (channel: string, type: any) => {
         externalCalled = true;
         expect(channel).toBe('gate.input');
-        return 'sig1' as any;
+        return 'sig_input' as any;
       },
       sigConst: (value: number, type: any) => {
-        constCalled = true;
-        expect(value).toBe(0.7);
-        return 'sig2' as any;
+        constCalls.push(value);
+        return `sig_const_${value}` as any;
       },
       sigZip: (inputs: any[], fn: any, type: any) => {
-        zipCalled = true;
-        expect(inputs).toHaveLength(2);
-        expect(fn.opcode).toBe('gt'); // OpCode.Gt
-        return 'sig3' as any;
+        zipCalls.push({ inputs, opcode: fn.opcode });
+        return `sig_zip_${zipCalls.length}` as any;
       },
       allocSlot: () => 'slot1' as any,
       opcode: (opcode: string) => ({ kind: 'opcode' as const, opcode }),
@@ -215,8 +212,10 @@ describe('ExternalGate Block', () => {
     });
 
     expect(externalCalled).toBe(true);
-    expect(constCalled).toBe(true);
-    expect(zipCalled).toBe(true);
+    expect(constCalls).toEqual([0.7, 1]); // threshold const, then 1 const
+    expect(zipCalls).toHaveLength(2);
+    expect(zipCalls[0].opcode).toBe('gt'); // threshold > input
+    expect(zipCalls[1].opcode).toBe('sub'); // 1 - result
     expect(result.outputsById.gate).toBeDefined();
     expect(result.outputsById.gate.k).toBe('sig');
   });
@@ -225,8 +224,10 @@ describe('ExternalGate Block', () => {
     const mockB = {
       sigExternal: () => 'sig1' as any,
       sigConst: (value: number) => {
-        expect(value).toBe(0.5);
-        return 'sig2' as any;
+        if (value !== 1) {
+          expect(value).toBe(0.5); // default threshold
+        }
+        return `const_${value}` as any;
       },
       sigZip: () => 'sig3' as any,
       allocSlot: () => 'slot1' as any,

@@ -96,17 +96,19 @@ registerBlock({
     const thresholdSig = ctx.b.sigConst(threshold, signalType('float'));
 
     // gate = input >= threshold ? 1 : 0
-    // Use Gt (greater than) which returns 1 if a > b, else 0
-    // To get >=, we compute: input >= threshold  <==>  NOT(threshold > input)
-    // But we don't have NOT, so we use: (input > threshold - epsilon) OR (input == threshold)
-    // Simplest: use (input - threshold) >= 0, which is step(input - threshold)
-    // Since we don't have step, use: Gt with (input - epsilon) vs threshold, or just accept > instead of >=
-
-    // For now, use simple Gt: returns 1 if input > threshold, 0 otherwise
-    // This means threshold is exclusive (input must be strictly greater)
-    // If spec requires >=, we need to use a different approach
+    // We need >= but only have Gt (>), Lt (<), and Eq (==)
+    // Implement: a >= b  <=>  NOT(b > a)  <=>  1 - (b > a)
+    // Since Gt returns 0 or 1: if threshold > input, returns 1, then 1-1=0 (correct)
+    //                          if threshold <= input, returns 0, then 1-0=1 (correct)
+    const oneSig = ctx.b.sigConst(1, signalType('float'));
     const gtFn = ctx.b.opcode(OpCode.Gt);
-    const gateSig = ctx.b.sigZip([inputSig, thresholdSig], gtFn, signalType('float'));
+    const subFn = ctx.b.opcode(OpCode.Sub);
+
+    // thresholdGtInput = (threshold > input) ? 1 : 0
+    const thresholdGtInput = ctx.b.sigZip([thresholdSig, inputSig], gtFn, signalType('float'));
+
+    // gateSig = 1 - thresholdGtInput  =>  (input >= threshold) ? 1 : 0
+    const gateSig = ctx.b.sigZip([oneSig, thresholdGtInput], subFn, signalType('float'));
 
     const slot = ctx.b.allocSlot();
     const outType = ctx.outTypes[0];
