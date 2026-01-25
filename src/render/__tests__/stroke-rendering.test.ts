@@ -92,8 +92,8 @@ describe('Stroke Rendering', () => {
       });
 
       const calls: string[] = [];
-      (ctx.fill as any).mockImplementation(() => calls.push('fill'));
-      (ctx.stroke as any).mockImplementation(() => calls.push('stroke'));
+      (ctx.fill as any).mockImplementation = (() => calls.push('fill'));
+      (ctx.stroke as any).mockImplementation = (() => calls.push('stroke'));
 
       renderDrawPathInstancesOp(ctx, op, 800, 600);
 
@@ -152,7 +152,8 @@ describe('Stroke Rendering', () => {
       renderDrawPathInstancesOp(ctx, op, 800, 600);
 
       // Last setLineDash call should be empty array (reset)
-      const calls = (ctx.setLineDash as any).mock.calls;
+      const setLineDashMock = ctx.setLineDash as any;
+      const calls = setLineDashMock.mock?.calls ?? [];
       expect(calls[calls.length - 1]).toEqual([[]]);
     });
 

@@ -24,7 +24,7 @@ import { createMockCanvas2DContext } from '../../__tests__/test-utils';
 // Mock canvas for Sparkline
 beforeEach(() => {
   const mockCtx = createMockCanvas2DContext();
-  HTMLCanvasElement.prototype.getContext = vi.fn(() => mockCtx) as any;
+  HTMLCanvasElement.prototype.getContext = vi.fn(() => mockCtx);
 });
 
 function renderWithStore(store: RootStore) {

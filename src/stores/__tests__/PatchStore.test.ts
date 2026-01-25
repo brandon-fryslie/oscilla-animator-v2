@@ -100,7 +100,7 @@ describe('PatchStore', () => {
 
     it('should throw if block not found', () => {
       expect(() => {
-        store.updateBlockParams('nonexistent' as any, {});
+        store.updateBlockParams(blockId('nonexistent'), {});
       }).toThrow('Block not found');
     });
   });
@@ -117,7 +117,7 @@ describe('PatchStore', () => {
 
     it('should throw if block not found', () => {
       expect(() => {
-        store.updateBlockDisplayName('nonexistent' as any, 'Name');
+        store.updateBlockDisplayName(blockId('nonexistent'), 'Name');
       }).toThrow('Block not found');
     });
   });

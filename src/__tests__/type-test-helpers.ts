@@ -1,0 +1,222 @@
+/**
+ * Type System Test Helpers
+ *
+ * Factory functions for creating properly-typed SignalType and related objects
+ * for testing. Eliminates the need for 'as any' casts when building type objects.
+ *
+ * @internal - Test-only infrastructure. Not part of public API.
+ */
+
+import {
+  signalType as makeSignalType,
+  unitScalar,
+  unitCount,
+  unitPhase01,
+  unitNorm01,
+  unitRadians,
+  unitDegrees,
+  unitNdc2,
+  unitNdc3,
+  unitWorld2,
+  unitWorld3,
+  unitRgba01,
+  unitNone,
+  extentDefault,
+  extent,
+  cardinalityOne,
+  cardinalityMany,
+  temporalityContinuous,
+  temporalityDiscrete,
+  bindingUnbound,
+  type PayloadType,
+  type SignalType,
+  type Unit,
+  type Extent,
+  type Cardinality,
+  type InstanceRef,
+} from '../core/canonical-types';
+
+/**
+ * Create a test SignalType with specified payload and optional unit.
+ *
+ * Uses sensible defaults for the extent (cardinality: one, temporality: continuous, etc.).
+ * For custom extent, use testSignalTypeWithExtent instead.
+ *
+ * @param payload - The payload type (float, int, vec2, etc.)
+ * @param unit - Optional unit; if omitted, uses default for payload
+ * @returns A properly typed SignalType
+ *
+ * @example
+ * const floatType = testSignalType('float');
+ * const phaseType = testSignalType('float', unitPhase01());
+ * const posType = testSignalType('vec2', unitWorld2());
+ */
+export function testSignalType(
+  payload: PayloadType,
+  unit?: Unit
+): SignalType {
+  return unit
+    ? makeSignalType(payload, unit)
+    : makeSignalType(payload);
+}
+
+/**
+ * Create a test SignalType with custom extent.
+ *
+ * Use this when you need to test field types (cardinality: many)
+ * or other non-default extent configurations.
+ *
+ * @param payload - The payload type
+ * @param unit - The unit annotation
+ * @param extentOverrides - Partial extent to customize (rest use defaults)
+ * @returns A properly typed SignalType
+ *
+ * @example
+ * // Field type over instances
+ * const fieldType = testSignalTypeWithExtent(
+ *   'float',
+ *   unitScalar(),
+ *   { cardinality: cardinalityMany(instanceRef('circle')) }
+ * );
+ */
+export function testSignalTypeWithExtent(
+  payload: PayloadType,
+  unit: Unit,
+  extentOverrides: Partial<Extent>
+): SignalType {
+  return makeSignalType(payload, unit, extentOverrides);
+}
+
+/**
+ * Create a test float type with specified unit.
+ *
+ * Convenience helper for float types, the most common case.
+ *
+ * @param unit - Unit for the float (defaults to scalar if omitted)
+ * @returns A SignalType with payload='float'
+ *
+ * @example
+ * const scalar = testFloat();
+ * const phase = testFloat(unitPhase01());
+ * const angle = testFloat(unitRadians());
+ */
+export function testFloat(unit?: Unit): SignalType {
+  return makeSignalType('float', unit ?? unitScalar());
+}
+
+/**
+ * Create a test int type (defaults to count unit).
+ *
+ * @param unit - Unit for the int (defaults to count if omitted)
+ * @returns A SignalType with payload='int'
+ *
+ * @example
+ * const index = testInt();
+ * const timeMs = testInt(unitMs());
+ */
+export function testInt(unit?: Unit): SignalType {
+  return makeSignalType('int', unit ?? unitCount());
+}
+
+/**
+ * Create a test vec2 type (defaults to world2 unit).
+ *
+ * @param unit - Unit for the vec2 (defaults to world2 if omitted)
+ * @returns A SignalType with payload='vec2'
+ *
+ * @example
+ * const position = testVec2();
+ * const normalized = testVec2(unitNdc2());
+ */
+export function testVec2(unit?: Unit): SignalType {
+  return makeSignalType('vec2', unit ?? unitWorld2());
+}
+
+/**
+ * Create a test vec3 type (defaults to world3 unit).
+ *
+ * @param unit - Unit for the vec3 (defaults to world3 if omitted)
+ * @returns A SignalType with payload='vec3'
+ */
+export function testVec3(unit?: Unit): SignalType {
+  return makeSignalType('vec3', unit ?? unitWorld3());
+}
+
+/**
+ * Create a test color type (RGBA, defaults to rgba01 unit).
+ *
+ * @param unit - Unit for the color (defaults to rgba01 if omitted)
+ * @returns A SignalType with payload='color'
+ *
+ * @example
+ * const color = testColor();
+ */
+export function testColor(unit?: Unit): SignalType {
+  return makeSignalType('color', unit ?? unitRgba01());
+}
+
+/**
+ * Create a test bool type (no unit).
+ *
+ * @returns A SignalType with payload='bool'
+ */
+export function testBool(): SignalType {
+  return makeSignalType('bool', unitNone());
+}
+
+/**
+ * Create a test shape type (shape descriptor, no unit).
+ *
+ * @returns A SignalType with payload='shape'
+ */
+export function testShape(): SignalType {
+  return makeSignalType('shape', unitNone());
+}
+
+/**
+ * Create a field type (cardinality: many over instances).
+ *
+ * Convenience for the common pattern of creating field types with many cardinality.
+ *
+ * @param payload - The payload type
+ * @param unit - The unit
+ * @param instance - The instance to align by (e.g., from instanceRef)
+ * @returns A SignalType with cardinality=many
+ *
+ * @example
+ * const pointField = testFieldType('vec2', unitWorld2(), instanceRef('polygon'));
+ */
+export function testFieldType(
+  payload: PayloadType,
+  unit: Unit,
+  instance: InstanceRef
+): SignalType {
+  return makeSignalType(payload, unit, {
+    cardinality: cardinalityMany(instance),
+  });
+}
+
+/**
+ * Create a discrete (event) type.
+ *
+ * @param payload - The payload type for the event
+ * @param unit - The unit annotation
+ * @returns A SignalType with temporality=discrete
+ *
+ * @example
+ * const clickEvent = testEventType('bool', unitNone());
+ */
+export function testEventType(
+  payload: PayloadType,
+  unit: Unit
+): SignalType {
+  return makeSignalType(payload, unit, {
+    temporality: temporalityDiscrete(),
+  });
+}
+
+// Re-export unit constructors for convenience
+export { unitScalar, unitCount, unitPhase01, unitNorm01, unitRadians, unitDegrees, unitNdc2, unitNdc3, unitWorld2, unitWorld3, unitRgba01, unitNone };
+
+// Re-export cardinality constructors
+export { cardinalityOne, cardinalityMany, temporalityContinuous, temporalityDiscrete, bindingUnbound };

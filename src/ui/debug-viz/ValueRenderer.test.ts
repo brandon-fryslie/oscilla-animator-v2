@@ -4,6 +4,7 @@ import { getValueRenderer, registerRenderer, type ValueRenderer } from './ValueR
 import { signalType, unitPhase01, unitNorm01 } from '../../core/canonical-types';
 import type { RendererSample } from './types';
 import { getDataAttr } from '../../__tests__/test-utils';
+import { testSignalType } from '../../__tests__/type-test-helpers';
 
 // Create mock renderers that return identifiable elements
 function mockRenderer(id: string): ValueRenderer {
@@ -78,8 +79,9 @@ describe('ValueRenderer registry', () => {
 
   describe('placeholder renderer', () => {
     it('returns placeholder for unknown payload type', () => {
-      // Force unknown payload past TypeScript
-      const type = { payload: 'unknown' as any, extent: {} as any, unit: { kind: 'none' as const } };
+      // Force unknown payload past TypeScript - use test helper then override
+      const type = testSignalType('float');
+      (type as any).payload = 'unknown';
       const renderer = getValueRenderer(type);
       const el = renderer.renderFull({ type: 'scalar', components: new Float32Array([0]), stride: 0 });
       expect((el.props as any).children).toBe('[no renderer]');
@@ -92,7 +94,8 @@ describe('ValueRenderer registry', () => {
       const renderer = getValueRenderer(type);
       const el = renderer.renderInline({ type: 'scalar', components: new Float32Array([0.5]), stride: 1 });
       expect(getDataAttr(el, 'renderer')).toBe('exact-float-phase');
-      expect((el.props as any).children).toBe('inline:exact-float-phase');
+      const elProps = el.props as any;
+      expect(elProps.children).toBe('inline:exact-float-phase');
     });
   });
 

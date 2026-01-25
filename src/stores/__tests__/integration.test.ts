@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { RootStore } from '../RootStore';
 import type { Endpoint } from '../../graph/Patch';
+import { blockId } from '../../types';
 
 // Import blocks to ensure they're registered
 import '../../blocks/signal-blocks';
@@ -148,7 +149,7 @@ describe('Store Integration', () => {
       }).not.toThrow();
 
       expect(() => {
-        root.selection.selectBlock('b0' as any);
+        root.selection.selectBlock(blockId('b0'));
       }).not.toThrow();
 
       expect(() => {

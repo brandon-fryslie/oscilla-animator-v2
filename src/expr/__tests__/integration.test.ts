@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { compileExpression } from '../index';
 import { signalType } from '../../core/canonical-types';
 import { IRBuilderImpl } from '../../compiler/ir/IRBuilderImpl';
+import { extractSigExpr } from '../../__tests__/ir-test-helpers';
 
 describe('compileExpression Integration', () => {
   let builder: IRBuilderImpl;
@@ -26,9 +27,9 @@ describe('compileExpression Integration', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      const sigExpr = builder['sigExprs'][result.value as any];
-      expect(sigExpr.kind).toBe('const');
-      expect((sigExpr as any).value).toBe(42);
+      const sigExpr = extractSigExpr(builder, result.value);
+      expect(sigExpr?.kind).toBe('const');
+      expect((sigExpr as any)?.value).toBe(42);
     }
   });
 
@@ -78,8 +79,8 @@ describe('compileExpression Integration', () => {
     }
     expect(result.ok).toBe(true);
     if (result.ok) {
-      const sigExpr = builder['sigExprs'][result.value as any];
-      expect(sigExpr.kind).toBe('zip'); // Binary ops use zip
+      const sigExpr = extractSigExpr(builder, result.value);
+      expect(sigExpr?.kind).toBe('zip'); // Binary ops use zip
     }
   });
 
@@ -100,8 +101,8 @@ describe('compileExpression Integration', () => {
     }
     expect(result.ok).toBe(true);
     if (result.ok) {
-      const sigExpr = builder['sigExprs'][result.value as any];
-      expect(sigExpr.kind).toBe('map'); // Functions use map
+      const sigExpr = extractSigExpr(builder, result.value);
+      expect(sigExpr?.kind).toBe('map'); // Functions use map
     }
   });
 
