@@ -13,6 +13,8 @@ import { buildPatch, type PatchBuilder } from '../../graph/Patch';
 import { createRuntimeState } from '../../runtime/RuntimeState';
 import { executeFrame } from '../../runtime/ScheduleExecutor';
 import { evaluateSignal } from '../../runtime/SignalEvaluator';
+import { sigExprId, eventSlotId } from '../../compiler/ir/Indices';
+import { signalType } from '../../core/canonical-types';
 
 // Import block registrations
 import '../signal-blocks';
@@ -173,10 +175,10 @@ describe('SampleHold', () => {
     state.eventScalars[0] = 0;
 
     const signals = [
-      { kind: 'eventRead' as const, eventSlot: 0 as any, type: { payload: 'float' as const, unit: { kind: 'default' as const } } as any },
+      { kind: 'eventRead' as const, eventSlot: eventSlotId(0), type: signalType('float') },
     ];
 
-    const result = evaluateSignal(0 as any, signals, state);
+    const result = evaluateSignal(sigExprId(0), signals, state);
     expect(result).toBe(0);
   });
 

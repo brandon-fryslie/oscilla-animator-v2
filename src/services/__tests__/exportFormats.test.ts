@@ -14,6 +14,7 @@ import {
 import type { Block, Edge } from '../../graph/Patch';
 import type { BlockDef } from '../../blocks/registry';
 import { blockId } from '../../types';
+import { signalType } from '../../core/canonical-types';
 
 describe('exportFormats', () => {
   describe('formatConfigValue', () => {
@@ -115,10 +116,10 @@ describe('exportFormats', () => {
         form: 'primitive',
         capability: 'pure',
         inputs: {
-          count: { type: { payload: 'float' } as any, value: 100 },
+          count: { type: signalType('float'), value: 100 },
         },
         outputs: {
-          instances: { type: { payload: 'instances' } as any },
+          instances: { type: signalType('instances') },
         },
         lower: () => ({ outputsById: {} }),
       };
@@ -145,10 +146,10 @@ describe('exportFormats', () => {
         form: 'primitive',
         capability: 'pure',
         inputs: {
-          count: { type: { payload: 'float' } as any, value: 100 },
+          count: { type: signalType('float'), value: 100 },
         },
         outputs: {
-          instances: { type: { payload: 'instances' } as any },
+          instances: { type: signalType('instances') },
         },
         lower: () => ({ outputsById: {} }),
       };
@@ -175,11 +176,11 @@ describe('exportFormats', () => {
         form: 'primitive',
         capability: 'pure',
         inputs: {
-          sides: { type: { payload: 'float' } as any, value: 3 },
-          rx: { type: { payload: 'float' } as any, value: 0.5 },
+          sides: { type: signalType('float'), value: 3 },
+          rx: { type: signalType('float'), value: 0.5 },
         },
         outputs: {
-          shape: { type: { payload: 'shape' } as any },
+          shape: { type: signalType('shape') },
         },
         lower: () => ({ outputsById: {} }),
       };
@@ -208,10 +209,10 @@ describe('exportFormats', () => {
         form: 'primitive',
         capability: 'pure',
         inputs: {
-          h: { type: { payload: 'float' } as any, value: 0 },
+          h: { type: signalType('float'), value: 0 },
         },
         outputs: {
-          color: { type: { payload: 'color' } as any },
+          color: { type: signalType('color') },
         },
         lower: () => ({ outputsById: {} }),
       };

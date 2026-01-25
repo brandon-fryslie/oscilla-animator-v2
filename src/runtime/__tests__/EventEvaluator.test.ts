@@ -14,6 +14,7 @@ import { EventHub } from '../../events/EventHub';
 import { BufferPool } from '../BufferPool';
 import { buildPatch } from '../../graph/Patch';
 import { signalType } from '../../core/canonical-types';
+import { sigExprId } from '../../compiler/ir/Indices';
 import type { EventExpr } from '../../compiler/ir/types';
 import type { EventExprId } from '../../compiler/ir/Indices';
 import type { RuntimeState } from '../RuntimeState';
@@ -130,7 +131,7 @@ describe('EventEvaluator', () => {
         { kind: 'const', value: 0.6, type: signalType('float') },
       ];
       const exprs: EventExpr[] = [
-        { kind: 'wrap', signal: 0 as any }, // SigExprId = 0
+        { kind: 'wrap', signal: sigExprId(0) },
       ];
       const state = createMinimalState(1, 1);
       state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: { r: 0, g: 0, b: 0, a: 1 }, energy: 0.5 };
@@ -144,7 +145,7 @@ describe('EventEvaluator', () => {
         { kind: 'const', value: 0.8, type: signalType('float') },
       ];
       const exprs: EventExpr[] = [
-        { kind: 'wrap', signal: 0 as any },
+        { kind: 'wrap', signal: sigExprId(0) },
       ];
       const state = createMinimalState(1, 1);
       state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: { r: 0, g: 0, b: 0, a: 1 }, energy: 0.5 };
@@ -159,7 +160,7 @@ describe('EventEvaluator', () => {
         { kind: 'const', value: 0.4, type: signalType('float') },
       ];
       const exprs: EventExpr[] = [
-        { kind: 'wrap', signal: 0 as any },
+        { kind: 'wrap', signal: sigExprId(0) },
       ];
       const state = createMinimalState(1, 1);
       state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: { r: 0, g: 0, b: 0, a: 1 }, energy: 0.5 };
@@ -174,7 +175,7 @@ describe('EventEvaluator', () => {
         { kind: 'const', value: NaN, type: signalType('float') },
       ];
       const exprs: EventExpr[] = [
-        { kind: 'wrap', signal: 0 as any },
+        { kind: 'wrap', signal: sigExprId(0) },
       ];
       const state = createMinimalState(1, 1);
       state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: { r: 0, g: 0, b: 0, a: 1 }, energy: 0.5 };
@@ -188,7 +189,7 @@ describe('EventEvaluator', () => {
         { kind: 'const', value: Infinity, type: signalType('float') },
       ];
       const exprs: EventExpr[] = [
-        { kind: 'wrap', signal: 0 as any },
+        { kind: 'wrap', signal: sigExprId(0) },
       ];
       const state = createMinimalState(1, 1);
       state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: { r: 0, g: 0, b: 0, a: 1 }, energy: 0.5 };
@@ -202,7 +203,7 @@ describe('EventEvaluator', () => {
         { kind: 'const', value: 0.7, type: signalType('float') },
       ];
       const exprs: EventExpr[] = [
-        { kind: 'wrap', signal: 0 as any },
+        { kind: 'wrap', signal: sigExprId(0) },
       ];
       const state = createMinimalState(1, 1);
       state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: { r: 0, g: 0, b: 0, a: 1 }, energy: 0.5 };
