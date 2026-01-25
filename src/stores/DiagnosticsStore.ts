@@ -49,6 +49,26 @@ export interface FrameTimingStats {
 }
 
 // =============================================================================
+// Memory Stats Types (Sprint: memory-instrumentation)
+// =============================================================================
+
+/**
+ * Memory statistics for diagnosing buffer pool usage and leaks.
+ *
+ * Key metrics:
+ * - poolAllocs: Allocations in last frame (should match releases)
+ * - poolReleases: Releases in last frame
+ * - pooledBytes: Total bytes in buffer pool
+ * - poolKeyCount: Number of distinct buffer sizes
+ */
+export interface MemoryStats {
+  poolAllocs: number;
+  poolReleases: number;
+  pooledBytes: number;
+  poolKeyCount: number;
+}
+
+// =============================================================================
 // Log Types
 // =============================================================================
 
@@ -121,6 +141,14 @@ export class DiagnosticsStore {
   private _frameTimingHistory: FrameTimingStats[] = [];
   private static readonly MAX_TIMING_HISTORY = 30;
 
+  // Memory statistics (Sprint: memory-instrumentation)
+  private _memoryStats: MemoryStats = {
+    poolAllocs: 0,
+    poolReleases: 0,
+    pooledBytes: 0,
+    poolKeyCount: 0,
+  };
+
   // =============================================================================
   // Constructor
   // =============================================================================
@@ -130,7 +158,7 @@ export class DiagnosticsStore {
 
     makeObservable<
       DiagnosticsStore,
-      '_revision' | '_logs' | '_compilationStats' | '_frameTiming' | '_frameTimingHistory' | 'incrementRevision'
+      '_revision' | '_logs' | '_compilationStats' | '_frameTiming' | '_frameTimingHistory' | '_memoryStats' | 'incrementRevision'
     >(this, {
       // Observable revision counter
       _revision: observable,
@@ -163,6 +191,11 @@ export class DiagnosticsStore {
       frameTiming: computed,
       frameTimingHistory: computed,
       updateFrameTiming: action,
+
+      // Memory Stats API (Sprint: memory-instrumentation)
+      _memoryStats: observable,
+      memoryStats: computed,
+      updateMemoryStats: action,
     });
   }
 
@@ -408,5 +441,24 @@ export class DiagnosticsStore {
     if (this._frameTimingHistory.length > DiagnosticsStore.MAX_TIMING_HISTORY) {
       this._frameTimingHistory.shift();
     }
+  }
+
+  // =============================================================================
+  // Memory Stats API (Sprint: memory-instrumentation)
+  // =============================================================================
+
+  /**
+   * Returns current memory statistics.
+   */
+  get memoryStats(): MemoryStats {
+    return this._memoryStats;
+  }
+
+  /**
+   * Updates memory statistics.
+   * Called by the animation loop at snapshot intervals (5Hz).
+   */
+  updateMemoryStats(stats: MemoryStats): void {
+    this._memoryStats = stats;
   }
 }

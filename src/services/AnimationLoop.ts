@@ -130,6 +130,15 @@ export function executeAnimationFrame(
     // Update diagnostics store with timing stats
     store.diagnostics.updateFrameTiming(timingStats);
 
+    // Update diagnostics store with memory stats (Sprint: memory-instrumentation)
+    const poolStats = pool.getFrameStats();
+    store.diagnostics.updateMemoryStats({
+      poolAllocs: poolStats.allocs,
+      poolReleases: poolStats.releases,
+      pooledBytes: poolStats.pooledBytes,
+      poolKeyCount: poolStats.poolKeys,
+    });
+
     emitHealthSnapshot(
       currentState,
       store.events,

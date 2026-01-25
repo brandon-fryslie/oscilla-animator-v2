@@ -61,6 +61,9 @@ export const DiagnosticConsole: React.FC = observer(() => {
   // Get frame timing stats (reactive)
   const timing = diagnosticsStore.frameTiming;
 
+  // Get memory stats (reactive) - Sprint: memory-instrumentation
+  const memory = diagnosticsStore.memoryStats;
+
   return (
     <div
       style={{
@@ -94,6 +97,30 @@ export const DiagnosticConsole: React.FC = observer(() => {
           <span style={{ color: timing.droppedFrames > 0 ? '#f88' : '#8a8' }}>
             {timing.droppedFrames} dropped
           </span>
+        </div>
+      )}
+
+      {/* Memory Stats Bar (Sprint: memory-instrumentation) */}
+      {memory.pooledBytes > 0 && (
+        <div
+          style={{
+            padding: '6px 12px',
+            borderBottom: '1px solid #0f3460',
+            fontFamily: 'monospace',
+            fontSize: '11px',
+            background: '#0a0a18',
+            color: memory.poolAllocs !== memory.poolReleases ? '#f88' : '#8a8',
+          }}
+        >
+          <span style={{ color: '#8af' }}>Memory:</span>{' '}
+          {formatBytes(memory.pooledBytes)} pooled |{' '}
+          <span style={{ color: memory.poolAllocs !== memory.poolReleases ? '#f88' : '#8a8' }}>
+            {memory.poolAllocs} alloc / {memory.poolReleases} release
+          </span>{' '}
+          {memory.poolAllocs !== memory.poolReleases && (
+            <span style={{ color: '#f88' }}>(LEAK!)</span>
+          )}
+          | {memory.poolKeyCount} sizes
         </div>
       )}
 
@@ -285,6 +312,15 @@ const DiagnosticRow: React.FC<DiagnosticRowProps> = ({ diagnostic }) => {
 // =============================================================================
 // Helper Functions
 // =============================================================================
+
+/**
+ * Formats bytes into human-readable string.
+ */
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)}MB`;
+}
 
 /**
  * Returns icon for severity level.
