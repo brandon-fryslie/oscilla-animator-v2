@@ -10,14 +10,12 @@
 
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { reaction, toJS } from 'mobx';
+import { reaction } from 'mobx';
 import { buildPatch, type Patch } from './graph';
-import { migratePatch } from './graph/patchMigrations';
 import { compile } from './compiler';
 import {
   createSessionState,
   createRuntimeStateFromSession,
-  extractSessionState,
   BufferPool,
   executeFrame,
   migrateState,
@@ -27,12 +25,13 @@ import {
 import { renderFrame } from './render';
 import { App } from './ui/components';
 import { StoreProvider, type RootStore } from './stores';
-import { type BlockId, type ValueSlot } from './types';
+import { type ValueSlot } from './types';
 import { recordFrameTime, recordFrameDelta, shouldEmitSnapshot, emitHealthSnapshot, computeFrameTimingStats, resetFrameTimingStats } from './runtime/HealthMonitor';
 import type { RuntimeState } from './runtime/RuntimeState';
 import { debugService } from './services/DebugService';
 import { mapDebugMappings } from './services/mapDebugEdges';
 import { patches, DEFAULT_PATCH_INDEX, type PatchBuilder } from './demo';
+import { loadPatchFromStorage, savePatchToStorage, clearStorageAndReload } from './services/PatchPersistence';
 
 // =============================================================================
 // Global State
@@ -92,110 +91,8 @@ function log(msg: string, level: 'info' | 'warn' | 'error' = 'info') {
 
 let currentPatchIndex = DEFAULT_PATCH_INDEX;
 
-// =============================================================================
-// LocalStorage Persistence
-// =============================================================================
-
-const STORAGE_KEY = 'oscilla-v2-patch-v10'; // Bumped to invalidate stale patches after block genericization (FieldSin->Sin, etc.)
-
-/** Clear localStorage and reload - exposed globally for UI */
-function clearStorageAndReload(): void {
-  localStorage.removeItem(STORAGE_KEY);
-  window.location.reload();
-}
+// Expose clearStorageAndReload globally for UI
 (window as unknown as { clearStorageAndReload: typeof clearStorageAndReload }).clearStorageAndReload = clearStorageAndReload;
-
-interface SerializedPatch {
-  blocks: Array<{
-    id: string;
-    type: string;
-    params: Record<string, unknown>;
-    label?: string;
-    displayName: string | null;
-    domainId: string | null;
-    role: { kind: string; meta: Record<string, unknown> };
-    inputPorts: Array<{ id: string; defaultSource?: unknown }>;
-    outputPorts: Array<{ id: string }>;
-  }>;
-  edges: Array<{
-    id: string;
-    from: { kind: 'port'; blockId: string; slotId: string };
-    to: { kind: 'port'; blockId: string; slotId: string };
-    enabled?: boolean;
-    sortKey?: number;
-  }>;
-  presetIndex: number;
-}
-
-function serializePatch(patch: Patch, presetIndex: number): string {
-  const serialized: SerializedPatch = {
-    blocks: Array.from(patch.blocks.entries()).map(([, block]) => ({
-      id: block.id,
-      type: block.type,
-      params: { ...block.params },
-      ...(block.label && { label: block.label }),
-      displayName: block.displayName,
-      domainId: block.domainId,
-      role: block.role as { kind: string; meta: Record<string, unknown> },
-      inputPorts: Array.from(block.inputPorts.values()),
-      outputPorts: Array.from(block.outputPorts.values()),
-    })),
-    edges: patch.edges.map(e => ({ ...e })),
-    presetIndex,
-  };
-  return JSON.stringify(serialized);
-}
-
-function deserializePatch(json: string): { patch: Patch; presetIndex: number } | null {
-  try {
-    const data: SerializedPatch = JSON.parse(json);
-    const blocks = new Map<BlockId, any>();
-    for (const b of data.blocks) {
-      blocks.set(b.id as BlockId, {
-        ...b,
-        inputPorts: new Map(b.inputPorts.map(p => [p.id, p])),
-        outputPorts: new Map(b.outputPorts.map(p => [p.id, p])),
-      });
-    }
-    const rawPatch = { blocks, edges: data.edges };
-
-    // Apply patch migrations for removed/renamed blocks
-    const { patch: migratedPatch, migrations } = migratePatch(rawPatch);
-
-    // Log migrations to console for debugging
-    if (migrations.length > 0) {
-      console.warn(
-        `[PatchMigration] Applied ${migrations.length} migrations to patch:`,
-        migrations.map(m => `  - ${m.kind}: ${m.reason}`).join('\n'),
-      );
-    }
-
-    return {
-      patch: migratedPatch,
-      presetIndex: data.presetIndex,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function savePatchToStorage(patch: Patch, presetIndex: number): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, serializePatch(patch, presetIndex));
-  } catch {
-    // Storage full or unavailable - silently ignore
-  }
-}
-
-function loadPatchFromStorage(): { patch: Patch; presetIndex: number } | null {
-  try {
-    const json = localStorage.getItem(STORAGE_KEY);
-    if (!json) return null;
-    return deserializePatch(json);
-  } catch {
-    return null;
-  }
-}
 
 // =============================================================================
 // Build and Compile
