@@ -2,92 +2,36 @@
  * SVG Renderer - Geometry Reuse via <defs>/<use>
  *
  * Consumes DrawPathInstancesOp from RenderAssembler v2 and outputs SVG.
- * Key optimization: <defs>/<use> pattern for shared geometry templates.
  *
- * Architecture:
- * - Each unique (topologyId, points buffer) → one <path> in <defs>
- * - Each instance → one <use> with transform attribute
- * - GeometryCache tracks buffer identity via WeakMap for efficiency
- *
- * Coordinate spaces (same as Canvas2D):
- * - LOCAL SPACE: Control points centered at (0,0), |p| ≈ O(1)
- * - WORLD SPACE: Instance positions normalized [0,1]
- * - VIEWPORT SPACE: Final SVG coordinates
- *
- * Usage:
- *   const renderer = new SVGRenderer(container, 800, 600);
- *   renderer.render(frame);
- *   // ...later...
- *   renderer.dispose();
+ * Key invariants:
+ * - Geometry definitions in <defs> persist across frames.
+ * - Per-frame work clears only instance nodes (<use> / primitive elements).
+ * - Geometry reuse is keyed by (topologyId, points-buffer identity), not by content hashing.
+ * - Color buffers may be Uint8ClampedArray RGBA (0..255) or Float32Array RGBA (0..1); both are rendered correctly.
  */
 
-import type { RenderFrameIR, DrawPathInstancesOp, DrawPrimitiveInstancesOp, PathGeometry, PrimitiveGeometry, PathStyle } from './types';
-import { isPathTopology } from '../runtime/RenderAssembler';
+import type {
+  RenderFrameIR,
+  DrawPathInstancesOp,
+  DrawPrimitiveInstancesOp,
+  PathGeometry
+} from './types';
 import { getTopology } from '../shapes/registry';
-import type { PathTopologyDef, TopologyDef } from '../shapes/types';
-
-/**
- * Cache for geometry d-strings.
- * Uses WeakMap for buffer identity tracking to avoid content hashing.
- */
-class GeometryCache {
-  private cache = new Map<string, string>();
-  private bufferKeys = new WeakMap<Float32Array, string>();
-  private nextBufferId = 0;
-
-  /**
-   * Get or create a cached d-string for a geometry.
-   *
-   * @param topologyId - Topology identifier
-   * @param points - Points buffer (identity used for cache key)
-   * @param factory - Factory to create d-string if not cached
-   * @returns Cached or newly created d-string
-   */
-  get(
-    topologyId: number,
-    points: Float32Array,
-    factory: () => string
-  ): string {
-    const key = this.computeKey(topologyId, points);
-    if (!this.cache.has(key)) {
-      this.cache.set(key, factory());
-    }
-    return this.cache.get(key)!;
-  }
-
-  private computeKey(topologyId: number, points: Float32Array): string {
-    let bufferKey = this.bufferKeys.get(points);
-    if (!bufferKey) {
-      bufferKey = `buf_${this.nextBufferId++}`;
-      this.bufferKeys.set(points, bufferKey);
-    }
-    return `${topologyId}:${bufferKey}`;
-  }
-
-  /** Clear all cached entries */
-  clear(): void {
-    this.cache.clear();
-  }
-}
+import type { PathTopologyDef } from '../shapes/types';
 
 /**
  * Convert path geometry to SVG d-string.
  *
- * Supports all path verbs: MOVE (0), LINE (1), CUBIC (2), QUAD (3), CLOSE (4).
- * Points are in local space and used directly without scaling.
- *
- * @param verbs - Path verbs array
- * @param points - Control points (x,y interleaved)
- * @param pointsCount - Number of points (points.length / 2)
- * @returns SVG path d-string
+ * Supports verbs: MOVE (0), LINE (1), CUBIC (2), QUAD (3), CLOSE (4).
+ * Points are in local space.
  */
 export function pathToSvgD(
-  verbs: Uint8Array,
-  points: Float32Array,
-  pointsCount: number
+    verbs: Uint8Array,
+    points: Float32Array,
+    pointsCount: number
 ): string {
   const parts: string[] = [];
-  let pi = 0; // Point index
+  let pi = 0;
 
   for (let vi = 0; vi < verbs.length; vi++) {
     const verb = verbs[vi];
@@ -139,7 +83,6 @@ export function pathToSvgD(
     }
   }
 
-  // Validate we consumed expected number of points
   if (pi !== pointsCount) {
     console.warn(`pathToSvgD: Expected ${pointsCount} points, consumed ${pi}`);
   }
@@ -148,58 +91,120 @@ export function pathToSvgD(
 }
 
 /**
- * Convert RGBA buffer to CSS color string.
+ * Geometry definition cache:
+ * - Keyed by (topologyId, points Float32Array identity).
+ * - Stores an actual <defs> element id that persists across frames.
  */
-function rgbaToCSS(color: Uint8ClampedArray | ArrayBufferView, offset: number): string {
-  const colorArray = color as Uint8ClampedArray;
-  const r = colorArray[offset];
-  const g = colorArray[offset + 1];
-  const b = colorArray[offset + 2];
-  const a = colorArray[offset + 3] / 255;
-  return `rgba(${r},${g},${b},${a})`;
+class GeometryDefCache {
+  private defIdByKey = new Map<string, string>();
+  private bufferIds = new WeakMap<Float32Array, number>();
+  private nextBufferId = 1;
+  private nextDefId = 1;
+
+  clear(): void {
+    this.defIdByKey.clear();
+    // WeakMap auto-clears with GC; do not reset bufferIds.
+  }
+
+  getOrCreatePathDefId(
+      defs: SVGDefsElement,
+      geometry: PathGeometry
+  ): string {
+    const key = this.computeKey(geometry.topologyId, geometry.points);
+    const existingId = this.defIdByKey.get(key);
+    if (existingId) return existingId;
+
+    const id = `geom_${this.nextDefId++}`;
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('id', id);
+    path.setAttribute('d', pathToSvgD(geometry.verbs, geometry.points, geometry.pointsCount));
+    defs.appendChild(path);
+
+    this.defIdByKey.set(key, id);
+    return id;
+  }
+
+  private computeKey(topologyId: number, points: Float32Array): string {
+    let bid = this.bufferIds.get(points);
+    if (!bid) {
+      bid = this.nextBufferId++;
+      this.bufferIds.set(points, bid);
+    }
+    return `${topologyId}:buf${bid}`;
+  }
 }
 
 /**
- * SVG Renderer using <defs>/<use> pattern for efficient geometry reuse.
+ * Convert RGBA buffer (either bytes 0..255 or floats 0..1) to CSS rgba().
+ * This is deterministic:
+ * - Uint8ClampedArray => bytes
+ * - Float32Array      => floats in [0,1] (clamped)
+ */
+function rgbaToCSS(color: ArrayBufferView, offset: number): string {
+  if (color instanceof Uint8ClampedArray) {
+    const r = color[offset];
+    const g = color[offset + 1];
+    const b = color[offset + 2];
+    const a = color[offset + 3] / 255;
+    return `rgba(${r},${g},${b},${clamp01(a)})`;
+  }
+
+  if (color instanceof Float32Array) {
+    const r = Math.round(clamp01(color[offset]) * 255);
+    const g = Math.round(clamp01(color[offset + 1]) * 255);
+    const b = Math.round(clamp01(color[offset + 2]) * 255);
+    const a = clamp01(color[offset + 3]);
+    return `rgba(${r},${g},${b},${a})`;
+  }
+
+  // Fallback: treat as bytes using a Uint8 view over underlying buffer.
+  const u8 = new Uint8ClampedArray(color.buffer, color.byteOffset, color.byteLength);
+  const r = u8[offset];
+  const g = u8[offset + 1];
+  const b = u8[offset + 2];
+  const a = u8[offset + 3] / 255;
+  return `rgba(${r},${g},${b},${clamp01(a)})`;
+}
+
+function clamp01(x: number): number {
+  if (!Number.isFinite(x)) return 0;
+  return x < 0 ? 0 : x > 1 ? 1 : x;
+}
+
+/**
+ * SVG Renderer using <defs>/<use> for efficient geometry reuse across instances AND frames.
  */
 export class SVGRenderer {
   private svg: SVGSVGElement;
   private defs: SVGDefsElement;
   private renderGroup: SVGGElement;
-  private geometryCache = new GeometryCache();
-  private defIdCounter = 0;
+
   private width: number;
   private height: number;
+
+  private geomDefs = new GeometryDefCache();
 
   constructor(container: HTMLElement, width: number, height: number) {
     this.width = width;
     this.height = height;
 
-    // Create SVG element
     this.svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     this.svg.setAttribute('width', String(width));
     this.svg.setAttribute('height', String(height));
     this.svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
     this.svg.style.backgroundColor = '#000';
 
-    // Create defs for geometry templates
     this.defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
     this.svg.appendChild(this.defs);
 
-    // Create render group for instances
     this.renderGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     this.svg.appendChild(this.renderGroup);
 
     container.appendChild(this.svg);
   }
 
-  /**
-   * Render a v2 frame to SVG.
-   *
-   * @param frame - Frame containing DrawOps
-   */
   render(frame: RenderFrameIR): void {
-    this.clear();
+    this.clearFrameInstances();
 
     for (const op of frame.ops) {
       if (op.kind === 'drawPathInstances') {
@@ -210,88 +215,31 @@ export class SVGRenderer {
     }
   }
 
-
-
-  /**
-   * Get or create a path geometry definition in <defs>.
-   */
-  private getOrCreatePathDef(topology: PathTopologyDef, controlPoints: Float32Array): string {
-    const cacheKey = this.geometryCache.get(
-      topology.id,
-      controlPoints,
-      () => pathToSvgD(new Uint8Array(topology.verbs), controlPoints, controlPoints.length / 2)
-    );
-
-    // Check if we already have this def
-    const existingId = `geom_${topology.id}_${this.geometryCache['bufferKeys'].get(controlPoints)}`;
-    const existing = this.defs.querySelector(`#${CSS.escape(existingId)}`);
-    if (existing) {
-      return existingId;
-    }
-
-    // Create new definition
-    const id = `geom_${this.defIdCounter++}`;
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('id', id);
-    path.setAttribute('d', cacheKey);
-    this.defs.appendChild(path);
-
-    return id;
-  }
-
-  /**
-   * Get or create a circle definition (for primitive topologies).
-   */
-  private getOrCreateCircleDef(): string {
-    const id = 'circle_prim';
-    const existing = this.defs.querySelector(`#${id}`);
-    if (existing) {
-      return id;
-    }
-
-    // Create circle centered at origin with radius 1 (will be scaled by instance transform)
-    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    circle.setAttribute('id', id);
-    circle.setAttribute('cx', '0');
-    circle.setAttribute('cy', '0');
-    circle.setAttribute('r', '1');
-    this.defs.appendChild(circle);
-
-    return id;
-  }
-
-  /**
-   * Render a single DrawPathInstancesOp (v2 path).
-   */
   private renderDrawPathInstancesOp(op: DrawPathInstancesOp): void {
     const { geometry, instances, style } = op;
     const { count, position, size, rotation, scale2 } = instances;
 
-    // Get or create geometry template in defs
-    const defId = this.getOrCreateGeometryDef(geometry);
-
-    // Reference dimension for scaling
+    const defId = this.geomDefs.getOrCreatePathDefId(this.defs, geometry);
     const D = Math.min(this.width, this.height);
 
-    // Determine fill/stroke modes
     const hasFill = style.fillColor !== undefined && style.fillColor.length > 0;
     const hasStroke = style.strokeColor !== undefined && style.strokeColor.length > 0;
-    const uniformFillColor = hasFill && style.fillColor!.length === 4;
-    const uniformStrokeColor = hasStroke && style.strokeColor!.length === 4;
 
-    // Create <use> element for each instance
+    const uniformFill = hasFill && style.fillColor!.length === 4;
+    const uniformStroke = hasStroke && style.strokeColor!.length === 4;
+
     for (let i = 0; i < count; i++) {
       const x = position[i * 2] * this.width;
       const y = position[i * 2 + 1] * this.height;
+
       const instanceSize = typeof size === 'number' ? size : size[i];
       const sizePx = instanceSize * D;
 
-      // Build transform string
       let transform = `translate(${x} ${y})`;
 
       if (rotation) {
-        const rot = rotation[i] * (180 / Math.PI); // Convert radians to degrees
-        transform += ` rotate(${rot})`;
+        const rotDeg = rotation[i] * (180 / Math.PI);
+        transform += ` rotate(${rotDeg})`;
       }
 
       if (scale2) {
@@ -300,49 +248,46 @@ export class SVGRenderer {
         transform += ` scale(${sizePx} ${sizePx})`;
       }
 
-      // Create <use> element
       const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
       use.setAttribute('href', `#${defId}`);
       use.setAttribute('transform', transform);
 
-      // Apply fill
+      // Fill
       if (hasFill) {
-        use.setAttribute('fill', uniformFillColor
-          ? rgbaToCSS(style.fillColor!, 0)
-          : rgbaToCSS(style.fillColor!, i * 4)
+        use.setAttribute(
+            'fill',
+            uniformFill ? rgbaToCSS(style.fillColor!, 0) : rgbaToCSS(style.fillColor!, i * 4)
         );
       } else {
         use.setAttribute('fill', 'none');
       }
 
-      // Apply stroke
+      // Stroke
       if (hasStroke) {
-        use.setAttribute('stroke', uniformStrokeColor
-          ? rgbaToCSS(style.strokeColor!, 0)
-          : rgbaToCSS(style.strokeColor!, i * 4)
+        use.setAttribute(
+            'stroke',
+            uniformStroke ? rgbaToCSS(style.strokeColor!, 0) : rgbaToCSS(style.strokeColor!, i * 4)
         );
 
-        // Stroke width (in local space, scaled by instance transform)
-        const strokeWidth = typeof style.strokeWidth === 'number'
-          ? style.strokeWidth
-          : style.strokeWidth
-            ? (style.strokeWidth as Float32Array)[i]
-            : 0.01; // Default stroke width
+        const strokeWidthLocal = typeof style.strokeWidth === 'number'
+            ? style.strokeWidth
+            : style.strokeWidth
+                ? (style.strokeWidth as Float32Array)[i]
+                : 0.01;
 
-        // Convert to SVG units (account for instance scale)
-        use.setAttribute('stroke-width', String(strokeWidth * D / sizePx));
+        // Stroke width in viewport units. Keeps stroke visually stable across scaling.
+        // (If you want stroke to scale with object size instead, remove vector-effect and use local width.)
+        use.setAttribute('vector-effect', 'non-scaling-stroke');
+        use.setAttribute('stroke-width', String(strokeWidthLocal * D));
 
-        if (style.lineJoin) {
-          use.setAttribute('stroke-linejoin', style.lineJoin);
-        }
-        if (style.lineCap) {
-          use.setAttribute('stroke-linecap', style.lineCap);
-        }
+        if (style.lineJoin) use.setAttribute('stroke-linejoin', style.lineJoin);
+        if (style.lineCap) use.setAttribute('stroke-linecap', style.lineCap);
+
         if (style.dashPattern && style.dashPattern.length > 0) {
-          const dashPx = style.dashPattern.map(d => d * D / sizePx).join(' ');
+          const dashPx = style.dashPattern.map(d => d * D).join(' ');
           use.setAttribute('stroke-dasharray', dashPx);
           if (style.dashOffset) {
-            use.setAttribute('stroke-dashoffset', String(style.dashOffset * D / sizePx));
+            use.setAttribute('stroke-dashoffset', String(style.dashOffset * D));
           }
         }
       }
@@ -352,73 +297,56 @@ export class SVGRenderer {
   }
 
   /**
-   * Render a single DrawPrimitiveInstancesOp (v2 primitives).
-   * 
-   * For primitives (ellipse, rect), we create inline SVG elements instead of using <defs>/<use>
-   * since primitives are simple enough and don't need geometry sharing optimization.
+   * Render primitives (ellipse, rect) as inline SVG elements.
    */
   private renderDrawPrimitiveInstancesOp(op: DrawPrimitiveInstancesOp): void {
     const { geometry, instances, style } = op;
     const { count, position, size, rotation, scale2 } = instances;
 
-    // Get topology for parameter interpretation
     const topology = getTopology(geometry.topologyId);
-    
-    // Reference dimension for scaling
     const D = Math.min(this.width, this.height);
 
-    // Determine fill mode
     const hasFill = style.fillColor !== undefined && style.fillColor.length > 0;
-    const uniformFillColor = hasFill && style.fillColor!.length === 4;
+    const uniformFill = hasFill && style.fillColor!.length === 4;
 
-    // Render each instance
+    const hasStroke = style.strokeColor !== undefined && style.strokeColor.length > 0;
+    const uniformStroke = hasStroke && style.strokeColor!.length === 4;
+
     for (let i = 0; i < count; i++) {
       const x = position[i * 2] * this.width;
       const y = position[i * 2 + 1] * this.height;
+
       const instanceSize = typeof size === 'number' ? size : size[i];
       const sizePx = instanceSize * D;
 
-      // Create SVG element based on topology
+      const sx = scale2 ? scale2[i * 2] : 1;
+      const sy = scale2 ? scale2[i * 2 + 1] : 1;
+
       let element: SVGElement;
-      
-      if (topology.id === 0) { // TOPOLOGY_ID_ELLIPSE
-        // Ellipse primitive
+
+      if (topology.id === 0) { // ellipse
         const rx = geometry.params.rx ?? 0.5;
         const ry = geometry.params.ry ?? 0.5;
-        
+
         const ellipse = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
         ellipse.setAttribute('cx', String(x));
         ellipse.setAttribute('cy', String(y));
-        
-        // Apply size and scale2 to radii
-        const sx = scale2 ? scale2[i * 2] : 1;
-        const sy = scale2 ? scale2[i * 2 + 1] : 1;
         ellipse.setAttribute('rx', String(rx * sizePx * sx));
         ellipse.setAttribute('ry', String(ry * sizePx * sy));
-        
         element = ellipse;
-      } else if (topology.id === 1) { // TOPOLOGY_ID_RECT {
-        // Rectangle primitive
-        const width = geometry.params.width ?? 1.0;
-        const height = geometry.params.height ?? 1.0;
-        
+      } else if (topology.id === 1) { // rect
+        const w0 = geometry.params.width ?? 1.0;
+        const h0 = geometry.params.height ?? 1.0;
+
         const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        
-        // Apply size and scale2 to dimensions
-        const sx = scale2 ? scale2[i * 2] : 1;
-        const sy = scale2 ? scale2[i * 2 + 1] : 1;
-        const w = width * sizePx * sx;
-        const h = height * sizePx * sy;
-        
-        // Center the rect at (x, y)
+        const w = w0 * sizePx * sx;
+        const h = h0 * sizePx * sy;
         rect.setAttribute('x', String(x - w / 2));
         rect.setAttribute('y', String(y - h / 2));
         rect.setAttribute('width', String(w));
         rect.setAttribute('height', String(h));
-        
         element = rect;
       } else {
-        // Fallback: render as circle
         const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         circle.setAttribute('cx', String(x));
         circle.setAttribute('cy', String(y));
@@ -426,20 +354,47 @@ export class SVGRenderer {
         element = circle;
       }
 
-      // Apply rotation if present
       if (rotation) {
-        const rot = rotation[i] * (180 / Math.PI); // Convert radians to degrees
-        element.setAttribute('transform', `rotate(${rot} ${x} ${y})`);
+        const rotDeg = rotation[i] * (180 / Math.PI);
+        element.setAttribute('transform', `rotate(${rotDeg} ${x} ${y})`);
       }
 
-      // Apply fill
+      // Fill
       if (hasFill) {
-        element.setAttribute('fill', uniformFillColor
-          ? rgbaToCSS(style.fillColor!, 0)
-          : rgbaToCSS(style.fillColor!, i * 4)
+        element.setAttribute(
+            'fill',
+            uniformFill ? rgbaToCSS(style.fillColor!, 0) : rgbaToCSS(style.fillColor!, i * 4)
         );
       } else {
         element.setAttribute('fill', 'none');
+      }
+
+      // Stroke
+      if (hasStroke) {
+        element.setAttribute(
+            'stroke',
+            uniformStroke ? rgbaToCSS(style.strokeColor!, 0) : rgbaToCSS(style.strokeColor!, i * 4)
+        );
+
+        const strokeWidthLocal = typeof style.strokeWidth === 'number'
+            ? style.strokeWidth
+            : style.strokeWidth
+                ? (style.strokeWidth as Float32Array)[i]
+                : 0.01;
+
+        element.setAttribute('vector-effect', 'non-scaling-stroke');
+        element.setAttribute('stroke-width', String(strokeWidthLocal * D));
+
+        if (style.lineJoin) element.setAttribute('stroke-linejoin', style.lineJoin);
+        if (style.lineCap) element.setAttribute('stroke-linecap', style.lineCap);
+
+        if (style.dashPattern && style.dashPattern.length > 0) {
+          const dashPx = style.dashPattern.map(d => d * D).join(' ');
+          element.setAttribute('stroke-dasharray', dashPx);
+          if (style.dashOffset) {
+            element.setAttribute('stroke-dashoffset', String(style.dashOffset * D));
+          }
+        }
       }
 
       this.renderGroup.appendChild(element);
@@ -447,53 +402,29 @@ export class SVGRenderer {
   }
 
   /**
-   * Get or create a geometry definition in <defs> (v2 path).
-   *
-   * @param geometry - Path geometry
-   * @returns Definition ID for use in href
+   * Per-frame clear: remove instance nodes only.
+   * Geometry defs persist across frames.
    */
-  private getOrCreateGeometryDef(geometry: PathGeometry): string {
-    const cacheKey = this.geometryCache.get(
-      geometry.topologyId,
-      geometry.points,
-      () => pathToSvgD(geometry.verbs, geometry.points, geometry.pointsCount)
-    );
-
-    // Check if we already have this def
-    const existingId = `geom_${geometry.topologyId}_${this.geometryCache['bufferKeys'].get(geometry.points)}`;
-    const existing = this.defs.querySelector(`#${CSS.escape(existingId)}`);
-    if (existing) {
-      return existingId;
-    }
-
-    // Create new definition
-    const id = `geom_${this.defIdCounter++}`;
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('id', id);
-    path.setAttribute('d', cacheKey);
-    this.defs.appendChild(path);
-
-    return id;
-  }
-
-  /**
-   * Clear the render group (removes all <use> elements).
-   */
-  clear(): void {
+  private clearFrameInstances(): void {
     while (this.renderGroup.firstChild) {
       this.renderGroup.removeChild(this.renderGroup.firstChild);
     }
-    // Also clear defs for fresh frame (geometry may have changed)
-    while (this.defs.firstChild) {
-      this.defs.removeChild(this.defs.firstChild);
-    }
-    this.defIdCounter = 0;
-    this.geometryCache.clear();
   }
 
   /**
-   * Update viewport dimensions.
+   * Full clear (instances + defs + caches).
+   * Use only when you know geometry buffers/topologies are invalidated globally.
    */
+  clearAll(): void {
+    this.clearFrameInstances();
+
+    while (this.defs.firstChild) {
+      this.defs.removeChild(this.defs.firstChild);
+    }
+
+    this.geomDefs.clear();
+  }
+
   resize(width: number, height: number): void {
     this.width = width;
     this.height = height;
@@ -502,25 +433,16 @@ export class SVGRenderer {
     this.svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
   }
 
-  /**
-   * Get the SVG element for export.
-   */
   getSVGElement(): SVGSVGElement {
     return this.svg;
   }
 
-  /**
-   * Export SVG as string.
-   */
   toSVGString(): string {
     return new XMLSerializer().serializeToString(this.svg);
   }
 
-  /**
-   * Dispose of the renderer and remove SVG from DOM.
-   */
   dispose(): void {
+    this.clearAll();
     this.svg.parentElement?.removeChild(this.svg);
-    this.geometryCache.clear();
   }
 }
