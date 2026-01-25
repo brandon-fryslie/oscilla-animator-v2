@@ -357,6 +357,20 @@ export interface HealthMetrics {
 
   /** Maximum frame delta in current window */
   maxFrameDelta: number;
+
+  // === Memory Instrumentation (Sprint: memory-instrumentation) ===
+
+  /** Pool allocations in last frame */
+  poolAllocs: number;
+
+  /** Pool releases in last frame */
+  poolReleases: number;
+
+  /** Total pooled bytes across all pools */
+  pooledBytes: number;
+
+  /** Number of distinct pool keys */
+  poolKeyCount: number;
 }
 
 /**
@@ -381,6 +395,11 @@ export function createHealthMetrics(): HealthMetrics {
     assemblerGroupingMsIndex: 0,
     assemblerSlicingMs: new Array(10).fill(0),
     assemblerSlicingMsIndex: 0,
+    // Memory instrumentation
+    poolAllocs: 0,
+    poolReleases: 0,
+    pooledBytes: 0,
+    poolKeyCount: 0,
     assemblerTotalMs: new Array(10).fill(0),
     assemblerTotalMsIndex: 0,
     topologyGroupCacheHits: 0,
