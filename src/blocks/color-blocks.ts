@@ -132,8 +132,8 @@ registerBlock({
   },
   inputs: {
     hue: { label: 'Hue', type: signalTypeField('float', 'default') },
-    sat: { label: 'Saturation', type: signalType('float'), defaultSource: defaultSourceConst(1.0) },
-    val: { label: 'Value', type: signalType('float'), defaultSource: defaultSourceConst(1.0) },
+    sat: { label: 'Saturation', type: signalType('float'), defaultSource: defaultSourceConst(1.0), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    val: { label: 'Value', type: signalType('float'), defaultSource: defaultSourceConst(1.0), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
   },
   outputs: {
     color: { label: 'Color', type: signalTypeField('color', 'default') },

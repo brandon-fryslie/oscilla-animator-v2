@@ -6,7 +6,7 @@
  */
 
 import type { Node, Edge as ReactFlowEdge } from 'reactflow';
-import type { Block, BlockId, Edge, DefaultSource } from '../../types';
+import type { Block, BlockId, Edge, DefaultSource, UIControlHint } from '../../types';
 import type { BlockDef, InputDef } from '../../blocks/registry';
 import type { PayloadType, SignalType } from '../../core/canonical-types';
 import { signalType } from '../../core/canonical-types';
@@ -44,6 +44,8 @@ export interface PortData {
   isConnected: boolean;
   /** Connection info if connected */
   connection?: PortConnectionInfo;
+  /** UI hint for default source control (min/max/step) */
+  uiHint?: UIControlHint;
 }
 
 /**
@@ -53,7 +55,7 @@ export interface ParamData {
   id: string;
   label: string;
   value: unknown;
-  hint?: import('../../types').UIControlHint;
+  hint?: UIControlHint;
 }
 
 /**
@@ -101,7 +103,8 @@ function createPortData(
   type: SignalType | undefined,
   isConnected: boolean,
   defaultSource?: DefaultSource,
-  connection?: PortConnectionInfo
+  connection?: PortConnectionInfo,
+  uiHint?: UIControlHint
 ): PortData {
   // For inputs without a type (non-port inputs), use a default
   const effectiveType: SignalType = type || signalType('float');
@@ -115,6 +118,7 @@ function createPortData(
     typeColor: getTypeColor(effectiveType.payload),
     isConnected,
     connection,
+    uiHint,
   };
 }
 
@@ -194,7 +198,8 @@ export function createNodeFromBlock(
           input.type,
           inputConnections.has(inputId),
           getEffectiveDefaultSource(block, inputId, input),
-          inputConnections.get(inputId)
+          inputConnections.get(inputId),
+          input.uiHint
         )
       ),
       outputs: Object.entries(blockDef.outputs).map(([outputId, output]) =>

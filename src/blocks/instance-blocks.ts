@@ -48,8 +48,8 @@ registerBlock({
   },
   inputs: {
     elements: { label: 'Elements', type: signalTypeField('shape', 'default') },
-    rows: { label: 'Rows', type: signalType('int'), value: 10, defaultSource: defaultSourceConst(10), exposedAsPort: false },
-    cols: { label: 'Columns', type: signalType('int'), value: 10, defaultSource: defaultSourceConst(10), exposedAsPort: false },
+    rows: { label: 'Rows', type: signalType('int'), value: 10, defaultSource: defaultSourceConst(10), exposedAsPort: false, uiHint: { kind: 'slider', min: 1, max: 100, step: 1 } },
+    cols: { label: 'Columns', type: signalType('int'), value: 10, defaultSource: defaultSourceConst(10), exposedAsPort: false, uiHint: { kind: 'slider', min: 1, max: 100, step: 1 } },
   },
   outputs: {
     position: { label: 'Position', type: signalTypeField('vec3', 'default') },
@@ -131,7 +131,7 @@ registerBlock({
   },
   inputs: {
     elements: { label: 'Elements', type: signalTypeField('shape', 'default') },
-    spacing: { label: 'Length', type: signalType('float'), value: 0.8, defaultSource: defaultSourceConst(0.8), exposedAsPort: true },
+    spacing: { label: 'Length', type: signalType('float'), value: 0.8, defaultSource: defaultSourceConst(0.8), exposedAsPort: true, uiHint: { kind: 'slider', min: 0.1, max: 2, step: 0.01 } },
   },
   outputs: {
     position: { label: 'Position', type: signalTypeField('vec3', 'default') },
@@ -219,8 +219,8 @@ registerBlock({
   },
   inputs: {
     elements: { label: 'Elements', type: signalTypeField('shape', 'default') },
-    radius: { label: 'Radius', type: signalType('float'), value: 0.3, defaultSource: defaultSourceConst(0.3), exposedAsPort: true },
-    phase: { label: 'Phase', type: signalType('float', unitPhase01()), value: 0, defaultSource: defaultSourceConst(0), exposedAsPort: true },
+    radius: { label: 'Radius', type: signalType('float'), value: 0.3, defaultSource: defaultSourceConst(0.3), exposedAsPort: true, uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 } },
+    phase: { label: 'Phase', type: signalType('float', unitPhase01()), value: 0, defaultSource: defaultSourceConst(0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
   },
   outputs: {
     position: { label: 'Position', type: signalTypeField('vec3', 'default') },
@@ -301,10 +301,10 @@ registerBlock({
   },
   inputs: {
     elements: { label: 'Elements', type: signalTypeField('shape', 'default') },
-    x0: { label: 'Start X', type: signalType('float'), value: 0.1, defaultSource: defaultSourceConst(0.1), exposedAsPort: true },
-    y0: { label: 'Start Y', type: signalType('float'), value: 0.5, defaultSource: defaultSourceConst(0.5), exposedAsPort: true },
-    x1: { label: 'End X', type: signalType('float'), value: 0.9, defaultSource: defaultSourceConst(0.9), exposedAsPort: true },
-    y1: { label: 'End Y', type: signalType('float'), value: 0.5, defaultSource: defaultSourceConst(0.5), exposedAsPort: true },
+    x0: { label: 'Start X', type: signalType('float'), value: 0.1, defaultSource: defaultSourceConst(0.1), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    y0: { label: 'Start Y', type: signalType('float'), value: 0.5, defaultSource: defaultSourceConst(0.5), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    x1: { label: 'End X', type: signalType('float'), value: 0.9, defaultSource: defaultSourceConst(0.9), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    y1: { label: 'End Y', type: signalType('float'), value: 0.5, defaultSource: defaultSourceConst(0.5), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
   },
   outputs: {
     position: { label: 'Position', type: signalTypeField('vec3', 'default') },

@@ -778,3 +778,19 @@ export function signalTypePerLaneEvent(payload: PayloadType, instance: InstanceR
     temporality: axisInstantiated(temporalityDiscrete()),
   });
 }
+
+/**
+ * Create a cardinality-polymorphic SignalType (one-or-many + continuous).
+ *
+ * Used for blocks with cardinalityMode: 'preserve' that work with both signals and fields.
+ * The cardinality axis is left as 'default', allowing the type system to resolve it
+ * based on actual input cardinalities at compile time.
+ */
+export function signalTypePolymorphic(payload: PayloadType, unit?: Unit): SignalType {
+  const u = unit ?? defaultUnitForPayload(payload);
+
+  return signalType(payload, u, {
+    cardinality: axisDefault(),
+    temporality: axisInstantiated(temporalityContinuous()),
+  });
+}

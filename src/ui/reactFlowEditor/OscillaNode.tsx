@@ -325,6 +325,7 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
                 portId={input.id}
                 portLabel={input.label}
                 defaultSource={input.defaultSource!}
+                hint={input.uiHint}
               />
             ))}
           </div>
