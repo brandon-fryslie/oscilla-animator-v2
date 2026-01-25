@@ -10,6 +10,7 @@ import { describe, it, expect } from 'vitest';
 // For now, we test indirectly via the compilation pipeline
 
 import { pass2TypeGraph } from '../pass2-types';
+import { pass1TypeConstraints } from '../pass1-type-constraints';
 import type { NormalizedPatch } from '../../ir/patches';
 import { signalType, signalTypeField } from '../../../core/canonical-types';
 import { isCardinalityGeneric } from '../../../blocks/registry';
@@ -42,8 +43,13 @@ describe('Cardinality Specialization', () => {
         revision: 1,
       };
 
+      // Must run pass1 first to resolve unit variables for Const blocks
+      const pass1Result = pass1TypeConstraints(patch);
+      expect(pass1Result.kind).toBe('ok');
+      if (pass1Result.kind !== 'ok') return;
+
       // Should not throw
-      expect(() => pass2TypeGraph(patch)).not.toThrow();
+      expect(() => pass2TypeGraph(patch, pass1Result)).not.toThrow();
     });
 
     it('rejects invalid port connections', () => {

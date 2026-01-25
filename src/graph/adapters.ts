@@ -21,7 +21,7 @@
  */
 
 import type { SignalType, PayloadType, Unit } from '../core/canonical-types';
-import { getAxisValue, DEFAULTS_V0, unitsEqual } from '../core/canonical-types';
+import { getAxisValue, DEFAULTS_V0, unitsEqual, isUnitVar } from '../core/canonical-types';
 
 // =============================================================================
 // Adapter Specification
@@ -279,11 +279,17 @@ export function findAdapter(from: SignalType, to: SignalType): AdapterSpec | nul
         }
       }
       // For rules with 'any' unit on both sides, require actual units to match
+      // Exception: unit variables (unitVar) are polymorphic and match any concrete unit
       if (rule.from.unit === 'any' && rule.to.unit === 'any') {
         const fromUnit = fromSig.unit;
         const toUnit = toSig.unit;
-        if (fromUnit !== 'any' && toUnit !== 'any' && !unitsEqual(fromUnit as Unit, toUnit as Unit)) {
-          continue;
+        if (fromUnit !== 'any' && toUnit !== 'any') {
+          // Unit variables are polymorphic - they can match any unit
+          const fromIsVar = isUnitVar(fromUnit as Unit);
+          const toIsVar = isUnitVar(toUnit as Unit);
+          if (!fromIsVar && !toIsVar && !unitsEqual(fromUnit as Unit, toUnit as Unit)) {
+            continue;
+          }
         }
       }
       return rule.adapter;

@@ -198,8 +198,14 @@ function isTypeCompatible(from: SignalType, to: SignalType): boolean {
   }
 
   // Unit must match (per spec: no implicit conversion)
+  // Exception: unit variables (unitVar) are polymorphic and match any unit
   if (from.unit.kind !== to.unit.kind) {
-    return false;
+    // Unit variables are polymorphic - they can unify with any concrete unit
+    const fromIsVar = from.unit.kind === 'var';
+    const toIsVar = to.unit.kind === 'var';
+    if (!fromIsVar && !toIsVar) {
+      return false;
+    }
   }
 
   // Temporality must match
