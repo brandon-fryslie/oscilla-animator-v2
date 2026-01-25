@@ -63,8 +63,19 @@ registerBlock({
 
     // Field path (or mixed signal/field with broadcast)
     if (a.k === 'field' || b.k === 'field') {
-      const aField = a.k === 'field' ? a.id : ctx.b.Broadcast(a.id as SigExprId, signalTypeField('float', 'default'));
-      const bField = b.k === 'field' ? b.id : ctx.b.Broadcast(b.id as SigExprId, signalTypeField('float', 'default'));
+      let aField: FieldExprId;
+      if (a.k === 'field') {
+        aField = a.id;
+      } else {
+        aField = ctx.b.Broadcast(a.id as SigExprId, signalTypeField('float', 'default'));
+      }
+
+      let bField: FieldExprId;
+      if (b.k === 'field') {
+        bField = b.id;
+      } else {
+        bField = ctx.b.Broadcast(b.id as SigExprId, signalTypeField('float', 'default'));
+      }
 
       const addFn = ctx.b.kernel('fieldAdd');
       const fieldId = ctx.b.fieldZip([aField as FieldExprId, bField as FieldExprId], addFn, signalTypeField('float', 'default'));
@@ -137,8 +148,19 @@ registerBlock({
 
     // Field path
     if (a.k === 'field' || b.k === 'field') {
-      const aField = a.k === 'field' ? a.id : ctx.b.Broadcast(a.id as SigExprId, signalTypeField('float', 'default'));
-      const bField = b.k === 'field' ? b.id : ctx.b.Broadcast(b.id as SigExprId, signalTypeField('float', 'default'));
+      let aField: FieldExprId;
+      if (a.k === 'field') {
+        aField = a.id;
+      } else {
+        aField = ctx.b.Broadcast(a.id as SigExprId, signalTypeField('float', 'default'));
+      }
+
+      let bField: FieldExprId;
+      if (b.k === 'field') {
+        bField = b.id;
+      } else {
+        bField = ctx.b.Broadcast(b.id as SigExprId, signalTypeField('float', 'default'));
+      }
 
       const subFn = ctx.b.kernel('fieldSubtract');
       const fieldId = ctx.b.fieldZip([aField as FieldExprId, bField as FieldExprId], subFn, signalTypeField('float', 'default'));
@@ -211,8 +233,19 @@ registerBlock({
 
     // Field path
     if (a.k === 'field' || b.k === 'field') {
-      const aField = a.k === 'field' ? a.id : ctx.b.Broadcast(a.id as SigExprId, signalTypeField('float', 'default'));
-      const bField = b.k === 'field' ? b.id : ctx.b.Broadcast(b.id as SigExprId, signalTypeField('float', 'default'));
+      let aField: FieldExprId;
+      if (a.k === 'field') {
+        aField = a.id;
+      } else {
+        aField = ctx.b.Broadcast(a.id as SigExprId, signalTypeField('float', 'default'));
+      }
+
+      let bField: FieldExprId;
+      if (b.k === 'field') {
+        bField = b.id;
+      } else {
+        bField = ctx.b.Broadcast(b.id as SigExprId, signalTypeField('float', 'default'));
+      }
 
       const mulFn = ctx.b.kernel('fieldMultiply');
       const fieldId = ctx.b.fieldZip([aField as FieldExprId, bField as FieldExprId], mulFn, signalTypeField('float', 'default'));
@@ -285,8 +318,19 @@ registerBlock({
 
     // Field path
     if (a.k === 'field' || b.k === 'field') {
-      const aField = a.k === 'field' ? a.id : ctx.b.Broadcast(a.id as SigExprId, signalTypeField('float', 'default'));
-      const bField = b.k === 'field' ? b.id : ctx.b.Broadcast(b.id as SigExprId, signalTypeField('float', 'default'));
+      let aField: FieldExprId;
+      if (a.k === 'field') {
+        aField = a.id;
+      } else {
+        aField = ctx.b.Broadcast(a.id as SigExprId, signalTypeField('float', 'default'));
+      }
+
+      let bField: FieldExprId;
+      if (b.k === 'field') {
+        bField = b.id;
+      } else {
+        bField = ctx.b.Broadcast(b.id as SigExprId, signalTypeField('float', 'default'));
+      }
 
       const divFn = ctx.b.kernel('fieldDivide');
       const fieldId = ctx.b.fieldZip([aField as FieldExprId, bField as FieldExprId], divFn, signalTypeField('float', 'default'));
@@ -359,8 +403,19 @@ registerBlock({
 
     // Field path
     if (a.k === 'field' || b.k === 'field') {
-      const aField = a.k === 'field' ? a.id : ctx.b.Broadcast(a.id as SigExprId, signalTypeField('float', 'default'));
-      const bField = b.k === 'field' ? b.id : ctx.b.Broadcast(b.id as SigExprId, signalTypeField('float', 'default'));
+      let aField: FieldExprId;
+      if (a.k === 'field') {
+        aField = a.id;
+      } else {
+        aField = ctx.b.Broadcast(a.id as SigExprId, signalTypeField('float', 'default'));
+      }
+
+      let bField: FieldExprId;
+      if (b.k === 'field') {
+        bField = b.id;
+      } else {
+        bField = ctx.b.Broadcast(b.id as SigExprId, signalTypeField('float', 'default'));
+      }
 
       const modFn = ctx.b.kernel('fieldModulo');
       const fieldId = ctx.b.fieldZip([aField as FieldExprId, bField as FieldExprId], modFn, signalTypeField('float', 'default'));
