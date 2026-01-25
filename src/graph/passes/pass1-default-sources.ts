@@ -6,6 +6,47 @@
  * Iterates until all nested default sources are materialized.
  */
 
+/**
+ * ============================================================================
+ * CONTRACT / NON-NEGOTIABLE BEHAVIOR
+ * ============================================================================
+ *
+ * This pass materializes *implicit default sources* into explicit graph
+ * structure.
+ *
+ * What this pass MUST do:
+ *   - For every exposed input port that has no incoming enabled edge:
+ *       * if there is a defaultSource (port override or registry default),
+ *         materialize it by inserting a derived block + edge.
+ *   - Iterate until no new default sources are introduced (nested defaults).
+ *   - Treat config-only inputs (`exposedAsPort: false`) as NOT ports:
+ *       * never create port objects
+ *       * never materialize defaults for them
+ *   - Preserve determinism via deterministic derived IDs.
+ *   - Preserve the strict normalization boundary:
+ *       * do not infer or stamp types/units
+ *       * derived block params come only from DefaultSource.params
+ *
+ * What this pass MUST NOT do:
+ *   - NO type/unit inference, NO constraint solving.
+ *   - NO adapter insertion.
+ *   - NO block special-casing EXCEPT for TimeRoot wiring.
+ *     (TimeRoot is the only allowed special case because it represents a
+ *      singleton graph root with a pre-existing instance.)
+ *   - NO mutation of existing user blocks/edges beyond adding derived blocks
+ *     and edges.
+ *
+ * Allowed future changes (safe evolutions):
+ *   - Add additional singleton-root special cases ONLY if they are truly
+ *     global singletons like TimeRoot, and they are specified as such.
+ *   - Improve cycle detection / iteration strategy (still must be bounded).
+ *   - Expand derived-role metadata for better UX/debugging.
+ *
+ * Disallowed future changes (architectural drift):
+ *   - Special-casing a particular user block type (e.g. Const) here.
+ *   - Writing inferred types/units into block params during normalization.
+ */
+
 import type { BlockId, PortId, BlockRole, DefaultSource } from '../../types';
 import type { Block, Edge, Patch } from '../Patch';
 import { getBlockDefinition, requireBlockDef, type InputDef } from '../../blocks/registry';
@@ -91,11 +132,10 @@ function materializeDefaultSource(
     },
   };
 
-  // Build params - for Const blocks, include payloadType from input type
-  let params = ds.params ?? {};
-  if (ds.blockType === 'Const' && targetInput.type) {
-    params = { ...params, payloadType: targetInput.type.payload };
-  }
+  // Build params.
+  // Normalization is structural: do not infer or stamp types here.
+  // The constraint solver specializes any generic/var types on the expanded graph.
+  const params = ds.params ?? {};
 
   const derivedBlock: Block = {
     id: derivedId,

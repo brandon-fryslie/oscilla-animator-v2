@@ -5,6 +5,47 @@
  * It consists of Blocks connected by Edges.
  */
 
+/**
+ * ============================================================================
+ * CONTRACT / NON-NEGOTIABLE BEHAVIOR
+ * ============================================================================
+ *
+ * This module defines the *user-facing* graph model (Patch/Block/Edge).
+ * It is intentionally not the compiled IR.
+ *
+ * What this module MUST represent:
+ *   - The graph exactly as the editor would serialize it:
+ *       * stable BlockId/Edge IDs
+ *       * ports as endpoints
+ *       * per-instance port properties (e.g. defaultSource overrides)
+ *       * user roles / display metadata
+ *   - Data must be sufficient to reconstruct user intent.
+ *
+ * What this module MUST NOT represent:
+ *   - NO inferred types, NO resolved payloads, NO resolved units.
+ *   - NO constraint-solver artifacts.
+ *   - NO compiler-only derived structure (dense indices, schedules, slots).
+ *   - NO runtime caches.
+ *
+ * Rationale:
+ *   - Patch is the authoritative, undoable user intent.
+ *   - Normalization/compilation may derive additional artifacts, but they must
+ *     not be written back into Patch objects.
+ *
+ * Allowed future changes (safe evolutions):
+ *   - Add editor-only metadata fields (selection state, UI hints) as long as
+ *     they do not affect compilation semantics.
+ *   - Add new endpoint kinds if/when the UI introduces new first-class
+ *     connection primitives, provided normalization explicitly rewrites them.
+ *   - Add new per-port override fields (still treated as user intent).
+ *
+ * Disallowed future changes (architectural drift):
+ *   - Adding fields like `resolvedUnit`, `resolvedPayload`, `slotId`, etc.
+ *     onto Block/Port/Edge.
+ *   - Allowing block instance params to become a dumping ground for inferred
+ *     typing results.
+ */
+
 import type { BlockId, PortId, BlockRole, DefaultSource, EdgeRole } from '../types';
 import { requireBlockDef } from '../blocks/registry';
 

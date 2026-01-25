@@ -1,3 +1,4 @@
+
 /**
  * Lower Types - Types for block lowering pass
  *
@@ -29,14 +30,35 @@ import type { IRBuilder } from './IRBuilder';
  * Used throughout the compiler pipeline for tracking IR expressions.
  */
 export type ValueRefPacked =
-  | { readonly k: 'sig'; readonly id: SigExprId; readonly slot: ValueSlot }
-  | { readonly k: 'field'; readonly id: FieldExprId; readonly slot: ValueSlot }
-  | { readonly k: 'event'; readonly id: EventExprId; readonly slot: EventSlotId }
+  | {
+      readonly k: 'sig';
+      readonly id: SigExprId;
+      /** Base slot for lane 0. Multi-component signals occupy [slotMeta.offset, slotMeta.offset + stride). */
+      readonly slot: ValueSlot;
+      readonly type: SignalType;
+      /** Components per sample for this value (e.g. float=1, vec2=2, vec3=3, color=4). */
+      readonly stride: number;
+    }
+  | {
+      readonly k: 'field';
+      readonly id: FieldExprId;
+      /** Slot that will hold the materialized field buffer (typed by `type`). */
+      readonly slot: ValueSlot;
+      readonly type: SignalType;
+      /** Components per lane element in the materialized buffer. */
+      readonly stride: number;
+    }
+  | {
+      readonly k: 'event';
+      readonly id: EventExprId;
+      readonly slot: EventSlotId;
+      readonly type: SignalType;
+    }
   | { readonly k: 'instance'; readonly id: InstanceId }
   | { readonly k: 'scalar'; readonly value: unknown };
 
 // =============================================================================
-// Legacy Types (for compatibility with existing code)
+// Lowered Types (compiler pass contract)
 // =============================================================================
 
 /**
@@ -51,12 +73,20 @@ export type LoweredOutput =
 export interface LoweredSignal {
   readonly kind: 'signal';
   readonly sigId: SigExprId;
+  /** Base slot for lane 0. Multi-component signals occupy a contiguous region sized by `stride`. */
+  readonly slot: ValueSlot;
+  /** Components per sample for this signal (payload geometry; unit does not affect stride). */
+  readonly stride: number;
   readonly type: SignalType;
 }
 
 export interface LoweredField {
   readonly kind: 'field';
   readonly fieldId: FieldExprId;
+  /** Slot that will hold the materialized field buffer. */
+  readonly slot: ValueSlot;
+  /** Components per lane element in the materialized buffer. */
+  readonly stride: number;
   readonly type: SignalType;
 }
 
@@ -85,13 +115,20 @@ export type LoweredInput =
 export interface LoweredSignalInput {
   readonly kind: 'signal';
   readonly sigId: SigExprId;
+  /** Base slot for lane 0. Multi-component signals occupy a contiguous region sized by `stride`. */
+  readonly slot: ValueSlot;
+  /** Components per sample for this signal. */
+  readonly stride: number;
   readonly type: SignalType;
-  readonly slot?: ValueSlot;
 }
 
 export interface LoweredFieldInput {
   readonly kind: 'field';
   readonly fieldId: FieldExprId;
+  /** Slot that will hold the materialized field buffer. */
+  readonly slot: ValueSlot;
+  /** Components per lane element in the materialized buffer. */
+  readonly stride: number;
   readonly type: SignalType;
 }
 
@@ -109,7 +146,8 @@ export interface LoweredInstanceInput {
 
 export interface LoweredUnconnectedInput {
   readonly kind: 'unconnected';
-  readonly defaultValue?: unknown;
+  /** Default value to use when unconnected. `undefined` means "no default" and should be treated as a compile error where required. */
+  readonly defaultValue: unknown | undefined;
   readonly type: SignalType;
 }
 
@@ -125,7 +163,7 @@ export interface LoweredBlock {
 }
 
 /**
- * Context for block lowering (legacy interface).
+ * Context for block lowering.
  */
 export interface LowerContext {
   readonly builder: IRBuilder;

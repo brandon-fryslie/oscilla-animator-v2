@@ -366,7 +366,10 @@ function lowerBlockInstance(
       blockType: block.type,
       instanceId: block.id,
       label: block.label,
-      inTypes: Object.values(blockDef.inputs).map(input => input.type).filter((t): t is NonNullable<typeof t> => t !== undefined),
+      inTypes: Object.values(blockDef.inputs)
+        .filter(input => input.exposedAsPort !== false)
+        .map(input => input.type)
+        .filter((t): t is NonNullable<typeof t> => t !== undefined),
       outTypes: Object.values(blockDef.outputs).map(output => output.type),
       b: builder,
       seedConstId: 0, // Seed value not used by current intrinsics (randomId uses element index only)

@@ -30,7 +30,75 @@ import { resolveCameraFromGlobals } from './CameraResolver';
 interface SlotLookup {
   storage: 'f64' | 'f32' | 'i32' | 'u32' | 'object' | 'shape2d';
   offset: number;
+  stride: number;
   slot: ValueSlot;
+}
+
+// Cache slot lookup tables per compiled program to avoid per-frame Map allocation.
+const SLOT_LOOKUP_CACHE = new WeakMap<CompiledProgramIR, Map<ValueSlot, SlotLookup>>();
+
+function getSlotLookupMap(program: CompiledProgramIR): Map<ValueSlot, SlotLookup> {
+  const cached = SLOT_LOOKUP_CACHE.get(program);
+  if (cached) return cached;
+  const map = new Map<ValueSlot, SlotLookup>();
+  for (const meta of program.slotMeta) {
+    if (meta.stride == null) {
+      throw new Error(`slotMeta missing required stride for slot ${meta.slot}`);
+    }
+    map.set(meta.slot, {
+      storage: meta.storage,
+      offset: meta.offset,
+      stride: meta.stride,
+      slot: meta.slot,
+    });
+  }
+  SLOT_LOOKUP_CACHE.set(program, map);
+  return map;
+}
+
+function assertSlotExists(slotLookupMap: Map<ValueSlot, SlotLookup>, slot: ValueSlot, what: string): SlotLookup {
+  const lookup = slotLookupMap.get(slot);
+  if (!lookup) throw new Error(`Missing slotMeta entry for ${what} (slot ${slot})`);
+  return lookup;
+}
+
+function assertF64Stride(
+  slotLookupMap: Map<ValueSlot, SlotLookup>,
+  slot: ValueSlot,
+  expectedStride: number,
+  what: string,
+): SlotLookup {
+  const lookup = assertSlotExists(slotLookupMap, slot, what);
+  if (lookup.storage !== 'f64') {
+    throw new Error(`${what} must be f64 storage, got ${lookup.storage}`);
+  }
+  if (lookup.stride !== expectedStride) {
+    throw new Error(`${what} must have stride=${expectedStride}, got ${lookup.stride}`);
+  }
+  return lookup;
+}
+
+function writeF64Scalar(state: RuntimeState, lookup: SlotLookup, value: number): void {
+  if (lookup.storage !== 'f64') {
+    throw new Error(`writeF64Scalar: expected f64 storage for slot ${lookup.slot}, got ${lookup.storage}`);
+  }
+  if (lookup.stride !== 1) {
+    throw new Error(`writeF64Scalar: expected stride=1 for slot ${lookup.slot}, got stride=${lookup.stride}`);
+  }
+  state.values.f64[lookup.offset] = value;
+}
+
+function writeF64Strided(state: RuntimeState, lookup: SlotLookup, src: ArrayLike<number>, stride: number): void {
+  if (lookup.storage !== 'f64') {
+    throw new Error(`writeF64Strided: expected f64 storage for slot ${lookup.slot}, got ${lookup.storage}`);
+  }
+  if (lookup.stride !== stride) {
+    throw new Error(`writeF64Strided: expected stride=${stride} for slot ${lookup.slot}, got ${lookup.stride}`);
+  }
+  const o = lookup.offset;
+  for (let i = 0; i < stride; i++) {
+    state.values.f64[o + i] = src[i] as number;
+  }
 }
 
 /**
@@ -55,15 +123,8 @@ export function executeFrame(
   const steps = schedule.steps;
 
   // C-16: Pre-compute slot lookup map to eliminate O(n*m) runtime dispatch
-  // Build once per frame (could be cached on program object for even better performance)
-  const slotLookupMap = new Map<ValueSlot, SlotLookup>();
-  for (const meta of program.slotMeta) {
-    slotLookupMap.set(meta.slot, {
-      storage: meta.storage,
-      offset: meta.offset,
-      slot: meta.slot,
-    });
-  }
+  // Use module-level cache for slot lookup tables.
+  const slotLookupMap = getSlotLookupMap(program);
 
   // Helper: Resolve slot to storage offset using pre-computed map (O(1) lookup)
   const resolveSlotOffset = (slot: ValueSlot): SlotLookup => {
@@ -90,10 +151,15 @@ export function executeFrame(
     payloads.length = 0; // Clear array but reuse allocation
   });
 
-  // Store palette color object in objects map for signal evaluation
-  // Use a reserved slot number for palette (slot 0 is reserved for time palette)
-  const PALETTE_SLOT = 0 as ValueSlot;
-  state.values.objects.set(PALETTE_SLOT, time.palette);
+  // === System-reserved time outputs ===
+  // These are part of the runtime contract: they are written deterministically from resolved time each frame.
+  // Slot allocation/stride is enforced via slotMeta; no runtime-only side channels.
+  const TIME_PALETTE_SLOT = 0 as ValueSlot;
+  if (!(time.palette instanceof Float32Array) || time.palette.length !== 4) {
+    throw new Error('time.palette must be Float32Array(4) in RGBA [0..1]');
+  }
+  const palette = assertF64Stride(slotLookupMap, TIME_PALETTE_SLOT, 4, 'time.palette slot');
+  writeF64Strided(state, palette, time.palette, 4);
 
   // 3. Execute schedule steps in TWO PHASES
   // Phase 1: Execute evalSig, materialize, render (skip stateWrite)
@@ -116,7 +182,8 @@ export function executeFrame(
     switch (step.kind) {
       case 'evalSig': {
         // Evaluate signal and store in slot using slotMeta.offset
-        const { storage, offset, slot } = resolveSlotOffset(step.target);
+        const lookup = resolveSlotOffset(step.target);
+        const { storage, offset, slot, stride } = lookup;
 
         if (storage === 'shape2d') {
           // Shape signal: write Shape2D record to shape2d bank
@@ -131,8 +198,11 @@ export function executeFrame(
             });
           }
         } else if (storage === 'f64') {
+          if (stride !== 1) {
+            throw new Error(`evalSig: expected stride=1 for scalar signal slot ${slot}, got stride=${stride}`);
+          }
           const value = evaluateSignal(step.expr, signals, state);
-          state.values.f64[offset] = value;
+          writeF64Scalar(state, lookup, value);
 
           // Debug tap: Record slot value (Sprint 1: Debug Probe)
           state.tap?.recordSlotValue?.(slot, value);
@@ -239,13 +309,9 @@ export function executeFrame(
           break;
         }
 
-        // Skip continuity for non-float buffers (like Uint8ClampedArray colors)
-        // Continuity operations require float math; colors need proper float-space handling
-        // TODO: Add float-space color continuity support (convert to linear RGB, apply continuity, convert back)
+        // Continuity ops are defined over Float32 fields. Non-float buffers here are a compile/runtime contract violation.
         if (!(baseBuffer instanceof Float32Array)) {
-          // Just pass through the base buffer unchanged
-          state.values.objects.set(outputSlot, baseBuffer);
-          break;
+          throw new Error(`Continuity: expected Float32Array for baseSlot ${baseSlot}, got ${Object.prototype.toString.call(baseBuffer)}`);
         }
 
         // Skip if policy is 'none' - no continuity processing needed
@@ -321,8 +387,8 @@ export function executeFrame(
         if (state.values.objects.has(slot)) {
           // Already written - just ensure debug tap is notified
           const existing = state.values.objects.get(slot);
-          if (existing instanceof Float32Array) {
-            state.tap.recordFieldValue?.(slot, existing);
+          if (existing) {
+            state.tap.recordFieldValue?.(slot, existing as any);
           }
           continue;
         }

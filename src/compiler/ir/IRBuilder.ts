@@ -148,7 +148,16 @@ export interface IRBuilder {
   // Slot Registration
   // =========================================================================
 
-  /** Allocate a typed value slot. */
+  /**
+   * Allocate a typed value slot.
+   *
+   * IMPORTANT CONTRACT:
+   * - The returned `ValueSlot` is the *base* slot identifier for lane 0.
+   * - Slot allocation is stride-aware: allocating a slot for a multi-component payload (e.g. vec2/vec3/color)
+   *   reserves a contiguous region sized by the payload stride.
+   * - At runtime, the executor reads/writes that contiguous region using `program.slotMeta[slot].offset` as the
+   *   start lane and `program.slotMeta[slot].stride` as the component count.
+   */
   allocValueSlot(type: SignalType, label?: string): ValueSlot;
 
   /** Register a signal expression with a slot. */
@@ -160,10 +169,6 @@ export interface IRBuilder {
   /**
    * Create a signal that reads the fired/not-fired state of an event slot as float (0.0 or 1.0).
    * This is the canonical event→signal bridge (spec §9.2).
-   *
-   * @param eventSlot - Event slot to read from
-   * @param type - Signal type (should be signalType('float'))
-   * @returns SigExprId for the read expression
    */
   sigEventRead(eventSlot: EventSlotId, type: SignalType): SigExprId;
 
@@ -174,14 +179,26 @@ export interface IRBuilder {
   // Slot Allocation (Simple)
   // =========================================================================
 
-  /** Allocate a simple slot (without type information). */
+  /**
+   * Allocate a simple slot (without type information).
+   *
+   * LEGACY ONLY:
+   * - Do not use for signal/field execution.
+   * - All executable values MUST use `allocValueSlot(type)` so slotMeta can carry (storage, offset, stride).
+   */
   allocSlot(): ValueSlot;
 
   /** Get slot count for iteration. */
   getSlotCount(): number;
 
-  /** Get slot type information for slotMeta generation. */
-  getSlotTypes(): ReadonlyMap<ValueSlot, SignalType>;
+  /**
+   * Get slot metadata inputs for slotMeta generation.
+   *
+   * NOTE:
+   * - `stride` is required and must match the payload geometry for the slot's type.
+   * - `ValueSlot` remains the base identifier; the actual storage span is described by (offset, stride).
+   */
+  getSlotMetaInputs(): ReadonlyMap<ValueSlot, { readonly type: SignalType; readonly stride: number }>;
 
   // =========================================================================
   // State Slot Allocation (Persistent Cross-Frame Storage)

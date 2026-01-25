@@ -268,8 +268,9 @@ function buildContinuityPipeline(
   // Track which instances we've already emitted mapBuild for
   const mapBuildEmitted = new Set<InstanceId>();
 
-  // Track field→slot mappings to avoid duplicate materializations
-  const fieldSlots = new Map<FieldExprId, { baseSlot: ValueSlot; outputSlot: ValueSlot }>();
+  // Track field+semantic → slot mappings to avoid duplicate materializations
+  // NOTE: semantic must be part of the key because continuity policy depends on semantic.
+  const fieldSlots = new Map<string, { baseSlot: ValueSlot; outputSlot: ValueSlot }>();
 
   for (const target of targets) {
     const { instanceId, position, color, scale, shape } = target;
@@ -289,8 +290,8 @@ function buildContinuityPipeline(
       fieldId: FieldExprId,
       semantic: 'position' | 'radius' | 'opacity' | 'color' | 'custom'
     ): { baseSlot: ValueSlot; outputSlot: ValueSlot } => {
-      // Create unique key including semantic to handle same field used for different purposes
-      const key = fieldId;
+      // Key includes semantic because the continuity policy is semantic-derived.
+      const key = `${instanceId}:${semantic}:${fieldId}`;
       let slots = fieldSlots.get(key);
       if (!slots) {
         const baseSlot = slotAllocator();

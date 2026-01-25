@@ -192,17 +192,17 @@ const ADAPTER_RULES: AdapterRule[] = [
   // Cardinality promotion: one -> many (broadcast)
   // ==========================================================================
 
-  // Polymorphic broadcast — works for any payload type (float, vec2, color, etc.)
-  // The FieldBroadcast block is payload-generic and resolves type from context.
+  // Broadcast — works for any payload type (float, vec2, color, etc.).
+  // The Broadcast block is payload-generic and resolves type from context.
   // Must be AFTER unit adapters (more specific rules first).
   {
     from: { payload: 'any', unit: 'any', cardinality: 'one', temporality: 'continuous' },
     to: { payload: 'any', unit: 'any', cardinality: 'many', temporality: 'continuous' },
     adapter: {
-      blockType: 'FieldBroadcast',
+      blockType: 'Broadcast',
       inputPortId: 'signal',
       outputPortId: 'field',
-      description: 'Broadcast signal to field (polymorphic)',
+      description: 'Broadcast signal to field',
     },
   },
 ];

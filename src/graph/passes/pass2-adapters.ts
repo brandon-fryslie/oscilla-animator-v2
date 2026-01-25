@@ -4,6 +4,46 @@
  * Inserts adapter blocks for type-mismatched edges.
  */
 
+/**
+ * ============================================================================
+ * CONTRACT / NON-NEGOTIABLE BEHAVIOR
+ * ============================================================================
+ *
+ * This pass performs *structural* adapter insertion.
+ * It rewrites the graph by inserting explicit adapter blocks for edges whose
+ * endpoint port types are incompatible.
+ *
+ * What this pass MUST do:
+ *   - Decide adapter insertion ONLY from the *block registry port definitions*
+ *     (i.e. `blockDef.inputs/outputs[portId].type`).
+ *   - Use `findAdapter(fromType, toType)` as the only conversion policy.
+ *   - Produce deterministic adapter IDs and deterministic edge IDs.
+ *   - Preserve user intent:
+ *       * original edge is replaced by two edges through the adapter
+ *       * adapter block is marked derived with metadata pointing to the
+ *         original edge
+ *   - Keep adapter blocks semantically neutral:
+ *       * adapter params remain empty
+ *       * typing is not stamped here
+ *
+ * What this pass MUST NOT do:
+ *   - NO inference/unification/constraint solving.
+ *   - NO specialization from block instance params.
+ *   - NO block-type special casing (Const is NOT special, Camera is NOT special).
+ *   - NO fallback conversions (if `findAdapter` returns null, the connection is
+ *     invalid and must be rejected later by the type system / diagnostics).
+ *
+ * Allowed future changes (safe evolutions):
+ *   - Improve error reporting (e.g. include extracted signatures in messages).
+ *   - Extend adapter insertion to cover new axes only if adapter policy remains
+ *     entirely in `adapters.ts`.
+ *   - Add batching/perf improvements, as long as determinism is preserved.
+ *
+ * Disallowed future changes:
+ *   - Reading or writing inferred types to `block.params`.
+ *   - Deciding adapters based on runtime values.
+ */
+
 import type { BlockId, PortId, BlockRole } from '../../types';
 import type { SignalType } from '../../core/canonical-types';
 import type { Block, Edge, Patch } from '../Patch';
@@ -109,13 +149,8 @@ function analyzeAdapters(
       continue;
     }
 
-    // If source is payload-generic, check if type was resolved via params
-    // This handles blocks like Const that have their type inferred from targets
-    const resolvedPayload = fromBlock.params.payloadType;
-    if (resolvedPayload) {
-      // Create a new type with the resolved payload
-      fromType = { ...fromType, payload: resolvedPayload as typeof fromType.payload };
-    }
+    // Normalization is structural: do not specialize types from block params here.
+    // The constraint solver specializes types after normalization.
 
     // Look for adapter
     const adapterSpec = findAdapter(fromType, toType);
@@ -148,11 +183,14 @@ function analyzeAdapters(
         outputPorts.set(outputId, { id: outputId });
       }
 
-      // For payload-generic adapters, set payloadType from the source type
+      // Adapter params are always empty; normalization is structural.
+      // The constraint solver specializes types after normalization.
+      const adapterParams: Record<string, unknown> = {};
+
       const adapterBlock: Block = {
         id: adapterId,
         type: adapterSpec.blockType,
-        params: { payloadType: fromType.payload },
+        params: adapterParams,
         displayName: null,
         domainId: toBlock.domainId, // Inherit domain from target
         role: adapterRole,

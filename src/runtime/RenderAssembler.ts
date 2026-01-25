@@ -113,7 +113,7 @@ export interface ProjectionOutput {
 export function depthSortAndCompact(
   projection: ProjectionOutput,
   count: number,
-  color: ArrayBufferView,
+  color: Uint8ClampedArray,
   rotation?: Float32Array,
   scale2?: Float32Array,
 ): {
@@ -121,7 +121,7 @@ export function depthSortAndCompact(
   screenPosition: Float32Array;
   screenRadius: Float32Array;
   depth: Float32Array;
-  color: ArrayBufferView;
+  color: Uint8ClampedArray;
   rotation?: Float32Array;
   scale2?: Float32Array;
 } {
@@ -179,14 +179,15 @@ export function depthSortAndCompact(
   }
 
   // Compact color buffer (stride 4: RGBA)
-  const colorU8 = color as Uint8ClampedArray;
-  const colorStride = colorU8.length / count;
-  const compactedColor = new Uint8ClampedArray(visibleCount * colorStride);
+  const compactedColor = new Uint8ClampedArray(visibleCount * 4);
   for (let out = 0; out < visibleCount; out++) {
     const src = indices[out];
-    for (let c = 0; c < colorStride; c++) {
-      compactedColor[out * colorStride + c] = colorU8[src * colorStride + c];
-    }
+    const o = out * 4;
+    const s = src * 4;
+    compactedColor[o] = color[s];
+    compactedColor[o + 1] = color[s + 1];
+    compactedColor[o + 2] = color[s + 2];
+    compactedColor[o + 3] = color[s + 3];
   }
 
   // Compact rotation if present
@@ -584,13 +585,6 @@ export function computeTopologyGroups(
   return groups;
 }
 
-/**
- * Sliced instance buffers for a topology group
- */
-interface SlicedBuffers {
-  position: Float32Array;
-  color: Uint8ClampedArray;
-}
 
 /**
  * Check if indices form a contiguous run
@@ -606,57 +600,33 @@ export function isContiguous(indices: number[]): boolean {
   return indices[indices.length - 1] - indices[0] === indices.length - 1;
 }
 
+
 /**
- * Slice instance buffers for a topology group
- *
- * Extracts position and color data for instances in the group.
- * Uses zero-copy subarray views when indices are contiguous,
- * falls back to copy for non-contiguous indices.
- *
- * @param fullPosition - Full position buffer (x,y OR x,y,z interleaved)
- * @param fullColor - Full color buffer (RGBA interleaved)
- * @param instanceIndices - Sorted indices of instances to extract
- * @returns Sliced position and color buffers
+ * Slice RGBA color buffer for a topology group.
+ * Uses zero-copy subarray when indices are contiguous; copies otherwise.
  */
-export function sliceInstanceBuffers(
-  fullPosition: Float32Array,
+export function sliceColorBuffer(
   fullColor: Uint8ClampedArray,
   instanceIndices: number[]
-): SlicedBuffers {
+): Uint8ClampedArray {
   const N = instanceIndices.length;
 
-  // Determine stride from buffer length
-  const stride = fullPosition.length / fullColor.length * 4; // color is RGBA (stride 4)
-
   if (isContiguous(instanceIndices)) {
-    // Zero-copy views — same underlying ArrayBuffer
     const start = instanceIndices[0];
-    return {
-      position: fullPosition.subarray(start * stride, (start + N) * stride),
-      color: fullColor.subarray(start * 4, (start + N) * 4),
-    };
+    return fullColor.subarray(start * 4, (start + N) * 4);
   }
 
-  // Non-contiguous: copy
-  const position = new Float32Array(N * stride);
-  const color = new Uint8ClampedArray(N * 4); // RGBA per instance
-
+  const color = new Uint8ClampedArray(N * 4);
   for (let i = 0; i < N; i++) {
     const srcIdx = instanceIndices[i];
-
-    // Position (stride-dependent)
-    for (let j = 0; j < stride; j++) {
-      position[i * stride + j] = fullPosition[srcIdx * stride + j];
-    }
-
-    // Color (R, G, B, A)
-    color[i * 4]     = fullColor[srcIdx * 4];
-    color[i * 4 + 1] = fullColor[srcIdx * 4 + 1];
-    color[i * 4 + 2] = fullColor[srcIdx * 4 + 2];
-    color[i * 4 + 3] = fullColor[srcIdx * 4 + 3];
+    const s = srcIdx * 4;
+    const o = i * 4;
+    color[o] = fullColor[s];
+    color[o + 1] = fullColor[s + 1];
+    color[o + 2] = fullColor[s + 2];
+    color[o + 3] = fullColor[s + 3];
   }
-
-  return { position, color };
+  return color;
 }
 
 /**
@@ -727,26 +697,15 @@ function assemblePerInstanceShapes(
 
   // Run projection using resolved camera params
   const resolved = context.resolvedCamera;
-  let projection: ProjectionOutput;
-  {
-    // Determine position stride: vec3 (stride 3) or vec2 (stride 2, promote to vec3 with z=0)
-    const posLength = fullPosition.length;
-    let worldPos3: Float32Array;
-    if (posLength === count * 3) {
-      // Already stride-3 vec3
-      worldPos3 = fullPosition;
-    } else {
-      // Stride-2 vec2: promote to vec3 with z=0
-      worldPos3 = new Float32Array(count * 3);
-      for (let i = 0; i < count; i++) {
-        worldPos3[i * 3] = fullPosition[i * 2];
-        worldPos3[i * 3 + 1] = fullPosition[i * 2 + 1];
-        // worldPos3[i * 3 + 2] = 0 (Float32Array is zero-initialized)
-      }
-    }
-
-    projection = projectInstances(worldPos3, scale, count, resolved);
+  if (fullPosition.length !== count * 3) {
+    throw new Error(
+      `RenderAssembler: Position buffer must be world-space vec3 (stride 3). ` +
+      `Expected length ${count * 3}, got ${fullPosition.length}. ` +
+      `Fix upstream: insert/compile an explicit pos2→pos3 adapter; RenderAssembler will not promote stride-2.`
+    );
   }
+
+  const projection = projectInstances(fullPosition, scale, count, resolved);
 
   for (const [key, group] of groups) {
     // Skip empty groups
@@ -757,12 +716,8 @@ function assemblePerInstanceShapes(
     // Validate topology exists (group-level validation, not per-instance)
     const topology = getTopology(group.topologyId);
 
-    // Slice instance buffers for this group
-    const { position, color } = sliceInstanceBuffers(
-      fullPosition,
-      fullColor,
-      group.instanceIndices
-    );
+    // Slice RGBA color for this group (position is not needed post-projection)
+    const color = sliceColorBuffer(fullColor, group.instanceIndices);
 
     // C-13: Slice rotation and scale2 if present
     const rotation = fullRotation
@@ -1146,23 +1101,16 @@ export function assembleDrawPathInstancesOp(
 
   // Run projection using resolved camera params
   {
-    // Determine position stride: vec3 (stride 3) or vec2 (stride 2, promote to vec3 with z=0)
-    const posLength = positionBuffer.length;
-    let worldPos3: Float32Array;
-    if (posLength === count * 3) {
-      // Already stride-3 vec3
-      worldPos3 = positionBuffer;
-    } else {
-      // Stride-2 vec2: promote to vec3 with z=0
-      worldPos3 = new Float32Array(count * 3);
-      for (let i = 0; i < count; i++) {
-        worldPos3[i * 3] = positionBuffer[i * 2];
-        worldPos3[i * 3 + 1] = positionBuffer[i * 2 + 1];
-        // worldPos3[i * 3 + 2] = 0 (Float32Array is zero-initialized)
-      }
+    // Run projection using resolved camera params
+    if (positionBuffer.length !== count * 3) {
+      throw new Error(
+        `RenderAssembler: Position buffer must be world-space vec3 (stride 3). ` +
+        `Expected length ${count * 3}, got ${positionBuffer.length}. ` +
+        `Fix upstream: insert/compile an explicit pos2→pos3 adapter; RenderAssembler will not promote stride-2.`
+      );
     }
 
-    const projection = projectInstances(worldPos3, scale, count, context.resolvedCamera);
+    const projection = projectInstances(positionBuffer, scale, count, context.resolvedCamera);
 
     // Depth-sort and compact: remove invisible instances, sort by depth (far-to-near / painter's algorithm)
     const compacted = depthSortAndCompact(projection, count, colorBuffer, rotation, scale2);
@@ -1178,7 +1126,7 @@ export function assembleDrawPathInstancesOp(
     );
 
     // Build style
-    const style = buildPathStyle(compacted.color as Uint8ClampedArray, 'nonzero');
+    const style = buildPathStyle(compacted.color, 'nonzero');
 
     // Dispatch based on topology mode
     if (resolvedShape.mode === 'path') {

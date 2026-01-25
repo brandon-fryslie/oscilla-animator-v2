@@ -25,10 +25,8 @@ export type IrVersion = 1;
 /**
  * Branded types for type safety
  */
-export type ValueSlot = number & { readonly __brand: 'ValueSlot' };
-export type StepId = number & { readonly __brand: 'StepId' };
-export type BlockId = number & { readonly __brand: 'BlockId' };
-export type PortId = number & { readonly __brand: 'PortId' };
+
+import type { ValueSlot, StepId, BlockId, PortId } from './Indices';
 
 // =============================================================================
 // Render Globals (Camera System)
@@ -195,9 +193,16 @@ export interface SlotMetaEntry {
 
   /**
    * REQUIRED: absolute offset into the backing store for this storage class.
-   * Offsets are per-storage (not global) and stable-ordered (slotId ascending).
+   * Offsets are per-storage (not global) and stable-ordered (slotId ascending). offset is the START lane for this slot; the slot occupies [offset, offset+stride).
    */
   readonly offset: number;
+
+  /**
+   * REQUIRED: number of consecutive scalar lanes for this logical slot.
+   * The slot occupies `stride` adjacent entries starting at `offset` in the selected storage.
+   * For scalar payloads this is 1. For e.g. color RGBA this is 4.
+   */
+  readonly stride: number;
 
   /**
    * REQUIRED: Canonical type (5-axis SignalType).
