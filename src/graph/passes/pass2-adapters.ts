@@ -50,6 +50,16 @@ import type { Block, Edge, Patch } from '../Patch';
 import { getBlockDefinition, requireBlockDef } from '../../blocks/registry';
 import { findAdapter, type AdapterSpec } from '../adapters';
 
+/**
+ * Check if a block has cardinalityMode: 'preserve'.
+ * Such blocks adapt their output cardinality to match their input cardinality.
+ */
+function isCardinalityPreserving(blockType: string): boolean {
+  const blockDef = getBlockDefinition(blockType);
+  if (!blockDef?.cardinality) return false;
+  return blockDef.cardinality.cardinalityMode === 'preserve';
+}
+
 // =============================================================================
 // Error Types
 // =============================================================================
@@ -156,6 +166,13 @@ function analyzeAdapters(
     const adapterSpec = findAdapter(fromType, toType);
 
     if (adapterSpec) {
+      // Skip Broadcast adapter for cardinality-preserving source blocks.
+      // Such blocks output fields when their inputs are fields, so the static
+      // type (cardinality: one) doesn't reflect runtime behavior.
+      // The actual cardinality propagation happens at lowering time.
+      if (adapterSpec.blockType === 'Broadcast' && isCardinalityPreserving(fromBlock.type)) {
+        continue;
+      }
       // Create adapter block and edges
       const adapterId = generateAdapterId(edge.id);
 

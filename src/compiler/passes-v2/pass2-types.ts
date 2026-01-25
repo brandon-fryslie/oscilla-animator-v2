@@ -52,7 +52,7 @@ export type Pass2Error = PortTypeUnknownError | NoConversionPathError;
  * Type compatibility check for wired connections.
  * Uses resolved types - no variables should be present.
  */
-function isTypeCompatible(from: SignalType, to: SignalType, targetBlockType?: string): boolean {
+function isTypeCompatible(from: SignalType, to: SignalType, sourceBlockType?: string, targetBlockType?: string): boolean {
   const fromCard = getAxisValue(from.extent.cardinality, DEFAULTS_V0.cardinality);
   const fromTemp = getAxisValue(from.extent.temporality, DEFAULTS_V0.temporality);
   const toCard = getAxisValue(to.extent.cardinality, DEFAULTS_V0.cardinality);
@@ -73,8 +73,9 @@ function isTypeCompatible(from: SignalType, to: SignalType, targetBlockType?: st
     return false;
   }
 
-  // Cardinality check - may be relaxed for cardinality-generic blocks
+  // Cardinality check - may be relaxed for cardinality-generic/preserving blocks
   if (fromCard.kind !== toCard.kind) {
+    // Allow if target block is cardinality-generic and allows mixing
     if (targetBlockType) {
       const meta = getBlockCardinalityMetadata(targetBlockType);
       if (meta && isCardinalityGeneric(targetBlockType)) {
@@ -83,6 +84,18 @@ function isTypeCompatible(from: SignalType, to: SignalType, targetBlockType?: st
         }
       }
     }
+
+    // Allow one→many if source block is cardinality-preserving.
+    // Cardinality-preserving blocks adapt their output cardinality to match
+    // their input cardinality, so the static type (cardinality: one) doesn't
+    // reflect runtime behavior when inputs are fields.
+    if (fromCard.kind === 'one' && toCard.kind === 'many' && sourceBlockType) {
+      const sourceMeta = getBlockCardinalityMetadata(sourceBlockType);
+      if (sourceMeta?.cardinalityMode === 'preserve') {
+        return true;
+      }
+    }
+
     return false;
   }
 
@@ -166,7 +179,7 @@ export function pass2TypeGraph(typeResolved: TypeResolvedPatch): TypedPatch {
     }
 
     // Validate type compatibility
-    if (!isTypeCompatible(fromType, toType, toBlock.type)) {
+    if (!isTypeCompatible(fromType, toType, fromBlock.type, toBlock.type)) {
       const fromCard = getAxisValue(fromType.extent.cardinality, DEFAULTS_V0.cardinality);
       const fromTemp = getAxisValue(fromType.extent.temporality, DEFAULTS_V0.temporality);
       const toCard = getAxisValue(toType.extent.cardinality, DEFAULTS_V0.cardinality);

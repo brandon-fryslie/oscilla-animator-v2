@@ -59,27 +59,20 @@ registerBlock({
       uiHint: { kind: 'slider', min: 1, max: 10000, step: 1 },
       exposedAsPort: false,
     },
-    payloadType: {
-      type: signalType('float'),  // Metadata storage - not a wirable port
-      value: undefined,
-      hidden: true,
-      exposedAsPort: false,
-    },
   },
   outputs: {
     // Unit is polymorphic (UnitVar) - resolved by pass1 constraint solver
-    // Payload is polymorphic - resolved by pass0 based on context
+    // Payload is polymorphic (payloadVar) - resolved by pass1 constraint solver
     out: { label: 'Output', type: signalType('float', unitVar('const_out')) },
   },
   lower: ({ ctx, config }) => {
-    const payloadType = config?.payloadType as PayloadType | undefined;
-    const rawValue = config?.value;
-
-    if (payloadType === undefined) {
-      throw new Error(
-        `Const block missing payloadType. Type must be resolved by normalizer before lowering.`
-      );
+    // Get resolved payload type from ctx.outTypes (populated from pass1 portTypes)
+    const outType = ctx.outTypes[0];
+    if (!outType) {
+      throw new Error(`Const block missing resolved output type from pass1`);
     }
+    const payloadType = outType.payload as PayloadType;
+    const rawValue = config?.value;
 
     if (rawValue === undefined) {
       throw new Error(
@@ -89,7 +82,6 @@ registerBlock({
 
     let sigId;
     const slot = ctx.b.allocSlot();
-    const outType = ctx.outTypes[0];
 
     switch (payloadType) {
       case 'float': {

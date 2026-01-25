@@ -54,27 +54,21 @@ registerBlock({
   },
   inputs: {
     signal: { label: 'Signal', type: signalType(payloadVar('broadcast_payload'), unitVar('broadcast_in')) },
-    payloadType: {
-      type: signalType('float'),
-      value: undefined,
-      hidden: true,
-      exposedAsPort: false,
-    },
   },
   outputs: {
     field: { label: 'Field', type: signalTypeField(payloadVar('broadcast_payload'), 'default', unitVar('broadcast_in')) },
   },
-  lower: ({ ctx, inputsById, config }) => {
-    const payloadType = config?.payloadType as PayloadType | undefined;
-
-    if (payloadType === undefined) {
-      throw new Error(
-        `Broadcast block missing payloadType. Type must be resolved by normalizer before lowering.`
-      );
+  lower: ({ ctx, inputsById }) => {
+    // Get resolved payload type from ctx.outTypes (populated from pass1 portTypes)
+    const outType = ctx.outTypes[0];
+    if (!outType) {
+      throw new Error(`Broadcast block missing resolved output type from pass1`);
     }
+    const payloadType = outType.payload as PayloadType;
 
     const signalValue = inputsById.signal;
     if (!signalValue || signalValue.k !== 'sig') {
+      console.error('[Broadcast] inputsById:', Object.keys(inputsById), 'signal:', signalValue, 'ctx.instanceId:', ctx.instanceId);
       throw new Error('Broadcast signal input must be a signal');
     }
 
@@ -83,7 +77,6 @@ registerBlock({
       signalValue.id as SigExprId,
       signalTypeField(payloadType, 'default')
     );
-    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
     return {
