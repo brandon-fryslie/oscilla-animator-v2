@@ -179,13 +179,13 @@ export function depthSortAndCompact(
   }
 
   // Compact color buffer (stride 4: RGBA)
-  const colorF32 = color as Float32Array;
-  const colorStride = colorF32.length / count;
-  const compactedColor = new Float32Array(visibleCount * colorStride);
+  const colorU8 = color as Uint8ClampedArray;
+  const colorStride = colorU8.length / count;
+  const compactedColor = new Uint8ClampedArray(visibleCount * colorStride);
   for (let out = 0; out < visibleCount; out++) {
     const src = indices[out];
     for (let c = 0; c < colorStride; c++) {
-      compactedColor[out * colorStride + c] = colorF32[src * colorStride + c];
+      compactedColor[out * colorStride + c] = colorU8[src * colorStride + c];
     }
   }
 

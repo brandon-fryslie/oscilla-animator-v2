@@ -236,13 +236,12 @@ describe('RenderAssembler', () => {
         expect(op.instances.position[i]).toBeGreaterThanOrEqual(0);
         expect(op.instances.position[i]).toBeLessThanOrEqual(1);
       }
-      expect(op.instances.size).toBeInstanceOf(Float32Array);
-      expect((op.instances.size as Float32Array).length).toBe(2); // 2 instances
+      expect(op.instances.size).toBe(2.5);
       expect(op.instances.rotation).toBeUndefined();
       expect(op.instances.scale2).toBeUndefined();
 
       // Validate style
-      expect(op.style.fillColor).toEqual(colorBuffer);
+      expect(op.style.fillColor).toBe(colorBuffer);
       expect(op.style.fillRule).toBe('nonzero');
     });
 
