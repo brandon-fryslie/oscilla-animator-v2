@@ -45,6 +45,9 @@ export function runAuthoringValidators(patch: Patch, patchRevision: number): Dia
   // Validator 3: Output usage (unused outputs)
   diagnostics.push(...validateOutputUsage(patch, patchRevision));
 
+  // Validator 4: Const block value representation
+  diagnostics.push(...validateConstValueRepresentation(patch, patchRevision));
+
   return diagnostics;
 }
 
@@ -304,6 +307,147 @@ function validateOutputUsage(patch: Patch, patchRevision: number): Diagnostic[] 
           });
         }
       }
+    }
+  }
+
+  return diagnostics;
+}
+
+// =============================================================================
+// Const Block Value Representation Validator
+// =============================================================================
+
+/**
+ * Validates that Const block values match their resolved payload type.
+ *
+ * Rules:
+ * - float: value must be parseable as number and finite
+ * - int: value must be parseable as integer (no decimal component)
+ * - bool: value must be true/false or 0/1
+ * - vec2: value must be {x: number, y: number}
+ * - color: value must be valid color (hex, rgb, or object)
+ * - shape: value must have required shape properties
+ * - cameraProjection: value must have required projection properties
+ *
+ * Only validates Const blocks with resolved payloadType.
+ * Unresolved Const blocks (payloadType undefined) are not validated.
+ *
+ * Performance: O(n) where n = block count (single pass)
+ */
+function validateConstValueRepresentation(patch: Patch, patchRevision: number): Diagnostic[] {
+  const diagnostics: Diagnostic[] = [];
+
+  for (const block of patch.blocks.values()) {
+    if (block.type !== 'Const') continue;
+
+    const payloadType = block.params?.payloadType as string | undefined;
+    const rawValue = block.params?.value;
+
+    // Skip validation if type not yet resolved
+    if (!payloadType) continue;
+
+    // Skip validation if value is undefined (will be caught by other validators)
+    if (rawValue === undefined) continue;
+
+    let isValid = false;
+    let errorMsg = '';
+
+    try {
+      switch (payloadType) {
+        case 'float': {
+          const num = Number(rawValue);
+          isValid = !isNaN(num) && isFinite(num);
+          if (!isValid) errorMsg = `Value '${rawValue}' is not a valid float`;
+          break;
+        }
+        case 'int': {
+          const num = Number(rawValue);
+          isValid = !isNaN(num) && Number.isInteger(num);
+          if (!isValid) errorMsg = `Value '${rawValue}' is not a valid integer`;
+          break;
+        }
+        case 'bool': {
+          const str = String(rawValue).toLowerCase();
+          isValid = str === 'true' || str === 'false' || str === '0' || str === '1';
+          if (!isValid) errorMsg = `Value '${rawValue}' is not a valid boolean`;
+          break;
+        }
+        case 'vec2': {
+          if (typeof rawValue === 'string') {
+            const parsed = JSON.parse(rawValue);
+            isValid = typeof parsed === 'object' && parsed !== null &&
+              typeof parsed.x === 'number' && typeof parsed.y === 'number';
+          } else if (typeof rawValue === 'object' && rawValue !== null) {
+            const obj = rawValue as any;
+            isValid = typeof obj.x === 'number' && typeof obj.y === 'number';
+          }
+          if (!isValid) errorMsg = `Value must be {x: number, y: number}`;
+          break;
+        }
+        case 'color': {
+          // Accept hex strings or objects with r,g,b,a properties
+          if (typeof rawValue === 'string') {
+            // Simple check: hex format #RRGGBB or #RRGGBBAA
+            isValid = /^#[0-9A-F]{6}([0-9A-F]{2})?$/i.test(rawValue);
+          } else if (typeof rawValue === 'object' && rawValue !== null) {
+            const obj = rawValue as any;
+            isValid = typeof obj.r === 'number' && typeof obj.g === 'number' &&
+              typeof obj.b === 'number' &&
+              (obj.a === undefined || typeof obj.a === 'number');
+          }
+          if (!isValid) errorMsg = `Value must be hex color (#RRGGBB) or {r,g,b,a} object`;
+          break;
+        }
+        case 'shape': {
+          if (typeof rawValue === 'string') {
+            const parsed = JSON.parse(rawValue);
+            isValid = typeof parsed === 'object' && parsed !== null && 'kind' in parsed;
+          } else if (typeof rawValue === 'object' && rawValue !== null) {
+            isValid = 'kind' in rawValue;
+          }
+          if (!isValid) errorMsg = `Value must be a valid shape descriptor`;
+          break;
+        }
+        case 'cameraProjection': {
+          if (typeof rawValue === 'string') {
+            const parsed = JSON.parse(rawValue);
+            isValid = typeof parsed === 'object' && parsed !== null;
+          } else if (typeof rawValue === 'object' && rawValue !== null) {
+            isValid = true; // Accept any non-null object for now
+          }
+          if (!isValid) errorMsg = `Value must be a valid projection object`;
+          break;
+        }
+        default:
+          // Unknown payload type - don't validate
+          isValid = true;
+      }
+    } catch (e) {
+      // JSON parse or other errors
+      isValid = false;
+      errorMsg = `Invalid value format: ${String(e)}`;
+    }
+
+    // Report validation error if value is invalid
+    if (!isValid) {
+      const target = { kind: 'block' as const, blockId: block.id };
+      const id = generateDiagnosticId('E_CONST_VALUE_INVALID', target, patchRevision);
+
+      diagnostics.push({
+        id,
+        code: 'E_CONST_VALUE_INVALID',
+        severity: 'error',
+        domain: 'authoring',
+        primaryTarget: target,
+        title: 'Invalid Const Value',
+        message: errorMsg || `Const block value doesn't match type '${payloadType}'`,
+        scope: { patchRevision },
+        metadata: {
+          firstSeenAt: Date.now(),
+          lastSeenAt: Date.now(),
+          occurrenceCount: 1,
+        },
+      });
     }
   }
 

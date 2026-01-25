@@ -108,6 +108,9 @@ export type DiagnosticCode =
   | 'E_UNIT_MISMATCH' // Units present but disallowed by block's unit contract
   | 'E_IMPLICIT_CAST_DISALLOWED' // Attempt to coerce payload without explicit cast block
 
+  // --- Const Block Errors ---
+  | 'E_CONST_VALUE_INVALID' // Const block value doesn't match resolved payload type
+
   // --- Graph Structure Errors ---
   | 'E_CYCLE_DETECTED' // Cycle with no stateful boundary
   | 'E_MISSING_INPUT' // Required input not connected

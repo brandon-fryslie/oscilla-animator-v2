@@ -1381,7 +1381,35 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
 
   // Special handling for Const block - show direct slider for value param
   const isConstBlock = currentBlockType === 'Const';
-  const constValue = isConstBlock ? (currentParams.value as number ?? 0) : 0;
+  const payloadType = portType.payload;
+
+  // Parse constValue based on payload type
+  const parseConstValue = (raw: unknown): unknown => {
+    if (raw === undefined || raw === null) {
+      // Return sensible defaults based on type
+      switch (payloadType) {
+        case 'bool': return false;
+        case 'int': return 0;
+        case 'float': return 0;
+        case 'vec2': return { x: 0, y: 0 };
+        case 'color': return { r: 0, g: 0, b: 0, a: 1 };
+        default: return 0;
+      }
+    }
+
+    // If it's a string, try to parse it as JSON (for complex types)
+    if (typeof raw === 'string') {
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return raw; // Return raw if parse fails
+      }
+    }
+
+    return raw;
+  };
+
+  const constValue = isConstBlock ? parseConstValue(currentParams.value) : 0;
 
   // Special handling for TimeRoot block - show output dropdown
   const isTimeRootBlock = currentBlockType === 'TimeRoot';
@@ -1421,17 +1449,81 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
         />
       </div>
 
-      {/* Const Block - Direct Value Editor */}
+      {/* Const Block - Type-Aware Value Editor */}
       {isConstBlock && (
         <div style={{ marginBottom: '12px' }}>
-          <SliderWithInput
-            label="Value"
-            value={constValue}
-            onChange={(value) => handleParamChange('value', value)}
-            min={getConstSliderMin(inputDef, portType)}
-            max={getConstSliderMax(inputDef, portType)}
-            step={getConstSliderStep(inputDef, portType)}
-          />
+          {payloadType === 'float' && (
+            <SliderWithInput
+              label="Value"
+              value={constValue as number}
+              onChange={(value) => handleParamChange('value', value)}
+              min={getConstSliderMin(inputDef, portType)}
+              max={getConstSliderMax(inputDef, portType)}
+              step={getConstSliderStep(inputDef, portType)}
+            />
+          )}
+          {payloadType === 'int' && (
+            <SliderWithInput
+              label="Value"
+              value={constValue as number}
+              onChange={(value) => handleParamChange('value', value)}
+              min={getConstSliderMin(inputDef, portType) ?? 0}
+              max={getConstSliderMax(inputDef, portType) ?? 100}
+              step={1}
+            />
+          )}
+          {payloadType === 'bool' && (
+            <MuiCheckboxInput
+              checked={!!constValue}
+              onChange={(value) => handleParamChange('value', value)}
+            />
+          )}
+          {payloadType === 'vec2' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <SliderWithInput
+                label="X"
+                value={(constValue as any)?.x ?? 0}
+                min={-1000}
+                max={1000}
+                step={1}
+                onChange={(v) => handleParamChange('value', { ...((constValue as any) || {}), x: v })}
+              />
+              <SliderWithInput
+                label="Y"
+                value={(constValue as any)?.y ?? 0}
+                min={-1000}
+                max={1000}
+                step={1}
+                onChange={(v) => handleParamChange('value', { ...((constValue as any) || {}), y: v })}
+              />
+            </div>
+          )}
+          {payloadType === 'color' && (
+            <MuiColorInput
+              value={
+                typeof constValue === 'string'
+                  ? constValue
+                  : (constValue as any)?.toHexString?.() ?? '#000000'
+              }
+              onChange={(value) => handleParamChange('value', value)}
+            />
+          )}
+          {(payloadType === 'shape' || payloadType === 'cameraProjection') && (
+            <div style={{ padding: '8px', backgroundColor: colors.bgPanel, borderRadius: '4px', fontSize: '12px', color: colors.textSecondary }}>
+              {payloadType === 'shape' && '⚙️ Shape values are configured via geometry properties'}
+              {payloadType === 'cameraProjection' && '⚙️ Camera projection values are configured via projection properties'}
+            </div>
+          )}
+          {!payloadType && (
+            <SliderWithInput
+              label="Value"
+              value={constValue as number}
+              onChange={(value) => handleParamChange('value', value)}
+              min={-100}
+              max={100}
+              step={0.1}
+            />
+          )}
         </div>
       )}
 
