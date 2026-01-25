@@ -91,6 +91,9 @@ export class BufferPool {
   private lastFrameAllocs = 0;
   private lastFrameReleases = 0;
 
+  /** Cached total bytes (updated incrementally to avoid O(n) iteration) */
+  private totalBytes = 0;
+
   /**
    * Allocate a buffer of the specified format and count.
    * Reuses an existing buffer from the pool if available.
@@ -121,6 +124,7 @@ export class BufferPool {
 
     // Allocate new buffer
     const buffer = allocateBuffer(format, count);
+    this.totalBytes += buffer.byteLength; // Track new allocation
     this.trackInUse(key, buffer);
     return buffer;
   }
@@ -161,7 +165,7 @@ export class BufferPool {
     return {
       allocs: this.lastFrameAllocs,
       releases: this.lastFrameReleases,
-      pooledBytes: this.computeTotalBytes(),
+      pooledBytes: this.totalBytes, // O(1) cached value
       poolKeys: this.pools.size,
     };
   }
@@ -192,30 +196,6 @@ export class BufferPool {
     return { pooled, inUse, poolKeys: this.pools.size };
   }
 
-  /**
-   * Compute total pooled bytes across all pools
-   *
-   * Sums byteLength of all buffers in both pools and inUse.
-   */
-  private computeTotalBytes(): number {
-    let total = 0;
-
-    // Count pooled buffers
-    for (const buffers of this.pools.values()) {
-      for (const buf of buffers) {
-        total += buf.byteLength;
-      }
-    }
-
-    // Count in-use buffers
-    for (const buffers of this.inUse.values()) {
-      for (const buf of buffers) {
-        total += buf.byteLength;
-      }
-    }
-
-    return total;
-  }
 
   /**
    * Remove least recently used pools when limit exceeded
@@ -227,6 +207,10 @@ export class BufferPool {
 
     for (const [key, buffers] of this.pools) {
       if (!keysToKeep.has(key) && buffers.length > 0) {
+        // Decrement totalBytes for removed buffers
+        for (const buf of buffers) {
+          this.totalBytes -= buf.byteLength;
+        }
         this.pools.delete(key);
       }
     }
@@ -239,6 +223,10 @@ export class BufferPool {
   clearUnusedPools(): void {
     for (const [key, buffers] of this.pools) {
       if (!this.inUse.has(key)) {
+        // Decrement totalBytes for removed buffers
+        for (const buf of buffers) {
+          this.totalBytes -= buf.byteLength;
+        }
         this.pools.delete(key);
       }
     }
