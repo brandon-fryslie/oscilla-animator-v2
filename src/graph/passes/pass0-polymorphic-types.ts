@@ -37,13 +37,14 @@ export function pass0PolymorphicTypes(patch: Patch): Patch {
     if (!isGeneric) continue;
 
     let inferredPayloadType: string | undefined;
+    let inferredUnit: string | undefined;
 
     // Strategy 1: Forward resolution - infer output type from what it connects to
     for (const [outputId] of Object.entries(blockDef.outputs)) {
       const outgoingEdge = patch.edges.find(
         e => e.enabled !== false &&
-             e.from.blockId === blockId &&
-             e.from.slotId === outputId
+          e.from.blockId === blockId &&
+          e.from.slotId === outputId
       );
 
       if (!outgoingEdge) continue;
@@ -58,6 +59,7 @@ export function pass0PolymorphicTypes(patch: Patch): Patch {
       if (!targetInput || !targetInput.type) continue;
 
       inferredPayloadType = targetInput.type.payload;
+      inferredUnit = targetInput.type.unit.kind;
       break;
     }
 
@@ -70,8 +72,8 @@ export function pass0PolymorphicTypes(patch: Patch): Patch {
 
         const incomingEdge = patch.edges.find(
           e => e.enabled !== false &&
-               e.to.blockId === blockId &&
-               e.to.slotId === inputId
+            e.to.blockId === blockId &&
+            e.to.slotId === inputId
         );
 
         if (!incomingEdge) continue;
@@ -88,7 +90,7 @@ export function pass0PolymorphicTypes(patch: Patch): Patch {
         // If source is also payload-generic, check if it was already resolved
         if (isPayloadGeneric(sourceBlock.type)) {
           const resolvedPayload = sourceBlock.params.payloadType ||
-                                  updatedBlocks.get(sourceBlock.id)?.params.payloadType;
+            updatedBlocks.get(sourceBlock.id)?.params.payloadType;
           if (resolvedPayload) {
             inferredPayloadType = resolvedPayload as string;
             break;
@@ -97,6 +99,7 @@ export function pass0PolymorphicTypes(patch: Patch): Patch {
         }
 
         inferredPayloadType = sourceOutput.type.payload;
+        inferredUnit = sourceOutput.type.unit.kind;
         break;
       }
     }
@@ -108,6 +111,7 @@ export function pass0PolymorphicTypes(patch: Patch): Patch {
         params: {
           ...block.params,
           payloadType: inferredPayloadType,
+          resolvedUnit: inferredUnit,
         },
       };
       updatedBlocks.set(blockId, updatedBlock);

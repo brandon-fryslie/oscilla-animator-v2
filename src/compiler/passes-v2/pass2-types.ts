@@ -14,14 +14,25 @@
  */
 
 import type { Block } from "../../graph/Patch";
-import type { SignalType } from "../../core/canonical-types";
 import {
   getAxisValue,
   DEFAULTS_V0,
+  defaultUnitForPayload,
+  isUnitVar,
+  type SignalType,
+  type PayloadType
 } from "../../core/canonical-types";
 import type { NormalizedPatch, TypedPatch, BlockIndex } from "../ir/patches";
-import { getBlockDefinition, getBlockCardinalityMetadata, isCardinalityGeneric, getBlockPayloadMetadata, isPayloadAllowed, findPayloadCombination } from "../../blocks/registry";
-import type { PayloadType } from "../../core/canonical-types";
+import {
+  getBlockDefinition,
+  getBlockCardinalityMetadata,
+  isCardinalityGeneric,
+  getBlockPayloadMetadata,
+  isPayloadAllowed,
+  findPayloadCombination,
+  isPayloadGeneric
+} from "../../blocks/registry";
+import type { ResolvedTypesResult, PortKey } from "./pass1-type-constraints";
 
 // Move these types into a better place
 
@@ -95,7 +106,7 @@ function isTypeCompatible(from: SignalType, to: SignalType): boolean {
     if (!fromInstance || !toInstance) return false;
     // Instances match if both domainType and instanceId are equal
     return fromInstance.domainType === toInstance.domainType &&
-           fromInstance.instanceId === toInstance.instanceId;
+      fromInstance.instanceId === toInstance.instanceId;
   }
 
   return true;
@@ -245,24 +256,81 @@ function validatePayloadCombination(
 
 
 /**
- * Get the type of a port on a block.
+ * Create a port key for looking up resolved types.
+ */
+function portKey(blockIndex: BlockIndex, portName: string, direction: 'in' | 'out'): PortKey {
+  return `${blockIndex}:${portName}:${direction}`;
+}
+
+/**
+ * Get the type of a port on a block, using resolved types from pass1.
+ *
+ * @param block - The block
+ * @param blockIndex - The block's index in the normalized patch
+ * @param portId - The port name
+ * @param direction - 'in' for inputs, 'out' for outputs
+ * @param resolvedTypes - Resolved types from pass1 constraint solving
  */
 function getPortType(
   block: Block,
-  portId: string
+  blockIndex: BlockIndex,
+  portId: string,
+  direction: 'in' | 'out',
+  resolvedTypes: ResolvedTypesResult | null
 ): SignalType | null {
   const blockDef = getBlockDefinition(block.type);
   if (!blockDef) return null;
 
-  // Check inputs first
-  const inputDef = blockDef.inputs[portId];
-  if (inputDef?.type) return inputDef.type;
+  // 1. Check resolved types from pass1 first (for polymorphic ports)
+  if (resolvedTypes) {
+    const key = portKey(blockIndex, portId, direction);
+    const resolved = resolvedTypes.resolvedPortTypes.get(key);
+    if (resolved) {
+      // Apply payload specialization on top of resolved unit
+      const payloadType = block.params?.payloadType as PayloadType | undefined;
+      if (payloadType && isPayloadGeneric(block.type) && isPayloadAllowed(block.type, portId, payloadType)) {
+        return {
+          ...resolved,
+          payload: payloadType,
+        };
+      }
+      return resolved;
+    }
+  }
 
-  // Then check outputs
-  const outputDef = blockDef.outputs[portId];
-  if (outputDef?.type) return outputDef.type;
+  // 2. Fall back to definition type
+  let type: SignalType | undefined;
+  if (direction === 'in') {
+    const inputDef = blockDef.inputs[portId];
+    type = inputDef?.type;
+  } else {
+    const outputDef = blockDef.outputs[portId];
+    type = outputDef?.type;
+  }
 
-  return null;
+  if (!type) return null;
+
+  // 3. If definition has a unit variable but we didn't get it from resolvedTypes,
+  // that's a bug in the constraint solver - it should have caught this
+  if (isUnitVar(type.unit)) {
+    throw new Error(
+      `BUG: Polymorphic port ${block.type}.${portId} has unresolved unit variable. ` +
+      `Pass 1 (type constraints) should have resolved this or reported an error.`
+    );
+  }
+
+  // 4. Handle Payload Specialization (for generic blocks with concrete units)
+  const payloadType = block.params?.payloadType as PayloadType | undefined;
+  if (payloadType && isPayloadGeneric(block.type)) {
+    if (isPayloadAllowed(block.type, portId, payloadType)) {
+      return {
+        ...type,
+        payload: payloadType,
+      };
+    }
+  }
+
+  return type;
 }
 
 /**
@@ -271,24 +339,31 @@ function getPortType(
  * Establishes types for every slot and validates type compatibility.
  *
  * @param normalized - The normalized patch from Pass 1
+ * @param resolvedTypes - Resolved types from Pass 1 constraint solving
  * @returns A typed patch with type information
  * @throws Error with all accumulated errors if validation fails
  */
 export function pass2TypeGraph(
-  normalized: NormalizedPatch
+  normalized: NormalizedPatch,
+  resolvedTypes?: ResolvedTypesResult
 ): TypedPatch {
   const errors: Pass2Error[] = [];
 
   // Build block output types map
   const blockOutputTypes = new Map<string, ReadonlyMap<string, SignalType>>();
 
-  for (const block of normalized.blocks) {
+  for (let i = 0; i < normalized.blocks.length; i++) {
+    const block = normalized.blocks[i];
+    const blockIndex = i as BlockIndex;
     const blockDef = getBlockDefinition(block.type);
     if (!blockDef) continue;
 
     const outputTypes = new Map<string, SignalType>();
-    for (const [portId, outputDef] of Object.entries(blockDef.outputs)) {
-      outputTypes.set(portId, outputDef.type);
+    for (const [portId] of Object.entries(blockDef.outputs)) {
+      const type = getPortType(block, blockIndex, portId, 'out', resolvedTypes ?? null);
+      if (type) {
+        outputTypes.set(portId, type);
+      }
     }
 
     blockOutputTypes.set(block.id, outputTypes);
@@ -305,8 +380,8 @@ export function pass2TypeGraph(
       continue;
     }
 
-    const fromType = getPortType(fromBlock, edge.fromPort);
-    const toType = getPortType(toBlock, edge.toPort);
+    const fromType = getPortType(fromBlock, edge.fromBlock, edge.fromPort, 'out', resolvedTypes ?? null);
+    const toType = getPortType(toBlock, edge.toBlock, edge.toPort, 'in', resolvedTypes ?? null);
 
     if (fromType === null || toType === null) {
       // Unknown port type - report error
@@ -341,7 +416,7 @@ export function pass2TypeGraph(
         connectionId: `${edge.fromBlock}:${edge.fromPort}->${edge.toBlock}:${edge.toPort}`,
         fromType,
         toType,
-        message: `Type mismatch: cannot connect ${fromCard.kind}+${fromTemp.kind}<${fromType.payload}> to ${toCard.kind}+${toTemp.kind}<${toType.payload}>`,
+        message: `Type mismatch: cannot connect ${fromCard.kind}+${fromTemp.kind}<${fromType.payload}, unit:${fromType.unit.kind}> to ${toCard.kind}+${toTemp.kind}<${toType.payload}, unit:${toType.unit.kind}>`,
       });
     }
 

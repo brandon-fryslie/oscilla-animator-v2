@@ -49,6 +49,7 @@ import '../blocks/camera-block'; // NEW - Camera system
 import '../blocks/test-blocks'; // Test blocks for signal evaluation in tests
 
 // Import passes
+import { pass1TypeConstraints } from './passes-v2';
 import { pass2TypeGraph } from './passes-v2';
 import { pass3Time } from './passes-v2';
 import { pass4DepGraph } from './passes-v2';
@@ -178,8 +179,26 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
       console.warn('[CompilationInspector] Failed to capture normalization:', e);
     }
 
+    // Pass 1: Type Constraints (unit inference)
+    const typeConstraintsResult = pass1TypeConstraints(normalized);
+    if (typeConstraintsResult.kind === 'error') {
+      const compileErrors: CompileError[] = typeConstraintsResult.errors.map((e) => ({
+        kind: e.kind,
+        message: `${e.message}\nSuggestions:\n${e.suggestions.map(s => `  - ${s}`).join('\n')}`,
+        blockId: normalized.blocks[e.blockIndex]?.id,
+        portId: e.portName,
+      }));
+      return emitFailure(options, startTime, compileId, compileErrors);
+    }
+
+    try {
+      compilationInspector.capturePass('type-constraints', normalized, typeConstraintsResult);
+    } catch (e) {
+      console.warn('[CompilationInspector] Failed to capture type-constraints:', e);
+    }
+
     // Pass 2: Type Graph
-    const typedPatch = pass2TypeGraph(normalized);
+    const typedPatch = pass2TypeGraph(normalized, typeConstraintsResult);
 
     try {
       compilationInspector.capturePass('type-graph', normalized, typedPatch);

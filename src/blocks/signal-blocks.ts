@@ -5,7 +5,7 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
-import { signalType, type PayloadType, unitPhase01, unitNorm01 } from '../core/canonical-types';
+import { signalType, type PayloadType, unitPhase01, unitNorm01, unitVar } from '../core/canonical-types';
 import { OpCode, stableStateId } from '../compiler/ir/types';
 import type { SigExprId } from '../compiler/ir/Indices';
 
@@ -67,8 +67,9 @@ registerBlock({
     },
   },
   outputs: {
-    // Default to 'float' - actual type resolved via payloadType config
-    out: { label: 'Output', type: signalType('float') },
+    // Unit is polymorphic (UnitVar) - resolved by pass1 constraint solver
+    // Payload is polymorphic - resolved by pass0 based on context
+    out: { label: 'Output', type: signalType('float', unitVar('const_out')) },
   },
   lower: ({ ctx, config }) => {
     const payloadType = config?.payloadType as PayloadType | undefined;
@@ -97,11 +98,12 @@ registerBlock({
         sigId = ctx.b.sigConst(rawValue, signalType('float'));
         break;
       }
+      case 'cameraProjection':
       case 'int': {
         if (typeof rawValue !== 'number') {
-          throw new Error(`Const<int> requires number value, got ${typeof rawValue}`);
+          throw new Error(`Const<${payloadType}> requires number value, got ${typeof rawValue}`);
         }
-        sigId = ctx.b.sigConst(Math.floor(rawValue), signalType('int'));
+        sigId = ctx.b.sigConst(Math.floor(rawValue), signalType(payloadType as any));
         break;
       }
       case 'bool': {
@@ -131,7 +133,7 @@ registerBlock({
           throw new Error(`Const<color> requires {r, g, b, a} object, got ${typeof rawValue}`);
         }
         if (typeof val.r !== 'number' || typeof val.g !== 'number' ||
-            typeof val.b !== 'number' || typeof val.a !== 'number') {
+          typeof val.b !== 'number' || typeof val.a !== 'number') {
           throw new Error(`Const<color> requires {r, g, b, a} as numbers`);
         }
         const rSig = ctx.b.sigConst(val.r, signalType('float'));

@@ -5,7 +5,7 @@ impl_source: src/
 generated: 2026-01-24T21:30:00Z
 previous_run: 2026-01-27T22:00:00Z
 topics_audited: 19
-totals: { trivial: 16, critical: 3, to-review: 24, unimplemented: 111, done: ~250 }
+totals: { trivial: 16, critical: 3, to-review: 23, unimplemented: 111, done: ~251 }
 ---
 
 # Gap Analysis: Full Spec (All 19 Topics) — UPDATE
@@ -33,6 +33,7 @@ Core pipeline (compilation, runtime, blocks, rendering) is mature with all prior
 | C-26 (no fast-path) | CRITICAL | DONE | Added monotone check before sort, commit 988f967 |
 | CameraDeclIR | N/A | DONE (type only) | commit d7d6119 |
 | cameraProjection PayloadType | N/A | TO-REVIEW | Spec says Signal<int>, impl uses dedicated type |
+| R-8 (expr trees vs op-IR) | TO-REVIEW | RESOLVED (spec update needed) | Code's DAG+schedule architecture aligns with deeper invariants; spec Scheduling subsection needs two-layer rewrite |
 
 ### Previously Resolved (unchanged from last run)
 All C-1 through C-23 remain DONE. All U-4/U-5/U-6/U-8 remain DONE. C-12 remains deferred (blocked by U-21).
@@ -57,7 +58,7 @@ All C-1 through C-23 remain DONE. All U-4/U-5/U-6/U-8 remain DONE. C-12 remains 
 | 21 | R-2 | 01 Type | Keep Unit type system or revert to payload-only? | [to-review/topic-01](./to-review/topic-01-type-system.md) |
 | 22 | R-6 | 05 Runtime | Float64 vs Float32 for scalars? | [to-review/topic-05](./to-review/topic-05-runtime.md) |
 | 23 | R-7 | 05 Runtime | Stamp-based vs CacheKey caching? | [to-review/topic-05](./to-review/topic-05-runtime.md) |
-| 24 | R-8 | 04 Compilation | Expression trees vs op-level IR? | [to-review/topic-04](./to-review/topic-04-compilation.md) |
+
 | 25 | R-9 | 18 Camera | ProjectionOutputs has extra screenRadius field | [to-review/topic-18](./to-review/topic-18-camera-projection.md) |
 | 26 | R-10 | 18 Camera | Ortho near default: spec=0.01, impl=-100.0 | [to-review/topic-18](./to-review/topic-18-camera-projection.md) |
 | 27 | R-11 | 18 Camera | CameraDeclIR splits center vec2 into centerX/centerY scalars | [to-review/topic-18](./to-review/topic-18-camera-projection.md) |

@@ -44,7 +44,8 @@ export type Unit =
   | { readonly kind: 'ndc3' }         // Normalized device coords vec3 [0,1]^3
   | { readonly kind: 'world2' }       // World-space vec2
   | { readonly kind: 'world3' }       // World-space vec3
-  | { readonly kind: 'rgba01' };      // Float color RGBA each in [0,1]
+  | { readonly kind: 'rgba01' }       // Float color RGBA each in [0,1]
+  | { readonly kind: 'var'; readonly id: string };  // Unresolved unit variable (must be resolved by constraint solver)
 
 // --- Unit Constructors ---
 export function unitNone(): Unit { return { kind: 'none' }; }
@@ -63,10 +64,30 @@ export function unitWorld2(): Unit { return { kind: 'world2' }; }
 export function unitWorld3(): Unit { return { kind: 'world3' }; }
 export function unitRgba01(): Unit { return { kind: 'rgba01' }; }
 
+let unitVarCounter = 0;
+/**
+ * Create an unresolved unit variable.
+ * Unit variables MUST be resolved by the constraint solver before compilation.
+ */
+export function unitVar(id?: string): Unit {
+  return { kind: 'var', id: id ?? `_uv${unitVarCounter++}` };
+}
+
+/**
+ * Check if a unit is an unresolved variable.
+ */
+export function isUnitVar(unit: Unit): unit is { kind: 'var'; id: string } {
+  return unit.kind === 'var';
+}
+
 /**
  * Compare two units for deep equality.
  */
 export function unitsEqual(a: Unit, b: Unit): boolean {
+  // Unit variables are only equal if they have the same id
+  if (a.kind === 'var' && b.kind === 'var') {
+    return a.id === b.id;
+  }
   return a.kind === b.kind;
 }
 
@@ -85,8 +106,11 @@ const ALLOWED_UNITS: Record<PayloadType, readonly Unit['kind'][]> = {
 
 /**
  * Check if a (payload, unit) combination is valid per spec §A4.
+ * Note: 'var' (unresolved unit variable) is always valid during inference.
  */
 export function isValidPayloadUnit(payload: PayloadType, unit: Unit): boolean {
+  // Unit variables are always valid during inference (will be resolved later)
+  if (unit.kind === 'var') return true;
   const allowed = ALLOWED_UNITS[payload];
   if (!allowed) return false;
   return allowed.includes(unit.kind);

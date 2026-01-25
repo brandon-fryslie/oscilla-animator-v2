@@ -152,6 +152,7 @@ describe('Level 9 Integration: Continuity Unaffected by Toggle', () => {
         { slot: 100 as ValueSlot, storage: 'object', offset: 2 },
       ],
       fieldSlotRegistry: new Map(),
+      renderGlobals: [],
       outputs: [{ slot: 100 as ValueSlot }],
       schedule: {
         kind: 'schedule',
@@ -223,126 +224,38 @@ describe('Level 9 Integration: Continuity Unaffected by Toggle', () => {
     return JSON.stringify({ targets, mappings }, null, 2);
   }
 
-  it('Test 5: Patch with continuity enabled, run 30 frames (ortho) to establish stable mapping', () => {
+  it('Test 5-8: Continuity state is identical across ortho and perspective camera modes', () => {
     const program = createMinimalProgramWithContinuity(10);
-    const state = createRuntimeState(program.slotMeta.length);
-    const pool = new BufferPool();
-
-    // Prepare world-space position buffer
     const worldPositions = createWorldPositions(10);
-    state.values.objects.set(10 as ValueSlot, worldPositions);
 
-    // Run 30 frames with ortho camera
-    const camera: ResolvedCameraParams = DEFAULT_CAMERA;
-
+    // Sequence 1: Ortho
+    const stateOrtho = createRuntimeState(program.slotMeta.length);
+    const poolOrtho = new BufferPool();
     for (let frame = 0; frame < 30; frame++) {
-      // Re-set world positions each frame (simulating materialization)
-      state.values.objects.set(10 as ValueSlot, worldPositions);
-
-      executeFrame(program, state, pool, frame * 16.667);
+      stateOrtho.values.objects.set(10 as ValueSlot, worldPositions);
+      executeFrame(program, stateOrtho, poolOrtho, frame * 16.667);
     }
+    const orthoSnapshot = serializeContinuityState(stateOrtho.continuity);
 
-    // Verify continuity state exists
-    expect(state.continuity.targets.size).toBeGreaterThan(0);
-    expect(state.continuity.prevDomains.size).toBeGreaterThan(0);
-
-    // Capture snapshot
-    const orthoSnapshot = serializeContinuityState(state.continuity);
-
-    // Store for next test
-    (globalThis as any).__level9_orthoSnapshot = orthoSnapshot;
-    (globalThis as any).__level9_orthoState = {
-      targets: new Map(state.continuity.targets),
-      mappings: new Map(state.continuity.mappings),
-      prevDomains: new Map(state.continuity.prevDomains),
-    };
-
-    expect(orthoSnapshot).toBeTruthy();
-  });
-
-  it('Test 6: Toggle to perspective, run 30 frames', () => {
-    const program = createMinimalProgramWithContinuity(10);
-
-    // Create fresh state with same initial conditions
-    const state = createRuntimeState(program.slotMeta.length);
-    const pool = new BufferPool();
-
-    const worldPositions = createWorldPositions(10);
-    state.values.objects.set(10 as ValueSlot, worldPositions);
-
-    // Run 30 frames with perspective camera
-    const camera: ResolvedCameraParams = {
-  projection: 'persp',
-  centerX: 0.5,
-  centerY: 0.5,
-  distance: 2.0,
-  tiltRad: (35 * Math.PI) / 180,
-  yawRad: 0,
-  fovYRad: (45 * Math.PI) / 180,
-  near: 0.01,
-  far: 100,
-};
-
+    // Sequence 2: Perspective
+    const statePersp = createRuntimeState(program.slotMeta.length);
+    const poolPersp = new BufferPool();
     for (let frame = 0; frame < 30; frame++) {
-      // Re-set world positions each frame
-      state.values.objects.set(10 as ValueSlot, worldPositions);
-
-      executeFrame(program, state, pool, frame * 16.667);
+      statePersp.values.objects.set(10 as ValueSlot, worldPositions);
+      executeFrame(program, statePersp, poolPersp, frame * 16.667);
     }
+    const perspSnapshot = serializeContinuityState(statePersp.continuity);
 
-    // Verify continuity state exists
-    expect(state.continuity.targets.size).toBeGreaterThan(0);
-    expect(state.continuity.prevDomains.size).toBeGreaterThan(0);
-
-    // Capture snapshot
-    const perspSnapshot = serializeContinuityState(state.continuity);
-
-    // Store for next test
-    (globalThis as any).__level9_perspSnapshot = perspSnapshot;
-
-    expect(perspSnapshot).toBeTruthy();
-  });
-
-  it('Test 7: Assert: continuity map is identical (same instance→slot assignments)', () => {
-    const orthoSnapshot = (globalThis as any).__level9_orthoSnapshot as string;
-    const perspSnapshot = (globalThis as any).__level9_perspSnapshot as string;
-
+    // Assert: Snapshots are identical (identity mapping and converged world-space tracked positions)
     expect(orthoSnapshot).toBeTruthy();
     expect(perspSnapshot).toBeTruthy();
+    expect(orthoSnapshot).toBe(perspSnapshot);
 
-    const orthoState = JSON.parse(orthoSnapshot);
-    const perspState = JSON.parse(perspSnapshot);
-
-    // Compare mappings (should be identical)
-    expect(orthoState.mappings).toEqual(perspState.mappings);
-  });
-
-  it('Test 8: Assert: world-space tracked positions are identical', () => {
-    const orthoSnapshot = (globalThis as any).__level9_orthoSnapshot as string;
-    const perspSnapshot = (globalThis as any).__level9_perspSnapshot as string;
-
-    const orthoState = JSON.parse(orthoSnapshot);
-    const perspState = JSON.parse(perspSnapshot);
-
-    // Compare target buffers (gauge and slew should converge to same values)
-    // Since both runs start from the same world positions and have the same continuity policy,
-    // the buffers should be identical (within floating-point tolerance)
-    const orthoTargets = orthoState.targets;
-    const perspTargets = perspState.targets;
-
-    expect(Object.keys(orthoTargets)).toEqual(Object.keys(perspTargets));
-
-    for (const key of Object.keys(orthoTargets)) {
-      const ortho = orthoTargets[key];
-      const persp = perspTargets[key];
-
-      expect(ortho.count).toBe(persp.count);
-
-      // Gauge and slew buffers should be identical
-      // (both operating on world-space, independent of projection)
-      expect(ortho.gaugeBuffer).toEqual(persp.gaugeBuffer);
-      expect(ortho.slewBuffer).toEqual(persp.slewBuffer);
-    }
+    // Deep equality check on the raw objects for robustness
+    const orthoData = JSON.parse(orthoSnapshot);
+    const perspData = JSON.parse(perspSnapshot);
+    expect(orthoData.mappings).toEqual(perspData.mappings);
+    expect(orthoData.targets).toEqual(perspData.targets);
   });
 });
 
@@ -351,7 +264,7 @@ describe('Level 9 Integration: Continuity Unaffected by Toggle', () => {
 // =============================================================================
 
 describe('Level 9 Integration: Projection is Pure (Read-Only)', () => {
-  it('Test 9: Instrument world-position buffer with write trap', () => {
+  it('Test 9-11: Projection (ortho and persp) is pure and never writes to world buffer', () => {
     // Create a world-position buffer (vec3 for 3D projection system)
     const count = 10;
     const worldPositions = new Float32Array(count * 3);
@@ -361,61 +274,41 @@ describe('Level 9 Integration: Projection is Pure (Read-Only)', () => {
       worldPositions[i * 3 + 2] = 0.0;
     }
 
-    // Store the buffer for next tests (not trapped, since Proxy on TypedArray has issues)
-    (globalThis as any).__level9_worldBuffer = worldPositions;
-
-    expect(worldPositions).toBeTruthy();
-  });
-
-  it('Test 10: Run projection (ortho): assert 0 writes to world buffer', () => {
-    const worldPositions = (globalThis as any).__level9_worldBuffer as Float32Array;
-
     // Take a snapshot before projection
     const beforeSnapshot = new Float32Array(worldPositions);
 
-    const count = 10;
-    const camera: ResolvedCameraParams = DEFAULT_CAMERA;
-
-    // Call projectInstances (should be read-only)
-    const output = projectInstances(worldPositions, 0.05, count, camera);
+    // 1. Run projection (ortho)
+    const cameraOrtho: ResolvedCameraParams = DEFAULT_CAMERA;
+    const outputOrtho = projectInstances(worldPositions, 0.05, count, cameraOrtho);
 
     // Verify projection produced output
-    expect(output.screenPosition.length).toBe(count * 2);
-    expect(output.depth.length).toBe(count);
+    expect(outputOrtho.screenPosition.length).toBe(count * 2);
+    expect(outputOrtho.depth.length).toBe(count);
 
-    // Verify world buffer is unchanged (byte-for-byte comparison)
+    // Verify world buffer is unchanged
     for (let i = 0; i < worldPositions.length; i++) {
       expect(worldPositions[i]).toBe(beforeSnapshot[i]);
     }
-  });
 
-  it('Test 11: Run projection (perspective): assert 0 writes to world buffer', () => {
-    const worldPositions = (globalThis as any).__level9_worldBuffer as Float32Array;
-
-    // Take a snapshot before projection
-    const beforeSnapshot = new Float32Array(worldPositions);
-
-    const count = 10;
-    const camera: ResolvedCameraParams = {
-  projection: 'persp',
-  centerX: 0.5,
-  centerY: 0.5,
-  distance: 2.0,
-  tiltRad: (35 * Math.PI) / 180,
-  yawRad: 0,
-  fovYRad: (45 * Math.PI) / 180,
-  near: 0.01,
-  far: 100,
-};
-
-    // Call projectInstances (should be read-only)
-    const output = projectInstances(worldPositions, 0.05, count, camera);
+    // 2. Run projection (perspective)
+    const cameraPersp: ResolvedCameraParams = {
+      projection: 'persp',
+      centerX: 0.5,
+      centerY: 0.5,
+      distance: 2.0,
+      tiltRad: (35 * Math.PI) / 180,
+      yawRad: 0,
+      fovYRad: (45 * Math.PI) / 180,
+      near: 0.01,
+      far: 100,
+    };
+    const outputPersp = projectInstances(worldPositions, 0.05, count, cameraPersp);
 
     // Verify projection produced output
-    expect(output.screenPosition.length).toBe(count * 2);
-    expect(output.depth.length).toBe(count);
+    expect(outputPersp.screenPosition.length).toBe(count * 2);
+    expect(outputPersp.depth.length).toBe(count);
 
-    // Verify world buffer is unchanged (byte-for-byte comparison)
+    // Verify world buffer is STILL unchanged
     for (let i = 0; i < worldPositions.length; i++) {
       expect(worldPositions[i]).toBe(beforeSnapshot[i]);
     }

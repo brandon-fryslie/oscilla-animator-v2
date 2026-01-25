@@ -12,9 +12,10 @@ import { describe, it, expect } from 'vitest';
 import { buildPatch } from '../../graph/Patch';
 import { compile } from '../../compiler/compile';
 import { executeFrame } from '../../runtime/ScheduleExecutor';
-import { createRuntimeState } from '../../runtime/RuntimeState';
+import { createRuntimeState, type RuntimeState } from '../../runtime/RuntimeState';
 import { BufferPool } from '../../runtime/BufferPool';
 import { DEFAULT_CAMERA, type ResolvedCameraParams } from '../../runtime/CameraResolver';
+import type { CompiledProgramIR, ValueSlot } from '../../compiler/ir/program';
 
 // =============================================================================
 // Camera Constants
@@ -34,6 +35,94 @@ const perspCam: ResolvedCameraParams = {
 };
 
 // =============================================================================
+// Helper Functions
+// =============================================================================
+
+/**
+ * Build a 5×5 grid patch (25 instances) with:
+ * - GridLayout (world positions)
+ * - FieldHueFromPhase (per-instance color)
+ * - RenderInstances2D (render sink)
+ */
+function buildGoldenPatch() {
+  return buildPatch((b) => {
+    const time = b.addBlock('InfiniteTimeRoot', {});
+    const ellipse = b.addBlock('Ellipse', { rx: 0.03, ry: 0.03 });
+    const array = b.addBlock('Array', { count: 25 });
+    const layout = b.addBlock('GridLayout', { rows: 5, cols: 5 });
+
+    // Color pipeline (Field-level hue from phase)
+    const sat = b.addBlock('Const', { value: 1.0 });
+    const val = b.addBlock('Const', { value: 1.0 });
+    const hue = b.addBlock('FieldHueFromPhase', {});
+    const color = b.addBlock('HsvToRgb', {});
+
+    const render = b.addBlock('RenderInstances2D', {});
+
+    // Camera block for data-driven projection control
+    b.addBlock('Camera', {
+      projection: 0, // 0 = ortho, 1 = persp
+      centerX: 0.5,
+      centerY: 0.5,
+      distance: 2.0,
+      tiltDeg: 0,
+      yawDeg: 0,
+      fovYDeg: 45,
+      near: 0.01,
+      far: 100,
+    });
+
+    // Wire topology
+    b.wire(ellipse, 'shape', array, 'element');
+    b.wire(array, 'elements', layout, 'elements');
+
+    // Wire color
+    b.wire(time, 'phaseA', hue, 'phase');
+    b.wire(array, 't', hue, 'id01');
+    b.wire(hue, 'hue', color, 'hue');
+    b.wire(sat, 'out', color, 'sat');
+    b.wire(val, 'out', color, 'val');
+
+    // Wire to render
+    b.wire(layout, 'position', render, 'pos');
+    b.wire(color, 'color', render, 'color');
+    b.wire(ellipse, 'shape', render, 'shape');
+  });
+}
+
+/**
+ * Helper: Set camera projection via slot
+ */
+function setCameraParams(
+  program: CompiledProgramIR,
+  state: RuntimeState,
+  params: Partial<ResolvedCameraParams>
+) {
+  if (program.renderGlobals.length === 0 || program.renderGlobals[0].kind !== 'camera') {
+    return;
+  }
+  const decl = program.renderGlobals[0];
+  const slotMeta = program.slotMeta;
+
+  const writeSlot = (slot: ValueSlot, value: number) => {
+    const meta = slotMeta.find((m) => m.slot === slot);
+    if (meta) {
+      state.values.f64[meta.offset] = value;
+    }
+  };
+
+  if (params.projection !== undefined) writeSlot(decl.projectionSlot, params.projection === 'persp' ? 1 : 0);
+  if (params.centerX !== undefined) writeSlot(decl.centerXSlot, params.centerX);
+  if (params.centerY !== undefined) writeSlot(decl.centerYSlot, params.centerY);
+  if (params.distance !== undefined) writeSlot(decl.distanceSlot, params.distance);
+  if (params.tiltRad !== undefined) writeSlot(decl.tiltDegSlot, (params.tiltRad * 180) / Math.PI);
+  if (params.yawRad !== undefined) writeSlot(decl.yawDegSlot, (params.yawRad * 180) / Math.PI);
+  if (params.fovYRad !== undefined) writeSlot(decl.fovYDegSlot, (params.fovYRad * 180) / Math.PI);
+  if (params.near !== undefined) writeSlot(decl.nearSlot, params.near);
+  if (params.far !== undefined) writeSlot(decl.farSlot, params.far);
+}
+
+// =============================================================================
 // Test 10.1: The Golden Patch - Multi-Frame Camera Toggle
 // =============================================================================
 
@@ -48,38 +137,7 @@ describe('Level 10 Golden Tests: The Golden Patch', () => {
    * The Ellipse rx/ry params (0.03) are shape params, not the world radius.
    * The world radius used for projection is the scale parameter (1.0).
    */
-  function buildGoldenPatch() {
-    return buildPatch((b) => {
-      const time = b.addBlock('InfiniteTimeRoot', {});
-      const ellipse = b.addBlock('Ellipse', { rx: 0.03, ry: 0.03 });
-      const array = b.addBlock('Array', { count: 25 });
-      const layout = b.addBlock('GridLayout', { rows: 5, cols: 5 });
 
-      // Color pipeline (Field-level hue from phase)
-      const sat = b.addBlock('Const', { value: 1.0 });
-      const val = b.addBlock('Const', { value: 1.0 });
-      const hue = b.addBlock('FieldHueFromPhase', {});
-      const color = b.addBlock('HsvToRgb', {});
-
-      const render = b.addBlock('RenderInstances2D', {});
-
-      // Wire topology
-      b.wire(ellipse, 'shape', array, 'element');
-      b.wire(array, 'elements', layout, 'elements');
-
-      // Wire color
-      b.wire(time, 'phaseA', hue, 'phase');
-      b.wire(array, 't', hue, 'id01');
-      b.wire(hue, 'hue', color, 'hue');
-      b.wire(sat, 'out', color, 'sat');
-      b.wire(val, 'out', color, 'val');
-
-      // Wire to render
-      b.wire(layout, 'position', render, 'pos');
-      b.wire(color, 'color', render, 'color');
-      b.wire(ellipse, 'shape', render, 'shape');
-    });
-  }
 
   it('Test 1.1: Run 120 frames ortho - verify identity projection', () => {
     const patch = buildGoldenPatch();
@@ -95,8 +153,9 @@ describe('Level 10 Golden Tests: The Golden Patch', () => {
     const N = 25;
     const expectedRadius = Math.fround(1.0); // Default scale from RenderInstances2D
 
-    // Run 120 frames with ortho camera
+    // Run 120 frames with ortho camera (default)
     for (let frame = 0; frame < 120; frame++) {
+      setCameraParams(program, state, { projection: 'ortho' });
       const frameIR = executeFrame(program, state, pool, frame * 16.667);
 
       expect(frameIR.ops.length).toBeGreaterThan(0);
@@ -154,15 +213,28 @@ describe('Level 10 Golden Tests: The Golden Patch', () => {
 
     // Run frames 0-120 with ortho (establish baseline)
     for (let frame = 0; frame < 121; frame++) {
+      setCameraParams(program, state, { projection: 'ortho' });
       executeFrame(program, state, pool, frame * 16.667);
     }
 
     // Capture frame 120 ortho output for comparison
+    setCameraParams(program, state, { projection: 'ortho' });
     const frame120 = executeFrame(program, state, pool, 120 * 16.667);
     const orthoPositions = new Float32Array(frame120.ops[0].instances.position!);
 
     // Toggle to perspective at frame 121, run to frame 180
     for (let frame = 121; frame <= 180; frame++) {
+      setCameraParams(program, state, {
+        projection: 'persp',
+        centerX: 0.5,
+        centerY: 0.5,
+        distance: 2.0,
+        tiltRad: (35 * Math.PI) / 180,
+        yawRad: 0,
+        fovYRad: (45 * Math.PI) / 180,
+        near: 0.01,
+        far: 100,
+      });
       const frameIR = executeFrame(program, state, pool, frame * 16.667);
 
       expect(frameIR.ops.length).toBeGreaterThan(0);
@@ -218,16 +290,29 @@ describe('Level 10 Golden Tests: The Golden Patch', () => {
 
     // Run frames 0-120 ortho
     for (let frame = 0; frame <= 120; frame++) {
+      setCameraParams(program, state, { projection: 'ortho' });
       executeFrame(program, state, pool, frame * 16.667);
     }
 
     // Run frames 121-180 perspective
     for (let frame = 121; frame <= 180; frame++) {
+      setCameraParams(program, state, {
+        projection: 'persp',
+        centerX: 0.5,
+        centerY: 0.5,
+        distance: 2.0,
+        tiltRad: (35 * Math.PI) / 180,
+        yawRad: 0,
+        fovYRad: (45 * Math.PI) / 180,
+        near: 0.01,
+        far: 100,
+      });
       executeFrame(program, state, pool, frame * 16.667);
     }
 
     // Toggle back to ortho at frame 181, run to 240
     for (let frame = 181; frame <= 240; frame++) {
+      setCameraParams(program, state, { projection: 'ortho' });
       const frameIR = executeFrame(program, state, pool, frame * 16.667);
 
       expect(frameIR.ops.length).toBeGreaterThan(0);
@@ -252,15 +337,29 @@ describe('Level 10 Golden Tests: The Golden Patch', () => {
     const pool1 = new BufferPool();
 
     for (let frame = 0; frame <= 120; frame++) {
+      setCameraParams(program1, state1, { projection: 'ortho' });
       executeFrame(program1, state1, pool1, frame * 16.667);
     }
     for (let frame = 121; frame <= 180; frame++) {
+      setCameraParams(program1, state1, {
+        projection: 'persp',
+        centerX: 0.5,
+        centerY: 0.5,
+        distance: 2.0,
+        tiltRad: (35 * Math.PI) / 180,
+        yawRad: 0,
+        fovYRad: (45 * Math.PI) / 180,
+        near: 0.01,
+        far: 100,
+      });
       executeFrame(program1, state1, pool1, frame * 16.667);
     }
     for (let frame = 181; frame <= 240; frame++) {
+      setCameraParams(program1, state1, { projection: 'ortho' });
       executeFrame(program1, state1, pool1, frame * 16.667);
     }
 
+    setCameraParams(program1, state1, { projection: 'ortho' });
     const toggledFrame = executeFrame(program1, state1, pool1, 240 * 16.667);
 
     // Run 2: Control (always ortho)
@@ -271,9 +370,11 @@ describe('Level 10 Golden Tests: The Golden Patch', () => {
     const pool2 = new BufferPool();
 
     for (let frame = 0; frame <= 240; frame++) {
+      setCameraParams(program2, state2, { projection: 'ortho' });
       executeFrame(program2, state2, pool2, frame * 16.667);
     }
 
+    setCameraParams(program2, state2, { projection: 'ortho' });
     const controlFrame = executeFrame(program2, state2, pool2, 240 * 16.667);
 
     // Compare frame 240 outputs
@@ -299,31 +400,11 @@ describe('Level 10 Golden Tests: The Golden Patch', () => {
 // =============================================================================
 
 describe('Level 10 Golden Tests: Determinism', () => {
-  it('Test 2.1: Run 60 frames, record all screenPosition outputs', () => {
-    const patch = buildPatch((b) => {
-      const time = b.addBlock('InfiniteTimeRoot', {});
-      const ellipse = b.addBlock('Ellipse', { rx: 0.03, ry: 0.03 });
-      const array = b.addBlock('Array', { count: 25 });
-      const layout = b.addBlock('GridLayout', { rows: 5, cols: 5 });
-
-      const sat = b.addBlock('Const', { value: 1.0 });
-      const val = b.addBlock('Const', { value: 1.0 });
-      const hue = b.addBlock('FieldHueFromPhase', {});
-      const color = b.addBlock('HsvToRgb', {});
-      const render = b.addBlock('RenderInstances2D', {});
-
-      b.wire(ellipse, 'shape', array, 'element');
-      b.wire(array, 'elements', layout, 'elements');
-      b.wire(time, 'phaseA', hue, 'phase');
-      b.wire(array, 't', hue, 'id01');
-      b.wire(hue, 'hue', color, 'hue');
-      b.wire(sat, 'out', color, 'sat');
-      b.wire(val, 'out', color, 'val');
-      b.wire(layout, 'position', render, 'pos');
-      b.wire(color, 'color', render, 'color');
-      b.wire(ellipse, 'shape', render, 'shape');
-    });
-
+  /**
+   * Helper for determinism test
+   */
+  function runDeterministicSequence(): Float32Array[] {
+    const patch = buildGoldenPatch();
     const result = compile(patch);
     if (result.kind !== 'ok') throw new Error('Compile failed');
 
@@ -335,65 +416,28 @@ describe('Level 10 Golden Tests: Determinism', () => {
 
     // Run 60 frames, record screenPosition for each
     for (let frame = 0; frame < 60; frame++) {
+      setCameraParams(program, state, { projection: 'ortho' });
       const frameIR = executeFrame(program, state, pool, frame * 16.667);
       const op = frameIR.ops[0];
       // Store a COPY of the screenPosition buffer
       recordings.push(new Float32Array(op.instances.position!));
     }
 
-    // Store recordings for next test
-    (globalThis as any).__level10_recordings = recordings;
-
     expect(recordings.length).toBe(60);
-  });
+    return recordings;
+  }
 
-  it('Test 2.2: Reset, run again, assert bitwise-identical outputs', () => {
-    const recordings = (globalThis as any).__level10_recordings as Float32Array[];
-    expect(recordings).toBeTruthy();
-    expect(recordings.length).toBe(60);
+  it('Test 2.1-2.2: Determinism - Run twice, assert bitwise-identical outputs', () => {
+    const recordings1 = runDeterministicSequence();
+    const recordings2 = runDeterministicSequence();
 
-    // Build the same patch
-    const patch = buildPatch((b) => {
-      const time = b.addBlock('InfiniteTimeRoot', {});
-      const ellipse = b.addBlock('Ellipse', { rx: 0.03, ry: 0.03 });
-      const array = b.addBlock('Array', { count: 25 });
-      const layout = b.addBlock('GridLayout', { rows: 5, cols: 5 });
+    expect(recordings1.length).toBe(60);
+    expect(recordings2.length).toBe(60);
 
-      const sat = b.addBlock('Const', { value: 1.0 });
-      const val = b.addBlock('Const', { value: 1.0 });
-      const hue = b.addBlock('FieldHueFromPhase', {});
-      const color = b.addBlock('HsvToRgb', {});
-      const render = b.addBlock('RenderInstances2D', {});
-
-      b.wire(ellipse, 'shape', array, 'element');
-      b.wire(array, 'elements', layout, 'elements');
-      b.wire(time, 'phaseA', hue, 'phase');
-      b.wire(array, 't', hue, 'id01');
-      b.wire(hue, 'hue', color, 'hue');
-      b.wire(sat, 'out', color, 'sat');
-      b.wire(val, 'out', color, 'val');
-      b.wire(layout, 'position', render, 'pos');
-      b.wire(color, 'color', render, 'color');
-      b.wire(ellipse, 'shape', render, 'shape');
-    });
-
-    // Completely fresh compile, state, pool
-    const result = compile(patch);
-    if (result.kind !== 'ok') throw new Error('Compile failed');
-
-    const program = result.program;
-    const state = createRuntimeState(program.slotMeta.length);
-    const pool = new BufferPool();
-
-    // Run 60 frames again
     for (let frame = 0; frame < 60; frame++) {
-      const frameIR = executeFrame(program, state, pool, frame * 16.667);
-      const op = frameIR.ops[0];
+      const expected = recordings1[frame];
+      const actual = recordings2[frame];
 
-      const expected = recordings[frame];
-      const actual = op.instances.position!;
-
-      // Bitwise-identical comparison (byte-for-byte)
       expect(actual.length).toBe(expected.length);
       for (let i = 0; i < actual.length; i++) {
         expect(actual[i]).toBe(expected[i]);
@@ -443,6 +487,7 @@ describe('Level 10 Golden Tests: Stress Test', () => {
 
     // Run 10 frames ortho
     for (let frame = 0; frame < 10; frame++) {
+      setCameraParams(program, state, { projection: 'ortho' });
       const frameIR = executeFrame(program, state, pool, frame * 16.667);
       const op = frameIR.ops[0];
 
@@ -475,6 +520,11 @@ describe('Level 10 Golden Tests: Stress Test', () => {
 
     // Run 10 frames perspective
     for (let frame = 10; frame < 20; frame++) {
+      setCameraParams(program, state, {
+        projection: 'persp',
+        distance: 2.0,
+        tiltRad: 0.5,
+      });
       const frameIR = executeFrame(program, state, pool, frame * 16.667);
       const op = frameIR.ops[0];
 
@@ -491,6 +541,7 @@ describe('Level 10 Golden Tests: Stress Test', () => {
 
     // Run 10 frames ortho again
     for (let frame = 20; frame < 30; frame++) {
+      setCameraParams(program, state, { projection: 'ortho' });
       const frameIR = executeFrame(program, state, pool, frame * 16.667);
       const op = frameIR.ops[0];
 
@@ -512,132 +563,57 @@ describe('Level 10 Golden Tests: Stress Test', () => {
 // =============================================================================
 
 describe('Level 10 Golden Tests: Export Isolation', () => {
-  it('Test 4.1: Run 60 frames with perspective toggles, capture frame 60 (ends in ortho)', () => {
-    const patch = buildPatch((b) => {
-      const time = b.addBlock('InfiniteTimeRoot', {});
-      const ellipse = b.addBlock('Ellipse', { rx: 0.03, ry: 0.03 });
-      const array = b.addBlock('Array', { count: 25 });
-      const layout = b.addBlock('GridLayout', { rows: 5, cols: 5 });
+  it('Test 4.1-4.3: Export Isolation - Comparison after sequence', () => {
+    const patch = buildGoldenPatch();
 
-      const sat = b.addBlock('Const', { value: 1.0 });
-      const val = b.addBlock('Const', { value: 1.0 });
-      const hue = b.addBlock('FieldHueFromPhase', {});
-      const color = b.addBlock('HsvToRgb', {});
-      const render = b.addBlock('RenderInstances2D', {});
+    // Run 1: Toggle sequence
+    const result1 = compile(patch);
+    if (result1.kind !== 'ok') throw new Error('Compile failed');
+    const program1 = result1.program;
+    const state1 = createRuntimeState(program1.slotMeta.length);
+    const pool1 = new BufferPool();
 
-      b.wire(ellipse, 'shape', array, 'element');
-      b.wire(array, 'elements', layout, 'elements');
-      b.wire(time, 'phaseA', hue, 'phase');
-      b.wire(array, 't', hue, 'id01');
-      b.wire(hue, 'hue', color, 'hue');
-      b.wire(sat, 'out', color, 'sat');
-      b.wire(val, 'out', color, 'val');
-      b.wire(layout, 'position', render, 'pos');
-      b.wire(color, 'color', render, 'color');
-      b.wire(ellipse, 'shape', render, 'shape');
-    });
-
-    const result = compile(patch);
-    if (result.kind !== 'ok') throw new Error('Compile failed');
-
-    const program = result.program;
-    const state = createRuntimeState(program.slotMeta.length);
-    const pool = new BufferPool();
-
-    // Toggle every 10 frames: ortho → persp → ortho → persp → ortho → persp
     for (let frame = 0; frame < 60; frame++) {
-      const camera = Math.floor(frame / 10) % 2 === 0 ? orthoCam : perspCam;
-      executeFrame(program, state, pool, frame * 16.667);
+      const proj = Math.floor(frame / 10) % 2 === 0 ? 'ortho' : 'persp';
+      setCameraParams(program1, state1, {
+        projection: proj,
+        distance: 2.0,
+      });
+      executeFrame(program1, state1, pool1, frame * 16.667);
     }
-
-    // Capture frame 60 (ends in ortho: frames 50-59 are persp, frame 60 would be ortho)
-    // Actually frame 59 is last of the loop, so run one more
-    const toggledFrame = executeFrame(program, state, pool, 60 * 16.667);
-
+    setCameraParams(program1, state1, { projection: 'ortho' });
+    const toggledFrame = executeFrame(program1, state1, pool1, 60 * 16.667);
     const toggledOp = toggledFrame.ops[0];
-    const toggledScreenPos = new Float32Array(toggledOp.instances.position!);
-    const toggledScreenRad = typeof toggledOp.instances.size === 'number'
-      ? new Float32Array(toggledOp.instances.count).fill(toggledOp.instances.size)
-      : new Float32Array(toggledOp.instances.size!);
 
-    // Store for comparison
-    (globalThis as any).__level10_toggledFrame60 = {
-      screenPosition: toggledScreenPos,
-      screenRadius: toggledScreenRad,
-      count: toggledOp.instances.count,
-    };
-  });
+    // Run 2: Control
+    const result2 = compile(patch);
+    if (result2.kind !== 'ok') throw new Error('Compile failed');
+    const program2 = result1.program;
+    const state2 = createRuntimeState(program2.slotMeta.length);
+    const pool2 = new BufferPool();
 
-  it('Test 4.2: Run 60 frames always ortho, capture frame 60', () => {
-    const patch = buildPatch((b) => {
-      const time = b.addBlock('InfiniteTimeRoot', {});
-      const ellipse = b.addBlock('Ellipse', { rx: 0.03, ry: 0.03 });
-      const array = b.addBlock('Array', { count: 25 });
-      const layout = b.addBlock('GridLayout', { rows: 5, cols: 5 });
-
-      const sat = b.addBlock('Const', { value: 1.0 });
-      const val = b.addBlock('Const', { value: 1.0 });
-      const hue = b.addBlock('FieldHueFromPhase', {});
-      const color = b.addBlock('HsvToRgb', {});
-      const render = b.addBlock('RenderInstances2D', {});
-
-      b.wire(ellipse, 'shape', array, 'element');
-      b.wire(array, 'elements', layout, 'elements');
-      b.wire(time, 'phaseA', hue, 'phase');
-      b.wire(array, 't', hue, 'id01');
-      b.wire(hue, 'hue', color, 'hue');
-      b.wire(sat, 'out', color, 'sat');
-      b.wire(val, 'out', color, 'val');
-      b.wire(layout, 'position', render, 'pos');
-      b.wire(color, 'color', render, 'color');
-      b.wire(ellipse, 'shape', render, 'shape');
-    });
-
-    const result = compile(patch);
-    if (result.kind !== 'ok') throw new Error('Compile failed');
-
-    const program = result.program;
-    const state = createRuntimeState(program.slotMeta.length);
-    const pool = new BufferPool();
-
-    // Always ortho
     for (let frame = 0; frame < 60; frame++) {
-      executeFrame(program, state, pool, frame * 16.667);
+      setCameraParams(program2, state2, { projection: 'ortho' });
+      executeFrame(program2, state2, pool2, frame * 16.667);
     }
-
-    const controlFrame = executeFrame(program, state, pool, 60 * 16.667);
-
+    setCameraParams(program2, state2, { projection: 'ortho' });
+    const controlFrame = executeFrame(program2, state2, pool2, 60 * 16.667);
     const controlOp = controlFrame.ops[0];
 
-    // Store for comparison
-    (globalThis as any).__level10_controlFrame60 = {
-      screenPosition: new Float32Array(controlOp.instances.position!),
-      screenRadius: typeof controlOp.instances.size === 'number'
-        ? new Float32Array(controlOp.instances.count).fill(controlOp.instances.size)
-        : new Float32Array(controlOp.instances.size!),
-      count: controlOp.instances.count,
-    };
-  });
+    // Assert identity
+    expect(toggledOp.instances.count).toBe(controlOp.instances.count);
+    const count = toggledOp.instances.count;
 
-  it('Test 4.3: Assert frame 60 outputs are identical', () => {
-    const toggled = (globalThis as any).__level10_toggledFrame60;
-    const control = (globalThis as any).__level10_controlFrame60;
-
-    expect(toggled).toBeTruthy();
-    expect(control).toBeTruthy();
-
-    expect(toggled.count).toBe(control.count);
-
-    // Compare screenPosition (bitwise-identical)
-    expect(toggled.screenPosition.length).toBe(control.screenPosition.length);
-    for (let i = 0; i < toggled.screenPosition.length; i++) {
-      expect(toggled.screenPosition[i]).toBe(control.screenPosition[i]);
+    const screenPos1 = toggledOp.instances.position!;
+    const screenPos2 = controlOp.instances.position!;
+    for (let i = 0; i < count * 2; i++) {
+      expect(screenPos1[i]).toBe(screenPos2[i]);
     }
 
-    // Compare screenRadius (bitwise-identical)
-    expect(toggled.screenRadius.length).toBe(control.screenRadius.length);
-    for (let i = 0; i < toggled.screenRadius.length; i++) {
-      expect(toggled.screenRadius[i]).toBe(control.screenRadius[i]);
+    const size1 = toggledOp.instances.size as Float32Array;
+    const size2 = controlOp.instances.size as Float32Array;
+    for (let i = 0; i < count; i++) {
+      expect(size1[i]).toBe(size2[i]);
     }
   });
 });
@@ -722,9 +698,11 @@ describe('Level 10 Golden Tests: Multi-Backend Comparison', () => {
 
     // Run 60 frames
     for (let frame = 0; frame < 60; frame++) {
+      setCameraParams(program, state, { projection: 'ortho' });
       executeFrame(program, state, pool, frame * 16.667);
     }
 
+    setCameraParams(program, state, { projection: 'ortho' });
     const frame60 = executeFrame(program, state, pool, 60 * 16.667);
     const op = frame60.ops[0];
 

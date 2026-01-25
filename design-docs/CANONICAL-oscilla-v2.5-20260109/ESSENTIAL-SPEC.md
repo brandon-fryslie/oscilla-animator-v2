@@ -153,9 +153,11 @@
 
 **NormalizedGraph**: Fully explicit graph the compiler consumes
 
-**CompiledProgramIR**: Output of compilation, executed by runtime
+**CompiledProgramIR**: Output of compilation — expression DAGs (computation shape) + schedule (execution ordering) + slot metadata (storage layout)
 
-**Schedule**: Explicit execution order as data structure
+**Expression DAG**: Hash-consable tree of signal/field/event nodes. Referentially transparent, memoized per frame.
+
+**Schedule**: Execution ordering as data — names which expr roots to evaluate/materialize, where to store results (slots), and phase ordering constraints
 
 ### Runtime
 
@@ -418,24 +420,88 @@ Structural artifacts keyed by anchor:
 2. **Unification**: Ensure agreement
 3. **Resolution**: Resolve defaults to concrete types
 
-### Scheduling
+### CompiledProgramIR Structure
+
+The compilation output has two layers: expression DAGs that define computation shape, and a schedule that defines execution ordering.
 
 ```typescript
-interface Schedule {
+interface CompiledProgramIR {
+  // Layer 1: Expression DAGs (computation shape)
+  signalExprs: ExprTable<SigExpr>;
+  fieldExprs: ExprTable<FieldExpr>;
+  eventExprs: ExprTable<EventExpr>;
+
+  // Layer 2: Execution schedule (ordering + materialization)
+  schedule: ScheduleIR;
+
+  // Storage layout
+  slotMeta: SlotMeta[];
+
+  // Ancillary
+  fieldSlotRegistry: FieldSlotRegistry;
+  debugIndex: DebugIndex;
+  renderGlobals: RenderGlobals;
+}
+```
+
+### Expression DAGs
+
+Computation is represented as hash-consable DAG nodes referenced by typed IDs (`SigExprId`, `FieldExprId`, `EventExprId`). Expression evaluation is referentially transparent and memoized per frame.
+
+Signal expressions (`SigExpr`):
+- `const`, `slot`, `time`, `external` — leaf nodes
+- `map`, `zip` — combinators
+- `stateRead`, `shapeRef`, `eventRead` — state/context access
+
+Field expressions (`FieldExpr`):
+- `const`, `intrinsic`, `broadcast` — leaf nodes
+- `map`, `zip`, `zipSig`, `array` — combinators
+- `stateRead` — per-lane state access
+
+Combine operations are expression nodes emitted at compile time (validation + construction), not runtime schedule steps.
+
+### Execution Schedule
+
+The schedule defines externally visible ordering boundaries. Expression evaluation within a step is demand-driven and cached.
+
+```typescript
+interface ScheduleIR {
   steps: Step[];
-  stateSlots: StateSlotDecl[];
-  fieldSlots: FieldSlotDecl[];
-  scalarSlots: ScalarSlotDecl[];
+  instances: InstanceDecl[];
+  stateSlotCount: number;
+  stateMappings: StateMapping[];
 }
 
 type Step =
-  | { kind: 'eval_scalar'; nodeId: NodeId; output: ScalarSlot }
-  | { kind: 'eval_field'; nodeId: NodeId; domain: DomainId; output: FieldSlot }
-  | { kind: 'state_read'; stateId: StateId; output: SlotRef }
-  | { kind: 'state_write'; input: SlotRef; stateId: StateId }
-  | { kind: 'combine'; inputs: SlotRef[]; mode: CombineMode; output: SlotRef }
-  | { kind: 'render'; sinkId: string; input: SlotRef };
+  | { kind: 'evalSig'; expr: SigExprId; target: ValueSlot }
+  | { kind: 'materialize'; field: FieldExprId; instanceId: number; target: ValueSlot }
+  | { kind: 'render'; instanceId: number; slots: RenderSlots }
+  | { kind: 'stateWrite'; source: ValueSlot; stateSlot: number }
+  | { kind: 'fieldStateWrite'; source: ValueSlot; stateSlot: number; instanceId: number }
+  | { kind: 'continuityMapBuild'; instanceId: number; ... }
+  | { kind: 'continuityApply'; instanceId: number; ... }
+  | { kind: 'evalEvent'; expr: EventExprId; target: ValueSlot };
 ```
+
+Phase ordering:
+1. Update time inputs (rails, tMs)
+2. Evaluate continuous scalars (`evalSig`)
+3. Build continuity mappings (`continuityMapBuild`)
+4. Materialize continuous fields (`materialize`)
+5. Apply continuity (`continuityApply`)
+6. Execute discrete events (`evalEvent`)
+7. Render sinks (`render`)
+8. State writes (`stateWrite`, `fieldStateWrite`)
+
+### Where Semantics Live
+
+| Concern | Authority |
+|---------|-----------|
+| Shape of computation | Expression DAGs |
+| When it happens | Schedule step ordering |
+| Where values live | SlotMeta (typed storage + offsets/strides) |
+| Why fields are special | Materializer + demand-driven behavior |
+| What's externally ordered | Events, state writes, continuity, render |
 
 ### Slot Allocation
 
@@ -462,9 +528,7 @@ No type information at runtime:
 Every tick:
 1. Sample external inputs
 2. Update time (tMs, phases)
-3. Execute schedule (topological order)
-4. Process events
-5. Write to render sinks
+3. Execute schedule steps in phase order (see Compilation → Execution Schedule)
 
 Target: **5-10ms per frame** (60-200 fps)
 

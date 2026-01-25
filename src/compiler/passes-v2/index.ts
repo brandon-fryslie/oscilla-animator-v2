@@ -2,13 +2,18 @@
  * Compiler Passes - Public API
  *
  * Compilation pipeline:
- * - Pass 2: Type Graph (type resolution)
+ * - Pass 1: Type Constraints (unit inference via constraint solving)
+ * - Pass 2: Type Graph (type validation)
  * - Pass 3: Time Topology (time model)
  * - Pass 4: Dependency Graph
  * - Pass 5: SCC Validation (cycle check)
  * - Pass 6: Block Lowering
  * - Pass 7: Schedule Construction
  */
+
+// Pass 1: Type Constraints (unit inference)
+export { pass1TypeConstraints, getResolvedPortType } from "./pass1-type-constraints";
+export type { ResolvedTypes, ResolvedTypesResult, ResolvedTypesError, TypeConstraintError, PortKey } from "./pass1-type-constraints";
 
 // Pass 2: Type Graph
 export { pass2TypeGraph } from "./pass2-types";
