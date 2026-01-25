@@ -249,10 +249,9 @@ class DebugService {
   getEdgeValue(edgeId: string): EdgeValueResult | undefined {
     const meta = this.edgeToSlotMap.get(edgeId);
     if (!meta) {
-      throw new Error(
-        `[DebugService.getEdgeValue] Edge '${edgeId}' not found in edge-to-slot mapping. ` +
-        `This indicates the compiler did not register this edge's source output in debugIndex.`
-      );
+      // Edge not in mapping - this is expected for event edges and other
+      // outputs that don't have debug support yet. Return undefined.
+      return undefined;
     }
 
     if (meta.cardinality === 'field') {

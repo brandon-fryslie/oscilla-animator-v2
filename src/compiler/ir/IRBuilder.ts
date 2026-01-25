@@ -45,7 +45,7 @@ export interface IRBuilder {
   sigTime(which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'progress' | 'palette' | 'energy', type: SignalType): SigExprId;
 
   /** Create an external input signal. */
-  sigExternal(which: 'mouseX' | 'mouseY' | 'mouseOver', type: SignalType): SigExprId;
+  sigExternal(channel: string, type: SignalType): SigExprId;
 
   /** Map a function over a signal. */
   sigMap(input: SigExprId, fn: PureFn, type: SignalType): SigExprId;

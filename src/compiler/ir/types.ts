@@ -112,7 +112,7 @@ export interface SigExprTime {
 
 export interface SigExprExternal {
   readonly kind: 'external';
-  readonly which: 'mouseX' | 'mouseY' | 'mouseOver';
+  readonly which: string;
   readonly type: SignalType;
 }
 

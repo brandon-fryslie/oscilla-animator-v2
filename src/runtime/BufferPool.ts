@@ -54,6 +54,20 @@ export function getBufferFormat(payload: PayloadType): BufferFormat {
 }
 
 /**
+ * Pool frame statistics for memory instrumentation
+ */
+export interface PoolFrameStats {
+  /** Number of allocations in last frame */
+  allocs: number;
+  /** Number of releases in last frame */
+  releases: number;
+  /** Total pooled bytes across all pools */
+  pooledBytes: number;
+  /** Number of distinct pool keys */
+  poolKeys: number;
+}
+
+/**
  * BufferPool manages typed array allocation and reuse
  *
  * Includes automatic cleanup to prevent memory leaks when domain sizes change.
@@ -68,6 +82,15 @@ export class BufferPool {
   /** Maximum number of different pool keys before triggering cleanup */
   private maxPoolSize = 100;
 
+  // === Memory Instrumentation (Sprint: memory-instrumentation) ===
+
+  /** Allocations in current frame (reset in releaseAll) */
+  private allocsThisFrame = 0;
+
+  /** Stats from last frame (recorded before reset in releaseAll) */
+  private lastFrameAllocs = 0;
+  private lastFrameReleases = 0;
+
   /**
    * Allocate a buffer of the specified format and count.
    * Reuses an existing buffer from the pool if available.
@@ -78,6 +101,9 @@ export class BufferPool {
    */
   alloc(format: BufferFormat, count: number): ArrayBufferView {
     const key = `${format}:${count}`;
+
+    // Instrumentation: Track allocation
+    this.allocsThisFrame++;
 
     // Cleanup old pools if we have too many keys
     if (this.pools.size > this.maxPoolSize) {
@@ -104,12 +130,40 @@ export class BufferPool {
    * Call this at the end of each frame.
    */
   releaseAll(): void {
+    // Record frame stats BEFORE releasing buffers
+    let releasedCount = 0;
+    for (const buffers of this.inUse.values()) {
+      releasedCount += buffers.length;
+    }
+
+    this.lastFrameAllocs = this.allocsThisFrame;
+    this.lastFrameReleases = releasedCount;
+
+    // Reset counter for next frame
+    this.allocsThisFrame = 0;
+
+    // Release buffers back to pool
     for (const [key, buffers] of this.inUse) {
       const pool = this.pools.get(key) ?? [];
       pool.push(...buffers);
       this.pools.set(key, pool);
     }
     this.inUse.clear();
+  }
+
+  /**
+   * Get frame statistics (for memory instrumentation)
+   *
+   * Returns stats from the last completed frame.
+   * Call this after releaseAll() to get accurate stats.
+   */
+  getFrameStats(): PoolFrameStats {
+    return {
+      allocs: this.lastFrameAllocs,
+      releases: this.lastFrameReleases,
+      pooledBytes: this.computeTotalBytes(),
+      poolKeys: this.pools.size,
+    };
   }
 
   /**
@@ -136,6 +190,31 @@ export class BufferPool {
     }
 
     return { pooled, inUse, poolKeys: this.pools.size };
+  }
+
+  /**
+   * Compute total pooled bytes across all pools
+   *
+   * Sums byteLength of all buffers in both pools and inUse.
+   */
+  private computeTotalBytes(): number {
+    let total = 0;
+
+    // Count pooled buffers
+    for (const buffers of this.pools.values()) {
+      for (const buf of buffers) {
+        total += buf.byteLength;
+      }
+    }
+
+    // Count in-use buffers
+    for (const buffers of this.inUse.values()) {
+      for (const buf of buffers) {
+        total += buf.byteLength;
+      }
+    }
+
+    return total;
   }
 
   /**

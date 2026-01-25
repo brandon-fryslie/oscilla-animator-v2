@@ -122,9 +122,9 @@ export class IRBuilderImpl implements IRBuilder {
     return id;
   }
 
-  sigExternal(which: 'mouseX' | 'mouseY' | 'mouseOver', type: SignalType): SigExprId {
+  sigExternal(channel: string, type: SignalType): SigExprId {
     const id = sigExprId(this.sigExprs.length);
-    this.sigExprs.push({ kind: 'external', which, type });
+    this.sigExprs.push({ kind: 'external', which: channel, type });
     return id;
   }
 
