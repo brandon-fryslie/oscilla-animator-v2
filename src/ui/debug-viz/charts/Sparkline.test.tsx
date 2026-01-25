@@ -3,6 +3,7 @@ import React from 'react';
 import { render } from '@testing-library/react';
 import { Sparkline } from './Sparkline';
 import type { HistoryView, Stride } from '../types';
+import { createMockCanvas2DContext } from '../../../__tests__/test-utils';
 
 /**
  * Create a mock HistoryView from an array of values.
@@ -35,27 +36,43 @@ function emptyHistory(): HistoryView {
 }
 
 // Mock canvas context
-let mockCtx: Record<string, any>;
+let mockCtx: CanvasRenderingContext2D;
 let drawCalls: string[];
 
 beforeEach(() => {
   drawCalls = [];
-  mockCtx = {
-    clearRect: vi.fn(() => drawCalls.push('clearRect')),
-    beginPath: vi.fn(() => drawCalls.push('beginPath')),
-    moveTo: vi.fn((x: number, y: number) => drawCalls.push(`moveTo(${x.toFixed(1)},${y.toFixed(1)})`)),
-    lineTo: vi.fn((x: number, y: number) => drawCalls.push(`lineTo(${x.toFixed(1)},${y.toFixed(1)})`)),
-    stroke: vi.fn(() => drawCalls.push('stroke')),
-    fillText: vi.fn((text: string) => drawCalls.push(`fillText(${text})`)),
-    setLineDash: vi.fn(),
-    strokeStyle: '',
-    fillStyle: '',
-    lineWidth: 0,
-    lineJoin: '',
-    lineCap: '',
-    font: '',
-    textAlign: '',
-  };
+  mockCtx = createMockCanvas2DContext();
+
+  // Override specific methods to track calls
+  const origClearRect = mockCtx.clearRect;
+  mockCtx.clearRect = vi.fn(() => {
+    drawCalls.push('clearRect');
+    (origClearRect as any)();
+  });
+
+  const origBeginPath = mockCtx.beginPath;
+  mockCtx.beginPath = vi.fn(() => {
+    drawCalls.push('beginPath');
+    (origBeginPath as any)();
+  });
+
+  mockCtx.moveTo = vi.fn((x: number, y: number) => {
+    drawCalls.push(`moveTo(${x.toFixed(1)},${y.toFixed(1)})`);
+  });
+
+  mockCtx.lineTo = vi.fn((x: number, y: number) => {
+    drawCalls.push(`lineTo(${x.toFixed(1)},${y.toFixed(1)})`);
+  });
+
+  const origStroke = mockCtx.stroke;
+  mockCtx.stroke = vi.fn(() => {
+    drawCalls.push('stroke');
+    (origStroke as any)();
+  });
+
+  mockCtx.fillText = vi.fn((text: string) => {
+    drawCalls.push(`fillText(${text})`);
+  });
 
   // Mock HTMLCanvasElement.getContext
   HTMLCanvasElement.prototype.getContext = vi.fn(() => mockCtx) as any;
@@ -98,8 +115,8 @@ describe('Sparkline', () => {
 
     // moveTo should be called for first point (value=0 → y=height*dpr)
     // lineTo for second point (value=1 → y=0)
-    const moveCall = mockCtx.moveTo.mock.calls[0];
-    const lineCall = mockCtx.lineTo.mock.calls[0];
+    const moveCall = (mockCtx.moveTo as any).mock.calls[0];
+    const lineCall = (mockCtx.lineTo as any).mock.calls[0];
     // First point (0) should be at bottom (y ≈ height*dpr)
     expect(moveCall[1]).toBeCloseTo(30 * (window.devicePixelRatio || 1), 0);
     // Second point (1) should be at top (y ≈ 0)
@@ -121,7 +138,7 @@ describe('Sparkline', () => {
     // With flat-line handling (range=0, yMin=val-0.5, yMax=val+0.5),
     // the value 0.5 maps to center: (0.5 - 0) / 1.0 = 0.5 → y = h/2
     const dpr = window.devicePixelRatio || 1;
-    const moveCall = mockCtx.moveTo.mock.calls[0];
+    const moveCall = (mockCtx.moveTo as any).mock.calls[0];
     expect(moveCall[1]).toBeCloseTo(30 * dpr / 2, 0);
   });
 
@@ -136,14 +153,14 @@ describe('Sparkline', () => {
     const history = makeHistory([0, NaN, 1]);
     render(React.createElement(Sparkline, { history, width: 100, height: 30 }));
     // fillText with "!" should be called
-    const fillTextCalls = mockCtx.fillText.mock.calls.map((c: any[]) => c[0]);
+    const fillTextCalls = (mockCtx.fillText as any).mock.calls.map((c: any[]) => c[0]);
     expect(fillTextCalls).toContain('!');
   });
 
   it('shows "invalid" text when all values are NaN/Inf', () => {
     const history = makeHistory([NaN, Infinity, -Infinity]);
     render(React.createElement(Sparkline, { history, width: 100, height: 30 }));
-    const fillTextCalls = mockCtx.fillText.mock.calls.map((c: any[]) => c[0]);
+    const fillTextCalls = (mockCtx.fillText as any).mock.calls.map((c: any[]) => c[0]);
     expect(fillTextCalls).toContain('invalid');
   });
 
@@ -155,7 +172,7 @@ describe('Sparkline', () => {
       // setLineDash should be called for dotted lines
       expect(mockCtx.setLineDash).toHaveBeenCalled();
       // Additional vertical line drawn at wrap point
-      const strokeCalls = mockCtx.stroke.mock.calls.length;
+      const strokeCalls = (mockCtx.stroke as any).mock.calls.length;
       expect(strokeCalls).toBeGreaterThan(1); // main line + wrap marker
     });
 
@@ -177,7 +194,7 @@ describe('Sparkline', () => {
     it('displays min and max labels', () => {
       const history = makeHistory([0, 100]);
       render(React.createElement(Sparkline, { history, width: 100, height: 30 }));
-      const fillTextCalls = mockCtx.fillText.mock.calls.map((c: any[]) => c[0]);
+      const fillTextCalls = (mockCtx.fillText as any).mock.calls.map((c: any[]) => c[0]);
       // Should contain scale labels for 0 and 100
       expect(fillTextCalls.some((t: string) => t.includes('0'))).toBe(true);
       expect(fillTextCalls.some((t: string) => t.includes('100'))).toBe(true);

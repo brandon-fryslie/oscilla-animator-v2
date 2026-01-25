@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import React from 'react';
 import { getValueRenderer, registerRenderer, type ValueRenderer } from './ValueRenderer';
-import { signalType, unitPhase01, unitNorm01, unitScalar } from '../../core/canonical-types';
+import { signalType, unitPhase01, unitNorm01 } from '../../core/canonical-types';
 import type { RendererSample } from './types';
+import { getDataAttr } from '../../__tests__/test-utils';
 
 // Create mock renderers that return identifiable elements
 function mockRenderer(id: string): ValueRenderer {
@@ -33,14 +34,14 @@ describe('ValueRenderer registry', () => {
       const type = signalType('float', unitPhase01());
       const renderer = getValueRenderer(type);
       const el = renderer.renderFull({ type: 'scalar', components: new Float32Array([0.5]), stride: 1 });
-      expect((el.props as any)['data-renderer']).toBe('exact-float-phase');
+      expect(getDataAttr(el, 'renderer')).toBe('exact-float-phase');
     });
 
     it('tier 2: payload-only when no exact match', () => {
       const type = signalType('float', unitNorm01()); // no exact "float:norm01" registered
       const renderer = getValueRenderer(type);
       const el = renderer.renderFull({ type: 'scalar', components: new Float32Array([0.5]), stride: 1 });
-      expect((el.props as any)['data-renderer']).toBe('payload-float');
+      expect(getDataAttr(el, 'renderer')).toBe('payload-float');
     });
 
     it('tier 3: category fallback when no payload match', () => {
@@ -48,7 +49,7 @@ describe('ValueRenderer registry', () => {
       const type = signalType('int');
       const renderer = getValueRenderer(type);
       const el = renderer.renderFull({ type: 'scalar', components: new Float32Array([5]), stride: 1 });
-      expect((el.props as any)['data-renderer']).toBe('cat-numeric');
+      expect(getDataAttr(el, 'renderer')).toBe('cat-numeric');
     });
 
     it('tier 3: color category fallback', () => {
@@ -57,21 +58,21 @@ describe('ValueRenderer registry', () => {
       const type = signalType('vec2');
       const renderer = getValueRenderer(type);
       const el = renderer.renderFull({ type: 'scalar', components: new Float32Array([1, 2]), stride: 2 });
-      expect((el.props as any)['data-renderer']).toBe('cat-numeric');
+      expect(getDataAttr(el, 'renderer')).toBe('cat-numeric');
     });
 
     it('tier 3: shape category fallback', () => {
       const type = signalType('shape');
       const renderer = getValueRenderer(type);
       const el = renderer.renderFull({ type: 'scalar', components: new Float32Array([0]), stride: 0 });
-      expect((el.props as any)['data-renderer']).toBe('cat-shape');
+      expect(getDataAttr(el, 'renderer')).toBe('cat-shape');
     });
 
     it('bool falls to category:numeric', () => {
       const type = signalType('bool');
       const renderer = getValueRenderer(type);
       const el = renderer.renderFull({ type: 'scalar', components: new Float32Array([1]), stride: 0 });
-      expect((el.props as any)['data-renderer']).toBe('cat-numeric');
+      expect(getDataAttr(el, 'renderer')).toBe('cat-numeric');
     });
   });
 
@@ -90,7 +91,7 @@ describe('ValueRenderer registry', () => {
       const type = signalType('float', unitPhase01());
       const renderer = getValueRenderer(type);
       const el = renderer.renderInline({ type: 'scalar', components: new Float32Array([0.5]), stride: 1 });
-      expect((el.props as any)['data-renderer']).toBe('exact-float-phase');
+      expect(getDataAttr(el, 'renderer')).toBe('exact-float-phase');
       expect((el.props as any).children).toBe('inline:exact-float-phase');
     });
   });
@@ -100,7 +101,7 @@ describe('ValueRenderer registry', () => {
       const type = signalType('color');
       const renderer = getValueRenderer(type);
       const el = renderer.renderFull({ type: 'scalar', components: new Float32Array([1, 0, 0, 1]), stride: 4 });
-      expect((el.props as any)['data-renderer']).toBe('payload-color');
+      expect(getDataAttr(el, 'renderer')).toBe('payload-color');
     });
   });
 });

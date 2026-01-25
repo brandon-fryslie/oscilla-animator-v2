@@ -4,6 +4,7 @@ import {
   renderDrawPathInstancesOp,
 } from '../Canvas2DRenderer';
 import type { DrawPathInstancesOp } from '../types';
+import { createMockCanvas2DContext } from '../../__tests__/test-utils';
 
 describe('Stroke Rendering', () => {
   describe('calculateStrokeWidthPx', () => {
@@ -33,27 +34,7 @@ describe('Stroke Rendering', () => {
     let ctx: CanvasRenderingContext2D;
 
     beforeEach(() => {
-      // Create a mock canvas context
-      ctx = {
-        save: vi.fn(),
-        restore: vi.fn(),
-        translate: vi.fn(),
-        rotate: vi.fn(),
-        scale: vi.fn(),
-        beginPath: vi.fn(),
-        moveTo: vi.fn(),
-        lineTo: vi.fn(),
-        closePath: vi.fn(),
-        fill: vi.fn(),
-        stroke: vi.fn(),
-        setLineDash: vi.fn(),
-        lineJoin: 'miter',
-        lineCap: 'butt',
-        lineWidth: 1,
-        lineDashOffset: 0,
-        fillStyle: '',
-        strokeStyle: '',
-      } as unknown as CanvasRenderingContext2D;
+      ctx = createMockCanvas2DContext();
     });
 
     function createSquareOp(style: Partial<DrawPathInstancesOp['style']>): DrawPathInstancesOp {

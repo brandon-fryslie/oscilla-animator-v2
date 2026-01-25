@@ -19,28 +19,12 @@ import { debugService } from '../../services/DebugService';
 import type { ValueSlot } from '../../types';
 import { signalType } from '../../core/canonical-types';
 import { DebugMiniView } from './DebugMiniView';
+import { createMockCanvas2DContext } from '../../__tests__/test-utils';
 
 // Mock canvas for Sparkline
 beforeEach(() => {
-  HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue({
-    clearRect: vi.fn(),
-    beginPath: vi.fn(),
-    moveTo: vi.fn(),
-    lineTo: vi.fn(),
-    stroke: vi.fn(),
-    fillText: vi.fn(),
-    measureText: vi.fn().mockReturnValue({ width: 20 }),
-    setLineDash: vi.fn(),
-    scale: vi.fn(),
-    canvas: { width: 560, height: 60 },
-    lineWidth: 1,
-    strokeStyle: '',
-    fillStyle: '',
-    font: '',
-    textAlign: '',
-    textBaseline: '',
-    globalAlpha: 1,
-  }) as any;
+  const mockCtx = createMockCanvas2DContext();
+  HTMLCanvasElement.prototype.getContext = vi.fn(() => mockCtx) as any;
 });
 
 function renderWithStore(store: RootStore) {
