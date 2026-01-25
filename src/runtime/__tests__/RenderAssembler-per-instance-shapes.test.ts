@@ -428,22 +428,22 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       const circleOp = result.find(op => op.geometry.topologyId === CIRCLE_ID)!;
       const squareOp = result.find(op => op.geometry.topologyId === SQUARE_ID)!;
 
-      // Circle op should have instances 0 and 3
+      // Circle op should have instances 0 and 3 (stride-2 after projection)
       expect(circleOp.instances.count).toBe(2);
       expect(circleOp.instances.position).toEqual(new Float32Array([
-        0.1, 0.1, 0, // instance 0 (vec3)
-        0.4, 0.4, 0, // instance 3 (vec3)
+        0.1, 0.1, // instance 0 (vec2)
+        0.4, 0.4, // instance 3 (vec2)
       ]));
       expect(circleOp.style.fillColor).toEqual(new Uint8ClampedArray([
         255, 0, 0, 255,   // red
         255, 255, 0, 255, // yellow
       ]));
 
-      // Square op should have instances 1 and 2
+      // Square op should have instances 1 and 2 (stride-2 after projection)
       expect(squareOp.instances.count).toBe(2);
       expect(squareOp.instances.position).toEqual(new Float32Array([
-        0.2, 0.2, 0, // instance 1 (vec3)
-        0.3, 0.3, 0, // instance 2 (vec3)
+        0.2, 0.2, // instance 1 (vec2)
+        0.3, 0.3, // instance 2 (vec2)
       ]));
       expect(squareOp.style.fillColor).toEqual(new Uint8ClampedArray([
         0, 255, 0, 255, // green
