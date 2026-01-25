@@ -7,7 +7,7 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
-import { signalType, signalTypeField, unitPhase01, type PayloadType } from '../core/canonical-types';
+import { signalType, signalTypeField, unitPhase01, strideOf, type PayloadType } from '../core/canonical-types';
 import { DOMAIN_CIRCLE } from '../core/domain-registry';
 import { defaultSourceConst } from '../types';
 
@@ -89,9 +89,12 @@ registerBlock({
       signalTypeField('vec3', 'default')
     );
 
+    const posType = ctx.outTypes[0];
+    const posSlot = ctx.b.allocSlot();
+
     return {
       outputsById: {
-        position: { k: 'field', id: positionField, slot: ctx.b.allocSlot() },
+        position: { k: 'field', id: positionField, slot: posSlot, type: posType, stride: strideOf(posType.payload) },
       },
       // Propagate instance context downstream
       instanceContext: instanceId,
@@ -170,9 +173,12 @@ registerBlock({
       signalTypeField('vec3', 'default')
     );
 
+    const posType = ctx.outTypes[0];
+    const posSlot = ctx.b.allocSlot();
+
     return {
       outputsById: {
-        position: { k: 'field', id: positionField, slot: ctx.b.allocSlot() },
+        position: { k: 'field', id: positionField, slot: posSlot, type: posType, stride: strideOf(posType.payload) },
       },
       // Propagate instance context downstream
       instanceContext: instanceId,
@@ -254,9 +260,12 @@ registerBlock({
       signalTypeField('vec3', 'default')
     );
 
+    const posType = ctx.outTypes[0];
+    const posSlot = ctx.b.allocSlot();
+
     return {
       outputsById: {
-        position: { k: 'field', id: positionField, slot: ctx.b.allocSlot() },
+        position: { k: 'field', id: positionField, slot: posSlot, type: posType, stride: strideOf(posType.payload) },
       },
       instanceContext: instanceId,
     };
@@ -341,9 +350,12 @@ registerBlock({
       signalTypeField('vec3', 'default')
     );
 
+    const posType = ctx.outTypes[0];
+    const posSlot = ctx.b.allocSlot();
+
     return {
       outputsById: {
-        position: { k: 'field', id: positionField, slot: ctx.b.allocSlot() },
+        position: { k: 'field', id: positionField, slot: posSlot, type: posType, stride: strideOf(posType.payload) },
       },
       instanceContext: instanceId,
     };

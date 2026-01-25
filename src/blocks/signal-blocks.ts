@@ -5,7 +5,7 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
-import { signalType, type PayloadType, unitPhase01, unitNorm01, unitVar } from '../core/canonical-types';
+import { signalType, type PayloadType, unitPhase01, unitNorm01, unitVar, strideOf } from '../core/canonical-types';
 import { OpCode, stableStateId } from '../compiler/ir/types';
 import type { SigExprId } from '../compiler/ir/Indices';
 
@@ -89,6 +89,7 @@ registerBlock({
 
     let sigId;
     const slot = ctx.b.allocSlot();
+    const outType = ctx.outTypes[0];
 
     switch (payloadType) {
       case 'float': {
@@ -151,7 +152,7 @@ registerBlock({
 
     return {
       outputsById: {
-        out: { k: 'sig', id: sigId, slot },
+        out: { k: 'sig', id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
@@ -215,10 +216,11 @@ registerBlock({
     }
 
     const slot = ctx.b.allocSlot();
+    const outType = ctx.outTypes[0];
 
     return {
       outputsById: {
-        out: { k: 'sig', id: sigId, slot },
+        out: { k: 'sig', id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
@@ -272,10 +274,11 @@ registerBlock({
     ctx.b.stepStateWrite(stateSlot, input.id as SigExprId);
 
     const slot = ctx.b.allocSlot();
+    const outType = ctx.outTypes[0];
 
     return {
       outputsById: {
-        out: { k: 'sig', id: prevId, slot },
+        out: { k: 'sig', id: prevId, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
@@ -337,10 +340,11 @@ registerBlock({
     ctx.b.stepStateWrite(stateSlot, outputId);
 
     const slot = ctx.b.allocSlot();
+    const outType = ctx.outTypes[0];
 
     return {
       outputsById: {
-        out: { k: 'sig', id: outputId, slot },
+        out: { k: 'sig', id: outputId, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
@@ -414,10 +418,11 @@ registerBlock({
     ctx.b.stepStateWrite(stateSlot, newPhase);
 
     const slot = ctx.b.allocSlot();
+    const outType = ctx.outTypes[0];
 
     return {
       outputsById: {
-        out: { k: 'sig', id: newPhase, slot },
+        out: { k: 'sig', id: newPhase, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
@@ -467,10 +472,11 @@ registerBlock({
     const hashId = ctx.b.sigZip([value.id as SigExprId, seedId], hashFn, signalType('float'));
 
     const slot = ctx.b.allocSlot();
+    const outType = ctx.outTypes[0];
 
     return {
       outputsById: {
-        out: { k: 'sig', id: hashId, slot },
+        out: { k: 'sig', id: hashId, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
@@ -522,10 +528,11 @@ registerBlock({
     const normalized = ctx.b.sigZip([index.id as SigExprId, safeCount], divFn, signalType('float'));
 
     const slot = ctx.b.allocSlot();
+    const outType = ctx.outTypes[0];
 
     return {
       outputsById: {
-        out: { k: 'sig', id: normalized, slot },
+        out: { k: 'sig', id: normalized, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },

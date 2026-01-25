@@ -7,7 +7,7 @@
  */
 
 import { registerBlock } from './registry';
-import { signalType, signalTypeField } from '../core/canonical-types';
+import { signalType, signalTypeField, strideOf } from '../core/canonical-types';
 import { DOMAIN_CONTROL } from '../core/domain-registry';
 import { PathVerb, type PathTopologyDef } from '../shapes/types';
 import { registerDynamicTopology } from '../shapes/registry';
@@ -186,11 +186,13 @@ registerBlock({
 
     const shapeSlot = ctx.b.allocSlot();
     const cpSlot = ctx.b.allocSlot();
+    const shapeType = ctx.outTypes[0];
+    const cpType = ctx.outTypes[1];
 
     return {
       outputsById: {
-        shape: { k: 'sig', id: shapeRefSig, slot: shapeSlot },
-        controlPoints: { k: 'field', id: computedPositions, slot: cpSlot },
+        shape: { k: 'sig', id: shapeRefSig, slot: shapeSlot, type: shapeType, stride: strideOf(shapeType.payload) },
+        controlPoints: { k: 'field', id: computedPositions, slot: cpSlot, type: cpType, stride: strideOf(cpType.payload) },
       },
     };
   },
@@ -378,11 +380,13 @@ registerBlock({
 
     const shapeSlot = ctx.b.allocSlot();
     const cpSlot = ctx.b.allocSlot();
+    const shapeType = ctx.outTypes[0];
+    const cpType = ctx.outTypes[1];
 
     return {
       outputsById: {
-        shape: { k: 'sig', id: shapeRefSig, slot: shapeSlot },
-        controlPoints: { k: 'field', id: computedPositions, slot: cpSlot },
+        shape: { k: 'sig', id: shapeRefSig, slot: shapeSlot, type: shapeType, stride: strideOf(shapeType.payload) },
+        controlPoints: { k: 'field', id: computedPositions, slot: cpSlot, type: cpType, stride: strideOf(cpType.payload) },
       },
     };
   },

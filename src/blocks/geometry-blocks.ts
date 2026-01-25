@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from './registry';
-import { signalType, signalTypeField, unitPhase01 } from '../core/canonical-types';
+import { signalType, signalTypeField, unitPhase01, strideOf } from '../core/canonical-types';
 import type { SigExprId } from '../compiler/ir/Indices';
 
 // =============================================================================
@@ -53,11 +53,12 @@ registerBlock({
 
     const polarFn = ctx.b.kernel('polarToCartesian');
     const sigId = ctx.b.sigZip(inputs, polarFn, signalType('vec2'));
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        pos: { k: 'sig', id: sigId, slot },
+        pos: { k: 'sig', id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
@@ -118,11 +119,13 @@ registerBlock({
 
     const posSlot = ctx.b.allocSlot();
     const angleSlot = ctx.b.allocSlot();
+    const posType = ctx.outTypes[0];
+    const angleType = ctx.outTypes[1];
 
     return {
       outputsById: {
-        pos: { k: 'field', id: posField, slot: posSlot },
-        angle: { k: 'field', id: angleField, slot: angleSlot },
+        pos: { k: 'field', id: posField, slot: posSlot, type: posType, stride: strideOf(posType.payload) },
+        angle: { k: 'field', id: angleField, slot: angleSlot, type: angleType, stride: strideOf(angleType.payload) },
       },
     };
   },
@@ -172,11 +175,12 @@ registerBlock({
 
     const offsetFn = ctx.b.kernel('offsetPosition');
     const sigId = ctx.b.sigZip(inputs, offsetFn, signalType('vec2'));
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        posOut: { k: 'sig', id: sigId, slot },
+        posOut: { k: 'sig', id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },

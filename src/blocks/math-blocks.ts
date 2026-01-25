@@ -66,15 +66,19 @@ registerBlock({
       let aField: FieldExprId;
       if (a.k === 'field') {
         aField = a.id;
+      } else if (a.k === 'sig') {
+        aField = ctx.b.Broadcast(a.id, signalTypeField('float', 'default'));
       } else {
-        aField = ctx.b.Broadcast(a.id as SigExprId, signalTypeField('float', 'default'));
+        throw new Error('Unexpected input type for Add field path');
       }
 
       let bField: FieldExprId;
       if (b.k === 'field') {
         bField = b.id;
+      } else if (b.k === 'sig') {
+        bField = ctx.b.Broadcast(b.id, signalTypeField('float', 'default'));
       } else {
-        bField = ctx.b.Broadcast(b.id as SigExprId, signalTypeField('float', 'default'));
+        throw new Error('Unexpected input type for Add field path');
       }
 
       const addFn = ctx.b.kernel('fieldAdd');
@@ -151,15 +155,19 @@ registerBlock({
       let aField: FieldExprId;
       if (a.k === 'field') {
         aField = a.id;
+      } else if (a.k === 'sig') {
+        aField = ctx.b.Broadcast(a.id, signalTypeField('float', 'default'));
       } else {
-        aField = ctx.b.Broadcast(a.id as SigExprId, signalTypeField('float', 'default'));
+        throw new Error('Unexpected input type for Subtract field path');
       }
 
       let bField: FieldExprId;
       if (b.k === 'field') {
         bField = b.id;
+      } else if (b.k === 'sig') {
+        bField = ctx.b.Broadcast(b.id, signalTypeField('float', 'default'));
       } else {
-        bField = ctx.b.Broadcast(b.id as SigExprId, signalTypeField('float', 'default'));
+        throw new Error('Unexpected input type for Subtract field path');
       }
 
       const subFn = ctx.b.kernel('fieldSubtract');
@@ -236,15 +244,19 @@ registerBlock({
       let aField: FieldExprId;
       if (a.k === 'field') {
         aField = a.id;
+      } else if (a.k === 'sig') {
+        aField = ctx.b.Broadcast(a.id, signalTypeField('float', 'default'));
       } else {
-        aField = ctx.b.Broadcast(a.id as SigExprId, signalTypeField('float', 'default'));
+        throw new Error('Unexpected input type for Multiply field path');
       }
 
       let bField: FieldExprId;
       if (b.k === 'field') {
         bField = b.id;
+      } else if (b.k === 'sig') {
+        bField = ctx.b.Broadcast(b.id, signalTypeField('float', 'default'));
       } else {
-        bField = ctx.b.Broadcast(b.id as SigExprId, signalTypeField('float', 'default'));
+        throw new Error('Unexpected input type for Multiply field path');
       }
 
       const mulFn = ctx.b.kernel('fieldMultiply');
@@ -321,15 +333,19 @@ registerBlock({
       let aField: FieldExprId;
       if (a.k === 'field') {
         aField = a.id;
+      } else if (a.k === 'sig') {
+        aField = ctx.b.Broadcast(a.id, signalTypeField('float', 'default'));
       } else {
-        aField = ctx.b.Broadcast(a.id as SigExprId, signalTypeField('float', 'default'));
+        throw new Error('Unexpected input type for Divide field path');
       }
 
       let bField: FieldExprId;
       if (b.k === 'field') {
         bField = b.id;
+      } else if (b.k === 'sig') {
+        bField = ctx.b.Broadcast(b.id, signalTypeField('float', 'default'));
       } else {
-        bField = ctx.b.Broadcast(b.id as SigExprId, signalTypeField('float', 'default'));
+        throw new Error('Unexpected input type for Divide field path');
       }
 
       const divFn = ctx.b.kernel('fieldDivide');
@@ -406,15 +422,19 @@ registerBlock({
       let aField: FieldExprId;
       if (a.k === 'field') {
         aField = a.id;
+      } else if (a.k === 'sig') {
+        aField = ctx.b.Broadcast(a.id, signalTypeField('float', 'default'));
       } else {
-        aField = ctx.b.Broadcast(a.id as SigExprId, signalTypeField('float', 'default'));
+        throw new Error('Unexpected input type for Modulo field path');
       }
 
       let bField: FieldExprId;
       if (b.k === 'field') {
         bField = b.id;
+      } else if (b.k === 'sig') {
+        bField = ctx.b.Broadcast(b.id, signalTypeField('float', 'default'));
       } else {
-        bField = ctx.b.Broadcast(b.id as SigExprId, signalTypeField('float', 'default'));
+        throw new Error('Unexpected input type for Modulo field path');
       }
 
       const modFn = ctx.b.kernel('fieldModulo');

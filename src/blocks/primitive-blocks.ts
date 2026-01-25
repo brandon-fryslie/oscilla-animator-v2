@@ -12,7 +12,7 @@
  */
 
 import {registerBlock} from './registry';
-import {signalType} from '../core/canonical-types';
+import {signalType, strideOf} from '../core/canonical-types';
 import {TOPOLOGY_ID_ELLIPSE, TOPOLOGY_ID_RECT} from '../shapes/registry';
 import {defaultSourceConst} from '../types';
 
@@ -104,10 +104,11 @@ registerBlock({
         );
 
         const slot = ctx.b.allocSlot();
+        const shapeType = ctx.outTypes[0];
 
         return {
             outputsById: {
-                shape: {k: 'sig', id: shapeRefSig, slot},
+                shape: {k: 'sig', id: shapeRefSig, slot, type: shapeType, stride: strideOf(shapeType.payload)},
             },
         };
     },
@@ -217,10 +218,11 @@ registerBlock({
         );
 
         const slot = ctx.b.allocSlot();
+        const shapeType = ctx.outTypes[0];
 
         return {
             outputsById: {
-                shape: {k: 'sig', id: shapeRefSig, slot},
+                shape: {k: 'sig', id: shapeRefSig, slot, type: shapeType, stride: strideOf(shapeType.payload)},
             },
         };
     },

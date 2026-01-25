@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from './registry';
-import { signalType, signalTypeField, domainTypeId } from '../core/canonical-types';
+import { signalType, signalTypeField, domainTypeId, strideOf } from '../core/canonical-types';
 import type { FieldExprId, SigExprId } from '../compiler/ir/Indices';
 import { defaultSourceConst } from '../types';
 
@@ -88,11 +88,13 @@ registerBlock({
 
     const posSlot = ctx.b.allocSlot();
     const idxSlot = ctx.b.allocSlot();
+    const posType = ctx.outTypes[0];
+    const idxType = ctx.outTypes[1];
 
     return {
       outputsById: {
-        position: { k: 'field', id: positionFieldId, slot: posSlot },
-        index: { k: 'field', id: indexField, slot: idxSlot },
+        position: { k: 'field', id: positionFieldId, slot: posSlot, type: posType, stride: strideOf(posType.payload) },
+        index: { k: 'field', id: indexField, slot: idxSlot, type: idxType, stride: strideOf(idxType.payload) },
       },
     };
   },
@@ -218,12 +220,15 @@ registerBlock({
     const posSlot = ctx.b.allocSlot();
     const tanSlot = ctx.b.allocSlot();
     const tSlot = ctx.b.allocSlot();
+    const posType = ctx.outTypes[0];
+    const tanType = ctx.outTypes[1];
+    const tType = ctx.outTypes[2];
 
     return {
       outputsById: {
-        positions: { k: 'field', id: positionsField, slot: posSlot },
-        tangents: { k: 'field', id: tangentsField, slot: tanSlot },
-        t: { k: 'field', id: tField, slot: tSlot },
+        positions: { k: 'field', id: positionsField, slot: posSlot, type: posType, stride: strideOf(posType.payload) },
+        tangents: { k: 'field', id: tangentsField, slot: tanSlot, type: tanType, stride: strideOf(tanType.payload) },
+        t: { k: 'field', id: tField, slot: tSlot, type: tType, stride: strideOf(tType.payload) },
       },
     };
   },

@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from './registry';
-import { signalType, signalTypeField } from '../core/canonical-types';
+import { signalType, signalTypeField, strideOf } from '../core/canonical-types';
 
 // =============================================================================
 // StableIdHash
@@ -47,11 +47,13 @@ registerBlock({
 
     const randSlot = ctx.b.allocSlot();
     const id01Slot = ctx.b.allocSlot();
+    const randType = ctx.outTypes[0];
+    const id01Type = ctx.outTypes[1];
 
     return {
       outputsById: {
-        rand: { k: 'field', id: randField, slot: randSlot },
-        id01: { k: 'field', id: id01Field, slot: id01Slot },
+        rand: { k: 'field', id: randField, slot: randSlot, type: randType, stride: strideOf(randType.payload) },
+        id01: { k: 'field', id: id01Field, slot: id01Slot, type: id01Type, stride: strideOf(id01Type.payload) },
       },
     };
   },
@@ -91,11 +93,13 @@ registerBlock({
 
     const indexSlot = ctx.b.allocSlot();
     const indexIntSlot = ctx.b.allocSlot();
+    const indexType = ctx.outTypes[0];
+    const indexIntType = ctx.outTypes[1];
 
     return {
       outputsById: {
-        index: { k: 'field', id: indexField, slot: indexSlot },
-        indexInt: { k: 'field', id: indexIntField, slot: indexIntSlot },
+        index: { k: 'field', id: indexField, slot: indexSlot, type: indexType, stride: strideOf(indexType.payload) },
+        indexInt: { k: 'field', id: indexIntField, slot: indexIntSlot, type: indexIntType, stride: strideOf(indexIntType.payload) },
       },
     };
   },
