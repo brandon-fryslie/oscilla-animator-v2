@@ -62,15 +62,15 @@ export type Pass2Error =
  * Type compatibility check for wired connections.
  * Determines if a value of type 'from' can be connected to a port expecting type 'to'.
  *
- * The compiler requires EXACT type matches. It does not perform any type coercion,
- * promotion, or automatic adaptation. Graph normalization is responsible for
- * inserting any necessary adapters before compilation.
+ * For cardinality-generic blocks (preserve mode with allowZipSig/requireBroadcastExpr),
+ * cardinality mismatches are allowed since the block handles both signals and fields.
  *
  * @param from - Source type descriptor
  * @param to - Target type descriptor
- * @returns true if types are exactly equal
+ * @param targetBlockType - The type of the block receiving the connection (for cardinality check)
+ * @returns true if types are compatible
  */
-function isTypeCompatible(from: SignalType, to: SignalType): boolean {
+function isTypeCompatible(from: SignalType, to: SignalType, targetBlockType?: string): boolean {
   // Resolve axes with defaults
   const fromCard = getAxisValue(from.extent.cardinality, DEFAULTS_V0.cardinality);
   const fromTemp = getAxisValue(from.extent.temporality, DEFAULTS_V0.temporality);
@@ -94,8 +94,18 @@ function isTypeCompatible(from: SignalType, to: SignalType): boolean {
     return false;
   }
 
-  // Cardinality must match exactly
+  // Cardinality check - may be relaxed for cardinality-generic blocks
   if (fromCard.kind !== toCard.kind) {
+    // Check if the target block allows cardinality mixing
+    if (targetBlockType) {
+      const meta = getBlockCardinalityMetadata(targetBlockType);
+      if (meta && isCardinalityGeneric(targetBlockType)) {
+        // Cardinality-generic blocks with appropriate broadcast policy allow mixing
+        if (meta.broadcastPolicy === 'allowZipSig' || meta.broadcastPolicy === 'requireBroadcastExpr') {
+          return true;
+        }
+      }
+    }
     return false;
   }
 
@@ -405,7 +415,8 @@ export function pass2TypeGraph(
     }
 
     // Validate type compatibility (HARD error)
-    if (!isTypeCompatible(fromType, toType)) {
+    // Pass target block type to allow cardinality-generic blocks to accept mixed cardinalities
+    if (!isTypeCompatible(fromType, toType, toBlock.type)) {
       const fromCard = getAxisValue(fromType.extent.cardinality, DEFAULTS_V0.cardinality);
       const fromTemp = getAxisValue(fromType.extent.temporality, DEFAULTS_V0.temporality);
       const toCard = getAxisValue(toType.extent.cardinality, DEFAULTS_V0.cardinality);
