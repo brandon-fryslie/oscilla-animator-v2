@@ -8,7 +8,9 @@
       "Skill(do:it-skill)",
       "Skill(do:plan-skill)",
       "Skill(do:plan)",
-      "Skill(superpowers:brainstorming)"
+      "Skill(superpowers:brainstorming)",
+      "Bash(pkill:*)",
+      "mcp__cherry-chrome__chrome"
     ]
   },
   "enableAllProjectMcpServers": true,

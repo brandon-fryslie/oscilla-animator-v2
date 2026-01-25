@@ -365,7 +365,7 @@ export class IRBuilderImpl implements IRBuilder {
 
   eventPulse(source: 'InfiniteTimeRoot'): EventExprId {
     const id = eventExprId(this.eventExprs.length);
-    this.eventExprs.push({ kind: 'pulse', source });
+    this.eventExprs.push({ kind: 'pulse', source: 'timeRoot' });
     return id;
   }
 
@@ -461,15 +461,64 @@ export class IRBuilderImpl implements IRBuilder {
   // Slots
   // =========================================================================
 
-  allocSlot(): ValueSlot {
-    return valueSlot(this.slotCounter++);
+  /**
+   * P0: Strided slot allocation.
+   *
+   * Allocates a contiguous region of `stride` slots starting at a base slot.
+   * Returns the base slot identifier.
+   *
+   * Contract:
+   * - stride defaults to 1 (scalar slots)
+   * - For multi-component payloads (vec2, vec3, color), stride > 1
+   * - The slot allocator increments by stride to reserve the full region
+   * - Downstream code reads/writes components at [slotBase+0 .. slotBase+(stride-1)]
+   *
+   * Example:
+   *   vec2 slot: allocSlot(2) returns slotBase K, reserves slots [K, K+1]
+   *   vec3 slot: allocSlot(3) returns slotBase K, reserves slots [K, K+1, K+2]
+   *
+   * @param stride - Number of contiguous f64 positions to allocate (default 1)
+   * @returns Base slot identifier for the allocated region
+   */
+  allocSlot(stride: number = 1): ValueSlot {
+    if (stride < 1 || !Number.isInteger(stride)) {
+      throw new Error(`allocSlot: stride must be a positive integer, got ${stride}`);
+    }
+    const baseSlot = valueSlot(this.slotCounter);
+    this.slotCounter += stride;
+    return baseSlot;
   }
 
   /**
    * Allocate a typed value slot (tracking type for slotMeta generation).
    */
   allocTypedSlot(type: SignalType, _label?: string): ValueSlot {
-    const slot = valueSlot(this.slotCounter++);
+    // Compute stride from payload
+    let stride: number;
+    switch (type.payload) {
+      case 'float':
+      case 'int':
+      case 'bool':
+      case 'cameraProjection':
+        stride = 1;
+        break;
+      case 'vec2':
+        stride = 2;
+        break;
+      case 'vec3':
+        stride = 3;
+        break;
+      case 'color':
+        stride = 4;
+        break;
+      case 'shape':
+        stride = 0; // Shape slots don't occupy f64 storage
+        break;
+      default:
+        stride = 1; // Fallback
+    }
+
+    const slot = this.allocSlot(stride);
     this.slotTypes.set(slot, type);
     return slot;
   }
@@ -612,13 +661,39 @@ export class IRBuilderImpl implements IRBuilder {
     this.steps.push({ kind: 'evalSig', expr, target });
   }
 
+  /**
+   * P3: Emit a strided slot write step.
+   *
+   * Writes multiple scalar signal components to contiguous slots.
+   * This is the canonical way to materialize multi-component signal values (vec2, vec3, color)
+   * without requiring array-returning evaluators or side-effect kernels.
+   *
+   * Contract:
+   * - slotBase must have been allocated with allocSlot(stride=inputs.length)
+   * - Each input is a scalar SigExprId
+   * - At runtime, evaluates each input and writes to values.f64[slotBase+i]
+   *
+   * Example usage (vec2 output):
+   *   const slotBase = builder.allocSlot(2);
+   *   builder.stepSlotWriteStrided(slotBase, [sigExprX, sigExprY]);
+   *
+   * @param slotBase - Base slot for the contiguous write region
+   * @param inputs - Array of scalar signal expressions to evaluate and write
+   */
+  stepSlotWriteStrided(slotBase: ValueSlot, inputs: readonly SigExprId[]): void {
+    if (inputs.length === 0) {
+      throw new Error('stepSlotWriteStrided: inputs array must not be empty');
+    }
+    this.steps.push({ kind: 'slotWriteStrided', slotBase, inputs });
+  }
+
   stepMaterialize(field: FieldExprId, instanceId: InstanceId, target: ValueSlot): void {
-    this.steps.push({ kind: 'materialize', field, instanceId, target });
+    this.steps.push({ kind: 'materialize', field, instanceId: instanceId as string, target });
   }
 
   stepContinuityMapBuild(instanceId: InstanceId): void {
     // outputMapping key is derived from instanceId for consistency
-    this.steps.push({ kind: 'continuityMapBuild', instanceId, outputMapping: `mapping_${instanceId}` });
+    this.steps.push({ kind: 'continuityMapBuild', instanceId: instanceId as string, outputMapping: `mapping_${instanceId}` });
   }
 
   stepContinuityApply(
@@ -632,7 +707,7 @@ export class IRBuilderImpl implements IRBuilder {
     this.steps.push({
       kind: 'continuityApply',
       targetKey,
-      instanceId,
+      instanceId: instanceId as string,
       policy,
       baseSlot,
       outputSlot,

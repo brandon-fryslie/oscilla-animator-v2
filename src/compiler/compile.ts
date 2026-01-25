@@ -517,8 +517,9 @@ function convertLinkedIRToProgram(
 
     for (const [blockIndex, outputs] of unlinkedIR.blockOutputs.entries()) {
       for (const [portId, ref] of outputs.entries()) {
-        // Only map slots
-        if (ref.k === 'sig' || ref.k === 'field' || ref.k === 'event') {
+        // Only map signal and field slots to debug index
+        // Events use separate storage (eventScalars Uint8Array) and don't have debug support yet
+        if (ref.k === 'sig' || ref.k === 'field') {
           const slot = ref.slot;
 
           // Generate stable port ID
@@ -534,7 +535,7 @@ function convertLinkedIRToProgram(
             block: blockIndex,
             portName: portId,
             direction: 'out',
-            domain: ref.k === 'field' ? 'field' : ref.k === 'event' ? 'event' : 'signal', // Simplified
+            domain: ref.k === 'field' ? 'field' : 'signal',
             role: 'userWire',
           });
         }

@@ -5,7 +5,7 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
-import { signalType, type PayloadType, unitPhase01, unitNorm01, unitVar, strideOf } from '../core/canonical-types';
+import { signalType, type PayloadType, unitPhase01, unitNorm01, unitVar, payloadVar, strideOf } from '../core/canonical-types';
 import { OpCode, stableStateId } from '../compiler/ir/types';
 import type { SigExprId } from '../compiler/ir/Indices';
 
@@ -63,7 +63,7 @@ registerBlock({
   outputs: {
     // Unit is polymorphic (UnitVar) - resolved by pass1 constraint solver
     // Payload is polymorphic (payloadVar) - resolved by pass1 constraint solver
-    out: { label: 'Output', type: signalType('float', unitVar('const_out')) },
+    out: { label: 'Output', type: signalType(payloadVar('const_payload'), unitVar('const_out')) },
   },
   lower: ({ ctx, config }) => {
     // Get resolved payload type from ctx.outTypes (populated from pass1 portTypes)

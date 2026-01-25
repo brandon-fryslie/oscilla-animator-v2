@@ -162,7 +162,7 @@ export function executeFrame(
   writeF64Strided(state, palette, time.palette, 4);
 
   // 3. Execute schedule steps in TWO PHASES
-  // Phase 1: Execute evalSig, materialize, render (skip stateWrite)
+  // Phase 1: Execute evalSig, slotWriteStrided, materialize, render (skip stateWrite)
   // Phase 2: Execute all stateWrite steps
   // This ensures state reads see previous frame's values
 
@@ -212,6 +212,33 @@ export function executeFrame(
           state.cache.sigStamps[step.expr as number] = state.cache.frameId;
         } else {
           throw new Error(`evalSig: unsupported storage type '${storage}'`);
+        }
+        break;
+      }
+
+      case 'slotWriteStrided': {
+        // P2: Execute strided slot write
+        // Evaluate each component signal and write to contiguous slots
+        const lookup = resolveSlotOffset(step.slotBase);
+        const { storage, offset, stride } = lookup;
+
+        if (storage !== 'f64') {
+          throw new Error(`slotWriteStrided: expected f64 storage for slot ${step.slotBase}, got ${storage}`);
+        }
+
+        if (step.inputs.length !== stride) {
+          throw new Error(
+            `slotWriteStrided: inputs.length (${step.inputs.length}) must equal stride (${stride}) for slot ${step.slotBase}`
+          );
+        }
+
+        // Evaluate each component and write sequentially
+        for (let i = 0; i < step.inputs.length; i++) {
+          const componentValue = evaluateSignal(step.inputs[i], signals, state);
+          state.values.f64[offset + i] = componentValue;
+
+          // Debug tap: Record slot value for each component
+          state.tap?.recordSlotValue?.((step.slotBase + i) as ValueSlot, componentValue);
         }
         break;
       }

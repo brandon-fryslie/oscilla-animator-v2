@@ -203,6 +203,7 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
         // 3. Lookup: Find the slot associated with this Source Port.
 
         // Update the lookup key construction:
+        // TODO: needs to use canonical portKey fn
         const key = `${blockId}:${portBinding.portName}`;
 
         // Find the slot for this port
@@ -252,7 +253,7 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
     for (const [portKey, slotId] of targetToSlot.entries()) {
         const meta = program.slotMeta.find(m => m.slot === slotId);
         const type = meta?.type || signalType('float');
-        const cardinality = portCardinality.get(portKey) || 'signal';
+        const cardinality = portCardinality.get(portKey);
         portMetaMap.set(portKey, { slotId, type, cardinality });
     }
 
