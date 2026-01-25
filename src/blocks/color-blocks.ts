@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from './registry';
-import { signalType, signalTypeField, unitPhase01 } from '../core/canonical-types';
+import { signalType, signalTypeField, unitPhase01, strideOf } from '../core/canonical-types';
 import { defaultSourceConst } from '../types';
 import type { SigExprId, FieldExprId } from '../compiler/ir/Indices';
 
@@ -57,11 +57,12 @@ registerBlock({
     ];
 
     const sigId = ctx.b.sigZip(inputs, colorFn, signalType('color'));
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        color: { k: 'sig', id: sigId, slot },
+        color: { k: 'sig', id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
@@ -102,11 +103,12 @@ registerBlock({
 
     const hsvFn = ctx.b.kernel('hsvToRgb');
     const sigId = ctx.b.sigZip([hue.id as SigExprId, sat.id as SigExprId, val.id as SigExprId], hsvFn, signalType('color'));
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        color: { k: 'sig', id: sigId, slot },
+        color: { k: 'sig', id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
@@ -155,11 +157,12 @@ registerBlock({
       hsvFn,
       signalTypeField('color', 'default')
     );
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        color: { k: 'field', id: colorField, slot },
+        color: { k: 'field', id: colorField, slot, type: outType, stride: strideOf(outType.payload) },
       },
       // Propagate instance context from inputs
       instanceContext: ctx.inferredInstance,
@@ -207,11 +210,12 @@ registerBlock({
       opacityFn,
       signalTypeField('color', 'default')
     );
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        out: { k: 'field', id: result, slot },
+        out: { k: 'field', id: result, slot, type: outType, stride: strideOf(outType.payload) },
       },
       instanceContext: ctx.inferredInstance,
     };

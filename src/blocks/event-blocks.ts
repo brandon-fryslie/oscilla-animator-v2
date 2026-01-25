@@ -7,7 +7,7 @@
  */
 
 import { registerBlock } from './registry';
-import { signalType, signalTypeTrigger } from '../core/canonical-types';
+import { signalType, signalTypeTrigger, strideOf } from '../core/canonical-types';
 import { OpCode, stableStateId } from '../compiler/ir/types';
 import type { SigExprId } from '../compiler/ir/Indices';
 
@@ -36,11 +36,12 @@ registerBlock({
 
     // Read the event scalar as a float signal (0.0 or 1.0)
     const sigId = ctx.b.sigEventRead(eventInput.slot, signalType('float'));
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        out: { k: 'sig', id: sigId, slot },
+        out: { k: 'sig', id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
@@ -103,11 +104,12 @@ registerBlock({
     // Write output to state for next frame (Phase 2)
     ctx.b.stepStateWrite(stateSlot, outputId);
 
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        out: { k: 'sig', id: outputId, slot },
+        out: { k: 'sig', id: outputId, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },

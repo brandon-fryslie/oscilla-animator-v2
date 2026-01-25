@@ -5,7 +5,7 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
-import { signalType, signalTypeField, type PayloadType } from '../core/canonical-types';
+import { signalType, signalTypeField, strideOf, type PayloadType } from '../core/canonical-types';
 import type { SigExprId } from '../compiler/ir/Indices';
 
 // =============================================================================
@@ -79,11 +79,12 @@ registerBlock({
       signalValue.id as SigExprId,
       signalTypeField(payloadType, 'default')
     );
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        field: { k: 'field', id: fieldId, slot },
+        field: { k: 'field', id: fieldId, slot, type: outType, stride: strideOf(outType.payload) },
       },
       // Propagate instance context from inputs
       // Broadcast is special - it can receive instance context even though

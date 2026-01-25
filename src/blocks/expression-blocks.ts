@@ -17,7 +17,7 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
-import { signalType, type PayloadType } from '../core/canonical-types';
+import { signalType, strideOf, type PayloadType } from '../core/canonical-types';
 import { compileExpression } from '../expr';
 import type { SigExprId, SigExpr } from '../compiler/ir/types';
 import type { SignalType } from '../core/canonical-types';
@@ -129,10 +129,11 @@ registerBlock({
     // Step 2: Handle empty expression (output constant 0)
     if (exprText.trim() === '') {
       const sigId = ctx.b.sigConst(0, signalType('float'));
+      const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
       return {
         outputsById: {
-          out: { k: 'sig', id: sigId, slot },
+          out: { k: 'sig', id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
         },
       };
     }
@@ -184,11 +185,12 @@ registerBlock({
 
     // Compilation succeeded - return output signal
     const sigId = result.value;
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        out: { k: 'sig', id: sigId, slot },
+        out: { k: 'sig', id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
