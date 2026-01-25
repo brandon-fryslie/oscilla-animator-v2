@@ -348,8 +348,8 @@ registerBlock({
       };
     } else {
       // Mixed path - broadcast signals to fields
-      const angleField = angle.k === 'field' ? angle.id : ctx.b.Broadcast(angle.id, signalTypeField('float', 'default'));
-      const radiusField = radius.k === 'field' ? radius.id : ctx.b.Broadcast(radius.id, signalTypeField('float', 'default'));
+      const angleField = angle.k === 'field' ? angle.id : ctx.b.Broadcast((angle as { k: 'sig'; id: SigExprId }).id, signalTypeField('float', 'default'));
+      const radiusField = radius.k === 'field' ? radius.id : ctx.b.Broadcast((radius as { k: 'sig'; id: SigExprId }).id, signalTypeField('float', 'default'));
       const centerXField = ctx.b.Broadcast(centerXSig, signalTypeField('float', 'default'));
       const centerYField = ctx.b.Broadcast(centerYSig, signalTypeField('float', 'default'));
 
@@ -785,8 +785,8 @@ registerBlock({
       };
     } else {
       // Mixed path - broadcast signals to fields
-      const id01Field = id01.k === 'field' ? id01.id : ctx.b.Broadcast(id01.id, signalTypeField('float', 'default'));
-      const radiusField = radius.k === 'field' ? radius.id : ctx.b.Broadcast(radius.id, signalTypeField('float', 'default'));
+      const id01Field = id01.k === 'field' ? id01.id : ctx.b.Broadcast((id01 as { k: 'sig'; id: SigExprId }).id, signalTypeField('float', 'default'));
+      const radiusField = radius.k === 'field' ? radius.id : ctx.b.Broadcast((radius as { k: 'sig'; id: SigExprId }).id, signalTypeField('float', 'default'));
 
       const sqrtFn = ctx.b.kernel('fieldRadiusSqrt');
       const result = ctx.b.fieldZip(
@@ -884,8 +884,8 @@ registerBlock({
       };
     } else {
       // Mixed path - broadcast signals to fields
-      const posField = pos.k === 'field' ? pos.id : ctx.b.Broadcast(pos.id, signalTypeField('vec2', 'default'));
-      const randField = rand.k === 'field' ? rand.id : ctx.b.Broadcast(rand.id, signalTypeField('float', 'default'));
+      const posField = pos.k === 'field' ? pos.id : ctx.b.Broadcast((pos as { k: 'sig'; id: SigExprId }).id, signalTypeField('vec2', 'default'));
+      const randField = rand.k === 'field' ? rand.id : ctx.b.Broadcast((rand as { k: 'sig'; id: SigExprId }).id, signalTypeField('float', 'default'));
       const amountXField = ctx.b.Broadcast(amountXSig, signalTypeField('float', 'default'));
       const amountYField = ctx.b.Broadcast(amountYSig, signalTypeField('float', 'default'));
 
@@ -1054,8 +1054,8 @@ registerBlock({
       };
     } else {
       // Mixed path - broadcast signals to fields
-      const posField = pos.k === 'field' ? pos.id : ctx.b.Broadcast(pos.id, signalTypeField('vec3', 'default'));
-      const zField = z.k === 'field' ? z.id : ctx.b.Broadcast(z.id, signalTypeField('float', 'default'));
+      const posField = pos.k === 'field' ? pos.id : ctx.b.Broadcast((pos as { k: 'sig'; id: SigExprId }).id, signalTypeField('vec3', 'default'));
+      const zField = z.k === 'field' ? z.id : ctx.b.Broadcast((z as { k: 'sig'; id: SigExprId }).id, signalTypeField('float', 'default'));
 
       const setZFn = ctx.b.kernel('fieldSetZ');
       const result = ctx.b.fieldZip(
