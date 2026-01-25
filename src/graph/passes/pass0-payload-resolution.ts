@@ -1,13 +1,17 @@
 /**
  * Pass 0: Payload-Generic Type Resolution
  *
- * Resolves payload types for payload-generic blocks by propagating concrete types bidirectionally.
+ * Resolves PAYLOAD types (not units) for payload-generic blocks by propagating concrete types bidirectionally.
  *
  * Type inference works in two directions:
  * 1. Forward (output -> target input): For blocks like Const, infer type from what it connects to
  * 2. Backward (source output -> input): For blocks like FieldBroadcast, infer type from source
  *
- * The resolved type is stored in the block's params as `payloadType`.
+ * The resolved payload type is stored in the block's params as `payloadType`.
+ *
+ * IMPORTANT: This pass does NOT resolve units. Unit resolution is handled by
+ * pass1-type-constraints.ts in the compiler, which uses constraint solving
+ * with per-block-instance unit variables.
  */
 
 import type { BlockId } from '../../types';
@@ -20,7 +24,7 @@ import { getBlockDefinition, isPayloadGeneric } from '../../blocks/registry';
  * @param patch - Raw patch
  * @returns Patch with resolved payloadType in block params
  */
-export function pass0PolymorphicTypes(patch: Patch): Patch {
+export function pass0PayloadResolution(patch: Patch): Patch {
   const updatedBlocks = new Map(patch.blocks);
 
   for (const [blockId, block] of patch.blocks) {
@@ -37,7 +41,6 @@ export function pass0PolymorphicTypes(patch: Patch): Patch {
     if (!isGeneric) continue;
 
     let inferredPayloadType: string | undefined;
-    let inferredUnit: string | undefined;
 
     // Strategy 1: Forward resolution - infer output type from what it connects to
     for (const [outputId] of Object.entries(blockDef.outputs)) {
@@ -59,7 +62,7 @@ export function pass0PolymorphicTypes(patch: Patch): Patch {
       if (!targetInput || !targetInput.type) continue;
 
       inferredPayloadType = targetInput.type.payload;
-      inferredUnit = targetInput.type.unit.kind;
+      // Unit resolution is handled by pass1-type-constraints, not here
       break;
     }
 
@@ -99,19 +102,19 @@ export function pass0PolymorphicTypes(patch: Patch): Patch {
         }
 
         inferredPayloadType = sourceOutput.type.payload;
-        inferredUnit = sourceOutput.type.unit.kind;
+        // Unit resolution is handled by pass1-type-constraints, not here
         break;
       }
     }
 
-    // Update block params with inferred type
+    // Update block params with inferred payload type only
+    // Unit resolution is handled by pass1-type-constraints in the compiler
     if (inferredPayloadType) {
       const updatedBlock: Block = {
         ...block,
         params: {
           ...block.params,
           payloadType: inferredPayloadType,
-          resolvedUnit: inferredUnit,
         },
       };
       updatedBlocks.set(blockId, updatedBlock);

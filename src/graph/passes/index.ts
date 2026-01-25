@@ -2,14 +2,14 @@
  * Graph Normalization Passes
  *
  * Orchestrates the normalization pipeline:
- * - Pass 0: Polymorphic type resolution
+ * - Pass 0: Payload type resolution (for payload-generic blocks)
  * - Pass 1: Default source materialization
  * - Pass 2: Adapter insertion
  * - Pass 3: Block indexing
  */
 
 import type { Patch } from '../Patch';
-import { pass0PolymorphicTypes } from './pass0-polymorphic-types';
+import { pass0PayloadResolution } from './pass0-payload-resolution';
 import { pass1DefaultSources } from './pass1-default-sources';
 import { pass2Adapters, type AdapterError } from './pass2-adapters';
 import { pass3Indexing, type IndexingError, type NormalizedPatch } from './pass3-indexing';
@@ -42,7 +42,7 @@ export interface NormalizeError {
  * Run all normalization passes.
  *
  * Transforms a raw patch into a fully normalized patch with:
- * - Polymorphic types resolved
+ * - Payload types resolved (for payload-generic blocks)
  * - Default sources materialized
  * - Type adapters inserted
  * - Dense block indices
@@ -52,8 +52,8 @@ export interface NormalizeError {
  * @returns NormalizedPatch or error list
  */
 export function runNormalizationPasses(patch: Patch): NormalizeResult | NormalizeError {
-  // Pass 0: Polymorphic type resolution
-  const p0 = pass0PolymorphicTypes(patch);
+  // Pass 0: Payload type resolution (for payload-generic blocks)
+  const p0 = pass0PayloadResolution(patch);
 
   // Pass 1: Default source materialization
   const p1 = pass1DefaultSources(p0);
@@ -77,7 +77,7 @@ export function runNormalizationPasses(patch: Patch): NormalizeResult | Normaliz
 // Re-export Individual Passes (for testing)
 // =============================================================================
 
-export { pass0PolymorphicTypes } from './pass0-polymorphic-types';
+export { pass0PayloadResolution } from './pass0-payload-resolution';
 export { pass1DefaultSources } from './pass1-default-sources';
 export { pass2Adapters } from './pass2-adapters';
 export { pass3Indexing, getInputEdges, getOutputEdges } from './pass3-indexing';

@@ -16,7 +16,7 @@ import type { SigExprId } from '../compiler/ir/Indices';
  * Payload-Generic field broadcast block.
  *
  * Broadcasts a signal value to all elements of a field.
- * The payload type is resolved by pass0-polymorphic-types based on
+ * The payload type is resolved by pass0-payload-resolution based on
  * the source signal. The resolved type is stored in `payloadType`.
  *
  * Payload-Generic Contract (per spec §1):

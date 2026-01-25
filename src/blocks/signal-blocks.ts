@@ -17,7 +17,7 @@ import type { SigExprId } from '../compiler/ir/Indices';
  * Payload-Generic constant block.
  *
  * This block outputs a constant value with type determined by context.
- * The payload type is resolved by pass0-polymorphic-types based on
+ * The payload type is resolved by pass0-payload-resolution based on
  * what this block connects to. The resolved type is stored in `payloadType`.
  *
  * Payload-Generic Contract (per spec §1):

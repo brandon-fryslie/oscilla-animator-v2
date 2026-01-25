@@ -6,10 +6,15 @@
  * constraint propagation.
  *
  * Architecture:
+ * - Each polymorphic port gets a UNIQUE unit variable ID (per block instance)
  * - Collects constraints from all edges: Type(fromPort) == Type(toPort)
  * - Uses union-find for efficient constraint propagation
  * - Produces a resolved types map: portKey → SignalType
  * - Unresolved polymorphic ports are hard errors (no fallback to scalar)
+ *
+ * IMPORTANT: We use per-instance unit variables (e.g., "5:out:out") instead of
+ * shared definition variables (e.g., "const_out"). This allows multiple Const
+ * blocks to resolve to different units independently.
  *
  * This implements the spec from design-docs/_to_integrate/01-Units-and-Type-Inference.md
  */
@@ -174,6 +179,32 @@ function isPolymorphicPort(type: SignalType | null): boolean {
 }
 
 /**
+ * Create an instance-specific unit variable for a port.
+ * Each block instance gets its own unique unit variable ID to prevent
+ * conflicts when multiple blocks of the same type need different units.
+ */
+function instanceUnitVar(blockIndex: BlockIndex, portName: string, direction: 'in' | 'out'): Unit {
+  return { kind: 'var', id: portKey(blockIndex, portName, direction) };
+}
+
+/**
+ * Get the effective unit for a port, creating an instance-specific variable
+ * if the definition has a polymorphic (variable) unit.
+ */
+function getEffectiveUnit(
+  defUnit: Unit,
+  blockIndex: BlockIndex,
+  portName: string,
+  direction: 'in' | 'out'
+): Unit {
+  if (isUnitVar(defUnit)) {
+    // Replace shared definition variable with per-instance variable
+    return instanceUnitVar(blockIndex, portName, direction);
+  }
+  return defUnit;
+}
+
+/**
  * Run type constraint solving on a normalized patch.
  *
  * @param normalized - Fully normalized patch (after all graph passes)
@@ -186,7 +217,7 @@ export function pass1TypeConstraints(normalized: NormalizedPatch): ResolvedTypes
   // Track which blocks have polymorphic ports
   const polymorphicPorts = new Map<PortKey, { block: Block; blockIndex: BlockIndex; portName: string; direction: 'in' | 'out'; type: SignalType }>();
 
-  // Phase 1: Initialize - identify all polymorphic ports
+  // Phase 1: Initialize - identify all polymorphic ports and create instance-specific unit variables
   for (let i = 0; i < normalized.blocks.length; i++) {
     const block = normalized.blocks[i];
     const blockIndex = i as BlockIndex;
@@ -197,12 +228,17 @@ export function pass1TypeConstraints(normalized: NormalizedPatch): ResolvedTypes
     for (const [portName, outputDef] of Object.entries(blockDef.outputs)) {
       if (outputDef.type && isUnitVar(outputDef.type.unit)) {
         const key = portKey(blockIndex, portName, 'out');
+        // Create instance-specific type with unique unit variable
+        const instanceType: SignalType = {
+          ...outputDef.type,
+          unit: instanceUnitVar(blockIndex, portName, 'out'),
+        };
         polymorphicPorts.set(key, {
           block,
           blockIndex,
           portName,
           direction: 'out',
-          type: outputDef.type,
+          type: instanceType,
         });
       }
     }
@@ -211,29 +247,39 @@ export function pass1TypeConstraints(normalized: NormalizedPatch): ResolvedTypes
     for (const [portName, inputDef] of Object.entries(blockDef.inputs)) {
       if (inputDef.type && isUnitVar(inputDef.type.unit)) {
         const key = portKey(blockIndex, portName, 'in');
+        // Create instance-specific type with unique unit variable
+        const instanceType: SignalType = {
+          ...inputDef.type,
+          unit: instanceUnitVar(blockIndex, portName, 'in'),
+        };
         polymorphicPorts.set(key, {
           block,
           blockIndex,
           portName,
           direction: 'in',
-          type: inputDef.type,
+          type: instanceType,
         });
       }
     }
   }
 
   // Phase 2: Collect constraints from edges
+  // Use instance-specific unit variables for polymorphic ports
   for (const edge of normalized.edges) {
     const fromBlock = normalized.blocks[edge.fromBlock];
     const toBlock = normalized.blocks[edge.toBlock];
 
-    const fromType = getDefinitionPortType(fromBlock, edge.fromPort, 'out');
-    const toType = getDefinitionPortType(toBlock, edge.toPort, 'in');
+    const fromDefType = getDefinitionPortType(fromBlock, edge.fromPort, 'out');
+    const toDefType = getDefinitionPortType(toBlock, edge.toPort, 'in');
 
-    if (!fromType || !toType) continue;
+    if (!fromDefType || !toDefType) continue;
 
-    // Constraint: fromType.unit == toType.unit
-    const result = uf.union(fromType.unit, toType.unit);
+    // Get effective units (instance-specific for polymorphic, concrete for monomorphic)
+    const fromUnit = getEffectiveUnit(fromDefType.unit, edge.fromBlock, edge.fromPort, 'out');
+    const toUnit = getEffectiveUnit(toDefType.unit, edge.toBlock, edge.toPort, 'in');
+
+    // Constraint: fromUnit == toUnit
+    const result = uf.union(fromUnit, toUnit);
     if (!result.ok) {
       errors.push({
         kind: 'ConflictingUnits',

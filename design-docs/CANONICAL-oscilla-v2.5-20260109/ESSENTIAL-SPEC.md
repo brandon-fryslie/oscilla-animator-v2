@@ -262,6 +262,22 @@ interface InstanceDecl {
 }
 ```
 
+### Unit System
+
+Units refine payload types. A `float` may carry a unit that constrains valid operations.
+
+| Unit | Meaning | Examples |
+|------|---------|----------|
+| `scalar` | Dimensionless | multipliers, ratios |
+| `phase01` | 0..1 with wrap semantics | animation phase |
+| `deg` | Degrees | rotation angles |
+| `rad` | Radians | rotation angles |
+| `px` | Pixels | screen positions |
+
+**Unit checking is strict**: edges require exact unit match. No implicit conversion.
+
+**Generic blocks** have type variables for payload (`PayloadVar`) and/or unit (`UnitVar`) that must be resolved by constraint solving. Example: `Const.out` is generic in both payload and unit — resolved by what it connects to, never defaulted to `float<scalar>`.
+
 ### Phase Arithmetic
 
 Phase is `float` with `unit: 'phase01'`. Arithmetic rules:
@@ -416,9 +432,37 @@ Structural artifacts keyed by anchor:
 
 ### Type Resolution
 
-1. **Propagation**: Infer missing structure
-2. **Unification**: Ensure agreement
-3. **Resolution**: Resolve defaults to concrete types
+Type resolution is constraint-based unification, not local inference.
+
+**Ordering requirement**: Run type resolution only after normalization has produced a fully explicit graph (all default sources materialized, all adapters explicit). Attempting to infer types before explicit structure exists causes directionality bugs.
+
+**Constraint sources**:
+- Monomorphic port definitions (e.g., `Camera.tiltDeg` is `float<deg>`)
+- User-specified parameters (e.g., `Const` explicitly set to `float<phase01>`)
+- Edge equality constraints: for every edge, `Type(fromPort) == Type(toPort)` (payload AND unit must match)
+- Adapter blocks are the only place unit conversion is allowed
+
+**Resolution phases**:
+1. **Initialization**: Seed known types from monomorphic definitions and explicit user choices
+2. **Propagation**: For each edge constraint, unify payload and unit variables
+3. **Verification**: Any unresolved variable after fixed-point → compile error
+
+**Critical invariant**: Unresolved generic types are hard errors, never silent defaults.
+
+```typescript
+// Resolved types are cached by port binding
+type PortBindingKey = `${BlockId}:${PortName}:${'in' | 'out'}`;
+resolvedPortTypes: Map<PortBindingKey, SignalType>;
+
+// getPortType() behavior:
+// 1. If resolved override exists → return it
+// 2. Else if monomorphic definition → return definition type
+// 3. Else if generic and unresolved → UnresolvedType ERROR (not scalar fallback)
+```
+
+**Diagnostic on unresolved type**:
+- Identify: block, port, why unconstrained
+- Suggest fixes: connect to typed consumer, set unit explicitly, or insert adapter
 
 ### CompiledProgramIR Structure
 

@@ -62,6 +62,7 @@ export function formatUnitForDisplay(unit: Unit): string {
     case 'world3': return 'world3';
     case 'rgba01': return 'rgba';
     case 'none': return '';
+    case 'var': return `?`; // Unresolved unit variable (should not appear in UI)
   }
 }
 
