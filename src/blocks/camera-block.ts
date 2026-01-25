@@ -13,7 +13,7 @@
  */
 
 import { registerBlock } from './registry';
-import { signalType, unitNorm01, unitScalar, unitDeg } from '../core/canonical-types';
+import { signalType, unitNorm01, unitScalar, unitDeg, strideOf } from '../core/canonical-types';
 import { defaultSourceConst, type DefaultSource } from '../types';
 import type { CameraDeclIR } from '../compiler/ir/program';
 
@@ -51,8 +51,9 @@ registerBlock({
   lower: ({ ctx, config }) => {
     const value = (config?.value as number) ?? 0;
     const sigId = ctx.b.sigConst(value, signalType('cameraProjection'));
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
-    return { outputsById: { out: { k: 'sig', id: sigId, slot } } };
+    return { outputsById: { out: { k: 'sig', id: sigId, slot, type: outType, stride: strideOf(outType.payload) } } };
   },
 });
 

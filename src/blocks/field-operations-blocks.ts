@@ -6,8 +6,8 @@
  * payload-generic where applicable.
  */
 
-import { registerBlock } from './registry';
-import { signalType, signalTypeField, unitPhase01, STANDARD_NUMERIC_PAYLOADS } from '../core/canonical-types';
+import { registerBlock, STANDARD_NUMERIC_PAYLOADS } from './registry';
+import { signalType, signalTypeField, unitPhase01, strideOf } from '../core/canonical-types';
 import { defaultSourceConst, defaultSourceTimeRoot } from '../types';
 import type { SigExprId, FieldExprId } from '../compiler/ir/Indices';
 import { OpCode } from '../compiler/ir/types';
@@ -43,11 +43,12 @@ registerBlock({
 
     // Use fieldIntrinsic to get normalized index (0..1) for each instance element
     const id01Field = ctx.b.fieldIntrinsic(instance, 'normalizedIndex', signalTypeField('float', 'default'));
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        id01: { k: 'field', id: id01Field, slot },
+        id01: { k: 'field', id: id01Field, slot, type: outType, stride: strideOf(outType.payload) },
       },
       // Propagate instance context
       instanceContext: instance,
@@ -77,8 +78,8 @@ registerBlock({
   },
   payload: {
     allowedPayloads: {
-      input: { float: true },
-      result: { float: true },
+      input: STANDARD_NUMERIC_PAYLOADS,
+      result: STANDARD_NUMERIC_PAYLOADS,
     },
     semantics: 'componentwise',
   },
@@ -99,20 +100,22 @@ registerBlock({
       // Signal path - use opcode
       const sinFn = ctx.b.opcode(OpCode.Sin);
       const result = ctx.b.sigMap(input.id, sinFn, signalType('float'));
+      const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
       return {
         outputsById: {
-          result: { k: 'sig', id: result, slot },
+          result: { k: 'sig', id: result, slot, type: outType, stride: strideOf(outType.payload) },
         },
       };
     } else if (input.k === 'field') {
       // Field path - use field kernel
       const sinFn = ctx.b.kernel('fieldSin');
       const result = ctx.b.fieldMap(input.id, sinFn, signalTypeField('float', 'default'));
+      const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
       return {
         outputsById: {
-          result: { k: 'field', id: result, slot },
+          result: { k: 'field', id: result, slot, type: outType, stride: strideOf(outType.payload) },
         },
         instanceContext: ctx.inferredInstance,
       };
@@ -140,8 +143,8 @@ registerBlock({
   },
   payload: {
     allowedPayloads: {
-      input: { float: true },
-      result: { float: true },
+      input: STANDARD_NUMERIC_PAYLOADS,
+      result: STANDARD_NUMERIC_PAYLOADS,
     },
     semantics: 'componentwise',
   },
@@ -162,20 +165,22 @@ registerBlock({
       // Signal path - use opcode
       const cosFn = ctx.b.opcode(OpCode.Cos);
       const result = ctx.b.sigMap(input.id, cosFn, signalType('float'));
+      const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
       return {
         outputsById: {
-          result: { k: 'sig', id: result, slot },
+          result: { k: 'sig', id: result, slot, type: outType, stride: strideOf(outType.payload) },
         },
       };
     } else if (input.k === 'field') {
       // Field path - use field kernel
       const cosFn = ctx.b.kernel('fieldCos');
       const result = ctx.b.fieldMap(input.id, cosFn, signalTypeField('float', 'default'));
+      const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
       return {
         outputsById: {
-          result: { k: 'field', id: result, slot },
+          result: { k: 'field', id: result, slot, type: outType, stride: strideOf(outType.payload) },
         },
         instanceContext: ctx.inferredInstance,
       };
@@ -203,9 +208,9 @@ registerBlock({
   },
   payload: {
     allowedPayloads: {
-      a: { float: true, int: true },
-      b: { float: true, int: true },
-      result: { float: true, int: true },
+      a: STANDARD_NUMERIC_PAYLOADS,
+      b: STANDARD_NUMERIC_PAYLOADS,
+      result: STANDARD_NUMERIC_PAYLOADS,
     },
     semantics: 'componentwise',
   },
@@ -228,20 +233,22 @@ registerBlock({
       // Signal path
       const modFn = ctx.b.opcode(OpCode.Mod);
       const result = ctx.b.sigZip([a.id, b.id], modFn, signalType('float'));
+      const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
       return {
         outputsById: {
-          result: { k: 'sig', id: result, slot },
+          result: { k: 'sig', id: result, slot, type: outType, stride: strideOf(outType.payload) },
         },
       };
     } else if (a.k === 'field' && b.k === 'field') {
       // Field path
       const modFn = ctx.b.kernel('fieldMod');
       const result = ctx.b.fieldZip([a.id, b.id], modFn, signalTypeField('float', 'default'));
+      const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
       return {
         outputsById: {
-          result: { k: 'field', id: result, slot },
+          result: { k: 'field', id: result, slot, type: outType, stride: strideOf(outType.payload) },
         },
         instanceContext: ctx.inferredInstance,
       };
@@ -304,11 +311,12 @@ registerBlock({
       signalTypeField('vec3', 'default')
     );
 
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        pos: { k: 'field', id: posField, slot },
+        pos: { k: 'field', id: posField, slot, type: outType, stride: strideOf(outType.payload) },
       },
       // Propagate instance context from inputs
       instanceContext: ctx.inferredInstance,
@@ -372,13 +380,15 @@ registerBlock({
       signalTypeField('float', 'default')
     );
 
+    const outTypeAngle = ctx.outTypes[0];
+    const outTypeRadius = ctx.outTypes[1];
     const angleSlot = ctx.b.allocSlot();
     const radiusSlot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        angle: { k: 'field', id: angleField, slot: angleSlot },
-        radius: { k: 'field', id: radiusField, slot: radiusSlot },
+        angle: { k: 'field', id: angleField, slot: angleSlot, type: outTypeAngle, stride: strideOf(outTypeAngle.payload) },
+        radius: { k: 'field', id: radiusField, slot: radiusSlot, type: outTypeRadius, stride: strideOf(outTypeRadius.payload) },
       },
       // Propagate instance context from inputs
       instanceContext: ctx.inferredInstance,
@@ -443,11 +453,12 @@ registerBlock({
       signalTypeField('float', 'default')
     );
 
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        value: { k: 'field', id: result, slot },
+        value: { k: 'field', id: result, slot, type: outType, stride: strideOf(outType.payload) },
       },
       // Propagate instance context from inputs
       instanceContext: ctx.inferredInstance,
@@ -491,11 +502,12 @@ registerBlock({
     // Use fieldZip (not fieldMap) because fieldGoldenAngle is a field kernel
     const result = ctx.b.fieldZip([id01.id], goldenAngleFn, signalTypeField('float', 'default'));
 
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        angle: { k: 'field', id: result, slot },
+        angle: { k: 'field', id: result, slot, type: outType, stride: strideOf(outType.payload) },
       },
       // Propagate instance context from inputs
       instanceContext: ctx.inferredInstance,
@@ -551,11 +563,12 @@ registerBlock({
       signalTypeField('float', 'default')
     );
 
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        offset: { k: 'field', id: result, slot },
+        offset: { k: 'field', id: result, slot, type: outType, stride: strideOf(outType.payload) },
       },
       // Propagate instance context from inputs
       instanceContext: ctx.inferredInstance,
@@ -605,11 +618,12 @@ registerBlock({
       signalTypeField('float', 'default')
     );
 
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        out: { k: 'field', id: result, slot },
+        out: { k: 'field', id: result, slot, type: outType, stride: strideOf(outType.payload) },
       },
       // Propagate instance context from inputs
       instanceContext: ctx.inferredInstance,
@@ -670,11 +684,12 @@ registerBlock({
       signalTypeField('vec2', 'default')
     );
 
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        out: { k: 'field', id: result, slot },
+        out: { k: 'field', id: result, slot, type: outType, stride: strideOf(outType.payload) },
       },
       // Propagate instance context from inputs
       instanceContext: ctx.inferredInstance,
@@ -725,11 +740,12 @@ registerBlock({
       signalTypeField('float', 'default')
     );
 
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        hue: { k: 'field', id: result, slot },
+        hue: { k: 'field', id: result, slot, type: outType, stride: strideOf(outType.payload) },
       },
       // Propagate instance context from inputs
       instanceContext: ctx.inferredInstance,
@@ -783,11 +799,12 @@ registerBlock({
       signalTypeField('vec3', 'default')
     );
 
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        out: { k: 'field', id: result, slot },
+        out: { k: 'field', id: result, slot, type: outType, stride: strideOf(outType.payload) },
       },
       instanceContext: ctx.inferredInstance,
     };

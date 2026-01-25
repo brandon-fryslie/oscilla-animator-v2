@@ -22,6 +22,7 @@ import {
   unitNorm01,
   unitMs,
   unitSeconds,
+  strideOf,
 } from '../core/canonical-types';
 import { OpCode } from '../compiler/ir/types';
 import type { SigExprId } from '../compiler/ir/Indices';
@@ -56,8 +57,13 @@ registerBlock({
     const input = inputsById.in;
     if (!input || input.k !== 'sig') throw new Error('Adapter input must be a signal');
     // Identity — no conversion needed, just re-type
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
-    return { outputsById: { out: { k: 'sig', id: input.id as SigExprId, slot } } };
+    return {
+      outputsById: {
+        out: { k: 'sig', id: input.id as SigExprId, slot, type: outType, stride: strideOf(outType.payload) },
+      },
+    };
   },
 });
 
@@ -88,8 +94,13 @@ registerBlock({
     if (!input || input.k !== 'sig') throw new Error('Adapter input must be a signal');
     const wrapFn = ctx.b.opcode(OpCode.Wrap01);
     const wrapped = ctx.b.sigMap(input.id as SigExprId, wrapFn, signalType('float', unitPhase01()));
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
-    return { outputsById: { out: { k: 'sig', id: wrapped, slot } } };
+    return {
+      outputsById: {
+        out: { k: 'sig', id: wrapped, slot, type: outType, stride: strideOf(outType.payload) },
+      },
+    };
   },
 });
 
@@ -125,8 +136,13 @@ registerBlock({
     const twoPi = ctx.b.sigConst(6.283185307179586, signalType('float', unitScalar()));
     const mulFn = ctx.b.opcode(OpCode.Mul);
     const radians = ctx.b.sigZip([input.id as SigExprId, twoPi], mulFn, signalType('float', unitRadians()));
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
-    return { outputsById: { out: { k: 'sig', id: radians, slot } } };
+    return {
+      outputsById: {
+        out: { k: 'sig', id: radians, slot, type: outType, stride: strideOf(outType.payload) },
+      },
+    };
   },
 });
 
@@ -160,8 +176,13 @@ registerBlock({
     const divided = ctx.b.sigZip([input.id as SigExprId, twoPi], divFn, signalType('float', unitScalar()));
     const wrapFn = ctx.b.opcode(OpCode.Wrap01);
     const wrapped = ctx.b.sigMap(divided, wrapFn, signalType('float', unitPhase01()));
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
-    return { outputsById: { out: { k: 'sig', id: wrapped, slot } } };
+    return {
+      outputsById: {
+        out: { k: 'sig', id: wrapped, slot, type: outType, stride: strideOf(outType.payload) },
+      },
+    };
   },
 });
 
@@ -197,8 +218,13 @@ registerBlock({
     const factor = ctx.b.sigConst(0.017453292519943295, signalType('float', unitScalar())); // π/180
     const mulFn = ctx.b.opcode(OpCode.Mul);
     const radians = ctx.b.sigZip([input.id as SigExprId, factor], mulFn, signalType('float', unitRadians()));
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
-    return { outputsById: { out: { k: 'sig', id: radians, slot } } };
+    return {
+      outputsById: {
+        out: { k: 'sig', id: radians, slot, type: outType, stride: strideOf(outType.payload) },
+      },
+    };
   },
 });
 
@@ -230,8 +256,13 @@ registerBlock({
     const factor = ctx.b.sigConst(57.29577951308232, signalType('float', unitScalar())); // 180/π
     const mulFn = ctx.b.opcode(OpCode.Mul);
     const degrees = ctx.b.sigZip([input.id as SigExprId, factor], mulFn, signalType('float', unitDegrees()));
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
-    return { outputsById: { out: { k: 'sig', id: degrees, slot } } };
+    return {
+      outputsById: {
+        out: { k: 'sig', id: degrees, slot, type: outType, stride: strideOf(outType.payload) },
+      },
+    };
   },
 });
 
@@ -268,8 +299,13 @@ registerBlock({
     const divisor = ctx.b.sigConst(1000, signalType('float', unitScalar()));
     const divFn = ctx.b.opcode(OpCode.Div);
     const seconds = ctx.b.sigZip([input.id as SigExprId, divisor], divFn, signalType('float', unitSeconds()));
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
-    return { outputsById: { out: { k: 'sig', id: seconds, slot } } };
+    return {
+      outputsById: {
+        out: { k: 'sig', id: seconds, slot, type: outType, stride: strideOf(outType.payload) },
+      },
+    };
   },
 });
 
@@ -303,8 +339,13 @@ registerBlock({
     const floatMs = ctx.b.sigZip([input.id as SigExprId, multiplier], mulFn, signalType('float', unitMs()));
     const floorFn = ctx.b.opcode(OpCode.Floor);
     const intMs = ctx.b.sigMap(floatMs, floorFn, signalType('int', unitMs()));
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
-    return { outputsById: { out: { k: 'sig', id: intMs, slot } } };
+    return {
+      outputsById: {
+        out: { k: 'sig', id: intMs, slot, type: outType, stride: strideOf(outType.payload) },
+      },
+    };
   },
 });
 
@@ -341,8 +382,13 @@ registerBlock({
     const one = ctx.b.sigConst(1, signalType('float', unitScalar()));
     const clampFn = ctx.b.opcode(OpCode.Clamp);
     const clamped = ctx.b.sigZip([input.id as SigExprId, zero, one], clampFn, signalType('float', unitNorm01()));
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
-    return { outputsById: { out: { k: 'sig', id: clamped, slot } } };
+    return {
+      outputsById: {
+        out: { k: 'sig', id: clamped, slot, type: outType, stride: strideOf(outType.payload) },
+      },
+    };
   },
 });
 
@@ -372,8 +418,13 @@ registerBlock({
     const input = inputsById.in;
     if (!input || input.k !== 'sig') throw new Error('Adapter input must be a signal');
     // Identity — no conversion needed, just re-type
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
-    return { outputsById: { out: { k: 'sig', id: input.id as SigExprId, slot } } };
+    return {
+      outputsById: {
+        out: { k: 'sig', id: input.id as SigExprId, slot, type: outType, stride: strideOf(outType.payload) },
+      },
+    };
   },
 });
 
@@ -404,7 +455,12 @@ registerBlock({
     const input = inputsById.in;
     if (!input || input.k !== 'sig') throw new Error('Adapter input must be a signal');
     // Identity — no conversion needed, just re-type
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
-    return { outputsById: { out: { k: 'sig', id: input.id as SigExprId, slot } } };
+    return {
+      outputsById: {
+        out: { k: 'sig', id: input.id as SigExprId, slot, type: outType, stride: strideOf(outType.payload) },
+      },
+    };
   },
 });

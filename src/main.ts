@@ -555,7 +555,7 @@ let currentPatchIndex = DEFAULT_PATCH_INDEX;
 // LocalStorage Persistence
 // =============================================================================
 
-const STORAGE_KEY = 'oscilla-v2-patch-v9'; // Bumped to force fresh load - Z wave animation
+const STORAGE_KEY = 'oscilla-v2-patch-v10'; // Bumped to invalidate stale patches after block genericization (FieldSin->Sin, etc.)
 
 /** Clear localStorage and reload - exposed globally for UI */
 function clearStorageAndReload(): void {

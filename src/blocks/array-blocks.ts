@@ -6,7 +6,7 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
-import { signalType, signalTypeField, type PayloadType } from '../core/canonical-types';
+import { signalType, signalTypeField, strideOf, type PayloadType } from '../core/canonical-types';
 import { DOMAIN_CIRCLE } from '../core/domain-registry';
 import { defaultSourceConst, defaultSource } from '../types';
 
@@ -101,12 +101,17 @@ registerBlock({
     const activeSignal = ctx.b.sigConst(true, signalType('bool'));
     const activeField = ctx.b.Broadcast(activeSignal, signalTypeField('bool', 'default'));
 
+    const outType0 = ctx.outTypes[0];
+    const outType1 = ctx.outTypes[1];
+    const outType2 = ctx.outTypes[2];
+    const outType3 = ctx.outTypes[3];
+
     return {
       outputsById: {
-        elements: { k: 'field', id: elementsField, slot: ctx.b.allocSlot() },
-        index: { k: 'field', id: indexField, slot: ctx.b.allocSlot() },
-        t: { k: 'field', id: tField, slot: ctx.b.allocSlot() },
-        active: { k: 'field', id: activeField, slot: ctx.b.allocSlot() },
+        elements: { k: 'field', id: elementsField, slot: ctx.b.allocSlot(), type: outType0, stride: strideOf(outType0.payload) },
+        index: { k: 'field', id: indexField, slot: ctx.b.allocSlot(), type: outType1, stride: strideOf(outType1.payload) },
+        t: { k: 'field', id: tField, slot: ctx.b.allocSlot(), type: outType2, stride: strideOf(outType2.payload) },
+        active: { k: 'field', id: activeField, slot: ctx.b.allocSlot(), type: outType3, stride: strideOf(outType3.payload) },
       },
       // Set instance context for downstream blocks
       instanceContext: instanceId,

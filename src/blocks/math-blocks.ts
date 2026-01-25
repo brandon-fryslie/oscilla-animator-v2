@@ -5,9 +5,9 @@
  */
 
 import { registerBlock, STANDARD_NUMERIC_PAYLOADS } from './registry';
-import { signalType } from '../core/canonical-types';
+import { signalType, signalTypeField, strideOf } from '../core/canonical-types';
 import { OpCode } from '../compiler/ir/types';
-import type { SigExprId } from '../compiler/ir/Indices';
+import type { SigExprId, FieldExprId } from '../compiler/ir/Indices';
 
 // =============================================================================
 // Add
@@ -17,7 +17,7 @@ registerBlock({
   type: 'Add',
   label: 'Add',
   category: 'math',
-  description: 'Adds two signals',
+  description: 'Adds two numbers (signals or fields)',
   form: 'primitive',
   capability: 'pure',
   cardinality: {
@@ -44,19 +44,42 @@ registerBlock({
     const a = inputsById.a;
     const b = inputsById.b;
 
-    if (!a || a.k !== 'sig' || !b || b.k !== 'sig') {
-      throw new Error('Add inputs must be signals');
+    if (!a || !b) {
+      throw new Error('Add requires both inputs');
     }
 
-    const addFn = ctx.b.opcode(OpCode.Add);
-    const sigId = ctx.b.sigZip([a.id as SigExprId, b.id as SigExprId], addFn, signalType('float'));
-    const slot = ctx.b.allocSlot();
+    // Signal path
+    if (a.k === 'sig' && b.k === 'sig') {
+      const addFn = ctx.b.opcode(OpCode.Add);
+      const sigId = ctx.b.sigZip([a.id as SigExprId, b.id as SigExprId], addFn, signalType('float'));
+      const outType = ctx.outTypes[0];
+      const slot = ctx.b.allocSlot();
+      return {
+        outputsById: {
+          out: { k: 'sig', id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
+        },
+      };
+    }
 
-    return {
-      outputsById: {
-        out: { k: 'sig', id: sigId, slot },
-      },
-    };
+    // Field path (or mixed signal/field with broadcast)
+    if (a.k === 'field' || b.k === 'field') {
+      const aField = a.k === 'field' ? a.id : ctx.b.Broadcast(a.id as SigExprId, signalTypeField('float', 'default'));
+      const bField = b.k === 'field' ? b.id : ctx.b.Broadcast(b.id as SigExprId, signalTypeField('float', 'default'));
+
+      const addFn = ctx.b.kernel('fieldAdd');
+      const fieldId = ctx.b.fieldZip([aField as FieldExprId, bField as FieldExprId], addFn, signalTypeField('float', 'default'));
+      const outType = ctx.outTypes[0];
+      const slot = ctx.b.allocSlot();
+
+      return {
+        outputsById: {
+          out: { k: 'field', id: fieldId, slot, type: outType, stride: strideOf(outType.payload) },
+        },
+        instanceContext: ctx.inferredInstance,
+      };
+    }
+
+    throw new Error('Add: Invalid input types');
   },
 });
 
@@ -68,7 +91,7 @@ registerBlock({
   type: 'Subtract',
   label: 'Subtract',
   category: 'math',
-  description: 'Subtracts two signals',
+  description: 'Subtracts two numbers (signals or fields)',
   form: 'primitive',
   capability: 'pure',
   cardinality: {
@@ -95,19 +118,42 @@ registerBlock({
     const a = inputsById.a;
     const b = inputsById.b;
 
-    if (!a || a.k !== 'sig' || !b || b.k !== 'sig') {
-      throw new Error('Subtract inputs must be signals');
+    if (!a || !b) {
+      throw new Error('Subtract requires both inputs');
     }
 
-    const subFn = ctx.b.opcode(OpCode.Sub);
-    const sigId = ctx.b.sigZip([a.id as SigExprId, b.id as SigExprId], subFn, signalType('float'));
-    const slot = ctx.b.allocSlot();
+    // Signal path
+    if (a.k === 'sig' && b.k === 'sig') {
+      const subFn = ctx.b.opcode(OpCode.Sub);
+      const sigId = ctx.b.sigZip([a.id as SigExprId, b.id as SigExprId], subFn, signalType('float'));
+      const outType = ctx.outTypes[0];
+      const slot = ctx.b.allocSlot();
+      return {
+        outputsById: {
+          out: { k: 'sig', id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
+        },
+      };
+    }
 
-    return {
-      outputsById: {
-        out: { k: 'sig', id: sigId, slot },
-      },
-    };
+    // Field path
+    if (a.k === 'field' || b.k === 'field') {
+      const aField = a.k === 'field' ? a.id : ctx.b.Broadcast(a.id as SigExprId, signalTypeField('float', 'default'));
+      const bField = b.k === 'field' ? b.id : ctx.b.Broadcast(b.id as SigExprId, signalTypeField('float', 'default'));
+
+      const subFn = ctx.b.kernel('fieldSubtract');
+      const fieldId = ctx.b.fieldZip([aField as FieldExprId, bField as FieldExprId], subFn, signalTypeField('float', 'default'));
+      const outType = ctx.outTypes[0];
+      const slot = ctx.b.allocSlot();
+
+      return {
+        outputsById: {
+          out: { k: 'field', id: fieldId, slot, type: outType, stride: strideOf(outType.payload) },
+        },
+        instanceContext: ctx.inferredInstance,
+      };
+    }
+
+    throw new Error('Subtract: Invalid input types');
   },
 });
 
@@ -119,7 +165,7 @@ registerBlock({
   type: 'Multiply',
   label: 'Multiply',
   category: 'math',
-  description: 'Multiplies two signals',
+  description: 'Multiplies two numbers (signals or fields)',
   form: 'primitive',
   capability: 'pure',
   cardinality: {
@@ -146,19 +192,42 @@ registerBlock({
     const a = inputsById.a;
     const b = inputsById.b;
 
-    if (!a || a.k !== 'sig' || !b || b.k !== 'sig') {
-      throw new Error('Multiply inputs must be signals');
+    if (!a || !b) {
+      throw new Error('Multiply requires both inputs');
     }
 
-    const mulFn = ctx.b.opcode(OpCode.Mul);
-    const sigId = ctx.b.sigZip([a.id as SigExprId, b.id as SigExprId], mulFn, signalType('float'));
-    const slot = ctx.b.allocSlot();
+    // Signal path
+    if (a.k === 'sig' && b.k === 'sig') {
+      const mulFn = ctx.b.opcode(OpCode.Mul);
+      const sigId = ctx.b.sigZip([a.id as SigExprId, b.id as SigExprId], mulFn, signalType('float'));
+      const outType = ctx.outTypes[0];
+      const slot = ctx.b.allocSlot();
+      return {
+        outputsById: {
+          out: { k: 'sig', id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
+        },
+      };
+    }
 
-    return {
-      outputsById: {
-        out: { k: 'sig', id: sigId, slot },
-      },
-    };
+    // Field path
+    if (a.k === 'field' || b.k === 'field') {
+      const aField = a.k === 'field' ? a.id : ctx.b.Broadcast(a.id as SigExprId, signalTypeField('float', 'default'));
+      const bField = b.k === 'field' ? b.id : ctx.b.Broadcast(b.id as SigExprId, signalTypeField('float', 'default'));
+
+      const mulFn = ctx.b.kernel('fieldMultiply');
+      const fieldId = ctx.b.fieldZip([aField as FieldExprId, bField as FieldExprId], mulFn, signalTypeField('float', 'default'));
+      const outType = ctx.outTypes[0];
+      const slot = ctx.b.allocSlot();
+
+      return {
+        outputsById: {
+          out: { k: 'field', id: fieldId, slot, type: outType, stride: strideOf(outType.payload) },
+        },
+        instanceContext: ctx.inferredInstance,
+      };
+    }
+
+    throw new Error('Multiply: Invalid input types');
   },
 });
 
@@ -170,7 +239,7 @@ registerBlock({
   type: 'Divide',
   label: 'Divide',
   category: 'math',
-  description: 'Divides two signals',
+  description: 'Divides two numbers (signals or fields)',
   form: 'primitive',
   capability: 'pure',
   cardinality: {
@@ -197,19 +266,42 @@ registerBlock({
     const a = inputsById.a;
     const b = inputsById.b;
 
-    if (!a || a.k !== 'sig' || !b || b.k !== 'sig') {
-      throw new Error('Divide inputs must be signals');
+    if (!a || !b) {
+      throw new Error('Divide requires both inputs');
     }
 
-    const divFn = ctx.b.opcode(OpCode.Div);
-    const sigId = ctx.b.sigZip([a.id as SigExprId, b.id as SigExprId], divFn, signalType('float'));
-    const slot = ctx.b.allocSlot();
+    // Signal path
+    if (a.k === 'sig' && b.k === 'sig') {
+      const divFn = ctx.b.opcode(OpCode.Div);
+      const sigId = ctx.b.sigZip([a.id as SigExprId, b.id as SigExprId], divFn, signalType('float'));
+      const outType = ctx.outTypes[0];
+      const slot = ctx.b.allocSlot();
+      return {
+        outputsById: {
+          out: { k: 'sig', id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
+        },
+      };
+    }
 
-    return {
-      outputsById: {
-        out: { k: 'sig', id: sigId, slot },
-      },
-    };
+    // Field path
+    if (a.k === 'field' || b.k === 'field') {
+      const aField = a.k === 'field' ? a.id : ctx.b.Broadcast(a.id as SigExprId, signalTypeField('float', 'default'));
+      const bField = b.k === 'field' ? b.id : ctx.b.Broadcast(b.id as SigExprId, signalTypeField('float', 'default'));
+
+      const divFn = ctx.b.kernel('fieldDivide');
+      const fieldId = ctx.b.fieldZip([aField as FieldExprId, bField as FieldExprId], divFn, signalTypeField('float', 'default'));
+      const outType = ctx.outTypes[0];
+      const slot = ctx.b.allocSlot();
+
+      return {
+        outputsById: {
+          out: { k: 'field', id: fieldId, slot, type: outType, stride: strideOf(outType.payload) },
+        },
+        instanceContext: ctx.inferredInstance,
+      };
+    }
+
+    throw new Error('Divide: Invalid input types');
   },
 });
 
@@ -221,7 +313,7 @@ registerBlock({
   type: 'Modulo',
   label: 'Modulo',
   category: 'math',
-  description: 'Computes modulo of two signals',
+  description: 'Computes modulo of two numbers (signals or fields)',
   form: 'primitive',
   capability: 'pure',
   cardinality: {
@@ -248,19 +340,42 @@ registerBlock({
     const a = inputsById.a;
     const b = inputsById.b;
 
-    if (!a || a.k !== 'sig' || !b || b.k !== 'sig') {
-      throw new Error('Modulo inputs must be signals');
+    if (!a || !b) {
+      throw new Error('Modulo requires both inputs');
     }
 
-    const modFn = ctx.b.opcode(OpCode.Mod);
-    const sigId = ctx.b.sigZip([a.id as SigExprId, b.id as SigExprId], modFn, signalType('float'));
-    const slot = ctx.b.allocSlot();
+    // Signal path
+    if (a.k === 'sig' && b.k === 'sig') {
+      const modFn = ctx.b.opcode(OpCode.Mod);
+      const sigId = ctx.b.sigZip([a.id as SigExprId, b.id as SigExprId], modFn, signalType('float'));
+      const outType = ctx.outTypes[0];
+      const slot = ctx.b.allocSlot();
+      return {
+        outputsById: {
+          out: { k: 'sig', id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
+        },
+      };
+    }
 
-    return {
-      outputsById: {
-        out: { k: 'sig', id: sigId, slot },
-      },
-    };
+    // Field path
+    if (a.k === 'field' || b.k === 'field') {
+      const aField = a.k === 'field' ? a.id : ctx.b.Broadcast(a.id as SigExprId, signalTypeField('float', 'default'));
+      const bField = b.k === 'field' ? b.id : ctx.b.Broadcast(b.id as SigExprId, signalTypeField('float', 'default'));
+
+      const modFn = ctx.b.kernel('fieldModulo');
+      const fieldId = ctx.b.fieldZip([aField as FieldExprId, bField as FieldExprId], modFn, signalTypeField('float', 'default'));
+      const outType = ctx.outTypes[0];
+      const slot = ctx.b.allocSlot();
+
+      return {
+        outputsById: {
+          out: { k: 'field', id: fieldId, slot, type: outType, stride: strideOf(outType.payload) },
+        },
+        instanceContext: ctx.inferredInstance,
+      };
+    }
+
+    throw new Error('Modulo: Invalid input types');
   },
 });
 
@@ -296,11 +411,12 @@ registerBlock({
     const seedId = ctx.b.sigConst(0, signalType('float'));
     const hashFn = ctx.b.opcode(OpCode.Hash);
     const hashId = ctx.b.sigZip([x.id as SigExprId, seedId], hashFn, signalType('float'));
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        out: { k: 'sig', id: hashId, slot },
+        out: { k: 'sig', id: hashId, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
@@ -354,11 +470,12 @@ registerBlock({
     }
 
     const lengthId = ctx.b.sigMap(sumSq, sqrtFn, signalType('float'));
+    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        out: { k: 'sig', id: lengthId, slot },
+        out: { k: 'sig', id: lengthId, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
@@ -433,15 +550,18 @@ registerBlock({
       outZId = ctx.b.sigConst(0, signalType('float'));
     }
 
+    const outTypeX = ctx.outTypes[0];
+    const outTypeY = ctx.outTypes[1];
+    const outTypeZ = ctx.outTypes[2];
     const slotX = ctx.b.allocSlot();
     const slotY = ctx.b.allocSlot();
     const slotZ = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        outX: { k: 'sig', id: outXId, slot: slotX },
-        outY: { k: 'sig', id: outYId, slot: slotY },
-        outZ: { k: 'sig', id: outZId, slot: slotZ },
+        outX: { k: 'sig', id: outXId, slot: slotX, type: outTypeX, stride: strideOf(outTypeX.payload) },
+        outY: { k: 'sig', id: outYId, slot: slotY, type: outTypeY, stride: strideOf(outTypeY.payload) },
+        outZ: { k: 'sig', id: outZId, slot: slotZ, type: outTypeZ, stride: strideOf(outTypeZ.payload) },
       },
     };
   },
