@@ -363,7 +363,7 @@ export class IRBuilderImpl implements IRBuilder {
   // Event Expressions
   // =========================================================================
 
-  eventPulse(source: 'timeRoot'): EventExprId {
+  eventPulse(source: 'InfiniteTimeRoot'): EventExprId {
     const id = eventExprId(this.eventExprs.length);
     this.eventExprs.push({ kind: 'pulse', source });
     return id;

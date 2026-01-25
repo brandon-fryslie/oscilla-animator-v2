@@ -118,7 +118,7 @@ export interface IRBuilder {
   // =========================================================================
 
   /** Create a pulse event. */
-  eventPulse(source: 'timeRoot'): EventExprId;
+  eventPulse(source: 'InfiniteTimeRoot'): EventExprId;
 
   /** Create a wrap event from a signal. */
   eventWrap(signal: SigExprId): EventExprId;
