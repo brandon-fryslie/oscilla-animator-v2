@@ -409,6 +409,13 @@ export interface IRBuilder {
   getStateSlotCount(): number;
 
   /**
+   * Get a single signal expression by ID.
+   * @param id Signal expression ID
+   * @returns The signal expression, or undefined if not found
+   */
+  getSigExpr(id: SigExprId): SigExpr | undefined;
+
+  /**
    * Get all signal expressions.
    * @returns Readonly array of all signal expressions
    */

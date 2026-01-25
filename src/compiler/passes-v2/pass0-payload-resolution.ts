@@ -1,7 +1,11 @@
 /**
- * Pass 0: Payload-Generic Type Resolution
+ * Pass 0: Payload Type Resolution
  *
- * Resolves PAYLOAD types (not units) for payload-generic blocks by propagating concrete types bidirectionally.
+ * Resolves PAYLOAD types (float, int, bool, vec2, color, etc.) for payload-generic
+ * blocks by propagating concrete types from edges.
+ *
+ * This pass runs AFTER graph normalization (so all derived blocks exist) and
+ * BEFORE unit constraint solving (pass1-type-constraints).
  *
  * Type inference works in two directions:
  * 1. Forward (output -> target input): For blocks like Const, infer type from what it connects to
@@ -10,24 +14,28 @@
  * The resolved payload type is stored in the block's params as `payloadType`.
  *
  * IMPORTANT: This pass does NOT resolve units. Unit resolution is handled by
- * pass1-type-constraints.ts in the compiler, which uses constraint solving
- * with per-block-instance unit variables.
+ * pass1-type-constraints.ts which uses constraint solving with per-block-instance
+ * unit variables.
  */
 
-import type { BlockId } from '../../types';
-import type { Block, Patch } from '../Patch';
+import type { NormalizedPatch, NormalizedEdge, BlockIndex } from '../ir/patches';
+import type { Block } from '../../graph/Patch';
 import { getBlockDefinition, isPayloadGeneric } from '../../blocks/registry';
 
 /**
- * Resolve payload types for payload-generic blocks by propagating concrete types.
+ * Resolve payload types for payload-generic blocks.
  *
- * @param patch - Raw patch
- * @returns Patch with resolved payloadType in block params
+ * @param normalized - Normalized patch (all derived blocks exist)
+ * @returns NormalizedPatch with payloadType resolved in block params
  */
-export function pass0PayloadResolution(patch: Patch): Patch {
-  const updatedBlocks = new Map(patch.blocks);
+export function pass0PayloadResolution(normalized: NormalizedPatch): NormalizedPatch {
+  // Create mutable copy of blocks array
+  const updatedBlocks = [...normalized.blocks];
+  let changed = false;
 
-  for (const [blockId, block] of patch.blocks) {
+  for (let i = 0; i < normalized.blocks.length; i++) {
+    const blockIndex = i as BlockIndex;
+    const block = normalized.blocks[i];
     const blockDef = getBlockDefinition(block.type);
     if (!blockDef) continue;
 
@@ -44,56 +52,51 @@ export function pass0PayloadResolution(patch: Patch): Patch {
 
     // Strategy 1: Forward resolution - infer output type from what it connects to
     for (const [outputId] of Object.entries(blockDef.outputs)) {
-      const outgoingEdge = patch.edges.find(
-        e => e.enabled !== false &&
-          e.from.blockId === blockId &&
-          e.from.slotId === outputId
+      const outgoingEdge = normalized.edges.find(
+        e => e.fromBlock === blockIndex && e.fromPort === outputId
       );
 
       if (!outgoingEdge) continue;
 
-      const targetBlock = patch.blocks.get(outgoingEdge.to.blockId as BlockId);
+      const targetBlock = normalized.blocks[outgoingEdge.toBlock];
       if (!targetBlock) continue;
 
       const targetDef = getBlockDefinition(targetBlock.type);
       if (!targetDef) continue;
 
-      const targetInput = targetDef.inputs[outgoingEdge.to.slotId];
+      const targetInput = targetDef.inputs[outgoingEdge.toPort];
       if (!targetInput || !targetInput.type) continue;
 
       inferredPayloadType = targetInput.type.payload;
-      // Unit resolution is handled by pass1-type-constraints, not here
       break;
     }
 
     // Strategy 2: Backward resolution - infer input type from source
     if (!inferredPayloadType) {
       for (const [inputId, input] of Object.entries(blockDef.inputs)) {
-        // CRITICAL FIX: Skip config-only inputs (exposedAsPort: false)
+        // Skip config-only inputs (exposedAsPort: false)
         // These are NOT ports and cannot have incoming edges for type inference
         if (input.exposedAsPort === false) continue;
 
-        const incomingEdge = patch.edges.find(
-          e => e.enabled !== false &&
-            e.to.blockId === blockId &&
-            e.to.slotId === inputId
+        const incomingEdge = normalized.edges.find(
+          e => e.toBlock === blockIndex && e.toPort === inputId
         );
 
         if (!incomingEdge) continue;
 
-        const sourceBlock = patch.blocks.get(incomingEdge.from.blockId as BlockId);
+        const sourceBlock = normalized.blocks[incomingEdge.fromBlock];
         if (!sourceBlock) continue;
 
         const sourceDef = getBlockDefinition(sourceBlock.type);
         if (!sourceDef) continue;
 
-        const sourceOutput = sourceDef.outputs[incomingEdge.from.slotId];
+        const sourceOutput = sourceDef.outputs[incomingEdge.fromPort];
         if (!sourceOutput) continue;
 
         // If source is also payload-generic, check if it was already resolved
         if (isPayloadGeneric(sourceBlock.type)) {
           const resolvedPayload = sourceBlock.params.payloadType ||
-            updatedBlocks.get(sourceBlock.id)?.params.payloadType;
+            updatedBlocks[incomingEdge.fromBlock]?.params.payloadType;
           if (resolvedPayload) {
             inferredPayloadType = resolvedPayload as string;
             break;
@@ -102,13 +105,11 @@ export function pass0PayloadResolution(patch: Patch): Patch {
         }
 
         inferredPayloadType = sourceOutput.type.payload;
-        // Unit resolution is handled by pass1-type-constraints, not here
         break;
       }
     }
 
-    // Update block params with inferred payload type only
-    // Unit resolution is handled by pass1-type-constraints in the compiler
+    // Update block params with inferred payload type
     if (inferredPayloadType) {
       const updatedBlock: Block = {
         ...block,
@@ -117,12 +118,17 @@ export function pass0PayloadResolution(patch: Patch): Patch {
           payloadType: inferredPayloadType,
         },
       };
-      updatedBlocks.set(blockId, updatedBlock);
+      updatedBlocks[i] = updatedBlock;
+      changed = true;
     }
   }
 
+  if (!changed) {
+    return normalized;
+  }
+
   return {
+    ...normalized,
     blocks: updatedBlocks,
-    edges: patch.edges,
   };
 }

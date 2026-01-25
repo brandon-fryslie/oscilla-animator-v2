@@ -31,8 +31,8 @@ export interface EffectiveTime {
   /** Progress within finite time (0-1), only set for finite time roots */
   progress?: number;
 
-  /** Palette: phase-derived RGBA color */
-  palette: { r: number; g: number; b: number; a: number };
+  /** Palette: phase-derived RGBA color as Float32Array(4) [r, g, b, a] */
+  palette: Float32Array;
 
   /** Energy: phase-derived energy [0,1] */
   energy: number;
@@ -86,8 +86,9 @@ export function wrapPhase(value: number): number {
 /**
  * Convert HSV color to RGB.
  * All values are in [0, 1] range.
+ * Returns Float32Array(4) in RGBA order [r, g, b, a].
  */
-function hsvToRgb(h: number, s: number, v: number): { r: number; g: number; b: number; a: number } {
+function hsvToRgb(h: number, s: number, v: number): Float32Array {
   const i = Math.floor(h * 6);
   const f = h * 6 - i;
   const p = v * (1 - s);
@@ -105,7 +106,7 @@ function hsvToRgb(h: number, s: number, v: number): { r: number; g: number; b: n
     default: r = 0; g = 0; b = 0;
   }
 
-  return { r, g, b, a: 1.0 };
+  return new Float32Array([r, g, b, 1.0]);
 }
 
 /**

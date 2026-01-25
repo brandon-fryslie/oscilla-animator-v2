@@ -66,6 +66,28 @@ export class IRBuilderImpl implements IRBuilder {
   private eventSlots = new Map<EventExprId, EventSlotId>();
   private eventSlotCounter = 0;
 
+  // Slot type tracking for slotMeta generation
+  private slotTypes = new Map<ValueSlot, SignalType>();
+
+  constructor() {
+    // Reserve system slots at fixed positions (compiler-runtime contract)
+    // Slot 0: time.palette (color, stride=4)
+    this.reserveSystemSlot(0, { kind: 'signal', form: 'scalar', payload: 'color', unit: { kind: 'scalar' } });
+  }
+
+  /**
+   * Reserve a system slot at a fixed position with known type.
+   * Used for compiler-runtime contracts like time.palette at slot 0.
+   */
+  private reserveSystemSlot(slotId: number, type: SignalType): void {
+    const slot = slotId as ValueSlot;
+    this.slotTypes.set(slot, type);
+    // Ensure slotCounter is past reserved slots
+    if (this.slotCounter <= slotId) {
+      this.slotCounter = slotId + 1;
+    }
+  }
+
   // State slot tracking for persistent cross-frame storage
   // OLD: private stateSlots: { initialValue: number }[] = [];
   // NEW: Store state mappings with stable IDs
@@ -73,9 +95,6 @@ export class IRBuilderImpl implements IRBuilder {
 
   // Step tracking for schedule generation
   private steps: Step[] = [];
-
-  // Slot type tracking for slotMeta generation
-  private slotTypes = new Map<ValueSlot, SignalType>();
 
   // Render globals tracking (Camera system)
   private renderGlobals: CameraDeclIR[] = [];
@@ -470,6 +489,46 @@ export class IRBuilderImpl implements IRBuilder {
    */
   getSlotTypes(): ReadonlyMap<ValueSlot, SignalType> {
     return this.slotTypes;
+  }
+
+  /**
+   * Get slot metadata inputs for slotMeta generation.
+   *
+   * This extracts all slots that have been allocated with type information,
+   * computing stride from payload type. This is used at compile finalization
+   * to ensure slotMeta covers all slots the runtime will touch.
+   */
+  getSlotMetaInputs(): ReadonlyMap<ValueSlot, { readonly type: SignalType; readonly stride: number }> {
+    const result = new Map<ValueSlot, { readonly type: SignalType; readonly stride: number }>();
+    for (const [slot, type] of this.slotTypes) {
+      // Import payloadStride inline to compute stride from payload type
+      let stride: number;
+      switch (type.payload) {
+        case 'float':
+        case 'int':
+        case 'phase':
+        case 'unit':
+        case 'bool':
+          stride = 1;
+          break;
+        case 'vec2':
+          stride = 2;
+          break;
+        case 'vec3':
+          stride = 3;
+          break;
+        case 'color':
+          stride = 4;
+          break;
+        case 'shape':
+          stride = 0;
+          break;
+        default:
+          stride = 1; // Fallback
+      }
+      result.set(slot, { type, stride });
+    }
+    return result;
   }
 
   // =========================================================================

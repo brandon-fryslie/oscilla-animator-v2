@@ -408,8 +408,14 @@ function lowerBlockInstance(
       }
 
       // Register slot for signal/field outputs
+      // NOTE: Skip registration for time signals - they are written directly by the runtime,
+      // not through evalSig steps. This avoids generating evalSig for palette/tMs/etc.
       if (ref.k === 'sig') {
-        builder.registerSigSlot(ref.id, ref.slot);
+        const sigExpr = builder.getSigExpr(ref.id);
+        const isTimeSignal = sigExpr?.kind === 'time';
+        if (!isTimeSignal) {
+          builder.registerSigSlot(ref.id, ref.slot);
+        }
       } else if (ref.k === 'field') {
         builder.registerFieldSlot(ref.id, ref.slot);
       }

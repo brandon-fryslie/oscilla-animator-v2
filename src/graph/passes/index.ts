@@ -2,14 +2,15 @@
  * Graph Normalization Passes
  *
  * Orchestrates the normalization pipeline:
- * - Pass 0: Payload type resolution (for payload-generic blocks)
  * - Pass 1: Default source materialization
  * - Pass 2: Adapter insertion
  * - Pass 3: Block indexing
+ *
+ * NOTE: Payload type resolution happens in the compiler (pass0-payload-resolution.ts)
+ * AFTER normalization completes, so all derived blocks exist when types are resolved.
  */
 
 import type { Patch } from '../Patch';
-import { pass0PayloadResolution } from './pass0-payload-resolution';
 import { pass1DefaultSources } from './pass1-default-sources';
 import { pass2Adapters, type AdapterError } from './pass2-adapters';
 import { pass3Indexing, type IndexingError, type NormalizedPatch } from './pass3-indexing';
@@ -42,21 +43,20 @@ export interface NormalizeError {
  * Run all normalization passes.
  *
  * Transforms a raw patch into a fully normalized patch with:
- * - Payload types resolved (for payload-generic blocks)
  * - Default sources materialized
  * - Type adapters inserted
  * - Dense block indices
  * - Canonical edge ordering
  *
+ * NOTE: Payload type resolution happens in the compiler AFTER normalization,
+ * so all derived blocks exist when types are resolved.
+ *
  * @param patch - Raw patch to normalize
  * @returns NormalizedPatch or error list
  */
 export function runNormalizationPasses(patch: Patch): NormalizeResult | NormalizeError {
-  // Pass 0: Payload type resolution (for payload-generic blocks)
-  const p0 = pass0PayloadResolution(patch);
-
   // Pass 1: Default source materialization
-  const p1 = pass1DefaultSources(p0);
+  const p1 = pass1DefaultSources(patch);
 
   // Pass 2: Adapter insertion
   const p2Result = pass2Adapters(p1);
@@ -77,7 +77,6 @@ export function runNormalizationPasses(patch: Patch): NormalizeResult | Normaliz
 // Re-export Individual Passes (for testing)
 // =============================================================================
 
-export { pass0PayloadResolution } from './pass0-payload-resolution';
 export { pass1DefaultSources } from './pass1-default-sources';
 export { pass2Adapters } from './pass2-adapters';
 export { pass3Indexing, getInputEdges, getOutputEdges } from './pass3-indexing';

@@ -19,6 +19,7 @@ import type { CompiledProgramIR, SlotMetaEntry, ValueSlot, FieldSlotEntry, Outpu
 import type { UnlinkedIRFragments } from './passes-v2/pass6-block-lowering';
 import type { ScheduleIR } from './passes-v2/pass7-schedule';
 import type { FieldExpr, FieldExprId, InstanceId } from './ir/types';
+import { payloadStride } from './ir/signalExpr';
 import type { AcyclicOrLegalGraph } from './ir/patches';
 import { convertCompileErrorsToDiagnostics } from './diagnosticConversion';
 import type { EventHub } from '../events/EventHub';
@@ -49,6 +50,7 @@ import '../blocks/camera-block'; // NEW - Camera system
 import '../blocks/test-blocks'; // Test blocks for signal evaluation in tests
 
 // Import passes
+import { pass0PayloadResolution } from './passes-v2/pass0-payload-resolution';
 import { pass1TypeConstraints } from './passes-v2';
 import { pass2TypeGraph } from './passes-v2';
 import { pass3Time } from './passes-v2';
@@ -179,8 +181,18 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
       console.warn('[CompilationInspector] Failed to capture normalization:', e);
     }
 
+    // Pass 0: Payload type resolution (for payload-generic blocks like Const, FieldBroadcast)
+    // This must run after normalization (so all derived blocks exist) and before type constraints
+    const withPayloadTypes = pass0PayloadResolution(normalized);
+
+    try {
+      compilationInspector.capturePass('payload-resolution', normalized, withPayloadTypes);
+    } catch (e) {
+      console.warn('[CompilationInspector] Failed to capture payload-resolution:', e);
+    }
+
     // Pass 1: Type Constraints (unit inference)
-    const typeConstraintsResult = pass1TypeConstraints(normalized);
+    const typeConstraintsResult = pass1TypeConstraints(withPayloadTypes);
     if (typeConstraintsResult.kind === 'error') {
       const compileErrors: CompileError[] = typeConstraintsResult.errors.map((e) => ({
         kind: e.kind,
@@ -439,10 +451,14 @@ function convertLinkedIRToProgram(
 
     const offset = storageOffsets[storage]++;
 
+    // Compute stride from payload type (objects/fields have stride=1 since they store a single reference)
+    const stride = storage === 'object' ? 1 : payloadStride(type.payload);
+
     slotMeta.push({
       slot,
       storage,
       offset,
+      stride,
       type,
     });
   }
@@ -465,6 +481,7 @@ function convertLinkedIRToProgram(
       slot: slotId as ValueSlot,
       storage: 'object',
       offset: storageOffsets.object++,
+      stride: 1, // Object slots store a single reference
       type: signalType('float'),
     });
   }
@@ -478,6 +495,7 @@ function convertLinkedIRToProgram(
     slot: renderFrameSlot,
     storage: 'object',
     offset: storageOffsets.object++,
+    stride: 1, // Object slots store a single reference
     type: signalType('float'), // Type is irrelevant for RenderFrameIR object slot
   });
 

@@ -49,13 +49,15 @@ registerBlock({
     const palette = ctx.b.sigTime('palette', signalType('color'));
     const energy = ctx.b.sigTime('energy', signalType('float'));
 
-    const tMsSlot = ctx.b.allocSlot();
-    const dtSlot = ctx.b.allocSlot();
-    const phaseASlot = ctx.b.allocSlot();
-    const phaseBSlot = ctx.b.allocSlot();
+    // Slot 0 is reserved for palette by IRBuilderImpl (compiler-runtime contract)
+    // Other time slots are dynamically allocated with proper type tracking
+    const paletteSlot = 0 as import('../compiler/ir/Indices').ValueSlot;
+    const tMsSlot = ctx.b.allocTypedSlot(signalType('float'), 'time.tMs');
+    const dtSlot = ctx.b.allocTypedSlot(signalType('float'), 'time.dt');
+    const phaseASlot = ctx.b.allocTypedSlot(signalType('float', unitPhase01()), 'time.phaseA');
+    const phaseBSlot = ctx.b.allocTypedSlot(signalType('float', unitPhase01()), 'time.phaseB');
     const pulseSlot = ctx.b.allocEventSlot(pulse);
-    const paletteSlot = ctx.b.allocSlot();
-    const energySlot = ctx.b.allocSlot();
+    const energySlot = ctx.b.allocTypedSlot(signalType('float'), 'time.energy');
 
     return {
       outputsById: {

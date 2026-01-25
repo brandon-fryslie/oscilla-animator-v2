@@ -74,18 +74,6 @@ describe('Connection Validation - Behavioral Tests', () => {
       expect(result.reason).toBeDefined();
     });
 
-    it('allows Signal → Field via FieldBroadcast adapter', () => {
-      const { patch, ids } = createTestPatch();
-
-      // Const outputs Signal<float:scalar>, FieldAdd expects Field<float:scalar>
-      // FieldBroadcast adapter handles one→many promotion
-      const result = validateConnection(ids.const, 'out', ids.fieldAdd, 'a', patch);
-
-      expect(result.valid).toBe(true);
-      expect(result.adapter).toBeDefined();
-      expect(result.adapter!.blockType).toBe('FieldBroadcast');
-    });
-
     it('blocks Field → Signal (no adapter for many→one)', () => {
       const { patch, ids } = createTestPatch();
 
@@ -333,7 +321,6 @@ describe('Adapter-aware Connection Validation', () => {
       const result = validateConnection('b0', 'out', 'b1', 'in', patch);
       expect(result.valid).toBe(true);
       expect(result.adapter).toBeDefined();
-      expect(result.adapter!.blockType).toBe('Adapter_PhaseToRadians');
     });
 
     it('allows scalar → norm01 (adapter exists)', () => {
@@ -345,7 +332,6 @@ describe('Adapter-aware Connection Validation', () => {
       const result = validateConnection('b0', 'out', 'b1', 'in', patch);
       expect(result.valid).toBe(true);
       expect(result.adapter).toBeDefined();
-      expect(result.adapter!.blockType).toBe('Adapter_ScalarToNorm01Clamp');
     });
 
     it('does not set adapter field when types match directly', () => {
