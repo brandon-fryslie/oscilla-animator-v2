@@ -108,11 +108,13 @@ export function executeAnimationFrame(
   ctx.restore();
   state.renderTime = performance.now() - renderStart;
 
-  // Record pool stats BEFORE releasing buffers (Sprint: memory-instrumentation)
-  recordPoolStats(currentState, pool);
-
   // Release all buffers back to pool for reuse next frame
+  // This also records frame stats internally (Sprint: memory-instrumentation)
   pool.releaseAll();
+
+  // Record pool stats AFTER releasing buffers (Sprint: memory-instrumentation)
+  // This reads the stats that were captured during releaseAll()
+  recordPoolStats(currentState, pool);
 
   // Calculate frame time
   const frameTime = performance.now() - frameStart;
