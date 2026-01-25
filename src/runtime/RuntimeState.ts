@@ -11,7 +11,6 @@ import { createTimeState } from './timeResolution';
 import type { ContinuityState } from './ContinuityState';
 import { createContinuityState } from './ContinuityState';
 import type { DebugTap } from './DebugTap';
-import { ExternalChannelSystem } from './ExternalChannel';
 
 /**
  * Shape2D packed record word layout (8 x u32 words per shape)
@@ -464,9 +463,6 @@ export interface SessionState {
   /** External inputs (mouse, MIDI, etc.) */
   external: ExternalInputs;
 
-  /** NEW: Generic external channel system (replaces ExternalInputs in Phase 2) */
-  externalChannels: ExternalChannelSystem;
-
   /** Health monitoring metrics */
   health: HealthMetrics;
 
@@ -562,12 +558,6 @@ export interface RuntimeState {
   /** External inputs (mouse, MIDI, etc.) */
   external: ExternalInputs;
 
-  /** NEW: Generic external channel system (replaces ExternalInputs in Phase 2) */
-  externalChannels: ExternalChannelSystem;
-
-  /** NEW: Generic external channel system (replaces ExternalInputs in Phase 2) */
-  externalChannels: ExternalChannelSystem;
-
   /** Health monitoring metrics (Sprint 2+) */
   health: HealthMetrics;
 
@@ -589,7 +579,6 @@ export function createSessionState(): SessionState {
     timeState: createTimeState(),
     external: createExternalInputs(),
     health: createHealthMetrics(),
-    externalChannels: new ExternalChannelSystem(),
     continuity: createContinuityState(),
     continuityConfig: createContinuityConfig(),
   };
