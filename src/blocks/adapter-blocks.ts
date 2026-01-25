@@ -18,6 +18,7 @@ import {
   unitScalar,
   unitRadians,
   unitDegrees,
+  unitDeg,
   unitNorm01,
   unitMs,
   unitSeconds,
@@ -366,6 +367,38 @@ registerBlock({
   },
   outputs: {
     out: { label: 'Out', type: signalType('float', unitScalar()) },
+  },
+  lower: ({ inputsById, ctx }) => {
+    const input = inputsById.in;
+    if (!input || input.k !== 'sig') throw new Error('Adapter input must be a signal');
+    // Identity — no conversion needed, just re-type
+    const slot = ctx.b.allocSlot();
+    return { outputsById: { out: { k: 'sig', id: input.id as SigExprId, slot } } };
+  },
+});
+
+/**
+ * ScalarToDeg: float:scalar → float:deg
+ * Semantics: y = x (identity — semantic boundary only)
+ * Use when a scalar value is semantically in degrees.
+ */
+registerBlock({
+  type: 'Adapter_ScalarToDeg',
+  label: 'Scalar → Deg',
+  category: 'adapter',
+  description: 'Reinterpret scalar as degrees (identity)',
+  form: 'primitive',
+  capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
+  inputs: {
+    in: { label: 'In', type: signalType('float', unitScalar()) },
+  },
+  outputs: {
+    out: { label: 'Out', type: signalType('float', unitDeg()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;

@@ -804,3 +804,60 @@ registerBlock({
     };
   },
 });
+
+// =============================================================================
+// FieldSetZ
+// =============================================================================
+
+/**
+ * Sets the Z component of a vec3 position field.
+ * Useful for adding depth/height animation to 2D layouts.
+ */
+registerBlock({
+  type: 'FieldSetZ',
+  label: 'Field Set Z',
+  category: 'field',
+  description: 'Set the Z component of a vec3 position field',
+  form: 'primitive',
+  capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'fieldOnly',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
+  inputs: {
+    pos: { label: 'Position', type: signalTypeField('vec3', 'default') },
+    z: { label: 'Z', type: signalTypeField('float', 'default') },
+  },
+  outputs: {
+    out: { label: 'Output', type: signalTypeField('vec3', 'default') },
+  },
+  lower: ({ ctx, inputsById }) => {
+    const pos = inputsById.pos;
+    const z = inputsById.z;
+
+    if (!pos || pos.k !== 'field') {
+      throw new Error('FieldSetZ pos must be a field');
+    }
+    if (!z || z.k !== 'field') {
+      throw new Error('FieldSetZ z must be a field');
+    }
+
+    // Zip position and z together: (vec3, float) -> vec3 with new z
+    const setZFn = ctx.b.kernel('fieldSetZ');
+    const result = ctx.b.fieldZip(
+      [pos.id, z.id],
+      setZFn,
+      signalTypeField('vec3', 'default')
+    );
+
+    const slot = ctx.b.allocSlot();
+
+    return {
+      outputsById: {
+        out: { k: 'field', id: result, slot },
+      },
+      instanceContext: ctx.inferredInstance,
+    };
+  },
+});

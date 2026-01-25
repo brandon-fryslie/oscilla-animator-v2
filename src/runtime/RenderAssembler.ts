@@ -46,6 +46,44 @@ import {
 import type { ResolvedCameraParams } from './CameraResolver';
 
 // =============================================================================
+// Preallocated Buffer Pool for depthSortAndCompact
+// =============================================================================
+// These buffers are reused across frames to avoid per-frame allocations.
+// They grow as needed (2x factor) but never shrink.
+// Final results are copied to fresh arrays to ensure caller independence.
+
+const INITIAL_POOL_CAPACITY = 256;
+
+let pooledIndices: Uint32Array = new Uint32Array(INITIAL_POOL_CAPACITY);
+let pooledScreenPos: Float32Array = new Float32Array(INITIAL_POOL_CAPACITY * 2);
+let pooledRadius: Float32Array = new Float32Array(INITIAL_POOL_CAPACITY);
+let pooledDepth: Float32Array = new Float32Array(INITIAL_POOL_CAPACITY);
+let pooledColor: Uint8ClampedArray = new Uint8ClampedArray(INITIAL_POOL_CAPACITY * 4);
+let pooledRotation: Float32Array = new Float32Array(INITIAL_POOL_CAPACITY);
+let pooledScale2: Float32Array = new Float32Array(INITIAL_POOL_CAPACITY * 2);
+
+/**
+ * Ensure pooled buffers have capacity for at least `needed` instances.
+ * Grows all buffers together (2x factor) to avoid capacity mismatch.
+ * No-op if current capacity is sufficient.
+ *
+ * @param needed - Required capacity (number of instances)
+ */
+function ensureBufferCapacity(needed: number): void {
+  if (pooledIndices.length >= needed) return;
+
+  const newSize = Math.max(needed, pooledIndices.length * 2);
+
+  pooledIndices = new Uint32Array(newSize);
+  pooledScreenPos = new Float32Array(newSize * 2);
+  pooledRadius = new Float32Array(newSize);
+  pooledDepth = new Float32Array(newSize);
+  pooledColor = new Uint8ClampedArray(newSize * 4);
+  pooledRotation = new Float32Array(newSize);
+  pooledScale2 = new Float32Array(newSize * 2);
+}
+
+// =============================================================================
 // Internal Types (v1 compatibility)
 // =============================================================================
 
@@ -103,6 +141,9 @@ export interface ProjectionOutput {
  *
  * Fast-path optimization: if depth is already monotone decreasing among visible instances, skip sort.
  *
+ * PERFORMANCE NOTE: Uses preallocated module-level buffers to avoid allocations during sort/compact.
+ * Final results are copied to fresh arrays to ensure each caller gets independent data.
+ *
  * @param projection - Raw projection output with all instances
  * @param count - Total instance count (including invisible)
  * @param color - Per-instance color buffer (Float32Array, stride 4: RGBA)
@@ -127,95 +168,96 @@ export function depthSortAndCompact(
 } {
   const { screenPosition, screenRadius, depth, visible } = projection;
 
-  // Build index array for visible instances
-  const indices: number[] = [];
+  // Ensure pooled buffers have capacity for this frame
+  ensureBufferCapacity(count);
+
+  // Build index array for visible instances using pooled buffer
+  let visibleCount = 0;
   for (let i = 0; i < count; i++) {
     if (visible[i] === 1) {
-      indices.push(i);
+      pooledIndices[visibleCount++] = i;
     }
   }
-
-  const visibleCount = indices.length;
 
   // Fast-path: check if depth is already monotone decreasing (far-to-near)
   // Common case: flat layouts (all z=0) or already-ordered scenes
   let alreadyOrdered = true;
   if (visibleCount > 1) {
     let prevVisibleDepth = Infinity;
-    for (let i = 0; i < count; i++) {
-      if (visible[i] === 1) {
-        if (depth[i] > prevVisibleDepth) {
-          // depth increased = ascending = NOT far-to-near
-          alreadyOrdered = false;
-          break;
-        }
-        prevVisibleDepth = depth[i];
+    for (let i = 0; i < visibleCount; i++) {
+      const idx = pooledIndices[i];
+      if (depth[idx] > prevVisibleDepth) {
+        // depth increased = ascending = NOT far-to-near
+        alreadyOrdered = false;
+        break;
       }
+      prevVisibleDepth = depth[idx];
     }
   }
 
   // Only sort if not already ordered
   if (!alreadyOrdered) {
     // Stable sort by depth (far-to-near / painter's algorithm: larger depth first)
-    indices.sort((a, b) => {
+    // Convert to Array for sort, then write back to pooled buffer
+    const indicesView = pooledIndices.subarray(0, visibleCount);
+    const sortedIndices = Array.from(indicesView).sort((a, b) => {
       const da = depth[a];
       const db = depth[b];
       if (da !== db) return db - da;
       return a - b; // Stable: preserve original order for equal depths
     });
+    for (let i = 0; i < visibleCount; i++) {
+      pooledIndices[i] = sortedIndices[i];
+    }
   }
 
-  // Compact screen-space arrays
-  const compactedScreenPos = new Float32Array(visibleCount * 2);
-  const compactedRadius = new Float32Array(visibleCount);
-  const compactedDepth = new Float32Array(visibleCount);
-
+  // Compact screen-space arrays to pooled buffers
   for (let out = 0; out < visibleCount; out++) {
-    const src = indices[out];
-    compactedScreenPos[out * 2] = screenPosition[src * 2];
-    compactedScreenPos[out * 2 + 1] = screenPosition[src * 2 + 1];
-    compactedRadius[out] = screenRadius[src];
-    compactedDepth[out] = depth[src];
+    const src = pooledIndices[out];
+    pooledScreenPos[out * 2] = screenPosition[src * 2];
+    pooledScreenPos[out * 2 + 1] = screenPosition[src * 2 + 1];
+    pooledRadius[out] = screenRadius[src];
+    pooledDepth[out] = depth[src];
   }
 
   // Compact color buffer (stride 4: RGBA)
-  const compactedColor = new Uint8ClampedArray(visibleCount * 4);
   for (let out = 0; out < visibleCount; out++) {
-    const src = indices[out];
+    const src = pooledIndices[out];
     const o = out * 4;
     const s = src * 4;
-    compactedColor[o] = color[s];
-    compactedColor[o + 1] = color[s + 1];
-    compactedColor[o + 2] = color[s + 2];
-    compactedColor[o + 3] = color[s + 3];
+    pooledColor[o] = color[s];
+    pooledColor[o + 1] = color[s + 1];
+    pooledColor[o + 2] = color[s + 2];
+    pooledColor[o + 3] = color[s + 3];
   }
 
   // Compact rotation if present
   let compactedRotation: Float32Array | undefined;
   if (rotation) {
-    compactedRotation = new Float32Array(visibleCount);
     for (let out = 0; out < visibleCount; out++) {
-      compactedRotation[out] = rotation[indices[out]];
+      pooledRotation[out] = rotation[pooledIndices[out]];
     }
+    compactedRotation = new Float32Array(pooledRotation.subarray(0, visibleCount));
   }
 
   // Compact scale2 if present (stride 2)
   let compactedScale2: Float32Array | undefined;
   if (scale2) {
-    compactedScale2 = new Float32Array(visibleCount * 2);
     for (let out = 0; out < visibleCount; out++) {
-      const src = indices[out];
-      compactedScale2[out * 2] = scale2[src * 2];
-      compactedScale2[out * 2 + 1] = scale2[src * 2 + 1];
+      const src = pooledIndices[out];
+      pooledScale2[out * 2] = scale2[src * 2];
+      pooledScale2[out * 2 + 1] = scale2[src * 2 + 1];
     }
+    compactedScale2 = new Float32Array(pooledScale2.subarray(0, visibleCount * 2));
   }
 
+  // Return fresh copies to ensure caller independence
   return {
     count: visibleCount,
-    screenPosition: compactedScreenPos,
-    screenRadius: compactedRadius,
-    depth: compactedDepth,
-    color: compactedColor,
+    screenPosition: new Float32Array(pooledScreenPos.subarray(0, visibleCount * 2)),
+    screenRadius: new Float32Array(pooledRadius.subarray(0, visibleCount)),
+    depth: new Float32Array(pooledDepth.subarray(0, visibleCount)),
+    color: new Uint8ClampedArray(pooledColor.subarray(0, visibleCount * 4)),
     rotation: compactedRotation,
     scale2: compactedScale2,
   };

@@ -75,12 +75,20 @@ export interface OscillaNodeData {
 export type OscillaNode = Node<OscillaNodeData>;
 
 /**
- * Get default source for an input from registry.
+ * Get effective default source for an input port.
+ * Instance override takes precedence over registry default.
  */
-function getDefaultSource(
+function getEffectiveDefaultSource(
+  block: Block,
+  inputId: string,
   input: InputDef
 ): DefaultSource | undefined {
-  // Get default source from registry (block definition)
+  // Instance-level override takes precedence
+  const instanceOverride = block.inputPorts.get(inputId)?.defaultSource;
+  if (instanceOverride) {
+    return instanceOverride;
+  }
+  // Fall back to registry default
   return (input as InputDef & { defaultSource?: DefaultSource }).defaultSource;
 }
 
@@ -185,7 +193,7 @@ export function createNodeFromBlock(
           input.label || inputId,
           input.type,
           inputConnections.has(inputId),
-          getDefaultSource(input),
+          getEffectiveDefaultSource(block, inputId, input),
           inputConnections.get(inputId)
         )
       ),

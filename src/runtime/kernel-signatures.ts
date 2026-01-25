@@ -338,6 +338,16 @@ export const KERNEL_SIGNATURES: Readonly<Record<string, KernelSignature>> = {
     ],
     output: { unit: 'scalar', description: 'Vertex position (vec2) - LOCAL-SPACE centered at (0,0)' },
   },
+
+  // === POSITION MANIPULATION ===
+
+  fieldSetZ: {
+    inputs: [
+      { expectedUnit: 'scalar', description: 'Position (vec3) - WORLD-SPACE' },
+      { expectedUnit: 'scalar', description: 'Z value - WORLD-SPACE units' },
+    ],
+    output: { unit: 'scalar', description: 'Position (vec3) with new Z - WORLD-SPACE' },
+  },
 };
 
 /**

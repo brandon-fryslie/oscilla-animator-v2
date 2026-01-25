@@ -412,6 +412,27 @@ export function applyFieldKernel(
       outArr[i * 4 + 2] = colorArr[i * 4 + 2];
       outArr[i * 4 + 3] = Math.round(opacity * 255);
     }
+  } else if (fieldOp === 'fieldSetZ') {
+    // ════════════════════════════════════════════════════════════════
+    // fieldSetZ: Set the Z component of a vec3 position field
+    // ────────────────────────────────────────────────────────────────
+    // Inputs: [pos: vec3 (stride 3), z: float]
+    // Output: vec3 (stride 3) with Z replaced
+    // Domain: z is arbitrary float (can be negative for below-plane)
+    // Coord-space: WORLD - positions are in normalized [0,1] world space
+    // ════════════════════════════════════════════════════════════════
+    if (inputs.length !== 2) {
+      throw new Error('fieldSetZ requires exactly 2 inputs (pos, z)');
+    }
+    const outArr = out as Float32Array;
+    const posArr = inputs[0] as Float32Array;
+    const zArr = inputs[1] as Float32Array;
+
+    for (let i = 0; i < N; i++) {
+      outArr[i * 3 + 0] = posArr[i * 3 + 0]; // X unchanged
+      outArr[i * 3 + 1] = posArr[i * 3 + 1]; // Y unchanged
+      outArr[i * 3 + 2] = zArr[i];           // Z from input field
+    }
   } else {
     throw new Error(`Unknown field kernel: ${fieldOp}`);
   }

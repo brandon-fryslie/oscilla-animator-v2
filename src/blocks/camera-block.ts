@@ -14,8 +14,61 @@
 
 import { registerBlock } from './registry';
 import { signalType, unitNorm01, unitScalar, unitDeg } from '../core/canonical-types';
-import { defaultSourceConst } from '../types';
+import { defaultSourceConst, type DefaultSource } from '../types';
 import type { CameraDeclIR } from '../compiler/ir/program';
+
+// =============================================================================
+// CameraProjection Constant Block
+// =============================================================================
+
+/**
+ * Outputs a constant cameraProjection value.
+ * 0 = orthographic, 1 = perspective
+ */
+registerBlock({
+  type: 'CameraProjectionConst',
+  label: 'Camera Projection',
+  category: 'signal',
+  description: 'Outputs a constant camera projection mode (0=ortho, 1=persp)',
+  form: 'primitive',
+  capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
+  inputs: {
+    value: {
+      type: signalType('int'),
+      value: 0,
+      uiHint: { kind: 'select', options: [{ value: '0', label: 'Orthographic' }, { value: '1', label: 'Perspective' }] },
+      exposedAsPort: false,
+    },
+  },
+  outputs: {
+    out: { label: 'Output', type: signalType('cameraProjection') },
+  },
+  lower: ({ ctx, config }) => {
+    const value = (config?.value as number) ?? 0;
+    const sigId = ctx.b.sigConst(value, signalType('cameraProjection'));
+    const slot = ctx.b.allocSlot();
+    return { outputsById: { out: { k: 'sig', id: sigId, slot } } };
+  },
+});
+
+/**
+ * Default source helper for cameraProjection type
+ */
+function defaultSourceCameraProjection(value: number): DefaultSource {
+  return { blockType: 'CameraProjectionConst', output: 'out', params: { value } };
+}
+
+/**
+ * Default source helper for deg unit (camera angles)
+ */
+function defaultSourceDeg(value: number): DefaultSource {
+  return { blockType: 'Const', output: 'out', params: { value, payloadType: 'float' } };
+}
 
 // =============================================================================
 // Camera Block
@@ -32,8 +85,8 @@ registerBlock({
     projection: {
       label: 'Projection',
       type: signalType('cameraProjection'),
-      value: 0, // ORTHO
-      defaultSource: defaultSourceConst(0),
+      value: 1, // PERSP (perspective is the sensible default for 3D)
+      defaultSource: defaultSourceCameraProjection(1),
     },
     centerX: {
       label: 'Center X',
@@ -50,26 +103,26 @@ registerBlock({
     distance: {
       label: 'Distance',
       type: signalType('float', unitScalar()),
-      value: 2.0,
-      defaultSource: defaultSourceConst(2.0),
+      value: 0.87,
+      defaultSource: defaultSourceConst(0.87),
     },
     tiltDeg: {
       label: 'Tilt',
       type: signalType('float', unitDeg()),
       value: 35.0,
-      defaultSource: defaultSourceConst(35.0),
+      defaultSource: defaultSourceDeg(35.0),
     },
     yawDeg: {
       label: 'Yaw',
       type: signalType('float', unitDeg()),
       value: 0.0,
-      defaultSource: defaultSourceConst(0.0),
+      defaultSource: defaultSourceDeg(0.0),
     },
     fovYDeg: {
       label: 'FOV',
       type: signalType('float', unitDeg()),
-      value: 45.0,
-      defaultSource: defaultSourceConst(45.0),
+      value: 60.0,
+      defaultSource: defaultSourceDeg(60.0),
     },
     near: {
       label: 'Near',

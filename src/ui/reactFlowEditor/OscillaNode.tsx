@@ -14,7 +14,7 @@ import { observer } from 'mobx-react-lite';
 import type { OscillaNodeData, PortData } from './nodes';
 import type { DefaultSource, PortId, BlockId } from '../../types';
 import { useStores } from '../../stores';
-import { ParameterControl } from './ParameterControls';
+import { ParameterControl, DefaultSourceControl } from './ParameterControls';
 import { PortInfoPopover } from './PortInfoPopover';
 
 /**
@@ -303,6 +303,33 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
           ))}
         </div>
       )}
+
+      {/* Default Source Controls (for unconnected inputs with Const defaults) */}
+      {(() => {
+        const editableDefaults = data.inputs.filter(
+          (input) => !input.isConnected && input.defaultSource?.blockType === 'Const'
+        );
+        if (editableDefaults.length === 0) return null;
+        return (
+          <div
+            style={{
+              marginTop: data.params.length > 0 ? '8px' : '10px',
+              paddingTop: data.params.length > 0 ? '8px' : '10px',
+              borderTop: data.params.length > 0 ? 'none' : '1px solid rgba(100, 116, 139, 0.2)',
+            }}
+          >
+            {editableDefaults.map((input) => (
+              <DefaultSourceControl
+                key={`default-${input.id}`}
+                blockId={data.blockId}
+                portId={input.id}
+                portLabel={input.label}
+                defaultSource={input.defaultSource!}
+              />
+            ))}
+          </div>
+        );
+      })()}
 
       {/* Output Handles (Right Side) with Labels and Type Colors */}
       {data.outputs.map((output, index) => {
