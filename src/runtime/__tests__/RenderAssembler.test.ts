@@ -226,9 +226,16 @@ describe('RenderAssembler', () => {
         expect(op.geometry.flags).toBe(1); // closed
       }
 
-      // Validate instance transforms
+      // Validate instance transforms (projection creates new buffer with stride-2)
       expect(op.instances.count).toBe(2);
-      expect(op.instances.position).toBe(positionBuffer);
+      expect(op.instances.position).toBeInstanceOf(Float32Array);
+      expect(op.instances.position.length).toBe(4); // 2 instances × stride-2
+      // Verify projected values are finite and in reasonable range
+      for (let i = 0; i < 4; i++) {
+        expect(Number.isFinite(op.instances.position[i])).toBe(true);
+        expect(op.instances.position[i]).toBeGreaterThanOrEqual(0);
+        expect(op.instances.position[i]).toBeLessThanOrEqual(1);
+      }
       expect(op.instances.size).toBe(2.5);
       expect(op.instances.rotation).toBeUndefined();
       expect(op.instances.scale2).toBeUndefined();
