@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { PatchStore } from '../PatchStore';
 import { SelectionStore } from '../SelectionStore';
 import type { Endpoint } from '../../graph/Patch';
+import { portId } from '../../types';
 
 // Import blocks to ensure they're registered
 import '../../blocks/signal-blocks';
@@ -129,7 +130,7 @@ describe('SelectionStore', () => {
 
     it('should set hovered port', () => {
       const id = patchStore.addBlock('Oscillator');
-      const portRef = { blockId: id, portId: 'frequency' as any };
+      const portRef = { blockId: id, portId: portId('frequency') };
 
       selectionStore.hoverPort(portRef);
 
@@ -161,7 +162,7 @@ describe('SelectionStore', () => {
 
       selectionStore.selectBlock(blockId);
       selectionStore.hoverBlock(blockId);
-      selectionStore.hoverPort({ blockId, portId: 'out' as any });
+      selectionStore.hoverPort({ blockId, portId: portId('out') });
 
       selectionStore.clearSelection();
 

@@ -261,7 +261,7 @@ describe('EventEvaluator', () => {
       }
 
       const program = result.program;
-      const schedule = program.schedule as any;
+      const schedule = program.schedule;
 
       // Verify eventSlotCount > 0 (pulse registered an event slot)
       expect(schedule.eventSlotCount).toBeGreaterThan(0);
@@ -297,7 +297,7 @@ describe('EventEvaluator', () => {
       }
 
       const program = result.program;
-      const schedule = program.schedule as any;
+      const schedule = program.schedule;
       const state = createRuntimeState(
         program.slotMeta.length,
         schedule.stateSlotCount ?? 0,

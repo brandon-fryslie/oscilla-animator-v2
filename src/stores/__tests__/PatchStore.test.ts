@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { PatchStore } from '../PatchStore';
 import { reaction } from 'mobx';
 import type { Endpoint } from '../../graph/Patch';
+import { blockId } from '../../types';
 
 // Import blocks to ensure they're registered
 import '../../blocks/signal-blocks';
@@ -237,8 +238,8 @@ describe('PatchStore', () => {
 
       const newPatch = {
         blocks: new Map([
-          ['b0' as any, {
-            id: 'b0' as any,
+          [blockId('b0'), {
+            id: blockId('b0'),
             type: 'Oscillator',
             params: {},
             displayName: null,
@@ -254,14 +255,14 @@ describe('PatchStore', () => {
       store.loadPatch(newPatch);
 
       expect(store.blocks.size).toBe(1);
-      expect(store.blocks.has('b0' as any)).toBe(true);
+      expect(store.blocks.has(blockId('b0'))).toBe(true);
     });
 
     it('should update ID generators to avoid conflicts', () => {
       const patch = {
         blocks: new Map([
-          ['b10' as any, {
-            id: 'b10' as any,
+          [blockId('b10'), {
+            id: blockId('b10'),
             type: 'Oscillator',
             params: {},
             displayName: null,

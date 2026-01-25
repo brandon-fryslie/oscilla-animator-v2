@@ -60,6 +60,10 @@ import type { Block, Edge, Patch } from '../Patch';
 /** Dense block index for array-based access */
 export type BlockIndex = number & { readonly __brand: 'BlockIndex' };
 
+export function blockIndex(n: number): BlockIndex {
+  return n as BlockIndex;
+}
+
 export interface NormalizedPatch {
   /** Original patch (for reference) */
   readonly patch: Patch;

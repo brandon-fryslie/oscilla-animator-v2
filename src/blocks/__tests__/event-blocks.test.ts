@@ -34,7 +34,7 @@ function compileAndRun(patchFn: (b: PatchBuilder) => void, frames: number[] = [1
   }
 
   const program = result.program;
-  const schedule = program.schedule as any;
+  const schedule = program.schedule;
   const state = createRuntimeState(
     program.slotMeta.length,
     schedule.stateSlotCount ?? 0,
@@ -78,7 +78,7 @@ describe('EventToSignalMask', () => {
     }
 
     const program = result.program;
-    const schedule = program.schedule as any;
+    const schedule = program.schedule;
     const state = createRuntimeState(
       program.slotMeta.length,
       schedule.stateSlotCount ?? 0,
@@ -121,7 +121,7 @@ describe('EventToSignalMask', () => {
     if (result.kind === 'error') throw new Error('Compile failed');
 
     const program = result.program;
-    const schedule = program.schedule as any;
+    const schedule = program.schedule;
     const state = createRuntimeState(
       program.slotMeta.length,
       schedule.stateSlotCount ?? 0,
@@ -196,7 +196,7 @@ describe('SampleHold', () => {
     }
 
     const program = result.program;
-    const schedule = program.schedule as any;
+    const schedule = program.schedule;
     const state = createRuntimeState(
       program.slotMeta.length,
       schedule.stateSlotCount ?? 0,
@@ -236,7 +236,7 @@ describe('SampleHold', () => {
 
     // Compile and run is sufficient — verifies no crash
     const program = result.program;
-    const schedule = program.schedule as any;
+    const schedule = program.schedule;
     const state = createRuntimeState(
       program.slotMeta.length,
       schedule.stateSlotCount ?? 0,
@@ -262,7 +262,7 @@ describe('SampleHold', () => {
     if (result.kind === 'error') throw new Error('Compile failed');
 
     const program = result.program;
-    const schedule = program.schedule as any;
+    const schedule = program.schedule;
 
     // Verify stateSlotCount > 0 (SampleHold allocates a state slot)
     expect(schedule.stateSlotCount).toBeGreaterThan(0);
@@ -314,7 +314,7 @@ describe('Event Consumer Blocks Integration', () => {
     }
 
     const program = result.program;
-    const schedule = program.schedule as any;
+    const schedule = program.schedule;
     const state = createRuntimeState(
       program.slotMeta.length,
       schedule.stateSlotCount ?? 0,
@@ -358,7 +358,7 @@ describe('Event Consumer Blocks Integration', () => {
     }
 
     const program = result.program;
-    const schedule = program.schedule as any;
+    const schedule = program.schedule;
     const state = createRuntimeState(
       program.slotMeta.length,
       schedule.stateSlotCount ?? 0,

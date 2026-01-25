@@ -30,7 +30,7 @@ describe('UnitDelay Block', () => {
     if (result.kind !== 'ok') return;
 
     const program = result.program;
-    const schedule = program.schedule as any;
+    const schedule = program.schedule;
 
     // Verify state slots were allocated
     expect(schedule.stateSlotCount).toBe(1);
@@ -61,7 +61,7 @@ describe('UnitDelay Block', () => {
     if (result.kind !== 'ok') return;
 
     const program = result.program;
-    const schedule = program.schedule as any;
+    const schedule = program.schedule;
     const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount);
     const pool = new BufferPool();
 
@@ -92,7 +92,7 @@ describe('UnitDelay Block', () => {
     if (result.kind !== 'ok') return;
 
     const program = result.program;
-    const schedule = program.schedule as any;
+    const schedule = program.schedule;
     const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount);
     const pool = new BufferPool();
 
@@ -126,7 +126,7 @@ describe('UnitDelay Block', () => {
     if (result.kind !== 'ok') return;
 
     const program = result.program;
-    const schedule = program.schedule as any;
+    const schedule = program.schedule;
 
     // Verify initial value was set correctly
     expect(schedule.stateSlots[0].initialValue).toBe(42);
@@ -176,7 +176,7 @@ describe('Lag Block', () => {
     if (result.kind !== 'ok') return;
 
     const program = result.program;
-    const schedule = program.schedule as any;
+    const schedule = program.schedule;
     const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount);
     const pool = new BufferPool();
 
@@ -206,7 +206,7 @@ describe('Lag Block', () => {
     if (result.kind !== 'ok') return;
 
     const program = result.program;
-    const schedule = program.schedule as any;
+    const schedule = program.schedule;
     const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount);
     const pool = new BufferPool();
 
@@ -227,7 +227,7 @@ describe('Lag Block', () => {
     if (result.kind !== 'ok') return;
 
     const program = result.program;
-    const schedule = program.schedule as any;
+    const schedule = program.schedule;
     const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount);
     const pool = new BufferPool();
 
@@ -288,7 +288,7 @@ describe('Phasor Block', () => {
     if (result.kind !== 'ok') return;
 
     const program = result.program;
-    const schedule = program.schedule as any;
+    const schedule = program.schedule;
     const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount);
     const pool = new BufferPool();
 
@@ -319,7 +319,7 @@ describe('Phasor Block', () => {
     if (result.kind !== 'ok') return;
 
     const program = result.program;
-    const schedule = program.schedule as any;
+    const schedule = program.schedule;
     const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount);
     const pool = new BufferPool();
 
@@ -351,7 +351,7 @@ describe('Phasor Block', () => {
     if (result.kind !== 'ok') return;
 
     const program = result.program;
-    const schedule = program.schedule as any;
+    const schedule = program.schedule;
     const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount);
     const pool = new BufferPool();
 
@@ -406,7 +406,7 @@ describe('Hash Block', () => {
     const pool = new BufferPool();
 
     // Find the evalSig step from TestSignal to get the slot
-    const schedule = program.schedule as any;
+    const schedule = program.schedule;
     const evalSigStep = schedule.steps.find((s: any) => s.kind === 'evalSig');
     expect(evalSigStep).toBeDefined();
     const slot = evalSigStep?.target;
@@ -494,7 +494,7 @@ describe('Hash Block', () => {
 
     // Find the evalSig step from TestSignal to get the slot
     // TestSignal's evalSig step is the LAST one in the schedule
-    const schedule = program.schedule as any;
+    const schedule = program.schedule;
     const evalSigSteps = schedule.steps.filter((s: any) => s.kind === 'evalSig');
     const evalSigStep = evalSigSteps[evalSigSteps.length - 1];
     expect(evalSigStep).toBeDefined();
@@ -531,7 +531,7 @@ describe('Hash Block', () => {
 
     // Find the evalSig step from TestSignal to get the slot
     // TestSignal's evalSig step is the LAST one in the schedule
-    const schedule = program.schedule as any;
+    const schedule = program.schedule;
     const evalSigSteps = schedule.steps.filter((s: any) => s.kind === 'evalSig');
     const evalSigStep = evalSigSteps[evalSigSteps.length - 1];
     expect(evalSigStep).toBeDefined();

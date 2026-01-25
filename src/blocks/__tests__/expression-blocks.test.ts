@@ -10,6 +10,8 @@ import { getBlockDefinition } from '../registry';
 import { signalType } from '../../core/canonical-types';
 import { IRBuilderImpl } from '../../compiler/ir/IRBuilderImpl';
 import type { LowerCtx } from '../registry';
+import { blockIndex } from '../../graph/passes/pass3-indexing';
+import { valueSlot } from '../../compiler/ir/Indices';
 
 describe('Expression Block Definition', () => {
   it('is registered in block registry', () => {
@@ -67,7 +69,7 @@ describe('Expression Block Lowering', () => {
     builder = new IRBuilderImpl();
     ctx = {
       b: builder,
-      blockIdx: 0 as any,
+      blockIdx: blockIndex(0),
       blockType: 'Expression',
       instanceId: 'inst_0',
       inTypes: [],
@@ -129,8 +131,8 @@ describe('Expression Block Lowering', () => {
       ctx,
       inputs: [],
       inputsById: {
-        in0: { k: 'sig', id: in0Sig, slot: 0 as any },
-        in1: { k: 'sig', id: in1Sig, slot: 1 as any },
+        in0: { k: 'sig', id: in0Sig, slot: valueSlot(0) },
+        in1: { k: 'sig', id: in1Sig, slot: valueSlot(1) },
       },
       config: { expression: 'in0 + in1' },
     });
@@ -182,7 +184,7 @@ describe('Expression Block Lowering', () => {
       ctx,
       inputs: [],
       inputsById: {
-        in0: { k: 'sig', id: in0Sig, slot: 0 as any },
+        in0: { k: 'sig', id: in0Sig, slot: valueSlot(0) },
       },
       config: { expression: 'sin(in0)' },
     });
@@ -208,7 +210,7 @@ describe('Expression Block Lowering', () => {
       ctx,
       inputs: [],
       inputsById: {
-        in0: { k: 'sig', id: in0Sig, slot: 0 as any },
+        in0: { k: 'sig', id: in0Sig, slot: valueSlot(0) },
         // in1, in2, in3, in4 unwired
       },
       config: { expression: 'in0 * 2' },

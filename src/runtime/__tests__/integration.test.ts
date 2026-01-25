@@ -29,7 +29,7 @@ describe('Runtime Integration', () => {
     const program = result.program;
 
     // Verify program structure
-    const schedule = program.schedule as any;
+    const schedule = program.schedule;
     expect(schedule.timeModel.kind).toBe('infinite');
     expect(schedule.instances.size).toBeGreaterThan(0);
     expect(schedule.steps.length).toBeGreaterThanOrEqual(0);
