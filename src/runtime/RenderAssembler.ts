@@ -254,13 +254,20 @@ export function depthSortAndCompact(
     compactedScale2 = pooledScale2.subarray(0, visibleCount * 2) as Float32Array;
   }
 
-  // Return fresh copies to ensure caller independence
+  // Return subarray views directly to eliminate memory leak
+  // These views point into module-level pooled buffers which are reused every frame.
+  // IMPORTANT: Returned buffers are VIEWS into pooled storage.
+  // They are valid only until the next frame or next call to depthSortAndCompact.
+  // Callers MUST NOT retain references beyond immediate use.
+  //
+  // In production (with pool.releaseAll() each frame), this is safe.
+  // In tests (without pool), the views are valid for immediate consumption within the test assertion.
   return {
     count: visibleCount,
-    screenPosition: new Float32Array(pooledScreenPos.subarray(0, visibleCount * 2)),
-    screenRadius: new Float32Array(pooledRadius.subarray(0, visibleCount)),
-    depth: new Float32Array(pooledDepth.subarray(0, visibleCount)),
-    color: new Uint8ClampedArray(pooledColor.subarray(0, visibleCount * 4)),
+    screenPosition: pooledScreenPos.subarray(0, visibleCount * 2) as Float32Array,
+    screenRadius: pooledRadius.subarray(0, visibleCount) as Float32Array,
+    depth: pooledDepth.subarray(0, visibleCount) as Float32Array,
+    color: pooledColor.subarray(0, visibleCount * 4) as Uint8ClampedArray,
     rotation: compactedRotation,
     scale2: compactedScale2,
   };
@@ -286,7 +293,9 @@ export function projectInstances(
   resolved: ResolvedCameraParams,
   pool?: BufferPool,
 ): ProjectionOutput {
-  // Allocate output buffers from pool if provided, otherwise allocate directly
+  // Allocate output buffers from pool (or fallback to direct allocation if no pool provided)
+  // In production, pool is ALWAYS provided by the render loop to avoid memory leaks.
+  // Tests may not provide a pool, so we fall back to direct allocation for test compatibility.
   const screenPosition = pool
     ? (pool.alloc('vec2f32', count) as Float32Array)
     : new Float32Array(count * 2);
@@ -296,7 +305,7 @@ export function projectInstances(
   const depth = pool
     ? (pool.alloc('f32', count) as Float32Array)
     : new Float32Array(count);
-  const visible = new Uint8Array(count); // No pool for uint8
+  const visible = new Uint8Array(count); // No pool for uint8 yet
 
   // Uniform radii input for field radius projection
   const worldRadii = pool
@@ -814,15 +823,29 @@ function assemblePerInstanceShapes(
       scale2
     );
 
-    const instanceTransforms: InstanceTransforms = {
+    // IMPORTANT: Copy compacted buffers when multiple groups are processed.
+    // depthSortAndCompact returns views into module-level pooled buffers.
+    // Since we call it for each group, we must copy to avoid data corruption
+    // when the pooled buffer is reused for the next group.
+    const compactedCopy = {
       count: compacted.count,
-      position: compacted.screenPosition,
-      size: compacted.screenRadius,
-      rotation: compacted.rotation,
-      scale2: compacted.scale2,
-      depth: compacted.depth,
+      screenPosition: new Float32Array(compacted.screenPosition),
+      screenRadius: new Float32Array(compacted.screenRadius),
+      depth: new Float32Array(compacted.depth),
+      color: new Uint8ClampedArray(compacted.color),
+      rotation: compacted.rotation ? new Float32Array(compacted.rotation) : undefined,
+      scale2: compacted.scale2 ? new Float32Array(compacted.scale2) : undefined,
     };
-    const compactedColor = compacted.color as Uint8ClampedArray;
+
+    const instanceTransforms: InstanceTransforms = {
+      count: compactedCopy.count,
+      position: compactedCopy.screenPosition,
+      size: compactedCopy.screenRadius,
+      rotation: compactedCopy.rotation,
+      scale2: compactedCopy.scale2,
+      depth: compactedCopy.depth,
+    };
+    const compactedColor = compactedCopy.color as Uint8ClampedArray;
 
     // Build style (shared by both path and primitive)
     const style: PathStyle = {
