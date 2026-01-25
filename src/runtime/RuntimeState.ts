@@ -11,6 +11,7 @@ import { createTimeState } from './timeResolution';
 import type { ContinuityState } from './ContinuityState';
 import { createContinuityState } from './ContinuityState';
 import type { DebugTap } from './DebugTap';
+import { ExternalChannelSystem } from './ExternalChannel';
 
 /**
  * Shape2D packed record word layout (8 x u32 words per shape)
@@ -479,8 +480,11 @@ export interface SessionState {
   /** Time state for wrap detection (persistent across frames and compiles) */
   timeState: TimeState;
 
-  /** External inputs (mouse, MIDI, etc.) */
+  /** External inputs (mouse, MIDI, etc.) - LEGACY, use externalChannels for new code */
   external: ExternalInputs;
+
+  /** External channel system (generic input infrastructure) */
+  externalChannels: ExternalChannelSystem;
 
   /** Health monitoring metrics */
   health: HealthMetrics;
@@ -574,8 +578,11 @@ export interface RuntimeState {
   /** Time state for wrap detection (persistent across frames) */
   timeState: TimeState;
 
-  /** External inputs (mouse, MIDI, etc.) */
+  /** External inputs (mouse, MIDI, etc.) - LEGACY, use externalChannels for new code */
   external: ExternalInputs;
+
+  /** External channel system (generic input infrastructure) */
+  externalChannels: ExternalChannelSystem;
 
   /** Health monitoring metrics (Sprint 2+) */
   health: HealthMetrics;
@@ -597,6 +604,7 @@ export function createSessionState(): SessionState {
   return {
     timeState: createTimeState(),
     external: createExternalInputs(),
+    externalChannels: new ExternalChannelSystem(),
     health: createHealthMetrics(),
     continuity: createContinuityState(),
     continuityConfig: createContinuityConfig(),
@@ -649,6 +657,7 @@ export function createRuntimeState(
     // SessionState
     timeState: session.timeState,
     external: session.external,
+    externalChannels: session.externalChannels,
     health: session.health,
     continuity: session.continuity,
     continuityConfig: session.continuityConfig,
@@ -680,6 +689,7 @@ export function createRuntimeStateFromSession(
     // SessionState (preserved)
     timeState: session.timeState,
     external: session.external,
+    externalChannels: session.externalChannels,
     health: session.health,
     continuity: session.continuity,
     continuityConfig: session.continuityConfig,
@@ -696,6 +706,7 @@ export function extractSessionState(state: RuntimeState): SessionState {
   return {
     timeState: state.timeState,
     external: state.external,
+    externalChannels: state.externalChannels,
     health: state.health,
     continuity: state.continuity,
     continuityConfig: state.continuityConfig,
