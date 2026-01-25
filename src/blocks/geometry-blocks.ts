@@ -74,15 +74,17 @@ registerBlock({
       const y = ctx.b.sigZip([centerYSig, yOffset], addFn, signalType('float'));
       const z = ctx.b.sigConst(0, signalType('float'));
 
-      // Package as vec3 using the vec3FromComponents kernel
-      const vec3Fn = ctx.b.kernel('vec3FromComponents');
-      const result = ctx.b.sigZip([x, y, z], vec3Fn, signalType('vec3', unitWorld3()));
-
+      // Multi-component signal: allocate strided slot, emit write step
       const outType = ctx.outTypes[0];
-      const slot = ctx.b.allocSlot();
+      const stride = strideOf(outType.payload);
+      const slot = ctx.b.allocSlot(stride);
+      const components = [x, y, z];
+
+      ctx.b.stepSlotWriteStrided(slot, components);
+
       return {
         outputsById: {
-          pos: { k: 'sig', id: result, slot, type: outType, stride: strideOf(outType.payload) },
+          pos: { k: 'sig', id: x, slot, type: outType, stride, components },
         },
       };
     } else if (angle.k === 'field' && radius.k === 'field') {
@@ -195,16 +197,44 @@ registerBlock({
     const amountZSig = amountZ?.k === 'sig' ? amountZ.id : ctx.b.sigConst(0.0, signalType('float'));
 
     if (pos.k === 'sig' && rand.k === 'sig') {
-      // Signal path - use kernel to build jittered vec3
-      const jitterFn = ctx.b.kernel('jitterVecSig');
-      const result = ctx.b.sigZip([pos.id, rand.id, amountXSig, amountYSig, amountZSig], jitterFn, signalType('vec3', unitWorld3()));
+      // Signal path - decompose input vec3, compute jittered components, recompose
+      // Read input vec3 components from slot
+      const posSlot = pos.slot;
+      const xIn = ctx.b.sigSlot(posSlot + 0, signalType('float'));
+      const yIn = ctx.b.sigSlot(posSlot + 1, signalType('float'));
+      const zIn = ctx.b.sigSlot(posSlot + 2, signalType('float'));
 
+      // Compute jitter for each component based on rand
+      // Simple jitter: pos + amount * (rand - 0.5) * 2
+      const mulFn = ctx.b.opcode(OpCode.Mul);
+      const addFn = ctx.b.opcode(OpCode.Add);
+      const subFn = ctx.b.opcode(OpCode.Sub);
+
+      const half = ctx.b.sigConst(0.5, signalType('float'));
+      const two = ctx.b.sigConst(2, signalType('float'));
+
+      const centered = ctx.b.sigZip([rand.id, half], subFn, signalType('float'));
+      const scaled = ctx.b.sigZip([centered, two], mulFn, signalType('float'));
+
+      const jitterX = ctx.b.sigZip([amountXSig, scaled], mulFn, signalType('float'));
+      const jitterY = ctx.b.sigZip([amountYSig, scaled], mulFn, signalType('float'));
+      const jitterZ = ctx.b.sigZip([amountZSig, scaled], mulFn, signalType('float'));
+
+      const xOut = ctx.b.sigZip([xIn, jitterX], addFn, signalType('float'));
+      const yOut = ctx.b.sigZip([yIn, jitterY], addFn, signalType('float'));
+      const zOut = ctx.b.sigZip([zIn, jitterZ], addFn, signalType('float'));
+
+      // Multi-component signal: allocate strided slot, emit write step
       const outType = ctx.outTypes[0];
-      const slot = ctx.b.allocSlot();
+      const stride = strideOf(outType.payload);
+      const slot = ctx.b.allocSlot(stride);
+      const components = [xOut, yOut, zOut];
+
+      ctx.b.stepSlotWriteStrided(slot, components);
 
       return {
         outputsById: {
-          posOut: { k: 'sig', id: result, slot, type: outType, stride: strideOf(outType.payload) },
+          posOut: { k: 'sig', id: xOut, slot, type: outType, stride, components },
         },
       };
     } else if (pos.k === 'field' && rand.k === 'field') {

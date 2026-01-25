@@ -142,15 +142,23 @@ export interface ProjectionOutput {
  *
  * Fast-path optimization: if depth is already monotone decreasing among visible instances, skip sort.
  *
- * PERFORMANCE NOTE: Uses preallocated module-level buffers to avoid allocations during sort/compact.
- * Final results are copied to fresh arrays to ensure each caller gets independent data.
+ * ⚠️ MEMORY CONTRACT - CRITICAL:
+ * Returned buffers are VIEWS into module-level pooled storage. They are valid ONLY until:
+ * - The next call to depthSortAndCompact (overwrites pooled buffers)
+ * - The next frame (pooled buffers are reused)
+ *
+ * Callers MUST copy the returned data before storing in any persistent structure.
+ * Example:
+ *   const compacted = depthSortAndCompact(...);
+ *   const safeCopy = new Float32Array(compacted.screenPosition); // ✓ Safe
+ *   drawOp.position = compacted.screenPosition; // ✗ MEMORY LEAK - view becomes invalid
  *
  * @param projection - Raw projection output with all instances
  * @param count - Total instance count (including invisible)
  * @param color - Per-instance color buffer (Float32Array, stride 4: RGBA)
  * @param rotation - Optional per-instance rotation
  * @param scale2 - Optional per-instance anisotropic scale
- * @returns Compacted output with only visible instances, depth-sorted
+ * @returns Compacted output with only visible instances, depth-sorted (VIEWS - must copy before storage)
  */
 export function depthSortAndCompact(
   projection: ProjectionOutput,
@@ -1195,18 +1203,33 @@ export function assembleDrawPathInstancesOp(
     // Depth-sort and compact: remove invisible instances, sort by depth (far-to-near / painter's algorithm)
     const compacted = depthSortAndCompact(projection, count, colorBuffer, rotation, scale2);
 
-    // Build instance transforms with projected data
+    // CRITICAL: Copy compacted buffers to prevent memory leak.
+    // depthSortAndCompact returns views into module-level pooled buffers.
+    // If we store these views in DrawOp, they become invalid on next frame
+    // when the pooled buffers are reused. This matches the multi-group path
+    // at lines 830-838.
+    const compactedCopy = {
+      count: compacted.count,
+      screenPosition: new Float32Array(compacted.screenPosition),
+      screenRadius: new Float32Array(compacted.screenRadius),
+      depth: new Float32Array(compacted.depth),
+      color: new Uint8ClampedArray(compacted.color),
+      rotation: compacted.rotation ? new Float32Array(compacted.rotation) : undefined,
+      scale2: compacted.scale2 ? new Float32Array(compacted.scale2) : undefined,
+    };
+
+    // Build instance transforms with copied data
     const instanceTransforms = buildInstanceTransforms(
-      compacted.count,
-      compacted.screenPosition,
-      compacted.screenRadius,
-      compacted.rotation,
-      compacted.scale2,
-      compacted.depth
+      compactedCopy.count,
+      compactedCopy.screenPosition,
+      compactedCopy.screenRadius,
+      compactedCopy.rotation,
+      compactedCopy.scale2,
+      compactedCopy.depth
     );
 
     // Build style
-    const style = buildPathStyle(compacted.color, 'nonzero');
+    const style = buildPathStyle(compactedCopy.color, 'nonzero');
 
     // Dispatch based on topology mode
     if (resolvedShape.mode === 'path') {

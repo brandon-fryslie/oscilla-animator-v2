@@ -38,6 +38,12 @@ export type ValueRefPacked =
       readonly type: SignalType;
       /** Components per sample for this value (e.g. float=1, vec2=2, vec3=3, color=4). */
       readonly stride: number;
+      /**
+       * For multi-component signals (stride > 1), this array contains the scalar SigExprIds
+       * that produce each component. Required when stride > 1, undefined when stride === 1.
+       * The runtime writes these component expressions into the slot range [slot, slot+stride).
+       */
+      readonly components?: readonly SigExprId[];
     }
   | {
       readonly k: 'field';

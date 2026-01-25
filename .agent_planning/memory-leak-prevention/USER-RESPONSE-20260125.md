@@ -42,7 +42,25 @@ Sprint 1 directly addresses the "substantial memory leak in the hot loop" by fix
 
 ## Approval Record
 
-**Approved By:** [Pending]
-**Date:** [Pending]
-**Decision:** [Pending]
-**Notes:** [Pending]
+**Approved By:** User
+**Date:** 2026-01-25
+**Decision:** APPROVED Sprint 1 (immediate-leak-fix)
+**Notes:** User approved immediate implementation. Fix applied to RenderAssembler.ts.
+
+## Implementation Status
+
+### Sprint 1: immediate-leak-fix - COMPLETE ✓
+
+**Changes made:**
+1. `src/runtime/RenderAssembler.ts:1195-1220` - Added buffer copy in single-group path
+2. `src/runtime/RenderAssembler.ts:139-166` - Enhanced JSDoc warning on depthSortAndCompact
+
+**Verification:**
+- All 32 RenderAssembler tests pass
+- Build compiles successfully
+- Pattern now matches multi-group path (lines 830-838)
+
+**Next Steps (when ready):**
+- Sprint 2: Add memory instrumentation
+- Sprint 3: Debug-mode invariant guards
+- Sprint 4: Automated leak regression tests
