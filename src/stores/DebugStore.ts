@@ -199,8 +199,10 @@ export class DebugStore {
     if (!this.enabled) return undefined;
     try {
       return debugService.getEdgeValue(edgeId);
-    } catch {
-      // Don't crash the app on unmapped edges or other query errors
+    } catch (err) {
+      // Log but don't crash - hover shouldn't bring down the app
+      // TODO: Route this through a proper diagnostics channel once available
+      console.warn(`[DebugStore.getEdgeValue] Failed for edge '${edgeId}':`, err instanceof Error ? err.message : err);
       return undefined;
     }
   }
@@ -213,8 +215,10 @@ export class DebugStore {
     if (!this.enabled) return undefined;
     try {
       return debugService.getPortValue(blockId, portName);
-    } catch {
-      // Don't crash the app on unmapped ports or other query errors
+    } catch (err) {
+      // Log but don't crash - hover shouldn't bring down the app
+      // TODO: Route this through a proper diagnostics channel once available
+      console.warn(`[DebugStore.getPortValue] Failed for port '${blockId}:${portName}':`, err instanceof Error ? err.message : err);
       return undefined;
     }
   }
@@ -276,8 +280,10 @@ export class DebugStore {
       runInAction(() => {
         this._cachedEdgeValue = result || null;
       });
-    } catch {
-      // Don't crash the polling loop on errors
+    } catch (err) {
+      // Log but don't crash - polling shouldn't bring down the app
+      // Note: This fires at 1Hz while hovered, so use console.debug to reduce noise
+      console.debug(`[DebugStore.pollValue] Failed for edge '${this.hoveredEdgeId}':`, err instanceof Error ? err.message : err);
       runInAction(() => {
         this._cachedEdgeValue = null;
       });
