@@ -77,11 +77,12 @@ describe('Connection Validation - Behavioral Tests', () => {
     it('blocks Field → Signal (no adapter for many→one)', () => {
       const { patch, ids } = createTestPatch();
 
-      // FieldAdd outputs Field, Add expects Signal — no reduction adapter exists
-      const result = validateConnection(ids.fieldAdd, 'out', ids.add, 'a', patch);
+      // Array outputs Field, Const (signal) expects Signal — no reduction adapter exists
+      // Using Array since FieldAdd was removed
+      const result = validateConnection(ids.array, 'instance', ids.const, 'value', patch);
 
       expect(result.valid).toBe(false);
-      expect(result.reason).toMatch(/Type mismatch/i);
+      expect(result.reason).toMatch(/Type mismatch|incompatible/i);
     });
   });
 
@@ -134,7 +135,7 @@ describe('Connection Validation - Behavioral Tests', () => {
       const { patch, ids } = createPatchWithFieldInstances();
 
       // Both field blocks use the same Array instance
-      // FieldAdd has inputs 'a' and 'b', not 'in'
+      // FromDomainId has input 'domain', not 'in'
       const result = validateConnection(ids.fieldA, 'out', ids.fieldB, 'a', patch);
 
       // Note: Instance matching happens at compile time, not at connection validation time.
@@ -192,8 +193,9 @@ function createTestPatch(): TestPatchWithIds {
     // Color block
     ids.hsv = b.addBlock('HSVToColor', {});
 
-    // Field block
-    ids.fieldAdd = b.addBlock('FieldAdd', {});
+    // Field block (FromDomainId requires Array)
+    ids.array = b.addBlock('Array', { size: 10 });
+    ids.fieldBlock = b.addBlock('FromDomainId', {}, { domainId: ids.array });
   });
 
   return { patch, ids };
@@ -223,8 +225,8 @@ function createPatchWithFieldInstances(): FieldPatchWithIds {
     // Create field blocks that should use this instance
     // Note: In reality, the instance comes from compilation context,
     // but for testing we rely on the type system to handle this.
-    ids.fieldA = b.addBlock('FieldAdd', {}, { domainId: ids.array });
-    ids.fieldB = b.addBlock('FieldAdd', {}, { domainId: ids.array });
+    ids.fieldA = b.addBlock('FromDomainId', {}, { domainId: ids.array });
+    ids.fieldB = b.addBlock('Pulse', {}, { domainId: ids.array });
   });
 
   return { patch, ids };
@@ -242,8 +244,8 @@ function createPatchWithDifferentInstances(): FieldPatchWithIds {
     ids.array2 = b.addBlock('Array', { size: 20 });
 
     // Create field blocks using different instances
-    ids.fieldA = b.addBlock('FieldAdd', {}, { domainId: ids.array1 });
-    ids.fieldB = b.addBlock('FieldAdd', {}, { domainId: ids.array2 });
+    ids.fieldA = b.addBlock('FromDomainId', {}, { domainId: ids.array1 });
+    ids.fieldB = b.addBlock('FromDomainId', {}, { domainId: ids.array2 });
   });
 
   return { patch, ids };

@@ -41,11 +41,11 @@ describe('Steel Thread - Rect Shape Pipeline', () => {
       const radius = b.addBlock('Const', { value: 0.35 });
       const spin = b.addBlock('Const', { value: 0.4 });
 
-      const goldenAngle = b.addBlock('FieldGoldenAngle', { turns: 50 });
-      const angularOffset = b.addBlock('FieldAngularOffset', {});
-      const totalAngle = b.addBlock('FieldAdd', {});
-      const effectiveRadius = b.addBlock('FieldRadiusSqrt', {});
-      const pos = b.addBlock('FieldPolarToCartesian', {});
+      const goldenAngle = b.addBlock('GoldenAngle', { turns: 50 });
+      const angularOffset = b.addBlock('AngularOffset', {});
+      const totalAngle = b.addBlock('Add', {});
+      const effectiveRadius = b.addBlock('RadiusSqrt', {});
+      const pos = b.addBlock('PolarToCartesian', {});
 
       b.wire(time, 'phaseA', angularOffset, 'phase');
       b.wire(array, 't', goldenAngle, 'id01');
@@ -63,7 +63,7 @@ describe('Steel Thread - Rect Shape Pipeline', () => {
       b.wire(effectiveRadius, 'out', pos, 'radius');
 
       // Color: hue from phase (must wire phase explicitly)
-      const hue = b.addBlock('FieldHueFromPhase', {});
+      const hue = b.addBlock('HueFromPhase', {});
       b.wire(time, 'phaseA', hue, 'phase');
       b.wire(array, 't', hue, 'id01');
 
@@ -202,12 +202,12 @@ describe('Steel Thread - Rect Shape Pipeline', () => {
       const array = b.addBlock('Array', { count: 10 });
       b.wire(ellipse, 'shape', array, 'element');
 
-      const pos = b.addBlock('FieldPolarToCartesian', {});
+      const pos = b.addBlock('PolarToCartesian', {});
       const centerX = b.addBlock('Const', { value: 0.5 });
       const centerY = b.addBlock('Const', { value: 0.5 });
       const radius = b.addBlock('Const', { value: 0.3 });
-      const goldenAngle = b.addBlock('FieldGoldenAngle', { turns: 50 });
-      const effectiveRadius = b.addBlock('FieldRadiusSqrt', {});
+      const goldenAngle = b.addBlock('GoldenAngle', { turns: 50 });
+      const effectiveRadius = b.addBlock('RadiusSqrt', {});
 
       b.wire(array, 't', goldenAngle, 'id01');
       b.wire(array, 't', effectiveRadius, 'id01');
@@ -217,7 +217,7 @@ describe('Steel Thread - Rect Shape Pipeline', () => {
       b.wire(goldenAngle, 'angle', pos, 'angle');
       b.wire(effectiveRadius, 'out', pos, 'radius');
 
-      const hue = b.addBlock('FieldHueFromPhase', {});
+      const hue = b.addBlock('HueFromPhase', {});
       b.wire(time, 'phaseA', hue, 'phase');
       b.wire(array, 't', hue, 'id01');
 
@@ -241,12 +241,12 @@ describe('Steel Thread - Rect Shape Pipeline', () => {
       const array = b.addBlock('Array', { count: 10 });
       b.wire(rect, 'shape', array, 'element');
 
-      const pos = b.addBlock('FieldPolarToCartesian', {});
+      const pos = b.addBlock('PolarToCartesian', {});
       const centerX = b.addBlock('Const', { value: 0.5 });
       const centerY = b.addBlock('Const', { value: 0.5 });
       const radius = b.addBlock('Const', { value: 0.3 });
-      const goldenAngle = b.addBlock('FieldGoldenAngle', { turns: 50 });
-      const effectiveRadius = b.addBlock('FieldRadiusSqrt', {});
+      const goldenAngle = b.addBlock('GoldenAngle', { turns: 50 });
+      const effectiveRadius = b.addBlock('RadiusSqrt', {});
 
       b.wire(array, 't', goldenAngle, 'id01');
       b.wire(array, 't', effectiveRadius, 'id01');
@@ -256,7 +256,7 @@ describe('Steel Thread - Rect Shape Pipeline', () => {
       b.wire(goldenAngle, 'angle', pos, 'angle');
       b.wire(effectiveRadius, 'out', pos, 'radius');
 
-      const hue = b.addBlock('FieldHueFromPhase', {});
+      const hue = b.addBlock('HueFromPhase', {});
       b.wire(time, 'phaseA', hue, 'phase');
       b.wire(array, 't', hue, 'id01');
 

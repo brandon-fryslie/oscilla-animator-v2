@@ -20,6 +20,7 @@ import type { StepRender, InstanceDecl, SigExpr } from '../compiler/ir/types';
 import type { RuntimeState } from './RuntimeState';
 import { evaluateSignal } from './SignalEvaluator';
 import { getTopology } from '../shapes/registry';
+import type { BufferPool } from './BufferPool';
 import type { PathTopologyDef, TopologyDef, TopologyId } from '../shapes/types';
 import type {
   DrawPathInstancesOp,
@@ -237,7 +238,8 @@ export function depthSortAndCompact(
     for (let out = 0; out < visibleCount; out++) {
       pooledRotation[out] = rotation[pooledIndices[out]];
     }
-    compactedRotation = new Float32Array(pooledRotation.subarray(0, visibleCount));
+    // Return subarray view directly - no copy
+    compactedRotation = pooledRotation.subarray(0, visibleCount) as Float32Array;
   }
 
   // Compact scale2 if present (stride 2)
@@ -248,7 +250,8 @@ export function depthSortAndCompact(
       pooledScale2[out * 2] = scale2[src * 2];
       pooledScale2[out * 2 + 1] = scale2[src * 2 + 1];
     }
-    compactedScale2 = new Float32Array(pooledScale2.subarray(0, visibleCount * 2));
+    // Return subarray view directly - no copy
+    compactedScale2 = pooledScale2.subarray(0, visibleCount * 2) as Float32Array;
   }
 
   // Return fresh copies to ensure caller independence
@@ -281,15 +284,24 @@ export function projectInstances(
   worldRadius: number,
   count: number,
   resolved: ResolvedCameraParams,
+  pool?: BufferPool,
 ): ProjectionOutput {
-  // Allocate output buffers (separate from world-space inputs)
-  const screenPosition = new Float32Array(count * 2);
-  const screenRadius = new Float32Array(count);
-  const depth = new Float32Array(count);
-  const visible = new Uint8Array(count);
+  // Allocate output buffers from pool if provided, otherwise allocate directly
+  const screenPosition = pool
+    ? (pool.alloc('vec2f32', count) as Float32Array)
+    : new Float32Array(count * 2);
+  const screenRadius = pool
+    ? (pool.alloc('f32', count) as Float32Array)
+    : new Float32Array(count);
+  const depth = pool
+    ? (pool.alloc('f32', count) as Float32Array)
+    : new Float32Array(count);
+  const visible = new Uint8Array(count); // No pool for uint8
 
   // Uniform radii input for field radius projection
-  const worldRadii = new Float32Array(count);
+  const worldRadii = pool
+    ? (pool.alloc('f32', count) as Float32Array)
+    : new Float32Array(count);
   worldRadii.fill(worldRadius);
 
   if (resolved.projection === 'ortho') {
@@ -716,7 +728,8 @@ function assemblePerInstanceShapes(
   fullColor: Uint8ClampedArray,
   scale: number,
   count: number,
-  context: AssemblerContext
+  context: AssemblerContext,
+  pool: BufferPool
 ): DrawOp[] {
   const { state } = context;
   const t0 = performance.now();
@@ -747,7 +760,7 @@ function assemblePerInstanceShapes(
     );
   }
 
-  const projection = projectInstances(fullPosition, scale, count, resolved);
+  const projection = projectInstances(fullPosition, scale, count, resolved, pool);
 
   for (const [key, group] of groups) {
     // Skip empty groups
@@ -1065,7 +1078,8 @@ function buildPathStyle(
  */
 export function assembleDrawPathInstancesOp(
   step: StepRender,
-  context: AssemblerContext
+  context: AssemblerContext,
+  pool: BufferPool
 ): DrawOp[] {
   const { signals, instances, state } = context;
 
@@ -1124,7 +1138,8 @@ export function assembleDrawPathInstancesOp(
       colorBuffer,
       scale,
       count,
-      context  // Pass full context (includes camera)
+      context,  // Pass full context (includes camera)
+      pool      // Pass pool for buffer allocation
     );
   }
 
@@ -1152,7 +1167,7 @@ export function assembleDrawPathInstancesOp(
       );
     }
 
-    const projection = projectInstances(positionBuffer, scale, count, context.resolvedCamera);
+    const projection = projectInstances(positionBuffer, scale, count, context.resolvedCamera, pool);
 
     // Depth-sort and compact: remove invisible instances, sort by depth (far-to-near / painter's algorithm)
     const compacted = depthSortAndCompact(projection, count, colorBuffer, rotation, scale2);
@@ -1217,12 +1232,13 @@ export function assembleDrawPathInstancesOp(
  */
 export function assembleRenderFrame(
   renderSteps: readonly StepRender[],
-  context: AssemblerContext
+  context: AssemblerContext,
+  pool: BufferPool
 ): RenderFrameIR {
   const ops: DrawOp[] = [];
 
   for (const step of renderSteps) {
-    const stepOps = assembleDrawPathInstancesOp(step, context);
+    const stepOps = assembleDrawPathInstancesOp(step, context, pool);
     ops.push(...stepOps);  // Flatten array of ops from each step
   }
 

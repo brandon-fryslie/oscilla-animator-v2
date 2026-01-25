@@ -45,11 +45,11 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
       const ellipseArray = b.addBlock('Array', { count: 25 });
       b.wire(ellipse, 'shape', ellipseArray, 'element');
 
-      const eGolden = b.addBlock('FieldGoldenAngle', { turns: 50 });
-      const eAngular = b.addBlock('FieldAngularOffset', {});
-      const eTotalAngle = b.addBlock('FieldAdd', {});
-      const eRadius = b.addBlock('FieldRadiusSqrt', {});
-      const ePos = b.addBlock('FieldPolarToCartesian', {});
+      const eGolden = b.addBlock('GoldenAngle', { turns: 50 });
+      const eAngular = b.addBlock('AngularOffset', {});
+      const eTotalAngle = b.addBlock('Add', {});
+      const eRadius = b.addBlock('RadiusSqrt', {});
+      const ePos = b.addBlock('PolarToCartesian', {});
       const eSpin = b.addBlock('Const', { value: 0.5 });
 
       b.wire(ellipseArray, 't', eGolden, 'id01');
@@ -70,7 +70,7 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
       b.wire(eRadius, 'out', ePos, 'radius');
 
       // Ellipse color + opacity
-      const eHue = b.addBlock('FieldHueFromPhase', {});
+      const eHue = b.addBlock('HueFromPhase', {});
       b.wire(time, 'phaseA', eHue, 'phase');
       b.wire(ellipseArray, 't', eHue, 'id01');
       const eColor = b.addBlock('HsvToRgb', {});
@@ -81,7 +81,7 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
       b.wire(eVal, 'out', eColor, 'val');
 
       // Per-element opacity for ellipses
-      const eOpacityPulse = b.addBlock('FieldPulse', {});
+      const eOpacityPulse = b.addBlock('Pulse', {});
       const eOpBase = b.addBlock('Const', { value: 0.4 });
       const eOpAmp = b.addBlock('Const', { value: 0.6 });
       const eOpSpread = b.addBlock('Const', { value: 1.5 });
@@ -106,11 +106,11 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
       const rectArray = b.addBlock('Array', { count: 20 });
       b.wire(rect, 'shape', rectArray, 'element');
 
-      const rGolden = b.addBlock('FieldGoldenAngle', { turns: 30 });
-      const rAngular = b.addBlock('FieldAngularOffset', {});
-      const rTotalAngle = b.addBlock('FieldAdd', {});
-      const rRadius = b.addBlock('FieldRadiusSqrt', {});
-      const rPos = b.addBlock('FieldPolarToCartesian', {});
+      const rGolden = b.addBlock('GoldenAngle', { turns: 30 });
+      const rAngular = b.addBlock('AngularOffset', {});
+      const rTotalAngle = b.addBlock('Add', {});
+      const rRadius = b.addBlock('RadiusSqrt', {});
+      const rPos = b.addBlock('PolarToCartesian', {});
       const rSpinConst = b.addBlock('Const', { value: -0.3 });
 
       b.wire(rectArray, 't', rGolden, 'id01');
@@ -131,7 +131,7 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
       b.wire(rRadius, 'out', rPos, 'radius');
 
       // Rect color + opacity
-      const rHue = b.addBlock('FieldHueFromPhase', {});
+      const rHue = b.addBlock('HueFromPhase', {});
       b.wire(time, 'phaseB', rHue, 'phase');
       b.wire(rectArray, 't', rHue, 'id01');
       const rColor = b.addBlock('HsvToRgb', {});
@@ -142,7 +142,7 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
       b.wire(rValConst, 'out', rColor, 'val');
 
       // Per-element opacity for rects
-      const rOpacityPulse = b.addBlock('FieldPulse', {});
+      const rOpacityPulse = b.addBlock('Pulse', {});
       const rOpBase = b.addBlock('Const', { value: 0.3 });
       const rOpAmp = b.addBlock('Const', { value: 0.7 });
       const rOpSpread = b.addBlock('Const', { value: 2.0 });

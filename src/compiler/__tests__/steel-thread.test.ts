@@ -41,17 +41,17 @@ describe('Steel Thread - Animated Particles', () => {
       const spin = b.addBlock('Const', { value: 0.5 });
 
       // Position from composable primitives
-      const goldenAngle = b.addBlock('FieldGoldenAngle', { turns: 50 });
-      const angularOffset = b.addBlock('FieldAngularOffset', {});
-      const totalAngle = b.addBlock('FieldAdd', {});
-      const effectiveRadius = b.addBlock('FieldRadiusSqrt', {});
-      const pos = b.addBlock('FieldPolarToCartesian', {});
+      const goldenAngle = b.addBlock('GoldenAngle', { turns: 50 });
+      const angularOffset = b.addBlock('AngularOffset', {});
+      const totalAngle = b.addBlock('Add', {});
+      const effectiveRadius = b.addBlock('RadiusSqrt', {});
+      const pos = b.addBlock('PolarToCartesian', {});
 
       const sat = b.addBlock('Const', { value: 1.0 });
       const val = b.addBlock('Const', { value: 1.0 });
 
       // Color from composable primitives
-      const hue = b.addBlock('FieldHueFromPhase', {});
+      const hue = b.addBlock('HueFromPhase', {});
       const color = b.addBlock('HsvToRgb', {});
       const render = b.addBlock('RenderInstances2D', {});
 

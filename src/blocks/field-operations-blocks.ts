@@ -2,20 +2,23 @@
  * Field Operation Blocks
  *
  * Blocks that perform operations on fields (per-element computations).
+ * These blocks are cardinality-generic (work with both Signals and Fields) and
+ * payload-generic where applicable.
  */
 
 import { registerBlock } from './registry';
-import { signalType, signalTypeField, unitPhase01 } from '../core/canonical-types';
+import { signalType, signalTypeField, unitPhase01, STANDARD_NUMERIC_PAYLOADS } from '../core/canonical-types';
 import { defaultSourceConst, defaultSourceTimeRoot } from '../types';
 import type { SigExprId, FieldExprId } from '../compiler/ir/Indices';
+import { OpCode } from '../compiler/ir/types';
 
 // =============================================================================
-// FieldFromDomainId
+// FromDomainId (field-only - domain intrinsic)
 // =============================================================================
 
 registerBlock({
-  type: 'FieldFromDomainId',
-  label: 'Field From Domain ID',
+  type: 'FromDomainId',
+  label: 'From Domain ID',
   category: 'field',
   description: 'Generates normalized (0..1) ID for each element in a domain',
   form: 'primitive',
@@ -35,7 +38,7 @@ registerBlock({
     // Get instance context from Array block or inferred from inputs
     const instance = ctx.inferredInstance ?? ctx.instance;
     if (!instance) {
-      throw new Error('FieldFromDomainId requires instance context');
+      throw new Error('FromDomainId requires instance context');
     }
 
     // Use fieldIntrinsic to get normalized index (0..1) for each instance element
@@ -52,277 +55,205 @@ registerBlock({
   },
 });
 
-// =============================================================================
-// FieldAdd
-// =============================================================================
-
-registerBlock({
-  type: 'FieldAdd',
-  label: 'Field Add',
-  category: 'field',
-  description: 'Per-element addition of two fields',
-  form: 'primitive',
-  capability: 'pure',
-  cardinality: {
-    cardinalityMode: 'fieldOnly',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
-  inputs: {
-    a: { label: 'A', type: signalTypeField('float', 'default') },
-    b: { label: 'B', type: signalTypeField('float', 'default') },
-  },
-  outputs: {
-    out: { label: 'Output', type: signalTypeField('float', 'default') },
-  },
-  lower: ({ ctx, inputsById }) => {
-    const a = inputsById.a;
-    const b = inputsById.b;
-
-    if (!a || a.k !== 'field' || !b || b.k !== 'field') {
-      throw new Error('FieldAdd inputs must be fields');
-    }
-
-    const addFn = ctx.b.kernel('fieldAdd');
-    const result = ctx.b.fieldZip([a.id, b.id], addFn, signalTypeField('float', 'default'));
-    const slot = ctx.b.allocSlot();
-
-    return {
-      outputsById: {
-        out: { k: 'field', id: result, slot },
-      },
-      // Propagate instance context from inputs
-      instanceContext: ctx.inferredInstance,
-    };
-  },
-});
+// NOTE: FieldAdd, FieldMultiply, and FieldScale have been removed.
+// Use the cardinality-generic Add and Multiply blocks instead, which work with both
+// signals and fields.
 
 // =============================================================================
-// FieldMultiply
+// Sin (cardinality-generic)
 // =============================================================================
 
 registerBlock({
-  type: 'FieldMultiply',
-  label: 'Field Multiply',
-  category: 'field',
-  description: 'Per-element multiplication of two fields',
+  type: 'Sin',
+  label: 'Sin',
+  category: 'math',
+  description: 'Per-element sine (works with both signals and fields)',
   form: 'primitive',
   capability: 'pure',
   cardinality: {
-    cardinalityMode: 'fieldOnly',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
-  inputs: {
-    a: { label: 'A', type: signalTypeField('float', 'default') },
-    b: { label: 'B', type: signalTypeField('float', 'default') },
-  },
-  outputs: {
-    result: { label: 'Result', type: signalTypeField('float', 'default') },
-  },
-  lower: ({ ctx, inputsById }) => {
-    const a = inputsById.a;
-    const b = inputsById.b;
-
-    if (!a || a.k !== 'field' || !b || b.k !== 'field') {
-      throw new Error('FieldMultiply inputs must be fields');
-    }
-
-    const mulFn = ctx.b.kernel('fieldMultiply');
-    const result = ctx.b.fieldZip([a.id, b.id], mulFn, signalTypeField('float', 'default'));
-    const slot = ctx.b.allocSlot();
-
-    return {
-      outputsById: {
-        result: { k: 'field', id: result, slot },
-      },
-      // Propagate instance context from inputs
-      instanceContext: ctx.inferredInstance,
-    };
-  },
-});
-
-// =============================================================================
-// FieldScale
-// =============================================================================
-
-registerBlock({
-  type: 'FieldScale',
-  label: 'Field Scale',
-  category: 'field',
-  description: 'Scale a field by a signal',
-  form: 'primitive',
-  capability: 'pure',
-  cardinality: {
-    cardinalityMode: 'fieldOnly',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
-  inputs: {
-    field: { label: 'Field', type: signalTypeField('float', 'default') },
-    scale: { label: 'Scale', type: signalType('float'), defaultSource: defaultSourceConst(1.0) },
-  },
-  outputs: {
-    result: { label: 'Result', type: signalTypeField('float', 'default') },
-  },
-  lower: ({ ctx, inputsById }) => {
-    const field = inputsById.field;
-    const scale = inputsById.scale;
-
-    if (!field || field.k !== 'field') {
-      throw new Error('FieldScale field input must be a field');
-    }
-    if (!scale || scale.k !== 'sig') {
-      throw new Error('FieldScale scale input must be a signal');
-    }
-
-    const scaleFn = ctx.b.kernel('fieldScale');
-    const result = ctx.b.fieldZipSig(field.id, [scale.id], scaleFn, signalTypeField('float', 'default'));
-    const slot = ctx.b.allocSlot();
-
-    return {
-      outputsById: {
-        result: { k: 'field', id: result, slot },
-      },
-      // Propagate instance context from inputs
-      instanceContext: ctx.inferredInstance,
-    };
-  },
-});
-
-// =============================================================================
-// FieldSin
-// =============================================================================
-
-registerBlock({
-  type: 'FieldSin',
-  label: 'Field Sin',
-  category: 'field',
-  description: 'Per-element sine of a field',
-  form: 'primitive',
-  capability: 'pure',
-  cardinality: {
-    cardinalityMode: 'fieldOnly',
+    cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
     broadcastPolicy: 'disallowSignalMix',
   },
+  payload: {
+    allowedPayloads: {
+      input: { float: true },
+      result: { float: true },
+    },
+    semantics: 'componentwise',
+  },
   inputs: {
-    input: { label: 'Input', type: signalTypeField('float', 'default') },
+    input: { label: 'Input', type: signalType('float') },
   },
   outputs: {
-    result: { label: 'Result', type: signalTypeField('float', 'default') },
+    result: { label: 'Result', type: signalType('float') },
   },
   lower: ({ ctx, inputsById }) => {
     const input = inputsById.input;
 
-    if (!input || input.k !== 'field') {
-      throw new Error('FieldSin input must be a field');
+    if (!input) {
+      throw new Error('Sin input required');
     }
 
-    const sinFn = ctx.b.kernel('fieldSin');
-    const result = ctx.b.fieldMap(input.id, sinFn, signalTypeField('float', 'default'));
-    const slot = ctx.b.allocSlot();
-
-    return {
-      outputsById: {
-        result: { k: 'field', id: result, slot },
-      },
-      // Propagate instance context from inputs
-      instanceContext: ctx.inferredInstance,
-    };
+    if (input.k === 'sig') {
+      // Signal path - use opcode
+      const sinFn = ctx.b.opcode(OpCode.Sin);
+      const result = ctx.b.sigMap(input.id, sinFn, signalType('float'));
+      const slot = ctx.b.allocSlot();
+      return {
+        outputsById: {
+          result: { k: 'sig', id: result, slot },
+        },
+      };
+    } else if (input.k === 'field') {
+      // Field path - use field kernel
+      const sinFn = ctx.b.kernel('fieldSin');
+      const result = ctx.b.fieldMap(input.id, sinFn, signalTypeField('float', 'default'));
+      const slot = ctx.b.allocSlot();
+      return {
+        outputsById: {
+          result: { k: 'field', id: result, slot },
+        },
+        instanceContext: ctx.inferredInstance,
+      };
+    } else {
+      throw new Error('Sin input must be signal or field');
+    }
   },
 });
 
 // =============================================================================
-// FieldCos
+// Cos (cardinality-generic)
 // =============================================================================
 
 registerBlock({
-  type: 'FieldCos',
-  label: 'Field Cos',
-  category: 'field',
-  description: 'Per-element cosine of a field',
+  type: 'Cos',
+  label: 'Cos',
+  category: 'math',
+  description: 'Per-element cosine (works with both signals and fields)',
   form: 'primitive',
   capability: 'pure',
   cardinality: {
-    cardinalityMode: 'fieldOnly',
+    cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
     broadcastPolicy: 'disallowSignalMix',
   },
+  payload: {
+    allowedPayloads: {
+      input: { float: true },
+      result: { float: true },
+    },
+    semantics: 'componentwise',
+  },
   inputs: {
-    input: { label: 'Input', type: signalTypeField('float', 'default') },
+    input: { label: 'Input', type: signalType('float') },
   },
   outputs: {
-    result: { label: 'Result', type: signalTypeField('float', 'default') },
+    result: { label: 'Result', type: signalType('float') },
   },
   lower: ({ ctx, inputsById }) => {
     const input = inputsById.input;
 
-    if (!input || input.k !== 'field') {
-      throw new Error('FieldCos input must be a field');
+    if (!input) {
+      throw new Error('Cos input required');
     }
 
-    const cosFn = ctx.b.kernel('fieldCos');
-    const result = ctx.b.fieldMap(input.id, cosFn, signalTypeField('float', 'default'));
-    const slot = ctx.b.allocSlot();
-
-    return {
-      outputsById: {
-        result: { k: 'field', id: result, slot },
-      },
-      // Propagate instance context from inputs
-      instanceContext: ctx.inferredInstance,
-    };
+    if (input.k === 'sig') {
+      // Signal path - use opcode
+      const cosFn = ctx.b.opcode(OpCode.Cos);
+      const result = ctx.b.sigMap(input.id, cosFn, signalType('float'));
+      const slot = ctx.b.allocSlot();
+      return {
+        outputsById: {
+          result: { k: 'sig', id: result, slot },
+        },
+      };
+    } else if (input.k === 'field') {
+      // Field path - use field kernel
+      const cosFn = ctx.b.kernel('fieldCos');
+      const result = ctx.b.fieldMap(input.id, cosFn, signalTypeField('float', 'default'));
+      const slot = ctx.b.allocSlot();
+      return {
+        outputsById: {
+          result: { k: 'field', id: result, slot },
+        },
+        instanceContext: ctx.inferredInstance,
+      };
+    } else {
+      throw new Error('Cos input must be signal or field');
+    }
   },
 });
 
 // =============================================================================
-// FieldMod
+// Mod (cardinality-generic)
 // =============================================================================
 
 registerBlock({
-  type: 'FieldMod',
-  label: 'Field Modulo',
-  category: 'field',
-  description: 'Per-element modulo of two fields',
+  type: 'Mod',
+  label: 'Mod',
+  category: 'math',
+  description: 'Per-element modulo (works with both signals and fields)',
   form: 'primitive',
   capability: 'pure',
   cardinality: {
-    cardinalityMode: 'fieldOnly',
+    cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
-    broadcastPolicy: 'disallowSignalMix',
+    broadcastPolicy: 'allowZipSig',
+  },
+  payload: {
+    allowedPayloads: {
+      a: { float: true, int: true },
+      b: { float: true, int: true },
+      result: { float: true, int: true },
+    },
+    semantics: 'componentwise',
   },
   inputs: {
-    a: { label: 'A', type: signalTypeField('float', 'default') },
-    b: { label: 'B', type: signalTypeField('float', 'default') },
+    a: { label: 'A', type: signalType('float') },
+    b: { label: 'B', type: signalType('float') },
   },
   outputs: {
-    result: { label: 'Result', type: signalTypeField('float', 'default') },
+    result: { label: 'Result', type: signalType('float') },
   },
   lower: ({ ctx, inputsById }) => {
     const a = inputsById.a;
     const b = inputsById.b;
 
-    if (!a || a.k !== 'field' || !b || b.k !== 'field') {
-      throw new Error('FieldMod inputs must be fields');
+    if (!a || !b) {
+      throw new Error('Mod inputs required');
     }
 
-    const modFn = ctx.b.kernel('fieldMod');
-    const result = ctx.b.fieldZip([a.id, b.id], modFn, signalTypeField('float', 'default'));
-    const slot = ctx.b.allocSlot();
-
-    return {
-      outputsById: {
-        result: { k: 'field', id: result, slot },
-      },
-      // Propagate instance context from inputs
-      instanceContext: ctx.inferredInstance,
-    };
+    if (a.k === 'sig' && b.k === 'sig') {
+      // Signal path
+      const modFn = ctx.b.opcode(OpCode.Mod);
+      const result = ctx.b.sigZip([a.id, b.id], modFn, signalType('float'));
+      const slot = ctx.b.allocSlot();
+      return {
+        outputsById: {
+          result: { k: 'sig', id: result, slot },
+        },
+      };
+    } else if (a.k === 'field' && b.k === 'field') {
+      // Field path
+      const modFn = ctx.b.kernel('fieldMod');
+      const result = ctx.b.fieldZip([a.id, b.id], modFn, signalTypeField('float', 'default'));
+      const slot = ctx.b.allocSlot();
+      return {
+        outputsById: {
+          result: { k: 'field', id: result, slot },
+        },
+        instanceContext: ctx.inferredInstance,
+      };
+    } else {
+      throw new Error('Mod inputs must both be signals or both be fields');
+    }
   },
 });
 
 // =============================================================================
-// FieldPolarToCartesian
+// FieldPolarToCartesian (field-only - uses broadcast with multiple inputs)
+// Note: Kept with "Field" prefix to avoid conflict with signal-only PolarToCartesian in geometry-blocks
 // =============================================================================
 
 registerBlock({
@@ -353,7 +284,7 @@ registerBlock({
     const centerY = inputsById.centerY;
 
     if (!angle || angle.k !== 'field' || !radius || radius.k !== 'field') {
-      throw new Error('FieldPolarToCartesian angle and radius must be fields');
+      throw new Error('PolarToCartesian angle and radius must be fields');
     }
 
     // Get center signals (or create default constants)
@@ -386,7 +317,8 @@ registerBlock({
 });
 
 // =============================================================================
-// FieldCartesianToPolar
+// FieldCartesianToPolar (field-only - uses broadcast with multiple inputs)
+// Note: Kept with "Field" prefix to avoid conflict with signal-only CartesianToPolar in geometry-blocks
 // =============================================================================
 
 registerBlock({
@@ -416,7 +348,7 @@ registerBlock({
     const centerY = inputsById.centerY;
 
     if (!pos || pos.k !== 'field') {
-      throw new Error('FieldCartesianToPolar pos must be a field');
+      throw new Error('CartesianToPolar pos must be a field');
     }
 
     // Get center signals (or create default constants)
@@ -455,12 +387,12 @@ registerBlock({
 });
 
 // =============================================================================
-// FieldPulse
+// Pulse (field-only - uses domain-aware phase distribution)
 // =============================================================================
 
 registerBlock({
-  type: 'FieldPulse',
-  label: 'Field Pulse',
+  type: 'Pulse',
+  label: 'Pulse',
   category: 'field',
   description: 'Per-element pulsing animation based on phase and spread',
   form: 'primitive',
@@ -489,7 +421,7 @@ registerBlock({
     const spread = inputsById.spread;
 
     if (!id01 || id01.k !== 'field') {
-      throw new Error('FieldPulse id01 must be a field');
+      throw new Error('Pulse id01 must be a field');
     }
 
     // Broadcast signal inputs to fields
@@ -524,12 +456,12 @@ registerBlock({
 });
 
 // =============================================================================
-// FieldGoldenAngle
+// GoldenAngle (field-only - intrinsic distribution)
 // =============================================================================
 
 registerBlock({
-  type: 'FieldGoldenAngle',
-  label: 'Field Golden Angle',
+  type: 'GoldenAngle',
+  label: 'Golden Angle',
   category: 'field',
   description: 'Generate golden angle distribution for each element',
   form: 'primitive',
@@ -550,7 +482,7 @@ registerBlock({
     const id01 = inputsById.id01;
 
     if (!id01 || id01.k !== 'field') {
-      throw new Error('FieldGoldenAngle id01 must be a field');
+      throw new Error('GoldenAngle id01 must be a field');
     }
 
     // Golden angle ≈ 2.39996... radians (137.508°)
@@ -572,12 +504,12 @@ registerBlock({
 });
 
 // =============================================================================
-// FieldAngularOffset
+// AngularOffset (field-only - uses domain-aware distribution)
 // =============================================================================
 
 registerBlock({
-  type: 'FieldAngularOffset',
-  label: 'Field Angular Offset',
+  type: 'AngularOffset',
+  label: 'Angular Offset',
   category: 'field',
   description: 'Per-element angular offset based on phase and spin',
   form: 'primitive',
@@ -601,7 +533,7 @@ registerBlock({
     const spin = inputsById.spin;
 
     if (!id01 || id01.k !== 'field') {
-      throw new Error('FieldAngularOffset id01 must be a field');
+      throw new Error('AngularOffset id01 must be a field');
     }
 
     // Broadcast signal inputs to fields
@@ -632,12 +564,12 @@ registerBlock({
 });
 
 // =============================================================================
-// FieldRadiusSqrt
+// RadiusSqrt (field-only - per-field operation)
 // =============================================================================
 
 registerBlock({
-  type: 'FieldRadiusSqrt',
-  label: 'Field Radius Sqrt',
+  type: 'RadiusSqrt',
+  label: 'Radius Sqrt',
   category: 'field',
   description: 'Square root radius distribution for even area coverage',
   form: 'primitive',
@@ -659,10 +591,10 @@ registerBlock({
     const radius = inputsById.radius;
 
     if (!id01 || id01.k !== 'field') {
-      throw new Error('FieldRadiusSqrt id01 must be a field');
+      throw new Error('RadiusSqrt id01 must be a field');
     }
     if (!radius || radius.k !== 'field') {
-      throw new Error('FieldRadiusSqrt radius must be a field');
+      throw new Error('RadiusSqrt radius must be a field');
     }
 
     // effective_radius = radius * sqrt(id01)
@@ -686,12 +618,12 @@ registerBlock({
 });
 
 // =============================================================================
-// FieldJitter2D
+// Jitter2D (field-only - per-field operation)
 // =============================================================================
 
 registerBlock({
-  type: 'FieldJitter2D',
-  label: 'Field Jitter 2D',
+  type: 'Jitter2D',
+  label: 'Jitter 2D',
   category: 'field',
   description: 'Add per-element random jitter to 2D positions',
   form: 'primitive',
@@ -717,10 +649,10 @@ registerBlock({
     const amountY = inputsById.amountY;
 
     if (!pos || pos.k !== 'field') {
-      throw new Error('FieldJitter2D pos must be a field');
+      throw new Error('Jitter2D pos must be a field');
     }
     if (!rand || rand.k !== 'field') {
-      throw new Error('FieldJitter2D rand must be a field');
+      throw new Error('Jitter2D rand must be a field');
     }
 
     // Broadcast signal inputs to fields
@@ -751,12 +683,12 @@ registerBlock({
 });
 
 // =============================================================================
-// FieldHueFromPhase
+// HueFromPhase (field-only - domain-aware hue generation)
 // =============================================================================
 
 registerBlock({
-  type: 'FieldHueFromPhase',
-  label: 'Field Hue From Phase',
+  type: 'HueFromPhase',
+  label: 'Hue From Phase',
   category: 'field',
   description: 'Generate per-element hue values from phase and ID',
   form: 'primitive',
@@ -778,7 +710,7 @@ registerBlock({
     const phase = inputsById.phase;
 
     if (!id01 || id01.k !== 'field') {
-      throw new Error('FieldHueFromPhase id01 must be a field');
+      throw new Error('HueFromPhase id01 must be a field');
     }
 
     // Broadcast phase to field
@@ -806,7 +738,7 @@ registerBlock({
 });
 
 // =============================================================================
-// FieldSetZ
+// SetZ (field-only - per-field operation)
 // =============================================================================
 
 /**
@@ -814,8 +746,8 @@ registerBlock({
  * Useful for adding depth/height animation to 2D layouts.
  */
 registerBlock({
-  type: 'FieldSetZ',
-  label: 'Field Set Z',
+  type: 'SetZ',
+  label: 'Set Z',
   category: 'field',
   description: 'Set the Z component of a vec3 position field',
   form: 'primitive',
@@ -837,10 +769,10 @@ registerBlock({
     const z = inputsById.z;
 
     if (!pos || pos.k !== 'field') {
-      throw new Error('FieldSetZ pos must be a field');
+      throw new Error('SetZ pos must be a field');
     }
     if (!z || z.k !== 'field') {
-      throw new Error('FieldSetZ z must be a field');
+      throw new Error('SetZ z must be a field');
     }
 
     // Zip position and z together: (vec3, float) -> vec3 with new z

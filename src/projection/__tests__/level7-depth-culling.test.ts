@@ -404,7 +404,7 @@ describe('Level 7 End-to-End: Real Pipeline Depth Sort + Cull', () => {
       const layout = b.addBlock('GridLayout', { rows: 3, cols: 3 });
       const sat = b.addBlock('Const', { value: 1.0 });
       const val = b.addBlock('Const', { value: 1.0 });
-      const hue = b.addBlock('FieldHueFromPhase', {});
+      const hue = b.addBlock('HueFromPhase', {});
       const color = b.addBlock('HsvToRgb', {});
       const render = b.addBlock('RenderInstances2D', {});
 

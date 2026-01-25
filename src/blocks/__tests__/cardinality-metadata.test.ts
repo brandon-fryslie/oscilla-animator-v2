@@ -52,6 +52,7 @@ describe('Cardinality Metadata', () => {
       'Oscillator', 'UnitDelay', 'Hash', 'Id01',
       'ColorLFO', 'HSVToColor', 'HsvToRgb',
       'PolarToCartesian', 'OffsetPosition',
+      'Sin', 'Cos', 'Mod',
       'Expression',
     ];
 
@@ -83,9 +84,10 @@ describe('Cardinality Metadata', () => {
     const fieldOnlyBlocks = [
       'RenderInstances2D',
       'StableIdHash', 'DomainIndex',
-      'FieldFromDomainId',
-      'FieldAdd', 'FieldMultiply', 'FieldScale',
-      'FieldSin', 'FieldCos', 'FieldMod',
+      'FromDomainId',
+      'FieldPolarToCartesian', 'FieldCartesianToPolar',
+      'Pulse', 'GoldenAngle', 'AngularOffset',
+      'RadiusSqrt', 'Jitter2D', 'HueFromPhase', 'SetZ',
       'PathField',
     ];
 

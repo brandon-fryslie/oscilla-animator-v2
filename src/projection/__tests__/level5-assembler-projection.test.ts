@@ -31,7 +31,7 @@ describe('Level 5 Unit Tests: Assembler API', () => {
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
 
-      const hue = b.addBlock('FieldHueFromPhase', {});
+      const hue = b.addBlock('HueFromPhase', {});
       b.wire(array, 't', hue, 'id01');
       const phase = b.addBlock('Const', { value: 0.0 });
       b.wire(phase, 'out', hue, 'phase');
@@ -76,7 +76,7 @@ describe('Level 5 Unit Tests: Assembler API', () => {
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
 
-      const hue = b.addBlock('FieldHueFromPhase', {});
+      const hue = b.addBlock('HueFromPhase', {});
       b.wire(array, 't', hue, 'id01');
       const phase = b.addBlock('Const', { value: 0.0 });
       b.wire(phase, 'out', hue, 'phase');
@@ -125,7 +125,7 @@ describe('Level 5 Unit Tests: Assembler API', () => {
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
 
-      const hue = b.addBlock('FieldHueFromPhase', {});
+      const hue = b.addBlock('HueFromPhase', {});
       b.wire(array, 't', hue, 'id01');
       const phase = b.addBlock('Const', { value: 0.0 });
       b.wire(phase, 'out', hue, 'phase');
@@ -202,7 +202,7 @@ describe('Level 5 Integration Tests: Full Pipeline', () => {
       b.wire(array, 'elements', layout, 'elements');
 
       // Color pipeline: FieldHueFromPhase → HsvToRgb
-      const hue = b.addBlock('FieldHueFromPhase', {});
+      const hue = b.addBlock('HueFromPhase', {});
       b.wire(array, 't', hue, 'id01');
       const phase = b.addBlock('Const', { value: 0.5 });
       b.wire(phase, 'out', hue, 'phase');

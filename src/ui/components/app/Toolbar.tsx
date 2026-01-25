@@ -75,6 +75,13 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
     setToastOpen(false);
   };
 
+  const handleResetLocalStorage = () => {
+    const clearStorageAndReload = (window as unknown as { clearStorageAndReload?: () => void }).clearStorageAndReload;
+    if (clearStorageAndReload) {
+      clearStorageAndReload();
+    }
+  };
+
   return (
     <>
       <Box
@@ -237,6 +244,22 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
                   }}
                 >
                   3D
+                </Button>
+              </Tooltip>
+
+              <Tooltip label="Reset localStorage" position="bottom" withArrow>
+                <Button
+                  variant="subtle"
+                  color="gray"
+                  size="xs"
+                  onClick={handleResetLocalStorage}
+                  styles={{
+                    root: {
+                      border: '1px solid rgba(139, 92, 246, 0.2)',
+                    },
+                  }}
+                >
+                  Reset
                 </Button>
               </Tooltip>
 

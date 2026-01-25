@@ -196,7 +196,7 @@ describe('Level 1 Integration Tests', () => {
       b.wire(array, 'elements', layout, 'elements');
 
       // Color: constant white via HSV
-      const hue = b.addBlock('FieldHueFromPhase', {});
+      const hue = b.addBlock('HueFromPhase', {});
       b.wire(array, 't', hue, 'id01');
       const phase = b.addBlock('Const', { value: 0.0 });
       b.wire(phase, 'out', hue, 'phase');

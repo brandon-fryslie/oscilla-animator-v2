@@ -26,9 +26,9 @@ describe('Debug5', () => {
       const centerY = b.addBlock('Const', { value: 0.5 });
       const radius = b.addBlock('Const', { value: 0.35 });
 
-      const goldenAngle = b.addBlock('FieldGoldenAngle', { turns: 50 });
-      const effectiveRadius = b.addBlock('FieldRadiusSqrt', {});
-      const pos = b.addBlock('FieldPolarToCartesian', {});
+      const goldenAngle = b.addBlock('GoldenAngle', { turns: 50 });
+      const effectiveRadius = b.addBlock('RadiusSqrt', {});
+      const pos = b.addBlock('PolarToCartesian', {});
 
       b.wire(array, 't', goldenAngle, 'id01');
       b.wire(array, 't', effectiveRadius, 'id01');
@@ -39,7 +39,7 @@ describe('Debug5', () => {
       b.wire(effectiveRadius, 'out', pos, 'radius');
 
       // Color
-      const hue = b.addBlock('FieldHueFromPhase', {});
+      const hue = b.addBlock('HueFromPhase', {});
       b.wire(time, 'phaseA', hue, 'phase');
       b.wire(array, 't', hue, 'id01');
 

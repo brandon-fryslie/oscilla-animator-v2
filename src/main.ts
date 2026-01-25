@@ -110,9 +110,9 @@ const patchGoldenSpiral: PatchBuilder = (b) => {
   const array = b.addBlock('Array', { count: 5000 });
   b.wire(ellipse, 'shape', array, 'element');
 
-  const goldenAngle = b.addBlock('FieldGoldenAngle', { turns: 50 });
-  const angularOffset = b.addBlock('FieldAngularOffset', { spin: 2.0 });
-  const totalAngle = b.addBlock('FieldAdd', {});
+  const goldenAngle = b.addBlock('GoldenAngle', { turns: 50 });
+  const angularOffset = b.addBlock('AngularOffset', { spin: 2.0 });
+  const totalAngle = b.addBlock('Add', {});
 
   b.wire(array, 't', goldenAngle, 'id01');
   b.wire(array, 't', angularOffset, 'id01');
@@ -120,17 +120,17 @@ const patchGoldenSpiral: PatchBuilder = (b) => {
   b.wire(goldenAngle, 'angle', totalAngle, 'a');
   b.wire(angularOffset, 'offset', totalAngle, 'b');
 
-  const effectiveRadius = b.addBlock('FieldRadiusSqrt', { radius: 0.35 });
+  const effectiveRadius = b.addBlock('RadiusSqrt', { radius: 0.35 });
   b.wire(array, 't', effectiveRadius, 'id01');
 
   const pos = b.addBlock('FieldPolarToCartesian', {});
   b.wire(totalAngle, 'out', pos, 'angle');
   b.wire(effectiveRadius, 'out', pos, 'radius');
 
-  const jitter = b.addBlock('FieldJitter2D', { amountX: 0.015, amountY: 0.015 });
+  const jitter = b.addBlock('Jitter2D', { amountX: 0.015, amountY: 0.015 });
   // Broadcast time (scalar) for jitter seed variation
   const timeBroadcast = b.addBlock('Broadcast', { payloadType: 'float' });
-  const jitterRand = b.addBlock('FieldAdd', {});
+  const jitterRand = b.addBlock('Add', {});
 
   b.wire(time, 'tMs', timeBroadcast, 'signal');
   b.wire(timeBroadcast, 'field', jitterRand, 'a');
@@ -138,7 +138,7 @@ const patchGoldenSpiral: PatchBuilder = (b) => {
   b.wire(pos, 'pos', jitter, 'pos');
   b.wire(jitterRand, 'out', jitter, 'rand');
 
-  const hue = b.addBlock('FieldHueFromPhase', {});
+  const hue = b.addBlock('HueFromPhase', {});
   const color = b.addBlock('HsvToRgb', { sat: 0.85, val: 0.9 });
 
   b.wire(array, 't', hue, 'id01');
@@ -166,9 +166,9 @@ const patchDomainTest: PatchBuilder = (b) => {
   const array = b.addBlock('Array', { count: 50 });
   b.wire(ellipse, 'shape', array, 'element');
 
-  const goldenAngle = b.addBlock('FieldGoldenAngle', { turns: 8 });
-  const angularOffset = b.addBlock('FieldAngularOffset', { spin: 1.0 });
-  const totalAngle = b.addBlock('FieldAdd', {});
+  const goldenAngle = b.addBlock('GoldenAngle', { turns: 8 });
+  const angularOffset = b.addBlock('AngularOffset', { spin: 1.0 });
+  const totalAngle = b.addBlock('Add', {});
 
   b.wire(array, 't', goldenAngle, 'id01');
   b.wire(array, 't', angularOffset, 'id01');
@@ -176,14 +176,14 @@ const patchDomainTest: PatchBuilder = (b) => {
   b.wire(goldenAngle, 'angle', totalAngle, 'a');
   b.wire(angularOffset, 'offset', totalAngle, 'b');
 
-  const effectiveRadius = b.addBlock('FieldRadiusSqrt', { radius: 0.35 });
+  const effectiveRadius = b.addBlock('RadiusSqrt', { radius: 0.35 });
   b.wire(array, 't', effectiveRadius, 'id01');
 
   const pos = b.addBlock('FieldPolarToCartesian', {});
   b.wire(totalAngle, 'out', pos, 'angle');
   b.wire(effectiveRadius, 'out', pos, 'radius');
 
-  const hue = b.addBlock('FieldHueFromPhase', {});
+  const hue = b.addBlock('HueFromPhase', {});
   const color = b.addBlock('HsvToRgb', { sat: 1.0, val: 1.0 });
 
   b.wire(array, 't', hue, 'id01');
@@ -218,16 +218,12 @@ const patchTileGrid: PatchBuilder = (b) => {
   b.wire(array, 'elements', grid, 'elements');
 
   // Rainbow gradient color from element position + time
-  const hue = b.addBlock('FieldHueFromPhase', {});
+  const hue = b.addBlock('HueFromPhase', {});
   b.wire(time, 'phaseB', hue, 'phase');
   b.wire(array, 't', hue, 'id01');
 
-  const sat = b.addBlock('Const', { value: 0.7 });
-  const val = b.addBlock('Const', { value: 0.95 });
   const color = b.addBlock('HsvToRgb', {});
   b.wire(hue, 'hue', color, 'hue');
-  b.wire(sat, 'out', color, 'sat');
-  b.wire(val, 'out', color, 'val');
 
   const render = b.addBlock('RenderInstances2D', {});
   b.wire(grid, 'position', render, 'pos');
@@ -253,41 +249,28 @@ const patchOrbitalRings: PatchBuilder = (b) => {
   b.wire(ellipse, 'shape', array, 'element');
 
   // Golden spiral with fast spin for orbital motion
-  const goldenAngle = b.addBlock('FieldGoldenAngle', { turns: 50 });
-  const angularOffset = b.addBlock('FieldAngularOffset', {});
-  const totalAngle = b.addBlock('FieldAdd', {});
-  const effectiveRadius = b.addBlock('FieldRadiusSqrt', {});
+  const goldenAngle = b.addBlock('GoldenAngle', { turns: 50 });
+  const angularOffset = b.addBlock('AngularOffset', {});
+  const totalAngle = b.addBlock('Add', {});
+  const effectiveRadius = b.addBlock('RadiusSqrt', {});
   const pos = b.addBlock('FieldPolarToCartesian', {});
-
-  const spin = b.addBlock('Const', { value: 1.5 }); // fast orbiting
-  const centerX = b.addBlock('Const', { value: 0.5 });
-  const centerY = b.addBlock('Const', { value: 0.5 });
-  const radiusMax = b.addBlock('Const', { value: 0.4 });
 
   b.wire(array, 't', goldenAngle, 'id01');
   b.wire(array, 't', angularOffset, 'id01');
   b.wire(array, 't', effectiveRadius, 'id01');
   b.wire(time, 'phaseA', angularOffset, 'phase');
-  b.wire(spin, 'out', angularOffset, 'spin');
   b.wire(goldenAngle, 'angle', totalAngle, 'a');
   b.wire(angularOffset, 'offset', totalAngle, 'b');
-  b.wire(centerX, 'out', pos, 'centerX');
-  b.wire(centerY, 'out', pos, 'centerY');
-  b.wire(radiusMax, 'out', effectiveRadius, 'radius');
   b.wire(totalAngle, 'out', pos, 'angle');
   b.wire(effectiveRadius, 'out', pos, 'radius');
 
   // Color: hue varies by element position + time shift
-  const hue = b.addBlock('FieldHueFromPhase', {});
+  const hue = b.addBlock('HueFromPhase', {});
   b.wire(time, 'phaseB', hue, 'phase');
   b.wire(array, 't', hue, 'id01');
 
-  const sat = b.addBlock('Const', { value: 0.9 });
-  const val = b.addBlock('Const', { value: 1.0 });
   const color = b.addBlock('HsvToRgb', {});
   b.wire(hue, 'hue', color, 'hue');
-  b.wire(sat, 'out', color, 'sat');
-  b.wire(val, 'out', color, 'val');
 
   const render = b.addBlock('RenderInstances2D', {});
   b.wire(pos, 'pos', render, 'pos');
@@ -314,36 +297,27 @@ const patchRectMosaic: PatchBuilder = (b) => {
   b.wire(rect, 'shape', array, 'element');
 
   // Position: golden spiral with jitter for organic randomness
-  const centerX = b.addBlock('Const', { value: 0.5 });
-  const centerY = b.addBlock('Const', { value: 0.5 });
-  const radius = b.addBlock('Const', { value: 0.45 });
-  const spin = b.addBlock('Const', { value: 0.2 });
-
-  const goldenAngle = b.addBlock('FieldGoldenAngle', { turns: 80 });
-  const angularOffset = b.addBlock('FieldAngularOffset', {});
-  const totalAngle = b.addBlock('FieldAdd', {});
-  const effectiveRadius = b.addBlock('FieldRadiusSqrt', {});
+  const goldenAngle = b.addBlock('GoldenAngle', { turns: 80 });
+  const angularOffset = b.addBlock('AngularOffset', {});
+  const totalAngle = b.addBlock('Add', {});
+  const effectiveRadius = b.addBlock('RadiusSqrt', { radius: 0.45 });
   const pos = b.addBlock('FieldPolarToCartesian', {});
 
   b.wire(time, 'phaseA', angularOffset, 'phase');
   b.wire(array, 't', goldenAngle, 'id01');
   b.wire(array, 't', angularOffset, 'id01');
   b.wire(array, 't', effectiveRadius, 'id01');
-  b.wire(spin, 'out', angularOffset, 'spin');
 
   b.wire(goldenAngle, 'angle', totalAngle, 'a');
   b.wire(angularOffset, 'offset', totalAngle, 'b');
 
-  b.wire(centerX, 'out', pos, 'centerX');
-  b.wire(centerY, 'out', pos, 'centerY');
-  b.wire(radius, 'out', effectiveRadius, 'radius');
   b.wire(totalAngle, 'out', pos, 'angle');
   b.wire(effectiveRadius, 'out', pos, 'radius');
 
   // Add jitter for organic per-element randomness
-  const jitter = b.addBlock('FieldJitter2D', { amountX: 0.02, amountY: 0.02 });
+  const jitter = b.addBlock('Jitter2D', { amountX: 0.02, amountY: 0.02 });
   const timeBroadcast = b.addBlock('Broadcast', { payloadType: 'float' });
-  const jitterRand = b.addBlock('FieldAdd', {});
+  const jitterRand = b.addBlock('Add', {});
   b.wire(time, 'tMs', timeBroadcast, 'signal');
   b.wire(timeBroadcast, 'field', jitterRand, 'a');
   b.wire(array, 't', jitterRand, 'b');
@@ -351,27 +325,17 @@ const patchRectMosaic: PatchBuilder = (b) => {
   b.wire(jitterRand, 'out', jitter, 'rand');
 
   // Color from index + time
-  const hue = b.addBlock('FieldHueFromPhase', {});
+  const hue = b.addBlock('HueFromPhase', {});
   b.wire(time, 'phaseB', hue, 'phase');
   b.wire(array, 't', hue, 'id01');
 
   const color = b.addBlock('HsvToRgb', {});
-  const sat = b.addBlock('Const', { value: 0.85 });
-  const val = b.addBlock('Const', { value: 0.95 });
   b.wire(hue, 'hue', color, 'hue');
-  b.wire(sat, 'out', color, 'sat');
-  b.wire(val, 'out', color, 'val');
 
   // Per-element animated opacity: wave that sweeps across elements
-  const opacityPulse = b.addBlock('FieldPulse', {});
-  const opacityBase = b.addBlock('Const', { value: 0.4 });
-  const opacityAmp = b.addBlock('Const', { value: 0.6 });
-  const opacitySpread = b.addBlock('Const', { value: 2.0 });
+  const opacityPulse = b.addBlock('Pulse', { base: 0.4, amplitude: 0.6, spread: 2.0 });
   b.wire(array, 't', opacityPulse, 'id01');
   b.wire(time, 'phaseB', opacityPulse, 'phase');
-  b.wire(opacityBase, 'out', opacityPulse, 'base');
-  b.wire(opacityAmp, 'out', opacityPulse, 'amplitude');
-  b.wire(opacitySpread, 'out', opacityPulse, 'spread');
 
   const opacity = b.addBlock('ApplyOpacity', {});
   b.wire(color, 'color', opacity, 'color');
@@ -422,52 +386,34 @@ const patchShapeKaleidoscope: PatchBuilder = (b) => {
   b.wire(ellipse, 'shape', ellipseArray, 'element');
 
   // Ellipse positions: golden spiral spinning clockwise, wide spread
-  const eGolden = b.addBlock('FieldGoldenAngle', { turns: 50 });
-  const eAngular = b.addBlock('FieldAngularOffset', {});
-  const eTotalAngle = b.addBlock('FieldAdd', {});
-  const eRadius = b.addBlock('FieldRadiusSqrt', {});
+  const eGolden = b.addBlock('GoldenAngle', { turns: 50 });
+  const eAngular = b.addBlock('AngularOffset', {});
+  const eTotalAngle = b.addBlock('Add', {});
+  const eRadius = b.addBlock('RadiusSqrt', { radius: 0.45 });
   const ePos = b.addBlock('FieldPolarToCartesian', {});
-  const eSpin = b.addBlock('Const', { value: 0.8 }); // clockwise
 
   b.wire(ellipseArray, 't', eGolden, 'id01');
   b.wire(ellipseArray, 't', eAngular, 'id01');
   b.wire(ellipseArray, 't', eRadius, 'id01');
   b.wire(time, 'phaseA', eAngular, 'phase');
-  b.wire(eSpin, 'out', eAngular, 'spin');
   b.wire(eGolden, 'angle', eTotalAngle, 'a');
   b.wire(eAngular, 'offset', eTotalAngle, 'b');
 
-  const eCenterX = b.addBlock('Const', { value: 0.5 });
-  const eCenterY = b.addBlock('Const', { value: 0.5 });
-  const eRadiusMax = b.addBlock('Const', { value: 0.45 }); // wider spread
-  b.wire(eCenterX, 'out', ePos, 'centerX');
-  b.wire(eCenterY, 'out', ePos, 'centerY');
-  b.wire(eRadiusMax, 'out', eRadius, 'radius');
   b.wire(eTotalAngle, 'out', ePos, 'angle');
   b.wire(eRadius, 'out', ePos, 'radius');
 
   // Ellipse color: warm hues
-  const eHue = b.addBlock('FieldHueFromPhase', {});
+  const eHue = b.addBlock('HueFromPhase', {});
   b.wire(time, 'phaseA', eHue, 'phase');
   b.wire(ellipseArray, 't', eHue, 'id01');
 
   const eColor = b.addBlock('HsvToRgb', {});
-  const eSat = b.addBlock('Const', { value: 1.0 });
-  const eVal = b.addBlock('Const', { value: 1.0 });
   b.wire(eHue, 'hue', eColor, 'hue');
-  b.wire(eSat, 'out', eColor, 'sat');
-  b.wire(eVal, 'out', eColor, 'val');
 
   // Ellipse per-element opacity: wave sweeps across elements
-  const eOpacityPulse = b.addBlock('FieldPulse', {});
-  const eOpBase = b.addBlock('Const', { value: 0.3 });
-  const eOpAmp = b.addBlock('Const', { value: 0.7 });
-  const eOpSpread = b.addBlock('Const', { value: 1.5 });
+  const eOpacityPulse = b.addBlock('Pulse', { base: 0.3, amplitude: 0.7, spread: 1.5 });
   b.wire(ellipseArray, 't', eOpacityPulse, 'id01');
   b.wire(time, 'phaseA', eOpacityPulse, 'phase');
-  b.wire(eOpBase, 'out', eOpacityPulse, 'base');
-  b.wire(eOpAmp, 'out', eOpacityPulse, 'amplitude');
-  b.wire(eOpSpread, 'out', eOpacityPulse, 'spread');
 
   const eOpacity = b.addBlock('ApplyOpacity', {});
   b.wire(eColor, 'color', eOpacity, 'color');
@@ -485,27 +431,19 @@ const patchShapeKaleidoscope: PatchBuilder = (b) => {
   b.wire(rect, 'shape', rectArray, 'element');
 
   // Rect positions: golden spiral spinning counter-clockwise, wide spread
-  const rGolden = b.addBlock('FieldGoldenAngle', { turns: 30 });
-  const rAngular = b.addBlock('FieldAngularOffset', {});
-  const rTotalAngle = b.addBlock('FieldAdd', {});
-  const rRadius = b.addBlock('FieldRadiusSqrt', {});
+  const rGolden = b.addBlock('GoldenAngle', { turns: 30 });
+  const rAngular = b.addBlock('AngularOffset', {});
+  const rTotalAngle = b.addBlock('Add', {});
+  const rRadius = b.addBlock('RadiusSqrt', { radius: 0.42 });
   const rPos = b.addBlock('FieldPolarToCartesian', {});
-  const rSpinConst = b.addBlock('Const', { value: -0.6 }); // counter-clockwise
 
   b.wire(rectArray, 't', rGolden, 'id01');
   b.wire(rectArray, 't', rAngular, 'id01');
   b.wire(rectArray, 't', rRadius, 'id01');
   b.wire(time, 'phaseB', rAngular, 'phase');
-  b.wire(rSpinConst, 'out', rAngular, 'spin');
   b.wire(rGolden, 'angle', rTotalAngle, 'a');
   b.wire(rAngular, 'offset', rTotalAngle, 'b');
 
-  const rCenterX = b.addBlock('Const', { value: 0.5 });
-  const rCenterY = b.addBlock('Const', { value: 0.5 });
-  const rRadiusMax = b.addBlock('Const', { value: 0.42 }); // wider spread
-  b.wire(rCenterX, 'out', rPos, 'centerX');
-  b.wire(rCenterY, 'out', rPos, 'centerY');
-  b.wire(rRadiusMax, 'out', rRadius, 'radius');
   b.wire(rTotalAngle, 'out', rPos, 'angle');
   b.wire(rRadius, 'out', rPos, 'radius');
 
@@ -515,27 +453,17 @@ const patchShapeKaleidoscope: PatchBuilder = (b) => {
   });
   b.wire(time, 'phaseB', rPhaseOffset, 'in0');
 
-  const rHue = b.addBlock('FieldHueFromPhase', {});
+  const rHue = b.addBlock('HueFromPhase', {});
   b.wire(rPhaseOffset, 'out', rHue, 'phase');
   b.wire(rectArray, 't', rHue, 'id01');
 
   const rColor = b.addBlock('HsvToRgb', {});
-  const rSat = b.addBlock('Const', { value: 0.7 });
-  const rVal = b.addBlock('Const', { value: 0.95 });
   b.wire(rHue, 'hue', rColor, 'hue');
-  b.wire(rSat, 'out', rColor, 'sat');
-  b.wire(rVal, 'out', rColor, 'val');
 
   // Rect per-element opacity: counter-phase wave
-  const rOpacityPulse = b.addBlock('FieldPulse', {});
-  const rOpBase = b.addBlock('Const', { value: 0.4 });
-  const rOpAmp = b.addBlock('Const', { value: 0.6 });
-  const rOpSpread = b.addBlock('Const', { value: 2.5 });
+  const rOpacityPulse = b.addBlock('Pulse', { base: 0.4, amplitude: 0.6, spread: 2.5 });
   b.wire(rectArray, 't', rOpacityPulse, 'id01');
   b.wire(time, 'phaseB', rOpacityPulse, 'phase');
-  b.wire(rOpBase, 'out', rOpacityPulse, 'base');
-  b.wire(rOpAmp, 'out', rOpacityPulse, 'amplitude');
-  b.wire(rOpSpread, 'out', rOpacityPulse, 'spread');
 
   const rOpacity = b.addBlock('ApplyOpacity', {});
   b.wire(rColor, 'color', rOpacity, 'color');
@@ -567,12 +495,6 @@ const patchPerspectiveCamera: PatchBuilder = (b) => {
   // Camera block
   const camera = b.addBlock('Camera', {});
 
-  // Fixed tilt: looking down at ~50° angle (overhead drone view)
-  const tiltConst = b.addBlock('Const', { value: 50.0 });
-  const tiltDeg = b.addBlock('Adapter_ScalarToDeg', {});
-  b.wire(tiltConst, 'out', tiltDeg, 'in');
-  b.wire(tiltDeg, 'out', camera, 'tiltDeg');
-
   // Animated yaw: continuous 360° orbit around the scene
   const yawExpr = b.addBlock('Expression', {
     expression: 'in0 * 360.0',
@@ -593,33 +515,21 @@ const patchPerspectiveCamera: PatchBuilder = (b) => {
 
   // Animated Z: per-element wave based on position in grid
   // z = 0.15 * sin(2π * (id01 + phaseB))
-  const zWave = b.addBlock('FieldPulse', {});
+  const zWave = b.addBlock('Pulse', { base: 0.0, amplitude: 0.15, spread: 2.0 });
   b.wire(array, 't', zWave, 'id01');
   b.wire(time, 'phaseB', zWave, 'phase');
-  const zBase = b.addBlock('Const', { value: 0.0 });
-  const zAmp = b.addBlock('Const', { value: 0.15 });
-  const zSpread = b.addBlock('Const', { value: 2.0 }); // 2 full waves across grid
-  b.wire(zBase, 'out', zWave, 'base');
-  b.wire(zAmp, 'out', zWave, 'amplitude');
-  b.wire(zSpread, 'out', zWave, 'spread');
 
   // Apply Z to positions
-  const posWithZ = b.addBlock('FieldSetZ', {});
+  const posWithZ = b.addBlock('SetZ', {});
   b.wire(grid, 'position', posWithZ, 'pos');
   b.wire(zWave, 'value', posWithZ, 'z');
 
   // Rainbow color based on grid position (static colors)
-  const hue = b.addBlock('FieldHueFromPhase', {});
+  const hue = b.addBlock('HueFromPhase', {});
   b.wire(array, 't', hue, 'id01');
-  const zeroPhase = b.addBlock('Const', { value: 0.0 });
-  b.wire(zeroPhase, 'out', hue, 'phase');
 
-  const sat = b.addBlock('Const', { value: 0.9 });
-  const val = b.addBlock('Const', { value: 1.0 });
   const color = b.addBlock('HsvToRgb', {});
   b.wire(hue, 'hue', color, 'hue');
-  b.wire(sat, 'out', color, 'sat');
-  b.wire(val, 'out', color, 'val');
 
   // Render with Z-animated positions
   const render = b.addBlock('RenderInstances2D', {});
@@ -742,29 +652,8 @@ function loadPatchFromStorage(): { patch: Patch; presetIndex: number } | null {
  * Does NOT compile - call compileAndSwap() after this.
  */
 function build(patchBuilder: PatchBuilder): Patch {
-  log(`Building patch...`);
-
   const patch = buildPatch(patchBuilder);
 
-  log(`Patch built: ${patch.blocks.size} blocks, ${patch.edges.length} edges`);
-
-  // Debug: Show Const blocks and their values
-  for (const [id, block] of patch.blocks) {
-    if (block.type === 'Const' || block.type === 'Broadcast' || block.type === 'FieldRadiusSqrt') {
-      log(`  ${block.type} ${id}: params=${JSON.stringify(block.params)}`);
-    }
-  }
-
-  // Debug: Show edges involving radius blocks
-  log(`  Edges involving radius, broadcast, or FieldRadiusSqrt:`);
-  for (const edge of patch.edges) {
-    const fromBlock = patch.blocks.get(edge.from.blockId as BlockId);
-    const toBlock = patch.blocks.get(edge.to.blockId as BlockId);
-    if (fromBlock?.type === 'Const' || fromBlock?.type === 'Broadcast' ||
-      toBlock?.type === 'FieldRadiusSqrt' || toBlock?.type === 'Broadcast') {
-      log(`    ${edge.from.blockId}:${edge.from.slotId} -> ${edge.to.blockId}:${edge.to.slotId}`);
-    }
-  }
 
   // Load patch into store
   store!.patch.loadPatch(patch);
@@ -787,13 +676,9 @@ function build(patchBuilder: PatchBuilder): Patch {
 async function compileAndSwap(isInitial: boolean = false) {
   const patch = store!.patch.patch;
   if (!patch) {
-    log('No patch to compile', 'warn');
     return;
   }
 
-  if (!isInitial) {
-    log('Live recompile triggered...');
-  }
 
   // Compile the patch
   const result = compile(patch, {
@@ -818,9 +703,6 @@ async function compileAndSwap(isInitial: boolean = false) {
   }
 
   const program = result.program;
-  log(
-    `Compiled: ${program.signalExprs.nodes.length} signals, ${program.fieldExprs.nodes.length} fields, ${program.slotMeta.length} slots`,
-  );
 
   // Get schedule info
   const newSchedule = program.schedule as {
@@ -852,9 +734,7 @@ async function compileAndSwap(isInitial: boolean = false) {
   // Always create fresh ProgramState on compile (this is the cleaner lifecycle)
   const oldSlotCount = currentState?.values.f64.length ?? 0;
   const oldStateSlotCount = oldSchedule?.stateSlotCount ?? 0;
-  if (!isInitial) {
-    log(`Hot-swap: value slots ${oldSlotCount}→${newSlotCount}, state slots ${oldStateSlotCount}→${newStateSlotCount}`);
-  }
+  if (!isInitial) {  }
 
   // Create new RuntimeState from preserved SessionState + fresh ProgramState
   currentState = createRuntimeStateFromSession(sessionState!, newSlotCount, newStateSlotCount, newEventSlotCount, newEventExprCount);
@@ -874,9 +754,7 @@ async function compileAndSwap(isInitial: boolean = false) {
       getLaneMapping
     );
 
-    if (migrationResult.migrated) {
-      log(`State migration: ${migrationResult.scalarsMigrated} scalar, ${migrationResult.fieldsMigrated} field states migrated, ${migrationResult.initialized} initialized, ${migrationResult.discarded} discarded`);
-    }
+    if (migrationResult.migrated) {    }
   } else if (newStateMappings.length > 0) {
     // Initialize fresh (first compile or no old state)
     const initialState = createInitialState(newStateSlotCount, newStateMappings);
@@ -904,9 +782,8 @@ async function compileAndSwap(isInitial: boolean = false) {
     }
   }
 
-  if (isInitial) {
-    log(`Initialized domain tracking: ${instanceCounts.size} instance(s)`);
-  }
+  if (isInitial) {  }
+
 
   // Emit ProgramSwapped event
   store!.events.emit({
@@ -918,12 +795,6 @@ async function compileAndSwap(isInitial: boolean = false) {
     instanceCounts: isInitial ? undefined : instanceCounts,
   });
 
-  if (!isInitial) {
-    const instanceInfo = [...instanceCounts.entries()]
-      .map(([id, count]) => `${id}=${count}`)
-      .join(', ');
-    log(`Recompiled: ${program.signalExprs.nodes.length} signals, ${program.fieldExprs.nodes.length} fields, instances: [${instanceInfo}]`);
-  }
 }
 
 // =============================================================================
@@ -952,14 +823,8 @@ function logDomainChange(instanceId: string, oldCount: number, newCount: number,
   if (now - lastLog >= DOMAIN_LOG_INTERVAL_MS) {
     const delta = newCount - oldCount;
     const deltaStr = delta > 0 ? `+${delta}` : `${delta}`;
-    log(`[Continuity] Domain change: ${instanceId} ${oldCount}→${newCount} (${deltaStr})`);
-
     // Log mapping stats (simplified - all existing elements map, delta are new/removed)
-    if (delta > 0) {
-      log(`[Continuity]   Mapped: ${oldCount}, New: ${delta}`);
-    } else if (delta < 0) {
-      log(`[Continuity]   Mapped: ${newCount}, Removed: ${-delta}`);
-    }
+    if (delta > 0) {    } else if (delta < 0) {    }
 
     // Record to ContinuityStore for UI (Sprint 3)
     store!.continuity.recordDomainChange(
@@ -1002,9 +867,7 @@ function detectAndLogDomainChanges(oldProgram: any, newProgram: any) {
   for (const [id, _oldDecl] of oldInstances) {
     if (!newInstances.has(id)) {
       const oldCount = prevInstanceCounts.get(id) ?? 0;
-      if (oldCount > 0) {
-        log(`[Continuity] Instance removed: ${id} (was ${oldCount} elements)`);
-      }
+      if (oldCount > 0) {      }
       prevInstanceCounts.delete(id);
     }
   }
@@ -1082,20 +945,14 @@ function setupLiveRecompileReaction() {
       }
       lastBlockParamsHash = hash;
       lastBlockCount = blockCount;
-      lastEdgeCount = edgeCount;
-
-      log(`Patch changed (blocks=${blockCount}, edges=${edgeCount}), scheduling recompile...`);
-      scheduleRecompile();
+      lastEdgeCount = edgeCount;      scheduleRecompile();
     },
     {
       fireImmediately: false,
       // Use structural comparison for the tracked values
       equals: (a, b) => a.blockCount === b.blockCount && a.edgeCount === b.edgeCount && a.hash === b.hash,
     }
-  );
-
-  log('Live recompile reaction initialized');
-}
+  );}
 
 /**
  * Cleanup function for testing/hot reload.
@@ -1216,20 +1073,6 @@ function animate(tMs: number) {
         window.__setStats(statsText);
       }
 
-      // Log element count to diagnostics (every 2 seconds)
-      if (now - (lastElementCountLog ?? 0) > 2000) {
-        log(`Rendering ${totalElements} elements across ${frame.ops.length} draw operation(s)`);
-
-
-        // Debug: Show first op details
-        if (frame.ops.length > 0) {
-          const op = frame.ops[0];
-          log(`  Op 0: count=${op.instances.count}`);
-        }
-
-
-        lastElementCountLog = now;
-      }
 
       frameCount = 0;
       lastFpsUpdate = now;
@@ -1252,9 +1095,7 @@ function animate(tMs: number) {
 async function switchPatch(index: number) {
   if (index < 0 || index >= patches.length) return;
   currentPatchIndex = index;
-  window.__oscilla_currentPreset = String(index);
-  log(`Switching to patch: ${patches[index].name}`);
-  build(patches[index].builder);
+  window.__oscilla_currentPreset = String(index);  build(patches[index].builder);
   await compileAndSwap(true);
   savePatchToStorage(store!.patch.patch, currentPatchIndex);
 }
@@ -1279,16 +1120,12 @@ async function initializeRuntime(rootStore: RootStore) {
   // Set the module-level store reference
   store = rootStore;
 
-  log('Store ready, initializing runtime...');
-
   // Initialize buffer pool
   pool = new BufferPool();
 
   // Try to restore from localStorage, otherwise use default preset
   const saved = loadPatchFromStorage();
-  if (saved) {
-    log(`Restoring patch from localStorage (preset index: ${saved.presetIndex})`);
-    currentPatchIndex = saved.presetIndex;
+  if (saved) {    currentPatchIndex = saved.presetIndex;
     store.patch.loadPatch(saved.patch);
     await compileAndSwap(true);
   } else {
@@ -1324,10 +1161,7 @@ async function initializeRuntime(rootStore: RootStore) {
     }
   });
 
-  log('Runtime initialized');
-
   // Start animation loop
-  log('Starting animation loop...');
   requestAnimationFrame(animate);
 }
 
@@ -1349,9 +1183,7 @@ async function main() {
         React.createElement(App, {
           onCanvasReady: (canvasEl: HTMLCanvasElement) => {
             canvas = canvasEl;
-            ctx = canvas.getContext('2d');
-            log('Canvas ready');
-          },
+            ctx = canvas.getContext('2d');          },
           onStoreReady: (rootStore: RootStore) => {
             // Initialize runtime once store is available
             initializeRuntime(rootStore).catch((err) => {

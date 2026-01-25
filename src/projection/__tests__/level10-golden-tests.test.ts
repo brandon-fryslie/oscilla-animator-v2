@@ -54,7 +54,7 @@ function buildGoldenPatch() {
     // Color pipeline (Field-level hue from phase)
     const sat = b.addBlock('Const', { value: 1.0 });
     const val = b.addBlock('Const', { value: 1.0 });
-    const hue = b.addBlock('FieldHueFromPhase', {});
+    const hue = b.addBlock('HueFromPhase', {});
     const color = b.addBlock('HsvToRgb', {});
 
     const render = b.addBlock('RenderInstances2D', {});
@@ -460,7 +460,7 @@ describe('Level 10 Golden Tests: Stress Test', () => {
 
       const sat = b.addBlock('Const', { value: 1.0 });
       const val = b.addBlock('Const', { value: 1.0 });
-      const hue = b.addBlock('FieldHueFromPhase', {});
+      const hue = b.addBlock('HueFromPhase', {});
       const color = b.addBlock('HsvToRgb', {});
       const render = b.addBlock('RenderInstances2D', {});
 
@@ -673,7 +673,7 @@ describe('Level 10 Golden Tests: Multi-Backend Comparison', () => {
 
       const sat = b.addBlock('Const', { value: 1.0 });
       const val = b.addBlock('Const', { value: 1.0 });
-      const hue = b.addBlock('FieldHueFromPhase', {});
+      const hue = b.addBlock('HueFromPhase', {});
       const color = b.addBlock('HsvToRgb', {});
       const render = b.addBlock('RenderInstances2D', {});
 

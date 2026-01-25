@@ -429,7 +429,7 @@ export function executeFrame(
   };
 
   // Build v2 frame from collected render steps
-  const frame = assembleRenderFrame(renderSteps, assemblerContext);
+  const frame = assembleRenderFrame(renderSteps, assemblerContext, pool);
 
   // PHASE 2: Execute all stateWrite steps
   // This ensures state reads in Phase 1 saw previous frame's values
