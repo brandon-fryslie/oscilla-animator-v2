@@ -158,7 +158,7 @@ describe('Lag Block', () => {
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
 
-    const schedule = result.program.schedule as any;
+    const schedule = result.program.schedule;
     expect(schedule.stateSlotCount).toBe(1);
     expect(schedule.stateSlots[0].initialValue).toBe(0);
   });
@@ -252,7 +252,7 @@ describe('Lag Block', () => {
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
 
-    const schedule = result.program.schedule as any;
+    const schedule = result.program.schedule;
     expect(schedule.stateSlots[0].initialValue).toBe(20);
   });
 });
@@ -270,7 +270,7 @@ describe('Phasor Block', () => {
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
 
-    const schedule = result.program.schedule as any;
+    const schedule = result.program.schedule;
     expect(schedule.stateSlotCount).toBe(1);
     expect(schedule.stateSlots[0].initialValue).toBe(0);
   });
@@ -379,7 +379,7 @@ describe('Phasor Block', () => {
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
 
-    const schedule = result.program.schedule as any;
+    const schedule = result.program.schedule;
     expect(schedule.stateSlots[0].initialValue).toBe(0.75);
   });
 });
@@ -452,7 +452,7 @@ describe('Hash Block', () => {
 
     // Find the evalSig steps from TestSignal blocks to get slots
     // TestSignal blocks create evalSig steps - we need the LAST TWO
-    const schedule = result.program.schedule as any;
+    const schedule = result.program.schedule;
     const evalSigSteps = schedule.steps.filter((s: any) => s.kind === 'evalSig');
     expect(evalSigSteps.length).toBeGreaterThanOrEqual(2);
     const slot1 = evalSigSteps[evalSigSteps.length - 2].target;

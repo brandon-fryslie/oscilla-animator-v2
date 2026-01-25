@@ -268,9 +268,8 @@ describe('SampleHold', () => {
     expect(schedule.stateSlotCount).toBeGreaterThan(0);
 
     // Verify stateMappings include a 'sample' state
-    const mappings = schedule.stateMappings as any[];
-    const sampleMapping = mappings?.find((m: any) =>
-      typeof m.stateId === 'string' && m.stateId.includes('sample')
+    const sampleMapping = schedule.stateMappings.find((m) =>
+      typeof m.stableId === 'string' && m.stableId.includes('sample')
     );
     expect(sampleMapping).toBeDefined();
   });
@@ -409,9 +408,8 @@ function findEventDependentSlot(evalSigSteps: any[], state: any): number {
  */
 function findSampleHoldOutputSlot(schedule: any, state: any): number {
   // Find evalSig steps that are after evalEvent steps (post-event signals)
-  const steps = schedule.steps as any[];
   let afterEvent = false;
-  for (const step of steps) {
+  for (const step of schedule.steps) {
     if (step.kind === 'evalEvent') {
       afterEvent = true;
       continue;

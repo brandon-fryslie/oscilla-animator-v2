@@ -51,7 +51,7 @@ describe('Noise Block', () => {
     if (result.kind !== 'ok') return;
 
     const program = result.program;
-    const schedule = program.schedule as any;
+    const schedule = program.schedule;
     const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount || 0);
     const pool = new BufferPool();
 
@@ -89,7 +89,7 @@ describe('Noise Block', () => {
     if (result.kind !== 'ok') return;
 
     const program = result.program;
-    const schedule = program.schedule as any;
+    const schedule = program.schedule;
     const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount || 0);
     const pool = new BufferPool();
 
@@ -132,8 +132,8 @@ describe('Noise Block', () => {
 
     const program1 = result1.program;
     const program2 = result2.program;
-    const schedule1 = program1.schedule as any;
-    const schedule2 = program2.schedule as any;
+    const schedule1 = program1.schedule;
+    const schedule2 = program2.schedule;
 
     const state1 = createRuntimeState(program1.slotMeta.length, schedule1.stateSlotCount || 0);
     const state2 = createRuntimeState(program2.slotMeta.length, schedule2.stateSlotCount || 0);
@@ -214,7 +214,7 @@ describe('Length Block', () => {
     if (result.kind !== 'ok') return;
 
     const program = result.program;
-    const schedule = program.schedule as any;
+    const schedule = program.schedule;
     const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount || 0);
     const pool = new BufferPool();
 
@@ -247,7 +247,7 @@ describe('Length Block', () => {
     if (result.kind !== 'ok') return;
 
     const program = result.program;
-    const schedule = program.schedule as any;
+    const schedule = program.schedule;
     const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount || 0);
     const pool = new BufferPool();
 
@@ -278,7 +278,7 @@ describe('Length Block', () => {
     if (result.kind !== 'ok') return;
 
     const program = result.program;
-    const schedule = program.schedule as any;
+    const schedule = program.schedule;
     const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount || 0);
     const pool = new BufferPool();
 
@@ -343,7 +343,7 @@ describe('Normalize Block', () => {
     if (result.kind !== 'ok') return;
 
     const program = result.program;
-    const schedule = program.schedule as any;
+    const schedule = program.schedule;
     const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount || 0);
     const pool = new BufferPool();
 
@@ -391,7 +391,7 @@ describe('Normalize Block', () => {
     if (result.kind !== 'ok') return;
 
     const program = result.program;
-    const schedule = program.schedule as any;
+    const schedule = program.schedule;
     const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount || 0);
     const pool = new BufferPool();
 
@@ -431,7 +431,7 @@ describe('Normalize Block', () => {
     if (result.kind !== 'ok') return;
 
     const program = result.program;
-    const schedule = program.schedule as any;
+    const schedule = program.schedule;
     const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount || 0);
     const pool = new BufferPool();
 
@@ -472,7 +472,7 @@ describe('Normalize Block', () => {
     if (result.kind !== 'ok') return;
 
     const program = result.program;
-    const schedule = program.schedule as any;
+    const schedule = program.schedule;
     const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount || 0);
     const pool = new BufferPool();
 
