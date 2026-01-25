@@ -439,6 +439,15 @@ export function pass7Schedule(
   // Collect steps from builder (stateWrite steps from stateful blocks)
   const builderSteps = unlinkedIR.builder.getSteps();
 
+  // Collect slots that are targets of slotWriteStrided steps.
+  // These slots are written by the strided write step, not evalSig.
+  const stridedWriteSlots = new Set<ValueSlot>();
+  for (const step of builderSteps) {
+    if (step.kind === 'slotWriteStrided') {
+      stridedWriteSlots.add(step.slotBase);
+    }
+  }
+
   // Generate evalSig steps for all signals with registered slots.
   // This enables the debug tap to record signal values for the debug probe.
   //
@@ -451,10 +460,18 @@ export function pass7Schedule(
   //
   // Signals that depend on eventRead must be evaluated AFTER events (Phase 5→6).
   // Pre-event signals go in Phase 1, post-event signals go after evalEvent.
+  //
+  // CRITICAL: Skip slots that are targets of slotWriteStrided steps.
+  // Those slots have stride > 1 and are written by the strided write, not evalSig.
   const sigSlots = unlinkedIR.builder.getSigSlots();
   const evalSigStepsPre: Step[] = [];
   const evalSigStepsPost: Step[] = [];
   for (const [sigId, slot] of sigSlots) {
+    // Skip slots that are written by slotWriteStrided
+    if (stridedWriteSlots.has(slot)) {
+      continue;
+    }
+
     const step: Step = {
       kind: 'evalSig',
       expr: sigId as SigExprId,
@@ -479,8 +496,22 @@ export function pass7Schedule(
     });
   }
 
+  // Separate builder steps by kind:
+  // - slotWriteStrided goes in Phase 1 (with evalSig)
+  // - stateWrite/fieldStateWrite goes in Phase 8 (end)
+  const slotWriteStridedSteps: Step[] = [];
+  const stateWriteSteps: Step[] = [];
+  for (const step of builderSteps) {
+    if (step.kind === 'slotWriteStrided') {
+      slotWriteStridedSteps.push(step);
+    } else if (step.kind === 'stateWrite' || step.kind === 'fieldStateWrite') {
+      stateWriteSteps.push(step);
+    }
+    // Other step kinds from builder are ignored (should not exist)
+  }
+
   // Combine all steps in correct execution order:
-  // 1. EvalSig-pre (signals NOT dependent on events)
+  // 1. EvalSig-pre + SlotWriteStrided (signals NOT dependent on events)
   // 2. ContinuityMapBuild (detect domain changes, compute mappings)
   // 3. Materialize (evaluate fields to buffers)
   // 4. ContinuityApply (apply gauge/slew/crossfade to buffers)
@@ -490,13 +521,14 @@ export function pass7Schedule(
   // 8. StateWrite (persist state for next frame)
   const steps: Step[] = [
     ...evalSigStepsPre,
+    ...slotWriteStridedSteps,
     ...mapBuildSteps,
     ...materializeSteps,
     ...continuityApplySteps,
     ...evalEventSteps,
     ...evalSigStepsPost,
     ...renderSteps,
-    ...builderSteps,
+    ...stateWriteSteps,
   ];
 
   // Get state slots from builder

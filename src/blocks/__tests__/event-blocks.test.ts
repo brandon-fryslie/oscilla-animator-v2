@@ -14,7 +14,20 @@ import { createRuntimeState } from '../../runtime/RuntimeState';
 import { executeFrame } from '../../runtime/ScheduleExecutor';
 import { evaluateSignal } from '../../runtime/SignalEvaluator';
 import { sigExprId, eventSlotId } from '../../compiler/ir/Indices';
+import type { StepEvalSig, ValueSlot } from '../../compiler/ir/types';
+import type { CompiledProgramIR } from '../../compiler/ir/program';
 import { signalType } from '../../core/canonical-types';
+
+/**
+ * Build a slot->offset map from slotMeta.
+ */
+function buildSlotToOffsetMap(program: CompiledProgramIR): Map<number, number> {
+  const map = new Map<number, number>();
+  for (const meta of program.slotMeta) {
+    map.set(meta.slot as number, meta.offset);
+  }
+  return map;
+}
 
 // Import block registrations
 import '../signal-blocks';
@@ -98,11 +111,18 @@ describe('EventToSignalMask', () => {
     // The event-dependent evalSig should exist (post-event)
     expect(evalSigSteps.length).toBeGreaterThan(0);
 
+    const slotToOffset = buildSlotToOffsetMap(program);
+
     // Find all evalSig steps and check which produces 1.0
     // Since pulse fires every frame, the eventRead signal should be 1.0
     let foundEventSignal = false;
-    for (const step of evalSigSteps) {
-      const value = state.values.f64[step.target as number];
+    for (const step of evalSigSteps as StepEvalSig[]) {
+      const slot = step.target as number;
+      const offset = slotToOffset.get(slot);
+      if (offset === undefined) {
+        throw new Error(`Slot ${slot} not found in slotMeta`);
+      }
+      const value = state.values.f64[offset];
       if (value === 1.0) {
         foundEventSignal = true;
         break;
@@ -132,19 +152,25 @@ describe('EventToSignalMask', () => {
     );
     const pool = new BufferPool();
 
+    const slotToOffset = buildSlotToOffsetMap(program);
+
     // Frame 1
     executeFrame(program, state, pool, 100);
     const evalSigSteps = schedule.steps.filter((s: any) => s.kind === 'evalSig');
-    const maskSlot = findEventDependentSlot(evalSigSteps, state);
-    expect(state.values.f64[maskSlot]).toBe(1.0);
+    const maskSlot = findEventDependentSlot(program, evalSigSteps, state);
+    const maskOffset = slotToOffset.get(maskSlot);
+    if (maskOffset === undefined) {
+      throw new Error(`Slot ${maskSlot} not found in slotMeta`);
+    }
+    expect(state.values.f64[maskOffset]).toBe(1.0);
 
     // Frame 2 — eventScalars cleared and re-populated
     executeFrame(program, state, pool, 116);
-    expect(state.values.f64[maskSlot]).toBe(1.0);
+    expect(state.values.f64[maskOffset]).toBe(1.0);
 
     // Frame 3
     executeFrame(program, state, pool, 132);
-    expect(state.values.f64[maskSlot]).toBe(1.0);
+    expect(state.values.f64[maskOffset]).toBe(1.0);
   });
 
   it('compiles without errors', () => {
@@ -207,16 +233,22 @@ describe('SampleHold', () => {
     );
     const pool = new BufferPool();
 
+    const slotToOffset = buildSlotToOffsetMap(program);
+
     // Frame 1 at t=100ms — pulse fires, SampleHold captures tMs=100
     executeFrame(program, state, pool, 100);
-    const shSlot = findSampleHoldOutputSlot(schedule, state);
+    const shSlot = findSampleHoldOutputSlot(program, schedule, state);
     expect(shSlot).toBeGreaterThanOrEqual(0);
+    const shOffset = slotToOffset.get(shSlot);
+    if (shOffset === undefined) {
+      throw new Error(`Slot ${shSlot} not found in slotMeta`);
+    }
     // Since pulse fires every frame, SampleHold captures the current tMs value
-    expect(state.values.f64[shSlot]).toBe(100);
+    expect(state.values.f64[shOffset]).toBe(100);
 
     // Frame 2 at t=200ms — pulse fires again, captures new value
     executeFrame(program, state, pool, 200);
-    expect(state.values.f64[shSlot]).toBe(200);
+    expect(state.values.f64[shOffset]).toBe(200);
   });
 
   it('holds value between fires (non-pulse trigger)', () => {
@@ -326,11 +358,18 @@ describe('Event Consumer Blocks Integration', () => {
 
     executeFrame(program, state, pool, 100);
 
+    const slotToOffset = buildSlotToOffsetMap(program);
+
     // Find multiply output — should be 5.0 (1.0 * 5.0)
-    const evalSigSteps = schedule.steps.filter((s: any) => s.kind === 'evalSig');
+    const evalSigSteps = schedule.steps.filter((s: any) => s.kind === 'evalSig') as StepEvalSig[];
     let found5 = false;
     for (const step of evalSigSteps) {
-      if (state.values.f64[step.target as number] === 5.0) {
+      const slot = step.target as number;
+      const offset = slotToOffset.get(slot);
+      if (offset === undefined) {
+        throw new Error(`Slot ${slot} not found in slotMeta`);
+      }
+      if (state.values.f64[offset] === 5.0) {
         found5 = true;
         break;
       }
@@ -370,11 +409,18 @@ describe('Event Consumer Blocks Integration', () => {
 
     executeFrame(program, state, pool, 100);
 
+    const slotToOffset = buildSlotToOffsetMap(program);
+
     // Find add output — should be 110 (100 + 10)
-    const evalSigSteps = schedule.steps.filter((s: any) => s.kind === 'evalSig');
+    const evalSigSteps = schedule.steps.filter((s: any) => s.kind === 'evalSig') as StepEvalSig[];
     let found110 = false;
     for (const step of evalSigSteps) {
-      if (state.values.f64[step.target as number] === 110.0) {
+      const slot = step.target as number;
+      const offset = slotToOffset.get(slot);
+      if (offset === undefined) {
+        throw new Error(`Slot ${slot} not found in slotMeta`);
+      }
+      if (state.values.f64[offset] === 110.0) {
         found110 = true;
         break;
       }
@@ -391,10 +437,16 @@ describe('Event Consumer Blocks Integration', () => {
  * Find the slot that contains an event-dependent signal value.
  * Returns the slot index of the first signal with value > 0.
  */
-function findEventDependentSlot(evalSigSteps: any[], state: any): number {
+function findEventDependentSlot(program: CompiledProgramIR, evalSigSteps: any[], state: any): number {
+  const slotToOffset = buildSlotToOffsetMap(program);
   for (const step of evalSigSteps) {
-    if (state.values.f64[step.target as number] === 1.0) {
-      return step.target as number;
+    const slot = step.target as number;
+    const offset = slotToOffset.get(slot);
+    if (offset === undefined) {
+      throw new Error(`Slot ${slot} not found in slotMeta`);
+    }
+    if (state.values.f64[offset] === 1.0) {
+      return slot;
     }
   }
   // Fallback: return last evalSig slot
@@ -408,7 +460,7 @@ function findEventDependentSlot(evalSigSteps: any[], state: any): number {
  * Find the SampleHold output slot.
  * SampleHold's output is the zip(lerp) expression which depends on eventRead.
  */
-function findSampleHoldOutputSlot(schedule: any, state: any): number {
+function findSampleHoldOutputSlot(program: CompiledProgramIR, schedule: any, state: any): number {
   // Find evalSig steps that are after evalEvent steps (post-event signals)
   let afterEvent = false;
   for (const step of schedule.steps) {

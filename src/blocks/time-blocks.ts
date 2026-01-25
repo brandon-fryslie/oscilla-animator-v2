@@ -45,7 +45,7 @@ registerBlock({
     const dt = ctx.b.sigTime('dt', signalType('float'));
     const phaseA = ctx.b.sigTime('phaseA', signalType('float', unitPhase01()));
     const phaseB = ctx.b.sigTime('phaseB', signalType('float', unitPhase01()));
-    const pulse = ctx.b.eventPulse('timeRoot');
+    const pulse = ctx.b.eventPulse('InfiniteTimeRoot');
     const palette = ctx.b.sigTime('palette', signalType('color'));
     const energy = ctx.b.sigTime('energy', signalType('float'));
 

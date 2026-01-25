@@ -8,6 +8,7 @@ import { registerBlock } from './registry';
 import { signalType, signalTypeField, strideOf, unitWorld3 } from '../core/canonical-types';
 import { defaultSourceConst } from '../types';
 import type { SigExprId, FieldExprId } from '../compiler/ir/Indices';
+import { slotOffset } from '../compiler/ir/Indices';
 import { OpCode } from '../compiler/ir/types';
 
 // =============================================================================
@@ -200,9 +201,9 @@ registerBlock({
       // Signal path - decompose input vec3, compute jittered components, recompose
       // Read input vec3 components from slot
       const posSlot = pos.slot;
-      const xIn = ctx.b.sigSlot(posSlot + 0, signalType('float'));
-      const yIn = ctx.b.sigSlot(posSlot + 1, signalType('float'));
-      const zIn = ctx.b.sigSlot(posSlot + 2, signalType('float'));
+      const xIn = ctx.b.sigSlot(slotOffset(posSlot, 0), signalType('float'));
+      const yIn = ctx.b.sigSlot(slotOffset(posSlot, 1), signalType('float'));
+      const zIn = ctx.b.sigSlot(slotOffset(posSlot, 2), signalType('float'));
 
       // Compute jitter for each component based on rand
       // Simple jitter: pos + amount * (rand - 0.5) * 2

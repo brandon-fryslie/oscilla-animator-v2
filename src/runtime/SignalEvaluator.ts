@@ -453,6 +453,32 @@ function applySignalKernel(name: string, values: number[]): number {
       return n - Math.floor(n);
     }
 
+    // === COMBINE KERNELS (multi-input signal combination) ===
+
+    case 'combine_sum': {
+      return values.reduce((a, b) => a + b, 0);
+    }
+
+    case 'combine_average': {
+      if (values.length === 0) return 0;
+      return values.reduce((a, b) => a + b, 0) / values.length;
+    }
+
+    case 'combine_max': {
+      if (values.length === 0) return -Infinity;
+      return Math.max(...values);
+    }
+
+    case 'combine_min': {
+      if (values.length === 0) return Infinity;
+      return Math.min(...values);
+    }
+
+    case 'combine_last': {
+      if (values.length === 0) return 0;
+      return values[values.length - 1];
+    }
+
     // vec2 kernels not supported at signal level
     case 'polarToCartesian':
     case 'offsetPosition':

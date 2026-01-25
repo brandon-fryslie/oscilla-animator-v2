@@ -13,6 +13,39 @@ import { createRuntimeState } from '../../runtime/RuntimeState';
 import { BufferPool } from '../../runtime/BufferPool';
 import { evaluateSignal } from '../../runtime/SignalEvaluator';
 import type { SigExprId } from '../../types';
+import type { StepEvalSig, SigExpr } from '../../compiler/ir/types';
+import type { CompiledProgramIR } from '../../compiler/ir/program';
+
+/**
+ * Helper to find TestSignal output offsets.
+ * Filters out 'time' signals to find TestSignal slots,
+ * then resolves them to actual f64 array offsets via slotMeta.
+ */
+function findTestSignalOffsets(program: CompiledProgramIR, count = 1): number[] {
+  const schedule = program.schedule;
+  const signals = program.signalExprs.nodes as readonly SigExpr[];
+
+  const evalSigSteps = schedule.steps.filter((s): s is StepEvalSig => s.kind === 'evalSig');
+  const nonTimeSteps = evalSigSteps.filter((step) => {
+    const sig = signals[step.expr as number];
+    return sig && sig.kind !== 'time';
+  });
+
+  const slots = nonTimeSteps.slice(-count).map(s => s.target as number);
+
+  const slotToOffset = new Map<number, number>();
+  for (const meta of program.slotMeta) {
+    slotToOffset.set(meta.slot as number, meta.offset);
+  }
+
+  return slots.map(slot => {
+    const offset = slotToOffset.get(slot);
+    if (offset === undefined) {
+      throw new Error(`Slot ${slot} not found in slotMeta`);
+    }
+    return offset;
+  });
+}
 
 describe('UnitDelay Block', () => {
   it('outputs 0 on first frame (initial state)', () => {
@@ -405,18 +438,15 @@ describe('Hash Block', () => {
     const state = createRuntimeState(program.slotMeta.length);
     const pool = new BufferPool();
 
-    // Find the evalSig step from TestSignal to get the slot
-    const schedule = program.schedule;
-    const evalSigStep = schedule.steps.find((s: any) => s.kind === 'evalSig');
-    expect(evalSigStep).toBeDefined();
-    const slot = evalSigStep?.target;
+    // Find the TestSignal output offset
+    const [offset] = findTestSignalOffsets(program);
 
     // Execute multiple times - should get same result
     executeFrame(program, state, pool, 0);
-    const hash1 = state.values.f64[slot];
+    const hash1 = state.values.f64[offset];
 
     executeFrame(program, state, pool, 100);
-    const hash2 = state.values.f64[slot];
+    const hash2 = state.values.f64[offset];
 
     expect(hash1).toBe(hash2);
   });
@@ -450,19 +480,14 @@ describe('Hash Block', () => {
     const state = createRuntimeState(result.program.slotMeta.length);
     const pool = new BufferPool();
 
-    // Find the evalSig steps from TestSignal blocks to get slots
-    // TestSignal blocks create evalSig steps - we need the LAST TWO
-    const schedule = result.program.schedule;
-    const evalSigSteps = schedule.steps.filter((s: any) => s.kind === 'evalSig');
-    expect(evalSigSteps.length).toBeGreaterThanOrEqual(2);
-    const slot1 = evalSigSteps[evalSigSteps.length - 2].target;
-    const slot2 = evalSigSteps[evalSigSteps.length - 1].target;
+    // Find the two TestSignal output offsets
+    const [offset1, offset2] = findTestSignalOffsets(result.program, 2);
 
     executeFrame(result.program, state, pool, 0);
 
-    // Get values from slots where TestSignal stored them
-    const val1 = state.values.f64[slot1];
-    const val2 = state.values.f64[slot2];
+    // Get values from offsets where TestSignal stored them
+    const val1 = state.values.f64[offset1];
+    const val2 = state.values.f64[offset2];
 
     expect(val1).toBeGreaterThan(0);
     expect(val1).toBeLessThan(1);
@@ -495,7 +520,7 @@ describe('Hash Block', () => {
     // Find the evalSig step from TestSignal to get the slot
     // TestSignal's evalSig step is the LAST one in the schedule
     const schedule = program.schedule;
-    const evalSigSteps = schedule.steps.filter((s: any) => s.kind === 'evalSig');
+    const evalSigSteps = schedule.steps.filter((s: any) => s.kind === 'evalSig') as StepEvalSig[];
     const evalSigStep = evalSigSteps[evalSigSteps.length - 1];
     expect(evalSigStep).toBeDefined();
     const slot = evalSigStep?.target;
@@ -532,7 +557,7 @@ describe('Hash Block', () => {
     // Find the evalSig step from TestSignal to get the slot
     // TestSignal's evalSig step is the LAST one in the schedule
     const schedule = program.schedule;
-    const evalSigSteps = schedule.steps.filter((s: any) => s.kind === 'evalSig');
+    const evalSigSteps = schedule.steps.filter((s: any) => s.kind === 'evalSig') as StepEvalSig[];
     const evalSigStep = evalSigSteps[evalSigSteps.length - 1];
     expect(evalSigStep).toBeDefined();
     const slot = evalSigStep?.target;

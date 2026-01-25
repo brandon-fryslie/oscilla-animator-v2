@@ -193,18 +193,30 @@ export class DebugStore {
   /**
    * Query current value for an edge by ID.
    * Direct query without caching - useful for one-off lookups.
+   * Returns undefined if edge is not mapped or query fails.
    */
   getEdgeValue(edgeId: string): EdgeValueResult | undefined {
     if (!this.enabled) return undefined;
-    return debugService.getEdgeValue(edgeId);
+    try {
+      return debugService.getEdgeValue(edgeId);
+    } catch {
+      // Don't crash the app on unmapped edges or other query errors
+      return undefined;
+    }
   }
 
   /**
    * Query current value for a port by block ID and port name.
+   * Returns undefined if port is not mapped or query fails.
    */
   getPortValue(blockId: string, portName: string): EdgeValueResult | undefined {
     if (!this.enabled) return undefined;
-    return debugService.getPortValue(blockId, portName);
+    try {
+      return debugService.getPortValue(blockId, portName);
+    } catch {
+      // Don't crash the app on unmapped ports or other query errors
+      return undefined;
+    }
   }
 
   /**

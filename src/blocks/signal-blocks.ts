@@ -204,10 +204,10 @@ registerBlock({
       uiHint: {
         kind: 'select',
         options: [
-          { value: 0, label: 'Sin' },
-          { value: 1, label: 'Saw' },
-          { value: 2, label: 'Square' },
-          { value: 3, label: 'Noise' },
+          { value: '0', label: 'Sin' },
+          { value: '1', label: 'Saw' },
+          { value: '2', label: 'Square' },
+          { value: '3', label: 'Noise' },
         ],
       },
     },
@@ -291,7 +291,7 @@ registerBlock({
   category: 'signal',
   description: 'Accumulates value over time with delta input',
   form: 'primitive',
-  capability: 'stateful',
+  capability: 'state',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
@@ -319,7 +319,7 @@ registerBlock({
 
     // Create state for accumulated value
     const stateId = stableStateId(`accumulator_${ctx.instanceId}`);
-    const stateSlot = ctx.b.createState(stateId, 0); // Initial value = 0
+    const stateSlot = ctx.b.allocStateSlot(stateId, { initialValue: 0 });
 
     // Read current state
     const currentValue = ctx.b.sigStateRead(stateSlot, signalType('float'));
@@ -341,6 +341,238 @@ registerBlock({
     return {
       outputsById: {
         value: { k: 'sig', id: finalValue, slot, type: outType, stride: strideOf(outType.payload) },
+      },
+    };
+  },
+});
+
+// =============================================================================
+// UnitDelay
+// =============================================================================
+
+registerBlock({
+  type: 'UnitDelay',
+  label: 'Unit Delay',
+  category: 'signal',
+  description: 'Delays input by one frame',
+  form: 'primitive',
+  capability: 'state',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
+  inputs: {
+    in: { label: 'Input', type: signalType('float') },
+    initialValue: { type: signalType('float'), value: 0, exposedAsPort: false },
+  },
+  outputs: {
+    out: { label: 'Output', type: signalType('float') },
+  },
+  lower: ({ ctx, inputsById, config }) => {
+    const input = inputsById.in;
+    if (!input || input.k !== 'sig') {
+      throw new Error('UnitDelay requires signal input');
+    }
+
+    const initialValue = (config?.initialValue as number) ?? 0;
+    const outType = ctx.outTypes[0];
+
+    // Create state for delayed value
+    const stateId = stableStateId(ctx.instanceId, 'delay');
+    const stateSlot = ctx.b.allocStateSlot(stateId, { initialValue });
+
+    // Read previous state (this is the output - delayed by 1 frame)
+    const outputId = ctx.b.sigStateRead(stateSlot, signalType('float'));
+
+    // Write current input to state for next frame
+    ctx.b.stepStateWrite(stateSlot, input.id);
+
+    const slot = ctx.b.allocSlot();
+
+    return {
+      outputsById: {
+        out: { k: 'sig', id: outputId, slot, type: outType, stride: strideOf(outType.payload) },
+      },
+    };
+  },
+});
+
+// =============================================================================
+// Lag
+// =============================================================================
+
+registerBlock({
+  type: 'Lag',
+  label: 'Lag',
+  category: 'signal',
+  description: 'Exponential smoothing filter',
+  form: 'primitive',
+  capability: 'state',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
+  inputs: {
+    target: { label: 'Target', type: signalType('float') },
+    smoothing: { type: signalType('float'), value: 0.5, exposedAsPort: false },
+    initialValue: { type: signalType('float'), value: 0, exposedAsPort: false },
+  },
+  outputs: {
+    out: { label: 'Output', type: signalType('float') },
+  },
+  lower: ({ ctx, inputsById, config }) => {
+    const target = inputsById.target;
+    if (!target || target.k !== 'sig') {
+      throw new Error('Lag requires target signal input');
+    }
+
+    const smoothing = (config?.smoothing as number) ?? 0.5;
+    const initialValue = (config?.initialValue as number) ?? 0;
+    const outType = ctx.outTypes[0];
+
+    // Create state for smoothed value
+    const stateId = stableStateId(ctx.instanceId, 'lag');
+    const stateSlot = ctx.b.allocStateSlot(stateId, { initialValue });
+
+    // Read previous state
+    const prevValue = ctx.b.sigStateRead(stateSlot, signalType('float'));
+
+    // Compute: lerp(prev, target, smoothing)
+    const lerpFn = ctx.b.opcode(OpCode.Lerp);
+    const smoothConst = ctx.b.sigConst(smoothing, signalType('float'));
+    const newValue = ctx.b.sigZip([prevValue, target.id, smoothConst], lerpFn, signalType('float'));
+
+    // Write new value to state
+    ctx.b.stepStateWrite(stateSlot, newValue);
+
+    const slot = ctx.b.allocSlot();
+
+    return {
+      outputsById: {
+        out: { k: 'sig', id: newValue, slot, type: outType, stride: strideOf(outType.payload) },
+      },
+    };
+  },
+});
+
+// =============================================================================
+// Phasor
+// =============================================================================
+
+registerBlock({
+  type: 'Phasor',
+  label: 'Phasor',
+  category: 'signal',
+  description: 'Phase accumulator that wraps at 1.0',
+  form: 'primitive',
+  capability: 'state',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
+  inputs: {
+    frequency: { label: 'Frequency (Hz)', type: signalType('float') },
+    initialPhase: { type: signalType('float'), value: 0, exposedAsPort: false },
+  },
+  outputs: {
+    out: { label: 'Phase', type: signalType('float', unitPhase01()) },
+  },
+  lower: ({ ctx, inputsById, config }) => {
+    const frequency = inputsById.frequency;
+    if (!frequency || frequency.k !== 'sig') {
+      throw new Error('Phasor requires frequency signal input');
+    }
+
+    const initialPhase = (config?.initialPhase as number) ?? 0;
+    const outType = ctx.outTypes[0];
+
+    // Create state for accumulated phase
+    const stateId = stableStateId(ctx.instanceId, 'phasor');
+    const stateSlot = ctx.b.allocStateSlot(stateId, { initialValue: initialPhase });
+
+    // Read previous phase
+    const prevPhase = ctx.b.sigStateRead(stateSlot, signalType('float', unitPhase01()));
+
+    // Read dt from time system (in seconds)
+    const dtSig = ctx.b.sigTime('dt', signalType('float'));
+
+    // Compute: phase increment = frequency * dt / 1000 (dt is in ms)
+    const mulFn = ctx.b.opcode(OpCode.Mul);
+    const divFn = ctx.b.opcode(OpCode.Div);
+    const thousand = ctx.b.sigConst(1000, signalType('float'));
+    const dtSeconds = ctx.b.sigZip([dtSig, thousand], divFn, signalType('float'));
+    const increment = ctx.b.sigZip([frequency.id, dtSeconds], mulFn, signalType('float'));
+
+    // Add increment to previous phase
+    const addFn = ctx.b.opcode(OpCode.Add);
+    const rawPhase = ctx.b.sigZip([prevPhase, increment], addFn, signalType('float'));
+
+    // Wrap to [0, 1)
+    const wrapFn = ctx.b.opcode(OpCode.Wrap01);
+    const wrappedPhase = ctx.b.sigMap(rawPhase, wrapFn, signalType('float', unitPhase01()));
+
+    // Write wrapped phase to state
+    ctx.b.stepStateWrite(stateSlot, wrappedPhase);
+
+    const slot = ctx.b.allocSlot();
+
+    return {
+      outputsById: {
+        out: { k: 'sig', id: wrappedPhase, slot, type: outType, stride: strideOf(outType.payload) },
+      },
+    };
+  },
+});
+
+// =============================================================================
+// Hash
+// =============================================================================
+
+registerBlock({
+  type: 'Hash',
+  label: 'Hash',
+  category: 'signal',
+  description: 'Deterministic hash function. Output in [0, 1)',
+  form: 'primitive',
+  capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
+  inputs: {
+    value: { label: 'Value', type: signalType('float') },
+    seed: { label: 'Seed', type: signalType('float'), optional: true },
+  },
+  outputs: {
+    out: { label: 'Output', type: signalType('float') },
+  },
+  lower: ({ ctx, inputsById }) => {
+    const value = inputsById.value;
+    if (!value || value.k !== 'sig') {
+      throw new Error('Hash requires value signal input');
+    }
+
+    const seed = inputsById.seed;
+    let seedId: SigExprId;
+    if (seed && seed.k === 'sig') {
+      seedId = seed.id;
+    } else {
+      seedId = ctx.b.sigConst(0, signalType('float'));
+    }
+
+    const hashFn = ctx.b.opcode(OpCode.Hash);
+    const hashId = ctx.b.sigZip([value.id, seedId], hashFn, signalType('float'));
+
+    const outType = ctx.outTypes[0];
+    const slot = ctx.b.allocSlot();
+
+    return {
+      outputsById: {
+        out: { k: 'sig', id: hashId, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },

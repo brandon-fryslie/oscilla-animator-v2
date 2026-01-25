@@ -90,6 +90,20 @@ export function valueSlot(n: number): ValueSlot {
   return n as ValueSlot;
 }
 
+/**
+ * Offset a value slot by a component index.
+ * Used for reading/writing individual components of multi-component values (vec2, vec3, color).
+ *
+ * Example:
+ *   const baseSlot = allocSlot(3); // vec3
+ *   const xSlot = slotOffset(baseSlot, 0);
+ *   const ySlot = slotOffset(baseSlot, 1);
+ *   const zSlot = slotOffset(baseSlot, 2);
+ */
+export function slotOffset(base: ValueSlot, offset: number): ValueSlot {
+  return ((base as number) + offset) as ValueSlot;
+}
+
 export function stateSlotId(n: number): StateSlotId {
   return n as StateSlotId;
 }

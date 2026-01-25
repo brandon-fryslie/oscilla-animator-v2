@@ -11,6 +11,50 @@ import { executeFrame } from '../../runtime/ScheduleExecutor';
 import { createRuntimeState } from '../../runtime/RuntimeState';
 import { BufferPool } from '../../runtime/BufferPool';
 import { getBlockDefinition } from '../registry';
+import type { StepEvalSig, SigExpr } from '../../compiler/ir/types';
+import type { CompiledProgramIR } from '../../compiler/ir/program';
+
+/**
+ * Helper to find TestSignal output offsets.
+ * Filters out 'time' signals (InfiniteTimeRoot outputs) to find TestSignal slots,
+ * then resolves them to actual f64 array offsets via slotMeta.
+ *
+ * Note: We only filter out 'time' kind signals (not 'const') because TestSignal
+ * may be connected to const outputs (e.g., Normalize.outZ when z input is empty).
+ *
+ * @param program - Compiled program
+ * @param count - Number of TestSignal offsets to return (default: 1)
+ * @returns Array of f64 offsets for TestSignal outputs
+ */
+function findTestSignalOffsets(program: CompiledProgramIR, count = 1): number[] {
+  const schedule = program.schedule;
+  const signals = program.signalExprs.nodes as readonly SigExpr[];
+
+  // Find evalSig steps that are NOT time signals (InfiniteTimeRoot outputs)
+  const evalSigSteps = schedule.steps.filter((s): s is StepEvalSig => s.kind === 'evalSig');
+  const nonTimeSteps = evalSigSteps.filter((step) => {
+    const sig = signals[step.expr as number];
+    return sig && sig.kind !== 'time';
+  });
+
+  // Get the last N slots and resolve to offsets
+  const slots = nonTimeSteps.slice(-count).map(s => s.target as number);
+
+  // Build slot->offset map from slotMeta
+  const slotToOffset = new Map<number, number>();
+  for (const meta of program.slotMeta) {
+    slotToOffset.set(meta.slot as number, meta.offset);
+  }
+
+  // Return offsets (not slots!)
+  return slots.map(slot => {
+    const offset = slotToOffset.get(slot);
+    if (offset === undefined) {
+      throw new Error(`Slot ${slot} not found in slotMeta`);
+    }
+    return offset;
+  });
+}
 
 describe('Noise Block', () => {
   it('is registered and discoverable', () => {
@@ -56,8 +100,7 @@ describe('Noise Block', () => {
     const pool = new BufferPool();
 
     // Find the slot where TestSignal stores the noise output
-    const evalSigStep = schedule.steps.filter((s: any) => s.kind === 'evalSig').slice(-1)[0];
-    const slot = evalSigStep.target;
+    const [slot] = findTestSignalOffsets(program);
 
     // Run multiple frames - output should be identical
     executeFrame(program, state, pool, 0);
@@ -93,8 +136,7 @@ describe('Noise Block', () => {
     const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount || 0);
     const pool = new BufferPool();
 
-    const evalSigStep = schedule.steps.filter((s: any) => s.kind === 'evalSig').slice(-1)[0];
-    const slot = evalSigStep.target;
+    const [slot] = findTestSignalOffsets(program);
 
     executeFrame(program, state, pool, 0);
     const output = state.values.f64[slot];
@@ -139,14 +181,14 @@ describe('Noise Block', () => {
     const state2 = createRuntimeState(program2.slotMeta.length, schedule2.stateSlotCount || 0);
     const pool = new BufferPool();
 
-    const slot1 = schedule1.steps.find((s: any) => s.kind === 'evalSig').target;
-    const slot2 = schedule2.steps.find((s: any) => s.kind === 'evalSig').target;
+    const [offset1] = findTestSignalOffsets(program1);
+    const [offset2] = findTestSignalOffsets(program2);
 
     executeFrame(program1, state1, pool, 0);
     executeFrame(program2, state2, pool, 0);
 
-    const output1 = state1.values.f64[slot1];
-    const output2 = state2.values.f64[slot2];
+    const output1 = state1.values.f64[offset1];
+    const output2 = state2.values.f64[offset2];
 
     // Different inputs should (very likely) produce different outputs
     expect(output1).not.toBe(output2);
@@ -218,8 +260,7 @@ describe('Length Block', () => {
     const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount || 0);
     const pool = new BufferPool();
 
-    const evalSigStep = schedule.steps.filter((s: any) => s.kind === 'evalSig').slice(-1)[0];
-    const slot = evalSigStep.target;
+    const [slot] = findTestSignalOffsets(program);
 
     executeFrame(program, state, pool, 0);
     const length = state.values.f64[slot];
@@ -251,8 +292,7 @@ describe('Length Block', () => {
     const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount || 0);
     const pool = new BufferPool();
 
-    const evalSigStep = schedule.steps.filter((s: any) => s.kind === 'evalSig').slice(-1)[0];
-    const slot = evalSigStep.target;
+    const [slot] = findTestSignalOffsets(program);
 
     executeFrame(program, state, pool, 0);
     const length = state.values.f64[slot];
@@ -282,8 +322,7 @@ describe('Length Block', () => {
     const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount || 0);
     const pool = new BufferPool();
 
-    const evalSigStep = schedule.steps.filter((s: any) => s.kind === 'evalSig').slice(-1)[0];
-    const slot = evalSigStep.target;
+    const [slot] = findTestSignalOffsets(program);
 
     executeFrame(program, state, pool, 0);
     const length = state.values.f64[slot];
@@ -347,10 +386,9 @@ describe('Normalize Block', () => {
     const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount || 0);
     const pool = new BufferPool();
 
-    // Find all evalSig steps (3 TestSignal blocks)
-    const evalSigSteps = schedule.steps.filter((s: any) => s.kind === 'evalSig').slice(-3);
-    expect(evalSigSteps.length).toBe(3);
-    const slots = evalSigSteps.map((s: any) => s.target);
+    // Find the 3 TestSignal output slots
+    const slots = findTestSignalOffsets(program, 3);
+    expect(slots.length).toBe(3);
 
     executeFrame(program, state, pool, 0);
 
@@ -395,12 +433,13 @@ describe('Normalize Block', () => {
     const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount || 0);
     const pool = new BufferPool();
 
-    const evalSigSteps = schedule.steps.filter((s: any) => s.kind === 'evalSig').slice(-3);
-    const slots = evalSigSteps.map((s: any) => s.target);
+    // Find the 3 TestSignal output offsets
+    const offsets = findTestSignalOffsets(program, 3);
+    expect(offsets.length).toBe(3);
 
     executeFrame(program, state, pool, 0);
 
-    const values = slots.map((slot: number) => state.values.f64[slot]);
+    const values = offsets.map((offset: number) => state.values.f64[offset]);
 
     // Normalized (1, 2, 2) = (1/3, 2/3, 2/3)
     const has1over3 = values.some((v: number) => Math.abs(v - 1/3) < 0.0001);
@@ -476,12 +515,13 @@ describe('Normalize Block', () => {
     const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount || 0);
     const pool = new BufferPool();
 
-    const evalSigSteps = schedule.steps.filter((s: any) => s.kind === 'evalSig').slice(-3);
-    const slots = evalSigSteps.map((s: any) => s.target);
+    // Find the 3 TestSignal output offsets
+    const offsets = findTestSignalOffsets(program, 3);
+    expect(offsets.length).toBe(3);
 
     executeFrame(program, state, pool, 0);
 
-    const values = slots.map((slot: number) => state.values.f64[slot]);
+    const values = offsets.map((offset: number) => state.values.f64[offset]);
 
     // Find the three values that should be the normalized components
     // We expect 3 values from Normalize (x, y, z)

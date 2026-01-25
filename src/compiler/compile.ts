@@ -415,7 +415,7 @@ function convertLinkedIRToProgram(
   }
 
   // Build slot metadata from slot types
-  const slotTypes = builder.getSlotTypes();
+  const slotTypes = builder.getSlotMetaInputs();
   const slotMeta: SlotMetaEntry[] = [];
 
   // Track offsets per storage class
@@ -432,7 +432,8 @@ function convertLinkedIRToProgram(
   // Slots are indexed from 0, so iterate through all slot IDs
   for (let slotId = 0; slotId < builder.getSlotCount?.() || 0; slotId++) {
     const slot = slotId as ValueSlot;
-    const type = slotTypes.get(slot) || signalType('float'); // Default to float if no type info
+    const slotInfo = slotTypes.get(slot);
+    const type = slotInfo?.type || signalType('float'); // Default to float if no type info
 
     // Determine storage class from type
     // Field output slots store buffer references in the objects Map
@@ -441,10 +442,13 @@ function convertLinkedIRToProgram(
       ? 'object'
       : type.payload === 'shape' ? 'shape2d' : 'f64';
 
-    const offset = storageOffsets[storage]++;
+    // Use stride from slotInfo (which comes from registered type), fallback to computing from payload
+    // Objects/fields have stride=1 since they store a single reference
+    const stride = storage === 'object' ? 1 : (slotInfo?.stride ?? payloadStride(type.payload));
 
-    // Compute stride from payload type (objects/fields have stride=1 since they store a single reference)
-    const stride = storage === 'object' ? 1 : payloadStride(type.payload);
+    // Offset must increment by stride, not 1 - multi-component types (color=4, vec3=3, vec2=2) need space
+    const offset = storageOffsets[storage];
+    storageOffsets[storage] += stride;
 
     slotMeta.push({
       slot,

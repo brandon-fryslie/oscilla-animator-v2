@@ -421,9 +421,19 @@ function lowerBlockInstance(
 
       // Register slot for signal/field outputs
       if (ref.k === 'sig') {
-        builder.registerSigSlot(ref.id, ref.slot);
+        // Only register scalar signals (stride=1) for evalSig step generation.
+        // Multi-component signals (stride>1) are written by stepSlotWriteStrided.
+        if (ref.stride === 1) {
+          builder.registerSigSlot(ref.id, ref.slot);
+        }
+        // CRITICAL: Register slot type for slotMeta generation
+        // Without this, slots allocated via allocSlot(stride) won't have type information,
+        // causing slotMeta to default to stride=1, which breaks slotWriteStrided at runtime
+        builder.registerSlotType(ref.slot, ref.type);
       } else if (ref.k === 'field') {
         builder.registerFieldSlot(ref.id, ref.slot);
+        // CRITICAL: Register slot type for slotMeta generation
+        builder.registerSlotType(ref.slot, ref.type);
       }
 
       outputRefs.set(portId, ref);
@@ -437,7 +447,7 @@ function lowerBlockInstance(
   } catch (error) {
     // Lowering failed - record error (will be thrown at end of pass with all other errors)
     const errorMsg = `Block lowering failed for "${block.type}": ${error instanceof Error ? error.message : String(error)}`;
-    
+
     // Detect expression errors by checking error message for ExprXxxError codes
     let errorKind = "NotImplemented";
     if (error instanceof Error && block.type === 'Expression') {

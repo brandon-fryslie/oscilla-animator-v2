@@ -158,7 +158,19 @@ export interface IRBuilder {
    * - At runtime, the executor reads/writes that contiguous region using `program.slotMeta[slot].offset` as the
    *   start lane and `program.slotMeta[slot].stride` as the component count.
    */
-  allocValueSlot(type: SignalType, label?: string): ValueSlot;
+  allocTypedSlot(type: SignalType, label?: string): ValueSlot;
+
+  /**
+   * Register a slot type for slotMeta generation.
+   *
+   * CRITICAL: This must be called after lowering produces slots via allocSlot(stride).
+   * Without type registration, slotMeta generation defaults to stride=1, causing runtime errors
+   * when slotWriteStrided tries to write multiple components to a single-component slot.
+   *
+   * @param slot - The slot to register
+   * @param type - The signal type for this slot
+   */
+  registerSlotType(slot: ValueSlot, type: SignalType): void;
 
   /** Register a signal expression with a slot. */
   registerSigSlot(sigId: SigExprId, slot: ValueSlot): void;
@@ -182,11 +194,46 @@ export interface IRBuilder {
   /**
    * Allocate a simple slot (without type information).
    *
-   * LEGACY ONLY:
+   * STRIDED ALLOCATION:
+   * - Pass stride > 1 for multi-component values (vec2=2, vec3=3, color=4)
+   * - Returns base slot for contiguous region of length stride
+   * - Slot allocator increments by stride to reserve the full region
+   *
+   * LEGACY ONLY (stride=1):
    * - Do not use for signal/field execution.
-   * - All executable values MUST use `allocValueSlot(type)` so slotMeta can carry (storage, offset, stride).
+   * - All executable values MUST use `allocTypedSlot(type)` so slotMeta can carry (storage, offset, stride).
    */
-  allocSlot(): ValueSlot;
+  allocSlot(stride?: number): ValueSlot;
+
+  // =========================================================================
+  // Strided Slot Write (Multi-Component Signals)
+  // =========================================================================
+
+  /**
+   * Schedule a strided slot write step for multi-component signal outputs.
+   *
+   * This is the canonical way to produce multi-component signal values (vec2, vec3, color).
+   * Each input signal is evaluated and written to a contiguous slot region.
+   *
+   * CRITICAL CONTRACT:
+   * - `slotBase` must have been allocated with `allocSlot(stride=inputs.length)`
+   * - `inputs.length` must equal the stride of the output slot
+   * - No kernel side effects - only the scheduler writes to slots
+   *
+   * Example: Producing a vec3 signal output
+   * ```typescript
+   * const slotBase = builder.allocSlot(3);
+   * const xSig = builder.sigConst(1.0, floatType);
+   * const ySig = builder.sigConst(2.0, floatType);
+   * const zSig = builder.sigConst(3.0, floatType);
+   * builder.stepSlotWriteStrided(slotBase, [xSig, ySig, zSig]);
+   * // Runtime writes: slot[0]=1.0, slot[1]=2.0, slot[2]=3.0
+   * ```
+   *
+   * @param slotBase - Base slot for the contiguous write region
+   * @param inputs - Component signal expressions to evaluate and write
+   */
+  stepSlotWriteStrided(slotBase: ValueSlot, inputs: readonly SigExprId[]): void;
 
   /** Get slot count for iteration. */
   getSlotCount(): number;

@@ -19,6 +19,7 @@ import type { ValueRefPacked } from "../ir/lowerTypes";
 import type { EventExprId } from "../ir/types";
 import type { SigExprId, FieldExprId } from "../ir/Indices";
 import type { EventCombineMode } from "../ir/signalExpr";
+import { strideOf } from "../../core/canonical-types";
 
 // =============================================================================
 // Types
@@ -286,9 +287,9 @@ export function createCombineNode(
     const combineMode = safeMode as "sum" | "average" | "max" | "min" | "last";
 
     const sigId = builder.sigCombine(sigTerms, combineMode, signalType);
-    const slot = builder.allocValueSlot(signalType, `combine_sig_${combineMode}`);
+    const slot = builder.allocTypedSlot(signalType, `combine_sig_${combineMode}`);
     builder.registerSigSlot(sigId, slot);
-    return { k: "sig", id: sigId, slot };
+    return { k: "sig", id: sigId, slot, type: signalType, stride: strideOf(signalType.payload) };
   }
 
   // Handle Field world
@@ -303,9 +304,9 @@ export function createCombineNode(
     const combineMode = safeMode as "sum" | "average" | "max" | "min" | "last" | "product";
 
     const fieldId = builder.fieldCombine(fieldTerms, combineMode, signalType);
-    const slot = builder.allocValueSlot(signalType, `combine_field_${combineMode}`);
+    const slot = builder.allocTypedSlot(signalType, `combine_field_${combineMode}`);
     builder.registerFieldSlot(fieldId, slot);
-    return { k: "field", id: fieldId, slot };
+    return { k: "field", id: fieldId, slot, type: signalType, stride: strideOf(signalType.payload) };
   }
 
   // Handle Event world
@@ -319,7 +320,7 @@ export function createCombineNode(
     const eventMode = normalizedMode === 'last' ? 'any' : 'any';
     const eventId = builder.eventCombine(eventTerms, eventMode);
     const slot = builder.allocEventSlot(eventId);
-    return { k: "event", id: eventId, slot };
+    return { k: "event", id: eventId, slot, type: signalType, stride: 1 };
   }
 
   // Unsupported world

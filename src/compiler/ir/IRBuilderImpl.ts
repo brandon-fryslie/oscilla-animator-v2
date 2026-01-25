@@ -522,12 +522,15 @@ export class IRBuilderImpl implements IRBuilder {
     this.slotTypes.set(slot, type);
     return slot;
   }
-
   /**
-   * Allocate a value slot with type (alias for allocTypedSlot for interface compatibility).
+   * Register a slot type for slotMeta generation.
+   *
+   * CRITICAL: This must be called after lowering produces slots via allocSlot(stride).
+   * Without type registration, slotMeta generation defaults to stride=1, causing runtime errors
+   * when slotWriteStrided tries to write multiple components to a single-component slot.
    */
-  allocValueSlot(type: SignalType, label?: string): ValueSlot {
-    return this.allocTypedSlot(type, label);
+  registerSlotType(slot: ValueSlot, type: SignalType): void {
+    this.slotTypes.set(slot, type);
   }
 
   getSlotCount(): number {
