@@ -228,18 +228,16 @@ describe('Level 1 Integration Tests', () => {
     const op = frame.ops[0];
     const position = op.instances.position;
 
-    // L1 INVARIANT: position buffer is contiguous Float32Array with stride 3
+    // After projection: position buffer is stride-2 screen-space (vec2)
     expect(position).toBeInstanceOf(Float32Array);
-    expect(position.length).toBe(N * 3); // 16 instances × 3 floats per position
+    expect(position.length).toBe(N * 2); // 16 instances × 2 floats per position
 
-    // All z values must be exactly 0.0, all x/y must be finite
+    // All x/y values must be finite (z no longer exists in projected output)
     for (let i = 0; i < N; i++) {
-      const x = position[i * 3 + 0];
-      const y = position[i * 3 + 1];
-      const z = position[i * 3 + 2];
+      const x = position[i * 2 + 0];
+      const y = position[i * 2 + 1];
       expect(Number.isFinite(x)).toBe(true);
       expect(Number.isFinite(y)).toBe(true);
-      expect(z).toBe(0.0); // Explicit z=0.0, written by gridLayout kernel
     }
   });
 });
