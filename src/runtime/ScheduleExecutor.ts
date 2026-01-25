@@ -138,6 +138,9 @@ export function executeFrame(
   // 1. Advance frame (cache owns frameId)
   state.cache.frameId++;
 
+  // 1.5. Commit external channel writes (spec: External Input System Section 3.1)
+  state.externalChannels.commit();
+
   // 2. Resolve effective time
   const time = resolveTime(tAbsMs, timeModel, state.timeState);
   state.time = time;

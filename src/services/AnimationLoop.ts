@@ -10,6 +10,7 @@ import { renderFrame } from '../render';
 import {
   recordFrameTime,
   recordFrameDelta,
+  recordPoolStats,
   shouldEmitSnapshot,
   emitHealthSnapshot,
   computeFrameTimingStats,
@@ -106,6 +107,9 @@ export function executeAnimationFrame(
   renderFrame(ctx, frame, canvas.width, canvas.height, /* skipClear */ true);
   ctx.restore();
   state.renderTime = performance.now() - renderStart;
+
+  // Record pool stats BEFORE releasing buffers (Sprint: memory-instrumentation)
+  recordPoolStats(currentState, pool);
 
   // Release all buffers back to pool for reuse next frame
   pool.releaseAll();

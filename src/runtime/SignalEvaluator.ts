@@ -173,12 +173,7 @@ function evaluateSigExpr(
 
 
     case 'external': {
-      const ext = expr as { which: 'mouseX' | 'mouseY' | 'mouseOver' };
-      // Use smooth positions for organic following
-      if (ext.which === 'mouseX') return state.external.smoothX;
-      if (ext.which === 'mouseY') return state.external.smoothY;
-      if (ext.which === 'mouseOver') return state.external.mouseOver ? 1 : 0;
-      throw new Error(`Unknown external signal: ${ext.which}`);
+      return state.externalChannels.snapshot.getFloat(expr.which);
     }
 
     case 'map': {

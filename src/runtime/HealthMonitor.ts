@@ -16,6 +16,7 @@
  */
 
 import type { RuntimeState } from './RuntimeState';
+import type { BufferPool } from './BufferPool';
 import type { EventHub } from '../events/EventHub';
 import { createDiagnostic } from '../diagnostics/types';
 import { generateDiagnosticId } from '../diagnostics/diagnosticId';
@@ -154,6 +155,27 @@ export interface FrameTimingStats {
   minDelta: number;
   /** Maximum frame delta in window */
   maxDelta: number;
+}
+
+// =============================================================================
+// Memory Instrumentation (Sprint: memory-instrumentation)
+// =============================================================================
+
+/**
+ * Record pool stats from BufferPool
+ *
+ * Reads frame statistics from the pool and stores them in health metrics.
+ * Call this BEFORE pool.releaseAll() to capture accurate stats.
+ *
+ * @param state - Runtime state with health metrics
+ * @param pool - BufferPool to read stats from
+ */
+export function recordPoolStats(state: RuntimeState, pool: BufferPool): void {
+  const stats = pool.getFrameStats();
+  state.health.poolAllocs = stats.allocs;
+  state.health.poolReleases = stats.releases;
+  state.health.pooledBytes = stats.pooledBytes;
+  state.health.poolKeyCount = stats.poolKeys;
 }
 
 // =============================================================================
