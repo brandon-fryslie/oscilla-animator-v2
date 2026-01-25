@@ -5,7 +5,7 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
-import { signalType, signalTypeField, strideOf, type PayloadType } from '../core/canonical-types';
+import { signalType, signalTypeField, strideOf, type PayloadType, unitVar, payloadVar } from '../core/canonical-types';
 import type { SigExprId } from '../compiler/ir/Indices';
 
 // =============================================================================
@@ -13,21 +13,25 @@ import type { SigExprId } from '../compiler/ir/Indices';
 // =============================================================================
 
 /**
- * Payload-Generic field broadcast block.
+ * Payload-Generic, Unit-Generic field broadcast block.
  *
  * Broadcasts a signal value to all elements of a field.
- * The payload type is resolved by pass0-payload-resolution based on
- * the source signal. The resolved type is stored in `payloadType`.
+ * The payload type and unit are resolved by pass1 constraint solver
+ * through constraint propagation from connected ports.
  *
  * Payload-Generic Contract (per spec §1):
- * - Closed admissible payload set: float, vec2, color, int, bool, phase, unit
+ * - Closed admissible payload set: float, vec3, color, int, bool, phase, unit
  * - Per-payload specialization is total
  * - No implicit coercions
  * - Deterministic resolution via payloadType param
+ *
+ * Unit-Generic Contract:
+ * - Output unit matches input signal unit (via unitVar constraint)
+ * - No unit conversion or adaptation applied
  */
 registerBlock({
   type: 'Broadcast',
-  label: 'Field Broadcast',
+  label: 'Broadcast',
   category: 'field',
   description: 'Broadcasts a signal value to all elements of a field (type inferred)',
   form: 'primitive',
@@ -49,7 +53,7 @@ registerBlock({
     semantics: 'typeSpecific',
   },
   inputs: {
-    signal: { label: 'Signal', type: signalType('float') },
+    signal: { label: 'Signal', type: signalType(payloadVar('broadcast_payload'), unitVar('broadcast_in')) },
     payloadType: {
       type: signalType('float'),
       value: undefined,
@@ -58,7 +62,7 @@ registerBlock({
     },
   },
   outputs: {
-    field: { label: 'Field', type: signalTypeField('float', 'default') },
+    field: { label: 'Field', type: signalTypeField(payloadVar('broadcast_payload'), 'default', unitVar('broadcast_in')) },
   },
   lower: ({ ctx, inputsById, config }) => {
     const payloadType = config?.payloadType as PayloadType | undefined;

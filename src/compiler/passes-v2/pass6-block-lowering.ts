@@ -12,6 +12,8 @@ import type { InstanceId } from "../ir/Indices";
 import { getBlockDefinition, type LowerCtx } from "../../blocks/registry";
 import { BLOCK_DEFS_BY_TYPE } from "../../blocks/registry";
 import type { EventHub } from "../../events/EventHub";
+import type { SignalType } from "../../core/canonical-types";
+import type { PortKey } from "./pass1-type-constraints";
 // Multi-Input Blocks Integration
 import {
   type Writer,
@@ -24,6 +26,11 @@ import {
   shouldCombine,
 } from "./combine-utils";
 import type { NormalizedEdge } from "../ir/patches";
+
+// Helper to create port key
+function portKey(blockIndex: BlockIndex, portName: string, direction: 'in' | 'out'): PortKey {
+  return `${blockIndex}:${portName}:${direction}` as PortKey;
+}
 
 // =============================================================================
 // Types
@@ -289,6 +296,7 @@ function inferInstanceContext(
  * @param blockOutputs - Map of block outputs for wire resolution
  * @param blockIdToIndex - Map from block ID to block index
  * @param instanceContextByBlock - Map from block index to instance context
+ * @param portTypes - Resolved port types from pass1
  * @returns Map of port ID to ValueRefPacked
  */
 function lowerBlockInstance(
@@ -300,7 +308,8 @@ function lowerBlockInstance(
   blocks?: readonly Block[],
   blockOutputs?: Map<BlockIndex, Map<string, ValueRefPacked>>,
   blockIdToIndex?: Map<string, BlockIndex>,
-  instanceContextByBlock?: Map<BlockIndex, InstanceId>
+  instanceContextByBlock?: Map<BlockIndex, InstanceId>,
+  portTypes?: ReadonlyMap<PortKey, SignalType>
 ): Map<string, ValueRefPacked> {
   const outputRefs = new Map<string, ValueRefPacked>();
   const blockDef = getBlockDefinition(block.type);
@@ -366,11 +375,14 @@ function lowerBlockInstance(
       blockType: block.type,
       instanceId: block.id,
       label: block.label,
-      inTypes: Object.values(blockDef.inputs)
-        .filter(input => input.exposedAsPort !== false)
-        .map(input => input.type)
-        .filter((t): t is NonNullable<typeof t> => t !== undefined),
-      outTypes: Object.values(blockDef.outputs).map(output => output.type),
+      // Use resolved types from pass1 (portTypes) - THE source of truth
+      inTypes: Object.keys(blockDef.inputs)
+        .filter(portName => blockDef.inputs[portName].exposedAsPort !== false)
+        .map(portName => portTypes?.get(portKey(blockIndex, portName, 'in')))
+        .filter((t): t is SignalType => t !== undefined),
+      outTypes: Object.keys(blockDef.outputs)
+        .map(portName => portTypes?.get(portKey(blockIndex, portName, 'out')))
+        .filter((t): t is SignalType => t !== undefined),
       b: builder,
       seedConstId: 0, // Seed value not used by current intrinsics (randomId uses element index only)
       inferredInstance,
@@ -537,7 +549,8 @@ export function pass6BlockLowering(
         blocks,
         blockOutputs,
         blockIdToIndex,
-        instanceContextByBlock
+        instanceContextByBlock,
+        validated.portTypes
       );
 
       if (outputRefs.size > 0) {

@@ -103,13 +103,14 @@ export function pass4DepGraph(
     );
   }
 
-  // Return dependency graph with timeModel and blocks/edges threaded through
+  // Return dependency graph with timeModel, portTypes and blocks/edges threaded through
   return {
     graph: {
       nodes,
       edges: depEdges,
     },
     timeModel: timeResolved.timeModel,
+    portTypes: timeResolved.portTypes,
     blocks: timeResolved.blocks,
     edges: timeResolved.edges,
   };

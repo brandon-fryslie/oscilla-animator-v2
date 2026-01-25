@@ -6,7 +6,7 @@
  * - Pass 2: Adapter insertion
  * - Pass 3: Block indexing
  *
- * NOTE: Payload type resolution happens in the compiler (pass0-payload-resolution.ts)
+ * NOTE: Type resolution (payload and unit) happens in the compiler (pass1-type-constraints.ts)
  * AFTER normalization completes, so all derived blocks exist when types are resolved.
  */
 
@@ -48,7 +48,7 @@ export interface NormalizeError {
  * - Dense block indices
  * - Canonical edge ordering
  *
- * NOTE: Payload type resolution happens in the compiler AFTER normalization,
+ * NOTE: Type resolution (payload and unit) happens in the compiler AFTER normalization,
  * so all derived blocks exist when types are resolved.
  *
  * @param patch - Raw patch to normalize

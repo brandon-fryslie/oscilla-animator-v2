@@ -5,6 +5,7 @@
  */
 
 import type { SignalType } from '../../core/canonical-types';
+import { signalType, unitScalar } from '../../core/canonical-types';
 import type { TopologyId } from '../../shapes/types';
 import type { IRBuilder } from './IRBuilder';
 import type {
@@ -72,7 +73,7 @@ export class IRBuilderImpl implements IRBuilder {
   constructor() {
     // Reserve system slots at fixed positions (compiler-runtime contract)
     // Slot 0: time.palette (color, stride=4)
-    this.reserveSystemSlot(0, { kind: 'signal', form: 'scalar', payload: 'color', unit: { kind: 'scalar' } });
+    this.reserveSystemSlot(0, signalType('color'));
   }
 
   /**
@@ -506,9 +507,8 @@ export class IRBuilderImpl implements IRBuilder {
       switch (type.payload) {
         case 'float':
         case 'int':
-        case 'phase':
-        case 'unit':
         case 'bool':
+        case 'cameraProjection':
           stride = 1;
           break;
         case 'vec2':

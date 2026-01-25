@@ -1,29 +1,22 @@
 /**
- * Pass 1: Type Constraint Solving (Unit Inference)
+ * Pass 1: Type Constraint Solving
  *
- * This pass runs immediately after graph normalization and before Pass 2 (Type Graph).
- * It resolves all polymorphic type variables (especially unit variables) through
- * constraint propagation.
+ * Resolves all polymorphic type variables (unit and payload) through
+ * constraint propagation using union-find.
  *
- * Architecture:
- * - Each polymorphic port gets a UNIQUE unit variable ID (per block instance)
- * - Collects constraints from all edges: Type(fromPort) == Type(toPort)
- * - Uses union-find for efficient constraint propagation
- * - Produces a resolved types map: portKey → SignalType
- * - Unresolved polymorphic ports are hard errors (no fallback to scalar)
+ * Input: NormalizedPatch (from graph normalization)
+ * Output: TypeResolvedPatch (same structure + resolved port types)
  *
- * IMPORTANT: We use per-instance unit variables (e.g., "5:out:out") instead of
- * shared definition variables (e.g., "const_out"). This allows multiple Const
- * blocks to resolve to different units independently.
- *
- * This implements the spec from design-docs/_to_integrate/01-Units-and-Type-Inference.md
+ * The output is THE source of truth for all port types in downstream passes.
+ * No downstream pass should look up types from BlockDef - always use
+ * TypeResolvedPatch.portTypes.
  */
 
 import type { NormalizedPatch, NormalizedEdge, BlockIndex } from '../ir/patches';
 import type { Block } from '../../graph/Patch';
-import type { SignalType, Unit, PayloadType } from '../../core/canonical-types';
-import { isUnitVar, unitsEqual } from '../../core/canonical-types';
-import { getBlockDefinition, isPayloadGeneric } from '../../blocks/registry';
+import type { SignalType, Unit, PayloadType, ConcretePayloadType } from '../../core/canonical-types';
+import { isUnitVar, unitsEqual, isPayloadVar, payloadsEqual } from '../../core/canonical-types';
+import { getBlockDefinition } from '../../blocks/registry';
 
 // =============================================================================
 // Types
@@ -32,72 +25,61 @@ import { getBlockDefinition, isPayloadGeneric } from '../../blocks/registry';
 /**
  * Key for a port: "blockIndex:portName:direction"
  */
-export type PortKey = string;
+export type PortKey = `${number}:${string}:${'in' | 'out'}`;
 
 function portKey(blockIndex: BlockIndex, portName: string, direction: 'in' | 'out'): PortKey {
-  return `${blockIndex}:${portName}:${direction}`;
+  return `${blockIndex}:${portName}:${direction}` as PortKey;
 }
 
 /**
- * Result of type constraint solving.
+ * TypeResolvedPatch - Output of Pass 1
+ *
+ * Identical structure to NormalizedPatch, plus resolved port types.
+ * This is THE source of truth for all port types in downstream passes.
  */
-export interface ResolvedTypesResult {
-  readonly kind: 'ok';
+export interface TypeResolvedPatch extends NormalizedPatch {
   /**
-   * Map from port key to resolved SignalType.
-   * Only contains entries for ports that were polymorphic and got resolved.
-   * Monomorphic ports use their definition type directly.
+   * Resolved types for ALL ports.
+   * Key: "blockIndex:portName:in" or "blockIndex:portName:out"
+   * Value: Fully resolved SignalType (no variables)
+   *
+   * This is the ONLY place to look up port types after pass1.
    */
-  readonly resolvedPortTypes: ReadonlyMap<PortKey, SignalType>;
+  readonly portTypes: ReadonlyMap<PortKey, SignalType>;
 }
 
 export interface TypeConstraintError {
-  readonly kind: 'UnresolvedUnit' | 'ConflictingUnits';
+  readonly kind: 'UnresolvedUnit' | 'ConflictingUnits' | 'UnresolvedPayload' | 'ConflictingPayloads';
   readonly blockIndex: BlockIndex;
   readonly portName: string;
   readonly message: string;
   readonly suggestions: readonly string[];
 }
 
-export interface ResolvedTypesError {
+export interface Pass1Error {
   readonly kind: 'error';
   readonly errors: readonly TypeConstraintError[];
 }
 
-export type ResolvedTypes = ResolvedTypesResult | ResolvedTypesError;
+export type Pass1Result = TypeResolvedPatch | Pass1Error;
 
 // =============================================================================
 // Union-Find for Unit Variables
 // =============================================================================
 
-/**
- * Union-Find data structure for unit constraint solving.
- * Maps unit variable IDs to their representative (either another var or a concrete unit).
- */
 class UnitUnionFind {
   private parent: Map<string, string | Unit> = new Map();
 
-  /**
-   * Find the representative for a unit.
-   * If concrete, returns itself. If var, follows chain to root.
-   */
   find(unit: Unit): Unit {
-    if (unit.kind !== 'var') {
-      return unit; // Concrete units are their own representative
-    }
+    if (unit.kind !== 'var') return unit;
 
     const id = unit.id;
     const p = this.parent.get(id);
 
-    if (p === undefined) {
-      // Not yet in union-find, it's its own representative
-      return unit;
-    }
+    if (p === undefined) return unit;
 
     if (typeof p === 'string') {
-      // Parent is another var ID, recurse
       const root = this.find({ kind: 'var', id: p });
-      // Path compression
       if (root.kind === 'var') {
         this.parent.set(id, root.id);
       } else {
@@ -106,27 +88,18 @@ class UnitUnionFind {
       return root;
     }
 
-    // Parent is a concrete unit
     return p;
   }
 
-  /**
-   * Unify two units.
-   * Returns true if successful, false if conflict (two different concrete units).
-   */
   union(a: Unit, b: Unit): { ok: true } | { ok: false; conflict: [Unit, Unit] } {
     const rootA = this.find(a);
     const rootB = this.find(b);
 
-    // Both concrete and equal → already unified
     if (rootA.kind !== 'var' && rootB.kind !== 'var') {
-      if (unitsEqual(rootA, rootB)) {
-        return { ok: true };
-      }
+      if (unitsEqual(rootA, rootB)) return { ok: true };
       return { ok: false, conflict: [rootA, rootB] };
     }
 
-    // One is var, one is concrete → var becomes concrete
     if (rootA.kind === 'var' && rootB.kind !== 'var') {
       this.parent.set(rootA.id, rootB);
       return { ok: true };
@@ -136,7 +109,6 @@ class UnitUnionFind {
       return { ok: true };
     }
 
-    // Both are vars → merge (arbitrary choice: A points to B)
     if (rootA.kind === 'var' && rootB.kind === 'var' && rootA.id !== rootB.id) {
       this.parent.set(rootA.id, rootB.id);
     }
@@ -146,13 +118,63 @@ class UnitUnionFind {
 }
 
 // =============================================================================
-// Constraint Collection & Solving
+// Union-Find for Payload Variables
 // =============================================================================
 
-/**
- * Get the type of a port from the block definition.
- * Returns the raw definition type (may contain UnitVar).
- */
+const CONCRETE_PAYLOADS = new Set(['float', 'int', 'vec2', 'vec3', 'color', 'bool', 'shape', 'cameraProjection']);
+
+class PayloadUnionFind {
+  private parent: Map<string, string> = new Map();
+
+  find(payload: PayloadType): PayloadType {
+    if (!isPayloadVar(payload)) return payload;
+
+    const id = payload.id;
+    const p = this.parent.get(id);
+
+    if (p === undefined) return payload;
+
+    if (CONCRETE_PAYLOADS.has(p)) return p as ConcretePayloadType;
+
+    const root = this.find({ kind: 'var', id: p });
+    if (isPayloadVar(root)) {
+      this.parent.set(id, root.id);
+    } else {
+      this.parent.set(id, root as string);
+    }
+    return root;
+  }
+
+  union(a: PayloadType, b: PayloadType): { ok: true } | { ok: false; conflict: [PayloadType, PayloadType] } {
+    const rootA = this.find(a);
+    const rootB = this.find(b);
+
+    if (!isPayloadVar(rootA) && !isPayloadVar(rootB)) {
+      if (payloadsEqual(rootA, rootB)) return { ok: true };
+      return { ok: false, conflict: [rootA, rootB] };
+    }
+
+    if (isPayloadVar(rootA) && !isPayloadVar(rootB)) {
+      this.parent.set(rootA.id, rootB as string);
+      return { ok: true };
+    }
+    if (isPayloadVar(rootB) && !isPayloadVar(rootA)) {
+      this.parent.set(rootB.id, rootA as string);
+      return { ok: true };
+    }
+
+    if (isPayloadVar(rootA) && isPayloadVar(rootB) && rootA.id !== rootB.id) {
+      this.parent.set(rootA.id, rootB.id);
+    }
+
+    return { ok: true };
+  }
+}
+
+// =============================================================================
+// Helpers
+// =============================================================================
+
 function getDefinitionPortType(
   block: Block,
   portName: string,
@@ -170,138 +192,256 @@ function getDefinitionPortType(
   }
 }
 
-/**
- * Check if a port's type is polymorphic (has a unit variable).
- */
-function isPolymorphicPort(type: SignalType | null): boolean {
-  if (!type) return false;
-  return isUnitVar(type.unit);
-}
-
-/**
- * Create an instance-specific unit variable for a port.
- * Each block instance gets its own unique unit variable ID to prevent
- * conflicts when multiple blocks of the same type need different units.
- */
 function instanceUnitVar(blockIndex: BlockIndex, portName: string, direction: 'in' | 'out'): Unit {
-  return { kind: 'var', id: portKey(blockIndex, portName, direction) };
+  return { kind: 'var', id: `${blockIndex}:${portName}:${direction}` };
 }
 
-/**
- * Get the effective unit for a port, creating an instance-specific variable
- * if the definition has a polymorphic (variable) unit.
- */
-function getEffectiveUnit(
-  defUnit: Unit,
-  blockIndex: BlockIndex,
-  portName: string,
-  direction: 'in' | 'out'
-): Unit {
-  if (isUnitVar(defUnit)) {
-    // Replace shared definition variable with per-instance variable
-    return instanceUnitVar(blockIndex, portName, direction);
-  }
-  return defUnit;
+function instancePayloadVar(blockIndex: BlockIndex, portName: string, direction: 'in' | 'out'): PayloadType {
+  return { kind: 'var', id: `${blockIndex}:${portName}:${direction}:payload` };
 }
 
+// =============================================================================
+// Main Pass
+// =============================================================================
+
 /**
- * Run type constraint solving on a normalized patch.
+ * Pass 1: Type Constraint Solving
  *
- * @param normalized - Fully normalized patch (after all graph passes)
- * @returns Resolved types or errors
+ * Resolves all polymorphic types and returns a TypeResolvedPatch with
+ * concrete types for every port.
  */
-export function pass1TypeConstraints(normalized: NormalizedPatch): ResolvedTypes {
-  const uf = new UnitUnionFind();
+export function pass1TypeConstraints(normalized: NormalizedPatch): Pass1Result {
+  const unitUf = new UnitUnionFind();
+  const payloadUf = new PayloadUnionFind();
   const errors: TypeConstraintError[] = [];
 
-  // Track which blocks have polymorphic ports
-  const polymorphicPorts = new Map<PortKey, { block: Block; blockIndex: BlockIndex; portName: string; direction: 'in' | 'out'; type: SignalType }>();
+  // Track polymorphic ports and their instance-specific types
+  interface PortInfo {
+    block: Block;
+    blockIndex: BlockIndex;
+    portName: string;
+    direction: 'in' | 'out';
+    defType: SignalType;
+    instanceUnit: Unit;
+    instancePayload: PayloadType;
+    hasUnitVar: boolean;
+    hasPayloadVar: boolean;
+  }
+  const portInfos = new Map<PortKey, PortInfo>();
 
-  // Phase 1: Initialize - identify all polymorphic ports and create instance-specific unit variables
+  // Maps for intra-block unification: blockIndex -> defVarId -> first port key
+  const blockUnitVarToFirst = new Map<number, Map<string, PortKey>>();
+  const blockPayloadVarToFirst = new Map<number, Map<string, PortKey>>();
+
+  // Phase 1: Collect all ports and create instance-specific variables for polymorphic ones
   for (let i = 0; i < normalized.blocks.length; i++) {
     const block = normalized.blocks[i];
     const blockIndex = i as BlockIndex;
     const blockDef = getBlockDefinition(block.type);
     if (!blockDef) continue;
 
-    // Check outputs
+    const unitVarMap = new Map<string, PortKey>();
+    const payloadVarMap = new Map<string, PortKey>();
+    blockUnitVarToFirst.set(i, unitVarMap);
+    blockPayloadVarToFirst.set(i, payloadVarMap);
+
+    // Process outputs
     for (const [portName, outputDef] of Object.entries(blockDef.outputs)) {
-      if (outputDef.type && isUnitVar(outputDef.type.unit)) {
-        const key = portKey(blockIndex, portName, 'out');
-        // Create instance-specific type with unique unit variable
-        const instanceType: SignalType = {
-          ...outputDef.type,
-          unit: instanceUnitVar(blockIndex, portName, 'out'),
-        };
-        polymorphicPorts.set(key, {
-          block,
-          blockIndex,
-          portName,
-          direction: 'out',
-          type: instanceType,
-        });
+      if (!outputDef.type) continue;
+
+      const key = portKey(blockIndex, portName, 'out');
+      const hasUnitVariable = isUnitVar(outputDef.type.unit);
+      const hasPayloadVariable = isPayloadVar(outputDef.type.payload);
+
+      const instanceUnit = hasUnitVariable
+        ? instanceUnitVar(blockIndex, portName, 'out')
+        : outputDef.type.unit;
+      const instancePayload = hasPayloadVariable
+        ? instancePayloadVar(blockIndex, portName, 'out')
+        : outputDef.type.payload;
+
+      portInfos.set(key, {
+        block,
+        blockIndex,
+        portName,
+        direction: 'out',
+        defType: outputDef.type,
+        instanceUnit,
+        instancePayload,
+        hasUnitVar: hasUnitVariable,
+        hasPayloadVar: hasPayloadVariable,
+      });
+
+      // Track for intra-block unification
+      if (hasUnitVariable && isUnitVar(outputDef.type.unit)) {
+        const defVarId = outputDef.type.unit.id;
+        if (!unitVarMap.has(defVarId)) unitVarMap.set(defVarId, key);
+      }
+      if (hasPayloadVariable && isPayloadVar(outputDef.type.payload)) {
+        const defVarId = outputDef.type.payload.id;
+        if (!payloadVarMap.has(defVarId)) payloadVarMap.set(defVarId, key);
       }
     }
 
-    // Check inputs (for completeness, though most polymorphism is on outputs)
+    // Process inputs
     for (const [portName, inputDef] of Object.entries(blockDef.inputs)) {
-      if (inputDef.type && isUnitVar(inputDef.type.unit)) {
-        const key = portKey(blockIndex, portName, 'in');
-        // Create instance-specific type with unique unit variable
-        const instanceType: SignalType = {
-          ...inputDef.type,
-          unit: instanceUnitVar(blockIndex, portName, 'in'),
-        };
-        polymorphicPorts.set(key, {
-          block,
-          blockIndex,
-          portName,
-          direction: 'in',
-          type: instanceType,
-        });
+      if (!inputDef.type) continue;
+      if (inputDef.exposedAsPort === false) continue;
+
+      const key = portKey(blockIndex, portName, 'in');
+      const hasUnitVariable = isUnitVar(inputDef.type.unit);
+      const hasPayloadVariable = isPayloadVar(inputDef.type.payload);
+
+      const instanceUnit = hasUnitVariable
+        ? instanceUnitVar(blockIndex, portName, 'in')
+        : inputDef.type.unit;
+      const instancePayload = hasPayloadVariable
+        ? instancePayloadVar(blockIndex, portName, 'in')
+        : inputDef.type.payload;
+
+      portInfos.set(key, {
+        block,
+        blockIndex,
+        portName,
+        direction: 'in',
+        defType: inputDef.type,
+        instanceUnit,
+        instancePayload,
+        hasUnitVar: hasUnitVariable,
+        hasPayloadVar: hasPayloadVariable,
+      });
+
+      // Track for intra-block unification
+      if (hasUnitVariable && isUnitVar(inputDef.type.unit)) {
+        const defVarId = inputDef.type.unit.id;
+        if (!unitVarMap.has(defVarId)) unitVarMap.set(defVarId, key);
+      }
+      if (hasPayloadVariable && isPayloadVar(inputDef.type.payload)) {
+        const defVarId = inputDef.type.payload.id;
+        if (!payloadVarMap.has(defVarId)) payloadVarMap.set(defVarId, key);
+      }
+    }
+  }
+
+  // Phase 1.5: Unify ports within same block that share definition-level variable IDs
+  for (let i = 0; i < normalized.blocks.length; i++) {
+    const blockIndex = i as BlockIndex;
+    const blockDef = getBlockDefinition(normalized.blocks[i].type);
+    if (!blockDef) continue;
+
+    const unitVarMap = blockUnitVarToFirst.get(i);
+    const payloadVarMap = blockPayloadVarToFirst.get(i);
+
+    // Unify units within block
+    if (unitVarMap) {
+      for (const [portName, outputDef] of Object.entries(blockDef.outputs)) {
+        if (!outputDef.type || !isUnitVar(outputDef.type.unit)) continue;
+        const defVarId = outputDef.type.unit.id;
+        const firstKey = unitVarMap.get(defVarId);
+        const thisKey = portKey(blockIndex, portName, 'out');
+        if (firstKey && firstKey !== thisKey) {
+          const first = portInfos.get(firstKey);
+          const current = portInfos.get(thisKey);
+          if (first && current) unitUf.union(first.instanceUnit, current.instanceUnit);
+        }
+      }
+      for (const [portName, inputDef] of Object.entries(blockDef.inputs)) {
+        if (!inputDef.type || !isUnitVar(inputDef.type.unit)) continue;
+        const defVarId = inputDef.type.unit.id;
+        const firstKey = unitVarMap.get(defVarId);
+        const thisKey = portKey(blockIndex, portName, 'in');
+        if (firstKey && firstKey !== thisKey) {
+          const first = portInfos.get(firstKey);
+          const current = portInfos.get(thisKey);
+          if (first && current) unitUf.union(first.instanceUnit, current.instanceUnit);
+        }
+      }
+    }
+
+    // Unify payloads within block
+    if (payloadVarMap) {
+      for (const [portName, outputDef] of Object.entries(blockDef.outputs)) {
+        if (!outputDef.type || !isPayloadVar(outputDef.type.payload)) continue;
+        const defVarId = outputDef.type.payload.id;
+        const firstKey = payloadVarMap.get(defVarId);
+        const thisKey = portKey(blockIndex, portName, 'out');
+        if (firstKey && firstKey !== thisKey) {
+          const first = portInfos.get(firstKey);
+          const current = portInfos.get(thisKey);
+          if (first && current) payloadUf.union(first.instancePayload, current.instancePayload);
+        }
+      }
+      for (const [portName, inputDef] of Object.entries(blockDef.inputs)) {
+        if (!inputDef.type || !isPayloadVar(inputDef.type.payload)) continue;
+        const defVarId = inputDef.type.payload.id;
+        const firstKey = payloadVarMap.get(defVarId);
+        const thisKey = portKey(blockIndex, portName, 'in');
+        if (firstKey && firstKey !== thisKey) {
+          const first = portInfos.get(firstKey);
+          const current = portInfos.get(thisKey);
+          if (first && current) payloadUf.union(first.instancePayload, current.instancePayload);
+        }
       }
     }
   }
 
   // Phase 2: Collect constraints from edges
-  // Use instance-specific unit variables for polymorphic ports
   for (const edge of normalized.edges) {
-    const fromBlock = normalized.blocks[edge.fromBlock];
-    const toBlock = normalized.blocks[edge.toBlock];
+    const fromKey = portKey(edge.fromBlock, edge.fromPort, 'out');
+    const toKey = portKey(edge.toBlock, edge.toPort, 'in');
+    const fromInfo = portInfos.get(fromKey);
+    const toInfo = portInfos.get(toKey);
 
-    const fromDefType = getDefinitionPortType(fromBlock, edge.fromPort, 'out');
-    const toDefType = getDefinitionPortType(toBlock, edge.toPort, 'in');
+    if (!fromInfo || !toInfo) continue;
 
-    if (!fromDefType || !toDefType) continue;
-
-    // Get effective units (instance-specific for polymorphic, concrete for monomorphic)
-    const fromUnit = getEffectiveUnit(fromDefType.unit, edge.fromBlock, edge.fromPort, 'out');
-    const toUnit = getEffectiveUnit(toDefType.unit, edge.toBlock, edge.toPort, 'in');
-
-    // Constraint: fromUnit == toUnit
-    const result = uf.union(fromUnit, toUnit);
-    if (!result.ok) {
+    // Unit constraint
+    const unitResult = unitUf.union(fromInfo.instanceUnit, toInfo.instanceUnit);
+    if (!unitResult.ok) {
+      const fromBlock = normalized.blocks[edge.fromBlock];
+      const toBlock = normalized.blocks[edge.toBlock];
       errors.push({
         kind: 'ConflictingUnits',
         blockIndex: edge.toBlock,
         portName: edge.toPort,
-        message: `Conflicting units: ${result.conflict[0].kind} vs ${result.conflict[1].kind}`,
+        message: `Conflicting units: ${unitResult.conflict[0].kind} vs ${unitResult.conflict[1].kind} (${fromBlock.type} -> ${toBlock.type})`,
         suggestions: [
           'Insert a unit adapter between these blocks',
           'Change the source block to output the expected unit',
         ],
       });
     }
+
+    // Payload constraint
+    const payloadResult = payloadUf.union(fromInfo.instancePayload, toInfo.instancePayload);
+    if (!payloadResult.ok) {
+      const fromBlock = normalized.blocks[edge.fromBlock];
+      const toBlock = normalized.blocks[edge.toBlock];
+      const p0 = payloadResult.conflict[0];
+      const p1 = payloadResult.conflict[1];
+      const p0Str = isPayloadVar(p0) ? `var(${p0.id})` : p0;
+      const p1Str = isPayloadVar(p1) ? `var(${p1.id})` : p1;
+      errors.push({
+        kind: 'ConflictingPayloads',
+        blockIndex: edge.toBlock,
+        portName: edge.toPort,
+        message: `Conflicting payloads: ${p0Str} vs ${p1Str} (${fromBlock.type} -> ${toBlock.type})`,
+        suggestions: [
+          'Ensure connected ports have compatible payload types',
+          'Insert an adapter block for payload conversion',
+        ],
+      });
+    }
   }
 
-  // Phase 3: Check all polymorphic ports are resolved
-  const resolvedPortTypes = new Map<PortKey, SignalType>();
+  // Phase 3: Resolve all ports and build output map
+  const portTypes = new Map<PortKey, SignalType>();
 
-  for (const [key, info] of polymorphicPorts) {
-    const resolvedUnit = uf.find(info.type.unit);
+  for (const [key, info] of portInfos) {
+    let resolvedUnit = unitUf.find(info.instanceUnit);
+    let resolvedPayload = payloadUf.find(info.instancePayload);
 
-    if (isUnitVar(resolvedUnit)) {
-      // Still unresolved - this is an error
+    // Check for unresolved variables
+    if (info.hasUnitVar && isUnitVar(resolvedUnit)) {
       errors.push({
         kind: 'UnresolvedUnit',
         blockIndex: info.blockIndex,
@@ -310,60 +450,57 @@ export function pass1TypeConstraints(normalized: NormalizedPatch): ResolvedTypes
         suggestions: [
           'Connect this port to a typed consumer',
           'Set an explicit unit on this block',
-          'Insert an adapter to specify the target unit',
         ],
       });
-    } else {
-      // Resolved - store the concrete type
-      resolvedPortTypes.set(key, {
-        ...info.type,
-        unit: resolvedUnit,
-      });
+      continue;
     }
+
+    if (info.hasPayloadVar && isPayloadVar(resolvedPayload)) {
+      errors.push({
+        kind: 'UnresolvedPayload',
+        blockIndex: info.blockIndex,
+        portName: info.portName,
+        message: `Cannot resolve payload for ${info.block.type}.${info.portName}`,
+        suggestions: [
+          'Connect this port to a typed source or consumer',
+          'Ensure the block is properly wired',
+        ],
+      });
+      continue;
+    }
+
+    // Build resolved type
+    portTypes.set(key, {
+      ...info.defType,
+      payload: resolvedPayload as ConcretePayloadType,
+      unit: resolvedUnit,
+    });
   }
 
   if (errors.length > 0) {
     return { kind: 'error', errors };
   }
 
-  return { kind: 'ok', resolvedPortTypes };
+  // Return the same graph structure with resolved types added
+  return {
+    ...normalized,
+    portTypes,
+  };
 }
 
 // =============================================================================
-// Helper for Pass 2 Integration
+// Helper for downstream passes
 // =============================================================================
 
 /**
- * Get the resolved type for a port.
- * First checks the resolved types map, then falls back to definition.
- * Throws if port is polymorphic but not resolved.
+ * Get the resolved type for a port from a TypeResolvedPatch.
+ * This is the ONLY way to look up port types after pass1.
  */
-export function getResolvedPortType(
-  resolved: ResolvedTypesResult,
-  block: Block,
+export function getPortType(
+  patch: TypeResolvedPatch,
   blockIndex: BlockIndex,
   portName: string,
   direction: 'in' | 'out'
-): SignalType | null {
-  const key = portKey(blockIndex, portName, direction);
-
-  // Check resolved types first
-  const resolvedType = resolved.resolvedPortTypes.get(key);
-  if (resolvedType) {
-    return resolvedType;
-  }
-
-  // Fall back to definition
-  const defType = getDefinitionPortType(block, portName, direction);
-  if (!defType) return null;
-
-  // If definition is polymorphic but not in resolved map, that's a bug
-  if (isUnitVar(defType.unit)) {
-    throw new Error(
-      `BUG: Polymorphic port ${block.type}.${portName} not in resolved types map. ` +
-      `This indicates the constraint solver missed this port.`
-    );
-  }
-
-  return defType;
+): SignalType | undefined {
+  return patch.portTypes.get(portKey(blockIndex, portName, direction));
 }

@@ -198,10 +198,11 @@ export function pass5CycleValidation(
     );
   }
 
-  // Return validated graph with SCC information and blocks/edges threaded through
+  // Return validated graph with SCC information and portTypes/blocks/edges threaded through
   return {
     graph: depGraphWithTime.graph,
     timeModel: depGraphWithTime.timeModel,
+    portTypes: depGraphWithTime.portTypes,
     blocks: depGraphWithTime.blocks,
     edges: depGraphWithTime.edges,
     sccs,

@@ -93,7 +93,7 @@ export function unitsEqual(a: Unit, b: Unit): boolean {
 
 // --- Payload-Unit Validation (Spec §A4) ---
 
-const ALLOWED_UNITS: Record<PayloadType, readonly Unit['kind'][]> = {
+const ALLOWED_UNITS: Record<ConcretePayloadType, readonly Unit['kind'][]> = {
   float: ['scalar', 'norm01', 'phase01', 'radians', 'degrees', 'deg', 'ms', 'seconds'],
   int: ['count', 'ms'],
   vec2: ['ndc2', 'world2'],
@@ -106,12 +106,14 @@ const ALLOWED_UNITS: Record<PayloadType, readonly Unit['kind'][]> = {
 
 /**
  * Check if a (payload, unit) combination is valid per spec §A4.
- * Note: 'var' (unresolved unit variable) is always valid during inference.
+ * Note: 'var' (unresolved unit/payload variable) is always valid during inference.
  */
 export function isValidPayloadUnit(payload: PayloadType, unit: Unit): boolean {
   // Unit variables are always valid during inference (will be resolved later)
   if (unit.kind === 'var') return true;
-  const allowed = ALLOWED_UNITS[payload];
+  // Payload variables are always valid during inference (will be resolved later)
+  if (isPayloadVar(payload)) return true;
+  const allowed = ALLOWED_UNITS[payload as ConcretePayloadType];
   if (!allowed) return false;
   return allowed.includes(unit.kind);
 }
@@ -119,9 +121,14 @@ export function isValidPayloadUnit(payload: PayloadType, unit: Unit): boolean {
 /**
  * Get the default unit for a payload type.
  * Used for ergonomic helpers where unit can be omitted.
+ * Throws if given a payload variable (must resolve payload first).
  */
 export function defaultUnitForPayload(payload: PayloadType): Unit {
-  switch (payload) {
+  if (isPayloadVar(payload)) {
+    throw new Error(`Cannot get default unit for payload variable ${payload.id} - resolve payload first`);
+  }
+  // After the guard, payload is a concrete string (TypeScript needs explicit assertion)
+  switch (payload as ConcretePayloadType) {
     case 'float': return unitScalar();
     case 'int': return unitCount();
     case 'vec2': return unitWorld2();
@@ -142,12 +149,12 @@ export type NumericUnit = Unit['kind'];
 // =============================================================================
 
 /**
- * The base data type of a value.
+ * Concrete payload types (non-variable).
  *
  * Note: 'phase' is NOT a payload - it's float with unit:phase01.
  * Note: 'event' and 'domain' are NOT PayloadTypes - they are axis/resource concepts.
  */
-export type PayloadType =
+export type ConcretePayloadType =
   | 'float'   // Floating-point values
   | 'int'     // Integer values
   | 'vec2'    // 2D positions/vectors
@@ -157,14 +164,63 @@ export type PayloadType =
   | 'shape'   // Shape descriptor (ellipse, rect, path)
   | 'cameraProjection';  // Camera projection enum (0=ortho, 1=persp)
 
+/**
+ * The base data type of a value, including unresolved variables.
+ *
+ * PayloadType can be either:
+ * - A concrete type string ('float', 'vec3', etc.)
+ * - A payload variable { kind: 'var', id: string } for polymorphic ports
+ *
+ * Payload variables MUST be resolved by the constraint solver before compilation.
+ */
+export type PayloadType =
+  | ConcretePayloadType
+  | { readonly kind: 'var'; readonly id: string };  // Unresolved payload variable
+
+let payloadVarCounter = 0;
+/**
+ * Create an unresolved payload variable.
+ * Payload variables MUST be resolved by the constraint solver before compilation.
+ */
+export function payloadVar(id?: string): PayloadType {
+  return { kind: 'var', id: id ?? `_pv${payloadVarCounter++}` };
+}
 
 /**
- * Stride (number of scalar slots) per PayloadType.
+ * Check if a payload is an unresolved variable.
+ */
+export function isPayloadVar(payload: PayloadType): payload is { kind: 'var'; id: string } {
+  return typeof payload === 'object' && payload !== null && payload.kind === 'var';
+}
+
+/**
+ * Check if a payload is a concrete (non-variable) type.
+ */
+export function isConcretePayload(payload: PayloadType): payload is ConcretePayloadType {
+  return typeof payload === 'string';
+}
+
+/**
+ * Compare two payloads for equality.
+ */
+export function payloadsEqual(a: PayloadType, b: PayloadType): boolean {
+  if (isPayloadVar(a) && isPayloadVar(b)) {
+    return a.id === b.id;
+  }
+  if (isPayloadVar(a) || isPayloadVar(b)) {
+    return false;  // One is var, other is concrete
+  }
+  return a === b;  // Both concrete strings
+}
+
+
+/**
+ * Stride (number of scalar slots) per concrete PayloadType.
  *
  * This table defines how many float32/int32 slots each payload type occupies
  * in typed arrays. Used by the materializer and buffer allocation.
  */
-export const PAYLOAD_STRIDE: Record<PayloadType, number> = {
+export const PAYLOAD_STRIDE: Record<ConcretePayloadType, number> = {
   float: 1,
   int: 1,
   bool: 1,
@@ -177,12 +233,17 @@ export const PAYLOAD_STRIDE: Record<PayloadType, number> = {
 
 /**
  * Get the stride for a given PayloadType.
+ * Throws if given a payload variable (must resolve payload first).
  *
- * @param type - The payload type
+ * @param type - The payload type (must be concrete)
  * @returns Number of scalar slots required
  */
 export function strideOf(type: PayloadType): number {
-  return PAYLOAD_STRIDE[type];
+  if (isPayloadVar(type)) {
+    throw new Error(`Cannot get stride for payload variable ${type.id} - resolve payload first`);
+  }
+  // After the guard, type is a concrete string (TypeScript needs explicit assertion)
+  return PAYLOAD_STRIDE[type as ConcretePayloadType];
 }
 
 // =============================================================================
@@ -482,11 +543,13 @@ export interface SignalType {
 /**
  * Create a SignalType with specified payload and unit.
  *
- * Overload 1: signalType(payload) - uses default unit for payload
- * Overload 2: signalType(payload, unit) - explicit unit
+ * Overload 1: signalType(payload) - uses default unit for payload (only for concrete payloads)
+ * Overload 2: signalType(payload, unit) - explicit unit (required for payload variables)
  * Overload 3: signalType(payload, unit, extentOverrides) - full control
  *
  * Legacy: signalType(payload, extentOverrides) still works during migration.
+ *
+ * Note: When using payloadVar(), you MUST provide an explicit unit (use unitVar for polymorphism).
  */
 export function signalType(
   payload: PayloadType,
@@ -497,15 +560,21 @@ export function signalType(
   let extOverrides: Partial<Extent> | undefined;
 
   if (unitOrExtent === undefined) {
-    // signalType('float') -> use default unit
+    // signalType('float') -> use default unit (only for concrete payloads)
+    if (isPayloadVar(payload)) {
+      throw new Error(`Cannot omit unit for payload variable ${payload.id} - use unitVar() for polymorphic unit`);
+    }
     unit = defaultUnitForPayload(payload);
     extOverrides = undefined;
   } else if ('kind' in unitOrExtent) {
-    // signalType('float', unitPhase01(), {...})
+    // signalType('float', unitPhase01(), {...}) or signalType(payloadVar('x'), unitVar('y'))
     unit = unitOrExtent as Unit;
     extOverrides = extentOverrides;
   } else {
     // Legacy: signalType('float', { cardinality: ... })
+    if (isPayloadVar(payload)) {
+      throw new Error(`Cannot omit unit for payload variable ${payload.id} - use unitVar() for polymorphic unit`);
+    }
     unit = defaultUnitForPayload(payload);
     extOverrides = unitOrExtent as Partial<Extent>;
   }

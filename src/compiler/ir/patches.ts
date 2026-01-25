@@ -56,16 +56,24 @@ export interface LensInstance {
 export type LensBinding = { kind: 'literal'; value: unknown };
 
 // =============================================================================
+// Type-Resolved Patch - Pass 1 output
+// =============================================================================
+
+// Re-export from pass1 for convenience
+export type { TypeResolvedPatch, PortKey } from '../passes-v2/pass1-type-constraints';
+import type { TypeResolvedPatch } from '../passes-v2/pass1-type-constraints';
+
+// =============================================================================
 // Typed Patch - Pass 2
 // =============================================================================
 
 /**
- * Typed patch with resolved types for all edges and defaults.
+ * Typed patch - extends TypeResolvedPatch with blockOutputTypes for legacy compatibility.
  *
- * Pass 2 resolves TypeDesc for every connection and validates type compatibility.
- * Extends NormalizedPatch from graph/normalize.ts.
+ * Pass 2 validates type compatibility using resolved types from pass1.
+ * All port types come from TypeResolvedPatch.portTypes.
  */
-export interface TypedPatch extends NormalizedPatch {
+export interface TypedPatch extends TypeResolvedPatch {
   /** Type descriptors for each block output: Map<BlockId, Map<PortId, SignalType | InstanceRef>> */
   readonly blockOutputTypes: ReadonlyMap<string, ReadonlyMap<string, SignalType | InstanceRef>>;
 }
@@ -145,6 +153,9 @@ export interface DepGraphWithTimeModel {
   readonly graph: DepGraph;
   readonly timeModel: TimeModelIR;
 
+  /** Port types from pass1 - THE source of truth */
+  readonly portTypes: TypeResolvedPatch['portTypes'];
+
   /** Blocks threaded through from NormalizedPatch */
   readonly blocks: readonly Block[];
 
@@ -182,6 +193,9 @@ export interface AcyclicOrLegalGraph {
 
   /** Time model from Pass 3, threaded through for Pass 6 */
   readonly timeModel: TimeModelIR;
+
+  /** Port types from pass1 - THE source of truth */
+  readonly portTypes: TypeResolvedPatch['portTypes'];
 
   /** Blocks threaded through for downstream passes */
   readonly blocks: readonly Block[];

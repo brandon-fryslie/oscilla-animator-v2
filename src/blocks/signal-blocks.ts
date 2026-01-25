@@ -17,8 +17,8 @@ import type { SigExprId } from '../compiler/ir/Indices';
  * Payload-Generic constant block.
  *
  * This block outputs a constant value with type determined by context.
- * The payload type is resolved by pass0-payload-resolution based on
- * what this block connects to. The resolved type is stored in `payloadType`.
+ * The payload type and unit are resolved by pass1 constraint solver
+ * through constraint propagation from connected ports.
  *
  * Payload-Generic Contract (per spec §1):
  * - Closed admissible payload set: float, int, bool, vec2, color

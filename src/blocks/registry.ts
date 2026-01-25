@@ -126,7 +126,7 @@ export interface BlockCardinalityMetadata {
 // Payload-Generic Block Metadata (Spec §8)
 // =============================================================================
 
-import type { PayloadType } from '../core/canonical-types';
+import { type PayloadType, isPayloadVar, payloadsEqual } from '../core/canonical-types';
 
 /**
  * Semantics category for payload-generic blocks.
@@ -447,19 +447,25 @@ export function getBlockPayloadMetadata(blockType: string): BlockPayloadMetadata
  * @param portName - The port name (input or output key)
  * @param payload - The payload type to check
  * @returns true if allowed, false if disallowed, undefined if no constraints
+ *
+ * Note: PayloadVar types are always allowed - constraint solving will handle actual type validation.
  */
 export function isPayloadAllowed(
   blockType: string,
   portName: string,
   payload: PayloadType
 ): boolean | undefined {
+  // PayloadVar is always allowed - constraint solving will handle validation
+  if (isPayloadVar(payload)) return true;
+
   const meta = getBlockPayloadMetadata(blockType);
   if (!meta) return undefined;
 
   const allowed = meta.allowedPayloads[portName];
   if (!allowed || allowed.length === 0) return undefined;
 
-  return allowed.includes(payload);
+  // Check if any allowed type matches (handling both concrete and payloadVar in allowed list)
+  return allowed.some(a => payloadsEqual(a, payload));
 }
 
 /**
@@ -478,6 +484,8 @@ export function getPayloadCombinations(blockType: string): readonly PayloadCombi
  * @param blockType - The block type
  * @param inputPayloads - Tuple of input payload types
  * @returns The output payload if valid, undefined if no match or no constraints
+ *
+ * Note: PayloadVar types always match any concrete type - constraint solving will validate.
  */
 export function findPayloadCombination(
   blockType: string,
@@ -488,7 +496,11 @@ export function findPayloadCombination(
 
   return combos.find((combo) => {
     if (combo.inputs.length !== inputPayloads.length) return false;
-    return combo.inputs.every((p, i) => p === inputPayloads[i]);
+    return combo.inputs.every((p, i) => {
+      // PayloadVar matches anything
+      if (isPayloadVar(inputPayloads[i]) || isPayloadVar(p)) return true;
+      return payloadsEqual(p, inputPayloads[i]);
+    });
   });
 }
 

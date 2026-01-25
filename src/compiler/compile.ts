@@ -50,7 +50,6 @@ import '../blocks/camera-block'; // NEW - Camera system
 import '../blocks/test-blocks'; // Test blocks for signal evaluation in tests
 
 // Import passes
-import { pass0PayloadResolution } from './passes-v2/pass0-payload-resolution';
 import { pass1TypeConstraints } from './passes-v2';
 import { pass2TypeGraph } from './passes-v2';
 import { pass3Time } from './passes-v2';
@@ -181,20 +180,12 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
       console.warn('[CompilationInspector] Failed to capture normalization:', e);
     }
 
-    // Pass 0: Payload type resolution (for payload-generic blocks like Const, Broadcast)
-    // This must run after normalization (so all derived blocks exist) and before type constraints
-    const withPayloadTypes = pass0PayloadResolution(normalized);
-
-    try {
-      compilationInspector.capturePass('payload-resolution', normalized, withPayloadTypes);
-    } catch (e) {
-      console.warn('[CompilationInspector] Failed to capture payload-resolution:', e);
-    }
-
-    // Pass 1: Type Constraints (unit inference)
-    const typeConstraintsResult = pass1TypeConstraints(withPayloadTypes);
-    if (typeConstraintsResult.kind === 'error') {
-      const compileErrors: CompileError[] = typeConstraintsResult.errors.map((e) => ({
+    // Pass 1: Type Constraints (unit and payload inference)
+    // Resolves polymorphic unit and payload variables through constraint propagation
+    // Output is TypeResolvedPatch - THE source of truth for all port types
+    const pass1Result = pass1TypeConstraints(normalized);
+    if (pass1Result.kind === 'error') {
+      const compileErrors: CompileError[] = pass1Result.errors.map((e) => ({
         kind: e.kind,
         message: `${e.message}\nSuggestions:\n${e.suggestions.map(s => `  - ${s}`).join('\n')}`,
         blockId: normalized.blocks[e.blockIndex]?.id,
@@ -202,18 +193,19 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
       }));
       return emitFailure(options, startTime, compileId, compileErrors);
     }
+    const typeResolved = pass1Result; // TypeResolvedPatch
 
     try {
-      compilationInspector.capturePass('type-constraints', normalized, typeConstraintsResult);
+      compilationInspector.capturePass('type-constraints', normalized, typeResolved);
     } catch (e) {
       console.warn('[CompilationInspector] Failed to capture type-constraints:', e);
     }
 
-    // Pass 2: Type Graph
-    const typedPatch = pass2TypeGraph(withPayloadTypes, typeConstraintsResult);
+    // Pass 2: Type Graph (validates types using resolved types from pass1)
+    const typedPatch = pass2TypeGraph(typeResolved);
 
     try {
-      compilationInspector.capturePass('type-graph', withPayloadTypes, typedPatch);
+      compilationInspector.capturePass('type-graph', normalized, typedPatch);
     } catch (e) {
       console.warn('[CompilationInspector] Failed to capture type-graph:', e);
     }

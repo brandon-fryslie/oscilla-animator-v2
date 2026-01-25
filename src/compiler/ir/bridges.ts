@@ -22,9 +22,10 @@ import type {
   Binding,
   AxisTag,
   PayloadType,
+  ConcretePayloadType,
   ResolvedExtent,
 } from '../../core/canonical-types';
-import { isInstantiated } from '../../core/canonical-types';
+import { isInstantiated, isPayloadVar } from '../../core/canonical-types';
 import type { ShapeDescIR } from './program';
 
 // =============================================================================
@@ -195,9 +196,17 @@ export function bridgeBindingToIdentityIR(
  *
  * Note: 'phase' and 'unit' are NOT PayloadTypes - they are float with units.
  * Note: Physical storage class is determined separately by SlotMetaEntry.storage
+ * Note: Payload variables must be resolved before calling this function.
  */
 export function payloadTypeToShapeDescIR(payload: PayloadType): ShapeDescIR {
-  switch (payload) {
+  // Payload variables must be resolved before this point
+  if (isPayloadVar(payload)) {
+    throw new Error(`Cannot convert payload variable ${payload.id} to shape descriptor - resolve payload first`);
+  }
+
+  // After the guard, payload is a concrete string (TypeScript needs explicit assertion)
+  const concretePayload = payload as ConcretePayloadType;
+  switch (concretePayload) {
     case 'float':
     case 'int':
       return { kind: 'number' };
@@ -223,7 +232,7 @@ export function payloadTypeToShapeDescIR(payload: PayloadType): ShapeDescIR {
       return { kind: 'number' };
 
     default:
-      exhaustiveCheck(payload);
+      exhaustiveCheck(concretePayload);
   }
 }
 

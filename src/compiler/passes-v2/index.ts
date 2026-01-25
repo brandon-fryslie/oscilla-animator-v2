@@ -11,9 +11,9 @@
  * - Pass 7: Schedule Construction
  */
 
-// Pass 1: Type Constraints (unit inference)
-export { pass1TypeConstraints, getResolvedPortType } from "./pass1-type-constraints";
-export type { ResolvedTypes, ResolvedTypesResult, ResolvedTypesError, TypeConstraintError, PortKey } from "./pass1-type-constraints";
+// Pass 1: Type Constraints (unit and payload inference)
+export { pass1TypeConstraints, getPortType } from "./pass1-type-constraints";
+export type { TypeResolvedPatch, Pass1Result, Pass1Error, TypeConstraintError, PortKey } from "./pass1-type-constraints";
 
 // Pass 2: Type Graph
 export { pass2TypeGraph } from "./pass2-types";
