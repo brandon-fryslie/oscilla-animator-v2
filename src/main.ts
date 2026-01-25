@@ -12,6 +12,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { reaction, toJS } from 'mobx';
 import { buildPatch, type Patch } from './graph';
+import { migratePatch } from './graph/patchMigrations';
 import { compile } from './compiler';
 import {
   createSessionState,
@@ -616,8 +617,21 @@ function deserializePatch(json: string): { patch: Patch; presetIndex: number } |
         outputPorts: new Map(b.outputPorts.map(p => [p.id, p])),
       });
     }
+    const rawPatch = { blocks, edges: data.edges };
+
+    // Apply patch migrations for removed/renamed blocks
+    const { patch: migratedPatch, migrations } = migratePatch(rawPatch);
+
+    // Log migrations to console for debugging
+    if (migrations.length > 0) {
+      console.warn(
+        `[PatchMigration] Applied ${migrations.length} migrations to patch:`,
+        migrations.map(m => `  - ${m.kind}: ${m.reason}`).join('\n'),
+      );
+    }
+
     return {
-      patch: { blocks, edges: data.edges },
+      patch: migratedPatch,
       presetIndex: data.presetIndex,
     };
   } catch {
