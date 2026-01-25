@@ -35,7 +35,7 @@ export const patchGoldenSpiral: PatchBuilder = (b) => {
   b.wire(totalAngle, 'out', pos, 'angle');
   b.wire(effectiveRadius, 'out', pos, 'radius');
 
-  const jitter = b.addBlock('Jitter2D', { amountX: 0.015, amountY: 0.015 });
+  const jitter = b.addBlock('JitterVec', { amountX: 0.015, amountY: 0.015 });
   // Broadcast time (scalar) for jitter seed variation
   const timeBroadcast = b.addBlock('Broadcast', { payloadType: 'float' });
   const jitterRand = b.addBlock('Add', {});

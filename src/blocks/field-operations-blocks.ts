@@ -809,14 +809,14 @@ registerBlock({
 });
 
 // =============================================================================
-// Jitter2D (cardinality-generic)
+// JitterVec (cardinality-generic) - adds random jitter to vec3 positions
 // =============================================================================
 
 registerBlock({
-  type: 'Jitter2D',
-  label: 'Jitter 2D',
+  type: 'JitterVec',
+  label: 'Jitter Vec',
   category: 'field',
-  description: 'Add per-element random jitter to 2D positions',
+  description: 'Add per-element random jitter to vec3 positions',
   form: 'primitive',
   capability: 'pure',
   cardinality: {
@@ -825,32 +825,35 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    pos: { label: 'Position', type: signalType('vec2') },
+    pos: { label: 'Position', type: signalType('vec3') },
     rand: { label: 'Random', type: signalType('float') },
     amountX: { label: 'Amount X', type: signalType('float'), defaultSource: defaultSourceConst(0.01), uiHint: { kind: 'slider', min: 0, max: 0.1, step: 0.001 } },
     amountY: { label: 'Amount Y', type: signalType('float'), defaultSource: defaultSourceConst(0.01), uiHint: { kind: 'slider', min: 0, max: 0.1, step: 0.001 } },
+    amountZ: { label: 'Amount Z', type: signalType('float'), defaultSource: defaultSourceConst(0.0), uiHint: { kind: 'slider', min: 0, max: 0.1, step: 0.001 } },
   },
   outputs: {
-    out: { label: 'Position', type: signalType('vec2') },
+    out: { label: 'Position', type: signalType('vec3') },
   },
   lower: ({ ctx, inputsById }) => {
     const pos = inputsById.pos;
     const rand = inputsById.rand;
     const amountX = inputsById.amountX;
     const amountY = inputsById.amountY;
+    const amountZ = inputsById.amountZ;
 
     if (!pos || !rand) {
-      throw new Error('Jitter2D pos and rand required');
+      throw new Error('JitterVec pos and rand required');
     }
 
     // Get amount signals (or create default constants)
     const amountXSig = amountX?.k === 'sig' ? amountX.id : ctx.b.sigConst(0.01, signalType('float'));
     const amountYSig = amountY?.k === 'sig' ? amountY.id : ctx.b.sigConst(0.01, signalType('float'));
+    const amountZSig = amountZ?.k === 'sig' ? amountZ.id : ctx.b.sigConst(0.0, signalType('float'));
 
     if (pos.k === 'sig' && rand.k === 'sig') {
-      // Signal path - use kernel to build jittered vec2
-      const jitterFn = ctx.b.kernel('jitter2DSig');
-      const result = ctx.b.sigZip([pos.id, rand.id, amountXSig, amountYSig], jitterFn, signalType('vec2'));
+      // Signal path - use kernel to build jittered vec3
+      const jitterFn = ctx.b.kernel('jitterVecSig');
+      const result = ctx.b.sigZip([pos.id, rand.id, amountXSig, amountYSig, amountZSig], jitterFn, signalType('vec3'));
 
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
@@ -864,13 +867,13 @@ registerBlock({
       // Field path - broadcast amount signals to fields
       const amountXField = ctx.b.Broadcast(amountXSig, signalTypeField('float', 'default'));
       const amountYField = ctx.b.Broadcast(amountYSig, signalTypeField('float', 'default'));
+      const amountZField = ctx.b.Broadcast(amountZSig, signalTypeField('float', 'default'));
 
-      // pos += vec2(rand * amountX, rand * amountY)
-      const jitterFn = ctx.b.kernel('fieldJitter2D');
+      const jitterFn = ctx.b.kernel('fieldJitterVec');
       const result = ctx.b.fieldZip(
-        [pos.id, rand.id, amountXField, amountYField],
+        [pos.id, rand.id, amountXField, amountYField, amountZField],
         jitterFn,
-        signalTypeField('vec2', 'default')
+        signalTypeField('vec3', 'default')
       );
 
       const outType = ctx.outTypes[0];
@@ -884,16 +887,17 @@ registerBlock({
       };
     } else {
       // Mixed path - broadcast signals to fields
-      const posField = pos.k === 'field' ? pos.id : ctx.b.Broadcast((pos as { k: 'sig'; id: SigExprId }).id, signalTypeField('vec2', 'default'));
+      const posField = pos.k === 'field' ? pos.id : ctx.b.Broadcast((pos as { k: 'sig'; id: SigExprId }).id, signalTypeField('vec3', 'default'));
       const randField = rand.k === 'field' ? rand.id : ctx.b.Broadcast((rand as { k: 'sig'; id: SigExprId }).id, signalTypeField('float', 'default'));
       const amountXField = ctx.b.Broadcast(amountXSig, signalTypeField('float', 'default'));
       const amountYField = ctx.b.Broadcast(amountYSig, signalTypeField('float', 'default'));
+      const amountZField = ctx.b.Broadcast(amountZSig, signalTypeField('float', 'default'));
 
-      const jitterFn = ctx.b.kernel('fieldJitter2D');
+      const jitterFn = ctx.b.kernel('fieldJitterVec');
       const result = ctx.b.fieldZip(
-        [posField, randField, amountXField, amountYField],
+        [posField, randField, amountXField, amountYField, amountZField],
         jitterFn,
-        signalTypeField('vec2', 'default')
+        signalTypeField('vec3', 'default')
       );
 
       const outType = ctx.outTypes[0];

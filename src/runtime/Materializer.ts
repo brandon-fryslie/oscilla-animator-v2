@@ -49,7 +49,7 @@
  *     LOCAL-SPACE - centered at (0,0), outputs control points
  *
  * EFFECTS:
- *   jitter2d / fieldJitter2D(pos, rand, amtX, amtY) → vec2
+ *   fieldJitterVec(pos, rand, amtX, amtY, amtZ) → vec3
  *     AGNOSTIC - offsets in same units as pos
  *   attract2d(pos, targetX, targetY, phase, strength) → vec2
  *     AGNOSTIC - pos/target must be in same space

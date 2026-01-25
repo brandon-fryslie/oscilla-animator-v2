@@ -278,14 +278,15 @@ export const KERNEL_SIGNATURES: Readonly<Record<string, KernelSignature>> = {
     output: { unit: 'scalar', description: 'Jittered position (vec2) - preserves input space' },
   },
 
-  fieldJitter2D: {
+  fieldJitterVec: {
     inputs: [
-      { expectedUnit: 'scalar', description: 'Position (vec2) - coord-space AGNOSTIC' },
+      { expectedUnit: 'scalar', description: 'Position (vec3) - coord-space AGNOSTIC' },
       { expectedUnit: 'scalar', description: 'Random seed value' },
       { expectedUnit: 'scalar', description: 'Amount X - same units as position' },
       { expectedUnit: 'scalar', description: 'Amount Y - same units as position' },
+      { expectedUnit: 'scalar', description: 'Amount Z - same units as position' },
     ],
-    output: { unit: 'scalar', description: 'Jittered position (vec2) - preserves input space' },
+    output: { unit: 'scalar', description: 'Jittered position (vec3)' },
   },
 
   attract2d: {

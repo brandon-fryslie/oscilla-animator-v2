@@ -54,6 +54,11 @@ describe('Cardinality Metadata', () => {
       'PolarToCartesian', 'OffsetPosition',
       'Sin', 'Cos', 'Mod',
       'Expression',
+      'JitterVec',
+      // Field operations that are also cardinality-preserving
+      'FieldPolarToCartesian', 'FieldCartesianToPolar',
+      'Pulse', 'GoldenAngle', 'AngularOffset',
+      'RadiusSqrt', 'HueFromPhase', 'SetZ',
     ];
 
     it.each(genericBlocks)('%s is cardinality-generic', (blockType) => {
@@ -85,9 +90,6 @@ describe('Cardinality Metadata', () => {
       'RenderInstances2D',
       'StableIdHash', 'DomainIndex',
       'FromDomainId',
-      'FieldPolarToCartesian', 'FieldCartesianToPolar',
-      'Pulse', 'GoldenAngle', 'AngularOffset',
-      'RadiusSqrt', 'Jitter2D', 'HueFromPhase', 'SetZ',
       'PathField',
     ];
 

@@ -39,7 +39,7 @@ export const patchRectMosaic: PatchBuilder = (b) => {
   b.wire(effectiveRadius, 'out', pos, 'radius');
 
   // Add jitter for organic per-element randomness
-  const jitter = b.addBlock('Jitter2D', { amountX: 0.02, amountY: 0.02 });
+  const jitter = b.addBlock('JitterVec', { amountX: 0.02, amountY: 0.02 });
   const timeBroadcast = b.addBlock('Broadcast', { payloadType: 'float' });
   const jitterRand = b.addBlock('Add', {});
   b.wire(time, 'tMs', timeBroadcast, 'signal');

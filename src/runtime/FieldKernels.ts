@@ -30,7 +30,7 @@
  * ZIP KERNELS (multiple field inputs):
  *   makeVec2, makeVec3, hsvToRgb, jitter2d, attract2d, fieldAngularOffset,
  *   fieldRadiusSqrt, fieldAdd, fieldPolarToCartesian, fieldPulse,
- *   fieldHueFromPhase, fieldJitter2D, fieldGoldenAngle
+ *   fieldHueFromPhase, fieldJitterVec, fieldGoldenAngle
  *
  * ZIPSIG KERNELS (field + signal inputs):
  *   applyOpacity, hsvToRgb, circleLayout, circleAngle,
@@ -338,34 +338,38 @@ export function applyFieldKernel(
       const hue = id01Arr[i] + phaseArr[i];
       outArr[i] = hue - Math.floor(hue); // fract (mod 1.0)
     }
-  } else if (fieldOp === 'fieldJitter2D') {
+  } else if (fieldOp === 'fieldJitterVec') {
     // ════════════════════════════════════════════════════════════════
-    // fieldJitter2D: Alias for jitter2d (same implementation)
+    // fieldJitterVec: Add random jitter to vec3 positions
     // ────────────────────────────────────────────────────────────────
-    // Inputs: [pos: vec2, rand: float, amountX: float, amountY: float]
-    // Output: vec2 (stride 2)
+    // Inputs: [pos: vec3, rand: float, amountX: float, amountY: float, amountZ: float]
+    // Output: vec3 (stride 3)
     // Domain: rand is arbitrary float seed, amounts are in coordinate units
     // Coord-space: AGNOSTIC - offsets are in same units as input pos
-    // Use case: Control points, tangent vectors (NOT instance positions)
+    // Use case: Instance positions, control points
     // ════════════════════════════════════════════════════════════════
-    if (inputs.length !== 4) {
-      throw new Error('fieldJitter2D requires 4 inputs (pos, rand, amountX, amountY)');
+    if (inputs.length !== 5) {
+      throw new Error('fieldJitterVec requires 5 inputs (pos, rand, amountX, amountY, amountZ)');
     }
     const outArr = out as Float32Array;
     const posArr = inputs[0] as Float32Array;
     const randArr = inputs[1] as Float32Array;
     const amountXArr = inputs[2] as Float32Array;
     const amountYArr = inputs[3] as Float32Array;
+    const amountZArr = inputs[4] as Float32Array;
 
     for (let i = 0; i < N; i++) {
       const rand = randArr[i];
       const randX = Math.sin(rand * 12.9898 + 78.233) * 43758.5453;
       const randY = Math.sin(rand * 93.9898 + 67.345) * 24571.2341;
+      const randZ = Math.sin(rand * 47.1234 + 12.567) * 31415.9265;
       const offsetX = ((randX - Math.floor(randX)) * 2 - 1) * amountXArr[i];
       const offsetY = ((randY - Math.floor(randY)) * 2 - 1) * amountYArr[i];
+      const offsetZ = ((randZ - Math.floor(randZ)) * 2 - 1) * amountZArr[i];
 
-      outArr[i * 2 + 0] = posArr[i * 2 + 0] + offsetX;
-      outArr[i * 2 + 1] = posArr[i * 2 + 1] + offsetY;
+      outArr[i * 3 + 0] = posArr[i * 3 + 0] + offsetX;
+      outArr[i * 3 + 1] = posArr[i * 3 + 1] + offsetY;
+      outArr[i * 3 + 2] = posArr[i * 3 + 2] + offsetZ;
     }
   } else if (fieldOp === 'fieldGoldenAngle') {
     // ════════════════════════════════════════════════════════════════
