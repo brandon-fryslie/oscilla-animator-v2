@@ -119,6 +119,7 @@ function materializeDefaultSource(
             from: {kind: 'port', blockId: timeRoot.id, slotId: ds.output},
             to: {kind: 'port', blockId: targetBlockId, slotId: targetPortId},
             enabled: true,
+            role: { kind: 'default', meta: { defaultSourceBlockId: timeRoot.id } },
         };
 
         return {block: null, edge};
@@ -164,6 +165,7 @@ function materializeDefaultSource(
             slotId: targetPortId,
         },
         enabled: true,
+        role: { kind: 'default', meta: { defaultSourceBlockId: derivedId } },
     };
 
     return {block: derivedBlock, edge};
@@ -227,7 +229,7 @@ function applyDefaultSourceInsertions(
             for (const [inputId, inputDef] of Object.entries(blockDef.inputs)) {
                 // Skip config-only inputs when creating ports
                 if (inputDef.exposedAsPort === false) continue;
-                inputPorts.set(inputId, {id: inputId});
+                inputPorts.set(inputId, {id: inputId, combineMode: 'last'});
             }
             // Create output ports
             const outputPorts = new Map();

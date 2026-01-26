@@ -341,7 +341,7 @@ export class PatchStore {
         throw new Error(`Cannot update port ${portId} on block ${blockId}: it is a config-only input, not a port`);
       }
       // Create the port entry
-      port = { id: portId, combineMode: 'last' };
+      port = { id: portId };
     }
 
     // Update port

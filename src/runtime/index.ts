@@ -17,7 +17,6 @@ export {
   type SessionState,
   type ProgramState,
   type RuntimeState,
-  type ExternalInputs,
   type ContinuityConfig,
   createValueStore,
   createFrameCache,
@@ -26,11 +25,14 @@ export {
   createRuntimeState,
   createRuntimeStateFromSession,
   extractSessionState,
-  createExternalInputs,
   createContinuityConfig,
-  updateSmoothing,
   advanceFrame,
 } from './RuntimeState';
+export {
+  ExternalWriteBus,
+  ExternalChannelSnapshot,
+  ExternalChannelSystem,
+} from './ExternalChannel';
 export { materialize } from './Materializer';
 export { executeFrame } from './ScheduleExecutor';
 export {

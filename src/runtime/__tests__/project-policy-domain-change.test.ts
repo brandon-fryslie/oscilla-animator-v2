@@ -21,6 +21,7 @@ import {
 } from '../ContinuityState';
 import type { StepContinuityApply } from '../../compiler/ir/types';
 import type { RuntimeState } from '../RuntimeState';
+import { ExternalChannelSystem } from '../ExternalChannel';
 import type { ValueSlot } from '../../types';
 
 /**
@@ -63,13 +64,8 @@ function createTestRuntimeState(): RuntimeState {
       offsetA: 0,
       offsetB: 0,
     },
-    external: {
-      mouseX: 0.5,
-      mouseY: 0.5,
-      mouseOver: false,
-      smoothX: 0.5,
-      smoothY: 0.5,
-    },
+    external: new ExternalChannelSystem(),
+    externalChannels: new ExternalChannelSystem(),
     health: {
       frameTimes: new Array(10).fill(0),
       frameTimesIndex: 0,

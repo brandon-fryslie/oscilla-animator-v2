@@ -26,15 +26,15 @@
  * - Per-instance rotation and anisotropic scale
  */
 
-import { isPathTopology } from '../runtime/RenderAssembler';
-import { getTopology } from '../shapes/registry';
-import type { PathTopologyDef, PathVerb, TopologyDef } from '../shapes/types';
+import { isPathTopology } from '../../runtime/RenderAssembler';
+import { getTopology } from '../../shapes/registry';
+import type { PathTopologyDef, PathVerb, TopologyDef } from '../../shapes/types';
 import type {
   DrawPathInstancesOp,
   DrawPrimitiveInstancesOp,
   PathStyle,
   RenderFrameIR,
-} from './types';
+} from '../types';
 
 /**
  * Calculate stroke width in pixels from world units.
@@ -138,7 +138,7 @@ export function renderDrawPathInstancesOp(
 
     if (style.dashPattern && style.dashPattern.length > 0) {
       // Scale dash pattern from world units to pixels
-      const dashPx = style.dashPattern.map(d => d * D);
+      const dashPx = style.dashPattern.map((d: number) => d * D);
       ctx.setLineDash(dashPx);
       ctx.lineDashOffset = (style.dashOffset ?? 0) * D;
     } else {

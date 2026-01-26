@@ -16,7 +16,7 @@ import {
     type ExtrudeLiteInput,
     type ExtrudeLiteDrawPlan,
     type RGBA01,
-} from '../style/ExtrudeLite';
+} from './ExtrudeLite';
 
 // ----------------------------
 // Public entrypoint

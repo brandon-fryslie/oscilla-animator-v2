@@ -3,10 +3,10 @@
  */
 
 // Canvas 2D renderer
-export { renderFrame, renderDrawPathInstancesOp, renderDrawPrimitiveInstancesOp } from './Canvas2DRenderer';
+export { renderFrame, renderDrawPathInstancesOp, renderDrawPrimitiveInstancesOp } from './canvas/Canvas2DRenderer';
 
 // SVG renderer
-export { SVGRenderer } from './SVGRenderer';
+export { SVGRenderer } from './svg/SVGRenderer';
 
 // Re-export v2 types (now the only types)
 export type {

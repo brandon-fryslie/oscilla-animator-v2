@@ -214,7 +214,7 @@ export class PatchStore {
     const inputPorts = new Map<string, InputPort>();
     for (const [inputId, inputDef] of Object.entries(blockDef.inputs)) {
       if (inputDef.exposedAsPort === false) continue;
-      inputPorts.set(inputId, { id: inputId, combineMode: 'last' });
+      inputPorts.set(inputId, { id: inputId });
     }
 
     // Create output ports from registry
@@ -341,7 +341,7 @@ export class PatchStore {
         throw new Error(`Cannot update port ${portId} on block ${blockId}: it is a config-only input, not a port`);
       }
       // Create the port entry
-      port = { id: portId, combineMode: 'last' };
+      port = { id: portId };
     }
 
     // Update port

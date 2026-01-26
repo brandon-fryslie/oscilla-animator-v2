@@ -184,7 +184,7 @@ export class PatchBuilder {
       // These are NOT ports and should NOT have port entries
       if (inputDef.exposedAsPort === false) continue;
       // Don't set combineMode - defaults to 'last' when undefined
-      inputPorts.set(inputId, { id: inputId, combineMode: 'last' });
+      inputPorts.set(inputId, { id: inputId });
     }
 
     // Create output ports from registry

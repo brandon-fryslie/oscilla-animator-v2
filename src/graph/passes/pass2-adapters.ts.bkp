@@ -191,7 +191,7 @@ function analyzeAdapters(
       // Create input ports from registry
       const inputPorts = new Map();
       for (const [inputId, inputDef] of Object.entries(adapterBlockDef.inputs)) {
-        inputPorts.set(inputId, { id: inputId, combineMode: 'last' });
+        inputPorts.set(inputId, { id: inputId });
       }
 
       // Create output ports from registry
