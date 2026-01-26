@@ -56,11 +56,11 @@ describe('Level 7 Unit Tests: Depth Sort and Cull', () => {
       visible: new Uint8Array([1, 1, 1, 1]),
     };
 
-    const color = new Float32Array([
-      1, 0, 0, 1,  // idx 0: red
-      0, 1, 0, 1,  // idx 1: green
-      0, 0, 1, 1,  // idx 2: blue
-      1, 1, 0, 1,  // idx 3: yellow
+    const color = new Uint8ClampedArray([
+      255, 0, 0, 255,  // idx 0: red
+      0, 255, 0, 255,  // idx 1: green
+      0, 0, 255, 255,  // idx 2: blue
+      255, 255, 0, 255,  // idx 3: yellow
     ]);
 
     const result = depthSortAndCompact(projection, count, color);
@@ -85,15 +85,15 @@ describe('Level 7 Unit Tests: Depth Sort and Cull', () => {
     expect(result.screenPosition[7]).toBeCloseTo(0.1); // idx 1's y
 
     // Verify colors follow the sort
-    const c = result.color as Float32Array;
+    const c = result.color;
     // idx 2 (blue) first
-    expect(c[0]).toBe(0); expect(c[1]).toBe(0); expect(c[2]).toBe(1); expect(c[3]).toBe(1);
+    expect(c[0]).toBe(0); expect(c[1]).toBe(0); expect(c[2]).toBe(255); expect(c[3]).toBe(255);
     // idx 0 (red) second
-    expect(c[4]).toBe(1); expect(c[5]).toBe(0); expect(c[6]).toBe(0); expect(c[7]).toBe(1);
+    expect(c[4]).toBe(255); expect(c[5]).toBe(0); expect(c[6]).toBe(0); expect(c[7]).toBe(255);
     // idx 3 (yellow) third
-    expect(c[8]).toBe(1); expect(c[9]).toBe(1); expect(c[10]).toBe(0); expect(c[11]).toBe(1);
+    expect(c[8]).toBe(255); expect(c[9]).toBe(255); expect(c[10]).toBe(0); expect(c[11]).toBe(255);
     // idx 1 (green) fourth
-    expect(c[12]).toBe(0); expect(c[13]).toBe(1); expect(c[14]).toBe(0); expect(c[15]).toBe(1);
+    expect(c[12]).toBe(0); expect(c[13]).toBe(255); expect(c[14]).toBe(0); expect(c[15]).toBe(255);
   });
 
   it('Depth sort is stable: equal depths preserve original order', () => {
@@ -111,9 +111,9 @@ describe('Level 7 Unit Tests: Depth Sort and Cull', () => {
       visible: new Uint8Array([1, 1, 1, 1, 1]),
     };
 
-    const color = new Float32Array(count * 4);
+    const color = new Uint8ClampedArray(count * 4);
     for (let i = 0; i < count; i++) {
-      color[i * 4] = i * 0.2; // Mark each with unique color channel
+      color[i * 4] = i * 50; // Mark each with unique color channel
     }
 
     const result = depthSortAndCompact(projection, count, color);
@@ -142,9 +142,9 @@ describe('Level 7 Unit Tests: Depth Sort and Cull', () => {
       visible: new Uint8Array([1, 0, 1, 0, 1]), // 1,3 invisible
     };
 
-    const color = new Float32Array(count * 4);
+    const color = new Uint8ClampedArray(count * 4);
     for (let i = 0; i < count; i++) {
-      color[i * 4] = i; // Unique marker
+      color[i * 4] = i * 50; // Unique marker (scaled to fit Uint8 range)
     }
 
     const result = depthSortAndCompact(projection, count, color);
@@ -166,10 +166,10 @@ describe('Level 7 Unit Tests: Depth Sort and Cull', () => {
     expect(result.screenPosition[4]).toBeCloseTo(0.1); // idx 0
 
     // Verify colors follow (idx 2, 4, 0 in that order)
-    const c = result.color as Float32Array;
-    expect(c[0]).toBe(2); // idx 2's marker
-    expect(c[4]).toBe(4); // idx 4's marker
-    expect(c[8]).toBe(0); // idx 0's marker
+    const c = result.color;
+    expect(c[0]).toBe(100); // idx 2's marker (2 * 50)
+    expect(c[4]).toBe(200); // idx 4's marker (4 * 50)
+    expect(c[8]).toBe(0); // idx 0's marker (0 * 50)
   });
 });
 
@@ -196,8 +196,8 @@ describe('Level 7 Integration Tests: Ortho Depth Ordering', () => {
     }
 
     const projection = projectInstances(positions, 0.03, N, orthoCam);
-    const color = new Float32Array(N * 4);
-    for (let i = 0; i < N; i++) color[i * 4] = i; // marker
+    const color = new Uint8ClampedArray(N * 4);
+    for (let i = 0; i < N; i++) color[i * 4] = i * 30; // marker
 
     const result = depthSortAndCompact(projection, N, color);
 
@@ -249,7 +249,7 @@ describe('Level 7 Integration Tests: Ortho Depth Ordering', () => {
     }
 
     const projection = projectInstances(positions, 0.03, N, orthoCam);
-    const color = new Float32Array(N * 4);
+    const color = new Uint8ClampedArray(N * 4);
     const result = depthSortAndCompact(projection, N, color);
 
     // All should be visible (z between -5 and 5 is within near=-100..far=100)
@@ -279,8 +279,8 @@ describe('Level 7 Integration Tests: Perspective Depth Ordering', () => {
     }
 
     const projection = projectInstances(positions, 0.03, N, perspCam);
-    const color = new Float32Array(N * 4);
-    for (let i = 0; i < N; i++) color[i * 4] = i;
+    const color = new Uint8ClampedArray(N * 4);
+    for (let i = 0; i < N; i++) color[i * 4] = i * 30;
 
     const result = depthSortAndCompact(projection, N, color);
 
@@ -313,8 +313,8 @@ describe('Level 7 Integration Tests: Perspective Depth Ordering', () => {
     writePosition(positions, 3, 0.7, 0.7, 0.5);  // closer
 
     const projection = projectInstances(positions, 0.03, N, perspCam);
-    const color = new Float32Array(N * 4);
-    for (let i = 0; i < N; i++) color[i * 4] = i;
+    const color = new Uint8ClampedArray(N * 4);
+    for (let i = 0; i < N; i++) color[i * 4] = i * 60;
     const result = depthSortAndCompact(projection, N, color);
 
     expect(result.count).toBe(4);
@@ -357,8 +357,8 @@ describe('Level 7 Integration Tests: Culling', () => {
     expect(projection.visible[4]).toBe(0); // z=10: behind camera
     expect(projection.visible[5]).toBe(0); // z=-200: beyond far
 
-    const color = new Float32Array(N * 4);
-    for (let i = 0; i < N; i++) color[i * 4] = i;
+    const color = new Uint8ClampedArray(N * 4);
+    for (let i = 0; i < N; i++) color[i * 4] = i * 40;
     const result = depthSortAndCompact(projection, N, color);
 
     // Only 4 visible instances remain
@@ -374,7 +374,7 @@ describe('Level 7 Integration Tests: Culling', () => {
     // Frame 1: behind camera (culled)
     writePosition(positions, 0, 0.5, 0.5, 10.0);
     const proj1 = projectInstances(positions, 0.03, N, perspCam);
-    const color = new Float32Array(N * 4);
+    const color = new Uint8ClampedArray(N * 4);
     const result1 = depthSortAndCompact(proj1, N, color);
     expect(result1.count).toBe(0); // Culled
 
