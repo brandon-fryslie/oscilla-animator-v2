@@ -22,6 +22,7 @@ import { darkTheme } from '../../theme';
 import { useGlobalHotkeys, type HotkeyFeedback } from '../../hotkeys';
 import { Toast } from '../common/Toast';
 import { useStores, type RootStore } from '../../../stores';
+import type { ExternalWriteBus } from '../../../runtime/ExternalChannel';
 
 // Mantine dark theme configuration - gorgeous modern look
 const mantineTheme = createMantineTheme({
@@ -104,9 +105,10 @@ const mantineTheme = createMantineTheme({
 interface AppProps {
   onCanvasReady?: (canvas: HTMLCanvasElement) => void;
   onStoreReady?: (store: RootStore) => void;
+  externalWriteBus?: ExternalWriteBus;
 }
 
-export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady }) => {
+export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, externalWriteBus }) => {
   const [stats, setStats] = useState('FPS: --');
 
   // Get store from context and expose to non-React code via callback
@@ -223,6 +225,7 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady }) => {
               onCanvasReady={handleCanvasReady}
               onActivePanelChange={handleActivePanelChange}
               onApiReady={setDockviewApi}
+              externalWriteBus={externalWriteBus}
             />
           </div>
         </div>

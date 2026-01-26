@@ -17,6 +17,7 @@ import 'dockview/dist/styles/dockview.css';
 import { PANEL_COMPONENTS } from './panelRegistry';
 import { createDefaultLayout } from './defaultLayout';
 import type { EditorHandle } from '../editorCommon';
+import type { ExternalWriteBus } from '../../runtime/ExternalChannel';
 import './theme.css';
 
 /**
@@ -43,6 +44,7 @@ interface DockviewProviderProps {
   onCanvasReady?: (canvas: HTMLCanvasElement) => void;
   onActivePanelChange?: (panelId: string | undefined) => void;
   onApiReady?: (api: DockviewApi) => void;
+  externalWriteBus?: ExternalWriteBus;
 }
 
 /**
@@ -54,6 +56,7 @@ export const DockviewProvider: React.FC<DockviewProviderProps> = ({
   onCanvasReady,
   onActivePanelChange,
   onApiReady,
+  externalWriteBus,
 }) => {
   const [api, setApi] = useState<DockviewApi | null>(null);
 
@@ -65,12 +68,13 @@ export const DockviewProvider: React.FC<DockviewProviderProps> = ({
       createDefaultLayout(event.api, {
         onReactFlowEditorReady,
         onCanvasReady,
+        externalWriteBus,
       });
 
       // Notify parent that API is ready
       onApiReady?.(event.api);
     },
-    [onReactFlowEditorReady, onCanvasReady, onApiReady]
+    [onReactFlowEditorReady, onCanvasReady, onApiReady, externalWriteBus]
   );
 
   // Subscribe to active panel changes

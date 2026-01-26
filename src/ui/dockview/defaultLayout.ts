@@ -17,10 +17,12 @@
 import type { DockviewApi, DockviewGroupPanel } from 'dockview';
 import { PANEL_DEFINITIONS } from './panelRegistry';
 import type { EditorHandle } from '../editorCommon';
+import type { ExternalWriteBus } from '../../runtime/ExternalChannel';
 
 interface LayoutCallbacks {
   onReactFlowEditorReady?: (handle: EditorHandle) => void;
   onCanvasReady?: (canvas: HTMLCanvasElement) => void;
+  externalWriteBus?: ExternalWriteBus;
 }
 
 /**
@@ -251,6 +253,9 @@ export function createDefaultLayout(api: DockviewApi, callbacks: LayoutCallbacks
     const params: Record<string, unknown> = {};
     if (callbacks.onCanvasReady) {
       params.onCanvasReady = callbacks.onCanvasReady;
+    }
+    if (callbacks.externalWriteBus) {
+      params.externalWriteBus = callbacks.externalWriteBus;
     }
 
     // Calculate position: ~60% from left, near top

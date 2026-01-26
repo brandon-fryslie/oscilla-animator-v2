@@ -10,7 +10,8 @@
       "Skill(do:plan)",
       "Skill(superpowers:brainstorming)",
       "Bash(pkill:*)",
-      "mcp__cherry-chrome__chrome"
+      "mcp__cherry-chrome__chrome",
+      "mcp__cherry-chrome__connect"
     ]
   },
   "enableAllProjectMcpServers": true,

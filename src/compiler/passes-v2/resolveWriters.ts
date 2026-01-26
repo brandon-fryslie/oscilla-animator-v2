@@ -20,10 +20,12 @@ import type {
   Slot,
   Block,
   SignalType,
+  CombineMode,
 } from '../../types';
 import { getBlockDefinition, type InputDef } from '../../blocks/registry';
 import type { CombinePolicy } from './combine-utils';
 import type { NormalizedEdge, BlockIndex } from '../ir/patches';
+import type { InputPort } from '../../graph/Patch';
 
 // =============================================================================
 // Types
@@ -215,11 +217,15 @@ export function getDefaultCombinePolicy(): CombinePolicy {
 /**
  * Resolve combine policy for an input slot.
  *
- * @param _inputSlot - The input slot definition (unused after Slot.combine removal)
- * @returns Combine policy (always default)
+ * Reads combineMode from the block's InputPort if set, otherwise uses default 'last'.
+ *
+ * @param _inputDef - The input slot definition (unused, kept for signature compatibility)
+ * @param inputPort - The block's InputPort instance (may have user-set combineMode)
+ * @returns Combine policy with the effective combine mode
  */
-export function resolveCombinePolicy(_input: InputDef): CombinePolicy {
-  return getDefaultCombinePolicy();
+export function resolveCombinePolicy(_inputDef: InputDef, inputPort?: InputPort): CombinePolicy {
+  const mode: CombineMode = inputPort?.combineMode ?? 'last';
+  return { when: 'multi', mode };
 }
 
 // =============================================================================
@@ -270,8 +276,9 @@ export function resolveBlockInputs(
     // Sort deterministically
     const sortedWriters = sortWriters(writers);
 
-    // Resolve combine policy
-    const combine = resolveCombinePolicy(inputSlot);
+    // Resolve combine policy - read combineMode from block's InputPort if set
+    const inputPort = block.inputPorts.get(slotId);
+    const combine = resolveCombinePolicy(inputSlot, inputPort);
 
     // Get the *effective* input port type.
     // If a resolver is provided, it must reflect any specialization
@@ -302,13 +309,15 @@ export function resolveBlockInputs(
  * @param edges - All edges in the patch (NormalizedEdge format)
  * @param blocks - All blocks in the patch (for index lookup)
  * @param inputSlot - The input slot definition
+ * @param inputPort - Optional InputPort with user-set combineMode
  * @returns Resolved input spec
  */
 export function resolveInput(
   endpoint: InputEndpoint,
   edges: readonly NormalizedEdge[],
   blocks: readonly Block[],
-  inputSlot: Slot
+  inputSlot: Slot,
+  inputPort?: InputPort
 ): ResolvedInputSpec {
   // Enumerate writers (DSConst edges are included via GraphNormalizer)
   const writers = enumerateWriters(endpoint, edges, blocks);
@@ -316,8 +325,8 @@ export function resolveInput(
   // Sort deterministically
   const sortedWriters = sortWriters(writers);
 
-  // Resolve combine policy
-  const combine = resolveCombinePolicy(inputSlot);
+  // Resolve combine policy - read combineMode from InputPort if set
+  const combine = resolveCombinePolicy(inputSlot, inputPort);
 
   // Get port type - inputSlot.type is SignalType
   const portType = inputSlot.type;

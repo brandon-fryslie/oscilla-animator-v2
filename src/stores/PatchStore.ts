@@ -12,7 +12,7 @@
 
 import { makeObservable, observable, computed, action } from 'mobx';
 import type { Block, Edge, Endpoint, Patch, BlockType, InputPort, OutputPort } from '../graph/Patch';
-import type { BlockId, BlockRole } from '../types';
+import type { BlockId, BlockRole, CombineMode, PortId } from '../types';
 import { emptyPatchData, type PatchData } from './internal';
 import type { EventHub } from '../events/EventHub';
 import { requireBlockDef } from '../blocks/registry';
@@ -72,6 +72,7 @@ export class PatchStore {
       updateBlockParams: action,
       updateBlockDisplayName: action,
       updateInputPort: action,
+      updateInputPortCombineMode: action,
       addEdge: action,
       removeEdge: action,
       updateEdge: action,
@@ -371,6 +372,14 @@ export class PatchStore {
         },
       });
     }
+  }
+
+  /**
+   * Updates the combine mode for an input port.
+   * Convenience method that wraps updateInputPort.
+   */
+  updateInputPortCombineMode(blockId: BlockId, portId: PortId, combineMode: CombineMode): void {
+    this.updateInputPort(blockId, portId, { combineMode });
   }
 
   /**

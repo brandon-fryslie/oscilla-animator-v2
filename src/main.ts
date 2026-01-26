@@ -5,6 +5,7 @@
  * Sets up the demo patch and animation loop.
  *
  * Sprint 2: Integrates runtime health monitoring
+ * Sprint 3: Connects external channel write bus for mouse input
  * Uses registry defaults for all inputs
  */
 
@@ -234,6 +235,13 @@ async function main() {
               console.error('Runtime error message:', err?.message);
               console.error('Runtime error stack:', err?.stack);
             });
+          },
+          // Pass the external write bus from the session state
+          // NOTE: At this point sessionState doesn't exist yet, so we'll update this
+          // after compileAndSwap creates it. For now, pass undefined and rely on
+          // component to handle absence gracefully.
+          get externalWriteBus() {
+            return compileState.currentState?.externalChannels.writeBus;
           },
         })
       )

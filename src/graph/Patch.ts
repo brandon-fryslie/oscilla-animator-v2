@@ -46,7 +46,7 @@
  *     typing results.
  */
 
-import type { BlockId, PortId, BlockRole, DefaultSource, EdgeRole } from '../types';
+import type { BlockId, PortId, BlockRole, DefaultSource, EdgeRole, CombineMode } from '../types';
 import { requireBlockDef } from '../blocks/registry';
 
 // =============================================================================
@@ -62,6 +62,8 @@ export interface InputPort {
   readonly id: string;
   /** Per-instance default source override (undefined = use registry default) */
   readonly defaultSource?: DefaultSource;
+  /** Combine mode for multiple inputs (REQUIRED - defaults to 'last') */
+  readonly combineMode: CombineMode;
 }
 
 /**
@@ -120,14 +122,14 @@ export interface Edge {
   /** Target endpoint */
   readonly to: Endpoint;
 
-  /** Whether this edge is enabled (default: true) */
-  readonly enabled?: boolean;
+  /** Whether this edge is enabled (REQUIRED - defaults to true) */
+  readonly enabled: boolean;
 
   /** Sort key for deterministic combine ordering */
   readonly sortKey?: number;
 
-  /** Semantic role for editor behavior (optional for backward compatibility) */
-  readonly role?: EdgeRole;
+  /** Semantic role for editor behavior (REQUIRED) */
+  readonly role: EdgeRole;
 }
 
 /**
@@ -177,7 +179,7 @@ export class PatchBuilder {
       // Skip config-only inputs (exposedAsPort: false)
       // These are NOT ports and should NOT have port entries
       if (inputDef.exposedAsPort === false) continue;
-      inputPorts.set(inputId, { id: inputId });
+      inputPorts.set(inputId, { id: inputId, combineMode: 'last' });
     }
 
     // Create output ports from registry
@@ -208,7 +210,7 @@ export class PatchBuilder {
       to,
       enabled: options?.enabled ?? true,
       sortKey: options?.sortKey,
-      role: options?.role,
+      role: options?.role ?? { kind: 'user' },
     });
     return this;
   }

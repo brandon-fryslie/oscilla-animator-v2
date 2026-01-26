@@ -49,3 +49,562 @@ import '../blocks/camera-block'; // NEW - Camera system
 import '../blocks/io-blocks'; // NEW - External input system
 
 import '../blocks/test-blocks'; // Test blocks for signal evaluation in tests
+
+// Import passes
+import { pass1TypeConstraints } from './passes-v2';
+import { pass2TypeGraph } from './passes-v2';
+import { pass3Time } from './passes-v2';
+import { pass4DepGraph } from './passes-v2';
+import { pass5CycleValidation } from './passes-v2';
+import { pass6BlockLowering } from './passes-v2';
+import { pass7Schedule } from './passes-v2';
+
+// =============================================================================
+// Compile Errors & Results
+// =============================================================================
+
+export interface CompileError {
+  readonly kind: string;
+  readonly message: string;
+  readonly blockId?: string;
+  readonly connectionId?: string;
+  readonly portId?: string;
+}
+
+export type CompileSuccess = {
+  readonly kind: 'ok';
+  readonly program: CompiledProgramIR;
+};
+
+export type CompileFailure = {
+  readonly kind: 'error';
+  readonly errors: readonly CompileError[];
+};
+
+export type CompileResult = CompileSuccess | CompileFailure;
+
+// =============================================================================
+// Compile Options
+// =============================================================================
+
+export interface CompileOptions {
+  readonly patchId?: string;
+  readonly patchRevision?: number;
+  readonly events: EventHub;
+}
+
+// =============================================================================
+// Main Compile Function
+// =============================================================================
+
+/**
+ * Compile a Patch into a CompiledProgramIR.
+ *
+ * @param patch - The patch to compile
+ * @param options - Optional compile options for event emission
+ * @returns CompileResult with either the compiled program or errors
+ */
+export function compile(patch: Patch, options?: CompileOptions): CompileResult {
+  const compileId = options?.patchId ? `${options.patchId}:${options.patchRevision || 0}` : 'unknown';
+  const startTime = performance.now();
+
+  // Begin compilation inspection
+  try {
+    compilationInspector.beginCompile(compileId);
+  } catch (e) {
+    console.warn('[CompilationInspector] Failed to begin compile:', e);
+  }
+
+  // Emit CompileBegin event
+  if (options) {
+    options.events.emit({
+      type: 'CompileBegin',
+      compileId,
+      patchId: options.patchId || 'unknown',
+      patchRevision: options.patchRevision || 0,
+      trigger: 'manual',
+    });
+  }
+
+  try {
+    // Pass 1: Normalization
+    const normResult = normalize(patch);
+
+    if (normResult.kind === 'error') {
+      const compileErrors: CompileError[] = normResult.errors.map((e) => {
+        switch (e.kind) {
+          case 'DanglingEdge':
+            return {
+              kind: e.kind,
+              message: `Edge references missing block (${e.missing})`,
+              blockId: e.edge.from.blockId,
+            };
+          case 'DuplicateBlockId':
+            return {
+              kind: e.kind,
+              message: `Duplicate block ID: ${e.id}`,
+              blockId: e.id,
+            };
+          case 'UnknownPort':
+            return {
+              kind: 'UnknownBlockType',
+              message: `Port '${e.portId}' does not exist on block '${e.blockId}' (${e.direction})`,
+              blockId: e.blockId,
+              portId: e.portId,
+            };
+          case 'NoAdapterFound':
+            return {
+              kind: 'TypeMismatch',
+              message: `No adapter found for type conversion: ${e.fromType} → ${e.toType}`,
+              blockId: e.edge.to.blockId,
+              portId: e.edge.to.slotId,
+            };
+          default: {
+            const _exhaustive: never = e;
+            return {
+              kind: 'UnknownBlockType',
+              message: `Unknown normalization error: ${JSON.stringify(_exhaustive)}`,
+            };
+          }
+        }
+      });
+
+      return emitFailure(options, startTime, compileId, compileErrors);
+    }
+
+    const normalized = normResult.patch;
+
+    // Capture normalization pass
+    try {
+      compilationInspector.capturePass('normalization', patch, normalized);
+    } catch (e) {
+      console.warn('[CompilationInspector] Failed to capture normalization:', e);
+    }
+
+    // Pass 1: Type Constraints (unit and payload inference)
+    // Resolves polymorphic unit and payload variables through constraint propagation
+    // Output is TypeResolvedPatch - THE source of truth for all port types
+    const pass1Result = pass1TypeConstraints(normalized);
+    if (pass1Result.kind === 'error') {
+      const compileErrors: CompileError[] = pass1Result.errors.map((e) => ({
+        kind: e.kind,
+        message: `${e.message}\nSuggestions:\n${e.suggestions.map(s => `  - ${s}`).join('\n')}`,
+        blockId: normalized.blocks[e.blockIndex]?.id,
+        portId: e.portName,
+      }));
+      return emitFailure(options, startTime, compileId, compileErrors);
+    }
+    const typeResolved = pass1Result; // TypeResolvedPatch
+
+    try {
+      compilationInspector.capturePass('type-constraints', normalized, typeResolved);
+    } catch (e) {
+      console.warn('[CompilationInspector] Failed to capture type-constraints:', e);
+    }
+
+    // Pass 2: Type Graph (validates types using resolved types from pass1)
+    const typedPatch = pass2TypeGraph(typeResolved);
+
+    try {
+      compilationInspector.capturePass('type-graph', normalized, typedPatch);
+    } catch (e) {
+      console.warn('[CompilationInspector] Failed to capture type-graph:', e);
+    }
+
+    // Pass 3: Time Topology
+    const timeResolvedPatch = pass3Time(typedPatch);
+
+    try {
+      compilationInspector.capturePass('time', typedPatch, timeResolvedPatch);
+    } catch (e) {
+      console.warn('[CompilationInspector] Failed to capture time:', e);
+    }
+
+    // Pass 4: Dependency Graph
+    const depGraphPatch = pass4DepGraph(timeResolvedPatch);
+
+    try {
+      compilationInspector.capturePass('depgraph', timeResolvedPatch, depGraphPatch);
+    } catch (e) {
+      console.warn('[CompilationInspector] Failed to capture depgraph:', e);
+    }
+
+    // Pass 5: Cycle Validation (SCC)
+    const acyclicPatch = pass5CycleValidation(depGraphPatch);
+
+    try {
+      compilationInspector.capturePass('scc', depGraphPatch, acyclicPatch);
+    } catch (e) {
+      console.warn('[CompilationInspector] Failed to capture scc:', e);
+    }
+
+    // Pass 6: Block Lowering
+    const unlinkedIR = pass6BlockLowering(acyclicPatch, {
+      events: options?.events,
+      compileId,
+      patchRevision: options?.patchRevision,
+    });
+
+    try {
+      compilationInspector.capturePass('block-lowering', acyclicPatch, unlinkedIR);
+    } catch (e) {
+      console.warn('[CompilationInspector] Failed to capture block-lowering:', e);
+    }
+
+    // Check for errors from pass 6
+    if (unlinkedIR.errors.length > 0) {
+      const compileErrors: CompileError[] = unlinkedIR.errors.map((e) => ({
+        kind: e.code,
+        message: e.message,
+        blockId: e.where?.blockId,
+      }));
+      return emitFailure(options, startTime, compileId, compileErrors);
+    }
+
+    // Pass 7: Schedule Construction
+    const scheduleIR = pass7Schedule(unlinkedIR, acyclicPatch);
+
+    try {
+      compilationInspector.capturePass('schedule', unlinkedIR, scheduleIR);
+    } catch (e) {
+      console.warn('[CompilationInspector] Failed to capture schedule:', e);
+    }
+
+    // Convert to CompiledProgramIR
+    const compiledIR = convertLinkedIRToProgram(unlinkedIR, scheduleIR, acyclicPatch);
+
+    // Build edge-to-slot map logic removed from compiler (migrated to main.ts)
+
+
+    // End compilation inspection (success)
+    try {
+      compilationInspector.endCompile('success');
+    } catch (e) {
+      console.warn('[CompilationInspector] Failed to end compile:', e);
+    }
+
+    // Emit CompileEnd event (success)
+    if (options) {
+      const durationMs = performance.now() - startTime;
+      const successDiagnostic = {
+        id: `compile-success:rev${options.patchRevision || 0}`,
+        code: 'I_COMPILE_SUCCESS' as const,
+        severity: 'info' as const,
+        domain: 'compile' as const,
+        primaryTarget: { kind: 'graphSpan' as const, blockIds: [] },
+        title: 'Compilation Successful',
+        message: `Compiled in ${durationMs.toFixed(1)}ms`,
+        scope: { patchRevision: options.patchRevision || 0, compileId },
+        metadata: {
+          firstSeenAt: Date.now(),
+          lastSeenAt: Date.now(),
+          occurrenceCount: 1,
+        },
+      };
+      options.events.emit({
+        type: 'CompileEnd',
+        compileId,
+        patchId: options.patchId || 'unknown',
+        patchRevision: options.patchRevision || 0,
+        status: 'success',
+        durationMs,
+        diagnostics: [successDiagnostic],
+      });
+    }
+
+    return {
+      kind: 'ok',
+      program: compiledIR,
+    };
+  } catch (e: unknown) {
+    // Catch errors from any pass
+    const error = e instanceof Error ? e : new Error(String(e));
+    const errorKind = (e as { code?: string }).code || 'CompilationFailed';
+    const errorMessage = error.message || 'Unknown compilation error';
+
+    console.error('[Compile] Exception caught:', error);
+    console.error('[Compile] Error message:', errorMessage);
+    console.error('[Compile] Error stack:', error.stack);
+    const compileErrors: CompileError[] = [{
+      kind: errorKind,
+      message: errorMessage,
+    }];
+
+    // End compilation inspection (failure)
+    try {
+      compilationInspector.endCompile('failure');
+    } catch (e2) {
+      console.warn('[CompilationInspector] Failed to end compile:', e2);
+    }
+
+    return emitFailure(options, startTime, compileId, compileErrors);
+  }
+}
+
+// =============================================================================
+// Helper Functions
+// =============================================================================
+
+function emitFailure(
+  options: CompileOptions | undefined,
+  startTime: number,
+  compileId: string,
+  errors: CompileError[]
+): CompileFailure {
+  // End compilation inspection (failure) if not already called
+  try {
+    if (compilationInspector['currentSnapshot']) {
+      compilationInspector.endCompile('failure');
+    }
+  } catch (e) {
+    console.warn('[CompilationInspector] Failed to end compile:', e);
+  }
+
+  if (options) {
+    const durationMs = performance.now() - startTime;
+    const diagnostics = convertCompileErrorsToDiagnostics(errors, options.patchRevision || 0, compileId);
+    options.events.emit({
+      type: 'CompileEnd',
+      compileId,
+      patchId: options.patchId || 'unknown',
+      patchRevision: options.patchRevision || 0,
+      status: 'failure',
+      durationMs,
+      diagnostics,
+    });
+  }
+
+  return {
+    kind: 'error',
+    errors,
+  };
+}
+
+/**
+ * Convert LinkedIR and ScheduleIR to CompiledProgramIR.
+ *
+ * @param unlinkedIR - Unlinked IR fragments from Pass 6
+ * @param scheduleIR - Execution schedule from Pass 7
+ * @returns CompiledProgramIR
+ */
+function convertLinkedIRToProgram(
+  unlinkedIR: UnlinkedIRFragments,
+  scheduleIR: ScheduleIR,
+  acyclicPatch: AcyclicOrLegalGraph
+): CompiledProgramIR {
+  // Extract data from the IR builder
+  const builder = unlinkedIR.builder;
+  const signalNodes = builder.getSigExprs();
+  const fieldNodes = builder.getFieldExprs();
+  const eventNodes = builder.getEventExprs();
+
+  // Build fieldSlotRegistry from blockOutputs (field outputs that can be materialized on demand)
+  const fieldSlotRegistry = new Map<ValueSlot, FieldSlotEntry>();
+  const fieldSlotSet = new Set<number>(); // Track which slots are field outputs
+  if (unlinkedIR.blockOutputs) {
+    for (const [, outputs] of unlinkedIR.blockOutputs.entries()) {
+      for (const [, ref] of outputs.entries()) {
+        if (ref.k === 'field') {
+          const instanceId = inferFieldInstanceFromExprs(ref.id, fieldNodes);
+          if (instanceId) {
+            fieldSlotRegistry.set(ref.slot, { fieldId: ref.id, instanceId });
+            fieldSlotSet.add(ref.slot as number);
+          }
+        }
+      }
+    }
+  }
+
+  // Build slot metadata from slot types
+  const slotTypes = builder.getSlotMetaInputs();
+  const slotMeta: SlotMetaEntry[] = [];
+
+  // Track offsets per storage class
+  const storageOffsets = {
+    f64: 0,
+    f32: 0,
+    i32: 0,
+    u32: 0,
+    object: 0,
+    shape2d: 0,
+  };
+
+  // Build slotMeta entries for all allocated slots
+  // Slots are indexed from 0, so iterate through all slot IDs
+  for (let slotId = 0; slotId < builder.getSlotCount?.() || 0; slotId++) {
+    const slot = slotId as ValueSlot;
+    const slotInfo = slotTypes.get(slot);
+    const type = slotInfo?.type || signalType('float'); // Default to float if no type info
+
+    // Determine storage class from type
+    // Field output slots store buffer references in the objects Map
+    // Shape payloads use dedicated shape2d bank; all other signals go to f64
+    const storage: SlotMetaEntry['storage'] = fieldSlotSet.has(slotId)
+      ? 'object'
+      : type.payload === 'shape' ? 'shape2d' : 'f64';
+
+    // Use stride from slotInfo (which comes from registered type), fallback to computing from payload
+    // Objects/fields have stride=1 since they store a single reference
+    const stride = storage === 'object' ? 1 : (slotInfo?.stride ?? payloadStride(type.payload));
+
+    // Offset must increment by stride, not 1 - multi-component types (color=4, vec3=3, vec2=2) need space
+    const offset = storageOffsets[storage];
+    storageOffsets[storage] += stride;
+
+    slotMeta.push({
+      slot,
+      storage,
+      offset,
+      stride,
+      type,
+    });
+  }
+
+  // Add slotMeta entries for slots allocated by Pass 7 (continuity pipeline buffers).
+  // These slots store object references (Float32Array buffers) and start after the builder's slot range.
+  const builderSlotCount = builder.getSlotCount?.() || 0;
+  const steps = scheduleIR.steps;
+  let maxSlotUsed = builderSlotCount - 1;
+  for (const step of steps) {
+    if (step.kind === 'materialize' && (step.target as number) >= builderSlotCount) {
+      maxSlotUsed = Math.max(maxSlotUsed, step.target as number);
+    }
+    if (step.kind === 'continuityApply') {
+      maxSlotUsed = Math.max(maxSlotUsed, step.baseSlot as number, step.outputSlot as number);
+    }
+  }
+  for (let slotId = builderSlotCount; slotId <= maxSlotUsed; slotId++) {
+    slotMeta.push({
+      slot: slotId as ValueSlot,
+      storage: 'object',
+      offset: storageOffsets.object++,
+      stride: 1, // Object slots store a single reference
+      type: signalType('float'),
+    });
+  }
+
+  // Build output specs
+  // Allocate a slot for the render frame output (RenderFrameIR object)
+  const renderFrameSlot = (maxSlotUsed + 1) as ValueSlot;
+
+  // Add SlotMetaEntry for render frame slot (object storage for RenderFrameIR)
+  slotMeta.push({
+    slot: renderFrameSlot,
+    storage: 'object',
+    offset: storageOffsets.object++,
+    stride: 1, // Object slots store a single reference
+    type: signalType('float'), // Type is irrelevant for RenderFrameIR object slot
+  });
+
+  // Create OutputSpecIR for render frame
+  const outputs: OutputSpecIR[] = [{
+    kind: 'renderFrame',
+    slot: renderFrameSlot,
+  }];
+
+  // Build debug index
+  const stepToBlock = new Map();
+  const slotToBlock = new Map();
+  const ports: any[] = [];
+  const slotToPort = new Map();
+  const blockMap = new Map(); // Map numeric BlockId -> string ID
+
+  // Populate debug index from unlinkedIR.blockOutputs (provenance)
+  if (unlinkedIR.blockOutputs) {
+    let portCounter = 0;
+
+    // Build block map from acyclicPatch
+    // We need to look up blocks by index to get their string ID
+    const blocks = acyclicPatch.blocks || []; // AcyclicOrLegalGraph has blocks array
+    for (let i = 0; i < blocks.length; i++) {
+      blockMap.set(i, blocks[i].id);
+    }
+
+    for (const [blockIndex, outputs] of unlinkedIR.blockOutputs.entries()) {
+      for (const [portId, ref] of outputs.entries()) {
+        // Only map signal and field slots to debug index
+        // Events use separate storage (eventScalars Uint8Array) and don't have debug support yet
+        if (ref.k === 'sig' || ref.k === 'field') {
+          const slot = ref.slot;
+
+          // Generate stable port ID
+          // We don't have a PortId type factory exposed here easily, so cast
+          const portIndex = portCounter++;
+
+          // Record slot->port mapping
+          slotToPort.set(slot, portIndex);
+
+          // Add port binding info
+          ports.push({
+            port: portIndex,
+            block: blockIndex,
+            portName: portId,
+            direction: 'out',
+            domain: ref.k === 'field' ? 'field' : 'signal',
+            role: 'userWire',
+          });
+        }
+      }
+    }
+  }
+
+  const debugIndex = {
+    stepToBlock,
+    slotToBlock,
+    ports,
+    slotToPort,
+    blockMap,
+  };
+
+  // Collect render globals from builder
+  const renderGlobals = builder.getRenderGlobals();
+
+  // Validate camera uniqueness (spec §2.1)
+  if (renderGlobals.length > 1) {
+    throw new Error('E_CAMERA_MULTIPLE: Only one Camera block is permitted.');
+  }
+
+  return {
+    irVersion: 1,
+    signalExprs: { nodes: signalNodes },
+    fieldExprs: { nodes: fieldNodes },
+    eventExprs: { nodes: eventNodes },
+    constants: { json: [] },
+    schedule: scheduleIR,
+    outputs,
+    slotMeta,
+    debugIndex,
+    fieldSlotRegistry,
+    renderGlobals, // NEW - Camera system: populated from builder
+  };
+}
+
+/**
+ * Infer instance from a field expression by walking the expression tree.
+ * Used to build fieldSlotRegistry for demand-driven materialization.
+ */
+function inferFieldInstanceFromExprs(
+  fieldId: FieldExprId,
+  fieldExprs: readonly FieldExpr[]
+): InstanceId | undefined {
+  const expr = fieldExprs[fieldId as number];
+  if (!expr) return undefined;
+
+  switch (expr.kind) {
+    case 'intrinsic':
+    case 'array':
+    case 'stateRead':
+      return expr.instanceId;
+    case 'map':
+      return expr.instanceId ?? inferFieldInstanceFromExprs(expr.input, fieldExprs);
+    case 'zip':
+      return expr.instanceId ?? (expr.inputs.length > 0 ? inferFieldInstanceFromExprs(expr.inputs[0], fieldExprs) : undefined);
+    case 'zipSig':
+      return expr.instanceId ?? inferFieldInstanceFromExprs(expr.field, fieldExprs);
+    case 'broadcast':
+    case 'const':
+      return undefined;
+    default:
+      return undefined;
+  }
+}
