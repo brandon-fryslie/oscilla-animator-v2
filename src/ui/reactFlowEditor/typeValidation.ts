@@ -37,7 +37,8 @@ export function getTypeColor(payload: PayloadType): string {
   if (isPayloadVar(payload)) {
     return '#888888'; // Gray for unresolved payload variables
   }
-  return TYPE_COLORS[payload] ?? TYPE_COLORS['float'];
+  // After the isPayloadVar check, payload is now a ConcretePayloadType
+  return TYPE_COLORS[payload as ConcretePayloadType] ?? TYPE_COLORS['float'];
 }
 
 // =============================================================================

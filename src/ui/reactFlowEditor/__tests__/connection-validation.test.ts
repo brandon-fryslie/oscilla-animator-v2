@@ -78,8 +78,8 @@ describe('Connection Validation - Behavioral Tests', () => {
       const { patch, ids } = createTestPatch();
 
       // Array outputs Field, Const (signal) expects Signal — no reduction adapter exists
-      // Using Array since FieldAdd was removed
-      const result = validateConnection(ids.array, 'instance', ids.const, 'value', patch);
+      // fieldBlock is FromDomainId which outputs a Field
+      const result = validateConnection(ids.fieldBlock, 'out', ids.const, 'value', patch);
 
       expect(result.valid).toBe(false);
       expect(result.reason).toMatch(/Type mismatch|incompatible/i);
@@ -176,7 +176,8 @@ interface TestPatchWithIds {
     add: string;
     multiply: string;
     hsv: string;
-    fieldAdd: string;
+    array: string;
+    fieldBlock: string;
   };
 }
 

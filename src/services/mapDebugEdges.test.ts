@@ -2,8 +2,9 @@
 import { describe, it, expect } from 'vitest';
 import { mapDebugEdges } from './mapDebugEdges';
 import type { Patch, Edge } from '../graph/Patch';
-import type { CompiledProgramIR, DebugIndexIR } from '../compiler/ir/program';
-import type { ValueSlot, BlockId, PortId } from '../compiler/ir/program';
+import type { CompiledProgramIR, DebugIndexIR, PortBindingIR } from '../compiler/ir/program';
+import type { ValueSlot } from '../compiler/ir/program';
+import type { BlockId, PortId } from '../types';
 
 describe('mapDebugEdges', () => {
     it('should map edges to source slots correctly', () => {
@@ -22,21 +23,21 @@ describe('mapDebugEdges', () => {
         } as unknown as Patch;
 
         // Setup Mock Program with DebugIndex
-        // We simulate that 'blockA' is at BlockIndex 0
+        // We simulate that 'blockA' is at BlockIndex 'b0'
         // And its 'out' port is mapped to Slot 10
 
-        // 1. blockMap: 0 -> 'blockA'
+        // 1. blockMap: 'b0' -> 'blockA'
         const blockMap = new Map<BlockId, string>();
-        blockMap.set(0 as BlockId, 'blockA');
+        blockMap.set('b0' as BlockId, 'blockA');
 
-        // 2. slotToPort: Slot 10 -> Port 0
+        // 2. slotToPort: Slot 10 -> Port 'p0'
         const slotToPort = new Map<ValueSlot, PortId>();
-        slotToPort.set(10 as ValueSlot, 0 as PortId);
+        slotToPort.set(10 as ValueSlot, 'p0' as PortId);
 
-        // 3. ports: Port 0 is 'out' on Block 0
-        const ports = [{
-            port: 0 as PortId,
-            block: 0 as BlockId,
+        // 3. ports: Port 'p0' is 'out' on Block 'b0'
+        const ports: PortBindingIR[] = [{
+            port: 'p0' as PortId,
+            block: 'b0' as BlockId,
             portName: 'out',
             direction: 'out' as const,
             domain: 'signal' as const,
@@ -79,15 +80,15 @@ describe('mapDebugEdges', () => {
         } as unknown as Patch;
 
         const blockMap = new Map<BlockId, string>();
-        blockMap.set(0 as BlockId, 'blockA');
+        blockMap.set('b0' as BlockId, 'blockA');
 
         const slotToPort = new Map<ValueSlot, PortId>();
-        slotToPort.set(10 as ValueSlot, 0 as PortId); // out1 -> slot 10
-        slotToPort.set(11 as ValueSlot, 1 as PortId); // out2 -> slot 11
+        slotToPort.set(10 as ValueSlot, 'p0' as PortId); // out1 -> slot 10
+        slotToPort.set(11 as ValueSlot, 'p1' as PortId); // out2 -> slot 11
 
-        const ports = [
-            { port: 0 as PortId, block: 0 as BlockId, portName: 'out1', direction: 'out' as const, domain: 'signal' as const, role: 'userWire' as const },
-            { port: 1 as PortId, block: 0 as BlockId, portName: 'out2', direction: 'out' as const, domain: 'signal' as const, role: 'userWire' as const },
+        const ports: PortBindingIR[] = [
+            { port: 'p0' as PortId, block: 'b0' as BlockId, portName: 'out1', direction: 'out' as const, domain: 'signal' as const, role: 'userWire' as const },
+            { port: 'p1' as PortId, block: 'b0' as BlockId, portName: 'out2', direction: 'out' as const, domain: 'signal' as const, role: 'userWire' as const },
         ];
 
         const mockProgram = {
@@ -132,7 +133,7 @@ describe('mapDebugEdges', () => {
 
         const mockProgram = {
             debugIndex: {
-                blockMap: new Map([[0 as BlockId, 'blockA']]),
+                blockMap: new Map([['b0' as BlockId, 'blockA']]),
                 slotToPort: new Map(),
                 ports: [],
                 stepToBlock: new Map(),

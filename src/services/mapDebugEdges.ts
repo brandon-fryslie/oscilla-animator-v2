@@ -1,6 +1,6 @@
 import type { Patch } from '../graph';
 import type { CompiledProgramIR, PortBindingIR } from '../compiler/ir/program';
-import type { ValueSlot } from '../types';
+import type { ValueSlot, PortId } from '../types';
 import type { SignalType } from '../core/canonical-types';
 import { signalType } from '../core/canonical-types';
 
@@ -93,11 +93,11 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
     //    Navigate: (BlockStringID, PortName) -> (BlockIndex, PortName) -> PortIndex -> Slot
     //    But easier: iterate ports, resolve their BlockIndex to StringID, map StringID:PortName -> Slot
 
-    // First build PortIndex -> Slot lookup (reverse of slotToPort)
-    const portToSlot = new Map<number, ValueSlot>(); // PortId is number
-    for (const [slot, portIndex] of debugIndex.slotToPort) {
+    // First build PortId -> Slot lookup (reverse of slotToPort)
+    const portToSlot = new Map<PortId, ValueSlot>();
+    for (const [slot, portId] of debugIndex.slotToPort) {
         // Note: slotToPort keys are ValueSlots, values are PortIds
-        portToSlot.set(portIndex as number, slot);
+        portToSlot.set(portId, slot);
     }
 
     // Now build the main lookup map

@@ -317,8 +317,10 @@ describe('ExternalVec2 Block', () => {
     expect(stridedWriteCalled).toBe(true);
     expect(result.outputsById.position).toBeDefined();
     expect(result.outputsById.position.k).toBe('sig');
-    expect(result.outputsById.position.stride).toBe(2);
-    expect(result.outputsById.position.components).toHaveLength(2);
+    if (result.outputsById.position.k === 'sig') {
+      expect(result.outputsById.position.stride).toBe(2);
+      expect(result.outputsById.position.components).toHaveLength(2);
+    }
   });
 
   it('lower function uses default channelBase', () => {

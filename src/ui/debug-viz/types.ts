@@ -88,7 +88,8 @@ export function getSampleEncoding(payload: PayloadType): SampleEncoding {
     return { payload, stride: 0, components: [], sampleable: false };
   }
 
-  const concretePayload: ConcretePayloadType = payload;
+  // After the isPayloadVar check, payload is now a ConcretePayloadType
+  const concretePayload = payload as ConcretePayloadType;
   switch (concretePayload) {
     case 'float':
       return { payload: concretePayload, stride: 1, components: ['value'], sampleable: true };

@@ -126,7 +126,7 @@ async function initializeRuntime(rootStore: RootStore) {
       {
         store,
         state: compileState,
-        onDomainChange: (oldProg, newProg) => detectAndLogDomainChanges(store, oldProg, newProg),
+        onDomainChange: (oldProg, newProg) => detectAndLogDomainChanges(store!, oldProg, newProg),
       },
       true
     );
@@ -144,7 +144,7 @@ async function initializeRuntime(rootStore: RootStore) {
       {
         store,
         state: compileState,
-        onDomainChange: (oldProg, newProg) => detectAndLogDomainChanges(store, oldProg, newProg),
+        onDomainChange: (oldProg, newProg) => detectAndLogDomainChanges(store!, oldProg, newProg),
       },
       true
     );
@@ -196,7 +196,7 @@ async function initializeRuntime(rootStore: RootStore) {
     },
     animationState,
     (err) => {
-      store.diagnostics.log({
+      store!.diagnostics.log({
         level: 'error',
         message: `Runtime error: ${err}`,
       });
