@@ -15,7 +15,7 @@ function createTestBlock(id: BlockId, type: string): Block {
     params: {},
     displayName: null,
     domainId: null,
-    role: 'regular',
+    role: { kind: 'user', meta: {} },
     inputPorts: new Map(),
     outputPorts: new Map(),
   };
@@ -26,6 +26,9 @@ function createTestEdge(id: string, fromBlockId: BlockId, fromSlotId: PortId, to
     id,
     from: { kind: 'port' as const, blockId: fromBlockId, slotId: fromSlotId },
     to: { kind: 'port' as const, blockId: toBlockId, slotId: toSlotId },
+    enabled: true,
+    sortKey: 0,
+    role: { kind: 'user' as const, meta: {} as Record<string, never> },
   };
 }
 

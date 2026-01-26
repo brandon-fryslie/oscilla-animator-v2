@@ -246,7 +246,7 @@ describe('exportFormats', () => {
             displayName: null,
             domainId: null,
             role: { kind: 'user', meta: {} },
-            inputPorts: new Map([['instances', { id: 'instances' }]]),
+            inputPorts: new Map([['instances', { id: 'instances', combineMode: 'last' as const }]]),
             outputPorts: new Map(),
           },
         ],
@@ -256,6 +256,9 @@ describe('exportFormats', () => {
         id: 'e1',
         from: { kind: 'port', blockId: 'b1', slotId: 'instances' },
         to: { kind: 'port', blockId: 'b2', slotId: 'instances' },
+        enabled: true,
+        sortKey: 0,
+        role: { kind: 'user', meta: {} as Record<string, never> },
       };
 
       expect(formatConnectionLine(edge, blocks)).toBe('b1.instances → b2.instances');
@@ -267,6 +270,9 @@ describe('exportFormats', () => {
         id: 'e1',
         from: { kind: 'port', blockId: 'b1', slotId: 'out' },
         to: { kind: 'port', blockId: 'b2', slotId: 'in' },
+        enabled: true,
+        sortKey: 0,
+        role: { kind: 'user', meta: {} as Record<string, never> },
       };
 
       const result = formatConnectionLine(edge, blocks);

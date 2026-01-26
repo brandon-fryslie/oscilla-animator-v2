@@ -277,6 +277,9 @@ describe('PatchStore', () => {
             id: 'e5',
             from: { kind: 'port' as const, blockId: 'b10', slotId: 'out' },
             to: { kind: 'port' as const, blockId: 'b10', slotId: 'in' },
+            enabled: true,
+            sortKey: 0,
+            role: { kind: 'user' as const, meta: {} as Record<string, never> },
           },
         ],
       };

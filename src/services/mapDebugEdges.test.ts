@@ -12,6 +12,9 @@ describe('mapDebugEdges', () => {
             id: 'edge1',
             from: { kind: 'port', blockId: 'blockA', slotId: 'out' },
             to: { kind: 'port', blockId: 'blockB', slotId: 'in' },
+            enabled: true,
+            sortKey: 0,
+            role: { kind: 'user', meta: {} as Record<string, never> },
         };
 
         const mockPatch = {
