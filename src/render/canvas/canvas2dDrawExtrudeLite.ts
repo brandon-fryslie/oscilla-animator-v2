@@ -1,7 +1,12 @@
-// src/render/canvas2d/drawExtrudeLite.ts
+// ============================================================================
+// EXTRUDELITE: 2.5D Relief Rendering (Experimental)
+// Canvas2D implementation - thin adapter. Delete when real mesh3d arrives.
+// ============================================================================
 //
-// Canvas2D implementation skeleton for "ExtrudeLite" render style.
-// This is intentionally a thin adapter: geometry lives in src/render/style/ExtrudeLite.ts.
+// src/render/canvas/canvas2dDrawExtrudeLite.ts
+//
+// Canvas2D implementation for "ExtrudeLite" render style.
+// This is intentionally a thin adapter: geometry lives in ExtrudeLite.ts.
 // The caller provides already-projected screen-space points in normalized [0..1] units.
 //
 // Contracts:
@@ -9,7 +14,6 @@
 // - Depth style is purely visual: it does not change picking/physics/debug fields.
 // - Deterministic: no randomness, no time dependence.
 
-import type { CanvasRenderingContext2D } from 'canvas'; // works in TS typecheck; runtime uses DOM canvas
 import {
     buildExtrudeLite,
     type ExtrudeLiteParams,

@@ -36,6 +36,18 @@ import type {
   RenderFrameIR,
 } from '../types';
 
+// ============================================================================
+// EXTRUDELITE: 2.5D Relief Rendering (Experimental)
+// Import for dispatch - delete when real mesh3d arrives.
+// ============================================================================
+
+import { drawExtrudeLite } from './canvas2dDrawExtrudeLite';
+import type { ExtrudeLiteInput, ExtrudeLiteParams, RGBA01 } from './ExtrudeLite';
+
+// ============================================================================
+// END EXTRUDELITE IMPORTS
+// ============================================================================
+
 /**
  * Calculate stroke width in pixels from world units.
  *
@@ -105,6 +117,17 @@ export function renderDrawPathInstancesOp(
   width: number,
   height: number
 ): void {
+  // ============================================================================
+  // EXTRUDELITE DISPATCH (Experimental - delete when real mesh3d arrives)
+  // ============================================================================
+  if (op.style.depthStyle === 'extrudeLite') {
+    renderExtrudeLiteOp(ctx, op, width, height);
+    return;
+  }
+  // ============================================================================
+  // END EXTRUDELITE DISPATCH
+  // ============================================================================
+
   const { geometry, instances, style } = op;
   const { count, position, size, rotation, scale2 } = instances;
 
@@ -214,6 +237,219 @@ export function renderDrawPathInstancesOp(
     ctx.setLineDash([]);
   }
 }
+
+// ============================================================================
+// EXTRUDELITE: 2.5D Relief Rendering (Experimental)
+// Isolate all extrude logic here. Delete this section when real mesh3d arrives.
+// ============================================================================
+
+const DEFAULT_EXTRUDE_PARAMS: ExtrudeLiteParams = {
+  extrudeHeight: 0.01,
+  lightDir: [-0.6, -0.8] as const,
+  shadeStrength: 0.25,
+  sideAlpha: 0.9,
+};
+
+/**
+ * Render a DrawPathInstancesOp with ExtrudeLite 2.5D effect.
+ *
+ * This function bridges the DrawPathInstancesOp format to ExtrudeLiteInput format,
+ * then delegates to drawExtrudeLite() for the actual rendering.
+ */
+function renderExtrudeLiteOp(
+  ctx: CanvasRenderingContext2D,
+  op: DrawPathInstancesOp,
+  width: number,
+  height: number
+): void {
+  const { geometry, instances, style } = op;
+  const { count, position, size, rotation, scale2 } = instances;
+
+  // Early exit if no fill color
+  if (!style.fillColor || style.fillColor.length === 0) {
+    console.warn('ExtrudeLite requires fillColor, skipping');
+    return;
+  }
+
+  const uniformFillColor = style.fillColor.length === 4;
+
+  // Convert DrawPathInstancesOp instances to ExtrudeLiteInput format
+  const extrudeInstances: ExtrudeLiteInput[] = [];
+
+  for (let i = 0; i < count; i++) {
+    // Transform geometry points to screen space for this instance
+    const screenPoints = transformGeometryToScreenSpace(
+      geometry,
+      instances,
+      i,
+      width,
+      height
+    );
+
+    // Extract fill color (RGBA in [0,1] range)
+    const fillOffset = uniformFillColor ? 0 : i * 4;
+    const fill: RGBA01 = [
+      style.fillColor[fillOffset] / 255,
+      style.fillColor[fillOffset + 1] / 255,
+      style.fillColor[fillOffset + 2] / 255,
+      style.fillColor[fillOffset + 3] / 255,
+    ];
+
+    extrudeInstances.push({
+      pointsXY: screenPoints,
+      fill,
+    });
+  }
+
+  // Call drawExtrudeLite with converted inputs
+  drawExtrudeLite({
+    ctx,
+    widthPx: width,
+    heightPx: height,
+    instances: extrudeInstances,
+    params: style.extrudeLiteParams ?? DEFAULT_EXTRUDE_PARAMS,
+  });
+}
+
+/**
+ * Transform local-space geometry points to normalized screen-space [0,1] for a specific instance.
+ *
+ * Applies instance transforms (position, size, rotation, scale2) to convert
+ * local-space control points into screen-space polygon points.
+ *
+ * @returns Float32Array of screen-space points in normalized [0,1] coordinates
+ */
+function transformGeometryToScreenSpace(
+  geometry: { verbs: Uint8Array; points: Float32Array },
+  instances: { position: Float32Array; size: number | Float32Array; rotation?: Float32Array; scale2?: Float32Array },
+  instanceIndex: number,
+  width: number,
+  height: number
+): Float32Array {
+  // Get instance transforms
+  const posX = instances.position[instanceIndex * 2];
+  const posY = instances.position[instanceIndex * 2 + 1];
+  const instanceSize = typeof instances.size === 'number' ? instances.size : instances.size[instanceIndex];
+  const rot = instances.rotation ? instances.rotation[instanceIndex] : 0;
+  const sx = instances.scale2 ? instances.scale2[instanceIndex * 2] : 1;
+  const sy = instances.scale2 ? instances.scale2[instanceIndex * 2 + 1] : 1;
+
+  // Reference dimension for size scaling
+  const D = Math.min(width, height);
+  const sizePx = instanceSize * D;
+
+  // Build screen-space polygon by extracting path points
+  const screenPoints: number[] = [];
+  let pointIndex = 0;
+
+  for (let i = 0; i < geometry.verbs.length; i++) {
+    const verb = geometry.verbs[i];
+
+    switch (verb) {
+      case 0: { // MOVE
+        const [sx_out, sy_out] = transformPoint(
+          geometry.points[pointIndex * 2],
+          geometry.points[pointIndex * 2 + 1],
+          posX, posY, sizePx, rot, sx, sy, width, height
+        );
+        screenPoints.push(sx_out, sy_out);
+        pointIndex++;
+        break;
+      }
+
+      case 1: { // LINE
+        const [sx_out, sy_out] = transformPoint(
+          geometry.points[pointIndex * 2],
+          geometry.points[pointIndex * 2 + 1],
+          posX, posY, sizePx, rot, sx, sy, width, height
+        );
+        screenPoints.push(sx_out, sy_out);
+        pointIndex++;
+        break;
+      }
+
+      case 2: { // CUBIC
+        // Skip control points, only use endpoint
+        pointIndex += 2;
+        const [sx_out, sy_out] = transformPoint(
+          geometry.points[pointIndex * 2],
+          geometry.points[pointIndex * 2 + 1],
+          posX, posY, sizePx, rot, sx, sy, width, height
+        );
+        screenPoints.push(sx_out, sy_out);
+        pointIndex++;
+        break;
+      }
+
+      case 3: { // QUAD
+        // Skip control point, only use endpoint
+        pointIndex++;
+        const [sx_out, sy_out] = transformPoint(
+          geometry.points[pointIndex * 2],
+          geometry.points[pointIndex * 2 + 1],
+          posX, posY, sizePx, rot, sx, sy, width, height
+        );
+        screenPoints.push(sx_out, sy_out);
+        pointIndex++;
+        break;
+      }
+
+      case 4: { // CLOSE
+        // No-op: polygon is closed by nature
+        break;
+      }
+    }
+  }
+
+  return new Float32Array(screenPoints);
+}
+
+/**
+ * Transform a single local-space point to normalized screen-space.
+ *
+ * @returns [x, y] in normalized [0,1] screen coordinates
+ */
+function transformPoint(
+  localX: number,
+  localY: number,
+  posX: number,
+  posY: number,
+  sizePx: number,
+  rotation: number,
+  scaleX: number,
+  scaleY: number,
+  width: number,
+  height: number
+): [number, number] {
+  // Apply local scale
+  let x = localX * scaleX;
+  let y = localY * scaleY;
+
+  // Apply rotation
+  if (rotation !== 0) {
+    const cos = Math.cos(rotation);
+    const sin = Math.sin(rotation);
+    const xRot = x * cos - y * sin;
+    const yRot = x * sin + y * cos;
+    x = xRot;
+    y = yRot;
+  }
+
+  // Apply size scaling
+  x *= sizePx;
+  y *= sizePx;
+
+  // Translate to world position (in pixels)
+  x += posX * width;
+  y += posY * height;
+
+  // Convert back to normalized [0,1] coordinates
+  return [x / width, y / height];
+}
+
+// ============================================================================
+// END EXTRUDELITE SECTION
+// ============================================================================
 
 /**
  * Render a single DrawPrimitiveInstancesOp.
