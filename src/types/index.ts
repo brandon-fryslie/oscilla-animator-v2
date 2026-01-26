@@ -375,6 +375,7 @@ export function derivedRole(meta: DerivedBlockMeta): BlockRole {
  * Note: busTap variant removed - buses are now regular blocks.
  */
 export type EdgeRole =
-  | { readonly kind: "user" }
+  | { readonly kind: "user"; readonly meta: Record<string, never> }
   | { readonly kind: "default"; readonly meta: { readonly defaultSourceBlockId: BlockId } }
-  | { readonly kind: "auto";    readonly meta: { readonly reason: "portMoved" | "rehydrate" | "migrate" } };
+  | { readonly kind: "auto";    readonly meta: { readonly reason: "portMoved" | "rehydrate" | "migrate" } }
+  | { readonly kind: "adapter"; readonly meta: { readonly adapterId: BlockId; readonly originalEdgeId: string } };

@@ -64,10 +64,9 @@ export interface InputPort {
   readonly defaultSource?: DefaultSource;
   /**
    * Combine mode for multiple inputs.
-   * Optional for backwards compatibility - undefined means 'last'.
-   * @default 'last'
+   * Determines how values from multiple edges are combined.
    */
-  readonly combineMode?: CombineMode;
+  readonly combineMode: CombineMode;
 }
 
 /**
@@ -126,14 +125,14 @@ export interface Edge {
   /** Target endpoint */
   readonly to: Endpoint;
 
-  /** Whether this edge is enabled (default: true) */
-  readonly enabled?: boolean;
+  /** Whether this edge is enabled */
+  readonly enabled: boolean;
 
   /** Sort key for deterministic combine ordering */
-  readonly sortKey?: number;
+  readonly sortKey: number;
 
-  /** Semantic role for editor behavior (optional for backward compatibility) */
-  readonly role?: EdgeRole;
+  /** Semantic role for editor behavior */
+  readonly role: EdgeRole;
 }
 
 /**
@@ -214,8 +213,8 @@ export class PatchBuilder {
       from,
       to,
       enabled: options?.enabled ?? true,
-      sortKey: options?.sortKey,
-      role: options?.role,
+      sortKey: options?.sortKey ?? this.edges.length,
+      role: options?.role ?? { kind: 'user', meta: {} as Record<string, never> },
     });
     return this;
   }

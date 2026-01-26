@@ -7,7 +7,7 @@
 
 import { migratePatch } from '../graph/patchMigrations';
 import type { Patch } from '../graph';
-import type { BlockId } from '../types';
+import type { BlockId, EdgeRole } from '../types';
 
 export const STORAGE_KEY = 'oscilla-v2-patch-v10'; // Bumped to invalidate stale patches after block genericization (FieldSin->Sin, etc.)
 
@@ -20,7 +20,7 @@ export interface SerializedPatch {
     displayName: string | null;
     domainId: string | null;
     role: { kind: string; meta: Record<string, unknown> };
-    inputPorts: Array<{ id: string; defaultSource?: unknown }>;
+    inputPorts: Array<{ id: string; defaultSource?: unknown; combineMode?: string }>;
     outputPorts: Array<{ id: string }>;
   }>;
   edges: Array<{
@@ -29,6 +29,7 @@ export interface SerializedPatch {
     to: { kind: 'port'; blockId: string; slotId: string };
     enabled?: boolean;
     sortKey?: number;
+    role?: { kind: string; meta: Record<string, unknown> };
   }>;
   presetIndex: number;
 }
@@ -64,13 +65,27 @@ export function deserializePatch(json: string): { patch: Patch; presetIndex: num
     const data: SerializedPatch = JSON.parse(json);
     const blocks = new Map<BlockId, any>();
     for (const b of data.blocks) {
+      // Ensure inputPorts have required combineMode field
+      const normalizedInputPorts = b.inputPorts.map(p => ({
+        ...p,
+        combineMode: p.combineMode ?? 'last',
+      }));
       blocks.set(b.id as BlockId, {
         ...b,
-        inputPorts: new Map(b.inputPorts.map(p => [p.id, p])),
+        inputPorts: new Map(normalizedInputPorts.map(p => [p.id, p])),
         outputPorts: new Map(b.outputPorts.map(p => [p.id, p])),
       });
     }
-    const rawPatch = { blocks, edges: data.edges };
+    // Ensure edges have required fields (for backwards compatibility with old patches)
+    const normalizedEdges = data.edges.map((e, i) => ({
+      id: e.id,
+      from: e.from,
+      to: e.to,
+      enabled: e.enabled ?? true,
+      sortKey: e.sortKey ?? i,
+      role: (e.role ?? { kind: 'user' as const, meta: {} as Record<string, never> }) as EdgeRole,
+    }));
+    const rawPatch: Patch = { blocks, edges: normalizedEdges };
 
     // Apply patch migrations for removed/renamed blocks
     const { patch: migratedPatch, migrations } = migratePatch(rawPatch);

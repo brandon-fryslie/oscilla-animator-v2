@@ -224,6 +224,8 @@ function analyzeAdapters(
           slotId: adapterSpec.inputPortId,
         },
         enabled: true,
+        sortKey: edge.sortKey, // Preserve original sort key
+        role: { kind: 'adapter', meta: { adapterId, originalEdgeId: edge.id } },
       };
 
       const edgeFromAdapter: Edge = {
@@ -235,6 +237,8 @@ function analyzeAdapters(
         },
         to: edge.to,
         enabled: true,
+        sortKey: edge.sortKey, // Preserve original sort key
+        role: { kind: 'adapter', meta: { adapterId, originalEdgeId: edge.id } },
       };
 
       insertions.push({

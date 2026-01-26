@@ -119,6 +119,7 @@ function materializeDefaultSource(
             from: {kind: 'port', blockId: timeRoot.id, slotId: ds.output},
             to: {kind: 'port', blockId: targetBlockId, slotId: targetPortId},
             enabled: true,
+            sortKey: patch.edges.length, // Will be adjusted during insertion
             role: { kind: 'default', meta: { defaultSourceBlockId: timeRoot.id } },
         };
 
@@ -165,6 +166,7 @@ function materializeDefaultSource(
             slotId: targetPortId,
         },
         enabled: true,
+        sortKey: patch.edges.length, // Will be adjusted during insertion
         role: { kind: 'default', meta: { defaultSourceBlockId: derivedId } },
     };
 

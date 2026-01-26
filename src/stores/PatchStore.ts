@@ -12,7 +12,7 @@
 
 import { makeObservable, observable, computed, action } from 'mobx';
 import type { Block, Edge, Endpoint, Patch, BlockType, InputPort, OutputPort } from '../graph/Patch';
-import type { BlockId, BlockRole, CombineMode, PortId } from '../types';
+import type { BlockId, BlockRole, CombineMode, EdgeRole, PortId } from '../types';
 import { emptyPatchData, type PatchData } from './internal';
 import type { EventHub } from '../events/EventHub';
 import { requireBlockDef } from '../blocks/registry';
@@ -34,6 +34,7 @@ export interface BlockOptions {
 export interface EdgeOptions {
   enabled?: boolean;
   sortKey?: number;
+  role?: EdgeRole;
 }
 
 export class PatchStore {
@@ -393,7 +394,8 @@ export class PatchStore {
       from,
       to,
       enabled: options?.enabled ?? true,
-      ...(options?.sortKey !== undefined && { sortKey: options.sortKey }),
+      sortKey: options?.sortKey ?? this._data.edges.length,
+      role: options?.role ?? { kind: 'user', meta: {} as Record<string, never> },
     };
     this._data.edges.push(edge);
     this.invalidateSnapshot();
