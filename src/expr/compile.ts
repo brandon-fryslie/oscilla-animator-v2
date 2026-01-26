@@ -20,6 +20,8 @@ import { signalType, type PayloadType } from '../core/canonical-types';
 export interface CompileContext {
   readonly builder: IRBuilder;
   readonly inputs: ReadonlyMap<string, SigExprId>;
+  /** Block reference signals by canonical address (optional - for member access support) */
+  readonly blockRefs?: ReadonlyMap<string, SigExprId>;
 }
 
 /**
@@ -54,6 +56,9 @@ export function compile(node: ExprNode, ctx: CompileContext): SigExprId {
 
     case 'call':
       return compileCall(node, ctx);
+
+    case 'member':
+      return compileMemberAccess(node, ctx);
 
     default:
       const _exhaustive: never = node;
@@ -312,8 +317,35 @@ function compileCall(node: ExprNode & { kind: 'call' }, ctx: CompileContext): Si
   }
 }
 
+/**
+ * Compile member access node (block output reference).
+ */
+function compileMemberAccess(node: ExprNode & { kind: 'member' }, ctx: CompileContext): SigExprId {
+  if (!ctx.blockRefs) {
+    throw new Error('Block references not available - internal error (should have been caught by type checker)');
+  }
+
+  // Build the shorthand to look up
+  if (node.object.kind !== 'identifier') {
+    throw new Error('Invalid member access object - should have been caught by type checker');
+  }
+
+  const blockName = node.object.name;
+  const portName = node.member;
+  const shorthand = `${blockName}.${portName}`;
+
+  // The signal should be in blockRefs, keyed by shorthand
+  const sigId = ctx.blockRefs.get(shorthand);
+  if (sigId === undefined) {
+    throw new Error(`Block reference ${shorthand} not found in context - internal error (should have been caught by type checker)`);
+  }
+
+  return sigId;
+}
+
 // =============================================================================
 // Operator Mapping
+
 // =============================================================================
 
 /**
