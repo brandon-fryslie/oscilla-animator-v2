@@ -379,3 +379,25 @@ export type EdgeRole =
   | { readonly kind: "default"; readonly meta: { readonly defaultSourceBlockId: BlockId } }
   | { readonly kind: "auto";    readonly meta: { readonly reason: "portMoved" | "rehydrate" | "migrate" } }
   | { readonly kind: "adapter"; readonly meta: { readonly adapterId: BlockId; readonly originalEdgeId: string } };
+
+// =============================================================================
+// Canonical Addressing System
+// =============================================================================
+
+export type {
+  CanonicalAddress,
+  BlockAddress,
+  OutputAddress,
+  InputAddress,
+  ParamAddress,
+} from './canonical-address';
+
+export {
+  isBlockAddress,
+  isOutputAddress,
+  isInputAddress,
+  isParamAddress,
+  addressToString,
+  parseAddress,
+  getAddressFormatVersion,
+} from './canonical-address';
