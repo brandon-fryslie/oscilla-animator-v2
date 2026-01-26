@@ -447,6 +447,179 @@ function transformPoint(
   return [x / width, y / height];
 }
 
+/**
+ * Render a DrawPrimitiveInstancesOp with ExtrudeLite 2.5D effect.
+ *
+ * Converts primitives (ellipse, rect) to polygon approximations,
+ * then delegates to drawExtrudeLite() for the actual rendering.
+ *
+ * - Ellipse → N-sided regular polygon (default 24 sides)
+ * - Rect → 4-corner polygon
+ */
+function renderExtrudeLitePrimitiveOp(
+  ctx: CanvasRenderingContext2D,
+  op: DrawPrimitiveInstancesOp,
+  width: number,
+  height: number
+): void {
+  const { geometry, instances, style } = op;
+  const { count, position, size, rotation, scale2 } = instances;
+
+  // Early exit if no fill color
+  if (!style.fillColor || style.fillColor.length === 0) {
+    console.warn('ExtrudeLite requires fillColor, skipping');
+    return;
+  }
+
+  const uniformFillColor = style.fillColor.length === 4;
+  const D = Math.min(width, height);
+
+  // Convert DrawPrimitiveInstancesOp instances to ExtrudeLiteInput format
+  const extrudeInstances: ExtrudeLiteInput[] = [];
+
+  for (let i = 0; i < count; i++) {
+    // Get instance transforms
+    const posX = position[i * 2];
+    const posY = position[i * 2 + 1];
+    const instanceSize = typeof size === 'number' ? size : size[i];
+    const rot = rotation ? rotation[i] : 0;
+    const sx = scale2 ? scale2[i * 2] : 1;
+    const sy = scale2 ? scale2[i * 2 + 1] : 1;
+
+    // Generate polygon points for this primitive
+    const screenPoints = generatePrimitivePolygon(
+      geometry.topologyId,
+      geometry.params,
+      posX, posY, instanceSize, rot, sx, sy,
+      width, height, D
+    );
+
+    // Extract fill color (RGBA in [0,1] range)
+    const fillOffset = uniformFillColor ? 0 : i * 4;
+    const fill: RGBA01 = [
+      style.fillColor[fillOffset] / 255,
+      style.fillColor[fillOffset + 1] / 255,
+      style.fillColor[fillOffset + 2] / 255,
+      style.fillColor[fillOffset + 3] / 255,
+    ];
+
+    extrudeInstances.push({
+      pointsXY: screenPoints,
+      fill,
+    });
+  }
+
+  // Call drawExtrudeLite with converted inputs
+  drawExtrudeLite({
+    ctx,
+    widthPx: width,
+    heightPx: height,
+    instances: extrudeInstances,
+    params: style.extrudeLiteParams ?? DEFAULT_EXTRUDE_PARAMS,
+  });
+}
+
+/**
+ * Generate polygon approximation for a primitive topology.
+ *
+ * @returns Float32Array of screen-space points in normalized [0,1] coordinates
+ */
+function generatePrimitivePolygon(
+  topologyId: number,
+  params: Record<string, number>,
+  posX: number,
+  posY: number,
+  instanceSize: number,
+  rotation: number,
+  scaleX: number,
+  scaleY: number,
+  width: number,
+  height: number,
+  D: number
+): Float32Array {
+  const sizePx = instanceSize * D;
+
+  // TOPOLOGY_ID_ELLIPSE = 0
+  if (topologyId === 0) {
+    // Ellipse → N-sided polygon approximation
+    const ELLIPSE_SEGMENTS = 24;
+    const rx = (params.rx ?? 0.02) * width * instanceSize;
+    const ry = (params.ry ?? 0.02) * height * instanceSize;
+    const ellipseRotation = params.rotation ?? 0;
+    const totalRotation = rotation + ellipseRotation;
+
+    const points: number[] = [];
+    for (let j = 0; j < ELLIPSE_SEGMENTS; j++) {
+      const angle = (j / ELLIPSE_SEGMENTS) * Math.PI * 2;
+
+      // Local ellipse point
+      let lx = Math.cos(angle) * rx * scaleX;
+      let ly = Math.sin(angle) * ry * scaleY;
+
+      // Apply rotation
+      if (totalRotation !== 0) {
+        const cos = Math.cos(totalRotation);
+        const sin = Math.sin(totalRotation);
+        const xRot = lx * cos - ly * sin;
+        const yRot = lx * sin + ly * cos;
+        lx = xRot;
+        ly = yRot;
+      }
+
+      // Translate to world position and normalize
+      const screenX = (posX * width + lx) / width;
+      const screenY = (posY * height + ly) / height;
+      points.push(screenX, screenY);
+    }
+    return new Float32Array(points);
+  }
+
+  // TOPOLOGY_ID_RECT = 1
+  if (topologyId === 1) {
+    // Rectangle → 4-corner polygon
+    const w = (params.width ?? 0.04) * width * instanceSize;
+    const h = (params.height ?? 0.02) * height * instanceSize;
+    const rectRotation = params.rotation ?? 0;
+    const totalRotation = rotation + rectRotation;
+
+    // Half dimensions
+    const hw = (w / 2) * scaleX;
+    const hh = (h / 2) * scaleY;
+
+    // Local corners (counterclockwise from top-left)
+    const corners = [
+      [-hw, -hh],
+      [hw, -hh],
+      [hw, hh],
+      [-hw, hh],
+    ];
+
+    const points: number[] = [];
+    for (const [lx, ly] of corners) {
+      let x = lx;
+      let y = ly;
+
+      // Apply rotation
+      if (totalRotation !== 0) {
+        const cos = Math.cos(totalRotation);
+        const sin = Math.sin(totalRotation);
+        x = lx * cos - ly * sin;
+        y = lx * sin + ly * cos;
+      }
+
+      // Translate to world position and normalize
+      const screenX = (posX * width + x) / width;
+      const screenY = (posY * height + y) / height;
+      points.push(screenX, screenY);
+    }
+    return new Float32Array(points);
+  }
+
+  // Fallback: unknown topology - return empty (will be skipped)
+  console.warn(`ExtrudeLite: Unknown topology ${topologyId}, skipping`);
+  return new Float32Array(0);
+}
+
 // ============================================================================
 // END EXTRUDELITE SECTION
 // ============================================================================
@@ -463,6 +636,17 @@ export function renderDrawPrimitiveInstancesOp(
   width: number,
   height: number
 ): void {
+  // ============================================================================
+  // EXTRUDELITE DISPATCH (Experimental - delete when real mesh3d arrives)
+  // ============================================================================
+  if (op.style.depthStyle === 'extrudeLite') {
+    renderExtrudeLitePrimitiveOp(ctx, op, width, height);
+    return;
+  }
+  // ============================================================================
+  // END EXTRUDELITE DISPATCH
+  // ============================================================================
+
   const { geometry, instances, style } = op;
   const { count, position, size, rotation, scale2 } = instances;
 
