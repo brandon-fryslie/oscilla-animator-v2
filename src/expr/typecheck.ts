@@ -15,6 +15,9 @@
 import type { ExprNode, Position } from './ast';
 import { withType } from './ast';
 import type { PayloadType } from '../core/canonical-types';
+import type { AddressRegistry } from '../graph/address-registry';
+import { addressToString } from '../types/canonical-address';
+
 
 /**
  * Type error with position and suggestion.
@@ -36,6 +39,30 @@ export class TypeError extends Error {
  * Input type environment (maps identifier names to types).
  */
 export type TypeEnv = ReadonlyMap<string, PayloadType>;
+
+/**
+ * Block reference context for resolving member access expressions.
+ *
+ * When provided, enables block output references (e.g., Circle1.radius).
+ * When absent, member access expressions produce type errors.
+ */
+export interface BlockReferenceContext {
+  /** Address registry for resolving block references */
+  readonly addressRegistry: AddressRegistry;
+  /** Allowed payload types (from vararg constraint) */
+  readonly allowedPayloads: readonly PayloadType[];
+}
+
+/**
+ * Type checking context.
+ */
+export interface TypeCheckContext {
+  /** Input variables (from expression inputs) */
+  readonly inputs: TypeEnv;
+  /** Block reference context (optional - enables member access) */
+  readonly blockRefs?: BlockReferenceContext;
+}
+
 
 /**
  * Function signature catalog.
@@ -83,34 +110,53 @@ const FUNCTION_SIGNATURES: Record<string, FunctionSignature> = {
 /**
  * Type check expression and return annotated AST.
  * @param node AST node to type check
- * @param env Input type environment
+ * @param ctx Type checking context
  * @returns Annotated AST node with type information
  * @throws TypeError if type checking fails
  */
-export function typecheck(node: ExprNode, env: TypeEnv): ExprNode {
+export function typecheck(node: ExprNode, ctx: TypeCheckContext): ExprNode;
+/**
+ * @deprecated Legacy signature - use TypeCheckContext instead
+ */
+export function typecheck(node: ExprNode, env: TypeEnv): ExprNode;
+export function typecheck(node: ExprNode, ctxOrEnv: TypeCheckContext | TypeEnv): ExprNode {
+  // Handle legacy signature (TypeEnv only)
+  const ctx: TypeCheckContext = isTypeEnv(ctxOrEnv)
+    ? { inputs: ctxOrEnv }
+    : ctxOrEnv;
   switch (node.kind) {
     case 'literal':
       return typecheckLiteral(node);
 
     case 'identifier':
-      return typecheckIdentifier(node, env);
+      return typecheckIdentifier(node, ctx);
 
     case 'unary':
-      return typecheckUnary(node, env);
+      return typecheckUnary(node, ctx);
 
     case 'binary':
-      return typecheckBinary(node, env);
+      return typecheckBinary(node, ctx);
 
     case 'ternary':
-      return typecheckTernary(node, env);
+      return typecheckTernary(node, ctx);
 
     case 'call':
-      return typecheckCall(node, env);
+      return typecheckCall(node, ctx);
+
+    case 'member':
+      return typecheckMemberAccess(node, ctx);
 
     default:
       const _exhaustive: never = node;
       throw new Error(`Unknown node kind: ${_exhaustive}`);
   }
+}
+
+/**
+ * Type guard to check if argument is TypeEnv (legacy) vs TypeCheckContext.
+ */
+function isTypeEnv(arg: TypeCheckContext | TypeEnv): arg is TypeEnv {
+  return arg instanceof Map || (arg as TypeCheckContext).inputs === undefined;
 }
 
 /**
@@ -127,11 +173,11 @@ function typecheckLiteral(node: ExprNode & { kind: 'literal' }): ExprNode {
 /**
  * Type check identifier node.
  */
-function typecheckIdentifier(node: ExprNode & { kind: 'identifier' }, env: TypeEnv): ExprNode {
-  const type = env.get(node.name);
+function typecheckIdentifier(node: ExprNode & { kind: 'identifier' }, ctx: TypeCheckContext): ExprNode {
+  const type = ctx.inputs.get(node.name);
   if (!type) {
-    const available = Array.from(env.keys()).join(', ');
-    const suggestion = findClosestMatch(node.name, Array.from(env.keys()));
+    const available = Array.from(ctx.inputs.keys()).join(', ');
+    const suggestion = findClosestMatch(node.name, Array.from(ctx.inputs.keys()));
     throw new TypeError(
       `Undefined input '${node.name}'. Available inputs: ${available}${suggestion ? `. Did you mean '${suggestion}'?` : ''}`,
       node.pos
@@ -143,8 +189,8 @@ function typecheckIdentifier(node: ExprNode & { kind: 'identifier' }, env: TypeE
 /**
  * Type check unary operator node.
  */
-function typecheckUnary(node: ExprNode & { kind: 'unary' }, env: TypeEnv): ExprNode {
-  const arg = typecheck(node.arg, env);
+function typecheckUnary(node: ExprNode & { kind: 'unary' }, ctx: TypeCheckContext): ExprNode {
+  const arg = typecheck(node.arg, ctx);
   const argType = arg.type!;
 
   switch (node.op) {
@@ -197,9 +243,9 @@ function typecheckUnary(node: ExprNode & { kind: 'unary' }, env: TypeEnv): ExprN
 /**
  * Type check binary operator node.
  */
-function typecheckBinary(node: ExprNode & { kind: 'binary' }, env: TypeEnv): ExprNode {
-  const left = typecheck(node.left, env);
-  const right = typecheck(node.right, env);
+function typecheckBinary(node: ExprNode & { kind: 'binary' }, ctx: TypeCheckContext): ExprNode {
+  const left = typecheck(node.left, ctx);
+  const right = typecheck(node.right, ctx);
   const leftType = left.type!;
   const rightType = right.type!;
 
@@ -333,10 +379,10 @@ function typecheckLogical(
 /**
  * Type check ternary conditional node.
  */
-function typecheckTernary(node: ExprNode & { kind: 'ternary' }, env: TypeEnv): ExprNode {
-  const cond = typecheck(node.cond, env);
-  const thenBranch = typecheck(node.then, env);
-  const elseBranch = typecheck(node.else, env);
+function typecheckTernary(node: ExprNode & { kind: 'ternary' }, ctx: TypeCheckContext): ExprNode {
+  const cond = typecheck(node.cond, ctx);
+  const thenBranch = typecheck(node.then, ctx);
+  const elseBranch = typecheck(node.else, ctx);
 
   const condType = cond.type!;
   const thenType = thenBranch.type!;
@@ -367,7 +413,7 @@ function typecheckTernary(node: ExprNode & { kind: 'ternary' }, env: TypeEnv): E
 /**
  * Type check function call node.
  */
-function typecheckCall(node: ExprNode & { kind: 'call' }, env: TypeEnv): ExprNode {
+function typecheckCall(node: ExprNode & { kind: 'call' }, ctx: TypeCheckContext): ExprNode {
   const signature = FUNCTION_SIGNATURES[node.fn];
 
   // Check if function exists
@@ -389,7 +435,7 @@ function typecheckCall(node: ExprNode & { kind: 'call' }, env: TypeEnv): ExprNod
   }
 
   // Type check arguments
-  const typedArgs = node.args.map(arg => typecheck(arg, env));
+  const typedArgs = node.args.map(arg => typecheck(arg, ctx));
 
   // Validate argument types
   for (let i = 0; i < typedArgs.length; i++) {
@@ -441,6 +487,84 @@ function typecheckCall(node: ExprNode & { kind: 'call' }, env: TypeEnv): ExprNod
   }
 
   return withType({ ...node, args: typedArgs }, returnType);
+}
+
+/**
+ * Type check member access node (block output reference).
+ */
+function typecheckMemberAccess(node: ExprNode & { kind: 'member' }, ctx: TypeCheckContext): ExprNode {
+  if (!ctx.blockRefs) {
+    throw new TypeError(
+      'Block references are not available in this context',
+      node.pos,
+      undefined,
+      undefined,
+      'Use input variables instead of block references'
+    );
+  }
+
+  // The object must be an identifier (block name)
+  if (node.object.kind !== 'identifier') {
+    throw new TypeError(
+      'Block reference must be in the form BlockName.port (e.g., Circle1.radius)',
+      node.object.pos,
+      undefined,
+      undefined,
+      'Only simple block references are supported'
+    );
+  }
+
+  const blockName = node.object.name;
+  const portName = node.member;
+  const shorthand = `${blockName}.${portName}`;
+
+  // Resolve shorthand to canonical address
+  const canonicalAddr = ctx.blockRefs.addressRegistry.resolveShorthand(shorthand);
+  if (!canonicalAddr) {
+    throw new TypeError(
+      `Unknown block or port: ${shorthand}`,
+      node.pos,
+      undefined,
+      undefined,
+      `Check that block "${blockName}" exists and has an output named "${portName}"`
+    );
+  }
+
+  // Resolve to get full type information
+  const resolved = ctx.blockRefs.addressRegistry.resolve(addressToString(canonicalAddr));
+  if (!resolved) {
+    throw new TypeError(
+      `Failed to resolve ${shorthand} (internal error)`,
+      node.pos
+    );
+  }
+
+  // Verify it's an output port
+  if (resolved.kind !== 'output') {
+    throw new TypeError(
+      `${shorthand} is not an output port`,
+      node.pos,
+      undefined,
+      undefined,
+      resolved.kind === 'input' ? `Did you mean to reference an output instead of an input?` : undefined
+    );
+  }
+
+  // Extract payload type from SignalType
+  const payload = resolved.type.payload;
+
+  // Validate payload type is allowed
+  if (!ctx.blockRefs.allowedPayloads.includes(payload)) {
+    throw new TypeError(
+      `${shorthand} has type ${payload}, but only ${ctx.blockRefs.allowedPayloads.join(', ')} are allowed`,
+      node.pos,
+      ctx.blockRefs.allowedPayloads as PayloadType[],
+      payload,
+      `This expression context only accepts ${ctx.blockRefs.allowedPayloads.join(' or ')} types`
+    );
+  }
+
+  return withType(node, payload);
 }
 
 // =============================================================================
