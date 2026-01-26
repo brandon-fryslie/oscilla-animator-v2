@@ -26,6 +26,9 @@ export const colors = {
   warning: '#ffd93d',      // Yellow warning
   error: '#ff6b6b',        // Error color (alias for secondary)
 
+  // Port colors
+  varargPort: '#9d4edd',   // Purple - distinct from primary teal (for varargs ports)
+
   // Text
   textPrimary: '#eee',
   textSecondary: '#888',
