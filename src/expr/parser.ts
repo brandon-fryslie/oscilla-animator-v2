@@ -6,19 +6,21 @@
  *
  * Grammar reference: src/expr/GRAMMAR.md
  * Operator precedence (highest to lowest):
- * 1. Unary: !, -, +
- * 2. Multiplicative: *, /, %
- * 3. Additive: +, -
- * 4. Comparison: <, >, <=, >=, ==, !=
- * 5. Logical AND: &&
- * 6. Logical OR: ||
- * 7. Ternary: ? :
+ * 1. Member access: .
+ * 2. Unary: !, -, +
+ * 3. Multiplicative: *, /, %
+ * 4. Additive: +, -
+ * 5. Comparison: <, >, <=, >=, ==, !=
+ * 6. Logical AND: &&
+ * 7. Logical OR: ||
+ * 8. Ternary: ? :
  */
 
 import type { ExprNode, Position } from './ast';
 import {
   astLiteral,
   astIdentifier,
+  astMemberAccess,
   astUnary,
   astBinary,
   astTernary,
@@ -212,10 +214,10 @@ class Parser {
 
   /**
    * Parse function call.
-   * Grammar: call := primary ("(" arguments? ")")?
+   * Grammar: call := member ("(" arguments? ")")?
    */
   private call(): ExprNode {
-    let expr = this.primary();
+    let expr = this.member();
 
     if (this.match(TokenKind.LPAREN)) {
       // Function call
@@ -232,6 +234,37 @@ class Parser {
       const closeParen = this.consume(TokenKind.RPAREN, "Expected ')' after arguments");
       const end = closeParen.pos.end;
       expr = astCall(fnName, args, { start, end });
+    }
+
+    return expr;
+  }
+
+  /**
+   * Parse member access (left-associative).
+   * Grammar: member := primary ("." IDENTIFIER)*
+   *
+   * Member access has highest precedence - it binds tighter than function calls.
+   * Examples:
+   *   Circle1.radius   → MemberAccess(identifier "Circle1", "radius")
+   *   a.b.c            → MemberAccess(MemberAccess(identifier "a", "b"), "c")
+   */
+  private member(): ExprNode {
+    let expr = this.primary();
+
+    // Handle chained member access (left-associative)
+    while (this.match(TokenKind.DOT)) {
+      if (!this.check(TokenKind.IDENT)) {
+        throw new ParseError(
+          'Expected identifier after "."',
+          this.peek().pos,
+          ['identifier'],
+          this.peek().value
+        );
+      }
+      const memberToken = this.advance();
+      const start = expr.pos.start;
+      const end = memberToken.pos.end;
+      expr = astMemberAccess(expr, memberToken.value, { start, end });
     }
 
     return expr;

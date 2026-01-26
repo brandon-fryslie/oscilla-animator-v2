@@ -26,6 +26,7 @@ export interface Position {
 export type ExprNode =
   | LiteralNode
   | IdentifierNode
+  | MemberAccessNode
   | UnaryOpNode
   | BinaryOpNode
   | TernaryNode
@@ -53,6 +54,23 @@ export interface IdentifierNode {
   readonly name: string;
   readonly pos: Position;
   readonly type?: PayloadType;  // Filled by type checker (from inputs)
+}
+
+/**
+ * Member access node (block output reference).
+ * Represents `object.member` syntax for referencing block outputs.
+ * Example: Circle1.radius
+ *
+ * The object can be an identifier (for simple block references) or
+ * another member access node (for chained access, though this is not
+ * currently used in the Expression DSL - reserved for future use).
+ */
+export interface MemberAccessNode {
+  readonly kind: 'member';
+  readonly object: ExprNode;
+  readonly member: string;
+  readonly pos: Position;
+  readonly type?: PayloadType;  // Filled by type checker (from block output)
 }
 
 /**
@@ -132,6 +150,13 @@ export function astLiteral(value: number, raw: string, pos: Position): LiteralNo
  */
 export function astIdentifier(name: string, pos: Position): IdentifierNode {
   return { kind: 'identifier', name, pos };
+}
+
+/**
+ * Create a member access node.
+ */
+export function astMemberAccess(object: ExprNode, member: string, pos: Position): MemberAccessNode {
+  return { kind: 'member', object, member, pos };
 }
 
 /**

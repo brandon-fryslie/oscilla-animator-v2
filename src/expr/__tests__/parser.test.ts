@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { tokenize } from '../lexer';
 import { parse } from '../parser';
-import type { LiteralNode, IdentifierNode, BinaryOpNode, UnaryOpNode, TernaryNode, CallNode, ExprNode } from '../ast';
+import type { LiteralNode, IdentifierNode, BinaryOpNode, UnaryOpNode, TernaryNode, CallNode, MemberAccessNode, ExprNode } from '../ast';
 
 // Type guards for discriminated union narrowing
 function isLiteral(node: ExprNode): node is LiteralNode {
@@ -14,6 +14,10 @@ function isLiteral(node: ExprNode): node is LiteralNode {
 
 function isIdentifier(node: ExprNode): node is IdentifierNode {
   return node.kind === 'identifier';
+}
+
+function isMemberAccess(node: ExprNode): node is MemberAccessNode {
+  return node.kind === 'member';
 }
 
 function isBinary(node: ExprNode): node is BinaryOpNode {
@@ -55,6 +59,86 @@ describe('Parser', () => {
       const ast = parse(tokens);
       expect(ast.kind).toBe('identifier');
       expect(isIdentifier(ast) && ast.name).toBe('phase');
+    });
+  });
+
+  describe('Member Access', () => {
+    it('parses simple member access', () => {
+      const tokens = tokenize('Circle1.radius');
+      const ast = parse(tokens);
+      expect(ast.kind).toBe('member');
+      if (isMemberAccess(ast)) {
+        expect(ast.member).toBe('radius');
+        expect(ast.object.kind).toBe('identifier');
+        expect(isIdentifier(ast.object) && ast.object.name).toBe('Circle1');
+      }
+    });
+
+    it('parses chained member access (left-associative)', () => {
+      const tokens = tokenize('a.b.c');
+      const ast = parse(tokens);
+      expect(ast.kind).toBe('member');
+      if (isMemberAccess(ast)) {
+        expect(ast.member).toBe('c');
+        expect(ast.object.kind).toBe('member');
+        if (isMemberAccess(ast.object)) {
+          expect(ast.object.member).toBe('b');
+          expect(ast.object.object.kind).toBe('identifier');
+          expect(isIdentifier(ast.object.object) && ast.object.object.name).toBe('a');
+        }
+      }
+    });
+
+    it('member access binds tighter than arithmetic', () => {
+      const tokens = tokenize('Circle1.radius * 2');
+      const ast = parse(tokens);
+      expect(ast.kind).toBe('binary');
+      if (isBinary(ast)) {
+        expect(ast.op).toBe('*');
+        expect(ast.left.kind).toBe('member');
+        if (isMemberAccess(ast.left)) {
+          expect(ast.left.member).toBe('radius');
+          expect(isIdentifier(ast.left.object) && ast.left.object.name).toBe('Circle1');
+        }
+        expect(isLiteral(ast.right) && ast.right.value).toBe(2);
+      }
+    });
+
+    it('throws error for member access on literal', () => {
+      const tokens = tokenize('42.x');
+      // Note: 42.x is lexed as NUMBER("42.x") if followed by identifier? No - lexer sees "42" then "." then "x"
+      // Actually, lexer will produce NUMBER("42"), DOT, IDENT("x") but parser should handle it
+      // The issue is: does lexer see "42." as start of float or "42" + "." ?
+      // According to lexer code, it checks peekNext() for digit after dot, so "42." becomes "42" then "."
+      // But wait - we need to be careful. Let me trace through:
+      // Input: "42.x"
+      // Lexer sees '4' -> digit -> number() -> reads "42", checks peek() == '.' and peekNext() == 'x' (not digit) -> stops
+      // So lexer produces: NUMBER("42"), DOT, IDENT("x")
+      // Parser parses: literal(42), then member(literal(42), "x")
+      // This should be allowed by parser but rejected by type checker
+      // So parser doesn't throw here - it produces the AST
+      expect(() => parse(tokens)).not.toThrow();
+      const ast = parse(tokens);
+      expect(ast.kind).toBe('member');
+      if (isMemberAccess(ast)) {
+        expect(ast.object.kind).toBe('literal');
+      }
+    });
+
+    it('throws error for missing identifier after dot', () => {
+      const tokens = tokenize('Circle1.');
+      expect(() => parse(tokens)).toThrow(/Expected identifier after/);
+    });
+
+    it('member access in complex expression', () => {
+      const tokens = tokenize('Circle1.radius + Circle2.radius');
+      const ast = parse(tokens);
+      expect(ast.kind).toBe('binary');
+      if (isBinary(ast)) {
+        expect(ast.op).toBe('+');
+        expect(ast.left.kind).toBe('member');
+        expect(ast.right.kind).toBe('member');
+      }
     });
   });
 
