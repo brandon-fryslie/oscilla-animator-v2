@@ -127,9 +127,9 @@ describe('Steel Thread - Animated Particles', () => {
     expect(op.instances.position).toBeInstanceOf(Float32Array);
     expect(op.style.fillColor).toBeInstanceOf(Uint8ClampedArray);
 
-    // Verify position buffer has correct size (vec3 stride, but no camera so still world-space)
+    // Verify position buffer has correct size (vec2 stride, screenPosition after projection)
     const posBuffer = op.instances.position as Float32Array;
-    expect(posBuffer.length).toBe(100 * 3); // 100 particles, 3 floats per position (x, y, z)
+    expect(posBuffer.length).toBe(100 * 2); // 100 particles, 2 floats per position (x, y)
     // Copy the values since the buffer will be reused for frame 2
     const frame1Positions = new Float32Array(posBuffer);
 
@@ -137,18 +137,24 @@ describe('Steel Thread - Animated Particles', () => {
     const colorBuffer = op.style.fillColor as Uint8ClampedArray;
     expect(colorBuffer.length).toBe(100 * 4); // 100 particles, 4 bytes per color (RGBA)
 
-    // Verify size is uniform (no camera = no projection = uniform size)
-    expect(typeof op.instances.size).toBe('number');
-    expect(op.instances.size).toBe(1); // Default scale from RenderInstances2D block
+    // After projection, size becomes per-instance Float32Array (screen radii)
+    expect(op.instances.size).toBeInstanceOf(Float32Array);
+    const sizeBuffer = op.instances.size as Float32Array;
+    expect(sizeBuffer.length).toBe(100); // One screen radius per instance
 
     // Verify positions are finite numbers (actual range depends on animation parameters)
     for (let i = 0; i < 100; i++) {
-      const x = posBuffer[i * 3 + 0];
-      const y = posBuffer[i * 3 + 1];
-      const z = posBuffer[i * 3 + 2];
+      const x = posBuffer[i * 2 + 0];
+      const y = posBuffer[i * 2 + 1];
       expect(Number.isFinite(x)).toBe(true);
       expect(Number.isFinite(y)).toBe(true);
-      expect(z).toBe(0.0); // z should always be 0.0
+    }
+
+    // Verify sizes are finite and positive
+    for (let i = 0; i < 100; i++) {
+      const size = sizeBuffer[i];
+      expect(Number.isFinite(size)).toBe(true);
+      expect(size).toBeGreaterThan(0);
     }
 
     // Verify colors are valid RGBA
@@ -176,8 +182,8 @@ describe('Steel Thread - Animated Particles', () => {
     let hasDifference = false;
     for (let i = 0; i < 100; i++) {
       if (
-        Math.abs(frame1Positions[i * 3 + 0] - pos2[i * 3 + 0]) > 0.001 ||
-        Math.abs(frame1Positions[i * 3 + 1] - pos2[i * 3 + 1]) > 0.001
+        Math.abs(frame1Positions[i * 2 + 0] - pos2[i * 2 + 0]) > 0.001 ||
+        Math.abs(frame1Positions[i * 2 + 1] - pos2[i * 2 + 1]) > 0.001
       ) {
         hasDifference = true;
         break;

@@ -199,15 +199,15 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
     expect(ellipseOp1.instances.count).toBe(25);
     expect(rectOp1.instances.count).toBe(20);
 
-    // Verify buffer types and sizes (NO camera, so position is stride-3)
+    // Verify buffer types and sizes (after projection: vec2 stride, Float32Array sizes)
     expect(ellipseOp1.instances.position).toBeInstanceOf(Float32Array);
     expect(ellipseOp1.style.fillColor).toBeInstanceOf(Uint8ClampedArray);
-    expect(ellipseOp1.instances.position.length).toBe(25 * 3); // 25 × 3 floats (x, y, z)
+    expect(ellipseOp1.instances.position.length).toBe(25 * 2); // 25 × 2 floats (x, y)
     expect(ellipseOp1.style.fillColor!.length).toBe(25 * 4);
 
     expect(rectOp1.instances.position).toBeInstanceOf(Float32Array);
     expect(rectOp1.style.fillColor).toBeInstanceOf(Uint8ClampedArray);
-    expect(rectOp1.instances.position.length).toBe(20 * 3); // 20 × 3 floats (x, y, z)
+    expect(rectOp1.instances.position.length).toBe(20 * 2); // 20 × 2 floats (x, y)
     expect(rectOp1.style.fillColor!.length).toBe(20 * 4);
 
     // Verify shapes are properly resolved
@@ -226,23 +226,30 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
       expect(rectOp1.geometry.params).toHaveProperty('cornerRadius');
     }
 
-    // === VERIFY SCALE IS ANIMATED (not default 1.0) ===
-    // At t=0, sin(0) = 0, so:
-    // ellipse scale = 1.5 + 0.5*sin(0) = 1.5
-    // rect scale = 0.8 + 0.4*sin(0+π) = 0.8 + 0.4*0 = 0.8
-    // phaseA at t=0: phase = 0/4000 = 0
-    // phaseB at t=0: phase = 0/8000 = 0
-    expect(ellipseOp1.instances.size).toBeCloseTo(1.5, 1); // 1.5 + 0.5*sin(0*2π) = 1.5
-    expect(rectOp1.instances.size).toBeCloseTo(0.8, 1);    // 0.8 + 0.4*sin(0*2π+π) = 0.8
+    // === VERIFY SCALE IS ANIMATED (Float32Array after projection) ===
+    expect(ellipseOp1.instances.size).toBeInstanceOf(Float32Array);
+    expect(rectOp1.instances.size).toBeInstanceOf(Float32Array);
+
+    const ellipseSizes1 = ellipseOp1.instances.size as Float32Array;
+    const rectSizes1 = rectOp1.instances.size as Float32Array;
+    expect(ellipseSizes1.length).toBe(25);
+    expect(rectSizes1.length).toBe(20);
+
+    // Verify sizes are finite and positive
+    for (let i = 0; i < 25; i++) {
+      expect(Number.isFinite(ellipseSizes1[i])).toBe(true);
+      expect(ellipseSizes1[i]).toBeGreaterThan(0);
+    }
+    for (let i = 0; i < 20; i++) {
+      expect(Number.isFinite(rectSizes1[i])).toBe(true);
+      expect(rectSizes1[i]).toBeGreaterThan(0);
+    }
 
     // === VERIFY PER-ELEMENT OPACITY (different alpha per element) ===
     const eColorBuf1 = ellipseOp1.style.fillColor!;
     const rColorBuf1 = rectOp1.style.fillColor!;
 
     // Per-element opacity: elements should have DIFFERENT alpha values
-    // FieldPulse produces: base + amplitude * sin(2π * (phase + id01 * spread))
-    // At t=0: phase=0, so value = base + amp * sin(2π * id01 * spread)
-    // Different id01 values → different opacities
     let rectAlphaVariation = false;
     const rectAlpha0 = rColorBuf1[3]; // first element alpha
     for (let i = 1; i < 20; i++) {
@@ -263,13 +270,12 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
     }
     expect(hasReducedAlpha).toBe(true); // at least some elements have reduced opacity
 
-    // Verify positions are finite (stride-3 for no camera)
+    // Verify positions are finite (vec2 stride after projection)
     for (const op of frame1.ops) {
       const pos = op.instances.position;
       for (let i = 0; i < op.instances.count; i++) {
-        expect(Number.isFinite(pos[i * 3 + 0])).toBe(true);
-        expect(Number.isFinite(pos[i * 3 + 1])).toBe(true);
-        expect(pos[i * 3 + 2]).toBe(0.0); // z should always be 0.0
+        expect(Number.isFinite(pos[i * 2 + 0])).toBe(true);
+        expect(Number.isFinite(pos[i * 2 + 1])).toBe(true);
       }
     }
 
@@ -293,8 +299,8 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
     // Copy frame 1 data for comparison
     const f1EllipsePos = new Float32Array(ellipseOp1.instances.position);
     const f1RectPos = new Float32Array(rectOp1.instances.position);
-    const f1EllipseScale = ellipseOp1.instances.size as number;
-    const f1RectScale = rectOp1.instances.size as number;
+    const f1EllipseSizes = new Float32Array(ellipseSizes1);
+    const f1RectSizes = new Float32Array(rectSizes1);
 
     const frame2 = executeFrame(program, state, pool, 1000) as RenderFrameIR;
     const ellipseOp2 = frame2.ops.find(op => op.geometry.topologyId === TOPOLOGY_ID_ELLIPSE)!;
@@ -304,8 +310,8 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
     let ellipseMoved = false;
     const ePos2 = ellipseOp2.instances.position;
     for (let i = 0; i < 25; i++) {
-      if (Math.abs(f1EllipsePos[i * 3 + 0] - ePos2[i * 3 + 0]) > 0.001 ||
-          Math.abs(f1EllipsePos[i * 3 + 1] - ePos2[i * 3 + 1]) > 0.001) {
+      if (Math.abs(f1EllipsePos[i * 2 + 0] - ePos2[i * 2 + 0]) > 0.001 ||
+          Math.abs(f1EllipsePos[i * 2 + 1] - ePos2[i * 2 + 1]) > 0.001) {
         ellipseMoved = true;
         break;
       }
@@ -315,23 +321,45 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
     let rectMoved = false;
     const rPos2 = rectOp2.instances.position;
     for (let i = 0; i < 20; i++) {
-      if (Math.abs(f1RectPos[i * 3 + 0] - rPos2[i * 3 + 0]) > 0.001 ||
-          Math.abs(f1RectPos[i * 3 + 1] - rPos2[i * 3 + 1]) > 0.001) {
+      if (Math.abs(f1RectPos[i * 2 + 0] - rPos2[i * 2 + 0]) > 0.001 ||
+          Math.abs(f1RectPos[i * 2 + 1] - rPos2[i * 2 + 1]) > 0.001) {
         rectMoved = true;
         break;
       }
     }
     expect(rectMoved).toBe(true);
 
-    // Scale should change between frames (animated)
-    expect(ellipseOp2.instances.size).not.toBeCloseTo(f1EllipseScale, 2);
-    expect(rectOp2.instances.size).not.toBeCloseTo(f1RectScale, 2);
+    // Sizes should change between frames (animated scale, Float32Array)
+    const ellipseSizes2 = ellipseOp2.instances.size as Float32Array;
+    const rectSizes2 = rectOp2.instances.size as Float32Array;
 
-    // Scale should be positive and reasonable
-    expect(ellipseOp2.instances.size as number).toBeGreaterThan(0);
-    expect(ellipseOp2.instances.size as number).toBeLessThan(5);
-    expect(rectOp2.instances.size as number).toBeGreaterThan(0);
-    expect(rectOp2.instances.size as number).toBeLessThan(5);
+    let ellipseSizeChanged = false;
+    for (let i = 0; i < 25; i++) {
+      if (Math.abs(f1EllipseSizes[i] - ellipseSizes2[i]) > 0.01) {
+        ellipseSizeChanged = true;
+        break;
+      }
+    }
+    expect(ellipseSizeChanged).toBe(true);
+
+    let rectSizeChanged = false;
+    for (let i = 0; i < 20; i++) {
+      if (Math.abs(f1RectSizes[i] - rectSizes2[i]) > 0.01) {
+        rectSizeChanged = true;
+        break;
+      }
+    }
+    expect(rectSizeChanged).toBe(true);
+
+    // Sizes should be positive and reasonable
+    for (let i = 0; i < 25; i++) {
+      expect(ellipseSizes2[i]).toBeGreaterThan(0);
+      expect(ellipseSizes2[i]).toBeLessThan(5);
+    }
+    for (let i = 0; i < 20; i++) {
+      expect(rectSizes2[i]).toBeGreaterThan(0);
+      expect(rectSizes2[i]).toBeLessThan(5);
+    }
 
     // Per-element opacity should change between frames (phase advances)
     const eColorBuf2 = ellipseOp2.style.fillColor!;
@@ -358,8 +386,16 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
     const ellipseOp3 = frame3.ops.find(op => op.geometry.topologyId === TOPOLOGY_ID_ELLIPSE)!;
     const rectOp3 = frame3.ops.find(op => op.geometry.topologyId === TOPOLOGY_ID_RECT)!;
 
-    // Scale continues to change
-    expect(ellipseOp3.instances.size).not.toBeCloseTo(ellipseOp2.instances.size as number, 2);
+    // Sizes continue to change
+    const ellipseSizes3 = ellipseOp3.instances.size as Float32Array;
+    let sizes3Changed = false;
+    for (let i = 0; i < 25; i++) {
+      if (Math.abs(ellipseSizes2[i] - ellipseSizes3[i]) > 0.01) {
+        sizes3Changed = true;
+        break;
+      }
+    }
+    expect(sizes3Changed).toBe(true);
 
     // All ops still valid
     expect(frame3.ops.length).toBe(2);

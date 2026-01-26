@@ -28,7 +28,7 @@ describe('Steel Thread - Rect Shape Pipeline', () => {
   it('should compile and execute a patch using Rect topology', () => {
     // Build the patch: Rect → Array → position/color → Render
     const patch = buildPatch((b) => {
-      const time = b.addBlock('InfiniteTimeRoot', { periodAMs: 3000, periodBMS: 6000 });
+      const time = b.addBlock('InfiniteTimeRoot', { periodAMs: 3000, periodBMs: 6000 });
 
       // Rect shape (uses registry defaults: width=0.04, height=0.02)
       const rect = b.addBlock('Rect', {});
@@ -124,17 +124,18 @@ describe('Steel Thread - Rect Shape Pipeline', () => {
     expect(op.instances.position).toBeInstanceOf(Float32Array);
     expect(op.style.fillColor).toBeInstanceOf(Uint8ClampedArray);
 
-    // Verify position buffer size (vec3 stride)
+    // Verify position buffer size (vec2 stride after projection)
     const posBuffer = op.instances.position as Float32Array;
-    expect(posBuffer.length).toBe(50 * 3); // 50 particles × 3 floats per position (x, y, z)
+    expect(posBuffer.length).toBe(50 * 2); // 50 particles × 2 floats per position (x, y)
 
     // Verify color buffer size
     const colorBuffer = op.style.fillColor as Uint8ClampedArray;
     expect(colorBuffer.length).toBe(50 * 4); // 50 particles × 4 bytes per color
 
-    // Verify size buffer exists
-    expect(typeof op.instances.size).toBe("number");
-    expect(op.instances.size).toBe(1);
+    // After projection, size becomes per-instance Float32Array
+    expect(op.instances.size).toBeInstanceOf(Float32Array);
+    const sizeBuffer = op.instances.size as Float32Array;
+    expect(sizeBuffer.length).toBe(50);
 
     // Verify geometry has correct rect topology (primitive mode)
     expect(op.geometry.topologyId).toBe(TOPOLOGY_ID_RECT);
@@ -143,14 +144,19 @@ describe('Steel Thread - Rect Shape Pipeline', () => {
     expect(op.geometry.params.rotation).toBe(0);
     expect(op.geometry.params.cornerRadius).toBe(0);
 
-    // Verify positions are finite
+    // Verify positions are finite (vec2 stride)
     for (let i = 0; i < 50; i++) {
-      const x = posBuffer[i * 3 + 0];
-      const y = posBuffer[i * 3 + 1];
-      const z = posBuffer[i * 3 + 2];
+      const x = posBuffer[i * 2 + 0];
+      const y = posBuffer[i * 2 + 1];
       expect(Number.isFinite(x)).toBe(true);
       expect(Number.isFinite(y)).toBe(true);
-      expect(z).toBe(0.0); // z should always be 0.0
+    }
+
+    // Verify sizes are finite and positive
+    for (let i = 0; i < 50; i++) {
+      const size = sizeBuffer[i];
+      expect(Number.isFinite(size)).toBe(true);
+      expect(size).toBeGreaterThan(0);
     }
 
     // Verify colors are valid RGBA
@@ -180,8 +186,8 @@ describe('Steel Thread - Rect Shape Pipeline', () => {
     let hasDifference = false;
     for (let i = 0; i < 50; i++) {
       if (
-        Math.abs(frame1Positions[i * 3 + 0] - pos2[i * 3 + 0]) > 0.001 ||
-        Math.abs(frame1Positions[i * 3 + 1] - pos2[i * 3 + 1]) > 0.001
+        Math.abs(frame1Positions[i * 2 + 0] - pos2[i * 2 + 0]) > 0.001 ||
+        Math.abs(frame1Positions[i * 2 + 1] - pos2[i * 2 + 1]) > 0.001
       ) {
         hasDifference = true;
         break;
@@ -197,7 +203,7 @@ describe('Steel Thread - Rect Shape Pipeline', () => {
   it('should produce different geometry for Ellipse vs Rect', () => {
     // Build Ellipse patch
     const ellipsePatch = buildPatch((b) => {
-      const time = b.addBlock('InfiniteTimeRoot', { periodAMs: 3000, periodBMS: 6000 });
+      const time = b.addBlock('InfiniteTimeRoot', { periodAMs: 3000, periodBMs: 6000 });
       const ellipse = b.addBlock('Ellipse', { rx: 0.02, ry: 0.02 });
       const array = b.addBlock('Array', { count: 10 });
       b.wire(ellipse, 'shape', array, 'element');
@@ -236,7 +242,7 @@ describe('Steel Thread - Rect Shape Pipeline', () => {
 
     // Build Rect patch
     const rectPatch = buildPatch((b) => {
-      const time = b.addBlock('InfiniteTimeRoot', { periodAMS: 3000, periodBMS: 6000 });
+      const time = b.addBlock('InfiniteTimeRoot', { periodAMs: 3000, periodBMs: 6000 });
       const rect = b.addBlock('Rect', {});
       const array = b.addBlock('Array', { count: 10 });
       b.wire(rect, 'shape', array, 'element');
