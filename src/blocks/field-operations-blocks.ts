@@ -591,13 +591,14 @@ registerBlock({
   },
   inputs: {
     id01: { label: 'ID (0..1)', type: signalType('float') },
-    turns: { label: 'Turns', type: signalType('float'), value: 50, exposedAsPort: false, hidden: true },
+    turns: { label: 'Turns', type: signalType('float'), value: 50, defaultSource: defaultSourceConst(50), exposedAsPort: true },
   },
   outputs: {
     angle: { label: 'Angle', type: signalType('float') },
   },
-  lower: ({ ctx, inputsById, config }) => {
+  lower: ({ ctx, inputsById }) => {
     const id01 = inputsById.id01;
+    const turns = inputsById.turns;
 
     if (!id01) {
       throw new Error('GoldenAngle id01 required');
@@ -606,11 +607,15 @@ registerBlock({
     // Golden angle ≈ 2.39996... radians (137.508°)
     const GOLDEN_ANGLE = 2.39996322972865332;
 
+    // Get turns signal (or create default constant)
+    const turnsSig = turns?.k === 'sig' ? turns.id : ctx.b.sigConst(50, signalType('float'));
+
     if (id01.k === 'sig') {
-      // Signal path - angle = id01 * goldenAngle
+      // Signal path - angle = id01 * turns * goldenAngle
       const goldenAngleConst = ctx.b.sigConst(GOLDEN_ANGLE, signalType('float'));
       const mulFn = ctx.b.opcode(OpCode.Mul);
-      const result = ctx.b.sigZip([id01.id, goldenAngleConst], mulFn, signalType('float'));
+      const turnsScaled = ctx.b.sigZip([id01.id, turnsSig], mulFn, signalType('float'));
+      const result = ctx.b.sigZip([turnsScaled, goldenAngleConst], mulFn, signalType('float'));
 
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
@@ -621,9 +626,9 @@ registerBlock({
         },
       };
     } else if (id01.k === 'field') {
-      // Field path - use field kernel
+      // Field path - use fieldZipSig kernel with turns signal
       const goldenAngleFn = ctx.b.kernel('fieldGoldenAngle');
-      const result = ctx.b.fieldZip([id01.id], goldenAngleFn, signalTypeField('float', 'default'));
+      const result = ctx.b.fieldZipSig(id01.id, [turnsSig], goldenAngleFn, signalTypeField('float', 'default'));
 
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();

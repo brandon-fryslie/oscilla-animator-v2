@@ -36,7 +36,7 @@ describe('Expression Block Definition', () => {
     expect(def?.label).toBe('Expression');
   });
 
-  it('has 5 optional input ports', () => {
+  it('has 3 optional input ports (in0, in1, refs)', () => {
     const def = getBlockDefinition('Expression');
     expect(def?.inputs).toBeDefined();
 
@@ -44,14 +44,18 @@ describe('Expression Block Definition', () => {
     const portKeys = Object.keys(def!.inputs).filter(
       k => def!.inputs[k].exposedAsPort !== false
     );
-    expect(portKeys).toEqual(['in0', 'in1', 'in2', 'in3', 'in4']);
+    expect(portKeys).toEqual(['in0', 'in1', 'refs']);
 
     // Verify they're all optional
     expect(def?.inputs.in0.optional).toBe(true);
     expect(def?.inputs.in1.optional).toBe(true);
-    expect(def?.inputs.in2.optional).toBe(true);
-    expect(def?.inputs.in3.optional).toBe(true);
-    expect(def?.inputs.in4.optional).toBe(true);
+    expect(def?.inputs.refs.optional).toBe(true);
+
+    // Verify refs is a vararg port
+    expect(def?.inputs.refs.isVararg).toBe(true);
+    expect(def?.inputs.refs.varargConstraint).toBeDefined();
+    expect(def?.inputs.refs.varargConstraint?.payloadType).toBe('float');
+    expect(def?.inputs.refs.varargConstraint?.cardinalityConstraint).toBe('any');
   });
 
   it('has 1 output port', () => {
@@ -228,7 +232,7 @@ describe('Expression Block Lowering', () => {
       inputs: [],
       inputsById: {
         in0: sigRef(in0Sig, valueSlot(0), intType),
-        // in1, in2, in3, in4 unwired
+        // in1, refs unwired
       },
       config: { expression: 'in0 * 2' },
     });
