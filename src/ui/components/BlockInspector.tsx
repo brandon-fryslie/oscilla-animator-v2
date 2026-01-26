@@ -6,7 +6,7 @@
  * Supports editing of displayName and block params.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useStores } from '../../stores';
 import { colors } from '../theme';
@@ -26,6 +26,11 @@ import {
 } from './common';
 import { validateCombineMode } from '../../compiler/passes-v2/combine-utils';
 import { ConnectionPicker } from './ConnectionPicker';
+import { AddressRegistry } from '../../graph/address-registry';
+import { SuggestionProvider } from '../../expr/suggestions';
+import type { Suggestion } from '../../expr/suggestions';
+import { AutocompleteDropdown } from '../expression-editor/AutocompleteDropdown';
+import { getCursorPosition, adjustPositionForViewport } from '../expression-editor/cursorPosition';
 
 // =============================================================================
 // Helper Functions
@@ -259,7 +264,7 @@ function TimeRootBlock() {
  */
 function getValidCombineModes(payload: string): CombineMode[] {
   const allModes: CombineMode[] = ['last', 'first', 'sum', 'average', 'max', 'min', 'mul', 'layer', 'or', 'and'];
-  
+
   return allModes.filter(mode => {
     // For signal world (most common for ports)
     const result = validateCombineMode(mode, 'signal', payload);
@@ -834,7 +839,7 @@ const BlockDetails = observer(function BlockDetails({ block, patch }: BlockDetai
       </div>
 
       {/* Editable Parameters */}
-      <ParamsEditor block={block} typeInfo={typeInfo} />
+      <ParamsEditor block={block} typeInfo={typeInfo} patch={patch} />
     </div>
   );
 });
@@ -1736,9 +1741,10 @@ const DefaultSourceParamField = observer(function DefaultSourceParamField({
 interface ParamsEditorProps {
   block: Block;
   typeInfo: BlockDef;
+  patch: Patch;
 }
 
-const ParamsEditor = observer(function ParamsEditor({ block, typeInfo }: ParamsEditorProps) {
+const ParamsEditor = observer(function ParamsEditor({ block, typeInfo, patch }: ParamsEditorProps) {
   const params = block.params || {};
   const paramKeys = Object.keys(params);
 
@@ -1766,6 +1772,7 @@ const ParamsEditor = observer(function ParamsEditor({ block, typeInfo }: ParamsE
             paramKey={key}
             value={params[key]}
             typeInfo={typeInfo}
+            patch={patch}
           />
         ))}
       </div>
@@ -1781,19 +1788,135 @@ const ParamsEditor = observer(function ParamsEditor({ block, typeInfo }: ParamsE
 interface ExpressionEditorProps {
   blockId: BlockId;
   value: string;
+  patch: Patch;
 }
 
-const ExpressionEditor = observer(function ExpressionEditor({ blockId, value }: ExpressionEditorProps) {
+/**
+ * Extract current identifier prefix from expression at cursor position.
+ * Scans backward from cursor to find alphanumeric+underscore sequence.
+ *
+ * Returns { prefix: string, startOffset: number } or null if not in identifier.
+ */
+function extractIdentifierPrefix(value: string, cursorPos: number): { prefix: string; startOffset: number } | null {
+  if (cursorPos === 0) return null;
+
+  let start = cursorPos - 1;
+  // Scan backward while we see identifier chars
+  while (start >= 0 && /[a-zA-Z0-9_]/.test(value[start])) {
+    start--;
+  }
+
+  // If we stopped at a dot, check if it's part of block.port syntax
+  const identifierStart = start + 1;
+  if (identifierStart >= cursorPos) {
+    return null; // No identifier chars before cursor
+  }
+
+  const prefix = value.substring(identifierStart, cursorPos);
+  return { prefix, startOffset: identifierStart };
+}
+
+/**
+ * Detect if cursor is after a dot (block.port context).
+ * Returns the block name if found, otherwise null.
+ */
+function detectBlockContext(value: string, cursorPos: number): string | null {
+  if (cursorPos === 0) return null;
+
+  // Check if immediately after a dot
+  if (value[cursorPos - 1] === '.') {
+    // Scan backward to find the block name
+    let start = cursorPos - 2;
+    while (start >= 0 && /[a-zA-Z0-9_]/.test(value[start])) {
+      start--;
+    }
+    const blockName = value.substring(start + 1, cursorPos - 1);
+    return blockName || null;
+  }
+
+  // Check if we're in the middle of typing a port name after a dot
+  const identifierPrefix = extractIdentifierPrefix(value, cursorPos);
+  if (identifierPrefix && identifierPrefix.startOffset > 0 && value[identifierPrefix.startOffset - 1] === '.') {
+    // Scan backward from the dot to find block name
+    let start = identifierPrefix.startOffset - 2;
+    while (start >= 0 && /[a-zA-Z0-9_]/.test(value[start])) {
+      start--;
+    }
+    const blockName = value.substring(start + 1, identifierPrefix.startOffset - 1);
+    return blockName || null;
+  }
+
+  return null;
+}
+
+/**
+ * Insert suggestion into textarea at current cursor position.
+ * Replaces the prefix and positions cursor appropriately.
+ */
+function insertSuggestion(
+  textarea: HTMLTextAreaElement,
+  suggestion: Suggestion,
+  filterPrefix: string,
+  prefixStartOffset: number
+): void {
+  const text = textarea.value;
+  const before = text.substring(0, prefixStartOffset);
+  const after = text.substring(textarea.selectionStart);
+
+  let insertText = suggestion.label;
+  let cursorOffset = insertText.length;
+
+  // For functions, position cursor inside parens
+  if (suggestion.type === 'function') {
+    cursorOffset = insertText.length - 1; // Before closing paren
+  }
+
+  // For blocks, add a dot to trigger port completion
+  if (suggestion.type === 'block') {
+    insertText += '.';
+    cursorOffset = insertText.length; // After the dot
+  }
+
+  const newValue = before + insertText + after;
+  const newCursorPos = prefixStartOffset + cursorOffset;
+
+  // Update textarea
+  textarea.value = newValue;
+  textarea.selectionStart = newCursorPos;
+  textarea.selectionEnd = newCursorPos;
+
+  // Trigger change event
+  const event = new Event('input', { bubbles: true });
+  textarea.dispatchEvent(event);
+}
+
+const ExpressionEditor = observer(function ExpressionEditor({ blockId, value, patch }: ExpressionEditorProps) {
   const { patch: patchStore, diagnostics: diagnosticsStore } = useStores();
   const [localValue, setLocalValue] = useState(value);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Autocomplete state
+  const [showAutocomplete, setShowAutocomplete] = useState(false);
+  const [suggestionIndex, setSuggestionIndex] = useState(0);
+  const [cursorPosition, setCursorPosition] = useState(0);
+  const [filterPrefix, setFilterPrefix] = useState('');
+  const [blockContext, setBlockContext] = useState<string | null>(null);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
+  const [filteredSuggestions, setFilteredSuggestions] = useState<readonly Suggestion[]>([]);
+
+  // Create SuggestionProvider (recreate when patch changes)
+  const suggestionProvider = useMemo(() => {
+    const registry = AddressRegistry.buildFromPatch(patch);
+    return new SuggestionProvider(patch, registry);
+  }, [patch]);
 
   // Update local value when prop changes
-  React.useEffect(() => {
+  useEffect(() => {
     setLocalValue(value);
   }, [value]);
 
   // Get expression-related errors for this block
-  const expressionError = React.useMemo(() => {
+  const expressionError = useMemo(() => {
     const allDiagnostics = diagnosticsStore.activeDiagnostics;
     const blockErrors = allDiagnostics.filter(
       (diag) =>
@@ -1804,33 +1927,158 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value }: 
     return blockErrors.length > 0 ? blockErrors[0] : null;
   }, [blockId, diagnosticsStore.activeDiagnostics]);
 
+  // Update suggestions when filter or context changes
+  useEffect(() => {
+    if (!showAutocomplete) {
+      setFilteredSuggestions([]);
+      return;
+    }
+
+    let suggestions: readonly Suggestion[];
+
+    if (blockContext) {
+      // Port completion context
+      suggestions = suggestionProvider.suggestBlockPorts(blockContext);
+      if (filterPrefix) {
+        suggestions = suggestionProvider.filterSuggestions(filterPrefix, 'port').filter(s => s.type === 'port');
+      }
+    } else if (filterPrefix) {
+      // Identifier completion context
+      suggestions = suggestionProvider.filterSuggestions(filterPrefix);
+    } else {
+      // Ctrl+Space - show all (except ports)
+      suggestions = suggestionProvider.filterSuggestions('');
+    }
+
+    setFilteredSuggestions(suggestions);
+    setSuggestionIndex(0); // Reset selection
+  }, [showAutocomplete, filterPrefix, blockContext, suggestionProvider]);
+
   const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newValue = e.target.value;
     if (newValue.length > 500) return; // Character limit
     setLocalValue(newValue);
+
+    const textarea = e.target;
+    const cursor = textarea.selectionStart;
+    setCursorPosition(cursor);
+
+    // Check for block.port context
+    const blockCtx = detectBlockContext(newValue, cursor);
+    setBlockContext(blockCtx);
+
+    // Extract identifier prefix
+    const identifierData = extractIdentifierPrefix(newValue, cursor);
+    if (identifierData) {
+      setFilterPrefix(identifierData.prefix);
+      setShowAutocomplete(true);
+
+      // Calculate dropdown position
+      if (textareaRef.current) {
+        const pos = getCursorPosition(textareaRef.current, cursor);
+        const adjusted = adjustPositionForViewport(pos, 200, 250);
+        setDropdownPosition(adjusted);
+      }
+    } else if (blockCtx) {
+      // After dot, but no port name yet
+      setFilterPrefix('');
+      setShowAutocomplete(true);
+
+      if (textareaRef.current) {
+        const pos = getCursorPosition(textareaRef.current, cursor);
+        const adjusted = adjustPositionForViewport(pos, 200, 250);
+        setDropdownPosition(adjusted);
+      }
+    } else {
+      setShowAutocomplete(false);
+      setFilterPrefix('');
+    }
   }, []);
 
   const handleBlur = useCallback(() => {
-    if (localValue !== value) {
-      patchStore.updateBlockParams(blockId, { expression: localValue });
-    }
+    // Delay to allow dropdown click to register
+    setTimeout(() => {
+      if (localValue !== value) {
+        patchStore.updateBlockParams(blockId, { expression: localValue });
+      }
+    }, 200);
   }, [blockId, localValue, value, patchStore]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (showAutocomplete && filteredSuggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSuggestionIndex(prev => (prev + 1) % filteredSuggestions.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSuggestionIndex(prev => (prev - 1 + filteredSuggestions.length) % filteredSuggestions.length);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        const selected = filteredSuggestions[suggestionIndex];
+        if (selected && textareaRef.current) {
+          const identifierData = extractIdentifierPrefix(localValue, cursorPosition);
+          const prefixStartOffset = identifierData?.startOffset ?? cursorPosition;
+          insertSuggestion(textareaRef.current, selected, filterPrefix, prefixStartOffset);
+          setShowAutocomplete(false);
+          setFilterPrefix('');
+          setBlockContext(null);
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowAutocomplete(false);
+        setFilterPrefix('');
+        setBlockContext(null);
+        return;
+      }
+    }
+
+    // Ctrl+Space to force show autocomplete
+    if ((e.ctrlKey || e.metaKey) && e.key === ' ') {
+      e.preventDefault();
+      setShowAutocomplete(true);
+      setFilterPrefix('');
+      setBlockContext(null);
+      if (textareaRef.current) {
+        const pos = getCursorPosition(textareaRef.current, textareaRef.current.selectionStart);
+        const adjusted = adjustPositionForViewport(pos, 200, 250);
+        setDropdownPosition(adjusted);
+      }
+      return;
+    }
+
+    // Ctrl/Cmd+Enter: trigger immediate update (blur will save)
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-      // Ctrl/Cmd+Enter: trigger immediate update (blur will save)
       e.currentTarget.blur();
     }
-  }, []);
+  }, [showAutocomplete, filteredSuggestions, suggestionIndex, filterPrefix, localValue, cursorPosition]);
+
+  const handleSelectSuggestion = useCallback((suggestion: Suggestion) => {
+    if (textareaRef.current) {
+      const identifierData = extractIdentifierPrefix(localValue, cursorPosition);
+      const prefixStartOffset = identifierData?.startOffset ?? cursorPosition;
+      insertSuggestion(textareaRef.current, suggestion, filterPrefix, prefixStartOffset);
+      setShowAutocomplete(false);
+      setFilterPrefix('');
+      setBlockContext(null);
+      textareaRef.current.focus();
+    }
+  }, [localValue, cursorPosition, filterPrefix]);
 
   const hasError = expressionError !== null;
 
   return (
-    <div>
+    <div style={{ position: 'relative' }}>
       <label style={{ fontSize: '12px', color: colors.textSecondary, display: 'block', marginBottom: '4px' }}>
         Expression
       </label>
       <textarea
+        ref={textareaRef}
         value={localValue}
         onChange={handleChange}
         onBlur={handleBlur}
@@ -1867,6 +2115,20 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value }: 
           {expressionError.message}
         </div>
       )}
+
+      {/* Autocomplete Dropdown */}
+      <AutocompleteDropdown
+        suggestions={filteredSuggestions}
+        selectedIndex={suggestionIndex}
+        onSelect={handleSelectSuggestion}
+        isVisible={showAutocomplete}
+        position={dropdownPosition}
+        onClose={() => {
+          setShowAutocomplete(false);
+          setFilterPrefix('');
+          setBlockContext(null);
+        }}
+      />
     </div>
   );
 });
@@ -1880,14 +2142,15 @@ interface ParamFieldProps {
   paramKey: string;
   value: unknown;
   typeInfo: BlockDef;
+  patch: Patch;
 }
 
-const ParamField = observer(function ParamField({ blockId, paramKey, value, typeInfo }: ParamFieldProps) {
+const ParamField = observer(function ParamField({ blockId, paramKey, value, typeInfo, patch }: ParamFieldProps) {
   const { patch: patchStore } = useStores();
   // Special case: Expression block with expression parameter
   // Render multiline textarea instead of single-line text input
   if (typeInfo.type === 'Expression' && paramKey === 'expression') {
-    return <ExpressionEditor blockId={blockId} value={String(value ?? '')} />;
+    return <ExpressionEditor blockId={blockId} value={String(value ?? '')} patch={patch} />;
   }
 
 

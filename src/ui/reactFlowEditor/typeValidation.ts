@@ -189,6 +189,10 @@ function canTransformDomain(fromDomain: string, toDomain: string): boolean {
 /**
  * Check if two types are directly compatible (no adapter needed).
  * Based on pass2-types.ts isTypeCompatible().
+ *
+ * For UI validation, we're more lenient with type variables (payloadVar, unitVar)
+ * since they get resolved during compilation. This allows users to make connections
+ * that will be validated properly by the compiler.
  */
 function isTypeCompatible(from: SignalType, to: SignalType): boolean {
   const fromCard = getAxisValue(from.extent.cardinality, DEFAULTS_V0.cardinality);
@@ -196,10 +200,16 @@ function isTypeCompatible(from: SignalType, to: SignalType): boolean {
   const toCard = getAxisValue(to.extent.cardinality, DEFAULTS_V0.cardinality);
   const toTemp = getAxisValue(to.extent.temporality, DEFAULTS_V0.temporality);
 
-  // Payload must match exactly
-  if (from.payload !== to.payload) {
-    return false;
+  // Payload must match, but payload variables are polymorphic
+  const fromIsPayloadVar = isPayloadVar(from.payload);
+  const toIsPayloadVar = isPayloadVar(to.payload);
+  if (!fromIsPayloadVar && !toIsPayloadVar) {
+    // Both concrete - must match exactly
+    if (from.payload !== to.payload) {
+      return false;
+    }
   }
+  // If either is a payload variable, allow connection (will be resolved at compile time)
 
   // Unit must match (per spec: no implicit conversion)
   // Exception: unit variables (unitVar) are polymorphic and match any unit

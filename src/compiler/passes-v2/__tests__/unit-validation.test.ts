@@ -6,9 +6,19 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { pass2TypeGraph } from '../pass2-types';
+import { pass1TypeConstraints, type TypeResolvedPatch } from '../pass1-type-constraints';
 import type { NormalizedPatch } from '../../ir/patches';
 import { signalTypeSignal, unitPhase01, unitRadians, unitScalar } from '../../../core/canonical-types';
 import { registerBlock } from '../../../blocks/registry';
+
+/** Helper to run pass1 and pass2 in sequence */
+function runPass1AndPass2(patch: NormalizedPatch) {
+  const pass1Result = pass1TypeConstraints(patch);
+  if ('kind' in pass1Result && pass1Result.kind === 'error') {
+    throw new Error(`Pass1 error: ${pass1Result.errors.map((e) => e.message).join(', ')}`);
+  }
+  return pass2TypeGraph(pass1Result as TypeResolvedPatch);
+}
 
 describe('Unit Validation', () => {
   // Mock console.warn to capture warnings
@@ -77,7 +87,7 @@ describe('Unit Validation', () => {
     };
 
     // Unit mismatch is now a hard error (requires adapter)
-    expect(() => pass2TypeGraph(patch)).toThrow(/Type mismatch/);
+    expect(() => runPass1AndPass2(patch)).toThrow(/Type mismatch|conflict/i);
   });
 
   it('should not warn when units match', () => {
@@ -129,8 +139,8 @@ describe('Unit Validation', () => {
       blockOutputTypes: new Map(),
     };
 
-    // Run pass2
-    pass2TypeGraph(patch);
+    // Run pass1 then pass2
+    runPass1AndPass2(patch);
 
     // Verify no warning
     expect(warnings.length).toBe(0);
@@ -185,8 +195,8 @@ describe('Unit Validation', () => {
       blockOutputTypes: new Map(),
     };
 
-    // Run pass2
-    pass2TypeGraph(patch);
+    // Run pass1 then pass2
+    runPass1AndPass2(patch);
 
     // Verify no warning (backwards compatible)
     expect(warnings.length).toBe(0);

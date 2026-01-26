@@ -78,8 +78,10 @@ describe('Connection Validation - Behavioral Tests', () => {
       const { patch, ids } = createTestPatch();
 
       // Array outputs Field, Const (signal) expects Signal — no reduction adapter exists
-      // fieldBlock is FromDomainId which outputs a Field
-      const result = validateConnection(ids.fieldBlock, 'out', ids.const, 'value', patch);
+      // fieldBlock is FromDomainId which outputs a Field on port 'id01'
+      // Const has input 'value' which expects Signal, not Field
+      // Note: Const.value is not exposed as a port (exposedAsPort: false), so we connect to Add.a instead
+      const result = validateConnection(ids.fieldBlock, 'id01', ids.add, 'a', patch);
 
       expect(result.valid).toBe(false);
       expect(result.reason).toMatch(/Type mismatch|incompatible/i);
@@ -131,30 +133,38 @@ describe('Connection Validation - Behavioral Tests', () => {
   });
 
   describe('Field instance matching', () => {
-    it('validates Field<float> → Field<float> connections based on instance', () => {
+    it('blocks Field → Signal connections (cardinality mismatch)', () => {
       const { patch, ids } = createPatchWithFieldInstances();
 
-      // Both field blocks use the same Array instance
-      // FromDomainId has input 'domain', not 'in'
-      const result = validateConnection(ids.fieldA, 'out', ids.fieldB, 'a', patch);
+      // FromDomainId.id01 outputs a Field<float>
+      // Pulse.id01 is declared as Signal<float> in the block definition
+      // At the UI level, we check declared types, not inferred cardinality
+      // So Field → Signal is blocked as a cardinality mismatch
+      const result = validateConnection(ids.fieldA, 'id01', ids.fieldB, 'id01', patch);
 
-      // Note: Instance matching happens at compile time, not at connection validation time.
-      // At the UI level, we only validate basic type compatibility (Field vs Signal, payload type).
-      // Instance IDs are resolved during compilation, not during UI connection validation.
-      // So this connection should be allowed at the UI level.
-      expect(result.valid).toBe(true);
+      // Cardinality mismatch: Field (many) → Signal (one)
+      // The actual cardinality inference happens at compile time when the graph is resolved
+      // But at UI validation time, we use declared types
+      expect(result.valid).toBe(false);
+      expect(result.reason).toMatch(/Type mismatch/i);
     });
 
-    it('allows Field<float> → Field<float> even with different instances at UI level', () => {
-      const { patch, ids } = createPatchWithDifferentInstances();
+    it('blocks Field → declared-Signal even for cardinality-generic blocks', () => {
+      // Create a patch with FromDomainId (outputs Field) and Add (declared as Signal)
+      // Even though Add is cardinality-generic, its declared type is Signal<float>
+      // The actual cardinality inference happens during compilation
+      const patchWithAdd = buildPatch((b) => {
+        const array1 = b.addBlock('Array', { size: 10 });
+        b.addBlock('FromDomainId', {}, { domainId: array1 });
+        b.addBlock('Add', {}); // declared type: Signal<float>
+      });
+      // Connect FromDomainId.id01 (Field) to Add.a (declared Signal)
+      const result = validateConnection('b1', 'id01', 'b2', 'a', patchWithAdd);
 
-      // Field blocks use different Array instances
-      const result = validateConnection(ids.fieldA, 'out', ids.fieldB, 'a', patch);
-
-      // Instance mismatch is caught by the COMPILER, not by UI validation.
-      // The UI only validates that both are Field<float>, which they are.
-      // This is correct behavior - instance validation is a compilation concern.
-      expect(result.valid).toBe(true);
+      // At UI validation time, we see Field → Signal which is a cardinality mismatch
+      // The cardinality-generic inference happens later during compilation
+      expect(result.valid).toBe(false);
+      expect(result.reason).toMatch(/Type mismatch/i);
     });
   });
 });
@@ -338,24 +348,15 @@ describe('Adapter-aware Connection Validation', () => {
     });
 
     it('does not set adapter field when types match directly', () => {
+      // Use Add.out → Add.a: both are Signal<float:scalar>
+      // This should connect directly without any adapter
       const patch = buildPatch((b) => {
-        b.addBlock('TestUIPhaseSource');
-        b.addBlock('TestUIPhaseSource'); // same type, different block
+        b.addBlock('Add', {}); // b0: first Add block
+        b.addBlock('Add', {}); // b1: second Add block
       });
 
-      // phase01 → phase01 (exact match)
-      const result = validateConnection('b0', 'out', 'b1', 'out', patch);
-      // This is actually an invalid connection (output→output not valid)
-      // Let's use proper matching:
-      const patch2 = buildPatch((b) => {
-        b.addBlock('TestUIScalarSource');
-        b.addBlock('TestUIScalarSource');
-      });
-
-      // scalar output → scalar output won't match (no input port)
-      // Just verify no adapter on exact match using a real case
-      const { patch: testPatch, ids } = createTestPatch();
-      const res = validateConnection(ids.osc, 'out', ids.add, 'a', testPatch);
+      // Add.out (float:scalar) → Add.a (float:scalar) should connect directly
+      const res = validateConnection('b0', 'out', 'b1', 'a', patch);
       expect(res.valid).toBe(true);
       expect(res.adapter).toBeUndefined();
     });

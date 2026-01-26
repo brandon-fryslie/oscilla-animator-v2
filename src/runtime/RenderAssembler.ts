@@ -1114,8 +1114,10 @@ export function assembleDrawPathInstancesOp(
   // Get instance declaration
   const instance = instances.get(step.instanceId);
   if (!instance) {
-    console.warn(`RenderAssembler: Instance ${step.instanceId} not found`);
-    return [];
+    throw new Error(
+      `RenderAssembler: Instance ${step.instanceId} not found in state.instances. ` +
+      `This indicates a compilation error where StepRender references an undeclared instance.`
+    );
   }
 
   // Resolve count from instance

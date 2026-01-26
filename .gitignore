@@ -10,6 +10,13 @@ node_modules/
 *.swo
 .vscode/
 
+# Backup files
+*.bkp
+*.bkp[0-9]*
+*.backup
+*.old
+*.ui[0-9]*
+
 # OS
 .DS_Store
 Thumbs.db

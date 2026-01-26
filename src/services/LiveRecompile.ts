@@ -76,6 +76,8 @@ export function setupLiveRecompileReaction(
       const blocks = store.patch.blocks;
       const edgeCount = store.patch.edges.length;
       const hash = hashBlockParams(blocks);
+      // DEBUG: Log whenever the reaction expression runs
+      console.log('[RECOMPILE-DEBUG] Reaction expression:', { blockCount: blocks.size, edgeCount, hashLen: hash.length });
       return { blockCount: blocks.size, edgeCount, hash };
     },
     ({ blockCount, edgeCount, hash }) => {
@@ -83,6 +85,8 @@ export function setupLiveRecompileReaction(
       if (hash === lastBlockParamsHash && blockCount === lastBlockCount && edgeCount === lastEdgeCount) {
         return;
       }
+      // DEBUG: Log recompile trigger
+      console.log('[RECOMPILE-DEBUG] Triggering recompile:', { blockCount, edgeCount, hashChanged: hash !== lastBlockParamsHash });
       lastBlockParamsHash = hash;
       lastBlockCount = blockCount;
       lastEdgeCount = edgeCount;

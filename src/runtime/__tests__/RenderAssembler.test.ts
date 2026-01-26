@@ -89,7 +89,7 @@ describe('RenderAssembler', () => {
   });
 
   describe('assembleDrawPathInstancesOp (v2)', () => {
-    it('returns empty array when instance not found', () => {
+    it('throws error when instance not found', () => {
       const state = createMockState();
       const step: StepRender = {
         kind: 'render',
@@ -105,11 +105,9 @@ describe('RenderAssembler', () => {
     resolvedCamera: DEFAULT_CAMERA,
       };
 
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const result = assembleDrawPathInstancesOp(step, context, new BufferPool());
-      warnSpy.mockRestore();
-
-      expect(result).toEqual([]);
+      expect(() => assembleDrawPathInstancesOp(step, context, new BufferPool())).toThrow(
+        /Instance missing-instance not found/
+      );
     });
 
     it('returns empty array when instance count is 0', () => {

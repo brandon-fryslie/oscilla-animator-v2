@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "owner": "secondsky",
+  "repo": "claude-skills",
+  "path": "plugins/motion/skills/motion",
+  "branch": "main",
+  "sha": "337a9521d713f428fc529219ee07577a08164c84"
+}

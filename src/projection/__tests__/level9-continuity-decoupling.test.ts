@@ -147,9 +147,12 @@ describe('Level 9 Integration: Continuity Unaffected by Toggle', () => {
       fieldExprs: { nodes: [], idMap: new Map() },
       eventExprs: { nodes: [], idMap: new Map() },
       slotMeta: [
-        { slot: 10 as ValueSlot, storage: 'object', offset: 0 },
-        { slot: 11 as ValueSlot, storage: 'object', offset: 1 },
-        { slot: 100 as ValueSlot, storage: 'object', offset: 2 },
+        // System-reserved slots that executeFrame writes to
+        { slot: 0 as ValueSlot, storage: 'f64', offset: 0, stride: 4 }, // time.palette
+        // Test slots
+        { slot: 10 as ValueSlot, storage: 'object', offset: 0, stride: 3 },
+        { slot: 11 as ValueSlot, storage: 'object', offset: 1, stride: 3 },
+        { slot: 100 as ValueSlot, storage: 'object', offset: 2, stride: 3 },
       ],
       fieldSlotRegistry: new Map(),
       renderGlobals: [],

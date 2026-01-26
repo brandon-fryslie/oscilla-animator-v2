@@ -75,13 +75,15 @@ describe('Expression Block Lowering', () => {
 
   beforeEach(() => {
     builder = new IRBuilderImpl();
+    // Expression block outputs float by default
+    const floatType = signalType('float');
     ctx = {
       b: builder,
       blockIdx: blockIndex(0),
       blockType: 'Expression',
       instanceId: 'inst_0',
       inTypes: [],
-      outTypes: [],
+      outTypes: [floatType], // Expression block has one output
       seedConstId: 0,
     };
   });

@@ -7,7 +7,7 @@
  * @internal - Test-only infrastructure. Not part of public API.
  */
 
-import type { MappingState } from '../runtime/ContinuityState';
+import type { MappingState, StableTargetId } from '../runtime/ContinuityState';
 import { instanceId as makeInstanceId } from '../compiler/ir/Indices';
 import type { InstanceId } from '../compiler/ir/Indices';
 import type { RuntimeState } from '../runtime/RuntimeState';
@@ -96,6 +96,24 @@ export function testInstanceId(prefix: string, suffix: string): InstanceId {
 }
 
 /**
+ * Create a test StableTargetId for continuity testing.
+ *
+ * StableTargetIds are used by the continuity system to identify targets
+ * across recompiles. Format: 'semantic:instanceId:portName'
+ *
+ * @param semantic - Semantic role (e.g., 'custom', 'position', 'radius')
+ * @param instancePortKey - Combined instance and port (e.g., 'inst:x')
+ * @returns A properly typed StableTargetId
+ *
+ * @example
+ * const targetId = testStableTargetId('custom', 'inst:x');
+ * // Results in 'custom:inst:x' as StableTargetId
+ */
+export function testStableTargetId(semantic: string, instancePortKey: string): StableTargetId {
+  return `${semantic}:${instancePortKey}` as StableTargetId;
+}
+
+/**
  * Create a bare RuntimeState for testing.
  *
  * Returns a freshly initialized RuntimeState with all subsystems created.
@@ -120,19 +138,20 @@ export function createTestRuntimeState(slotCount: number = 100): RuntimeState {
  * This is useful when tests need to manually construct state for unit testing
  * continuity logic in isolation.
  *
- * @param slotCount - Number of value slots (default 100)
  * @param overrides - Optional partial state to merge in
+ * @param slotCount - Number of value slots (default 100)
  * @returns A properly typed RuntimeState
  *
  * @example
- * const state = createMockRuntimeState(100, {
+ * const state = createMockRuntimeState({
+ *   continuity: myContinuity,
  *   values: { objects: new Map() }
  * });
  * // Now state is properly typed and ready to use
  */
 export function createMockRuntimeState(
-  slotCount: number = 100,
-  overrides?: Partial<RuntimeState>
+  overrides?: Partial<RuntimeState>,
+  slotCount: number = 100
 ): RuntimeState {
   const base = createRuntimeState(slotCount);
   return { ...base, ...overrides };

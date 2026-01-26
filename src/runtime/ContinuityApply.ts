@@ -305,10 +305,6 @@ export function initializeSlewWithMapping(
  * @param state - Runtime state
  * @param getBuffer - Function to get buffer for a slot
  */
-// Debug flag - set to true to enable logging
-// NOTE: This logs ONLY on domain changes, not every frame
-const DEBUG_CONTINUITY = false;
-
 export function applyContinuity(
   step: StepContinuityApply,
   state: RuntimeState,
@@ -342,11 +338,6 @@ export function applyContinuity(
     // Buffer size change - save old values before they're overwritten by getOrCreateTargetState
     oldSlewSnapshot = new Float32Array(existingTargetState!.slewBuffer);
     oldGaugeSnapshot = new Float32Array(existingTargetState!.gaugeBuffer);
-    if (DEBUG_CONTINUITY && semantic === 'position') {
-      console.log(`[Continuity] Buffer size change detected: ${existingTargetState!.count} -> ${bufferLength}`);
-      console.log(`[Continuity] Old slew sample [0,1]:`, oldSlewSnapshot[0], oldSlewSnapshot[1]);
-      console.log(`[Continuity] Old gauge sample [0,1]:`, oldGaugeSnapshot[0], oldGaugeSnapshot[1]);
-    }
   }
 
   // Get or create continuity state for this target
@@ -397,27 +388,6 @@ export function applyContinuity(
         : null
     );
 
-    if (DEBUG_CONTINUITY && semantic === 'position') {
-      console.log(`[Continuity] Domain change for ${semantic}:`, {
-        hadPreviousState,
-        hadOldSlewSnapshot: oldSlewSnapshot !== null,
-        hadOldGaugeSnapshot: oldGaugeSnapshot !== null,
-        oldEffectiveLen: oldEffective?.length,
-        oldSlewLen: oldSlew?.length,
-        oldGaugeLen: oldGaugeSnapshot?.length,
-        newBufferLen: bufferLength,
-        mappingKind: mapping?.kind,
-        policy: policy.kind,
-      });
-      if (oldEffective) {
-        console.log(`[Continuity] oldEffective sample [0,1]:`, oldEffective[0], oldEffective[1]);
-      }
-      if (oldGaugeSnapshot) {
-        console.log(`[Continuity] oldGauge snapshot sample [0,1]:`, oldGaugeSnapshot[0], oldGaugeSnapshot[1]);
-      }
-      console.log(`[Continuity] newBase sample [0,1]:`, baseBuffer[0], baseBuffer[1]);
-    }
-
     // For ALL policies that use gauge (preserve, slew, project):
     // Initialize gauge to preserve effective values at boundary (spec §2.5)
     // This ensures mapped elements maintain their visual position at the boundary
@@ -430,13 +400,6 @@ export function applyContinuity(
       stride
     );
 
-    if (DEBUG_CONTINUITY && semantic === 'position') {
-      console.log(`[Continuity] gauge after init sample [0,1]:`, targetState.gaugeBuffer[0], targetState.gaugeBuffer[1]);
-      const effectivePos0 = baseBuffer[0] + targetState.gaugeBuffer[0];
-      const effectivePos1 = baseBuffer[1] + targetState.gaugeBuffer[1];
-      console.log(`[Continuity] effective position [0,1] (base+gauge):`, effectivePos0, effectivePos1);
-    }
-
     // Initialize slew with mapped values
     // For project: Old effective -> slews toward base (no offset)
     // For slew with gauge: Old effective -> slews toward base+gauge
@@ -448,10 +411,6 @@ export function applyContinuity(
       elementCount,
       stride
     );
-
-    if (DEBUG_CONTINUITY && semantic === 'position') {
-      console.log(`[Continuity] slew after init sample [0,1]:`, targetState.slewBuffer[0], targetState.slewBuffer[1]);
-    }
   }
 
   // Get output buffer (may be same as base for in-place)
@@ -483,10 +442,6 @@ export function applyContinuity(
 
       // Mark pulse as applied this frame
       pulseRequest.appliedFrameId = state.cache.frameId;
-
-      if (DEBUG_CONTINUITY) {
-        console.log(`[Continuity] Test pulse applied to ${semantic}: magnitude=${magnitude}, bufferLength=${bufferLength}`);
-      }
     }
   }
 
@@ -527,22 +482,8 @@ export function applyContinuity(
       // Apply tau multiplier and base tau factor to policy tau
       const effectiveTau = policy.tauMs * baseTauFactor * tauMultiplier;
 
-      // Debug logging for gauge decay (only when gauge is non-zero)
-      if (DEBUG_CONTINUITY && semantic === 'position' &&
-          (targetState.gaugeBuffer[0] !== 0 || targetState.gaugeBuffer[1] !== 0)) {
-        console.log(`[Continuity] gauge pre-decay [0,1]:`,
-          targetState.gaugeBuffer[0].toFixed(4), targetState.gaugeBuffer[1].toFixed(4));
-      }
-
       // Decay gauge toward zero over time (using config exponent)
       decayGauge(targetState.gaugeBuffer, effectiveTau, dtMs, bufferLength, decayExponent);
-
-      // Debug logging after decay (only when gauge is non-zero)
-      if (DEBUG_CONTINUITY && semantic === 'position' &&
-          (targetState.gaugeBuffer[0] !== 0 || targetState.gaugeBuffer[1] !== 0)) {
-        console.log(`[Continuity] gauge post-decay [0,1]:`,
-          targetState.gaugeBuffer[0].toFixed(4), targetState.gaugeBuffer[1].toFixed(4));
-      }
 
       // Apply gauge: x_gauged = x_base + Δ
       applyAdditiveGauge(baseBuffer, targetState.gaugeBuffer, outputBuffer, bufferLength);

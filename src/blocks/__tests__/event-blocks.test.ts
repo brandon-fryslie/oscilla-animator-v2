@@ -15,7 +15,8 @@ import { executeFrame } from '../../runtime/ScheduleExecutor';
 import { evaluateSignal } from '../../runtime/SignalEvaluator';
 import { sigExprId, eventSlotId } from '../../compiler/ir/Indices';
 import type { StepEvalSig, ValueSlot } from '../../compiler/ir/types';
-import type { CompiledProgramIR } from '../../compiler/ir/program';
+import type { CompiledProgramIR, computeStorageSizes } from '../../compiler/ir/program';
+import { computeStorageSizes as getStorageSizes } from '../../compiler/ir/program';
 import { signalType } from '../../core/canonical-types';
 
 /**
@@ -50,8 +51,9 @@ function compileAndRun(patchFn: (b: PatchBuilder) => void, frames: number[] = [1
 
   const program = result.program;
   const schedule = program.schedule;
+  const sizes = getStorageSizes(program.slotMeta);
   const state = createRuntimeState(
-    program.slotMeta.length,
+    sizes.f64,
     schedule.stateSlotCount ?? 0,
     schedule.eventSlotCount ?? 0,
     schedule.eventExprCount ?? 0
@@ -94,8 +96,9 @@ describe('EventToSignalMask', () => {
 
     const program = result.program;
     const schedule = program.schedule;
+    const sizes = getStorageSizes(program.slotMeta);
     const state = createRuntimeState(
-      program.slotMeta.length,
+      sizes.f64,
       schedule.stateSlotCount ?? 0,
       schedule.eventSlotCount ?? 0,
       schedule.eventExprCount ?? 0
@@ -144,8 +147,9 @@ describe('EventToSignalMask', () => {
 
     const program = result.program;
     const schedule = program.schedule;
+    const sizes = getStorageSizes(program.slotMeta);
     const state = createRuntimeState(
-      program.slotMeta.length,
+      sizes.f64,
       schedule.stateSlotCount ?? 0,
       schedule.eventSlotCount ?? 0,
       schedule.eventExprCount ?? 0
@@ -225,8 +229,9 @@ describe('SampleHold', () => {
 
     const program = result.program;
     const schedule = program.schedule;
+    const sizes = getStorageSizes(program.slotMeta);
     const state = createRuntimeState(
-      program.slotMeta.length,
+      sizes.f64,
       schedule.stateSlotCount ?? 0,
       schedule.eventSlotCount ?? 0,
       schedule.eventExprCount ?? 0
@@ -271,8 +276,9 @@ describe('SampleHold', () => {
     // Compile and run is sufficient — verifies no crash
     const program = result.program;
     const schedule = program.schedule;
+    const sizes = getStorageSizes(program.slotMeta);
     const state = createRuntimeState(
-      program.slotMeta.length,
+      sizes.f64,
       schedule.stateSlotCount ?? 0,
       schedule.eventSlotCount ?? 0,
       schedule.eventExprCount ?? 0
@@ -348,8 +354,9 @@ describe('Event Consumer Blocks Integration', () => {
 
     const program = result.program;
     const schedule = program.schedule;
+    const sizes = getStorageSizes(program.slotMeta);
     const state = createRuntimeState(
-      program.slotMeta.length,
+      sizes.f64,
       schedule.stateSlotCount ?? 0,
       schedule.eventSlotCount ?? 0,
       schedule.eventExprCount ?? 0
@@ -399,8 +406,9 @@ describe('Event Consumer Blocks Integration', () => {
 
     const program = result.program;
     const schedule = program.schedule;
+    const sizes = getStorageSizes(program.slotMeta);
     const state = createRuntimeState(
-      program.slotMeta.length,
+      sizes.f64,
       schedule.stateSlotCount ?? 0,
       schedule.eventSlotCount ?? 0,
       schedule.eventExprCount ?? 0

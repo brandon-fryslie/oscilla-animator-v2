@@ -92,8 +92,8 @@ describe('Stroke Rendering', () => {
       });
 
       const calls: string[] = [];
-      (ctx.fill as any).mockImplementation = (() => calls.push('fill'));
-      (ctx.stroke as any).mockImplementation = (() => calls.push('stroke'));
+      (ctx.fill as ReturnType<typeof vi.fn>).mockImplementation(() => calls.push('fill'));
+      (ctx.stroke as ReturnType<typeof vi.fn>).mockImplementation(() => calls.push('stroke'));
 
       renderDrawPathInstancesOp(ctx, op, 800, 600);
 

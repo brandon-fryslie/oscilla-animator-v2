@@ -367,13 +367,25 @@ export function getBlockDefinition(blockType: string): BlockDef | undefined {
 }
 
 /**
+ * Error thrown when a block type is not registered.
+ */
+export class UnknownBlockTypeError extends Error {
+  readonly code = 'UnknownBlockType';
+
+  constructor(blockType: string) {
+    super(`Unknown block type: "${blockType}" is not registered`);
+    this.name = 'UnknownBlockTypeError';
+  }
+}
+
+/**
  * Get block definition by type, throwing if not registered.
  * Use this in compiler/runtime paths where a missing block is always a bug.
  */
 export function requireBlockDef(blockType: string): BlockDef {
   const def = registry.get(blockType);
   if (!def) {
-    throw new Error(`Unknown block type: "${blockType}" is not registered`);
+    throw new UnknownBlockTypeError(blockType);
   }
   return def;
 }

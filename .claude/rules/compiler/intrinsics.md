@@ -18,9 +18,7 @@ Intrinsics use a closed union type `IntrinsicPropertyName` defined in `src/compi
 export type IntrinsicPropertyName =
   | 'index'
   | 'normalizedIndex'
-  | 'randomId'
-  | 'position'
-  | 'radius';
+  | 'randomId';
 ```
 
 This closed union enables:
@@ -35,8 +33,6 @@ This closed union enables:
 | `index` | int | Element index (0, 1, 2, ..., N-1) | Sequential numbering, array lookups |
 | `normalizedIndex` | float | Normalized index (0.0 to 1.0) | Gradients, lerping across array |
 | `randomId` | float | Deterministic per-element random (0.0 to 1.0) | Stable per-element randomness |
-| `position` | vec2 | Layout-derived position | Particle positions from layout |
-| `radius` | float | Layout-derived radius | Particle size from layout |
 
 ### Implementation Details
 
@@ -46,15 +42,9 @@ This closed union enables:
 
 **randomId**: Uses sine-based pseudo-random generator: `sin(seed * 12.9898) * 43758.5453 % 1.0`. Deterministic and smooth.
 
-**position**: Depends on instance layout:
-- `grid`: Normalized grid positions [0, 1] × [0, 1]
-- `circular`: Positions on circle with specified radius
-- `linear`: Vertical line with specified spacing
-- `unordered`: Defaults to (0.5, 0.5)
+### Note on Position and Radius
 
-**radius**: Depends on instance layout:
-- `circular`: Uses layout radius
-- Others: Default radius 0.02
+Position and radius are **not intrinsics**. They are computed by layout field kernels (e.g., `circleLayout`, `gridLayout`) which take intrinsics like `normalizedIndex` as input and produce position/radius fields. See `src/runtime/FieldKernels.ts` for layout computations.
 
 ## Usage in Blocks
 
@@ -84,8 +74,6 @@ export type IntrinsicPropertyName =
   | 'index'
   | 'normalizedIndex'
   | 'randomId'
-  | 'position'
-  | 'radius'
   | 'yourNewIntrinsic'; // Add here
 ```
 

@@ -9,11 +9,10 @@ import { describe, it, expect } from 'vitest';
 // Import the specialization functions (these are internal, but we can test via the module)
 // For now, we test indirectly via the compilation pipeline
 
-import { pass2TypeGraph } from '../pass2-types';
-import { pass1TypeConstraints } from '../pass1-type-constraints';
-import type { NormalizedPatch } from '../../ir/patches';
+import { compile } from '../../compile';
 import { signalType, signalTypeField } from '../../../core/canonical-types';
 import { isCardinalityGeneric } from '../../../blocks/registry';
+import { buildPatch } from '../../../graph/Patch';
 
 // Import blocks to ensure registry is populated
 import '../../../blocks/math-blocks';
@@ -28,49 +27,43 @@ describe('Cardinality Specialization', () => {
     it('allows Signal+Signal connections for preserve blocks', () => {
       // This is already handled by existing type checking
       // Just verify the compilation path works
-      const patch: NormalizedPatch = {
-        blocks: [
-          { id: 'time', type: 'InfiniteTimeRoot', params: {}, position: { x: 0, y: 0 } },
-          { id: 'const1', type: 'Const', params: { value: 1, payloadType: 'float' }, position: { x: 0, y: 0 } },
-          { id: 'const2', type: 'Const', params: { value: 2, payloadType: 'float' }, position: { x: 0, y: 0 } },
-          { id: 'add', type: 'Add', params: {}, position: { x: 0, y: 0 } },
-        ],
-        edges: [
-          { fromBlock: 1, fromPort: 'out', toBlock: 3, toPort: 'a' },
-          { fromBlock: 2, fromPort: 'out', toBlock: 3, toPort: 'b' },
-        ],
-        timeRoot: 0,
-        revision: 1,
-      };
+      const patch = buildPatch((b) => {
+        b.addBlock('InfiniteTimeRoot', {});
+        const const1 = b.addBlock('Const', { value: 1 });
+        const const2 = b.addBlock('Const', { value: 2 });
+        const add = b.addBlock('Add', {});
+        b.wire(const1, 'out', add, 'a');
+        b.wire(const2, 'out', add, 'b');
+      });
 
-      // Must run pass1 first to resolve unit variables for Const blocks
-      const pass1Result = pass1TypeConstraints(patch);
-      expect(pass1Result.kind).toBe('ok');
-      if (pass1Result.kind !== 'ok') return;
-
-      // Should not throw
-      expect(() => pass2TypeGraph(patch, pass1Result)).not.toThrow();
+      // Should compile successfully
+      const result = compile(patch);
+      expect(result.kind).toBe('ok');
     });
 
-    it('rejects invalid port connections', () => {
-      // This tests that the type checker correctly rejects invalid connections
-      const patch: NormalizedPatch = {
-        blocks: [
-          { id: 'time', type: 'InfiniteTimeRoot', params: {}, position: { x: 0, y: 0 } },
-          { id: 'const', type: 'Const', params: { value: 1, payloadType: 'float' }, position: { x: 0, y: 0 } },
-          // FieldAdd expects Field inputs, not Signal
-          { id: 'fieldAdd', type: 'FieldAdd', params: {}, position: { x: 0, y: 0 } },
-        ],
-        edges: [
-          // Trying to connect to non-existent port - should fail
-          { fromBlock: 1, fromPort: 'out', toBlock: 2, toPort: 'a' },
-        ],
-        timeRoot: 0,
-        revision: 1,
-      };
+    it('rejects unknown block types', () => {
+      // This tests that the compiler correctly rejects unknown block types
+      // Use the buildPatch API but create an invalid block manually
+      const patch = buildPatch((b) => {
+        b.addBlock('InfiniteTimeRoot', {});
+        b.addBlock('Const', { value: 1 });
+      });
 
-      // Should throw due to port/type issues
-      expect(() => pass2TypeGraph(patch)).toThrow();
+      // Add an invalid block manually
+      patch.blocks.set('invalid', {
+        id: 'invalid',
+        type: 'NonExistentBlockType',
+        params: {},
+        displayName: null,
+        domainId: null,
+        role: { kind: 'user', meta: {} },
+        inputPorts: new Map(),
+        outputPorts: new Map(),
+      });
+
+      // Should fail to compile due to unknown block type
+      const result = compile(patch);
+      expect(result.kind).toBe('error');
     });
   });
 

@@ -323,3 +323,47 @@ export interface CombineDebugIR {
   readonly dst: ValueSlot;
   readonly contributors: readonly ValueSlot[]; // in priority / evaluation order
 }
+
+// =============================================================================
+// Helper Functions
+// =============================================================================
+
+/**
+ * Compute required storage sizes from slot metadata.
+ *
+ * Returns the number of cells needed for each storage class.
+ * Use these values to create properly-sized runtime state buffers.
+ *
+ * @param slotMeta - Slot metadata from compiled program
+ * @returns Object with storage size for each class
+ *
+ * @example
+ * const sizes = computeStorageSizes(program.slotMeta);
+ * const state = createRuntimeState(sizes.f64);
+ */
+export function computeStorageSizes(slotMeta: readonly SlotMetaEntry[]): {
+  f64: number;
+  f32: number;
+  i32: number;
+  u32: number;
+  object: number;
+  shape2d: number;
+} {
+  const sizes = {
+    f64: 0,
+    f32: 0,
+    i32: 0,
+    u32: 0,
+    object: 0,
+    shape2d: 0,
+  };
+
+  for (const meta of slotMeta) {
+    const requiredSize = meta.offset + meta.stride;
+    if (requiredSize > sizes[meta.storage]) {
+      sizes[meta.storage] = requiredSize;
+    }
+  }
+
+  return sizes;
+}

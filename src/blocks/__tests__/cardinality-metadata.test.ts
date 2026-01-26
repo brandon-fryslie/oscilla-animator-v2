@@ -49,9 +49,9 @@ describe('Cardinality Metadata', () => {
   describe('Cardinality-generic blocks (preserve + laneLocal)', () => {
     const genericBlocks = [
       'Add', 'Subtract', 'Multiply', 'Divide', 'Modulo',
-      'Oscillator', 'UnitDelay', 'Hash', 'Id01',
+      'Oscillator', 'UnitDelay', 'Hash', 'Accumulator',
       'ColorLFO', 'HSVToColor', 'HsvToRgb',
-      'PolarToCartesian', 'OffsetPosition',
+      'PolarToCartesian', 'OffsetVec',
       'Sin', 'Cos', 'Mod',
       'Expression',
       'JitterVec',
