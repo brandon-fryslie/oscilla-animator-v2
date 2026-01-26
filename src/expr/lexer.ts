@@ -8,7 +8,7 @@
  * - NUMBER: Integer or float literals
  * - IDENT: Identifiers (input names, function names)
  * - Operators: +, -, *, /, %, <, >, <=, >=, ==, !=, &&, ||, !, ?,:
- * - Punctuation: (, ), ,
+ * - Punctuation: (, ), ,, .
  * - EOF: End of input
  */
 
@@ -50,6 +50,7 @@ export enum TokenKind {
   LPAREN = 'LPAREN',
   RPAREN = 'RPAREN',
   COMMA = 'COMMA',
+  DOT = 'DOT',
 
   // Special
   EOF = 'EOF',
@@ -171,6 +172,8 @@ class Lexer {
         return this.makeToken(TokenKind.RPAREN, ch, start);
       case ',':
         return this.makeToken(TokenKind.COMMA, ch, start);
+      case '.':
+        return this.makeToken(TokenKind.DOT, ch, start);
       default:
         throw this.error(`Unexpected character '${ch}'`, start);
     }

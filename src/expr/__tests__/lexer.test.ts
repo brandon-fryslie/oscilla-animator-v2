@@ -93,6 +93,53 @@ describe('Lexer', () => {
       const tokens = tokenize(',');
       expect(tokens[0].kind).toBe(TokenKind.COMMA);
     });
+
+    it('tokenizes dot', () => {
+      const tokens = tokenize('.');
+      expect(tokens[0].kind).toBe(TokenKind.DOT);
+    });
+  });
+
+  describe('Dot Notation (Member Access)', () => {
+    it('tokenizes qualified identifier', () => {
+      const tokens = tokenize('Circle1.radius');
+      expect(tokens).toHaveLength(4); // IDENT + DOT + IDENT + EOF
+      expect(tokens[0].kind).toBe(TokenKind.IDENT);
+      expect(tokens[0].value).toBe('Circle1');
+      expect(tokens[1].kind).toBe(TokenKind.DOT);
+      expect(tokens[2].kind).toBe(TokenKind.IDENT);
+      expect(tokens[2].value).toBe('radius');
+    });
+
+    it('tokenizes chained member access', () => {
+      const tokens = tokenize('a.b.c');
+      expect(tokens).toHaveLength(6); // IDENT + DOT + IDENT + DOT + IDENT + EOF
+      expect(tokens[0].kind).toBe(TokenKind.IDENT);
+      expect(tokens[0].value).toBe('a');
+      expect(tokens[1].kind).toBe(TokenKind.DOT);
+      expect(tokens[2].kind).toBe(TokenKind.IDENT);
+      expect(tokens[2].value).toBe('b');
+      expect(tokens[3].kind).toBe(TokenKind.DOT);
+      expect(tokens[4].kind).toBe(TokenKind.IDENT);
+      expect(tokens[4].value).toBe('c');
+    });
+
+    it('preserves decimal numbers (does not split on dot)', () => {
+      const tokens = tokenize('3.14');
+      expect(tokens).toHaveLength(2); // NUMBER + EOF
+      expect(tokens[0].kind).toBe(TokenKind.NUMBER);
+      expect(tokens[0].value).toBe('3.14');
+    });
+
+    it('handles dot in expression context', () => {
+      const tokens = tokenize('Circle1.radius * 2');
+      expect(tokens).toHaveLength(6); // IDENT + DOT + IDENT + STAR + NUMBER + EOF
+      expect(tokens[0].kind).toBe(TokenKind.IDENT);
+      expect(tokens[1].kind).toBe(TokenKind.DOT);
+      expect(tokens[2].kind).toBe(TokenKind.IDENT);
+      expect(tokens[3].kind).toBe(TokenKind.STAR);
+      expect(tokens[4].kind).toBe(TokenKind.NUMBER);
+    });
   });
 
   describe('Whitespace', () => {
