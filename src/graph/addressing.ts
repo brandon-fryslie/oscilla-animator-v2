@@ -112,3 +112,81 @@ export function getAllAddresses(patch: Patch): CanonicalAddress[] {
 
   return addresses;
 }
+
+// =============================================================================
+// User-Facing Shorthand Support
+// =============================================================================
+
+/**
+ * Resolve user-facing shorthand to canonical address.
+ *
+ * Shorthand format: `blockName.portName`
+ * Examples:
+ * - "my_circle.radius" → output port "radius" on block "my_circle"
+ * - "circle.x" → input or output port "x" on block "circle"
+ *
+ * Resolution rules:
+ * 1. Find block by normalized displayName or blockId
+ * 2. Check output ports first, then input ports
+ * 3. Return null if block or port not found
+ *
+ * @param patch - The patch to search
+ * @param shorthand - Shorthand string (e.g., "blockName.portName")
+ * @returns Canonical address or null if not found
+ */
+export function resolveShorthand(patch: Patch, shorthand: string): CanonicalAddress | null {
+  const [blockPart, portPart] = shorthand.split('.');
+  if (!blockPart || !portPart) return null;
+
+  // Find block by normalized displayName or blockId
+  const block = Array.from(patch.blocks.values()).find(b => {
+    const canonical = b.displayName ? normalizeCanonicalName(b.displayName) : b.id;
+    return canonical === blockPart.toLowerCase() || b.id === blockPart;
+  });
+
+  if (!block) return null;
+
+  // Try output ports first
+  const outputPort = block.outputPorts.get(portPart);
+  if (outputPort) {
+    return getOutputAddress(block, portPart as PortId);
+  }
+
+  // Try input ports
+  const inputPort = block.inputPorts.get(portPart);
+  if (inputPort) {
+    return getInputAddress(block, portPart as PortId);
+  }
+
+  return null;
+}
+
+/**
+ * Generate user-facing shorthand for an output port.
+ *
+ * Format: `canonicalName.portId`
+ * Example: "my_circle.radius"
+ *
+ * @param block - The block containing the port
+ * @param portId - The port ID
+ * @returns Shorthand string
+ */
+export function getShorthandForOutput(block: Block, portId: PortId): string {
+  const canonical = block.displayName ? normalizeCanonicalName(block.displayName) : block.id;
+  return `${canonical}.${portId}`;
+}
+
+/**
+ * Generate user-facing shorthand for an input port.
+ *
+ * Format: `canonicalName.portId`
+ * Example: "my_circle.x"
+ *
+ * @param block - The block containing the port
+ * @param portId - The port ID
+ * @returns Shorthand string
+ */
+export function getShorthandForInput(block: Block, portId: PortId): string {
+  const canonical = block.displayName ? normalizeCanonicalName(block.displayName) : block.id;
+  return `${canonical}.${portId}`;
+}

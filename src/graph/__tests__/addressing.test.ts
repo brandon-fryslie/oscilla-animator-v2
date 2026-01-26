@@ -8,6 +8,9 @@ import {
   getOutputAddress,
   getInputAddress,
   getAllAddresses,
+  resolveShorthand,
+  getShorthandForOutput,
+  getShorthandForInput,
 } from '../addressing';
 import { buildPatch } from '../Patch';
 import { blockId, portId } from '../../types';
@@ -131,13 +134,13 @@ describe('getInputAddress', () => {
     });
 
     const block = Array.from(patch.blocks.values())[0];
-    const addr = getInputAddress(block, portId('freq'));
+    const addr = getInputAddress(block, portId('phase'));
 
     expect(addr).toEqual({
       kind: 'input',
       blockId: block.id,
       canonicalName: 'my_osc',
-      portId: 'freq',
+      portId: 'phase',
     });
   });
 
@@ -147,7 +150,7 @@ describe('getInputAddress', () => {
     });
 
     const block = Array.from(patch.blocks.values())[0];
-    const addr = getInputAddress(block, portId('freq'));
+    const addr = getInputAddress(block, portId('phase'));
 
     expect(addr.canonicalName).toBe(block.id);
   });
@@ -290,6 +293,207 @@ describe('getAllAddresses', () => {
       if ('blockId' in addr) {
         expect(addr.blockId).toBe(block.id);
       }
+    }
+  });
+});
+
+describe('resolveShorthand', () => {
+  it('resolves shorthand for output port', () => {
+    const patch = buildPatch(b => {
+      b.addBlock('Const', { value: 1 }, { displayName: 'My Const' });
+    });
+
+    const block = Array.from(patch.blocks.values())[0];
+    const addr = resolveShorthand(patch, 'my_const.out');
+
+    expect(addr).not.toBeNull();
+    expect(addr?.kind).toBe('output');
+    if (addr?.kind === 'output') {
+      expect(addr.blockId).toBe(block.id);
+      expect(addr.portId).toBe('out');
+    }
+  });
+
+  it('resolves shorthand for input port', () => {
+    const patch = buildPatch(b => {
+      b.addBlock('Oscillator', {}, { displayName: 'My Osc' });
+    });
+
+    const block = Array.from(patch.blocks.values())[0];
+    const addr = resolveShorthand(patch, 'my_osc.phase');
+
+    expect(addr).not.toBeNull();
+    expect(addr?.kind).toBe('input');
+    if (addr?.kind === 'input') {
+      expect(addr.blockId).toBe(block.id);
+      expect(addr.portId).toBe('phase');
+    }
+  });
+
+  it('prefers output ports over input ports', () => {
+    const patch = buildPatch(b => {
+      b.addBlock('Const', { value: 1 }, { displayName: 'My Const' });
+    });
+
+    // Const has both input and output ports
+    const addr = resolveShorthand(patch, 'my_const.out');
+
+    expect(addr).not.toBeNull();
+    expect(addr?.kind).toBe('output'); // Output preferred
+  });
+
+  it('returns null for invalid shorthand format', () => {
+    const patch = buildPatch(b => {
+      b.addBlock('Const', { value: 1 }, { displayName: 'My Const' });
+    });
+
+    expect(resolveShorthand(patch, 'invalid')).toBeNull();
+    expect(resolveShorthand(patch, 'too.many.dots')).toBeNull();
+    expect(resolveShorthand(patch, '')).toBeNull();
+  });
+
+  it('returns null for nonexistent block', () => {
+    const patch = buildPatch(b => {
+      b.addBlock('Const', { value: 1 }, { displayName: 'My Const' });
+    });
+
+    expect(resolveShorthand(patch, 'nonexistent.out')).toBeNull();
+  });
+
+  it('returns null for nonexistent port', () => {
+    const patch = buildPatch(b => {
+      b.addBlock('Const', { value: 1 }, { displayName: 'My Const' });
+    });
+
+    expect(resolveShorthand(patch, 'my_const.nonexistent')).toBeNull();
+  });
+
+  it('handles canonical names correctly', () => {
+    const patch = buildPatch(b => {
+      b.addBlock('Const', { value: 1 }, { displayName: 'My Fancy Block!' });
+    });
+
+    const addr = resolveShorthand(patch, 'my_fancy_block.out');
+
+    expect(addr).not.toBeNull();
+    expect(addr?.canonicalName).toBe('my_fancy_block');
+  });
+
+  it('matches blockId when no displayName', () => {
+    const patch = buildPatch(b => {
+      b.addBlock('Const', { value: 1 }, { displayName: null });
+    });
+
+    const block = Array.from(patch.blocks.values())[0];
+    const addr = resolveShorthand(patch, `${block.id}.out`);
+
+    expect(addr).not.toBeNull();
+    expect(addr?.blockId).toBe(block.id);
+  });
+});
+
+describe('getShorthandForOutput', () => {
+  it('generates shorthand with displayName', () => {
+    const patch = buildPatch(b => {
+      b.addBlock('Const', { value: 1 }, { displayName: 'My Const' });
+    });
+
+    const block = Array.from(patch.blocks.values())[0];
+    const shorthand = getShorthandForOutput(block, portId('out'));
+
+    expect(shorthand).toBe('my_const.out');
+  });
+
+  it('uses blockId when no displayName', () => {
+    const patch = buildPatch(b => {
+      b.addBlock('Const', { value: 1 }, { displayName: null });
+    });
+
+    const block = Array.from(patch.blocks.values())[0];
+    const shorthand = getShorthandForOutput(block, portId('out'));
+
+    expect(shorthand).toBe(`${block.id}.out`);
+  });
+
+  it('preserves port ID exactly', () => {
+    const patch = buildPatch(b => {
+      b.addBlock('Const', { value: 1 }, { displayName: 'My Const' });
+    });
+
+    const block = Array.from(patch.blocks.values())[0];
+    const shorthand = getShorthandForOutput(block, portId('some_output'));
+
+    expect(shorthand).toBe('my_const.some_output');
+  });
+});
+
+describe('getShorthandForInput', () => {
+  it('generates shorthand with displayName', () => {
+    const patch = buildPatch(b => {
+      b.addBlock('Oscillator', {}, { displayName: 'My Osc' });
+    });
+
+    const block = Array.from(patch.blocks.values())[0];
+    const shorthand = getShorthandForInput(block, portId('phase'));
+
+    expect(shorthand).toBe('my_osc.phase');
+  });
+
+  it('uses blockId when no displayName', () => {
+    const patch = buildPatch(b => {
+      b.addBlock('Oscillator', {}, { displayName: null });
+    });
+
+    const block = Array.from(patch.blocks.values())[0];
+    const shorthand = getShorthandForInput(block, portId('phase'));
+
+    expect(shorthand).toBe(`${block.id}.phase`);
+  });
+
+  it('preserves port ID exactly', () => {
+    const patch = buildPatch(b => {
+      b.addBlock('Oscillator', {}, { displayName: 'My Osc' });
+    });
+
+    const block = Array.from(patch.blocks.values())[0];
+    const shorthand = getShorthandForInput(block, portId('some_input'));
+
+    expect(shorthand).toBe('my_osc.some_input');
+  });
+});
+
+describe('shorthand roundtrip', () => {
+  it('output shorthand resolves back to same address', () => {
+    const patch = buildPatch(b => {
+      b.addBlock('Const', { value: 1 }, { displayName: 'My Const' });
+    });
+
+    const block = Array.from(patch.blocks.values())[0];
+    const shorthand = getShorthandForOutput(block, portId('out'));
+    const addr = resolveShorthand(patch, shorthand);
+
+    expect(addr).not.toBeNull();
+    expect(addr?.kind).toBe('output');
+    if (addr?.kind === 'output') {
+      expect(addr.blockId).toBe(block.id);
+      expect(addr.portId).toBe('out');
+    }
+  });
+
+  it('input shorthand resolves back to same address', () => {
+    const patch = buildPatch(b => {
+      b.addBlock('Oscillator', {}, { displayName: 'My Osc' });
+    });
+
+    const block = Array.from(patch.blocks.values())[0];
+    const shorthand = getShorthandForInput(block, portId('phase'));
+    const addr = resolveShorthand(patch, shorthand);
+
+    expect(addr).not.toBeNull();
+    expect(addr?.kind).toBe('input');
+    if (addr?.kind === 'input') {
+      expect(addr.blockId).toBe(block.id);
+      expect(addr.portId).toBe('phase');
     }
   });
 });

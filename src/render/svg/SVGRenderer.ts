@@ -15,9 +15,9 @@ import type {
   DrawPathInstancesOp,
   DrawPrimitiveInstancesOp,
   PathGeometry
-} from './types';
-import { getTopology } from '../shapes/registry';
-import type { PathTopologyDef } from '../shapes/types';
+} from '../types';
+import { getTopology } from '../../shapes/registry';
+import type { PathTopologyDef } from '../../shapes/types';
 
 /**
  * Convert path geometry to SVG d-string.
