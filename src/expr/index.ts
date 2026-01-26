@@ -149,3 +149,15 @@ function extractPayloadTypes(inputs: ReadonlyMap<string, SignalType>): TypeEnv {
 // Re-export types that may be useful for callers
 export type { ExprNode, Position } from './ast';
 export type { TypeEnv } from './typecheck';
+
+// Re-export suggestion types and service
+export type {
+  Suggestion,
+  SuggestionType,
+  FunctionSuggestion,
+  InputSuggestion,
+  BlockSuggestion,
+  PortSuggestion,
+  FunctionSignature,
+} from './suggestions';
+export { SuggestionProvider, getFunctionSignatures } from './suggestions';
