@@ -220,49 +220,6 @@ export function createFrameCache(
 }
 
 /**
- * ExternalInputs - Values fed into the runtime from outside (mouse, MIDI, etc.)
- */
-export interface ExternalInputs {
-  /** Mouse X position (0..1, normalized to canvas) - RAW target */
-  mouseX: number;
-
-  /** Mouse Y position (0..1, normalized to canvas) - RAW target */
-  mouseY: number;
-
-  /** Whether mouse is over the canvas */
-  mouseOver: boolean;
-
-  /** Smoothed X position that follows mouseX */
-  smoothX: number;
-
-  /** Smoothed Y position that follows mouseY */
-  smoothY: number;
-}
-
-/**
- * Create default external inputs
- */
-export function createExternalInputs(): ExternalInputs {
-  return {
-    mouseX: 0.5,
-    mouseY: 0.5,
-    mouseOver: false,
-    smoothX: 0.5,
-    smoothY: 0.5,
-  };
-}
-
-/**
- * Update smooth following - call once per frame
- * @param ext External inputs to update
- * @param lerpFactor How fast to follow (0.02 = slow, 0.1 = fast)
- */
-export function updateSmoothing(ext: ExternalInputs, lerpFactor: number = 0.05): void {
-  ext.smoothX += (ext.mouseX - ext.smoothX) * lerpFactor;
-  ext.smoothY += (ext.mouseY - ext.smoothY) * lerpFactor;
-}
-
-/**
  * HealthMetrics - Runtime health monitoring state
  *
  * Tracks performance metrics and error conditions for diagnostics.
@@ -480,11 +437,8 @@ export interface SessionState {
   /** Time state for wrap detection (persistent across frames and compiles) */
   timeState: TimeState;
 
-  /** External inputs (mouse, MIDI, etc.) - LEGACY, use externalChannels for new code */
-  external: ExternalInputs;
-
   /** External channel system (generic input infrastructure) */
-  externalChannels: ExternalChannelSystem;
+  external: ExternalChannelSystem;
 
   /** Health monitoring metrics */
   health: HealthMetrics;
@@ -578,9 +532,6 @@ export interface RuntimeState {
   /** Time state for wrap detection (persistent across frames) */
   timeState: TimeState;
 
-  /** External inputs (mouse, MIDI, etc.) - LEGACY, use externalChannels for new code */
-  external: ExternalInputs;
-
   /** External channel system (generic input infrastructure) */
   externalChannels: ExternalChannelSystem;
 
@@ -603,8 +554,7 @@ export interface RuntimeState {
 export function createSessionState(): SessionState {
   return {
     timeState: createTimeState(),
-    external: createExternalInputs(),
-    externalChannels: new ExternalChannelSystem(),
+    external: new ExternalChannelSystem(),
     health: createHealthMetrics(),
     continuity: createContinuityState(),
     continuityConfig: createContinuityConfig(),
@@ -656,8 +606,7 @@ export function createRuntimeState(
     events: program.events,
     // SessionState
     timeState: session.timeState,
-    external: session.external,
-    externalChannels: session.externalChannels,
+    externalChannels: session.external,
     health: session.health,
     continuity: session.continuity,
     continuityConfig: session.continuityConfig,
@@ -688,8 +637,7 @@ export function createRuntimeStateFromSession(
     events: program.events,
     // SessionState (preserved)
     timeState: session.timeState,
-    external: session.external,
-    externalChannels: session.externalChannels,
+    externalChannels: session.external,
     health: session.health,
     continuity: session.continuity,
     continuityConfig: session.continuityConfig,
@@ -705,8 +653,7 @@ export function createRuntimeStateFromSession(
 export function extractSessionState(state: RuntimeState): SessionState {
   return {
     timeState: state.timeState,
-    external: state.external,
-    externalChannels: state.externalChannels,
+    external: state.externalChannels,
     health: state.health,
     continuity: state.continuity,
     continuityConfig: state.continuityConfig,
