@@ -21,6 +21,7 @@ import {
   unitMs,
   unitSeconds,
 } from '../../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../../core/canonical-types';
 import { registerBlock } from '../../../blocks/registry';
 
 // Import block definitions to register them
@@ -276,7 +277,7 @@ registerBlock({
   capability: 'pure',
   inputs: {},
   outputs: {
-    out: { label: 'Out', type: signalType('float', unitPhase01()) },
+    out: { label: 'Out', type: signalType(FLOAT, unitPhase01()) },
   },
   lower: () => ({ outputsById: {} }),
 });
@@ -289,7 +290,7 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   inputs: {
-    in: { label: 'In', type: signalType('float', unitRadians()) },
+    in: { label: 'In', type: signalType(FLOAT, unitRadians()) },
   },
   outputs: {},
   lower: () => ({ outputsById: {} }),
@@ -304,7 +305,7 @@ registerBlock({
   capability: 'pure',
   inputs: {},
   outputs: {
-    out: { label: 'Out', type: signalType('float', unitScalar()) },
+    out: { label: 'Out', type: signalType(FLOAT, unitScalar()) },
   },
   lower: () => ({ outputsById: {} }),
 });
@@ -317,7 +318,7 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   inputs: {
-    in: { label: 'In', type: signalType('float', unitNorm01()) },
+    in: { label: 'In', type: signalType(FLOAT, unitNorm01()) },
   },
   outputs: {},
   lower: () => ({ outputsById: {} }),
@@ -372,7 +373,7 @@ describe('Adapter-aware Connection Validation', () => {
         capability: 'pure',
         inputs: {},
         outputs: {
-          out: { label: 'Out', type: signalType('float', unitPhase01()) },
+          out: { label: 'Out', type: signalType(FLOAT, unitPhase01()) },
         },
         lower: () => ({ outputsById: {} }),
       });
@@ -383,7 +384,7 @@ describe('Adapter-aware Connection Validation', () => {
         form: 'primitive',
         capability: 'pure',
         inputs: {
-          in: { label: 'In', type: signalType('float', unitNorm01()) },
+          in: { label: 'In', type: signalType(FLOAT, unitNorm01()) },
         },
         outputs: {},
         lower: () => ({ outputsById: {} }),
@@ -434,27 +435,27 @@ describe('Unit Display Functions', () => {
 
   describe('formatTypeForDisplay with units', () => {
     it('includes unit for phase01: Signal<float:phase>', () => {
-      const type = signalType('float', unitPhase01());
+      const type = signalType(FLOAT, unitPhase01());
       expect(formatTypeForDisplay(type)).toBe('Signal<float:phase>');
     });
 
     it('includes unit for radians: Signal<float:rad>', () => {
-      const type = signalType('float', unitRadians());
+      const type = signalType(FLOAT, unitRadians());
       expect(formatTypeForDisplay(type)).toBe('Signal<float:rad>');
     });
 
     it('omits unit for scalar: Signal<float>', () => {
-      const type = signalType('float', unitScalar());
+      const type = signalType(FLOAT, unitScalar());
       expect(formatTypeForDisplay(type)).toBe('Signal<float>');
     });
 
     it('includes unit for degrees: Signal<float:deg>', () => {
-      const type = signalType('float', unitDegrees());
+      const type = signalType(FLOAT, unitDegrees());
       expect(formatTypeForDisplay(type)).toBe('Signal<float:deg>');
     });
 
     it('includes unit for norm01: Signal<float:0..1>', () => {
-      const type = signalType('float', unitNorm01());
+      const type = signalType(FLOAT, unitNorm01());
       expect(formatTypeForDisplay(type)).toBe('Signal<float:0..1>');
     });
   });

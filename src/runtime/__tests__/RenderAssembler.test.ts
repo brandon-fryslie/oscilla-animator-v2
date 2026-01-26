@@ -12,7 +12,7 @@ import {
 } from '../RenderAssembler';
 import type { StepRender, InstanceDecl, SigExpr } from '../../compiler/ir/types';
 import type { SignalType } from '../../core/canonical-types';
-import { signalType, extentDefault } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION, signalType, extentDefault } from '../../core/canonical-types';
 import type { RuntimeState } from '../RuntimeState';
 import { createRuntimeState } from '../RuntimeState';
 import type { ValueSlot, SigExprId } from '../../types';
@@ -23,7 +23,7 @@ import { DEFAULT_CAMERA } from '../CameraResolver';
 import { BufferPool } from '../BufferPool';
 
 // Helper to create a scalar signal type
-const SCALAR_TYPE: SignalType = signalType('float');
+const SCALAR_TYPE: SignalType = signalType(FLOAT);
 
 // Create a minimal runtime state for testing
 function createMockState(): RuntimeState {
@@ -118,6 +118,7 @@ describe('RenderAssembler', () => {
         instanceId: 'empty-instance',
         positionSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
+        shape: { k: 'sig', topologyId: 1, paramSignals: [] },
       };
 
       const context: AssemblerContext = {

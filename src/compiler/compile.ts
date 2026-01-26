@@ -24,6 +24,7 @@ import type { AcyclicOrLegalGraph } from './ir/patches';
 import { convertCompileErrorsToDiagnostics } from './diagnosticConversion';
 import type { EventHub } from '../events/EventHub';
 import { signalType } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 // debugService import removed for strict compiler isolation (One Source of Truth)
 import { compilationInspector } from '../services/CompilationInspectorService';
 
@@ -441,14 +442,14 @@ function convertLinkedIRToProgram(
   for (let slotId = 0; slotId < builder.getSlotCount?.() || 0; slotId++) {
     const slot = slotId as ValueSlot;
     const slotInfo = slotTypes.get(slot);
-    const type = slotInfo?.type || signalType('float'); // Default to float if no type info
+    const type = slotInfo?.type || signalType(FLOAT); // Default to float if no type info
 
     // Determine storage class from type
     // Field output slots store buffer references in the objects Map
     // Shape payloads use dedicated shape2d bank; all other signals go to f64
     const storage: SlotMetaEntry['storage'] = fieldSlotSet.has(slotId)
       ? 'object'
-      : type.payload === 'shape' ? 'shape2d' : 'f64';
+      : type.payload .kind === 'shape' ? 'shape2d' : 'f64';
 
     // Use stride from slotInfo (which comes from registered type), fallback to computing from payload
     // Objects/fields have stride=1 since they store a single reference
@@ -486,7 +487,7 @@ function convertLinkedIRToProgram(
       storage: 'object',
       offset: storageOffsets.object++,
       stride: 1, // Object slots store a single reference
-      type: signalType('float'),
+      type: signalType(FLOAT),
     });
   }
 
@@ -500,7 +501,7 @@ function convertLinkedIRToProgram(
     storage: 'object',
     offset: storageOffsets.object++,
     stride: 1, // Object slots store a single reference
-    type: signalType('float'), // Type is irrelevant for RenderFrameIR object slot
+    type: signalType(FLOAT), // Type is irrelevant for RenderFrameIR object slot
   });
 
   // Create OutputSpecIR for render frame

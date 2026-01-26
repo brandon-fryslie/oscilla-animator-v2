@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import '../expression-blocks'; // Import to register block
 import { getBlockDefinition } from '../registry';
 import { signalType, type SignalType, strideOf, isPayloadVar } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
 import { IRBuilderImpl } from '../../compiler/ir/IRBuilderImpl';
 import type { LowerCtx } from '../registry';
 import { blockIndex } from '../../graph/passes/pass3-indexing';
@@ -80,7 +81,7 @@ describe('Expression Block Lowering', () => {
   beforeEach(() => {
     builder = new IRBuilderImpl();
     // Expression block outputs float by default
-    const floatType = signalType('float');
+    const floatType = signalType(FLOAT);
     ctx = {
       b: builder,
       blockIdx: blockIndex(0),
@@ -140,10 +141,10 @@ describe('Expression Block Lowering', () => {
     const def = getBlockDefinition('Expression')!;
 
     // Create input signals
-    const in0Sig = builder.sigConst(5, signalType('int'));
-    const in1Sig = builder.sigConst(3, signalType('int'));
+    const in0Sig = builder.sigConst(5, signalType(INT));
+    const in1Sig = builder.sigConst(3, signalType(INT));
 
-    const intType = signalType('int');
+    const intType = signalType(INT);
     const result = def.lower({
       ctx,
       inputs: [],
@@ -196,9 +197,9 @@ describe('Expression Block Lowering', () => {
     const def = getBlockDefinition('Expression')!;
 
     // Create input signal
-    const in0Sig = builder.sigConst(0, signalType('float'));
+    const in0Sig = builder.sigConst(0, signalType(FLOAT));
 
-    const floatType = signalType('float');
+    const floatType = signalType(FLOAT);
     const result = def.lower({
       ctx,
       inputs: [],
@@ -224,9 +225,9 @@ describe('Expression Block Lowering', () => {
     const def = getBlockDefinition('Expression')!;
 
     // Only wire in0, leave others unwired
-    const in0Sig = builder.sigConst(42, signalType('int'));
+    const in0Sig = builder.sigConst(42, signalType(INT));
 
-    const intType = signalType('int');
+    const intType = signalType(INT);
     const result = def.lower({
       ctx,
       inputs: [],

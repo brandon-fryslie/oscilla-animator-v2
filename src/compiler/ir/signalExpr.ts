@@ -6,7 +6,7 @@
 
 import { type PayloadType, type ConcretePayloadType, isPayloadVar } from '../../core/canonical-types';
 
-export type Stride = 0 | 1 | 2 | 3 | 4;
+export type Stride = 0 | 1 | 2 | 3 | 4 | 8;
 
 function assertNever(x: never, msg: string): never {
   throw new Error(msg);
@@ -25,24 +25,9 @@ export function payloadStride(payload: PayloadType): Stride {
   }
 
   // After the guard, payload is guaranteed to be a ConcretePayloadType
+  // Stride is now baked into the type, so we can just return it directly!
   const concretePayload = payload as ConcretePayloadType;
-  switch (concretePayload) {
-    case 'float':
-    case 'int':
-    case 'bool':
-    case 'cameraProjection':
-      return 1;
-    case 'vec2':
-      return 2;
-    case 'vec3':
-      return 3;
-    case 'color':
-      return 4;
-    case 'shape':
-      return 0;
-    default:
-      return assertNever(concretePayload, `Unhandled payload in payloadStride(): ${String(concretePayload)}`);
-  }
+  return concretePayload.stride as Stride;
 }
 
 /** True iff this payload can be sampled into numeric components. */

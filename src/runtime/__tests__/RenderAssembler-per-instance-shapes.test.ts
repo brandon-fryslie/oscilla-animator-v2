@@ -12,7 +12,7 @@ import {
 } from '../RenderAssembler';
 import type { StepRender, InstanceDecl, SigExpr } from '../../compiler/ir/types';
 import type { SignalType } from '../../core/canonical-types';
-import { signalType } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION, signalType } from '../../core/canonical-types';
 import type { RuntimeState } from '../RuntimeState';
 import { createRuntimeState, SHAPE2D_WORDS, writeShape2D } from '../RuntimeState';
 import type { ValueSlot, SigExprId } from '../../types';
@@ -22,7 +22,7 @@ import { PathVerb } from '../../shapes/types';
 import { DEFAULT_CAMERA } from '../CameraResolver';
 
 // Helper to create a scalar signal type
-const SCALAR_TYPE: SignalType = signalType('float');
+const SCALAR_TYPE: SignalType = signalType(FLOAT);
 
 // Create a minimal runtime state for testing
 function createMockState(): RuntimeState {

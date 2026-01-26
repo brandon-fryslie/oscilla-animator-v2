@@ -11,16 +11,17 @@ import {
   type VarargConstraint,
 } from '../registry';
 import { signalType, signalTypeSignal } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
 import { defaultSourceConst } from '../../types';
 
 describe('VarargInputDef', () => {
   describe('isVarargInput type guard', () => {
     it('returns true for vararg inputs', () => {
       const def: InputDef = {
-        type: signalTypeSignal('float', { kind: 'norm01' }),
+        type: signalTypeSignal(FLOAT, { kind: 'norm01' }),
         isVararg: true,
         varargConstraint: {
-          payloadType: 'float',
+          payloadType: FLOAT,
           cardinalityConstraint: 'any',
         },
       };
@@ -29,14 +30,14 @@ describe('VarargInputDef', () => {
 
     it('returns false for normal inputs', () => {
       const def: InputDef = {
-        type: signalTypeSignal('float', { kind: 'norm01' }),
+        type: signalTypeSignal(FLOAT, { kind: 'norm01' }),
       };
       expect(isVarargInput(def)).toBe(false);
     });
 
     it('returns false for inputs with isVararg: false', () => {
       const def: InputDef = {
-        type: signalTypeSignal('float', { kind: 'norm01' }),
+        type: signalTypeSignal(FLOAT, { kind: 'norm01' }),
         isVararg: false,
       };
       expect(isVarargInput(def)).toBe(false);
@@ -46,7 +47,7 @@ describe('VarargInputDef', () => {
   describe('VarargConstraint', () => {
     it('defines payload type constraint', () => {
       const constraint: VarargConstraint = {
-        payloadType: 'float',
+        payloadType: FLOAT,
         cardinalityConstraint: 'any',
       };
       expect(constraint.payloadType).toBe('float');
@@ -54,7 +55,7 @@ describe('VarargInputDef', () => {
 
     it('defines cardinality constraint', () => {
       const constraint: VarargConstraint = {
-        payloadType: 'float',
+        payloadType: FLOAT,
         cardinalityConstraint: 'field',
       };
       expect(constraint.cardinalityConstraint).toBe('field');
@@ -62,7 +63,7 @@ describe('VarargInputDef', () => {
 
     it('allows minConnections constraint', () => {
       const constraint: VarargConstraint = {
-        payloadType: 'float',
+        payloadType: FLOAT,
         cardinalityConstraint: 'any',
         minConnections: 1,
       };
@@ -71,7 +72,7 @@ describe('VarargInputDef', () => {
 
     it('allows maxConnections constraint', () => {
       const constraint: VarargConstraint = {
-        payloadType: 'float',
+        payloadType: FLOAT,
         cardinalityConstraint: 'any',
         maxConnections: 10,
       };
@@ -89,17 +90,17 @@ describe('VarargInputDef', () => {
         capability: 'pure',
         inputs: {
           values: {
-            type: signalTypeSignal('float', { kind: 'norm01' }),
+            type: signalTypeSignal(FLOAT, { kind: 'norm01' }),
             isVararg: true,
             varargConstraint: {
-              payloadType: 'float',
+              payloadType: FLOAT,
               cardinalityConstraint: 'any',
             },
           },
         },
         outputs: {
           result: {
-            type: signalTypeSignal('float', { kind: 'norm01' }),
+            type: signalTypeSignal(FLOAT, { kind: 'norm01' }),
           },
         },
         lower: () => ({ outputsById: {} }),
@@ -117,14 +118,14 @@ describe('VarargInputDef', () => {
         capability: 'pure',
         inputs: {
           values: {
-            type: signalTypeSignal('float', { kind: 'norm01' }),
+            type: signalTypeSignal(FLOAT, { kind: 'norm01' }),
             isVararg: true,
             // Missing varargConstraint
           },
         },
         outputs: {
           result: {
-            type: signalTypeSignal('float', { kind: 'norm01' }),
+            type: signalTypeSignal(FLOAT, { kind: 'norm01' }),
           },
         },
         lower: () => ({ outputsById: {} }),
@@ -144,10 +145,10 @@ describe('VarargInputDef', () => {
         capability: 'pure',
         inputs: {
           values: {
-            type: signalTypeSignal('float', { kind: 'norm01' }),
+            type: signalTypeSignal(FLOAT, { kind: 'norm01' }),
             isVararg: true,
             varargConstraint: {
-              payloadType: 'float',
+              payloadType: FLOAT,
               cardinalityConstraint: 'any',
             },
             defaultSource: defaultSourceConst(0),
@@ -155,7 +156,7 @@ describe('VarargInputDef', () => {
         },
         outputs: {
           result: {
-            type: signalTypeSignal('float', { kind: 'norm01' }),
+            type: signalTypeSignal(FLOAT, { kind: 'norm01' }),
           },
         },
         lower: () => ({ outputsById: {} }),
@@ -175,21 +176,21 @@ describe('VarargInputDef', () => {
         capability: 'pure',
         inputs: {
           normalInput: {
-            type: signalTypeSignal('float', { kind: 'norm01' }),
+            type: signalTypeSignal(FLOAT, { kind: 'norm01' }),
             defaultSource: defaultSourceConst(1),
           },
           varargInput: {
-            type: signalTypeSignal('float', { kind: 'norm01' }),
+            type: signalTypeSignal(FLOAT, { kind: 'norm01' }),
             isVararg: true,
             varargConstraint: {
-              payloadType: 'float',
+              payloadType: FLOAT,
               cardinalityConstraint: 'any',
             },
           },
         },
         outputs: {
           result: {
-            type: signalTypeSignal('float', { kind: 'norm01' }),
+            type: signalTypeSignal(FLOAT, { kind: 'norm01' }),
           },
         },
         lower: () => ({ outputsById: {} }),

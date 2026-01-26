@@ -6,6 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
 import {
   getBlockDefinition,
   requireBlockDef,
@@ -133,7 +134,7 @@ describe('Metadata functions throw on unknown block type', () => {
 
   describe('findPayloadCombination', () => {
     it('throws for non-existent block type', () => {
-      expect(() => findPayloadCombination('Bogus', ['float'])).toThrow(
+      expect(() => findPayloadCombination('Bogus', [FLOAT])).toThrow(
         'Unknown block type: "Bogus" is not registered'
       );
     });

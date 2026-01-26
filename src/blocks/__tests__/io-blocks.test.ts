@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
 import {
   getBlockDefinition,
   requireBlockDef,
@@ -96,7 +97,7 @@ describe('ExternalInput Block', () => {
     };
     const ctx = {
       b: mockB,
-      outTypes: [{ payload: 'float', unit: '#' }],
+      outTypes: [{ payload: FLOAT, unit: '#' }],
       blockIdx: 0,
       blockType: 'ExternalInput',
       instanceId: 'test',
@@ -125,7 +126,7 @@ describe('ExternalInput Block', () => {
     };
     const ctx = {
       b: mockB,
-      outTypes: [{ payload: 'float', unit: '#' }],
+      outTypes: [{ payload: FLOAT, unit: '#' }],
       blockIdx: 0,
       blockType: 'ExternalInput',
       instanceId: 'test',
@@ -196,7 +197,7 @@ describe('ExternalGate Block', () => {
     };
     const ctx = {
       b: mockB,
-      outTypes: [{ payload: 'float', unit: '#' }],
+      outTypes: [{ payload: FLOAT, unit: '#' }],
       blockIdx: 0,
       blockType: 'ExternalGate',
       instanceId: 'test',
@@ -235,7 +236,7 @@ describe('ExternalGate Block', () => {
     };
     const ctx = {
       b: mockB,
-      outTypes: [{ payload: 'float', unit: '#' }],
+      outTypes: [{ payload: FLOAT, unit: '#' }],
       blockIdx: 0,
       blockType: 'ExternalGate',
       instanceId: 'test',
@@ -298,7 +299,7 @@ describe('ExternalVec2 Block', () => {
     };
     const ctx = {
       b: mockB,
-      outTypes: [{ payload: 'vec2', unit: '#' }],
+      outTypes: [{ payload: VEC2, unit: '#' }],
       blockIdx: 0,
       blockType: 'ExternalVec2',
       instanceId: 'test',
@@ -336,7 +337,7 @@ describe('ExternalVec2 Block', () => {
     };
     const ctx = {
       b: mockB,
-      outTypes: [{ payload: 'vec2', unit: '#' }],
+      outTypes: [{ payload: VEC2, unit: '#' }],
       blockIdx: 0,
       blockType: 'ExternalVec2',
       instanceId: 'test',

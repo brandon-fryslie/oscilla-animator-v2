@@ -93,7 +93,7 @@ export function unitsEqual(a: Unit, b: Unit): boolean {
 
 // --- Payload-Unit Validation (Spec §A4) ---
 
-const ALLOWED_UNITS: Record<ConcretePayloadType, readonly Unit['kind'][]> = {
+const ALLOWED_UNITS: Record<PayloadKind, readonly Unit['kind'][]> = {
   float: ['scalar', 'norm01', 'phase01', 'radians', 'degrees', 'deg', 'ms', 'seconds'],
   int: ['count', 'ms'],
   vec2: ['ndc2', 'world2'],
@@ -113,7 +113,7 @@ export function isValidPayloadUnit(payload: PayloadType, unit: Unit): boolean {
   if (unit.kind === 'var') return true;
   // Payload variables are always valid during inference (will be resolved later)
   if (isPayloadVar(payload)) return true;
-  const allowed = ALLOWED_UNITS[payload as ConcretePayloadType];
+  const allowed = ALLOWED_UNITS[payload.kind];
   if (!allowed) return false;
   return allowed.includes(unit.kind);
 }
@@ -127,8 +127,7 @@ export function defaultUnitForPayload(payload: PayloadType): Unit {
   if (isPayloadVar(payload)) {
     throw new Error(`Cannot get default unit for payload variable ${payload.id} - resolve payload first`);
   }
-  // After the guard, payload is a concrete string (TypeScript needs explicit assertion)
-  switch (payload as ConcretePayloadType) {
+  switch (payload.kind) {
     case 'float': return unitScalar();
     case 'int': return unitCount();
     case 'vec2': return unitWorld2();
@@ -149,26 +148,78 @@ export type NumericUnit = Unit['kind'];
 // =============================================================================
 
 /**
- * Concrete payload types (non-variable).
+ * Concrete payload types (non-variable) as discriminated union with intrinsic stride.
+ *
+ * Stride is baked into the type - wherever you have a ConcretePayloadType,
+ * stride is immediately available via `.stride`. No lookups needed.
  *
  * Note: 'phase' is NOT a payload - it's float with unit:phase01.
  * Note: 'event' and 'domain' are NOT PayloadTypes - they are axis/resource concepts.
  */
 export type ConcretePayloadType =
-  | 'float'   // Floating-point values
-  | 'int'     // Integer values
-  | 'vec2'    // 2D positions/vectors
-  | 'vec3'    // 3D positions/vectors
-  | 'color'   // Color values (RGBA)
-  | 'bool'    // Boolean values
-  | 'shape'   // Shape descriptor (ellipse, rect, path)
-  | 'cameraProjection';  // Camera projection enum (0=ortho, 1=persp)
+  | { readonly kind: 'float'; readonly stride: 1 }
+  | { readonly kind: 'int'; readonly stride: 1 }
+  | { readonly kind: 'bool'; readonly stride: 1 }
+  | { readonly kind: 'vec2'; readonly stride: 2 }
+  | { readonly kind: 'vec3'; readonly stride: 3 }
+  | { readonly kind: 'color'; readonly stride: 4 }
+  | { readonly kind: 'shape'; readonly stride: 8 }
+  | { readonly kind: 'cameraProjection'; readonly stride: 1 };
+
+/**
+ * The kind discriminator for concrete payload types.
+ * Use this for switch statements and Record keys.
+ */
+export type PayloadKind = ConcretePayloadType['kind'];
+
+// --- Singleton instances for each concrete payload type ---
+// Use these instead of creating new objects. They are identical by reference.
+
+/** Float payload type (stride: 1) */
+export const FLOAT: ConcretePayloadType = { kind: 'float', stride: 1 } as const;
+/** Int payload type (stride: 1) */
+export const INT: ConcretePayloadType = { kind: 'int', stride: 1 } as const;
+/** Bool payload type (stride: 1) */
+export const BOOL: ConcretePayloadType = { kind: 'bool', stride: 1 } as const;
+/** Vec2 payload type (stride: 2) */
+export const VEC2: ConcretePayloadType = { kind: 'vec2', stride: 2 } as const;
+/** Vec3 payload type (stride: 3) */
+export const VEC3: ConcretePayloadType = { kind: 'vec3', stride: 3 } as const;
+/** Color payload type (stride: 4) */
+export const COLOR: ConcretePayloadType = { kind: 'color', stride: 4 } as const;
+/** Shape payload type (stride: 8) */
+export const SHAPE: ConcretePayloadType = { kind: 'shape', stride: 8 } as const;
+/** Camera projection payload type (stride: 1) */
+export const CAMERA_PROJECTION: ConcretePayloadType = { kind: 'cameraProjection', stride: 1 } as const;
+
+/**
+ * Map from kind string to singleton instance.
+ * Used by payloadFromKind() for deserialization and compatibility.
+ */
+const PAYLOAD_BY_KIND: Record<PayloadKind, ConcretePayloadType> = {
+  float: FLOAT,
+  int: INT,
+  bool: BOOL,
+  vec2: VEC2,
+  vec3: VEC3,
+  color: COLOR,
+  shape: SHAPE,
+  cameraProjection: CAMERA_PROJECTION,
+};
+
+/**
+ * Get a ConcretePayloadType from its kind string.
+ * Used for deserialization and backwards compatibility.
+ */
+export function payloadFromKind(kind: PayloadKind): ConcretePayloadType {
+  return PAYLOAD_BY_KIND[kind];
+}
 
 /**
  * The base data type of a value, including unresolved variables.
  *
  * PayloadType can be either:
- * - A concrete type string ('float', 'vec3', etc.)
+ * - A concrete type object with kind and stride (e.g., FLOAT, VEC2)
  * - A payload variable { kind: 'var', id: string } for polymorphic ports
  *
  * Payload variables MUST be resolved by the constraint solver before compilation.
@@ -197,7 +248,7 @@ export function isPayloadVar(payload: PayloadType): payload is { kind: 'var'; id
  * Check if a payload is a concrete (non-variable) type.
  */
 export function isConcretePayload(payload: PayloadType): payload is ConcretePayloadType {
-  return typeof payload === 'string';
+  return typeof payload === 'object' && payload !== null && 'stride' in payload;
 }
 
 /**
@@ -210,17 +261,18 @@ export function payloadsEqual(a: PayloadType, b: PayloadType): boolean {
   if (isPayloadVar(a) || isPayloadVar(b)) {
     return false;  // One is var, other is concrete
   }
-  return a === b;  // Both concrete strings
+  // Both concrete - compare by kind (stride is derived from kind, so kind equality is sufficient)
+  return a.kind === b.kind;
 }
 
 
 /**
  * Stride (number of scalar slots) per concrete PayloadType.
  *
- * This table defines how many float32/int32 slots each payload type occupies
- * in typed arrays. Used by the materializer and buffer allocation.
+ * @deprecated Use payload.stride directly instead. Stride is now intrinsic to ConcretePayloadType.
+ * This lookup table is preserved for backwards compatibility during migration.
  */
-export const PAYLOAD_STRIDE: Record<ConcretePayloadType, number> = {
+export const PAYLOAD_STRIDE: Record<PayloadKind, number> = {
   float: 1,
   int: 1,
   bool: 1,
@@ -242,8 +294,8 @@ export function strideOf(type: PayloadType): number {
   if (isPayloadVar(type)) {
     throw new Error(`Cannot get stride for payload variable ${type.id} - resolve payload first`);
   }
-  // After the guard, type is a concrete string (TypeScript needs explicit assertion)
-  return PAYLOAD_STRIDE[type as ConcretePayloadType];
+  // Stride is now intrinsic to ConcretePayloadType
+  return type.stride;
 }
 
 // =============================================================================
@@ -560,18 +612,18 @@ export function signalType(
   let extOverrides: Partial<Extent> | undefined;
 
   if (unitOrExtent === undefined) {
-    // signalType('float') -> use default unit (only for concrete payloads)
+    // signalType(FLOAT) -> use default unit (only for concrete payloads)
     if (isPayloadVar(payload)) {
       throw new Error(`Cannot omit unit for payload variable ${payload.id} - use unitVar() for polymorphic unit`);
     }
     unit = defaultUnitForPayload(payload);
     extOverrides = undefined;
   } else if ('kind' in unitOrExtent) {
-    // signalType('float', unitPhase01(), {...}) or signalType(payloadVar('x'), unitVar('y'))
+    // signalType(FLOAT, unitPhase01(), {...}) or signalType(payloadVar('x'), unitVar('y'))
     unit = unitOrExtent as Unit;
     extOverrides = extentOverrides;
   } else {
-    // Legacy: signalType('float', { cardinality: ... })
+    // Legacy: signalType(FLOAT, { cardinality: ... })
     if (isPayloadVar(payload)) {
       throw new Error(`Cannot omit unit for payload variable ${payload.id} - use unitVar() for polymorphic unit`);
     }

@@ -63,6 +63,7 @@ import {
   signalTypeTrigger,
   signalTypeStatic,
 } from '../canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../canonical-types';
 
 // =============================================================================
 // PayloadType Tests
@@ -70,13 +71,13 @@ import {
 
 describe('PayloadType', () => {
   it('includes all core payload types', () => {
-    const payloads: PayloadType[] = ['float', 'int', 'vec2', 'color', 'bool', 'shape'];
+    const payloads: PayloadType[] = [FLOAT, INT, VEC2, COLOR, BOOL, SHAPE];
     expect(payloads.length).toBe(6);
   });
 
   it('does NOT include event or domain (these are axis concepts)', () => {
     // TypeScript will catch this at compile time, but documenting intent
-    const validPayloads: PayloadType[] = ['float', 'int', 'vec2', 'color', 'bool', 'shape'];
+    const validPayloads: PayloadType[] = [FLOAT, INT, VEC2, COLOR, BOOL, SHAPE];
     expect(validPayloads).not.toContain('event');
     expect(validPayloads).not.toContain('domain');
   });
@@ -244,16 +245,16 @@ describe('Extent', () => {
 
 describe('SignalType', () => {
   it('creates SignalType with payload and default extent', () => {
-    const st = signalType('float');
-    expect(st.payload).toBe('float');
+    const st = signalType(FLOAT);
+    expect(st.payload.kind).toBe('float');
     expect(st.extent.cardinality.kind).toBe('default');
   });
 
   it('creates SignalType with payload and custom extent', () => {
-    const st = signalType('vec2', {
+    const st = signalType(VEC2, {
       cardinality: axisInstantiated(cardinalityMany(instanceRef('shape', 'grid-1'))),
     });
-    expect(st.payload).toBe('vec2');
+    expect(st.payload.kind).toBe('vec2');
     expect(st.extent.cardinality.kind).toBe('instantiated');
   });
 });
@@ -390,8 +391,8 @@ describe('unifyExtent', () => {
 
 describe('derived SignalType helpers', () => {
   it('signalTypeSignal creates one + continuous', () => {
-    const st = signalTypeSignal('float');
-    expect(st.payload).toBe('float');
+    const st = signalTypeSignal(FLOAT);
+    expect(st.payload.kind).toBe('float');
     const card = st.extent.cardinality;
     const temp = st.extent.temporality;
     expect(card.kind).toBe('instantiated');
@@ -403,8 +404,8 @@ describe('derived SignalType helpers', () => {
   });
 
   it('signalTypeField creates many + continuous', () => {
-    const st = signalTypeField('vec2', 'grid-1');
-    expect(st.payload).toBe('vec2');
+    const st = signalTypeField(VEC2, 'grid-1');
+    expect(st.payload.kind).toBe('vec2');
     const card = st.extent.cardinality;
     const temp = st.extent.temporality;
     expect(card.kind).toBe('instantiated');
@@ -416,7 +417,7 @@ describe('derived SignalType helpers', () => {
   });
 
   it('signalTypeTrigger creates one + discrete', () => {
-    const st = signalTypeTrigger('bool');
+    const st = signalTypeTrigger(BOOL);
     const card = st.extent.cardinality;
     const temp = st.extent.temporality;
     expect(card.kind).toBe('instantiated');
@@ -428,7 +429,7 @@ describe('derived SignalType helpers', () => {
   });
 
   it('signalTypeStatic creates zero + continuous', () => {
-    const st = signalTypeStatic('int');
+    const st = signalTypeStatic(INT);
     const card = st.extent.cardinality;
     const temp = st.extent.temporality;
     expect(card.kind).toBe('instantiated');

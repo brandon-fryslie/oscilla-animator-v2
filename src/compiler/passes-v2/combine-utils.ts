@@ -111,7 +111,7 @@ export function validateCombineMode(
     return { valid: true };
   }
 
-  if (payload === 'color') {
+  if (payload .kind === 'color') {
     // Color domain only supports 'last', 'first', and 'layer'
     if (mode === 'layer') {
       return { valid: true };
@@ -122,7 +122,7 @@ export function validateCombineMode(
     };
   }
 
-  if (payload === 'shape') {
+  if (payload .kind === 'shape') {
     // Shape domain only supports 'last', 'first', and 'layer' (not numeric combines)
     if (mode === 'layer') {
       return { valid: true };

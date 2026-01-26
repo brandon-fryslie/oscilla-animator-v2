@@ -14,7 +14,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { applyFieldKernel, applyFieldKernelZipSig, hsvToRgb } from '../FieldKernels';
-import { signalTypeField, type PayloadType, type SignalType } from '../../core/canonical-types';
+import { signalTypeField, type PayloadType, type SignalType, FLOAT, VEC2, VEC3, COLOR } from '../../core/canonical-types';
 
 /**
  * Test helper to create a properly-typed SignalType for field tests.
@@ -35,7 +35,7 @@ describe('Field Kernel Contract Tests', () => {
       const x = new Float32Array([1, 2, 3]);
       const y = new Float32Array([4, 5, 6]);
 
-      applyFieldKernel(out, [x, y], 'makeVec2', 3, testFieldType('vec2'));
+      applyFieldKernel(out, [x, y], 'makeVec2', 3, testFieldType(VEC2));
 
       expect(out[0]).toBe(1); expect(out[1]).toBe(4);
       expect(out[2]).toBe(2); expect(out[3]).toBe(5);
@@ -47,7 +47,7 @@ describe('Field Kernel Contract Tests', () => {
       const x = new Float32Array([1]);
 
       expect(() =>
-        applyFieldKernel(out, [x], 'makeVec2', 1, testFieldType('vec2'))
+        applyFieldKernel(out, [x], 'makeVec2', 1, testFieldType(VEC2))
       ).toThrow(/requires exactly 2 inputs/);
     });
   });
@@ -60,7 +60,7 @@ describe('Field Kernel Contract Tests', () => {
       const r = new Float32Array([1, 2]);
       const angle = new Float32Array([0, Math.PI / 2]); // 0 rad, 90 deg
 
-      applyFieldKernel(out, [cx, cy, r, angle], 'fieldPolarToCartesian', 2, testFieldType('vec3'));
+      applyFieldKernel(out, [cx, cy, r, angle], 'fieldPolarToCartesian', 2, testFieldType(VEC3));
 
       // Point 0: angle=0, r=1 → (1, 0, 0)
       expect(out[0]).toBeCloseTo(1);
@@ -80,7 +80,7 @@ describe('Field Kernel Contract Tests', () => {
       const r = new Float32Array([0.25]); // world radius
       const angle = new Float32Array([0]);
 
-      applyFieldKernel(out, [cx, cy, r, angle], 'fieldPolarToCartesian', 1, testFieldType('vec3'));
+      applyFieldKernel(out, [cx, cy, r, angle], 'fieldPolarToCartesian', 1, testFieldType(VEC3));
 
       expect(out[0]).toBeCloseTo(0.75); // 0.5 + 0.25
       expect(out[1]).toBeCloseTo(0.5);
@@ -94,7 +94,7 @@ describe('Field Kernel Contract Tests', () => {
       const r = new Float32Array([1]);
       const angle = new Float32Array([Math.PI]); // 180 degrees
 
-      applyFieldKernel(out, [cx, cy, r, angle], 'fieldPolarToCartesian', 1, testFieldType('vec3'));
+      applyFieldKernel(out, [cx, cy, r, angle], 'fieldPolarToCartesian', 1, testFieldType(VEC3));
 
       expect(out[0]).toBeCloseTo(-1); // cos(π) = -1
       expect(out[1]).toBeCloseTo(0);  // sin(π) = 0
@@ -112,7 +112,7 @@ describe('Field Kernel Contract Tests', () => {
       const indices = new Float32Array([0, 1, 2, 3]);
       const signals = [4, 1, 1]; // 4 sides, radiusX=1, radiusY=1
 
-      applyFieldKernelZipSig(out, indices, signals, 'polygonVertex', 4, testFieldType('vec2'));
+      applyFieldKernelZipSig(out, indices, signals, 'polygonVertex', 4, testFieldType(VEC2));
 
       // Square (4 sides): vertices at top, right, bottom, left
       // Start at top (angle = -π/2), go clockwise
@@ -138,7 +138,7 @@ describe('Field Kernel Contract Tests', () => {
       const indices = new Float32Array([0, 1, 2, 3, 4]);
       const signals = [5, 1, 1]; // pentagon
 
-      applyFieldKernelZipSig(out, indices, signals, 'polygonVertex', 5, testFieldType('vec2'));
+      applyFieldKernelZipSig(out, indices, signals, 'polygonVertex', 5, testFieldType(VEC2));
 
       // All vertices should be at distance 1 from origin
       for (let i = 0; i < 5; i++) {
@@ -154,7 +154,7 @@ describe('Field Kernel Contract Tests', () => {
       const indices = new Float32Array([0, 1, 2, 3]);
       const signals = [4, 2, 1]; // 4 sides, radiusX=2, radiusY=1
 
-      applyFieldKernelZipSig(out, indices, signals, 'polygonVertex', 4, testFieldType('vec2'));
+      applyFieldKernelZipSig(out, indices, signals, 'polygonVertex', 4, testFieldType(VEC2));
 
       // Right vertex (1, 0 direction) should be at (2, 0)
       expect(out[2]).toBeCloseTo(2);
@@ -172,7 +172,7 @@ describe('Field Kernel Contract Tests', () => {
       const indices = new Float32Array([0, 0.25, 0.5, 0.75]); // normalized
       const signals = [0.25, 0]; // radius=0.25, phase=0
 
-      applyFieldKernelZipSig(out, indices, signals, 'circleLayout', 4, testFieldType('vec3'));
+      applyFieldKernelZipSig(out, indices, signals, 'circleLayout', 4, testFieldType(VEC3));
 
       // Position 0: index=0 → angle=0 → (0.75, 0.5, 0)
       expect(out[0]).toBeCloseTo(0.75);
@@ -190,7 +190,7 @@ describe('Field Kernel Contract Tests', () => {
       const indices = new Float32Array([0]);
       const signals = [0.25, 0.25]; // radius=0.25, phase=0.25 (90 degrees)
 
-      applyFieldKernelZipSig(out, indices, signals, 'circleLayout', 1, testFieldType('vec3'));
+      applyFieldKernelZipSig(out, indices, signals, 'circleLayout', 1, testFieldType(VEC3));
 
       // index=0 + phase=0.25 → effective angle=0.25*2π=π/2
       expect(out[0]).toBeCloseTo(0.5);
@@ -250,7 +250,7 @@ describe('Field Kernel Contract Tests', () => {
       const s = new Float32Array([1, 1]);
       const v = new Float32Array([1, 1]);
 
-      applyFieldKernel(out, [h, s, v], 'hsvToRgb', 2, testFieldType('color'));
+      applyFieldKernel(out, [h, s, v], 'hsvToRgb', 2, testFieldType(COLOR));
 
       // Color 0: Red
       expect(out[0]).toBe(255);
@@ -277,7 +277,7 @@ describe('Field Kernel Contract Tests', () => {
       const a = new Float32Array([1, 2, 3]);
       const b = new Float32Array([10, 20, 30]);
 
-      applyFieldKernel(out, [a, b], 'fieldAdd', 3, testFieldType('float'));
+      applyFieldKernel(out, [a, b], 'fieldAdd', 3, testFieldType(FLOAT));
 
       expect(out[0]).toBe(11);
       expect(out[1]).toBe(22);
@@ -290,7 +290,7 @@ describe('Field Kernel Contract Tests', () => {
       const out = new Float32Array(3);
       const id01 = new Float32Array([0, 0.5, 1]);
 
-      applyFieldKernel(out, [id01], 'fieldGoldenAngle', 3, testFieldType('float'));
+      applyFieldKernel(out, [id01], 'fieldGoldenAngle', 3, testFieldType(FLOAT));
 
       // Golden angle ≈ 2.39996 rad (137.5 degrees)
       const goldenAngle = Math.PI * (3 - Math.sqrt(5));
@@ -308,7 +308,7 @@ describe('Field Kernel Contract Tests', () => {
       const id01 = new Float32Array([0, 0.5, 0.8]);
       const phase = new Float32Array([0.3, 0.3, 0.3]);
 
-      applyFieldKernel(out, [id01, phase], 'fieldHueFromPhase', 3, testFieldType('float'));
+      applyFieldKernel(out, [id01, phase], 'fieldHueFromPhase', 3, testFieldType(FLOAT));
 
       expect(out[0]).toBeCloseTo(0.3); // 0 + 0.3
       expect(out[1]).toBeCloseTo(0.8); // 0.5 + 0.3
@@ -329,8 +329,8 @@ describe('Field Kernel Contract Tests', () => {
       const amtX = new Float32Array([0.1]);
       const amtY = new Float32Array([0.1]);
 
-      applyFieldKernel(out1, [pos, rand, amtX, amtY], 'jitter2d', 1, testFieldType('vec2'));
-      applyFieldKernel(out2, [pos, rand, amtX, amtY], 'jitter2d', 1, testFieldType('vec2'));
+      applyFieldKernel(out1, [pos, rand, amtX, amtY], 'jitter2d', 1, testFieldType(VEC2));
+      applyFieldKernel(out2, [pos, rand, amtX, amtY], 'jitter2d', 1, testFieldType(VEC2));
 
       expect(out1[0]).toBe(out2[0]);
       expect(out1[1]).toBe(out2[1]);
@@ -351,7 +351,7 @@ describe('Field Kernel Contract Tests', () => {
         amtY[i] = 0.1;
       }
 
-      applyFieldKernel(out, [pos, rand, amtX, amtY], 'jitter2d', 100, testFieldType('vec2'));
+      applyFieldKernel(out, [pos, rand, amtX, amtY], 'jitter2d', 100, testFieldType(VEC2));
 
       for (let i = 0; i < 100; i++) {
         const offsetX = Math.abs(out[i * 2] - 0.5);
@@ -370,21 +370,21 @@ describe('Field Kernel Contract Tests', () => {
     it('jitter2d requires 4 inputs', () => {
       const out = new Float32Array(2);
       expect(() =>
-        applyFieldKernel(out, [new Float32Array(1)], 'jitter2d', 1, testFieldType('vec2'))
+        applyFieldKernel(out, [new Float32Array(1)], 'jitter2d', 1, testFieldType(VEC2))
       ).toThrow(/4 inputs/);
     });
 
     it('attract2d requires 5 inputs', () => {
       const out = new Float32Array(2);
       expect(() =>
-        applyFieldKernel(out, [new Float32Array(1)], 'attract2d', 1, testFieldType('vec2'))
+        applyFieldKernel(out, [new Float32Array(1)], 'attract2d', 1, testFieldType(VEC2))
       ).toThrow(/5 inputs/);
     });
 
     it('fieldPolarToCartesian requires 4 inputs', () => {
       const out = new Float32Array(2);
       expect(() =>
-        applyFieldKernel(out, [new Float32Array(1)], 'fieldPolarToCartesian', 1, testFieldType('vec2'))
+        applyFieldKernel(out, [new Float32Array(1)], 'fieldPolarToCartesian', 1, testFieldType(VEC2))
       ).toThrow(/4 inputs/);
     });
   });
@@ -402,7 +402,7 @@ describe('Field Kernel Contract Tests', () => {
       const r = new Float32Array([1]); // unit radius
       const angle = new Float32Array([0]);
 
-      applyFieldKernel(out, [cx, cy, r, angle], 'fieldPolarToCartesian', 1, testFieldType('vec3'));
+      applyFieldKernel(out, [cx, cy, r, angle], 'fieldPolarToCartesian', 1, testFieldType(VEC3));
 
       // Output should be (1, 0, 0), not (width, 0, 0) or any scaled value
       expect(out[0]).toBe(1);
@@ -418,7 +418,7 @@ describe('Field Kernel Contract Tests', () => {
       const amtX = new Float32Array([0]); // zero jitter
       const amtY = new Float32Array([0]);
 
-      applyFieldKernel(out, [pos, rand, amtX, amtY], 'jitter2d', 1, testFieldType('vec2'));
+      applyFieldKernel(out, [pos, rand, amtX, amtY], 'jitter2d', 1, testFieldType(VEC2));
 
       // With zero amount, output should equal input exactly
       expect(out[0]).toBe(0);
@@ -435,7 +435,7 @@ describe('Field Kernel Contract Tests', () => {
       const out = new Float32Array(9); // 3 vec3 positions
       const t = new Float32Array([0, 0.5, 1]); // start, middle, end
 
-      applyFieldKernelZipSig(out, t, [0.1, 0.2, 0.9, 0.8], 'lineLayout', 3, testFieldType('vec3'));
+      applyFieldKernelZipSig(out, t, [0.1, 0.2, 0.9, 0.8], 'lineLayout', 3, testFieldType(VEC3));
 
       // t=0 should be at start (0.1, 0.2, 0)
       expect(out[0]).toBeCloseTo(0.1);
@@ -455,7 +455,7 @@ describe('Field Kernel Contract Tests', () => {
       const out = new Float32Array(6); // 2 vec3
       const t = new Float32Array([-0.5, 1.5]); // Out of range
 
-      applyFieldKernelZipSig(out, t, [0, 0, 1, 1], 'lineLayout', 2, testFieldType('vec3'));
+      applyFieldKernelZipSig(out, t, [0, 0, 1, 1], 'lineLayout', 2, testFieldType(VEC3));
 
       // -0.5 clamped to 0 → (0, 0, 0)
       expect(out[0]).toBe(0);
@@ -472,7 +472,7 @@ describe('Field Kernel Contract Tests', () => {
       const t = new Float32Array([0.5]);
 
       expect(() =>
-        applyFieldKernelZipSig(out, t, [0.1, 0.2], 'lineLayout', 1, testFieldType('vec3'))
+        applyFieldKernelZipSig(out, t, [0.1, 0.2], 'lineLayout', 1, testFieldType(VEC3))
       ).toThrow(/4 signals/);
     });
   });
@@ -482,7 +482,7 @@ describe('Field Kernel Contract Tests', () => {
       const out = new Float32Array(12); // 4 vec3 positions
       const index = new Float32Array([0, 1, 2, 3]);
 
-      applyFieldKernelZipSig(out, index, [2, 2], 'gridLayout', 4, testFieldType('vec3'));
+      applyFieldKernelZipSig(out, index, [2, 2], 'gridLayout', 4, testFieldType(VEC3));
 
       // 2x2 grid: positions at corners
       // index 0: col=0, row=0 → (0, 0, 0)
@@ -507,7 +507,7 @@ describe('Field Kernel Contract Tests', () => {
       const out = new Float32Array(6); // 2 vec3
       const index = new Float32Array([0, 1]);
 
-      applyFieldKernelZipSig(out, index, [1, 2], 'gridLayout', 2, testFieldType('vec3'));
+      applyFieldKernelZipSig(out, index, [1, 2], 'gridLayout', 2, testFieldType(VEC3));
 
       // Single column: x=0.5 for both
       expect(out[0]).toBe(0.5); // x
@@ -522,7 +522,7 @@ describe('Field Kernel Contract Tests', () => {
       const out = new Float32Array(6); // 2 vec3
       const index = new Float32Array([0, 1]);
 
-      applyFieldKernelZipSig(out, index, [2, 1], 'gridLayout', 2, testFieldType('vec3'));
+      applyFieldKernelZipSig(out, index, [2, 1], 'gridLayout', 2, testFieldType(VEC3));
 
       // Single row: y=0.5 for both
       expect(out[0]).toBe(0);   // x (col 0)
@@ -538,7 +538,7 @@ describe('Field Kernel Contract Tests', () => {
       const index = new Float32Array([0]);
 
       expect(() =>
-        applyFieldKernelZipSig(out, index, [2], 'gridLayout', 1, testFieldType('vec3'))
+        applyFieldKernelZipSig(out, index, [2], 'gridLayout', 1, testFieldType(VEC3))
       ).toThrow(/2 signals/);
     });
 
@@ -546,7 +546,7 @@ describe('Field Kernel Contract Tests', () => {
       const out = new Float32Array(30); // 10 vec3 positions
       const index = new Float32Array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
 
-      applyFieldKernelZipSig(out, index, [5, 2], 'gridLayout', 10, testFieldType('vec3'));
+      applyFieldKernelZipSig(out, index, [5, 2], 'gridLayout', 10, testFieldType(VEC3));
 
       for (let i = 0; i < 10; i++) {
         expect(out[i * 3]).toBeGreaterThanOrEqual(0);

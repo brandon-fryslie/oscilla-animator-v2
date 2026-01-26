@@ -14,6 +14,7 @@
 import type { Patch } from '../graph/Patch';
 import type { AddressRegistry } from '../graph/address-registry';
 import type { PayloadType } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { BLOCK_DEFS_BY_TYPE } from '../blocks/registry';
 import { addressToString } from '../types/canonical-address';
 
@@ -110,30 +111,30 @@ export interface FunctionSignature {
  */
 const FUNCTION_SIGNATURES: readonly FunctionSignature[] = [
   // Trigonometric
-  { name: 'sin', arity: 1, returnType: 'float', description: 'Sine function (radians)' },
-  { name: 'cos', arity: 1, returnType: 'float', description: 'Cosine function (radians)' },
-  { name: 'tan', arity: 1, returnType: 'float', description: 'Tangent function (radians)' },
+  { name: 'sin', arity: 1, returnType: FLOAT, description: 'Sine function (radians)' },
+  { name: 'cos', arity: 1, returnType: FLOAT, description: 'Cosine function (radians)' },
+  { name: 'tan', arity: 1, returnType: FLOAT, description: 'Tangent function (radians)' },
 
   // Unary
-  { name: 'abs', arity: 1, returnType: 'float', description: 'Absolute value' },
-  { name: 'sqrt', arity: 1, returnType: 'float', description: 'Square root' },
-  { name: 'floor', arity: 1, returnType: 'int', description: 'Round down to integer' },
-  { name: 'ceil', arity: 1, returnType: 'int', description: 'Round up to integer' },
-  { name: 'round', arity: 1, returnType: 'int', description: 'Round to nearest integer' },
+  { name: 'abs', arity: 1, returnType: FLOAT, description: 'Absolute value' },
+  { name: 'sqrt', arity: 1, returnType: FLOAT, description: 'Square root' },
+  { name: 'floor', arity: 1, returnType: INT, description: 'Round down to integer' },
+  { name: 'ceil', arity: 1, returnType: INT, description: 'Round up to integer' },
+  { name: 'round', arity: 1, returnType: INT, description: 'Round to nearest integer' },
 
   // Binary
-  { name: 'min', arity: 2, returnType: 'float', description: 'Minimum of two values' },
-  { name: 'max', arity: 2, returnType: 'float', description: 'Maximum of two values' },
+  { name: 'min', arity: 2, returnType: FLOAT, description: 'Minimum of two values' },
+  { name: 'max', arity: 2, returnType: FLOAT, description: 'Maximum of two values' },
 
   // Interpolation
-  { name: 'lerp', arity: 3, returnType: 'float', description: 'Linear interpolation: lerp(a, b, t) = a + t*(b-a)' },
-  { name: 'mix', arity: 3, returnType: 'float', description: 'Linear interpolation (alias for lerp)' },
-  { name: 'smoothstep', arity: 3, returnType: 'float', description: 'Smooth Hermite interpolation' },
-  { name: 'clamp', arity: 3, returnType: 'float', description: 'Clamp value to range: clamp(x, min, max)' },
+  { name: 'lerp', arity: 3, returnType: FLOAT, description: 'Linear interpolation: lerp(a, b, t) = a + t*(b-a)' },
+  { name: 'mix', arity: 3, returnType: FLOAT, description: 'Linear interpolation (alias for lerp)' },
+  { name: 'smoothstep', arity: 3, returnType: FLOAT, description: 'Smooth Hermite interpolation' },
+  { name: 'clamp', arity: 3, returnType: FLOAT, description: 'Clamp value to range: clamp(x, min, max)' },
 
   // Phase/fractional
-  { name: 'wrap', arity: 1, returnType: 'float', description: 'Wrap to [0, 1) range' },
-  { name: 'fract', arity: 1, returnType: 'float', description: 'Fractional part (same as wrap)' },
+  { name: 'wrap', arity: 1, returnType: FLOAT, description: 'Wrap to [0, 1) range' },
+  { name: 'fract', arity: 1, returnType: FLOAT, description: 'Fractional part (same as wrap)' },
 ] as const;
 
 /**

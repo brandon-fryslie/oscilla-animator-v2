@@ -10,7 +10,7 @@
  * 3. releaseAll() - return all buffers to pool at frame end
  */
 
-import { type PayloadType, isPayloadVar } from '../core/canonical-types';
+import { type PayloadType, isPayloadVar, type ConcretePayloadType } from '../core/canonical-types';
 
 /** Shape2D words per record (must match RuntimeState.SHAPE2D_WORDS) */
 const SHAPE2D_WORDS = 8;
@@ -32,27 +32,38 @@ export function getBufferFormat(payload: PayloadType): BufferFormat {
   if (isPayloadVar(payload)) {
     throw new Error(`Cannot get buffer format for unresolved payload variable: ${payload.id}`);
   }
-  switch (payload) {
+
+  // TypeScript now knows payload is ConcretePayloadType
+  const concrete = payload as ConcretePayloadType;
+
+  switch (concrete.kind) {
     // Numeric types -> f32
     case 'float':
     case 'int':
     case 'bool':
+    case 'cameraProjection':
       return 'f32';
+
     // Shape descriptors -> shape2d
     case 'shape':
       return 'shape2d';
+
     // 2D vectors
     case 'vec2':
       return 'vec2f32';
+
     // 3D vectors
     case 'vec3':
       return 'vec3f32';
+
     // Colors
     case 'color':
       return 'rgba8';
-    // Camera projection enum (scalar f32)
-    case 'cameraProjection':
-      return 'f32';
+
+    default: {
+      const _exhaustive: never = concrete;
+      throw new Error(`Unknown payload type: ${String(_exhaustive)}`);
+    }
   }
 }
 

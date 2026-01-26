@@ -5,7 +5,8 @@
  * All blocks are defined here with both metadata and IR lowering.
  */
 
-import type { SignalType } from '../core/canonical-types';
+import type { SignalType, PayloadType } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import type { Slot, UIControlHint, DefaultSource } from '../types';
 import type { IRBuilder } from '../compiler/ir/IRBuilder';
 import type { BlockIndex } from '../graph/normalize';
@@ -202,19 +203,20 @@ export const DEFAULT_PAYLOAD_METADATA: BlockPayloadMetadata = {
 /**
  * Standard allowed payloads for common block patterns.
  */
-export const STANDARD_NUMERIC_PAYLOADS: readonly PayloadType[] = ['float', 'int', 'vec2', 'color'];
-export const STANDARD_SCALAR_PAYLOADS: readonly PayloadType[] = ['float', 'int', 'bool'];
-export const STANDARD_VECTOR_PAYLOADS: readonly PayloadType[] = ['vec2'];
-export const STANDARD_COLOR_PAYLOADS: readonly PayloadType[] = ['color'];
+export const STANDARD_NUMERIC_PAYLOADS: readonly PayloadType[] = [FLOAT, INT, VEC2, COLOR];
+export const STANDARD_SCALAR_PAYLOADS: readonly PayloadType[] = [FLOAT, INT, BOOL];
+export const STANDARD_VECTOR_PAYLOADS: readonly PayloadType[] = [VEC2];
+export const STANDARD_COLOR_PAYLOADS: readonly PayloadType[] = [COLOR];
 /** All concrete payload types */
 export const ALL_CONCRETE_PAYLOADS: readonly PayloadType[] = [
-  'float',
-  'int',
-  'bool',
-  'vec2',
-  'color',
-  'shape',
-  'cameraProjection',
+  FLOAT,
+  INT,
+  BOOL,
+  VEC2,
+  VEC3,
+  COLOR,
+  SHAPE,
+  CAMERA_PROJECTION,
 ];
 
 // =============================================================================

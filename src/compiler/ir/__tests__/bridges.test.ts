@@ -37,6 +37,12 @@ import {
   bindingIdentity,
   instanceRef,
   referentRef,
+  FLOAT,
+  INT,
+  VEC2,
+  COLOR,
+  BOOL,
+  SHAPE,
 } from '../../../core/canonical-types';
 
 // =============================================================================
@@ -153,23 +159,23 @@ describe('bridgeBindingToIdentityIR', () => {
 
 describe('payloadTypeToShapeDescIR', () => {
   it('maps float to number shape', () => {
-    expect(payloadTypeToShapeDescIR('float')).toEqual({ kind: 'number' });
+    expect(payloadTypeToShapeDescIR(FLOAT)).toEqual({ kind: 'number' });
   });
 
   it('maps int to number shape', () => {
-    expect(payloadTypeToShapeDescIR('int')).toEqual({ kind: 'number' });
+    expect(payloadTypeToShapeDescIR(INT)).toEqual({ kind: 'number' });
   });
 
   it('maps shape to shape kind', () => {
-    expect(payloadTypeToShapeDescIR('shape')).toEqual({ kind: 'shape' });
+    expect(payloadTypeToShapeDescIR(SHAPE)).toEqual({ kind: 'shape' });
   });
 
   it('maps bool to bool shape', () => {
-    expect(payloadTypeToShapeDescIR('bool')).toEqual({ kind: 'bool' });
+    expect(payloadTypeToShapeDescIR(BOOL)).toEqual({ kind: 'bool' });
   });
 
   it('maps vec2 to vec shape with 2 lanes', () => {
-    expect(payloadTypeToShapeDescIR('vec2')).toEqual({
+    expect(payloadTypeToShapeDescIR(VEC2)).toEqual({
       kind: 'vec',
       lanes: 2,
       element: 'number',
@@ -177,7 +183,7 @@ describe('payloadTypeToShapeDescIR', () => {
   });
 
   it('maps color to vec shape with 4 lanes (RGBA)', () => {
-    expect(payloadTypeToShapeDescIR('color')).toEqual({
+    expect(payloadTypeToShapeDescIR(COLOR)).toEqual({
       kind: 'vec',
       lanes: 4,
       element: 'number',
@@ -345,12 +351,12 @@ describe('bridging edge cases', () => {
 
   it('handles all payload types', () => {
     const payloads: PayloadType[] = [
-      'float',
-      'int',
-      'vec2',
-      'color',
-      'bool',
-      'shape',
+      FLOAT,
+      INT,
+      VEC2,
+      COLOR,
+      BOOL,
+      SHAPE,
     ];
 
     for (const payload of payloads) {

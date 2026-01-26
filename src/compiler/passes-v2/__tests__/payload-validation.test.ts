@@ -30,7 +30,7 @@ describe('Payload Validation', () => {
       const meta: BlockPayloadMetadata = {
         allowedPayloads: {
           input: ['float', 'phase'],
-          out: ['float'],
+          out: [FLOAT],
         },
         semantics: 'typeSpecific',
       };
@@ -43,7 +43,7 @@ describe('Payload Validation', () => {
 
   describe('findPayloadCombination', () => {
     it('returns undefined for blocks without combinations', () => {
-      const combo = findPayloadCombination('Const', ['float']);
+      const combo = findPayloadCombination('Const', [FLOAT]);
       expect(combo).toBeUndefined();
     });
 
@@ -56,26 +56,26 @@ describe('Payload Validation', () => {
         },
         semantics: 'componentwise',
         combinations: [
-          { inputs: ['float', 'float'], output: 'float' },
-          { inputs: ['vec2', 'vec2'], output: 'vec2' },
+          { inputs: [FLOAT, FLOAT], output: 'float' },
+          { inputs: [VEC2, VEC2], output: 'vec2' },
         ],
       };
 
       // Find float+float combination
       const floatCombo = meta.combinations?.find(
-        c => c.inputs[0] === 'float' && c.inputs[1] === 'float'
+        c => c.inputs[0] .kind === 'float' && c.inputs[1] .kind === 'float'
       );
       expect(floatCombo?.output).toBe('float');
 
       // Find vec2+vec2 combination
       const vec2Combo = meta.combinations?.find(
-        c => c.inputs[0] === 'vec2' && c.inputs[1] === 'vec2'
+        c => c.inputs[0] .kind === 'vec2' && c.inputs[1] .kind === 'vec2'
       );
       expect(vec2Combo?.output).toBe('vec2');
 
       // No color+color combination
       const colorCombo = meta.combinations?.find(
-        c => c.inputs[0] === 'color' && c.inputs[1] === 'color'
+        c => c.inputs[0] .kind === 'color' && c.inputs[1] .kind === 'color'
       );
       expect(colorCombo).toBeUndefined();
     });
@@ -115,7 +115,7 @@ describe('Payload Validation', () => {
         allowedPayloads: { input: ['float', 'phase'] },
         semantics: 'typeSpecific',
         combinations: [
-          { inputs: ['float'], output: 'float' },
+          { inputs: [FLOAT], output: 'float' },
           { inputs: ['phase'], output: 'float' },
         ],
       };

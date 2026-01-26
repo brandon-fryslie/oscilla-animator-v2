@@ -21,7 +21,7 @@
  */
 
 import type { SignalType, PayloadType, Unit } from '../core/canonical-types';
-import { getAxisValue, DEFAULTS_V0, unitsEqual, isUnitVar } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION, getAxisValue, DEFAULTS_V0, unitsEqual, isUnitVar } from '../core/canonical-types';
 
 // =============================================================================
 // Adapter Specification
@@ -80,8 +80,8 @@ const ADAPTER_RULES: AdapterRule[] = [
 
   // --- Phase / Scalar ---
   {
-    from: { payload: 'float', unit: { kind: 'phase01' }, cardinality: 'any', temporality: 'any' },
-    to: { payload: 'float', unit: { kind: 'scalar' }, cardinality: 'any', temporality: 'any' },
+    from: { payload: FLOAT, unit: { kind: 'phase01' }, cardinality: 'any', temporality: 'any' },
+    to: { payload: FLOAT, unit: { kind: 'scalar' }, cardinality: 'any', temporality: 'any' },
     adapter: {
       blockType: 'Adapter_PhaseToScalar01',
       inputPortId: 'in',
@@ -90,8 +90,8 @@ const ADAPTER_RULES: AdapterRule[] = [
     },
   },
   {
-    from: { payload: 'float', unit: { kind: 'scalar' }, cardinality: 'any', temporality: 'any' },
-    to: { payload: 'float', unit: { kind: 'phase01' }, cardinality: 'any', temporality: 'any' },
+    from: { payload: FLOAT, unit: { kind: 'scalar' }, cardinality: 'any', temporality: 'any' },
+    to: { payload: FLOAT, unit: { kind: 'phase01' }, cardinality: 'any', temporality: 'any' },
     adapter: {
       blockType: 'Adapter_ScalarToPhase01',
       inputPortId: 'in',
@@ -102,8 +102,8 @@ const ADAPTER_RULES: AdapterRule[] = [
 
   // --- Phase / Radians ---
   {
-    from: { payload: 'float', unit: { kind: 'phase01' }, cardinality: 'any', temporality: 'any' },
-    to: { payload: 'float', unit: { kind: 'radians' }, cardinality: 'any', temporality: 'any' },
+    from: { payload: FLOAT, unit: { kind: 'phase01' }, cardinality: 'any', temporality: 'any' },
+    to: { payload: FLOAT, unit: { kind: 'radians' }, cardinality: 'any', temporality: 'any' },
     adapter: {
       blockType: 'Adapter_PhaseToRadians',
       inputPortId: 'in',
@@ -112,8 +112,8 @@ const ADAPTER_RULES: AdapterRule[] = [
     },
   },
   {
-    from: { payload: 'float', unit: { kind: 'radians' }, cardinality: 'any', temporality: 'any' },
-    to: { payload: 'float', unit: { kind: 'phase01' }, cardinality: 'any', temporality: 'any' },
+    from: { payload: FLOAT, unit: { kind: 'radians' }, cardinality: 'any', temporality: 'any' },
+    to: { payload: FLOAT, unit: { kind: 'phase01' }, cardinality: 'any', temporality: 'any' },
     adapter: {
       blockType: 'Adapter_RadiansToPhase01',
       inputPortId: 'in',
@@ -124,8 +124,8 @@ const ADAPTER_RULES: AdapterRule[] = [
 
   // --- Degrees / Radians ---
   {
-    from: { payload: 'float', unit: { kind: 'degrees' }, cardinality: 'any', temporality: 'any' },
-    to: { payload: 'float', unit: { kind: 'radians' }, cardinality: 'any', temporality: 'any' },
+    from: { payload: FLOAT, unit: { kind: 'degrees' }, cardinality: 'any', temporality: 'any' },
+    to: { payload: FLOAT, unit: { kind: 'radians' }, cardinality: 'any', temporality: 'any' },
     adapter: {
       blockType: 'Adapter_DegreesToRadians',
       inputPortId: 'in',
@@ -134,8 +134,8 @@ const ADAPTER_RULES: AdapterRule[] = [
     },
   },
   {
-    from: { payload: 'float', unit: { kind: 'radians' }, cardinality: 'any', temporality: 'any' },
-    to: { payload: 'float', unit: { kind: 'degrees' }, cardinality: 'any', temporality: 'any' },
+    from: { payload: FLOAT, unit: { kind: 'radians' }, cardinality: 'any', temporality: 'any' },
+    to: { payload: FLOAT, unit: { kind: 'degrees' }, cardinality: 'any', temporality: 'any' },
     adapter: {
       blockType: 'Adapter_RadiansToDegrees',
       inputPortId: 'in',
@@ -146,8 +146,8 @@ const ADAPTER_RULES: AdapterRule[] = [
 
   // --- Time ---
   {
-    from: { payload: 'int', unit: { kind: 'ms' }, cardinality: 'any', temporality: 'any' },
-    to: { payload: 'float', unit: { kind: 'seconds' }, cardinality: 'any', temporality: 'any' },
+    from: { payload: INT, unit: { kind: 'ms' }, cardinality: 'any', temporality: 'any' },
+    to: { payload: FLOAT, unit: { kind: 'seconds' }, cardinality: 'any', temporality: 'any' },
     adapter: {
       blockType: 'Adapter_MsToSeconds',
       inputPortId: 'in',
@@ -156,8 +156,8 @@ const ADAPTER_RULES: AdapterRule[] = [
     },
   },
   {
-    from: { payload: 'float', unit: { kind: 'seconds' }, cardinality: 'any', temporality: 'any' },
-    to: { payload: 'int', unit: { kind: 'ms' }, cardinality: 'any', temporality: 'any' },
+    from: { payload: FLOAT, unit: { kind: 'seconds' }, cardinality: 'any', temporality: 'any' },
+    to: { payload: INT, unit: { kind: 'ms' }, cardinality: 'any', temporality: 'any' },
     adapter: {
       blockType: 'Adapter_SecondsToMs',
       inputPortId: 'in',
@@ -168,8 +168,8 @@ const ADAPTER_RULES: AdapterRule[] = [
 
   // --- Normalization ---
   {
-    from: { payload: 'float', unit: { kind: 'scalar' }, cardinality: 'any', temporality: 'any' },
-    to: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'any', temporality: 'any' },
+    from: { payload: FLOAT, unit: { kind: 'scalar' }, cardinality: 'any', temporality: 'any' },
+    to: { payload: FLOAT, unit: { kind: 'norm01' }, cardinality: 'any', temporality: 'any' },
     adapter: {
       blockType: 'Adapter_ScalarToNorm01Clamp',
       inputPortId: 'in',
@@ -178,8 +178,8 @@ const ADAPTER_RULES: AdapterRule[] = [
     },
   },
   {
-    from: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'any', temporality: 'any' },
-    to: { payload: 'float', unit: { kind: 'scalar' }, cardinality: 'any', temporality: 'any' },
+    from: { payload: FLOAT, unit: { kind: 'norm01' }, cardinality: 'any', temporality: 'any' },
+    to: { payload: FLOAT, unit: { kind: 'scalar' }, cardinality: 'any', temporality: 'any' },
     adapter: {
       blockType: 'Adapter_Norm01ToScalar',
       inputPortId: 'in',

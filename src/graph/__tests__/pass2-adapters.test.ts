@@ -14,6 +14,7 @@ import {
   unitRadians,
   unitScalar,
 } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
 import { registerBlock } from '../../blocks/registry';
 
 // Ensure adapter blocks are registered
@@ -33,7 +34,7 @@ registerBlock({
   capability: 'pure',
   inputs: {},
   outputs: {
-    out: { label: 'Out', type: signalType('float', unitPhase01()) },
+    out: { label: 'Out', type: signalType(FLOAT, unitPhase01()) },
   },
   lower: () => ({ outputsById: {} }),
 });
@@ -47,7 +48,7 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   inputs: {
-    in: { label: 'In', type: signalType('float', unitRadians()) },
+    in: { label: 'In', type: signalType(FLOAT, unitRadians()) },
   },
   outputs: {},
   lower: () => ({ outputsById: {} }),
@@ -62,7 +63,7 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   inputs: {
-    in: { label: 'In', type: signalType('float', unitPhase01()) },
+    in: { label: 'In', type: signalType(FLOAT, unitPhase01()) },
   },
   outputs: {},
   lower: () => ({ outputsById: {} }),
@@ -78,7 +79,7 @@ registerBlock({
   capability: 'pure',
   inputs: {},
   outputs: {
-    out: { label: 'Out', type: signalType('float', unitScalar()) },
+    out: { label: 'Out', type: signalType(FLOAT, unitScalar()) },
   },
   lower: () => ({ outputsById: {} }),
 });

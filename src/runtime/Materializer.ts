@@ -291,7 +291,7 @@ function fillBuffer(
       }
       const value = expr.value;
 
-      if (expr.type.payload === 'color') {
+      if (expr.type.payload .kind === 'color') {
         // Color: broadcast to RGBA
         const rgba = buffer as Uint8ClampedArray;
         for (let i = 0; i < N; i++) {
@@ -300,7 +300,7 @@ function fillBuffer(
           rgba[i * 4 + 2] = 255; // B
           rgba[i * 4 + 3] = 255; // A
         }
-      } else if (expr.type.payload === 'vec2') {
+      } else if (expr.type.payload .kind === 'vec2') {
         // Vec2: broadcast to (value, value)
         const vec = buffer as Float32Array;
         for (let i = 0; i < N; i++) {
@@ -473,7 +473,7 @@ function applyMap(
   N: number,
   type: SignalType
 ): void {
-  if (type.payload !== 'float') {
+  if (type.payload .kind !== 'float') {
     throw new Error(
       `Map with opcode only supports scalar float fields, got payload=${type.payload}`
     );
@@ -508,7 +508,7 @@ function applyZip(
   type: SignalType
 ): void {
   if (fn.kind === 'opcode') {
-    if (type.payload !== 'float') {
+    if (type.payload .kind !== 'float') {
       throw new Error(
         `Zip with opcode only supports scalar float fields, got payload=${type.payload}`
       );
@@ -543,7 +543,7 @@ function applyZipSig(
   const inArr = fieldInput as Float32Array;
 
   if (fn.kind === 'opcode') {
-    if (type.payload !== 'float') {
+    if (type.payload .kind !== 'float') {
       throw new Error(
         `ZipSig with opcode only supports scalar float fields, got payload=${type.payload}`
       );

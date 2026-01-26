@@ -16,6 +16,7 @@ import type { Block, Patch, Edge, PortRef } from '../../graph/Patch';
 import type { BlockId, PortId, DefaultSource, UIControlHint } from '../../types';
 import type { CombineMode } from '../../types';
 import type { SignalType } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
 import {
   NumberInput as MuiNumberInput,
   TextInput as MuiTextInput,
@@ -40,7 +41,10 @@ import { getCursorPosition, adjustPositionForViewport } from '../expression-edit
  * Format a SignalType for display.
  */
 function formatSignalType(type: SignalType | undefined): string {
-  return (typeof type?.payload === 'string' ? type.payload : '(unresolved)') ?? '(no type)';
+  if (type == undefined) {
+    throw new Error("ERROR: BlockInspector.formatSignalType: Type is undefined.")
+  }
+  return type.payload.kind;
 }
 
 /**
@@ -86,7 +90,7 @@ function getConstSliderMin(inputDef: InputDef | undefined, portType: SignalType 
     return hint.min;
   }
   // Type-based defaults
-  switch (portType?.payload) {
+  switch (portType?.payload.kind) {
     case 'int': return 0;
     case 'float': return 0;
     default: return 0;
@@ -104,7 +108,7 @@ function getConstSliderMax(inputDef: InputDef | undefined, portType: SignalType 
     return hint.max;
   }
   // Type-based defaults
-  switch (portType?.payload) {
+  switch (portType?.payload.kind) {
     case 'int': return 100;  // Reasonable default for integers
     case 'float': return 1;
     default: return 1;
@@ -122,7 +126,7 @@ function getConstSliderStep(inputDef: InputDef | undefined, portType: SignalType
     return hint.step;
   }
   // Type-based defaults
-  switch (portType?.payload) {
+  switch (portType?.payload.kind) {
     case 'int': return 1;
     case 'float': return 0.01;
     default: return 0.01;
@@ -402,7 +406,7 @@ const PortInspectorStandalone = observer(function PortInspectorStandalone({ port
             onChange={(value) => {
               patchStore.updateInputPortCombineMode(block.id, portRef.portId as PortId, value as CombineMode);
             }}
-            options={getValidCombineModes(typeof portDef.type.payload === 'string' ? portDef.type.payload : 'float').map(mode => ({
+            options={getValidCombineModes(portDef.type.payload.kind).map(mode => ({
               value: mode,
               label: formatCombineMode(mode)
             }))}
@@ -1448,7 +1452,7 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
   const parseConstValue = (raw: unknown): unknown => {
     if (raw === undefined || raw === null) {
       // Return sensible defaults based on type
-      switch (payloadType) {
+      switch (payloadType.kind) {
         case 'bool': return false;
         case 'int': return 0;
         case 'float': return 0;
@@ -1513,7 +1517,7 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
       {/* Const Block - Type-Aware Value Editor */}
       {isConstBlock && (
         <div style={{ marginBottom: '12px' }}>
-          {payloadType === 'float' && (
+          {payloadType.kind === 'float' && (
             <SliderWithInput
               label="Value"
               value={constValue as number}
@@ -1523,7 +1527,7 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
               step={getConstSliderStep(inputDef, portType)}
             />
           )}
-          {payloadType === 'int' && (
+          {payloadType.kind === 'int' && (
             <SliderWithInput
               label="Value"
               value={constValue as number}
@@ -1533,13 +1537,13 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
               step={1}
             />
           )}
-          {payloadType === 'bool' && (
+          {payloadType.kind === 'bool' && (
             <MuiCheckboxInput
               checked={!!constValue}
               onChange={(value) => handleParamChange('value', value)}
             />
           )}
-          {payloadType === 'vec2' && (
+          {payloadType.kind === 'vec2' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <SliderWithInput
                 label="X"
@@ -1559,7 +1563,7 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
               />
             </div>
           )}
-          {payloadType === 'color' && (
+          {payloadType.kind === 'color' && (
             <MuiColorInput
               value={
                 typeof constValue === 'string'
@@ -1569,13 +1573,13 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
               onChange={(value) => handleParamChange('value', value)}
             />
           )}
-          {(payloadType === 'shape' || payloadType === 'cameraProjection') && (
+          {(payloadType.kind === 'shape' || payloadType.kind === 'cameraProjection') && (
             <div style={{ padding: '8px', backgroundColor: colors.bgPanel, borderRadius: '4px', fontSize: '12px', color: colors.textSecondary }}>
-              {payloadType === 'shape' && '⚙️ Shape values are configured via geometry properties'}
-              {payloadType === 'cameraProjection' && '⚙️ Camera projection values are configured via projection properties'}
+              {payloadType.kind === 'shape' && '⚙️ Shape values are configured via geometry properties'}
+              {payloadType.kind === 'cameraProjection' && '⚙️ Camera projection values are configured via projection properties'}
             </div>
           )}
-          {!payloadType && (
+          {payloadType.kind !== 'float' && payloadType.kind !== 'int' && payloadType.kind !== 'bool' && payloadType.kind !== 'vec2' && payloadType.kind !== 'color' && payloadType.kind !== 'shape' && payloadType.kind !== 'cameraProjection' && (
             <SliderWithInput
               label="Value"
               value={constValue as number}

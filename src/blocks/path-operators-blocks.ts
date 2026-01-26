@@ -6,6 +6,7 @@
 
 import { registerBlock } from './registry';
 import { signalType, signalTypeField, domainTypeId, strideOf } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import type { FieldExprId, SigExprId } from '../compiler/ir/Indices';
 import { defaultSourceConst } from '../types';
 
@@ -53,12 +54,12 @@ registerBlock({
   inputs: {
     controlPoints: {
       label: 'Control Points',
-      type: signalTypeField('vec2', 'control'),
+      type: signalTypeField(VEC2, 'control'),
     },
   },
   outputs: {
-    position: { label: 'Position', type: signalTypeField('vec2', 'control') },
-    index: { label: 'Index', type: signalTypeField('int', 'control') },
+    position: { label: 'Position', type: signalTypeField(VEC2, 'control') },
+    index: { label: 'Index', type: signalTypeField(INT, 'control') },
   },
   lower: ({ ctx, inputsById }) => {
     const controlPointsInput = inputsById.controlPoints;
@@ -83,7 +84,7 @@ registerBlock({
     const indexField = ctx.b.fieldIntrinsic(
       instance,
       'index',
-      signalTypeField('int', 'control')
+      signalTypeField(INT, 'control')
     );
 
     const posSlot = ctx.b.allocSlot();
@@ -145,23 +146,23 @@ registerBlock({
   inputs: {
     radius: {
       label: 'Radius',
-      type: signalType('float'),
+      type: signalType(FLOAT),
       value: 0.15,
       defaultSource: defaultSourceConst(0.15),
       uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 },
     },
     count: {
       label: 'Count',
-      type: signalType('int'),
+      type: signalType(INT),
       value: 10,
       defaultSource: defaultSourceConst(10),
       uiHint: { kind: 'slider', min: 1, max: 100, step: 1 },
     },
   },
   outputs: {
-    positions: { label: 'Positions', type: signalTypeField('vec2', 'default') },
-    tangents: { label: 'Tangents', type: signalTypeField('vec2', 'default') },
-    t: { label: 'T', type: signalTypeField('float', 'default') },
+    positions: { label: 'Positions', type: signalTypeField(VEC2, 'default') },
+    tangents: { label: 'Tangents', type: signalTypeField(VEC2, 'default') },
+    t: { label: 'T', type: signalTypeField(FLOAT, 'default') },
   },
   lower: ({ ctx, inputsById, config }) => {
     // Get count from config
@@ -181,7 +182,7 @@ registerBlock({
     const normalizedIndexField = ctx.b.fieldIntrinsic(
       layoutInstance,
       'normalizedIndex',
-      signalTypeField('float', 'default')
+      signalTypeField(FLOAT, 'default')
     );
 
     // The 't' output is just the normalized index
@@ -191,9 +192,9 @@ registerBlock({
     const radiusInput = inputsById.radius;
     const radiusSig = radiusInput?.k === 'sig'
       ? radiusInput.id as SigExprId
-      : ctx.b.sigConst((config?.radius as number) ?? 0.15, signalType('float'));
+      : ctx.b.sigConst((config?.radius as number) ?? 0.15, signalType(FLOAT));
 
-    const phaseSig = ctx.b.sigConst(0, signalType('float'));
+    const phaseSig = ctx.b.sigConst(0, signalType(FLOAT));
 
     // Use circleLayout kernel to create positions
     const circleLayoutFn = ctx.b.kernel('circleLayout');
@@ -201,20 +202,20 @@ registerBlock({
       normalizedIndexField,
       [radiusSig, phaseSig],
       circleLayoutFn,
-      signalTypeField('vec2', 'default')
+      signalTypeField(VEC2, 'default')
     );
 
     // For tangents in MVP, we'll output a constant zero field
     // Full tangent calculation requires more complex field operations
     // Users can compute tangents manually if needed
-    const zeroSig = ctx.b.sigConst(0, signalType('float'));
-    const zeroXField = ctx.b.Broadcast(zeroSig, signalTypeField('float', 'default'));
-    const zeroYField = ctx.b.Broadcast(zeroSig, signalTypeField('float', 'default'));
+    const zeroSig = ctx.b.sigConst(0, signalType(FLOAT));
+    const zeroXField = ctx.b.Broadcast(zeroSig, signalTypeField(FLOAT, 'default'));
+    const zeroYField = ctx.b.Broadcast(zeroSig, signalTypeField(FLOAT, 'default'));
     const makeVec2Fn = ctx.b.kernel('makeVec2');
     const tangentsField = ctx.b.fieldZip(
       [zeroXField, zeroYField],
       makeVec2Fn,
-      signalTypeField('vec2', 'default')
+      signalTypeField(VEC2, 'default')
     );
 
     const posSlot = ctx.b.allocSlot();

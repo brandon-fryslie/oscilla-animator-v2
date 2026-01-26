@@ -8,6 +8,7 @@
 
 import { registerBlock, STANDARD_NUMERIC_PAYLOADS } from './registry';
 import { signalType, signalTypeField, unitPhase01, strideOf } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { defaultSourceConst, defaultSourceTimeRoot } from '../types';
 import type { SigExprId, FieldExprId } from '../compiler/ir/Indices';
 import { slotOffset } from '../compiler/ir/Indices';
@@ -30,10 +31,10 @@ registerBlock({
     broadcastPolicy: 'disallowSignalMix',
   },
   inputs: {
-    domain: { label: 'Domain', type: signalType('int') }, // Domain count
+    domain: { label: 'Domain', type: signalType(INT) }, // Domain count
   },
   outputs: {
-    id01: { label: 'ID (0..1)', type: signalTypeField('float', 'default') },
+    id01: { label: 'ID (0..1)', type: signalTypeField(FLOAT, 'default') },
   },
   lower: ({ ctx }) => {
     // Get instance context from Array block or inferred from inputs
@@ -43,7 +44,7 @@ registerBlock({
     }
 
     // Use fieldIntrinsic to get normalized index (0..1) for each instance element
-    const id01Field = ctx.b.fieldIntrinsic(instance, 'normalizedIndex', signalTypeField('float', 'default'));
+    const id01Field = ctx.b.fieldIntrinsic(instance, 'normalizedIndex', signalTypeField(FLOAT, 'default'));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
@@ -85,10 +86,10 @@ registerBlock({
     semantics: 'componentwise',
   },
   inputs: {
-    input: { label: 'Input', type: signalType('float') },
+    input: { label: 'Input', type: signalType(FLOAT) },
   },
   outputs: {
-    result: { label: 'Result', type: signalType('float') },
+    result: { label: 'Result', type: signalType(FLOAT) },
   },
   lower: ({ ctx, inputsById }) => {
     const input = inputsById.input;
@@ -100,7 +101,7 @@ registerBlock({
     if (input.k === 'sig') {
       // Signal path - use opcode
       const sinFn = ctx.b.opcode(OpCode.Sin);
-      const result = ctx.b.sigMap(input.id, sinFn, signalType('float'));
+      const result = ctx.b.sigMap(input.id, sinFn, signalType(FLOAT));
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
       return {
@@ -111,7 +112,7 @@ registerBlock({
     } else if (input.k === 'field') {
       // Field path - use field kernel
       const sinFn = ctx.b.kernel('fieldSin');
-      const result = ctx.b.fieldMap(input.id, sinFn, signalTypeField('float', 'default'));
+      const result = ctx.b.fieldMap(input.id, sinFn, signalTypeField(FLOAT, 'default'));
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
       return {
@@ -150,10 +151,10 @@ registerBlock({
     semantics: 'componentwise',
   },
   inputs: {
-    input: { label: 'Input', type: signalType('float') },
+    input: { label: 'Input', type: signalType(FLOAT) },
   },
   outputs: {
-    result: { label: 'Result', type: signalType('float') },
+    result: { label: 'Result', type: signalType(FLOAT) },
   },
   lower: ({ ctx, inputsById }) => {
     const input = inputsById.input;
@@ -165,7 +166,7 @@ registerBlock({
     if (input.k === 'sig') {
       // Signal path - use opcode
       const cosFn = ctx.b.opcode(OpCode.Cos);
-      const result = ctx.b.sigMap(input.id, cosFn, signalType('float'));
+      const result = ctx.b.sigMap(input.id, cosFn, signalType(FLOAT));
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
       return {
@@ -176,7 +177,7 @@ registerBlock({
     } else if (input.k === 'field') {
       // Field path - use field kernel
       const cosFn = ctx.b.kernel('fieldCos');
-      const result = ctx.b.fieldMap(input.id, cosFn, signalTypeField('float', 'default'));
+      const result = ctx.b.fieldMap(input.id, cosFn, signalTypeField(FLOAT, 'default'));
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
       return {
@@ -216,11 +217,11 @@ registerBlock({
     semantics: 'componentwise',
   },
   inputs: {
-    a: { label: 'A', type: signalType('float') },
-    b: { label: 'B', type: signalType('float') },
+    a: { label: 'A', type: signalType(FLOAT) },
+    b: { label: 'B', type: signalType(FLOAT) },
   },
   outputs: {
-    result: { label: 'Result', type: signalType('float') },
+    result: { label: 'Result', type: signalType(FLOAT) },
   },
   lower: ({ ctx, inputsById }) => {
     const a = inputsById.a;
@@ -233,7 +234,7 @@ registerBlock({
     if (a.k === 'sig' && b.k === 'sig') {
       // Signal path
       const modFn = ctx.b.opcode(OpCode.Mod);
-      const result = ctx.b.sigZip([a.id, b.id], modFn, signalType('float'));
+      const result = ctx.b.sigZip([a.id, b.id], modFn, signalType(FLOAT));
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
       return {
@@ -244,7 +245,7 @@ registerBlock({
     } else if (a.k === 'field' && b.k === 'field') {
       // Field path
       const modFn = ctx.b.kernel('fieldMod');
-      const result = ctx.b.fieldZip([a.id, b.id], modFn, signalTypeField('float', 'default'));
+      const result = ctx.b.fieldZip([a.id, b.id], modFn, signalTypeField(FLOAT, 'default'));
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
       return {
@@ -277,13 +278,13 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    angle: { label: 'Angle', type: signalType('float') },
-    radius: { label: 'Radius', type: signalType('float') },
-    centerX: { label: 'Center X', type: signalType('float'), optional: true, value: 0.5, defaultSource: defaultSourceConst(0.5), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    centerY: { label: 'Center Y', type: signalType('float'), optional: true, value: 0.5, defaultSource: defaultSourceConst(0.5), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    angle: { label: 'Angle', type: signalType(FLOAT) },
+    radius: { label: 'Radius', type: signalType(FLOAT) },
+    centerX: { label: 'Center X', type: signalType(FLOAT), optional: true, value: 0.5, defaultSource: defaultSourceConst(0.5), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    centerY: { label: 'Center Y', type: signalType(FLOAT), optional: true, value: 0.5, defaultSource: defaultSourceConst(0.5), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
   },
   outputs: {
-    pos: { label: 'Position', type: signalType('vec3') },
+    pos: { label: 'Position', type: signalType(VEC3) },
   },
   lower: ({ ctx, inputsById }) => {
     const angle = inputsById.angle;
@@ -296,8 +297,8 @@ registerBlock({
     }
 
     // Get center signals (or create default constants)
-    const centerXSig = centerX?.k === 'sig' ? centerX.id : ctx.b.sigConst(0.5, signalType('float'));
-    const centerYSig = centerY?.k === 'sig' ? centerY.id : ctx.b.sigConst(0.5, signalType('float'));
+    const centerXSig = centerX?.k === 'sig' ? centerX.id : ctx.b.sigConst(0.5, signalType(FLOAT));
+    const centerYSig = centerY?.k === 'sig' ? centerY.id : ctx.b.sigConst(0.5, signalType(FLOAT));
 
     if (angle.k === 'sig' && radius.k === 'sig') {
       // Signal path - build compound operation: pos.x = centerX + radius * cos(angle), pos.y = centerY + radius * sin(angle)
@@ -306,17 +307,17 @@ registerBlock({
       const mulFn = ctx.b.opcode(OpCode.Mul);
       const addFn = ctx.b.opcode(OpCode.Add);
 
-      const cosAngle = ctx.b.sigMap(angle.id, cosFn, signalType('float'));
-      const sinAngle = ctx.b.sigMap(angle.id, sinFn, signalType('float'));
-      const xOffset = ctx.b.sigZip([radius.id, cosAngle], mulFn, signalType('float'));
-      const yOffset = ctx.b.sigZip([radius.id, sinAngle], mulFn, signalType('float'));
-      const x = ctx.b.sigZip([centerXSig, xOffset], addFn, signalType('float'));
-      const y = ctx.b.sigZip([centerYSig, yOffset], addFn, signalType('float'));
-      const z = ctx.b.sigConst(0, signalType('float'));
+      const cosAngle = ctx.b.sigMap(angle.id, cosFn, signalType(FLOAT));
+      const sinAngle = ctx.b.sigMap(angle.id, sinFn, signalType(FLOAT));
+      const xOffset = ctx.b.sigZip([radius.id, cosAngle], mulFn, signalType(FLOAT));
+      const yOffset = ctx.b.sigZip([radius.id, sinAngle], mulFn, signalType(FLOAT));
+      const x = ctx.b.sigZip([centerXSig, xOffset], addFn, signalType(FLOAT));
+      const y = ctx.b.sigZip([centerYSig, yOffset], addFn, signalType(FLOAT));
+      const z = ctx.b.sigConst(0, signalType(FLOAT));
 
       // Package as vec3 - use composed kernel to build vec3 from (x, y, z)
       const vec3Fn = ctx.b.kernel('vec3FromComponents');
-      const result = ctx.b.sigZip([x, y, z], vec3Fn, signalType('vec3'));
+      const result = ctx.b.sigZip([x, y, z], vec3Fn, signalType(VEC3));
 
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
@@ -327,15 +328,15 @@ registerBlock({
       };
     } else if (angle.k === 'field' && radius.k === 'field') {
       // Field path - use broadcast for center signals
-      const centerXField = ctx.b.Broadcast(centerXSig, signalTypeField('float', 'default'));
-      const centerYField = ctx.b.Broadcast(centerYSig, signalTypeField('float', 'default'));
+      const centerXField = ctx.b.Broadcast(centerXSig, signalTypeField(FLOAT, 'default'));
+      const centerYField = ctx.b.Broadcast(centerYSig, signalTypeField(FLOAT, 'default'));
 
       // Zip all four fields together: centerX, centerY, radius, angle -> vec3
       const polarFn = ctx.b.kernel('fieldPolarToCartesian');
       const posField = ctx.b.fieldZip(
         [centerXField, centerYField, radius.id, angle.id],
         polarFn,
-        signalTypeField('vec3', 'default')
+        signalTypeField(VEC3, 'default')
       );
 
       const outType = ctx.outTypes[0];
@@ -349,16 +350,16 @@ registerBlock({
       };
     } else {
       // Mixed path - broadcast signals to fields
-      const angleField = angle.k === 'field' ? angle.id : ctx.b.Broadcast((angle as { k: 'sig'; id: SigExprId }).id, signalTypeField('float', 'default'));
-      const radiusField = radius.k === 'field' ? radius.id : ctx.b.Broadcast((radius as { k: 'sig'; id: SigExprId }).id, signalTypeField('float', 'default'));
-      const centerXField = ctx.b.Broadcast(centerXSig, signalTypeField('float', 'default'));
-      const centerYField = ctx.b.Broadcast(centerYSig, signalTypeField('float', 'default'));
+      const angleField = angle.k === 'field' ? angle.id : ctx.b.Broadcast((angle as { k: 'sig'; id: SigExprId }).id, signalTypeField(FLOAT, 'default'));
+      const radiusField = radius.k === 'field' ? radius.id : ctx.b.Broadcast((radius as { k: 'sig'; id: SigExprId }).id, signalTypeField(FLOAT, 'default'));
+      const centerXField = ctx.b.Broadcast(centerXSig, signalTypeField(FLOAT, 'default'));
+      const centerYField = ctx.b.Broadcast(centerYSig, signalTypeField(FLOAT, 'default'));
 
       const polarFn = ctx.b.kernel('fieldPolarToCartesian');
       const posField = ctx.b.fieldZip(
         [centerXField, centerYField, radiusField, angleField],
         polarFn,
-        signalTypeField('vec3', 'default')
+        signalTypeField(VEC3, 'default')
       );
 
       const outType = ctx.outTypes[0];
@@ -392,13 +393,13 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    pos: { label: 'Position', type: signalType('vec3') },
-    centerX: { label: 'Center X', type: signalType('float'), optional: true, value: 0.5, defaultSource: defaultSourceConst(0.5), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    centerY: { label: 'Center Y', type: signalType('float'), optional: true, value: 0.5, defaultSource: defaultSourceConst(0.5), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    pos: { label: 'Position', type: signalType(VEC3) },
+    centerX: { label: 'Center X', type: signalType(FLOAT), optional: true, value: 0.5, defaultSource: defaultSourceConst(0.5), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    centerY: { label: 'Center Y', type: signalType(FLOAT), optional: true, value: 0.5, defaultSource: defaultSourceConst(0.5), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
   },
   outputs: {
-    angle: { label: 'Angle', type: signalType('float') },
-    radius: { label: 'Radius', type: signalType('float') },
+    angle: { label: 'Angle', type: signalType(FLOAT) },
+    radius: { label: 'Radius', type: signalType(FLOAT) },
   },
   lower: ({ ctx, inputsById }) => {
     const pos = inputsById.pos;
@@ -410,25 +411,25 @@ registerBlock({
     }
 
     // Get center signals (or create default constants)
-    const centerXSig = centerX?.k === 'sig' ? centerX.id : ctx.b.sigConst(0.5, signalType('float'));
-    const centerYSig = centerY?.k === 'sig' ? centerY.id : ctx.b.sigConst(0.5, signalType('float'));
+    const centerXSig = centerX?.k === 'sig' ? centerX.id : ctx.b.sigConst(0.5, signalType(FLOAT));
+    const centerYSig = centerY?.k === 'sig' ? centerY.id : ctx.b.sigConst(0.5, signalType(FLOAT));
 
     if (pos.k === 'sig') {
       // Signal path - extract components and compute angle/radius
       // This would need vec3 component extraction and atan2/sqrt opcodes
       // For now, use kernel approach for signal path too
       const extractFn = ctx.b.kernel('vec3ExtractXY');
-      const xySig = ctx.b.sigMap(pos.id, extractFn, signalType('vec2'));
+      const xySig = ctx.b.sigMap(pos.id, extractFn, signalType(VEC2));
 
       // Compute dx = x - centerX, dy = y - centerY
       const subFn = ctx.b.opcode(OpCode.Sub);
       const xyComponents = ctx.b.kernel('vec2ToComponents');
-      const components = ctx.b.sigMap(xySig, xyComponents, signalType('float'));
+      const components = ctx.b.sigMap(xySig, xyComponents, signalType(FLOAT));
 
       // Use atan2 and sqrt through kernel
       const polarFn = ctx.b.kernel('cartesianToPolarSig');
-      const angleResult = ctx.b.sigZip([pos.id, centerXSig, centerYSig], polarFn, signalType('float'));
-      const radiusResult = ctx.b.sigZip([pos.id, centerXSig, centerYSig], polarFn, signalType('float'));
+      const angleResult = ctx.b.sigZip([pos.id, centerXSig, centerYSig], polarFn, signalType(FLOAT));
+      const radiusResult = ctx.b.sigZip([pos.id, centerXSig, centerYSig], polarFn, signalType(FLOAT));
 
       const outTypeAngle = ctx.outTypes[0];
       const outTypeRadius = ctx.outTypes[1];
@@ -443,20 +444,20 @@ registerBlock({
       };
     } else if (pos.k === 'field') {
       // Field path - use broadcast for center signals
-      const centerXField = ctx.b.Broadcast(centerXSig, signalTypeField('float', 'default'));
-      const centerYField = ctx.b.Broadcast(centerYSig, signalTypeField('float', 'default'));
+      const centerXField = ctx.b.Broadcast(centerXSig, signalTypeField(FLOAT, 'default'));
+      const centerYField = ctx.b.Broadcast(centerYSig, signalTypeField(FLOAT, 'default'));
 
       // Zip all three fields together: pos, centerX, centerY -> (angle, radius)
       const polarFn = ctx.b.kernel('fieldCartesianToPolar');
       const angleField = ctx.b.fieldZip(
         [pos.id, centerXField, centerYField],
         polarFn,
-        signalTypeField('float', 'default')
+        signalTypeField(FLOAT, 'default')
       );
       const radiusField = ctx.b.fieldZip(
         [pos.id, centerXField, centerYField],
         polarFn,
-        signalTypeField('float', 'default')
+        signalTypeField(FLOAT, 'default')
       );
 
       const outTypeAngle = ctx.outTypes[0];
@@ -494,15 +495,15 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    id01: { label: 'ID (0..1)', type: signalType('float') },
+    id01: { label: 'ID (0..1)', type: signalType(FLOAT) },
     // Phase input expects normalized time cycle [0, 1)
-    phase: { label: 'Phase', type: signalType('float', unitPhase01()), defaultSource: defaultSourceTimeRoot('phaseA'), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    base: { label: 'Base', type: signalType('float'), defaultSource: defaultSourceConst(0.5), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    amplitude: { label: 'Amplitude', type: signalType('float'), defaultSource: defaultSourceConst(1.0), uiHint: { kind: 'slider', min: 0, max: 2, step: 0.01 } },
-    spread: { label: 'Spread', type: signalType('float'), defaultSource: defaultSourceConst(1.0), uiHint: { kind: 'slider', min: 0, max: 2, step: 0.01 } },
+    phase: { label: 'Phase', type: signalType(FLOAT, unitPhase01()), defaultSource: defaultSourceTimeRoot('phaseA'), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    base: { label: 'Base', type: signalType(FLOAT), defaultSource: defaultSourceConst(0.5), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    amplitude: { label: 'Amplitude', type: signalType(FLOAT), defaultSource: defaultSourceConst(1.0), uiHint: { kind: 'slider', min: 0, max: 2, step: 0.01 } },
+    spread: { label: 'Spread', type: signalType(FLOAT), defaultSource: defaultSourceConst(1.0), uiHint: { kind: 'slider', min: 0, max: 2, step: 0.01 } },
   },
   outputs: {
-    value: { label: 'Value', type: signalType('float') },
+    value: { label: 'Value', type: signalType(FLOAT) },
   },
   lower: ({ ctx, inputsById }) => {
     const id01 = inputsById.id01;
@@ -516,10 +517,10 @@ registerBlock({
     }
 
     // Get signal inputs (or create default constants)
-    const phaseSig = phase?.k === 'sig' ? phase.id : ctx.b.sigConst(0, signalType('float', unitPhase01()));
-    const baseSig = base?.k === 'sig' ? base.id : ctx.b.sigConst(0.5, signalType('float'));
-    const ampSig = amplitude?.k === 'sig' ? amplitude.id : ctx.b.sigConst(1, signalType('float'));
-    const spreadSig = spread?.k === 'sig' ? spread.id : ctx.b.sigConst(1, signalType('float'));
+    const phaseSig = phase?.k === 'sig' ? phase.id : ctx.b.sigConst(0, signalType(FLOAT, unitPhase01()));
+    const baseSig = base?.k === 'sig' ? base.id : ctx.b.sigConst(0.5, signalType(FLOAT));
+    const ampSig = amplitude?.k === 'sig' ? amplitude.id : ctx.b.sigConst(1, signalType(FLOAT));
+    const spreadSig = spread?.k === 'sig' ? spread.id : ctx.b.sigConst(1, signalType(FLOAT));
 
     if (id01.k === 'sig') {
       // Signal path - compute: base + amplitude * sin(2π * (phase + id01 * spread))
@@ -527,13 +528,13 @@ registerBlock({
       const addFn = ctx.b.opcode(OpCode.Add);
       const sinFn = ctx.b.opcode(OpCode.Sin);
 
-      const idSpread = ctx.b.sigZip([id01.id, spreadSig], mulFn, signalType('float'));
-      const phaseOffset = ctx.b.sigZip([phaseSig, idSpread], addFn, signalType('float'));
-      const tau = ctx.b.sigConst(2 * Math.PI, signalType('float'));
-      const angle = ctx.b.sigZip([tau, phaseOffset], mulFn, signalType('float'));
-      const sinValue = ctx.b.sigMap(angle, sinFn, signalType('float'));
-      const scaled = ctx.b.sigZip([ampSig, sinValue], mulFn, signalType('float'));
-      const result = ctx.b.sigZip([baseSig, scaled], addFn, signalType('float'));
+      const idSpread = ctx.b.sigZip([id01.id, spreadSig], mulFn, signalType(FLOAT));
+      const phaseOffset = ctx.b.sigZip([phaseSig, idSpread], addFn, signalType(FLOAT));
+      const tau = ctx.b.sigConst(2 * Math.PI, signalType(FLOAT));
+      const angle = ctx.b.sigZip([tau, phaseOffset], mulFn, signalType(FLOAT));
+      const sinValue = ctx.b.sigMap(angle, sinFn, signalType(FLOAT));
+      const scaled = ctx.b.sigZip([ampSig, sinValue], mulFn, signalType(FLOAT));
+      const result = ctx.b.sigZip([baseSig, scaled], addFn, signalType(FLOAT));
 
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
@@ -545,17 +546,17 @@ registerBlock({
       };
     } else if (id01.k === 'field') {
       // Field path - broadcast signal inputs to fields
-      const phaseField = ctx.b.Broadcast(phaseSig, signalTypeField('float', 'default'));
-      const baseField = ctx.b.Broadcast(baseSig, signalTypeField('float', 'default'));
-      const ampField = ctx.b.Broadcast(ampSig, signalTypeField('float', 'default'));
-      const spreadField = ctx.b.Broadcast(spreadSig, signalTypeField('float', 'default'));
+      const phaseField = ctx.b.Broadcast(phaseSig, signalTypeField(FLOAT, 'default'));
+      const baseField = ctx.b.Broadcast(baseSig, signalTypeField(FLOAT, 'default'));
+      const ampField = ctx.b.Broadcast(ampSig, signalTypeField(FLOAT, 'default'));
+      const spreadField = ctx.b.Broadcast(spreadSig, signalTypeField(FLOAT, 'default'));
 
       // Compute: base + amplitude * sin(2π * (phase + id01 * spread))
       const pulseFn = ctx.b.kernel('fieldPulse');
       const result = ctx.b.fieldZip(
         [id01.id, phaseField, baseField, ampField, spreadField],
         pulseFn,
-        signalTypeField('float', 'default')
+        signalTypeField(FLOAT, 'default')
       );
 
       const outType = ctx.outTypes[0];
@@ -590,11 +591,11 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    id01: { label: 'ID (0..1)', type: signalType('float') },
-    turns: { label: 'Turns', type: signalType('float'), value: 50, defaultSource: defaultSourceConst(50), exposedAsPort: true },
+    id01: { label: 'ID (0..1)', type: signalType(FLOAT) },
+    turns: { label: 'Turns', type: signalType(FLOAT), value: 50, defaultSource: defaultSourceConst(50), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 50, step: 0.1 } },
   },
   outputs: {
-    angle: { label: 'Angle', type: signalType('float') },
+    angle: { label: 'Angle', type: signalType(FLOAT) },
   },
   lower: ({ ctx, inputsById }) => {
     const id01 = inputsById.id01;
@@ -608,14 +609,14 @@ registerBlock({
     const GOLDEN_ANGLE = 2.39996322972865332;
 
     // Get turns signal (or create default constant)
-    const turnsSig = turns?.k === 'sig' ? turns.id : ctx.b.sigConst(50, signalType('float'));
+    const turnsSig = turns?.k === 'sig' ? turns.id : ctx.b.sigConst(50, signalType(FLOAT));
 
     if (id01.k === 'sig') {
       // Signal path - angle = id01 * turns * goldenAngle
-      const goldenAngleConst = ctx.b.sigConst(GOLDEN_ANGLE, signalType('float'));
+      const goldenAngleConst = ctx.b.sigConst(GOLDEN_ANGLE, signalType(FLOAT));
       const mulFn = ctx.b.opcode(OpCode.Mul);
-      const turnsScaled = ctx.b.sigZip([id01.id, turnsSig], mulFn, signalType('float'));
-      const result = ctx.b.sigZip([turnsScaled, goldenAngleConst], mulFn, signalType('float'));
+      const turnsScaled = ctx.b.sigZip([id01.id, turnsSig], mulFn, signalType(FLOAT));
+      const result = ctx.b.sigZip([turnsScaled, goldenAngleConst], mulFn, signalType(FLOAT));
 
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
@@ -628,7 +629,7 @@ registerBlock({
     } else if (id01.k === 'field') {
       // Field path - use fieldZipSig kernel with turns signal
       const goldenAngleFn = ctx.b.kernel('fieldGoldenAngle');
-      const result = ctx.b.fieldZipSig(id01.id, [turnsSig], goldenAngleFn, signalTypeField('float', 'default'));
+      const result = ctx.b.fieldZipSig(id01.id, [turnsSig], goldenAngleFn, signalTypeField(FLOAT, 'default'));
 
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
@@ -662,12 +663,12 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    id01: { label: 'ID (0..1)', type: signalType('float') },
-    phase: { label: 'Phase', type: signalType('float', unitPhase01()), defaultSource: defaultSourceTimeRoot('phaseA'), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    spin: { label: 'Spin', type: signalType('float'), defaultSource: defaultSourceConst(1.0), uiHint: { kind: 'slider', min: -2, max: 2, step: 0.01 } },
+    id01: { label: 'ID (0..1)', type: signalType(FLOAT) },
+    phase: { label: 'Phase', type: signalType(FLOAT, unitPhase01()), defaultSource: defaultSourceTimeRoot('phaseA'), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    spin: { label: 'Spin', type: signalType(FLOAT), defaultSource: defaultSourceConst(1.0), uiHint: { kind: 'slider', min: -2, max: 2, step: 0.01 } },
   },
   outputs: {
-    offset: { label: 'Offset', type: signalType('float') },
+    offset: { label: 'Offset', type: signalType(FLOAT) },
   },
   lower: ({ ctx, inputsById }) => {
     const id01 = inputsById.id01;
@@ -679,15 +680,15 @@ registerBlock({
     }
 
     // Get signal inputs (or create default constants)
-    const phaseSig = phase?.k === 'sig' ? phase.id : ctx.b.sigConst(0, signalType('float'));
-    const spinSig = spin?.k === 'sig' ? spin.id : ctx.b.sigConst(1, signalType('float'));
+    const phaseSig = phase?.k === 'sig' ? phase.id : ctx.b.sigConst(0, signalType(FLOAT));
+    const spinSig = spin?.k === 'sig' ? spin.id : ctx.b.sigConst(1, signalType(FLOAT));
 
     if (id01.k === 'sig') {
       // Signal path - offset = 2π * phase * spin
-      const tau = ctx.b.sigConst(2 * Math.PI, signalType('float'));
+      const tau = ctx.b.sigConst(2 * Math.PI, signalType(FLOAT));
       const mulFn = ctx.b.opcode(OpCode.Mul);
-      const phaseSpin = ctx.b.sigZip([phaseSig, spinSig], mulFn, signalType('float'));
-      const result = ctx.b.sigZip([tau, phaseSpin], mulFn, signalType('float'));
+      const phaseSpin = ctx.b.sigZip([phaseSig, spinSig], mulFn, signalType(FLOAT));
+      const result = ctx.b.sigZip([tau, phaseSpin], mulFn, signalType(FLOAT));
 
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
@@ -699,15 +700,15 @@ registerBlock({
       };
     } else if (id01.k === 'field') {
       // Field path - broadcast signal inputs to fields
-      const phaseField = ctx.b.Broadcast(phaseSig, signalTypeField('float', 'default'));
-      const spinField = ctx.b.Broadcast(spinSig, signalTypeField('float', 'default'));
+      const phaseField = ctx.b.Broadcast(phaseSig, signalTypeField(FLOAT, 'default'));
+      const spinField = ctx.b.Broadcast(spinSig, signalTypeField(FLOAT, 'default'));
 
       // offset = 2π * phase * spin
       const offsetFn = ctx.b.kernel('fieldAngularOffset');
       const result = ctx.b.fieldZip(
         [id01.id, phaseField, spinField],
         offsetFn,
-        signalTypeField('float', 'default')
+        signalTypeField(FLOAT, 'default')
       );
 
       const outType = ctx.outTypes[0];
@@ -742,11 +743,11 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    id01: { label: 'ID (0..1)', type: signalType('float') },
-    radius: { label: 'Radius', type: signalType('float'), defaultSource: defaultSourceConst(0.35), uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 } },
+    id01: { label: 'ID (0..1)', type: signalType(FLOAT) },
+    radius: { label: 'Radius', type: signalType(FLOAT), defaultSource: defaultSourceConst(0.35), uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 } },
   },
   outputs: {
-    out: { label: 'Radius', type: signalType('float') },
+    out: { label: 'Radius', type: signalType(FLOAT) },
   },
   lower: ({ ctx, inputsById }) => {
     const id01 = inputsById.id01;
@@ -760,8 +761,8 @@ registerBlock({
       // Signal path - effective_radius = radius * sqrt(id01)
       const sqrtFn = ctx.b.opcode(OpCode.Sqrt);
       const mulFn = ctx.b.opcode(OpCode.Mul);
-      const sqrtId = ctx.b.sigMap(id01.id, sqrtFn, signalType('float'));
-      const result = ctx.b.sigZip([radius.id, sqrtId], mulFn, signalType('float'));
+      const sqrtId = ctx.b.sigMap(id01.id, sqrtFn, signalType(FLOAT));
+      const result = ctx.b.sigZip([radius.id, sqrtId], mulFn, signalType(FLOAT));
 
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
@@ -777,7 +778,7 @@ registerBlock({
       const result = ctx.b.fieldZip(
         [id01.id, radius.id],
         sqrtFn,
-        signalTypeField('float', 'default')
+        signalTypeField(FLOAT, 'default')
       );
 
       const outType = ctx.outTypes[0];
@@ -791,14 +792,14 @@ registerBlock({
       };
     } else {
       // Mixed path - broadcast signals to fields
-      const id01Field = id01.k === 'field' ? id01.id : ctx.b.Broadcast((id01 as { k: 'sig'; id: SigExprId }).id, signalTypeField('float', 'default'));
-      const radiusField = radius.k === 'field' ? radius.id : ctx.b.Broadcast((radius as { k: 'sig'; id: SigExprId }).id, signalTypeField('float', 'default'));
+      const id01Field = id01.k === 'field' ? id01.id : ctx.b.Broadcast((id01 as { k: 'sig'; id: SigExprId }).id, signalTypeField(FLOAT, 'default'));
+      const radiusField = radius.k === 'field' ? radius.id : ctx.b.Broadcast((radius as { k: 'sig'; id: SigExprId }).id, signalTypeField(FLOAT, 'default'));
 
       const sqrtFn = ctx.b.kernel('fieldRadiusSqrt');
       const result = ctx.b.fieldZip(
         [id01Field, radiusField],
         sqrtFn,
-        signalTypeField('float', 'default')
+        signalTypeField(FLOAT, 'default')
       );
 
       const outType = ctx.outTypes[0];
@@ -831,14 +832,14 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    pos: { label: 'Position', type: signalType('vec3') },
-    rand: { label: 'Random', type: signalType('float') },
-    amountX: { label: 'Amount X', type: signalType('float'), defaultSource: defaultSourceConst(0.01), uiHint: { kind: 'slider', min: 0, max: 0.1, step: 0.001 } },
-    amountY: { label: 'Amount Y', type: signalType('float'), defaultSource: defaultSourceConst(0.01), uiHint: { kind: 'slider', min: 0, max: 0.1, step: 0.001 } },
-    amountZ: { label: 'Amount Z', type: signalType('float'), defaultSource: defaultSourceConst(0.0), uiHint: { kind: 'slider', min: 0, max: 0.1, step: 0.001 } },
+    pos: { label: 'Position', type: signalType(VEC3) },
+    rand: { label: 'Random', type: signalType(FLOAT) },
+    amountX: { label: 'Amount X', type: signalType(FLOAT), defaultSource: defaultSourceConst(0.01), uiHint: { kind: 'slider', min: 0, max: 0.1, step: 0.001 } },
+    amountY: { label: 'Amount Y', type: signalType(FLOAT), defaultSource: defaultSourceConst(0.01), uiHint: { kind: 'slider', min: 0, max: 0.1, step: 0.001 } },
+    amountZ: { label: 'Amount Z', type: signalType(FLOAT), defaultSource: defaultSourceConst(0.0), uiHint: { kind: 'slider', min: 0, max: 0.1, step: 0.001 } },
   },
   outputs: {
-    out: { label: 'Position', type: signalType('vec3') },
+    out: { label: 'Position', type: signalType(VEC3) },
   },
   lower: ({ ctx, inputsById }) => {
     const pos = inputsById.pos;
@@ -852,17 +853,17 @@ registerBlock({
     }
 
     // Get amount signals (or create default constants)
-    const amountXSig = amountX?.k === 'sig' ? amountX.id : ctx.b.sigConst(0.01, signalType('float'));
-    const amountYSig = amountY?.k === 'sig' ? amountY.id : ctx.b.sigConst(0.01, signalType('float'));
-    const amountZSig = amountZ?.k === 'sig' ? amountZ.id : ctx.b.sigConst(0.0, signalType('float'));
+    const amountXSig = amountX?.k === 'sig' ? amountX.id : ctx.b.sigConst(0.01, signalType(FLOAT));
+    const amountYSig = amountY?.k === 'sig' ? amountY.id : ctx.b.sigConst(0.01, signalType(FLOAT));
+    const amountZSig = amountZ?.k === 'sig' ? amountZ.id : ctx.b.sigConst(0.0, signalType(FLOAT));
 
     if (pos.k === 'sig' && rand.k === 'sig') {
       // Signal path - decompose input vec3, compute jittered components, recompose
       // Read input vec3 components from slot
       const posSlot = pos.slot;
-      const xIn = ctx.b.sigSlot(slotOffset(posSlot, 0), signalType('float'));
-      const yIn = ctx.b.sigSlot(slotOffset(posSlot, 1), signalType('float'));
-      const zIn = ctx.b.sigSlot(slotOffset(posSlot, 2), signalType('float'));
+      const xIn = ctx.b.sigSlot(slotOffset(posSlot, 0), signalType(FLOAT));
+      const yIn = ctx.b.sigSlot(slotOffset(posSlot, 1), signalType(FLOAT));
+      const zIn = ctx.b.sigSlot(slotOffset(posSlot, 2), signalType(FLOAT));
 
       // Compute jitter for each component based on rand
       // Simple jitter: pos + amount * (rand - 0.5) * 2
@@ -870,19 +871,19 @@ registerBlock({
       const addFn = ctx.b.opcode(OpCode.Add);
       const subFn = ctx.b.opcode(OpCode.Sub);
 
-      const half = ctx.b.sigConst(0.5, signalType('float'));
-      const two = ctx.b.sigConst(2, signalType('float'));
+      const half = ctx.b.sigConst(0.5, signalType(FLOAT));
+      const two = ctx.b.sigConst(2, signalType(FLOAT));
 
-      const centered = ctx.b.sigZip([rand.id, half], subFn, signalType('float'));
-      const scaled = ctx.b.sigZip([centered, two], mulFn, signalType('float'));
+      const centered = ctx.b.sigZip([rand.id, half], subFn, signalType(FLOAT));
+      const scaled = ctx.b.sigZip([centered, two], mulFn, signalType(FLOAT));
 
-      const jitterX = ctx.b.sigZip([amountXSig, scaled], mulFn, signalType('float'));
-      const jitterY = ctx.b.sigZip([amountYSig, scaled], mulFn, signalType('float'));
-      const jitterZ = ctx.b.sigZip([amountZSig, scaled], mulFn, signalType('float'));
+      const jitterX = ctx.b.sigZip([amountXSig, scaled], mulFn, signalType(FLOAT));
+      const jitterY = ctx.b.sigZip([amountYSig, scaled], mulFn, signalType(FLOAT));
+      const jitterZ = ctx.b.sigZip([amountZSig, scaled], mulFn, signalType(FLOAT));
 
-      const xOut = ctx.b.sigZip([xIn, jitterX], addFn, signalType('float'));
-      const yOut = ctx.b.sigZip([yIn, jitterY], addFn, signalType('float'));
-      const zOut = ctx.b.sigZip([zIn, jitterZ], addFn, signalType('float'));
+      const xOut = ctx.b.sigZip([xIn, jitterX], addFn, signalType(FLOAT));
+      const yOut = ctx.b.sigZip([yIn, jitterY], addFn, signalType(FLOAT));
+      const zOut = ctx.b.sigZip([zIn, jitterZ], addFn, signalType(FLOAT));
 
       // Multi-component signal: allocate strided slot, emit write step
       const outType = ctx.outTypes[0];
@@ -899,15 +900,15 @@ registerBlock({
       };
     } else if (pos.k === 'field' && rand.k === 'field') {
       // Field path - broadcast amount signals to fields
-      const amountXField = ctx.b.Broadcast(amountXSig, signalTypeField('float', 'default'));
-      const amountYField = ctx.b.Broadcast(amountYSig, signalTypeField('float', 'default'));
-      const amountZField = ctx.b.Broadcast(amountZSig, signalTypeField('float', 'default'));
+      const amountXField = ctx.b.Broadcast(amountXSig, signalTypeField(FLOAT, 'default'));
+      const amountYField = ctx.b.Broadcast(amountYSig, signalTypeField(FLOAT, 'default'));
+      const amountZField = ctx.b.Broadcast(amountZSig, signalTypeField(FLOAT, 'default'));
 
       const jitterFn = ctx.b.kernel('fieldJitterVec');
       const result = ctx.b.fieldZip(
         [pos.id, rand.id, amountXField, amountYField, amountZField],
         jitterFn,
-        signalTypeField('vec3', 'default')
+        signalTypeField(VEC3, 'default')
       );
 
       const outType = ctx.outTypes[0];
@@ -921,17 +922,17 @@ registerBlock({
       };
     } else {
       // Mixed path - broadcast signals to fields
-      const posField = pos.k === 'field' ? pos.id : ctx.b.Broadcast((pos as { k: 'sig'; id: SigExprId }).id, signalTypeField('vec3', 'default'));
-      const randField = rand.k === 'field' ? rand.id : ctx.b.Broadcast((rand as { k: 'sig'; id: SigExprId }).id, signalTypeField('float', 'default'));
-      const amountXField = ctx.b.Broadcast(amountXSig, signalTypeField('float', 'default'));
-      const amountYField = ctx.b.Broadcast(amountYSig, signalTypeField('float', 'default'));
-      const amountZField = ctx.b.Broadcast(amountZSig, signalTypeField('float', 'default'));
+      const posField = pos.k === 'field' ? pos.id : ctx.b.Broadcast((pos as { k: 'sig'; id: SigExprId }).id, signalTypeField(VEC3, 'default'));
+      const randField = rand.k === 'field' ? rand.id : ctx.b.Broadcast((rand as { k: 'sig'; id: SigExprId }).id, signalTypeField(FLOAT, 'default'));
+      const amountXField = ctx.b.Broadcast(amountXSig, signalTypeField(FLOAT, 'default'));
+      const amountYField = ctx.b.Broadcast(amountYSig, signalTypeField(FLOAT, 'default'));
+      const amountZField = ctx.b.Broadcast(amountZSig, signalTypeField(FLOAT, 'default'));
 
       const jitterFn = ctx.b.kernel('fieldJitterVec');
       const result = ctx.b.fieldZip(
         [posField, randField, amountXField, amountYField, amountZField],
         jitterFn,
-        signalTypeField('vec3', 'default')
+        signalTypeField(VEC3, 'default')
       );
 
       const outType = ctx.outTypes[0];
@@ -964,11 +965,11 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    id01: { label: 'ID (0..1)', type: signalType('float') },
-    phase: { label: 'Phase', type: signalType('float', unitPhase01()), defaultSource: defaultSourceTimeRoot('phaseA'), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    id01: { label: 'ID (0..1)', type: signalType(FLOAT) },
+    phase: { label: 'Phase', type: signalType(FLOAT, unitPhase01()), defaultSource: defaultSourceTimeRoot('phaseA'), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
   },
   outputs: {
-    hue: { label: 'Hue', type: signalType('float') },
+    hue: { label: 'Hue', type: signalType(FLOAT) },
   },
   lower: ({ ctx, inputsById }) => {
     const id01 = inputsById.id01;
@@ -979,15 +980,15 @@ registerBlock({
     }
 
     // Get phase signal (or create default constant)
-    const phaseSig = phase?.k === 'sig' ? phase.id : ctx.b.sigConst(0, signalType('float'));
+    const phaseSig = phase?.k === 'sig' ? phase.id : ctx.b.sigConst(0, signalType(FLOAT));
 
     if (id01.k === 'sig') {
       // Signal path - hue = (id01 + phase) mod 1.0
       const addFn = ctx.b.opcode(OpCode.Add);
       const modFn = ctx.b.opcode(OpCode.Mod);
-      const sum = ctx.b.sigZip([id01.id, phaseSig], addFn, signalType('float'));
-      const one = ctx.b.sigConst(1.0, signalType('float'));
-      const result = ctx.b.sigZip([sum, one], modFn, signalType('float'));
+      const sum = ctx.b.sigZip([id01.id, phaseSig], addFn, signalType(FLOAT));
+      const one = ctx.b.sigConst(1.0, signalType(FLOAT));
+      const result = ctx.b.sigZip([sum, one], modFn, signalType(FLOAT));
 
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
@@ -999,14 +1000,14 @@ registerBlock({
       };
     } else if (id01.k === 'field') {
       // Field path - broadcast phase to field
-      const phaseField = ctx.b.Broadcast(phaseSig, signalTypeField('float', 'default'));
+      const phaseField = ctx.b.Broadcast(phaseSig, signalTypeField(FLOAT, 'default'));
 
       // hue = (id01 + phase) mod 1.0
       const hueFn = ctx.b.kernel('fieldHueFromPhase');
       const result = ctx.b.fieldZip(
         [id01.id, phaseField],
         hueFn,
-        signalTypeField('float', 'default')
+        signalTypeField(FLOAT, 'default')
       );
 
       const outType = ctx.outTypes[0];
@@ -1045,11 +1046,11 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    pos: { label: 'Position', type: signalType('vec3') },
-    z: { label: 'Z', type: signalType('float') },
+    pos: { label: 'Position', type: signalType(VEC3) },
+    z: { label: 'Z', type: signalType(FLOAT) },
   },
   outputs: {
-    out: { label: 'Output', type: signalType('vec3') },
+    out: { label: 'Output', type: signalType(VEC3) },
   },
   lower: ({ ctx, inputsById }) => {
     const pos = inputsById.pos;
@@ -1063,8 +1064,8 @@ registerBlock({
       // Signal path - decompose input vec3, replace z component, recompose
       // Read input vec3 components from slot
       const posSlot = pos.slot;
-      const xIn = ctx.b.sigSlot(slotOffset(posSlot, 0), signalType('float'));
-      const yIn = ctx.b.sigSlot(slotOffset(posSlot, 1), signalType('float'));
+      const xIn = ctx.b.sigSlot(slotOffset(posSlot, 0), signalType(FLOAT));
+      const yIn = ctx.b.sigSlot(slotOffset(posSlot, 1), signalType(FLOAT));
 
       // Multi-component signal: allocate strided slot, emit write step
       const outType = ctx.outTypes[0];
@@ -1085,7 +1086,7 @@ registerBlock({
       const result = ctx.b.fieldZip(
         [pos.id, z.id],
         setZFn,
-        signalTypeField('vec3', 'default')
+        signalTypeField(VEC3, 'default')
       );
 
       const outType = ctx.outTypes[0];
@@ -1099,14 +1100,14 @@ registerBlock({
       };
     } else {
       // Mixed path - broadcast signals to fields
-      const posField = pos.k === 'field' ? pos.id : ctx.b.Broadcast((pos as { k: 'sig'; id: SigExprId }).id, signalTypeField('vec3', 'default'));
-      const zField = z.k === 'field' ? z.id : ctx.b.Broadcast((z as { k: 'sig'; id: SigExprId }).id, signalTypeField('float', 'default'));
+      const posField = pos.k === 'field' ? pos.id : ctx.b.Broadcast((pos as { k: 'sig'; id: SigExprId }).id, signalTypeField(VEC3, 'default'));
+      const zField = z.k === 'field' ? z.id : ctx.b.Broadcast((z as { k: 'sig'; id: SigExprId }).id, signalTypeField(FLOAT, 'default'));
 
       const setZFn = ctx.b.kernel('fieldSetZ');
       const result = ctx.b.fieldZip(
         [posField, zField],
         setZFn,
-        signalTypeField('vec3', 'default')
+        signalTypeField(VEC3, 'default')
       );
 
       const outType = ctx.outTypes[0];

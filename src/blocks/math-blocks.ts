@@ -6,6 +6,7 @@
 
 import { registerBlock, STANDARD_NUMERIC_PAYLOADS } from './registry';
 import { signalType, signalTypeField, strideOf } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { OpCode } from '../compiler/ir/types';
 import type { SigExprId, FieldExprId } from '../compiler/ir/Indices';
 
@@ -34,11 +35,11 @@ registerBlock({
     semantics: 'componentwise',
   },
   inputs: {
-    a: { label: 'A', type: signalType('float') },
-    b: { label: 'B', type: signalType('float') },
+    a: { label: 'A', type: signalType(FLOAT) },
+    b: { label: 'B', type: signalType(FLOAT) },
   },
   outputs: {
-    out: { label: 'Output', type: signalType('float') },
+    out: { label: 'Output', type: signalType(FLOAT) },
   },
   lower: ({ ctx, inputsById }) => {
     const a = inputsById.a;
@@ -51,7 +52,7 @@ registerBlock({
     // Signal path
     if (a.k === 'sig' && b.k === 'sig') {
       const addFn = ctx.b.opcode(OpCode.Add);
-      const sigId = ctx.b.sigZip([a.id as SigExprId, b.id as SigExprId], addFn, signalType('float'));
+      const sigId = ctx.b.sigZip([a.id as SigExprId, b.id as SigExprId], addFn, signalType(FLOAT));
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
       return {
@@ -67,7 +68,7 @@ registerBlock({
       if (a.k === 'field') {
         aField = a.id;
       } else if (a.k === 'sig') {
-        aField = ctx.b.Broadcast(a.id, signalTypeField('float', 'default'));
+        aField = ctx.b.Broadcast(a.id, signalTypeField(FLOAT, 'default'));
       } else {
         throw new Error('Unexpected input type for Add field path');
       }
@@ -76,13 +77,13 @@ registerBlock({
       if (b.k === 'field') {
         bField = b.id;
       } else if (b.k === 'sig') {
-        bField = ctx.b.Broadcast(b.id, signalTypeField('float', 'default'));
+        bField = ctx.b.Broadcast(b.id, signalTypeField(FLOAT, 'default'));
       } else {
         throw new Error('Unexpected input type for Add field path');
       }
 
       const addFn = ctx.b.kernel('fieldAdd');
-      const fieldId = ctx.b.fieldZip([aField as FieldExprId, bField as FieldExprId], addFn, signalTypeField('float', 'default'));
+      const fieldId = ctx.b.fieldZip([aField as FieldExprId, bField as FieldExprId], addFn, signalTypeField(FLOAT, 'default'));
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
 
@@ -123,11 +124,11 @@ registerBlock({
     semantics: 'componentwise',
   },
   inputs: {
-    a: { label: 'A', type: signalType('float') },
-    b: { label: 'B', type: signalType('float') },
+    a: { label: 'A', type: signalType(FLOAT) },
+    b: { label: 'B', type: signalType(FLOAT) },
   },
   outputs: {
-    out: { label: 'Output', type: signalType('float') },
+    out: { label: 'Output', type: signalType(FLOAT) },
   },
   lower: ({ ctx, inputsById }) => {
     const a = inputsById.a;
@@ -140,7 +141,7 @@ registerBlock({
     // Signal path
     if (a.k === 'sig' && b.k === 'sig') {
       const subFn = ctx.b.opcode(OpCode.Sub);
-      const sigId = ctx.b.sigZip([a.id as SigExprId, b.id as SigExprId], subFn, signalType('float'));
+      const sigId = ctx.b.sigZip([a.id as SigExprId, b.id as SigExprId], subFn, signalType(FLOAT));
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
       return {
@@ -156,7 +157,7 @@ registerBlock({
       if (a.k === 'field') {
         aField = a.id;
       } else if (a.k === 'sig') {
-        aField = ctx.b.Broadcast(a.id, signalTypeField('float', 'default'));
+        aField = ctx.b.Broadcast(a.id, signalTypeField(FLOAT, 'default'));
       } else {
         throw new Error('Unexpected input type for Subtract field path');
       }
@@ -165,13 +166,13 @@ registerBlock({
       if (b.k === 'field') {
         bField = b.id;
       } else if (b.k === 'sig') {
-        bField = ctx.b.Broadcast(b.id, signalTypeField('float', 'default'));
+        bField = ctx.b.Broadcast(b.id, signalTypeField(FLOAT, 'default'));
       } else {
         throw new Error('Unexpected input type for Subtract field path');
       }
 
       const subFn = ctx.b.kernel('fieldSubtract');
-      const fieldId = ctx.b.fieldZip([aField as FieldExprId, bField as FieldExprId], subFn, signalTypeField('float', 'default'));
+      const fieldId = ctx.b.fieldZip([aField as FieldExprId, bField as FieldExprId], subFn, signalTypeField(FLOAT, 'default'));
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
 
@@ -212,11 +213,11 @@ registerBlock({
     semantics: 'componentwise',
   },
   inputs: {
-    a: { label: 'A', type: signalType('float') },
-    b: { label: 'B', type: signalType('float') },
+    a: { label: 'A', type: signalType(FLOAT) },
+    b: { label: 'B', type: signalType(FLOAT) },
   },
   outputs: {
-    out: { label: 'Output', type: signalType('float') },
+    out: { label: 'Output', type: signalType(FLOAT) },
   },
   lower: ({ ctx, inputsById }) => {
     const a = inputsById.a;
@@ -229,7 +230,7 @@ registerBlock({
     // Signal path
     if (a.k === 'sig' && b.k === 'sig') {
       const mulFn = ctx.b.opcode(OpCode.Mul);
-      const sigId = ctx.b.sigZip([a.id as SigExprId, b.id as SigExprId], mulFn, signalType('float'));
+      const sigId = ctx.b.sigZip([a.id as SigExprId, b.id as SigExprId], mulFn, signalType(FLOAT));
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
       return {
@@ -245,7 +246,7 @@ registerBlock({
       if (a.k === 'field') {
         aField = a.id;
       } else if (a.k === 'sig') {
-        aField = ctx.b.Broadcast(a.id, signalTypeField('float', 'default'));
+        aField = ctx.b.Broadcast(a.id, signalTypeField(FLOAT, 'default'));
       } else {
         throw new Error('Unexpected input type for Multiply field path');
       }
@@ -254,13 +255,13 @@ registerBlock({
       if (b.k === 'field') {
         bField = b.id;
       } else if (b.k === 'sig') {
-        bField = ctx.b.Broadcast(b.id, signalTypeField('float', 'default'));
+        bField = ctx.b.Broadcast(b.id, signalTypeField(FLOAT, 'default'));
       } else {
         throw new Error('Unexpected input type for Multiply field path');
       }
 
       const mulFn = ctx.b.kernel('fieldMultiply');
-      const fieldId = ctx.b.fieldZip([aField as FieldExprId, bField as FieldExprId], mulFn, signalTypeField('float', 'default'));
+      const fieldId = ctx.b.fieldZip([aField as FieldExprId, bField as FieldExprId], mulFn, signalTypeField(FLOAT, 'default'));
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
 
@@ -301,11 +302,11 @@ registerBlock({
     semantics: 'componentwise',
   },
   inputs: {
-    a: { label: 'A', type: signalType('float') },
-    b: { label: 'B', type: signalType('float') },
+    a: { label: 'A', type: signalType(FLOAT) },
+    b: { label: 'B', type: signalType(FLOAT) },
   },
   outputs: {
-    out: { label: 'Output', type: signalType('float') },
+    out: { label: 'Output', type: signalType(FLOAT) },
   },
   lower: ({ ctx, inputsById }) => {
     const a = inputsById.a;
@@ -318,7 +319,7 @@ registerBlock({
     // Signal path
     if (a.k === 'sig' && b.k === 'sig') {
       const divFn = ctx.b.opcode(OpCode.Div);
-      const sigId = ctx.b.sigZip([a.id as SigExprId, b.id as SigExprId], divFn, signalType('float'));
+      const sigId = ctx.b.sigZip([a.id as SigExprId, b.id as SigExprId], divFn, signalType(FLOAT));
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
       return {
@@ -334,7 +335,7 @@ registerBlock({
       if (a.k === 'field') {
         aField = a.id;
       } else if (a.k === 'sig') {
-        aField = ctx.b.Broadcast(a.id, signalTypeField('float', 'default'));
+        aField = ctx.b.Broadcast(a.id, signalTypeField(FLOAT, 'default'));
       } else {
         throw new Error('Unexpected input type for Divide field path');
       }
@@ -343,13 +344,13 @@ registerBlock({
       if (b.k === 'field') {
         bField = b.id;
       } else if (b.k === 'sig') {
-        bField = ctx.b.Broadcast(b.id, signalTypeField('float', 'default'));
+        bField = ctx.b.Broadcast(b.id, signalTypeField(FLOAT, 'default'));
       } else {
         throw new Error('Unexpected input type for Divide field path');
       }
 
       const divFn = ctx.b.kernel('fieldDivide');
-      const fieldId = ctx.b.fieldZip([aField as FieldExprId, bField as FieldExprId], divFn, signalTypeField('float', 'default'));
+      const fieldId = ctx.b.fieldZip([aField as FieldExprId, bField as FieldExprId], divFn, signalTypeField(FLOAT, 'default'));
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
 
@@ -390,11 +391,11 @@ registerBlock({
     semantics: 'componentwise',
   },
   inputs: {
-    a: { label: 'A', type: signalType('float') },
-    b: { label: 'B', type: signalType('float') },
+    a: { label: 'A', type: signalType(FLOAT) },
+    b: { label: 'B', type: signalType(FLOAT) },
   },
   outputs: {
-    out: { label: 'Output', type: signalType('float') },
+    out: { label: 'Output', type: signalType(FLOAT) },
   },
   lower: ({ ctx, inputsById }) => {
     const a = inputsById.a;
@@ -407,7 +408,7 @@ registerBlock({
     // Signal path
     if (a.k === 'sig' && b.k === 'sig') {
       const modFn = ctx.b.opcode(OpCode.Mod);
-      const sigId = ctx.b.sigZip([a.id as SigExprId, b.id as SigExprId], modFn, signalType('float'));
+      const sigId = ctx.b.sigZip([a.id as SigExprId, b.id as SigExprId], modFn, signalType(FLOAT));
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
       return {
@@ -423,7 +424,7 @@ registerBlock({
       if (a.k === 'field') {
         aField = a.id;
       } else if (a.k === 'sig') {
-        aField = ctx.b.Broadcast(a.id, signalTypeField('float', 'default'));
+        aField = ctx.b.Broadcast(a.id, signalTypeField(FLOAT, 'default'));
       } else {
         throw new Error('Unexpected input type for Modulo field path');
       }
@@ -432,13 +433,13 @@ registerBlock({
       if (b.k === 'field') {
         bField = b.id;
       } else if (b.k === 'sig') {
-        bField = ctx.b.Broadcast(b.id, signalTypeField('float', 'default'));
+        bField = ctx.b.Broadcast(b.id, signalTypeField(FLOAT, 'default'));
       } else {
         throw new Error('Unexpected input type for Modulo field path');
       }
 
       const modFn = ctx.b.kernel('fieldModulo');
-      const fieldId = ctx.b.fieldZip([aField as FieldExprId, bField as FieldExprId], modFn, signalTypeField('float', 'default'));
+      const fieldId = ctx.b.fieldZip([aField as FieldExprId, bField as FieldExprId], modFn, signalTypeField(FLOAT, 'default'));
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
 
@@ -471,10 +472,10 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    x: { label: 'X', type: signalType('float') },
+    x: { label: 'X', type: signalType(FLOAT) },
   },
   outputs: {
-    out: { label: 'Output', type: signalType('float') },
+    out: { label: 'Output', type: signalType(FLOAT) },
   },
   lower: ({ ctx, inputsById }) => {
     const x = inputsById.x;
@@ -483,9 +484,9 @@ registerBlock({
     }
 
     // Use Hash opcode with fixed seed=0 for deterministic noise
-    const seedId = ctx.b.sigConst(0, signalType('float'));
+    const seedId = ctx.b.sigConst(0, signalType(FLOAT));
     const hashFn = ctx.b.opcode(OpCode.Hash);
-    const hashId = ctx.b.sigZip([x.id as SigExprId, seedId], hashFn, signalType('float'));
+    const hashId = ctx.b.sigZip([x.id as SigExprId, seedId], hashFn, signalType(FLOAT));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
@@ -514,12 +515,12 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    x: { label: 'X', type: signalType('float') },
-    y: { label: 'Y', type: signalType('float') },
-    z: { label: 'Z', type: signalType('float'), optional: true },
+    x: { label: 'X', type: signalType(FLOAT) },
+    y: { label: 'Y', type: signalType(FLOAT) },
+    z: { label: 'Z', type: signalType(FLOAT), optional: true },
   },
   outputs: {
-    out: { label: 'Output', type: signalType('float') },
+    out: { label: 'Output', type: signalType(FLOAT) },
   },
   lower: ({ ctx, inputsById }) => {
     const x = inputsById.x;
@@ -535,16 +536,16 @@ registerBlock({
     const addFn = ctx.b.opcode(OpCode.Add);
     const sqrtFn = ctx.b.opcode(OpCode.Sqrt);
 
-    const x2 = ctx.b.sigZip([x.id as SigExprId, x.id as SigExprId], mulFn, signalType('float'));
-    const y2 = ctx.b.sigZip([y.id as SigExprId, y.id as SigExprId], mulFn, signalType('float'));
-    let sumSq = ctx.b.sigZip([x2, y2], addFn, signalType('float'));
+    const x2 = ctx.b.sigZip([x.id as SigExprId, x.id as SigExprId], mulFn, signalType(FLOAT));
+    const y2 = ctx.b.sigZip([y.id as SigExprId, y.id as SigExprId], mulFn, signalType(FLOAT));
+    let sumSq = ctx.b.sigZip([x2, y2], addFn, signalType(FLOAT));
 
     if (z && z.k === 'sig') {
-      const z2 = ctx.b.sigZip([z.id as SigExprId, z.id as SigExprId], mulFn, signalType('float'));
-      sumSq = ctx.b.sigZip([sumSq, z2], addFn, signalType('float'));
+      const z2 = ctx.b.sigZip([z.id as SigExprId, z.id as SigExprId], mulFn, signalType(FLOAT));
+      sumSq = ctx.b.sigZip([sumSq, z2], addFn, signalType(FLOAT));
     }
 
-    const lengthId = ctx.b.sigMap(sumSq, sqrtFn, signalType('float'));
+    const lengthId = ctx.b.sigMap(sumSq, sqrtFn, signalType(FLOAT));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
@@ -573,14 +574,14 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    x: { label: 'X', type: signalType('float') },
-    y: { label: 'Y', type: signalType('float') },
-    z: { label: 'Z', type: signalType('float'), optional: true },
+    x: { label: 'X', type: signalType(FLOAT) },
+    y: { label: 'Y', type: signalType(FLOAT) },
+    z: { label: 'Z', type: signalType(FLOAT), optional: true },
   },
   outputs: {
-    outX: { label: 'X', type: signalType('float') },
-    outY: { label: 'Y', type: signalType('float') },
-    outZ: { label: 'Z', type: signalType('float') },
+    outX: { label: 'X', type: signalType(FLOAT) },
+    outY: { label: 'Y', type: signalType(FLOAT) },
+    outZ: { label: 'Z', type: signalType(FLOAT) },
   },
   lower: ({ ctx, inputsById }) => {
     const x = inputsById.x;
@@ -598,31 +599,31 @@ registerBlock({
     const maxFn = ctx.b.opcode(OpCode.Max);
 
     // Compute length = sqrt(x² + y² [+ z²])
-    const x2 = ctx.b.sigZip([x.id as SigExprId, x.id as SigExprId], mulFn, signalType('float'));
-    const y2 = ctx.b.sigZip([y.id as SigExprId, y.id as SigExprId], mulFn, signalType('float'));
-    let sumSq = ctx.b.sigZip([x2, y2], addFn, signalType('float'));
+    const x2 = ctx.b.sigZip([x.id as SigExprId, x.id as SigExprId], mulFn, signalType(FLOAT));
+    const y2 = ctx.b.sigZip([y.id as SigExprId, y.id as SigExprId], mulFn, signalType(FLOAT));
+    let sumSq = ctx.b.sigZip([x2, y2], addFn, signalType(FLOAT));
 
     const hasZ = z && z.k === 'sig';
     if (hasZ) {
-      const z2 = ctx.b.sigZip([z.id as SigExprId, z.id as SigExprId], mulFn, signalType('float'));
-      sumSq = ctx.b.sigZip([sumSq, z2], addFn, signalType('float'));
+      const z2 = ctx.b.sigZip([z.id as SigExprId, z.id as SigExprId], mulFn, signalType(FLOAT));
+      sumSq = ctx.b.sigZip([sumSq, z2], addFn, signalType(FLOAT));
     }
 
-    const lengthId = ctx.b.sigMap(sumSq, sqrtFn, signalType('float'));
+    const lengthId = ctx.b.sigMap(sumSq, sqrtFn, signalType(FLOAT));
 
     // Guard against division by zero: use max(length, epsilon)
-    const epsilon = ctx.b.sigConst(1e-10, signalType('float'));
-    const safeLengthId = ctx.b.sigZip([lengthId, epsilon], maxFn, signalType('float'));
+    const epsilon = ctx.b.sigConst(1e-10, signalType(FLOAT));
+    const safeLengthId = ctx.b.sigZip([lengthId, epsilon], maxFn, signalType(FLOAT));
 
     // Divide each component by length
-    const outXId = ctx.b.sigZip([x.id as SigExprId, safeLengthId], divFn, signalType('float'));
-    const outYId = ctx.b.sigZip([y.id as SigExprId, safeLengthId], divFn, signalType('float'));
+    const outXId = ctx.b.sigZip([x.id as SigExprId, safeLengthId], divFn, signalType(FLOAT));
+    const outYId = ctx.b.sigZip([y.id as SigExprId, safeLengthId], divFn, signalType(FLOAT));
 
     let outZId: SigExprId;
     if (hasZ) {
-      outZId = ctx.b.sigZip([z.id as SigExprId, safeLengthId], divFn, signalType('float'));
+      outZId = ctx.b.sigZip([z.id as SigExprId, safeLengthId], divFn, signalType(FLOAT));
     } else {
-      outZId = ctx.b.sigConst(0, signalType('float'));
+      outZId = ctx.b.sigConst(0, signalType(FLOAT));
     }
 
     const outTypeX = ctx.outTypes[0];

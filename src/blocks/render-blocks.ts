@@ -11,6 +11,7 @@
 
 import { registerBlock } from './registry';
 import { signalType, signalTypeField } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { defaultSourceConst } from '../types';
 
 // =============================================================================
@@ -30,12 +31,12 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    pos: { label: 'Position', type: signalTypeField('vec3', 'default') },
-    color: { label: 'Color', type: signalTypeField('color', 'default') },
-    shape: { label: 'Shape', type: signalType('shape') },
+    pos: { label: 'Position', type: signalTypeField(VEC3, 'default') },
+    color: { label: 'Color', type: signalTypeField(COLOR, 'default') },
+    shape: { label: 'Shape', type: signalType(SHAPE) },
     scale: {
       label: 'Scale',
-      type: signalType('float'),
+      type: signalType(FLOAT),
       value: 1.0,
       defaultSource: defaultSourceConst(1.0),
       uiHint: { kind: 'slider', min: 0.1, max: 10, step: 0.1 },

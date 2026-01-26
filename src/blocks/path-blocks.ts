@@ -8,6 +8,7 @@
 
 import { registerBlock } from './registry';
 import { signalType, signalTypeField, strideOf } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { DOMAIN_CONTROL } from '../core/domain-registry';
 import { PathVerb, type PathTopologyDef } from '../shapes/types';
 import { registerDynamicTopology } from '../shapes/registry';
@@ -101,29 +102,29 @@ registerBlock({
   inputs: {
     sides: {
       label: 'Sides',
-      type: signalType('int'),
+      type: signalType(INT),
       value: 5,  // Pentagon by default
       defaultSource: defaultSourceConst(5),
       uiHint: { kind: 'slider', min: 3, max: 12, step: 1 },
     },
     radiusX: {
       label: 'Radius X',
-      type: signalType('float'),
+      type: signalType(FLOAT),
       value: 0.1,
       defaultSource: defaultSourceConst(0.1),
       uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 },
     },
     radiusY: {
       label: 'Radius Y',
-      type: signalType('float'),
+      type: signalType(FLOAT),
       value: 0.1,
       defaultSource: defaultSourceConst(0.1),
       uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 },
     },
   },
   outputs: {
-    shape: { label: 'Shape', type: signalType('shape') },
-    controlPoints: { label: 'Control Points', type: signalTypeField('vec2', 'control') },
+    shape: { label: 'Shape', type: signalType(SHAPE) },
+    controlPoints: { label: 'Control Points', type: signalTypeField(VEC2, 'control') },
   },
   lower: ({ ctx, inputsById, config }) => {
     // Get sides from config (must be compile-time constant)
@@ -149,7 +150,7 @@ registerBlock({
     const indexField = ctx.b.fieldIntrinsic(
       controlInstance,
       'index',
-      signalTypeField('int', 'control')
+      signalTypeField(INT, 'control')
     );
 
     // Get radiusX and radiusY signals
@@ -157,14 +158,14 @@ registerBlock({
     const radiusXInput = inputsById.radiusX;
     const radiusXSig = radiusXInput?.k === 'sig'
       ? radiusXInput.id
-      : ctx.b.sigConst((config?.radiusX as number) ?? 1.0, signalType('float'));
+      : ctx.b.sigConst((config?.radiusX as number) ?? 1.0, signalType(FLOAT));
 
     const radiusYInput = inputsById.radiusY;
     const radiusYSig = radiusYInput?.k === 'sig'
       ? radiusYInput.id
-      : ctx.b.sigConst((config?.radiusY as number) ?? 1.0, signalType('float'));
+      : ctx.b.sigConst((config?.radiusY as number) ?? 1.0, signalType(FLOAT));
 
-    const sidesSig = ctx.b.sigConst(sides, signalType('int'));
+    const sidesSig = ctx.b.sigConst(sides, signalType(INT));
 
     // Compute control point positions using kernel
     // kernel('polygonVertex') takes: (index, sides, radiusX, radiusY) → vec2
@@ -173,14 +174,14 @@ registerBlock({
       indexField,
       [sidesSig, radiusXSig, radiusYSig],
       polygonVertexFn,
-      signalTypeField('vec2', 'control')
+      signalTypeField(VEC2, 'control')
     );
 
     // Create shape reference with numeric topology ID
     const shapeRefSig = ctx.b.sigShapeRef(
       topologyId,  // Numeric ID returned from registerDynamicTopology
       [],  // No topology params
-      signalType('shape'),
+      signalType(SHAPE),
       computedPositions  // Control point field
     );
 
@@ -292,29 +293,29 @@ registerBlock({
   inputs: {
     points: {
       label: 'Points',
-      type: signalType('int'),
+      type: signalType(INT),
       value: 5,  // 5-pointed star by default
       defaultSource: defaultSourceConst(5),
       uiHint: { kind: 'slider', min: 3, max: 12, step: 1 },
     },
     outerRadius: {
       label: 'Outer Radius',
-      type: signalType('float'),
+      type: signalType(FLOAT),
       value: 0.15,
       defaultSource: defaultSourceConst(0.15),
       uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 },
     },
     innerRadius: {
       label: 'Inner Radius',
-      type: signalType('float'),
+      type: signalType(FLOAT),
       value: 0.06,
       defaultSource: defaultSourceConst(0.06),
       uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 },
     },
   },
   outputs: {
-    shape: { label: 'Shape', type: signalType('shape') },
-    controlPoints: { label: 'Control Points', type: signalTypeField('vec2', 'control') },
+    shape: { label: 'Shape', type: signalType(SHAPE) },
+    controlPoints: { label: 'Control Points', type: signalTypeField(VEC2, 'control') },
   },
   lower: ({ ctx, inputsById, config }) => {
     // Get points from config (must be compile-time constant)
@@ -343,7 +344,7 @@ registerBlock({
     const indexField = ctx.b.fieldIntrinsic(
       controlInstance,
       'index',
-      signalTypeField('int', 'control')
+      signalTypeField(INT, 'control')
     );
 
     // Get outerRadius and innerRadius signals
@@ -351,14 +352,14 @@ registerBlock({
     const outerRadiusInput = inputsById.outerRadius;
     const outerRadiusSig = outerRadiusInput?.k === 'sig'
       ? outerRadiusInput.id
-      : ctx.b.sigConst((config?.outerRadius as number) ?? 1.0, signalType('float'));
+      : ctx.b.sigConst((config?.outerRadius as number) ?? 1.0, signalType(FLOAT));
 
     const innerRadiusInput = inputsById.innerRadius;
     const innerRadiusSig = innerRadiusInput?.k === 'sig'
       ? innerRadiusInput.id
-      : ctx.b.sigConst((config?.innerRadius as number) ?? 0.4, signalType('float'));
+      : ctx.b.sigConst((config?.innerRadius as number) ?? 0.4, signalType(FLOAT));
 
-    const pointsSig = ctx.b.sigConst(points, signalType('int'));
+    const pointsSig = ctx.b.sigConst(points, signalType(INT));
 
     // Compute control point positions using kernel
     // kernel('starVertex') takes: (index, points, outerRadius, innerRadius) → vec2
@@ -367,14 +368,14 @@ registerBlock({
       indexField,
       [pointsSig, outerRadiusSig, innerRadiusSig],
       starVertexFn,
-      signalTypeField('vec2', 'control')
+      signalTypeField(VEC2, 'control')
     );
 
     // Create shape reference with numeric topology ID
     const shapeRefSig = ctx.b.sigShapeRef(
       topologyId,  // Numeric ID returned from registerDynamicTopology
       [],  // No topology params
-      signalType('shape'),
+      signalType(SHAPE),
       computedPositions  // Control point field
     );
 

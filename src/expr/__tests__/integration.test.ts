@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { compileExpression } from '../index';
 import { signalType } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
 import { IRBuilderImpl } from '../../compiler/ir/IRBuilderImpl';
 import { extractSigExpr } from '../../__tests__/ir-test-helpers';
 
@@ -35,12 +36,12 @@ describe('compileExpression Integration', () => {
 
   it('compiles identifier expression', () => {
     // Create an input signal
-    const inputSig = builder.sigConst(10, signalType('int'));
+    const inputSig = builder.sigConst(10, signalType(INT));
 
     // Compile expression that references it
     const result = compileExpression(
       'x',
-      new Map([['x', signalType('int')]]),
+      new Map([['x', signalType(INT)]]),
       builder,
       new Map([['x', inputSig]])
     );
@@ -57,15 +58,15 @@ describe('compileExpression Integration', () => {
 
   it('compiles binary operation', () => {
     // Create input signals
-    const aSig = builder.sigConst(5, signalType('int'));
-    const bSig = builder.sigConst(3, signalType('int'));
+    const aSig = builder.sigConst(5, signalType(INT));
+    const bSig = builder.sigConst(3, signalType(INT));
 
     // Compile expression
     const result = compileExpression(
       'a + b',
       new Map([
-        ['a', signalType('int')],
-        ['b', signalType('int')],
+        ['a', signalType(INT)],
+        ['b', signalType(INT)],
       ]),
       builder,
       new Map([
@@ -86,12 +87,12 @@ describe('compileExpression Integration', () => {
 
   it('compiles function call', () => {
     // Create input signal
-    const xSig = builder.sigConst(0, signalType('float'));
+    const xSig = builder.sigConst(0, signalType(FLOAT));
 
     // Compile expression
     const result = compileExpression(
       'sin(x)',
-      new Map([['x', signalType('float')]]),
+      new Map([['x', signalType(FLOAT)]]),
       builder,
       new Map([['x', xSig]])
     );
@@ -109,9 +110,9 @@ describe('compileExpression Integration', () => {
   it('returns error for syntax error', () => {
     const result = compileExpression(
       'x +',
-      new Map([['x', signalType('int')]]),
+      new Map([['x', signalType(INT)]]),
       builder,
-      new Map([['x', builder.sigConst(1, signalType('int'))]])
+      new Map([['x', builder.sigConst(1, signalType(INT))]])
     );
 
     expect(result.ok).toBe(false);
@@ -125,13 +126,13 @@ describe('compileExpression Integration', () => {
     const result = compileExpression(
       'x + y',
       new Map([
-        ['x', signalType('bool')],
-        ['y', signalType('bool')],
+        ['x', signalType(BOOL)],
+        ['y', signalType(BOOL)],
       ]),
       builder,
       new Map([
-        ['x', builder.sigConst(0, signalType('bool'))],
-        ['y', builder.sigConst(0, signalType('bool'))],
+        ['x', builder.sigConst(0, signalType(BOOL))],
+        ['y', builder.sigConst(0, signalType(BOOL))],
       ])
     );
 

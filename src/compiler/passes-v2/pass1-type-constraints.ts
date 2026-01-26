@@ -14,8 +14,8 @@
 
 import type { NormalizedPatch, NormalizedEdge, BlockIndex } from '../ir/patches';
 import type { Block } from '../../graph/Patch';
-import type { SignalType, Unit, PayloadType, ConcretePayloadType } from '../../core/canonical-types';
-import { isUnitVar, unitsEqual, isPayloadVar, payloadsEqual } from '../../core/canonical-types';
+import type { SignalType, Unit, PayloadType, ConcretePayloadType, PayloadKind } from '../../core/canonical-types';
+import { isUnitVar, unitsEqual, isPayloadVar, payloadsEqual, payloadFromKind } from '../../core/canonical-types';
 import { getBlockDefinition } from '../../blocks/registry';
 
 // =============================================================================
@@ -121,10 +121,10 @@ class UnitUnionFind {
 // Union-Find for Payload Variables
 // =============================================================================
 
-const CONCRETE_PAYLOADS = new Set(['float', 'int', 'vec2', 'vec3', 'color', 'bool', 'shape', 'cameraProjection']);
+const CONCRETE_PAYLOADS = new Set<PayloadKind>(['float', 'int', 'vec2', 'vec3', 'color', 'bool', 'shape', 'cameraProjection']);
 
 class PayloadUnionFind {
-  private parent: Map<string, string> = new Map();
+  private parent: Map<string, string | PayloadKind> = new Map();
 
   find(payload: PayloadType): PayloadType {
     if (!isPayloadVar(payload)) return payload;
@@ -134,13 +134,15 @@ class PayloadUnionFind {
 
     if (p === undefined) return payload;
 
-    if (CONCRETE_PAYLOADS.has(p)) return p as ConcretePayloadType;
+    if (typeof p === 'string' && CONCRETE_PAYLOADS.has(p as PayloadKind)) {
+      return payloadFromKind(p as PayloadKind);
+    }
 
     const root = this.find({ kind: 'var', id: p });
     if (isPayloadVar(root)) {
       this.parent.set(id, root.id);
     } else {
-      this.parent.set(id, root as string);
+      this.parent.set(id, root.kind);
     }
     return root;
   }
@@ -155,11 +157,11 @@ class PayloadUnionFind {
     }
 
     if (isPayloadVar(rootA) && !isPayloadVar(rootB)) {
-      this.parent.set(rootA.id, rootB as string);
+      this.parent.set(rootA.id, rootB.kind);
       return { ok: true };
     }
     if (isPayloadVar(rootB) && !isPayloadVar(rootA)) {
-      this.parent.set(rootB.id, rootA as string);
+      this.parent.set(rootB.id, rootA.kind);
       return { ok: true };
     }
 
@@ -418,8 +420,8 @@ export function pass1TypeConstraints(normalized: NormalizedPatch): Pass1Result {
       const toBlock = normalized.blocks[edge.toBlock];
       const p0 = payloadResult.conflict[0];
       const p1 = payloadResult.conflict[1];
-      const p0Str = isPayloadVar(p0) ? `var(${p0.id})` : p0;
-      const p1Str = isPayloadVar(p1) ? `var(${p1.id})` : p1;
+      const p0Str = isPayloadVar(p0) ? `var(${p0.id})` : p0.kind;
+      const p1Str = isPayloadVar(p1) ? `var(${p1.id})` : p1.kind;
       errors.push({
         kind: 'ConflictingPayloads',
         blockIndex: edge.toBlock,

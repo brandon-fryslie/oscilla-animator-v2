@@ -14,6 +14,7 @@ import { EventHub } from '../../events/EventHub';
 import { BufferPool } from '../BufferPool';
 import { buildPatch } from '../../graph/Patch';
 import { signalType } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
 import { sigExprId } from '../../compiler/ir/Indices';
 import type { EventExpr } from '../../compiler/ir/types';
 import type { EventExprId } from '../../compiler/ir/Indices';
@@ -128,7 +129,7 @@ describe('EventEvaluator', () => {
     it('fires on rising edge (0.4 → 0.6)', () => {
       // Signal that returns different values
       const signals: SigExpr[] = [
-        { kind: 'const', value: 0.6, type: signalType('float') },
+        { kind: 'const', value: 0.6, type: signalType(FLOAT) },
       ];
       const exprs: EventExpr[] = [
         { kind: 'wrap', signal: sigExprId(0) },
@@ -142,7 +143,7 @@ describe('EventEvaluator', () => {
 
     it('does not fire on sustained high (0.6 → 0.8)', () => {
       const signals: SigExpr[] = [
-        { kind: 'const', value: 0.8, type: signalType('float') },
+        { kind: 'const', value: 0.8, type: signalType(FLOAT) },
       ];
       const exprs: EventExpr[] = [
         { kind: 'wrap', signal: sigExprId(0) },
@@ -157,7 +158,7 @@ describe('EventEvaluator', () => {
 
     it('does not fire on falling edge (0.6 → 0.4)', () => {
       const signals: SigExpr[] = [
-        { kind: 'const', value: 0.4, type: signalType('float') },
+        { kind: 'const', value: 0.4, type: signalType(FLOAT) },
       ];
       const exprs: EventExpr[] = [
         { kind: 'wrap', signal: sigExprId(0) },
@@ -172,7 +173,7 @@ describe('EventEvaluator', () => {
 
     it('NaN treated as false', () => {
       const signals: SigExpr[] = [
-        { kind: 'const', value: NaN, type: signalType('float') },
+        { kind: 'const', value: NaN, type: signalType(FLOAT) },
       ];
       const exprs: EventExpr[] = [
         { kind: 'wrap', signal: sigExprId(0) },
@@ -186,7 +187,7 @@ describe('EventEvaluator', () => {
 
     it('Inf treated as false', () => {
       const signals: SigExpr[] = [
-        { kind: 'const', value: Infinity, type: signalType('float') },
+        { kind: 'const', value: Infinity, type: signalType(FLOAT) },
       ];
       const exprs: EventExpr[] = [
         { kind: 'wrap', signal: sigExprId(0) },
@@ -200,7 +201,7 @@ describe('EventEvaluator', () => {
 
     it('updates eventPrevPredicate after evaluation', () => {
       const signals: SigExpr[] = [
-        { kind: 'const', value: 0.7, type: signalType('float') },
+        { kind: 'const', value: 0.7, type: signalType(FLOAT) },
       ];
       const exprs: EventExpr[] = [
         { kind: 'wrap', signal: sigExprId(0) },

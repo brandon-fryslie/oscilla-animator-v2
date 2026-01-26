@@ -6,6 +6,7 @@
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
 import { signalType, type PayloadType, unitPhase01, unitNorm01, unitVar, payloadVar, strideOf } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { OpCode, stableStateId } from '../compiler/ir/types';
 import type { SigExprId } from '../compiler/ir/Indices';
 
@@ -54,7 +55,7 @@ registerBlock({
   },
   inputs: {
     value: {
-      type: signalType('float'),
+      type: signalType(FLOAT),
       value: 0,
       uiHint: { kind: 'slider', min: 1, max: 10000, step: 1 },
       exposedAsPort: false,
@@ -82,12 +83,12 @@ registerBlock({
 
     const stride = strideOf(outType.payload);
 
-    switch (payloadType) {
+    switch (payloadType.kind) {
       case 'float': {
         if (typeof rawValue !== 'number') {
           throw new Error(`Const<float> requires number value, got ${typeof rawValue}`);
         }
-        const sigId = ctx.b.sigConst(rawValue, signalType('float'));
+        const sigId = ctx.b.sigConst(rawValue, signalType(FLOAT));
         const slot = ctx.b.allocSlot(stride);
         return {
           outputsById: {
@@ -98,7 +99,7 @@ registerBlock({
       case 'cameraProjection':
       case 'int': {
         if (typeof rawValue !== 'number') {
-          throw new Error(`Const<${payloadType}> requires number value, got ${typeof rawValue}`);
+          throw new Error(`Const<${payloadType.kind}> requires number value, got ${typeof rawValue}`);
         }
         const sigId = ctx.b.sigConst(Math.floor(rawValue), signalType(payloadType as any));
         const slot = ctx.b.allocSlot(stride);
@@ -112,7 +113,7 @@ registerBlock({
         if (typeof rawValue !== 'boolean' && typeof rawValue !== 'number') {
           throw new Error(`Const<bool> requires boolean or number value, got ${typeof rawValue}`);
         }
-        const sigId = ctx.b.sigConst(rawValue ? 1 : 0, signalType('bool'));
+        const sigId = ctx.b.sigConst(rawValue ? 1 : 0, signalType(BOOL));
         const slot = ctx.b.allocSlot(stride);
         return {
           outputsById: {
@@ -131,8 +132,8 @@ registerBlock({
 
         // Multi-component signal: allocate strided slot, compute components, emit write step
         const slot = ctx.b.allocSlot(stride);
-        const xSig = ctx.b.sigConst(val.x, signalType('float'));
-        const ySig = ctx.b.sigConst(val.y, signalType('float'));
+        const xSig = ctx.b.sigConst(val.x, signalType(FLOAT));
+        const ySig = ctx.b.sigConst(val.y, signalType(FLOAT));
         const components = [xSig, ySig];
 
         ctx.b.stepSlotWriteStrided(slot, components);
@@ -155,10 +156,10 @@ registerBlock({
 
         // Multi-component signal: allocate strided slot, compute components, emit write step
         const slot = ctx.b.allocSlot(stride);
-        const rSig = ctx.b.sigConst(val.r, signalType('float'));
-        const gSig = ctx.b.sigConst(val.g, signalType('float'));
-        const bSig = ctx.b.sigConst(val.b, signalType('float'));
-        const aSig = ctx.b.sigConst(val.a, signalType('float'));
+        const rSig = ctx.b.sigConst(val.r, signalType(FLOAT));
+        const gSig = ctx.b.sigConst(val.g, signalType(FLOAT));
+        const bSig = ctx.b.sigConst(val.b, signalType(FLOAT));
+        const aSig = ctx.b.sigConst(val.a, signalType(FLOAT));
         const components = [rSig, gSig, bSig, aSig];
 
         ctx.b.stepSlotWriteStrided(slot, components);
@@ -170,7 +171,7 @@ registerBlock({
         };
       }
       default: {
-        throw new Error(`Unsupported payload type for Const: ${payloadType}`);
+        throw new Error(`Unsupported payload type for Const: ${(payloadType as any).kind}`);
       }
     }
   },
@@ -195,10 +196,10 @@ registerBlock({
   inputs: {
     phase: {
       label: 'Phase',
-      type: signalType('float', unitPhase01()),
+      type: signalType(FLOAT, unitPhase01()),
     },
     mode: {
-      type: signalType('int'),
+      type: signalType(INT),
       value: 0,
       exposedAsPort: false,
       uiHint: {
@@ -213,7 +214,7 @@ registerBlock({
     },
   },
   outputs: {
-    out: { label: 'Output', type: signalType('float', unitNorm01()) },
+    out: { label: 'Output', type: signalType(FLOAT, unitNorm01()) },
   },
   lower: ({ ctx, inputsById, config }) => {
     const phase = inputsById.phase;
@@ -231,9 +232,9 @@ registerBlock({
         // Sin
         const mul = ctx.b.opcode(OpCode.Mul);
         const sin = ctx.b.opcode(OpCode.Sin);
-        const tau = ctx.b.sigConst(Math.PI * 2, signalType('float'));
-        const phaseRadians = ctx.b.sigZip([phase.id, tau], mul, signalType('float', unitPhase01()));
-        sigId = ctx.b.sigMap(phaseRadians, sin, signalType('float', unitNorm01()));
+        const tau = ctx.b.sigConst(Math.PI * 2, signalType(FLOAT));
+        const phaseRadians = ctx.b.sigZip([phase.id, tau], mul, signalType(FLOAT, unitPhase01()));
+        sigId = ctx.b.sigMap(phaseRadians, sin, signalType(FLOAT, unitNorm01()));
         break;
       }
       case 1: {
@@ -241,29 +242,29 @@ registerBlock({
         const floor = ctx.b.opcode(OpCode.Floor);
         const sub = ctx.b.opcode(OpCode.Sub);
         const mul = ctx.b.opcode(OpCode.Mul);
-        const two = ctx.b.sigConst(2, signalType('float'));
-        const one = ctx.b.sigConst(1, signalType('float'));
+        const two = ctx.b.sigConst(2, signalType(FLOAT));
+        const one = ctx.b.sigConst(1, signalType(FLOAT));
 
-        const phaseFloor = ctx.b.sigMap(phase.id, floor, signalType('float', unitPhase01()));
-        const frac = ctx.b.sigZip([phase.id, phaseFloor], sub, signalType('float', unitNorm01()));
-        const scaled = ctx.b.sigZip([two, frac], mul, signalType('float', unitNorm01()));
-        sigId = ctx.b.sigZip([scaled, one], sub, signalType('float', unitNorm01()));
+        const phaseFloor = ctx.b.sigMap(phase.id, floor, signalType(FLOAT, unitPhase01()));
+        const frac = ctx.b.sigZip([phase.id, phaseFloor], sub, signalType(FLOAT, unitNorm01()));
+        const scaled = ctx.b.sigZip([two, frac], mul, signalType(FLOAT, unitNorm01()));
+        sigId = ctx.b.sigZip([scaled, one], sub, signalType(FLOAT, unitNorm01()));
         break;
       }
       case 2: {
         // Square: phase < 0.5 ? 1 : -1
         const sub = ctx.b.opcode(OpCode.Sub);
-        const half = ctx.b.sigConst(0.5, signalType('float'));
+        const half = ctx.b.sigConst(0.5, signalType(FLOAT));
         const sign = ctx.b.opcode(OpCode.Sign);
 
-        const shifted = ctx.b.sigZip([phase.id, half], sub, signalType('float'));
-        sigId = ctx.b.sigMap(shifted, sign, signalType('float', unitNorm01()));
+        const shifted = ctx.b.sigZip([phase.id, half], sub, signalType(FLOAT));
+        sigId = ctx.b.sigMap(shifted, sign, signalType(FLOAT, unitNorm01()));
         break;
       }
       case 3: {
         // Noise: Use simplexNoise1D with phase as seed
         const noise = ctx.b.kernel('simplexNoise1D');
-        sigId = ctx.b.sigMap(phase.id, noise, signalType('float', unitNorm01()));
+        sigId = ctx.b.sigMap(phase.id, noise, signalType(FLOAT, unitNorm01()));
         break;
       }
       default: {
@@ -298,11 +299,11 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    delta: { label: 'Delta', type: signalType('float') },
-    reset: { label: 'Reset', type: signalType('bool') },
+    delta: { label: 'Delta', type: signalType(FLOAT) },
+    reset: { label: 'Reset', type: signalType(BOOL) },
   },
   outputs: {
-    value: { label: 'Value', type: signalType('float') },
+    value: { label: 'Value', type: signalType(FLOAT) },
   },
   lower: ({ ctx, inputsById }) => {
     const delta = inputsById.delta;
@@ -322,16 +323,16 @@ registerBlock({
     const stateSlot = ctx.b.allocStateSlot(stateId, { initialValue: 0 });
 
     // Read current state
-    const currentValue = ctx.b.sigStateRead(stateSlot, signalType('float'));
+    const currentValue = ctx.b.sigStateRead(stateSlot, signalType(FLOAT));
 
     // Compute new value: reset ? 0 : (currentValue + delta)
     const add = ctx.b.opcode(OpCode.Add);
-    const zero = ctx.b.sigConst(0, signalType('float'));
-    const newValue = ctx.b.sigZip([currentValue, delta.id], add, signalType('float'));
+    const zero = ctx.b.sigConst(0, signalType(FLOAT));
+    const newValue = ctx.b.sigZip([currentValue, delta.id], add, signalType(FLOAT));
 
     // Select: reset ? 0 : newValue
     const select = ctx.b.kernel('select');
-    const finalValue = ctx.b.sigZip([reset.id, zero, newValue], select, signalType('float'));
+    const finalValue = ctx.b.sigZip([reset.id, zero, newValue], select, signalType(FLOAT));
 
     // Write back to state
     ctx.b.stepStateWrite(stateSlot, finalValue);
@@ -363,11 +364,11 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'Input', type: signalType('float') },
-    initialValue: { type: signalType('float'), value: 0, exposedAsPort: false },
+    in: { label: 'Input', type: signalType(FLOAT) },
+    initialValue: { type: signalType(FLOAT), value: 0, exposedAsPort: false },
   },
   outputs: {
-    out: { label: 'Output', type: signalType('float') },
+    out: { label: 'Output', type: signalType(FLOAT) },
   },
   lower: ({ ctx, inputsById, config }) => {
     const input = inputsById.in;
@@ -383,7 +384,7 @@ registerBlock({
     const stateSlot = ctx.b.allocStateSlot(stateId, { initialValue });
 
     // Read previous state (this is the output - delayed by 1 frame)
-    const outputId = ctx.b.sigStateRead(stateSlot, signalType('float'));
+    const outputId = ctx.b.sigStateRead(stateSlot, signalType(FLOAT));
 
     // Write current input to state for next frame
     ctx.b.stepStateWrite(stateSlot, input.id);
@@ -415,12 +416,12 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    target: { label: 'Target', type: signalType('float') },
-    smoothing: { type: signalType('float'), value: 0.5, exposedAsPort: false },
-    initialValue: { type: signalType('float'), value: 0, exposedAsPort: false },
+    target: { label: 'Target', type: signalType(FLOAT) },
+    smoothing: { type: signalType(FLOAT), value: 0.5, exposedAsPort: false },
+    initialValue: { type: signalType(FLOAT), value: 0, exposedAsPort: false },
   },
   outputs: {
-    out: { label: 'Output', type: signalType('float') },
+    out: { label: 'Output', type: signalType(FLOAT) },
   },
   lower: ({ ctx, inputsById, config }) => {
     const target = inputsById.target;
@@ -437,12 +438,12 @@ registerBlock({
     const stateSlot = ctx.b.allocStateSlot(stateId, { initialValue });
 
     // Read previous state
-    const prevValue = ctx.b.sigStateRead(stateSlot, signalType('float'));
+    const prevValue = ctx.b.sigStateRead(stateSlot, signalType(FLOAT));
 
     // Compute: lerp(prev, target, smoothing)
     const lerpFn = ctx.b.opcode(OpCode.Lerp);
-    const smoothConst = ctx.b.sigConst(smoothing, signalType('float'));
-    const newValue = ctx.b.sigZip([prevValue, target.id, smoothConst], lerpFn, signalType('float'));
+    const smoothConst = ctx.b.sigConst(smoothing, signalType(FLOAT));
+    const newValue = ctx.b.sigZip([prevValue, target.id, smoothConst], lerpFn, signalType(FLOAT));
 
     // Write new value to state
     ctx.b.stepStateWrite(stateSlot, newValue);
@@ -474,11 +475,11 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    frequency: { label: 'Frequency (Hz)', type: signalType('float') },
-    initialPhase: { type: signalType('float'), value: 0, exposedAsPort: false },
+    frequency: { label: 'Frequency (Hz)', type: signalType(FLOAT) },
+    initialPhase: { type: signalType(FLOAT), value: 0, exposedAsPort: false },
   },
   outputs: {
-    out: { label: 'Phase', type: signalType('float', unitPhase01()) },
+    out: { label: 'Phase', type: signalType(FLOAT, unitPhase01()) },
   },
   lower: ({ ctx, inputsById, config }) => {
     const frequency = inputsById.frequency;
@@ -494,25 +495,25 @@ registerBlock({
     const stateSlot = ctx.b.allocStateSlot(stateId, { initialValue: initialPhase });
 
     // Read previous phase
-    const prevPhase = ctx.b.sigStateRead(stateSlot, signalType('float', unitPhase01()));
+    const prevPhase = ctx.b.sigStateRead(stateSlot, signalType(FLOAT, unitPhase01()));
 
     // Read dt from time system (in seconds)
-    const dtSig = ctx.b.sigTime('dt', signalType('float'));
+    const dtSig = ctx.b.sigTime('dt', signalType(FLOAT));
 
     // Compute: phase increment = frequency * dt / 1000 (dt is in ms)
     const mulFn = ctx.b.opcode(OpCode.Mul);
     const divFn = ctx.b.opcode(OpCode.Div);
-    const thousand = ctx.b.sigConst(1000, signalType('float'));
-    const dtSeconds = ctx.b.sigZip([dtSig, thousand], divFn, signalType('float'));
-    const increment = ctx.b.sigZip([frequency.id, dtSeconds], mulFn, signalType('float'));
+    const thousand = ctx.b.sigConst(1000, signalType(FLOAT));
+    const dtSeconds = ctx.b.sigZip([dtSig, thousand], divFn, signalType(FLOAT));
+    const increment = ctx.b.sigZip([frequency.id, dtSeconds], mulFn, signalType(FLOAT));
 
     // Add increment to previous phase
     const addFn = ctx.b.opcode(OpCode.Add);
-    const rawPhase = ctx.b.sigZip([prevPhase, increment], addFn, signalType('float'));
+    const rawPhase = ctx.b.sigZip([prevPhase, increment], addFn, signalType(FLOAT));
 
     // Wrap to [0, 1)
     const wrapFn = ctx.b.opcode(OpCode.Wrap01);
-    const wrappedPhase = ctx.b.sigMap(rawPhase, wrapFn, signalType('float', unitPhase01()));
+    const wrappedPhase = ctx.b.sigMap(rawPhase, wrapFn, signalType(FLOAT, unitPhase01()));
 
     // Write wrapped phase to state
     ctx.b.stepStateWrite(stateSlot, wrappedPhase);
@@ -544,11 +545,11 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    value: { label: 'Value', type: signalType('float') },
-    seed: { label: 'Seed', type: signalType('float'), optional: true },
+    value: { label: 'Value', type: signalType(FLOAT) },
+    seed: { label: 'Seed', type: signalType(FLOAT), optional: true },
   },
   outputs: {
-    out: { label: 'Output', type: signalType('float') },
+    out: { label: 'Output', type: signalType(FLOAT) },
   },
   lower: ({ ctx, inputsById }) => {
     const value = inputsById.value;
@@ -561,11 +562,11 @@ registerBlock({
     if (seed && seed.k === 'sig') {
       seedId = seed.id;
     } else {
-      seedId = ctx.b.sigConst(0, signalType('float'));
+      seedId = ctx.b.sigConst(0, signalType(FLOAT));
     }
 
     const hashFn = ctx.b.opcode(OpCode.Hash);
-    const hashId = ctx.b.sigZip([value.id, seedId], hashFn, signalType('float'));
+    const hashId = ctx.b.sigZip([value.id, seedId], hashFn, signalType(FLOAT));
 
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();

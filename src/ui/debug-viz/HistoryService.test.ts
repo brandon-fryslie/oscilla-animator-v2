@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { HistoryService, type KeyResolver, type ResolvedKeyMetadata } from './HistoryService';
 import type { DebugTargetKey } from './types';
 import type { ValueSlot } from '../../types';
+import { FLOAT, BOOL, VEC2 } from '../../core/canonical-types';
 
 function slot(n: number): ValueSlot {
   return n as ValueSlot;
@@ -40,12 +41,12 @@ describe('HistoryService', () => {
 
   beforeEach(() => {
     resolverMap = new Map([
-      ['e1', { slotId: slot(10), cardinality: 'signal', payloadType: 'float' }],
-      ['e2', { slotId: slot(20), cardinality: 'signal', payloadType: 'float' }],
-      ['e3', { slotId: slot(30), cardinality: 'signal', payloadType: 'float' }],
-      ['field1', { slotId: slot(40), cardinality: 'field', payloadType: 'float' }],
-      ['bool1', { slotId: slot(50), cardinality: 'signal', payloadType: 'bool' }],
-      ['vec2-1', { slotId: slot(60), cardinality: 'signal', payloadType: 'vec2' }],
+      ['e1', { slotId: slot(10), cardinality: 'signal', payloadType: FLOAT }],
+      ['e2', { slotId: slot(20), cardinality: 'signal', payloadType: FLOAT }],
+      ['e3', { slotId: slot(30), cardinality: 'signal', payloadType: FLOAT }],
+      ['field1', { slotId: slot(40), cardinality: 'field', payloadType: FLOAT }],
+      ['bool1', { slotId: slot(50), cardinality: 'signal', payloadType: BOOL }],
+      ['vec2-1', { slotId: slot(60), cardinality: 'signal', payloadType: VEC2 }],
     ]);
     resolver = makeResolver(resolverMap);
     service = new HistoryService(resolver);
@@ -88,7 +89,7 @@ describe('HistoryService', () => {
     });
 
     it('tracks port keys', () => {
-      resolverMap.set('block-1:out', { slotId: slot(70), cardinality: 'signal', payloadType: 'float' });
+      resolverMap.set('block-1:out', { slotId: slot(70), cardinality: 'signal', payloadType: FLOAT });
       service.track(portKey('block-1', 'out'));
       expect(service.isTracked(portKey('block-1', 'out'))).toBe(true);
     });
@@ -210,7 +211,7 @@ describe('HistoryService', () => {
 
     it('pushes to multiple entries on the same slot', () => {
       // Two keys mapping to the same slot
-      resolverMap.set('e-dup', { slotId: slot(10), cardinality: 'signal', payloadType: 'float' });
+      resolverMap.set('e-dup', { slotId: slot(10), cardinality: 'signal', payloadType: FLOAT });
       service.track(edgeKey('e1'));   // slot 10
       service.track(edgeKey('e-dup')); // also slot 10
 
@@ -248,13 +249,13 @@ describe('HistoryService', () => {
       // Fill to max with float slots
       for (let i = 0; i < 32; i++) {
         const id = `fill-${i}`;
-        resolverMap.set(id, { slotId: slot(100 + i), cardinality: 'signal', payloadType: 'float' });
+        resolverMap.set(id, { slotId: slot(100 + i), cardinality: 'signal', payloadType: FLOAT });
         service.track(edgeKey(id));
       }
       expect(service.trackedCount).toBe(32);
 
       // Track one more — should evict 'fill-0' (oldest)
-      resolverMap.set('new-one', { slotId: slot(200), cardinality: 'signal', payloadType: 'float' });
+      resolverMap.set('new-one', { slotId: slot(200), cardinality: 'signal', payloadType: FLOAT });
       service.track(edgeKey('new-one'));
 
       expect(service.trackedCount).toBe(32);
@@ -265,13 +266,13 @@ describe('HistoryService', () => {
     it('evicts hover probes in insertion order', () => {
       for (let i = 0; i < 32; i++) {
         const id = `fill-${i}`;
-        resolverMap.set(id, { slotId: slot(100 + i), cardinality: 'signal', payloadType: 'float' });
+        resolverMap.set(id, { slotId: slot(100 + i), cardinality: 'signal', payloadType: FLOAT });
         service.track(edgeKey(id));
       }
 
       // Add two more — should evict fill-0 then fill-1
-      resolverMap.set('new-1', { slotId: slot(200), cardinality: 'signal', payloadType: 'float' });
-      resolverMap.set('new-2', { slotId: slot(201), cardinality: 'signal', payloadType: 'float' });
+      resolverMap.set('new-1', { slotId: slot(200), cardinality: 'signal', payloadType: FLOAT });
+      resolverMap.set('new-2', { slotId: slot(201), cardinality: 'signal', payloadType: FLOAT });
       service.track(edgeKey('new-1'));
       service.track(edgeKey('new-2'));
 
@@ -289,7 +290,7 @@ describe('HistoryService', () => {
       // Since we can't pin in v1, we just verify the capacity guard works.
       for (let i = 0; i < 32; i++) {
         const id = `fill-${i}`;
-        resolverMap.set(id, { slotId: slot(100 + i), cardinality: 'signal', payloadType: 'float' });
+        resolverMap.set(id, { slotId: slot(100 + i), cardinality: 'signal', payloadType: FLOAT });
         service.track(edgeKey(id));
       }
       // All are hover probes, so eviction always works
@@ -308,7 +309,7 @@ describe('HistoryService', () => {
       service.onSlotWrite(slot(10), 1.0);
 
       // Change slot mapping
-      resolverMap.set('e1', { slotId: slot(99), cardinality: 'signal', payloadType: 'float' });
+      resolverMap.set('e1', { slotId: slot(99), cardinality: 'signal', payloadType: FLOAT });
       service.onMappingChanged();
 
       // Old slot should not push
@@ -342,7 +343,7 @@ describe('HistoryService', () => {
     it('sets slotId=null if cardinality changes to field', () => {
       service.track(edgeKey('e1'));
 
-      resolverMap.set('e1', { slotId: slot(10), cardinality: 'field', payloadType: 'float' });
+      resolverMap.set('e1', { slotId: slot(10), cardinality: 'field', payloadType: FLOAT });
       service.onMappingChanged();
 
       const history = service.getHistory(edgeKey('e1'))!;
@@ -358,7 +359,7 @@ describe('HistoryService', () => {
       service.onMappingChanged();
 
       // Reappear with new slot
-      resolverMap.set('e1', { slotId: slot(55), cardinality: 'signal', payloadType: 'float' });
+      resolverMap.set('e1', { slotId: slot(55), cardinality: 'signal', payloadType: FLOAT });
       service.onMappingChanged();
 
       const history = service.getHistory(edgeKey('e1'))!;
@@ -412,7 +413,7 @@ describe('HistoryService', () => {
 
   describe('edge cases', () => {
     it('handles null slotId from resolver', () => {
-      resolverMap.set('null-slot', { slotId: null, cardinality: 'signal', payloadType: 'float' });
+      resolverMap.set('null-slot', { slotId: null, cardinality: 'signal', payloadType: FLOAT });
       service.track(edgeKey('null-slot'));
 
       expect(service.isTracked(edgeKey('null-slot'))).toBe(true);

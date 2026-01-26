@@ -16,7 +16,7 @@ import {
 import type { Patch, Block, OutputPort, InputPort } from './Patch';
 import type { PortId } from '../types';
 import type { SignalType } from '../core/canonical-types';
-import { signalType } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION, signalType } from '../core/canonical-types';
 import { BLOCK_DEFS_BY_TYPE } from '../blocks/registry';
 import { normalizeCanonicalName } from '../core/canonical-name';
 
@@ -77,7 +77,7 @@ export function resolveAddress(patch: Patch, addressStr: string): ResolvedAddres
     const blockDef = BLOCK_DEFS_BY_TYPE.get(block.type);
     const outputDef = blockDef?.outputs?.[addr.portId];
     // Use type from definition, or fallback to a default SignalType
-    const type = outputDef?.type || signalType('float' as const);
+    const type = outputDef?.type || signalType(FLOAT as const);
 
     return { kind: 'output', block, port, type, addr };
   }
@@ -90,7 +90,7 @@ export function resolveAddress(patch: Patch, addressStr: string): ResolvedAddres
     const blockDef = BLOCK_DEFS_BY_TYPE.get(block.type);
     const inputDef = blockDef?.inputs?.[addr.portId];
     // Use type from definition, or fallback to a default SignalType
-    const type = inputDef?.type || signalType('float' as const);
+    const type = inputDef?.type || signalType(FLOAT as const);
 
     return { kind: 'input', block, port, type, addr };
   }

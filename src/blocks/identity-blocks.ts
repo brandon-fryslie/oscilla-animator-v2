@@ -6,6 +6,7 @@
 
 import { registerBlock } from './registry';
 import { signalType, signalTypeField, strideOf } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 
 // =============================================================================
 // StableIdHash
@@ -24,12 +25,12 @@ registerBlock({
     broadcastPolicy: 'disallowSignalMix',
   },
   inputs: {
-    domain: { label: 'Domain', type: signalType('float') },
-    seed: { type: signalType('int'), value: 0, exposedAsPort: false },
+    domain: { label: 'Domain', type: signalType(FLOAT) },
+    seed: { type: signalType(INT), value: 0, exposedAsPort: false },
   },
   outputs: {
-    rand: { label: 'Random [0,1]', type: signalTypeField('float', 'default') },
-    id01: { label: 'ID [0,1]', type: signalTypeField('float', 'default') },
+    rand: { label: 'Random [0,1]', type: signalTypeField(FLOAT, 'default') },
+    id01: { label: 'ID [0,1]', type: signalTypeField(FLOAT, 'default') },
   },
   lower: ({ ctx, config }) => {
     const seed = (config?.seed as number) ?? 0;
@@ -42,8 +43,8 @@ registerBlock({
 
     // Create field expressions that map instance index to random values
     // Use fieldIntrinsic to get instance-specific values
-    const randField = ctx.b.fieldIntrinsic(instance, 'randomId', signalTypeField('float', 'default'));
-    const id01Field = ctx.b.fieldIntrinsic(instance, 'normalizedIndex', signalTypeField('float', 'default'));
+    const randField = ctx.b.fieldIntrinsic(instance, 'randomId', signalTypeField(FLOAT, 'default'));
+    const id01Field = ctx.b.fieldIntrinsic(instance, 'normalizedIndex', signalTypeField(FLOAT, 'default'));
 
     const randSlot = ctx.b.allocSlot();
     const id01Slot = ctx.b.allocSlot();
@@ -77,8 +78,8 @@ registerBlock({
   },
   inputs: {},
   outputs: {
-    index: { label: 'Index', type: signalTypeField('float', 'default') },
-    indexInt: { label: 'Index (int)', type: signalTypeField('int', 'default') },
+    index: { label: 'Index', type: signalTypeField(FLOAT, 'default') },
+    indexInt: { label: 'Index (int)', type: signalTypeField(INT, 'default') },
   },
   lower: ({ ctx }) => {
     // Get instance context from Array block or inferred from inputs
@@ -88,8 +89,8 @@ registerBlock({
     }
 
     // Create field expressions that expose instance index
-    const indexField = ctx.b.fieldIntrinsic(instance, 'normalizedIndex', signalTypeField('float', 'default'));
-    const indexIntField = ctx.b.fieldIntrinsic(instance, 'index', signalTypeField('int', 'default'));
+    const indexField = ctx.b.fieldIntrinsic(instance, 'normalizedIndex', signalTypeField(FLOAT, 'default'));
+    const indexIntField = ctx.b.fieldIntrinsic(instance, 'index', signalTypeField(INT, 'default'));
 
     const indexSlot = ctx.b.allocSlot();
     const indexIntSlot = ctx.b.allocSlot();

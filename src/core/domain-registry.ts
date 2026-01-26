@@ -8,6 +8,7 @@
  */
 
 import type { PayloadType } from './canonical-types';
+import { FLOAT, INT, BOOL, VEC2 } from './canonical-types';
 
 // =============================================================================
 // Domain Type System
@@ -74,19 +75,19 @@ export const DOMAIN_EVENT = domainTypeId('event');
 // =============================================================================
 
 const INTRINSICS = {
-  position: { name: 'position', type: 'vec2' as PayloadType, computation: 'inherent' as const },
-  bounds: { name: 'bounds', type: 'vec2' as PayloadType, computation: 'derived' as const },
-  area: { name: 'area', type: 'float' as PayloadType, computation: 'derived' as const },
-  index: { name: 'index', type: 'int' as PayloadType, computation: 'inherent' as const },
-  normalizedIndex: { name: 'normalizedIndex', type: 'float' as PayloadType, computation: 'derived' as const },
-  radius: { name: 'radius', type: 'float' as PayloadType, computation: 'inherent' as const },
-  width: { name: 'width', type: 'float' as PayloadType, computation: 'inherent' as const },
-  height: { name: 'height', type: 'float' as PayloadType, computation: 'inherent' as const },
-  value: { name: 'value', type: 'float' as PayloadType, computation: 'inherent' as const },
-  min: { name: 'min', type: 'float' as PayloadType, computation: 'inherent' as const },
-  max: { name: 'max', type: 'float' as PayloadType, computation: 'inherent' as const },
-  time: { name: 'time', type: 'float' as PayloadType, computation: 'inherent' as const },
-  fired: { name: 'fired', type: 'bool' as PayloadType, computation: 'inherent' as const },
+  position: { name: 'position', type: VEC2, computation: 'inherent' as const },
+  bounds: { name: 'bounds', type: VEC2, computation: 'derived' as const },
+  area: { name: 'area', type: FLOAT, computation: 'derived' as const },
+  index: { name: 'index', type: INT, computation: 'inherent' as const },
+  normalizedIndex: { name: 'normalizedIndex', type: FLOAT, computation: 'derived' as const },
+  radius: { name: 'radius', type: FLOAT, computation: 'inherent' as const },
+  width: { name: 'width', type: FLOAT, computation: 'inherent' as const },
+  height: { name: 'height', type: FLOAT, computation: 'inherent' as const },
+  value: { name: 'value', type: FLOAT, computation: 'inherent' as const },
+  min: { name: 'min', type: FLOAT, computation: 'inherent' as const },
+  max: { name: 'max', type: FLOAT, computation: 'inherent' as const },
+  time: { name: 'time', type: FLOAT, computation: 'inherent' as const },
+  fired: { name: 'fired', type: BOOL, computation: 'inherent' as const },
 } as const;
 
 // =============================================================================

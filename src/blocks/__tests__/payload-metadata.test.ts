@@ -6,6 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
 import {
   getBlockDefinition,
   getBlockPayloadMetadata,
@@ -29,33 +30,33 @@ describe('Payload Metadata', () => {
     it('exports payload metadata types correctly', () => {
       const meta: BlockPayloadMetadata = {
         allowedPayloads: {
-          a: ['float', 'vec2'],
-          b: ['float', 'vec2'],
-          out: ['float', 'vec2'],
+          a: [FLOAT, VEC2],
+          b: [FLOAT, VEC2],
+          out: [FLOAT, VEC2],
         },
         semantics: 'componentwise',
       };
       expect(meta.semantics).toBe('componentwise');
-      expect(meta.allowedPayloads.a).toContain('float');
+      expect(meta.allowedPayloads.a).toContain(FLOAT);
     });
 
     it('exports payload combination types correctly', () => {
       const combo: PayloadCombination = {
-        inputs: ['float', 'float'],
-        output: 'float',
+        inputs: [FLOAT, FLOAT],
+        output: FLOAT,
         impl: { kind: 'opcode', opcode: 'Add' },
       };
-      expect(combo.inputs).toEqual(['float', 'float']);
-      expect(combo.output).toBe('float');
+      expect(combo.inputs).toEqual([FLOAT, FLOAT]);
+      expect(combo.output).toBe(FLOAT);
     });
 
     it('provides standard payload sets', () => {
-      expect(STANDARD_NUMERIC_PAYLOADS).toContain('float');
-      expect(STANDARD_NUMERIC_PAYLOADS).toContain('vec2');
-      expect(STANDARD_NUMERIC_PAYLOADS).toContain('color');
+      expect(STANDARD_NUMERIC_PAYLOADS).toContain(FLOAT);
+      expect(STANDARD_NUMERIC_PAYLOADS).toContain(VEC2);
+      expect(STANDARD_NUMERIC_PAYLOADS).toContain(COLOR);
 
-      expect(STANDARD_SCALAR_PAYLOADS).toContain('float');
-      expect(STANDARD_SCALAR_PAYLOADS).not.toContain('vec2');
+      expect(STANDARD_SCALAR_PAYLOADS).toContain(FLOAT);
+      expect(STANDARD_SCALAR_PAYLOADS).not.toContain(VEC2);
     });
 
     it('provides default payload metadata', () => {
@@ -77,22 +78,22 @@ describe('Payload Metadata', () => {
       const meta = getBlockPayloadMetadata('Add');
       expect(meta).toBeDefined();
       expect(meta?.semantics).toBe('componentwise');
-      expect(meta?.allowedPayloads.a).toContain('float');
-      expect(meta?.allowedPayloads.a).toContain('vec2');
+      expect(meta?.allowedPayloads.a).toContain(FLOAT);
+      expect(meta?.allowedPayloads.a).toContain(VEC2);
     });
 
     it('isPayloadAllowed returns true for allowed payloads', () => {
-      const result = isPayloadAllowed('Add', 'a', 'float');
+      const result = isPayloadAllowed('Add', 'a', FLOAT);
       expect(result).toBe(true);
     });
 
     it('isPayloadAllowed returns true for Const allowed payloads', () => {
-      const result = isPayloadAllowed('Const', 'out', 'float');
+      const result = isPayloadAllowed('Const', 'out', FLOAT);
       expect(result).toBe(true);
     });
 
     it('isPayloadAllowed returns true for Const vec2 payload', () => {
-      const result = isPayloadAllowed('Const', 'out', 'vec2');
+      const result = isPayloadAllowed('Const', 'out', VEC2);
       expect(result).toBe(true);
     });
 
@@ -105,7 +106,7 @@ describe('Payload Metadata', () => {
 
     it('findPayloadCombination returns undefined for Const with inputs (it has no inputs)', () => {
       // Const has no input ports that affect type - it's a source block
-      const combo = findPayloadCombination('Const', ['float', 'float']);
+      const combo = findPayloadCombination('Const', [FLOAT, FLOAT]);
       expect(combo).toBeUndefined();
     });
 
@@ -119,45 +120,45 @@ describe('Payload Metadata', () => {
     it('validates payload constraints correctly', () => {
       const meta: BlockPayloadMetadata = {
         allowedPayloads: {
-          input: ['float', 'int'],
-          out: ['float'],
+          input: [FLOAT, INT],
+          out: [FLOAT],
         },
         semantics: 'typeSpecific',
         combinations: [
-          { inputs: ['float'], output: 'float' },
-          { inputs: ['int'], output: 'float' },
+          { inputs: [FLOAT], output: FLOAT },
+          { inputs: [INT], output: FLOAT },
         ],
       };
 
-      expect(meta.allowedPayloads.input).toContain('float');
-      expect(meta.allowedPayloads.input).toContain('int');
-      expect(meta.allowedPayloads.input).not.toContain('vec2');
+      expect(meta.allowedPayloads.input).toContain(FLOAT);
+      expect(meta.allowedPayloads.input).toContain(INT);
+      expect(meta.allowedPayloads.input).not.toContain(VEC2);
 
       expect(meta.combinations).toHaveLength(2);
     });
 
     it('combination lookup works correctly', () => {
       const combos: PayloadCombination[] = [
-        { inputs: ['float', 'float'], output: 'float' },
-        { inputs: ['vec2', 'vec2'], output: 'vec2' },
-        { inputs: ['vec2', 'float'], output: 'vec2' },
+        { inputs: [FLOAT, FLOAT], output: FLOAT },
+        { inputs: [VEC2, VEC2], output: VEC2 },
+        { inputs: [VEC2, FLOAT], output: VEC2 },
       ];
 
       // Find exact match
       const floatFloat = combos.find(
-        (c) => c.inputs.length === 2 && c.inputs[0] === 'float' && c.inputs[1] === 'float'
+        (c) => c.inputs.length === 2 && c.inputs[0].kind === 'float' && c.inputs[1].kind === 'float'
       );
-      expect(floatFloat?.output).toBe('float');
+      expect(floatFloat?.output).toBe(FLOAT);
 
       // Find mixed match
       const vec2Float = combos.find(
-        (c) => c.inputs.length === 2 && c.inputs[0] === 'vec2' && c.inputs[1] === 'float'
+        (c) => c.inputs.length === 2 && c.inputs[0].kind === 'vec2' && c.inputs[1].kind === 'float'
       );
-      expect(vec2Float?.output).toBe('vec2');
+      expect(vec2Float?.output).toBe(VEC2);
 
       // No match for disallowed
       const colorColor = combos.find(
-        (c) => c.inputs.length === 2 && c.inputs[0] === 'color' && c.inputs[1] === 'color'
+        (c) => c.inputs.length === 2 && c.inputs[0].kind === 'color' && c.inputs[1].kind === 'color'
       );
       expect(colorColor).toBeUndefined();
     });
@@ -166,7 +167,7 @@ describe('Payload Metadata', () => {
   describe('Semantics categories', () => {
     it('componentwise semantics means per-component operation', () => {
       const meta: BlockPayloadMetadata = {
-        allowedPayloads: { a: ['float', 'vec2', 'color'] },
+        allowedPayloads: { a: [FLOAT, VEC2, COLOR] },
         semantics: 'componentwise',
       };
       expect(meta.semantics).toBe('componentwise');
@@ -174,11 +175,11 @@ describe('Payload Metadata', () => {
 
     it('typeSpecific semantics means explicit per-type behavior', () => {
       const meta: BlockPayloadMetadata = {
-        allowedPayloads: { input: ['float', 'int'] },
+        allowedPayloads: { input: [FLOAT, INT] },
         semantics: 'typeSpecific',
         combinations: [
-          { inputs: ['float'], output: 'float' },
-          { inputs: ['int'], output: 'float' },
+          { inputs: [FLOAT], output: FLOAT },
+          { inputs: [INT], output: FLOAT },
         ],
       };
       expect(meta.semantics).toBe('typeSpecific');

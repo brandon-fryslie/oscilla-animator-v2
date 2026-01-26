@@ -7,6 +7,7 @@
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
 import { signalType, signalTypeField, strideOf, type PayloadType } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { DOMAIN_CIRCLE } from '../core/domain-registry';
 import { defaultSourceConst, defaultSource } from '../types';
 
@@ -57,13 +58,13 @@ registerBlock({
   inputs: {
     element: {
       label: 'Element',
-      type: signalType('shape'),  // Default type for typical usage
+      type: signalType(SHAPE),  // Default type for typical usage
       optional: true,
       defaultSource: defaultSource('Ellipse', 'shape'),
     },
     count: {
       label: 'Count',
-      type: signalType('int'),
+      type: signalType(INT),
       value: 100,
       defaultSource: defaultSourceConst(100),
       uiHint: { kind: 'slider', min: 1, max: 10000, step: 1 },
@@ -71,10 +72,10 @@ registerBlock({
     },
   },
   outputs: {
-    elements: { label: 'Elements', type: signalTypeField('shape', 'default') },
-    index: { label: 'Index', type: signalTypeField('int', 'default') },
-    t: { label: 'T (0-1)', type: signalTypeField('float', 'default') },
-    active: { label: 'Active', type: signalTypeField('bool', 'default') },
+    elements: { label: 'Elements', type: signalTypeField(SHAPE, 'default') },
+    index: { label: 'Index', type: signalTypeField(INT, 'default') },
+    t: { label: 'T (0-1)', type: signalTypeField(FLOAT, 'default') },
+    active: { label: 'Active', type: signalTypeField(BOOL, 'default') },
   },
   lower: ({ ctx, inputsById, config }) => {
     const count = (config?.count as number) ?? 100;
@@ -88,18 +89,18 @@ registerBlock({
     let elementsField;
     if (elementInput && elementInput.k === 'sig') {
       // Broadcast the signal to a field
-      elementsField = ctx.b.Broadcast(elementInput.id, signalTypeField('shape', 'default'));
+      elementsField = ctx.b.Broadcast(elementInput.id, signalTypeField(SHAPE, 'default'));
     } else {
       // No input - use array field (identity)
-      elementsField = ctx.b.fieldArray(instanceId, signalTypeField('shape', 'default'));
+      elementsField = ctx.b.fieldArray(instanceId, signalTypeField(SHAPE, 'default'));
     }
 
     // 2. Intrinsic fields (index, t, active)
-    const indexField = ctx.b.fieldIntrinsic(instanceId, 'index', signalTypeField('int', 'default'));
-    const tField = ctx.b.fieldIntrinsic(instanceId, 'normalizedIndex', signalTypeField('float', 'default'));
+    const indexField = ctx.b.fieldIntrinsic(instanceId, 'index', signalTypeField(INT, 'default'));
+    const tField = ctx.b.fieldIntrinsic(instanceId, 'normalizedIndex', signalTypeField(FLOAT, 'default'));
     // For static arrays, active is always true - we can use a constant broadcast
-    const activeSignal = ctx.b.sigConst(true, signalType('bool'));
-    const activeField = ctx.b.Broadcast(activeSignal, signalTypeField('bool', 'default'));
+    const activeSignal = ctx.b.sigConst(true, signalType(BOOL));
+    const activeField = ctx.b.Broadcast(activeSignal, signalTypeField(BOOL, 'default'));
 
     const outType0 = ctx.outTypes[0];
     const outType1 = ctx.outTypes[1];

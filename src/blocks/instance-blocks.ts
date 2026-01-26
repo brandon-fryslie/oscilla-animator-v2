@@ -8,6 +8,7 @@
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
 import { signalType, signalTypeField, unitPhase01, strideOf, type PayloadType } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { DOMAIN_CIRCLE } from '../core/domain-registry';
 import { defaultSourceConst } from '../types';
 
@@ -47,12 +48,12 @@ registerBlock({
     semantics: 'typeSpecific',
   },
   inputs: {
-    elements: { label: 'Elements', type: signalTypeField('shape', 'default') },
-    rows: { label: 'Rows', type: signalType('int'), value: 10, defaultSource: defaultSourceConst(10), exposedAsPort: false, uiHint: { kind: 'slider', min: 1, max: 100, step: 1 } },
-    cols: { label: 'Columns', type: signalType('int'), value: 10, defaultSource: defaultSourceConst(10), exposedAsPort: false, uiHint: { kind: 'slider', min: 1, max: 100, step: 1 } },
+    elements: { label: 'Elements', type: signalTypeField(SHAPE, 'default') },
+    rows: { label: 'Rows', type: signalType(INT), value: 10, defaultSource: defaultSourceConst(10), exposedAsPort: false, uiHint: { kind: 'slider', min: 1, max: 100, step: 1 } },
+    cols: { label: 'Columns', type: signalType(INT), value: 10, defaultSource: defaultSourceConst(10), exposedAsPort: false, uiHint: { kind: 'slider', min: 1, max: 100, step: 1 } },
   },
   outputs: {
-    position: { label: 'Position', type: signalTypeField('vec3', 'default') },
+    position: { label: 'Position', type: signalTypeField(VEC3, 'default') },
   },
   lower: ({ ctx, inputsById, config }) => {
     const elementsInput = inputsById.elements;
@@ -69,16 +70,16 @@ registerBlock({
     // Get grid dimensions as signals
     const rowsSig = inputsById.rows?.k === 'sig'
       ? inputsById.rows.id
-      : ctx.b.sigConst((config?.rows as number) ?? 10, signalType('int'));
+      : ctx.b.sigConst((config?.rows as number) ?? 10, signalType(INT));
     const colsSig = inputsById.cols?.k === 'sig'
       ? inputsById.cols.id
-      : ctx.b.sigConst((config?.cols as number) ?? 10, signalType('int'));
+      : ctx.b.sigConst((config?.cols as number) ?? 10, signalType(INT));
 
     // Create index field for the instance (gridLayout expects integer indices)
     const indexField = ctx.b.fieldIntrinsic(
       instanceId,
       'index',
-      signalTypeField('float', 'default')
+      signalTypeField(FLOAT, 'default')
     );
 
     // Apply gridLayout kernel: index + [cols, rows] → vec3 positions
@@ -86,7 +87,7 @@ registerBlock({
       indexField,
       [colsSig, rowsSig],
       { kind: 'kernel', name: 'gridLayout' },
-      signalTypeField('vec3', 'default')
+      signalTypeField(VEC3, 'default')
     );
 
     const posType = ctx.outTypes[0];
@@ -130,11 +131,11 @@ registerBlock({
     semantics: 'typeSpecific',
   },
   inputs: {
-    elements: { label: 'Elements', type: signalTypeField('shape', 'default') },
-    spacing: { label: 'Length', type: signalType('float'), value: 0.8, defaultSource: defaultSourceConst(0.8), exposedAsPort: true, uiHint: { kind: 'slider', min: 0.1, max: 2, step: 0.01 } },
+    elements: { label: 'Elements', type: signalTypeField(SHAPE, 'default') },
+    spacing: { label: 'Length', type: signalType(FLOAT), value: 0.8, defaultSource: defaultSourceConst(0.8), exposedAsPort: true, uiHint: { kind: 'slider', min: 0.1, max: 2, step: 0.01 } },
   },
   outputs: {
-    position: { label: 'Position', type: signalTypeField('vec3', 'default') },
+    position: { label: 'Position', type: signalTypeField(VEC3, 'default') },
   },
   lower: ({ ctx, inputsById, config }) => {
     const elementsInput = inputsById.elements;
@@ -153,16 +154,16 @@ registerBlock({
     const length = (config?.spacing as number) ?? 0.8;
 
     // Create vertical line: center X, Y spans from (1-length)/2 to (1+length)/2
-    const x0Sig = ctx.b.sigConst(0.5, signalType('float'));
-    const y0Sig = ctx.b.sigConst((1 - length) / 2, signalType('float'));
-    const x1Sig = ctx.b.sigConst(0.5, signalType('float'));
-    const y1Sig = ctx.b.sigConst((1 + length) / 2, signalType('float'));
+    const x0Sig = ctx.b.sigConst(0.5, signalType(FLOAT));
+    const y0Sig = ctx.b.sigConst((1 - length) / 2, signalType(FLOAT));
+    const x1Sig = ctx.b.sigConst(0.5, signalType(FLOAT));
+    const y1Sig = ctx.b.sigConst((1 + length) / 2, signalType(FLOAT));
 
     // Create normalizedIndex field for the instance
     const normalizedIndexField = ctx.b.fieldIntrinsic(
       instanceId,
       'normalizedIndex',
-      signalTypeField('float', 'default')
+      signalTypeField(FLOAT, 'default')
     );
 
     // Apply lineLayout kernel: normalizedIndex + [x0, y0, x1, y1] → vec3 positions
@@ -170,7 +171,7 @@ registerBlock({
       normalizedIndexField,
       [x0Sig, y0Sig, x1Sig, y1Sig],
       { kind: 'kernel', name: 'lineLayout' },
-      signalTypeField('vec3', 'default')
+      signalTypeField(VEC3, 'default')
     );
 
     const posType = ctx.outTypes[0];
@@ -218,12 +219,12 @@ registerBlock({
     semantics: 'typeSpecific',
   },
   inputs: {
-    elements: { label: 'Elements', type: signalTypeField('shape', 'default') },
-    radius: { label: 'Radius', type: signalType('float'), value: 0.3, defaultSource: defaultSourceConst(0.3), exposedAsPort: true, uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 } },
-    phase: { label: 'Phase', type: signalType('float', unitPhase01()), value: 0, defaultSource: defaultSourceConst(0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    elements: { label: 'Elements', type: signalTypeField(SHAPE, 'default') },
+    radius: { label: 'Radius', type: signalType(FLOAT), value: 0.3, defaultSource: defaultSourceConst(0.3), exposedAsPort: true, uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 } },
+    phase: { label: 'Phase', type: signalType(FLOAT, unitPhase01()), value: 0, defaultSource: defaultSourceConst(0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
   },
   outputs: {
-    position: { label: 'Position', type: signalTypeField('vec3', 'default') },
+    position: { label: 'Position', type: signalTypeField(VEC3, 'default') },
   },
   lower: ({ ctx, inputsById, config }) => {
     const elementsInput = inputsById.elements;
@@ -240,16 +241,16 @@ registerBlock({
     // Get radius and phase as signals
     const radiusSig = inputsById.radius?.k === 'sig'
       ? inputsById.radius.id
-      : ctx.b.sigConst((config?.radius as number) ?? 0.3, signalType('float'));
+      : ctx.b.sigConst((config?.radius as number) ?? 0.3, signalType(FLOAT));
     const phaseSig = inputsById.phase?.k === 'sig'
       ? inputsById.phase.id
-      : ctx.b.sigConst((config?.phase as number) ?? 0, signalType('float'));
+      : ctx.b.sigConst((config?.phase as number) ?? 0, signalType(FLOAT));
 
     // Create normalizedIndex field for the instance
     const normalizedIndexField = ctx.b.fieldIntrinsic(
       instanceId,
       'normalizedIndex',
-      signalTypeField('float', 'default')
+      signalTypeField(FLOAT, 'default')
     );
 
     // Apply circleLayout kernel: normalizedIndex + [radius, phase] → vec3 positions
@@ -257,7 +258,7 @@ registerBlock({
       normalizedIndexField,
       [radiusSig, phaseSig],
       { kind: 'kernel', name: 'circleLayout' },
-      signalTypeField('vec3', 'default')
+      signalTypeField(VEC3, 'default')
     );
 
     const posType = ctx.outTypes[0];
@@ -300,14 +301,14 @@ registerBlock({
     semantics: 'typeSpecific',
   },
   inputs: {
-    elements: { label: 'Elements', type: signalTypeField('shape', 'default') },
-    x0: { label: 'Start X', type: signalType('float'), value: 0.1, defaultSource: defaultSourceConst(0.1), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    y0: { label: 'Start Y', type: signalType('float'), value: 0.5, defaultSource: defaultSourceConst(0.5), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    x1: { label: 'End X', type: signalType('float'), value: 0.9, defaultSource: defaultSourceConst(0.9), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    y1: { label: 'End Y', type: signalType('float'), value: 0.5, defaultSource: defaultSourceConst(0.5), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    elements: { label: 'Elements', type: signalTypeField(SHAPE, 'default') },
+    x0: { label: 'Start X', type: signalType(FLOAT), value: 0.1, defaultSource: defaultSourceConst(0.1), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    y0: { label: 'Start Y', type: signalType(FLOAT), value: 0.5, defaultSource: defaultSourceConst(0.5), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    x1: { label: 'End X', type: signalType(FLOAT), value: 0.9, defaultSource: defaultSourceConst(0.9), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    y1: { label: 'End Y', type: signalType(FLOAT), value: 0.5, defaultSource: defaultSourceConst(0.5), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
   },
   outputs: {
-    position: { label: 'Position', type: signalTypeField('vec3', 'default') },
+    position: { label: 'Position', type: signalTypeField(VEC3, 'default') },
   },
   lower: ({ ctx, inputsById, config }) => {
     const elementsInput = inputsById.elements;
@@ -324,22 +325,22 @@ registerBlock({
     // Get line endpoints as signals
     const x0Sig = inputsById.x0?.k === 'sig'
       ? inputsById.x0.id
-      : ctx.b.sigConst((config?.x0 as number) ?? 0.1, signalType('float'));
+      : ctx.b.sigConst((config?.x0 as number) ?? 0.1, signalType(FLOAT));
     const y0Sig = inputsById.y0?.k === 'sig'
       ? inputsById.y0.id
-      : ctx.b.sigConst((config?.y0 as number) ?? 0.5, signalType('float'));
+      : ctx.b.sigConst((config?.y0 as number) ?? 0.5, signalType(FLOAT));
     const x1Sig = inputsById.x1?.k === 'sig'
       ? inputsById.x1.id
-      : ctx.b.sigConst((config?.x1 as number) ?? 0.9, signalType('float'));
+      : ctx.b.sigConst((config?.x1 as number) ?? 0.9, signalType(FLOAT));
     const y1Sig = inputsById.y1?.k === 'sig'
       ? inputsById.y1.id
-      : ctx.b.sigConst((config?.y1 as number) ?? 0.5, signalType('float'));
+      : ctx.b.sigConst((config?.y1 as number) ?? 0.5, signalType(FLOAT));
 
     // Create normalizedIndex field for the instance
     const normalizedIndexField = ctx.b.fieldIntrinsic(
       instanceId,
       'normalizedIndex',
-      signalTypeField('float', 'default')
+      signalTypeField(FLOAT, 'default')
     );
 
     // Apply lineLayout kernel: normalizedIndex + [x0, y0, x1, y1] → vec3 positions
@@ -347,7 +348,7 @@ registerBlock({
       normalizedIndexField,
       [x0Sig, y0Sig, x1Sig, y1Sig],
       { kind: 'kernel', name: 'lineLayout' },
-      signalTypeField('vec3', 'default')
+      signalTypeField(VEC3, 'default')
     );
 
     const posType = ctx.outTypes[0];

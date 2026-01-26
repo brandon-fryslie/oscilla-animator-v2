@@ -24,10 +24,10 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
-import { signalType, strideOf, type PayloadType } from '../core/canonical-types';
+import { signalType, strideOf, FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
+import type { SignalType, PayloadType } from '../core/canonical-types';
 import { compileExpression } from '../expr';
 import type { SigExprId, SigExpr } from '../compiler/ir/types';
-import type { SignalType } from '../core/canonical-types';
 
 // =============================================================================
 // Expression (Payload-Generic)
@@ -64,13 +64,13 @@ registerBlock({
     // Kept for backward compatibility - internally processed same as varargs
     in0: {
       label: 'In 0',
-      type: signalType('float'), // Default type - actual type inferred during lowering
+      type: signalType(FLOAT), // Default type - actual type inferred during lowering
       optional: true,            // Unwired inputs are unavailable in expression
       exposedAsPort: true,
     },
     in1: {
       label: 'In 1',
-      type: signalType('float'),
+      type: signalType(FLOAT),
       optional: true,
       exposedAsPort: true,
     },
@@ -78,12 +78,12 @@ registerBlock({
     // Accepts variable-length connections with aliases
     refs: {
       label: 'Block Refs',
-      type: signalType('float'),  // Base type for validation
+      type: signalType(FLOAT),  // Base type for validation
       optional: true,
       exposedAsPort: true,
       isVararg: true,
       varargConstraint: {
-        payloadType: 'float',
+        payloadType: FLOAT,
         cardinalityConstraint: 'any',  // Accept Signal or Field
       },
     },
@@ -91,7 +91,7 @@ registerBlock({
     // Note: Inspector UI will detect Expression block and render this as multiline
     expression: {
       label: 'Expression',
-      type: signalType('float'),  // Config-only, type not used
+      type: signalType(FLOAT),  // Config-only, type not used
       exposedAsPort: false,       // Config-only, not wirable
       value: '',                  // Default: empty expression
       uiHint: { kind: 'text' },   // Text input (Inspector will make it multiline)
@@ -101,7 +101,7 @@ registerBlock({
   outputs: {
     out: {
       label: 'Output',
-      type: signalType('float'), // Default - actual type inferred during lowering
+      type: signalType(FLOAT), // Default - actual type inferred during lowering
     },
   },
 
@@ -134,7 +134,7 @@ registerBlock({
 
     // Step 2: Handle empty expression (output constant 0)
     if (exprText.trim() === '') {
-      const sigId = ctx.b.sigConst(0, signalType('float'));
+      const sigId = ctx.b.sigConst(0, signalType(FLOAT));
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
       return {

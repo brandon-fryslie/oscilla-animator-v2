@@ -16,6 +16,7 @@ import {
   readShape2D,
   writeShape2D,
 } from '../RuntimeState';
+import { FLOAT, INT, BOOL, SHAPE } from '../../core/canonical-types';
 
 // =============================================================================
 // BufferPool: shape2d format
@@ -23,13 +24,13 @@ import {
 
 describe('BufferPool shape2d format', () => {
   it('maps shape payload to shape2d format', () => {
-    expect(getBufferFormat('shape')).toBe('shape2d');
+    expect(getBufferFormat(SHAPE)).toBe('shape2d');
   });
 
   it('does NOT map numeric payloads to shape2d', () => {
-    expect(getBufferFormat('float')).toBe('f32');
-    expect(getBufferFormat('int')).toBe('f32');
-    expect(getBufferFormat('bool')).toBe('f32');
+    expect(getBufferFormat(FLOAT)).toBe('f32');
+    expect(getBufferFormat(INT)).toBe('f32');
+    expect(getBufferFormat(BOOL)).toBe('f32');
   });
 
   it('allocates Uint32Array for shape2d format', () => {
@@ -75,12 +76,12 @@ describe('BufferPool shape2d format', () => {
 
 describe('IR bridges shape kind', () => {
   it('maps shape payload to {kind: "shape"} descriptor', () => {
-    expect(payloadTypeToShapeDescIR('shape')).toEqual({ kind: 'shape' });
+    expect(payloadTypeToShapeDescIR(SHAPE)).toEqual({ kind: 'shape' });
   });
 
   it('shape descriptor is distinct from number descriptor', () => {
-    const shapeDesc = payloadTypeToShapeDescIR('shape');
-    const numberDesc = payloadTypeToShapeDescIR('float');
+    const shapeDesc = payloadTypeToShapeDescIR(SHAPE);
+    const numberDesc = payloadTypeToShapeDescIR(FLOAT);
 
     expect(shapeDesc.kind).not.toBe(numberDesc.kind);
   });

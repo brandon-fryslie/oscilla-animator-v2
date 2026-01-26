@@ -7,6 +7,7 @@
 
 import { registerBlock } from './registry';
 import { signalType } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import type { SigExprId } from '../types';
 
 // =============================================================================
@@ -51,7 +52,7 @@ registerBlock({
     broadcastPolicy: 'disallowSignalMix',
   },
   inputs: {
-    value: { label: 'Value', type: signalType('float') },
+    value: { label: 'Value', type: signalType(FLOAT) },
   },
   outputs: {},
   lower: ({ ctx, inputsById }) => {

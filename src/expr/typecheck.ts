@@ -15,6 +15,7 @@
 import type { ExprNode, Position } from './ast';
 import { withType } from './ast';
 import type { PayloadType } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import type { AddressRegistry } from '../graph/address-registry';
 import { addressToString } from '../types/canonical-address';
 
@@ -81,30 +82,30 @@ interface FunctionSignature {
  */
 const FUNCTION_SIGNATURES: Record<string, FunctionSignature> = {
   // Trigonometric
-  sin: { params: ['float'], returnType: 'float' },
-  cos: { params: ['float'], returnType: 'float' },
-  tan: { params: ['float'], returnType: 'float' },
+  sin: { params: [FLOAT], returnType: FLOAT },
+  cos: { params: [FLOAT], returnType: FLOAT },
+  tan: { params: [FLOAT], returnType: FLOAT },
 
   // Unary
-  abs: { params: ['float'], returnType: 'float', polymorphic: true },
-  sqrt: { params: ['float'], returnType: 'float' },
-  floor: { params: ['float'], returnType: 'int' },
-  ceil: { params: ['float'], returnType: 'int' },
-  round: { params: ['float'], returnType: 'int' },
+  abs: { params: [FLOAT], returnType: FLOAT, polymorphic: true },
+  sqrt: { params: [FLOAT], returnType: FLOAT },
+  floor: { params: [FLOAT], returnType: INT },
+  ceil: { params: [FLOAT], returnType: INT },
+  round: { params: [FLOAT], returnType: INT },
 
   // Binary
-  min: { params: ['float', 'float'], returnType: 'float', polymorphic: true },
-  max: { params: ['float', 'float'], returnType: 'float', polymorphic: true },
+  min: { params: [FLOAT, FLOAT], returnType: FLOAT, polymorphic: true },
+  max: { params: [FLOAT, FLOAT], returnType: FLOAT, polymorphic: true },
 
   // Interpolation
-  lerp: { params: ['float', 'float', 'float'], returnType: 'float' },
-  mix: { params: ['float', 'float', 'float'], returnType: 'float' }, // Alias
-  smoothstep: { params: ['float', 'float', 'float'], returnType: 'float' },
-  clamp: { params: ['float', 'float', 'float'], returnType: 'float' },
+  lerp: { params: [FLOAT, FLOAT, FLOAT], returnType: FLOAT },
+  mix: { params: [FLOAT, FLOAT, FLOAT], returnType: FLOAT }, // Alias
+  smoothstep: { params: [FLOAT, FLOAT, FLOAT], returnType: FLOAT },
+  clamp: { params: [FLOAT, FLOAT, FLOAT], returnType: FLOAT },
 
   // Phase (now returns float - unit annotation happens at higher level)
-  wrap: { params: ['float'], returnType: 'float' },
-  fract: { params: ['float'], returnType: 'float' },
+  wrap: { params: [FLOAT], returnType: FLOAT },
+  fract: { params: [FLOAT], returnType: FLOAT },
 };
 
 /**
@@ -166,7 +167,7 @@ function isTypeEnv(arg: TypeCheckContext | TypeEnv): arg is TypeEnv {
 function typecheckLiteral(node: ExprNode & { kind: 'literal' }): ExprNode {
   // Check raw token string for decimal point
   const hasDecimalPoint = node.raw.includes('.');
-  const type: PayloadType = hasDecimalPoint ? 'float' : 'int';
+  const type: PayloadType = hasDecimalPoint ? FLOAT : INT;
   return withType(node, type);
 }
 
@@ -196,16 +197,16 @@ function typecheckUnary(node: ExprNode & { kind: 'unary' }, ctx: TypeCheckContex
   switch (node.op) {
     case '!': {
       // Logical NOT requires bool
-      if (argType !== 'bool') {
+      if (argType.kind !== 'bool') {
         throw new TypeError(
           `Logical NOT requires bool operand, got ${argType}`,
           node.pos,
-          ['bool'],
+          [BOOL],
           argType,
-          argType === 'float' || argType === 'int' ? 'Use comparison operators (>, <, ==, !=) to get bool' : undefined
+          argType.kind === 'float' || argType.kind === 'int' ? 'Use comparison operators (>, <, ==, !=) to get bool' : undefined
         );
       }
-      return withType({ ...node, arg }, 'bool');
+      return withType({ ...node, arg }, BOOL);
     }
 
     case '-': {
@@ -214,7 +215,7 @@ function typecheckUnary(node: ExprNode & { kind: 'unary' }, ctx: TypeCheckContex
         throw new TypeError(
           `Unary negation requires numeric operand, got ${argType}`,
           node.pos,
-          ['int', 'float'],
+          [INT, FLOAT],
           argType
         );
       }
@@ -227,7 +228,7 @@ function typecheckUnary(node: ExprNode & { kind: 'unary' }, ctx: TypeCheckContex
         throw new TypeError(
           `Unary plus requires numeric operand, got ${argType}`,
           node.pos,
-          ['int', 'float'],
+          [INT, FLOAT],
           argType
         );
       }
@@ -326,13 +327,13 @@ function typecheckComparison(
 
   // Equality comparisons (==, !=) allow bool or numeric
   if (node.op === '==' || node.op === '!=') {
-    if (leftType === 'bool' && rightType !== 'bool') {
+    if (leftType.kind === 'bool' && rightType.kind !== 'bool') {
       throw new TypeError(
         `Cannot compare ${leftType} with ${rightType}`,
         node.pos
       );
     }
-    if (leftType !== 'bool' && rightType === 'bool') {
+    if (leftType.kind !== 'bool' && rightType.kind === 'bool') {
       throw new TypeError(
         `Cannot compare ${leftType} with ${rightType}`,
         node.pos
@@ -340,7 +341,7 @@ function typecheckComparison(
     }
   }
 
-  return withType({ ...node, left, right }, 'bool');
+  return withType({ ...node, left, right }, BOOL);
 }
 
 /**
@@ -354,26 +355,26 @@ function typecheckLogical(
   rightType: PayloadType
 ): ExprNode {
   // Both operands must be bool
-  if (leftType !== 'bool') {
+  if (leftType.kind !== 'bool') {
     throw new TypeError(
       `Logical ${node.op === '&&' ? 'AND' : 'OR'} requires bool operands. Left operand is ${leftType}.`,
       node.pos,
-      ['bool'],
+      [BOOL],
       leftType,
-      leftType === 'float' || leftType === 'int' ? `Did you mean '... > 0 ${node.op} ...'?` : undefined
+      leftType.kind === 'float' || leftType.kind === 'int' ? `Did you mean '... > 0 ${node.op} ...'?` : undefined
     );
   }
-  if (rightType !== 'bool') {
+  if (rightType.kind !== 'bool') {
     throw new TypeError(
       `Logical ${node.op === '&&' ? 'AND' : 'OR'} requires bool operands. Right operand is ${rightType}.`,
       node.pos,
-      ['bool'],
+      [BOOL],
       rightType,
-      rightType === 'float' || rightType === 'int' ? `Did you mean '... ${node.op} ... > 0'?` : undefined
+      rightType.kind === 'float' || rightType.kind === 'int' ? `Did you mean '... ${node.op} ... > 0'?` : undefined
     );
   }
 
-  return withType({ ...node, left, right }, 'bool');
+  return withType({ ...node, left, right }, BOOL);
 }
 
 /**
@@ -389,11 +390,11 @@ function typecheckTernary(node: ExprNode & { kind: 'ternary' }, ctx: TypeCheckCo
   const elseType = elseBranch.type!;
 
   // Condition must be bool
-  if (condType !== 'bool') {
+  if (condType.kind !== 'bool') {
     throw new TypeError(
       `Ternary condition must be bool, got ${condType}`,
       cond.pos,
-      ['bool'],
+      [BOOL],
       condType
     );
   }
@@ -449,7 +450,7 @@ function typecheckCall(node: ExprNode & { kind: 'call' }, ctx: TypeCheckContext)
         throw new TypeError(
           `Function '${node.fn}' expects numeric type, got ${argType} for argument ${i + 1}`,
           typedArgs[i].pos,
-          ['int', 'float'],
+          [INT, FLOAT],
           argType
         );
       }
@@ -483,7 +484,7 @@ function typecheckCall(node: ExprNode & { kind: 'call' }, ctx: TypeCheckContext)
   let returnType = signature.returnType;
   if (signature.polymorphic) {
     const firstArgType = typedArgs[0].type!;
-    returnType = firstArgType === 'int' ? 'int' : 'float';
+    returnType = firstArgType.kind === 'int' ? INT : FLOAT;
   }
 
   return withType({ ...node, args: typedArgs }, returnType);
@@ -575,7 +576,7 @@ function typecheckMemberAccess(node: ExprNode & { kind: 'member' }, ctx: TypeChe
  * Check if a type is numeric.
  */
 function isNumeric(type: PayloadType): boolean {
-  return type === 'int' || type === 'float';
+  return type.kind === 'int' || type.kind === 'float';
 }
 
 /**
@@ -584,19 +585,19 @@ function isNumeric(type: PayloadType): boolean {
  */
 function unifyNumeric(left: PayloadType, right: PayloadType): PayloadType {
   // int + int → int
-  if (left === 'int' && right === 'int') return 'int';
+  if (left.kind === 'int' && right.kind === 'int') return INT;
 
   // int + float → float (coerce int)
-  if ((left === 'int' && right === 'float') || (left === 'float' && right === 'int')) {
-    return 'float';
+  if ((left.kind === 'int' && right.kind === 'float') || (left.kind === 'float' && right.kind === 'int')) {
+    return FLOAT;
   }
 
   // float + float → float
-  if (left === 'float' && right === 'float') return 'float';
+  if (left.kind === 'float' && right.kind === 'float') return FLOAT;
 
   // Fallback to float for other numeric combinations
   if (isNumeric(left) && isNumeric(right)) {
-    return 'float';
+    return FLOAT;
   }
 
   throw new Error(`Cannot unify types: ${left} and ${right}`);
@@ -611,8 +612,8 @@ function unifyTypes(left: PayloadType, right: PayloadType): PayloadType | undefi
   if (left === right) return left;
 
   // int + float → float
-  if ((left === 'int' && right === 'float') || (left === 'float' && right === 'int')) {
-    return 'float';
+  if ((left.kind === 'int' && right.kind === 'float') || (left.kind === 'float' && right.kind === 'int')) {
+    return FLOAT;
   }
 
   // Incompatible
@@ -627,7 +628,7 @@ function canCoerceTo(from: PayloadType, to: PayloadType): boolean {
   if (from === to) return true;
 
   // int → float (safe)
-  if (from === 'int' && to === 'float') return true;
+  if (from.kind === 'int' && to.kind === 'float') return true;
 
   return false;
 }

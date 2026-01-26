@@ -7,6 +7,7 @@ import { PatchBuilder, type VarargConnection, type InputPort } from '../Patch';
 import { registerBlock, type BlockDef } from '../../blocks/registry';
 import type { BlockId } from '../../types';
 import { signalType, unitNorm01 } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
 
 // Register a test block with vararg input
 beforeAll(() => {
@@ -18,7 +19,7 @@ beforeAll(() => {
     capability: 'pure',
     inputs: {
       values: {
-        type: signalType('float', unitNorm01()),
+        type: signalType(FLOAT, unitNorm01()),
         isVararg: true,
         varargConstraint: {
           payloadType: 'float',
@@ -28,7 +29,7 @@ beforeAll(() => {
     },
     outputs: {
       result: {
-        type: signalType('float', unitNorm01()),
+        type: signalType(FLOAT, unitNorm01()),
       },
     },
     lower: () => ({ outputsById: {} }),
@@ -43,7 +44,7 @@ beforeAll(() => {
     inputs: {},
     outputs: {
       value: {
-        type: signalType('float', unitNorm01()),
+        type: signalType(FLOAT, unitNorm01()),
       },
     },
     lower: () => ({ outputsById: {} }),

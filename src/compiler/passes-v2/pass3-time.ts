@@ -8,6 +8,7 @@ import type { Block } from '../../graph/Patch';
 import type { TimeModelIR, TimeSignals, TypedPatch, TimeResolvedPatch } from '../ir';
 import { IRBuilderImpl } from '../ir/IRBuilderImpl';
 import { signalType, unitPhase01 } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
 
 // =============================================================================
 // Error Types
@@ -93,15 +94,15 @@ function generateTimeSignals(timeModel: TimeModelIR): TimeSignals {
   const builder = new IRBuilderImpl();
 
   // All models have tModelMs - float scalar
-  const tModelMs = builder.sigTime('tMs', signalType('float'));
+  const tModelMs = builder.sigTime('tMs', signalType(FLOAT));
 
   // Infinite time model
-  const phaseA = builder.sigTime('phaseA', signalType('float', unitPhase01()));
-  const phaseB = builder.sigTime('phaseB', signalType('float', unitPhase01()));
-  const dt = builder.sigTime('dt', signalType('float'));
+  const phaseA = builder.sigTime('phaseA', signalType(FLOAT, unitPhase01()));
+  const phaseB = builder.sigTime('phaseB', signalType(FLOAT, unitPhase01()));
+  const dt = builder.sigTime('dt', signalType(FLOAT));
   const pulse = builder.eventPulse('InfiniteTimeRoot');
-  const palette = builder.sigTime('palette', signalType('color'));
-  const energy = builder.sigTime('energy', signalType('float'));
+  const palette = builder.sigTime('palette', signalType(COLOR));
+  const energy = builder.sigTime('energy', signalType(FLOAT));
 
   return {
     tModelMs,

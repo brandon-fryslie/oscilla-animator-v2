@@ -47,7 +47,7 @@ describe('Unit Validation', () => {
       capability: 'pure',
       inputs: {},
       outputs: {
-        phase: { label: 'Phase', type: signalTypeSignal('float', unitPhase01()) },
+        phase: { label: 'Phase', type: signalTypeSignal(FLOAT, unitPhase01()) },
       },
       lower: () => ({ outputsById: {} }),
     });
@@ -60,7 +60,7 @@ describe('Unit Validation', () => {
       form: 'primitive',
       capability: 'pure',
       inputs: {
-        angle: { label: 'Angle', type: signalTypeSignal('float', unitRadians()) },
+        angle: { label: 'Angle', type: signalTypeSignal(FLOAT, unitRadians()) },
       },
       outputs: {},
       lower: () => ({ outputsById: {} }),
@@ -100,7 +100,7 @@ describe('Unit Validation', () => {
       capability: 'pure',
       inputs: {},
       outputs: {
-        phase: { label: 'Phase', type: signalTypeSignal('float', unitPhase01()) },
+        phase: { label: 'Phase', type: signalTypeSignal(FLOAT, unitPhase01()) },
       },
       lower: () => ({ outputsById: {} }),
     });
@@ -113,7 +113,7 @@ describe('Unit Validation', () => {
       form: 'primitive',
       capability: 'pure',
       inputs: {
-        phase: { label: 'Phase', type: signalTypeSignal('float', unitPhase01()) },
+        phase: { label: 'Phase', type: signalTypeSignal(FLOAT, unitPhase01()) },
       },
       outputs: {},
       lower: () => ({ outputsById: {} }),
@@ -156,7 +156,7 @@ describe('Unit Validation', () => {
       capability: 'pure',
       inputs: {},
       outputs: {
-        value: { label: 'Value', type: signalTypeSignal('float') },
+        value: { label: 'Value', type: signalTypeSignal(FLOAT) },
       },
       lower: () => ({ outputsById: {} }),
     });
@@ -169,7 +169,7 @@ describe('Unit Validation', () => {
       form: 'primitive',
       capability: 'pure',
       inputs: {
-        value: { label: 'Value', type: signalTypeSignal('float') },
+        value: { label: 'Value', type: signalTypeSignal(FLOAT) },
       },
       outputs: {},
       lower: () => ({ outputsById: {} }),

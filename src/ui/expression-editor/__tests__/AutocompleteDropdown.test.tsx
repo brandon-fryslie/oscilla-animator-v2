@@ -7,6 +7,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { AutocompleteDropdown } from '../AutocompleteDropdown';
 import type { Suggestion } from '../../../expr/suggestions';
+import { FLOAT } from '../../../core/canonical-types';
 
 // =============================================================================
 // Test Data
@@ -19,7 +20,7 @@ const mockFunctionSuggestions: Suggestion[] = [
     description: 'Sine function (radians)',
     sortOrder: 100,
     arity: 1,
-    returnType: 'float',
+    returnType: FLOAT,
   },
   {
     label: 'cos(',
@@ -27,7 +28,7 @@ const mockFunctionSuggestions: Suggestion[] = [
     description: 'Cosine function (radians)',
     sortOrder: 101,
     arity: 1,
-    returnType: 'float',
+    returnType: FLOAT,
   },
   {
     label: 'lerp(',
@@ -35,7 +36,7 @@ const mockFunctionSuggestions: Suggestion[] = [
     description: 'Linear interpolation: lerp(a, b, t) = a + t*(b-a)',
     sortOrder: 102,
     arity: 3,
-    returnType: 'float',
+    returnType: FLOAT,
   },
 ] as Suggestion[];
 
@@ -75,7 +76,7 @@ const mockPortSuggestions: Suggestion[] = [
     type: 'port',
     description: 'Output: float (one)',
     sortOrder: 400,
-    payloadType: 'float',
+    payloadType: FLOAT,
     cardinality: 'one',
   },
 ] as Suggestion[];

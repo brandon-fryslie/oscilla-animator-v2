@@ -8,6 +8,7 @@
 
 import { registerBlock } from './registry';
 import { signalType, signalTypeTrigger, strideOf } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { OpCode, stableStateId } from '../compiler/ir/types';
 import type { SigExprId } from '../compiler/ir/Indices';
 
@@ -23,10 +24,10 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   inputs: {
-    event: { label: 'Event', type: signalTypeTrigger('bool') },
+    event: { label: 'Event', type: signalTypeTrigger(BOOL) },
   },
   outputs: {
-    out: { label: 'Signal', type: signalType('float') },
+    out: { label: 'Signal', type: signalType(FLOAT) },
   },
   lower: ({ ctx, inputsById }) => {
     const eventInput = inputsById.event;
@@ -35,7 +36,7 @@ registerBlock({
     }
 
     // Read the event scalar as a float signal (0.0 or 1.0)
-    const sigId = ctx.b.sigEventRead(eventInput.slot, signalType('float'));
+    const sigId = ctx.b.sigEventRead(eventInput.slot, signalType(FLOAT));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
@@ -60,12 +61,12 @@ registerBlock({
   capability: 'state',
   isStateful: true,
   inputs: {
-    value: { label: 'Value', type: signalType('float') },
-    trigger: { label: 'Trigger', type: signalTypeTrigger('bool') },
-    initialValue: { type: signalType('float'), value: 0, exposedAsPort: false },
+    value: { label: 'Value', type: signalType(FLOAT) },
+    trigger: { label: 'Trigger', type: signalTypeTrigger(BOOL) },
+    initialValue: { type: signalType(FLOAT), value: 0, exposedAsPort: false },
   },
   outputs: {
-    out: { label: 'Held', type: signalType('float') },
+    out: { label: 'Held', type: signalType(FLOAT) },
   },
   lower: ({ ctx, inputsById, config }) => {
     const valueInput = inputsById.value;
@@ -87,10 +88,10 @@ registerBlock({
     );
 
     // Read previous held value (Phase 1 — reads previous frame's state)
-    const prevId = ctx.b.sigStateRead(stateSlot, signalType('float'));
+    const prevId = ctx.b.sigStateRead(stateSlot, signalType(FLOAT));
 
     // Read event scalar as float (0.0 or 1.0)
-    const triggerSig = ctx.b.sigEventRead(triggerInput.slot, signalType('float'));
+    const triggerSig = ctx.b.sigEventRead(triggerInput.slot, signalType(FLOAT));
 
     // Conditional via lerp: lerp(prev, value, trigger)
     // trigger=0 → output=prev (hold), trigger=1 → output=value (sample)
@@ -98,7 +99,7 @@ registerBlock({
     const outputId = ctx.b.sigZip(
       [prevId, valueInput.id as SigExprId, triggerSig],
       lerpFn,
-      signalType('float')
+      signalType(FLOAT)
     );
 
     // Write output to state for next frame (Phase 2)

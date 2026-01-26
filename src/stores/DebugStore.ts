@@ -27,7 +27,7 @@ import { debugSettings, type DebugSettings } from '../settings/tokens/debug-sett
 export function formatDebugValue(value: number, type: SignalType): string {
   const payload = type.payload;
 
-  switch (payload) {
+  switch (payload.kind) {
     case 'color':
       // Color is packed RGB, display as hex
       return `#${Math.floor(value).toString(16).padStart(6, '0')}`;

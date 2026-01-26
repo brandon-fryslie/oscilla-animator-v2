@@ -1,51 +1,52 @@
 import { describe, it, expect } from 'vitest';
 import { getSampleEncoding, serializeKey, type DebugTargetKey, type Stride } from './types';
 import type { PayloadType } from '../../core/canonical-types';
+import { FLOAT, INT, VEC2, COLOR, BOOL, SHAPE } from '../../core/canonical-types';
 
 describe('getSampleEncoding', () => {
   it('returns stride=1 for float', () => {
-    const enc = getSampleEncoding('float');
-    expect(enc.payload).toBe('float');
+    const enc = getSampleEncoding(FLOAT);
+    expect(enc.payload.kind).toBe('float');
     expect(enc.stride).toBe(1);
     expect(enc.components).toEqual(['value']);
     expect(enc.sampleable).toBe(true);
   });
 
   it('returns stride=1 for int', () => {
-    const enc = getSampleEncoding('int');
-    expect(enc.payload).toBe('int');
+    const enc = getSampleEncoding(INT);
+    expect(enc.payload.kind).toBe('int');
     expect(enc.stride).toBe(1);
     expect(enc.components).toEqual(['value']);
     expect(enc.sampleable).toBe(true);
   });
 
   it('returns stride=2 for vec2', () => {
-    const enc = getSampleEncoding('vec2');
-    expect(enc.payload).toBe('vec2');
+    const enc = getSampleEncoding(VEC2);
+    expect(enc.payload.kind).toBe('vec2');
     expect(enc.stride).toBe(2);
     expect(enc.components).toEqual(['x', 'y']);
     expect(enc.sampleable).toBe(true);
   });
 
   it('returns stride=4 for color', () => {
-    const enc = getSampleEncoding('color');
-    expect(enc.payload).toBe('color');
+    const enc = getSampleEncoding(COLOR);
+    expect(enc.payload.kind).toBe('color');
     expect(enc.stride).toBe(4);
     expect(enc.components).toEqual(['r', 'g', 'b', 'a']);
     expect(enc.sampleable).toBe(true);
   });
 
   it('returns stride=0, sampleable=false for bool', () => {
-    const enc = getSampleEncoding('bool');
-    expect(enc.payload).toBe('bool');
+    const enc = getSampleEncoding(BOOL);
+    expect(enc.payload.kind).toBe('bool');
     expect(enc.stride).toBe(0);
     expect(enc.components).toEqual([]);
     expect(enc.sampleable).toBe(false);
   });
 
   it('returns stride=0, sampleable=false for shape', () => {
-    const enc = getSampleEncoding('shape');
-    expect(enc.payload).toBe('shape');
+    const enc = getSampleEncoding(SHAPE);
+    expect(enc.payload.kind).toBe('shape');
     expect(enc.stride).toBe(0);
     expect(enc.components).toEqual([]);
     expect(enc.sampleable).toBe(false);
@@ -56,7 +57,7 @@ describe('getSampleEncoding', () => {
     // If a new PayloadType is added and getSampleEncoding is not updated,
     // TypeScript will catch it at compile time (never check).
     // This runtime test ensures no unexpected values slip through.
-    const allPayloads: PayloadType[] = ['float', 'int', 'vec2', 'color', 'bool', 'shape'];
+    const allPayloads: PayloadType[] = [FLOAT, INT, VEC2, COLOR, BOOL, SHAPE];
     for (const p of allPayloads) {
       expect(() => getSampleEncoding(p)).not.toThrow();
     }
@@ -64,7 +65,7 @@ describe('getSampleEncoding', () => {
 
   it('throws on unknown payload type', () => {
     // Force a bad value past TypeScript to verify runtime exhaustiveness
-    expect(() => getSampleEncoding('unknown' as PayloadType)).toThrow('Unknown PayloadType');
+    expect(() => getSampleEncoding({ kind: 'unknown', stride: 0 } as PayloadType)).toThrow('Unknown PayloadType');
   });
 });
 

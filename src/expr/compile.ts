@@ -12,6 +12,7 @@ import type { IRBuilder } from '../compiler/ir/IRBuilder';
 import type { SigExprId } from '../compiler/ir/types';
 import { OpCode } from '../compiler/ir/types';
 import { signalType, type PayloadType } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 
 /**
  * Compilation context.
@@ -94,7 +95,7 @@ function compileUnary(node: ExprNode & { kind: 'unary' }, ctx: CompileContext): 
   switch (node.op) {
     case '!': {
       // Logical NOT: Use comparison to false (0)
-      const zero = ctx.builder.sigConst(0, signalType('int'));
+      const zero = ctx.builder.sigConst(0, signalType(INT));
       const eqFn = ctx.builder.opcode(OpCode.Eq);
       return ctx.builder.sigZip([arg, zero], eqFn, type);
     }
@@ -144,8 +145,8 @@ function compileBinary(node: ExprNode & { kind: 'binary' }, ctx: CompileContext)
     case '<=': {
       // a <= b → !(a > b)
       const gtFn = ctx.builder.opcode(OpCode.Gt);
-      const gt = ctx.builder.sigZip([left, right], gtFn, signalType('bool'));
-      const zero = ctx.builder.sigConst(0, signalType('int'));
+      const gt = ctx.builder.sigZip([left, right], gtFn, signalType(BOOL));
+      const zero = ctx.builder.sigConst(0, signalType(INT));
       const eqFn = ctx.builder.opcode(OpCode.Eq);
       return ctx.builder.sigZip([gt, zero], eqFn, type);
     }
@@ -153,8 +154,8 @@ function compileBinary(node: ExprNode & { kind: 'binary' }, ctx: CompileContext)
     case '>=': {
       // a >= b → !(a < b)
       const ltFn = ctx.builder.opcode(OpCode.Lt);
-      const lt = ctx.builder.sigZip([left, right], ltFn, signalType('bool'));
-      const zero = ctx.builder.sigConst(0, signalType('int'));
+      const lt = ctx.builder.sigZip([left, right], ltFn, signalType(BOOL));
+      const zero = ctx.builder.sigConst(0, signalType(INT));
       const eqFn = ctx.builder.opcode(OpCode.Eq);
       return ctx.builder.sigZip([lt, zero], eqFn, type);
     }
@@ -162,8 +163,8 @@ function compileBinary(node: ExprNode & { kind: 'binary' }, ctx: CompileContext)
     case '!=': {
       // a != b → !(a == b)
       const eqFn = ctx.builder.opcode(OpCode.Eq);
-      const eq = ctx.builder.sigZip([left, right], eqFn, signalType('bool'));
-      const zero = ctx.builder.sigConst(0, signalType('int'));
+      const eq = ctx.builder.sigZip([left, right], eqFn, signalType(BOOL));
+      const zero = ctx.builder.sigConst(0, signalType(INT));
       const eqZeroFn = ctx.builder.opcode(OpCode.Eq);
       return ctx.builder.sigZip([eq, zero], eqZeroFn, type);
     }
@@ -177,8 +178,8 @@ function compileBinary(node: ExprNode & { kind: 'binary' }, ctx: CompileContext)
     case '||': {
       // a || b → min(a + b, 1)
       const addFn = ctx.builder.opcode(OpCode.Add);
-      const sum = ctx.builder.sigZip([left, right], addFn, signalType('int'));
-      const one = ctx.builder.sigConst(1, signalType('int'));
+      const sum = ctx.builder.sigZip([left, right], addFn, signalType(INT));
+      const one = ctx.builder.sigConst(1, signalType(INT));
       const minFn = ctx.builder.opcode(OpCode.Min);
       return ctx.builder.sigZip([sum, one], minFn, type);
     }
@@ -208,9 +209,9 @@ function compileTernary(node: ExprNode & { kind: 'ternary' }, ctx: CompileContex
   const condThen = ctx.builder.sigZip([cond, thenBranch], mulFn, type);
 
   // 1 - cond
-  const one = ctx.builder.sigConst(1, signalType('int'));
+  const one = ctx.builder.sigConst(1, signalType(INT));
   const subFn = ctx.builder.opcode(OpCode.Sub);
-  const oneMinusCond = ctx.builder.sigZip([one, cond], subFn, signalType('int'));
+  const oneMinusCond = ctx.builder.sigZip([one, cond], subFn, signalType(INT));
 
   // (1 - cond) * else
   const condElse = ctx.builder.sigZip([oneMinusCond, elseBranch], mulFn, type);

@@ -149,7 +149,7 @@ export interface SigExprShapeRef {
   readonly topologyId: TopologyId;
   readonly paramSignals: readonly SigExprId[]; // Signals for each topology param
   readonly controlPointField?: FieldExprId; // Optional control points for paths
-  readonly type: SignalType; // Should be signalType('shape')
+  readonly type: SignalType; // Should be signalType(SHAPE)
 }
 
 /**

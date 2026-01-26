@@ -6,6 +6,7 @@
 
 import { registerBlock } from './registry';
 import { signalType, signalTypeTrigger, unitPhase01, strideOf } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 
 // =============================================================================
 // InfiniteTimeRoot
@@ -24,30 +25,30 @@ registerBlock({
     broadcastPolicy: 'disallowSignalMix',
   },
   inputs: {
-    periodAMs: { type: signalType('float'), value: 1000, exposedAsPort: false },
-    periodBMs: { type: signalType('float'), value: 2000, exposedAsPort: false },
+    periodAMs: { type: signalType(FLOAT), value: 1000, exposedAsPort: false },
+    periodBMs: { type: signalType(FLOAT), value: 2000, exposedAsPort: false },
   },
   outputs: {
-    tMs: { label: 'Time (ms)', type: signalType('float') },
-    dt: { label: 'Delta Time', type: signalType('float') },
+    tMs: { label: 'Time (ms)', type: signalType(FLOAT) },
+    dt: { label: 'Delta Time', type: signalType(FLOAT) },
     // Phase outputs use float payload with phase01 unit: values in [0, 1) range representing normalized time cycles
-    phaseA: { label: 'Phase A', type: signalType('float', unitPhase01()) },
-    phaseB: { label: 'Phase B', type: signalType('float', unitPhase01()) },
-    pulse: { label: 'Pulse', type: signalTypeTrigger('bool') },
-    palette: { label: 'Palette', type: signalType('color') },
-    energy: { label: 'Energy', type: signalType('float') },
+    phaseA: { label: 'Phase A', type: signalType(FLOAT, unitPhase01()) },
+    phaseB: { label: 'Phase B', type: signalType(FLOAT, unitPhase01()) },
+    pulse: { label: 'Pulse', type: signalTypeTrigger(BOOL) },
+    palette: { label: 'Palette', type: signalType(COLOR) },
+    energy: { label: 'Energy', type: signalType(FLOAT) },
   },
   lower: ({ ctx }): import('../blocks/registry').LowerResult => {
     // TimeRoot blocks don't produce IR directly
     // Their outputs are provided by the time system (pass 3)
     // We create placeholder signals that reference the time system
-    const tMs = ctx.b.sigTime('tMs', signalType('float'));
-    const dt = ctx.b.sigTime('dt', signalType('float'));
-    const phaseA = ctx.b.sigTime('phaseA', signalType('float', unitPhase01()));
-    const phaseB = ctx.b.sigTime('phaseB', signalType('float', unitPhase01()));
+    const tMs = ctx.b.sigTime('tMs', signalType(FLOAT));
+    const dt = ctx.b.sigTime('dt', signalType(FLOAT));
+    const phaseA = ctx.b.sigTime('phaseA', signalType(FLOAT, unitPhase01()));
+    const phaseB = ctx.b.sigTime('phaseB', signalType(FLOAT, unitPhase01()));
     const pulse = ctx.b.eventPulse('InfiniteTimeRoot');
-    const palette = ctx.b.sigTime('palette', signalType('color'));
-    const energy = ctx.b.sigTime('energy', signalType('float'));
+    const palette = ctx.b.sigTime('palette', signalType(COLOR));
+    const energy = ctx.b.sigTime('energy', signalType(FLOAT));
 
     // Allocate slots for time outputs
     const tMsSlot = ctx.b.allocSlot();

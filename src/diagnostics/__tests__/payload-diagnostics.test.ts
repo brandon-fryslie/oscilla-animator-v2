@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
 import type { DiagnosticCode, DiagnosticPayload, TargetRef } from '../types';
 import { generateDiagnosticId } from '../diagnosticId';
 
@@ -36,7 +37,7 @@ describe('Payload Diagnostics', () => {
       const payload: DiagnosticPayload = {
         code: 'E_PAYLOAD_NOT_ALLOWED',
         port: 'input',
-        payload: 'color',
+        payload: COLOR,
         allowedPayloads: ['float', 'vec2'],
       };
       expect(payload.code).toBe('E_PAYLOAD_NOT_ALLOWED');

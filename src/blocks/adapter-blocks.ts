@@ -24,6 +24,7 @@ import {
   unitSeconds,
   strideOf,
 } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { OpCode } from '../compiler/ir/types';
 import type { SigExprId } from '../compiler/ir/Indices';
 
@@ -48,10 +49,10 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: signalType('float', unitPhase01()) },
+    in: { label: 'In', type: signalType(FLOAT, unitPhase01()) },
   },
   outputs: {
-    out: { label: 'Out', type: signalType('float', unitScalar()) },
+    out: { label: 'Out', type: signalType(FLOAT, unitScalar()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
@@ -84,16 +85,16 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: signalType('float', unitScalar()) },
+    in: { label: 'In', type: signalType(FLOAT, unitScalar()) },
   },
   outputs: {
-    out: { label: 'Out', type: signalType('float', unitPhase01()) },
+    out: { label: 'Out', type: signalType(FLOAT, unitPhase01()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
     if (!input || input.k !== 'sig') throw new Error('Adapter input must be a signal');
     const wrapFn = ctx.b.opcode(OpCode.Wrap01);
-    const wrapped = ctx.b.sigMap(input.id as SigExprId, wrapFn, signalType('float', unitPhase01()));
+    const wrapped = ctx.b.sigMap(input.id as SigExprId, wrapFn, signalType(FLOAT, unitPhase01()));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return {
@@ -125,17 +126,17 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: signalType('float', unitPhase01()) },
+    in: { label: 'In', type: signalType(FLOAT, unitPhase01()) },
   },
   outputs: {
-    out: { label: 'Out', type: signalType('float', unitRadians()) },
+    out: { label: 'Out', type: signalType(FLOAT, unitRadians()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
     if (!input || input.k !== 'sig') throw new Error('Adapter input must be a signal');
-    const twoPi = ctx.b.sigConst(6.283185307179586, signalType('float', unitScalar()));
+    const twoPi = ctx.b.sigConst(6.283185307179586, signalType(FLOAT, unitScalar()));
     const mulFn = ctx.b.opcode(OpCode.Mul);
-    const radians = ctx.b.sigZip([input.id as SigExprId, twoPi], mulFn, signalType('float', unitRadians()));
+    const radians = ctx.b.sigZip([input.id as SigExprId, twoPi], mulFn, signalType(FLOAT, unitRadians()));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return {
@@ -163,19 +164,19 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: signalType('float', unitRadians()) },
+    in: { label: 'In', type: signalType(FLOAT, unitRadians()) },
   },
   outputs: {
-    out: { label: 'Out', type: signalType('float', unitPhase01()) },
+    out: { label: 'Out', type: signalType(FLOAT, unitPhase01()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
     if (!input || input.k !== 'sig') throw new Error('Adapter input must be a signal');
-    const twoPi = ctx.b.sigConst(6.283185307179586, signalType('float', unitScalar()));
+    const twoPi = ctx.b.sigConst(6.283185307179586, signalType(FLOAT, unitScalar()));
     const divFn = ctx.b.opcode(OpCode.Div);
-    const divided = ctx.b.sigZip([input.id as SigExprId, twoPi], divFn, signalType('float', unitScalar()));
+    const divided = ctx.b.sigZip([input.id as SigExprId, twoPi], divFn, signalType(FLOAT, unitScalar()));
     const wrapFn = ctx.b.opcode(OpCode.Wrap01);
-    const wrapped = ctx.b.sigMap(divided, wrapFn, signalType('float', unitPhase01()));
+    const wrapped = ctx.b.sigMap(divided, wrapFn, signalType(FLOAT, unitPhase01()));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return {
@@ -207,17 +208,17 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: signalType('float', unitDegrees()) },
+    in: { label: 'In', type: signalType(FLOAT, unitDegrees()) },
   },
   outputs: {
-    out: { label: 'Out', type: signalType('float', unitRadians()) },
+    out: { label: 'Out', type: signalType(FLOAT, unitRadians()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
     if (!input || input.k !== 'sig') throw new Error('Adapter input must be a signal');
-    const factor = ctx.b.sigConst(0.017453292519943295, signalType('float', unitScalar())); // π/180
+    const factor = ctx.b.sigConst(0.017453292519943295, signalType(FLOAT, unitScalar())); // π/180
     const mulFn = ctx.b.opcode(OpCode.Mul);
-    const radians = ctx.b.sigZip([input.id as SigExprId, factor], mulFn, signalType('float', unitRadians()));
+    const radians = ctx.b.sigZip([input.id as SigExprId, factor], mulFn, signalType(FLOAT, unitRadians()));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return {
@@ -245,17 +246,17 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: signalType('float', unitRadians()) },
+    in: { label: 'In', type: signalType(FLOAT, unitRadians()) },
   },
   outputs: {
-    out: { label: 'Out', type: signalType('float', unitDegrees()) },
+    out: { label: 'Out', type: signalType(FLOAT, unitDegrees()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
     if (!input || input.k !== 'sig') throw new Error('Adapter input must be a signal');
-    const factor = ctx.b.sigConst(57.29577951308232, signalType('float', unitScalar())); // 180/π
+    const factor = ctx.b.sigConst(57.29577951308232, signalType(FLOAT, unitScalar())); // 180/π
     const mulFn = ctx.b.opcode(OpCode.Mul);
-    const degrees = ctx.b.sigZip([input.id as SigExprId, factor], mulFn, signalType('float', unitDegrees()));
+    const degrees = ctx.b.sigZip([input.id as SigExprId, factor], mulFn, signalType(FLOAT, unitDegrees()));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return {
@@ -287,18 +288,18 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: signalType('int', unitMs()) },
+    in: { label: 'In', type: signalType(INT, unitMs()) },
   },
   outputs: {
-    out: { label: 'Out', type: signalType('float', unitSeconds()) },
+    out: { label: 'Out', type: signalType(FLOAT, unitSeconds()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
     if (!input || input.k !== 'sig') throw new Error('Adapter input must be a signal');
     // int:ms → float division → float:seconds
-    const divisor = ctx.b.sigConst(1000, signalType('float', unitScalar()));
+    const divisor = ctx.b.sigConst(1000, signalType(FLOAT, unitScalar()));
     const divFn = ctx.b.opcode(OpCode.Div);
-    const seconds = ctx.b.sigZip([input.id as SigExprId, divisor], divFn, signalType('float', unitSeconds()));
+    const seconds = ctx.b.sigZip([input.id as SigExprId, divisor], divFn, signalType(FLOAT, unitSeconds()));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return {
@@ -326,19 +327,19 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: signalType('float', unitSeconds()) },
+    in: { label: 'In', type: signalType(FLOAT, unitSeconds()) },
   },
   outputs: {
-    out: { label: 'Out', type: signalType('int', unitMs()) },
+    out: { label: 'Out', type: signalType(INT, unitMs()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
     if (!input || input.k !== 'sig') throw new Error('Adapter input must be a signal');
-    const multiplier = ctx.b.sigConst(1000, signalType('float', unitScalar()));
+    const multiplier = ctx.b.sigConst(1000, signalType(FLOAT, unitScalar()));
     const mulFn = ctx.b.opcode(OpCode.Mul);
-    const floatMs = ctx.b.sigZip([input.id as SigExprId, multiplier], mulFn, signalType('float', unitMs()));
+    const floatMs = ctx.b.sigZip([input.id as SigExprId, multiplier], mulFn, signalType(FLOAT, unitMs()));
     const floorFn = ctx.b.opcode(OpCode.Floor);
-    const intMs = ctx.b.sigMap(floatMs, floorFn, signalType('int', unitMs()));
+    const intMs = ctx.b.sigMap(floatMs, floorFn, signalType(INT, unitMs()));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return {
@@ -370,18 +371,18 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: signalType('float', unitScalar()) },
+    in: { label: 'In', type: signalType(FLOAT, unitScalar()) },
   },
   outputs: {
-    out: { label: 'Out', type: signalType('float', unitNorm01()) },
+    out: { label: 'Out', type: signalType(FLOAT, unitNorm01()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
     if (!input || input.k !== 'sig') throw new Error('Adapter input must be a signal');
-    const zero = ctx.b.sigConst(0, signalType('float', unitScalar()));
-    const one = ctx.b.sigConst(1, signalType('float', unitScalar()));
+    const zero = ctx.b.sigConst(0, signalType(FLOAT, unitScalar()));
+    const one = ctx.b.sigConst(1, signalType(FLOAT, unitScalar()));
     const clampFn = ctx.b.opcode(OpCode.Clamp);
-    const clamped = ctx.b.sigZip([input.id as SigExprId, zero, one], clampFn, signalType('float', unitNorm01()));
+    const clamped = ctx.b.sigZip([input.id as SigExprId, zero, one], clampFn, signalType(FLOAT, unitNorm01()));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return {
@@ -409,10 +410,10 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: signalType('float', unitNorm01()) },
+    in: { label: 'In', type: signalType(FLOAT, unitNorm01()) },
   },
   outputs: {
-    out: { label: 'Out', type: signalType('float', unitScalar()) },
+    out: { label: 'Out', type: signalType(FLOAT, unitScalar()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
@@ -446,10 +447,10 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: signalType('float', unitScalar()) },
+    in: { label: 'In', type: signalType(FLOAT, unitScalar()) },
   },
   outputs: {
-    out: { label: 'Out', type: signalType('float', unitDeg()) },
+    out: { label: 'Out', type: signalType(FLOAT, unitDeg()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;

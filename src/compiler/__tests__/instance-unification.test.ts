@@ -20,6 +20,7 @@ import { describe, it, expect } from 'vitest';
 import { IRBuilderImpl } from '../ir/IRBuilderImpl';
 import { OpCode } from '../ir/types';
 import { signalTypeField, signalTypeSignal } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
 import { DOMAIN_CIRCLE } from '../../core/domain-registry';
 
 describe('Instance Unification', () => {
@@ -27,7 +28,7 @@ describe('Instance Unification', () => {
     it('returns instanceId for index intrinsic', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const type = signalTypeField('float', instance);
+      const type = signalTypeField(FLOAT, instance);
       const field = b.fieldIntrinsic(instance, 'index', type);
 
       // Intrinsics ARE bound to their instance
@@ -37,7 +38,7 @@ describe('Instance Unification', () => {
     it('returns instanceId for normalizedIndex intrinsic', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const type = signalTypeField('float', instance);
+      const type = signalTypeField(FLOAT, instance);
       const field = b.fieldIntrinsic(instance, 'normalizedIndex', type);
 
       expect(b.inferFieldInstance(field)).toBe(instance);
@@ -46,7 +47,7 @@ describe('Instance Unification', () => {
     it('returns instanceId for randomId intrinsic', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const type = signalTypeField('float', instance);
+      const type = signalTypeField(FLOAT, instance);
       const field = b.fieldIntrinsic(instance, 'randomId', type);
 
       expect(b.inferFieldInstance(field)).toBe(instance);
@@ -57,8 +58,8 @@ describe('Instance Unification', () => {
     it('returns undefined for broadcast fields', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const type = signalTypeField('float', instance);
-      const sig = b.sigConst(1.0, signalTypeSignal('float'));
+      const type = signalTypeField(FLOAT, instance);
+      const sig = b.sigConst(1.0, signalTypeSignal(FLOAT));
       const broadcast = b.Broadcast(sig, type);
 
       // Broadcasts are instance-agnostic
@@ -68,7 +69,7 @@ describe('Instance Unification', () => {
     it('returns undefined for const fields', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const type = signalTypeField('float', instance);
+      const type = signalTypeField(FLOAT, instance);
       const constField = b.fieldConst(42, type);
 
       // Consts are instance-agnostic
@@ -80,7 +81,7 @@ describe('Instance Unification', () => {
     it('returns instanceId for array fields', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const type = signalTypeField('float', instance);
+      const type = signalTypeField(FLOAT, instance);
       const arrayField = b.fieldArray(instance, type);
 
       expect(b.inferFieldInstance(arrayField)).toBe(instance);
@@ -89,8 +90,8 @@ describe('Instance Unification', () => {
     it('returns instanceId for kernel-based layout fields', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const floatType = signalTypeField('float', instance);
-      const vec2Type = signalTypeField('vec2', instance);
+      const floatType = signalTypeField(FLOAT, instance);
+      const vec2Type = signalTypeField(VEC2, instance);
       
       // Create normalizedIndex field
       const normalizedIndex = b.fieldIntrinsic(instance, 'normalizedIndex', floatType);
@@ -115,7 +116,7 @@ describe('Instance Unification', () => {
     it('propagates instanceId through map on intrinsic', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const type = signalTypeField('float', instance);
+      const type = signalTypeField(FLOAT, instance);
       const intrinsic = b.fieldIntrinsic(instance, 'index', type);
       const mapped = b.fieldMap(intrinsic, { kind: 'opcode', opcode: OpCode.Sin }, type);
 
@@ -126,8 +127,8 @@ describe('Instance Unification', () => {
     it('propagates instanceId through zipSig on intrinsic', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const fieldType = signalTypeField('float', instance);
-      const sigType = signalTypeSignal('float');
+      const fieldType = signalTypeField(FLOAT, instance);
+      const sigType = signalTypeSignal(FLOAT);
       const intrinsic = b.fieldIntrinsic(instance, 'index', fieldType);
       const signal = b.sigConst(2.0, sigType);
       const zipped = b.fieldZipSig(intrinsic, [signal], { kind: 'opcode', opcode: OpCode.Mul }, fieldType);
@@ -138,7 +139,7 @@ describe('Instance Unification', () => {
     it('unifies instance for zip of intrinsics from same instance', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const type = signalTypeField('float', instance);
+      const type = signalTypeField(FLOAT, instance);
       const field1 = b.fieldIntrinsic(instance, 'index', type);
       const field2 = b.fieldIntrinsic(instance, 'normalizedIndex', type);
 
@@ -150,8 +151,8 @@ describe('Instance Unification', () => {
       const b = new IRBuilderImpl();
       const instance1 = b.createInstance(DOMAIN_CIRCLE, 10);
       const instance2 = b.createInstance(DOMAIN_CIRCLE, 20);
-      const type1 = signalTypeField('float', instance1);
-      const type2 = signalTypeField('float', instance2);
+      const type1 = signalTypeField(FLOAT, instance1);
+      const type2 = signalTypeField(FLOAT, instance2);
       const field1 = b.fieldIntrinsic(instance1, 'index', type1);
       const field2 = b.fieldIntrinsic(instance2, 'index', type2);
 
@@ -164,9 +165,9 @@ describe('Instance Unification', () => {
     it('propagates instance through zip of intrinsic and broadcast', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const type = signalTypeField('float', instance);
+      const type = signalTypeField(FLOAT, instance);
       const intrinsic = b.fieldIntrinsic(instance, 'index', type);
-      const sig = b.sigConst(1.0, signalTypeSignal('float'));
+      const sig = b.sigConst(1.0, signalTypeSignal(FLOAT));
       const broadcast = b.Broadcast(sig, type);
 
       // Broadcast is instance-agnostic, so zip takes instance from intrinsic
@@ -177,7 +178,7 @@ describe('Instance Unification', () => {
     it('propagates instance through map after zip of intrinsics', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const type = signalTypeField('float', instance);
+      const type = signalTypeField(FLOAT, instance);
       const field1 = b.fieldIntrinsic(instance, 'index', type);
       const field2 = b.fieldIntrinsic(instance, 'normalizedIndex', type);
       const zipped = b.fieldZip([field1, field2], { kind: 'opcode', opcode: OpCode.Add }, type);
@@ -191,9 +192,9 @@ describe('Instance Unification', () => {
     it('returns undefined for zip of multiple broadcasts (all instance-agnostic)', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const type = signalTypeField('float', instance);
-      const sig1 = b.sigConst(1.0, signalTypeSignal('float'));
-      const sig2 = b.sigConst(2.0, signalTypeSignal('float'));
+      const type = signalTypeField(FLOAT, instance);
+      const sig1 = b.sigConst(1.0, signalTypeSignal(FLOAT));
+      const sig2 = b.sigConst(2.0, signalTypeSignal(FLOAT));
       const broadcast1 = b.Broadcast(sig1, type);
       const broadcast2 = b.Broadcast(sig2, type);
 

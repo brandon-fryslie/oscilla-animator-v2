@@ -189,7 +189,7 @@ function findCompatibleBlockTypes(
  */
 function getValidCombineModes(payloadType: PayloadType): CombineMode[] {
   const isNumeric = ['float', 'int', 'vec2', 'vec3', 'color'].includes(payloadType as string);
-  const isBoolean = payloadType === 'bool';
+  const isBoolean = payloadType .kind === 'bool';
 
   return (Object.entries(COMBINE_MODE_CATEGORY) as [CombineMode, string][])
     .filter(([_, category]) => {

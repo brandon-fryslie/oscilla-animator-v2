@@ -59,7 +59,7 @@ export type CompileResult =
  * ```typescript
  * const inputs = new Map([
  *   ['phase', signalType('phase')],
- *   ['radius', signalType('float')],
+ *   ['radius', signalType(FLOAT)],
  * ]);
  * const inputSignals = new Map([
  *   ['phase', phaseSignalId],

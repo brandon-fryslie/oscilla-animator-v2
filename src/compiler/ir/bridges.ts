@@ -25,7 +25,7 @@ import type {
   ConcretePayloadType,
   ResolvedExtent,
 } from '../../core/canonical-types';
-import { isInstantiated, isPayloadVar } from '../../core/canonical-types';
+import { isInstantiated, isPayloadVar, FLOAT, INT, VEC2, VEC3, COLOR, BOOL, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
 import type { ShapeDescIR } from './program';
 
 // =============================================================================
@@ -204,9 +204,9 @@ export function payloadTypeToShapeDescIR(payload: PayloadType): ShapeDescIR {
     throw new Error(`Cannot convert payload variable ${payload.id} to shape descriptor - resolve payload first`);
   }
 
-  // After the guard, payload is a concrete string (TypeScript needs explicit assertion)
+  // After the guard, payload is a concrete type (not a variable)
   const concretePayload = payload as ConcretePayloadType;
-  switch (concretePayload) {
+  switch (concretePayload.kind) {
     case 'float':
     case 'int':
       return { kind: 'number' };

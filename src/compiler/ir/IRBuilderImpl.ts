@@ -5,7 +5,7 @@
  */
 
 import type { SignalType } from '../../core/canonical-types';
-import { signalType, unitScalar } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION, signalType, unitScalar } from '../../core/canonical-types';
 import type { TopologyId } from '../../shapes/types';
 import type { IRBuilder } from './IRBuilder';
 import type {
@@ -73,7 +73,7 @@ export class IRBuilderImpl implements IRBuilder {
   constructor() {
     // Reserve system slots at fixed positions (compiler-runtime contract)
     // Slot 0: time.palette (color, stride=4)
-    this.reserveSystemSlot(0, signalType('color'));
+    this.reserveSystemSlot(0, signalType(COLOR));
   }
 
   /**
@@ -495,7 +495,7 @@ export class IRBuilderImpl implements IRBuilder {
   allocTypedSlot(type: SignalType, _label?: string): ValueSlot {
     // Compute stride from payload
     let stride: number;
-    switch (type.payload) {
+    switch (type.payload.kind) {
       case 'float':
       case 'int':
       case 'bool':
@@ -556,7 +556,7 @@ export class IRBuilderImpl implements IRBuilder {
     for (const [slot, type] of this.slotTypes) {
       // Import payloadStride inline to compute stride from payload type
       let stride: number;
-      switch (type.payload) {
+      switch (type.payload.kind) {
         case 'float':
         case 'int':
         case 'bool':
