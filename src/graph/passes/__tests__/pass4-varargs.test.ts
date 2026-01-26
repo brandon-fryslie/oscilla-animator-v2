@@ -8,6 +8,7 @@ import { PatchBuilder } from '../../Patch';
 import { registerBlock, type BlockDef } from '../../../blocks/registry';
 import { addressToString } from '../../../types/canonical-address';
 import { getOutputAddress, getInputAddress } from '../../addressing';
+import { signalType, unitNorm01 } from '../../../core/canonical-types';
 
 // Register test blocks
 beforeAll(() => {
@@ -19,7 +20,7 @@ beforeAll(() => {
     capability: 'pure',
     inputs: {
       values: {
-        type: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'signal' },
+        type: signalType('float', unitNorm01()),
         isVararg: true,
         varargConstraint: {
           payloadType: 'float',
@@ -29,7 +30,7 @@ beforeAll(() => {
     },
     outputs: {
       result: {
-        type: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'signal' },
+        type: signalType('float', unitNorm01()),
       },
     },
     lower: () => ({ outputsById: {} }),
@@ -43,7 +44,7 @@ beforeAll(() => {
     capability: 'pure',
     inputs: {
       values: {
-        type: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'signal' },
+        type: signalType('float', unitNorm01()),
         isVararg: true,
         varargConstraint: {
           payloadType: 'float',
@@ -55,7 +56,7 @@ beforeAll(() => {
     },
     outputs: {
       result: {
-        type: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'signal' },
+        type: signalType('float', unitNorm01()),
       },
     },
     lower: () => ({ outputsById: {} }),
@@ -70,7 +71,7 @@ beforeAll(() => {
     inputs: {},
     outputs: {
       value: {
-        type: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'signal' },
+        type: signalType('float', unitNorm01()),
       },
     },
     lower: () => ({ outputsById: {} }),

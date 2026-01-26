@@ -6,6 +6,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { PatchBuilder, type VarargConnection, type InputPort } from '../Patch';
 import { registerBlock, type BlockDef } from '../../blocks/registry';
 import type { BlockId } from '../../types';
+import { signalType, unitNorm01 } from '../../core/canonical-types';
 
 // Register a test block with vararg input
 beforeAll(() => {
@@ -17,7 +18,7 @@ beforeAll(() => {
     capability: 'pure',
     inputs: {
       values: {
-        type: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'signal' },
+        type: signalType('float', unitNorm01()),
         isVararg: true,
         varargConstraint: {
           payloadType: 'float',
@@ -27,7 +28,7 @@ beforeAll(() => {
     },
     outputs: {
       result: {
-        type: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'signal' },
+        type: signalType('float', unitNorm01()),
       },
     },
     lower: () => ({ outputsById: {} }),
@@ -42,7 +43,7 @@ beforeAll(() => {
     inputs: {},
     outputs: {
       value: {
-        type: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'signal' },
+        type: signalType('float', unitNorm01()),
       },
     },
     lower: () => ({ outputsById: {} }),
