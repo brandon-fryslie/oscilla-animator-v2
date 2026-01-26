@@ -10,6 +10,7 @@ import type { Slot, UIControlHint, DefaultSource } from '../types';
 import type { IRBuilder } from '../compiler/ir/IRBuilder';
 import type { BlockIndex } from '../graph/normalize';
 import type { InstanceId } from '../compiler/ir/Indices';
+import type { VarargConnection } from '../graph/Patch';
 
 // Re-export lowering types from compiler
 export type { ValueRefPacked } from '../compiler/ir/lowerTypes';
@@ -38,6 +39,13 @@ export interface LowerCtx {
    * Automatically inferred from connected field inputs during lowering.
    */
   readonly inferredInstance?: InstanceId;
+
+  /**
+   * Vararg connections metadata.
+   * Map from vararg port ID to array of VarargConnection in sortKey order.
+   * Used by blocks with vararg inputs to access connection aliases and source addresses.
+   */
+  readonly varargConnections?: ReadonlyMap<string, readonly VarargConnection[]>;
 }
 
 /**

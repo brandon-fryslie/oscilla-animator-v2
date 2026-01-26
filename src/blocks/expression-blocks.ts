@@ -5,10 +5,17 @@
  * Provides flexible signal computation without creating new blocks.
  *
  * Architecture:
- * - Fixed inputs (in0-in4): Simplifies v1, avoids dynamic port complexity
+ * - Legacy inputs (in0, in1): Fixed optional inputs for backward compatibility
+ * - Varargs refs input: Variable-length block references (NEW 2026-01-26)
  * - Payload-Generic inputs: Accept any concrete payload type
  * - Expression config parameter: Text string, not wirable
  * - Compilation: Delegated to Expression DSL (src/expr/)
+ *
+ * UNIFIED VARARGS SYSTEM (2026-01-26):
+ * - SINGLE CODE PATH: Legacy in0/in1 AND varargs refs flow through ONE processing loop
+ * - in0/in1 are shims: converted to synthetic vararg-style entries internally
+ * - ALL inputs processed identically: build unified Map<string, SigExprId>
+ * - No dual processing paths - ONE loop handles everything
  *
  * Design Decisions:
  * - ONE SOURCE OF TRUTH: Expression DSL is the sole compiler (no duplicate logic)
@@ -42,9 +49,7 @@ registerBlock({
     allowedPayloads: {
       in0: ALL_CONCRETE_PAYLOADS,
       in1: ALL_CONCRETE_PAYLOADS,
-      in2: ALL_CONCRETE_PAYLOADS,
-      in3: ALL_CONCRETE_PAYLOADS,
-      in4: ALL_CONCRETE_PAYLOADS,
+      refs: ALL_CONCRETE_PAYLOADS,
       out: ALL_CONCRETE_PAYLOADS,
     },
     // Expression block has dynamic type resolution based on expression text
@@ -55,8 +60,8 @@ registerBlock({
   // Inputs include both wirable ports AND config parameters
   // Config parameters have exposedAsPort: false
   inputs: {
-    // Fixed input ports (5 optional inputs)
-    // User wires signals to in0, in1, etc. and references them by name in expression
+    // Legacy fixed input ports (2 optional inputs)
+    // Kept for backward compatibility - internally processed same as varargs
     in0: {
       label: 'In 0',
       type: signalType('float'), // Default type - actual type inferred during lowering
@@ -69,23 +74,18 @@ registerBlock({
       optional: true,
       exposedAsPort: true,
     },
-    in2: {
-      label: 'In 2',
-      type: signalType('float'),
+    // Varargs input port for block references (NEW 2026-01-26)
+    // Accepts variable-length connections with aliases
+    refs: {
+      label: 'Block Refs',
+      type: signalType('float'),  // Base type for validation
       optional: true,
       exposedAsPort: true,
-    },
-    in3: {
-      label: 'In 3',
-      type: signalType('float'),
-      optional: true,
-      exposedAsPort: true,
-    },
-    in4: {
-      label: 'In 4',
-      type: signalType('float'),
-      optional: true,
-      exposedAsPort: true,
+      isVararg: true,
+      varargConstraint: {
+        payloadType: 'float',
+        cardinalityConstraint: 'any',  // Accept Signal or Field
+      },
     },
     // Config parameter (not a port - cannot be wired)
     // Note: Inspector UI will detect Expression block and render this as multiline
@@ -108,11 +108,17 @@ registerBlock({
   /**
    * Lower Expression block to IR.
    *
+   * UNIFIED VARARGS SYSTEM:
+   * Step 1: SHIM - Convert legacy in0/in1 to synthetic vararg-style entries
+   * Step 2: MERGE - Combine synthetic entries with actual varargs refs
+   * Step 3: SINGLE LOOP - Process ALL inputs through ONE code path
+   * Step 4: Compile with unified Map<string, SigExprId>
+   *
    * Algorithm:
    * 1. Extract expression text from config
    * 2. Handle empty expression (output constant 0)
-   * 3. Build input type map (only wired inputs)
-   * 4. Build input signal map (only wired inputs)
+   * 3. Build unified input list (legacy + varargs)
+   * 4. Single processing loop: build inputSignals map
    * 5. Call compileExpression() from Expression DSL
    * 6. Handle success: return output signal
    * 7. Handle error: throw CompileError with clear message
@@ -122,7 +128,7 @@ registerBlock({
    * - Type errors: thrown by type checker with suggestions
    * - Undefined identifiers: lists available inputs
    */
-  lower: ({ ctx, inputsById, config }) => {
+  lower: ({ ctx, inputsById, varargInputsById, config }) => {
     // Step 1: Extract expression text from config
     const exprText = (config?.expression as string | undefined) ?? '';
 
@@ -138,10 +144,6 @@ registerBlock({
       };
     }
 
-    // Step 3 & 4: Build input type map and input signal map (only wired inputs)
-    const inputs = new Map<string, SignalType>();
-    const inputSignals = new Map<string, SigExprId>();
-
     // Helper: Get actual type from signal expression
     // IRBuilder tracks types for all signal expressions
     const getSigType = (sigId: SigExprId): SignalType => {
@@ -153,15 +155,40 @@ registerBlock({
       return sigExpr.type;
     };
 
-    // Process fixed input ports (in0-in4)
-    for (const key of ['in0', 'in1', 'in2', 'in3', 'in4'] as const) {
+    // Step 3: Build unified input list
+    // SHIM: Convert legacy inputs to synthetic vararg-style entries
+    const allInputEntries: Array<{ alias: string; signal: SigExprId }> = [];
+
+    // Legacy inputs (in0, in1) become synthetic vararg entries
+    for (const key of ['in0', 'in1'] as const) {
       const input = inputsById[key];
       if (input && input.k === 'sig') {
-        // Input is wired - get actual type from signal expression
-        const inputType = getSigType(input.id as SigExprId);
-        inputs.set(key, inputType);
-        inputSignals.set(key, input.id as SigExprId);
+        allInputEntries.push({ alias: key, signal: input.id as SigExprId });
       }
+    }
+
+    // Actual vararg refs - get alias from varargConnections metadata
+    const refsValues = varargInputsById?.refs ?? [];
+    const refsConnections = ctx.varargConnections?.get('refs') ?? [];
+    for (let i = 0; i < refsValues.length; i++) {
+      const value = refsValues[i];
+      const conn = refsConnections[i];
+      if (value && value.k === 'sig' && conn) {
+        // Use alias if available, otherwise fall back to sourceAddress
+        const alias = conn.alias ?? conn.sourceAddress;
+        allInputEntries.push({ alias, signal: value.id as SigExprId });
+      }
+    }
+
+    // Step 4: SINGLE PROCESSING LOOP - the ONE code path
+    // Process ALL inputs (legacy via shim + actual varargs) identically
+    const inputs = new Map<string, SignalType>();
+    const inputSignals = new Map<string, SigExprId>();
+
+    for (const { alias, signal } of allInputEntries) {
+      const inputType = getSigType(signal);
+      inputs.set(alias, inputType);
+      inputSignals.set(alias, signal);
     }
 
     // Step 5: Compile expression using Expression DSL

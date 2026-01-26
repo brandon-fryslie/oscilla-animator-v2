@@ -4,6 +4,7 @@
 
 import type { AcyclicOrLegalGraph, BlockIndex } from "../ir/patches";
 import type { Block, Edge } from "../../types";
+import type { VarargConnection } from "../../graph/Patch";
 import type { IRBuilder } from "../ir/IRBuilder";
 import { IRBuilderImpl } from "../ir/IRBuilderImpl";
 import type { CompileError } from "../types";
@@ -369,6 +370,15 @@ function lowerBlockInstance(
       inferredInstance = inferInstanceContext(blockIndex, edges, instanceContextByBlock);
     }
 
+    // Extract varargConnections from block.inputPorts
+    // Build map from port ID to array of VarargConnection
+    const varargConnectionsMap = new Map<string, readonly VarargConnection[]>();
+    for (const [portId, inputPort] of block.inputPorts.entries()) {
+      if (inputPort.varargConnections && inputPort.varargConnections.length > 0) {
+        varargConnectionsMap.set(portId, inputPort.varargConnections);
+      }
+    }
+
     // Build lowering context
     const ctx: LowerCtx = {
       blockIdx: blockIndex,
@@ -386,6 +396,7 @@ function lowerBlockInstance(
       b: builder,
       seedConstId: 0, // Seed value not used by current intrinsics (randomId uses element index only)
       inferredInstance,
+      varargConnections: varargConnectionsMap.size > 0 ? varargConnectionsMap : undefined,
     };
 
     // Pass block params as config (needed for DSConst blocks to access their value)
