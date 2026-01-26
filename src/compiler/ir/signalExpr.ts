@@ -4,7 +4,7 @@
  * Additional types for signal and event expressions.
  */
 
-import type { PayloadType } from './types';
+import { type PayloadType, type ConcretePayloadType, isPayloadVar } from '../../core/canonical-types';
 
 export type Stride = 0 | 1 | 2 | 3 | 4;
 
@@ -19,12 +19,18 @@ function assertNever(x: never, msg: string): never {
  * to reason about multi-component signal payloads.
  */
 export function payloadStride(payload: PayloadType): Stride {
-  switch (payload) {
+  if (isPayloadVar(payload)) {
+    // Payload variables should be resolved before this point
+    throw new Error(`Cannot get stride for unresolved payload variable: ${payload.id}`);
+  }
+
+  // After the guard, payload is guaranteed to be a ConcretePayloadType
+  const concretePayload = payload as ConcretePayloadType;
+  switch (concretePayload) {
     case 'float':
     case 'int':
-    case 'phase':
-    case 'unit':
     case 'bool':
+    case 'cameraProjection':
       return 1;
     case 'vec2':
       return 2;
@@ -35,7 +41,7 @@ export function payloadStride(payload: PayloadType): Stride {
     case 'shape':
       return 0;
     default:
-      return assertNever(payload as never, `Unhandled payload in payloadStride(): ${String(payload)}`);
+      return assertNever(concretePayload, `Unhandled payload in payloadStride(): ${String(concretePayload)}`);
   }
 }
 

@@ -10,7 +10,13 @@
 import type { SigExpr, FieldExpr, EventExpr } from './types';
 import type { SignalType, ResolvedExtent } from '../../core/canonical-types';
 import type { ScheduleIR } from '../passes-v2/pass7-schedule';
-import type { FieldExprId, InstanceId } from './Indices';
+import type {
+  FieldExprId,
+  InstanceId,
+  ValueSlot,
+  StepId,
+} from './Indices';
+import type { BlockId, PortId } from '../../types';
 
 // =============================================================================
 // Version and Core Types
@@ -27,7 +33,8 @@ export type IrVersion = 1;
  */
 
 // Re-export these types for consumers
-export type { ValueSlot, StepId, BlockId, PortId } from './Indices';
+export type { ValueSlot, StepId } from './Indices';
+export type { BlockId, PortId } from '../../types';
 
 // =============================================================================
 // Render Globals (Camera System)

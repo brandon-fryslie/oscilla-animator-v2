@@ -10,12 +10,13 @@ import {
   type InputDef,
   type VarargConstraint,
 } from '../registry';
+import { signalType, signalTypeSignal } from '../../core/canonical-types';
 
 describe('VarargInputDef', () => {
   describe('isVarargInput type guard', () => {
     it('returns true for vararg inputs', () => {
       const def: InputDef = {
-        type: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'signal' },
+        type: signalTypeSignal('float', { kind: 'norm01' }),
         isVararg: true,
         varargConstraint: {
           payloadType: 'float',
@@ -27,14 +28,14 @@ describe('VarargInputDef', () => {
 
     it('returns false for normal inputs', () => {
       const def: InputDef = {
-        type: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'signal' },
+        type: signalTypeSignal('float', { kind: 'norm01' }),
       };
       expect(isVarargInput(def)).toBe(false);
     });
 
     it('returns false for inputs with isVararg: false', () => {
       const def: InputDef = {
-        type: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'signal' },
+        type: signalTypeSignal('float', { kind: 'norm01' }),
         isVararg: false,
       };
       expect(isVarargInput(def)).toBe(false);
@@ -87,7 +88,7 @@ describe('VarargInputDef', () => {
         capability: 'pure',
         inputs: {
           values: {
-            type: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'signal' },
+            type: signalTypeSignal('float', { kind: 'norm01' }),
             isVararg: true,
             varargConstraint: {
               payloadType: 'float',
@@ -97,7 +98,7 @@ describe('VarargInputDef', () => {
         },
         outputs: {
           result: {
-            type: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'signal' },
+            type: signalTypeSignal('float', { kind: 'norm01' }),
           },
         },
         lower: () => ({ outputsById: {} }),
@@ -115,14 +116,14 @@ describe('VarargInputDef', () => {
         capability: 'pure',
         inputs: {
           values: {
-            type: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'signal' },
+            type: signalTypeSignal('float', { kind: 'norm01' }),
             isVararg: true,
             // Missing varargConstraint
           },
         },
         outputs: {
           result: {
-            type: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'signal' },
+            type: signalTypeSignal('float', { kind: 'norm01' }),
           },
         },
         lower: () => ({ outputsById: {} }),
@@ -142,7 +143,7 @@ describe('VarargInputDef', () => {
         capability: 'pure',
         inputs: {
           values: {
-            type: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'signal' },
+            type: signalTypeSignal('float', { kind: 'norm01' }),
             isVararg: true,
             varargConstraint: {
               payloadType: 'float',
@@ -153,7 +154,7 @@ describe('VarargInputDef', () => {
         },
         outputs: {
           result: {
-            type: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'signal' },
+            type: signalTypeSignal('float', { kind: 'norm01' }),
           },
         },
         lower: () => ({ outputsById: {} }),
@@ -173,11 +174,11 @@ describe('VarargInputDef', () => {
         capability: 'pure',
         inputs: {
           normalInput: {
-            type: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'signal' },
+            type: signalTypeSignal('float', { kind: 'norm01' }),
             defaultSource: 'Const1',
           },
           varargInput: {
-            type: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'signal' },
+            type: signalTypeSignal('float', { kind: 'norm01' }),
             isVararg: true,
             varargConstraint: {
               payloadType: 'float',
@@ -187,7 +188,7 @@ describe('VarargInputDef', () => {
         },
         outputs: {
           result: {
-            type: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'signal' },
+            type: signalTypeSignal('float', { kind: 'norm01' }),
           },
         },
         lower: () => ({ outputsById: {} }),
