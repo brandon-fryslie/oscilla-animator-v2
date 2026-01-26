@@ -856,10 +856,8 @@ function assemblePerInstanceShapes(
     const compactedColor = compactedCopy.color as Uint8ClampedArray;
 
     // Build style (shared by both path and primitive)
-    const style: PathStyle = {
-      fillColor: compactedColor,
-      fillRule: 'nonzero',
-    };
+    // Auto-enables ExtrudeLite for perspective camera
+    const style = buildPathStyle(compactedColor, 'nonzero', context.resolvedCamera);
 
     if (isPathTopology(topology)) {
       // PATH TOPOLOGY: Build DrawPathInstancesOp
@@ -1071,6 +1069,20 @@ function buildInstanceTransforms(
   };
 }
 
+// =============================================================================
+// EXTRUDELITE: Default parameters for perspective camera (Experimental)
+// Delete when real mesh3d arrives.
+// =============================================================================
+const DEFAULT_EXTRUDE_PARAMS = {
+  extrudeHeight: 0.008,       // Subtle depth effect
+  lightDir: [-0.6, -0.8] as const,  // Light from top-left
+  shadeStrength: 0.3,
+  sideAlpha: 0.85,
+};
+// =============================================================================
+// END EXTRUDELITE DEFAULTS
+// =============================================================================
+
 /**
  * Build PathStyle from color buffer
  *
@@ -1079,16 +1091,31 @@ function buildInstanceTransforms(
  *
  * @param color - Color buffer (RGBA per instance or uniform)
  * @param fillRule - Fill rule ('nonzero' or 'evenodd')
+ * @param camera - Resolved camera params (optional, for auto-enabling ExtrudeLite)
  * @returns PathStyle structure for v2 rendering
  */
 function buildPathStyle(
   color: Uint8ClampedArray,
-  fillRule?: 'nonzero' | 'evenodd'
+  fillRule?: 'nonzero' | 'evenodd',
+  camera?: ResolvedCameraParams
 ): PathStyle {
+  // ============================================================================
+  // EXTRUDELITE: Auto-enable for perspective camera (Experimental)
+  // Delete when real mesh3d arrives.
+  // ============================================================================
+  const usePerspective = camera?.projection === 'persp';
+
   return {
     fillColor: color,
     fillRule,
+    ...(usePerspective && {
+      depthStyle: 'extrudeLite' as const,
+      extrudeLiteParams: DEFAULT_EXTRUDE_PARAMS,
+    }),
   };
+  // ============================================================================
+  // END EXTRUDELITE AUTO-ENABLE
+  // ============================================================================
 }
 
 /**
@@ -1228,8 +1255,8 @@ export function assembleDrawPathInstancesOp(
       compactedCopy.depth
     );
 
-    // Build style
-    const style = buildPathStyle(compactedCopy.color, 'nonzero');
+    // Build style (auto-enables ExtrudeLite for perspective camera)
+    const style = buildPathStyle(compactedCopy.color, 'nonzero', context.resolvedCamera);
 
     // Dispatch based on topology mode
     if (resolvedShape.mode === 'path') {
