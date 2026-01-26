@@ -114,13 +114,13 @@ describe('Metadata functions throw on unknown block type', () => {
 
   describe('isPayloadAllowed', () => {
     it('throws for non-existent block type', () => {
-      expect(() => isPayloadAllowed('Bogus', 'a', 'float')).toThrow(
+      expect(() => isPayloadAllowed('Bogus', 'a', FLOAT)).toThrow(
         'Unknown block type: "Bogus" is not registered'
       );
     });
 
     it('returns true for allowed payload on known block', () => {
-      expect(isPayloadAllowed('Add', 'a', 'float')).toBe(true);
+      expect(isPayloadAllowed('Add', 'a', FLOAT)).toBe(true);
     });
   });
 

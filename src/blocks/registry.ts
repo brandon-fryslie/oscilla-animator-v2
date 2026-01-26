@@ -141,7 +141,7 @@ export interface BlockCardinalityMetadata {
 // Payload-Generic Block Metadata (Spec §8)
 // =============================================================================
 
-import { type PayloadType, isPayloadVar, payloadsEqual } from '../core/canonical-types';
+import { isPayloadVar, payloadsEqual } from '../core/canonical-types';
 
 /**
  * Semantics category for payload-generic blocks.

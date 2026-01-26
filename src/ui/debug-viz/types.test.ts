@@ -65,7 +65,7 @@ describe('getSampleEncoding', () => {
 
   it('throws on unknown payload type', () => {
     // Force a bad value past TypeScript to verify runtime exhaustiveness
-    expect(() => getSampleEncoding({ kind: 'unknown', stride: 0 } as PayloadType)).toThrow('Unknown PayloadType');
+    expect(() => getSampleEncoding({ kind: 'unknown', stride: 0 } as unknown as PayloadType)).toThrow('Unknown PayloadType');
   });
 });
 

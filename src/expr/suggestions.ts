@@ -83,7 +83,7 @@ export interface BlockSuggestion extends Suggestion {
  */
 export interface PortSuggestion extends Suggestion {
   readonly type: 'port';
-  readonly payloadType: PayloadType;
+  readonly payloadTypeStr: string;
   readonly cardinality: 'one' | 'many';
 }
 
@@ -271,17 +271,17 @@ export class SuggestionProvider {
       // Resolve port type from registry if available
       const shorthand = `${blockName}.${portId}`;
       const canonicalAddr = this.registry.resolveShorthand(shorthand);
-      let payloadType: PayloadType = 'float'; // Default fallback
+      let payloadTypeStr: string = `(error: payloadType not resolved)`; // Default fallback
       let cardinality: 'one' | 'many' = 'one';
 
       if (canonicalAddr) {
         const addrString = addressToString(canonicalAddr);
         const resolved = this.registry.resolve(addrString);
         if (resolved?.kind === 'output') {
-          payloadType = resolved.type.payload;
+          payloadTypeStr = resolved.type.payload.kind;
           // Extract cardinality from SignalType's extent axes
-          const cardinalityAxis = resolved.type.extent?.cardinality;
-          if (cardinalityAxis?.kind === 'instantiated') {
+          const cardinalityAxis = resolved.type.extent.cardinality;
+          if (cardinalityAxis.kind === 'instantiated') {
             // Cardinality is a discriminated union: { kind: 'one' } | { kind: 'many', instance: ... }
             cardinality = cardinalityAxis.value.kind === 'one' ? 'one' : 'many';
           }
@@ -291,8 +291,8 @@ export class SuggestionProvider {
       suggestions.push({
         label: portId,
         type: 'port',
-        description: `Output: ${payloadType} (${cardinality})`,
-        payloadType,
+        description: `Output: ${payloadTypeStr} (${cardinality})`,
+        payloadTypeStr: payloadTypeStr,
         cardinality,
         sortOrder: 400,
       });

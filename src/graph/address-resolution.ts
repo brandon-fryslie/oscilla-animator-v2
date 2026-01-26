@@ -77,7 +77,7 @@ export function resolveAddress(patch: Patch, addressStr: string): ResolvedAddres
     const blockDef = BLOCK_DEFS_BY_TYPE.get(block.type);
     const outputDef = blockDef?.outputs?.[addr.portId];
     // Use type from definition, or fallback to a default SignalType
-    const type = outputDef?.type || signalType(FLOAT as const);
+    const type = outputDef?.type || signalType(FLOAT);
 
     return { kind: 'output', block, port, type, addr };
   }
@@ -90,7 +90,7 @@ export function resolveAddress(patch: Patch, addressStr: string): ResolvedAddres
     const blockDef = BLOCK_DEFS_BY_TYPE.get(block.type);
     const inputDef = blockDef?.inputs?.[addr.portId];
     // Use type from definition, or fallback to a default SignalType
-    const type = inputDef?.type || signalType(FLOAT as const);
+    const type = inputDef?.type || signalType(FLOAT);
 
     return { kind: 'input', block, port, type, addr };
   }

@@ -82,7 +82,7 @@ export function getValueRenderer(type: SignalType): ValueRenderer {
     return placeholderRenderer;
   }
 
-  const payloadKey = type.payload as string;
+  const payloadKey = type.payload.kind;
 
   // Tier 1: Exact match (payload + unit)
   const unitKind = type.unit.kind;

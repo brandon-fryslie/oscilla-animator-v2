@@ -6,14 +6,14 @@ import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { AutocompleteDropdown } from '../AutocompleteDropdown';
-import type { Suggestion } from '../../../expr/suggestions';
+import type { Suggestion, FunctionSuggestion, InputSuggestion, BlockSuggestion, PortSuggestion } from '../../../expr/suggestions';
 import { FLOAT } from '../../../core/canonical-types';
 
 // =============================================================================
 // Test Data
 // =============================================================================
 
-const mockFunctionSuggestions: Suggestion[] = [
+const mockFunctionSuggestions: FunctionSuggestion[] = [
   {
     label: 'sin(',
     type: 'function',
@@ -38,9 +38,9 @@ const mockFunctionSuggestions: Suggestion[] = [
     arity: 3,
     returnType: FLOAT,
   },
-] as Suggestion[];
+];
 
-const mockInputSuggestions: Suggestion[] = [
+const mockInputSuggestions: InputSuggestion[] = [
   {
     label: 'in0',
     type: 'input',
@@ -57,9 +57,9 @@ const mockInputSuggestions: Suggestion[] = [
     connected: true,
     position: 1,
   },
-] as Suggestion[];
+];
 
-const mockBlockSuggestions: Suggestion[] = [
+const mockBlockSuggestions: BlockSuggestion[] = [
   {
     label: 'Circle1',
     type: 'block',
@@ -68,18 +68,18 @@ const mockBlockSuggestions: Suggestion[] = [
     portCount: 3,
     displayName: 'Circle',
   },
-] as Suggestion[];
+];
 
-const mockPortSuggestions: Suggestion[] = [
+const mockPortSuggestions: PortSuggestion[] = [
   {
     label: 'radius',
     type: 'port',
     description: 'Output: float (one)',
     sortOrder: 400,
-    payloadType: FLOAT,
+    payloadTypeStr: 'float',
     cardinality: 'one',
   },
-] as Suggestion[];
+];
 
 // =============================================================================
 // Component Rendering Tests

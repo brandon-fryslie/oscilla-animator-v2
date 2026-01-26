@@ -22,7 +22,7 @@ beforeAll(() => {
         type: signalType(FLOAT, unitNorm01()),
         isVararg: true,
         varargConstraint: {
-          payloadType: 'float',
+          payloadType: FLOAT,
           cardinalityConstraint: 'any',
         },
       },

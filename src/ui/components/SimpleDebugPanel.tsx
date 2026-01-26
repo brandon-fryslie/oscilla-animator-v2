@@ -16,7 +16,7 @@ import type { SignalType } from '../../core/canonical-types';
 function formatValue(value: number, type: SignalType): string {
   const payload = type.payload;
 
-  switch (payload) {
+  switch (payload.kind) {
     case 'color':
       return `#${Math.floor(value).toString(16).padStart(6, '0')}`;
     case 'float':
@@ -32,9 +32,9 @@ function formatValue(value: number, type: SignalType): string {
  */
 function formatType(type: SignalType, cardinality: 'signal' | 'field'): string {
   if (cardinality === 'field') {
-    return `Field:${type.payload}`;
+    return `Field:${type.payload.kind}`;
   }
-  return `Signal:${type.payload}`;
+  return `Signal:${type.payload.kind}`;
 }
 
 export interface SimpleDebugPanelProps {

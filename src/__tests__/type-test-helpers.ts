@@ -29,6 +29,14 @@ import {
   temporalityDiscrete,
   bindingUnbound,
   axisInstantiated,
+  FLOAT,
+  INT,
+  BOOL,
+  VEC2,
+  VEC3,
+  COLOR,
+  SHAPE,
+  CAMERA_PROJECTION,
   type PayloadType,
   type SignalType,
   type Unit,
@@ -48,9 +56,9 @@ import {
  * @returns A properly typed SignalType
  *
  * @example
- * const floatType = testSignalType('float');
- * const phaseType = testSignalType('float', unitPhase01());
- * const posType = testSignalType('vec2', unitWorld2());
+ * const floatType = testSignalType(FLOAT);
+ * const phaseType = testSignalType(FLOAT, unitPhase01());
+ * const posType = testSignalType(VEC2, unitWorld2());
  */
 export function testSignalType(
   payload: PayloadType,
@@ -75,7 +83,7 @@ export function testSignalType(
  * @example
  * // Field type over instances
  * const fieldType = testSignalTypeWithExtent(
- *   'float',
+ *   FLOAT,
  *   unitScalar(),
  *   { cardinality: cardinalityMany(instanceRef('circle')) }
  * );
@@ -102,7 +110,7 @@ export function testSignalTypeWithExtent(
  * const angle = testFloat(unitRadians());
  */
 export function testFloat(unit?: Unit): SignalType {
-  return makeSignalType('float', unit ?? unitScalar());
+  return makeSignalType(FLOAT, unit ?? unitScalar());
 }
 
 /**
@@ -116,7 +124,7 @@ export function testFloat(unit?: Unit): SignalType {
  * const timeMs = testInt(unitMs());
  */
 export function testInt(unit?: Unit): SignalType {
-  return makeSignalType('int', unit ?? unitCount());
+  return makeSignalType(INT, unit ?? unitCount());
 }
 
 /**
@@ -130,7 +138,7 @@ export function testInt(unit?: Unit): SignalType {
  * const normalized = testVec2(unitNdc2());
  */
 export function testVec2(unit?: Unit): SignalType {
-  return makeSignalType('vec2', unit ?? unitWorld2());
+  return makeSignalType(VEC2, unit ?? unitWorld2());
 }
 
 /**
@@ -140,7 +148,7 @@ export function testVec2(unit?: Unit): SignalType {
  * @returns A SignalType with payload='vec3'
  */
 export function testVec3(unit?: Unit): SignalType {
-  return makeSignalType('vec3', unit ?? unitWorld3());
+  return makeSignalType(VEC3, unit ?? unitWorld3());
 }
 
 /**
@@ -153,7 +161,7 @@ export function testVec3(unit?: Unit): SignalType {
  * const color = testColor();
  */
 export function testColor(unit?: Unit): SignalType {
-  return makeSignalType('color', unit ?? unitRgba01());
+  return makeSignalType(COLOR, unit ?? unitRgba01());
 }
 
 /**
@@ -162,7 +170,7 @@ export function testColor(unit?: Unit): SignalType {
  * @returns A SignalType with payload='bool'
  */
 export function testBool(): SignalType {
-  return makeSignalType('bool', unitNone());
+  return makeSignalType(BOOL, unitNone());
 }
 
 /**
@@ -171,7 +179,7 @@ export function testBool(): SignalType {
  * @returns A SignalType with payload='shape'
  */
 export function testShape(): SignalType {
-  return makeSignalType('shape', unitNone());
+  return makeSignalType(SHAPE, unitNone());
 }
 
 /**
@@ -185,7 +193,7 @@ export function testShape(): SignalType {
  * @returns A SignalType with cardinality=many
  *
  * @example
- * const pointField = testFieldType('vec2', unitWorld2(), instanceRef('polygon'));
+ * const pointField = testFieldType(VEC2, unitWorld2(), instanceRef('polygon'));
  */
 export function testFieldType(
   payload: PayloadType,
@@ -205,7 +213,7 @@ export function testFieldType(
  * @returns A SignalType with temporality=discrete
  *
  * @example
- * const clickEvent = testEventType('bool', unitNone());
+ * const clickEvent = testEventType(BOOL, unitNone());
  */
 export function testEventType(
   payload: PayloadType,

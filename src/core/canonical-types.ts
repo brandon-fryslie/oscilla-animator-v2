@@ -113,7 +113,9 @@ export function isValidPayloadUnit(payload: PayloadType, unit: Unit): boolean {
   if (unit.kind === 'var') return true;
   // Payload variables are always valid during inference (will be resolved later)
   if (isPayloadVar(payload)) return true;
-  const allowed = ALLOWED_UNITS[payload.kind];
+  // After isPayloadVar check, payload is ConcretePayloadType
+  const concretePayload = payload as ConcretePayloadType;
+  const allowed = ALLOWED_UNITS[concretePayload.kind];
   if (!allowed) return false;
   return allowed.includes(unit.kind);
 }
@@ -127,7 +129,9 @@ export function defaultUnitForPayload(payload: PayloadType): Unit {
   if (isPayloadVar(payload)) {
     throw new Error(`Cannot get default unit for payload variable ${payload.id} - resolve payload first`);
   }
-  switch (payload.kind) {
+  // After isPayloadVar check, payload is ConcretePayloadType
+  const concretePayload = payload as ConcretePayloadType;
+  switch (concretePayload.kind) {
     case 'float': return unitScalar();
     case 'int': return unitCount();
     case 'vec2': return unitWorld2();
@@ -136,6 +140,10 @@ export function defaultUnitForPayload(payload: PayloadType): Unit {
     case 'bool': return unitNone();
     case 'shape': return unitNone();
     case 'cameraProjection': return unitNone();
+    default: {
+      const _exhaustive: never = concretePayload;
+      throw new Error(`Unknown payload kind: ${(_exhaustive as ConcretePayloadType).kind}`);
+    }
   }
 }
 
@@ -295,7 +303,8 @@ export function strideOf(type: PayloadType): number {
     throw new Error(`Cannot get stride for payload variable ${type.id} - resolve payload first`);
   }
   // Stride is now intrinsic to ConcretePayloadType
-  return type.stride;
+  // After isPayloadVar check, type is ConcretePayloadType
+  return (type as ConcretePayloadType).stride;
 }
 
 // =============================================================================

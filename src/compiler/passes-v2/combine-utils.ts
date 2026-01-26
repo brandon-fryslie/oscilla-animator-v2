@@ -105,13 +105,15 @@ export function validateCombineMode(
   }
 
   // Domain-specific validation for signal/field worlds
+  // Normalize payload to kind string (handles both string and object forms)
+  const payloadKind = typeof payload === 'string' ? payload : payload;
   const numericPayloads = ['float', 'int', 'vec2', 'vec3'];
-  if (numericPayloads.includes(payload)) {
+  if (numericPayloads.includes(payloadKind)) {
     // Numeric domains support all combine modes
     return { valid: true };
   }
 
-  if (payload .kind === 'color') {
+  if (payloadKind === 'color') {
     // Color domain only supports 'last', 'first', and 'layer'
     if (mode === 'layer') {
       return { valid: true };
@@ -122,7 +124,7 @@ export function validateCombineMode(
     };
   }
 
-  if (payload .kind === 'shape') {
+  if (payloadKind === 'shape') {
     // Shape domain only supports 'last', 'first', and 'layer' (not numeric combines)
     if (mode === 'layer') {
       return { valid: true };

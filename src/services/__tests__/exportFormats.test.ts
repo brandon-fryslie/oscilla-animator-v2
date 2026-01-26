@@ -14,8 +14,7 @@ import {
 import type { Block, Edge } from '../../graph/Patch';
 import type { BlockDef } from '../../blocks/registry';
 import { blockId } from '../../types';
-import { signalType } from '../../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
+import { signalType, FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
 
 describe('exportFormats', () => {
   describe('formatConfigValue', () => {
@@ -120,7 +119,7 @@ describe('exportFormats', () => {
           count: { type: signalType(FLOAT), value: 100 },
         },
         outputs: {
-          instances: { type: signalType('instances') },
+          instances: { type: signalType(FLOAT) },
         },
         lower: () => ({ outputsById: {} }),
       };
@@ -150,7 +149,7 @@ describe('exportFormats', () => {
           count: { type: signalType(FLOAT), value: 100 },
         },
         outputs: {
-          instances: { type: signalType('instances') },
+          instances: { type: signalType(FLOAT) },
         },
         lower: () => ({ outputsById: {} }),
       };

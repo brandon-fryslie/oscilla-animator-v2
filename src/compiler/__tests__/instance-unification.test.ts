@@ -97,8 +97,8 @@ describe('Instance Unification', () => {
       const normalizedIndex = b.fieldIntrinsic(instance, 'normalizedIndex', floatType);
       
       // Create signals for grid dimensions
-      const colsSig = b.sigConst(5, signalTypeSignal('int'));
-      const rowsSig = b.sigConst(2, signalTypeSignal('int'));
+      const colsSig = b.sigConst(5, signalTypeSignal(INT));
+      const rowsSig = b.sigConst(2, signalTypeSignal(INT));
       
       // Apply gridLayout kernel
       const layoutField = b.fieldZipSig(

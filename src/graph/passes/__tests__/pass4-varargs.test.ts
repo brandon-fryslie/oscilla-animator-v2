@@ -24,7 +24,7 @@ beforeAll(() => {
         type: signalType(FLOAT, unitNorm01()),
         isVararg: true,
         varargConstraint: {
-          payloadType: 'float',
+          payloadType: FLOAT,
           cardinalityConstraint: 'any',
         },
       },
@@ -48,7 +48,7 @@ beforeAll(() => {
         type: signalType(FLOAT, unitNorm01()),
         isVararg: true,
         varargConstraint: {
-          payloadType: 'float',
+          payloadType: FLOAT,
           cardinalityConstraint: 'any',
           minConnections: 2,
           maxConnections: 5,

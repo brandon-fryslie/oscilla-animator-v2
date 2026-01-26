@@ -37,7 +37,7 @@ describe('Payload Diagnostics', () => {
       const payload: DiagnosticPayload = {
         code: 'E_PAYLOAD_NOT_ALLOWED',
         port: 'input',
-        payload: COLOR,
+        payload: COLOR.kind,
         allowedPayloads: ['float', 'vec2'],
       };
       expect(payload.code).toBe('E_PAYLOAD_NOT_ALLOWED');

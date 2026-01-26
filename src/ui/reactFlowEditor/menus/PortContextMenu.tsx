@@ -25,6 +25,7 @@ import { ContextMenu, type ContextMenuItem } from '../ContextMenu';
 import { validateConnection } from '../typeValidation';
 import { requireBlockDef, getBlockCategories, getBlockTypesByCategory, type BlockDef } from '../../../blocks/registry';
 import type { PayloadType } from '../../../core/canonical-types';
+import { isPayloadVar } from '../../../core/canonical-types';
 
 /** Maximum number of quick connect suggestions to show */
 const MAX_QUICK_CONNECT = 3;
@@ -188,8 +189,9 @@ function findCompatibleBlockTypes(
  * Get valid combine modes for a given payload type.
  */
 function getValidCombineModes(payloadType: PayloadType): CombineMode[] {
-  const isNumeric = ['float', 'int', 'vec2', 'vec3', 'color'].includes(payloadType as string);
-  const isBoolean = payloadType .kind === 'bool';
+  const payloadKind = isPayloadVar(payloadType) ? 'float' : payloadType.kind;
+  const isNumeric = ['float', 'int', 'vec2', 'vec3', 'color'].includes(payloadKind);
+  const isBoolean = payloadKind === 'bool';
 
   return (Object.entries(COMBINE_MODE_CATEGORY) as [CombineMode, string][])
     .filter(([_, category]) => {

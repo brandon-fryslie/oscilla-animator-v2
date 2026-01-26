@@ -81,7 +81,7 @@ describe('ValueRenderer registry', () => {
   describe('placeholder renderer', () => {
     it('returns placeholder for unknown payload type', () => {
       // Force unknown payload past TypeScript - use test helper then override
-      const type = testSignalType('float');
+      const type = testSignalType(FLOAT);
       (type as any).payload = 'unknown';
       const renderer = getValueRenderer(type);
       const el = renderer.renderFull({ type: 'scalar', components: new Float32Array([0]), stride: 0 });
