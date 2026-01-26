@@ -19,7 +19,7 @@ import type { PatchStore } from '../../stores/PatchStore';
 import type { LayoutStore } from '../../stores/LayoutStore';
 import type { DiagnosticsStore } from '../../stores/DiagnosticsStore';
 import { getBlockDefinition, type BlockDef } from '../../blocks/registry';
-import { createNodeFromBlock, createEdgeFromPatchEdge, type OscillaNode } from './nodes';
+import { createNodeFromBlock, createEdgeFromPatchEdge, computeAllNonContributingEdges, type OscillaNode } from './nodes';
 import { getPortTypeFromBlockType, formatUnitForDisplay } from './typeValidation';
 import { findAdapter } from '../../graph/adapters';
 
@@ -234,8 +234,11 @@ export function reconcileNodes(
     }
   }
 
-  // Build edges from patch (edges don't have positions)
-  const edges = patch.edges.map(e => createEdgeFromPatchEdge(e, patch.blocks));
+  // Compute non-contributing edges before mapping
+  const nonContributingEdges = computeAllNonContributingEdges(patch);
+
+  // Build edges from patch with non-contributing styling
+  const edges = patch.edges.map(e => createEdgeFromPatchEdge(e, patch.blocks, nonContributingEdges));
 
   return { nodes, edges };
 }
@@ -274,7 +277,11 @@ export function buildNodesAndEdges(
     nodes.push(node);
   }
 
-  const edges = patch.edges.map(e => createEdgeFromPatchEdge(e, patch.blocks));
+  // Compute non-contributing edges before mapping
+  const nonContributingEdges = computeAllNonContributingEdges(patch);
+
+  // Build edges from patch with non-contributing styling
+  const edges = patch.edges.map(e => createEdgeFromPatchEdge(e, patch.blocks, nonContributingEdges));
 
   return { nodes, edges };
 }
@@ -394,6 +401,9 @@ export function createConnectHandler(handle: SyncHandle): OnConnect {
         }
       );
 
+      // Recompute non-contributing edges
+      const nonContributingEdges = computeAllNonContributingEdges(handle.patchStore.patch);
+
       // Also add to ReactFlow state directly (since reaction is blocked by isSyncing)
       const newEdge: ReactFlowEdge = {
         id: edgeId,
@@ -404,20 +414,28 @@ export function createConnectHandler(handle: SyncHandle): OnConnect {
         type: 'default',
       };
 
-      // Compute adapter label for the new edge
-      const sourceBlock = handle.patchStore.patch.blocks.get(connection.source as BlockId);
-      const targetBlock = handle.patchStore.patch.blocks.get(connection.target as BlockId);
-      if (sourceBlock && targetBlock) {
-        const sourceType = getPortTypeFromBlockType(sourceBlock.type, connection.sourceHandle || '', 'output');
-        const targetType = getPortTypeFromBlockType(targetBlock.type, connection.targetHandle || '', 'input');
-        if (sourceType && targetType) {
-          const adapter = findAdapter(sourceType, targetType);
-          if (adapter) {
-            const fromUnit = formatUnitForDisplay(sourceType.unit);
-            const toUnit = formatUnitForDisplay(targetType.unit);
-            newEdge.label = `${fromUnit}→${toUnit}`;
-            newEdge.labelStyle = { fontSize: 10, fill: '#888' };
-            newEdge.style = { stroke: '#f59e0b', strokeDasharray: '4 2' };
+      // Check if this edge is non-contributing
+      const isNonContributing = nonContributingEdges.has(edgeId);
+      if (isNonContributing) {
+        newEdge.style = { opacity: 0.3, strokeDasharray: '5,5' };
+        newEdge.label = 'Not contributing';
+        newEdge.labelStyle = { fontSize: 10, fill: '#666' };
+      } else {
+        // Compute adapter label for the new edge (only if contributing)
+        const sourceBlock = handle.patchStore.patch.blocks.get(connection.source as BlockId);
+        const targetBlock = handle.patchStore.patch.blocks.get(connection.target as BlockId);
+        if (sourceBlock && targetBlock) {
+          const sourceType = getPortTypeFromBlockType(sourceBlock.type, connection.sourceHandle || '', 'output');
+          const targetType = getPortTypeFromBlockType(targetBlock.type, connection.targetHandle || '', 'input');
+          if (sourceType && targetType) {
+            const adapter = findAdapter(sourceType, targetType);
+            if (adapter) {
+              const fromUnit = formatUnitForDisplay(sourceType.unit);
+              const toUnit = formatUnitForDisplay(targetType.unit);
+              newEdge.label = `${fromUnit}→${toUnit}`;
+              newEdge.labelStyle = { fontSize: 10, fill: '#888' };
+              newEdge.style = { stroke: '#f59e0b', strokeDasharray: '4 2' };
+            }
           }
         }
       }

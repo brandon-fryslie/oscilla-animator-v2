@@ -1,8 +1,9 @@
 # Sprint: graph-visualization - Combine Mode Visual Indication in Graph Editor
 
 **Generated:** 2026-01-25
-**Confidence:** HIGH: 1, MEDIUM: 1, LOW: 0
-**Status:** PARTIALLY READY
+**Updated:** 2026-01-25 (unknowns resolved)
+**Confidence:** HIGH: 3, MEDIUM: 0, LOW: 0
+**Status:** READY FOR IMPLEMENTATION
 
 ## Sprint Goal
 
@@ -11,54 +12,67 @@ Show visual indication in the graph editor when an edge's contribution is dimini
 ## Scope
 
 **Deliverables:**
-1. Compute which edges are "non-contributing" based on combine mode
+1. Helper function to compute non-contributing edges
 2. Apply dimming/styling to non-contributing edges in ReactFlow
+3. Tooltip explaining why edge is dimmed
 
 ## Work Items
 
-### P0: Determine non-contributing edges [MEDIUM]
+### P0: Create getNonContributingEdges helper [HIGH]
 
 **Acceptance Criteria:**
-- [ ] For 'last' combine mode: all edges except the last (by sort order) are non-contributing
+- [ ] Function takes patch and port identifier, returns Set<edgeId>
+- [ ] For 'last' combine mode: all edges except the last (by sortKey) are non-contributing
 - [ ] For 'first' combine mode: all edges except the first are non-contributing
-- [ ] For other modes (sum, average, etc.): all edges contribute equally
-- [ ] Function returns list of edge IDs that are non-contributing
-
-#### Unknowns to Resolve
-- How is edge sort order determined? (edge ID? explicit priority?)
-- Should this computation happen in the compiler or at render time?
-- Do we need compiler output to determine order, or can we compute it from patch?
-
-#### Exit Criteria
-- Clear algorithm for determining non-contributing edges
-- Decision on where computation lives (compiler vs UI)
+- [ ] For commutative modes (sum, average, max, min, mul, or, and): empty set (all contribute)
+- [ ] For 'layer': empty set (all contribute, occlusion too complex to compute)
+- [ ] Single edge to a port never marked as non-contributing
 
 **Technical Notes:**
-- May need to expose edge ordering from compiler passes
-- Alternatively, apply same sorting logic used in `combine-utils.ts`
+- Location: `src/ui/reactFlowEditor/nodes.ts` or new file
+- Reuse `sortEdgesBySortKey` from `src/compiler/passes-v2/combine-utils.ts`
+- Import CombineMode from types
 
-### P1: Apply visual dimming to edges [HIGH]
+### P1: Apply visual dimming to non-contributing edges [HIGH]
 
 **Acceptance Criteria:**
-- [ ] Non-contributing edges have reduced opacity (e.g., 0.3)
+- [ ] Non-contributing edges have reduced opacity (0.3)
 - [ ] Non-contributing edges have dashed stroke style
-- [ ] Tooltip explains why edge is dimmed ("Not contributing due to 'last' combine mode")
 - [ ] Visual style updates when combine mode changes
+- [ ] Style applied via ReactFlow edge `style` prop
 
 **Technical Notes:**
-- Location: ReactFlow edge components in `src/ui/reactFlowEditor/`
-- Use ReactFlow's `style` prop on edges
-- May need custom edge component for tooltip
+- Modify `createEdgeFromPatchEdge` in `src/ui/reactFlowEditor/nodes.ts`
+- Add parameter for non-contributing edge IDs
+- In `sync.ts`, pre-compute non-contributing edges before mapping
+
+```typescript
+const edgeStyle: React.CSSProperties = isNonContributing
+  ? { opacity: 0.3, strokeDasharray: '5,5' }
+  : {};
+```
+
+### P2: Add tooltip for dimmed edges [HIGH]
+
+**Acceptance Criteria:**
+- [ ] Dimmed edges show tooltip on hover
+- [ ] Tooltip explains: "Not contributing: combine mode is 'X' and this edge has lower priority"
+- [ ] Non-dimmed edges have no tooltip (or standard tooltip)
+
+**Technical Notes:**
+- ReactFlow edges support `label` prop for simple text
+- For richer tooltip, may need to add data and custom edge component
+- Start simple: use edge `label` prop conditionally
 
 ## Dependencies
 
-- Sprint 1 (data-model-ui) must be complete
-- Understanding of edge sort order in combine logic
+- Sprint 1 (data-model-ui) - COMPLETE ✅
+- `Edge.sortKey` field - COMPLETE ✅ (made required in Sprint 1)
 
 ## Risks
 
 | Risk | Mitigation |
 |------|------------|
-| Edge ordering logic is complex | Start with simple case: alphabetical edge ID |
-| Performance with many edges | Compute once on patch change, memoize |
-| ReactFlow styling limitations | May need custom edge component |
+| Tooltip positioning | Start with simple label, iterate if needed |
+| Performance with many edges | Memoize computation, only recompute on patch change |
+| ReactFlow edge styling limitations | Simple CSS props should suffice; custom component as fallback |

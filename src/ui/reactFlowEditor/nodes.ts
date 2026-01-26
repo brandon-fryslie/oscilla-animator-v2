@@ -6,12 +6,14 @@
  */
 
 import type { Node, Edge as ReactFlowEdge } from 'reactflow';
-import type { Block, BlockId, Edge, DefaultSource, UIControlHint } from '../../types';
+import type { Block, BlockId, Edge, DefaultSource, UIControlHint, CombineMode } from '../../types';
+import type { Patch } from '../../graph/Patch';
 import type { BlockDef, InputDef } from '../../blocks/registry';
 import type { PayloadType, SignalType } from '../../core/canonical-types';
 import { signalType } from '../../core/canonical-types';
 import { formatTypeForTooltip, getTypeColor, getPortTypeFromBlockType, formatUnitForDisplay } from './typeValidation';
 import { findAdapter } from '../../graph/adapters';
+import { sortEdgesBySortKey } from '../../compiler/passes-v2/combine-utils';
 
 /**
  * Connection info for a port
@@ -218,13 +220,106 @@ export function createNodeFromBlock(
 }
 
 /**
+ * Get IDs of edges that don't contribute to a port's final value.
+ * For 'last' mode, all but the highest-sortKey edge are non-contributing.
+ * For 'first' mode, all but the lowest-sortKey edge are non-contributing.
+ * For commutative modes (sum, etc.), all edges contribute.
+ */
+export function getNonContributingEdges(
+  patch: Patch,
+  targetBlockId: string,
+  targetPortId: string,
+  combineMode: CombineMode
+): Set<string> {
+  // Get all edges targeting this port
+  const edgesToPort = patch.edges.filter(
+    e => e.to.blockId === targetBlockId && e.to.slotId === targetPortId
+  );
+
+  // Single edge always contributes
+  if (edgesToPort.length <= 1) {
+    return new Set();
+  }
+
+  // Commutative modes: all edges contribute
+  const commutativeModes: CombineMode[] = ['sum', 'average', 'max', 'min', 'mul', 'or', 'and'];
+  if (commutativeModes.includes(combineMode)) {
+    return new Set();
+  }
+
+  // Sort by sortKey (ascending), then edge ID
+  const sorted = sortEdgesBySortKey(edgesToPort);
+
+  // 'last': highest sortKey wins → all but last are non-contributing
+  if (combineMode === 'last') {
+    return new Set(sorted.slice(0, -1).map(e => e.id));
+  }
+
+  // 'first': lowest sortKey wins → all but first are non-contributing
+  if (combineMode === 'first') {
+    return new Set(sorted.slice(1).map(e => e.id));
+  }
+
+  // 'layer': all contribute (occlusion is complex, treat as all visible)
+  return new Set();
+}
+
+/**
+ * Compute non-contributing edges for ALL ports in a patch.
+ * Returns a Set of edge IDs that should be visually dimmed.
+ */
+export function computeAllNonContributingEdges(patch: Patch): Set<string> {
+  const nonContributing = new Set<string>();
+
+  // Group edges by target port
+  const edgesByTarget = new Map<string, Edge[]>();
+  for (const edge of patch.edges) {
+    const key = `${edge.to.blockId}:${edge.to.slotId}`;
+    if (!edgesByTarget.has(key)) {
+      edgesByTarget.set(key, []);
+    }
+    edgesByTarget.get(key)!.push(edge);
+  }
+
+  // For each port with multiple edges, check combine mode
+  for (const [key, edges] of edgesByTarget) {
+    if (edges.length <= 1) continue;
+
+    const [blockId, portId] = key.split(':');
+    const block = patch.blocks.get(blockId as BlockId);
+    if (!block) continue;
+
+    const inputPort = block.inputPorts.get(portId);
+    if (!inputPort) continue;
+
+    const combineMode = inputPort.combineMode;
+    const nonContributingForPort = getNonContributingEdges(
+      patch, blockId, portId, combineMode
+    );
+
+    for (const edgeId of nonContributingForPort) {
+      nonContributing.add(edgeId);
+    }
+  }
+
+  return nonContributing;
+}
+
+/**
  * Create ReactFlow edge from Oscilla edge.
  * Optionally computes adapter label from source/target block types.
+ *
+ * @param edge - The edge to convert
+ * @param blocks - All blocks in the patch (for adapter detection)
+ * @param nonContributingEdges - Set of edge IDs that don't contribute to final value
  */
 export function createEdgeFromPatchEdge(
   edge: Edge,
-  blocks?: ReadonlyMap<BlockId, Block>
+  blocks?: ReadonlyMap<BlockId, Block>,
+  nonContributingEdges?: Set<string>
 ): ReactFlowEdge {
+  const isNonContributing = nonContributingEdges?.has(edge.id) ?? false;
+
   const rfEdge: ReactFlowEdge = {
     id: edge.id,
     source: edge.from.blockId,
@@ -234,8 +329,15 @@ export function createEdgeFromPatchEdge(
     type: 'default',
   };
 
-  // Compute adapter label if block context is available
-  if (blocks) {
+  // Apply dimming style for non-contributing edges
+  if (isNonContributing) {
+    rfEdge.style = { opacity: 0.3, strokeDasharray: '5,5' };
+    rfEdge.label = 'Not contributing';
+    rfEdge.labelStyle = { fontSize: 10, fill: '#666' };
+  }
+
+  // Compute adapter label if block context is available (only for contributing edges)
+  if (blocks && !isNonContributing) {
     const sourceBlock = blocks.get(edge.from.blockId as BlockId);
     const targetBlock = blocks.get(edge.to.blockId as BlockId);
     if (sourceBlock && targetBlock) {
