@@ -8,7 +8,7 @@ import { describe, bench } from 'vitest';
 import {
   computeTopologyGroups,
   groupInstancesByTopology,
-  sliceInstanceBuffers,
+  // sliceInstanceBuffers - removed (function no longer exported)
   resetTopologyCacheCounters,
 } from '../RenderAssembler';
 import { SHAPE2D_WORDS, writeShape2D } from '../RuntimeState';
@@ -74,39 +74,11 @@ describe('computeTopologyGroups', () => {
 });
 
 // ============================================================================
-// sliceInstanceBuffers Benchmarks
+// sliceInstanceBuffers Benchmarks (DISABLED - function removed)
 // ============================================================================
 
-describe('sliceInstanceBuffers', () => {
-  const pos500 = createPositionBuffer(500);
-  const col500 = createColorBuffer(500);
-  const pos1000 = createPositionBuffer(1000);
-  const col1000 = createColorBuffer(1000);
-
-  // Contiguous indices (subarray path)
-  const contiguous100 = Array.from({ length: 100 }, (_, i) => i + 50);
-  const contiguous500 = Array.from({ length: 500 }, (_, i) => i);
-
-  // Non-contiguous indices (copy path) — every other
-  const nonContiguous100 = Array.from({ length: 100 }, (_, i) => i * 2);
-  const nonContiguous500 = Array.from({ length: 500 }, (_, i) => i * 2);
-
-  bench('100 contiguous (subarray)', () => {
-    sliceInstanceBuffers(pos500, col500, contiguous100);
-  });
-
-  bench('100 non-contiguous (copy)', () => {
-    sliceInstanceBuffers(pos500, col500, nonContiguous100);
-  });
-
-  bench('500 contiguous (subarray)', () => {
-    sliceInstanceBuffers(pos1000, col1000, contiguous500);
-  });
-
-  bench('500 non-contiguous (copy)', () => {
-    sliceInstanceBuffers(pos1000, col1000, nonContiguous500);
-  });
-});
+// TODO: Re-enable if sliceInstanceBuffers is restored
+// describe('sliceInstanceBuffers', () => { ... });
 
 // ============================================================================
 // Cache Hit vs Miss Benchmarks
