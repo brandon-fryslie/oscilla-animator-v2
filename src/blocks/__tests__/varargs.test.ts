@@ -11,6 +11,7 @@ import {
   type VarargConstraint,
 } from '../registry';
 import { signalType, signalTypeSignal } from '../../core/canonical-types';
+import { defaultSourceConst } from '../../types';
 
 describe('VarargInputDef', () => {
   describe('isVarargInput type guard', () => {
@@ -149,7 +150,7 @@ describe('VarargInputDef', () => {
               payloadType: 'float',
               cardinalityConstraint: 'any',
             },
-            defaultSource: 'Const0',
+            defaultSource: defaultSourceConst(0),
           },
         },
         outputs: {
@@ -175,7 +176,7 @@ describe('VarargInputDef', () => {
         inputs: {
           normalInput: {
             type: signalTypeSignal('float', { kind: 'norm01' }),
-            defaultSource: 'Const1',
+            defaultSource: defaultSourceConst(1),
           },
           varargInput: {
             type: signalTypeSignal('float', { kind: 'norm01' }),

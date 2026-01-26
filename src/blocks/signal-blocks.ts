@@ -318,7 +318,7 @@ registerBlock({
     const outType = ctx.outTypes[0];
 
     // Create state for accumulated value
-    const stateId = stableStateId(`accumulator_${ctx.instanceId}`);
+    const stateId = stableStateId(ctx.instanceId, 'accumulator');
     const stateSlot = ctx.b.allocStateSlot(stateId, { initialValue: 0 });
 
     // Read current state
