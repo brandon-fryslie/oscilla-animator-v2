@@ -14,6 +14,7 @@ import { getBlockDefinition, type BlockDef, type InputDef, type OutputDef, BLOCK
 import './BlockInspector.css';
 import type { Block, Patch, Edge, PortRef } from '../../graph/Patch';
 import type { BlockId, PortId, DefaultSource, UIControlHint } from '../../types';
+import type { CombineMode } from '../../types';
 import type { SignalType } from '../../core/canonical-types';
 import {
   NumberInput as MuiNumberInput,
@@ -23,6 +24,7 @@ import {
   ColorInput as MuiColorInput,
   SliderWithInput,
 } from './common';
+import { validateCombineMode } from '../../compiler/passes-v2/combine-utils';
 import { ConnectionPicker } from './ConnectionPicker';
 
 // =============================================================================
@@ -33,7 +35,7 @@ import { ConnectionPicker } from './ConnectionPicker';
  * Format a SignalType for display.
  */
 function formatSignalType(type: SignalType | undefined): string {
-  return type?.payload ?? '(no type)';
+  return (typeof type?.payload === 'string' ? type.payload : '(unresolved)') ?? '(no type)';
 }
 
 /**
@@ -251,6 +253,40 @@ function TimeRootBlock() {
 }
 
 
+/**
+ * Get valid combine modes for a payload type.
+ * Filters modes based on type compatibility.
+ */
+function getValidCombineModes(payload: string): CombineMode[] {
+  const allModes: CombineMode[] = ['last', 'first', 'sum', 'average', 'max', 'min', 'mul', 'layer', 'or', 'and'];
+  
+  return allModes.filter(mode => {
+    // For signal world (most common for ports)
+    const result = validateCombineMode(mode, 'signal', payload);
+    return result.valid;
+  });
+}
+
+/**
+ * Format combine mode for display.
+ */
+function formatCombineMode(mode: CombineMode): string {
+  const labels: Record<CombineMode, string> = {
+    last: 'Last (default)',
+    first: 'First',
+    sum: 'Sum',
+    average: 'Average',
+    max: 'Maximum',
+    min: 'Minimum',
+    mul: 'Multiply',
+    layer: 'Layer',
+    or: 'OR (boolean)',
+    and: 'AND (boolean)',
+  };
+  return labels[mode] ?? mode;
+}
+
+
 // =============================================================================
 // Port Inspector Panel (Top-Level)
 // =============================================================================
@@ -349,6 +385,26 @@ const PortInspectorStandalone = observer(function PortInspectorStandalone({ port
           {formatSignalType(portDef.type!)}
         </div>
       </div>
+
+      {/* Combine Mode - only for input ports */}
+      {isInput && portDef.type && (
+        <div style={{ marginBottom: '16px' }}>
+          <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: colors.textSecondary }}>
+            Combine Mode
+          </h4>
+          <MuiSelectInput
+            value={instancePort?.combineMode ?? 'last'}
+            onChange={(value) => {
+              patchStore.updateInputPortCombineMode(block.id, portRef.portId as PortId, value as CombineMode);
+            }}
+            options={getValidCombineModes(typeof portDef.type.payload === 'string' ? portDef.type.payload : 'float').map(mode => ({
+              value: mode,
+              label: formatCombineMode(mode)
+            }))}
+            size="sm"
+          />
+        </div>
+      )}
 
       {/* Editable default source for input ports */}
       {isInput && inputDef && effectiveDefaultSource && (
