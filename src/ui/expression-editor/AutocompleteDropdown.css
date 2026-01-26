@@ -1,0 +1,147 @@
+/**
+ * Autocomplete Dropdown Styles
+ *
+ * Dark theme matching BlockInspector.
+ * Supports keyboard navigation and mouse hover.
+ */
+
+.autocomplete-dropdown {
+  /* Theme colors matching BlockInspector */
+  --bg-dropdown: #16213e;
+  --bg-item: #0f0f23;
+  --bg-item-alt: #1a1a2e;
+  --bg-hover: rgba(78, 205, 196, 0.1);
+  --bg-selected: rgba(78, 205, 196, 0.2);
+  --border-color: #0f3460;
+  --text-primary: #eee;
+  --text-secondary: #888;
+  --accent: #4ecdc4;
+
+  position: fixed;
+  z-index: 10000;
+  min-width: 300px;
+  max-width: 500px;
+  max-height: 400px;
+  background: var(--bg-dropdown);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+}
+
+/* ============================================================================
+ * List Container
+ * ========================================================================== */
+
+.autocomplete-dropdown__list {
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: 400px;
+  padding: 4px;
+}
+
+/* Custom scrollbar */
+.autocomplete-dropdown__list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.autocomplete-dropdown__list::-webkit-scrollbar-track {
+  background-color: var(--bg-dropdown);
+}
+
+.autocomplete-dropdown__list::-webkit-scrollbar-thumb {
+  background-color: var(--border-color);
+  border-radius: 4px;
+}
+
+.autocomplete-dropdown__list::-webkit-scrollbar-thumb:hover {
+  background-color: var(--accent);
+}
+
+/* ============================================================================
+ * Suggestion Items
+ * ========================================================================== */
+
+.autocomplete-dropdown__item {
+  display: flex;
+  align-items: flex-start;
+  padding: 8px 12px;
+  margin: 2px 0;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text-primary);
+  background: var(--bg-item);
+  transition: background-color 0.15s ease;
+}
+
+/* Alternating row colors for readability */
+.autocomplete-dropdown__item:nth-child(even) {
+  background: var(--bg-item-alt);
+}
+
+/* Hover state */
+.autocomplete-dropdown__item:hover {
+  background: var(--bg-hover);
+}
+
+/* Selected state (keyboard navigation) */
+.autocomplete-dropdown__item--selected {
+  background: var(--bg-selected) !important;
+  border-left: 2px solid var(--accent);
+  padding-left: 10px; /* Adjust for border */
+}
+
+/* ============================================================================
+ * Icon
+ * ========================================================================== */
+
+.autocomplete-dropdown__icon {
+  flex-shrink: 0;
+  width: 32px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-right: 8px;
+  background: rgba(78, 205, 196, 0.1);
+  border-radius: 3px;
+}
+
+/* ============================================================================
+ * Content (Label + Description)
+ * ========================================================================== */
+
+.autocomplete-dropdown__content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0; /* Allow text truncation */
+}
+
+.autocomplete-dropdown__label {
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.autocomplete-dropdown__description {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ============================================================================
+ * Empty State (handled by component)
+ * ========================================================================== */
+
+/* When suggestions array is empty, component returns null */
