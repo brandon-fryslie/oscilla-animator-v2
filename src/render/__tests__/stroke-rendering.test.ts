@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   calculateStrokeWidthPx,
   renderDrawPathInstancesOp,
-} from '../Canvas2DRenderer';
+} from '../canvas/Canvas2DRenderer';
 import type { DrawPathInstancesOp } from '../types';
 import { createMockCanvas2DContext } from '../../__tests__/test-utils';
 

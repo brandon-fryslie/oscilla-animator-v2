@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { pathToSvgD, SVGRenderer } from '../SVGRenderer';
+import { pathToSvgD, SVGRenderer } from '../svg/SVGRenderer';
 import type { RenderFrameIR, DrawPathInstancesOp } from '../types';
 
 describe('SVGRenderer', () => {
