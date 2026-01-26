@@ -299,6 +299,10 @@ export function setupStructureReaction(
     () => ({
       blockCount: handle.patchStore.blocks.size,
       edgeCount: handle.patchStore.edges.length,
+      // Track combineMode changes for edge dimming updates
+      combineModes: Array.from(handle.patchStore.blocks.values()).map(block =>
+        Array.from(block.inputPorts.values()).map(port => port.combineMode).join(',')
+      ).join('|'),
     }),
     () => {
       if (isSyncing) return;
