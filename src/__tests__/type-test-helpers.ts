@@ -28,6 +28,7 @@ import {
   temporalityContinuous,
   temporalityDiscrete,
   bindingUnbound,
+  axisInstantiated,
   type PayloadType,
   type SignalType,
   type Unit,
@@ -192,7 +193,7 @@ export function testFieldType(
   instance: InstanceRef
 ): SignalType {
   return makeSignalType(payload, unit, {
-    cardinality: cardinalityMany(instance),
+    cardinality: axisInstantiated(cardinalityMany(instance)),
   });
 }
 
@@ -211,7 +212,7 @@ export function testEventType(
   unit: Unit
 ): SignalType {
   return makeSignalType(payload, unit, {
-    temporality: temporalityDiscrete(),
+    temporality: axisInstantiated(temporalityDiscrete()),
   });
 }
 

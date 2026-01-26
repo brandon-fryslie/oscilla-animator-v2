@@ -7,12 +7,19 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import '../expression-blocks'; // Import to register block
 import { getBlockDefinition } from '../registry';
-import { signalType } from '../../core/canonical-types';
+import { signalType, type SignalType, strideOf, isPayloadVar } from '../../core/canonical-types';
 import { IRBuilderImpl } from '../../compiler/ir/IRBuilderImpl';
 import type { LowerCtx } from '../registry';
 import { blockIndex } from '../../graph/passes/pass3-indexing';
-import { valueSlot } from '../../compiler/ir/Indices';
+import { valueSlot, type SigExprId, type ValueSlot } from '../../compiler/ir/Indices';
 import { extractSigExprId, extractSigExpr } from '../../__tests__/ir-test-helpers';
+import type { ValueRefPacked } from '../../compiler/ir/lowerTypes';
+
+/** Helper to create a signal ValueRefPacked with proper fields */
+function sigRef(id: SigExprId, slot: ValueSlot, type: SignalType): ValueRefPacked {
+  const stride = isPayloadVar(type.payload) ? 1 : strideOf(type.payload);
+  return { k: 'sig', id, slot, type, stride };
+}
 
 describe('Expression Block Definition', () => {
   it('is registered in block registry', () => {
@@ -130,12 +137,13 @@ describe('Expression Block Lowering', () => {
     const in0Sig = builder.sigConst(5, signalType('int'));
     const in1Sig = builder.sigConst(3, signalType('int'));
 
+    const intType = signalType('int');
     const result = def.lower({
       ctx,
       inputs: [],
       inputsById: {
-        in0: { k: 'sig', id: in0Sig, slot: valueSlot(0) },
-        in1: { k: 'sig', id: in1Sig, slot: valueSlot(1) },
+        in0: sigRef(in0Sig, valueSlot(0), intType),
+        in1: sigRef(in1Sig, valueSlot(1), intType),
       },
       config: { expression: 'in0 + in1' },
     });
@@ -184,11 +192,12 @@ describe('Expression Block Lowering', () => {
     // Create input signal
     const in0Sig = builder.sigConst(0, signalType('float'));
 
+    const floatType = signalType('float');
     const result = def.lower({
       ctx,
       inputs: [],
       inputsById: {
-        in0: { k: 'sig', id: in0Sig, slot: valueSlot(0) },
+        in0: sigRef(in0Sig, valueSlot(0), floatType),
       },
       config: { expression: 'sin(in0)' },
     });
@@ -211,11 +220,12 @@ describe('Expression Block Lowering', () => {
     // Only wire in0, leave others unwired
     const in0Sig = builder.sigConst(42, signalType('int'));
 
+    const intType = signalType('int');
     const result = def.lower({
       ctx,
       inputs: [],
       inputsById: {
-        in0: { k: 'sig', id: in0Sig, slot: valueSlot(0) },
+        in0: sigRef(in0Sig, valueSlot(0), intType),
         // in1, in2, in3, in4 unwired
       },
       config: { expression: 'in0 * 2' },

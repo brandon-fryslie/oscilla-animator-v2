@@ -10,7 +10,7 @@
  */
 
 import React from 'react';
-import type { SignalType } from '../../core/canonical-types';
+import { type SignalType, isPayloadVar } from '../../core/canonical-types';
 import type { RendererSample } from './types';
 
 // =============================================================================
@@ -77,18 +77,25 @@ export function registerRenderer(key: string, renderer: ValueRenderer): void {
  * Falls back to a minimal placeholder renderer if nothing matches.
  */
 export function getValueRenderer(type: SignalType): ValueRenderer {
+  // Handle payload variables (unresolved) - use placeholder
+  if (isPayloadVar(type.payload)) {
+    return placeholderRenderer;
+  }
+
+  const payloadKey = type.payload as string;
+
   // Tier 1: Exact match (payload + unit)
   const unitKind = type.unit.kind;
-  const exactKey = `${type.payload}:${unitKind}`;
+  const exactKey = `${payloadKey}:${unitKind}`;
   const exact = registry.get(exactKey);
   if (exact) return exact;
 
   // Tier 2: Payload-only
-  const payloadRenderer = registry.get(type.payload);
+  const payloadRenderer = registry.get(payloadKey);
   if (payloadRenderer) return payloadRenderer;
 
   // Tier 3: Category fallback
-  const category = PAYLOAD_TO_CATEGORY[type.payload];
+  const category = PAYLOAD_TO_CATEGORY[payloadKey];
   if (category) {
     const categoryRenderer = registry.get(`category:${category}`);
     if (categoryRenderer) return categoryRenderer;

@@ -14,8 +14,8 @@
  * "SetZField" style duplication.
  */
 
-import type { SigExprId, FieldExprId } from '../compiler/ir/Indices';
-import type { SignalType } from '../types';
+import type { SigExprId, FieldExprId } from '../../compiler/ir/Indices';
+import type { SignalType } from '../../core/canonical-types';
 
 export type ValueRef =
     | { k: 'sig'; id: SigExprId }

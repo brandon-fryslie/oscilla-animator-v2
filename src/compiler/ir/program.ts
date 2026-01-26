@@ -26,7 +26,8 @@ export type IrVersion = 1;
  * Branded types for type safety
  */
 
-import type { ValueSlot, StepId, BlockId, PortId } from './Indices';
+// Re-export these types for consumers
+export type { ValueSlot, StepId, BlockId, PortId } from './Indices';
 
 // =============================================================================
 // Render Globals (Camera System)

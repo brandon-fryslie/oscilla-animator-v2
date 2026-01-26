@@ -1,8 +1,13 @@
 # Definition of Done: expr-block-integration
 
 Generated: 2026-01-25-192523
-Status: READY FOR IMPLEMENTATION
+Updated: 2026-01-26-023153
+Status: BLOCKED (awaiting Sprint 2 & 3)
 Plan: SPRINT-20260125-192523-expr-block-integration-PLAN.md
+Prerequisites:
+  - canonical-addressing [COMPLETED]
+  - varargs-infra [PENDING]
+  - expr-dsl-extension [PENDING]
 
 ## Acceptance Criteria
 

@@ -32,16 +32,6 @@
  * This makes all shapes respond uniformly to position/size/rotation modulators.
  */
 
-// ============================================================================
-// EXTRUDELITE SUPPORT (Experimental - delete when real mesh3d arrives)
-// ============================================================================
-
-import type { ExtrudeLiteParams } from './canvas/ExtrudeLite';
-
-// ============================================================================
-// END EXTRUDELITE IMPORTS
-// ============================================================================
-
 /**
  * Path Style - Explicit styling for path rendering
  *
@@ -81,20 +71,6 @@ export interface PathStyle {
 
   /** Global alpha (optional) */
   readonly globalAlpha?: number | Float32Array;
-
-  // ============================================================================
-  // EXTRUDELITE SUPPORT (Experimental - delete when real mesh3d arrives)
-  // ============================================================================
-
-  /** Depth style for 2.5D effects (default: 'flat') */
-  readonly depthStyle?: 'flat' | 'extrudeLite';
-
-  /** ExtrudeLite parameters (only when depthStyle === 'extrudeLite') */
-  readonly extrudeLiteParams?: ExtrudeLiteParams;
-
-  // ============================================================================
-  // END EXTRUDELITE SUPPORT
-  // ============================================================================
 }
 
 /**

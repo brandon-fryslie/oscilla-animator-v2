@@ -33,4 +33,4 @@ export const patches: { name: string; builder: PatchBuilder }[] = [
   { name: 'Perspective Camera', builder: patchPerspectiveCamera },
 ];
 
-export const DEFAULT_PATCH_INDEX = 6; // Perspective Camera
+export const DEFAULT_PATCH_INDEX = 0; // Golden Spiral

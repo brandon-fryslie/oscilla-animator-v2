@@ -47,6 +47,12 @@ export interface LowerArgs {
   readonly ctx: LowerCtx;
   readonly inputs: readonly import('../compiler/ir/lowerTypes').ValueRefPacked[];
   readonly inputsById: Record<string, import('../compiler/ir/lowerTypes').ValueRefPacked>;
+  /**
+   * Vararg inputs - array of values per vararg port.
+   * Only populated for blocks with vararg inputs.
+   * Key is port ID, value is array of ValueRefPacked in sortKey order.
+   */
+  readonly varargInputsById?: Record<string, readonly import('../compiler/ir/lowerTypes').ValueRefPacked[]>;
   readonly config?: Readonly<Record<string, unknown>>;
 }
 
@@ -203,6 +209,25 @@ export const ALL_CONCRETE_PAYLOADS: readonly PayloadType[] = [
   'cameraProjection',
 ];
 
+// =============================================================================
+// Varargs Support
+// =============================================================================
+
+/**
+ * Constraint for a varargs input.
+ * Defines type and cardinality requirements for variable-length inputs.
+ */
+export interface VarargConstraint {
+  /** Required payload type for all vararg connections (e.g., 'float') */
+  readonly payloadType: PayloadType;
+  /** Required cardinality constraint: 'signal', 'field', or 'any' */
+  readonly cardinalityConstraint: 'signal' | 'field' | 'any';
+  /** Minimum number of connections (default: 0) */
+  readonly minConnections?: number;
+  /** Maximum number of connections (default: unlimited) */
+  readonly maxConnections?: number;
+}
+
 /**
  * Input definition for a block.
  *
@@ -210,6 +235,11 @@ export const ALL_CONCRETE_PAYLOADS: readonly PayloadType[] = [
  * - Both wirable ports AND config-only parameters use this type
  * - `exposedAsPort` distinguishes between ports (true) and config (false)
  * - Object key (in BlockDef.inputs Record) is the identifier
+ *
+ * VARARGS EXTENSION (2026-01-26):
+ * - `isVararg` flag marks inputs that accept variable-length connections
+ * - Varargs inputs bypass the normal combine system
+ * - Varargs inputs have no defaultSource (explicit connections only)
  */
 export interface InputDef {
   readonly label?: string;           // Display label (defaults to key name)
@@ -220,6 +250,29 @@ export interface InputDef {
   readonly exposedAsPort?: boolean;  // Default: true (backward compat)
   readonly optional?: boolean;       // For ports: optional wiring?
   readonly hidden?: boolean;         // Hide from UI (normalizer params)
+
+  /**
+   * Varargs flag - marks this input as accepting variable-length connections.
+   * Varargs inputs:
+   * - Accept 0..N connections without combining them
+   * - Receive connections as an array in LowerArgs.varargInputsById
+   * - Bypass the normal combine system
+   * - Cannot have a defaultSource (explicit connections only)
+   */
+  readonly isVararg?: boolean;
+
+  /**
+   * Varargs constraint - type and cardinality requirements.
+   * Required if isVararg is true.
+   */
+  readonly varargConstraint?: VarargConstraint;
+}
+
+/**
+ * Type guard to check if an InputDef is a vararg input.
+ */
+export function isVarargInput(def: InputDef): boolean {
+  return def.isVararg === true;
 }
 
 /**
@@ -340,6 +393,25 @@ export function registerBlock(def: BlockDef): void {
   for (const key of outputKeys) {
     if (key in def.inputs) {
       throw new Error(`Port ID used as both input and output in block ${def.type}: ${key}`);
+    }
+  }
+
+  // Validate varargs inputs
+  for (const [portId, inputDef] of Object.entries(def.inputs)) {
+    if (isVarargInput(inputDef)) {
+      // Varargs inputs must have a constraint
+      if (!inputDef.varargConstraint) {
+        throw new Error(
+          `Vararg input "${portId}" in block ${def.type} must have varargConstraint`
+        );
+      }
+
+      // Varargs inputs cannot have a defaultSource (explicit connections only)
+      if (inputDef.defaultSource) {
+        throw new Error(
+          `Vararg input "${portId}" in block ${def.type} cannot have defaultSource`
+        );
+      }
     }
   }
 

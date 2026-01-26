@@ -253,7 +253,7 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
     for (const [portKey, slotId] of targetToSlot.entries()) {
         const meta = program.slotMeta.find(m => m.slot === slotId);
         const type = meta?.type || signalType('float');
-        const cardinality = portCardinality.get(portKey);
+        const cardinality = portCardinality.get(portKey) ?? 'signal';
         portMetaMap.set(portKey, { slotId, type, cardinality });
     }
 

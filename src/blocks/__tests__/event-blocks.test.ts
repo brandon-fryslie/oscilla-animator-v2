@@ -195,7 +195,7 @@ describe('SampleHold', () => {
     // Unit test: directly test evaluateSignal with an eventRead expr
     // when eventScalars[slot] is 0
     const state = createRuntimeState(4, 0, 4, 0);
-    state.time = { tAbsMs: 0, tMs: 100, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: { r: 0, g: 0, b: 0, a: 1 }, energy: 0.5 };
+    state.time = { tAbsMs: 0, tMs: 100, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: new Float32Array([0, 0, 0, 1]), energy: 0.5 };
 
     // Event slot 0 is NOT fired (stays at 0 after frame clear)
     state.eventScalars[0] = 0;
@@ -303,7 +303,7 @@ describe('SampleHold', () => {
 
     // Verify stateMappings include a 'sample' state
     const sampleMapping = schedule.stateMappings.find((m) =>
-      typeof m.stableId === 'string' && m.stableId.includes('sample')
+      typeof m.stateId === 'string' && m.stateId.includes('sample')
     );
     expect(sampleMapping).toBeDefined();
   });

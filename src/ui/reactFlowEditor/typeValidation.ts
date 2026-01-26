@@ -6,8 +6,8 @@
  */
 
 import type { Patch, BlockId } from '../../types';
-import type { SignalType, PayloadType, Unit } from '../../core/canonical-types';
-import { getAxisValue, DEFAULTS_V0 } from '../../core/canonical-types';
+import type { SignalType, PayloadType, Unit, ConcretePayloadType } from '../../core/canonical-types';
+import { getAxisValue, DEFAULTS_V0, isPayloadVar } from '../../core/canonical-types';
 import { getBlockDefinition } from '../../blocks/registry';
 import { findAdapter, type AdapterSpec } from '../../graph/adapters';
 
@@ -16,9 +16,9 @@ import { findAdapter, type AdapterSpec } from '../../graph/adapters';
 // =============================================================================
 
 /**
- * Color palette for payload types.
+ * Color palette for concrete payload types.
  */
-export const TYPE_COLORS: Record<PayloadType, string> = {
+export const TYPE_COLORS: Record<ConcretePayloadType, string> = {
   float: '#5a9fd4',   // Blue
   int: '#6366f1',     // Indigo
   vec2: '#22c55e',    // Green
@@ -34,6 +34,9 @@ export const TYPE_COLORS: Record<PayloadType, string> = {
  * Get color for a payload type.
  */
 export function getTypeColor(payload: PayloadType): string {
+  if (isPayloadVar(payload)) {
+    return '#888888'; // Gray for unresolved payload variables
+  }
   return TYPE_COLORS[payload] ?? TYPE_COLORS['float'];
 }
 

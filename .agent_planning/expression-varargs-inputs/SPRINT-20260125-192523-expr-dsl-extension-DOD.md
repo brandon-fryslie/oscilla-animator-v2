@@ -1,8 +1,10 @@
 # Definition of Done: expr-dsl-extension
 
 Generated: 2026-01-25-192523
+Updated: 2026-01-26-023153
 Status: READY FOR IMPLEMENTATION
 Plan: SPRINT-20260125-192523-expr-dsl-extension-PLAN.md
+Prerequisite: canonical-addressing [COMPLETED]
 
 ## Acceptance Criteria
 

@@ -3,7 +3,7 @@
  *
  * Tests for render pass assembly module.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   assembleDrawPathInstancesOp,
   assembleRenderFrame,
@@ -20,6 +20,7 @@ import { registerDynamicTopology, TOPOLOGY_ID_ELLIPSE } from '../../shapes/regis
 import type { RenderSpace2D } from '../../shapes/types';
 import { PathVerb } from '../../shapes/types';
 import { DEFAULT_CAMERA } from '../CameraResolver';
+import { BufferPool } from '../BufferPool';
 
 // Helper to create a scalar signal type
 const SCALAR_TYPE: SignalType = signalType('float');
@@ -105,7 +106,7 @@ describe('RenderAssembler', () => {
       };
 
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const result = assembleDrawPathInstancesOp(step, context);
+      const result = assembleDrawPathInstancesOp(step, context, new BufferPool());
       warnSpy.mockRestore();
 
       expect(result).toEqual([]);
@@ -127,7 +128,7 @@ describe('RenderAssembler', () => {
     resolvedCamera: DEFAULT_CAMERA,
       };
 
-      const result = assembleDrawPathInstancesOp(step, context);
+      const result = assembleDrawPathInstancesOp(step, context, new BufferPool());
       expect(result).toEqual([]);
     });
 
@@ -161,7 +162,7 @@ describe('RenderAssembler', () => {
     resolvedCamera: DEFAULT_CAMERA,
       };
 
-      const result = assembleDrawPathInstancesOp(step, context);
+      const result = assembleDrawPathInstancesOp(step, context, new BufferPool());
       // Primitive topologies now produce DrawPrimitiveInstancesOp
       expect(result).toHaveLength(1);
       expect(result[0].kind).toBe('drawPrimitiveInstances');
@@ -212,7 +213,7 @@ describe('RenderAssembler', () => {
     resolvedCamera: DEFAULT_CAMERA,
       };
 
-      const result = assembleDrawPathInstancesOp(step, context);
+      const result = assembleDrawPathInstancesOp(step, context, new BufferPool());
 
       expect(result).toHaveLength(1);
       const op = result[0];
@@ -286,7 +287,7 @@ describe('RenderAssembler', () => {
     resolvedCamera: DEFAULT_CAMERA,
       };
 
-      expect(() => assembleDrawPathInstancesOp(step, context)).toThrow(
+      expect(() => assembleDrawPathInstancesOp(step, context, new BufferPool())).toThrow(
         /Position buffer must be Float32Array/
       );
     });
@@ -330,7 +331,7 @@ describe('RenderAssembler', () => {
     resolvedCamera: DEFAULT_CAMERA,
       };
 
-      expect(() => assembleDrawPathInstancesOp(step, context)).toThrow(
+      expect(() => assembleDrawPathInstancesOp(step, context, new BufferPool())).toThrow(
         /Color buffer must be Uint8ClampedArray/
       );
     });
@@ -373,7 +374,7 @@ describe('RenderAssembler', () => {
     resolvedCamera: DEFAULT_CAMERA,
       };
 
-      expect(() => assembleDrawPathInstancesOp(step, context)).toThrow(
+      expect(() => assembleDrawPathInstancesOp(step, context, new BufferPool())).toThrow(
         /Path topology requires control points buffer/
       );
     });
@@ -437,7 +438,7 @@ describe('RenderAssembler', () => {
     resolvedCamera: DEFAULT_CAMERA,
       };
 
-      const result = assembleRenderFrame(steps, context);
+      const result = assembleRenderFrame(steps, context, new BufferPool());
 
       expect(result.version).toBe(2);
       expect(result.ops).toHaveLength(2);
@@ -496,7 +497,7 @@ describe('RenderAssembler', () => {
     resolvedCamera: DEFAULT_CAMERA,
       };
 
-      const result = assembleRenderFrame(steps, context);
+      const result = assembleRenderFrame(steps, context, new BufferPool());
 
       // Both path and primitive instances produce ops
       expect(result.version).toBe(2);
@@ -532,7 +533,7 @@ describe('RenderAssembler', () => {
     resolvedCamera: DEFAULT_CAMERA,
       };
 
-      const result = assembleRenderFrame(steps, context);
+      const result = assembleRenderFrame(steps, context, new BufferPool());
 
       expect(result.version).toBe(2);
       expect(result.ops).toHaveLength(0);

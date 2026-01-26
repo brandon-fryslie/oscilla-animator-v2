@@ -11,7 +11,8 @@
       "Skill(superpowers:brainstorming)",
       "Bash(pkill:*)",
       "mcp__cherry-chrome__chrome",
-      "mcp__cherry-chrome__connect"
+      "mcp__cherry-chrome__connect",
+      "mcp__chatgpt-convo__chatgpt"
     ]
   },
   "enableAllProjectMcpServers": true,

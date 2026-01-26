@@ -3,6 +3,7 @@
  *
  * Verifies Sprint: memory-instrumentation implementation
  */
+import { describe, test, expect } from 'vitest';
 
 import { BufferPool } from '../runtime/BufferPool';
 import { createRuntimeState } from '../runtime/RuntimeState';

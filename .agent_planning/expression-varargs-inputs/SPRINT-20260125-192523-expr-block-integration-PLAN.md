@@ -1,9 +1,14 @@
 # Sprint: expr-block-integration - Expression Block Varargs Integration
 
 Generated: 2026-01-25-192523
+Updated: 2026-01-26-023153
 Confidence: HIGH: 3, MEDIUM: 1, LOW: 0
-Status: READY FOR IMPLEMENTATION
+Status: BLOCKED (awaiting Sprint 2 & 3)
 Source: EVALUATION-20260125-181203.md
+Prerequisites:
+  - SPRINT-20260125-192523-canonical-addressing-PLAN.md [COMPLETED]
+  - SPRINT-20260125-192523-varargs-infra-PLAN.md [PENDING]
+  - SPRINT-20260125-192523-expr-dsl-extension-PLAN.md [PENDING]
 
 ## Sprint Goal
 

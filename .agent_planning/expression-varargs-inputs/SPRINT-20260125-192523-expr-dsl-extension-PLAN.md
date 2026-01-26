@@ -1,9 +1,14 @@
 # Sprint: expr-dsl-extension - Expression DSL Block Reference Syntax
 
 Generated: 2026-01-25-192523
+Updated: 2026-01-26-023153
 Confidence: HIGH: 3, MEDIUM: 1, LOW: 0
 Status: READY FOR IMPLEMENTATION
 Source: EVALUATION-20260125-181203.md
+Prerequisite: SPRINT-20260125-192523-canonical-addressing-PLAN.md [COMPLETED]
+
+Note: Lexer/Parser work can proceed immediately (no dependencies).
+Type checker work requires Sprint 1 AddressRegistry (COMPLETED).
 
 ## Sprint Goal
 

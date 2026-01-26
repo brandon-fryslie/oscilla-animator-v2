@@ -1,0 +1,199 @@
+/**
+ * Tests for varargs input support in block registry
+ */
+
+import { describe, it, expect } from 'vitest';
+import {
+  registerBlock,
+  isVarargInput,
+  type BlockDef,
+  type InputDef,
+  type VarargConstraint,
+} from '../registry';
+
+describe('VarargInputDef', () => {
+  describe('isVarargInput type guard', () => {
+    it('returns true for vararg inputs', () => {
+      const def: InputDef = {
+        type: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'signal' },
+        isVararg: true,
+        varargConstraint: {
+          payloadType: 'float',
+          cardinalityConstraint: 'any',
+        },
+      };
+      expect(isVarargInput(def)).toBe(true);
+    });
+
+    it('returns false for normal inputs', () => {
+      const def: InputDef = {
+        type: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'signal' },
+      };
+      expect(isVarargInput(def)).toBe(false);
+    });
+
+    it('returns false for inputs with isVararg: false', () => {
+      const def: InputDef = {
+        type: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'signal' },
+        isVararg: false,
+      };
+      expect(isVarargInput(def)).toBe(false);
+    });
+  });
+
+  describe('VarargConstraint', () => {
+    it('defines payload type constraint', () => {
+      const constraint: VarargConstraint = {
+        payloadType: 'float',
+        cardinalityConstraint: 'any',
+      };
+      expect(constraint.payloadType).toBe('float');
+    });
+
+    it('defines cardinality constraint', () => {
+      const constraint: VarargConstraint = {
+        payloadType: 'float',
+        cardinalityConstraint: 'field',
+      };
+      expect(constraint.cardinalityConstraint).toBe('field');
+    });
+
+    it('allows minConnections constraint', () => {
+      const constraint: VarargConstraint = {
+        payloadType: 'float',
+        cardinalityConstraint: 'any',
+        minConnections: 1,
+      };
+      expect(constraint.minConnections).toBe(1);
+    });
+
+    it('allows maxConnections constraint', () => {
+      const constraint: VarargConstraint = {
+        payloadType: 'float',
+        cardinalityConstraint: 'any',
+        maxConnections: 10,
+      };
+      expect(constraint.maxConnections).toBe(10);
+    });
+  });
+
+  describe('registerBlock validation', () => {
+    it('accepts block with vararg input and valid constraint', () => {
+      const blockDef: BlockDef = {
+        type: 'test.vararg.valid',
+        label: 'Test Vararg Block',
+        category: 'test',
+        form: 'primitive',
+        capability: 'pure',
+        inputs: {
+          values: {
+            type: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'signal' },
+            isVararg: true,
+            varargConstraint: {
+              payloadType: 'float',
+              cardinalityConstraint: 'any',
+            },
+          },
+        },
+        outputs: {
+          result: {
+            type: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'signal' },
+          },
+        },
+        lower: () => ({ outputsById: {} }),
+      };
+
+      expect(() => registerBlock(blockDef)).not.toThrow();
+    });
+
+    it('rejects vararg input without constraint', () => {
+      const blockDef: BlockDef = {
+        type: 'test.vararg.no-constraint',
+        label: 'Test Vararg No Constraint',
+        category: 'test',
+        form: 'primitive',
+        capability: 'pure',
+        inputs: {
+          values: {
+            type: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'signal' },
+            isVararg: true,
+            // Missing varargConstraint
+          },
+        },
+        outputs: {
+          result: {
+            type: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'signal' },
+          },
+        },
+        lower: () => ({ outputsById: {} }),
+      };
+
+      expect(() => registerBlock(blockDef)).toThrow(
+        'Vararg input "values" in block test.vararg.no-constraint must have varargConstraint'
+      );
+    });
+
+    it('rejects vararg input with defaultSource', () => {
+      const blockDef: BlockDef = {
+        type: 'test.vararg.with-default',
+        label: 'Test Vararg With Default',
+        category: 'test',
+        form: 'primitive',
+        capability: 'pure',
+        inputs: {
+          values: {
+            type: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'signal' },
+            isVararg: true,
+            varargConstraint: {
+              payloadType: 'float',
+              cardinalityConstraint: 'any',
+            },
+            defaultSource: 'Const0',
+          },
+        },
+        outputs: {
+          result: {
+            type: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'signal' },
+          },
+        },
+        lower: () => ({ outputsById: {} }),
+      };
+
+      expect(() => registerBlock(blockDef)).toThrow(
+        'Vararg input "values" in block test.vararg.with-default cannot have defaultSource'
+      );
+    });
+
+    it('accepts normal input alongside vararg input', () => {
+      const blockDef: BlockDef = {
+        type: 'test.vararg.mixed',
+        label: 'Test Mixed Inputs',
+        category: 'test',
+        form: 'primitive',
+        capability: 'pure',
+        inputs: {
+          normalInput: {
+            type: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'signal' },
+            defaultSource: 'Const1',
+          },
+          varargInput: {
+            type: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'signal' },
+            isVararg: true,
+            varargConstraint: {
+              payloadType: 'float',
+              cardinalityConstraint: 'any',
+            },
+          },
+        },
+        outputs: {
+          result: {
+            type: { payload: 'float', unit: { kind: 'norm01' }, cardinality: 'signal' },
+          },
+        },
+        lower: () => ({ outputsById: {} }),
+      };
+
+      expect(() => registerBlock(blockDef)).not.toThrow();
+    });
+  });
+});

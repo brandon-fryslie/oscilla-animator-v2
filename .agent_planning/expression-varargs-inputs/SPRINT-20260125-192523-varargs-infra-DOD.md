@@ -1,8 +1,10 @@
 # Definition of Done: varargs-infra
 
 Generated: 2026-01-25-192523
-Status: PARTIALLY READY
+Updated: 2026-01-26-023153
+Status: READY FOR IMPLEMENTATION
 Plan: SPRINT-20260125-192523-varargs-infra-PLAN.md
+Prerequisite: canonical-addressing [COMPLETED]
 
 ## Acceptance Criteria
 

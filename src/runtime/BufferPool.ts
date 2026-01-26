@@ -10,7 +10,7 @@
  * 3. releaseAll() - return all buffers to pool at frame end
  */
 
-import type { PayloadType } from '../core/canonical-types';
+import { type PayloadType, isPayloadVar } from '../core/canonical-types';
 
 /** Shape2D words per record (must match RuntimeState.SHAPE2D_WORDS) */
 const SHAPE2D_WORDS = 8;
@@ -29,6 +29,9 @@ export type BufferFormat =
  * Get buffer format for a payload type
  */
 export function getBufferFormat(payload: PayloadType): BufferFormat {
+  if (isPayloadVar(payload)) {
+    throw new Error(`Cannot get buffer format for unresolved payload variable: ${payload.id}`);
+  }
   switch (payload) {
     // Numeric types -> f32
     case 'float':
