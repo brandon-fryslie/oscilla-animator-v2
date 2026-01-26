@@ -337,7 +337,7 @@ function buildContinuityPipeline(
     }
 
     // Process shape (semantic: custom) if it's a field or signal
-    let shapeOutput: StepRender['shape'] = undefined;
+    let shapeOutput: StepRender['shape'] | undefined = undefined;
     let controlPointsOutput: StepRender['controlPoints'] = undefined;
 
     if (shape) {
@@ -363,6 +363,14 @@ function buildContinuityPipeline(
       }
     }
 
+    // Validate shape is present (required by runtime)
+    if (!shapeOutput) {
+      throw new Error(
+        `Render step for instance ${instanceId} requires shape, but shape is undefined. ` +
+        `Ensure a shape block (Ellipse, Rect, etc.) is wired to the render pipeline.`
+      );
+    }
+
     // 4. Create render step that reads from output slots
     const renderStep: StepRender = {
       kind: 'render',
@@ -370,7 +378,7 @@ function buildContinuityPipeline(
       positionSlot: posSlots.outputSlot,
       colorSlot: colorSlots.outputSlot,
       ...(scaleOutput && { scale: scaleOutput }),
-      ...(shapeOutput && { shape: shapeOutput }),
+      shape: shapeOutput,
       ...(controlPointsOutput && { controlPoints: controlPointsOutput }), // P5c: Add control points to render step
     };
 

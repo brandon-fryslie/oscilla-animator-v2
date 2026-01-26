@@ -485,8 +485,8 @@ export interface StepRender {
   readonly colorSlot: ValueSlot;
   /** Scale multiplier for shape dimensions (uniform signal, default 1.0) */
   readonly scale?: { readonly k: 'sig'; readonly id: SigExprId };
-  /** Shape - topology + param signals (REQUIRED) */
-  readonly shape?:
+  /** Shape - topology + param signals (REQUIRED at runtime, types now enforce this) */
+  readonly shape:
     | { readonly k: 'sig'; readonly topologyId: TopologyId; readonly paramSignals: readonly SigExprId[] }
     | { readonly k: 'slot'; readonly slot: ValueSlot };
   /** Optional control points for path rendering - P5c: Add control points field */

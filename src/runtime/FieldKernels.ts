@@ -30,11 +30,11 @@
  * ZIP KERNELS (multiple field inputs):
  *   makeVec2, makeVec3, hsvToRgb, jitter2d, attract2d, fieldAngularOffset,
  *   fieldRadiusSqrt, fieldAdd, fieldPolarToCartesian, fieldPulse,
- *   fieldHueFromPhase, fieldJitterVec, fieldGoldenAngle
+ *   fieldHueFromPhase, fieldJitterVec, fieldGoldenAngle (deprecated - use zipSig)
  *
  * ZIPSIG KERNELS (field + signal inputs):
  *   applyOpacity, hsvToRgb, circleLayout, circleAngle,
- *   polygonVertex, starVertex, lineLayout, gridLayout
+ *   polygonVertex, starVertex, lineLayout, gridLayout, fieldGoldenAngle
  *
  * ──────────────────────────────────────────────────────────────────────
  * ARCHITECTURAL RULES
@@ -373,7 +373,7 @@ export function applyFieldKernel(
     }
   } else if (fieldOp === 'fieldGoldenAngle') {
     // ════════════════════════════════════════════════════════════════
-    // fieldGoldenAngle: Compute golden angle spiral angles
+    // fieldGoldenAngle: Compute golden angle spiral angles (DEPRECATED)
     // ────────────────────────────────────────────────────────────────
     // Inputs: [id01: float]
     // Output: float (radians)
@@ -381,7 +381,8 @@ export function applyFieldKernel(
     // Coord-space: N/A - outputs angle in RADIANS
     // Formula: angle = id01 * turns * goldenAngle
     //   where goldenAngle ≈ 2.39996 rad (π * (3 - √5))
-    // Note: turns=50 is currently baked in (TODO: make configurable)
+    // Note: turns=50 is hardcoded here. Use zipSig variant for configurable turns.
+    // DEPRECATED: Prefer the zipSig variant with explicit turns parameter.
     // ════════════════════════════════════════════════════════════════
     if (inputs.length !== 1) {
       throw new Error('fieldGoldenAngle requires exactly 1 input (id01)');
@@ -680,6 +681,30 @@ export function applyFieldKernelZipSig(
       outArr[i * 3 + 0] = x;
       outArr[i * 3 + 1] = y;
       outArr[i * 3 + 2] = 0.0;
+    }
+  } else if (fieldOp === 'fieldGoldenAngle') {
+    // ════════════════════════════════════════════════════════════════
+    // fieldGoldenAngle: Compute golden angle spiral angles
+    // ────────────────────────────────────────────────────────────────
+    // Field input: id01 (normalized index [0,1])
+    // Signals: [turns: float]
+    // Output: float (radians)
+    // Domain: id01 expects [0,1] normalized index, turns is number of spiral turns
+    // Coord-space: N/A - outputs angle in RADIANS
+    // Formula: angle = id01 * turns * goldenAngle
+    //   where goldenAngle ≈ 2.39996 rad (π * (3 - √5))
+    // Note: turns parameter allows configurable spiral density (default 50)
+    // ════════════════════════════════════════════════════════════════
+    if (sigValues.length !== 1) {
+      throw new Error('fieldGoldenAngle requires exactly 1 signal (turns)');
+    }
+    const outArr = out as Float32Array;
+    const id01Arr = fieldInput as Float32Array;
+    const turns = sigValues[0];
+    const goldenAngle = Math.PI * (3 - Math.sqrt(5)); // ≈ 2.39996
+
+    for (let i = 0; i < N; i++) {
+      outArr[i] = id01Arr[i] * turns * goldenAngle;
     }
   } else {
     throw new Error(`Unknown field kernel (zipSig): ${fieldOp}`);

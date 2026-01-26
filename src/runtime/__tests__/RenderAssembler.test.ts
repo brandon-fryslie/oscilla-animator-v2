@@ -96,6 +96,7 @@ describe('RenderAssembler', () => {
         instanceId: 'missing-instance',
         positionSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
+        shape: { k: 'sig', topologyId: 1, paramSignals: [] },
       };
 
       const context: AssemblerContext = {
