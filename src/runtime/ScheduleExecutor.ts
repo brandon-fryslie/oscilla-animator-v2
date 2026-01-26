@@ -311,12 +311,6 @@ export function executeFrame(
           state.continuity.prevDomains
         );
 
-        // DEBUG: Log domain change detection
-        const prevDomain = state.continuity.prevDomains.get(instanceId);
-        if (prevDomain?.count !== count) {
-          console.log(`[CONTINUITY-DEBUG] Domain change detected for ${instanceId}: ${prevDomain?.count ?? 'none'} -> ${count}, changed=${changed}, mapping=${mapping?.kind ?? 'null'}`);
-        }
-
         if (changed) {
           // Store mapping (may be null for crossfade fallback)
           if (mapping) {

@@ -65,19 +65,22 @@ export function setupLiveRecompileReaction(
   reactionSetup = true;
 
   // Initialize tracking state from current store
-  lastBlockParamsHash = hashBlockParams(store.patch.blocks);
-  lastBlockCount = store.patch.blocks.size;
-  lastEdgeCount = store.patch.edges.length;
+  // Use store.patch.patch to get the ImmutablePatch (same as reaction expression)
+  const initialPatch = store.patch.patch;
+  lastBlockParamsHash = hashBlockParams(initialPatch.blocks);
+  lastBlockCount = initialPatch.blocks.size;
+  lastEdgeCount = initialPatch.edges.length;
 
   // Watch for block AND edge changes (additions, removals, param changes)
   reactionDisposer = reaction(
     () => {
       // Track structure (blocks + edges) and params
-      const blocks = store.patch.blocks;
-      const edgeCount = store.patch.edges.length;
+      // IMPORTANT: Use store.patch.patch (ImmutablePatch) instead of store.patch.blocks
+      // because .patch reads _dataVersion which is observable, while .blocks does not.
+      const immutablePatch = store.patch.patch;
+      const blocks = immutablePatch.blocks;
+      const edgeCount = immutablePatch.edges.length;
       const hash = hashBlockParams(blocks);
-      // DEBUG: Log whenever the reaction expression runs
-      console.log('[RECOMPILE-DEBUG] Reaction expression:', { blockCount: blocks.size, edgeCount, hashLen: hash.length });
       return { blockCount: blocks.size, edgeCount, hash };
     },
     ({ blockCount, edgeCount, hash }) => {
@@ -85,8 +88,6 @@ export function setupLiveRecompileReaction(
       if (hash === lastBlockParamsHash && blockCount === lastBlockCount && edgeCount === lastEdgeCount) {
         return;
       }
-      // DEBUG: Log recompile trigger
-      console.log('[RECOMPILE-DEBUG] Triggering recompile:', { blockCount, edgeCount, hashChanged: hash !== lastBlockParamsHash });
       lastBlockParamsHash = hash;
       lastBlockCount = blockCount;
       lastEdgeCount = edgeCount;
