@@ -159,6 +159,13 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
               blockId: e.edge.to.blockId,
               portId: e.edge.to.slotId,
             };
+          case 'vararg':
+            return {
+              kind: 'VarargError',
+              message: e.message,
+              blockId: e.where.blockId,
+              portId: e.where.portId,
+            };
           default: {
             const _exhaustive: never = e;
             return {
@@ -185,16 +192,16 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
     // Resolves polymorphic unit and payload variables through constraint propagation
     // Output is TypeResolvedPatch - THE source of truth for all port types
     const pass1Result = pass1TypeConstraints(normalized);
-    if (pass1Result.kind === 'error') {
-      const compileErrors: CompileError[] = pass1Result.errors.map((e) => ({
+    if ('kind' in pass1Result && pass1Result.kind === 'error') {
+      const compileErrors: CompileError[] = pass1Result.errors.map((e: { kind: string; blockIndex: number; portName: string; message: string; suggestions: readonly string[] }) => ({
         kind: e.kind,
-        message: `${e.message}\nSuggestions:\n${e.suggestions.map(s => `  - ${s}`).join('\n')}`,
+        message: `${e.message}\nSuggestions:\n${e.suggestions.map((s: string) => `  - ${s}`).join('\n')}`,
         blockId: normalized.blocks[e.blockIndex]?.id,
         portId: e.portName,
       }));
       return emitFailure(options, startTime, compileId, compileErrors);
     }
-    const typeResolved = pass1Result; // TypeResolvedPatch
+    const typeResolved = pass1Result as import('./passes-v2/pass1-type-constraints').TypeResolvedPatch;
 
     try {
       compilationInspector.capturePass('type-constraints', normalized, typeResolved);

@@ -320,7 +320,7 @@ export function createCombineNode(
     const eventMode = normalizedMode === 'last' ? 'any' : 'any';
     const eventId = builder.eventCombine(eventTerms, eventMode);
     const slot = builder.allocEventSlot(eventId);
-    return { k: "event", id: eventId, slot, type: signalType, stride: 1 };
+    return { k: "event", id: eventId, slot, type: signalType };
   }
 
   // Unsupported world
