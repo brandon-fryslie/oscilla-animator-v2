@@ -6,7 +6,7 @@
 import { describe, test, expect } from 'vitest';
 
 import { BufferPool } from '../runtime/BufferPool';
-import { createRuntimeState } from '../runtime/RuntimeState';
+import { createRuntimeState } from '../runtime';
 import { recordPoolStats } from '../runtime/HealthMonitor';
 
 describe('Memory Instrumentation', () => {

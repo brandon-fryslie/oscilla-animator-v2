@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { compile } from '../../compiler/compile';
 import { buildPatch } from '../../graph';
 import { executeFrame } from '../../runtime/ScheduleExecutor';
-import { createRuntimeState } from '../../runtime/RuntimeState';
+import { createSessionState, createRuntimeStateFromSession } from '../../runtime/RuntimeState';
 import { BufferPool } from '../../runtime/BufferPool';
 import { getBlockDefinition } from '../registry';
 import type { StepEvalSig, SigExpr } from '../../compiler/ir/types';
@@ -96,7 +96,8 @@ describe('Noise Block', () => {
 
     const program = result.program;
     const schedule = program.schedule;
-    const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount || 0);
+    const session = createSessionState();
+    const state = createRuntimeStateFromSession(session, program.slotMeta.length, schedule.stateSlotCount || 0, 0, 0);
     const pool = new BufferPool();
 
     // Find the slot where TestSignal stores the noise output
@@ -133,7 +134,8 @@ describe('Noise Block', () => {
 
     const program = result.program;
     const schedule = program.schedule;
-    const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount || 0);
+    const session = createSessionState();
+    const state = createRuntimeStateFromSession(session, program.slotMeta.length, schedule.stateSlotCount || 0, 0, 0);
     const pool = new BufferPool();
 
     const [slot] = findTestSignalOffsets(program);
@@ -177,8 +179,10 @@ describe('Noise Block', () => {
     const schedule1 = program1.schedule;
     const schedule2 = program2.schedule;
 
-    const state1 = createRuntimeState(program1.slotMeta.length, schedule1.stateSlotCount || 0);
-    const state2 = createRuntimeState(program2.slotMeta.length, schedule2.stateSlotCount || 0);
+    const session1 = createSessionState();
+    const state1 = createRuntimeStateFromSession(session1, program1.slotMeta.length, schedule1.stateSlotCount || 0, 0, 0);
+    const session2 = createSessionState();
+    const state2 = createRuntimeStateFromSession(session2, program2.slotMeta.length, schedule2.stateSlotCount || 0, 0, 0);
     const pool = new BufferPool();
 
     const [offset1] = findTestSignalOffsets(program1);
@@ -257,7 +261,8 @@ describe('Length Block', () => {
 
     const program = result.program;
     const schedule = program.schedule;
-    const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount || 0);
+    const session = createSessionState();
+    const state = createRuntimeStateFromSession(session, program.slotMeta.length, schedule.stateSlotCount || 0, 0, 0);
     const pool = new BufferPool();
 
     const [slot] = findTestSignalOffsets(program);
@@ -289,7 +294,8 @@ describe('Length Block', () => {
 
     const program = result.program;
     const schedule = program.schedule;
-    const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount || 0);
+    const session = createSessionState();
+    const state = createRuntimeStateFromSession(session, program.slotMeta.length, schedule.stateSlotCount || 0, 0, 0);
     const pool = new BufferPool();
 
     const [slot] = findTestSignalOffsets(program);
@@ -319,7 +325,8 @@ describe('Length Block', () => {
 
     const program = result.program;
     const schedule = program.schedule;
-    const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount || 0);
+    const session = createSessionState();
+    const state = createRuntimeStateFromSession(session, program.slotMeta.length, schedule.stateSlotCount || 0, 0, 0);
     const pool = new BufferPool();
 
     const [slot] = findTestSignalOffsets(program);
@@ -383,7 +390,8 @@ describe('Normalize Block', () => {
 
     const program = result.program;
     const schedule = program.schedule;
-    const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount || 0);
+    const session = createSessionState();
+    const state = createRuntimeStateFromSession(session, program.slotMeta.length, schedule.stateSlotCount || 0, 0, 0);
     const pool = new BufferPool();
 
     // Find the 3 TestSignal output slots
@@ -430,7 +438,8 @@ describe('Normalize Block', () => {
 
     const program = result.program;
     const schedule = program.schedule;
-    const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount || 0);
+    const session = createSessionState();
+    const state = createRuntimeStateFromSession(session, program.slotMeta.length, schedule.stateSlotCount || 0, 0, 0);
     const pool = new BufferPool();
 
     // Find the 3 TestSignal output offsets
@@ -471,7 +480,8 @@ describe('Normalize Block', () => {
 
     const program = result.program;
     const schedule = program.schedule;
-    const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount || 0);
+    const session = createSessionState();
+    const state = createRuntimeStateFromSession(session, program.slotMeta.length, schedule.stateSlotCount || 0, 0, 0);
     const pool = new BufferPool();
 
     const evalSigSteps = schedule.steps.filter((s: any) => s.kind === 'evalSig').slice(-3);
@@ -512,7 +522,8 @@ describe('Normalize Block', () => {
 
     const program = result.program;
     const schedule = program.schedule;
-    const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount || 0);
+    const session = createSessionState();
+    const state = createRuntimeStateFromSession(session, program.slotMeta.length, schedule.stateSlotCount || 0, 0, 0);
     const pool = new BufferPool();
 
     // Find the 3 TestSignal output offsets

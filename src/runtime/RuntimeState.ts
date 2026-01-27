@@ -584,8 +584,8 @@ export function createProgramState(
 /**
  * Create a RuntimeState by composing SessionState and ProgramState
  *
- * Convenience wrapper for tests and simple use cases.
- * For production code with session persistence, use createSessionState() + createProgramState() separately.
+ * DEPRECATED - Internal test helper only. Use createSessionState() + createRuntimeStateFromSession() for new code.
+ * @internal Not part of public API
  */
 export function createRuntimeState(
   slotCount: number,
@@ -594,23 +594,7 @@ export function createRuntimeState(
   eventExprCount: number = 0
 ): RuntimeState {
   const session = createSessionState();
-  const program = createProgramState(slotCount, stateSlotCount, eventSlotCount, eventExprCount);
-  return {
-    // ProgramState
-    values: program.values,
-    cache: program.cache,
-    time: program.time,
-    state: program.state,
-    eventScalars: program.eventScalars,
-    eventPrevPredicate: program.eventPrevPredicate,
-    events: program.events,
-    // SessionState
-    timeState: session.timeState,
-    externalChannels: session.external,
-    health: session.health,
-    continuity: session.continuity,
-    continuityConfig: session.continuityConfig,
-  };
+  return createRuntimeStateFromSession(session, slotCount, stateSlotCount, eventSlotCount, eventExprCount);
 }
 
 /**

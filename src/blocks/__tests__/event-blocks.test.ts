@@ -10,7 +10,7 @@ import { compile } from '../../compiler/compile';
 import { EventHub } from '../../events/EventHub';
 import { BufferPool } from '../../runtime/BufferPool';
 import { buildPatch, type PatchBuilder } from '../../graph/Patch';
-import { createSessionState, createProgramState } from '../../runtime/RuntimeState';
+import { createSessionState, createProgramState, createRuntimeState, createRuntimeStateFromSession } from '../../runtime';
 import { executeFrame } from '../../runtime/ScheduleExecutor';
 import { evaluateSignal } from '../../runtime/SignalEvaluator';
 import { sigExprId, eventSlotId } from '../../compiler/ir/Indices';
@@ -251,7 +251,8 @@ describe('SampleHold', () => {
     const program = result.program;
     const schedule = program.schedule;
     const sizes = getStorageSizes(program.slotMeta);
-    const state = createRuntimeState(
+    const session = createSessionState();
+    const state = createRuntimeStateFromSession(session, 
       sizes.f64,
       schedule.stateSlotCount ?? 0,
       schedule.eventSlotCount ?? 0,

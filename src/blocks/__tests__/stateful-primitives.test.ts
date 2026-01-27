@@ -9,7 +9,7 @@ import { describe, it, expect } from 'vitest';
 import { compile } from '../../compiler/compile';
 import { buildPatch } from '../../graph';
 import { executeFrame } from '../../runtime/ScheduleExecutor';
-import { createSessionState, createProgramState } from '../../runtime/RuntimeState';
+import { createSessionState, createRuntimeStateFromSession, createRuntimeState } from '../../runtime';
 import { BufferPool } from '../../runtime/BufferPool';
 import { evaluateSignal } from '../../runtime/SignalEvaluator';
 import type { SigExprId } from '../../types';
@@ -72,8 +72,7 @@ describe('UnitDelay Block', () => {
 
     // Create runtime with state slots
     const session = createSessionState();
-    const program_ = createProgramState(program.slotMeta.length, schedule.stateSlotCount, 0, 0);
-    const state = { ...session, ...program_ };
+    const state = createRuntimeStateFromSession(session, program.slotMeta.length, schedule.stateSlotCount, 0, 0);
     const pool = new BufferPool();
 
     // First frame: output should be 0 (initial state)
@@ -97,7 +96,8 @@ describe('UnitDelay Block', () => {
 
     const program = result.program;
     const schedule = program.schedule;
-    const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount);
+    const session = createSessionState();
+    const state = createRuntimeStateFromSession(session, program.slotMeta.length, schedule.stateSlotCount, 0, 0);
     const pool = new BufferPool();
 
     // Frame 1: output = 0 (initial), write 10 to state
@@ -128,7 +128,8 @@ describe('UnitDelay Block', () => {
 
     const program = result.program;
     const schedule = program.schedule;
-    const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount);
+    const session = createSessionState();
+    const state = createRuntimeStateFromSession(session, program.slotMeta.length, schedule.stateSlotCount, 0, 0);
     const pool = new BufferPool();
 
     // Frame 1 at t=0: output = 0 (initial), write 0 to state
@@ -166,7 +167,8 @@ describe('UnitDelay Block', () => {
     // Verify initial value was set correctly
     expect(schedule.stateSlots[0].initialValue).toBe(42);
 
-    const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount);
+    const session = createSessionState();
+    const state = createRuntimeStateFromSession(session, program.slotMeta.length, schedule.stateSlotCount);
     const pool = new BufferPool();
 
     // Initialize state from schedule
@@ -212,7 +214,8 @@ describe('Lag Block', () => {
 
     const program = result.program;
     const schedule = program.schedule;
-    const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount);
+    const session = createSessionState();
+    const state = createRuntimeStateFromSession(session, program.slotMeta.length, schedule.stateSlotCount, 0, 0);
     const pool = new BufferPool();
 
     // Frame 1: lerp(0, 10, 0.5) = 5
@@ -242,7 +245,8 @@ describe('Lag Block', () => {
 
     const program = result.program;
     const schedule = program.schedule;
-    const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount);
+    const session = createSessionState();
+    const state = createRuntimeStateFromSession(session, program.slotMeta.length, schedule.stateSlotCount, 0, 0);
     const pool = new BufferPool();
 
     executeFrame(program, state, pool, 0);
@@ -263,7 +267,8 @@ describe('Lag Block', () => {
 
     const program = result.program;
     const schedule = program.schedule;
-    const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount);
+    const session = createSessionState();
+    const state = createRuntimeStateFromSession(session, program.slotMeta.length, schedule.stateSlotCount, 0, 0);
     const pool = new BufferPool();
 
     // Initialize state
@@ -324,7 +329,8 @@ describe('Phasor Block', () => {
 
     const program = result.program;
     const schedule = program.schedule;
-    const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount);
+    const session = createSessionState();
+    const state = createRuntimeStateFromSession(session, program.slotMeta.length, schedule.stateSlotCount, 0, 0);
     const pool = new BufferPool();
 
     // Frame 1 at t=0, dt=0: phase stays at 0
@@ -355,7 +361,8 @@ describe('Phasor Block', () => {
 
     const program = result.program;
     const schedule = program.schedule;
-    const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount);
+    const session = createSessionState();
+    const state = createRuntimeStateFromSession(session, program.slotMeta.length, schedule.stateSlotCount, 0, 0);
     const pool = new BufferPool();
 
     // Initialize state with initialPhase
@@ -387,7 +394,8 @@ describe('Phasor Block', () => {
 
     const program = result.program;
     const schedule = program.schedule;
-    const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount);
+    const session = createSessionState();
+    const state = createRuntimeStateFromSession(session, program.slotMeta.length, schedule.stateSlotCount, 0, 0);
     const pool = new BufferPool();
 
     // Initialize state
@@ -437,7 +445,8 @@ describe('Hash Block', () => {
     if (result.kind !== 'ok') return;
 
     const program = result.program;
-    const state = createRuntimeState(program.slotMeta.length);
+    const session = createSessionState();
+    const state = createRuntimeStateFromSession(session, program.slotMeta.length);
     const pool = new BufferPool();
 
     // Find the TestSignal output offset
@@ -479,7 +488,8 @@ describe('Hash Block', () => {
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
 
-    const state = createRuntimeState(result.program.slotMeta.length);
+    const session = createSessionState();
+    const state = createRuntimeStateFromSession(session, result.program.slotMeta.length);
     const pool = new BufferPool();
 
     // Find the two TestSignal output offsets
@@ -516,7 +526,8 @@ describe('Hash Block', () => {
     if (result.kind !== 'ok') return;
 
     const program = result.program;
-    const state = createRuntimeState(program.slotMeta.length);
+    const session = createSessionState();
+    const state = createRuntimeStateFromSession(session, program.slotMeta.length);
     const pool = new BufferPool();
 
     // Find the evalSig step from TestSignal to get the slot
@@ -553,7 +564,8 @@ describe('Hash Block', () => {
     if (result.kind !== 'ok') return;
 
     const program = result.program;
-    const state = createRuntimeState(program.slotMeta.length);
+    const session = createSessionState();
+    const state = createRuntimeStateFromSession(session, program.slotMeta.length);
     const pool = new BufferPool();
 
     // Find the evalSig step from TestSignal to get the slot
