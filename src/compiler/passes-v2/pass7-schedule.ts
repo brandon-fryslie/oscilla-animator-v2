@@ -545,12 +545,27 @@ export function pass7Schedule(
     ...stateWriteSteps,
   ];
 
-  // Get state slots from builder
+  // Get state mappings from builder and convert to legacy StateSlotDef format
   const stateSlotCount = unlinkedIR.builder.getStateSlotCount();
-  const stateSlots: StateSlotDef[] = unlinkedIR.builder.getStateSlots().map(s => ({
-    initialValue: s.initialValue,
-  }));
   const stateMappings = unlinkedIR.builder.getStateMappings();
+
+  // Convert StateMapping[] to StateSlotDef[] by expanding all slots
+  const stateSlots: StateSlotDef[] = [];
+  for (const mapping of stateMappings) {
+    if (mapping.kind === 'scalar') {
+      // Scalar: expand stride slots
+      for (let i = 0; i < mapping.stride; i++) {
+        stateSlots.push({ initialValue: mapping.initial[i] });
+      }
+    } else {
+      // Field: expand laneCount * stride slots
+      for (let lane = 0; lane < mapping.laneCount; lane++) {
+        for (let i = 0; i < mapping.stride; i++) {
+          stateSlots.push({ initialValue: mapping.initial[i] });
+        }
+      }
+    }
+  }
 
   // Get event counts for runtime allocation
   const eventSlotCount = unlinkedIR.builder.getEventSlotCount();

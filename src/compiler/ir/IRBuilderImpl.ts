@@ -837,29 +837,6 @@ export class IRBuilderImpl implements IRBuilder {
     return this.stateMappings;
   }
 
-  /**
-   * Get legacy state slots format (for backwards compatibility).
-   * @deprecated Use getStateMappings() instead
-   */
-  getStateSlots(): readonly { initialValue: number }[] {
-    // Convert new format back to old format for backwards compatibility
-    const slots: { initialValue: number }[] = [];
-    for (const mapping of this.stateMappings) {
-      if (mapping.kind === 'scalar') {
-        for (let i = 0; i < mapping.stride; i++) {
-          slots.push({ initialValue: mapping.initial[i] });
-        }
-      } else {
-        // Field state: expand all lanes
-        for (let lane = 0; lane < mapping.laneCount; lane++) {
-          for (let i = 0; i < mapping.stride; i++) {
-            slots.push({ initialValue: mapping.initial[i] });
-          }
-        }
-      }
-    }
-    return slots;
-  }
 
   getStateSlotCount(): number {
     return this.stateSlotCounter;

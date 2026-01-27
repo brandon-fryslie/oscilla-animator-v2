@@ -58,14 +58,6 @@ export interface CompileError {
 
   /** Optional additional details */
   readonly details?: Record<string, unknown>;
-
-  // Legacy fields for backward compatibility
-  /** @deprecated Use 'code' instead */
-  readonly kind?: string;
-  /** @deprecated Use 'where' instead */
-  readonly location?: CompileErrorWhere;
-  /** @deprecated No longer used */
-  readonly severity?: 'error' | 'warning' | 'info';
 }
 
 /**
@@ -77,7 +69,7 @@ export function compileError(
   where?: CompileErrorWhere,
   details?: Record<string, unknown>
 ): CompileError {
-  return { code, message, where, details, kind: code };
+  return { code, message, where, details };
 }
 
 // =============================================================================

@@ -451,8 +451,6 @@ export interface IRBuilder {
   /** Get state mappings with stable IDs for hot-swap migration. */
   getStateMappings(): readonly StateMapping[];
 
-  /** Get state slots (legacy format, use getStateMappings for hot-swap). */
-  getStateSlots(): readonly { initialValue: number }[];
 
   /** Get state slot count. */
   getStateSlotCount(): number;
