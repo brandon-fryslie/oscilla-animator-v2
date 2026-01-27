@@ -32,6 +32,7 @@ import { SuggestionProvider } from '../../expr/suggestions';
 import type { Suggestion, OutputSuggestion } from '../../expr/suggestions';
 import { AutocompleteDropdown } from '../expression-editor/AutocompleteDropdown';
 import { getCursorPosition, adjustPositionForViewport } from '../expression-editor/cursorPosition';
+import { DisplayNameEditor } from './DisplayNameEditor';
 
 // =============================================================================
 // Helper Functions
@@ -787,7 +788,7 @@ const BlockDetails = observer(function BlockDetails({ block, patch }: BlockDetai
   return (
     <div>
       {/* Header with editable display name */}
-      <DisplayNameEditor block={block} typeInfo={typeInfo} />
+      <BlockNameHeader block={block} typeInfo={typeInfo} />
 
       <p style={{ margin: '0 0 16px', color: colors.textSecondary, fontSize: '13px' }}>
         {typeInfo.type}
@@ -849,81 +850,39 @@ const BlockDetails = observer(function BlockDetails({ block, patch }: BlockDetai
 });
 
 // =============================================================================
-// Display Name Editor
+// Block Name Header (uses shared DisplayNameEditor)
 // =============================================================================
 
-interface DisplayNameEditorProps {
+interface BlockNameHeaderProps {
   block: Block;
   typeInfo: BlockDef;
 }
 
-const DisplayNameEditor = observer(function DisplayNameEditor({ block, typeInfo }: DisplayNameEditorProps) {
-  const { patch: patchStore } = useStores();
-  const [isEditing, setIsEditing] = useState(false);
-  const [editValue, setEditValue] = useState(block.displayName || '');
-
-  const handleDoubleClick = useCallback(() => {
-    setEditValue(block.displayName || '');
-    setIsEditing(true);
-  }, [block.displayName]);
-
-  const handleBlur = useCallback(() => {
-    setIsEditing(false);
-    const newName = editValue.trim() || null;
-    if (newName !== block.displayName) {
-      patchStore.updateBlockDisplayName(block.id, newName);
-    }
-  }, [block.id, block.displayName, editValue]);
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      (e.target as HTMLInputElement).blur();
-    } else if (e.key === 'Escape') {
-      setEditValue(block.displayName || '');
-      setIsEditing(false);
-    }
-  }, [block.displayName]);
-
-  if (isEditing) {
-    return (
-      <input
-        type="text"
-        value={editValue}
-        onChange={(e) => setEditValue(e.target.value)}
-        onBlur={handleBlur}
-        onKeyDown={handleKeyDown}
-        autoFocus
-        placeholder={typeInfo.label}
+/**
+ * Block name header in inspector. Uses shared DisplayNameEditor with inspector styling.
+ */
+function BlockNameHeader({ block, typeInfo }: BlockNameHeaderProps) {
+  return (
+    <h3 style={{ margin: '0 0 8px', fontSize: '18px' }}>
+      <DisplayNameEditor
+        blockId={block.id}
+        currentDisplayName={block.displayName}
+        fallbackLabel={typeInfo.label}
         style={{
-          margin: '0 0 8px',
+          fontSize: '18px',
+          fontWeight: 'bold',
+          cursor: 'pointer',
+        }}
+        editStyle={{
           fontSize: '18px',
           fontWeight: 'bold',
           background: colors.bgPanel,
-          border: `1px solid ${colors.primary}`,
-          borderRadius: '4px',
-          padding: '4px 8px',
           color: colors.textPrimary,
-          width: '100%',
-          boxSizing: 'border-box',
         }}
       />
-    );
-  }
-
-  return (
-    <h3
-      onDoubleClick={handleDoubleClick}
-      style={{
-        margin: '0 0 8px',
-        fontSize: '18px',
-        cursor: 'pointer',
-      }}
-      title="Double-click to edit"
-    >
-      {block.displayName || typeInfo.label}
     </h3>
   );
-});
+}
 
 // =============================================================================
 // Port Items

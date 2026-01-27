@@ -6,9 +6,6 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { PatchStore } from '../PatchStore';
-import { blockId } from '../../types';
-import type { BlockId } from '../../types';
-import type { Block, Patch } from '../../graph/Patch';
 
 // Import blocks to ensure they're registered
 import '../../blocks/signal-blocks';
@@ -53,15 +50,6 @@ describe('PatchStore - Display Name Auto-generation', () => {
 
       const block = store.blocks.get(id);
       expect(block?.displayName).toBe('Main Oscillator');
-    });
-
-    it('should allow null displayName when explicitly provided', () => {
-      const id = store.addBlock('Oscillator', { frequency: 440 }, {
-        displayName: null
-      });
-
-      const block = store.blocks.get(id);
-      expect(block?.displayName).toBe(null);
     });
 
     it('should handle collision with existing displayName', () => {
@@ -180,114 +168,16 @@ describe('PatchStore - Display Name Auto-generation', () => {
       expect(result.error).toBeUndefined();
     });
 
-    it('should auto-generate when given null displayName', () => {
-      const id = store.addBlock('Oscillator', {}, { displayName: 'Custom Name' });
-
-      const result = store.updateBlockDisplayName(id, null);
-
-      expect(result.error).toBeUndefined();
-      const block = store.blocks.get(id);
-      // Should auto-generate based on type. Since there's 1 Oscillator, it becomes "Oscillator 2"
-      // (the block itself is still counted in the type count during re-generation)
-      expect(block?.displayName).toBe('Oscillator 2');
-    });
-
-    it('should auto-generate when given empty string', () => {
+    it('should reject empty string', () => {
       const id = store.addBlock('Oscillator', {}, { displayName: 'Custom Name' });
 
       const result = store.updateBlockDisplayName(id, '   ');
 
-      expect(result.error).toBeUndefined();
+      expect(result.error).toBeDefined();
+      expect(result.error).toContain('empty');
+      // Name should remain unchanged
       const block = store.blocks.get(id);
-      expect(block?.displayName).toBe('Oscillator 2');
-    });
-  });
-
-  describe('loadPatch auto-migration', () => {
-    it('should auto-generate displayName for null values on load', () => {
-      const b0Id = blockId('b0');
-      const patch: Patch = {
-        blocks: new Map<BlockId, Block>([
-          [b0Id, {
-            id: b0Id,
-            type: 'Oscillator',
-            params: {},
-            displayName: null,
-            domainId: null,
-            role: { kind: 'user' as const, meta: {} },
-            inputPorts: new Map(),
-            outputPorts: new Map(),
-          }],
-        ]),
-        edges: [],
-      };
-
-      store.loadPatch(patch);
-
-      const block = store.blocks.get(b0Id);
-      expect(block?.displayName).toBe('Oscillator 1');
-    });
-
-    it('should preserve non-null displayNames on load', () => {
-      const b0Id = blockId('b0');
-      const patch: Patch = {
-        blocks: new Map<BlockId, Block>([
-          [b0Id, {
-            id: b0Id,
-            type: 'Oscillator',
-            params: {},
-            displayName: 'Custom Name',
-            domainId: null,
-            role: { kind: 'user' as const, meta: {} },
-            inputPorts: new Map(),
-            outputPorts: new Map(),
-          }],
-        ]),
-        edges: [],
-      };
-
-      store.loadPatch(patch);
-
-      const block = store.blocks.get(b0Id);
       expect(block?.displayName).toBe('Custom Name');
-    });
-
-    it('should handle mixed null and non-null displayNames on load', () => {
-      const b0Id = blockId('b0');
-      const b1Id = blockId('b1');
-      const patch: Patch = {
-        blocks: new Map<BlockId, Block>([
-          [b0Id, {
-            id: b0Id,
-            type: 'Oscillator',
-            params: {},
-            displayName: 'Custom 1',
-            domainId: null,
-            role: { kind: 'user' as const, meta: {} },
-            inputPorts: new Map(),
-            outputPorts: new Map(),
-          }],
-          [b1Id, {
-            id: b1Id,
-            type: 'Oscillator',
-            params: {},
-            displayName: null,
-            domainId: null,
-            role: { kind: 'user' as const, meta: {} },
-            inputPorts: new Map(),
-            outputPorts: new Map(),
-          }],
-        ]),
-        edges: [],
-      };
-
-      store.loadPatch(patch);
-
-      const block0 = store.blocks.get(b0Id);
-      const block1 = store.blocks.get(b1Id);
-      expect(block0?.displayName).toBe('Custom 1');
-      // b1 is processed after b0 is already in migratedBlocks, so count = 2
-      expect(block1?.displayName).toBe('Oscillator 2');
     });
   });
 });

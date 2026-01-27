@@ -12,7 +12,7 @@ import { useStores } from '../../stores';
 
 interface DisplayNameEditorProps {
   blockId: BlockId;
-  currentDisplayName: string | null;
+  currentDisplayName: string;
   fallbackLabel: string;
   style?: React.CSSProperties;
   editStyle?: React.CSSProperties;
@@ -40,17 +40,22 @@ export const DisplayNameEditor = observer(function DisplayNameEditor({
 }: DisplayNameEditorProps) {
   const { patch: patchStore } = useStores();
   const [isEditing, setIsEditing] = useState(false);
-  const [editValue, setEditValue] = useState(currentDisplayName || '');
+  const [editValue, setEditValue] = useState(currentDisplayName);
   const [error, setError] = useState<string | null>(null);
 
   const handleDoubleClick = useCallback(() => {
-    setEditValue(currentDisplayName || '');
+    setEditValue(currentDisplayName);
     setError(null);
     setIsEditing(true);
   }, [currentDisplayName]);
 
   const handleCommit = useCallback(() => {
-    const newName = editValue.trim() || null;
+    const newName = editValue.trim();
+    // Empty name not allowed - show error
+    if (!newName) {
+      setError('Name cannot be empty');
+      return;
+    }
     if (newName !== currentDisplayName) {
       const result = patchStore.updateBlockDisplayName(blockId, newName);
       if (result.error) {
@@ -76,7 +81,7 @@ export const DisplayNameEditor = observer(function DisplayNameEditor({
       e.preventDefault();
       handleCommit();
     } else if (e.key === 'Escape') {
-      setEditValue(currentDisplayName || '');
+      setEditValue(currentDisplayName);
       setError(null);
       setIsEditing(false);
     }
@@ -140,7 +145,7 @@ export const DisplayNameEditor = observer(function DisplayNameEditor({
       }}
       title="Double-click to edit"
     >
-      {currentDisplayName || fallbackLabel}
+      {currentDisplayName}
     </span>
   );
 });

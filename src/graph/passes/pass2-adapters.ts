@@ -208,7 +208,7 @@ function analyzeAdapters(
         id: adapterId,
         type: adapterSpec.blockType,
         params: adapterParams,
-        displayName: null,
+        displayName: `${adapterSpec.blockType} (adapter)`, // System-generated adapter block
         domainId: toBlock.domainId, // Inherit domain from target
         role: adapterRole,
         inputPorts,

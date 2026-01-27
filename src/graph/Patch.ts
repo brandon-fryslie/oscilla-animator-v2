@@ -48,7 +48,7 @@
 
 import type { BlockId, PortId, BlockRole, DefaultSource, EdgeRole, CombineMode } from '../types';
 import { requireBlockDef } from '../blocks/registry';
-import { detectCanonicalNameCollisions } from '../core/canonical-name';
+import { detectCanonicalNameCollisions, normalizeCanonicalName } from '../core/canonical-name';
 
 // =============================================================================
 // Varargs Support
@@ -138,8 +138,8 @@ export interface Block {
   readonly params: Readonly<Record<string, unknown>>;
   /** Optional label for display (legacy - prefer displayName) */
   readonly label?: string;
-  /** User-editable display name (REQUIRED - can be null) */
-  readonly displayName: string | null;
+  /** User-editable display name (REQUIRED - always has a value) */
+  readonly displayName: string;
   /** Reference to domain block ID (REQUIRED - can be null) */
   readonly domainId: string | null;
   /** Semantic role for editor behavior (REQUIRED) */
@@ -257,7 +257,7 @@ export class PatchBuilder {
     params: Record<string, unknown> = {},
     options?: {
       label?: string;
-      displayName?: string | null;
+      displayName?: string;
       domainId?: string | null;
       role?: BlockRole;
     }
@@ -281,10 +281,18 @@ export class PatchBuilder {
       outputPorts.set(outputId, { id: outputId });
     }
 
-    // Auto-generate displayName if not provided
-    const displayName = options?.displayName !== undefined
+    // Auto-generate displayName if not provided or empty
+    const displayName = options?.displayName && options.displayName.trim()
       ? options.displayName
       : generateDefaultDisplayName(type, this.blocks);
+
+    // Validate no collision with existing displayNames
+    const existingNames = Array.from(this.blocks.values())
+      .map(b => b.displayName);
+    const { collisions } = detectCanonicalNameCollisions([...existingNames, displayName]);
+    if (collisions.length > 0) {
+      throw new Error(`Display name "${displayName}" conflicts with existing block (canonical: "${normalizeCanonicalName(displayName)}")`);
+    }
 
     this.blocks.set(id, {
       id,

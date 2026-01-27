@@ -27,7 +27,7 @@ export type ImmutablePatch = Patch & { readonly [ImmutablePatchBrand]: never };
 
 export interface BlockOptions {
   label?: string;
-  displayName?: string | null;
+  displayName?: string;
   domainId?: string | null;
   role?: BlockRole;
 }
@@ -265,10 +265,18 @@ export class PatchStore {
       outputPorts.set(outputId, { id: outputId });
     }
 
-    // Auto-generate displayName if not provided
-    const displayName = options?.displayName !== undefined
+    // Auto-generate displayName if not provided or empty
+    const displayName = options?.displayName && options.displayName.trim()
       ? options.displayName
       : generateDefaultDisplayName(type, this._data.blocks);
+
+    // Validate no collision with existing displayNames
+    const existingNames = Array.from(this._data.blocks.values())
+      .map(b => b.displayName);
+    const { collisions } = detectCanonicalNameCollisions([...existingNames, displayName]);
+    if (collisions.length > 0) {
+      throw new Error(`Display name "${displayName}" conflicts with existing block (canonical: "${normalizeCanonicalName(displayName)}")`);
+    }
 
     const block: Block = {
       id,
@@ -351,38 +359,37 @@ export class PatchStore {
    * Validates uniqueness before applying.
    *
    * @param id - Block ID
-   * @param displayName - New display name (null not allowed - use auto-generated name instead)
-   * @returns Error message if collision detected, null if successful
+   * @param displayName - New display name (must be non-empty string)
+   * @returns Error message if collision detected or name invalid
    */
-  updateBlockDisplayName(id: BlockId, displayName: string | null): { error?: string } {
+  updateBlockDisplayName(id: BlockId, displayName: string): { error?: string } {
     const block = this._data.blocks.get(id);
     if (!block) {
       throw new Error(`Block not found: ${id}`);
     }
 
-    // If displayName is null or empty, auto-generate a new one
-    let finalDisplayName = displayName;
-    if (!displayName || displayName.trim() === '') {
-      finalDisplayName = generateDefaultDisplayName(block.type, this._data.blocks);
+    // Validate non-empty
+    const trimmedName = displayName.trim();
+    if (!trimmedName) {
+      return { error: 'Display name cannot be empty' };
     }
 
     // Validate uniqueness (check against all OTHER blocks, not this one)
     const otherBlockNames = Array.from(this._data.blocks.values())
       .filter(b => b.id !== id)
-      .map(b => b.displayName)
-      .filter((n): n is string => n !== null && n !== '');
+      .map(b => b.displayName);
 
-    const { collisions } = detectCanonicalNameCollisions([...otherBlockNames, finalDisplayName!]);
+    const { collisions } = detectCanonicalNameCollisions([...otherBlockNames, trimmedName]);
     if (collisions.length > 0) {
       // Collision detected - return error
-      const canonical = normalizeCanonicalName(finalDisplayName!);
-      return { error: `Name "${finalDisplayName}" conflicts with another block (canonical: "${canonical}")` };
+      const canonical = normalizeCanonicalName(trimmedName);
+      return { error: `Name "${trimmedName}" conflicts with another block (canonical: "${canonical}")` };
     }
 
     // No collision - update the name
     this._data.blocks.set(id, {
       ...block,
-      displayName: finalDisplayName,
+      displayName: trimmedName,
     });
 
     this.invalidateSnapshot();
@@ -584,22 +591,8 @@ export class PatchStore {
    * Auto-migrates null displayNames to auto-generated names.
    */
   loadPatch(patch: Patch): void {
-    // Auto-migrate null displayNames
-    const migratedBlocks = new Map<BlockId, Block>();
-    const tempBlocks = new Map(patch.blocks);
-
-    for (const [blockId, block] of tempBlocks) {
-      if (block.displayName === null) {
-        // Generate displayName for this block
-        const generatedName = generateDefaultDisplayName(block.type, migratedBlocks);
-        migratedBlocks.set(blockId, { ...block, displayName: generatedName });
-      } else {
-        migratedBlocks.set(blockId, block);
-      }
-    }
-
     this._data = {
-      blocks: migratedBlocks,
+      blocks: new Map(patch.blocks),
       edges: [...patch.edges],
     };
 

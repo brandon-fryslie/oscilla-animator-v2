@@ -68,7 +68,7 @@ export interface OscillaNodeData {
   blockId: BlockId;
   blockType: string;
   label: string;
-  displayName: string | null; // User-editable display name
+  displayName: string; // User-editable display name (always has value)
   inputs: PortData[];
   outputs: PortData[];
   params: ParamData[];

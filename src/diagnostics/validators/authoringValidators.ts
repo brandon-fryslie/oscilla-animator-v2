@@ -17,6 +17,7 @@
 import type { Patch } from '../../graph';
 import type { Diagnostic } from '../types';
 import { generateDiagnosticId } from '../diagnosticId';
+import { validateDisplayNameUniqueness } from '../../core/canonical-name';
 
 // =============================================================================
 // Main Entry Point

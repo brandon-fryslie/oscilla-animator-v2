@@ -13,7 +13,7 @@ function createTestBlock(id: BlockId, type: string): Block {
     id,
     type,
     params: {},
-    displayName: null,
+    displayName: `${type} ${id}`,
     domainId: null,
     role: { kind: 'user', meta: {} },
     inputPorts: new Map(),

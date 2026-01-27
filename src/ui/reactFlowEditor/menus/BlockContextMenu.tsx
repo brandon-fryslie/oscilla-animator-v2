@@ -52,7 +52,7 @@ export const BlockContextMenu: React.FC<BlockContextMenuProps> = observer(({
         action: () => {
           // Create copy with same type and params
           const newId = patch.addBlock(block.type, { ...block.params }, {
-            displayName: block.displayName ? `${block.displayName} (copy)` : null,
+            displayName: `${block.displayName} (copy)`,
             domainId: block.domainId,
             role: block.role,
           });

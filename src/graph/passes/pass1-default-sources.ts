@@ -146,7 +146,7 @@ function materializeDefaultSource(
         id: derivedId,
         type: ds.blockType,
         params,
-        displayName: null,
+        displayName: `${ds.blockType} (default)`, // System-generated default source block
         domainId: targetBlock.domainId,
         role: derivedRole,
         inputPorts: new Map(), // Will be populated recursively if this block has inputs
