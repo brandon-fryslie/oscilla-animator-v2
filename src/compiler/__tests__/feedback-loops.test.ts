@@ -23,7 +23,7 @@ describe('Feedback Loops with UnitDelay', () => {
       // UnitDelay -> Add.b (feedback)
       b.wire(delay, 'out', add, 'b');
       // Add -> UnitDelay (completes cycle)
-      b.wire(add, 'sum', delay, 'in');
+      b.wire(add, 'out', delay, 'in');
     });
 
     const result = compile(patch);
@@ -41,24 +41,24 @@ describe('Feedback Loops with UnitDelay', () => {
   });
 
   it('compiles multi-block feedback loop', () => {
-    // A longer cycle: Add -> Mul -> UnitDelay -> back to Add
+    // A longer cycle: Add -> Multiply -> UnitDelay -> back to Add
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot', {});
       const constBlock = b.addBlock('Const', { value: 2 });
       const add = b.addBlock('Add', {});
-      const mul = b.addBlock('Mul', {});
+      const mul = b.addBlock('Multiply', {});
       const delay = b.addBlock('UnitDelay', { initialValue: 1 });
 
       // Const -> Add.a
       b.wire(constBlock, 'out', add, 'a');
       // UnitDelay -> Add.b (feedback)
       b.wire(delay, 'out', add, 'b');
-      // Add -> Mul.a
-      b.wire(add, 'sum', mul, 'a');
-      // Const -> Mul.b
+      // Add -> Multiply.a
+      b.wire(add, 'out', mul, 'a');
+      // Const -> Multiply.b
       b.wire(constBlock, 'out', mul, 'b');
-      // Mul -> UnitDelay (completes cycle)
-      b.wire(mul, 'product', delay, 'in');
+      // Multiply -> UnitDelay (completes cycle)
+      b.wire(mul, 'out', delay, 'in');
     });
 
     const result = compile(patch);
@@ -76,16 +76,16 @@ describe('Feedback Loops with UnitDelay', () => {
   });
 
   it('rejects cycle without stateful block', () => {
-    // Add -> Mul -> back to Add (no UnitDelay, illegal cycle)
+    // Add -> Multiply -> back to Add (no UnitDelay, illegal cycle)
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot', {});
       const constBlock = b.addBlock('Const', { value: 1 });
       const add = b.addBlock('Add', {});
-      const mul = b.addBlock('Mul', {});
+      const mul = b.addBlock('Multiply', {});
 
-      // Create an illegal cycle: Add -> Mul -> Add
-      b.wire(add, 'sum', mul, 'a');
-      b.wire(mul, 'product', add, 'a');
+      // Create an illegal cycle: Add -> Multiply -> Add
+      b.wire(add, 'out', mul, 'a');
+      b.wire(mul, 'out', add, 'a');
 
       // Wire constants to other inputs
       b.wire(constBlock, 'out', mul, 'b');

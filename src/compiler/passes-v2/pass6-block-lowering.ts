@@ -69,15 +69,6 @@ export interface Pass6Options {
 // =============================================================================
 
 /**
- * Check if a domain/payload is valid for combine mode validation.
- * Valid payloads: float, int, vec2, vec3, color, boolean, time, rate, trigger
- */
-function isCorePayload(payload: string): boolean {
-  const corePayloads = ['float', 'int', 'vec2', 'vec3', 'color', 'boolean', 'time', 'rate', 'trigger'];
-  return corePayloads.includes(payload);
-}
-
-/**
  * Check if an SCC is non-trivial (contains an actual cycle).
  *
  * An SCC is non-trivial if:
@@ -624,12 +615,13 @@ function lowerSCCTwoPass(
   }
 
   // Pass 2: Full lowering for all blocks
-  for (const node of scc.nodes) {
-    if (node.kind !== "BlockEval") continue;
+  // Strategy: Process blocks in dependency order, treating stateful block outputs
+  // as already available (from phase 1).
 
-    const blockIndex = node.blockIndex;
+  // Helper to lower a single block
+  const lowerSingleBlock = (blockIndex: BlockIndex) => {
     const block = blocks[blockIndex];
-    if (!block) continue;
+    if (!block) return;
 
     (builder as any).setCurrentBlockId(block.id);
 
@@ -673,6 +665,87 @@ function lowerSCCTwoPass(
         instanceCount,
       });
     }
+  };
+
+  // Build set of block indices in this SCC
+  const sccBlockIndices = new Set<BlockIndex>();
+  for (const node of scc.nodes) {
+    if (node.kind === "BlockEval") {
+      sccBlockIndices.add(node.blockIndex);
+    }
+  }
+
+  // Build set of stateful block indices (their outputs are already available)
+  const statefulBlockIndices = new Set<BlockIndex>();
+  for (const idx of sccBlockIndices) {
+    const block = blocks[idx];
+    if (!block) continue;
+    const blockDef = getBlockDefinition(block.type);
+    if (blockDef?.isStateful && hasLowerOutputsOnly(blockDef)) {
+      statefulBlockIndices.add(idx);
+    }
+  }
+
+  // Topological sort of non-stateful blocks within the SCC
+  // Edges within SCC from non-stateful -> non-stateful need ordering
+  // Edges from stateful blocks are "free" (outputs already available)
+  const nonStatefulIndices = [...sccBlockIndices].filter(idx => !statefulBlockIndices.has(idx));
+  const lowered = new Set<BlockIndex>(statefulBlockIndices); // Stateful outputs already available
+  const remaining = new Set<BlockIndex>(nonStatefulIndices);
+
+  // Keep lowering blocks whose inputs are satisfied until all done
+  let progress = true;
+  while (remaining.size > 0 && progress) {
+    progress = false;
+    for (const blockIndex of remaining) {
+      const block = blocks[blockIndex];
+      if (!block) {
+        remaining.delete(blockIndex);
+        continue;
+      }
+
+      // Check if all SCC-internal dependencies are satisfied
+      let canLower = true;
+      for (const edge of edges) {
+        // Is this edge an input to this block?
+        if (edge.toBlock !== blockIndex) continue;
+
+        // Is the source in this SCC?
+        const sourceIdx = edge.fromBlock;
+        if (!sccBlockIndices.has(sourceIdx)) continue; // External dependency, already available
+
+        // Is the source lowered?
+        if (!lowered.has(sourceIdx)) {
+          canLower = false;
+          break;
+        }
+      }
+
+      if (canLower) {
+        lowerSingleBlock(blockIndex);
+        lowered.add(blockIndex);
+        remaining.delete(blockIndex);
+        progress = true;
+      }
+    }
+  }
+
+  // If we couldn't make progress, there's still a dependency issue
+  // (shouldn't happen if pass5 validated correctly, but handle gracefully)
+  if (remaining.size > 0) {
+    for (const blockIndex of remaining) {
+      const block = blocks[blockIndex];
+      errors.push({
+        code: "CycleWithoutStatefulBoundary",
+        message: `Block "${block?.type || 'unknown'}" in cycle could not be lowered - dependency issue`,
+        where: { blockId: block?.id || 'unknown' },
+      });
+    }
+  }
+
+  // Finally, lower the stateful blocks (their inputs should now be available)
+  for (const blockIndex of statefulBlockIndices) {
+    lowerSingleBlock(blockIndex);
   }
 }
 
