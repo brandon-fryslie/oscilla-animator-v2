@@ -15,14 +15,14 @@
 
 import React, { useRef, useEffect } from 'react';
 import type { HistoryView } from '../types';
-import type { NumericUnit } from '../../../core/canonical-types';
+import type { Unit } from '../../../core/canonical-types';
 import { isInvalidFloat } from '../renderers/formatFloat';
 
 export interface SparklineProps {
   history: HistoryView;
   width: number;
   height: number;
-  unit?: NumericUnit;
+  unit?: Unit['kind'];
 }
 
 /** Minimum range to avoid division by zero. */
@@ -77,7 +77,7 @@ function drawSparkline(
   width: number,
   height: number,
   dpr: number,
-  unit?: NumericUnit,
+  unit?: Unit['kind'],
 ): void {
   const w = width * dpr;
   const h = height * dpr;

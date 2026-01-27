@@ -147,10 +147,6 @@ export function defaultUnitForPayload(payload: PayloadType): Unit {
   }
 }
 
-// --- Legacy Compat (deprecated, will be removed) ---
-/** @deprecated Use Unit type instead */
-export type NumericUnit = Unit['kind'];
-
 // =============================================================================
 // PayloadType - What the value is made of
 // =============================================================================
