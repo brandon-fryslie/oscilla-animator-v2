@@ -820,7 +820,7 @@ registerBlock({
 // =============================================================================
 
 registerBlock({
-  type: ' Vec',
+  type: 'JitterVec',
   label: 'Jitter Vec',
   category: 'field',
   description: 'Add per-element random jitter to vec3 positions',
