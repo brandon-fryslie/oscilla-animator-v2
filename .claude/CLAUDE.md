@@ -140,6 +140,9 @@ The main loop:
 
 No persistent rendering state—everything derives from runtime state.
 
+#### Two-Phase Execution Model
+The runtime executes each frame in two phases: **Phase 1** evaluates all signals and reads from the previous frame's state, while **Phase 2** writes new state values for the next frame. This separation is non-negotiable—it ensures stateful blocks (like `UnitDelay`, `Lag`, `Phasor`) maintain proper delay semantics and prevents causality loops. Without phasing, feedback loops would read their own writes within the same frame, breaking the one-frame-delay guarantee. Phase boundaries also enable safe hot-swap by providing clean state migration points. See `docs/runtime/execution-model.md` for full technical details, examples, and maintenance guidelines.
+
 ### Module Dependency Arrows (Simplified)
 
 ```
