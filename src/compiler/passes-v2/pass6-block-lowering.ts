@@ -2,7 +2,7 @@
  * Pass 6: Block Lowering to IR
  */
 
-import type { AcyclicOrLegalGraph, BlockIndex } from "../ir/patches";
+import type { AcyclicOrLegalGraph, BlockIndex, DepGraph, SCC } from "../ir/patches";
 import type { Block, Edge } from "../../types";
 import type { VarargConnection } from "../../graph/Patch";
 import type { IRBuilder } from "../ir/IRBuilder";
@@ -10,7 +10,7 @@ import { IRBuilderImpl } from "../ir/IRBuilderImpl";
 import type { CompileError } from "../types";
 import type { ValueRefPacked } from "../ir/lowerTypes";
 import type { InstanceId } from "../ir/Indices";
-import { getBlockDefinition, type LowerCtx } from "../../blocks/registry";
+import { getBlockDefinition, type LowerCtx, type LowerResult, hasLowerOutputsOnly } from "../../blocks/registry";
 import { BLOCK_DEFS_BY_TYPE } from "../../blocks/registry";
 import type { EventHub } from "../../events/EventHub";
 import type { SignalType } from "../../core/canonical-types";
@@ -77,6 +77,37 @@ export interface Pass6Options {
 function isCorePayload(payload: string): boolean {
   const corePayloads = ['float', 'int', 'vec2', 'vec3', 'color', 'boolean', 'time', 'rate', 'trigger'];
   return corePayloads.includes(payload);
+}
+
+/**
+ * Check if an SCC is non-trivial (contains an actual cycle).
+ *
+ * An SCC is non-trivial if:
+ * - It has more than one node (multi-block cycle)
+ * - It has a self-loop (single block with feedback to itself)
+ *
+ * @param scc - The strongly connected component
+ * @param graph - The dependency graph
+ * @returns true if SCC is non-trivial (has a cycle)
+ */
+function isNonTrivialSCC(scc: SCC, graph: DepGraph): boolean {
+  // Multi-block cycle
+  if (scc.nodes.length > 1) {
+    return true;
+  }
+
+  // Single node - check for self-loop
+  if (scc.nodes.length === 1) {
+    const node = scc.nodes[0];
+    // Check if there's an edge from this node to itself
+    const hasSelfLoop = graph.edges.some(
+      edge => edge.from === node && edge.to === node
+    );
+    return hasSelfLoop;
+  }
+
+  // Empty SCC (shouldn't happen, but handle gracefully)
+  return false;
 }
 
 // =============================================================================
@@ -298,6 +329,7 @@ function inferInstanceContext(
  * @param blockIdToIndex - Map from block ID to block index
  * @param instanceContextByBlock - Map from block index to instance context
  * @param portTypes - Resolved port types from pass1
+ * @param existingOutputs - Existing outputs from phase 1 (for two-pass lowering)
  * @returns Map of port ID to ValueRefPacked
  */
 function lowerBlockInstance(
@@ -310,7 +342,8 @@ function lowerBlockInstance(
   blockOutputs?: Map<BlockIndex, Map<string, ValueRefPacked>>,
   blockIdToIndex?: Map<string, BlockIndex>,
   instanceContextByBlock?: Map<BlockIndex, InstanceId>,
-  portTypes?: ReadonlyMap<PortKey, SignalType>
+  portTypes?: ReadonlyMap<PortKey, SignalType>,
+  existingOutputs?: Partial<LowerResult>
 ): Map<string, ValueRefPacked> {
   const outputRefs = new Map<string, ValueRefPacked>();
   const blockDef = getBlockDefinition(block.type);
@@ -402,8 +435,8 @@ function lowerBlockInstance(
     // Pass block params as config (needed for DSConst blocks to access their value)
     const config = block.params;
 
-    // Call lowering function
-    const result = blockDef.lower({ ctx, inputs, inputsById, config });
+    // Call lowering function (with existingOutputs if this is phase 2)
+    const result = blockDef.lower({ ctx, inputs, inputsById, config, existingOutputs });
 
     // All blocks MUST use outputsById pattern
     // Allow empty outputsById only if block has no declared outputs
@@ -482,6 +515,170 @@ function lowerBlockInstance(
 }
 
 // =============================================================================
+// Two-Pass SCC Lowering
+// =============================================================================
+
+/**
+ * Lower blocks in a non-trivial SCC using two-pass lowering.
+ *
+ * Pass 1: Generate outputs for stateful blocks (lowerOutputsOnly)
+ * - Stateful blocks with lowerOutputsOnly generate outputs without needing inputs
+ * - These outputs are stored in blockOutputs, making them available to other blocks
+ * - Non-stateful blocks skip this pass
+ *
+ * Pass 2: Full lowering for all blocks
+ * - Stateful blocks call lower() with existingOutputs to generate state writes
+ * - Non-stateful blocks call lower() normally (inputs now available)
+ *
+ * @param scc - The strongly connected component (cycle)
+ * @param blocks - All blocks in the patch
+ * @param edges - All edges in the patch
+ * @param builder - IRBuilder for emitting IR
+ * @param errors - Error accumulator
+ * @param blockOutputs - Map of block outputs (populated in-place)
+ * @param blockIdToIndex - Map from block ID to block index
+ * @param instanceContextByBlock - Map from block index to instance context
+ * @param portTypes - Resolved port types from pass1
+ * @param options - Event emission options
+ */
+function lowerSCCTwoPass(
+  scc: SCC,
+  blocks: readonly Block[],
+  edges: readonly NormalizedEdge[],
+  builder: IRBuilder,
+  errors: CompileError[],
+  blockOutputs: Map<BlockIndex, Map<string, ValueRefPacked>>,
+  blockIdToIndex: Map<string, BlockIndex>,
+  instanceContextByBlock: Map<BlockIndex, InstanceId>,
+  portTypes: ReadonlyMap<PortKey, SignalType>,
+  options?: Pass6Options
+): void {
+  // Storage for phase 1 results
+  const phase1Results = new Map<BlockIndex, Partial<LowerResult>>();
+
+  // Pass 1: Generate outputs for stateful blocks with lowerOutputsOnly
+  for (const node of scc.nodes) {
+    if (node.kind !== "BlockEval") continue;
+
+    const blockIndex = node.blockIndex;
+    const block = blocks[blockIndex];
+    if (!block) continue;
+
+    const blockDef = getBlockDefinition(block.type);
+    if (!blockDef) continue;
+
+    // Only process stateful blocks with lowerOutputsOnly
+    if (blockDef.isStateful && hasLowerOutputsOnly(blockDef)) {
+      builder.setCurrentBlockId(block.id);
+
+      try {
+        // Build lowering context (similar to lowerBlockInstance but no input resolution)
+        const ctx: LowerCtx = {
+          blockIdx: blockIndex,
+          blockType: block.type,
+          instanceId: block.id,
+          label: block.label,
+          inTypes: Object.keys(blockDef.inputs)
+            .filter(portName => blockDef.inputs[portName].exposedAsPort !== false)
+            .map(portName => portTypes?.get(portKey(blockIndex, portName, 'in')))
+            .filter((t): t is SignalType => t !== undefined),
+          outTypes: Object.keys(blockDef.outputs)
+            .map(portName => portTypes?.get(portKey(blockIndex, portName, 'out')))
+            .filter((t): t is SignalType => t !== undefined),
+          b: builder,
+          seedConstId: 0,
+        };
+
+        const config = block.params;
+
+        // Call lowerOutputsOnly
+        const partialResult = blockDef.lowerOutputsOnly!({ ctx, config });
+
+        // Store partial result for phase 2
+        phase1Results.set(blockIndex, partialResult);
+
+        // Register outputs in blockOutputs (making them available to other blocks)
+        if (partialResult.outputsById) {
+          const outputRefs = new Map<string, ValueRefPacked>();
+          for (const [portId, ref] of Object.entries(partialResult.outputsById)) {
+            // Register slot types
+            if (ref.k === 'sig') {
+              if (ref.stride === 1) {
+                builder.registerSigSlot(ref.id, ref.slot);
+              }
+              builder.registerSlotType(ref.slot, ref.type);
+            } else if (ref.k === 'field') {
+              builder.registerFieldSlot(ref.id, ref.slot);
+              builder.registerSlotType(ref.slot, ref.type);
+            }
+            outputRefs.set(portId, ref);
+          }
+          blockOutputs.set(blockIndex, outputRefs);
+        }
+      } catch (error) {
+        errors.push({
+          code: "NotImplemented",
+          message: `Phase 1 lowering failed for "${block.type}": ${error instanceof Error ? error.message : String(error)}`,
+          where: { blockId: block.id },
+        });
+      }
+    }
+  }
+
+  // Pass 2: Full lowering for all blocks
+  for (const node of scc.nodes) {
+    if (node.kind !== "BlockEval") continue;
+
+    const blockIndex = node.blockIndex;
+    const block = blocks[blockIndex];
+    if (!block) continue;
+
+    builder.setCurrentBlockId(block.id);
+
+    // Get existing outputs from phase 1 (if any)
+    const existingOutputs = phase1Results.get(blockIndex);
+
+    // Lower this block instance
+    const outputRefs = lowerBlockInstance(
+      block,
+      blockIndex,
+      builder,
+      errors,
+      edges,
+      blocks,
+      blockOutputs,
+      blockIdToIndex,
+      instanceContextByBlock,
+      portTypes,
+      existingOutputs
+    );
+
+    // Update blockOutputs (may overwrite phase 1 results, but should be identical)
+    if (outputRefs.size > 0) {
+      blockOutputs.set(blockIndex, outputRefs);
+    }
+
+    // Emit BlockLowered event
+    if (options?.events) {
+      const instanceContext = instanceContextByBlock.get(blockIndex);
+      const instanceCount = block.type === 'Array'
+        ? (block.params.count as number | undefined)
+        : undefined;
+
+      options.events.emit({
+        type: 'BlockLowered',
+        compileId: options.compileId || 'unknown',
+        patchRevision: options.patchRevision || 0,
+        blockId: block.id,
+        blockType: block.type,
+        instanceId: instanceContext,
+        instanceCount,
+      });
+    }
+  }
+}
+
+// =============================================================================
 // Pass 6 Implementation
 // =============================================================================
 
@@ -501,6 +698,11 @@ function lowerBlockInstance(
  * Instance Context Propagation:
  * - Tracks instanceContext returned by blocks (e.g., Array)
  * - Propagates to downstream blocks via ctx.inferredInstance
+ *
+ * Two-Pass Lowering for Feedback Loops:
+ * - Non-trivial SCCs (cycles) use two-pass lowering
+ * - Stateful blocks with lowerOutputsOnly generate outputs first (phase 1)
+ * - All blocks then perform full lowering with inputs available (phase 2)
  *
  * Input: Validated dependency graph + blocks array + edges
  * Output: UnlinkedIRFragments with IR nodes
@@ -534,61 +736,81 @@ export function pass6BlockLowering(
   // so we reverse them to process dependencies before dependents
   const orderedSccs = [...validated.sccs].reverse();
   for (const scc of orderedSccs) {
-    for (const node of scc.nodes) {
-      if (node.kind !== "BlockEval") {
-        continue; // Skip non-block nodes
-      }
+    // Check if this SCC is non-trivial (contains a cycle)
+    const isNonTrivial = isNonTrivialSCC(scc, validated.graph);
 
-      const blockIndex = node.blockIndex;
-      const block = blocks[blockIndex];
-
-      if (block === undefined) {
-        errors.push({
-          code: "BlockMissing",
-          message: `Block index ${blockIndex} out of bounds`,
-        });
-        continue;
-      }
-
-      // Set current block ID for debug index tracking (Phase 7)
-      builder.setCurrentBlockId(block.id);
-
-
-      // Lower this block instance
-      const outputRefs = lowerBlockInstance(
-        block,
-        blockIndex,
+    if (isNonTrivial) {
+      // Use two-pass lowering for cycles
+      lowerSCCTwoPass(
+        scc,
+        blocks,
+        edges,
         builder,
         errors,
-        edges,
-        blocks,
         blockOutputs,
         blockIdToIndex,
         instanceContextByBlock,
-        validated.portTypes
+        validated.portTypes,
+        options
       );
+    } else {
+      // Single-pass lowering for trivial SCCs (no cycles)
+      for (const node of scc.nodes) {
+        if (node.kind !== "BlockEval") {
+          continue; // Skip non-block nodes
+        }
 
-      if (outputRefs.size > 0) {
-        blockOutputs.set(blockIndex, outputRefs);
-      }
+        const blockIndex = node.blockIndex;
+        const block = blocks[blockIndex];
 
-      // Emit BlockLowered event if EventHub is available
-      if (options?.events) {
-        const instanceContext = instanceContextByBlock.get(blockIndex);
-        // For instance-creating blocks (Array), get the count from params
-        const instanceCount = block.type === 'Array'
-          ? (block.params.count as number | undefined)
-          : undefined;
+        if (block === undefined) {
+          errors.push({
+            code: "BlockMissing",
+            message: `Block index ${blockIndex} out of bounds`,
+          });
+          continue;
+        }
 
-        options.events.emit({
-          type: 'BlockLowered',
-          compileId: options.compileId || 'unknown',
-          patchRevision: options.patchRevision || 0,
-          blockId: block.id,
-          blockType: block.type,
-          instanceId: instanceContext,
-          instanceCount,
-        });
+        // Set current block ID for debug index tracking (Phase 7)
+        builder.setCurrentBlockId(block.id);
+
+
+        // Lower this block instance
+        const outputRefs = lowerBlockInstance(
+          block,
+          blockIndex,
+          builder,
+          errors,
+          edges,
+          blocks,
+          blockOutputs,
+          blockIdToIndex,
+          instanceContextByBlock,
+          validated.portTypes
+        );
+
+        if (outputRefs.size > 0) {
+          blockOutputs.set(blockIndex, outputRefs);
+        }
+
+        // Emit BlockLowered event if EventHub is available
+        if (options?.events) {
+          const instanceContext = instanceContextByBlock.get(blockIndex);
+          // For instance-creating blocks (Array), get the count from params
+          const instanceCount = block.type === 'Array'
+            ? (block.params.count as number | undefined)
+            : undefined;
+
+          options.events.emit({
+            type: 'BlockLowered',
+            compileId: options.compileId || 'unknown',
+            patchRevision: options.patchRevision || 0,
+            blockId: block.id,
+            blockType: block.type,
+            instanceId: instanceContext,
+            instanceCount,
+          });
+        }
       }
     }
   }
