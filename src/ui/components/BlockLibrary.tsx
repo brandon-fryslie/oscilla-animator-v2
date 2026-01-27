@@ -14,12 +14,13 @@ import {
   getBlockTypesByCategory,
   type BlockDef,
 } from '../../blocks/registry';
+import { type CompositeBlockDef, isCompositeBlockDef } from '../../blocks/composite-types';
 import { useEditor } from '../editorCommon';
 import './BlockLibrary.css';
 
 // Type aliases for clarity
 type BlockCategory = string;
-type BlockTypeInfo = BlockDef;
+type BlockTypeInfo = BlockDef | CompositeBlockDef;
 
 // LocalStorage key for category collapse state
 const COLLAPSE_STATE_KEY = 'blockLibrary.collapsedCategories';
@@ -165,7 +166,7 @@ export const BlockLibrary: React.FC = observer(() => {
     return categories.filter(category => {
       const types = getBlockTypesByCategory(category);
       // Check if category has any non-timeRoot blocks
-      return types.some((t: BlockDef) => t.capability !== 'time');
+      return types.some((t: BlockTypeInfo) => t.capability !== 'time');
     });
   }, [categories]);
 
@@ -175,9 +176,9 @@ export const BlockLibrary: React.FC = observer(() => {
     filteredCategories.forEach((category: string) => {
       const types = getBlockTypesByCategory(category);
       // Filter out timeRoot blocks
-      const nonTimeRootTypes = types.filter((t: BlockDef) => t.capability !== 'time');
+      const nonTimeRootTypes = types.filter((t: BlockTypeInfo) => t.capability !== 'time');
       const filtered = debouncedSearchQuery
-        ? nonTimeRootTypes.filter((t: BlockDef) =>
+        ? nonTimeRootTypes.filter((t: BlockTypeInfo) =>
           t.type.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
           t.label.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
           (t.description?.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ?? false)
@@ -284,12 +285,12 @@ const BlockCategorySection: React.FC<BlockCategorySectionProps> = ({
 
   // Filter out timeRoot blocks (P5: TimeRoot Hidden)
   const nonTimeRootTypes = useMemo(() => {
-    return types.filter((t: BlockDef) => t.capability !== 'time');
+    return types.filter((t: BlockTypeInfo) => t.capability !== 'time');
   }, [types]);
 
   const filteredTypes = useMemo(() => {
     if (!searchQuery) return nonTimeRootTypes;
-    return nonTimeRootTypes.filter((t: BlockDef) =>
+    return nonTimeRootTypes.filter((t: BlockTypeInfo) =>
       t.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
       t.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (t.description?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false)
@@ -313,7 +314,7 @@ const BlockCategorySection: React.FC<BlockCategorySectionProps> = ({
 
       {!collapsed && (
         <div className="block-category__types">
-          {filteredTypes.map((type: BlockDef) => (
+          {filteredTypes.map((type: BlockTypeInfo) => (
             <BlockTypeItem
               key={type.type}
               type={type}
@@ -346,7 +347,29 @@ const BlockTypeItem: React.FC<BlockTypeItemProps> = ({
 }) => {
   const inputCount = Object.keys(type.inputs).length;
   const outputCount = Object.keys(type.outputs).length;
+  const isComposite = isCompositeBlockDef(type);
   const isPrimitive = type.form === 'primitive';
+
+  // For composites, check if it's readonly (library) or user-created
+  const isLibraryComposite = isComposite && type.readonly === true;
+  const isUserComposite = isComposite && !type.readonly;
+
+  // Determine badge appearance
+  let badgeText: string;
+  let badgeClass: string;
+  if (isLibraryComposite) {
+    badgeText = '🔒'; // Lock icon for library composites
+    badgeClass = 'block-type-item__badge--library';
+  } else if (isUserComposite) {
+    badgeText = '✏️'; // Edit icon for user composites
+    badgeClass = 'block-type-item__badge--user';
+  } else if (isPrimitive) {
+    badgeText = 'P';
+    badgeClass = 'block-type-item__badge--primitive';
+  } else {
+    badgeText = 'M';
+    badgeClass = 'block-type-item__badge--macro';
+  }
 
   const handleDragStart = useCallback(
     (e: React.DragEvent) => {
@@ -359,7 +382,7 @@ const BlockTypeItem: React.FC<BlockTypeItemProps> = ({
 
   return (
     <div
-      className="block-type-item"
+      className={`block-type-item ${isComposite ? 'block-type-item--composite' : ''}`}
       onClick={() => onClick(type)}
       onDoubleClick={() => onDoubleClick(type)}
       draggable
@@ -369,10 +392,8 @@ const BlockTypeItem: React.FC<BlockTypeItemProps> = ({
       <div className="block-type-item__info">
         <div className="block-type-item__header">
           <span className="block-type-item__label">{type.label}</span>
-          <span
-            className={`block-type-item__badge ${isPrimitive ? 'block-type-item__badge--primitive' : 'block-type-item__badge--macro'}`}
-          >
-            {isPrimitive ? 'P' : 'M'}
+          <span className={`block-type-item__badge ${badgeClass}`}>
+            {badgeText}
           </span>
         </div>
         <div className="block-type-item__meta">

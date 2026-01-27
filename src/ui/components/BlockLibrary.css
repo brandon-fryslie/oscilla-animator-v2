@@ -23,6 +23,7 @@
   --category-shape: #00bcd4;
   --category-time: #888888;
   --category-test: #888888;
+  --category-composite: #9c27b0; /* Purple for composites */
 
   /* Base colors */
   --bg-content: #0f0f23;
@@ -195,6 +196,7 @@
 .block-category[data-category="shape"] { --category-accent: var(--category-shape); }
 .block-category[data-category="time"] { --category-accent: var(--category-time); }
 .block-category[data-category="test"] { --category-accent: var(--category-test); }
+.block-category[data-category="composite"] { --category-accent: var(--category-composite); }
 
 .block-category__header {
   display: flex;
@@ -359,6 +361,27 @@
   background: rgba(249, 168, 38, 0.2);
   color: #f9a826;
   border: 1px solid rgba(249, 168, 38, 0.3);
+}
+
+/* Library composite badge (locked) */
+.block-type-item__badge--library {
+  background: rgba(156, 39, 176, 0.2);
+  color: #ce93d8;
+  border: 1px solid rgba(156, 39, 176, 0.3);
+  font-size: 0.625rem;
+}
+
+/* User composite badge (editable) */
+.block-type-item__badge--user {
+  background: rgba(46, 204, 113, 0.2);
+  color: #2ecc71;
+  border: 1px solid rgba(46, 204, 113, 0.3);
+  font-size: 0.625rem;
+}
+
+/* Composite item styling */
+.block-type-item--composite {
+  border-left: 2px solid rgba(156, 39, 176, 0.3);
 }
 
 /* Block metadata row (type, ports) */

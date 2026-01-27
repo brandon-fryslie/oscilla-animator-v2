@@ -10,7 +10,7 @@ import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '.
 import type { UIControlHint, DefaultSource } from '../types';
 import type { IRBuilder } from '../compiler/ir/IRBuilder';
 import type { BlockIndex } from '../graph/normalize';
-import type { InstanceId } from '../compiler/ir/Indices';
+import type { InstanceId, StateSlotId } from '../compiler/ir/Indices';
 import type { VarargConnection } from '../graph/Patch';
 
 // Re-export lowering types from compiler
@@ -63,6 +63,11 @@ export interface LowerArgs {
    */
   readonly varargInputsById?: Record<string, readonly import('../compiler/ir/lowerTypes').ValueRefPacked[]>;
   readonly config?: Readonly<Record<string, unknown>>;
+  /**
+   * Existing outputs from phase 1 (lowerOutputsOnly).
+   * Only populated when called as phase 2 of two-pass lowering.
+   */
+  readonly existingOutputs?: Partial<LowerResult>;
 }
 
 /**
@@ -78,6 +83,12 @@ export interface LowerResult {
    * to downstream blocks that need it (e.g., GridLayout, RenderInstances2D).
    */
   readonly instanceContext?: InstanceId;
+
+  /**
+   * State slot ID allocated in phase 1 (lowerOutputsOnly).
+   * Passed to phase 2 to ensure consistent state slot allocation.
+   */
+  readonly stateSlot?: StateSlotId;
 }
 
 // =============================================================================
@@ -353,10 +364,41 @@ export interface BlockDef {
   // IR lowering function
   readonly lower: (args: LowerArgs) => LowerResult;
 
+  /**
+   * Phase 1 lowering function for stateful blocks in feedback loops.
+   *
+   * This function generates ONLY the outputs (reading from state) without requiring
+   * inputs to be resolved. Used in two-pass lowering for non-trivial SCCs.
+   *
+   * Phase 1 responsibilities:
+   * - Allocate state slot(s)
+   * - Generate output ValueRefs (reading from previous frame's state)
+   * - Return outputs and state slot ID for phase 2
+   *
+   * Phase 2 (normal lower() function) responsibilities:
+   * - Reuse state slot from phase 1
+   * - Generate state write steps using resolved inputs
+   * - Return same outputs as phase 1
+   *
+   * Only required for stateful blocks where output does NOT depend on input
+   * within the same frame (e.g., UnitDelay, SampleAndHold).
+   *
+   * Blocks like Lag and Phasor where output depends on input within-frame
+   * do NOT benefit from this and should omit it.
+   */
+  readonly lowerOutputsOnly?: (args: { ctx: LowerCtx; config: Record<string, unknown> }) => Partial<LowerResult>;
+
   // Optional tags
   readonly tags?: {
     readonly irPortContract?: 'strict' | 'relaxed';
   };
+}
+
+/**
+ * Type guard to check if a block definition has lowerOutputsOnly.
+ */
+export function hasLowerOutputsOnly(blockDef: BlockDef): boolean {
+  return blockDef.lowerOutputsOnly !== undefined;
 }
 
 // =============================================================================
@@ -452,22 +494,31 @@ export function getAllBlockTypes(): readonly string[] {
 }
 
 /**
- * Get all unique block categories.
+ * Get all unique block categories (primitive and composite).
  */
 export function getBlockCategories(): readonly string[] {
   const categories = new Set<string>();
   for (const def of registry.values()) {
     categories.add(def.category);
   }
+  for (const def of compositeRegistry.values()) {
+    categories.add(def.category);
+  }
   return Array.from(categories).sort();
 }
 
 /**
- * Get all block types in a given category.
+ * Get all block types in a given category (primitive and composite).
+ * Returns BlockDef for primitives and CompositeBlockDef for composites.
  */
-export function getBlockTypesByCategory(category: string): readonly BlockDef[] {
-  const blocks: BlockDef[] = [];
+export function getBlockTypesByCategory(category: string): readonly (BlockDef | CompositeBlockDef)[] {
+  const blocks: (BlockDef | CompositeBlockDef)[] = [];
   for (const def of registry.values()) {
+    if (def.category === category) {
+      blocks.push(def);
+    }
+  }
+  for (const def of compositeRegistry.values()) {
     if (def.category === category) {
       blocks.push(def);
     }

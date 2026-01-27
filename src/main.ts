@@ -29,6 +29,7 @@ import {
   createAnimationLoopState,
   type AnimationLoopState,
 } from './services/AnimationLoop';
+import { initializeComposites } from './blocks/composites';
 
 // =============================================================================
 // Global State
@@ -210,6 +211,9 @@ async function initializeRuntime(rootStore: RootStore) {
  */
 async function main() {
   try {
+    // Initialize composite block system (library + user composites)
+    initializeComposites();
+
     // Get app container
     const appContainer = document.getElementById('app-container');
     if (!appContainer) {
