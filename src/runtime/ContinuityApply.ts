@@ -310,11 +310,9 @@ export function applyContinuity(
   // (existingTargetState.count !== bufferLength), because getOrCreateTargetState
   // will allocate new buffers and zero them out
   let oldSlewSnapshot: Float32Array | null = null;
-  let oldGaugeSnapshot: Float32Array | null = null;
   if (hadPreviousState && existingTargetState!.count !== bufferLength) {
     // Buffer size change - save old values before they're overwritten by getOrCreateTargetState
     oldSlewSnapshot = new Float32Array(existingTargetState!.slewBuffer);
-    oldGaugeSnapshot = new Float32Array(existingTargetState!.gaugeBuffer);
   }
 
   // Get or create continuity state for this target
@@ -353,7 +351,7 @@ export function applyContinuity(
   // Crossfade handles its own initialization differently
   if (state.continuity.domainChangeThisFrame && policy.kind !== 'crossfade') {
     // Use pre-captured snapshots (from before getOrCreateTargetState zeroed buffers)
-    // If count didn't change, oldSlewSnapshot/oldGaugeSnapshot are null, use current targetState
+    // If count didn't change, oldSlewSnapshot is null, use current targetState
     const oldEffective = oldSlewSnapshot ?? (
       targetState.slewBuffer.length > 0 && targetState.slewBuffer.length <= bufferLength
         ? new Float32Array(targetState.slewBuffer)
