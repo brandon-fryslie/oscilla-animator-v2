@@ -279,6 +279,16 @@ export class IRBuilderImpl implements IRBuilder {
     return id;
   }
 
+  fieldPathDerivative(
+    input: FieldExprId,
+    operation: 'tangent' | 'arcLength',
+    type: SignalType
+  ): FieldExprId {
+    const id = fieldExprId(this.fieldExprs.length);
+    this.fieldExprs.push({ kind: 'pathDerivative', input, operation, type });
+    return id;
+  }
+
   // =========================================================================
   // Instance Inference
   // =========================================================================
@@ -309,6 +319,8 @@ export class IRBuilderImpl implements IRBuilder {
         return expr.instanceId ?? this.inferZipInstance(expr.inputs);
       case 'zipSig':
         return expr.instanceId ?? this.inferFieldInstance(expr.field);
+      case 'pathDerivative':
+        return this.inferFieldInstance(expr.input);
       case 'broadcast':
       case 'const':
         return undefined; // Truly instance-agnostic

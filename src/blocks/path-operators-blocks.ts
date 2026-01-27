@@ -19,18 +19,34 @@ import { defaultSourceConst } from '../types';
  * PathField - Extract per-point properties from path control points
  *
  * Takes a path's control points field and exposes the control points
- * along with computed per-point properties (index).
+ * along with computed per-point properties (index, tangent, arc length).
  * All outputs are over the DOMAIN_CONTROL domain (one value per control point).
  *
  * Outputs:
  * - position: Field<vec2> - control point positions (pass-through)
  * - index: Field<int> - control point index
+ * - tangent: Field<vec2> - tangent direction at each point (MVP: polygonal paths)
+ * - arcLength: Field<float> - cumulative arc length from first point
  *
- * Future enhancements (not in MVP):
- * - tangent: Field<vec2> - tangent direction at each point
- * - arcLength: Field<float> - cumulative arc length (0 to 1 normalized)
+ * MVP Limitations (Phase 1):
+ * - Tangent assumes straight-line segments (polygonal paths)
+ *   - Uses central difference: tangent[i] = (point[i+1] - point[i-1]) / 2
+ *   - Exact for polygonal paths, linear approximation for bezier curves
+ * - Arc length computed as cumulative Euclidean distance
+ *   - Exact for polygonal paths, approximation for bezier curves
+ * - Assumes closed path (tangent at endpoints wraps around)
+ * - Tangent magnitude varies with point spacing
  *
- * Note: This block operates on the controlPoints output from ProceduralPolygon/Star.
+ * Phase 2 Enhancements (Future):
+ * - Accurate tangent for bezier curves (requires topology access)
+ * - Accurate arc length via numerical integration
+ * - Support for open (non-closed) paths
+ * - Curvature computation
+ *
+ * Use Cases This Supports:
+ * - Tangent visualization on ProceduralPolygon/Star
+ * - Arc length for uniform speed along polygons
+ * - Control point debugging via tangent vectors
  *
  * Example usage:
  * ```
@@ -38,13 +54,15 @@ import { defaultSourceConst } from '../types';
  * fields = PathField(controlPoints=polygon.controlPoints)
  * // fields.position contains the 5 vertex positions
  * // fields.index contains 0, 1, 2, 3, 4
+ * // fields.tangent contains tangent directions (polygonal approximation)
+ * // fields.arcLength contains cumulative distances [0, d1, d1+d2, ...]
  * ```
  */
 registerBlock({
   type: 'PathField',
   label: 'Path Field',
   category: 'shape',
-  description: 'Extract per-point properties from path control points',
+  description: 'Extract per-point properties from path control points (MVP: polygonal paths)',
   form: 'primitive',
   capability: 'pure',
   cardinality: {
@@ -61,6 +79,8 @@ registerBlock({
   outputs: {
     position: { label: 'Position', type: signalTypeField(VEC2, 'control') },
     index: { label: 'Index', type: signalTypeField(INT, 'control') },
+    tangent: { label: 'Tangent', type: signalTypeField(VEC2, 'control') },
+    arcLength: { label: 'Arc Length', type: signalTypeField(FLOAT, 'absolute') },
   },
   lower: ({ ctx, inputsById }) => {
     const controlPointsInput = inputsById.controlPoints;
@@ -88,15 +108,36 @@ registerBlock({
       signalTypeField(INT, 'control')
     );
 
+    // Create tangent field (MVP: polygonal paths, linear approximation)
+    const tangentField = ctx.b.fieldPathDerivative(
+      controlPointsFieldId,
+      'tangent',
+      signalTypeField(VEC2, 'control')
+    );
+
+    // Create arc length field (MVP: cumulative Euclidean distance)
+    const arcLengthField = ctx.b.fieldPathDerivative(
+      controlPointsFieldId,
+      'arcLength',
+      signalTypeField(FLOAT, 'absolute')
+    );
+
     const posSlot = ctx.b.allocSlot();
     const idxSlot = ctx.b.allocSlot();
+    const tanSlot = ctx.b.allocSlot();
+    const arcSlot = ctx.b.allocSlot();
+
     const posType = ctx.outTypes[0];
     const idxType = ctx.outTypes[1];
+    const tanType = ctx.outTypes[2];
+    const arcType = ctx.outTypes[3];
 
     return {
       outputsById: {
         position: { k: 'field', id: positionFieldId, slot: posSlot, type: posType, stride: strideOf(posType.payload) },
         index: { k: 'field', id: indexField, slot: idxSlot, type: idxType, stride: strideOf(idxType.payload) },
+        tangent: { k: 'field', id: tangentField, slot: tanSlot, type: tanType, stride: strideOf(tanType.payload) },
+        arcLength: { k: 'field', id: arcLengthField, slot: arcSlot, type: arcType, stride: strideOf(arcType.payload) },
       },
     };
   },

@@ -113,6 +113,27 @@ export interface IRBuilder {
     type: SignalType
   ): FieldExprId;
 
+  /**
+   * Create a path derivative field expression.
+   * Computes tangent or arc length from path control points.
+   *
+   * MVP Scope: Polygonal paths only (linear approximation).
+   * - tangent: Central difference between adjacent points (assumes closed path)
+   * - arcLength: Cumulative Euclidean distance from first point
+   *
+   * Instance binding: Inherited from input field (same instance as control points).
+   *
+   * @param input - Field expression for control points (typically vec2 field)
+   * @param operation - Derivative operation: 'tangent' or 'arcLength'
+   * @param type - Signal type for the result (vec2 for tangent, float for arcLength)
+   * @returns FieldExprId for the derivative field
+   */
+  fieldPathDerivative(
+    input: FieldExprId,
+    operation: 'tangent' | 'arcLength',
+    type: SignalType
+  ): FieldExprId;
+
   // =========================================================================
   // Event Expressions
   // =========================================================================

@@ -395,6 +395,26 @@ function fillBuffer(
       break;
     }
 
+    case 'pathDerivative': {
+      // Path derivative: compute tangent or arc length from control points
+      const inputBuffer = materialize(
+        expr.input,
+        instance.id,
+        fields,
+        signals,
+        instances,
+        state,
+        pool
+      );
+      
+      if (expr.operation === 'tangent') {
+        fillBufferTangent(buffer as Float32Array, inputBuffer as Float32Array, N);
+      } else if (expr.operation === 'arcLength') {
+        fillBufferArcLength(buffer as Float32Array, inputBuffer as Float32Array, N);
+      }
+      break;
+    }
+
     default: {
       const _exhaustive: never = expr;
       throw new Error(`Unknown field expr kind: ${(_exhaustive as FieldExpr).kind}`);
@@ -574,3 +594,99 @@ function hashToFloat01(str: string): number {
   const t = (h * 12.9898 + 78.233) * 43758.5453;
   return t - Math.floor(t);
 }
+// ==============================================================================
+// Path Derivative Helpers (Task 4h6 - MVP: Polygonal paths only)
+// ==============================================================================
+
+/**
+ * Fill buffer with tangent vectors using central difference.
+ * 
+ * MVP Scope: Polygonal paths (linear approximation).
+ * For a closed path with N control points:
+ *   tangent[i] = (point[i+1] - point[i-1]) / 2
+ * 
+ * Edge cases:
+ * - Single point (N=1): tangent = (0, 0)
+ * - Two points (N=2): tangent computed with wrapping
+ * - Assumes closed path (wraps at boundaries)
+ * 
+ * @param out - Output buffer for tangent vectors (vec2, length N*2)
+ * @param input - Input buffer for control points (vec2, length N*2)
+ * @param N - Number of points (not components)
+ */
+function fillBufferTangent(
+  out: Float32Array,
+  input: Float32Array,
+  N: number
+): void {
+  if (N === 0) return;
+  
+  if (N === 1) {
+    // Single point: no tangent
+    out[0] = 0;
+    out[1] = 0;
+    return;
+  }
+  
+  // Central difference for each point
+  // For closed path: [P0, P1, ..., PN-1] where PN wraps to P0
+  for (let i = 0; i < N; i++) {
+    const prevIdx = (i - 1 + N) % N;  // Wrap around for closed path
+    const nextIdx = (i + 1) % N;
+    
+    const prevX = input[prevIdx * 2];
+    const prevY = input[prevIdx * 2 + 1];
+    const nextX = input[nextIdx * 2];
+    const nextY = input[nextIdx * 2 + 1];
+    
+    // Central difference: (next - prev) / 2
+    out[i * 2] = (nextX - prevX) / 2;
+    out[i * 2 + 1] = (nextY - prevY) / 2;
+  }
+}
+
+/**
+ * Fill buffer with cumulative arc length.
+ * 
+ * MVP Scope: Polygonal paths (Euclidean distance between consecutive points).
+ * For N control points:
+ *   arcLength[0] = 0
+ *   arcLength[i] = arcLength[i-1] + ||point[i] - point[i-1]||
+ * 
+ * Edge cases:
+ * - Single point (N=1): arcLength = [0]
+ * - Returns monotonically increasing values
+ * 
+ * @param out - Output buffer for arc lengths (float, length N)
+ * @param input - Input buffer for control points (vec2, length N*2)
+ * @param N - Number of points
+ */
+function fillBufferArcLength(
+  out: Float32Array,
+  input: Float32Array,
+  N: number
+): void {
+  if (N === 0) return;
+  
+  out[0] = 0;
+  
+  if (N === 1) return;
+  
+  let totalDistance = 0;
+  
+  // Sum segment distances from point 0 to point i
+  for (let i = 1; i < N; i++) {
+    const prevX = input[(i - 1) * 2];
+    const prevY = input[(i - 1) * 2 + 1];
+    const currX = input[i * 2];
+    const currY = input[i * 2 + 1];
+    
+    const dx = currX - prevX;
+    const dy = currY - prevY;
+    const segmentLength = Math.sqrt(dx * dx + dy * dy);
+    totalDistance += segmentLength;
+    
+    out[i] = totalDistance;
+  }
+}
+

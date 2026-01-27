@@ -185,7 +185,8 @@ export type FieldExpr =
   | FieldExprZip
   | FieldExprZipSig
   | FieldExprArray
-  | FieldExprStateRead;
+  | FieldExprStateRead
+  | FieldExprPathDerivative;
 
 export interface FieldExprConst {
   readonly kind: 'const';
@@ -249,6 +250,23 @@ export interface FieldExprStateRead {
   readonly kind: 'stateRead';
   readonly stateSlot: StateSlotId;
   readonly instanceId: InstanceId;
+  readonly type: SignalType;
+}
+
+/**
+ * Path derivative field expression.
+ * Computes tangent or arc length from path control points.
+ *
+ * MVP Scope: Polygonal paths only (linear approximation).
+ * - tangent: Central difference between adjacent points
+ * - arcLength: Cumulative Euclidean distance
+ *
+ * Phase 2: Will add bezier curve support via topology access.
+ */
+export interface FieldExprPathDerivative {
+  readonly kind: 'pathDerivative';
+  readonly input: FieldExprId;
+  readonly operation: 'tangent' | 'arcLength';
   readonly type: SignalType;
 }
 
