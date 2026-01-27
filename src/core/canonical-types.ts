@@ -354,25 +354,6 @@ export function getAxisValue<T>(tag: AxisTag<T>, defaultValue: T): T {
 // =============================================================================
 
 /**
- * Re-export domain registry types.
- * These define the domain TYPE system (shape, circle, control, event).
- */
-export type { DomainTypeId, InstanceId, IntrinsicSpec, DomainType } from './domain-registry';
-export {
-  domainTypeId,
-  instanceId,
-  DOMAIN_SHAPE,
-  DOMAIN_CIRCLE,
-  DOMAIN_RECTANGLE,
-  DOMAIN_CONTROL,
-  DOMAIN_EVENT,
-  getDomainType,
-  isSubdomainOf,
-  getIntrinsics,
-  hasIntrinsic,
-} from './domain-registry';
-
-/**
  * Reference to a specific instance.
  * Instances are configurations of domain types (count, layout, lifecycle).
  */

@@ -24,15 +24,12 @@ describe('ContinuityMapping', () => {
       const new_ = createStableDomainInstance(11);
       const mapping = buildMappingById(old, new_);
 
-      expect(mapping.kind).toBe('byId');
-      if (mapping.kind === 'byId') {
-        // 0-9 map to themselves
-        for (let i = 0; i < 10; i++) {
-          expect(mapping.newToOld[i]).toBe(i);
-        }
-        // 10 is new (unmapped)
-        expect(mapping.newToOld[10]).toBe(-1);
+      // 0-9 map to themselves
+      for (let i = 0; i < 10; i++) {
+        expect(mapping.newToOld[i]).toBe(i);
       }
+      // 10 is new (unmapped)
+      expect(mapping.newToOld[10]).toBe(-1);
     });
 
     it('maps 11→10 correctly (remove one element)', () => {
@@ -40,21 +37,19 @@ describe('ContinuityMapping', () => {
       const new_ = createStableDomainInstance(10);
       const mapping = buildMappingById(old, new_);
 
-      expect(mapping.kind).toBe('byId');
-      if (mapping.kind === 'byId') {
-        // 0-9 map to themselves
-        for (let i = 0; i < 10; i++) {
-          expect(mapping.newToOld[i]).toBe(i);
-        }
+      // 0-9 map to themselves
+      for (let i = 0; i < 10; i++) {
+        expect(mapping.newToOld[i]).toBe(i);
       }
     });
 
-    it('returns identity for unchanged domain', () => {
+    it('returns identity mapping for unchanged domain', () => {
       const domain = createStableDomainInstance(10);
       const mapping = buildMappingById(domain, domain);
-      expect(mapping.kind).toBe('identity');
-      if (mapping.kind === 'identity') {
-        expect(mapping.count).toBe(10);
+      // Identity: newToOld[i] === i
+      expect(mapping.newToOld.length).toBe(10);
+      for (let i = 0; i < 10; i++) {
+        expect(mapping.newToOld[i]).toBe(i);
       }
     });
 
@@ -72,16 +67,13 @@ describe('ContinuityMapping', () => {
       const new_ = createStableDomainInstance(15, 100);
 
       const mapping = buildMappingById(old, new_);
-      expect(mapping.kind).toBe('byId');
-      if (mapping.kind === 'byId') {
-        // First 10 should map
-        for (let i = 0; i < 10; i++) {
-          expect(mapping.newToOld[i]).toBe(i);
-        }
-        // Last 5 are new (unmapped)
-        for (let i = 10; i < 15; i++) {
-          expect(mapping.newToOld[i]).toBe(-1);
-        }
+      // First 10 should map
+      for (let i = 0; i < 10; i++) {
+        expect(mapping.newToOld[i]).toBe(i);
+      }
+      // Last 5 are new (unmapped)
+      for (let i = 10; i < 15; i++) {
+        expect(mapping.newToOld[i]).toBe(-1);
       }
     });
 
@@ -92,12 +84,9 @@ describe('ContinuityMapping', () => {
       const new_ = createStableDomainInstance(10, 1000);
 
       const mapping = buildMappingById(old, new_);
-      expect(mapping.kind).toBe('byId');
-      if (mapping.kind === 'byId') {
-        // All should be unmapped
-        for (let i = 0; i < 10; i++) {
-          expect(mapping.newToOld[i]).toBe(-1);
-        }
+      // All should be unmapped
+      for (let i = 0; i < 10; i++) {
+        expect(mapping.newToOld[i]).toBe(-1);
       }
     });
   });
@@ -121,11 +110,8 @@ describe('ContinuityMapping', () => {
       };
 
       const mapping = buildMappingByPosition(old, new_, 0.5);
-      expect(mapping.kind).toBe('byPosition');
-      if (mapping.kind === 'byPosition') {
-        expect(mapping.newToOld[0]).toBe(0); // (0.1,0.1) → (0,0)
-        expect(mapping.newToOld[1]).toBe(1); // (0.9,0.9) → (1,1)
-      }
+      expect(mapping.newToOld[0]).toBe(0); // (0.1,0.1) → (0,0)
+      expect(mapping.newToOld[1]).toBe(1); // (0.9,0.9) → (1,1)
     });
 
     it('returns -1 for elements outside search radius', () => {
@@ -146,9 +132,7 @@ describe('ContinuityMapping', () => {
       };
 
       const mapping = buildMappingByPosition(old, new_, 0.5);
-      if (mapping.kind === 'byPosition') {
-        expect(mapping.newToOld[0]).toBe(-1);
-      }
+      expect(mapping.newToOld[0]).toBe(-1);
     });
 
     it('prevents double-mapping (each old element used once)', () => {
@@ -171,12 +155,10 @@ describe('ContinuityMapping', () => {
       };
 
       const mapping = buildMappingByPosition(old, new_, 0.5);
-      if (mapping.kind === 'byPosition') {
-        // First element maps to old[0]
-        expect(mapping.newToOld[0]).toBe(0);
-        // Second element can't map (old[0] already used)
-        expect(mapping.newToOld[1]).toBe(-1);
-      }
+      // First element maps to old[0]
+      expect(mapping.newToOld[0]).toBe(0);
+      // Second element can't map (old[0] already used)
+      expect(mapping.newToOld[1]).toBe(-1);
     });
 
     it('throws if posHintXY missing', () => {
@@ -211,7 +193,11 @@ describe('ContinuityMapping', () => {
       const prevDomains = new Map<string, DomainInstance>([['inst1', domain]]);
       const result = detectDomainChange('inst1', domain, prevDomains);
       expect(result.changed).toBe(false);
-      expect(result.mapping?.kind).toBe('identity');
+      // Identity mapping: newToOld[i] === i
+      expect(result.mapping).not.toBeNull();
+      for (let i = 0; i < 10; i++) {
+        expect(result.mapping!.newToOld[i]).toBe(i);
+      }
     });
 
     it('returns mapping for count change (stable domains)', () => {
@@ -222,7 +208,11 @@ describe('ContinuityMapping', () => {
       const result = detectDomainChange('inst1', new_, prevDomains);
       expect(result.changed).toBe(true);
       expect(result.mapping).not.toBeNull();
-      expect(result.mapping?.kind).toBe('byId');
+      // First 10 map to themselves, 11th is new
+      for (let i = 0; i < 10; i++) {
+        expect(result.mapping!.newToOld[i]).toBe(i);
+      }
+      expect(result.mapping!.newToOld[10]).toBe(-1);
     });
 
     it('returns null mapping for unstable domains without posHint', () => {
@@ -235,7 +225,9 @@ describe('ContinuityMapping', () => {
       expect(result.mapping).toBeNull();
     });
 
-    it('uses byPosition for unstable domains with posHint', () => {
+    it('uses position mapping for unstable domains with posHint', () => {
+      // Offsets must be within default radius (0.1)
+      // sqrt(0.05^2 + 0.05^2) ≈ 0.07 < 0.1
       const old: DomainInstance = {
         count: 2,
         elementId: new Uint32Array(0),
@@ -246,48 +238,43 @@ describe('ContinuityMapping', () => {
         count: 2,
         elementId: new Uint32Array(0),
         identityMode: 'none',
-        posHintXY: new Float32Array([0.1, 0.1, 0.9, 0.9]),
+        posHintXY: new Float32Array([0.05, 0.05, 0.95, 0.95]),
       };
       const prevDomains = new Map<string, DomainInstance>([['inst1', old]]);
 
       const result = detectDomainChange('inst1', new_, prevDomains);
       expect(result.changed).toBe(true);
-      expect(result.mapping?.kind).toBe('byPosition');
+      expect(result.mapping).not.toBeNull();
+      // Should have mapped by position
+      expect(result.mapping!.newToOld[0]).toBe(0);
+      expect(result.mapping!.newToOld[1]).toBe(1);
     });
   });
 
   describe('countMappedElements', () => {
     it('counts identity mapping correctly', () => {
-      const counts = countMappedElements({ kind: 'identity', count: 10 });
+      const newToOld = new Int32Array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+      const counts = countMappedElements({ newToOld });
       expect(counts.mapped).toBe(10);
       expect(counts.unmapped).toBe(0);
     });
 
-    it('counts byId mapping correctly', () => {
-      const mapping = {
-        kind: 'byId' as const,
-        newToOld: new Int32Array([0, 1, -1, 3, -1]),
-      };
+    it('counts mixed mapping correctly', () => {
+      const mapping = { newToOld: new Int32Array([0, 1, -1, 3, -1]) };
       const counts = countMappedElements(mapping);
       expect(counts.mapped).toBe(3);
       expect(counts.unmapped).toBe(2);
     });
 
     it('counts all mapped', () => {
-      const mapping = {
-        kind: 'byId' as const,
-        newToOld: new Int32Array([0, 1, 2]),
-      };
+      const mapping = { newToOld: new Int32Array([0, 1, 2]) };
       const counts = countMappedElements(mapping);
       expect(counts.mapped).toBe(3);
       expect(counts.unmapped).toBe(0);
     });
 
     it('counts all unmapped', () => {
-      const mapping = {
-        kind: 'byId' as const,
-        newToOld: new Int32Array([-1, -1, -1]),
-      };
+      const mapping = { newToOld: new Int32Array([-1, -1, -1]) };
       const counts = countMappedElements(mapping);
       expect(counts.mapped).toBe(0);
       expect(counts.unmapped).toBe(3);

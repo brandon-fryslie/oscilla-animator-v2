@@ -59,14 +59,14 @@ export interface IRBuilder {
    * @param topologyId - Numeric topology identifier (e.g., TOPOLOGY_ID_ELLIPSE, TOPOLOGY_ID_RECT)
    * @param paramSignals - Signal IDs for each topology parameter
    * @param type - Signal type (should be signalType(SHAPE))
-   * @param controlPointField - Optional Field<vec2> for path control points
+   * @param controlPointField - Optional control point field with stride
    * @returns SigExprId for the shape reference
    */
   sigShapeRef(
     topologyId: TopologyId,
     paramSignals: readonly SigExprId[],
     type: SignalType,
-    controlPointField?: FieldExprId
+    controlPointField?: { id: FieldExprId; stride: number }
   ): SigExprId;
 
   // =========================================================================

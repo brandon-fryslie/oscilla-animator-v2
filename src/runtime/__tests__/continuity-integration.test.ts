@@ -67,16 +67,13 @@ describe('Continuity Integration', () => {
 
       // Build mapping
       const mapping = buildMappingById(domain10, domain11);
-      expect(mapping.kind).toBe('byId');
 
-      if (mapping.kind === 'byId') {
-        // Elements 0-9 map to themselves
-        for (let i = 0; i < 10; i++) {
-          expect(mapping.newToOld[i]).toBe(i);
-        }
-        // Element 10 is new (unmapped)
-        expect(mapping.newToOld[10]).toBe(-1);
+      // Elements 0-9 map to themselves
+      for (let i = 0; i < 10; i++) {
+        expect(mapping.newToOld[i]).toBe(i);
       }
+      // Element 10 is new (unmapped)
+      expect(mapping.newToOld[10]).toBe(-1);
 
       // New base values (would come from recalculation)
       const newBase11 = new Float32Array([
@@ -114,13 +111,10 @@ describe('Continuity Integration', () => {
 
       // Build mapping
       const mapping = buildMappingById(domain11, domain10);
-      expect(mapping.kind).toBe('byId');
 
-      if (mapping.kind === 'byId') {
-        // All 10 elements map to themselves
-        for (let i = 0; i < 10; i++) {
-          expect(mapping.newToOld[i]).toBe(i);
-        }
+      // All 10 elements map to themselves
+      for (let i = 0; i < 10; i++) {
+        expect(mapping.newToOld[i]).toBe(i);
       }
 
       // New base values
@@ -260,7 +254,11 @@ describe('Continuity Integration', () => {
       const result = detectDomainChange('inst1', domain, prevDomains);
 
       expect(result.changed).toBe(false);
-      expect(result.mapping?.kind).toBe('identity');
+      // Identity mapping: newToOld[i] === i
+      expect(result.mapping).not.toBeNull();
+      for (let i = 0; i < 10; i++) {
+        expect(result.mapping!.newToOld[i]).toBe(i);
+      }
     });
 
     it('detects count change and provides mapping', () => {
@@ -271,7 +269,15 @@ describe('Continuity Integration', () => {
       const result = detectDomainChange('inst1', new_, prevDomains);
 
       expect(result.changed).toBe(true);
-      expect(result.mapping?.kind).toBe('byId');
+      expect(result.mapping).not.toBeNull();
+      // First 10 map to themselves
+      for (let i = 0; i < 10; i++) {
+        expect(result.mapping!.newToOld[i]).toBe(i);
+      }
+      // Last 5 are new
+      for (let i = 10; i < 15; i++) {
+        expect(result.mapping!.newToOld[i]).toBe(-1);
+      }
     });
   });
 
@@ -297,11 +303,8 @@ describe('Continuity Integration', () => {
 
       const mapping = buildMappingByPosition(oldDomain, newDomain, 0.2);
 
-      expect(mapping.kind).toBe('byPosition');
-      if (mapping.kind === 'byPosition') {
-        expect(mapping.newToOld[0]).toBe(0); // (0.05,0.05) → (0,0)
-        expect(mapping.newToOld[1]).toBe(1); // (0.95,0.95) → (1,1)
-      }
+      expect(mapping.newToOld[0]).toBe(0); // (0.05,0.05) → (0,0)
+      expect(mapping.newToOld[1]).toBe(1); // (0.95,0.95) → (1,1)
     });
   });
 
@@ -312,7 +315,7 @@ describe('Continuity Integration', () => {
 
       // Domain change: same count, different base values
       const newBase = new Float32Array([50, 150]);
-      const mapping: MappingState = { kind: 'identity', count: 2 };
+      const mapping: MappingState = { newToOld: new Int32Array([0, 1]) };
 
       // Initialize gauge to preserve effective values
       const gaugeBuffer = new Float32Array(2);
@@ -427,6 +430,7 @@ describe('Continuity Integration', () => {
         baseSlot: valueSlot(0),
         outputSlot: valueSlot(1),
         semantic: 'custom' as any,
+        stride: 1,
       };
 
       // First frame: domain change triggers crossfade start
@@ -483,6 +487,7 @@ describe('Continuity Integration', () => {
         baseSlot: valueSlot(0),
         outputSlot: valueSlot(1),
         semantic: 'custom' as any,
+        stride: 1,
       };
 
       // First frame at t=0 - triggers crossfade start
@@ -533,6 +538,7 @@ describe('Continuity Integration', () => {
         baseSlot: valueSlot(0),
         outputSlot: valueSlot(1),
         semantic: 'custom' as any,
+        stride: 1,
       };
 
       // First frame - no old buffer means instant transition to base

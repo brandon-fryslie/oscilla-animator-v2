@@ -55,7 +55,7 @@ describe('Expression Block Definition', () => {
     // Verify refs is a vararg port
     expect(def?.inputs.refs.isVararg).toBe(true);
     expect(def?.inputs.refs.varargConstraint).toBeDefined();
-    expect(def?.inputs.refs.varargConstraint?.payloadType).toBe('float');
+    expect(def?.inputs.refs.varargConstraint?.payloadType).toBe(FLOAT);
     expect(def?.inputs.refs.varargConstraint?.cardinalityConstraint).toBe('any');
   });
 

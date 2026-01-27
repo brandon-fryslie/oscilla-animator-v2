@@ -139,7 +139,7 @@ export class IRBuilderImpl implements IRBuilder {
     this.sigExprs.push({ kind: 'zip', inputs, fn, type });
     return id;
   }
-  sigShapeRef(topologyId: TopologyId, paramSignals: readonly SigExprId[], type: SignalType, controlPointField?: FieldExprId): SigExprId {
+  sigShapeRef(topologyId: TopologyId, paramSignals: readonly SigExprId[], type: SignalType, controlPointField?: { id: FieldExprId; stride: number }): SigExprId {
     const id = sigExprId(this.sigExprs.length);
     this.sigExprs.push({ kind: 'shapeRef', topologyId, paramSignals, controlPointField, type });
     return id;

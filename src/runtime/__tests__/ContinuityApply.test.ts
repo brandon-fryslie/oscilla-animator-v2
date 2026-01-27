@@ -97,7 +97,7 @@ describe('ContinuityApply', () => {
       const oldEffective = new Float32Array([5, 10, 15]);
       const newBase = new Float32Array([1, 2, 3]);
       const gaugeBuffer = new Float32Array(3);
-      const mapping: MappingState = { kind: 'identity', count: 3 };
+      const mapping: MappingState = { newToOld: new Int32Array([0, 1, 2]) };
 
       initializeGaugeOnDomainChange(oldEffective, newBase, gaugeBuffer, mapping, 3);
 
@@ -118,7 +118,6 @@ describe('ContinuityApply', () => {
       const newBase = new Float32Array([10, 20, 30, 40]);
       const gaugeBuffer = new Float32Array(4);
       const mapping: MappingState = {
-        kind: 'byId',
         newToOld: new Int32Array([0, 1, 2, -1]),
       };
 
@@ -137,7 +136,6 @@ describe('ContinuityApply', () => {
       const newBase = new Float32Array([5, 6, 7]);
       const gaugeBuffer = new Float32Array(3);
       const mapping: MappingState = {
-        kind: 'byPosition',
         newToOld: new Int32Array([1, 0, -1]), // Swapped positions
       };
 
@@ -272,7 +270,7 @@ describe('ContinuityApply', () => {
       const oldSlew = new Float32Array([5, 10, 15]);
       const newBase = new Float32Array([1, 2, 3]);
       const slewBuffer = new Float32Array(3);
-      const mapping: MappingState = { kind: 'identity', count: 3 };
+      const mapping: MappingState = { newToOld: new Int32Array([0, 1, 2]) };
 
       initializeSlewWithMapping(oldSlew, newBase, slewBuffer, mapping, 3);
 
@@ -286,7 +284,6 @@ describe('ContinuityApply', () => {
       const newBase = new Float32Array([1, 2, 3]);
       const slewBuffer = new Float32Array(3);
       const mapping: MappingState = {
-        kind: 'byId',
         newToOld: new Int32Array([1, 0, -1]),
       };
 
@@ -303,7 +300,6 @@ describe('ContinuityApply', () => {
       const newBase = new Float32Array([1, 2, 3, 4]);
       const slewBuffer = new Float32Array(4);
       const mapping: MappingState = {
-        kind: 'byId',
         newToOld: new Int32Array([0, 1, -1, -1]),
       };
 
@@ -322,7 +318,7 @@ describe('ContinuityApply', () => {
       const oldEffective = new Float32Array([100, 200, 300]);
       const newBase = new Float32Array([50, 150, 250]);
       const gaugeBuffer = new Float32Array(3);
-      const mapping: MappingState = { kind: 'identity', count: 3 };
+      const mapping: MappingState = { newToOld: new Int32Array([0, 1, 2]) };
 
       // Initialize gauge on domain change
       initializeGaugeOnDomainChange(oldEffective, newBase, gaugeBuffer, mapping, 3);

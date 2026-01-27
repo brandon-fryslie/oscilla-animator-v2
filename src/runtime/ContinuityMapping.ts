@@ -8,6 +8,10 @@
  * - byId: Primary mapping using stable elementIds (spec §3.4)
  * - byPosition: Fallback using spatial position hints (spec §3.5)
  *
+ * Both methods produce the same MappingState structure with a newToOld array.
+ * The `isIdentity` flag is set when the mapping is provably identity (same
+ * elements in same order), enabling a fast path in ContinuityApply.
+ *
  * Performance constraint: Mapping is computed ONLY when domain identity changed,
  * not every frame.
  *
@@ -39,12 +43,16 @@ export function buildMappingById(
     throw new Error('byId mapping requires stable identity mode');
   }
 
-  // Fast path: identical domains
+  // Fast path: identical domains - create identity array
   if (
     oldDomain.count === newDomain.count &&
     arraysEqual(oldDomain.elementId, newDomain.elementId)
   ) {
-    return { kind: 'identity', count: newDomain.count };
+    const newToOld = new Int32Array(newDomain.count);
+    for (let i = 0; i < newDomain.count; i++) {
+      newToOld[i] = i;
+    }
+    return { newToOld };
   }
 
   // Build hash map: oldId → oldIndex
@@ -60,7 +68,7 @@ export function buildMappingById(
     newToOld[i] = oldIdx !== undefined ? oldIdx : -1;
   }
 
-  return { kind: 'byId', newToOld };
+  return { newToOld };
 }
 
 /**
@@ -120,7 +128,7 @@ export function buildMappingByPosition(
     }
   }
 
-  return { kind: 'byPosition', newToOld };
+  return { newToOld };
 }
 
 /**
@@ -144,16 +152,20 @@ export function detectDomainChange(
     return { changed: true, mapping: null };
   }
 
-  // Check for identity (fast path)
+  // Check for identity (fast path) - no domain change if same elements in same order
   if (
     oldDomain.count === newDomain.count &&
     oldDomain.identityMode === 'stable' &&
     newDomain.identityMode === 'stable' &&
     arraysEqual(oldDomain.elementId, newDomain.elementId)
   ) {
+    const newToOld = new Int32Array(newDomain.count);
+    for (let i = 0; i < newDomain.count; i++) {
+      newToOld[i] = i;
+    }
     return {
       changed: false,
-      mapping: { kind: 'identity', count: newDomain.count },
+      mapping: { newToOld },
     };
   }
 
@@ -181,10 +193,6 @@ export function detectDomainChange(
 export function countMappedElements(
   mapping: MappingState
 ): { mapped: number; unmapped: number } {
-  if (mapping.kind === 'identity') {
-    return { mapped: mapping.count, unmapped: 0 };
-  }
-
   let mapped = 0;
   let unmapped = 0;
 

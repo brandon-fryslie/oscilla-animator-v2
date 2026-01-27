@@ -174,7 +174,6 @@ describe('Project Policy Domain Change', () => {
 
     // Mapping: elements 0-4 map to old 0-4, elements 5-6 are unmapped (-1)
     const mapping: MappingState = {
-      kind: 'byId',
       newToOld: new Int32Array([0, 1, 2, 3, 4, -1, -1]),
     };
 
@@ -285,7 +284,6 @@ describe('Project Policy Domain Change', () => {
 
     // Set up mapping
     const mapping: MappingState = {
-      kind: 'byId',
       newToOld: new Int32Array([0, 1, 2, -1]),
     };
     state.continuity.mappings.set('test_instance', mapping);
@@ -300,6 +298,7 @@ describe('Project Policy Domain Change', () => {
       baseSlot,
       outputSlot,
       semantic: 'position',
+      stride: 2,  // vec2 position
     };
 
     // Apply continuity
@@ -375,7 +374,6 @@ describe('Project Policy Domain Change', () => {
     ]);
 
     const mapping: MappingState = {
-      kind: 'byId',
       newToOld: new Int32Array([0, 1, 2]),
     };
 
@@ -492,7 +490,6 @@ describe('Project Policy Domain Change', () => {
       // Set up mapping if domain changed
       if (isDomainChange && newToOldMapping) {
         const mapping: MappingState = {
-          kind: 'byId',
           newToOld: newToOldMapping,
         };
         state.continuity.mappings.set(instanceId, mapping);
@@ -511,6 +508,7 @@ describe('Project Policy Domain Change', () => {
         baseSlot,
         outputSlot,
         semantic: 'position',
+        stride: 2,  // vec2 position
       };
 
       // Apply continuity
@@ -641,6 +639,7 @@ describe('Project Policy Domain Change', () => {
       baseSlot,
       outputSlot,
       semantic: 'position',
+      stride: 2,  // vec2 position
     };
 
     // Run initial frames
@@ -675,7 +674,6 @@ describe('Project Policy Domain Change', () => {
     state.values.objects.set(outputSlot, outputBuffer);
 
     const mapping: MappingState = {
-      kind: 'byId',
       newToOld: new Int32Array([0, 1, 2, -1, -1]),
     };
     state.continuity.mappings.set(instanceId, mapping);

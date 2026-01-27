@@ -12,6 +12,7 @@ import {
   findPayloadCombination,
   type BlockPayloadMetadata,
 } from '../../../blocks/registry';
+import { FLOAT, VEC2 } from '../../../core/canonical-types';
 
 // Import blocks to ensure registry is populated
 import '../../../blocks/math-blocks';
@@ -21,7 +22,7 @@ describe('Payload Validation', () => {
   describe('isPayloadAllowed', () => {
     it('returns undefined for blocks without payload constraints', () => {
       // Most blocks don't have payload constraints yet
-      const result = isPayloadAllowed('Add', 'a', 'float');
+      const result = isPayloadAllowed('Add', 'a', FLOAT);
       // undefined = no constraints = allowed
       expect(result === undefined || result === true).toBe(true);
     });

@@ -26,13 +26,18 @@ export type {
   ReferentRef,
   AxisTag,
   InstanceRef,
+  PAYLOAD_STRIDE,
+  strideOf,
+  instanceRef,
+} from '../core/canonical-types';
+
+export type {
   DomainTypeId,
   DomainType,
   IntrinsicSpec,
-} from '../core/canonical-types';
+} from '../core/domain-registry';
 
 export {
-  instanceRef,
   domainTypeId,
   instanceId,
   DOMAIN_SHAPE,
@@ -44,9 +49,7 @@ export {
   isSubdomainOf,
   getIntrinsics,
   hasIntrinsic,
-  PAYLOAD_STRIDE,
-  strideOf,
-} from '../core/canonical-types';
+} from '../core/domain-registry';
 
 export {
   signalType,

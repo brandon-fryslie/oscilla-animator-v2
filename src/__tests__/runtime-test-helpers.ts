@@ -14,65 +14,36 @@ import type { RuntimeState } from '../runtime/RuntimeState';
 import { createRuntimeState } from '../runtime/RuntimeState';
 
 /**
- * Create a properly-typed ByIdMapping for testing.
+ * Create a mapping for testing.
  *
- * Maps new element indices to old element indices using Int32Array.
- * -1 in the array means the new element is unmapped (new element).
- *
- * @param newToOld - Array of old indices, with -1 for unmapped elements
- * @returns A MappingState with kind 'byId'
+ * @param newToOld - Array mapping new indices to old indices (-1 means unmapped)
+ * @returns A MappingState
  *
  * @example
- * const mapping = mockByIdMapping([0, 1, -1, 2]);
+ * const mapping = mockMapping([0, 1, -1, 2]);
  * // Element 0 maps to old 0, element 1 to old 1, element 2 is new, element 3 maps to old 2
  */
-export function mockByIdMapping(
-  newToOld: (number | -1)[]
-): Extract<MappingState, { kind: 'byId' }> {
-  return {
-    kind: 'byId',
-    newToOld: new Int32Array(newToOld),
-  };
+export function mockMapping(newToOld: (number | -1)[]): MappingState {
+  return { newToOld: new Int32Array(newToOld) };
 }
 
 /**
- * Create a properly-typed identity mapping for testing.
+ * Create an identity mapping for testing.
  *
- * Used when the new domain has the same count as the old domain
- * and indices are preserved.
- *
- * @param count - Number of elements in the domain
- * @returns A MappingState with kind 'identity'
- *
- * @example
- * const mapping = mockIdentityMapping(5);
- * // 5 elements, all indices preserved
+ * @param count - Number of elements
+ * @returns A MappingState where newToOld[i] === i
  */
-export function mockIdentityMapping(
-  count: number
-): Extract<MappingState, { kind: 'identity' }> {
-  return {
-    kind: 'identity',
-    count,
-  };
+export function mockIdentityMapping(count: number): MappingState {
+  const newToOld = new Int32Array(count);
+  for (let i = 0; i < count; i++) {
+    newToOld[i] = i;
+  }
+  return { newToOld };
 }
 
-/**
- * Create a properly-typed position-based mapping for testing.
- *
- * Fallback mapping when stable element IDs are not available.
- *
- * @param newToOld - Array of old indices based on position
- * @returns A MappingState with kind 'byPosition'
- */
-export function mockPositionMapping(
-  newToOld: (number | -1)[]
-): Extract<MappingState, { kind: 'byPosition' }> {
-  return {
-    kind: 'byPosition',
-    newToOld: new Int32Array(newToOld),
-  };
-}
+// Legacy aliases for backward compatibility with tests
+export const mockByIdMapping = mockMapping;
+export const mockPositionMapping = mockMapping;
 
 /**
  * Create a test instance ID with flexible naming.

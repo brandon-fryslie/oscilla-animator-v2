@@ -106,30 +106,21 @@ export function initializeGaugeOnDomainChange(
 
   const oldElementCount = oldEffective.length / stride;
 
-  if (mapping.kind === 'identity') {
-    // Same indices - preserve Δ so x_eff stays continuous
-    for (let i = 0; i < elementCount; i++) {
+  // Single code path: always use newToOld lookup
+  // For identity mappings, newToOld[i] === i (allocated once at domain creation)
+  for (let i = 0; i < elementCount; i++) {
+    const oldIdx = mapping.newToOld[i];
+    if (oldIdx >= 0 && oldIdx < oldElementCount) {
+      // Mapped element: preserve effective value
       for (let s = 0; s < stride; s++) {
-        const bufIdx = i * stride + s;
-        gaugeBuffer[bufIdx] = oldEffective[bufIdx] - newBase[bufIdx];
+        const newBufIdx = i * stride + s;
+        const oldBufIdx = oldIdx * stride + s;
+        gaugeBuffer[newBufIdx] = oldEffective[oldBufIdx] - newBase[newBufIdx];
       }
-    }
-  } else if (mapping.kind === 'byId' || mapping.kind === 'byPosition') {
-    // Mapped indices
-    for (let i = 0; i < elementCount; i++) {
-      const oldIdx = mapping.newToOld[i];
-      if (oldIdx >= 0 && oldIdx < oldElementCount) {
-        // Mapped element: preserve effective value
-        for (let s = 0; s < stride; s++) {
-          const newBufIdx = i * stride + s;
-          const oldBufIdx = oldIdx * stride + s;
-          gaugeBuffer[newBufIdx] = oldEffective[oldBufIdx] - newBase[newBufIdx];
-        }
-      } else {
-        // New element: start at base (no jump)
-        for (let s = 0; s < stride; s++) {
-          gaugeBuffer[i * stride + s] = 0;
-        }
+    } else {
+      // New element: start at base (no jump)
+      for (let s = 0; s < stride; s++) {
+        gaugeBuffer[i * stride + s] = 0;
       }
     }
   }
@@ -263,31 +254,18 @@ export function initializeSlewWithMapping(
 
   const oldElementCount = oldSlew.length / stride;
 
-  if (mapping.kind === 'identity') {
-    // Same indices - copy old slew state for existing elements, base for new
-    for (let i = 0; i < elementCount; i++) {
+  // Single code path: always use newToOld lookup
+  for (let i = 0; i < elementCount; i++) {
+    const oldIdx = mapping.newToOld[i];
+    if (oldIdx >= 0 && oldIdx < oldElementCount) {
+      // Mapped: transfer slew state
       for (let s = 0; s < stride; s++) {
-        const bufIdx = i * stride + s;
-        if (i < oldElementCount) {
-          slewBuffer[bufIdx] = oldSlew[bufIdx];
-        } else {
-          slewBuffer[bufIdx] = newBase[bufIdx];
-        }
+        slewBuffer[i * stride + s] = oldSlew[oldIdx * stride + s];
       }
-    }
-  } else if (mapping.kind === 'byId' || mapping.kind === 'byPosition') {
-    for (let i = 0; i < elementCount; i++) {
-      const oldIdx = mapping.newToOld[i];
-      if (oldIdx >= 0 && oldIdx < oldElementCount) {
-        // Mapped: transfer slew state
-        for (let s = 0; s < stride; s++) {
-          slewBuffer[i * stride + s] = oldSlew[oldIdx * stride + s];
-        }
-      } else {
-        // New element: start at base (will slew from there)
-        for (let s = 0; s < stride; s++) {
-          slewBuffer[i * stride + s] = newBase[i * stride + s];
-        }
+    } else {
+      // New element: start at base (will slew from there)
+      for (let s = 0; s < stride; s++) {
+        slewBuffer[i * stride + s] = newBase[i * stride + s];
       }
     }
   }

@@ -55,14 +55,14 @@ export function computeStableTargetId(
  * Mapping from new element indices to old element indices (spec §3.3).
  * Used to transfer state when domain count changes.
  *
- * - `identity`: Fast path - same indices, no remapping needed
- * - `byId`: Primary mapping using stable elementIds
- * - `byPosition`: Fallback using spatial position hints
+ * newToOld[i] = old index for element i, or -1 if element is new (unmapped).
+ * For identity mappings, newToOld[i] === i (array allocated once at domain creation).
+ *
+ * Single representation, single code path everywhere.
  */
-export type MappingState =
-  | { readonly kind: 'identity'; readonly count: number }
-  | { readonly kind: 'byId'; readonly newToOld: Int32Array }  // -1 = unmapped (new element)
-  | { readonly kind: 'byPosition'; readonly newToOld: Int32Array };
+export interface MappingState {
+  readonly newToOld: Int32Array;
+}
 
 // =============================================================================
 // Target Continuity State

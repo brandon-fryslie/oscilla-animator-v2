@@ -216,7 +216,7 @@ describe('StateMigration', () => {
       const oldState = new Float64Array([10, 20, 30]);
       const newState = new Float64Array(3);
 
-      const identityMapping: MappingState = { kind: 'identity', count: 3 };
+      const identityMapping: MappingState = { newToOld: new Int32Array([0, 1, 2]) };
 
       migrateState(oldState, newState, oldMappings, newMappings, () => identityMapping);
 
@@ -254,7 +254,6 @@ describe('StateMigration', () => {
 
       // New lane 0 was old lane 2, lane 1 was 0, lane 2 was 1
       const reorderMapping: MappingState = {
-        kind: 'byId',
         newToOld: new Int32Array([2, 0, 1]),
       };
 
@@ -294,7 +293,6 @@ describe('StateMigration', () => {
 
       // First 2 lanes map directly, lanes 2-3 are new (-1)
       const mapping: MappingState = {
-        kind: 'byId',
         newToOld: new Int32Array([0, 1, -1, -1]),
       };
 

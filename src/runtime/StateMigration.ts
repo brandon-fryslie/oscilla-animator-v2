@@ -208,8 +208,8 @@ function migrateFieldState(
 
   const stride = newMapping.stride;
 
-  if (!laneMapping || laneMapping.kind === 'identity') {
-    // No mapping or identity mapping: copy by index
+  if (!laneMapping) {
+    // No mapping: copy by index
     const copyCount = Math.min(oldMapping.laneCount, newMapping.laneCount);
     const copyStride = Math.min(oldMapping.stride, newMapping.stride);
 

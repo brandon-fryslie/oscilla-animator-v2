@@ -5,7 +5,8 @@
  */
 
 import { registerBlock } from './registry';
-import { signalType, signalTypeField, domainTypeId, strideOf } from '../core/canonical-types';
+import { signalType, signalTypeField, strideOf } from '../core/canonical-types';
+import { domainTypeId } from '../core/domain-registry';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import type { FieldExprId, SigExprId } from '../compiler/ir/Indices';
 import { defaultSourceConst } from '../types';

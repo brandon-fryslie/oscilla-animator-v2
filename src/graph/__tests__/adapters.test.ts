@@ -202,7 +202,7 @@ describe('Adapter Registry', () => {
     it('extracts payload, unit, cardinality, temporality', () => {
       const type = signalType(FLOAT, unitPhase01());
       const sig = extractSignature(type);
-      expect(sig.payload).toBe('float');
+      expect(sig.payload).toBe(FLOAT);
       expect(sig.unit).toEqual({ kind: 'phase01' });
       expect(sig.cardinality).toBe('one');
       expect(sig.temporality).toBe('continuous');

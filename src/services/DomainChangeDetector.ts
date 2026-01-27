@@ -34,8 +34,7 @@ function logDomainChange(
       instanceId,
       oldCount,
       newCount,
-      tMs || now,
-      oldCount > 0 ? 'byId' : 'none' // Simplified: assume byId mapping for existing elements
+      tMs || now
     );
 
     domainChangeLogThrottle.set(instanceId, now);

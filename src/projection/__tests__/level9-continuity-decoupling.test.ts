@@ -47,10 +47,9 @@ describe('Level 9 Unit Tests: Continuity Uses World-Space Data', () => {
       'utf-8'
     );
 
-    // applyContinuity function computes stride based on semantic
-    // Position semantic uses stride=2 for vec2 (2D world-space), not screen-space
-    // The key line: const stride = semantic === 'position' ? 2 : 1;
-    expect(source).toMatch(/const stride = semantic === 'position' \? 2 : 1/);
+    // applyContinuity gets stride from the step (type-derived, not semantic)
+    // This ensures stride comes from ONE SOURCE OF TRUTH (the type system)
+    expect(source).toMatch(/const\s*\{\s*[^}]*stride[^}]*\}\s*=\s*step/);
 
     // Gauge initialization operates on buffers with stride (world-space layout)
     expect(source).toMatch(/initializeGaugeOnDomainChange/);
@@ -71,11 +70,11 @@ describe('Level 9 Unit Tests: Continuity Uses World-Space Data', () => {
       'utf-8'
     );
 
-    // For non-position semantics (like 'radius'), stride=1 (float, world-space)
-    expect(source).toMatch(/const stride = semantic === 'position' \? 2 : 1/);
+    // Stride comes from step.stride (type-derived), not from semantic heuristics
+    // This ensures stride is uniform for all field types
+    expect(source).toMatch(/const\s*\{\s*[^}]*stride[^}]*\}\s*=\s*step/);
 
     // Continuity operates on the scale/radius field (world-space), not screenRadius
-    // The semantic determines stride, not screen-space projection output
     expect(source).not.toMatch(/screenRadius/);
     expect(source).not.toMatch(/screen.*[Rr]adius/);
   });
@@ -183,6 +182,7 @@ describe('Level 9 Integration: Continuity Unaffected by Toggle', () => {
             baseSlot: 10 as ValueSlot,
             outputSlot: 11 as ValueSlot,
             semantic: 'position' as const,
+            stride: 2,  // vec2 position
           },
         ],
       },
@@ -217,11 +217,7 @@ describe('Level 9 Integration: Continuity Unaffected by Toggle', () => {
 
     const mappings: Record<string, any> = {};
     for (const [key, value] of state.mappings.entries()) {
-      if (value.kind === 'identity') {
-        mappings[key] = { kind: 'identity', count: value.count };
-      } else {
-        mappings[key] = { kind: value.kind, newToOld: Array.from(value.newToOld) };
-      }
+      mappings[key] = { newToOld: Array.from(value.newToOld) };
     }
 
     return JSON.stringify({ targets, mappings }, null, 2);
@@ -356,7 +352,7 @@ describe('Level 9 Integration: Continuity Remap During Toggle', () => {
     expect(changed).toBe(true);
     expect(mapping).toBeTruthy();
 
-    if (mapping && mapping.kind !== 'identity') {
+    if (mapping) {
       // Verify mapping: first 8 map to themselves, last 2 are gone
       expect(mapping.newToOld.length).toBe(8);
       for (let i = 0; i < 8; i++) {
@@ -409,8 +405,12 @@ describe('Level 9 Integration: Continuity Remap During Toggle', () => {
     // No change on toggle
     expect(changed).toBe(false);
     expect(mapping2).toBeTruthy();
-    if (mapping2 && mapping2.kind === 'identity') {
-      expect(mapping2.count).toBe(8);
+    if (mapping2) {
+      // Identity mapping: all elements map to themselves
+      expect(mapping2.newToOld.length).toBe(8);
+      for (let i = 0; i < 8; i++) {
+        expect(mapping2.newToOld[i]).toBe(i);
+      }
     }
 
     // Verify element IDs still preserved

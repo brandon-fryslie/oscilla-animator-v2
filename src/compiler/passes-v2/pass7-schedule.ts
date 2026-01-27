@@ -233,9 +233,7 @@ function resolveShapeInfo(
     return {
       topologyId: expr.topologyId,
       paramSignals: expr.paramSignals,
-      controlPointField: expr.controlPointField !== undefined
-        ? { id: expr.controlPointField, stride: expr.controlPointFieldStride ?? 2 }
-        : undefined,
+      controlPointField: expr.controlPointField,
     };
   }
 
@@ -360,7 +358,11 @@ function buildContinuityPipeline(
 
           // P5b: If shape has control point field, materialize it
           if (shapeInfo.controlPointField !== undefined) {
-            const cpSlots = getFieldSlots(shapeInfo.controlPointField, 'custom');
+            const cpSlots = getFieldSlots(
+              shapeInfo.controlPointField.id,
+              'custom',
+              shapeInfo.controlPointField.stride
+            );
             controlPointsOutput = { k: 'slot', slot: cpSlots.outputSlot };
           }
         }

@@ -744,7 +744,7 @@ registerBlock({
   },
   inputs: {
     id01: { label: 'ID (0..1)', type: signalType(FLOAT) },
-    radius: { label: 'Radius', type: signalType(FLOAT), defaultSource: defaultSourceConst(0.35), uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 } },
+    radius: { label: 'Radius', type: signalType(FLOAT), defaultSource: defaultSourceConst(0.35), uiHint: { kind: 'slider', min: 0.01, max: 5, step: 0.1 } },
   },
   outputs: {
     out: { label: 'Radius', type: signalType(FLOAT) },
@@ -820,7 +820,7 @@ registerBlock({
 // =============================================================================
 
 registerBlock({
-  type: 'JitterVec',
+  type: ' Vec',
   label: 'Jitter Vec',
   category: 'field',
   description: 'Add per-element random jitter to vec3 positions',

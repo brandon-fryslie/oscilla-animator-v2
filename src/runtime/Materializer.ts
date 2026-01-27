@@ -473,9 +473,9 @@ function applyMap(
   N: number,
   type: SignalType
 ): void {
-  if (type.payload .kind !== 'float') {
+  if (type.payload.kind !== 'float') {
     throw new Error(
-      `Map with opcode only supports scalar float fields, got payload=${type.payload}`
+      `Map with opcode only supports scalar float fields, got payload=${type.payload.kind}`
     );
   }
   const outArr = out as Float32Array;
@@ -508,9 +508,9 @@ function applyZip(
   type: SignalType
 ): void {
   if (fn.kind === 'opcode') {
-    if (type.payload .kind !== 'float') {
+    if (type.payload.kind !== 'float') {
       throw new Error(
-        `Zip with opcode only supports scalar float fields, got payload=${type.payload}`
+        `Zip with opcode only supports scalar float fields, got payload=${type.payload.kind}`
       );
     }
     const outArr = out as Float32Array;
@@ -543,9 +543,9 @@ function applyZipSig(
   const inArr = fieldInput as Float32Array;
 
   if (fn.kind === 'opcode') {
-    if (type.payload .kind !== 'float') {
+    if (type.payload.kind !== 'float') {
       throw new Error(
-        `ZipSig with opcode only supports scalar float fields, got payload=${type.payload}`
+        `ZipSig with opcode only supports scalar float fields, got payload=${type.payload.kind}`
       );
     }
     const op = fn.opcode;

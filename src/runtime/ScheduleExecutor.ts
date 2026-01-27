@@ -194,7 +194,7 @@ export function executeFrame(
           if (exprNode.kind === 'shapeRef') {
             writeShape2D(state.values.shape2d, offset, {
               topologyId: exprNode.topologyId,
-              pointsFieldSlot: (exprNode.controlPointField as number) ?? 0,
+              pointsFieldSlot: exprNode.controlPointField?.id as number ?? 0,
               pointsCount: 0,
               styleRef: 0,
               flags: 0,

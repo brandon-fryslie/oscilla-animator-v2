@@ -13,6 +13,7 @@ import {
 } from '../suggestions';
 import type { Patch } from '../../graph/Patch';
 import { AddressRegistry } from '../../graph/address-registry';
+import { FLOAT } from '../../core/canonical-types';
 
 // =============================================================================
 // Test Fixtures
@@ -107,7 +108,8 @@ describe('getFunctionSignatures', () => {
       expect(sig).toHaveProperty('description');
       expect(typeof sig.name).toBe('string');
       expect(typeof sig.arity).toBe('number');
-      expect(typeof sig.returnType).toBe('string');
+      expect(typeof sig.returnType).toBe('object');  // PayloadType is { kind, stride }
+      expect(typeof sig.returnType.kind).toBe('string');
       expect(typeof sig.description).toBe('string');
     }
   });
@@ -154,7 +156,7 @@ describe('SuggestionProvider.suggestFunctions', () => {
 
     expect(sinSuggestion).toBeDefined();
     expect(sinSuggestion.arity).toBe(1);
-    expect(sinSuggestion.returnType).toBe('float');
+    expect(sinSuggestion.returnType).toBe(FLOAT);
     expect(sinSuggestion.description).toContain('Sine');
   });
 

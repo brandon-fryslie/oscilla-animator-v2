@@ -76,7 +76,7 @@ describe('ExternalInput Block', () => {
 
   it('has value output with float type', () => {
     expect(def.outputs.value).toBeDefined();
-    expect(def.outputs.value.type.payload).toBe('float');
+    expect(def.outputs.value.type.payload).toBe(FLOAT);
   });
 
   it('is cardinality-generic with preserve mode', () => {
@@ -165,7 +165,7 @@ describe('ExternalGate Block', () => {
 
   it('has gate output with float type', () => {
     expect(def.outputs.gate).toBeDefined();
-    expect(def.outputs.gate.type.payload).toBe('float');
+    expect(def.outputs.gate.type.payload).toBe(FLOAT);
   });
 
   it('is cardinality-generic', () => {
@@ -270,7 +270,7 @@ describe('ExternalVec2 Block', () => {
 
   it('has position output with vec2 type', () => {
     expect(def.outputs.position).toBeDefined();
-    expect(def.outputs.position.type.payload).toBe('vec2');
+    expect(def.outputs.position.type.payload).toBe(VEC2);
   });
 
   it('is cardinality-generic', () => {

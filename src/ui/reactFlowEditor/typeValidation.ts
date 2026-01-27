@@ -94,7 +94,8 @@ export function formatTypeForDisplay(type: SignalType): string {
 
   // Unit suffix (only show non-trivial units)
   const unitStr = formatUnitForDisplay(type.unit);
-  const payloadUnit = unitStr ? `${type.payload}:${unitStr}` : type.payload;
+  const payloadKind = type.payload.kind;
+  const payloadUnit = unitStr ? `${payloadKind}:${unitStr}` : payloadKind;
 
   // Temporality suffix
   const tempSuffix = temp.kind === 'discrete' ? ' [event]' : '';

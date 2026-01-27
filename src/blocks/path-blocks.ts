@@ -182,7 +182,7 @@ registerBlock({
       topologyId,  // Numeric ID returned from registerDynamicTopology
       [],  // No topology params
       signalType(SHAPE),
-      computedPositions  // Control point field
+      { id: computedPositions, stride: VEC2.stride }  // Control point field with stride
     );
 
     const shapeSlot = ctx.b.allocSlot();
@@ -376,7 +376,7 @@ registerBlock({
       topologyId,  // Numeric ID returned from registerDynamicTopology
       [],  // No topology params
       signalType(SHAPE),
-      computedPositions  // Control point field
+      { id: computedPositions, stride: VEC2.stride }  // Control point field with stride
     );
 
     const shapeSlot = ctx.b.allocSlot();

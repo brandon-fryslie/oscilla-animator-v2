@@ -39,7 +39,7 @@ registerBlock({
       type: signalType(FLOAT),
       value: 1.0,
       defaultSource: defaultSourceConst(1.0),
-      uiHint: { kind: 'slider', min: 0.1, max: 10, step: 0.1 },
+      uiHint: { kind: 'slider', min: 0.1, max: 1, step: 0.1 },
     },
   },
   outputs: {},

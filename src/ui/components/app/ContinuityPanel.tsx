@@ -247,13 +247,6 @@ function TargetItem({ target }: { target: TargetSummary }) {
 }
 
 function MappingItem({ mapping }: { mapping: MappingSummary }) {
-  const kindColor =
-    mapping.kind === 'identity'
-      ? '#6bff6b'
-      : mapping.kind === 'byId'
-        ? colors.primary
-        : '#ffd93d';
-
   return (
     <div
       style={{
@@ -268,9 +261,6 @@ function MappingItem({ mapping }: { mapping: MappingSummary }) {
     >
       <span>
         <strong style={{ color: colors.textPrimary }}>{mapping.instanceId}</strong>
-        <span style={{ color: kindColor, marginLeft: '0.5rem', fontSize: '0.75rem' }}>
-          ({mapping.kind})
-        </span>
       </span>
       <span style={{ color: colors.textMuted, fontSize: '0.75rem' }}>
         {mapping.mapped} mapped

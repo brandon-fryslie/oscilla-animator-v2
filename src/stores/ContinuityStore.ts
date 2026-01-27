@@ -40,8 +40,6 @@ export interface TargetSummary {
 export interface MappingSummary {
   /** Instance ID */
   instanceId: string;
-  /** Mapping kind */
-  kind: 'identity' | 'byId' | 'byPosition';
   /** Number of elements with mapping from previous domain */
   mapped: number;
   /** Number of new elements without mapping */
@@ -60,8 +58,6 @@ export interface DomainChangeEvent {
   newCount: number;
   /** Model time when change occurred (ms) */
   tMs: number;
-  /** Mapping used for continuity */
-  mappingKind: 'identity' | 'byId' | 'byPosition' | 'none';
 }
 
 // =============================================================================
@@ -270,7 +266,6 @@ export class ContinuityStore {
       const { mapped, unmapped } = countMappedElements(mapping);
       mappings.push({
         instanceId,
-        kind: mapping.kind,
         mapped,
         unmapped,
       });
@@ -294,8 +289,7 @@ export class ContinuityStore {
     instanceId: string,
     oldCount: number,
     newCount: number,
-    tMs: number,
-    mappingKind: 'identity' | 'byId' | 'byPosition' | 'none' = 'none'
+    tMs: number
   ): void {
     runInAction(() => {
       this.recentChanges.unshift({
@@ -303,7 +297,6 @@ export class ContinuityStore {
         oldCount,
         newCount,
         tMs,
-        mappingKind,
       });
 
       // Keep only last 10 events
@@ -339,11 +332,6 @@ export class ContinuityStore {
  * Count mapped vs unmapped elements in a mapping.
  */
 function countMappedElements(mapping: MappingState): { mapped: number; unmapped: number } {
-  if (mapping.kind === 'identity') {
-    return { mapped: mapping.count, unmapped: 0 };
-  }
-
-  // For byId and byPosition mappings
   let mapped = 0;
   let unmapped = 0;
   for (const idx of mapping.newToOld) {
