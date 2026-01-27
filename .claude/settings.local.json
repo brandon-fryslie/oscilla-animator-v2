@@ -18,7 +18,8 @@
   },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
-    "cherry-chrome"
+    "cherry-chrome",
+    "chromedevtools/chrome-devtools-mcp"
   ],
   "disabledMcpjsonServers": [
     "chromedevtools/chrome-devtools-mcp"

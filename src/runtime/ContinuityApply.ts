@@ -18,8 +18,57 @@
 
 import type { ContinuityPolicy, StepContinuityApply, ValueSlot } from '../compiler/ir/types';
 import type { RuntimeState } from './RuntimeState';
-import type { MappingState, StableTargetId } from './ContinuityState';
+import type { ContinuityState, MappingState, StableTargetId } from './ContinuityState';
 import { getOrCreateTargetState } from './ContinuityState';
+
+// =============================================================================
+// Buffer Snapshot Capture
+// =============================================================================
+
+/**
+ * Context captured BEFORE getOrCreateTargetState() to preserve old buffer values.
+ *
+ * This is necessary because getOrCreateTargetState() may allocate new zero-filled
+ * buffers when the element count changes, destroying the old values we need for
+ * continuity calculations.
+ *
+ * CRITICAL INVARIANT: This MUST be captured before calling getOrCreateTargetState().
+ */
+export interface CaptureContext {
+  /** Snapshot of slew buffer before reallocation (null if no prior state or size unchanged) */
+  oldSlewSnapshot: Float32Array | null;
+  /** Whether target state existed before this call */
+  hadPreviousState: boolean;
+  /** Whether buffer size is changing (triggers reallocation) */
+  sizeChanged: boolean;
+}
+
+/**
+ * Capture state before calling getOrCreateTargetState().
+ *
+ * MUST be called BEFORE getOrCreateTargetState() to avoid data loss when
+ * buffer size changes trigger reallocation.
+ *
+ * @param continuity - Continuity state container
+ * @param targetId - Stable target identifier
+ * @param newBufferLength - New buffer length (in floats, not elements)
+ * @returns Capture context with old buffer snapshot (if needed)
+ */
+export function capturePreAllocationState(
+  continuity: ContinuityState,
+  targetId: StableTargetId,
+  newBufferLength: number
+): CaptureContext {
+  const existingState = continuity.targets.get(targetId);
+  const hadPreviousState = existingState !== undefined;
+  const sizeChanged = hadPreviousState && existingState!.count !== newBufferLength;
+
+  return {
+    oldSlewSnapshot: sizeChanged ? new Float32Array(existingState!.slewBuffer) : null,
+    hadPreviousState,
+    sizeChanged,
+  };
+}
 
 // =============================================================================
 // Helper Functions
