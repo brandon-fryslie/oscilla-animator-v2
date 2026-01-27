@@ -455,7 +455,6 @@ export function registerBlock(def: BlockDef): void {
   }
 
   // Validate: object keys are inherently unique, but check input/output collision
-  const inputKeys = Object.keys(def.inputs);
   const outputKeys = Object.keys(def.outputs);
 
   for (const key of outputKeys) {

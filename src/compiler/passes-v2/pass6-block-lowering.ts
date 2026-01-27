@@ -3,7 +3,7 @@
  */
 
 import type { AcyclicOrLegalGraph, BlockIndex, DepGraph, SCC } from "../ir/patches";
-import type { Block, Edge } from "../../types";
+import type { Block } from "../../types";
 import type { VarargConnection } from "../../graph/Patch";
 import type { IRBuilder } from "../ir/IRBuilder";
 import { IRBuilderImpl } from "../ir/IRBuilderImpl";
@@ -11,7 +11,6 @@ import type { CompileError } from "../types";
 import type { ValueRefPacked } from "../ir/lowerTypes";
 import type { InstanceId } from "../ir/Indices";
 import { getBlockDefinition, type LowerCtx, type LowerResult, hasLowerOutputsOnly } from "../../blocks/registry";
-import { BLOCK_DEFS_BY_TYPE } from "../../blocks/registry";
 import type { EventHub } from "../../events/EventHub";
 import type { SignalType } from "../../core/canonical-types";
 import type { PortKey } from "./pass1-type-constraints";
@@ -22,7 +21,6 @@ import {
 } from "./resolveWriters";
 import {
   createCombineNode,
-  validateCombineMode,
   validateCombinePolicy,
   shouldCombine,
 } from "./combine-utils";

@@ -4,9 +4,9 @@
  * Blocks that produce and transform scalar signals.
  */
 
-import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
+import { registerBlock, ALL_CONCRETE_PAYLOADS, type LowerResult } from './registry';
 import { signalType, type PayloadType, unitPhase01, unitNorm01, unitVar, payloadVar, strideOf } from '../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
+import { FLOAT, INT, BOOL } from '../core/canonical-types';
 import { OpCode, stableStateId } from '../compiler/ir/types';
 import { defaultSourceConst } from '../types';
 import type { SigExprId, StateSlotId } from '../compiler/ir/Indices';
@@ -395,23 +395,23 @@ registerBlock({
     };
   },
   // Phase 2: Generate state write step using resolved input
-  lower: ({ ctx, inputsById, config, existingOutputs }) => {
+  lower: ({ ctx, inputsById, config, existingOutputs }): LowerResult => {
     const input = inputsById.in;
     if (!input || input.k !== 'sig') {
       throw new Error('UnitDelay requires signal input');
     }
 
-    // If called from phase 1, reuse existing outputs and state slot
-    if (existingOutputs?.outputsById && existingOutputs?.stateSlot) {
+    // If called from two-phase lowering, reuse existing outputs and state slot
+    if (existingOutputs?.outputsById && existingOutputs?.stateSlot !== undefined) {
       // Write current input to state for next frame
       ctx.b.stepStateWrite(existingOutputs.stateSlot as StateSlotId, input.id);
-      // Return complete result (existingOutputs has outputsById which is required)
+      // Return the existing outputs (already registered in phase 1)
       return {
         outputsById: existingOutputs.outputsById,
       };
     }
 
-    // Fallback: single-pass lowering (for non-cycle usage)
+    // Single-pass lowering (for non-cycle usage)
     const initialValue = (config?.initialValue as number) ?? 0;
     const outType = ctx.outTypes[0];
 
