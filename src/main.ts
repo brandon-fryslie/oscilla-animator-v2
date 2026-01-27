@@ -13,7 +13,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { reaction } from 'mobx';
 import { buildPatch, type Patch } from './graph';
-import { BufferPool } from './runtime';
+import { initGlobalRenderArena, type RenderBufferArena } from './render';
 import { App } from './ui/components';
 import { StoreProvider, type RootStore } from './stores';
 import { patches, DEFAULT_PATCH_INDEX, type PatchBuilder } from './demo';
@@ -48,7 +48,7 @@ let animationState: AnimationLoopState = createAnimationLoopState();
 // Canvas and rendering state
 let canvas: HTMLCanvasElement | null = null;
 let ctx: CanvasRenderingContext2D | null = null;
-let pool: BufferPool | null = null;
+let arena: RenderBufferArena | null = null;
 
 // Store reference - set via callback from React when StoreProvider mounts
 let store: RootStore | null = null;
@@ -114,8 +114,8 @@ async function initializeRuntime(rootStore: RootStore) {
   // Set the module-level store reference
   store = rootStore;
 
-  // Initialize buffer pool
-  pool = new BufferPool();
+  // Initialize render buffer arena (50k elements, zero allocations after init)
+  arena = initGlobalRenderArena(50_000);
 
   // Try to restore from localStorage, otherwise use default preset
   const saved = loadPatchFromStorage();
@@ -186,7 +186,7 @@ async function initializeRuntime(rootStore: RootStore) {
       getCurrentState: () => compileState.currentState,
       getCanvas: () => canvas,
       getContext: () => ctx,
-      getPool: () => pool,
+      getArena: () => arena,
       store,
       onStatsUpdate: (statsText) => {
         if (window.__setStats) {

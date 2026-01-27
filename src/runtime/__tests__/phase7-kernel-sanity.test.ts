@@ -19,7 +19,7 @@ import { compile } from '../../compiler/compile';
 import { buildPatch } from '../../graph';
 import { executeFrame } from '../ScheduleExecutor';
 import { createRuntimeState } from '../RuntimeState';
-import { BufferPool } from '../BufferPool';
+import { getTestArena } from '../../runtime/__tests__/test-arena-helper';
 
 // ══════════════════════════════════════════════════════════════════════
 // LAYER 1: OPCODE INTERPRETER TESTS
@@ -78,10 +78,10 @@ describe('Phase 7 - Layer 2: Signal Kernel Sanity', () => {
 
     const program = result.program;
     const state = createRuntimeState(program.slotMeta.length);
-    const pool = new BufferPool();
+    const arena = getTestArena();
 
     // Execute and verify program runs
-    const frame = executeFrame(program, state, pool, 0);
+    const frame = executeFrame(program, state, arena, 0);
     expect(frame.version).toBe(2);
     expect(frame.ops).toBeInstanceOf(Array);
   });
@@ -107,9 +107,9 @@ describe('Phase 7 - Layer 3: Field Kernel Sanity', () => {
 
     const program = result.program;
     const state = createRuntimeState(program.slotMeta.length);
-    const pool = new BufferPool();
+    const arena = getTestArena();
 
-    const frame = executeFrame(program, state, pool, 0);
+    const frame = executeFrame(program, state, arena, 0);
     expect(frame.version).toBe(2);
   });
 });
@@ -134,10 +134,10 @@ describe('Phase 7 - Layer 4: End-to-End Smoke Tests', () => {
 
     const program = result.program;
     const state = createRuntimeState(program.slotMeta.length);
-    const pool = new BufferPool();
+    const arena = getTestArena();
 
     // Execute and verify basic functionality
-    const frame = executeFrame(program, state, pool, 0);
+    const frame = executeFrame(program, state, arena, 0);
     expect(frame.version).toBe(2);
   });
 });

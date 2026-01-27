@@ -9,7 +9,7 @@ import { compile } from '../../compiler/compile';
 import { buildPatch } from '../../graph';
 import { executeFrame } from '../ScheduleExecutor';
 import { createRuntimeState } from '../RuntimeState';
-import { BufferPool } from '../BufferPool';
+import { getTestArena } from '../../runtime/__tests__/test-arena-helper';
 
 describe('Runtime Integration', () => {
   it('executes a simple animated grid', () => {
@@ -36,10 +36,10 @@ describe('Runtime Integration', () => {
 
     // Create runtime
     const state = createRuntimeState(program.slotMeta.length);
-    const pool = new BufferPool();
+    const arena = getTestArena();
 
     // Execute at t=0
-    const frame = executeFrame(program, state, pool, 0);
+    const frame = executeFrame(program, state, arena, 0);
 
     // Verify frame structure
     expect(frame.version).toBe(2);
@@ -49,7 +49,7 @@ describe('Runtime Integration', () => {
     expect(state.cache.frameId).toBe(2);
 
     // Execute at t=1000
-    const frame2 = executeFrame(program, state, pool, 1000);
+    const frame2 = executeFrame(program, state, arena, 1000);
     expect(state.cache.frameId).toBe(3);
     expect(frame2.version).toBe(2);
   });
@@ -70,19 +70,19 @@ describe('Runtime Integration', () => {
 
     const program = result.program;
     const state = createRuntimeState(program.slotMeta.length);
-    const pool = new BufferPool();
+    const arena = getTestArena();
 
     // Initial state (frameId starts at 1)
     expect(state.cache.frameId).toBe(1);
 
     // Execute frame
-    executeFrame(program, state, pool, 0);
+    executeFrame(program, state, arena, 0);
 
     // After first frame, frameId should be 2
     expect(state.cache.frameId).toBe(2);
 
     // Execute second frame
-    executeFrame(program, state, pool, 100);
+    executeFrame(program, state, arena, 100);
     expect(state.cache.frameId).toBe(3);
   });
 
@@ -97,16 +97,16 @@ describe('Runtime Integration', () => {
 
     const program = result.program;
     const state = createRuntimeState(program.slotMeta.length);
-    const pool = new BufferPool();
+    const arena = getTestArena();
 
     // Execute at various times
-    executeFrame(program, state, pool, 0);
+    executeFrame(program, state, arena, 0);
     expect(state.time?.tMs).toBe(0);
 
-    executeFrame(program, state, pool, 1000);
+    executeFrame(program, state, arena, 1000);
     expect(state.time?.tMs).toBe(1000);
 
-    executeFrame(program, state, pool, 5000);
+    executeFrame(program, state, arena, 5000);
     expect(state.time?.tMs).toBe(5000);
   });
 });

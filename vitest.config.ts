@@ -5,6 +5,13 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./src/ui/components/__tests__/setup.ts'],
+    // Pass --expose-gc to worker threads for memory profiling tests
+    pool: 'forks',
+    poolOptions: {
+      forks: {
+        execArgv: process.env.VITEST_EXPOSE_GC ? ['--expose-gc'] : [],
+      },
+    },
     benchmark: {
       include: ['**/__benchmarks__/*.bench.ts'],
     },

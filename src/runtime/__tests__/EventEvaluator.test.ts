@@ -11,7 +11,7 @@ import { createRuntimeState } from '../RuntimeState';
 import { executeFrame } from '../ScheduleExecutor';
 import { compile } from '../../compiler/compile';
 import { EventHub } from '../../events/EventHub';
-import { BufferPool } from '../BufferPool';
+import { getTestArena } from '../../runtime/__tests__/test-arena-helper';
 import { buildPatch } from '../../graph/Patch';
 import { signalType } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
@@ -284,8 +284,8 @@ describe('EventEvaluator', () => {
         schedule.eventSlotCount ?? 0,
         schedule.eventExprCount ?? 0
       );
-      const pool = new BufferPool();
-      executeFrame(program, state, pool, 100);
+      const arena = getTestArena();
+      executeFrame(program, state, arena, 100);
 
       // Verify pulse event slot is 1 (fired this tick)
       const pulseStep = evalEventSteps[0] as StepEvalEvent;
@@ -311,15 +311,15 @@ describe('EventEvaluator', () => {
         schedule.eventSlotCount ?? 0,
         schedule.eventExprCount ?? 0
       );
-      const pool = new BufferPool();
+      const arena = getTestArena();
 
       // Frame 1
-      executeFrame(program, state, pool, 100);
+      executeFrame(program, state, arena, 100);
       const evalEventSteps = schedule.steps.filter((s: any) => s.kind === 'evalEvent') as StepEvalEvent[];
       expect(state.eventScalars[evalEventSteps[0].target as number]).toBe(1);
 
       // Frame 2 (eventScalars should be cleared and re-fired)
-      executeFrame(program, state, pool, 116);
+      executeFrame(program, state, arena, 116);
       expect(state.eventScalars[evalEventSteps[0].target as number]).toBe(1);
     });
   });

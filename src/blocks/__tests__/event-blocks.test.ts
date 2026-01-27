@@ -8,7 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import { compile } from '../../compiler/compile';
 import { EventHub } from '../../events/EventHub';
-import { BufferPool } from '../../runtime/BufferPool';
+import { getTestArena } from '../../runtime/__tests__/test-arena-helper';
 import { buildPatch, type PatchBuilder } from '../../graph/Patch';
 import { createSessionState, createProgramState, createRuntimeState, createRuntimeStateFromSession } from '../../runtime';
 import { executeFrame } from '../../runtime/ScheduleExecutor';
@@ -59,11 +59,11 @@ function compileAndRun(patchFn: (b: PatchBuilder) => void, frames: number[] = [1
     schedule.eventSlotCount ?? 0,
     schedule.eventExprCount ?? 0
   );
-  const pool = new BufferPool();
+  const arena = getTestArena();
 
   const results: { values: Float64Array; eventScalars: Uint8Array }[] = [];
   for (const tMs of frames) {
-    executeFrame(program, state, pool, tMs);
+    arena.reset(); executeFrame(program, state, arena, tMs);
     results.push({
       values: state.values.f64.slice(),
       eventScalars: state.eventScalars.slice(),
@@ -104,10 +104,10 @@ describe('EventToSignalMask', () => {
       schedule.eventSlotCount ?? 0,
       schedule.eventExprCount ?? 0
     );
-    const pool = new BufferPool();
+    const arena = getTestArena();
 
     // Execute frame — pulse fires every tick
-    executeFrame(program, state, pool, 100);
+    arena.reset(); executeFrame(program, state, arena, 100);
 
     // Find the EventToSignalMask output slot
     // The mask output is a signal stored in a value slot
@@ -155,12 +155,12 @@ describe('EventToSignalMask', () => {
       schedule.eventSlotCount ?? 0,
       schedule.eventExprCount ?? 0
     );
-    const pool = new BufferPool();
+    const arena = getTestArena();
 
     const slotToOffset = buildSlotToOffsetMap(program);
 
     // Frame 1
-    executeFrame(program, state, pool, 100);
+    arena.reset(); executeFrame(program, state, arena, 100);
     const evalSigSteps = schedule.steps.filter((s: any) => s.kind === 'evalSig');
     const maskSlot = findEventDependentSlot(program, evalSigSteps, state);
     const maskOffset = slotToOffset.get(maskSlot);
@@ -170,11 +170,11 @@ describe('EventToSignalMask', () => {
     expect(state.values.f64[maskOffset]).toBe(1.0);
 
     // Frame 2 — eventScalars cleared and re-populated
-    executeFrame(program, state, pool, 116);
+    arena.reset(); executeFrame(program, state, arena, 116);
     expect(state.values.f64[maskOffset]).toBe(1.0);
 
     // Frame 3
-    executeFrame(program, state, pool, 132);
+    arena.reset(); executeFrame(program, state, arena, 132);
     expect(state.values.f64[maskOffset]).toBe(1.0);
   });
 
@@ -238,12 +238,12 @@ describe('SampleHold', () => {
       schedule.eventSlotCount ?? 0,
       schedule.eventExprCount ?? 0
     );
-    const pool = new BufferPool();
+    const arena = getTestArena();
 
     const slotToOffset = buildSlotToOffsetMap(program);
 
     // Frame 1 at t=100ms — pulse fires, SampleHold captures tMs=100
-    executeFrame(program, state, pool, 100);
+    arena.reset(); executeFrame(program, state, arena, 100);
     const shSlot = findSampleHoldOutputSlot(program, schedule, state);
     expect(shSlot).toBeGreaterThanOrEqual(0);
     const shOffset = slotToOffset.get(shSlot);
@@ -254,7 +254,7 @@ describe('SampleHold', () => {
     expect(state.values.f64[shOffset]).toBe(100);
 
     // Frame 2 at t=200ms — pulse fires again, captures new value
-    executeFrame(program, state, pool, 200);
+    arena.reset(); executeFrame(program, state, arena, 200);
     expect(state.values.f64[shOffset]).toBe(200);
   });
 
@@ -285,9 +285,9 @@ describe('SampleHold', () => {
       schedule.eventSlotCount ?? 0,
       schedule.eventExprCount ?? 0
     );
-    const pool = new BufferPool();
+    const arena = getTestArena();
 
-    executeFrame(program, state, pool, 100);
+    arena.reset(); executeFrame(program, state, arena, 100);
     expect(result.kind).toBe('ok');
   });
 
@@ -363,9 +363,9 @@ describe('Event Consumer Blocks Integration', () => {
       schedule.eventSlotCount ?? 0,
       schedule.eventExprCount ?? 0
     );
-    const pool = new BufferPool();
+    const arena = getTestArena();
 
-    executeFrame(program, state, pool, 100);
+    arena.reset(); executeFrame(program, state, arena, 100);
 
     const slotToOffset = buildSlotToOffsetMap(program);
 
@@ -415,9 +415,9 @@ describe('Event Consumer Blocks Integration', () => {
       schedule.eventSlotCount ?? 0,
       schedule.eventExprCount ?? 0
     );
-    const pool = new BufferPool();
+    const arena = getTestArena();
 
-    executeFrame(program, state, pool, 100);
+    arena.reset(); executeFrame(program, state, arena, 100);
 
     const slotToOffset = buildSlotToOffsetMap(program);
 

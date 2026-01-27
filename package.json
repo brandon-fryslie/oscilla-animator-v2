@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:memory": "VITEST_EXPOSE_GC=1 vitest run src/__tests__/memory-profile.test.ts",
     "bench": "vitest bench"
   },
   "dependencies": {

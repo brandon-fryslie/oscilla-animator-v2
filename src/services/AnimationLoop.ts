@@ -5,12 +5,11 @@
  * and performance metrics tracking.
  */
 
-import { BufferPool, executeFrame } from '../runtime';
-import { renderFrame } from '../render';
+import { executeFrame } from '../runtime';
+import { renderFrame, RenderBufferArena } from '../render';
 import {
   recordFrameTime,
   recordFrameDelta,
-  recordPoolStats,
   shouldEmitSnapshot,
   emitHealthSnapshot,
   computeFrameTimingStats,
@@ -36,7 +35,7 @@ export interface AnimationLoopDeps {
   getCurrentState: () => RuntimeState | null;
   getCanvas: () => HTMLCanvasElement | null;
   getContext: () => CanvasRenderingContext2D | null;
-  getPool: () => BufferPool | null;
+  getArena: () => RenderBufferArena | null;
   store: RootStore;
   onStatsUpdate?: (statsText: string) => void;
 }
@@ -68,17 +67,20 @@ export function executeAnimationFrame(
   deps: AnimationLoopDeps,
   state: AnimationLoopState
 ): void {
-  const { getCurrentProgram, getCurrentState, getCanvas, getContext, getPool, store, onStatsUpdate } = deps;
+  const { getCurrentProgram, getCurrentState, getCanvas, getContext, getArena, store, onStatsUpdate } = deps;
 
   const currentProgram = getCurrentProgram();
   const currentState = getCurrentState();
   const ctx = getContext();
   const canvas = getCanvas();
-  const pool = getPool();
+  const arena = getArena();
 
-  if (!currentProgram || !currentState || !ctx || !canvas || !pool) {
+  if (!currentProgram || !currentState || !ctx || !canvas || !arena) {
     return;
   }
+
+  // Reset arena for this frame (O(1) - just resets write heads)
+  arena.reset();
 
   // Record frame delta FIRST (using rAF timestamp for precision)
   recordFrameDelta(currentState, tMs);
@@ -87,7 +89,7 @@ export function executeAnimationFrame(
 
   // Execute frame (camera resolved from program.renderGlobals)
   const execStart = performance.now();
-  const frame = executeFrame(currentProgram, currentState, pool, tMs);
+  const frame = executeFrame(currentProgram, currentState, arena, tMs);
   state.execTime = performance.now() - execStart;
 
   // Render to canvas with zoom/pan transform from store
@@ -108,13 +110,7 @@ export function executeAnimationFrame(
   ctx.restore();
   state.renderTime = performance.now() - renderStart;
 
-  // Release all buffers back to pool for reuse next frame
-  // This also records frame stats internally (Sprint: memory-instrumentation)
-  pool.releaseAll();
-
-  // Record pool stats AFTER releasing buffers (Sprint: memory-instrumentation)
-  // This reads the stats that were captured during releaseAll()
-  recordPoolStats(currentState, pool);
+  // NOTE: No buffer release needed - arena is reset at frame start (O(1))
 
   // Calculate frame time
   const frameTime = performance.now() - frameStart;
@@ -130,13 +126,12 @@ export function executeAnimationFrame(
     // Update diagnostics store with timing stats
     store.diagnostics.updateFrameTiming(timingStats);
 
-    // Update diagnostics store with memory stats (Sprint: memory-instrumentation)
-    const poolStats = pool.getFrameStats();
+    // Update diagnostics store with memory stats (arena is zero-alloc after init)
     store.diagnostics.updateMemoryStats({
-      poolAllocs: poolStats.allocs,
-      poolReleases: poolStats.releases,
-      pooledBytes: poolStats.pooledBytes,
-      poolKeyCount: poolStats.poolKeys,
+      poolAllocs: 0,
+      poolReleases: 0,
+      pooledBytes: arena.getTotalAllocatedBytes(),
+      poolKeyCount: 6, // f32, vec2f32, vec3f32, rgba8, u32, u8
     });
 
     emitHealthSnapshot(

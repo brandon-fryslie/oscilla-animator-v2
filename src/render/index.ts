@@ -19,3 +19,12 @@ export type {
   RenderFrameIR,
   DrawOp,
 } from './types';
+
+// RenderBufferArena for zero-allocation rendering
+export {
+  RenderBufferArena,
+  initGlobalRenderArena,
+  getGlobalRenderArena,
+  isGlobalArenaInitialized,
+  _resetGlobalArenaForTesting,
+} from './RenderBufferArena';

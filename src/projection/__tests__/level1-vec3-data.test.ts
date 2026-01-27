@@ -184,7 +184,8 @@ describe('Level 1 Integration Tests', () => {
     // via the Materializer's standard field-slot pipeline.
     const { buildPatch } = await import('../../graph');
     const { compile } = await import('../../compiler/compile');
-    const { createRuntimeState, BufferPool, executeFrame } = await import('../../runtime');
+    const { createRuntimeState, executeFrame } = await import('../../runtime');
+    const { getTestArena } = await import('../../runtime/__tests__/test-arena-helper');
 
     const N = 16;
     const patch = buildPatch((b: any) => {
@@ -221,8 +222,8 @@ describe('Level 1 Integration Tests', () => {
 
     const program = result.program;
     const state = createRuntimeState(program.slotMeta.length);
-    const pool = new BufferPool();
-    const frame = executeFrame(program, state, pool, 0) as RenderFrameIR;
+    const arena = getTestArena();
+    const frame = executeFrame(program, state, arena, 0) as RenderFrameIR;
 
     expect(frame.ops.length).toBeGreaterThan(0);
     const op = frame.ops[0];

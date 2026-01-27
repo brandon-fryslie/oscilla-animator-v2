@@ -20,7 +20,7 @@ import { registerDynamicTopology, TOPOLOGY_ID_ELLIPSE } from '../../shapes/regis
 import type { RenderSpace2D } from '../../shapes/types';
 import { PathVerb } from '../../shapes/types';
 import { DEFAULT_CAMERA } from '../CameraResolver';
-import { BufferPool } from '../BufferPool';
+import { getTestArena } from './test-arena-helper';
 
 // Helper to create a valid palette Float32Array
 function createPalette(r = 1, g = 1, b = 1, a = 1): Float32Array {
@@ -108,10 +108,11 @@ describe('RenderAssembler', () => {
         signals: [],
         instances: new Map(),
         state,
-    resolvedCamera: DEFAULT_CAMERA,
+        resolvedCamera: DEFAULT_CAMERA,
+        arena: getTestArena(),
       };
 
-      expect(() => assembleDrawPathInstancesOp(step, context, new BufferPool())).toThrow(
+      expect(() => assembleDrawPathInstancesOp(step, context)).toThrow(
         /Instance missing-instance not found/
       );
     });
@@ -130,10 +131,11 @@ describe('RenderAssembler', () => {
         signals: [],
         instances: new Map([['empty-instance', createMockInstance(0)]]),
         state,
-    resolvedCamera: DEFAULT_CAMERA,
+        resolvedCamera: DEFAULT_CAMERA,
+        arena: getTestArena(),
       };
 
-      const result = assembleDrawPathInstancesOp(step, context, new BufferPool());
+      const result = assembleDrawPathInstancesOp(step, context);
       expect(result).toEqual([]);
     });
 
@@ -165,9 +167,10 @@ describe('RenderAssembler', () => {
         instances: new Map([['test-instance', createMockInstance(10)]]),
         state,
     resolvedCamera: DEFAULT_CAMERA,
+        arena: getTestArena(),
       };
 
-      const result = assembleDrawPathInstancesOp(step, context, new BufferPool());
+      const result = assembleDrawPathInstancesOp(step, context);
       // Primitive topologies now produce DrawPrimitiveInstancesOp
       expect(result).toHaveLength(1);
       expect(result[0].kind).toBe('drawPrimitiveInstances');
@@ -216,9 +219,10 @@ describe('RenderAssembler', () => {
         instances: new Map([['test-instance', createMockInstance(2)]]),
         state,
     resolvedCamera: DEFAULT_CAMERA,
+        arena: getTestArena(),
       };
 
-      const result = assembleDrawPathInstancesOp(step, context, new BufferPool());
+      const result = assembleDrawPathInstancesOp(step, context);
 
       expect(result).toHaveLength(1);
       const op = result[0];
@@ -290,9 +294,10 @@ describe('RenderAssembler', () => {
         instances: new Map([['test-instance', createMockInstance(10)]]),
         state,
     resolvedCamera: DEFAULT_CAMERA,
+        arena: getTestArena(),
       };
 
-      expect(() => assembleDrawPathInstancesOp(step, context, new BufferPool())).toThrow(
+      expect(() => assembleDrawPathInstancesOp(step, context)).toThrow(
         /Position buffer must be Float32Array/
       );
     });
@@ -334,9 +339,10 @@ describe('RenderAssembler', () => {
         instances: new Map([['test-instance', createMockInstance(10)]]),
         state,
     resolvedCamera: DEFAULT_CAMERA,
+        arena: getTestArena(),
       };
 
-      expect(() => assembleDrawPathInstancesOp(step, context, new BufferPool())).toThrow(
+      expect(() => assembleDrawPathInstancesOp(step, context)).toThrow(
         /Color buffer must be Uint8ClampedArray/
       );
     });
@@ -377,9 +383,10 @@ describe('RenderAssembler', () => {
         instances: new Map([['test-instance', createMockInstance(10)]]),
         state,
     resolvedCamera: DEFAULT_CAMERA,
+        arena: getTestArena(),
       };
 
-      expect(() => assembleDrawPathInstancesOp(step, context, new BufferPool())).toThrow(
+      expect(() => assembleDrawPathInstancesOp(step, context)).toThrow(
         /Path topology requires control points buffer/
       );
     });
@@ -441,9 +448,10 @@ describe('RenderAssembler', () => {
         ]),
         state,
     resolvedCamera: DEFAULT_CAMERA,
+        arena: getTestArena(),
       };
 
-      const result = assembleRenderFrame(steps, context, new BufferPool());
+      const result = assembleRenderFrame(steps, context);
 
       expect(result.version).toBe(2);
       expect(result.ops).toHaveLength(2);
@@ -500,9 +508,10 @@ describe('RenderAssembler', () => {
         ]),
         state,
     resolvedCamera: DEFAULT_CAMERA,
+        arena: getTestArena(),
       };
 
-      const result = assembleRenderFrame(steps, context, new BufferPool());
+      const result = assembleRenderFrame(steps, context);
 
       // Both path and primitive instances produce ops
       expect(result.version).toBe(2);
@@ -536,9 +545,10 @@ describe('RenderAssembler', () => {
         ]),
         state,
     resolvedCamera: DEFAULT_CAMERA,
+        arena: getTestArena(),
       };
 
-      const result = assembleRenderFrame(steps, context, new BufferPool());
+      const result = assembleRenderFrame(steps, context);
 
       expect(result.version).toBe(2);
       expect(result.ops).toHaveLength(0);

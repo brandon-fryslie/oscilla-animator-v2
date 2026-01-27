@@ -17,7 +17,7 @@ import { compile } from '../../compiler/compile';
 import { buildPatch } from '../../graph';
 import { executeFrame } from '../../runtime/ScheduleExecutor';
 import { createRuntimeState } from '../../runtime/RuntimeState';
-import { BufferPool } from '../../runtime/BufferPool';
+import { getTestArena } from '../../runtime/__tests__/test-arena-helper';
 
 // =============================================================================
 // Camera Constants
@@ -63,7 +63,7 @@ describe('Level 7 Unit Tests: Depth Sort and Cull', () => {
       255, 255, 0, 255,  // idx 3: yellow
     ]);
 
-    const result = depthSortAndCompact(projection, count, color);
+    const result = depthSortAndCompact(projection, count, color, getTestArena());
 
     // Expected order: idx 2 (d=0.9), idx 0 (d=0.5), idx 3 (d=0.3), idx 1 (d=0.1)
     expect(result.count).toBe(4);
@@ -116,7 +116,7 @@ describe('Level 7 Unit Tests: Depth Sort and Cull', () => {
       color[i * 4] = i * 50; // Mark each with unique color channel
     }
 
-    const result = depthSortAndCompact(projection, count, color);
+    const result = depthSortAndCompact(projection, count, color, getTestArena());
 
     // All same depth → original order preserved (stable sort)
     expect(result.count).toBe(5);
@@ -147,7 +147,7 @@ describe('Level 7 Unit Tests: Depth Sort and Cull', () => {
       color[i * 4] = i * 50; // Unique marker (scaled to fit Uint8 range)
     }
 
-    const result = depthSortAndCompact(projection, count, color);
+    const result = depthSortAndCompact(projection, count, color, getTestArena());
 
     // Only 3 visible instances remain
     expect(result.count).toBe(3);
@@ -195,11 +195,12 @@ describe('Level 7 Integration Tests: Ortho Depth Ordering', () => {
       writePosition(positions, i, ((i - 4) % 2) * 0.5 + 0.1, Math.floor((i - 4) / 2) * 0.5 + 0.1, 0.4);
     }
 
-    const projection = projectInstances(positions, 0.03, N, orthoCam);
+    const arena = getTestArena();
+    const projection = projectInstances(positions, 0.03, N, orthoCam, arena);
     const color = new Uint8ClampedArray(N * 4);
     for (let i = 0; i < N; i++) color[i * 4] = i * 30; // marker
 
-    const result = depthSortAndCompact(projection, N, color);
+    const result = depthSortAndCompact(projection, N, color, arena);
 
     // All 8 visible
     expect(result.count).toBe(8);
@@ -226,7 +227,7 @@ describe('Level 7 Integration Tests: Ortho Depth Ordering', () => {
       writePosition(positions, i, 0.25 * (i - 4), 0.75, 0.4);
     }
 
-    const projection = projectInstances(positions, 0.03, N, orthoCam);
+    const projection = projectInstances(positions, 0.03, N, orthoCam, getTestArena());
 
     // Group A depths (z=0)
     const groupADepths = Array.from(projection.depth.slice(0, 4));
@@ -248,9 +249,11 @@ describe('Level 7 Integration Tests: Ortho Depth Ordering', () => {
       writePosition(positions, i, (i % 4) * 0.25, Math.floor(i / 4) * 0.25, zValues[i]);
     }
 
-    const projection = projectInstances(positions, 0.03, N, orthoCam);
+    // Use same arena for both calls - don't call getTestArena() twice
+    const arena = getTestArena();
+    const projection = projectInstances(positions, 0.03, N, orthoCam, arena);
     const color = new Uint8ClampedArray(N * 4);
-    const result = depthSortAndCompact(projection, N, color);
+    const result = depthSortAndCompact(projection, N, color, arena);
 
     // All should be visible (z between -5 and 5 is within near=-100..far=100)
     expect(result.count).toBe(N);
@@ -278,11 +281,12 @@ describe('Level 7 Integration Tests: Perspective Depth Ordering', () => {
       writePosition(positions, i, 0.3 + ((i - 4) % 2) * 0.2, 0.3 + Math.floor((i - 4) / 2) * 0.2, 0.4);
     }
 
-    const projection = projectInstances(positions, 0.03, N, perspCam);
+    const arena = getTestArena();
+    const projection = projectInstances(positions, 0.03, N, perspCam, arena);
     const color = new Uint8ClampedArray(N * 4);
     for (let i = 0; i < N; i++) color[i * 4] = i * 30;
 
-    const result = depthSortAndCompact(projection, N, color);
+    const result = depthSortAndCompact(projection, N, color, arena);
 
     // All visible
     expect(result.count).toBe(8);
@@ -312,10 +316,11 @@ describe('Level 7 Integration Tests: Perspective Depth Ordering', () => {
     writePosition(positions, 2, 0.7, 0.7, 0.0);  // farther
     writePosition(positions, 3, 0.7, 0.7, 0.5);  // closer
 
-    const projection = projectInstances(positions, 0.03, N, perspCam);
+    const arena = getTestArena();
+    const projection = projectInstances(positions, 0.03, N, perspCam, arena);
     const color = new Uint8ClampedArray(N * 4);
     for (let i = 0; i < N; i++) color[i * 4] = i * 60;
-    const result = depthSortAndCompact(projection, N, color);
+    const result = depthSortAndCompact(projection, N, color, arena);
 
     expect(result.count).toBe(4);
 
@@ -347,7 +352,8 @@ describe('Level 7 Integration Tests: Culling', () => {
     writePosition(positions, 4, 0.5, 0.5, 10.0);   // behind camera (viewZ < 0), culled
     writePosition(positions, 5, 0.5, 0.5, -200.0); // beyond far plane, culled
 
-    const projection = projectInstances(positions, 0.03, N, perspCam);
+    const arena = getTestArena();
+    const projection = projectInstances(positions, 0.03, N, perspCam, arena);
 
     // Verify visibility flags
     expect(projection.visible[0]).toBe(1); // z=0: visible
@@ -359,7 +365,7 @@ describe('Level 7 Integration Tests: Culling', () => {
 
     const color = new Uint8ClampedArray(N * 4);
     for (let i = 0; i < N; i++) color[i * 4] = i * 40;
-    const result = depthSortAndCompact(projection, N, color);
+    const result = depthSortAndCompact(projection, N, color, arena);
 
     // Only 4 visible instances remain
     expect(result.count).toBe(4);
@@ -370,18 +376,20 @@ describe('Level 7 Integration Tests: Culling', () => {
   it('Culling state does not persist: if instance moves back into frustum next frame, it becomes visible', () => {
     const N = 1;
     const positions = createPositionField(N);
+    const color = new Uint8ClampedArray(N * 4);
 
     // Frame 1: behind camera (culled)
     writePosition(positions, 0, 0.5, 0.5, 10.0);
-    const proj1 = projectInstances(positions, 0.03, N, perspCam);
-    const color = new Uint8ClampedArray(N * 4);
-    const result1 = depthSortAndCompact(proj1, N, color);
+    const arena1 = getTestArena();
+    const proj1 = projectInstances(positions, 0.03, N, perspCam, arena1);
+    const result1 = depthSortAndCompact(proj1, N, color, arena1);
     expect(result1.count).toBe(0); // Culled
 
     // Frame 2: move back into frustum
     writePosition(positions, 0, 0.5, 0.5, 0.0);
-    const proj2 = projectInstances(positions, 0.03, N, perspCam);
-    const result2 = depthSortAndCompact(proj2, N, color);
+    const arena2 = getTestArena(); // Simulates new frame (resets arena)
+    const proj2 = projectInstances(positions, 0.03, N, perspCam, arena2);
+    const result2 = depthSortAndCompact(proj2, N, color, arena2);
     expect(result2.count).toBe(1); // Visible again
 
     // Verify it has valid screen-space data
@@ -428,10 +436,10 @@ describe('Level 7 End-to-End: Real Pipeline Depth Sort + Cull', () => {
 
     const program = result.program;
     const state = createRuntimeState(program.slotMeta.length);
-    const pool = new BufferPool();
+    const arena = getTestArena();
 
     // Execute one frame (no camera parameter — uses default ortho)
-    const frame = executeFrame(program, state, pool, 0);
+    const frame = executeFrame(program, state, arena, 0);
 
     expect(frame.ops.length).toBeGreaterThan(0);
     const op = frame.ops[0];

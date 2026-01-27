@@ -15,10 +15,10 @@ import { compile } from '../compile';
 import type { ScheduleIR } from '../passes-v2/pass7-schedule';
 import {
   createRuntimeState,
-  BufferPool,
   executeFrame,
   type RenderFrameIR,
 } from '../../runtime';
+import { getTestArena } from '../../runtime/__tests__/test-arena-helper';
 import { TOPOLOGY_ID_ELLIPSE, TOPOLOGY_ID_RECT } from '../../shapes/registry';
 
 describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
@@ -183,9 +183,9 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
     expect(topologyIds).toContain(TOPOLOGY_ID_RECT);
 
     // === FRAME 1: t=0 ===
-    const pool = new BufferPool();
+    const arena = getTestArena();
     const state = createRuntimeState(program.slotMeta.length);
-    const frame1 = executeFrame(program, state, pool, 0) as RenderFrameIR;
+    const frame1 = executeFrame(program, state, arena, 0) as RenderFrameIR;
 
     expect(frame1.version).toBe(2);
     expect(frame1.ops.length).toBe(2);
@@ -302,7 +302,7 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
     const f1EllipseSizes = new Float32Array(ellipseSizes1);
     const f1RectSizes = new Float32Array(rectSizes1);
 
-    const frame2 = executeFrame(program, state, pool, 1000) as RenderFrameIR;
+    const frame2 = executeFrame(program, state, arena, 1000) as RenderFrameIR;
     const ellipseOp2 = frame2.ops.find(op => op.geometry.topologyId === TOPOLOGY_ID_ELLIPSE)!;
     const rectOp2 = frame2.ops.find(op => op.geometry.topologyId === TOPOLOGY_ID_RECT)!;
 
@@ -382,7 +382,7 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
     expect(rectOp2.kind).toBe('drawPrimitiveInstances');
 
     // === FRAME 3: t=2000ms - verify continued animation ===
-    const frame3 = executeFrame(program, state, pool, 2000) as RenderFrameIR;
+    const frame3 = executeFrame(program, state, arena, 2000) as RenderFrameIR;
     const ellipseOp3 = frame3.ops.find(op => op.geometry.topologyId === TOPOLOGY_ID_ELLIPSE)!;
     const rectOp3 = frame3.ops.find(op => op.geometry.topologyId === TOPOLOGY_ID_RECT)!;
 

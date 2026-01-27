@@ -11,12 +11,12 @@ import { compile } from '../compile';
 import type { ScheduleIR } from '../passes-v2/pass7-schedule';
 import {
   createRuntimeState,
-  BufferPool,
   executeFrame,
   type RenderFrameIR,
   type DrawPathInstancesOp,
   type DrawPrimitiveInstancesOp,
 } from '../../runtime';
+import { getTestArena } from '../../runtime/__tests__/test-arena-helper';
 
 describe('Steel Thread - Animated Particles', () => {
   it('should compile and execute the minimal animated particles patch', () => {
@@ -112,10 +112,10 @@ describe('Steel Thread - Animated Particles', () => {
     expect(renderSteps.length).toBe(1);
 
     // Execute a frame
-    const pool = new BufferPool();
+    const arena = getTestArena();
     const state = createRuntimeState(program.slotMeta.length);
 
-    const frame = executeFrame(program, state, pool, 0);
+    const frame = executeFrame(program, state, arena, 0);
 
     // Verify frame structure (v2)
     expect(frame.version).toBe(2);
@@ -173,7 +173,7 @@ describe('Steel Thread - Animated Particles', () => {
     }
 
     // Execute another frame at t=1000ms to verify animation
-    const frame2 = executeFrame(program, state, pool, 1000);
+    const frame2 = executeFrame(program, state, arena, 1000);
     const pos2 = (frame2.ops[0] as DrawPathInstancesOp | DrawPrimitiveInstancesOp).instances.position as Float32Array;
 
     // Positions should be different from frame 1

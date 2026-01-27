@@ -14,7 +14,8 @@
 import { describe, it, expect } from 'vitest';
 import { buildPatch } from '../../graph';
 import { compile } from '../../compiler/compile';
-import { createRuntimeState, BufferPool, executeFrame, type RenderFrameIR } from '../../runtime';
+import { createRuntimeState, executeFrame, type RenderFrameIR } from '../../runtime';
+import { getTestArena } from '../../runtime/__tests__/test-arena-helper';
 import { DEFAULT_CAMERA, type ResolvedCameraParams } from '../../runtime/CameraResolver';
 
 // =============================================================================
@@ -54,15 +55,15 @@ describe('Level 5 Unit Tests: Assembler API', () => {
 
     const program = result.program;
     const state = createRuntimeState(program.slotMeta.length);
-    const pool = new BufferPool();
+    const arena = getTestArena();
 
     // executeFrame no longer takes camera parameter
     // Camera is resolved from program.renderGlobals (default if none)
-    const frameNoCamera = executeFrame(program, state, pool, 0);
+    const frameNoCamera = executeFrame(program, state, arena, 0);
     expect(frameNoCamera.version).toBe(2);
     expect(frameNoCamera.ops.length).toBeGreaterThan(0);
 
-    const frameNext = executeFrame(program, state, pool, 16);
+    const frameNext = executeFrame(program, state, arena, 16);
     expect(frameNext.version).toBe(2);
     expect(frameNext.ops.length).toBeGreaterThan(0);
   });
@@ -99,9 +100,9 @@ describe('Level 5 Unit Tests: Assembler API', () => {
 
     const program = result.program;
     const state = createRuntimeState(program.slotMeta.length);
-    const pool = new BufferPool();
+    const arena = getTestArena();
 
-    const frame = executeFrame(program, state, pool, 0) as RenderFrameIR;
+    const frame = executeFrame(program, state, arena, 0) as RenderFrameIR;
     expect(frame.version).toBe(2);
     expect(frame.ops.length).toBeGreaterThan(0);
 
@@ -148,9 +149,9 @@ describe('Level 5 Unit Tests: Assembler API', () => {
 
     const program = result.program;
     const state = createRuntimeState(program.slotMeta.length);
-    const pool = new BufferPool();
+    const arena = getTestArena();
 
-    const frame = executeFrame(program, state, pool, 0) as RenderFrameIR;
+    const frame = executeFrame(program, state, arena, 0) as RenderFrameIR;
     expect(frame.version).toBe(2);
     expect(frame.ops.length).toBeGreaterThan(0);
 
@@ -229,10 +230,10 @@ describe('Level 5 Integration Tests: Full Pipeline', () => {
 
     // Create runtime state and buffer pool
     const state = createRuntimeState(program.slotMeta.length);
-    const pool = new BufferPool();
+    const arena = getTestArena();
 
     // Execute one frame (default ortho camera from program.renderGlobals)
-    const frame = executeFrame(program, state, pool, 0) as RenderFrameIR;
+    const frame = executeFrame(program, state, arena, 0) as RenderFrameIR;
 
     // Verify frame produced a render op
     expect(frame.ops.length).toBeGreaterThan(0);

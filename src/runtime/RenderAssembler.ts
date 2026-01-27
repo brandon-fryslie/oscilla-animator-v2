@@ -20,7 +20,6 @@ import type { StepRender, InstanceDecl, SigExpr } from '../compiler/ir/types';
 import type { RuntimeState } from './RuntimeState';
 import { evaluateSignal } from './SignalEvaluator';
 import { getTopology } from '../shapes/registry';
-import type { BufferPool } from './BufferPool';
 import type { PathTopologyDef, TopologyDef, TopologyId } from '../shapes/types';
 import type {
   DrawPathInstancesOp,
@@ -47,42 +46,13 @@ import {
 import type { ResolvedCameraParams } from './CameraResolver';
 
 // =============================================================================
-// Preallocated Buffer Pool for depthSortAndCompact
+// RenderBufferArena Integration
 // =============================================================================
-// These buffers are reused across frames to avoid per-frame allocations.
-// They grow as needed (2x factor) but never shrink.
-// Final results are copied to fresh arrays to ensure caller independence.
+// All render pipeline allocations go through the RenderBufferArena.
+// After initialization, NO allocations occur during rendering.
+// Any attempt to exceed arena capacity throws an error (fail-fast).
 
-const INITIAL_POOL_CAPACITY = 256;
-
-let pooledIndices: Uint32Array = new Uint32Array(INITIAL_POOL_CAPACITY);
-let pooledScreenPos: Float32Array = new Float32Array(INITIAL_POOL_CAPACITY * 2);
-let pooledRadius: Float32Array = new Float32Array(INITIAL_POOL_CAPACITY);
-let pooledDepth: Float32Array = new Float32Array(INITIAL_POOL_CAPACITY);
-let pooledColor: Uint8ClampedArray = new Uint8ClampedArray(INITIAL_POOL_CAPACITY * 4);
-let pooledRotation: Float32Array = new Float32Array(INITIAL_POOL_CAPACITY);
-let pooledScale2: Float32Array = new Float32Array(INITIAL_POOL_CAPACITY * 2);
-
-/**
- * Ensure pooled buffers have capacity for at least `needed` instances.
- * Grows all buffers together (2x factor) to avoid capacity mismatch.
- * No-op if current capacity is sufficient.
- *
- * @param needed - Required capacity (number of instances)
- */
-function ensureBufferCapacity(needed: number): void {
-  if (pooledIndices.length >= needed) return;
-
-  const newSize = Math.max(needed, pooledIndices.length * 2);
-
-  pooledIndices = new Uint32Array(newSize);
-  pooledScreenPos = new Float32Array(newSize * 2);
-  pooledRadius = new Float32Array(newSize);
-  pooledDepth = new Float32Array(newSize);
-  pooledColor = new Uint8ClampedArray(newSize * 4);
-  pooledRotation = new Float32Array(newSize);
-  pooledScale2 = new Float32Array(newSize * 2);
-}
+import type { RenderBufferArena } from '../render/RenderBufferArena';
 
 // =============================================================================
 // Internal Types (v1 compatibility)
@@ -142,31 +112,23 @@ export interface ProjectionOutput {
  *
  * Fast-path optimization: if depth is already monotone decreasing among visible instances, skip sort.
  *
- * ⚠️ MEMORY CONTRACT - CRITICAL:
- * Returned buffers are VIEWS into module-level pooled storage. They are valid ONLY until:
- * - The next call to depthSortAndCompact (overwrites pooled buffers)
- * - The next frame (pooled buffers are reused)
- *
- * Callers MUST copy the returned data before storing in any persistent structure.
- * Example:
- *   const compacted = depthSortAndCompact(...);
- *   const safeCopy = new Float32Array(compacted.screenPosition); // ✓ Safe
- *   drawOp.position = compacted.screenPosition; // ✗ MEMORY LEAK - view becomes invalid
- *
- * For most use cases, prefer the high-level helpers `projectAndCompact()` or `compactAndCopy()`
- * which automatically handle copying.
+ * MEMORY CONTRACT:
+ * Returned buffers are VIEWS into the arena. They are valid until arena.reset() is called.
+ * Callers should use the returned views directly in DrawOps - no copying needed.
  *
  * @param projection - Raw projection output with all instances
  * @param count - Total instance count (including invisible)
- * @param color - Per-instance color buffer (Float32Array, stride 4: RGBA)
+ * @param color - Per-instance color buffer (Uint8ClampedArray, stride 4: RGBA)
+ * @param arena - Pre-allocated buffer arena (required)
  * @param rotation - Optional per-instance rotation
  * @param scale2 - Optional per-instance anisotropic scale
- * @returns Compacted output with only visible instances, depth-sorted (VIEWS - must copy before storage)
+ * @returns Compacted output with only visible instances, depth-sorted
  */
 export function depthSortAndCompact(
   projection: ProjectionOutput,
   count: number,
   color: Uint8ClampedArray,
+  arena: RenderBufferArena,
   rotation?: Float32Array,
   scale2?: Float32Array,
 ): {
@@ -180,14 +142,14 @@ export function depthSortAndCompact(
 } {
   const { screenPosition, screenRadius, depth, visible } = projection;
 
-  // Ensure pooled buffers have capacity for this frame
-  ensureBufferCapacity(count);
+  // Allocate index buffer from arena
+  const indices = arena.allocU32(count);
 
-  // Build index array for visible instances using pooled buffer
+  // Build index array for visible instances
   let visibleCount = 0;
   for (let i = 0; i < count; i++) {
     if (visible[i] === 1) {
-      pooledIndices[visibleCount++] = i;
+      indices[visibleCount++] = i;
     }
   }
 
@@ -197,7 +159,7 @@ export function depthSortAndCompact(
   if (visibleCount > 1) {
     let prevVisibleDepth = Infinity;
     for (let i = 0; i < visibleCount; i++) {
-      const idx = pooledIndices[i];
+      const idx = indices[i];
       if (depth[idx] > prevVisibleDepth) {
         // depth increased = ascending = NOT far-to-near
         alreadyOrdered = false;
@@ -209,76 +171,73 @@ export function depthSortAndCompact(
 
   // Only sort if not already ordered
   if (!alreadyOrdered) {
-    // Stable sort by depth (far-to-near / painter's algorithm: larger depth first)
-    // Convert to Array for sort, then write back to pooled buffer
-    const indicesView = pooledIndices.subarray(0, visibleCount);
-    const sortedIndices = Array.from(indicesView).sort((a, b) => {
-      const da = depth[a];
-      const db = depth[b];
-      if (da !== db) return db - da;
-      return a - b; // Stable: preserve original order for equal depths
-    });
-    for (let i = 0; i < visibleCount; i++) {
-      pooledIndices[i] = sortedIndices[i];
+    // In-place insertion sort (allocation-free, stable, O(n²) but fast for small n)
+    // For large arrays this is slower than Array.sort but avoids allocation
+    for (let i = 1; i < visibleCount; i++) {
+      const key = indices[i];
+      const keyDepth = depth[key];
+      let j = i - 1;
+      // Move elements with smaller depth (closer) to the right
+      while (j >= 0 && depth[indices[j]] < keyDepth) {
+        indices[j + 1] = indices[j];
+        j--;
+      }
+      indices[j + 1] = key;
     }
   }
 
-  // Compact screen-space arrays to pooled buffers
+  // Allocate output buffers from arena
+  const outScreenPos = arena.allocVec2(visibleCount);
+  const outRadius = arena.allocF32(visibleCount);
+  const outDepth = arena.allocF32(visibleCount);
+  const outColor = arena.allocRGBA(visibleCount);
+
+  // Compact screen-space arrays
   for (let out = 0; out < visibleCount; out++) {
-    const src = pooledIndices[out];
-    pooledScreenPos[out * 2] = screenPosition[src * 2];
-    pooledScreenPos[out * 2 + 1] = screenPosition[src * 2 + 1];
-    pooledRadius[out] = screenRadius[src];
-    pooledDepth[out] = depth[src];
+    const src = indices[out];
+    outScreenPos[out * 2] = screenPosition[src * 2];
+    outScreenPos[out * 2 + 1] = screenPosition[src * 2 + 1];
+    outRadius[out] = screenRadius[src];
+    outDepth[out] = depth[src];
   }
 
   // Compact color buffer (stride 4: RGBA)
   for (let out = 0; out < visibleCount; out++) {
-    const src = pooledIndices[out];
+    const src = indices[out];
     const o = out * 4;
     const s = src * 4;
-    pooledColor[o] = color[s];
-    pooledColor[o + 1] = color[s + 1];
-    pooledColor[o + 2] = color[s + 2];
-    pooledColor[o + 3] = color[s + 3];
+    outColor[o] = color[s];
+    outColor[o + 1] = color[s + 1];
+    outColor[o + 2] = color[s + 2];
+    outColor[o + 3] = color[s + 3];
   }
 
   // Compact rotation if present
   let compactedRotation: Float32Array | undefined;
   if (rotation) {
+    compactedRotation = arena.allocF32(visibleCount);
     for (let out = 0; out < visibleCount; out++) {
-      pooledRotation[out] = rotation[pooledIndices[out]];
+      compactedRotation[out] = rotation[indices[out]];
     }
-    // Return subarray view directly - no copy
-    compactedRotation = pooledRotation.subarray(0, visibleCount) as Float32Array;
   }
 
   // Compact scale2 if present (stride 2)
   let compactedScale2: Float32Array | undefined;
   if (scale2) {
+    compactedScale2 = arena.allocVec2(visibleCount);
     for (let out = 0; out < visibleCount; out++) {
-      const src = pooledIndices[out];
-      pooledScale2[out * 2] = scale2[src * 2];
-      pooledScale2[out * 2 + 1] = scale2[src * 2 + 1];
+      const src = indices[out];
+      compactedScale2[out * 2] = scale2[src * 2];
+      compactedScale2[out * 2 + 1] = scale2[src * 2 + 1];
     }
-    // Return subarray view directly - no copy
-    compactedScale2 = pooledScale2.subarray(0, visibleCount * 2) as Float32Array;
   }
 
-  // Return subarray views directly to eliminate memory leak
-  // These views point into module-level pooled buffers which are reused every frame.
-  // IMPORTANT: Returned buffers are VIEWS into pooled storage.
-  // They are valid only until the next frame or next call to depthSortAndCompact.
-  // Callers MUST NOT retain references beyond immediate use.
-  //
-  // In production (with pool.releaseAll() each frame), this is safe.
-  // In tests (without pool), the views are valid for immediate consumption within the test assertion.
   return {
     count: visibleCount,
-    screenPosition: pooledScreenPos.subarray(0, visibleCount * 2) as Float32Array,
-    screenRadius: pooledRadius.subarray(0, visibleCount) as Float32Array,
-    depth: pooledDepth.subarray(0, visibleCount) as Float32Array,
-    color: pooledColor.subarray(0, visibleCount * 4) as Uint8ClampedArray,
+    screenPosition: outScreenPos,
+    screenRadius: outRadius,
+    depth: outDepth,
+    color: outColor,
     rotation: compactedRotation,
     scale2: compactedScale2,
   };
@@ -298,6 +257,7 @@ export function depthSortAndCompact(
  * @param worldRadius - Uniform world-space radius for all instances
  * @param count - Number of instances
  * @param resolved - Resolved camera parameters from frame globals
+ * @param arena - Pre-allocated buffer arena (required)
  * @returns Separate screen-space output buffers
  */
 export function projectInstances(
@@ -305,26 +265,16 @@ export function projectInstances(
   worldRadius: number,
   count: number,
   resolved: ResolvedCameraParams,
-  pool?: BufferPool,
+  arena: RenderBufferArena,
 ): ProjectionOutput {
-  // Allocate output buffers from pool (or fallback to direct allocation if no pool provided)
-  // In production, pool is ALWAYS provided by the render loop to avoid memory leaks.
-  // Tests may not provide a pool, so we fall back to direct allocation for test compatibility.
-  const screenPosition = pool
-    ? (pool.alloc('vec2f32', count) as Float32Array)
-    : new Float32Array(count * 2);
-  const screenRadius = pool
-    ? (pool.alloc('f32', count) as Float32Array)
-    : new Float32Array(count);
-  const depth = pool
-    ? (pool.alloc('f32', count) as Float32Array)
-    : new Float32Array(count);
-  const visible = new Uint8Array(count); // No pool for uint8 yet
+  // Allocate output buffers from arena (zero allocations after init)
+  const screenPosition = arena.allocVec2(count);
+  const screenRadius = arena.allocF32(count);
+  const depth = arena.allocF32(count);
+  const visible = arena.allocU8(count);
 
   // Uniform radii input for field radius projection
-  const worldRadii = pool
-    ? (pool.alloc('f32', count) as Float32Array)
-    : new Float32Array(count);
+  const worldRadii = arena.allocF32(count);
   worldRadii.fill(worldRadius);
 
   if (resolved.projection === 'ortho') {
@@ -357,44 +307,24 @@ export function projectInstances(
  * Project world-space instances and depth-sort/compact in one step.
  *
  * This is the high-level API combining projectInstances() + depthSortAndCompact().
- * Returns OWNED copies of all buffers (safe for persistent storage).
+ * Returns views into the arena (valid until arena.reset()).
  *
  * Preferred over manual projection + compaction for typical rendering use.
  *
  * **Use case:** Single-group path (uniform shapes), or any case where
  * projection and compaction happen together.
  *
- * **Memory contract:** Returns OWNED copies. Caller can store returned buffers
- * in DrawOps or other persistent structures without copying.
- *
- * **Low-level alternative:** For advanced use cases requiring projection without
- * compaction, or compaction without projection, use projectInstances() and
- * depthSortAndCompact() directly (and remember to copy the results).
+ * **Memory contract:** Returns arena views. Valid until arena.reset() at end of frame.
  *
  * @param worldPositions - World-space positions (vec3 stride, READ-ONLY)
  * @param worldRadius - Uniform world-space radius
  * @param count - Instance count
  * @param color - Per-instance RGBA colors (stride 4)
  * @param camera - Resolved camera parameters (determines projection mode)
- * @param rotation - Optional per-instance rotations (will be copied)
- * @param scale2 - Optional per-instance anisotropic scale (will be copied)
- * @param pool - Buffer pool for intermediate allocation (optional, for memory management)
- * @returns All buffers as OWNED copies (safe for immediate storage in DrawOp)
- *
- * @example
- * ```typescript
- * const result = projectAndCompact(
- *   positions,     // Float32Array (vec3 stride)
- *   0.05,          // uniform radius
- *   instanceCount,
- *   colors,        // Uint8ClampedArray (RGBA stride)
- *   cameraParams,
- *   rotations,     // optional
- *   scales,        // optional
- *   bufferPool     // optional
- * );
- * // result.screenPosition, result.color, etc. are OWNED copies
- * ```
+ * @param arena - Pre-allocated buffer arena (required)
+ * @param rotation - Optional per-instance rotations
+ * @param scale2 - Optional per-instance anisotropic scale
+ * @returns All buffers as arena views (valid until arena.reset())
  */
 export function projectAndCompact(
   worldPositions: Float32Array,
@@ -402,9 +332,9 @@ export function projectAndCompact(
   count: number,
   color: Uint8ClampedArray,
   camera: ResolvedCameraParams,
+  arena: RenderBufferArena,
   rotation?: Float32Array,
   scale2?: Float32Array,
-  pool?: BufferPool,
 ): {
   count: number;
   screenPosition: Float32Array;
@@ -415,114 +345,38 @@ export function projectAndCompact(
   scale2?: Float32Array;
 } {
   // Step 1: Project
-  const projection = projectInstances(worldPositions, worldRadius, count, camera, pool);
+  const projection = projectInstances(worldPositions, worldRadius, count, camera, arena);
 
-  // Step 2: Compact & sort
-  const compacted = depthSortAndCompact(projection, count, color, rotation, scale2);
-
-  // Step 3: Copy to pooled buffers (avoids per-frame allocations)
-  const visibleCount = compacted.count;
-
-  // Allocate from pool (or fallback to direct allocation for tests)
-  const outScreenPos = pool
-    ? (pool.alloc('vec2f32', visibleCount) as Float32Array)
-    : new Float32Array(visibleCount * 2);
-  const outScreenRadius = pool
-    ? (pool.alloc('f32', visibleCount) as Float32Array)
-    : new Float32Array(visibleCount);
-  const outDepth = pool
-    ? (pool.alloc('f32', visibleCount) as Float32Array)
-    : new Float32Array(visibleCount);
-  const outColor = pool
-    ? (pool.alloc('rgba8', visibleCount) as Uint8ClampedArray)
-    : new Uint8ClampedArray(visibleCount * 4);
-
-  // Copy from compacted views to pooled buffers
-  outScreenPos.set(compacted.screenPosition);
-  outScreenRadius.set(compacted.screenRadius);
-  outDepth.set(compacted.depth);
-  outColor.set(compacted.color);
-
-  // Handle optional buffers
-  let outRotation: Float32Array | undefined;
-  if (compacted.rotation) {
-    outRotation = pool
-      ? (pool.alloc('f32', visibleCount) as Float32Array)
-      : new Float32Array(visibleCount);
-    outRotation.set(compacted.rotation);
-  }
-
-  let outScale2: Float32Array | undefined;
-  if (compacted.scale2) {
-    outScale2 = pool
-      ? (pool.alloc('vec2f32', visibleCount) as Float32Array)
-      : new Float32Array(visibleCount * 2);
-    outScale2.set(compacted.scale2);
-  }
-
-  return {
-    count: visibleCount,
-    screenPosition: outScreenPos,
-    screenRadius: outScreenRadius,
-    depth: outDepth,
-    color: outColor,
-    rotation: outRotation,
-    scale2: outScale2,
-  };
+  // Step 2: Compact & sort (returns arena views directly)
+  return depthSortAndCompact(projection, count, color, arena, rotation, scale2);
 }
 
 /**
- * Depth-sort, compact, and copy projection results in one step.
+ * Depth-sort and compact projection results in one step.
  *
  * This is a mid-level API for cases where projection has already been done
  * (e.g., multi-group path where projection happens once for full batch).
- * Allocates from BufferPool to avoid per-frame allocations.
  *
  * **Use case:** Multi-group path where projectInstances() is called once for
- * the full batch, then this function is called per-group to compact and copy.
+ * the full batch, then this function is called per-group to compact.
  *
- * **Memory contract:** Returns buffers allocated from the pool. Buffers are
- * valid until pool.releaseAll() is called (end of frame).
- *
- * **Comparison:**
- * - Use `projectAndCompact()` when you need projection + compaction together
- * - Use `compactAndCopy()` when projection is already done
- * - Use `depthSortAndCompact()` directly for low-level control (remember to copy)
+ * **Memory contract:** Returns arena views. Valid until arena.reset() at end of frame.
  *
  * @param projection - Already-projected data (from projectInstances())
  * @param count - Instance count for this group
  * @param color - Per-instance RGBA colors (stride 4)
+ * @param arena - Pre-allocated buffer arena (required)
  * @param rotation - Optional per-instance rotations
  * @param scale2 - Optional per-instance anisotropic scale
- * @param pool - Buffer pool for allocation (required in production, optional for tests)
- * @returns Buffers allocated from pool (valid until pool.releaseAll())
- *
- * @example
- * ```typescript
- * // Multi-group path
- * const projection = projectInstances(fullPositions, radius, totalCount, camera, pool);
- *
- * for (const group of groups) {
- *   const groupProjection = sliceProjection(projection, group.indices);
- *   const result = compactAndCopy(
- *     groupProjection,
- *     group.count,
- *     groupColors,
- *     groupRotations,
- *     groupScales,
- *     pool
- *   );
- *   // result buffers are from pool
- * }
- * ```
+ * @returns Arena views (valid until arena.reset())
  */
 export function compactAndCopy(
   projection: ProjectionOutput,
   count: number,
   color: Uint8ClampedArray,
+  arena: RenderBufferArena,
   rotation?: Float32Array,
   scale2?: Float32Array,
-  pool?: BufferPool,
 ): {
   count: number;
   screenPosition: Float32Array;
@@ -532,58 +386,8 @@ export function compactAndCopy(
   rotation?: Float32Array;
   scale2?: Float32Array;
 } {
-  // Step 1: Compact & sort
-  const compacted = depthSortAndCompact(projection, count, color, rotation, scale2);
-
-  // Step 2: Copy to pooled buffers (avoids per-frame allocations)
-  const visibleCount = compacted.count;
-
-  // Allocate from pool (or fallback to direct allocation for tests)
-  const outScreenPos = pool
-    ? (pool.alloc('vec2f32', visibleCount) as Float32Array)
-    : new Float32Array(visibleCount * 2);
-  const outScreenRadius = pool
-    ? (pool.alloc('f32', visibleCount) as Float32Array)
-    : new Float32Array(visibleCount);
-  const outDepth = pool
-    ? (pool.alloc('f32', visibleCount) as Float32Array)
-    : new Float32Array(visibleCount);
-  const outColor = pool
-    ? (pool.alloc('rgba8', visibleCount) as Uint8ClampedArray)
-    : new Uint8ClampedArray(visibleCount * 4);
-
-  // Copy from compacted views to pooled buffers
-  outScreenPos.set(compacted.screenPosition);
-  outScreenRadius.set(compacted.screenRadius);
-  outDepth.set(compacted.depth);
-  outColor.set(compacted.color);
-
-  // Handle optional buffers
-  let outRotation: Float32Array | undefined;
-  if (compacted.rotation) {
-    outRotation = pool
-      ? (pool.alloc('f32', visibleCount) as Float32Array)
-      : new Float32Array(visibleCount);
-    outRotation.set(compacted.rotation);
-  }
-
-  let outScale2: Float32Array | undefined;
-  if (compacted.scale2) {
-    outScale2 = pool
-      ? (pool.alloc('vec2f32', visibleCount) as Float32Array)
-      : new Float32Array(visibleCount * 2);
-    outScale2.set(compacted.scale2);
-  }
-
-  return {
-    count: visibleCount,
-    screenPosition: outScreenPos,
-    screenRadius: outScreenRadius,
-    depth: outDepth,
-    color: outColor,
-    rotation: outRotation,
-    scale2: outScale2,
-  };
+  // Compact & sort (returns arena views directly)
+  return depthSortAndCompact(projection, count, color, arena, rotation, scale2);
 }
 
 /**
@@ -598,6 +402,8 @@ export interface AssemblerContext {
   state: RuntimeState;
   /** Resolved camera params from frame globals (always present, defaults if no Camera block) */
   resolvedCamera: ResolvedCameraParams;
+  /** Pre-allocated buffer arena for zero-allocation rendering */
+  arena: RenderBufferArena;
 }
 
 /**
@@ -913,11 +719,12 @@ export function isContiguous(indices: number[]): boolean {
 
 /**
  * Slice RGBA color buffer for a topology group.
- * Uses zero-copy subarray when indices are contiguous; copies otherwise.
+ * Uses zero-copy subarray when indices are contiguous; copies to arena otherwise.
  */
 export function sliceColorBuffer(
   fullColor: Uint8ClampedArray,
-  instanceIndices: number[]
+  instanceIndices: number[],
+  arena: RenderBufferArena
 ): Uint8ClampedArray {
   const N = instanceIndices.length;
 
@@ -926,7 +733,7 @@ export function sliceColorBuffer(
     return fullColor.subarray(start * 4, (start + N) * 4);
   }
 
-  const color = new Uint8ClampedArray(N * 4);
+  const color = arena.allocRGBA(N);
   for (let i = 0; i < N; i++) {
     const srcIdx = instanceIndices[i];
     const s = srcIdx * 4;
@@ -974,7 +781,7 @@ function recordAssemblerTiming(
  * @param fullColor - Full color buffer
  * @param scale - Uniform scale
  * @param count - Instance count
- * @param context - Assembly context (includes camera for projection)
+ * @param context - Assembly context (includes camera, arena)
  * @returns Array of DrawOp operations (path or primitive)
  */
 function assemblePerInstanceShapes(
@@ -984,10 +791,9 @@ function assemblePerInstanceShapes(
   fullColor: Uint8ClampedArray,
   scale: number,
   count: number,
-  context: AssemblerContext,
-  pool: BufferPool
+  context: AssemblerContext
 ): DrawOp[] {
-  const { state } = context;
+  const { state, arena } = context;
   const t0 = performance.now();
 
   // Group instances by topology
@@ -1016,7 +822,7 @@ function assemblePerInstanceShapes(
     );
   }
 
-  const projection = projectInstances(fullPosition, scale, count, resolved, pool);
+  const projection = projectInstances(fullPosition, scale, count, resolved, arena);
 
   for (const [key, group] of groups) {
     // Skip empty groups
@@ -1028,24 +834,25 @@ function assemblePerInstanceShapes(
     const topology = getTopology(group.topologyId);
 
     // Slice RGBA color for this group (position is not needed post-projection)
-    const color = sliceColorBuffer(fullColor, group.instanceIndices);
+    const color = sliceColorBuffer(fullColor, group.instanceIndices, arena);
 
     // C-13: Slice rotation and scale2 if present
     const rotation = fullRotation
-      ? sliceRotationBuffer(fullRotation, group.instanceIndices)
+      ? sliceRotationBuffer(fullRotation, group.instanceIndices, arena)
       : undefined;
 
     const scale2 = fullScale2
-      ? sliceScale2Buffer(fullScale2, group.instanceIndices)
+      ? sliceScale2Buffer(fullScale2, group.instanceIndices, arena)
       : undefined;
 
-    // Slice projection outputs for this group
-    const groupScreenPos = new Float32Array(group.instanceIndices.length * 2);
-    const groupScreenRadius = new Float32Array(group.instanceIndices.length);
-    const groupDepth = new Float32Array(group.instanceIndices.length);
-    const groupVisible = new Uint8Array(group.instanceIndices.length);
+    // Slice projection outputs for this group (use arena)
+    const groupN = group.instanceIndices.length;
+    const groupScreenPos = arena.allocVec2(groupN);
+    const groupScreenRadius = arena.allocF32(groupN);
+    const groupDepth = arena.allocF32(groupN);
+    const groupVisible = arena.allocU8(groupN);
 
-    for (let i = 0; i < group.instanceIndices.length; i++) {
+    for (let i = 0; i < groupN; i++) {
       const srcIdx = group.instanceIndices[i];
       groupScreenPos[i * 2] = projection.screenPosition[srcIdx * 2];
       groupScreenPos[i * 2 + 1] = projection.screenPosition[srcIdx * 2 + 1];
@@ -1061,14 +868,14 @@ function assemblePerInstanceShapes(
       visible: groupVisible,
     };
 
-    // Compact and copy in one step (projection already done at line 780)
+    // Compact and copy in one step (projection already done)
     const compactedCopy = compactAndCopy(
       groupProjection,
-      group.instanceIndices.length,
+      groupN,
       color,
+      arena,
       rotation,
-      scale2,
-      pool
+      scale2
     );
 
     const instanceTransforms: InstanceTransforms = {
@@ -1149,14 +956,17 @@ function assemblePerInstanceShapes(
  * Slice rotation buffer for a topology group
  *
  * C-13: Helper to extract per-instance rotations for a subset of instances.
+ * Uses zero-copy subarray when contiguous; copies to arena otherwise.
  *
  * @param fullRotation - Full rotation buffer (Float32Array, one value per instance)
  * @param instanceIndices - Indices of instances to extract
+ * @param arena - Pre-allocated buffer arena
  * @returns Sliced rotation buffer
  */
 function sliceRotationBuffer(
   fullRotation: Float32Array,
-  instanceIndices: number[]
+  instanceIndices: number[],
+  arena: RenderBufferArena
 ): Float32Array {
   const N = instanceIndices.length;
 
@@ -1166,8 +976,8 @@ function sliceRotationBuffer(
     return fullRotation.subarray(start, start + N);
   }
 
-  // Non-contiguous: copy
-  const rotation = new Float32Array(N);
+  // Non-contiguous: copy to arena
+  const rotation = arena.allocF32(N);
   for (let i = 0; i < N; i++) {
     rotation[i] = fullRotation[instanceIndices[i]];
   }
@@ -1178,14 +988,17 @@ function sliceRotationBuffer(
  * Slice scale2 buffer for a topology group
  *
  * C-13: Helper to extract per-instance anisotropic scales for a subset of instances.
+ * Uses zero-copy subarray when contiguous; copies to arena otherwise.
  *
  * @param fullScale2 - Full scale2 buffer (Float32Array, x,y pairs per instance)
  * @param instanceIndices - Indices of instances to extract
+ * @param arena - Pre-allocated buffer arena
  * @returns Sliced scale2 buffer
  */
 function sliceScale2Buffer(
   fullScale2: Float32Array,
-  instanceIndices: number[]
+  instanceIndices: number[],
+  arena: RenderBufferArena
 ): Float32Array {
   const N = instanceIndices.length;
 
@@ -1195,8 +1008,8 @@ function sliceScale2Buffer(
     return fullScale2.subarray(start * 2, (start + N) * 2);
   }
 
-  // Non-contiguous: copy
-  const scale2 = new Float32Array(N * 2);
+  // Non-contiguous: copy to arena
+  const scale2 = arena.allocVec2(N);
   for (let i = 0; i < N; i++) {
     const srcIdx = instanceIndices[i];
     scale2[i * 2] = fullScale2[srcIdx * 2];
@@ -1327,15 +1140,14 @@ function buildPathStyle(
  * SUPPORTS PROJECTION: When camera is present, applies 3D projection and depth-sorting.
  *
  * @param step - The render step to assemble
- * @param context - Assembly context with signals, instances, and state
+ * @param context - Assembly context with signals, instances, state, and arena
  * @returns Array of DrawOp operations (one or more, path or primitive)
  */
 export function assembleDrawPathInstancesOp(
   step: StepRender,
-  context: AssemblerContext,
-  pool: BufferPool
+  context: AssemblerContext
 ): DrawOp[] {
-  const { signals, instances, state } = context;
+  const { signals, instances, state, arena } = context;
 
   // Get instance declaration
   const instance = instances.get(step.instanceId);
@@ -1394,8 +1206,7 @@ export function assembleDrawPathInstancesOp(
       colorBuffer,
       scale,
       count,
-      context,  // Pass full context (includes camera)
-      pool      // Pass pool for buffer allocation
+      context  // Pass full context (includes camera and arena)
     );
   }
 
@@ -1423,16 +1234,16 @@ export function assembleDrawPathInstancesOp(
       );
     }
 
-    // Project, compact, and copy in one step (helper enforces memory safety)
+    // Project, compact, and copy in one step (uses arena from context)
     const compactedCopy = projectAndCompact(
       positionBuffer,
       scale,
       count,
       colorBuffer,
       context.resolvedCamera,
+      arena,
       rotation,
-      scale2,
-      pool
+      scale2
     );
 
     // Build instance transforms with copied data
@@ -1488,20 +1299,20 @@ export function assembleDrawPathInstancesOp(
  * NOW SUPPORTS PER-INSTANCE SHAPES: Multiple ops can be emitted per render step.
  * SUPPORTS PRIMITIVES: Handles both DrawPathInstancesOp and DrawPrimitiveInstancesOp.
  * SUPPORTS PROJECTION: Always applies projection from resolved camera params.
+ * ZERO ALLOCATIONS: All buffers come from the pre-allocated arena in context.
  *
  * @param renderSteps - Array of render steps to assemble
- * @param context - Assembly context
+ * @param context - Assembly context (must include initialized arena)
  * @returns RenderFrameIR with DrawOp operations
  */
 export function assembleRenderFrame(
   renderSteps: readonly StepRender[],
-  context: AssemblerContext,
-  pool: BufferPool
+  context: AssemblerContext
 ): RenderFrameIR {
   const ops: DrawOp[] = [];
 
   for (const step of renderSteps) {
-    const stepOps = assembleDrawPathInstancesOp(step, context, pool);
+    const stepOps = assembleDrawPathInstancesOp(step, context);
     ops.push(...stepOps);  // Flatten array of ops from each step
   }
 

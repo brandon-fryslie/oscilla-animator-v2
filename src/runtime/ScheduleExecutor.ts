@@ -10,9 +10,10 @@ import type { ScheduleIR } from '../compiler/passes-v2/pass7-schedule';
 import type { Step, InstanceDecl, DomainInstance, StepRender } from '../compiler/ir/types';
 import type { SigExprId, IrInstanceId as InstanceId } from '../types';
 import type { RuntimeState } from './RuntimeState';
-import type { BufferPool } from './BufferPool';
 import type { TopologyId } from '../shapes/types';
 import type { RenderFrameIR } from '../render/types';
+import type { RenderBufferArena } from '../render/RenderBufferArena';
+import { BufferPool } from './BufferPool';
 import { resolveTime } from './timeResolution';
 import { materialize } from './Materializer';
 import { evaluateSignal } from './SignalEvaluator';
@@ -36,6 +37,11 @@ interface SlotLookup {
 
 // Cache slot lookup tables per compiled program to avoid per-frame Map allocation.
 const SLOT_LOOKUP_CACHE = new WeakMap<CompiledProgramIR, Map<ValueSlot, SlotLookup>>();
+
+// Module-level pool for Materializer buffers.
+// These buffers are CACHED in RuntimeState.cache.fieldBuffers and reused across frames,
+// so they don't need arena semantics. The pool grows once and then stabilizes.
+const MATERIALIZER_POOL = new BufferPool();
 
 function getSlotLookupMap(program: CompiledProgramIR): Map<ValueSlot, SlotLookup> {
   const cached = SLOT_LOOKUP_CACHE.get(program);
@@ -106,14 +112,14 @@ function writeF64Strided(state: RuntimeState, lookup: SlotLookup, src: ArrayLike
  *
  * @param program - Compiled IR program (CompiledProgramIR)
  * @param state - Runtime state
- * @param pool - Buffer pool
+ * @param arena - Pre-allocated buffer arena for render operations
  * @param tAbsMs - Absolute time in milliseconds
  * @returns RenderFrameIR for this frame
  */
 export function executeFrame(
   program: CompiledProgramIR,
   state: RuntimeState,
-  pool: BufferPool,
+  arena: RenderBufferArena,
   tAbsMs: number,
 ): RenderFrameIR {
   // Extract schedule components
@@ -267,7 +273,7 @@ export function executeFrame(
           signals,
           instances as ReadonlyMap<string, InstanceDecl>,
           state,
-          pool
+          MATERIALIZER_POOL
         );
         // Store directly in objects map using slot as key
         // (Object storage doesn't need slotMeta offset lookup)
@@ -365,11 +371,11 @@ export function executeFrame(
           break;
         }
 
-        // Ensure output buffer exists (allocate from pool if needed)
+        // Ensure output buffer exists (allocate from Materializer pool if needed)
         let outputBuffer = state.values.objects.get(outputSlot) as Float32Array | undefined;
         if (!outputBuffer || outputBuffer.length !== baseBuffer.length) {
           // Allocate output buffer with same size as base
-          outputBuffer = pool.alloc('f32', baseBuffer.length) as Float32Array;
+          outputBuffer = MATERIALIZER_POOL.alloc('f32', baseBuffer.length) as Float32Array;
           state.values.objects.set(outputSlot, outputBuffer);
         }
 
@@ -449,7 +455,7 @@ export function executeFrame(
           signals,
           instances as ReadonlyMap<string, InstanceDecl>,
           state,
-          pool
+          MATERIALIZER_POOL
         );
 
         // Store in objects map and notify debug tap
@@ -462,16 +468,17 @@ export function executeFrame(
   // Resolve camera from program render globals (slots now populated by signal evaluation)
   const resolvedCamera = resolveCameraFromGlobals(program, state);
 
-  // Build assembler context with resolved camera
+  // Build assembler context with resolved camera and arena
   assemblerContext = {
     signals,
     instances: instances as ReadonlyMap<string, InstanceDecl>,
     state,
     resolvedCamera,
+    arena,
   };
 
-  // Build v2 frame from collected render steps
-  const frame = assembleRenderFrame(renderSteps, assemblerContext, pool);
+  // Build v2 frame from collected render steps (zero allocations - uses arena)
+  const frame = assembleRenderFrame(renderSteps, assemblerContext);
 
   // PHASE 2: Execute all stateWrite steps
   // This ensures state reads in Phase 1 saw previous frame's values
@@ -504,7 +511,7 @@ export function executeFrame(
         signals,
         instances as ReadonlyMap<string, InstanceDecl>,
         state,
-        pool
+        MATERIALIZER_POOL
       );
 
       // Write each lane to state

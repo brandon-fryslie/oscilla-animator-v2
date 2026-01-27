@@ -13,7 +13,7 @@ import { buildPatch } from '../../graph/Patch';
 import { compile } from '../../compiler/compile';
 import { executeFrame } from '../../runtime/ScheduleExecutor';
 import { createRuntimeState, type RuntimeState } from '../../runtime/RuntimeState';
-import { BufferPool } from '../../runtime/BufferPool';
+import { getTestArena } from '../../runtime/__tests__/test-arena-helper';
 import { DEFAULT_CAMERA, type ResolvedCameraParams } from '../../runtime/CameraResolver';
 import type { CompiledProgramIR, ValueSlot } from '../../compiler/ir/program';
 
@@ -141,7 +141,7 @@ describe('Level 10 Golden Tests: The Golden Patch', () => {
 
     const program = result.program;
     const state = createRuntimeState(program.slotMeta.length);
-    const pool = new BufferPool();
+    const arena = getTestArena();
 
     const N = 25;
     const expectedRadius = Math.fround(1.0); // Default scale from RenderInstances2D
@@ -149,7 +149,7 @@ describe('Level 10 Golden Tests: The Golden Patch', () => {
     // Run 120 frames with ortho camera (default)
     // No Camera block in patch → uses DEFAULT_CAMERA which is ortho
     for (let frame = 0; frame < 120; frame++) {
-      const frameIR = executeFrame(program, state, pool, frame * 16.667);
+      const frameIR = executeFrame(program, state, arena, frame * 16.667);
 
       expect(frameIR.ops.length).toBeGreaterThan(0);
       const op = frameIR.ops[0];
@@ -203,32 +203,35 @@ describe('Level 10 Golden Tests: The Golden Patch', () => {
 
   it('Test 1.4: Frame 240 output matches control run (never-toggled ortho)', () => {
     const patch = buildGoldenPatch();
+    const arena = getTestArena();
 
     // Run 1: Long run with ortho (no Camera block → DEFAULT_CAMERA)
     const result1 = compile(patch);
     if (result1.kind !== 'ok') throw new Error('Compile failed');
     const program1 = result1.program;
     const state1 = createRuntimeState(program1.slotMeta.length);
-    const pool1 = new BufferPool();
 
     for (let frame = 0; frame <= 240; frame++) {
-      executeFrame(program1, state1, pool1, frame * 16.667);
+      arena.reset();
+      executeFrame(program1, state1, arena, frame * 16.667);
     }
 
-    const run1Frame = executeFrame(program1, state1, pool1, 240 * 16.667);
+    arena.reset();
+    const run1Frame = executeFrame(program1, state1, arena, 240 * 16.667);
 
     // Run 2: Control (same as run 1, just to verify determinism)
     const result2 = compile(patch);
     if (result2.kind !== 'ok') throw new Error('Compile failed');
     const program2 = result2.program;
     const state2 = createRuntimeState(program2.slotMeta.length);
-    const pool2 = new BufferPool();
 
     for (let frame = 0; frame <= 240; frame++) {
-      executeFrame(program2, state2, pool2, frame * 16.667);
+      arena.reset();
+      executeFrame(program2, state2, arena, frame * 16.667);
     }
 
-    const run2Frame = executeFrame(program2, state2, pool2, 240 * 16.667);
+    arena.reset();
+    const run2Frame = executeFrame(program2, state2, arena, 240 * 16.667);
 
     // Compare frame 240 outputs
     const op1 = run1Frame.ops[0];
@@ -263,13 +266,13 @@ describe('Level 10 Golden Tests: Determinism', () => {
 
     const program = result.program;
     const state = createRuntimeState(program.slotMeta.length);
-    const pool = new BufferPool();
+    const arena = getTestArena();
 
     const recordings: Float32Array[] = [];
 
     // Run 60 frames, record screenPosition for each
     for (let frame = 0; frame < 60; frame++) {
-      const frameIR = executeFrame(program, state, pool, frame * 16.667);
+      const frameIR = executeFrame(program, state, arena, frame * 16.667);
       const op = frameIR.ops[0];
       // Store a COPY of the screenPosition buffer
       recordings.push(new Float32Array(op.instances.position!));
@@ -333,13 +336,14 @@ describe('Level 10 Golden Tests: Stress Test', () => {
 
     const program = result.program;
     const state = createRuntimeState(program.slotMeta.length);
-    const pool = new BufferPool();
+    const arena = getTestArena();
 
     const N = 2500;
 
     // Run 30 frames ortho (no Camera block → DEFAULT_CAMERA)
     for (let frame = 0; frame < 30; frame++) {
-      const frameIR = executeFrame(program, state, pool, frame * 16.667);
+      arena.reset(); // Reset arena each frame (simulates real frame loop)
+      const frameIR = executeFrame(program, state, arena, frame * 16.667);
       const op = frameIR.ops[0];
 
       expect(op.instances.count).toBe(N);
@@ -378,18 +382,20 @@ describe('Level 10 Golden Tests: Stress Test', () => {
 describe('Level 10 Golden Tests: Export Isolation', () => {
   it('Test 4.1-4.3: Export Isolation - Comparison after sequence', () => {
     const patch = buildGoldenPatch();
+    const arena = getTestArena();
 
     // Run 1: 60 frames
     const result1 = compile(patch);
     if (result1.kind !== 'ok') throw new Error('Compile failed');
     const program1 = result1.program;
     const state1 = createRuntimeState(program1.slotMeta.length);
-    const pool1 = new BufferPool();
 
     for (let frame = 0; frame < 60; frame++) {
-      executeFrame(program1, state1, pool1, frame * 16.667);
+      arena.reset();
+      executeFrame(program1, state1, arena, frame * 16.667);
     }
-    const run1Frame = executeFrame(program1, state1, pool1, 60 * 16.667);
+    arena.reset();
+    const run1Frame = executeFrame(program1, state1, arena, 60 * 16.667);
     const op1 = run1Frame.ops[0];
 
     // Run 2: Control
@@ -397,12 +403,13 @@ describe('Level 10 Golden Tests: Export Isolation', () => {
     if (result2.kind !== 'ok') throw new Error('Compile failed');
     const program2 = result1.program;
     const state2 = createRuntimeState(program2.slotMeta.length);
-    const pool2 = new BufferPool();
 
     for (let frame = 0; frame < 60; frame++) {
-      executeFrame(program2, state2, pool2, frame * 16.667);
+      arena.reset();
+      executeFrame(program2, state2, arena, frame * 16.667);
     }
-    const run2Frame = executeFrame(program2, state2, pool2, 60 * 16.667);
+    arena.reset();
+    const run2Frame = executeFrame(program2, state2, arena, 60 * 16.667);
     const op2 = run2Frame.ops[0];
 
     // Assert identity
@@ -499,14 +506,14 @@ describe('Level 10 Golden Tests: Multi-Backend Comparison', () => {
 
     const program = result.program;
     const state = createRuntimeState(program.slotMeta.length);
-    const pool = new BufferPool();
+    const arena = getTestArena();
 
     // Run 60 frames
     for (let frame = 0; frame < 60; frame++) {
-      executeFrame(program, state, pool, frame * 16.667);
+      executeFrame(program, state, arena, frame * 16.667);
     }
 
-    const frame60 = executeFrame(program, state, pool, 60 * 16.667);
+    const frame60 = executeFrame(program, state, arena, 60 * 16.667);
     const op = frame60.ops[0];
 
     // Verify RenderPassIR has screen-space data

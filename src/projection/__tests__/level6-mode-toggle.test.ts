@@ -20,7 +20,7 @@ import { compile } from '../../compiler/compile';
 import { buildPatch } from '../../graph';
 import { executeFrame } from '../../runtime/ScheduleExecutor';
 import { createRuntimeState } from '../../runtime/RuntimeState';
-import { BufferPool } from '../../runtime/BufferPool';
+import { getTestArena } from '../../runtime/__tests__/test-arena-helper';
 
 // =============================================================================
 // Camera Constants (ResolvedCameraParams)
@@ -67,7 +67,7 @@ describe('Level 6 Unit Tests: ProjectionMode Type', () => {
     gridLayout3D(positions, N, 2, 2);
 
     // Works with orthographic
-    const orthoResult = projectInstances(positions, 0.05, N, orthoCam);
+    const orthoResult = projectInstances(positions, 0.05, N, orthoCam, getTestArena());
     expect(orthoResult).toBeDefined();
     expect(orthoResult.screenPosition).toBeInstanceOf(Float32Array);
     expect(orthoResult.screenRadius).toBeInstanceOf(Float32Array);
@@ -75,7 +75,7 @@ describe('Level 6 Unit Tests: ProjectionMode Type', () => {
     expect(orthoResult.visible).toBeInstanceOf(Uint8Array);
 
     // Works with perspective
-    const perspResult = projectInstances(positions, 0.05, N, perspCam);
+    const perspResult = projectInstances(positions, 0.05, N, perspCam, getTestArena());
     expect(perspResult).toBeDefined();
     expect(perspResult.screenPosition).toBeInstanceOf(Float32Array);
     expect(perspResult.screenRadius).toBeInstanceOf(Float32Array);
@@ -97,19 +97,19 @@ describe('Level 6 Unit Tests: ProjectionMode Type', () => {
     const positionsBefore = new Float32Array(positions);
 
     // Call with ortho
-    const result1 = projectInstances(positions, 0.03, N, orthoCam);
+    const result1 = projectInstances(positions, 0.03, N, orthoCam, getTestArena());
 
     // World-space input is unchanged
     expect(positions).toEqual(positionsBefore);
 
     // Call with perspective (different mode, same positions buffer)
-    const result2 = projectInstances(positions, 0.03, N, perspCam);
+    const result2 = projectInstances(positions, 0.03, N, perspCam, getTestArena());
 
     // World-space input is STILL unchanged
     expect(positions).toEqual(positionsBefore);
 
     // Call with ortho again (toggle back)
-    const result3 = projectInstances(positions, 0.03, N, orthoCam);
+    const result3 = projectInstances(positions, 0.03, N, orthoCam, getTestArena());
 
     // World-space input is STILL unchanged
     expect(positions).toEqual(positionsBefore);
@@ -164,12 +164,12 @@ describe('Level 6 Integration Tests: State Preservation Across Mode Toggle', () 
 
     const program = result.program;
     const state = createRuntimeState(program.slotMeta.length);
-    const pool = new BufferPool();
+    const arena = getTestArena();
 
     // Run 50 frames (no camera parameter passed — uses default ortho from renderGlobals)
     for (let frameIdx = 0; frameIdx < 50; frameIdx++) {
       const tAbsMs = frameIdx * 16.67; // 60fps
-      executeFrame(program, state, pool, tAbsMs);
+      arena.reset(); executeFrame(program, state, arena, tAbsMs);
     }
 
     // Take snapshot of state after 50 frames
@@ -226,12 +226,12 @@ describe('Level 6 Integration Tests: State Preservation Across Mode Toggle', () 
 
     const program = result.program;
     const state = createRuntimeState(program.slotMeta.length);
-    const pool = new BufferPool();
+    const arena = getTestArena();
 
     // Run 50 frames
     for (let frameIdx = 0; frameIdx < 50; frameIdx++) {
       const tAbsMs = frameIdx * 16.67;
-      executeFrame(program, state, pool, tAbsMs);
+      arena.reset(); executeFrame(program, state, arena, tAbsMs);
     }
 
     // Snapshot after frame 49 (before frame 50)
@@ -239,7 +239,8 @@ describe('Level 6 Integration Tests: State Preservation Across Mode Toggle', () 
     const runtimeSlotsBeforeFrame50 = new Float64Array(state.values.f64);
 
     // Run frame 50
-    const frame50 = executeFrame(program, state, pool, 50 * 16.67);
+    arena.reset();
+    const frame50 = executeFrame(program, state, arena, 50 * 16.67);
     const screenPos50 = new Float32Array((frame50.ops[0] as any).instances.position);
 
     // DoD Checkbox 6: compiledSchedule is same object (referential ===)
@@ -287,30 +288,37 @@ describe('Level 6 Integration Tests: State Preservation Across Mode Toggle', () 
 
     const program = result.program;
     const state = createRuntimeState(program.slotMeta.length);
-    const pool = new BufferPool();
+    const arena = getTestArena();
 
     // Run 50 frames
     for (let i = 0; i < 50; i++) {
-      executeFrame(program, state, pool, i * 16.67);
+      arena.reset();
+      executeFrame(program, state, arena, i * 16.67);
     }
 
     // Snapshot state at frame 50
     const stateSnapshot50 = new Float64Array(state.values.f64);
 
     // Run frame 50 → capture screenPositions A
-    const frame50 = executeFrame(program, state, pool, 50 * 16.67);
+    arena.reset();
+    const frame50 = executeFrame(program, state, arena, 50 * 16.67);
     const screenPosA = new Float32Array((frame50.ops[0] as any).instances.position);
 
     // Run frames 51-52
-    executeFrame(program, state, pool, 51 * 16.67);
-    const frame52 = executeFrame(program, state, pool, 52 * 16.67);
+    arena.reset();
+    executeFrame(program, state, arena, 51 * 16.67);
+    arena.reset();
+    const frame52 = executeFrame(program, state, arena, 52 * 16.67);
     const screenPosAfter = new Float32Array((frame52.ops[0] as any).instances.position);
 
     // Reset to frame 50 and run frame 50→51→52
     state.values.f64.set(stateSnapshot50);
-    executeFrame(program, state, pool, 50 * 16.67); // frame 50
-    executeFrame(program, state, pool, 51 * 16.67); // frame 51
-    const frame52NoToggle = executeFrame(program, state, pool, 52 * 16.67);
+    arena.reset();
+    executeFrame(program, state, arena, 50 * 16.67); // frame 50
+    arena.reset();
+    executeFrame(program, state, arena, 51 * 16.67); // frame 51
+    arena.reset();
+    const frame52NoToggle = executeFrame(program, state, arena, 52 * 16.67);
     const screenPosNoToggle = new Float32Array((frame52NoToggle.ops[0] as any).instances.position);
 
     // Bitwise identical: determinism verified
@@ -337,11 +345,11 @@ describe('Level 6 Integration Tests: Output Correctness', () => {
     }
 
     // Run ortho → capture A
-    const resultOrtho = projectInstances(positions, 0.03, N, orthoCam);
+    const resultOrtho = projectInstances(positions, 0.03, N, orthoCam, getTestArena());
     const screenPosA = new Float32Array(resultOrtho.screenPosition);
 
     // Run perspective → capture B
-    const resultPersp = projectInstances(positions, 0.03, N, perspCam);
+    const resultPersp = projectInstances(positions, 0.03, N, perspCam, getTestArena());
     const screenPosB = new Float32Array(resultPersp.screenPosition);
 
     // DoD Checkbox 13: A !== B for off-center instances
@@ -375,15 +383,15 @@ describe('Level 6 Integration Tests: Output Correctness', () => {
     }
 
     // Run ortho → A
-    const result1 = projectInstances(positions, 0.03, N, orthoCam);
+    const result1 = projectInstances(positions, 0.03, N, orthoCam, getTestArena());
     const screenPosA = new Float32Array(result1.screenPosition);
 
     // Run perspective → B (different output, proves mode switch works)
-    const result2 = projectInstances(positions, 0.03, N, perspCam);
+    const result2 = projectInstances(positions, 0.03, N, perspCam, getTestArena());
     const screenPosB = new Float32Array(result2.screenPosition);
 
     // Run ortho again → C
-    const result3 = projectInstances(positions, 0.03, N, orthoCam);
+    const result3 = projectInstances(positions, 0.03, N, orthoCam, getTestArena());
     const screenPosC = new Float32Array(result3.screenPosition);
 
     // DoD Checkbox 15: A === C (bitwise — ortho is deterministic, toggle doesn't corrupt)
@@ -443,7 +451,7 @@ describe('Level 6 Integration Tests: World-Space Continuity Across Toggle', () =
       }
 
       // Project (this doesn't mutate positions, but we're verifying that anyway)
-      projectInstances(positions, 0.03, N, camera);
+      projectInstances(positions, 0.03, N, camera, getTestArena());
     }
 
     // Verify world positions form a smooth sine wave (no discontinuities at f50, f100)

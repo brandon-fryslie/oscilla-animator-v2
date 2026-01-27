@@ -17,11 +17,11 @@ import { compile } from '../compile';
 import type { ScheduleIR } from '../passes-v2/pass7-schedule';
 import {
   createRuntimeState,
-  BufferPool,
   executeFrame,
   type DrawPathInstancesOp,
   type DrawPrimitiveInstancesOp,
 } from '../../runtime';
+import { getTestArena } from '../../runtime/__tests__/test-arena-helper';
 import { TOPOLOGY_ID_ELLIPSE, TOPOLOGY_ID_RECT } from '../../shapes/registry';
 
 describe('Steel Thread - Rect Shape Pipeline', () => {
@@ -110,9 +110,9 @@ describe('Steel Thread - Rect Shape Pipeline', () => {
     expect(renderStep.shape.paramSignals.length).toBe(4);
 
     // Execute frame at t=0
-    const pool = new BufferPool();
+    const arena = getTestArena();
     const state = createRuntimeState(program.slotMeta.length);
-    const frame = executeFrame(program, state, pool, 0);
+    const frame = executeFrame(program, state, arena, 0);
 
     // Verify frame structure (v2)
     expect(frame.version).toBe(2);
@@ -178,7 +178,7 @@ describe('Steel Thread - Rect Shape Pipeline', () => {
     const frame1Positions = new Float32Array(posBuffer);
 
     // Execute another frame at t=1000ms to verify animation
-    const frame2 = executeFrame(program, state, pool, 1000);
+    const frame2 = executeFrame(program, state, arena, 1000);
     const op2 = frame2.ops[0] as DrawPrimitiveInstancesOp;
     const pos2 = op2.instances.position as Float32Array;
 
@@ -291,12 +291,12 @@ describe('Steel Thread - Rect Shape Pipeline', () => {
     }
 
     // Execute both
-    const pool = new BufferPool();
+    const arena = getTestArena();
     const ellipseState = createRuntimeState(ellipseResult.program.slotMeta.length);
     const rectState = createRuntimeState(rectResult.program.slotMeta.length);
 
-    const ellipseFrame = executeFrame(ellipseResult.program, ellipseState, pool, 0);
-    const rectFrame = executeFrame(rectResult.program, rectState, pool, 0);
+    const ellipseFrame = executeFrame(ellipseResult.program, ellipseState, arena, 0);
+    const rectFrame = executeFrame(rectResult.program, rectState, arena, 0);
 
     // Both should render successfully
     expect(ellipseFrame.ops.length).toBe(1);

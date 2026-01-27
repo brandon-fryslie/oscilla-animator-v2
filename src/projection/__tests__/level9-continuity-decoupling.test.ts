@@ -26,7 +26,7 @@ import { detectDomainChange, buildMappingById } from '../../runtime/ContinuityMa
 import { applyContinuity } from '../../runtime/ContinuityApply';
 import { createContinuityState, type ContinuityState } from '../../runtime/ContinuityState';
 import { createRuntimeState, type RuntimeState } from '../../runtime/RuntimeState';
-import { BufferPool } from '../../runtime/BufferPool';
+import { getTestArena } from '../../runtime/__tests__/test-arena-helper';
 import { executeFrame } from '../../runtime/ScheduleExecutor';
 import type { CompiledProgramIR } from '../../compiler/ir/program';
 import type { DomainInstance, StepContinuityApply, ContinuityPolicy } from '../../compiler/ir/types';
@@ -229,19 +229,21 @@ describe('Level 9 Integration: Continuity Unaffected by Toggle', () => {
 
     // Sequence 1: Ortho
     const stateOrtho = createRuntimeState(program.slotMeta.length);
-    const poolOrtho = new BufferPool();
+    const arenaOrtho = getTestArena();
     for (let frame = 0; frame < 30; frame++) {
       stateOrtho.values.objects.set(10 as ValueSlot, worldPositions);
-      executeFrame(program, stateOrtho, poolOrtho, frame * 16.667);
+      arenaOrtho.reset();
+      executeFrame(program, stateOrtho, arenaOrtho, frame * 16.667);
     }
     const orthoSnapshot = serializeContinuityState(stateOrtho.continuity);
 
     // Sequence 2: Perspective
     const statePersp = createRuntimeState(program.slotMeta.length);
-    const poolPersp = new BufferPool();
+    const arenaPersp = getTestArena();
     for (let frame = 0; frame < 30; frame++) {
       statePersp.values.objects.set(10 as ValueSlot, worldPositions);
-      executeFrame(program, statePersp, poolPersp, frame * 16.667);
+      arenaPersp.reset();
+      executeFrame(program, statePersp, arenaPersp, frame * 16.667);
     }
     const perspSnapshot = serializeContinuityState(statePersp.continuity);
 
@@ -278,7 +280,7 @@ describe('Level 9 Integration: Projection is Pure (Read-Only)', () => {
 
     // 1. Run projection (ortho)
     const cameraOrtho: ResolvedCameraParams = DEFAULT_CAMERA;
-    const outputOrtho = projectInstances(worldPositions, 0.05, count, cameraOrtho);
+    const outputOrtho = projectInstances(worldPositions, 0.05, count, cameraOrtho, getTestArena());
 
     // Verify projection produced output
     expect(outputOrtho.screenPosition.length).toBe(count * 2);
@@ -301,7 +303,7 @@ describe('Level 9 Integration: Projection is Pure (Read-Only)', () => {
       near: 0.01,
       far: 100,
     };
-    const outputPersp = projectInstances(worldPositions, 0.05, count, cameraPersp);
+    const outputPersp = projectInstances(worldPositions, 0.05, count, cameraPersp, getTestArena());
 
     // Verify projection produced output
     expect(outputPersp.screenPosition.length).toBe(count * 2);
