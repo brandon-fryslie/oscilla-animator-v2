@@ -5,6 +5,7 @@
  * Uses ReactFlow for the internal graph canvas.
  */
 
+import { useCallback } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useStores } from '../../stores';
 import { CompositeInternalGraph } from './CompositeInternalGraph';

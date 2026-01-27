@@ -89,6 +89,12 @@ export class CompositeEditorStore {
   /** Tracks if there are unsaved changes */
   isDirty: boolean = false;
 
+  /** Whether editing a fork of a readonly composite (save creates new) */
+  isFork: boolean = false;
+
+  /** Counter for auto-generating unique composite names */
+  private static _nameCounter: number = 1;
+
   // -------------------------------------------------------------------------
   // Constructor
   // -------------------------------------------------------------------------
@@ -104,6 +110,7 @@ export class CompositeEditorStore {
       metadata: observable,
       isOpen: observable,
       isDirty: observable,
+      isFork: observable,
 
       // Computed
       validationErrors: computed,
@@ -130,6 +137,20 @@ export class CompositeEditorStore {
       save: action,
       reset: action,
     });
+  }
+
+  // -------------------------------------------------------------------------
+  // Static Helpers
+  // -------------------------------------------------------------------------
+
+  /**
+   * Generate a unique composite name.
+   * Format: MyComposite1, MyComposite2, etc.
+   */
+  static generateUniqueName(baseName: string = 'MyComposite'): string {
+    const name = `${baseName}${CompositeEditorStore._nameCounter}`;
+    CompositeEditorStore._nameCounter++;
+    return name;
   }
 
   // -------------------------------------------------------------------------
@@ -294,14 +315,24 @@ export class CompositeEditorStore {
 
   /**
    * Open the editor to create a new composite.
+   * Auto-generates a unique name.
    */
   openNew(): void {
     this.reset();
+    const autoName = CompositeEditorStore.generateUniqueName();
+    this.metadata = {
+      name: autoName,
+      label: autoName,
+      category: 'user',
+      description: '',
+    };
     this.isOpen = true;
   }
 
   /**
    * Open the editor to edit an existing composite.
+   * If the composite is readonly (library), opens in fork mode where
+   * saving creates a new composite with an auto-generated name.
    */
   openExisting(compositeType: string): void {
     const def = getCompositeDefinition(compositeType);
@@ -311,25 +342,49 @@ export class CompositeEditorStore {
     }
 
     this.reset();
-    this.compositeId = compositeType;
 
-    // Load metadata
-    this.metadata = {
-      name: def.type,
-      label: def.label,
-      category: def.category,
-      description: '',
-    };
+    // Check if this is a readonly (library) composite
+    const isReadonly = def.readonly === true;
+    this.isFork = isReadonly;
 
-    // Load internal blocks
+    if (isReadonly) {
+      // Fork mode: generate new name, don't link to original
+      const baseName = def.type.replace(/^My/, ''); // Remove "My" prefix if present
+      const forkName = CompositeEditorStore.generateUniqueName(`My${baseName}`);
+      this.compositeId = null; // Not editing original
+      this.metadata = {
+        name: forkName,
+        label: `${def.label} (Copy)`,
+        category: 'user', // User composites go to 'user' category
+        description: `Fork of ${def.type}`,
+      };
+    } else {
+      // Edit mode: editing existing user composite
+      this.compositeId = compositeType;
+      this.metadata = {
+        name: def.type,
+        label: def.label,
+        category: def.category,
+        description: '',
+      };
+    }
+
+    // Load internal blocks with auto-layout
+    let layoutX = 100;
+    let layoutY = 100;
     for (const [id, blockDef] of def.internalBlocks) {
       this.internalBlocks.set(id, {
         id,
         type: blockDef.type,
-        position: { x: 0, y: 0 }, // Will need layout
+        position: { x: layoutX, y: layoutY },
         params: blockDef.params,
         displayName: blockDef.displayName,
       });
+      layoutY += 120; // Stack blocks vertically for initial layout
+      if (layoutY > 400) {
+        layoutY = 100;
+        layoutX += 200;
+      }
     }
 
     // Load internal edges
@@ -340,7 +395,7 @@ export class CompositeEditorStore {
     this.exposedOutputs = [...def.exposedOutputs];
 
     this.isOpen = true;
-    this.isDirty = false;
+    this.isDirty = isReadonly; // Fork is immediately dirty (needs save)
   }
 
   /**
@@ -589,6 +644,7 @@ export class CompositeEditorStore {
       description: '',
     };
     this.isDirty = false;
+    this.isFork = false;
   }
 
   // -------------------------------------------------------------------------

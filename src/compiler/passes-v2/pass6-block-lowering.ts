@@ -569,7 +569,7 @@ function lowerSCCTwoPass(
 
     // Only process stateful blocks with lowerOutputsOnly
     if (blockDef.isStateful && hasLowerOutputsOnly(blockDef)) {
-      builder.setCurrentBlockId(block.id);
+      (builder as any).setCurrentBlockId(block.id);
 
       try {
         // Build lowering context (similar to lowerBlockInstance but no input resolution)
@@ -633,7 +633,7 @@ function lowerSCCTwoPass(
     const block = blocks[blockIndex];
     if (!block) continue;
 
-    builder.setCurrentBlockId(block.id);
+    (builder as any).setCurrentBlockId(block.id);
 
     // Get existing outputs from phase 1 (if any)
     const existingOutputs = phase1Results.get(blockIndex);
@@ -772,7 +772,7 @@ export function pass6BlockLowering(
         }
 
         // Set current block ID for debug index tracking (Phase 7)
-        builder.setCurrentBlockId(block.id);
+        (builder as any).setCurrentBlockId(block.id);
 
 
         // Lower this block instance
@@ -816,7 +816,7 @@ export function pass6BlockLowering(
   }
 
   // Clear block ID after processing all blocks
-  builder.setCurrentBlockId(undefined);
+  (builder as any).setCurrentBlockId(undefined);
 
   return {
     builder,

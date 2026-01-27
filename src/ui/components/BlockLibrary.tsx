@@ -375,9 +375,13 @@ const BlockTypeItem: React.FC<BlockTypeItemProps> = ({
     (e: React.DragEvent) => {
       // Set block type data for drag-and-drop
       e.dataTransfer.setData('application/oscilla-block-type', type.type);
+      // Also set flag if this is a composite (for composite editor drops)
+      if (isComposite) {
+        e.dataTransfer.setData('application/oscilla-composite-type', type.type);
+      }
       e.dataTransfer.effectAllowed = 'copy';
     },
-    [type.type]
+    [type.type, isComposite]
   );
 
   return (

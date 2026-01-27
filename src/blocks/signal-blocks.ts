@@ -405,7 +405,10 @@ registerBlock({
     if (existingOutputs?.outputsById && existingOutputs?.stateSlot) {
       // Write current input to state for next frame
       ctx.b.stepStateWrite(existingOutputs.stateSlot as StateSlotId, input.id);
-      return existingOutputs;
+      // Return complete result (existingOutputs has outputsById which is required)
+      return {
+        outputsById: existingOutputs.outputsById,
+      };
     }
 
     // Fallback: single-pass lowering (for non-cycle usage)

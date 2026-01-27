@@ -5,7 +5,7 @@
  * Reuses type validation and node rendering patterns from the main ReactFlow editor.
  */
 
-import { useCallback, useMemo, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import ReactFlow, {
   Background,
   Controls,
@@ -24,6 +24,7 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { observer } from 'mobx-react-lite';
+import { reaction, toJS } from 'mobx';
 import { useStores } from '../../stores';
 import type { InternalBlockId, InternalEdge } from '../../blocks/composite-types';
 import { getBlockDefinition } from '../../blocks/registry';
@@ -299,50 +300,58 @@ export const CompositeInternalGraph = observer(function CompositeInternalGraph()
   const [nodes, setNodes] = useState<InternalNode[]>([]);
   const [edges, setEdges] = useState<ReactFlowEdge[]>([]);
 
-  // Compute connected ports
-  const { connectedInputsByBlock, connectedOutputsByBlock } = useMemo(() => {
-    const inputs = new Map<InternalBlockId, Set<string>>();
-    const outputs = new Map<InternalBlockId, Set<string>>();
-
-    for (const edge of compositeEditor.internalEdges) {
-      // Track connected outputs
-      if (!outputs.has(edge.fromBlock)) {
-        outputs.set(edge.fromBlock, new Set());
-      }
-      outputs.get(edge.fromBlock)!.add(edge.fromPort);
-
-      // Track connected inputs
-      if (!inputs.has(edge.toBlock)) {
-        inputs.set(edge.toBlock, new Set());
-      }
-      inputs.get(edge.toBlock)!.add(edge.toPort);
-    }
-
-    return { connectedInputsByBlock: inputs, connectedOutputsByBlock: outputs };
-  }, [compositeEditor.internalEdges]);
-
-  // Sync nodes from store
+  // Sync nodes and edges from store using MobX reaction (tracks Map changes properly)
   useEffect(() => {
-    const newNodes: InternalNode[] = [];
-    for (const [id, block] of compositeEditor.internalBlocks) {
-      const connectedInputs = connectedInputsByBlock.get(id) || new Set();
-      const connectedOutputs = connectedOutputsByBlock.get(id) || new Set();
-      newNodes.push(createNodeFromInternalBlock(
-        { id, type: block.type, position: block.position, displayName: block.displayName },
-        connectedInputs,
-        connectedOutputs
-      ));
-    }
-    setNodes(newNodes);
-  }, [compositeEditor.internalBlocks, connectedInputsByBlock, connectedOutputsByBlock]);
+    const dispose = reaction(
+      // Data function: what to track
+      () => ({
+        blocks: Array.from(compositeEditor.internalBlocks.entries()).map(([id, block]) => ({
+          id,
+          type: block.type,
+          position: toJS(block.position),
+          displayName: block.displayName,
+        })),
+        edges: toJS(compositeEditor.internalEdges),
+      }),
+      // Effect function: what to do when data changes
+      ({ blocks, edges }) => {
+        // Recompute connected ports
+        const connectedInputs = new Map<InternalBlockId, Set<string>>();
+        const connectedOutputs = new Map<InternalBlockId, Set<string>>();
 
-  // Sync edges from store
-  useEffect(() => {
-    const newEdges = compositeEditor.internalEdges.map((edge, index) =>
-      createEdgeFromInternalEdge(edge, index)
+        for (const edge of edges) {
+          if (!connectedOutputs.has(edge.fromBlock)) {
+            connectedOutputs.set(edge.fromBlock, new Set());
+          }
+          connectedOutputs.get(edge.fromBlock)!.add(edge.fromPort);
+
+          if (!connectedInputs.has(edge.toBlock)) {
+            connectedInputs.set(edge.toBlock, new Set());
+          }
+          connectedInputs.get(edge.toBlock)!.add(edge.toPort);
+        }
+
+        // Create nodes
+        const newNodes: InternalNode[] = blocks.map((block) =>
+          createNodeFromInternalBlock(
+            block,
+            connectedInputs.get(block.id) || new Set(),
+            connectedOutputs.get(block.id) || new Set()
+          )
+        );
+        setNodes(newNodes);
+
+        // Create edges
+        const newEdges = edges.map((edge, index) =>
+          createEdgeFromInternalEdge(edge, index)
+        );
+        setEdges(newEdges);
+      },
+      { fireImmediately: true } // Run immediately on mount
     );
-    setEdges(newEdges);
-  }, [compositeEditor.internalEdges]);
+
+    return dispose;
+  }, [compositeEditor]);
 
   // Handle node changes (drag, delete)
   const onNodesChange: OnNodesChange = useCallback(
