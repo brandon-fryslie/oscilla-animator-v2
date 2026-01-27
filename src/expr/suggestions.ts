@@ -245,9 +245,11 @@ export class SuggestionProvider {
     for (const block of this.patch.blocks.values()) {
       const blockDef = BLOCK_DEFS_BY_TYPE.get(block.type);
       const outputCount = blockDef?.outputs ? Object.keys(blockDef.outputs).length : 0;
+      // Use displayName if set, otherwise type+id for readability
+      const displayName = block.displayName ?? `${block.type}_${block.id}`;
 
       suggestions.push({
-        label: block.id,
+        label: displayName,
         type: 'block',
         description: `Block: ${block.type}`,
         portCount: outputCount,
@@ -270,7 +272,17 @@ export class SuggestionProvider {
    * @returns Read-only array of port suggestions, or empty if block not found
    */
   suggestBlockPorts(blockName: string): readonly PortSuggestion[] {
-    const block = this.patch.blocks.get(blockName as any);
+    // Find block by display name (or fall back to ID)
+    let block = this.patch.blocks.get(blockName as any);
+    if (!block) {
+      // Search by display name
+      for (const b of this.patch.blocks.values()) {
+        if ((b.displayName ?? b.id) === blockName) {
+          block = b;
+          break;
+        }
+      }
+    }
     if (!block) {
       return [];
     }
@@ -336,11 +348,14 @@ export class SuggestionProvider {
       const blockDef = BLOCK_DEFS_BY_TYPE.get(block.type);
       if (!blockDef?.outputs) continue;
 
+      // Use displayName if set, otherwise type+id for readability
+      const displayName = block.displayName ?? `${block.type}_${block.id}`;
+
       for (const [portId, outputDef] of Object.entries(blockDef.outputs)) {
         const sourceAddress = `blocks.${block.id}.outputs.${portId}`;
 
         suggestions.push({
-          label: `${block.id}.${portId}`,
+          label: `${displayName}.${portId}`,
           type: 'output',
           description: `${block.type} output`,
           blockId: block.id,

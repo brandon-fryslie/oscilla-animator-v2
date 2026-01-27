@@ -16,6 +16,7 @@ import type { BlockId, BlockRole, CombineMode, EdgeRole, PortId } from '../types
 import { emptyPatchData, type PatchData } from './internal';
 import type { EventHub } from '../events/EventHub';
 import { requireBlockDef } from '../blocks/registry';
+import { normalizeCanonicalName, detectCanonicalNameCollisions } from '../core/canonical-name';
 
 /**
  * Opaque type for immutable patch access.
@@ -35,6 +36,44 @@ export interface EdgeOptions {
   enabled?: boolean;
   sortKey?: number;
   role?: EdgeRole;
+}
+
+/**
+ * Generate a default displayName for a new block.
+ * Pattern: "<BlockDef.label> <n>" where n starts at 1 and increments until unique.
+ *
+ * @param blockType - Block type being added
+ * @param existingBlocks - Current blocks in the patch
+ * @returns A unique displayName
+ */
+function generateDefaultDisplayName(
+  blockType: string,
+  existingBlocks: ReadonlyMap<BlockId, Block>
+): string {
+  const blockDef = requireBlockDef(blockType);
+  const baseLabel = blockDef.label;
+
+  // Count existing blocks of the same type
+  let count = 1;
+  for (const block of existingBlocks.values()) {
+    if (block.type === blockType) {
+      count++;
+    }
+  }
+
+  // Collect all existing displayNames for collision detection
+  const existingNames = Array.from(existingBlocks.values())
+    .map(b => b.displayName)
+    .filter((n): n is string => n !== null && n !== '');
+
+  // Generate candidate and check for collisions across ALL blocks
+  let candidate = `${baseLabel} ${count}`;
+  while (detectCanonicalNameCollisions([...existingNames, candidate]).collisions.length > 0) {
+    count++;
+    candidate = `${baseLabel} ${count}`;
+  }
+
+  return candidate;
 }
 
 export class PatchStore {
@@ -202,6 +241,7 @@ export class PatchStore {
   /**
    * Adds a new block to the patch.
    * Creates ports from registry definitions.
+   * Auto-generates displayName if not provided.
    * Returns the generated BlockId.
    */
   addBlock(
@@ -225,12 +265,17 @@ export class PatchStore {
       outputPorts.set(outputId, { id: outputId });
     }
 
+    // Auto-generate displayName if not provided
+    const displayName = options?.displayName !== undefined
+      ? options.displayName
+      : generateDefaultDisplayName(type, this._data.blocks);
+
     const block: Block = {
       id,
       type,
       params,
       label: options?.label,
-      displayName: options?.displayName ?? null,
+      displayName,
       domainId: options?.domainId ?? null,
       role: options?.role ?? { kind: 'user', meta: {} },
       inputPorts,
@@ -303,19 +348,45 @@ export class PatchStore {
 
   /**
    * Updates block display name.
+   * Validates uniqueness before applying.
+   *
+   * @param id - Block ID
+   * @param displayName - New display name (null not allowed - use auto-generated name instead)
+   * @returns Error message if collision detected, null if successful
    */
-  updateBlockDisplayName(id: BlockId, displayName: string | null): void {
+  updateBlockDisplayName(id: BlockId, displayName: string | null): { error?: string } {
     const block = this._data.blocks.get(id);
     if (!block) {
       throw new Error(`Block not found: ${id}`);
     }
 
+    // If displayName is null or empty, auto-generate a new one
+    let finalDisplayName = displayName;
+    if (!displayName || displayName.trim() === '') {
+      finalDisplayName = generateDefaultDisplayName(block.type, this._data.blocks);
+    }
+
+    // Validate uniqueness (check against all OTHER blocks, not this one)
+    const otherBlockNames = Array.from(this._data.blocks.values())
+      .filter(b => b.id !== id)
+      .map(b => b.displayName)
+      .filter((n): n is string => n !== null && n !== '');
+
+    const { collisions } = detectCanonicalNameCollisions([...otherBlockNames, finalDisplayName!]);
+    if (collisions.length > 0) {
+      // Collision detected - return error
+      const canonical = normalizeCanonicalName(finalDisplayName!);
+      return { error: `Name "${finalDisplayName}" conflicts with another block (canonical: "${canonical}")` };
+    }
+
+    // No collision - update the name
     this._data.blocks.set(id, {
       ...block,
-      displayName,
+      displayName: finalDisplayName,
     });
 
     this.invalidateSnapshot();
+    return {};
   }
 
   /**
@@ -510,10 +581,25 @@ export class PatchStore {
   /**
    * Loads a complete patch, replacing the current one.
    * This is used for file load, undo/redo, etc.
+   * Auto-migrates null displayNames to auto-generated names.
    */
   loadPatch(patch: Patch): void {
+    // Auto-migrate null displayNames
+    const migratedBlocks = new Map<BlockId, Block>();
+    const tempBlocks = new Map(patch.blocks);
+
+    for (const [blockId, block] of tempBlocks) {
+      if (block.displayName === null) {
+        // Generate displayName for this block
+        const generatedName = generateDefaultDisplayName(block.type, migratedBlocks);
+        migratedBlocks.set(blockId, { ...block, displayName: generatedName });
+      } else {
+        migratedBlocks.set(blockId, block);
+      }
+    }
+
     this._data = {
-      blocks: new Map(patch.blocks),
+      blocks: migratedBlocks,
       edges: [...patch.edges],
     };
 

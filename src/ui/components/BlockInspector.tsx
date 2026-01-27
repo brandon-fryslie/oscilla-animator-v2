@@ -1811,6 +1811,18 @@ function extractIdentifierPrefix(value: string, cursorPos: number): { prefix: st
   }
 
   // If we stopped at a dot, check if it's part of block.port syntax
+  // and include the block name in the prefix
+  if (start >= 0 && value[start] === '.') {
+    // Scan further backward to include the block name
+    let blockStart = start - 1;
+    while (blockStart >= 0 && /[a-zA-Z0-9_]/.test(value[blockStart])) {
+      blockStart--;
+    }
+    const identifierStart = blockStart + 1;
+    const prefix = value.substring(identifierStart, cursorPos);
+    return { prefix, startOffset: identifierStart };
+  }
+
   const identifierStart = start + 1;
   if (identifierStart >= cursorPos) {
     return null; // No identifier chars before cursor
@@ -1941,17 +1953,20 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value, pa
     let suggestions: readonly Suggestion[];
 
     if (blockContext) {
-      // Port completion context
+      // Port completion context - get ports for specific block
       suggestions = suggestionProvider.suggestBlockPorts(blockContext);
+
+      // Filter the block's ports by the port name prefix (if any)
+      // Extract just the port part after the dot (e.g., "b14.rad" -> "rad")
       if (filterPrefix) {
-        suggestions = suggestionProvider.filterSuggestions(filterPrefix, 'port').filter(s => s.type === 'port');
+        const dotIndex = filterPrefix.indexOf('.');
+        const portPrefix = dotIndex >= 0 ? filterPrefix.substring(dotIndex + 1) : filterPrefix;
+        const lowerPrefix = portPrefix.toLowerCase();
+        suggestions = suggestions.filter(s => s.label.toLowerCase().includes(lowerPrefix));
       }
-    } else if (filterPrefix) {
-      // Identifier completion context - exclude self
-      suggestions = suggestionProvider.filterSuggestions(filterPrefix, undefined, blockId);
     } else {
-      // Ctrl+Space - show all (except ports) - exclude self
-      suggestions = suggestionProvider.filterSuggestions('', undefined, blockId);
+      // All suggestions (functions, inputs, outputs, blocks)
+      suggestions = suggestionProvider.filterSuggestions(filterPrefix);
     }
 
     setFilteredSuggestions(suggestions);

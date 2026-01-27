@@ -48,6 +48,7 @@
 
 import type { BlockId, PortId, BlockRole, DefaultSource, EdgeRole, CombineMode } from '../types';
 import { requireBlockDef } from '../blocks/registry';
+import { detectCanonicalNameCollisions } from '../core/canonical-name';
 
 // =============================================================================
 // Varargs Support
@@ -207,6 +208,44 @@ export interface Patch {
 // Builders (for tests and programmatic construction)
 // =============================================================================
 
+/**
+ * Generate a default displayName for a new block in PatchBuilder.
+ * Pattern: "<BlockDef.label> <n>" where n starts at 1 and increments until unique.
+ *
+ * @param blockType - Block type being added
+ * @param existingBlocks - Current blocks in the builder
+ * @returns A unique displayName
+ */
+function generateDefaultDisplayName(
+  blockType: string,
+  existingBlocks: ReadonlyMap<BlockId, Block>
+): string {
+  const blockDef = requireBlockDef(blockType);
+  const baseLabel = blockDef.label;
+
+  // Count existing blocks of the same type
+  let count = 1;
+  for (const block of existingBlocks.values()) {
+    if (block.type === blockType) {
+      count++;
+    }
+  }
+
+  // Collect all existing displayNames for collision detection
+  const existingNames = Array.from(existingBlocks.values())
+    .map(b => b.displayName)
+    .filter((n): n is string => n !== null && n !== '');
+
+  // Generate candidate and check for collisions across ALL blocks
+  let candidate = `${baseLabel} ${count}`;
+  while (detectCanonicalNameCollisions([...existingNames, candidate]).collisions.length > 0) {
+    count++;
+    candidate = `${baseLabel} ${count}`;
+  }
+
+  return candidate;
+}
+
 export class PatchBuilder {
   private blocks = new Map<BlockId, Block>();
   private edges: Edge[] = [];
@@ -242,12 +281,17 @@ export class PatchBuilder {
       outputPorts.set(outputId, { id: outputId });
     }
 
+    // Auto-generate displayName if not provided
+    const displayName = options?.displayName !== undefined
+      ? options.displayName
+      : generateDefaultDisplayName(type, this.blocks);
+
     this.blocks.set(id, {
       id,
       type,
       params,
       label: options?.label,
-      displayName: options?.displayName ?? null,
+      displayName,
       domainId: options?.domainId ?? null,
       role: options?.role ?? { kind: 'user', meta: {} },
       inputPorts,
