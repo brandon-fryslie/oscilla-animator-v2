@@ -376,29 +376,44 @@ export function applyContinuity(
   // Use the pre-captured snapshot (before getOrCreateTargetState zeroed it)
   let oldEffectiveSnapshot: Float32Array | null = null;
   if (state.continuity.domainChangeThisFrame && ctx.hadPreviousState) {
-    // Use snapshot if count changed, otherwise copy from current state
-    oldEffectiveSnapshot = ctx.oldSlewSnapshot ?? (
-      targetState.slewBuffer.length > 0
-        ? new Float32Array(targetState.slewBuffer)
-        : null
-    );
+    // Buffer size changed - use pre-captured snapshot (safer, buffers may have been reallocated)
+    if (ctx.sizeChanged) {
+      oldEffectiveSnapshot = ctx.oldSlewSnapshot;
+    }
+    // Buffer size unchanged - safe to copy from current state (no reallocation happened)
+    else if (targetState.slewBuffer.length > 0) {
+      oldEffectiveSnapshot = new Float32Array(targetState.slewBuffer);
+    }
+    // Edge case: buffer exists but is empty (shouldn't happen, but handle gracefully)
+    else {
+      oldEffectiveSnapshot = null;
+    }
   }
 
   // Handle domain change - reinitialize buffers (for non-crossfade policies)
   // Crossfade handles its own initialization differently
   if (state.continuity.domainChangeThisFrame && policy.kind !== 'crossfade') {
-    // Use pre-captured snapshots (from before getOrCreateTargetState zeroed buffers)
-    // If count didn't change, ctx.oldSlewSnapshot is null, use current targetState
-    const oldEffective = ctx.oldSlewSnapshot ?? (
-      targetState.slewBuffer.length > 0 && targetState.slewBuffer.length <= bufferLength
-        ? new Float32Array(targetState.slewBuffer)
-        : null
-    );
-    const oldSlew = ctx.oldSlewSnapshot ?? (
-      targetState.slewBuffer.length > 0
-        ? new Float32Array(targetState.slewBuffer)
-        : null
-    );
+    // Determine old effective values (for gauge initialization)
+    let oldEffective: Float32Array | null = null;
+    if (ctx.sizeChanged) {
+      // Buffer size changed - use pre-captured snapshot (buffers were reallocated)
+      oldEffective = ctx.oldSlewSnapshot;
+    } else if (targetState.slewBuffer.length > 0 && targetState.slewBuffer.length <= bufferLength) {
+      // Buffer size unchanged - safe to copy from current state (no reallocation happened)
+      oldEffective = new Float32Array(targetState.slewBuffer);
+    }
+    // Otherwise oldEffective remains null (no previous data to preserve)
+
+    // Determine old slew values (for slew initialization)
+    let oldSlew: Float32Array | null = null;
+    if (ctx.sizeChanged) {
+      // Buffer size changed - use pre-captured snapshot
+      oldSlew = ctx.oldSlewSnapshot;
+    } else if (targetState.slewBuffer.length > 0) {
+      // Buffer size unchanged - safe to copy from current state
+      oldSlew = new Float32Array(targetState.slewBuffer);
+    }
+    // Otherwise oldSlew remains null
 
     // For ALL policies that use gauge (preserve, slew, project):
     // Initialize gauge to preserve effective values at boundary (spec §2.5)
