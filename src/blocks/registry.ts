@@ -7,7 +7,7 @@
 
 import type { SignalType, PayloadType } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
-import type { Slot, UIControlHint, DefaultSource } from '../types';
+import type { UIControlHint, DefaultSource } from '../types';
 import type { IRBuilder } from '../compiler/ir/IRBuilder';
 import type { BlockIndex } from '../graph/normalize';
 import type { InstanceId } from '../compiler/ir/Indices';
@@ -86,8 +86,12 @@ export interface LowerResult {
 
 /**
  * Block form determines compilation behavior.
+ *
+ * - 'primitive': Atomic block with a lower() function
+ * - 'macro': Expands into multiple blocks (future use)
+ * - 'composite': Contains an internal graph, expands during normalization
  */
-export type BlockForm = 'primitive' | 'macro';
+export type BlockForm = 'primitive' | 'macro' | 'composite';
 
 /**
  * Capability determines what special authorities a block has.
@@ -610,4 +614,312 @@ export function isPayloadGeneric(blockType: string): boolean {
     if (allowed.length > 1) return true;
   }
   return false;
+}
+
+// =============================================================================
+// Composite Block Registry
+// =============================================================================
+
+import type {
+  CompositeBlockDef,
+  CompositeValidationError,
+} from './composite-types';
+
+// Re-export composite types for convenience
+export type { CompositeBlockDef, InternalBlockId } from './composite-types';
+export { isCompositeBlockDef } from './composite-types';
+
+/** Separate registry for composite blocks */
+const compositeRegistry = new Map<string, CompositeBlockDef>();
+
+/**
+ * Composite definitions indexed by type.
+ * Exported for direct access by compiler passes.
+ */
+export const COMPOSITE_DEFS_BY_TYPE: ReadonlyMap<string, CompositeBlockDef> = compositeRegistry;
+
+/**
+ * Get composite block definition by type, or undefined if not registered.
+ */
+export function getCompositeDefinition(blockType: string): CompositeBlockDef | undefined {
+  return compositeRegistry.get(blockType);
+}
+
+/**
+ * Get composite block definition by type, throwing if not registered.
+ */
+export function requireCompositeDef(blockType: string): CompositeBlockDef {
+  const def = compositeRegistry.get(blockType);
+  if (!def) {
+    throw new Error(`Unknown composite block type: "${blockType}" is not registered`);
+  }
+  return def;
+}
+
+/**
+ * Check if a block type is a composite.
+ */
+export function isCompositeType(blockType: string): boolean {
+  return compositeRegistry.has(blockType);
+}
+
+/**
+ * Validate a composite block definition.
+ * Returns an array of validation errors (empty if valid).
+ */
+export function validateCompositeDefinition(
+  def: CompositeBlockDef,
+  visitedTypes: Set<string> = new Set(),
+  depth: number = 0
+): CompositeValidationError[] {
+  const errors: CompositeValidationError[] = [];
+
+  // Check nesting depth
+  if (depth > 5) { // MAX_COMPOSITE_NESTING_DEPTH
+    errors.push({
+      code: 'MAX_NESTING_EXCEEDED',
+      message: `Composite nesting depth exceeds maximum of 5 levels`,
+    });
+    return errors;
+  }
+
+  // Check for circular references
+  if (visitedTypes.has(def.type)) {
+    errors.push({
+      code: 'CIRCULAR_REFERENCE',
+      message: `Circular reference detected: composite "${def.type}" references itself`,
+    });
+    return errors;
+  }
+  visitedTypes.add(def.type);
+
+  // Check for empty composite
+  if (def.internalBlocks.size === 0) {
+    errors.push({
+      code: 'EMPTY_COMPOSITE',
+      message: 'Composite must contain at least one internal block',
+    });
+  }
+
+  // Check for at least one exposed output
+  if (def.exposedOutputs.length === 0) {
+    errors.push({
+      code: 'NO_EXPOSED_OUTPUTS',
+      message: 'Composite must expose at least one output port',
+    });
+  }
+
+  // Validate internal block types
+  for (const [internalId, internalDef] of def.internalBlocks) {
+    const blockDef = getBlockDefinition(internalDef.type);
+    const compositeDef = getCompositeDefinition(internalDef.type);
+
+    if (!blockDef && !compositeDef) {
+      errors.push({
+        code: 'UNKNOWN_INTERNAL_BLOCK_TYPE',
+        message: `Internal block "${internalId}" references unknown block type "${internalDef.type}"`,
+        location: { internalBlockId: internalId },
+      });
+    }
+
+    // Recursively validate nested composites
+    if (compositeDef) {
+      const nestedErrors = validateCompositeDefinition(compositeDef, new Set(visitedTypes), depth + 1);
+      errors.push(...nestedErrors);
+    }
+  }
+
+  // Validate exposed input port mappings
+  const seenExternalInputs = new Set<string>();
+  for (const exposed of def.exposedInputs) {
+    // Check for duplicate external IDs
+    if (seenExternalInputs.has(exposed.externalId)) {
+      errors.push({
+        code: 'DUPLICATE_EXTERNAL_PORT',
+        message: `Duplicate external input port ID: "${exposed.externalId}"`,
+        location: { portId: exposed.externalId },
+      });
+    }
+    seenExternalInputs.add(exposed.externalId);
+
+    // Check internal block exists
+    if (!def.internalBlocks.has(exposed.internalBlockId)) {
+      errors.push({
+        code: 'INVALID_PORT_MAPPING',
+        message: `Exposed input "${exposed.externalId}" maps to non-existent internal block "${exposed.internalBlockId}"`,
+        location: { internalBlockId: exposed.internalBlockId, portId: exposed.externalId },
+      });
+    } else {
+      // Check internal port exists
+      const internalBlock = def.internalBlocks.get(exposed.internalBlockId)!;
+      const internalBlockDef = getBlockDefinition(internalBlock.type);
+      const internalCompositeDef = getCompositeDefinition(internalBlock.type);
+
+      // Check if the port exists - handle both primitives and composites
+      let portExists = false;
+      if (internalBlockDef) {
+        // Primitive block - check inputs
+        portExists = exposed.internalPortId in internalBlockDef.inputs;
+      } else if (internalCompositeDef) {
+        // Composite block - check exposedInputs
+        portExists = internalCompositeDef.exposedInputs.some(
+          exp => exp.externalId === exposed.internalPortId
+        );
+      }
+
+      if ((internalBlockDef || internalCompositeDef) && !portExists) {
+        errors.push({
+          code: 'INVALID_PORT_MAPPING',
+          message: `Exposed input "${exposed.externalId}" maps to non-existent port "${exposed.internalPortId}" on block "${exposed.internalBlockId}"`,
+          location: { internalBlockId: exposed.internalBlockId, portId: exposed.internalPortId },
+        });
+      }
+    }
+  }
+
+  // Validate exposed output port mappings
+  const seenExternalOutputs = new Set<string>();
+  for (const exposed of def.exposedOutputs) {
+    // Check for duplicate external IDs
+    if (seenExternalOutputs.has(exposed.externalId)) {
+      errors.push({
+        code: 'DUPLICATE_EXTERNAL_PORT',
+        message: `Duplicate external output port ID: "${exposed.externalId}"`,
+        location: { portId: exposed.externalId },
+      });
+    }
+    seenExternalOutputs.add(exposed.externalId);
+
+    // Check internal block exists
+    if (!def.internalBlocks.has(exposed.internalBlockId)) {
+      errors.push({
+        code: 'INVALID_PORT_MAPPING',
+        message: `Exposed output "${exposed.externalId}" maps to non-existent internal block "${exposed.internalBlockId}"`,
+        location: { internalBlockId: exposed.internalBlockId, portId: exposed.externalId },
+      });
+    } else {
+      // Check internal port exists
+      const internalBlock = def.internalBlocks.get(exposed.internalBlockId)!;
+      const internalBlockDef = getBlockDefinition(internalBlock.type);
+      const internalCompositeDef = getCompositeDefinition(internalBlock.type);
+
+      // Check if the port exists - handle both primitives and composites
+      let portExists = false;
+      if (internalBlockDef) {
+        // Primitive block - check outputs
+        portExists = exposed.internalPortId in internalBlockDef.outputs;
+      } else if (internalCompositeDef) {
+        // Composite block - check exposedOutputs
+        portExists = internalCompositeDef.exposedOutputs.some(
+          exp => exp.externalId === exposed.internalPortId
+        );
+      }
+
+      if ((internalBlockDef || internalCompositeDef) && !portExists) {
+        errors.push({
+          code: 'INVALID_PORT_MAPPING',
+          message: `Exposed output "${exposed.externalId}" maps to non-existent port "${exposed.internalPortId}" on block "${exposed.internalBlockId}"`,
+          location: { internalBlockId: exposed.internalBlockId, portId: exposed.internalPortId },
+        });
+      }
+    }
+  }
+
+  // Check for duplicate between inputs and outputs
+  for (const inputId of seenExternalInputs) {
+    if (seenExternalOutputs.has(inputId)) {
+      errors.push({
+        code: 'DUPLICATE_EXTERNAL_PORT',
+        message: `Port ID "${inputId}" used as both input and output`,
+        location: { portId: inputId },
+      });
+    }
+  }
+
+  visitedTypes.delete(def.type);
+  return errors;
+}
+
+/**
+ * Register a composite block definition.
+ *
+ * Validates the composite and throws if invalid.
+ */
+export function registerComposite(def: CompositeBlockDef): void {
+  // Check for name collision with primitive blocks
+  if (registry.has(def.type)) {
+    throw new Error(`Block type already registered as primitive: ${def.type}`);
+  }
+
+  // Check for duplicate composite registration
+  if (compositeRegistry.has(def.type)) {
+    throw new Error(`Composite block type already registered: ${def.type}`);
+  }
+
+  // Validate the definition
+  const errors = validateCompositeDefinition(def);
+  if (errors.length > 0) {
+    const errorMessages = errors.map(e => `  - ${e.code}: ${e.message}`).join('\n');
+    throw new Error(`Invalid composite block definition "${def.type}":\n${errorMessages}`);
+  }
+
+  compositeRegistry.set(def.type, def);
+}
+
+/**
+ * Unregister a composite block definition.
+ * Used for user-created composites that can be deleted.
+ * Library composites (readonly: true) cannot be unregistered.
+ */
+export function unregisterComposite(blockType: string): boolean {
+  const def = compositeRegistry.get(blockType);
+  if (!def) {
+    return false;
+  }
+
+  if (def.readonly) {
+    throw new Error(`Cannot unregister library composite: ${blockType}`);
+  }
+
+  compositeRegistry.delete(blockType);
+  return true;
+}
+
+/**
+ * Get all registered composite block types.
+ */
+export function getAllCompositeTypes(): readonly string[] {
+  return Array.from(compositeRegistry.keys());
+}
+
+/**
+ * Get all composite block definitions.
+ */
+export function getAllComposites(): readonly CompositeBlockDef[] {
+  return Array.from(compositeRegistry.values());
+}
+
+/**
+ * Check if a block type is registered (primitive or composite).
+ */
+export function isBlockTypeRegistered(blockType: string): boolean {
+  return registry.has(blockType) || compositeRegistry.has(blockType);
+}
+
+/**
+ * Get any block definition (primitive or composite) by type.
+ */
+export function getAnyBlockDefinition(blockType: string): BlockDef | CompositeBlockDef | undefined {
+  return registry.get(blockType) || compositeRegistry.get(blockType);
+}
+
+/**
+ * Require any block definition (primitive or composite), throwing if not found.
+ */
+export function requireAnyBlockDef(blockType: string): BlockDef | CompositeBlockDef {
+  const def = getAnyBlockDefinition(blockType);
+  if (!def) {
+    throw new Error(`Unknown block type: "${blockType}" is not registered`);
+  }
+  return def;
 }

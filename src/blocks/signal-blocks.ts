@@ -8,6 +8,7 @@ import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
 import { signalType, type PayloadType, unitPhase01, unitNorm01, unitVar, payloadVar, strideOf } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { OpCode, stableStateId } from '../compiler/ir/types';
+import { defaultSourceConst } from '../types';
 import type { SigExprId } from '../compiler/ir/Indices';
 
 // =============================================================================
@@ -293,6 +294,7 @@ registerBlock({
   description: 'Accumulates value over time with delta input',
   form: 'primitive',
   capability: 'state',
+  isStateful: true,  // Allows feedback cycles - reads from previous frame
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
@@ -358,13 +360,14 @@ registerBlock({
   description: 'Delays input by one frame',
   form: 'primitive',
   capability: 'state',
+  isStateful: true,  // Allows feedback cycles - reads from previous frame
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'Input', type: signalType(FLOAT) },
+    in: { label: 'Input', type: signalType(FLOAT), defaultSource: defaultSourceConst(0) },
     initialValue: { type: signalType(FLOAT), value: 0, exposedAsPort: false },
   },
   outputs: {
@@ -410,6 +413,7 @@ registerBlock({
   description: 'Exponential smoothing filter',
   form: 'primitive',
   capability: 'state',
+  isStateful: true,  // Allows feedback cycles - reads from previous frame
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',

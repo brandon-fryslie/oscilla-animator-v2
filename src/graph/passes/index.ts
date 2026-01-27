@@ -2,6 +2,7 @@
  * Graph Normalization Passes
  *
  * Orchestrates the normalization pipeline:
+ * - Pass 0: Composite expansion (expands composite blocks into derived blocks)
  * - Pass 1: Default source materialization
  * - Pass 2: Adapter insertion
  * - Pass 3: Varargs validation
@@ -12,6 +13,7 @@
  */
 
 import type { Patch } from '../Patch';
+import { pass0CompositeExpansion, type ExpansionError } from './pass0-composite-expansion';
 import { pass1DefaultSources } from './pass1-default-sources';
 import { pass2Adapters, type AdapterError } from './pass2-adapters';
 import { pass4Varargs, type VarargError } from './pass4-varargs';
@@ -24,9 +26,11 @@ import { pass3Indexing, type IndexingError, type NormalizedPatch } from './pass3
 export type { NormalizedPatch, NormalizedEdge, BlockIndex } from './pass3-indexing';
 export type { AdapterError } from './pass2-adapters';
 export type { VarargError } from './pass4-varargs';
+export type { ExpansionError, CompositeExpansionResult } from './pass0-composite-expansion';
+export type { CompositeExpansionInfo } from '../../blocks/composite-types';
 
 // Unified error type
-export type NormError = AdapterError | IndexingError | VarargError;
+export type NormError = AdapterError | IndexingError | VarargError | ExpansionError;
 
 export interface NormalizeResult {
   readonly kind: 'ok';
@@ -46,6 +50,7 @@ export interface NormalizeError {
  * Run all normalization passes.
  *
  * Transforms a raw patch into a fully normalized patch with:
+ * - Composite blocks expanded
  * - Default sources materialized
  * - Type adapters inserted
  * - Varargs validated
@@ -59,8 +64,14 @@ export interface NormalizeError {
  * @returns NormalizedPatch or error list
  */
 export function runNormalizationPasses(patch: Patch): NormalizeResult | NormalizeError {
+  // Pass 0: Composite expansion (expands composite blocks first)
+  const p0Result = pass0CompositeExpansion(patch);
+  if (p0Result.kind === 'error') {
+    return { kind: 'error', errors: p0Result.errors };
+  }
+
   // Pass 1: Default source materialization
-  const p1 = pass1DefaultSources(patch);
+  const p1 = pass1DefaultSources(p0Result.patch);
 
   // Pass 2: Adapter insertion
   const p2Result = pass2Adapters(p1);
@@ -87,6 +98,7 @@ export function runNormalizationPasses(patch: Patch): NormalizeResult | Normaliz
 // Re-export Individual Passes (for testing)
 // =============================================================================
 
+export { pass0CompositeExpansion } from './pass0-composite-expansion';
 export { pass1DefaultSources } from './pass1-default-sources';
 export { pass2Adapters } from './pass2-adapters';
 export { pass4Varargs } from './pass4-varargs';

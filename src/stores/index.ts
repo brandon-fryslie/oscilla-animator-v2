@@ -24,6 +24,7 @@ export {
   type LogLevel,
   type LogEntry,
 } from './DiagnosticsStore';
+export { CompositeEditorStore } from './CompositeEditorStore';
 
 // React integration
 export { StoreProvider, useStores, useStore } from './context';

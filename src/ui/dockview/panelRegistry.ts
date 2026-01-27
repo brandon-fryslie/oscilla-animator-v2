@@ -17,6 +17,7 @@ import { ContinuityPanel } from './panels/ContinuityPanel';
 import { CompilationInspectorPanel } from './panels/CompilationInspectorPanel';
 import { DebugMiniViewPanel } from './panels/DebugMiniViewPanel';
 import { SettingsPanelWrapper } from './panels/SettingsPanelWrapper';
+import { CompositeEditorPanel } from './panels/CompositeEditorPanel';
 
 /**
  * Panel group assignments for layout.
@@ -56,6 +57,7 @@ export const PANEL_DEFINITIONS: PanelDefinition[] = [
   { id: 'flow-editor', component: 'flow-editor', title: 'Flow', group: 'center' },
   { id: 'table-view', component: 'table-view', title: 'Table', group: 'center' },
   { id: 'connection-matrix', component: 'connection-matrix', title: 'Matrix', group: 'center' },
+  { id: 'composite-editor', component: 'composite-editor', title: 'Composite', group: 'center' },
 
   // Right sidebar (settings not in default layout - can be opened manually)
   { id: 'settings', component: 'settings', title: 'Settings', group: 'right-top' },
@@ -81,6 +83,7 @@ export const PANEL_COMPONENTS = {
   'table-view': TableViewPanel,
   'connection-matrix': ConnectionMatrixPanel,
   'flow-editor': ReactFlowEditorPanel,
+  'composite-editor': CompositeEditorPanel,
   'preview': PreviewPanel,
   'diagnostic-console': DiagnosticConsolePanel,
   'log-panel': LogPanel,

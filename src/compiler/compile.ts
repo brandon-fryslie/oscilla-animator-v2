@@ -167,6 +167,13 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
               blockId: e.where.blockId,
               portId: e.where.portId,
             };
+          case 'CompositeExpansion':
+            return {
+              kind: 'CompositeExpansion',
+              message: e.message,
+              blockId: e.compositeBlockId,
+              code: e.code,
+            };
           default: {
             const _exhaustive: never = e;
             return {

@@ -340,7 +340,7 @@ interface BlockTypeItemProps {
 
 const BlockTypeItem: React.FC<BlockTypeItemProps> = ({
   type,
-  category,
+  category: _category,
   onClick,
   onDoubleClick,
 }) => {
@@ -348,11 +348,22 @@ const BlockTypeItem: React.FC<BlockTypeItemProps> = ({
   const outputCount = Object.keys(type.outputs).length;
   const isPrimitive = type.form === 'primitive';
 
+  const handleDragStart = useCallback(
+    (e: React.DragEvent) => {
+      // Set block type data for drag-and-drop
+      e.dataTransfer.setData('application/oscilla-block-type', type.type);
+      e.dataTransfer.effectAllowed = 'copy';
+    },
+    [type.type]
+  );
+
   return (
     <div
       className="block-type-item"
       onClick={() => onClick(type)}
       onDoubleClick={() => onDoubleClick(type)}
+      draggable
+      onDragStart={handleDragStart}
     >
       <div className="block-type-item__icon" />
       <div className="block-type-item__info">

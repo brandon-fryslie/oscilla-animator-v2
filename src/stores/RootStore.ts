@@ -23,6 +23,7 @@ import { CameraStore } from './CameraStore';
 import { SettingsStore } from './SettingsStore';
 import { EventHub } from '../events/EventHub';
 import { DiagnosticHub } from '../diagnostics/DiagnosticHub';
+import { CompositeEditorStore } from './CompositeEditorStore';
 
 export class RootStore {
   readonly patch: PatchStore;
@@ -37,6 +38,7 @@ export class RootStore {
   readonly camera: CameraStore;
   readonly settings: SettingsStore;
   readonly events: EventHub;
+  readonly compositeEditor: CompositeEditorStore;
 
   // Patch revision tracking (for diagnostics)
   private patchRevision: number = 0;
@@ -81,6 +83,9 @@ export class RootStore {
 
     // Create CameraStore (3D preview state - viewer only)
     this.camera = new CameraStore();
+
+    // Create CompositeEditorStore (composite block editor state)
+    this.compositeEditor = new CompositeEditorStore();
 
     // Wire up callback for MobX reactivity
     this.diagnosticHub.setOnRevisionChange(() => this.diagnostics.incrementRevision());

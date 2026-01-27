@@ -339,7 +339,8 @@ export type DerivedBlockMeta =
   | { readonly kind: "defaultSource"; readonly target: { readonly kind: "port"; readonly port: PortRef } }
   | { readonly kind: "wireState";     readonly target: { readonly kind: "wire"; readonly wire: WireId } }
   | { readonly kind: "lens";          readonly target: { readonly kind: "node"; readonly node: NodeRef } }
-  | { readonly kind: "adapter";       readonly edgeId: string; readonly adapterType: string };
+  | { readonly kind: "adapter";       readonly edgeId: string; readonly adapterType: string }
+  | { readonly kind: "compositeExpansion"; readonly compositeDefId: string; readonly compositeInstanceId: string; readonly internalBlockId: string };
 
 /**
  * Helper functions to create BlockRole instances
@@ -380,7 +381,8 @@ export type EdgeRole =
   | { readonly kind: "user"; readonly meta: Record<string, never> }
   | { readonly kind: "default"; readonly meta: { readonly defaultSourceBlockId: BlockId } }
   | { readonly kind: "auto";    readonly meta: { readonly reason: "portMoved" | "rehydrate" | "migrate" } }
-  | { readonly kind: "adapter"; readonly meta: { readonly adapterId: BlockId; readonly originalEdgeId: string } };
+  | { readonly kind: "adapter"; readonly meta: { readonly adapterId: BlockId; readonly originalEdgeId: string } }
+  | { readonly kind: "composite"; readonly meta: { readonly compositeInstanceId: string } };
 
 // =============================================================================
 // Canonical Addressing System
