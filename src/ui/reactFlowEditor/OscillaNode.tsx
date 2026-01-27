@@ -6,6 +6,7 @@
  * Handles are color-coded by payload type with type tooltips.
  * Supports port hover highlighting for compatible ports.
  * Shows detailed port info popover on hover.
+ * Supports inline displayName editing via double-click.
  */
 
 import React, { useCallback, useState } from 'react';
@@ -16,6 +17,7 @@ import type { DefaultSource, PortId, BlockId } from '../../types';
 import { useStores } from '../../stores';
 import { ParameterControl, DefaultSourceControl } from './ParameterControls';
 import { PortInfoPopover } from './PortInfoPopover';
+import { DisplayNameEditor } from '../components/DisplayNameEditor';
 
 /**
  * Format a default source for display in tooltip.
@@ -195,16 +197,16 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
               onMouseLeave={handlePortMouseLeave}
               style={{
                 top: `${topPercent}%`,
-                background: input.isConnected 
-                  ? input.typeColor 
+                background: input.isConnected
+                  ? input.typeColor
                   : `linear-gradient(135deg, ${input.typeColor}40 0%, #1a1a2e 100%)`,
                 width: '14px',
                 height: '14px',
                 border: `2px solid ${input.typeColor}`,
                 borderRadius: '50%',
-                boxShadow: isSelected 
-                  ? `0 0 12px 3px ${input.typeColor}80, inset 0 0 4px ${input.typeColor}` 
-                  : input.isConnected 
+                boxShadow: isSelected
+                  ? `0 0 12px 3px ${input.typeColor}80, inset 0 0 4px ${input.typeColor}`
+                  : input.isConnected
                     ? `0 0 6px 1px ${input.typeColor}40`
                     : 'none',
                 cursor: 'pointer',
@@ -233,7 +235,7 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
         );
       })}
 
-      {/* Node Label */}
+      {/* Node Label with Inline Editing */}
       <div
         style={{
           textAlign: 'center',
@@ -244,13 +246,33 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
           color: '#f1f5f9',
         }}
       >
-        {data.label}
+        <DisplayNameEditor
+          blockId={data.blockId}
+          currentDisplayName={data.displayName}
+          fallbackLabel={data.label}
+          style={{
+            fontSize: '14px',
+            fontWeight: 600,
+            letterSpacing: '0.3px',
+            color: '#f1f5f9',
+          }}
+          editStyle={{
+            fontSize: '14px',
+            fontWeight: 600,
+            background: '#1a1a2e',
+            color: '#f1f5f9',
+            textAlign: 'center',
+          }}
+          errorStyle={{
+            fontSize: '10px',
+          }}
+        />
       </div>
 
       {/* Port Labels Summary (removed to reduce clutter) */}
-      <div style={{ 
-        fontSize: '10px', 
-        color: '#64748b', 
+      <div style={{
+        fontSize: '10px',
+        color: '#64748b',
         textAlign: 'center',
         display: 'flex',
         alignItems: 'center',
@@ -258,7 +280,7 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
         gap: '8px',
       }}>
         {data.inputs.length > 0 && (
-          <span style={{ 
+          <span style={{
             color: '#3b82f6',
             display: 'flex',
             alignItems: 'center',
@@ -271,7 +293,7 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
           <span style={{ color: '#334155' }}>•</span>
         )}
         {data.outputs.length > 0 && (
-          <span style={{ 
+          <span style={{
             color: '#22c55e',
             display: 'flex',
             alignItems: 'center',
@@ -374,16 +396,16 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
               onMouseLeave={handlePortMouseLeave}
               style={{
                 top: `${topPercent}%`,
-                background: output.isConnected 
-                  ? output.typeColor 
+                background: output.isConnected
+                  ? output.typeColor
                   : `linear-gradient(135deg, ${output.typeColor}40 0%, #1a1a2e 100%)`,
                 width: '14px',
                 height: '14px',
                 border: `2px solid ${output.typeColor}`,
                 borderRadius: '50%',
-                boxShadow: isSelected 
-                  ? `0 0 12px 3px ${output.typeColor}80, inset 0 0 4px ${output.typeColor}` 
-                  : output.isConnected 
+                boxShadow: isSelected
+                  ? `0 0 12px 3px ${output.typeColor}80, inset 0 0 4px ${output.typeColor}`
+                  : output.isConnected
                     ? `0 0 6px 1px ${output.typeColor}40`
                     : 'none',
                 cursor: 'pointer',

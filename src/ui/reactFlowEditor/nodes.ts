@@ -68,6 +68,7 @@ export interface OscillaNodeData {
   blockId: BlockId;
   blockType: string;
   label: string;
+  displayName: string | null; // User-editable display name
   inputs: PortData[];
   outputs: PortData[];
   params: ParamData[];
@@ -192,7 +193,8 @@ export function createNodeFromBlock(
     data: {
       blockId: block.id,
       blockType: block.type,
-      label: block.displayName || blockDef.label,
+      label: blockDef.label,
+      displayName: block.displayName,
       inputs: Object.entries(blockDef.inputs).map(([inputId, input]) =>
         createPortData(
           inputId,
