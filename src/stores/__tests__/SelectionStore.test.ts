@@ -9,6 +9,8 @@ import { PatchStore } from '../PatchStore';
 import { SelectionStore } from '../SelectionStore';
 import type { Endpoint } from '../../graph/Patch';
 import { portId } from '../../types';
+import { EventHub } from '../../events/EventHub';
+import type { EditorEvent } from '../../events/types';
 
 // Import blocks to ensure they're registered
 import '../../blocks/signal-blocks';
@@ -397,6 +399,265 @@ describe('SelectionStore', () => {
 
       expect(selectionStore.highlightedBlockIds.size).toBe(0);
       expect(selectionStore.highlightedEdgeIds.size).toBe(0);
+    });
+  });
+
+  describe('event-based selection cleanup', () => {
+    it('should clear block selection when BlockRemoved event fires via handleBlockRemoved', () => {
+      const blockId = patchStore.addBlock('Oscillator');
+      selectionStore.selectBlock(blockId);
+
+      expect(selectionStore.selectedBlockId).toBe(blockId);
+
+      // Simulate BlockRemoved event handler
+      selectionStore.handleBlockRemoved(blockId);
+
+      expect(selectionStore.selectedBlockId).toBe(null);
+    });
+
+    it('should clear edge selection when EdgeRemoved event fires via handleEdgeRemoved', () => {
+      const blockId = patchStore.addBlock('Oscillator');
+      const targetId = patchStore.addBlock('Add');
+
+      const from: Endpoint = { kind: 'port', blockId, slotId: 'out' };
+      const to: Endpoint = { kind: 'port', blockId: targetId, slotId: 'in' };
+      const edgeId = patchStore.addEdge(from, to);
+
+      selectionStore.selectEdge(edgeId);
+      expect(selectionStore.selectedEdgeId).toBe(edgeId);
+
+      // Simulate EdgeRemoved event handler
+      selectionStore.handleEdgeRemoved(edgeId);
+
+      expect(selectionStore.selectedEdgeId).toBe(null);
+    });
+
+    it('should clear hover state when BlockRemoved event fires', () => {
+      const blockId = patchStore.addBlock('Oscillator');
+      selectionStore.hoverBlock(blockId);
+
+      expect(selectionStore.hoveredBlockId).toBe(blockId);
+
+      selectionStore.handleBlockRemoved(blockId);
+
+      expect(selectionStore.hoveredBlockId).toBe(null);
+    });
+
+    it('should clear port selection when parent block is removed', () => {
+      const blockId = patchStore.addBlock('Oscillator');
+      selectionStore.selectPort(blockId, portId('out'));
+
+      expect(selectionStore.selectedPort?.blockId).toBe(blockId);
+
+      selectionStore.handleBlockRemoved(blockId);
+
+      expect(selectionStore.selectedPort).toBe(null);
+    });
+
+    it('should not affect selection if different block is removed', () => {
+      const blockId1 = patchStore.addBlock('Oscillator');
+      const blockId2 = patchStore.addBlock('Add');
+
+      selectionStore.selectBlock(blockId1);
+      expect(selectionStore.selectedBlockId).toBe(blockId1);
+
+      selectionStore.handleBlockRemoved(blockId2);
+
+      expect(selectionStore.selectedBlockId).toBe(blockId1);
+    });
+  });
+
+  describe('event emission', () => {
+    let eventHub: EventHub;
+    let capturedEvents: EditorEvent[];
+
+    beforeEach(() => {
+      eventHub = new EventHub();
+      capturedEvents = [];
+
+      // Capture all events
+      eventHub.on('SelectionChanged', (event) => capturedEvents.push(event));
+      eventHub.on('HoverChanged', (event) => capturedEvents.push(event));
+
+      // Wire up EventHub
+      let revision = 0;
+      selectionStore.setEventHub(eventHub, 'test-patch', () => ++revision);
+    });
+
+    describe('SelectionChanged events', () => {
+      it('should emit SelectionChanged when selecting a block', () => {
+        const blockId = patchStore.addBlock('Oscillator');
+
+        selectionStore.selectBlock(blockId);
+
+        expect(capturedEvents).toHaveLength(1);
+        expect(capturedEvents[0]).toMatchObject({
+          type: 'SelectionChanged',
+          patchId: 'test-patch',
+          patchRevision: 1,
+          selection: { type: 'block', blockId },
+          previousSelection: { type: 'none' },
+        });
+      });
+
+      it('should emit SelectionChanged when selecting an edge', () => {
+        const blockId = patchStore.addBlock('Oscillator');
+        const targetId = patchStore.addBlock('Add');
+
+        const from: Endpoint = { kind: 'port', blockId, slotId: 'out' };
+        const to: Endpoint = { kind: 'port', blockId: targetId, slotId: 'in' };
+        const edgeId = patchStore.addEdge(from, to);
+
+        selectionStore.selectEdge(edgeId);
+
+        expect(capturedEvents).toHaveLength(1);
+        expect(capturedEvents[0]).toMatchObject({
+          type: 'SelectionChanged',
+          patchId: 'test-patch',
+          patchRevision: 1,
+          selection: { type: 'edge', edgeId },
+          previousSelection: { type: 'none' },
+        });
+      });
+
+      it('should emit SelectionChanged when selecting a port', () => {
+        const blockId = patchStore.addBlock('Oscillator');
+        const portKey = portId('phase');
+
+        selectionStore.selectPort(blockId, portKey);
+
+        expect(capturedEvents).toHaveLength(1);
+        expect(capturedEvents[0]).toMatchObject({
+          type: 'SelectionChanged',
+          patchId: 'test-patch',
+          patchRevision: 1,
+          selection: { type: 'port', blockId, portKey },
+          previousSelection: { type: 'none' },
+        });
+      });
+
+      it('should include previousSelection when changing selection', () => {
+        const blockId1 = patchStore.addBlock('Oscillator');
+        const blockId2 = patchStore.addBlock('Add');
+
+        selectionStore.selectBlock(blockId1);
+        capturedEvents = []; // Clear first event
+
+        selectionStore.selectBlock(blockId2);
+
+        expect(capturedEvents).toHaveLength(1);
+        expect(capturedEvents[0]).toMatchObject({
+          type: 'SelectionChanged',
+          selection: { type: 'block', blockId: blockId2 },
+          previousSelection: { type: 'block', blockId: blockId1 },
+        });
+      });
+
+      it('should emit SelectionChanged when clearing selection', () => {
+        const blockId = patchStore.addBlock('Oscillator');
+        selectionStore.selectBlock(blockId);
+        capturedEvents = [];
+
+        selectionStore.clearSelection();
+
+        expect(capturedEvents).toHaveLength(1);
+        expect(capturedEvents[0]).toMatchObject({
+          type: 'SelectionChanged',
+          selection: { type: 'none' },
+          previousSelection: { type: 'block', blockId },
+        });
+      });
+    });
+
+    describe('HoverChanged events', () => {
+      it('should emit HoverChanged when hovering a block', () => {
+        const blockId = patchStore.addBlock('Oscillator');
+
+        selectionStore.hoverBlock(blockId);
+
+        expect(capturedEvents).toHaveLength(1);
+        expect(capturedEvents[0]).toMatchObject({
+          type: 'HoverChanged',
+          patchId: 'test-patch',
+          patchRevision: 1,
+          hovered: { type: 'block', blockId },
+        });
+      });
+
+      it('should emit HoverChanged with null when clearing block hover', () => {
+        const blockId = patchStore.addBlock('Oscillator');
+        selectionStore.hoverBlock(blockId);
+        capturedEvents = [];
+
+        selectionStore.hoverBlock(null);
+
+        expect(capturedEvents).toHaveLength(1);
+        expect(capturedEvents[0]).toMatchObject({
+          type: 'HoverChanged',
+          hovered: null,
+        });
+      });
+
+      it('should emit HoverChanged when hovering a port', () => {
+        const blockId = patchStore.addBlock('Oscillator');
+        const portKey = portId('phase');
+
+        selectionStore.hoverPort({ blockId, portId: portKey });
+
+        expect(capturedEvents).toHaveLength(1);
+        const event = capturedEvents[0];
+        expect(event.type).toBe('HoverChanged');
+        if (event.type === 'HoverChanged') {
+          expect(event.hovered).toMatchObject({
+            type: 'port',
+            blockId,
+            portKey,
+            isInput: true, // phase is an input port
+          });
+        }
+      });
+
+      it('should emit HoverChanged with null when clearing port hover', () => {
+        const blockId = patchStore.addBlock('Oscillator');
+        const portKey = portId('phase');
+        selectionStore.hoverPort({ blockId, portId: portKey });
+        capturedEvents = [];
+
+        selectionStore.hoverPort(null);
+
+        expect(capturedEvents).toHaveLength(1);
+        expect(capturedEvents[0]).toMatchObject({
+          type: 'HoverChanged',
+          hovered: null,
+        });
+      });
+
+      it('should prioritize port hover over block hover in event', () => {
+        const blockId = patchStore.addBlock('Oscillator');
+        const portKey = portId('phase');
+
+        // Hover both block and port (port should take precedence)
+        selectionStore.hoverBlock(blockId);
+        capturedEvents = [];
+        selectionStore.hoverPort({ blockId, portId: portKey });
+
+        expect(capturedEvents).toHaveLength(1);
+        const event = capturedEvents[0];
+        expect(event.type).toBe('HoverChanged');
+        if (event.type === 'HoverChanged') {
+          expect(event.hovered?.type).toBe('port');
+        }
+      });
+    });
+
+    describe('no events without EventHub', () => {
+      it('should not throw when EventHub is not set', () => {
+        const store = new SelectionStore(patchStore);
+        const blockId = patchStore.addBlock('Oscillator');
+
+        expect(() => store.selectBlock(blockId)).not.toThrow();
+        expect(() => store.hoverBlock(blockId)).not.toThrow();
+      });
     });
   });
 });

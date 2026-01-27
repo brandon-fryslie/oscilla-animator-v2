@@ -1,6 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EventHub } from '../EventHub';
-import type { EditorEvent, GraphCommittedEvent, CompileEndEvent, CompileBeginEvent, ProgramSwappedEvent, RuntimeHealthSnapshotEvent } from '../types';
+import type {
+  EditorEvent,
+  GraphCommittedEvent,
+  CompileEndEvent,
+  CompileBeginEvent,
+  ProgramSwappedEvent,
+  RuntimeHealthSnapshotEvent,
+  BlockAddedEvent,
+  BlockRemovedEvent,
+  BlockUpdatedEvent,
+  EdgeAddedEvent,
+  EdgeRemovedEvent,
+  PlaybackStateChangedEvent,
+  SelectionChangedEvent,
+  EditorStateChangedEvent,
+} from '../types';
 
 // Helper functions to create valid test events
 function createGraphCommittedEvent(overrides?: Partial<GraphCommittedEvent>): GraphCommittedEvent {
@@ -342,6 +357,237 @@ describe('EventHub', () => {
       hub.on('RuntimeHealthSnapshot', handler);
 
       const event = createRuntimeHealthSnapshotEvent();
+      hub.emit(event);
+
+      expect(handler).toHaveBeenCalledWith(event);
+    });
+  });
+
+  describe('once() method', () => {
+    it('should fire handler only once then auto-unsubscribe', () => {
+      const handler = vi.fn();
+      hub.once('BlockAdded', handler);
+
+      const event1: BlockAddedEvent = {
+        type: 'BlockAdded',
+        patchId: 'p0',
+        patchRevision: 1,
+        blockId: 'block-1',
+        blockType: 'Sin',
+      };
+      const event2: BlockAddedEvent = {
+        type: 'BlockAdded',
+        patchId: 'p0',
+        patchRevision: 2,
+        blockId: 'block-2',
+        blockType: 'Cos',
+      };
+
+      hub.emit(event1);
+      hub.emit(event2);
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(handler).toHaveBeenCalledWith(event1);
+    });
+
+    it('should allow early unsubscribe before event fires', () => {
+      const handler = vi.fn();
+      const unsubscribe = hub.once('BlockRemoved', handler);
+
+      // Unsubscribe before any event
+      unsubscribe();
+
+      const event: BlockRemovedEvent = {
+        type: 'BlockRemoved',
+        patchId: 'p0',
+        patchRevision: 1,
+        blockId: 'block-1',
+      };
+      hub.emit(event);
+
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('should handle multiple once listeners for same event', () => {
+      const handler1 = vi.fn();
+      const handler2 = vi.fn();
+
+      hub.once('EdgeAdded', handler1);
+      hub.once('EdgeAdded', handler2);
+
+      const event: EdgeAddedEvent = {
+        type: 'EdgeAdded',
+        patchId: 'p0',
+        patchRevision: 1,
+        edgeId: 'edge-1',
+        sourceBlockId: 'block-1',
+        targetBlockId: 'block-2',
+      };
+      hub.emit(event);
+
+      expect(handler1).toHaveBeenCalledTimes(1);
+      expect(handler2).toHaveBeenCalledTimes(1);
+
+      // Second emit should not call either
+      hub.emit(event);
+      expect(handler1).toHaveBeenCalledTimes(1);
+      expect(handler2).toHaveBeenCalledTimes(1);
+    });
+
+    it('should unsubscribe even if handler throws', () => {
+      const handler = vi.fn(() => {
+        throw new Error('Handler error');
+      });
+
+      const originalError = console.error;
+      console.error = vi.fn();
+
+      hub.once('EdgeRemoved', handler);
+
+      const event: EdgeRemovedEvent = {
+        type: 'EdgeRemoved',
+        patchId: 'p0',
+        patchRevision: 1,
+        edgeId: 'edge-1',
+      };
+
+      hub.emit(event);
+      hub.emit(event); // Second emit
+
+      console.error = originalError;
+
+      // Should have been called only once even though it threw
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('New event types', () => {
+    it('should handle BlockAdded event', () => {
+      const handler = vi.fn();
+      hub.on('BlockAdded', handler);
+
+      const event: BlockAddedEvent = {
+        type: 'BlockAdded',
+        patchId: 'p0',
+        patchRevision: 1,
+        blockId: 'block-1',
+        blockType: 'Sin',
+      };
+      hub.emit(event);
+
+      expect(handler).toHaveBeenCalledWith(event);
+    });
+
+    it('should handle BlockRemoved event', () => {
+      const handler = vi.fn();
+      hub.on('BlockRemoved', handler);
+
+      const event: BlockRemovedEvent = {
+        type: 'BlockRemoved',
+        patchId: 'p0',
+        patchRevision: 1,
+        blockId: 'block-1',
+      };
+      hub.emit(event);
+
+      expect(handler).toHaveBeenCalledWith(event);
+    });
+
+    it('should handle BlockUpdated event', () => {
+      const handler = vi.fn();
+      hub.on('BlockUpdated', handler);
+
+      const event: BlockUpdatedEvent = {
+        type: 'BlockUpdated',
+        patchId: 'p0',
+        patchRevision: 1,
+        blockId: 'block-1',
+        changeType: 'param',
+        property: 'frequency',
+      };
+      hub.emit(event);
+
+      expect(handler).toHaveBeenCalledWith(event);
+    });
+
+    it('should handle EdgeAdded event', () => {
+      const handler = vi.fn();
+      hub.on('EdgeAdded', handler);
+
+      const event: EdgeAddedEvent = {
+        type: 'EdgeAdded',
+        patchId: 'p0',
+        patchRevision: 1,
+        edgeId: 'edge-1',
+        sourceBlockId: 'block-1',
+        targetBlockId: 'block-2',
+      };
+      hub.emit(event);
+
+      expect(handler).toHaveBeenCalledWith(event);
+    });
+
+    it('should handle EdgeRemoved event', () => {
+      const handler = vi.fn();
+      hub.on('EdgeRemoved', handler);
+
+      const event: EdgeRemovedEvent = {
+        type: 'EdgeRemoved',
+        patchId: 'p0',
+        patchRevision: 1,
+        edgeId: 'edge-1',
+      };
+      hub.emit(event);
+
+      expect(handler).toHaveBeenCalledWith(event);
+    });
+
+    it('should handle PlaybackStateChanged event', () => {
+      const handler = vi.fn();
+      hub.on('PlaybackStateChanged', handler);
+
+      const event: PlaybackStateChangedEvent = {
+        type: 'PlaybackStateChanged',
+        patchId: 'p0',
+        patchRevision: 1,
+        state: 'playing',
+        previousState: 'stopped',
+      };
+      hub.emit(event);
+
+      expect(handler).toHaveBeenCalledWith(event);
+    });
+
+    it('should handle SelectionChanged event', () => {
+      const handler = vi.fn();
+      hub.on('SelectionChanged', handler);
+
+      const event: SelectionChangedEvent = {
+        type: 'SelectionChanged',
+        patchId: 'p0',
+        patchRevision: 1,
+        selection: { type: 'block', blockId: 'block-1' },
+      };
+      hub.emit(event);
+
+      expect(handler).toHaveBeenCalledWith(event);
+    });
+
+    it('should handle EditorStateChanged event', () => {
+      const handler = vi.fn();
+      hub.on('EditorStateChanged', handler);
+
+      const event: EditorStateChangedEvent = {
+        type: 'EditorStateChanged',
+        patchId: 'p0',
+        patchRevision: 1,
+        action: 'editStarted',
+        editor: {
+          id: 'displayName-block-1',
+          editorType: 'displayName',
+          location: 'node',
+        },
+      };
       hub.emit(event);
 
       expect(handler).toHaveBeenCalledWith(event);

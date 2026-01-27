@@ -47,8 +47,8 @@ describe('Store Integration', () => {
 
       root.patch.removeBlock(id);
 
-      // Selection ID remains but derived block is undefined
-      expect(root.selection.selectedBlockId).toBe(id);
+      // Selection is automatically cleared via BlockRemoved event
+      expect(root.selection.selectedBlockId).toBe(null);
       expect(root.selection.selectedBlock).toBeUndefined();
     });
 
@@ -65,7 +65,8 @@ describe('Store Integration', () => {
 
       root.patch.removeEdge(edgeId);
 
-      expect(root.selection.selectedEdgeId).toBe(edgeId);
+      // Selection is automatically cleared via EdgeRemoved event
+      expect(root.selection.selectedEdgeId).toBe(null);
       expect(root.selection.selectedEdge).toBeUndefined();
     });
 
@@ -80,9 +81,11 @@ describe('Store Integration', () => {
       root.selection.selectEdge(edgeId);
       expect(root.selection.selectedEdge).toBeDefined();
 
-      // Deleting source block removes the edge
+      // Deleting source block removes the edge, which triggers EdgeRemoved event
       root.patch.removeBlock(id1);
 
+      // Selection is automatically cleared via EdgeRemoved event cascade
+      expect(root.selection.selectedEdgeId).toBe(null);
       expect(root.selection.selectedEdge).toBeUndefined();
     });
   });

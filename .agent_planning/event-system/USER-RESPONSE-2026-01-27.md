@@ -1,27 +1,47 @@
 # User Response: Event System Planning
 
 **Date:** 2026-01-27
-**Status:** PENDING APPROVAL
+**Status:** APPROVED WITH MODIFICATIONS
 
 ---
 
-## Sprint Summary
+## User Modifications Applied
+
+1. **No per-frame events** - `frameStarted` and `frameCompleted` removed entirely
+2. **Patch events are priority** - Consolidated to `blockAdded`, `blockRemoved`, `blockUpdated`
+3. **Each event must migrate at least one use case** - Added to DoD for all sprints
+
+---
+
+## Sprint Summary (Updated)
 
 | Sprint | Name | Confidence | Status |
 |--------|------|------------|--------|
 | 1 | event-types | HIGH: 4, MEDIUM: 0, LOW: 0 | READY FOR IMPLEMENTATION |
-| 2 | patch-events | HIGH: 3, MEDIUM: 1, LOW: 0 | PARTIALLY READY |
-| 3 | runtime-selection | HIGH: 2, MEDIUM: 3, LOW: 0 | PARTIALLY READY |
+| 2 | patch-events | HIGH: 4, MEDIUM: 1, LOW: 0 | READY FOR IMPLEMENTATION |
+| 3 | runtime-selection | HIGH: 2, MEDIUM: 2, LOW: 0 | PARTIALLY READY |
 | 4 | editor-state | HIGH: 1, MEDIUM: 2, LOW: 1 | RESEARCH REQUIRED |
 
 ---
 
-## Approval Options
+## Key Events by Priority
 
-- [ ] **Option 1: Approve all** - Proceed with all 4 sprints
-- [ ] **Option 2: Approve HIGH only** - Start with Sprint 1, discuss others
-- [ ] **Option 3: Revise specific sprint** - Request changes to a plan
-- [ ] **Option 4: Reject and restart** - Start over with different approach
+### HIGH PRIORITY (Sprints 1-2)
+- `BlockAdded` - When added from library or any other way
+- `BlockRemoved` - When deleted from patch
+- `BlockUpdated` - When connected, param changed, default source changed, any patch property changed
+- `EdgeAdded` / `EdgeRemoved` - Wire connections
+- Compilation events (`CompileStarted`, `CompileSucceeded`, `CompileFailed`)
+
+### MEDIUM PRIORITY (Sprint 3)
+- `PlaybackStateChanged` - Play/pause/stop
+- `SelectionChanged` - Block/edge selection
+- `RuntimeError` - NaN/Inf detection
+- `HoverChanged` - Hover state
+
+### EXCLUDED
+- ~~`frameStarted`~~ - Too high frequency
+- ~~`frameCompleted`~~ - Too high frequency
 
 ---
 
@@ -47,8 +67,9 @@
 
 ---
 
-## Notes
+## Next Steps
 
-- Sprint 1 is foundational and blocks all others
-- Sprint 4 requires research before implementation
-- Existing DiagnosticHub integration preserved throughout
+1. Implement Sprint 1 (event-types) - Foundation
+2. Implement Sprint 2 (patch-events) - Most useful events
+3. Research unknowns for Sprint 3 before implementation
+4. Sprint 4 deferred until needed

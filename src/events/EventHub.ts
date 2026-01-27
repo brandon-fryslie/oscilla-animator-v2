@@ -8,8 +8,9 @@
  * - Synchronous emission (listeners run before emit() returns)
  * - Exception isolation (one listener's error doesn't break others)
  * - Type-safe subscriptions (TypeScript narrows event type)
+ * - once() for single-fire listeners
  *
- * Spec Reference: design-docs/CANONICAL-oscilla-v2.5-20260109/topics/12-event-hub.md
+ * Spec Reference: design-docs/_new/01-Event-System.md
  */
 
 import type { EditorEvent } from './types';
@@ -124,6 +125,52 @@ export class EventHub {
     // Return unsubscribe function
     return () => {
       this.listeners.get(type)?.delete(typedHandler);
+    };
+  }
+
+  /**
+   * Subscribes to a specific event type, firing only once.
+   *
+   * The handler auto-unsubscribes after the first matching event.
+   * Returns an unsubscribe function for manual early cleanup.
+   *
+   * @param type The event type to listen for
+   * @param handler The handler function (receives narrowed event type)
+   * @returns Unsubscribe function (for early cleanup before event fires)
+   *
+   * Example:
+   * ```typescript
+   * hub.once('CompileEnd', (event) => {
+   *   console.log('First compile complete!');
+   *   // Handler auto-removed, won't fire again
+   * });
+   * ```
+   */
+  once<T extends EditorEvent['type']>(
+    type: T,
+    handler: (event: Extract<EditorEvent, { type: T }>) => void
+  ): () => void {
+    let unsubscribe: (() => void) | null = null;
+
+    // Wrap handler to auto-unsubscribe after first call
+    const wrappedHandler = (event: Extract<EditorEvent, { type: T }>) => {
+      // Unsubscribe first (in case handler throws)
+      if (unsubscribe) {
+        unsubscribe();
+        unsubscribe = null;
+      }
+      handler(event);
+    };
+
+    // Subscribe with wrapped handler
+    unsubscribe = this.on(type, wrappedHandler);
+
+    // Return unsubscribe for early cleanup
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+        unsubscribe = null;
+      }
     };
   }
 

@@ -91,6 +91,9 @@ export class RootStore {
     // Wire up EventHub to PatchStore for ParamChanged events
     this.patch.setEventHub(this.events, 'patch-0', () => this.patchRevision);
 
+    // Wire up EventHub to SelectionStore for selection/hover events and automatic cleanup
+    this.selection.setEventHub(this.events, 'patch-0', () => this.patchRevision);
+
     // Wire patch mutations to emit GraphCommitted events
     this.setupGraphCommittedEmission();
   }
@@ -151,6 +154,9 @@ export class RootStore {
 
     // Dispose DiagnosticHub
     this.diagnosticHub.dispose();
+
+    // Dispose SelectionStore
+    this.selection.dispose();
 
     // Dispose DebugStore
     this.debug.dispose();

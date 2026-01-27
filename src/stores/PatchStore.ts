@@ -292,6 +292,18 @@ export class PatchStore {
 
     this._data.blocks.set(id, block);
     this.invalidateSnapshot();
+
+    // Emit BlockAdded event
+    if (this.eventHub && this.getPatchRevision) {
+      this.eventHub.emit({
+        type: 'BlockAdded',
+        patchId: this.patchId,
+        patchRevision: this.getPatchRevision(),
+        blockId: id,
+        blockType: type,
+      });
+    }
+
     return id;
   }
 
@@ -299,8 +311,14 @@ export class PatchStore {
    * Removes a block from the patch.
    * Also removes all edges connected to this block.
    * Ports are automatically removed (nested in block).
+   * Emits EdgeRemoved for each edge, then BlockRemoved.
    */
   removeBlock(id: BlockId): void {
+    // Find edges to remove (for event emission)
+    const edgesToRemove = this._data.edges.filter(
+      (edge) => edge.from.blockId === id || edge.to.blockId === id
+    );
+
     // Remove the block
     this._data.blocks.delete(id);
 
@@ -311,6 +329,29 @@ export class PatchStore {
     );
 
     this.invalidateSnapshot();
+
+    // Emit events: EdgeRemoved for each edge, then BlockRemoved
+    if (this.eventHub && this.getPatchRevision) {
+      const rev = this.getPatchRevision();
+
+      // Emit EdgeRemoved for each cascaded edge
+      for (const edge of edgesToRemove) {
+        this.eventHub.emit({
+          type: 'EdgeRemoved',
+          patchId: this.patchId,
+          patchRevision: rev,
+          edgeId: edge.id,
+        });
+      }
+
+      // Emit BlockRemoved
+      this.eventHub.emit({
+        type: 'BlockRemoved',
+        patchId: this.patchId,
+        patchRevision: rev,
+        blockId: id,
+      });
+    }
   }
 
   /**
@@ -352,6 +393,17 @@ export class PatchStore {
     });
 
     this.invalidateSnapshot();
+
+    // Emit BlockUpdated event (in addition to ParamChanged events above)
+    if (this.eventHub && this.getPatchRevision) {
+      this.eventHub.emit({
+        type: 'BlockUpdated',
+        patchId: this.patchId,
+        patchRevision: this.getPatchRevision(),
+        blockId: id,
+        changeType: 'param',
+      });
+    }
   }
 
   /**
@@ -393,6 +445,19 @@ export class PatchStore {
     });
 
     this.invalidateSnapshot();
+
+    // Emit BlockUpdated event for displayName change
+    if (this.eventHub && this.getPatchRevision) {
+      this.eventHub.emit({
+        type: 'BlockUpdated',
+        patchId: this.patchId,
+        patchRevision: this.getPatchRevision(),
+        blockId: id,
+        changeType: 'displayName',
+        property: 'displayName',
+      });
+    }
+
     return {};
   }
 
@@ -437,13 +502,22 @@ export class PatchStore {
 
     this.invalidateSnapshot();
 
-    // Emit GraphCommitted event to trigger recompilation
-    // Port defaultSource changes affect the compiled graph
+    // Emit BlockUpdated event for connection/defaultSource change
     if (this.eventHub && this.getPatchRevision) {
+      this.eventHub.emit({
+        type: 'BlockUpdated',
+        patchId: this.patchId,
+        patchRevision: this.getPatchRevision(),
+        blockId,
+        changeType: 'defaultSource',
+        property: portId,
+      });
+
+      // Also emit GraphCommitted for backward compatibility (triggers recompilation)
       this.eventHub.emit({
         type: 'GraphCommitted',
         patchId: this.patchId,
-        patchRevision: this.getPatchRevision() + 1, // Increment revision
+        patchRevision: this.getPatchRevision() + 1,
         reason: 'userEdit',
         diffSummary: {
           blocksAdded: 0,
@@ -524,8 +598,18 @@ export class PatchStore {
 
     this.invalidateSnapshot();
 
-    // Emit GraphCommitted event to trigger recompilation
+    // Emit BlockUpdated event for vararg connection change
     if (this.eventHub && this.getPatchRevision) {
+      this.eventHub.emit({
+        type: 'BlockUpdated',
+        patchId: this.patchId,
+        patchRevision: this.getPatchRevision(),
+        blockId,
+        changeType: 'connection',
+        property: portId,
+      });
+
+      // Also emit GraphCommitted for backward compatibility (triggers recompilation)
       this.eventHub.emit({
         type: 'GraphCommitted',
         patchId: this.patchId,
@@ -534,7 +618,7 @@ export class PatchStore {
         diffSummary: {
           blocksAdded: 0,
           blocksRemoved: 0,
-          edgesChanged: 1, // Vararg connection is similar to edge
+          edgesChanged: 1,
         },
       });
     }
@@ -544,6 +628,7 @@ export class PatchStore {
   /**
    * Adds a new edge to the patch.
    * Returns the generated edge ID.
+   * Emits EdgeAdded event.
    */
   addEdge(from: Endpoint, to: Endpoint, options?: EdgeOptions): string {
     const id = `e${this._nextEdgeId++}`;
@@ -557,15 +642,39 @@ export class PatchStore {
     };
     this._data.edges.push(edge);
     this.invalidateSnapshot();
+
+    // Emit EdgeAdded event
+    if (this.eventHub && this.getPatchRevision) {
+      this.eventHub.emit({
+        type: 'EdgeAdded',
+        patchId: this.patchId,
+        patchRevision: this.getPatchRevision(),
+        edgeId: id,
+        sourceBlockId: from.blockId,
+        targetBlockId: to.blockId,
+      });
+    }
+
     return id;
   }
 
   /**
    * Removes an edge from the patch.
+   * Emits EdgeRemoved event.
    */
   removeEdge(id: string): void {
     this._data.edges = this._data.edges.filter((edge) => edge.id !== id);
     this.invalidateSnapshot();
+
+    // Emit EdgeRemoved event
+    if (this.eventHub && this.getPatchRevision) {
+      this.eventHub.emit({
+        type: 'EdgeRemoved',
+        patchId: this.patchId,
+        patchRevision: this.getPatchRevision(),
+        edgeId: id,
+      });
+    }
   }
 
   /**
@@ -589,6 +698,7 @@ export class PatchStore {
    * Loads a complete patch, replacing the current one.
    * This is used for file load, undo/redo, etc.
    * Auto-migrates null displayNames to auto-generated names.
+   * Emits PatchReset event.
    */
   loadPatch(patch: Patch): void {
     this._data = {
@@ -628,13 +738,32 @@ export class PatchStore {
     }
 
     this.invalidateSnapshot();
+
+    // Emit PatchReset event
+    if (this.eventHub && this.getPatchRevision) {
+      this.eventHub.emit({
+        type: 'PatchReset',
+        patchId: this.patchId,
+        patchRevision: this.getPatchRevision(),
+      });
+    }
   }
 
   /**
    * Clears all blocks and edges.
+   * Emits PatchReset event.
    */
   clear(): void {
     this._data = emptyPatchData();
     this.invalidateSnapshot();
+
+    // Emit PatchReset event
+    if (this.eventHub && this.getPatchRevision) {
+      this.eventHub.emit({
+        type: 'PatchReset',
+        patchId: this.patchId,
+        patchRevision: this.getPatchRevision(),
+      });
+    }
   }
 }
