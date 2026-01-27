@@ -535,6 +535,7 @@ export interface StepContinuityApply {
   readonly baseSlot: ValueSlot; // Input buffer (base values)
   readonly outputSlot: ValueSlot; // Output buffer (continuity-applied values)
   readonly semantic: 'position' | 'radius' | 'opacity' | 'color' | 'custom';
+  readonly stride: number; // Components per element (from payload type, not semantic)
 }
 
 /**

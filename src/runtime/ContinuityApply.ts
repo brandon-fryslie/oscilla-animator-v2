@@ -241,7 +241,7 @@ export function initializeSlewBuffer(
  * @param slewBuffer - Slew buffer to initialize
  * @param mapping - Element mapping
  * @param elementCount - Number of elements in new domain
- * @param stride - Number of floats per element (1 for float, 2 for vec2)
+ * @param stride - Number of floats per element (determined solely by ConcretePayloadType)
  */
 export function initializeSlewWithMapping(
   oldSlew: Float32Array | null,
@@ -249,7 +249,7 @@ export function initializeSlewWithMapping(
   slewBuffer: Float32Array,
   mapping: MappingState | null,
   elementCount: number,
-  stride: number = 1
+  stride: number = 1 // WRONG: stride bug!
 ): void {
   const bufferLength = elementCount * stride;
 
@@ -310,15 +310,14 @@ export function applyContinuity(
   state: RuntimeState,
   getBuffer: (slot: ValueSlot) => Float32Array
 ): void {
-  const { targetKey, instanceId, policy, baseSlot, outputSlot, semantic } = step;
+  const { targetKey, instanceId, policy, baseSlot, outputSlot, semantic, stride } = step;
   const targetId = targetKey as StableTargetId;
 
   // Get current base buffer
   const baseBuffer = getBuffer(baseSlot);
   const bufferLength = baseBuffer.length;
 
-  // Compute stride based on semantic (position is vec2, others are float)
-  const stride = semantic === 'position' ? 2 : 1;
+  // Stride comes from compiled type metadata (not semantic heuristics)
   const elementCount = bufferLength / stride;
 
   // Check if target state already existed before we call getOrCreate

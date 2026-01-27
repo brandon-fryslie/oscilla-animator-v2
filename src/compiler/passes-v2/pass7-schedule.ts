@@ -126,10 +126,10 @@ function getInputRef(
  */
 interface RenderTargetInfo {
   instanceId: InstanceId;
-  position: FieldExprId;
-  color: FieldExprId;
+  position: { id: FieldExprId; stride: number };
+  color: { id: FieldExprId; stride: number };
   scale?: { k: 'sig'; id: SigExprId };
-  shape?: { k: 'sig'; id: SigExprId } | { k: 'field'; id: FieldExprId };
+  shape?: { k: 'sig'; id: SigExprId } | { k: 'field'; id: FieldExprId; stride: number };
 }
 
 /**
@@ -171,14 +171,14 @@ function collectRenderTargets(
     const scale = scaleRef?.k === 'sig' ? { k: 'sig' as const, id: scaleRef.id }
                : undefined;
 
-    const shape = shapeRef?.k === 'field' ? { k: 'field' as const, id: shapeRef.id }
+    const shape = shapeRef?.k === 'field' ? { k: 'field' as const, id: shapeRef.id, stride: shapeRef.stride }
                 : shapeRef?.k === 'sig' ? { k: 'sig' as const, id: shapeRef.id }
                 : undefined;
 
     targets.push({
       instanceId,
-      position: posRef.id,
-      color: colorRef.id,
+      position: { id: posRef.id, stride: posRef.stride },
+      color: { id: colorRef.id, stride: colorRef.stride },
       scale,
       shape,
     });
@@ -220,12 +220,12 @@ function inferFieldInstanceFromExprs(
 
 /**
  * Resolve shape info from a signal expression.
- * Returns topologyId, paramSignals, and optional controlPointField if the signal is a shapeRef.
+ * Returns topologyId, paramSignals, and optional controlPointField with stride if the signal is a shapeRef.
  */
 function resolveShapeInfo(
   sigId: SigExprId,
   signals: readonly SigExpr[]
-): { topologyId: TopologyId; paramSignals: readonly SigExprId[]; controlPointField?: FieldExprId } | undefined {
+): { topologyId: TopologyId; paramSignals: readonly SigExprId[]; controlPointField?: { id: FieldExprId; stride: number } } | undefined {
   const expr = signals[sigId as number];
   if (!expr) return undefined;
 
@@ -233,7 +233,9 @@ function resolveShapeInfo(
     return {
       topologyId: expr.topologyId,
       paramSignals: expr.paramSignals,
-      controlPointField: expr.controlPointField, // P5b: Include control point field
+      controlPointField: expr.controlPointField !== undefined
+        ? { id: expr.controlPointField, stride: expr.controlPointFieldStride ?? 2 }
+        : undefined,
     };
   }
 
@@ -288,7 +290,8 @@ function buildContinuityPipeline(
     // Helper to get or create slots for a field
     const getFieldSlots = (
       fieldId: FieldExprId,
-      semantic: 'position' | 'radius' | 'opacity' | 'color' | 'custom'
+      semantic: 'position' | 'radius' | 'opacity' | 'color' | 'custom',
+      stride: number
     ): { baseSlot: ValueSlot; outputSlot: ValueSlot } => {
       // Key includes semantic because the continuity policy is semantic-derived.
       const key = `${instanceId}:${semantic}:${fieldId}`;
@@ -318,16 +321,17 @@ function buildContinuityPipeline(
           baseSlot,
           outputSlot,
           semantic,
+          stride,
         });
       }
       return slots;
     };
 
     // Process position (semantic: position)
-    const posSlots = getFieldSlots(position, 'position');
+    const posSlots = getFieldSlots(position.id, 'position', position.stride);
 
     // Process color (semantic: color)
-    const colorSlots = getFieldSlots(color, 'color');
+    const colorSlots = getFieldSlots(color.id, 'color', color.stride);
 
     // Process scale (uniform signal only - no per-particle scale)
     let scaleOutput: StepRender['scale'] = undefined;
@@ -342,7 +346,7 @@ function buildContinuityPipeline(
 
     if (shape) {
       if (shape.k === 'field') {
-        const shapeSlots = getFieldSlots(shape.id, 'custom');
+        const shapeSlots = getFieldSlots(shape.id, 'custom', shape.stride);
         shapeOutput = { k: 'slot', slot: shapeSlots.outputSlot };
       } else {
         // Signal - resolve topology + param signals + control points

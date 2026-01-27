@@ -705,7 +705,8 @@ export class IRBuilderImpl implements IRBuilder {
     policy: ContinuityPolicy,
     baseSlot: ValueSlot,
     outputSlot: ValueSlot,
-    semantic: 'position' | 'radius' | 'opacity' | 'color' | 'custom'
+    semantic: 'position' | 'radius' | 'opacity' | 'color' | 'custom',
+    stride: number
   ): void {
     this.steps.push({
       kind: 'continuityApply',
@@ -715,6 +716,7 @@ export class IRBuilderImpl implements IRBuilder {
       baseSlot,
       outputSlot,
       semantic,
+      stride,
     });
   }
 

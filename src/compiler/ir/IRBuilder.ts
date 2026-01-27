@@ -374,6 +374,7 @@ export interface IRBuilder {
    * @param baseSlot - Slot containing base (materialized) values
    * @param outputSlot - Slot to store continuity-applied values
    * @param semantic - Semantic role of target (position, color, etc.)
+   * @param stride - Components per element (from buffer type, not semantic)
    */
   stepContinuityApply(
     targetKey: string,
@@ -381,7 +382,8 @@ export interface IRBuilder {
     policy: ContinuityPolicy,
     baseSlot: ValueSlot,
     outputSlot: ValueSlot,
-    semantic: 'position' | 'radius' | 'opacity' | 'color' | 'custom'
+    semantic: 'position' | 'radius' | 'opacity' | 'color' | 'custom',
+    stride: number
   ): void;
 
   // =========================================================================

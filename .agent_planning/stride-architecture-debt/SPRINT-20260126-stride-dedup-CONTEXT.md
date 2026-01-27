@@ -2,90 +2,94 @@
 
 ## Problem Summary
 
-Stride (the number of scalar components per buffer element) has two sources of truth:
-1. **Canonical:** `PAYLOAD_STRIDE` lookup table in `src/core/canonical-types.ts`
-2. **Duplicated:** Switch statements that recompute stride throughout the codebase
-
-Additionally, renderers use hardcoded multipliers (`i * 2`, `i * 3`, `i * 4`) instead of deriving stride from the type system.
-
-**Constraint:** Stride must NEVER be stored as a constant like `STRIDE_POSITION = 2`. It must always be computed from `strideOf(payloadType)`.
-
-## Source of Truth: PAYLOAD_STRIDE
-
-**File:** `src/core/canonical-types.ts` (lines 223-246)
+Stride (the number of scalar components per buffer element) is now intrinsic to `ConcretePayloadType`. Each payload type has a `.stride` field:
 
 ```typescript
-export const PAYLOAD_STRIDE: Record<ConcretePayloadType, number> = {
-  float: 1,
-  int: 1,
-  bool: 1,
-  vec2: 2,
-  vec3: 3,
-  color: 4,
-  shape: 8,
-  cameraProjection: 1,
-};
+export type ConcretePayloadType =
+  | { readonly kind: 'float'; readonly stride: 1 }
+  | { readonly kind: 'int'; readonly stride: 1 }
+  | { readonly kind: 'bool'; readonly stride: 1 }
+  | { readonly kind: 'vec2'; readonly stride: 2 }
+  | { readonly kind: 'vec3'; readonly stride: 3 }
+  | { readonly kind: 'color'; readonly stride: 4 }
+  | { readonly kind: 'shape'; readonly stride: 8 }
+  | { readonly kind: 'cameraProjection'; readonly stride: 1 };
+```
 
+**However, there are still HIGH priority architectural debts:**
+
+1. **Duplicate switch statements in IRBuilderImpl.ts** that recompute stride instead of using `payload.stride` directly
+2. **Hardcoded multipliers in renderers** (`i * 2`, `i * 3`, `i * 4`) instead of deriving stride from type information
+
+**Constraint:** Stride must ALWAYS come from `payload.stride` (for concrete types) or `strideOf(type)` (which returns `payload.stride`). NO hardcoded constants like `STRIDE_POSITION = 2`, NO magic numbers in loops.
+
+## Source of Truth: ConcretePayloadType.stride
+
+**File:** `src/core/canonical-types.ts` (lines 167-175)
+
+**Direct field access (preferred):**
+```typescript
+const stride = payload.stride;  // For ConcretePayloadType
+```
+
+**Or through strideOf() function:**
+```typescript
 export function strideOf(type: PayloadType): number {
   if (isPayloadVar(type)) {
     throw new Error(`Cannot get stride for payload variable ${type.id} - resolve payload first`);
   }
-  return PAYLOAD_STRIDE[type as ConcretePayloadType];
+  // After check, type is ConcretePayloadType with stride field
+  return (type as ConcretePayloadType).stride;
 }
 ```
 
+**Singleton instances (use these, not recreating objects):**
+```typescript
+export const FLOAT: ConcretePayloadType = { kind: 'float', stride: 1 } as const;
+export const VEC2: ConcretePayloadType = { kind: 'vec2', stride: 2 } as const;
+export const VEC3: ConcretePayloadType = { kind: 'vec3', stride: 3 } as const;
+export const COLOR: ConcretePayloadType = { kind: 'color', stride: 4 } as const;
+export const SHAPE: ConcretePayloadType = { kind: 'shape', stride: 8 } as const;
+export const INT: ConcretePayloadType = { kind: 'int', stride: 1 } as const;
+export const BOOL: ConcretePayloadType = { kind: 'bool', stride: 1 } as const;
+export const CAMERA_PROJECTION: ConcretePayloadType = { kind: 'cameraProjection', stride: 1 } as const;
+```
+
 **Key Points:**
-- Only source of truth for stride
-- Exported and available throughout codebase
-- Requires concrete payload type (not a type variable)
-- Returns 1-8 (scalar counts per element)
+- Stride is intrinsic to `ConcretePayloadType` via `.stride` field
+- Access stride via `payload.stride` (direct field access)
+- Use `strideOf(type)` for PayloadType (handles both concrete and variables)
+- All stride information derives from the type object itself
+- No separate lookup table needed (stride is part of the type contract)
 
-## High Priority Issues
-
-### Issue 1: Duplicate Switch Statements in IRBuilderImpl.ts
+## HIGH Priority Issue 1: Duplicate Switch Statements in IRBuilderImpl.ts
 
 **Location:** Lines 498-519 and 559-579
 
 **Current Code:**
-```typescript
-let stride: number;
-switch (type.payload) {
-  case 'float':
-  case 'int':
-  case 'bool':
-  case 'cameraProjection':
-    stride = 1;
-    break;
-  case 'vec2':
-    stride = 2;
-    break;
-  case 'vec3':
-    stride = 3;
-    break;
-  case 'color':
-    stride = 4;
-    break;
-  case 'shape':
-    stride = 0; // Shape slots don't occupy f64 storage
-    break;
-  default:
-    stride = 1; // Fallback (dangerous!)
-}
-```
+Recomputes stride with a switch statement instead of using `payload.stride` directly.
 
 **Problem:**
-- Duplicated from canonical table
-- Has fallback to 1 (dangerous for unknown types)
-- Violates DRY principle
-- If PAYLOAD_STRIDE changes, this code is out of sync
+- Duplicates stride logic that's already in the type object
+- Violates DRY and ONE SOURCE OF TRUTH principles
+- Makes stride harder to maintain (change in one place, must update here too)
+- Special case logic (shape = 0) is scattered instead of localized
 
 **Solution:**
-Replace with direct call:
+Replace switch with direct access to `payload.stride`:
 ```typescript
-const stride = strideOf(type.payload);
+// OLD (bad)
+let stride: number;
+switch (type.payload) {
+  case 'vec2': stride = 2; break;
+  // ... etc
+}
+
+// NEW (good)
+const stride = strideOf(type.payload);  // Returns type.payload.stride
 ```
 
-**Note:** The special case `stride = 0` for shape is interesting—verify this is intentional and document it.
+**Note on shape stride:** Shape has `stride: 8` in the type, but slot allocation may use different logic. Verify the special-case handling is intentional and document why shape differs from other payloads.
 
 ---
 
