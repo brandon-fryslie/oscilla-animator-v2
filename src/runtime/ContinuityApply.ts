@@ -347,22 +347,10 @@ export function applyContinuity(
   // Stride comes from compiled type metadata (not semantic heuristics)
   const elementCount = bufferLength / stride;
 
-  // Check if target state already existed before we call getOrCreate
-  const existingTargetState = state.continuity.targets.get(targetId);
-  const hadPreviousState = existingTargetState !== undefined;
-
   // CRITICAL: Capture old buffer values BEFORE getOrCreateTargetState replaces them
   // When count changes, getOrCreateTargetState creates new zero-filled buffers,
   // discarding the old values we need for continuity
-  //
-  // IMPORTANT: We need to capture snapshots whenever the buffer SIZE changes
-  // (existingTargetState.count !== bufferLength), because getOrCreateTargetState
-  // will allocate new buffers and zero them out
-  let oldSlewSnapshot: Float32Array | null = null;
-  if (hadPreviousState && existingTargetState!.count !== bufferLength) {
-    // Buffer size change - save old values before they're overwritten by getOrCreateTargetState
-    oldSlewSnapshot = new Float32Array(existingTargetState!.slewBuffer);
-  }
+  const ctx = capturePreAllocationState(state.continuity, targetId, bufferLength);
 
   // Get or create continuity state for this target
   // NOTE: This may replace the state with new zero-filled buffers if count changed
@@ -374,7 +362,7 @@ export function applyContinuity(
 
   // If this is a newly created target state (slew buffer is all zeros),
   // initialize it to the base values to avoid starting from zero
-  if (!hadPreviousState) {
+  if (!ctx.hadPreviousState) {
     // Initialize slew buffer to base values for smooth first-frame behavior
     initializeSlewBuffer(baseBuffer, targetState.slewBuffer, bufferLength);
     // Initialize gauge to zero (no offset needed on first frame)
@@ -387,11 +375,11 @@ export function applyContinuity(
   // For crossfade, capture old effective values for blending
   // Use the pre-captured snapshot (before getOrCreateTargetState zeroed it)
   let oldEffectiveSnapshot: Float32Array | null = null;
-  if (state.continuity.domainChangeThisFrame && hadPreviousState) {
+  if (state.continuity.domainChangeThisFrame && ctx.hadPreviousState) {
     // Use snapshot if count changed, otherwise copy from current state
-    oldEffectiveSnapshot = oldSlewSnapshot ?? (
-      existingTargetState!.slewBuffer.length > 0
-        ? new Float32Array(existingTargetState!.slewBuffer)
+    oldEffectiveSnapshot = ctx.oldSlewSnapshot ?? (
+      targetState.slewBuffer.length > 0
+        ? new Float32Array(targetState.slewBuffer)
         : null
     );
   }
@@ -400,13 +388,13 @@ export function applyContinuity(
   // Crossfade handles its own initialization differently
   if (state.continuity.domainChangeThisFrame && policy.kind !== 'crossfade') {
     // Use pre-captured snapshots (from before getOrCreateTargetState zeroed buffers)
-    // If count didn't change, oldSlewSnapshot is null, use current targetState
-    const oldEffective = oldSlewSnapshot ?? (
+    // If count didn't change, ctx.oldSlewSnapshot is null, use current targetState
+    const oldEffective = ctx.oldSlewSnapshot ?? (
       targetState.slewBuffer.length > 0 && targetState.slewBuffer.length <= bufferLength
         ? new Float32Array(targetState.slewBuffer)
         : null
     );
-    const oldSlew = oldSlewSnapshot ?? (
+    const oldSlew = ctx.oldSlewSnapshot ?? (
       targetState.slewBuffer.length > 0
         ? new Float32Array(targetState.slewBuffer)
         : null
