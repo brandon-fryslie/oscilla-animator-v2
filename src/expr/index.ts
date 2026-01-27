@@ -26,7 +26,7 @@ import type { IRBuilder } from '../compiler/ir/IRBuilder';
 import type { SigExprId } from '../compiler/ir/types';
 import { tokenize } from './lexer';
 import { parse, ParseError } from './parser';
-import { typecheck, TypeError, type TypeEnv } from './typecheck';
+import { typecheck, TypeError } from './typecheck';
 import { compile, type CompileContext } from './compile';
 
 /**
@@ -88,7 +88,7 @@ export function compileExpression(
 
     // Step 3: Type check
     const inputTypes = extractPayloadTypes(inputs);
-    const typedAst = typecheck(ast, inputTypes);
+    const typedAst = typecheck(ast, { inputs: inputTypes });
 
     // Step 4: Compile to IR
     const ctx: CompileContext = {
@@ -138,7 +138,7 @@ export function compileExpression(
 /**
  * Extract payload types from signal types.
  */
-function extractPayloadTypes(inputs: ReadonlyMap<string, SignalType>): TypeEnv {
+function extractPayloadTypes(inputs: ReadonlyMap<string, SignalType>): ReadonlyMap<string, PayloadType> {
   const typeMap = new Map<string, PayloadType>();
   for (const [name, signalType] of inputs.entries()) {
     typeMap.set(name, signalType.payload);
@@ -148,7 +148,6 @@ function extractPayloadTypes(inputs: ReadonlyMap<string, SignalType>): TypeEnv {
 
 // Re-export types that may be useful for callers
 export type { ExprNode, Position } from './ast';
-export type { TypeEnv } from './typecheck';
 
 // Re-export suggestion types and service
 export type {
