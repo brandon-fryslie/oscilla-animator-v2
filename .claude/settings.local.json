@@ -13,7 +13,8 @@
       "mcp__cherry-chrome__chrome",
       "mcp__cherry-chrome__connect",
       "mcp__chatgpt-convo__chatgpt",
-      "mcp__cherry-chrome__query_elements"
+      "mcp__cherry-chrome__query_elements",
+      "Bash(bd list:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
