@@ -270,22 +270,6 @@ export function payloadsEqual(a: PayloadType, b: PayloadType): boolean {
 }
 
 
-/**
- * Stride (number of scalar slots) per concrete PayloadType.
- *
- * @deprecated Use payload.stride directly instead. Stride is now intrinsic to ConcretePayloadType.
- * This lookup table is preserved for backwards compatibility during migration.
- */
-export const PAYLOAD_STRIDE: Record<PayloadKind, number> = {
-  float: 1,
-  int: 1,
-  bool: 1,
-  vec2: 2,
-  vec3: 3,
-  color: 4,
-  shape: 8,  // Shape descriptor has 8 scalar fields
-  cameraProjection: 1,  // Single scalar slot (stored as numeric, interpreted as int32)
-};
 
 /**
  * Get the stride for a given PayloadType.

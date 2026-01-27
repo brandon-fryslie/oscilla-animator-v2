@@ -26,7 +26,6 @@ export type {
   ReferentRef,
   AxisTag,
   InstanceRef,
-  PAYLOAD_STRIDE,
   strideOf,
   instanceRef,
 } from '../core/canonical-types';

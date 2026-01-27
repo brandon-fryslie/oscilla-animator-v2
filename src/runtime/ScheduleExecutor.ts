@@ -164,10 +164,22 @@ export function executeFrame(
   const palette = assertF64Stride(slotLookupMap, TIME_PALETTE_SLOT, 4, 'time.palette slot');
   writeF64Strided(state, palette, time.palette, 4);
 
-  // 3. Execute schedule steps in TWO PHASES
-  // Phase 1: Execute evalSig, slotWriteStrided, materialize, render (skip stateWrite)
-  // Phase 2: Execute all stateWrite steps
-  // This ensures state reads see previous frame's values
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TWO-PHASE EXECUTION MODEL
+  // ═══════════════════════════════════════════════════════════════════════════
+  //
+  // Phase 1 (below): Evaluate all signals, materialize fields, fire events,
+  //                  collect render ops. Reads state from PREVIOUS frame.
+  // Phase 2 (line ~464): Write new state values for NEXT frame.
+  //
+  // This separation is NON-NEGOTIABLE. It ensures:
+  // - Stateful blocks (UnitDelay, Lag, etc.) maintain proper delay semantics
+  // - Cycles only cross frame boundaries via state (invariant I7)
+  // - All signals see consistent state within a frame
+  // - Hot-swap can migrate state without corruption
+  //
+  // See: docs/runtime/execution-model.md for full rationale and examples.
+  // ═══════════════════════════════════════════════════════════════════════════
 
   // Get dense arrays from program
   const signals = program.signalExprs.nodes;
