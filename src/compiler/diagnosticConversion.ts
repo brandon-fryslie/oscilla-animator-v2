@@ -12,32 +12,78 @@
  * Spec Reference: design-docs/CANONICAL-oscilla-v2.5-20260109/topics/07-diagnostics-system.md
  */
 
-import type { CompileError } from './compile';
+import type { CompileError } from './types';
 import type { Diagnostic, DiagnosticCode, TargetRef } from '../diagnostics/types';
 import { generateDiagnosticId } from '../diagnostics/diagnosticId';
 
 // =============================================================================
-// Error Kind to DiagnosticCode Mapping
+// Legacy Error Compatibility
 // =============================================================================
 
 /**
- * Maps compiler error kinds to diagnostic codes.
+ * Legacy error format from compile.ts (deprecated, to be migrated).
+ * @deprecated Use CompileError from ./types.ts instead
+ */
+interface LegacyCompileError {
+  readonly kind: string;
+  readonly message: string;
+  readonly blockId?: string;
+  readonly connectionId?: string;
+  readonly portId?: string;
+}
+
+/**
+ * Type guard to check if an error is in legacy format.
+ */
+function isLegacyError(error: CompileError | LegacyCompileError): error is LegacyCompileError {
+  return 'kind' in error && !('code' in error);
+}
+
+/**
+ * Normalize legacy error to new format.
+ */
+function normalizeLegacyError(error: LegacyCompileError): CompileError {
+  return {
+    code: error.kind, // Map kind → code
+    message: error.message,
+    where: {
+      blockId: error.blockId,
+      port: error.portId,
+    },
+  };
+}
+
+// =============================================================================
+// Error Code to DiagnosticCode Mapping
+// =============================================================================
+
+/**
+ * Maps compiler error codes to diagnostic codes.
  *
  * Sprint 1: Basic mapping for P0 error types.
  * Sprint 2+: Expand with additional error types.
  * Sprint 3: Expression DSL error codes
  */
-const ERROR_KIND_TO_CODE: Record<string, DiagnosticCode> = {
+const ERROR_CODE_TO_DIAGNOSTIC_CODE: Record<string, DiagnosticCode> = {
   NoTimeRoot: 'E_TIME_ROOT_MISSING',
   MultipleTimeRoots: 'E_TIME_ROOT_MULTIPLE',
   UnknownBlockType: 'E_UNKNOWN_BLOCK_TYPE',
   TypeMismatch: 'E_TYPE_MISMATCH',
+  PortTypeMismatch: 'E_TYPE_MISMATCH',
+  Cycle: 'E_CYCLE_DETECTED',
   CycleDetected: 'E_CYCLE_DETECTED',
+  UnconnectedInput: 'E_MISSING_INPUT',
   MissingInput: 'E_MISSING_INPUT',
   DanglingEdge: 'E_MISSING_INPUT', // Edge references non-existent block
   DuplicateBlockId: 'E_CYCLE_DETECTED', // Structural issue (reuse cycle code for now)
   LoweringError: 'E_UNKNOWN_BLOCK_TYPE', // Generic fallback
   UnknownPort: 'E_UNKNOWN_BLOCK_TYPE', // Port not found (block type may not be registered)
+  BlockMissing: 'E_UNKNOWN_BLOCK_TYPE',
+  NotImplemented: 'E_UNKNOWN_BLOCK_TYPE',
+  IRValidationFailed: 'E_UNKNOWN_BLOCK_TYPE',
+  UpstreamError: 'E_UNKNOWN_BLOCK_TYPE',
+  TransformError: 'E_UNKNOWN_BLOCK_TYPE',
+  VarargError: 'E_UNKNOWN_BLOCK_TYPE',
   // Expression DSL errors (Sprint 3)
   ExprSyntaxError: 'E_EXPR_SYNTAX',
   ExprTypeError: 'E_EXPR_TYPE',
@@ -62,22 +108,25 @@ const ERROR_KIND_TO_CODE: Record<string, DiagnosticCode> = {
  * Extracts a TargetRef from a CompileError.
  *
  * Strategy:
- * - If error has blockId → { kind: 'block', blockId }
- * - If error has blockId + portId → { kind: 'port', blockId, portId }
+ * - If error has where.blockId → { kind: 'block', blockId }
+ * - If error has where.blockId + where.port → { kind: 'port', blockId, portId }
  * - Otherwise → { kind: 'graphSpan', blockIds: [] } (whole graph)
  */
 function extractTargetRef(error: CompileError): TargetRef {
-  if (error.blockId) {
-    if (error.portId) {
+  const blockId = error.where?.blockId;
+  const portId = error.where?.port;
+
+  if (blockId) {
+    if (portId) {
       return {
         kind: 'port',
-        blockId: error.blockId,
-        portId: error.portId,
+        blockId: blockId,
+        portId: portId,
       };
     }
     return {
       kind: 'block',
-      blockId: error.blockId,
+      blockId: blockId,
     };
   }
 
@@ -95,28 +144,31 @@ function extractTargetRef(error: CompileError): TargetRef {
 /**
  * Converts a CompileError to a Diagnostic.
  *
- * @param error CompileError from compiler
+ * @param error CompileError from compiler (or legacy format)
  * @param patchRevision Current patch revision
  * @param compileId Compile session identifier
  * @returns Structured Diagnostic object
  */
 export function convertCompileErrorToDiagnostic(
-  error: CompileError,
+  error: CompileError | LegacyCompileError,
   patchRevision: number,
   compileId: string
 ): Diagnostic {
-  // Map error kind to diagnostic code
-  const code = ERROR_KIND_TO_CODE[error.kind] || 'E_UNKNOWN_BLOCK_TYPE';
+  // Normalize legacy errors to new format
+  const normalizedError = isLegacyError(error) ? normalizeLegacyError(error) : error;
+
+  // Map error code to diagnostic code
+  const code = ERROR_CODE_TO_DIAGNOSTIC_CODE[normalizedError.code] || 'E_UNKNOWN_BLOCK_TYPE';
 
   // Extract target reference
-  const primaryTarget = extractTargetRef(error);
+  const primaryTarget = extractTargetRef(normalizedError);
 
   // Generate title (short summary)
-  const title = formatTitle(error.kind);
+  const title = formatTitle(normalizedError.code);
 
-  // Generate stable ID (use error.kind as signature to disambiguate
-  // multiple errors for the same block that map to the same code)
-  const id = generateDiagnosticId(code, primaryTarget, patchRevision, error.kind);
+  // Generate stable ID (use error.code as signature to disambiguate
+  // multiple errors for the same block that map to the same diagnostic code)
+  const id = generateDiagnosticId(code, primaryTarget, patchRevision, normalizedError.code);
 
   return {
     id,
@@ -125,7 +177,7 @@ export function convertCompileErrorToDiagnostic(
     domain: 'compile',
     primaryTarget,
     title,
-    message: error.message,
+    message: normalizedError.message,
     scope: {
       patchRevision,
       compileId,
@@ -141,13 +193,13 @@ export function convertCompileErrorToDiagnostic(
 /**
  * Converts an array of CompileErrors to Diagnostics.
  *
- * @param errors Array of CompileErrors
+ * @param errors Array of CompileErrors (or legacy format)
  * @param patchRevision Current patch revision
  * @param compileId Compile session identifier
  * @returns Array of Diagnostics
  */
 export function convertCompileErrorsToDiagnostics(
-  errors: readonly CompileError[],
+  errors: readonly (CompileError | LegacyCompileError)[],
   patchRevision: number,
   compileId: string
 ): Diagnostic[] {
@@ -161,15 +213,15 @@ export function convertCompileErrorsToDiagnostics(
 // =============================================================================
 
 /**
- * Formats a user-friendly title from error kind.
+ * Formats a user-friendly title from error code.
  *
  * Examples:
- * - NoTimeRoot → "No TimeRoot"
+ * - NoTimeRoot → "No Time Root"
  * - TypeMismatch → "Type Mismatch"
  * - UnknownBlockType → "Unknown Block Type"
  */
-function formatTitle(kind: string): string {
+function formatTitle(code: string): string {
   // Insert spaces before capital letters
-  const spaced = kind.replace(/([A-Z])/g, ' $1').trim();
+  const spaced = code.replace(/([A-Z])/g, ' $1').trim();
   return spaced;
 }

@@ -1,10 +1,10 @@
 # Oscilla Animator v2 - Project Roadmap
 
-Last updated: 2026-01-19-175500
+Last updated: 2026-01-27-120000
 
 ---
 
-## 🟢 Phase 1: Core Foundation [ACTIVE] (5/11 completed)
+## 🟢 Phase 1: Core Foundation [ACTIVE] (6/12 completed)
 
 **Goal:** Implement the core compilation pipeline and runtime system according to the unified spec
 
@@ -107,13 +107,28 @@ Last updated: 2026-01-19-175500
 - **Planning Files:** `.agent_planning/phase1-remaining/`
 - **Status Note:** ~50% complete, offset addressing needed
 
-#### 📋 primitives-catalog [PLANNING]
-- **State:** PLANNING
+#### ✅ primitives-catalog [COMPLETED]
+- **State:** COMPLETED
 - **Epic:** Phase 1 Unified Plan (P6)
 - **Spec:** `design-docs/CANONICAL-oscilla-v2.5-20260109/topics/02-block-system.md`
 - **Description:** Basic 12 completion, stateful primitives, composites
 - **Planning Files:** `.agent_planning/primitives-catalog/`
-- **Status Note:** Sprint plan APPROVED. Deliverables: UnitDelay, Hash, Id01
+- **Completed:** 2025-01-21
+- **Summary:** All MVP stateful primitives implemented (UnitDelay, Lag, Phasor, SampleAndHold, Accumulator). Hash and Id01 also complete. 547 tests passing.
+
+#### 📋 field-blocks-expansion [PLANNING]
+- **State:** PLANNING
+- **Epic:** Phase 1 Unified Plan (Extended)
+- **Spec:** `design-docs/CANONICAL-oscilla-v2.5-20260109/topics/02-block-system.md:195+`
+- **Description:** Extended block system: SpiralLayout, RandomScatter, AlongPath, vector state blocks (FieldLag, FieldUnitDelay, FieldPhasor), Polygon primitive, enhanced per-element randomness (AnimatedNoise, NoiseField, GaussianRandom)
+- **Planning Files:** `.agent_planning/field-blocks-expansion/`
+- **Status Note:** 5-sprint plan ready. Estimated 24-36 hours total.
+- **Key Deliverables:**
+  - Sprint 1 (P0): SpiralLayout, RandomScatter blocks + kernels
+  - Sprint 2 (P1): AnimatedNoise, NoiseField, GaussianRandom blocks
+  - Sprint 3 (P2): FieldLag, FieldUnitDelay, FieldPhasor (per-element state)
+  - Sprint 4 (P2): Polygon primitive block
+  - Sprint 5 (P3): Full AlongPath with arbitrary paths (stretch goal)
 
 #### 📋 domain-refactor [PLANNING]
 - **State:** PLANNING

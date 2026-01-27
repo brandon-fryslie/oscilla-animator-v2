@@ -1,0 +1,83 @@
+Agent: iterative-implementer | 2026-01-27 05:44:00
+Mode: manual
+Completed: P0-P5 (all acceptance criteria) | Files: 2 | Commits: 1
+Tests: All RenderAssembler & projection tests pass
+Cache invalidated: None required (no cached evaluation data exists for this module)
+Status: complete
+
+## Summary
+
+Successfully extracted the repeated `projectInstances() → depthSortAndCompact() → copy buffers` 
+pattern into reusable helper functions, eliminating code duplication and enforcing memory safety.
+
+## Implementation Details
+
+**P0: Create projectAndCompact() helper**
+- ✓ Function added at line 399 in RenderAssembler.ts
+- ✓ Signature matches spec: takes worldPositions, worldRadius, count, color, camera, rotation?, scale2?, pool?
+- ✓ Auto-copies all 6 buffers (screenPosition, screenRadius, depth, color, rotation?, scale2?)
+- ✓ Returns OWNED copies (safe for storage in DrawOps)
+- ✓ Comprehensive JSDoc with memory contract, use case, examples
+
+**P1: Create compactAndCopy() helper**
+- ✓ Function added at line 478 in RenderAssembler.ts
+- ✓ Takes ProjectionOutput + count + color + optional rotation/scale2
+- ✓ Calls depthSortAndCompact() then copies all buffers
+- ✓ Returns same structure as projectAndCompact() (OWNED copies)
+- ✓ JSDoc explains use case (multi-group path) and comparison with projectAndCompact()
+
+**P2: Refactor single-group call site**
+- ✓ `assembleDrawPathInstancesOp` (lines 1345-1354) now uses `projectAndCompact()`
+- ✓ Replaced 3-step pattern (project, compact, copy) with single helper call
+- ✓ Removed manual copy block (lines 1210-1218 in original)
+- ✓ Function behavior is identical to before
+
+**P3: Refactor multi-group call site**
+- ✓ `assemblePerInstanceShapes` (lines 984-990) now uses `compactAndCopy()`
+- ✓ Projection logic (line 938) remains unchanged (still happens once for full batch)
+- ✓ Per-group loop now calls compactAndCopy() instead of depthSortAndCompact + manual copy
+- ✓ Removed manual copy block (lines 838-846 in original)
+- ✓ Function behavior is identical to before
+
+**P4: Update exports**
+- ✓ Added `projectAndCompact` and `compactAndCopy` to exports in `src/runtime/index.ts`
+- ✓ No breaking changes to existing exports
+
+**P5: Verify tests**
+- ✓ All RenderAssembler tests pass (12 tests)
+- ✓ All per-instance shapes tests pass (8 tests)
+- ✓ All depth-culling tests pass (11 tests)
+- ✓ TypeScript type checking passes with no errors
+
+## Code Quality
+
+- **Copy logic is identical**: Helpers use exact same copy blocks as original call sites
+- **No functional changes**: Refactoring is pure code reorganization (behavior byte-for-byte identical)
+- **Memory safety improved**: Auto-copy prevents common bug (forgetting to copy pooled buffers)
+- **Follows architectural principles**: 
+  - SINGLE ENFORCER: Memory contract enforced at helper boundary
+  - ONE SOURCE OF TRUTH: Copy logic in one place (helpers), not duplicated
+  - No violations of one-way dependencies
+  - No shared mutable globals introduced
+
+## Lines of Code
+
+- **Added:** ~173 lines (two new helper functions with comprehensive JSDoc)
+- **Removed:** ~35 lines (duplicate copy logic at 2 call sites)
+- **Net change:** +138 lines (acceptable for abstraction that improves safety and maintainability)
+
+## Performance
+
+- **No measurable performance regression**: Helpers add no overhead
+- **Allocation count unchanged**: Existing code already copied buffers
+- **No new GC pressure**: Memory behavior is identical
+
+## Commits
+
+- 0210360: refactor(runtime): Extract projectInstances + depthSortAndCompact pattern into reusable helpers
+
+## Related Documents
+
+- Plan: .agent_planning/project-instances-helper/PLAN-project-instances-helper-20260127-053012.md
+- DoD: .agent_planning/project-instances-helper/DOD-project-instances-helper-20260127-053012.md
+- Context: .agent_planning/project-instances-helper/CONTEXT-project-instances-helper-20260127-053012.md
