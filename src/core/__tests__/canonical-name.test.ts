@@ -222,21 +222,22 @@ describe('validateDisplayNameUniqueness', () => {
     expect(error?.message).toContain('circle');
   });
 
-  it('ignores null displayNames', () => {
+  it('generates unique displayNames when not provided', () => {
     const patch = buildPatch(b => {
-      b.addBlock('Add', {}, { displayName: null });
-      b.addBlock('Add', {}, { displayName: null });
+      b.addBlock('Add', {});
+      b.addBlock('Add', {});
       b.addBlock('Add', {}, { displayName: 'Valid' });
     });
 
     const error = validateDisplayNameUniqueness(patch);
+    // All displayNames should be unique (auto-generated + explicit)
     expect(error).toBeNull();
   });
 
-  it('ignores empty displayNames', () => {
+  it('auto-generates displayName when empty string provided', () => {
     const patch = buildPatch(b => {
       b.addBlock('Add', {}, { displayName: '' });
-      b.addBlock('Add', {}, { displayName: '' });
+      b.addBlock('Add', {}, { displayName: '  ' });
       b.addBlock('Add', {}, { displayName: 'Valid' });
     });
 

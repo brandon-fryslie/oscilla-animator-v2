@@ -220,5 +220,78 @@ Undo/redo: onPatchReset → clear transient state, re-sync UI
 
 Debug values: onFrameCompleted → update debug value displays
 
-Selection sync: onBlockRemoved → if removed block was selected, 
+Selection sync: onBlockRemoved → if removed block was selected,
 clear selection
+
+Editor State Coordination: onEditorStateChanged → coordinate multiple
+inline editors (displayName, params, expressions) to prevent conflicting
+edits while one is invalid
+
+---
+
+Editor State Coordination Use Case
+
+Problem: Multiple editors can be open in different locations (ReactFlow
+node, inspector panel, dialog). When one editor has invalid state
+(empty displayName, collision, syntax error), we need to:
+1. Prevent the user from making further edits in THAT editor
+2. Prevent other editors from opening while this one is invalid
+3. Allow Escape to revert safely
+4. Provide clear error feedback
+
+Solution: EditorStateStore manages editor lifecycle via events.
+
+New Event Type
+
+Add to EventMap:
+  editorStateChanged: (change: {
+    action: 'editStarted' | 'validityChanged' | 'editEnded'
+    editor?: { id: string, type: string, location: 'node' | 'inspector' | 'dialog' }
+    isValid?: boolean
+    error?: string
+  }) => void
+
+Architecture
+
+EditorStateStore (Emitter):
+  - Owns active editor state per location
+  - Validates edits (collision detection, syntax, etc.)
+  - Emits editorStateChanged on state transitions
+  - Broadcast to all subscribers
+
+DisplayNameEditor Component (Listener):
+  - On mount: subscribe to editorStateChanged
+  - Check: can I edit? (no other editor active OR other is valid)
+  - On blur: emit editorStateChanged({action: 'validityChanged', isValid})
+  - On Escape: emit editorStateChanged({action: 'editEnded'})
+  - Disable input if another editor is invalid
+
+Lifecycle Example
+
+1. User clicks displayName in node → editorStateChanged({action: 'editStarted'})
+2. Inspector's displayName editor subscribes, sees other editor active
+3. Inspector editor disables itself (renders as read-only text)
+4. User types invalid name (empty) → editorStateChanged({action: 'validityChanged', isValid: false})
+5. Both editors see invalid state, remain locked
+6. User presses Escape → editorStateChanged({action: 'editEnded'})
+7. Inspector re-enables, user can now edit there instead
+
+Cascades
+
+onEditorStateChanged → ValidationService →
+  if collision detected → emit with error
+  if syntax valid → clear error, set isValid: true
+
+onEditorStateChanged (editEnded with isValid=true) → trigger auto-compile
+
+onPatchReset → close all editors, reset EditorStateStore
+
+Benefits
+
+- Per-location isolation: node, inspector, dialog each independent
+- Clear error state: listeners see exactly what failed
+- Extensible: add new editor types without changing core logic
+- Debuggable: eventHub.enableDebug(true) shows all editor transitions
+- Scalable: works for displayName, params, expressions, custom fields
+- Clean separation: validation logic in EditorStateStore, rendering in
+  components

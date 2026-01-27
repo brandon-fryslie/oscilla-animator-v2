@@ -4,7 +4,7 @@
  * Tests format utilities for patch export.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import {
   formatBlockShorthand,
   formatConnectionLine,
@@ -15,8 +15,13 @@ import type { Block, Edge } from '../../graph/Patch';
 import type { BlockDef } from '../../blocks/registry';
 import { blockId } from '../../types';
 import { signalType, FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
+import { createTestBlock, resetBlockFactory } from '../../test-utils/block-factory';
 
 describe('exportFormats', () => {
+  beforeEach(() => {
+    resetBlockFactory();
+  });
+
   describe('formatConfigValue', () => {
     it('formats primitives correctly', () => {
       expect(formatConfigValue(42)).toBe('42');
@@ -83,31 +88,21 @@ describe('exportFormats', () => {
 
   describe('formatBlockShorthand', () => {
     it('formats block without definition (no config)', () => {
-      const block: Block = {
+      const block = createTestBlock({
         id: blockId('b1'),
         type: 'Array',
         params: { count: 100 },
-        displayName: null,
-        domainId: null,
-        role: { kind: 'user', meta: {} },
-        inputPorts: new Map(),
-        outputPorts: new Map(),
-      };
+      });
 
       expect(formatBlockShorthand(block, undefined)).toBe('b1:Array');
     });
 
     it('omits parentheses when all values are default', () => {
-      const block: Block = {
+      const block = createTestBlock({
         id: blockId('b1'),
         type: 'Array',
         params: { count: 100 },
-        displayName: null,
-        domainId: null,
-        role: { kind: 'user', meta: {} },
-        inputPorts: new Map(),
-        outputPorts: new Map(),
-      };
+      });
 
       const definition: BlockDef = {
         type: 'Array',
@@ -128,16 +123,11 @@ describe('exportFormats', () => {
     });
 
     it('includes non-default config values', () => {
-      const block: Block = {
+      const block = createTestBlock({
         id: blockId('b1'),
         type: 'Array',
         params: { count: 5000 },
-        displayName: null,
-        domainId: null,
-        role: { kind: 'user', meta: {} },
-        inputPorts: new Map(),
-        outputPorts: new Map(),
-      };
+      });
 
       const definition: BlockDef = {
         type: 'Array',
@@ -158,16 +148,11 @@ describe('exportFormats', () => {
     });
 
     it('includes multiple non-default config values', () => {
-      const block: Block = {
+      const block = createTestBlock({
         id: blockId('b3'),
         type: 'ProceduralPolygon',
         params: { sides: 5, rx: 0.2 },
-        displayName: null,
-        domainId: null,
-        role: { kind: 'user', meta: {} },
-        inputPorts: new Map(),
-        outputPorts: new Map(),
-      };
+      });
 
       const definition: BlockDef = {
         type: 'ProceduralPolygon',
@@ -191,16 +176,11 @@ describe('exportFormats', () => {
     });
 
     it('formats expression values', () => {
-      const block: Block = {
+      const block = createTestBlock({
         id: blockId('b4'),
         type: 'HSVColor',
         params: { h: 'index*0.1' },
-        displayName: null,
-        domainId: null,
-        role: { kind: 'user', meta: {} },
-        inputPorts: new Map(),
-        outputPorts: new Map(),
-      };
+      });
 
       const definition: BlockDef = {
         type: 'HSVColor',
@@ -223,33 +203,19 @@ describe('exportFormats', () => {
 
   describe('formatConnectionLine', () => {
     it('formats valid connection correctly', () => {
+      const block1 = createTestBlock({
+        id: blockId('b1'),
+        type: 'Array',
+        outputPorts: new Map([['instances', { id: 'instances' }]]),
+      });
+      const block2 = createTestBlock({
+        id: blockId('b2'),
+        type: 'CircleLayout',
+        inputPorts: new Map([['instances', { id: 'instances', combineMode: 'last' as const }]]),
+      });
       const blocks = new Map<string, Block>([
-        [
-          'b1',
-          {
-            id: blockId('b1'),
-            type: 'Array',
-            params: {},
-            displayName: null,
-            domainId: null,
-            role: { kind: 'user', meta: {} },
-            inputPorts: new Map(),
-            outputPorts: new Map([['instances', { id: 'instances' }]]),
-          },
-        ],
-        [
-          'b2',
-          {
-            id: blockId('b2'),
-            type: 'CircleLayout',
-            params: {},
-            displayName: null,
-            domainId: null,
-            role: { kind: 'user', meta: {} },
-            inputPorts: new Map([['instances', { id: 'instances', combineMode: 'last' as const }]]),
-            outputPorts: new Map(),
-          },
-        ],
+        [blockId('b1'), block1],
+        [blockId('b2'), block2],
       ]);
 
       const edge: Edge = {

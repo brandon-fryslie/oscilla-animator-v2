@@ -9,6 +9,7 @@ import { PatchStore } from '../PatchStore';
 import { reaction } from 'mobx';
 import type { Endpoint } from '../../graph/Patch';
 import { blockId } from '../../types';
+import { createTestBlock, resetBlockFactory } from '../../test-utils/block-factory';
 
 // Import blocks to ensure they're registered
 import '../../blocks/signal-blocks';
@@ -19,6 +20,7 @@ describe('PatchStore', () => {
 
   beforeEach(() => {
     store = new PatchStore();
+    resetBlockFactory();
   });
 
   describe('addBlock', () => {
@@ -237,19 +239,9 @@ describe('PatchStore', () => {
     it('should replace entire patch', () => {
       store.addBlock('Oscillator');
 
+      const block = createTestBlock({ id: blockId('b0'), type: 'Oscillator' });
       const newPatch = {
-        blocks: new Map([
-          [blockId('b0'), {
-            id: blockId('b0'),
-            type: 'Oscillator',
-            params: {},
-            displayName: null,
-            domainId: null,
-            role: { kind: 'user' as const, meta: {} },
-            inputPorts: new Map(),
-            outputPorts: new Map(),
-          }],
-        ]),
+        blocks: new Map([[block.id, block]]),
         edges: [],
       };
 
@@ -260,19 +252,9 @@ describe('PatchStore', () => {
     });
 
     it('should update ID generators to avoid conflicts', () => {
+      const block = createTestBlock({ id: blockId('b10'), type: 'Oscillator' });
       const patch = {
-        blocks: new Map([
-          [blockId('b10'), {
-            id: blockId('b10'),
-            type: 'Oscillator',
-            params: {},
-            displayName: null,
-            domainId: null,
-            role: { kind: 'user' as const, meta: {} },
-            inputPorts: new Map(),
-            outputPorts: new Map(),
-          }],
-        ]),
+        blocks: new Map([[block.id, block]]),
         edges: [
           {
             id: 'e5',

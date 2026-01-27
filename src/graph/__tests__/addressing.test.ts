@@ -13,7 +13,8 @@ import {
   getShorthandForInput,
 } from '../addressing';
 import { buildPatch } from '../Patch';
-import { blockId, portId } from '../../types';
+import { portId } from '../../types';
+import { normalizeCanonicalName } from '../../core/canonical-name';
 
 // Import blocks to trigger registration
 import '../../blocks/signal-blocks';
@@ -34,34 +35,30 @@ describe('getBlockAddress', () => {
     });
   });
 
-  it('falls back to blockId when displayName is null', () => {
+  it('auto-generates displayName if not provided', () => {
     const patch = buildPatch(b => {
-      b.addBlock('Const', { value: 1 }, { displayName: null });
+      b.addBlock('Const', { value: 1 });
     });
 
     const block = Array.from(patch.blocks.values())[0];
     const addr = getBlockAddress(block);
 
-    expect(addr).toEqual({
-      kind: 'block',
-      blockId: block.id,
-      canonicalName: block.id, // Fallback to blockId
-    });
+    // displayName is auto-generated, so it should be normalized
+    expect(addr.canonicalName).toBe(
+      normalizeCanonicalName(block.displayName)
+    );
+    expect(block.displayName).toMatch(/^Const \d+$/);
   });
 
-  it('falls back to blockId when displayName is empty', () => {
+  it('normalizes displayName to canonical form', () => {
     const patch = buildPatch(b => {
-      b.addBlock('Const', { value: 1 }, { displayName: '' });
+      b.addBlock('Const', { value: 1 }, { displayName: 'My Const!' });
     });
 
     const block = Array.from(patch.blocks.values())[0];
     const addr = getBlockAddress(block);
 
-    expect(addr).toEqual({
-      kind: 'block',
-      blockId: block.id,
-      canonicalName: block.id, // Empty displayName falls back to blockId
-    });
+    expect(addr.canonicalName).toBe('my_const');
   });
 
   it('handles displayName with special characters', () => {
@@ -106,7 +103,7 @@ describe('getOutputAddress', () => {
 
   it('falls back to blockId when displayName is null', () => {
     const patch = buildPatch(b => {
-      b.addBlock('Const', { value: 1 }, { displayName: null });
+      b.addBlock('Const', { value: 1 });
     });
 
     const block = Array.from(patch.blocks.values())[0];
@@ -146,7 +143,7 @@ describe('getInputAddress', () => {
 
   it('falls back to blockId when displayName is null', () => {
     const patch = buildPatch(b => {
-      b.addBlock('Oscillator', {}, { displayName: null });
+      b.addBlock('Oscillator', {});
     });
 
     const block = Array.from(patch.blocks.values())[0];
@@ -266,7 +263,7 @@ describe('getAllAddresses', () => {
 
   it('handles blocks without displayName', () => {
     const patch = buildPatch(b => {
-      b.addBlock('Const', { value: 1 }, { displayName: null });
+      b.addBlock('Const', { value: 1 });
       b.addBlock('Oscillator', {}, { displayName: 'Osc' });
     });
 
@@ -381,7 +378,7 @@ describe('resolveShorthand', () => {
 
   it('matches blockId when no displayName', () => {
     const patch = buildPatch(b => {
-      b.addBlock('Const', { value: 1 }, { displayName: null });
+      b.addBlock('Const', { value: 1 });
     });
 
     const block = Array.from(patch.blocks.values())[0];
@@ -406,7 +403,7 @@ describe('getShorthandForOutput', () => {
 
   it('uses blockId when no displayName', () => {
     const patch = buildPatch(b => {
-      b.addBlock('Const', { value: 1 }, { displayName: null });
+      b.addBlock('Const', { value: 1 });
     });
 
     const block = Array.from(patch.blocks.values())[0];
@@ -441,7 +438,7 @@ describe('getShorthandForInput', () => {
 
   it('uses blockId when no displayName', () => {
     const patch = buildPatch(b => {
-      b.addBlock('Oscillator', {}, { displayName: null });
+      b.addBlock('Oscillator', {});
     });
 
     const block = Array.from(patch.blocks.values())[0];

@@ -130,9 +130,9 @@ describe('resolveAddress', () => {
     expect(resolved).toBeNull();
   });
 
-  it('handles blocks without displayName (fallback to blockId)', () => {
+  it('resolves auto-generated displayNames', () => {
     const patch = buildPatch(b => {
-      b.addBlock('Const', { value: 1 }, { displayName: null });
+      b.addBlock('Const', { value: 1 });
     });
 
     const block = Array.from(patch.blocks.values())[0];
