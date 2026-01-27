@@ -420,15 +420,54 @@ export function projectAndCompact(
   // Step 2: Compact & sort
   const compacted = depthSortAndCompact(projection, count, color, rotation, scale2);
 
-  // Step 3: Copy all buffers (AUTOMATIC)
+  // Step 3: Copy to pooled buffers (avoids per-frame allocations)
+  const visibleCount = compacted.count;
+
+  // Allocate from pool (or fallback to direct allocation for tests)
+  const outScreenPos = pool
+    ? (pool.alloc('vec2f32', visibleCount) as Float32Array)
+    : new Float32Array(visibleCount * 2);
+  const outScreenRadius = pool
+    ? (pool.alloc('f32', visibleCount) as Float32Array)
+    : new Float32Array(visibleCount);
+  const outDepth = pool
+    ? (pool.alloc('f32', visibleCount) as Float32Array)
+    : new Float32Array(visibleCount);
+  const outColor = pool
+    ? (pool.alloc('rgba8', visibleCount) as Uint8ClampedArray)
+    : new Uint8ClampedArray(visibleCount * 4);
+
+  // Copy from compacted views to pooled buffers
+  outScreenPos.set(compacted.screenPosition);
+  outScreenRadius.set(compacted.screenRadius);
+  outDepth.set(compacted.depth);
+  outColor.set(compacted.color);
+
+  // Handle optional buffers
+  let outRotation: Float32Array | undefined;
+  if (compacted.rotation) {
+    outRotation = pool
+      ? (pool.alloc('f32', visibleCount) as Float32Array)
+      : new Float32Array(visibleCount);
+    outRotation.set(compacted.rotation);
+  }
+
+  let outScale2: Float32Array | undefined;
+  if (compacted.scale2) {
+    outScale2 = pool
+      ? (pool.alloc('vec2f32', visibleCount) as Float32Array)
+      : new Float32Array(visibleCount * 2);
+    outScale2.set(compacted.scale2);
+  }
+
   return {
-    count: compacted.count,
-    screenPosition: new Float32Array(compacted.screenPosition),
-    screenRadius: new Float32Array(compacted.screenRadius),
-    depth: new Float32Array(compacted.depth),
-    color: new Uint8ClampedArray(compacted.color),
-    rotation: compacted.rotation ? new Float32Array(compacted.rotation) : undefined,
-    scale2: compacted.scale2 ? new Float32Array(compacted.scale2) : undefined,
+    count: visibleCount,
+    screenPosition: outScreenPos,
+    screenRadius: outScreenRadius,
+    depth: outDepth,
+    color: outColor,
+    rotation: outRotation,
+    scale2: outScale2,
   };
 }
 
@@ -437,13 +476,13 @@ export function projectAndCompact(
  *
  * This is a mid-level API for cases where projection has already been done
  * (e.g., multi-group path where projection happens once for full batch).
- * Returns OWNED copies of all buffers (safe for persistent storage).
+ * Allocates from BufferPool to avoid per-frame allocations.
  *
  * **Use case:** Multi-group path where projectInstances() is called once for
  * the full batch, then this function is called per-group to compact and copy.
  *
- * **Memory contract:** Returns OWNED copies. Caller can store returned buffers
- * without copying.
+ * **Memory contract:** Returns buffers allocated from the pool. Buffers are
+ * valid until pool.releaseAll() is called (end of frame).
  *
  * **Comparison:**
  * - Use `projectAndCompact()` when you need projection + compaction together
@@ -453,9 +492,10 @@ export function projectAndCompact(
  * @param projection - Already-projected data (from projectInstances())
  * @param count - Instance count for this group
  * @param color - Per-instance RGBA colors (stride 4)
- * @param rotation - Optional per-instance rotations (will be copied)
- * @param scale2 - Optional per-instance anisotropic scale (will be copied)
- * @returns All buffers as OWNED copies (safe for immediate storage in DrawOp)
+ * @param rotation - Optional per-instance rotations
+ * @param scale2 - Optional per-instance anisotropic scale
+ * @param pool - Buffer pool for allocation (required in production, optional for tests)
+ * @returns Buffers allocated from pool (valid until pool.releaseAll())
  *
  * @example
  * ```typescript
@@ -469,9 +509,10 @@ export function projectAndCompact(
  *     group.count,
  *     groupColors,
  *     groupRotations,
- *     groupScales
+ *     groupScales,
+ *     pool
  *   );
- *   // result buffers are OWNED copies
+ *   // result buffers are from pool
  * }
  * ```
  */
@@ -481,6 +522,7 @@ export function compactAndCopy(
   color: Uint8ClampedArray,
   rotation?: Float32Array,
   scale2?: Float32Array,
+  pool?: BufferPool,
 ): {
   count: number;
   screenPosition: Float32Array;
@@ -493,15 +535,54 @@ export function compactAndCopy(
   // Step 1: Compact & sort
   const compacted = depthSortAndCompact(projection, count, color, rotation, scale2);
 
-  // Step 2: Copy all buffers (AUTOMATIC)
+  // Step 2: Copy to pooled buffers (avoids per-frame allocations)
+  const visibleCount = compacted.count;
+
+  // Allocate from pool (or fallback to direct allocation for tests)
+  const outScreenPos = pool
+    ? (pool.alloc('vec2f32', visibleCount) as Float32Array)
+    : new Float32Array(visibleCount * 2);
+  const outScreenRadius = pool
+    ? (pool.alloc('f32', visibleCount) as Float32Array)
+    : new Float32Array(visibleCount);
+  const outDepth = pool
+    ? (pool.alloc('f32', visibleCount) as Float32Array)
+    : new Float32Array(visibleCount);
+  const outColor = pool
+    ? (pool.alloc('rgba8', visibleCount) as Uint8ClampedArray)
+    : new Uint8ClampedArray(visibleCount * 4);
+
+  // Copy from compacted views to pooled buffers
+  outScreenPos.set(compacted.screenPosition);
+  outScreenRadius.set(compacted.screenRadius);
+  outDepth.set(compacted.depth);
+  outColor.set(compacted.color);
+
+  // Handle optional buffers
+  let outRotation: Float32Array | undefined;
+  if (compacted.rotation) {
+    outRotation = pool
+      ? (pool.alloc('f32', visibleCount) as Float32Array)
+      : new Float32Array(visibleCount);
+    outRotation.set(compacted.rotation);
+  }
+
+  let outScale2: Float32Array | undefined;
+  if (compacted.scale2) {
+    outScale2 = pool
+      ? (pool.alloc('vec2f32', visibleCount) as Float32Array)
+      : new Float32Array(visibleCount * 2);
+    outScale2.set(compacted.scale2);
+  }
+
   return {
-    count: compacted.count,
-    screenPosition: new Float32Array(compacted.screenPosition),
-    screenRadius: new Float32Array(compacted.screenRadius),
-    depth: new Float32Array(compacted.depth),
-    color: new Uint8ClampedArray(compacted.color),
-    rotation: compacted.rotation ? new Float32Array(compacted.rotation) : undefined,
-    scale2: compacted.scale2 ? new Float32Array(compacted.scale2) : undefined,
+    count: visibleCount,
+    screenPosition: outScreenPos,
+    screenRadius: outScreenRadius,
+    depth: outDepth,
+    color: outColor,
+    rotation: outRotation,
+    scale2: outScale2,
   };
 }
 
@@ -986,7 +1067,8 @@ function assemblePerInstanceShapes(
       group.instanceIndices.length,
       color,
       rotation,
-      scale2
+      scale2,
+      pool
     );
 
     const instanceTransforms: InstanceTransforms = {
