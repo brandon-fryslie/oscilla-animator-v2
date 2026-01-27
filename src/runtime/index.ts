@@ -44,6 +44,8 @@ export {
 export {
   assembleDrawPathInstancesOp,
   assembleRenderFrame,
+  projectAndCompact,
+  compactAndCopy,
   type AssemblerContext,
 } from './RenderAssembler';
 

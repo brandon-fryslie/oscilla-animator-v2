@@ -153,6 +153,9 @@ export interface ProjectionOutput {
  *   const safeCopy = new Float32Array(compacted.screenPosition); // ✓ Safe
  *   drawOp.position = compacted.screenPosition; // ✗ MEMORY LEAK - view becomes invalid
  *
+ * For most use cases, prefer the high-level helpers `projectAndCompact()` or `compactAndCopy()`
+ * which automatically handle copying.
+ *
  * @param projection - Raw projection output with all instances
  * @param count - Total instance count (including invisible)
  * @param color - Per-instance color buffer (Float32Array, stride 4: RGBA)
@@ -288,6 +291,9 @@ export function depthSortAndCompact(
  * World-space buffers are READ-ONLY — output is written to separate buffers.
  * Camera params come from the frame globals resolver (ResolvedCameraParams).
  *
+ * For most use cases, prefer the high-level helper `projectAndCompact()` which combines
+ * projection + compaction + copying in one step.
+ *
  * @param worldPositions - World-space vec3 positions (Float32Array, stride 3). READ-ONLY.
  * @param worldRadius - Uniform world-space radius for all instances
  * @param count - Number of instances
@@ -345,6 +351,158 @@ export function projectInstances(
   }
 
   return { screenPosition, screenRadius, depth, visible };
+}
+
+/**
+ * Project world-space instances and depth-sort/compact in one step.
+ *
+ * This is the high-level API combining projectInstances() + depthSortAndCompact().
+ * Returns OWNED copies of all buffers (safe for persistent storage).
+ *
+ * Preferred over manual projection + compaction for typical rendering use.
+ *
+ * **Use case:** Single-group path (uniform shapes), or any case where
+ * projection and compaction happen together.
+ *
+ * **Memory contract:** Returns OWNED copies. Caller can store returned buffers
+ * in DrawOps or other persistent structures without copying.
+ *
+ * **Low-level alternative:** For advanced use cases requiring projection without
+ * compaction, or compaction without projection, use projectInstances() and
+ * depthSortAndCompact() directly (and remember to copy the results).
+ *
+ * @param worldPositions - World-space positions (vec3 stride, READ-ONLY)
+ * @param worldRadius - Uniform world-space radius
+ * @param count - Instance count
+ * @param color - Per-instance RGBA colors (stride 4)
+ * @param camera - Resolved camera parameters (determines projection mode)
+ * @param rotation - Optional per-instance rotations (will be copied)
+ * @param scale2 - Optional per-instance anisotropic scale (will be copied)
+ * @param pool - Buffer pool for intermediate allocation (optional, for memory management)
+ * @returns All buffers as OWNED copies (safe for immediate storage in DrawOp)
+ *
+ * @example
+ * ```typescript
+ * const result = projectAndCompact(
+ *   positions,     // Float32Array (vec3 stride)
+ *   0.05,          // uniform radius
+ *   instanceCount,
+ *   colors,        // Uint8ClampedArray (RGBA stride)
+ *   cameraParams,
+ *   rotations,     // optional
+ *   scales,        // optional
+ *   bufferPool     // optional
+ * );
+ * // result.screenPosition, result.color, etc. are OWNED copies
+ * ```
+ */
+export function projectAndCompact(
+  worldPositions: Float32Array,
+  worldRadius: number,
+  count: number,
+  color: Uint8ClampedArray,
+  camera: ResolvedCameraParams,
+  rotation?: Float32Array,
+  scale2?: Float32Array,
+  pool?: BufferPool,
+): {
+  count: number;
+  screenPosition: Float32Array;
+  screenRadius: Float32Array;
+  depth: Float32Array;
+  color: Uint8ClampedArray;
+  rotation?: Float32Array;
+  scale2?: Float32Array;
+} {
+  // Step 1: Project
+  const projection = projectInstances(worldPositions, worldRadius, count, camera, pool);
+
+  // Step 2: Compact & sort
+  const compacted = depthSortAndCompact(projection, count, color, rotation, scale2);
+
+  // Step 3: Copy all buffers (AUTOMATIC)
+  return {
+    count: compacted.count,
+    screenPosition: new Float32Array(compacted.screenPosition),
+    screenRadius: new Float32Array(compacted.screenRadius),
+    depth: new Float32Array(compacted.depth),
+    color: new Uint8ClampedArray(compacted.color),
+    rotation: compacted.rotation ? new Float32Array(compacted.rotation) : undefined,
+    scale2: compacted.scale2 ? new Float32Array(compacted.scale2) : undefined,
+  };
+}
+
+/**
+ * Depth-sort, compact, and copy projection results in one step.
+ *
+ * This is a mid-level API for cases where projection has already been done
+ * (e.g., multi-group path where projection happens once for full batch).
+ * Returns OWNED copies of all buffers (safe for persistent storage).
+ *
+ * **Use case:** Multi-group path where projectInstances() is called once for
+ * the full batch, then this function is called per-group to compact and copy.
+ *
+ * **Memory contract:** Returns OWNED copies. Caller can store returned buffers
+ * without copying.
+ *
+ * **Comparison:**
+ * - Use `projectAndCompact()` when you need projection + compaction together
+ * - Use `compactAndCopy()` when projection is already done
+ * - Use `depthSortAndCompact()` directly for low-level control (remember to copy)
+ *
+ * @param projection - Already-projected data (from projectInstances())
+ * @param count - Instance count for this group
+ * @param color - Per-instance RGBA colors (stride 4)
+ * @param rotation - Optional per-instance rotations (will be copied)
+ * @param scale2 - Optional per-instance anisotropic scale (will be copied)
+ * @returns All buffers as OWNED copies (safe for immediate storage in DrawOp)
+ *
+ * @example
+ * ```typescript
+ * // Multi-group path
+ * const projection = projectInstances(fullPositions, radius, totalCount, camera, pool);
+ *
+ * for (const group of groups) {
+ *   const groupProjection = sliceProjection(projection, group.indices);
+ *   const result = compactAndCopy(
+ *     groupProjection,
+ *     group.count,
+ *     groupColors,
+ *     groupRotations,
+ *     groupScales
+ *   );
+ *   // result buffers are OWNED copies
+ * }
+ * ```
+ */
+export function compactAndCopy(
+  projection: ProjectionOutput,
+  count: number,
+  color: Uint8ClampedArray,
+  rotation?: Float32Array,
+  scale2?: Float32Array,
+): {
+  count: number;
+  screenPosition: Float32Array;
+  screenRadius: Float32Array;
+  depth: Float32Array;
+  color: Uint8ClampedArray;
+  rotation?: Float32Array;
+  scale2?: Float32Array;
+} {
+  // Step 1: Compact & sort
+  const compacted = depthSortAndCompact(projection, count, color, rotation, scale2);
+
+  // Step 2: Copy all buffers (AUTOMATIC)
+  return {
+    count: compacted.count,
+    screenPosition: new Float32Array(compacted.screenPosition),
+    screenRadius: new Float32Array(compacted.screenRadius),
+    depth: new Float32Array(compacted.depth),
+    color: new Uint8ClampedArray(compacted.color),
+    rotation: compacted.rotation ? new Float32Array(compacted.rotation) : undefined,
+    scale2: compacted.scale2 ? new Float32Array(compacted.scale2) : undefined,
+  };
 }
 
 /**
@@ -822,28 +980,14 @@ function assemblePerInstanceShapes(
       visible: groupVisible,
     };
 
-    // Depth-sort and compact for this group
-    const compacted = depthSortAndCompact(
+    // Compact and copy in one step (projection already done at line 780)
+    const compactedCopy = compactAndCopy(
       groupProjection,
       group.instanceIndices.length,
       color,
       rotation,
       scale2
     );
-
-    // IMPORTANT: Copy compacted buffers when multiple groups are processed.
-    // depthSortAndCompact returns views into module-level pooled buffers.
-    // Since we call it for each group, we must copy to avoid data corruption
-    // when the pooled buffer is reused for the next group.
-    const compactedCopy = {
-      count: compacted.count,
-      screenPosition: new Float32Array(compacted.screenPosition),
-      screenRadius: new Float32Array(compacted.screenRadius),
-      depth: new Float32Array(compacted.depth),
-      color: new Uint8ClampedArray(compacted.color),
-      rotation: compacted.rotation ? new Float32Array(compacted.rotation) : undefined,
-      scale2: compacted.scale2 ? new Float32Array(compacted.scale2) : undefined,
-    };
 
     const instanceTransforms: InstanceTransforms = {
       count: compactedCopy.count,
@@ -1197,25 +1341,17 @@ export function assembleDrawPathInstancesOp(
       );
     }
 
-    const projection = projectInstances(positionBuffer, scale, count, context.resolvedCamera, pool);
-
-    // Depth-sort and compact: remove invisible instances, sort by depth (far-to-near / painter's algorithm)
-    const compacted = depthSortAndCompact(projection, count, colorBuffer, rotation, scale2);
-
-    // CRITICAL: Copy compacted buffers to prevent memory leak.
-    // depthSortAndCompact returns views into module-level pooled buffers.
-    // If we store these views in DrawOp, they become invalid on next frame
-    // when the pooled buffers are reused. This matches the multi-group path
-    // at lines 830-838.
-    const compactedCopy = {
-      count: compacted.count,
-      screenPosition: new Float32Array(compacted.screenPosition),
-      screenRadius: new Float32Array(compacted.screenRadius),
-      depth: new Float32Array(compacted.depth),
-      color: new Uint8ClampedArray(compacted.color),
-      rotation: compacted.rotation ? new Float32Array(compacted.rotation) : undefined,
-      scale2: compacted.scale2 ? new Float32Array(compacted.scale2) : undefined,
-    };
+    // Project, compact, and copy in one step (helper enforces memory safety)
+    const compactedCopy = projectAndCompact(
+      positionBuffer,
+      scale,
+      count,
+      colorBuffer,
+      context.resolvedCamera,
+      rotation,
+      scale2,
+      pool
+    );
 
     // Build instance transforms with copied data
     const instanceTransforms = buildInstanceTransforms(
