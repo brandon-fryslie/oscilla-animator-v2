@@ -22,13 +22,40 @@ import './CompositeEditor.css';
 export const CompositeEditor = observer(function CompositeEditor() {
   const { compositeEditor } = useStores();
 
+  // Handle drop of composite to open for editing
+  const handleDropOnEmpty = useCallback(
+    (event: React.DragEvent) => {
+      event.preventDefault();
+      const compositeType = event.dataTransfer.getData('application/oscilla-composite-type');
+      if (compositeType) {
+        compositeEditor.openExisting(compositeType);
+      }
+    },
+    [compositeEditor]
+  );
+
+  const handleDragOverEmpty = useCallback((event: React.DragEvent) => {
+    // Only accept composite drops
+    if (event.dataTransfer.types.includes('application/oscilla-composite-type')) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'copy';
+    }
+  }, []);
+
   // If editor is not open, show empty state
   if (!compositeEditor.isOpen) {
     return (
-      <div className="composite-editor composite-editor--empty">
+      <div
+        className="composite-editor composite-editor--empty"
+        onDrop={handleDropOnEmpty}
+        onDragOver={handleDragOverEmpty}
+      >
         <div className="composite-editor__empty-state">
           <h2>Composite Editor</h2>
           <p>No composite is currently being edited.</p>
+          <p className="composite-editor__hint">
+            Drag a composite from the library to edit it, or:
+          </p>
           <button
             className="composite-editor__new-btn"
             onClick={() => compositeEditor.openNew()}
@@ -42,6 +69,13 @@ export const CompositeEditor = observer(function CompositeEditor() {
 
   return (
     <div className="composite-editor">
+      {/* Fork notice for library composites */}
+      {compositeEditor.isFork && (
+        <div className="composite-editor__fork-notice">
+          📋 Editing a copy of a library composite. Save will create a new user composite.
+        </div>
+      )}
+
       {/* Header with metadata and actions */}
       <div className="composite-editor__header">
         <div className="composite-editor__metadata">

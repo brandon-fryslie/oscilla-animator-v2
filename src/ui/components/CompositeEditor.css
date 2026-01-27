@@ -12,6 +12,21 @@
 .composite-editor--empty {
   justify-content: center;
   align-items: center;
+  transition: background 0.2s;
+}
+
+.composite-editor--empty:hover {
+  background: var(--bg-hover, #1f1f35);
+}
+
+/* Fork indicator */
+.composite-editor__fork-notice {
+  padding: 0.5rem 1rem;
+  background: var(--info-bg, rgba(74, 158, 255, 0.1));
+  border-bottom: 1px solid var(--info-border, rgba(74, 158, 255, 0.3));
+  font-size: 0.8rem;
+  color: var(--info-text, #6ab0ff);
+  flex-shrink: 0;
 }
 
 .composite-editor__empty-state {
