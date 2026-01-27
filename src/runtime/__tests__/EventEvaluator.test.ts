@@ -16,10 +16,15 @@ import { buildPatch } from '../../graph/Patch';
 import { signalType } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
 import { sigExprId } from '../../compiler/ir/Indices';
-import type { EventExpr } from '../../compiler/ir/types';
+import type { EventExpr, StepEvalEvent } from '../../compiler/ir/types';
 import type { EventExprId } from '../../compiler/ir/Indices';
 import type { RuntimeState } from '../RuntimeState';
 import type { SigExpr } from '../../compiler/ir/types';
+
+// Helper to create a valid palette Float32Array
+function createPalette(r = 0, g = 0, b = 0, a = 1): Float32Array {
+  return new Float32Array([r, g, b, a]);
+}
 
 // =============================================================================
 // Test Helpers
@@ -46,14 +51,14 @@ describe('EventEvaluator', () => {
       const exprs: EventExpr[] = [{ kind: 'const', fired: true }];
       const state = createMinimalState(0, 1);
       // Set time so evaluateSignal doesn't throw
-      state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: { r: 0, g: 0, b: 0, a: 1 }, energy: 0.5 };
+      state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: createPalette(), energy: 0.5 };
       expect(evaluateEvent(eventExprId(0), exprs, state, [])).toBe(true);
     });
 
     it('const(false) does not fire', () => {
       const exprs: EventExpr[] = [{ kind: 'const', fired: false }];
       const state = createMinimalState(0, 1);
-      state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: { r: 0, g: 0, b: 0, a: 1 }, energy: 0.5 };
+      state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: createPalette(), energy: 0.5 };
       expect(evaluateEvent(eventExprId(0), exprs, state, [])).toBe(false);
     });
   });
@@ -62,7 +67,7 @@ describe('EventEvaluator', () => {
     it('never fires', () => {
       const exprs: EventExpr[] = [{ kind: 'never' }];
       const state = createMinimalState(0, 1);
-      state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: { r: 0, g: 0, b: 0, a: 1 }, energy: 0.5 };
+      state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: createPalette(), energy: 0.5 };
       expect(evaluateEvent(eventExprId(0), exprs, state, [])).toBe(false);
     });
   });
@@ -71,7 +76,7 @@ describe('EventEvaluator', () => {
     it('pulse(timeRoot) fires every tick', () => {
       const exprs: EventExpr[] = [{ kind: 'pulse', source: 'timeRoot' }];
       const state = createMinimalState(0, 1);
-      state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: { r: 0, g: 0, b: 0, a: 1 }, energy: 0.5 };
+      state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: createPalette(), energy: 0.5 };
       // Should fire every tick
       expect(evaluateEvent(eventExprId(0), exprs, state, [])).toBe(true);
       expect(evaluateEvent(eventExprId(0), exprs, state, [])).toBe(true);
@@ -87,7 +92,7 @@ describe('EventEvaluator', () => {
         { kind: 'combine', events: [eventExprId(0), eventExprId(1)], mode: 'any' },
       ];
       const state = createMinimalState(0, 3);
-      state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: { r: 0, g: 0, b: 0, a: 1 }, energy: 0.5 };
+      state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: createPalette(), energy: 0.5 };
       expect(evaluateEvent(eventExprId(2), exprs, state, [])).toBe(true);
     });
 
@@ -98,7 +103,7 @@ describe('EventEvaluator', () => {
         { kind: 'combine', events: [eventExprId(0), eventExprId(1)], mode: 'any' },
       ];
       const state = createMinimalState(0, 3);
-      state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: { r: 0, g: 0, b: 0, a: 1 }, energy: 0.5 };
+      state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: createPalette(), energy: 0.5 };
       expect(evaluateEvent(eventExprId(2), exprs, state, [])).toBe(false);
     });
 
@@ -109,7 +114,7 @@ describe('EventEvaluator', () => {
         { kind: 'combine', events: [eventExprId(0), eventExprId(1)], mode: 'all' },
       ];
       const state = createMinimalState(0, 3);
-      state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: { r: 0, g: 0, b: 0, a: 1 }, energy: 0.5 };
+      state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: createPalette(), energy: 0.5 };
       expect(evaluateEvent(eventExprId(2), exprs, state, [])).toBe(true);
     });
 
@@ -120,7 +125,7 @@ describe('EventEvaluator', () => {
         { kind: 'combine', events: [eventExprId(0), eventExprId(1)], mode: 'all' },
       ];
       const state = createMinimalState(0, 3);
-      state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: { r: 0, g: 0, b: 0, a: 1 }, energy: 0.5 };
+      state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: createPalette(), energy: 0.5 };
       expect(evaluateEvent(eventExprId(2), exprs, state, [])).toBe(false);
     });
   });
@@ -135,7 +140,7 @@ describe('EventEvaluator', () => {
         { kind: 'wrap', signal: sigExprId(0) },
       ];
       const state = createMinimalState(1, 1);
-      state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: { r: 0, g: 0, b: 0, a: 1 }, energy: 0.5 };
+      state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: createPalette(), energy: 0.5 };
 
       // prevPredicate starts at 0, signal is 0.6 → predicate=1, rising edge → fires
       expect(evaluateEvent(eventExprId(0), exprs, state, signals)).toBe(true);
@@ -149,7 +154,7 @@ describe('EventEvaluator', () => {
         { kind: 'wrap', signal: sigExprId(0) },
       ];
       const state = createMinimalState(1, 1);
-      state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: { r: 0, g: 0, b: 0, a: 1 }, energy: 0.5 };
+      state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: createPalette(), energy: 0.5 };
 
       // First call: rising edge (0→1)
       state.eventPrevPredicate[0] = 1; // Simulate previous predicate was already 1
@@ -164,7 +169,7 @@ describe('EventEvaluator', () => {
         { kind: 'wrap', signal: sigExprId(0) },
       ];
       const state = createMinimalState(1, 1);
-      state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: { r: 0, g: 0, b: 0, a: 1 }, energy: 0.5 };
+      state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: createPalette(), energy: 0.5 };
 
       // Previous was high (1), now low (0.4) → predicate=0, not rising edge
       state.eventPrevPredicate[0] = 1;
@@ -179,7 +184,7 @@ describe('EventEvaluator', () => {
         { kind: 'wrap', signal: sigExprId(0) },
       ];
       const state = createMinimalState(1, 1);
-      state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: { r: 0, g: 0, b: 0, a: 1 }, energy: 0.5 };
+      state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: createPalette(), energy: 0.5 };
 
       // NaN → predicate=0, prev=0 → no rising edge
       expect(evaluateEvent(eventExprId(0), exprs, state, signals)).toBe(false);
@@ -193,7 +198,7 @@ describe('EventEvaluator', () => {
         { kind: 'wrap', signal: sigExprId(0) },
       ];
       const state = createMinimalState(1, 1);
-      state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: { r: 0, g: 0, b: 0, a: 1 }, energy: 0.5 };
+      state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: createPalette(), energy: 0.5 };
 
       // Inf → not finite → predicate=0, prev=0 → no rising edge
       expect(evaluateEvent(eventExprId(0), exprs, state, signals)).toBe(false);
@@ -207,7 +212,7 @@ describe('EventEvaluator', () => {
         { kind: 'wrap', signal: sigExprId(0) },
       ];
       const state = createMinimalState(1, 1);
-      state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: { r: 0, g: 0, b: 0, a: 1 }, energy: 0.5 };
+      state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: createPalette(), energy: 0.5 };
 
       expect(state.eventPrevPredicate[0]).toBe(0);
       evaluateEvent(eventExprId(0), exprs, state, signals);
@@ -283,7 +288,7 @@ describe('EventEvaluator', () => {
       executeFrame(program, state, pool, 100);
 
       // Verify pulse event slot is 1 (fired this tick)
-      const pulseStep = evalEventSteps[0];
+      const pulseStep = evalEventSteps[0] as StepEvalEvent;
       expect(state.eventScalars[pulseStep.target as number]).toBe(1);
     });
 
@@ -310,7 +315,7 @@ describe('EventEvaluator', () => {
 
       // Frame 1
       executeFrame(program, state, pool, 100);
-      const evalEventSteps = schedule.steps.filter((s: any) => s.kind === 'evalEvent');
+      const evalEventSteps = schedule.steps.filter((s: any) => s.kind === 'evalEvent') as StepEvalEvent[];
       expect(state.eventScalars[evalEventSteps[0].target as number]).toBe(1);
 
       // Frame 2 (eventScalars should be cleared and re-fired)

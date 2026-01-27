@@ -80,11 +80,13 @@ beforeEach(() => {
   const fillTextImpl = mockCtx.fillText;
   mockCtx.fillText = vi.fn((text: string, x?: number, y?: number) => {
     drawCalls.push(`fillText(${text})`);
-    fillTextImpl.call(mockCtx, text, x, y);
+    fillTextImpl.call(mockCtx, text, x ?? 0, y ?? 0);
   });
 
-  // Mock HTMLCanvasElement.getContext
-  HTMLCanvasElement.prototype.getContext = vi.fn(() => mockCtx);
+  // Mock HTMLCanvasElement.getContext to return mock context for any contextId
+  HTMLCanvasElement.prototype.getContext = vi.fn(
+    (_contextId: string) => mockCtx
+  ) as unknown as typeof HTMLCanvasElement.prototype.getContext;
 });
 
 describe('Sparkline', () => {

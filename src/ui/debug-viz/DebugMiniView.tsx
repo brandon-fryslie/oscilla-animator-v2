@@ -113,9 +113,11 @@ const styles = {
 
 function formatTypeLine(type: SignalType, cardinality: 'signal' | 'field'): string {
   const unitKind = type.unit.kind;
+  // PayloadType is an object with a 'kind' property (e.g., { kind: 'float', stride: 1 })
+  const payloadKind = type.payload.kind;
   const payloadUnit = unitKind === 'none' || unitKind === 'scalar'
-    ? type.payload
-    : `${type.payload}:${unitKind}`;
+    ? payloadKind
+    : `${payloadKind}:${unitKind}`;
   const card = cardinality === 'signal' ? 'one' : 'many';
   return `${payloadUnit} · ${card} · cont`;
 }

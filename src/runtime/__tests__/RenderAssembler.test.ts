@@ -22,6 +22,11 @@ import { PathVerb } from '../../shapes/types';
 import { DEFAULT_CAMERA } from '../CameraResolver';
 import { BufferPool } from '../BufferPool';
 
+// Helper to create a valid palette Float32Array
+function createPalette(r = 1, g = 1, b = 1, a = 1): Float32Array {
+  return new Float32Array([r, g, b, a]);
+}
+
 // Helper to create a scalar signal type
 const SCALAR_TYPE: SignalType = signalType(FLOAT);
 
@@ -36,7 +41,7 @@ function createMockState(): RuntimeState {
     phaseA: 0,
     phaseB: 0,
     pulse: 0,
-    palette: { r: 1, g: 1, b: 1, a: 1 },
+    palette: createPalette(),
     energy: 0.5,
   };
   return state;

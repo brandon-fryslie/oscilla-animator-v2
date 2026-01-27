@@ -20,6 +20,12 @@ import { registerDynamicTopology } from '../../shapes/registry';
 import type { RenderSpace2D } from '../../shapes/types';
 import { PathVerb } from '../../shapes/types';
 import { DEFAULT_CAMERA } from '../CameraResolver';
+import { BufferPool } from '../BufferPool';
+
+// Helper to create a valid palette Float32Array
+function createPalette(r = 1, g = 1, b = 1, a = 1): Float32Array {
+  return new Float32Array([r, g, b, a]);
+}
 
 // Helper to create a scalar signal type
 const SCALAR_TYPE: SignalType = signalType(FLOAT);
@@ -34,7 +40,7 @@ function createMockState(): RuntimeState {
     phaseA: 0,
     phaseB: 0,
     pulse: 0,
-    palette: { r: 1, g: 1, b: 1, a: 1 },
+    palette: createPalette(),
     energy: 0.5,
   };
   return state;
@@ -138,7 +144,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
     resolvedCamera: DEFAULT_CAMERA,
       };
 
-      expect(() => assembleDrawPathInstancesOp(step, context)).toThrow(
+      expect(() => assembleDrawPathInstancesOp(step, context, new BufferPool())).toThrow(
         /Shape buffer length mismatch/
       );
     });
@@ -203,7 +209,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
     resolvedCamera: DEFAULT_CAMERA,
       };
 
-      const result = assembleDrawPathInstancesOp(step, context);
+      const result = assembleDrawPathInstancesOp(step, context, new BufferPool());
 
       // All instances have same topology → 1 group → 1 op
       expect(result).toHaveLength(1);
@@ -280,7 +286,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
     resolvedCamera: DEFAULT_CAMERA,
       };
 
-      const result = assembleDrawPathInstancesOp(step, context);
+      const result = assembleDrawPathInstancesOp(step, context, new BufferPool());
 
       // 3 different topologies → 3 groups → 3 ops
       expect(result).toHaveLength(3);
@@ -360,7 +366,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
     resolvedCamera: DEFAULT_CAMERA,
       };
 
-      const result = assembleDrawPathInstancesOp(step, context);
+      const result = assembleDrawPathInstancesOp(step, context, new BufferPool());
 
       // 2 topologies → 2 ops (circles grouped together, squares grouped together)
       expect(result).toHaveLength(2);
@@ -428,7 +434,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
     resolvedCamera: DEFAULT_CAMERA,
       };
 
-      const result = assembleDrawPathInstancesOp(step, context);
+      const result = assembleDrawPathInstancesOp(step, context, new BufferPool());
 
       expect(result).toHaveLength(2);
 
@@ -506,7 +512,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
     resolvedCamera: DEFAULT_CAMERA,
       };
 
-      expect(() => assembleDrawPathInstancesOp(step, context)).toThrow(
+      expect(() => assembleDrawPathInstancesOp(step, context, new BufferPool())).toThrow(
         /Unknown topology ID: 999/
       );
     });
@@ -555,7 +561,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
     resolvedCamera: DEFAULT_CAMERA,
       };
 
-      expect(() => assembleDrawPathInstancesOp(step, context)).toThrow(
+      expect(() => assembleDrawPathInstancesOp(step, context, new BufferPool())).toThrow(
         /Control points buffer not found/
       );
     });
@@ -637,7 +643,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
     resolvedCamera: DEFAULT_CAMERA,
       };
 
-      const result = assembleRenderFrame(steps, context);
+      const result = assembleRenderFrame(steps, context, new BufferPool());
 
       // Step 1: 1 op (all circles)
       // Step 2: 2 ops (circles + squares)

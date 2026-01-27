@@ -24,6 +24,11 @@ import type { RuntimeState } from '../RuntimeState';
 import { ExternalChannelSystem } from '../ExternalChannel';
 import type { ValueSlot } from '../../types';
 
+// Helper to create a valid palette Float32Array
+function createPalette(r = 0.5, g = 0, b = 0, a = 1): Float32Array {
+  return new Float32Array([r, g, b, a]);
+}
+
 /**
  * Create a minimal RuntimeState for testing
  */
@@ -36,7 +41,7 @@ function createTestRuntimeState(): RuntimeState {
       phaseB: 0, 
       dt: 16, 
       pulse: 0,
-      palette: { r: 0.5, g: 0, b: 0, a: 1.0 },
+      palette: createPalette(),
       energy: 0.5,
     },
     values: {
@@ -64,7 +69,6 @@ function createTestRuntimeState(): RuntimeState {
       offsetA: 0,
       offsetB: 0,
     },
-    external: new ExternalChannelSystem(),
     externalChannels: new ExternalChannelSystem(),
     health: {
       frameTimes: new Array(10).fill(0),
@@ -98,6 +102,11 @@ function createTestRuntimeState(): RuntimeState {
       frameDeltaSumSq: 0,
       minFrameDelta: Infinity,
       maxFrameDelta: 0,
+      // Buffer pool metrics
+      poolAllocs: 0,
+      poolReleases: 0,
+      pooledBytes: 0,
+      poolKeyCount: 0,
     },
     continuity: createContinuityState(),
     continuityConfig: {
@@ -123,7 +132,7 @@ describe('Project Policy Domain Change', () => {
       phaseB: 0, 
       dt: 16, 
       pulse: 0,
-      palette: { r: 0.5, g: 0, b: 0, a: 1.0 },
+      palette: createPalette(),
       energy: 0.5,
     };
 
@@ -237,7 +246,7 @@ describe('Project Policy Domain Change', () => {
       phaseB: 0, 
       dt: 16, 
       pulse: 0,
-      palette: { r: 0.5, g: 0, b: 0, a: 1.0 },
+      palette: createPalette(),
       energy: 0.5,
     };
     state.continuity.lastTModelMs = 984; // Previous frame was 16ms ago
@@ -339,7 +348,7 @@ describe('Project Policy Domain Change', () => {
       phaseB: 0, 
       dt: 16, 
       pulse: 0,
-      palette: { r: 0.5, g: 0, b: 0, a: 1.0 },
+      palette: createPalette(),
       energy: 0.5,
     };
 
@@ -467,7 +476,7 @@ describe('Project Policy Domain Change', () => {
         phaseB: 0, 
         dt: 16, 
         pulse: 0,
-        palette: { r: 0.5, g: 0, b: 0, a: 1.0 },
+        palette: createPalette(),
         energy: 0.5,
       };
 
@@ -643,7 +652,7 @@ describe('Project Policy Domain Change', () => {
         phaseB: 0, 
         dt: 16, 
         pulse: 0,
-        palette: { r: 0.5, g: 0, b: 0, a: 1.0 },
+        palette: createPalette(),
         energy: 0.5,
       };
       state.continuity.domainChangeThisFrame = false;
@@ -678,7 +687,7 @@ describe('Project Policy Domain Change', () => {
       phaseB: 0, 
       dt: 16, 
       pulse: 0,
-      palette: { r: 0.5, g: 0, b: 0, a: 1.0 },
+      palette: createPalette(),
       energy: 0.5,
     };
 
@@ -712,7 +721,7 @@ describe('Project Policy Domain Change', () => {
         phaseB: 0, 
         dt: 16, 
         pulse: 0,
-        palette: { r: 0.5, g: 0, b: 0, a: 1.0 },
+        palette: createPalette(),
         energy: 0.5,
       };
 
