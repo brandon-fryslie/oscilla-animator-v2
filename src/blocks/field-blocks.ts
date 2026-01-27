@@ -68,7 +68,6 @@ registerBlock({
 
     const signalValue = inputsById.signal;
     if (!signalValue || signalValue.k !== 'sig') {
-      console.error('[Broadcast] inputsById:', Object.keys(inputsById), 'signal:', signalValue, 'ctx.instanceId:', ctx.instanceId);
       throw new Error('Broadcast signal input must be a signal');
     }
 
