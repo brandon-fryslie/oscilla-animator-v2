@@ -32,13 +32,17 @@ function createTestPatch(blocks: any[]): Patch {
 
 /**
  * Create a test block with outputs.
+ * @param id - Block ID (also used as displayName for test readability)
+ * @param type - Block type
+ * @param displayName - Optional display name (defaults to ID for test readability)
  */
-function createTestBlock(id: string, type: string): any {
+function createTestBlock(id: string, type: string, displayName?: string | null): any {
   return {
     id,
     type,
     params: {},
-    displayName: null,
+    // Default to ID for test readability (simulates auto-generated display name)
+    displayName: displayName !== undefined ? displayName : id,
     domainId: null,
     role: 'normal' as const,
     inputPorts: new Map(),
@@ -260,10 +264,11 @@ describe('SuggestionProvider.suggestBlocks', () => {
   });
 
   it('sorts blocks by label alphabetically', () => {
+    // Block IDs become the displayName by default in test fixture
     const blocks = [
-      createTestBlock('Zebra', 'Z'),
-      createTestBlock('Apple', 'A'),
-      createTestBlock('Mango', 'M'),
+      createTestBlock('Zebra', 'TestType'),
+      createTestBlock('Apple', 'TestType'),
+      createTestBlock('Mango', 'TestType'),
     ];
     const patch = createTestPatch(blocks);
     const registry = AddressRegistry.buildFromPatch(patch);
@@ -271,6 +276,7 @@ describe('SuggestionProvider.suggestBlocks', () => {
 
     const suggestions = provider.suggestBlocks();
     const labels = suggestions.map(s => s.label);
+    // Sorted alphabetically by label (displayName)
     expect(labels).toEqual(['Apple', 'Mango', 'Zebra']);
   });
 });

@@ -29,7 +29,8 @@ describe('PatchStore', () => {
       const block = store.blocks.get(id);
       expect(block?.type).toBe('Oscillator');
       expect(block?.params).toEqual({ frequency: 440 });
-      expect(block?.displayName).toBe(null);
+      // displayName is auto-generated when not provided
+      expect(block?.displayName).toBe('Oscillator 1');
       expect(block?.domainId).toBe(null);
       expect(block?.role).toEqual({ kind: 'user', meta: {} });
     });

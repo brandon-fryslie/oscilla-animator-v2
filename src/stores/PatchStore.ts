@@ -261,7 +261,7 @@ export class PatchStore {
 
     // Create output ports from registry
     const outputPorts = new Map<string, OutputPort>();
-    for (const [outputId, outputDef] of Object.entries(blockDef.outputs)) {
+    for (const outputId of Object.keys(blockDef.outputs)) {
       outputPorts.set(outputId, { id: outputId });
     }
 
