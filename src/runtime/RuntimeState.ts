@@ -584,8 +584,8 @@ export function createProgramState(
 /**
  * Create a RuntimeState by composing SessionState and ProgramState
  *
- * @deprecated Use createSessionState() + createProgramState() for new code.
- * This function is kept for backwards compatibility.
+ * Convenience wrapper for tests and simple use cases.
+ * For production code with session persistence, use createSessionState() + createProgramState() separately.
  */
 export function createRuntimeState(
   slotCount: number,
