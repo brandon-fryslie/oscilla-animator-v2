@@ -29,7 +29,7 @@ import { validateCombineMode } from '../../compiler/passes-v2/combine-utils';
 import { ConnectionPicker } from './ConnectionPicker';
 import { AddressRegistry } from '../../graph/address-registry';
 import { SuggestionProvider } from '../../expr/suggestions';
-import type { Suggestion } from '../../expr/suggestions';
+import type { Suggestion, OutputSuggestion } from '../../expr/suggestions';
 import { AutocompleteDropdown } from '../expression-editor/AutocompleteDropdown';
 import { getCursorPosition, adjustPositionForViewport } from '../expression-editor/cursorPosition';
 
@@ -1947,11 +1947,11 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value, pa
         suggestions = suggestionProvider.filterSuggestions(filterPrefix, 'port').filter(s => s.type === 'port');
       }
     } else if (filterPrefix) {
-      // Identifier completion context
-      suggestions = suggestionProvider.filterSuggestions(filterPrefix);
+      // Identifier completion context - exclude self
+      suggestions = suggestionProvider.filterSuggestions(filterPrefix, undefined, blockId);
     } else {
-      // Ctrl+Space - show all (except ports)
-      suggestions = suggestionProvider.filterSuggestions('');
+      // Ctrl+Space - show all (except ports) - exclude self
+      suggestions = suggestionProvider.filterSuggestions('', undefined, blockId);
     }
 
     setFilteredSuggestions(suggestions);
@@ -2067,12 +2067,34 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value, pa
       const identifierData = extractIdentifierPrefix(localValue, cursorPosition);
       const prefixStartOffset = identifierData?.startOffset ?? cursorPosition;
       insertSuggestion(textareaRef.current, suggestion, filterPrefix, prefixStartOffset);
+
+      // Wire vararg connection for output suggestions
+      if (suggestion.type === 'output') {
+        const outputSugg = suggestion as OutputSuggestion;
+
+        // Get existing refs connections to calculate sortKey
+        const block = patch.blocks.get(blockId);
+        const refsPort = block?.inputPorts.get('refs');
+        const existingConnections = refsPort?.varargConnections ?? [];
+        const maxSortKey = existingConnections.length > 0
+          ? Math.max(...existingConnections.map(c => c.sortKey))
+          : -1;
+
+        // Wire the connection
+        patchStore.addVarargConnection(
+          blockId,
+          'refs',
+          outputSugg.sourceAddress,
+          maxSortKey + 1
+        );
+      }
+
       setShowAutocomplete(false);
       setFilterPrefix('');
       setBlockContext(null);
       textareaRef.current.focus();
     }
-  }, [localValue, cursorPosition, filterPrefix]);
+  }, [localValue, cursorPosition, filterPrefix, blockId, patch, patchStore]);
 
   const hasError = expressionError !== null;
 

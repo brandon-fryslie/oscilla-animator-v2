@@ -74,6 +74,7 @@ export class PatchStore {
       updateBlockDisplayName: action,
       updateInputPort: action,
       updateInputPortCombineMode: action,
+      addVarargConnection: action,
       addEdge: action,
       removeEdge: action,
       updateEdge: action,
@@ -382,6 +383,85 @@ export class PatchStore {
   updateInputPortCombineMode(blockId: BlockId, portId: PortId, combineMode: CombineMode): void {
     this.updateInputPort(blockId, portId, { combineMode });
   }
+  /**
+   * Add a vararg connection to an input port.
+   *
+   * @param blockId - Block ID
+   * @param portId - Input port ID (must be a vararg input)
+   * @param sourceAddress - Canonical address of the output (e.g., "blocks.b1.outputs.value")
+   * @param sortKey - Sort key for ordering
+   * @param alias - Optional display alias
+   */
+  addVarargConnection(
+    blockId: BlockId,
+    portId: string,
+    sourceAddress: string,
+    sortKey: number,
+    alias?: string
+  ): void {
+    const block = this._data.blocks.get(blockId);
+    if (!block) {
+      throw new Error(`Block ${blockId} not found`);
+    }
+
+    // Get existing port or create from registry definition
+    let port = block.inputPorts.get(portId);
+    if (!port) {
+      // Port not in block's map - check if it exists in registry
+      const blockDef = requireBlockDef(block.type);
+      const inputDef = blockDef.inputs[portId];
+      if (!inputDef) {
+        throw new Error(`Port ${portId} not found on block ${blockId}`);
+      }
+      // Create the port entry
+      port = { id: portId, combineMode: 'last' };
+    }
+
+    // Create new vararg connection
+    const newConnection = {
+      sourceAddress,
+      sortKey,
+      alias,
+    };
+
+    // Append to existing connections (or create new array)
+    const existingConnections = port.varargConnections ?? [];
+    const updatedConnections = [...existingConnections, newConnection];
+
+    // Update port with new connections array
+    const updatedPort = {
+      ...port,
+      varargConnections: updatedConnections,
+    };
+
+    // Update block with new port
+    const updatedInputPorts = new Map(block.inputPorts);
+    updatedInputPorts.set(portId, updatedPort);
+
+    // Update block in store
+    this._data.blocks.set(blockId, {
+      ...block,
+      inputPorts: updatedInputPorts,
+    });
+
+    this.invalidateSnapshot();
+
+    // Emit GraphCommitted event to trigger recompilation
+    if (this.eventHub && this.getPatchRevision) {
+      this.eventHub.emit({
+        type: 'GraphCommitted',
+        patchId: this.patchId,
+        patchRevision: this.getPatchRevision() + 1,
+        reason: 'userEdit',
+        diffSummary: {
+          blocksAdded: 0,
+          blocksRemoved: 0,
+          edgesChanged: 1, // Vararg connection is similar to edge
+        },
+      });
+    }
+  }
+
 
   /**
    * Adds a new edge to the patch.

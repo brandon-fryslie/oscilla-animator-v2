@@ -7,6 +7,7 @@
  * - Input variables (in0-in4)
  * - Block references (from patch)
  * - Port references (from block definitions)
+ * - Output ports (block.port combinations)
  *
  * This is a pure data service with no UI coupling.
  */
@@ -25,7 +26,7 @@ import { addressToString } from '../types/canonical-address';
 /**
  * Discriminated union for suggestion types.
  */
-export type SuggestionType = 'function' | 'input' | 'block' | 'port';
+export type SuggestionType = 'function' | 'input' | 'block' | 'port' | 'output';
 
 /**
  * Base suggestion interface.
@@ -85,6 +86,19 @@ export interface PortSuggestion extends Suggestion {
   readonly type: 'port';
   readonly payloadTypeStr: string;
   readonly cardinality: 'one' | 'many';
+}
+
+/**
+ * Output suggestion (flat block.port combinations).
+ *
+ * Example: { label: "Circle.radius", type: "output", blockId: "Circle", portId: "radius", sourceAddress: "blocks.Circle.outputs.radius" }
+ */
+export interface OutputSuggestion extends Suggestion {
+  readonly type: 'output';
+  readonly blockId: string;
+  readonly portId: string;
+  readonly sourceAddress: string;
+  readonly payloadType: string;
 }
 
 // =============================================================================
@@ -158,6 +172,7 @@ export function getFunctionSignatures(): readonly FunctionSignature[] {
  * - Input variables (in0-in4)
  * - Block references from the patch
  * - Port references from block definitions
+ * - Output ports (flat block.port combinations)
  *
  * Usage:
  * ```typescript
@@ -302,6 +317,46 @@ export class SuggestionProvider {
   }
 
   /**
+   * Get all output suggestions (flat block.port combinations).
+   *
+   * Returns suggestions formatted as "BlockName.portId" (e.g., "Circle.radius").
+   * Each suggestion includes blockId, portId, and sourceAddress for wiring.
+   * Results are sorted alphabetically by label.
+   *
+   * @param excludeBlockId - Optional block ID to exclude (e.g., self-reference prevention)
+   * @returns Read-only array of output suggestions
+   */
+  suggestAllOutputs(excludeBlockId?: string): readonly OutputSuggestion[] {
+    const suggestions: OutputSuggestion[] = [];
+
+    for (const block of this.patch.blocks.values()) {
+      // Skip excluded block (e.g., Expression block can't reference itself)
+      if (block.id === excludeBlockId) continue;
+
+      const blockDef = BLOCK_DEFS_BY_TYPE.get(block.type);
+      if (!blockDef?.outputs) continue;
+
+      for (const [portId, outputDef] of Object.entries(blockDef.outputs)) {
+        const sourceAddress = `blocks.${block.id}.outputs.${portId}`;
+
+        suggestions.push({
+          label: `${block.id}.${portId}`,
+          type: 'output',
+          description: `${block.type} output`,
+          blockId: block.id,
+          portId,
+          sourceAddress,
+          payloadType: outputDef.type.payload.kind,
+          sortOrder: 250, // Between inputs (200) and blocks (300)
+        });
+      }
+    }
+
+    // Sort by label for deterministic ordering
+    return suggestions.sort((a, b) => a.label.localeCompare(b.label));
+  }
+
+  /**
    * Filter suggestions by prefix and optionally by type.
    *
    * Uses case-insensitive substring matching (fuzzy filter).
@@ -312,10 +367,11 @@ export class SuggestionProvider {
    * Empty prefix returns all suggestions of the given type (or all if no type).
    *
    * @param prefix - Search string (case-insensitive)
-   * @param type - Optional type filter (function, input, block, port)
+   * @param type - Optional type filter (function, input, block, port, output)
+   * @param excludeBlockId - Optional block ID to exclude from output suggestions
    * @returns Filtered and sorted suggestions
    */
-  filterSuggestions(prefix: string, type?: SuggestionType): readonly Suggestion[] {
+  filterSuggestions(prefix: string, type?: SuggestionType, excludeBlockId?: string): readonly Suggestion[] {
     // Collect all suggestions based on type filter
     let allSuggestions: Suggestion[];
 
@@ -328,11 +384,14 @@ export class SuggestionProvider {
     } else if (type === 'port') {
       // Port suggestions require a block context, return empty
       allSuggestions = [];
+    } else if (type === 'output') {
+      allSuggestions = [...this.suggestAllOutputs(excludeBlockId)];
     } else {
       // No type filter - include all except ports (which need context)
       allSuggestions = [
         ...this.suggestFunctions(),
         ...this.suggestInputs(),
+        ...this.suggestAllOutputs(excludeBlockId),
         ...this.suggestBlocks(),
       ];
     }
