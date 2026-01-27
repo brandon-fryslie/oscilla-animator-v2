@@ -260,6 +260,24 @@ export function applyFieldKernel(
     for (let i = 0; i < N; i++) {
       outArr[i] = aArr[i] + bArr[i];
     }
+  } else if (fieldOp === 'fieldMultiply') {
+    // ════════════════════════════════════════════════════════════════
+    // fieldMultiply: Element-wise multiplication of two float fields
+    // ────────────────────────────────────────────────────────────────
+    // Inputs: [a: float, b: float]
+    // Output: float
+    // Coord-space: AGNOSTIC - operates on raw field values
+    // ════════════════════════════════════════════════════════════════
+    if (inputs.length !== 2) {
+      throw new Error('fieldMultiply requires 2 inputs (a, b)');
+    }
+    const outArr = out as Float32Array;
+    const aArr = inputs[0] as Float32Array;
+    const bArr = inputs[1] as Float32Array;
+
+    for (let i = 0; i < N; i++) {
+      outArr[i] = aArr[i] * bArr[i];
+    }
   } else if (fieldOp === 'fieldPolarToCartesian') {
     // ════════════════════════════════════════════════════════════════
     // fieldPolarToCartesian: Convert polar to cartesian coordinates
