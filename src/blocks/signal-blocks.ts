@@ -9,7 +9,7 @@ import { signalType, type PayloadType, unitPhase01, unitNorm01, unitVar, payload
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { OpCode, stableStateId } from '../compiler/ir/types';
 import { defaultSourceConst } from '../types';
-import type { SigExprId } from '../compiler/ir/Indices';
+import type { SigExprId, StateSlotId } from '../compiler/ir/Indices';
 
 // =============================================================================
 // Const (Payload-Generic)
@@ -373,12 +373,42 @@ registerBlock({
   outputs: {
     out: { label: 'Output', type: signalType(FLOAT) },
   },
-  lower: ({ ctx, inputsById, config }) => {
+  // Phase 1: Generate output (reading from state) without needing input resolved
+  lowerOutputsOnly: ({ ctx, config }) => {
+    const initialValue = (config?.initialValue as number) ?? 0;
+    const outType = ctx.outTypes[0];
+
+    // Allocate state slot (will be reused in phase 2)
+    const stateId = stableStateId(ctx.instanceId, 'delay');
+    const stateSlot = ctx.b.allocStateSlot(stateId, { initialValue });
+
+    // Read previous state (this is the output - delayed by 1 frame)
+    const outputId = ctx.b.sigStateRead(stateSlot, signalType(FLOAT));
+
+    const slot = ctx.b.allocSlot();
+
+    return {
+      outputsById: {
+        out: { k: 'sig', id: outputId, slot, type: outType, stride: strideOf(outType.payload) },
+      },
+      stateSlot, // Pass to phase 2
+    };
+  },
+  // Phase 2: Generate state write step using resolved input
+  lower: ({ ctx, inputsById, config, existingOutputs }) => {
     const input = inputsById.in;
     if (!input || input.k !== 'sig') {
       throw new Error('UnitDelay requires signal input');
     }
 
+    // If called from phase 1, reuse existing outputs and state slot
+    if (existingOutputs?.outputsById && existingOutputs?.stateSlot) {
+      // Write current input to state for next frame
+      ctx.b.stepStateWrite(existingOutputs.stateSlot as StateSlotId, input.id);
+      return existingOutputs;
+    }
+
+    // Fallback: single-pass lowering (for non-cycle usage)
     const initialValue = (config?.initialValue as number) ?? 0;
     const outType = ctx.outTypes[0];
 
