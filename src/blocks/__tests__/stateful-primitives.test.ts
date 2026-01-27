@@ -9,7 +9,7 @@ import { describe, it, expect } from 'vitest';
 import { compile } from '../../compiler/compile';
 import { buildPatch } from '../../graph';
 import { executeFrame } from '../../runtime/ScheduleExecutor';
-import { createRuntimeState } from '../../runtime/RuntimeState';
+import { createSessionState, createProgramState } from '../../runtime/RuntimeState';
 import { BufferPool } from '../../runtime/BufferPool';
 import { evaluateSignal } from '../../runtime/SignalEvaluator';
 import type { SigExprId } from '../../types';
@@ -71,7 +71,9 @@ describe('UnitDelay Block', () => {
     expect(schedule.stateSlots[0].initialValue).toBe(0);
 
     // Create runtime with state slots
-    const state = createRuntimeState(program.slotMeta.length, schedule.stateSlotCount);
+    const session = createSessionState();
+    const program_ = createProgramState(program.slotMeta.length, schedule.stateSlotCount, 0, 0);
+    const state = { ...session, ...program_ };
     const pool = new BufferPool();
 
     // First frame: output should be 0 (initial state)

@@ -10,7 +10,7 @@ import { compile } from '../../compiler/compile';
 import { EventHub } from '../../events/EventHub';
 import { BufferPool } from '../../runtime/BufferPool';
 import { buildPatch, type PatchBuilder } from '../../graph/Patch';
-import { createRuntimeState } from '../../runtime/RuntimeState';
+import { createSessionState, createProgramState } from '../../runtime/RuntimeState';
 import { executeFrame } from '../../runtime/ScheduleExecutor';
 import { evaluateSignal } from '../../runtime/SignalEvaluator';
 import { sigExprId, eventSlotId } from '../../compiler/ir/Indices';
@@ -53,12 +53,17 @@ function compileAndRun(patchFn: (b: PatchBuilder) => void, frames: number[] = [1
   const program = result.program;
   const schedule = program.schedule;
   const sizes = getStorageSizes(program.slotMeta);
-  const state = createRuntimeState(
+  const session = createSessionState();
+  const program_ = createProgramState(
     sizes.f64,
     schedule.stateSlotCount ?? 0,
     schedule.eventSlotCount ?? 0,
     schedule.eventExprCount ?? 0
   );
+  const state = {
+    ...session,
+    ...program_,
+  };
   const pool = new BufferPool();
 
   const results: { values: Float64Array; eventScalars: Uint8Array }[] = [];
@@ -98,12 +103,17 @@ describe('EventToSignalMask', () => {
     const program = result.program;
     const schedule = program.schedule;
     const sizes = getStorageSizes(program.slotMeta);
-    const state = createRuntimeState(
+    const session = createSessionState();
+    const program_ = createProgramState(
       sizes.f64,
       schedule.stateSlotCount ?? 0,
       schedule.eventSlotCount ?? 0,
       schedule.eventExprCount ?? 0
     );
+    const state = {
+      ...session,
+      ...program_,
+    };
     const pool = new BufferPool();
 
     // Execute frame — pulse fires every tick
@@ -149,12 +159,17 @@ describe('EventToSignalMask', () => {
     const program = result.program;
     const schedule = program.schedule;
     const sizes = getStorageSizes(program.slotMeta);
-    const state = createRuntimeState(
+    const session = createSessionState();
+    const program_ = createProgramState(
       sizes.f64,
       schedule.stateSlotCount ?? 0,
       schedule.eventSlotCount ?? 0,
       schedule.eventExprCount ?? 0
     );
+    const state = {
+      ...session,
+      ...program_,
+    };
     const pool = new BufferPool();
 
     const slotToOffset = buildSlotToOffsetMap(program);
@@ -199,7 +214,12 @@ describe('SampleHold', () => {
   it('sigEventRead returns 0.0 when event has not fired', () => {
     // Unit test: directly test evaluateSignal with an eventRead expr
     // when eventScalars[slot] is 0
-    const state = createRuntimeState(4, 0, 4, 0);
+    const session = createSessionState();
+    const program_ = createProgramState(4, 0, 4, 0);
+    const state = {
+      ...session,
+      ...program_,
+    };
     state.time = { tAbsMs: 0, tMs: 100, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: new Float32Array([0, 0, 0, 1]), energy: 0.5 };
 
     // Event slot 0 is NOT fired (stays at 0 after frame clear)
@@ -278,12 +298,17 @@ describe('SampleHold', () => {
     const program = result.program;
     const schedule = program.schedule;
     const sizes = getStorageSizes(program.slotMeta);
-    const state = createRuntimeState(
+    const session = createSessionState();
+    const program_ = createProgramState(
       sizes.f64,
       schedule.stateSlotCount ?? 0,
       schedule.eventSlotCount ?? 0,
       schedule.eventExprCount ?? 0
     );
+    const state = {
+      ...session,
+      ...program_,
+    };
     const pool = new BufferPool();
 
     executeFrame(program, state, pool, 100);
@@ -356,12 +381,17 @@ describe('Event Consumer Blocks Integration', () => {
     const program = result.program;
     const schedule = program.schedule;
     const sizes = getStorageSizes(program.slotMeta);
-    const state = createRuntimeState(
+    const session = createSessionState();
+    const program_ = createProgramState(
       sizes.f64,
       schedule.stateSlotCount ?? 0,
       schedule.eventSlotCount ?? 0,
       schedule.eventExprCount ?? 0
     );
+    const state = {
+      ...session,
+      ...program_,
+    };
     const pool = new BufferPool();
 
     executeFrame(program, state, pool, 100);
@@ -408,12 +438,17 @@ describe('Event Consumer Blocks Integration', () => {
     const program = result.program;
     const schedule = program.schedule;
     const sizes = getStorageSizes(program.slotMeta);
-    const state = createRuntimeState(
+    const session = createSessionState();
+    const program_ = createProgramState(
       sizes.f64,
       schedule.stateSlotCount ?? 0,
       schedule.eventSlotCount ?? 0,
       schedule.eventExprCount ?? 0
     );
+    const state = {
+      ...session,
+      ...program_,
+    };
     const pool = new BufferPool();
 
     executeFrame(program, state, pool, 100);
