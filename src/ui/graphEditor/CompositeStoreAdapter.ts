@@ -16,7 +16,8 @@
 import { makeObservable, computed } from 'mobx';
 import type { InternalBlockId, InternalEdge } from '../../blocks/composite-types';
 import type { CompositeEditorStore } from '../../stores/CompositeEditorStore';
-import { getBlockDefinition, type BlockDef } from '../../blocks/registry';
+import { getBlockDefinition } from '../../blocks/registry';
+import type { BlockDef } from '../../blocks/registry';
 import type {
   GraphDataAdapter,
   BlockLike,
@@ -215,11 +216,11 @@ export class CompositeStoreAdapter implements GraphDataAdapter<InternalBlockId> 
   private getInputPortsForBlock(blockDef: BlockDef): ReadonlyMap<string, InputPortLike> {
     const portMap = new Map<string, InputPortLike>();
 
-    for (const [portId, inputDef] of Object.entries(blockDef.inputs)) {
-      portMap.set(portId, {
-        id: portId,
+    for (const [id, inputDef] of Object.entries(blockDef.inputs)) {
+      portMap.set(id, {
+        id,
         // Default combineMode to 'last' (matches PatchStore behavior for new blocks)
-        combineMode: 'last',
+        combineMode: 'last' as const,
         defaultSource: inputDef.defaultSource,
       });
     }

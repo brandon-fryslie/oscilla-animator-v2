@@ -1,176 +1,187 @@
 # Sprint: multi-patch-support - Multiple Simultaneous Patches
 
 **Generated:** 2026-01-27-122000
-**Confidence:** HIGH: 0, MEDIUM: 2, LOW: 2
-**Status:** RESEARCH REQUIRED
-**Source:** EVALUATION-2026-01-27-120000.md
+**Updated:** 2026-01-27 (user decisions captured)
+**Confidence:** HIGH: 3, MEDIUM: 1, LOW: 0
+**Status:** READY FOR IMPLEMENTATION
+
+## User Decisions (2026-01-27)
+
+These decisions resolve the previous unknowns:
+
+1. **Tab model:** Tabs in the center Dockview panel group
+   - Patch tabs: "Patch - \<patch name\>"
+   - Composite editor tabs: "Edit Block - \<composite block name\>"
+   - Both tab types coexist in the same tab group (with Table, Matrix)
+
+2. **Multiple tabs:** Can have multiple patch tabs AND multiple composite editor tabs open simultaneously
+
+3. **Runtime:** Multiple runtimes will be supported
+   - **For this sprint:** Design the Patch Editor ↔ Runtime API
+   - **Deferred:** Actual multi-runtime implementation (separate initiative)
 
 ## Sprint Goal
 
-Enable opening and editing multiple patches simultaneously, with tab-based switching and independent state management per patch.
+Enable opening and editing multiple patches/composites simultaneously via Dockview dynamic tabs, with a well-designed API that will support multiple runtimes in the future.
 
 ## Scope
 
 **Deliverables:**
+- Dynamic tab creation in center panel group
+- Tab naming convention ("Patch - X", "Edit Block - X")
 - PatchRegistry for managing multiple patch instances
-- Tab UI for switching between open patches
-- Independent runtime/compilation per patch
-- Patch lifecycle management (create, open, close, save)
+- Runtime API design document (for future multi-runtime)
+- Patch lifecycle management (create, open, close)
 
 ## Work Items
 
-### P1 [MEDIUM] Design Multi-Patch Architecture
+### P0 [HIGH] Dynamic Tab System for Center Panel
 
 **Dependencies:** Sprint unified-editor-core complete
-**Spec Reference:** PatchStore as single source of truth (CLAUDE.md)
-**Status Reference:** EVALUATION - "No Multi-Patch Support"
+**Spec Reference:** Dockview panel system
 
 #### Description
 
-Research and design how multiple patches will coexist. Key questions:
-- Should each patch have its own PatchStore instance, or one store with multiple patches?
-- How does runtime/compilation work with multiple patches?
-- What is the "active patch" concept and how is it managed?
-- How do stores that reference PatchStore (RuntimeStore, CompilationStore) handle multiple patches?
+Extend Dockview integration to support dynamic tab creation. Currently tabs are static (Flow, Table, Matrix, Composite). Need to:
+- Create tabs dynamically when opening a patch/composite
+- Close tabs when done editing
+- Handle multiple instances of same panel type with different data
 
-#### Unknowns to Resolve
+#### Acceptance Criteria
 
-1. **Store architecture**: One PatchStore per patch vs. one store managing all patches?
-   - Research: Check how other node editors (Blender, Unreal Blueprints) handle this
-   - Consider memory implications
+- [ ] Can programmatically add a new tab to center panel group
+- [ ] Tabs show correct title ("Patch - MyPatch" or "Edit Block - SmoothNoise")
+- [ ] Can have multiple "Patch" tabs open simultaneously
+- [ ] Can have multiple "Edit Block" tabs open simultaneously
+- [ ] Closing a tab removes it from the panel group
+- [ ] Tab close button with dirty state confirmation
+- [ ] Active tab selection reflects which patch/composite is being edited
 
-2. **Runtime isolation**: Can multiple patches run simultaneously, or only one active?
-   - Research: Runtime dependencies, canvas allocation
-   - Consider use cases (preview while editing another?)
+#### Technical Notes
 
-3. **Compilation caching**: How to avoid recompiling inactive patches?
-   - Research: Hot swap requirements
-   - Consider lazy compilation
-
-#### Exit Criteria (to reach HIGH confidence)
-
-- [ ] Architecture decision document written
-- [ ] Store structure decided (single vs. multiple instances)
-- [ ] Runtime behavior decided (concurrent vs. exclusive)
-- [ ] API surface sketched for PatchRegistry
+Dockview supports dynamic panels via `api.addPanel()`. Each panel needs:
+- Unique ID (e.g., `patch-${patchId}`, `composite-${compositeType}`)
+- Component reference (reusable GraphEditorCore)
+- Props including the adapter instance
 
 ---
 
-### P1 [MEDIUM] Implement PatchRegistry
+### P0 [HIGH] PatchRegistry Implementation
 
-**Dependencies:** Multi-patch architecture design complete
-**Spec Reference:** N/A (new feature)
-**Status Reference:** EVALUATION - "PatchStore is singleton"
+**Dependencies:** None (can start immediately)
+**Spec Reference:** PatchStore as single source of truth (CLAUDE.md)
 
 #### Description
 
-Create a registry that manages multiple patch instances. This becomes the new single source of truth for "all patches", with PatchStore becoming "one patch's state".
+Create a registry that manages multiple patch instances. PatchStore becomes "one patch's state" while PatchRegistry manages "all open patches".
 
 #### Acceptance Criteria
 
 - [ ] `PatchRegistry` class in `src/stores/PatchRegistry.ts`
-- [ ] Can create new patch (returns PatchStore or ID)
-- [ ] Can open existing patch from storage
-- [ ] Can close patch (with dirty check)
-- [ ] Can switch active patch
-- [ ] Observable `activePatch` property
-- [ ] Observable `openPatches` collection
+- [ ] `createPatch(name?: string): string` - creates new patch, returns ID
+- [ ] `openPatch(id: string, data: PatchData): void` - opens existing patch
+- [ ] `closePatch(id: string): boolean` - closes patch (returns false if dirty and user cancels)
+- [ ] `getStore(id: string): PatchStore | null` - gets store for a patch
+- [ ] Observable `activePatchId: string | null`
+- [ ] Observable `openPatches: ReadonlyMap<string, PatchStore>`
+- [ ] Computed `activePatch: PatchStore | null`
 - [ ] Integrates with RootStore
 - [ ] Unit tests for CRUD operations
 
 #### Technical Notes
 
-Possible shape:
 ```typescript
 class PatchRegistry {
-  readonly openPatches: ReadonlyMap<string, PatchStore>;
-  activePatchId: string | null;
+  readonly openPatches = observable.map<string, PatchStore>();
+  activePatchId: string | null = null;
 
-  get activePatch(): PatchStore | null;
+  get activePatch(): PatchStore | null {
+    return this.activePatchId ? this.openPatches.get(this.activePatchId) ?? null : null;
+  }
 
-  createPatch(): string; // Returns ID
-  openPatch(id: string, data: PatchData): void;
-  closePatch(id: string): void;
-  setActivePatch(id: string): void;
+  createPatch(name?: string): string {
+    const id = generateId();
+    const store = new PatchStore(id, name ?? `Untitled ${this.openPatches.size + 1}`);
+    this.openPatches.set(id, store);
+    this.activePatchId = id;
+    return id;
+  }
+  // ...
 }
 ```
 
 ---
 
-### P2 [LOW] Tab UI for Patch Switching
+### P0 [HIGH] CompositeEditorRegistry Implementation
 
-**Dependencies:** PatchRegistry implemented
-**Spec Reference:** Dockview integration (CLAUDE.md)
-**Status Reference:** N/A (new feature)
+**Dependencies:** CompositeEditorStore exists
+**Spec Reference:** CompositeEditorStore
 
 #### Description
 
-Add a tab bar or similar UI for switching between open patches. Integrate with Dockview panel system.
+Similar to PatchRegistry, but for composite editors. Multiple composites can be edited simultaneously.
 
-#### Unknowns to Resolve
+#### Acceptance Criteria
 
-1. **Tab location**: Above the graph editor? In a panel header? Separate panel?
-   - Research: Dockview tab group features
-   - Consider: Does this replace or augment existing panels?
-
-2. **Dirty indicators**: How to show unsaved changes per patch?
-   - Research: VS Code, Figma patterns
-   - Consider: Auto-save implications
-
-3. **Composite editor interaction**: When editing composite, is that a "patch" or separate?
-   - Research: User mental model
-   - Consider: Composite as embedded vs. separate tab
-
-#### Exit Criteria (to reach MEDIUM confidence)
-
-- [ ] UI mockup or wireframe created
-- [ ] Dockview integration approach decided
-- [ ] Tab component library chosen (MUI Tabs? Custom?)
+- [ ] `CompositeEditorRegistry` class in `src/stores/CompositeEditorRegistry.ts`
+- [ ] `openComposite(type: string): string` - opens composite for editing, returns editor ID
+- [ ] `closeEditor(id: string): boolean` - closes editor
+- [ ] `getEditor(id: string): CompositeEditorStore | null`
+- [ ] Observable `activeEditorId: string | null`
+- [ ] Observable `openEditors: ReadonlyMap<string, CompositeEditorStore>`
+- [ ] Each editor has independent state (blocks, edges, metadata)
+- [ ] Unit tests
 
 ---
 
-### P2 [LOW] Runtime Per-Patch Isolation
+### P1 [MEDIUM] Runtime API Design Document
 
-**Dependencies:** PatchRegistry, Architecture design
-**Spec Reference:** Runtime architecture (CLAUDE.md RuntimeState section)
-**Status Reference:** EVALUATION - Risks section
+**Dependencies:** None (design work)
+**Spec Reference:** Runtime architecture, RuntimeState, ScheduleExecutor
 
 #### Description
 
-Ensure each patch can have independent runtime state. This may require RuntimeStore changes or a new RuntimeRegistry.
+Design the API contract between Patch Editor and Runtime that will support multiple runtimes in the future. This is **design only** - implementation is deferred.
 
-#### Unknowns to Resolve
+The goal is to ensure our editor refactoring doesn't create assumptions that would block multi-runtime later.
 
-1. **Canvas sharing**: Can multiple patches share a canvas, or need separate canvases?
-   - Research: WebGL context limits, canvas element requirements
-   - Consider: Split-screen editing use case
+#### Acceptance Criteria
 
-2. **Animation loop**: One loop with multiple patches, or independent loops?
-   - Research: requestAnimationFrame patterns for multiple contexts
-   - Consider: Performance implications
+- [ ] Design document at `.agent_planning/reusable-graph-editor/RUNTIME-API-DESIGN.md`
+- [ ] Defines `RuntimeHandle` interface (start, stop, pause, getState, etc.)
+- [ ] Defines how editor requests runtime for a specific patch
+- [ ] Defines canvas allocation strategy (one per runtime? shared?)
+- [ ] Defines input routing (how mouse events reach correct runtime)
+- [ ] Identifies breaking changes needed in current RuntimeStore
+- [ ] Lists open questions for future multi-runtime sprint
 
-3. **External channels**: How do mouse/input events route to correct patch?
-   - Research: Current ExternalChannel implementation
-   - Consider: Focus-based routing
+#### Technical Notes
 
-#### Exit Criteria (to reach MEDIUM confidence)
+Key design questions to address:
+1. Should RuntimeStore become RuntimeRegistry?
+2. How does preview canvas work with multiple runtimes?
+3. Can we have multiple canvases, or render-on-demand to single canvas?
+4. ExternalChannel (mouse) - focus-based routing?
 
-- [ ] Runtime isolation approach decided
-- [ ] Canvas allocation strategy decided
-- [ ] Input routing strategy decided
+**This sprint produces the design document. Implementation is a separate future sprint.**
+
+---
 
 ## Dependencies
 
-- **Blocked by:** Sprint unified-editor-core (need reusable editor first)
-- **Partially blocked by:** Architecture research (unknowns must be resolved)
+- **Sprint adapter-interface:** Must complete first (defines how editor talks to data)
+- **Sprint unified-editor-core:** Must complete first (provides reusable editor component)
 
 ## Risks
 
-- **Risk:** Scope creep - multi-patch touches many systems
-  - **Mitigation:** Strict phase boundaries; do architecture first
+- **Risk:** Dockview dynamic panel complexity
+  - **Mitigation:** Spike/prototype tab creation early
 
-- **Risk:** Memory pressure with many open patches
-  - **Mitigation:** Lazy loading, patch hibernation, limits
+- **Risk:** Store reference updates when switching active patch
+  - **Mitigation:** Use registry.activePatch computed property everywhere
 
-- **Risk:** Breaking existing single-patch workflows
-  - **Mitigation:** Feature flag; single-patch remains default initially
+## Non-Goals (Deferred)
+
+- Actual multi-runtime implementation (separate sprint after API design)
+- Patch persistence/serialization changes
+- Undo/redo across patches

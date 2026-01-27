@@ -12,12 +12,11 @@
  */
 
 import { makeObservable, computed } from 'mobx';
-import type { BlockId, CombineMode, DefaultSource } from '../../types';
+import type { BlockId, CombineMode, DefaultSource, PortId } from '../../types';
 import { portId } from '../../types';
 import type { PatchStore } from '../../stores/PatchStore';
 import type { LayoutStore } from '../../stores/LayoutStore';
 import type { InputPort, OutputPort } from '../../graph/Patch';
-import { requireBlockDef } from '../../blocks/registry';
 import type {
   GraphDataAdapter,
   BlockLike,

@@ -281,7 +281,8 @@ describe('Memory Profile: Zero-Allocation Rendering', () => {
 });
 
 // Type augmentation for global.gc
+// Note: Using NodeJS.GCFunction to match @types/node declaration
 declare global {
   // eslint-disable-next-line no-var
-  var gc: (() => void) | undefined;
+  var gc: NodeJS.GCFunction | undefined;
 }
