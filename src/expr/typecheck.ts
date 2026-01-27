@@ -115,16 +115,7 @@ const FUNCTION_SIGNATURES: Record<string, FunctionSignature> = {
  * @returns Annotated AST node with type information
  * @throws TypeError if type checking fails
  */
-export function typecheck(node: ExprNode, ctx: TypeCheckContext): ExprNode;
-/**
- * @deprecated Legacy signature - use TypeCheckContext instead
- */
-export function typecheck(node: ExprNode, env: TypeEnv): ExprNode;
-export function typecheck(node: ExprNode, ctxOrEnv: TypeCheckContext | TypeEnv): ExprNode {
-  // Handle legacy signature (TypeEnv only)
-  const ctx: TypeCheckContext = isTypeEnv(ctxOrEnv)
-    ? { inputs: ctxOrEnv }
-    : ctxOrEnv;
+export function typecheck(node: ExprNode, ctx: TypeCheckContext): ExprNode {
   switch (node.kind) {
     case 'literal':
       return typecheckLiteral(node);
@@ -151,13 +142,6 @@ export function typecheck(node: ExprNode, ctxOrEnv: TypeCheckContext | TypeEnv):
       const _exhaustive: never = node;
       throw new Error(`Unknown node kind: ${_exhaustive}`);
   }
-}
-
-/**
- * Type guard to check if argument is TypeEnv (legacy) vs TypeCheckContext.
- */
-function isTypeEnv(arg: TypeCheckContext | TypeEnv): arg is TypeEnv {
-  return arg instanceof Map || (arg as TypeCheckContext).inputs === undefined;
 }
 
 /**
