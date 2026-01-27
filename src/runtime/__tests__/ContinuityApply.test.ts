@@ -13,10 +13,75 @@ import {
   initializeSlewWithMapping,
   smoothstep,
   lerp,
+  capturePreAllocationState,
 } from '../ContinuityApply';
-import type { MappingState } from '../ContinuityState';
+import type { MappingState, StableTargetId } from '../ContinuityState';
+import { createContinuityState, getOrCreateTargetState } from '../ContinuityState';
 
 describe('ContinuityApply', () => {
+  describe('capturePreAllocationState', () => {
+    it('returns null snapshot and hadPreviousState=false for new targets', () => {
+      const continuity = createContinuityState();
+      const targetId = 'position:instance1:out' as StableTargetId;
+      const newBufferLength = 10;
+
+      const ctx = capturePreAllocationState(continuity, targetId, newBufferLength);
+
+      expect(ctx.oldSlewSnapshot).toBeNull();
+      expect(ctx.hadPreviousState).toBe(false);
+      expect(ctx.sizeChanged).toBe(false);
+    });
+
+    it('returns valid snapshot when size changes', () => {
+      const continuity = createContinuityState();
+      const targetId = 'position:instance2:out' as StableTargetId;
+
+      // Create initial state with size 5
+      const initialSize = 5;
+      const targetState = getOrCreateTargetState(continuity, targetId, initialSize);
+
+      // Populate slew buffer with test values
+      for (let i = 0; i < initialSize; i++) {
+        targetState.slewBuffer[i] = i * 10;
+      }
+
+      // Capture before changing size to 10
+      const newBufferLength = 10;
+      const ctx = capturePreAllocationState(continuity, targetId, newBufferLength);
+
+      expect(ctx.hadPreviousState).toBe(true);
+      expect(ctx.sizeChanged).toBe(true);
+      expect(ctx.oldSlewSnapshot).not.toBeNull();
+      expect(ctx.oldSlewSnapshot!.length).toBe(initialSize);
+
+      // Verify snapshot contains the correct values
+      for (let i = 0; i < initialSize; i++) {
+        expect(ctx.oldSlewSnapshot![i]).toBe(i * 10);
+      }
+    });
+
+    it('returns hadPreviousState=true but null snapshot when size unchanged', () => {
+      const continuity = createContinuityState();
+      const targetId = 'radius:instance3:out' as StableTargetId;
+
+      // Create initial state with size 7
+      const bufferLength = 7;
+      const targetState = getOrCreateTargetState(continuity, targetId, bufferLength);
+
+      // Populate slew buffer
+      for (let i = 0; i < bufferLength; i++) {
+        targetState.slewBuffer[i] = i * 2;
+      }
+
+      // Capture with same size
+      const ctx = capturePreAllocationState(continuity, targetId, bufferLength);
+
+      expect(ctx.hadPreviousState).toBe(true);
+      expect(ctx.sizeChanged).toBe(false);
+      expect(ctx.oldSlewSnapshot).toBeNull();
+    });
+  });
+
   describe('applyAdditiveGauge', () => {
     it('computes x_eff = x_base + Δ', () => {
       const base = new Float32Array([1, 2, 3, 4, 5]);
