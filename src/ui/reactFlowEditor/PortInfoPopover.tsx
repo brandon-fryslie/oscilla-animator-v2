@@ -17,6 +17,7 @@ import { observer } from 'mobx-react-lite';
 import type { PortData } from './nodes';
 import type { DefaultSource } from '../../types';
 import { useStores, formatDebugValue } from '../../stores';
+import { getLensLabel } from './lensUtils';
 
 interface PortInfoPopoverProps {
   port: PortData | null;
@@ -288,6 +289,27 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
               >
                 {formatDefaultSource(port.defaultSource)}
               </Badge>
+            </Box>
+          )}
+
+          {/* Lenses (for inputs with attached lenses) */}
+          {isInput && port.lenses && port.lenses.length > 0 && (
+            <Box>
+              <Text size="xs" c="dimmed">
+                Lenses
+              </Text>
+              <Stack gap={4} mt={4}>
+                {port.lenses.map((lens) => (
+                  <Group key={lens.id} gap="xs">
+                    <Badge size="xs" color="orange" variant="light">
+                      {getLensLabel(lens.lensType)}
+                    </Badge>
+                    <Text size="xs" c="dimmed" style={{ fontFamily: 'monospace' }}>
+                      {lens.sourceAddress.split('.').slice(-2).join('.')}
+                    </Text>
+                  </Group>
+                ))}
+              </Stack>
             </Box>
           )}
         </Stack>

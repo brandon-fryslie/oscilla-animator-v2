@@ -107,7 +107,24 @@ export function findCompatibleLenses(
   targetType: SignalType
 ): LensTypeInfo[] {
   const allLenses = getAvailableLensTypes();
-  return allLenses.filter(lens =>
-    canApplyLens(sourceType, lens.inputType, lens.outputType, targetType)
-  );
+  
+  console.log('[Lens Debug] Finding lenses for:', {
+    source: sourceType,
+    target: targetType,
+    availableLenses: allLenses.length,
+  });
+  
+  const compatible = allLenses.filter(lens => {
+    const canApply = canApplyLens(sourceType, lens.inputType, lens.outputType, targetType);
+    console.log('[Lens Debug] Checking lens:', {
+      lens: lens.label,
+      lensInput: lens.inputType,
+      lensOutput: lens.outputType,
+      canApply,
+    });
+    return canApply;
+  });
+  
+  console.log('[Lens Debug] Compatible lenses found:', compatible.length);
+  return compatible;
 }

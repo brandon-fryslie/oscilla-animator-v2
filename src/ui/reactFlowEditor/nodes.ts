@@ -7,7 +7,7 @@
 
 import type { Node, Edge as ReactFlowEdge } from 'reactflow';
 import type { Block, BlockId, Edge, DefaultSource, UIControlHint, CombineMode } from '../../types';
-import type { Patch } from '../../graph/Patch';
+import type { Patch, LensAttachment } from '../../graph/Patch';
 import type { BlockDef, InputDef } from '../../blocks/registry';
 import type { PayloadType, SignalType } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION, signalType } from '../../core/canonical-types';
@@ -48,6 +48,10 @@ export interface PortData {
   connection?: PortConnectionInfo;
   /** UI hint for default source control (min/max/step) */
   uiHint?: UIControlHint;
+  /** Number of lenses attached to this port (input ports only) */
+  lensCount?: number;
+  /** Lenses attached to this port (input ports only) */
+  lenses?: readonly LensAttachment[];
 }
 
 /**
@@ -107,7 +111,8 @@ function createPortData(
   isConnected: boolean,
   defaultSource?: DefaultSource,
   connection?: PortConnectionInfo,
-  uiHint?: UIControlHint
+  uiHint?: UIControlHint,
+  lenses?: readonly LensAttachment[]
 ): PortData {
   // For inputs without a type (non-port inputs), use a default
   const effectiveType: SignalType = type || signalType(FLOAT);
@@ -122,6 +127,8 @@ function createPortData(
     isConnected,
     connection,
     uiHint,
+    lensCount: lenses?.length ?? 0,
+    lenses,
   };
 }
 
@@ -195,17 +202,19 @@ export function createNodeFromBlock(
       blockType: block.type,
       label: blockDef.label,
       displayName: block.displayName,
-      inputs: Object.entries(blockDef.inputs).map(([inputId, input]) =>
-        createPortData(
+      inputs: Object.entries(blockDef.inputs).map(([inputId, input]) => {
+        const lenses = block.inputPorts.get(inputId)?.lenses;
+        return createPortData(
           inputId,
           input.label || inputId,
           input.type,
           inputConnections.has(inputId),
           getEffectiveDefaultSource(block, inputId, input),
           inputConnections.get(inputId),
-          input.uiHint
-        )
-      ),
+          input.uiHint,
+          lenses
+        );
+      }),
       outputs: Object.entries(blockDef.outputs).map(([outputId, output]) =>
         createPortData(
           outputId,

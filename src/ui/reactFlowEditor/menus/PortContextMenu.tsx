@@ -17,15 +17,18 @@ import {
   Cable as ConnectIcon,
   Add as AddIcon,
   SwapHoriz as CombineIcon,
+  Transform as LensIcon,
+  RemoveCircle as RemoveLensIcon,
 } from '@mui/icons-material';
 import type { BlockId, PortId, CombineMode } from '../../../types';
 import { COMBINE_MODE_CATEGORY } from '../../../types';
 import { useStores } from '../../../stores';
 import { ContextMenu, type ContextMenuItem } from '../ContextMenu';
-import { validateConnection } from '../typeValidation';
+import { validateConnection, getPortTypeFromBlockType } from '../typeValidation';
 import { requireBlockDef, getBlockCategories, getBlockTypesByCategory, type BlockDef } from '../../../blocks/registry';
 import type { PayloadType } from '../../../core/canonical-types';
 import { isPayloadVar } from '../../../core/canonical-types';
+import { getAvailableLensTypes, getLensLabel, findCompatibleLenses } from '../lensUtils';
 
 /** Maximum number of quick connect suggestions to show */
 const MAX_QUICK_CONNECT = 3;
@@ -353,7 +356,76 @@ export const PortContextMenu: React.FC<PortContextMenuProps> = observer(({
     }
 
     // ==========================================================================
-    // Section 4: Disconnect / Reset
+    // Section 4: Add Lens (input ports only)
+    // ==========================================================================
+    if (isInput) {
+      // Find incoming edge to get source info
+      const incomingEdge = patch.edges.find(
+        (edge) => edge.to.blockId === blockId && edge.to.slotId === portId
+      );
+
+      if (incomingEdge) {
+        const sourceBlock = patch.blocks.get(incomingEdge.from.blockId as BlockId);
+        if (sourceBlock) {
+          const sourceBlockDef = requireBlockDef(sourceBlock.type);
+          const sourceOutput = sourceBlockDef.outputs[incomingEdge.from.slotId];
+          const sourceType = sourceOutput?.type;
+          const targetInput = blockDef.inputs[portId];
+          const targetType = targetInput?.type;
+
+          if (sourceType && targetType) {
+            // Find compatible lenses
+            const compatibleLenses = findCompatibleLenses(sourceType, targetType);
+
+            if (compatibleLenses.length > 0) {
+              // Limit to 5 lenses in menu
+              const lensesToShow = compatibleLenses.slice(0, 5);
+              
+              // Add each lens as a direct menu item
+              for (const lens of lensesToShow) {
+                menuItems.push({
+                  label: `Add Lens: ${lens.label}`,
+                  icon: <LensIcon fontSize="small" />,
+                  action: () => {
+                    const sourceAddress = `v1:blocks.${sourceBlock.displayName}.outputs.${incomingEdge.from.slotId}`;
+                    patch.addLens(blockId, portId, lens.blockType, sourceAddress);
+                  },
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // ==========================================================================
+    // Section 5: Remove Lens (input ports only)
+    // ==========================================================================
+    if (isInput) {
+      const existingLenses = patch.getLensesForPort(blockId, portId);
+      
+      if (existingLenses.length > 0) {
+        // Add each lens removal as a direct menu item
+        for (const lens of existingLenses) {
+          menuItems.push({
+            label: `Remove Lens: ${getLensLabel(lens.lensType)}`,
+            icon: <RemoveLensIcon fontSize="small" />,
+            action: () => {
+              patch.removeLens(blockId, portId, lens.id);
+            },
+          });
+        }
+      }
+    }
+
+    // Add divider after lens section if any lens items were added
+    const lastItem = menuItems[menuItems.length - 1];
+    if (lastItem && (lastItem.label.includes('Lens'))) {
+      lastItem.dividerAfter = true;
+    }
+
+    // ==========================================================================
+    // Section 6: Disconnect / Reset
     // ==========================================================================
     if (isInput) {
       const connectedEdge = patch.edges.find(

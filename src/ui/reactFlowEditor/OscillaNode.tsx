@@ -231,6 +231,31 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
                 title={formatDefaultSource(input.defaultSource)}
               />
             )}
+
+            {/* Lens Indicator */}
+            {input.lensCount && input.lensCount > 0 && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '-3px',
+                  top: `calc(${topPercent}% + 12px)`,
+                  minWidth: input.lensCount > 1 ? '14px' : '8px',
+                  height: '8px',
+                  borderRadius: '4px',
+                  background: '#f59e0b',  // Amber color
+                  pointerEvents: 'none',
+                  fontSize: '8px',
+                  color: '#000',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 'bold',
+                }}
+                title={`${input.lensCount} lens${input.lensCount > 1 ? 'es' : ''} attached`}
+              >
+                {input.lensCount > 1 ? input.lensCount : ''}
+              </div>
+            )}
           </React.Fragment>
         );
       })}
