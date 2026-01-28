@@ -289,6 +289,12 @@ export class IRBuilderImpl implements IRBuilder {
     return id;
   }
 
+  ReduceField(field: FieldExprId, op: 'min' | 'max' | 'sum' | 'avg', type: SignalType): SigExprId {
+    const id = sigExprId(this.sigExprs.length);
+    this.sigExprs.push({ kind: 'reduce_field', field, op, type });
+    return id;
+  }
+
   fieldMap(input: FieldExprId, fn: PureFn, type: SignalType): FieldExprId {
     const instanceId = this.inferFieldInstance(input);
     const id = fieldExprId(this.fieldExprs.length);

@@ -198,6 +198,13 @@ function evaluateSigExpr(
       return 0;
     }
 
+    case 'reduce_field': {
+      // Field reduction is handled during step execution (materialization needed)
+      // This case should not be reached during signal evaluation
+      // Return 0 as placeholder (actual work done in executor)
+      return 0;
+    }
+
     case 'eventRead': {
       // Read event scalar as float: 0 → 0.0, 1 → 1.0 (spec §9.2)
       return state.eventScalars[expr.eventSlot as number] ?? 0;

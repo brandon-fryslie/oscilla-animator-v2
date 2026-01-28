@@ -90,6 +90,7 @@ export type SigExpr =
   | SigExprZip
   | SigExprStateRead
   | SigExprShapeRef
+  | SigExprReduceField
   | SigExprEventRead;
 
 export interface SigExprConst {
@@ -151,6 +152,22 @@ export interface SigExprShapeRef {
   /** Optional control points for paths - carries stride like all field refs */
   readonly controlPointField?: { readonly id: FieldExprId; readonly stride: number };
   readonly type: SignalType; // Should be signalType(SHAPE)
+}
+
+/**
+ * Reduce field to scalar signal expression.
+ * Aggregates all elements of a field using a reduction operation.
+ * 
+ * Semantics: Componentwise reduction (e.g., vec2 sum: (Σx, Σy))
+ * Empty field behavior: Returns 0 for numeric types
+ * 
+ * Spec: 04-compilation.md:394, 409
+ */
+export interface SigExprReduceField {
+  readonly kind: 'reduce_field';
+  readonly field: FieldExprId;
+  readonly op: 'min' | 'max' | 'sum' | 'avg';
+  readonly type: SignalType;
 }
 
 /**

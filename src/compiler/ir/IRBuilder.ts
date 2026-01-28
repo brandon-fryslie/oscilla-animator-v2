@@ -83,6 +83,24 @@ export interface IRBuilder {
     controlPointField?: { id: FieldExprId; stride: number }
   ): SigExprId;
 
+  /**
+   * Create a reduce field signal expression.
+   * Aggregates a field into a scalar signal using the specified reduction operation.
+   * 
+   * @param field - Field expression to reduce
+   * @param op - Reduction operation: 'min' | 'max' | 'sum' | 'avg'
+   * @param type - Signal type (output, cardinality=one, payload matches input field)
+   * @returns SigExprId for the reduce expression
+   * 
+   * Example:
+   *   const sumSig = b.ReduceField(fieldId, 'sum', signalType('float'));
+   */
+  ReduceField(
+    field: FieldExprId,
+    op: 'min' | 'max' | 'sum' | 'avg',
+    type: SignalType
+  ): SigExprId;
+
   // =========================================================================
   // Field Expressions
   // =========================================================================
