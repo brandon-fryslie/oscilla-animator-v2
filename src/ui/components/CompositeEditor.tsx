@@ -2,13 +2,15 @@
  * Composite Editor
  *
  * Editor for creating and editing composite blocks.
- * Uses ReactFlow for the internal graph canvas.
+ * Uses GraphEditorCore for the internal graph canvas.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useStores } from '../../stores';
-import { CompositeInternalGraph } from './CompositeInternalGraph';
+import { GraphEditorCore, type GraphEditorCoreHandle } from '../graphEditor/GraphEditorCore';
+import { CompositeStoreAdapter } from '../graphEditor/CompositeStoreAdapter';
+import type { InternalBlockId } from '../../blocks/composite-types';
 import './CompositeEditor.css';
 
 /**
@@ -21,8 +23,15 @@ import './CompositeEditor.css';
  */
 export const CompositeEditor = observer(function CompositeEditor() {
   const { compositeEditor } = useStores();
+  const graphEditorRef = useRef<GraphEditorCoreHandle>(null);
 
-  // Handle drop of composite to open for editing
+  // Create adapter for GraphEditorCore
+  const adapter = useMemo(
+    () => new CompositeStoreAdapter(compositeEditor),
+    [compositeEditor]
+  );
+
+  // Handle drop of composite to open for editing (empty state)
   const handleDropOnEmpty = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault();
@@ -40,6 +49,31 @@ export const CompositeEditor = observer(function CompositeEditor() {
       event.preventDefault();
       event.dataTransfer.dropEffect = 'copy';
     }
+  }, []);
+
+  // Handle drop of blocks onto graph canvas (when editor is open)
+  const handleDropOnCanvas = useCallback(
+    (event: React.DragEvent) => {
+      event.preventDefault();
+
+      const blockType = event.dataTransfer.getData('application/oscilla-block-type');
+      if (!blockType) return;
+
+      // Get drop position relative to the canvas
+      const reactFlowBounds = event.currentTarget.getBoundingClientRect();
+      const position = {
+        x: event.clientX - reactFlowBounds.left - 75, // Center the node
+        y: event.clientY - reactFlowBounds.top - 30,
+      };
+
+      compositeEditor.addBlock(blockType, position);
+    },
+    [compositeEditor]
+  );
+
+  const handleDragOverCanvas = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
   }, []);
 
   // If editor is not open, show empty state
@@ -156,8 +190,28 @@ export const CompositeEditor = observer(function CompositeEditor() {
       {/* Main content area */}
       <div className="composite-editor__content">
         {/* Left: Internal graph canvas */}
-        <div className="composite-editor__canvas">
-          <CompositeInternalGraph />
+        <div
+          className="composite-editor__canvas"
+          onDrop={handleDropOnCanvas}
+          onDragOver={handleDragOverCanvas}
+        >
+          <GraphEditorCore
+            ref={graphEditorRef}
+            adapter={adapter}
+            features={{
+              enableParamEditing: false,  // User decision: composite editor only handles topology
+              enableDebugMode: false,
+              enableContextMenus: true,
+              enableAutoArrange: true,
+              enableMinimap: true,
+            }}
+            // No stores needed for composite editor (no selection, debug, etc.)
+            selection={null}
+            portHighlight={null}
+            diagnostics={null}
+            debug={null}
+            patch={null}
+          />
         </div>
 
         {/* Right: Port exposure panel */}
