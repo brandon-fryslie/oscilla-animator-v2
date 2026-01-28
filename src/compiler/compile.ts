@@ -269,6 +269,19 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
     }
 
     // Check for errors from pass 6 - Filter by reachability
+    // Collect warnings for unreachable blocks to include in CompileEnd event
+    let unreachableBlockWarnings: Array<{
+      id: string;
+      code: 'W_BLOCK_UNREACHABLE_ERROR';
+      severity: 'warn';
+      domain: 'compile';
+      primaryTarget: { kind: 'block'; blockId: string };
+      title: string;
+      message: string;
+      scope: { patchRevision: number; compileId: string };
+      metadata: { firstSeenAt: number; lastSeenAt: number; occurrenceCount: number };
+    }> = [];
+
     if (unlinkedIR.errors.length > 0) {
       // Compute which blocks are reachable from render blocks
       const reachableBlocks = computeRenderReachableBlocks(
@@ -301,34 +314,24 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
         }
       }
 
-      // Emit warnings for unreachable block errors
-      if (unreachableErrors.length > 0 && options?.events) {
-        for (const error of unreachableErrors) {
-          const warningDiagnostic = {
-            id: `W_BLOCK_UNREACHABLE_ERROR:${error.where?.blockId}:rev${options.patchRevision || 0}`,
-            code: 'W_BLOCK_UNREACHABLE_ERROR' as const,
-            severity: 'warn' as const,
-            domain: 'compile' as const,
-            primaryTarget: { kind: 'block' as const, blockId: error.where?.blockId || 'unknown' },
-            title: `Unreachable Block Error: ${error.code}`,
-            message: `Block '${error.where?.blockId || 'unknown'}' has error but is not connected to render pipeline: ${error.message}\n\nSuggestion: Connect this block to the render pipeline or remove it.`,
-            scope: { patchRevision: options.patchRevision || 0, compileId },
-            metadata: {
-              firstSeenAt: Date.now(),
-              lastSeenAt: Date.now(),
-              occurrenceCount: 1,
-            },
-            payload: {
-              code: 'W_BLOCK_UNREACHABLE_ERROR' as const,
-              originalError: error.message,
-              originalCode: error.code,
-            },
-          };
-
-          // Emit warning diagnostic (will be collected by DiagnosticHub through CompileEnd event)
-          // Note: We can't emit partial CompileEnd here, so we'll collect warnings and emit them at the end
-          // For now, warnings are lost - this will be fixed in integration testing phase
-        }
+      // Build warning diagnostics for unreachable block errors
+      // These will be emitted with the CompileEnd event so DiagnosticHub can process them
+      if (unreachableErrors.length > 0 && options) {
+        unreachableBlockWarnings = unreachableErrors.map((error) => ({
+          id: `W_BLOCK_UNREACHABLE_ERROR:${error.where?.blockId}:rev${options.patchRevision || 0}`,
+          code: 'W_BLOCK_UNREACHABLE_ERROR' as const,
+          severity: 'warn' as const,
+          domain: 'compile' as const,
+          primaryTarget: { kind: 'block' as const, blockId: error.where?.blockId || 'unknown' },
+          title: `Unreachable Block Error: ${error.code}`,
+          message: `Block '${error.where?.blockId || 'unknown'}' has error but is not connected to render pipeline: ${error.message}\n\nSuggestion: Connect this block to the render pipeline or remove it.`,
+          scope: { patchRevision: options.patchRevision || 0, compileId },
+          metadata: {
+            firstSeenAt: Date.now(),
+            lastSeenAt: Date.now(),
+            occurrenceCount: 1,
+          },
+        }));
       }
 
       // Only fail compilation if there are reachable errors
@@ -366,6 +369,7 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
     }
 
     // Emit CompileEnd event (success)
+    // Include warnings for unreachable blocks that had errors (they didn't block compilation)
     if (options) {
       const durationMs = performance.now() - startTime;
       const successDiagnostic = {
@@ -383,6 +387,8 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
           occurrenceCount: 1,
         },
       };
+      // Combine success diagnostic with any unreachable block warnings
+      const diagnostics = [successDiagnostic, ...unreachableBlockWarnings];
       options.events.emit({
         type: 'CompileEnd',
         compileId,
@@ -390,7 +396,7 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
         patchRevision: options.patchRevision || 0,
         status: 'success',
         durationMs,
-        diagnostics: [successDiagnostic],
+        diagnostics,
       });
     }
 

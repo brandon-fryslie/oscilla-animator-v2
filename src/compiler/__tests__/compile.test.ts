@@ -305,8 +305,9 @@ describe('error isolation for unreachable blocks', () => {
       b.addBlock('InfiniteTimeRoot', {});
 
       // Add a disconnected Expression block with a syntax error
+      // Note: parameter name is 'expression', not 'expr'
       b.addBlock('Expression', {
-        expr: 'this is not valid syntax!!!',
+        expression: 'this is not valid +++',  // Syntax error
       });
     });
 
@@ -325,8 +326,9 @@ describe('error isolation for unreachable blocks', () => {
       b.addBlock('InfiniteTimeRoot', {});
 
       // Disconnected subgraph with multiple errors
-      const expr1 = b.addBlock('Expression', { expr: 'error 1!!!' });
-      const expr2 = b.addBlock('Expression', { expr: 'error 2!!!' });
+      // Note: parameter name is 'expression', not 'expr'
+      const expr1 = b.addBlock('Expression', { expression: 'error 1 +++' });
+      const expr2 = b.addBlock('Expression', { expression: 'error 2 +++' });
       // Wire them together but not to anything else
       b.wire(expr1, 'out', expr2, 'in0');
     });
@@ -340,6 +342,49 @@ describe('error isolation for unreachable blocks', () => {
     expect(result.kind).toBe('ok');
   });
 
-  // Note: Tests for F2 (connected blocks with errors still fail) and F4 (mix of reachable/unreachable)
-  // require complex render pipelines and are deferred. Core functionality is verified above.
+  it('emits warnings for unreachable block errors in CompileEnd event', () => {
+    // Build a patch with a disconnected block that has an error
+    const patch = buildPatch((b) => {
+      const time = b.addBlock('InfiniteTimeRoot', {});
+
+      // Create Expression block with a syntax error but leave it disconnected from any render
+      // Note: parameter name is 'expression', not 'expr'
+      // Use "in0 +" which is a guaranteed syntax error (incomplete expression)
+      const expr = b.addBlock('Expression', {
+        expression: 'in0 +',  // Incomplete expression - guaranteed syntax error
+      });
+      // Wire time to the Expression so it actually tries to compile
+      b.wire(time, 'tMs', expr, 'in0');
+    });
+
+    // Create a mock event hub to capture the CompileEnd event
+    const emittedEvents: any[] = [];
+    const mockEventHub = {
+      emit: (event: any) => emittedEvents.push(event),
+    };
+
+    const result = compile(patch, {
+      events: mockEventHub as any,
+      patchId: 'test',
+      patchRevision: 1,
+    });
+
+    // Should compile successfully
+    expect(result.kind).toBe('ok');
+
+    // Should have emitted a CompileEnd event with warnings
+    const compileEndEvent = emittedEvents.find(e => e.type === 'CompileEnd');
+    expect(compileEndEvent).toBeDefined();
+    expect(compileEndEvent.status).toBe('success');
+    expect(compileEndEvent.diagnostics).toBeDefined();
+
+    // Should have at least one warning diagnostic for the unreachable block
+    const warnings = compileEndEvent.diagnostics.filter((d: any) => d.severity === 'warn');
+    expect(warnings.length).toBeGreaterThan(0);
+
+    // Warning should include original error info
+    const unreachableWarning = warnings.find((d: any) => d.code === 'W_BLOCK_UNREACHABLE_ERROR');
+    expect(unreachableWarning).toBeDefined();
+    expect(unreachableWarning.message).toContain('not connected to render pipeline');
+  });
 });
