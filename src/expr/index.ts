@@ -160,3 +160,11 @@ export type {
   FunctionSignature,
 } from './suggestions';
 export { SuggestionProvider, getFunctionSignatures } from './suggestions';
+
+// Swizzle utilities (for advanced use cases)
+export {
+  isValidSwizzle,
+  swizzleResultType,
+  validateSwizzle,
+  componentIndex,
+} from './swizzle';
