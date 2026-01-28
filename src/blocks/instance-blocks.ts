@@ -363,6 +363,272 @@ registerBlock({
   },
 });
 
+/**
+ * CircleLayoutUV - Gauge-invariant circle layout using placement basis
+ *
+ * Stage 3: Field operation block.
+ * Takes Field<T> input and outputs Field<vec3> positions on a circle.
+ * Uses UV placement basis instead of normalizedIndex for gauge invariance.
+ */
+registerBlock({
+  type: 'CircleLayoutUV',
+  label: 'Circle Layout (UV)',
+  category: 'layout',
+  description: 'Arranges elements in a circle pattern using UV placement basis (gauge-invariant)',
+  form: 'primitive',
+  capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
+  payload: {
+    allowedPayloads: {
+      elements: ALL_CONCRETE_PAYLOADS,
+    },
+    semantics: 'typeSpecific',
+  },
+  inputs: {
+    elements: { label: 'Elements', type: signalTypeField(SHAPE, 'default') },
+    radius: { label: 'Radius', type: signalType(FLOAT), value: 0.3, defaultSource: defaultSourceConst(0.3), exposedAsPort: true, uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 } },
+    phase: { label: 'Phase', type: signalType(FLOAT, unitPhase01()), value: 0, defaultSource: defaultSourceConst(0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+  },
+  outputs: {
+    position: { label: 'Position', type: signalTypeField(VEC3, 'default') },
+  },
+  // NOTE: basisKind configuration will be added when BlockDef supports config.
+  // For now, using 'halton2D' as the default basis kind for gauge-invariant layouts.
+  lower: ({ ctx, inputsById }) => {
+    const elementsInput = inputsById.elements;
+
+    if (!elementsInput || elementsInput.k !== 'field') {
+      throw new Error('CircleLayoutUV requires a field input (from Array block)');
+    }
+
+    const instanceId = ctx.inferredInstance;
+    if (!instanceId) {
+      throw new Error('CircleLayoutUV requires instance context from upstream Array block');
+    }
+
+    // Get radius and phase as signals
+    const radiusSig = inputsById.radius?.k === 'sig'
+      ? inputsById.radius.id
+      : ctx.b.sigConst(0.3, signalType(FLOAT));
+    const phaseSig = inputsById.phase?.k === 'sig'
+      ? inputsById.phase.id
+      : ctx.b.sigConst(0, signalType(FLOAT));
+
+    // Use halton2D as default basis kind (user-configurable when BlockDef supports config)
+    const basisKind: import('../compiler/ir/types').BasisKind = 'halton2D';
+
+    // Create UV field from placement basis
+    const uvField = ctx.b.fieldPlacement(
+      instanceId,
+      'uv',
+      basisKind,
+      signalTypeField(VEC2, 'default')
+    );
+
+    // Apply circleLayoutUV kernel: uv + [radius, phase] → vec3 positions
+    const positionField = ctx.b.fieldZipSig(
+      uvField,
+      [radiusSig, phaseSig],
+      { kind: 'kernel', name: 'circleLayoutUV' },
+      signalTypeField(VEC3, 'default')
+    );
+
+    const posType = ctx.outTypes[0];
+    const posSlot = ctx.b.allocSlot();
+
+    return {
+      outputsById: {
+        position: { k: 'field', id: positionField, slot: posSlot, type: posType, stride: strideOf(posType.payload) },
+      },
+      instanceContext: instanceId,
+    };
+  },
+});
+
+/**
+ * LineLayoutUV - Gauge-invariant line layout using placement basis
+ *
+ * Stage 3: Field operation block.
+ * Takes Field<T> input and outputs Field<vec3> positions along a line.
+ * Uses UV placement basis instead of normalizedIndex for gauge invariance.
+ */
+registerBlock({
+  type: 'LineLayoutUV',
+  label: 'Line Layout (UV)',
+  category: 'layout',
+  description: 'Arranges elements along a line using UV placement basis (gauge-invariant)',
+  form: 'primitive',
+  capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
+  payload: {
+    allowedPayloads: {
+      elements: ALL_CONCRETE_PAYLOADS,
+    },
+    semantics: 'typeSpecific',
+  },
+  inputs: {
+    elements: { label: 'Elements', type: signalTypeField(SHAPE, 'default') },
+    x0: { label: 'Start X', type: signalType(FLOAT), value: 0.2, defaultSource: defaultSourceConst(0.2), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    y0: { label: 'Start Y', type: signalType(FLOAT), value: 0.2, defaultSource: defaultSourceConst(0.2), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    x1: { label: 'End X', type: signalType(FLOAT), value: 0.8, defaultSource: defaultSourceConst(0.8), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    y1: { label: 'End Y', type: signalType(FLOAT), value: 0.8, defaultSource: defaultSourceConst(0.8), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+  },
+  outputs: {
+    position: { label: 'Position', type: signalTypeField(VEC3, 'default') },
+  },
+  // NOTE: basisKind configuration will be added when BlockDef supports config.
+  // For now, using 'halton2D' as the default basis kind for gauge-invariant layouts.
+  lower: ({ ctx, inputsById }) => {
+    const elementsInput = inputsById.elements;
+
+    if (!elementsInput || elementsInput.k !== 'field') {
+      throw new Error('LineLayoutUV requires a field input (from Array block)');
+    }
+
+    const instanceId = ctx.inferredInstance;
+    if (!instanceId) {
+      throw new Error('LineLayoutUV requires instance context from upstream Array block');
+    }
+
+    // Get line endpoints as signals
+    const x0Sig = inputsById.x0?.k === 'sig'
+      ? inputsById.x0.id
+      : ctx.b.sigConst(0.2, signalType(FLOAT));
+    const y0Sig = inputsById.y0?.k === 'sig'
+      ? inputsById.y0.id
+      : ctx.b.sigConst(0.2, signalType(FLOAT));
+    const x1Sig = inputsById.x1?.k === 'sig'
+      ? inputsById.x1.id
+      : ctx.b.sigConst(0.8, signalType(FLOAT));
+    const y1Sig = inputsById.y1?.k === 'sig'
+      ? inputsById.y1.id
+      : ctx.b.sigConst(0.8, signalType(FLOAT));
+
+    // Use halton2D as default basis kind (user-configurable when BlockDef supports config)
+    const basisKind: import('../compiler/ir/types').BasisKind = 'halton2D';
+
+    // Create UV field from placement basis
+    const uvField = ctx.b.fieldPlacement(
+      instanceId,
+      'uv',
+      basisKind,
+      signalTypeField(VEC2, 'default')
+    );
+
+    // Apply lineLayoutUV kernel: uv + [x0, y0, x1, y1] → vec3 positions
+    const positionField = ctx.b.fieldZipSig(
+      uvField,
+      [x0Sig, y0Sig, x1Sig, y1Sig],
+      { kind: 'kernel', name: 'lineLayoutUV' },
+      signalTypeField(VEC3, 'default')
+    );
+
+    const posType = ctx.outTypes[0];
+    const posSlot = ctx.b.allocSlot();
+
+    return {
+      outputsById: {
+        position: { k: 'field', id: positionField, slot: posSlot, type: posType, stride: strideOf(posType.payload) },
+      },
+      instanceContext: instanceId,
+    };
+  },
+});
+
+/**
+ * GridLayoutUV - Gauge-invariant grid layout using placement basis
+ *
+ * Stage 3: Field operation block.
+ * Takes Field<T> input and outputs Field<vec3> positions in a grid.
+ * Uses UV placement basis instead of index for gauge invariance.
+ */
+registerBlock({
+  type: 'GridLayoutUV',
+  label: 'Grid Layout (UV)',
+  category: 'layout',
+  description: 'Arranges elements in a grid using UV placement basis (gauge-invariant)',
+  form: 'primitive',
+  capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
+  payload: {
+    allowedPayloads: {
+      elements: ALL_CONCRETE_PAYLOADS,
+    },
+    semantics: 'typeSpecific',
+  },
+  inputs: {
+    elements: { label: 'Elements', type: signalTypeField(SHAPE, 'default') },
+    cols: { label: 'Columns', type: signalType(INT), value: 5, defaultSource: defaultSourceConst(5), exposedAsPort: true, uiHint: { kind: 'slider', min: 1, max: 20, step: 1 } },
+    rows: { label: 'Rows', type: signalType(INT), value: 5, defaultSource: defaultSourceConst(5), exposedAsPort: true, uiHint: { kind: 'slider', min: 1, max: 20, step: 1 } },
+  },
+  outputs: {
+    position: { label: 'Position', type: signalTypeField(VEC3, 'default') },
+  },
+  // NOTE: basisKind configuration will be added when BlockDef supports config.
+  // For GridLayoutUV, using 'grid' as the default basis kind for proper grid alignment.
+  lower: ({ ctx, inputsById }) => {
+    const elementsInput = inputsById.elements;
+
+    if (!elementsInput || elementsInput.k !== 'field') {
+      throw new Error('GridLayoutUV requires a field input (from Array block)');
+    }
+
+    const instanceId = ctx.inferredInstance;
+    if (!instanceId) {
+      throw new Error('GridLayoutUV requires instance context from upstream Array block');
+    }
+
+    // Get cols and rows as signals
+    const colsSig = inputsById.cols?.k === 'sig'
+      ? inputsById.cols.id
+      : ctx.b.sigConst(5, signalType(INT));
+    const rowsSig = inputsById.rows?.k === 'sig'
+      ? inputsById.rows.id
+      : ctx.b.sigConst(5, signalType(INT));
+
+    // Use 'grid' as default basis kind for proper grid alignment
+    const basisKind: import('../compiler/ir/types').BasisKind = 'grid';
+
+    // Create UV field from placement basis
+    const uvField = ctx.b.fieldPlacement(
+      instanceId,
+      'uv',
+      basisKind,
+      signalTypeField(VEC2, 'default')
+    );
+
+    // Apply gridLayoutUV kernel: uv + [cols, rows] → vec3 positions
+    const positionField = ctx.b.fieldZipSig(
+      uvField,
+      [colsSig, rowsSig],
+      { kind: 'kernel', name: 'gridLayoutUV' },
+      signalTypeField(VEC3, 'default')
+    );
+
+    const posType = ctx.outTypes[0];
+    const posSlot = ctx.b.allocSlot();
+
+    return {
+      outputsById: {
+        position: { k: 'field', id: positionField, slot: posSlot, type: posType, stride: strideOf(posType.payload) },
+      },
+      instanceContext: instanceId,
+    };
+  },
+});
+
 // NOTE: CircleInstance was removed in P5 (2026-01-19).
 // Use the three-stage architecture instead:
 // 1. Circle (primitive) → Signal<float> (radius)
