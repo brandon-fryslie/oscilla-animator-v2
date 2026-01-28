@@ -119,6 +119,7 @@ export type DiagnosticCode =
   // --- Graph Quality Warnings ---
   | 'W_GRAPH_DISCONNECTED_BLOCK' // Block not reachable from TimeRoot
   | 'W_GRAPH_UNUSED_OUTPUT' // Block output has no consumers
+  | 'W_BLOCK_UNREACHABLE_ERROR' // Block has error but is not reachable from render (Error Isolation)
 
   // --- Bus Warnings (Sprint 2 - Compile Stream) ---
   | 'W_BUS_EMPTY' // Bus has publishers but no listeners
@@ -155,6 +156,7 @@ export type DiagnosticPayload =
   | { code: 'E_TYPE_MISMATCH'; expected: string; actual: string }
   | { code: 'E_CYCLE_DETECTED'; cycleBlocks: string[] }
   | { code: 'W_GRAPH_DISCONNECTED_BLOCK'; distance: number }
+  | { code: 'W_BLOCK_UNREACHABLE_ERROR'; originalError: string; originalCode: string }
   | { code: 'E_CARDINALITY_MISMATCH'; inputCardinality: string; outputCardinality: string }
   | { code: 'E_INSTANCE_MISMATCH'; instanceA: string; instanceB: string; portA: string; portB: string }
   | { code: 'E_LANE_COUPLED_DISALLOWED'; blockType: string; reason: string }
@@ -177,10 +179,10 @@ export type DiagnosticPayload =
  * Sprint 2+: Quick fixes like "Insert Adapter", "Add TimeRoot", etc.
  */
 export interface DiagnosticAction {
-  readonly id: string;
-  readonly label: string;
-  readonly description?: string;
-  readonly isPreferred?: boolean;
+  readonly id: string; // Unique action ID (stable across re-runs)
+  readonly label: string; // User-facing label (e.g., "Insert Adapter")
+  readonly kind: 'automated' | 'guided'; // Automated = one-click, guided = multi-step
+  readonly payload?: unknown; // Action-specific data (e.g., adapter config)
 }
 
 // =============================================================================
@@ -188,83 +190,72 @@ export interface DiagnosticAction {
 // =============================================================================
 
 /**
- * Diagnostic represents a single issue, warning, or informational message.
+ * Diagnostic - Complete diagnostic with stable ID, metadata, and scope.
  *
- * Key properties:
- * - id: Stable, deterministic identifier (code + target + revision + signature)
- * - code: Diagnostic type (enables filtering, grouping, actions)
- * - severity: Impact level (fatal/error/warn/info/hint)
- * - domain: Source phase (authoring/compile/runtime/perf)
- * - primaryTarget: Main entity this diagnostic refers to
- * - affectedTargets: Additional related entities (optional)
- * - title: Short, user-facing summary (1-2 words)
- * - message: Detailed explanation (1-2 sentences)
- * - payload: Code-specific structured data (optional)
- * - actions: Available fixes/improvements (Sprint 2+)
- * - scope: Context (patch revision, compile ID, runtime session)
- * - metadata: Tracking info (first seen, last seen, count)
+ * Design principles:
+ * - Stable ID for deduplication and tracking across revisions
+ * - Structured target (TargetRef) for precise UI navigation
+ * - Scope tracking (patchRevision, compileId) for version awareness
+ * - Metadata for occurrence counting and staleness detection
+ * - Extensible payload for code-specific structured data
  */
 export interface Diagnostic {
+  /** Stable ID format: "CODE:targetStr:revN[:signature]" */
   readonly id: string;
+
+  /** Diagnostic code (e.g., E_TYPE_MISMATCH) */
   readonly code: DiagnosticCode;
+
+  /** Severity level */
   readonly severity: Severity;
+
+  /** Domain classification */
   readonly domain: Domain;
+
+  /** Primary target (what the diagnostic points to) */
   readonly primaryTarget: TargetRef;
-  readonly affectedTargets?: readonly TargetRef[];
+
+  /** Short title (1 line) */
   readonly title: string;
+
+  /** Detailed message (multi-line OK) */
   readonly message: string;
-  readonly payload?: DiagnosticPayload;
-  readonly actions?: readonly DiagnosticAction[];
+
+  /** Scope tracking */
   readonly scope: {
-    readonly patchRevision: number;
-    readonly compileId?: string;
-    readonly runtimeSessionId?: string;
+    readonly patchRevision: number; // Patch version where this diagnostic was raised
+    readonly compileId?: string; // Optional compile ID for compile-time diagnostics
   };
+
+  /** Metadata for tracking and staleness */
   readonly metadata: {
-    readonly firstSeenAt: number;
-    readonly lastSeenAt: number;
-    readonly occurrenceCount: number;
+    readonly firstSeenAt: number; // Unix timestamp (ms)
+    readonly lastSeenAt: number; // Unix timestamp (ms)
+    readonly occurrenceCount: number; // How many times this diagnostic has been raised
   };
+
+  /** Optional structured payload */
+  readonly payload?: DiagnosticPayload;
+
+  /** Optional actions for resolution */
+  readonly actions?: readonly DiagnosticAction[];
 }
 
 // =============================================================================
-// Helper: Create Diagnostic
+// DiagnosticFilter
 // =============================================================================
 
 /**
- * Helper function to create a Diagnostic with sensible defaults.
- * Automatically generates stable ID and initializes metadata.
- */
-export function createDiagnostic(
-  options: Omit<Diagnostic, 'id' | 'metadata'> & {
-    signature?: string;
-  }
-): Diagnostic {
-  const { signature, ...rest } = options;
-  const now = Date.now();
-
-  return {
-    id: '', // Will be set by generateDiagnosticId in diagnosticId.ts
-    ...rest,
-    metadata: {
-      firstSeenAt: now,
-      lastSeenAt: now,
-      occurrenceCount: 1,
-    },
-  };
-}
-
-// =============================================================================
-// Filter Options
-// =============================================================================
-
-/**
- * DiagnosticFilter defines criteria for querying diagnostics.
+ * DiagnosticFilter - Query interface for retrieving diagnostics.
+ *
+ * Sprint 1: Minimal filters (severity, domain, target kind).
+ * Sprint 2+: Rich filters (date range, occurrence count, etc.).
  */
 export interface DiagnosticFilter {
-  readonly severity?: Severity | Severity[];
-  readonly domain?: Domain | Domain[];
+  readonly severity?: readonly Severity[];
+  readonly domain?: readonly Domain[];
   readonly code?: DiagnosticCode | DiagnosticCode[];
   readonly targetKind?: TargetRef['kind'];
-  readonly patchRevision?: number;
+  readonly blockId?: string; // Filter by specific block
+  readonly patchRevision?: number; // Filter by specific patch revision
 }

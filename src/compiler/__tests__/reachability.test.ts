@@ -13,6 +13,8 @@ beforeAll(() => {
     type: 'TestRenderBlock',
     form: 'primitive',
     capability: 'render',
+    label: 'Test Render',
+    category: 'test',
     inputs: {},
     outputs: {},
     lower: () => ({ outputsById: {} }),
@@ -22,6 +24,8 @@ beforeAll(() => {
     type: 'TestPureBlock',
     form: 'primitive',
     capability: 'pure',
+    label: 'Test Pure',
+    category: 'test',
     inputs: {},
     outputs: {},
     lower: () => ({ outputsById: {} }),
@@ -31,8 +35,8 @@ beforeAll(() => {
 describe('computeRenderReachableBlocks', () => {
   it('returns empty set for no render blocks', () => {
     const blocks: Block[] = [
-      { id: 'b1', type: 'TestPureBlock', params: {}, ports: {} },
-      { id: 'b2', type: 'TestPureBlock', params: {}, ports: {} },
+      { id: 'b1' as any, type: 'TestPureBlock' } as any,
+      { id: 'b2' as any, type: 'TestPureBlock' } as any,
     ];
     const edges: NormalizedEdge[] = [];
 
@@ -43,8 +47,8 @@ describe('computeRenderReachableBlocks', () => {
 
   it('returns render block only if no inputs', () => {
     const blocks: Block[] = [
-      { id: 'render', type: 'TestRenderBlock', params: {}, ports: {} },
-      { id: 'disconnected', type: 'TestPureBlock', params: {}, ports: {} },
+      { id: 'render' as any, type: 'TestRenderBlock' } as any,
+      { id: 'disconnected' as any, type: 'TestPureBlock' } as any,
     ];
     const edges: NormalizedEdge[] = [];
 
@@ -56,17 +60,16 @@ describe('computeRenderReachableBlocks', () => {
 
   it('traces through single edge', () => {
     const blocks: Block[] = [
-      { id: 'source', type: 'TestPureBlock', params: {}, ports: {} },
-      { id: 'render', type: 'TestRenderBlock', params: {}, ports: {} },
+      { id: 'source' as any, type: 'TestPureBlock' } as any,
+      { id: 'render' as any, type: 'TestRenderBlock' } as any,
     ];
     const edges: NormalizedEdge[] = [
       {
         fromBlock: 0 as BlockIndex,
+        fromPort: 'out' as any,
         toBlock: 1 as BlockIndex,
-        from: { blockId: 'source', slotId: 'out' },
-        to: { blockId: 'render', slotId: 'in' },
-        role: 'userWire',
-      } as NormalizedEdge,
+        toPort: 'in' as any,
+      },
     ];
 
     const reachable = computeRenderReachableBlocks(blocks, edges);
@@ -78,33 +81,30 @@ describe('computeRenderReachableBlocks', () => {
 
   it('traces through chain', () => {
     const blocks: Block[] = [
-      { id: 'b1', type: 'TestPureBlock', params: {}, ports: {} },
-      { id: 'b2', type: 'TestPureBlock', params: {}, ports: {} },
-      { id: 'b3', type: 'TestPureBlock', params: {}, ports: {} },
-      { id: 'render', type: 'TestRenderBlock', params: {}, ports: {} },
+      { id: 'b1' as any, type: 'TestPureBlock' } as any,
+      { id: 'b2' as any, type: 'TestPureBlock' } as any,
+      { id: 'b3' as any, type: 'TestPureBlock' } as any,
+      { id: 'render' as any, type: 'TestRenderBlock' } as any,
     ];
     const edges: NormalizedEdge[] = [
       {
         fromBlock: 0 as BlockIndex,
+        fromPort: 'out' as any,
         toBlock: 1 as BlockIndex,
-        from: { blockId: 'b1', slotId: 'out' },
-        to: { blockId: 'b2', slotId: 'in' },
-        role: 'userWire',
-      } as NormalizedEdge,
+        toPort: 'in' as any,
+      },
       {
         fromBlock: 1 as BlockIndex,
+        fromPort: 'out' as any,
         toBlock: 2 as BlockIndex,
-        from: { blockId: 'b2', slotId: 'out' },
-        to: { blockId: 'b3', slotId: 'in' },
-        role: 'userWire',
-      } as NormalizedEdge,
+        toPort: 'in' as any,
+      },
       {
         fromBlock: 2 as BlockIndex,
+        fromPort: 'out' as any,
         toBlock: 3 as BlockIndex,
-        from: { blockId: 'b3', slotId: 'out' },
-        to: { blockId: 'render', slotId: 'in' },
-        role: 'userWire',
-      } as NormalizedEdge,
+        toPort: 'in' as any,
+      },
     ];
 
     const reachable = computeRenderReachableBlocks(blocks, edges);
@@ -118,40 +118,36 @@ describe('computeRenderReachableBlocks', () => {
 
   it('traces through diamond', () => {
     const blocks: Block[] = [
-      { id: 'source', type: 'TestPureBlock', params: {}, ports: {} },
-      { id: 'left', type: 'TestPureBlock', params: {}, ports: {} },
-      { id: 'right', type: 'TestPureBlock', params: {}, ports: {} },
-      { id: 'render', type: 'TestRenderBlock', params: {}, ports: {} },
+      { id: 'source' as any, type: 'TestPureBlock' } as any,
+      { id: 'left' as any, type: 'TestPureBlock' } as any,
+      { id: 'right' as any, type: 'TestPureBlock' } as any,
+      { id: 'render' as any, type: 'TestRenderBlock' } as any,
     ];
     const edges: NormalizedEdge[] = [
       {
         fromBlock: 0 as BlockIndex,
+        fromPort: 'out' as any,
         toBlock: 1 as BlockIndex,
-        from: { blockId: 'source', slotId: 'out' },
-        to: { blockId: 'left', slotId: 'in' },
-        role: 'userWire',
-      } as NormalizedEdge,
+        toPort: 'in' as any,
+      },
       {
         fromBlock: 0 as BlockIndex,
+        fromPort: 'out' as any,
         toBlock: 2 as BlockIndex,
-        from: { blockId: 'source', slotId: 'out' },
-        to: { blockId: 'right', slotId: 'in' },
-        role: 'userWire',
-      } as NormalizedEdge,
+        toPort: 'in' as any,
+      },
       {
         fromBlock: 1 as BlockIndex,
+        fromPort: 'out' as any,
         toBlock: 3 as BlockIndex,
-        from: { blockId: 'left', slotId: 'out' },
-        to: { blockId: 'render', slotId: 'in1' },
-        role: 'userWire',
-      } as NormalizedEdge,
+        toPort: 'in1' as any,
+      },
       {
         fromBlock: 2 as BlockIndex,
+        fromPort: 'out' as any,
         toBlock: 3 as BlockIndex,
-        from: { blockId: 'right', slotId: 'out' },
-        to: { blockId: 'render', slotId: 'in2' },
-        role: 'userWire',
-      } as NormalizedEdge,
+        toPort: 'in2' as any,
+      },
     ];
 
     const reachable = computeRenderReachableBlocks(blocks, edges);
@@ -165,27 +161,25 @@ describe('computeRenderReachableBlocks', () => {
 
   it('excludes disconnected subgraph', () => {
     const blocks: Block[] = [
-      { id: 'connected', type: 'TestPureBlock', params: {}, ports: {} },
-      { id: 'render', type: 'TestRenderBlock', params: {}, ports: {} },
-      { id: 'disconnected1', type: 'TestPureBlock', params: {}, ports: {} },
-      { id: 'disconnected2', type: 'TestPureBlock', params: {}, ports: {} },
+      { id: 'connected' as any, type: 'TestPureBlock' } as any,
+      { id: 'render' as any, type: 'TestRenderBlock' } as any,
+      { id: 'disconnected1' as any, type: 'TestPureBlock' } as any,
+      { id: 'disconnected2' as any, type: 'TestPureBlock' } as any,
     ];
     const edges: NormalizedEdge[] = [
       {
         fromBlock: 0 as BlockIndex,
+        fromPort: 'out' as any,
         toBlock: 1 as BlockIndex,
-        from: { blockId: 'connected', slotId: 'out' },
-        to: { blockId: 'render', slotId: 'in' },
-        role: 'userWire',
-      } as NormalizedEdge,
+        toPort: 'in' as any,
+      },
       // disconnected subgraph
       {
         fromBlock: 2 as BlockIndex,
+        fromPort: 'out' as any,
         toBlock: 3 as BlockIndex,
-        from: { blockId: 'disconnected1', slotId: 'out' },
-        to: { blockId: 'disconnected2', slotId: 'in' },
-        role: 'userWire',
-      } as NormalizedEdge,
+        toPort: 'in' as any,
+      },
     ];
 
     const reachable = computeRenderReachableBlocks(blocks, edges);
@@ -199,27 +193,25 @@ describe('computeRenderReachableBlocks', () => {
 
   it('handles multiple render blocks', () => {
     const blocks: Block[] = [
-      { id: 'source1', type: 'TestPureBlock', params: {}, ports: {} },
-      { id: 'render1', type: 'TestRenderBlock', params: {}, ports: {} },
-      { id: 'source2', type: 'TestPureBlock', params: {}, ports: {} },
-      { id: 'render2', type: 'TestRenderBlock', params: {}, ports: {} },
-      { id: 'disconnected', type: 'TestPureBlock', params: {}, ports: {} },
+      { id: 'source1' as any, type: 'TestPureBlock' } as any,
+      { id: 'render1' as any, type: 'TestRenderBlock' } as any,
+      { id: 'source2' as any, type: 'TestPureBlock' } as any,
+      { id: 'render2' as any, type: 'TestRenderBlock' } as any,
+      { id: 'disconnected' as any, type: 'TestPureBlock' } as any,
     ];
     const edges: NormalizedEdge[] = [
       {
         fromBlock: 0 as BlockIndex,
+        fromPort: 'out' as any,
         toBlock: 1 as BlockIndex,
-        from: { blockId: 'source1', slotId: 'out' },
-        to: { blockId: 'render1', slotId: 'in' },
-        role: 'userWire',
-      } as NormalizedEdge,
+        toPort: 'in' as any,
+      },
       {
         fromBlock: 2 as BlockIndex,
+        fromPort: 'out' as any,
         toBlock: 3 as BlockIndex,
-        from: { blockId: 'source2', slotId: 'out' },
-        to: { blockId: 'render2', slotId: 'in' },
-        role: 'userWire',
-      } as NormalizedEdge,
+        toPort: 'in' as any,
+      },
     ];
 
     const reachable = computeRenderReachableBlocks(blocks, edges);

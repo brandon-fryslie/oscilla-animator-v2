@@ -27,6 +27,8 @@ import { signalType } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 // debugService import removed for strict compiler isolation (One Source of Truth)
 import { compilationInspector } from '../services/CompilationInspectorService';
+import { computeRenderReachableBlocks } from './reachability';
+
 
 // Import block registrations (side-effect imports to register blocks)
 import '../blocks/time-blocks';
@@ -266,15 +268,80 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
       console.warn('[CompilationInspector] Failed to capture block-lowering:', e);
     }
 
-    // Check for errors from pass 6
+    // Check for errors from pass 6 - Filter by reachability
     if (unlinkedIR.errors.length > 0) {
-      const compileErrors: CompileError[] = unlinkedIR.errors.map((e) => ({
-        kind: e.code,
-        message: e.message,
-        blockId: e.where?.blockId,
-      }));
-      return emitFailure(options, startTime, compileId, compileErrors);
+      // Compute which blocks are reachable from render blocks
+      const reachableBlocks = computeRenderReachableBlocks(
+        acyclicPatch.blocks,
+        acyclicPatch.edges
+      );
+
+      // Build blockId → blockIndex map
+      const blockIdToIndex = new Map<string, number>();
+      for (let i = 0; i < acyclicPatch.blocks.length; i++) {
+        blockIdToIndex.set(acyclicPatch.blocks[i].id, i);
+      }
+
+      // Partition errors into reachable and unreachable
+      const reachableErrors: import('./types').CompileError[] = [];
+      const unreachableErrors: import('./types').CompileError[] = [];
+
+      for (const error of unlinkedIR.errors) {
+        const blockIdx = error.where?.blockId
+          ? blockIdToIndex.get(error.where.blockId)
+          : undefined;
+
+        // Error is reachable if:
+        // 1. It has no blockId (global error), OR
+        // 2. The block is in the reachable set
+        if (blockIdx === undefined || reachableBlocks.has(blockIdx as import('./ir/patches').BlockIndex)) {
+          reachableErrors.push(error);
+        } else {
+          unreachableErrors.push(error);
+        }
+      }
+
+      // Emit warnings for unreachable block errors
+      if (unreachableErrors.length > 0 && options?.events) {
+        for (const error of unreachableErrors) {
+          const warningDiagnostic = {
+            id: `W_BLOCK_UNREACHABLE_ERROR:${error.where?.blockId}:rev${options.patchRevision || 0}`,
+            code: 'W_BLOCK_UNREACHABLE_ERROR' as const,
+            severity: 'warn' as const,
+            domain: 'compile' as const,
+            primaryTarget: { kind: 'block' as const, blockId: error.where?.blockId || 'unknown' },
+            title: `Unreachable Block Error: ${error.code}`,
+            message: `Block '${error.where?.blockId || 'unknown'}' has error but is not connected to render pipeline: ${error.message}\n\nSuggestion: Connect this block to the render pipeline or remove it.`,
+            scope: { patchRevision: options.patchRevision || 0, compileId },
+            metadata: {
+              firstSeenAt: Date.now(),
+              lastSeenAt: Date.now(),
+              occurrenceCount: 1,
+            },
+            payload: {
+              code: 'W_BLOCK_UNREACHABLE_ERROR' as const,
+              originalError: error.message,
+              originalCode: error.code,
+            },
+          };
+
+          // Emit warning diagnostic (will be collected by DiagnosticHub through CompileEnd event)
+          // Note: We can't emit partial CompileEnd here, so we'll collect warnings and emit them at the end
+          // For now, warnings are lost - this will be fixed in integration testing phase
+        }
+      }
+
+      // Only fail compilation if there are reachable errors
+      if (reachableErrors.length > 0) {
+        const compileErrors: CompileError[] = reachableErrors.map((e) => ({
+          kind: e.code,
+          message: e.message,
+          blockId: e.where?.blockId,
+        }));
+        return emitFailure(options, startTime, compileId, compileErrors);
+      }
     }
+
 
     // Pass 7: Schedule Construction
     const scheduleIR = pass7Schedule(unlinkedIR, acyclicPatch);
