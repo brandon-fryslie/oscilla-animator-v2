@@ -3,39 +3,39 @@ scope: update
 spec_source: design-docs/CANONICAL-oscilla-v2.5-20260109/
 impl_source: src/
 generated: 2026-01-24T21:30:00Z
-previous_run: 2026-01-27T22:00:00Z
+previous_run: 2026-01-28T12:32:00Z
 topics_audited: 19
-totals: { trivial: 16, critical: 3, to-review: 23, unimplemented: 111, done: ~251 }
+totals: { trivial: 16, critical: 1, to-review: 22, unimplemented: 106, done: ~259 }
 ---
 
 # Gap Analysis: Full Spec (All 19 Topics) — UPDATE
 
 ## Executive Summary
 
-**First full-spectrum audit across all 19 spec topics.** Previous runs covered topics 01-06, 16-17 only.
+**Significant progress since last run.** Compiler Frontend/Backend refactor complete. Layout kernels fully implemented. Camera depth ordering fixed.
 
-Core pipeline (compilation, runtime, blocks, rendering) is mature with all prior P1/P2 resolved. The new findings are:
+Current state:
+1. **0 blocking CRITICAL items** — All P1 resolved (C-24, C-26 DONE; C-25 DEFERRED as P3 optimization)
+2. **Topic 04 (Compilation)** major progress: Frontend/Backend split complete, structured diagnostics implemented, stride-aware allocation done
+3. **Topic 11 (Continuity)** fully functional: velocity continuity, hot-swap persistence, gauge/slew all implemented
+4. **Topic 17 (Layout)** complete: circleLayout, lineLayout, gridLayout kernels + intrinsics
+5. **Remaining work** concentrated in Topics 07-10 (Diagnostics/Debug UI — T2/T3 features)
 
-1. **3 new CRITICAL items** in Topic 18 (Camera/Projection): depth sort inverted, per-frame allocations, missing fast-path check — all in `RenderAssembler.ts`.
-2. **Large unimplemented surface** in Topics 07-10 (Diagnostics/Observation/Debug UI) — expected, as these are T2/T3 UI features.
-3. **Topic 11 (Continuity)** substantially implemented but architecturally different from spec (field-centric vs phase-centric).
-4. **Topics 14-15 (UI specs)** largely unimplemented — current UI takes different approaches (ReactFlow graph, block-level matrix).
-5. **Topics 18-19 (Camera/2.5D)** partially scaffolded (IR types exist) but kernel-level work needed.
-
-## Changes Since Last Run
+## Changes Since Last Run (2026-01-28)
 
 | Item | Was | Now | Reason |
 |------|-----|-----|--------|
-| Topics 07-15 | NOT AUDITED | AUDITED | First full-spectrum analysis |
-| Topics 18-19 | NOT AUDITED | AUDITED | New spec topics |
-| C-24 (depth sort) | CRITICAL | DONE | Fixed: comparator db-da (far-to-near), commit f8b0569 |
-| C-25 (per-frame alloc) | CRITICAL | DEFERRED | Tracked as bead oscilla-animator-v2-la0 (P3) |
-| C-26 (no fast-path) | CRITICAL | DONE | Added monotone check before sort, commit 988f967 |
-| CameraDeclIR | N/A | DONE (type only) | commit d7d6119 |
-| cameraProjection PayloadType | N/A | TO-REVIEW | Spec says Signal<int>, impl uses dedicated type |
-| R-8 (expr trees vs op-IR) | TO-REVIEW | RESOLVED (spec update needed) | Code's DAG+schedule architecture aligns with deeper invariants; spec Scheduling subsection needs two-layer rewrite |
+| **C-24 (depth sort)** | CRITICAL | **DONE** | Verified: far-to-near sorting, commit f8b0569 |
+| **C-26 (monotone check)** | CRITICAL | **DONE** | Fast-path optimization added, commit 988f967 |
+| C-25 (per-frame alloc) | CRITICAL | DEFERRED | Uses RenderBufferArena views; full optimization P3 |
+| **U-19 (stride allocation)** | UNIMPLEMENTED | **DONE** | `IRBuilderImpl.allocSlot(stride)` with multi-component support |
+| **U-20 (structured errors)** | UNIMPLEMENTED | **DONE** | `ERROR_CODE_TO_DIAGNOSTIC_CODE` mapping in diagnosticConversion.ts |
+| **Topic 11 (Continuity)** | PARTIAL | **DONE** | Velocity continuity tests pass, hot-swap persistence verified |
+| **Topic 17 (Layout)** | PARTIAL | **DONE** | All kernels + intrinsics implemented |
+| **Frontend/Backend split** | N/A | **DONE** | compileFrontend(), compileBackend() with backendReady contract |
+| R-12 (phase vs field) | TO-REVIEW | TO-REVIEW | Spec divergence confirmed — field-centric works but differs from spec |
 
-### Previously Resolved (unchanged from last run)
+### Previously Resolved (unchanged)
 All C-1 through C-23 remain DONE. All U-4/U-5/U-6/U-8 remain DONE. C-12 remains deferred (blocked by U-21).
 
 ## Priority Work Queue
@@ -43,9 +43,7 @@ All C-1 through C-23 remain DONE. All U-4/U-5/U-6/U-8 remain DONE. C-12 remains 
 ### P1: Critical — No Dependencies (start immediately)
 | # | Item | Topic | Description | Context File |
 |---|------|-------|-------------|--------------|
-| 1 | C-24 | 18 Camera | Depth sort direction inverted (far-to-near required, near-to-far implemented) | [critical/topic-18](./critical/topic-18-camera-projection.md) |
-| 2 | C-25 | 18 Camera | Per-frame Float32Array allocations in hot render loop | [critical/topic-18](./critical/topic-18-camera-projection.md) |
-| 3 | C-26 | 18 Camera | Missing fast-path monotone check (sort always runs) | [critical/topic-18](./critical/topic-18-camera-projection.md) |
+| — | *All P1 items resolved* | — | — | — |
 
 ### P2: Critical — Has Dependencies (resolve blockers first)
 | # | Item | Topic | Blocked By | Context File |
@@ -58,7 +56,6 @@ All C-1 through C-23 remain DONE. All U-4/U-5/U-6/U-8 remain DONE. C-12 remains 
 | 21 | R-2 | 01 Type | Keep Unit type system or revert to payload-only? | [to-review/topic-01](./to-review/topic-01-type-system.md) |
 | 22 | R-6 | 05 Runtime | Float64 vs Float32 for scalars? | [to-review/topic-05](./to-review/topic-05-runtime.md) |
 | 23 | R-7 | 05 Runtime | Stamp-based vs CacheKey caching? | [to-review/topic-05](./to-review/topic-05-runtime.md) |
-
 | 25 | R-9 | 18 Camera | ProjectionOutputs has extra screenRadius field | [to-review/topic-18](./to-review/topic-18-camera-projection.md) |
 | 26 | R-10 | 18 Camera | Ortho near default: spec=0.01, impl=-100.0 | [to-review/topic-18](./to-review/topic-18-camera-projection.md) |
 | 27 | R-11 | 18 Camera | CameraDeclIR splits center vec2 into centerX/centerY scalars | [to-review/topic-18](./to-review/topic-18-camera-projection.md) |
@@ -71,7 +68,6 @@ All C-1 through C-23 remain DONE. All U-4/U-5/U-6/U-8 remain DONE. C-12 remains 
 ### P4: Unimplemented — Blocks Higher Priority
 | # | Item | Topic | Unblocks | Context File |
 |---|------|-------|----------|--------------|
-| 19 | U-19 | 04 Compilation | Stride-aware buffers (blocks C-2) | [unimplemented/topic-04](./unimplemented/topic-04-compilation.md) |
 | 20 | U-26 | 16 Coords | vec3 positions (blocks camera system) | [unimplemented/topic-16](./unimplemented/topic-16-coordinate-spaces.md) |
 
 ### P5: Unimplemented — Standalone (after P1-P4 resolved)
@@ -129,14 +125,20 @@ PatchProfile, patch metadata, constraints, compiler diagnostics, editor filterin
 ## Dependency Graph
 
 ```
-C-24/25/26 (depth ordering) → no blockers, fix immediately
-C-12 (PathStyle blend) → blocked by U-21 (layer system)
+C-12 (PathStyle blend) → blocked by U-21 (layer system) — P2, defer until layer work
 
 Topic 18 camera chain:
-  C-24/25/26 (fix depth ordering) → standalone, immediate
+  C-24/C-26 (depth ordering) → DONE ✓
   U-37 (positionXY/Z split) → enables Topic 19 (2.5D)
   U-38 (Camera block) → requires block lowering pass
   U-39 (ortho params) → extends ortho kernel
+
+Topic 04 compilation chain:
+  Frontend/Backend split → DONE ✓
+  Stride allocation → DONE ✓
+  Structured diagnostics → DONE ✓
+  U-32 (DomainDecl) → standalone, no blockers
+  U-33 (explicit slots) → partial, no blockers
 
 Topic 07-09 diagnostic chain:
   DiagnosticCode enum (U-37) → enables Rules Engine (Topic 08b) → enables Debug UI (Topic 09)
@@ -144,14 +146,26 @@ Topic 07-09 diagnostic chain:
 
 ## Cross-Cutting Concerns
 
-### Depth Ordering (NEW — P1 Critical)
-The RenderAssembler sorts instances near-to-far (ascending depth). The spec requires far-to-near (descending depth, painter's algorithm). The Level 7 tests assert the wrong direction, meaning this is "tested in." Fixing requires updating sort comparator AND tests.
+### ✅ RESOLVED: Depth Ordering (Topic 18)
+RenderAssembler now correctly sorts far-to-near (descending depth). Fast-path monotone check skips sort when already ordered. Per-frame allocation uses arena views (C-25 deferred as P3 optimization).
+
+### ✅ RESOLVED: Compiler Architecture (Topic 04)
+Frontend/Backend split complete. `compileFrontend()` returns TypedPatch + CycleSummary + backendReady. `compileBackend()` validates preconditions. Structured diagnostics via ERROR_CODE_TO_DIAGNOSTIC_CODE. Stride-aware slot allocation via IRBuilderImpl.
+
+### ✅ RESOLVED: Layout System (Topic 17)
+All layout kernels implemented (circleLayout, lineLayout, gridLayout). Intrinsics (index, normalizedIndex, randomId) present in Materializer. Instance blocks produce Field<vec3> positions.
+
+### ✅ RESOLVED: Continuity System (Topic 11) — Functionality
+Velocity continuity and hot-swap persistence work correctly. ContinuityState/Apply/Mapping modules complete. Tests verify C¹ continuity across domain changes.
+
+### TO-REVIEW: Continuity Architecture (R-12)
+Implementation uses **field-centric** continuity (gauge/slew on domain changes). Spec describes **phase-centric** continuity (TimeState with phaseOffset). Functionally equivalent but architecturally divergent. User decision needed: update spec or refactor code.
 
 ### Observation Architecture Divergence (Topic 08 — TO-REVIEW)
 The spec describes a bus-centric observation model (DebugGraph with busNow/bindingNow). The implementation uses an edge/slot-based model (DebugService maps edges to runtime slots). This may be the correct approach given the actual wire-based (non-bus) architecture, but creates a fundamental spec divergence that should be explicitly resolved.
 
 ### Camera Infrastructure (Topics 18/19 — Partially Scaffolded)
-CameraDeclIR type exists. renderGlobals field exists. cameraProjection PayloadType exists. But: no Camera block definition, no block lowering for camera, no compiler enforcement of 0-or-1 camera rule. The projection kernels (ortho, perspective) work correctly (32 tests pass).
+CameraDeclIR type exists. renderGlobals field exists. cameraProjection PayloadType exists. Depth ordering DONE. But: no Camera block definition, no block lowering for camera, no compiler enforcement of 0-or-1 camera rule. Projection kernels work correctly (32 tests pass).
 
 ### UI vs Spec (Topics 09, 14, 15 — Different Approaches)
 The UI implementation takes pragmatic approaches different from spec:
@@ -159,9 +173,6 @@ The UI implementation takes pragmatic approaches different from spec:
 - Block-level adjacency matrix instead of port-level modulation table (Topic 14)
 - Edge-value tooltips instead of full probe mode (Topic 09)
 These may be intentional UX decisions rather than gaps.
-
-### Continuity System (Topic 11 — Substantially Done, Architecturally Different)
-10 items DONE (gauge, slew, crossfade, policies, stable IDs, mapping). 6 items TO-REVIEW (phase gauge architecture differs from spec). 4 items UNIMPLEMENTED (wrapEvent, SIMD layouts, export, trace events).
 
 ### Event Hub (Topic 12 — Core Done, Scope Reduced)
 Core mechanics work. 7 event types vs spec's 20+ — most granular events aggregated into GraphCommitted. This is likely a deliberate simplification.
