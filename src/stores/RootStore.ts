@@ -24,6 +24,8 @@ import { SettingsStore } from './SettingsStore';
 import { EventHub } from '../events/EventHub';
 import { DiagnosticHub } from '../diagnostics/DiagnosticHub';
 import { CompositeEditorStore } from './CompositeEditorStore';
+import { executeAction, type ActionResult } from '../diagnostics/actionExecutor';
+import type { DiagnosticAction } from '../diagnostics/types';
 
 export class RootStore {
   readonly patch: PatchStore;
@@ -146,6 +148,21 @@ export class RootStore {
    */
   getPatchRevision(): number {
     return this.patchRevision;
+  }
+
+  /**
+   * Execute a DiagnosticAction using the action executor.
+   * Convenience method for UI components to execute diagnostic actions.
+   *
+   * @param action - The action to execute
+   * @returns Result indicating success/failure
+   */
+  executeAction(action: DiagnosticAction): ActionResult {
+    return executeAction(action, {
+      patchStore: this.patch,
+      selectionStore: this.selection,
+      eventHub: this.events,
+    });
   }
 
   /**
