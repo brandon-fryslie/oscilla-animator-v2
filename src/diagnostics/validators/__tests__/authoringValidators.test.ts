@@ -91,6 +91,84 @@ describe('Authoring Validators', () => {
     });
   });
 
+  describe('Diagnostic Actions', () => {
+    describe('E_TIME_ROOT_MISSING actions', () => {
+      it('includes createTimeRoot action', () => {
+        const patch = createTestPatch(10, { timeRoots: 0 });
+        const diagnostics = runAuthoringValidators(patch, 1);
+        const timeRootDiagnostic = diagnostics.find(d => d.code === 'E_TIME_ROOT_MISSING');
+
+        expect(timeRootDiagnostic).toBeDefined();
+        expect(timeRootDiagnostic!.actions).toBeDefined();
+        expect(timeRootDiagnostic!.actions).toHaveLength(1);
+      });
+
+      it('createTimeRoot action has correct structure', () => {
+        const patch = createTestPatch(10, { timeRoots: 0 });
+        const diagnostics = runAuthoringValidators(patch, 1);
+        const timeRootDiagnostic = diagnostics.find(d => d.code === 'E_TIME_ROOT_MISSING');
+        const action = timeRootDiagnostic!.actions![0];
+
+        expect(action.kind).toBe('createTimeRoot');
+        expect(action.label).toBe('Add InfiniteTimeRoot');
+        expect((action as any).timeRootKind).toBe('Infinite');
+      });
+    });
+
+    describe('W_GRAPH_DISCONNECTED_BLOCK actions', () => {
+      it('includes goToTarget and removeBlock actions', () => {
+        const patch = createTestPatch(5, { timeRoots: 1 });
+        const diagnostics = runAuthoringValidators(patch, 1);
+        const disconnectedDiagnostics = diagnostics.filter(d => d.code === 'W_GRAPH_DISCONNECTED_BLOCK');
+
+        expect(disconnectedDiagnostics.length).toBeGreaterThan(0);
+        
+        for (const diagnostic of disconnectedDiagnostics) {
+          expect(diagnostic.actions).toBeDefined();
+          expect(diagnostic.actions).toHaveLength(2);
+        }
+      });
+
+      it('first action is goToTarget with correct structure', () => {
+        const patch = createTestPatch(5, { timeRoots: 1 });
+        const diagnostics = runAuthoringValidators(patch, 1);
+        const disconnectedDiagnostic = diagnostics.find(d => d.code === 'W_GRAPH_DISCONNECTED_BLOCK');
+        const action = disconnectedDiagnostic!.actions![0];
+
+        expect(action.kind).toBe('goToTarget');
+        expect(action.label).toBe('Go to Block');
+        expect((action as any).target).toBeDefined();
+        expect((action as any).target.kind).toBe('block');
+        expect((action as any).target.blockId).toBeDefined();
+      });
+
+      it('second action is removeBlock with correct structure', () => {
+        const patch = createTestPatch(5, { timeRoots: 1 });
+        const diagnostics = runAuthoringValidators(patch, 1);
+        const disconnectedDiagnostic = diagnostics.find(d => d.code === 'W_GRAPH_DISCONNECTED_BLOCK');
+        const action = disconnectedDiagnostic!.actions![1];
+
+        expect(action.kind).toBe('removeBlock');
+        expect(action.label).toBe('Remove Block');
+        expect((action as any).blockId).toBeDefined();
+      });
+
+      it('action blockId matches diagnostic target blockId', () => {
+        const patch = createTestPatch(5, { timeRoots: 1 });
+        const diagnostics = runAuthoringValidators(patch, 1);
+        const disconnectedDiagnostic = diagnostics.find(d => d.code === 'W_GRAPH_DISCONNECTED_BLOCK');
+        
+        expect(disconnectedDiagnostic!.primaryTarget.kind).toBe('block');
+        const targetBlockId = (disconnectedDiagnostic!.primaryTarget as any).blockId;
+        const removeAction = disconnectedDiagnostic!.actions![1];
+        const goToAction = disconnectedDiagnostic!.actions![0];
+
+        expect((removeAction as any).blockId).toBe(targetBlockId);
+        expect((goToAction as any).target.blockId).toBe(targetBlockId);
+      });
+    });
+  });
+
   describe('Performance', () => {
     it('completes in <10ms for 50-block patch', () => {
       const patch = createTestPatch(50, { timeRoots: 0 });
