@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { compileExpression } from '../index';
 import { signalType } from '../../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC3, COLOR } from '../../core/canonical-types';
 import { IRBuilderImpl } from '../../compiler/ir/IRBuilderImpl';
 import { extractSigExpr } from '../../__tests__/ir-test-helpers';
 
