@@ -15,7 +15,8 @@ import {
   fillPlacementBasis,
   ensurePlacementBasis,
 } from '../PlacementBasis';
-import type { BasisKind, PlacementBasisBuffers } from '../../compiler/ir/types';
+import type { BasisKind } from '../../compiler/ir/types';
+import type { PlacementBasisBuffers } from '../PlacementBasis';
 
 describe('PlacementBasis Sprint 1: Type Foundation', () => {
   describe('constants', () => {

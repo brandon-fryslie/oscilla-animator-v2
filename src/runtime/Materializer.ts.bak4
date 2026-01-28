@@ -415,7 +415,6 @@ function fillBuffer(
         fillBufferArcLength(buffer as Float32Array, inputBuffer as Float32Array, N);
       }
       break;
-    }
 
     case 'placement': {
       const placementExpr = expr as import('../compiler/ir/types').FieldExprPlacement;
