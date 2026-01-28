@@ -177,6 +177,22 @@ export type IntrinsicPropertyName =
   | 'normalizedIndex'
   | 'randomId';
 
+/**
+ * PlacementBasis field names (stable per-element coordinates).
+ * These replace normalizedIndex in gauge-invariant layout blocks.
+ */
+export type PlacementFieldName = 'uv' | 'rank' | 'seed';
+
+/**
+ * Basis generation algorithm.
+ * User-configurable per layout block.
+ */
+export type BasisKind =
+  | 'halton2D'    // Low-discrepancy sequence (good general coverage)
+  | 'random'      // Pure random (specified seed)
+  | 'spiral'      // Spiral pattern (good for circles)
+  | 'grid';       // Grid-aligned (good for grid layouts)
+
 export type FieldExpr =
   | FieldExprConst
   | FieldExprIntrinsic
@@ -186,7 +202,8 @@ export type FieldExpr =
   | FieldExprZipSig
   | FieldExprArray
   | FieldExprStateRead
-  | FieldExprPathDerivative;
+  | FieldExprPathDerivative
+  | FieldExprPlacement;
 
 export interface FieldExprConst {
   readonly kind: 'const';
@@ -202,6 +219,18 @@ export interface FieldExprIntrinsic {
   readonly kind: 'intrinsic';
   readonly instanceId: InstanceId;
   readonly intrinsic: IntrinsicPropertyName;
+  readonly type: SignalType;
+}
+
+/**
+ * Placement field expression - gauge-invariant per-element coordinates.
+ * These replace normalizedIndex for layout blocks.
+ */
+export interface FieldExprPlacement {
+  readonly kind: 'placement';
+  readonly instanceId: InstanceId;
+  readonly field: PlacementFieldName;
+  readonly basisKind: BasisKind;
   readonly type: SignalType;
 }
 

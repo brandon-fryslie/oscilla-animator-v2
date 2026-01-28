@@ -11,7 +11,7 @@
 import type { Node, Edge as ReactFlowEdge } from 'reactflow';
 import type { BlockLike, EdgeLike, GraphDataAdapter } from './types';
 import type { DefaultSource, UIControlHint } from '../../types';
-import { getBlockDefinition, type BlockDef, type InputDef, type OutputDef } from '../../blocks/registry';
+import { getBlockDefinition, type BlockDef, type InputDef } from '../../blocks/registry';
 import type { PayloadType, SignalType } from '../../core/canonical-types';
 import { FLOAT, signalType } from '../../core/canonical-types';
 import { formatTypeForTooltip, getTypeColor } from '../reactFlowEditor/typeValidation';

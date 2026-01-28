@@ -51,6 +51,56 @@ import { requireBlockDef } from '../blocks/registry';
 import { detectCanonicalNameCollisions, normalizeCanonicalName } from '../core/canonical-name';
 
 // =============================================================================
+// Adapter Attachments (Sprint 2026-01-27)
+// =============================================================================
+
+/**
+ * Adapter attachment on an input port.
+ *
+ * Describes a type conversion applied to a specific incoming connection.
+ * Adapters are stored on the input port (not the edge) because they conceptually
+ * belong to the receiving port - they adapt incoming values to match the port's
+ * expected type.
+ *
+ * Key properties:
+ * - Per-port-per-connection: A port can have different adapters for each source
+ * - Addressable: `v1:blocks.{block}.inputs.{port}.adapters.{id}`
+ * - Normalized to blocks: During normalization, adapters become real blocks
+ *
+ * NOTE: Adapters are stored on the port, NOT as edges.
+ * This is intentional - adapters belong to the port, not the connection.
+ */
+export interface AdapterAttachment {
+  /**
+   * Unique ID within this port's adapters.
+   * Generated deterministically from source address.
+   * Used in resource addressing: `my_block.inputs.count.adapters.{id}`
+   */
+  readonly id: string;
+
+  /**
+   * The adapter block type to insert.
+   * Must be a registered adapter block (e.g., 'Adapter_DegreesToRadians').
+   */
+  readonly adapterType: string;
+
+  /**
+   * Canonical address of the source output this adapter applies to.
+   * Format: "v1:blocks.{block}.outputs.{port}"
+   *
+   * This identifies which incoming connection the adapter transforms.
+   * A port can have multiple adapters if it has multiple incoming connections.
+   */
+  readonly sourceAddress: string;
+
+  /**
+   * Sort key for deterministic ordering when multiple adapters exist.
+   * Adapters are processed in sortKey order during normalization.
+   */
+  readonly sortKey: number;
+}
+
+// =============================================================================
 // Varargs Support
 // =============================================================================
 
@@ -99,6 +149,11 @@ export interface VarargConnection {
  * - Normal inputs use edges and combine system
  * - Varargs inputs use varargConnections array (bypass combine)
  * - A port is EITHER normal OR vararg, never both
+ *
+ * ADAPTERS EXTENSION (2026-01-27):
+ * - Adapters are attached per-port-per-connection
+ * - Each adapter specifies which source connection it transforms
+ * - Adapters are expanded to blocks during normalization
  */
 export interface InputPort {
   /** Port ID (slotId from registry) */
@@ -118,6 +173,18 @@ export interface InputPort {
    * Connections are ordered by sortKey for deterministic indexing.
    */
   readonly varargConnections?: readonly VarargConnection[];
+
+  /**
+   * Adapter attachments for incoming connections (2026-01-27).
+   *
+   * Each adapter specifies a type conversion for a specific source connection.
+   * Adapters are keyed by source address - one adapter per (port, source) pair.
+   *
+   * During normalization, adapters are expanded to real adapter blocks.
+   * The adapter ID is used for resource addressing:
+   *   `v1:blocks.{block}.inputs.{port}.adapters.{id}`
+   */
+  readonly adapters?: readonly AdapterAttachment[];
 }
 
 /**
@@ -266,14 +333,23 @@ export class PatchBuilder {
     const blockDef = requireBlockDef(type);
 
     // Create input ports from registry (ONLY for exposed ports)
+    // Also collect default values for config params (exposedAsPort: false)
     const inputPorts = new Map<string, InputPort>();
+    const configDefaults: Record<string, unknown> = {};
     for (const [inputId, inputDef] of Object.entries(blockDef.inputs)) {
-      // Skip config-only inputs (exposedAsPort: false)
-      // These are NOT ports and should NOT have port entries
-      if (inputDef.exposedAsPort === false) continue;
+      if (inputDef.exposedAsPort === false) {
+        // Config param - collect default value if present
+        if (inputDef.value !== undefined) {
+          configDefaults[inputId] = inputDef.value;
+        }
+        continue;
+      }
       // Don't set combineMode - defaults to 'last' when undefined
       inputPorts.set(inputId, { id: inputId, combineMode: 'last' });
     }
+
+    // Merge config defaults with provided params (provided params take precedence)
+    const mergedParams = { ...configDefaults, ...params };
 
     // Create output ports from registry
     const outputPorts = new Map<string, OutputPort>();
@@ -297,7 +373,7 @@ export class PatchBuilder {
     this.blocks.set(id, {
       id,
       type,
-      params,
+      params: mergedParams,
       label: options?.label,
       displayName,
       domainId: options?.domainId ?? null,

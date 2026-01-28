@@ -148,3 +148,67 @@ export interface PatchError {
   readonly kind: string;
   readonly message: string;
 }
+
+// =============================================================================
+// Adapter ID Generation (Sprint 2026-01-27)
+// =============================================================================
+
+/**
+ * Generate a deterministic adapter ID from a source address.
+ *
+ * Adapter IDs are used for resource addressing:
+ *   `v1:blocks.{block}.inputs.{port}.adapters.{adapter_id}`
+ *
+ * The ID is derived from the source address to ensure:
+ * - Determinism: Same source address always produces same ID
+ * - Uniqueness: Different source addresses produce different IDs
+ * - Readability: IDs are short and human-readable
+ *
+ * Format: `adapter_{hash}` where hash is a short alphanumeric string
+ * derived from the source address.
+ *
+ * @param sourceAddress - Canonical address of the source output (e.g., "v1:blocks.c1.outputs.value")
+ * @returns Deterministic adapter ID
+ */
+export function generateAdapterId(sourceAddress: string): string {
+  // Use a simple hash based on the source address
+  // We want short, readable IDs that are still deterministic
+  const hash = simpleHash(sourceAddress);
+  return `adapter_${hash}`;
+}
+
+/**
+ * Generate a deterministic adapter ID with an explicit index.
+ *
+ * Use this when you need to generate multiple adapter IDs for the same port
+ * and want explicit ordering control.
+ *
+ * @param portId - The input port ID
+ * @param index - Sequential index (0-based)
+ * @returns Deterministic adapter ID like "adapter_0", "adapter_1", etc.
+ */
+export function generateAdapterIdByIndex(portId: string, index: number): string {
+  return `adapter_${index}`;
+}
+
+/**
+ * Simple string hash that produces a short alphanumeric string.
+ *
+ * This is NOT cryptographic - it's for generating deterministic IDs.
+ * Collisions are theoretically possible but extremely unlikely for
+ * the expected input space (canonical addresses).
+ *
+ * @param str - Input string to hash
+ * @returns 6-character alphanumeric hash
+ */
+function simpleHash(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  // Convert to positive number and then to base36 (alphanumeric)
+  const positive = Math.abs(hash);
+  return positive.toString(36).slice(0, 6).padStart(6, '0');
+}

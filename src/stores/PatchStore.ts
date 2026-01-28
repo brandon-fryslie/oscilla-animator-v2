@@ -253,11 +253,22 @@ export class PatchStore {
     const blockDef = requireBlockDef(type);
 
     // Create input ports from registry
+    // Also collect default values for config params (exposedAsPort: false)
     const inputPorts = new Map<string, InputPort>();
+    const configDefaults: Record<string, unknown> = {};
     for (const [inputId, inputDef] of Object.entries(blockDef.inputs)) {
-      if (inputDef.exposedAsPort === false) continue;
+      if (inputDef.exposedAsPort === false) {
+        // Config param - collect default value if present
+        if (inputDef.value !== undefined) {
+          configDefaults[inputId] = inputDef.value;
+        }
+        continue;
+      }
       inputPorts.set(inputId, { id: inputId, combineMode: 'last' });
     }
+
+    // Merge config defaults with provided params (provided params take precedence)
+    const mergedParams = { ...configDefaults, ...params };
 
     // Create output ports from registry
     const outputPorts = new Map<string, OutputPort>();
@@ -281,7 +292,7 @@ export class PatchStore {
     const block: Block = {
       id,
       type,
-      params,
+      params: mergedParams,
       label: options?.label,
       displayName,
       domainId: options?.domainId ?? null,

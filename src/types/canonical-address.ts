@@ -23,7 +23,8 @@ export type CanonicalAddress =
   | BlockAddress
   | OutputAddress
   | InputAddress
-  | ParamAddress;
+  | ParamAddress
+  | AdapterAddress;
 
 /**
  * Address to a block.
@@ -68,6 +69,21 @@ export interface ParamAddress {
   readonly paramId: string;
 }
 
+/**
+ * Address to an adapter on an input port.
+ * Format: `v1:blocks.{canonical_name}.inputs.{port_id}.adapters.{adapter_id}`
+ *
+ * Adapters are per-port-per-connection type converters. Each adapter has a unique ID
+ * within its port, generated deterministically from the source address it transforms.
+ */
+export interface AdapterAddress {
+  readonly kind: 'adapter';
+  readonly blockId: BlockId;
+  readonly canonicalName: string;
+  readonly portId: PortId;
+  readonly adapterId: string;
+}
+
 // =============================================================================
 // Type Guards
 // =============================================================================
@@ -100,6 +116,13 @@ export function isParamAddress(addr: CanonicalAddress): addr is ParamAddress {
   return addr.kind === 'param';
 }
 
+/**
+ * Type guard for AdapterAddress.
+ */
+export function isAdapterAddress(addr: CanonicalAddress): addr is AdapterAddress {
+  return addr.kind === 'adapter';
+}
+
 // =============================================================================
 // String Conversion
 // =============================================================================
@@ -118,6 +141,7 @@ const CURRENT_VERSION = 'v1';
  * - Output: `v1:blocks.my_circle.outputs.radius`
  * - Input: `v1:blocks.my_circle.inputs.x`
  * - Param: `v1:blocks.my_circle.params.size`
+ * - Adapter: `v1:blocks.my_circle.inputs.x.adapters.adapter_0`
  *
  * SINGLE SOURCE OF TRUTH for address string format.
  *
@@ -136,14 +160,18 @@ export function addressToString(addr: CanonicalAddress): string {
       return `${base}.inputs.${addr.portId}`;
     case 'param':
       return `${base}.params.${addr.paramId}`;
+    case 'adapter':
+      return `${base}.inputs.${addr.portId}.adapters.${addr.adapterId}`;
   }
 }
 
 /**
  * Parse versioned address string to CanonicalAddress.
  *
- * Supports format: `v1:blocks.{canonical_name}[.{category}.{id}]`
- * Where category is one of: outputs, inputs, params
+ * Supports formats:
+ * - `v1:blocks.{canonical_name}` (block)
+ * - `v1:blocks.{canonical_name}.{category}.{id}` (output, input, param)
+ * - `v1:blocks.{canonical_name}.inputs.{port_id}.adapters.{adapter_id}` (adapter)
  *
  * Returns null for:
  * - Invalid syntax
@@ -212,6 +240,23 @@ export function parseAddress(str: string): CanonicalAddress | null {
       default:
         return null; // Unknown category
     }
+  }
+
+  // Adapter address: "blocks.{canonical_name}.inputs.{port_id}.adapters.{adapter_id}"
+  if (parts.length === 5) {
+    const [canonicalName, category, portId, adaptersLiteral, adapterId] = parts;
+    if (!canonicalName || !category || !portId || !adaptersLiteral || !adapterId) return null;
+
+    // Must be inputs.{port_id}.adapters.{adapter_id}
+    if (category !== 'inputs' || adaptersLiteral !== 'adapters') return null;
+
+    return {
+      kind: 'adapter',
+      blockId: '' as BlockId,
+      canonicalName,
+      portId: portId as PortId,
+      adapterId,
+    };
   }
 
   return null; // Invalid path structure

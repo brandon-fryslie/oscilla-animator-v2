@@ -90,9 +90,7 @@ registerBlock({
 
     const controlPointsFieldId = controlPointsInput.id as FieldExprId;
 
-    // Get the instance ID from the control points field
-    // We need to extract this from the field expression
-    // For now, we'll use the inferred instance from the context
+    // Get instance from context (inferred from input fields by lowering system)
     const instance = ctx.inferredInstance ?? ctx.instance;
     if (!instance) {
       throw new Error('PathField requires instance context from control points field');
@@ -145,6 +143,7 @@ registerBlock({
         tangent: { k: 'field', id: tangentField, slot: tanSlot, type: tanType, stride: strideOf(tanType.payload) },
         arcLength: { k: 'field', id: arcLengthField, slot: arcSlot, type: arcType, stride: strideOf(arcType.payload) },
       },
+      instanceContext: instance,
     };
   },
 });

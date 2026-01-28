@@ -47,7 +47,8 @@ describe('getBlockAddress', () => {
     expect(addr.canonicalName).toBe(
       normalizeCanonicalName(block.displayName)
     );
-    expect(block.displayName).toMatch(/^Const \d+$/);
+    // Const block has label 'Constant', so auto-generated displayName is 'Constant N'
+    expect(block.displayName).toMatch(/^Constant \d+$/);
   });
 
   it('normalizes displayName to canonical form', () => {
@@ -101,7 +102,7 @@ describe('getOutputAddress', () => {
     });
   });
 
-  it('falls back to blockId when displayName is null', () => {
+  it('uses auto-generated displayName when not provided', () => {
     const patch = buildPatch(b => {
       b.addBlock('Const', { value: 1 });
     });
@@ -109,7 +110,8 @@ describe('getOutputAddress', () => {
     const block = Array.from(patch.blocks.values())[0];
     const addr = getOutputAddress(block, portId('out'));
 
-    expect(addr.canonicalName).toBe(block.id);
+    // displayName is auto-generated as 'Constant 1', canonical name is 'constant_1'
+    expect(addr.canonicalName).toBe(normalizeCanonicalName(block.displayName));
   });
 
   it('handles port ID with underscores', () => {
@@ -141,7 +143,7 @@ describe('getInputAddress', () => {
     });
   });
 
-  it('falls back to blockId when displayName is null', () => {
+  it('uses auto-generated displayName when not provided', () => {
     const patch = buildPatch(b => {
       b.addBlock('Oscillator', {});
     });
@@ -149,7 +151,8 @@ describe('getInputAddress', () => {
     const block = Array.from(patch.blocks.values())[0];
     const addr = getInputAddress(block, portId('phase'));
 
-    expect(addr.canonicalName).toBe(block.id);
+    // displayName is auto-generated, canonical name is based on it
+    expect(addr.canonicalName).toBe(normalizeCanonicalName(block.displayName));
   });
 });
 
@@ -401,7 +404,7 @@ describe('getShorthandForOutput', () => {
     expect(shorthand).toBe('my_const.out');
   });
 
-  it('uses blockId when no displayName', () => {
+  it('uses auto-generated displayName when not provided', () => {
     const patch = buildPatch(b => {
       b.addBlock('Const', { value: 1 });
     });
@@ -409,7 +412,8 @@ describe('getShorthandForOutput', () => {
     const block = Array.from(patch.blocks.values())[0];
     const shorthand = getShorthandForOutput(block, portId('out'));
 
-    expect(shorthand).toBe(`${block.id}.out`);
+    // displayName is auto-generated as 'Constant 1', canonical name is 'constant_1'
+    expect(shorthand).toBe(`${normalizeCanonicalName(block.displayName)}.out`);
   });
 
   it('preserves port ID exactly', () => {
@@ -436,7 +440,7 @@ describe('getShorthandForInput', () => {
     expect(shorthand).toBe('my_osc.phase');
   });
 
-  it('uses blockId when no displayName', () => {
+  it('uses auto-generated displayName when not provided', () => {
     const patch = buildPatch(b => {
       b.addBlock('Oscillator', {});
     });
@@ -444,7 +448,8 @@ describe('getShorthandForInput', () => {
     const block = Array.from(patch.blocks.values())[0];
     const shorthand = getShorthandForInput(block, portId('phase'));
 
-    expect(shorthand).toBe(`${block.id}.phase`);
+    // displayName is auto-generated, shorthand uses canonical name from it
+    expect(shorthand).toBe(`${normalizeCanonicalName(block.displayName)}.phase`);
   });
 
   it('preserves port ID exactly', () => {

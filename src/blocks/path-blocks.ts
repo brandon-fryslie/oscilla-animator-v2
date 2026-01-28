@@ -195,6 +195,7 @@ registerBlock({
         shape: { k: 'sig', id: shapeRefSig, slot: shapeSlot, type: shapeType, stride: strideOf(shapeType.payload) },
         controlPoints: { k: 'field', id: computedPositions, slot: cpSlot, type: cpType, stride: strideOf(cpType.payload) },
       },
+      instanceContext: controlInstance,
     };
   },
 });
@@ -389,6 +390,7 @@ registerBlock({
         shape: { k: 'sig', id: shapeRefSig, slot: shapeSlot, type: shapeType, stride: strideOf(shapeType.payload) },
         controlPoints: { k: 'field', id: computedPositions, slot: cpSlot, type: cpType, stride: strideOf(cpType.payload) },
       },
+      instanceContext: controlInstance,
     };
   },
 });

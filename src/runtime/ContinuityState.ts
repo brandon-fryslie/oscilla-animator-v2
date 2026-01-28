@@ -13,6 +13,7 @@
  */
 
 import type { DomainInstance } from '../compiler/ir/types';
+import type { PlacementBasisBuffers } from './PlacementBasis';
 
 // =============================================================================
 // Branded Types
@@ -116,6 +117,9 @@ export interface ContinuityState {
   /** Previous domain instances (for change detection) */
   prevDomains: Map<string, DomainInstance>;
 
+  /** Per-instance placement basis, keyed by InstanceId */
+  readonly placementBasis: Map<string, PlacementBasisBuffers>;
+
   /** Last t_model_ms for slew delta computation */
   lastTModelMs: number;
 
@@ -133,6 +137,7 @@ export function createContinuityState(): ContinuityState {
     targets: new Map(),
     mappings: new Map(),
     prevDomains: new Map(),
+    placementBasis: new Map(),
     lastTModelMs: 0,
     domainChangeThisFrame: false,
   };
@@ -180,6 +185,7 @@ export function clearContinuityState(continuity: ContinuityState): void {
   continuity.targets.clear();
   continuity.mappings.clear();
   continuity.prevDomains.clear();
+  continuity.placementBasis.clear();
   continuity.lastTModelMs = 0;
   continuity.domainChangeThisFrame = false;
 }

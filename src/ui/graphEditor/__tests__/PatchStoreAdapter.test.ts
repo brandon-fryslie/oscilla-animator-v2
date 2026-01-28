@@ -44,7 +44,8 @@ describe('PatchStoreAdapter', () => {
       expect(blockLike?.id).toBe(id);
       expect(blockLike?.type).toBe('Oscillator');
       expect(blockLike?.displayName).toBe('Oscillator 1'); // Auto-generated
-      expect(blockLike?.params).toEqual({ frequency: 440 });
+      // Config defaults (mode: 0) are merged with provided params
+      expect(blockLike?.params).toEqual({ mode: 0, frequency: 440 });
       expect(blockLike?.inputPorts).toBeInstanceOf(Map);
       expect(blockLike?.outputPorts).toBeInstanceOf(Map);
     });

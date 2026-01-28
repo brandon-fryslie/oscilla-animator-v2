@@ -198,28 +198,24 @@ describe('validateDisplayNameUniqueness', () => {
     expect(error).toBeNull();
   });
 
-  it('detects case-insensitive collisions', () => {
-    const patch = buildPatch(b => {
-      b.addBlock('Add', {}, { displayName: 'My Block' });
-      b.addBlock('Add', {}, { displayName: 'my block' });
-    });
-
-    const error = validateDisplayNameUniqueness(patch);
-    expect(error).not.toBeNull();
-    expect(error?.kind).toBe('DISPLAYNAME_COLLISION');
-    expect(error?.message).toContain('my_block');
+  it('prevents case-insensitive collisions at creation time', () => {
+    // addBlock now throws when creating a block with a colliding displayName
+    expect(() => {
+      buildPatch(b => {
+        b.addBlock('Add', {}, { displayName: 'My Block' });
+        b.addBlock('Add', {}, { displayName: 'my block' });
+      });
+    }).toThrow(/conflicts with existing block/);
   });
 
-  it('detects special character collisions', () => {
-    const patch = buildPatch(b => {
-      b.addBlock('Add', {}, { displayName: 'Circle!' });
-      b.addBlock('Add', {}, { displayName: 'Circle?' });
-    });
-
-    const error = validateDisplayNameUniqueness(patch);
-    expect(error).not.toBeNull();
-    expect(error?.kind).toBe('DISPLAYNAME_COLLISION');
-    expect(error?.message).toContain('circle');
+  it('prevents special character collisions at creation time', () => {
+    // addBlock now throws when creating a block with a colliding displayName
+    expect(() => {
+      buildPatch(b => {
+        b.addBlock('Add', {}, { displayName: 'Circle!' });
+        b.addBlock('Add', {}, { displayName: 'Circle?' });
+      });
+    }).toThrow(/conflicts with existing block/);
   });
 
   it('generates unique displayNames when not provided', () => {
@@ -245,32 +241,24 @@ describe('validateDisplayNameUniqueness', () => {
     expect(error).toBeNull();
   });
 
-  it('provides detailed error message with all colliding names', () => {
-    const patch = buildPatch(b => {
-      b.addBlock('Add', {}, { displayName: 'My Block' });
-      b.addBlock('Add', {}, { displayName: 'my block' });
-      b.addBlock('Add', {}, { displayName: 'MY BLOCK!' });
-    });
-
-    const error = validateDisplayNameUniqueness(patch);
-    expect(error).not.toBeNull();
-    expect(error?.message).toContain('My Block');
-    expect(error?.message).toContain('my block');
-    expect(error?.message).toContain('MY BLOCK!');
+  it('prevents multiple collisions at creation time', () => {
+    // addBlock now throws on the first collision attempt
+    expect(() => {
+      buildPatch(b => {
+        b.addBlock('Add', {}, { displayName: 'My Block' });
+        b.addBlock('Add', {}, { displayName: 'my block' }); // This will throw
+      });
+    }).toThrow(/conflicts with existing block/);
   });
 
-  it('handles multiple collision groups', () => {
-    const patch = buildPatch(b => {
-      b.addBlock('Add', {}, { displayName: 'Block A' });
-      b.addBlock('Add', {}, { displayName: 'block a' });
-      b.addBlock('Add', {}, { displayName: 'Circle' });
-      b.addBlock('Add', {}, { displayName: 'circle!' });
-    });
-
-    const error = validateDisplayNameUniqueness(patch);
-    expect(error).not.toBeNull();
-    expect(error?.message).toContain('block_a');
-    expect(error?.message).toContain('circle');
+  it('prevents collisions across multiple groups at creation time', () => {
+    // addBlock now throws on the first collision attempt
+    expect(() => {
+      buildPatch(b => {
+        b.addBlock('Add', {}, { displayName: 'Block A' });
+        b.addBlock('Add', {}, { displayName: 'block a' }); // This will throw
+      });
+    }).toThrow(/conflicts with existing block/);
   });
 });
 

@@ -27,6 +27,8 @@ import ReactFlow, {
   type Node,
   type Edge,
   type Connection,
+  type NodeMouseHandler,
+  type EdgeMouseHandler,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import type { GraphDataAdapter } from './types';
@@ -92,6 +94,14 @@ export interface GraphEditorCoreProps {
 
   /** Callback when editor is ready (for external imperative API) */
   onEditorReady?: (handle: GraphEditorCoreHandle) => void;
+
+  /** Context menu event handlers (optional) */
+  onNodeContextMenu?: NodeMouseHandler;
+  onEdgeContextMenu?: EdgeMouseHandler;
+
+  /** Edge hover event handlers (optional - for debug mode) */
+  onEdgeMouseEnter?: EdgeMouseHandler;
+  onEdgeMouseLeave?: EdgeMouseHandler;
 }
 
 /**
@@ -120,15 +130,19 @@ export const GraphEditorCoreInner = observer(
         patch = null,
         nodeTypes: customNodeTypes,
         onEditorReady,
+        onNodeContextMenu,
+        onEdgeContextMenu,
+        onEdgeMouseEnter,
+        onEdgeMouseLeave,
       },
       ref
     ) => {
       // Merge features with defaults
       const mergedFeatures = useMemo(() => ({ ...DEFAULT_FEATURES, ...features }), [features]);
 
-      // ReactFlow state - remove generic to avoid type mismatch
-      const [nodes, setNodes, onNodesChange] = useNodesState([]);
-      const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+      // ReactFlow state with explicit types
+      const [nodes, setNodes, onNodesChange] = useNodesState<any>([]);
+      const [edges, setEdges, onEdgesChange] = useEdgesState<any>([]);
       const [isLayouting, setIsLayouting] = useState(false);
       const { fitView } = useReactFlow();
 
@@ -385,6 +399,10 @@ export const GraphEditorCoreInner = observer(
               onNodeClick={handleNodeClick}
               onEdgeClick={handleEdgeClick}
               onPaneClick={handlePaneClick}
+              onNodeContextMenu={onNodeContextMenu}
+              onEdgeContextMenu={onEdgeContextMenu}
+              onEdgeMouseEnter={onEdgeMouseEnter}
+              onEdgeMouseLeave={onEdgeMouseLeave}
               isValidConnection={isValidConnection}
               nodeTypes={nodeTypes}
               fitView

@@ -151,15 +151,26 @@ Last updated: 2026-01-27-171000
 - **Spec:** `design-docs/CANONICAL-oscilla-v2.5-20260109/topics/11-continuity-system.md` (I2), `topics/17-layout-system.md`
 - **Description:** PlacementBasis abstraction for stable per-element placement coordinates (uv, rank, seed) independent of element count N. Eliminates velocity snaps when element count changes.
 - **Planning Files:** `.agent_planning/placement-basis/`
-- **Status Note:** 7-sprint plan complete. Enables gauge-invariant layouts per I2.
+- **Status Note:** 7-sprint plan complete (user decisions resolved). Ready for implementation.
+- **User Decisions:**
+  - Migration: Manual only (no backwards compatibility)
+  - BasisKind: User-configurable input parameter
+  - Rank: Activation only (not Z-ordering)
+  - MaxCount: Pre-allocate to 10k (MAX_ELEMENTS constant)
+- **Constraints:**
+  - Write NEW layouts (CircleLayoutUV, LineLayoutUV, GridLayoutUV) - no migration of existing
+  - Defer compiler validation until new layouts proven gauge-invariant
+  - Test as you go, use buffer pools, modular/composable code
+  - No arbitrary defaults - hard errors on missing values
 - **Key Deliverables:**
-  - PlacementBasis types and storage (Sprint 1, HIGH confidence)
-  - Generation functions (Halton, rank, seed) and materialization (Sprint 2, HIGH)
-  - UV-based layout kernels (circleLayoutUV, lineLayoutUV, gridLayoutUV) (Sprint 3, HIGH)
-  - Layout block migration (Sprint 4, MEDIUM - migration strategy TBD)
-  - Compiler validation forbidding index intrinsics in layouts (Sprint 5, MEDIUM)
-  - Hot-swap persistence (Sprint 6, MEDIUM)
-  - Velocity continuity tests (Sprint 7, HIGH)
+  - Sprint 1: Type Foundation + Tests (HIGH)
+  - Sprint 2: Generation + Tests (HIGH)
+  - Sprint 3: Materialization + Tests (HIGH)
+  - Sprint 4: Layout Kernels + Tests (HIGH)
+  - Sprint 5: New Layout Blocks + Tests (HIGH)
+  - Sprint 6: Persistence & Hot-Swap + Tests (MEDIUM)
+  - Sprint 7: Velocity Continuity Integration Tests (HIGH)
+  - (Deferred) Compiler Validation
 - **Problem Solved:** Current layouts use `normalizedIndex(i, N)` which causes velocity discontinuities when N changes. PlacementBasis provides stable per-element coordinates that persist across count changes.
 - **Origin:** `.agent_planning/placement-basis/HANDOFF.md`, ChatGPT conversation on GaugeInvariantLayouts
 

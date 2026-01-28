@@ -394,6 +394,7 @@ export type {
   OutputAddress,
   InputAddress,
   ParamAddress,
+  AdapterAddress,
 } from './canonical-address';
 
 export {
@@ -401,7 +402,14 @@ export {
   isOutputAddress,
   isInputAddress,
   isParamAddress,
+  isAdapterAddress,
   addressToString,
   parseAddress,
   getAddressFormatVersion,
 } from './canonical-address';
+
+// =============================================================================
+// Adapter Attachments (from Patch.ts)
+// =============================================================================
+
+export type { AdapterAttachment, VarargConnection } from '../graph/Patch';
