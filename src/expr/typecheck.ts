@@ -18,6 +18,7 @@ import type { PayloadType } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import type { AddressRegistry } from '../graph/address-registry';
 import { addressToString } from '../types/canonical-address';
+import { isVectorType, validateSwizzle, swizzleResultType } from './swizzle';
 
 
 /**
@@ -475,16 +476,36 @@ function typecheckCall(node: ExprNode & { kind: 'call' }, ctx: TypeCheckContext)
 }
 
 /**
- * Type check member access node (block output reference).
+ * Type check member access node (component access or block output reference).
  */
 function typecheckMemberAccess(node: ExprNode & { kind: 'member' }, ctx: TypeCheckContext): ExprNode {
+  // First, type-check the object expression
+  const typedObject = typecheck(node.object, ctx);
+  const objectType = typedObject.type!;
+
+  // Case 1: Component access on vector type (vec2, vec3, color)
+  if (isVectorType(objectType)) {
+    const error = validateSwizzle(node.member, objectType);
+    if (error) {
+      throw new TypeError(error, node.pos, undefined, undefined,
+        objectType.kind === 'vec3' ? 'Valid components: x, y, z (or r, g, b)' :
+        objectType.kind === 'color' ? 'Valid components: r, g, b, a (or x, y, z, w)' :
+        objectType.kind === 'vec2' ? 'Valid components: x, y (or r, g)' : undefined
+      );
+    }
+    const resultType = swizzleResultType(node.member);
+    return withType({ ...node, object: typedObject }, resultType);
+  }
+
+  // Case 2: Block output reference (existing logic)
   if (!ctx.blockRefs) {
     throw new TypeError(
-      'Block references are not available in this context',
+      `Cannot access member '${node.member}' on type '${objectType.kind}' (not a vector type, and block references not available)`,
       node.pos,
       undefined,
       undefined,
-      'Use input variables instead of block references'
+      objectType.kind === 'float' || objectType.kind === 'int' ?
+        'Scalar types do not have components. Did you mean a block reference?' : undefined
     );
   }
 
