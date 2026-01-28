@@ -16,6 +16,11 @@ import type { BasisKind } from '../compiler/ir/types';
 export const MAX_ELEMENTS = 10_000;
 
 /**
+ * Golden ratio conjugate (1/φ) for low-discrepancy sequences.
+ */
+const PHI = 0.6180339887498949;
+
+/**
  * Per-instance placement basis buffers.
  * Pre-allocated to MAX_ELEMENTS. Persists across frames and hot-swap.
  */
@@ -24,4 +29,151 @@ export interface PlacementBasisBuffers {
   readonly rank: Float32Array;    // MAX_ELEMENTS floats
   readonly seed: Float32Array;    // MAX_ELEMENTS floats
   readonly basisKind: BasisKind;  // Generation algorithm used
+}
+
+// =============================================================================
+// Generation Functions
+// =============================================================================
+
+/**
+ * Generate 1D Halton sequence value for index i.
+ * Pure function - no side effects.
+ *
+ * @param index - Element index
+ * @param base - Base for Halton sequence (typically 2, 3, 5, 7, ...)
+ * @returns Value in [0, 1]
+ */
+export function halton(index: number, base: number): number {
+  if (typeof index !== 'number' || typeof base !== 'number') {
+    throw new Error('halton: index and base are required numbers');
+  }
+  let result = 0;
+  let f = 1 / base;
+  let i = index;
+  while (i > 0) {
+    result += f * (i % base);
+    i = Math.floor(i / base);
+    f /= base;
+  }
+  return result;
+}
+
+/**
+ * Generate 2D Halton sequence value for index i.
+ * Pure function - no side effects.
+ *
+ * @param index - Element index
+ * @param base1 - Base for first dimension
+ * @param base2 - Base for second dimension
+ * @returns [u, v] in [0, 1] x [0, 1]
+ */
+export function halton2D(index: number, base1: number, base2: number): [number, number] {
+  if (typeof base1 !== 'number' || typeof base2 !== 'number') {
+    throw new Error('halton2D: base1 and base2 are required numbers');
+  }
+  return [halton(index, base1), halton(index, base2)];
+}
+
+/**
+ * Generate rank value for index i.
+ * Uses golden ratio for low-discrepancy 1D sequence.
+ * Pure function - no side effects.
+ *
+ * @param i - Element index
+ * @returns Rank value in [0, 1)
+ */
+export function generateRank(i: number): number {
+  if (typeof i !== 'number') {
+    throw new Error('generateRank: index is required number');
+  }
+  return (i * PHI) % 1.0;
+}
+
+/**
+ * Simple string hash (djb2 variant).
+ * Pure function - no side effects.
+ *
+ * @param str - String to hash
+ * @returns Unsigned 32-bit integer hash
+ */
+function hashString(str: string): number {
+  if (typeof str !== 'string') {
+    throw new Error('hashString: str is required string');
+  }
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash) ^ str.charCodeAt(i);
+  }
+  return hash >>> 0; // Ensure unsigned
+}
+
+/**
+ * Generate deterministic seed for instance+element.
+ * Pure function - no side effects.
+ *
+ * @param instanceId - Instance identifier
+ * @param elementIndex - Element index
+ * @returns Seed value in [0, 1]
+ */
+export function generateSeed(instanceId: string, elementIndex: number): number {
+  if (typeof instanceId !== 'string') {
+    throw new Error('generateSeed: instanceId is required string');
+  }
+  if (typeof elementIndex !== 'number') {
+    throw new Error('generateSeed: elementIndex is required number');
+  }
+  const hash = hashString(instanceId) ^ (elementIndex * 2654435761);
+  return (hash >>> 0) / 4294967295; // Normalize to [0,1]
+}
+
+/**
+ * Generate UV coordinate based on BasisKind.
+ * Pure function - no side effects.
+ *
+ * @param basisKind - Generation algorithm
+ * @param index - Element index
+ * @param instanceId - Instance identifier (used for random seed)
+ * @returns [u, v] in [0, 1] x [0, 1]
+ */
+export function generateUV(
+  basisKind: BasisKind,
+  index: number,
+  instanceId: string
+): [number, number] {
+  if (!basisKind) {
+    throw new Error('generateUV: basisKind is required');
+  }
+
+  switch (basisKind) {
+    case 'halton2D':
+      return halton2D(index, 2, 3);
+
+    case 'random': {
+      // Use seed-derived pseudo-random
+      const seed1 = generateSeed(instanceId, index * 2);
+      const seed2 = generateSeed(instanceId, index * 2 + 1);
+      return [seed1, seed2];
+    }
+
+    case 'spiral': {
+      // Fermat spiral for good circle coverage
+      const angle = index * PHI * 2 * Math.PI;
+      const radius = Math.sqrt(index / MAX_ELEMENTS);
+      return [
+        0.5 + 0.5 * radius * Math.cos(angle),
+        0.5 + 0.5 * radius * Math.sin(angle),
+      ];
+    }
+
+    case 'grid': {
+      // Grid-aligned using Halton but snapped
+      const [u, v] = halton2D(index, 2, 3);
+      return [u, v]; // Grid snapping done by kernel if needed
+    }
+
+    default: {
+      const _exhaustive: never = basisKind;
+      throw new Error(`Unknown basisKind: ${_exhaustive}`);
+    }
+  }
 }

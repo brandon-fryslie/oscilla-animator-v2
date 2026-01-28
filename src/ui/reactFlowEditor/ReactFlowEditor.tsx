@@ -23,7 +23,6 @@ import type { BlockId, PortId } from '../../types';
 import type { EditorHandle } from '../editorCommon';
 import { GraphEditorCore, type GraphEditorCoreHandle } from '../graphEditor/GraphEditorCore';
 import { PatchStoreAdapter } from '../graphEditor/PatchStoreAdapter';
-import { useGraphEditor } from '../graphEditor/GraphEditorContext';
 import { BlockContextMenu } from './menus/BlockContextMenu';
 import { EdgeContextMenu } from './menus/EdgeContextMenu';
 import { PortContextMenu } from './menus/PortContextMenu';
@@ -162,6 +161,51 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorProps> = observer(({
     [selection]
   );
 
+  // Context menu handlers
+  const handleNodeContextMenu = useCallback<NodeMouseHandler>(
+    (event, node) => {
+      event.preventDefault();
+      setContextMenu({
+        type: 'block',
+        blockId: node.id as BlockId,
+        position: { top: event.clientY, left: event.clientX },
+      });
+    },
+    []
+  );
+
+  const handleEdgeContextMenu = useCallback<EdgeMouseHandler>(
+    (event, edge) => {
+      event.preventDefault();
+      setContextMenu({
+        type: 'edge',
+        edgeId: edge.id,
+        position: { top: event.clientY, left: event.clientX },
+      });
+    },
+    []
+  );
+
+  // Edge hover handlers (for debug mode)
+  const handleEdgeMouseEnter = useCallback<EdgeMouseHandler>(
+    (_event, edge) => {
+      debug.setHoveredEdge(edge.id);
+    },
+    [debug]
+  );
+
+  const handleEdgeMouseLeave = useCallback<EdgeMouseHandler>(
+    () => {
+      debug.setHoveredEdge(null);
+    },
+    [debug]
+  );
+
+  // Close context menu on pane click
+  const handlePaneClick = useCallback(() => {
+    setContextMenu(null);
+  }, []);
+
   // Create handle for EditorContext
   useEffect(() => {
     if (!coreRef.current) return;
@@ -218,6 +262,10 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorProps> = observer(({
           diagnostics={diagnostics}
           debug={debug}
           patch={patchStore.patch}
+          onNodeContextMenu={handleNodeContextMenu}
+          onEdgeContextMenu={handleEdgeContextMenu}
+          onEdgeMouseEnter={handleEdgeMouseEnter}
+          onEdgeMouseLeave={handleEdgeMouseLeave}
         />
 
         {/* Auto-Arrange Button Panel */}

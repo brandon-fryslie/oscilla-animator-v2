@@ -9,10 +9,12 @@ import {
   type OutputAddress,
   type InputAddress,
   type ParamAddress,
+  type AdapterAddress,
   isBlockAddress,
   isOutputAddress,
   isInputAddress,
   isParamAddress,
+  isAdapterAddress,
   addressToString,
   parseAddress,
   getAddressFormatVersion,
@@ -47,11 +49,20 @@ describe('Canonical Address Type Guards', () => {
     paramId: 'size',
   };
 
+  const adapterAddr: AdapterAddress = {
+    kind: 'adapter',
+    blockId: blockId('b1'),
+    canonicalName: 'my_circle',
+    portId: portId('x'),
+    adapterId: 'adapter_0',
+  };
+
   it('isBlockAddress correctly identifies block addresses', () => {
     expect(isBlockAddress(blockAddr)).toBe(true);
     expect(isBlockAddress(outputAddr)).toBe(false);
     expect(isBlockAddress(inputAddr)).toBe(false);
     expect(isBlockAddress(paramAddr)).toBe(false);
+    expect(isBlockAddress(adapterAddr)).toBe(false);
   });
 
   it('isOutputAddress correctly identifies output addresses', () => {
@@ -59,6 +70,7 @@ describe('Canonical Address Type Guards', () => {
     expect(isOutputAddress(outputAddr)).toBe(true);
     expect(isOutputAddress(inputAddr)).toBe(false);
     expect(isOutputAddress(paramAddr)).toBe(false);
+    expect(isOutputAddress(adapterAddr)).toBe(false);
   });
 
   it('isInputAddress correctly identifies input addresses', () => {
@@ -66,6 +78,7 @@ describe('Canonical Address Type Guards', () => {
     expect(isInputAddress(outputAddr)).toBe(false);
     expect(isInputAddress(inputAddr)).toBe(true);
     expect(isInputAddress(paramAddr)).toBe(false);
+    expect(isInputAddress(adapterAddr)).toBe(false);
   });
 
   it('isParamAddress correctly identifies param addresses', () => {
@@ -73,6 +86,15 @@ describe('Canonical Address Type Guards', () => {
     expect(isParamAddress(outputAddr)).toBe(false);
     expect(isParamAddress(inputAddr)).toBe(false);
     expect(isParamAddress(paramAddr)).toBe(true);
+    expect(isParamAddress(adapterAddr)).toBe(false);
+  });
+
+  it('isAdapterAddress correctly identifies adapter addresses', () => {
+    expect(isAdapterAddress(blockAddr)).toBe(false);
+    expect(isAdapterAddress(outputAddr)).toBe(false);
+    expect(isAdapterAddress(inputAddr)).toBe(false);
+    expect(isAdapterAddress(paramAddr)).toBe(false);
+    expect(isAdapterAddress(adapterAddr)).toBe(true);
   });
 });
 
@@ -114,6 +136,17 @@ describe('addressToString', () => {
       paramId: 'size',
     };
     expect(addressToString(addr)).toBe('v1:blocks.my_circle.params.size');
+  });
+
+  it('serializes adapter address', () => {
+    const addr: AdapterAddress = {
+      kind: 'adapter',
+      blockId: blockId('b1'),
+      canonicalName: 'my_circle',
+      portId: portId('x'),
+      adapterId: 'adapter_0',
+    };
+    expect(addressToString(addr)).toBe('v1:blocks.my_circle.inputs.x.adapters.adapter_0');
   });
 
   it('handles canonical names with underscores and hyphens', () => {
@@ -177,6 +210,17 @@ describe('parseAddress', () => {
       });
     });
 
+    it('parses adapter address', () => {
+      const result = parseAddress('v1:blocks.my_circle.inputs.x.adapters.adapter_0');
+      expect(result).toEqual({
+        kind: 'adapter',
+        blockId: '',
+        canonicalName: 'my_circle',
+        portId: 'x',
+        adapterId: 'adapter_0',
+      });
+    });
+
     it('handles canonical names with underscores and hyphens', () => {
       const result = parseAddress('v1:blocks.my_fancy_block-v2');
       expect(result?.canonicalName).toBe('my_fancy_block-v2');
@@ -233,6 +277,19 @@ describe('parseAddress', () => {
 
     it('rejects too few path segments for port/param', () => {
       expect(parseAddress('v1:blocks.my_circle.outputs')).toBeNull();
+    });
+
+    it('rejects adapter address with wrong category (must be inputs)', () => {
+      // Adapters can only be on inputs, not outputs
+      expect(parseAddress('v1:blocks.my_circle.outputs.x.adapters.adapter_0')).toBeNull();
+    });
+
+    it('rejects adapter address with wrong literal (must be adapters)', () => {
+      expect(parseAddress('v1:blocks.my_circle.inputs.x.lenses.lens_0')).toBeNull();
+    });
+
+    it('rejects adapter address with empty adapter ID', () => {
+      expect(parseAddress('v1:blocks.my_circle.inputs.x.adapters.')).toBeNull();
     });
 
     it('rejects empty string', () => {
@@ -316,6 +373,25 @@ describe('roundtrip: parseAddress(addressToString(addr))', () => {
       original.canonicalName
     );
     expect(parsed && 'paramId' in parsed ? parsed.paramId : null).toBe(original.paramId);
+  });
+
+  it('roundtrips adapter address', () => {
+    const original: AdapterAddress = {
+      kind: 'adapter',
+      blockId: blockId('b1'),
+      canonicalName: 'my_circle',
+      portId: portId('x'),
+      adapterId: 'adapter_0',
+    };
+    const str = addressToString(original);
+    const parsed = parseAddress(str);
+
+    expect(parsed?.kind).toBe('adapter');
+    expect(parsed && 'canonicalName' in parsed ? parsed.canonicalName : null).toBe(
+      original.canonicalName
+    );
+    expect(parsed && 'portId' in parsed ? parsed.portId : null).toBe(original.portId);
+    expect(parsed && 'adapterId' in parsed ? parsed.adapterId : null).toBe(original.adapterId);
   });
 });
 
