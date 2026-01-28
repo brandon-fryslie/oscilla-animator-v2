@@ -82,7 +82,7 @@ registerBlock({
   capability: 'pure',
   inputs: [],
   outputs: [
-    { id: 'out', label: 'Output', type: signalType('???') },
+    { id: 'out', label: 'Output', type: canonicalType('???') },
   ],
   params: {
     value: 0,

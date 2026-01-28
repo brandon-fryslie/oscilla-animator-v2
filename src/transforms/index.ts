@@ -5,7 +5,7 @@
  * This is a stub that will be extended with actual transform definitions.
  */
 
-import type { SignalType } from '../core/canonical-types';
+import type { CanonicalType } from '../core/canonical-types';
 
 // =============================================================================
 // Transform Function Types
@@ -21,8 +21,8 @@ export type TransformFn = (value: unknown, params: Record<string, unknown>) => u
  */
 export interface AdapterDef {
   readonly id: string;
-  readonly from: SignalType;
-  readonly to: SignalType;
+  readonly from: CanonicalType;
+  readonly to: CanonicalType;
   readonly fn: TransformFn;
   readonly cost: number;
 }
@@ -32,8 +32,8 @@ export interface AdapterDef {
  */
 export interface LensDef {
   readonly id: string;
-  readonly inputType: SignalType;
-  readonly outputType: SignalType;
+  readonly inputType: CanonicalType;
+  readonly outputType: CanonicalType;
   readonly params: readonly LensParamDef[];
   readonly fn: TransformFn;
 }
@@ -44,7 +44,7 @@ export interface LensDef {
 export interface LensParamDef {
   readonly id: string;
   readonly label: string;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
   readonly defaultValue: unknown;
 }
 
@@ -89,7 +89,7 @@ export function registerLens(def: LensDef): void {
  * Note: This is a simple comparison. In the future, we may need more sophisticated
  * matching logic that considers axis unification and payload compatibility.
  */
-export function findAdapters(from: SignalType, to: SignalType): AdapterDef[] {
+export function findAdapters(from: CanonicalType, to: CanonicalType): AdapterDef[] {
   return Array.from(adapters.values()).filter(
     a => a.from.payload === from.payload && a.to.payload === to.payload
   );

@@ -20,8 +20,8 @@ The **Unit type system migration (Phase 1)** is **complete and compiling**. The 
 | Area | Status | Location |
 |------|--------|----------|
 | `Unit` discriminated union (14 kinds) | Done | `canonical-types.ts:20-54` |
-| `SignalType.unit` is mandatory (`readonly unit: Unit`) | Done | `canonical-types.ts:419` |
-| `signalType()` factory always provides a unit | Done | Defaults via `defaultUnitForPayload()` |
+| `CanonicalType.unit` is mandatory (`readonly unit: Unit`) | Done | `canonical-types.ts:419` |
+| `canonicalType()` factory always provides a unit | Done | Defaults via `defaultUnitForPayload()` |
 | Payload-unit validation (`isValidPayloadUnit`) | Done | `canonical-types.ts:85` |
 | `PayloadType` cleaned: removed 'phase' and 'unit' | Done | Clean set of 7 payloads |
 | Block definitions use explicit units (`unitPhase01()`) | Done | signal, time, color, geometry, field-ops, instance blocks |
@@ -77,7 +77,7 @@ None of these are implemented:
 if (from.unit && to.unit && from.unit.kind !== to.unit.kind) {
 ```
 
-`SignalType.unit` is declared as `readonly unit: Unit` (non-optional). The `from.unit && to.unit` guard is dead code from before unit became mandatory. Should be:
+`CanonicalType.unit` is declared as `readonly unit: Unit` (non-optional). The `from.unit && to.unit` guard is dead code from before unit became mandatory. Should be:
 
 ```typescript
 if (from.unit.kind !== to.unit.kind) {
@@ -112,11 +112,11 @@ The adapter registry can only match on payload+cardinality+temporality. The spec
 
 **Recommendation**: When implementing Phase 2, extend `TypeSignature` to include `unit: Unit['kind'] | 'any'`.
 
-### P2: Many blocks use `signalType('float')` without semantic unit annotation
+### P2: Many blocks use `canonicalType('float')` without semantic unit annotation
 
 **Scope**: math-blocks, primitive-blocks, geometry-blocks, signal-blocks
 
-When called as `signalType('float')`, the default unit is `unitScalar()`. This is correct for generic math operations, but some ports semantically carry specific units that aren't declared:
+When called as `canonicalType('float')`, the default unit is `unitScalar()`. This is correct for generic math operations, but some ports semantically carry specific units that aren't declared:
 
 - `PolarToCartesian.angle` — should be `unitRadians()` or `unitDegrees()`?
 - `CircularLayout.radius` — spatial meaning, `unitScalar()` is arguably correct
@@ -129,7 +129,7 @@ These are **design decisions** for the adapter system to resolve, not bugs. The 
 **Location**: `src/compiler/passes-v2/pass2-types.ts:17`
 
 ```typescript
-import type { SignalType, NumericUnit } from "../../core/canonical-types";
+import type { CanonicalType, NumericUnit } from "../../core/canonical-types";
 ```
 
 `NumericUnit` is imported but not used in this file. Dead import.
@@ -143,7 +143,7 @@ readonly unit?: UnitKind;      // KernelInputSignature
 readonly unit?: UnitKind;      // KernelOutputSignature
 ```
 
-Kernel signatures still treat unit as optional, which is inconsistent with the mandatory unit in `SignalType`. This is acceptable for now (kernels are a different layer — they describe runtime expectations, not graph types), but should be aligned when adapters are implemented to enable unit-aware kernel validation.
+Kernel signatures still treat unit as optional, which is inconsistent with the mandatory unit in `CanonicalType`. This is acceptable for now (kernels are a different layer — they describe runtime expectations, not graph types), but should be aligned when adapters are implemented to enable unit-aware kernel validation.
 
 ---
 

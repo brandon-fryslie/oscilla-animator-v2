@@ -4,8 +4,8 @@
  * Concrete implementation of the IRBuilder interface.
  */
 
-import type { SignalType } from '../../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION, signalType, unitScalar } from '../../core/canonical-types';
+import type { CanonicalType } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION, canonicalType, unitScalar } from '../../core/canonical-types';
 import type { TopologyId } from '../../shapes/types';
 import type { IRBuilder } from './IRBuilder';
 import type {
@@ -75,19 +75,19 @@ export class IRBuilderImpl implements IRBuilder {
   private eventSlotCounter = 0;
 
   // Slot type tracking for slotMeta generation
-  private slotTypes = new Map<ValueSlot, SignalType>();
+  private slotTypes = new Map<ValueSlot, CanonicalType>();
 
   constructor() {
     // Reserve system slots at fixed positions (compiler-runtime contract)
     // Slot 0: time.palette (color, stride=4)
-    this.reserveSystemSlot(0, signalType(COLOR));
+    this.reserveSystemSlot(0, canonicalType(COLOR));
   }
 
   /**
    * Reserve a system slot at a fixed position with known type.
    * Used for compiler-runtime contracts like time.palette at slot 0.
    */
-  private reserveSystemSlot(slotId: number, type: SignalType): void {
+  private reserveSystemSlot(slotId: number, type: CanonicalType): void {
     const slot = slotId as ValueSlot;
     this.slotTypes.set(slot, type);
     // Ensure slotCounter is past reserved slots
@@ -111,7 +111,7 @@ export class IRBuilderImpl implements IRBuilder {
   // Signal Expressions
   // =========================================================================
 
-  sigConst(value: number | string | boolean, type: SignalType): SigExprId {
+  sigConst(value: number | string | boolean, type: CanonicalType): SigExprId {
     // Hash-consing (I13): check cache before creating new ID
     const expr = { kind: 'const' as const, value, type };
     const hash = hashSigExpr(expr);
@@ -125,7 +125,7 @@ export class IRBuilderImpl implements IRBuilder {
     return id;
   }
 
-  sigSlot(slot: ValueSlot, type: SignalType): SigExprId {
+  sigSlot(slot: ValueSlot, type: CanonicalType): SigExprId {
     const expr = { kind: 'slot' as const, slot, type };
     const hash = hashSigExpr(expr);
     const existing = this.sigExprCache.get(hash);
@@ -138,7 +138,7 @@ export class IRBuilderImpl implements IRBuilder {
     return id;
   }
 
-  sigTime(which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'progress' | 'palette' | 'energy', type: SignalType): SigExprId {
+  sigTime(which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'progress' | 'palette' | 'energy', type: CanonicalType): SigExprId {
     const expr = { kind: 'time' as const, which, type };
     const hash = hashSigExpr(expr);
     const existing = this.sigExprCache.get(hash);
@@ -151,7 +151,7 @@ export class IRBuilderImpl implements IRBuilder {
     return id;
   }
 
-  sigExternal(channel: string, type: SignalType): SigExprId {
+  sigExternal(channel: string, type: CanonicalType): SigExprId {
     const expr = { kind: 'external' as const, which: channel, type };
     const hash = hashSigExpr(expr);
     const existing = this.sigExprCache.get(hash);
@@ -164,7 +164,7 @@ export class IRBuilderImpl implements IRBuilder {
     return id;
   }
 
-  sigMap(input: SigExprId, fn: PureFn, type: SignalType): SigExprId {
+  sigMap(input: SigExprId, fn: PureFn, type: CanonicalType): SigExprId {
     const expr = { kind: 'map' as const, input, fn, type };
     const hash = hashSigExpr(expr);
     const existing = this.sigExprCache.get(hash);
@@ -177,7 +177,7 @@ export class IRBuilderImpl implements IRBuilder {
     return id;
   }
 
-  sigZip(inputs: readonly SigExprId[], fn: PureFn, type: SignalType): SigExprId {
+  sigZip(inputs: readonly SigExprId[], fn: PureFn, type: CanonicalType): SigExprId {
     const expr = { kind: 'zip' as const, inputs, fn, type };
     const hash = hashSigExpr(expr);
     const existing = this.sigExprCache.get(hash);
@@ -189,7 +189,7 @@ export class IRBuilderImpl implements IRBuilder {
     this.sigExprCache.set(hash, id);
     return id;
   }
-  sigShapeRef(topologyId: TopologyId, paramSignals: readonly SigExprId[], type: SignalType, controlPointField?: { id: FieldExprId; stride: number }): SigExprId {
+  sigShapeRef(topologyId: TopologyId, paramSignals: readonly SigExprId[], type: CanonicalType, controlPointField?: { id: FieldExprId; stride: number }): SigExprId {
     const expr = { kind: 'shapeRef' as const, topologyId, paramSignals, controlPointField, type };
     const hash = hashSigExpr(expr);
     const existing = this.sigExprCache.get(hash);
@@ -205,14 +205,14 @@ export class IRBuilderImpl implements IRBuilder {
   /**
    * Binary operation helper - creates a sig expression that zips two inputs with an opcode.
    */
-  sigBinOp(a: SigExprId, b: SigExprId, opcode: OpCode, type: SignalType): SigExprId {
+  sigBinOp(a: SigExprId, b: SigExprId, opcode: OpCode, type: CanonicalType): SigExprId {
     return this.sigZip([a, b], { kind: 'opcode', opcode }, type);
   }
 
   /**
    * Unary operation helper - creates a sig expression that maps a single input with an opcode.
    */
-  sigUnaryOp(input: SigExprId, opcode: OpCode, type: SignalType): SigExprId {
+  sigUnaryOp(input: SigExprId, opcode: OpCode, type: CanonicalType): SigExprId {
     return this.sigMap(input, { kind: 'opcode', opcode }, type);
   }
 
@@ -223,7 +223,7 @@ export class IRBuilderImpl implements IRBuilder {
   sigCombine(
     inputs: readonly SigExprId[],
     mode: 'sum' | 'average' | 'max' | 'min' | 'last',
-    type: SignalType
+    type: CanonicalType
   ): SigExprId {
     // For combining signals, we use zip with appropriate combine function
     const fn: PureFn = { kind: 'kernel', name: `combine_${mode}` };
@@ -254,7 +254,7 @@ export class IRBuilderImpl implements IRBuilder {
   /**
    * Look up the type for a signal expression.
    */
-  getSigExprType(id: SigExprId): SignalType | undefined {
+  getSigExprType(id: SigExprId): CanonicalType | undefined {
     const expr = this.sigExprs[id as number];
     return expr?.type;
   }
@@ -275,7 +275,7 @@ export class IRBuilderImpl implements IRBuilder {
   // Field Expressions
   // =========================================================================
 
-  fieldConst(value: number | string, type: SignalType): FieldExprId {
+  fieldConst(value: number | string, type: CanonicalType): FieldExprId {
     const expr = { kind: 'const' as const, value, type };
     const hash = hashFieldExpr(expr);
     const existing = this.fieldExprCache.get(hash);
@@ -292,7 +292,7 @@ export class IRBuilderImpl implements IRBuilder {
    * Create a field from an intrinsic property.
    * Uses proper FieldExprIntrinsic type - no 'as any' casts needed.
    */
-  fieldIntrinsic(instanceId: InstanceId, intrinsic: IntrinsicPropertyName, type: SignalType): FieldExprId {
+  fieldIntrinsic(instanceId: InstanceId, intrinsic: IntrinsicPropertyName, type: CanonicalType): FieldExprId {
     const expr = {
       kind: 'intrinsic' as const,
       instanceId,
@@ -319,7 +319,7 @@ export class IRBuilderImpl implements IRBuilder {
     instanceId: InstanceId,
     field: PlacementFieldName,
     basisKind: BasisKind,
-    type: SignalType
+    type: CanonicalType
   ): FieldExprId {
     if (!instanceId) {
       throw new Error('fieldPlacement: instanceId is required');
@@ -355,7 +355,7 @@ export class IRBuilderImpl implements IRBuilder {
    * Create an array field expression (Stage 2: Signal<T> → Field<T>).
    * Represents the elements of an array instance.
    */
-  fieldArray(instanceId: InstanceId, type: SignalType): FieldExprId {
+  fieldArray(instanceId: InstanceId, type: CanonicalType): FieldExprId {
     const expr = {
       kind: 'array' as const,
       instanceId,
@@ -372,7 +372,7 @@ export class IRBuilderImpl implements IRBuilder {
     return id;
   }
 
-  Broadcast(signal: SigExprId, type: SignalType): FieldExprId {
+  Broadcast(signal: SigExprId, type: CanonicalType): FieldExprId {
     const expr = { kind: 'broadcast' as const, signal, type };
     const hash = hashFieldExpr(expr);
     const existing = this.fieldExprCache.get(hash);
@@ -385,7 +385,7 @@ export class IRBuilderImpl implements IRBuilder {
     return id;
   }
 
-  ReduceField(field: FieldExprId, op: 'min' | 'max' | 'sum' | 'avg', type: SignalType): SigExprId {
+  ReduceField(field: FieldExprId, op: 'min' | 'max' | 'sum' | 'avg', type: CanonicalType): SigExprId {
     const expr = { kind: 'reduce_field' as const, field, op, type };
     const hash = hashSigExpr(expr);
     const existing = this.sigExprCache.get(hash);
@@ -398,7 +398,7 @@ export class IRBuilderImpl implements IRBuilder {
     return id;
   }
 
-  fieldMap(input: FieldExprId, fn: PureFn, type: SignalType): FieldExprId {
+  fieldMap(input: FieldExprId, fn: PureFn, type: CanonicalType): FieldExprId {
     const instanceId = this.inferFieldInstance(input);
     const expr = { kind: 'map' as const, input, fn, type, instanceId };
     const hash = hashFieldExpr(expr);
@@ -412,7 +412,7 @@ export class IRBuilderImpl implements IRBuilder {
     return id;
   }
 
-  fieldZip(inputs: readonly FieldExprId[], fn: PureFn, type: SignalType): FieldExprId {
+  fieldZip(inputs: readonly FieldExprId[], fn: PureFn, type: CanonicalType): FieldExprId {
     const instanceId = this.inferZipInstance(inputs);
     const expr = { kind: 'zip' as const, inputs, fn, type, instanceId };
     const hash = hashFieldExpr(expr);
@@ -430,7 +430,7 @@ export class IRBuilderImpl implements IRBuilder {
     field: FieldExprId,
     signals: readonly SigExprId[],
     fn: PureFn,
-    type: SignalType
+    type: CanonicalType
   ): FieldExprId {
     const instanceId = this.inferFieldInstance(field);
     const expr = { kind: 'zipSig' as const, field, signals, fn, type, instanceId };
@@ -448,7 +448,7 @@ export class IRBuilderImpl implements IRBuilder {
   fieldPathDerivative(
     input: FieldExprId,
     operation: 'tangent' | 'arcLength',
-    type: SignalType
+    type: CanonicalType
   ): FieldExprId {
     const expr = { kind: 'pathDerivative' as const, input, operation, type };
     const hash = hashFieldExpr(expr);
@@ -535,7 +535,7 @@ export class IRBuilderImpl implements IRBuilder {
   fieldCombine(
     inputs: readonly FieldExprId[],
     mode: 'sum' | 'average' | 'max' | 'min' | 'last' | 'product',
-    type: SignalType
+    type: CanonicalType
   ): FieldExprId {
     // For combining fields, we use zip with appropriate combine function
     const fn: PureFn = { kind: 'kernel', name: `combine_${mode}` };
@@ -584,7 +584,7 @@ export class IRBuilderImpl implements IRBuilder {
   eventCombine(
     events: readonly EventExprId[],
     mode: 'any' | 'all' | 'merge' | 'last',
-    _type?: SignalType
+    _type?: CanonicalType
   ): EventExprId {
     // Map 'merge' and 'last' to underlying event combine modes
     const underlyingMode = mode === 'merge' || mode === 'last' ? 'any' : mode;
@@ -712,7 +712,7 @@ export class IRBuilderImpl implements IRBuilder {
   /**
    * Allocate a typed value slot (tracking type for slotMeta generation).
    */
-  allocTypedSlot(type: SignalType, _label?: string): ValueSlot {
+  allocTypedSlot(type: CanonicalType, _label?: string): ValueSlot {
     // Compute stride from payload
     let stride: number;
     switch (type.payload.kind) {
@@ -749,7 +749,7 @@ export class IRBuilderImpl implements IRBuilder {
    * Without type registration, slotMeta generation defaults to stride=1, causing runtime errors
    * when slotWriteStrided tries to write multiple components to a single-component slot.
    */
-  registerSlotType(slot: ValueSlot, type: SignalType): void {
+  registerSlotType(slot: ValueSlot, type: CanonicalType): void {
     this.slotTypes.set(slot, type);
   }
 
@@ -760,7 +760,7 @@ export class IRBuilderImpl implements IRBuilder {
   /**
    * Get slot type information for slotMeta generation.
    */
-  getSlotTypes(): ReadonlyMap<ValueSlot, SignalType> {
+  getSlotTypes(): ReadonlyMap<ValueSlot, CanonicalType> {
     return this.slotTypes;
   }
 
@@ -771,8 +771,8 @@ export class IRBuilderImpl implements IRBuilder {
    * computing stride from payload type. This is used at compile finalization
    * to ensure slotMeta covers all slots the runtime will touch.
    */
-  getSlotMetaInputs(): ReadonlyMap<ValueSlot, { readonly type: SignalType; readonly stride: number }> {
-    const result = new Map<ValueSlot, { readonly type: SignalType; readonly stride: number }>();
+  getSlotMetaInputs(): ReadonlyMap<ValueSlot, { readonly type: CanonicalType; readonly stride: number }> {
+    const result = new Map<ValueSlot, { readonly type: CanonicalType; readonly stride: number }>();
     for (const [slot, type] of this.slotTypes) {
       // Import payloadStride inline to compute stride from payload type
       let stride: number;
@@ -854,7 +854,7 @@ export class IRBuilderImpl implements IRBuilder {
     return stateSlotId(slotIndex);
   }
 
-  sigStateRead(stateSlot: StateSlotId, type: SignalType): SigExprId {
+  sigStateRead(stateSlot: StateSlotId, type: CanonicalType): SigExprId {
     const expr = { kind: 'stateRead' as const, stateSlot, type };
     const hash = hashSigExpr(expr);
     const existing = this.sigExprCache.get(hash);
@@ -867,7 +867,7 @@ export class IRBuilderImpl implements IRBuilder {
     return id;
   }
 
-  sigEventRead(eventSlot: EventSlotId, type: SignalType): SigExprId {
+  sigEventRead(eventSlot: EventSlotId, type: CanonicalType): SigExprId {
     // EventRead: produces a signal that is 1.0 on frames when the event fires, 0.0 otherwise
     const expr = { kind: 'eventRead' as const, eventSlot, type };
     const hash = hashSigExpr(expr);
@@ -885,7 +885,7 @@ export class IRBuilderImpl implements IRBuilder {
     this.steps.push({ kind: 'stateWrite', stateSlot, value });
   }
 
-  fieldStateRead(stateSlot: StateSlotId, instanceId: InstanceId, type: SignalType): FieldExprId {
+  fieldStateRead(stateSlot: StateSlotId, instanceId: InstanceId, type: CanonicalType): FieldExprId {
     const expr = { kind: 'stateRead' as const, stateSlot, instanceId, type };
     const hash = hashFieldExpr(expr);
     const existing = this.fieldExprCache.get(hash);

@@ -18,7 +18,7 @@ Before implementation can begin:
 ### Must Pass
 
 - [ ] `NumericUnit` type exists with all required units
-- [ ] `SignalType` accepts optional `unit` field
+- [ ] `CanonicalType` accepts optional `unit` field
 - [ ] At least sin/cos kernels have declared signatures
 - [ ] Compiler validates unit compatibility (warning on mismatch)
 - [ ] `npm run typecheck` passes

@@ -108,15 +108,15 @@ The strided write exists but the signal evaluator doesn't produce arrays.
 The Const block demonstrates payload polymorphism:
 ```typescript
 case 'vec2': {
-  const xSig = ctx.b.sigConst(val.x, signalType('float'));
-  const ySig = ctx.b.sigConst(val.y, signalType('float'));
+  const xSig = ctx.b.sigConst(val.x, canonicalType('float'));
+  const ySig = ctx.b.sigConst(val.y, canonicalType('float'));
   const packFn = ctx.b.kernel('packVec2');
-  sigId = ctx.b.sigZip([xSig, ySig], packFn, signalType('vec2'));
+  sigId = ctx.b.sigZip([xSig, ySig], packFn, canonicalType('vec2'));
   break;
 }
 case 'color': {
   const packFn = ctx.b.kernel('packColor');
-  sigId = ctx.b.sigZip([rSig, gSig, bSig, aSig], packFn, signalType('color'));
+  sigId = ctx.b.sigZip([rSig, gSig, bSig, aSig], packFn, canonicalType('color'));
   break;
 }
 ```
@@ -151,7 +151,7 @@ Only the pure-signal path is broken.
 
 ### 10. IR Type System
 
-SigExpr types include a `type: SignalType` field which can have any PayloadType including vec2/vec3/color. The IR allows multi-component signal types, but the runtime evaluator doesn't implement them.
+SigExpr types include a `type: CanonicalType` field which can have any PayloadType including vec2/vec3/color. The IR allows multi-component signal types, but the runtime evaluator doesn't implement them.
 
 ## Summary
 

@@ -207,7 +207,7 @@ const handleDefaultSourceChange = (newDefault: DefaultSource) => {
 ### P1: Validation - Valid Default Source Block Types
 
 ```typescript
-function getValidDefaultSourceBlockTypes(portType: SignalType): string[] {
+function getValidDefaultSourceBlockTypes(portType: CanonicalType): string[] {
   const registry = getBlockRegistry();
   return Object.entries(registry)
     .filter(([_, def]) => {

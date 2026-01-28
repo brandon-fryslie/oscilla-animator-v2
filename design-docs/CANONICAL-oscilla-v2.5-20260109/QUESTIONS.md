@@ -30,11 +30,11 @@ These affect T1 topics (type-system, block-system, time-system, compilation, run
 **Severity**: BLOCKER
 **Source**: debugger/4-DiagnosticPayloadSpec.md vs topics/01-type-system.md
 
-**Problem**: Debugger uses "TypeDesc", canonical uses "SignalType = PayloadType + Extent" (5-axis model).
+**Problem**: Debugger uses "TypeDesc", canonical uses "CanonicalType = PayloadType + Extent" (5-axis model).
 
 **Options**:
-- A. Replace TypeDesc with SignalType everywhere
-- B. Define TypeDesc as alias for SignalType
+- A. Replace TypeDesc with CanonicalType everywhere
+- B. Define TypeDesc as alias for CanonicalType
 - C. Keep both, define mapping
 
 **Your Response**: Option A - replace all TypeDesc with standard 5 axis mapping

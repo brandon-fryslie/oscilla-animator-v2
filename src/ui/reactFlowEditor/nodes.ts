@@ -9,8 +9,8 @@ import type { Node, Edge as ReactFlowEdge } from 'reactflow';
 import type { Block, BlockId, Edge, DefaultSource, UIControlHint, CombineMode } from '../../types';
 import type { Patch, LensAttachment } from '../../graph/Patch';
 import type { BlockDef, InputDef } from '../../blocks/registry';
-import type { PayloadType, SignalType } from '../../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION, signalType } from '../../core/canonical-types';
+import type { PayloadType, CanonicalType } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION, canonicalType } from '../../core/canonical-types';
 import { formatTypeForTooltip, getTypeColor, getPortTypeFromBlockType, formatUnitForDisplay } from './typeValidation';
 import { findAdapter } from '../../graph/adapters';
 import { sortEdgesBySortKey } from '../../compiler/passes-v2/combine-utils';
@@ -107,7 +107,7 @@ function getEffectiveDefaultSource(
 function createPortData(
   id: string,
   label: string,
-  type: SignalType | undefined,
+  type: CanonicalType | undefined,
   isConnected: boolean,
   defaultSource?: DefaultSource,
   connection?: PortConnectionInfo,
@@ -115,7 +115,7 @@ function createPortData(
   lenses?: readonly LensAttachment[]
 ): PortData {
   // For inputs without a type (non-port inputs), use a default
-  const effectiveType: SignalType = type || signalType(FLOAT);
+  const effectiveType: CanonicalType = type || canonicalType(FLOAT);
 
   return {
     id,

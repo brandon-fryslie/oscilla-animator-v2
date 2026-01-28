@@ -15,8 +15,8 @@ import {
 } from '../types/canonical-address';
 import type { Patch, Block, OutputPort, InputPort } from './Patch';
 import type { PortId } from '../types';
-import type { SignalType } from '../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION, signalType } from '../core/canonical-types';
+import type { CanonicalType } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION, canonicalType } from '../core/canonical-types';
 import { BLOCK_DEFS_BY_TYPE } from '../blocks/registry';
 import { normalizeCanonicalName } from '../core/canonical-name';
 
@@ -26,8 +26,8 @@ import { normalizeCanonicalName } from '../core/canonical-name';
  */
 export type ResolvedAddress =
   | { kind: 'block'; block: Block; addr: CanonicalAddress }
-  | { kind: 'output'; block: Block; port: OutputPort; type: SignalType; addr: CanonicalAddress }
-  | { kind: 'input'; block: Block; port: InputPort; type: SignalType; addr: CanonicalAddress }
+  | { kind: 'output'; block: Block; port: OutputPort; type: CanonicalType; addr: CanonicalAddress }
+  | { kind: 'input'; block: Block; port: InputPort; type: CanonicalType; addr: CanonicalAddress }
   | { kind: 'param'; block: Block; paramId: string; value: unknown; addr: CanonicalAddress };
 
 /**
@@ -76,8 +76,8 @@ export function resolveAddress(patch: Patch, addressStr: string): ResolvedAddres
     // Get type from block definition
     const blockDef = BLOCK_DEFS_BY_TYPE.get(block.type);
     const outputDef = blockDef?.outputs?.[addr.portId];
-    // Use type from definition, or fallback to a default SignalType
-    const type = outputDef?.type || signalType(FLOAT);
+    // Use type from definition, or fallback to a default CanonicalType
+    const type = outputDef?.type || canonicalType(FLOAT);
 
     return { kind: 'output', block, port, type, addr };
   }
@@ -89,8 +89,8 @@ export function resolveAddress(patch: Patch, addressStr: string): ResolvedAddres
     // Get type from block definition
     const blockDef = BLOCK_DEFS_BY_TYPE.get(block.type);
     const inputDef = blockDef?.inputs?.[addr.portId];
-    // Use type from definition, or fallback to a default SignalType
-    const type = inputDef?.type || signalType(FLOAT);
+    // Use type from definition, or fallback to a default CanonicalType
+    const type = inputDef?.type || canonicalType(FLOAT);
 
     return { kind: 'input', block, port, type, addr };
   }

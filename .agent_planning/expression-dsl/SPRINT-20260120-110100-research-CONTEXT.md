@@ -68,13 +68,13 @@ The expression compiler will use these IR builder methods:
 ```typescript
 interface IRBuilder {
   // Constants
-  sigConst(value: number, type: SignalType): SigExprId;
+  sigConst(value: number, type: CanonicalType): SigExprId;
 
   // Unary operations
-  sigMap(input: SigExprId, fn: PureFn, type: SignalType): SigExprId;
+  sigMap(input: SigExprId, fn: PureFn, type: CanonicalType): SigExprId;
 
   // Binary/n-ary operations
-  sigZip(inputs: SigExprId[], fn: PureFn, type: SignalType): SigExprId;
+  sigZip(inputs: SigExprId[], fn: PureFn, type: CanonicalType): SigExprId;
 
   // OpCode for primitive operations
   opcode(op: OpCode): PureFn;
@@ -88,7 +88,7 @@ Example IR generation (from math-blocks.ts):
 ```typescript
 // a + b compiles to:
 const addFn = ctx.b.opcode(OpCode.Add);
-const sigId = ctx.b.sigZip([a.id, b.id], addFn, signalType('float'));
+const sigId = ctx.b.sigZip([a.id, b.id], addFn, canonicalType('float'));
 ```
 
 **Key insight:** Expression AST compiles to a tree of `sigConst`, `sigMap`, and `sigZip` calls.
@@ -98,12 +98,12 @@ const sigId = ctx.b.sigZip([a.id, b.id], addFn, signalType('float'));
 ```typescript
 type PayloadType = 'float' | 'int' | 'bool' | 'phase' | 'unit' | 'vec2' | 'color';
 
-interface SignalType {
+interface CanonicalType {
   payload: PayloadType;
   extent: Extent;  // Cardinality, temporality, etc.
 }
 
-function signalType(payload: PayloadType): SignalType;
+function canonicalType(payload: PayloadType): CanonicalType;
 ```
 
 Expression type checker must work with PayloadType.

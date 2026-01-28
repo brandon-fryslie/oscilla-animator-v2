@@ -7,7 +7,7 @@
  */
 
 import { registerBlock } from './registry';
-import { signalType, signalTypeField, strideOf } from '../core/canonical-types';
+import { canonicalType, signalTypeField, strideOf } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { DOMAIN_CONTROL } from '../core/domain-registry';
 import { PathVerb, type PathTopologyDef } from '../shapes/types';
@@ -102,28 +102,28 @@ registerBlock({
   inputs: {
     sides: {
       label: 'Sides',
-      type: signalType(INT),
+      type: canonicalType(INT),
       value: 5,  // Pentagon by default
       defaultSource: defaultSourceConst(5),
       uiHint: { kind: 'slider', min: 3, max: 12, step: 1 },
     },
     radiusX: {
       label: 'Radius X',
-      type: signalType(FLOAT),
+      type: canonicalType(FLOAT),
       value: 0.1,
       defaultSource: defaultSourceConst(0.1),
       uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 },
     },
     radiusY: {
       label: 'Radius Y',
-      type: signalType(FLOAT),
+      type: canonicalType(FLOAT),
       value: 0.1,
       defaultSource: defaultSourceConst(0.1),
       uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 },
     },
   },
   outputs: {
-    shape: { label: 'Shape', type: signalType(SHAPE) },
+    shape: { label: 'Shape', type: canonicalType(SHAPE) },
     controlPoints: { label: 'Control Points', type: signalTypeField(VEC2, 'control') },
   },
   lower: ({ ctx, inputsById, config }) => {
@@ -158,14 +158,14 @@ registerBlock({
     const radiusXInput = inputsById.radiusX;
     const radiusXSig = radiusXInput?.k === 'sig'
       ? radiusXInput.id
-      : ctx.b.sigConst((config?.radiusX as number) ?? 1.0, signalType(FLOAT));
+      : ctx.b.sigConst((config?.radiusX as number) ?? 1.0, canonicalType(FLOAT));
 
     const radiusYInput = inputsById.radiusY;
     const radiusYSig = radiusYInput?.k === 'sig'
       ? radiusYInput.id
-      : ctx.b.sigConst((config?.radiusY as number) ?? 1.0, signalType(FLOAT));
+      : ctx.b.sigConst((config?.radiusY as number) ?? 1.0, canonicalType(FLOAT));
 
-    const sidesSig = ctx.b.sigConst(sides, signalType(INT));
+    const sidesSig = ctx.b.sigConst(sides, canonicalType(INT));
 
     // Compute control point positions using kernel
     // kernel('polygonVertex') takes: (index, sides, radiusX, radiusY) → vec2
@@ -181,7 +181,7 @@ registerBlock({
     const shapeRefSig = ctx.b.sigShapeRef(
       topologyId,  // Numeric ID returned from registerDynamicTopology
       [],  // No topology params
-      signalType(SHAPE),
+      canonicalType(SHAPE),
       { id: computedPositions, stride: VEC2.stride }  // Control point field with stride
     );
 
@@ -294,28 +294,28 @@ registerBlock({
   inputs: {
     points: {
       label: 'Points',
-      type: signalType(INT),
+      type: canonicalType(INT),
       value: 5,  // 5-pointed star by default
       defaultSource: defaultSourceConst(5),
       uiHint: { kind: 'slider', min: 3, max: 12, step: 1 },
     },
     outerRadius: {
       label: 'Outer Radius',
-      type: signalType(FLOAT),
+      type: canonicalType(FLOAT),
       value: 0.15,
       defaultSource: defaultSourceConst(0.15),
       uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 },
     },
     innerRadius: {
       label: 'Inner Radius',
-      type: signalType(FLOAT),
+      type: canonicalType(FLOAT),
       value: 0.06,
       defaultSource: defaultSourceConst(0.06),
       uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 },
     },
   },
   outputs: {
-    shape: { label: 'Shape', type: signalType(SHAPE) },
+    shape: { label: 'Shape', type: canonicalType(SHAPE) },
     controlPoints: { label: 'Control Points', type: signalTypeField(VEC2, 'control') },
   },
   lower: ({ ctx, inputsById, config }) => {
@@ -353,14 +353,14 @@ registerBlock({
     const outerRadiusInput = inputsById.outerRadius;
     const outerRadiusSig = outerRadiusInput?.k === 'sig'
       ? outerRadiusInput.id
-      : ctx.b.sigConst((config?.outerRadius as number) ?? 1.0, signalType(FLOAT));
+      : ctx.b.sigConst((config?.outerRadius as number) ?? 1.0, canonicalType(FLOAT));
 
     const innerRadiusInput = inputsById.innerRadius;
     const innerRadiusSig = innerRadiusInput?.k === 'sig'
       ? innerRadiusInput.id
-      : ctx.b.sigConst((config?.innerRadius as number) ?? 0.4, signalType(FLOAT));
+      : ctx.b.sigConst((config?.innerRadius as number) ?? 0.4, canonicalType(FLOAT));
 
-    const pointsSig = ctx.b.sigConst(points, signalType(INT));
+    const pointsSig = ctx.b.sigConst(points, canonicalType(INT));
 
     // Compute control point positions using kernel
     // kernel('starVertex') takes: (index, points, outerRadius, innerRadius) → vec2
@@ -376,7 +376,7 @@ registerBlock({
     const shapeRefSig = ctx.b.sigShapeRef(
       topologyId,  // Numeric ID returned from registerDynamicTopology
       [],  // No topology params
-      signalType(SHAPE),
+      canonicalType(SHAPE),
       { id: computedPositions, stride: VEC2.stride }  // Control point field with stride
     );
 

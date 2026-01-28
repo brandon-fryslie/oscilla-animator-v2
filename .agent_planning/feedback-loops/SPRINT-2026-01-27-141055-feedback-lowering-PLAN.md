@@ -100,7 +100,7 @@ lowerOutputsOnly: ({ ctx, config }) => {
   const initialValue = (config?.initialValue as number) ?? 0;
   const stateId = stableStateId(ctx.instanceId, 'delay');
   const stateSlot = ctx.b.allocStateSlot(stateId, { initialValue });
-  const outputId = ctx.b.sigStateRead(stateSlot, signalType(FLOAT));
+  const outputId = ctx.b.sigStateRead(stateSlot, canonicalType(FLOAT));
   const slot = ctx.b.allocSlot();
 
   return {
@@ -155,7 +155,7 @@ Actually, Lag's output IS the smoothed value which requires the lerp computation
 Looking at the code:
 ```typescript
 // Read previous state
-const prevValue = ctx.b.sigStateRead(stateSlot, signalType(FLOAT));
+const prevValue = ctx.b.sigStateRead(stateSlot, canonicalType(FLOAT));
 // Compute: lerp(prev, target, smoothing)
 const lerpResult = ctx.b.sigBinary(prevValue, target, lerpFn);
 // Write to state

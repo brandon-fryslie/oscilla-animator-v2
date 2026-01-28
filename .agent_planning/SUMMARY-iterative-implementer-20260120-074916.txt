@@ -8,7 +8,7 @@ Status: in_progress
 
 After the unified-inputs migration, tests were failing because:
 1. Pass 1 (default-sources) was creating edges to ALL inputs, including config inputs (`exposedAsPort: false`)
-2. These config inputs (like Const's `value` and `payloadType`) don't have SignalType definitions
+2. These config inputs (like Const's `value` and `payloadType`) don't have CanonicalType definitions
 3. Pass 2 (type-graph) then failed with "Unknown port type" errors
 
 ## Solution Implemented

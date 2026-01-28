@@ -15,8 +15,8 @@ Implement Payload-Generic blocks per spec at `.agent_planning/_future/0-PayloadG
    - Polymorphic placeholder `'???'` exists for type inference
 
 2. **Block Port Type System** ✅
-   - `InputDef` and `OutputDef` with `type: SignalType`
-   - `SignalType = { payload: PayloadType, extent, unit? }`
+   - `InputDef` and `OutputDef` with `type: CanonicalType`
+   - `CanonicalType = { payload: PayloadType, extent, unit? }`
    - All ports use unified type system
 
 3. **Type Unification** ⚠️ PARTIAL

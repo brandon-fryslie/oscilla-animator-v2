@@ -1,11 +1,11 @@
-# Sprint: Field Kernel Types - SignalType factory
+# Sprint: Field Kernel Types - CanonicalType factory
 **Generated:** 2026-01-25T07:30:32Z
 **Status:** READY FOR IMPLEMENTATION
 **Confidence:** HIGH: 1, MEDIUM: 0, LOW: 0
 **Expected Effort:** 1 hour
 
 ## Sprint Goal
-Remove 36 'as any' casts by replacing partial SignalType objects with proper `signalTypeField()` factory function.
+Remove 36 'as any' casts by replacing partial CanonicalType objects with proper `signalTypeField()` factory function.
 
 ## Scope
 **Deliverables:**
@@ -22,7 +22,7 @@ Remove 36 'as any' casts by replacing partial SignalType objects with proper `si
 - Import `signalTypeField()` from `src/core/canonical-types.ts`
 - Create test helper function at top of file:
   ```typescript
-  function testFieldType(payload: PayloadType): SignalType {
+  function testFieldType(payload: PayloadType): CanonicalType {
     return signalTypeField(payload, 'test-instance');
   }
   ```

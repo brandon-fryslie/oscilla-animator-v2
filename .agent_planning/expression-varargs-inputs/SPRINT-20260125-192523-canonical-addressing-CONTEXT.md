@@ -167,12 +167,12 @@ export function getAllAddresses(patch: Patch): CanonicalAddress[] {
 
 ```typescript
 import type { Block, InputPort, OutputPort, Patch } from '../graph/Patch';
-import type { SignalType } from '../core/canonical-types';
+import type { CanonicalType } from '../core/canonical-types';
 
 export type ResolvedAddress =
   | { readonly kind: 'block'; readonly block: Block }
-  | { readonly kind: 'output'; readonly block: Block; readonly port: OutputPort; readonly type: SignalType }
-  | { readonly kind: 'input'; readonly block: Block; readonly port: InputPort; readonly type: SignalType }
+  | { readonly kind: 'output'; readonly block: Block; readonly port: OutputPort; readonly type: CanonicalType }
+  | { readonly kind: 'input'; readonly block: Block; readonly port: InputPort; readonly type: CanonicalType }
   | { readonly kind: 'param'; readonly block: Block; readonly paramId: string; readonly value: unknown };
 ```
 

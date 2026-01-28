@@ -17,7 +17,7 @@ Plan: SPRINT-20260125-unified-slots-PLAN.md
 
 ### P0: Unified allocSlot Method
 
-- [ ] IRBuilder interface has exactly one `allocSlot(type: SignalType): SlotAllocation`
+- [ ] IRBuilder interface has exactly one `allocSlot(type: CanonicalType): SlotAllocation`
 - [ ] `allocTypedSlot` method deleted from interface and impl
 - [ ] `allocValueSlot` method deleted from interface and impl
 - [ ] `registerSlotType` method deleted from interface and impl
@@ -27,7 +27,7 @@ Plan: SPRINT-20260125-unified-slots-PLAN.md
 ### P1: Remove slotMeta Generation from compile.ts
 
 - [ ] compile.ts slotMeta section is <= 10 lines
-- [ ] No fallback to `signalType('float')` for unknown types
+- [ ] No fallback to `canonicalType('float')` for unknown types
 - [ ] IRBuilder.getSlotMeta() returns readonly SlotMetaEntry[]
 - [ ] Attempting to get slotMeta for unallocated slot throws
 - [ ] All existing tests pass

@@ -17,7 +17,7 @@ import { RootStore } from '../../stores/RootStore';
 import { StoreProvider } from '../../stores/context';
 import { debugService } from '../../services/DebugService';
 import type { ValueSlot } from '../../types';
-import { signalType } from '../../core/canonical-types';
+import { canonicalType } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
 import { DebugMiniView } from './DebugMiniView';
 import { createMockCanvas2DContext } from '../../__tests__/test-utils';
@@ -69,7 +69,7 @@ describe('DebugMiniView', () => {
   describe('signal edge hovered', () => {
     beforeEach(() => {
       const edgeMap = new Map([
-        ['sig-edge', { slotId: 10 as ValueSlot, type: signalType(FLOAT), cardinality: 'signal' as const }],
+        ['sig-edge', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
       ]);
       debugService.setEdgeToSlotMap(edgeMap);
     });
@@ -114,7 +114,7 @@ describe('DebugMiniView', () => {
   describe('field edge hovered', () => {
     beforeEach(() => {
       const edgeMap = new Map([
-        ['field-edge', { slotId: 30 as ValueSlot, type: signalType(FLOAT), cardinality: 'field' as const }],
+        ['field-edge', { slotId: 30 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'field' as const }],
       ]);
       debugService.setEdgeToSlotMap(edgeMap);
     });
@@ -157,7 +157,7 @@ describe('DebugMiniView', () => {
   describe('transitions', () => {
     it('should return to idle after unhover', () => {
       const edgeMap = new Map([
-        ['sig-edge', { slotId: 10 as ValueSlot, type: signalType(FLOAT), cardinality: 'signal' as const }],
+        ['sig-edge', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
       ]);
       debugService.setEdgeToSlotMap(edgeMap);
 

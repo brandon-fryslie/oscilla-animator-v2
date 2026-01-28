@@ -78,7 +78,7 @@ The major change is the **five-axis type system** that replaces the single `Worl
 | Old (v2) | New (v2.5) |
 |----------|------------|
 | `World = static \| signal \| field \| event` | Five independent axes |
-| `Type = { world, value, domain? }` | `SignalType = { payload, extent }` |
+| `Type = { world, value, domain? }` | `CanonicalType = { payload, extent }` |
 | Optional domain field | Domain in Cardinality axis |
 | Event as separate world | Temporality axis (continuous/discrete) |
 

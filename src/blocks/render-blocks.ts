@@ -10,7 +10,7 @@
  */
 
 import { registerBlock } from './registry';
-import { signalType, signalTypeField } from '../core/canonical-types';
+import { canonicalType, signalTypeField } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { defaultSourceConst } from '../types';
 
@@ -33,10 +33,10 @@ registerBlock({
   inputs: {
     pos: { label: 'Position', type: signalTypeField(VEC3, 'default') },
     color: { label: 'Color', type: signalTypeField(COLOR, 'default') },
-    shape: { label: 'Shape', type: signalType(SHAPE) },
+    shape: { label: 'Shape', type: canonicalType(SHAPE) },
     scale: {
       label: 'Scale',
-      type: signalType(FLOAT),
+      type: canonicalType(FLOAT),
       value: 1.0,
       defaultSource: defaultSourceConst(1.0),
       uiHint: { kind: 'slider', min: 0.1, max: 1, step: 0.1 },

@@ -24,8 +24,8 @@ Compose the ValueRenderer, chart primitives, and HistoryService into ViewModes, 
 **File:** `src/ui/debug-viz/SampleSource.ts`
 
 **Acceptance Criteria:**
-- [ ] `buildScalarSample(edgeValue: EdgeValueResult, type: SignalType): RendererSample | null` — extracts value into Float32Array components
-- [ ] `buildAggregateSample(edgeValue: EdgeValueResult, type: SignalType): RendererSample | null` — builds AggregateStats from FieldValueResult
+- [ ] `buildScalarSample(edgeValue: EdgeValueResult, type: CanonicalType): RendererSample | null` — extracts value into Float32Array components
+- [ ] `buildAggregateSample(edgeValue: EdgeValueResult, type: CanonicalType): RendererSample | null` — builds AggregateStats from FieldValueResult
 - [ ] Scalar path: signal kind → components[0] = value, stride = getSampleEncoding(type.payload).stride
 - [ ] Aggregate path: field kind → compute component-wise stats from buffer (or use pre-computed stats)
 - [ ] Returns null for field-untracked or undefined edge values
@@ -43,7 +43,7 @@ Compose the ValueRenderer, chart primitives, and HistoryService into ViewModes, 
 **File:** `src/ui/debug-viz/viewModes/SignalViewMode.tsx`
 
 **Acceptance Criteria:**
-- [ ] Props: `targetKey: DebugTargetKey`, `sample: RendererSample & { mode: 'scalar' }`, `type: SignalType`, `history: HistoryView | undefined`
+- [ ] Props: `targetKey: DebugTargetKey`, `sample: RendererSample & { mode: 'scalar' }`, `type: CanonicalType`, `history: HistoryView | undefined`
 - [ ] Renders vertically: ValueRenderer.renderFull(sample) → Sparkline (if history) → WarmupIndicator (if not full)
 - [ ] Gets ValueRenderer via `getValueRenderer(type)`
 - [ ] Sparkline receives `width: 200`, `height: 32`, `unit: type.unit`
@@ -58,7 +58,7 @@ Compose the ValueRenderer, chart primitives, and HistoryService into ViewModes, 
 **File:** `src/ui/debug-viz/viewModes/FieldViewMode.tsx`
 
 **Acceptance Criteria:**
-- [ ] Props: `targetKey: DebugTargetKey`, `sample: RendererSample & { mode: 'aggregate' }`, `type: SignalType`, `instanceId: string`, `count: number`
+- [ ] Props: `targetKey: DebugTargetKey`, `sample: RendererSample & { mode: 'aggregate' }`, `type: CanonicalType`, `instanceId: string`, `count: number`
 - [ ] Renders vertically: instance summary → ValueRenderer.renderFull(sample) → DistributionBar (for numeric) or color gradient (for color)
 - [ ] Instance summary line: `Instance: ${instanceId}  N=${count}`
 - [ ] Gets ValueRenderer via `getValueRenderer(type)` for stats formatting

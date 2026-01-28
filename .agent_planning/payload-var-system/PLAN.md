@@ -175,7 +175,7 @@ class PayloadUnionFind {
 
 **3.2 Update ResolvedTypesResult to include payload**
 
-The existing `resolvedPortTypes` map stores `SignalType` which already includes `payload`. No structural change needed—just ensure we store the resolved payload in the SignalType.
+The existing `resolvedPortTypes` map stores `CanonicalType` which already includes `payload`. No structural change needed—just ensure we store the resolved payload in the CanonicalType.
 
 **3.3 Update constraint solving phases**
 
@@ -191,7 +191,7 @@ if (outputDef.type) {
 
   if (hasPayloadVar || hasUnitVar) {
     const key = portKey(blockIndex, portName, 'out');
-    const instanceType: SignalType = {
+    const instanceType: CanonicalType = {
       ...outputDef.type,
       payload: hasPayloadVar ? payloadVar(key + ':payload') : defPayload,
       unit: hasUnitVar ? instanceUnitVar(blockIndex, portName, 'out') : defUnit,
@@ -287,7 +287,7 @@ The existing `block.params?.payloadType` logic can be removed or made secondary,
 ```typescript
 // Before (lines 52, 61):
 inputs: {
-  signal: { label: 'Signal', type: signalType('float', unitVar('broadcast_in')) },
+  signal: { label: 'Signal', type: canonicalType('float', unitVar('broadcast_in')) },
 },
 outputs: {
   field: { label: 'Field', type: signalTypeField('float', 'default', unitVar('broadcast_in')) },
@@ -295,7 +295,7 @@ outputs: {
 
 // After:
 inputs: {
-  signal: { label: 'Signal', type: signalType(payloadVar('broadcast_payload'), unitVar('broadcast_in')) },
+  signal: { label: 'Signal', type: canonicalType(payloadVar('broadcast_payload'), unitVar('broadcast_in')) },
 },
 outputs: {
   field: { label: 'Field', type: signalTypeField(payloadVar('broadcast_payload'), 'default', unitVar('broadcast_in')) },
@@ -306,17 +306,17 @@ outputs: {
 
 ---
 
-### Step 6: Update signalType/signalTypeField Functions
+### Step 6: Update canonicalType/signalTypeField Functions
 
-**6.1 Update signalType() signature**
+**6.1 Update canonicalType() signature**
 
 ```typescript
 // In canonical-types.ts
-export function signalType(
+export function canonicalType(
   payload: PayloadType,  // Now accepts PayloadType (including payloadVar)
   unit?: Unit,
   extentOverrides?: Partial<Extent>
-): SignalType {
+): CanonicalType {
   // Existing logic works - payload is just stored in the type
 }
 ```
@@ -328,7 +328,7 @@ export function signalTypeField(
   payload: PayloadType,  // Now accepts PayloadType (including payloadVar)
   instance: InstanceTag,
   unit?: Unit
-): SignalType {
+): CanonicalType {
   // Existing logic works
 }
 ```

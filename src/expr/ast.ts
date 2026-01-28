@@ -8,7 +8,7 @@
  * Grammar reference: src/expr/GRAMMAR.md
  */
 
-import type { SignalType, PayloadType } from '../core/canonical-types';
+import type { CanonicalType, PayloadType } from '../core/canonical-types';
 
 /**
  * Position information for error reporting.

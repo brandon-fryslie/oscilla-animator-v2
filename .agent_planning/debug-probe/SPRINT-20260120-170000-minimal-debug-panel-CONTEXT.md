@@ -235,19 +235,19 @@ function getEdgeValue(edgeId: string): number | undefined {
 **Unknown**: How to display "Signal:Float" vs "Signal:Phase" in panel?
 
 **Investigation**:
-- Examined SignalType in `src/core/canonical-types.ts`
+- Examined CanonicalType in `src/core/canonical-types.ts`
 - Examined edge.data structure in PatchStore
 - Examined compiled IR structures
 
 **Discovered**:
-- SignalType is compile-time only (not stored in runtime slot values)
+- CanonicalType is compile-time only (not stored in runtime slot values)
 - Edge has type information in PatchStore (from block port definitions)
 - **Solution**: DebugService must store type alongside slot mapping
 
 **Implementation**:
 ```typescript
 // In compiler:
-const edgeMetadata = new Map<EdgeId, { slotId: number; type: SignalType }>();
+const edgeMetadata = new Map<EdgeId, { slotId: number; type: CanonicalType }>();
 
 // In DebugService:
 getEdgeValue(edgeId: string): { value: number; type: string } | undefined {
@@ -264,7 +264,7 @@ getEdgeValue(edgeId: string): { value: number; type: string } | undefined {
 - SimpleDebugPanel can show type badge
 
 **Impact on Sprint 2**:
-- DebugGraph.buses has `type: SignalType`
+- DebugGraph.buses has `type: CanonicalType`
 - DebugGraph.byPort includes type information
 - This foundation pattern extends naturally
 

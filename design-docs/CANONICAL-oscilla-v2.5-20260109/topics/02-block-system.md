@@ -39,7 +39,7 @@ interface Block {
 ### Important Naming
 
 - Use `kind` property, **not** `type`
-- `type` is reserved for the type system (SignalType)
+- `type` is reserved for the type system (CanonicalType)
 - `kind` identifies which block definition this instance uses
 
 ### Port Structure
@@ -48,7 +48,7 @@ interface Block {
 interface PortBinding {
   id: PortId;
   dir: { kind: 'in' } | { kind: 'out' };
-  type: SignalType;       // 5-axis coordinate
+  type: CanonicalType;       // 5-axis coordinate
   combine: CombineMode;   // For inputs only (still required for outputs, but meaningless)
 }
 ```
@@ -337,8 +337,8 @@ registerBlock({
   type: 'Array',
   category: 'instance',
   inputs: [
-    { id: 'element', label: 'Element', type: signalType('any-domain') },
-    { id: 'count', label: 'Count', type: signalType('int') },
+    { id: 'element', label: 'Element', type: canonicalType('any-domain') },
+    { id: 'count', label: 'Count', type: canonicalType('int') },
   ],
   outputs: [
     { id: 'elements', label: 'Elements', type: signalTypeField('same-as:element', 'self') },
@@ -719,7 +719,7 @@ This is a **presentation choice**, not an architectural one.
 
 ## See Also
 
-- [01-type-system](./01-type-system.md) - SignalType for ports
+- [01-type-system](./01-type-system.md) - CanonicalType for ports
 - [03-time-system](./03-time-system.md) - TimeRoot and rails
 - [04-compilation](./04-compilation.md) - How blocks compile
 - [Glossary: Block](../GLOSSARY.md#block)

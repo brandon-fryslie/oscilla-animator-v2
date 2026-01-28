@@ -59,7 +59,7 @@ Create new component:
 
 ```tsx
 interface CombineModeSelectorProps {
-  portType: SignalType;
+  portType: CanonicalType;
   currentMode: CombineMode;
   onChange: (mode: CombineMode) => void;
 }

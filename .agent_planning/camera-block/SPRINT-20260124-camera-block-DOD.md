@@ -5,7 +5,7 @@
 ### 1. Type System
 - [ ] `cameraProjection` is added to the `PayloadType` union
 - [ ] `PAYLOAD_STRIDE['cameraProjection'] === 1` (scalar slot, not multi-stride)
-- [ ] `signalType('cameraProjection', { unit: undefined })` (no numeric unit; it is an enum-like payload)
+- [ ] `canonicalType('cameraProjection', { unit: undefined })` (no numeric unit; it is an enum-like payload)
 - [ ] Camera numeric inputs use existing payload+unit exactly:
   - [ ] `centerX`, `centerY`: payload `float`, unit `norm01`
   - [ ] `distance`, `near`, `far`: payload `float`, unit `scalar`

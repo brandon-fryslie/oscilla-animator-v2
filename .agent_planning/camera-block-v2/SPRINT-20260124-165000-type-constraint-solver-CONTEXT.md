@@ -78,7 +78,7 @@ export function isUnitVar(unit: Unit): boolean {
 Change:
 ```typescript
 outputs: {
-  out: { label: 'Output', type: signalType('float', unitVar()) }
+  out: { label: 'Output', type: canonicalType('float', unitVar()) }
 }
 ```
 
@@ -88,7 +88,7 @@ This makes Const's output unit a variable that MUST be resolved.
 
 ```typescript
 export interface ResolvedTypes {
-  readonly portTypes: ReadonlyMap<string, SignalType>;  // "blockId:portName" → type
+  readonly portTypes: ReadonlyMap<string, CanonicalType>;  // "blockId:portName" → type
 }
 
 export function pass05TypeConstraints(patch: Patch): ResolvedTypes {
@@ -108,7 +108,7 @@ function getPortType(
   block: Block,
   portId: string,
   resolvedTypes: ResolvedTypes  // NEW parameter
-): SignalType | null {
+): CanonicalType | null {
   // Check resolved types first
   const key = `${block.id}:${portId}`;
   const resolved = resolvedTypes.portTypes.get(key);

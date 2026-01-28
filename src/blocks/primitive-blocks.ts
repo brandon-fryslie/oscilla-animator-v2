@@ -12,7 +12,7 @@
  */
 
 import {registerBlock} from './registry';
-import {signalType, strideOf} from '../core/canonical-types';
+import {canonicalType, strideOf} from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import {TOPOLOGY_ID_ELLIPSE, TOPOLOGY_ID_RECT} from '../shapes/registry';
 import {defaultSourceConst} from '../types';
@@ -46,28 +46,28 @@ registerBlock({
     inputs: {
         rx: {
             label: 'Radius X',
-            type: signalType(FLOAT),
+            type: canonicalType(FLOAT),
             value: 0.02,
             defaultSource: defaultSourceConst(0.02),
             uiHint: {kind: 'slider', min: 0.001, max: 0.5, step: 0.001},
         },
         ry: {
             label: 'Radius Y',
-            type: signalType(FLOAT),
+            type: canonicalType(FLOAT),
             value: 0.02,
             defaultSource: defaultSourceConst(0.02),
             uiHint: {kind: 'slider', min: 0.001, max: 0.5, step: 0.001},
         },
         rotation: {
             label: 'Rotation',
-            type: signalType(FLOAT),
+            type: canonicalType(FLOAT),
             value: 0,
             defaultSource: defaultSourceConst(0),
             uiHint: {kind: 'slider', min: 0, max: 6.28, step: 0.01},
         },
     },
     outputs: {
-        shape: {label: 'Shape', type: signalType(SHAPE)},
+        shape: {label: 'Shape', type: canonicalType(SHAPE)},
     },
     lower: ({ctx, inputsById, config}) => {
         // Resolve rx parameter
@@ -76,7 +76,7 @@ registerBlock({
         if (rxInput && rxInput.k === 'sig') {
             rxSig = rxInput.id;
         } else {
-            rxSig = ctx.b.sigConst((config?.rx as number) ?? 0.02, signalType(FLOAT));
+            rxSig = ctx.b.sigConst((config?.rx as number) ?? 0.02, canonicalType(FLOAT));
         }
 
         // Resolve ry parameter
@@ -85,7 +85,7 @@ registerBlock({
         if (ryInput && ryInput.k === 'sig') {
             rySig = ryInput.id;
         } else {
-            rySig = ctx.b.sigConst((config?.ry as number) ?? 0.02, signalType(FLOAT));
+            rySig = ctx.b.sigConst((config?.ry as number) ?? 0.02, canonicalType(FLOAT));
         }
 
         // Resolve rotation parameter
@@ -94,14 +94,14 @@ registerBlock({
         if (rotationInput && rotationInput.k === 'sig') {
             rotationSig = rotationInput.id;
         } else {
-            rotationSig = ctx.b.sigConst((config?.rotation as number) ?? 0, signalType(FLOAT));
+            rotationSig = ctx.b.sigConst((config?.rotation as number) ?? 0, canonicalType(FLOAT));
         }
 
         // Create shape reference with ellipse topology and param signals
         const shapeRefSig = ctx.b.sigShapeRef(
             TOPOLOGY_ID_ELLIPSE,
             [rxSig, rySig, rotationSig],
-            signalType(SHAPE)
+            canonicalType(SHAPE)
         );
 
         const slot = ctx.b.allocSlot();
@@ -144,35 +144,35 @@ registerBlock({
     inputs: {
         width: {
             label: 'Width',
-            type: signalType(FLOAT),
+            type: canonicalType(FLOAT),
             value: 0.04,
             defaultSource: defaultSourceConst(0.04),
             uiHint: {kind: 'slider', min: 0.001, max: 0.5, step: 0.001},
         },
         height: {
             label: 'Height',
-            type: signalType(FLOAT),
+            type: canonicalType(FLOAT),
             value: 0.02,
             defaultSource: defaultSourceConst(0.02),
             uiHint: {kind: 'slider', min: 0.001, max: 0.5, step: 0.001},
         },
         rotation: {
             label: 'Rotation',
-            type: signalType(FLOAT),
+            type: canonicalType(FLOAT),
             value: 0,
             defaultSource: defaultSourceConst(0),
             uiHint: {kind: 'slider', min: 0, max: 6.28, step: 0.01},
         },
         cornerRadius: {
             label: 'Corner Radius',
-            type: signalType(FLOAT),
+            type: canonicalType(FLOAT),
             value: 0,
             defaultSource: defaultSourceConst(0),
             uiHint: {kind: 'slider', min: 0, max: 0.1, step: 0.001},
         },
     },
     outputs: {
-        shape: {label: 'Shape', type: signalType(SHAPE)},
+        shape: {label: 'Shape', type: canonicalType(SHAPE)},
     },
     lower: ({ctx, inputsById, config}) => {
         // Resolve width parameter
@@ -181,7 +181,7 @@ registerBlock({
         if (widthInput && widthInput.k === 'sig') {
             widthSig = widthInput.id;
         } else {
-            widthSig = ctx.b.sigConst((config?.width as number) ?? 0.04, signalType(FLOAT));
+            widthSig = ctx.b.sigConst((config?.width as number) ?? 0.04, canonicalType(FLOAT));
         }
 
         // Resolve height parameter
@@ -190,7 +190,7 @@ registerBlock({
         if (heightInput && heightInput.k === 'sig') {
             heightSig = heightInput.id;
         } else {
-            heightSig = ctx.b.sigConst((config?.height as number) ?? 0.02, signalType(FLOAT));
+            heightSig = ctx.b.sigConst((config?.height as number) ?? 0.02, canonicalType(FLOAT));
         }
 
         // Resolve rotation parameter
@@ -199,7 +199,7 @@ registerBlock({
         if (rotationInput && rotationInput.k === 'sig') {
             rotationSig = rotationInput.id;
         } else {
-            rotationSig = ctx.b.sigConst((config?.rotation as number) ?? 0, signalType(FLOAT));
+            rotationSig = ctx.b.sigConst((config?.rotation as number) ?? 0, canonicalType(FLOAT));
         }
 
         // Resolve cornerRadius parameter
@@ -208,14 +208,14 @@ registerBlock({
         if (cornerRadiusInput && cornerRadiusInput.k === 'sig') {
             cornerRadiusSig = cornerRadiusInput.id;
         } else {
-            cornerRadiusSig = ctx.b.sigConst((config?.cornerRadius as number) ?? 0, signalType(FLOAT));
+            cornerRadiusSig = ctx.b.sigConst((config?.cornerRadius as number) ?? 0, canonicalType(FLOAT));
         }
 
         // Create shape reference with rect topology and param signals
         const shapeRefSig = ctx.b.sigShapeRef(
             TOPOLOGY_ID_RECT,
             [widthSig, heightSig, rotationSig, cornerRadiusSig],
-            signalType(SHAPE)
+            canonicalType(SHAPE)
         );
 
         const slot = ctx.b.allocSlot();

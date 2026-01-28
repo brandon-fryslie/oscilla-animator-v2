@@ -79,7 +79,7 @@ Note: finite timeroot was removed from spec.
 ### TimeRoot SignalTypes (v2.5)
 
 ```typescript
-const tMsType: SignalType = {
+const tMsType: CanonicalType = {
   payload: 'int',
   extent: {
     cardinality: { kind: 'instantiated', value: { kind: 'one' } },
@@ -90,7 +90,7 @@ const tMsType: SignalType = {
   }
 };
 
-const phaseType: SignalType = {
+const phaseType: CanonicalType = {
   payload: 'float',
   unit: 'phase01',
   extent: {
@@ -102,7 +102,7 @@ const phaseType: SignalType = {
   }
 };
 
-const pulseType: SignalType = {
+const pulseType: CanonicalType = {
   payload: 'unit',
   extent: {
     cardinality: { kind: 'instantiated', value: { kind: 'one' } },
@@ -113,7 +113,7 @@ const pulseType: SignalType = {
   }
 };
 
-const dtType: SignalType = {
+const dtType: CanonicalType = {
   payload: 'float',
   extent: {
     cardinality: { kind: 'instantiated', value: { kind: 'one' } },
@@ -124,7 +124,7 @@ const dtType: SignalType = {
   }
 };
 
-const paletteType: SignalType = {
+const paletteType: CanonicalType = {
   payload: 'color',
   extent: {
     cardinality: { kind: 'instantiated', value: { kind: 'one' } },
@@ -135,7 +135,7 @@ const paletteType: SignalType = {
   }
 };
 
-const energyType: SignalType = {
+const energyType: CanonicalType = {
   payload: 'float',
   extent: {
     cardinality: { kind: 'instantiated', value: { kind: 'one' } },
@@ -267,7 +267,7 @@ function PhaseDistance(a: phase, b: phase): float {
 Simulation time in milliseconds.
 
 - **Type**: `int`
-- **SignalType**: `one + continuous + int`
+- **CanonicalType**: `one + continuous + int`
 - **Monotonic**: Always increasing
 - **Unbounded**: Never wraps
 
@@ -276,7 +276,7 @@ Simulation time in milliseconds.
 Delta time since last frame in milliseconds.
 
 - **Type**: `float`
-- **SignalType**: `one + continuous + float`
+- **CanonicalType**: `one + continuous + float`
 - **Semantics**: Time elapsed since previous frame
 - **Use case**: Frame-rate independent animation, physics integration
 
@@ -285,7 +285,7 @@ Delta time since last frame in milliseconds.
 Primary and secondary phase rails:
 
 - **Type**: `phase`
-- **SignalType**: `one + continuous + phase`
+- **CanonicalType**: `one + continuous + phase`
 - **Range**: [0, 1)
 - **Semantics**: Cyclic, wrapping
 
@@ -294,7 +294,7 @@ Primary and secondary phase rails:
 Frame tick trigger:
 
 - **Type**: `unit`
-- **SignalType**: `one + discrete + unit`
+- **CanonicalType**: `one + discrete + unit`
 - **Semantics**: Event fires every frame
 
 ### palette
@@ -302,7 +302,7 @@ Frame tick trigger:
 Default color atmosphere for the patch.
 
 - **Type**: `color`
-- **SignalType**: `one + continuous + color`
+- **CanonicalType**: `one + continuous + color`
 - **Default**: HSV rainbow cycling with phaseA (hue = phaseA, saturation = 1.0, value = 0.5)
 - **Semantics**: Provides ambient color reference; can be overridden
 
@@ -311,7 +311,7 @@ Default color atmosphere for the patch.
 Animation intensity signal (audio-reactive ready).
 
 - **Type**: `float`
-- **SignalType**: `one + continuous + float`
+- **CanonicalType**: `one + continuous + float`
 - **Range**: [0, 1]
 - **Default**: Sine wave derived from phaseA (0.5 + 0.5 * sin(phaseA * 2π))
 - **Semantics**: Overall animation "energy" level; designed for future audio reactivity
@@ -343,7 +343,7 @@ v0 keeps time rails as `one` signals. If per-lane phase is needed later:
 
 ```typescript
 // Per-lane phasor (NOT a separate concept of "field time")
-const perLanePhasor: SignalType = {
+const perLanePhasor: CanonicalType = {
   payload: 'float',
   unit: 'phase01',
   extent: {

@@ -27,7 +27,7 @@ lower: ({ctx, inputsById, config}) => {
     if (rxInput && rxInput.k === 'sig') {
         rxSig = rxInput.id;
     } else {
-        rxSig = ctx.b.sigConst((config?.rx as number) ?? 0.02, signalType('float'));
+        rxSig = ctx.b.sigConst((config?.rx as number) ?? 0.02, canonicalType('float'));
     }
     const slot = ctx.b.allocSlot();
     return {
@@ -75,9 +75,9 @@ switch (shape) {
 **Option A: Three separate output ports**
 ```typescript
 outputs: [
-  {id: 'shapeType', type: signalType('int')},
-  {id: 'param1', type: signalType('float')},
-  {id: 'param2', type: signalType('float')},
+  {id: 'shapeType', type: canonicalType('int')},
+  {id: 'param1', type: canonicalType('float')},
+  {id: 'param2', type: canonicalType('float')},
 ]
 ```
 Pro: Explicit, easy to wire individually
@@ -86,7 +86,7 @@ Con: Verbose, 3 wires for one shape
 **Option B: Single shape port with composite value**
 ```typescript
 outputs: [
-  {id: 'shape', type: signalType('shape')},  // internally 3 values
+  {id: 'shape', type: canonicalType('shape')},  // internally 3 values
 ]
 ```
 Pro: Clean API, single wire
@@ -95,7 +95,7 @@ Con: Need composite type handling
 **Option C: Bundle as vec3**
 ```typescript
 outputs: [
-  {id: 'shape', type: signalType('vec3')},  // (type, p1, p2)
+  {id: 'shape', type: canonicalType('vec3')},  // (type, p1, p2)
 ]
 ```
 Pro: Uses existing vec infrastructure

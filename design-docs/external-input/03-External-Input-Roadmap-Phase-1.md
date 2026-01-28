@@ -41,7 +41,7 @@ Goal: the compiler and runtime can express “read channel X” as a first-class
 •	IR:
 •	add SigExpr { kind:'external', which:string }
 •	IRBuilder:
-•	sigExternal(channel: string, type: SignalType)
+•	sigExternal(channel: string, type: CanonicalType)
 •	SignalEvaluator:
 •	external case is a single line: return state.external.snapshot.getFloat(expr.which)
 

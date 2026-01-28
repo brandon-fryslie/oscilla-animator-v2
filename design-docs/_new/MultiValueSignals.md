@@ -78,7 +78,7 @@ Constraints (compiler MUST enforce):
 
 3.2 Slot allocator
 
-allocTypedSlot(type: SignalType) -> ValueSlot MUST:
+allocTypedSlot(type: CanonicalType) -> ValueSlot MUST:
 •	Compute stride = payloadStride(type.payload).
 •	Reject stride=0.
 •	Reserve stride consecutive positions in the numeric store.
@@ -235,7 +235,7 @@ DebugService MUST read current samples directly from RuntimeState numeric store 
 
 It exposes a stable “read into out array” API:
 
-readSignalSampleInto(slot: ValueSlot, out: Float32Array /*len 4*/): { stride:Stride, payload:PayloadType, type:SignalType }
+readSignalSampleInto(slot: ValueSlot, out: Float32Array /*len 4*/): { stride:Stride, payload:PayloadType, type:CanonicalType }
 
 Rules:
 •	Reads stride components into out[0..stride-1].
@@ -263,7 +263,7 @@ This is strict and permanent for v1.
 
 Scalar renderer samples are:
 
-{ mode:'scalar', components: Float32Array /*len 4*/, stride:Stride, type:SignalType }
+{ mode:'scalar', components: Float32Array /*len 4*/, stride:Stride, type:CanonicalType }
 
 Rules:
 •	ValueRenderer formats based on type.payload and type.unit, and may use all components up to stride.

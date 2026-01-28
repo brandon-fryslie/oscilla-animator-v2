@@ -22,7 +22,7 @@ After successful compilation, builds a map from ReactFlow edge IDs to runtime sl
 - Queries unlinkedIR.builder.debugIndex.slotToPort for port→slot mappings
 - Reverses to create portKey→slot lookup table  
 - For each edge, builds portKey "blockId:portId" and resolves to slot
-- Includes SignalType metadata for proper value formatting
+- Includes CanonicalType metadata for proper value formatting
 - Passes completed map to debugService.setEdgeToSlotMap()
 
 **Result**: Every edge in the graph has its runtime storage location tracked.

@@ -54,7 +54,7 @@ Status: in_progress - blocked on Expression DSL compile bug
 // Test code that fails:
 const result = compileExpression(
   'x',
-  new Map([['x', signalType('int')]]),     // Type map
+  new Map([['x', canonicalType('int')]]),     // Type map
   builder,
   new Map([['x', inputSig]])                // Signal map
 );

@@ -520,7 +520,7 @@ export interface FieldExprPlacement {
   readonly instanceId: InstanceId;
   readonly field: PlacementFieldName;
   readonly basisKind: BasisKind;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 
 // Update FieldExpr union:
@@ -556,7 +556,7 @@ fieldPlacement(
   instanceId: InstanceId,
   field: PlacementFieldName,
   basisKind: BasisKind,
-  type: SignalType
+  type: CanonicalType
 ): FieldExprId;
 ```
 
@@ -567,7 +567,7 @@ fieldPlacement(
   instanceId: InstanceId,
   field: PlacementFieldName,
   basisKind: BasisKind,
-  type: SignalType
+  type: CanonicalType
 ): FieldExprId {
   if (!instanceId) {
     throw new Error('fieldPlacement: instanceId is required');
@@ -1079,21 +1079,21 @@ registerBlock({
     elements: { label: 'Elements', type: signalTypeField(SHAPE, 'default') },
     radius: {
       label: 'Radius',
-      type: signalType(FLOAT),
+      type: canonicalType(FLOAT),
       value: 0.4,
       defaultSource: defaultSourceConst(0.4),
       uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 },
     },
     phase: {
       label: 'Phase',
-      type: signalType(FLOAT, unitPhase01),
+      type: canonicalType(FLOAT, unitPhase01),
       value: 0,
       defaultSource: defaultSourceConst(0),
       uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 },
     },
     basisKind: {
       label: 'Basis Kind',
-      type: signalType(INT), // Enum as int: 0=halton2D, 1=random, 2=spiral, 3=grid
+      type: canonicalType(INT), // Enum as int: 0=halton2D, 1=random, 2=spiral, 3=grid
       value: 0,
       defaultSource: defaultSourceConst(0),
       exposedAsPort: false,
@@ -1126,10 +1126,10 @@ registerBlock({
     // Get radius and phase as signals
     const radiusSig = inputsById.radius?.k === 'sig'
       ? inputsById.radius.id
-      : ctx.b.sigConst((config?.radius as number) ?? 0.4, signalType(FLOAT));
+      : ctx.b.sigConst((config?.radius as number) ?? 0.4, canonicalType(FLOAT));
     const phaseSig = inputsById.phase?.k === 'sig'
       ? inputsById.phase.id
-      : ctx.b.sigConst((config?.phase as number) ?? 0, signalType(FLOAT, unitPhase01));
+      : ctx.b.sigConst((config?.phase as number) ?? 0, canonicalType(FLOAT, unitPhase01));
 
     // Map basisKind config to BasisKind type
     const basisKindValue = (config?.basisKind as number) ?? 0;

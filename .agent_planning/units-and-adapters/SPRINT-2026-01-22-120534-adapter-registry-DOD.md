@@ -36,7 +36,7 @@ Plan: SPRINT-2026-01-22-120534-adapter-registry-PLAN.md
 
 #### Unit-Based Rules Added
 - [ ] TypeSignature interface includes unit: Unit | 'any'
-- [ ] extractSignature() extracts unit from SignalType
+- [ ] extractSignature() extracts unit from CanonicalType
 - [ ] 10 adapter rules added to ADAPTER_RULES array
 - [ ] Each rule specifies exact (payload, unit) for from and to
 - [ ] Rules include cardinality: 'any' and temporality: 'continuous'

@@ -11,7 +11,7 @@ import type { ExprNode } from './ast';
 import type { IRBuilder } from '../compiler/ir/IRBuilder';
 import type { SigExprId } from '../compiler/ir/types';
 import { OpCode } from '../compiler/ir/types';
-import { signalType, type PayloadType } from '../core/canonical-types';
+import { canonicalType, type PayloadType } from '../core/canonical-types';
 import { FLOAT, INT, BOOL } from '../core/canonical-types';
 import { isVectorType, componentIndex, swizzleResultType } from './swizzle';
 
@@ -72,7 +72,7 @@ export function compile(node: ExprNode, ctx: CompileContext): SigExprId {
  * Compile literal node to constant signal.
  */
 function compileLiteral(node: ExprNode & { kind: 'literal' }, ctx: CompileContext): SigExprId {
-  const type = signalType(node.type as PayloadType);
+  const type = canonicalType(node.type as PayloadType);
   return ctx.builder.sigConst(node.value, type);
 }
 
@@ -91,12 +91,12 @@ function compileIdentifier(node: ExprNode & { kind: 'identifier' }, ctx: Compile
  */
 function compileUnary(node: ExprNode & { kind: 'unary' }, ctx: CompileContext): SigExprId {
   const arg = compile(node.arg, ctx);
-  const type = signalType(node.type as PayloadType);
+  const type = canonicalType(node.type as PayloadType);
 
   switch (node.op) {
     case '!': {
       // Logical NOT: Use comparison to false (0)
-      const zero = ctx.builder.sigConst(0, signalType(INT));
+      const zero = ctx.builder.sigConst(0, canonicalType(INT));
       const eqFn = ctx.builder.opcode(OpCode.Eq);
       return ctx.builder.sigZip([arg, zero], eqFn, type);
     }
@@ -124,7 +124,7 @@ function compileUnary(node: ExprNode & { kind: 'unary' }, ctx: CompileContext): 
 function compileBinary(node: ExprNode & { kind: 'binary' }, ctx: CompileContext): SigExprId {
   const left = compile(node.left, ctx);
   const right = compile(node.right, ctx);
-  const type = signalType(node.type as PayloadType);
+  const type = canonicalType(node.type as PayloadType);
 
   // Handle operators that need synthesis
   switch (node.op) {
@@ -146,8 +146,8 @@ function compileBinary(node: ExprNode & { kind: 'binary' }, ctx: CompileContext)
     case '<=': {
       // a <= b → !(a > b)
       const gtFn = ctx.builder.opcode(OpCode.Gt);
-      const gt = ctx.builder.sigZip([left, right], gtFn, signalType(BOOL));
-      const zero = ctx.builder.sigConst(0, signalType(INT));
+      const gt = ctx.builder.sigZip([left, right], gtFn, canonicalType(BOOL));
+      const zero = ctx.builder.sigConst(0, canonicalType(INT));
       const eqFn = ctx.builder.opcode(OpCode.Eq);
       return ctx.builder.sigZip([gt, zero], eqFn, type);
     }
@@ -155,8 +155,8 @@ function compileBinary(node: ExprNode & { kind: 'binary' }, ctx: CompileContext)
     case '>=': {
       // a >= b → !(a < b)
       const ltFn = ctx.builder.opcode(OpCode.Lt);
-      const lt = ctx.builder.sigZip([left, right], ltFn, signalType(BOOL));
-      const zero = ctx.builder.sigConst(0, signalType(INT));
+      const lt = ctx.builder.sigZip([left, right], ltFn, canonicalType(BOOL));
+      const zero = ctx.builder.sigConst(0, canonicalType(INT));
       const eqFn = ctx.builder.opcode(OpCode.Eq);
       return ctx.builder.sigZip([lt, zero], eqFn, type);
     }
@@ -164,8 +164,8 @@ function compileBinary(node: ExprNode & { kind: 'binary' }, ctx: CompileContext)
     case '!=': {
       // a != b → !(a == b)
       const eqFn = ctx.builder.opcode(OpCode.Eq);
-      const eq = ctx.builder.sigZip([left, right], eqFn, signalType(BOOL));
-      const zero = ctx.builder.sigConst(0, signalType(INT));
+      const eq = ctx.builder.sigZip([left, right], eqFn, canonicalType(BOOL));
+      const zero = ctx.builder.sigConst(0, canonicalType(INT));
       const eqZeroFn = ctx.builder.opcode(OpCode.Eq);
       return ctx.builder.sigZip([eq, zero], eqZeroFn, type);
     }
@@ -179,8 +179,8 @@ function compileBinary(node: ExprNode & { kind: 'binary' }, ctx: CompileContext)
     case '||': {
       // a || b → min(a + b, 1)
       const addFn = ctx.builder.opcode(OpCode.Add);
-      const sum = ctx.builder.sigZip([left, right], addFn, signalType(INT));
-      const one = ctx.builder.sigConst(1, signalType(INT));
+      const sum = ctx.builder.sigZip([left, right], addFn, canonicalType(INT));
+      const one = ctx.builder.sigConst(1, canonicalType(INT));
       const minFn = ctx.builder.opcode(OpCode.Min);
       return ctx.builder.sigZip([sum, one], minFn, type);
     }
@@ -203,16 +203,16 @@ function compileTernary(node: ExprNode & { kind: 'ternary' }, ctx: CompileContex
   const cond = compile(node.cond, ctx);
   const thenBranch = compile(node.then, ctx);
   const elseBranch = compile(node.else, ctx);
-  const type = signalType(node.type as PayloadType);
+  const type = canonicalType(node.type as PayloadType);
 
   // cond * then
   const mulFn = ctx.builder.opcode(OpCode.Mul);
   const condThen = ctx.builder.sigZip([cond, thenBranch], mulFn, type);
 
   // 1 - cond
-  const one = ctx.builder.sigConst(1, signalType(INT));
+  const one = ctx.builder.sigConst(1, canonicalType(INT));
   const subFn = ctx.builder.opcode(OpCode.Sub);
-  const oneMinusCond = ctx.builder.sigZip([one, cond], subFn, signalType(INT));
+  const oneMinusCond = ctx.builder.sigZip([one, cond], subFn, canonicalType(INT));
 
   // (1 - cond) * else
   const condElse = ctx.builder.sigZip([oneMinusCond, elseBranch], mulFn, type);
@@ -227,7 +227,7 @@ function compileTernary(node: ExprNode & { kind: 'ternary' }, ctx: CompileContex
  */
 function compileCall(node: ExprNode & { kind: 'call' }, ctx: CompileContext): SigExprId {
   const args = node.args.map(arg => compile(arg, ctx));
-  const type = signalType(node.type as PayloadType);
+  const type = canonicalType(node.type as PayloadType);
 
   // Map function name to implementation
   switch (node.fn) {
@@ -330,7 +330,7 @@ function compileMemberAccess(node: ExprNode & { kind: 'member' }, ctx: CompileCo
   // Case 1: Component access on vector type
   if (isVectorType(objectType)) {
     const pattern = node.member;
-    const resultType = signalType(swizzleResultType(pattern));
+    const resultType = canonicalType(swizzleResultType(pattern));
 
     if (pattern.length === 1) {
       // Single component extraction
@@ -343,7 +343,7 @@ function compileMemberAccess(node: ExprNode & { kind: 'member' }, ctx: CompileCo
       for (const char of pattern) {
         const kernelName = getExtractionKernel(objectType, char);
         const fn = ctx.builder.kernel(kernelName);
-        const componentSig = ctx.builder.sigMap(objectSig, fn, signalType(FLOAT));
+        const componentSig = ctx.builder.sigMap(objectSig, fn, canonicalType(FLOAT));
         componentSigs.push(componentSig);
       }
 

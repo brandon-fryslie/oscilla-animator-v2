@@ -34,7 +34,7 @@ Payload-generic behavior is entirely compile-time; runtime sees only erased slot
 •	If unification yields a payload not in AllowedPayloads for a required port, compilation fails.
 
 2.2 Units are part of the validity check (when present)
-If your SignalType includes unit?: NumericUnit:
+If your CanonicalType includes unit?: NumericUnit:
 •	Blocks may declare unit constraints per payload, e.g.:
 •	Sin allows float(unit=radians) and phase(unit=phase) but not float(unit=ms).
 •	If either side lacks a unit annotation, unit checking is not performed for that value (absence means “no unit validation”), but payload validity is still enforced.

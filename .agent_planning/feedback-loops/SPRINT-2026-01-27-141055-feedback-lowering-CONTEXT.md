@@ -91,7 +91,7 @@ lower: ({ ctx, inputsById, config }) => {
   const stateSlot = ctx.b.allocStateSlot(stateId, { initialValue });
 
   // Read previous state (this is the output - delayed by 1 frame)
-  const outputId = ctx.b.sigStateRead(stateSlot, signalType(FLOAT));
+  const outputId = ctx.b.sigStateRead(stateSlot, canonicalType(FLOAT));
 
   // Write current input to state for next frame
   ctx.b.stepStateWrite(stateSlot, input.id);
@@ -117,7 +117,7 @@ lowerOutputsOnly: ({ ctx, config }) => {
   const stateSlot = ctx.b.allocStateSlot(stateId, { initialValue });
 
   // Read previous state (this is the output - delayed by 1 frame)
-  const outputId = ctx.b.sigStateRead(stateSlot, signalType(FLOAT));
+  const outputId = ctx.b.sigStateRead(stateSlot, canonicalType(FLOAT));
 
   const slot = ctx.b.allocSlot();
 
@@ -152,7 +152,7 @@ lower: ({ ctx, inputsById, config, existingOutputs }) => {
 
   const stateId = stableStateId(ctx.instanceId, 'delay');
   const stateSlot = ctx.b.allocStateSlot(stateId, { initialValue });
-  const outputId = ctx.b.sigStateRead(stateSlot, signalType(FLOAT));
+  const outputId = ctx.b.sigStateRead(stateSlot, canonicalType(FLOAT));
   ctx.b.stepStateWrite(stateSlot, input.id);
 
   const slot = ctx.b.allocSlot();
@@ -232,7 +232,7 @@ function lowerSCCTwoPass(
   blockOutputs: Map<BlockIndex, Map<string, ValueRefPacked>>,
   blockIdToIndex: Map<string, BlockIndex>,
   instanceContextByBlock: Map<BlockIndex, InstanceId>,
-  portTypes: ReadonlyMap<PortKey, SignalType>
+  portTypes: ReadonlyMap<PortKey, CanonicalType>
 ): void {
   // Track which blocks were lowered in pass 1
   const partialResults = new Map<BlockIndex, {
@@ -326,7 +326,7 @@ function lowerBlockInstance(
   blockOutputs?: Map<BlockIndex, Map<string, ValueRefPacked>>,
   blockIdToIndex?: Map<string, BlockIndex>,
   instanceContextByBlock?: Map<BlockIndex, InstanceId>,
-  portTypes?: ReadonlyMap<PortKey, SignalType>,
+  portTypes?: ReadonlyMap<PortKey, CanonicalType>,
   existingOutputs?: { outputsById: Record<string, ValueRefPacked>; stateSlot?: StateSlotId }
 ): Map<string, ValueRefPacked> {
 ```
@@ -433,7 +433,7 @@ const stateId = stableStateId(ctx.instanceId, 'stateName');
 const stateSlot = ctx.b.allocStateSlot(stateId, { initialValue });
 
 // State read pattern (output)
-const outputId = ctx.b.sigStateRead(stateSlot, signalType(FLOAT));
+const outputId = ctx.b.sigStateRead(stateSlot, canonicalType(FLOAT));
 
 // State write pattern (input)
 ctx.b.stepStateWrite(stateSlot, inputId);

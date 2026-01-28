@@ -169,7 +169,7 @@ No dynamic stride. No runtime maps.
 8.1 Remove “pack” usage at signal level
 
 Any block lowering that currently does:
-•	sigZip([...], kernel('packVec2'), signalType('vec2'))
+•	sigZip([...], kernel('packVec2'), canonicalType('vec2'))
 or similar must be rewritten to:
 •	compute scalar component SigExprIds
 •	strided slot write step

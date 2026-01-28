@@ -11,8 +11,8 @@ import {
   type AssemblerContext,
 } from '../RenderAssembler';
 import type { StepRender, InstanceDecl, SigExpr } from '../../compiler/ir/types';
-import type { SignalType } from '../../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION, signalType, extentDefault } from '../../core/canonical-types';
+import type { CanonicalType } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION, canonicalType, extentDefault } from '../../core/canonical-types';
 import type { RuntimeState } from '../RuntimeState';
 import { createRuntimeState } from '../RuntimeState';
 import type { ValueSlot, SigExprId } from '../../types';
@@ -28,7 +28,7 @@ function createPalette(r = 1, g = 1, b = 1, a = 1): Float32Array {
 }
 
 // Helper to create a scalar signal type
-const SCALAR_TYPE: SignalType = signalType(FLOAT);
+const SCALAR_TYPE: CanonicalType = canonicalType(FLOAT);
 
 // Create a minimal runtime state for testing
 function createMockState(): RuntimeState {

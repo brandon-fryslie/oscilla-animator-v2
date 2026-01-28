@@ -9,8 +9,8 @@ Status: COMPLETE
 
 1. Type System (canonical-types.ts)
    - Added NumericUnit type (8 units: phase, radians, normalized, scalar, ms, #, degrees, seconds)
-   - Extended SignalType with optional unit field
-   - Updated all signalType* helpers to accept unit parameter
+   - Extended CanonicalType with optional unit field
+   - Updated all canonicalType* helpers to accept unit parameter
    - 100% backwards compatible
 
 2. Kernel Signatures (kernel-signatures.ts)
@@ -47,7 +47,7 @@ Completed all unknowns:
 
 All DOD criteria met:
 - [x] NumericUnit type exists
-- [x] SignalType accepts optional unit field
+- [x] CanonicalType accepts optional unit field
 - [x] Kernel signatures declared (20+)
 - [x] Compiler validates units (warnings)
 - [x] npm run typecheck passes

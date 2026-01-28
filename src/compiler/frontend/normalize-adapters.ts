@@ -40,7 +40,7 @@
  */
 
 import type { BlockId, BlockRole } from '../../types';
-import type { SignalType } from '../../core/canonical-types';
+import type { CanonicalType } from '../../core/canonical-types';
 import type { Block, Edge, Patch, LensAttachment } from '../../graph/Patch';
 import { getBlockDefinition, requireBlockDef } from '../../blocks/registry';
 import { findAdapter } from '../../graph/adapters';
@@ -100,13 +100,13 @@ function generateLensBlockId(portId: string, lensId: string): BlockId {
 }
 
 /**
- * Get the SignalType for a port on a block.
+ * Get the CanonicalType for a port on a block.
  */
 function getPortType(
   blockType: string,
   portId: string,
   direction: 'input' | 'output'
-): SignalType | null {
+): CanonicalType | null {
   const blockDef = getBlockDefinition(blockType);
   if (!blockDef) return null;
 

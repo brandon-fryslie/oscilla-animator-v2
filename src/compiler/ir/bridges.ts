@@ -2,7 +2,7 @@
  * Bridge Functions: Canonical Type System → IR Schema
  *
  * These pure functions translate from the canonical type system
- * (SignalType with 5-axis Extent) to individual axis/shape components.
+ * (CanonicalType with 5-axis Extent) to individual axis/shape components.
  *
  * Design principles:
  * - Pure functions (no side effects)
@@ -15,7 +15,7 @@
  */
 
 import type {
-  SignalType,
+  CanonicalType,
   Extent,
   Cardinality,
   Temporality,

@@ -152,7 +152,7 @@ import type {
   FieldExprId,
   SigExprId,
 } from '../types';
-import type { SignalType } from '../core/canonical-types';
+import type { CanonicalType } from '../core/canonical-types';
 import type {
   FieldExpr,
   InstanceDecl,
@@ -524,7 +524,7 @@ function applyMap(
   input: ArrayBufferView,
   fn: PureFn,
   N: number,
-  type: SignalType
+  type: CanonicalType
 ): void {
   if (type.payload.kind !== 'float') {
     throw new Error(
@@ -558,7 +558,7 @@ function applyZip(
   inputs: ArrayBufferView[],
   fn: PureFn,
   N: number,
-  type: SignalType
+  type: CanonicalType
 ): void {
   if (fn.kind === 'opcode') {
     if (type.payload.kind !== 'float') {
@@ -590,7 +590,7 @@ function applyZipSig(
   sigValues: number[],
   fn: PureFn,
   N: number,
-  type: SignalType
+  type: CanonicalType
 ): void {
   const outArr = out as Float32Array;
   const inArr = fieldInput as Float32Array;

@@ -6,11 +6,11 @@
 
 ## Sprint Goal
 
-Add optional unit annotations to SignalType, enabling compile-time detection of unit mismatches (phase vs radians, ms vs seconds, etc.).
+Add optional unit annotations to CanonicalType, enabling compile-time detection of unit mismatches (phase vs radians, ms vs seconds, etc.).
 
 ## Known Elements
 
-- SignalType has `payload` and `extent` fields
+- CanonicalType has `payload` and `extent` fields
 - Adding `unit?: NumericUnit` is additive and non-breaking
 - Spec already defines phase arithmetic rules (phase + float = phase)
 
@@ -34,7 +34,7 @@ Add optional unit annotations to SignalType, enabling compile-time detection of 
 ## Tentative Deliverables
 
 - [ ] `NumericUnit` type definition in `canonical-types.ts`
-- [ ] Updated `SignalType` with optional `unit` field
+- [ ] Updated `CanonicalType` with optional `unit` field
 - [ ] Kernel signature declarations for sin/cos/etc.
 - [ ] Compiler pass or validation for unit compatibility
 - [ ] `phaseToRadians` / `radiansToPhase` conversion kernels

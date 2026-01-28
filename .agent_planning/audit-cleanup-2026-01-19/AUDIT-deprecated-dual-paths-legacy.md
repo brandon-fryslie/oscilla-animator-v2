@@ -40,12 +40,12 @@ The codebase is migrating from an old "Domain" system to a new "Instance" system
 ```typescript
 // src/compiler/ir/IRBuilderImpl.ts:188-199
 /** @deprecated Use fieldIntrinsic() instead for instance-based fields. */
-fieldSource(domain: DomainId, sourceId: ..., type: SignalType): FieldExprId
+fieldSource(domain: DomainId, sourceId: ..., type: CanonicalType): FieldExprId
 
 // vs.
 
 // src/compiler/ir/IRBuilderImpl.ts:206-215
-fieldIntrinsic(instanceId: InstanceId, intrinsic: IntrinsicPropertyName, type: SignalType): FieldExprId
+fieldIntrinsic(instanceId: InstanceId, intrinsic: IntrinsicPropertyName, type: CanonicalType): FieldExprId
 ```
 
 **Legacy materializer path:**

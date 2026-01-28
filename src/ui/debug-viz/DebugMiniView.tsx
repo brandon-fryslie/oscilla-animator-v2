@@ -19,7 +19,7 @@ import { WarmupIndicator } from './charts/WarmupIndicator';
 import type { RendererSample, AggregateStats, Stride } from './types';
 import type { EdgeValueResult } from '../../services/DebugService';
 import type { EdgeMetadata } from '../../services/mapDebugEdges';
-import type { SignalType } from '../../core/canonical-types';
+import type { CanonicalType } from '../../core/canonical-types';
 
 // Side-effect import: registers all renderers
 import './renderers/register';
@@ -111,7 +111,7 @@ const styles = {
 // Helper Components
 // =============================================================================
 
-function formatTypeLine(type: SignalType, cardinality: 'signal' | 'field'): string {
+function formatTypeLine(type: CanonicalType, cardinality: 'signal' | 'field'): string {
   const unitKind = type.unit.kind;
   // PayloadType is an object with a 'kind' property (e.g., { kind: 'float', stride: 1 })
   const payloadKind = type.payload.kind;

@@ -188,7 +188,7 @@ No switch statements per device. Ever.
 
 Add:
 
-sigExternal(channel: string, type: SignalType): SigExprId
+sigExternal(channel: string, type: CanonicalType): SigExprId
 
 Emission rule:
 •	the type is for the compiler/type checker; runtime reads numeric.
@@ -214,7 +214,7 @@ Canonical minimal:
 Config-only input channel (string).
 
 Lowering:
-•	ctx.b.sigExternal(channel, signalType('float'))
+•	ctx.b.sigExternal(channel, canonicalType('float'))
 
 6.2 ExternalGate (scalar -> bool-ish)
 

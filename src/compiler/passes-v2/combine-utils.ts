@@ -13,7 +13,7 @@
  * Updated: Multi-Input Blocks Integration (2026-01-01)
  */
 
-import type { CombineMode, Edge, SignalType } from "../../types";
+import type { CombineMode, Edge, CanonicalType } from "../../types";
 import type { IRBuilder } from "../ir/IRBuilder";
 import type { ValueRefPacked } from "../ir/lowerTypes";
 import type { EventExprId } from "../ir/types";
@@ -228,14 +228,14 @@ function normalizeCombineMode(mode: CombineMode | 'error' | 'layer'): CombineMod
  *
  * @param mode - Combine mode (sum, average, max, min, last, first, layer)
  * @param inputs - Pre-sorted input ValueRefs (ascending sortKey, ties by edge ID)
- * @param type - Legacy type descriptor (world, domain) or SignalType
+ * @param type - Legacy type descriptor (world, domain) or CanonicalType
  * @param builder - IRBuilder for emitting nodes
  * @returns Combined ValueRefPacked or null if no inputs
  */
 export function createCombineNode(
   mode: CombineMode | 'error' | 'layer',
   inputs: readonly ValueRefPacked[],
-  type: SignalType,
+  type: CanonicalType,
   builder: IRBuilder
 ): ValueRefPacked | null {
   // Handle empty inputs - caller should materialize default
@@ -274,8 +274,8 @@ export function createCombineNode(
                  fieldTerms.length > 0 ? 'field' :
                  eventTerms.length > 0 ? 'event' : 'signal');
 
-  // Convert to SignalType if needed (for IRBuilder API)
-  const signalType = ('payload' in type) ? type : type as unknown as SignalType;
+  // Convert to CanonicalType if needed (for IRBuilder API)
+  const canonicalType = ('payload' in type) ? type : type as unknown as CanonicalType;
 
   // Handle Signal world
   if (world === "signal") {
@@ -288,10 +288,10 @@ export function createCombineNode(
     const safeMode = validModes.includes(normalizedMode) ? normalizedMode : "last";
     const combineMode = safeMode as "sum" | "average" | "max" | "min" | "last";
 
-    const sigId = builder.sigCombine(sigTerms, combineMode, signalType);
-    const slot = builder.allocTypedSlot(signalType, `combine_sig_${combineMode}`);
+    const sigId = builder.sigCombine(sigTerms, combineMode, canonicalType);
+    const slot = builder.allocTypedSlot(canonicalType, `combine_sig_${combineMode}`);
     builder.registerSigSlot(sigId, slot);
-    return { k: "sig", id: sigId, slot, type: signalType, stride: strideOf(signalType.payload) };
+    return { k: "sig", id: sigId, slot, type: canonicalType, stride: strideOf(canonicalType.payload) };
   }
 
   // Handle Field world
@@ -305,10 +305,10 @@ export function createCombineNode(
     const safeMode = validModes.includes(normalizedMode) ? normalizedMode : "product";
     const combineMode = safeMode as "sum" | "average" | "max" | "min" | "last" | "product";
 
-    const fieldId = builder.fieldCombine(fieldTerms, combineMode, signalType);
-    const slot = builder.allocTypedSlot(signalType, `combine_field_${combineMode}`);
+    const fieldId = builder.fieldCombine(fieldTerms, combineMode, canonicalType);
+    const slot = builder.allocTypedSlot(canonicalType, `combine_field_${combineMode}`);
     builder.registerFieldSlot(fieldId, slot);
-    return { k: "field", id: fieldId, slot, type: signalType, stride: strideOf(signalType.payload) };
+    return { k: "field", id: fieldId, slot, type: canonicalType, stride: strideOf(canonicalType.payload) };
   }
 
   // Handle Event world
@@ -322,7 +322,7 @@ export function createCombineNode(
     const eventMode = normalizedMode === 'last' ? 'any' : 'any';
     const eventId = builder.eventCombine(eventTerms, eventMode);
     const slot = builder.allocEventSlot(eventId);
-    return { k: "event", id: eventId, slot, type: signalType };
+    return { k: "event", id: eventId, slot, type: canonicalType };
   }
 
   // Unsupported world

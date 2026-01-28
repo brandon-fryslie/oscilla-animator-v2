@@ -6,7 +6,7 @@ I’m going to define:
 3.	How “modulatable geometry” is typed (control points as a first-class Field<vec2> and how it relates to a shape)
 4.	Combine / default-source rules for shape2d so the graph remains total and predictable
 
-Everything below is written to slot into the system you already have: PayloadType, SignalType, Extent, Cardinality, Temporality, FieldSlot, ScalarSlot, Schedule steps, and your PathTopologyDef registry.
+Everything below is written to slot into the system you already have: PayloadType, CanonicalType, Extent, Cardinality, Temporality, FieldSlot, ScalarSlot, Schedule steps, and your PathTopologyDef registry.
 
 ⸻
 
@@ -20,13 +20,13 @@ type PayloadType =
 | 'float' | 'int' | 'vec2' | 'color' | 'phase' | 'bool' | 'unit'
 | 'shape2d';
 
-B. SignalType / Extent
+B. CanonicalType / Extent
 
-No special cases: shape2d uses the same SignalType and Extent machinery.
+No special cases: shape2d uses the same CanonicalType and Extent machinery.
 •	Signal<shape2d> means “one shape value per tick”
 •	Field<shape2d> means “one shape value per instance lane per tick” (you can support this from day one even if your first blocks only output Signal<shape2d>)
 
-const shape2dSignal = signalType('shape2d');          // cardinality one, continuous
+const shape2dSignal = canonicalType('shape2d');          // cardinality one, continuous
 const shape2dField  = signalTypeField('shape2d', 'instance'); // cardinality many(instance), continuous
 
 C. CombineMode constraints (important)
@@ -191,10 +191,10 @@ This ensures the graph is total and the renderer never sees “missing shape.”
 
 Your block currently does:
 
-const shapeRefSig = ctx.b.sigShapeRef(topology.id, [], signalType('shape'), computedPositions);
+const shapeRefSig = ctx.b.sigShapeRef(topology.id, [], canonicalType('shape'), computedPositions);
 
 In the “real” type system:
-•	signalType('shape') becomes signalType('shape2d')
+•	canonicalType('shape') becomes canonicalType('shape2d')
 •	sigShapeRef(...) must allocate/write into the shape2d scalar bank using the packed layout and must record:
 •	TopologyId (numeric)
 •	PointsFieldSlot (the slot allocated for computedPositions)

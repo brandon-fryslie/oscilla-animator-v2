@@ -17,7 +17,7 @@
  */
 
 import type { SigExprId, EventExprId } from "./types";
-import type { SignalType, InstanceRef } from "../../core/canonical-types";
+import type { CanonicalType, InstanceRef } from "../../core/canonical-types";
 import type { TimeModelIR } from "./schedule";
 
 // Re-export from graph/normalize for convenience - these are the authoritative types
@@ -74,8 +74,8 @@ import type { TypeResolvedPatch } from '../frontend/analyze-type-constraints';
  * All port types come from TypeResolvedPatch.portTypes.
  */
 export interface TypedPatch extends TypeResolvedPatch {
-  /** Type descriptors for each block output: Map<BlockId, Map<PortId, SignalType | InstanceRef>> */
-  readonly blockOutputTypes: ReadonlyMap<string, ReadonlyMap<string, SignalType | InstanceRef>>;
+  /** Type descriptors for each block output: Map<BlockId, Map<PortId, CanonicalType | InstanceRef>> */
+  readonly blockOutputTypes: ReadonlyMap<string, ReadonlyMap<string, CanonicalType | InstanceRef>>;
 }
 
 // =============================================================================

@@ -8,7 +8,7 @@
 
 // Import the legacy types for now (will be replaced with proper execution node types)
 import type { SigExpr, FieldExpr, EventExpr } from './types';
-import type { SignalType, ResolvedExtent } from '../../core/canonical-types';
+import type { CanonicalType, ResolvedExtent } from '../../core/canonical-types';
 import type { ScheduleIR } from '../backend/schedule-program';
 import type {
   FieldExprId,
@@ -213,11 +213,11 @@ export interface SlotMetaEntry {
   readonly stride: number;
 
   /**
-   * REQUIRED: Canonical type (5-axis SignalType).
+   * REQUIRED: Canonical type (5-axis CanonicalType).
    * This is the compiler-authoritative type including all semantic axes.
    * Runtime uses this for type assertions and validation in debug mode.
    */
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 
   /** Optional debug label */
   readonly debugName?: string;

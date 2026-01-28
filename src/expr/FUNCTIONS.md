@@ -544,7 +544,7 @@ Most functions map 1:1 to OpCodes:
 ```typescript
 // Example: sin(x)
 const sinFn = ctx.b.opcode(OpCode.Sin);
-const result = ctx.b.sigMap(xSigId, sinFn, signalType('float'));
+const result = ctx.b.sigMap(xSigId, sinFn, canonicalType('float'));
 ```
 
 ### Synthesized Functions
@@ -552,11 +552,11 @@ const result = ctx.b.sigMap(xSigId, sinFn, signalType('float'));
 Some functions are synthesized from primitives:
 ```typescript
 // Example: lerp(a, b, t) = (1 - t) * a + t * b
-const one = ctx.b.sigConst(1, signalType('float'));
-const oneMinusT = ctx.b.sigZip([one, t], ctx.b.opcode(OpCode.Sub), signalType('float'));
-const term1 = ctx.b.sigZip([oneMinusT, a], ctx.b.opcode(OpCode.Mul), signalType('float'));
-const term2 = ctx.b.sigZip([t, b], ctx.b.opcode(OpCode.Mul), signalType('float'));
-const result = ctx.b.sigZip([term1, term2], ctx.b.opcode(OpCode.Add), signalType('float'));
+const one = ctx.b.sigConst(1, canonicalType('float'));
+const oneMinusT = ctx.b.sigZip([one, t], ctx.b.opcode(OpCode.Sub), canonicalType('float'));
+const term1 = ctx.b.sigZip([oneMinusT, a], ctx.b.opcode(OpCode.Mul), canonicalType('float'));
+const term2 = ctx.b.sigZip([t, b], ctx.b.opcode(OpCode.Mul), canonicalType('float'));
+const result = ctx.b.sigZip([term1, term2], ctx.b.opcode(OpCode.Add), canonicalType('float'));
 ```
 
 ### Missing OpCodes

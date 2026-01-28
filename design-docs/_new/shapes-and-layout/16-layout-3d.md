@@ -54,7 +54,7 @@ Canonical world position is:
 worldPosition: Field<vec3> over an InstanceRef.
 
 Concretely:
-•	SignalType:
+•	CanonicalType:
 •	payload: 'vec3'
 •	extent.cardinality.kind = 'many'
 •	extent.cardinality.instance: InstanceRef (with instanceId and domainType)
@@ -210,7 +210,7 @@ Camera is parameterized by:
 Encoding detail:
 
 Your current payload types don’t yet have vec3 signals in the file you showed, but since we added vec3 as a PayloadType, these are just:
-•	SignalType with:
+•	CanonicalType with:
 •	payload: 'vec3'
 •	cardinality.one (signal)
 •	continuous temporality.

@@ -136,7 +136,7 @@ Implement the generic external channel system infrastructure: write bus, snapsho
 **Status Reference:** EVALUATION-20260125.md - "IRBuilder.sigExternal(): only accepts the 3 hardcoded mouse names"
 
 **Acceptance Criteria:**
-- [ ] IRBuilder interface updated: sigExternal(channel: string, type: SignalType)
+- [ ] IRBuilder interface updated: sigExternal(channel: string, type: CanonicalType)
 - [ ] IRBuilderImpl updated to accept any string channel name
 - [ ] Existing sigExternal calls continue to work (backward compatible)
 - [ ] TypeScript compiles without errors
@@ -144,8 +144,8 @@ Implement the generic external channel system infrastructure: write bus, snapsho
 **Technical Notes:**
 - Change in src/compiler/ir/IRBuilder.ts line 48
 - Change in src/compiler/ir/IRBuilderImpl.ts line 125
-- From: `sigExternal(which: 'mouseX' | 'mouseY' | 'mouseOver', type: SignalType)`
-- To: `sigExternal(channel: string, type: SignalType)`
+- From: `sigExternal(which: 'mouseX' | 'mouseY' | 'mouseOver', type: CanonicalType)`
+- To: `sigExternal(channel: string, type: CanonicalType)`
 
 ---
 

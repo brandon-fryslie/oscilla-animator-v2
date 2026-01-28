@@ -7,7 +7,7 @@
  * The type system separates concerns into:
  * - PayloadType: What the value is made of (float, vec2, color, etc.)
  * - Extent: Where/when/about-what a value exists (5 independent axes)
- * - SignalType: Complete type contract (payload + extent + unit)
+ * - CanonicalType: Complete type contract (payload + extent + unit)
  * - NumericUnit: Optional unit annotation for numeric types (phase, radians, etc.)
  *
  * Key design principles:
@@ -547,7 +547,7 @@ export function extent(overrides: Partial<Extent>): Extent {
 }
 
 // =============================================================================
-// SignalType - Complete Type Contract
+// CanonicalType - Complete Type Contract
 // =============================================================================
 
 /**
@@ -556,44 +556,44 @@ export function extent(overrides: Partial<Extent>): Extent {
  * Every value has (payload, unit, extent). Unit is mandatory.
  * Spec Reference: 0-Units-and-Adapters.md §A1
  */
-export interface SignalType {
+export interface CanonicalType {
   readonly payload: PayloadType;
   readonly extent: Extent;
   readonly unit: Unit;
 }
 
 /**
- * Create a SignalType with specified payload and unit.
+ * Create a CanonicalType with specified payload and unit.
  *
- * Overload 1: signalType(payload) - uses default unit for payload (only for concrete payloads)
- * Overload 2: signalType(payload, unit) - explicit unit (required for payload variables)
- * Overload 3: signalType(payload, unit, extentOverrides) - full control
+ * Overload 1: canonicalType(payload) - uses default unit for payload (only for concrete payloads)
+ * Overload 2: canonicalType(payload, unit) - explicit unit (required for payload variables)
+ * Overload 3: canonicalType(payload, unit, extentOverrides) - full control
  *
- * Legacy: signalType(payload, extentOverrides) still works during migration.
+ * Legacy: canonicalType(payload, extentOverrides) still works during migration.
  *
  * Note: When using payloadVar(), you MUST provide an explicit unit (use unitVar for polymorphism).
  */
-export function signalType(
+export function canonicalType(
   payload: PayloadType,
   unitOrExtent?: Unit | Partial<Extent>,
   extentOverrides?: Partial<Extent>
-): SignalType {
+): CanonicalType {
   let unit: Unit;
   let extOverrides: Partial<Extent> | undefined;
 
   if (unitOrExtent === undefined) {
-    // signalType(FLOAT) -> use default unit (only for concrete payloads)
+    // canonicalType(FLOAT) -> use default unit (only for concrete payloads)
     if (isPayloadVar(payload)) {
       throw new Error(`Cannot omit unit for payload variable ${payload.id} - use unitVar() for polymorphic unit`);
     }
     unit = defaultUnitForPayload(payload);
     extOverrides = undefined;
   } else if ('kind' in unitOrExtent) {
-    // signalType(FLOAT, unitPhase01(), {...}) or signalType(payloadVar('x'), unitVar('y'))
+    // canonicalType(FLOAT, unitPhase01(), {...}) or canonicalType(payloadVar('x'), unitVar('y'))
     unit = unitOrExtent as Unit;
     extOverrides = extentOverrides;
   } else {
-    // Legacy: signalType(FLOAT, { cardinality: ... })
+    // Legacy: canonicalType(FLOAT, { cardinality: ... })
     if (isPayloadVar(payload)) {
       throw new Error(`Cannot omit unit for payload variable ${payload.id} - use unitVar() for polymorphic unit`);
     }
@@ -804,83 +804,83 @@ export function worldToAxes(
 // =============================================================================
 
 /**
- * Create a Signal SignalType (one + continuous).
+ * Create a Signal CanonicalType (one + continuous).
  */
-export function signalTypeSignal(payload: PayloadType, unit?: Unit): SignalType {
+export function signalTypeSignal(payload: PayloadType, unit?: Unit): CanonicalType {
   const u = unit ?? defaultUnitForPayload(payload);
-  return signalType(payload, u, {
+  return canonicalType(payload, u, {
     cardinality: axisInstantiated(cardinalityOne()),
     temporality: axisInstantiated(temporalityContinuous()),
   });
 }
 
 /**
- * Create a Field SignalType (many(instance) + continuous).
+ * Create a Field CanonicalType (many(instance) + continuous).
  *
  * Accepts either an InstanceRef or a plain instanceId string (uses 'default' domain type).
  */
-export function signalTypeField(payload: PayloadType, instance: InstanceRef | string, unit?: Unit): SignalType {
+export function signalTypeField(payload: PayloadType, instance: InstanceRef | string, unit?: Unit): CanonicalType {
   const instanceRefValue = typeof instance === 'string'
     ? instanceRef('default', instance)
     : instance;
   const u = unit ?? defaultUnitForPayload(payload);
 
-  return signalType(payload, u, {
+  return canonicalType(payload, u, {
     cardinality: axisInstantiated(cardinalityMany(instanceRefValue)),
     temporality: axisInstantiated(temporalityContinuous()),
   });
 }
 
 /**
- * Create a Trigger SignalType (one + discrete).
+ * Create a Trigger CanonicalType (one + discrete).
  */
-export function signalTypeTrigger(payload: PayloadType, unit?: Unit): SignalType {
+export function signalTypeTrigger(payload: PayloadType, unit?: Unit): CanonicalType {
   const u = unit ?? defaultUnitForPayload(payload);
-  return signalType(payload, u, {
+  return canonicalType(payload, u, {
     cardinality: axisInstantiated(cardinalityOne()),
     temporality: axisInstantiated(temporalityDiscrete()),
   });
 }
 
 /**
- * Create a Static/Scalar SignalType (zero + continuous).
+ * Create a Static/Scalar CanonicalType (zero + continuous).
  */
-export function signalTypeStatic(payload: PayloadType, unit?: Unit): SignalType {
+export function signalTypeStatic(payload: PayloadType, unit?: Unit): CanonicalType {
   const u = unit ?? defaultUnitForPayload(payload);
-  return signalType(payload, u, {
+  return canonicalType(payload, u, {
     cardinality: axisInstantiated(cardinalityZero()),
     temporality: axisInstantiated(temporalityContinuous()),
   });
 }
 
 /**
- * Create a per-lane Event SignalType (many(instance) + discrete).
+ * Create a per-lane Event CanonicalType (many(instance) + discrete).
  *
  * Accepts either an InstanceRef or a plain instanceId string (uses 'default' domain type).
  */
-export function signalTypePerLaneEvent(payload: PayloadType, instance: InstanceRef | string, unit?: Unit): SignalType {
+export function signalTypePerLaneEvent(payload: PayloadType, instance: InstanceRef | string, unit?: Unit): CanonicalType {
   const instanceRefValue = typeof instance === 'string'
     ? instanceRef('default', instance)
     : instance;
   const u = unit ?? defaultUnitForPayload(payload);
 
-  return signalType(payload, u, {
+  return canonicalType(payload, u, {
     cardinality: axisInstantiated(cardinalityMany(instanceRefValue)),
     temporality: axisInstantiated(temporalityDiscrete()),
   });
 }
 
 /**
- * Create a cardinality-polymorphic SignalType (one-or-many + continuous).
+ * Create a cardinality-polymorphic CanonicalType (one-or-many + continuous).
  *
  * Used for blocks with cardinalityMode: 'preserve' that work with both signals and fields.
  * The cardinality axis is left as 'default', allowing the type system to resolve it
  * based on actual input cardinalities at compile time.
  */
-export function signalTypePolymorphic(payload: PayloadType, unit?: Unit): SignalType {
+export function signalTypePolymorphic(payload: PayloadType, unit?: Unit): CanonicalType {
   const u = unit ?? defaultUnitForPayload(payload);
 
-  return signalType(payload, u, {
+  return canonicalType(payload, u, {
     cardinality: axisDefault(),
     temporality: axisInstantiated(temporalityContinuous()),
   });

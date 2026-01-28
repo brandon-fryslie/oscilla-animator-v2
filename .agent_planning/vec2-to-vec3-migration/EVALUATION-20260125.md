@@ -29,7 +29,7 @@ These blocks handle instance positions and conflict with the vec3 ecosystem:
 | LayoutAlongPath | path-operators-blocks.ts:133-235 | N/A | vec2 (positions, tangents) | NEEDS MIGRATION |
 
 **Evidence**:
-- geometry-blocks.ts:34: `pos: { label: 'Position', type: signalType('vec2') }`
+- geometry-blocks.ts:34: `pos: { label: 'Position', type: canonicalType('vec2') }`
 - geometry-blocks.ts:88: `pos: { label: 'Position', type: signalTypeField('vec2', 'default') }`
 - path-operators-blocks.ts:162: `positions: { label: 'Positions', type: signalTypeField('vec2', 'default') }`
 
@@ -116,11 +116,11 @@ If `CircularLayout` is the old version:
 ### Priority 2: Migrate Position Blocks to vec3
 
 1. **PolarToCartesian** (geometry-blocks.ts:15-65)
-   - Change output type from `signalType('vec2')` to `signalType('vec3')`
+   - Change output type from `canonicalType('vec2')` to `canonicalType('vec3')`
    - Update kernel reference to output vec3 (add z=0)
 
 2. **OffsetPosition** (geometry-blocks.ts:138-187)
-   - Change input/output from `signalType('vec2')` to `signalType('vec3')`
+   - Change input/output from `canonicalType('vec2')` to `canonicalType('vec3')`
    - Update kernel `offsetPosition` to handle vec3
 
 3. **LayoutAlongPath** (path-operators-blocks.ts:133-235)
@@ -165,7 +165,7 @@ These are local-space shape definitions, not instance positions.
 | Breaking existing patches | Medium | High | Search for saved patches using affected blocks, test each |
 | Runtime type mismatch | Low | High | Add defensive stride checks in Materializer |
 | Performance regression | Low | Low | vec3 uses 50% more memory than vec2, but position buffers are small |
-| Forgotten block | Medium | Medium | Grep for all signalType('vec2') and signalTypeField('vec2' after migration |
+| Forgotten block | Medium | Medium | Grep for all canonicalType('vec2') and signalTypeField('vec2' after migration |
 
 ## Verdict
 - [x] CONTINUE - Scope is clear, path forward is defined

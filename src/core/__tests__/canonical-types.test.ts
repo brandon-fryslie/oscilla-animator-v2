@@ -41,9 +41,9 @@ import {
   extentDefault,
   extent,
 
-  // SignalType
-  type SignalType,
-  signalType,
+  // CanonicalType
+  type CanonicalType,
+  canonicalType,
 
   // Defaults
   DEFAULTS_V0,
@@ -240,18 +240,18 @@ describe('Extent', () => {
 });
 
 // =============================================================================
-// SignalType Tests
+// CanonicalType Tests
 // =============================================================================
 
-describe('SignalType', () => {
-  it('creates SignalType with payload and default extent', () => {
-    const st = signalType(FLOAT);
+describe('CanonicalType', () => {
+  it('creates CanonicalType with payload and default extent', () => {
+    const st = canonicalType(FLOAT);
     expect(st.payload.kind).toBe('float');
     expect(st.extent.cardinality.kind).toBe('default');
   });
 
-  it('creates SignalType with payload and custom extent', () => {
-    const st = signalType(VEC2, {
+  it('creates CanonicalType with payload and custom extent', () => {
+    const st = canonicalType(VEC2, {
       cardinality: axisInstantiated(cardinalityMany(instanceRef('shape', 'grid-1'))),
     });
     expect(st.payload.kind).toBe('vec2');
@@ -386,10 +386,10 @@ describe('unifyExtent', () => {
 });
 
 // =============================================================================
-// Derived SignalType Helpers Tests
+// Derived CanonicalType Helpers Tests
 // =============================================================================
 
-describe('derived SignalType helpers', () => {
+describe('derived CanonicalType helpers', () => {
   it('signalTypeSignal creates one + continuous', () => {
     const st = signalTypeSignal(FLOAT);
     expect(st.payload.kind).toBe('float');

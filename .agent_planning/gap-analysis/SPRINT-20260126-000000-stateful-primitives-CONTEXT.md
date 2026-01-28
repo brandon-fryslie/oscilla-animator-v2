@@ -24,7 +24,7 @@ Confidence: HIGH
 ### Imports already available in signal-blocks.ts (line 7-10)
 ```typescript
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
-import { signalType, type PayloadType, unitPhase01, unitNorm01 } from '../core/canonical-types';
+import { canonicalType, type PayloadType, unitPhase01, unitNorm01 } from '../core/canonical-types';
 import { OpCode, stableStateId } from '../compiler/ir/types';
 import type { SigExprId } from '../compiler/ir/Indices';
 ```
@@ -53,12 +53,12 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    target: { label: 'Target', type: signalType('float') },
-    smoothing: { type: signalType('float'), value: 0.1, exposedAsPort: false },
-    initialValue: { type: signalType('float'), value: 0, exposedAsPort: false },
+    target: { label: 'Target', type: canonicalType('float') },
+    smoothing: { type: canonicalType('float'), value: 0.1, exposedAsPort: false },
+    initialValue: { type: canonicalType('float'), value: 0, exposedAsPort: false },
   },
   outputs: {
-    out: { label: 'Output', type: signalType('float') },
+    out: { label: 'Output', type: canonicalType('float') },
   },
   lower: ({ ctx, inputsById, config }) => {
     const targetInput = inputsById.target;
@@ -76,15 +76,15 @@ registerBlock({
     );
 
     // Read previous value (Phase 1)
-    const prevId = ctx.b.sigStateRead(stateSlot, signalType('float'));
+    const prevId = ctx.b.sigStateRead(stateSlot, canonicalType('float'));
 
     // Compute: lerp(prev, target, smoothing)
-    const smoothConst = ctx.b.sigConst(smoothing, signalType('float'));
+    const smoothConst = ctx.b.sigConst(smoothing, canonicalType('float'));
     const lerpFn = ctx.b.opcode(OpCode.Lerp);
     const outputId = ctx.b.sigZip(
       [prevId, targetInput.id as SigExprId, smoothConst],
       lerpFn,
-      signalType('float')
+      canonicalType('float')
     );
 
     // Write output to state for next frame (Phase 2)
@@ -132,11 +132,11 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    frequency: { label: 'Frequency', type: signalType('float') },
-    initialPhase: { type: signalType('float'), value: 0, exposedAsPort: false },
+    frequency: { label: 'Frequency', type: canonicalType('float') },
+    initialPhase: { type: canonicalType('float'), value: 0, exposedAsPort: false },
   },
   outputs: {
-    out: { label: 'Phase', type: signalType('float', unitPhase01()) },
+    out: { label: 'Phase', type: canonicalType('float', unitPhase01()) },
   },
   lower: ({ ctx, inputsById, config }) => {
     const freqInput = inputsById.frequency;
@@ -153,30 +153,30 @@ registerBlock({
     );
 
     // Read previous phase (Phase 1)
-    const prevPhase = ctx.b.sigStateRead(stateSlot, signalType('float'));
+    const prevPhase = ctx.b.sigStateRead(stateSlot, canonicalType('float'));
 
     // Get dt from time system (in ms)
-    const dtMs = ctx.b.sigTime('dt', signalType('float'));
+    const dtMs = ctx.b.sigTime('dt', canonicalType('float'));
 
     // Convert dt from ms to seconds: dtSec = dt * 0.001
-    const msToSec = ctx.b.sigConst(0.001, signalType('float'));
+    const msToSec = ctx.b.sigConst(0.001, canonicalType('float'));
     const mulFn = ctx.b.opcode(OpCode.Mul);
-    const dtSec = ctx.b.sigZip([dtMs, msToSec], mulFn, signalType('float'));
+    const dtSec = ctx.b.sigZip([dtMs, msToSec], mulFn, canonicalType('float'));
 
     // Compute phase increment: increment = frequency * dtSec
     const increment = ctx.b.sigZip(
       [freqInput.id as SigExprId, dtSec],
       mulFn,
-      signalType('float')
+      canonicalType('float')
     );
 
     // Accumulate: rawPhase = prev + increment
     const addFn = ctx.b.opcode(OpCode.Add);
-    const rawPhase = ctx.b.sigZip([prevPhase, increment], addFn, signalType('float'));
+    const rawPhase = ctx.b.sigZip([prevPhase, increment], addFn, canonicalType('float'));
 
     // Wrap to [0, 1): newPhase = wrap01(rawPhase)
     const wrapFn = ctx.b.opcode(OpCode.Wrap01);
-    const newPhase = ctx.b.sigMap(rawPhase, wrapFn, signalType('float', unitPhase01()));
+    const newPhase = ctx.b.sigMap(rawPhase, wrapFn, canonicalType('float', unitPhase01()));
 
     // Write new phase to state for next frame (Phase 2)
     ctx.b.stepStateWrite(stateSlot, newPhase);
@@ -486,7 +486,7 @@ const stateSlot = ctx.b.allocStateSlot(
   stableStateId(ctx.instanceId, 'delay'),  // Change to 'lag' or 'phasor'
   { initialValue }
 );
-const prevId = ctx.b.sigStateRead(stateSlot, signalType('float'));
+const prevId = ctx.b.sigStateRead(stateSlot, canonicalType('float'));
 // ... compute ...
 ctx.b.stepStateWrite(stateSlot, valueToStore);
 ```

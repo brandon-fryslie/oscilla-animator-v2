@@ -11,7 +11,7 @@ Plan: SPRINT-20260120-110200-core-impl-PLAN.md
 - [ ] Create `src/expr/ast.ts` with complete AST type definitions
 - [ ] All AST node types have discriminated union (`kind` field)
 - [ ] All nodes include `pos: { start: number; end: number }` for error reporting
-- [ ] All nodes include `type?: SignalType` for type checker results
+- [ ] All nodes include `type?: CanonicalType` for type checker results
 - [ ] AST is immutable (readonly fields)
 - [ ] Provide helper functions: `astLiteral()`, `astBinary()`, etc.
 - [ ] Include JSDoc comments explaining each node type

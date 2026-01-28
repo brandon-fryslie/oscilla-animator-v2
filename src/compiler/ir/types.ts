@@ -17,7 +17,7 @@
  */
 
 // Import canonical types as source of truth
-import type { SignalType } from '../../core/canonical-types';
+import type { CanonicalType } from '../../core/canonical-types';
 
 // Import ValueSlot and StateSlotId for use in this file
 import type { ValueSlot as _ValueSlot, StateSlotId as _StateSlotId } from './Indices';
@@ -96,39 +96,39 @@ export type SigExpr =
 export interface SigExprConst {
   readonly kind: 'const';
   readonly value: number | string | boolean;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 
 export interface SigExprSlot {
   readonly kind: 'slot';
   readonly slot: ValueSlot;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 
 export interface SigExprTime {
   readonly kind: 'time';
   readonly which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'progress' | 'palette' | 'energy';
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 
 export interface SigExprExternal {
   readonly kind: 'external';
   readonly which: string;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 
 export interface SigExprMap {
   readonly kind: 'map';
   readonly input: SigExprId;
   readonly fn: PureFn;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 
 export interface SigExprZip {
   readonly kind: 'zip';
   readonly inputs: readonly SigExprId[];
   readonly fn: PureFn;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 
 /**
@@ -138,7 +138,7 @@ export interface SigExprZip {
 export interface SigExprStateRead {
   readonly kind: 'stateRead';
   readonly stateSlot: StateSlotId;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 
 /**
@@ -151,7 +151,7 @@ export interface SigExprShapeRef {
   readonly paramSignals: readonly SigExprId[]; // Signals for each topology param
   /** Optional control points for paths - carries stride like all field refs */
   readonly controlPointField?: { readonly id: FieldExprId; readonly stride: number };
-  readonly type: SignalType; // Should be signalType(SHAPE)
+  readonly type: CanonicalType; // Should be canonicalType(SHAPE)
 }
 
 /**
@@ -167,7 +167,7 @@ export interface SigExprReduceField {
   readonly kind: 'reduce_field';
   readonly field: FieldExprId;
   readonly op: 'min' | 'max' | 'sum' | 'avg';
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 
 /**
@@ -178,7 +178,7 @@ export interface SigExprReduceField {
 export interface SigExprEventRead {
   readonly kind: 'eventRead';
   readonly eventSlot: EventSlotId;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 
 // =============================================================================
@@ -225,7 +225,7 @@ export type FieldExpr =
 export interface FieldExprConst {
   readonly kind: 'const';
   readonly value: number | string;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 
 /**
@@ -236,7 +236,7 @@ export interface FieldExprIntrinsic {
   readonly kind: 'intrinsic';
   readonly instanceId: InstanceId;
   readonly intrinsic: IntrinsicPropertyName;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 
 /**
@@ -248,20 +248,20 @@ export interface FieldExprPlacement {
   readonly instanceId: InstanceId;
   readonly field: PlacementFieldName;
   readonly basisKind: BasisKind;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 
 export interface FieldExprBroadcast {
   readonly kind: 'broadcast';
   readonly signal: SigExprId;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 
 export interface FieldExprMap {
   readonly kind: 'map';
   readonly input: FieldExprId;
   readonly fn: PureFn;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
   readonly instanceId?: InstanceId;
 }
 
@@ -269,7 +269,7 @@ export interface FieldExprZip {
   readonly kind: 'zip';
   readonly inputs: readonly FieldExprId[];
   readonly fn: PureFn;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
   readonly instanceId?: InstanceId;
 }
 
@@ -278,14 +278,14 @@ export interface FieldExprZipSig {
   readonly field: FieldExprId;
   readonly signals: readonly SigExprId[];
   readonly fn: PureFn;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
   readonly instanceId?: InstanceId;
 }
 
 export interface FieldExprArray {
   readonly kind: 'array';
   readonly instanceId: InstanceId;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 
 /**
@@ -296,7 +296,7 @@ export interface FieldExprStateRead {
   readonly kind: 'stateRead';
   readonly stateSlot: StateSlotId;
   readonly instanceId: InstanceId;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 
 /**
@@ -313,7 +313,7 @@ export interface FieldExprPathDerivative {
   readonly kind: 'pathDerivative';
   readonly input: FieldExprId;
   readonly operation: 'tangent' | 'arcLength';
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 
 // =============================================================================

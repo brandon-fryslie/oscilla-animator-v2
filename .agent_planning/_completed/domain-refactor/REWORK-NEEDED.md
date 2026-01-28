@@ -71,17 +71,17 @@ Stop Sprint 8, rewrite instance-blocks.ts and related code to match the three-st
 // Stage 1: Circle Primitive
 registerBlock({
   type: 'Circle',
-  inputs: [{ id: 'radius', type: signalType('float') }],
-  outputs: [{ id: 'circle', type: signalType('circle') }],  // Signal<circle> (ONE)
+  inputs: [{ id: 'radius', type: canonicalType('float') }],
+  outputs: [{ id: 'circle', type: canonicalType('circle') }],  // Signal<circle> (ONE)
 });
 
 // Stage 2: Array (domain-agnostic)
 registerBlock({
   type: 'Array',
   inputs: [
-    { id: 'element', type: signalType('any') },  // Signal<T>
-    { id: 'count', type: signalType('int') },
-    { id: 'maxCount', type: signalType('int') },
+    { id: 'element', type: canonicalType('any') },  // Signal<T>
+    { id: 'count', type: canonicalType('int') },
+    { id: 'maxCount', type: canonicalType('int') },
   ],
   outputs: [
     { id: 'elements', type: signalTypeField('same-as-input') },  // Field<T>
@@ -96,8 +96,8 @@ registerBlock({
   type: 'GridLayout',
   inputs: [
     { id: 'elements', type: signalTypeField('any') },  // Field<T> input
-    { id: 'rows', type: signalType('int') },
-    { id: 'cols', type: signalType('int') },
+    { id: 'rows', type: canonicalType('int') },
+    { id: 'cols', type: canonicalType('int') },
   ],
   outputs: [
     { id: 'position', type: signalTypeField('vec2') },  // Field<vec2> output
@@ -123,7 +123,7 @@ registerBlock({
 Current hack in `instance-blocks.ts`:
 ```typescript
 // WRONG: Layout carried as metadata on dummy signal
-const layoutSignal = ctx.b.sigConst(0, signalType('int'));
+const layoutSignal = ctx.b.sigConst(0, canonicalType('int'));
 return { layout: { k: 'sig', id: layoutSignal, metadata: { layoutSpec: layout } } };
 ```
 

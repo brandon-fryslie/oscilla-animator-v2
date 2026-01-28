@@ -14,9 +14,9 @@
 **Files Modified**: 5
 
 **Deliverables**:
-- TimeRoot phaseA/phaseB outputs use `signalType('phase')`
-- Oscillator phase input uses `signalType('phase')`
-- Field blocks phase inputs use `signalType('phase')`
+- TimeRoot phaseA/phaseB outputs use `canonicalType('phase')`
+- Oscillator phase input uses `canonicalType('phase')`
+- Field blocks phase inputs use `canonicalType('phase')`
 - SignalEvaluator and OpcodeInterpreter documented
 
 **Validation**: ✅ All DoD criteria met
@@ -31,7 +31,7 @@
 
 **Deliverables**:
 - NumericUnit type with 8 units
-- SignalType optional unit field (backwards compatible)
+- CanonicalType optional unit field (backwards compatible)
 - kernel-signatures.ts with 28 kernel declarations
 - Pass 2 unit compatibility validation
 - Unit validation tests (3 tests)

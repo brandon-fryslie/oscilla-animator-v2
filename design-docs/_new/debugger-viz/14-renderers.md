@@ -4,7 +4,7 @@ A. Registry / lookup corrections
 
 A1) Delete resolveUnit() and use type.unit directly
 
-Your canonical SignalType has unit?: NumericUnit where NumericUnit is already the unit identifier. There is no “unit object” to resolve.
+Your canonical CanonicalType has unit?: NumericUnit where NumericUnit is already the unit identifier. There is no “unit object” to resolve.
 •	Replace: const unit = resolveUnit(type.unit);
 •	With: const unit = type.unit; // NumericUnit | undefined
 
@@ -44,8 +44,8 @@ But for scalar multi-component payloads (vec2/vec3/color signals later), value:n
 Option (canonical, future-proof): scalar sample always uses a fixed 4-float buffer + stride
 
 type RendererSample =
-| { mode: 'scalar'; components: Float32Array; stride: Stride; type: SignalType }
-| { mode: 'aggregate'; stats: AggregateStats; type: SignalType };
+| { mode: 'scalar'; components: Float32Array; stride: Stride; type: CanonicalType }
+| { mode: 'aggregate'; stats: AggregateStats; type: CanonicalType };
 
 This matches your existing “sampleEncoding single source of truth” and prevents a second scalar encoding path later.
 

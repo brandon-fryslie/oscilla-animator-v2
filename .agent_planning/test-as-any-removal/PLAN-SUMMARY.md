@@ -21,7 +21,7 @@
 ### Immediate (Sprints 1-3): 96 casts, ~2.25 hours
 All three sprints are fully HIGH confidence and can be executed immediately or in parallel:
 
-1. **Sprint 1 (30 min):** Use existing `sigExprId()` and `signalType()` factories
+1. **Sprint 1 (30 min):** Use existing `sigExprId()` and `canonicalType()` factories
 2. **Sprint 2 (1 hour):** Create `testFieldType()` helper and apply consistently
 3. **Sprint 3 (45 min):** Create test helpers for props access and mock canvas
 
@@ -40,7 +40,7 @@ Opportunistic fixes in remaining files using patterns from earlier sprints.
 ### Sprint 1 & 2 - Factory Functions
 These already exist and are ready to use:
 - `sigExprId(n)` from `src/compiler/ir/Indices.ts` (line 101)
-- `signalType(payload)` from `src/core/canonical-types.ts`
+- `canonicalType(payload)` from `src/core/canonical-types.ts`
 - `signalTypeField(payload, instanceId)` from `src/core/canonical-types.ts`
 
 ### Sprint 3 - New Test Helpers

@@ -30,7 +30,7 @@ function applyMap(
   input: ArrayBufferView,
   fn: PureFn,
   N: number,
-  type: SignalType
+  type: CanonicalType
 ): void {
   const outArr = out as Float32Array;
   const inArr = input as Float32Array;
@@ -84,7 +84,7 @@ function applyMap(
   input: ArrayBufferView,
   fn: PureFn,
   N: number,
-  type: SignalType
+  type: CanonicalType
 ): void {
   const outArr = out as Float32Array;
   const inArr = input as Float32Array;

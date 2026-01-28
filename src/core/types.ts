@@ -2,7 +2,7 @@
  * Core Types for Oscilla
  *
  * This module defines primitive types and utilities used throughout the application.
- * The type system has been migrated to SignalType in canonical-types.ts.
+ * The type system has been migrated to CanonicalType in canonical-types.ts.
  */
 
 // =============================================================================

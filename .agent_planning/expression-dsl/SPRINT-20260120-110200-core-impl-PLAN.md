@@ -62,7 +62,7 @@ Each node should have:
 - [ ] Create `src/expr/ast.ts` with complete AST type definitions
 - [ ] All AST node types have discriminated union (`kind` field)
 - [ ] All nodes include `pos: { start: number; end: number }` for error reporting
-- [ ] All nodes include `type?: SignalType` for type checker results
+- [ ] All nodes include `type?: CanonicalType` for type checker results
 - [ ] AST is immutable (readonly fields)
 - [ ] Provide helper functions: `astLiteral()`, `astBinary()`, etc.
 - [ ] Include JSDoc comments explaining each node type
@@ -83,7 +83,7 @@ interface LiteralNode {
   kind: 'literal';
   value: number | boolean;
   pos: { start: number; end: number };
-  type?: SignalType;  // filled by type checker
+  type?: CanonicalType;  // filled by type checker
 }
 
 interface BinaryOpNode {
@@ -92,7 +92,7 @@ interface BinaryOpNode {
   left: ExprNode;
   right: ExprNode;
   pos: { start: number; end: number };
-  type?: SignalType;
+  type?: CanonicalType;
 }
 
 // ... etc.
@@ -251,7 +251,7 @@ Compiler is a tree walk that generates IR:
 function compileToIR(node: ExprNode, builder: IRBuilder, inputs: Map<string, SigExprId>): SigExprId {
   switch (node.kind) {
     case 'literal':
-      return builder.sigConst(node.value, signalType(node.type!.payload));
+      return builder.sigConst(node.value, canonicalType(node.type!.payload));
 
     case 'identifier':
       return inputs.get(node.name)!;
@@ -260,7 +260,7 @@ function compileToIR(node: ExprNode, builder: IRBuilder, inputs: Map<string, Sig
       const left = compileToIR(node.left, builder, inputs);
       const right = compileToIR(node.right, builder, inputs);
       const opFn = builder.opcode(mapOpToOpCode(node.op));
-      return builder.sigZip([left, right], opFn, signalType(node.type!.payload));
+      return builder.sigZip([left, right], opFn, canonicalType(node.type!.payload));
 
     case 'function':
       const args = node.args.map(arg => compileToIR(arg, builder, inputs));
@@ -286,7 +286,7 @@ API must be simple:
 ```typescript
 function compileExpression(
   text: string,
-  inputs: Map<string, SignalType>,
+  inputs: Map<string, CanonicalType>,
   builder: IRBuilder
 ): Result<SigExprId, CompileError>
 ```
@@ -308,7 +308,7 @@ Implementation:
 ```typescript
 export function compileExpression(
   text: string,
-  inputs: Map<string, SignalType>,
+  inputs: Map<string, CanonicalType>,
   builder: IRBuilder
 ): Result<SigExprId, CompileError> {
   // Parse

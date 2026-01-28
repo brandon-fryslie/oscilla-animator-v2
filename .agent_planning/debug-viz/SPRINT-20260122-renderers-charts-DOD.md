@@ -3,9 +3,9 @@
 ## Acceptance Tests
 
 ### ValueRenderer Registry
-- [ ] `getValueRenderer(signalType('float'))` returns FloatValueRenderer
-- [ ] `getValueRenderer(signalType('color'))` returns ColorValueRenderer
-- [ ] `getValueRenderer(signalType('int'))` falls through to GenericNumericRenderer (category: numeric)
+- [ ] `getValueRenderer(canonicalType('float'))` returns FloatValueRenderer
+- [ ] `getValueRenderer(canonicalType('color'))` returns ColorValueRenderer
+- [ ] `getValueRenderer(canonicalType('int'))` falls through to GenericNumericRenderer (category: numeric)
 - [ ] Unknown payload falls through to category fallback (never throws)
 
 ### FloatValueRenderer

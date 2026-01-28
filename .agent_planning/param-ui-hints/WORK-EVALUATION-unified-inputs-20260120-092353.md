@@ -71,7 +71,7 @@ Last evaluation: WORK-EVALUATION-unified-inputs-20260120-160000.md (8:29 AM toda
 ```typescript
 export interface InputDef {
   readonly label?: string;
-  readonly type?: SignalType;
+  readonly type?: CanonicalType;
   readonly value?: unknown;
   readonly defaultSource?: DefaultSource;
   readonly uiHint?: UIControlHint;
@@ -87,7 +87,7 @@ export interface InputDef {
 ```typescript
 export interface OutputDef {
   readonly label?: string;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
   readonly hidden?: boolean;
 }
 ```
@@ -126,7 +126,7 @@ inputs: {
 inputs: {
   rx: {
     label: 'Radius X',
-    type: signalType('float'),
+    type: canonicalType('float'),
     value: 0.02,
     defaultSource: defaultSourceConst(0.02),
     uiHint: {kind: 'slider', min: 0.001, max: 0.5, step: 0.001},
@@ -141,11 +141,11 @@ inputs: {
 **Add block (math-blocks.ts:23-28):**
 ```typescript
 inputs: {
-  a: { label: 'A', type: signalType('float') },
-  b: { label: 'B', type: signalType('float') },
+  a: { label: 'A', type: canonicalType('float') },
+  b: { label: 'B', type: canonicalType('float') },
 },
 outputs: {
-  out: { label: 'Output', type: signalType('float') },
+  out: { label: 'Output', type: canonicalType('float') },
 }
 ```
 ✅ Two input ports as required

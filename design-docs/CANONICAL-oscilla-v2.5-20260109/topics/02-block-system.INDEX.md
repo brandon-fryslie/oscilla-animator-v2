@@ -33,7 +33,7 @@ tier: T1
 ### Core Types and Structures
 
 - **Block** [L30-36] — Compute unit with id, kind, role, inputs[], outputs[]
-  - **kind** property, NOT type (reserved for SignalType) [L41-43]
+  - **kind** property, NOT type (reserved for CanonicalType) [L41-43]
 
 - **BlockRole** [L63-65] — Discriminated union:
   - `{ kind: "user" }` — Explicit user action, persisted as authored
@@ -44,7 +44,7 @@ tier: T1
   - `wireState` — State on a wire for feedback cycles
   - `lens` — Type adapter/transform block
 
-- **PortBinding** [L48-53] — Port with id, direction (in|out), type (SignalType), combine (CombineMode)
+- **PortBinding** [L48-53] — Port with id, direction (in|out), type (CanonicalType), combine (CombineMode)
 
 - **EdgeRole** [L111-115] — 3 variants:
   - `user` — Explicit user connection, persisted
@@ -188,7 +188,7 @@ interface Block {
 interface PortBinding {
   id: PortId;
   dir: { kind: 'in' } | { kind: 'out' };
-  type: SignalType;
+  type: CanonicalType;
   combine: CombineMode;
 }
 
@@ -246,7 +246,7 @@ const visibleBlocks = patch.blocks.filter(b =>
 ### Depends On (Preconditions)
 
 - **[01-type-system](./01-type-system.md)** [L419]
-  - SignalType for port types
+  - CanonicalType for port types
   - PayloadType for default value selection
   - Cardinality for state allocation
   - Extent (temporality, binding, perspective, branch)
@@ -277,7 +277,7 @@ const visibleBlocks = patch.blocks.filter(b =>
 ## Decisions
 
 ### D1: Use `kind` Property, NOT `type` [L41-43]
-**Rationale**: `type` is reserved for SignalType in the type system. Using `kind` prevents ambiguity and namespace pollution.
+**Rationale**: `type` is reserved for CanonicalType in the type system. Using `kind` prevents ambiguity and namespace pollution.
 
 **Alternative Rejected**: Overload `type` — causes naming collision and confusion between block definition and signal type.
 
@@ -341,7 +341,7 @@ const visibleBlocks = patch.blocks.filter(b =>
 **Tier: T1 (Foundational)**
 
 **Rationale**: Blocks are the only compute units. Everything in Oscilla flows through the block model. The block system is prerequisite for:
-- Type system instantiation (ports carry SignalType)
+- Type system instantiation (ports carry CanonicalType)
 - Time system initialization (TimeRoot and rails are blocks)
 - Compilation (all compilation operates on block graph)
 - Graph normalization (creates and manages derived blocks)

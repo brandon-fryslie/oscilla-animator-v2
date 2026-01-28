@@ -14,10 +14,10 @@ Plan: SPRINT-2026-01-22-120534-unit-system-PLAN.md
 - [ ] Type exports from canonical-types.ts
 - [ ] TypeScript compilation succeeds with strict mode
 
-#### SignalType Unit Field
-- [ ] SignalType has `readonly unit: Unit` (mandatory, not optional)
-- [ ] signalType() constructor requires unit parameter
-- [ ] All signalType*() helpers require unit parameter
+#### CanonicalType Unit Field
+- [ ] CanonicalType has `readonly unit: Unit` (mandatory, not optional)
+- [ ] canonicalType() constructor requires unit parameter
+- [ ] All canonicalType*() helpers require unit parameter
 - [ ] No optional chaining needed (`type.unit.kind` not `type.unit?.kind`)
 - [ ] Breaking change applied consistently across codebase
 
@@ -25,7 +25,7 @@ Plan: SPRINT-2026-01-22-120534-unit-system-PLAN.md
 - [ ] Function isValidPayloadUnitCombination(payload, unit) exists
 - [ ] Validates all 25 allowed combinations from spec §A4 table
 - [ ] Rejects invalid combinations (e.g., float:rgba01, color:phase01)
-- [ ] Called in signalType() and helper constructors
+- [ ] Called in canonicalType() and helper constructors
 - [ ] Throws clear error: "Invalid combination: [payload]:[unit]. [payload] allows: [list]"
 - [ ] Test coverage: 7 payload types × (2 valid + 2 invalid) = 28+ test cases
 

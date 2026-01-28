@@ -21,7 +21,7 @@ The root cause: blocks like `GoldenAngle`, `AngularOffset`, etc. were marked as 
 
 This means:
 1. Blocks shouldn't need separate signal/field paths in their `lower` functions
-2. Port types should use `signalType()` (polymorphic) not `signalTypeField()` (forces many)
+2. Port types should use `canonicalType()` (polymorphic) not `signalTypeField()` (forces many)
 3. The type system should allow cardinality mixing for polymorphic blocks
 
 ## Completed Work
@@ -50,7 +50,7 @@ In `src/blocks/field-operations-blocks.ts`:
 - HueFromPhase
 - SetZ
 
-**Changed port types from `signalTypeField()` to `signalType()`:**
+**Changed port types from `signalTypeField()` to `canonicalType()`:**
 - FromDomainId (output)
 - GoldenAngle (input/output)
 - AngularOffset (input/output)
@@ -59,7 +59,7 @@ In `src/blocks/field-operations-blocks.ts`:
 
 ### 1. Update Port Types for Remaining Blocks
 
-Need to change `signalTypeField('float', 'default')` to `signalType('float')` for:
+Need to change `signalTypeField('float', 'default')` to `canonicalType('float')` for:
 
 - FieldPolarToCartesian (inputs: angle, radius; output: pos)
 - FieldCartesianToPolar (input: pos; outputs: angle, radius)
@@ -110,7 +110,7 @@ git status
 git diff src/blocks/field-operations-blocks.ts
 
 # Continue updating port types in field-operations-blocks.ts
-# Pattern: signalTypeField('X', 'default') -> signalType('X')
+# Pattern: signalTypeField('X', 'default') -> canonicalType('X')
 
 # After all port types updated, run typecheck
 npm run typecheck

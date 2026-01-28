@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import '../expression-blocks'; // Import to register block
 import { getBlockDefinition } from '../registry';
-import { signalType, type SignalType, strideOf, isPayloadVar } from '../../core/canonical-types';
+import { canonicalType, type CanonicalType, strideOf, isPayloadVar } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
 import { IRBuilderImpl } from '../../compiler/ir/IRBuilderImpl';
 import type { LowerCtx } from '../registry';
@@ -17,7 +17,7 @@ import { extractSigExprId, extractSigExpr } from '../../__tests__/ir-test-helper
 import type { ValueRefPacked } from '../../compiler/ir/lowerTypes';
 
 /** Helper to create a signal ValueRefPacked with proper fields */
-function sigRef(id: SigExprId, slot: ValueSlot, type: SignalType): ValueRefPacked {
+function sigRef(id: SigExprId, slot: ValueSlot, type: CanonicalType): ValueRefPacked {
   const stride = isPayloadVar(type.payload) ? 1 : strideOf(type.payload);
   return { k: 'sig', id, slot, type, stride };
 }
@@ -81,7 +81,7 @@ describe('Expression Block Lowering', () => {
   beforeEach(() => {
     builder = new IRBuilderImpl();
     // Expression block outputs float by default
-    const floatType = signalType(FLOAT);
+    const floatType = canonicalType(FLOAT);
     ctx = {
       b: builder,
       blockIdx: blockIndex(0),
@@ -141,10 +141,10 @@ describe('Expression Block Lowering', () => {
     const def = getBlockDefinition('Expression')!;
 
     // Create input signals
-    const in0Sig = builder.sigConst(5, signalType(INT));
-    const in1Sig = builder.sigConst(3, signalType(INT));
+    const in0Sig = builder.sigConst(5, canonicalType(INT));
+    const in1Sig = builder.sigConst(3, canonicalType(INT));
 
-    const intType = signalType(INT);
+    const intType = canonicalType(INT);
     const result = def.lower({
       ctx,
       inputs: [],
@@ -197,9 +197,9 @@ describe('Expression Block Lowering', () => {
     const def = getBlockDefinition('Expression')!;
 
     // Create input signal
-    const in0Sig = builder.sigConst(0, signalType(FLOAT));
+    const in0Sig = builder.sigConst(0, canonicalType(FLOAT));
 
-    const floatType = signalType(FLOAT);
+    const floatType = canonicalType(FLOAT);
     const result = def.lower({
       ctx,
       inputs: [],
@@ -225,9 +225,9 @@ describe('Expression Block Lowering', () => {
     const def = getBlockDefinition('Expression')!;
 
     // Only wire in0, leave others unwired
-    const in0Sig = builder.sigConst(42, signalType(INT));
+    const in0Sig = builder.sigConst(42, canonicalType(INT));
 
-    const intType = signalType(INT);
+    const intType = canonicalType(INT);
     const result = def.lower({
       ctx,
       inputs: [],

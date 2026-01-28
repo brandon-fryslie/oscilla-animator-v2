@@ -68,7 +68,7 @@ Implement the external input channel map (Option D with commit step) so that ext
 **Confidence:** HIGH
 
 **Acceptance Criteria:**
-- [ ] `IRBuilder` interface has `sigExternal(channel: string, type: SignalType): SigId`
+- [ ] `IRBuilder` interface has `sigExternal(channel: string, type: CanonicalType): SigId`
 - [ ] Implementation creates expression node `{ kind: 'external', which: channel }`
 - [ ] Returns a valid SigId that can be wired to block outputs
 
@@ -84,7 +84,7 @@ Implement the external input channel map (Option D with commit step) so that ext
 - [ ] `ExternalInput` block registered with `capability: 'io'`
 - [ ] Config input `channel: string` (not wirable, config-only, no default)
 - [ ] Output: `value: float`
-- [ ] `lower()` calls `ctx.b.sigExternal(channel, signalType('float'))`
+- [ ] `lower()` calls `ctx.b.sigExternal(channel, canonicalType('float'))`
 - [ ] Mouse values written to channels in main.ts: `mouse.x`, `mouse.y`, `mouse.over`
 - [ ] Mouse smoothing logic preserved (smoothing happens at write side, not read side)
 

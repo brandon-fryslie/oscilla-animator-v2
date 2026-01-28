@@ -25,7 +25,7 @@ Eliminate unsafe `as any` casts by creating a proper `FieldExprIntrinsic` type, 
 
 **Acceptance Criteria:**
 - [ ] `IntrinsicPropertyName` type defined as closed union: `'index' | 'normalizedIndex' | 'randomId' | 'position' | 'radius'`
-- [ ] `FieldExprIntrinsic` interface defined with `kind: 'intrinsic'`, `instanceId: InstanceId`, `intrinsic: IntrinsicPropertyName`, `type: SignalType`
+- [ ] `FieldExprIntrinsic` interface defined with `kind: 'intrinsic'`, `instanceId: InstanceId`, `intrinsic: IntrinsicPropertyName`, `type: CanonicalType`
 - [ ] `FieldExpr` union updated to include `FieldExprIntrinsic`
 - [ ] Existing `FieldExprSource` kept unchanged for backward compatibility
 
@@ -42,7 +42,7 @@ export interface FieldExprIntrinsic {
   readonly kind: 'intrinsic';
   readonly instanceId: InstanceId;
   readonly intrinsic: IntrinsicPropertyName;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 ```
 
@@ -58,7 +58,7 @@ export interface FieldExprIntrinsic {
 
 **Technical Notes:**
 ```typescript
-fieldIntrinsic(instanceId: InstanceId, intrinsic: IntrinsicPropertyName, type: SignalType): FieldExprId {
+fieldIntrinsic(instanceId: InstanceId, intrinsic: IntrinsicPropertyName, type: CanonicalType): FieldExprId {
   const id = fieldExprId(this.fieldExprs.length);
   this.fieldExprs.push({
     kind: 'intrinsic',

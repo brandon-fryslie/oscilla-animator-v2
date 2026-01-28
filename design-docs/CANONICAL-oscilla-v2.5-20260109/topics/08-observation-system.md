@@ -88,7 +88,7 @@ interface DebugGraph {
 interface DebugBusNode {
   id: BusId;
   name: string;
-  type: SignalType;              // canonical five-axis type
+  type: CanonicalType;              // canonical five-axis type
   combineMode: CombineMode;
   defaultValueSummary: ValueSummary;
   publisherIds: PublisherId[];   // sorted by sortKey
@@ -134,8 +134,8 @@ Pre-computed rendering of the transformation chain:
 interface DebugPipeline {
   bindingId: BindingKey;
   kind: 'publisher' | 'listener';
-  fromType: SignalType;
-  toType: SignalType;
+  fromType: CanonicalType;
+  toType: CanonicalType;
   stages: DebugStage[];   // in evaluation order
 }
 
@@ -143,27 +143,27 @@ type DebugStage =
   | {
       kind: 'source';
       label: string;
-      type: SignalType;
+      type: CanonicalType;
       ref: { busId?: string; portKey?: string }
     }
   | {
       kind: 'adapter';
       adapterId: string;
-      from: SignalType;
-      to: SignalType;
+      from: CanonicalType;
+      to: CanonicalType;
       policy: AdapterPolicy
     }
   | {
       kind: 'lens';
       lensId: string;
-      type: SignalType;
+      type: CanonicalType;
       params: Record<string, DebugParamBindingSummary>
     }
   | {
       kind: 'combine';
       busId: string;
       combineMode: CombineMode;
-      type: SignalType
+      type: CanonicalType
     };
 ```
 
@@ -445,7 +445,7 @@ interface PortProbeResult {
   portKey: PortKey;
   blockId: string;
   portName: string;
-  type: SignalType;
+  type: CanonicalType;
 
   // Current value (from latest snapshot)
   value: ValueSummary;
@@ -467,7 +467,7 @@ interface PortProbeResult {
 interface BusProbeResult {
   busId: BusId;
   name: string;
-  type: SignalType;
+  type: CanonicalType;
   combineMode: CombineMode;
 
   // Current value

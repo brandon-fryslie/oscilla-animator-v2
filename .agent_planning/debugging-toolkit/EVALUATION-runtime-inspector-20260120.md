@@ -55,7 +55,7 @@ interface SlotMetaEntry {
   slot: ValueSlot;
   storage: 'f64' | 'f32' | 'i32' | 'u32' | 'object';
   offset: number;
-  type: SignalType;
+  type: CanonicalType;
   debugName?: string;
 }
 ```

@@ -51,11 +51,11 @@ The warning path is unreachable: by the time `checkUnitCompatibility` is called 
 // Current (dead guard):
 if (from.unit && to.unit && from.unit.kind !== to.unit.kind) {
 
-// Correct (unit is mandatory per SignalType interface):
+// Correct (unit is mandatory per CanonicalType interface):
 if (from.unit.kind !== to.unit.kind) {
 ```
 
-`SignalType.unit` is declared as `readonly unit: Unit` (non-optional). The truthiness guard is dead code from before unit became mandatory.
+`CanonicalType.unit` is declared as `readonly unit: Unit` (non-optional). The truthiness guard is dead code from before unit became mandatory.
 
 #### Acceptance Criteria
 - [ ] Guard simplified to `if (from.unit.kind !== to.unit.kind)`
@@ -70,7 +70,7 @@ if (from.unit.kind !== to.unit.kind) {
 
 #### Description
 ```typescript
-import type { SignalType, NumericUnit } from "../../core/canonical-types";
+import type { CanonicalType, NumericUnit } from "../../core/canonical-types";
 ```
 `NumericUnit` is imported but never used in this file.
 

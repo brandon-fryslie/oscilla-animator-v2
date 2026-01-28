@@ -11,7 +11,7 @@
 - **Interface:** `BlockDef` with `type`, `label`, `category`, `form`, `capability`, `inputs`, `outputs`, `params`
 - **Functions:** `registerBlock()`, `getBlockDefinition()`, `getAllBlockTypes()`, `hasBlockDefinition()`
 - **Consumers:**
-  - `pass2-types.ts` - extracts SignalType
+  - `pass2-types.ts` - extracts CanonicalType
   - `pass5-scc.ts` - block lookup
   - `pass6-block-lowering.ts` - port contracts
   - `pass8-link-resolution.ts` - block definitions
@@ -78,7 +78,7 @@ This violates: **ONE SOURCE OF TRUTH** - Every concept has exactly one authorita
 |---------|----------------------|------------------|
 | Block type name | all 3 registries | ONE registry |
 | Input/output ports | all 3 registries | ONE registry |
-| Port types (SignalType) | registries 1 & 2 | ONE registry |
+| Port types (CanonicalType) | registries 1 & 2 | ONE registry |
 | UI metadata (label, category, desc) | registry 1 | ONE registry |
 | IR lowering function | registries 2 & 3 | ONE registry |
 | Block form/capability | registry 1 | ONE registry |
@@ -106,7 +106,7 @@ interface BlockDef {
   readonly form: BlockForm;
   readonly capability: Capability;
 
-  // Port definitions (with SignalType)
+  // Port definitions (with CanonicalType)
   readonly inputs: readonly InputDef[];
   readonly outputs: readonly OutputDef[];
 

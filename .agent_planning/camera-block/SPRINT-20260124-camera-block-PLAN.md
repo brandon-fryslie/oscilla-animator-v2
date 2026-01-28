@@ -17,7 +17,7 @@ Implement the Camera block as a first-class render-global declaration emitted by
 - [ ] Add `cameraProjection` to the `PayloadType` union in `src/core/canonical-types.ts`
 - [ ] Add `cameraProjection` to `PAYLOAD_STRIDE` with stride = 1
 - [ ] Ensure unit kinds used by the Camera block exist exactly as: `norm01`, `scalar`, `deg`
-- [ ] Ensure `signalType(...)` (and any helpers that construct `SignalType`) accepts payload `cameraProjection` with no unit
+- [ ] Ensure `canonicalType(...)` (and any helpers that construct `CanonicalType`) accepts payload `cameraProjection` with no unit
 
 **Technical Notes:**
 - `cameraProjection` is stored as numeric in a single f64 slot and interpreted as int32 via `projI32 = (value | 0)`.

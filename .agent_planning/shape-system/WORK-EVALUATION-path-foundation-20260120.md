@@ -129,7 +129,7 @@ const controlPositions = ctx.b.fieldIntrinsic(controlInstance, 'position', ...);
 const indexField = ctx.b.fieldIntrinsic(controlInstance, 'index', ...);
 const computedPositions = ctx.b.fieldZipSig(indexField, [sidesSig, radiusXSig, radiusYSig], 
   ctx.b.kernel('polygonVertex'), ...);
-const shapeRefSig = ctx.b.sigShapeRef(topology.id, [], signalType('shape'), computedPositions);
+const shapeRefSig = ctx.b.sigShapeRef(topology.id, [], canonicalType('shape'), computedPositions);
 ```
 
 **Status:** ✅ COMPLETE

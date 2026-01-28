@@ -56,7 +56,7 @@ export interface SigExprReduceField {
   readonly kind: 'reduce_field';
   readonly field: FieldExprId;           // Input field to aggregate
   readonly op: 'min' | 'max' | 'sum' | 'avg';  // Reduction operation
-  readonly type: SignalType;             // Output signal type (cardinality=one, same payload)
+  readonly type: CanonicalType;             // Output signal type (cardinality=one, same payload)
 }
 ```
 
@@ -81,12 +81,12 @@ export interface SigExprReduceField {
  * @returns SigExprId for the reduce expression
  * 
  * Example:
- *   const sumSig = b.ReduceField(fieldId, 'sum', signalType('float'));
+ *   const sumSig = b.ReduceField(fieldId, 'sum', canonicalType('float'));
  */
 ReduceField(
   field: FieldExprId,
   op: 'min' | 'max' | 'sum' | 'avg',
-  type: SignalType
+  type: CanonicalType
 ): SigExprId;
 ```
 
@@ -101,7 +101,7 @@ ReduceField(
 ```typescript
 // INSERT at line ~291 (right after Broadcast implementation):
 
-ReduceField(field: FieldExprId, op: 'min' | 'max' | 'sum' | 'avg', type: SignalType): SigExprId {
+ReduceField(field: FieldExprId, op: 'min' | 'max' | 'sum' | 'avg', type: CanonicalType): SigExprId {
   const id = sigExprId(this.sigExprs.length);
   this.sigExprs.push({ kind: 'reduce_field', field, op, type });
   return id;
@@ -110,7 +110,7 @@ ReduceField(field: FieldExprId, op: 'min' | 'max' | 'sum' | 'avg', type: SignalT
 
 **Pattern to follow**: Exact mirror of `Broadcast()` at lines 286-290:
 ```typescript
-Broadcast(signal: SigExprId, type: SignalType): FieldExprId {
+Broadcast(signal: SigExprId, type: CanonicalType): FieldExprId {
   const id = fieldExprId(this.fieldExprs.length);
   this.fieldExprs.push({ kind: 'broadcast', signal, type });
   return id;
@@ -190,7 +190,7 @@ registerBlock({
   outputs: {
     signal: { 
       label: 'Result', 
-      type: signalType(payloadVar('reduce_payload'), unitVar('reduce_in'))
+      type: canonicalType(payloadVar('reduce_payload'), unitVar('reduce_in'))
     },
   },
   lower: ({ ctx, inputsById, params }) => {
@@ -217,7 +217,7 @@ registerBlock({
     const sigId = ctx.b.ReduceField(
       fieldInput.id as FieldExprId,
       op,
-      signalType(payloadType)  // Output has same payload but cardinality=one
+      canonicalType(payloadType)  // Output has same payload but cardinality=one
     );
     const slot = ctx.b.allocSlot();
 
@@ -239,7 +239,7 @@ registerBlock({
 
 **Imports needed** (already at top of file):
 - `registerBlock`, `ALL_CONCRETE_PAYLOADS` from './registry'
-- `signalType`, `signalTypeField`, `payloadVar`, `unitVar` from '../core/canonical-types'
+- `canonicalType`, `signalTypeField`, `payloadVar`, `unitVar` from '../core/canonical-types'
 - `SigExprId`, `FieldExprId` from '../compiler/ir/Indices'
 
 ---
@@ -536,9 +536,9 @@ describe('ReduceOp', () => {
 
 ## Data Structures Referenced
 
-### SignalType (from canonical-types)
+### CanonicalType (from canonical-types)
 ```typescript
-interface SignalType {
+interface CanonicalType {
   world: 'signal' | 'field' | 'event';
   cardinality: 'one' | 'many';
   payload: PayloadType;
@@ -570,8 +570,8 @@ phase → 1
 ```typescript
 // IR types
 import type { SigExprId, FieldExprId } from '../compiler/ir/Indices';
-import type { SignalType } from '../core/canonical-types';
-import { signalType, signalTypeField, strideOf, payloadVar, unitVar } from '../core/canonical-types';
+import type { CanonicalType } from '../core/canonical-types';
+import { canonicalType, signalTypeField, strideOf, payloadVar, unitVar } from '../core/canonical-types';
 
 // Block registration
 import { registerBlock, ALL_CONCRETE_PAYLOADS, type PayloadType } from './registry';
@@ -628,7 +628,7 @@ export interface SigExprShapeRef {
   readonly topologyId: TopologyId;
   readonly paramSignals: readonly SigExprId[];
   readonly controlPointField?: { readonly id: FieldExprId; readonly stride: number };
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 // ↑ This shows SigExprs CAN reference FieldExprIds
 ```

@@ -114,7 +114,7 @@ Key questions:
 
 Existing system types (from ESSENTIAL-SPEC.md):
 - PayloadType: `'float' | 'int' | 'bool' | 'phase' | 'unit' | 'vec2' | 'color'`
-- SignalType: `{ payload: PayloadType; extent: Extent }`
+- CanonicalType: `{ payload: PayloadType; extent: Extent }`
 
 For v1, focus on scalar types (float, int, bool, phase, unit). Defer vec2/color to future.
 

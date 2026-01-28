@@ -24,7 +24,7 @@ Based on kernel audit and intrinsic analysis:
 
 2. **No existing unit tracking**: Current system has NO unit safety. All numeric types are just 'float'. This causes bugs when phase is connected to radian-expecting inputs.
 
-3. **Backwards compatibility critical**: We have ~20 blocks and many tests. Adding `unit?: NumericUnit` to SignalType must be non-breaking.
+3. **Backwards compatibility critical**: We have ~20 blocks and many tests. Adding `unit?: NumericUnit` to CanonicalType must be non-breaking.
 
 ## Validation Scope Decision
 
@@ -77,7 +77,7 @@ Kept separate from implementation for clarity and future extensibility (e.g., ad
 ## Implementation Strategy
 
 1. Add `NumericUnit` type to canonical-types.ts
-2. Extend `SignalType` with optional `unit` field
+2. Extend `CanonicalType` with optional `unit` field
 3. Create kernel-signatures.ts with kernel unit declarations
 4. Add unit validation to Pass 4 wiring
 5. Update select blocks to declare units (start with oscillator, time rails)

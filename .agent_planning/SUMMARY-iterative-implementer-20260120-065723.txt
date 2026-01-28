@@ -45,7 +45,7 @@ Major transformation work:
 - diffSummary format mismatch in updateInputPort (needs edgesChanged not edgesAdded/edgesRemoved)
 
 ### nodes.ts  
-- SignalType default needs proper type structure (not just object literal)
+- CanonicalType default needs proper type structure (not just object literal)
 
 ### ConnectionPicker.tsx
 - portId type assertion for PortId brand
@@ -68,7 +68,7 @@ Key pattern changes:
 1. Fix remaining BlockInspector observer components
 2. Add missing definitions (backButtonStyle, check ParamsEditor)
 3. Fix PatchStore diffSummary format
-4. Fix SignalType default structure in nodes.ts
+4. Fix CanonicalType default structure in nodes.ts
 5. Run full typecheck + build + test
 6. Manual verification per DOD
 

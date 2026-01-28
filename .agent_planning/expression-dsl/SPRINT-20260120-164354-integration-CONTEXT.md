@@ -127,7 +127,7 @@ If Error: Throw CompileError → shown in Inspector + Diagnostics
 ```typescript
 export function compileExpression(
   exprText: string,
-  inputs: ReadonlyMap<string, SignalType>,
+  inputs: ReadonlyMap<string, CanonicalType>,
   builder: IRBuilder,
   inputSignals: ReadonlyMap<string, SigExprId>
 ): CompileResult;
@@ -148,12 +148,12 @@ export interface ExpressionCompileError {
 
 ```typescript
 import { compileExpression } from '../expr';
-import { signalType } from '../core/canonical-types';
+import { canonicalType } from '../core/canonical-types';
 
 // In block lowering function:
 const inputs = new Map([
-  ['in0', signalType('phase')],
-  ['in1', signalType('float')],
+  ['in0', canonicalType('phase')],
+  ['in1', canonicalType('float')],
 ]);
 
 const inputSignals = new Map([
@@ -178,7 +178,7 @@ if (result.ok) {
 ### Input Types
 
 - `exprText`: Expression string from config parameter
-- `inputs`: Map of input names → SignalType (for type checking)
+- `inputs`: Map of input names → CanonicalType (for type checking)
   - Only include wired inputs (skip unwired optional inputs)
 - `builder`: IRBuilder instance from `ctx.b`
 - `inputSignals`: Map of input names → SigExprId (for IR generation)
@@ -201,7 +201,7 @@ if (result.ok) {
 
 ```typescript
 import { registerBlock } from './registry';
-import { signalType } from '../core/canonical-types';
+import { canonicalType } from '../core/canonical-types';
 import { compileExpression } from '../expr';
 import type { SigExprId } from '../compiler/ir/types';
 
@@ -216,27 +216,27 @@ registerBlock({
   inputs: {
     in0: {
       label: 'In 0',
-      type: signalType('???'),
+      type: canonicalType('???'),
       optional: true,
     },
     in1: {
       label: 'In 1',
-      type: signalType('???'),
+      type: canonicalType('???'),
       optional: true,
     },
     in2: {
       label: 'In 2',
-      type: signalType('???'),
+      type: canonicalType('???'),
       optional: true,
     },
     in3: {
       label: 'In 3',
-      type: signalType('???'),
+      type: canonicalType('???'),
       optional: true,
     },
     in4: {
       label: 'In 4',
-      type: signalType('???'),
+      type: canonicalType('???'),
       optional: true,
     },
   },
@@ -244,14 +244,14 @@ registerBlock({
   outputs: {
     out: {
       label: 'Output',
-      type: signalType('???'), // Inferred during lowering
+      type: canonicalType('???'), // Inferred during lowering
     },
   },
 
   config: {
     expression: {
       label: 'Expression',
-      type: signalType('???'), // Not used, just for schema
+      type: canonicalType('???'), // Not used, just for schema
       exposedAsPort: false,   // Config-only, not wirable
       value: '',              // Default empty
       uiHint: {
@@ -288,7 +288,7 @@ lower: ({ ctx, inputsById, config }) => {
 
   // Step 2: Handle empty expression (output constant 0)
   if (exprText.trim() === '') {
-    const sigId = ctx.b.sigConst(0, signalType('float'));
+    const sigId = ctx.b.sigConst(0, canonicalType('float'));
     const slot = ctx.b.allocSlot();
     return {
       outputsById: {
@@ -298,7 +298,7 @@ lower: ({ ctx, inputsById, config }) => {
   }
 
   // Step 3: Build input type map (only wired inputs)
-  const inputs = new Map<string, SignalType>();
+  const inputs = new Map<string, CanonicalType>();
   const inputSignals = new Map<string, SigExprId>();
 
   for (const key of ['in0', 'in1', 'in2', 'in3', 'in4']) {
@@ -306,7 +306,7 @@ lower: ({ ctx, inputsById, config }) => {
     if (input && input.k === 'sig') {
       // Input is wired, include it
       // TODO: Get actual type from input (not just '???')
-      inputs.set(key, signalType('???')); // FIXME: Use actual type
+      inputs.set(key, canonicalType('???')); // FIXME: Use actual type
       inputSignals.set(key, input.id as SigExprId);
     }
   }
@@ -337,7 +337,7 @@ lower: ({ ctx, inputsById, config }) => {
 
 ### Getting Input Types
 
-**FIXME:** The template above uses `signalType('???')` for all inputs. This is incorrect but will work for v1 because the expression DSL type checker can infer types.
+**FIXME:** The template above uses `canonicalType('???')` for all inputs. This is incorrect but will work for v1 because the expression DSL type checker can infer types.
 
 **Correct Approach (TODO):**
 
@@ -346,7 +346,7 @@ lower: ({ ctx, inputsById, config }) => {
 const inputType = ctx.inTypes[portIndex]; // or from block definition
 
 // Example:
-const in0Type = inputsById.in0?.type ?? signalType('???');
+const in0Type = inputsById.in0?.type ?? canonicalType('???');
 inputs.set('in0', in0Type);
 ```
 
@@ -576,7 +576,7 @@ if (error.message.startsWith('Expression compile error:')) {
 
 ```typescript
 import { getBlockDefinition } from '../registry';
-import { signalType } from '../../core/canonical-types';
+import { canonicalType } from '../../core/canonical-types';
 
 describe('Expression Block Definition', () => {
   it('is registered in block registry', () => {
@@ -621,7 +621,7 @@ describe('Expression Block Definition', () => {
 ```typescript
 import { createTestIRBuilder } from './test-utils';
 import { getBlockDefinition } from '../../blocks/registry';
-import { signalType } from '../../core/canonical-types';
+import { canonicalType } from '../../core/canonical-types';
 
 describe('Expression Block Lowering', () => {
   let builder: IRBuilder;
@@ -673,8 +673,8 @@ describe('Expression Block Lowering', () => {
 
   it('compiles binary operation', () => {
     // Create input signals
-    const in0Sig = builder.sigConst(5, signalType('int'));
-    const in1Sig = builder.sigConst(3, signalType('int'));
+    const in0Sig = builder.sigConst(5, canonicalType('int'));
+    const in1Sig = builder.sigConst(3, canonicalType('int'));
 
     const def = getBlockDefinition('Expression')!;
     const result = def.lower({
@@ -683,8 +683,8 @@ describe('Expression Block Lowering', () => {
         blockIdx: 0,
         blockType: 'Expression',
         instanceId: 'inst_0',
-        inTypes: [signalType('int'), signalType('int')],
-        outTypes: [signalType('???')],
+        inTypes: [canonicalType('int'), canonicalType('int')],
+        outTypes: [canonicalType('???')],
         seedConstId: 0,
       },
       inputsById: {
@@ -802,13 +802,13 @@ import { compileExpression, type ExpressionCompileError } from '../expr';
 
 ```typescript
 // FIXME: This is a workaround because inputsById doesn't include type
-function getInputType(inputsById: Record<string, ValueRefPacked>, key: string): SignalType {
+function getInputType(inputsById: Record<string, ValueRefPacked>, key: string): CanonicalType {
   const input = inputsById[key];
   if (!input || input.k !== 'sig') {
-    return signalType('???'); // Unknown/polymorphic
+    return canonicalType('???'); // Unknown/polymorphic
   }
   // TODO: Look up actual type from ctx.inTypes or block definition
-  return signalType('???'); // Placeholder
+  return canonicalType('???'); // Placeholder
 }
 ```
 
@@ -849,9 +849,9 @@ if (!result.ok) {
 
 ```typescript
 interface IRBuilder {
-  sigConst(value: number, type: SignalType): SigExprId;
-  sigMap(input: SigExprId, fn: MapFnId, type: SignalType): SigExprId;
-  sigZip(inputs: SigExprId[], fn: ZipFnId, type: SignalType): SigExprId;
+  sigConst(value: number, type: CanonicalType): SigExprId;
+  sigMap(input: SigExprId, fn: MapFnId, type: CanonicalType): SigExprId;
+  sigZip(inputs: SigExprId[], fn: ZipFnId, type: CanonicalType): SigExprId;
   opcode(op: OpCode): MapFnId | ZipFnId;
   allocSlot(): Slot;
 }
@@ -865,8 +865,8 @@ interface LowerCtx {
   readonly blockType: string;
   readonly instanceId: string;
   readonly label?: string;
-  readonly inTypes: readonly SignalType[];
-  readonly outTypes: readonly SignalType[];
+  readonly inTypes: readonly CanonicalType[];
+  readonly outTypes: readonly CanonicalType[];
   readonly b: IRBuilder;
   readonly seedConstId: number;
   readonly instance?: InstanceId;
@@ -883,10 +883,10 @@ type ValueRefPacked =
   | { k: 'trigger'; id: TriggerExprId };
 ```
 
-### SignalType
+### CanonicalType
 
 ```typescript
-interface SignalType {
+interface CanonicalType {
   payload: PayloadType;
   extent: Extent;
 }
@@ -954,14 +954,14 @@ if (!result.ok) {
 
 ❌ **Wrong:**
 ```typescript
-inputs.set('in0', signalType('???'));
+inputs.set('in0', canonicalType('???'));
 inputSignals.set('in0', inputsById.in0.id); // CRASHES if in0 unwired
 ```
 
 ✅ **Correct:**
 ```typescript
 if (inputsById.in0 && inputsById.in0.k === 'sig') {
-  inputs.set('in0', signalType('???'));
+  inputs.set('in0', canonicalType('???'));
   inputSignals.set('in0', inputsById.in0.id as SigExprId);
 }
 ```
@@ -1014,7 +1014,7 @@ const result = compileExpression(exprText, ...); // Crashes on empty string
 ```typescript
 if (exprText.trim() === '') {
   // Return constant 0 for empty expression
-  const sigId = ctx.b.sigConst(0, signalType('float'));
+  const sigId = ctx.b.sigConst(0, canonicalType('float'));
   const slot = ctx.b.allocSlot();
   return { outputsById: { out: { k: 'sig', id: sigId, slot } } };
 }
@@ -1052,7 +1052,7 @@ Use this checklist while implementing to ensure all integration points are cover
 
 ### Block Definition
 - [ ] Create `src/blocks/expression-blocks.ts` (or add to math-blocks.ts)
-- [ ] Import `registerBlock`, `signalType`, `compileExpression`
+- [ ] Import `registerBlock`, `canonicalType`, `compileExpression`
 - [ ] Register Expression block with correct metadata
 - [ ] Define 5 optional input ports (in0-in4)
 - [ ] Define 1 output port (out)

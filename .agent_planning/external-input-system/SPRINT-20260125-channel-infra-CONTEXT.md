@@ -38,28 +38,28 @@ type WriteRecord =
 export interface SigExprTime {
   readonly kind: 'time';
   readonly which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'progress' | 'palette' | 'energy';
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 
 // Update to:
 export interface SigExprExternal {
   readonly kind: 'external';
   readonly which: string;  // Was: 'mouseX' | 'mouseY' | 'mouseOver'
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 ```
 
 ### IRBuilder Pattern (from IRBuilderImpl.ts)
 ```typescript
 // Existing pattern at line 119-123:
-sigTime(which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'progress' | 'palette' | 'energy', type: SignalType): SigExprId {
+sigTime(which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'progress' | 'palette' | 'energy', type: CanonicalType): SigExprId {
   const id = sigExprId(this.sigExprs.length);
   this.sigExprs.push({ kind: 'time', which, type });
   return id;
 }
 
 // Update sigExternal to:
-sigExternal(channel: string, type: SignalType): SigExprId {
+sigExternal(channel: string, type: CanonicalType): SigExprId {
   const id = sigExprId(this.sigExprs.length);
   this.sigExprs.push({ kind: 'external', which: channel, type });
   return id;

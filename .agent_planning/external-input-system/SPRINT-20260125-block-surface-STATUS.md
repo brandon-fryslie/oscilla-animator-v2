@@ -16,7 +16,7 @@ Successfully implemented all three external input blocks (ExternalInput, Externa
 - Cardinality: preserve (cardinality-generic)
 - Config input: channel (string, default 'mouse.x')
 - Output: value (float)
-- Lower: ctx.b.sigExternal(channel, signalType('float'))
+- Lower: ctx.b.sigExternal(channel, canonicalType('float'))
 - Appears in block palette under 'io' category
 
 ### P1: ExternalGate Block ✅

@@ -33,7 +33,7 @@ Key changes:
 export interface InputDef {
   readonly id: string;
   readonly label: string;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
   readonly optional?: boolean;
   readonly defaultValue?: unknown;
   readonly defaultSource?: DefaultSource;
@@ -43,7 +43,7 @@ export interface InputDef {
 // AFTER
 export interface InputDef {
   readonly label?: string;           // Defaults to key name
-  readonly type?: SignalType;        // Required if exposedAsPort
+  readonly type?: CanonicalType;        // Required if exposedAsPort
   readonly value?: unknown;          // Default value (was in params)
   readonly defaultSource?: DefaultSource;
   readonly uiHint?: UIControlHint;
@@ -54,7 +54,7 @@ export interface InputDef {
 
 export interface OutputDef {
   readonly label?: string;           // Defaults to key name
-  readonly type: SignalType;         // Required
+  readonly type: CanonicalType;         // Required
   readonly hidden?: boolean;         // For symmetry
 }
 ```
@@ -125,13 +125,13 @@ Each block file needs mechanical conversion:
 ```typescript
 // BEFORE
 inputs: [
-  { id: 'x', label: 'X', type: signalType('float'), defaultValue: 1 },
+  { id: 'x', label: 'X', type: canonicalType('float'), defaultValue: 1 },
 ],
 params: { x: 1 },
 
 // AFTER
 inputs: {
-  x: { label: 'X', type: signalType('float'), value: 1, exposedAsPort: true },
+  x: { label: 'X', type: canonicalType('float'), value: 1, exposedAsPort: true },
 },
 ```
 

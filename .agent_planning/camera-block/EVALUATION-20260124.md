@@ -15,7 +15,7 @@ The spec requires a Camera block with 9 input ports producing a CameraDeclIR ren
 - [ ] Add `cameraProjection` to the `PayloadType` union in `src/core/canonical-types.ts`
 - [ ] Add `cameraProjection` to `PAYLOAD_STRIDE` with stride = 1
 - [ ] Ensure unit kinds used by the Camera block exist exactly as: `norm01`, `scalar`, `deg`
-- [ ] Ensure `signalType(...)` (and any helpers that construct `SignalType`) accepts payload `cameraProjection` with no unit
+- [ ] Ensure `canonicalType(...)` (and any helpers that construct `CanonicalType`) accepts payload `cameraProjection` with no unit
 
 **Technical Notes:**
 - `cameraProjection` is stored as numeric in a single f64 slot and interpreted as int32 via `projI32 = (value | 0)`.
@@ -255,7 +255,7 @@ A planning document exists at `.agent_planning/external-input-system/SPRINT-2026
 |------|----------|-----------------|--------|
 | isActive input | Does Camera block have an isActive boolean input? | Planning doc added isActive port (not in spec) | HIGH - spec has no isActive; projection mode is the projection enum slot (0=ortho, 1=persp). If isActive is added, it contradicts the spec model where projection mode IS the activation mechanism. |
 | centerX/centerY semantics | Spec says NDC centering post-projection. Current kernel has camTargetX/Y/Z world-space. | Planning doc omits centerX/centerY entirely | HIGH - spec has 9 ports, planning doc has 6 ports. Missing: centerX, centerY, near. The screen centering formula in spec 6.3 is different from world-space camera target. |
-| Unit enforcement | Spec says ports have units (norm01, deg, scalar). How is this enforced at compile time? | Not addressed | MEDIUM - SignalType has unit axis but current PayloadTypes don't encode unit constraints in a way that prevents misuse |
+| Unit enforcement | Spec says ports have units (norm01, deg, scalar). How is this enforced at compile time? | Not addressed | MEDIUM - CanonicalType has unit axis but current PayloadTypes don't encode unit constraints in a way that prevents misuse |
 | Default patch inclusion | Should default demo patches include a Camera block? | Planning doc asks this as unknown | MEDIUM - spec is silent on demos. Current patches have no Camera block. |
 | PerspectiveCameraParams vs ResolvedCameraParams | Current kernel uses (camPos, camTarget, camUp, fovY, near, far). Spec uses (centerX, centerY, distance, tiltRad, yawRad, fovYRad, near, far, projection). | Not reconciled | HIGH - a derivation layer must translate spec params to kernel params. deriveCamPos() partially handles this but with different parameter names and semantics. |
 

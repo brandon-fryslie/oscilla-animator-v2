@@ -11,7 +11,7 @@ What to change
 
 Those are upstream implementation artifacts. SampleSource should expose a minimal, stable interface the UI can depend on:
 	•	kind: 'signal' | 'field'
-	•	type: SignalType (resolved enough for payload/unit)
+	•	type: CanonicalType (resolved enough for payload/unit)
 	•	count(): number
 	•	readSample(i, outComponents4): { stride, flags } (allocation-free)
 	•	getAggregate(outStats) for fields (min/max/mean/etc)
@@ -67,12 +67,12 @@ This is the critical place where “payload governs representation” becomes ex
 
 2) Unit handling must be explicit and immutable at render time
 
-Even though the registry is keyed by payload only, ValueRenderer must receive SignalType (or at least payload + unit) so it can display unit-specific decorations without inferring. Otherwise you’ll reintroduce implicit conversion behavior.
+Even though the registry is keyed by payload only, ValueRenderer must receive CanonicalType (or at least payload + unit) so it can display unit-specific decorations without inferring. Otherwise you’ll reintroduce implicit conversion behavior.
 
 So change interface slightly:
 
-renderFull(type: SignalType, sample: Float32Array, stride: number): ReactNode
-renderInline(type: SignalType, sample: Float32Array, stride: number): ReactNode
+renderFull(type: CanonicalType, sample: Float32Array, stride: number): ReactNode
+renderInline(type: CanonicalType, sample: Float32Array, stride: number): ReactNode
 
 Everything else can stay as you wrote it.
 

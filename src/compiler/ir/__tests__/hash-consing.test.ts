@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { IRBuilderImpl } from '../IRBuilderImpl';
-import { signalType } from '../../../core/canonical-types';
+import { canonicalType } from '../../../core/canonical-types';
 import { FLOAT, INT, VEC2 } from '../../../core/canonical-types';
 import { OpCode } from '../types';
 import { instanceId } from '../Indices';
@@ -9,7 +9,7 @@ describe('Hash-consing (I13)', () => {
   describe('SigExpr deduplication', () => {
     it('deduplicates identical sigConst', () => {
       const b = new IRBuilderImpl();
-      const type = signalType(FLOAT);
+      const type = canonicalType(FLOAT);
       
       const id1 = b.sigConst(1.0, type);
       const id2 = b.sigConst(1.0, type);
@@ -19,7 +19,7 @@ describe('Hash-consing (I13)', () => {
 
     it('distinguishes different sigConst values', () => {
       const b = new IRBuilderImpl();
-      const type = signalType(FLOAT);
+      const type = canonicalType(FLOAT);
       
       const id1 = b.sigConst(1.0, type);
       const id2 = b.sigConst(2.0, type);
@@ -29,7 +29,7 @@ describe('Hash-consing (I13)', () => {
 
     it('deduplicates identical sigTime', () => {
       const b = new IRBuilderImpl();
-      const type = signalType(FLOAT);
+      const type = canonicalType(FLOAT);
       
       const id1 = b.sigTime('tMs', type);
       const id2 = b.sigTime('tMs', type);
@@ -39,7 +39,7 @@ describe('Hash-consing (I13)', () => {
 
     it('distinguishes different sigTime variants', () => {
       const b = new IRBuilderImpl();
-      const type = signalType(FLOAT);
+      const type = canonicalType(FLOAT);
       
       const id1 = b.sigTime('tMs', type);
       const id2 = b.sigTime('dt', type);
@@ -49,7 +49,7 @@ describe('Hash-consing (I13)', () => {
 
     it('deduplicates identical sigExternal', () => {
       const b = new IRBuilderImpl();
-      const type = signalType(FLOAT);
+      const type = canonicalType(FLOAT);
       
       const id1 = b.sigExternal('audioLevel', type);
       const id2 = b.sigExternal('audioLevel', type);
@@ -59,7 +59,7 @@ describe('Hash-consing (I13)', () => {
 
     it('deduplicates identical sigMap', () => {
       const b = new IRBuilderImpl();
-      const type = signalType(FLOAT);
+      const type = canonicalType(FLOAT);
       
       const input = b.sigConst(1.0, type);
       const fn = { kind: 'opcode' as const, opcode: OpCode.Sin };
@@ -72,7 +72,7 @@ describe('Hash-consing (I13)', () => {
 
     it('deduplicates identical sigZip', () => {
       const b = new IRBuilderImpl();
-      const type = signalType(FLOAT);
+      const type = canonicalType(FLOAT);
       
       const a = b.sigConst(2.0, type);
       const b1 = b.sigConst(3.0, type);
@@ -86,7 +86,7 @@ describe('Hash-consing (I13)', () => {
 
     it('deduplicates identical sigBinOp (uses sigZip)', () => {
       const b = new IRBuilderImpl();
-      const type = signalType(FLOAT);
+      const type = canonicalType(FLOAT);
       
       const a = b.sigConst(2.0, type);
       const b1 = b.sigConst(3.0, type);
@@ -99,7 +99,7 @@ describe('Hash-consing (I13)', () => {
 
     it('deduplicates identical sigUnaryOp (uses sigMap)', () => {
       const b = new IRBuilderImpl();
-      const type = signalType(FLOAT);
+      const type = canonicalType(FLOAT);
       
       const input = b.sigConst(1.0, type);
       
@@ -111,7 +111,7 @@ describe('Hash-consing (I13)', () => {
 
     it('deduplicates identical sigCombine', () => {
       const b = new IRBuilderImpl();
-      const type = signalType(FLOAT);
+      const type = canonicalType(FLOAT);
       
       const a = b.sigConst(1.0, type);
       const b1 = b.sigConst(2.0, type);
@@ -124,7 +124,7 @@ describe('Hash-consing (I13)', () => {
 
     it('deduplicates identical ReduceField', () => {
       const b = new IRBuilderImpl();
-      const sigType = signalType(FLOAT);
+      const sigType = canonicalType(FLOAT);
       
       const sig = b.sigConst(1.0, sigType);
       const field = b.Broadcast(sig, sigType);
@@ -139,7 +139,7 @@ describe('Hash-consing (I13)', () => {
   describe('Compound expression deduplication', () => {
     it('deduplicates transitively', () => {
       const b = new IRBuilderImpl();
-      const type = signalType(FLOAT);
+      const type = canonicalType(FLOAT);
       
       // Constants deduplicate
       const a = b.sigConst(2.0, type);
@@ -155,7 +155,7 @@ describe('Hash-consing (I13)', () => {
 
     it('deduplicates nested expressions', () => {
       const b = new IRBuilderImpl();
-      const type = signalType(FLOAT);
+      const type = canonicalType(FLOAT);
       
       const a = b.sigConst(1.0, type);
       const b1 = b.sigConst(2.0, type);
@@ -180,7 +180,7 @@ describe('Hash-consing (I13)', () => {
   describe('FieldExpr deduplication', () => {
     it('deduplicates identical fieldConst', () => {
       const b = new IRBuilderImpl();
-      const type = signalType(FLOAT);
+      const type = canonicalType(FLOAT);
       
       const id1 = b.fieldConst(1.0, type);
       const id2 = b.fieldConst(1.0, type);
@@ -190,7 +190,7 @@ describe('Hash-consing (I13)', () => {
 
     it('distinguishes different fieldConst values', () => {
       const b = new IRBuilderImpl();
-      const type = signalType(FLOAT);
+      const type = canonicalType(FLOAT);
       
       const id1 = b.fieldConst(1.0, type);
       const id2 = b.fieldConst(2.0, type);
@@ -200,7 +200,7 @@ describe('Hash-consing (I13)', () => {
 
     it('deduplicates identical Broadcast', () => {
       const b = new IRBuilderImpl();
-      const sigType = signalType(FLOAT);
+      const sigType = canonicalType(FLOAT);
       
       const sig = b.sigConst(1.0, sigType);
       const id1 = b.Broadcast(sig, sigType);
@@ -211,7 +211,7 @@ describe('Hash-consing (I13)', () => {
 
     it('deduplicates fieldIntrinsic with same instanceId', () => {
       const b = new IRBuilderImpl();
-      const type = signalType(FLOAT);
+      const type = canonicalType(FLOAT);
       const inst = instanceId('inst1');
       
       const id1 = b.fieldIntrinsic(inst, 'index', type);
@@ -222,7 +222,7 @@ describe('Hash-consing (I13)', () => {
 
     it('distinguishes fieldIntrinsic with different instanceIds', () => {
       const b = new IRBuilderImpl();
-      const type = signalType(FLOAT);
+      const type = canonicalType(FLOAT);
       const inst1 = instanceId('inst1');
       const inst2 = instanceId('inst2');
       
@@ -234,7 +234,7 @@ describe('Hash-consing (I13)', () => {
 
     it('distinguishes fieldIntrinsic with different properties', () => {
       const b = new IRBuilderImpl();
-      const type = signalType(FLOAT);
+      const type = canonicalType(FLOAT);
       const inst = instanceId('inst1');
       
       const id1 = b.fieldIntrinsic(inst, 'index', type);
@@ -245,7 +245,7 @@ describe('Hash-consing (I13)', () => {
 
     it('deduplicates identical fieldArray', () => {
       const b = new IRBuilderImpl();
-      const type = signalType(FLOAT);
+      const type = canonicalType(FLOAT);
       const inst = instanceId('inst1');
       
       const id1 = b.fieldArray(inst, type);
@@ -256,7 +256,7 @@ describe('Hash-consing (I13)', () => {
 
     it('deduplicates identical fieldPlacement', () => {
       const b = new IRBuilderImpl();
-      const type = signalType(VEC2);
+      const type = canonicalType(VEC2);
       const inst = instanceId('inst1');
       
       const id1 = b.fieldPlacement(inst, 'uv', 'halton2D', type);
@@ -287,7 +287,7 @@ describe('Hash-consing (I13)', () => {
 
     it('deduplicates identical eventWrap', () => {
       const b = new IRBuilderImpl();
-      const type = signalType(FLOAT);
+      const type = canonicalType(FLOAT);
       
       const sig = b.sigConst(1.0, type);
       const id1 = b.eventWrap(sig);
@@ -312,7 +312,7 @@ describe('Hash-consing (I13)', () => {
   describe('Edge cases', () => {
     it('handles array order correctly (different order = different expr)', () => {
       const b = new IRBuilderImpl();
-      const type = signalType(FLOAT);
+      const type = canonicalType(FLOAT);
       
       const a = b.sigConst(1.0, type);
       const b1 = b.sigConst(2.0, type);
@@ -326,7 +326,7 @@ describe('Hash-consing (I13)', () => {
 
     it('handles PureFn opcodes correctly', () => {
       const b = new IRBuilderImpl();
-      const type = signalType(FLOAT);
+      const type = canonicalType(FLOAT);
       
       const input = b.sigConst(1.0, type);
       const fn = { kind: 'opcode' as const, opcode: OpCode.Sin };
@@ -339,7 +339,7 @@ describe('Hash-consing (I13)', () => {
 
     it('distinguishes different PureFn opcodes', () => {
       const b = new IRBuilderImpl();
-      const type = signalType(FLOAT);
+      const type = canonicalType(FLOAT);
       
       const input = b.sigConst(1.0, type);
       const fn1 = { kind: 'opcode' as const, opcode: OpCode.Sin };
@@ -353,7 +353,7 @@ describe('Hash-consing (I13)', () => {
 
     it('handles float precision consistently', () => {
       const b = new IRBuilderImpl();
-      const type = signalType(FLOAT);
+      const type = canonicalType(FLOAT);
       
       const id1 = b.sigConst(1.0, type);
       const id2 = b.sigConst(1.00, type);
@@ -363,8 +363,8 @@ describe('Hash-consing (I13)', () => {
 
     it('distinguishes different signal types', () => {
       const b = new IRBuilderImpl();
-      const floatType = signalType(FLOAT);
-      const intType = signalType(INT);
+      const floatType = canonicalType(FLOAT);
+      const intType = canonicalType(INT);
       
       const id1 = b.sigConst(1, floatType);
       const id2 = b.sigConst(1, intType);
@@ -374,7 +374,7 @@ describe('Hash-consing (I13)', () => {
 
     it('handles composed PureFn correctly', () => {
       const b = new IRBuilderImpl();
-      const type = signalType(FLOAT);
+      const type = canonicalType(FLOAT);
       
       const input = b.sigConst(1.0, type);
       const fn = { kind: 'composed' as const, ops: [OpCode.Sin, OpCode.Cos] as readonly OpCode[] };
@@ -389,7 +389,7 @@ describe('Hash-consing (I13)', () => {
   describe('Real-world scenarios', () => {
     it('reduces expression count in typical patch', () => {
       const b = new IRBuilderImpl();
-      const type = signalType(FLOAT);
+      const type = canonicalType(FLOAT);
       
       // Simulate a patch with repeated time references
       const time1 = b.sigTime('tMs', type);
@@ -418,7 +418,7 @@ describe('Hash-consing (I13)', () => {
 
     it('deduplicates broadcast patterns', () => {
       const b = new IRBuilderImpl();
-      const type = signalType(FLOAT);
+      const type = canonicalType(FLOAT);
       
       const time = b.sigTime('tMs', type);
       

@@ -11,7 +11,7 @@
 
 **Overall Status**: Implementation is **95% complete** with **ONE CRITICAL GAP** and several minor deviations.
 
-**Critical Finding**: The spec explicitly requires `ResolvedPortType = { kind: PortValueKind, type: CanonicalType }` wrapper interface, but the implementation uses `SignalType` directly without the `PortValueKind` wrapper. This affects the Frontend/Backend contract and UI integration.
+**Critical Finding**: The spec explicitly requires `ResolvedPortType = { kind: PortValueKind, type: CanonicalType }` wrapper interface, but the implementation uses `CanonicalType` directly without the `PortValueKind` wrapper. This affects the Frontend/Backend contract and UI integration.
 
 **Verification Method**: 
 - Read all spec documents (PLAN.md, SPRINT-20260128-DOD.md, ALIGNMENT.md, ALIGNMENT-GAPS.md, Cycle-detection-frontend.md, COMPLETION.md)
@@ -62,7 +62,7 @@ interface ResolvedPortType {
 > **Backend lowering**: Uses `kind` to choose which expression family to produce (SigExpr, FieldExpr, EventExpr) and validates the expected kinds for blocks that require them.
 
 **Actual Implementation**:
-- `TypeResolvedPatch.portTypes: ReadonlyMap<PortKey, SignalType>`  
+- `TypeResolvedPatch.portTypes: ReadonlyMap<PortKey, CanonicalType>`  
   (src/compiler/frontend/analyze-type-constraints.ts:48)
 - No `PortValueKind` enum exists anywhere in the codebase
 - No wrapper interface that combines `kind` + `type`
@@ -78,7 +78,7 @@ $ grep -r "ResolvedPortType" src/
 
 **Impact**:
 1. **Frontend/Backend Contract Violation**: Backend cannot determine if a port should be lowered to SigExpr vs FieldExpr vs EventExpr without the `kind` field
-2. **UI Integration Issue**: The spec promises UI can distinguish signal/field/event types, but current implementation only provides `SignalType` which encodes this in `extent.cardinality` and `extent.temporality` (implicit, not explicit)
+2. **UI Integration Issue**: The spec promises UI can distinguish signal/field/event types, but current implementation only provides `CanonicalType` which encodes this in `extent.cardinality` and `extent.temporality` (implicit, not explicit)
 3. **Adapter Insertion**: Spec says adapters may need to know execution kind (e.g., Broadcast adapter specifically converts `sig` to `field`)
 
 **Why This Is Critical**:
@@ -88,13 +88,13 @@ $ grep -r "ResolvedPortType" src/
 - The distinction between "type system semantics" (CanonicalType) and "execution representation" (PortValueKind) is a core design principle
 
 **Possible Explanations**:
-1. **Implementation shortcut**: Implementer may have merged `kind` into `SignalType.extent` axes (using cardinality/temporality to infer execution kind)
+1. **Implementation shortcut**: Implementer may have merged `kind` into `CanonicalType.extent` axes (using cardinality/temporality to infer execution kind)
 2. **Spec evolution**: This requirement may have been added after initial implementation
 3. **Deferred**: May have been intentionally deferred, though not documented as such
 
 **Recommendation**: **TO-REVIEW** → Need to verify if:
-- Current `SignalType.extent` encoding is sufficient for Backend lowering (does Backend have logic to infer SigExpr vs FieldExpr vs EventExpr from extent?)
-- UI helpers can derive `kind` from extent (CompilationInspectorService.getResolvedPortTypes() returns SignalType, not ResolvedPortType)
+- Current `CanonicalType.extent` encoding is sufficient for Backend lowering (does Backend have logic to infer SigExpr vs FieldExpr vs EventExpr from extent?)
+- UI helpers can derive `kind` from extent (CompilationInspectorService.getResolvedPortTypes() returns CanonicalType, not ResolvedPortType)
 - If not, this needs implementation or spec revision
 
 ---
@@ -118,7 +118,7 @@ $ grep -r "ResolvedPortType" src/
 // src/services/CompilationInspectorService.ts:263-289
 getResolvedPortTypes(): Map<string, unknown> | undefined {
   // ...
-  return portTypes as Map<string, unknown>;  // Returns Map<PortKey, SignalType>
+  return portTypes as Map<string, unknown>;  // Returns Map<PortKey, CanonicalType>
 }
 ```
 
@@ -126,13 +126,13 @@ getResolvedPortTypes(): Map<string, unknown> | undefined {
 - Method exists ✅
 - Returns port types ✅
 - But return type is `Map<string, unknown>` instead of `Map<PortKey, ResolvedPortType>` ❌
-- Value type is `SignalType`, not `ResolvedPortType` ❌
+- Value type is `CanonicalType`, not `ResolvedPortType` ❌
 
 **Related To**: GAP-C1 (missing ResolvedPortType interface)
 
 **Evidence**: src/services/CompilationInspectorService.ts:263
 
-**Assessment**: If GAP-C1 is resolved (either by implementing ResolvedPortType or confirming SignalType is equivalent), this becomes TRIVIAL (just update the return type annotation).
+**Assessment**: If GAP-C1 is resolved (either by implementing ResolvedPortType or confirming CanonicalType is equivalent), this becomes TRIVIAL (just update the return type annotation).
 
 ---
 
@@ -412,7 +412,7 @@ Result:      ✅ ALL PASS
 
 **AC3: TypedPatch.portTypes Exposed to UI** ✅ (with GAP-TR1)
 - Verification: `CompilationInspectorService.getResolvedPortTypes()` exists
-- Gap: Return type is `SignalType`, not `ResolvedPortType` (see GAP-C1, GAP-TR1)
+- Gap: Return type is `CanonicalType`, not `ResolvedPortType` (see GAP-C1, GAP-TR1)
 
 **AC4: CycleSummary Exposed to UI** ✅
 - Verification: `CompilationInspectorService.getCycleSummary()` exists
@@ -449,7 +449,7 @@ Result:      ✅ ALL PASS
 
 **GAP-C1** - Resolve ResolvedPortType wrapper:
 1. **Option A**: Implement `PortValueKind` enum and `ResolvedPortType` wrapper as specified
-2. **Option B**: Verify that Backend can infer execution kind from `SignalType.extent` and update spec to reflect this
+2. **Option B**: Verify that Backend can infer execution kind from `CanonicalType.extent` and update spec to reflect this
 3. **Option C**: Defer if not blocking current use cases, but document the deviation
 
 ### Follow-Up Actions

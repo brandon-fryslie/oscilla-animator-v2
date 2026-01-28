@@ -12,8 +12,8 @@ import type { Node, Edge as ReactFlowEdge } from 'reactflow';
 import type { BlockLike, EdgeLike, GraphDataAdapter } from './types';
 import type { DefaultSource, UIControlHint } from '../../types';
 import { getBlockDefinition, type BlockDef, type InputDef } from '../../blocks/registry';
-import type { PayloadType, SignalType } from '../../core/canonical-types';
-import { FLOAT, signalType } from '../../core/canonical-types';
+import type { PayloadType, CanonicalType } from '../../core/canonical-types';
+import { FLOAT, canonicalType } from '../../core/canonical-types';
 import { formatTypeForTooltip, getTypeColor } from '../reactFlowEditor/typeValidation';
 
 /**
@@ -76,14 +76,14 @@ export type UnifiedNode = Node<UnifiedNodeData>;
 function createPortData(
   id: string,
   label: string,
-  type: SignalType | undefined,
+  type: CanonicalType | undefined,
   isConnected: boolean,
   defaultSource?: DefaultSource,
   connection?: PortConnectionInfo,
   uiHint?: UIControlHint
 ): PortData {
   // For inputs without a type (non-port inputs), use a default
-  const effectiveType: SignalType = type || signalType(FLOAT);
+  const effectiveType: CanonicalType = type || canonicalType(FLOAT);
 
   return {
     id,

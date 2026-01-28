@@ -8,7 +8,7 @@
  * derived blocks, before default source materialization.
  */
 
-import type { SignalType } from '../core/canonical-types';
+import type { CanonicalType } from '../core/canonical-types';
 import type { DefaultSource, UIControlHint } from '../types';
 import type { BlockDef, InputDef, OutputDef, Capability, BlockCardinalityMetadata, BlockPayloadMetadata } from './registry';
 
@@ -70,7 +70,7 @@ export interface ExposedInputPort {
   /** Which port on the internal block */
   readonly internalPortId: string;
   /** Override the internal port's type (optional) */
-  readonly type?: SignalType;
+  readonly type?: CanonicalType;
   /** Override the internal port's default source (optional) */
   readonly defaultSource?: DefaultSource;
   /** Override the internal port's UI hint (optional) */

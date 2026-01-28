@@ -31,7 +31,7 @@ Implement the block layer for external input access: ExternalInput, ExternalGate
 - [ ] Cardinality: preserve (works with both signal and field)
 - [ ] Input: channel (string, config-only, not exposed as port)
 - [ ] Output: value (float)
-- [ ] lower() emits ctx.b.sigExternal(channel, signalType('float'))
+- [ ] lower() emits ctx.b.sigExternal(channel, canonicalType('float'))
 - [ ] Block appears in block palette under 'io' category
 
 **Technical Notes:**

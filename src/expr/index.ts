@@ -8,7 +8,7 @@
  * ```typescript
  * const result = compileExpression(
  *   "sin(phase * 2) + 0.5",
- *   new Map([['phase', signalType('phase')]]),
+ *   new Map([['phase', canonicalType('phase')]]),
  *   builder
  * );
  * if (result.ok) {
@@ -21,7 +21,7 @@
  * ```
  */
 
-import type { SignalType, PayloadType } from '../core/canonical-types';
+import type { CanonicalType, PayloadType } from '../core/canonical-types';
 import type { IRBuilder } from '../compiler/ir/IRBuilder';
 import type { SigExprId } from '../compiler/ir/types';
 import { tokenize } from './lexer';
@@ -58,8 +58,8 @@ export type CompileResult =
  * @example
  * ```typescript
  * const inputs = new Map([
- *   ['phase', signalType('phase')],
- *   ['radius', signalType(FLOAT)],
+ *   ['phase', canonicalType('phase')],
+ *   ['radius', canonicalType(FLOAT)],
  * ]);
  * const inputSignals = new Map([
  *   ['phase', phaseSignalId],
@@ -75,7 +75,7 @@ export type CompileResult =
  */
 export function compileExpression(
   exprText: string,
-  inputs: ReadonlyMap<string, SignalType>,
+  inputs: ReadonlyMap<string, CanonicalType>,
   builder: IRBuilder,
   inputSignals: ReadonlyMap<string, SigExprId>
 ): CompileResult {
@@ -138,10 +138,10 @@ export function compileExpression(
 /**
  * Extract payload types from signal types.
  */
-function extractPayloadTypes(inputs: ReadonlyMap<string, SignalType>): ReadonlyMap<string, PayloadType> {
+function extractPayloadTypes(inputs: ReadonlyMap<string, CanonicalType>): ReadonlyMap<string, PayloadType> {
   const typeMap = new Map<string, PayloadType>();
-  for (const [name, signalType] of inputs.entries()) {
-    typeMap.set(name, signalType.payload);
+  for (const [name, canonicalType] of inputs.entries()) {
+    typeMap.set(name, canonicalType.payload);
   }
   return typeMap;
 }

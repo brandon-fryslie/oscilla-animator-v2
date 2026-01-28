@@ -8,7 +8,7 @@
  */
 
 import { registerBlock } from './registry';
-import { signalType, strideOf } from '../core/canonical-types';
+import { canonicalType, strideOf } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { OpCode } from '../compiler/ir/types';
 import { defaultSourceConst } from '../types';
@@ -32,7 +32,7 @@ registerBlock({
   inputs: {
     channel: {
       label: 'Channel',
-      type: signalType(FLOAT),
+      type: canonicalType(FLOAT),
       value: 'mouse.x',
       exposedAsPort: false,
       uiHint: {
@@ -57,11 +57,11 @@ registerBlock({
     },
   },
   outputs: {
-    value: { label: 'Value', type: signalType(FLOAT) },
+    value: { label: 'Value', type: canonicalType(FLOAT) },
   },
   lower: ({ ctx, config }) => {
     const channel = (config?.channel as string) ?? 'mouse.x';
-    const sig = ctx.b.sigExternal(channel, signalType(FLOAT));
+    const sig = ctx.b.sigExternal(channel, canonicalType(FLOAT));
     const slot = ctx.b.allocSlot();
     const outType = ctx.outTypes[0];
 
@@ -92,7 +92,7 @@ registerBlock({
   inputs: {
     channel: {
       label: 'Channel',
-      type: signalType(FLOAT),
+      type: canonicalType(FLOAT),
       value: 'mouse.x',
       exposedAsPort: false,
       uiHint: {
@@ -114,7 +114,7 @@ registerBlock({
     },
     threshold: {
       label: 'Threshold',
-      type: signalType(FLOAT),
+      type: canonicalType(FLOAT),
       value: 0.5,
       defaultSource: defaultSourceConst(0.5),
       exposedAsPort: false,
@@ -122,29 +122,29 @@ registerBlock({
     },
   },
   outputs: {
-    gate: { label: 'Gate', type: signalType(FLOAT) }, // 0 or 1
+    gate: { label: 'Gate', type: canonicalType(FLOAT) }, // 0 or 1
   },
   lower: ({ ctx, config }) => {
     const channel = (config?.channel as string) ?? 'mouse.x';
     const threshold = (config?.threshold as number) ?? 0.5;
 
-    const inputSig = ctx.b.sigExternal(channel, signalType(FLOAT));
-    const thresholdSig = ctx.b.sigConst(threshold, signalType(FLOAT));
+    const inputSig = ctx.b.sigExternal(channel, canonicalType(FLOAT));
+    const thresholdSig = ctx.b.sigConst(threshold, canonicalType(FLOAT));
 
     // gate = input >= threshold ? 1 : 0
     // We need >= but only have Gt (>), Lt (<), and Eq (==)
     // Implement: a >= b  <=>  NOT(b > a)  <=>  1 - (b > a)
     // Since Gt returns 0 or 1: if threshold > input, returns 1, then 1-1=0 (correct)
     //                          if threshold <= input, returns 0, then 1-0=1 (correct)
-    const oneSig = ctx.b.sigConst(1, signalType(FLOAT));
+    const oneSig = ctx.b.sigConst(1, canonicalType(FLOAT));
     const gtFn = ctx.b.opcode(OpCode.Gt);
     const subFn = ctx.b.opcode(OpCode.Sub);
 
     // thresholdGtInput = (threshold > input) ? 1 : 0
-    const thresholdGtInput = ctx.b.sigZip([thresholdSig, inputSig], gtFn, signalType(FLOAT));
+    const thresholdGtInput = ctx.b.sigZip([thresholdSig, inputSig], gtFn, canonicalType(FLOAT));
 
     // gateSig = 1 - thresholdGtInput  =>  (input >= threshold) ? 1 : 0
-    const gateSig = ctx.b.sigZip([oneSig, thresholdGtInput], subFn, signalType(FLOAT));
+    const gateSig = ctx.b.sigZip([oneSig, thresholdGtInput], subFn, canonicalType(FLOAT));
 
     const slot = ctx.b.allocSlot();
     const outType = ctx.outTypes[0];
@@ -176,7 +176,7 @@ registerBlock({
   inputs: {
     channelBase: {
       label: 'Channel Base',
-      type: signalType(FLOAT),
+      type: canonicalType(FLOAT),
       value: 'mouse',
       exposedAsPort: false,
       uiHint: {
@@ -189,13 +189,13 @@ registerBlock({
     },
   },
   outputs: {
-    position: { label: 'Position', type: signalType(VEC2) },
+    position: { label: 'Position', type: canonicalType(VEC2) },
   },
   lower: ({ ctx, config }) => {
     const channelBase = (config?.channelBase as string) ?? 'mouse';
 
-    const xSig = ctx.b.sigExternal(`${channelBase}.x`, signalType(FLOAT));
-    const ySig = ctx.b.sigExternal(`${channelBase}.y`, signalType(FLOAT));
+    const xSig = ctx.b.sigExternal(`${channelBase}.x`, canonicalType(FLOAT));
+    const ySig = ctx.b.sigExternal(`${channelBase}.y`, canonicalType(FLOAT));
 
     // Pack x and y into vec2 using strided slot write
     const outType = ctx.outTypes[0];

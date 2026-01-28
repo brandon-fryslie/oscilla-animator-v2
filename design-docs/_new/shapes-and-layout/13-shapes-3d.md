@@ -20,7 +20,7 @@ type PayloadType =
 | 'vec3'      // you’ll need it anyway
 | 'quat';     // optional convenience
 
-Keep the same SignalType/Extent scheme: Signal<shape3d>, Field<shape3d>.
+Keep the same CanonicalType/Extent scheme: Signal<shape3d>, Field<shape3d>.
 
 Combine constraints
 

@@ -31,7 +31,7 @@ The 3D projection stage lives between (3) and (4) — inside `assembleRenderPass
 ### Types & Compilation
 | File | Index Into |
 |------|-----------|
-| `src/types/index.ts` | PayloadType, SignalType, Extent, BlockRole |
+| `src/types/index.ts` | PayloadType, CanonicalType, Extent, BlockRole |
 | `src/compiler/ir/types.ts` | SigExpr, FieldExpr, Step variants, InstanceDecl |
 | `src/compiler/ir/program.ts` | CompiledProgramIR output structure |
 | `src/compiler/compile.ts` | 7-pass pipeline entry point |

@@ -10,7 +10,7 @@ import { describe, it, expect } from 'vitest';
 // For now, we test indirectly via the compilation pipeline
 
 import { compile } from '../../compile';
-import { signalType, signalTypeField } from '../../../core/canonical-types';
+import { canonicalType, signalTypeField } from '../../../core/canonical-types';
 import { isCardinalityGeneric } from '../../../blocks/registry';
 import { buildPatch } from '../../../graph/Patch';
 

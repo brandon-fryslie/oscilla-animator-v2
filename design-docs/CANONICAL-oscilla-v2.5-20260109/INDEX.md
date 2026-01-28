@@ -92,7 +92,7 @@ Total Resolutions: 115
 **Day-to-day implementation:** Read [ESSENTIAL-SPEC.md](./ESSENTIAL-SPEC.md) (~25k tokens)
 
 This condensed spec contains all invariants, glossary core terms, and T1 content from:
-- Type System (PayloadType, Extent, SignalType, Domain/Instance)
+- Type System (PayloadType, Extent, CanonicalType, Domain/Instance)
 - Block System (roles, three-stage architecture, stateful primitives)
 - Compilation (pipeline, NormalizedGraph, scheduling, slot allocation)
 - Runtime (execution model, state management, hot-swap)
@@ -128,7 +128,7 @@ This condensed spec contains all invariants, glossary core terms, and T1 content
 
 | # | Topic | Description | Key Concepts |
 |---|-------|-------------|--------------|
-| 01 | [Type System](./topics/01-type-system.md) | Five-axis type model | PayloadType, Extent, SignalType, DomainSpec, InstanceDecl |
+| 01 | [Type System](./topics/01-type-system.md) | Five-axis type model | PayloadType, Extent, CanonicalType, DomainSpec, InstanceDecl |
 | 02 | [Block System](./topics/02-block-system.md) | Compute units and roles | Block, BlockRole, Primitive → Array → Layout |
 | 03 | [Time System](./topics/03-time-system.md) | Time sources and rails | TimeRoot, Rails, tMs, phase |
 | 04 | [Compilation](./topics/04-compilation.md) | Graph normalization and IR | NormalizedGraph, CompiledProgramIR |
@@ -171,7 +171,7 @@ Looking for something specific? Here's where to find it:
 
 | Concept | Location |
 |---------|----------|
-| PayloadType, Extent, SignalType | [01-type-system.md](./topics/01-type-system.md) |
+| PayloadType, Extent, CanonicalType | [01-type-system.md](./topics/01-type-system.md) |
 | Cardinality, Temporality, Binding | [01-type-system.md](./topics/01-type-system.md) |
 | Domain, DomainSpec, DomainTypeId | [01-type-system.md](./topics/01-type-system.md) |
 | Instance, InstanceDecl, InstanceRef | [01-type-system.md](./topics/01-type-system.md) |

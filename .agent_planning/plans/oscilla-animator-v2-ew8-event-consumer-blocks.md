@@ -58,7 +58,7 @@ export type SigExpr =
 export interface SigExprEventRead {
   readonly kind: 'eventRead';
   readonly eventSlot: EventSlotId;
-  readonly type: SignalType;  // Always signalType('float')
+  readonly type: CanonicalType;  // Always canonicalType('float')
 }
 ```
 
@@ -69,14 +69,14 @@ export interface SigExprEventRead {
 Add method:
 ```typescript
 /** Create a signal that reads the fired/not-fired state of an event slot as float (0.0 or 1.0). */
-sigEventRead(eventSlot: EventSlotId, type: SignalType): SigExprId;
+sigEventRead(eventSlot: EventSlotId, type: CanonicalType): SigExprId;
 ```
 
 **File**: `src/compiler/ir/IRBuilderImpl.ts`
 
 Implement:
 ```typescript
-sigEventRead(eventSlot: EventSlotId, type: SignalType): SigExprId {
+sigEventRead(eventSlot: EventSlotId, type: CanonicalType): SigExprId {
   const id = sigExprId(this.sigExprs.length);
   this.sigExprs.push({ kind: 'eventRead', eventSlot, type });
   return id;
@@ -108,10 +108,10 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',  // No state needed — reads event scalar each frame
   inputs: {
-    event: { label: 'Event', type: signalType('bool') },  // Event input port
+    event: { label: 'Event', type: canonicalType('bool') },  // Event input port
   },
   outputs: {
-    out: { label: 'Signal', type: signalType('float') },
+    out: { label: 'Signal', type: canonicalType('float') },
   },
   lower: ({ ctx, inputsById }) => {
     const eventInput = inputsById.event;
@@ -120,7 +120,7 @@ registerBlock({
     }
 
     // Read the event scalar as a float signal
-    const sigId = ctx.b.sigEventRead(eventInput.slot, signalType('float'));
+    const sigId = ctx.b.sigEventRead(eventInput.slot, canonicalType('float'));
     const slot = ctx.b.allocSlot();
 
     return {
@@ -145,12 +145,12 @@ registerBlock({
   form: 'primitive',
   capability: 'state',
   inputs: {
-    value: { label: 'Value', type: signalType('float') },
-    trigger: { label: 'Trigger', type: signalType('bool') },  // Event input port
-    initialValue: { type: signalType('float'), value: 0, exposedAsPort: false },
+    value: { label: 'Value', type: canonicalType('float') },
+    trigger: { label: 'Trigger', type: canonicalType('bool') },  // Event input port
+    initialValue: { type: canonicalType('float'), value: 0, exposedAsPort: false },
   },
   outputs: {
-    out: { label: 'Held', type: signalType('float') },
+    out: { label: 'Held', type: canonicalType('float') },
   },
   lower: ({ ctx, inputsById, config }) => {
     const valueInput = inputsById.value;
@@ -172,10 +172,10 @@ registerBlock({
     );
 
     // Read previous held value (Phase 1)
-    const prevId = ctx.b.sigStateRead(stateSlot, signalType('float'));
+    const prevId = ctx.b.sigStateRead(stateSlot, canonicalType('float'));
 
     // Read event scalar as float (0.0 or 1.0)
-    const triggerSig = ctx.b.sigEventRead(triggerInput.slot, signalType('float'));
+    const triggerSig = ctx.b.sigEventRead(triggerInput.slot, canonicalType('float'));
 
     // Conditional: lerp(prev, value, trigger)
     // trigger=0 → prev, trigger=1 → value
@@ -183,7 +183,7 @@ registerBlock({
     const outputId = ctx.b.sigZip(
       [prevId, valueInput.id as SigExprId, triggerSig],
       lerpFn,
-      signalType('float')
+      canonicalType('float')
     );
 
     // Write output to state for next frame (Phase 2)

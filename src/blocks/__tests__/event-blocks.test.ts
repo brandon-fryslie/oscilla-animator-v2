@@ -17,7 +17,7 @@ import { sigExprId, eventSlotId } from '../../compiler/ir/Indices';
 import type { StepEvalSig, ValueSlot } from '../../compiler/ir/types';
 import type { CompiledProgramIR, computeStorageSizes } from '../../compiler/ir/program';
 import { computeStorageSizes as getStorageSizes } from '../../compiler/ir/program';
-import { signalType } from '../../core/canonical-types';
+import { canonicalType } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
 
 /**
@@ -206,7 +206,7 @@ describe('SampleHold', () => {
     state.eventScalars[0] = 0;
 
     const signals = [
-      { kind: 'eventRead' as const, eventSlot: eventSlotId(0), type: signalType(FLOAT) },
+      { kind: 'eventRead' as const, eventSlot: eventSlotId(0), type: canonicalType(FLOAT) },
     ];
 
     const result = evaluateSignal(sigExprId(0), signals, state);

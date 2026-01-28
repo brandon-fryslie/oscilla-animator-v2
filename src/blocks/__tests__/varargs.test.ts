@@ -10,7 +10,7 @@ import {
   type InputDef,
   type VarargConstraint,
 } from '../registry';
-import { signalType, signalTypeSignal } from '../../core/canonical-types';
+import { canonicalType, signalTypeSignal } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
 import { defaultSourceConst } from '../../types';
 

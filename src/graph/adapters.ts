@@ -1,7 +1,7 @@
 /**
  * Adapter Registry
  *
- * Defines which block types can adapt between SignalType mismatches.
+ * Defines which block types can adapt between CanonicalType mismatches.
  * Used by graph normalization to automatically insert adapters.
  *
  * This is the SINGLE source of truth for type coercion adapters.
@@ -20,7 +20,7 @@
  * - Any int↔float without explicit rounding policy
  */
 
-import type { SignalType, PayloadType, Unit } from '../core/canonical-types';
+import type { CanonicalType, PayloadType, Unit } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION, getAxisValue, DEFAULTS_V0, unitsEqual, isUnitVar } from '../core/canonical-types';
 
 // =============================================================================
@@ -212,9 +212,9 @@ const ADAPTER_RULES: AdapterRule[] = [
 // =============================================================================
 
 /**
- * Extract a type signature from a SignalType.
+ * Extract a type signature from a CanonicalType.
  */
-export function extractSignature(type: SignalType): TypeSignature {
+export function extractSignature(type: CanonicalType): TypeSignature {
   const cardinality = getAxisValue(type.extent.cardinality, DEFAULTS_V0.cardinality);
   const temporality = getAxisValue(type.extent.temporality, DEFAULTS_V0.temporality);
 
@@ -256,11 +256,11 @@ function signatureMatches(actual: TypeSignature, pattern: TypeSignature): boolea
 /**
  * Find an adapter that can convert from one type to another.
  *
- * @param from - Source SignalType
- * @param to - Target SignalType
+ * @param from - Source CanonicalType
+ * @param to - Target CanonicalType
  * @returns AdapterSpec if an adapter exists, null otherwise
  */
-export function findAdapter(from: SignalType, to: SignalType): AdapterSpec | null {
+export function findAdapter(from: CanonicalType, to: CanonicalType): AdapterSpec | null {
   const fromSig = extractSignature(from);
   const toSig = extractSignature(to);
 
@@ -322,7 +322,7 @@ function typesAreCompatible(from: TypeSignature, to: TypeSignature): boolean {
 /**
  * Check if types need an adapter (and one exists).
  */
-export function needsAdapter(from: SignalType, to: SignalType): boolean {
+export function needsAdapter(from: CanonicalType, to: CanonicalType): boolean {
   const fromSig = extractSignature(from);
   const toSig = extractSignature(to);
 

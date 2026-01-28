@@ -20,7 +20,7 @@ Plan: SPRINT-20260125-block-surface-PLAN.md
 ### Block Definition Pattern (from time-blocks.ts)
 ```typescript
 import { registerBlock } from './registry';
-import { signalType, strideOf } from '../core/canonical-types';
+import { canonicalType, strideOf } from '../core/canonical-types';
 
 registerBlock({
   type: 'InfiniteTimeRoot',
@@ -35,13 +35,13 @@ registerBlock({
     broadcastPolicy: 'disallowSignalMix',
   },
   inputs: {
-    periodAMs: { type: signalType('float'), value: 1000, exposedAsPort: false },
+    periodAMs: { type: canonicalType('float'), value: 1000, exposedAsPort: false },
   },
   outputs: {
-    tMs: { label: 'Time (ms)', type: signalType('float') },
+    tMs: { label: 'Time (ms)', type: canonicalType('float') },
   },
   lower: ({ ctx }): LowerResult => {
-    const tMs = ctx.b.sigTime('tMs', signalType('float'));
+    const tMs = ctx.b.sigTime('tMs', canonicalType('float'));
     const tMsSlot = ctx.b.allocSlot();
     return {
       outputsById: {
@@ -56,7 +56,7 @@ registerBlock({
 ```typescript
 inputs: {
   channel: {
-    type: signalType('float'), // Type doesn't matter much for config-only
+    type: canonicalType('float'), // Type doesn't matter much for config-only
     value: 'mouse.x',          // Default value
     exposedAsPort: false,      // Config-only, not wirable
   },
@@ -66,14 +66,14 @@ inputs: {
 ### Vec2 Packing Pattern (from geometry-blocks.ts)
 ```typescript
 // Create vec2 from two signals
-const xSig = ctx.b.sigExternal('mouse.x', signalType('float'));
-const ySig = ctx.b.sigExternal('mouse.y', signalType('float'));
+const xSig = ctx.b.sigExternal('mouse.x', canonicalType('float'));
+const ySig = ctx.b.sigExternal('mouse.y', canonicalType('float'));
 
 // Pack into vec2 using zip
 const packed = ctx.b.sigZip(
   [xSig, ySig],
   { kind: 'kernel', name: 'pack_vec2' },
-  signalType('vec2')
+  canonicalType('vec2')
 );
 ```
 
@@ -91,7 +91,7 @@ const packed = ctx.b.sigZip(
 // src/blocks/io-blocks.ts
 
 import { registerBlock, type LowerResult } from './registry';
-import { signalType, strideOf } from '../core/canonical-types';
+import { canonicalType, strideOf } from '../core/canonical-types';
 
 registerBlock({
   type: 'ExternalInput',
@@ -107,18 +107,18 @@ registerBlock({
   },
   inputs: {
     channel: {
-      type: signalType('float'),
+      type: canonicalType('float'),
       value: 'mouse.x',
       exposedAsPort: false,
       uiHint: 'text',
     },
   },
   outputs: {
-    value: { label: 'Value', type: signalType('float') },
+    value: { label: 'Value', type: canonicalType('float') },
   },
   lower: ({ ctx, config }): LowerResult => {
     const channel = (config?.channel as string) ?? 'mouse.x';
-    const sig = ctx.b.sigExternal(channel, signalType('float'));
+    const sig = ctx.b.sigExternal(channel, canonicalType('float'));
     const slot = ctx.b.allocSlot();
     const outType = ctx.outTypes[0];
 
@@ -149,26 +149,26 @@ registerBlock({
   },
   inputs: {
     channel: {
-      type: signalType('float'),
+      type: canonicalType('float'),
       value: 'mouse.x',
       exposedAsPort: false,
       uiHint: 'text',
     },
     threshold: {
-      type: signalType('float'),
+      type: canonicalType('float'),
       value: 0.5,
       exposedAsPort: false,
     },
   },
   outputs: {
-    gate: { label: 'Gate', type: signalType('float') }, // 0 or 1
+    gate: { label: 'Gate', type: canonicalType('float') }, // 0 or 1
   },
   lower: ({ ctx, config }): LowerResult => {
     const channel = (config?.channel as string) ?? 'mouse.x';
     const threshold = (config?.threshold as number) ?? 0.5;
 
-    const inputSig = ctx.b.sigExternal(channel, signalType('float'));
-    const thresholdSig = ctx.b.sigConst(threshold, signalType('float'));
+    const inputSig = ctx.b.sigExternal(channel, canonicalType('float'));
+    const thresholdSig = ctx.b.sigConst(threshold, canonicalType('float'));
 
     // gate = input >= threshold ? 1 : 0
     // Use Gt which returns 1 if a > b, else 0
@@ -178,7 +178,7 @@ registerBlock({
     const gateSig = ctx.b.sigZip(
       [inputSig, thresholdSig],
       { kind: 'opcode', opcode: OpCode.Gt },
-      signalType('float')
+      canonicalType('float')
     );
 
     const slot = ctx.b.allocSlot();
@@ -209,27 +209,27 @@ registerBlock({
   },
   inputs: {
     channelBase: {
-      type: signalType('float'),
+      type: canonicalType('float'),
       value: 'mouse',
       exposedAsPort: false,
       uiHint: 'text',
     },
   },
   outputs: {
-    position: { label: 'Position', type: signalType('vec2') },
+    position: { label: 'Position', type: canonicalType('vec2') },
   },
   lower: ({ ctx, config }): LowerResult => {
     const channelBase = (config?.channelBase as string) ?? 'mouse';
 
-    const xSig = ctx.b.sigExternal(`${channelBase}.x`, signalType('float'));
-    const ySig = ctx.b.sigExternal(`${channelBase}.y`, signalType('float'));
+    const xSig = ctx.b.sigExternal(`${channelBase}.x`, canonicalType('float'));
+    const ySig = ctx.b.sigExternal(`${channelBase}.y`, canonicalType('float'));
 
     // Pack x and y into vec2
     // Check if pack_vec2 kernel exists, or use alternative pattern
     const packedSig = ctx.b.sigZip(
       [xSig, ySig],
       { kind: 'kernel', name: 'pack_vec2' },
-      signalType('vec2')
+      canonicalType('vec2')
     );
 
     const slot = ctx.b.allocSlot();

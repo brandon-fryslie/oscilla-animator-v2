@@ -212,7 +212,7 @@ Example:
 6.3 Port typing changes (canonical)
 
 For blocks transitioning from field-only to preserve:
-•	Main I/O ports (the “field data” ports) must use signalType(...) rather than signalTypeField(...).
+•	Main I/O ports (the “field data” ports) must use canonicalType(...) rather than signalTypeField(...).
 •	Control/parameter ports that are naturally signals (phase, time root, slider constants) remain signal-typed and may be broadcast explicitly in lowering when operating on fields.
 •	Default sources remain signal-y, not field-y.
 
@@ -295,7 +295,7 @@ No fallback defaults in getPortType() for polymorphic ports.
 1.	For all blocks currently fieldOnly but semantically elementwise:
 •	set cardinalityMode: 'preserve'
 •	set broadcastPolicy appropriately (allowZipSig if it’s okay to mix)
-•	change main field I/O ports from signalTypeField → signalType
+•	change main field I/O ports from signalTypeField → canonicalType
 2.	Remove lowering guards that require k === 'field' unless the block is truly domain-bound.
 3.	Prefer dual-kernel emission for unary/binary/componentwise blocks:
 •	blocks should call dispatch helpers, not implement branching.
@@ -333,7 +333,7 @@ Do not embed unification “at the end of normalization” if that implies pass0
 12. Canonical Examples (behavioral)
 
 Example A — GoldenAngle.angle → Add.a
-•	GoldenAngle is preserve-cardinality. Its angle output is signalType('float').
+•	GoldenAngle is preserve-cardinality. Its angle output is canonicalType('float').
 •	If upstream is a field (id01 field), angle is field.
 •	Add is preserve-cardinality with allowZipSig.
 •	Connecting field→signal should not happen; it becomes field→field due to preserve tracking, or errors if the graph is inconsistent.
@@ -369,7 +369,7 @@ Here are concrete “gold standard” examples of block configs that are actuall
 
 Example 1: Unary numeric op (Sin) — preserve + dual lowering
 
-This is the simplest “works for both sig and field” pattern: ports typed with signalType(...), cardinalityMode: 'preserve', and lower() branches only because you haven’t centralized dispatch yet.
+This is the simplest “works for both sig and field” pattern: ports typed with canonicalType(...), cardinalityMode: 'preserve', and lower() branches only because you haven’t centralized dispatch yet.
 
 registerBlock({
 type: 'Sin',
@@ -391,10 +391,10 @@ result: STANDARD_NUMERIC_PAYLOADS,
 semantics: 'componentwise',
 },
 inputs: {
-input: { label: 'Input', type: signalType('float') },   // IMPORTANT: NOT signalTypeField
+input: { label: 'Input', type: canonicalType('float') },   // IMPORTANT: NOT signalTypeField
 },
 outputs: {
-result: { label: 'Result', type: signalType('float') }, // IMPORTANT: NOT signalTypeField
+result: { label: 'Result', type: canonicalType('float') }, // IMPORTANT: NOT signalTypeField
 },
 lower: ({ ctx, inputsById }) => {
 const input = inputsById.input;
@@ -402,7 +402,7 @@ if (!input) throw new Error('Sin input required');
 
     if (input.k === 'sig') {
       const fn = ctx.b.opcode(OpCode.Sin);
-      const id = ctx.b.sigMap(input.id, fn, signalType('float'));
+      const id = ctx.b.sigMap(input.id, fn, canonicalType('float'));
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
       return { outputsById: { result: { k: 'sig', id, slot, type: outType, stride: strideOf(outType.payload) } } };
@@ -423,7 +423,7 @@ if (!input) throw new Error('Sin input required');
 },
 });
 
-Takeaway for the “hardcode signalTypeField” crowd: the ports are signalType, and polymorphism is controlled by cardinalityMode: 'preserve' + lowering/dispatch, not by choosing signalTypeField up front.
+Takeaway for the “hardcode signalTypeField” crowd: the ports are canonicalType, and polymorphism is controlled by cardinalityMode: 'preserve' + lowering/dispatch, not by choosing signalTypeField up front.
 
 ⸻
 
@@ -452,11 +452,11 @@ result: STANDARD_NUMERIC_PAYLOADS,
 semantics: 'componentwise',
 },
 inputs: {
-a: { label: 'A', type: signalType('float') }, // NOT signalTypeField
-b: { label: 'B', type: signalType('float') }, // NOT signalTypeField
+a: { label: 'A', type: canonicalType('float') }, // NOT signalTypeField
+b: { label: 'B', type: canonicalType('float') }, // NOT signalTypeField
 },
 outputs: {
-result: { label: 'Result', type: signalType('float') },
+result: { label: 'Result', type: canonicalType('float') },
 },
 lower: ({ ctx, inputsById }) => {
 const a = inputsById.a;
@@ -465,7 +465,7 @@ if (!a || !b) throw new Error('Mod inputs required');
 
     if (a.k === 'sig' && b.k === 'sig') {
       const fn = ctx.b.opcode(OpCode.Mod);
-      const id = ctx.b.sigZip([a.id, b.id], fn, signalType('float'));
+      const id = ctx.b.sigZip([a.id, b.id], fn, canonicalType('float'));
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
       return { outputsById: { result: { k: 'sig', id, slot, type: outType, stride: strideOf(outType.payload) } } };
@@ -493,7 +493,7 @@ Takeaway: cardinality polymorphism is primarily metadata + solver behavior; mixi
 
 Example 3: Source block that is still preserve-cardinality (FromDomainId) — correctly outputs a field in lowering
 
-This is a good example to stop people from using port typing as a proxy for “it’s a field.” The port is typed signalType('float'), yet lowering returns a field value because the instance context exists.
+This is a good example to stop people from using port typing as a proxy for “it’s a field.” The port is typed canonicalType('float'), yet lowering returns a field value because the instance context exists.
 
 registerBlock({
 type: 'FromDomainId',
@@ -508,10 +508,10 @@ laneCoupling: 'laneLocal',
 broadcastPolicy: 'allowZipSig',
 },
 inputs: {
-domain: { label: 'Domain', type: signalType('int') }, // signal input
+domain: { label: 'Domain', type: canonicalType('int') }, // signal input
 },
 outputs: {
-id01: { label: 'ID (0..1)', type: signalType('float') }, // IMPORTANT: not signalTypeField
+id01: { label: 'ID (0..1)', type: canonicalType('float') }, // IMPORTANT: not signalTypeField
 },
 lower: ({ ctx }) => {
 const instance = ctx.inferredInstance ?? ctx.instance;
@@ -556,11 +556,11 @@ combinations: ALL_CONCRETE_PAYLOADS.map(p => ({ inputs: [] as PayloadType[], out
 semantics: 'typeSpecific',
 },
 inputs: {
-value: { type: signalType('float'), value: 0, exposedAsPort: false },
-payloadType: { type: signalType('float'), value: undefined, hidden: true, exposedAsPort: false },
+value: { type: canonicalType('float'), value: 0, exposedAsPort: false },
+payloadType: { type: canonicalType('float'), value: undefined, hidden: true, exposedAsPort: false },
 },
 outputs: {
-out: { label: 'Output', type: signalType('float', unitVar('const_out')) }, // unit resolved by constraints
+out: { label: 'Output', type: canonicalType('float', unitVar('const_out')) }, // unit resolved by constraints
 },
 });
 
@@ -571,7 +571,7 @@ Takeaway: even a generic block does not express polymorphism by choosing signalT
 The “If you do only one thing” rule for the team
 
 If a block is intended to be cardinality-polymorphic, its primary data ports should be typed with:
-•	signalType(...) on inputs/outputs
+•	canonicalType(...) on inputs/outputs
 •	cardinalityMode: 'preserve'
 •	broadcastPolicy set based on whether mixed sig/field should be allowed
 

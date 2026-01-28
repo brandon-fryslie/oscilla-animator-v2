@@ -5,7 +5,7 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
-import { signalType, signalTypeField, strideOf, type PayloadType, unitVar, payloadVar } from '../core/canonical-types';
+import { canonicalType, signalTypeField, strideOf, type PayloadType, unitVar, payloadVar } from '../core/canonical-types';
 import type { SigExprId, FieldExprId } from '../compiler/ir/Indices';
 
 // =============================================================================
@@ -53,7 +53,7 @@ registerBlock({
     semantics: 'typeSpecific',
   },
   inputs: {
-    signal: { label: 'Signal', type: signalType(payloadVar('broadcast_payload'), unitVar('broadcast_in')) },
+    signal: { label: 'Signal', type: canonicalType(payloadVar('broadcast_payload'), unitVar('broadcast_in')) },
   },
   outputs: {
     field: { label: 'Field', type: signalTypeField(payloadVar('broadcast_payload'), 'default', unitVar('broadcast_in')) },
@@ -143,7 +143,7 @@ registerBlock({
   outputs: {
     signal: { 
       label: 'Result', 
-      type: signalType(payloadVar('reduce_payload'), unitVar('reduce_in'))
+      type: canonicalType(payloadVar('reduce_payload'), unitVar('reduce_in'))
     },
   },
   lower: ({ ctx, inputsById, config }) => {
@@ -170,7 +170,7 @@ registerBlock({
     const sigId = ctx.b.ReduceField(
       fieldInput.id as FieldExprId,
       op,
-      signalType(payloadType)
+      canonicalType(payloadType)
     );
     const slot = ctx.b.allocSlot();
 

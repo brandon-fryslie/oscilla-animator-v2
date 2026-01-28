@@ -45,7 +45,7 @@
 - TimeModel IR supports this but blocks don't expose it
 
 ### 3. Phase Type Mismatch
-- Blocks use `signalType('float')` for phases
+- Blocks use `canonicalType('float')` for phases
 - Spec defines `PayloadType = 'phase'` as distinct type
 - No phase-specific wrap semantics enforcement
 

@@ -13,7 +13,7 @@ import { compile } from '../../compiler/compile';
 import { EventHub } from '../../events/EventHub';
 import { getTestArena } from '../../runtime/__tests__/test-arena-helper';
 import { buildPatch } from '../../graph/Patch';
-import { signalType } from '../../core/canonical-types';
+import { canonicalType } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
 import { sigExprId } from '../../compiler/ir/Indices';
 import type { EventExpr, StepEvalEvent } from '../../compiler/ir/types';
@@ -134,7 +134,7 @@ describe('EventEvaluator', () => {
     it('fires on rising edge (0.4 → 0.6)', () => {
       // Signal that returns different values
       const signals: SigExpr[] = [
-        { kind: 'const', value: 0.6, type: signalType(FLOAT) },
+        { kind: 'const', value: 0.6, type: canonicalType(FLOAT) },
       ];
       const exprs: EventExpr[] = [
         { kind: 'wrap', signal: sigExprId(0) },
@@ -148,7 +148,7 @@ describe('EventEvaluator', () => {
 
     it('does not fire on sustained high (0.6 → 0.8)', () => {
       const signals: SigExpr[] = [
-        { kind: 'const', value: 0.8, type: signalType(FLOAT) },
+        { kind: 'const', value: 0.8, type: canonicalType(FLOAT) },
       ];
       const exprs: EventExpr[] = [
         { kind: 'wrap', signal: sigExprId(0) },
@@ -163,7 +163,7 @@ describe('EventEvaluator', () => {
 
     it('does not fire on falling edge (0.6 → 0.4)', () => {
       const signals: SigExpr[] = [
-        { kind: 'const', value: 0.4, type: signalType(FLOAT) },
+        { kind: 'const', value: 0.4, type: canonicalType(FLOAT) },
       ];
       const exprs: EventExpr[] = [
         { kind: 'wrap', signal: sigExprId(0) },
@@ -178,7 +178,7 @@ describe('EventEvaluator', () => {
 
     it('NaN treated as false', () => {
       const signals: SigExpr[] = [
-        { kind: 'const', value: NaN, type: signalType(FLOAT) },
+        { kind: 'const', value: NaN, type: canonicalType(FLOAT) },
       ];
       const exprs: EventExpr[] = [
         { kind: 'wrap', signal: sigExprId(0) },
@@ -192,7 +192,7 @@ describe('EventEvaluator', () => {
 
     it('Inf treated as false', () => {
       const signals: SigExpr[] = [
-        { kind: 'const', value: Infinity, type: signalType(FLOAT) },
+        { kind: 'const', value: Infinity, type: canonicalType(FLOAT) },
       ];
       const exprs: EventExpr[] = [
         { kind: 'wrap', signal: sigExprId(0) },
@@ -206,7 +206,7 @@ describe('EventEvaluator', () => {
 
     it('updates eventPrevPredicate after evaluation', () => {
       const signals: SigExpr[] = [
-        { kind: 'const', value: 0.7, type: signalType(FLOAT) },
+        { kind: 'const', value: 0.7, type: canonicalType(FLOAT) },
       ];
       const exprs: EventExpr[] = [
         { kind: 'wrap', signal: sigExprId(0) },

@@ -20,7 +20,7 @@ This coexistence creates a type mismatch that breaks compile-time safety. A rece
 **File**: `src/compiler/ir/IRBuilder.ts:66`
 
 ```typescript
-fieldIntrinsic(instanceId: InstanceId, intrinsic: string, type: SignalType): FieldExprId;
+fieldIntrinsic(instanceId: InstanceId, intrinsic: string, type: CanonicalType): FieldExprId;
 ```
 
 - Clean, documented interface
@@ -30,7 +30,7 @@ fieldIntrinsic(instanceId: InstanceId, intrinsic: string, type: SignalType): Fie
 **File**: `src/compiler/ir/IRBuilderImpl.ts:199-212`
 
 ```typescript
-fieldIntrinsic(instanceId: InstanceId, intrinsic: string, type: SignalType): FieldExprId {
+fieldIntrinsic(instanceId: InstanceId, intrinsic: string, type: CanonicalType): FieldExprId {
   const id = fieldExprId(this.fieldExprs.length);
   this.fieldExprs.push({
     kind: 'source',
@@ -58,7 +58,7 @@ export interface FieldExprSource {
   readonly kind: 'source';
   readonly domain: DomainId;
   readonly sourceId: 'pos0' | 'idRand' | 'index' | 'normalizedIndex';
-  readonly type: SignalType;
+  readonly type: CanonicalType;
   // NEW: Instance-based model (Sprint 2)
   readonly instanceId?: string; // InstanceId
   readonly intrinsic?: string;  // Intrinsic property name
@@ -117,7 +117,7 @@ export interface FieldExprSourceLegacy {
   readonly kind: 'source';
   readonly domain: DomainId;
   readonly sourceId: 'pos0' | 'idRand' | 'index' | 'normalizedIndex';
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 
 // NEW model - instance-based intrinsics
@@ -125,7 +125,7 @@ export interface FieldExprIntrinsic {
   readonly kind: 'intrinsic';
   readonly instanceId: InstanceId;
   readonly intrinsic: IntrinsicPropertyName;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 
 // Closed set of valid intrinsics (enables bounds checking)
@@ -148,7 +148,7 @@ export type FieldExpr =
 ### 3.2 IRBuilder Implementation
 
 ```typescript
-fieldIntrinsic(instanceId: InstanceId, intrinsic: IntrinsicPropertyName, type: SignalType): FieldExprId {
+fieldIntrinsic(instanceId: InstanceId, intrinsic: IntrinsicPropertyName, type: CanonicalType): FieldExprId {
   const id = fieldExprId(this.fieldExprs.length);
   this.fieldExprs.push({
     kind: 'intrinsic',  // NEW KIND - no ambiguity

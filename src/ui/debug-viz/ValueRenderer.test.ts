@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import React from 'react';
 import { getValueRenderer, registerRenderer, type ValueRenderer } from './ValueRenderer';
-import { signalType, unitPhase01, unitNorm01 } from '../../core/canonical-types';
+import { canonicalType, unitPhase01, unitNorm01 } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
 import type { RendererSample } from './types';
 import { getDataAttr } from '../../__tests__/test-utils';
@@ -33,14 +33,14 @@ describe('ValueRenderer registry', () => {
 
   describe('3-tier fallback ladder', () => {
     it('tier 1: exact match (payload + unit) wins', () => {
-      const type = signalType(FLOAT, unitPhase01());
+      const type = canonicalType(FLOAT, unitPhase01());
       const renderer = getValueRenderer(type);
       const el = renderer.renderFull({ type: 'scalar', components: new Float32Array([0.5]), stride: 1 });
       expect(getDataAttr(el, 'renderer')).toBe('exact-float-phase');
     });
 
     it('tier 2: payload-only when no exact match', () => {
-      const type = signalType(FLOAT, unitNorm01()); // no exact "float:norm01" registered
+      const type = canonicalType(FLOAT, unitNorm01()); // no exact "float:norm01" registered
       const renderer = getValueRenderer(type);
       const el = renderer.renderFull({ type: 'scalar', components: new Float32Array([0.5]), stride: 1 });
       expect(getDataAttr(el, 'renderer')).toBe('payload-float');
@@ -48,7 +48,7 @@ describe('ValueRenderer registry', () => {
 
     it('tier 3: category fallback when no payload match', () => {
       // 'int' has no payload-level registration, falls to category:numeric
-      const type = signalType(INT);
+      const type = canonicalType(INT);
       const renderer = getValueRenderer(type);
       const el = renderer.renderFull({ type: 'scalar', components: new Float32Array([5]), stride: 1 });
       expect(getDataAttr(el, 'renderer')).toBe('cat-numeric');
@@ -57,21 +57,21 @@ describe('ValueRenderer registry', () => {
     it('tier 3: color category fallback', () => {
       // 'color' has payload-level, but let's test category by removing it
       // Actually color IS registered at payload level. Test vec2 -> numeric category instead.
-      const type = signalType(VEC2);
+      const type = canonicalType(VEC2);
       const renderer = getValueRenderer(type);
       const el = renderer.renderFull({ type: 'scalar', components: new Float32Array([1, 2]), stride: 2 });
       expect(getDataAttr(el, 'renderer')).toBe('cat-numeric');
     });
 
     it('tier 3: shape category fallback', () => {
-      const type = signalType(SHAPE);
+      const type = canonicalType(SHAPE);
       const renderer = getValueRenderer(type);
       const el = renderer.renderFull({ type: 'scalar', components: new Float32Array([0]), stride: 0 });
       expect(getDataAttr(el, 'renderer')).toBe('cat-shape');
     });
 
     it('bool falls to category:numeric', () => {
-      const type = signalType(BOOL);
+      const type = canonicalType(BOOL);
       const renderer = getValueRenderer(type);
       const el = renderer.renderFull({ type: 'scalar', components: new Float32Array([1]), stride: 0 });
       expect(getDataAttr(el, 'renderer')).toBe('cat-numeric');
@@ -91,7 +91,7 @@ describe('ValueRenderer registry', () => {
 
   describe('renderInline', () => {
     it('exact match provides inline renderer', () => {
-      const type = signalType(FLOAT, unitPhase01());
+      const type = canonicalType(FLOAT, unitPhase01());
       const renderer = getValueRenderer(type);
       const el = renderer.renderInline({ type: 'scalar', components: new Float32Array([0.5]), stride: 1 });
       expect(getDataAttr(el, 'renderer')).toBe('exact-float-phase');
@@ -102,7 +102,7 @@ describe('ValueRenderer registry', () => {
 
   describe('color payload-level match', () => {
     it('color type resolves to payload-color renderer', () => {
-      const type = signalType(COLOR);
+      const type = canonicalType(COLOR);
       const renderer = getValueRenderer(type);
       const el = renderer.renderFull({ type: 'scalar', components: new Float32Array([1, 0, 0, 1]), stride: 4 });
       expect(getDataAttr(el, 'renderer')).toBe('payload-color');

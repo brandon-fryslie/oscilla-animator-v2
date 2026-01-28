@@ -32,7 +32,7 @@ inputs: {
   // Existing fixed inputs (keep all of these)
   in0: {
     label: 'In 0',
-    type: signalType('float'),
+    type: canonicalType('float'),
     optional: true,
     exposedAsPort: true,
   },
@@ -44,7 +44,7 @@ inputs: {
   // NEW: Varargs input for block output references
   refs: {
     label: 'Block References',
-    type: signalType('float'),
+    type: canonicalType('float'),
     isVararg: true,
     varargConstraint: {
       payloadType: 'float',
@@ -58,7 +58,7 @@ inputs: {
   // Existing config parameter
   expression: {
     label: 'Expression',
-    type: signalType('float'),
+    type: canonicalType('float'),
     exposedAsPort: false,
     value: '',
     uiHint: { kind: 'text' },
@@ -86,7 +86,7 @@ lower: ({ ctx, inputsById, varargInputsById, config }) => {
 
   // Step 2: Handle empty expression (output constant 0)
   if (exprText.trim() === '') {
-    const sigId = ctx.b.sigConst(0, signalType('float'));
+    const sigId = ctx.b.sigConst(0, canonicalType('float'));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return {
@@ -97,10 +97,10 @@ lower: ({ ctx, inputsById, varargInputsById, config }) => {
   }
 
   // Step 3 & 4: Build input type map and signal map (fixed inputs)
-  const inputs = new Map<string, SignalType>();
+  const inputs = new Map<string, CanonicalType>();
   const inputSignals = new Map<string, SigExprId>();
 
-  const getSigType = (sigId: SigExprId): SignalType => {
+  const getSigType = (sigId: SigExprId): CanonicalType => {
     const sigExprs = ctx.b.getSigExprs();
     const sigExpr = sigExprs[sigId as number];
     if (!sigExpr) {
@@ -215,8 +215,8 @@ export interface LowerCtx {
   readonly blockType: string;
   readonly instanceId: string;
   readonly label?: string;
-  readonly inTypes: readonly SignalType[];
-  readonly outTypes: readonly SignalType[];
+  readonly inTypes: readonly CanonicalType[];
+  readonly outTypes: readonly CanonicalType[];
   readonly b: IRBuilder;
   readonly seedConstId: number;
   readonly instance?: InstanceId;
@@ -238,8 +238,8 @@ export interface LowerCtx {
   readonly blockType: string;
   readonly instanceId: string;
   readonly label?: string;
-  readonly inTypes: readonly SignalType[];
-  readonly outTypes: readonly SignalType[];
+  readonly inTypes: readonly CanonicalType[];
+  readonly outTypes: readonly CanonicalType[];
   readonly b: IRBuilder;
   readonly seedConstId: number;
   readonly instance?: InstanceId;
@@ -323,7 +323,7 @@ This is populated during the early normalization/validation phase.
 ```typescript
 import { PatchBuilder } from '../../graph/Patch';
 import { compilePatch } from '../../compiler/compile';
-import { signalType } from '../../core/canonical-types';
+import { canonicalType } from '../../core/canonical-types';
 
 describe('Expression Block with Varargs', () => {
   describe('block reference compilation', () => {

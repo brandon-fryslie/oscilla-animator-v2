@@ -95,7 +95,7 @@
 
 **Extent**: 5-axis coordinate (cardinality, temporality, binding, perspective, branch)
 
-**SignalType**: Complete type = `{ payload: PayloadType; extent: Extent }`
+**CanonicalType**: Complete type = `{ payload: PayloadType; extent: Extent }`
 
 **AxisTag<T>**: `{ kind: 'default' } | { kind: 'instantiated'; value: T }`
 
@@ -306,7 +306,7 @@ interface Block {
 interface PortBinding {
   id: PortId;
   dir: { kind: 'in' } | { kind: 'out' };
-  type: SignalType;
+  type: CanonicalType;
   combine: CombineMode;
 }
 ```
@@ -452,7 +452,7 @@ Type resolution is constraint-based unification, not local inference.
 ```typescript
 // Resolved types are cached by port binding
 type PortBindingKey = `${BlockId}:${PortName}:${'in' | 'out'}`;
-resolvedPortTypes: Map<PortBindingKey, SignalType>;
+resolvedPortTypes: Map<PortBindingKey, CanonicalType>;
 
 // getPortType() behavior:
 // 1. If resolved override exists → return it

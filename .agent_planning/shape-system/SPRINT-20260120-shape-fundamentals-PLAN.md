@@ -84,7 +84,7 @@ Implement proper Ellipse and Rect shapes with multi-channel parameter passing (s
 **Acceptance Criteria:**
 - [ ] RenderInstances2D accepts shape as Signal<shape> or Field<shape>
 - [ ] Shape input wired to 3-channel representation
-- [ ] Remove old `signalType('int')` shape input
+- [ ] Remove old `canonicalType('int')` shape input
 - [ ] Size input becomes optional (shape params provide dimensions)
 
 **Technical Notes:**

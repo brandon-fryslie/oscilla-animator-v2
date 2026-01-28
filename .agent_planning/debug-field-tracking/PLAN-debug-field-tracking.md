@@ -57,7 +57,7 @@ Use port binding's `domain` field (already in `PortBindingIR`) to tag edge metad
 ```typescript
 interface EdgeMetadata {
   slotId: ValueSlot;
-  type: SignalType;
+  type: CanonicalType;
   cardinality: 'signal' | 'field';  // NEW
 }
 ```
@@ -83,9 +83,9 @@ getTrackedFieldSlots(): ReadonlySet<ValueSlot>
 3. Make `EdgeValueResult` a discriminated union:
 ```typescript
 export type EdgeValueResult =
-  | { kind: 'signal'; value: number; slotId: ValueSlot; type: SignalType }
-  | { kind: 'field'; count: number; min: number; max: number; mean: number; first: number; slotId: ValueSlot; type: SignalType }
-  | { kind: 'field-untracked'; slotId: ValueSlot; type: SignalType };
+  | { kind: 'signal'; value: number; slotId: ValueSlot; type: CanonicalType }
+  | { kind: 'field'; count: number; min: number; max: number; mean: number; first: number; slotId: ValueSlot; type: CanonicalType }
+  | { kind: 'field-untracked'; slotId: ValueSlot; type: CanonicalType };
 ```
 
 4. Update `getEdgeValue` logic:

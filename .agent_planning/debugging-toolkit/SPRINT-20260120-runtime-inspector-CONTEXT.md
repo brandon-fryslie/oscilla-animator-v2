@@ -53,7 +53,7 @@ This document provides implementation context for the Runtime Value Inspector fe
 interface SlotValue {
   slot: ValueSlot;
   value: number | null;           // null if object slot
-  type: SignalType;
+  type: CanonicalType;
   storage: 'f64' | 'f32' | 'i32' | 'u32' | 'object';
   debugName?: string;
   isBuffer: boolean;              // true if storage === 'object' and value is ArrayBufferView

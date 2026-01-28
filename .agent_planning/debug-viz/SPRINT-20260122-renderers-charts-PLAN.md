@@ -27,7 +27,7 @@ Build the ValueRenderer registry with fallback ladder, implement float and color
 
 **Acceptance Criteria:**
 - [ ] `ValueRenderer` interface: `renderFull(sample: RendererSample): React.ReactElement` and `renderInline(sample: RendererSample): React.ReactElement`
-- [ ] `getValueRenderer(type: SignalType): ValueRenderer` — implements 3-tier fallback: exact(payload+unit) → payload-only → category
+- [ ] `getValueRenderer(type: CanonicalType): ValueRenderer` — implements 3-tier fallback: exact(payload+unit) → payload-only → category
 - [ ] `registerRenderer(key: string, renderer: ValueRenderer)` — module-level registration
 - [ ] Lookup uses `type.payload` and `type.unit?.kind` directly (no resolveUnit, no resolveExtent)
 - [ ] Category fallbacks map: `{ numeric: genericNumericRenderer, color: colorRenderer, shape: genericRenderer }`

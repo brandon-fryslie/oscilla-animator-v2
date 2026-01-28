@@ -13,7 +13,7 @@ import type { Block } from "../../graph/Patch";
 import {
   getAxisValue,
   DEFAULTS_V0,
-  type SignalType,
+  type CanonicalType,
 } from "../../core/canonical-types";
 import type { TypedPatch, BlockIndex } from "../ir/patches";
 import {
@@ -37,8 +37,8 @@ export interface PortTypeUnknownError {
 export interface NoConversionPathError {
   kind: "NoConversionPath";
   connectionId: string;
-  fromType: SignalType;
-  toType: SignalType;
+  fromType: CanonicalType;
+  toType: CanonicalType;
   message: string;
 }
 
@@ -52,7 +52,7 @@ export type Pass2Error = PortTypeUnknownError | NoConversionPathError;
  * Type compatibility check for wired connections.
  * Uses resolved types - no variables should be present.
  */
-function isTypeCompatible(from: SignalType, to: SignalType, sourceBlockType?: string, targetBlockType?: string): boolean {
+function isTypeCompatible(from: CanonicalType, to: CanonicalType, sourceBlockType?: string, targetBlockType?: string): boolean {
   const fromCard = getAxisValue(from.extent.cardinality, DEFAULTS_V0.cardinality);
   const fromTemp = getAxisValue(from.extent.temporality, DEFAULTS_V0.temporality);
   const toCard = getAxisValue(to.extent.cardinality, DEFAULTS_V0.cardinality);
@@ -129,7 +129,7 @@ export function pass2TypeGraph(typeResolved: TypeResolvedPatch): TypedPatch {
   const errors: Pass2Error[] = [];
 
   // Build block output types map (for legacy compatibility)
-  const blockOutputTypes = new Map<string, ReadonlyMap<string, SignalType>>();
+  const blockOutputTypes = new Map<string, ReadonlyMap<string, CanonicalType>>();
 
   for (let i = 0; i < typeResolved.blocks.length; i++) {
     const block = typeResolved.blocks[i];
@@ -137,7 +137,7 @@ export function pass2TypeGraph(typeResolved: TypeResolvedPatch): TypedPatch {
     const blockDef = getBlockDefinition(block.type);
     if (!blockDef) continue;
 
-    const outputTypes = new Map<string, SignalType>();
+    const outputTypes = new Map<string, CanonicalType>();
     for (const portId of Object.keys(blockDef.outputs)) {
       const type = getPortType(typeResolved, blockIndex, portId, 'out');
       if (type) {

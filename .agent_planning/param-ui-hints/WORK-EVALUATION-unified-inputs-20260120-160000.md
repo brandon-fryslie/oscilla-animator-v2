@@ -56,7 +56,7 @@ Verified via source code inspection:
 ```typescript
 export interface InputDef {
   readonly label?: string;
-  readonly type?: SignalType;
+  readonly type?: CanonicalType;
   readonly value?: unknown;
   readonly defaultSource?: DefaultSource;
   readonly uiHint?: UIControlHint;
@@ -92,14 +92,14 @@ Ellipse block (primitive-blocks.ts:39-54):
 inputs: {
   rx: {
     label: 'Radius X',
-    type: signalType('float'),
+    type: canonicalType('float'),
     value: 0.02,
     defaultSource: defaultSourceConst(0.02),
     uiHint: {kind: 'slider', min: 0.001, max: 0.5, step: 0.001},
   },
   ry: {
     label: 'Radius Y',
-    type: signalType('float'),
+    type: canonicalType('float'),
     value: 0.02,
     defaultSource: defaultSourceConst(0.02),
     uiHint: {kind: 'slider', min: 0.001, max: 0.5, step: 0.001},
@@ -112,11 +112,11 @@ inputs: {
 Add block (math-blocks.ts:23-26):
 ```typescript
 inputs: {
-  a: { label: 'A', type: signalType('float') },
-  b: { label: 'B', type: signalType('float') },
+  a: { label: 'A', type: canonicalType('float') },
+  b: { label: 'B', type: canonicalType('float') },
 },
 outputs: {
-  out: { label: 'Output', type: signalType('float') },
+  out: { label: 'Output', type: canonicalType('float') },
 }
 ```
 ✅ Simple port-only inputs (no uiHint needed)

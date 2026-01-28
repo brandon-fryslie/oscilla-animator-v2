@@ -46,7 +46,7 @@ generated: 2026-01-12
 - `busIndexById` / `bindingIndexById`: Indices for array-based snapshots
 
 #### DebugBusNode Properties
-- id, name, type (canonical five-axis SignalType)
+- id, name, type (canonical five-axis CanonicalType)
 - combineMode, defaultValueSummary
 - publisherIds, listenerIds (sorted by sortKey)
 - Optional reservedRole ('phaseA', 'pulse', 'palette', etc.)

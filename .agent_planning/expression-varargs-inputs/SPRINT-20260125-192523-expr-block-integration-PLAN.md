@@ -64,7 +64,7 @@ inputs: {
   // NEW: Varargs input for block references
   refs: {
     label: 'References',
-    type: signalType('float'),  // Base type (actual signals come via varargs)
+    type: canonicalType('float'),  // Base type (actual signals come via varargs)
     isVararg: true,
     varargConstraint: {
       payloadType: 'float',
@@ -115,7 +115,7 @@ lower: ({ ctx, inputsById, varargInputsById, config }) => {
   }
 
   // Step 3 & 4: Build input type map and signal map (existing - for in0-in4)
-  const inputs = new Map<string, SignalType>();
+  const inputs = new Map<string, CanonicalType>();
   const inputSignals = new Map<string, SigExprId>();
 
   // Process fixed input ports (existing)
@@ -190,8 +190,8 @@ export interface LowerCtx {
   readonly blockType: string;
   readonly instanceId: string;
   readonly label?: string;
-  readonly inTypes: readonly SignalType[];
-  readonly outTypes: readonly SignalType[];
+  readonly inTypes: readonly CanonicalType[];
+  readonly outTypes: readonly CanonicalType[];
   readonly b: IRBuilder;
   readonly seedConstId: number;
   readonly instance?: InstanceId;

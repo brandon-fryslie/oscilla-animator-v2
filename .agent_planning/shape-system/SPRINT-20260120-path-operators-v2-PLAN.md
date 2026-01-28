@@ -51,7 +51,7 @@ Add path-specific operations: PathField for per-point properties, instance-along
 registerBlock({
   type: 'PathField',
   inputs: {
-    path: { type: signalType('shape') },
+    path: { type: canonicalType('shape') },
   },
   outputs: {
     position: { type: signalTypeField('vec2', 'control') },
@@ -86,8 +86,8 @@ registerBlock({
 registerBlock({
   type: 'LayoutAlongPath',
   inputs: {
-    path: { type: signalType('shape') },
-    count: { type: signalType('int'), value: 10 },
+    path: { type: canonicalType('shape') },
+    count: { type: canonicalType('int'), value: 10 },
   },
   outputs: {
     positions: { type: signalTypeField('vec2', 'default') },

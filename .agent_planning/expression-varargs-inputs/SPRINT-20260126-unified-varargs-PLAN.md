@@ -46,8 +46,8 @@ Migrate Expression block to unified varargs system where ALL inputs (legacy in0/
 ```typescript
 // Expression block inputs - AFTER
 inputs: {
-  in0: { label: 'In 0', type: signalType('float'), optional: true, exposedAsPort: true },
-  in1: { label: 'In 1', type: signalType('float'), optional: true, exposedAsPort: true },
+  in0: { label: 'In 0', type: canonicalType('float'), optional: true, exposedAsPort: true },
+  in1: { label: 'In 1', type: canonicalType('float'), optional: true, exposedAsPort: true },
   refs: { /* new vararg port - see P1 */ },
   expression: { /* config parameter unchanged */ },
 },
@@ -74,7 +74,7 @@ inputs: {
 ```typescript
 refs: {
   label: 'Block Refs',
-  type: signalType('float'),  // Base type for validation
+  type: canonicalType('float'),  // Base type for validation
   optional: true,
   exposedAsPort: true,
   isVararg: true,
@@ -116,7 +116,7 @@ lower: ({ ctx, inputsById, varargInputsById, config }) => {
 
   // UNIFIED INPUT PROCESSING
   const inputSignals = new Map<string, SigExprId>();
-  const inputTypes = new Map<string, SignalType>();
+  const inputTypes = new Map<string, CanonicalType>();
 
   // Step 1: Process legacy inputs (in0, in1) - same as varargs internally
   for (const key of ['in0', 'in1'] as const) {
@@ -193,7 +193,7 @@ lower: ({ ctx, inputsById, varargInputsById, config }) => {
 // src/expr/index.ts
 export function compileExpression(
   source: string,
-  inputs: Map<string, SignalType>,
+  inputs: Map<string, CanonicalType>,
   builder: IRBuilder,
   inputSignals: Map<string, SigExprId>,
   blockRefs?: BlockReferenceContext,  // NEW optional parameter

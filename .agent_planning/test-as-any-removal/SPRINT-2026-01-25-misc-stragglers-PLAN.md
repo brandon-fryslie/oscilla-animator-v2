@@ -22,7 +22,7 @@ Remove ~17 remaining 'as any' casts from miscellaneous test files (1-4 instances
 
 **Technical approach:**
 - Scan all remaining test files for 'as any'
-- Apply appropriate fix from previous sprints (sigExprId, signalType, mock helpers, etc.)
+- Apply appropriate fix from previous sprints (sigExprId, canonicalType, mock helpers, etc.)
 - Each file is independent
 
 **Acceptance Criteria:**
@@ -37,7 +37,7 @@ Remove ~17 remaining 'as any' casts from miscellaneous test files (1-4 instances
 ## Implementation Notes
 These are cleanup passes through remaining files. Most will use one of:
 - `sigExprId()` for branded types
-- `signalType()` or `signalTypeField()` for type objects
+- `canonicalType()` or `signalTypeField()` for type objects
 - Test helpers from earlier sprints
 
 ## Risks

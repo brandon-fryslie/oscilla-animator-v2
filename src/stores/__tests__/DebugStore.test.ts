@@ -12,7 +12,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { DebugStore } from '../DebugStore';
 import { debugService } from '../../services/DebugService';
 import type { ValueSlot } from '../../types';
-import { signalType } from '../../core/canonical-types';
+import { canonicalType } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
 
 describe('DebugStore', () => {
@@ -26,7 +26,7 @@ describe('DebugStore', () => {
   describe('setHoveredEdge - signal history tracking', () => {
     it('should track signal edge in HistoryService on hover', () => {
       const edgeMap = new Map([
-        ['sig-edge', { slotId: 10 as ValueSlot, type: signalType(FLOAT), cardinality: 'signal' as const }],
+        ['sig-edge', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
       ]);
       debugService.setEdgeToSlotMap(edgeMap);
 
@@ -37,7 +37,7 @@ describe('DebugStore', () => {
 
     it('should untrack signal edge when hovering null', () => {
       const edgeMap = new Map([
-        ['sig-edge', { slotId: 10 as ValueSlot, type: signalType(FLOAT), cardinality: 'signal' as const }],
+        ['sig-edge', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
       ]);
       debugService.setEdgeToSlotMap(edgeMap);
 
@@ -50,8 +50,8 @@ describe('DebugStore', () => {
 
     it('should untrack previous signal edge when switching to different edge', () => {
       const edgeMap = new Map([
-        ['sig-edge-1', { slotId: 10 as ValueSlot, type: signalType(FLOAT), cardinality: 'signal' as const }],
-        ['sig-edge-2', { slotId: 20 as ValueSlot, type: signalType(FLOAT), cardinality: 'signal' as const }],
+        ['sig-edge-1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+        ['sig-edge-2', { slotId: 20 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
       ]);
       debugService.setEdgeToSlotMap(edgeMap);
 
@@ -65,7 +65,7 @@ describe('DebugStore', () => {
 
     it('should not track field edges in HistoryService', () => {
       const edgeMap = new Map([
-        ['field-edge', { slotId: 30 as ValueSlot, type: signalType(FLOAT), cardinality: 'field' as const }],
+        ['field-edge', { slotId: 30 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'field' as const }],
       ]);
       debugService.setEdgeToSlotMap(edgeMap);
 
@@ -75,7 +75,7 @@ describe('DebugStore', () => {
 
     it('should receive history values when slot is written after tracking', () => {
       const edgeMap = new Map([
-        ['sig-edge', { slotId: 10 as ValueSlot, type: signalType(FLOAT), cardinality: 'signal' as const }],
+        ['sig-edge', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
       ]);
       debugService.setEdgeToSlotMap(edgeMap);
 
@@ -95,7 +95,7 @@ describe('DebugStore', () => {
   describe('setHoveredEdge - field tracking', () => {
     it('should track field slot on hover', () => {
       const edgeMap = new Map([
-        ['field-edge', { slotId: 30 as ValueSlot, type: signalType(FLOAT), cardinality: 'field' as const }],
+        ['field-edge', { slotId: 30 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'field' as const }],
       ]);
       debugService.setEdgeToSlotMap(edgeMap);
 
@@ -105,7 +105,7 @@ describe('DebugStore', () => {
 
     it('should untrack field slot when hovering null', () => {
       const edgeMap = new Map([
-        ['field-edge', { slotId: 30 as ValueSlot, type: signalType(FLOAT), cardinality: 'field' as const }],
+        ['field-edge', { slotId: 30 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'field' as const }],
       ]);
       debugService.setEdgeToSlotMap(edgeMap);
 
@@ -118,8 +118,8 @@ describe('DebugStore', () => {
 
     it('should untrack previous field when switching to different edge', () => {
       const edgeMap = new Map([
-        ['field-edge-1', { slotId: 30 as ValueSlot, type: signalType(FLOAT), cardinality: 'field' as const }],
-        ['field-edge-2', { slotId: 31 as ValueSlot, type: signalType(FLOAT), cardinality: 'field' as const }],
+        ['field-edge-1', { slotId: 30 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'field' as const }],
+        ['field-edge-2', { slotId: 31 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'field' as const }],
       ]);
       debugService.setEdgeToSlotMap(edgeMap);
 
@@ -135,8 +135,8 @@ describe('DebugStore', () => {
   describe('setHoveredEdge - mixed transitions', () => {
     it('should clean up signal history when switching to field edge', () => {
       const edgeMap = new Map([
-        ['sig-edge', { slotId: 10 as ValueSlot, type: signalType(FLOAT), cardinality: 'signal' as const }],
-        ['field-edge', { slotId: 30 as ValueSlot, type: signalType(FLOAT), cardinality: 'field' as const }],
+        ['sig-edge', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
+        ['field-edge', { slotId: 30 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'field' as const }],
       ]);
       debugService.setEdgeToSlotMap(edgeMap);
 
@@ -150,8 +150,8 @@ describe('DebugStore', () => {
 
     it('should clean up field tracking when switching to signal edge', () => {
       const edgeMap = new Map([
-        ['field-edge', { slotId: 30 as ValueSlot, type: signalType(FLOAT), cardinality: 'field' as const }],
-        ['sig-edge', { slotId: 10 as ValueSlot, type: signalType(FLOAT), cardinality: 'signal' as const }],
+        ['field-edge', { slotId: 30 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'field' as const }],
+        ['sig-edge', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
       ]);
       debugService.setEdgeToSlotMap(edgeMap);
 
@@ -167,7 +167,7 @@ describe('DebugStore', () => {
   describe('enabled state', () => {
     it('should not track when disabled', () => {
       const edgeMap = new Map([
-        ['sig-edge', { slotId: 10 as ValueSlot, type: signalType(FLOAT), cardinality: 'signal' as const }],
+        ['sig-edge', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
       ]);
       debugService.setEdgeToSlotMap(edgeMap);
 
@@ -179,7 +179,7 @@ describe('DebugStore', () => {
 
     it('should not track field when disabled', () => {
       const edgeMap = new Map([
-        ['field-edge', { slotId: 30 as ValueSlot, type: signalType(FLOAT), cardinality: 'field' as const }],
+        ['field-edge', { slotId: 30 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'field' as const }],
       ]);
       debugService.setEdgeToSlotMap(edgeMap);
 
@@ -193,7 +193,7 @@ describe('DebugStore', () => {
   describe('dispose', () => {
     it('should untrack signal history on dispose', () => {
       const edgeMap = new Map([
-        ['sig-edge', { slotId: 10 as ValueSlot, type: signalType(FLOAT), cardinality: 'signal' as const }],
+        ['sig-edge', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
       ]);
       debugService.setEdgeToSlotMap(edgeMap);
 
@@ -206,7 +206,7 @@ describe('DebugStore', () => {
 
     it('should untrack field on dispose', () => {
       const edgeMap = new Map([
-        ['field-edge', { slotId: 30 as ValueSlot, type: signalType(FLOAT), cardinality: 'field' as const }],
+        ['field-edge', { slotId: 30 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'field' as const }],
       ]);
       debugService.setEdgeToSlotMap(edgeMap);
 
@@ -225,7 +225,7 @@ describe('DebugStore', () => {
 
     it('should update on setHoveredEdge', () => {
       const edgeMap = new Map([
-        ['edge-1', { slotId: 10 as ValueSlot, type: signalType(FLOAT), cardinality: 'signal' as const }],
+        ['edge-1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
       ]);
       debugService.setEdgeToSlotMap(edgeMap);
 
@@ -243,7 +243,7 @@ describe('DebugStore', () => {
 
     it('should not re-track when setting same edge', () => {
       const edgeMap = new Map([
-        ['sig-edge', { slotId: 10 as ValueSlot, type: signalType(FLOAT), cardinality: 'signal' as const }],
+        ['sig-edge', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT), cardinality: 'signal' as const }],
       ]);
       debugService.setEdgeToSlotMap(edgeMap);
 

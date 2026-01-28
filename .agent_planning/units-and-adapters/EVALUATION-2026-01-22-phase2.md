@@ -7,7 +7,7 @@ Source: Audit of unit and adapter system migration
 
 ### Phase 1 (Unit Type System) — COMPLETE
 - `Unit` discriminated union (14 kinds) implemented in `canonical-types.ts`
-- `SignalType.unit` is mandatory (`readonly unit: Unit`)
+- `CanonicalType.unit` is mandatory (`readonly unit: Unit`)
 - All block definitions use explicit units where semantically required
 - Unit mismatches are hard compilation errors
 - TypeScript compiles cleanly, 858/863 tests passing

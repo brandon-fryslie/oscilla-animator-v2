@@ -14,7 +14,7 @@ export type { Block, Edge, Endpoint, Patch, PortRef, BlockType, InputPort, Outpu
 
 // Re-export canonical type system
 export type {
-  SignalType,
+  CanonicalType,
   PayloadType,
   Cardinality,
   Temporality,
@@ -51,7 +51,7 @@ export {
 } from '../core/domain-registry';
 
 export {
-  signalType,
+  canonicalType,
   signalTypeSignal,
   signalTypeField,
   signalTypeTrigger,
@@ -183,8 +183,8 @@ export const COMBINE_MODE_CATEGORY: Record<CombineMode, CombineModeCategory> = {
   and: 'boolean',
 };
 
-// Import SignalType for local use in interface definitions
-import type { SignalType } from '../core/canonical-types';
+// Import CanonicalType for local use in interface definitions
+import type { CanonicalType } from '../core/canonical-types';
 
 // =============================================================================
 // Transform System Types
@@ -194,8 +194,8 @@ export type TransformStep = AdapterStep | LensStep;
 
 export interface AdapterStep {
   readonly kind: 'adapter';
-  readonly from: SignalType;
-  readonly to: SignalType;
+  readonly from: CanonicalType;
+  readonly to: CanonicalType;
   readonly adapter: string;
   readonly adapterId?: string;
   readonly params?: Record<string, unknown>;
@@ -226,7 +226,7 @@ export type SlotDirection = 'input' | 'output';
 export interface Slot {
   readonly id: string;
   readonly label: string;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
   readonly direction: SlotDirection;
   readonly optional?: boolean;
   readonly defaultSource: DefaultSource;

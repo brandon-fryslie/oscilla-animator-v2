@@ -7,13 +7,13 @@ Status: complete
 
 Migration Summary:
 - Removed 'phase' and 'unit' from PayloadType union arrays in registry.ts
-- Updated field-operations-blocks.ts to use signalType('float', unitPhase01()) instead of signalType('phase')
+- Updated field-operations-blocks.ts to use canonicalType('float', unitPhase01()) instead of canonicalType('phase')
 - Verified all production block files compile without errors
 - Test files remain to be updated separately (per user instructions)
 
 Key Pattern Applied:
-  Old: signalType('phase')
-  New: signalType('float', unitPhase01())
+  Old: canonicalType('phase')
+  New: canonicalType('float', unitPhase01())
 
 Files Modified:
 - src/blocks/registry.ts: Removed 'phase'/'unit' from ALL_CONCRETE_PAYLOADS, STANDARD_NUMERIC_PAYLOADS, STANDARD_SCALAR_PAYLOADS

@@ -9,7 +9,7 @@ import { describe, it, expect } from 'vitest';
 import { pass2Adapters } from '../../compiler/frontend/normalize-adapters';
 import { buildPatch, type Patch } from '../Patch';
 import {
-  signalType,
+  canonicalType,
   unitPhase01,
   unitRadians,
   unitScalar,
@@ -34,7 +34,7 @@ registerBlock({
   capability: 'pure',
   inputs: {},
   outputs: {
-    out: { label: 'Out', type: signalType(FLOAT, unitPhase01()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitPhase01()) },
   },
   lower: () => ({ outputsById: {} }),
 });
@@ -48,7 +48,7 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   inputs: {
-    in: { label: 'In', type: signalType(FLOAT, unitRadians()) },
+    in: { label: 'In', type: canonicalType(FLOAT, unitRadians()) },
   },
   outputs: {},
   lower: () => ({ outputsById: {} }),
@@ -63,7 +63,7 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   inputs: {
-    in: { label: 'In', type: signalType(FLOAT, unitPhase01()) },
+    in: { label: 'In', type: canonicalType(FLOAT, unitPhase01()) },
   },
   outputs: {},
   lower: () => ({ outputsById: {} }),
@@ -79,7 +79,7 @@ registerBlock({
   capability: 'pure',
   inputs: {},
   outputs: {
-    out: { label: 'Out', type: signalType(FLOAT, unitScalar()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitScalar()) },
   },
   lower: () => ({ outputsById: {} }),
 });

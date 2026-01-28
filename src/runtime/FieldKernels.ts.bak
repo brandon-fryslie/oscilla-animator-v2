@@ -48,7 +48,7 @@
  * ══════════════════════════════════════════════════════════════════════
  */
 
-import type { SignalType } from '../types';
+import type { CanonicalType } from '../types';
 
 /**
  * Apply field kernel to zip (multiple field inputs)
@@ -58,7 +58,7 @@ export function applyFieldKernel(
   inputs: ArrayBufferView[],
   fieldOp: string,
   N: number,
-  _type: SignalType
+  _type: CanonicalType
 ): void {
   if (fieldOp === 'makeVec2') {
     // ════════════════════════════════════════════════════════════════
@@ -587,7 +587,7 @@ export function applyFieldKernelZipSig(
   sigValues: number[],
   fieldOp: string,
   N: number,
-  _type: SignalType
+  _type: CanonicalType
 ): void {
   if (fieldOp === 'applyOpacity') {
     // ════════════════════════════════════════════════════════════════

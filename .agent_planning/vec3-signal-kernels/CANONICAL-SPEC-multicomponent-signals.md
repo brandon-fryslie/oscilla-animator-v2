@@ -172,7 +172,7 @@ No dynamic stride. No runtime maps.
 
 Any block lowering that currently does:
 ```typescript
-sigZip([...], kernel('packVec2'), signalType('vec2'))
+sigZip([...], kernel('packVec2'), canonicalType('vec2'))
 ```
 or similar must be rewritten to:
 1. compute scalar component SigExprIds

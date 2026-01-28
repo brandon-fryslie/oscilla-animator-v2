@@ -39,11 +39,11 @@ The uncommitted changes incorrectly made FromDomainId preserve. Per spec §6.2:
 **Acceptance Criteria:**
 - [ ] FromDomainId has `cardinalityMode: 'fieldOnly'`
 - [ ] FromDomainId has `broadcastPolicy: 'disallowSignalMix'`
-- [ ] FromDomainId output uses `signalTypeField('float', 'default')` (not signalType)
+- [ ] FromDomainId output uses `signalTypeField('float', 'default')` (not canonicalType)
 
 ### P1: Complete port types for PRESERVE blocks [HIGH]
 
-**Per spec §6.3:** "Main I/O ports must use signalType(...) rather than signalTypeField(...)."
+**Per spec §6.3:** "Main I/O ports must use canonicalType(...) rather than signalTypeField(...)."
 
 | Block | Ports to Update | Current Status |
 |-------|-----------------|----------------|
@@ -58,8 +58,8 @@ The uncommitted changes incorrectly made FromDomainId preserve. Per spec §6.2:
 | FieldCartesianToPolar | pos, angle, radius | ❌ Still signalTypeField |
 
 **Acceptance Criteria:**
-- [ ] All 7 blocks have main I/O ports changed to `signalType()`
-- [ ] Control ports (phase, centerX, etc.) remain `signalType()` (unchanged)
+- [ ] All 7 blocks have main I/O ports changed to `canonicalType()`
+- [ ] Control ports (phase, centerX, etc.) remain `canonicalType()` (unchanged)
 
 ### P2: Fix non-canonical lower() guards [HIGH]
 

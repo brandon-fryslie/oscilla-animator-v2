@@ -13,7 +13,7 @@ Replace ~30 'as any' casts for field kernel type parameters with proper factory 
 
 **Deliverables:**
 - Remove all `type as any` casts passed to `applyFieldKernel()` and `applyFieldKernelZipSig()`
-- Use `signalType()` and `signalTypeField()` factory functions
+- Use `canonicalType()` and `signalTypeField()` factory functions
 - Ensure proper type imports from canonical-types module
 
 **Files affected:**
@@ -24,14 +24,14 @@ Replace ~30 'as any' casts for field kernel type parameters with proper factory 
 ### P0: Replace field kernel type parameter casts
 **Confidence:** HIGH
 **Acceptance Criteria:**
-- [ ] All `type as any` casts in applyFieldKernel calls replaced with `signalType(...)` or `signalTypeField(...)`
+- [ ] All `type as any` casts in applyFieldKernel calls replaced with `canonicalType(...)` or `signalTypeField(...)`
 - [ ] Determine which factory function applies to each test case
 - [ ] Import statements updated to include required factories
 - [ ] Tests pass without regression
 - [ ] All 30+ casts eliminated
 
 **Technical Notes:**
-- `signalType()` factory function exists in `/src/core/canonical-types.ts`
+- `canonicalType()` factory function exists in `/src/core/canonical-types.ts`
 - `signalTypeField()` factory may also be available for field-specific types
 - Each cast location should be examined to determine appropriate factory
 - No logic changes required, only type creation
@@ -43,7 +43,7 @@ Replace ~30 'as any' casts for field kernel type parameters with proper factory 
 ## Risks
 
 - **Low:** Factory functions are tested in production code
-- **Mitigation:** Verify each factory returns correct `SignalType` structure before/after conversion
+- **Mitigation:** Verify each factory returns correct `CanonicalType` structure before/after conversion
 
 ## Implementation Sequence
 

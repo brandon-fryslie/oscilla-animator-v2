@@ -31,8 +31,8 @@ The slot/stride/slotMeta system has accumulated significant complexity through i
 1. **Three allocation methods that do similar things:**
    ```typescript
    allocSlot(stride?: number): ValueSlot           // Raw allocation
-   allocTypedSlot(type: SignalType): ValueSlot     // Allocation + type tracking
-   allocValueSlot(type: SignalType): ValueSlot     // Alias for allocTypedSlot
+   allocTypedSlot(type: CanonicalType): ValueSlot     // Allocation + type tracking
+   allocValueSlot(type: CanonicalType): ValueSlot     // Alias for allocTypedSlot
    ```
 
 2. **Stride computation duplicated in 4 places:**
@@ -49,7 +49,7 @@ The slot/stride/slotMeta system has accumulated significant complexity through i
 4. **System reserved slots hardcoded:**
    ```typescript
    // IRBuilderImpl constructor
-   this.reserveSystemSlot(0, signalType('color')); // time.palette at slot 0
+   this.reserveSystemSlot(0, canonicalType('color')); // time.palette at slot 0
    ```
    But the ScheduleExecutor also hardcodes:
    ```typescript
@@ -107,7 +107,7 @@ The slot/stride/slotMeta system has accumulated significant complexity through i
 **Evidence:**
 ```typescript
 // IRBuilderImpl.ts constructor
-this.reserveSystemSlot(0, signalType('color'));
+this.reserveSystemSlot(0, canonicalType('color'));
 
 // ScheduleExecutor.ts executeFrame
 const TIME_PALETTE_SLOT = 0 as ValueSlot;
@@ -147,7 +147,7 @@ const storageOffsets = { f64: 0, f32: 0, i32: 0, u32: 0, object: 0, shape2d: 0 }
 for (let slotId = 0; slotId < builder.getSlotCount(); slotId++) {
   const slot = slotId as ValueSlot;
   const slotInfo = slotTypes.get(slot);
-  const type = slotInfo?.type || signalType('float'); // Default to float if no type!
+  const type = slotInfo?.type || canonicalType('float'); // Default to float if no type!
 
   // Storage class dispatch
   const storage = fieldSlotSet.has(slotId) ? 'object'
@@ -209,7 +209,7 @@ Each addition was grafted on without unifying the underlying model.
 ## What "Simple" Would Look Like
 
 A unified slot system where:
-1. **One allocation method**: `allocSlot(type: SignalType) -> SlotHandle`
+1. **One allocation method**: `allocSlot(type: CanonicalType) -> SlotHandle`
 2. **One execution path**: All slots use the same evaluation + write pattern
 3. **Stride is automatic**: Derived from type at allocation, never computed again
 4. **Storage is automatic**: Derived from type at allocation

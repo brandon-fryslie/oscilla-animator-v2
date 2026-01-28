@@ -409,7 +409,7 @@ Current:
 ```typescript
 export function compileExpression(
   exprText: string,
-  inputs: ReadonlyMap<string, SignalType>,
+  inputs: ReadonlyMap<string, CanonicalType>,
   builder: IRBuilder,
   inputSignals: ReadonlyMap<string, SigExprId>
 ): CompileResult;
@@ -419,7 +419,7 @@ Extended:
 ```typescript
 export interface ExpressionCompileOptions {
   /** Input type environment (in0, in1, etc.) */
-  inputs: ReadonlyMap<string, SignalType>;
+  inputs: ReadonlyMap<string, CanonicalType>;
   /** Input signals */
   inputSignals: ReadonlyMap<string, SigExprId>;
   /** Block reference context (optional) */
@@ -439,7 +439,7 @@ export function compileExpression(
 // Keep old signature for backward compatibility
 export function compileExpression(
   exprText: string,
-  inputs: ReadonlyMap<string, SignalType>,
+  inputs: ReadonlyMap<string, CanonicalType>,
   builder: IRBuilder,
   inputSignals: ReadonlyMap<string, SigExprId>,
   blockRefs?: {
@@ -554,7 +554,7 @@ describe('block reference compilation', () => {
   it('compiles expression with block reference', () => {
     // Setup: create a mock address registry
     const registry = createMockAddressRegistry({
-      'Circle1.radius': { type: signalType('float'), sigId: 42 },
+      'Circle1.radius': { type: canonicalType('float'), sigId: 42 },
     });
 
     const result = compileExpression(

@@ -83,7 +83,7 @@ Functions `worldToAxes`, `domainRef`, and `getBlockCategories` were removed from
 1. **Layout metadata hack** in `instance-blocks.ts`:
    ```typescript
    // Layout carried as metadata on dummy signal (WRONG)
-   const layoutSignal = ctx.b.sigConst(0, signalType('int'));
+   const layoutSignal = ctx.b.sigConst(0, canonicalType('int'));
    return { layout: { k: 'sig', id: layoutSignal, metadata: { layoutSpec: layout } } };
    ```
 

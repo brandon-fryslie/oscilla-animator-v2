@@ -34,7 +34,7 @@ Remove hardcoded time signal handling by making time signals flow through the no
 Currently IRBuilderImpl constructor reserves slot 0:
 ```typescript
 constructor() {
-  this.reserveSystemSlot(0, signalType('color')); // time.palette at slot 0
+  this.reserveSystemSlot(0, canonicalType('color')); // time.palette at slot 0
 }
 ```
 

@@ -68,9 +68,9 @@ import { typecheck, TypeError } from './typecheck';
 **extractPayloadTypes (CHANGE return type):**
 ```typescript
 // Line 141 - CHANGE FROM:
-function extractPayloadTypes(inputs: ReadonlyMap<string, SignalType>): TypeEnv {
+function extractPayloadTypes(inputs: ReadonlyMap<string, CanonicalType>): TypeEnv {
 // TO:
-function extractPayloadTypes(inputs: ReadonlyMap<string, SignalType>): ReadonlyMap<string, PayloadType> {
+function extractPayloadTypes(inputs: ReadonlyMap<string, CanonicalType>): ReadonlyMap<string, PayloadType> {
 ```
 
 **Call Site (CHANGE to TypeCheckContext):**

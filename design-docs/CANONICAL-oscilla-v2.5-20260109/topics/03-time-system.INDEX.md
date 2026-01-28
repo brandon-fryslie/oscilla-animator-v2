@@ -28,7 +28,7 @@ source_hash: 9d52fe0a03f2
 |------|-----------------|----------|
 | `infinite` | Constant 0 | Runs forever |
 
-## Outputs (SignalType)
+## Outputs (CanonicalType)
 - `tMs`: one + continuous + int
 - `dt`: one + continuous + float
 - `phaseA`, `phaseB`: one + continuous + phase

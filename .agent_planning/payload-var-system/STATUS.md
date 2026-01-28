@@ -12,7 +12,7 @@ Create a `payloadVar` system parallel to `unitVar` that allows blocks to be trul
 
 Currently, blocks like Broadcast hardcode payload types as `'float'` in port definitions:
 ```typescript
-signal: { type: signalType('float', unitVar('broadcast_in')) }
+signal: { type: canonicalType('float', unitVar('broadcast_in')) }
 ```
 
 This prevents true polymorphism—the definition type payload is `'float'` but the actual connected signal might be `'vec3'`. Pass 0 infers the correct payload and stores it in `block.params.payloadType`, but Pass 2 sees a type mismatch because the port definition still has `'float'`.
@@ -30,7 +30,7 @@ Introduce `payloadVar()` which creates unresolved payload type variables that ge
 
 **After:**
 ```typescript
-signal: { type: signalType(payloadVar('broadcast_payload'), unitVar('broadcast_in')) }
+signal: { type: canonicalType(payloadVar('broadcast_payload'), unitVar('broadcast_in')) }
 ```
 
 ## Success Criteria

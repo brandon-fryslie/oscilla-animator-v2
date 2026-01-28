@@ -23,7 +23,7 @@ Plan: SPRINT-20260125-192523-varargs-infra-PLAN.md
 ```typescript
 export interface InputDef {
   readonly label?: string;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
   readonly value?: unknown;
   readonly defaultSource?: DefaultSource;
   readonly uiHint?: UIControlHint;
@@ -55,7 +55,7 @@ export interface VarargConstraint {
 
 export interface InputDef {
   readonly label?: string;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
   readonly value?: unknown;
   readonly defaultSource?: DefaultSource;
   readonly uiHint?: UIControlHint;
@@ -205,7 +205,7 @@ export interface ResolvedVarargConnection {
   readonly sourceAddress: CanonicalAddress;
   readonly sourceBlockId: string;
   readonly sourcePortId: string;
-  readonly resolvedType: import('../../core/canonical-types').SignalType;
+  readonly resolvedType: import('../../core/canonical-types').CanonicalType;
 }
 
 export interface VarargValidationResult {
@@ -441,7 +441,7 @@ describe('VarargInputDef', () => {
   it('defines a varargs input', () => {
     const def: InputDef = {
       label: 'Inputs',
-      type: signalType('float'),
+      type: canonicalType('float'),
       isVararg: true,
       varargConstraint: {
         payloadType: 'float',
@@ -454,7 +454,7 @@ describe('VarargInputDef', () => {
   it('regular input is not varargs', () => {
     const def: InputDef = {
       label: 'In',
-      type: signalType('float'),
+      type: canonicalType('float'),
     };
     expect(isVarargInput(def)).toBe(false);
   });

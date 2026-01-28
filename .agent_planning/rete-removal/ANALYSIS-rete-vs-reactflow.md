@@ -86,7 +86,7 @@
   - Field → Signal: ✗ INCOMPATIBLE
   - Field → Field (same payload): ✓ COMPATIBLE
 - 10 singleton socket instances for type safety
-- `getSocketForSignalType()` maps SignalType to socket
+- `getSocketForSignalType()` maps CanonicalType to socket
 
 **React Flow Status:** NOT IMPLEMENTED - connections are unconstrained
 

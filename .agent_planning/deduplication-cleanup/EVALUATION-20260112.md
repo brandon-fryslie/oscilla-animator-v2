@@ -42,7 +42,7 @@ Based on thorough investigation of the deduplication audit findings.
 2. **What's blocked:**
    - 9 lines of identical TODO comments wrapping validation code
    - Code checks `modeValidation.valid` and throws PortTypeMismatch errors
-   - All lines start with: `// TODO: Fix validation for new SignalType structure`
+   - All lines start with: `// TODO: Fix validation for new CanonicalType structure`
 
 3. **Context investigation:**
    - The code surrounding it (lines 101-110) validates `combine` policy successfully
@@ -95,10 +95,10 @@ Based on thorough investigation of the deduplication audit findings.
 
 1. **Methods in question:**
    ```typescript
-   declareState(_id: StateId, _type: SignalType, _initialValue?: unknown): void {
+   declareState(_id: StateId, _type: CanonicalType, _initialValue?: unknown): void {
      // TODO: Implement state declaration
    }
-   readState(_id: StateId, type: SignalType): SigExprId {
+   readState(_id: StateId, type: CanonicalType): SigExprId {
      // TODO: Implement state reading
      return this.sigConst(0, type);  // Dummy return!
    }
@@ -113,7 +113,7 @@ Based on thorough investigation of the deduplication audit findings.
 
 4. **Alternative implementations:** IRBuilder has different state methods:
    - `allocStateSlot(initialValue?: number): StateSlotId` - exists, used
-   - `sigStateRead(stateSlot: StateSlotId, type: SignalType): SigExprId` - exists, used
+   - `sigStateRead(stateSlot: StateSlotId, type: CanonicalType): SigExprId` - exists, used
    - `stepStateWrite(stateSlot: StateSlotId, value: SigExprId): void` - exists, used
 
 5. **Assessment:** The old interface (`declareState`, `readState`, `writeState`) was replaced by the new slot-based API (`allocStateSlot`, `sigStateRead`, `stepStateWrite`). The old methods are dead code.

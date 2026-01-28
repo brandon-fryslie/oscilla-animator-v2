@@ -38,7 +38,7 @@ Successfully implemented the PlacementBasis (Gauge-Invariant Layout System) acro
 ### Sprint 4: Layout Kernels ✅
 - Implemented circleLayoutUV, lineLayoutUV, gridLayoutUV
 - All kernels use UV coordinates instead of normalizedIndex
-- Proper SignalType handling with helpers
+- Proper CanonicalType handling with helpers
 - **Tests**: 7 passing (kernel correctness)
 
 ### Sprint 5: New Layout Blocks ✅

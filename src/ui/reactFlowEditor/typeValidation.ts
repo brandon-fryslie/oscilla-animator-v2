@@ -6,7 +6,7 @@
  */
 
 import type { Patch, BlockId } from '../../types';
-import {SignalType, PayloadType, Unit, ConcretePayloadType, FLOAT} from '../../core/canonical-types';
+import {CanonicalType, PayloadType, Unit, ConcretePayloadType, FLOAT} from '../../core/canonical-types';
 import { getAxisValue, DEFAULTS_V0, isPayloadVar } from '../../core/canonical-types';
 import { getBlockDefinition } from '../../blocks/registry';
 import { findAdapter, type AdapterSpec } from '../../graph/adapters';
@@ -71,10 +71,10 @@ export function formatUnitForDisplay(unit: Unit): string {
 }
 
 /**
- * Format a SignalType for display.
+ * Format a CanonicalType for display.
  * Returns strings like "Signal<float:phase>" or "Field<color>"
  */
-export function formatTypeForDisplay(type: SignalType): string {
+export function formatTypeForDisplay(type: CanonicalType): string {
   const card = getAxisValue(type.extent.cardinality, DEFAULTS_V0.cardinality);
   const temp = getAxisValue(type.extent.temporality, DEFAULTS_V0.temporality);
 
@@ -104,9 +104,9 @@ export function formatTypeForDisplay(type: SignalType): string {
 }
 
 /**
- * Format a SignalType for tooltip with more detail.
+ * Format a CanonicalType for tooltip with more detail.
  */
-export function formatTypeForTooltip(type: SignalType): string {
+export function formatTypeForTooltip(type: CanonicalType): string {
   const card = getAxisValue(type.extent.cardinality, DEFAULTS_V0.cardinality);
   const temp = getAxisValue(type.extent.temporality, DEFAULTS_V0.temporality);
 
@@ -132,7 +132,7 @@ export function getPortType(
   blockId: string,
   portId: string,
   direction: 'input' | 'output'
-): SignalType | null {
+): CanonicalType | null {
   const block = patch.blocks.get(blockId as BlockId);
   if (!block) return null;
 
@@ -152,7 +152,7 @@ export function getPortTypeFromBlockType(
   blockType: string,
   portId: string,
   direction: 'input' | 'output'
-): SignalType | null {
+): CanonicalType | null {
   const blockDef = getBlockDefinition(blockType);
   if (!blockDef) return null;
 
@@ -195,7 +195,7 @@ function canTransformDomain(fromDomain: string, toDomain: string): boolean {
  * since they get resolved during compilation. This allows users to make connections
  * that will be validated properly by the compiler.
  */
-function isTypeCompatible(from: SignalType, to: SignalType): boolean {
+function isTypeCompatible(from: CanonicalType, to: CanonicalType): boolean {
   const fromCard = getAxisValue(from.extent.cardinality, DEFAULTS_V0.cardinality);
   const fromTemp = getAxisValue(from.extent.temporality, DEFAULTS_V0.temporality);
   const toCard = getAxisValue(to.extent.cardinality, DEFAULTS_V0.cardinality);

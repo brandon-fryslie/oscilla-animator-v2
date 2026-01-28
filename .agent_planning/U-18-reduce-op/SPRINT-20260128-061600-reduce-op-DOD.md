@@ -13,7 +13,7 @@ Plan: SPRINT-20260128-061600-reduce-op-PLAN.md
 - [ ] Has `kind: 'reduce_field'` field
 - [ ] Has `field: FieldExprId` field (input to reduce)
 - [ ] Has `op: 'min' | 'max' | 'sum' | 'avg'` field
-- [ ] Has `type: SignalType` field (output type with cardinality=one)
+- [ ] Has `type: CanonicalType` field (output type with cardinality=one)
 - [ ] Added to `SigExpr` union type at line 84-93
 - [ ] TypeScript compiles with no errors
 - [ ] Exhaustive switch checks in SignalEvaluator catch new case
@@ -32,7 +32,7 @@ grep "kind: 'reduce_field'" src/compiler/ir/types.ts
 **Status**: Not Started
 
 - [ ] `ReduceField()` method declared in `IRBuilder` interface
-- [ ] Method signature: `ReduceField(field: FieldExprId, op: 'min'|'max'|'sum'|'avg', type: SignalType): SigExprId`
+- [ ] Method signature: `ReduceField(field: FieldExprId, op: 'min'|'max'|'sum'|'avg', type: CanonicalType): SigExprId`
 - [ ] Implementation exists in `IRBuilderImpl` class
 - [ ] Implementation allocates new SigExprId correctly
 - [ ] Implementation pushes correct expr to `sigExprs` array
@@ -62,7 +62,7 @@ const sigId = ctx.b.ReduceField(fieldId, 'sum', outputType);
 - [ ] Parameter `op` defined with 4 options: ['min', 'max', 'sum', 'avg']
 - [ ] Default operation is 'sum'
 - [ ] Input port `field` has type `signalTypeField(payloadVar(...), 'default')`
-- [ ] Output port `signal` has type `signalType(payloadVar(...))`
+- [ ] Output port `signal` has type `canonicalType(payloadVar(...))`
 - [ ] Payload-generic contract uses `ALL_CONCRETE_PAYLOADS`
 - [ ] `lower()` function calls `ctx.b.ReduceField(...)`
 - [ ] `lower()` returns signal output with correct type and slot

@@ -15,7 +15,7 @@ The spec defines **system architecture**, not UI/store implementation:
 
 | Canonical Spec | Implementation Status |
 |----------------|----------------------|
-| **Type System** (Topic 01) | ✅ COMPLETE - SignalType, 5-axis metadata |
+| **Type System** (Topic 01) | ✅ COMPLETE - CanonicalType, 5-axis metadata |
 | **Block System** (Topic 02) | ✅ COMPLETE - Block, BlockRole, discriminated roles |
 | **Time System** (Topic 03) | 📋 PLANNED - TimeRoot, phase continuity |
 | **Compilation** (Topic 04) | 🔄 IN PROGRESS - Domain unification done, passes 5-10 remaining |
@@ -87,11 +87,11 @@ src/stores/
 
 ### Signal Type Evolution
 
-**V1**: Separate `SignalType` and `FieldType` enums
+**V1**: Separate `CanonicalType` and `FieldType` enums
 
 **V2 Canonical** (Topic 01):
 ```typescript
-type SignalType = {
+type CanonicalType = {
   payload: PayloadType;  // 'number' | 'vec2' | 'color' | etc
   extent: Extent;        // 'signal' | 'field' | 'special'
   cardinality: [number, number]; // [min, max] domain size
@@ -173,7 +173,7 @@ When porting a component, verify alignment:
 
 ### Type System (Topic 01)
 
-- [ ] Displays `SignalType` with extent + payload (e.g., "field:vec2")
+- [ ] Displays `CanonicalType` with extent + payload (e.g., "field:vec2")
 - [ ] Shows axis tags where relevant (e.g., "(point)" for position)
 - [ ] Handles cardinality ranges [min, max] for domain sizes
 
@@ -316,7 +316,7 @@ v1: src/editor/BlockLibrary.css
 
 ### Fully Aligned ✅
 
-- **Type System** (Topic 01): SignalType with 5-axis metadata implemented
+- **Type System** (Topic 01): CanonicalType with 5-axis metadata implemented
 - **Block System** (Topic 02): BlockRole discriminated union, buses as blocks
 - **Diagnostics** (Topic 07): Sprint 1 complete - EventHub, DiagnosticHub, stable IDs
 - **Event Hub** (Topic 12): Typed event bus, five-event spine
@@ -372,7 +372,7 @@ v1: src/editor/BlockLibrary.css
 ### Phase 4 (Inspector & Editing)
 - [ ] Inspector shows selected block's input/output **ports** (no separate params)
 - [ ] Can create edges between compatible ports
-- [ ] Type compatibility shown (SignalType with extent + payload)
+- [ ] Type compatibility shown (CanonicalType with extent + payload)
 - [ ] Undo/redo works via HistoryStore
 
 ---

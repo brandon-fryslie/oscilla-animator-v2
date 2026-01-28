@@ -556,7 +556,7 @@ function typecheckMemberAccess(node: ExprNode & { kind: 'member' }, ctx: TypeChe
     );
   }
 
-  // Extract payload type from SignalType
+  // Extract payload type from CanonicalType
   const payload = resolved.type.payload;
 
   // Validate payload type is allowed

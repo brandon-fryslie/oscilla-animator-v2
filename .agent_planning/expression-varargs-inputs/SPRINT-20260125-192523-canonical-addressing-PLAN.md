@@ -321,7 +321,7 @@ Implement a comprehensive address resolution service that resolves versioned add
 - [ ] `resolveAddress(patch: Patch, address: string): ResolvedAddress | null`
 - [ ] Supports all address formats: blocks, ports, edges, edges/properties, domains, instances, intrinsics
 - [ ] Parses version prefix (e.g., `v1:`) and routes to appropriate handler
-- [ ] For output addresses, includes SignalType of the output
+- [ ] For output addresses, includes CanonicalType of the output
 - [ ] For edge addresses, resolves from/to endpoints and edge metadata
 - [ ] For domain instances, validates instance index is in bounds
 - [ ] For intrinsics, validates property name is valid for domain type
@@ -334,8 +334,8 @@ Implement a comprehensive address resolution service that resolves versioned add
 ```typescript
 type ResolvedAddress =
   | { kind: 'block'; block: Block; addr: CanonicalAddress }
-  | { kind: 'output'; block: Block; port: OutputPort; type: SignalType; addr: CanonicalAddress }
-  | { kind: 'input'; block: Block; port: InputPort; type: SignalType; addr: CanonicalAddress }
+  | { kind: 'output'; block: Block; port: OutputPort; type: CanonicalType; addr: CanonicalAddress }
+  | { kind: 'input'; block: Block; port: InputPort; type: CanonicalType; addr: CanonicalAddress }
   | { kind: 'edge'; edge: Edge; addr: CanonicalAddress }
   | { kind: 'edge-property'; edge: Edge; property: 'from'|'to'|'enabled'|'sortKey'|'role'; value: unknown; addr: CanonicalAddress }
   | { kind: 'domain-instance'; domainBlockId: BlockId; instanceIndex: number; addr: CanonicalAddress }

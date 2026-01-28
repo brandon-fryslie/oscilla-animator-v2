@@ -126,19 +126,19 @@ Key files:
 ```typescript
 // BEFORE
 inputs: [
-  { id: 'radius', label: 'Radius', type: signalType('float'), defaultValue: 0.02 },
+  { id: 'radius', label: 'Radius', type: canonicalType('float'), defaultValue: 0.02 },
 ],
 outputs: [
-  { id: 'circle', label: 'Circle', type: signalType('float') },
+  { id: 'circle', label: 'Circle', type: canonicalType('float') },
 ],
 params: { radius: 0.02 },
 
 // AFTER
 inputs: {
-  radius: { label: 'Radius', type: signalType('float'), value: 0.02 },
+  radius: { label: 'Radius', type: canonicalType('float'), value: 0.02 },
 },
 outputs: {
-  circle: { label: 'Circle', type: signalType('float') },
+  circle: { label: 'Circle', type: canonicalType('float') },
 },
 ```
 

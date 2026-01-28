@@ -46,7 +46,7 @@ Successfully split the compiler into **Frontend** (UI-facing) and **Backend** (e
 
 ### ✅ Phase 6: UI Integration (COMPLETE)
 - Added `CompilationInspectorService.getResolvedPortTypes()`
-  - Returns Map<PortKey, SignalType> from latest TypedPatch
+  - Returns Map<PortKey, CanonicalType> from latest TypedPatch
   - Provides UI access to resolved types (no type variables)
 - Added `CompilationInspectorService.getCycleSummary()`
   - Returns CycleSummary from latest Frontend compilation
@@ -124,7 +124,7 @@ Result:      ✅ ALL PASS
 ### AC3: TypedPatch.portTypes Exposed to UI ✅
 - **Status**: PASS
 - **Evidence**: `CompilationInspectorService.getResolvedPortTypes()` method
-- **Verification**: Helper method returns Map<PortKey, SignalType> from TypedPatch
+- **Verification**: Helper method returns Map<PortKey, CanonicalType> from TypedPatch
 
 ### AC4: CycleSummary Exposed to UI ✅
 - **Status**: PASS

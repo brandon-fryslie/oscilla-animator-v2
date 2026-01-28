@@ -16,7 +16,7 @@
 
 import { registerBlock } from './registry';
 import {
-  signalType,
+  canonicalType,
   unitPhase01,
   unitScalar,
   unitRadians,
@@ -52,10 +52,10 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: signalType(FLOAT, unitPhase01()) },
+    in: { label: 'In', type: canonicalType(FLOAT, unitPhase01()) },
   },
   outputs: {
-    out: { label: 'Out', type: signalType(FLOAT, unitScalar()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitScalar()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
@@ -88,16 +88,16 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: signalType(FLOAT, unitScalar()) },
+    in: { label: 'In', type: canonicalType(FLOAT, unitScalar()) },
   },
   outputs: {
-    out: { label: 'Out', type: signalType(FLOAT, unitPhase01()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitPhase01()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
     if (!input || input.k !== 'sig') throw new Error('Lens block input must be a signal');
     const wrapFn = ctx.b.opcode(OpCode.Wrap01);
-    const wrapped = ctx.b.sigMap(input.id as SigExprId, wrapFn, signalType(FLOAT, unitPhase01()));
+    const wrapped = ctx.b.sigMap(input.id as SigExprId, wrapFn, canonicalType(FLOAT, unitPhase01()));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return {
@@ -129,17 +129,17 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: signalType(FLOAT, unitPhase01()) },
+    in: { label: 'In', type: canonicalType(FLOAT, unitPhase01()) },
   },
   outputs: {
-    out: { label: 'Out', type: signalType(FLOAT, unitRadians()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitRadians()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
     if (!input || input.k !== 'sig') throw new Error('Lens block input must be a signal');
-    const twoPi = ctx.b.sigConst(6.283185307179586, signalType(FLOAT, unitScalar()));
+    const twoPi = ctx.b.sigConst(6.283185307179586, canonicalType(FLOAT, unitScalar()));
     const mulFn = ctx.b.opcode(OpCode.Mul);
-    const radians = ctx.b.sigZip([input.id as SigExprId, twoPi], mulFn, signalType(FLOAT, unitRadians()));
+    const radians = ctx.b.sigZip([input.id as SigExprId, twoPi], mulFn, canonicalType(FLOAT, unitRadians()));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return {
@@ -167,19 +167,19 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: signalType(FLOAT, unitRadians()) },
+    in: { label: 'In', type: canonicalType(FLOAT, unitRadians()) },
   },
   outputs: {
-    out: { label: 'Out', type: signalType(FLOAT, unitPhase01()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitPhase01()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
     if (!input || input.k !== 'sig') throw new Error('Lens block input must be a signal');
-    const twoPi = ctx.b.sigConst(6.283185307179586, signalType(FLOAT, unitScalar()));
+    const twoPi = ctx.b.sigConst(6.283185307179586, canonicalType(FLOAT, unitScalar()));
     const divFn = ctx.b.opcode(OpCode.Div);
-    const divided = ctx.b.sigZip([input.id as SigExprId, twoPi], divFn, signalType(FLOAT, unitScalar()));
+    const divided = ctx.b.sigZip([input.id as SigExprId, twoPi], divFn, canonicalType(FLOAT, unitScalar()));
     const wrapFn = ctx.b.opcode(OpCode.Wrap01);
-    const wrapped = ctx.b.sigMap(divided, wrapFn, signalType(FLOAT, unitPhase01()));
+    const wrapped = ctx.b.sigMap(divided, wrapFn, canonicalType(FLOAT, unitPhase01()));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return {
@@ -211,17 +211,17 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: signalType(FLOAT, unitDegrees()) },
+    in: { label: 'In', type: canonicalType(FLOAT, unitDegrees()) },
   },
   outputs: {
-    out: { label: 'Out', type: signalType(FLOAT, unitRadians()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitRadians()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
     if (!input || input.k !== 'sig') throw new Error('Lens block input must be a signal');
-    const factor = ctx.b.sigConst(0.017453292519943295, signalType(FLOAT, unitScalar())); // π/180
+    const factor = ctx.b.sigConst(0.017453292519943295, canonicalType(FLOAT, unitScalar())); // π/180
     const mulFn = ctx.b.opcode(OpCode.Mul);
-    const radians = ctx.b.sigZip([input.id as SigExprId, factor], mulFn, signalType(FLOAT, unitRadians()));
+    const radians = ctx.b.sigZip([input.id as SigExprId, factor], mulFn, canonicalType(FLOAT, unitRadians()));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return {
@@ -249,17 +249,17 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: signalType(FLOAT, unitRadians()) },
+    in: { label: 'In', type: canonicalType(FLOAT, unitRadians()) },
   },
   outputs: {
-    out: { label: 'Out', type: signalType(FLOAT, unitDegrees()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitDegrees()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
     if (!input || input.k !== 'sig') throw new Error('Lens block input must be a signal');
-    const factor = ctx.b.sigConst(57.29577951308232, signalType(FLOAT, unitScalar())); // 180/π
+    const factor = ctx.b.sigConst(57.29577951308232, canonicalType(FLOAT, unitScalar())); // 180/π
     const mulFn = ctx.b.opcode(OpCode.Mul);
-    const degrees = ctx.b.sigZip([input.id as SigExprId, factor], mulFn, signalType(FLOAT, unitDegrees()));
+    const degrees = ctx.b.sigZip([input.id as SigExprId, factor], mulFn, canonicalType(FLOAT, unitDegrees()));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return {
@@ -291,18 +291,18 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: signalType(INT, unitMs()) },
+    in: { label: 'In', type: canonicalType(INT, unitMs()) },
   },
   outputs: {
-    out: { label: 'Out', type: signalType(FLOAT, unitSeconds()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitSeconds()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
     if (!input || input.k !== 'sig') throw new Error('Lens block input must be a signal');
     // int:ms → float division → float:seconds
-    const divisor = ctx.b.sigConst(1000, signalType(FLOAT, unitScalar()));
+    const divisor = ctx.b.sigConst(1000, canonicalType(FLOAT, unitScalar()));
     const divFn = ctx.b.opcode(OpCode.Div);
-    const seconds = ctx.b.sigZip([input.id as SigExprId, divisor], divFn, signalType(FLOAT, unitSeconds()));
+    const seconds = ctx.b.sigZip([input.id as SigExprId, divisor], divFn, canonicalType(FLOAT, unitSeconds()));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return {
@@ -330,19 +330,19 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: signalType(FLOAT, unitSeconds()) },
+    in: { label: 'In', type: canonicalType(FLOAT, unitSeconds()) },
   },
   outputs: {
-    out: { label: 'Out', type: signalType(INT, unitMs()) },
+    out: { label: 'Out', type: canonicalType(INT, unitMs()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
     if (!input || input.k !== 'sig') throw new Error('Lens block input must be a signal');
-    const multiplier = ctx.b.sigConst(1000, signalType(FLOAT, unitScalar()));
+    const multiplier = ctx.b.sigConst(1000, canonicalType(FLOAT, unitScalar()));
     const mulFn = ctx.b.opcode(OpCode.Mul);
-    const floatMs = ctx.b.sigZip([input.id as SigExprId, multiplier], mulFn, signalType(FLOAT, unitMs()));
+    const floatMs = ctx.b.sigZip([input.id as SigExprId, multiplier], mulFn, canonicalType(FLOAT, unitMs()));
     const floorFn = ctx.b.opcode(OpCode.Floor);
-    const intMs = ctx.b.sigMap(floatMs, floorFn, signalType(INT, unitMs()));
+    const intMs = ctx.b.sigMap(floatMs, floorFn, canonicalType(INT, unitMs()));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return {
@@ -374,18 +374,18 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: signalType(FLOAT, unitScalar()) },
+    in: { label: 'In', type: canonicalType(FLOAT, unitScalar()) },
   },
   outputs: {
-    out: { label: 'Out', type: signalType(FLOAT, unitNorm01()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitNorm01()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
     if (!input || input.k !== 'sig') throw new Error('Lens block input must be a signal');
-    const zero = ctx.b.sigConst(0, signalType(FLOAT, unitScalar()));
-    const one = ctx.b.sigConst(1, signalType(FLOAT, unitScalar()));
+    const zero = ctx.b.sigConst(0, canonicalType(FLOAT, unitScalar()));
+    const one = ctx.b.sigConst(1, canonicalType(FLOAT, unitScalar()));
     const clampFn = ctx.b.opcode(OpCode.Clamp);
-    const clamped = ctx.b.sigZip([input.id as SigExprId, zero, one], clampFn, signalType(FLOAT, unitNorm01()));
+    const clamped = ctx.b.sigZip([input.id as SigExprId, zero, one], clampFn, canonicalType(FLOAT, unitNorm01()));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return {
@@ -413,10 +413,10 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: signalType(FLOAT, unitNorm01()) },
+    in: { label: 'In', type: canonicalType(FLOAT, unitNorm01()) },
   },
   outputs: {
-    out: { label: 'Out', type: signalType(FLOAT, unitScalar()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitScalar()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
@@ -450,10 +450,10 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    in: { label: 'In', type: signalType(FLOAT, unitScalar()) },
+    in: { label: 'In', type: canonicalType(FLOAT, unitScalar()) },
   },
   outputs: {
-    out: { label: 'Out', type: signalType(FLOAT, unitDeg()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitDeg()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;

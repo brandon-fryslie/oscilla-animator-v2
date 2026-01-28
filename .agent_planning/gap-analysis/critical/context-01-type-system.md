@@ -19,7 +19,7 @@ priority: P1
 2. Stride per PayloadType: float/int/phase/bool/unit=1, vec2=2, vec3=3, color=4, shape2d=8
 3. CombineMode as discriminated union: numeric (sum/avg/min/max/mul), any (last/first/layer), boolean (or/and)
 4. Extent (5-axis coordinate): cardinality, temporality, binding, perspective, branch
-5. SignalType = { payload, extent }
+5. CanonicalType = { payload, extent }
 6. AxisTag<T> discriminated union (default | instantiated)
 7. Cardinality: zero | one | many(instance)
 8. Temporality: continuous | discrete

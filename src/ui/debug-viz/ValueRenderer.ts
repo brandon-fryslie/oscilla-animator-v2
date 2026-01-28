@@ -10,7 +10,7 @@
  */
 
 import React from 'react';
-import { type SignalType, isPayloadVar } from '../../core/canonical-types';
+import { type CanonicalType, isPayloadVar } from '../../core/canonical-types';
 import type { RendererSample } from './types';
 
 // =============================================================================
@@ -68,7 +68,7 @@ export function registerRenderer(key: string, renderer: ValueRenderer): void {
 }
 
 /**
- * Get the appropriate renderer for a SignalType using 3-tier fallback.
+ * Get the appropriate renderer for a CanonicalType using 3-tier fallback.
  *
  * 1. Exact match: "{payload}:{unit.kind}"
  * 2. Payload-only: "{payload}"
@@ -76,7 +76,7 @@ export function registerRenderer(key: string, renderer: ValueRenderer): void {
  *
  * Falls back to a minimal placeholder renderer if nothing matches.
  */
-export function getValueRenderer(type: SignalType): ValueRenderer {
+export function getValueRenderer(type: CanonicalType): ValueRenderer {
   // Handle payload variables (unresolved) - use placeholder
   if (isPayloadVar(type.payload)) {
     return placeholderRenderer;

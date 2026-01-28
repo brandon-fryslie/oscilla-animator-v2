@@ -19,7 +19,7 @@
 import type {
   Slot,
   Block,
-  SignalType,
+  CanonicalType,
   CombineMode,
 } from '../../types';
 import { getBlockDefinition, type InputDef } from '../../blocks/registry';
@@ -58,7 +58,7 @@ export interface ResolvedInputSpec {
   readonly endpoint: InputEndpoint;
 
   /** Type of the input port */
-  readonly portType: SignalType;
+  readonly portType: CanonicalType;
 
   /** All writers to this input (length >= 1 after defaults injected) */
   readonly writers: readonly Writer[];
@@ -82,7 +82,7 @@ export type InputPortTypeResolver = (args: {
   readonly block: Block;
   readonly slotId: string;
   readonly inputDef: InputDef;
-}) => SignalType;
+}) => CanonicalType;
 
 // =============================================================================
 // Writer Sort Key (Deterministic Ordering)
@@ -328,7 +328,7 @@ export function resolveInput(
   // Resolve combine policy - read combineMode from InputPort if set
   const combine = resolveCombinePolicy(inputSlot, inputPort);
 
-  // Get port type - inputSlot.type is SignalType
+  // Get port type - inputSlot.type is CanonicalType
   const portType = inputSlot.type;
 
   return {

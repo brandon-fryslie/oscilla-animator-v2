@@ -74,7 +74,7 @@ Add `FieldExprIntrinsic` to this union.
 
 Current implementation (lines 199-212):
 ```typescript
-fieldIntrinsic(instanceId: InstanceId, intrinsic: string, type: SignalType): FieldExprId {
+fieldIntrinsic(instanceId: InstanceId, intrinsic: string, type: CanonicalType): FieldExprId {
   const id = fieldExprId(this.fieldExprs.length);
   this.fieldExprs.push({
     kind: 'source',

@@ -57,7 +57,7 @@ export type UIControlHint =
 export interface InputDef {
   readonly id: string;
   readonly label: string;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
   readonly optional?: boolean;
   readonly defaultValue?: unknown;
   readonly defaultSource?: DefaultSource;

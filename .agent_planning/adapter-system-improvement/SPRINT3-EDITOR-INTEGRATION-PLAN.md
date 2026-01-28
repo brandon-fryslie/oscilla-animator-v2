@@ -210,8 +210,8 @@ export interface LensTypeInfo {
   blockType: string;
   label: string;
   description: string;
-  inputType: SignalType;
-  outputType: SignalType;
+  inputType: CanonicalType;
+  outputType: CanonicalType;
 }
 
 export function getAvailableLensTypes(): LensTypeInfo[] {
@@ -519,10 +519,10 @@ Utility function to check if a lens can be applied between two types.
 ```typescript
 // Location: src/ui/reactFlowEditor/lensUtils.ts
 export function canApplyLens(
-  sourceType: SignalType,
-  lensInputType: SignalType,
-  lensOutputType: SignalType,
-  targetType: SignalType
+  sourceType: CanonicalType,
+  lensInputType: CanonicalType,
+  lensOutputType: CanonicalType,
+  targetType: CanonicalType
 ): boolean {
   // Check if source type is compatible with lens input
   // and lens output is compatible with target type

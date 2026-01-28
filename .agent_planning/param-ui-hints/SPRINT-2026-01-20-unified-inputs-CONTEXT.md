@@ -46,11 +46,11 @@
 ```typescript
 // BEFORE
 inputs: [
-  { id: 'a', label: 'A', type: signalType('float') },
-  { id: 'b', label: 'B', type: signalType('float') },
+  { id: 'a', label: 'A', type: canonicalType('float') },
+  { id: 'b', label: 'B', type: canonicalType('float') },
 ],
 outputs: [
-  { id: 'out', label: 'Output', type: signalType('float') },
+  { id: 'out', label: 'Output', type: canonicalType('float') },
 ],
 params: {
   someConfig: 42,
@@ -58,12 +58,12 @@ params: {
 
 // AFTER
 inputs: {
-  a: { label: 'A', type: signalType('float') },
-  b: { label: 'B', type: signalType('float') },
+  a: { label: 'A', type: canonicalType('float') },
+  b: { label: 'B', type: canonicalType('float') },
   someConfig: { value: 42, exposedAsPort: false },
 },
 outputs: {
-  out: { label: 'Output', type: signalType('float') },
+  out: { label: 'Output', type: canonicalType('float') },
 },
 ```
 

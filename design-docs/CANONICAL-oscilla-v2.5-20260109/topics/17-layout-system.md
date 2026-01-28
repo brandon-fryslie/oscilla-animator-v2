@@ -31,7 +31,7 @@ The layout system defines how instances are positioned in world space. Key princ
 
 > A `Field<vec2>` over a specific instance, with world-space coordinates in normalized [0,1] × [0,1], produced by field expressions and field kernels.
 
-Concretely, a layout is represented by a `FieldExprId` whose SignalType has:
+Concretely, a layout is represented by a `FieldExprId` whose CanonicalType has:
 - `payload: 'vec2'`
 - `extent.cardinality.kind = 'many'`
 - `extent.cardinality.instance.instanceId = <the instance being positioned>`
@@ -108,7 +108,7 @@ Layout kernels use `kind: 'kernel'` and are resolved by `name` in the field-kern
 
 All layout kernels share:
 
-**Output SignalType**:
+**Output CanonicalType**:
 - `payload: 'vec2'`
 - `extent.cardinality.kind = 'many'`
 - `extent.cardinality.instance = <instance of input field>`

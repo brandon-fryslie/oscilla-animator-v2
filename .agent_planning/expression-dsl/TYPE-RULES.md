@@ -393,7 +393,7 @@ Input types are provided by block lowering context:
 
 ```typescript
 interface LowerCtx {
-  inTypes: Record<string, SignalType>;  // Input port name → type
+  inTypes: Record<string, CanonicalType>;  // Input port name → type
   // ...
 }
 ```
@@ -402,7 +402,7 @@ Expression compiler receives:
 ```typescript
 compileExpression(
   exprString: string,
-  inputTypes: Record<string, PayloadType>,  // Extract payload from SignalType
+  inputTypes: Record<string, PayloadType>,  // Extract payload from CanonicalType
   builder: IRBuilder
 ): Result<SigExprId, CompileError>
 ```

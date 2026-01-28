@@ -9,7 +9,7 @@
  * This file now only contains types used by the compiler passes.
  */
 
-import type { SignalType } from '../../core/canonical-types';
+import type { CanonicalType } from '../../core/canonical-types';
 import type {
   SigExprId,
   FieldExprId,
@@ -35,7 +35,7 @@ export type ValueRefPacked =
       readonly id: SigExprId;
       /** Base slot for lane 0. Multi-component signals occupy [slotMeta.offset, slotMeta.offset + stride). */
       readonly slot: ValueSlot;
-      readonly type: SignalType;
+      readonly type: CanonicalType;
       /** Components per sample for this value (e.g. float=1, vec2=2, vec3=3, color=4). */
       readonly stride: number;
       /**
@@ -50,7 +50,7 @@ export type ValueRefPacked =
       readonly id: FieldExprId;
       /** Slot that will hold the materialized field buffer (typed by `type`). */
       readonly slot: ValueSlot;
-      readonly type: SignalType;
+      readonly type: CanonicalType;
       /** Components per lane element in the materialized buffer. */
       readonly stride: number;
     }
@@ -58,7 +58,7 @@ export type ValueRefPacked =
       readonly k: 'event';
       readonly id: EventExprId;
       readonly slot: EventSlotId;
-      readonly type: SignalType;
+      readonly type: CanonicalType;
     }
   | { readonly k: 'instance'; readonly id: InstanceId }
   | { readonly k: 'scalar'; readonly value: unknown };
@@ -83,7 +83,7 @@ export interface LoweredSignal {
   readonly slot: ValueSlot;
   /** Components per sample for this signal (payload geometry; unit does not affect stride). */
   readonly stride: number;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 
 export interface LoweredField {
@@ -93,13 +93,13 @@ export interface LoweredField {
   readonly slot: ValueSlot;
   /** Components per lane element in the materialized buffer. */
   readonly stride: number;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 
 export interface LoweredScalar {
   readonly kind: 'scalar';
   readonly value: unknown;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 
 export interface LoweredInstance {
@@ -125,7 +125,7 @@ export interface LoweredSignalInput {
   readonly slot: ValueSlot;
   /** Components per sample for this signal. */
   readonly stride: number;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 
 export interface LoweredFieldInput {
@@ -135,13 +135,13 @@ export interface LoweredFieldInput {
   readonly slot: ValueSlot;
   /** Components per lane element in the materialized buffer. */
   readonly stride: number;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 
 export interface LoweredScalarInput {
   readonly kind: 'scalar';
   readonly value: unknown;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 
 export interface LoweredInstanceInput {
@@ -154,7 +154,7 @@ export interface LoweredUnconnectedInput {
   readonly kind: 'unconnected';
   /** Default value to use when unconnected. `undefined` means "no default" and should be treated as a compile error where required. */
   readonly defaultValue: unknown | undefined;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 
 /**

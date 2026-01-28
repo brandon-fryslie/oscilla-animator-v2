@@ -107,7 +107,7 @@ function hashEventExpr(expr: EventExpr): string {
 
 #### BEFORE (Current Code - Line 109):
 ```typescript
-sigConst(value: number | string | boolean, type: SignalType): SigExprId {
+sigConst(value: number | string | boolean, type: CanonicalType): SigExprId {
   const id = sigExprId(this.sigExprs.length);
   this.sigExprs.push({ kind: 'const', value, type });
   return id;
@@ -116,7 +116,7 @@ sigConst(value: number | string | boolean, type: SignalType): SigExprId {
 
 #### AFTER (With Hash-Consing):
 ```typescript
-sigConst(value: number | string | boolean, type: SignalType): SigExprId {
+sigConst(value: number | string | boolean, type: CanonicalType): SigExprId {
   // Hash-consing (I13): check cache before creating new ID
   const expr = { kind: 'const', value, type } as const;
   const hash = hashSigExpr(expr);
@@ -156,7 +156,7 @@ sigConst(value: number | string | boolean, type: SignalType): SigExprId {
 
 ```typescript
 // BEFORE
-sigBinOp(left: SigExprId, right: SigExprId, opcode: OpCode, type: SignalType): SigExprId {
+sigBinOp(left: SigExprId, right: SigExprId, opcode: OpCode, type: CanonicalType): SigExprId {
   const id = sigExprId(this.sigExprs.length);
   this.sigExprs.push({
     kind: 'binOp',
@@ -169,7 +169,7 @@ sigBinOp(left: SigExprId, right: SigExprId, opcode: OpCode, type: SignalType): S
 }
 
 // AFTER
-sigBinOp(left: SigExprId, right: SigExprId, opcode: OpCode, type: SignalType): SigExprId {
+sigBinOp(left: SigExprId, right: SigExprId, opcode: OpCode, type: CanonicalType): SigExprId {
   const expr = {
     kind: 'binOp',
     left,

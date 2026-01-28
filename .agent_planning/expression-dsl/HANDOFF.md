@@ -613,7 +613,7 @@ import { compileExpression } from './expr';
 
 const result = compileExpression(
   "sin(phase) * 0.5",
-  new Map([['phase', signalType('phase')]]),
+  new Map([['phase', canonicalType('phase')]]),
   builder,
   new Map([['phase', phaseSignalId]])
 );
@@ -638,7 +638,7 @@ b.wire(sourceBlock, 'output', exprBlock, 'in0');
 
 ```typescript
 it('compiles [feature]', () => {
-  const inputs = new Map([['x', signalType('float')]]);
+  const inputs = new Map([['x', canonicalType('float')]]);
   const signals = new Map([['x', sigId]]);
 
   const result = compileExpression(

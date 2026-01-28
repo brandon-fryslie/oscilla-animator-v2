@@ -23,14 +23,14 @@ type PayloadType = 'float' | 'int' | 'color' | 'shape';
 Discriminated union with `kind` field:
 - `'none'` | `'scalar'` | `'norm01'` | `'phase01'` | `'radians'` | `'degrees'` | `'ms'` | `'seconds'` | `'count'` | `'ndc2'` | `'ndc3'` | `'world2'` | `'world3'` | `'rgba01'`
 
-### SignalType (used in EdgeMetadata)
+### CanonicalType (used in EdgeMetadata)
 Has `payload`, `unit`, `extent` fields. Use `resolveExtent(type.extent)` to get resolved cardinality/temporality.
 
 ### EdgeMetadata (src/services/mapDebugEdges.ts)
 ```typescript
 interface EdgeMetadata {
   slotId: ValueSlot;
-  type: SignalType;
+  type: CanonicalType;
   cardinality: 'signal' | 'field';
 }
 ```
@@ -99,7 +99,7 @@ HistoryService tests should use a fresh instance with mock resolver:
 ```typescript
 const mockResolver = (key: DebugTargetKey) => ({
   slotId: 10 as ValueSlot,
-  type: signalType('float'),
+  type: canonicalType('float'),
   cardinality: 'signal' as const,
 });
 const service = new HistoryServiceImpl(mockResolver);

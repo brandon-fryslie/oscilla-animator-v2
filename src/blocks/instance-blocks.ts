@@ -7,7 +7,7 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
-import { signalType, signalTypeField, unitPhase01, strideOf, type PayloadType } from '../core/canonical-types';
+import { canonicalType, signalTypeField, unitPhase01, strideOf, type PayloadType } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { DOMAIN_CIRCLE } from '../core/domain-registry';
 import { defaultSourceConst } from '../types';
@@ -49,8 +49,8 @@ registerBlock({
   },
   inputs: {
     elements: { label: 'Elements', type: signalTypeField(SHAPE, 'default') },
-    rows: { label: 'Rows', type: signalType(INT), value: 10, defaultSource: defaultSourceConst(10), exposedAsPort: true, uiHint: { kind: 'slider', min: 1, max: 100, step: 1 } },
-    cols: { label: 'Columns', type: signalType(INT), value: 10, defaultSource: defaultSourceConst(10), exposedAsPort: true, uiHint: { kind: 'slider', min: 1, max: 100, step: 1 } },
+    rows: { label: 'Rows', type: canonicalType(INT), value: 10, defaultSource: defaultSourceConst(10), exposedAsPort: true, uiHint: { kind: 'slider', min: 1, max: 100, step: 1 } },
+    cols: { label: 'Columns', type: canonicalType(INT), value: 10, defaultSource: defaultSourceConst(10), exposedAsPort: true, uiHint: { kind: 'slider', min: 1, max: 100, step: 1 } },
   },
   outputs: {
     position: { label: 'Position', type: signalTypeField(VEC3, 'default') },
@@ -70,10 +70,10 @@ registerBlock({
     // Get grid dimensions as signals
     const rowsSig = inputsById.rows?.k === 'sig'
       ? inputsById.rows.id
-      : ctx.b.sigConst((config?.rows as number) ?? 10, signalType(INT));
+      : ctx.b.sigConst((config?.rows as number) ?? 10, canonicalType(INT));
     const colsSig = inputsById.cols?.k === 'sig'
       ? inputsById.cols.id
-      : ctx.b.sigConst((config?.cols as number) ?? 10, signalType(INT));
+      : ctx.b.sigConst((config?.cols as number) ?? 10, canonicalType(INT));
 
     // Create index field for the instance (gridLayout expects integer indices)
     const indexField = ctx.b.fieldIntrinsic(
@@ -132,7 +132,7 @@ registerBlock({
   },
   inputs: {
     elements: { label: 'Elements', type: signalTypeField(SHAPE, 'default') },
-    spacing: { label: 'Length', type: signalType(FLOAT), value: 0.8, defaultSource: defaultSourceConst(0.8), exposedAsPort: true, uiHint: { kind: 'slider', min: 0.1, max: 2, step: 0.01 } },
+    spacing: { label: 'Length', type: canonicalType(FLOAT), value: 0.8, defaultSource: defaultSourceConst(0.8), exposedAsPort: true, uiHint: { kind: 'slider', min: 0.1, max: 2, step: 0.01 } },
   },
   outputs: {
     position: { label: 'Position', type: signalTypeField(VEC3, 'default') },
@@ -154,10 +154,10 @@ registerBlock({
     const length = (config?.spacing as number) ?? 0.8;
 
     // Create vertical line: center X, Y spans from (1-length)/2 to (1+length)/2
-    const x0Sig = ctx.b.sigConst(0.5, signalType(FLOAT));
-    const y0Sig = ctx.b.sigConst((1 - length) / 2, signalType(FLOAT));
-    const x1Sig = ctx.b.sigConst(0.5, signalType(FLOAT));
-    const y1Sig = ctx.b.sigConst((1 + length) / 2, signalType(FLOAT));
+    const x0Sig = ctx.b.sigConst(0.5, canonicalType(FLOAT));
+    const y0Sig = ctx.b.sigConst((1 - length) / 2, canonicalType(FLOAT));
+    const x1Sig = ctx.b.sigConst(0.5, canonicalType(FLOAT));
+    const y1Sig = ctx.b.sigConst((1 + length) / 2, canonicalType(FLOAT));
 
     // Create normalizedIndex field for the instance
     const normalizedIndexField = ctx.b.fieldIntrinsic(
@@ -220,8 +220,8 @@ registerBlock({
   },
   inputs: {
     elements: { label: 'Elements', type: signalTypeField(SHAPE, 'default') },
-    radius: { label: 'Radius', type: signalType(FLOAT), value: 0.3, defaultSource: defaultSourceConst(0.3), exposedAsPort: true, uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 } },
-    phase: { label: 'Phase', type: signalType(FLOAT, unitPhase01()), value: 0, defaultSource: defaultSourceConst(0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    radius: { label: 'Radius', type: canonicalType(FLOAT), value: 0.3, defaultSource: defaultSourceConst(0.3), exposedAsPort: true, uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 } },
+    phase: { label: 'Phase', type: canonicalType(FLOAT, unitPhase01()), value: 0, defaultSource: defaultSourceConst(0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
   },
   outputs: {
     position: { label: 'Position', type: signalTypeField(VEC3, 'default') },
@@ -241,10 +241,10 @@ registerBlock({
     // Get radius and phase as signals
     const radiusSig = inputsById.radius?.k === 'sig'
       ? inputsById.radius.id
-      : ctx.b.sigConst((config?.radius as number) ?? 0.3, signalType(FLOAT));
+      : ctx.b.sigConst((config?.radius as number) ?? 0.3, canonicalType(FLOAT));
     const phaseSig = inputsById.phase?.k === 'sig'
       ? inputsById.phase.id
-      : ctx.b.sigConst((config?.phase as number) ?? 0, signalType(FLOAT));
+      : ctx.b.sigConst((config?.phase as number) ?? 0, canonicalType(FLOAT));
 
     // Create normalizedIndex field for the instance
     const normalizedIndexField = ctx.b.fieldIntrinsic(
@@ -302,10 +302,10 @@ registerBlock({
   },
   inputs: {
     elements: { label: 'Elements', type: signalTypeField(SHAPE, 'default') },
-    x0: { label: 'Start X', type: signalType(FLOAT), value: 0.1, defaultSource: defaultSourceConst(0.1), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    y0: { label: 'Start Y', type: signalType(FLOAT), value: 0.5, defaultSource: defaultSourceConst(0.5), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    x1: { label: 'End X', type: signalType(FLOAT), value: 0.9, defaultSource: defaultSourceConst(0.9), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    y1: { label: 'End Y', type: signalType(FLOAT), value: 0.5, defaultSource: defaultSourceConst(0.5), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    x0: { label: 'Start X', type: canonicalType(FLOAT), value: 0.1, defaultSource: defaultSourceConst(0.1), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    y0: { label: 'Start Y', type: canonicalType(FLOAT), value: 0.5, defaultSource: defaultSourceConst(0.5), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    x1: { label: 'End X', type: canonicalType(FLOAT), value: 0.9, defaultSource: defaultSourceConst(0.9), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    y1: { label: 'End Y', type: canonicalType(FLOAT), value: 0.5, defaultSource: defaultSourceConst(0.5), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
   },
   outputs: {
     position: { label: 'Position', type: signalTypeField(VEC3, 'default') },
@@ -325,16 +325,16 @@ registerBlock({
     // Get line endpoints as signals
     const x0Sig = inputsById.x0?.k === 'sig'
       ? inputsById.x0.id
-      : ctx.b.sigConst((config?.x0 as number) ?? 0.1, signalType(FLOAT));
+      : ctx.b.sigConst((config?.x0 as number) ?? 0.1, canonicalType(FLOAT));
     const y0Sig = inputsById.y0?.k === 'sig'
       ? inputsById.y0.id
-      : ctx.b.sigConst((config?.y0 as number) ?? 0.5, signalType(FLOAT));
+      : ctx.b.sigConst((config?.y0 as number) ?? 0.5, canonicalType(FLOAT));
     const x1Sig = inputsById.x1?.k === 'sig'
       ? inputsById.x1.id
-      : ctx.b.sigConst((config?.x1 as number) ?? 0.9, signalType(FLOAT));
+      : ctx.b.sigConst((config?.x1 as number) ?? 0.9, canonicalType(FLOAT));
     const y1Sig = inputsById.y1?.k === 'sig'
       ? inputsById.y1.id
-      : ctx.b.sigConst((config?.y1 as number) ?? 0.5, signalType(FLOAT));
+      : ctx.b.sigConst((config?.y1 as number) ?? 0.5, canonicalType(FLOAT));
 
     // Create normalizedIndex field for the instance
     const normalizedIndexField = ctx.b.fieldIntrinsic(
@@ -390,8 +390,8 @@ registerBlock({
   },
   inputs: {
     elements: { label: 'Elements', type: signalTypeField(SHAPE, 'default') },
-    radius: { label: 'Radius', type: signalType(FLOAT), value: 0.3, defaultSource: defaultSourceConst(0.3), exposedAsPort: true, uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 } },
-    phase: { label: 'Phase', type: signalType(FLOAT, unitPhase01()), value: 0, defaultSource: defaultSourceConst(0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    radius: { label: 'Radius', type: canonicalType(FLOAT), value: 0.3, defaultSource: defaultSourceConst(0.3), exposedAsPort: true, uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 } },
+    phase: { label: 'Phase', type: canonicalType(FLOAT, unitPhase01()), value: 0, defaultSource: defaultSourceConst(0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
   },
   outputs: {
     position: { label: 'Position', type: signalTypeField(VEC3, 'default') },
@@ -413,10 +413,10 @@ registerBlock({
     // Get radius and phase as signals
     const radiusSig = inputsById.radius?.k === 'sig'
       ? inputsById.radius.id
-      : ctx.b.sigConst(0.3, signalType(FLOAT));
+      : ctx.b.sigConst(0.3, canonicalType(FLOAT));
     const phaseSig = inputsById.phase?.k === 'sig'
       ? inputsById.phase.id
-      : ctx.b.sigConst(0, signalType(FLOAT));
+      : ctx.b.sigConst(0, canonicalType(FLOAT));
 
     // Use halton2D as default basis kind (user-configurable when BlockDef supports config)
     const basisKind: import('../compiler/ir/types').BasisKind = 'halton2D';
@@ -476,10 +476,10 @@ registerBlock({
   },
   inputs: {
     elements: { label: 'Elements', type: signalTypeField(SHAPE, 'default') },
-    x0: { label: 'Start X', type: signalType(FLOAT), value: 0.2, defaultSource: defaultSourceConst(0.2), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    y0: { label: 'Start Y', type: signalType(FLOAT), value: 0.2, defaultSource: defaultSourceConst(0.2), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    x1: { label: 'End X', type: signalType(FLOAT), value: 0.8, defaultSource: defaultSourceConst(0.8), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    y1: { label: 'End Y', type: signalType(FLOAT), value: 0.8, defaultSource: defaultSourceConst(0.8), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    x0: { label: 'Start X', type: canonicalType(FLOAT), value: 0.2, defaultSource: defaultSourceConst(0.2), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    y0: { label: 'Start Y', type: canonicalType(FLOAT), value: 0.2, defaultSource: defaultSourceConst(0.2), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    x1: { label: 'End X', type: canonicalType(FLOAT), value: 0.8, defaultSource: defaultSourceConst(0.8), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    y1: { label: 'End Y', type: canonicalType(FLOAT), value: 0.8, defaultSource: defaultSourceConst(0.8), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
   },
   outputs: {
     position: { label: 'Position', type: signalTypeField(VEC3, 'default') },
@@ -501,16 +501,16 @@ registerBlock({
     // Get line endpoints as signals
     const x0Sig = inputsById.x0?.k === 'sig'
       ? inputsById.x0.id
-      : ctx.b.sigConst(0.2, signalType(FLOAT));
+      : ctx.b.sigConst(0.2, canonicalType(FLOAT));
     const y0Sig = inputsById.y0?.k === 'sig'
       ? inputsById.y0.id
-      : ctx.b.sigConst(0.2, signalType(FLOAT));
+      : ctx.b.sigConst(0.2, canonicalType(FLOAT));
     const x1Sig = inputsById.x1?.k === 'sig'
       ? inputsById.x1.id
-      : ctx.b.sigConst(0.8, signalType(FLOAT));
+      : ctx.b.sigConst(0.8, canonicalType(FLOAT));
     const y1Sig = inputsById.y1?.k === 'sig'
       ? inputsById.y1.id
-      : ctx.b.sigConst(0.8, signalType(FLOAT));
+      : ctx.b.sigConst(0.8, canonicalType(FLOAT));
 
     // Use halton2D as default basis kind (user-configurable when BlockDef supports config)
     const basisKind: import('../compiler/ir/types').BasisKind = 'halton2D';
@@ -570,8 +570,8 @@ registerBlock({
   },
   inputs: {
     elements: { label: 'Elements', type: signalTypeField(SHAPE, 'default') },
-    cols: { label: 'Columns', type: signalType(INT), value: 5, defaultSource: defaultSourceConst(5), exposedAsPort: true, uiHint: { kind: 'slider', min: 1, max: 20, step: 1 } },
-    rows: { label: 'Rows', type: signalType(INT), value: 5, defaultSource: defaultSourceConst(5), exposedAsPort: true, uiHint: { kind: 'slider', min: 1, max: 20, step: 1 } },
+    cols: { label: 'Columns', type: canonicalType(INT), value: 5, defaultSource: defaultSourceConst(5), exposedAsPort: true, uiHint: { kind: 'slider', min: 1, max: 20, step: 1 } },
+    rows: { label: 'Rows', type: canonicalType(INT), value: 5, defaultSource: defaultSourceConst(5), exposedAsPort: true, uiHint: { kind: 'slider', min: 1, max: 20, step: 1 } },
   },
   outputs: {
     position: { label: 'Position', type: signalTypeField(VEC3, 'default') },
@@ -593,10 +593,10 @@ registerBlock({
     // Get cols and rows as signals
     const colsSig = inputsById.cols?.k === 'sig'
       ? inputsById.cols.id
-      : ctx.b.sigConst(5, signalType(INT));
+      : ctx.b.sigConst(5, canonicalType(INT));
     const rowsSig = inputsById.rows?.k === 'sig'
       ? inputsById.rows.id
-      : ctx.b.sigConst(5, signalType(INT));
+      : ctx.b.sigConst(5, canonicalType(INT));
 
     // Use 'grid' as default basis kind for proper grid alignment
     const basisKind: import('../compiler/ir/types').BasisKind = 'grid';

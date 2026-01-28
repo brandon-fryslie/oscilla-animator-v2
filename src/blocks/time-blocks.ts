@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from './registry';
-import { signalType, signalTypeTrigger, unitPhase01, strideOf } from '../core/canonical-types';
+import { canonicalType, signalTypeTrigger, unitPhase01, strideOf } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { defaultSourceConst } from '../types';
 
@@ -26,30 +26,30 @@ registerBlock({
     broadcastPolicy: 'disallowSignalMix',
   },
   inputs: {
-    periodAMs: { type: signalType(FLOAT), value: 1000, defaultSource: defaultSourceConst(1000), exposedAsPort: true, uiHint: { kind: 'slider', min: 100, max: 10000, step: 100 } },
-    periodBMs: { type: signalType(FLOAT), value: 2000, defaultSource: defaultSourceConst(2000), exposedAsPort: true, uiHint: { kind: 'slider', min: 100, max: 10000, step: 100 } },
+    periodAMs: { type: canonicalType(FLOAT), value: 1000, defaultSource: defaultSourceConst(1000), exposedAsPort: true, uiHint: { kind: 'slider', min: 100, max: 10000, step: 100 } },
+    periodBMs: { type: canonicalType(FLOAT), value: 2000, defaultSource: defaultSourceConst(2000), exposedAsPort: true, uiHint: { kind: 'slider', min: 100, max: 10000, step: 100 } },
   },
   outputs: {
-    tMs: { label: 'Time (ms)', type: signalType(FLOAT) },
-    dt: { label: 'Delta Time', type: signalType(FLOAT) },
+    tMs: { label: 'Time (ms)', type: canonicalType(FLOAT) },
+    dt: { label: 'Delta Time', type: canonicalType(FLOAT) },
     // Phase outputs use float payload with phase01 unit: values in [0, 1) range representing normalized time cycles
-    phaseA: { label: 'Phase A', type: signalType(FLOAT, unitPhase01()) },
-    phaseB: { label: 'Phase B', type: signalType(FLOAT, unitPhase01()) },
+    phaseA: { label: 'Phase A', type: canonicalType(FLOAT, unitPhase01()) },
+    phaseB: { label: 'Phase B', type: canonicalType(FLOAT, unitPhase01()) },
     pulse: { label: 'Pulse', type: signalTypeTrigger(BOOL) },
-    palette: { label: 'Palette', type: signalType(COLOR) },
-    energy: { label: 'Energy', type: signalType(FLOAT) },
+    palette: { label: 'Palette', type: canonicalType(COLOR) },
+    energy: { label: 'Energy', type: canonicalType(FLOAT) },
   },
   lower: ({ ctx }): import('../blocks/registry').LowerResult => {
     // TimeRoot blocks don't produce IR directly
     // Their outputs are provided by the time system (pass 3)
     // We create placeholder signals that reference the time system
-    const tMs = ctx.b.sigTime('tMs', signalType(FLOAT));
-    const dt = ctx.b.sigTime('dt', signalType(FLOAT));
-    const phaseA = ctx.b.sigTime('phaseA', signalType(FLOAT, unitPhase01()));
-    const phaseB = ctx.b.sigTime('phaseB', signalType(FLOAT, unitPhase01()));
+    const tMs = ctx.b.sigTime('tMs', canonicalType(FLOAT));
+    const dt = ctx.b.sigTime('dt', canonicalType(FLOAT));
+    const phaseA = ctx.b.sigTime('phaseA', canonicalType(FLOAT, unitPhase01()));
+    const phaseB = ctx.b.sigTime('phaseB', canonicalType(FLOAT, unitPhase01()));
     const pulse = ctx.b.eventPulse('InfiniteTimeRoot');
-    const palette = ctx.b.sigTime('palette', signalType(COLOR));
-    const energy = ctx.b.sigTime('energy', signalType(FLOAT));
+    const palette = ctx.b.sigTime('palette', canonicalType(COLOR));
+    const energy = ctx.b.sigTime('energy', canonicalType(FLOAT));
 
     // Allocate slots for time outputs
     const tMsSlot = ctx.b.allocSlot();

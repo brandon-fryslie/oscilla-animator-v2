@@ -26,7 +26,7 @@ Non-goals (out of scope for this spec):
 
 2. Core Types and Terminology
 
-2.1 PayloadType and SignalType
+2.1 PayloadType and CanonicalType
 
 From the canonical type system:
 
@@ -41,7 +41,7 @@ export type PayloadType =
 | 'shape'
 | '???';
 
-export interface SignalType {
+export interface CanonicalType {
 readonly payload: PayloadType;
 readonly extent: Extent;
 readonly unit?: NumericUnit;
@@ -127,7 +127,7 @@ readonly kind: 'shapeRef';
 readonly topologyId: TopologyId;
 readonly paramSignals: readonly SigExprId[];
 readonly controlPointField?: FieldExprId;
-readonly type: SignalType; // payload 'shape'
+readonly type: CanonicalType; // payload 'shape'
 }
 
 	•	SigExprShapeRef is the scalar representation of a shape:
@@ -162,20 +162,20 @@ export interface FieldExprIntrinsic {
 readonly kind: 'intrinsic';
 readonly instanceId: InstanceId;
 readonly intrinsic: IntrinsicPropertyName;
-readonly type: SignalType;
+readonly type: CanonicalType;
 }
 
 export interface FieldExprBroadcast {
 readonly kind: 'broadcast';
 readonly signal: SigExprId;
-readonly type: SignalType;
+readonly type: CanonicalType;
 }
 
 export interface FieldExprMap {
 readonly kind: 'map';
 readonly input: FieldExprId;
 readonly fn: PureFn;
-readonly type: SignalType;
+readonly type: CanonicalType;
 readonly instanceId?: InstanceId;
 }
 
@@ -183,7 +183,7 @@ export interface FieldExprZip {
 readonly kind: 'zip';
 readonly inputs: readonly FieldExprId[];
 readonly fn: PureFn;
-readonly type: SignalType;
+readonly type: CanonicalType;
 readonly instanceId?: InstanceId;
 }
 
@@ -192,14 +192,14 @@ readonly kind: 'zipSig';
 readonly field: FieldExprId;
 readonly signals: readonly SigExprId[];
 readonly fn: PureFn;
-readonly type: SignalType;
+readonly type: CanonicalType;
 readonly instanceId?: InstanceId;
 }
 
 export interface FieldExprArray {
 readonly kind: 'array';
 readonly instanceId: InstanceId;
-readonly type: SignalType;
+readonly type: CanonicalType;
 }
 
 3.3 Intrinsics
@@ -265,7 +265,7 @@ Layout is defined as:
 A Field<vec2> over a specific InstanceDecl, with world-space coordinates in normalized [0,1] × [0,1], produced by field expressions and field kernels.
 
 Concretely:
-•	Layout is represented by a FieldExprId whose SignalType has:
+•	Layout is represented by a FieldExprId whose CanonicalType has:
 •	payload: 'vec2',
 •	extent.cardinality.kind = 'many',
 •	extent.cardinality.instance.instanceId = the InstanceDecl.id,
@@ -322,7 +322,7 @@ Layout kernels use kind: 'kernel' and are resolved by name in the field-kernel r
 6.1 Common Contract
 
 For all layout kernels in this spec:
-•	Output SignalType:
+•	Output CanonicalType:
 •	payload: 'vec2'
 •	extent.cardinality.kind = 'many'
 •	extent.cardinality.instance = instance of the input field.
@@ -483,7 +483,7 @@ readonly paramSlots: readonly number[]; // SlotRef indices
 •	type.payload = 'shape'
 •	extent.cardinality.kind = 'one'.
 •	A field of shapes (per-instance shape variation) is represented as:
-•	a FieldExpr whose SignalType has payload: 'shape' and cardinality.many.
+•	a FieldExpr whose CanonicalType has payload: 'shape' and cardinality.many.
 
 The compiler decides whether to:
 •	Pass the shape as a scalar (SigExprShapeRef) plus an instance reference, or
@@ -630,7 +630,7 @@ with the semantics defined in Section 6 of the spec:
 •	gridLayout: k: Field<float>, cols,rows: Signal<int> → Field<vec2> (grid positions in world [0,1]).
 2.	For each kernel, enforce:
 •	Input type checks (float vs vec2 vs color) consistent with the spec.
-•	Output SignalType uses payload: 'vec2' and preserves the InstanceRef of the input field.
+•	Output CanonicalType uses payload: 'vec2' and preserves the InstanceRef of the input field.
 3.	Update applyFieldKernel / applyFieldKernelZipSig to recognize these kernel names and route to the appropriate implementations.
 
 Completion criteria:
@@ -677,7 +677,7 @@ Step 6 — Enforce Position/Shape Alignment via InstanceId
 •	Any controlPoints slot must be a field whose cardinality.many.instanceId = I (or a shape-specific control instance, if the renderer is designed to combine them accordingly).
 2.	Add compile-time checks during type resolution:
 •	If any field wired into a sink has cardinality.many.instanceId ≠ StepRender.instanceId, compilation fails with a clear diagnostic.
-3.	Ensure that positionSlot in StepRender always refers to a ValueSlot whose SignalType is Field<vec2> over instanceId.
+3.	Ensure that positionSlot in StepRender always refers to a ValueSlot whose CanonicalType is Field<vec2> over instanceId.
 
 Completion criteria:
 •	It becomes impossible to compile a patch where a layout over instance A is applied to shapes from instance B.

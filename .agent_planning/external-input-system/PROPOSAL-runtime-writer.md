@@ -271,7 +271,7 @@ window.addEventListener('keydown', (e) => {
 
 ```typescript
 // src/compiler/ir/IRBuilderImpl.ts
-sigExternal(channel: string, type: SignalType): SigId {
+sigExternal(channel: string, type: CanonicalType): SigId {
   return this.addSigExpr({ kind: 'external', which: channel, type });
 }
 
@@ -280,14 +280,14 @@ registerBlock({
   type: 'ExternalInput',
   capability: 'io',
   inputs: {
-    channel: { type: signalType('float'), value: 'mouse.x', exposedAsPort: false },
+    channel: { type: canonicalType('float'), value: 'mouse.x', exposedAsPort: false },
   },
   outputs: {
-    value: { type: signalType('float') },
+    value: { type: canonicalType('float') },
   },
   lower: ({ ctx, config }) => {
     const channel = config?.channel as string;
-    const sig = ctx.b.sigExternal(channel, signalType('float'));
+    const sig = ctx.b.sigExternal(channel, canonicalType('float'));
     return { outputsById: { value: { k: 'sig', id: sig, slot: ctx.b.allocSlot() } } };
   },
 });

@@ -70,7 +70,7 @@ export function applyFieldKernel(
   inputs: ArrayBufferView[],
   fieldOp: string,      // Kernel name: 'fieldPolarToCartesian', 'makeVec2', etc.
   N: number,            // Element count
-  _type: SignalType
+  _type: CanonicalType
 ): void {
   switch (fieldOp) {
     case 'makeVec2':
@@ -479,7 +479,7 @@ function materializeField(
      readonly kind: 'pathDerivative';
      readonly input: FieldExprId;  // Source field (control points)
      readonly operation: 'tangent' | 'arcLength';
-     readonly type: SignalType;
+     readonly type: CanonicalType;
    }
    ```
 
@@ -497,7 +497,7 @@ function materializeField(
    fieldPathDerivative(
      input: FieldExprId,
      operation: 'tangent' | 'arcLength',
-     type: SignalType
+     type: CanonicalType
    ): FieldExprId {
      const id = this.allocFieldId();
      this.fieldExprs.push({ kind: 'pathDerivative', input, operation, type });
@@ -890,7 +890,7 @@ Currently assumes closed paths. Future:
 
 ```typescript
 // In IRBuilder
-fieldMap(input: FieldExprId, kernel: string, type: SignalType): FieldExprId {
+fieldMap(input: FieldExprId, kernel: string, type: CanonicalType): FieldExprId {
   // Just like our fieldPathDerivative
 }
 

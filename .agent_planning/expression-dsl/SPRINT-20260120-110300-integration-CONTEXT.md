@@ -83,7 +83,7 @@ Before starting this sprint, you MUST have completed the core implementation spr
  */
 
 import { registerBlock } from './registry';
-import { signalType } from '../core/canonical-types';
+import { canonicalType } from '../core/canonical-types';
 import { compileExpression } from '../expr';
 import type { LowerArgs } from './registry';
 
@@ -102,7 +102,7 @@ registerBlock({
   inputs: {
     // Expression string (config-only, not a port)
     expression: {
-      type: signalType('???'),  // Not actually used as signal
+      type: canonicalType('???'),  // Not actually used as signal
       value: '',
       exposedAsPort: false,
       uiHint: { kind: 'expression' },  // Custom UI hint for expression input
@@ -112,17 +112,17 @@ registerBlock({
     // For expression "sin(phase * 2)", user would wire:
     a: {
       label: 'A',
-      type: signalType('???'),  // Polymorphic
+      type: canonicalType('???'),  // Polymorphic
       optional: true,
     },
     b: {
       label: 'B',
-      type: signalType('???'),
+      type: canonicalType('???'),
       optional: true,
     },
     c: {
       label: 'C',
-      type: signalType('???'),
+      type: canonicalType('???'),
       optional: true,
     },
   },
@@ -130,7 +130,7 @@ registerBlock({
   outputs: {
     out: {
       label: 'Output',
-      type: signalType('???'),  // Resolved from expression
+      type: canonicalType('???'),  // Resolved from expression
     },
   },
 
@@ -142,7 +142,7 @@ registerBlock({
     }
 
     // Collect input types from connected ports
-    const inputTypes = new Map<string, SignalType>();
+    const inputTypes = new Map<string, CanonicalType>();
     const inputExprs = new Map<string, SigExprId>();
 
     for (const [name, valueRef] of Object.entries(inputsById)) {
@@ -187,7 +187,7 @@ Create `src/blocks/__tests__/expression-block.test.ts`:
 
 ```typescript
 import { getBlockDef } from '../registry';
-import { signalType } from '../../core/canonical-types';
+import { canonicalType } from '../../core/canonical-types';
 import { IRBuilderImpl } from '../../compiler/ir/IRBuilderImpl';
 
 describe('Expression Block', () => {
@@ -196,13 +196,13 @@ describe('Expression Block', () => {
     expect(blockDef).toBeDefined();
 
     const builder = new IRBuilderImpl();
-    const phaseId = builder.sigTime('phaseA', signalType('phase'));
+    const phaseId = builder.sigTime('phaseA', canonicalType('phase'));
 
     const result = blockDef.lower({
       ctx: {
         b: builder,
         blockIdx: { ... },
-        inTypes: [signalType('phase')],
+        inTypes: [canonicalType('phase')],
         // ... other ctx fields
       },
       inputsById: {
@@ -231,7 +231,7 @@ describe('Expression Block', () => {
   test('throws on type error', () => {
     const blockDef = getBlockDef('Expression');
     const builder = new IRBuilderImpl();
-    const phaseId = builder.sigTime('phaseA', signalType('phase'));
+    const phaseId = builder.sigTime('phaseA', canonicalType('phase'));
 
     expect(() => {
       blockDef.lower({
@@ -260,12 +260,12 @@ import React, { useState, useCallback } from 'react';
 import { TextField, Box, Typography } from '@mui/material';
 import { compileExpression } from '../../../expr';
 import { IRBuilderImpl } from '../../../compiler/ir/IRBuilderImpl';
-import type { SignalType } from '../../../core/canonical-types';
+import type { CanonicalType } from '../../../core/canonical-types';
 
 interface ExpressionInputProps {
   value: string;
   onChange: (value: string) => void;
-  inputTypes: Map<string, SignalType>;
+  inputTypes: Map<string, CanonicalType>;
   label?: string;
 }
 
@@ -368,7 +368,7 @@ function renderParamControl(param: ParamDef, value: unknown, onChange: (v: unkno
 ```typescript
 import { compilePatch } from '../../compiler';
 import { createRuntime } from '../../runtime';
-import { signalType } from '../../core/canonical-types';
+import { canonicalType } from '../../core/canonical-types';
 
 describe('Expression Integration', () => {
   test('expression compiles and executes', () => {

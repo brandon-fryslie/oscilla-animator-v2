@@ -32,8 +32,8 @@ Migrate Const block from `???` polymorphic type to the new PayloadGeneric metada
 ### P1: Update Const output type
 
 **Acceptance Criteria:**
-- [ ] Const output no longer uses `signalType('???')`
-- [ ] Output type uses `signalType('float')` as default (most common)
+- [ ] Const output no longer uses `canonicalType('???')`
+- [ ] Output type uses `canonicalType('float')` as default (most common)
 - [ ] Type resolution uses payload metadata for validation
 - [ ] Existing tests pass
 

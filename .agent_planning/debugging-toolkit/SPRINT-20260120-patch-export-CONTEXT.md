@@ -130,7 +130,7 @@ interface Endpoint {
 ```typescript
 interface InputDef {
   label?: string;
-  type: SignalType;
+  type: CanonicalType;
   value?: unknown;          // DEFAULT VALUE - compare against this
   defaultSource?: DefaultSource;
   uiHint?: UIControlHint;

@@ -5,7 +5,7 @@
  * Provides methods for creating signal, field, and event expressions.
  */
 
-import type { SignalType } from '../../core/canonical-types';
+import type { CanonicalType } from '../../core/canonical-types';
 import type {
   SigExprId,
   FieldExprId,
@@ -50,36 +50,36 @@ export interface IRBuilder {
   // =========================================================================
 
   /** Create a constant signal expression. */
-  sigConst(value: number | string | boolean, type: SignalType): SigExprId;
+  sigConst(value: number | string | boolean, type: CanonicalType): SigExprId;
 
   /** Create a signal from a slot reference. */
-  sigSlot(slot: ValueSlot, type: SignalType): SigExprId;
+  sigSlot(slot: ValueSlot, type: CanonicalType): SigExprId;
 
   /** Create a time-derived signal. */
-  sigTime(which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'progress' | 'palette' | 'energy', type: SignalType): SigExprId;
+  sigTime(which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'progress' | 'palette' | 'energy', type: CanonicalType): SigExprId;
 
   /** Create an external input signal. */
-  sigExternal(channel: string, type: SignalType): SigExprId;
+  sigExternal(channel: string, type: CanonicalType): SigExprId;
 
   /** Map a function over a signal. */
-  sigMap(input: SigExprId, fn: PureFn, type: SignalType): SigExprId;
+  sigMap(input: SigExprId, fn: PureFn, type: CanonicalType): SigExprId;
 
   /** Zip multiple signals with a function. */
-  sigZip(inputs: readonly SigExprId[], fn: PureFn, type: SignalType): SigExprId;
+  sigZip(inputs: readonly SigExprId[], fn: PureFn, type: CanonicalType): SigExprId;
 
   /**
    * Create a shape reference signal.
    *
    * @param topologyId - Numeric topology identifier (e.g., TOPOLOGY_ID_ELLIPSE, TOPOLOGY_ID_RECT)
    * @param paramSignals - Signal IDs for each topology parameter
-   * @param type - Signal type (should be signalType(SHAPE))
+   * @param type - Signal type (should be canonicalType(SHAPE))
    * @param controlPointField - Optional control point field with stride
    * @returns SigExprId for the shape reference
    */
   sigShapeRef(
     topologyId: TopologyId,
     paramSignals: readonly SigExprId[],
-    type: SignalType,
+    type: CanonicalType,
     controlPointField?: { id: FieldExprId; stride: number }
   ): SigExprId;
 
@@ -93,12 +93,12 @@ export interface IRBuilder {
    * @returns SigExprId for the reduce expression
    * 
    * Example:
-   *   const sumSig = b.ReduceField(fieldId, 'sum', signalType('float'));
+   *   const sumSig = b.ReduceField(fieldId, 'sum', canonicalType('float'));
    */
   ReduceField(
     field: FieldExprId,
     op: 'min' | 'max' | 'sum' | 'avg',
-    type: SignalType
+    type: CanonicalType
   ): SigExprId;
 
   // =========================================================================
@@ -106,7 +106,7 @@ export interface IRBuilder {
   // =========================================================================
 
   /** Create a constant field expression. */
-  fieldConst(value: number | string, type: SignalType): FieldExprId;
+  fieldConst(value: number | string, type: CanonicalType): FieldExprId;
 
   /**
    * Create a field from an intrinsic property.
@@ -118,7 +118,7 @@ export interface IRBuilder {
    * @param intrinsic - Intrinsic property name (type-checked at compile time)
    * @param type - Signal type for the field
    */
-  fieldIntrinsic(instanceId: InstanceId, intrinsic: IntrinsicPropertyName, type: SignalType): FieldExprId;
+  fieldIntrinsic(instanceId: InstanceId, intrinsic: IntrinsicPropertyName, type: CanonicalType): FieldExprId;
 
   /**
    * Create a field from placement basis.
@@ -134,7 +134,7 @@ export interface IRBuilder {
     instanceId: InstanceId,
     field: PlacementFieldName,
     basisKind: BasisKind,
-    type: SignalType
+    type: CanonicalType
   ): FieldExprId;
 
   /**
@@ -143,23 +143,23 @@ export interface IRBuilder {
    * @param instanceId - The instance containing the array elements
    * @param type - Signal type for the array elements
    */
-  fieldArray(instanceId: InstanceId, type: SignalType): FieldExprId;
+  fieldArray(instanceId: InstanceId, type: CanonicalType): FieldExprId;
 
   /** Broadcast a signal to a field. */
-  Broadcast(signal: SigExprId, type: SignalType): FieldExprId;
+  Broadcast(signal: SigExprId, type: CanonicalType): FieldExprId;
 
   /** Map a function over a field. */
-  fieldMap(input: FieldExprId, fn: PureFn, type: SignalType): FieldExprId;
+  fieldMap(input: FieldExprId, fn: PureFn, type: CanonicalType): FieldExprId;
 
   /** Zip multiple fields with a function. */
-  fieldZip(inputs: readonly FieldExprId[], fn: PureFn, type: SignalType): FieldExprId;
+  fieldZip(inputs: readonly FieldExprId[], fn: PureFn, type: CanonicalType): FieldExprId;
 
   /** Zip a field with signals. */
   fieldZipSig(
     field: FieldExprId,
     signals: readonly SigExprId[],
     fn: PureFn,
-    type: SignalType
+    type: CanonicalType
   ): FieldExprId;
 
   /**
@@ -180,7 +180,7 @@ export interface IRBuilder {
   fieldPathDerivative(
     input: FieldExprId,
     operation: 'tangent' | 'arcLength',
-    type: SignalType
+    type: CanonicalType
   ): FieldExprId;
 
   // =========================================================================
@@ -194,7 +194,7 @@ export interface IRBuilder {
   eventWrap(signal: SigExprId): EventExprId;
 
   /** Combine multiple events. */
-  eventCombine(events: readonly EventExprId[], mode: 'any' | 'all' | 'merge' | 'last', type?: SignalType): EventExprId;
+  eventCombine(events: readonly EventExprId[], mode: 'any' | 'all' | 'merge' | 'last', type?: CanonicalType): EventExprId;
 
   // =========================================================================
   // Combine Operations
@@ -204,14 +204,14 @@ export interface IRBuilder {
   sigCombine(
     inputs: readonly SigExprId[],
     mode: 'sum' | 'average' | 'max' | 'min' | 'last',
-    type: SignalType
+    type: CanonicalType
   ): SigExprId;
 
   /** Combine multiple fields. */
   fieldCombine(
     inputs: readonly FieldExprId[],
     mode: 'sum' | 'average' | 'max' | 'min' | 'last' | 'product',
-    type: SignalType
+    type: CanonicalType
   ): FieldExprId;
 
   // =========================================================================
@@ -228,7 +228,7 @@ export interface IRBuilder {
    * - At runtime, the executor reads/writes that contiguous region using `program.slotMeta[slot].offset` as the
    *   start lane and `program.slotMeta[slot].stride` as the component count.
    */
-  allocTypedSlot(type: SignalType, label?: string): ValueSlot;
+  allocTypedSlot(type: CanonicalType, label?: string): ValueSlot;
 
   /**
    * Register a slot type for slotMeta generation.
@@ -240,7 +240,7 @@ export interface IRBuilder {
    * @param slot - The slot to register
    * @param type - The signal type for this slot
    */
-  registerSlotType(slot: ValueSlot, type: SignalType): void;
+  registerSlotType(slot: ValueSlot, type: CanonicalType): void;
 
   /** Register a signal expression with a slot. */
   registerSigSlot(sigId: SigExprId, slot: ValueSlot): void;
@@ -252,7 +252,7 @@ export interface IRBuilder {
    * Create a signal that reads the fired/not-fired state of an event slot as float (0.0 or 1.0).
    * This is the canonical event→signal bridge (spec §9.2).
    */
-  sigEventRead(eventSlot: EventSlotId, type: SignalType): SigExprId;
+  sigEventRead(eventSlot: EventSlotId, type: CanonicalType): SigExprId;
 
   /** Allocate an event slot for an event expression. Returns a distinct EventSlotId. */
   allocEventSlot(eventId: EventExprId): EventSlotId;
@@ -315,7 +315,7 @@ export interface IRBuilder {
    * - `stride` is required and must match the payload geometry for the slot's type.
    * - `ValueSlot` remains the base identifier; the actual storage span is described by (offset, stride).
    */
-  getSlotMetaInputs(): ReadonlyMap<ValueSlot, { readonly type: SignalType; readonly stride: number }>;
+  getSlotMetaInputs(): ReadonlyMap<ValueSlot, { readonly type: CanonicalType; readonly stride: number }>;
 
   // =========================================================================
   // State Slot Allocation (Persistent Cross-Frame Storage)
@@ -371,7 +371,7 @@ export interface IRBuilder {
    * @param type - Signal type for the read value
    * @returns SigExprId for the read expression
    */
-  sigStateRead(stateSlot: StateSlotId, type: SignalType): SigExprId;
+  sigStateRead(stateSlot: StateSlotId, type: CanonicalType): SigExprId;
 
   /**
    * Schedule a state write step.
@@ -393,7 +393,7 @@ export interface IRBuilder {
    * @param type - Field type for the read values
    * @returns FieldExprId for the per-lane read expression
    */
-  fieldStateRead(stateSlot: StateSlotId, instanceId: InstanceId, type: SignalType): FieldExprId;
+  fieldStateRead(stateSlot: StateSlotId, instanceId: InstanceId, type: CanonicalType): FieldExprId;
 
   /**
    * Schedule a per-lane state write step.

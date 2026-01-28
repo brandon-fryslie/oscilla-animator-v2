@@ -15,7 +15,7 @@
 | Shape bridge | `src/compiler/ir/bridges.ts:218-221` | Maps to `{ kind: 'number' }` placeholder |
 | Shape buffer format | `src/runtime/BufferPool.ts:34` | Uses f32 (single float) |
 | Canvas2DRenderer | `src/render/Canvas2DRenderer.ts:73-95` | Hardcoded: 0=circle, 1=square, 2=triangle |
-| RenderInstances2D.shape | `src/blocks/render-blocks.ts:130` | Accepts `signalType('int')`, not 'shape' |
+| RenderInstances2D.shape | `src/blocks/render-blocks.ts:130` | Accepts `canonicalType('int')`, not 'shape' |
 
 ### What's Broken
 

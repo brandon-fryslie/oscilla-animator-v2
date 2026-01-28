@@ -15,7 +15,7 @@ Rather than just registering the TestSignal block, the implementation required a
 
 1. **Added slot metadata interfaces to IRBuilder** (`src/compiler/ir/IRBuilder.ts`)
    - `getSlotCount()`: Returns number of allocated slots
-   - `getSlotTypes()`: Returns map of slot → SignalType for later resolution
+   - `getSlotTypes()`: Returns map of slot → CanonicalType for later resolution
 
 2. **Implemented slotMeta generation** (`src/compiler/compile.ts`)
    - Iterates through all allocated slots

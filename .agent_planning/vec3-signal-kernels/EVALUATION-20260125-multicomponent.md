@@ -102,11 +102,11 @@ function writeF64Scalar(state: RuntimeState, lookup: SlotLookup, value: number):
 ### 5. Type System Allows Multi-Component Signals
 
 **Status**: TYPE_SYSTEM_READY
-**Evidence**: SignalType can have any PayloadType including vec2/vec3/color. The IR types support this.
+**Evidence**: CanonicalType can have any PayloadType including vec2/vec3/color. The IR types support this.
 
 ```typescript
 // From Const block (signal-blocks.ts:119-121)
-sigId = ctx.b.sigZip([xSig, ySig], packFn, signalType('vec2'));
+sigId = ctx.b.sigZip([xSig, ySig], packFn, canonicalType('vec2'));
 ```
 
 **Issues**:

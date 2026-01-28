@@ -18,7 +18,7 @@ All 10 required adapter blocks live here:
 
 ```typescript
 import { registerBlock } from './registry';
-import { signalType, unitPhase01, unitScalar, unitRadians, unitNorm01, unitMs, unitSeconds, unitDegrees } from '../core/canonical-types';
+import { canonicalType, unitPhase01, unitScalar, unitRadians, unitNorm01, unitMs, unitSeconds, unitDegrees } from '../core/canonical-types';
 import { OpCode } from '../compiler/ir/types';
 
 // Phase/Scalar Adapters
@@ -30,8 +30,8 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   cardinality: { cardinalityMode: 'preserve', laneCoupling: 'laneLocal', broadcastPolicy: 'allowZipSig' },
-  inputs: { in: { type: signalType('float', unitPhase01()) } },
-  outputs: { out: { type: signalType('float', unitScalar()) } },
+  inputs: { in: { type: canonicalType('float', unitPhase01()) } },
+  outputs: { out: { type: canonicalType('float', unitScalar()) } },
   lower: ({ inputs }) => ({
     outputsById: { out: inputs[0] }, // Identity - no conversion needed
   }),
@@ -45,10 +45,10 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   cardinality: { cardinalityMode: 'preserve', laneCoupling: 'laneLocal', broadcastPolicy: 'allowZipSig' },
-  inputs: { in: { type: signalType('float', unitScalar()) } },
-  outputs: { out: { type: signalType('float', unitPhase01()) } },
+  inputs: { in: { type: canonicalType('float', unitScalar()) } },
+  outputs: { out: { type: canonicalType('float', unitPhase01()) } },
   lower: ({ ctx, inputs }) => {
-    const wrapped = ctx.b.sigOp(OpCode.wrap01, [inputs[0]], signalType('float', unitPhase01()));
+    const wrapped = ctx.b.sigOp(OpCode.wrap01, [inputs[0]], canonicalType('float', unitPhase01()));
     return { outputsById: { out: wrapped } };
   },
 });
@@ -62,11 +62,11 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   cardinality: { cardinalityMode: 'preserve', laneCoupling: 'laneLocal', broadcastPolicy: 'allowZipSig' },
-  inputs: { in: { type: signalType('float', unitPhase01()) } },
-  outputs: { out: { type: signalType('float', unitRadians()) } },
+  inputs: { in: { type: canonicalType('float', unitPhase01()) } },
+  outputs: { out: { type: canonicalType('float', unitRadians()) } },
   lower: ({ ctx, inputs }) => {
-    const twoPi = ctx.b.sigConst(6.283185307179586, signalType('float', unitScalar()));
-    const radians = ctx.b.sigOp(OpCode.mul, [inputs[0], twoPi], signalType('float', unitRadians()));
+    const twoPi = ctx.b.sigConst(6.283185307179586, canonicalType('float', unitScalar()));
+    const radians = ctx.b.sigOp(OpCode.mul, [inputs[0], twoPi], canonicalType('float', unitRadians()));
     return { outputsById: { out: radians } };
   },
 });
@@ -79,12 +79,12 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   cardinality: { cardinalityMode: 'preserve', laneCoupling: 'laneLocal', broadcastPolicy: 'allowZipSig' },
-  inputs: { in: { type: signalType('float', unitRadians()) } },
-  outputs: { out: { type: signalType('float', unitPhase01()) } },
+  inputs: { in: { type: canonicalType('float', unitRadians()) } },
+  outputs: { out: { type: canonicalType('float', unitPhase01()) } },
   lower: ({ ctx, inputs }) => {
-    const twoPi = ctx.b.sigConst(6.283185307179586, signalType('float', unitScalar()));
-    const divided = ctx.b.sigOp(OpCode.div, [inputs[0], twoPi], signalType('float', unitScalar()));
-    const wrapped = ctx.b.sigOp(OpCode.wrap01, [divided], signalType('float', unitPhase01()));
+    const twoPi = ctx.b.sigConst(6.283185307179586, canonicalType('float', unitScalar()));
+    const divided = ctx.b.sigOp(OpCode.div, [inputs[0], twoPi], canonicalType('float', unitScalar()));
+    const wrapped = ctx.b.sigOp(OpCode.wrap01, [divided], canonicalType('float', unitPhase01()));
     return { outputsById: { out: wrapped } };
   },
 });
@@ -98,11 +98,11 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   cardinality: { cardinalityMode: 'preserve', laneCoupling: 'laneLocal', broadcastPolicy: 'allowZipSig' },
-  inputs: { in: { type: signalType('float', unitDegrees()) } },
-  outputs: { out: { type: signalType('float', unitRadians()) } },
+  inputs: { in: { type: canonicalType('float', unitDegrees()) } },
+  outputs: { out: { type: canonicalType('float', unitRadians()) } },
   lower: ({ ctx, inputs }) => {
-    const factor = ctx.b.sigConst(0.017453292519943295, signalType('float', unitScalar())); // π/180
-    const radians = ctx.b.sigOp(OpCode.mul, [inputs[0], factor], signalType('float', unitRadians()));
+    const factor = ctx.b.sigConst(0.017453292519943295, canonicalType('float', unitScalar())); // π/180
+    const radians = ctx.b.sigOp(OpCode.mul, [inputs[0], factor], canonicalType('float', unitRadians()));
     return { outputsById: { out: radians } };
   },
 });
@@ -115,11 +115,11 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   cardinality: { cardinalityMode: 'preserve', laneCoupling: 'laneLocal', broadcastPolicy: 'allowZipSig' },
-  inputs: { in: { type: signalType('float', unitRadians()) } },
-  outputs: { out: { type: signalType('float', unitDegrees()) } },
+  inputs: { in: { type: canonicalType('float', unitRadians()) } },
+  outputs: { out: { type: canonicalType('float', unitDegrees()) } },
   lower: ({ ctx, inputs }) => {
-    const factor = ctx.b.sigConst(57.29577951308232, signalType('float', unitScalar())); // 180/π
-    const degrees = ctx.b.sigOp(OpCode.mul, [inputs[0], factor], signalType('float', unitDegrees()));
+    const factor = ctx.b.sigConst(57.29577951308232, canonicalType('float', unitScalar())); // 180/π
+    const degrees = ctx.b.sigOp(OpCode.mul, [inputs[0], factor], canonicalType('float', unitDegrees()));
     return { outputsById: { out: degrees } };
   },
 });
@@ -133,13 +133,13 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   cardinality: { cardinalityMode: 'preserve', laneCoupling: 'laneLocal', broadcastPolicy: 'allowZipSig' },
-  inputs: { in: { type: signalType('int', unitMs()) } },
-  outputs: { out: { type: signalType('float', unitSeconds()) } },
+  inputs: { in: { type: canonicalType('int', unitMs()) } },
+  outputs: { out: { type: canonicalType('float', unitSeconds()) } },
   lower: ({ ctx, inputs }) => {
     // Convert int:ms to float:ms, then divide by 1000
-    const floatMs = ctx.b.sigOp(OpCode.intToFloat, [inputs[0]], signalType('float', unitMs()));
-    const divisor = ctx.b.sigConst(1000, signalType('float', unitScalar()));
-    const seconds = ctx.b.sigOp(OpCode.div, [floatMs, divisor], signalType('float', unitSeconds()));
+    const floatMs = ctx.b.sigOp(OpCode.intToFloat, [inputs[0]], canonicalType('float', unitMs()));
+    const divisor = ctx.b.sigConst(1000, canonicalType('float', unitScalar()));
+    const seconds = ctx.b.sigOp(OpCode.div, [floatMs, divisor], canonicalType('float', unitSeconds()));
     return { outputsById: { out: seconds } };
   },
 });
@@ -152,12 +152,12 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   cardinality: { cardinalityMode: 'preserve', laneCoupling: 'laneLocal', broadcastPolicy: 'allowZipSig' },
-  inputs: { in: { type: signalType('float', unitSeconds()) } },
-  outputs: { out: { type: signalType('int', unitMs()) } },
+  inputs: { in: { type: canonicalType('float', unitSeconds()) } },
+  outputs: { out: { type: canonicalType('int', unitMs()) } },
   lower: ({ ctx, inputs }) => {
-    const multiplier = ctx.b.sigConst(1000, signalType('float', unitScalar()));
-    const floatMs = ctx.b.sigOp(OpCode.mul, [inputs[0], multiplier], signalType('float', unitMs()));
-    const intMs = ctx.b.sigOp(OpCode.floor, [floatMs], signalType('int', unitMs()));
+    const multiplier = ctx.b.sigConst(1000, canonicalType('float', unitScalar()));
+    const floatMs = ctx.b.sigOp(OpCode.mul, [inputs[0], multiplier], canonicalType('float', unitMs()));
+    const intMs = ctx.b.sigOp(OpCode.floor, [floatMs], canonicalType('int', unitMs()));
     return { outputsById: { out: intMs } };
   },
 });
@@ -171,12 +171,12 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   cardinality: { cardinalityMode: 'preserve', laneCoupling: 'laneLocal', broadcastPolicy: 'allowZipSig' },
-  inputs: { in: { type: signalType('float', unitScalar()) } },
-  outputs: { out: { type: signalType('float', unitNorm01()) } },
+  inputs: { in: { type: canonicalType('float', unitScalar()) } },
+  outputs: { out: { type: canonicalType('float', unitNorm01()) } },
   lower: ({ ctx, inputs }) => {
-    const zero = ctx.b.sigConst(0, signalType('float', unitScalar()));
-    const one = ctx.b.sigConst(1, signalType('float', unitScalar()));
-    const clamped = ctx.b.sigOp(OpCode.clamp, [inputs[0], zero, one], signalType('float', unitNorm01()));
+    const zero = ctx.b.sigConst(0, canonicalType('float', unitScalar()));
+    const one = ctx.b.sigConst(1, canonicalType('float', unitScalar()));
+    const clamped = ctx.b.sigOp(OpCode.clamp, [inputs[0], zero, one], canonicalType('float', unitNorm01()));
     return { outputsById: { out: clamped } };
   },
 });
@@ -189,8 +189,8 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   cardinality: { cardinalityMode: 'preserve', laneCoupling: 'laneLocal', broadcastPolicy: 'allowZipSig' },
-  inputs: { in: { type: signalType('float', unitNorm01()) } },
-  outputs: { out: { type: signalType('float', unitScalar()) } },
+  inputs: { in: { type: canonicalType('float', unitNorm01()) } },
+  outputs: { out: { type: canonicalType('float', unitScalar()) } },
   lower: ({ inputs }) => ({
     outputsById: { out: inputs[0] }, // Identity - no conversion needed
   }),
@@ -222,7 +222,7 @@ export interface TypeSignature {
 }
 
 // Update extractSignature (line ~93)
-export function extractSignature(type: SignalType): TypeSignature {
+export function extractSignature(type: CanonicalType): TypeSignature {
   const cardinality = getAxisValue(type.extent.cardinality, DEFAULTS_V0.cardinality);
   const temporality = getAxisValue(type.extent.temporality, DEFAULTS_V0.temporality);
 

@@ -159,7 +159,7 @@ interface ResolvedVarargConnection {
   readonly sourceAddress: CanonicalAddress;
   readonly sourceBlockId: BlockId;
   readonly sourcePortId: PortId;
-  readonly resolvedType: SignalType;
+  readonly resolvedType: CanonicalType;
 }
 
 interface NormalizedVarargInput {

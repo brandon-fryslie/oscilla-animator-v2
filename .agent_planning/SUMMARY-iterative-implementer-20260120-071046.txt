@@ -19,7 +19,7 @@ Fixed all remaining type errors from the unified-inputs migration:
 
 4. **ConnectionPicker.tsx (line 98)**: Cast `portId` to `PortId` type when building PortOption
 
-5. **nodes.ts (line 69)**: Replaced object literal with `signalType('float')` constructor call
+5. **nodes.ts (line 69)**: Replaced object literal with `canonicalType('float')` constructor call
 
 6. **PatchStore.ts loadPatch**: Added logic to update ID generators based on max IDs in loaded patch to prevent ID conflicts (fixes test failure)
 

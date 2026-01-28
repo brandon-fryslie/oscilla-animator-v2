@@ -5,7 +5,7 @@ This spec defines a Camera block that integrates into compilation, runtime, debu
 ⸻
 
 0) Definitions and invariants
-	•	Signal slot storage is numeric and typed by SignalType.
+	•	Signal slot storage is numeric and typed by CanonicalType.
 	•	All camera parameters are ordinary one+continuous signals whose values are produced by regular schedule steps (StepEvalSig or the existing canonical equivalent).
 	•	The renderer never “evaluates camera expressions” directly. It only reads already-written slot values using slotMeta.
 	•	Camera integration is expressed in IR as data (“render globals declarations”), not as special behavior in the executor.

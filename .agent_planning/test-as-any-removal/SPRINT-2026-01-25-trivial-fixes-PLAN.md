@@ -34,12 +34,12 @@ Remove 15 'as any' casts by applying trivial, mechanical fixes to branded type c
 **Pattern:** `{ payload: 'float' } as any` in block input/output definitions
 
 **Technical approach:**
-- Import `signalType()` from `src/core/canonical-types.ts`
-- Replace `{ payload: 'float' } as any` with `signalType('float')`
-- This function already returns properly-typed SignalType with sensible defaults
+- Import `canonicalType()` from `src/core/canonical-types.ts`
+- Replace `{ payload: 'float' } as any` with `canonicalType('float')`
+- This function already returns properly-typed CanonicalType with sensible defaults
 
 **Acceptance Criteria:**
-- [ ] All mock block definitions use proper `signalType()` factory
+- [ ] All mock block definitions use proper `canonicalType()` factory
 - [ ] Tests pass with no regressions
 - [ ] Verify exports still work correctly (since exportFormats.test.ts covers serialization)
 
@@ -47,9 +47,9 @@ Remove 15 'as any' casts by applying trivial, mechanical fixes to branded type c
 - None - both fixes are self-contained
 
 ## Risks
-- **Risk:** Incorrect understanding of signalType() defaults
+- **Risk:** Incorrect understanding of canonicalType() defaults
   - **Mitigation:** Read canonical-types.ts to confirm defaults before implementation
   - **Mitigation:** Run tests after changes to verify behavior
 
 ## Notes
-These are the simplest fixes in the full set. Both `sigExprId()` and `signalType()` are existing, stable functions. No new code needed.
+These are the simplest fixes in the full set. Both `sigExprId()` and `canonicalType()` are existing, stable functions. No new code needed.

@@ -13,7 +13,7 @@
  */
 
 import { registerBlock } from './registry';
-import { signalType, unitNorm01, unitScalar, unitDeg, strideOf } from '../core/canonical-types';
+import { canonicalType, unitNorm01, unitScalar, unitDeg, strideOf } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { defaultSourceConst, type DefaultSource } from '../types';
 import type { CameraDeclIR } from '../compiler/ir/program';
@@ -40,7 +40,7 @@ registerBlock({
   },
   inputs: {
     value: {
-      type: signalType(INT),
+      type: canonicalType(INT),
       value: 0,
       defaultSource: defaultSourceConst(0),
       uiHint: { kind: 'select', options: [{ value: '0', label: 'Orthographic' }, { value: '1', label: 'Perspective' }] },
@@ -48,11 +48,11 @@ registerBlock({
     },
   },
   outputs: {
-    out: { label: 'Output', type: signalType(CAMERA_PROJECTION) },
+    out: { label: 'Output', type: canonicalType(CAMERA_PROJECTION) },
   },
   lower: ({ ctx, config }) => {
     const value = (config?.value as number) ?? 0;
-    const sigId = ctx.b.sigConst(value, signalType(CAMERA_PROJECTION));
+    const sigId = ctx.b.sigConst(value, canonicalType(CAMERA_PROJECTION));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return { outputsById: { out: { k: 'sig', id: sigId, slot, type: outType, stride: strideOf(outType.payload) } } };
@@ -87,63 +87,63 @@ registerBlock({
   inputs: {
     projection: {
       label: 'Projection',
-      type: signalType(CAMERA_PROJECTION),
+      type: canonicalType(CAMERA_PROJECTION),
       value: 1, // PERSP (perspective is the sensible default for 3D)
       defaultSource: defaultSourceCameraProjection(1),
       uiHint: { kind: 'select', options: [{ value: '0', label: 'Orthographic' }, { value: '1', label: 'Perspective' }] },
     },
     centerX: {
       label: 'Center X',
-      type: signalType(FLOAT, unitNorm01()),
+      type: canonicalType(FLOAT, unitNorm01()),
       value: 0.5,
       defaultSource: defaultSourceConst(0.5),
       uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 },
     },
     centerY: {
       label: 'Center Y',
-      type: signalType(FLOAT, unitNorm01()),
+      type: canonicalType(FLOAT, unitNorm01()),
       value: 0.5,
       defaultSource: defaultSourceConst(0.5),
       uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 },
     },
     distance: {
       label: 'Distance',
-      type: signalType(FLOAT, unitScalar()),
+      type: canonicalType(FLOAT, unitScalar()),
       value: 0.87,
       defaultSource: defaultSourceConst(0.87),
       uiHint: { kind: 'slider', min: 0.1, max: 5, step: 0.01 },
     },
     tiltDeg: {
       label: 'Tilt',
-      type: signalType(FLOAT, unitDeg()),
+      type: canonicalType(FLOAT, unitDeg()),
       value: 35.0,
       defaultSource: defaultSourceDeg(35.0),
       uiHint: { kind: 'slider', min: -90, max: 90, step: 1 },
     },
     yawDeg: {
       label: 'Yaw',
-      type: signalType(FLOAT, unitDeg()),
+      type: canonicalType(FLOAT, unitDeg()),
       value: 0.0,
       defaultSource: defaultSourceDeg(0.0),
       uiHint: { kind: 'slider', min: -180, max: 180, step: 1 },
     },
     fovYDeg: {
       label: 'FOV',
-      type: signalType(FLOAT, unitDeg()),
+      type: canonicalType(FLOAT, unitDeg()),
       value: 60.0,
       defaultSource: defaultSourceDeg(60.0),
       uiHint: { kind: 'slider', min: 10, max: 120, step: 1 },
     },
     near: {
       label: 'Near',
-      type: signalType(FLOAT, unitScalar()),
+      type: canonicalType(FLOAT, unitScalar()),
       value: 0.01,
       defaultSource: defaultSourceConst(0.01),
       uiHint: { kind: 'slider', min: 0.001, max: 1, step: 0.001 },
     },
     far: {
       label: 'Far',
-      type: signalType(FLOAT, unitScalar()),
+      type: canonicalType(FLOAT, unitScalar()),
       value: 100.0,
       defaultSource: defaultSourceConst(100.0),
       uiHint: { kind: 'slider', min: 1, max: 1000, step: 1 },

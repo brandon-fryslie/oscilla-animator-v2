@@ -118,7 +118,7 @@ Note: The output is the NEW phase (post-increment), not the previous phase. This
 #### Acceptance Criteria
 - [ ] Block registered as type `'Phasor'` with `capability: 'state'` and `isStateful: true`
 - [ ] Block has inputs: `frequency` (float signal, wirable), `initialPhase` (config, default 0)
-- [ ] Block has output: `out` with type `signalType('float', unitPhase01())`
+- [ ] Block has output: `out` with type `canonicalType('float', unitPhase01())`
 - [ ] Lowering uses `allocStateSlot`, `sigStateRead`, `stepStateWrite` with `stableStateId(instanceId, 'phasor')`
 - [ ] Phase wraps correctly at 1.0 (uses OpCode.Wrap01 or equivalent fract operation)
 - [ ] Frequency input correctly converts dt from ms to seconds before multiplication
@@ -129,7 +129,7 @@ Note: The output is the NEW phase (post-increment), not the previous phase. This
 
 #### Technical Notes
 - The Phasor needs access to `dt` (delta time). This comes as a wired input from TimeRoot's `dt` output, OR can be accessed via a wired connection. For MVP, accept `dt` as a signal input port (users wire TimeRoot.dt -> Phasor.dt).
-- ALTERNATIVE: Use `frequency` input only, and internally the lower function gets dt via `ctx.b.sigTime('dt', ...)`. This is cleaner since it avoids requiring users to manually wire dt. Check how TimeRoot exposes dt -- it uses `sigTime('dt', signalType('float'))`. The Phasor can do the same to reference the time system's dt.
+- ALTERNATIVE: Use `frequency` input only, and internally the lower function gets dt via `ctx.b.sigTime('dt', ...)`. This is cleaner since it avoids requiring users to manually wire dt. Check how TimeRoot exposes dt -- it uses `sigTime('dt', canonicalType('float'))`. The Phasor can do the same to reference the time system's dt.
 - Use `OpCode.Wrap01` for the wrap operation (confirmed existing in codebase)
 - Use `OpCode.Mul` for frequency * dtSec, `OpCode.Add` for prev + increment
 - Division by 1000 for ms->sec: use `OpCode.Div` with a const 1000, or `OpCode.Mul` with const 0.001

@@ -46,7 +46,7 @@ export interface FieldExprSource {
   // NEW: Required
   readonly instanceId: InstanceId;
   readonly intrinsic: string;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 ```
 
@@ -55,7 +55,7 @@ export interface FieldExprSource {
 
 Remove placeholder values:
 ```typescript
-fieldIntrinsic(instanceId: InstanceId, intrinsic: string, type: SignalType): FieldExprId {
+fieldIntrinsic(instanceId: InstanceId, intrinsic: string, type: CanonicalType): FieldExprId {
   const id = fieldExprId(this.fieldExprs.length);
   this.fieldExprs.push({
     kind: 'source',

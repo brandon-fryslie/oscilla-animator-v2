@@ -15,7 +15,7 @@ Source: EVALUATION-20260125-234400.md
 - [ ] Input ports: `target` (float signal, wirable), `smoothing` (float config, default 0.1), `initialValue` (float config, default 0)
 - [ ] Output port: `out` (float signal)
 - [ ] Lower function calls `allocStateSlot(stableStateId(ctx.instanceId, 'lag'), { initialValue })`
-- [ ] Lower function calls `sigStateRead(stateSlot, signalType('float'))` to get previous value
+- [ ] Lower function calls `sigStateRead(stateSlot, canonicalType('float'))` to get previous value
 - [ ] Lower function uses `OpCode.Lerp` to compute `lerp(prev, target, smoothing)`
 - [ ] Lower function calls `stepStateWrite(stateSlot, outputId)` to persist new value
 - [ ] Test: compilation produces 1 state slot with correct initialValue
@@ -33,9 +33,9 @@ Source: EVALUATION-20260125-234400.md
 - [ ] BlockDef has `category: 'signal'`, `form: 'primitive'`
 - [ ] BlockDef has cardinality metadata: `cardinalityMode: 'preserve'`, `laneCoupling: 'laneLocal'`
 - [ ] Input ports: `frequency` (float signal, wirable), `initialPhase` (float config, default 0)
-- [ ] Output port: `out` with type `signalType('float', unitPhase01())`
+- [ ] Output port: `out` with type `canonicalType('float', unitPhase01())`
 - [ ] Lower function calls `allocStateSlot(stableStateId(ctx.instanceId, 'phasor'), { initialValue: initialPhase })`
-- [ ] Lower function calls `sigStateRead(stateSlot, signalType('float'))` to get previous phase
+- [ ] Lower function calls `sigStateRead(stateSlot, canonicalType('float'))` to get previous phase
 - [ ] Lower function accesses dt (either via `sigTime('dt', ...)` or input port)
 - [ ] Lower function converts dt from ms to seconds (multiply by 0.001)
 - [ ] Lower function computes increment = frequency * dtSec

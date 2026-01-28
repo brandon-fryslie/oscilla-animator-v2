@@ -53,10 +53,10 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   inputs: [
-    { id: 'size', label: 'Size', type: signalType('float'), defaultValue: 0.02, defaultSource: defaultSourceConst(0.02) },
+    { id: 'size', label: 'Size', type: canonicalType('float'), defaultValue: 0.02, defaultSource: defaultSourceConst(0.02) },
   ],
   outputs: [
-    { id: 'square', label: 'Square', type: signalType('float') },
+    { id: 'square', label: 'Square', type: canonicalType('float') },
   ],
   params: {
     size: 0.02,
@@ -67,7 +67,7 @@ registerBlock({
     if (sizeInput && sizeInput.k === 'sig') {
       sizeSig = sizeInput.id;
     } else {
-      sizeSig = ctx.b.sigConst((config?.size as number) ?? 0.02, signalType('float'));
+      sizeSig = ctx.b.sigConst((config?.size as number) ?? 0.02, canonicalType('float'));
     }
     const slot = ctx.b.allocSlot();
     return {
@@ -170,7 +170,7 @@ export function defaultSourceTimeRoot(
 1. **src/blocks/array-blocks.ts** (line 40):
    ```typescript
    // Old:
-   { id: 'element', label: 'Element', type: signalType('???'), optional: true, defaultSource: defaultSourceNone() }
+   { id: 'element', label: 'Element', type: canonicalType('???'), optional: true, defaultSource: defaultSourceNone() }
 
    // New: Need to determine appropriate default for 'element' input
    // Option A: Remove defaultSource entirely (if optional means "no default needed")
@@ -330,10 +330,10 @@ npm run dev
 
 ```typescript
 // Old:
-{ id: 'element', label: 'Element', type: signalType('???'), optional: true, defaultSource: defaultSourceNone() }
+{ id: 'element', label: 'Element', type: canonicalType('???'), optional: true, defaultSource: defaultSourceNone() }
 
 // New:
-{ id: 'element', label: 'Element', type: signalType('???'), optional: true, defaultSource: defaultSource('Square', 'out') }
+{ id: 'element', label: 'Element', type: canonicalType('???'), optional: true, defaultSource: defaultSource('Square', 'out') }
 ```
 
 This gives arrays a sensible visual default (squares) that users can override.

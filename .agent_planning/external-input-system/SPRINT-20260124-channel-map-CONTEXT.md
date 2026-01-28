@@ -29,7 +29,7 @@
 ### IRBuilder Extension
 
 5. **`src/compiler/ir/IRBuilder.ts`** (interface)
-   - Add: `sigExternal(channel: string, type: SignalType): SigId`
+   - Add: `sigExternal(channel: string, type: CanonicalType): SigId`
 
 6. **`src/compiler/ir/IRBuilderImpl.ts`** (implementation)
    - Implement `sigExternal()`: creates `{ kind: 'external', which: channel }` expression
@@ -41,8 +41,8 @@
    - Register `ExternalInput` block
    - `capability: 'io'`
    - Config: `channel: string`
-   - Output: `value: signalType('float')`
-   - `lower()`: `ctx.b.sigExternal(config.channel, signalType('float'))`
+   - Output: `value: canonicalType('float')`
+   - `lower()`: `ctx.b.sigExternal(config.channel, canonicalType('float'))`
 
 ### Mouse Migration
 
@@ -58,7 +58,7 @@
 
 ```typescript
 // IRBuilder: sigTime() creates time expression
-sigTime(field: TimeField, type: SignalType): SigId {
+sigTime(field: TimeField, type: CanonicalType): SigId {
   return this.addSigExpr({ kind: 'time', field, type });
 }
 
@@ -70,7 +70,7 @@ case 'time': {
 
 // InfiniteTimeRoot block: lower()
 lower: ({ ctx }) => {
-  const tMs = ctx.b.sigTime('tMs', signalType('float'));
+  const tMs = ctx.b.sigTime('tMs', canonicalType('float'));
   const tMsSlot = ctx.b.allocSlot();
   // ...
 }
@@ -92,7 +92,7 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: { /* ... */ },
-  outputs: { value: { label: 'Value', type: signalType('float') } },
+  outputs: { value: { label: 'Value', type: canonicalType('float') } },
   lower: ({ ctx, config }) => { /* ... */ },
 });
 ```

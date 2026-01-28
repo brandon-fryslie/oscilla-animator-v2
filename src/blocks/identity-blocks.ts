@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from './registry';
-import { signalType, signalTypeField, strideOf } from '../core/canonical-types';
+import { canonicalType, signalTypeField, strideOf } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { defaultSourceConst } from '../types';
 
@@ -26,8 +26,8 @@ registerBlock({
     broadcastPolicy: 'disallowSignalMix',
   },
   inputs: {
-    domain: { label: 'Domain', type: signalType(FLOAT) },
-    seed: { type: signalType(INT), value: 0, defaultSource: defaultSourceConst(0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1000, step: 1 } },
+    domain: { label: 'Domain', type: canonicalType(FLOAT) },
+    seed: { type: canonicalType(INT), value: 0, defaultSource: defaultSourceConst(0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1000, step: 1 } },
   },
   outputs: {
     rand: { label: 'Random [0,1]', type: signalTypeField(FLOAT, 'default') },

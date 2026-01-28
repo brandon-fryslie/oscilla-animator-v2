@@ -5,7 +5,7 @@
  * All blocks are defined here with both metadata and IR lowering.
  */
 
-import type { SignalType, PayloadType } from '../core/canonical-types';
+import type { CanonicalType, PayloadType } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import type { UIControlHint, DefaultSource } from '../types';
 import type { IRBuilder } from '../compiler/ir/IRBuilder';
@@ -24,8 +24,8 @@ export interface LowerCtx {
   readonly blockType: string;
   readonly instanceId: string;
   readonly label?: string;
-  readonly inTypes: readonly SignalType[];
-  readonly outTypes: readonly SignalType[];
+  readonly inTypes: readonly CanonicalType[];
+  readonly outTypes: readonly CanonicalType[];
   readonly b: IRBuilder;
   readonly seedConstId: number;
 
@@ -268,7 +268,7 @@ export interface VarargConstraint {
  */
 export interface InputDef {
   readonly label?: string;           // Display label (defaults to key name)
-  readonly type: SignalType;         // Required - all inputs have a type
+  readonly type: CanonicalType;         // Required - all inputs have a type
   readonly value?: unknown;          // Default value (was in params)
   readonly defaultSource?: DefaultSource;
   readonly uiHint?: UIControlHint;
@@ -309,7 +309,7 @@ export function isVarargInput(def: InputDef): boolean {
  */
 export interface OutputDef {
   readonly label?: string;           // Display label (defaults to key name)
-  readonly type: SignalType;         // Required
+  readonly type: CanonicalType;         // Required
   readonly hidden?: boolean;         // For symmetry
 }
 
@@ -468,11 +468,11 @@ export function registerBlock(def: BlockDef): void {
   const normalizedInputs: Record<string, InputDef> = {};
 
   /**
-   * Get a sensible zero/default value for a SignalType.
+   * Get a sensible zero/default value for a CanonicalType.
    * The Const block is payload-polymorphic and will handle broadcasting
    * this value to the appropriate payload type (vec2, vec3, color, etc.).
    */
-  const getZeroValue = (type: SignalType): number => {
+  const getZeroValue = (type: CanonicalType): number => {
     // For all payload types, return 0
     // The Const block will broadcast this to the appropriate shape:
     // - float: 0

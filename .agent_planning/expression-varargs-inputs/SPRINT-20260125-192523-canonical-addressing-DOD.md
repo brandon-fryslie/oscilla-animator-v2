@@ -30,7 +30,7 @@ Verification: WORK-EVALUATION-2026-01-26-022757.md
 ### Address Resolution Service
 
 - [x] `resolveAddress(patch, addressString)` returns target or null
-- [x] Resolution includes SignalType for port addresses
+- [x] Resolution includes CanonicalType for port addresses
 - [x] `resolveAddressWithDiagnostic()` provides error messages
 - [x] Invalid syntax returns null (no exceptions)
 - [x] Missing target returns null with clear diagnostic

@@ -15,8 +15,8 @@ Successfully implemented the Unit Annotation System for compile-time unit valida
 **File**: `src/core/canonical-types.ts`
 
 - Added `NumericUnit` type with 8 units (phase, radians, normalized, scalar, ms, #, degrees, seconds)
-- Extended `SignalType` with optional `unit?: NumericUnit` field
-- Updated all `signalType*` helper functions to accept unit parameter
+- Extended `CanonicalType` with optional `unit?: NumericUnit` field
+- Updated all `canonicalType*` helper functions to accept unit parameter
 - Fully backwards compatible - no breaking changes
 
 ### 2. Kernel Signatures ✓
@@ -77,7 +77,7 @@ Successfully implemented the Unit Annotation System for compile-time unit valida
 
 **Must Pass**:
 - [x] `NumericUnit` type exists with all required units
-- [x] `SignalType` accepts optional `unit` field
+- [x] `CanonicalType` accepts optional `unit` field
 - [x] At least sin/cos kernels have declared signatures (20+ kernels declared)
 - [x] Compiler validates unit compatibility (checkUnitCompatibility in Pass 2)
 - [x] `npm run typecheck` passes
@@ -99,7 +99,7 @@ Successfully implemented the Unit Annotation System for compile-time unit valida
 
 ### 1. Optional Units (Gradual Adoption)
 
-**Decision**: Unit field is optional on SignalType.
+**Decision**: Unit field is optional on CanonicalType.
 **Rationale**: Backwards compatibility. Existing blocks work without changes.
 **Impact**: Zero breaking changes, smooth migration path.
 

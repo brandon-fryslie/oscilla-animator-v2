@@ -328,11 +328,11 @@ V1 diagnostics are bus-centric. V2 has edges, not buses (though buses still exis
 **Category**: Adaptation
 
 **The Problem**:
-V1 type mismatch diagnostics show `TypeDesc`. V2 uses five-axis `SignalType` (payload + extent). How should diagnostics display type errors?
+V1 type mismatch diagnostics show `TypeDesc`. V2 uses five-axis `CanonicalType` (payload + extent). How should diagnostics display type errors?
 
 **Options Considered**:
 
-1. **Show full SignalType**: All 5 axes
+1. **Show full CanonicalType**: All 5 axes
    - Pros: Complete information
    - Cons: Verbose, may confuse non-technical users
 
@@ -382,15 +382,15 @@ V1 has extensive power-user debug specs (DebugGraph, TraceEvents, FieldPlan, Deb
 **Source**: debugger specs vs. 01-type-system.md
 
 **The Problem**:
-Debugger specs use generic "TypeDesc". Canonical v2.5 uses five-axis SignalType model (PayloadType + Extent with 5 axes).
+Debugger specs use generic "TypeDesc". Canonical v2.5 uses five-axis CanonicalType model (PayloadType + Extent with 5 axes).
 
-**Resolution**: Option A - Replace TypeDesc with SignalType everywhere
+**Resolution**: Option A - Replace TypeDesc with CanonicalType everywhere
 
-**Rationale**: Alignment with canonical five-axis type model. All debugger type references in diagnostic payloads now use SignalType + axes specification.
+**Rationale**: Alignment with canonical five-axis type model. All debugger type references in diagnostic payloads now use CanonicalType + axes specification.
 
 **Impact**:
-- Diagnostic payload types updated to use SignalType
-- GLOSSARY.md updated: SignalType now includes diagnostic context
+- Diagnostic payload types updated to use CanonicalType
+- GLOSSARY.md updated: CanonicalType now includes diagnostic context
 
 **Approved by**: Brandon Fryslie
 **Approved at**: 2026-01-10T18:00:00Z
@@ -1559,7 +1559,7 @@ The spec said "one state cell" and "N state cells" without specifying how multi-
 
 **Source**: 0-PayloadGeneriic-Block-Type-Spec.md §2.2
 
-**The Proposal**: Add `unit?: NumericUnit` to SignalType for dimensional analysis (e.g., Sin requires radians).
+**The Proposal**: Add `unit?: NumericUnit` to CanonicalType for dimensional analysis (e.g., Sin requires radians).
 
 **Resolution**: Deferred. Full spec incoming — will be integrated when provided.
 

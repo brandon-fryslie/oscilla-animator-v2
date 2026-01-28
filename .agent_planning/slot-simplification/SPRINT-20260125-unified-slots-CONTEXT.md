@@ -52,7 +52,7 @@ switch (type.payload) {
    - DELETE `registerSlotType` method
    - ADD new signature:
      ```typescript
-     allocSlot(type: SignalType, label?: string): SlotAllocation;
+     allocSlot(type: CanonicalType, label?: string): SlotAllocation;
      ```
 
 3. **src/compiler/ir/IRBuilderImpl.ts**
@@ -67,7 +67,7 @@ switch (type.payload) {
      ```
    - Modify allocSlot to:
      ```typescript
-     allocSlot(type: SignalType, label?: string): SlotAllocation {
+     allocSlot(type: CanonicalType, label?: string): SlotAllocation {
        const stride = strideOf(type.payload);
        const storage = this.storageForPayload(type.payload);
        const offset = this.storageOffsets[storage];
@@ -209,7 +209,7 @@ Pass the IRBuilder to buildContinuityPipeline and use proper allocation:
 
 ```typescript
 const slotAllocator = (): SlotAllocation => {
-  return unlinkedIR.builder.allocSlot(signalType('object')); // or appropriate type
+  return unlinkedIR.builder.allocSlot(canonicalType('object')); // or appropriate type
 };
 ```
 
@@ -219,7 +219,7 @@ Need to determine what type these continuity slots should have. They store:
 - Float32Array references for position buffers
 - Float32Array references for color buffers
 
-Likely type: `signalType('object')` or a new `signalType('buffer')` type.
+Likely type: `canonicalType('object')` or a new `canonicalType('buffer')` type.
 
 ---
 

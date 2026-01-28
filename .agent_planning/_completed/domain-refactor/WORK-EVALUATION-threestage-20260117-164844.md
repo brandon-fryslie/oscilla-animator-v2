@@ -102,7 +102,7 @@ Tests  2 failed | 250 passed | 34 skipped (286)
 | Block exists | ✅ PASS | `src/blocks/primitive-blocks.ts:30-66` |
 | Registered in primitive-blocks.ts | ✅ PASS | Confirmed |
 | Input: radius (Signal<float>) | ✅ PASS | Line 38 |
-| Output: circle signal (NOT field) | ✅ PASS | Line 41, output type is `signalType('float')` |
+| Output: circle signal (NOT field) | ✅ PASS | Line 41, output type is `canonicalType('float')` |
 | Cardinality ONE | ✅ PASS | Returns signal, not field |
 | **Block name** | ⚠️ MISMATCH | **DoD says "Circle", implementation is "CirclePrimitive"** |
 

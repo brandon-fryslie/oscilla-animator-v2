@@ -1,11 +1,11 @@
 Yes — this is directionally correct and very close to something you can hand to engineers, but there are a few non-negotiable fixes you should make so you don’t bake in contradictions or under-specify the adapter/type surface the UI depends on.
 
-1) Fix the “types” mapping: SignalType is not your resolved port type
+1) Fix the “types” mapping: CanonicalType is not your resolved port type
 
 Right now you map:
-•	ConcreteType / ResolvedPortType → SignalType
+•	ConcreteType / ResolvedPortType → CanonicalType
 
-That’s wrong in the codebase’s terms. SignalType is one shape of type (and in some places it’s used as a generic “port type” shorthand), but your UI needs a ResolvedPortType that includes full Extent and can represent signal vs field vs event semantics.
+That’s wrong in the codebase’s terms. CanonicalType is one shape of type (and in some places it’s used as a generic “port type” shorthand), but your UI needs a ResolvedPortType that includes full Extent and can represent signal vs field vs event semantics.
 
 Required edit:
 •	Replace that row with something like:

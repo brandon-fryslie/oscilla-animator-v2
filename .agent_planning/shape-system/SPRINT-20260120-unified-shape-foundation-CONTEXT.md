@@ -26,7 +26,7 @@ lower: ({ctx, inputsById, config}) => {
     if (rxInput && rxInput.k === 'sig') {
         rxSig = rxInput.id;
     } else {
-        rxSig = ctx.b.sigConst((config?.rx as number) ?? 0.02, signalType('float'));
+        rxSig = ctx.b.sigConst((config?.rx as number) ?? 0.02, canonicalType('float'));
     }
     const slot = ctx.b.allocSlot();
     return {
@@ -119,7 +119,7 @@ lower: ({ctx, inputsById, config}) => {
     // Get or create signals for each param
     const rxSig = getInputSignal(inputsById.rx, config?.rx ?? 0.02, ctx);
     const rySig = getInputSignal(inputsById.ry, config?.ry ?? 0.02, ctx);
-    const rotSig = ctx.b.sigConst(0, signalType('float'));  // Default rotation
+    const rotSig = ctx.b.sigConst(0, canonicalType('float'));  // Default rotation
 
     // Allocate slots for params
     const rxSlot = ctx.b.allocSlot();

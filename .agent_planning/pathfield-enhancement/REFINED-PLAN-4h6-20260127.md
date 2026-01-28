@@ -318,7 +318,7 @@ export interface FieldExprPathDerivative {
   readonly kind: 'pathDerivative';
   readonly input: FieldExprId;
   readonly operation: 'tangent' | 'arcLength';
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 ```
 
@@ -354,7 +354,7 @@ export type FieldExpr =
 fieldPathDerivative(
   input: FieldExprId,
   operation: 'tangent' | 'arcLength',
-  type: SignalType
+  type: CanonicalType
 ): FieldExprId;
 ```
 
@@ -365,7 +365,7 @@ fieldPathDerivative(
 fieldPathDerivative(
   input: FieldExprId,
   operation: 'tangent' | 'arcLength',
-  type: SignalType
+  type: CanonicalType
 ): FieldExprId {
   const id = this.allocFieldId();
   this.fieldExprs.push({
@@ -418,7 +418,7 @@ function fillBufferPathDerivative(
   out: ArrayBufferView,
   input: ArrayBufferView,
   operation: 'tangent' | 'arcLength',
-  inputType: SignalType
+  inputType: CanonicalType
 ): void {
   if (operation === 'tangent') {
     fillBufferTangent(out, input, inputType);
@@ -430,7 +430,7 @@ function fillBufferPathDerivative(
 function fillBufferTangent(
   out: ArrayBufferView,
   input: ArrayBufferView,
-  inputType: SignalType
+  inputType: CanonicalType
 ): void {
   // Input: vec2 field (control points)
   // Output: vec2 field (tangent vectors)
@@ -471,7 +471,7 @@ function fillBufferTangent(
 function fillBufferArcLength(
   out: ArrayBufferView,
   input: ArrayBufferView,
-  inputType: SignalType
+  inputType: CanonicalType
 ): void {
   // Input: vec2 field (control points)
   // Output: float field (cumulative arc length)
@@ -902,7 +902,7 @@ After all phases complete:
 | **Tangent wrapping bug** | Medium | Comprehensive boundary tests, hand-verify for N=2,3,4 |
 | **Arc length off-by-one** | Low | Tests verify monotonicity and specific distances |
 | **Instance inference failure** | Low | Test that tangent field inherits instance from input |
-| **Type inference failure** | Low | Verify SignalType propagates correctly |
+| **Type inference failure** | Low | Verify CanonicalType propagates correctly |
 | **Materializer crashes on invalid input** | Low | Test with N=1, N=2, empty buffers |
 | **Performance regression** | Low | Materializer now does slightly more work, but still O(N) |
 

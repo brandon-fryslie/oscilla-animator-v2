@@ -23,7 +23,7 @@ import { payloadStride } from './ir/signalExpr';
 import type { AcyclicOrLegalGraph } from './ir/patches';
 import { convertCompileErrorsToDiagnostics } from './diagnosticConversion';
 import type { EventHub } from '../events/EventHub';
-import { signalType } from '../core/canonical-types';
+import { canonicalType } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 // debugService import removed for strict compiler isolation (One Source of Truth)
 import { compilationInspector } from '../services/CompilationInspectorService';
@@ -519,7 +519,7 @@ function convertLinkedIRToProgram(
   for (let slotId = 0; slotId < builder.getSlotCount?.() || 0; slotId++) {
     const slot = slotId as ValueSlot;
     const slotInfo = slotTypes.get(slot);
-    const type = slotInfo?.type || signalType(FLOAT); // Default to float if no type info
+    const type = slotInfo?.type || canonicalType(FLOAT); // Default to float if no type info
 
     // Determine storage class from type
     // Field output slots store buffer references in the objects Map
@@ -564,7 +564,7 @@ function convertLinkedIRToProgram(
       storage: 'object',
       offset: storageOffsets.object++,
       stride: 1, // Object slots store a single reference
-      type: signalType(FLOAT),
+      type: canonicalType(FLOAT),
     });
   }
 
@@ -578,7 +578,7 @@ function convertLinkedIRToProgram(
     storage: 'object',
     offset: storageOffsets.object++,
     stride: 1, // Object slots store a single reference
-    type: signalType(FLOAT), // Type is irrelevant for RenderFrameIR object slot
+    type: canonicalType(FLOAT), // Type is irrelevant for RenderFrameIR object slot
   });
 
   // Create OutputSpecIR for render frame

@@ -14,7 +14,7 @@
 
 import type { NormalizedPatch, NormalizedEdge, BlockIndex } from '../ir/patches';
 import type { Block } from '../../graph/Patch';
-import type { SignalType, Unit, PayloadType, ConcretePayloadType, PayloadKind } from '../../core/canonical-types';
+import type { CanonicalType, Unit, PayloadType, ConcretePayloadType, PayloadKind } from '../../core/canonical-types';
 import { isUnitVar, unitsEqual, isPayloadVar, payloadsEqual, payloadFromKind } from '../../core/canonical-types';
 import { getBlockDefinition } from '../../blocks/registry';
 
@@ -41,11 +41,11 @@ export interface TypeResolvedPatch extends NormalizedPatch {
   /**
    * Resolved types for ALL ports.
    * Key: "blockIndex:portName:in" or "blockIndex:portName:out"
-   * Value: Fully resolved SignalType (no variables)
+   * Value: Fully resolved CanonicalType (no variables)
    *
    * This is the ONLY place to look up port types after pass1.
    */
-  readonly portTypes: ReadonlyMap<PortKey, SignalType>;
+  readonly portTypes: ReadonlyMap<PortKey, CanonicalType>;
 }
 
 export interface TypeConstraintError {
@@ -181,7 +181,7 @@ function getDefinitionPortType(
   block: Block,
   portName: string,
   direction: 'in' | 'out'
-): SignalType | null {
+): CanonicalType | null {
   const blockDef = getBlockDefinition(block.type);
   if (!blockDef) return null;
 
@@ -223,7 +223,7 @@ export function pass1TypeConstraints(normalized: NormalizedPatch): Pass1Result {
     blockIndex: BlockIndex;
     portName: string;
     direction: 'in' | 'out';
-    defType: SignalType;
+    defType: CanonicalType;
     instanceUnit: Unit;
     instancePayload: PayloadType;
     hasUnitVar: boolean;
@@ -436,7 +436,7 @@ export function pass1TypeConstraints(normalized: NormalizedPatch): Pass1Result {
   }
 
   // Phase 3: Resolve all ports and build output map
-  const portTypes = new Map<PortKey, SignalType>();
+  const portTypes = new Map<PortKey, CanonicalType>();
 
   for (const [key, info] of portInfos) {
     let resolvedUnit = unitUf.find(info.instanceUnit);
@@ -503,6 +503,6 @@ export function getPortType(
   blockIndex: BlockIndex,
   portName: string,
   direction: 'in' | 'out'
-): SignalType | undefined {
+): CanonicalType | undefined {
   return patch.portTypes.get(portKey(blockIndex, portName, direction));
 }

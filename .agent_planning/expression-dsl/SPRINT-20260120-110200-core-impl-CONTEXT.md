@@ -120,7 +120,7 @@ export interface LiteralNode {
   readonly kind: 'literal';
   readonly value: number | boolean;
   readonly pos: SourcePos;
-  readonly type?: SignalType;  // filled by type checker
+  readonly type?: CanonicalType;  // filled by type checker
 }
 
 /**
@@ -130,7 +130,7 @@ export interface IdentifierNode {
   readonly kind: 'identifier';
   readonly name: string;
   readonly pos: SourcePos;
-  readonly type?: SignalType;
+  readonly type?: CanonicalType;
 }
 
 /**
@@ -142,7 +142,7 @@ export interface BinaryOpNode {
   readonly left: ExprNode;
   readonly right: ExprNode;
   readonly pos: SourcePos;
-  readonly type?: SignalType;
+  readonly type?: CanonicalType;
 }
 
 export type BinaryOp =
@@ -158,7 +158,7 @@ export interface UnaryOpNode {
   readonly op: UnaryOp;
   readonly operand: ExprNode;
   readonly pos: SourcePos;
-  readonly type?: SignalType;
+  readonly type?: CanonicalType;
 }
 
 export type UnaryOp = '-' | '+' | '!';
@@ -171,7 +171,7 @@ export interface FunctionCallNode {
   readonly name: string;
   readonly args: readonly ExprNode[];
   readonly pos: SourcePos;
-  readonly type?: SignalType;
+  readonly type?: CanonicalType;
 }
 
 /**
@@ -183,7 +183,7 @@ export interface TernaryNode {
   readonly consequent: ExprNode;
   readonly alternate: ExprNode;
   readonly pos: SourcePos;
-  readonly type?: SignalType;
+  readonly type?: CanonicalType;
 }
 
 // Helper functions for constructing AST nodes
@@ -406,8 +406,8 @@ export function parse(source: string): Result<ExprNode, SyntaxError> {
 
 ```typescript
 import type { ExprNode, BinaryOp, UnaryOp } from './ast';
-import type { PayloadType, SignalType } from '../core/canonical-types';
-import { signalType } from '../core/canonical-types';
+import type { PayloadType, CanonicalType } from '../core/canonical-types';
+import { canonicalType } from '../core/canonical-types';
 
 export interface TypeError {
   code: 'ExprTypeError';
@@ -438,7 +438,7 @@ function inferType(node: ExprNode, inputs: Map<string, PayloadType>): ExprNode {
   switch (node.kind) {
     case 'literal': {
       const payloadType = typeof node.value === 'number' ? 'float' : 'bool';
-      return { ...node, type: signalType(payloadType) };
+      return { ...node, type: canonicalType(payloadType) };
     }
 
     case 'identifier': {
@@ -451,7 +451,7 @@ function inferType(node: ExprNode, inputs: Map<string, PayloadType>): ExprNode {
         };
       }
       const payloadType = inputs.get(node.name)!;
-      return { ...node, type: signalType(payloadType) };
+      return { ...node, type: canonicalType(payloadType) };
     }
 
     case 'binary': {
@@ -497,10 +497,10 @@ function inferType(node: ExprNode, inputs: Map<string, PayloadType>): ExprNode {
  */
 function inferBinaryOpType(
   op: BinaryOp,
-  left: SignalType,
-  right: SignalType,
+  left: CanonicalType,
+  right: CanonicalType,
   pos: { start: number; end: number }
-): SignalType {
+): CanonicalType {
   // Arithmetic: +, -, *, /, %
   if (['+', '-', '*', '/', '%'].includes(op)) {
     return inferArithmeticType(op, left.payload, right.payload, pos);
@@ -524,7 +524,7 @@ function inferArithmeticType(
   left: PayloadType,
   right: PayloadType,
   pos: { start: number; end: number }
-): SignalType {
+): CanonicalType {
   // Follow TYPE-RULES.md
   // Example: float + int → float (int coerces to float)
   // Example: phase + float → phase (per spec)
@@ -637,7 +637,7 @@ function compileFunctionCall(
   name: string,
   args: SigExprId[],
   builder: IRBuilder,
-  resultType: SignalType
+  resultType: CanonicalType
 ): SigExprId {
   // Map function names to OpCodes per FUNCTIONS.md
   switch (name) {
@@ -678,7 +678,7 @@ import { typecheck } from './typecheck';
 import { compileToIR } from './compile';
 import type { SigExprId } from '../compiler/ir/Indices';
 import type { IRBuilder } from '../compiler/ir/IRBuilder';
-import type { SignalType } from '../core/canonical-types';
+import type { CanonicalType } from '../core/canonical-types';
 import type { CompileError } from '../compiler/types';
 
 /**
@@ -691,7 +691,7 @@ import type { CompileError } from '../compiler/types';
  */
 export function compileExpression(
   text: string,
-  inputs: Map<string, SignalType>,
+  inputs: Map<string, CanonicalType>,
   builder: IRBuilder
 ): Result<SigExprId, CompileError> {
   // 1. Parse

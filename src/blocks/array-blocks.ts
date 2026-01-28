@@ -6,7 +6,7 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
-import { signalType, signalTypeField, strideOf, type PayloadType } from '../core/canonical-types';
+import { canonicalType, signalTypeField, strideOf, type PayloadType } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { DOMAIN_CIRCLE } from '../core/domain-registry';
 import { defaultSourceConst, defaultSource } from '../types';
@@ -58,13 +58,13 @@ registerBlock({
   inputs: {
     element: {
       label: 'Element',
-      type: signalType(SHAPE),  // Default type for typical usage
+      type: canonicalType(SHAPE),  // Default type for typical usage
       optional: true,
       defaultSource: defaultSource('Ellipse', 'shape'),
     },
     count: {
       label: 'Count',
-      type: signalType(INT),
+      type: canonicalType(INT),
       value: 100,
       defaultSource: defaultSourceConst(100),
       exposedAsPort: true,
@@ -99,7 +99,7 @@ registerBlock({
     const indexField = ctx.b.fieldIntrinsic(instanceId, 'index', signalTypeField(INT, 'default'));
     const tField = ctx.b.fieldIntrinsic(instanceId, 'normalizedIndex', signalTypeField(FLOAT, 'default'));
     // For static arrays, active is always true - we can use a constant broadcast
-    const activeSignal = ctx.b.sigConst(true, signalType(BOOL));
+    const activeSignal = ctx.b.sigConst(true, canonicalType(BOOL));
     const activeField = ctx.b.Broadcast(activeSignal, signalTypeField(BOOL, 'default'));
 
     const outType0 = ctx.outTypes[0];

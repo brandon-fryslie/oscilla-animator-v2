@@ -208,7 +208,7 @@ export interface PathTopologyDef extends TopologyDef {
      inputs: ArrayBufferView[],
      fieldOp: string,
      N: number,
-     _type: SignalType
+     _type: CanonicalType
    ): void {
      // Pure function - no registry access
      // No topology information passed
@@ -293,7 +293,7 @@ function applyFieldKernel(
   inputs: ArrayBufferView[],   // Input buffers
   fieldOp: string,             // Kernel name
   N: number,                   // Element count
-  _type: SignalType            // Type metadata
+  _type: CanonicalType            // Type metadata
 ): void;
 ```
 
@@ -380,7 +380,7 @@ tangent[i] = (controlPoints[i+1] - controlPoints[i-1]) / 2;
      readonly input: FieldExprId;
      readonly topologyId: TopologyId;  // NEW
      readonly operation: 'tangent' | 'arcLength' | 'curvature';
-     readonly type: SignalType;
+     readonly type: CanonicalType;
    }
    ```
 
@@ -479,7 +479,7 @@ tangent[i] = (controlPoints[i+1] - controlPoints[i-1]) / 2;
      inputs: ArrayBufferView[],
      fieldOp: string,
      N: number,
-     _type: SignalType,
+     _type: CanonicalType,
      context?: KernelContext  // NEW
    ): void;
 
@@ -497,7 +497,7 @@ tangent[i] = (controlPoints[i+1] - controlPoints[i-1]) / 2;
      readonly inputs: readonly FieldExprId[];
      readonly fn: PureFn;
      readonly topologyContext?: TopologyId;  // Optional topology
-     readonly type: SignalType;
+     readonly type: CanonicalType;
    }
    ```
 

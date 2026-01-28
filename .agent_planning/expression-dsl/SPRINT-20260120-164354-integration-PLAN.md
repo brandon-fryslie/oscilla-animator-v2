@@ -52,7 +52,7 @@ Integrate the completed Expression DSL (lexer, parser, type checker, IR compiler
 
 ### 2. Output Type: INFERRED DURING LOWERING
 
-**Decision:** Output type is `signalType('???')` in block definition, resolved during lowering via type checking.
+**Decision:** Output type is `canonicalType('???')` in block definition, resolved during lowering via type checking.
 
 **Rationale:**
 - Type checker determines actual output type (`sin(x)` → float, `x > 0` → bool)
@@ -120,17 +120,17 @@ Create a new block type `'Expression'` in `src/blocks/math-blocks.ts` (or new `s
 - Description: `'Compute signal from mathematical expression'`
 
 **Inputs (5 optional ports):**
-- `in0`: `{ label: 'In 0', type: signalType('???'), optional: true }`
-- `in1`: `{ label: 'In 1', type: signalType('???'), optional: true }`
-- `in2`: `{ label: 'In 2', type: signalType('???'), optional: true }`
-- `in3`: `{ label: 'In 3', type: signalType('???'), optional: true }`
-- `in4`: `{ label: 'In 4', type: signalType('???'), optional: true }`
+- `in0`: `{ label: 'In 0', type: canonicalType('???'), optional: true }`
+- `in1`: `{ label: 'In 1', type: canonicalType('???'), optional: true }`
+- `in2`: `{ label: 'In 2', type: canonicalType('???'), optional: true }`
+- `in3`: `{ label: 'In 3', type: canonicalType('???'), optional: true }`
+- `in4`: `{ label: 'In 4', type: canonicalType('???'), optional: true }`
 
 **Config Parameter (not a port):**
-- `expression`: `{ label: 'Expression', type: signalType('???'), exposedAsPort: false, value: '', uiHint: { control: 'text', multiline: true } }`
+- `expression`: `{ label: 'Expression', type: canonicalType('???'), exposedAsPort: false, value: '', uiHint: { control: 'text', multiline: true } }`
 
 **Outputs:**
-- `out`: `{ label: 'Output', type: signalType('???') }`
+- `out`: `{ label: 'Output', type: canonicalType('???') }`
 
 **Notes:**
 - Use polymorphic type `'???'` because actual types are unknown until expression is parsed
@@ -171,7 +171,7 @@ Implement the `lower` function for Expression block to compile expression text t
 6. If compilation fails: throw `CompileError` with expression error details
 
 **Edge Cases:**
-- Empty expression → return `sigConst(0, signalType('float'))`
+- Empty expression → return `sigConst(0, canonicalType('float'))`
 - Undefined identifier in expression → error lists available inputs (in0-in4 that are wired)
 - No inputs wired → expression can only use literals and functions
 - Type mismatch → error from type checker

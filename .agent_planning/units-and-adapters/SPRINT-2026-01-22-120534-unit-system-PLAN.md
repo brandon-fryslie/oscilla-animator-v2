@@ -5,13 +5,13 @@ Status: READY FOR IMPLEMENTATION
 Source: EVALUATION-2026-01-22.md (from _future/_now directory) + Spec: 0-Units-and-Adapters.md
 
 ## Sprint Goal
-Implement the Unit type system as a closed discriminated union alongside payload and extent in SignalType, replacing the current optional NumericUnit annotation with the spec-compliant Unit system.
+Implement the Unit type system as a closed discriminated union alongside payload and extent in CanonicalType, replacing the current optional NumericUnit annotation with the spec-compliant Unit system.
 
 ## Scope
 
 **Deliverables:**
 - Replace NumericUnit with Unit discriminated union in canonical-types.ts
-- Update SignalType to use Unit (not optional)
+- Update CanonicalType to use Unit (not optional)
 - Add unit validation rules per payload (A4 allowed combinations table)
 - Update all helper functions to accept Unit parameters
 - Migrate existing phase/unit payloads to float:phase01 and float:norm01
@@ -43,23 +43,23 @@ The spec requires a closed union to prevent ad-hoc string additions. Unlike Nume
 
 ---
 
-### P0: Update SignalType to Require Unit
+### P0: Update CanonicalType to Require Unit
 
 **Dependencies**: Define Unit Discriminated Union
 **Spec Reference**: 0-Units-and-Adapters.md §A1 • **Status Reference**: canonical-types.ts line 352 (unit?: NumericUnit)
 
 #### Description
-Modify SignalType to have a mandatory `unit` field instead of the optional `unit?: NumericUnit`. Every SignalType must declare its unit - there is no implicit default.
+Modify CanonicalType to have a mandatory `unit` field instead of the optional `unit?: NumericUnit`. Every CanonicalType must declare its unit - there is no implicit default.
 
 #### Acceptance Criteria
-- [ ] SignalType interface has `readonly unit: Unit` (not optional)
-- [ ] signalType() helper requires unit parameter (no default)
+- [ ] CanonicalType interface has `readonly unit: Unit` (not optional)
+- [ ] canonicalType() helper requires unit parameter (no default)
 - [ ] All derived helpers (signalTypeSignal, signalTypeField, etc.) require unit parameter
 - [ ] TypeScript enforces unit presence at compile time
 - [ ] No optional chaining needed to access .unit field
 
 #### Technical Notes
-This is a breaking change - every SignalType constructor call will need updating. The migration should happen in this sprint to avoid partial states. For types where unit is truly N/A (bool, shape), use unitNone().
+This is a breaking change - every CanonicalType constructor call will need updating. The migration should happen in this sprint to avoid partial states. For types where unit is truly N/A (bool, shape), use unitNone().
 
 ---
 
@@ -76,7 +76,7 @@ Create a validation function that enforces the allowed (payload, unit) combinati
 - [ ] Returns true for all 25 valid combinations in spec §A4
 - [ ] Returns false for invalid combinations (e.g., float:ndc2, int:phase01)
 - [ ] Test coverage for all payload types and at least 2 valid + 2 invalid units each
-- [ ] Used by SignalType constructors to validate at creation time
+- [ ] Used by CanonicalType constructors to validate at creation time
 
 #### Technical Notes
 The validation table from spec:
@@ -94,7 +94,7 @@ Throw descriptive error on invalid combination with suggestion for correct unit.
 
 ### P1: Migrate Existing Unit Usages
 
-**Dependencies**: Update SignalType to Require Unit
+**Dependencies**: Update CanonicalType to Require Unit
 **Spec Reference**: 0-Units-and-Adapters.md §A2 notes • **Status Reference**: UNIT-MIGRATION-GUIDE.md, canonical-types.ts
 
 #### Description
@@ -122,17 +122,17 @@ This is a large surface area change but purely mechanical.
 
 ### P1: Update Helper Functions
 
-**Dependencies**: Update SignalType to Require Unit
+**Dependencies**: Update CanonicalType to Require Unit
 **Spec Reference**: 0-Units-and-Adapters.md §A1 • **Status Reference**: canonical-types.ts lines 571-628
 
 #### Description
-Update all SignalType construction helpers (signalTypeSignal, signalTypeField, etc.) to accept and pass through Unit parameters. Ensure type safety and ergonomics.
+Update all CanonicalType construction helpers (signalTypeSignal, signalTypeField, etc.) to accept and pass through Unit parameters. Ensure type safety and ergonomics.
 
 #### Acceptance Criteria
-- [ ] signalTypeSignal(payload: PayloadType, unit: Unit): SignalType implemented
-- [ ] signalTypeField(payload: PayloadType, instance: InstanceRef | string, unit: Unit): SignalType implemented
-- [ ] signalTypeStatic(payload: PayloadType, unit: Unit): SignalType implemented
-- [ ] signalTypeTrigger(payload: PayloadType, unit: Unit): SignalType implemented
+- [ ] signalTypeSignal(payload: PayloadType, unit: Unit): CanonicalType implemented
+- [ ] signalTypeField(payload: PayloadType, instance: InstanceRef | string, unit: Unit): CanonicalType implemented
+- [ ] signalTypeStatic(payload: PayloadType, unit: Unit): CanonicalType implemented
+- [ ] signalTypeTrigger(payload: PayloadType, unit: Unit): CanonicalType implemented
 - [ ] All helpers validate payload-unit combination via validation table
 - [ ] Clear error messages when invalid combinations provided
 - [ ] Helper usage documented with examples
@@ -174,7 +174,7 @@ Integrate with existing unifyAxis() logic for extent unification.
 
 ### P2: Update Compiler Type Checking
 
-**Dependencies**: Update SignalType to Require Unit, Update Unit Comparison Logic
+**Dependencies**: Update CanonicalType to Require Unit, Update Unit Comparison Logic
 **Spec Reference**: 0-Units-and-Adapters.md §A5 • **Status Reference**: Current compiler uses payload-only type checking
 
 #### Description
@@ -220,7 +220,7 @@ This is developer-facing documentation. Focus on practical migration patterns an
 
 ```
 P0: Define Unit Discriminated Union
-  └─> P0: Update SignalType to Require Unit
+  └─> P0: Update CanonicalType to Require Unit
       └─> P1: Migrate Existing Unit Usages
       └─> P1: Update Helper Functions
   └─> P0: Implement Payload-Unit Validation Table
@@ -247,8 +247,8 @@ P3: Update Documentation (depends on all P0-P2)
 ## Success Criteria
 
 - [ ] All types use Unit discriminated union (no NumericUnit strings)
-- [ ] SignalType.unit is mandatory and validated
-- [ ] Payload-unit validation enforced at SignalType creation
+- [ ] CanonicalType.unit is mandatory and validated
+- [ ] Payload-unit validation enforced at CanonicalType creation
 - [ ] Compiler rejects unit-mismatched connections
 - [ ] Tests pass (815+ tests, allowing for new unit validation)
 - [ ] No phase/unit PayloadTypes remain in codebase

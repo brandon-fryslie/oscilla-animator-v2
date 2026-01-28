@@ -209,7 +209,7 @@ function typecheckMemberAccess(node: ExprNode & { kind: 'member' }, ctx: TypeChe
     );
   }
 
-  // Extract payload type from SignalType
+  // Extract payload type from CanonicalType
   const payload = resolved.type.payload;
 
   // Validate payload type is allowed
@@ -253,7 +253,7 @@ function compileMemberAccess(node: ExprNode & { kind: 'member' }, ctx: CompileCo
   // Case 1: Component access on vector type
   if (isVectorType(objectType)) {
     const pattern = node.member;
-    const resultType = signalType(swizzleResultType(pattern));
+    const resultType = canonicalType(swizzleResultType(pattern));
 
     if (pattern.length === 1) {
       // Single component extraction
@@ -266,7 +266,7 @@ function compileMemberAccess(node: ExprNode & { kind: 'member' }, ctx: CompileCo
       for (const char of pattern) {
         const kernelName = getExtractionKernel(objectType, char);
         const fn = ctx.builder.kernel(kernelName);
-        const componentSig = ctx.builder.sigMap(objectSig, fn, signalType(FLOAT));
+        const componentSig = ctx.builder.sigMap(objectSig, fn, canonicalType(FLOAT));
         componentSigs.push(componentSig);
       }
 

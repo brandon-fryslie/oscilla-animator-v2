@@ -62,7 +62,7 @@ export interface FieldExprMap {
   readonly kind: 'map';
   readonly input: FieldExprId;
   readonly fn: PureFn;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
   readonly domain?: DomainId; // Opaque, unused
 }
 
@@ -71,7 +71,7 @@ export interface FieldExprMap {
   readonly kind: 'map';
   readonly input: FieldExprId;
   readonly fn: PureFn;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
   readonly instanceId?: InstanceId; // Rich context available
 }
 ```

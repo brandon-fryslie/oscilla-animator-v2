@@ -16,7 +16,7 @@ The Const block's output is hardcoded to `'float'` payload type, causing type un
 
 In `src/blocks/signal-blocks.ts:66`:
 ```typescript
-out: { label: 'Output', type: signalType('float', unitVar('const_out')) },
+out: { label: 'Output', type: canonicalType('float', unitVar('const_out')) },
 ```
 
 The output uses:
@@ -30,7 +30,7 @@ When pass1-type-constraints tries to unify `'float'` (from Const) with `'int'` (
 Change the Const block output to use `payloadVar()` for polymorphic payload resolution:
 
 ```typescript
-out: { label: 'Output', type: signalType(payloadVar('const_payload'), unitVar('const_out')) },
+out: { label: 'Output', type: canonicalType(payloadVar('const_payload'), unitVar('const_out')) },
 ```
 
 This allows the constraint solver to resolve the payload type from context (what the Const block connects to).
@@ -43,10 +43,10 @@ This allows the constraint solver to resolve the payload type from context (what
 
 ```typescript
 // BEFORE
-out: { label: 'Output', type: signalType('float', unitVar('const_out')) },
+out: { label: 'Output', type: canonicalType('float', unitVar('const_out')) },
 
 // AFTER
-out: { label: 'Output', type: signalType(payloadVar('const_payload'), unitVar('const_out')) },
+out: { label: 'Output', type: canonicalType(payloadVar('const_payload'), unitVar('const_out')) },
 ```
 
 **Note**: Import `payloadVar` at top of file (already may be there, verify).

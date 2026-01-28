@@ -15,7 +15,7 @@ import './BlockInspector.css';
 import type { Block, Patch, Edge, PortRef } from '../../graph/Patch';
 import type { BlockId, PortId, DefaultSource, UIControlHint } from '../../types';
 import type { CombineMode } from '../../types';
-import type { SignalType } from '../../core/canonical-types';
+import type { CanonicalType } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
 import {
   NumberInput as MuiNumberInput,
@@ -39,9 +39,9 @@ import { DisplayNameEditor } from './DisplayNameEditor';
 // =============================================================================
 
 /**
- * Format a SignalType for display.
+ * Format a CanonicalType for display.
  */
-function formatSignalType(type: SignalType | undefined): string {
+function formatSignalType(type: CanonicalType | undefined): string {
   if (type == undefined) {
     throw new Error("ERROR: BlockInspector.formatSignalType: Type is undefined.")
   }
@@ -73,7 +73,7 @@ function getDerivedDefaultSourceId(blockId: BlockId, portId: string): BlockId {
  * Check if two signal types are compatible for wiring.
  * Payload types must match. Payload-generic blocks use BlockPayloadMetadata.
  */
-function areTypesCompatible(sourceType: SignalType | undefined, targetType: SignalType | undefined): boolean {
+function areTypesCompatible(sourceType: CanonicalType | undefined, targetType: CanonicalType | undefined): boolean {
   // Handle undefined types
   if (!sourceType || !targetType) return false;
   // Payload types must match
@@ -84,7 +84,7 @@ function areTypesCompatible(sourceType: SignalType | undefined, targetType: Sign
  * Get slider min value for Const default source editor.
  * Priority: inputDef.uiHint > inputDef.defaultSource.params.value-based > type-based defaults
  */
-function getConstSliderMin(inputDef: InputDef | undefined, portType: SignalType | undefined): number {
+function getConstSliderMin(inputDef: InputDef | undefined, portType: CanonicalType | undefined): number {
   // Check uiHint first
   const hint = inputDef?.uiHint;
   if (hint && 'min' in hint && hint.min !== undefined) {
@@ -102,7 +102,7 @@ function getConstSliderMin(inputDef: InputDef | undefined, portType: SignalType 
  * Get slider max value for Const default source editor.
  * Priority: inputDef.uiHint > type-based defaults
  */
-function getConstSliderMax(inputDef: InputDef | undefined, portType: SignalType | undefined): number {
+function getConstSliderMax(inputDef: InputDef | undefined, portType: CanonicalType | undefined): number {
   // Check uiHint first
   const hint = inputDef?.uiHint;
   if (hint && 'max' in hint && hint.max !== undefined) {
@@ -120,7 +120,7 @@ function getConstSliderMax(inputDef: InputDef | undefined, portType: SignalType 
  * Get slider step value for Const default source editor.
  * Priority: inputDef.uiHint > type-based defaults
  */
-function getConstSliderStep(inputDef: InputDef | undefined, portType: SignalType | undefined): number {
+function getConstSliderStep(inputDef: InputDef | undefined, portType: CanonicalType | undefined): number {
   // Check uiHint first
   const hint = inputDef?.uiHint;
   if (hint && 'step' in hint && hint.step !== undefined) {
@@ -141,7 +141,7 @@ function getConstSliderStep(inputDef: InputDef | undefined, portType: SignalType
  * - Must have at least one output
  * - Must have at least one output compatible with the target port type
  */
-function getValidDefaultSourceBlockTypes(portType: SignalType): { blockType: string; label: string; outputs: readonly OutputDef[] }[] {
+function getValidDefaultSourceBlockTypes(portType: CanonicalType): { blockType: string; label: string; outputs: readonly OutputDef[] }[] {
   const validBlocks: { blockType: string; label: string; outputs: readonly OutputDef[] }[] = [];
 
   for (const [blockType, def] of BLOCK_DEFS_BY_TYPE.entries()) {
@@ -1325,7 +1325,7 @@ function PortInspector({ portRef, block, typeInfo, patch, onBack }: PortInspecto
 interface PortDefaultSourceEditorProps {
   blockId: BlockId;
   portId: string;
-  portType: SignalType;
+  portType: CanonicalType;
   currentDefaultSource: DefaultSource;
   registryDefaultSource?: DefaultSource;
   isConnected?: boolean;

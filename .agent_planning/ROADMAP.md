@@ -26,9 +26,9 @@ Last updated: 2026-01-27-171000
 #### ✅ canonical-arch-alignment [COMPLETED]
 - **State:** COMPLETED
 - **Epic:** None
-- **Description:** Implement canonical 5-axis type system (PayloadType, AxisTag, Cardinality, Temporality, Binding, Extent, SignalType)
+- **Description:** Implement canonical 5-axis type system (PayloadType, AxisTag, Cardinality, Temporality, Binding, Extent, CanonicalType)
 - **Completed:** 2026-01-09
-- **Summary:** P0-P3 delivered. 68 tests passing. All 25 blocks migrated to SignalType system.
+- **Summary:** P0-P3 delivered. 68 tests passing. All 25 blocks migrated to CanonicalType system.
 - **Planning Files:** `.agent_planning/canonical-arch-alignment/`
 
 #### ✅ design-docs-audit [COMPLETED]

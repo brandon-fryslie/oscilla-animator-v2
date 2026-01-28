@@ -37,7 +37,7 @@ RawGraph → GraphNormalization → NormalizedGraph → Compilation → Compiled
 
 **Anchor-Based IDs** [L104-119]: Structural artifacts keyed by attachment (e.g., `defaultSource:<blockId>:<portName>:<in|out>`) survive user edits.
 
-**Port Structure** [L140-151]: `{ id, dir: PortDirection, type: SignalType, combine: CombineMode }`
+**Port Structure** [L140-151]: `{ id, dir: PortDirection, type: CanonicalType, combine: CombineMode }`
 **Combine on input port, not edge** [L163].
 
 ## Domain Declarations [L167-179]

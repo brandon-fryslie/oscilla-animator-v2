@@ -62,17 +62,17 @@ type Extent = {
 
 ---
 
-### SignalType
+### CanonicalType
 
 **Definition**: Complete type description for a port or wire. The full contract.
 
 **Type**: type
 
-**Canonical Form**: `SignalType`
+**Canonical Form**: `CanonicalType`
 
 **Structure**:
 ```typescript
-type SignalType = {
+type CanonicalType = {
   payload: PayloadType;
   extent: Extent;
 };
@@ -716,7 +716,7 @@ interface DrawPathInstancesOp {
 
 ### Field
 
-**Definition**: A SignalType where `cardinality = many(domain)` and `temporality = continuous`.
+**Definition**: A CanonicalType where `cardinality = many(domain)` and `temporality = continuous`.
 
 **Type**: concept (type constraint)
 
@@ -728,7 +728,7 @@ interface DrawPathInstancesOp {
 
 ### Signal
 
-**Definition**: A SignalType where `cardinality = one` and `temporality = continuous`.
+**Definition**: A CanonicalType where `cardinality = one` and `temporality = continuous`.
 
 **Type**: concept (type constraint)
 
@@ -738,7 +738,7 @@ interface DrawPathInstancesOp {
 
 ### Trigger
 
-**Definition**: A SignalType where `cardinality = one` and `temporality = discrete`.
+**Definition**: A CanonicalType where `cardinality = one` and `temporality = discrete`.
 
 **Type**: concept (type constraint)
 
@@ -904,7 +904,7 @@ type BlockRole =
 
 **Canonical Form**: `tMs`
 
-**SignalType**: `one + continuous + int`
+**CanonicalType**: `one + continuous + int`
 
 **Source**: [03-time-system.md](./topics/03-time-system.md)
 
@@ -1267,8 +1267,8 @@ interface PathTopologyDef {
 
 ### Type Names
 
-- **PascalCase**: `SignalType`, `PayloadType`, `BlockRole`, `Extent`
-- No generic syntax in names: `SignalType`, not `Signal<T>`
+- **PascalCase**: `CanonicalType`, `PayloadType`, `BlockRole`, `Extent`
+- No generic syntax in names: `CanonicalType`, not `Signal<T>`
 
 ### Block Names
 
@@ -1776,7 +1776,7 @@ type ValueSummary =
 | `DomainTag` | `PayloadType` | Domain is now ontological classification |
 | `ValueType` | `PayloadType` | More precise name |
 | `World` | `Extent` | 5-axis coordinate |
-| `Type` / `TypeDesc` | `SignalType` | Complete contract |
+| `Type` / `TypeDesc` | `CanonicalType` | Complete contract |
 | `config` / `scalar` (world) | `cardinality = zero` | Explicit axis |
 | `signal` (world) | `one + continuous` | Explicit axes |
 | `field` (world) | `many(instance) + continuous` | Now references InstanceRef, not DomainRef |

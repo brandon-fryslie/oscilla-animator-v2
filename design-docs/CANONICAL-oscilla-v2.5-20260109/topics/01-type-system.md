@@ -9,7 +9,7 @@ order: 1
 > The foundation of Oscilla's type safety and compile-time guarantees.
 
 **Related Topics**: [02-block-system](./02-block-system.md), [04-compilation](./04-compilation.md)
-**Key Terms**: [PayloadType](../GLOSSARY.md#payloadtype), [Extent](../GLOSSARY.md#extent), [SignalType](../GLOSSARY.md#signaltype)
+**Key Terms**: [PayloadType](../GLOSSARY.md#payloadtype), [Extent](../GLOSSARY.md#extent), [CanonicalType](../GLOSSARY.md#canonicalType)
 **Relevant Invariants**: [I22](../INVARIANTS.md#i22-safe-modulation-ranges)
 
 ---
@@ -21,7 +21,7 @@ Oscilla v2.5 introduces a **five-axis type coordinate system** that cleanly sepa
 The type system has three layers:
 1. **PayloadType** - What the value is made of (float, vec2, color, etc.)
 2. **Extent** - Where/when/about-what the value exists (5 axes)
-3. **SignalType** - The complete contract (PayloadType + Extent)
+3. **CanonicalType** - The complete contract (PayloadType + Extent)
 
 ---
 
@@ -278,12 +278,12 @@ These axes exist in the type coordinate so you can add multi-view and multi-hist
 
 ---
 
-## SignalType (Complete Contract)
+## CanonicalType (Complete Contract)
 
 The full type description for a port or wire.
 
 ```typescript
-type SignalType = {
+type CanonicalType = {
   payload: PayloadType;
   extent: Extent;
 };
@@ -291,7 +291,7 @@ type SignalType = {
 
 ### Derived Type Concepts
 
-These are NOT separate types - they're constraints on SignalType:
+These are NOT separate types - they're constraints on CanonicalType:
 
 | Concept | Cardinality | Temporality | Definition |
 |---------|-------------|-------------|------------|
@@ -302,7 +302,7 @@ These are NOT separate types - they're constraints on SignalType:
 
 ```typescript
 // Field predicate
-function isField(t: SignalType): boolean {
+function isField(t: CanonicalType): boolean {
   return (
     t.extent.cardinality.kind === 'instantiated' &&
     t.extent.cardinality.value.kind === 'many' &&
@@ -529,7 +529,7 @@ Phase is `float` with `unit: 'phase01'`. Arithmetic rules:
 ### Signal Type (Per-Frame Float)
 
 ```typescript
-const phaseSignal: SignalType = {
+const phaseSignal: CanonicalType = {
   payload: 'float',
   unit: 'phase01',
   extent: {
@@ -545,7 +545,7 @@ const phaseSignal: SignalType = {
 ### Field Type (Per-Element Color)
 
 ```typescript
-const colorField: SignalType = {
+const colorField: CanonicalType = {
   payload: 'color',
   extent: {
     cardinality: {
@@ -570,7 +570,7 @@ const colorField: SignalType = {
 ### Event Type (Trigger)
 
 ```typescript
-const pulse: SignalType = {
+const pulse: CanonicalType = {
   payload: 'unit',
   extent: {
     cardinality: { kind: 'instantiated', value: { kind: 'one' } },
@@ -586,8 +586,8 @@ const pulse: SignalType = {
 
 ## See Also
 
-- [02-block-system](./02-block-system.md) - How blocks use SignalType
+- [02-block-system](./02-block-system.md) - How blocks use CanonicalType
 - [04-compilation](./04-compilation.md) - Type unification and resolution
 - [Glossary: PayloadType](../GLOSSARY.md#payloadtype)
 - [Glossary: Extent](../GLOSSARY.md#extent)
-- [Glossary: SignalType](../GLOSSARY.md#signaltype)
+- [Glossary: CanonicalType](../GLOSSARY.md#canonicalType)

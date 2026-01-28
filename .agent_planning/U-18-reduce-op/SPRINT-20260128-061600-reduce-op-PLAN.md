@@ -53,7 +53,7 @@ Add new `SigExprReduceField` interface to the SigExpr union type. This follows t
   - `kind: 'reduce_field'`
   - `field: FieldExprId` (input field to aggregate)
   - `op: 'min' | 'max' | 'sum' | 'avg'` (reduction operation)
-  - `type: SignalType` (output signal type with cardinality=one)
+  - `type: CanonicalType` (output signal type with cardinality=one)
 - [ ] Added to `SigExpr` union type (lines 84-93)
 - [ ] TypeScript compilation succeeds with no errors
 - [ ] Exhaustive switch checks in `SignalEvaluator.ts` and `Materializer.ts` catch new variant
@@ -77,7 +77,7 @@ Add `ReduceField()` method to IRBuilder interface and implementation. This creat
 #### Acceptance Criteria
 - [ ] Method signature added to `IRBuilder` interface (src/compiler/ir/IRBuilder.ts):
   ```typescript
-  ReduceField(field: FieldExprId, op: 'min'|'max'|'sum'|'avg', type: SignalType): SigExprId;
+  ReduceField(field: FieldExprId, op: 'min'|'max'|'sum'|'avg', type: CanonicalType): SigExprId;
   ```
 - [ ] Implementation added to `IRBuilderImpl` class (src/compiler/ir/IRBuilderImpl.ts):
   - Allocates new SigExprId
@@ -120,7 +120,7 @@ Register Reduce block following the Broadcast pattern (field-blocks.ts:33-90). T
 - [ ] Parameter defined for operation selection:
   - `op: { label: 'Operation', type: 'enum', options: ['min', 'max', 'sum', 'avg'], default: 'sum' }`
 - [ ] Input port: `field: { label: 'Field', type: signalTypeField(payloadVar(...), 'default') }`
-- [ ] Output port: `signal: { label: 'Result', type: signalType(payloadVar(...)) }`
+- [ ] Output port: `signal: { label: 'Result', type: canonicalType(payloadVar(...)) }`
 - [ ] Payload-generic contract implemented (ALL_CONCRETE_PAYLOADS)
 - [ ] `lower()` function calls `ctx.b.ReduceField(...)` and returns signal output
 - [ ] Block appears in block picker UI under 'field' category

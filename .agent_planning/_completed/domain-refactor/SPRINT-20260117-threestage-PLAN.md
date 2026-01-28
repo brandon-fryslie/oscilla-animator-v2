@@ -26,22 +26,22 @@ Implement the correct three-stage block architecture:
 export interface FieldExprArray {
   readonly kind: 'array';
   readonly instanceId: InstanceId;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 
 export interface FieldExprLayout {
   readonly kind: 'layout';
   readonly input: FieldExprId;
   readonly layoutSpec: LayoutSpec;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 ```
 
 **Add IRBuilder methods**:
 ```typescript
 // IRBuilder.ts
-fieldArray(instanceId: InstanceId, type: SignalType): FieldExprId;
-fieldLayout(input: FieldExprId, layout: LayoutSpec, type: SignalType): FieldExprId;
+fieldArray(instanceId: InstanceId, type: CanonicalType): FieldExprId;
+fieldLayout(input: FieldExprId, layout: LayoutSpec, type: CanonicalType): FieldExprId;
 ```
 
 **Acceptance Criteria**:
@@ -65,13 +65,13 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   inputs: [
-    { id: 'radius', label: 'Radius', type: signalType('float'), defaultValue: 0.02 }
+    { id: 'radius', label: 'Radius', type: canonicalType('float'), defaultValue: 0.02 }
   ],
   outputs: [
-    { id: 'circle', label: 'Circle', type: signalType('circle') }  // Signal, not Field!
+    { id: 'circle', label: 'Circle', type: canonicalType('circle') }  // Signal, not Field!
   ],
   lower: ({ ctx, inputsById, config }) => {
-    const radius = inputsById.radius?.id ?? ctx.b.sigConst(config?.radius ?? 0.02, signalType('float'));
+    const radius = inputsById.radius?.id ?? ctx.b.sigConst(config?.radius ?? 0.02, canonicalType('float'));
     const slot = ctx.b.allocSlot();
     // Pass through radius as the "circle" signal (minimal for now)
     return {
@@ -103,9 +103,9 @@ registerBlock({
   form: 'primitive',
   capability: 'identity',
   inputs: [
-    { id: 'element', label: 'Element', type: signalType('any') },
-    { id: 'count', label: 'Count', type: signalType('int'), defaultValue: 100 },
-    { id: 'maxCount', label: 'Max Count', type: signalType('int'), optional: true }
+    { id: 'element', label: 'Element', type: canonicalType('any') },
+    { id: 'count', label: 'Count', type: canonicalType('int'), defaultValue: 100 },
+    { id: 'maxCount', label: 'Max Count', type: canonicalType('int'), optional: true }
   ],
   outputs: [
     { id: 'elements', label: 'Elements', type: signalTypeField('any', 'default') },
@@ -162,8 +162,8 @@ registerBlock({
   capability: 'pure',
   inputs: [
     { id: 'elements', label: 'Elements', type: signalTypeField('any', 'default') },  // Field input!
-    { id: 'rows', label: 'Rows', type: signalType('int'), defaultValue: 10 },
-    { id: 'cols', label: 'Columns', type: signalType('int'), defaultValue: 10 }
+    { id: 'rows', label: 'Rows', type: canonicalType('int'), defaultValue: 10 },
+    { id: 'cols', label: 'Columns', type: canonicalType('int'), defaultValue: 10 }
   ],
   outputs: [
     { id: 'position', label: 'Position', type: signalTypeField('vec2', 'default') }  // Field output!

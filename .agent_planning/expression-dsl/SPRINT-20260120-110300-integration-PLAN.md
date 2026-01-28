@@ -73,10 +73,10 @@ registerBlock({
   inputs: {
     // Dynamic inputs based on expression
     // For expression "sin(phase * 2)", this would be:
-    // phase: { type: signalType('phase'), exposedAsPort: true }
+    // phase: { type: canonicalType('phase'), exposedAsPort: true }
   },
   outputs: {
-    out: { type: signalType('???') }  // Polymorphic, resolved from expression
+    out: { type: canonicalType('???') }  // Polymorphic, resolved from expression
   },
   lower: ({ ctx, inputsById, config }) => {
     const exprString = config?.expression as string;
@@ -85,7 +85,7 @@ registerBlock({
     }
 
     // Get input types from connected ports
-    const inputTypes = new Map<string, SignalType>();
+    const inputTypes = new Map<string, CanonicalType>();
     for (const [name, port] of Object.entries(ctx.inputsById)) {
       inputTypes.set(name, port.type);
     }
@@ -158,7 +158,7 @@ Component structure:
 interface ExpressionInputProps {
   value: string;
   onChange: (value: string) => void;
-  inputTypes: Map<string, SignalType>;  // Available inputs
+  inputTypes: Map<string, CanonicalType>;  // Available inputs
 }
 
 export function ExpressionInput({ value, onChange, inputTypes }: ExpressionInputProps) {
@@ -237,7 +237,7 @@ test('expression block compiles and executes', () => {
     type: 'Expression',
     config: { expression: 'sin(phase * 2)' },
     inputs: {
-      phase: { type: signalType('phase') }
+      phase: { type: canonicalType('phase') }
     }
   });
 

@@ -60,7 +60,7 @@ export interface FieldExprPathDerivative {
   readonly kind: 'pathDerivative';
   readonly input: FieldExprId;  // The control points field
   readonly operation: 'tangent' | 'arcLength';
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 ```
 
@@ -93,7 +93,7 @@ This keeps field kernels pure while enabling Materializer to compute derivatives
      readonly kind: 'pathDerivative';
      readonly input: FieldExprId;
      readonly operation: 'tangent' | 'arcLength';
-     readonly type: SignalType;
+     readonly type: CanonicalType;
    }
    ```
 
@@ -132,7 +132,7 @@ This keeps field kernels pure while enabling Materializer to compute derivatives
    fieldPathDerivative(
      input: FieldExprId,
      operation: 'tangent' | 'arcLength',
-     type: SignalType
+     type: CanonicalType
    ): FieldExprId;
    ```
 
@@ -143,7 +143,7 @@ This keeps field kernels pure while enabling Materializer to compute derivatives
    fieldPathDerivative(
      input: FieldExprId,
      operation: 'tangent' | 'arcLength',
-     type: SignalType
+     type: CanonicalType
    ): FieldExprId {
      const id = this.allocFieldId();
      this.fieldExprs.push({
@@ -188,7 +188,7 @@ This keeps field kernels pure while enabling Materializer to compute derivatives
      out: ArrayBufferView,
      input: ArrayBufferView,
      operation: 'tangent' | 'arcLength',
-     inputType: SignalType
+     inputType: CanonicalType
    ): void {
      if (operation === 'tangent') {
        fillBufferTangent(out, input, inputType);
@@ -200,7 +200,7 @@ This keeps field kernels pure while enabling Materializer to compute derivatives
    function fillBufferTangent(
      out: ArrayBufferView,
      input: ArrayBufferView,
-     inputType: SignalType
+     inputType: CanonicalType
    ): void {
      // Assume input is Field<vec2> (control points)
      const N = inputType.cardinality === 'sig' ? 1 : input.byteLength / (2 * 4);
@@ -232,7 +232,7 @@ This keeps field kernels pure while enabling Materializer to compute derivatives
    function fillBufferArcLength(
      out: ArrayBufferView,
      input: ArrayBufferView,
-     inputType: SignalType
+     inputType: CanonicalType
    ): void {
      // Assume input is Field<vec2> (control points)
      const N = inputType.cardinality === 'sig' ? 1 : input.byteLength / (2 * 4);

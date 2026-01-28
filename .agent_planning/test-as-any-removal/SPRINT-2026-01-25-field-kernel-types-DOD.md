@@ -12,8 +12,8 @@ All of the following must be true for this sprint to be COMPLETE:
 
 **Primary: Create testFieldType() helper function**
 - [ ] New test helper function `testFieldType()` created in appropriate location (likely `src/core/__tests__/test-helpers.ts` or similar)
-- [ ] Function signature: `testFieldType(payload: Payload, instanceId?: InstanceId): SignalType`
-- [ ] Function returns a properly-typed SignalType without requiring casts
+- [ ] Function signature: `testFieldType(payload: Payload, instanceId?: InstanceId): CanonicalType`
+- [ ] Function returns a properly-typed CanonicalType without requiring casts
 - [ ] Helper exported for use in all test files
 - [ ] Function includes JSDoc explaining its purpose
 
@@ -59,7 +59,7 @@ If all of these commands succeed and return zero matches for remaining 'type as 
 ## Notes
 
 - This is the largest single-sprint effort (36 casts), but mechanical once the helper is created
-- The helper should encapsulate all the defaults needed for test SignalType objects
+- The helper should encapsulate all the defaults needed for test CanonicalType objects
 - Focus on creating a clean, reusable helper that other tests can benefit from
 - Once created, application to all ~30 instances in field-kernel-contracts.test.ts is straightforward
 
@@ -75,7 +75,7 @@ const type = testFieldType('float')
 ```
 
 **Similar existing helpers:**
-- `signalType()` from `src/core/canonical-types.ts`
+- `canonicalType()` from `src/core/canonical-types.ts`
 - `sigExprId()` from `src/compiler/ir/Indices.ts`
 
 Consider whether `testFieldType()` should extend or delegate to these existing factories.

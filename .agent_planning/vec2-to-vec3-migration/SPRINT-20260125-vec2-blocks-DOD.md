@@ -12,15 +12,15 @@
 - [ ] No test failures
 
 ### P1: PolarToCartesian → vec3
-- [ ] Output `pos` type is `signalType('vec3')`
+- [ ] Output `pos` type is `canonicalType('vec3')`
 - [ ] Kernel outputs (x, y, 0) - z is always 0
 - [ ] kernel-signatures.ts updated
 
 ### P2: OffsetPosition → OffsetVec
 - [ ] Block renamed from OffsetPosition to OffsetVec
-- [ ] Input `posIn` type is `signalType('vec3')`
+- [ ] Input `posIn` type is `canonicalType('vec3')`
 - [ ] Input `amountZ` added with default 0
-- [ ] Output `posOut` type is `signalType('vec3')`
+- [ ] Output `posOut` type is `canonicalType('vec3')`
 - [ ] Kernel renamed and updated for stride 3
 
 ### P3: LayoutAlongPath → vec3

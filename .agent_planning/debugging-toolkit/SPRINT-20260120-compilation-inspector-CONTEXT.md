@@ -182,7 +182,7 @@ compilationInspector.capturePass('schedule', unlinkedIR, scheduleIR);
 ### TypedPatch
 ```typescript
 NormalizedPatch & {
-  blockOutputTypes: Map<BlockId, Map<PortId, SignalType>>;
+  blockOutputTypes: Map<BlockId, Map<PortId, CanonicalType>>;
 }
 ```
 

@@ -44,7 +44,7 @@ The user-authored patch before any processing:
 
 Makes all structure explicit:
 - Materializes derived blocks (default sources, buses, rails, lenses)
-- Assigns initial SignalType coordinates
+- Assigns initial CanonicalType coordinates
 - Connects all inputs (default source invariant)
 
 **Output**: NormalizedGraph
@@ -122,7 +122,7 @@ structEdgeId = hash("structEdge", anchor, localEdgeName)
 
 - **Explicitly closed**: All derived blocks materialized
 - **Fully connected**: Every input has exactly one source
-- **Typed ports**: Every port has a SignalType
+- **Typed ports**: Every port has a CanonicalType
 - **Immutable input**: Compiler never mutates this
 
 ### IDs and References
@@ -145,7 +145,7 @@ type PortDirection = { kind: 'in' } | { kind: 'out' };
 type Port = {
   id: PortId;
   dir: PortDirection;
-  type: SignalType;       // 5-axis coordinate
+  type: CanonicalType;       // 5-axis coordinate
   combine: CombineMode;   // For inputs
 };
 ```
@@ -184,7 +184,7 @@ type DomainDecl =
 
 ### Where the Five-Axis Model Lives
 
-1. **GraphNormalization**: Assigns initial SignalType coordinates (mostly with `AxisTag.default`)
+1. **GraphNormalization**: Assigns initial CanonicalType coordinates (mostly with `AxisTag.default`)
 
 2. **Compilation**:
    - Unifies axes (join rules)

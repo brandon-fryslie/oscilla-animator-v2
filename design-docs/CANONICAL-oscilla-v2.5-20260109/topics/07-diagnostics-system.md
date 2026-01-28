@@ -389,7 +389,7 @@ Optional structured data for specific diagnostic types:
 
 ```typescript
 type DiagnosticPayload =
-  | { kind: 'typeMismatch'; expected: SignalType; actual: SignalType; suggestedAdapters?: string[] }
+  | { kind: 'typeMismatch'; expected: CanonicalType; actual: CanonicalType; suggestedAdapters?: string[] }
   | { kind: 'cycle'; memberBlockIds: string[] }
   | { kind: 'busMetrics'; publishers: number; listeners: number; defaultValue?: unknown }
   | { kind: 'performance'; threshold: number; actual: number; blockId?: string }
@@ -797,7 +797,7 @@ This prevents the worst UX: errors vanishing when things break.
 
 ### Canonical Type Formatting
 
-Every `SignalType` must be representable as a stable string key:
+Every `CanonicalType` must be representable as a stable string key:
 - `signal:number`
 - `field:vec2(point)`
 - `special:renderTree`

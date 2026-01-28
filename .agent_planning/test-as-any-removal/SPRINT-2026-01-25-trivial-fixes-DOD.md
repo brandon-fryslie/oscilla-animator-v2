@@ -18,8 +18,8 @@ All of the following must be true for this sprint to be COMPLETE:
 - [ ] Zero remaining `as any` in both files (verify with grep)
 
 **Item 2: Block definition mock SignalTypes**
-- [ ] All mock block definitions in affected files use `signalType('float')` or equivalent factory
-- [ ] No `{ payload: ... } as any` patterns remain in SignalType usage
+- [ ] All mock block definitions in affected files use `canonicalType('float')` or equivalent factory
+- [ ] No `{ payload: ... } as any` patterns remain in CanonicalType usage
 - [ ] Tests execute: `npm run test -- exportFormats.test.ts` → PASS
 - [ ] Export serialization works correctly (exportFormats test covers this)
 - [ ] Zero remaining `as any` in block mock definitions (verify with grep)

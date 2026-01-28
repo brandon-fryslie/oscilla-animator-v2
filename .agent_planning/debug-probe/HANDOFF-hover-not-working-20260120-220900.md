@@ -125,7 +125,7 @@ Sprint 1 is complete when:
 
 ### Related Components
 - `src/types.ts` - ValueSlot type definition
-- `src/core/canonical-types.ts` - SignalType definition
+- `src/core/canonical-types.ts` - CanonicalType definition
 - `src/runtime/RuntimeState.ts` - Tap interface definition
 
 ### Out of Scope
@@ -255,7 +255,7 @@ console.log('Manual query result:', result);
 **Key Interfaces**:
 - `src/runtime/RuntimeState.ts` - DebugTap interface definition
 - `src/types.ts` - ValueSlot type
-- `src/core/canonical-types.ts` - SignalType definition
+- `src/core/canonical-types.ts` - CanonicalType definition
 
 ## Questions & Blockers
 

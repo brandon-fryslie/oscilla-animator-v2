@@ -194,7 +194,7 @@ const randField = b.fieldIntrinsic(instanceId, 'randomId',
 
 ## Helper Functions
 
-All `signalType*` helpers accept an optional unit parameter:
+All `canonicalType*` helpers accept an optional unit parameter:
 
 ```typescript
 // Signal (one + continuous)
@@ -303,7 +303,7 @@ A: Only when the unit matters. Generic arithmetic doesn't need units.
 
 ## Related Files
 
-- `src/core/canonical-types.ts` - NumericUnit type definition, SignalType extension
+- `src/core/canonical-types.ts` - NumericUnit type definition, CanonicalType extension
 - `src/runtime/kernel-signatures.ts` - Kernel unit expectations
 - `src/compiler/passes-v2/pass2-types.ts` - Unit validation implementation
 - `src/compiler/passes-v2/__tests__/unit-validation.test.ts` - Tests

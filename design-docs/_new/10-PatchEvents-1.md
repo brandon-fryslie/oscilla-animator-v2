@@ -61,7 +61,7 @@ Events are stored in:
 
 3.1 Allowed extents for events
 
-An event’s SignalType payload is always bool and its extent must satisfy:
+An event’s CanonicalType payload is always bool and its extent must satisfy:
 •	temporality.kind === 'discrete'
 •	cardinality.kind ∈ {'one','many'} (events can be per-lane)
 •	binding/perspective/branch follow the same rules as signals/fields.
@@ -91,7 +91,7 @@ export type EventExpr =
 
 4.1 Type attachment
 
-Every EventExpr in IR MUST have an associated resolved SignalType describing:
+Every EventExpr in IR MUST have an associated resolved CanonicalType describing:
 •	payload: 'bool'
 •	extent.temporality: discrete
 •	extent.cardinality: one|many(instance)

@@ -156,7 +156,7 @@ Option B: CSS-only with data attributes
 ```typescript
 interface ConnectionPickerProps {
   targetPort: PortRef;  // The port we're connecting TO
-  targetType: SignalType;
+  targetType: CanonicalType;
   onSelect: (sourcePort: PortRef) => void;
   onCancel: () => void;
 }

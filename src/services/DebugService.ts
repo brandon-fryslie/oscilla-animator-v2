@@ -12,7 +12,7 @@
  */
 
 import type { ValueSlot } from '../types';
-import type { SignalType } from '../core/canonical-types';
+import type { CanonicalType } from '../core/canonical-types';
 import type { UnmappedEdgeInfo, EdgeMetadata } from './mapDebugEdges';
 import { HistoryService, type KeyResolver, type ResolvedKeyMetadata } from '../ui/debug-viz/HistoryService';
 import type { DebugTargetKey } from '../ui/debug-viz/types';
@@ -24,7 +24,7 @@ export interface SignalValueResult {
   kind: 'signal';
   value: number;
   slotId: ValueSlot;
-  type: SignalType;
+  type: CanonicalType;
 }
 
 /**
@@ -38,7 +38,7 @@ export interface FieldValueResult {
   mean: number;
   first: number;
   slotId: ValueSlot;
-  type: SignalType;
+  type: CanonicalType;
 }
 
 /**
@@ -48,7 +48,7 @@ export interface FieldValueResult {
 export interface FieldUntrackedResult {
   kind: 'field-untracked';
   slotId: ValueSlot;
-  type: SignalType;
+  type: CanonicalType;
 }
 
 /**

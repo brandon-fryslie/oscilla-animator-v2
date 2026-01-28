@@ -248,7 +248,7 @@ export interface FieldExprArray {
   readonly kind: 'array';
   readonly primitiveId: PrimitiveId;
   readonly instanceId: InstanceId;
-  readonly type: SignalType;
+  readonly type: CanonicalType;
 }
 
 // Created by layout blocks
@@ -257,7 +257,7 @@ export interface FieldExprLayout {
   readonly instanceId: InstanceId;
   readonly layout: 'grid' | 'spiral' | 'random' | 'along-path';
   readonly params: readonly SigExprId[];  // rows, cols, spacing, etc.
-  readonly type: SignalType;  // Always vec2 (position)
+  readonly type: CanonicalType;  // Always vec2 (position)
 }
 ```
 

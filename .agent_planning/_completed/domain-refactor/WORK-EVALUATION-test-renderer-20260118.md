@@ -142,7 +142,7 @@ it('different seeds produce different results', () => {
 getSlotCount(): number;
 
 /** Get slot type information for slotMeta generation. */
-getSlotTypes(): ReadonlyMap<ValueSlot, SignalType>;
+getSlotTypes(): ReadonlyMap<ValueSlot, CanonicalType>;
 ```
 
 **SlotMeta Generation (compile.ts:283-319)**
@@ -164,7 +164,7 @@ const storageOffsets = {
 // Slots are indexed from 0, so iterate through all slot IDs
 for (let slotId = 0; slotId < builder.getSlotCount?.() || 0; slotId++) {
   const slot = slotId as ValueSlot;
-  const type = slotTypes.get(slot) || signalType('float'); // Default to float if no type info
+  const type = slotTypes.get(slot) || canonicalType('float'); // Default to float if no type info
 
   // Determine storage class from type
   // For now, simple mapping: all numbers go to f64

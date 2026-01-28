@@ -15,7 +15,7 @@ The work is well-defined with clear requirements. No blockers identified.
 ### PayloadType System ✅
 - `PayloadType` defined in `src/core/canonical-types.ts` (line 50-59)
 - Includes `'shape'` as a payload type
-- SignalType and Extent machinery fully operational
+- CanonicalType and Extent machinery fully operational
 
 ### Shape Representation
 - `ShapeDescriptor`: Plain object with topologyId + params dict (ScheduleExecutor:43-46)

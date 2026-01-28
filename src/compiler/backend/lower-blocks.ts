@@ -12,7 +12,7 @@ import type { ValueRefPacked } from "../ir/lowerTypes";
 import type { InstanceId } from "../ir/Indices";
 import { getBlockDefinition, type LowerCtx, type LowerResult, hasLowerOutputsOnly } from "../../blocks/registry";
 import type { EventHub } from "../../events/EventHub";
-import type { SignalType } from "../../core/canonical-types";
+import type { CanonicalType } from "../../core/canonical-types";
 import type { PortKey } from "../frontend/analyze-type-constraints";
 // Multi-Input Blocks Integration
 import {
@@ -331,7 +331,7 @@ function lowerBlockInstance(
   blockOutputs?: Map<BlockIndex, Map<string, ValueRefPacked>>,
   blockIdToIndex?: Map<string, BlockIndex>,
   instanceContextByBlock?: Map<BlockIndex, InstanceId>,
-  portTypes?: ReadonlyMap<PortKey, SignalType>,
+  portTypes?: ReadonlyMap<PortKey, CanonicalType>,
   existingOutputs?: Partial<LowerResult>
 ): Map<string, ValueRefPacked> {
   const outputRefs = new Map<string, ValueRefPacked>();
@@ -411,10 +411,10 @@ function lowerBlockInstance(
       inTypes: Object.keys(blockDef.inputs)
         .filter(portName => blockDef.inputs[portName].exposedAsPort !== false)
         .map(portName => portTypes?.get(portKey(blockIndex, portName, 'in')))
-        .filter((t): t is SignalType => t !== undefined),
+        .filter((t): t is CanonicalType => t !== undefined),
       outTypes: Object.keys(blockDef.outputs)
         .map(portName => portTypes?.get(portKey(blockIndex, portName, 'out')))
-        .filter((t): t is SignalType => t !== undefined),
+        .filter((t): t is CanonicalType => t !== undefined),
       b: builder,
       seedConstId: 0, // Seed value not used by current intrinsics (randomId uses element index only)
       inferredInstance,
@@ -539,7 +539,7 @@ function lowerSCCTwoPass(
   blockOutputs: Map<BlockIndex, Map<string, ValueRefPacked>>,
   blockIdToIndex: Map<string, BlockIndex>,
   instanceContextByBlock: Map<BlockIndex, InstanceId>,
-  portTypes: ReadonlyMap<PortKey, SignalType>,
+  portTypes: ReadonlyMap<PortKey, CanonicalType>,
   options?: Pass6Options
 ): void {
   // Storage for phase 1 results
@@ -570,10 +570,10 @@ function lowerSCCTwoPass(
           inTypes: Object.keys(blockDef.inputs)
             .filter(portName => blockDef.inputs[portName].exposedAsPort !== false)
             .map(portName => portTypes?.get(portKey(blockIndex, portName, 'in')))
-            .filter((t): t is SignalType => t !== undefined),
+            .filter((t): t is CanonicalType => t !== undefined),
           outTypes: Object.keys(blockDef.outputs)
             .map(portName => portTypes?.get(portKey(blockIndex, portName, 'out')))
-            .filter((t): t is SignalType => t !== undefined),
+            .filter((t): t is CanonicalType => t !== undefined),
           b: builder,
           seedConstId: 0,
         };

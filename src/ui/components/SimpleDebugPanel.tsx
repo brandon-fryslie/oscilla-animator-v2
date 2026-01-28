@@ -8,12 +8,12 @@
 
 import React from 'react';
 import type { EdgeValueResult, DebugServiceStatus } from '../../services/DebugService';
-import type { SignalType } from '../../core/canonical-types';
+import type { CanonicalType } from '../../core/canonical-types';
 
 /**
  * Format a numeric value based on its signal type.
  */
-function formatValue(value: number, type: SignalType): string {
+function formatValue(value: number, type: CanonicalType): string {
   const payload = type.payload;
 
   switch (payload.kind) {
@@ -30,7 +30,7 @@ function formatValue(value: number, type: SignalType): string {
 /**
  * Format signal type for display.
  */
-function formatType(type: SignalType, cardinality: 'signal' | 'field'): string {
+function formatType(type: CanonicalType, cardinality: 'signal' | 'field'): string {
   if (cardinality === 'field') {
     return `Field:${type.payload.kind}`;
   }

@@ -6,7 +6,7 @@
 
 ## Overview
 
-This sprint replaces the current optional `unit?: NumericUnit` annotation in SignalType with a mandatory Unit discriminated union as specified in 0-Units-and-Adapters.md. This is the foundation for the adapter system and enables compile-time prevention of semantic type errors (connecting phase values to radian inputs, etc.).
+This sprint replaces the current optional `unit?: NumericUnit` annotation in CanonicalType with a mandatory Unit discriminated union as specified in 0-Units-and-Adapters.md. This is the foundation for the adapter system and enables compile-time prevention of semantic type errors (connecting phase values to radian inputs, etc.).
 
 ## Key Files to Modify
 
@@ -16,7 +16,7 @@ This sprint replaces the current optional `unit?: NumericUnit` annotation in Sig
 
 **Current State**:
 - Lines 23-39: NumericUnit as string union
-- Line 352: SignalType has `readonly unit?: NumericUnit` (optional)
+- Line 352: CanonicalType has `readonly unit?: NumericUnit` (optional)
 - Lines 571-628: Helper functions accept optional unit parameter
 
 **Required Changes**:
@@ -58,8 +58,8 @@ export function unitWorld2(): Unit { return { kind: 'world2' }; }
 export function unitWorld3(): Unit { return { kind: 'world3' }; }
 export function unitRgba01(): Unit { return { kind: 'rgba01' }; }
 
-// MODIFY SignalType (line 352)
-export interface SignalType {
+// MODIFY CanonicalType (line 352)
+export interface CanonicalType {
   readonly payload: PayloadType;
   readonly extent: Extent;
   readonly unit: Unit;  // MANDATORY, not optional
@@ -83,12 +83,12 @@ export function isValidPayloadUnitCombination(payload: PayloadType, unit: Unit):
   return allowed.includes(unit.kind);
 }
 
-// MODIFY signalType() constructor (lines 358-371)
-export function signalType(
+// MODIFY canonicalType() constructor (lines 358-371)
+export function canonicalType(
   payload: PayloadType,
   unit: Unit,  // REQUIRED parameter
   extentOverrides?: Partial<Extent>
-): SignalType {
+): CanonicalType {
   if (!isValidPayloadUnitCombination(payload, unit)) {
     const allowed = ALLOWED_UNITS[payload]?.join(', ') ?? 'none';
     throw new Error(`Invalid combination: ${payload}:${unit.kind}. ${payload} allows: ${allowed}`);
@@ -101,18 +101,18 @@ export function signalType(
 }
 
 // MODIFY all helpers (lines 571-628)
-export function signalTypeSignal(payload: PayloadType, unit: Unit): SignalType {
-  return signalType(payload, unit, {
+export function signalTypeSignal(payload: PayloadType, unit: Unit): CanonicalType {
+  return canonicalType(payload, unit, {
     cardinality: axisInstantiated(cardinalityOne()),
     temporality: axisInstantiated(temporalityContinuous()),
   });
 }
 
-export function signalTypeField(payload: PayloadType, instance: InstanceRef | string, unit: Unit): SignalType {
+export function signalTypeField(payload: PayloadType, instance: InstanceRef | string, unit: Unit): CanonicalType {
   const instanceRefValue = typeof instance === 'string'
     ? instanceRef('default', instance)
     : instance;
-  return signalType(payload, unit, {
+  return canonicalType(payload, unit, {
     cardinality: axisInstantiated(cardinalityMany(instanceRefValue)),
     temporality: axisInstantiated(temporalityContinuous()),
   });
@@ -126,7 +126,7 @@ export function unitsEqual(a: Unit, b: Unit): boolean {
 }
 ```
 
-**Migration Impact**: Every call to `signalType()` and helpers must be updated to pass a Unit.
+**Migration Impact**: Every call to `canonicalType()` and helpers must be updated to pass a Unit.
 
 ---
 
@@ -274,7 +274,7 @@ export interface TypeSignature {
   readonly temporality: 'continuous' | 'discrete' | 'any';
 }
 
-export function extractSignature(type: SignalType): TypeSignature {
+export function extractSignature(type: CanonicalType): TypeSignature {
   // ... existing cardinality/temporality extraction
   return {
     payload: type.payload,
@@ -375,13 +375,13 @@ signalTypeSignal('float', unitPhase01())
 4. Add unitsEqual()
 
 ### Phase 2: Dual Support (Transition Period)
-1. Make SignalType.unit accept `Unit | NumericUnit` temporarily
-2. Update signalType() to accept both forms
+1. Make CanonicalType.unit accept `Unit | NumericUnit` temporarily
+2. Update canonicalType() to accept both forms
 3. Migrate one file at a time, starting with core types
 
 ### Phase 3: Complete Migration
 1. Remove NumericUnit type
-2. Make SignalType.unit mandatory Unit
+2. Make CanonicalType.unit mandatory Unit
 3. Update all remaining usages
 4. Run full test suite
 
@@ -473,7 +473,7 @@ signalTypeField('color', instanceId, unitRgba01())
 
 From 0-Units-and-Adapters.md:
 
-- [ ] §A1: Every SignalType has (payload, unit, extent) - no optionals
+- [ ] §A1: Every CanonicalType has (payload, unit, extent) - no optionals
 - [ ] §A2: No 'phase' or 'unit' PayloadTypes exist
 - [ ] §A3: Unit is closed discriminated union with exact 14 kinds
 - [ ] §A4: Payload-unit validation enforces allowed combinations table
@@ -498,8 +498,8 @@ Consider adding a PhaseToRadians adapter block.
 
 3. **Missing Unit Parameter**:
 ```
-Error: signalType() requires unit parameter.
-Example: signalType('float', unitPhase01())
+Error: canonicalType() requires unit parameter.
+Example: canonicalType('float', unitPhase01())
 ```
 
 ---
@@ -508,8 +508,8 @@ Example: signalType('float', unitPhase01())
 
 1. **canonical-types.ts**: Add Unit type and helpers (~50 lines)
 2. **canonical-types.ts**: Add validation function (~30 lines)
-3. **canonical-types.ts**: Update SignalType interface (1 line change)
-4. **canonical-types.ts**: Update signalType() constructor (~10 lines)
+3. **canonical-types.ts**: Update CanonicalType interface (1 line change)
+4. **canonical-types.ts**: Update canonicalType() constructor (~10 lines)
 5. **canonical-types.ts**: Update all helper functions (~40 lines)
 6. **canonical-types.ts**: Add unitsEqual() (~5 lines)
 7. **time-blocks.ts**: Migrate TimeRoot (1 block, ~10 port changes)
@@ -531,9 +531,9 @@ Estimated total: ~500 lines new/modified across ~70 files.
 
 2. **Unit vs Norm01**: Old PayloadType 'unit' maps to `float:norm01` not `float:unit`.
 
-3. **Validation at Construction**: Validation must happen in signalType(), not lazily, to catch errors early.
+3. **Validation at Construction**: Validation must happen in canonicalType(), not lazily, to catch errors early.
 
-4. **No Unit Inference**: Units are never inferred. Every SignalType must explicitly state its unit.
+4. **No Unit Inference**: Units are never inferred. Every CanonicalType must explicitly state its unit.
 
 5. **Bool and Shape**: Always use unitNone() for bool and shape - they don't carry units.
 

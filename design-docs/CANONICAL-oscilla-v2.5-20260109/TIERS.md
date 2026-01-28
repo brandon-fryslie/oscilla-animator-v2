@@ -33,7 +33,7 @@ The tier system enables:
 - Non-negotiable rules that all other architecture depends on
 
 **Examples:**
-- Five-axis type system (PayloadType, Extent, SignalType)
+- Five-axis type system (PayloadType, Extent, CanonicalType)
 - Core graph topology rules (multi-in/multi-out, no cycles)
 - Time system fundamentals (single TimeRoot, rails)
 - Identity principles (what makes Oscilla unique)
@@ -135,7 +135,7 @@ The tier structure serves the content, not the other way around.
 ## Examples of Tier Classification
 
 ### Type System
-- **T1**: Five-axis model (PayloadType, Extent, SignalType), AxisTag pattern
+- **T1**: Five-axis model (PayloadType, Extent, CanonicalType), AxisTag pattern
 - **T2**: Type unification rules, domain resource model
 - **T3**: Specific axis combinations, example type signatures
 

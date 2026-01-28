@@ -9,8 +9,8 @@ Sprint: unit-safe-types/phase-type-fix
 Commit: 29a2a02
 
 Implementation Details:
-- Fixed TimeRoot phaseA/phaseB outputs to use signalType('phase')
-- Fixed Oscillator phase input to use signalType('phase')
+- Fixed TimeRoot phaseA/phaseB outputs to use canonicalType('phase')
+- Fixed Oscillator phase input to use canonicalType('phase')
 - Fixed 3 field blocks (FieldPulse, FieldAngularOffset, FieldHueFromPhase) phase inputs
 - Added documentation to OpcodeInterpreter explaining sin/cos operate on radians
 - Added documentation to SignalEvaluator explaining kernels expect phase [0,1)

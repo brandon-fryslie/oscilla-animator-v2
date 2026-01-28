@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { applyFieldKernelZipSig } from '../FieldKernels';
-import { signalTypeField, type PayloadType, type SignalType, VEC2 } from '../../core/canonical-types';
+import { signalTypeField, type PayloadType, type CanonicalType, VEC2 } from '../../core/canonical-types';
 
 /**
  * Local-space sanity tests verifying coordinate space conventions.
@@ -14,10 +14,10 @@ import { signalTypeField, type PayloadType, type SignalType, VEC2 } from '../../
  */
 
 /**
- * Test helper to create a properly-typed SignalType for field tests.
- * Returns a SignalType with many(instance) cardinality and continuous temporality.
+ * Test helper to create a properly-typed CanonicalType for field tests.
+ * Returns a CanonicalType with many(instance) cardinality and continuous temporality.
  */
-function testFieldType(payload: PayloadType): SignalType {
+function testFieldType(payload: PayloadType): CanonicalType {
   return signalTypeField(payload, 'test-instance');
 }
 

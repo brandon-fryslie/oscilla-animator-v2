@@ -161,7 +161,7 @@ Would need new method like:
 fieldPlacement(
   instanceId: InstanceId,
   field: 'uv' | 'rank' | 'seed',
-  type: SignalType
+  type: CanonicalType
 ): FieldExprId
 ```
 

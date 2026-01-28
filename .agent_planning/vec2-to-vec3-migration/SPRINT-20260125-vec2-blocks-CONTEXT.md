@@ -68,12 +68,12 @@ for (let i = 0; i < N; i++) {
 ```typescript
 // Before
 outputs: {
-  pos: { label: 'Position', type: signalType('vec2') },
+  pos: { label: 'Position', type: canonicalType('vec2') },
 }
 
 // After
 outputs: {
-  pos: { label: 'Position', type: signalType('vec3') },
+  pos: { label: 'Position', type: canonicalType('vec3') },
 }
 ```
 
@@ -81,12 +81,12 @@ outputs: {
 
 ```typescript
 inputs: {
-  posIn: { label: 'Position', type: signalType('vec3') },
+  posIn: { label: 'Position', type: canonicalType('vec3') },
   amountX: { ... },
   amountY: { ... },
   amountZ: {
     label: 'Amount Z',
-    type: signalType('float'),
+    type: canonicalType('float'),
     defaultSource: defaultSourceConst(0.0),
     uiHint: { kind: 'slider', min: -0.5, max: 0.5, step: 0.01 }
   },
@@ -113,7 +113,7 @@ The JitterVec migration (already complete) is the pattern to follow:
 
 ```bash
 # Find remaining vec2 position usages (should only be control points)
-grep -r "signalType('vec2')" src/blocks/ | grep -v control
+grep -r "canonicalType('vec2')" src/blocks/ | grep -v control
 
 # Verify control points still use vec2
 grep -r "vec2.*control" src/blocks/

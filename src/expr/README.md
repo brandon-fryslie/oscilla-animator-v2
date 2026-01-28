@@ -41,7 +41,7 @@ import { compileExpression } from './expr';
 
 const result = compileExpression(
   exprText,      // Expression string
-  inputs,        // Map<string, SignalType> - input names to types
+  inputs,        // Map<string, CanonicalType> - input names to types
   builder,       // IRBuilder instance
   inputSignals   // Map<string, SigExprId> - input names to compiled signals
 );

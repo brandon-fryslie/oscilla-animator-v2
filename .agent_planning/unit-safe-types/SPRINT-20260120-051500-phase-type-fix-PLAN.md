@@ -11,8 +11,8 @@ Fix all blocks and kernels to consistently use `phase` PayloadType where values 
 ## Scope
 
 **Deliverables:**
-1. Fix TimeRoot outputs to use `signalType('phase')` instead of `signalType('float')`
-2. Fix Oscillator input to expect `signalType('phase')`
+1. Fix TimeRoot outputs to use `canonicalType('phase')` instead of `canonicalType('float')`
+2. Fix Oscillator input to expect `canonicalType('phase')`
 3. Fix field block phase inputs to use correct type
 4. Ensure kernel behavior matches declared types
 
@@ -23,9 +23,9 @@ Fix all blocks and kernels to consistently use `phase` PayloadType where values 
 **Files**: `src/blocks/time-blocks.ts`
 
 **Acceptance Criteria:**
-- [ ] `phaseA` output declared with `signalType('phase')`
-- [ ] `phaseB` output declared with `signalType('phase')`
-- [ ] `tMs` output remains `signalType('float')` (milliseconds, not phase)
+- [ ] `phaseA` output declared with `canonicalType('phase')`
+- [ ] `phaseB` output declared with `canonicalType('phase')`
+- [ ] `tMs` output remains `canonicalType('float')` (milliseconds, not phase)
 - [ ] Tests pass after change
 
 **Technical Notes:**
@@ -37,7 +37,7 @@ Fix all blocks and kernels to consistently use `phase` PayloadType where values 
 **Files**: `src/blocks/signal-blocks.ts`
 
 **Acceptance Criteria:**
-- [ ] Oscillator `phase` input declared with `signalType('phase')`
+- [ ] Oscillator `phase` input declared with `canonicalType('phase')`
 - [ ] Block still compiles and executes correctly
 - [ ] Waveform kernels (sin, cos, triangle, etc.) document expected input type in comments
 
@@ -50,7 +50,7 @@ Fix all blocks and kernels to consistently use `phase` PayloadType where values 
 **Files**: `src/blocks/field-operations-blocks.ts`, `src/blocks/field-blocks.ts`
 
 **Acceptance Criteria:**
-- [ ] All field blocks with `phase` inputs use `signalType('phase')`
+- [ ] All field blocks with `phase` inputs use `canonicalType('phase')`
 - [ ] Blocks: FieldAngularOffset, FieldHueFromPhase, FieldPulse (and any others)
 - [ ] Comments document expected ranges
 

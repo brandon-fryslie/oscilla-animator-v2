@@ -19,17 +19,17 @@ type NumericUnit =
   | 'scalar';    // dimensionless number
 ```
 
-### Extended SignalType
+### Extended CanonicalType
 
 ```typescript
-interface SignalType {
+interface CanonicalType {
   payload: PayloadType;
   extent?: Extent;
   unit?: NumericUnit;  // NEW: optional unit annotation
 }
 
 // Helper with unit
-function signalType(payload: PayloadType, unit?: NumericUnit): SignalType {
+function canonicalType(payload: PayloadType, unit?: NumericUnit): CanonicalType {
   return { payload, unit };
 }
 ```
@@ -90,7 +90,7 @@ const KERNEL_SIGNATURES: Record<string, KernelSignature> = {
 
 | File | Change |
 |------|--------|
-| `src/core/canonical-types.ts` | Add NumericUnit, extend SignalType |
+| `src/core/canonical-types.ts` | Add NumericUnit, extend CanonicalType |
 | `src/compiler/passes-v2/pass4-wiring.ts` | Add unit validation |
 | `src/runtime/SignalEvaluator.ts` | Add kernel signatures |
 | `src/runtime/Materializer.ts` | Add kernel signatures |

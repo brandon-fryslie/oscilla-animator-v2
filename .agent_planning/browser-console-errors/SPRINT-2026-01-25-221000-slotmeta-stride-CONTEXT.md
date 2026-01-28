@@ -30,7 +30,7 @@ The loop builds slotMeta entries (lines 433-456):
 ```typescript
   for (let slotId = 0; slotId < builder.getSlotCount?.() || 0; slotId++) {
     const slot = slotId as ValueSlot;
-    const type = slotTypes.get(slot) || signalType('float');
+    const type = slotTypes.get(slot) || canonicalType('float');
 
     const storage: SlotMetaEntry['storage'] = fieldSlotSet.has(slotId)
       ? 'object'
@@ -59,7 +59,7 @@ Note: The `stride` calculation happens AFTER the offset increment, so we need to
 ```typescript
   for (let slotId = 0; slotId < builder.getSlotCount?.() || 0; slotId++) {
     const slot = slotId as ValueSlot;
-    const type = slotTypes.get(slot) || signalType('float');
+    const type = slotTypes.get(slot) || canonicalType('float');
 
     const storage: SlotMetaEntry['storage'] = fieldSlotSet.has(slotId)
       ? 'object'

@@ -66,11 +66,11 @@ Replace three allocation methods with one:
 ```typescript
 // BEFORE: 3 methods
 allocSlot(stride?: number): ValueSlot
-allocTypedSlot(type: SignalType): ValueSlot
-allocValueSlot(type: SignalType): ValueSlot
+allocTypedSlot(type: CanonicalType): ValueSlot
+allocValueSlot(type: CanonicalType): ValueSlot
 
 // AFTER: 1 method
-allocSlot(type: SignalType): SlotAllocation
+allocSlot(type: CanonicalType): SlotAllocation
 // where SlotAllocation = { slot: ValueSlot, stride: number, offset: number }
 ```
 
@@ -227,7 +227,7 @@ These slots have no type information, causing slotMeta gaps. Either:
 
 Currently blocks return ValueRefPacked which contains:
 ```typescript
-{ k: 'sig', id: SigExprId, slot: ValueSlot, type: SignalType, stride: number }
+{ k: 'sig', id: SigExprId, slot: ValueSlot, type: CanonicalType, stride: number }
 ```
 
 And allocSlot will return:
@@ -238,7 +238,7 @@ And allocSlot will return:
 These overlap. Consider whether ValueRefPacked should just use the SlotAllocation:
 
 ```typescript
-{ k: 'sig', id: SigExprId, allocation: SlotAllocation, type: SignalType }
+{ k: 'sig', id: SigExprId, allocation: SlotAllocation, type: CanonicalType }
 ```
 
 #### Acceptance Criteria

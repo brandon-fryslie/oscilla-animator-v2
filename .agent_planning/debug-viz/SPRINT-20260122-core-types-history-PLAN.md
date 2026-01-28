@@ -89,7 +89,7 @@ Establish the type foundation and temporal history infrastructure for the debug 
 ## Dependencies
 
 - PayloadType union from `src/core/canonical-types.ts`
-- SignalType and resolveExtent from canonical types
+- CanonicalType and resolveExtent from canonical types
 - DebugService existing API (getEdgeMetadata, EdgeMetadata with cardinality)
 
 ## Risks

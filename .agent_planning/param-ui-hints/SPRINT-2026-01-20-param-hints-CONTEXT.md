@@ -34,7 +34,7 @@ inputs: [
   {
     id: 'size',
     label: 'Size',
-    type: signalType('float'),
+    type: canonicalType('float'),
     defaultValue: 0.02,
     defaultSource: defaultSourceConst(0.02),
     uiHint: {kind: 'slider', min: 0.01, max: 0.5, step: 0.01},

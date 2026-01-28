@@ -30,15 +30,15 @@ Wire the Expression DSL into the application so users can create Expression bloc
 **Deliverable:** Empty expression compiles to constant 0
 
 - [ ] Expression block with empty expression text compiles without error
-- [ ] Output is `sigConst(0, signalType('float'))`
+- [ ] Output is `sigConst(0, canonicalType('float'))`
 - [ ] Block can be used in patch with empty expression (outputs constant 0)
 
 ### 3. Block Lowering - Literal Expressions
 
 **Deliverable:** Numeric literals compile correctly
 
-- [ ] Expression `"42"` compiles to `sigConst(42, signalType('int'))`
-- [ ] Expression `"3.14"` compiles to `sigConst(3.14, signalType('float'))`
+- [ ] Expression `"42"` compiles to `sigConst(42, canonicalType('int'))`
+- [ ] Expression `"3.14"` compiles to `sigConst(3.14, canonicalType('float'))`
 - [ ] Output type matches literal type (int or float)
 - [ ] Runtime execution produces correct constant value
 

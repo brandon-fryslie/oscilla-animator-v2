@@ -95,14 +95,14 @@ Methods to modify: `sigConst`, `sigSlot`, `sigTime`, `sigExternal`, `sigMap`, `s
 **Before/After Pattern** (EVALUATION:261-279):
 ```typescript
 // BEFORE (current):
-sigConst(value: number | string | boolean, type: SignalType): SigExprId {
+sigConst(value: number | string | boolean, type: CanonicalType): SigExprId {
   const id = sigExprId(this.sigExprs.length);
   this.sigExprs.push({ kind: 'const', value, type });
   return id;
 }
 
 // AFTER (hash-consing):
-sigConst(value: number | string | boolean, type: SignalType): SigExprId {
+sigConst(value: number | string | boolean, type: CanonicalType): SigExprId {
   const hash = hashSigExpr({ kind: 'const', value, type });
   const existing = this.sigExprCache.get(hash);
   if (existing !== undefined) {

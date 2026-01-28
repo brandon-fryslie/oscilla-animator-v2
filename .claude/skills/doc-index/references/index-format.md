@@ -114,7 +114,7 @@ After frontmatter, the index body MUST include:
 ## Definitions
 - **Extent**: 5-tuple (time, freq, amp, spat, batch) defining signal shape [L30]
 - **PayloadType**: Either Float or Int, determines value representation [L25]
-- **SignalType**: Union of PayloadType and Extent (5-axis model) [L23]
+- **CanonicalType**: Union of PayloadType and Extent (5-axis model) [L23]
 ```
 
 ### Section: Invariants
@@ -162,8 +162,8 @@ After frontmatter, the index body MUST include:
 ```markdown
 ## Data Structures
 - **Block**: { id, parameters, ports, role, state? } [L100]
-- **Port**: { connected, direction, id, signalType } [L120]
-- **Wire**: { from, signalType, to } [L140]
+- **Port**: { connected, direction, id, canonicalType } [L120]
+- **Wire**: { from, canonicalType, to } [L140]
 ```
 
 ### Section: Dependencies
@@ -278,7 +278,7 @@ index_version: 1.0
 ## Definitions
 - **Extent**: 5-tuple (time, freq, amp, spat, batch) defining signal shape [L30]
 - **PayloadType**: Either Float or Int, determines value representation [L25]
-- **SignalType**: Union of PayloadType and Extent (5-axis model) [L23]
+- **CanonicalType**: Union of PayloadType and Extent (5-axis model) [L23]
 
 ## Invariants
 - **I1**: Port type compatibility checked at wire creation [L55]
@@ -287,8 +287,8 @@ index_version: 1.0
 
 ## Data Structures
 - **Block**: { id, parameters, ports, role, state? } [L100]
-- **Port**: { connected, direction, id, signalType } [L120]
-- **Wire**: { from, signalType, to } [L140]
+- **Port**: { connected, direction, id, canonicalType } [L120]
+- **Wire**: { from, canonicalType, to } [L140]
 
 ## Dependencies
 - **Depends on**: (none - foundational)

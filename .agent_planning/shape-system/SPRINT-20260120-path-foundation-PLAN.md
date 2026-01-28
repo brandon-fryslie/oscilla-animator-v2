@@ -155,12 +155,12 @@ registerBlock({
   label: 'Polygon',
   category: 'shape',
   inputs: {
-    sides: { type: signalType('int'), value: 5 },  // Compile-time constant
-    radiusX: { type: signalType('float'), value: 0.1 },
-    radiusY: { type: signalType('float'), value: 0.1 },
+    sides: { type: canonicalType('int'), value: 5 },  // Compile-time constant
+    radiusX: { type: canonicalType('float'), value: 0.1 },
+    radiusY: { type: canonicalType('float'), value: 0.1 },
   },
   outputs: {
-    shape: { type: signalType('shape') },
+    shape: { type: canonicalType('shape') },
     controlPoints: { type: signalTypeField('vec2', 'control') },
   },
   lower: ({ ctx, config }) => {

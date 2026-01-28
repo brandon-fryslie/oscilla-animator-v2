@@ -20,7 +20,7 @@ import type {
   Temporality,
   Binding,
   Extent,
-  SignalType,
+  CanonicalType,
   PayloadType,
 } from '../../../core/canonical-types';
 import {

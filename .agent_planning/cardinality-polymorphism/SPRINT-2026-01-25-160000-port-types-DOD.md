@@ -12,13 +12,13 @@
 - [ ] Output port uses `signalTypeField('float', 'default')`
 
 ### P1: Port types updated for PRESERVE blocks
-- [ ] Pulse: id01, value → `signalType()`
-- [ ] RadiusSqrt: id01, radius, out → `signalType()`
-- [ ] Jitter2D: pos, rand, out → `signalType()`
-- [ ] HueFromPhase: id01, hue → `signalType()`
-- [ ] SetZ: pos, z, out → `signalType()`
-- [ ] FieldPolarToCartesian: angle, radius, pos → `signalType()`
-- [ ] FieldCartesianToPolar: pos, angle, radius → `signalType()`
+- [ ] Pulse: id01, value → `canonicalType()`
+- [ ] RadiusSqrt: id01, radius, out → `canonicalType()`
+- [ ] Jitter2D: pos, rand, out → `canonicalType()`
+- [ ] HueFromPhase: id01, hue → `canonicalType()`
+- [ ] SetZ: pos, z, out → `canonicalType()`
+- [ ] FieldPolarToCartesian: angle, radius, pos → `canonicalType()`
+- [ ] FieldCartesianToPolar: pos, angle, radius → `canonicalType()`
 
 ### P2: lower() guards fixed
 - [ ] GoldenAngle: dual-path lower() (sig + field)

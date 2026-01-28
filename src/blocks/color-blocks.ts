@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from './registry';
-import { signalType, signalTypeField, unitPhase01, strideOf } from '../core/canonical-types';
+import { canonicalType, signalTypeField, unitPhase01, strideOf } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { defaultSourceConst } from '../types';
 import type { SigExprId, FieldExprId } from '../compiler/ir/Indices';
@@ -27,13 +27,13 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    phase: { label: 'Phase', type: signalType(FLOAT, unitPhase01()) },
-    hue: { label: 'Hue Offset', type: signalType(FLOAT) },
-    sat: { label: 'Saturation', type: signalType(FLOAT) },
-    val: { label: 'Value', type: signalType(FLOAT) },
+    phase: { label: 'Phase', type: canonicalType(FLOAT, unitPhase01()) },
+    hue: { label: 'Hue Offset', type: canonicalType(FLOAT) },
+    sat: { label: 'Saturation', type: canonicalType(FLOAT) },
+    val: { label: 'Value', type: canonicalType(FLOAT) },
   },
   outputs: {
-    color: { label: 'Color', type: signalType(COLOR) },
+    color: { label: 'Color', type: canonicalType(COLOR) },
   },
   lower: ({ ctx, inputsById }) => {
     const phase = inputsById.phase;
@@ -52,12 +52,12 @@ registerBlock({
     // Build HSV triple from inputs
     const inputs: SigExprId[] = [
       phase.id as SigExprId,
-      hue?.k === 'sig' ? (hue.id as SigExprId) : ctx.b.sigConst(0, signalType(FLOAT)),
-      sat?.k === 'sig' ? (sat.id as SigExprId) : ctx.b.sigConst(1, signalType(FLOAT)),
-      val?.k === 'sig' ? (val.id as SigExprId) : ctx.b.sigConst(1, signalType(FLOAT)),
+      hue?.k === 'sig' ? (hue.id as SigExprId) : ctx.b.sigConst(0, canonicalType(FLOAT)),
+      sat?.k === 'sig' ? (sat.id as SigExprId) : ctx.b.sigConst(1, canonicalType(FLOAT)),
+      val?.k === 'sig' ? (val.id as SigExprId) : ctx.b.sigConst(1, canonicalType(FLOAT)),
     ];
 
-    const sigId = ctx.b.sigZip(inputs, colorFn, signalType(COLOR));
+    const sigId = ctx.b.sigZip(inputs, colorFn, canonicalType(COLOR));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
@@ -86,12 +86,12 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    hue: { label: 'Hue', type: signalType(FLOAT) },
-    sat: { label: 'Saturation', type: signalType(FLOAT) },
-    val: { label: 'Value', type: signalType(FLOAT) },
+    hue: { label: 'Hue', type: canonicalType(FLOAT) },
+    sat: { label: 'Saturation', type: canonicalType(FLOAT) },
+    val: { label: 'Value', type: canonicalType(FLOAT) },
   },
   outputs: {
-    color: { label: 'Color', type: signalType(COLOR) },
+    color: { label: 'Color', type: canonicalType(COLOR) },
   },
   lower: ({ ctx, inputsById }) => {
     const hue = inputsById.hue;
@@ -103,7 +103,7 @@ registerBlock({
     }
 
     const hsvFn = ctx.b.kernel('hsvToRgb');
-    const sigId = ctx.b.sigZip([hue.id as SigExprId, sat.id as SigExprId, val.id as SigExprId], hsvFn, signalType(COLOR));
+    const sigId = ctx.b.sigZip([hue.id as SigExprId, sat.id as SigExprId, val.id as SigExprId], hsvFn, canonicalType(COLOR));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
@@ -133,8 +133,8 @@ registerBlock({
   },
   inputs: {
     hue: { label: 'Hue', type: signalTypeField(FLOAT, 'default') },
-    sat: { label: 'Saturation', type: signalType(FLOAT), defaultSource: defaultSourceConst(1.0), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    val: { label: 'Value', type: signalType(FLOAT), defaultSource: defaultSourceConst(1.0), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    sat: { label: 'Saturation', type: canonicalType(FLOAT), defaultSource: defaultSourceConst(1.0), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    val: { label: 'Value', type: canonicalType(FLOAT), defaultSource: defaultSourceConst(1.0), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
   },
   outputs: {
     color: { label: 'Color', type: signalTypeField(COLOR, 'default') },

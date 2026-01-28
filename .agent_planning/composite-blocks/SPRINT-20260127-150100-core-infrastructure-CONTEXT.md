@@ -59,7 +59,7 @@ export interface ExposedInputPort {
   readonly internalBlockId: InternalBlockId;
   readonly internalPortId: string;
   // Inherit type from internal port, or override?
-  readonly type?: SignalType;
+  readonly type?: CanonicalType;
   readonly defaultSource?: DefaultSource;
   readonly uiHint?: UIControlHint;
 }

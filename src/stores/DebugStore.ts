@@ -15,7 +15,7 @@
 
 import { makeAutoObservable, runInAction, reaction } from 'mobx';
 import { debugService, type EdgeValueResult, type DebugServiceStatus } from '../services/DebugService';
-import type { SignalType } from '../core/canonical-types';
+import type { CanonicalType } from '../core/canonical-types';
 import type { ValueSlot } from '../types';
 import type { DebugTargetKey } from '../ui/debug-viz/types';
 import type { SettingsStore } from './SettingsStore';
@@ -24,7 +24,7 @@ import { debugSettings, type DebugSettings } from '../settings/tokens/debug-sett
 /**
  * Format a numeric value based on its signal type.
  */
-export function formatDebugValue(value: number, type: SignalType): string {
+export function formatDebugValue(value: number, type: CanonicalType): string {
   const payload = type.payload;
 
   switch (payload.kind) {

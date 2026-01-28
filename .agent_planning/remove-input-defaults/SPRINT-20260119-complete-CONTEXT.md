@@ -29,8 +29,8 @@ If we remove `inputDefaults` before adding registry defaults for `radius`, `sat`
 ```typescript
 inputs: [
   { id: 'hue', label: 'Hue', type: signalTypeField('float', 'default') },
-  { id: 'sat', label: 'Saturation', type: signalType('float') },
-  { id: 'val', label: 'Value', type: signalType('float') },
+  { id: 'sat', label: 'Saturation', type: canonicalType('float') },
+  { id: 'val', label: 'Value', type: canonicalType('float') },
 ],
 ```
 
@@ -38,8 +38,8 @@ inputs: [
 ```typescript
 inputs: [
   { id: 'hue', label: 'Hue', type: signalTypeField('float', 'default') },
-  { id: 'sat', label: 'Saturation', type: signalType('float'), defaultSource: defaultSourceConstant(1.0) },
-  { id: 'val', label: 'Value', type: signalType('float'), defaultSource: defaultSourceConstant(1.0) },
+  { id: 'sat', label: 'Saturation', type: canonicalType('float'), defaultSource: defaultSourceConstant(1.0) },
+  { id: 'val', label: 'Value', type: canonicalType('float'), defaultSource: defaultSourceConstant(1.0) },
 ],
 ```
 

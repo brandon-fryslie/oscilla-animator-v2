@@ -19,18 +19,18 @@
 ### TimeRoot (WRONG)
 ```typescript
 outputs: [
-  { id: 'tMs', label: 'Time (ms)', type: signalType('float') },
-  { id: 'phaseA', label: 'Phase A', type: signalType('float') },  // WRONG
-  { id: 'phaseB', label: 'Phase B', type: signalType('float') },  // WRONG
+  { id: 'tMs', label: 'Time (ms)', type: canonicalType('float') },
+  { id: 'phaseA', label: 'Phase A', type: canonicalType('float') },  // WRONG
+  { id: 'phaseB', label: 'Phase B', type: canonicalType('float') },  // WRONG
 ],
 ```
 
 ### TimeRoot (CORRECT)
 ```typescript
 outputs: [
-  { id: 'tMs', label: 'Time (ms)', type: signalType('float') },
-  { id: 'phaseA', label: 'Phase A', type: signalType('phase') },  // CORRECT
-  { id: 'phaseB', label: 'Phase B', type: signalType('phase') },  // CORRECT
+  { id: 'tMs', label: 'Time (ms)', type: canonicalType('float') },
+  { id: 'phaseA', label: 'Phase A', type: canonicalType('phase') },  // CORRECT
+  { id: 'phaseB', label: 'Phase B', type: canonicalType('phase') },  // CORRECT
 ],
 ```
 

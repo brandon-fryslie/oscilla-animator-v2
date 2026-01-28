@@ -37,7 +37,7 @@ index_version: 1.0
 - **Binding** [L170-175] - Aboutness/purpose (unbound, weak, strong, identity)
 - **PerspectiveId** [L197] - View perspective identifier
 - **BranchId** [L198] - Timeline branch identifier
-- **SignalType** [L214-217] - Complete contract (PayloadType + Extent)
+- **CanonicalType** [L214-217] - Complete contract (PayloadType + Extent)
 - **DomainDecl** [L304-309] - Domain declaration with shape (fixed_count, grid_2d, voices, mesh_vertices)
 - **EvalFrame** [L256] - Runtime evaluation context (perspective, branch)
 
@@ -60,23 +60,23 @@ index_version: 1.0
 - **Cardinality** [L109-113] - 3-variant union (zero, one, many)
 - **Binding** [L170-175] - 4-variant union (unbound, weak, strong, identity)
 - **Temporality** [L146-149] - 2-variant union (continuous, discrete)
-- **SignalType** [L214-217] - 2 fields (payload: PayloadType, extent: Extent)
+- **CanonicalType** [L214-217] - 2 fields (payload: PayloadType, extent: Extent)
 - **DomainDecl** [L304-309] - 4-variant union with shape substructure
 - **DEFAULTS_V0** [L248-254] - 5 fields (all canonically bound)
 
 ## Dependencies
 
 **Depends on:**
-- [02-block-system.md](./02-block-system.md) - How blocks use SignalType [L11, L402]
+- [02-block-system.md](./02-block-system.md) - How blocks use CanonicalType [L11, L402]
 - [04-compilation.md](./04-compilation.md) - Type unification and resolution [L11, L403]
 - [GLOSSARY.md](../GLOSSARY.md#payloadtype) - PayloadType definition [L12]
 - [GLOSSARY.md](../GLOSSARY.md#extent) - Extent definition [L12]
-- [GLOSSARY.md](../GLOSSARY.md#signaltype) - SignalType definition [L12]
+- [GLOSSARY.md](../GLOSSARY.md#canonicalType) - CanonicalType definition [L12]
 - [INVARIANTS.md](../INVARIANTS.md#i22-safe-modulation-ranges) - I22 Safe Modulation Ranges [L13]
 
 **Referenced by:**
 - Type unification rules (all five axes) [L265-283]
-- Block interface definitions via SignalType [L220-241]
+- Block interface definitions via CanonicalType [L220-241]
 
 ## Decisions
 

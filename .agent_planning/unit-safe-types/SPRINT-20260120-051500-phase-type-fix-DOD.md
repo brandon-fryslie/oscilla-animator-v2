@@ -8,9 +8,9 @@
 
 ### Must Pass
 
-- [x] All TimeRoot phase outputs use `signalType('phase')`
-- [x] Oscillator phase input uses `signalType('phase')`
-- [x] All field blocks with phase inputs use `signalType('phase')`
+- [x] All TimeRoot phase outputs use `canonicalType('phase')`
+- [x] Oscillator phase input uses `canonicalType('phase')`
+- [x] All field blocks with phase inputs use `canonicalType('phase')`
 - [x] `npm run typecheck` passes
 - [x] `npm run test` passes
 - [x] Application runs without errors
@@ -20,7 +20,7 @@
 
 - [x] OpcodeInterpreter sin/cos has comment explaining radians expectation
 - [x] SignalEvaluator sin/cos has comment explaining phase expectation
-- [x] No `signalType('float')` used for values that are semantically phase [0,1)
+- [x] No `canonicalType('float')` used for values that are semantically phase [0,1)
 
 ### Documentation
 

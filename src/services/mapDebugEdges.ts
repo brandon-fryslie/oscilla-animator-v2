@@ -1,8 +1,8 @@
 import type { Patch } from '../graph';
 import type { CompiledProgramIR, PortBindingIR } from '../compiler/ir/program';
 import type { ValueSlot, PortId } from '../types';
-import type { SignalType } from '../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION, signalType } from '../core/canonical-types';
+import type { CanonicalType } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION, canonicalType } from '../core/canonical-types';
 
 /**
  * Edge metadata stored alongside slot mapping.
@@ -13,7 +13,7 @@ export interface EdgeMetadata {
     slotId: ValueSlot;
 
     /** Signal type for formatting (e.g., "Float", "Phase", "Color") */
-    type: SignalType;
+    type: CanonicalType;
 
     /** Cardinality: signal (scalar) or field (buffer of N values) */
     cardinality: 'signal' | 'field';
@@ -228,7 +228,7 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
 
         if (slotId !== undefined) {
             const meta = program.slotMeta.find(m => m.slot === slotId);
-            const type = meta?.type || signalType(FLOAT);
+            const type = meta?.type || canonicalType(FLOAT);
             const cardinality = portCardinality.get(sourceKey) || 'signal';
 
             edgeMetaMap.set(edge.id, {
@@ -252,7 +252,7 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
     const portMetaMap = new Map<string, EdgeMetadata>();
     for (const [portKey, slotId] of targetToSlot.entries()) {
         const meta = program.slotMeta.find(m => m.slot === slotId);
-        const type = meta?.type || signalType(FLOAT);
+        const type = meta?.type || canonicalType(FLOAT);
         const cardinality = portCardinality.get(portKey) ?? 'signal';
         portMetaMap.set(portKey, { slotId, type, cardinality });
     }

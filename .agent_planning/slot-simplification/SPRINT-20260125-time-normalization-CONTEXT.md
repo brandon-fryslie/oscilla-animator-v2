@@ -9,8 +9,8 @@ Plan: SPRINT-20260125-time-normalization-PLAN.md
 
 1. **src/compiler/ir/IRBuilderImpl.ts** (lines 99-108)
    - DELETE: `reserveSystemSlot` method
-   - DELETE: Call in constructor: `this.reserveSystemSlot(0, signalType('color'))`
-   - DELETE: `private reservedSlots = new Map<number, SignalType>()`
+   - DELETE: Call in constructor: `this.reserveSystemSlot(0, canonicalType('color'))`
+   - DELETE: `private reservedSlots = new Map<number, CanonicalType>()`
 
 2. **src/runtime/ScheduleExecutor.ts** (lines 27-28)
    - DELETE: `const TIME_PALETTE_SLOT = 0 as ValueSlot;`
@@ -50,7 +50,7 @@ export interface ScheduleIR {
 InfiniteTimeRoot block emits writeSlot steps that read from time system:
 ```typescript
 // In InfiniteTimeRoot lower function
-const { slot: tMsSlot } = ctx.b.allocSlot(signalType('float'));
+const { slot: tMsSlot } = ctx.b.allocSlot(canonicalType('float'));
 ctx.b.emitSlotWrite(tMsSlot, [ctx.b.sigTime('tMs', type)]);
 ```
 
@@ -68,9 +68,9 @@ Option B is cleaner - no special ScheduleIR fields, time flows through normal me
 
 ```typescript
 lower: ({ ctx }): LowerResult => {
-  const tMs = ctx.b.sigTime('tMs', signalType('float'));
-  const dt = ctx.b.sigTime('dt', signalType('float'));
-  const phaseA = ctx.b.sigTime('phaseA', signalType('float', unitPhase01()));
+  const tMs = ctx.b.sigTime('tMs', canonicalType('float'));
+  const dt = ctx.b.sigTime('dt', canonicalType('float'));
+  const phaseA = ctx.b.sigTime('phaseA', canonicalType('float', unitPhase01()));
   // ...
 
   const tMsSlot = ctx.b.allocSlot();
@@ -91,19 +91,19 @@ lower: ({ ctx }): LowerResult => {
 ```typescript
 lower: ({ ctx }): LowerResult => {
   // Allocate slots through normal mechanism
-  const { slot: tMsSlot, stride: tMsStride } = ctx.b.allocSlot(signalType('float'));
-  const { slot: dtSlot, stride: dtStride } = ctx.b.allocSlot(signalType('float'));
-  const { slot: phaseASlot } = ctx.b.allocSlot(signalType('float', unitPhase01()));
-  const { slot: phaseBSlot } = ctx.b.allocSlot(signalType('float', unitPhase01()));
-  const { slot: paletteSlot } = ctx.b.allocSlot(signalType('color')); // stride=4
-  const { slot: energySlot } = ctx.b.allocSlot(signalType('float'));
+  const { slot: tMsSlot, stride: tMsStride } = ctx.b.allocSlot(canonicalType('float'));
+  const { slot: dtSlot, stride: dtStride } = ctx.b.allocSlot(canonicalType('float'));
+  const { slot: phaseASlot } = ctx.b.allocSlot(canonicalType('float', unitPhase01()));
+  const { slot: phaseBSlot } = ctx.b.allocSlot(canonicalType('float', unitPhase01()));
+  const { slot: paletteSlot } = ctx.b.allocSlot(canonicalType('color')); // stride=4
+  const { slot: energySlot } = ctx.b.allocSlot(canonicalType('float'));
 
   // Create time signal expressions
-  const tMs = ctx.b.sigTime('tMs', signalType('float'));
-  const dt = ctx.b.sigTime('dt', signalType('float'));
-  const phaseA = ctx.b.sigTime('phaseA', signalType('float', unitPhase01()));
-  const phaseB = ctx.b.sigTime('phaseB', signalType('float', unitPhase01()));
-  const energy = ctx.b.sigTime('energy', signalType('float'));
+  const tMs = ctx.b.sigTime('tMs', canonicalType('float'));
+  const dt = ctx.b.sigTime('dt', canonicalType('float'));
+  const phaseA = ctx.b.sigTime('phaseA', canonicalType('float', unitPhase01()));
+  const phaseB = ctx.b.sigTime('phaseB', canonicalType('float', unitPhase01()));
+  const energy = ctx.b.sigTime('energy', canonicalType('float'));
 
   // Emit slot writes for time values
   ctx.b.emitSlotWrite(tMsSlot, [tMs]);
@@ -113,10 +113,10 @@ lower: ({ ctx }): LowerResult => {
   ctx.b.emitSlotWrite(energySlot, [energy]);
 
   // Palette is 4 components - need 4 time expressions
-  const paletteR = ctx.b.sigTime('palette', signalType('float')); // component 0
-  const paletteG = ctx.b.sigTime('palette', signalType('float')); // component 1
-  const paletteB = ctx.b.sigTime('palette', signalType('float')); // component 2
-  const paletteA = ctx.b.sigTime('palette', signalType('float')); // component 3
+  const paletteR = ctx.b.sigTime('palette', canonicalType('float')); // component 0
+  const paletteG = ctx.b.sigTime('palette', canonicalType('float')); // component 1
+  const paletteB = ctx.b.sigTime('palette', canonicalType('float')); // component 2
+  const paletteA = ctx.b.sigTime('palette', canonicalType('float')); // component 3
   ctx.b.emitSlotWrite(paletteSlot, [paletteR, paletteG, paletteB, paletteA]);
 
   // ... rest unchanged

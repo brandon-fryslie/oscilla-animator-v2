@@ -15,7 +15,7 @@
  */
 
 import type { SigExprId, FieldExprId } from '../../compiler/ir/Indices';
-import type { SignalType } from '../../core/canonical-types';
+import type { CanonicalType } from '../../core/canonical-types';
 
 export type ValueRef =
     | { k: 'sig'; id: SigExprId }
@@ -30,15 +30,15 @@ export type KernelLowerCtx = {
         opcode(op: string): any;
         kernel(name: string): any;
 
-        sigMap(input: SigExprId, fn: any, outType: SignalType): SigExprId;
-        sigZip(inputs: SigExprId[], fn: any, outType: SignalType): SigExprId;
-        sigConst(value: number, outType: SignalType): SigExprId;
+        sigMap(input: SigExprId, fn: any, outType: CanonicalType): SigExprId;
+        sigZip(inputs: SigExprId[], fn: any, outType: CanonicalType): SigExprId;
+        sigConst(value: number, outType: CanonicalType): SigExprId;
 
-        fieldMap(input: FieldExprId, fn: any, outType: SignalType): FieldExprId;
-        fieldZip(inputs: FieldExprId[], fn: any, outType: SignalType): FieldExprId;
+        fieldMap(input: FieldExprId, fn: any, outType: CanonicalType): FieldExprId;
+        fieldZip(inputs: FieldExprId[], fn: any, outType: CanonicalType): FieldExprId;
 
         /** Broadcast a signal to a field explicitly (no implicit conversions). */
-        Broadcast(sig: SigExprId, outFieldType: SignalType): FieldExprId;
+        Broadcast(sig: SigExprId, outFieldType: CanonicalType): FieldExprId;
     };
 };
 
@@ -58,8 +58,8 @@ export function emitUnary(
     spec: {
         opcode: string;
         fieldKernel: string;
-        outSigType: SignalType;
-        outFieldType: SignalType;
+        outSigType: CanonicalType;
+        outFieldType: CanonicalType;
     }
 ): ValueRef {
     if (input.k === 'sig') {
@@ -85,8 +85,8 @@ export function emitBinary(
     spec: {
         opcode: string;
         fieldKernel: string;
-        outSigType: SignalType;
-        outFieldType: SignalType;
+        outSigType: CanonicalType;
+        outFieldType: CanonicalType;
     }
 ): ValueRef {
     if (a.k === 'sig' && b.k === 'sig') {
@@ -104,6 +104,6 @@ export function emitBinary(
 }
 
 /** Convenience for building numeric constants for signal-only formulas. */
-export function sigConst(ctx: KernelLowerCtx, value: number, t: SignalType): ValueRef {
+export function sigConst(ctx: KernelLowerCtx, value: number, t: CanonicalType): ValueRef {
     return { k: 'sig', id: ctx.b.sigConst(value, t) };
 }

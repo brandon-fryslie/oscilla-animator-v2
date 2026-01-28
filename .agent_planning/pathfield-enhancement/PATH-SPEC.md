@@ -215,7 +215,7 @@ Instead, add a new FieldExpr that is explicitly “path query” and materialize
 	•	pathSlot: ValueSlot (object slot containing Path)
 	•	uField: FieldExprId
 	•	op: 'position' | 'tangent' | 'normal' | 'arcLength'
-	•	type: SignalType (stride + unit)
+	•	type: CanonicalType (stride + unit)
 
 Materializer can:
 	•	materialize uField into a Float32Array

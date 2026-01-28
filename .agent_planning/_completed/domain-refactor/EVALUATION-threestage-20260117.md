@@ -252,21 +252,21 @@ export interface FieldExprLayout {
 fieldArray(
   instanceId: InstanceId,
   elementSignal?: SigExprId,  // The primitive signal being instantiated
-  type: SignalType
+  type: CanonicalType
 ): FieldExprId;
 
 // Layout stage (creates Field<vec2> from Field<any>)
 fieldLayout(
   input: FieldExprId,
   layout: LayoutSpec,
-  type: SignalType
+  type: CanonicalType
 ): FieldExprId;
 
 // Optional: Get intrinsic field for current instance
 fieldIntrinsic(
   instanceId: InstanceId,
   intrinsic: string,
-  type: SignalType
+  type: CanonicalType
 ): FieldExprId;  // Already exists ✅
 ```
 
@@ -299,10 +299,10 @@ export interface PrimitiveDecl {
 registerBlock({
   type: 'Circle',
   inputs: [
-    { id: 'radius', type: signalType('float'), defaultValue: 0.02 }
+    { id: 'radius', type: canonicalType('float'), defaultValue: 0.02 }
   ],
   outputs: [
-    { id: 'circle', type: signalType('circle') }  // ← SigExpr, not Field!
+    { id: 'circle', type: canonicalType('circle') }  // ← SigExpr, not Field!
   ],
   lower: ({ ctx, inputsById }) => {
     const radius = inputsById.radius;
@@ -326,9 +326,9 @@ registerBlock({
 registerBlock({
   type: 'Array',
   inputs: [
-    { id: 'element', type: signalType('any') },  // ← Any domain
-    { id: 'count', type: signalType('int'), defaultValue: 100 },
-    { id: 'maxCount', type: signalType('int'), optional: true }
+    { id: 'element', type: canonicalType('any') },  // ← Any domain
+    { id: 'count', type: canonicalType('int'), defaultValue: 100 },
+    { id: 'maxCount', type: canonicalType('int'), optional: true }
   ],
   outputs: [
     { id: 'elements', type: signalTypeField('same-as-input') },  // ← Same type!
@@ -376,8 +376,8 @@ registerBlock({
   type: 'GridLayout',
   inputs: [
     { id: 'elements', type: signalTypeField('any') },  // ← Field input!
-    { id: 'rows', type: signalType('int') },
-    { id: 'cols', type: signalType('int') }
+    { id: 'rows', type: canonicalType('int') },
+    { id: 'cols', type: canonicalType('int') }
   ],
   outputs: [
     { id: 'position', type: signalTypeField('vec2') }  // ← Field output!
@@ -472,7 +472,7 @@ From `domain-registry.ts`:
 
 ## Part 11: Type System Status
 
-### SignalType Support ✅
+### CanonicalType Support ✅
 
 - 'float', 'int', 'vec2', 'vec3', 'color', 'bool', 'circle', etc.
 - Field variant: `signalTypeField('float', 'default')`

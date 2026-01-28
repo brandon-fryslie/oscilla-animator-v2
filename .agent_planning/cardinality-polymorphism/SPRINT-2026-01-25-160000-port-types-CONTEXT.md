@@ -83,7 +83,7 @@ lower: ({ ctx, inputsById }) => {
   if (input.k === 'sig') {
     // Signal path - use opcode
     const sinFn = ctx.b.opcode(OpCode.Sin);
-    const result = ctx.b.sigMap(input.id, sinFn, signalType('float'));
+    const result = ctx.b.sigMap(input.id, sinFn, canonicalType('float'));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return {
@@ -117,7 +117,7 @@ For blocks like RadiusSqrt, Jitter2D, SetZ with multiple field inputs:
 ```typescript
 if (a.k === 'sig' && b.k === 'sig') {
   const fn = ctx.b.opcode(OpCode.Whatever);
-  const result = ctx.b.sigZip([a.id, b.id], fn, signalType('float'));
+  const result = ctx.b.sigZip([a.id, b.id], fn, canonicalType('float'));
   return { outputsById: { out: { k: 'sig', ... } } };
 }
 ```

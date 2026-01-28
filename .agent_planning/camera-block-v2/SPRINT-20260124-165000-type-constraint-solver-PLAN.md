@@ -41,7 +41,7 @@ Replace ad-hoc unit inference with a proper constraint solver that resolves all 
 
 **Technical Notes:**
 - Add `UnitVar` to canonical-types.ts as a special unit kind
-- Const output changes from `signalType('float')` to `signalType('float', unitVar())`
+- Const output changes from `canonicalType('float')` to `canonicalType('float', unitVar())`
 - Other generic blocks (Add, Mul, etc.) may need similar treatment
 
 ### P2: Implement constraint solver pass (MEDIUM)
@@ -50,7 +50,7 @@ Replace ad-hoc unit inference with a proper constraint solver that resolves all 
 - [ ] New pass `pass0.5-type-constraints.ts` runs after pass0 (structural) and before pass1 (default sources)
 - [ ] Collects constraints from all edges: `Type(fromPort) == Type(toPort)`
 - [ ] Unifies payload variables and unit variables
-- [ ] Produces `resolvedPortTypes: Map<PortKey, SignalType>`
+- [ ] Produces `resolvedPortTypes: Map<PortKey, CanonicalType>`
 - [ ] Handles transitive constraints (A→B→C propagates A's type to C)
 
 **Technical Notes:**

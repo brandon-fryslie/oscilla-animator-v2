@@ -126,7 +126,7 @@ The v2.5 type system upgrade came primarily from:
 
 This document introduced:
 - Five-axis coordinate system
-- PayloadType/Extent/SignalType naming
+- PayloadType/Extent/CanonicalType naming
 - AxisTag pattern (no optional fields)
 - Domain as compile-time resource
 - Binding/Perspective/Branch axes

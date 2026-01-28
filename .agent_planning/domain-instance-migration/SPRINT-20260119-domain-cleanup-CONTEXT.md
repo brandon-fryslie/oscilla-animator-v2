@@ -96,26 +96,26 @@ With the new instance system, intrinsics don't have domains - they have instance
 ### IRBuilder.fieldIntrinsic() (NEW - KEEP)
 
 ```typescript
-fieldIntrinsic(instanceId: InstanceId, intrinsic: IntrinsicPropertyName, type: SignalType): FieldExprId
+fieldIntrinsic(instanceId: InstanceId, intrinsic: IntrinsicPropertyName, type: CanonicalType): FieldExprId
 ```
 
 Creates a `FieldExprIntrinsic` with:
 - `kind: 'intrinsic'`
 - `instanceId`: The instance to query
 - `intrinsic`: 'index' | 'normalizedIndex' | 'randomId' | 'position' | 'radius'
-- `type`: SignalType
+- `type`: CanonicalType
 
 ### IRBuilder.fieldSource() (OLD - REMOVE)
 
 ```typescript
-fieldSource(domain: DomainId, sourceId: 'pos0' | 'idRand' | 'index' | 'normalizedIndex', type: SignalType): FieldExprId
+fieldSource(domain: DomainId, sourceId: 'pos0' | 'idRand' | 'index' | 'normalizedIndex', type: CanonicalType): FieldExprId
 ```
 
 Creates a `FieldExprSource` with:
 - `kind: 'source'`
 - `domain`: DomainId
 - `sourceId`: Source identifier
-- `type`: SignalType
+- `type`: CanonicalType
 
 ### inferFieldDomain() Behavior
 
