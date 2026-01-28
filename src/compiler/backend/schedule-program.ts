@@ -37,8 +37,19 @@ import { getPolicyForSemantic } from '../../runtime/ContinuityDefaults';
  * - instances: Instance declarations (count, layout, etc)
  * - steps: Ordered execution steps
  * - stateSlotCount: Number of persistent state slots
- * - stateSlots: Initial values for state slots (legacy format)
- * - stateMappings: State mappings with stable IDs for hot-swap migration
+ * - stateSlots: Initial values (legacy format, prefer stateMappings)
+ * - stateMappings: Canonical source for state slot declarations (ScalarSlotDecl | FieldSlotDecl)
+ *
+ * **Accessing State Slots:**
+ * Use `getScalarSlots(schedule)` and `getFieldSlots(schedule)` for typed access to state declarations.
+ * These provide the spec-aligned API (ScalarSlotDecl, FieldSlotDecl) while maintaining the
+ * implementation's union array (stateMappings).
+ *
+ * @see ScalarSlotDecl - Type alias for scalar state slots (spec terminology)
+ * @see FieldSlotDecl - Type alias for field state slots (spec terminology)
+ * @see getScalarSlots - Helper to filter scalar slots
+ * @see getFieldSlots - Helper to filter field slots
+ * @see design-docs/CANONICAL-oscilla-v2.5-20260109/topics/04-compilation.md §I9
  */
 export interface ScheduleIR {
   /** Time model configuration */
@@ -53,10 +64,46 @@ export interface ScheduleIR {
   /** Number of persistent state slots */
   readonly stateSlotCount: number;
 
-  /** Initial values for state slots (legacy format, use stateMappings for hot-swap) */
+  /**
+   * **Legacy format** - Initial values for state slots.
+   *
+   * This is an expanded array used only for initial state buffer allocation.
+   * For hot-swap migration and semantic state queries, use `stateMappings` instead.
+   * For typed access, use `getScalarSlots()` or `getFieldSlots()`.
+   *
+   * @deprecated Legacy expanded format. Use stateMappings for hot-swap migration.
+   *             Use getScalarSlots() / getFieldSlots() for spec-aligned typed access.
+   */
   readonly stateSlots: readonly StateSlotDef[];
 
-  /** State mappings with stable IDs for hot-swap migration */
+  /**
+   * Canonical source for state slot declarations with stable IDs.
+   *
+   * This array contains both scalar and field state mappings (ScalarSlotDecl | FieldSlotDecl).
+   * Each mapping includes:
+   * - Stable semantic identity (stateId) for hot-swap migration
+   * - Positional slot information (slotIndex/slotStart)
+   * - Memory layout (stride, laneCount)
+   * - Initial values
+   *
+   * Use `getScalarSlots()` / `getFieldSlots()` for typed access, or iterate directly:
+   *
+   * @example
+   * ```typescript
+   * // Option 1: Typed accessors
+   * const scalars = getScalarSlots(schedule);
+   * const fields = getFieldSlots(schedule);
+   *
+   * // Option 2: Direct iteration with discrimination
+   * for (const mapping of schedule.stateMappings) {
+   *   if (mapping.kind === 'scalar') {
+   *     console.log(`Scalar: ${mapping.stateId} at slot ${mapping.slotIndex}`);
+   *   } else {
+   *     console.log(`Field: ${mapping.stateId}, ${mapping.laneCount} lanes`);
+   *   }
+   * }
+   * ```
+   */
   readonly stateMappings: readonly StateMapping[];
 
   /** Number of event slots (for sizing eventScalars Uint8Array) */
