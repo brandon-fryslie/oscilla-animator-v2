@@ -9,12 +9,12 @@ import {
   type OutputAddress,
   type InputAddress,
   type ParamAddress,
-  type AdapterAddress,
+  type LensAddress,
   isBlockAddress,
   isOutputAddress,
   isInputAddress,
   isParamAddress,
-  isAdapterAddress,
+  isLensAddress,
   addressToString,
   parseAddress,
   getAddressFormatVersion,
@@ -49,12 +49,12 @@ describe('Canonical Address Type Guards', () => {
     paramId: 'size',
   };
 
-  const adapterAddr: AdapterAddress = {
-    kind: 'adapter',
+  const lensAddr: LensAddress = {
+    kind: 'lens',
     blockId: blockId('b1'),
     canonicalName: 'my_circle',
     portId: portId('x'),
-    adapterId: 'adapter_0',
+    lensId: 'lens_0',
   };
 
   it('isBlockAddress correctly identifies block addresses', () => {
@@ -62,7 +62,7 @@ describe('Canonical Address Type Guards', () => {
     expect(isBlockAddress(outputAddr)).toBe(false);
     expect(isBlockAddress(inputAddr)).toBe(false);
     expect(isBlockAddress(paramAddr)).toBe(false);
-    expect(isBlockAddress(adapterAddr)).toBe(false);
+    expect(isBlockAddress(lensAddr)).toBe(false);
   });
 
   it('isOutputAddress correctly identifies output addresses', () => {
@@ -70,7 +70,7 @@ describe('Canonical Address Type Guards', () => {
     expect(isOutputAddress(outputAddr)).toBe(true);
     expect(isOutputAddress(inputAddr)).toBe(false);
     expect(isOutputAddress(paramAddr)).toBe(false);
-    expect(isOutputAddress(adapterAddr)).toBe(false);
+    expect(isOutputAddress(lensAddr)).toBe(false);
   });
 
   it('isInputAddress correctly identifies input addresses', () => {
@@ -78,7 +78,7 @@ describe('Canonical Address Type Guards', () => {
     expect(isInputAddress(outputAddr)).toBe(false);
     expect(isInputAddress(inputAddr)).toBe(true);
     expect(isInputAddress(paramAddr)).toBe(false);
-    expect(isInputAddress(adapterAddr)).toBe(false);
+    expect(isInputAddress(lensAddr)).toBe(false);
   });
 
   it('isParamAddress correctly identifies param addresses', () => {
@@ -86,15 +86,15 @@ describe('Canonical Address Type Guards', () => {
     expect(isParamAddress(outputAddr)).toBe(false);
     expect(isParamAddress(inputAddr)).toBe(false);
     expect(isParamAddress(paramAddr)).toBe(true);
-    expect(isParamAddress(adapterAddr)).toBe(false);
+    expect(isParamAddress(lensAddr)).toBe(false);
   });
 
-  it('isAdapterAddress correctly identifies adapter addresses', () => {
-    expect(isAdapterAddress(blockAddr)).toBe(false);
-    expect(isAdapterAddress(outputAddr)).toBe(false);
-    expect(isAdapterAddress(inputAddr)).toBe(false);
-    expect(isAdapterAddress(paramAddr)).toBe(false);
-    expect(isAdapterAddress(adapterAddr)).toBe(true);
+  it('isLensAddress correctly identifies lens addresses', () => {
+    expect(isLensAddress(blockAddr)).toBe(false);
+    expect(isLensAddress(outputAddr)).toBe(false);
+    expect(isLensAddress(inputAddr)).toBe(false);
+    expect(isLensAddress(paramAddr)).toBe(false);
+    expect(isLensAddress(lensAddr)).toBe(true);
   });
 });
 
@@ -138,15 +138,15 @@ describe('addressToString', () => {
     expect(addressToString(addr)).toBe('v1:blocks.my_circle.params.size');
   });
 
-  it('serializes adapter address', () => {
-    const addr: AdapterAddress = {
-      kind: 'adapter',
+  it('serializes lens address', () => {
+    const addr: LensAddress = {
+      kind: 'lens',
       blockId: blockId('b1'),
       canonicalName: 'my_circle',
       portId: portId('x'),
-      adapterId: 'adapter_0',
+      lensId: 'lens_0',
     };
-    expect(addressToString(addr)).toBe('v1:blocks.my_circle.inputs.x.adapters.adapter_0');
+    expect(addressToString(addr)).toBe('v1:blocks.my_circle.inputs.x.lenses.lens_0');
   });
 
   it('handles canonical names with underscores and hyphens', () => {
@@ -210,14 +210,14 @@ describe('parseAddress', () => {
       });
     });
 
-    it('parses adapter address', () => {
-      const result = parseAddress('v1:blocks.my_circle.inputs.x.adapters.adapter_0');
+    it('parses lens address', () => {
+      const result = parseAddress('v1:blocks.my_circle.inputs.x.lenses.lens_0');
       expect(result).toEqual({
-        kind: 'adapter',
+        kind: 'lens',
         blockId: '',
         canonicalName: 'my_circle',
         portId: 'x',
-        adapterId: 'adapter_0',
+        lensId: 'lens_0',
       });
     });
 
@@ -279,17 +279,18 @@ describe('parseAddress', () => {
       expect(parseAddress('v1:blocks.my_circle.outputs')).toBeNull();
     });
 
-    it('rejects adapter address with wrong category (must be inputs)', () => {
-      // Adapters can only be on inputs, not outputs
-      expect(parseAddress('v1:blocks.my_circle.outputs.x.adapters.adapter_0')).toBeNull();
+    it('rejects lens address with wrong category (must be inputs)', () => {
+      // Lenses can only be on inputs (for now - outputs reserved for future)
+      expect(parseAddress('v1:blocks.my_circle.outputs.x.lenses.lens_0')).toBeNull();
     });
 
-    it('rejects adapter address with wrong literal (must be adapters)', () => {
-      expect(parseAddress('v1:blocks.my_circle.inputs.x.lenses.lens_0')).toBeNull();
+    it('rejects lens address with wrong literal (must be lenses)', () => {
+      // Should be "lenses" not "adapters" (Sprint 2 redesign)
+      expect(parseAddress('v1:blocks.my_circle.inputs.x.adapters.adapter_0')).toBeNull();
     });
 
-    it('rejects adapter address with empty adapter ID', () => {
-      expect(parseAddress('v1:blocks.my_circle.inputs.x.adapters.')).toBeNull();
+    it('rejects lens address with empty lens ID', () => {
+      expect(parseAddress('v1:blocks.my_circle.inputs.x.lenses.')).toBeNull();
     });
 
     it('rejects empty string', () => {
@@ -375,23 +376,23 @@ describe('roundtrip: parseAddress(addressToString(addr))', () => {
     expect(parsed && 'paramId' in parsed ? parsed.paramId : null).toBe(original.paramId);
   });
 
-  it('roundtrips adapter address', () => {
-    const original: AdapterAddress = {
-      kind: 'adapter',
+  it('roundtrips lens address', () => {
+    const original: LensAddress = {
+      kind: 'lens',
       blockId: blockId('b1'),
       canonicalName: 'my_circle',
       portId: portId('x'),
-      adapterId: 'adapter_0',
+      lensId: 'lens_0',
     };
     const str = addressToString(original);
     const parsed = parseAddress(str);
 
-    expect(parsed?.kind).toBe('adapter');
+    expect(parsed?.kind).toBe('lens');
     expect(parsed && 'canonicalName' in parsed ? parsed.canonicalName : null).toBe(
       original.canonicalName
     );
     expect(parsed && 'portId' in parsed ? parsed.portId : null).toBe(original.portId);
-    expect(parsed && 'adapterId' in parsed ? parsed.adapterId : null).toBe(original.adapterId);
+    expect(parsed && 'lensId' in parsed ? parsed.lensId : null).toBe(original.lensId);
   });
 });
 
