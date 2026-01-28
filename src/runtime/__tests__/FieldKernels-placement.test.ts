@@ -6,8 +6,15 @@
 
 import { describe, it, expect } from 'vitest';
 import { applyFieldKernelZipSig } from '../FieldKernels';
+import { signalTypeField, VEC3, type SignalType, type PayloadType } from '../../core/canonical-types';
 
-const VEC3_TYPE = { payload: 'vec3' as const, unit: 'world' as const };
+/**
+ * Test helper to create a properly-typed SignalType for field tests.
+ * Returns a SignalType with many(instance) cardinality and continuous temporality.
+ */
+function testFieldType(payload: PayloadType): SignalType {
+  return signalTypeField(payload, 'test-instance');
+}
 
 describe('FieldKernels Sprint 4: PlacementBasis Layouts', () => {
   describe('circleLayoutUV', () => {
@@ -22,7 +29,7 @@ describe('FieldKernels Sprint 4: PlacementBasis Layouts', () => {
         uv[i * 2 + 1] = 0.5;   // v unused
       }
 
-      applyFieldKernelZipSig(out, uv, [0.3, 0.0], 'circleLayoutUV', N, VEC3_TYPE);
+      applyFieldKernelZipSig(out, uv, [0.3, 0.0], 'circleLayoutUV', N, testFieldType(VEC3));
 
       // Check first element (u=0, phase=0)
       expect(out[0]).toBeCloseTo(0.5 + 0.3, 2); // x = cx + radius
@@ -40,7 +47,7 @@ describe('FieldKernels Sprint 4: PlacementBasis Layouts', () => {
     it('throws on wrong signal count', () => {
       const uv = new Float32Array(10);
       const out = new Float32Array(15);
-      expect(() => applyFieldKernelZipSig(out, uv, [0.3], 'circleLayoutUV', 5, VEC3_TYPE)).toThrow(/2 signals/);
+      expect(() => applyFieldKernelZipSig(out, uv, [0.3], 'circleLayoutUV', 5, testFieldType(VEC3))).toThrow(/2 signals/);
     });
   });
 
@@ -57,7 +64,7 @@ describe('FieldKernels Sprint 4: PlacementBasis Layouts', () => {
       }
 
       // Line from (0.1, 0.2) to (0.9, 0.8)
-      applyFieldKernelZipSig(out, uv, [0.1, 0.2, 0.9, 0.8], 'lineLayoutUV', N, VEC3_TYPE);
+      applyFieldKernelZipSig(out, uv, [0.1, 0.2, 0.9, 0.8], 'lineLayoutUV', N, testFieldType(VEC3));
 
       // Check first element (u=0)
       expect(out[0]).toBeCloseTo(0.1, 5);
@@ -77,7 +84,7 @@ describe('FieldKernels Sprint 4: PlacementBasis Layouts', () => {
     it('throws on wrong signal count', () => {
       const uv = new Float32Array(10);
       const out = new Float32Array(15);
-      expect(() => applyFieldKernelZipSig(out, uv, [0.1, 0.2], 'lineLayoutUV', 5, VEC3_TYPE)).toThrow(/4 signals/);
+      expect(() => applyFieldKernelZipSig(out, uv, [0.1, 0.2], 'lineLayoutUV', 5, testFieldType(VEC3))).toThrow(/4 signals/);
     });
   });
 
@@ -95,7 +102,7 @@ describe('FieldKernels Sprint 4: PlacementBasis Layouts', () => {
         uv[i * 2 + 1] = (row + 0.5) / 3; // v centered in cell
       }
 
-      applyFieldKernelZipSig(out, uv, [3, 3], 'gridLayoutUV', N, VEC3_TYPE);
+      applyFieldKernelZipSig(out, uv, [3, 3], 'gridLayoutUV', N, testFieldType(VEC3));
 
       // Check corners
       // First element (col=0, row=0)
@@ -124,7 +131,7 @@ describe('FieldKernels Sprint 4: PlacementBasis Layouts', () => {
         uv[i * 2 + 1] = 0.5;
       }
 
-      applyFieldKernelZipSig(out, uv, [1, 3], 'gridLayoutUV', N, VEC3_TYPE);
+      applyFieldKernelZipSig(out, uv, [1, 3], 'gridLayoutUV', N, testFieldType(VEC3));
 
       // All elements should have x = 0.5 (single column)
       expect(out[0]).toBeCloseTo(0.5, 5);
@@ -135,7 +142,7 @@ describe('FieldKernels Sprint 4: PlacementBasis Layouts', () => {
     it('throws on wrong signal count', () => {
       const uv = new Float32Array(10);
       const out = new Float32Array(15);
-      expect(() => applyFieldKernelZipSig(out, uv, [3], 'gridLayoutUV', 5, VEC3_TYPE)).toThrow(/2 signals/);
+      expect(() => applyFieldKernelZipSig(out, uv, [3], 'gridLayoutUV', 5, testFieldType(VEC3))).toThrow(/2 signals/);
     });
   });
 });

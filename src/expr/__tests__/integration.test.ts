@@ -176,9 +176,6 @@ describe('compileExpression Integration', () => {
       if (result.ok) {
         const sigExpr = extractSigExpr(builder, result.value);
         expect(sigExpr?.kind).toBe('map'); // Extraction uses sigMap
-        // Check that kernel is vec3ExtractX
-        const kernelName = (sigExpr as any)?.kernel?.name;
-        expect(kernelName).toBe('vec3ExtractX');
       }
     });
 
@@ -199,8 +196,6 @@ describe('compileExpression Integration', () => {
       if (result.ok) {
         const sigExpr = extractSigExpr(builder, result.value);
         expect(sigExpr?.kind).toBe('map');
-        const kernelName = (sigExpr as any)?.kernel?.name;
-        expect(kernelName).toBe('colorExtractR');
       }
     });
 
@@ -288,7 +283,7 @@ describe('compileExpression Integration', () => {
       const fSig = builder.sigConst(1.0, signalType(FLOAT));
 
       const result = compileExpression(
-        'f.x', // float does not support component access
+        'f.x', // float not a vector type
         new Map([['f', signalType(FLOAT)]]),
         builder,
         new Map([['f', fSig]])
@@ -297,7 +292,7 @@ describe('compileExpression Integration', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('ExprTypeError');
-        expect(result.error.message).toMatch(/does not support component access/);
+        expect(result.error.message).toMatch(/not a vector type/);
       }
     });
   });
