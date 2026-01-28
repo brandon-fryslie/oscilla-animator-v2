@@ -20,7 +20,8 @@ import React, { useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { ToggleButton, ToggleButtonGroup } from '@mui/material';
 import { useStores } from '../../../stores';
-import type { Diagnostic, Severity, TargetRef } from '../../../diagnostics/types';
+import type { RootStore } from '../../../stores';
+import type { Diagnostic, Severity, TargetRef, DiagnosticAction } from '../../../diagnostics/types';
 
 // =============================================================================
 // DiagnosticConsole Component
@@ -32,7 +33,8 @@ import type { Diagnostic, Severity, TargetRef } from '../../../diagnostics/types
  * MobX observer: Re-renders when diagnostics change.
  */
 export const DiagnosticConsole: React.FC = observer(() => {
-  const { diagnostics: diagnosticsStore } = useStores();
+  const rootStore = useStores();
+  const diagnosticsStore = rootStore.diagnostics;
   const [filter, setFilter] = useState<Severity | 'all'>('all');
 
   // Get active diagnostics (reactive - triggers re-render when changed)
@@ -248,7 +250,7 @@ export const DiagnosticConsole: React.FC = observer(() => {
           </div>
         ) : (
           filteredDiagnostics.map((diag: Diagnostic) => (
-            <DiagnosticRow key={diag.id} diagnostic={diag} />
+            <DiagnosticRow key={diag.id} diagnostic={diag} rootStore={rootStore} />
           ))
         )}
       </div>
@@ -262,6 +264,7 @@ export const DiagnosticConsole: React.FC = observer(() => {
 
 interface DiagnosticRowProps {
   diagnostic: Diagnostic;
+  rootStore: RootStore;
 }
 
 /**
@@ -272,11 +275,38 @@ interface DiagnosticRowProps {
  * - Title (bold, short summary)
  * - Message (detailed explanation)
  * - Target (formatted location)
+ * - Action Buttons (if diagnostic has actions)
  */
-const DiagnosticRow: React.FC<DiagnosticRowProps> = ({ diagnostic }) => {
+const DiagnosticRow: React.FC<DiagnosticRowProps> = ({ diagnostic, rootStore }) => {
   const icon = getSeverityIcon(diagnostic.severity);
   const color = getSeverityColor(diagnostic.severity);
   const targetStr = formatTargetRef(diagnostic.primaryTarget);
+
+  // State for action execution
+  const [executingActionIdx, setExecutingActionIdx] = useState<number | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  // Action click handler
+  const handleActionClick = (action: DiagnosticAction, idx: number) => {
+    setActionError(null);
+    setExecutingActionIdx(idx);
+
+    try {
+      const result = rootStore.executeAction(action);
+
+      setExecutingActionIdx(null);
+
+      if (!result.success) {
+        setActionError(result.error || 'Action failed');
+        console.error('Diagnostic action failed:', result.error);
+      }
+    } catch (err) {
+      setExecutingActionIdx(null);
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+      setActionError(errorMsg);
+      console.error('Diagnostic action exception:', err);
+    }
+  };
 
   return (
     <div
@@ -303,6 +333,60 @@ const DiagnosticRow: React.FC<DiagnosticRowProps> = ({ diagnostic }) => {
       {targetStr && (
         <div style={{ fontSize: '11px', marginLeft: '24px', color: '#888' }}>
           Target: {targetStr}
+        </div>
+      )}
+
+      {/* Action Buttons */}
+      {diagnostic.actions && diagnostic.actions.length > 0 && (
+        <div style={{ 
+          marginTop: '8px', 
+          marginLeft: '24px',
+          display: 'flex',
+          gap: '8px',
+          flexWrap: 'wrap',
+        }}>
+          {diagnostic.actions.map((action, idx) => (
+            <div key={idx} style={{ display: 'flex', flexDirection: 'column' }}>
+              <button
+                onClick={() => handleActionClick(action, idx)}
+                disabled={executingActionIdx === idx}
+                style={{
+                  padding: '4px 12px',
+                  fontSize: '12px',
+                  fontWeight: 500,
+                  color: executingActionIdx === idx ? '#888' : '#fff',
+                  background: executingActionIdx === idx ? '#1a2744' : '#2a4365',
+                  border: '1px solid #3a5a85',
+                  borderRadius: '4px',
+                  cursor: executingActionIdx === idx ? 'not-allowed' : 'pointer',
+                  opacity: executingActionIdx === idx ? 0.6 : 1,
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={(e) => {
+                  if (executingActionIdx !== idx) {
+                    e.currentTarget.style.background = '#3a5a85';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (executingActionIdx !== idx) {
+                    e.currentTarget.style.background = '#2a4365';
+                  }
+                }}
+              >
+                {executingActionIdx === idx ? '⏳ Executing...' : action.label}
+              </button>
+              
+              {actionError && executingActionIdx === null && (
+                <span style={{ 
+                  fontSize: '10px', 
+                  color: '#ff6b6b', 
+                  marginTop: '2px' 
+                }}>
+                  {actionError}
+                </span>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>
