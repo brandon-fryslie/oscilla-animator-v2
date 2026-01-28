@@ -150,45 +150,53 @@ export interface PatchError {
 }
 
 // =============================================================================
-// Adapter ID Generation (Sprint 2026-01-27)
+// Lens ID Generation (Sprint 2: Lenses System Redesign - 2026-01-27)
 // =============================================================================
 
 /**
- * Generate a deterministic adapter ID from a source address.
+ * Generate a deterministic lens ID from a source address.
  *
- * Adapter IDs are used for resource addressing:
- *   `v1:blocks.{block}.inputs.{port}.adapters.{adapter_id}`
+ * Lens IDs are used for resource addressing:
+ *   `v1:blocks.{block}.inputs.{port}.lenses.{lens_id}`
  *
  * The ID is derived from the source address to ensure:
  * - Determinism: Same source address always produces same ID
  * - Uniqueness: Different source addresses produce different IDs
  * - Readability: IDs are short and human-readable
  *
- * Format: `adapter_{hash}` where hash is a short alphanumeric string
+ * Format: `lens_{hash}` where hash is a short alphanumeric string
  * derived from the source address.
  *
+ * NOTE (Sprint 2 Redesign):
+ * - Renamed from generateAdapterId to generateLensId
+ * - Adapters are now a category of lens (type conversion lenses)
+ * - Future lenses may include scaling, quantization, color space transforms
+ *
  * @param sourceAddress - Canonical address of the source output (e.g., "v1:blocks.c1.outputs.value")
- * @returns Deterministic adapter ID
+ * @returns Deterministic lens ID
  */
-export function generateAdapterId(sourceAddress: string): string {
+export function generateLensId(sourceAddress: string): string {
   // Use a simple hash based on the source address
   // We want short, readable IDs that are still deterministic
   const hash = simpleHash(sourceAddress);
-  return `adapter_${hash}`;
+  return `lens_${hash}`;
 }
 
 /**
- * Generate a deterministic adapter ID with an explicit index.
+ * Generate a deterministic lens ID with an explicit index.
  *
- * Use this when you need to generate multiple adapter IDs for the same port
+ * Use this when you need to generate multiple lens IDs for the same port
  * and want explicit ordering control.
+ *
+ * NOTE (Sprint 2 Redesign):
+ * - Renamed from generateAdapterIdByIndex to generateLensIdByIndex
  *
  * @param _portId - The input port ID (unused but included for API consistency)
  * @param index - Sequential index (0-based)
- * @returns Deterministic adapter ID like "adapter_0", "adapter_1", etc.
+ * @returns Deterministic lens ID like "lens_0", "lens_1", etc.
  */
-export function generateAdapterIdByIndex(_portId: string, index: number): string {
-  return `adapter_${index}`;
+export function generateLensIdByIndex(_portId: string, index: number): string {
+  return `lens_${index}`;
 }
 
 /**

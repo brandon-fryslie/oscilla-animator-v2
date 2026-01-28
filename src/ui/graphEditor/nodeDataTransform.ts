@@ -215,7 +215,7 @@ export function createEdgeFromEdgeLike(edge: EdgeLike): ReactFlowEdge {
     sourceHandle: edge.sourcePortId,
     target: edge.targetBlockId,
     targetHandle: edge.targetPortId,
-    type: 'smoothstep',
+    type: 'default', // Bezier curves (smooth lines)
     animated: false,
   };
 }

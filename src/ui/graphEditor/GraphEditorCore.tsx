@@ -149,6 +149,7 @@ export const GraphEditorCoreInner = observer(
       const [nodes, setNodes, onNodesChange] = useNodesState<any>([]);
       const [edges, setEdges, onEdgesChange] = useEdgesState<any>([]);
       const [isLayouting, setIsLayouting] = useState(false);
+      const [isInitialized, setIsInitialized] = useState(false);
       const { fitView } = useReactFlow();
 
       // Refs for stable access to latest state
@@ -361,10 +362,114 @@ export const GraphEditorCoreInner = observer(
       }, [onEditorReady, ref]);
 
       // -------------------------------------------------------------------------
-      // MobX Reaction - Sync Adapter Changes to ReactFlow
+      // Initial Layout - Compute ELK layout BEFORE first render (no flash)
+      // -------------------------------------------------------------------------
+
+      const initialLayoutDoneRef = useRef(false);
+
+      useEffect(() => {
+        let cancelled = false;
+
+        async function initializeLayout() {
+          // Skip if already initialized or no blocks
+          if (initialLayoutDoneRef.current) return;
+          if (adapter.blocks.size === 0) {
+            setIsInitialized(true);
+            return;
+          }
+
+          // Build initial nodes/edges with placeholder positions
+          const { nodes: initialNodes, edges: initialEdges } = reconcileNodesFromAdapter(
+            adapter,
+            [],
+            (blockId) => adapter.getBlockPosition(blockId)
+          );
+
+          // Single node: just place it and render
+          if (initialNodes.length === 1) {
+            if (!initialNodes[0].position || (initialNodes[0].position.x === 100 && initialNodes[0].position.y === 100)) {
+              initialNodes[0].position = { x: 100, y: 100 };
+              adapter.setBlockPosition(initialNodes[0].id, initialNodes[0].position);
+            }
+            if (!cancelled) {
+              setNodes(initialNodes);
+              setEdges(initialEdges);
+              setIsInitialized(true);
+              initialLayoutDoneRef.current = true;
+              setTimeout(() => fitView({ padding: 0.1 }), 50);
+            }
+            return;
+          }
+
+          // Check if all nodes have stored positions (not just default 100,100)
+          const allHavePositions = initialNodes.every((node) => {
+            const stored = adapter.getBlockPosition(node.id);
+            return stored && !(stored.x === 100 && stored.y === 100 && initialNodes.length > 1);
+          });
+
+          if (allHavePositions) {
+            // Use stored positions directly
+            if (!cancelled) {
+              setNodes(initialNodes);
+              setEdges(initialEdges);
+              setIsInitialized(true);
+              initialLayoutDoneRef.current = true;
+              setTimeout(() => fitView({ padding: 0.1 }), 50);
+            }
+            return;
+          }
+
+          // Compute ELK layout (async)
+          try {
+            const { nodes: layoutedNodes } = await getLayoutedElements(initialNodes, initialEdges);
+
+            if (cancelled) return;
+
+            // Persist positions to adapter
+            for (const node of layoutedNodes) {
+              adapter.setBlockPosition(node.id, node.position);
+            }
+
+            // Set state - first render will show correct positions
+            setNodes(layoutedNodes);
+            setEdges(initialEdges);
+            setIsInitialized(true);
+            initialLayoutDoneRef.current = true;
+            setTimeout(() => fitView({ padding: 0.1 }), 50);
+          } catch (error) {
+            console.warn('Initial layout failed, using grid fallback:', error);
+
+            // Grid fallback
+            let x = 100, y = 100;
+            for (const node of initialNodes) {
+              node.position = { x, y };
+              adapter.setBlockPosition(node.id, { x, y });
+              x += 250;
+              if (x > 1000) { x = 100; y += 150; }
+            }
+
+            if (!cancelled) {
+              setNodes(initialNodes);
+              setEdges(initialEdges);
+              setIsInitialized(true);
+              initialLayoutDoneRef.current = true;
+            }
+          }
+        }
+
+        initializeLayout();
+
+        return () => { cancelled = true; };
+      }, [adapter, setNodes, setEdges, fitView]);
+
+      // -------------------------------------------------------------------------
+      // MobX Reaction - Sync Adapter Changes to ReactFlow (after initialization)
       // -------------------------------------------------------------------------
 
       useEffect(() => {
+        // Don't run reaction until initial layout is done
+        if (!isInitialized) return;
+
         const disposer = reaction(
           () => ({
             blockCount: adapter.blocks.size,
@@ -383,14 +488,11 @@ export const GraphEditorCoreInner = observer(
 
             setNodes(reconciledNodes);
             setEdges(reconciledEdges);
-          },
-          {
-            fireImmediately: true, // Run immediately to populate initial nodes/edges
           }
         );
 
         return disposer;
-      }, [adapter, setNodes, setEdges]);
+      }, [adapter, setNodes, setEdges, isInitialized]);
 
       // -------------------------------------------------------------------------
       // Render

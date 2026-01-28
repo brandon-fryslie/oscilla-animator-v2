@@ -394,7 +394,7 @@ export type {
   OutputAddress,
   InputAddress,
   ParamAddress,
-  AdapterAddress,
+  LensAddress,
 } from './canonical-address';
 
 export {
@@ -402,14 +402,14 @@ export {
   isOutputAddress,
   isInputAddress,
   isParamAddress,
-  isAdapterAddress,
+  isLensAddress,
   addressToString,
   parseAddress,
   getAddressFormatVersion,
 } from './canonical-address';
 
 // =============================================================================
-// Adapter Attachments (from Patch.ts)
+// Lens Attachments (from Patch.ts)
 // =============================================================================
 
-export type { AdapterAttachment, VarargConnection } from '../graph/Patch';
+export type { LensAttachment, VarargConnection } from '../graph/Patch';
