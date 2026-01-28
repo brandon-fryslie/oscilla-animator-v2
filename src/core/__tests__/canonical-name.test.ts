@@ -10,6 +10,8 @@ import {
   detectCanonicalNameCollisions,
   validateDisplayNameUniqueness,
   isValidDisplayName,
+  generateAdapterId,
+  generateAdapterIdByIndex,
 } from '../canonical-name';
 import { buildPatch } from '../../graph/Patch';
 
@@ -293,5 +295,67 @@ describe('isValidDisplayName', () => {
   it('rejects objects', () => {
     expect(isValidDisplayName({})).toBe(false);
     expect(isValidDisplayName([])).toBe(false);
+  });
+});
+
+// =============================================================================
+// Adapter ID Generation Tests
+// =============================================================================
+
+describe('generateAdapterId', () => {
+  it('generates deterministic IDs from source address', () => {
+    const sourceAddress = 'v1:blocks.const_1.outputs.value';
+    const id1 = generateAdapterId(sourceAddress);
+    const id2 = generateAdapterId(sourceAddress);
+    expect(id1).toBe(id2);
+  });
+
+  it('generates different IDs for different source addresses', () => {
+    const id1 = generateAdapterId('v1:blocks.const_1.outputs.value');
+    const id2 = generateAdapterId('v1:blocks.const_2.outputs.value');
+    expect(id1).not.toBe(id2);
+  });
+
+  it('generates IDs with adapter_ prefix', () => {
+    const id = generateAdapterId('v1:blocks.const_1.outputs.value');
+    expect(id).toMatch(/^adapter_/);
+  });
+
+  it('generates short, readable IDs', () => {
+    const id = generateAdapterId('v1:blocks.const_1.outputs.value');
+    // adapter_ prefix (8 chars) + hash (6 chars) = 14 chars max
+    expect(id.length).toBeLessThanOrEqual(14);
+  });
+
+  it('handles empty string', () => {
+    const id = generateAdapterId('');
+    expect(id).toMatch(/^adapter_/);
+  });
+
+  it('handles long source addresses', () => {
+    const longAddress = 'v1:blocks.very_long_block_name_with_many_words.outputs.complex_output_port';
+    const id = generateAdapterId(longAddress);
+    expect(id).toMatch(/^adapter_/);
+    expect(id.length).toBeLessThanOrEqual(14);
+  });
+});
+
+describe('generateAdapterIdByIndex', () => {
+  it('generates IDs with adapter_ prefix and index', () => {
+    expect(generateAdapterIdByIndex('x', 0)).toBe('adapter_0');
+    expect(generateAdapterIdByIndex('x', 1)).toBe('adapter_1');
+    expect(generateAdapterIdByIndex('x', 99)).toBe('adapter_99');
+  });
+
+  it('generates deterministic IDs', () => {
+    const id1 = generateAdapterIdByIndex('port', 5);
+    const id2 = generateAdapterIdByIndex('port', 5);
+    expect(id1).toBe(id2);
+  });
+
+  it('generates different IDs for different indices', () => {
+    const id1 = generateAdapterIdByIndex('port', 0);
+    const id2 = generateAdapterIdByIndex('port', 1);
+    expect(id1).not.toBe(id2);
   });
 });

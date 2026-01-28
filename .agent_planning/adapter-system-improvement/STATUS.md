@@ -12,7 +12,7 @@
 
 | Sprint | Description | Bead ID | Status |
 |--------|-------------|---------|--------|
-| Sprint 1 | Data Model & Addressing | `oscilla-animator-v2-53c` | NOT STARTED |
+| Sprint 1 | Data Model & Addressing | `oscilla-animator-v2-53c` | COMPLETED |
 | Sprint 2 | Normalization Pass Updates | `oscilla-animator-v2-mtc` | NOT STARTED |
 | Sprint 3 | Editor Integration | `oscilla-animator-v2-lrc` | NOT STARTED |
 | Sprint 4 | UI Visualization | `oscilla-animator-v2-166` | NOT STARTED |
@@ -22,6 +22,15 @@
 
 ## Recent Activity
 
+- 2026-01-27: **Sprint 1 COMPLETED** - Data Model & Addressing
+  - Added `AdapterAttachment` interface to `src/graph/Patch.ts`
+  - Extended `InputPort` with optional `adapters` field
+  - Added `AdapterAddress` type to `src/types/canonical-address.ts`
+  - Added `isAdapterAddress` type guard
+  - Updated `addressToString` and `parseAddress` for adapter addresses
+  - Added `generateAdapterId` and `generateAdapterIdByIndex` helpers
+  - Added 14 new tests (43 total canonical-address tests, 47 canonical-name tests)
+  - All 1800 tests pass
 - 2026-01-27: Created implementation plan (PLAN.md)
 - 2026-01-27: Created Definition of Done (DOD.md)
 - 2026-01-27: Explored current adapter architecture

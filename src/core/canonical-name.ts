@@ -183,11 +183,11 @@ export function generateAdapterId(sourceAddress: string): string {
  * Use this when you need to generate multiple adapter IDs for the same port
  * and want explicit ordering control.
  *
- * @param portId - The input port ID
+ * @param _portId - The input port ID (unused but included for API consistency)
  * @param index - Sequential index (0-based)
  * @returns Deterministic adapter ID like "adapter_0", "adapter_1", etc.
  */
-export function generateAdapterIdByIndex(portId: string, index: number): string {
+export function generateAdapterIdByIndex(_portId: string, index: number): string {
   return `adapter_${index}`;
 }
 
