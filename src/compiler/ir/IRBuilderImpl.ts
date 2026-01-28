@@ -348,6 +348,7 @@ export class IRBuilderImpl implements IRBuilder {
       case 'intrinsic':
       case 'array':
       case 'stateRead':
+      case 'placement':
         return expr.instanceId; // These ARE bound to an instance
       case 'map':
         return expr.instanceId ?? this.inferFieldInstance(expr.input);

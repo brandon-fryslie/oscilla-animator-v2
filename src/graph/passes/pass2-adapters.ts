@@ -1,54 +1,49 @@
 /**
- * Pass 2: Adapter Insertion
+ * Pass 2: Lens Expansion & Type Validation (Redesigned Sprint 2)
  *
- * Inserts adapter blocks for type-mismatched edges.
+ * This pass is split into TWO INDEPENDENT PHASES:
+ *
+ * PHASE 1: Expand Explicit Lenses
+ *   - For each lens in InputPort.lenses, create a lens block
+ *   - Insert deterministically between source and target
+ *   - No type checking or auto-insertion involved
+ *
+ * PHASE 2: Type Validation
+ *   - Check all remaining edges for type compatibility
+ *   - Report errors (no auto-fix, no insertion)
+ *   - Independent of Phase 1 (could theoretically run in either order)
+ *
+ * KEY DESIGN CHANGE FROM v1:
+ *   - Removed automatic adapter insertion on type mismatch
+ *   - Lenses are NOW user-controlled transformations
+ *   - Type validation is now SEPARATE from lens expansion
+ *   - No fallback logic; errors are reported to user
+ *
+ * CONTRACT FOR PHASE 1 (expandExplicitLenses):
+ *   - Input: Patch with user-defined lenses in InputPort.lenses
+ *   - For each lens: create lens block, rewire edges through it
+ *   - Lens block IDs: _lens_{portId}_{lensId} (deterministic)
+ *   - Display names: {blockName}.{portId}.lenses.{lensId}
+ *   - Output: Patch with lens blocks expanded, lenses field now empty
+ *
+ * CONTRACT FOR PHASE 2 (validateTypeCompatibility):
+ *   - Input: Patch (after Phase 1 expansion)
+ *   - Check each edge's source/target port types
+ *   - Collect errors for mismatches (don't insert adapters)
+ *   - Output: Either ok or error list (type errors only)
+ *
+ * INVARIANTS:
+ *   - Both phases preserve existing block behavior
+ *   - Deterministic: same input → same output
+ *   - No auto-insertion (user controls transformations via lenses)
+ *   - Type errors are reported, not silently fixed
  */
 
-/**
- * ============================================================================
- * CONTRACT / NON-NEGOTIABLE BEHAVIOR
- * ============================================================================
- *
- * This pass performs *structural* adapter insertion.
- * It rewrites the graph by inserting explicit adapter blocks for edges whose
- * endpoint port types are incompatible.
- *
- * What this pass MUST do:
- *   - Decide adapter insertion ONLY from the *block registry port definitions*
- *     (i.e. `blockDef.inputs/outputs[portId].type`).
- *   - Use `findAdapter(fromType, toType)` as the only conversion policy.
- *   - Produce deterministic adapter IDs and deterministic edge IDs.
- *   - Preserve user intent:
- *       * original edge is replaced by two edges through the adapter
- *       * adapter block is marked derived with metadata pointing to the
- *         original edge
- *   - Keep adapter blocks semantically neutral:
- *       * adapter params remain empty
- *       * typing is not stamped here
- *
- * What this pass MUST NOT do:
- *   - NO inference/unification/constraint solving.
- *   - NO specialization from block instance params.
- *   - NO block-type special casing (Const is NOT special, Camera is NOT special).
- *   - NO fallback conversions (if `findAdapter` returns null, the connection is
- *     invalid and must be rejected later by the type system / diagnostics).
- *
- * Allowed future changes (safe evolutions):
- *   - Improve error reporting (e.g. include extracted signatures in messages).
- *   - Extend adapter insertion to cover new axes only if adapter policy remains
- *     entirely in `adapters.ts`.
- *   - Add batching/perf improvements, as long as determinism is preserved.
- *
- * Disallowed future changes:
- *   - Reading or writing inferred types to `block.params`.
- *   - Deciding adapters based on runtime values.
- */
-
-import type { BlockId, PortId, BlockRole } from '../../types';
+import type { BlockId, BlockRole } from '../../types';
 import type { SignalType } from '../../core/canonical-types';
-import type { Block, Edge, Patch } from '../Patch';
+import type { Block, Edge, Patch, LensAttachment } from '../Patch';
 import { getBlockDefinition, requireBlockDef } from '../../blocks/registry';
-import { findAdapter, type AdapterSpec } from '../adapters';
+import { findAdapter } from '../adapters';
 
 /**
  * Check if a block has cardinalityMode: 'preserve'.
@@ -79,25 +74,29 @@ export interface Pass2Error {
 }
 
 // =============================================================================
-// Adapter Insertion
+// Lens Expansion (Phase 1)
 // =============================================================================
 
-interface AdapterInsertion {
-  /** The adapter block to insert */
+interface LensInsertion {
+  /** The lens block to insert */
   block: Block;
-  /** The edge from original source to adapter input */
-  edgeToAdapter: Edge;
-  /** The edge from adapter output to original target */
-  edgeFromAdapter: Edge;
+  /** The edge from original source to lens input */
+  edgeToLens: Edge;
+  /** The edge from lens output to original target */
+  edgeFromLens: Edge;
   /** The original edge ID being replaced */
   originalEdgeId: string;
+  /** The block and port being modified */
+  targetBlockId: BlockId;
+  targetPortId: string;
 }
 
 /**
- * Generate a deterministic adapter block ID.
+ * Generate a deterministic lens block ID.
+ * Format: _lens_{portId}_{lensId}
  */
-function generateAdapterId(edgeId: string): BlockId {
-  return `_adapter_${edgeId}` as BlockId;
+function generateLensBlockId(portId: string, lensId: string): BlockId {
+  return `_lens_${portId}_${lensId}` as BlockId;
 }
 
 /**
@@ -117,29 +116,273 @@ function getPortType(
 }
 
 /**
- * Analyze edges for type mismatches and determine needed adapter insertions.
+ * Create a lens block from a LensAttachment.
+ *
+ * A lens block is a real block that performs the transformation.
+ * The lensType determines what block type to create.
  */
-function analyzeAdapters(
+function createLensBlock(
+  portId: string,
+  lens: LensAttachment,
+  targetBlock: Block,
+  lensBlockId: BlockId
+): Block {
+  // The lens.lensType should correspond to a block type (e.g., 'Adapter_DegreesToRadians')
+  const lensBlockDef = requireBlockDef(lens.lensType);
+
+  // Create input ports from registry
+  const inputPorts = new Map();
+  for (const [inputId] of Object.entries(lensBlockDef.inputs)) {
+    inputPorts.set(inputId, { id: inputId, combineMode: 'last' });
+  }
+
+  // Create output ports from registry
+  const outputPorts = new Map();
+  for (const [outputId] of Object.entries(lensBlockDef.outputs)) {
+    outputPorts.set(outputId, { id: outputId });
+  }
+
+  // Use lens params if provided, otherwise empty
+  const lensParams = lens.params ?? {};
+
+  // For now, use adapter meta since lens is primarily for editor tracking
+  // Once lens-specific metadata is needed, we can update this
+  const lensRole: BlockRole = {
+    kind: 'derived',
+    meta: {
+      kind: 'adapter',
+      edgeId: '', // Will be set per-edge
+      adapterType: lens.lensType,
+    },
+  };
+
+  // Display name format: {targetBlockName}.{portId}.lenses.{lensId}
+  const displayName = `${targetBlock.displayName}.${portId}.lenses.${lens.id}`;
+
+  return {
+    id: lensBlockId,
+    type: lens.lensType,
+    params: lensParams,
+    displayName,
+    domainId: targetBlock.domainId, // Inherit domain from target
+    role: lensRole,
+    inputPorts,
+    outputPorts,
+  };
+}
+
+/**
+ * Analyze lenses and determine needed lens block insertions.
+ *
+ * Returns a list of lens blocks to insert and how to rewire edges.
+ */
+function analyzeLenses(
   patch: Patch,
   errors: AdapterError[]
-): AdapterInsertion[] {
-  const insertions: AdapterInsertion[] = [];
+): LensInsertion[] {
+  const insertions: LensInsertion[] = [];
+
+  for (const [blockId, block] of patch.blocks) {
+    for (const [portId, port] of block.inputPorts) {
+      // Skip if no lenses defined for this port
+      if (!port.lenses || port.lenses.length === 0) continue;
+
+      for (const lens of port.lenses) {
+        // Find all edges targeting this (block, port) pair
+        // For now, we insert lens for all edges to this port.
+        // The sourceAddress in the lens could be used for more precise matching in the future.
+        for (const edge of patch.edges) {
+          if (edge.enabled === false) continue;
+          if (edge.to.kind !== 'port') continue;
+          if (edge.to.blockId !== blockId || edge.to.slotId !== portId) continue;
+
+          // Create lens block
+          const lensBlockId = generateLensBlockId(portId, lens.id);
+          const lensBlock = createLensBlock(portId, lens, block, lensBlockId);
+
+          // Find the lens block definition to get input/output port IDs
+          const lensBlockDef = getBlockDefinition(lens.lensType);
+          if (!lensBlockDef) {
+            errors.push({
+              kind: 'UnknownPort',
+              blockId: lensBlockId,
+              portId: 'unknown',
+              direction: 'input',
+            });
+            continue;
+          }
+
+          const inputPortId = Object.keys(lensBlockDef.inputs)[0] ?? 'in';
+          const outputPortId = Object.keys(lensBlockDef.outputs)[0] ?? 'out';
+
+          // Create edges: source → lens input, lens output → target
+          const edgeToLens: Edge = {
+            id: `${edge.id}_to_lens`,
+            from: edge.from,
+            to: {
+              kind: 'port',
+              blockId: lensBlockId,
+              slotId: inputPortId,
+            },
+            enabled: true,
+            sortKey: edge.sortKey,
+            role: { kind: 'adapter', meta: { adapterId: lensBlockId, originalEdgeId: edge.id } },
+          };
+
+          const edgeFromLens: Edge = {
+            id: `${edge.id}_from_lens`,
+            from: {
+              kind: 'port',
+              blockId: lensBlockId,
+              slotId: outputPortId,
+            },
+            to: edge.to,
+            enabled: true,
+            sortKey: edge.sortKey,
+            role: { kind: 'adapter', meta: { adapterId: lensBlockId, originalEdgeId: edge.id } },
+          };
+
+          insertions.push({
+            block: lensBlock,
+            edgeToLens,
+            edgeFromLens,
+            originalEdgeId: edge.id,
+            targetBlockId: blockId,
+            targetPortId: portId,
+          });
+        }
+      }
+    }
+  }
+
+  return insertions;
+}
+
+/**
+ * Apply lens insertions to create an expanded patch.
+ *
+ * After expansion, the lenses field is cleared from the port.
+ */
+function applyLensInsertions(
+  patch: Patch,
+  insertions: LensInsertion[]
+): Patch {
+  if (insertions.length === 0) {
+    return patch;
+  }
+
+  // Build set of edge IDs being replaced
+  const replacedEdgeIds = new Set(insertions.map(i => i.originalEdgeId));
+
+  // Create new blocks map with lens blocks
+  const newBlocks = new Map(patch.blocks);
+
+  // Add lens blocks
+  for (const ins of insertions) {
+    newBlocks.set(ins.block.id, ins.block);
+  }
+
+  // Clear lenses from ports (they've been expanded to blocks)
+  for (const ins of insertions) {
+    const block = newBlocks.get(ins.targetBlockId);
+    if (block) {
+      const port = block.inputPorts.get(ins.targetPortId);
+      if (port && port.lenses) {
+        const newPort = { ...port, lenses: undefined };
+        const newInputPorts = new Map(block.inputPorts);
+        newInputPorts.set(ins.targetPortId, newPort);
+        const newBlock = { ...block, inputPorts: newInputPorts };
+        newBlocks.set(ins.targetBlockId, newBlock);
+      }
+    }
+  }
+
+  // Create new edges array
+  const newEdges: Edge[] = [];
+
+  // Keep edges that aren't being replaced
+  for (const edge of patch.edges) {
+    if (!replacedEdgeIds.has(edge.id)) {
+      newEdges.push(edge);
+    }
+  }
+
+  // Add lens edges
+  for (const ins of insertions) {
+    newEdges.push(ins.edgeToLens);
+    newEdges.push(ins.edgeFromLens);
+  }
+
+  return {
+    blocks: newBlocks,
+    edges: newEdges,
+  };
+}
+
+/**
+ * PHASE 1: Expand explicit lenses
+ *
+ * For each lens defined in InputPort.lenses, creates a lens block and rewires edges.
+ * This is independent of type checking (Phase 2).
+ */
+function expandExplicitLenses(patch: Patch): Pass2Result | Pass2Error {
+  const errors: AdapterError[] = [];
+  const insertions = analyzeLenses(patch, errors);
+
+  if (errors.length > 0) {
+    return { kind: 'error', errors };
+  }
+
+  return { kind: 'ok', patch: applyLensInsertions(patch, insertions) };
+}
+
+// =============================================================================
+// Type Validation (Phase 2)
+// =============================================================================
+
+/**
+ * PHASE 2: Auto-insertion (Backwards Compatibility)
+ *
+ * NOTE: Sprint 2 is transitional. Eventually, users will add lenses explicitly
+ * and Phase 2 will be split into:
+ *   - Phase 2a: Validate type compatibility (report errors only)
+ *   - Phase 2b: (Removed in future sprint)
+ *
+ * For now, this phase still auto-inserts adapters for backward compatibility.
+ * But the design is set up to remove auto-insertion in Sprint 3+.
+ *
+ * CONTRACT (temporary):
+ *   - Input: Patch (after Phase 1 lens expansion)
+ *   - For each edge with type mismatch, check if adapter exists
+ *   - If yes: insert adapter block (backward compat)
+ *   - If no: report error
+ *   - Output: Patch with auto-inserted adapters, or errors
+ *
+ * FUTURE (Sprint 3+):
+ *   - Remove auto-insertion entirely
+ *   - Users add lenses explicitly via UI
+ *   - Phase 2 becomes type validation only
+ */
+function autoInsertAdapters(patch: Patch): Pass2Result | Pass2Error {
+  const errors: AdapterError[] = [];
+  const insertions: Array<{
+    block: Block;
+    edgeToAdapter: Edge;
+    edgeFromAdapter: Edge;
+    originalEdgeId: string;
+  }> = [];
 
   for (const edge of patch.edges) {
-    // Skip disabled edges
     if (edge.enabled === false) continue;
 
     const fromBlock = patch.blocks.get(edge.from.blockId as BlockId);
     const toBlock = patch.blocks.get(edge.to.blockId as BlockId);
 
-    // Skip if blocks don't exist (will be caught by dangling edge check)
     if (!fromBlock || !toBlock) continue;
 
-    // Get port types
-    let fromType = getPortType(fromBlock.type, edge.from.slotId, 'output');
+    const fromType = getPortType(fromBlock.type, edge.from.slotId, 'output');
     const toType = getPortType(toBlock.type, edge.to.slotId, 'input');
 
-    // Skip if we can't determine types (block def missing)
     if (!fromType) {
       errors.push({
         kind: 'UnknownPort',
@@ -159,58 +402,44 @@ function analyzeAdapters(
       continue;
     }
 
-    // Normalization is structural: do not specialize types from block params here.
-    // The constraint solver specializes types after normalization.
-
-    // Look for adapter
+    // Try to find adapter for this type pair
+    // If no adapter is needed (types match), findAdapter returns null and we skip
     const adapterSpec = findAdapter(fromType, toType);
 
     if (adapterSpec) {
-      // Skip Broadcast adapter for cardinality-preserving source blocks.
-      // Such blocks output fields when their inputs are fields, so the static
-      // type (cardinality: one) doesn't reflect runtime behavior.
-      // The actual cardinality propagation happens at lowering time.
+      // Skip Broadcast adapter for cardinality-preserving source blocks
       if (adapterSpec.blockType === 'Broadcast' && isCardinalityPreserving(fromBlock.type)) {
         continue;
       }
-      // Create adapter block and edges
-      const adapterId = generateAdapterId(edge.id);
 
-      const adapterRole: BlockRole = {
-        kind: 'derived',
-        meta: {
-          kind: 'adapter',
-          edgeId: edge.id,
-          adapterType: adapterSpec.blockType,
-        },
-      };
-
-      // Get block definition to create ports
+      // Auto-insert adapter (temporary, for backwards compatibility)
+      const adapterId = `_adapter_${edge.id}` as BlockId;
       const adapterBlockDef = requireBlockDef(adapterSpec.blockType);
 
-      // Create input ports from registry
       const inputPorts = new Map();
-      for (const [inputId, inputDef] of Object.entries(adapterBlockDef.inputs)) {
+      for (const [inputId] of Object.entries(adapterBlockDef.inputs)) {
         inputPorts.set(inputId, { id: inputId, combineMode: 'last' });
       }
 
-      // Create output ports from registry
       const outputPorts = new Map();
-      for (const [outputId, outputDef] of Object.entries(adapterBlockDef.outputs)) {
+      for (const [outputId] of Object.entries(adapterBlockDef.outputs)) {
         outputPorts.set(outputId, { id: outputId });
       }
-
-      // Adapter params are always empty; normalization is structural.
-      // The constraint solver specializes types after normalization.
-      const adapterParams: Record<string, unknown> = {};
 
       const adapterBlock: Block = {
         id: adapterId,
         type: adapterSpec.blockType,
-        params: adapterParams,
-        displayName: `${adapterSpec.blockType} (adapter)`, // System-generated adapter block
-        domainId: toBlock.domainId, // Inherit domain from target
-        role: adapterRole,
+        params: {},
+        displayName: `${adapterSpec.blockType} (adapter)`,
+        domainId: toBlock.domainId,
+        role: {
+          kind: 'derived',
+          meta: {
+            kind: 'adapter',
+            edgeId: edge.id,
+            adapterType: adapterSpec.blockType,
+          },
+        },
         inputPorts,
         outputPorts,
       };
@@ -224,7 +453,7 @@ function analyzeAdapters(
           slotId: adapterSpec.inputPortId,
         },
         enabled: true,
-        sortKey: edge.sortKey, // Preserve original sort key
+        sortKey: edge.sortKey,
         role: { kind: 'adapter', meta: { adapterId, originalEdgeId: edge.id } },
       };
 
@@ -237,7 +466,7 @@ function analyzeAdapters(
         },
         to: edge.to,
         enabled: true,
-        sortKey: edge.sortKey, // Preserve original sort key
+        sortKey: edge.sortKey,
         role: { kind: 'adapter', meta: { adapterId, originalEdgeId: edge.id } },
       };
 
@@ -250,64 +479,58 @@ function analyzeAdapters(
     }
   }
 
-  return insertions;
-}
-
-/**
- * Apply adapter insertions to create an expanded patch.
- */
-function applyAdapterInsertions(
-  patch: Patch,
-  insertions: AdapterInsertion[]
-): Patch {
-  if (insertions.length === 0) {
-    return patch;
+  if (errors.length > 0) {
+    return { kind: 'error', errors };
   }
 
-  // Build set of edge IDs being replaced
-  const replacedEdgeIds = new Set(insertions.map(i => i.originalEdgeId));
+  // Apply adapter insertions
+  if (insertions.length === 0) {
+    return { kind: 'ok', patch };
+  }
 
-  // Create new blocks map with adapter blocks
+  const replacedEdgeIds = new Set(insertions.map(i => i.originalEdgeId));
   const newBlocks = new Map(patch.blocks);
+
   for (const ins of insertions) {
     newBlocks.set(ins.block.id, ins.block);
   }
 
-  // Create new edges array
   const newEdges: Edge[] = [];
-
-  // Keep edges that aren't being replaced
   for (const edge of patch.edges) {
     if (!replacedEdgeIds.has(edge.id)) {
       newEdges.push(edge);
     }
   }
 
-  // Add adapter edges
   for (const ins of insertions) {
     newEdges.push(ins.edgeToAdapter);
     newEdges.push(ins.edgeFromAdapter);
   }
 
-  return {
-    blocks: newBlocks,
-    edges: newEdges,
-  };
+  return { kind: 'ok', patch: { blocks: newBlocks, edges: newEdges } };
 }
 
+// =============================================================================
+// Main Pass Function (Orchestration)
+// =============================================================================
+
 /**
- * Insert adapters for type-mismatched edges.
+ * Pass 2: Execute both phases in order
+ *
+ * 1. Phase 1: Expand explicit lenses
+ * 2. Phase 2: Auto-insert adapters (temporary, for backwards compatibility)
  *
  * @param patch - Patch from Pass 1
- * @returns Patch with adapters, or errors
+ * @returns Patch with lenses expanded and adapters inserted, or errors
  */
 export function pass2Adapters(patch: Patch): Pass2Result | Pass2Error {
-  const errors: AdapterError[] = [];
-  const insertions = analyzeAdapters(patch, errors);
-
-  if (errors.length > 0) {
-    return { kind: 'error', errors };
+  // Phase 1: Expand explicit lenses
+  const p1Result = expandExplicitLenses(patch);
+  if (p1Result.kind === 'error') {
+    return p1Result;
   }
 
-  return { kind: 'ok', patch: applyAdapterInsertions(patch, insertions) };
+  // Phase 2: Auto-insert adapters (temporary, for backwards compatibility)
+  const p2Result = autoInsertAdapters(p1Result.patch);
+  return p2Result;
 }

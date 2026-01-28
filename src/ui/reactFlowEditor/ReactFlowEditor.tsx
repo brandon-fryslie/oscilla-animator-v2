@@ -14,7 +14,7 @@
 
 import React, { useEffect, useCallback, useMemo, useState, useRef } from 'react';
 import { observer } from 'mobx-react-lite';
-import { type NodeMouseHandler, type EdgeMouseHandler } from 'reactflow';
+import { Panel, type NodeMouseHandler, type EdgeMouseHandler } from 'reactflow';
 import { Button } from '@mui/material';
 import { useStores } from '../../stores';
 import { useSettings } from '../../settings';
@@ -267,52 +267,52 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorProps> = observer(({
           onEdgeMouseEnter={handleEdgeMouseEnter}
           onEdgeMouseLeave={handleEdgeMouseLeave}
           onPaneClick={handlePaneClick}
-        />
+        >
+          {/* Auto-Arrange Button Panel - rendered inside ReactFlow context */}
+          <Panel position="top-left" className="react-flow-panel">
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => coreRef.current?.autoArrange()}
+              sx={{
+                textTransform: 'none',
+                fontSize: '0.75rem',
+                borderColor: '#0f3460',
+                color: '#eee',
+                '&:hover': {
+                  borderColor: '#4ecdc4',
+                  background: 'rgba(78, 205, 196, 0.1)',
+                },
+              }}
+            >
+              Auto Arrange
+            </Button>
+          </Panel>
 
-        {/* Auto-Arrange Button */}
-        <div className="react-flow-panel" style={{ position: 'absolute', top: 10, left: 10, zIndex: 5 }}>
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={() => coreRef.current?.autoArrange()}
-            sx={{
-              textTransform: 'none',
-              fontSize: '0.75rem',
-              borderColor: '#0f3460',
-              color: '#eee',
-              '&:hover': {
-                borderColor: '#4ecdc4',
-                background: 'rgba(78, 205, 196, 0.1)',
-              },
-            }}
-          >
-            Auto Arrange
-          </Button>
-        </div>
+          {/* Debug Mode Toggle Panel */}
+          <Panel position="top-right" className="react-flow-panel">
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => debug.toggleEnabled()}
+              sx={{
+                textTransform: 'none',
+                fontSize: '0.75rem',
+                borderColor: debug.enabled ? '#4ecdc4' : '#0f3460',
+                color: debug.enabled ? '#4ecdc4' : '#666',
+                background: debug.enabled ? 'rgba(78, 205, 196, 0.1)' : 'transparent',
+                '&:hover': {
+                  borderColor: '#4ecdc4',
+                  background: 'rgba(78, 205, 196, 0.1)',
+                },
+              }}
+            >
+              {debug.enabled ? 'Debug: ON' : 'Debug: OFF'}
+            </Button>
+          </Panel>
+        </GraphEditorCore>
 
-        {/* Debug Mode Toggle */}
-        <div className="react-flow-panel" style={{ position: 'absolute', top: 10, right: 10, zIndex: 5 }}>
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={() => debug.toggleEnabled()}
-            sx={{
-              textTransform: 'none',
-              fontSize: '0.75rem',
-              borderColor: debug.enabled ? '#4ecdc4' : '#0f3460',
-              color: debug.enabled ? '#4ecdc4' : '#666',
-              background: debug.enabled ? 'rgba(78, 205, 196, 0.1)' : 'transparent',
-              '&:hover': {
-                borderColor: '#4ecdc4',
-                background: 'rgba(78, 205, 196, 0.1)',
-              },
-            }}
-          >
-            {debug.enabled ? 'Debug: ON' : 'Debug: OFF'}
-          </Button>
-        </div>
-
-        {/* Debug Panel (Sprint 1: Debug Probe) */}
+        {/* Debug Panel (Sprint 1: Debug Probe) - outside ReactFlow, absolute positioned */}
         <SimpleDebugPanel
           edgeValue={debug.edgeValue}
           edgeLabel={edgeLabel}

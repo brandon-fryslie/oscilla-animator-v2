@@ -106,6 +106,9 @@ export interface GraphEditorCoreProps {
 
   /** Pane click handler (optional - for closing context menus) */
   onPaneClick?: (event: React.MouseEvent) => void;
+
+  /** Children rendered inside ReactFlow (for Panel components, etc.) */
+  children?: React.ReactNode;
 }
 
 /**
@@ -139,6 +142,7 @@ export const GraphEditorCoreInner = observer(
         onEdgeMouseEnter,
         onEdgeMouseLeave,
         onPaneClick,
+        children,
       },
       ref
     ) => {
@@ -526,6 +530,7 @@ export const GraphEditorCoreInner = observer(
               <Background color="#4ecdc4" gap={16} />
               <Controls />
               {mergedFeatures.enableMinimap && <MiniMap />}
+              {children}
             </ReactFlow>
           </div>
         </GraphEditorProvider>
