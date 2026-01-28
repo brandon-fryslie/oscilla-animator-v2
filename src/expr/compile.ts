@@ -13,6 +13,7 @@ import type { SigExprId } from '../compiler/ir/types';
 import { OpCode } from '../compiler/ir/types';
 import { signalType, type PayloadType } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
+import { isVectorType, componentIndex, swizzleResultType } from './swizzle';
 
 /**
  * Compilation context.
@@ -319,14 +320,45 @@ function compileCall(node: ExprNode & { kind: 'call' }, ctx: CompileContext): Si
 }
 
 /**
- * Compile member access node (block output reference).
+ * Compile member access node (component access or block output reference).
  */
 function compileMemberAccess(node: ExprNode & { kind: 'member' }, ctx: CompileContext): SigExprId {
+  // Type is already validated by type checker
+  const objectSig = compile(node.object, ctx);
+  const objectType = node.object.type!;
+
+  // Case 1: Component access on vector type
+  if (isVectorType(objectType)) {
+    const pattern = node.member;
+    const resultType = signalType(swizzleResultType(pattern));
+
+    if (pattern.length === 1) {
+      // Single component extraction
+      const kernelName = getExtractionKernel(objectType, pattern);
+      const fn = ctx.builder.kernel(kernelName);
+      return ctx.builder.sigMap(objectSig, fn, resultType);
+    } else {
+      // Multi-component swizzle: extract each component and combine
+      const componentSigs: SigExprId[] = [];
+      for (const char of pattern) {
+        const kernelName = getExtractionKernel(objectType, char);
+        const fn = ctx.builder.kernel(kernelName);
+        const componentSig = ctx.builder.sigMap(objectSig, fn, signalType(FLOAT));
+        componentSigs.push(componentSig);
+      }
+
+      // Combine components into result vector
+      const combineKernel = getCombineKernel(pattern.length);
+      const combineFn = ctx.builder.kernel(combineKernel);
+      return ctx.builder.sigZip(componentSigs, combineFn, resultType);
+    }
+  }
+
+  // Case 2: Block output reference (existing logic)
   if (!ctx.blockRefs) {
     throw new Error('Block references not available - internal error (should have been caught by type checker)');
   }
 
-  // Build the shorthand to look up
   if (node.object.kind !== 'identifier') {
     throw new Error('Invalid member access object - should have been caught by type checker');
   }
@@ -335,7 +367,6 @@ function compileMemberAccess(node: ExprNode & { kind: 'member' }, ctx: CompileCo
   const portName = node.member;
   const shorthand = `${blockName}.${portName}`;
 
-  // The signal should be in blockRefs, keyed by shorthand
   const sigId = ctx.blockRefs.get(shorthand);
   if (sigId === undefined) {
     throw new Error(`Block reference ${shorthand} not found in context - internal error (should have been caught by type checker)`);
@@ -344,9 +375,33 @@ function compileMemberAccess(node: ExprNode & { kind: 'member' }, ctx: CompileCo
   return sigId;
 }
 
+/**
+ * Get extraction kernel name for a component.
+ */
+function getExtractionKernel(sourceType: PayloadType, component: string): string {
+  const idx = componentIndex(component);
+  if (sourceType.kind === 'color') {
+    return ['colorExtractR', 'colorExtractG', 'colorExtractB', 'colorExtractA'][idx];
+  } else {
+    // vec2 or vec3
+    return ['vec3ExtractX', 'vec3ExtractY', 'vec3ExtractZ'][idx];
+  }
+}
+
+/**
+ * Get combine kernel name for constructing a vector.
+ */
+function getCombineKernel(componentCount: number): string {
+  switch (componentCount) {
+    case 2: return 'makeVec2Sig';
+    case 3: return 'makeVec3Sig';
+    case 4: return 'makeColorSig';
+    default: throw new Error(`Invalid component count: ${componentCount}`);
+  }
+}
+
 // =============================================================================
 // Operator Mapping
-
 // =============================================================================
 
 /**
