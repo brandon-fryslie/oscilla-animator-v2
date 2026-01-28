@@ -187,6 +187,12 @@ export function convertCompileErrorToDiagnostic(
       lastSeenAt: Date.now(),
       occurrenceCount: 1,
     },
+    // TODO: Add addAdapter actions for type mismatch errors (Sprint 2 - P1 deferred)
+    // Blocker: CompileError.where does not include structured port references
+    // needed for addAdapter action (fromPort.blockId, fromPort.portId, fromPort.portKind).
+    // Edge-level type mismatches occur during compilation before being converted to diagnostics,
+    // but the CompileError structure only includes blockId/port string, not full PortTargetRef.
+    // Resolution: Enhance CompileError to include edge information or structured port refs.
   };
 }
 
