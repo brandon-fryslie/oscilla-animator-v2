@@ -155,4 +155,150 @@ describe('compileExpression Integration', () => {
       expect(result.error.code).toBe('ExprTypeError'); // Type checker catches undefined identifiers
     }
   });
+
+  describe('Component Access (Swizzle)', () => {
+    it('compiles vec3.x to extraction kernel (single component)', () => {
+      // Note: At signal level, vec3 is represented as a reference to a multi-slot value.
+      // For this test, we create a placeholder signal with vec3 type.
+      const vSig = builder.sigConst(0, signalType(VEC3)); // Placeholder
+
+      const result = compileExpression(
+        'v.x',
+        new Map([['v', signalType(VEC3)]]),
+        builder,
+        new Map([['v', vSig]])
+      );
+
+      if (!result.ok) {
+        console.error('Compilation failed:', result.error);
+      }
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const sigExpr = extractSigExpr(builder, result.value);
+        expect(sigExpr?.kind).toBe('map'); // Extraction uses sigMap
+        // Check that kernel is vec3ExtractX
+        const kernelName = (sigExpr as any)?.kernel?.name;
+        expect(kernelName).toBe('vec3ExtractX');
+      }
+    });
+
+    it('compiles color.r to extraction kernel', () => {
+      const cSig = builder.sigConst(0, signalType(COLOR)); // Placeholder
+
+      const result = compileExpression(
+        'c.r',
+        new Map([['c', signalType(COLOR)]]),
+        builder,
+        new Map([['c', cSig]])
+      );
+
+      if (!result.ok) {
+        console.error('Compilation failed:', result.error);
+      }
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const sigExpr = extractSigExpr(builder, result.value);
+        expect(sigExpr?.kind).toBe('map');
+        const kernelName = (sigExpr as any)?.kernel?.name;
+        expect(kernelName).toBe('colorExtractR');
+      }
+    });
+
+    it('compiles expressions with single-component extraction', () => {
+      const vSig = builder.sigConst(0, signalType(VEC3));
+
+      const result = compileExpression(
+        'v.x + v.y',
+        new Map([['v', signalType(VEC3)]]),
+        builder,
+        new Map([['v', vSig]])
+      );
+
+      if (!result.ok) {
+        console.error('Compilation failed:', result.error);
+      }
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const sigExpr = extractSigExpr(builder, result.value);
+        expect(sigExpr?.kind).toBe('zip'); // Addition uses zip
+      }
+    });
+
+    it('compiles function call on extracted component', () => {
+      const vSig = builder.sigConst(0, signalType(VEC3));
+
+      const result = compileExpression(
+        'sin(v.x)',
+        new Map([['v', signalType(VEC3)]]),
+        builder,
+        new Map([['v', vSig]])
+      );
+
+      if (!result.ok) {
+        console.error('Compilation failed:', result.error);
+      }
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // Should compile successfully - sin operates on the extracted float
+        const sigExpr = extractSigExpr(builder, result.value);
+        expect(sigExpr?.kind).toBe('map'); // sin uses map
+      }
+    });
+
+    it('compiles multi-component swizzle (field-level only)', () => {
+      // Multi-component swizzle (.xy, .rgb) compiles successfully but is
+      // FIELD-LEVEL ONLY. Signal-level execution is not yet supported.
+      // See WORK-EVALUATION-20260127-181500.md for details.
+      const vSig = builder.sigConst(0, signalType(VEC3));
+
+      const result = compileExpression(
+        'v.xy',
+        new Map([['v', signalType(VEC3)]]),
+        builder,
+        new Map([['v', vSig]])
+      );
+
+      if (!result.ok) {
+        console.error('Compilation failed:', result.error);
+      }
+      // Should compile (type-check and IR generation work)
+      expect(result.ok).toBe(true);
+      // Note: Runtime execution would fail at signal level due to makeVec2Sig
+      // throwing "not yet supported". This is documented as field-level only.
+    });
+
+    it('returns error for invalid component', () => {
+      const vSig = builder.sigConst(0, signalType(VEC3));
+
+      const result = compileExpression(
+        'v.w', // vec3 has no 4th component
+        new Map([['v', signalType(VEC3)]]),
+        builder,
+        new Map([['v', vSig]])
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('ExprTypeError');
+        expect(result.error.message).toMatch(/has no component 'w'/);
+      }
+    });
+
+    it('returns error for component access on non-vector', () => {
+      const fSig = builder.sigConst(1.0, signalType(FLOAT));
+
+      const result = compileExpression(
+        'f.x', // float does not support component access
+        new Map([['f', signalType(FLOAT)]]),
+        builder,
+        new Map([['f', fSig]])
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('ExprTypeError');
+        expect(result.error.message).toMatch(/does not support component access/);
+      }
+    });
+  });
 });

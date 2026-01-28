@@ -14,7 +14,7 @@
 
 import React, { useEffect, useCallback, useMemo, useState, useRef } from 'react';
 import { observer } from 'mobx-react-lite';
-import { Panel, type NodeMouseHandler, type EdgeMouseHandler } from 'reactflow';
+import { type NodeMouseHandler, type EdgeMouseHandler } from 'reactflow';
 import { Button } from '@mui/material';
 import { useStores } from '../../stores';
 import { useSettings } from '../../settings';
@@ -269,8 +269,8 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorProps> = observer(({
           onPaneClick={handlePaneClick}
         />
 
-        {/* Auto-Arrange Button Panel */}
-        <Panel position="top-left" className="react-flow-panel">
+        {/* Auto-Arrange Button */}
+        <div className="react-flow-panel" style={{ position: 'absolute', top: 10, left: 10, zIndex: 5 }}>
           <Button
             variant="outlined"
             size="small"
@@ -288,10 +288,10 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorProps> = observer(({
           >
             Auto Arrange
           </Button>
-        </Panel>
+        </div>
 
-        {/* Debug Mode Toggle Panel */}
-        <Panel position="top-right" className="react-flow-panel">
+        {/* Debug Mode Toggle */}
+        <div className="react-flow-panel" style={{ position: 'absolute', top: 10, right: 10, zIndex: 5 }}>
           <Button
             variant="outlined"
             size="small"
@@ -310,7 +310,7 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorProps> = observer(({
           >
             {debug.enabled ? 'Debug: ON' : 'Debug: OFF'}
           </Button>
-        </Panel>
+        </div>
 
         {/* Debug Panel (Sprint 1: Debug Probe) */}
         <SimpleDebugPanel

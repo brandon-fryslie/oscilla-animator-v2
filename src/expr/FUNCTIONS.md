@@ -1,12 +1,142 @@
 # Expression DSL Built-in Functions
 
 **Status:** FROZEN
-**Last Updated:** 2026-01-20
+**Last Updated:** 2026-01-27
 **Change Process:** Function additions require spec update
 
 ## Overview
 
 This document catalogs all built-in functions available in the Expression DSL. Each function specifies its signature, type rules, and mapping to IR primitives (OpCodes or IRBuilder methods).
+
+## Component Access and Swizzling
+
+**Added:** 2026-01-27
+
+### Component Access Syntax
+
+Vector types (vec2, vec3, color) support GLSL-style component access using the dot (`.`) operator:
+
+```
+vec3Input.x    // Extract X component → float
+vec3Input.y    // Extract Y component → float
+vec3Input.z    // Extract Z component → float
+colorInput.r   // Extract red component → float
+colorInput.g   // Extract green component → float
+colorInput.b   // Extract blue component → float
+colorInput.a   // Extract alpha component → float
+```
+
+### Component Sets
+
+Two component naming conventions are supported (cross-access allowed):
+
+- **Position components**: `x`, `y`, `z`, `w` (for spatial vectors)
+- **Color components**: `r`, `g`, `b`, `a` (for color values)
+
+Cross-access examples:
+```
+vec3Input.r    // Valid: r=x (component 0)
+vec3Input.g    // Valid: g=y (component 1)
+vec3Input.b    // Valid: b=z (component 2)
+colorInput.x   // Valid: x=r (component 0)
+```
+
+### Swizzle Patterns
+
+Multiple components can be extracted in a single operation (swizzling):
+
+```
+vec3Input.xy   // Extract X and Y → vec2
+vec3Input.xz   // Extract X and Z → vec2
+vec3Input.xyz  // Extract all three → vec3
+vec3Input.zyx  // Reverse order → vec3
+colorInput.rgb // Extract RGB → vec3
+colorInput.bgra // Swizzle BGRA → color
+```
+
+### Result Types
+
+The result type depends on the number of components:
+
+| Pattern Length | Result Type |
+|----------------|-------------|
+| 1 component    | float       |
+| 2 components   | vec2        |
+| 3 components   | vec3        |
+| 4 components   | color       |
+
+### Type-Specific Access
+
+| Type  | Available Components | Max Index |
+|-------|----------------------|-----------|
+| vec2  | x, y (or r, g)       | 1         |
+| vec3  | x, y, z (or r, g, b) | 2         |
+| color | r, g, b, a (or x, y, z, w) | 3 |
+
+### Error Cases
+
+Invalid component access produces type errors:
+
+```
+vec3Input.w    // ERROR: vec3 has no component 'w' (only 3 components)
+vec3Input.a    // ERROR: vec3 has no component 'a' (only 3 components)
+floatInput.x   // ERROR: float does not support component access
+vec3Input.q    // ERROR: Invalid component 'q' (not in x/y/z/w/r/g/b/a)
+```
+
+### Known Limitations
+
+**Multi-component swizzle is field-level only** (as of 2026-01-27):
+- Single-component extraction (`.x`, `.r`) works at both signal and field levels
+- Multi-component swizzle (`.xy`, `.rgb`) compiles successfully but is **only functional for field operations**
+- Signal-level multi-component returns are not yet implemented (tracked in issue oscilla-animator-v2-5s8)
+
+Field-level usage (works):
+```
+// In field expression context (operating on arrays)
+positionArray.xy  // Extracts X,Y from each position → vec2 field
+colorArray.rgb    // Extracts RGB from each color → vec3 field
+```
+
+Signal-level usage (limited):
+```
+// Single component (works)
+vec3Signal.x      // Extracts X → float signal
+
+// Multi-component (compiles but not yet executable)
+vec3Signal.xy     // Type-checks and compiles, but runtime not implemented
+```
+
+### Examples
+
+```
+// Extract and use single components
+x = position.x
+y = position.y
+distance = sqrt(x * x + y * y)
+
+// Brightness from color
+brightness = c.r * 0.3 + c.g * 0.59 + c.b * 0.11
+
+// Cross-access (position as color)
+redChannel = position.r  // Same as position.x
+```
+
+### IR Mapping
+
+Component extraction uses dedicated signal kernels:
+- `vec3ExtractX`, `vec3ExtractY`, `vec3ExtractZ`
+- `colorExtractR`, `colorExtractG`, `colorExtractB`, `colorExtractA`
+
+Multi-component swizzle synthesizes multiple extractions:
+```typescript
+// vec.xy compiles to:
+const xSig = builder.sigMap(vecSig, kernel('vec3ExtractX'), FLOAT);
+const ySig = builder.sigMap(vecSig, kernel('vec3ExtractY'), FLOAT);
+const result = builder.sigZip([xSig, ySig], kernel('makeVec2'), VEC2);
+```
+
+---
 
 ## Function Categories
 
@@ -540,6 +670,11 @@ Verify each function compiles to correct IR:
 
 ## Version History
 
+- **2026-01-27**: Added component access and swizzle documentation
+  - GLSL-style component access (.x, .y, .z, .r, .g, .b, .a)
+  - Swizzle patterns (.xy, .rgb, .zyx, etc.)
+  - Cross-access support (r=x, g=y, b=z, a=w)
+  - Known limitation: multi-component is field-level only
 - **2026-01-20**: Initial catalog (v1.0)
   - 16 built-in functions
   - All functions map to existing OpCodes or can be synthesized

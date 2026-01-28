@@ -34,7 +34,7 @@
  *
  * ZIPSIG KERNELS (field + signal inputs):
  *   applyOpacity, hsvToRgb, circleLayout, circleAngle,
- *   polygonVertex, starVertex, lineLayout, gridLayout, circleLayoutUV, lineLayoutUV, gridLayoutUV, fieldGoldenAngle
+ *   polygonVertex, starVertex, lineLayout, gridLayout, fieldGoldenAngle
  *
  * ──────────────────────────────────────────────────────────────────────
  * ARCHITECTURAL RULES
