@@ -479,6 +479,83 @@ function applySignalKernel(name: string, values: number[]): number {
       return values[values.length - 1];
     }
 
+    // === COMPONENT EXTRACTION (vec3/color → float) ===
+
+    case 'vec3ExtractX': {
+      if (values.length !== 3) {
+        throw new Error(`Signal kernel 'vec3ExtractX' expects 3 inputs (vec3 components), got ${values.length}`);
+      }
+      return values[0];
+    }
+
+    case 'vec3ExtractY': {
+      if (values.length !== 3) {
+        throw new Error(`Signal kernel 'vec3ExtractY' expects 3 inputs (vec3 components), got ${values.length}`);
+      }
+      return values[1];
+    }
+
+    case 'vec3ExtractZ': {
+      if (values.length !== 3) {
+        throw new Error(`Signal kernel 'vec3ExtractZ' expects 3 inputs (vec3 components), got ${values.length}`);
+      }
+      return values[2];
+    }
+
+    case 'colorExtractR': {
+      if (values.length !== 4) {
+        throw new Error(`Signal kernel 'colorExtractR' expects 4 inputs (color components), got ${values.length}`);
+      }
+      return values[0];
+    }
+
+    case 'colorExtractG': {
+      if (values.length !== 4) {
+        throw new Error(`Signal kernel 'colorExtractG' expects 4 inputs (color components), got ${values.length}`);
+      }
+      return values[1];
+    }
+
+    case 'colorExtractB': {
+      if (values.length !== 4) {
+        throw new Error(`Signal kernel 'colorExtractB' expects 4 inputs (color components), got ${values.length}`);
+      }
+      return values[2];
+    }
+
+    case 'colorExtractA': {
+      if (values.length !== 4) {
+        throw new Error(`Signal kernel 'colorExtractA' expects 4 inputs (color components), got ${values.length}`);
+      }
+      return values[3];
+    }
+
+    // === VECTOR CONSTRUCTION (for swizzle results) ===
+    // Note: These return multi-component values, which requires special handling.
+    // For now, they throw an error similar to other vec2-returning kernels.
+    // Future: Support multi-component signal returns via tuple slots or similar mechanism.
+
+    case 'makeVec2Sig': {
+      if (values.length !== 2) {
+        throw new Error(`Signal kernel 'makeVec2Sig' expects 2 inputs, got ${values.length}`);
+      }
+      throw new Error('makeVec2Sig: multi-component signal returns not yet supported');
+    }
+
+    case 'makeVec3Sig': {
+      if (values.length !== 3) {
+        throw new Error(`Signal kernel 'makeVec3Sig' expects 3 inputs, got ${values.length}`);
+      }
+      throw new Error('makeVec3Sig: multi-component signal returns not yet supported');
+    }
+
+    case 'makeColorSig': {
+      if (values.length !== 4) {
+        throw new Error(`Signal kernel 'makeColorSig' expects 4 inputs, got ${values.length}`);
+      }
+      throw new Error('makeColorSig: multi-component signal returns not yet supported');
+    }
+
     // vec2 kernels not supported at signal level
     case 'polarToCartesian':
     case 'offsetPosition':
