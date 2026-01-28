@@ -132,12 +132,18 @@ describe('Cardinality Metadata', () => {
   });
 
   describe('Lane coupling', () => {
-    it('All registered blocks are lane-local (no lane-coupled blocks yet)', () => {
+    it('Most blocks are lane-local (lane-coupled only where needed)', () => {
       const allTypes = getAllBlockTypes();
+      const laneCoupledBlocks = ['Reduce']; // Blocks where all elements contribute to result
+      
       for (const blockType of allTypes) {
         const meta = getBlockCardinalityMetadata(blockType);
         if (meta) {
-          expect(meta.laneCoupling).toBe('laneLocal');
+          if (laneCoupledBlocks.includes(blockType)) {
+            expect(meta.laneCoupling).toBe('laneCoupled');
+          } else {
+            expect(meta.laneCoupling).toBe('laneLocal');
+          }
         }
       }
     });
