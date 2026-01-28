@@ -16,6 +16,7 @@ export { patchPerspectiveCamera } from './perspective-camera';
 export { patchFeedbackRotation } from './feedback-rotation';
 export { patchFeedbackSimple } from './feedback-simple';
 export { patchPathFieldDemo } from './path-field-demo';
+export { patchErrorIsolationDemo } from './error-isolation-demo';
 
 import { patchGoldenSpiral } from './golden-spiral';
 import { patchDomainTest } from './domain-test';
@@ -27,6 +28,7 @@ import { patchPerspectiveCamera } from './perspective-camera';
 import { patchFeedbackRotation } from './feedback-rotation';
 import { patchFeedbackSimple } from './feedback-simple';
 import { patchPathFieldDemo } from './path-field-demo';
+import { patchErrorIsolationDemo } from './error-isolation-demo';
 import type { PatchBuilder } from './types';
 
 export const patches: { name: string; builder: PatchBuilder }[] = [
@@ -40,6 +42,7 @@ export const patches: { name: string; builder: PatchBuilder }[] = [
   { name: 'Feedback Rotation', builder: patchFeedbackRotation },
   { name: 'Feedback Simple', builder: patchFeedbackSimple },
   { name: 'Path Field Demo', builder: patchPathFieldDemo },
+  { name: 'Error Isolation Demo', builder: patchErrorIsolationDemo },
 ];
 
 export const DEFAULT_PATCH_INDEX = 0; // Golden Spiral
