@@ -12,7 +12,7 @@ import type { IRBuilder } from '../compiler/ir/IRBuilder';
 import type { SigExprId } from '../compiler/ir/types';
 import { OpCode } from '../compiler/ir/types';
 import { signalType, type PayloadType } from '../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
+import { FLOAT, INT, BOOL } from '../core/canonical-types';
 import { isVectorType, componentIndex, swizzleResultType } from './swizzle';
 
 /**

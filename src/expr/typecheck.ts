@@ -15,7 +15,7 @@
 import type { ExprNode, Position } from './ast';
 import { withType } from './ast';
 import type { PayloadType } from '../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
+import { FLOAT, INT, BOOL } from '../core/canonical-types';
 import type { AddressRegistry } from '../graph/address-registry';
 import { addressToString } from '../types/canonical-address';
 import { isVectorType, validateSwizzle, swizzleResultType } from './swizzle';
@@ -641,20 +641,6 @@ function canCoerceTo(from: PayloadType, to: PayloadType): boolean {
 // =============================================================================
 // Utility Functions
 // =============================================================================
-
-/**
- * Convert operator to verb for error messages.
- */
-function opToVerb(op: string): string {
-  switch (op) {
-    case '+': return 'add';
-    case '-': return 'subtract';
-    case '*': return 'multiply';
-    case '/': return 'divide';
-    case '%': return 'modulo';
-    default: return op;
-  }
-}
 
 /**
  * Find closest string match using simple edit distance.
