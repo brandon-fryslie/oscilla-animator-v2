@@ -10,7 +10,6 @@ import { observer } from 'mobx-react-lite';
 import { useStores } from '../../stores';
 import { GraphEditorCore, type GraphEditorCoreHandle } from '../graphEditor/GraphEditorCore';
 import { CompositeStoreAdapter } from '../graphEditor/CompositeStoreAdapter';
-import type { InternalBlockId } from '../../blocks/composite-types';
 import './CompositeEditor.css';
 
 /**

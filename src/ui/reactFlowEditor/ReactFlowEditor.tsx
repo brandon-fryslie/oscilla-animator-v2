@@ -14,7 +14,7 @@
 
 import React, { useEffect, useCallback, useMemo, useState, useRef } from 'react';
 import { observer } from 'mobx-react-lite';
-import { Panel, type Node, type Edge, type NodeMouseHandler, type EdgeMouseHandler } from 'reactflow';
+import { Panel, type NodeMouseHandler, type EdgeMouseHandler } from 'reactflow';
 import { Button } from '@mui/material';
 import { useStores } from '../../stores';
 import { useSettings } from '../../settings';
@@ -266,6 +266,7 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorProps> = observer(({
           onEdgeContextMenu={handleEdgeContextMenu}
           onEdgeMouseEnter={handleEdgeMouseEnter}
           onEdgeMouseLeave={handleEdgeMouseLeave}
+          onPaneClick={handlePaneClick}
         />
 
         {/* Auto-Arrange Button Panel */}

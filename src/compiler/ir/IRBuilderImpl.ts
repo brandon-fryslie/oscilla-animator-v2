@@ -39,6 +39,8 @@ import type {
   InstanceDecl,
   Step,
   IntrinsicPropertyName,
+  PlacementFieldName,
+  BasisKind,
   ContinuityPolicy,
   StableStateId,
   StateMapping,
@@ -233,6 +235,40 @@ export class IRBuilderImpl implements IRBuilder {
     return id;
   }
 
+
+  /**
+   * Create a field from placement basis.
+   * Replaces normalizedIndex for gauge-invariant layouts.
+   */
+  fieldPlacement(
+    instanceId: InstanceId,
+    field: PlacementFieldName,
+    basisKind: BasisKind,
+    type: SignalType
+  ): FieldExprId {
+    if (!instanceId) {
+      throw new Error('fieldPlacement: instanceId is required');
+    }
+    if (!field) {
+      throw new Error('fieldPlacement: field is required');
+    }
+    if (!basisKind) {
+      throw new Error('fieldPlacement: basisKind is required');
+    }
+    if (!type) {
+      throw new Error('fieldPlacement: type is required');
+    }
+
+    const id = fieldExprId(this.fieldExprs.length);
+    this.fieldExprs.push({
+      kind: 'placement',
+      instanceId,
+      field,
+      basisKind,
+      type,
+    });
+    return id;
+  }
   /**
    * Create an array field expression (Stage 2: Signal<T> → Field<T>).
    * Represents the elements of an array instance.

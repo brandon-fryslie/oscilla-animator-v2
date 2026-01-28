@@ -160,14 +160,12 @@ import type {
   PureFn,
   SigExpr,
   IntrinsicPropertyName,
-  PlacementFieldName,
 } from '../compiler/ir/types';
 import type { BufferPool, BufferFormat } from './BufferPool';
 import { getBufferFormat } from './BufferPool';
 import type { RuntimeState } from './RuntimeState';
 import { evaluateSignal } from './SignalEvaluator';
 import { applyOpcode } from './OpcodeInterpreter';
-import { ensurePlacementBasis } from './PlacementBasis';
 import { applyFieldKernel, applyFieldKernelZipSig } from './FieldKernels';
 
 /**
@@ -415,37 +413,6 @@ function fillBuffer(
         fillBufferArcLength(buffer as Float32Array, inputBuffer as Float32Array, N);
       }
       break;
-
-    case 'placement': {
-      const placementExpr = expr as import('../compiler/ir/types').FieldExprPlacement;
-
-      // Get or create placement basis for this instance
-      const basis = ensurePlacementBasis(
-        state.continuity.placementBasis,
-        placementExpr.instanceId,
-        N,
-        placementExpr.basisKind
-      );
-
-      const outArr = buffer as Float32Array;
-      switch (placementExpr.field) {
-        case 'uv':
-          // Copy N elements (stride 2)
-          outArr.set(basis.uv.subarray(0, N * 2));
-          break;
-        case 'rank':
-          outArr.set(basis.rank.subarray(0, N));
-          break;
-        case 'seed':
-          outArr.set(basis.seed.subarray(0, N));
-          break;
-        default: {
-          const _: never = placementExpr.field;
-          throw new Error(`Unknown placement field: ${_}`);
-        }
-      }
-      break;
-    }
     }
 
     default: {

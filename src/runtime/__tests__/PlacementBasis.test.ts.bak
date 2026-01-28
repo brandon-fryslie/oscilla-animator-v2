@@ -244,10 +244,10 @@ describe('PlacementBasis Sprint 3: Materialization', () => {
 
       fillPlacementBasis(buffers, 'test', 0, 100, 'halton2D');
 
-      // Check that values were written (use index 1 since index 0 values might be 0)
-      expect(buffers.uv[2]).toBeGreaterThan(0); // u for element 1 (stride 2, so offset 2)
-      expect(buffers.rank[1]).toBeGreaterThan(0); // rank for element 1
-      expect(buffers.seed[1]).toBeGreaterThanOrEqual(0); // seed for element 1
+      // Check that values were written
+      expect(buffers.uv[0]).not.toBe(0); // First u
+      expect(buffers.rank[0]).not.toBe(0); // First rank (index 0 has rank ~0, but > 0)
+      expect(buffers.seed[0]).toBeGreaterThanOrEqual(0);
     });
 
     it('is deterministic', () => {

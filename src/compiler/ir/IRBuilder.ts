@@ -19,7 +19,21 @@ import type {
 } from './Indices';
 import type { TopologyId } from '../../shapes/types';
 import type { TimeModelIR } from './schedule';
-import type { PureFn, OpCode, InstanceDecl, Step, IntrinsicPropertyName, ContinuityPolicy, SigExpr, FieldExpr, EventExpr, StableStateId, StateMapping } from './types';
+import type {
+  PureFn,
+  OpCode,
+  InstanceDecl,
+  Step,
+  IntrinsicPropertyName,
+  PlacementFieldName,
+  BasisKind,
+  ContinuityPolicy,
+  SigExpr,
+  FieldExpr,
+  EventExpr,
+  StableStateId,
+  StateMapping,
+} from './types';
 import type { CameraDeclIR } from './program';
 
 // =============================================================================
@@ -87,6 +101,23 @@ export interface IRBuilder {
    * @param type - Signal type for the field
    */
   fieldIntrinsic(instanceId: InstanceId, intrinsic: IntrinsicPropertyName, type: SignalType): FieldExprId;
+
+  /**
+   * Create a field from placement basis.
+   * Replaces normalizedIndex for gauge-invariant layouts.
+   *
+   * @param instanceId - The instance this field operates over
+   * @param field - Which placement field (uv, rank, seed)
+   * @param basisKind - Generation algorithm (user-configurable)
+   * @param type - Signal type of the field
+   * @throws Error if any parameter is missing
+   */
+  fieldPlacement(
+    instanceId: InstanceId,
+    field: PlacementFieldName,
+    basisKind: BasisKind,
+    type: SignalType
+  ): FieldExprId;
 
   /**
    * Create an array field expression (Stage 2: Signal<T> → Field<T>).

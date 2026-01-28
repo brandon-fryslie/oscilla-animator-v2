@@ -21,6 +21,7 @@ import ReactFlow, {
   Background,
   Controls,
   MiniMap,
+  ReactFlowProvider,
   useNodesState,
   useEdgesState,
   useReactFlow,
@@ -102,6 +103,9 @@ export interface GraphEditorCoreProps {
   /** Edge hover event handlers (optional - for debug mode) */
   onEdgeMouseEnter?: EdgeMouseHandler;
   onEdgeMouseLeave?: EdgeMouseHandler;
+
+  /** Pane click handler (optional - for closing context menus) */
+  onPaneClick?: (event: React.MouseEvent) => void;
 }
 
 /**
@@ -134,6 +138,7 @@ export const GraphEditorCoreInner = observer(
         onEdgeContextMenu,
         onEdgeMouseEnter,
         onEdgeMouseLeave,
+        onPaneClick,
       },
       ref
     ) => {
@@ -283,11 +288,15 @@ export const GraphEditorCoreInner = observer(
         [selection]
       );
 
-      const handlePaneClick = useCallback(() => {
+      const handlePaneClick = useCallback((event: React.MouseEvent) => {
         if (selection) {
           selection.clearSelection();
         }
-      }, [selection]);
+        // Call custom handler if provided
+        if (onPaneClick) {
+          onPaneClick(event);
+        }
+      }, [selection, onPaneClick]);
 
       // -------------------------------------------------------------------------
       // Auto-Arrange (ELK Layout)
@@ -431,7 +440,6 @@ GraphEditorCoreInner.displayName = 'GraphEditorCoreInner';
  */
 export const GraphEditorCore = forwardRef<GraphEditorCoreHandle, GraphEditorCoreProps>(
   (props, ref) => {
-    const { ReactFlowProvider } = require('reactflow');
     return (
       <ReactFlowProvider>
         <GraphEditorCoreInner {...props} ref={ref} />

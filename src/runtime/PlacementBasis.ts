@@ -177,3 +177,82 @@ export function generateUV(
     }
   }
 }
+
+// =============================================================================
+// Buffer Management
+// =============================================================================
+
+/**
+ * Fill placement basis buffers for a range of indices.
+ * Uses buffer pool for temporary allocations.
+ *
+ * @param buffers - Target buffers (pre-allocated to MAX_ELEMENTS)
+ * @param instanceId - Instance identifier for seed generation
+ * @param startIdx - First index to fill
+ * @param endIdx - Last index (exclusive) to fill
+ * @param basisKind - Generation algorithm
+ */
+export function fillPlacementBasis(
+  buffers: PlacementBasisBuffers,
+  instanceId: string,
+  startIdx: number,
+  endIdx: number,
+  basisKind: BasisKind
+): void {
+  if (!buffers) throw new Error('fillPlacementBasis: buffers is required');
+  if (!instanceId) throw new Error('fillPlacementBasis: instanceId is required');
+  if (typeof startIdx !== 'number') throw new Error('fillPlacementBasis: startIdx is required number');
+  if (typeof endIdx !== 'number') throw new Error('fillPlacementBasis: endIdx is required number');
+  if (!basisKind) throw new Error('fillPlacementBasis: basisKind is required');
+
+  for (let i = startIdx; i < endIdx; i++) {
+    const [u, v] = generateUV(basisKind, i, instanceId);
+    buffers.uv[i * 2 + 0] = u;
+    buffers.uv[i * 2 + 1] = v;
+    buffers.rank[i] = generateRank(i);
+    buffers.seed[i] = generateSeed(instanceId, i);
+  }
+}
+
+/**
+ * Create or retrieve PlacementBasis buffers for an instance.
+ * Buffers are pre-allocated to MAX_ELEMENTS and never resized.
+ *
+ * @param store - The placement basis store
+ * @param instanceId - Instance identifier
+ * @param count - Current element count (used for initial fill)
+ * @param basisKind - Generation algorithm
+ * @returns PlacementBasisBuffers (from store or newly created)
+ */
+export function ensurePlacementBasis(
+  store: Map<string, PlacementBasisBuffers>,
+  instanceId: string,
+  count: number,
+  basisKind: BasisKind
+): PlacementBasisBuffers {
+  if (!store) throw new Error('ensurePlacementBasis: store is required');
+  if (!instanceId) throw new Error('ensurePlacementBasis: instanceId is required');
+  if (typeof count !== 'number') throw new Error('ensurePlacementBasis: count is required number');
+  if (!basisKind) throw new Error('ensurePlacementBasis: basisKind is required');
+
+  const existing = store.get(instanceId);
+  if (existing) {
+    // Already have buffers for this instance - return as-is
+    // (pre-allocated to MAX_ELEMENTS, no resize needed)
+    return existing;
+  }
+
+  // Allocate new buffers (pre-allocated to MAX_ELEMENTS)
+  const buffers: PlacementBasisBuffers = {
+    uv: new Float32Array(MAX_ELEMENTS * 2),
+    rank: new Float32Array(MAX_ELEMENTS),
+    seed: new Float32Array(MAX_ELEMENTS),
+    basisKind,
+  };
+
+  // Fill all slots up front (deterministic)
+  fillPlacementBasis(buffers, instanceId, 0, MAX_ELEMENTS, basisKind);
+
+  store.set(instanceId, buffers);
+  return buffers;
+}
