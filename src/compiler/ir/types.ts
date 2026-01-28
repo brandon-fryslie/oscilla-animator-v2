@@ -638,6 +638,19 @@ export interface StateMappingScalar {
 }
 
 /**
+ * Spec-aligned type alias for scalar state slot declarations.
+ *
+ * This is the name used in the specification (04-compilation.md §I9).
+ * The implementation uses `StateMappingScalar` as the canonical name
+ * because it clarifies the "mapping" between semantic state IDs and
+ * positional slots.
+ *
+ * @see StateMappingScalar
+ * @see design-docs/CANONICAL-oscilla-v2.5-20260109/topics/04-compilation.md §I9
+ */
+export type ScalarSlotDecl = StateMappingScalar;
+
+/**
  * State mapping for field (many cardinality) state.
  *
  * Used for stateful primitives operating on per-lane state arrays.
@@ -658,6 +671,19 @@ export interface StateMappingField {
   /** Per-lane initial values template (length = stride) */
   readonly initial: readonly number[];
 }
+
+/**
+ * Spec-aligned type alias for field state slot declarations.
+ *
+ * This is the name used in the specification (04-compilation.md §I9).
+ * The implementation uses `StateMappingField` as the canonical name
+ * because it clarifies the "mapping" between semantic state IDs and
+ * positional slots, with lane remapping for hot-swap.
+ *
+ * @see StateMappingField
+ * @see design-docs/CANONICAL-oscilla-v2.5-20260109/topics/04-compilation.md §I9
+ */
+export type FieldSlotDecl = StateMappingField;
 
 /**
  * Union of scalar and field state mappings.

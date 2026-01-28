@@ -15,7 +15,7 @@
  * deterministic execution order.
  */
 
-import type { Step, StepEvalEvent, StepRender, StepMaterialize, StepContinuityMapBuild, StepContinuityApply, TimeModel, InstanceId, InstanceDecl, FieldExprId, SigExprId, SigExpr, FieldExpr, ValueSlot, ContinuityPolicy, StateMapping, EventSlotId } from '../ir/types';
+import type { Step, StepEvalEvent, StepRender, StepMaterialize, StepContinuityMapBuild, StepContinuityApply, TimeModel, InstanceId, InstanceDecl, FieldExprId, SigExprId, SigExpr, FieldExpr, ValueSlot, ContinuityPolicy, StateMapping, EventSlotId, ScalarSlotDecl, FieldSlotDecl } from '../ir/types';
 import type { EventExprId } from '../ir/Indices';
 import type { UnlinkedIRFragments } from './lower-blocks';
 import type { AcyclicOrLegalGraph, NormalizedEdge, Block, BlockIndex } from '../ir/patches';
@@ -76,6 +76,49 @@ export interface StateSlotDef {
 // =============================================================================
 // Helper Functions
 // =============================================================================
+
+/**
+ * Get scalar state slot declarations from a schedule.
+ *
+ * Filters the `stateMappings` array to return only scalar (signal cardinality) state slots.
+ * This provides the spec-aligned API name while maintaining the single-source-of-truth
+ * implementation via the union array.
+ *
+ * @param schedule - The schedule IR to query
+ * @returns Array of scalar state slot declarations
+ *
+ * @example
+ * ```typescript
+ * const scalars = getScalarSlots(schedule);
+ * scalars.forEach(slot => {
+ *   console.log(`Scalar state ${slot.stateId} at slot ${slot.slotIndex}`);
+ * });
+ * ```
+ */
+export function getScalarSlots(schedule: ScheduleIR): ScalarSlotDecl[] {
+  return schedule.stateMappings.filter((m): m is ScalarSlotDecl => m.kind === 'scalar');
+}
+
+/**
+ * Get field state slot declarations from a schedule.
+ *
+ * Filters the `stateMappings` array to return only field (many cardinality) state slots.
+ * These represent per-lane state that undergoes continuity-based remapping during hot-swap.
+ *
+ * @param schedule - The schedule IR to query
+ * @returns Array of field state slot declarations
+ *
+ * @example
+ * ```typescript
+ * const fields = getFieldSlots(schedule);
+ * fields.forEach(slot => {
+ *   console.log(`Field state ${slot.stateId} for instance ${slot.instanceId}: ${slot.laneCount} lanes`);
+ * });
+ * ```
+ */
+export function getFieldSlots(schedule: ScheduleIR): FieldSlotDecl[] {
+  return schedule.stateMappings.filter((m): m is FieldSlotDecl => m.kind === 'field');
+}
 
 /**
  * Find all render blocks in the validated graph.
