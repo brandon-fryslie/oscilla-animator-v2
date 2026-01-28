@@ -1,6 +1,6 @@
 # Oscilla Animator v2 - Project Roadmap
 
-Last updated: 2026-01-27-120000
+Last updated: 2026-01-27-170700
 
 ---
 
@@ -167,7 +167,7 @@ Last updated: 2026-01-27-120000
 
 ---
 
-## 🟢 Phase 2: Rendering & UI [ACTIVE] (5/6 completed)
+## 🟢 Phase 2: Rendering & UI [ACTIVE] (5/7 completed)
 
 **Goal:** Implement rendering pipeline and basic UI for patch editing
 
@@ -263,6 +263,20 @@ Last updated: 2026-01-27-120000
 - **Recommended Approach:** Parameter Panel + Presets (Option A from research)
 - **Dependencies:** patch-editor-ui, Phase 1 complete
 - **Origin:** Identified during compilation-pipeline domain unification sprint (2026-01-09)
+
+#### 📋 adapter-system-improvement [PLANNING]
+- **State:** PLANNING
+- **Epic:** `oscilla-animator-v2-o7a`
+- **Description:** Per-port-per-connection adapters, resource addressing (`my_block.inputs.count.adapters.<name>`), visual representation on wires, auto-insertion by editor
+- **Planning Files:** `.agent_planning/adapter-system-improvement/`
+- **Dependencies:** canonical-addressing (COMPLETED)
+- **Origin:** User requirement for improved adapter UX and addressing
+- **Sprints:**
+  - Sprint 1 (P1): Data Model & Addressing - `oscilla-animator-v2-53c`
+  - Sprint 2 (P1): Normalization Pass Updates - `oscilla-animator-v2-mtc`
+  - Sprint 3 (P1): Editor Integration - `oscilla-animator-v2-lrc`
+  - Sprint 4 (P2): UI Visualization - `oscilla-animator-v2-166`
+  - Sprint 5 (P2): Context Menu & Editing - `oscilla-animator-v2-u01`
 
 ---
 

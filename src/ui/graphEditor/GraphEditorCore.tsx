@@ -32,6 +32,7 @@ import 'reactflow/dist/style.css';
 import type { GraphDataAdapter } from './types';
 import { GraphEditorProvider, type GraphEditorContextValue } from './GraphEditorContext';
 import { reconcileNodesFromAdapter, type UnifiedNode } from './nodeDataTransform';
+import { UnifiedNode as UnifiedNodeComponent } from './UnifiedNode';
 import { getLayoutedElements } from '../reactFlowEditor/layout';
 import { validateConnection } from '../reactFlowEditor/typeValidation';
 import type { SelectionStore } from '../../stores/SelectionStore';
@@ -140,9 +141,7 @@ export const GraphEditorCoreInner = observer(
       // Node types - default to unified node
       const nodeTypes = useMemo(() => {
         if (customNodeTypes) return customNodeTypes;
-        // Import UnifiedNode dynamically to avoid circular deps
-        // For now, return empty - will be filled when UnifiedNode is created
-        return { unified: (() => <div>TODO: UnifiedNode</div>) as React.ComponentType<any> };
+        return { unified: UnifiedNodeComponent };
       }, [customNodeTypes]);
 
       // Context value for child components
