@@ -42,8 +42,9 @@ registerBlock({
     value: {
       type: signalType(INT),
       value: 0,
+      defaultSource: defaultSourceConst(0),
       uiHint: { kind: 'select', options: [{ value: '0', label: 'Orthographic' }, { value: '1', label: 'Perspective' }] },
-      exposedAsPort: false,
+      exposedAsPort: true,
     },
   },
   outputs: {

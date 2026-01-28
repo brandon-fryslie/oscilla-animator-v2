@@ -202,7 +202,8 @@ registerBlock({
     mode: {
       type: signalType(INT),
       value: 0,
-      exposedAsPort: false,
+      defaultSource: defaultSourceConst(0),
+      exposedAsPort: true,
       uiHint: {
         kind: 'select',
         options: [

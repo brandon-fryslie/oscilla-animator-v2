@@ -11,6 +11,8 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useStores } from '../../../stores';
 import type { ExternalWriteBus } from '../../../runtime/ExternalChannel';
+import { ActionIcon, Tooltip } from '@mantine/core';
+import { ZoomOutMap as ZoomOutMapIcon } from '@mui/icons-material';
 
 interface CanvasTabProps {
   onCanvasReady?: (canvas: HTMLCanvasElement) => void;
@@ -74,8 +76,10 @@ export const CanvasTab: React.FC<CanvasTabProps> = observer(({ onCanvasReady, ex
       // Update canvas element dimensions directly for immediate effect
       canvas.width = width;
       canvas.height = height;
+      // Update viewport store with new canvas dimensions
+      viewport.setCanvasDimensions(width, height);
     }
-  }, [canvasSize.width, canvasSize.height]);
+  }, [canvasSize.width, canvasSize.height, viewport]);
 
   // Set up ResizeObserver to track container size changes
   useEffect(() => {
@@ -235,21 +239,9 @@ export const CanvasTab: React.FC<CanvasTabProps> = observer(({ onCanvasReady, ex
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
 
-      // Viewport zoom (existing behavior)
-      const rect = canvas.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-
+      // Simple zoom without mouse-following
       const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
       const newZoom = Math.max(0.1, Math.min(10, viewport.zoom * zoomFactor));
-
-      const dx = mouseX - canvas.width / 2;
-      const dy = mouseY - canvas.height / 2;
-
-      viewport.panBy(
-        (dx * (1 - zoomFactor)) / viewport.zoom,
-        (dy * (1 - zoomFactor)) / viewport.zoom
-      );
 
       viewport.setZoom(newZoom);
 
@@ -322,6 +314,7 @@ export const CanvasTab: React.FC<CanvasTabProps> = observer(({ onCanvasReady, ex
         justifyContent: 'center',
         background: '#0f0f23',
         overflow: 'hidden',
+        position: 'relative',
       }}
     >
       <canvas
@@ -332,6 +325,24 @@ export const CanvasTab: React.FC<CanvasTabProps> = observer(({ onCanvasReady, ex
           cursor: 'grab',
         }}
       />
+
+      {/* Zoom to fit button overlay */}
+      <Tooltip label="Zoom to fit all content" position="left" withArrow>
+        <ActionIcon
+          variant="filled"
+          color="violet"
+          size="lg"
+          onClick={() => viewport.zoomToFit()}
+          style={{
+            position: 'absolute',
+            bottom: '16px',
+            right: '16px',
+            boxShadow: '0 2px 8px rgba(139, 92, 246, 0.4)',
+          }}
+        >
+          <ZoomOutMapIcon style={{ fontSize: 20 }} />
+        </ActionIcon>
+      </Tooltip>
     </div>
   );
 });

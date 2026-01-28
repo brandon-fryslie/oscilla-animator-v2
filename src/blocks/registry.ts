@@ -463,18 +463,55 @@ export function registerBlock(def: BlockDef): void {
     }
   }
 
-  // Validate varargs inputs
+  // Auto-generate defaultSource for any port that doesn't have one (architectural law)
+  // Like a 404 page or BIOS - there's ALWAYS a fallback, never a crash
+  const normalizedInputs: Record<string, InputDef> = {};
+
+  /**
+   * Get a sensible zero/default value for a SignalType.
+   * The Const block is payload-polymorphic and will handle broadcasting
+   * this value to the appropriate payload type (vec2, vec3, color, etc.).
+   */
+  const getZeroValue = (type: SignalType): number => {
+    // For all payload types, return 0
+    // The Const block will broadcast this to the appropriate shape:
+    // - float: 0
+    // - int: 0
+    // - bool: 0 (false)
+    // - vec2: [0, 0]
+    // - vec3: [0, 0, 0]
+    // - color: [0, 0, 0, 0] (transparent black)
+    // - shape: 0 (empty/null shape)
+    // - cameraProjection: 0 (orthographic)
+    return 0;
+  };
+
   for (const [portId, inputDef] of Object.entries(def.inputs)) {
-    if (isVarargInput(inputDef)) {
+    const isExposedPort = inputDef.exposedAsPort !== false;
+
+    // Auto-generate defaultSource if missing
+    if (isExposedPort && !inputDef.defaultSource && !isVarargInput(inputDef)) {
+      // Use the value if provided, otherwise use a sensible zero value
+      const defaultValue = inputDef.value ?? getZeroValue(inputDef.type);
+      normalizedInputs[portId] = {
+        ...inputDef,
+        defaultSource: { blockType: 'Const', output: 'out', params: { value: defaultValue } },
+      };
+    } else {
+      normalizedInputs[portId] = inputDef;
+    }
+
+    const actualDef = normalizedInputs[portId];
+    if (isVarargInput(actualDef)) {
       // Varargs inputs must have a constraint
-      if (!inputDef.varargConstraint) {
+      if (!actualDef.varargConstraint) {
         throw new Error(
           `Vararg input "${portId}" in block ${def.type} must have varargConstraint`
         );
       }
 
       // Varargs inputs cannot have a defaultSource (explicit connections only)
-      if (inputDef.defaultSource) {
+      if (actualDef.defaultSource) {
         throw new Error(
           `Vararg input "${portId}" in block ${def.type} cannot have defaultSource`
         );
@@ -482,7 +519,13 @@ export function registerBlock(def: BlockDef): void {
     }
   }
 
-  registry.set(def.type, def);
+  // Register the block with normalized inputs (auto-generated defaultSources)
+  const normalizedDef: BlockDef = {
+    ...def,
+    inputs: normalizedInputs,
+  };
+
+  registry.set(def.type, normalizedDef);
 }
 
 /**

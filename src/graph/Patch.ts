@@ -48,7 +48,7 @@
 
 import type { BlockId, PortId, BlockRole, DefaultSource, EdgeRole, CombineMode } from '../types';
 import { requireBlockDef } from '../blocks/registry';
-import { detectCanonicalNameCollisions, normalizeCanonicalName } from '../core/canonical-name';
+import { detectCanonicalNameCollisions, normalizeCanonicalName, generateLensId } from '../core/canonical-name';
 
 // =============================================================================
 // Lens Attachments (Sprint 2: Lenses System Redesign - 2026-01-27)
@@ -503,6 +503,55 @@ export class PatchBuilder {
     };
 
     this.blocks.set(blockId, updatedBlock);
+    return this;
+  }
+
+  /**
+   * Add a lens to an input port.
+   *
+   * @param blockId - Block ID
+   * @param portId - Input port ID
+   * @param lensType - Lens block type
+   * @param sourceAddress - Canonical address of the source output
+   * @param params - Optional lens parameters
+   */
+  addLens(
+    blockId: BlockId,
+    portId: string,
+    lensType: string,
+    sourceAddress: string,
+    params?: Record<string, unknown>
+  ): this {
+    const block = this.blocks.get(blockId);
+    if (!block) {
+      throw new Error(`Block ${blockId} not found`);
+    }
+
+    const port = block.inputPorts.get(portId);
+    if (!port) {
+      throw new Error(`Input port ${portId} not found on block ${blockId}`);
+    }
+
+    const lensId = generateLensId(sourceAddress);
+    const existingLenses = port.lenses ?? [];
+
+    const lens: LensAttachment = {
+      id: lensId,
+      lensType,
+      sourceAddress,
+      params,
+      sortKey: existingLenses.length,
+    };
+
+    const updatedPort: InputPort = {
+      ...port,
+      lenses: [...existingLenses, lens],
+    };
+
+    const updatedInputPorts = new Map(block.inputPorts);
+    updatedInputPorts.set(portId, updatedPort);
+
+    this.blocks.set(blockId, { ...block, inputPorts: updatedInputPorts });
     return this;
   }
 

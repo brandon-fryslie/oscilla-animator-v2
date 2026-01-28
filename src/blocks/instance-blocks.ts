@@ -49,8 +49,8 @@ registerBlock({
   },
   inputs: {
     elements: { label: 'Elements', type: signalTypeField(SHAPE, 'default') },
-    rows: { label: 'Rows', type: signalType(INT), value: 10, defaultSource: defaultSourceConst(10), exposedAsPort: false, uiHint: { kind: 'slider', min: 1, max: 100, step: 1 } },
-    cols: { label: 'Columns', type: signalType(INT), value: 10, defaultSource: defaultSourceConst(10), exposedAsPort: false, uiHint: { kind: 'slider', min: 1, max: 100, step: 1 } },
+    rows: { label: 'Rows', type: signalType(INT), value: 10, defaultSource: defaultSourceConst(10), exposedAsPort: true, uiHint: { kind: 'slider', min: 1, max: 100, step: 1 } },
+    cols: { label: 'Columns', type: signalType(INT), value: 10, defaultSource: defaultSourceConst(10), exposedAsPort: true, uiHint: { kind: 'slider', min: 1, max: 100, step: 1 } },
   },
   outputs: {
     position: { label: 'Position', type: signalTypeField(VEC3, 'default') },

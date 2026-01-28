@@ -17,6 +17,8 @@ import {
 } from '../runtime/HealthMonitor';
 import type { RuntimeState } from '../runtime/RuntimeState';
 import type { RootStore } from '../stores';
+import type { RenderFrameIR } from '../render/types';
+import type { ContentBounds } from '../stores/ViewportStore';
 
 export interface AnimationLoopState {
   frameCount: number;
@@ -41,6 +43,56 @@ export interface AnimationLoopDeps {
 }
 
 const CONTINUITY_STORE_UPDATE_INTERVAL = 200; // 5Hz
+
+/**
+ * Calculate content bounds from a render frame.
+ * Returns bounds in world space (normalized [0,1] coordinates).
+ */
+function calculateContentBounds(frame: RenderFrameIR): ContentBounds | null {
+  if (frame.ops.length === 0) {
+    return null;
+  }
+
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+
+  for (const op of frame.ops) {
+    const { instances } = op;
+    const { position, count } = instances;
+
+    // Process each instance - just track positions without size padding for now
+    for (let i = 0; i < count; i++) {
+      // Position in normalized [0,1] space
+      const normX = position[i * 2];
+      const normY = position[i * 2 + 1];
+
+      minX = Math.min(minX, normX);
+      maxX = Math.max(maxX, normX);
+      minY = Math.min(minY, normY);
+      maxY = Math.max(maxY, normY);
+    }
+  }
+
+  // Add a small padding (5% of content size) to account for instance sizes
+  const contentWidth = maxX - minX;
+  const contentHeight = maxY - minY;
+  const paddingX = contentWidth * 0.05;
+  const paddingY = contentHeight * 0.05;
+
+  minX -= paddingX;
+  maxX += paddingX;
+  minY -= paddingY;
+  maxY += paddingY;
+
+  // Return null if no valid bounds found
+  if (!isFinite(minX) || !isFinite(maxX) || !isFinite(minY) || !isFinite(maxY)) {
+    return null;
+  }
+
+  return { minX, maxX, minY, maxY };
+}
 
 /**
  * Create initial animation loop state
@@ -109,6 +161,10 @@ export function executeAnimationFrame(
   renderFrame(ctx, frame, canvas.width, canvas.height, /* skipClear */ true);
   ctx.restore();
   state.renderTime = performance.now() - renderStart;
+
+  // Update content bounds in viewport store (for zoom-to-fit feature)
+  const bounds = calculateContentBounds(frame);
+  store.viewport.setContentBounds(bounds);
 
   // NOTE: No buffer release needed - arena is reset at frame start (O(1))
 

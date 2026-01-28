@@ -7,8 +7,9 @@
 
 export { type PatchBuilder } from './types';
 export { patchGoldenSpiral } from './golden-spiral';
+export { patchMouseSpiral } from './mouse-spiral';
 export { patchDomainTest } from './domain-test';
-export { patchTileGrid } from './tile-grid';
+export { patchTileGrid, patchTileGridUV } from './tile-grid';
 export { patchOrbitalRings } from './orbital-rings';
 export { patchRectMosaic } from './rect-mosaic';
 export { patchShapeKaleidoscope } from './shape-kaleidoscope';
@@ -19,8 +20,9 @@ export { patchPathFieldDemo } from './path-field-demo';
 export { patchErrorIsolationDemo } from './error-isolation-demo';
 
 import { patchGoldenSpiral } from './golden-spiral';
+import { patchMouseSpiral } from './mouse-spiral';
 import { patchDomainTest } from './domain-test';
-import { patchTileGrid } from './tile-grid';
+import { patchTileGrid, patchTileGridUV } from './tile-grid';
 import { patchOrbitalRings } from './orbital-rings';
 import { patchRectMosaic } from './rect-mosaic';
 import { patchShapeKaleidoscope } from './shape-kaleidoscope';
@@ -33,8 +35,10 @@ import type { PatchBuilder } from './types';
 
 export const patches: { name: string; builder: PatchBuilder }[] = [
   { name: 'Golden Spiral', builder: patchGoldenSpiral },
+  { name: 'Mouse Spiral', builder: patchMouseSpiral },
   { name: 'Domain Test', builder: patchDomainTest },
   { name: 'Tile Grid', builder: patchTileGrid },
+  { name: 'Tile Grid UV', builder: patchTileGridUV },
   { name: 'Orbital Rings', builder: patchOrbitalRings },
   { name: 'Rect Mosaic', builder: patchRectMosaic },
   { name: 'Shape Kaleidoscope', builder: patchShapeKaleidoscope },

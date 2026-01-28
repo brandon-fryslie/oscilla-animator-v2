@@ -11,12 +11,12 @@
  */
 
 import { makeObservable, observable, computed, action } from 'mobx';
-import type { Block, Edge, Endpoint, Patch, BlockType, InputPort, OutputPort } from '../graph/Patch';
+import type { Block, Edge, Endpoint, Patch, BlockType, InputPort, OutputPort, LensAttachment } from '../graph/Patch';
 import type { BlockId, BlockRole, CombineMode, EdgeRole, PortId } from '../types';
 import { emptyPatchData, type PatchData } from './internal';
 import type { EventHub } from '../events/EventHub';
 import { requireBlockDef } from '../blocks/registry';
-import { normalizeCanonicalName, detectCanonicalNameCollisions } from '../core/canonical-name';
+import { normalizeCanonicalName, detectCanonicalNameCollisions, generateLensId } from '../core/canonical-name';
 
 /**
  * Opaque type for immutable patch access.
@@ -114,6 +114,9 @@ export class PatchStore {
       updateInputPort: action,
       updateInputPortCombineMode: action,
       addVarargConnection: action,
+      addLens: action,
+      removeLens: action,
+      updateLensParams: action,
       addEdge: action,
       removeEdge: action,
       updateEdge: action,
@@ -635,6 +638,256 @@ export class PatchStore {
     }
   }
 
+  // =============================================================================
+  // Lens Management
+  // =============================================================================
+
+  /**
+   * Add a lens to an input port.
+   *
+   * Creates a LensAttachment and appends it to the port's lenses array.
+   * Triggers recompilation via GraphCommitted event.
+   *
+   * @param blockId - Block containing the input port
+   * @param portId - Input port ID
+   * @param lensType - Block type for the lens (e.g., 'Adapter_DegreesToRadians')
+   * @param sourceAddress - Canonical address of the source output
+   * @param params - Optional parameters for parameterized lenses
+   * @returns Generated lens ID
+   */
+  addLens(
+    blockId: BlockId,
+    portId: string,
+    lensType: string,
+    sourceAddress: string,
+    params?: Record<string, unknown>
+  ): string {
+    const block = this._data.blocks.get(blockId);
+    if (!block) {
+      throw new Error(`Block ${blockId} not found`);
+    }
+
+    // Validate port exists (either in inputPorts or registry)
+    let port = block.inputPorts.get(portId);
+    if (!port) {
+      const blockDef = requireBlockDef(block.type);
+      const inputDef = blockDef.inputs[portId];
+      if (!inputDef) {
+        throw new Error(`Port ${portId} not found on block ${blockId}`);
+      }
+      if (inputDef.exposedAsPort === false) {
+        throw new Error(`Cannot add lens to config-only input ${portId}`);
+      }
+      // Create port entry if it doesn't exist
+      port = { id: portId, combineMode: 'last' };
+    }
+
+    // Validate lens type is registered
+    requireBlockDef(lensType);
+
+    // Generate deterministic lens ID
+    const lensId = generateLensId(sourceAddress);
+
+    // Check for duplicate
+    const existingLenses = port.lenses ?? [];
+    if (existingLenses.some(l => l.sourceAddress === sourceAddress)) {
+      throw new Error(`Lens already exists for source ${sourceAddress} on port ${portId}`);
+    }
+
+    // Create lens attachment
+    const lens: LensAttachment = {
+      id: lensId,
+      lensType,
+      sourceAddress,
+      params,
+      sortKey: existingLenses.length,
+    };
+
+    // Update port with new lens
+    const updatedPort = {
+      ...port,
+      lenses: [...existingLenses, lens],
+    };
+
+    // Update block with new port
+    const updatedInputPorts = new Map(block.inputPorts);
+    updatedInputPorts.set(portId, updatedPort);
+
+    this._data.blocks.set(blockId, {
+      ...block,
+      inputPorts: updatedInputPorts,
+    });
+
+    this.invalidateSnapshot();
+
+    // Emit events for recompilation
+    if (this.eventHub && this.getPatchRevision) {
+      this.eventHub.emit({
+        type: 'BlockUpdated',
+        patchId: this.patchId,
+        patchRevision: this.getPatchRevision(),
+        blockId,
+        changeType: 'other',
+        property: portId,
+      });
+
+      this.eventHub.emit({
+        type: 'GraphCommitted',
+        patchId: this.patchId,
+        patchRevision: this.getPatchRevision() + 1,
+        reason: 'userEdit',
+        diffSummary: {
+          blocksAdded: 0,
+          blocksRemoved: 0,
+          edgesChanged: 0,
+        },
+      });
+    }
+
+    return lensId;
+  }
+
+  /**
+   * Remove a lens from an input port.
+   *
+   * @param blockId - Block containing the input port
+   * @param portId - Input port ID
+   * @param lensId - Lens ID to remove
+   */
+  removeLens(blockId: BlockId, portId: string, lensId: string): void {
+    const block = this._data.blocks.get(blockId);
+    if (!block) {
+      throw new Error(`Block ${blockId} not found`);
+    }
+
+    const port = block.inputPorts.get(portId);
+    const existingLenses = port?.lenses ?? [];
+    const newLenses = existingLenses.filter(l => l.id !== lensId);
+
+    if (newLenses.length === existingLenses.length) {
+      throw new Error(`Lens ${lensId} not found on port ${portId}`);
+    }
+
+    // Update port - clear lenses if empty
+    const updatedPort = {
+      ...port!,
+      lenses: newLenses.length > 0 ? newLenses : undefined,
+    };
+
+    // Update block
+    const updatedInputPorts = new Map(block.inputPorts);
+    updatedInputPorts.set(portId, updatedPort);
+
+    this._data.blocks.set(blockId, {
+      ...block,
+      inputPorts: updatedInputPorts,
+    });
+
+    this.invalidateSnapshot();
+
+    // Emit events
+    if (this.eventHub && this.getPatchRevision) {
+      this.eventHub.emit({
+        type: 'BlockUpdated',
+        patchId: this.patchId,
+        patchRevision: this.getPatchRevision(),
+        blockId,
+        changeType: 'other',
+        property: portId,
+      });
+
+      this.eventHub.emit({
+        type: 'GraphCommitted',
+        patchId: this.patchId,
+        patchRevision: this.getPatchRevision() + 1,
+        reason: 'userEdit',
+        diffSummary: {
+          blocksAdded: 0,
+          blocksRemoved: 0,
+          edgesChanged: 0,
+        },
+      });
+    }
+  }
+
+  /**
+   * Get all lenses attached to an input port.
+   *
+   * @param blockId - Block containing the input port
+   * @param portId - Input port ID
+   * @returns Array of lens attachments (empty if none)
+   */
+  getLensesForPort(blockId: BlockId, portId: string): readonly LensAttachment[] {
+    const block = this._data.blocks.get(blockId);
+    if (!block) return [];
+    const port = block.inputPorts.get(portId);
+    return port?.lenses ? [...port.lenses] : [];
+  }
+
+  /**
+   * Update parameters for an existing lens.
+   *
+   * @param blockId - Block containing the input port
+   * @param portId - Input port ID
+   * @param lensId - Lens ID to update
+   * @param params - New parameters (shallow merged with existing)
+   */
+  updateLensParams(
+    blockId: BlockId,
+    portId: string,
+    lensId: string,
+    params: Record<string, unknown>
+  ): void {
+    const block = this._data.blocks.get(blockId);
+    if (!block) {
+      throw new Error(`Block ${blockId} not found`);
+    }
+
+    const port = block.inputPorts.get(portId);
+    const existingLenses = port?.lenses ?? [];
+    const lensIndex = existingLenses.findIndex(l => l.id === lensId);
+
+    if (lensIndex === -1) {
+      throw new Error(`Lens ${lensId} not found on port ${portId}`);
+    }
+
+    // Update the lens with merged params
+    const newLenses = existingLenses.map((l, i) =>
+      i === lensIndex ? { ...l, params: { ...l.params, ...params } } : l
+    );
+
+    // Update port
+    const updatedPort = {
+      ...port!,
+      lenses: newLenses,
+    };
+
+    // Update block
+    const updatedInputPorts = new Map(block.inputPorts);
+    updatedInputPorts.set(portId, updatedPort);
+
+    this._data.blocks.set(blockId, {
+      ...block,
+      inputPorts: updatedInputPorts,
+    });
+
+    this.invalidateSnapshot();
+
+    // Emit events
+    if (this.eventHub && this.getPatchRevision) {
+      this.eventHub.emit({
+        type: 'GraphCommitted',
+        patchId: this.patchId,
+        patchRevision: this.getPatchRevision() + 1,
+        reason: 'userEdit',
+        diffSummary: {
+          blocksAdded: 0,
+          blocksRemoved: 0,
+          edgesChanged: 0,
+        },
+      });
+    }
+  }
 
   /**
    * Adds a new edge to the patch.

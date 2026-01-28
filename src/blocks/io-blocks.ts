@@ -11,6 +11,7 @@ import { registerBlock } from './registry';
 import { signalType, strideOf } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { OpCode } from '../compiler/ir/types';
+import { defaultSourceConst } from '../types';
 
 // =============================================================================
 // ExternalInput
@@ -34,7 +35,25 @@ registerBlock({
       type: signalType(FLOAT),
       value: 'mouse.x',
       exposedAsPort: false,
-      uiHint: { kind: 'text' },
+      uiHint: {
+        kind: 'select',
+        options: [
+          // Value channels (sample-and-hold)
+          { value: 'mouse.x', label: 'Mouse X' },
+          { value: 'mouse.y', label: 'Mouse Y' },
+          { value: 'mouse.over', label: 'Mouse Over Canvas' },
+          { value: 'mouse.button.left.held', label: 'Left Button Held' },
+          { value: 'mouse.button.right.held', label: 'Right Button Held' },
+          // Pulse channels (1 for one frame, then 0)
+          { value: 'mouse.button.left.down', label: 'Left Button Down (pulse)' },
+          { value: 'mouse.button.left.up', label: 'Left Button Up (pulse)' },
+          { value: 'mouse.button.right.down', label: 'Right Button Down (pulse)' },
+          { value: 'mouse.button.right.up', label: 'Right Button Up (pulse)' },
+          // Accumulator channels (sums deltas, clears each frame)
+          { value: 'mouse.wheel.dx', label: 'Mouse Wheel Horizontal (delta)' },
+          { value: 'mouse.wheel.dy', label: 'Mouse Wheel Vertical (delta)' },
+        ],
+      },
     },
   },
   outputs: {
@@ -76,13 +95,29 @@ registerBlock({
       type: signalType(FLOAT),
       value: 'mouse.x',
       exposedAsPort: false,
-      uiHint: { kind: 'text' },
+      uiHint: {
+        kind: 'select',
+        options: [
+          { value: 'mouse.x', label: 'Mouse X' },
+          { value: 'mouse.y', label: 'Mouse Y' },
+          { value: 'mouse.over', label: 'Mouse Over Canvas' },
+          { value: 'mouse.button.left.held', label: 'Left Button Held' },
+          { value: 'mouse.button.right.held', label: 'Right Button Held' },
+          { value: 'mouse.button.left.down', label: 'Left Button Down (pulse)' },
+          { value: 'mouse.button.left.up', label: 'Left Button Up (pulse)' },
+          { value: 'mouse.button.right.down', label: 'Right Button Down (pulse)' },
+          { value: 'mouse.button.right.up', label: 'Right Button Up (pulse)' },
+          { value: 'mouse.wheel.dx', label: 'Mouse Wheel Horizontal (delta)' },
+          { value: 'mouse.wheel.dy', label: 'Mouse Wheel Vertical (delta)' },
+        ],
+      },
     },
     threshold: {
       label: 'Threshold',
       type: signalType(FLOAT),
       value: 0.5,
-      exposedAsPort: false,
+      defaultSource: defaultSourceConst(0.5),
+      exposedAsPort: true,
       uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 },
     },
   },
@@ -144,7 +179,13 @@ registerBlock({
       type: signalType(FLOAT),
       value: 'mouse',
       exposedAsPort: false,
-      uiHint: { kind: 'text' },
+      uiHint: {
+        kind: 'select',
+        options: [
+          { value: 'mouse', label: 'Mouse Position' },
+          { value: 'mouse.wheel', label: 'Mouse Wheel Delta' },
+        ],
+      },
     },
   },
   outputs: {

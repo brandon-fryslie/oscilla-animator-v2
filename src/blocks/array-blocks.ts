@@ -67,8 +67,8 @@ registerBlock({
       type: signalType(INT),
       value: 100,
       defaultSource: defaultSourceConst(100),
+      exposedAsPort: true,
       uiHint: { kind: 'slider', min: 1, max: 10000, step: 1 },
-      exposedAsPort: false,  // Config-only, not wirable
     },
   },
   outputs: {

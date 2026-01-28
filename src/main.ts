@@ -151,6 +151,11 @@ async function initializeRuntime(rootStore: RootStore) {
     );
   }
 
+  // Re-render App to update externalWriteBus prop now that runtime state exists
+  if ((window as any).__renderApp) {
+    (window as any).__renderApp();
+  }
+
   // Expose presets to React toolbar UI
   exposePresetsToUI();
 
@@ -223,33 +228,38 @@ async function main() {
     // Create React root and render App wrapped in StoreProvider
     // StoreProvider creates and owns the store; App exposes it via onStoreReady callback
     const root = createRoot(appContainer);
-    root.render(
-      React.createElement(
-        StoreProvider,
-        null, // No store prop - StoreProvider creates its own
-        React.createElement(App, {
-          onCanvasReady: (canvasEl: HTMLCanvasElement) => {
-            canvas = canvasEl;
-            ctx = canvas.getContext('2d');
-          },
-          onStoreReady: (rootStore: RootStore) => {
-            // Initialize runtime once store is available
-            initializeRuntime(rootStore).catch((err) => {
-              console.error('Failed to initialize runtime:', err);
-              console.error('Runtime error message:', err?.message);
-              console.error('Runtime error stack:', err?.stack);
-            });
-          },
-          // Pass the external write bus from the session state
-          // NOTE: At this point sessionState doesn't exist yet, so we'll update this
-          // after compileAndSwap creates it. For now, pass undefined and rely on
-          // component to handle absence gracefully.
-          get externalWriteBus() {
-            return compileState.currentState?.externalChannels.writeBus;
-          },
-        })
-      )
-    );
+
+    // Function to render app with current externalWriteBus
+    const renderApp = () => {
+      root.render(
+        React.createElement(
+          StoreProvider,
+          null, // No store prop - StoreProvider creates its own
+          React.createElement(App, {
+            onCanvasReady: (canvasEl: HTMLCanvasElement) => {
+              canvas = canvasEl;
+              ctx = canvas.getContext('2d');
+            },
+            onStoreReady: (rootStore: RootStore) => {
+              // Initialize runtime once store is available
+              initializeRuntime(rootStore).catch((err) => {
+                console.error('Failed to initialize runtime:', err);
+                console.error('Runtime error message:', err?.message);
+                console.error('Runtime error stack:', err?.stack);
+              });
+            },
+            // Pass the external write bus from the current runtime state
+            externalWriteBus: compileState.currentState?.externalChannels.writeBus,
+          })
+        )
+      );
+    };
+
+    // Initial render (externalWriteBus will be undefined until first compile)
+    renderApp();
+
+    // Store renderApp globally so it can be called after compile
+    (window as any).__renderApp = renderApp;
   } catch (err) {
     console.error('Failed to initialize application:', err);
   }

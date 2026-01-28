@@ -13,6 +13,7 @@
 // Store classes
 export { RootStore } from './RootStore';
 export { PatchStore, type ImmutablePatch, type BlockOptions } from './PatchStore';
+export type { LensAttachment } from '../graph/Patch';
 export { SelectionStore } from './SelectionStore';
 export { ViewportStore, type Pan } from './ViewportStore';
 export { PlaybackStore } from './PlaybackStore';

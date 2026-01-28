@@ -316,7 +316,7 @@ export const GraphEditorCoreInner = observer(
         try {
           // Single node - just zoom to it
           if (nodesRef.current.length === 1) {
-            setTimeout(() => fitView({ padding: 0.1 }), 50);
+            // fitView will be called by the dedicated effect after render
             return;
           }
 
@@ -332,7 +332,7 @@ export const GraphEditorCoreInner = observer(
             adapter.setBlockPosition(node.id, node.position);
           }
 
-          setTimeout(() => fitView({ padding: 0.1 }), 50);
+          // fitView will be called by the dedicated effect after render
         } catch (error) {
           if (diagnostics) {
             diagnostics.log({
@@ -369,55 +369,36 @@ export const GraphEditorCoreInner = observer(
       // Initial Layout - Compute ELK layout BEFORE first render (no flash)
       // -------------------------------------------------------------------------
 
-      const initialLayoutDoneRef = useRef(false);
+      const layoutDoneRef = useRef(false);
 
       useEffect(() => {
         let cancelled = false;
 
         async function initializeLayout() {
-          // Skip if already initialized or no blocks
-          if (initialLayoutDoneRef.current) return;
+          // Already done
+          if (layoutDoneRef.current) return;
+
+          // Empty: wait for blocks to load (don't initialize yet)
           if (adapter.blocks.size === 0) {
-            setIsInitialized(true);
             return;
           }
 
-          // Build initial nodes/edges with placeholder positions
+          // Build nodes/edges
           const { nodes: initialNodes, edges: initialEdges } = reconcileNodesFromAdapter(
             adapter,
             [],
             (blockId) => adapter.getBlockPosition(blockId)
           );
 
-          // Single node: just place it and render
+          // Single node: just center it
           if (initialNodes.length === 1) {
-            if (!initialNodes[0].position || (initialNodes[0].position.x === 100 && initialNodes[0].position.y === 100)) {
-              initialNodes[0].position = { x: 100, y: 100 };
-              adapter.setBlockPosition(initialNodes[0].id, initialNodes[0].position);
-            }
+            initialNodes[0].position = { x: 100, y: 100 };
+            adapter.setBlockPosition(initialNodes[0].id, initialNodes[0].position);
             if (!cancelled) {
+              layoutDoneRef.current = true;
               setNodes(initialNodes);
               setEdges(initialEdges);
               setIsInitialized(true);
-              initialLayoutDoneRef.current = true;
-              setTimeout(() => fitView({ padding: 0.1 }), 50);
-            }
-            return;
-          }
-
-          // Check if all nodes have stored positions (not just default 100,100)
-          const allHavePositions = initialNodes.every((node) => {
-            const stored = adapter.getBlockPosition(node.id);
-            return stored && !(stored.x === 100 && stored.y === 100 && initialNodes.length > 1);
-          });
-
-          if (allHavePositions) {
-            // Use stored positions directly
-            if (!cancelled) {
-              setNodes(initialNodes);
-              setEdges(initialEdges);
-              setIsInitialized(true);
-              initialLayoutDoneRef.current = true;
               setTimeout(() => fitView({ padding: 0.1 }), 50);
             }
             return;
@@ -435,10 +416,10 @@ export const GraphEditorCoreInner = observer(
             }
 
             // Set state - first render will show correct positions
+            layoutDoneRef.current = true;
             setNodes(layoutedNodes);
             setEdges(initialEdges);
             setIsInitialized(true);
-            initialLayoutDoneRef.current = true;
             setTimeout(() => fitView({ padding: 0.1 }), 50);
           } catch (error) {
             console.warn('Initial layout failed, using grid fallback:', error);
@@ -453,10 +434,10 @@ export const GraphEditorCoreInner = observer(
             }
 
             if (!cancelled) {
+              layoutDoneRef.current = true;
               setNodes(initialNodes);
               setEdges(initialEdges);
               setIsInitialized(true);
-              initialLayoutDoneRef.current = true;
             }
           }
         }
@@ -464,7 +445,8 @@ export const GraphEditorCoreInner = observer(
         initializeLayout();
 
         return () => { cancelled = true; };
-      }, [adapter, setNodes, setEdges, fitView]);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, [adapter, adapter.blocks.size, setNodes, setEdges, fitView]);
 
       // -------------------------------------------------------------------------
       // MobX Reaction - Sync Adapter Changes to ReactFlow (after initialization)
@@ -502,6 +484,24 @@ export const GraphEditorCoreInner = observer(
       // Render
       // -------------------------------------------------------------------------
 
+      // Loading state: don't render ReactFlow until layout is computed
+      if (!isInitialized) {
+        return (
+          <div className="graph-editor-core" style={{
+            width: '100%',
+            height: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: '#1a1a2e',
+            color: '#666',
+            fontSize: '0.875rem',
+          }}>
+            Computing layout...
+          </div>
+        );
+      }
+
       return (
         <GraphEditorProvider value={contextValue}>
           <div className="graph-editor-core" style={{ width: '100%', height: '100%' }}>
@@ -523,7 +523,6 @@ export const GraphEditorCoreInner = observer(
               fitView
               minZoom={0.1}
               maxZoom={4}
-              defaultViewport={{ x: 0, y: 0, zoom: 1 }}
               snapToGrid={false}
               deleteKeyCode="Delete"
             >

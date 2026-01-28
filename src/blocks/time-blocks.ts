@@ -7,6 +7,7 @@
 import { registerBlock } from './registry';
 import { signalType, signalTypeTrigger, unitPhase01, strideOf } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
+import { defaultSourceConst } from '../types';
 
 // =============================================================================
 // InfiniteTimeRoot
@@ -25,8 +26,8 @@ registerBlock({
     broadcastPolicy: 'disallowSignalMix',
   },
   inputs: {
-    periodAMs: { type: signalType(FLOAT), value: 1000, exposedAsPort: false },
-    periodBMs: { type: signalType(FLOAT), value: 2000, exposedAsPort: false },
+    periodAMs: { type: signalType(FLOAT), value: 1000, defaultSource: defaultSourceConst(1000), exposedAsPort: true, uiHint: { kind: 'slider', min: 100, max: 10000, step: 100 } },
+    periodBMs: { type: signalType(FLOAT), value: 2000, defaultSource: defaultSourceConst(2000), exposedAsPort: true, uiHint: { kind: 'slider', min: 100, max: 10000, step: 100 } },
   },
   outputs: {
     tMs: { label: 'Time (ms)', type: signalType(FLOAT) },
