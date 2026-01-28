@@ -252,6 +252,59 @@ class CompilationInspectorService {
     this.currentSnapshot = null;
     this.passStartTime = 0;
   }
+
+  /**
+   * Get resolved port types from the latest TypedPatch.
+   * Returns a Map where keys are "blockIndex:portName:in" or "blockIndex:portName:out"
+   * and values are resolved SignalTypes.
+   *
+   * @returns Port types map or undefined if not available
+   */
+  getResolvedPortTypes(): Map<string, unknown> | undefined {
+    const latest = this.getLatestSnapshot();
+    if (!latest) return undefined;
+
+    // Find the type-graph pass (or frontend:type-graph)
+    const typeGraphPass = latest.passes.find(
+      (p) => p.passName === 'type-graph' || p.passName === 'frontend:type-graph'
+    );
+    if (!typeGraphPass) return undefined;
+
+    // Extract portTypes from the output
+    const output = typeGraphPass.output as { portTypes?: unknown };
+    if (!output || typeof output !== 'object') return undefined;
+
+    // portTypes is serialized from a Map - reconstruct if possible
+    const portTypes = output.portTypes;
+    if (portTypes instanceof Map) {
+      return portTypes as Map<string, unknown>;
+    }
+
+    // If serialized as object entries, convert back to Map
+    if (Array.isArray(portTypes)) {
+      return new Map(portTypes as [string, unknown][]);
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Get the CycleSummary from the latest Frontend compilation.
+   *
+   * @returns CycleSummary or undefined if not available
+   */
+  getCycleSummary(): unknown | undefined {
+    const latest = this.getLatestSnapshot();
+    if (!latest) return undefined;
+
+    // Find the cycle-analysis pass
+    const cyclePass = latest.passes.find(
+      (p) => p.passName === 'frontend:cycle-analysis'
+    );
+    if (!cyclePass) return undefined;
+
+    return cyclePass.output;
+  }
 }
 
 // =============================================================================
