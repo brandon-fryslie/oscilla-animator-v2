@@ -63,6 +63,11 @@ export class IRBuilderImpl implements IRBuilder {
   private timeModel: TimeModelIR | undefined;
   private currentBlockId: string | undefined;
 
+  // Hash-consing caches for expression deduplication (I13)
+  private sigExprCache = new Map<string, SigExprId>();
+  private fieldExprCache = new Map<string, FieldExprId>();
+  private eventExprCache = new Map<string, EventExprId>();
+
   // Slot registrations for debug/validation
   private sigSlots = new Map<number, ValueSlot>();
   private fieldSlots = new Map<number, ValueSlot>();
@@ -107,43 +112,93 @@ export class IRBuilderImpl implements IRBuilder {
   // =========================================================================
 
   sigConst(value: number | string | boolean, type: SignalType): SigExprId {
+    // Hash-consing (I13): check cache before creating new ID
+    const expr = { kind: 'const' as const, value, type };
+    const hash = hashSigExpr(expr);
+    const existing = this.sigExprCache.get(hash);
+    if (existing !== undefined) {
+      return existing;
+    }
     const id = sigExprId(this.sigExprs.length);
-    this.sigExprs.push({ kind: 'const', value, type });
+    this.sigExprs.push(expr);
+    this.sigExprCache.set(hash, id);
     return id;
   }
 
   sigSlot(slot: ValueSlot, type: SignalType): SigExprId {
+    const expr = { kind: 'slot' as const, slot, type };
+    const hash = hashSigExpr(expr);
+    const existing = this.sigExprCache.get(hash);
+    if (existing !== undefined) {
+      return existing;
+    }
     const id = sigExprId(this.sigExprs.length);
-    this.sigExprs.push({ kind: 'slot', slot, type });
+    this.sigExprs.push(expr);
+    this.sigExprCache.set(hash, id);
     return id;
   }
 
   sigTime(which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'progress' | 'palette' | 'energy', type: SignalType): SigExprId {
+    const expr = { kind: 'time' as const, which, type };
+    const hash = hashSigExpr(expr);
+    const existing = this.sigExprCache.get(hash);
+    if (existing !== undefined) {
+      return existing;
+    }
     const id = sigExprId(this.sigExprs.length);
-    this.sigExprs.push({ kind: 'time', which, type });
+    this.sigExprs.push(expr);
+    this.sigExprCache.set(hash, id);
     return id;
   }
 
   sigExternal(channel: string, type: SignalType): SigExprId {
+    const expr = { kind: 'external' as const, which: channel, type };
+    const hash = hashSigExpr(expr);
+    const existing = this.sigExprCache.get(hash);
+    if (existing !== undefined) {
+      return existing;
+    }
     const id = sigExprId(this.sigExprs.length);
-    this.sigExprs.push({ kind: 'external', which: channel, type });
+    this.sigExprs.push(expr);
+    this.sigExprCache.set(hash, id);
     return id;
   }
 
   sigMap(input: SigExprId, fn: PureFn, type: SignalType): SigExprId {
+    const expr = { kind: 'map' as const, input, fn, type };
+    const hash = hashSigExpr(expr);
+    const existing = this.sigExprCache.get(hash);
+    if (existing !== undefined) {
+      return existing;
+    }
     const id = sigExprId(this.sigExprs.length);
-    this.sigExprs.push({ kind: 'map', input, fn, type });
+    this.sigExprs.push(expr);
+    this.sigExprCache.set(hash, id);
     return id;
   }
 
   sigZip(inputs: readonly SigExprId[], fn: PureFn, type: SignalType): SigExprId {
+    const expr = { kind: 'zip' as const, inputs, fn, type };
+    const hash = hashSigExpr(expr);
+    const existing = this.sigExprCache.get(hash);
+    if (existing !== undefined) {
+      return existing;
+    }
     const id = sigExprId(this.sigExprs.length);
-    this.sigExprs.push({ kind: 'zip', inputs, fn, type });
+    this.sigExprs.push(expr);
+    this.sigExprCache.set(hash, id);
     return id;
   }
   sigShapeRef(topologyId: TopologyId, paramSignals: readonly SigExprId[], type: SignalType, controlPointField?: { id: FieldExprId; stride: number }): SigExprId {
+    const expr = { kind: 'shapeRef' as const, topologyId, paramSignals, controlPointField, type };
+    const hash = hashSigExpr(expr);
+    const existing = this.sigExprCache.get(hash);
+    if (existing !== undefined) {
+      return existing;
+    }
     const id = sigExprId(this.sigExprs.length);
-    this.sigExprs.push({ kind: 'shapeRef', topologyId, paramSignals, controlPointField, type });
+    this.sigExprs.push(expr);
+    this.sigExprCache.set(hash, id);
     return id;
   }
 
@@ -171,10 +226,16 @@ export class IRBuilderImpl implements IRBuilder {
     type: SignalType
   ): SigExprId {
     // For combining signals, we use zip with appropriate combine function
-    // inputs are already SigExprId[]
     const fn: PureFn = { kind: 'kernel', name: `combine_${mode}` };
+    const expr = { kind: 'zip' as const, inputs, fn, type };
+    const hash = hashSigExpr(expr);
+    const existing = this.sigExprCache.get(hash);
+    if (existing !== undefined) {
+      return existing;
+    }
     const id = sigExprId(this.sigExprs.length);
-    this.sigExprs.push({ kind: 'zip', inputs, fn, type });
+    this.sigExprs.push(expr);
+    this.sigExprCache.set(hash, id);
     return id;
   }
 
@@ -215,8 +276,15 @@ export class IRBuilderImpl implements IRBuilder {
   // =========================================================================
 
   fieldConst(value: number | string, type: SignalType): FieldExprId {
+    const expr = { kind: 'const' as const, value, type };
+    const hash = hashFieldExpr(expr);
+    const existing = this.fieldExprCache.get(hash);
+    if (existing !== undefined) {
+      return existing;
+    }
     const id = fieldExprId(this.fieldExprs.length);
-    this.fieldExprs.push({ kind: 'const', value, type });
+    this.fieldExprs.push(expr);
+    this.fieldExprCache.set(hash, id);
     return id;
   }
 
@@ -225,13 +293,20 @@ export class IRBuilderImpl implements IRBuilder {
    * Uses proper FieldExprIntrinsic type - no 'as any' casts needed.
    */
   fieldIntrinsic(instanceId: InstanceId, intrinsic: IntrinsicPropertyName, type: SignalType): FieldExprId {
-    const id = fieldExprId(this.fieldExprs.length);
-    this.fieldExprs.push({
-      kind: 'intrinsic',
+    const expr = {
+      kind: 'intrinsic' as const,
       instanceId,
       intrinsic,
       type,
-    });
+    };
+    const hash = hashFieldExpr(expr);
+    const existing = this.fieldExprCache.get(hash);
+    if (existing !== undefined) {
+      return existing;
+    }
+    const id = fieldExprId(this.fieldExprs.length);
+    this.fieldExprs.push(expr);
+    this.fieldExprCache.set(hash, id);
     return id;
   }
 
@@ -259,14 +334,21 @@ export class IRBuilderImpl implements IRBuilder {
       throw new Error('fieldPlacement: type is required');
     }
 
-    const id = fieldExprId(this.fieldExprs.length);
-    this.fieldExprs.push({
-      kind: 'placement',
+    const expr = {
+      kind: 'placement' as const,
       instanceId,
       field,
       basisKind,
       type,
-    });
+    };
+    const hash = hashFieldExpr(expr);
+    const existing = this.fieldExprCache.get(hash);
+    if (existing !== undefined) {
+      return existing;
+    }
+    const id = fieldExprId(this.fieldExprs.length);
+    this.fieldExprs.push(expr);
+    this.fieldExprCache.set(hash, id);
     return id;
   }
   /**
@@ -274,38 +356,73 @@ export class IRBuilderImpl implements IRBuilder {
    * Represents the elements of an array instance.
    */
   fieldArray(instanceId: InstanceId, type: SignalType): FieldExprId {
-    const id = fieldExprId(this.fieldExprs.length);
-    this.fieldExprs.push({
-      kind: 'array',
+    const expr = {
+      kind: 'array' as const,
       instanceId,
       type,
-    });
+    };
+    const hash = hashFieldExpr(expr);
+    const existing = this.fieldExprCache.get(hash);
+    if (existing !== undefined) {
+      return existing;
+    }
+    const id = fieldExprId(this.fieldExprs.length);
+    this.fieldExprs.push(expr);
+    this.fieldExprCache.set(hash, id);
     return id;
   }
 
   Broadcast(signal: SigExprId, type: SignalType): FieldExprId {
+    const expr = { kind: 'broadcast' as const, signal, type };
+    const hash = hashFieldExpr(expr);
+    const existing = this.fieldExprCache.get(hash);
+    if (existing !== undefined) {
+      return existing;
+    }
     const id = fieldExprId(this.fieldExprs.length);
-    this.fieldExprs.push({ kind: 'broadcast', signal, type });
+    this.fieldExprs.push(expr);
+    this.fieldExprCache.set(hash, id);
     return id;
   }
 
   ReduceField(field: FieldExprId, op: 'min' | 'max' | 'sum' | 'avg', type: SignalType): SigExprId {
+    const expr = { kind: 'reduce_field' as const, field, op, type };
+    const hash = hashSigExpr(expr);
+    const existing = this.sigExprCache.get(hash);
+    if (existing !== undefined) {
+      return existing;
+    }
     const id = sigExprId(this.sigExprs.length);
-    this.sigExprs.push({ kind: 'reduce_field', field, op, type });
+    this.sigExprs.push(expr);
+    this.sigExprCache.set(hash, id);
     return id;
   }
 
   fieldMap(input: FieldExprId, fn: PureFn, type: SignalType): FieldExprId {
     const instanceId = this.inferFieldInstance(input);
+    const expr = { kind: 'map' as const, input, fn, type, instanceId };
+    const hash = hashFieldExpr(expr);
+    const existing = this.fieldExprCache.get(hash);
+    if (existing !== undefined) {
+      return existing;
+    }
     const id = fieldExprId(this.fieldExprs.length);
-    this.fieldExprs.push({ kind: 'map', input, fn, type, instanceId });
+    this.fieldExprs.push(expr);
+    this.fieldExprCache.set(hash, id);
     return id;
   }
 
   fieldZip(inputs: readonly FieldExprId[], fn: PureFn, type: SignalType): FieldExprId {
     const instanceId = this.inferZipInstance(inputs);
+    const expr = { kind: 'zip' as const, inputs, fn, type, instanceId };
+    const hash = hashFieldExpr(expr);
+    const existing = this.fieldExprCache.get(hash);
+    if (existing !== undefined) {
+      return existing;
+    }
     const id = fieldExprId(this.fieldExprs.length);
-    this.fieldExprs.push({ kind: 'zip', inputs, fn, type, instanceId });
+    this.fieldExprs.push(expr);
+    this.fieldExprCache.set(hash, id);
     return id;
   }
 
@@ -316,8 +433,15 @@ export class IRBuilderImpl implements IRBuilder {
     type: SignalType
   ): FieldExprId {
     const instanceId = this.inferFieldInstance(field);
+    const expr = { kind: 'zipSig' as const, field, signals, fn, type, instanceId };
+    const hash = hashFieldExpr(expr);
+    const existing = this.fieldExprCache.get(hash);
+    if (existing !== undefined) {
+      return existing;
+    }
     const id = fieldExprId(this.fieldExprs.length);
-    this.fieldExprs.push({ kind: 'zipSig', field, signals, fn, type, instanceId });
+    this.fieldExprs.push(expr);
+    this.fieldExprCache.set(hash, id);
     return id;
   }
 
@@ -326,8 +450,15 @@ export class IRBuilderImpl implements IRBuilder {
     operation: 'tangent' | 'arcLength',
     type: SignalType
   ): FieldExprId {
+    const expr = { kind: 'pathDerivative' as const, input, operation, type };
+    const hash = hashFieldExpr(expr);
+    const existing = this.fieldExprCache.get(hash);
+    if (existing !== undefined) {
+      return existing;
+    }
     const id = fieldExprId(this.fieldExprs.length);
-    this.fieldExprs.push({ kind: 'pathDerivative', input, operation, type });
+    this.fieldExprs.push(expr);
+    this.fieldExprCache.set(hash, id);
     return id;
   }
 
@@ -407,10 +538,16 @@ export class IRBuilderImpl implements IRBuilder {
     type: SignalType
   ): FieldExprId {
     // For combining fields, we use zip with appropriate combine function
-    // inputs are already FieldExprId[]
     const fn: PureFn = { kind: 'kernel', name: `combine_${mode}` };
+    const expr = { kind: 'zip' as const, inputs, fn, type };
+    const hash = hashFieldExpr(expr);
+    const existing = this.fieldExprCache.get(hash);
+    if (existing !== undefined) {
+      return existing;
+    }
     const id = fieldExprId(this.fieldExprs.length);
-    this.fieldExprs.push({ kind: 'zip', inputs, fn, type });
+    this.fieldExprs.push(expr);
+    this.fieldExprCache.set(hash, id);
     return id;
   }
 
@@ -419,14 +556,28 @@ export class IRBuilderImpl implements IRBuilder {
   // =========================================================================
 
   eventPulse(source: 'InfiniteTimeRoot'): EventExprId {
+    const expr = { kind: 'pulse' as const, source: 'timeRoot' as const };
+    const hash = hashEventExpr(expr);
+    const existing = this.eventExprCache.get(hash);
+    if (existing !== undefined) {
+      return existing;
+    }
     const id = eventExprId(this.eventExprs.length);
-    this.eventExprs.push({ kind: 'pulse', source: 'timeRoot' });
+    this.eventExprs.push(expr);
+    this.eventExprCache.set(hash, id);
     return id;
   }
 
   eventWrap(signal: SigExprId): EventExprId {
+    const expr = { kind: 'wrap' as const, signal };
+    const hash = hashEventExpr(expr);
+    const existing = this.eventExprCache.get(hash);
+    if (existing !== undefined) {
+      return existing;
+    }
     const id = eventExprId(this.eventExprs.length);
-    this.eventExprs.push({ kind: 'wrap', signal });
+    this.eventExprs.push(expr);
+    this.eventExprCache.set(hash, id);
     return id;
   }
 
@@ -435,10 +586,17 @@ export class IRBuilderImpl implements IRBuilder {
     mode: 'any' | 'all' | 'merge' | 'last',
     _type?: SignalType
   ): EventExprId {
-    const id = eventExprId(this.eventExprs.length);
     // Map 'merge' and 'last' to underlying event combine modes
     const underlyingMode = mode === 'merge' || mode === 'last' ? 'any' : mode;
-    this.eventExprs.push({ kind: 'combine', events, mode: underlyingMode as 'any' | 'all' });
+    const expr = { kind: 'combine' as const, events, mode: underlyingMode as 'any' | 'all' };
+    const hash = hashEventExpr(expr);
+    const existing = this.eventExprCache.get(hash);
+    if (existing !== undefined) {
+      return existing;
+    }
+    const id = eventExprId(this.eventExprs.length);
+    this.eventExprs.push(expr);
+    this.eventExprCache.set(hash, id);
     return id;
   }
 
@@ -447,8 +605,15 @@ export class IRBuilderImpl implements IRBuilder {
    * Used as a default when an event input is optional and not connected.
    */
   eventNever(): EventExprId {
+    const expr = { kind: 'never' as const };
+    const hash = hashEventExpr(expr);
+    const existing = this.eventExprCache.get(hash);
+    if (existing !== undefined) {
+      return existing;
+    }
     const id = eventExprId(this.eventExprs.length);
-    this.eventExprs.push({ kind: 'never' });
+    this.eventExprs.push(expr);
+    this.eventExprCache.set(hash, id);
     return id;
   }
 
@@ -690,14 +855,29 @@ export class IRBuilderImpl implements IRBuilder {
   }
 
   sigStateRead(stateSlot: StateSlotId, type: SignalType): SigExprId {
+    const expr = { kind: 'stateRead' as const, stateSlot, type };
+    const hash = hashSigExpr(expr);
+    const existing = this.sigExprCache.get(hash);
+    if (existing !== undefined) {
+      return existing;
+    }
     const id = sigExprId(this.sigExprs.length);
-    this.sigExprs.push({ kind: 'stateRead', stateSlot, type });
+    this.sigExprs.push(expr);
+    this.sigExprCache.set(hash, id);
     return id;
   }
 
   sigEventRead(eventSlot: EventSlotId, type: SignalType): SigExprId {
+    // EventRead: produces a signal that is 1.0 on frames when the event fires, 0.0 otherwise
+    const expr = { kind: 'eventRead' as const, eventSlot, type };
+    const hash = hashSigExpr(expr);
+    const existing = this.sigExprCache.get(hash);
+    if (existing !== undefined) {
+      return existing;
+    }
     const id = sigExprId(this.sigExprs.length);
-    this.sigExprs.push({ kind: 'eventRead', eventSlot, type });
+    this.sigExprs.push(expr);
+    this.sigExprCache.set(hash, id);
     return id;
   }
 
@@ -706,8 +886,15 @@ export class IRBuilderImpl implements IRBuilder {
   }
 
   fieldStateRead(stateSlot: StateSlotId, instanceId: InstanceId, type: SignalType): FieldExprId {
+    const expr = { kind: 'stateRead' as const, stateSlot, instanceId, type };
+    const hash = hashFieldExpr(expr);
+    const existing = this.fieldExprCache.get(hash);
+    if (existing !== undefined) {
+      return existing;
+    }
     const id = fieldExprId(this.fieldExprs.length);
-    this.fieldExprs.push({ kind: 'stateRead', stateSlot, instanceId, type });
+    this.fieldExprs.push(expr);
+    this.fieldExprCache.set(hash, id);
     return id;
   }
 
@@ -907,6 +1094,24 @@ export class IRBuilderImpl implements IRBuilder {
     }
     return this.timeModel;
   }
+}
+
+// =============================================================================
+// Hash-consing utility functions (I13)
+// =============================================================================
+// JSON.stringify is sufficient because all expression fields are readonly primitives/arrays
+// No circular references, no functions, deterministic order
+
+function hashSigExpr(expr: SigExpr): string {
+  return JSON.stringify(expr);
+}
+
+function hashFieldExpr(expr: FieldExpr): string {
+  return JSON.stringify(expr);
+}
+
+function hashEventExpr(expr: EventExpr): string {
+  return JSON.stringify(expr);
 }
 
 /**
