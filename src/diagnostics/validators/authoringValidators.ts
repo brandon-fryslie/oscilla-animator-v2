@@ -15,7 +15,7 @@
  */
 
 import type { Patch } from '../../graph';
-import type { Diagnostic } from '../types';
+import type { Diagnostic, DiagnosticAction } from '../types';
 import { generateDiagnosticId } from '../diagnosticId';
 import { validateDisplayNameUniqueness } from '../../core/canonical-name';
 
@@ -99,6 +99,13 @@ function validateTimeRoot(patch: Patch, patchRevision: number): Diagnostic[] {
           lastSeenAt: Date.now(),
           occurrenceCount: 1,
         },
+        actions: [
+          {
+            kind: 'createTimeRoot',
+            label: 'Add InfiniteTimeRoot',
+            timeRootKind: 'Infinite',
+          },
+        ],
       },
     ];
   }
@@ -194,6 +201,18 @@ function validateConnectivity(patch: Patch, patchRevision: number): Diagnostic[]
             lastSeenAt: Date.now(),
             occurrenceCount: 1,
           },
+          actions: [
+            {
+              kind: 'goToTarget',
+              label: 'Go to Block',
+              target: { kind: 'block', blockId },
+            },
+            {
+              kind: 'removeBlock',
+              label: 'Remove Block',
+              blockId,
+            },
+          ],
         });
       } else if (isRenderSink && !hasIncoming) {
         // Render sink needs at least one incoming connection
@@ -214,6 +233,18 @@ function validateConnectivity(patch: Patch, patchRevision: number): Diagnostic[]
             lastSeenAt: Date.now(),
             occurrenceCount: 1,
           },
+          actions: [
+            {
+              kind: 'goToTarget',
+              label: 'Go to Block',
+              target: { kind: 'block', blockId },
+            },
+            {
+              kind: 'removeBlock',
+              label: 'Remove Block',
+              blockId,
+            },
+          ],
         });
       } else if (!isTimeRoot && !isRenderSink) {
         // Regular block with no connections at all
@@ -234,6 +265,18 @@ function validateConnectivity(patch: Patch, patchRevision: number): Diagnostic[]
             lastSeenAt: Date.now(),
             occurrenceCount: 1,
           },
+          actions: [
+            {
+              kind: 'goToTarget',
+              label: 'Go to Block',
+              target: { kind: 'block', blockId },
+            },
+            {
+              kind: 'removeBlock',
+              label: 'Remove Block',
+              blockId,
+            },
+          ],
         });
       }
     }
