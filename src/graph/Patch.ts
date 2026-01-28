@@ -51,51 +51,70 @@ import { requireBlockDef } from '../blocks/registry';
 import { detectCanonicalNameCollisions, normalizeCanonicalName } from '../core/canonical-name';
 
 // =============================================================================
-// Adapter Attachments (Sprint 2026-01-27)
+// Lens Attachments (Sprint 2: Lenses System Redesign - 2026-01-27)
 // =============================================================================
 
 /**
- * Adapter attachment on an input port.
+ * Lens attachment on a port.
  *
- * Describes a type conversion applied to a specific incoming connection.
- * Adapters are stored on the input port (not the edge) because they conceptually
- * belong to the receiving port - they adapt incoming values to match the port's
- * expected type.
+ * Describes a signal interpretation/transformation applied to a specific connection.
+ * Lenses are stored on ports (not edges) because they conceptually belong to the
+ * receiving or sending port - they interpret signals flowing through that port.
  *
  * Key properties:
- * - Per-port-per-connection: A port can have different adapters for each source
- * - Addressable: `v1:blocks.{block}.inputs.{port}.adapters.{id}`
- * - Normalized to blocks: During normalization, adapters become real blocks
+ * - Per-port-per-connection: A port can have different lenses for each connection
+ * - Addressable: `v1:blocks.{block}.inputs.{port}.lenses.{id}` (inputs)
+ *              or `v1:blocks.{block}.outputs.{port}.lenses.{id}` (outputs - future)
+ * - Normalized to blocks: During normalization, lenses become real blocks
  *
- * NOTE: Adapters are stored on the port, NOT as edges.
- * This is intentional - adapters belong to the port, not the connection.
+ * Lenses vs Type Checking (Sprint 2 Redesign):
+ * - Lenses: User explicitly controls signal transformation (this system)
+ * - Type Checking: Compiler validates type compatibility (separate system)
+ * - These are completely independent - no fallback logic between them
+ *
+ * NOTE: Lenses are stored on the port, NOT as edges.
+ * This is intentional - lenses belong to the port, not the connection.
  */
-export interface AdapterAttachment {
+export interface LensAttachment {
   /**
-   * Unique ID within this port's adapters.
+   * Unique ID within this port's lenses.
    * Generated deterministically from source address.
-   * Used in resource addressing: `my_block.inputs.count.adapters.{id}`
+   * Used in resource addressing: `my_block.inputs.count.lenses.{id}`
    */
   readonly id: string;
 
   /**
-   * The adapter block type to insert.
-   * Must be a registered adapter block (e.g., 'Adapter_DegreesToRadians').
+   * The lens block type to insert.
+   * Must be a registered lens block (e.g., 'Adapter_DegreesToRadians', 'Lens_Scale').
+   *
+   * NOTE: Adapters are a category of lens (type conversion lenses).
+   * Future lenses may include scaling, quantization, color space transforms, etc.
    */
-  readonly adapterType: string;
+  readonly lensType: string;
 
   /**
-   * Canonical address of the source output this adapter applies to.
+   * Canonical address of the source output this lens applies to.
    * Format: "v1:blocks.{block}.outputs.{port}"
    *
-   * This identifies which incoming connection the adapter transforms.
-   * A port can have multiple adapters if it has multiple incoming connections.
+   * This identifies which incoming connection the lens transforms.
+   * A port can have multiple lenses if it has multiple incoming connections.
    */
   readonly sourceAddress: string;
 
   /**
-   * Sort key for deterministic ordering when multiple adapters exist.
-   * Adapters are processed in sortKey order during normalization.
+   * Parameters for parameterized lenses (e.g., scale factor, quantization bits).
+   * Optional - only for lenses that accept parameters.
+   *
+   * Examples:
+   * - Scaling lens: { scale: 0.5 }
+   * - Quantization lens: { bits: 8 }
+   * - Color space lens: { targetSpace: 'srgb' }
+   */
+  readonly params?: Record<string, unknown>;
+
+  /**
+   * Sort key for deterministic ordering when multiple lenses exist.
+   * Lenses are processed in sortKey order during normalization.
    */
   readonly sortKey: number;
 }
@@ -150,10 +169,11 @@ export interface VarargConnection {
  * - Varargs inputs use varargConnections array (bypass combine)
  * - A port is EITHER normal OR vararg, never both
  *
- * ADAPTERS EXTENSION (2026-01-27):
- * - Adapters are attached per-port-per-connection
- * - Each adapter specifies which source connection it transforms
- * - Adapters are expanded to blocks during normalization
+ * LENSES EXTENSION (Sprint 2: 2026-01-27):
+ * - Lenses are attached per-port-per-connection
+ * - Each lens specifies which source connection it transforms
+ * - Lenses are expanded to blocks during normalization (Pass 2)
+ * - Lenses are independent of type checking (no auto-insertion)
  */
 export interface InputPort {
   /** Port ID (slotId from registry) */
@@ -175,24 +195,43 @@ export interface InputPort {
   readonly varargConnections?: readonly VarargConnection[];
 
   /**
-   * Adapter attachments for incoming connections (2026-01-27).
+   * Lens attachments for incoming connections (Sprint 2: 2026-01-27).
    *
-   * Each adapter specifies a type conversion for a specific source connection.
-   * Adapters are keyed by source address - one adapter per (port, source) pair.
+   * Each lens specifies a signal transformation for a specific source connection.
+   * Lenses are keyed by source address - one lens per (port, source) pair.
    *
-   * During normalization, adapters are expanded to real adapter blocks.
-   * The adapter ID is used for resource addressing:
-   *   `v1:blocks.{block}.inputs.{port}.adapters.{id}`
+   * During normalization, lenses are expanded to real lens blocks.
+   * The lens ID is used for resource addressing:
+   *   `v1:blocks.{block}.inputs.{port}.lenses.{id}`
+   *
+   * NOTE: Lenses are user-controlled transformations, independent of type checking.
    */
-  readonly adapters?: readonly AdapterAttachment[];
+  readonly lenses?: readonly LensAttachment[];
 }
 
 /**
  * Output port - a first-class object on a block.
+ *
+ * LENSES EXTENSION (Sprint 2: 2026-01-27 - Future-proofing):
+ * - Output lenses reserved for future use
+ * - Will allow transforming outgoing signals (e.g., scaling, normalization)
+ * - Address format: `v1:blocks.{block}.outputs.{port}.lenses.{id}`
+ * - Currently unused but designed in to avoid breaking changes later
  */
 export interface OutputPort {
   /** Port ID (slotId from registry) */
   readonly id: string;
+
+  /**
+   * Lens attachments for outgoing connections (FUTURE - Sprint 2 design).
+   *
+   * Not yet implemented, but the interface is defined to support future expansion
+   * without breaking changes to the data model.
+   *
+   * When implemented, output lenses will transform signals before they reach
+   * connected input ports.
+   */
+  readonly lenses?: readonly LensAttachment[];
 }
 
 // =============================================================================

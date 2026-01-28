@@ -90,7 +90,7 @@ export function generateRank(i: number): number {
 }
 
 /**
- * Simple string hash (djb2 variant).
+ * MurmurHash3-inspired 32-bit string hash with good avalanche properties.
  * Pure function - no side effects.
  *
  * @param str - String to hash
@@ -100,11 +100,19 @@ function hashString(str: string): number {
   if (typeof str !== 'string') {
     throw new Error('hashString: str is required string');
   }
-  let hash = 5381;
+  let h = 2166136261; // FNV offset basis
   for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) + hash) ^ str.charCodeAt(i);
+    h ^= str.charCodeAt(i);
+    // FNV-1a multiply (good mixing)
+    h = Math.imul(h, 16777619);
   }
-  return hash >>> 0; // Ensure unsigned
+  // Final avalanche mixing
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
+  return h >>> 0; // Ensure unsigned
 }
 
 /**

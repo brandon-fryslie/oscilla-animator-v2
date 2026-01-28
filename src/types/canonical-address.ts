@@ -24,7 +24,7 @@ export type CanonicalAddress =
   | OutputAddress
   | InputAddress
   | ParamAddress
-  | AdapterAddress;
+  | LensAddress;
 
 /**
  * Address to a block.
@@ -70,18 +70,24 @@ export interface ParamAddress {
 }
 
 /**
- * Address to an adapter on an input port.
- * Format: `v1:blocks.{canonical_name}.inputs.{port_id}.adapters.{adapter_id}`
+ * Address to a lens on an input port.
+ * Format: `v1:blocks.{canonical_name}.inputs.{port_id}.lenses.{lens_id}`
  *
- * Adapters are per-port-per-connection type converters. Each adapter has a unique ID
+ * Lenses are per-port-per-connection signal transformations. Each lens has a unique ID
  * within its port, generated deterministically from the source address it transforms.
+ *
+ * Sprint 2 Redesign (2026-01-27):
+ * - Renamed from AdapterAddress to LensAddress
+ * - Path changed from `.adapters.` to `.lenses.`
+ * - Lenses are user-controlled transformations, independent of type checking
+ * - Future: Output port lenses will use `.outputs.{port_id}.lenses.{lens_id}`
  */
-export interface AdapterAddress {
-  readonly kind: 'adapter';
+export interface LensAddress {
+  readonly kind: 'lens';
   readonly blockId: BlockId;
   readonly canonicalName: string;
   readonly portId: PortId;
-  readonly adapterId: string;
+  readonly lensId: string;
 }
 
 // =============================================================================
@@ -117,10 +123,10 @@ export function isParamAddress(addr: CanonicalAddress): addr is ParamAddress {
 }
 
 /**
- * Type guard for AdapterAddress.
+ * Type guard for LensAddress.
  */
-export function isAdapterAddress(addr: CanonicalAddress): addr is AdapterAddress {
-  return addr.kind === 'adapter';
+export function isLensAddress(addr: CanonicalAddress): addr is LensAddress {
+  return addr.kind === 'lens';
 }
 
 // =============================================================================
@@ -141,7 +147,7 @@ const CURRENT_VERSION = 'v1';
  * - Output: `v1:blocks.my_circle.outputs.radius`
  * - Input: `v1:blocks.my_circle.inputs.x`
  * - Param: `v1:blocks.my_circle.params.size`
- * - Adapter: `v1:blocks.my_circle.inputs.x.adapters.adapter_0`
+ * - Lens: `v1:blocks.my_circle.inputs.x.lenses.lens_0`
  *
  * SINGLE SOURCE OF TRUTH for address string format.
  *
@@ -160,8 +166,8 @@ export function addressToString(addr: CanonicalAddress): string {
       return `${base}.inputs.${addr.portId}`;
     case 'param':
       return `${base}.params.${addr.paramId}`;
-    case 'adapter':
-      return `${base}.inputs.${addr.portId}.adapters.${addr.adapterId}`;
+    case 'lens':
+      return `${base}.inputs.${addr.portId}.lenses.${addr.lensId}`;
   }
 }
 
@@ -171,7 +177,7 @@ export function addressToString(addr: CanonicalAddress): string {
  * Supports formats:
  * - `v1:blocks.{canonical_name}` (block)
  * - `v1:blocks.{canonical_name}.{category}.{id}` (output, input, param)
- * - `v1:blocks.{canonical_name}.inputs.{port_id}.adapters.{adapter_id}` (adapter)
+ * - `v1:blocks.{canonical_name}.inputs.{port_id}.lenses.{lens_id}` (lens)
  *
  * Returns null for:
  * - Invalid syntax
@@ -242,20 +248,20 @@ export function parseAddress(str: string): CanonicalAddress | null {
     }
   }
 
-  // Adapter address: "blocks.{canonical_name}.inputs.{port_id}.adapters.{adapter_id}"
+  // Lens address: "blocks.{canonical_name}.inputs.{port_id}.lenses.{lens_id}"
   if (parts.length === 5) {
-    const [canonicalName, category, portId, adaptersLiteral, adapterId] = parts;
-    if (!canonicalName || !category || !portId || !adaptersLiteral || !adapterId) return null;
+    const [canonicalName, category, portId, lensesLiteral, lensId] = parts;
+    if (!canonicalName || !category || !portId || !lensesLiteral || !lensId) return null;
 
-    // Must be inputs.{port_id}.adapters.{adapter_id}
-    if (category !== 'inputs' || adaptersLiteral !== 'adapters') return null;
+    // Must be inputs.{port_id}.lenses.{lens_id}
+    if (category !== 'inputs' || lensesLiteral !== 'lenses') return null;
 
     return {
-      kind: 'adapter',
+      kind: 'lens',
       blockId: '' as BlockId,
       canonicalName,
       portId: portId as PortId,
-      adapterId,
+      lensId,
     };
   }
 
