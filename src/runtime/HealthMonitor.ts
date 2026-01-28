@@ -18,7 +18,7 @@
 import type { RuntimeState } from './RuntimeState';
 import type { BufferPool } from './BufferPool';
 import type { EventHub } from '../events/EventHub';
-import { createDiagnostic } from '../diagnostics/types';
+// import { createDiagnostic } from '../diagnostics/types';
 import { generateDiagnosticId } from '../diagnostics/diagnosticId';
 import { DIAGNOSTICS_CONFIG } from '../diagnostics/config';
 

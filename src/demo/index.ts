@@ -15,6 +15,7 @@ export { patchShapeKaleidoscope } from './shape-kaleidoscope';
 export { patchPerspectiveCamera } from './perspective-camera';
 export { patchFeedbackRotation } from './feedback-rotation';
 export { patchFeedbackSimple } from './feedback-simple';
+export { patchPathFieldDemo } from './path-field-demo';
 
 import { patchGoldenSpiral } from './golden-spiral';
 import { patchDomainTest } from './domain-test';
@@ -25,6 +26,7 @@ import { patchShapeKaleidoscope } from './shape-kaleidoscope';
 import { patchPerspectiveCamera } from './perspective-camera';
 import { patchFeedbackRotation } from './feedback-rotation';
 import { patchFeedbackSimple } from './feedback-simple';
+import { patchPathFieldDemo } from './path-field-demo';
 import type { PatchBuilder } from './types';
 
 export const patches: { name: string; builder: PatchBuilder }[] = [
@@ -37,6 +39,7 @@ export const patches: { name: string; builder: PatchBuilder }[] = [
   { name: 'Perspective Camera', builder: patchPerspectiveCamera },
   { name: 'Feedback Rotation', builder: patchFeedbackRotation },
   { name: 'Feedback Simple', builder: patchFeedbackSimple },
+  { name: 'Path Field Demo', builder: patchPathFieldDemo },
 ];
 
 export const DEFAULT_PATCH_INDEX = 0; // Golden Spiral

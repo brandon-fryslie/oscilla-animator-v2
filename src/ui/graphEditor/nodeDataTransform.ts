@@ -156,7 +156,7 @@ export function createNodeFromBlockLike(
     inputs.push(
       createPortData(
         inputId,
-        inputDef.label,
+        inputDef.label || inputId, // Fallback to inputId if label undefined
         inputDef.type,
         isConnected,
         defaultSource,
@@ -173,20 +173,21 @@ export function createNodeFromBlockLike(
     const isConnected = connection !== undefined;
 
     outputs.push(
-      createPortData(outputId, outputDef.label, outputDef.type, isConnected, undefined, connection)
+      createPortData(
+        outputId,
+        outputDef.label || outputId, // Fallback to outputId if label undefined
+        outputDef.type,
+        isConnected,
+        undefined,
+        connection
+      )
     );
   }
 
-  // Build params (if block has params exposed in UI)
+  // Build params (blocks don't expose params in BlockDef directly - they're in the block instance)
+  // For now, we'll skip params rendering unless explicitly needed
   const params: ParamData[] = [];
-  for (const [paramId, paramDef] of Object.entries(blockDef.params || {})) {
-    params.push({
-      id: paramId,
-      label: paramDef.label,
-      value: block.params[paramId] ?? paramDef.defaultValue,
-      hint: (paramDef as { uiHint?: UIControlHint }).uiHint,
-    });
-  }
+  // TODO: If param editing is needed, extract param metadata from block.params
 
   return {
     id: block.id,
@@ -231,14 +232,14 @@ export function reconcileNodesFromAdapter(
   adapter: GraphDataAdapter,
   currentNodes: Node[],
   getBlockPosition: (blockId: string) => { x: number; y: number } | undefined
-): { nodes: UnifiedNode[]; edges: ReactFlowEdge[] } {
+): { nodes: Node[]; edges: ReactFlowEdge[] } {
   // Build map of existing nodes by ID for fast lookup
   const existingNodeMap = new Map<string, Node>();
   for (const node of currentNodes) {
     existingNodeMap.set(node.id, node);
   }
 
-  const nodes: UnifiedNode[] = [];
+  const nodes: Node[] = [];
   const patchBlockIds = new Set<string>();
 
   for (const [blockId, block] of adapter.blocks) {

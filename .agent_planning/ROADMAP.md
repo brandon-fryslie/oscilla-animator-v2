@@ -1,10 +1,10 @@
 # Oscilla Animator v2 - Project Roadmap
 
-Last updated: 2026-01-27-170700
+Last updated: 2026-01-27-171000
 
 ---
 
-## 🟢 Phase 1: Core Foundation [ACTIVE] (6/12 completed)
+## 🟢 Phase 1: Core Foundation [ACTIVE] (6/13 completed)
 
 **Goal:** Implement the core compilation pipeline and runtime system according to the unified spec
 
@@ -144,6 +144,24 @@ Last updated: 2026-01-27-170700
   - Create new instance blocks (CircleInstance, ShapeInstance)
   - Update all field operations to use instance context
   - Update compiler passes and runtime
+
+#### 📋 placement-basis [PLANNING]
+- **State:** PLANNING
+- **Epic:** Gauge Invariant Continuity
+- **Spec:** `design-docs/CANONICAL-oscilla-v2.5-20260109/topics/11-continuity-system.md` (I2), `topics/17-layout-system.md`
+- **Description:** PlacementBasis abstraction for stable per-element placement coordinates (uv, rank, seed) independent of element count N. Eliminates velocity snaps when element count changes.
+- **Planning Files:** `.agent_planning/placement-basis/`
+- **Status Note:** 7-sprint plan complete. Enables gauge-invariant layouts per I2.
+- **Key Deliverables:**
+  - PlacementBasis types and storage (Sprint 1, HIGH confidence)
+  - Generation functions (Halton, rank, seed) and materialization (Sprint 2, HIGH)
+  - UV-based layout kernels (circleLayoutUV, lineLayoutUV, gridLayoutUV) (Sprint 3, HIGH)
+  - Layout block migration (Sprint 4, MEDIUM - migration strategy TBD)
+  - Compiler validation forbidding index intrinsics in layouts (Sprint 5, MEDIUM)
+  - Hot-swap persistence (Sprint 6, MEDIUM)
+  - Velocity continuity tests (Sprint 7, HIGH)
+- **Problem Solved:** Current layouts use `normalizedIndex(i, N)` which causes velocity discontinuities when N changes. PlacementBasis provides stable per-element coordinates that persist across count changes.
+- **Origin:** `.agent_planning/placement-basis/HANDOFF.md`, ChatGPT conversation on GaugeInvariantLayouts
 
 #### ✅ continuity-crossfade [COMPLETED]
 - **State:** COMPLETED

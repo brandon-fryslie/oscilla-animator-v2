@@ -31,7 +31,7 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import type { GraphDataAdapter } from './types';
 import { GraphEditorProvider, type GraphEditorContextValue } from './GraphEditorContext';
-import { reconcileNodesFromAdapter, type UnifiedNode } from './nodeDataTransform';
+import { reconcileNodesFromAdapter } from './nodeDataTransform';
 import { UnifiedNode as UnifiedNodeComponent } from './UnifiedNode';
 import { getLayoutedElements } from '../reactFlowEditor/layout';
 import { validateConnection } from '../reactFlowEditor/typeValidation';
@@ -126,8 +126,8 @@ export const GraphEditorCoreInner = observer(
       // Merge features with defaults
       const mergedFeatures = useMemo(() => ({ ...DEFAULT_FEATURES, ...features }), [features]);
 
-      // ReactFlow state
-      const [nodes, setNodes, onNodesChange] = useNodesState<UnifiedNode>([]);
+      // ReactFlow state - remove generic to avoid type mismatch
+      const [nodes, setNodes, onNodesChange] = useNodesState([]);
       const [edges, setEdges, onEdgesChange] = useEdgesState([]);
       const [isLayouting, setIsLayouting] = useState(false);
       const { fitView } = useReactFlow();
@@ -253,7 +253,8 @@ export const GraphEditorCoreInner = observer(
       const handleNodeClick = useCallback(
         (_event: React.MouseEvent, node: Node) => {
           if (selection) {
-            selection.selectBlock(node.id);
+            // Cast to any to handle both BlockId and InternalBlockId
+            selection.selectBlock(node.id as any);
           }
         },
         [selection]
