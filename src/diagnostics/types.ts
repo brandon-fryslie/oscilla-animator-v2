@@ -168,21 +168,170 @@ export type DiagnosticPayload =
   | undefined;
 
 // =============================================================================
-// Diagnostic Actions (Deferred to Sprint 2+)
+// Diagnostic Actions
 // =============================================================================
 
 /**
- * DiagnosticAction represents an automated or semi-automated fix.
- * Actions are idempotent (safe to replay).
- *
- * Sprint 1: No actions implemented.
- * Sprint 2+: Quick fixes like "Insert Adapter", "Add TimeRoot", etc.
+ * Reference to a specific port on a block.
+ * Used by actions that target ports (e.g., addAdapter).
  */
-export interface DiagnosticAction {
-  readonly id: string; // Unique action ID (stable across re-runs)
-  readonly label: string; // User-facing label (e.g., "Insert Adapter")
-  readonly kind: 'automated' | 'guided'; // Automated = one-click, guided = multi-step
-  readonly payload?: unknown; // Action-specific data (e.g., adapter config)
+export interface PortTargetRef {
+  readonly blockId: string;
+  readonly portId: string;
+  readonly portKind: 'input' | 'output';
+}
+
+/**
+ * DiagnosticAction represents an automated or user-initiated fix for a diagnostic issue.
+ * 
+ * Actions follow the Action Determinism Contract:
+ * - Serializable: Can be sent over network or saved to disk
+ * - Replayable: Same action + same state = same result
+ * - Safe: All references by ID, not mutable object pointers
+ * 
+ * Each action variant must specify:
+ * - Exact targets (by ID)
+ * - Exact operation parameters
+ * - User-facing label for UI buttons
+ * 
+ * @see design-docs/.../07-diagnostics-system.md:368-379 for spec
+ * @see design-docs/.../07-diagnostics-system.md:835-854 for Action Determinism Contract
+ */
+export type DiagnosticAction =
+  | GoToTargetAction
+  | InsertBlockAction
+  | RemoveBlockAction
+  | AddAdapterAction
+  | CreateTimeRootAction
+  | MuteDiagnosticAction
+  | OpenDocsAction;
+
+/**
+ * Navigate to a specific target in the UI (block, port, edge, etc.)
+ * Used for "jump to problem" functionality.
+ * 
+ * @example
+ * { kind: 'goToTarget', label: 'Go to Block', target: { kind: 'block', blockId: 'abc123' } }
+ */
+export interface GoToTargetAction {
+  readonly kind: 'goToTarget';
+  readonly label: string;
+  readonly target: TargetRef;
+}
+
+/**
+ * Insert a new block into the patch.
+ * Used for adding missing blocks (e.g., TimeRoot, Adapter).
+ * 
+ * @example
+ * { kind: 'insertBlock', label: 'Add InfiniteTimeRoot', blockType: 'InfiniteTimeRoot' }
+ * @example
+ * { kind: 'insertBlock', label: 'Insert After', blockType: 'Gain', position: 'after', nearBlockId: 'abc123' }
+ */
+export interface InsertBlockAction {
+  readonly kind: 'insertBlock';
+  readonly label: string;
+  readonly blockType: string;
+  readonly position?: 'before' | 'after';
+  readonly nearBlockId?: string;
+}
+
+/**
+ * Remove a block from the patch.
+ * Used for cleaning up disconnected or problematic blocks.
+ * 
+ * @example
+ * { kind: 'removeBlock', label: 'Remove Disconnected Block', blockId: 'abc123' }
+ */
+export interface RemoveBlockAction {
+  readonly kind: 'removeBlock';
+  readonly label: string;
+  readonly blockId: string;
+}
+
+/**
+ * Add an adapter block between two ports to fix type mismatches.
+ * Used for automatic type coercion (e.g., Signal → Value, Field → Signal).
+ * 
+ * @example
+ * { kind: 'addAdapter', label: 'Insert Adapter', fromPort: { blockId: 'a', portId: 'out', portKind: 'output' }, adapterType: 'SignalToValue' }
+ */
+export interface AddAdapterAction {
+  readonly kind: 'addAdapter';
+  readonly label: string;
+  readonly fromPort: PortTargetRef;
+  readonly adapterType: string;
+}
+
+/**
+ * Create a time root block (required for patch execution).
+ * Used when patch is missing a TimeRoot.
+ * 
+ * @example
+ * { kind: 'createTimeRoot', label: 'Add InfiniteTimeRoot', timeRootKind: 'Infinite' }
+ */
+export interface CreateTimeRootAction {
+  readonly kind: 'createTimeRoot';
+  readonly label: string;
+  readonly timeRootKind: 'Infinite';
+}
+
+/**
+ * Mute/hide a specific diagnostic (user dismissal).
+ * Used when user wants to suppress warnings they consider acceptable.
+ * 
+ * @example
+ * { kind: 'muteDiagnostic', label: 'Mute Warning', diagnosticId: 'diag-xyz' }
+ */
+export interface MuteDiagnosticAction {
+  readonly kind: 'muteDiagnostic';
+  readonly label: string;
+  readonly diagnosticId: string;
+}
+
+/**
+ * Open documentation in external browser or help panel.
+ * Used for "Learn More" links on diagnostics.
+ * 
+ * @example
+ * { kind: 'openDocs', label: 'Learn More', docUrl: 'https://docs.example.com/signals' }
+ */
+export interface OpenDocsAction {
+  readonly kind: 'openDocs';
+  readonly label: string;
+  readonly docUrl: string;
+}
+
+// =============================================================================
+// Type Guards for DiagnosticAction
+// =============================================================================
+
+export function isGoToTargetAction(action: DiagnosticAction): action is GoToTargetAction {
+  return action.kind === 'goToTarget';
+}
+
+export function isInsertBlockAction(action: DiagnosticAction): action is InsertBlockAction {
+  return action.kind === 'insertBlock';
+}
+
+export function isRemoveBlockAction(action: DiagnosticAction): action is RemoveBlockAction {
+  return action.kind === 'removeBlock';
+}
+
+export function isAddAdapterAction(action: DiagnosticAction): action is AddAdapterAction {
+  return action.kind === 'addAdapter';
+}
+
+export function isCreateTimeRootAction(action: DiagnosticAction): action is CreateTimeRootAction {
+  return action.kind === 'createTimeRoot';
+}
+
+export function isMuteDiagnosticAction(action: DiagnosticAction): action is MuteDiagnosticAction {
+  return action.kind === 'muteDiagnostic';
+}
+
+export function isOpenDocsAction(action: DiagnosticAction): action is OpenDocsAction {
+  return action.kind === 'openDocs';
 }
 
 // =============================================================================
