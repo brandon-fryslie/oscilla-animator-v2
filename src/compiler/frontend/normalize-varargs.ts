@@ -15,8 +15,8 @@
  * The patch is immutable; errors are collected in the error list.
  */
 
-import type { Patch } from '../Patch';
-import { AddressRegistry } from '../address-registry';
+import type { Patch } from '../../graph/Patch';
+import { AddressRegistry } from '../../graph/address-registry';
 import { isVarargInput, requireBlockDef, type VarargConstraint } from '../../blocks/registry';
 import { addressToString } from '../../types/canonical-address';
 

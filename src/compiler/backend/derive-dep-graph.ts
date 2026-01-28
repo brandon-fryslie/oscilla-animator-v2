@@ -19,7 +19,7 @@ import type {
   DepEdge,
   DepGraphWithTimeModel,
 } from "../ir/patches";
-import type { BlockIndex } from "../../graph/passes/pass3-indexing";
+import type { BlockIndex } from "../frontend/normalize-indexing";
 
 /**
  * Error types emitted by Pass 4.

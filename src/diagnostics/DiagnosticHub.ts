@@ -437,7 +437,7 @@ export class DiagnosticHub {
    * @returns Diagnostics with that severity
    */
   getBySeverity(severity: Diagnostic['severity']): Diagnostic[] {
-    return this.filter(this.getActive(), { severity });
+    return this.filter(this.getActive(), { severity: [severity] });
   }
 
   /**
@@ -447,7 +447,7 @@ export class DiagnosticHub {
    * @returns Diagnostics in that domain
    */
   getByDomain(domain: Diagnostic['domain']): Diagnostic[] {
-    return this.filter(this.getActive(), { domain });
+    return this.filter(this.getActive(), { domain: [domain] });
   }
 
   /**

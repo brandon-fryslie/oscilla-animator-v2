@@ -41,9 +41,9 @@
 
 import type { BlockId, BlockRole } from '../../types';
 import type { SignalType } from '../../core/canonical-types';
-import type { Block, Edge, Patch, LensAttachment } from '../Patch';
+import type { Block, Edge, Patch, LensAttachment } from '../../graph/Patch';
 import { getBlockDefinition, requireBlockDef } from '../../blocks/registry';
-import { findAdapter } from '../adapters';
+import { findAdapter } from '../../graph/adapters';
 
 /**
  * Check if a block has cardinalityMode: 'preserve'.

@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { pass4Varargs, type VarargError } from '../pass4-varargs';
+import { pass4Varargs, type VarargError } from '../../../compiler/frontend/normalize-varargs';
 import { PatchBuilder } from '../../Patch';
 import { registerBlock, type BlockDef } from '../../../blocks/registry';
 import { addressToString } from '../../../types/canonical-address';

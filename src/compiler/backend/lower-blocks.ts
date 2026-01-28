@@ -13,17 +13,17 @@ import type { InstanceId } from "../ir/Indices";
 import { getBlockDefinition, type LowerCtx, type LowerResult, hasLowerOutputsOnly } from "../../blocks/registry";
 import type { EventHub } from "../../events/EventHub";
 import type { SignalType } from "../../core/canonical-types";
-import type { PortKey } from "./pass1-type-constraints";
+import type { PortKey } from "../frontend/analyze-type-constraints";
 // Multi-Input Blocks Integration
 import {
   type Writer,
   resolveBlockInputs,
-} from "./resolveWriters";
+} from "../passes-v2/resolveWriters";
 import {
   createCombineNode,
   validateCombinePolicy,
   shouldCombine,
-} from "./combine-utils";
+} from "../passes-v2/combine-utils";
 import type { NormalizedEdge } from "../ir/patches";
 
 // Helper to create port key

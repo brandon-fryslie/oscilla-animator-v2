@@ -9,7 +9,7 @@
 // Import the legacy types for now (will be replaced with proper execution node types)
 import type { SigExpr, FieldExpr, EventExpr } from './types';
 import type { SignalType, ResolvedExtent } from '../../core/canonical-types';
-import type { ScheduleIR } from '../passes-v2/pass7-schedule';
+import type { ScheduleIR } from '../backend/schedule-program';
 import type {
   FieldExprId,
   InstanceId,
@@ -144,7 +144,7 @@ export interface FieldSlotEntry {
 
 // ScheduleIR is imported from pass7-schedule.ts and used above
 // Re-export for convenience
-export type { ScheduleIR } from '../passes-v2/pass7-schedule';
+export type { ScheduleIR } from '../backend/schedule-program';
 
 // =============================================================================
 // Execution Tables

@@ -48,7 +48,7 @@
  */
 
 import type {BlockId, PortId, BlockRole, DefaultSource} from '../../types';
-import type {Block, Edge, Patch} from '../Patch';
+import type {Block, Edge, Patch} from '../../graph/Patch';
 import {getBlockDefinition, requireBlockDef, type InputDef} from '../../blocks/registry';
 
 interface DefaultSourceInsertion {

@@ -30,15 +30,16 @@ function findTestSignalOffsets(program: CompiledProgramIR, count = 1): number[] 
   const schedule = program.schedule;
   const signals = program.signalExprs.nodes as readonly SigExpr[];
 
-  // Find evalSig steps that are NOT time signals (InfiniteTimeRoot outputs)
+  // Find evalSig steps that are NOT time signals or const signals
   const evalSigSteps = schedule.steps.filter((s): s is StepEvalSig => s.kind === 'evalSig');
-  const nonTimeSteps = evalSigSteps.filter((step) => {
+  const targetSteps = evalSigSteps.filter((step) => {
     const sig = signals[step.expr as number];
-    return sig && sig.kind !== 'time';
+    // Exclude time and const signals - we want computed values
+    return sig && sig.kind !== 'time' && sig.kind !== 'const';
   });
 
   // Get the last N slots and resolve to offsets
-  const slots = nonTimeSteps.slice(-count).map(s => s.target as number);
+  const slots = targetSteps.slice(-count).map(s => s.target as number);
 
   // Build slot->offset map from slotMeta
   const slotToOffset = new Map<number, number>();
@@ -138,10 +139,10 @@ describe('Noise Block', () => {
     const state = createRuntimeStateFromSession(session, program.slotMeta.length, schedule.stateSlotCount || 0, 0, 0);
     const arena = getTestArena();
 
-    const [slot] = findTestSignalOffsets(program);
+    const [offset] = findTestSignalOffsets(program);
 
     arena.reset(); executeFrame(program, state, arena, 0);
-    const output = state.values.f64[slot];
+    const output = state.values.f64[offset];
 
     // Output should be in [0, 1)
     expect(output).toBeGreaterThanOrEqual(0);
@@ -484,12 +485,11 @@ describe('Normalize Block', () => {
     const state = createRuntimeStateFromSession(session, program.slotMeta.length, schedule.stateSlotCount || 0, 0, 0);
     const arena = getTestArena();
 
-    const evalSigSteps = schedule.steps.filter((s: any) => s.kind === 'evalSig').slice(-3);
-    const slots = evalSigSteps.map((s: any) => s.target);
+    const [xOffset, yOffset, zOffset] = findTestSignalOffsets(program, 3);
 
     arena.reset(); executeFrame(program, state, arena, 0);
 
-    const values = slots.map((slot: number) => state.values.f64[slot]);
+    const values = [state.values.f64[xOffset], state.values.f64[yOffset], state.values.f64[zOffset]];
 
     // Zero vector normalized should produce (0, 0, 0) not NaN
     // Due to epsilon guard, we divide by epsilon instead of zero

@@ -6,7 +6,7 @@
  */
 
 import type { CompiledProgramIR, ValueSlot, FieldSlotEntry } from '../compiler/ir/program';
-import type { ScheduleIR } from '../compiler/passes-v2/pass7-schedule';
+import type { ScheduleIR } from '../compiler/backend/schedule-program';
 import type { Step, InstanceDecl, DomainInstance, StepRender } from '../compiler/ir/types';
 import type { SigExprId, IrInstanceId as InstanceId } from '../types';
 import type { RuntimeState } from './RuntimeState';

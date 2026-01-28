@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { pass2TypeGraph } from '../pass2-types';
-import { pass1TypeConstraints, type TypeResolvedPatch } from '../pass1-type-constraints';
+import { pass2TypeGraph } from '../../frontend/analyze-type-graph';
+import { pass1TypeConstraints, type TypeResolvedPatch } from '../../frontend/analyze-type-constraints';
 import type { NormalizedPatch } from '../../ir/patches';
 import { signalTypeSignal, unitPhase01, unitRadians, unitScalar, FLOAT } from '../../../core/canonical-types';
 import { registerBlock } from '../../../blocks/registry';

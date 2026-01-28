@@ -30,8 +30,8 @@ describe('PatchStore', () => {
       expect(store.blocks.has(id)).toBe(true);
       const block = store.blocks.get(id);
       expect(block?.type).toBe('Oscillator');
-      // Config defaults (mode: 0) are merged with provided params
-      expect(block?.params).toEqual({ mode: 0, frequency: 440 });
+      // Only user-provided params (mode is a port input, not a config param)
+      expect(block?.params).toEqual({ frequency: 440 });
       // displayName is auto-generated when not provided
       expect(block?.displayName).toBe('Oscillator 1');
       expect(block?.domainId).toBe(null);
@@ -89,8 +89,8 @@ describe('PatchStore', () => {
       store.updateBlockParams(id, { frequency: 880 });
 
       const block = store.blocks.get(id);
-      // Includes config defaults (mode: 0) from block definition
-      expect(block?.params).toEqual({ mode: 0, frequency: 880 });
+      // Only user-provided params are stored (mode is a port input, not a config param)
+      expect(block?.params).toEqual({ frequency: 880 });
     });
 
     it('should merge parameters', () => {
@@ -99,8 +99,8 @@ describe('PatchStore', () => {
       store.updateBlockParams(id, { frequency: 880 });
 
       const block = store.blocks.get(id);
-      // Should merge: keep amplitude and config defaults, update frequency
-      expect(block?.params).toEqual({ mode: 0, frequency: 880, amplitude: 1 });
+      // Should merge: keep amplitude, update frequency
+      expect(block?.params).toEqual({ frequency: 880, amplitude: 1 });
     });
 
     it('should throw if block not found', () => {

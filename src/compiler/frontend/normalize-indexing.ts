@@ -51,7 +51,7 @@
  */
 
 import type { BlockId, PortId } from '../../types';
-import type { Block, Edge, Patch } from '../Patch';
+import type { Block, Edge, Patch } from '../../graph/Patch';
 
 // =============================================================================
 // Type Exports

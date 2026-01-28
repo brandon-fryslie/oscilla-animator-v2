@@ -117,7 +117,7 @@ registerBlock({
       type: signalType(FLOAT),
       value: 0.5,
       defaultSource: defaultSourceConst(0.5),
-      exposedAsPort: true,
+      exposedAsPort: false,
       uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 },
     },
   },

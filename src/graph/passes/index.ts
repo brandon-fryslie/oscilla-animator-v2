@@ -8,25 +8,27 @@
  * - Pass 3: Varargs validation
  * - Pass 4: Block indexing
  *
- * NOTE: Type resolution (payload and unit) happens in the compiler (pass1-type-constraints.ts)
- * AFTER normalization completes, so all derived blocks exist when types are resolved.
+ * NOTE: These passes have moved to src/compiler/frontend/ as part of the
+ * Frontend/Backend split. This file re-exports for backward compatibility.
+ *
+ * New code should import from src/compiler/frontend/
  */
 
 import type { Patch } from '../Patch';
-import { pass0CompositeExpansion, type ExpansionError } from './pass0-composite-expansion';
-import { pass1DefaultSources } from './pass1-default-sources';
-import { pass2Adapters, type AdapterError } from './pass2-adapters';
-import { pass4Varargs, type VarargError } from './pass4-varargs';
-import { pass3Indexing, type IndexingError, type NormalizedPatch } from './pass3-indexing';
+import { pass0CompositeExpansion, type ExpansionError } from '../../compiler/frontend/normalize-composites';
+import { pass1DefaultSources } from '../../compiler/frontend/normalize-default-sources';
+import { pass2Adapters, type AdapterError } from '../../compiler/frontend/normalize-adapters';
+import { pass4Varargs, type VarargError } from '../../compiler/frontend/normalize-varargs';
+import { pass3Indexing, type IndexingError, type NormalizedPatch } from '../../compiler/frontend/normalize-indexing';
 
 // =============================================================================
 // Re-export Types
 // =============================================================================
 
-export type { NormalizedPatch, NormalizedEdge, BlockIndex } from './pass3-indexing';
-export type { AdapterError } from './pass2-adapters';
-export type { VarargError } from './pass4-varargs';
-export type { ExpansionError, CompositeExpansionResult } from './pass0-composite-expansion';
+export type { NormalizedPatch, NormalizedEdge, BlockIndex } from '../../compiler/frontend/normalize-indexing';
+export type { AdapterError } from '../../compiler/frontend/normalize-adapters';
+export type { VarargError } from '../../compiler/frontend/normalize-varargs';
+export type { ExpansionError, CompositeExpansionResult } from '../../compiler/frontend/normalize-composites';
 export type { CompositeExpansionInfo } from '../../blocks/composite-types';
 
 // Unified error type
@@ -98,8 +100,8 @@ export function runNormalizationPasses(patch: Patch): NormalizeResult | Normaliz
 // Re-export Individual Passes (for testing)
 // =============================================================================
 
-export { pass0CompositeExpansion } from './pass0-composite-expansion';
-export { pass1DefaultSources } from './pass1-default-sources';
-export { pass2Adapters } from './pass2-adapters';
-export { pass4Varargs } from './pass4-varargs';
-export { pass3Indexing, getInputEdges, getOutputEdges } from './pass3-indexing';
+export { pass0CompositeExpansion } from '../../compiler/frontend/normalize-composites';
+export { pass1DefaultSources } from '../../compiler/frontend/normalize-default-sources';
+export { pass2Adapters } from '../../compiler/frontend/normalize-adapters';
+export { pass4Varargs } from '../../compiler/frontend/normalize-varargs';
+export { pass3Indexing, getInputEdges, getOutputEdges } from '../../compiler/frontend/normalize-indexing';

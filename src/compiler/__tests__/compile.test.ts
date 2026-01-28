@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildPatch } from '../../graph';
 import { compile } from '../compile';
-import type { ScheduleIR } from '../passes-v2/pass7-schedule';
+import type { ScheduleIR } from '../backend/schedule-program';
 
 describe('compile', () => {
   describe('TimeRoot validation', () => {

@@ -11,7 +11,7 @@ import { signalType, type SignalType, strideOf, isPayloadVar } from '../../core/
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
 import { IRBuilderImpl } from '../../compiler/ir/IRBuilderImpl';
 import type { LowerCtx } from '../registry';
-import { blockIndex } from '../../graph/passes/pass3-indexing';
+import { blockIndex } from '../../compiler/frontend/normalize-indexing';
 import { valueSlot, type SigExprId, type ValueSlot } from '../../compiler/ir/Indices';
 import { extractSigExprId, extractSigExpr } from '../../__tests__/ir-test-helpers';
 import type { ValueRefPacked } from '../../compiler/ir/lowerTypes';

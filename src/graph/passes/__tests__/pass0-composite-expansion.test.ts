@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { pass0CompositeExpansion } from '../pass0-composite-expansion';
+import { pass0CompositeExpansion } from '../../../compiler/frontend/normalize-composites';
 import {
   registerComposite,
   unregisterComposite,

@@ -60,8 +60,8 @@ export type LensBinding = { kind: 'literal'; value: unknown };
 // =============================================================================
 
 // Re-export from pass1 for convenience
-export type { TypeResolvedPatch, PortKey } from '../passes-v2/pass1-type-constraints';
-import type { TypeResolvedPatch } from '../passes-v2/pass1-type-constraints';
+export type { TypeResolvedPatch, PortKey } from '../frontend/analyze-type-constraints';
+import type { TypeResolvedPatch } from '../frontend/analyze-type-constraints';
 
 // =============================================================================
 // Typed Patch - Pass 2

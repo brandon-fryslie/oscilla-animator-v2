@@ -17,7 +17,7 @@
 
 import type { Step, StepEvalEvent, StepRender, StepMaterialize, StepContinuityMapBuild, StepContinuityApply, TimeModel, InstanceId, InstanceDecl, FieldExprId, SigExprId, SigExpr, FieldExpr, ValueSlot, ContinuityPolicy, StateMapping, EventSlotId } from '../ir/types';
 import type { EventExprId } from '../ir/Indices';
-import type { UnlinkedIRFragments } from './pass6-block-lowering';
+import type { UnlinkedIRFragments } from './lower-blocks';
 import type { AcyclicOrLegalGraph, NormalizedEdge, Block, BlockIndex } from '../ir/patches';
 import type { TimeModelIR } from '../ir/schedule';
 import type { ValueRefPacked } from '../ir/lowerTypes';

@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { pass2Adapters } from '../passes/pass2-adapters';
+import { pass2Adapters } from '../../compiler/frontend/normalize-adapters';
 import { buildPatch, type Patch } from '../Patch';
 import {
   signalType,

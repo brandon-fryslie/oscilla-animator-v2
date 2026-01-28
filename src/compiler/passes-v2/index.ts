@@ -1,42 +1,34 @@
 /**
  * Compiler Passes - Public API
  *
- * Compilation pipeline:
- * - Pass 1: Type Constraints (unit inference via constraint solving)
- * - Pass 2: Type Graph (type validation)
- * - Pass 3: Time Topology (time model)
- * - Pass 4: Dependency Graph
- * - Pass 5: SCC Validation (cycle check)
- * - Pass 6: Block Lowering
- * - Pass 7: Schedule Construction
+ * This module re-exports from the new frontend/backend structure.
+ * Maintained for backward compatibility during migration.
+ *
+ * New code should import from:
+ * - src/compiler/frontend/ for Frontend passes
+ * - src/compiler/backend/ for Backend passes
  */
 
-// Pass 1: Type Constraints (unit and payload inference)
-export { pass1TypeConstraints, getPortType } from "./pass1-type-constraints";
-export type { TypeResolvedPatch, Pass1Result, Pass1Error, TypeConstraintError, PortKey } from "./pass1-type-constraints";
+// Frontend passes (re-export for backward compatibility)
+export { pass1TypeConstraints, getPortType } from "../frontend/analyze-type-constraints";
+export type { TypeResolvedPatch, Pass1Result, Pass1Error, TypeConstraintError, PortKey } from "../frontend/analyze-type-constraints";
 
-// Pass 2: Type Graph
-export { pass2TypeGraph } from "./pass2-types";
+export { pass2TypeGraph } from "../frontend/analyze-type-graph";
 export type { TypedPatch } from "../ir/patches";
 
-// Pass 3: Time Topology
-export { pass3Time } from "./pass3-time";
+// Backend passes (re-export for backward compatibility)
+export { pass3Time } from "../backend/derive-time-model";
 export type { TimeResolvedPatch } from "../ir/patches";
 
-// Pass 4: Dependency Graph
-export { pass4DepGraph } from "./pass4-depgraph";
-export type { DepGraphWithTimeModel } from "../ir/patches";
-export type { DepGraph } from "../ir/patches";
+export { pass4DepGraph } from "../backend/derive-dep-graph";
+export type { DepGraphWithTimeModel, DepGraph } from "../ir/patches";
 
-// Pass 5: SCC Validation
-export { pass5CycleValidation } from "./pass5-scc";
+export { pass5CycleValidation } from "../backend/schedule-scc";
 export type { AcyclicOrLegalGraph } from "../ir/patches";
 
-// Pass 6: Block Lowering
-export { pass6BlockLowering } from "./pass6-block-lowering";
-export type { UnlinkedIRFragments, Pass6Options } from "./pass6-block-lowering";
+export { pass6BlockLowering } from "../backend/lower-blocks";
+export type { UnlinkedIRFragments, Pass6Options } from "../backend/lower-blocks";
 
-// Pass 7: Schedule Construction
-export { pass7Schedule } from "./pass7-schedule";
-export type { ScheduleIR } from "./pass7-schedule";
+export { pass7Schedule } from "../backend/schedule-program";
+export type { ScheduleIR } from "../backend/schedule-program";
 

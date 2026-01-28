@@ -16,8 +16,8 @@
 import type { Patch } from '../graph';
 import { normalize, type NormalizedPatch } from '../graph/normalize';
 import type { CompiledProgramIR, SlotMetaEntry, ValueSlot, FieldSlotEntry, OutputSpecIR } from './ir/program';
-import type { UnlinkedIRFragments } from './passes-v2/pass6-block-lowering';
-import type { ScheduleIR } from './passes-v2/pass7-schedule';
+import type { UnlinkedIRFragments } from './backend/lower-blocks';
+import type { ScheduleIR } from './backend/schedule-program';
 import type { FieldExpr, FieldExprId, InstanceId } from './ir/types';
 import { payloadStride } from './ir/signalExpr';
 import type { AcyclicOrLegalGraph } from './ir/patches';
@@ -211,7 +211,7 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
       }));
       return emitFailure(options, startTime, compileId, compileErrors);
     }
-    const typeResolved = pass1Result as import('./passes-v2/pass1-type-constraints').TypeResolvedPatch;
+    const typeResolved = pass1Result as import('./frontend/analyze-type-constraints').TypeResolvedPatch;
 
     try {
       compilationInspector.capturePass('type-constraints', normalized, typeResolved);

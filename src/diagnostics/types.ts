@@ -259,3 +259,41 @@ export interface DiagnosticFilter {
   readonly blockId?: string; // Filter by specific block
   readonly patchRevision?: number; // Filter by specific patch revision
 }
+
+// =============================================================================
+// Helper Functions
+// =============================================================================
+
+/**
+ * Creates a Diagnostic object with default metadata.
+ * The id field should be set separately using generateDiagnosticId.
+ */
+export function createDiagnostic(params: {
+  code: DiagnosticCode;
+  severity: Severity;
+  domain: Domain;
+  primaryTarget: TargetRef;
+  title: string;
+  message: string;
+  scope: { patchRevision: number; compileId?: string };
+  payload?: DiagnosticPayload;
+  actions?: DiagnosticAction[];
+}): Omit<Diagnostic, 'id'> {
+  const now = Date.now();
+  return {
+    code: params.code,
+    severity: params.severity,
+    domain: params.domain,
+    primaryTarget: params.primaryTarget,
+    title: params.title,
+    message: params.message,
+    scope: params.scope,
+    metadata: {
+      firstSeenAt: now,
+      lastSeenAt: now,
+      occurrenceCount: 1,
+    },
+    payload: params.payload,
+    actions: params.actions,
+  };
+}

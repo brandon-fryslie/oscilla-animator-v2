@@ -21,7 +21,7 @@ import {
   getBlockCardinalityMetadata,
   isCardinalityGeneric,
 } from "../../blocks/registry";
-import { type TypeResolvedPatch, getPortType } from "./pass1-type-constraints";
+import { type TypeResolvedPatch, getPortType } from "./analyze-type-constraints";
 
 // =============================================================================
 // Error Types

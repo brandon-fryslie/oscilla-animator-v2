@@ -1,14 +1,13 @@
 /**
- * Pass 5: Cycle Validation (SCC)
+ * Backend SCC Scheduling
  *
- * Validates the dependency graph for cycles using Tarjan's strongly connected
- * component (SCC) algorithm. Legal cycles must have at least one state boundary
- * block (isStateful === true).
+ * Uses Tarjan's SCC algorithm for execution ordering and final cycle validation.
+ * This is Backend-only - Frontend does cycle classification separately for UI.
  *
- * This pass ensures feedback loops are well-formed under the memory semantics.
+ * Rule: Backend answers "how to run it"
  *
  * References:
- * - HANDOFF.md Topic 6: Pass 5 - Cycle Validation
+ * - .agent_planning/compiler-design-frontend-backend/ALIGNMENT.md §5 Gap 3
  * - design-docs/12-Compiler-Final/15-Canonical-Lowering-Pipeline.md § Pass 5
  * - https://en.wikipedia.org/wiki/Tarjan%27s_strongly_connected_components_algorithm
  */

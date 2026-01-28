@@ -25,13 +25,15 @@ function findTestSignalOffsets(program: CompiledProgramIR, count = 1): number[] 
   const schedule = program.schedule;
   const signals = program.signalExprs.nodes as readonly SigExpr[];
 
+  // Find evalSig steps that are NOT time signals or const signals
   const evalSigSteps = schedule.steps.filter((s): s is StepEvalSig => s.kind === 'evalSig');
-  const nonTimeSteps = evalSigSteps.filter((step) => {
+  const targetSteps = evalSigSteps.filter((step) => {
     const sig = signals[step.expr as number];
-    return sig && sig.kind !== 'time';
+    // Exclude time and const signals - we want computed values
+    return sig && sig.kind !== 'time' && sig.kind !== 'const';
   });
 
-  const slots = nonTimeSteps.slice(-count).map(s => s.target as number);
+  const slots = targetSteps.slice(-count).map(s => s.target as number);
 
   const slotToOffset = new Map<number, number>();
   for (const meta of program.slotMeta) {

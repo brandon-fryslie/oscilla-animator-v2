@@ -285,7 +285,7 @@ export class DiagnosticsStore {
    * Returns all warnings (severity: 'warn').
    */
   get warnings(): Diagnostic[] {
-    return this.filter({ severity: 'warn' });
+    return this.filter({ severity: ['warn'] });
   }
 
   /**

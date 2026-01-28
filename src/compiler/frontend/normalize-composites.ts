@@ -30,7 +30,7 @@
  */
 
 import type { BlockId, BlockRole, EdgeRole } from '../../types';
-import type { Block, Edge, Patch, InputPort, OutputPort } from '../Patch';
+import type { Block, Edge, Patch, InputPort, OutputPort } from '../../graph/Patch';
 import {
   getCompositeDefinition,
   isCompositeType,
