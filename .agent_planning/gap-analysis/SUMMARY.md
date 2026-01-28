@@ -3,9 +3,9 @@ scope: update
 spec_source: design-docs/CANONICAL-oscilla-v2.5-20260109/
 impl_source: src/
 generated: 2026-01-24T21:30:00Z
-previous_run: 2026-01-28T12:32:00Z
+previous_run: 2026-01-28T14:01:00Z
 topics_audited: 19
-totals: { trivial: 16, critical: 1, to-review: 22, unimplemented: 106, done: ~259 }
+totals: { trivial: 16, critical: 1, to-review: 22, unimplemented: 103, done: ~262 }
 ---
 
 # Gap Analysis: Full Spec (All 19 Topics) — UPDATE
@@ -25,6 +25,9 @@ Current state:
 
 | Item | Was | Now | Reason |
 |------|-----|-----|--------|
+| **U-17 (hash-consing)** | UNIMPLEMENTED | **DONE** | I13 invariant: hash cache in IRBuilderImpl, 25 builder methods, 33 tests |
+| **U-18 (ReduceOp)** | UNIMPLEMENTED | **DONE** | SigExprReduceField interface, IRBuilder.reduceField(), 8 tests (runtime deferred) |
+| **U-33 (slot declarations)** | UNIMPLEMENTED | **DONE** | ScalarSlotDecl/FieldSlotDecl aliases, getScalarSlots/getFieldSlots accessors |
 | **C-24 (depth sort)** | CRITICAL | **DONE** | Verified: far-to-near sorting, commit f8b0569 |
 | **C-26 (monotone check)** | CRITICAL | **DONE** | Fast-path optimization added, commit 988f967 |
 | C-25 (per-frame alloc) | CRITICAL | DEFERRED | Uses RenderBufferArena views; full optimization P3 |
