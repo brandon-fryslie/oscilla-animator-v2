@@ -297,3 +297,137 @@ describe('Debug Probe Support', () => {
     }
   });
 });
+
+describe('error isolation for unreachable blocks', () => {
+  it('compiles successfully when only disconnected blocks have errors', () => {
+    // Build a minimal working patch with a render block
+    const patch = buildPatch((b) => {
+      const time = b.addBlock('InfiniteTimeRoot', {});
+      
+      // Minimal render pipeline using composables
+      const ellipse = b.addBlock('Ellipse', { rx: 0.02, ry: 0.02 });
+      const const1 = b.addBlock('Const', { value: 0.5 });
+      const const2 = b.addBlock('Const', { value: 0.5 });
+      const const3 = b.addBlock('Const', { value: 0.35 });
+      const vecConst = b.addBlock('VecConst', { x: 0.5, y: 0.5, z: 0 });
+      const colorConst = b.addBlock('ColorConst', { r: 1, g: 0, b: 0, a: 1 });
+      const render = b.addBlock('RenderInstances2D', {});
+      
+      b.wire(vecConst, 'out', render, 'pos');
+      b.wire(colorConst, 'out', render, 'color');
+      b.wire(ellipse, 'shape', render, 'shape');
+
+      // Add a disconnected Expression block with a syntax error
+      b.addBlock('Expression', {
+        expr: 'this is not valid syntax!!!',
+      });
+    });
+
+    const result = compile(patch);
+
+    // Should compile successfully (unreachable error becomes warning)
+    if (result.kind === 'error') {
+      console.error('COMPILE ERROR (should have succeeded):', JSON.stringify(result.errors, null, 2));
+    }
+    expect(result.kind).toBe('ok');
+  });
+
+  it('fails when error block is connected to render pipeline', () => {
+    // Build a patch where an error block feeds into render
+    const patch = buildPatch((b) => {
+      const time = b.addBlock('InfiniteTimeRoot', {});
+      
+      // Minimal render pipeline
+      const ellipse = b.addBlock('Ellipse', { rx: 0.02, ry: 0.02 });
+      const vecConst = b.addBlock('VecConst', { x: 0.5, y: 0.5, z: 0 });
+      const colorConst = b.addBlock('ColorConst', { r: 1, g: 0, b: 0, a: 1 });
+      const render = b.addBlock('RenderInstances2D', {});
+      
+      // Expression with syntax error connected to render pipeline
+      const expr = b.addBlock('Expression', {
+        expr: 'this is not valid syntax!!!',
+      });
+
+      b.wire(vecConst, 'out', render, 'pos');
+      b.wire(colorConst, 'out', render, 'color');
+      b.wire(ellipse, 'shape', render, 'shape');
+      
+      // Connect broken Expression to render - makes it reachable
+      b.wire(expr, 'out', render, 'scale');
+    });
+
+    const result = compile(patch);
+
+    // Should fail (reachable error)
+    if (result.kind !== 'error') {
+      console.error('Expected error, got ok');
+    }
+    expect(result.kind).toBe('error');
+    if (result.kind === 'error') {
+      expect(result.errors.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('excludes errors from disconnected subgraph', () => {
+    // Build a patch with render pipeline and disconnected subgraph with errors
+    const patch = buildPatch((b) => {
+      const time = b.addBlock('InfiniteTimeRoot', {});
+      
+      // Minimal render pipeline
+      const ellipse = b.addBlock('Ellipse', { rx: 0.02, ry: 0.02 });
+      const vecConst = b.addBlock('VecConst', { x: 0.5, y: 0.5, z: 0 });
+      const colorConst = b.addBlock('ColorConst', { r: 1, g: 0, b: 0, a: 1 });
+      const render = b.addBlock('RenderInstances2D', {});
+      
+      b.wire(vecConst, 'out', render, 'pos');
+      b.wire(colorConst, 'out', render, 'color');
+      b.wire(ellipse, 'shape', render, 'shape');
+
+      // Disconnected subgraph with multiple errors
+      const expr1 = b.addBlock('Expression', { expr: 'error 1!!!' });
+      const expr2 = b.addBlock('Expression', { expr: 'error 2!!!' });
+      // Wire them together but not to render
+      b.wire(expr1, 'out', expr2, 'in0');
+    });
+
+    const result = compile(patch);
+
+    // Should compile successfully (both errors are unreachable)
+    if (result.kind === 'error') {
+      console.error('COMPILE ERROR (disconnected subgraph):', JSON.stringify(result.errors, null, 2));
+    }
+    expect(result.kind).toBe('ok');
+  });
+
+  it('fails if ANY connected block has error', () => {
+    // Mix of reachable and unreachable errors - should fail due to reachable one
+    const patch = buildPatch((b) => {
+      const time = b.addBlock('InfiniteTimeRoot', {});
+      
+      // Minimal render pipeline
+      const ellipse = b.addBlock('Ellipse', { rx: 0.02, ry: 0.02 });
+      const vecConst = b.addBlock('VecConst', { x: 0.5, y: 0.5, z: 0 });
+      const colorConst = b.addBlock('ColorConst', { r: 1, g: 0, b: 0, a: 1 });
+      const render = b.addBlock('RenderInstances2D', {});
+      
+      b.wire(vecConst, 'out', render, 'pos');
+      b.wire(colorConst, 'out', render, 'color');
+      b.wire(ellipse, 'shape', render, 'shape');
+
+      // Connected broken block (reachable)
+      const exprConnected = b.addBlock('Expression', { expr: 'connected error!!!' });
+      b.wire(exprConnected, 'out', render, 'scale');
+      
+      // Disconnected broken block (unreachable)
+      b.addBlock('Expression', { expr: 'disconnected error!!!' });
+    });
+
+    const result = compile(patch);
+
+    // Should fail (at least one reachable error)
+    if (result.kind !== 'error') {
+      console.error('Expected error due to connected broken block');
+    }
+    expect(result.kind).toBe('error');
+  });
+});

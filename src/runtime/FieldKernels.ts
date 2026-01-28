@@ -435,6 +435,26 @@ export function applyFieldKernel(
       outArr[i * 4 + 2] = colorArr[i * 4 + 2];
       outArr[i * 4 + 3] = Math.round(opacity * 255);
     }
+  } else if (fieldOp === 'vec2ToVec3') {
+    // ════════════════════════════════════════════════════════════════
+    // vec2ToVec3: Convert vec2 to vec3 with z=0
+    // ────────────────────────────────────────────────────────────────
+    // Inputs: [pos: vec2 (stride 2)]
+    // Output: vec3 (stride 3) with z=0
+    // Coord-space: AGNOSTIC - preserves input space
+    // Use case: Converting 2D control points to 3D for rendering
+    // ════════════════════════════════════════════════════════════════
+    if (inputs.length !== 1) {
+      throw new Error('vec2ToVec3 requires exactly 1 input (vec2)');
+    }
+    const outArr = out as Float32Array;
+    const inArr = inputs[0] as Float32Array;
+
+    for (let i = 0; i < N; i++) {
+      outArr[i * 3 + 0] = inArr[i * 2 + 0];
+      outArr[i * 3 + 1] = inArr[i * 2 + 1];
+      outArr[i * 3 + 2] = 0.0;
+    }
   } else if (fieldOp === 'fieldSetZ') {
     // ════════════════════════════════════════════════════════════════
     // fieldSetZ: Set the Z component of a vec3 position field

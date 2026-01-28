@@ -1,0 +1,35 @@
+/**
+ * GraphEditorCore styles
+ * Minimal styling for the core editor wrapper.
+ */
+
+.graph-editor-core {
+  width: 100%;
+  height: 100%;
+  background: #1a1a2e;
+}
+
+/* ReactFlow overrides for consistent dark theme */
+.graph-editor-core .react-flow__background {
+  background-color: #1a1a2e;
+}
+
+.graph-editor-core .react-flow__minimap {
+  background-color: #16213e;
+  border: 1px solid rgba(78, 205, 196, 0.2);
+}
+
+.graph-editor-core .react-flow__controls {
+  background-color: #16213e;
+  border: 1px solid rgba(78, 205, 196, 0.2);
+}
+
+.graph-editor-core .react-flow__controls-button {
+  background-color: #16213e;
+  border-bottom: 1px solid rgba(78, 205, 196, 0.2);
+  color: #4ecdc4;
+}
+
+.graph-editor-core .react-flow__controls-button:hover {
+  background-color: #1a1a2e;
+}

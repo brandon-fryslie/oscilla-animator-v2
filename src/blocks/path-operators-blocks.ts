@@ -23,9 +23,9 @@ import { defaultSourceConst } from '../types';
  * All outputs are over the DOMAIN_CONTROL domain (one value per control point).
  *
  * Outputs:
- * - position: Field<vec2> - control point positions (pass-through)
+ * - position: Field<vec3> - control point positions (z=0, converted from input vec2)
  * - index: Field<int> - control point index
- * - tangent: Field<vec2> - tangent direction at each point (MVP: polygonal paths)
+ * - tangent: Field<vec3> - tangent direction at each point (z=0, MVP: polygonal paths)
  * - arcLength: Field<float> - cumulative arc length from first point
  *
  * MVP Limitations (Phase 1):
@@ -77,9 +77,9 @@ registerBlock({
     },
   },
   outputs: {
-    position: { label: 'Position', type: signalTypeField(VEC2, 'control') },
+    position: { label: 'Position', type: signalTypeField(VEC3, 'control') },
     index: { label: 'Index', type: signalTypeField(INT, 'control') },
-    tangent: { label: 'Tangent', type: signalTypeField(VEC2, 'control') },
+    tangent: { label: 'Tangent', type: signalTypeField(VEC3, 'control') },
     arcLength: { label: 'Arc Length', type: signalTypeField(FLOAT, 'absolute') },
   },
   lower: ({ ctx, inputsById }) => {
@@ -90,9 +90,6 @@ registerBlock({
 
     const controlPointsFieldId = controlPointsInput.id as FieldExprId;
 
-    // Position output is just a pass-through of the input
-    const positionFieldId = controlPointsFieldId;
-
     // Get the instance ID from the control points field
     // We need to extract this from the field expression
     // For now, we'll use the inferred instance from the context
@@ -100,6 +97,14 @@ registerBlock({
     if (!instance) {
       throw new Error('PathField requires instance context from control points field');
     }
+
+    // Position output: convert VEC2 control points to VEC3 (z=0)
+    const vec2ToVec3Fn = ctx.b.kernel('vec2ToVec3');
+    const positionFieldId = ctx.b.fieldZip(
+      [controlPointsFieldId],
+      vec2ToVec3Fn,
+      signalTypeField(VEC3, 'control')
+    );
 
     // Create index field
     const indexField = ctx.b.fieldIntrinsic(
@@ -109,10 +114,11 @@ registerBlock({
     );
 
     // Create tangent field (MVP: polygonal paths, linear approximation)
+    // Outputs VEC3 (z=0) for compatibility with render pipeline
     const tangentField = ctx.b.fieldPathDerivative(
       controlPointsFieldId,
       'tangent',
-      signalTypeField(VEC2, 'control')
+      signalTypeField(VEC3, 'control')
     );
 
     // Create arc length field (MVP: cumulative Euclidean distance)

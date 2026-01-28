@@ -610,7 +610,7 @@ function hashToFloat01(str: string): number {
  * - Two points (N=2): tangent computed with wrapping
  * - Assumes closed path (wraps at boundaries)
  * 
- * @param out - Output buffer for tangent vectors (vec2, length N*2)
+ * @param out - Output buffer for tangent vectors (vec3, length N*3)
  * @param input - Input buffer for control points (vec2, length N*2)
  * @param N - Number of points (not components)
  */
@@ -620,28 +620,30 @@ function fillBufferTangent(
   N: number
 ): void {
   if (N === 0) return;
-  
+
   if (N === 1) {
     // Single point: no tangent
     out[0] = 0;
     out[1] = 0;
+    out[2] = 0;
     return;
   }
-  
+
   // Central difference for each point
   // For closed path: [P0, P1, ..., PN-1] where PN wraps to P0
   for (let i = 0; i < N; i++) {
     const prevIdx = (i - 1 + N) % N;  // Wrap around for closed path
     const nextIdx = (i + 1) % N;
-    
+
     const prevX = input[prevIdx * 2];
     const prevY = input[prevIdx * 2 + 1];
     const nextX = input[nextIdx * 2];
     const nextY = input[nextIdx * 2 + 1];
-    
-    // Central difference: (next - prev) / 2
-    out[i * 2] = (nextX - prevX) / 2;
-    out[i * 2 + 1] = (nextY - prevY) / 2;
+
+    // Central difference: (next - prev) / 2, z=0
+    out[i * 3] = (nextX - prevX) / 2;
+    out[i * 3 + 1] = (nextY - prevY) / 2;
+    out[i * 3 + 2] = 0;
   }
 }
 
