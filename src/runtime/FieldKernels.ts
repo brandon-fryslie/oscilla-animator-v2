@@ -476,6 +476,103 @@ export function applyFieldKernel(
       outArr[i * 3 + 1] = posArr[i * 3 + 1]; // Y unchanged
       outArr[i * 3 + 2] = zArr[i];           // Z from input field
     }
+  } else if (fieldOp === 'fieldExtractX') {
+    // ════════════════════════════════════════════════════════════════
+    // fieldExtractX: Extract X component from vec3 field
+    // ────────────────────────────────────────────────────────────────
+    // Inputs: [vec3 (stride 3)]
+    // Output: float (stride 1)
+    // ════════════════════════════════════════════════════════════════
+    if (inputs.length !== 1) {
+      throw new Error('fieldExtractX requires exactly 1 input (vec3)');
+    }
+    const outArr = out as Float32Array;
+    const inArr = inputs[0] as Float32Array;
+    for (let i = 0; i < N; i++) {
+      outArr[i] = inArr[i * 3 + 0];
+    }
+  } else if (fieldOp === 'fieldExtractY') {
+    if (inputs.length !== 1) {
+      throw new Error('fieldExtractY requires exactly 1 input (vec3)');
+    }
+    const outArr = out as Float32Array;
+    const inArr = inputs[0] as Float32Array;
+    for (let i = 0; i < N; i++) {
+      outArr[i] = inArr[i * 3 + 1];
+    }
+  } else if (fieldOp === 'fieldExtractZ') {
+    if (inputs.length !== 1) {
+      throw new Error('fieldExtractZ requires exactly 1 input (vec3)');
+    }
+    const outArr = out as Float32Array;
+    const inArr = inputs[0] as Float32Array;
+    for (let i = 0; i < N; i++) {
+      outArr[i] = inArr[i * 3 + 2];
+    }
+  } else if (fieldOp === 'fieldExtractR') {
+    // Color extraction (stride 4, Uint8ClampedArray)
+    if (inputs.length !== 1) {
+      throw new Error('fieldExtractR requires exactly 1 input (color)');
+    }
+    const outArr = out as Float32Array;
+    const inArr = inputs[0] as Uint8ClampedArray;
+    for (let i = 0; i < N; i++) {
+      outArr[i] = inArr[i * 4 + 0] / 255.0;
+    }
+  } else if (fieldOp === 'fieldExtractG') {
+    if (inputs.length !== 1) {
+      throw new Error('fieldExtractG requires exactly 1 input (color)');
+    }
+    const outArr = out as Float32Array;
+    const inArr = inputs[0] as Uint8ClampedArray;
+    for (let i = 0; i < N; i++) {
+      outArr[i] = inArr[i * 4 + 1] / 255.0;
+    }
+  } else if (fieldOp === 'fieldExtractB') {
+    if (inputs.length !== 1) {
+      throw new Error('fieldExtractB requires exactly 1 input (color)');
+    }
+    const outArr = out as Float32Array;
+    const inArr = inputs[0] as Uint8ClampedArray;
+    for (let i = 0; i < N; i++) {
+      outArr[i] = inArr[i * 4 + 2] / 255.0;
+    }
+  } else if (fieldOp === 'fieldExtractA') {
+    if (inputs.length !== 1) {
+      throw new Error('fieldExtractA requires exactly 1 input (color)');
+    }
+    const outArr = out as Float32Array;
+    const inArr = inputs[0] as Uint8ClampedArray;
+    for (let i = 0; i < N; i++) {
+      outArr[i] = inArr[i * 4 + 3] / 255.0;
+    }
+  } else if (fieldOp === 'fieldSwizzle_xy') {
+    // ════════════════════════════════════════════════════════════════
+    // fieldSwizzle_xy: Extract XY components from vec3 to vec2
+    // ════════════════════════════════════════════════════════════════
+    if (inputs.length !== 1) {
+      throw new Error('fieldSwizzle_xy requires exactly 1 input (vec3)');
+    }
+    const outArr = out as Float32Array;
+    const inArr = inputs[0] as Float32Array;
+    for (let i = 0; i < N; i++) {
+      outArr[i * 2 + 0] = inArr[i * 3 + 0]; // X
+      outArr[i * 2 + 1] = inArr[i * 3 + 1]; // Y
+    }
+  } else if (fieldOp === 'fieldSwizzle_rgb') {
+    // ════════════════════════════════════════════════════════════════
+    // fieldSwizzle_rgb: Extract RGB components from color to vec3
+    // ════════════════════════════════════════════════════════════════
+    if (inputs.length !== 1) {
+      throw new Error('fieldSwizzle_rgb requires exactly 1 input (color)');
+    }
+    const outArr = out as Float32Array;
+    const inArr = inputs[0] as Uint8ClampedArray;
+    for (let i = 0; i < N; i++) {
+      outArr[i * 3 + 0] = inArr[i * 4 + 0] / 255.0; // R
+      outArr[i * 3 + 1] = inArr[i * 4 + 1] / 255.0; // G
+      outArr[i * 3 + 2] = inArr[i * 4 + 2] / 255.0; // B
+    }
   } else {
     throw new Error(`Unknown field kernel: ${fieldOp}`);
   }
