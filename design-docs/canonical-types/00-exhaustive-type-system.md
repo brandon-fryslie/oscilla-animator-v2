@@ -6,41 +6,49 @@
 
 export type Brand<K, T extends string> = K & { readonly __brand: T };
 
-export type VarId        = Brand<string, 'VarId'>;
+export type CardinalityVarId = Brand<string, 'CardinalityVarId'>;
+export type TemporalityVarId = Brand<string, 'TemporalityVarId'>;
+export type BindingVarId = Brand<string, 'BindingVarId'>;
+export type PerspectiveVarId = Brand<string, 'PerspectiveVarId'>;
+export type BranchVarId = Brand<string, 'BranchVarId'>;
 
-export type InstanceId   = Brand<string, 'InstanceId'>;
+export type InstanceId = Brand<string, 'InstanceId'>;
 export type DomainTypeId = Brand<string, 'DomainTypeId'>;
 
-export type BlockId      = Brand<string, 'BlockId'>;
-export type PortId       = Brand<string, 'PortId'>;
-export type WireId       = Brand<string, 'WireId'>;
+export type BlockId = Brand<string, 'BlockId'>;
+export type PortId = Brand<string, 'PortId'>;
+export type WireId = Brand<string, 'WireId'>;
 
-export type KernelId     = Brand<string, 'KernelId'>;
+export type KernelId = Brand<string, 'KernelId'>;
 
-export type ValueExprId  = Brand<number, 'ValueExprId'>;
-export type ValueSlot    = Brand<number, 'ValueSlot'>;
+export type ValueExprId = Brand<number, 'ValueExprId'>;
+export type ValueSlot = Brand<number, 'ValueSlot'>;
 
 // Factories (casts). Keep these tiny and boring.
-export const varId        = (s: string) => s as VarId;
+export const cardinalityVarId = (s: string) => s as CardinalityVarId;
+export const temporalityVarId = (s: string) => s as TemporalityVarId;
+export const bindingVarId = (s: string) => s as BindingVarId;
+export const perspectiveVarId = (s: string) => s as PerspectiveVarId;
+export const branchVarId = (s: string) => s as BranchVarId;
 
-export const instanceId   = (s: string) => s as InstanceId;
+export const instanceId = (s: string) => s as InstanceId;
 export const domainTypeId = (s: string) => s as DomainTypeId;
 
-export const blockId      = (s: string) => s as BlockId;
-export const portId       = (s: string) => s as PortId;
-export const wireId       = (s: string) => s as WireId;
+export const blockId = (s: string) => s as BlockId;
+export const portId = (s: string) => s as PortId;
+export const wireId = (s: string) => s as WireId;
 
-export const kernelId     = (s: string) => s as KernelId;
+export const kernelId = (s: string) => s as KernelId;
 
-export const valueExprId  = (n: number) => n as ValueExprId;
-export const valueSlot    = (n: number) => n as ValueSlot;
+export const valueExprId = (n: number) => n as ValueExprId;
+export const valueSlot = (n: number) => n as ValueSlot;
 ```
 
 # core/canonical-types.ts
 
 ```typescript
 // src/core/canonical-types.ts
-import { DomainTypeId, InstanceId, VarId } from './ids';
+import { CardinalityVarId, TemporalityVarId, BindingVarId, PerspectiveVarId, BranchVarId } from './ids';
 
 /**
  * CanonicalType is the ONLY type authority in the system:
@@ -54,12 +62,15 @@ import { DomainTypeId, InstanceId, VarId } from './ids';
 /* Axis representation (var vs inst)  */
 /* ---------------------------------- */
 
-export type Axis<T> =
-  | { readonly kind: 'var'; readonly var: VarId }
-  | { readonly kind: 'inst'; readonly value: T };
+export type Axis<T, V> =
+    | { readonly kind: 'var'; readonly var: V }
+    | { readonly kind: 'inst'; readonly value: T };
 
-export const axisVar = <T>(v: VarId): Axis<T> => ({ kind: 'var', var: v });
-export const axisInst = <T>(x: T): Axis<T> => ({ kind: 'inst', value: x });
+export type CardinalityAxis   = Axis<CardinalityValue, CardinalityVarId>;
+export type TemporalityAxis   = Axis<TemporalityValue, TemporalityVarId>;
+export type BindingAxis   = Axis<BindingValue, BindingVarId>;
+export type PerspectiveAxis  = Axis<PerspectiveValue, PerspectiveVarId>;
+export type BranchAxis = Axis<BranchValue, BranchVarId>;
 
 /* ---------------------------------- */
 /* Instance reference                  */
@@ -100,11 +111,11 @@ export type BranchValue =
 /* ---------------------------------- */
 
 export interface Extent {
-  readonly cardinality: Axis<CardinalityValue>;
-  readonly temporality: Axis<TemporalityValue>;
-  readonly binding: Axis<BindingValue>;
-  readonly perspective: Axis<PerspectiveValue>;
-  readonly branch: Axis<BranchValue>;
+    readonly cardinality: CardinalityAxis;
+    readonly temporality: TemporalityAxis;
+    readonly binding: BindingAxis;
+    readonly perspective: PerspectiveAxis;
+    readonly branch: BranchAxis;
 }
 
 /* ---------------------------------- */
