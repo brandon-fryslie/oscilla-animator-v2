@@ -23,7 +23,7 @@ import { payloadStride } from './ir/signalExpr';
 import type { AcyclicOrLegalGraph } from './ir/patches';
 import { convertCompileErrorsToDiagnostics } from './diagnosticConversion';
 import type { EventHub } from '../events/EventHub';
-import { canonicalType } from '../core/canonical-types';
+import { canonicalType, requireManyInstance } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 // debugService import removed for strict compiler isolation (One Source of Truth)
 import { compilationInspector } from '../services/CompilationInspectorService';
@@ -677,15 +677,14 @@ function inferFieldInstanceFromExprs(
 
   switch (expr.kind) {
     case 'intrinsic':
-    case 'array':
     case 'stateRead':
       return expr.instanceId;
     case 'map':
-      return expr.instanceId ?? inferFieldInstanceFromExprs(expr.input, fieldExprs);
+      return requireManyInstance(expr.type).instanceId;
     case 'zip':
-      return expr.instanceId ?? (expr.inputs.length > 0 ? inferFieldInstanceFromExprs(expr.inputs[0], fieldExprs) : undefined);
+      return requireManyInstance(expr.type).instanceId;
     case 'zipSig':
-      return expr.instanceId ?? inferFieldInstanceFromExprs(expr.field, fieldExprs);
+      return requireManyInstance(expr.type).instanceId;
     case 'broadcast':
     case 'const':
       return undefined;

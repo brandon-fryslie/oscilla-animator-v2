@@ -5,7 +5,7 @@
  * Provides methods for creating signal, field, and event expressions.
  */
 
-import type { CanonicalType } from '../../core/canonical-types';
+import type { CanonicalType, ConstValue } from '../../core/canonical-types';
 import type {
   SigExprId,
   FieldExprId,
@@ -50,7 +50,7 @@ export interface IRBuilder {
   // =========================================================================
 
   /** Create a constant signal expression. */
-  sigConst(value: number | string | boolean, type: CanonicalType): SigExprId;
+  sigConst(value: ConstValue, type: CanonicalType): SigExprId;
 
   /** Create a signal from a slot reference. */
   sigSlot(slot: ValueSlot, type: CanonicalType): SigExprId;
@@ -106,7 +106,7 @@ export interface IRBuilder {
   // =========================================================================
 
   /** Create a constant field expression. */
-  fieldConst(value: number | string, type: CanonicalType): FieldExprId;
+  fieldConst(value: ConstValue, type: CanonicalType): FieldExprId;
 
   /**
    * Create a field from an intrinsic property.
@@ -136,14 +136,6 @@ export interface IRBuilder {
     basisKind: BasisKind,
     type: CanonicalType
   ): FieldExprId;
-
-  /**
-   * Create an array field expression (Stage 2: Signal<T> → Field<T>).
-   * Represents the elements of an array instance.
-   * @param instanceId - The instance containing the array elements
-   * @param type - Signal type for the array elements
-   */
-  fieldArray(instanceId: InstanceId, type: CanonicalType): FieldExprId;
 
   /** Broadcast a signal to a field. */
   Broadcast(signal: SigExprId, type: CanonicalType): FieldExprId;

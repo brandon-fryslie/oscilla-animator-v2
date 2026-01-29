@@ -374,18 +374,6 @@ function fillBuffer(
       break;
     }
 
-    case 'array': {
-      // Array field expression: Stage 2 of three-stage architecture
-      // This represents the identity field of the instance
-      // For now, we'll fill with the index as a placeholder
-      // TODO: Support actual element values when blocks provide them
-      const arr = buffer as Float32Array;
-      for (let i = 0; i < N; i++) {
-        arr[i] = i;
-      }
-      break;
-    }
-
     case 'stateRead': {
       // Per-lane state read for stateful cardinality-generic blocks
       // Each lane reads its corresponding state slot value

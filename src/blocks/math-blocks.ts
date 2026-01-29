@@ -5,7 +5,7 @@
  */
 
 import { registerBlock, STANDARD_NUMERIC_PAYLOADS } from './registry';
-import { canonicalType, signalTypeField, strideOf } from '../core/canonical-types';
+import { canonicalType, signalTypeField, strideOf, floatConst } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { OpCode } from '../compiler/ir/types';
 import type { SigExprId, FieldExprId } from '../compiler/ir/Indices';
@@ -484,7 +484,7 @@ registerBlock({
     }
 
     // Use Hash opcode with fixed seed=0 for deterministic noise
-    const seedId = ctx.b.sigConst(0, canonicalType(FLOAT));
+    const seedId = ctx.b.sigConst(floatConst(0), canonicalType(FLOAT));
     const hashFn = ctx.b.opcode(OpCode.Hash);
     const hashId = ctx.b.sigZip([x.id as SigExprId, seedId], hashFn, canonicalType(FLOAT));
     const outType = ctx.outTypes[0];
@@ -612,7 +612,7 @@ registerBlock({
     const lengthId = ctx.b.sigMap(sumSq, sqrtFn, canonicalType(FLOAT));
 
     // Guard against division by zero: use max(length, epsilon)
-    const epsilon = ctx.b.sigConst(1e-10, canonicalType(FLOAT));
+    const epsilon = ctx.b.sigConst(floatConst(1e-10), canonicalType(FLOAT));
     const safeLengthId = ctx.b.sigZip([lengthId, epsilon], maxFn, canonicalType(FLOAT));
 
     // Divide each component by length
@@ -623,7 +623,7 @@ registerBlock({
     if (hasZ) {
       outZId = ctx.b.sigZip([z.id as SigExprId, safeLengthId], divFn, canonicalType(FLOAT));
     } else {
-      outZId = ctx.b.sigConst(0, canonicalType(FLOAT));
+      outZId = ctx.b.sigConst(floatConst(0), canonicalType(FLOAT));
     }
 
     const outTypeX = ctx.outTypes[0];

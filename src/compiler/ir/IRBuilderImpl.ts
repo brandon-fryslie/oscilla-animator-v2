@@ -4,8 +4,8 @@
  * Concrete implementation of the IRBuilder interface.
  */
 
-import type { CanonicalType } from '../../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION, canonicalType, unitScalar } from '../../core/canonical-types';
+import type { CanonicalType, ConstValue } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION, canonicalType, unitScalar, eventTypeScalar, requireManyInstance } from '../../core/canonical-types';
 import type { TopologyId } from '../../shapes/types';
 import type { IRBuilder } from './IRBuilder';
 import type {
@@ -36,6 +36,10 @@ import type {
   SigExpr,
   FieldExpr,
   EventExpr,
+  EventExprPulse,
+  EventExprWrap,
+  EventExprCombine,
+  EventExprNever,
   InstanceDecl,
   Step,
   IntrinsicPropertyName,
@@ -111,7 +115,7 @@ export class IRBuilderImpl implements IRBuilder {
   // Signal Expressions
   // =========================================================================
 
-  sigConst(value: number | string | boolean, type: CanonicalType): SigExprId {
+  sigConst(value: ConstValue, type: CanonicalType): SigExprId {
     // Hash-consing (I13): check cache before creating new ID
     const expr = { kind: 'const' as const, value, type };
     const hash = hashSigExpr(expr);
@@ -275,7 +279,7 @@ export class IRBuilderImpl implements IRBuilder {
   // Field Expressions
   // =========================================================================
 
-  fieldConst(value: number | string, type: CanonicalType): FieldExprId {
+  fieldConst(value: ConstValue, type: CanonicalType): FieldExprId {
     const expr = { kind: 'const' as const, value, type };
     const hash = hashFieldExpr(expr);
     const existing = this.fieldExprCache.get(hash);
@@ -351,26 +355,6 @@ export class IRBuilderImpl implements IRBuilder {
     this.fieldExprCache.set(hash, id);
     return id;
   }
-  /**
-   * Create an array field expression (Stage 2: Signal<T> → Field<T>).
-   * Represents the elements of an array instance.
-   */
-  fieldArray(instanceId: InstanceId, type: CanonicalType): FieldExprId {
-    const expr = {
-      kind: 'array' as const,
-      instanceId,
-      type,
-    };
-    const hash = hashFieldExpr(expr);
-    const existing = this.fieldExprCache.get(hash);
-    if (existing !== undefined) {
-      return existing;
-    }
-    const id = fieldExprId(this.fieldExprs.length);
-    this.fieldExprs.push(expr);
-    this.fieldExprCache.set(hash, id);
-    return id;
-  }
 
   Broadcast(signal: SigExprId, type: CanonicalType): FieldExprId {
     const expr = { kind: 'broadcast' as const, signal, type };
@@ -386,7 +370,7 @@ export class IRBuilderImpl implements IRBuilder {
   }
 
   ReduceField(field: FieldExprId, op: 'min' | 'max' | 'sum' | 'avg', type: CanonicalType): SigExprId {
-    const expr = { kind: 'reduce_field' as const, field, op, type };
+    const expr = { kind: 'reduceField' as const, field, op, type };
     const hash = hashSigExpr(expr);
     const existing = this.sigExprCache.get(hash);
     if (existing !== undefined) {
@@ -483,16 +467,15 @@ export class IRBuilderImpl implements IRBuilder {
 
     switch (expr.kind) {
       case 'intrinsic':
-      case 'array':
       case 'stateRead':
       case 'placement':
         return expr.instanceId; // These ARE bound to an instance
       case 'map':
-        return expr.instanceId ?? this.inferFieldInstance(expr.input);
+        return requireManyInstance(expr.type).instanceId;
       case 'zip':
-        return expr.instanceId ?? this.inferZipInstance(expr.inputs);
+        return requireManyInstance(expr.type).instanceId;
       case 'zipSig':
-        return expr.instanceId ?? this.inferFieldInstance(expr.field);
+        return requireManyInstance(expr.type).instanceId;
       case 'pathDerivative':
         return this.inferFieldInstance(expr.input);
       case 'broadcast':
@@ -556,7 +539,11 @@ export class IRBuilderImpl implements IRBuilder {
   // =========================================================================
 
   eventPulse(source: 'InfiniteTimeRoot'): EventExprId {
-    const expr = { kind: 'pulse' as const, source: 'timeRoot' as const };
+    const expr: EventExprPulse = {
+      kind: 'pulse',
+      type: eventTypeScalar(),
+      source: 'timeRoot',
+    };
     const hash = hashEventExpr(expr);
     const existing = this.eventExprCache.get(hash);
     if (existing !== undefined) {
@@ -569,7 +556,11 @@ export class IRBuilderImpl implements IRBuilder {
   }
 
   eventWrap(signal: SigExprId): EventExprId {
-    const expr = { kind: 'wrap' as const, signal };
+    const expr: EventExprWrap = {
+      kind: 'wrap',
+      type: eventTypeScalar(),
+      signal,
+    };
     const hash = hashEventExpr(expr);
     const existing = this.eventExprCache.get(hash);
     if (existing !== undefined) {
@@ -588,7 +579,12 @@ export class IRBuilderImpl implements IRBuilder {
   ): EventExprId {
     // Map 'merge' and 'last' to underlying event combine modes
     const underlyingMode = mode === 'merge' || mode === 'last' ? 'any' : mode;
-    const expr = { kind: 'combine' as const, events, mode: underlyingMode as 'any' | 'all' };
+    const expr: EventExprCombine = {
+      kind: 'combine',
+      type: eventTypeScalar(),
+      events,
+      mode: underlyingMode as 'any' | 'all',
+    };
     const hash = hashEventExpr(expr);
     const existing = this.eventExprCache.get(hash);
     if (existing !== undefined) {
@@ -605,7 +601,10 @@ export class IRBuilderImpl implements IRBuilder {
    * Used as a default when an event input is optional and not connected.
    */
   eventNever(): EventExprId {
-    const expr = { kind: 'never' as const };
+    const expr: EventExprNever = {
+      kind: 'never',
+      type: eventTypeScalar(),
+    };
     const hash = hashEventExpr(expr);
     const existing = this.eventExprCache.get(hash);
     if (existing !== undefined) {
@@ -649,8 +648,8 @@ export class IRBuilderImpl implements IRBuilder {
   ): InstanceId {
     const id = instanceId(`instance_${this.instances.size}`);
     this.instances.set(id, {
-      id: id as string,
-      domainType: domainType as string,
+      id,
+      domainType,
       count,
       lifecycle,
       identityMode,
@@ -831,7 +830,7 @@ export class IRBuilderImpl implements IRBuilder {
       this.stateMappings.push({
         kind: 'field',
         stateId: stableId,
-        instanceId: options.instanceId as string,
+        instanceId: options.instanceId,
         slotStart: slotIndex,
         laneCount,
         stride,
@@ -933,12 +932,12 @@ export class IRBuilderImpl implements IRBuilder {
   }
 
   stepMaterialize(field: FieldExprId, instanceId: InstanceId, target: ValueSlot): void {
-    this.steps.push({ kind: 'materialize', field, instanceId: instanceId as string, target });
+    this.steps.push({ kind: 'materialize', field, instanceId, target });
   }
 
   stepContinuityMapBuild(instanceId: InstanceId): void {
     // outputMapping key is derived from instanceId for consistency
-    this.steps.push({ kind: 'continuityMapBuild', instanceId: instanceId as string, outputMapping: `mapping_${instanceId}` });
+    this.steps.push({ kind: 'continuityMapBuild', instanceId, outputMapping: `mapping_${instanceId}` });
   }
 
   stepContinuityApply(
@@ -953,7 +952,7 @@ export class IRBuilderImpl implements IRBuilder {
     this.steps.push({
       kind: 'continuityApply',
       targetKey,
-      instanceId: instanceId as string,
+      instanceId,
       policy,
       baseSlot,
       outputSlot,

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { IRBuilderImpl } from '../IRBuilderImpl';
-import { canonicalType } from '../../../core/canonical-types';
+import { canonicalType, floatConst, vec2Const, intConst } from '../../../core/canonical-types';
 import { FLOAT, INT, VEC2 } from '../../../core/canonical-types';
 import { OpCode } from '../types';
 import { instanceId } from '../Indices';
@@ -11,8 +11,8 @@ describe('Hash-consing (I13)', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
       
-      const id1 = b.sigConst(1.0, type);
-      const id2 = b.sigConst(1.0, type);
+      const id1 = b.sigConst(floatConst(1.0), type);
+      const id2 = b.sigConst(floatConst(1.0), type);
       
       expect(id1).toBe(id2); // MUST be same ID
     });
@@ -21,8 +21,8 @@ describe('Hash-consing (I13)', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
       
-      const id1 = b.sigConst(1.0, type);
-      const id2 = b.sigConst(2.0, type);
+      const id1 = b.sigConst(floatConst(1.0), type);
+      const id2 = b.sigConst(floatConst(2.0), type);
       
       expect(id1).not.toBe(id2);
     });
@@ -61,7 +61,7 @@ describe('Hash-consing (I13)', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
       
-      const input = b.sigConst(1.0, type);
+      const input = b.sigConst(floatConst(1.0), type);
       const fn = { kind: 'opcode' as const, opcode: OpCode.Sin };
       
       const id1 = b.sigMap(input, fn, type);
@@ -74,8 +74,8 @@ describe('Hash-consing (I13)', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
       
-      const a = b.sigConst(2.0, type);
-      const b1 = b.sigConst(3.0, type);
+      const a = b.sigConst(floatConst(2.0), type);
+      const b1 = b.sigConst(floatConst(3.0), type);
       const fn = { kind: 'opcode' as const, opcode: OpCode.Add };
       
       const sum1 = b.sigZip([a, b1], fn, type);
@@ -88,8 +88,8 @@ describe('Hash-consing (I13)', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
       
-      const a = b.sigConst(2.0, type);
-      const b1 = b.sigConst(3.0, type);
+      const a = b.sigConst(floatConst(2.0), type);
+      const b1 = b.sigConst(floatConst(3.0), type);
       
       const sum1 = b.sigBinOp(a, b1, OpCode.Add, type);
       const sum2 = b.sigBinOp(a, b1, OpCode.Add, type);
@@ -101,7 +101,7 @@ describe('Hash-consing (I13)', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
       
-      const input = b.sigConst(1.0, type);
+      const input = b.sigConst(floatConst(1.0), type);
       
       const result1 = b.sigUnaryOp(input, OpCode.Sin, type);
       const result2 = b.sigUnaryOp(input, OpCode.Sin, type);
@@ -113,8 +113,8 @@ describe('Hash-consing (I13)', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
       
-      const a = b.sigConst(1.0, type);
-      const b1 = b.sigConst(2.0, type);
+      const a = b.sigConst(floatConst(1.0), type);
+      const b1 = b.sigConst(floatConst(2.0), type);
       
       const sum1 = b.sigCombine([a, b1], 'sum', type);
       const sum2 = b.sigCombine([a, b1], 'sum', type);
@@ -126,7 +126,7 @@ describe('Hash-consing (I13)', () => {
       const b = new IRBuilderImpl();
       const sigType = canonicalType(FLOAT);
       
-      const sig = b.sigConst(1.0, sigType);
+      const sig = b.sigConst(floatConst(1.0), sigType);
       const field = b.Broadcast(sig, sigType);
       
       const reduce1 = b.ReduceField(field, 'sum', sigType);
@@ -142,9 +142,9 @@ describe('Hash-consing (I13)', () => {
       const type = canonicalType(FLOAT);
       
       // Constants deduplicate
-      const a = b.sigConst(2.0, type);
-      const b1 = b.sigConst(3.0, type);
-      const b2 = b.sigConst(3.0, type);
+      const a = b.sigConst(floatConst(2.0), type);
+      const b1 = b.sigConst(floatConst(3.0), type);
+      const b2 = b.sigConst(floatConst(3.0), type);
       expect(b1).toBe(b2);
       
       // Operations using deduplicated inputs also deduplicate
@@ -157,17 +157,17 @@ describe('Hash-consing (I13)', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
       
-      const a = b.sigConst(1.0, type);
-      const b1 = b.sigConst(2.0, type);
+      const a = b.sigConst(floatConst(1.0), type);
+      const b1 = b.sigConst(floatConst(2.0), type);
       
       // Build: (a + b) * 2
       const sum1 = b.sigBinOp(a, b1, OpCode.Add, type);
-      const two1 = b.sigConst(2.0, type);
+      const two1 = b.sigConst(floatConst(2.0), type);
       const result1 = b.sigBinOp(sum1, two1, OpCode.Mul, type);
       
       // Build same expression again
       const sum2 = b.sigBinOp(a, b1, OpCode.Add, type);
-      const two2 = b.sigConst(2.0, type);
+      const two2 = b.sigConst(floatConst(2.0), type);
       const result2 = b.sigBinOp(sum2, two2, OpCode.Mul, type);
       
       // All subexpressions should be deduplicated
@@ -181,20 +181,20 @@ describe('Hash-consing (I13)', () => {
     it('deduplicates identical fieldConst', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
-      
-      const id1 = b.fieldConst(1.0, type);
-      const id2 = b.fieldConst(1.0, type);
-      
+
+      const id1 = b.fieldConst(floatConst(1.0), type);
+      const id2 = b.fieldConst(floatConst(1.0), type);
+
       expect(id1).toBe(id2);
     });
 
     it('distinguishes different fieldConst values', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
-      
-      const id1 = b.fieldConst(1.0, type);
-      const id2 = b.fieldConst(2.0, type);
-      
+
+      const id1 = b.fieldConst(floatConst(1.0), type);
+      const id2 = b.fieldConst(floatConst(2.0), type);
+
       expect(id1).not.toBe(id2);
     });
 
@@ -202,7 +202,7 @@ describe('Hash-consing (I13)', () => {
       const b = new IRBuilderImpl();
       const sigType = canonicalType(FLOAT);
       
-      const sig = b.sigConst(1.0, sigType);
+      const sig = b.sigConst(floatConst(1.0), sigType);
       const id1 = b.Broadcast(sig, sigType);
       const id2 = b.Broadcast(sig, sigType);
       
@@ -243,17 +243,6 @@ describe('Hash-consing (I13)', () => {
       expect(id1).not.toBe(id2);
     });
 
-    it('deduplicates identical fieldArray', () => {
-      const b = new IRBuilderImpl();
-      const type = canonicalType(FLOAT);
-      const inst = instanceId('inst1');
-      
-      const id1 = b.fieldArray(inst, type);
-      const id2 = b.fieldArray(inst, type);
-      
-      expect(id1).toBe(id2);
-    });
-
     it('deduplicates identical fieldPlacement', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(VEC2);
@@ -289,7 +278,7 @@ describe('Hash-consing (I13)', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
       
-      const sig = b.sigConst(1.0, type);
+      const sig = b.sigConst(floatConst(1.0), type);
       const id1 = b.eventWrap(sig);
       const id2 = b.eventWrap(sig);
       
@@ -314,8 +303,8 @@ describe('Hash-consing (I13)', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
       
-      const a = b.sigConst(1.0, type);
-      const b1 = b.sigConst(2.0, type);
+      const a = b.sigConst(floatConst(1.0), type);
+      const b1 = b.sigConst(floatConst(2.0), type);
       const fn = { kind: 'opcode' as const, opcode: OpCode.Add };
       
       const zip1 = b.sigZip([a, b1], fn, type);
@@ -328,7 +317,7 @@ describe('Hash-consing (I13)', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
       
-      const input = b.sigConst(1.0, type);
+      const input = b.sigConst(floatConst(1.0), type);
       const fn = { kind: 'opcode' as const, opcode: OpCode.Sin };
       
       const id1 = b.sigMap(input, fn, type);
@@ -341,7 +330,7 @@ describe('Hash-consing (I13)', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
       
-      const input = b.sigConst(1.0, type);
+      const input = b.sigConst(floatConst(1.0), type);
       const fn1 = { kind: 'opcode' as const, opcode: OpCode.Sin };
       const fn2 = { kind: 'opcode' as const, opcode: OpCode.Cos };
       
@@ -355,8 +344,8 @@ describe('Hash-consing (I13)', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
       
-      const id1 = b.sigConst(1.0, type);
-      const id2 = b.sigConst(1.00, type);
+      const id1 = b.sigConst(floatConst(1.0), type);
+      const id2 = b.sigConst(floatConst(1.00), type);
       
       expect(id1).toBe(id2); // JS number normalization
     });
@@ -366,8 +355,8 @@ describe('Hash-consing (I13)', () => {
       const floatType = canonicalType(FLOAT);
       const intType = canonicalType(INT);
       
-      const id1 = b.sigConst(1, floatType);
-      const id2 = b.sigConst(1, intType);
+      const id1 = b.sigConst(floatConst(1), floatType);
+      const id2 = b.sigConst(intConst(1), intType);
       
       expect(id1).not.toBe(id2);
     });
@@ -376,7 +365,7 @@ describe('Hash-consing (I13)', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
       
-      const input = b.sigConst(1.0, type);
+      const input = b.sigConst(floatConst(1.0), type);
       const fn = { kind: 'composed' as const, ops: [OpCode.Sin, OpCode.Cos] as readonly OpCode[] };
       
       const id1 = b.sigMap(input, fn, type);
@@ -401,8 +390,8 @@ describe('Hash-consing (I13)', () => {
       expect(time2).toBe(time3);
       
       // Create multiple instances of same computation
-      const one = b.sigConst(1.0, type);
-      const pi = b.sigConst(3.14159, type);
+      const one = b.sigConst(floatConst(1.0), type);
+      const pi = b.sigConst(floatConst(3.14159), type);
       
       for (let i = 0; i < 5; i++) {
         const result = b.sigBinOp(time1, one, OpCode.Add, type);

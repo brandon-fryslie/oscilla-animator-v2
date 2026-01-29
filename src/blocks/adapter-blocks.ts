@@ -26,6 +26,7 @@ import {
   unitMs,
   unitSeconds,
   strideOf,
+  floatConst,
 } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { OpCode } from '../compiler/ir/types';
@@ -137,7 +138,7 @@ registerBlock({
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
     if (!input || input.k !== 'sig') throw new Error('Lens block input must be a signal');
-    const twoPi = ctx.b.sigConst(6.283185307179586, canonicalType(FLOAT, unitScalar()));
+    const twoPi = ctx.b.sigConst(floatConst(6.283185307179586), canonicalType(FLOAT, unitScalar()));
     const mulFn = ctx.b.opcode(OpCode.Mul);
     const radians = ctx.b.sigZip([input.id as SigExprId, twoPi], mulFn, canonicalType(FLOAT, unitRadians()));
     const outType = ctx.outTypes[0];
@@ -175,7 +176,7 @@ registerBlock({
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
     if (!input || input.k !== 'sig') throw new Error('Lens block input must be a signal');
-    const twoPi = ctx.b.sigConst(6.283185307179586, canonicalType(FLOAT, unitScalar()));
+    const twoPi = ctx.b.sigConst(floatConst(6.283185307179586), canonicalType(FLOAT, unitScalar()));
     const divFn = ctx.b.opcode(OpCode.Div);
     const divided = ctx.b.sigZip([input.id as SigExprId, twoPi], divFn, canonicalType(FLOAT, unitScalar()));
     const wrapFn = ctx.b.opcode(OpCode.Wrap01);
@@ -219,7 +220,7 @@ registerBlock({
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
     if (!input || input.k !== 'sig') throw new Error('Lens block input must be a signal');
-    const factor = ctx.b.sigConst(0.017453292519943295, canonicalType(FLOAT, unitScalar())); // π/180
+    const factor = ctx.b.sigConst(floatConst(0.017453292519943295), canonicalType(FLOAT, unitScalar())); // π/180
     const mulFn = ctx.b.opcode(OpCode.Mul);
     const radians = ctx.b.sigZip([input.id as SigExprId, factor], mulFn, canonicalType(FLOAT, unitRadians()));
     const outType = ctx.outTypes[0];
@@ -257,7 +258,7 @@ registerBlock({
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
     if (!input || input.k !== 'sig') throw new Error('Lens block input must be a signal');
-    const factor = ctx.b.sigConst(57.29577951308232, canonicalType(FLOAT, unitScalar())); // 180/π
+    const factor = ctx.b.sigConst(floatConst(57.29577951308232), canonicalType(FLOAT, unitScalar())); // 180/π
     const mulFn = ctx.b.opcode(OpCode.Mul);
     const degrees = ctx.b.sigZip([input.id as SigExprId, factor], mulFn, canonicalType(FLOAT, unitDegrees()));
     const outType = ctx.outTypes[0];
@@ -300,7 +301,7 @@ registerBlock({
     const input = inputsById.in;
     if (!input || input.k !== 'sig') throw new Error('Lens block input must be a signal');
     // int:ms → float division → float:seconds
-    const divisor = ctx.b.sigConst(1000, canonicalType(FLOAT, unitScalar()));
+    const divisor = ctx.b.sigConst(floatConst(1000), canonicalType(FLOAT, unitScalar()));
     const divFn = ctx.b.opcode(OpCode.Div);
     const seconds = ctx.b.sigZip([input.id as SigExprId, divisor], divFn, canonicalType(FLOAT, unitSeconds()));
     const outType = ctx.outTypes[0];
@@ -338,7 +339,7 @@ registerBlock({
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
     if (!input || input.k !== 'sig') throw new Error('Lens block input must be a signal');
-    const multiplier = ctx.b.sigConst(1000, canonicalType(FLOAT, unitScalar()));
+    const multiplier = ctx.b.sigConst(floatConst(1000), canonicalType(FLOAT, unitScalar()));
     const mulFn = ctx.b.opcode(OpCode.Mul);
     const floatMs = ctx.b.sigZip([input.id as SigExprId, multiplier], mulFn, canonicalType(FLOAT, unitMs()));
     const floorFn = ctx.b.opcode(OpCode.Floor);
@@ -382,8 +383,8 @@ registerBlock({
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
     if (!input || input.k !== 'sig') throw new Error('Lens block input must be a signal');
-    const zero = ctx.b.sigConst(0, canonicalType(FLOAT, unitScalar()));
-    const one = ctx.b.sigConst(1, canonicalType(FLOAT, unitScalar()));
+    const zero = ctx.b.sigConst(floatConst(0), canonicalType(FLOAT, unitScalar()));
+    const one = ctx.b.sigConst(floatConst(1), canonicalType(FLOAT, unitScalar()));
     const clampFn = ctx.b.opcode(OpCode.Clamp);
     const clamped = ctx.b.sigZip([input.id as SigExprId, zero, one], clampFn, canonicalType(FLOAT, unitNorm01()));
     const outType = ctx.outTypes[0];

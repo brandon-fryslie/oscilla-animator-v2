@@ -13,7 +13,7 @@
  */
 
 import { registerBlock } from './registry';
-import { canonicalType, unitNorm01, unitScalar, unitDeg, strideOf } from '../core/canonical-types';
+import { canonicalType, unitNorm01, unitScalar, unitDeg, strideOf, floatConst, cameraProjectionConst } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { defaultSourceConst, type DefaultSource } from '../types';
 import type { CameraDeclIR } from '../compiler/ir/program';
@@ -51,8 +51,8 @@ registerBlock({
     out: { label: 'Output', type: canonicalType(CAMERA_PROJECTION) },
   },
   lower: ({ ctx, config }) => {
-    const value = (config?.value as number) ?? 0;
-    const sigId = ctx.b.sigConst(value, canonicalType(CAMERA_PROJECTION));
+    const rawValue = (config?.value as number) ?? 0;
+    const sigId = ctx.b.sigConst(cameraProjectionConst(rawValue === 1 ? 'perspective' : 'orthographic'), canonicalType(CAMERA_PROJECTION));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return { outputsById: { out: { k: 'sig', id: sigId, slot, type: outType, stride: strideOf(outType.payload) } } };

@@ -6,7 +6,7 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
-import { canonicalType, signalTypeField, strideOf, type PayloadType } from '../core/canonical-types';
+import { canonicalType, signalTypeField, strideOf, type PayloadType, boolConst } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { DOMAIN_CIRCLE } from '../core/domain-registry';
 import { defaultSourceConst, defaultSource } from '../types';
@@ -86,20 +86,18 @@ registerBlock({
 
     // Create field expressions
     // 1. Elements field - broadcasts the input signal across the array
-    let elementsField;
-    if (elementInput && elementInput.k === 'sig') {
-      // Broadcast the signal to a field
-      elementsField = ctx.b.Broadcast(elementInput.id, signalTypeField(SHAPE, 'default'));
-    } else {
-      // No input - use array field (identity)
-      elementsField = ctx.b.fieldArray(instanceId, signalTypeField(SHAPE, 'default'));
+    // NOTE: elementInput is required - FieldExprArray (identity) has been removed per spec
+    // until it has concrete backing store, lifetime rules, and runtime storage contract
+    if (!elementInput || elementInput.k !== 'sig') {
+      throw new Error('Array block requires an element signal input');
     }
+    const elementsField = ctx.b.Broadcast(elementInput.id, signalTypeField(SHAPE, 'default'));
 
     // 2. Intrinsic fields (index, t, active)
     const indexField = ctx.b.fieldIntrinsic(instanceId, 'index', signalTypeField(INT, 'default'));
     const tField = ctx.b.fieldIntrinsic(instanceId, 'normalizedIndex', signalTypeField(FLOAT, 'default'));
     // For static arrays, active is always true - we can use a constant broadcast
-    const activeSignal = ctx.b.sigConst(true, canonicalType(BOOL));
+    const activeSignal = ctx.b.sigConst(boolConst(true), canonicalType(BOOL));
     const activeField = ctx.b.Broadcast(activeSignal, signalTypeField(BOOL, 'default'));
 
     const outType0 = ctx.outTypes[0];

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { getScalarSlots, getFieldSlots, type ScheduleIR } from '../schedule-program';
 import type { ScalarSlotDecl, FieldSlotDecl } from '../../ir/types';
+import { instanceId } from '../../ir/Indices';
 
 describe('State Slot Accessors', () => {
   // Helper to create minimal test schedule
@@ -23,7 +24,7 @@ describe('State Slot Accessors', () => {
     it('should return only scalar state mappings', () => {
       const schedule = createTestSchedule([
         { kind: 'scalar', stateId: 's1' as any, slotIndex: 0, stride: 1, initial: [0] },
-        { kind: 'field', stateId: 'f1' as any, instanceId: 'inst1', slotStart: 1, laneCount: 4, stride: 1, initial: [0] },
+        { kind: 'field', stateId: 'f1' as any, instanceId: instanceId('inst1'), slotStart: 1, laneCount: 4, stride: 1, initial: [0] },
         { kind: 'scalar', stateId: 's2' as any, slotIndex: 5, stride: 2, initial: [0, 0] }
       ]);
 
@@ -38,7 +39,7 @@ describe('State Slot Accessors', () => {
 
     it('should return empty array when no scalar slots exist', () => {
       const schedule = createTestSchedule([
-        { kind: 'field', stateId: 'f1' as any, instanceId: 'inst1', slotStart: 0, laneCount: 4, stride: 1, initial: [0] }
+        { kind: 'field', stateId: 'f1' as any, instanceId: instanceId('inst1'), slotStart: 0, laneCount: 4, stride: 1, initial: [0] }
       ]);
 
       const result = getScalarSlots(schedule);
@@ -68,8 +69,8 @@ describe('State Slot Accessors', () => {
     it('should return only field state mappings', () => {
       const schedule = createTestSchedule([
         { kind: 'scalar', stateId: 's1' as any, slotIndex: 0, stride: 1, initial: [0] },
-        { kind: 'field', stateId: 'f1' as any, instanceId: 'inst1', slotStart: 1, laneCount: 4, stride: 1, initial: [0] },
-        { kind: 'field', stateId: 'f2' as any, instanceId: 'inst2', slotStart: 5, laneCount: 8, stride: 2, initial: [0, 0] }
+        { kind: 'field', stateId: 'f1' as any, instanceId: instanceId('inst1'), slotStart: 1, laneCount: 4, stride: 1, initial: [0] },
+        { kind: 'field', stateId: 'f2' as any, instanceId: instanceId('inst2'), slotStart: 5, laneCount: 8, stride: 2, initial: [0, 0] }
       ]);
 
       const result = getFieldSlots(schedule);
@@ -95,7 +96,7 @@ describe('State Slot Accessors', () => {
 
     it('should narrow TypeScript type correctly', () => {
       const schedule = createTestSchedule([
-        { kind: 'field', stateId: 'f1' as any, instanceId: 'inst1', slotStart: 0, laneCount: 4, stride: 1, initial: [0] }
+        { kind: 'field', stateId: 'f1' as any, instanceId: instanceId('inst1'), slotStart: 0, laneCount: 4, stride: 1, initial: [0] }
       ]);
 
       const result = getFieldSlots(schedule);
@@ -115,9 +116,9 @@ describe('State Slot Accessors', () => {
     it('should partition stateMappings array correctly', () => {
       const mappings = [
         { kind: 'scalar' as const, stateId: 's1' as any, slotIndex: 0, stride: 1, initial: [0] },
-        { kind: 'field' as const, stateId: 'f1' as any, instanceId: 'inst1', slotStart: 1, laneCount: 4, stride: 1, initial: [0] },
+        { kind: 'field' as const, stateId: 'f1' as any, instanceId: instanceId('inst1'), slotStart: 1, laneCount: 4, stride: 1, initial: [0] },
         { kind: 'scalar' as const, stateId: 's2' as any, slotIndex: 5, stride: 2, initial: [0, 0] },
-        { kind: 'field' as const, stateId: 'f2' as any, instanceId: 'inst2', slotStart: 7, laneCount: 8, stride: 1, initial: [0] }
+        { kind: 'field' as const, stateId: 'f2' as any, instanceId: instanceId('inst2'), slotStart: 7, laneCount: 8, stride: 1, initial: [0] }
       ];
       const schedule = createTestSchedule(mappings);
 

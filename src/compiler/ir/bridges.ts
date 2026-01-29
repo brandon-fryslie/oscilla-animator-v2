@@ -17,16 +17,22 @@
 import type {
   CanonicalType,
   Extent,
-  Cardinality,
-  Temporality,
-  Binding,
-  AxisTag,
+  CardinalityValue,
+  TemporalityValue,
+  BindingValue,
+  Axis,
   PayloadType,
   ConcretePayloadType,
   ResolvedExtent,
 } from '../../core/canonical-types';
-import { isInstantiated, isPayloadVar, FLOAT, INT, VEC2, VEC3, COLOR, BOOL, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
+import { isAxisInst, isPayloadVar, FLOAT, INT, VEC2, VEC3, COLOR, BOOL, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
 import type { ShapeDescIR } from './program';
+
+// Type aliases for backward compat
+type Cardinality = CardinalityValue;
+type Temporality = TemporalityValue;
+type Binding = BindingValue;
+type AxisTag<T> = Axis<T, never>;
 
 // =============================================================================
 // Main Bridge Function: Extent → ResolvedExtent
@@ -242,17 +248,17 @@ export function payloadTypeToShapeDescIR(payload: PayloadType): ShapeDescIR {
 // =============================================================================
 
 /**
- * Extract instantiated value from AxisTag or throw.
+ * Extract instantiated value from Axis or throw.
  */
-function getInstantiatedOrThrow<T>(tag: AxisTag<T>, axisName: string): T {
-  if (!isInstantiated(tag)) {
+function getInstantiatedOrThrow<T, V>(axis: Axis<T, V>, axisName: string): T {
+  if (axis.kind !== 'inst') {
     throw new Error(
-      `Cannot bridge axis '${axisName}' with kind 'default'. ` +
+      `Cannot bridge axis '${axisName}' with kind 'var'. ` +
         `All axes must be instantiated before bridging to IR. ` +
-        `Run Pass 4 (resolve defaults) first.`
+        `Run type inference first.`
     );
   }
-  return tag.value;
+  return axis.value;
 }
 
 /**

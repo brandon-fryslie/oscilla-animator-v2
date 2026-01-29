@@ -11,6 +11,7 @@ import {
   type AssemblerContext,
 } from '../RenderAssembler';
 import type { StepRender, InstanceDecl, SigExpr } from '../../compiler/ir/types';
+import { instanceId, domainTypeId } from '../../compiler/ir/Indices';
 import type { CanonicalType } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION, canonicalType } from '../../core/canonical-types';
 import type { RuntimeState } from '../RuntimeState';
@@ -125,12 +126,12 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       state.values.objects.set(3 as ValueSlot, shapeBuffer);
 
       const signals: SigExpr[] = [
-        { kind: 'const', value: 1.0, type: SCALAR_TYPE },
+        { kind: 'const', value: { kind: 'float', value: 1.0 }, type: SCALAR_TYPE },
       ];
 
       const step: StepRender = {
         kind: 'render',
-        instanceId: 'test-instance',
+        instanceId: instanceId('test-instance'),
         positionSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
         scale: { k: 'sig', id: 0 as SigExprId },
@@ -191,12 +192,12 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       state.values.objects.set(4 as ValueSlot, controlPointsBuffer);
 
       const signals: SigExpr[] = [
-        { kind: 'const', value: 1.0, type: SCALAR_TYPE },
+        { kind: 'const', value: { kind: 'float', value: 1.0 }, type: SCALAR_TYPE },
       ];
 
       const step: StepRender = {
         kind: 'render',
-        instanceId: 'test-instance',
+        instanceId: instanceId('test-instance'),
         positionSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
         scale: { k: 'sig', id: 0 as SigExprId },
@@ -269,12 +270,12 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       }
 
       const signals: SigExpr[] = [
-        { kind: 'const', value: 2.0, type: SCALAR_TYPE },
+        { kind: 'const', value: { kind: 'float', value: 2.0 }, type: SCALAR_TYPE },
       ];
 
       const step: StepRender = {
         kind: 'render',
-        instanceId: 'test-instance',
+        instanceId: instanceId('test-instance'),
         positionSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
         scale: { k: 'sig', id: 0 as SigExprId },
@@ -350,12 +351,12 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       }
 
       const signals: SigExpr[] = [
-        { kind: 'const', value: 1.0, type: SCALAR_TYPE },
+        { kind: 'const', value: { kind: 'float', value: 1.0 }, type: SCALAR_TYPE },
       ];
 
       const step: StepRender = {
         kind: 'render',
-        instanceId: 'test-instance',
+        instanceId: instanceId('test-instance'),
         positionSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
         scale: { k: 'sig', id: 0 as SigExprId },
@@ -419,12 +420,12 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       writeShape2D(shapeBuffer, 3, { topologyId: CIRCLE_ID, pointsFieldSlot: 4, pointsCount: 4, styleRef: 0, flags: 1 });
 
       const signals: SigExpr[] = [
-        { kind: 'const', value: 1.0, type: SCALAR_TYPE },
+        { kind: 'const', value: { kind: 'float', value: 1.0 }, type: SCALAR_TYPE },
       ];
 
       const step: StepRender = {
         kind: 'render',
-        instanceId: 'test-instance',
+        instanceId: instanceId('test-instance'),
         positionSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
         scale: { k: 'sig', id: 0 as SigExprId },
@@ -498,12 +499,12 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       }
 
       const signals: SigExpr[] = [
-        { kind: 'const', value: 1.0, type: SCALAR_TYPE },
+        { kind: 'const', value: { kind: 'float', value: 1.0 }, type: SCALAR_TYPE },
       ];
 
       const step: StepRender = {
         kind: 'render',
-        instanceId: 'test-instance',
+        instanceId: instanceId('test-instance'),
         positionSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
         scale: { k: 'sig', id: 0 as SigExprId },
@@ -548,12 +549,12 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       }
 
       const signals: SigExpr[] = [
-        { kind: 'const', value: 1.0, type: SCALAR_TYPE },
+        { kind: 'const', value: { kind: 'float', value: 1.0 }, type: SCALAR_TYPE },
       ];
 
       const step: StepRender = {
         kind: 'render',
-        instanceId: 'test-instance',
+        instanceId: instanceId('test-instance'),
         positionSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
         scale: { k: 'sig', id: 0 as SigExprId },
@@ -618,13 +619,13 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       state.values.objects.set(11 as ValueSlot, squarePoints);
 
       const signals: SigExpr[] = [
-        { kind: 'const', value: 1.0, type: SCALAR_TYPE },
+        { kind: 'const', value: { kind: 'float', value: 1.0 }, type: SCALAR_TYPE },
       ];
 
       const steps: StepRender[] = [
         {
           kind: 'render',
-          instanceId: 'instance-a',
+          instanceId: instanceId('instance-a'),
           positionSlot: 1 as ValueSlot,
           colorSlot: 2 as ValueSlot,
           scale: { k: 'sig', id: 0 as SigExprId },
@@ -632,7 +633,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         },
         {
           kind: 'render',
-          instanceId: 'instance-b',
+          instanceId: instanceId('instance-b'),
           positionSlot: 4 as ValueSlot,
           colorSlot: 5 as ValueSlot,
           scale: { k: 'sig', id: 0 as SigExprId },

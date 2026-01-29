@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from './registry';
-import { canonicalType, signalTypeField, strideOf } from '../core/canonical-types';
+import { canonicalType, signalTypeField, strideOf, floatConst, vec2Const } from '../core/canonical-types';
 import { domainTypeId } from '../core/domain-registry';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import type { FieldExprId, SigExprId } from '../compiler/ir/Indices';
@@ -239,9 +239,9 @@ registerBlock({
     const radiusInput = inputsById.radius;
     const radiusSig = radiusInput?.k === 'sig'
       ? radiusInput.id as SigExprId
-      : ctx.b.sigConst((config?.radius as number) ?? 0.15, canonicalType(FLOAT));
+      : ctx.b.sigConst(floatConst((config?.radius as number) ?? 0.15), canonicalType(FLOAT));
 
-    const phaseSig = ctx.b.sigConst(0, canonicalType(FLOAT));
+    const phaseSig = ctx.b.sigConst(floatConst(0), canonicalType(FLOAT));
 
     // Use circleLayout kernel to create positions
     const circleLayoutFn = ctx.b.kernel('circleLayout');
@@ -255,7 +255,7 @@ registerBlock({
     // For tangents in MVP, we'll output a constant zero field
     // Full tangent calculation requires more complex field operations
     // Users can compute tangents manually if needed
-    const zeroSig = ctx.b.sigConst(0, canonicalType(FLOAT));
+    const zeroSig = ctx.b.sigConst(floatConst(0), canonicalType(FLOAT));
     const zeroXField = ctx.b.Broadcast(zeroSig, signalTypeField(FLOAT, 'default'));
     const zeroYField = ctx.b.Broadcast(zeroSig, signalTypeField(FLOAT, 'default'));
     const makeVec2Fn = ctx.b.kernel('makeVec2');

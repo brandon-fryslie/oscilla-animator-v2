@@ -3,7 +3,14 @@
  *
  * Branded types for dense numeric indices used in runtime lookups.
  * String IDs are for persistence and debugging; indices are for fast runtime access.
+ *
+ * NOTE: InstanceId and DomainTypeId are now defined in src/core/ids.ts.
+ * This module re-exports them for backward compatibility during migration.
  */
+
+// Re-export InstanceId and DomainTypeId from core (single source of truth)
+export type { InstanceId, DomainTypeId } from '../../core/ids';
+export { instanceId, domainTypeId } from '../../core/ids';
 
 // =============================================================================
 // Branded Index Types (Numeric)
@@ -56,19 +63,6 @@ export type ExprId = string & { readonly __brand: 'ExprId' };
 
 /** Stable string ID for state bindings. */
 export type StateId = string & { readonly __brand: 'StateId' };
-
-
-/**
- * Stable string ID for domain types (NEW).
- * Domain types classify elements (shape, circle, control, event).
- */
-export type DomainTypeId = string & { readonly __brand: 'DomainTypeId' };
-
-/**
- * Stable string ID for instances (NEW).
- * Instances are specific instantiations of domain types (count, layout).
- */
-export type InstanceId = string & { readonly __brand: 'InstanceId' };
 
 /** Stable string ID for slots. */
 export type SlotId = string & { readonly __brand: 'SlotId' };
@@ -143,21 +137,6 @@ export function exprId(s: string): ExprId {
 
 export function stateId(s: string): StateId {
   return s as StateId;
-}
-
-
-/**
- * Create a DomainTypeId (NEW).
- */
-export function domainTypeId(s: string): DomainTypeId {
-  return s as DomainTypeId;
-}
-
-/**
- * Create an InstanceId (NEW).
- */
-export function instanceId(s: string): InstanceId {
-  return s as InstanceId;
 }
 
 export function slotId(s: string): SlotId {

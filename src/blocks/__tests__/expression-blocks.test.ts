@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import '../expression-blocks'; // Import to register block
 import { getBlockDefinition } from '../registry';
-import { canonicalType, type CanonicalType, strideOf, isPayloadVar } from '../../core/canonical-types';
+import { canonicalType, type CanonicalType, strideOf, isPayloadVar, floatConst, intConst } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
 import { IRBuilderImpl } from '../../compiler/ir/IRBuilderImpl';
 import type { LowerCtx } from '../registry';
@@ -141,8 +141,8 @@ describe('Expression Block Lowering', () => {
     const def = getBlockDefinition('Expression')!;
 
     // Create input signals
-    const in0Sig = builder.sigConst(5, canonicalType(INT));
-    const in1Sig = builder.sigConst(3, canonicalType(INT));
+    const in0Sig = builder.sigConst(intConst(5), canonicalType(INT));
+    const in1Sig = builder.sigConst(intConst(3), canonicalType(INT));
 
     const intType = canonicalType(INT);
     const result = def.lower({
@@ -197,7 +197,7 @@ describe('Expression Block Lowering', () => {
     const def = getBlockDefinition('Expression')!;
 
     // Create input signal
-    const in0Sig = builder.sigConst(0, canonicalType(FLOAT));
+    const in0Sig = builder.sigConst(floatConst(0), canonicalType(FLOAT));
 
     const floatType = canonicalType(FLOAT);
     const result = def.lower({
@@ -225,7 +225,7 @@ describe('Expression Block Lowering', () => {
     const def = getBlockDefinition('Expression')!;
 
     // Only wire in0, leave others unwired
-    const in0Sig = builder.sigConst(42, canonicalType(INT));
+    const in0Sig = builder.sigConst(intConst(42), canonicalType(INT));
 
     const intType = canonicalType(INT);
     const result = def.lower({

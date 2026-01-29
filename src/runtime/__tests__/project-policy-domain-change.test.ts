@@ -20,6 +20,7 @@ import {
   type StableTargetId,
 } from '../ContinuityState';
 import type { StepContinuityApply } from '../../compiler/ir/types';
+import { instanceId } from '../../compiler/ir/Indices';
 import type { RuntimeState } from '../RuntimeState';
 import { ExternalChannelSystem } from '../ExternalChannel';
 import type { ValueSlot } from '../../types';
@@ -293,7 +294,7 @@ describe('Project Policy Domain Change', () => {
     const step: StepContinuityApply = {
       kind: 'continuityApply',
       targetKey: targetId,
-      instanceId: 'test_instance',
+      instanceId: instanceId('test_instance'),
       policy: { kind: 'project', projector: 'byId', post: 'slew', tauMs: 120 },
       baseSlot,
       outputSlot,
@@ -457,7 +458,7 @@ describe('Project Policy Domain Change', () => {
     ]);
 
     const targetId = 'test_instance_position_0' as StableTargetId;
-    const instanceId = 'test_instance';
+    const instId = 'test_instance';
     let outputBuffer = new Float32Array(10);
 
     // Helper to run one frame
@@ -492,18 +493,18 @@ describe('Project Policy Domain Change', () => {
         const mapping: MappingState = {
           newToOld: newToOldMapping,
         };
-        state.continuity.mappings.set(instanceId, mapping);
+        state.continuity.mappings.set(instId, mapping);
         state.continuity.domainChangeThisFrame = true;
       } else {
         state.continuity.domainChangeThisFrame = false;
-        state.continuity.mappings.delete(instanceId);
+        state.continuity.mappings.delete(instId);
       }
 
       // Create step
       const step: StepContinuityApply = {
         kind: 'continuityApply',
         targetKey: targetId,
-        instanceId,
+        instanceId: instanceId(instId),
         policy: { kind: 'project', projector: 'byId', post: 'slew', tauMs: 120 },
         baseSlot,
         outputSlot,
@@ -617,7 +618,7 @@ describe('Project Policy Domain Change', () => {
     const baseSlot = 100 as ValueSlot;
     const outputSlot = 101 as ValueSlot;
     const targetId = 'test_instance_position_0' as StableTargetId;
-    const instanceId = 'test_instance';
+    const instId = 'test_instance';
 
     // Start with 3 elements at known positions
     const initialPositions = new Float32Array([
@@ -634,7 +635,7 @@ describe('Project Policy Domain Change', () => {
     const step: StepContinuityApply = {
       kind: 'continuityApply',
       targetKey: targetId,
-      instanceId,
+      instanceId: instanceId(instId),
       policy: { kind: 'project', projector: 'byId', post: 'slew', tauMs: 120 },
       baseSlot,
       outputSlot,
@@ -676,7 +677,7 @@ describe('Project Policy Domain Change', () => {
     const mapping: MappingState = {
       newToOld: new Int32Array([0, 1, 2, -1, -1]),
     };
-    state.continuity.mappings.set(instanceId, mapping);
+    state.continuity.mappings.set(instId, mapping);
     state.continuity.domainChangeThisFrame = true;
     state.time = { 
       tAbsMs: 116, 
@@ -704,7 +705,7 @@ describe('Project Policy Domain Change', () => {
     // Run frames with the NEW base positions (simulating continued animation)
     // As time passes, gauge should decay toward zero
     state.continuity.domainChangeThisFrame = false;
-    state.continuity.mappings.delete(instanceId);
+    state.continuity.mappings.delete(instId);
 
     // Collect gauge samples over time
     const gaugeSamples: number[] = [];

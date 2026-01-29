@@ -19,7 +19,7 @@
 import { describe, it, expect } from 'vitest';
 import { IRBuilderImpl } from '../ir/IRBuilderImpl';
 import { OpCode } from '../ir/types';
-import { signalTypeField, signalTypeSignal } from '../../core/canonical-types';
+import { signalTypeField, signalTypeSignal, floatConst, intConst, vec2Const } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
 import { DOMAIN_CIRCLE } from '../../core/domain-registry';
 
@@ -59,7 +59,7 @@ describe('Instance Unification', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
       const type = signalTypeField(FLOAT, instance);
-      const sig = b.sigConst(1.0, signalTypeSignal(FLOAT));
+      const sig = b.sigConst(floatConst(1.0), signalTypeSignal(FLOAT));
       const broadcast = b.Broadcast(sig, type);
 
       // Broadcasts are instance-agnostic
@@ -70,23 +70,14 @@ describe('Instance Unification', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
       const type = signalTypeField(FLOAT, instance);
-      const constField = b.fieldConst(42, type);
+      const constField = b.fieldConst(floatConst(42), type);
 
       // Consts are instance-agnostic
       expect(b.inferFieldInstance(constField)).toBeUndefined();
     });
   });
 
-  describe('array and layout field instance inference', () => {
-    it('returns instanceId for array fields', () => {
-      const b = new IRBuilderImpl();
-      const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const type = signalTypeField(FLOAT, instance);
-      const arrayField = b.fieldArray(instance, type);
-
-      expect(b.inferFieldInstance(arrayField)).toBe(instance);
-    });
-
+  describe('layout field instance inference', () => {
     it('returns instanceId for kernel-based layout fields', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
@@ -97,8 +88,8 @@ describe('Instance Unification', () => {
       const normalizedIndex = b.fieldIntrinsic(instance, 'normalizedIndex', floatType);
       
       // Create signals for grid dimensions
-      const colsSig = b.sigConst(5, signalTypeSignal(INT));
-      const rowsSig = b.sigConst(2, signalTypeSignal(INT));
+      const colsSig = b.sigConst(intConst(5), signalTypeSignal(INT));
+      const rowsSig = b.sigConst(intConst(2), signalTypeSignal(INT));
       
       // Apply gridLayout kernel
       const layoutField = b.fieldZipSig(
@@ -130,7 +121,7 @@ describe('Instance Unification', () => {
       const fieldType = signalTypeField(FLOAT, instance);
       const sigType = signalTypeSignal(FLOAT);
       const intrinsic = b.fieldIntrinsic(instance, 'index', fieldType);
-      const signal = b.sigConst(2.0, sigType);
+      const signal = b.sigConst(floatConst(2.0), sigType);
       const zipped = b.fieldZipSig(intrinsic, [signal], { kind: 'opcode', opcode: OpCode.Mul }, fieldType);
 
       expect(b.inferFieldInstance(zipped)).toBe(instance);
@@ -167,7 +158,7 @@ describe('Instance Unification', () => {
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
       const type = signalTypeField(FLOAT, instance);
       const intrinsic = b.fieldIntrinsic(instance, 'index', type);
-      const sig = b.sigConst(1.0, signalTypeSignal(FLOAT));
+      const sig = b.sigConst(floatConst(1.0), signalTypeSignal(FLOAT));
       const broadcast = b.Broadcast(sig, type);
 
       // Broadcast is instance-agnostic, so zip takes instance from intrinsic
@@ -193,8 +184,8 @@ describe('Instance Unification', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
       const type = signalTypeField(FLOAT, instance);
-      const sig1 = b.sigConst(1.0, signalTypeSignal(FLOAT));
-      const sig2 = b.sigConst(2.0, signalTypeSignal(FLOAT));
+      const sig1 = b.sigConst(floatConst(1.0), signalTypeSignal(FLOAT));
+      const sig2 = b.sigConst(floatConst(2.0), signalTypeSignal(FLOAT));
       const broadcast1 = b.Broadcast(sig1, type);
       const broadcast2 = b.Broadcast(sig2, type);
 

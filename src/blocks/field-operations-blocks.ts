@@ -7,7 +7,7 @@
  */
 
 import { registerBlock, STANDARD_NUMERIC_PAYLOADS } from './registry';
-import { canonicalType, signalTypeField, unitPhase01, strideOf } from '../core/canonical-types';
+import { canonicalType, signalTypeField, unitPhase01, strideOf, floatConst, vec2Const, vec3Const } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { defaultSourceConst, defaultSourceTimeRoot } from '../types';
 import type { SigExprId, FieldExprId } from '../compiler/ir/Indices';
@@ -297,8 +297,8 @@ registerBlock({
     }
 
     // Get center signals (or create default constants)
-    const centerXSig = centerX?.k === 'sig' ? centerX.id : ctx.b.sigConst(0.5, canonicalType(FLOAT));
-    const centerYSig = centerY?.k === 'sig' ? centerY.id : ctx.b.sigConst(0.5, canonicalType(FLOAT));
+    const centerXSig = centerX?.k === 'sig' ? centerX.id : ctx.b.sigConst(floatConst(0.5), canonicalType(FLOAT));
+    const centerYSig = centerY?.k === 'sig' ? centerY.id : ctx.b.sigConst(floatConst(0.5), canonicalType(FLOAT));
 
     if (angle.k === 'sig' && radius.k === 'sig') {
       // Signal path - build compound operation: pos.x = centerX + radius * cos(angle), pos.y = centerY + radius * sin(angle)
@@ -313,7 +313,7 @@ registerBlock({
       const yOffset = ctx.b.sigZip([radius.id, sinAngle], mulFn, canonicalType(FLOAT));
       const x = ctx.b.sigZip([centerXSig, xOffset], addFn, canonicalType(FLOAT));
       const y = ctx.b.sigZip([centerYSig, yOffset], addFn, canonicalType(FLOAT));
-      const z = ctx.b.sigConst(0, canonicalType(FLOAT));
+      const z = ctx.b.sigConst(floatConst(0), canonicalType(FLOAT));
 
       // Package as vec3 - use composed kernel to build vec3 from (x, y, z)
       const vec3Fn = ctx.b.kernel('vec3FromComponents');
@@ -411,8 +411,8 @@ registerBlock({
     }
 
     // Get center signals (or create default constants)
-    const centerXSig = centerX?.k === 'sig' ? centerX.id : ctx.b.sigConst(0.5, canonicalType(FLOAT));
-    const centerYSig = centerY?.k === 'sig' ? centerY.id : ctx.b.sigConst(0.5, canonicalType(FLOAT));
+    const centerXSig = centerX?.k === 'sig' ? centerX.id : ctx.b.sigConst(floatConst(0.5), canonicalType(FLOAT));
+    const centerYSig = centerY?.k === 'sig' ? centerY.id : ctx.b.sigConst(floatConst(0.5), canonicalType(FLOAT));
 
     if (pos.k === 'sig') {
       // Signal path - extract components and compute angle/radius
@@ -517,10 +517,10 @@ registerBlock({
     }
 
     // Get signal inputs (or create default constants)
-    const phaseSig = phase?.k === 'sig' ? phase.id : ctx.b.sigConst(0, canonicalType(FLOAT, unitPhase01()));
-    const baseSig = base?.k === 'sig' ? base.id : ctx.b.sigConst(0.5, canonicalType(FLOAT));
-    const ampSig = amplitude?.k === 'sig' ? amplitude.id : ctx.b.sigConst(1, canonicalType(FLOAT));
-    const spreadSig = spread?.k === 'sig' ? spread.id : ctx.b.sigConst(1, canonicalType(FLOAT));
+    const phaseSig = phase?.k === 'sig' ? phase.id : ctx.b.sigConst(floatConst(0), canonicalType(FLOAT, unitPhase01()));
+    const baseSig = base?.k === 'sig' ? base.id : ctx.b.sigConst(floatConst(0.5), canonicalType(FLOAT));
+    const ampSig = amplitude?.k === 'sig' ? amplitude.id : ctx.b.sigConst(floatConst(1), canonicalType(FLOAT));
+    const spreadSig = spread?.k === 'sig' ? spread.id : ctx.b.sigConst(floatConst(1), canonicalType(FLOAT));
 
     if (id01.k === 'sig') {
       // Signal path - compute: base + amplitude * sin(2π * (phase + id01 * spread))
@@ -530,7 +530,7 @@ registerBlock({
 
       const idSpread = ctx.b.sigZip([id01.id, spreadSig], mulFn, canonicalType(FLOAT));
       const phaseOffset = ctx.b.sigZip([phaseSig, idSpread], addFn, canonicalType(FLOAT));
-      const tau = ctx.b.sigConst(2 * Math.PI, canonicalType(FLOAT));
+      const tau = ctx.b.sigConst(floatConst(2 * Math.PI), canonicalType(FLOAT));
       const angle = ctx.b.sigZip([tau, phaseOffset], mulFn, canonicalType(FLOAT));
       const sinValue = ctx.b.sigMap(angle, sinFn, canonicalType(FLOAT));
       const scaled = ctx.b.sigZip([ampSig, sinValue], mulFn, canonicalType(FLOAT));
@@ -609,11 +609,11 @@ registerBlock({
     const GOLDEN_ANGLE = 2.39996322972865332;
 
     // Get turns signal (or create default constant)
-    const turnsSig = turns?.k === 'sig' ? turns.id : ctx.b.sigConst(50, canonicalType(FLOAT));
+    const turnsSig = turns?.k === 'sig' ? turns.id : ctx.b.sigConst(floatConst(50), canonicalType(FLOAT));
 
     if (id01.k === 'sig') {
       // Signal path - angle = id01 * turns * goldenAngle
-      const goldenAngleConst = ctx.b.sigConst(GOLDEN_ANGLE, canonicalType(FLOAT));
+      const goldenAngleConst = ctx.b.sigConst(floatConst(GOLDEN_ANGLE), canonicalType(FLOAT));
       const mulFn = ctx.b.opcode(OpCode.Mul);
       const turnsScaled = ctx.b.sigZip([id01.id, turnsSig], mulFn, canonicalType(FLOAT));
       const result = ctx.b.sigZip([turnsScaled, goldenAngleConst], mulFn, canonicalType(FLOAT));
@@ -680,12 +680,12 @@ registerBlock({
     }
 
     // Get signal inputs (or create default constants)
-    const phaseSig = phase?.k === 'sig' ? phase.id : ctx.b.sigConst(0, canonicalType(FLOAT));
-    const spinSig = spin?.k === 'sig' ? spin.id : ctx.b.sigConst(1, canonicalType(FLOAT));
+    const phaseSig = phase?.k === 'sig' ? phase.id : ctx.b.sigConst(floatConst(0), canonicalType(FLOAT));
+    const spinSig = spin?.k === 'sig' ? spin.id : ctx.b.sigConst(floatConst(1), canonicalType(FLOAT));
 
     if (id01.k === 'sig') {
       // Signal path - offset = 2π * phase * spin
-      const tau = ctx.b.sigConst(2 * Math.PI, canonicalType(FLOAT));
+      const tau = ctx.b.sigConst(floatConst(2 * Math.PI), canonicalType(FLOAT));
       const mulFn = ctx.b.opcode(OpCode.Mul);
       const phaseSpin = ctx.b.sigZip([phaseSig, spinSig], mulFn, canonicalType(FLOAT));
       const result = ctx.b.sigZip([tau, phaseSpin], mulFn, canonicalType(FLOAT));
@@ -853,9 +853,9 @@ registerBlock({
     }
 
     // Get amount signals (or create default constants)
-    const amountXSig = amountX?.k === 'sig' ? amountX.id : ctx.b.sigConst(0.01, canonicalType(FLOAT));
-    const amountYSig = amountY?.k === 'sig' ? amountY.id : ctx.b.sigConst(0.01, canonicalType(FLOAT));
-    const amountZSig = amountZ?.k === 'sig' ? amountZ.id : ctx.b.sigConst(0.0, canonicalType(FLOAT));
+    const amountXSig = amountX?.k === 'sig' ? amountX.id : ctx.b.sigConst(floatConst(0.01), canonicalType(FLOAT));
+    const amountYSig = amountY?.k === 'sig' ? amountY.id : ctx.b.sigConst(floatConst(0.01), canonicalType(FLOAT));
+    const amountZSig = amountZ?.k === 'sig' ? amountZ.id : ctx.b.sigConst(floatConst(0.0), canonicalType(FLOAT));
 
     if (pos.k === 'sig' && rand.k === 'sig') {
       // Signal path - decompose input vec3, compute jittered components, recompose
@@ -871,8 +871,8 @@ registerBlock({
       const addFn = ctx.b.opcode(OpCode.Add);
       const subFn = ctx.b.opcode(OpCode.Sub);
 
-      const half = ctx.b.sigConst(0.5, canonicalType(FLOAT));
-      const two = ctx.b.sigConst(2, canonicalType(FLOAT));
+      const half = ctx.b.sigConst(floatConst(0.5), canonicalType(FLOAT));
+      const two = ctx.b.sigConst(floatConst(2), canonicalType(FLOAT));
 
       const centered = ctx.b.sigZip([rand.id, half], subFn, canonicalType(FLOAT));
       const scaled = ctx.b.sigZip([centered, two], mulFn, canonicalType(FLOAT));
@@ -980,14 +980,14 @@ registerBlock({
     }
 
     // Get phase signal (or create default constant)
-    const phaseSig = phase?.k === 'sig' ? phase.id : ctx.b.sigConst(0, canonicalType(FLOAT));
+    const phaseSig = phase?.k === 'sig' ? phase.id : ctx.b.sigConst(floatConst(0), canonicalType(FLOAT));
 
     if (id01.k === 'sig') {
       // Signal path - hue = (id01 + phase) mod 1.0
       const addFn = ctx.b.opcode(OpCode.Add);
       const modFn = ctx.b.opcode(OpCode.Mod);
       const sum = ctx.b.sigZip([id01.id, phaseSig], addFn, canonicalType(FLOAT));
-      const one = ctx.b.sigConst(1.0, canonicalType(FLOAT));
+      const one = ctx.b.sigConst(floatConst(1.0), canonicalType(FLOAT));
       const result = ctx.b.sigZip([sum, one], modFn, canonicalType(FLOAT));
 
       const outType = ctx.outTypes[0];

@@ -8,6 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { migrateState, createInitialState } from '../StateMigration';
 import type { StateMapping, StableStateId } from '../../compiler/ir/types';
 import { stableStateId } from '../../compiler/ir/types';
+import { instanceId } from '../../compiler/ir/Indices';
 import type { MappingState } from '../ContinuityState';
 
 describe('StateMigration', () => {
@@ -32,7 +33,7 @@ describe('StateMigration', () => {
         {
           kind: 'field',
           stateId: stableStateId('b2', 'slew'),
-          instanceId: 'inst_0',
+          instanceId: instanceId('inst_0'),
           slotStart: 0,
           laneCount: 3,
           stride: 1,
@@ -51,7 +52,7 @@ describe('StateMigration', () => {
         {
           kind: 'field',
           stateId: stableStateId('b3', 'filter'),
-          instanceId: 'inst_0',
+          instanceId: instanceId('inst_0'),
           slotStart: 0,
           laneCount: 2,
           stride: 2,
@@ -194,7 +195,7 @@ describe('StateMigration', () => {
         {
           kind: 'field',
           stateId: stableStateId('b1', 'slew'),
-          instanceId: 'inst_0',
+          instanceId: instanceId('inst_0'),
           slotStart: 0,
           laneCount: 3,
           stride: 1,
@@ -205,7 +206,7 @@ describe('StateMigration', () => {
         {
           kind: 'field',
           stateId: stableStateId('b1', 'slew'),
-          instanceId: 'inst_0',
+          instanceId: instanceId('inst_0'),
           slotStart: 0,
           laneCount: 3,
           stride: 1,
@@ -230,7 +231,7 @@ describe('StateMigration', () => {
         {
           kind: 'field',
           stateId: stableStateId('b1', 'slew'),
-          instanceId: 'inst_0',
+          instanceId: instanceId('inst_0'),
           slotStart: 0,
           laneCount: 3,
           stride: 1,
@@ -241,7 +242,7 @@ describe('StateMigration', () => {
         {
           kind: 'field',
           stateId: stableStateId('b1', 'slew'),
-          instanceId: 'inst_0',
+          instanceId: instanceId('inst_0'),
           slotStart: 0,
           laneCount: 3,
           stride: 1,
@@ -269,7 +270,7 @@ describe('StateMigration', () => {
         {
           kind: 'field',
           stateId: stableStateId('b1', 'slew'),
-          instanceId: 'inst_0',
+          instanceId: instanceId('inst_0'),
           slotStart: 0,
           laneCount: 2,
           stride: 1,
@@ -280,7 +281,7 @@ describe('StateMigration', () => {
         {
           kind: 'field',
           stateId: stableStateId('b1', 'slew'),
-          instanceId: 'inst_0',
+          instanceId: instanceId('inst_0'),
           slotStart: 0,
           laneCount: 4,
           stride: 1,
@@ -326,7 +327,7 @@ describe('StateMigration', () => {
         {
           kind: 'field',
           stateId: stableStateId('b1', 'state'), // Same ID, different cardinality
-          instanceId: 'inst_0',
+          instanceId: instanceId('inst_0'),
           slotStart: 0,
           laneCount: 3,
           stride: 1,

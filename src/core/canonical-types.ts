@@ -11,10 +11,22 @@
  * - NumericUnit: Optional unit annotation for numeric types (phase, radians, etc.)
  *
  * Key design principles:
- * - No optional fields - use discriminated unions (AxisTag pattern)
+ * - No optional fields - use discriminated unions (Axis<T,V> pattern)
  * - Runtime erasure - all type info resolved at compile time
  * - Single source of truth - this is the authoritative type system
  */
+
+import {
+  type CardinalityVarId,
+  type TemporalityVarId,
+  type BindingVarId,
+  type PerspectiveVarId,
+  type BranchVarId,
+  type DomainTypeId,
+  type InstanceId,
+  domainTypeId,
+  instanceId,
+} from './ids.js';
 
 // =============================================================================
 // Unit - Closed Discriminated Union (Spec §A3)
@@ -29,7 +41,7 @@
  *
  * Spec Reference: 0-Units-and-Adapters.md §A3
  */
-export type Unit =
+export type UnitType =
   | { readonly kind: 'none' }         // For payloads without units (bool, shape)
   | { readonly kind: 'scalar' }       // Dimensionless numeric
   | { readonly kind: 'norm01' }       // Clamped [0, 1]
@@ -44,56 +56,46 @@ export type Unit =
   | { readonly kind: 'ndc3' }         // Normalized device coords vec3 [0,1]^3
   | { readonly kind: 'world2' }       // World-space vec2
   | { readonly kind: 'world3' }       // World-space vec3
-  | { readonly kind: 'rgba01' }       // Float color RGBA each in [0,1]
-  | { readonly kind: 'var'; readonly id: string };  // Unresolved unit variable (must be resolved by constraint solver)
+  | { readonly kind: 'rgba01' };      // Float color RGBA each in [0,1]
 
 // --- Unit Constructors ---
-export function unitNone(): Unit { return { kind: 'none' }; }
-export function unitScalar(): Unit { return { kind: 'scalar' }; }
-export function unitNorm01(): Unit { return { kind: 'norm01' }; }
-export function unitPhase01(): Unit { return { kind: 'phase01' }; }
-export function unitRadians(): Unit { return { kind: 'radians' }; }
-export function unitDegrees(): Unit { return { kind: 'degrees' }; }
-export function unitDeg(): Unit { return { kind: 'deg' }; }
-export function unitMs(): Unit { return { kind: 'ms' }; }
-export function unitSeconds(): Unit { return { kind: 'seconds' }; }
-export function unitCount(): Unit { return { kind: 'count' }; }
-export function unitNdc2(): Unit { return { kind: 'ndc2' }; }
-export function unitNdc3(): Unit { return { kind: 'ndc3' }; }
-export function unitWorld2(): Unit { return { kind: 'world2' }; }
-export function unitWorld3(): Unit { return { kind: 'world3' }; }
-export function unitRgba01(): Unit { return { kind: 'rgba01' }; }
+export function unitNone(): UnitType { return { kind: 'none' }; }
+export function unitScalar(): UnitType { return { kind: 'scalar' }; }
+export function unitNorm01(): UnitType { return { kind: 'norm01' }; }
+export function unitPhase01(): UnitType { return { kind: 'phase01' }; }
+export function unitRadians(): UnitType { return { kind: 'radians' }; }
+export function unitDegrees(): UnitType { return { kind: 'degrees' }; }
+export function unitDeg(): UnitType { return { kind: 'deg' }; }
+export function unitMs(): UnitType { return { kind: 'ms' }; }
+export function unitSeconds(): UnitType { return { kind: 'seconds' }; }
+export function unitCount(): UnitType { return { kind: 'count' }; }
+export function unitNdc2(): UnitType { return { kind: 'ndc2' }; }
+export function unitNdc3(): UnitType { return { kind: 'ndc3' }; }
+export function unitWorld2(): UnitType { return { kind: 'world2' }; }
+export function unitWorld3(): UnitType { return { kind: 'world3' }; }
+export function unitRgba01(): UnitType { return { kind: 'rgba01' }; }
 
 let unitVarCounter = 0;
 /**
- * Create an unresolved unit variable.
- * Unit variables MUST be resolved by the constraint solver before compilation.
+ * REMOVED per D5: Unit variables belong in inference wrappers, not canonical types.
+ * This function is no longer valid.
+ * @deprecated Use InferenceUnit from analyze-type-constraints instead
  */
-export function unitVar(id?: string): Unit {
-  return { kind: 'var', id: id ?? `_uv${unitVarCounter++}` };
-}
-
-/**
- * Check if a unit is an unresolved variable.
- */
-export function isUnitVar(unit: Unit): unit is { kind: 'var'; id: string } {
-  return unit.kind === 'var';
+export function unitVar(_id?: string): never {
+  throw new Error('unitVar() removed per D5 - use InferenceUnit in constraint solver instead');
 }
 
 /**
  * Compare two units for deep equality.
  */
-export function unitsEqual(a: Unit, b: Unit): boolean {
-  // Unit variables are only equal if they have the same id
-  if (a.kind === 'var' && b.kind === 'var') {
-    return a.id === b.id;
-  }
+export function unitsEqual(a: UnitType, b: UnitType): boolean {
+  // Note: Unit variables removed per D5 - all units are concrete
   return a.kind === b.kind;
 }
 
 // --- Payload-Unit Validation (Spec §A4) ---
 
-const ALLOWED_UNITS: Record<PayloadKind, readonly Unit['kind'][]> = {
+const ALLOWED_UNITS: Record<PayloadKind, readonly UnitType['kind'][]> = {
   float: ['scalar', 'norm01', 'phase01', 'radians', 'degrees', 'deg', 'ms', 'seconds'],
   int: ['count', 'ms'],
   vec2: ['ndc2', 'world2'],
@@ -106,11 +108,9 @@ const ALLOWED_UNITS: Record<PayloadKind, readonly Unit['kind'][]> = {
 
 /**
  * Check if a (payload, unit) combination is valid per spec §A4.
- * Note: 'var' (unresolved unit/payload variable) is always valid during inference.
+ * Note: Unit variables removed per D5. This now only checks concrete units.
  */
-export function isValidPayloadUnit(payload: PayloadType, unit: Unit): boolean {
-  // Unit variables are always valid during inference (will be resolved later)
-  if (unit.kind === 'var') return true;
+export function isValidPayloadUnit(payload: PayloadType, unit: UnitType): boolean {
   // Payload variables are always valid during inference (will be resolved later)
   if (isPayloadVar(payload)) return true;
   // After isPayloadVar check, payload is ConcretePayloadType
@@ -125,7 +125,7 @@ export function isValidPayloadUnit(payload: PayloadType, unit: Unit): boolean {
  * Used for ergonomic helpers where unit can be omitted.
  * Throws if given a payload variable (must resolve payload first).
  */
-export function defaultUnitForPayload(payload: PayloadType): Unit {
+export function defaultUnitForPayload(payload: PayloadType): UnitType {
   if (isPayloadVar(payload)) {
     throw new Error(`Cannot get default unit for payload variable ${payload.id} - resolve payload first`);
   }
@@ -269,6 +269,107 @@ export function payloadsEqual(a: PayloadType, b: PayloadType): boolean {
   return a.kind === b.kind;
 }
 
+// =============================================================================
+// ConstValue - Strongly-Typed Constant Values (Invariant I5)
+// =============================================================================
+
+/**
+ * Strongly-typed constant value representation.
+ *
+ * INVARIANT I5 (15-FiveAxesTypeSystem-Conclusion.md:95-99):
+ * ConstValue.kind MUST match CanonicalType.payload.kind
+ *
+ * Enforcement:
+ * 1. Compile time: TypeScript prevents wrong value types
+ * 2. Runtime: Axis enforcement validates kind matches payload
+ *
+ * Tuple values are readonly to prevent mutation and maintain
+ * CanonicalType immutability contract.
+ *
+ * @see constValueMatchesPayload for validation helper
+ */
+export type ConstValue =
+  | { readonly kind: 'float'; readonly value: number }
+  | { readonly kind: 'int'; readonly value: number }
+  | { readonly kind: 'bool'; readonly value: boolean }
+  | { readonly kind: 'vec2'; readonly value: readonly [number, number] }
+  | { readonly kind: 'vec3'; readonly value: readonly [number, number, number] }
+  | { readonly kind: 'color'; readonly value: readonly [number, number, number, number] }
+  | { readonly kind: 'cameraProjection'; readonly value: string };
+
+/**
+ * Validate that ConstValue.kind matches PayloadType.kind.
+ *
+ * Used by axis enforcement pass to catch payload mismatches at runtime.
+ *
+ * @returns true if kinds match, false otherwise
+ *
+ * @example
+ * const payload: PayloadType = { kind: 'float' };
+ * const value: ConstValue = { kind: 'float', value: 42.0 };
+ * constValueMatchesPayload(payload, value); // true
+ *
+ * const wrongValue: ConstValue = { kind: 'vec2', value: [1, 2] };
+ * constValueMatchesPayload(payload, wrongValue); // false
+ */
+export function constValueMatchesPayload(
+  payload: PayloadType,
+  constValue: ConstValue
+): boolean {
+  return payload.kind === constValue.kind;
+}
+
+// --- Helper Constructors for ConstValue ---
+
+/**
+ * Create a float constant value.
+ */
+export function floatConst(value: number): ConstValue {
+  return { kind: 'float', value };
+}
+
+/**
+ * Create an int constant value.
+ */
+export function intConst(value: number): ConstValue {
+  return { kind: 'int', value };
+}
+
+/**
+ * Create a bool constant value.
+ */
+export function boolConst(value: boolean): ConstValue {
+  return { kind: 'bool', value };
+}
+
+/**
+ * Create a vec2 constant value.
+ */
+export function vec2Const(x: number, y: number): ConstValue {
+  return { kind: 'vec2', value: [x, y] as const };
+}
+
+/**
+ * Create a vec3 constant value.
+ */
+export function vec3Const(x: number, y: number, z: number): ConstValue {
+  return { kind: 'vec3', value: [x, y, z] as const };
+}
+
+/**
+ * Create a color constant value (RGBA).
+ */
+export function colorConst(r: number, g: number, b: number, a: number): ConstValue {
+  return { kind: 'color', value: [r, g, b, a] as const };
+}
+
+/**
+ * Create a camera projection constant value.
+ */
+export function cameraProjectionConst(value: string): ConstValue {
+  return { kind: 'cameraProjection', value };
+}
+
 
 
 /**
@@ -288,45 +389,48 @@ export function strideOf(type: PayloadType): number {
 }
 
 // =============================================================================
-// AxisTag - No Optional Fields Pattern
+// Axis - Variable or Instantiated Pattern
 // =============================================================================
 
 /**
- * Discriminated union representing "default unless instantiated".
+ * Discriminated union representing "type variable or instantiated value".
  *
- * This pattern replaces optional fields with explicit union branches,
- * enabling TypeScript type narrowing and ensuring no implicit nulls.
+ * This pattern supports polymorphic type inference (var) and resolved types (inst).
+ * Enables constraint solving during type inference, then resolves to instantiated values.
+ *
+ * T = value type (e.g., CardinalityValue)
+ * V = variable ID type (e.g., CardinalityVarId)
  */
-export type AxisTag<T> =
-  | { readonly kind: 'default' }
-  | { readonly kind: 'instantiated'; readonly value: T };
+export type Axis<T, V> =
+  | { readonly kind: 'var'; readonly var: V }
+  | { readonly kind: 'inst'; readonly value: T };
 
 /**
- * Create a default axis tag.
+ * Create a type variable axis.
  */
-export function axisDefault<T>(): AxisTag<T> {
-  return { kind: 'default' };
+export function axisVar<T, V>(v: V): Axis<T, V> {
+  return { kind: 'var', var: v };
 }
 
 /**
- * Create an instantiated axis tag.
+ * Create an instantiated axis.
  */
-export function axisInstantiated<T>(value: T): AxisTag<T> {
-  return { kind: 'instantiated', value };
+export function axisInst<T, V>(value: T): Axis<T, V> {
+  return { kind: 'inst', value };
 }
 
 /**
- * Check if an axis tag is instantiated.
+ * Check if an axis is a type variable.
  */
-export function isInstantiated<T>(tag: AxisTag<T>): tag is { kind: 'instantiated'; value: T } {
-  return tag.kind === 'instantiated';
+export function isAxisVar<T, V>(a: Axis<T, V>): a is { kind: 'var'; var: V } {
+  return a.kind === 'var';
 }
 
 /**
- * Get the value from an axis tag, or return the default if not instantiated.
+ * Check if an axis is instantiated.
  */
-export function getAxisValue<T>(tag: AxisTag<T>, defaultValue: T): T {
-  return tag.kind === 'instantiated' ? tag.value : defaultValue;
+export function isAxisInst<T, V>(a: Axis<T, V>): a is { kind: 'inst'; value: T } {
+  return a.kind === 'inst';
 }
 
 // =============================================================================
@@ -338,16 +442,15 @@ export function getAxisValue<T>(tag: AxisTag<T>, defaultValue: T): T {
  * Instances are configurations of domain types (count, layout, lifecycle).
  */
 export interface InstanceRef {
-  readonly kind: 'instance';
-  readonly domainType: string; // DomainTypeId
-  readonly instanceId: string; // InstanceId
+  readonly instanceId: InstanceId;
+  readonly domainTypeId: DomainTypeId;
 }
 
 /**
  * Create an instance reference.
  */
-export function instanceRef(domainType: string, instanceId: string): InstanceRef {
-  return { kind: 'instance', domainType, instanceId };
+export function instanceRef(instanceId: InstanceId, domainTypeId: DomainTypeId): InstanceRef {
+  return { instanceId, domainTypeId };
 }
 
 // =============================================================================
@@ -362,31 +465,10 @@ export function instanceRef(domainType: string, instanceId: string): InstanceRef
  * - one = was 'signal' (single lane, time-varying)
  * - many(instance) = was 'field(domain)' (N lanes aligned by instance)
  */
-export type Cardinality =
+export type CardinalityValue =
   | { readonly kind: 'zero' }                              // Compile-time constant, no runtime lanes
   | { readonly kind: 'one' }                               // Single lane
   | { readonly kind: 'many'; readonly instance: InstanceRef }; // N lanes aligned by instance
-
-/**
- * Create a zero cardinality (compile-time constant).
- */
-export function cardinalityZero(): Cardinality {
-  return { kind: 'zero' };
-}
-
-/**
- * Create a one cardinality (single lane).
- */
-export function cardinalityOne(): Cardinality {
-  return { kind: 'one' };
-}
-
-/**
- * Create a many cardinality (N lanes aligned by instance).
- */
-export function cardinalityMany(instance: InstanceRef): Cardinality {
-  return { kind: 'many', instance };
-}
 
 // =============================================================================
 // Temporality - When
@@ -398,105 +480,70 @@ export function cardinalityMany(instance: InstanceRef): Cardinality {
  * - continuous: Value exists every frame/tick
  * - discrete: Event occurrences only (sparse, edge-triggered)
  */
-export type Temporality =
+export type TemporalityValue =
   | { readonly kind: 'continuous' }
   | { readonly kind: 'discrete' };
 
-/**
- * Create a continuous temporality.
- */
-export function temporalityContinuous(): Temporality {
-  return { kind: 'continuous' };
-}
-
-/**
- * Create a discrete temporality (events).
- */
-export function temporalityDiscrete(): Temporality {
-  return { kind: 'discrete' };
-}
-
 // =============================================================================
-// Referent References
-// =============================================================================
-
-/**
- * Stable identifier for a referent (binding target).
- */
-export type ReferentId = string;
-
-/**
- * Reference to a referent by ID.
- */
-export interface ReferentRef {
-  readonly kind: 'referent';
-  readonly id: ReferentId;
-}
-
-/**
- * Create a referent reference.
- */
-export function referentRef(id: ReferentId): ReferentRef {
-  return { kind: 'referent', id };
-}
-
-// =============================================================================
-// Binding - Referential Anchoring (v0: Default-Only)
+// Binding - Referential Anchoring
 // =============================================================================
 
 /**
  * How a value is bound to a referent.
  *
- * Note: Binding is independent of Domain. Same domain can host
- * unbound image vs bound mask.
+ * Note: BindingValue is a closed semantic set. Referents ("what is it bound to?")
+ * belong in continuity policies / state mapping config / StateOp args, NOT in the type lattice.
  */
-export type Binding =
+export type BindingValue =
   | { readonly kind: 'unbound' }
-  | { readonly kind: 'weak'; readonly referent: ReferentRef }
-  | { readonly kind: 'strong'; readonly referent: ReferentRef }
-  | { readonly kind: 'identity'; readonly referent: ReferentRef };
-
-/**
- * Create an unbound binding.
- */
-export function bindingUnbound(): Binding {
-  return { kind: 'unbound' };
-}
-
-/**
- * Create a weak binding.
- */
-export function bindingWeak(referent: ReferentRef): Binding {
-  return { kind: 'weak', referent };
-}
-
-/**
- * Create a strong binding.
- */
-export function bindingStrong(referent: ReferentRef): Binding {
-  return { kind: 'strong', referent };
-}
-
-/**
- * Create an identity binding.
- */
-export function bindingIdentity(referent: ReferentRef): Binding {
-  return { kind: 'identity', referent };
-}
+  | { readonly kind: 'weak' }
+  | { readonly kind: 'strong' }
+  | { readonly kind: 'identity' };
 
 // =============================================================================
 // Perspective and Branch (v0: Default-Only)
 // =============================================================================
 
 /**
- * Perspective identifier.
+ * Perspective value (v0: only default).
  */
-export type PerspectiveId = string;
+export type PerspectiveValue =
+  | { readonly kind: 'default' };
 
 /**
- * Branch identifier.
+ * Branch value (v0: only default).
  */
-export type BranchId = string;
+export type BranchValue =
+  | { readonly kind: 'default' };
+
+// =============================================================================
+// Per-Axis Type Aliases
+// =============================================================================
+
+/**
+ * Cardinality axis: type variable or instantiated cardinality value.
+ */
+export type CardinalityAxis = Axis<CardinalityValue, CardinalityVarId>;
+
+/**
+ * Temporality axis: type variable or instantiated temporality value.
+ */
+export type TemporalityAxis = Axis<TemporalityValue, TemporalityVarId>;
+
+/**
+ * Binding axis: type variable or instantiated binding value.
+ */
+export type BindingAxis = Axis<BindingValue, BindingVarId>;
+
+/**
+ * Perspective axis: type variable or instantiated perspective value.
+ */
+export type PerspectiveAxis = Axis<PerspectiveValue, PerspectiveVarId>;
+
+/**
+ * Branch axis: type variable or instantiated branch value.
+ */
+export type BranchAxis = Axis<BranchValue, BranchVarId>;
 
 // =============================================================================
 // Extent - 5-Axis Coordinate
@@ -509,42 +556,24 @@ export type BranchId = string;
  * 1. Cardinality: How many lanes (zero/one/many)
  * 2. Temporality: When value exists (continuous/discrete)
  * 3. Binding: Referential anchoring (unbound/weak/strong/identity)
- * 4. Perspective: Point of view (v0: global only)
- * 5. Branch: Execution branch (v0: main only)
+ * 4. Perspective: Point of view (v0: default only)
+ * 5. Branch: Execution branch (v0: default only)
  */
 export interface Extent {
-  readonly cardinality: AxisTag<Cardinality>;
-  readonly temporality: AxisTag<Temporality>;
-  readonly binding: AxisTag<Binding>;
-  readonly perspective: AxisTag<PerspectiveId>;
-  readonly branch: AxisTag<BranchId>;
+  readonly cardinality: CardinalityAxis;
+  readonly temporality: TemporalityAxis;
+  readonly binding: BindingAxis;
+  readonly perspective: PerspectiveAxis;
+  readonly branch: BranchAxis;
 }
 
-/**
- * Create an extent with all default axes.
- */
-export function extentDefault(): Extent {
-  return {
-    cardinality: axisDefault(),
-    temporality: axisDefault(),
-    binding: axisDefault(),
-    perspective: axisDefault(),
-    branch: axisDefault(),
-  };
-}
+// =============================================================================
+// Default Axis Values (used by canonical constructors)
+// =============================================================================
 
-/**
- * Create an extent with specified axes (rest default).
- */
-export function extent(overrides: Partial<Extent>): Extent {
-  return {
-    cardinality: overrides.cardinality ?? axisDefault(),
-    temporality: overrides.temporality ?? axisDefault(),
-    binding: overrides.binding ?? axisDefault(),
-    perspective: overrides.perspective ?? axisDefault(),
-    branch: overrides.branch ?? axisDefault(),
-  };
-}
+const DEFAULT_BINDING: BindingValue = { kind: 'unbound' };
+const DEFAULT_PERSPECTIVE: PerspectiveValue = { kind: 'default' };
+const DEFAULT_BRANCH: BranchValue = { kind: 'default' };
 
 // =============================================================================
 // CanonicalType - Complete Type Contract
@@ -559,7 +588,241 @@ export function extent(overrides: Partial<Extent>): Extent {
 export interface CanonicalType {
   readonly payload: PayloadType;
   readonly extent: Extent;
-  readonly unit: Unit;
+  readonly unit: UnitType;
+}
+
+// =============================================================================
+// Canonical Constructors (no ambiguity)
+// =============================================================================
+
+/**
+ * Create a Signal canonical type (one + continuous).
+ * 
+ * Signal types represent single-lane time-varying values.
+ * Examples: time, mouse position, camera FOV.
+ */
+export function canonicalSignal(payload: PayloadType, unit: UnitType = { kind: 'scalar' }): CanonicalType {
+  return {
+    payload,
+    unit,
+    extent: {
+      cardinality: axisInst({ kind: 'one' }),
+      temporality: axisInst({ kind: 'continuous' }),
+      binding: axisInst(DEFAULT_BINDING),
+      perspective: axisInst(DEFAULT_PERSPECTIVE),
+      branch: axisInst(DEFAULT_BRANCH),
+    },
+  };
+}
+
+/**
+ * Create a Field canonical type (many(instance) + continuous).
+ * 
+ * Field types represent multi-lane spatially-indexed values.
+ * Examples: particle positions, per-instance colors.
+ */
+export function canonicalField(payload: PayloadType, unit: UnitType, instance: InstanceRef): CanonicalType {
+  return {
+    payload,
+    unit,
+    extent: {
+      cardinality: axisInst({ kind: 'many', instance }),
+      temporality: axisInst({ kind: 'continuous' }),
+      binding: axisInst(DEFAULT_BINDING),
+      perspective: axisInst(DEFAULT_PERSPECTIVE),
+      branch: axisInst(DEFAULT_BRANCH),
+    },
+  };
+}
+
+/**
+ * Create an Event canonical type with cardinality=one (one + discrete).
+ * 
+ * Event types are HARD invariants:
+ *   - payload = bool
+ *   - unit = none
+ *   - temporality = discrete
+ *   - cardinality = one
+ */
+export function canonicalEventOne(): CanonicalType {
+  return {
+    payload: BOOL,
+    unit: { kind: 'none' },
+    extent: {
+      cardinality: axisInst({ kind: 'one' }),
+      temporality: axisInst({ kind: 'discrete' }),
+      binding: axisInst(DEFAULT_BINDING),
+      perspective: axisInst(DEFAULT_PERSPECTIVE),
+      branch: axisInst(DEFAULT_BRANCH),
+    },
+  };
+}
+
+/**
+ * Create an Event canonical type with cardinality=many (many(instance) + discrete).
+ * 
+ * Event types are HARD invariants:
+ *   - payload = bool
+ *   - unit = none
+ *   - temporality = discrete
+ *   - cardinality = many(instance)
+ */
+export function canonicalEventField(instance: InstanceRef): CanonicalType {
+  return {
+    payload: BOOL,
+    unit: { kind: 'none' },
+    extent: {
+      cardinality: axisInst({ kind: 'many', instance }),
+      temporality: axisInst({ kind: 'discrete' }),
+      binding: axisInst(DEFAULT_BINDING),
+      perspective: axisInst(DEFAULT_PERSPECTIVE),
+      branch: axisInst(DEFAULT_BRANCH),
+    },
+  };
+}
+
+// =============================================================================
+// Derived Classification Helpers
+// =============================================================================
+
+/**
+ * Derived kind classification (not a separate type system).
+ * 
+ * Classification rules:
+ * - temporality=discrete → 'event'
+ * - temporality=continuous + cardinality=many → 'field'
+ * - temporality=continuous + cardinality=one → 'signal'
+ */
+export type DerivedKind = 'signal' | 'field' | 'event';
+
+export function deriveKind(t: CanonicalType): DerivedKind {
+  const card = t.extent.cardinality;
+  const tempo = t.extent.temporality;
+
+  // Must be instantiated
+  if (tempo.kind !== 'inst') {
+    throw new Error('Cannot derive kind from type with uninstantiated temporality axis');
+  }
+
+  if (tempo.value.kind === 'discrete') return 'event';
+
+  // continuous:
+  if (card.kind !== 'inst') {
+    throw new Error('Cannot derive kind from type with uninstantiated cardinality axis');
+  }
+  
+  if (card.value.kind === 'many') return 'field';
+  return 'signal';
+}
+
+/**
+ * Try to get instance reference from cardinality=many.
+ * Returns null if not a many cardinality.
+ */
+export function tryGetManyInstance(t: CanonicalType): InstanceRef | null {
+  const card = t.extent.cardinality;
+  if (card.kind !== 'inst') return null;
+  if (card.value.kind !== 'many') return null;
+  return card.value.instance;
+}
+
+/**
+ * Require instance reference from cardinality=many.
+ * Throws if not a many cardinality.
+ */
+export function requireManyInstance(t: CanonicalType): InstanceRef {
+  const inst = tryGetManyInstance(t);
+  if (!inst) {
+    throw new Error(`Expected field type (cardinality=many), got ${deriveKind(t)}`);
+  }
+  return inst;
+}
+
+/**
+ * Check if type is a signal (one + continuous).
+ */
+export function isSignalType(t: CanonicalType): boolean {
+  return deriveKind(t) === 'signal';
+}
+
+/**
+ * Assert type is a signal, throw if not.
+ */
+export function assertSignalType(t: CanonicalType): void {
+  const k = deriveKind(t);
+  if (k !== 'signal') throw new Error(`Expected signal type, got ${k}`);
+  
+  const card = t.extent.cardinality;
+  if (card.kind !== 'inst' || card.value.kind !== 'one') {
+    throw new Error('Signal types must have cardinality=one (instantiated)');
+  }
+  const tempo = t.extent.temporality;
+  if (tempo.kind !== 'inst' || tempo.value.kind !== 'continuous') {
+    throw new Error('Signal types must have temporality=continuous (instantiated)');
+  }
+}
+
+/**
+ * Check if type is a field (many + continuous).
+ */
+export function isFieldType(t: CanonicalType): boolean {
+  return deriveKind(t) === 'field';
+}
+
+/**
+ * Assert type is a field, return instance ref.
+ */
+export function assertFieldType(t: CanonicalType): InstanceRef {
+  const k = deriveKind(t);
+  if (k !== 'field') throw new Error(`Expected field type, got ${k}`);
+  
+  const inst = tryGetManyInstance(t);
+  if (!inst) throw new Error('Field types must have cardinality=many(instance) (instantiated)');
+  
+  const tempo = t.extent.temporality;
+  if (tempo.kind !== 'inst' || tempo.value.kind !== 'continuous') {
+    throw new Error('Field types must have temporality=continuous (instantiated)');
+  }
+  return inst;
+}
+
+/**
+ * Check if type is an event (discrete).
+ */
+export function isEventType(t: CanonicalType): boolean {
+  return deriveKind(t) === 'event';
+}
+
+/**
+ * Assert type is an event.
+ */
+export function assertEventType(t: CanonicalType): void {
+  const k = deriveKind(t);
+  if (k !== 'event') throw new Error(`Expected event type, got ${k}`);
+  
+  if (t.payload.kind !== 'bool') throw new Error('Event payload must be bool');
+  if (t.unit.kind !== 'none') throw new Error('Event unit must be none');
+  
+  const tempo = t.extent.temporality;
+  if (tempo.kind !== 'inst' || tempo.value.kind !== 'discrete') {
+    throw new Error('Event temporality must be discrete (instantiated)');
+  }
+}
+
+/**
+ * Get payload stride (derived from payload only).
+ */
+export function payloadStride(p: PayloadType): 1 | 2 | 3 | 4 {
+  if (isPayloadVar(p)) {
+    throw new Error('Cannot get stride for payload variable - resolve payload first');
+  }
+  
+  switch (p.kind) {
+    case 'vec2': return 2;
+    case 'vec3': return 3;
+    case 'color': return 4;
+    default: return 1;
+  }
 }
 
 /**
@@ -575,10 +838,10 @@ export interface CanonicalType {
  */
 export function canonicalType(
   payload: PayloadType,
-  unitOrExtent?: Unit | Partial<Extent>,
+  unitOrExtent?: UnitType | Partial<Extent>,
   extentOverrides?: Partial<Extent>
 ): CanonicalType {
-  let unit: Unit;
+  let unit: UnitType;
   let extOverrides: Partial<Extent> | undefined;
 
   if (unitOrExtent === undefined) {
@@ -590,7 +853,7 @@ export function canonicalType(
     extOverrides = undefined;
   } else if ('kind' in unitOrExtent) {
     // canonicalType(FLOAT, unitPhase01(), {...}) or canonicalType(payloadVar('x'), unitVar('y'))
-    unit = unitOrExtent as Unit;
+    unit = unitOrExtent as UnitType;
     extOverrides = extentOverrides;
   } else {
     // Legacy: canonicalType(FLOAT, { cardinality: ... })
@@ -604,65 +867,72 @@ export function canonicalType(
   return {
     payload,
     unit,
-    extent: extOverrides ? extent(extOverrides) : extentDefault(),
+    extent: {
+      cardinality: extOverrides?.cardinality ?? axisInst({ kind: 'one' }),
+      temporality: extOverrides?.temporality ?? axisInst({ kind: 'continuous' }),
+      binding: extOverrides?.binding ?? axisInst(DEFAULT_BINDING),
+      perspective: extOverrides?.perspective ?? axisInst(DEFAULT_PERSPECTIVE),
+      branch: extOverrides?.branch ?? axisInst(DEFAULT_BRANCH),
+    },
   };
 }
 
 // =============================================================================
-// V0 Canonical Defaults
+// V0 Canonical Defaults (DEPRECATED)
 // =============================================================================
 
 /**
  * V0 canonical default values for each axis.
  *
- * These are used when resolving AxisTag.default during compilation.
+ * @deprecated These defaults were for the old AxisTag system.
+ * New code should use canonical constructors that explicitly instantiate values.
  */
 export const DEFAULTS_V0 = {
-  cardinality: cardinalityOne(),
-  temporality: temporalityContinuous(),
-  binding: bindingUnbound(),
-  perspective: 'global' as PerspectiveId,
-  branch: 'main' as BranchId,
+  cardinality: { kind: 'one' } as CardinalityValue,
+  temporality: { kind: 'continuous' } as TemporalityValue,
+  binding: { kind: 'unbound' } as BindingValue,
+  perspective: 'global' as string,  // TODO: DEFAULTS_V0 should use PerspectiveValue/BranchValue
+  branch: 'main' as string,
 } as const;
 
 /**
  * V0 evaluation frame defaults.
+ * @deprecated Use PerspectiveValue/BranchValue instead
  */
 export const FRAME_V0 = {
-  perspective: 'global' as PerspectiveId,
-  branch: 'main' as BranchId,
+  perspective: 'global' as string,  // TODO: FRAME_V0 should use PerspectiveValue/BranchValue
+  branch: 'main' as string,
 } as const;
 
 // =============================================================================
-// ResolvedExtent - IR-Ready Form
+// ResolvedExtent - IR-Ready Form (DEPRECATED)
 // =============================================================================
 
 /**
- * ResolvedExtent - All axes instantiated (no defaults).
+ * ResolvedExtent - All axes instantiated.
  *
- * This is the "IR-ready" form of Extent. After default resolution,
- * all AxisTags are guaranteed to be instantiated with concrete values.
- *
- * Used by: IR TypeDesc, debugging, serialization
+ * @deprecated The new Axis<T,V> system makes this concept obsolete.
+ * Extents with axisInst() are already "resolved".
  */
 export interface ResolvedExtent {
-  readonly cardinality: Cardinality;
-  readonly temporality: Temporality;
-  readonly binding: Binding;
-  readonly perspective: PerspectiveId;
-  readonly branch: BranchId;
+  readonly cardinality: CardinalityValue;
+  readonly temporality: TemporalityValue;
+  readonly binding: BindingValue;
+  readonly perspective: PerspectiveValue;
+  readonly branch: BranchValue;
 }
 
 /**
- * Resolve an Extent to ResolvedExtent using v0 defaults.
+ * Resolve an Extent to ResolvedExtent.
+ * @deprecated Use isAxisInst checks instead
  */
 export function resolveExtent(extent: Extent): ResolvedExtent {
   return {
-    cardinality: getAxisValue(extent.cardinality, DEFAULTS_V0.cardinality),
-    temporality: getAxisValue(extent.temporality, DEFAULTS_V0.temporality),
-    binding: getAxisValue(extent.binding, DEFAULTS_V0.binding),
-    perspective: getAxisValue(extent.perspective, DEFAULTS_V0.perspective),
-    branch: getAxisValue(extent.branch, DEFAULTS_V0.branch),
+    cardinality: extent.cardinality.kind === 'inst' ? extent.cardinality.value : DEFAULTS_V0.cardinality,
+    temporality: extent.temporality.kind === 'inst' ? extent.temporality.value : DEFAULTS_V0.temporality,
+    binding: extent.binding.kind === 'inst' ? extent.binding.value : DEFAULTS_V0.binding,
+    perspective: extent.perspective.kind === 'inst' ? extent.perspective.value : { kind: 'default' },
+    branch: extent.branch.kind === 'inst' ? extent.branch.value : { kind: 'default' },
   };
 }
 
@@ -707,26 +977,26 @@ function deepEqual(a: unknown, b: unknown): boolean {
  * Unify two axis tags according to v0 strict join rules.
  *
  * Rules:
- * - default + default → default
- * - default + instantiated(X) → instantiated(X)
- * - instantiated(X) + default → instantiated(X)
- * - instantiated(X) + instantiated(X) → instantiated(X)
- * - instantiated(X) + instantiated(Y), X≠Y → ERROR
+ * - var + var → first var (constraint solver handles)
+ * - var + inst(X) → inst(X)
+ * - inst(X) + var → inst(X)
+ * - inst(X) + inst(X) → inst(X)
+ * - inst(X) + inst(Y), X≠Y → ERROR
  *
  * @param axisName - Name of axis (for error messages)
- * @param a - First axis tag
- * @param b - Second axis tag
- * @returns Unified axis tag
+ * @param a - First axis
+ * @param b - Second axis
+ * @returns Unified axis
  * @throws AxisUnificationError if values don't match
  */
-export function unifyAxis<T>(axisName: string, a: AxisTag<T>, b: AxisTag<T>): AxisTag<T> {
-  if (a.kind === 'default' && b.kind === 'default') {
-    return { kind: 'default' };
+export function unifyAxis<T, V>(axisName: string, a: Axis<T, V>, b: Axis<T, V>): Axis<T, V> {
+  if (a.kind === 'var' && b.kind === 'var') {
+    return a;
   }
-  if (a.kind === 'default') {
+  if (a.kind === 'var') {
     return b;
   }
-  if (b.kind === 'default') {
+  if (b.kind === 'var') {
     return a;
   }
   // Both instantiated
@@ -770,31 +1040,31 @@ export function unifyExtent(a: Extent, b: Extent): Extent {
 export function worldToAxes(
   world: 'static' | 'scalar' | 'signal' | 'field' | 'event',
   instanceIdStr?: string
-): { cardinality: Cardinality; temporality: Temporality } {
+): { cardinality: CardinalityValue; temporality: TemporalityValue } {
   switch (world) {
     case 'static':
     case 'scalar':
       return {
-        cardinality: cardinalityZero(),
-        temporality: temporalityContinuous(),
+        cardinality: {kind: 'zero'},
+        temporality: {kind: 'continuous'},
       };
     case 'signal':
       return {
-        cardinality: cardinalityOne(),
-        temporality: temporalityContinuous(),
+        cardinality: {kind: 'one'},
+        temporality: {kind: 'continuous'},
       };
     case 'field':
       if (!instanceIdStr) {
         throw new Error('field world requires domainId');
       }
       return {
-        cardinality: cardinalityMany(instanceRef('default', instanceIdStr)),
-        temporality: temporalityContinuous(),
+        cardinality: { kind: 'many', instance: { instanceId: instanceId(instanceIdStr), domainTypeId: domainTypeId('default') } },
+        temporality: {kind: 'continuous'},
       };
     case 'event':
       return {
-        cardinality: instanceIdStr ? cardinalityMany(instanceRef('default', instanceIdStr)) : cardinalityOne(),
-        temporality: temporalityDiscrete(),
+        cardinality: instanceIdStr ? { kind: 'many', instance: { instanceId: instanceId(instanceIdStr), domainTypeId: domainTypeId('default') } } : {kind: 'one'},
+        temporality: {kind: 'discrete'},
       };
   }
 }
@@ -806,11 +1076,11 @@ export function worldToAxes(
 /**
  * Create a Signal CanonicalType (one + continuous).
  */
-export function signalTypeSignal(payload: PayloadType, unit?: Unit): CanonicalType {
+export function signalTypeSignal(payload: PayloadType, unit?: UnitType): CanonicalType {
   const u = unit ?? defaultUnitForPayload(payload);
   return canonicalType(payload, u, {
-    cardinality: axisInstantiated(cardinalityOne()),
-    temporality: axisInstantiated(temporalityContinuous()),
+    cardinality: axisInst({kind: 'one'}),
+    temporality: axisInst({kind: 'continuous'}),
   });
 }
 
@@ -819,37 +1089,37 @@ export function signalTypeSignal(payload: PayloadType, unit?: Unit): CanonicalTy
  *
  * Accepts either an InstanceRef or a plain instanceId string (uses 'default' domain type).
  */
-export function signalTypeField(payload: PayloadType, instance: InstanceRef | string, unit?: Unit): CanonicalType {
+export function signalTypeField(payload: PayloadType, instance: InstanceRef | string, unit?: UnitType): CanonicalType {
   const instanceRefValue = typeof instance === 'string'
-    ? instanceRef('default', instance)
+    ? instanceRef(instanceId(instance), domainTypeId('default'))
     : instance;
   const u = unit ?? defaultUnitForPayload(payload);
 
   return canonicalType(payload, u, {
-    cardinality: axisInstantiated(cardinalityMany(instanceRefValue)),
-    temporality: axisInstantiated(temporalityContinuous()),
+    cardinality: axisInst({ kind: 'many', instance: instanceRefValue }),
+    temporality: axisInst({kind: 'continuous'}),
   });
 }
 
 /**
  * Create a Trigger CanonicalType (one + discrete).
  */
-export function signalTypeTrigger(payload: PayloadType, unit?: Unit): CanonicalType {
+export function signalTypeTrigger(payload: PayloadType, unit?: UnitType): CanonicalType {
   const u = unit ?? defaultUnitForPayload(payload);
   return canonicalType(payload, u, {
-    cardinality: axisInstantiated(cardinalityOne()),
-    temporality: axisInstantiated(temporalityDiscrete()),
+    cardinality: axisInst({kind: 'one'}),
+    temporality: axisInst({kind: 'discrete'}),
   });
 }
 
 /**
  * Create a Static/Scalar CanonicalType (zero + continuous).
  */
-export function signalTypeStatic(payload: PayloadType, unit?: Unit): CanonicalType {
+export function signalTypeStatic(payload: PayloadType, unit?: UnitType): CanonicalType {
   const u = unit ?? defaultUnitForPayload(payload);
   return canonicalType(payload, u, {
-    cardinality: axisInstantiated(cardinalityZero()),
-    temporality: axisInstantiated(temporalityContinuous()),
+    cardinality: axisInst({kind: 'zero'}),
+    temporality: axisInst({kind: 'continuous'}),
   });
 }
 
@@ -858,15 +1128,15 @@ export function signalTypeStatic(payload: PayloadType, unit?: Unit): CanonicalTy
  *
  * Accepts either an InstanceRef or a plain instanceId string (uses 'default' domain type).
  */
-export function signalTypePerLaneEvent(payload: PayloadType, instance: InstanceRef | string, unit?: Unit): CanonicalType {
+export function signalTypePerLaneEvent(payload: PayloadType, instance: InstanceRef | string, unit?: UnitType): CanonicalType {
   const instanceRefValue = typeof instance === 'string'
-    ? instanceRef('default', instance)
+    ? instanceRef(instanceId(instance), domainTypeId('default'))
     : instance;
   const u = unit ?? defaultUnitForPayload(payload);
 
   return canonicalType(payload, u, {
-    cardinality: axisInstantiated(cardinalityMany(instanceRefValue)),
-    temporality: axisInstantiated(temporalityDiscrete()),
+    cardinality: axisInst({ kind: 'many', instance: instanceRefValue }),
+    temporality: axisInst({kind: 'discrete'}),
   });
 }
 
@@ -877,11 +1147,57 @@ export function signalTypePerLaneEvent(payload: PayloadType, instance: InstanceR
  * The cardinality axis is left as 'default', allowing the type system to resolve it
  * based on actual input cardinalities at compile time.
  */
-export function signalTypePolymorphic(payload: PayloadType, unit?: Unit): CanonicalType {
+export function signalTypePolymorphic(payload: PayloadType, unit?: UnitType): CanonicalType {
   const u = unit ?? defaultUnitForPayload(payload);
 
+  // TODO: signalType uses default cardinality - should be removed or fixed
   return canonicalType(payload, u, {
-    cardinality: axisDefault(),
-    temporality: axisInstantiated(temporalityContinuous()),
+    cardinality: axisInst({ kind: 'one' }),  // Defaulting to 'one'
+    temporality: axisInst({kind: 'continuous'}),
   });
+}
+
+// =============================================================================
+// Event Expression Types
+// =============================================================================
+
+/**
+ * Create a CanonicalType for event expressions.
+ *
+ * HARD INVARIANTS (enforced at construction):
+ * - payload.kind === 'bool' (events are fired/not-fired)
+ * - unit.kind === 'none' (events are dimensionless)
+ * - temporality === 'discrete' (events fire at instants, not continuous)
+ *
+ * @param cardinalityAxis - The cardinality axis (one for scalar events, many for per-instance events)
+ * @returns CanonicalType satisfying all event invariants
+ */
+export function eventType(cardinalityAxis: CardinalityAxis): CanonicalType {
+  return {
+    payload: { kind: 'bool', stride: 1 },
+    unit: { kind: 'none' },
+    extent: {
+      cardinality: cardinalityAxis,
+      temporality: axisInst({ kind: 'discrete' }),
+      binding: axisInst(DEFAULT_BINDING),
+      perspective: axisInst(DEFAULT_PERSPECTIVE),
+      branch: axisInst(DEFAULT_BRANCH),
+    },
+  };
+}
+
+/**
+ * Create a scalar event type (cardinality = one).
+ * Use this for events that fire globally, not per-instance.
+ */
+export function eventTypeScalar(): CanonicalType {
+  return eventType(axisInst({ kind: 'one' }));
+}
+
+/**
+ * Create a per-instance event type (cardinality = many).
+ * Use this for events that fire per-element.
+ */
+export function eventTypePerInstance(instance: InstanceRef): CanonicalType {
+  return eventType(axisInst({ kind: 'many', instance }));
 }

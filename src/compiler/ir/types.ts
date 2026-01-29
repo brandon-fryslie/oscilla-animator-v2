@@ -17,7 +17,7 @@
  */
 
 // Import canonical types as source of truth
-import type { CanonicalType } from '../../core/canonical-types';
+import type { CanonicalType, ConstValue } from '../../core/canonical-types';
 
 // Import ValueSlot and StateSlotId for use in this file
 import type { ValueSlot as _ValueSlot, StateSlotId as _StateSlotId } from './Indices';
@@ -95,7 +95,7 @@ export type SigExpr =
 
 export interface SigExprConst {
   readonly kind: 'const';
-  readonly value: number | string | boolean;
+  readonly value: ConstValue;
   readonly type: CanonicalType;
 }
 
@@ -164,7 +164,7 @@ export interface SigExprShapeRef {
  * Spec: 04-compilation.md:394, 409
  */
 export interface SigExprReduceField {
-  readonly kind: 'reduce_field';
+  readonly kind: 'reduceField';
   readonly field: FieldExprId;
   readonly op: 'min' | 'max' | 'sum' | 'avg';
   readonly type: CanonicalType;
@@ -217,14 +217,13 @@ export type FieldExpr =
   | FieldExprMap
   | FieldExprZip
   | FieldExprZipSig
-  | FieldExprArray
   | FieldExprStateRead
   | FieldExprPathDerivative
   | FieldExprPlacement;
 
 export interface FieldExprConst {
   readonly kind: 'const';
-  readonly value: number | string;
+  readonly value: ConstValue;
   readonly type: CanonicalType;
 }
 
@@ -262,7 +261,7 @@ export interface FieldExprMap {
   readonly input: FieldExprId;
   readonly fn: PureFn;
   readonly type: CanonicalType;
-  readonly instanceId?: InstanceId;
+  // instanceId derived via requireManyInstance(expr.type)
 }
 
 export interface FieldExprZip {
@@ -270,7 +269,7 @@ export interface FieldExprZip {
   readonly inputs: readonly FieldExprId[];
   readonly fn: PureFn;
   readonly type: CanonicalType;
-  readonly instanceId?: InstanceId;
+  // instanceId derived via requireManyInstance(expr.type)
 }
 
 export interface FieldExprZipSig {
@@ -279,13 +278,7 @@ export interface FieldExprZipSig {
   readonly signals: readonly SigExprId[];
   readonly fn: PureFn;
   readonly type: CanonicalType;
-  readonly instanceId?: InstanceId;
-}
-
-export interface FieldExprArray {
-  readonly kind: 'array';
-  readonly instanceId: InstanceId;
-  readonly type: CanonicalType;
+  // instanceId derived via requireManyInstance(expr.type)
 }
 
 /**
@@ -329,27 +322,32 @@ export type EventExpr =
 
 export interface EventExprConst {
   readonly kind: 'const';
+  readonly type: CanonicalType;
   readonly fired: boolean;
 }
 
 export interface EventExprPulse {
   readonly kind: 'pulse';
+  readonly type: CanonicalType;
   readonly source: 'timeRoot';
 }
 
 export interface EventExprWrap {
   readonly kind: 'wrap';
+  readonly type: CanonicalType;
   readonly signal: SigExprId;
 }
 
 export interface EventExprCombine {
   readonly kind: 'combine';
+  readonly type: CanonicalType;
   readonly events: readonly EventExprId[];
   readonly mode: 'any' | 'all';
 }
 
 export interface EventExprNever {
   readonly kind: 'never';
+  readonly type: CanonicalType;
 }
 
 // =============================================================================
@@ -432,8 +430,8 @@ import type { DomainTypeId, InstanceId } from './Indices';
  * Layout is now handled entirely through field kernels (circleLayout, lineLayout, gridLayout).
  */
 export interface InstanceDecl {
-  readonly id: string; // InstanceId
-  readonly domainType: string; // DomainTypeId
+  readonly id: InstanceId;
+  readonly domainType: DomainTypeId;
   readonly count: number | 'dynamic';
   readonly lifecycle: 'static' | 'dynamic' | 'pooled';
   // Continuity System: Identity specification
@@ -537,13 +535,13 @@ export interface StepSlotWriteStrided {
 export interface StepMaterialize {
   readonly kind: 'materialize';
   readonly field: FieldExprId;
-  readonly instanceId: string; // InstanceId
+  readonly instanceId: InstanceId;
   readonly target: ValueSlot;
 }
 
 export interface StepRender {
   readonly kind: 'render';
-  readonly instanceId: string; // InstanceId - UPDATED for Sprint 6
+  readonly instanceId: InstanceId;
   /** Slot containing position buffer (after continuity applied) */
   readonly positionSlot: ValueSlot;
   /** Slot containing color buffer (after continuity applied) */
@@ -584,7 +582,7 @@ export interface StepFieldStateWrite {
  */
 export interface StepContinuityMapBuild {
   readonly kind: 'continuityMapBuild';
-  readonly instanceId: string; // InstanceId
+  readonly instanceId: InstanceId;
   readonly outputMapping: string; // Mapping identifier
 }
 
@@ -595,7 +593,7 @@ export interface StepContinuityMapBuild {
 export interface StepContinuityApply {
   readonly kind: 'continuityApply';
   readonly targetKey: string; // Unique identifier for this target
-  readonly instanceId: string; // InstanceId
+  readonly instanceId: InstanceId;
   readonly policy: ContinuityPolicy;
   readonly baseSlot: ValueSlot; // Input buffer (base values)
   readonly outputSlot: ValueSlot; // Output buffer (continuity-applied values)
@@ -678,7 +676,7 @@ export interface StateMappingField {
   /** Stable semantic identity */
   readonly stateId: StableStateId;
   /** Instance this state tracks (for lane mapping) */
-  readonly instanceId: string;
+  readonly instanceId: InstanceId;
   /** Start offset in state array (positional, changes each compile) */
   readonly slotStart: number;
   /** Number of lanes at compile time */

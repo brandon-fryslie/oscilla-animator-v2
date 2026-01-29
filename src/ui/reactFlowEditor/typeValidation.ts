@@ -6,8 +6,8 @@
  */
 
 import type { Patch, BlockId } from '../../types';
-import {CanonicalType, PayloadType, Unit, ConcretePayloadType, FLOAT} from '../../core/canonical-types';
-import { getAxisValue, DEFAULTS_V0, isPayloadVar } from '../../core/canonical-types';
+import {CanonicalType, PayloadType, UnitType, ConcretePayloadType, FLOAT} from '../../core/canonical-types';
+import { DEFAULTS_V0, isPayloadVar } from '../../core/canonical-types';
 import { getBlockDefinition } from '../../blocks/registry';
 import { findAdapter, type AdapterSpec } from '../../graph/adapters';
 
@@ -49,7 +49,7 @@ export function getTypeColor(payload: PayloadType): string {
  * Format a unit kind for display.
  * Returns short human-readable unit labels.
  */
-export function formatUnitForDisplay(unit: Unit): string {
+export function formatUnitForDisplay(unit: UnitType): string {
   switch (unit.kind) {
     case 'scalar': return '';
     case 'phase01': return 'phase';
@@ -66,7 +66,7 @@ export function formatUnitForDisplay(unit: Unit): string {
     case 'world3': return 'world3';
     case 'rgba01': return 'rgba';
     case 'none': return '';
-    case 'var': return `?`; // Unresolved unit variable (should not appear in UI)
+    // Note: 'var' kind removed per D5 - unit variables only in inference layer
   }
 }
 
@@ -75,8 +75,8 @@ export function formatUnitForDisplay(unit: Unit): string {
  * Returns strings like "Signal<float:phase>" or "Field<color>"
  */
 export function formatTypeForDisplay(type: CanonicalType): string {
-  const card = getAxisValue(type.extent.cardinality, DEFAULTS_V0.cardinality);
-  const temp = getAxisValue(type.extent.temporality, DEFAULTS_V0.temporality);
+  const card = type.extent.cardinality.kind === 'inst' ? type.extent.cardinality.value : DEFAULTS_V0.cardinality;
+  const temp = type.extent.temporality.kind === 'inst' ? type.extent.temporality.value : DEFAULTS_V0.temporality;
 
   // Cardinality prefix
   let cardStr: string;
@@ -107,8 +107,8 @@ export function formatTypeForDisplay(type: CanonicalType): string {
  * Format a CanonicalType for tooltip with more detail.
  */
 export function formatTypeForTooltip(type: CanonicalType): string {
-  const card = getAxisValue(type.extent.cardinality, DEFAULTS_V0.cardinality);
-  const temp = getAxisValue(type.extent.temporality, DEFAULTS_V0.temporality);
+  const card = type.extent.cardinality.kind === 'inst' ? type.extent.cardinality.value : DEFAULTS_V0.cardinality;
+  const temp = type.extent.temporality.kind === 'inst' ? type.extent.temporality.value : DEFAULTS_V0.temporality;
 
   const base = formatTypeForDisplay(type);
 
@@ -196,10 +196,10 @@ function canTransformDomain(fromDomain: string, toDomain: string): boolean {
  * that will be validated properly by the compiler.
  */
 function isTypeCompatible(from: CanonicalType, to: CanonicalType): boolean {
-  const fromCard = getAxisValue(from.extent.cardinality, DEFAULTS_V0.cardinality);
-  const fromTemp = getAxisValue(from.extent.temporality, DEFAULTS_V0.temporality);
-  const toCard = getAxisValue(to.extent.cardinality, DEFAULTS_V0.cardinality);
-  const toTemp = getAxisValue(to.extent.temporality, DEFAULTS_V0.temporality);
+  const fromCard = from.extent.cardinality.kind === 'inst' ? from.extent.cardinality.value : DEFAULTS_V0.cardinality;
+  const fromTemp = from.extent.temporality.kind === 'inst' ? from.extent.temporality.value : DEFAULTS_V0.temporality;
+  const toCard = to.extent.cardinality.kind === 'inst' ? to.extent.cardinality.value : DEFAULTS_V0.cardinality;
+  const toTemp = to.extent.temporality.kind === 'inst' ? to.extent.temporality.value : DEFAULTS_V0.temporality;
 
   // Payload must match, but payload variables are polymorphic
   const fromIsPayloadVar = isPayloadVar(from.payload);
@@ -215,12 +215,8 @@ function isTypeCompatible(from: CanonicalType, to: CanonicalType): boolean {
   // Unit must match (per spec: no implicit conversion)
   // Exception: unit variables (unitVar) are polymorphic and match any unit
   if (from.unit.kind !== to.unit.kind) {
-    // Unit variables are polymorphic - they can unify with any concrete unit
-    const fromIsVar = from.unit.kind === 'var';
-    const toIsVar = to.unit.kind === 'var';
-    if (!fromIsVar && !toIsVar) {
-      return false;
-    }
+    // Note: Unit variables removed per D5 - all units are concrete in UI
+    return false;
   }
 
   // Temporality must match
@@ -245,12 +241,12 @@ function isTypeCompatible(from: CanonicalType, to: CanonicalType): boolean {
     }
 
     // Domain types must match exactly OR have a valid transformation
-    if (fromInstance.domainType === toInstance.domainType) {
+    if (fromInstance.domainTypeId === toInstance.domainTypeId) {
       return true;
     }
 
     // Check if domain transformation exists (stub for now)
-    return canTransformDomain(fromInstance.domainType, toInstance.domainType);
+    return canTransformDomain(fromInstance.domainTypeId, toInstance.domainTypeId);
   }
 
   return true;

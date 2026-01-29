@@ -16,12 +16,12 @@
  * - ms: Milliseconds - Time values
  */
 
-import type { Unit } from '../core/canonical-types';
+import type { UnitType } from '../core/canonical-types';
 
 /**
  * Unit kind string for kernel signatures (lighter weight than full Unit objects).
  */
-type UnitKind = Unit['kind'];
+type UnitKind = UnitType['kind'];
 
 /**
  * Kernel input signature - declares expected unit for an input parameter

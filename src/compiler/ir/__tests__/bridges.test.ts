@@ -16,27 +16,23 @@ import {
   payloadTypeToShapeDescIR,
 } from '../bridges';
 import type {
-  Cardinality,
-  Temporality,
-  Binding,
+  CardinalityValue,
+  TemporalityValue,
+  BindingValue,
   Extent,
   CanonicalType,
   PayloadType,
 } from '../../../core/canonical-types';
 import {
-  axisInstantiated,
-  axisDefault,
   cardinalityZero,
   cardinalityOne,
   cardinalityMany,
   temporalityContinuous,
   temporalityDiscrete,
   bindingUnbound,
-  bindingWeak,
-  bindingStrong,
-  bindingIdentity,
-  instanceRef,
-  referentRef,
+  testInstanceRef,
+} from '../../../__tests__/type-test-helpers';
+import {
   FLOAT,
   INT,
   VEC2,
@@ -44,6 +40,12 @@ import {
   BOOL,
   SHAPE,
 } from '../../../core/canonical-types';
+import { instanceId, domainTypeId } from '../../../core/ids';
+
+// Type aliases for backward compat
+type Cardinality = CardinalityValue;
+type Temporality = TemporalityValue;
+type Binding = BindingValue;
 
 // =============================================================================
 // Cardinality → Domain Axis
@@ -61,7 +63,7 @@ describe('bridgeCardinalityToIR', () => {
   });
 
   it('maps many cardinality to "field" domain', () => {
-    const card: Cardinality = cardinalityMany(instanceRef('circle', 'particles'));
+    const card: Cardinality = cardinalityMany(testInstanceRef(instanceId('particles'), domainTypeId('circle')));
     expect(bridgeCardinalityToIR(card)).toBe('field');
   });
 });
@@ -126,7 +128,7 @@ describe('bridgeBindingToIdentityIR', () => {
   });
 
   it('maps identity binding to keyed entity', () => {
-    const binding: Binding = bindingIdentity(referentRef('entities'));
+    const binding: Binding = { kind: 'identity' };
     const result = bridgeBindingToIdentityIR(binding);
     expect(result).toEqual({
       kind: 'keyed',
@@ -135,7 +137,7 @@ describe('bridgeBindingToIdentityIR', () => {
   });
 
   it('maps weak binding to keyed custom', () => {
-    const binding: Binding = bindingWeak(referentRef('mask'));
+    const binding: Binding = { kind: 'weak' };
     const result = bridgeBindingToIdentityIR(binding);
     expect(result).toEqual({
       kind: 'keyed',
@@ -144,7 +146,7 @@ describe('bridgeBindingToIdentityIR', () => {
   });
 
   it('maps strong binding to keyed custom', () => {
-    const binding: Binding = bindingStrong(referentRef('mask'));
+    const binding: Binding = { kind: 'strong' };
     const result = bridgeBindingToIdentityIR(binding);
     expect(result).toEqual({
       kind: 'keyed',
@@ -198,11 +200,11 @@ describe('payloadTypeToShapeDescIR', () => {
 describe('bridgeExtentToAxesDescIR', () => {
   it('bridges signal extent (one + continuous)', () => {
     const extent: Extent = {
-      cardinality: axisInstantiated(cardinalityOne()),
-      temporality: axisInstantiated(temporalityContinuous()),
-      binding: axisInstantiated(bindingUnbound()),
-      perspective: axisInstantiated('global'),
-      branch: axisInstantiated('main'),
+      cardinality: axisInst(cardinalityOne()),
+      temporality: axisInst(temporalityContinuous()),
+      binding: axisInst(bindingUnbound()),
+      perspective: axisInst({ kind: 'default' }),
+      branch: axisInst({ kind: 'default' }),
     };
 
     const resolved = bridgeExtentToAxesDescIR(extent);
@@ -216,11 +218,11 @@ describe('bridgeExtentToAxesDescIR', () => {
 
   it('bridges field extent (many + continuous)', () => {
     const extent: Extent = {
-      cardinality: axisInstantiated(cardinalityMany(instanceRef('circle', 'particles'))),
-      temporality: axisInstantiated(temporalityContinuous()),
-      binding: axisInstantiated(bindingUnbound()),
-      perspective: axisInstantiated('global'),
-      branch: axisInstantiated('main'),
+      cardinality: axisInst(cardinalityMany(testInstanceRef(instanceId('particles'), domainTypeId('circle')))),
+      temporality: axisInst(temporalityContinuous()),
+      binding: axisInst(bindingUnbound()),
+      perspective: axisInst({ kind: 'default' }),
+      branch: axisInst({ kind: 'default' }),
     };
 
     const resolved = bridgeExtentToAxesDescIR(extent);
@@ -237,11 +239,11 @@ describe('bridgeExtentToAxesDescIR', () => {
 
   it('bridges event extent (one + discrete)', () => {
     const extent: Extent = {
-      cardinality: axisInstantiated(cardinalityOne()),
-      temporality: axisInstantiated(temporalityDiscrete()),
-      binding: axisInstantiated(bindingUnbound()),
-      perspective: axisInstantiated('global'),
-      branch: axisInstantiated('main'),
+      cardinality: axisInst(cardinalityOne()),
+      temporality: axisInst(temporalityDiscrete()),
+      binding: axisInst(bindingUnbound()),
+      perspective: axisInst({ kind: 'default' }),
+      branch: axisInst({ kind: 'default' }),
     };
 
     const resolved = bridgeExtentToAxesDescIR(extent);
@@ -255,11 +257,11 @@ describe('bridgeExtentToAxesDescIR', () => {
 
   it('bridges value extent (zero + continuous)', () => {
     const extent: Extent = {
-      cardinality: axisInstantiated(cardinalityZero()),
-      temporality: axisInstantiated(temporalityContinuous()),
-      binding: axisInstantiated(bindingUnbound()),
-      perspective: axisInstantiated('global'),
-      branch: axisInstantiated('main'),
+      cardinality: axisInst(cardinalityZero()),
+      temporality: axisInst(temporalityContinuous()),
+      binding: axisInst(bindingUnbound()),
+      perspective: axisInst({ kind: 'default' }),
+      branch: axisInst({ kind: 'default' }),
     };
 
     const resolved = bridgeExtentToAxesDescIR(extent);
@@ -271,41 +273,13 @@ describe('bridgeExtentToAxesDescIR', () => {
     expect(resolved.branch).toBe('main');
   });
 
-  it('throws error when cardinality is default', () => {
-    const extent: Extent = {
-      cardinality: axisDefault(),
-      temporality: axisInstantiated(temporalityContinuous()),
-      binding: axisInstantiated(bindingUnbound()),
-      perspective: axisInstantiated('global'),
-      branch: axisInstantiated('main'),
-    };
-
-    expect(() => bridgeExtentToAxesDescIR(extent)).toThrow(
-      /Cannot bridge axis 'cardinality' with kind 'default'/
-    );
-  });
-
-  it('throws error when temporality is default', () => {
-    const extent: Extent = {
-      cardinality: axisInstantiated(cardinalityOne()),
-      temporality: axisDefault(),
-      binding: axisInstantiated(bindingUnbound()),
-      perspective: axisInstantiated('global'),
-      branch: axisInstantiated('main'),
-    };
-
-    expect(() => bridgeExtentToAxesDescIR(extent)).toThrow(
-      /Cannot bridge axis 'temporality' with kind 'default'/
-    );
-  });
-
   it('preserves identity binding through bridging', () => {
     const extent: Extent = {
-      cardinality: axisInstantiated(cardinalityMany(instanceRef('circle', 'particles'))),
-      temporality: axisInstantiated(temporalityContinuous()),
-      binding: axisInstantiated(bindingIdentity(referentRef('entities'))),
-      perspective: axisInstantiated('global'),
-      branch: axisInstantiated('main'),
+      cardinality: axisInst(cardinalityMany(testInstanceRef(instanceId('particles'), domainTypeId('circle')))),
+      temporality: axisInst(temporalityContinuous()),
+      binding: axisInst({ kind: 'identity' }),
+      perspective: axisInst({ kind: 'default' }),
+      branch: axisInst({ kind: 'default' }),
     };
 
     const resolved = bridgeExtentToAxesDescIR(extent);
@@ -326,7 +300,7 @@ describe('bridging edge cases', () => {
     const cardinalities: Cardinality[] = [
       cardinalityZero(),
       cardinalityOne(),
-      cardinalityMany(instanceRef('circle', 'test')),
+      cardinalityMany(testInstanceRef(instanceId('test'), domainTypeId('circle'))),
     ];
     const temporalities: Temporality[] = [
       temporalityContinuous(),
@@ -337,11 +311,11 @@ describe('bridging edge cases', () => {
     for (const card of cardinalities) {
       for (const temp of temporalities) {
         const extent: Extent = {
-          cardinality: axisInstantiated(card),
-          temporality: axisInstantiated(temp),
-          binding: axisInstantiated(bindingUnbound()),
-          perspective: axisInstantiated('global'),
-          branch: axisInstantiated('main'),
+          cardinality: axisInst(card),
+          temporality: axisInst(temp),
+          binding: axisInst(bindingUnbound()),
+          perspective: axisInst({ kind: 'default' }),
+          branch: axisInst({ kind: 'default' }),
         };
 
         expect(() => bridgeExtentToAxesDescIR(extent)).not.toThrow();
@@ -367,9 +341,9 @@ describe('bridging edge cases', () => {
   it('handles all binding variants', () => {
     const bindings: Binding[] = [
       bindingUnbound(),
-      bindingWeak(referentRef('test')),
-      bindingStrong(referentRef('test')),
-      bindingIdentity(referentRef('test')),
+      {kind: 'weak'},
+      {kind: 'strong'},
+      {kind: 'identity'},
     ];
 
     for (const binding of bindings) {

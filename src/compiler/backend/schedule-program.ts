@@ -24,6 +24,7 @@ import type { ValueRefPacked } from '../ir/lowerTypes';
 import type { TopologyId } from '../../shapes/types';
 import { getBlockDefinition } from '../../blocks/registry';
 import { getPolicyForSemantic } from '../../runtime/ContinuityDefaults';
+import { requireManyInstance } from '../../core/canonical-types';
 
 // =============================================================================
 // Schedule IR Types
@@ -290,16 +291,14 @@ function inferFieldInstanceFromExprs(
 
   switch (expr.kind) {
     case 'intrinsic':
-    case 'array':
     case 'stateRead':
       return expr.instanceId;
     case 'map':
-      return expr.instanceId ?? inferFieldInstanceFromExprs(expr.input, fieldExprs);
+      return requireManyInstance(expr.type).instanceId;
     case 'zip':
-      // Take first input's instance (they should all match per validation)
-      return expr.instanceId ?? (expr.inputs.length > 0 ? inferFieldInstanceFromExprs(expr.inputs[0], fieldExprs) : undefined);
+      return requireManyInstance(expr.type).instanceId;
     case 'zipSig':
-      return expr.instanceId ?? inferFieldInstanceFromExprs(expr.field, fieldExprs);
+      return requireManyInstance(expr.type).instanceId;
     case 'broadcast':
     case 'const':
       return undefined;

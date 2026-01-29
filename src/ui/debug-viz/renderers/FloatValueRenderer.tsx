@@ -12,7 +12,7 @@
 import React from 'react';
 import type { ValueRenderer } from '../ValueRenderer';
 import type { RendererSample, AggregateStats } from '../types';
-import type { Unit } from '../../../core/canonical-types';
+import type { UnitType } from '../../../core/canonical-types';
 import { formatFloat, isInvalidFloat } from './formatFloat';
 
 const styles = {
@@ -29,7 +29,7 @@ const styles = {
 };
 
 /** Unit kind to display label. */
-function unitLabel(unit: Unit): string | null {
+function unitLabel(unit: UnitType): string | null {
   switch (unit.kind) {
     case 'scalar': return null;
     case 'norm01': return null; // has range indicator instead
@@ -44,7 +44,7 @@ function unitLabel(unit: Unit): string | null {
 }
 
 interface FloatRendererProps {
-  unit: Unit;
+  unit: UnitType;
 }
 
 function renderScalarFull(value: number, props: FloatRendererProps): React.ReactElement {
@@ -127,7 +127,7 @@ function renderAggregateInline(stats: AggregateStats, _props: FloatRendererProps
  * Create a FloatValueRenderer bound to a specific unit.
  * Called during registration for each unit variant.
  */
-export function createFloatValueRenderer(unit: Unit): ValueRenderer {
+export function createFloatValueRenderer(unit: UnitType): ValueRenderer {
   const props: FloatRendererProps = { unit };
 
   return {

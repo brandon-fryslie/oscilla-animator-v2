@@ -7,7 +7,7 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
-import { canonicalType, signalTypeField, unitPhase01, strideOf, type PayloadType } from '../core/canonical-types';
+import { canonicalType, signalTypeField, unitPhase01, strideOf, type PayloadType, floatConst, vec2Const, vec3Const, colorConst, intConst } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { DOMAIN_CIRCLE } from '../core/domain-registry';
 import { defaultSourceConst } from '../types';
@@ -70,10 +70,10 @@ registerBlock({
     // Get grid dimensions as signals
     const rowsSig = inputsById.rows?.k === 'sig'
       ? inputsById.rows.id
-      : ctx.b.sigConst((config?.rows as number) ?? 10, canonicalType(INT));
+      : ctx.b.sigConst(intConst((config?.rows as number) ?? 10), canonicalType(INT));
     const colsSig = inputsById.cols?.k === 'sig'
       ? inputsById.cols.id
-      : ctx.b.sigConst((config?.cols as number) ?? 10, canonicalType(INT));
+      : ctx.b.sigConst(intConst((config?.cols as number) ?? 10), canonicalType(INT));
 
     // Create index field for the instance (gridLayout expects integer indices)
     const indexField = ctx.b.fieldIntrinsic(
@@ -154,10 +154,10 @@ registerBlock({
     const length = (config?.spacing as number) ?? 0.8;
 
     // Create vertical line: center X, Y spans from (1-length)/2 to (1+length)/2
-    const x0Sig = ctx.b.sigConst(0.5, canonicalType(FLOAT));
-    const y0Sig = ctx.b.sigConst((1 - length) / 2, canonicalType(FLOAT));
-    const x1Sig = ctx.b.sigConst(0.5, canonicalType(FLOAT));
-    const y1Sig = ctx.b.sigConst((1 + length) / 2, canonicalType(FLOAT));
+    const x0Sig = ctx.b.sigConst(floatConst(0.5), canonicalType(FLOAT));
+    const y0Sig = ctx.b.sigConst(floatConst((1 - length) / 2), canonicalType(FLOAT));
+    const x1Sig = ctx.b.sigConst(floatConst(0.5), canonicalType(FLOAT));
+    const y1Sig = ctx.b.sigConst(floatConst((1 + length) / 2), canonicalType(FLOAT));
 
     // Create normalizedIndex field for the instance
     const normalizedIndexField = ctx.b.fieldIntrinsic(
@@ -241,10 +241,10 @@ registerBlock({
     // Get radius and phase as signals
     const radiusSig = inputsById.radius?.k === 'sig'
       ? inputsById.radius.id
-      : ctx.b.sigConst((config?.radius as number) ?? 0.3, canonicalType(FLOAT));
+      : ctx.b.sigConst(floatConst((config?.radius as number) ?? 0.3), canonicalType(FLOAT));
     const phaseSig = inputsById.phase?.k === 'sig'
       ? inputsById.phase.id
-      : ctx.b.sigConst((config?.phase as number) ?? 0, canonicalType(FLOAT));
+      : ctx.b.sigConst(floatConst((config?.phase as number) ?? 0), canonicalType(FLOAT));
 
     // Create normalizedIndex field for the instance
     const normalizedIndexField = ctx.b.fieldIntrinsic(
@@ -325,16 +325,16 @@ registerBlock({
     // Get line endpoints as signals
     const x0Sig = inputsById.x0?.k === 'sig'
       ? inputsById.x0.id
-      : ctx.b.sigConst((config?.x0 as number) ?? 0.1, canonicalType(FLOAT));
+      : ctx.b.sigConst(floatConst((config?.x0 as number) ?? 0.1), canonicalType(FLOAT));
     const y0Sig = inputsById.y0?.k === 'sig'
       ? inputsById.y0.id
-      : ctx.b.sigConst((config?.y0 as number) ?? 0.5, canonicalType(FLOAT));
+      : ctx.b.sigConst(floatConst((config?.y0 as number) ?? 0.5), canonicalType(FLOAT));
     const x1Sig = inputsById.x1?.k === 'sig'
       ? inputsById.x1.id
-      : ctx.b.sigConst((config?.x1 as number) ?? 0.9, canonicalType(FLOAT));
+      : ctx.b.sigConst(floatConst((config?.x1 as number) ?? 0.9), canonicalType(FLOAT));
     const y1Sig = inputsById.y1?.k === 'sig'
       ? inputsById.y1.id
-      : ctx.b.sigConst((config?.y1 as number) ?? 0.5, canonicalType(FLOAT));
+      : ctx.b.sigConst(floatConst((config?.y1 as number) ?? 0.5), canonicalType(FLOAT));
 
     // Create normalizedIndex field for the instance
     const normalizedIndexField = ctx.b.fieldIntrinsic(
@@ -413,10 +413,10 @@ registerBlock({
     // Get radius and phase as signals
     const radiusSig = inputsById.radius?.k === 'sig'
       ? inputsById.radius.id
-      : ctx.b.sigConst(0.3, canonicalType(FLOAT));
+      : ctx.b.sigConst(floatConst(0.3), canonicalType(FLOAT));
     const phaseSig = inputsById.phase?.k === 'sig'
       ? inputsById.phase.id
-      : ctx.b.sigConst(0, canonicalType(FLOAT));
+      : ctx.b.sigConst(floatConst(0), canonicalType(FLOAT));
 
     // Use halton2D as default basis kind (user-configurable when BlockDef supports config)
     const basisKind: import('../compiler/ir/types').BasisKind = 'halton2D';
@@ -501,16 +501,16 @@ registerBlock({
     // Get line endpoints as signals
     const x0Sig = inputsById.x0?.k === 'sig'
       ? inputsById.x0.id
-      : ctx.b.sigConst(0.2, canonicalType(FLOAT));
+      : ctx.b.sigConst(floatConst(0.2), canonicalType(FLOAT));
     const y0Sig = inputsById.y0?.k === 'sig'
       ? inputsById.y0.id
-      : ctx.b.sigConst(0.2, canonicalType(FLOAT));
+      : ctx.b.sigConst(floatConst(0.2), canonicalType(FLOAT));
     const x1Sig = inputsById.x1?.k === 'sig'
       ? inputsById.x1.id
-      : ctx.b.sigConst(0.8, canonicalType(FLOAT));
+      : ctx.b.sigConst(floatConst(0.8), canonicalType(FLOAT));
     const y1Sig = inputsById.y1?.k === 'sig'
       ? inputsById.y1.id
-      : ctx.b.sigConst(0.8, canonicalType(FLOAT));
+      : ctx.b.sigConst(floatConst(0.8), canonicalType(FLOAT));
 
     // Use halton2D as default basis kind (user-configurable when BlockDef supports config)
     const basisKind: import('../compiler/ir/types').BasisKind = 'halton2D';
@@ -593,10 +593,10 @@ registerBlock({
     // Get cols and rows as signals
     const colsSig = inputsById.cols?.k === 'sig'
       ? inputsById.cols.id
-      : ctx.b.sigConst(5, canonicalType(INT));
+      : ctx.b.sigConst(intConst(5), canonicalType(INT));
     const rowsSig = inputsById.rows?.k === 'sig'
       ? inputsById.rows.id
-      : ctx.b.sigConst(5, canonicalType(INT));
+      : ctx.b.sigConst(intConst(5), canonicalType(INT));
 
     // Use 'grid' as default basis kind for proper grid alignment
     const basisKind: import('../compiler/ir/types').BasisKind = 'grid';

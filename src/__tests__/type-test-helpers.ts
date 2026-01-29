@@ -21,14 +21,7 @@ import {
   unitWorld3,
   unitRgba01,
   unitNone,
-  extentDefault,
-  extent,
-  cardinalityOne,
-  cardinalityMany,
-  temporalityContinuous,
-  temporalityDiscrete,
-  bindingUnbound,
-  axisInstantiated,
+  axisInst,
   FLOAT,
   INT,
   BOOL,
@@ -39,11 +32,47 @@ import {
   CAMERA_PROJECTION,
   type PayloadType,
   type CanonicalType,
-  type Unit,
+  type UnitType,
   type Extent,
-  type Cardinality,
+  type CardinalityValue,
+  type TemporalityValue,
+  type BindingValue,
   type InstanceRef,
 } from '../core/canonical-types';
+
+import { instanceId, domainTypeId } from '../core/ids.js';
+
+// Helper functions for tests
+export function cardinalityZero(): CardinalityValue {
+  return { kind: 'zero' };
+}
+
+export function cardinalityOne(): CardinalityValue {
+  return { kind: 'one' };
+}
+
+export function cardinalityMany(instance: InstanceRef): CardinalityValue {
+  return { kind: 'many', instance };
+}
+
+export function temporalityContinuous(): TemporalityValue {
+  return { kind: 'continuous' };
+}
+
+export function temporalityDiscrete(): TemporalityValue {
+  return { kind: 'discrete' };
+}
+
+export function bindingUnbound(): BindingValue {
+  return { kind: 'unbound' };
+}
+
+/**
+ * Test helper: create InstanceRef from string literals (uses branded ID casts).
+ */
+export function testInstanceRef(instId: string, domainType: string = 'default'): InstanceRef {
+  return { instanceId: instanceId(instId), domainTypeId: domainTypeId(domainType) };
+}
 
 /**
  * Create a test CanonicalType with specified payload and optional unit.
@@ -62,7 +91,7 @@ import {
  */
 export function testSignalType(
   payload: PayloadType,
-  unit?: Unit
+  unit?: UnitType
 ): CanonicalType {
   return unit
     ? makeSignalType(payload, unit)
@@ -90,7 +119,7 @@ export function testSignalType(
  */
 export function testSignalTypeWithExtent(
   payload: PayloadType,
-  unit: Unit,
+  unit: UnitType,
   extentOverrides: Partial<Extent>
 ): CanonicalType {
   return makeSignalType(payload, unit, extentOverrides);
@@ -109,7 +138,7 @@ export function testSignalTypeWithExtent(
  * const phase = testFloat(unitPhase01());
  * const angle = testFloat(unitRadians());
  */
-export function testFloat(unit?: Unit): CanonicalType {
+export function testFloat(unit?: UnitType): CanonicalType {
   return makeSignalType(FLOAT, unit ?? unitScalar());
 }
 
@@ -123,7 +152,7 @@ export function testFloat(unit?: Unit): CanonicalType {
  * const index = testInt();
  * const timeMs = testInt(unitMs());
  */
-export function testInt(unit?: Unit): CanonicalType {
+export function testInt(unit?: UnitType): CanonicalType {
   return makeSignalType(INT, unit ?? unitCount());
 }
 
@@ -137,7 +166,7 @@ export function testInt(unit?: Unit): CanonicalType {
  * const position = testVec2();
  * const normalized = testVec2(unitNdc2());
  */
-export function testVec2(unit?: Unit): CanonicalType {
+export function testVec2(unit?: UnitType): CanonicalType {
   return makeSignalType(VEC2, unit ?? unitWorld2());
 }
 
@@ -147,7 +176,7 @@ export function testVec2(unit?: Unit): CanonicalType {
  * @param unit - Unit for the vec3 (defaults to world3 if omitted)
  * @returns A CanonicalType with payload='vec3'
  */
-export function testVec3(unit?: Unit): CanonicalType {
+export function testVec3(unit?: UnitType): CanonicalType {
   return makeSignalType(VEC3, unit ?? unitWorld3());
 }
 
@@ -160,7 +189,7 @@ export function testVec3(unit?: Unit): CanonicalType {
  * @example
  * const color = testColor();
  */
-export function testColor(unit?: Unit): CanonicalType {
+export function testColor(unit?: UnitType): CanonicalType {
   return makeSignalType(COLOR, unit ?? unitRgba01());
 }
 
@@ -197,11 +226,11 @@ export function testShape(): CanonicalType {
  */
 export function testFieldType(
   payload: PayloadType,
-  unit: Unit,
+  unit: UnitType,
   instance: InstanceRef
 ): CanonicalType {
   return makeSignalType(payload, unit, {
-    cardinality: axisInstantiated(cardinalityMany(instance)),
+    cardinality: axisInst(cardinalityMany(instance)),
   });
 }
 
@@ -217,10 +246,10 @@ export function testFieldType(
  */
 export function testEventType(
   payload: PayloadType,
-  unit: Unit
+  unit: UnitType
 ): CanonicalType {
   return makeSignalType(payload, unit, {
-    temporality: axisInstantiated(temporalityDiscrete()),
+    temporality: axisInst(temporalityDiscrete()),
   });
 }
 
@@ -228,4 +257,3 @@ export function testEventType(
 export { unitScalar, unitCount, unitPhase01, unitNorm01, unitRadians, unitDegrees, unitNdc2, unitNdc3, unitWorld2, unitWorld3, unitRgba01, unitNone };
 
 // Re-export cardinality constructors
-export { cardinalityOne, cardinalityMany, temporalityContinuous, temporalityDiscrete, bindingUnbound };

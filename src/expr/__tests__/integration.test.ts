@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { compileExpression } from '../index';
-import { canonicalType } from '../../core/canonical-types';
+import { canonicalType, floatConst, intConst, boolConst, vec3Const, colorConst } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC3, COLOR } from '../../core/canonical-types';
 import { IRBuilderImpl } from '../../compiler/ir/IRBuilderImpl';
 import { extractSigExpr } from '../../__tests__/ir-test-helpers';
@@ -36,7 +36,7 @@ describe('compileExpression Integration', () => {
 
   it('compiles identifier expression', () => {
     // Create an input signal
-    const inputSig = builder.sigConst(10, canonicalType(INT));
+    const inputSig = builder.sigConst(intConst(10), canonicalType(INT));
 
     // Compile expression that references it
     const result = compileExpression(
@@ -58,8 +58,8 @@ describe('compileExpression Integration', () => {
 
   it('compiles binary operation', () => {
     // Create input signals
-    const aSig = builder.sigConst(5, canonicalType(INT));
-    const bSig = builder.sigConst(3, canonicalType(INT));
+    const aSig = builder.sigConst(intConst(5), canonicalType(INT));
+    const bSig = builder.sigConst(intConst(3), canonicalType(INT));
 
     // Compile expression
     const result = compileExpression(
@@ -87,7 +87,7 @@ describe('compileExpression Integration', () => {
 
   it('compiles function call', () => {
     // Create input signal
-    const xSig = builder.sigConst(0, canonicalType(FLOAT));
+    const xSig = builder.sigConst(floatConst(0), canonicalType(FLOAT));
 
     // Compile expression
     const result = compileExpression(
@@ -112,7 +112,7 @@ describe('compileExpression Integration', () => {
       'x +',
       new Map([['x', canonicalType(INT)]]),
       builder,
-      new Map([['x', builder.sigConst(1, canonicalType(INT))]])
+      new Map([['x', builder.sigConst(intConst(1), canonicalType(INT))]])
     );
 
     expect(result.ok).toBe(false);
@@ -131,8 +131,8 @@ describe('compileExpression Integration', () => {
       ]),
       builder,
       new Map([
-        ['x', builder.sigConst(0, canonicalType(BOOL))],
-        ['y', builder.sigConst(0, canonicalType(BOOL))],
+        ['x', builder.sigConst(boolConst(false), canonicalType(BOOL))],
+        ['y', builder.sigConst(boolConst(false), canonicalType(BOOL))],
       ])
     );
 
@@ -160,7 +160,7 @@ describe('compileExpression Integration', () => {
     it('compiles vec3.x to extraction kernel (single component)', () => {
       // Note: At signal level, vec3 is represented as a reference to a multi-slot value.
       // For this test, we create a placeholder signal with vec3 type.
-      const vSig = builder.sigConst(0, canonicalType(VEC3)); // Placeholder
+      const vSig = builder.sigConst(vec3Const(0, 0, 0), canonicalType(VEC3)); // Placeholder
 
       const result = compileExpression(
         'v.x',
@@ -180,7 +180,7 @@ describe('compileExpression Integration', () => {
     });
 
     it('compiles color.r to extraction kernel', () => {
-      const cSig = builder.sigConst(0, canonicalType(COLOR)); // Placeholder
+      const cSig = builder.sigConst(colorConst(0, 0, 0, 1), canonicalType(COLOR)); // Placeholder
 
       const result = compileExpression(
         'c.r',
@@ -200,7 +200,7 @@ describe('compileExpression Integration', () => {
     });
 
     it('compiles expressions with single-component extraction', () => {
-      const vSig = builder.sigConst(0, canonicalType(VEC3));
+      const vSig = builder.sigConst(vec3Const(0, 0, 0), canonicalType(VEC3));
 
       const result = compileExpression(
         'v.x + v.y',
@@ -220,7 +220,7 @@ describe('compileExpression Integration', () => {
     });
 
     it('compiles function call on extracted component', () => {
-      const vSig = builder.sigConst(0, canonicalType(VEC3));
+      const vSig = builder.sigConst(vec3Const(0, 0, 0), canonicalType(VEC3));
 
       const result = compileExpression(
         'sin(v.x)',
@@ -244,7 +244,7 @@ describe('compileExpression Integration', () => {
       // Multi-component swizzle (.xy, .rgb) compiles successfully but is
       // FIELD-LEVEL ONLY. Signal-level execution is not yet supported.
       // See WORK-EVALUATION-20260127-181500.md for details.
-      const vSig = builder.sigConst(0, canonicalType(VEC3));
+      const vSig = builder.sigConst(vec3Const(0, 0, 0), canonicalType(VEC3));
 
       const result = compileExpression(
         'v.xy',
@@ -263,7 +263,7 @@ describe('compileExpression Integration', () => {
     });
 
     it('returns error for invalid component', () => {
-      const vSig = builder.sigConst(0, canonicalType(VEC3));
+      const vSig = builder.sigConst(vec3Const(0, 0, 0), canonicalType(VEC3));
 
       const result = compileExpression(
         'v.w', // vec3 has no 4th component
@@ -280,7 +280,7 @@ describe('compileExpression Integration', () => {
     });
 
     it('returns error for component access on non-vector', () => {
-      const fSig = builder.sigConst(1.0, canonicalType(FLOAT));
+      const fSig = builder.sigConst(floatConst(1.0), canonicalType(FLOAT));
 
       const result = compileExpression(
         'f.x', // float not a vector type

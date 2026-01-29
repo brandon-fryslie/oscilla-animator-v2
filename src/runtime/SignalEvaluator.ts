@@ -198,7 +198,7 @@ function evaluateSigExpr(
       return 0;
     }
 
-    case 'reduce_field': {
+    case 'reduceField': {
       // Field reduction is handled during step execution (materialization needed)
       // This case should not be reached during signal evaluation
       // Return 0 as placeholder (actual work done in executor)

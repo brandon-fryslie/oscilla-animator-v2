@@ -11,7 +11,7 @@
 
 import type { Block } from "../../graph/Patch";
 import {
-  getAxisValue,
+  isAxisInst,
   DEFAULTS_V0,
   type CanonicalType,
 } from "../../core/canonical-types";
@@ -53,10 +53,10 @@ export type Pass2Error = PortTypeUnknownError | NoConversionPathError;
  * Uses resolved types - no variables should be present.
  */
 function isTypeCompatible(from: CanonicalType, to: CanonicalType, sourceBlockType?: string, targetBlockType?: string): boolean {
-  const fromCard = getAxisValue(from.extent.cardinality, DEFAULTS_V0.cardinality);
-  const fromTemp = getAxisValue(from.extent.temporality, DEFAULTS_V0.temporality);
-  const toCard = getAxisValue(to.extent.cardinality, DEFAULTS_V0.cardinality);
-  const toTemp = getAxisValue(to.extent.temporality, DEFAULTS_V0.temporality);
+  const fromCard = from.extent.cardinality.kind === 'inst' ? from.extent.cardinality.value : DEFAULTS_V0.cardinality;
+  const fromTemp = from.extent.temporality.kind === 'inst' ? from.extent.temporality.value : DEFAULTS_V0.temporality;
+  const toCard = to.extent.cardinality.kind === 'inst' ? to.extent.cardinality.value : DEFAULTS_V0.cardinality;
+  const toTemp = to.extent.temporality.kind === 'inst' ? to.extent.temporality.value : DEFAULTS_V0.temporality;
 
   // Payload must match (resolved types - no variables)
   if (from.payload !== to.payload) {
@@ -104,7 +104,7 @@ function isTypeCompatible(from: CanonicalType, to: CanonicalType, sourceBlockTyp
     const fromInstance = fromCard.instance;
     const toInstance = toCard.instance;
     if (!fromInstance || !toInstance) return false;
-    return fromInstance.domainType === toInstance.domainType &&
+    return fromInstance.domainTypeId === toInstance.domainTypeId &&
       fromInstance.instanceId === toInstance.instanceId;
   }
 
@@ -180,10 +180,10 @@ export function pass2TypeGraph(typeResolved: TypeResolvedPatch): TypedPatch {
 
     // Validate type compatibility
     if (!isTypeCompatible(fromType, toType, fromBlock.type, toBlock.type)) {
-      const fromCard = getAxisValue(fromType.extent.cardinality, DEFAULTS_V0.cardinality);
-      const fromTemp = getAxisValue(fromType.extent.temporality, DEFAULTS_V0.temporality);
-      const toCard = getAxisValue(toType.extent.cardinality, DEFAULTS_V0.cardinality);
-      const toTemp = getAxisValue(toType.extent.temporality, DEFAULTS_V0.temporality);
+      const fromCard = fromType.extent.cardinality.kind === 'inst' ? fromType.extent.cardinality.value : DEFAULTS_V0.cardinality;
+      const fromTemp = fromType.extent.temporality.kind === 'inst' ? fromType.extent.temporality.value : DEFAULTS_V0.temporality;
+      const toCard = toType.extent.cardinality.kind === 'inst' ? toType.extent.cardinality.value : DEFAULTS_V0.cardinality;
+      const toTemp = toType.extent.temporality.kind === 'inst' ? toType.extent.temporality.value : DEFAULTS_V0.temporality;
 
       errors.push({
         kind: "NoConversionPath",

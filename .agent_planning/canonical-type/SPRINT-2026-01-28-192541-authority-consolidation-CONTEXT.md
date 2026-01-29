@@ -7,47 +7,57 @@ Remove dual authority violations (FieldExpr.instanceId) and implement canonical 
 
 ## C-5: Remove instanceId from FieldExpr, Add getManyInstance Helper
 
-### CONTRACT DECISION REQUIRED FIRST
+### CONTRACT DECISION: TWO HELPERS, NOT ONE
 
-**Before implementing, decide:**
+**Decision made (2026-01-28):** Use two helpers with explicit contracts encoded in names.
 
-What should callers do when `getManyInstance(type)` returns null?
-
-**Context**: FieldExpr can theoretically have cardinality=one (not just many). If getManyInstance returns null, caller has no instance reference.
-
-**Options**:
 ```typescript
-// Option A: Check null, handle both cases (RECOMMENDED)
-const inst = getManyInstance(expr.type);
-if (inst === null) {
-  // cardinality is 'one' or 'zero' or var — skip or use default
-  console.warn('Expression is not a field (cardinality≠many), skipping');
-  continue;
-}
-// Use inst...
+// TOTAL / FAILING HELPER (default for compiler/backend code)
+/** Returns the instance for many(instance). Throws if cardinality is not inst+many. */
+export function requireManyInstance(t: CanonicalType): InstanceRef
 
-// Option B: Assume non-null (DANGEROUS)
-const inst = getManyInstance(expr.type)!;  // Crashes if null
-// Use inst... (breaks on cardinality=one)
-
-// Option C: Helper throws error (RESTRICTIVE)
-export function getManyInstance(t: CanonicalType): InstanceRef {
-  const card = t.extent.cardinality;
-  if (card.kind !== 'inst') throw new Error('Cardinality is type variable');
-  if (card.value.kind !== 'many') throw new Error('Not a field (cardinality≠many)');
-  return card.value.instance;
-}
+// PARTIAL / QUERY HELPER (only for UI/probing paths)
+/** Returns the instance for many(instance), else null (var/zero/one). */
+export function maybeManyInstance(t: CanonicalType): InstanceRef | null
 ```
 
-**Recommendation**: Choose **Option A** (check null). Document in getManyInstance docstring:
+**Why this choice:**
+- Backend/lowering: encountering non-many in field-expected paths is a bug → fail-fast
+- UI: legitimately has "not fully typed yet" (vars) and "not a field" values → null OK
+
+**Rules for callers:**
+| Context | Helper | If null/error? |
+|---------|--------|----------------|
+| Backend/lowering | `requireManyInstance()` | Throw (axis-validation gap) |
+| Frontend axis validation | `requireManyInstance()` for field-by-construction; `maybeManyInstance()` for probing | Throw / handle null |
+| UI rendering | `maybeManyInstance()` | Show "unknown/not-field" |
+
+**Docstring requirements:**
+
+`requireManyInstance`:
 ```typescript
 /**
- * Returns null if:
- * - cardinality is a type variable (kind='var')
- * - cardinality is 'zero' or 'one'
- * 
- * Callers MUST check for null and handle gracefully.
+ * Returns the instance for many(instance).
+ * @throws If cardinality is:
+ *   - var (type variable)
+ *   - inst.zero
+ *   - inst.one
+ * Error message includes actual cardinality and optional context.
  */
+```
+
+`maybeManyInstance`:
+```typescript
+/**
+ * Returns the instance for many(instance), else null.
+ * @returns null if cardinality is:
+ *   - var (type variable)
+ *   - inst.zero
+ *   - inst.one
+ */
+```
+
+**Enforcement:** Delete `getManyInstance` entirely. Ban `maybeManyInstance(...)!` via grep gate.
 ```
 
 ---

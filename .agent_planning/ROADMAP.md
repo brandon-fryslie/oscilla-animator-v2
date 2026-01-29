@@ -47,13 +47,35 @@ Last updated: 2026-01-27-171000
 - **Planning Files:** `.agent_planning/ir-5-axes/`
 - **Completion Report:** `.agent_planning/ir-5-axes/COMPLETION-20260109-212700.md`
 
-#### 📋 type-system [PLANNING]
+#### ✅ canonical-type [COMPLETED]
+- **State:** COMPLETED (foundation + event-typing sprints)
+- **Epic:** None
+- **Description:** Type system foundation cleanup + EventExpr CanonicalType + Step type fixes
+- **Planning Files:** `.agent_planning/canonical-type/`
+- **Summary:** Foundation (C-7, C-3, C-2) and event-typing (C-1, C-6) sprints complete. All 5 EventExpr variants now have type: CanonicalType, eventType() helper added with hard invariants (payload=bool, unit=none, temporality=discrete), 6 Step types now use branded InstanceId. 2036 tests passing including new EventExpr invariant tests.
+- **Completed:** 2026-01-28
+
+#### 📋 const-value [PLANNING]
 - **State:** PLANNING
+- **Epic:** canonical-type Sprint 4
+- **Spec:** `design-docs/canonical-types/00-exhaustive-type-system.md:285-293`
+- **Description:** Replace loose `value: number|string|boolean` with discriminated ConstValue union. Enforces Invariant I5 (const literal shape matches payload).
+- **Planning Files:** `.agent_planning/canonical-type/SPRINT-2026-01-28-192541-const-value-*.md`
+- **Status Note:** C-8: ConstValue type with 7 payload variants, update 40+ construction sites, axis enforcement integration. High confidence - spec complete.
+- **Key Work Items:**
+  - C-8 (P0): Define ConstValue discriminated union (float, int, bool, vec2, vec3, color, cameraProjection)
+  - C-8 (P0): Update SigExprConst.value and FieldExprConst.value to ConstValue
+  - C-8 (P0): Update all 40+ construction sites
+  - C-8 (P0): Add constValueMatchesPayload validator + axis enforcement integration
+- **Acceptance Criteria:** All tests pass, TypeScript clean, 10+ invariant tests
+
+#### 🔄 type-system [IN PROGRESS]
+- **State:** IN PROGRESS (Phase 1 Unified Plan P1)
 - **Epic:** Phase 1 Unified Plan (P1)
 - **Spec:** `design-docs/CANONICAL-oscilla-v2.5-20260109/topics/01-type-system.md`
 - **Description:** AxesDescIR integration, bridge functions, SlotMetaEntry population
 - **Planning Files:** `.agent_planning/phase1-remaining/`
-- **Status Note:** ~90% foundation complete, IR integration remaining
+- **Status Note:** Remaining work - AxesDescIR and bridge functions
 
 #### 📋 time-model [PLANNING]
 - **State:** PLANNING

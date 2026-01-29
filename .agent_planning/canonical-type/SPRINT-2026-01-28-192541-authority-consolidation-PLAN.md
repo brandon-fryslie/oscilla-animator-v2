@@ -1,7 +1,7 @@
 # Sprint: authority-consolidation - Single Authority Enforcement
 Generated: 2026-01-28-192541
-Confidence: HIGH: 1, MEDIUM: 1, LOW: 0
-Status: PARTIALLY READY
+Confidence: HIGH: 2, MEDIUM: 0, LOW: 0
+Status: READY (contract decided)
 Source: EVALUATION-2026-01-28-191553.md
 Dependencies: Sprint 1 (foundation) + Sprint 2 (event-typing)
 
@@ -27,7 +27,7 @@ Eliminate dual authority violations by removing instanceId from FieldExpr nodes 
 **Dependencies**: Sprint 1 C-2 (InstanceId in core/ids.ts), Sprint 2 C-1 (EventExpr.type exists)
 **Spec Reference**: 15-FiveAxesTypeSystem-Conclusion.md:69 (I1: Single Authority), 00-exhaustive-type-system.md:230-235 • **Status Reference**: EVALUATION-2026-01-28-191553.md:145-164
 
-**Confidence**: MEDIUM (helper is 5 lines, but null-handling contract needs clarification)
+**Confidence**: HIGH (contract decision: two helpers, requireManyInstance/maybeManyInstance)
 
 #### Description
 **REMOVE** instanceId field from FieldExprMap, FieldExprZip, FieldExprZipSig (3 interfaces). This field violates Invariant I1 (Single Authority): "No field on any node may duplicate type authority." If instanceId is present, it MUST match getManyInstance(type), so why store it twice? Implement getManyInstance(type: CanonicalType): InstanceRef | null helper so callers derive instance via: `const inst = getManyInstance(expr.type)`.
@@ -64,21 +64,62 @@ export function getManyInstance(t: CanonicalType): InstanceRef | null {
 
 #### Technical Notes
 
-**Add helper to canonical-types.ts:**
+**Add two helpers to canonical-types.ts:**
+
+**`requireManyInstance`** (total, throws):
 ```typescript
 /**
- * Derive instance reference from cardinality axis.
- * Returns null if cardinality is not many(instance).
- * 
- * Use this instead of storing instanceId on expression nodes.
+ * Returns the instance reference for cardinality=many(instance).
+ *
+ * USE IN: Compiler backend, lowering, axis validation (field-expected paths).
+ *
+ * @throws If cardinality is not inst+many:
+ *   - kind='var' (type variable not yet resolved)
+ *   - value.kind='zero' (empty)
+ *   - value.kind='one' (scalar, not a field)
+ *
+ * Error message includes actual cardinality for debugging.
  */
-export function getManyInstance(t: CanonicalType): InstanceRef | null {
+export function requireManyInstance(
+  t: CanonicalType,
+  context?: string
+): InstanceRef {
   const card = t.extent.cardinality;
-  if (card.kind !== 'inst') return null;  // type variable
-  if (card.value.kind !== 'many') return null;  // zero or one
+  if (card.kind !== 'inst') {
+    throw new Error(
+      `requireManyInstance: cardinality is var${context ? ` (${context})` : ''}, got: ${JSON.stringify(card)}`
+    );
+  }
+  if (card.value.kind !== 'many') {
+    throw new Error(
+      `requireManyInstance: cardinality is ${card.value.kind}${context ? ` (${context})` : ''}, expected many`
+    );
+  }
   return card.value.instance;
 }
 ```
+
+**`maybeManyInstance`** (partial, returns null):
+```typescript
+/**
+ * Returns the instance reference for cardinality=many(instance), or null.
+ *
+ * USE IN: UI rendering, diagnostic probes, when handling incomplete types.
+ *
+ * @returns InstanceRef if cardinality=many(instance), null otherwise:
+ *   - kind='var' (type variable not yet resolved)
+ *   - value.kind='zero' (empty)
+ *   - value.kind='one' (scalar, not a field)
+ */
+export function maybeManyInstance(t: CanonicalType): InstanceRef | null {
+  const card = t.extent.cardinality;
+  if (card.kind !== 'inst') return null;
+  if (card.value.kind !== 'many') return null;
+  return card.value.instance;
+}
+```
+
+**NOTE:** Do NOT create a `getManyInstance` helper. The ambiguity in that name is why we need two explicit variants.
 
 **Call site pattern:**
 ```typescript

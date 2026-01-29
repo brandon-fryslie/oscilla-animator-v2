@@ -12,7 +12,7 @@
  */
 
 import {registerBlock} from './registry';
-import {canonicalType, strideOf} from '../core/canonical-types';
+import {canonicalType, strideOf, floatConst} from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import {TOPOLOGY_ID_ELLIPSE, TOPOLOGY_ID_RECT} from '../shapes/registry';
 import {defaultSourceConst} from '../types';
@@ -76,7 +76,7 @@ registerBlock({
         if (rxInput && rxInput.k === 'sig') {
             rxSig = rxInput.id;
         } else {
-            rxSig = ctx.b.sigConst((config?.rx as number) ?? 0.02, canonicalType(FLOAT));
+            rxSig = ctx.b.sigConst(floatConst((config?.rx as number) ?? 0.02), canonicalType(FLOAT));
         }
 
         // Resolve ry parameter
@@ -85,7 +85,7 @@ registerBlock({
         if (ryInput && ryInput.k === 'sig') {
             rySig = ryInput.id;
         } else {
-            rySig = ctx.b.sigConst((config?.ry as number) ?? 0.02, canonicalType(FLOAT));
+            rySig = ctx.b.sigConst(floatConst((config?.ry as number) ?? 0.02), canonicalType(FLOAT));
         }
 
         // Resolve rotation parameter
@@ -94,7 +94,7 @@ registerBlock({
         if (rotationInput && rotationInput.k === 'sig') {
             rotationSig = rotationInput.id;
         } else {
-            rotationSig = ctx.b.sigConst((config?.rotation as number) ?? 0, canonicalType(FLOAT));
+            rotationSig = ctx.b.sigConst(floatConst((config?.rotation as number) ?? 0), canonicalType(FLOAT));
         }
 
         // Create shape reference with ellipse topology and param signals
@@ -181,7 +181,7 @@ registerBlock({
         if (widthInput && widthInput.k === 'sig') {
             widthSig = widthInput.id;
         } else {
-            widthSig = ctx.b.sigConst((config?.width as number) ?? 0.04, canonicalType(FLOAT));
+            widthSig = ctx.b.sigConst(floatConst((config?.width as number) ?? 0.04), canonicalType(FLOAT));
         }
 
         // Resolve height parameter
@@ -190,7 +190,7 @@ registerBlock({
         if (heightInput && heightInput.k === 'sig') {
             heightSig = heightInput.id;
         } else {
-            heightSig = ctx.b.sigConst((config?.height as number) ?? 0.02, canonicalType(FLOAT));
+            heightSig = ctx.b.sigConst(floatConst((config?.height as number) ?? 0.02), canonicalType(FLOAT));
         }
 
         // Resolve rotation parameter
@@ -199,7 +199,7 @@ registerBlock({
         if (rotationInput && rotationInput.k === 'sig') {
             rotationSig = rotationInput.id;
         } else {
-            rotationSig = ctx.b.sigConst((config?.rotation as number) ?? 0, canonicalType(FLOAT));
+            rotationSig = ctx.b.sigConst(floatConst((config?.rotation as number) ?? 0), canonicalType(FLOAT));
         }
 
         // Resolve cornerRadius parameter
@@ -208,7 +208,7 @@ registerBlock({
         if (cornerRadiusInput && cornerRadiusInput.k === 'sig') {
             cornerRadiusSig = cornerRadiusInput.id;
         } else {
-            cornerRadiusSig = ctx.b.sigConst((config?.cornerRadius as number) ?? 0, canonicalType(FLOAT));
+            cornerRadiusSig = ctx.b.sigConst(floatConst((config?.cornerRadius as number) ?? 0), canonicalType(FLOAT));
         }
 
         // Create shape reference with rect topology and param signals

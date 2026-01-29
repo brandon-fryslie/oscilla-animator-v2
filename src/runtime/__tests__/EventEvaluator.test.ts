@@ -13,7 +13,7 @@ import { compile } from '../../compiler/compile';
 import { EventHub } from '../../events/EventHub';
 import { getTestArena } from '../../runtime/__tests__/test-arena-helper';
 import { buildPatch } from '../../graph/Patch';
-import { canonicalType } from '../../core/canonical-types';
+import { canonicalType, eventTypeScalar } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
 import { sigExprId } from '../../compiler/ir/Indices';
 import type { EventExpr, StepEvalEvent } from '../../compiler/ir/types';
@@ -48,7 +48,7 @@ function eventExprId(n: number): EventExprId {
 describe('EventEvaluator', () => {
   describe('const', () => {
     it('const(true) fires', () => {
-      const exprs: EventExpr[] = [{ kind: 'const', fired: true }];
+      const exprs: EventExpr[] = [{ kind: 'const', type: eventTypeScalar(), fired: true }];
       const state = createMinimalState(0, 1);
       // Set time so evaluateSignal doesn't throw
       state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: createPalette(), energy: 0.5 };
@@ -56,7 +56,7 @@ describe('EventEvaluator', () => {
     });
 
     it('const(false) does not fire', () => {
-      const exprs: EventExpr[] = [{ kind: 'const', fired: false }];
+      const exprs: EventExpr[] = [{ kind: 'const', type: eventTypeScalar(), fired: false }];
       const state = createMinimalState(0, 1);
       state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: createPalette(), energy: 0.5 };
       expect(evaluateEvent(eventExprId(0), exprs, state, [])).toBe(false);
@@ -65,7 +65,7 @@ describe('EventEvaluator', () => {
 
   describe('never', () => {
     it('never fires', () => {
-      const exprs: EventExpr[] = [{ kind: 'never' }];
+      const exprs: EventExpr[] = [{ kind: 'never', type: eventTypeScalar() }];
       const state = createMinimalState(0, 1);
       state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: createPalette(), energy: 0.5 };
       expect(evaluateEvent(eventExprId(0), exprs, state, [])).toBe(false);
@@ -74,7 +74,7 @@ describe('EventEvaluator', () => {
 
   describe('pulse', () => {
     it('pulse(timeRoot) fires every tick', () => {
-      const exprs: EventExpr[] = [{ kind: 'pulse', source: 'timeRoot' }];
+      const exprs: EventExpr[] = [{ kind: 'pulse', type: eventTypeScalar(), source: 'timeRoot' }];
       const state = createMinimalState(0, 1);
       state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: createPalette(), energy: 0.5 };
       // Should fire every tick
@@ -87,9 +87,9 @@ describe('EventEvaluator', () => {
   describe('combine', () => {
     it('combine(any) fires if either fires', () => {
       const exprs: EventExpr[] = [
-        { kind: 'const', fired: false },
-        { kind: 'const', fired: true },
-        { kind: 'combine', events: [eventExprId(0), eventExprId(1)], mode: 'any' },
+        { kind: 'const', type: eventTypeScalar(), fired: false },
+        { kind: 'const', type: eventTypeScalar(), fired: true },
+        { kind: 'combine', type: eventTypeScalar(), events: [eventExprId(0), eventExprId(1)], mode: 'any' },
       ];
       const state = createMinimalState(0, 3);
       state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: createPalette(), energy: 0.5 };
@@ -98,9 +98,9 @@ describe('EventEvaluator', () => {
 
     it('combine(any) does not fire if none fires', () => {
       const exprs: EventExpr[] = [
-        { kind: 'const', fired: false },
-        { kind: 'const', fired: false },
-        { kind: 'combine', events: [eventExprId(0), eventExprId(1)], mode: 'any' },
+        { kind: 'const', type: eventTypeScalar(), fired: false },
+        { kind: 'const', type: eventTypeScalar(), fired: false },
+        { kind: 'combine', type: eventTypeScalar(), events: [eventExprId(0), eventExprId(1)], mode: 'any' },
       ];
       const state = createMinimalState(0, 3);
       state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: createPalette(), energy: 0.5 };
@@ -109,9 +109,9 @@ describe('EventEvaluator', () => {
 
     it('combine(all) fires only if both fire', () => {
       const exprs: EventExpr[] = [
-        { kind: 'const', fired: true },
-        { kind: 'const', fired: true },
-        { kind: 'combine', events: [eventExprId(0), eventExprId(1)], mode: 'all' },
+        { kind: 'const', type: eventTypeScalar(), fired: true },
+        { kind: 'const', type: eventTypeScalar(), fired: true },
+        { kind: 'combine', type: eventTypeScalar(), events: [eventExprId(0), eventExprId(1)], mode: 'all' },
       ];
       const state = createMinimalState(0, 3);
       state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: createPalette(), energy: 0.5 };
@@ -120,9 +120,9 @@ describe('EventEvaluator', () => {
 
     it('combine(all) does not fire if one is false', () => {
       const exprs: EventExpr[] = [
-        { kind: 'const', fired: true },
-        { kind: 'const', fired: false },
-        { kind: 'combine', events: [eventExprId(0), eventExprId(1)], mode: 'all' },
+        { kind: 'const', type: eventTypeScalar(), fired: true },
+        { kind: 'const', type: eventTypeScalar(), fired: false },
+        { kind: 'combine', type: eventTypeScalar(), events: [eventExprId(0), eventExprId(1)], mode: 'all' },
       ];
       const state = createMinimalState(0, 3);
       state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: createPalette(), energy: 0.5 };
@@ -134,10 +134,10 @@ describe('EventEvaluator', () => {
     it('fires on rising edge (0.4 → 0.6)', () => {
       // Signal that returns different values
       const signals: SigExpr[] = [
-        { kind: 'const', value: 0.6, type: canonicalType(FLOAT) },
+        { kind: 'const', value: { kind: 'float', value: 0.6 }, type: canonicalType(FLOAT) },
       ];
       const exprs: EventExpr[] = [
-        { kind: 'wrap', signal: sigExprId(0) },
+        { kind: 'wrap', type: eventTypeScalar(), signal: sigExprId(0) },
       ];
       const state = createMinimalState(1, 1);
       state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: createPalette(), energy: 0.5 };
@@ -148,10 +148,10 @@ describe('EventEvaluator', () => {
 
     it('does not fire on sustained high (0.6 → 0.8)', () => {
       const signals: SigExpr[] = [
-        { kind: 'const', value: 0.8, type: canonicalType(FLOAT) },
+        { kind: 'const', value: { kind: 'float', value: 0.8 }, type: canonicalType(FLOAT) },
       ];
       const exprs: EventExpr[] = [
-        { kind: 'wrap', signal: sigExprId(0) },
+        { kind: 'wrap', type: eventTypeScalar(), signal: sigExprId(0) },
       ];
       const state = createMinimalState(1, 1);
       state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: createPalette(), energy: 0.5 };
@@ -163,10 +163,10 @@ describe('EventEvaluator', () => {
 
     it('does not fire on falling edge (0.6 → 0.4)', () => {
       const signals: SigExpr[] = [
-        { kind: 'const', value: 0.4, type: canonicalType(FLOAT) },
+        { kind: 'const', value: { kind: 'float', value: 0.4 }, type: canonicalType(FLOAT) },
       ];
       const exprs: EventExpr[] = [
-        { kind: 'wrap', signal: sigExprId(0) },
+        { kind: 'wrap', type: eventTypeScalar(), signal: sigExprId(0) },
       ];
       const state = createMinimalState(1, 1);
       state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: createPalette(), energy: 0.5 };
@@ -178,10 +178,10 @@ describe('EventEvaluator', () => {
 
     it('NaN treated as false', () => {
       const signals: SigExpr[] = [
-        { kind: 'const', value: NaN, type: canonicalType(FLOAT) },
+        { kind: 'const', value: { kind: 'float', value: NaN }, type: canonicalType(FLOAT) },
       ];
       const exprs: EventExpr[] = [
-        { kind: 'wrap', signal: sigExprId(0) },
+        { kind: 'wrap', type: eventTypeScalar(), signal: sigExprId(0) },
       ];
       const state = createMinimalState(1, 1);
       state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: createPalette(), energy: 0.5 };
@@ -192,10 +192,10 @@ describe('EventEvaluator', () => {
 
     it('Inf treated as false', () => {
       const signals: SigExpr[] = [
-        { kind: 'const', value: Infinity, type: canonicalType(FLOAT) },
+        { kind: 'const', value: { kind: 'float', value: Infinity }, type: canonicalType(FLOAT) },
       ];
       const exprs: EventExpr[] = [
-        { kind: 'wrap', signal: sigExprId(0) },
+        { kind: 'wrap', type: eventTypeScalar(), signal: sigExprId(0) },
       ];
       const state = createMinimalState(1, 1);
       state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: createPalette(), energy: 0.5 };
@@ -206,10 +206,10 @@ describe('EventEvaluator', () => {
 
     it('updates eventPrevPredicate after evaluation', () => {
       const signals: SigExpr[] = [
-        { kind: 'const', value: 0.7, type: canonicalType(FLOAT) },
+        { kind: 'const', value: { kind: 'float', value: 0.7 }, type: canonicalType(FLOAT) },
       ];
       const exprs: EventExpr[] = [
-        { kind: 'wrap', signal: sigExprId(0) },
+        { kind: 'wrap', type: eventTypeScalar(), signal: sigExprId(0) },
       ];
       const state = createMinimalState(1, 1);
       state.time = { tAbsMs: 0, tMs: 0, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: createPalette(), energy: 0.5 };

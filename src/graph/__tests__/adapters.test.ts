@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { findAdapter, needsAdapter, extractSignature } from '../adapters';
+import { findAdapter, needsAdapter, extractPattern } from '../adapters';
 import {
   canonicalType,
   unitPhase01,
@@ -198,14 +198,13 @@ describe('Adapter Registry', () => {
     });
   });
 
-  describe('extractSignature', () => {
-    it('extracts payload, unit, cardinality, temporality', () => {
+  describe('extractPattern', () => {
+    it('extracts payload, unit, extent', () => {
       const type = canonicalType(FLOAT, unitPhase01());
-      const sig = extractSignature(type);
-      expect(sig.payload).toBe(FLOAT);
-      expect(sig.unit).toEqual({ kind: 'phase01' });
-      expect(sig.cardinality).toBe('one');
-      expect(sig.temporality).toBe('continuous');
+      const pattern = extractPattern(type);
+      expect(pattern.payload).toBe(FLOAT);
+      expect(pattern.unit).toEqual({ kind: 'phase01' });
+      expect(pattern.extent).toEqual(type.extent);
     });
   });
 });

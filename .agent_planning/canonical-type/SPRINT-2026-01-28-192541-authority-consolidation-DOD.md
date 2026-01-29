@@ -1,19 +1,26 @@
 # Definition of Done: authority-consolidation
 Generated: 2026-01-28-192541
-Status: PARTIALLY READY (C-5 needs contract decision, C-4 ready)
+Status: READY (contract decided: requireManyInstance/maybeManyInstance)
 Plan: SPRINT-2026-01-28-192541-authority-consolidation-PLAN.md
 
 ## Acceptance Criteria
 
-### C-5: Remove instanceId from FieldExpr, Add getManyInstance Helper
+### C-5: Remove instanceId from FieldExpr, Add Two Helpers
 
 #### Helper Implementation
-- [ ] getManyInstance(type: CanonicalType): InstanceRef | null exists in src/core/canonical-types.ts
-- [ ] Helper exported from canonical-types.ts
-- [ ] Helper returns InstanceRef when cardinality.kind='inst' AND value.kind='many'
-- [ ] Helper returns null when cardinality.kind='var' (type variable)
-- [ ] Helper returns null when cardinality.value.kind='zero' or 'one'
-- [ ] Helper has docstring documenting null-handling contract
+- [ ] `requireManyInstance(t: CanonicalType, context?: string): InstanceRef` exists in canonical-types.ts
+- [ ] `requireManyInstance` throws if cardinality is var/zero/one (with cardinality in error message)
+- [ ] `requireManyInstance` exported from canonical-types.ts
+- [ ] `maybeManyInstance(t: CanonicalType): InstanceRef | null` exists in canonical-types.ts
+- [ ] `maybeManyInstance` returns null if cardinality is var/zero/one
+- [ ] `maybeManyInstance` exported from canonical-types.ts
+- [ ] NO `getManyInstance` helper exists (ambiguous name deleted)
+- [ ] Both helpers have complete docstrings documenting their contracts
+
+#### Call Sites (estimate 30+)
+- [ ] All call sites use either `requireManyInstance()` (backend) or `maybeManyInstance()` (UI/probing)
+- [ ] No call sites use `maybeManyInstance(...)!` (ban the assertion pattern)
+- [ ] No construction sites pass instanceId to Map/Zip/ZipSig (TypeScript enforces)
 
 #### Type Definitions
 - [ ] FieldExprMap (types.ts:265) has NO instanceId field
@@ -36,10 +43,9 @@ Plan: SPRINT-2026-01-28-192541-authority-consolidation-PLAN.md
 - [ ] TypeScript compilation succeeds
 
 #### Contract Decision (EXIT CRITERIA for MEDIUM → HIGH)
-- [ ] Decision documented: What should callers do when getManyInstance returns null?
-  - [ ] Option chosen: (a) check null + handle, (b) assume non-null, or (c) throw error
-- [ ] Decision documented in getManyInstance docstring
-- [ ] All call sites implement chosen contract
+- [x] Decision made: Two helpers - requireManyInstance (throws) + maybeManyInstance (null)
+- [x] Decision documented: Names encode contracts; no ambiguous getManyInstance
+- [x] Enforcement strategy: Ban `maybeManyInstance(...)!` pattern
 
 ---
 

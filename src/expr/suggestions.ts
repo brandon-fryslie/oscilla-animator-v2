@@ -308,7 +308,7 @@ export class SuggestionProvider {
           payloadTypeStr = resolved.type.payload.kind;
           // Extract cardinality from CanonicalType's extent axes
           const cardinalityAxis = resolved.type.extent.cardinality;
-          if (cardinalityAxis.kind === 'instantiated') {
+          if (cardinalityAxis.kind === 'inst') {
             // Cardinality is a discriminated union: { kind: 'one' } | { kind: 'many', instance: ... }
             cardinality = cardinalityAxis.value.kind === 'one' ? 'one' : 'many';
           }

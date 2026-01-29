@@ -7,7 +7,7 @@
  */
 
 import { registerBlock } from './registry';
-import { canonicalType, signalTypeField, strideOf } from '../core/canonical-types';
+import { canonicalType, signalTypeField, strideOf, floatConst, vec2Const, intConst } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { DOMAIN_CONTROL } from '../core/domain-registry';
 import { PathVerb, type PathTopologyDef } from '../shapes/types';
@@ -158,14 +158,14 @@ registerBlock({
     const radiusXInput = inputsById.radiusX;
     const radiusXSig = radiusXInput?.k === 'sig'
       ? radiusXInput.id
-      : ctx.b.sigConst((config?.radiusX as number) ?? 1.0, canonicalType(FLOAT));
+      : ctx.b.sigConst(floatConst((config?.radiusX as number) ?? 1.0), canonicalType(FLOAT));
 
     const radiusYInput = inputsById.radiusY;
     const radiusYSig = radiusYInput?.k === 'sig'
       ? radiusYInput.id
-      : ctx.b.sigConst((config?.radiusY as number) ?? 1.0, canonicalType(FLOAT));
+      : ctx.b.sigConst(floatConst((config?.radiusY as number) ?? 1.0), canonicalType(FLOAT));
 
-    const sidesSig = ctx.b.sigConst(sides, canonicalType(INT));
+    const sidesSig = ctx.b.sigConst(intConst(sides), canonicalType(INT));
 
     // Compute control point positions using kernel
     // kernel('polygonVertex') takes: (index, sides, radiusX, radiusY) → vec2
@@ -353,14 +353,14 @@ registerBlock({
     const outerRadiusInput = inputsById.outerRadius;
     const outerRadiusSig = outerRadiusInput?.k === 'sig'
       ? outerRadiusInput.id
-      : ctx.b.sigConst((config?.outerRadius as number) ?? 1.0, canonicalType(FLOAT));
+      : ctx.b.sigConst(floatConst((config?.outerRadius as number) ?? 1.0), canonicalType(FLOAT));
 
     const innerRadiusInput = inputsById.innerRadius;
     const innerRadiusSig = innerRadiusInput?.k === 'sig'
       ? innerRadiusInput.id
-      : ctx.b.sigConst((config?.innerRadius as number) ?? 0.4, canonicalType(FLOAT));
+      : ctx.b.sigConst(floatConst((config?.innerRadius as number) ?? 0.4), canonicalType(FLOAT));
 
-    const pointsSig = ctx.b.sigConst(points, canonicalType(INT));
+    const pointsSig = ctx.b.sigConst(intConst(points), canonicalType(INT));
 
     // Compute control point positions using kernel
     // kernel('starVertex') takes: (index, points, outerRadius, innerRadius) → vec2

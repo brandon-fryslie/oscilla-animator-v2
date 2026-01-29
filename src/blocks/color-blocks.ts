@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from './registry';
-import { canonicalType, signalTypeField, unitPhase01, strideOf } from '../core/canonical-types';
+import { canonicalType, signalTypeField, unitPhase01, strideOf, floatConst } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { defaultSourceConst } from '../types';
 import type { SigExprId, FieldExprId } from '../compiler/ir/Indices';
@@ -52,9 +52,9 @@ registerBlock({
     // Build HSV triple from inputs
     const inputs: SigExprId[] = [
       phase.id as SigExprId,
-      hue?.k === 'sig' ? (hue.id as SigExprId) : ctx.b.sigConst(0, canonicalType(FLOAT)),
-      sat?.k === 'sig' ? (sat.id as SigExprId) : ctx.b.sigConst(1, canonicalType(FLOAT)),
-      val?.k === 'sig' ? (val.id as SigExprId) : ctx.b.sigConst(1, canonicalType(FLOAT)),
+      hue?.k === 'sig' ? (hue.id as SigExprId) : ctx.b.sigConst(floatConst(0), canonicalType(FLOAT)),
+      sat?.k === 'sig' ? (sat.id as SigExprId) : ctx.b.sigConst(floatConst(1), canonicalType(FLOAT)),
+      val?.k === 'sig' ? (val.id as SigExprId) : ctx.b.sigConst(floatConst(1), canonicalType(FLOAT)),
     ];
 
     const sigId = ctx.b.sigZip(inputs, colorFn, canonicalType(COLOR));

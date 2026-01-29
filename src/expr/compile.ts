@@ -11,7 +11,7 @@ import type { ExprNode } from './ast';
 import type { IRBuilder } from '../compiler/ir/IRBuilder';
 import type { SigExprId } from '../compiler/ir/types';
 import { OpCode } from '../compiler/ir/types';
-import { canonicalType, type PayloadType } from '../core/canonical-types';
+import { canonicalType, type PayloadType, floatConst, intConst, boolConst } from '../core/canonical-types';
 import { FLOAT, INT, BOOL } from '../core/canonical-types';
 import { isVectorType, componentIndex, swizzleResultType } from './swizzle';
 
@@ -73,7 +73,7 @@ export function compile(node: ExprNode, ctx: CompileContext): SigExprId {
  */
 function compileLiteral(node: ExprNode & { kind: 'literal' }, ctx: CompileContext): SigExprId {
   const type = canonicalType(node.type as PayloadType);
-  return ctx.builder.sigConst(node.value, type);
+  return ctx.builder.sigConst(floatConst(node.value), type);
 }
 
 /**
@@ -96,7 +96,7 @@ function compileUnary(node: ExprNode & { kind: 'unary' }, ctx: CompileContext): 
   switch (node.op) {
     case '!': {
       // Logical NOT: Use comparison to false (0)
-      const zero = ctx.builder.sigConst(0, canonicalType(INT));
+      const zero = ctx.builder.sigConst(intConst(0), canonicalType(INT));
       const eqFn = ctx.builder.opcode(OpCode.Eq);
       return ctx.builder.sigZip([arg, zero], eqFn, type);
     }
@@ -147,7 +147,7 @@ function compileBinary(node: ExprNode & { kind: 'binary' }, ctx: CompileContext)
       // a <= b → !(a > b)
       const gtFn = ctx.builder.opcode(OpCode.Gt);
       const gt = ctx.builder.sigZip([left, right], gtFn, canonicalType(BOOL));
-      const zero = ctx.builder.sigConst(0, canonicalType(INT));
+      const zero = ctx.builder.sigConst(intConst(0), canonicalType(INT));
       const eqFn = ctx.builder.opcode(OpCode.Eq);
       return ctx.builder.sigZip([gt, zero], eqFn, type);
     }
@@ -156,7 +156,7 @@ function compileBinary(node: ExprNode & { kind: 'binary' }, ctx: CompileContext)
       // a >= b → !(a < b)
       const ltFn = ctx.builder.opcode(OpCode.Lt);
       const lt = ctx.builder.sigZip([left, right], ltFn, canonicalType(BOOL));
-      const zero = ctx.builder.sigConst(0, canonicalType(INT));
+      const zero = ctx.builder.sigConst(intConst(0), canonicalType(INT));
       const eqFn = ctx.builder.opcode(OpCode.Eq);
       return ctx.builder.sigZip([lt, zero], eqFn, type);
     }
@@ -165,7 +165,7 @@ function compileBinary(node: ExprNode & { kind: 'binary' }, ctx: CompileContext)
       // a != b → !(a == b)
       const eqFn = ctx.builder.opcode(OpCode.Eq);
       const eq = ctx.builder.sigZip([left, right], eqFn, canonicalType(BOOL));
-      const zero = ctx.builder.sigConst(0, canonicalType(INT));
+      const zero = ctx.builder.sigConst(intConst(0), canonicalType(INT));
       const eqZeroFn = ctx.builder.opcode(OpCode.Eq);
       return ctx.builder.sigZip([eq, zero], eqZeroFn, type);
     }
@@ -180,7 +180,7 @@ function compileBinary(node: ExprNode & { kind: 'binary' }, ctx: CompileContext)
       // a || b → min(a + b, 1)
       const addFn = ctx.builder.opcode(OpCode.Add);
       const sum = ctx.builder.sigZip([left, right], addFn, canonicalType(INT));
-      const one = ctx.builder.sigConst(1, canonicalType(INT));
+      const one = ctx.builder.sigConst(intConst(1), canonicalType(INT));
       const minFn = ctx.builder.opcode(OpCode.Min);
       return ctx.builder.sigZip([sum, one], minFn, type);
     }
@@ -210,7 +210,7 @@ function compileTernary(node: ExprNode & { kind: 'ternary' }, ctx: CompileContex
   const condThen = ctx.builder.sigZip([cond, thenBranch], mulFn, type);
 
   // 1 - cond
-  const one = ctx.builder.sigConst(1, canonicalType(INT));
+  const one = ctx.builder.sigConst(intConst(1), canonicalType(INT));
   const subFn = ctx.builder.opcode(OpCode.Sub);
   const oneMinusCond = ctx.builder.sigZip([one, cond], subFn, canonicalType(INT));
 

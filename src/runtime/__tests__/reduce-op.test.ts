@@ -71,11 +71,11 @@ describe('ReduceOp', () => {
 
       const program = result.program;
       
-      // Find reduce_field expression
-      const reduceExpr = program.signalExprs.nodes.find(e => e.kind === 'reduce_field');
+      // Find reduceField expression
+      const reduceExpr = program.signalExprs.nodes.find(e => e.kind === 'reduceField');
       expect(reduceExpr).toBeDefined();
       
-      if (reduceExpr && reduceExpr.kind === 'reduce_field') {
+      if (reduceExpr && reduceExpr.kind === 'reduceField') {
         expect(reduceExpr.field).toBeDefined();
         expect(reduceExpr.op).toBeDefined();
         expect(['min', 'max', 'sum', 'avg']).toContain(reduceExpr.op);
@@ -98,13 +98,13 @@ describe('ReduceOp', () => {
       if (result.kind !== 'ok') return;
 
       const program = result.program;
-      const reduceExpr = program.signalExprs.nodes.find(e => e.kind === 'reduce_field');
+      const reduceExpr = program.signalExprs.nodes.find(e => e.kind === 'reduceField');
       
       // For now, just verify the expression exists with the required fields
       // Type structure verification skipped until runtime evaluation complete
       expect(reduceExpr).toBeDefined();
       
-      if (reduceExpr && reduceExpr.kind === 'reduce_field') {
+      if (reduceExpr && reduceExpr.kind === 'reduceField') {
         expect(reduceExpr.type).toBeDefined();
         expect(reduceExpr.field).toBeDefined();
         expect(reduceExpr.op).toBeDefined();
@@ -126,9 +126,9 @@ describe('ReduceOp', () => {
       if (result.kind !== 'ok') return;
 
       const program = result.program;
-      const reduceExpr = program.signalExprs.nodes.find(e => e.kind === 'reduce_field');
+      const reduceExpr = program.signalExprs.nodes.find(e => e.kind === 'reduceField');
       
-      if (reduceExpr && reduceExpr.kind === 'reduce_field') {
+      if (reduceExpr && reduceExpr.kind === 'reduceField') {
         expect(reduceExpr.op).toBe('sum'); // Default
       }
     });
@@ -146,19 +146,19 @@ describe('ReduceOp', () => {
       if (result.kind !== 'ok') return;
 
       const program = result.program;
-      const reduceExpr = program.signalExprs.nodes.find(e => e.kind === 'reduce_field');
+      const reduceExpr = program.signalExprs.nodes.find(e => e.kind === 'reduceField');
       
-      if (reduceExpr && reduceExpr.kind === 'reduce_field') {
+      if (reduceExpr && reduceExpr.kind === 'reduceField') {
         expect(reduceExpr.op).toBe('max');
       }
     });
   });
 
-  // NOTE: Runtime evaluation tests are deferred until reduce_field
+  // NOTE: Runtime evaluation tests are deferred until reduceField
   // can access field materialization (requires ScheduleExecutor changes)
   describe.skip('Runtime Evaluation', () => {
     it('sums scalar field values', () => {
-      // TODO: Implement after reduce_field can materialize fields
+      // TODO: Implement after reduceField can materialize fields
     });
 
     it('computes average correctly', () => {

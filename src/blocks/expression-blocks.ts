@@ -24,7 +24,7 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
-import { canonicalType, strideOf, FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
+import { canonicalType, strideOf, floatConst, FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import type { CanonicalType, PayloadType } from '../core/canonical-types';
 import { compileExpression } from '../expr';
 import type { SigExprId, SigExpr } from '../compiler/ir/types';
@@ -136,7 +136,7 @@ registerBlock({
 
     // Step 2: Handle empty expression (output constant 0)
     if (exprText.trim() === '') {
-      const sigId = ctx.b.sigConst(0, canonicalType(FLOAT));
+      const sigId = ctx.b.sigConst(floatConst(0), canonicalType(FLOAT));
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
       return {

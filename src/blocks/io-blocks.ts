@@ -8,7 +8,7 @@
  */
 
 import { registerBlock } from './registry';
-import { canonicalType, strideOf } from '../core/canonical-types';
+import { canonicalType, strideOf, floatConst, intConst } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { OpCode } from '../compiler/ir/types';
 import { defaultSourceConst } from '../types';
@@ -129,14 +129,14 @@ registerBlock({
     const threshold = (config?.threshold as number) ?? 0.5;
 
     const inputSig = ctx.b.sigExternal(channel, canonicalType(FLOAT));
-    const thresholdSig = ctx.b.sigConst(threshold, canonicalType(FLOAT));
+    const thresholdSig = ctx.b.sigConst(floatConst(threshold), canonicalType(FLOAT));
 
     // gate = input >= threshold ? 1 : 0
     // We need >= but only have Gt (>), Lt (<), and Eq (==)
     // Implement: a >= b  <=>  NOT(b > a)  <=>  1 - (b > a)
     // Since Gt returns 0 or 1: if threshold > input, returns 1, then 1-1=0 (correct)
     //                          if threshold <= input, returns 0, then 1-0=1 (correct)
-    const oneSig = ctx.b.sigConst(1, canonicalType(FLOAT));
+    const oneSig = ctx.b.sigConst(floatConst(1), canonicalType(FLOAT));
     const gtFn = ctx.b.opcode(OpCode.Gt);
     const subFn = ctx.b.opcode(OpCode.Sub);
 

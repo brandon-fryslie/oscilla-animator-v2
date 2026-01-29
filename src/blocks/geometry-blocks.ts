@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from './registry';
-import { canonicalType, signalTypeField, strideOf, unitWorld3 } from '../core/canonical-types';
+import { canonicalType, signalTypeField, strideOf, unitWorld3, floatConst } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { defaultSourceConst } from '../types';
 import type { SigExprId, FieldExprId } from '../compiler/ir/Indices';
@@ -58,8 +58,8 @@ registerBlock({
     }
 
     // Get center signals (or create default constants)
-    const centerXSig = centerX?.k === 'sig' ? centerX.id : ctx.b.sigConst(0.5, canonicalType(FLOAT));
-    const centerYSig = centerY?.k === 'sig' ? centerY.id : ctx.b.sigConst(0.5, canonicalType(FLOAT));
+    const centerXSig = centerX?.k === 'sig' ? centerX.id : ctx.b.sigConst(floatConst(0.5), canonicalType(FLOAT));
+    const centerYSig = centerY?.k === 'sig' ? centerY.id : ctx.b.sigConst(floatConst(0.5), canonicalType(FLOAT));
 
     if (angle.k === 'sig' && radius.k === 'sig') {
       // Signal path - compute x = cx + r*cos(a), y = cy + r*sin(a), z = 0
@@ -74,7 +74,7 @@ registerBlock({
       const yOffset = ctx.b.sigZip([radius.id, sinAngle], mulFn, canonicalType(FLOAT));
       const x = ctx.b.sigZip([centerXSig, xOffset], addFn, canonicalType(FLOAT));
       const y = ctx.b.sigZip([centerYSig, yOffset], addFn, canonicalType(FLOAT));
-      const z = ctx.b.sigConst(0, canonicalType(FLOAT));
+      const z = ctx.b.sigConst(floatConst(0), canonicalType(FLOAT));
 
       // Multi-component signal: allocate strided slot, emit write step
       const outType = ctx.outTypes[0];
@@ -194,9 +194,9 @@ registerBlock({
     }
 
     // Get amount signals
-    const amountXSig = amountX?.k === 'sig' ? amountX.id : ctx.b.sigConst(0.0, canonicalType(FLOAT));
-    const amountYSig = amountY?.k === 'sig' ? amountY.id : ctx.b.sigConst(0.0, canonicalType(FLOAT));
-    const amountZSig = amountZ?.k === 'sig' ? amountZ.id : ctx.b.sigConst(0.0, canonicalType(FLOAT));
+    const amountXSig = amountX?.k === 'sig' ? amountX.id : ctx.b.sigConst(floatConst(0.0), canonicalType(FLOAT));
+    const amountYSig = amountY?.k === 'sig' ? amountY.id : ctx.b.sigConst(floatConst(0.0), canonicalType(FLOAT));
+    const amountZSig = amountZ?.k === 'sig' ? amountZ.id : ctx.b.sigConst(floatConst(0.0), canonicalType(FLOAT));
 
     if (pos.k === 'sig' && rand.k === 'sig') {
       // Signal path - decompose input vec3, compute jittered components, recompose
@@ -212,8 +212,8 @@ registerBlock({
       const addFn = ctx.b.opcode(OpCode.Add);
       const subFn = ctx.b.opcode(OpCode.Sub);
 
-      const half = ctx.b.sigConst(0.5, canonicalType(FLOAT));
-      const two = ctx.b.sigConst(2, canonicalType(FLOAT));
+      const half = ctx.b.sigConst(floatConst(0.5), canonicalType(FLOAT));
+      const two = ctx.b.sigConst(floatConst(2), canonicalType(FLOAT));
 
       const centered = ctx.b.sigZip([rand.id, half], subFn, canonicalType(FLOAT));
       const scaled = ctx.b.sigZip([centered, two], mulFn, canonicalType(FLOAT));
