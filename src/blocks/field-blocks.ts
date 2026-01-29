@@ -5,7 +5,8 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
-import { canonicalType, signalTypeField, strideOf, type PayloadType, unitVar, payloadVar } from '../core/canonical-types';
+import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../core/ids';
+import { canonicalType, canonicalField, strideOf, type PayloadType, unitVar, payloadVar } from '../core/canonical-types';
 import type { SigExprId, FieldExprId } from '../compiler/ir/Indices';
 
 // =============================================================================
@@ -56,7 +57,7 @@ registerBlock({
     signal: { label: 'Signal', type: canonicalType(payloadVar('broadcast_payload'), unitVar('broadcast_in')) },
   },
   outputs: {
-    field: { label: 'Field', type: signalTypeField(payloadVar('broadcast_payload'), 'default', unitVar('broadcast_in')) },
+    field: { label: 'Field', type: canonicalField(payloadVar('broadcast_payload'), unitVar('broadcast_in'), { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
   },
   lower: ({ ctx, inputsById }) => {
     // Get resolved payload type from ctx.outTypes (populated from pass1 portTypes)
@@ -74,7 +75,7 @@ registerBlock({
     // Create field broadcast operation with the resolved type
     const fieldId = ctx.b.Broadcast(
       signalValue.id as SigExprId,
-      signalTypeField(payloadType, 'default')
+      canonicalField(payloadType, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
     );
     const slot = ctx.b.allocSlot();
 
@@ -137,7 +138,7 @@ registerBlock({
   inputs: {
     field: { 
       label: 'Field', 
-      type: signalTypeField(payloadVar('reduce_payload'), 'default', unitVar('reduce_in'))
+      type: canonicalField(payloadVar('reduce_payload'), unitVar('reduce_in'), { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
     },
   },
   outputs: {

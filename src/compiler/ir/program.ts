@@ -8,7 +8,7 @@
 
 // Import the legacy types for now (will be replaced with proper execution node types)
 import type { SigExpr, FieldExpr, EventExpr } from './types';
-import type { CanonicalType, ResolvedExtent } from '../../core/canonical-types';
+import type { CanonicalType } from '../../core/canonical-types';
 import type { ScheduleIR } from '../backend/schedule-program';
 import type {
   FieldExprId,

@@ -7,7 +7,8 @@
  */
 
 import { registerBlock, STANDARD_NUMERIC_PAYLOADS } from './registry';
-import { canonicalType, signalTypeField, unitPhase01, strideOf, floatConst, vec2Const, vec3Const } from '../core/canonical-types';
+import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../core/ids';
+import { canonicalType, canonicalField, unitPhase01, strideOf, floatConst, vec2Const, vec3Const } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { defaultSourceConst, defaultSourceTimeRoot } from '../types';
 import type { SigExprId, FieldExprId } from '../compiler/ir/Indices';
@@ -34,7 +35,7 @@ registerBlock({
     domain: { label: 'Domain', type: canonicalType(INT) }, // Domain count
   },
   outputs: {
-    id01: { label: 'ID (0..1)', type: signalTypeField(FLOAT, 'default') },
+    id01: { label: 'ID (0..1)', type: canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
   },
   lower: ({ ctx }) => {
     // Get instance context from Array block or inferred from inputs
@@ -44,7 +45,7 @@ registerBlock({
     }
 
     // Use fieldIntrinsic to get normalized index (0..1) for each instance element
-    const id01Field = ctx.b.fieldIntrinsic(instance, 'normalizedIndex', signalTypeField(FLOAT, 'default'));
+    const id01Field = ctx.b.fieldIntrinsic(instance, 'normalizedIndex', canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
@@ -112,7 +113,7 @@ registerBlock({
     } else if (input.k === 'field') {
       // Field path - use field kernel
       const sinFn = ctx.b.kernel('fieldSin');
-      const result = ctx.b.fieldMap(input.id, sinFn, signalTypeField(FLOAT, 'default'));
+      const result = ctx.b.fieldMap(input.id, sinFn, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
       return {
@@ -177,7 +178,7 @@ registerBlock({
     } else if (input.k === 'field') {
       // Field path - use field kernel
       const cosFn = ctx.b.kernel('fieldCos');
-      const result = ctx.b.fieldMap(input.id, cosFn, signalTypeField(FLOAT, 'default'));
+      const result = ctx.b.fieldMap(input.id, cosFn, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
       return {
@@ -245,7 +246,7 @@ registerBlock({
     } else if (a.k === 'field' && b.k === 'field') {
       // Field path
       const modFn = ctx.b.kernel('fieldMod');
-      const result = ctx.b.fieldZip([a.id, b.id], modFn, signalTypeField(FLOAT, 'default'));
+      const result = ctx.b.fieldZip([a.id, b.id], modFn, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
       return {
@@ -328,15 +329,15 @@ registerBlock({
       };
     } else if (angle.k === 'field' && radius.k === 'field') {
       // Field path - use broadcast for center signals
-      const centerXField = ctx.b.Broadcast(centerXSig, signalTypeField(FLOAT, 'default'));
-      const centerYField = ctx.b.Broadcast(centerYSig, signalTypeField(FLOAT, 'default'));
+      const centerXField = ctx.b.Broadcast(centerXSig, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
+      const centerYField = ctx.b.Broadcast(centerYSig, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
 
       // Zip all four fields together: centerX, centerY, radius, angle -> vec3
       const polarFn = ctx.b.kernel('fieldPolarToCartesian');
       const posField = ctx.b.fieldZip(
         [centerXField, centerYField, radius.id, angle.id],
         polarFn,
-        signalTypeField(VEC3, 'default')
+        canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
       );
 
       const outType = ctx.outTypes[0];
@@ -350,16 +351,16 @@ registerBlock({
       };
     } else {
       // Mixed path - broadcast signals to fields
-      const angleField = angle.k === 'field' ? angle.id : ctx.b.Broadcast((angle as { k: 'sig'; id: SigExprId }).id, signalTypeField(FLOAT, 'default'));
-      const radiusField = radius.k === 'field' ? radius.id : ctx.b.Broadcast((radius as { k: 'sig'; id: SigExprId }).id, signalTypeField(FLOAT, 'default'));
-      const centerXField = ctx.b.Broadcast(centerXSig, signalTypeField(FLOAT, 'default'));
-      const centerYField = ctx.b.Broadcast(centerYSig, signalTypeField(FLOAT, 'default'));
+      const angleField = angle.k === 'field' ? angle.id : ctx.b.Broadcast((angle as { k: 'sig'; id: SigExprId }).id, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
+      const radiusField = radius.k === 'field' ? radius.id : ctx.b.Broadcast((radius as { k: 'sig'; id: SigExprId }).id, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
+      const centerXField = ctx.b.Broadcast(centerXSig, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
+      const centerYField = ctx.b.Broadcast(centerYSig, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
 
       const polarFn = ctx.b.kernel('fieldPolarToCartesian');
       const posField = ctx.b.fieldZip(
         [centerXField, centerYField, radiusField, angleField],
         polarFn,
-        signalTypeField(VEC3, 'default')
+        canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
       );
 
       const outType = ctx.outTypes[0];
@@ -444,20 +445,20 @@ registerBlock({
       };
     } else if (pos.k === 'field') {
       // Field path - use broadcast for center signals
-      const centerXField = ctx.b.Broadcast(centerXSig, signalTypeField(FLOAT, 'default'));
-      const centerYField = ctx.b.Broadcast(centerYSig, signalTypeField(FLOAT, 'default'));
+      const centerXField = ctx.b.Broadcast(centerXSig, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
+      const centerYField = ctx.b.Broadcast(centerYSig, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
 
       // Zip all three fields together: pos, centerX, centerY -> (angle, radius)
       const polarFn = ctx.b.kernel('fieldCartesianToPolar');
       const angleField = ctx.b.fieldZip(
         [pos.id, centerXField, centerYField],
         polarFn,
-        signalTypeField(FLOAT, 'default')
+        canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
       );
       const radiusField = ctx.b.fieldZip(
         [pos.id, centerXField, centerYField],
         polarFn,
-        signalTypeField(FLOAT, 'default')
+        canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
       );
 
       const outTypeAngle = ctx.outTypes[0];
@@ -546,17 +547,17 @@ registerBlock({
       };
     } else if (id01.k === 'field') {
       // Field path - broadcast signal inputs to fields
-      const phaseField = ctx.b.Broadcast(phaseSig, signalTypeField(FLOAT, 'default'));
-      const baseField = ctx.b.Broadcast(baseSig, signalTypeField(FLOAT, 'default'));
-      const ampField = ctx.b.Broadcast(ampSig, signalTypeField(FLOAT, 'default'));
-      const spreadField = ctx.b.Broadcast(spreadSig, signalTypeField(FLOAT, 'default'));
+      const phaseField = ctx.b.Broadcast(phaseSig, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
+      const baseField = ctx.b.Broadcast(baseSig, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
+      const ampField = ctx.b.Broadcast(ampSig, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
+      const spreadField = ctx.b.Broadcast(spreadSig, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
 
       // Compute: base + amplitude * sin(2π * (phase + id01 * spread))
       const pulseFn = ctx.b.kernel('fieldPulse');
       const result = ctx.b.fieldZip(
         [id01.id, phaseField, baseField, ampField, spreadField],
         pulseFn,
-        signalTypeField(FLOAT, 'default')
+        canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
       );
 
       const outType = ctx.outTypes[0];
@@ -629,7 +630,7 @@ registerBlock({
     } else if (id01.k === 'field') {
       // Field path - use fieldZipSig kernel with turns signal
       const goldenAngleFn = ctx.b.kernel('fieldGoldenAngle');
-      const result = ctx.b.fieldZipSig(id01.id, [turnsSig], goldenAngleFn, signalTypeField(FLOAT, 'default'));
+      const result = ctx.b.fieldZipSig(id01.id, [turnsSig], goldenAngleFn, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
 
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
@@ -700,15 +701,15 @@ registerBlock({
       };
     } else if (id01.k === 'field') {
       // Field path - broadcast signal inputs to fields
-      const phaseField = ctx.b.Broadcast(phaseSig, signalTypeField(FLOAT, 'default'));
-      const spinField = ctx.b.Broadcast(spinSig, signalTypeField(FLOAT, 'default'));
+      const phaseField = ctx.b.Broadcast(phaseSig, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
+      const spinField = ctx.b.Broadcast(spinSig, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
 
       // offset = 2π * phase * spin
       const offsetFn = ctx.b.kernel('fieldAngularOffset');
       const result = ctx.b.fieldZip(
         [id01.id, phaseField, spinField],
         offsetFn,
-        signalTypeField(FLOAT, 'default')
+        canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
       );
 
       const outType = ctx.outTypes[0];
@@ -778,7 +779,7 @@ registerBlock({
       const result = ctx.b.fieldZip(
         [id01.id, radius.id],
         sqrtFn,
-        signalTypeField(FLOAT, 'default')
+        canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
       );
 
       const outType = ctx.outTypes[0];
@@ -792,14 +793,14 @@ registerBlock({
       };
     } else {
       // Mixed path - broadcast signals to fields
-      const id01Field = id01.k === 'field' ? id01.id : ctx.b.Broadcast((id01 as { k: 'sig'; id: SigExprId }).id, signalTypeField(FLOAT, 'default'));
-      const radiusField = radius.k === 'field' ? radius.id : ctx.b.Broadcast((radius as { k: 'sig'; id: SigExprId }).id, signalTypeField(FLOAT, 'default'));
+      const id01Field = id01.k === 'field' ? id01.id : ctx.b.Broadcast((id01 as { k: 'sig'; id: SigExprId }).id, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
+      const radiusField = radius.k === 'field' ? radius.id : ctx.b.Broadcast((radius as { k: 'sig'; id: SigExprId }).id, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
 
       const sqrtFn = ctx.b.kernel('fieldRadiusSqrt');
       const result = ctx.b.fieldZip(
         [id01Field, radiusField],
         sqrtFn,
-        signalTypeField(FLOAT, 'default')
+        canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
       );
 
       const outType = ctx.outTypes[0];
@@ -900,15 +901,15 @@ registerBlock({
       };
     } else if (pos.k === 'field' && rand.k === 'field') {
       // Field path - broadcast amount signals to fields
-      const amountXField = ctx.b.Broadcast(amountXSig, signalTypeField(FLOAT, 'default'));
-      const amountYField = ctx.b.Broadcast(amountYSig, signalTypeField(FLOAT, 'default'));
-      const amountZField = ctx.b.Broadcast(amountZSig, signalTypeField(FLOAT, 'default'));
+      const amountXField = ctx.b.Broadcast(amountXSig, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
+      const amountYField = ctx.b.Broadcast(amountYSig, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
+      const amountZField = ctx.b.Broadcast(amountZSig, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
 
       const jitterFn = ctx.b.kernel('fieldJitterVec');
       const result = ctx.b.fieldZip(
         [pos.id, rand.id, amountXField, amountYField, amountZField],
         jitterFn,
-        signalTypeField(VEC3, 'default')
+        canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
       );
 
       const outType = ctx.outTypes[0];
@@ -922,17 +923,17 @@ registerBlock({
       };
     } else {
       // Mixed path - broadcast signals to fields
-      const posField = pos.k === 'field' ? pos.id : ctx.b.Broadcast((pos as { k: 'sig'; id: SigExprId }).id, signalTypeField(VEC3, 'default'));
-      const randField = rand.k === 'field' ? rand.id : ctx.b.Broadcast((rand as { k: 'sig'; id: SigExprId }).id, signalTypeField(FLOAT, 'default'));
-      const amountXField = ctx.b.Broadcast(amountXSig, signalTypeField(FLOAT, 'default'));
-      const amountYField = ctx.b.Broadcast(amountYSig, signalTypeField(FLOAT, 'default'));
-      const amountZField = ctx.b.Broadcast(amountZSig, signalTypeField(FLOAT, 'default'));
+      const posField = pos.k === 'field' ? pos.id : ctx.b.Broadcast((pos as { k: 'sig'; id: SigExprId }).id, canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
+      const randField = rand.k === 'field' ? rand.id : ctx.b.Broadcast((rand as { k: 'sig'; id: SigExprId }).id, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
+      const amountXField = ctx.b.Broadcast(amountXSig, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
+      const amountYField = ctx.b.Broadcast(amountYSig, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
+      const amountZField = ctx.b.Broadcast(amountZSig, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
 
       const jitterFn = ctx.b.kernel('fieldJitterVec');
       const result = ctx.b.fieldZip(
         [posField, randField, amountXField, amountYField, amountZField],
         jitterFn,
-        signalTypeField(VEC3, 'default')
+        canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
       );
 
       const outType = ctx.outTypes[0];
@@ -1000,14 +1001,14 @@ registerBlock({
       };
     } else if (id01.k === 'field') {
       // Field path - broadcast phase to field
-      const phaseField = ctx.b.Broadcast(phaseSig, signalTypeField(FLOAT, 'default'));
+      const phaseField = ctx.b.Broadcast(phaseSig, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
 
       // hue = (id01 + phase) mod 1.0
       const hueFn = ctx.b.kernel('fieldHueFromPhase');
       const result = ctx.b.fieldZip(
         [id01.id, phaseField],
         hueFn,
-        signalTypeField(FLOAT, 'default')
+        canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
       );
 
       const outType = ctx.outTypes[0];
@@ -1086,7 +1087,7 @@ registerBlock({
       const result = ctx.b.fieldZip(
         [pos.id, z.id],
         setZFn,
-        signalTypeField(VEC3, 'default')
+        canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
       );
 
       const outType = ctx.outTypes[0];
@@ -1100,14 +1101,14 @@ registerBlock({
       };
     } else {
       // Mixed path - broadcast signals to fields
-      const posField = pos.k === 'field' ? pos.id : ctx.b.Broadcast((pos as { k: 'sig'; id: SigExprId }).id, signalTypeField(VEC3, 'default'));
-      const zField = z.k === 'field' ? z.id : ctx.b.Broadcast((z as { k: 'sig'; id: SigExprId }).id, signalTypeField(FLOAT, 'default'));
+      const posField = pos.k === 'field' ? pos.id : ctx.b.Broadcast((pos as { k: 'sig'; id: SigExprId }).id, canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
+      const zField = z.k === 'field' ? z.id : ctx.b.Broadcast((z as { k: 'sig'; id: SigExprId }).id, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
 
       const setZFn = ctx.b.kernel('fieldSetZ');
       const result = ctx.b.fieldZip(
         [posField, zField],
         setZFn,
-        signalTypeField(VEC3, 'default')
+        canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
       );
 
       const outType = ctx.outTypes[0];

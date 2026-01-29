@@ -46,7 +46,12 @@ export interface TypeConstraintError {
   readonly suggestions: readonly string[];
 }
 
-export type Pass1Result = TypeResolvedPatch | { readonly kind: 'error'; readonly errors: readonly TypeConstraintError[] };
+export interface Pass1Error {
+  readonly kind: 'error';
+  readonly errors: readonly TypeConstraintError[];
+}
+
+export type Pass1Result = TypeResolvedPatch | Pass1Error;
 
 // =============================================================================
 // Inference-only atoms (D5)

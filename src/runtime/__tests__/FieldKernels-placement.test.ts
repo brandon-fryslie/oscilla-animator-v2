@@ -6,14 +6,15 @@
 
 import { describe, it, expect } from 'vitest';
 import { applyFieldKernelZipSig } from '../FieldKernels';
-import { signalTypeField, VEC3, type CanonicalType, type PayloadType } from '../../core/canonical-types';
+import { canonicalField, VEC3, type CanonicalType, type PayloadType, instanceRef } from '../../core/canonical-types';
+import { instanceId, domainTypeId } from "../../core/ids";
 
 /**
  * Test helper to create a properly-typed CanonicalType for field tests.
  * Returns a CanonicalType with many(instance) cardinality and continuous temporality.
  */
 function testFieldType(payload: PayloadType): CanonicalType {
-  return signalTypeField(payload, 'test-instance');
+  return canonicalField(payload, { kind: 'scalar' }, { instanceId: instanceId('test-instance'), domainTypeId: domainTypeId('default') });
 }
 
 describe('FieldKernels Sprint 4: PlacementBasis Layouts', () => {

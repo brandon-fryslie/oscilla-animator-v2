@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from './registry';
-import { canonicalType, signalTypeTrigger, unitPhase01, strideOf } from '../core/canonical-types';
+import { canonicalType, canonicalEventOne, unitPhase01, strideOf } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { defaultSourceConst } from '../types';
 
@@ -35,7 +35,7 @@ registerBlock({
     // Phase outputs use float payload with phase01 unit: values in [0, 1) range representing normalized time cycles
     phaseA: { label: 'Phase A', type: canonicalType(FLOAT, unitPhase01()) },
     phaseB: { label: 'Phase B', type: canonicalType(FLOAT, unitPhase01()) },
-    pulse: { label: 'Pulse', type: signalTypeTrigger(BOOL) },
+    pulse: { label: 'Pulse', type: canonicalEventOne() },
     palette: { label: 'Palette', type: canonicalType(COLOR) },
     energy: { label: 'Energy', type: canonicalType(FLOAT) },
   },

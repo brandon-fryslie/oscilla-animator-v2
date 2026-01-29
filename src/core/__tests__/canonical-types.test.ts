@@ -19,8 +19,7 @@ import {
   // Cardinality
   type CardinalityValue,
   type CardinalityAxis,
-// TODO: rewrite for canonical types
-  // cardinalityMany,
+
   // Temporality
   type TemporalityValue,
 
@@ -47,10 +46,9 @@ import {
   AxisUnificationError,
 
   // Derived types
-  signalTypeSignal,
-  signalTypeField,
-  signalTypeTrigger,
-  signalTypeStatic,
+  canonicalSignal,
+  canonicalField,
+  canonicalEventOne,
 
   // Event types
   eventType,
@@ -284,8 +282,8 @@ describe('unifyExtent', () => {
 // =============================================================================
 
 describe('derived CanonicalType helpers', () => {
-  it('signalTypeSignal creates one + continuous', () => {
-    const st = signalTypeSignal(FLOAT);
+  it('canonicalSignal creates one + continuous', () => {
+    const st = canonicalSignal(FLOAT);
     expect(st.payload.kind).toBe('float');
     const card = st.extent.cardinality;
     const temp = st.extent.temporality;
@@ -297,33 +295,34 @@ describe('derived CanonicalType helpers', () => {
     }
   });
 
-  it('signalTypeField creates many + continuous', () => {
-    const st = signalTypeField(VEC2, 'grid-1');
+  it('canonicalField creates many + continuous', () => {
+    const instanceRef_ = instanceRef(instanceId('grid-1'), domainTypeId('default'));
+    const st = canonicalField(VEC2, { kind: 'scalar' }, instanceRef_);
     expect(st.payload.kind).toBe('vec2');
     const card = st.extent.cardinality;
     const temp = st.extent.temporality;
-    expect(card.kind).toBe('instantiated');
-    expect(temp.kind).toBe('instantiated');
+    expect(card.kind).toBe('inst');
+    expect(temp.kind).toBe('inst');
     if (card.kind === 'inst' && temp.kind === 'inst') {
       expect(card.value.kind).toBe('many');
       expect(temp.value.kind).toBe('continuous');
     }
   });
 
-  it('signalTypeTrigger creates one + discrete', () => {
-    const st = signalTypeTrigger(BOOL);
+  it('canonicalEventOne creates one + discrete', () => {
+    const st = canonicalEventOne();
     const card = st.extent.cardinality;
     const temp = st.extent.temporality;
-    expect(card.kind).toBe('instantiated');
-    expect(temp.kind).toBe('instantiated');
+    expect(card.kind).toBe('inst');
+    expect(temp.kind).toBe('inst');
     if (card.kind === 'inst' && temp.kind === 'inst') {
       expect(card.value.kind).toBe('one');
       expect(temp.value.kind).toBe('discrete');
     }
   });
 
-  it('signalTypeStatic creates zero + continuous', () => {
-    const st = signalTypeStatic(INT);
+  it('canonicalType creates zero + continuous', () => {
+    const st = canonicalType(INT);
     const card = st.extent.cardinality;
     const temp = st.extent.temporality;
     expect(card.kind).toBe('instantiated');

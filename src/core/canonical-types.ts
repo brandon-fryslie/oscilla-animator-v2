@@ -905,35 +905,28 @@ export const FRAME_V0 = {
 } as const;
 
 // =============================================================================
-// ResolvedExtent - IR-Ready Form (DEPRECATED)
+// =============================================================================
+// REMOVED: ResolvedExtent (Sprints 3-6 complete)
 // =============================================================================
 
 /**
- * ResolvedExtent - All axes instantiated.
- *
- * @deprecated The new Axis<T,V> system makes this concept obsolete.
- * Extents with axisInst() are already "resolved".
+ * REMOVED: ResolvedExtent type.
+ * 
+ * The new Axis<T,V> system makes this obsolete. All Extent objects with
+ * axisInst() are already "resolved". Use Extent directly, or extract
+ * values inline with axis.kind === 'inst' ? axis.value : throw.
+ * 
+ * @deprecated REMOVED - Do not use
  */
-export interface ResolvedExtent {
-  readonly cardinality: CardinalityValue;
-  readonly temporality: TemporalityValue;
-  readonly binding: BindingValue;
-  readonly perspective: PerspectiveValue;
-  readonly branch: BranchValue;
-}
+export type ResolvedExtent = never;
 
 /**
- * Resolve an Extent to ResolvedExtent.
- * @deprecated Use isAxisInst checks instead
+ * REMOVED: resolveExtent function.
+ * 
+ * @deprecated REMOVED - Extract axis values directly instead
  */
-export function resolveExtent(extent: Extent): ResolvedExtent {
-  return {
-    cardinality: extent.cardinality.kind === 'inst' ? extent.cardinality.value : DEFAULTS_V0.cardinality,
-    temporality: extent.temporality.kind === 'inst' ? extent.temporality.value : DEFAULTS_V0.temporality,
-    binding: extent.binding.kind === 'inst' ? extent.binding.value : DEFAULTS_V0.binding,
-    perspective: extent.perspective.kind === 'inst' ? extent.perspective.value : { kind: 'default' },
-    branch: extent.branch.kind === 'inst' ? extent.branch.value : { kind: 'default' },
-  };
+export function resolveExtent(_extent: Extent): never {
+  throw new Error('resolveExtent() removed - extract axis.value directly where axis.kind === "inst"');
 }
 
 // =============================================================================
@@ -1073,89 +1066,26 @@ export function worldToAxes(
 // Derived Concept Helpers
 // =============================================================================
 
-/**
- * Create a Signal CanonicalType (one + continuous).
- */
-export function signalTypeSignal(payload: PayloadType, unit?: UnitType): CanonicalType {
-  const u = unit ?? defaultUnitForPayload(payload);
-  return canonicalType(payload, u, {
-    cardinality: axisInst({kind: 'one'}),
-    temporality: axisInst({kind: 'continuous'}),
-  });
-}
+// =============================================================================
+// REMOVED: Old Signal Type Constructors (Sprints 3-6 complete)
+// =============================================================================
 
 /**
- * Create a Field CanonicalType (many(instance) + continuous).
- *
- * Accepts either an InstanceRef or a plain instanceId string (uses 'default' domain type).
+ * REMOVED: signalTypeSignal, signalTypeField, signalTypeTrigger, 
+ * signalTypeStatic, signalTypePerLaneEvent, signalTypePolymorphic
+ * 
+ * Use canonical constructors instead:
+ * - signalTypeSignal → canonicalSignal
+ * - signalTypeField → canonicalField
+ * - signalTypeTrigger → canonicalEventOne
+ * - signalTypeStatic → canonicalType with cardinality={kind:'zero'}
+ * - signalTypePerLaneEvent → canonicalEventField
+ * - signalTypePolymorphic → remove (use proper polymorphic types with vars)
+ * 
+ * @deprecated REMOVED
  */
-export function signalTypeField(payload: PayloadType, instance: InstanceRef | string, unit?: UnitType): CanonicalType {
-  const instanceRefValue = typeof instance === 'string'
-    ? instanceRef(instanceId(instance), domainTypeId('default'))
-    : instance;
-  const u = unit ?? defaultUnitForPayload(payload);
 
-  return canonicalType(payload, u, {
-    cardinality: axisInst({ kind: 'many', instance: instanceRefValue }),
-    temporality: axisInst({kind: 'continuous'}),
-  });
-}
-
-/**
- * Create a Trigger CanonicalType (one + discrete).
- */
-export function signalTypeTrigger(payload: PayloadType, unit?: UnitType): CanonicalType {
-  const u = unit ?? defaultUnitForPayload(payload);
-  return canonicalType(payload, u, {
-    cardinality: axisInst({kind: 'one'}),
-    temporality: axisInst({kind: 'discrete'}),
-  });
-}
-
-/**
- * Create a Static/Scalar CanonicalType (zero + continuous).
- */
-export function signalTypeStatic(payload: PayloadType, unit?: UnitType): CanonicalType {
-  const u = unit ?? defaultUnitForPayload(payload);
-  return canonicalType(payload, u, {
-    cardinality: axisInst({kind: 'zero'}),
-    temporality: axisInst({kind: 'continuous'}),
-  });
-}
-
-/**
- * Create a per-lane Event CanonicalType (many(instance) + discrete).
- *
- * Accepts either an InstanceRef or a plain instanceId string (uses 'default' domain type).
- */
-export function signalTypePerLaneEvent(payload: PayloadType, instance: InstanceRef | string, unit?: UnitType): CanonicalType {
-  const instanceRefValue = typeof instance === 'string'
-    ? instanceRef(instanceId(instance), domainTypeId('default'))
-    : instance;
-  const u = unit ?? defaultUnitForPayload(payload);
-
-  return canonicalType(payload, u, {
-    cardinality: axisInst({ kind: 'many', instance: instanceRefValue }),
-    temporality: axisInst({kind: 'discrete'}),
-  });
-}
-
-/**
- * Create a cardinality-polymorphic CanonicalType (one-or-many + continuous).
- *
- * Used for blocks with cardinalityMode: 'preserve' that work with both signals and fields.
- * The cardinality axis is left as 'default', allowing the type system to resolve it
- * based on actual input cardinalities at compile time.
- */
-export function signalTypePolymorphic(payload: PayloadType, unit?: UnitType): CanonicalType {
-  const u = unit ?? defaultUnitForPayload(payload);
-
-  // TODO: signalType uses default cardinality - should be removed or fixed
-  return canonicalType(payload, u, {
-    cardinality: axisInst({ kind: 'one' }),  // Defaulting to 'one'
-    temporality: axisInst({kind: 'continuous'}),
-  });
-}
+// =============================================================================
 
 // =============================================================================
 // Event Expression Types

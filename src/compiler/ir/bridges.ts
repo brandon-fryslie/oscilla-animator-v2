@@ -20,10 +20,11 @@ import type {
   CardinalityValue,
   TemporalityValue,
   BindingValue,
+  PerspectiveValue,
+  BranchValue,
   Axis,
   PayloadType,
   ConcretePayloadType,
-  ResolvedExtent,
 } from '../../core/canonical-types';
 import { isAxisInst, isPayloadVar, FLOAT, INT, VEC2, VEC3, COLOR, BOOL, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
 import type { ShapeDescIR } from './program';
@@ -39,15 +40,20 @@ type AxisTag<T> = Axis<T, never>;
 // =============================================================================
 
 /**
- * Bridge a complete Extent to ResolvedExtent.
+ * Bridge a complete Extent to unwrapped value types.
  *
- * This is the primary entry point for type system → IR conversion.
- * It requires that all axes are instantiated (not default).
- * Pass 4 (resolve defaults) must run before calling this.
+ * This extracts the instantiated values from each axis.
+ * All axes must be instantiated (kind='inst'), not variables.
  *
- * @throws Error if any axis is still 'default'
+ * @throws Error if any axis is not instantiated
  */
-export function bridgeExtentToAxesDescIR(extent: Extent): ResolvedExtent {
+export function bridgeExtentToAxesDescIR(extent: Extent): {
+  cardinality: CardinalityValue;
+  temporality: TemporalityValue;
+  binding: BindingValue;
+  perspective: PerspectiveValue;
+  branch: BranchValue;
+} {
   // Extract instantiated values or throw
   const cardinality = getInstantiatedOrThrow(
     extent.cardinality,
@@ -61,7 +67,7 @@ export function bridgeExtentToAxesDescIR(extent: Extent): ResolvedExtent {
   const perspective = getInstantiatedOrThrow(extent.perspective, 'perspective');
   const branch = getInstantiatedOrThrow(extent.branch, 'branch');
 
-  // Return resolved extent with canonical types
+  // Return unwrapped values
   return {
     cardinality,
     temporality,

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { applyFieldKernelZipSig } from '../FieldKernels';
-import { signalTypeField, type PayloadType, type CanonicalType, VEC2 } from '../../core/canonical-types';
+import { canonicalField, type PayloadType, type CanonicalType, VEC2, instanceRef } from '../../core/canonical-types';
+import { instanceId, domainTypeId } from "../../core/ids";
 
 /**
  * Local-space sanity tests verifying coordinate space conventions.
@@ -18,7 +19,7 @@ import { signalTypeField, type PayloadType, type CanonicalType, VEC2 } from '../
  * Returns a CanonicalType with many(instance) cardinality and continuous temporality.
  */
 function testFieldType(payload: PayloadType): CanonicalType {
-  return signalTypeField(payload, 'test-instance');
+  return canonicalField(payload, { kind: 'scalar' }, { instanceId: instanceId('test-instance'), domainTypeId: domainTypeId('default') });
 }
 
 describe('Local-Space Sanity Tests', () => {

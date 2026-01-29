@@ -1,8 +1,9 @@
 /**
+ * @DEPRECATED
  * Tests for Type System → IR Bridge Functions
  *
  * These tests verify that all canonical type system variants
- * map correctly to IR schema format using ResolvedExtent.
+ * map correctly to IR schema format (unwrapped axis values).
  */
 
 import { describe, it, expect } from 'vitest';
@@ -23,6 +24,7 @@ import type {
   CanonicalType,
   PayloadType,
 } from '../../../core/canonical-types';
+import { axisInst } from '../../../core/canonical-types';
 import {
   cardinalityZero,
   cardinalityOne,
@@ -194,7 +196,7 @@ describe('payloadTypeToShapeDescIR', () => {
 });
 
 // =============================================================================
-// Complete Extent → ResolvedExtent
+// Complete Extent → Unwrapped Values
 // =============================================================================
 
 describe('bridgeExtentToAxesDescIR', () => {
@@ -269,8 +271,8 @@ describe('bridgeExtentToAxesDescIR', () => {
     expect(resolved.cardinality).toEqual({ kind: 'zero' });
     expect(resolved.temporality).toEqual({ kind: 'continuous' });
     expect(resolved.binding).toEqual({ kind: 'unbound' });
-    expect(resolved.perspective).toBe('global');
-    expect(resolved.branch).toBe('main');
+    expect(resolved.perspective).toEqual({ kind: 'default' });
+    expect(resolved.branch).toEqual({ kind: 'default' });
   });
 
   it('preserves identity binding through bridging', () => {
@@ -284,10 +286,9 @@ describe('bridgeExtentToAxesDescIR', () => {
 
     const resolved = bridgeExtentToAxesDescIR(extent);
 
-    expect(resolved.binding).toEqual({
-      kind: 'identity',
-      referent: { kind: 'referent', id: 'entities' },
-    });
+    // Per Decision D1: BindingValue has NO referent field
+    // Referents belong in continuity policies, NOT in type lattice
+    expect(resolved.binding).toEqual({ kind: 'identity' });
   });
 });
 

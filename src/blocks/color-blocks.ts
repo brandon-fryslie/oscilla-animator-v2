@@ -5,7 +5,8 @@
  */
 
 import { registerBlock } from './registry';
-import { canonicalType, signalTypeField, unitPhase01, strideOf, floatConst } from '../core/canonical-types';
+import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../core/ids';
+import { canonicalType, canonicalField, unitPhase01, strideOf, floatConst } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { defaultSourceConst } from '../types';
 import type { SigExprId, FieldExprId } from '../compiler/ir/Indices';
@@ -132,12 +133,12 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    hue: { label: 'Hue', type: signalTypeField(FLOAT, 'default') },
+    hue: { label: 'Hue', type: canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
     sat: { label: 'Saturation', type: canonicalType(FLOAT), defaultSource: defaultSourceConst(1.0), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
     val: { label: 'Value', type: canonicalType(FLOAT), defaultSource: defaultSourceConst(1.0), uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
   },
   outputs: {
-    color: { label: 'Color', type: signalTypeField(COLOR, 'default') },
+    color: { label: 'Color', type: canonicalField(COLOR, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
   },
   lower: ({ ctx, inputsById }) => {
     const hue = inputsById.hue;
@@ -156,7 +157,7 @@ registerBlock({
       hue.id as FieldExprId,
       [sat.id as SigExprId, val.id as SigExprId],
       hsvFn,
-      signalTypeField(COLOR, 'default')
+      canonicalField(COLOR, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
     );
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
@@ -188,11 +189,11 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    color: { label: 'Color', type: signalTypeField(COLOR, 'default') },
-    opacity: { label: 'Opacity', type: signalTypeField(FLOAT, 'default') },
+    color: { label: 'Color', type: canonicalField(COLOR, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+    opacity: { label: 'Opacity', type: canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
   },
   outputs: {
-    out: { label: 'Color', type: signalTypeField(COLOR, 'default') },
+    out: { label: 'Color', type: canonicalField(COLOR, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
   },
   lower: ({ ctx, inputsById }) => {
     const color = inputsById.color;
@@ -209,7 +210,7 @@ registerBlock({
     const result = ctx.b.fieldZip(
       [color.id as FieldExprId, opacity.id as FieldExprId],
       opacityFn,
-      signalTypeField(COLOR, 'default')
+      canonicalField(COLOR, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
     );
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();

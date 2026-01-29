@@ -14,14 +14,15 @@
 
 import { describe, it, expect } from 'vitest';
 import { applyFieldKernel, applyFieldKernelZipSig, hsvToRgb } from '../FieldKernels';
-import { signalTypeField, type PayloadType, type CanonicalType, FLOAT, VEC2, VEC3, COLOR } from '../../core/canonical-types';
+import { canonicalField, type PayloadType, type CanonicalType, FLOAT, VEC2, VEC3, COLOR, instanceRef } from '../../core/canonical-types';
+import { instanceId, domainTypeId } from "../../core/ids";
 
 /**
  * Test helper to create a properly-typed CanonicalType for field tests.
  * Returns a CanonicalType with many(instance) cardinality and continuous temporality.
  */
 function testFieldType(payload: PayloadType): CanonicalType {
-  return signalTypeField(payload, 'test-instance');
+  return canonicalField(payload, { kind: 'scalar' }, { instanceId: instanceId('test-instance'), domainTypeId: domainTypeId('default') });
 }
 
 // ══════════════════════════════════════════════════════════════════════
