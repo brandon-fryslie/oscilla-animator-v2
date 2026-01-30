@@ -26,8 +26,7 @@ import { useStores } from '../../../stores';
 import { ContextMenu, type ContextMenuItem } from '../ContextMenu';
 import { validateConnection, getPortTypeFromBlockType } from '../typeValidation';
 import { requireBlockDef, getBlockCategories, getBlockTypesByCategory, type BlockDef } from '../../../blocks/registry';
-import type { PayloadType } from '../../../core/canonical-types';
-import { isPayloadVar } from '../../../core/canonical-types';
+import { isPayloadVar, type InferencePayloadType } from '../../../core/inference-types';
 import { getAvailableLensTypes, getLensLabel, findCompatibleLenses } from '../lensUtils';
 
 /** Maximum number of quick connect suggestions to show */
@@ -191,7 +190,7 @@ function findCompatibleBlockTypes(
 /**
  * Get valid combine modes for a given payload type.
  */
-function getValidCombineModes(payloadType: PayloadType): CombineMode[] {
+function getValidCombineModes(payloadType: InferencePayloadType): CombineMode[] {
   const payloadKind = isPayloadVar(payloadType) ? 'float' : payloadType.kind;
   const isNumeric = ['float', 'int', 'vec2', 'vec3', 'color'].includes(payloadKind);
   const isBoolean = payloadKind === 'bool';

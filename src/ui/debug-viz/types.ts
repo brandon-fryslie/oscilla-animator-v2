@@ -5,7 +5,8 @@
  * visualization rendering of debug probe data.
  */
 
-import { type PayloadType, type ConcretePayloadType, isPayloadVar } from '../../core/canonical-types';
+import { type PayloadType, type ConcretePayloadType } from '../../core/canonical-types';
+import { isPayloadVar } from '../../core/inference-types';
 
 // =============================================================================
 // DebugTargetKey - What is being observed

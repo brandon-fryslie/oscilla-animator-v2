@@ -12,8 +12,8 @@ import type { Node, Edge as ReactFlowEdge } from 'reactflow';
 import type { BlockLike, EdgeLike, GraphDataAdapter } from './types';
 import type { DefaultSource, UIControlHint } from '../../types';
 import { getBlockDefinition, type BlockDef, type InputDef } from '../../blocks/registry';
-import type { PayloadType, CanonicalType } from '../../core/canonical-types';
 import { FLOAT, canonicalType } from '../../core/canonical-types';
+import type { InferenceCanonicalType, InferencePayloadType } from '../../core/inference-types';
 import { formatTypeForTooltip, getTypeColor } from '../reactFlowEditor/typeValidation';
 
 /**
@@ -33,7 +33,7 @@ export interface PortData {
   id: string;
   label: string;
   defaultSource?: DefaultSource;
-  payloadType: PayloadType;
+  payloadType: InferencePayloadType;
   typeTooltip: string;
   typeColor: string;
   isConnected: boolean;
@@ -76,14 +76,14 @@ export type UnifiedNode = Node<UnifiedNodeData>;
 function createPortData(
   id: string,
   label: string,
-  type: CanonicalType | undefined,
+  type: InferenceCanonicalType | undefined,
   isConnected: boolean,
   defaultSource?: DefaultSource,
   connection?: PortConnectionInfo,
   uiHint?: UIControlHint
 ): PortData {
   // For inputs without a type (non-port inputs), use a default
-  const effectiveType: CanonicalType = type || canonicalType(FLOAT);
+  const effectiveType: InferenceCanonicalType = type || canonicalType(FLOAT);
 
   return {
     id,
@@ -121,24 +121,31 @@ export function createNodeFromBlockLike(
   for (const edge of edges) {
     // Input connection: edge goes TO this block
     if (edge.targetBlockId === block.id) {
-      const sourceBlock = blocks.get(edge.sourceBlockId);
-      inputConnections.set(edge.targetPortId, {
-        blockId: edge.sourceBlockId,
-        blockLabel: sourceBlock?.displayName || edge.sourceBlockId,
-        portId: edge.sourcePortId,
-        edgeId: edge.id,
-      });
+      // An input can legally have multiple incoming edges (combine). For UI summary,
+      // keep the first one we encounter to avoid nondeterministic overwrites.
+      if (!inputConnections.has(edge.targetPortId)) {
+        const sourceBlock = blocks.get(edge.sourceBlockId);
+        inputConnections.set(edge.targetPortId, {
+          blockId: edge.sourceBlockId,
+          blockLabel: sourceBlock?.displayName || edge.sourceBlockId,
+          portId: edge.sourcePortId,
+          edgeId: edge.id,
+        });
+      }
     }
 
     // Output connection: edge goes FROM this block
     if (edge.sourceBlockId === block.id) {
-      const targetBlock = blocks.get(edge.targetBlockId);
-      outputConnections.set(edge.sourcePortId, {
-        blockId: edge.targetBlockId,
-        blockLabel: targetBlock?.displayName || edge.targetBlockId,
-        portId: edge.targetPortId,
-        edgeId: edge.id,
-      });
+      // An output can have many outgoing edges. For UI summary, keep the first.
+      if (!outputConnections.has(edge.sourcePortId)) {
+        const targetBlock = blocks.get(edge.targetBlockId);
+        outputConnections.set(edge.sourcePortId, {
+          blockId: edge.targetBlockId,
+          blockLabel: targetBlock?.displayName || edge.targetBlockId,
+          portId: edge.targetPortId,
+          edgeId: edge.id,
+        });
+      }
     }
   }
 

@@ -16,6 +16,7 @@ import type { Block, Patch, Edge, PortRef } from '../../graph/Patch';
 import type { BlockId, PortId, DefaultSource, UIControlHint } from '../../types';
 import type { CombineMode } from '../../types';
 import type { CanonicalType } from '../../core/canonical-types';
+import type { InferenceCanonicalType } from '../../core/inference-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../core/canonical-types';
 import {
   NumberInput as MuiNumberInput,
@@ -39,13 +40,45 @@ import { DisplayNameEditor } from './DisplayNameEditor';
 // =============================================================================
 
 /**
- * Format a CanonicalType for display.
+ * Format a CanonicalType for display, non-throwing, shows unit if meaningful.
  */
-function formatSignalType(type: CanonicalType | undefined): string {
-  if (type == undefined) {
-    throw new Error("ERROR: BlockInspector.formatSignalType: Type is undefined.")
+function formatSignalType(type: InferenceCanonicalType | undefined): string {
+  if (!type) return 'unknown';
+
+  const payload = type.payload.kind;
+  const unit = type.unit;
+
+  let unitStr = '';
+  switch (unit.kind) {
+    case 'none':
+    case 'scalar':
+      unitStr = '';
+      break;
+    case 'norm01':
+      unitStr = '0..1';
+      break;
+    case 'phase01':
+      unitStr = 'phase';
+      break;
+    case 'radians':
+      unitStr = 'rad';
+      break;
+    case 'degrees':
+    case 'deg':
+      unitStr = 'deg';
+      break;
+    case 'ms':
+      unitStr = 'ms';
+      break;
+    case 'seconds':
+      unitStr = 's';
+      break;
+    default:
+      unitStr = '';
+      break;
   }
-  return type.payload.kind;
+
+  return unitStr ? `${payload}:${unitStr}` : payload;
 }
 
 /**
@@ -73,18 +106,16 @@ function getDerivedDefaultSourceId(blockId: BlockId, portId: string): BlockId {
  * Check if two signal types are compatible for wiring.
  * Payload types must match. Payload-generic blocks use BlockPayloadMetadata.
  */
-function areTypesCompatible(sourceType: CanonicalType | undefined, targetType: CanonicalType | undefined): boolean {
-  // Handle undefined types
+function areTypesCompatible(sourceType: InferenceCanonicalType | undefined, targetType: InferenceCanonicalType | undefined): boolean {
   if (!sourceType || !targetType) return false;
-  // Payload types must match
-  return sourceType.payload === targetType.payload;
+  return sourceType.payload.kind === targetType.payload.kind;
 }
 
 /**
  * Get slider min value for Const default source editor.
  * Priority: inputDef.uiHint > inputDef.defaultSource.params.value-based > type-based defaults
  */
-function getConstSliderMin(inputDef: InputDef | undefined, portType: CanonicalType | undefined): number {
+function getConstSliderMin(inputDef: InputDef | undefined, portType: InferenceCanonicalType | undefined): number {
   // Check uiHint first
   const hint = inputDef?.uiHint;
   if (hint && 'min' in hint && hint.min !== undefined) {
@@ -102,7 +133,7 @@ function getConstSliderMin(inputDef: InputDef | undefined, portType: CanonicalTy
  * Get slider max value for Const default source editor.
  * Priority: inputDef.uiHint > type-based defaults
  */
-function getConstSliderMax(inputDef: InputDef | undefined, portType: CanonicalType | undefined): number {
+function getConstSliderMax(inputDef: InputDef | undefined, portType: InferenceCanonicalType | undefined): number {
   // Check uiHint first
   const hint = inputDef?.uiHint;
   if (hint && 'max' in hint && hint.max !== undefined) {
@@ -120,7 +151,7 @@ function getConstSliderMax(inputDef: InputDef | undefined, portType: CanonicalTy
  * Get slider step value for Const default source editor.
  * Priority: inputDef.uiHint > type-based defaults
  */
-function getConstSliderStep(inputDef: InputDef | undefined, portType: CanonicalType | undefined): number {
+function getConstSliderStep(inputDef: InputDef | undefined, portType: InferenceCanonicalType | undefined): number {
   // Check uiHint first
   const hint = inputDef?.uiHint;
   if (hint && 'step' in hint && hint.step !== undefined) {
@@ -141,7 +172,7 @@ function getConstSliderStep(inputDef: InputDef | undefined, portType: CanonicalT
  * - Must have at least one output
  * - Must have at least one output compatible with the target port type
  */
-function getValidDefaultSourceBlockTypes(portType: CanonicalType): { blockType: string; label: string; outputs: readonly OutputDef[] }[] {
+function getValidDefaultSourceBlockTypes(portType: InferenceCanonicalType): { blockType: string; label: string; outputs: readonly OutputDef[] }[] {
   const validBlocks: { blockType: string; label: string; outputs: readonly OutputDef[] }[] = [];
 
   for (const [blockType, def] of BLOCK_DEFS_BY_TYPE.entries()) {
@@ -1325,7 +1356,7 @@ function PortInspector({ portRef, block, typeInfo, patch, onBack }: PortInspecto
 interface PortDefaultSourceEditorProps {
   blockId: BlockId;
   portId: string;
-  portType: CanonicalType;
+  portType: InferenceCanonicalType;
   currentDefaultSource: DefaultSource;
   registryDefaultSource?: DefaultSource;
   isConnected?: boolean;
@@ -1415,8 +1446,8 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
         case 'bool': return false;
         case 'int': return 0;
         case 'float': return 0;
-        case 'vec2': return { x: 0, y: 0 };
-        case 'color': return { r: 0, g: 0, b: 0, a: 1 };
+        case 'vec2': return [0, 0];
+        case 'color': return [0, 0, 0, 1];
         default: return 0;
       }
     }
@@ -1506,19 +1537,25 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <SliderWithInput
                 label="X"
-                value={(constValue as any)?.x ?? 0}
+                value={Array.isArray(constValue) ? (constValue as any)[0] ?? 0 : 0}
                 min={-1000}
                 max={1000}
                 step={1}
-                onChange={(v) => handleParamChange('value', { ...((constValue as any) || {}), x: v })}
+                onChange={(v) => {
+                  const cur = Array.isArray(constValue) ? (constValue as any) : [0, 0];
+                  handleParamChange('value', [v, cur[1] ?? 0]);
+                }}
               />
               <SliderWithInput
                 label="Y"
-                value={(constValue as any)?.y ?? 0}
+                value={Array.isArray(constValue) ? (constValue as any)[1] ?? 0 : 0}
                 min={-1000}
                 max={1000}
                 step={1}
-                onChange={(v) => handleParamChange('value', { ...((constValue as any) || {}), y: v })}
+                onChange={(v) => {
+                  const cur = Array.isArray(constValue) ? (constValue as any) : [0, 0];
+                  handleParamChange('value', [cur[0] ?? 0, v]);
+                }}
               />
             </div>
           )}

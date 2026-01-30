@@ -10,7 +10,8 @@
  */
 
 import React from 'react';
-import { type CanonicalType, isPayloadVar } from '../../core/canonical-types';
+import type { CanonicalType } from '../../core/canonical-types';
+import { isPayloadVar } from '../../core/inference-types';
 import type { RendererSample } from './types';
 
 // =============================================================================

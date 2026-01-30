@@ -67,24 +67,24 @@ export const EdgeContextMenu: React.FC<EdgeContextMenuProps> = observer(({
     if (sourceBlock && targetBlock) {
       const sourceBlockDef = requireBlockDef(sourceBlock.type);
       const targetBlockDef = requireBlockDef(targetBlock.type);
-      
+
       const sourceOutput = sourceBlockDef.outputs[edge.from.slotId];
       const targetInput = targetBlockDef.inputs[edge.to.slotId];
-      
+
       if (sourceOutput?.type && targetInput?.type) {
         const compatibleLenses = findCompatibleLenses(sourceOutput.type, targetInput.type);
-        
+
         if (compatibleLenses.length > 0) {
           // Limit to 3 lenses in edge menu (less than port menu)
           const lensesToShow = compatibleLenses.slice(0, 3);
-          
+
           // Add each lens as a direct menu item
           for (const lens of lensesToShow) {
             menuItems.push({
               label: `Add Lens: ${lens.label}`,
               icon: <LensIcon fontSize="small" />,
               action: () => {
-                const sourceAddress = `v1:blocks.${sourceBlock.displayName}.outputs.${edge.from.slotId}`;
+                const sourceAddress = `v1:blocks.${edge.from.blockId}.outputs.${edge.from.slotId}`;
                 patch.addLens(edge.to.blockId as BlockId, edge.to.slotId, lens.blockType, sourceAddress);
               },
             });

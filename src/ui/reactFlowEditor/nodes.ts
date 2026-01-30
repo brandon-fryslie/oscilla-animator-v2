@@ -9,7 +9,8 @@ import type { Node, Edge as ReactFlowEdge } from 'reactflow';
 import type { Block, BlockId, Edge, DefaultSource, UIControlHint, CombineMode } from '../../types';
 import type { Patch, LensAttachment } from '../../graph/Patch';
 import type { BlockDef, InputDef } from '../../blocks/registry';
-import type { PayloadType, CanonicalType } from '../../core/canonical-types';
+import type { PayloadType } from '../../core/canonical-types';
+import type { InferenceCanonicalType, InferencePayloadType } from '../../core/inference-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION, canonicalType } from '../../core/canonical-types';
 import { formatTypeForTooltip, getTypeColor, getPortTypeFromBlockType, formatUnitForDisplay } from './typeValidation';
 import { findAdapter } from '../../graph/adapters';
@@ -37,7 +38,7 @@ export interface PortData {
   label: string;
   defaultSource?: DefaultSource;
   /** Payload type for coloring handles */
-  payloadType: PayloadType;
+  payloadType: InferencePayloadType;
   /** Full type for tooltip */
   typeTooltip: string;
   /** Color for handle based on type */
@@ -107,7 +108,7 @@ function getEffectiveDefaultSource(
 function createPortData(
   id: string,
   label: string,
-  type: CanonicalType | undefined,
+  type: InferenceCanonicalType | undefined,
   isConnected: boolean,
   defaultSource?: DefaultSource,
   connection?: PortConnectionInfo,
@@ -115,7 +116,7 @@ function createPortData(
   lenses?: readonly LensAttachment[]
 ): PortData {
   // For inputs without a type (non-port inputs), use a default
-  const effectiveType: CanonicalType = type || canonicalType(FLOAT);
+  const effectiveType: InferenceCanonicalType = type || canonicalType(FLOAT);
 
   return {
     id,

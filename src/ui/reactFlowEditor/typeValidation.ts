@@ -6,8 +6,15 @@
  */
 
 import type { Patch, BlockId } from '../../types';
-import {CanonicalType, PayloadType, UnitType, ConcretePayloadType, FLOAT} from '../../core/canonical-types';
-import { DEFAULTS_V0, isPayloadVar } from '../../core/canonical-types';
+import type {
+  CanonicalType,
+  UnitType,
+  ConcretePayloadType,
+  CardinalityValue,
+  TemporalityValue,
+} from '../../core/canonical-types';
+import { FLOAT } from '../../core/canonical-types';
+import { isPayloadVar, type InferenceCanonicalType, type InferencePayloadType, type InferenceUnitType } from '../../core/inference-types';
 import { getBlockDefinition } from '../../blocks/registry';
 import { findAdapter, type AdapterSpec } from '../../graph/adapters';
 
@@ -30,10 +37,27 @@ export const TYPE_COLORS: Record<ConcretePayloadType["kind"], string> = {
   cameraProjection: '#8b5cf6', // Purple (enum-like projection mode)
 };
 
+const DEFAULT_CARDINALITY: CardinalityValue = { kind: 'one' };
+const DEFAULT_TEMPORALITY: TemporalityValue = { kind: 'continuous' };
+
+function getInstantiatedCardinality(t: InferenceCanonicalType): CardinalityValue {
+  return t.extent.cardinality.kind === 'inst' ? t.extent.cardinality.value : DEFAULT_CARDINALITY;
+}
+
+function getInstantiatedTemporality(t: InferenceCanonicalType): TemporalityValue {
+  return t.extent.temporality.kind === 'inst' ? t.extent.temporality.value : DEFAULT_TEMPORALITY;
+}
+
+function inferenceUnitsEqual(a: UnitType | InferenceUnitType, b: UnitType | InferenceUnitType): boolean {
+  // Unit vars are polymorphic — match anything during UI validation
+  if (a.kind === 'var' || b.kind === 'var') return true;
+  return a.kind === b.kind;
+}
+
 /**
  * Get color for a payload type.
  */
-export function getTypeColor(payload: PayloadType): string {
+export function getTypeColor(payload: InferencePayloadType): string {
   if (isPayloadVar(payload)) {
     return '#888888'; // Gray for unresolved payload variables
   }
@@ -49,24 +73,38 @@ export function getTypeColor(payload: PayloadType): string {
  * Format a unit kind for display.
  * Returns short human-readable unit labels.
  */
-export function formatUnitForDisplay(unit: UnitType): string {
+export function formatUnitForDisplay(unit: UnitType | InferenceUnitType): string {
   switch (unit.kind) {
-    case 'scalar': return '';
-    case 'phase01': return 'phase';
-    case 'radians': return 'rad';
-    case 'degrees': return 'deg';
-    case 'deg': return 'deg';
-    case 'norm01': return '0..1';
-    case 'ms': return 'ms';
-    case 'seconds': return 's';
-    case 'count': return '#';
-    case 'ndc2': return 'ndc2';
-    case 'ndc3': return 'ndc3';
-    case 'world2': return 'world2';
-    case 'world3': return 'world3';
-    case 'rgba01': return 'rgba';
-    case 'none': return '';
-    // Note: 'var' kind removed per D5 - unit variables only in inference layer
+    case 'none':
+    case 'scalar':
+      return '';
+    case 'norm01':
+      return '0..1';
+    case 'phase01':
+      return 'phase';
+    case 'radians':
+      return 'rad';
+    case 'degrees':
+    case 'deg':
+      return 'deg';
+    case 'ms':
+      return 'ms';
+    case 'seconds':
+      return 's';
+    case 'count':
+      return 'count';
+    case 'ndc2':
+      return 'ndc2';
+    case 'ndc3':
+      return 'ndc3';
+    case 'world2':
+      return 'world2';
+    case 'world3':
+      return 'world3';
+    case 'rgba01':
+      return 'rgba';
+    default:
+      return '';
   }
 }
 
@@ -74,9 +112,9 @@ export function formatUnitForDisplay(unit: UnitType): string {
  * Format a CanonicalType for display.
  * Returns strings like "Signal<float:phase>" or "Field<color>"
  */
-export function formatTypeForDisplay(type: CanonicalType): string {
-  const card = type.extent.cardinality.kind === 'inst' ? type.extent.cardinality.value : DEFAULTS_V0.cardinality;
-  const temp = type.extent.temporality.kind === 'inst' ? type.extent.temporality.value : DEFAULTS_V0.temporality;
+export function formatTypeForDisplay(type: InferenceCanonicalType): string {
+  const card = getInstantiatedCardinality(type);
+  const temp = getInstantiatedTemporality(type);
 
   // Cardinality prefix
   let cardStr: string;
@@ -106,9 +144,9 @@ export function formatTypeForDisplay(type: CanonicalType): string {
 /**
  * Format a CanonicalType for tooltip with more detail.
  */
-export function formatTypeForTooltip(type: CanonicalType): string {
-  const card = type.extent.cardinality.kind === 'inst' ? type.extent.cardinality.value : DEFAULTS_V0.cardinality;
-  const temp = type.extent.temporality.kind === 'inst' ? type.extent.temporality.value : DEFAULTS_V0.temporality;
+export function formatTypeForTooltip(type: InferenceCanonicalType): string {
+  const card = getInstantiatedCardinality(type);
+  const temp = getInstantiatedTemporality(type);
 
   const base = formatTypeForDisplay(type);
 
@@ -132,7 +170,7 @@ export function getPortType(
   blockId: string,
   portId: string,
   direction: 'input' | 'output'
-): CanonicalType | null {
+): InferenceCanonicalType | null {
   const block = patch.blocks.get(blockId as BlockId);
   if (!block) return null;
 
@@ -152,7 +190,7 @@ export function getPortTypeFromBlockType(
   blockType: string,
   portId: string,
   direction: 'input' | 'output'
-): CanonicalType | null {
+): InferenceCanonicalType | null {
   const blockDef = getBlockDefinition(blockType);
   if (!blockDef) return null;
 
@@ -195,18 +233,18 @@ function canTransformDomain(fromDomain: string, toDomain: string): boolean {
  * since they get resolved during compilation. This allows users to make connections
  * that will be validated properly by the compiler.
  */
-function isTypeCompatible(from: CanonicalType, to: CanonicalType): boolean {
-  const fromCard = from.extent.cardinality.kind === 'inst' ? from.extent.cardinality.value : DEFAULTS_V0.cardinality;
-  const fromTemp = from.extent.temporality.kind === 'inst' ? from.extent.temporality.value : DEFAULTS_V0.temporality;
-  const toCard = to.extent.cardinality.kind === 'inst' ? to.extent.cardinality.value : DEFAULTS_V0.cardinality;
-  const toTemp = to.extent.temporality.kind === 'inst' ? to.extent.temporality.value : DEFAULTS_V0.temporality;
+function isTypeCompatible(from: InferenceCanonicalType, to: InferenceCanonicalType): boolean {
+  const fromCard = getInstantiatedCardinality(from);
+  const fromTemp = getInstantiatedTemporality(from);
+  const toCard = getInstantiatedCardinality(to);
+  const toTemp = getInstantiatedTemporality(to);
 
   // Payload must match, but payload variables are polymorphic
   const fromIsPayloadVar = isPayloadVar(from.payload);
   const toIsPayloadVar = isPayloadVar(to.payload);
   if (!fromIsPayloadVar && !toIsPayloadVar) {
-    // Both concrete - must match exactly
-    if (from.payload !== to.payload) {
+    // Both concrete - must match kind
+    if ((from.payload as ConcretePayloadType).kind !== (to.payload as ConcretePayloadType).kind) {
       return false;
     }
   }
@@ -214,8 +252,7 @@ function isTypeCompatible(from: CanonicalType, to: CanonicalType): boolean {
 
   // Unit must match (per spec: no implicit conversion)
   // Exception: unit variables (unitVar) are polymorphic and match any unit
-  if (from.unit.kind !== to.unit.kind) {
-    // Note: Unit variables removed per D5 - all units are concrete in UI
+  if (!inferenceUnitsEqual(from.unit, to.unit)) {
     return false;
   }
 

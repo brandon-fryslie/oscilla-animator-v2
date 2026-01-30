@@ -4,7 +4,7 @@
  * Provides helper functions for lens management in the editor.
  */
 
-import type { CanonicalType } from '../../core/canonical-types';
+import type { InferenceCanonicalType } from '../../core/inference-types';
 import { getBlockTypesByCategory } from '../../blocks/registry';
 
 /**
@@ -18,9 +18,9 @@ export interface LensTypeInfo {
   /** Description of what the lens does */
   description: string;
   /** Input type the lens accepts */
-  inputType: CanonicalType;
+  inputType: InferenceCanonicalType;
   /** Output type the lens produces */
-  outputType: CanonicalType;
+  outputType: InferenceCanonicalType;
 }
 
 /**
@@ -66,10 +66,10 @@ export function getLensLabel(lensType: string): string {
  * @returns true if lens is compatible
  */
 export function canApplyLens(
-  sourceType: CanonicalType,
-  lensInputType: CanonicalType,
-  lensOutputType: CanonicalType,
-  targetType: CanonicalType
+  sourceType: InferenceCanonicalType,
+  lensInputType: InferenceCanonicalType,
+  lensOutputType: InferenceCanonicalType,
+  targetType: InferenceCanonicalType
 ): boolean {
   // Simple compatibility: exact type matches
   // Source must match lens input, lens output must match target
@@ -82,7 +82,7 @@ export function canApplyLens(
  * Check if two signal types match.
  * Handles payload and unit comparison.
  */
-function typesMatch(a: CanonicalType, b: CanonicalType): boolean {
+function typesMatch(a: InferenceCanonicalType, b: InferenceCanonicalType): boolean {
   // Payload must match
   if (a.payload.kind !== b.payload.kind) return false;
 
@@ -103,8 +103,8 @@ function typesMatch(a: CanonicalType, b: CanonicalType): boolean {
  * @returns Array of compatible lens types
  */
 export function findCompatibleLenses(
-  sourceType: CanonicalType,
-  targetType: CanonicalType
+  sourceType: InferenceCanonicalType,
+  targetType: InferenceCanonicalType
 ): LensTypeInfo[] {
   const allLenses = getAvailableLensTypes();
   
