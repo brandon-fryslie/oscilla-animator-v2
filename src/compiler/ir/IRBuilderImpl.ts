@@ -738,9 +738,6 @@ export class IRBuilderImpl implements IRBuilder {
       case 'color':
         stride = 4;
         break;
-      case 'shape':
-        stride = 0; // Shape slots don't occupy f64 storage
-        break;
       default:
         stride = 1; // Fallback
     }
@@ -798,9 +795,6 @@ export class IRBuilderImpl implements IRBuilder {
           break;
         case 'color':
           stride = 4;
-          break;
-        case 'shape':
-          stride = 0;
           break;
         default:
           stride = 1; // Fallback

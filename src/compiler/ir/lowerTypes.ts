@@ -9,7 +9,7 @@
  * This file now only contains types used by the compiler passes.
  */
 
-import type { CanonicalType } from '../../core/canonical-types';
+import { deriveKind, type CanonicalType } from '../../core/canonical-types';
 import type {
   SigExprId,
   FieldExprId,
@@ -62,6 +62,28 @@ export type ValueRefPacked =
     }
   | { readonly k: 'instance'; readonly id: InstanceId }
   | { readonly k: 'scalar'; readonly value: unknown };
+
+/**
+ * Assert that a ValueRefPacked's `k` tag agrees with `deriveKind(type)`.
+ * Per gap analysis resolutions Q4/Q5: discriminant tags must agree with deriveKind
+ * when a `.type` field is present. Called at lowering boundaries.
+ */
+const K_TO_DERIVED_KIND: Record<string, string> = {
+  sig: 'signal',
+  field: 'field',
+  event: 'event',
+};
+
+export function assertKindAgreement(ref: ValueRefPacked): void {
+  if (ref.k === 'instance' || ref.k === 'scalar') return; // No .type field
+  const expected = K_TO_DERIVED_KIND[ref.k];
+  const actual = deriveKind(ref.type);
+  if (expected !== actual) {
+    throw new Error(
+      `deriveKind agreement violation: ValueRefPacked.k='${ref.k}' (expected derived kind '${expected}') but deriveKind(type) returned '${actual}'`
+    );
+  }
+}
 
 // =============================================================================
 // Lowered Types (compiler pass contract)

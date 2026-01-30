@@ -1,0 +1,91 @@
+/**
+ * CI Forbidden Pattern Test (Gap Analysis #13 / Resolution Q13)
+ *
+ * Grep-based test that fails CI for patterns that violate the canonical type system.
+ * This is the mechanical enforcement gate for type system invariants.
+ */
+import { describe, it, expect } from 'vitest';
+import { execSync } from 'child_process';
+
+/** Run grep and return matching file:line results, excluding this test file */
+function grepSrc(pattern: string, pathFilter?: string): string[] {
+  try {
+    const target = pathFilter ?? 'src/';
+    const cmd = `grep -rn '${pattern}' ${target} --include='*.ts' --include='*.tsx' 2>/dev/null || true`;
+    const result = execSync(cmd, { encoding: 'utf-8', cwd: process.cwd() }).trim();
+    const lines = result ? result.split('\n').filter(Boolean) : [];
+    // Always exclude this test file itself
+    return lines.filter(l => !l.includes('forbidden-patterns.test.ts'));
+  } catch {
+    return [];
+  }
+}
+
+/** Filter out allowed locations from grep results */
+function filterAllowlist(results: string[], allowlist: RegExp[]): string[] {
+  return results.filter(line => !allowlist.some(re => re.test(line)));
+}
+
+describe('Forbidden Patterns (Type System Invariants)', () => {
+
+  it('no AxisTag type alias anywhere in src/', () => {
+    // Search for "type AxisTag" or "AxisTag<" as a type usage (not in comments)
+    const matches = grepSrc('type AxisTag');
+    expect(matches).toEqual([]);
+  });
+
+  it('no payload var kind outside inference modules', () => {
+    const matches = grepSrc("kind: 'var'");
+    const allowlist = [
+      /canonical-types\.ts/,       // Type definitions and constructors
+      /inference/i,                 // Any inference module
+      /analyze-type-constraints/,   // Type constraint gathering
+      /analyze-type-graph/,         // Type solver
+      /type-env/i,                  // Type environment
+      /\.test\./,                   // Test files
+      /__tests__/,                  // Test directories
+    ];
+    const filtered = filterAllowlist(matches, allowlist);
+    expect(filtered).toEqual([]);
+  });
+
+  it('no legacy type aliases in non-test, non-comment code', () => {
+    // Search for type/interface declarations or type annotations using legacy names
+    // We look for patterns like "type ResolvedPortType" or ": ResolvedPortType"
+    const legacyTypes = [
+      { pattern: 'type ResolvedPortType', description: 'legacy port type declaration' },
+      { pattern: 'type ResolvedExtent', description: 'legacy extent type declaration' },
+    ];
+    for (const { pattern, description } of legacyTypes) {
+      const matches = grepSrc(pattern);
+      const allowlist = [
+        /\.test\./,               // Test files
+        /__tests__/,              // Test directories
+        /\/\//,                   // Single-line comments
+        /\*/,                     // Block comments
+        /migration/i,            // Migration modules (temporary)
+        /DEPRECATED/,            // Deprecation notices
+      ];
+      const filtered = filterAllowlist(matches, allowlist);
+      expect(filtered, `Found ${description} '${pattern}' outside allowed locations`).toEqual([]);
+    }
+  });
+
+  // Note: "SignalType" is NOT checked because valid function names like
+  // "assertSignalType" contain this substring. The actual legacy type was
+  // already removed in previous sprints.
+
+  it('no instanceId field on expression types in IR types', () => {
+    // Only check the IR types file where expression types are defined
+    const matches = grepSrc('instanceId', 'src/compiler/ir/types.ts');
+    // Allow comments referencing instanceId for migration docs
+    const filtered = matches.filter(m => {
+      const content = m.substring(m.indexOf(':', m.indexOf(':') + 1) + 1).trim();
+      return !content.startsWith('//') && !content.startsWith('*') && !content.includes('TODO');
+    });
+    // Currently instanceId still exists on some field expressions (gap analysis #25 will remove)
+    // This test documents the current state; tighten after #25 is complete
+    // TODO: Change to expect(filtered).toEqual([]) after gap analysis Sprint 4 item #25
+    expect(filtered.length).toBeLessThanOrEqual(9); // Current count of instanceId fields
+  });
+});

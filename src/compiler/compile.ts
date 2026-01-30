@@ -526,7 +526,7 @@ function convertLinkedIRToProgram(
     // Shape payloads use dedicated shape2d bank; all other signals go to f64
     const storage: SlotMetaEntry['storage'] = fieldSlotSet.has(slotId)
       ? 'object'
-      : type.payload .kind === 'shape' ? 'shape2d' : 'f64';
+      : 'f64'; // TODO: Q6 — shape2d storage removed with shape payload; will use resource graph
 
     // Use stride from slotInfo (which comes from registered type), fallback to computing from payload
     // Objects/fields have stride=1 since they store a single reference

@@ -8,7 +8,7 @@ import type { VarargConnection } from "../../graph/Patch";
 import type { IRBuilder } from "../ir/IRBuilder";
 import { IRBuilderImpl } from "../ir/IRBuilderImpl";
 import type { CompileError } from "../types";
-import type { ValueRefPacked } from "../ir/lowerTypes";
+import { assertKindAgreement, type ValueRefPacked } from "../ir/lowerTypes";
 import type { InstanceId } from "../ir/Indices";
 import { getBlockDefinition, type LowerCtx, type LowerResult, hasLowerOutputsOnly } from "../../blocks/registry";
 import type { EventHub } from "../../events/EventHub";
@@ -469,6 +469,8 @@ function lowerBlockInstance(
         builder.registerSlotType(ref.slot, ref.type);
       }
 
+      // Gap analysis #12 (Q4/Q5): Assert kind tag agrees with deriveKind(type)
+      assertKindAgreement(ref);
       outputRefs.set(portId, ref);
     }
 

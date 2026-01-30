@@ -1532,13 +1532,12 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
               onChange={(value) => handleParamChange('value', value)}
             />
           )}
-          {(payloadType.kind === 'shape' || payloadType.kind === 'cameraProjection') && (
+          {payloadType.kind === 'cameraProjection' && (
             <div style={{ padding: '8px', backgroundColor: colors.bgPanel, borderRadius: '4px', fontSize: '12px', color: colors.textSecondary }}>
-              {payloadType.kind === 'shape' && '⚙️ Shape values are configured via geometry properties'}
-              {payloadType.kind === 'cameraProjection' && '⚙️ Camera projection values are configured via projection properties'}
+              ⚙️ Camera projection values are configured via projection properties
             </div>
           )}
-          {payloadType.kind !== 'float' && payloadType.kind !== 'int' && payloadType.kind !== 'bool' && payloadType.kind !== 'vec2' && payloadType.kind !== 'color' && payloadType.kind !== 'shape' && payloadType.kind !== 'cameraProjection' && (
+          {payloadType.kind !== 'float' && payloadType.kind !== 'int' && payloadType.kind !== 'bool' && payloadType.kind !== 'vec2' && payloadType.kind !== 'color' && payloadType.kind !== 'cameraProjection' && (
             <SliderWithInput
               label="Value"
               value={constValue as number}

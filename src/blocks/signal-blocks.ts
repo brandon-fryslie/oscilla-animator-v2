@@ -5,7 +5,7 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS, type LowerResult } from './registry';
-import { canonicalType, type PayloadType, unitPhase01, unitNorm01, unitVar, payloadVar, strideOf, floatConst, intConst, boolConst, vec2Const, colorConst, cameraProjectionConst } from '../core/canonical-types';
+import { canonicalType, type PayloadType, type CameraProjection, unitPhase01, unitNorm01, unitVar, payloadVar, strideOf, floatConst, intConst, boolConst, vec2Const, colorConst, cameraProjectionConst } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, CAMERA_PROJECTION } from '../core/canonical-types';
 import { OpCode, stableStateId } from '../compiler/ir/types';
 import { defaultSourceConst } from '../types';
@@ -174,7 +174,7 @@ registerBlock({
         if (typeof rawValue !== 'string') {
           throw new Error(`Const<cameraProjection> requires string value, got ${typeof rawValue}`);
         }
-        const sigId = ctx.b.sigConst(cameraProjectionConst(rawValue), canonicalType(CAMERA_PROJECTION));
+        const sigId = ctx.b.sigConst(cameraProjectionConst(rawValue as CameraProjection), canonicalType(CAMERA_PROJECTION));
         const slot = ctx.b.allocSlot(stride);
         return {
           outputsById: {

@@ -936,21 +936,7 @@ export const FRAME_V0 = {
   branch: { kind: 'default' } as BranchValue,
 } as const;
 
-// =============================================================================
-// =============================================================================
-// REMOVED: ResolvedExtent (Sprints 3-6 complete)
-// =============================================================================
-
-/**
- * REMOVED: ResolvedExtent type.
- *
- * The new Axis<T,V> system makes this obsolete. All Extent objects with
- * axisInst() are already "resolved". Use Extent directly, or extract
- * values inline with axis.kind === 'inst' ? axis.value : throw.
- *
- * @deprecated REMOVED - Do not use
- */
-export type ResolvedExtent = never;
+// ResolvedExtent removed — use Extent directly with Axis<T,V> system
 
 /**
  * REMOVED: resolveExtent function.
