@@ -7,6 +7,8 @@
  * - phase01: "phase" label
  * - scalar: no decoration
  * - Other units: unit label
+ *
+ * Updated for structured UnitType (#18).
  */
 
 import React from 'react';
@@ -28,18 +30,56 @@ const styles = {
   countBadge: { color: '#666', fontSize: '10px', marginTop: '2px' } as const,
 };
 
-/** Unit kind to display label. */
+/**
+ * Unit kind to display label.
+ * Updated for structured units (#18).
+ */
 function unitLabel(unit: UnitType): string | null {
   switch (unit.kind) {
-    case 'scalar': return null;
-    case 'norm01': return null; // has range indicator instead
-    case 'phase01': return 'phase';
-    case 'radians': return 'rad';
-    case 'degrees': return 'deg';
-    case 'ms': return 'ms';
-    case 'seconds': return 's';
-    case 'count': return null;
-    default: return unit.kind;
+    case 'scalar':
+    case 'none':
+      return null;
+    case 'norm01':
+      return null; // has range indicator instead
+    case 'count':
+      return null;
+
+    // Structured: angle
+    case 'angle': {
+      const angleUnit = (unit as Extract<UnitType, { kind: 'angle' }>).unit;
+      switch (angleUnit) {
+        case 'phase01': return 'phase';
+        case 'radians': return 'rad';
+        case 'degrees': return 'deg';
+      }
+      return null;
+    }
+
+    // Structured: time
+    case 'time': {
+      const timeUnit = (unit as Extract<UnitType, { kind: 'time' }>).unit;
+      switch (timeUnit) {
+        case 'ms': return 'ms';
+        case 'seconds': return 's';
+      }
+      return null;
+    }
+
+    // Structured: space
+    case 'space': {
+      const spaceUnit = unit as Extract<UnitType, { kind: 'space' }>;
+      return `${spaceUnit.unit}${spaceUnit.dims}`;
+    }
+
+    // Structured: color
+    case 'color': {
+      return 'rgba';
+    }
+
+    default: {
+      const _exhaustive: never = unit;
+      return null;
+    }
   }
 }
 
