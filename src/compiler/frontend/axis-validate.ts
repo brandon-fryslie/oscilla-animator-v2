@@ -15,6 +15,7 @@
 
 import {
   type CanonicalType,
+  type BindingValue,
   assertEventType,
   assertFieldType,
   assertSignalType,
@@ -31,6 +32,35 @@ export interface AxisViolation {
   readonly kind: string;
   readonly message: string;
 }
+
+/**
+ * Binding mismatch error with structured left/right values and remedy suggestions.
+ * Item #17 / Q9: Structured BindingMismatchError
+ *
+ * This provides typed diagnostic information for binding unification failures,
+ * enabling UI to suggest appropriate remedies.
+ */
+export interface BindingMismatchError {
+  readonly left: BindingValue;
+  readonly right: BindingValue;
+  readonly location: {
+    readonly leftBlockId?: string;
+    readonly leftPortId?: string;
+    readonly rightBlockId?: string;
+    readonly rightPortId?: string;
+  };
+  readonly remedy: BindingMismatchRemedy;
+  readonly message: string;
+}
+
+/**
+ * Remedies for binding mismatches.
+ * Item #17: Structured remedy suggestions.
+ */
+export type BindingMismatchRemedy =
+  | 'insert-state-op'        // Insert stateful boundary (e.g., UnitDelay)
+  | 'insert-continuity-op'   // Insert continuity operator (e.g., Lag, Slew)
+  | 'rewire';                // Rewire to avoid binding conflict
 
 /**
  * Validate a collection of canonical types.
@@ -130,6 +160,71 @@ export function validateNoVarAxes(types: readonly CanonicalType[]): AxisViolatio
   }
 
   return violations;
+}
+
+/**
+ * Create a BindingMismatchError from binding values.
+ * Item #17: Structured binding mismatch diagnostics.
+ *
+ * @param left - Left binding value
+ * @param right - Right binding value
+ * @param location - Source location information
+ * @returns Structured binding mismatch error
+ */
+export function createBindingMismatchError(
+  left: BindingValue,
+  right: BindingValue,
+  location: BindingMismatchError['location']
+): BindingMismatchError {
+  const remedy = determineBindingRemedy(left, right);
+  const message = formatBindingMismatch(left, right, remedy);
+
+  return {
+    left,
+    right,
+    location,
+    remedy,
+    message,
+  };
+}
+
+/**
+ * Determine the appropriate remedy for a binding mismatch.
+ */
+function determineBindingRemedy(left: BindingValue, right: BindingValue): BindingMismatchRemedy {
+  // If one is unbound, the other might need continuity
+  if (left.kind === 'unbound' || right.kind === 'unbound') {
+    return 'insert-continuity-op';
+  }
+
+  // If both are bound but to different values, need state boundary
+  if (left.kind === 'weak' || right.kind === 'weak' ||
+      left.kind === 'strong' || right.kind === 'strong') {
+    return 'insert-state-op';
+  }
+
+  // Default fallback
+  return 'rewire';
+}
+
+/**
+ * Format binding mismatch message with remedy suggestion.
+ */
+function formatBindingMismatch(
+  left: BindingValue,
+  right: BindingValue,
+  remedy: BindingMismatchRemedy
+): string {
+  const leftStr = JSON.stringify(left);
+  const rightStr = JSON.stringify(right);
+
+  const remedyText = {
+    'insert-state-op': 'Insert a stateful block (e.g., UnitDelay) to break the binding cycle.',
+    'insert-continuity-op': 'Insert a continuity operator (e.g., Lag, Slew) to align binding semantics.',
+    'rewire': 'Rewire connections to avoid binding conflict.',
+  }[remedy];
+
+  return `Binding mismatch: cannot unify ${leftStr} with ${rightStr}. Remedy: ${remedyText}`;
 }
 
 /**

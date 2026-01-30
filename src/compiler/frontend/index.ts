@@ -40,6 +40,7 @@ export type { TypeResolvedPatch, Pass1Error, TypeConstraintError } from './analy
 export type { TypedPatch } from '../ir/patches';
 export type { CycleSummary, ClassifiedSCC, CycleFix, SCCClassification, CycleLegality } from './analyze-cycles';
 export type { AxisViolation } from './axis-validate';
+export type { BindingMismatchError, BindingMismatchRemedy } from './axis-validate';
 export { analyzeCycles } from './analyze-cycles';
 export { pass1TypeConstraints, getPortType } from './analyze-type-constraints';
 export { pass2TypeGraph } from './analyze-type-graph';
