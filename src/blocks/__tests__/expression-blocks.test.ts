@@ -112,7 +112,8 @@ describe('Expression Block Lowering', () => {
     expect(sigId).not.toBeNull();
     const sigExpr = extractSigExpr(builder, sigId!);
     expect(sigExpr?.kind).toBe('const');
-    expect((sigExpr as any)?.value).toBe(0);
+    // value is now a ConstValue object { kind: 'float', value: 0 }
+    expect((sigExpr as any)?.value?.value).toBe(0);
   });
 
   it('compiles literal expression to constant', () => {
@@ -134,7 +135,8 @@ describe('Expression Block Lowering', () => {
     expect(sigId).not.toBeNull();
     const sigExpr = extractSigExpr(builder, sigId!);
     expect(sigExpr?.kind).toBe('const');
-    expect((sigExpr as any)?.value).toBe(42);
+    // value is now a ConstValue object { kind: 'float', value: 42 }
+    expect((sigExpr as any)?.value?.value).toBe(42);
   });
 
   it('compiles binary operation with inputs', () => {

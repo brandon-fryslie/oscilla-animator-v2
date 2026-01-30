@@ -22,7 +22,7 @@ export interface SparklineProps {
   history: HistoryView;
   width: number;
   height: number;
-  unit?: UnitType['kind'];
+  unit?: UnitType;
 }
 
 /** Minimum range to avoid division by zero. */
@@ -77,7 +77,7 @@ function drawSparkline(
   width: number,
   height: number,
   dpr: number,
-  unit?: UnitType['kind'],
+  unit?: UnitType,
 ): void {
   const w = width * dpr;
   const h = height * dpr;
@@ -149,7 +149,7 @@ function drawSparkline(
   ctx.stroke();
 
   // Phase wrap markers (only for phase01 unit)
-  if (unit === 'phase01') {
+  if (unit?.kind === 'angle' && unit.unit === 'phase01') {
     ctx.strokeStyle = WRAP_COLOR;
     ctx.lineWidth = 1 * dpr;
     ctx.setLineDash([2 * dpr, 2 * dpr]);

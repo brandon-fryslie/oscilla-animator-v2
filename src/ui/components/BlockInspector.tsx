@@ -57,21 +57,47 @@ function formatSignalType(type: InferenceCanonicalType | undefined): string {
     case 'norm01':
       unitStr = '0..1';
       break;
-    case 'phase01':
-      unitStr = 'phase';
+    case 'count':
+      unitStr = '#';
       break;
-    case 'radians':
-      unitStr = 'rad';
+    case 'angle':
+      switch (unit.unit) {
+        case 'phase01':
+          unitStr = 'phase';
+          break;
+        case 'radians':
+          unitStr = 'rad';
+          break;
+        case 'degrees':
+          unitStr = 'deg';
+          break;
+      }
       break;
-    case 'degrees':
-    case 'deg':
-      unitStr = 'deg';
+    case 'time':
+      switch (unit.unit) {
+        case 'ms':
+          unitStr = 'ms';
+          break;
+        case 'seconds':
+          unitStr = 's';
+          break;
+      }
       break;
-    case 'ms':
-      unitStr = 'ms';
+    case 'space':
+      switch (unit.unit) {
+        case 'ndc':
+          unitStr = 'ndc';
+          break;
+        case 'world':
+          unitStr = 'world';
+          break;
+        case 'view':
+          unitStr = 'view';
+          break;
+      }
       break;
-    case 'seconds':
-      unitStr = 's';
+    case 'color':
+      unitStr = 'rgba';
       break;
     default:
       unitStr = '';

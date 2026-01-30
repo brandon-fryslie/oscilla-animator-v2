@@ -190,7 +190,7 @@ describe('payloadTypeToShapeDescIR', () => {
 //       lanes: 4,
 //       element: 'number',
 //     });
-//   });
+  });
 });
 
 // =============================================================================
@@ -231,10 +231,10 @@ describe('bridgeExtentToAxesDescIR', () => {
 //       kind: 'many',
 //       instance: { kind: 'instance', domainType: 'circle', instanceId: 'particles' },
 //     });
-    //     expect(resolved.temporality).toEqual({ kind: 'continuous' });
-    //     expect(resolved.binding).toEqual({ kind: 'unbound' });
-    //     expect(resolved.perspective).toBe('global');
-    //     expect(resolved.branch).toBe('main');
+    expect(resolved.temporality).toEqual({ kind: 'continuous' });
+    expect(resolved.binding).toEqual({ kind: 'unbound' });
+    expect(resolved.perspective).toBe('global');
+    expect(resolved.branch).toBe('main');
   });
 
 //   it('bridges event extent (one + discrete)', () => {
@@ -288,7 +288,7 @@ describe('bridgeExtentToAxesDescIR', () => {
 //     // Referents belong in continuity policies, NOT in type lattice
 //     expect(resolved.binding).toEqual({ kind: 'identity' });
 //   });
-// });
+});
 
 // =============================================================================
 // Edge Cases and Combinations
@@ -337,16 +337,16 @@ describe('bridging edge cases', () => {
     }
   });
 
-//   it('handles all binding variants', () => {
-//     const bindings: Binding[] = [
-//       bindingUnbound(),
-//       {kind: 'weak'},
-//       {kind: 'strong'},
-//       {kind: 'identity'},
-//     ];
-// 
-//     for (const binding of bindings) {
-//       expect(() => bridgeBindingToIdentityIR(binding)).not.toThrow();
-//     }
-//   });
+  it('handles all binding variants', () => {
+    const bindings: Binding[] = [
+      bindingUnbound(),
+      {kind: 'weak'},
+      {kind: 'strong'},
+      {kind: 'identity'},
+    ];
+
+    for (const binding of bindings) {
+      expect(() => bridgeBindingToIdentityIR(binding)).not.toThrow();
+    }
+  });
 });

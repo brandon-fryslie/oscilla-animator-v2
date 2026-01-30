@@ -13,7 +13,7 @@ import type {
   CardinalityValue,
   TemporalityValue,
 } from '../../core/canonical-types';
-import { FLOAT } from '../../core/canonical-types';
+import { FLOAT, unitsEqual } from '../../core/canonical-types';
 import { isPayloadVar, type InferenceCanonicalType, type InferencePayloadType, type InferenceUnitType } from '../../core/inference-types';
 import { getBlockDefinition } from '../../blocks/registry';
 import { findAdapter, type AdapterSpec } from '../../graph/adapters';
@@ -51,7 +51,8 @@ function getInstantiatedTemporality(t: InferenceCanonicalType): TemporalityValue
 function inferenceUnitsEqual(a: UnitType | InferenceUnitType, b: UnitType | InferenceUnitType): boolean {
   // Unit vars are polymorphic — match anything during UI validation
   if (a.kind === 'var' || b.kind === 'var') return true;
-  return a.kind === b.kind;
+  // Delegate to canonical unitsEqual for structural comparison of structured units
+  return unitsEqual(a as UnitType, b as UnitType);
 }
 
 /**

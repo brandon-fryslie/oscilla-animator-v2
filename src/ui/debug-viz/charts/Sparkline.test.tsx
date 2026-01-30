@@ -184,7 +184,7 @@ describe('Sparkline', () => {
     it('draws wrap markers for phase01 unit', () => {
       // Simulate phase wrap: 0.95 → 0.05
       const history = makeHistory([0.9, 0.95, 0.05, 0.1]);
-      render(React.createElement(Sparkline, { history, width: 100, height: 30, unit: 'phase01' }));
+      render(React.createElement(Sparkline, { history, width: 100, height: 30, unit: { kind: 'angle', unit: 'phase01' } }));
       // setLineDash should be called for dotted lines
       expect(mockCtx.setLineDash).toHaveBeenCalled();
       // Additional vertical line drawn at wrap point
@@ -195,7 +195,7 @@ describe('Sparkline', () => {
 
     it('does NOT draw wrap markers for non-phase units', () => {
       const history = makeHistory([0.9, 0.95, 0.05, 0.1]);
-      render(React.createElement(Sparkline, { history, width: 100, height: 30, unit: 'scalar' }));
+      render(React.createElement(Sparkline, { history, width: 100, height: 30, unit: { kind: 'scalar' } }));
       // setLineDash should not be called (no wrap markers)
       expect(mockCtx.setLineDash).not.toHaveBeenCalled();
     });

@@ -9,18 +9,15 @@
  *   - Event: payload=bool, unit=none, temporality=discrete
  *   - Field: cardinality=many(instance), temporality=continuous
  *   - Signal: cardinality=one, temporality=continuous
- *   - Const: cardinality=zero, temporality=continuous (Item #14)
  * - **Avoid over-enforcing**: payload/unit combos unless genuinely non-negotiable
  */
 
 import {
   type CanonicalType,
   type BindingValue,
-  assertEventType,
-  assertFieldType,
-  assertSignalType,
   deriveKind,
   isAxisVar,
+  isAxisInst,
 } from '../../core/canonical-types';
 
 /**
@@ -95,11 +92,10 @@ export function validateType(t: CanonicalType): void {
   // Core family invariants are derived from CanonicalType
   const k = deriveKind(t);
 
-  // Enforce family invariants (Item #14: handle 'const')
-  if (k === 'signal') assertSignalType(t);
-  else if (k === 'field') assertFieldType(t);
-  else if (k === 'event') assertEventType(t);
-  else if (k === 'const') assertConstType(t);
+  // Enforce family invariants
+  if (k === 'signal') assertSignalInvariants(t);
+  else if (k === 'field') assertFieldInvariants(t);
+  else if (k === 'event') assertEventInvariants(t);
   else {
     // Exhaustiveness check
     const _exhaustive: never = k;
@@ -108,20 +104,54 @@ export function validateType(t: CanonicalType): void {
 }
 
 /**
- * Assert type is a const (zero + continuous).
- * Item #14 / T03-C-1: Handle const types.
+ * Assert signal type invariants (one + continuous).
  */
-export function assertConstType(t: CanonicalType): void {
-  const k = deriveKind(t);
-  if (k !== 'const') throw new Error(`Expected const type, got ${k}`);
-
+function assertSignalInvariants(t: CanonicalType): void {
   const card = t.extent.cardinality;
-  if (card.kind !== 'inst' || card.value.kind !== 'zero') {
-    throw new Error('Const types must have cardinality=zero (instantiated)');
-  }
   const tempo = t.extent.temporality;
-  if (tempo.kind !== 'inst' || tempo.value.kind !== 'continuous') {
-    throw new Error('Const types must have temporality=continuous (instantiated)');
+
+  if (!isAxisInst(card) || card.value.kind !== 'one') {
+    throw new Error('Signal types must have cardinality=one (instantiated)');
+  }
+  if (!isAxisInst(tempo) || tempo.value.kind !== 'continuous') {
+    throw new Error('Signal types must have temporality=continuous (instantiated)');
+  }
+}
+
+/**
+ * Assert field type invariants (many + continuous).
+ */
+function assertFieldInvariants(t: CanonicalType): void {
+  const card = t.extent.cardinality;
+  const tempo = t.extent.temporality;
+
+  if (!isAxisInst(card) || card.value.kind !== 'many') {
+    throw new Error('Field types must have cardinality=many(instance) (instantiated)');
+  }
+  if (!isAxisInst(tempo) || tempo.value.kind !== 'continuous') {
+    throw new Error('Field types must have temporality=continuous (instantiated)');
+  }
+}
+
+/**
+ * Assert event type invariants (discrete + bool + none unit).
+ */
+function assertEventInvariants(t: CanonicalType): void {
+  const tempo = t.extent.temporality;
+
+  // Hard invariant: temporality must be discrete
+  if (!isAxisInst(tempo) || tempo.value.kind !== 'discrete') {
+    throw new Error('Event types must have temporality=discrete (instantiated)');
+  }
+
+  // Hard invariant: payload must be bool
+  if (t.payload.kind !== 'bool') {
+    throw new Error('Event types must have payload=bool');
+  }
+
+  // Hard invariant: unit must be none
+  if (t.unit.kind !== 'none') {
+    throw new Error('Event types must have unit=none');
   }
 }
 
@@ -192,15 +222,21 @@ export function createBindingMismatchError(
  * Determine the appropriate remedy for a binding mismatch.
  */
 function determineBindingRemedy(left: BindingValue, right: BindingValue): BindingMismatchRemedy {
-  // If one is unbound, the other might need continuity
-  if (left.kind === 'unbound' || right.kind === 'unbound') {
+  // Current binding values are 'default' | 'specific'
+  // If one is default and the other is specific, suggest continuity
+  if (left.kind === 'default' && right.kind === 'specific') {
+    return 'insert-continuity-op';
+  }
+  if (left.kind === 'specific' && right.kind === 'default') {
     return 'insert-continuity-op';
   }
 
-  // If both are bound but to different values, need state boundary
-  if (left.kind === 'weak' || right.kind === 'weak' ||
-      left.kind === 'strong' || right.kind === 'strong') {
-    return 'insert-state-op';
+  // If both are specific but to different instances, need state boundary
+  if (left.kind === 'specific' && right.kind === 'specific') {
+    if (left.instance.instanceId !== right.instance.instanceId ||
+        left.instance.domainType !== right.instance.domainType) {
+      return 'insert-state-op';
+    }
   }
 
   // Default fallback
@@ -232,7 +268,7 @@ function formatBindingMismatch(
  * Throws if not.
  */
 export function validateSignal(t: CanonicalType): void {
-  assertSignalType(t);
+  assertSignalInvariants(t);
 }
 
 /**
@@ -240,7 +276,7 @@ export function validateSignal(t: CanonicalType): void {
  * Throws if not.
  */
 export function validateField(t: CanonicalType): void {
-  assertFieldType(t);
+  assertFieldInvariants(t);
 }
 
 /**
@@ -248,5 +284,5 @@ export function validateField(t: CanonicalType): void {
  * Throws if not.
  */
 export function validateEvent(t: CanonicalType): void {
-  assertEventType(t);
+  assertEventInvariants(t);
 }

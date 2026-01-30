@@ -155,7 +155,7 @@ function SignalValueSection({ value, meta, history }: {
           history,
           width: 280,
           height: 30,
-          unit: meta.type.unit.kind,
+          unit: meta.type.unit,
         })
       )
     );

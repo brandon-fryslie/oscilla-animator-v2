@@ -91,6 +91,7 @@ export function bridgeExtentToAxesDescIR(extent: Extent): {
  * - one → "signal" (single-lane time-varying value)
  * - many(domain) → "field" (multi-lane spatially-indexed value)
  */
+
 export function bridgeCardinalityToIR(
   cardinality: Cardinality
 ): 'signal' | 'field' {
@@ -103,6 +104,7 @@ export function bridgeCardinalityToIR(
       exhaustiveCheck(cardinality);
   }
 }
+
 
 
 
@@ -183,13 +185,18 @@ export function bridgeBindingToIdentityIR(
       readonly keyTag?: string;
     } {
   switch (binding.kind) {
-    case 'default':
+    case 'unbound':
       return { kind: 'none' };
 
-    case 'specific':
-      // Specific bindings use 'entity' keyspace
+    case 'identity':
+      // Identity bindings use 'entity' keyspace
       return { kind: 'keyed', keySpace: 'entity' };
 
+    case 'weak':
+    case 'strong':
+      // V0: map to 'custom' keyspace
+      // Future: use referent metadata to determine keyspace
+      return { kind: 'keyed', keySpace: 'custom' };
 
     default:
       exhaustiveCheck(binding);
