@@ -30,6 +30,7 @@ export type {
   BranchAxis,
   InstanceRef,
   UnitType,
+  CameraProjection,
 } from '../core/canonical-types';
 
 export type {
@@ -63,6 +64,7 @@ export {
   isAxisInst,
   isAxisVar,
   deriveKind,
+  tryDeriveKind,
   tryGetManyInstance,
   requireManyInstance,
   assertSignalType,
@@ -80,7 +82,6 @@ export {
   VEC2,
   VEC3,
   COLOR,
-  SHAPE,
   CAMERA_PROJECTION,
 } from '../core/canonical-types';
 

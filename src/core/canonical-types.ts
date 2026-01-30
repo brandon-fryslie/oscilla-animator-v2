@@ -42,7 +42,7 @@ import {
  * Spec Reference: 0-Units-and-Adapters.md §A3
  */
 export type UnitType =
-  | { readonly kind: 'none' }         // For payloads without units (bool, shape)
+  | { readonly kind: 'none' }         // For payloads without units (bool)
   | { readonly kind: 'scalar' }       // Dimensionless numeric
   | { readonly kind: 'norm01' }       // Clamped [0, 1]
   | { readonly kind: 'phase01' }      // Cyclic [0, 1) with wrap semantics
@@ -93,6 +93,73 @@ export function unitsEqual(a: UnitType, b: UnitType): boolean {
   return a.kind === b.kind;
 }
 
+// =============================================================================
+// PayloadType - What the value is made of
+// =============================================================================
+
+/**
+ * Closed union of camera projection modes.
+ * Per resolution Q8: cameraProjection is a closed enum, not a matrix.
+ */
+export type CameraProjection = 'orthographic' | 'perspective';
+
+/**
+ * Concrete payload types (non-variable) as discriminated union.
+ *
+ * Stride is NOT stored - use payloadStride() to derive it from kind.
+ * Per resolution Q7: stride is derived, never stored.
+ *
+ * Note: 'phase' is NOT a payload - it's float with unit:phase01.
+ * Note: 'event' and 'domain' are NOT PayloadTypes - they are axis/resource concepts.
+ * Note: 'shape' removed per Q6 - shapes are resources, not payloads.
+ */
+export type ConcretePayloadType =
+  | { readonly kind: 'float' }
+  | { readonly kind: 'int' }
+  | { readonly kind: 'bool' }
+  | { readonly kind: 'vec2' }
+  | { readonly kind: 'vec3' }
+  | { readonly kind: 'color' }
+  | { readonly kind: 'cameraProjection' };
+
+/**
+ * The kind discriminator for concrete payload types.
+ * Use this for switch statements and Record keys.
+ */
+export type PayloadKind = ConcretePayloadType['kind'];
+
+// --- Singleton instances for each concrete payload type ---
+// Use these instead of creating new objects. They are identical by reference.
+
+/** Float payload type (stride: 1) */
+export const FLOAT: ConcretePayloadType = { kind: 'float' } as const;
+/** Int payload type (stride: 1) */
+export const INT: ConcretePayloadType = { kind: 'int' } as const;
+/** Bool payload type (stride: 1) */
+export const BOOL: ConcretePayloadType = { kind: 'bool' } as const;
+/** Vec2 payload type (stride: 2) */
+export const VEC2: ConcretePayloadType = { kind: 'vec2' } as const;
+/** Vec3 payload type (stride: 3) */
+export const VEC3: ConcretePayloadType = { kind: 'vec3' } as const;
+/** Color payload type (stride: 4) */
+export const COLOR: ConcretePayloadType = { kind: 'color' } as const;
+/** Camera projection payload type (stride: 1) */
+export const CAMERA_PROJECTION: ConcretePayloadType = { kind: 'cameraProjection' } as const;
+
+/**
+ * Map from kind string to singleton instance.
+ * Used by payloadFromKind() for deserialization and compatibility.
+ */
+const PAYLOAD_BY_KIND: Record<PayloadKind, ConcretePayloadType> = {
+  float: FLOAT,
+  int: INT,
+  bool: BOOL,
+  vec2: VEC2,
+  vec3: VEC3,
+  color: COLOR,
+  cameraProjection: CAMERA_PROJECTION,
+};
+
 // --- Payload-Unit Validation (Spec §A4) ---
 
 const ALLOWED_UNITS: Record<PayloadKind, readonly UnitType['kind'][]> = {
@@ -102,9 +169,67 @@ const ALLOWED_UNITS: Record<PayloadKind, readonly UnitType['kind'][]> = {
   vec3: ['ndc3', 'world3'],
   color: ['rgba01'],
   bool: ['none'],
-  shape: ['none'],
   cameraProjection: ['none'], // Camera projection is an enum, no unit
 };
+
+/**
+ * Get a ConcretePayloadType from its kind string.
+ * Used for deserialization and backwards compatibility.
+ */
+export function payloadFromKind(kind: PayloadKind): ConcretePayloadType {
+  return PAYLOAD_BY_KIND[kind];
+}
+
+/**
+ * The base data type of a value, including unresolved variables.
+ *
+ * PayloadType can be either:
+ * - A concrete type object with kind (e.g., FLOAT, VEC2)
+ * - A payload variable { kind: 'var', id: string } for polymorphic ports
+ *
+ * Payload variables MUST be resolved by the constraint solver before compilation.
+ */
+export type PayloadType =
+  | ConcretePayloadType
+  | { readonly kind: 'var'; readonly id: string };  // Unresolved payload variable
+
+let payloadVarCounter = 0;
+/**
+ * Create an unresolved payload variable.
+ * Payload variables MUST be resolved by the constraint solver before compilation.
+ */
+export function payloadVar(id?: string): PayloadType {
+  return { kind: 'var', id: id ?? `_pv${payloadVarCounter++}` };
+}
+
+/**
+ * Check if a payload is an unresolved variable.
+ */
+export function isPayloadVar(payload: PayloadType): payload is { kind: 'var'; id: string } {
+  return typeof payload === 'object' && payload !== null && payload.kind === 'var';
+}
+
+/**
+ * Check if a payload is a concrete (non-variable) type.
+ */
+export function isConcretePayload(payload: PayloadType): payload is ConcretePayloadType {
+  // After removing stride field, check that it's not a var
+  return typeof payload === 'object' && payload !== null && payload.kind !== 'var';
+}
+
+/**
+ * Compare two payloads for equality.
+ */
+export function payloadsEqual(a: PayloadType, b: PayloadType): boolean {
+  if (isPayloadVar(a) && isPayloadVar(b)) {
+    return a.id === b.id;
+  }
+  if (isPayloadVar(a) || isPayloadVar(b)) {
+    return false;  // One is var, other is concrete
+  }
+  // Both concrete - compare by kind
+  return a.kind === b.kind;
+}
 
 /**
  * Check if a (payload, unit) combination is valid per spec §A4.
@@ -138,135 +263,12 @@ export function defaultUnitForPayload(payload: PayloadType): UnitType {
     case 'vec3': return unitWorld3();
     case 'color': return unitRgba01();
     case 'bool': return unitNone();
-    case 'shape': return unitNone();
     case 'cameraProjection': return unitNone();
     default: {
       const _exhaustive: never = concretePayload;
       throw new Error(`Unknown payload kind: ${(_exhaustive as ConcretePayloadType).kind}`);
     }
   }
-}
-
-// =============================================================================
-// PayloadType - What the value is made of
-// =============================================================================
-
-/**
- * Concrete payload types (non-variable) as discriminated union with intrinsic stride.
- *
- * Stride is baked into the type - wherever you have a ConcretePayloadType,
- * stride is immediately available via `.stride`. No lookups needed.
- *
- * Note: 'phase' is NOT a payload - it's float with unit:phase01.
- * Note: 'event' and 'domain' are NOT PayloadTypes - they are axis/resource concepts.
- */
-export type ConcretePayloadType =
-  | { readonly kind: 'float'; readonly stride: 1 }
-  | { readonly kind: 'int'; readonly stride: 1 }
-  | { readonly kind: 'bool'; readonly stride: 1 }
-  | { readonly kind: 'vec2'; readonly stride: 2 }
-  | { readonly kind: 'vec3'; readonly stride: 3 }
-  | { readonly kind: 'color'; readonly stride: 4 }
-  | { readonly kind: 'shape'; readonly stride: 8 }
-  | { readonly kind: 'cameraProjection'; readonly stride: 1 };
-
-/**
- * The kind discriminator for concrete payload types.
- * Use this for switch statements and Record keys.
- */
-export type PayloadKind = ConcretePayloadType['kind'];
-
-// --- Singleton instances for each concrete payload type ---
-// Use these instead of creating new objects. They are identical by reference.
-
-/** Float payload type (stride: 1) */
-export const FLOAT: ConcretePayloadType = { kind: 'float', stride: 1 } as const;
-/** Int payload type (stride: 1) */
-export const INT: ConcretePayloadType = { kind: 'int', stride: 1 } as const;
-/** Bool payload type (stride: 1) */
-export const BOOL: ConcretePayloadType = { kind: 'bool', stride: 1 } as const;
-/** Vec2 payload type (stride: 2) */
-export const VEC2: ConcretePayloadType = { kind: 'vec2', stride: 2 } as const;
-/** Vec3 payload type (stride: 3) */
-export const VEC3: ConcretePayloadType = { kind: 'vec3', stride: 3 } as const;
-/** Color payload type (stride: 4) */
-export const COLOR: ConcretePayloadType = { kind: 'color', stride: 4 } as const;
-/** Shape payload type (stride: 8) */
-export const SHAPE: ConcretePayloadType = { kind: 'shape', stride: 8 } as const;
-/** Camera projection payload type (stride: 1) */
-export const CAMERA_PROJECTION: ConcretePayloadType = { kind: 'cameraProjection', stride: 1 } as const;
-
-/**
- * Map from kind string to singleton instance.
- * Used by payloadFromKind() for deserialization and compatibility.
- */
-const PAYLOAD_BY_KIND: Record<PayloadKind, ConcretePayloadType> = {
-  float: FLOAT,
-  int: INT,
-  bool: BOOL,
-  vec2: VEC2,
-  vec3: VEC3,
-  color: COLOR,
-  shape: SHAPE,
-  cameraProjection: CAMERA_PROJECTION,
-};
-
-/**
- * Get a ConcretePayloadType from its kind string.
- * Used for deserialization and backwards compatibility.
- */
-export function payloadFromKind(kind: PayloadKind): ConcretePayloadType {
-  return PAYLOAD_BY_KIND[kind];
-}
-
-/**
- * The base data type of a value, including unresolved variables.
- *
- * PayloadType can be either:
- * - A concrete type object with kind and stride (e.g., FLOAT, VEC2)
- * - A payload variable { kind: 'var', id: string } for polymorphic ports
- *
- * Payload variables MUST be resolved by the constraint solver before compilation.
- */
-export type PayloadType =
-  | ConcretePayloadType
-  | { readonly kind: 'var'; readonly id: string };  // Unresolved payload variable
-
-let payloadVarCounter = 0;
-/**
- * Create an unresolved payload variable.
- * Payload variables MUST be resolved by the constraint solver before compilation.
- */
-export function payloadVar(id?: string): PayloadType {
-  return { kind: 'var', id: id ?? `_pv${payloadVarCounter++}` };
-}
-
-/**
- * Check if a payload is an unresolved variable.
- */
-export function isPayloadVar(payload: PayloadType): payload is { kind: 'var'; id: string } {
-  return typeof payload === 'object' && payload !== null && payload.kind === 'var';
-}
-
-/**
- * Check if a payload is a concrete (non-variable) type.
- */
-export function isConcretePayload(payload: PayloadType): payload is ConcretePayloadType {
-  return typeof payload === 'object' && payload !== null && 'stride' in payload;
-}
-
-/**
- * Compare two payloads for equality.
- */
-export function payloadsEqual(a: PayloadType, b: PayloadType): boolean {
-  if (isPayloadVar(a) && isPayloadVar(b)) {
-    return a.id === b.id;
-  }
-  if (isPayloadVar(a) || isPayloadVar(b)) {
-    return false;  // One is var, other is concrete
-  }
-  // Both concrete - compare by kind (stride is derived from kind, so kind equality is sufficient)
-  return a.kind === b.kind;
 }
 
 // =============================================================================
@@ -295,7 +297,7 @@ export type ConstValue =
   | { readonly kind: 'vec2'; readonly value: readonly [number, number] }
   | { readonly kind: 'vec3'; readonly value: readonly [number, number, number] }
   | { readonly kind: 'color'; readonly value: readonly [number, number, number, number] }
-  | { readonly kind: 'cameraProjection'; readonly value: string };
+  | { readonly kind: 'cameraProjection'; readonly value: CameraProjection };
 
 /**
  * Validate that ConstValue.kind matches PayloadType.kind.
@@ -365,8 +367,9 @@ export function colorConst(r: number, g: number, b: number, a: number): ConstVal
 
 /**
  * Create a camera projection constant value.
+ * Per resolution Q8: accepts CameraProjection closed enum.
  */
-export function cameraProjectionConst(value: string): ConstValue {
+export function cameraProjectionConst(value: CameraProjection): ConstValue {
   return { kind: 'cameraProjection', value };
 }
 
@@ -378,14 +381,37 @@ export function cameraProjectionConst(value: string): ConstValue {
  *
  * @param type - The payload type (must be concrete)
  * @returns Number of scalar slots required
+ * @deprecated Use payloadStride() instead - this delegates to it
  */
 export function strideOf(type: PayloadType): number {
-  if (isPayloadVar(type)) {
-    throw new Error(`Cannot get stride for payload variable ${type.id} - resolve payload first`);
+  return payloadStride(type);
+}
+
+/**
+ * Get payload stride (derived from payload only).
+ * Per resolution Q7: This is the single authority for stride.
+ * Per resolution Q4: Exhaustive switch with explicit case for every PayloadType kind.
+ */
+export function payloadStride(p: PayloadType): number {
+  if (isPayloadVar(p)) {
+    throw new Error('Cannot get stride for payload variable - resolve payload first');
   }
-  // Stride is now intrinsic to ConcretePayloadType
-  // After isPayloadVar check, type is ConcretePayloadType
-  return (type as ConcretePayloadType).stride;
+
+  // Exhaustive switch - no default fall-through
+  switch (p.kind) {
+    case 'float': return 1;
+    case 'int': return 1;
+    case 'bool': return 1;
+    case 'vec2': return 2;
+    case 'vec3': return 3;
+    case 'color': return 4;
+    case 'cameraProjection': return 1;
+    default: {
+      // Exhaustiveness check - if we reach here, we missed a case
+      const _exhaustive: never = p;
+      throw new Error(`Unknown payload kind: ${(_exhaustive as ConcretePayloadType).kind}`);
+    }
+  }
 }
 
 // =============================================================================
@@ -597,7 +623,7 @@ export interface CanonicalType {
 
 /**
  * Create a Signal canonical type (one + continuous).
- * 
+ *
  * Signal types represent single-lane time-varying values.
  * Examples: time, mouse position, camera FOV.
  */
@@ -617,7 +643,7 @@ export function canonicalSignal(payload: PayloadType, unit: UnitType = { kind: '
 
 /**
  * Create a Field canonical type (many(instance) + continuous).
- * 
+ *
  * Field types represent multi-lane spatially-indexed values.
  * Examples: particle positions, per-instance colors.
  */
@@ -637,7 +663,7 @@ export function canonicalField(payload: PayloadType, unit: UnitType, instance: I
 
 /**
  * Create an Event canonical type with cardinality=one (one + discrete).
- * 
+ *
  * Event types are HARD invariants:
  *   - payload = bool
  *   - unit = none
@@ -660,7 +686,7 @@ export function canonicalEventOne(): CanonicalType {
 
 /**
  * Create an Event canonical type with cardinality=many (many(instance) + discrete).
- * 
+ *
  * Event types are HARD invariants:
  *   - payload = bool
  *   - unit = none
@@ -687,7 +713,7 @@ export function canonicalEventField(instance: InstanceRef): CanonicalType {
 
 /**
  * Derived kind classification (not a separate type system).
- * 
+ *
  * Classification rules:
  * - temporality=discrete → 'event'
  * - temporality=continuous + cardinality=many → 'field'
@@ -710,7 +736,27 @@ export function deriveKind(t: CanonicalType): DerivedKind {
   if (card.kind !== 'inst') {
     throw new Error('Cannot derive kind from type with uninstantiated cardinality axis');
   }
-  
+
+  if (card.value.kind === 'many') return 'field';
+  return 'signal';
+}
+
+/**
+ * Try to derive kind from a CanonicalType.
+ * Returns null if any axis is a variable (not instantiated).
+ *
+ * Per resolution Q3: UI/inference paths use tryDeriveKind; backend paths use strict deriveKind.
+ */
+export function tryDeriveKind(t: CanonicalType): DerivedKind | null {
+  const card = t.extent.cardinality;
+  const tempo = t.extent.temporality;
+
+  // Return null if any axis is var
+  if (tempo.kind !== 'inst') return null;
+  if (card.kind !== 'inst') return null;
+
+  // All axes instantiated - same logic as deriveKind
+  if (tempo.value.kind === 'discrete') return 'event';
   if (card.value.kind === 'many') return 'field';
   return 'signal';
 }
@@ -751,7 +797,7 @@ export function isSignalType(t: CanonicalType): boolean {
 export function assertSignalType(t: CanonicalType): void {
   const k = deriveKind(t);
   if (k !== 'signal') throw new Error(`Expected signal type, got ${k}`);
-  
+
   const card = t.extent.cardinality;
   if (card.kind !== 'inst' || card.value.kind !== 'one') {
     throw new Error('Signal types must have cardinality=one (instantiated)');
@@ -775,10 +821,10 @@ export function isFieldType(t: CanonicalType): boolean {
 export function assertFieldType(t: CanonicalType): InstanceRef {
   const k = deriveKind(t);
   if (k !== 'field') throw new Error(`Expected field type, got ${k}`);
-  
+
   const inst = tryGetManyInstance(t);
   if (!inst) throw new Error('Field types must have cardinality=many(instance) (instantiated)');
-  
+
   const tempo = t.extent.temporality;
   if (tempo.kind !== 'inst' || tempo.value.kind !== 'continuous') {
     throw new Error('Field types must have temporality=continuous (instantiated)');
@@ -799,29 +845,13 @@ export function isEventType(t: CanonicalType): boolean {
 export function assertEventType(t: CanonicalType): void {
   const k = deriveKind(t);
   if (k !== 'event') throw new Error(`Expected event type, got ${k}`);
-  
+
   if (t.payload.kind !== 'bool') throw new Error('Event payload must be bool');
   if (t.unit.kind !== 'none') throw new Error('Event unit must be none');
-  
+
   const tempo = t.extent.temporality;
   if (tempo.kind !== 'inst' || tempo.value.kind !== 'discrete') {
     throw new Error('Event temporality must be discrete (instantiated)');
-  }
-}
-
-/**
- * Get payload stride (derived from payload only).
- */
-export function payloadStride(p: PayloadType): 1 | 2 | 3 | 4 {
-  if (isPayloadVar(p)) {
-    throw new Error('Cannot get stride for payload variable - resolve payload first');
-  }
-  
-  switch (p.kind) {
-    case 'vec2': return 2;
-    case 'vec3': return 3;
-    case 'color': return 4;
-    default: return 1;
   }
 }
 
@@ -884,6 +914,7 @@ export function canonicalType(
 /**
  * V0 canonical default values for each axis.
  *
+ * Per resolution T03-C-3: perspective/branch are now PerspectiveValue/BranchValue objects.
  * @deprecated These defaults were for the old AxisTag system.
  * New code should use canonical constructors that explicitly instantiate values.
  */
@@ -891,17 +922,18 @@ export const DEFAULTS_V0 = {
   cardinality: { kind: 'one' } as CardinalityValue,
   temporality: { kind: 'continuous' } as TemporalityValue,
   binding: { kind: 'unbound' } as BindingValue,
-  perspective: 'global' as string,  // TODO: DEFAULTS_V0 should use PerspectiveValue/BranchValue
-  branch: 'main' as string,
+  perspective: { kind: 'default' } as PerspectiveValue,
+  branch: { kind: 'default' } as BranchValue,
 } as const;
 
 /**
  * V0 evaluation frame defaults.
+ * Per resolution T03-C-3: perspective/branch are now PerspectiveValue/BranchValue objects.
  * @deprecated Use PerspectiveValue/BranchValue instead
  */
 export const FRAME_V0 = {
-  perspective: 'global' as string,  // TODO: FRAME_V0 should use PerspectiveValue/BranchValue
-  branch: 'main' as string,
+  perspective: { kind: 'default' } as PerspectiveValue,
+  branch: { kind: 'default' } as BranchValue,
 } as const;
 
 // =============================================================================
@@ -911,18 +943,18 @@ export const FRAME_V0 = {
 
 /**
  * REMOVED: ResolvedExtent type.
- * 
+ *
  * The new Axis<T,V> system makes this obsolete. All Extent objects with
  * axisInst() are already "resolved". Use Extent directly, or extract
  * values inline with axis.kind === 'inst' ? axis.value : throw.
- * 
+ *
  * @deprecated REMOVED - Do not use
  */
 export type ResolvedExtent = never;
 
 /**
  * REMOVED: resolveExtent function.
- * 
+ *
  * @deprecated REMOVED - Extract axis values directly instead
  */
 export function resolveExtent(_extent: Extent): never {
@@ -1071,9 +1103,9 @@ export function worldToAxes(
 // =============================================================================
 
 /**
- * REMOVED: signalTypeSignal, signalTypeField, signalTypeTrigger, 
+ * REMOVED: signalTypeSignal, signalTypeField, signalTypeTrigger,
  * signalTypeStatic, signalTypePerLaneEvent, signalTypePolymorphic
- * 
+ *
  * Use canonical constructors instead:
  * - signalTypeSignal → canonicalSignal
  * - signalTypeField → canonicalField
@@ -1081,7 +1113,7 @@ export function worldToAxes(
  * - signalTypeStatic → canonicalType with cardinality={kind:'zero'}
  * - signalTypePerLaneEvent → canonicalEventField
  * - signalTypePolymorphic → remove (use proper polymorphic types with vars)
- * 
+ *
  * @deprecated REMOVED
  */
 
@@ -1104,7 +1136,7 @@ export function worldToAxes(
  */
 export function eventType(cardinalityAxis: CardinalityAxis): CanonicalType {
   return {
-    payload: { kind: 'bool', stride: 1 },
+    payload: BOOL,
     unit: { kind: 'none' },
     extent: {
       cardinality: cardinalityAxis,
