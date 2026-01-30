@@ -5,7 +5,7 @@
  */
 
 import type { CanonicalType, ConstValue } from '../../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, CAMERA_PROJECTION, canonicalType, unitScalar, eventTypeScalar, requireManyInstance, constValueMatchesPayload } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, CAMERA_PROJECTION, canonicalType, unitScalar, canonicalEvent, requireManyInstance, constValueMatchesPayload } from '../../core/canonical-types';
 import type { TopologyId } from '../../shapes/types';
 import type { IRBuilder } from './IRBuilder';
 import type {
@@ -549,7 +549,7 @@ export class IRBuilderImpl implements IRBuilder {
   eventPulse(source: 'InfiniteTimeRoot'): EventExprId {
     const expr: EventExprPulse = {
       kind: 'pulse',
-      type: eventTypeScalar(),
+      type: canonicalEvent(),
       source: 'timeRoot',
     };
     const hash = hashEventExpr(expr);
@@ -566,7 +566,7 @@ export class IRBuilderImpl implements IRBuilder {
   eventWrap(signal: SigExprId): EventExprId {
     const expr: EventExprWrap = {
       kind: 'wrap',
-      type: eventTypeScalar(),
+      type: canonicalEvent(),
       signal,
     };
     const hash = hashEventExpr(expr);
@@ -589,7 +589,7 @@ export class IRBuilderImpl implements IRBuilder {
     const underlyingMode = mode === 'merge' || mode === 'last' ? 'any' : mode;
     const expr: EventExprCombine = {
       kind: 'combine',
-      type: eventTypeScalar(),
+      type: canonicalEvent(),
       events,
       mode: underlyingMode as 'any' | 'all',
     };
@@ -611,7 +611,7 @@ export class IRBuilderImpl implements IRBuilder {
   eventNever(): EventExprId {
     const expr: EventExprNever = {
       kind: 'never',
-      type: eventTypeScalar(),
+      type: canonicalEvent(),
     };
     const hash = hashEventExpr(expr);
     const existing = this.eventExprCache.get(hash);

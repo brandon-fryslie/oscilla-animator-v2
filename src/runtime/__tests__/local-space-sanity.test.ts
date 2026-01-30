@@ -19,7 +19,7 @@ import { instanceId, domainTypeId } from "../../core/ids";
  * Returns a CanonicalType with many(instance) cardinality and continuous temporality.
  */
 function testFieldType(payload: PayloadType): CanonicalType {
-  return canonicalField(payload, { kind: 'scalar' }, { instanceId: instanceId('test-instance'), domainTypeId: domainTypeId('default') });
+  return canonicalField(payload, { kind: 'scalar' }, { instanceId: instanceId('test-instance'), domainType: domainTypeId('default') });
 }
 
 describe('Local-Space Sanity Tests', () => {

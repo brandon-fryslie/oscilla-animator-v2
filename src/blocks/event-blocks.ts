@@ -7,7 +7,7 @@
  */
 
 import { registerBlock } from './registry';
-import { canonicalType, canonicalEventOne, strideOf } from '../core/canonical-types';
+import { canonicalType, canonicalEvent, strideOf } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { OpCode, stableStateId } from '../compiler/ir/types';
 import type { SigExprId } from '../compiler/ir/Indices';
@@ -24,7 +24,7 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   inputs: {
-    event: { label: 'Event', type: canonicalEventOne() },
+    event: { label: 'Event', type: canonicalEvent() },
   },
   outputs: {
     out: { label: 'Signal', type: canonicalType(FLOAT) },
@@ -62,7 +62,7 @@ registerBlock({
   isStateful: true,
   inputs: {
     value: { label: 'Value', type: canonicalType(FLOAT) },
-    trigger: { label: 'Trigger', type: canonicalEventOne() },
+    trigger: { label: 'Trigger', type: canonicalEvent() },
     initialValue: { type: canonicalType(FLOAT), value: 0, exposedAsPort: false },
   },
   outputs: {

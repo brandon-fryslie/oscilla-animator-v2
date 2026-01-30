@@ -58,7 +58,7 @@ registerBlock({
     signal: { label: 'Signal', type: inferType(payloadVar('broadcast_payload'), unitVar('broadcast_in')) },
   },
   outputs: {
-    field: { label: 'Field', type: inferField(payloadVar('broadcast_payload'), unitVar('broadcast_in'), { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+    field: { label: 'Field', type: inferField(payloadVar('broadcast_payload'), unitVar('broadcast_in'), { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }) },
   },
   lower: ({ ctx, inputsById }) => {
     // Get resolved payload type from ctx.outTypes (populated from pass1 portTypes)
@@ -76,7 +76,7 @@ registerBlock({
     // Create field broadcast operation with the resolved type
     const fieldId = ctx.b.Broadcast(
       signalValue.id as SigExprId,
-      canonicalField(payloadType, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
+      canonicalField(payloadType, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') })
     );
     const slot = ctx.b.allocSlot();
 
@@ -139,7 +139,7 @@ registerBlock({
   inputs: {
     field: {
       label: 'Field',
-      type: inferField(payloadVar('reduce_payload'), unitVar('reduce_in'), { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
+      type: inferField(payloadVar('reduce_payload'), unitVar('reduce_in'), { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') })
     },
   },
   outputs: {

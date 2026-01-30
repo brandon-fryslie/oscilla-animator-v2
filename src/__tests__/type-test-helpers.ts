@@ -43,9 +43,8 @@ import {
 import { instanceId, domainTypeId } from '../core/ids.js';
 
 // Helper functions for tests
-export function cardinalityZero(): CardinalityValue {
-  return { kind: 'zero' };
-}
+// NOTE: CardinalityValue only has 'one' and 'many', no 'zero'
+// If tests need cardinality=one, use cardinalityOne()
 
 export function cardinalityOne(): CardinalityValue {
   return { kind: 'one' };
@@ -63,15 +62,15 @@ export function temporalityDiscrete(): TemporalityValue {
   return { kind: 'discrete' };
 }
 
-export function bindingUnbound(): BindingValue {
-  return { kind: 'unbound' };
+export function bindingDefault(): BindingValue {
+  return { kind: 'default' };
 }
 
 /**
  * Test helper: create InstanceRef from string literals (uses branded ID casts).
  */
 export function testInstanceRef(instId: string, domainType: string = 'default'): InstanceRef {
-  return { instanceId: instanceId(instId), domainTypeId: domainTypeId(domainType) };
+  return { instanceId: instanceId(instId), domainType: domainTypeId(domainType) };
 }
 
 /**
@@ -257,3 +256,4 @@ export function testEventType(
 export { unitScalar, unitCount, unitPhase01, unitNorm01, unitRadians, unitDegrees, unitNdc2, unitNdc3, unitWorld2, unitWorld3, unitRgba01, unitNone };
 
 // Re-export cardinality constructors
+

@@ -31,8 +31,8 @@ registerBlock({
     seed: { type: canonicalType(INT), value: 0, defaultSource: defaultSourceConst(0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1000, step: 1 } },
   },
   outputs: {
-    rand: { label: 'Random [0,1]', type: canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
-    id01: { label: 'ID [0,1]', type: canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+    rand: { label: 'Random [0,1]', type: canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }) },
+    id01: { label: 'ID [0,1]', type: canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }) },
   },
   lower: ({ ctx, config }) => {
     const seed = (config?.seed as number) ?? 0;
@@ -45,8 +45,8 @@ registerBlock({
 
     // Create field expressions that map instance index to random values
     // Use fieldIntrinsic to get instance-specific values
-    const randField = ctx.b.fieldIntrinsic(instance, 'randomId', canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
-    const id01Field = ctx.b.fieldIntrinsic(instance, 'normalizedIndex', canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
+    const randField = ctx.b.fieldIntrinsic(instance, 'randomId', canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }));
+    const id01Field = ctx.b.fieldIntrinsic(instance, 'normalizedIndex', canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }));
 
     const randSlot = ctx.b.allocSlot();
     const id01Slot = ctx.b.allocSlot();
@@ -80,8 +80,8 @@ registerBlock({
   },
   inputs: {},
   outputs: {
-    index: { label: 'Index', type: canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
-    indexInt: { label: 'Index (int)', type: canonicalField(INT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+    index: { label: 'Index', type: canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }) },
+    indexInt: { label: 'Index (int)', type: canonicalField(INT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }) },
   },
   lower: ({ ctx }) => {
     // Get instance context from Array block or inferred from inputs
@@ -91,8 +91,8 @@ registerBlock({
     }
 
     // Create field expressions that expose instance index
-    const indexField = ctx.b.fieldIntrinsic(instance, 'normalizedIndex', canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
-    const indexIntField = ctx.b.fieldIntrinsic(instance, 'index', canonicalField(INT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
+    const indexField = ctx.b.fieldIntrinsic(instance, 'normalizedIndex', canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }));
+    const indexIntField = ctx.b.fieldIntrinsic(instance, 'index', canonicalField(INT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }));
 
     const indexSlot = ctx.b.allocSlot();
     const indexIntSlot = ctx.b.allocSlot();

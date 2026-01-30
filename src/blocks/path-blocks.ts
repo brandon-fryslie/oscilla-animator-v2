@@ -125,7 +125,7 @@ registerBlock({
   },
   outputs: {
     shape: { label: 'Shape', type: canonicalType(SHAPE) },
-    controlPoints: { label: 'Control Points', type: canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainTypeId: makeDomainTypeId('default') }) },
+    controlPoints: { label: 'Control Points', type: canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainType: makeDomainTypeId('default') }) },
   },
   lower: ({ ctx, inputsById, config }) => {
     // Get sides from config (must be compile-time constant)
@@ -151,7 +151,7 @@ registerBlock({
     const indexField = ctx.b.fieldIntrinsic(
       controlInstance,
       'index',
-      canonicalField(INT, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainTypeId: makeDomainTypeId('default') })
+      canonicalField(INT, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainType: makeDomainTypeId('default') })
     );
 
     // Get radiusX and radiusY signals
@@ -175,7 +175,7 @@ registerBlock({
       indexField,
       [sidesSig, radiusXSig, radiusYSig],
       polygonVertexFn,
-      canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainTypeId: makeDomainTypeId('default') })
+      canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainType: makeDomainTypeId('default') })
     );
 
     // Create shape reference with numeric topology ID
@@ -317,7 +317,7 @@ registerBlock({
   },
   outputs: {
     shape: { label: 'Shape', type: canonicalType(SHAPE) },
-    controlPoints: { label: 'Control Points', type: canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainTypeId: makeDomainTypeId('default') }) },
+    controlPoints: { label: 'Control Points', type: canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainType: makeDomainTypeId('default') }) },
   },
   lower: ({ ctx, inputsById, config }) => {
     // Get points from config (must be compile-time constant)
@@ -346,7 +346,7 @@ registerBlock({
     const indexField = ctx.b.fieldIntrinsic(
       controlInstance,
       'index',
-      canonicalField(INT, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainTypeId: makeDomainTypeId('default') })
+      canonicalField(INT, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainType: makeDomainTypeId('default') })
     );
 
     // Get outerRadius and innerRadius signals
@@ -370,7 +370,7 @@ registerBlock({
       indexField,
       [pointsSig, outerRadiusSig, innerRadiusSig],
       starVertexFn,
-      canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainTypeId: makeDomainTypeId('default') })
+      canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainType: makeDomainTypeId('default') })
     );
 
     // Create shape reference with numeric topology ID
