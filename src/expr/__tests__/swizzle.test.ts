@@ -71,10 +71,6 @@ describe('isVectorType', () => {
   it('returns false for float', () => {
     expect(isVectorType(FLOAT)).toBe(false);
   });
-
-  it('returns false for var type', () => {
-    expect(isVectorType({ kind: 'var', id: 't0' })).toBe(false);
-  });
 });
 
 describe('vectorComponentCount', () => {

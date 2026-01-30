@@ -26,7 +26,7 @@ import type {
   PayloadType,
   ConcretePayloadType,
 } from '../../core/canonical-types';
-import { isAxisInst, isPayloadVar, FLOAT, INT, VEC2, VEC3, COLOR, BOOL,  CAMERA_PROJECTION } from '../../core/canonical-types';
+import { isAxisInst, FLOAT, INT, VEC2, VEC3, COLOR, BOOL,  CAMERA_PROJECTION } from '../../core/canonical-types';
 import type { ShapeDescIR } from './program';
 
 // Type aliases for backward compat
@@ -207,17 +207,11 @@ export function bridgeBindingToIdentityIR(
  *
  * Note: 'phase' and 'unit' are NOT PayloadTypes - they are float with units.
  * Note: Physical storage class is determined separately by SlotMetaEntry.storage
- * Note: Payload variables must be resolved before calling this function.
+ * Note: PayloadType no longer includes variables (they live in InferencePayloadType).
  */
 export function payloadTypeToShapeDescIR(payload: PayloadType): ShapeDescIR {
-  // Payload variables must be resolved before this point
-  if (isPayloadVar(payload)) {
-    throw new Error(`Cannot convert payload variable ${payload.id} to shape descriptor - resolve payload first`);
-  }
-
-  // After the guard, payload is a concrete type (not a variable)
-  const concretePayload = payload as ConcretePayloadType;
-  switch (concretePayload.kind) {
+  // PayloadType is now always concrete (no vars), so we can use it directly
+  switch (payload.kind) {
     case 'float':
     case 'int':
       return { kind: 'number' };
@@ -243,7 +237,7 @@ export function payloadTypeToShapeDescIR(payload: PayloadType): ShapeDescIR {
       return { kind: 'number' };
 
     default:
-      exhaustiveCheck(concretePayload);
+      exhaustiveCheck(payload);
   }
 }
 

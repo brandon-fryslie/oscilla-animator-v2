@@ -40,7 +40,7 @@
  */
 
 import type { BlockId, BlockRole } from '../../types';
-import type { CanonicalType } from '../../core/canonical-types';
+import type { InferenceCanonicalType } from '../../core/inference-types';
 import type { Block, Edge, Patch, LensAttachment } from '../../graph/Patch';
 import { getBlockDefinition, requireBlockDef } from '../../blocks/registry';
 import { findAdapter } from '../../graph/adapters';
@@ -106,7 +106,7 @@ function getPortType(
   blockType: string,
   portId: string,
   direction: 'input' | 'output'
-): CanonicalType | null {
+): InferenceCanonicalType | null {
   const blockDef = getBlockDefinition(blockType);
   if (!blockDef) return null;
 
@@ -194,6 +194,7 @@ function analyzeLenses(
         for (const edge of patch.edges) {
           if (edge.enabled === false) continue;
           if (edge.to.kind !== 'port') continue;
+          if (edge.from.kind !== 'port') continue;
           if (edge.to.blockId !== blockId || edge.to.slotId !== portId) continue;
 
           // Create lens block
@@ -374,6 +375,8 @@ function autoInsertAdapters(patch: Patch): Pass2Result | Pass2Error {
 
   for (const edge of patch.edges) {
     if (edge.enabled === false) continue;
+    if (edge.from.kind !== 'port') continue;
+    if (edge.to.kind !== 'port') continue;
 
     const fromBlock = patch.blocks.get(edge.from.blockId as BlockId);
     const toBlock = patch.blocks.get(edge.to.blockId as BlockId);

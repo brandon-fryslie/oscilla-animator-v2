@@ -4,7 +4,7 @@
  * Additional types for signal and event expressions.
  */
 
-import { payloadStride as corePayloadStride, type PayloadType, type ConcretePayloadType, isPayloadVar } from '../../core/canonical-types';
+import { payloadStride as corePayloadStride, type PayloadType, type ConcretePayloadType } from '../../core/canonical-types';
 
 export type Stride = 0 | 1 | 2 | 3 | 4 | 8;
 
@@ -17,17 +17,11 @@ function assertNever(x: never, msg: string): never {
  *
  * This is used by slot allocation, debug sampling, and any code that needs
  * to reason about multi-component signal payloads.
+ *
+ * Note: PayloadType is now always concrete (no vars), so we can use it directly.
  */
 export function payloadStride(payload: PayloadType): Stride {
-  if (isPayloadVar(payload)) {
-    // Payload variables should be resolved before this point
-    throw new Error(`Cannot get stride for unresolved payload variable: ${payload.id}`);
-  }
-
-  // After the guard, payload is guaranteed to be a ConcretePayloadType
-  // Stride is now baked into the type, so we can just return it directly!
-  const concretePayload = payload as ConcretePayloadType;
-  return corePayloadStride(concretePayload) as Stride;
+  return corePayloadStride(payload) as Stride;
 }
 
 /** True iff this payload can be sampled into numeric components. */

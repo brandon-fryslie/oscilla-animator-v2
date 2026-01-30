@@ -43,13 +43,11 @@ export function componentIndex(char: string): number {
 
 /** Check if payload type supports component access */
 export function isVectorType(payload: PayloadType): boolean {
-  if (payload.kind === 'var') return false;
   return payload.kind === 'vec2' || payload.kind === 'vec3' || payload.kind === 'color';
 }
 
 /** Get max component count for a vector type */
 export function vectorComponentCount(payload: PayloadType): number {
-  if (payload.kind === 'var') return 0;
   switch (payload.kind) {
     case 'vec2': return 2;
     case 'vec3': return 3;

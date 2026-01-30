@@ -16,6 +16,7 @@ import type { ExprNode, Position } from './ast';
 import { withType } from './ast';
 import type { PayloadType } from '../core/canonical-types';
 import { FLOAT, INT, BOOL } from '../core/canonical-types';
+import { isConcretePayload } from '../core/inference-types';
 import type { AddressRegistry } from '../graph/address-registry';
 import { addressToString } from '../types/canonical-address';
 import { isVectorType, validateSwizzle, swizzleResultType } from './swizzle';
@@ -556,17 +557,24 @@ function typecheckMemberAccess(node: ExprNode & { kind: 'member' }, ctx: TypeChe
     );
   }
 
-  // Extract payload type from CanonicalType
-  const payload = resolved.type.payload;
+  // Extract payload type from CanonicalType (may be inference var from BlockDef)
+  const rawPayload = resolved.type.payload;
+
+  // Payload vars are polymorphic — skip validation, default to float for AST annotation
+  if (!isConcretePayload(rawPayload)) {
+    return withType(node, FLOAT);
+  }
+
+  const payload: PayloadType = rawPayload;
 
   // Validate payload type is allowed
   if (!ctx.blockRefs.allowedPayloads.includes(payload)) {
     throw new TypeError(
-      `${shorthand} has type ${payload}, but only ${ctx.blockRefs.allowedPayloads.join(', ')} are allowed`,
+      `${shorthand} has type ${payload.kind}, but only ${ctx.blockRefs.allowedPayloads.map(p => p.kind).join(', ')} are allowed`,
       node.pos,
       ctx.blockRefs.allowedPayloads as PayloadType[],
       payload,
-      `This expression context only accepts ${ctx.blockRefs.allowedPayloads.join(' or ')} types`
+      `This expression context only accepts ${ctx.blockRefs.allowedPayloads.map(p => p.kind).join(' or ')} types`
     );
   }
 

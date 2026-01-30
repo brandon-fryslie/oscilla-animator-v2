@@ -190,10 +190,12 @@ function resolveInputsWithMultiInput(
       continue;
     }
 
+    // portType is InferenceCanonicalType from ResolvedInputSpec, but by this point
+    // in the backend pipeline all types are concrete (vars resolved by solver).
     const combinedRef = createCombineNode(
       combine.mode,
       writerRefs,
-      portType,
+      portType as CanonicalType,
       builder
     );
 

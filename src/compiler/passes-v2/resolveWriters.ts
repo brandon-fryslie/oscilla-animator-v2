@@ -19,9 +19,9 @@
 import type {
   Slot,
   Block,
-  CanonicalType,
   CombineMode,
 } from '../../types';
+import type { InferenceCanonicalType } from '../../core/inference-types';
 import { getBlockDefinition, type InputDef } from '../../blocks/registry';
 import type { CombinePolicy } from './combine-utils';
 import type { NormalizedEdge, BlockIndex } from '../ir/patches';
@@ -57,8 +57,8 @@ export interface ResolvedInputSpec {
   /** Target input endpoint */
   readonly endpoint: InputEndpoint;
 
-  /** Type of the input port */
-  readonly portType: CanonicalType;
+  /** Type of the input port (may contain inference vars before solving) */
+  readonly portType: InferenceCanonicalType;
 
   /** All writers to this input (length >= 1 after defaults injected) */
   readonly writers: readonly Writer[];
@@ -82,7 +82,7 @@ export type InputPortTypeResolver = (args: {
   readonly block: Block;
   readonly slotId: string;
   readonly inputDef: InputDef;
-}) => CanonicalType;
+}) => InferenceCanonicalType;
 
 // =============================================================================
 // Writer Sort Key (Deterministic Ordering)
