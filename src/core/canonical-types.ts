@@ -499,10 +499,16 @@ export function requireInst<T, V>(a: Axis<T, V>, name: string): T {
  * Cardinality: How many instances exist?
  */
 export type CardinalityValue =
+  | { readonly kind: 'zero' }
   | { readonly kind: 'one' }
   | { readonly kind: 'many'; readonly instance: InstanceRef };
 
 export type Cardinality = Axis<CardinalityValue, CardinalityVarId>;
+
+
+export function cardinalityZero(): Cardinality {
+  return axisInst({ kind: 'zero' });
+}
 
 export function cardinalityOne(): Cardinality {
   return axisInst({ kind: 'one' });
@@ -541,12 +547,32 @@ export function temporalityDiscrete(): Temporality {
  * Binding: What instance does this value belong to?
  */
 export type BindingValue =
-  | { readonly kind: 'default' }
-  | { readonly kind: 'specific'; readonly instance: InstanceRef };
+  | { readonly kind: 'unbound' }
+  | { readonly kind: 'weak' }
+  | { readonly kind: 'strong' }
+  | { readonly kind: 'identity' };
 
 export type Binding = Axis<BindingValue, BindingVarId>;
 
-export const DEFAULT_BINDING: BindingValue = { kind: 'default' };
+export const DEFAULT_BINDING: BindingValue = { kind: 'unbound' };
+
+
+export function bindingUnbound(): Binding {
+  return axisInst({ kind: 'unbound' });
+}
+
+export function bindingWeak(): Binding {
+  return axisInst({ kind: 'weak' });
+}
+
+export function bindingStrong(): Binding {
+  return axisInst({ kind: 'strong' });
+}
+
+export function bindingIdentity(): Binding {
+  return axisInst({ kind: 'identity' });
+}
+
 
 /**
  * Perspective: From whose point of view?
@@ -654,12 +680,12 @@ export function canonicalEvent(): CanonicalType {
 }
 
 /**
- * Shallow const value type (one + continuous).
+ * Shallow const value type (one + continuous) - TEMPORARY: using cardinalityOne until pipeline supports zero.
  * Const values use whatever payload/unit is provided but always have one+continuous extent.
  */
 export function canonicalConst(payload: PayloadType, unit?: UnitType): CanonicalType {
   return canonicalType(payload, unit, {
-    cardinality: cardinalityOne(),
+    cardinality: cardinalityOne(), // TODO: Should be cardinalityZero() per spec, but pipeline needs broadcastConstToSignal ops first
     temporality: temporalityContinuous(),
   });
 }
@@ -682,6 +708,7 @@ export type DerivedKind = 'signal' | 'field' | 'event';
  * - discrete → event
  * - many + continuous → field
  * - one + continuous → signal
+ * - zero + continuous → signal (compile-time scalar)
  */
 export function deriveKind(type: CanonicalType): DerivedKind {
   const card = requireInst(type.extent.cardinality, 'cardinality');
@@ -689,7 +716,7 @@ export function deriveKind(type: CanonicalType): DerivedKind {
 
   if (tempo.kind === 'discrete') return 'event';
   if (card.kind === 'many') return 'field';
-  return 'signal';
+  return 'signal'; // Both \'zero\' and \'one\' derive as signal
 }
 
 /**
@@ -710,6 +737,69 @@ export function tryDeriveKind(type: CanonicalType): DerivedKind | null {
 }
 
 // =============================================================================
+// Type Assertion Helpers (Required by spec)
+// =============================================================================
+
+
+/**
+ * Require that a type is a signal type.
+ * Throws if not signal.
+ */
+export function requireSignalType(t: CanonicalType): void {
+  const kind = deriveKind(t);
+  if (kind !== 'signal') {
+    throw new Error(`Expected signal type, got: ${kind}`);
+  }
+}
+
+/**
+ * Require that a type is a field type.
+ * Throws if not field, returns InstanceRef if valid.
+ */
+export function requireFieldType(t: CanonicalType): InstanceRef {
+  const kind = deriveKind(t);
+  if (kind !== 'field') {
+    throw new Error(`Expected field type, got: ${kind}`);
+  }
+  return requireManyInstance(t);
+}
+
+/**
+ * Require that a type is an event type.
+ * Throws if not event.
+ */
+export function requireEventType(t: CanonicalType): void {
+  const kind = deriveKind(t);
+  if (kind !== 'event') {
+    throw new Error(`Expected event type, got: ${kind}`);
+  }
+}
+
+/**
+ * Check if a type is a signal type (boolean check).
+ */
+export function isSignalType(t: CanonicalType): boolean {
+  const kind = tryDeriveKind(t);
+  return kind === 'signal';
+}
+
+/**
+ * Check if a type is a field type (boolean check).
+ */
+export function isFieldType(t: CanonicalType): boolean {
+  const kind = tryDeriveKind(t);
+  return kind === 'field';
+}
+
+/**
+ * Check if a type is an event type (boolean check).
+ */
+export function isEventType(t: CanonicalType): boolean {
+  const kind = tryDeriveKind(t);
+  return kind === 'event';
+}
+
+// =============================================================================
 // Instance References - Domain System (Spec §4)
 // =============================================================================
 
@@ -718,13 +808,13 @@ export function tryDeriveKind(type: CanonicalType): DerivedKind | null {
  * Identifies which domain and which declared instance.
  */
 export interface InstanceRef {
-  readonly domainType: DomainTypeId;
+  readonly domainTypeId: DomainTypeId;
   readonly instanceId: InstanceId;
 }
 
 export function instanceRef(domainType: string, instanceIdStr: string): InstanceRef {
   return {
-    domainType: domainTypeId(domainType),
+    domainTypeId: domainTypeId(domainType),
     instanceId: instanceId(instanceIdStr),
   };
 }
@@ -738,12 +828,12 @@ export function instanceRef(domainType: string, instanceIdStr: string): Instance
  */
 export function cardinalitiesEqual(a: CardinalityValue, b: CardinalityValue): boolean {
   if (a.kind !== b.kind) return false;
-  if (a.kind === 'one') return true;
+  if (a.kind === 'zero' || a.kind === 'one') return true;
   // Both are 'many'
   const aMany = a as Extract<CardinalityValue, { kind: 'many' }>;
   const bMany = b as Extract<CardinalityValue, { kind: 'many' }>;
   return (
-    aMany.instance.domainType === bMany.instance.domainType &&
+    aMany.instance.domainTypeId === bMany.instance.domainTypeId &&
     aMany.instance.instanceId === bMany.instance.instanceId
   );
 }
@@ -759,14 +849,7 @@ export function temporalitiesEqual(a: TemporalityValue, b: TemporalityValue): bo
  * Check if two BindingValue objects are equal.
  */
 export function bindingsEqual(a: BindingValue, b: BindingValue): boolean {
-  if (a.kind !== b.kind) return false;
-  if (a.kind === 'default') return true;
-  const aSpec = a as Extract<BindingValue, { kind: 'specific' }>;
-  const bSpec = b as Extract<BindingValue, { kind: 'specific' }>;
-  return (
-    aSpec.instance.domainType === bSpec.instance.domainType &&
-    aSpec.instance.instanceId === bSpec.instance.instanceId
-  );
+  return a.kind === b.kind;
 }
 
 /**
@@ -778,7 +861,7 @@ export function perspectivesEqual(a: PerspectiveValue, b: PerspectiveValue): boo
   const aSpec = a as Extract<PerspectiveValue, { kind: 'specific' }>;
   const bSpec = b as Extract<PerspectiveValue, { kind: 'specific' }>;
   return (
-    aSpec.instance.domainType === bSpec.instance.domainType &&
+    aSpec.instance.domainTypeId === bSpec.instance.domainTypeId &&
     aSpec.instance.instanceId === bSpec.instance.instanceId
   );
 }
@@ -792,7 +875,7 @@ export function branchesEqual(a: BranchValue, b: BranchValue): boolean {
   const aSpec = a as Extract<BranchValue, { kind: 'specific' }>;
   const bSpec = b as Extract<BranchValue, { kind: 'specific' }>;
   return (
-    aSpec.instance.domainType === bSpec.instance.domainType &&
+    aSpec.instance.domainTypeId === bSpec.instance.domainTypeId &&
     aSpec.instance.instanceId === bSpec.instance.instanceId
   );
 }
@@ -848,7 +931,7 @@ export function typesEqual(a: CanonicalType, b: CanonicalType): boolean {
 export const DEFAULTS_V0: Extent = {
   cardinality: axisInst({ kind: 'one' }),
   temporality: axisInst({ kind: 'continuous' }),
-  binding: axisInst({ kind: 'default' }),
+  binding: axisInst({ kind: 'unbound' }),
   perspective: axisInst({ kind: 'default' }),
   branch: axisInst({ kind: 'default' }),
 };

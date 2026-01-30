@@ -74,14 +74,14 @@ registerBlock({
   inputs: {
     controlPoints: {
       label: 'Control Points',
-      type: canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainType: makeDomainTypeId('default') }),
+      type: canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainTypeId: makeDomainTypeId('default') }),
     },
   },
   outputs: {
-    position: { label: 'Position', type: canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainType: makeDomainTypeId('default') }) },
-    index: { label: 'Index', type: canonicalField(INT, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainType: makeDomainTypeId('default') }) },
-    tangent: { label: 'Tangent', type: canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainType: makeDomainTypeId('default') }) },
-    arcLength: { label: 'Arc Length', type: canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('absolute'), domainType: makeDomainTypeId('default') }) },
+    position: { label: 'Position', type: canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainTypeId: makeDomainTypeId('default') }) },
+    index: { label: 'Index', type: canonicalField(INT, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainTypeId: makeDomainTypeId('default') }) },
+    tangent: { label: 'Tangent', type: canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainTypeId: makeDomainTypeId('default') }) },
+    arcLength: { label: 'Arc Length', type: canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('absolute'), domainTypeId: makeDomainTypeId('default') }) },
   },
   lower: ({ ctx, inputsById }) => {
     const controlPointsInput = inputsById.controlPoints;
@@ -102,14 +102,14 @@ registerBlock({
     const positionFieldId = ctx.b.fieldZip(
       [controlPointsFieldId],
       vec2ToVec3Fn,
-      canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainType: makeDomainTypeId('default') })
+      canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainTypeId: makeDomainTypeId('default') })
     );
 
     // Create index field
     const indexField = ctx.b.fieldIntrinsic(
       instance,
       'index',
-      canonicalField(INT, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainType: makeDomainTypeId('default') })
+      canonicalField(INT, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainTypeId: makeDomainTypeId('default') })
     );
 
     // Create tangent field (MVP: polygonal paths, linear approximation)
@@ -117,14 +117,14 @@ registerBlock({
     const tangentField = ctx.b.fieldPathDerivative(
       controlPointsFieldId,
       'tangent',
-      canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainType: makeDomainTypeId('default') })
+      canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainTypeId: makeDomainTypeId('default') })
     );
 
     // Create arc length field (MVP: cumulative Euclidean distance)
     const arcLengthField = ctx.b.fieldPathDerivative(
       controlPointsFieldId,
       'arcLength',
-      canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('absolute'), domainType: makeDomainTypeId('default') })
+      canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('absolute'), domainTypeId: makeDomainTypeId('default') })
     );
 
     const posSlot = ctx.b.allocSlot();
@@ -208,9 +208,9 @@ registerBlock({
     },
   },
   outputs: {
-    positions: { label: 'Positions', type: canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }) },
-    tangents: { label: 'Tangents', type: canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }) },
-    t: { label: 'T', type: canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }) },
+    positions: { label: 'Positions', type: canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+    tangents: { label: 'Tangents', type: canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+    t: { label: 'T', type: canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
   },
   lower: ({ ctx, inputsById, config }) => {
     // Get count from config
@@ -230,7 +230,7 @@ registerBlock({
     const normalizedIndexField = ctx.b.fieldIntrinsic(
       layoutInstance,
       'normalizedIndex',
-      canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') })
+      canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
     );
 
     // The 't' output is just the normalized index
@@ -250,20 +250,20 @@ registerBlock({
       normalizedIndexField,
       [radiusSig, phaseSig],
       circleLayoutFn,
-      canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') })
+      canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
     );
 
     // For tangents in MVP, we'll output a constant zero field
     // Full tangent calculation requires more complex field operations
     // Users can compute tangents manually if needed
     const zeroSig = ctx.b.sigConst(floatConst(0), canonicalType(FLOAT));
-    const zeroXField = ctx.b.Broadcast(zeroSig, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }));
-    const zeroYField = ctx.b.Broadcast(zeroSig, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }));
+    const zeroXField = ctx.b.Broadcast(zeroSig, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
+    const zeroYField = ctx.b.Broadcast(zeroSig, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
     const makeVec2Fn = ctx.b.kernel('makeVec2');
     const tangentsField = ctx.b.fieldZip(
       [zeroXField, zeroYField],
       makeVec2Fn,
-      canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') })
+      canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
     );
 
     const posSlot = ctx.b.allocSlot();

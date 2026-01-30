@@ -148,6 +148,9 @@ export function formatTypeForDisplay(type: InferenceCanonicalType): string {
   // Cardinality prefix
   let cardStr: string;
   switch (card.kind) {
+    case 'zero':
+      cardStr = 'Const';
+      break;
     case 'one':
       cardStr = 'Signal';
       break;
@@ -308,12 +311,12 @@ function isTypeCompatible(from: InferenceCanonicalType, to: InferenceCanonicalTy
     }
 
     // Domain types must match exactly OR have a valid transformation
-    if (fromInstance.domainType === toInstance.domainType) {
+    if (fromInstance.domainTypeId === toInstance.domainTypeId) {
       return true;
     }
 
     // Check if domain transformation exists (stub for now)
-    return canTransformDomain(fromInstance.domainType, toInstance.domainType);
+    return canTransformDomain(fromInstance.domainTypeId, toInstance.domainTypeId);
   }
 
   return true;

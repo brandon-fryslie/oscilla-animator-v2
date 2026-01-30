@@ -175,7 +175,7 @@ describe('ExternalGate Block', () => {
 
   it('lower function implements >= using 1 - (threshold > input)', () => {
     let externalCalled = false;
-    let constCalls: number[] = [];
+    let constCalls: any[] = [];
     let zipCalls: Array<{ inputs: any[]; opcode: string }> = [];
 
     const mockB = {
@@ -184,9 +184,10 @@ describe('ExternalGate Block', () => {
         expect(channel).toBe('gate.input');
         return 'sig_input' as any;
       },
-      sigConst: (value: number, type: any) => {
+      sigConst: (value: any, type: any) => {
+        // sigConst now receives ConstValue objects, e.g. { kind: 'float', value: 0.7 }
         constCalls.push(value);
-        return `sig_const_${value}` as any;
+        return `sig_const_${value.value}` as any;
       },
       sigZip: (inputs: any[], fn: any, type: any) => {
         zipCalls.push({ inputs, opcode: fn.opcode });
@@ -213,7 +214,8 @@ describe('ExternalGate Block', () => {
     });
 
     expect(externalCalled).toBe(true);
-    expect(constCalls).toEqual([0.7, 1]); // threshold const, then 1 const
+    // sigConst now receives ConstValue objects
+    expect(constCalls.map(c => c.value)).toEqual([0.7, 1]); // threshold const, then 1 const
     expect(zipCalls).toHaveLength(2);
     expect(zipCalls[0].opcode).toBe('gt'); // threshold > input
     expect(zipCalls[1].opcode).toBe('sub'); // 1 - result
@@ -224,11 +226,12 @@ describe('ExternalGate Block', () => {
   it('lower function uses default threshold', () => {
     const mockB = {
       sigExternal: () => 'sig1' as any,
-      sigConst: (value: number) => {
-        if (value !== 1) {
-          expect(value).toBe(0.5); // default threshold
+      sigConst: (value: any) => {
+        // sigConst now receives ConstValue objects
+        if (value.value !== 1) {
+          expect(value.value).toBe(0.5); // default threshold
         }
-        return `const_${value}` as any;
+        return `const_${value.value}` as any;
       },
       sigZip: () => 'sig3' as any,
       allocSlot: () => 'slot1' as any,

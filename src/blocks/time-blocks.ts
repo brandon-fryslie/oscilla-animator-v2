@@ -61,12 +61,18 @@ registerBlock({
     const energySlot = ctx.b.allocSlot();
 
     // Get output types from context
+    // NOTE: ctx.outTypes might exclude event outputs, check what ports are provided
     const tMsType = ctx.outTypes[0];
     const dtType = ctx.outTypes[1];
     const phaseAType = ctx.outTypes[2];
     const phaseBType = ctx.outTypes[3];
-    const paletteType = ctx.outTypes[5];
-    const energyType = ctx.outTypes[6];
+
+    // Event outputs SHOULD have a type in portTypes per spec - it's discrete+bool+none
+    // If ctx.outTypes includes events (length=7), use indices 4,5,6 for pulse,palette,energy
+    // If ctx.outTypes excludes events (length=6), use indices 4,5 for palette,energy
+    const pulseType = canonicalEvent(); // Events always have this type
+    const paletteType = ctx.outTypes.length === 7 ? ctx.outTypes[5] : ctx.outTypes[4];
+    const energyType = ctx.outTypes.length === 7 ? ctx.outTypes[6] : ctx.outTypes[5];
 
     return {
       outputsById: {
@@ -74,7 +80,7 @@ registerBlock({
         dt: { k: 'sig', id: dt, slot: dtSlot, type: dtType, stride: strideOf(dtType.payload) },
         phaseA: { k: 'sig', id: phaseA, slot: phaseASlot, type: phaseAType, stride: strideOf(phaseAType.payload) },
         phaseB: { k: 'sig', id: phaseB, slot: phaseBSlot, type: phaseBType, stride: strideOf(phaseBType.payload) },
-        pulse: { k: 'event', id: pulse, slot: pulseSlot } as any,
+        pulse: { k: 'event', id: pulse, slot: pulseSlot, type: pulseType },
         palette: { k: 'sig', id: palette, slot: paletteSlot, type: paletteType, stride: strideOf(paletteType.payload) },
         energy: { k: 'sig', id: energy, slot: energySlot, type: energyType, stride: strideOf(energyType.payload) },
       },

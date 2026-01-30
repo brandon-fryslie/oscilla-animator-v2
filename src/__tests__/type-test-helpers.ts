@@ -43,8 +43,12 @@ import {
 import { instanceId, domainTypeId } from '../core/ids.js';
 
 // Helper functions for tests
-// NOTE: CardinalityValue only has 'one' and 'many', no 'zero'
-// If tests need cardinality=one, use cardinalityOne()
+// NOTE: CardinalityValue now has \'zero\', \'one\', and \'many\' per spec
+
+
+export function cardinalityZero(): CardinalityValue {
+  return { kind: 'zero' };
+}
 
 export function cardinalityOne(): CardinalityValue {
   return { kind: 'one' };
@@ -62,15 +66,18 @@ export function temporalityDiscrete(): TemporalityValue {
   return { kind: 'discrete' };
 }
 
-export function bindingDefault(): BindingValue {
-  return { kind: 'default' };
+export function bindingUnbound(): BindingValue {
+  return { kind: 'unbound' };
 }
+
+// Backward compat alias
+export const bindingDefault = bindingUnbound;
 
 /**
  * Test helper: create InstanceRef from string literals (uses branded ID casts).
  */
 export function testInstanceRef(instId: string, domainType: string = 'default'): InstanceRef {
-  return { instanceId: instanceId(instId), domainType: domainTypeId(domainType) };
+  return { instanceId: instanceId(instId), domainTypeId: domainTypeId(domainType) };
 }
 
 /**

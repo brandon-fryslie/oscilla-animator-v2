@@ -73,10 +73,10 @@ registerBlock({
     },
   },
   outputs: {
-    elements: { label: 'Elements', type: canonicalField(SHAPE, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }) },
-    index: { label: 'Index', type: canonicalField(INT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }) },
-    t: { label: 'T (0-1)', type: canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }) },
-    active: { label: 'Active', type: canonicalField(BOOL, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }) },
+    elements: { label: 'Elements', type: canonicalField(SHAPE, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+    index: { label: 'Index', type: canonicalField(INT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+    t: { label: 'T (0-1)', type: canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+    active: { label: 'Active', type: canonicalField(BOOL, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
   },
   lower: ({ ctx, inputsById, config }) => {
     const count = (config?.count as number) ?? 100;
@@ -92,14 +92,14 @@ registerBlock({
     if (!elementInput || elementInput.k !== 'sig') {
       throw new Error('Array block requires an element signal input');
     }
-    const elementsField = ctx.b.Broadcast(elementInput.id, canonicalField(SHAPE, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }));
+    const elementsField = ctx.b.Broadcast(elementInput.id, canonicalField(SHAPE, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
 
     // 2. Intrinsic fields (index, t, active)
-    const indexField = ctx.b.fieldIntrinsic(instanceId, 'index', canonicalField(INT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }));
-    const tField = ctx.b.fieldIntrinsic(instanceId, 'normalizedIndex', canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }));
+    const indexField = ctx.b.fieldIntrinsic(instanceId, 'index', canonicalField(INT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
+    const tField = ctx.b.fieldIntrinsic(instanceId, 'normalizedIndex', canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
     // For static arrays, active is always true - we can use a constant broadcast
     const activeSignal = ctx.b.sigConst(boolConst(true), canonicalType(BOOL));
-    const activeField = ctx.b.Broadcast(activeSignal, canonicalField(BOOL, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }));
+    const activeField = ctx.b.Broadcast(activeSignal, canonicalField(BOOL, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
 
     const outType0 = ctx.outTypes[0];
     const outType1 = ctx.outTypes[1];

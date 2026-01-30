@@ -104,7 +104,7 @@ function isTypeCompatible(from: CanonicalType, to: CanonicalType, sourceBlockTyp
     const fromInstance = fromCard.instance;
     const toInstance = toCard.instance;
     if (!fromInstance || !toInstance) return false;
-    return fromInstance.domainType === toInstance.domainType &&
+    return fromInstance.domainTypeId === toInstance.domainTypeId &&
       fromInstance.instanceId === toInstance.instanceId;
   }
 

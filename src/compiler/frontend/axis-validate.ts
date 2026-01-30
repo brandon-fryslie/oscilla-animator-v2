@@ -110,8 +110,8 @@ function assertSignalInvariants(t: CanonicalType): void {
   const card = t.extent.cardinality;
   const tempo = t.extent.temporality;
 
-  if (!isAxisInst(card) || card.value.kind !== 'one') {
-    throw new Error('Signal types must have cardinality=one (instantiated)');
+  if (!isAxisInst(card) || (card.value.kind !== 'one' && card.value.kind !== 'zero')) {
+    throw new Error('Signal types must have cardinality=one or zero (instantiated)');
   }
   if (!isAxisInst(tempo) || tempo.value.kind !== 'continuous') {
     throw new Error('Signal types must have temporality=continuous (instantiated)');
@@ -222,21 +222,17 @@ export function createBindingMismatchError(
  * Determine the appropriate remedy for a binding mismatch.
  */
 function determineBindingRemedy(left: BindingValue, right: BindingValue): BindingMismatchRemedy {
-  // Current binding values are 'default' | 'specific'
-  // If one is default and the other is specific, suggest continuity
-  if (left.kind === 'default' && right.kind === 'specific') {
+  // If one is unbound and the other is bound, suggest continuity
+  if (left.kind === 'unbound' && right.kind !== 'unbound') {
     return 'insert-continuity-op';
   }
-  if (left.kind === 'specific' && right.kind === 'default') {
+  if (left.kind !== 'unbound' && right.kind === 'unbound') {
     return 'insert-continuity-op';
   }
 
-  // If both are specific but to different instances, need state boundary
-  if (left.kind === 'specific' && right.kind === 'specific') {
-    if (left.instance.instanceId !== right.instance.instanceId ||
-        left.instance.domainType !== right.instance.domainType) {
-      return 'insert-state-op';
-    }
+  // If both are bound but to different strengths, need state boundary
+  if (left.kind !== 'unbound' && right.kind !== 'unbound' && left.kind !== right.kind) {
+    return 'insert-state-op';
   }
 
   // Default fallback

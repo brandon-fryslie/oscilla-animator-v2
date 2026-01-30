@@ -49,12 +49,12 @@ registerBlock({
     semantics: 'typeSpecific',
   },
   inputs: {
-    elements: { label: 'Elements', type: canonicalField(SHAPE, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }) },
+    elements: { label: 'Elements', type: canonicalField(SHAPE, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
     rows: { label: 'Rows', type: canonicalType(INT), value: 10, defaultSource: defaultSourceConst(10), exposedAsPort: true, uiHint: { kind: 'slider', min: 1, max: 100, step: 1 } },
     cols: { label: 'Columns', type: canonicalType(INT), value: 10, defaultSource: defaultSourceConst(10), exposedAsPort: true, uiHint: { kind: 'slider', min: 1, max: 100, step: 1 } },
   },
   outputs: {
-    position: { label: 'Position', type: canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }) },
+    position: { label: 'Position', type: canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
   },
   lower: ({ ctx, inputsById, config }) => {
     const elementsInput = inputsById.elements;
@@ -80,7 +80,7 @@ registerBlock({
     const indexField = ctx.b.fieldIntrinsic(
       instanceId,
       'index',
-      canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') })
+      canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
     );
 
     // Apply gridLayout kernel: index + [cols, rows] → vec3 positions
@@ -88,7 +88,7 @@ registerBlock({
       indexField,
       [colsSig, rowsSig],
       { kind: 'kernel', name: 'gridLayout' },
-      canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') })
+      canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
     );
 
     const posType = ctx.outTypes[0];
@@ -132,11 +132,11 @@ registerBlock({
     semantics: 'typeSpecific',
   },
   inputs: {
-    elements: { label: 'Elements', type: canonicalField(SHAPE, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }) },
+    elements: { label: 'Elements', type: canonicalField(SHAPE, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
     spacing: { label: 'Length', type: canonicalType(FLOAT), value: 0.8, defaultSource: defaultSourceConst(0.8), exposedAsPort: true, uiHint: { kind: 'slider', min: 0.1, max: 2, step: 0.01 } },
   },
   outputs: {
-    position: { label: 'Position', type: canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }) },
+    position: { label: 'Position', type: canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
   },
   lower: ({ ctx, inputsById, config }) => {
     const elementsInput = inputsById.elements;
@@ -164,7 +164,7 @@ registerBlock({
     const normalizedIndexField = ctx.b.fieldIntrinsic(
       instanceId,
       'normalizedIndex',
-      canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') })
+      canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
     );
 
     // Apply lineLayout kernel: normalizedIndex + [x0, y0, x1, y1] → vec3 positions
@@ -172,7 +172,7 @@ registerBlock({
       normalizedIndexField,
       [x0Sig, y0Sig, x1Sig, y1Sig],
       { kind: 'kernel', name: 'lineLayout' },
-      canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') })
+      canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
     );
 
     const posType = ctx.outTypes[0];
@@ -220,12 +220,12 @@ registerBlock({
     semantics: 'typeSpecific',
   },
   inputs: {
-    elements: { label: 'Elements', type: canonicalField(SHAPE, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }) },
+    elements: { label: 'Elements', type: canonicalField(SHAPE, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
     radius: { label: 'Radius', type: canonicalType(FLOAT), value: 0.3, defaultSource: defaultSourceConst(0.3), exposedAsPort: true, uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 } },
     phase: { label: 'Phase', type: canonicalType(FLOAT, unitPhase01()), value: 0, defaultSource: defaultSourceConst(0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
   },
   outputs: {
-    position: { label: 'Position', type: canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }) },
+    position: { label: 'Position', type: canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
   },
   lower: ({ ctx, inputsById, config }) => {
     const elementsInput = inputsById.elements;
@@ -251,7 +251,7 @@ registerBlock({
     const normalizedIndexField = ctx.b.fieldIntrinsic(
       instanceId,
       'normalizedIndex',
-      canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') })
+      canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
     );
 
     // Apply circleLayout kernel: normalizedIndex + [radius, phase] → vec3 positions
@@ -259,7 +259,7 @@ registerBlock({
       normalizedIndexField,
       [radiusSig, phaseSig],
       { kind: 'kernel', name: 'circleLayout' },
-      canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') })
+      canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
     );
 
     const posType = ctx.outTypes[0];
@@ -302,14 +302,14 @@ registerBlock({
     semantics: 'typeSpecific',
   },
   inputs: {
-    elements: { label: 'Elements', type: canonicalField(SHAPE, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }) },
+    elements: { label: 'Elements', type: canonicalField(SHAPE, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
     x0: { label: 'Start X', type: canonicalType(FLOAT), value: 0.1, defaultSource: defaultSourceConst(0.1), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
     y0: { label: 'Start Y', type: canonicalType(FLOAT), value: 0.5, defaultSource: defaultSourceConst(0.5), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
     x1: { label: 'End X', type: canonicalType(FLOAT), value: 0.9, defaultSource: defaultSourceConst(0.9), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
     y1: { label: 'End Y', type: canonicalType(FLOAT), value: 0.5, defaultSource: defaultSourceConst(0.5), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
   },
   outputs: {
-    position: { label: 'Position', type: canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }) },
+    position: { label: 'Position', type: canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
   },
   lower: ({ ctx, inputsById, config }) => {
     const elementsInput = inputsById.elements;
@@ -341,7 +341,7 @@ registerBlock({
     const normalizedIndexField = ctx.b.fieldIntrinsic(
       instanceId,
       'normalizedIndex',
-      canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') })
+      canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
     );
 
     // Apply lineLayout kernel: normalizedIndex + [x0, y0, x1, y1] → vec3 positions
@@ -349,7 +349,7 @@ registerBlock({
       normalizedIndexField,
       [x0Sig, y0Sig, x1Sig, y1Sig],
       { kind: 'kernel', name: 'lineLayout' },
-      canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') })
+      canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
     );
 
     const posType = ctx.outTypes[0];
@@ -390,12 +390,12 @@ registerBlock({
     semantics: 'typeSpecific',
   },
   inputs: {
-    elements: { label: 'Elements', type: canonicalField(SHAPE, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }) },
+    elements: { label: 'Elements', type: canonicalField(SHAPE, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
     radius: { label: 'Radius', type: canonicalType(FLOAT), value: 0.3, defaultSource: defaultSourceConst(0.3), exposedAsPort: true, uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 } },
     phase: { label: 'Phase', type: canonicalType(FLOAT, unitPhase01()), value: 0, defaultSource: defaultSourceConst(0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
   },
   outputs: {
-    position: { label: 'Position', type: canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }) },
+    position: { label: 'Position', type: canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
   },
   // NOTE: basisKind configuration will be added when BlockDef supports config.
   // For now, using 'halton2D' as the default basis kind for gauge-invariant layouts.
@@ -427,7 +427,7 @@ registerBlock({
       instanceId,
       'uv',
       basisKind,
-      canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') })
+      canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
     );
 
     // Apply circleLayoutUV kernel: uv + [radius, phase] → vec3 positions
@@ -435,7 +435,7 @@ registerBlock({
       uvField,
       [radiusSig, phaseSig],
       { kind: 'kernel', name: 'circleLayoutUV' },
-      canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') })
+      canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
     );
 
     const posType = ctx.outTypes[0];
@@ -476,14 +476,14 @@ registerBlock({
     semantics: 'typeSpecific',
   },
   inputs: {
-    elements: { label: 'Elements', type: canonicalField(SHAPE, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }) },
+    elements: { label: 'Elements', type: canonicalField(SHAPE, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
     x0: { label: 'Start X', type: canonicalType(FLOAT), value: 0.2, defaultSource: defaultSourceConst(0.2), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
     y0: { label: 'Start Y', type: canonicalType(FLOAT), value: 0.2, defaultSource: defaultSourceConst(0.2), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
     x1: { label: 'End X', type: canonicalType(FLOAT), value: 0.8, defaultSource: defaultSourceConst(0.8), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
     y1: { label: 'End Y', type: canonicalType(FLOAT), value: 0.8, defaultSource: defaultSourceConst(0.8), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
   },
   outputs: {
-    position: { label: 'Position', type: canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }) },
+    position: { label: 'Position', type: canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
   },
   // NOTE: basisKind configuration will be added when BlockDef supports config.
   // For now, using 'halton2D' as the default basis kind for gauge-invariant layouts.
@@ -521,7 +521,7 @@ registerBlock({
       instanceId,
       'uv',
       basisKind,
-      canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') })
+      canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
     );
 
     // Apply lineLayoutUV kernel: uv + [x0, y0, x1, y1] → vec3 positions
@@ -529,7 +529,7 @@ registerBlock({
       uvField,
       [x0Sig, y0Sig, x1Sig, y1Sig],
       { kind: 'kernel', name: 'lineLayoutUV' },
-      canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') })
+      canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
     );
 
     const posType = ctx.outTypes[0];
@@ -570,12 +570,12 @@ registerBlock({
     semantics: 'typeSpecific',
   },
   inputs: {
-    elements: { label: 'Elements', type: canonicalField(SHAPE, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }) },
+    elements: { label: 'Elements', type: canonicalField(SHAPE, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
     cols: { label: 'Columns', type: canonicalType(INT), value: 5, defaultSource: defaultSourceConst(5), exposedAsPort: true, uiHint: { kind: 'slider', min: 1, max: 20, step: 1 } },
     rows: { label: 'Rows', type: canonicalType(INT), value: 5, defaultSource: defaultSourceConst(5), exposedAsPort: true, uiHint: { kind: 'slider', min: 1, max: 20, step: 1 } },
   },
   outputs: {
-    position: { label: 'Position', type: canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }) },
+    position: { label: 'Position', type: canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
   },
   // NOTE: basisKind configuration will be added when BlockDef supports config.
   // For GridLayoutUV, using 'grid' as the default basis kind for proper grid alignment.
@@ -607,7 +607,7 @@ registerBlock({
       instanceId,
       'uv',
       basisKind,
-      canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') })
+      canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
     );
 
     // Apply gridLayoutUV kernel: uv + [cols, rows] → vec3 positions
@@ -615,7 +615,7 @@ registerBlock({
       uvField,
       [colsSig, rowsSig],
       { kind: 'kernel', name: 'gridLayoutUV' },
-      canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') })
+      canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
     );
 
     const posType = ctx.outTypes[0];

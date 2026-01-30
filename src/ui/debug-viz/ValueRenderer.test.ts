@@ -63,11 +63,12 @@ describe('ValueRenderer registry', () => {
       expect(getDataAttr(el, 'renderer')).toBe('cat-numeric');
     });
 
-    it('tier 3: shape category fallback', () => {
+    it('SHAPE (aliased to FLOAT) resolves to payload-float renderer', () => {
+      // Per Q6: SHAPE === FLOAT, so it matches at tier 2 (payload-float)
       const type = canonicalType(SHAPE);
       const renderer = getValueRenderer(type);
       const el = renderer.renderFull({ type: 'scalar', components: new Float32Array([0]), stride: 0 });
-      expect(getDataAttr(el, 'renderer')).toBe('cat-shape');
+      expect(getDataAttr(el, 'renderer')).toBe('payload-float');
     });
 
     it('bool falls to category:numeric', () => {

@@ -39,9 +39,8 @@ export function getBufferFormat(payload: PayloadType): BufferFormat {
     case 'cameraProjection':
       return 'f32';
 
-    // Shape descriptors -> shape2d
-    // TODO: Q6 case 'shape':
-      return 'shape2d';
+    // NOTE: 'shape' removed per Q6 - shapes are resources, not payloads.
+    // SHAPE is aliased to FLOAT and handled by the float case above.
 
     // 2D vectors
     case 'vec2':

@@ -69,7 +69,7 @@ registerBlock({
       if (a.k === 'field') {
         aField = a.id;
       } else if (a.k === 'sig') {
-        aField = ctx.b.Broadcast(a.id, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }));
+        aField = ctx.b.Broadcast(a.id, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
       } else {
         throw new Error('Unexpected input type for Add field path');
       }
@@ -78,13 +78,13 @@ registerBlock({
       if (b.k === 'field') {
         bField = b.id;
       } else if (b.k === 'sig') {
-        bField = ctx.b.Broadcast(b.id, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }));
+        bField = ctx.b.Broadcast(b.id, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
       } else {
         throw new Error('Unexpected input type for Add field path');
       }
 
       const addFn = ctx.b.kernel('fieldAdd');
-      const fieldId = ctx.b.fieldZip([aField as FieldExprId, bField as FieldExprId], addFn, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }));
+      const fieldId = ctx.b.fieldZip([aField as FieldExprId, bField as FieldExprId], addFn, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
 
@@ -158,7 +158,7 @@ registerBlock({
       if (a.k === 'field') {
         aField = a.id;
       } else if (a.k === 'sig') {
-        aField = ctx.b.Broadcast(a.id, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }));
+        aField = ctx.b.Broadcast(a.id, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
       } else {
         throw new Error('Unexpected input type for Subtract field path');
       }
@@ -167,13 +167,13 @@ registerBlock({
       if (b.k === 'field') {
         bField = b.id;
       } else if (b.k === 'sig') {
-        bField = ctx.b.Broadcast(b.id, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }));
+        bField = ctx.b.Broadcast(b.id, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
       } else {
         throw new Error('Unexpected input type for Subtract field path');
       }
 
       const subFn = ctx.b.kernel('fieldSubtract');
-      const fieldId = ctx.b.fieldZip([aField as FieldExprId, bField as FieldExprId], subFn, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }));
+      const fieldId = ctx.b.fieldZip([aField as FieldExprId, bField as FieldExprId], subFn, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
 
@@ -247,7 +247,7 @@ registerBlock({
       if (a.k === 'field') {
         aField = a.id;
       } else if (a.k === 'sig') {
-        aField = ctx.b.Broadcast(a.id, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }));
+        aField = ctx.b.Broadcast(a.id, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
       } else {
         throw new Error('Unexpected input type for Multiply field path');
       }
@@ -256,13 +256,13 @@ registerBlock({
       if (b.k === 'field') {
         bField = b.id;
       } else if (b.k === 'sig') {
-        bField = ctx.b.Broadcast(b.id, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }));
+        bField = ctx.b.Broadcast(b.id, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
       } else {
         throw new Error('Unexpected input type for Multiply field path');
       }
 
       const mulFn = ctx.b.kernel('fieldMultiply');
-      const fieldId = ctx.b.fieldZip([aField as FieldExprId, bField as FieldExprId], mulFn, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }));
+      const fieldId = ctx.b.fieldZip([aField as FieldExprId, bField as FieldExprId], mulFn, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
 
@@ -336,7 +336,7 @@ registerBlock({
       if (a.k === 'field') {
         aField = a.id;
       } else if (a.k === 'sig') {
-        aField = ctx.b.Broadcast(a.id, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }));
+        aField = ctx.b.Broadcast(a.id, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
       } else {
         throw new Error('Unexpected input type for Divide field path');
       }
@@ -345,13 +345,13 @@ registerBlock({
       if (b.k === 'field') {
         bField = b.id;
       } else if (b.k === 'sig') {
-        bField = ctx.b.Broadcast(b.id, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }));
+        bField = ctx.b.Broadcast(b.id, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
       } else {
         throw new Error('Unexpected input type for Divide field path');
       }
 
       const divFn = ctx.b.kernel('fieldDivide');
-      const fieldId = ctx.b.fieldZip([aField as FieldExprId, bField as FieldExprId], divFn, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }));
+      const fieldId = ctx.b.fieldZip([aField as FieldExprId, bField as FieldExprId], divFn, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
 
@@ -425,7 +425,7 @@ registerBlock({
       if (a.k === 'field') {
         aField = a.id;
       } else if (a.k === 'sig') {
-        aField = ctx.b.Broadcast(a.id, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }));
+        aField = ctx.b.Broadcast(a.id, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
       } else {
         throw new Error('Unexpected input type for Modulo field path');
       }
@@ -434,13 +434,13 @@ registerBlock({
       if (b.k === 'field') {
         bField = b.id;
       } else if (b.k === 'sig') {
-        bField = ctx.b.Broadcast(b.id, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }));
+        bField = ctx.b.Broadcast(b.id, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
       } else {
         throw new Error('Unexpected input type for Modulo field path');
       }
 
       const modFn = ctx.b.kernel('fieldModulo');
-      const fieldId = ctx.b.fieldZip([aField as FieldExprId, bField as FieldExprId], modFn, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainType: makeDomainTypeId('default') }));
+      const fieldId = ctx.b.fieldZip([aField as FieldExprId, bField as FieldExprId], modFn, canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
 

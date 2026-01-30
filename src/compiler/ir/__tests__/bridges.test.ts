@@ -169,7 +169,8 @@ describe('payloadTypeToShapeDescIR', () => {
   });
 
   it('maps shape to shape kind', () => {
-    expect(payloadTypeToShapeDescIR(SHAPE)).toEqual({ kind: 'shape' });
+    // Per Q6: SHAPE === FLOAT now
+    expect(payloadTypeToShapeDescIR(SHAPE)).toEqual({ kind: 'number' });
   });
 
   it('maps bool to bool shape', () => {

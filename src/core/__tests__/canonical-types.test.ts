@@ -11,26 +11,13 @@ import {
   type PayloadType,
 
   // Axis
-  type Axis,
   axisInst,
-  axisVar,
   isAxisInst,
 
   // Cardinality
-  type CardinalityValue,
   type Cardinality,
 
-  // Temporality
-  type TemporalityValue,
-
-  // Binding
-  type BindingValue,
-
-  // Extent
-  type Extent,
-
   // CanonicalType
-  type CanonicalType,
   canonicalType,
 
   // Derived types
@@ -41,9 +28,8 @@ import {
   // Instance system
   instanceRef,
 } from '../canonical-types';
-import { isPayloadVar, isConcretePayload } from '../inference-types';
+import { isConcretePayload } from '../inference-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION, payloadStride } from '../canonical-types';
-import { instanceId, domainTypeId } from '../ids';
 
 // =============================================================================
 // PayloadType Tests

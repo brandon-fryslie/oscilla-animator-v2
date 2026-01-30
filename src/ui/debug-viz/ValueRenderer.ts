@@ -69,6 +69,16 @@ export function registerRenderer(key: string, renderer: ValueRenderer): void {
 }
 
 /**
+ * Convert a UnitType to its registry key string.
+ * Simple kinds (none, scalar, norm01, count) use just the kind.
+ * Structured kinds (angle, time, space, color) use the sub-unit for specificity.
+ */
+function unitToRegistryKey(unit: CanonicalType['unit']): string {
+  if ('unit' in unit) return unit.unit; // angle, time, space, color
+  return unit.kind; // none, scalar, norm01, count
+}
+
+/**
  * Get the appropriate renderer for a CanonicalType using 3-tier fallback.
  *
  * 1. Exact match: "{payload}:{unit.kind}"
@@ -86,8 +96,9 @@ export function getValueRenderer(type: CanonicalType): ValueRenderer {
   const payloadKey = type.payload.kind;
 
   // Tier 1: Exact match (payload + unit)
-  const unitKind = type.unit.kind;
-  const exactKey = `${payloadKey}:${unitKind}`;
+  // For structured units (angle, time, space, color), use the sub-unit for specificity
+  const unitKey = unitToRegistryKey(type.unit);
+  const exactKey = `${payloadKey}:${unitKey}`;
   const exact = registry.get(exactKey);
   if (exact) return exact;
 

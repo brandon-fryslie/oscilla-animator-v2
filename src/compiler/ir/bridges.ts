@@ -93,8 +93,10 @@ export function bridgeExtentToAxesDescIR(extent: Extent): {
  */
 export function bridgeCardinalityToIR(
   cardinality: Cardinality
-): 'signal' | 'field' {
+): 'value' | 'signal' | 'field' {
   switch (cardinality.kind) {
+    case 'zero':
+      return 'value';
     case 'one':
       return 'signal';
     case 'many':
@@ -183,13 +185,15 @@ export function bridgeBindingToIdentityIR(
       readonly keyTag?: string;
     } {
   switch (binding.kind) {
-    case 'default':
+    case 'unbound':
       return { kind: 'none' };
 
-    case 'specific':
-      // Specific bindings use 'entity' keyspace
+    case 'identity':
       return { kind: 'keyed', keySpace: 'entity' };
 
+    case 'weak':
+    case 'strong':
+      return { kind: 'keyed', keySpace: 'custom' };
 
     default:
       exhaustiveCheck(binding);
@@ -234,8 +238,7 @@ export function payloadTypeToShapeDescIR(payload: PayloadType): ShapeDescIR {
     case 'bool':
       return { kind: 'bool' };
 
-    // TODO: Q6 case 'shape':
-      return { kind: 'shape' };
+    // TODO: Q6 - shape handling deferred
 
     case 'cameraProjection':
       // cameraProjection is a scalar enum stored as number (0=ortho, 1=persp)

@@ -19,9 +19,8 @@
 import { describe, it, expect } from 'vitest';
 import { IRBuilderImpl } from '../ir/IRBuilderImpl';
 import { OpCode } from '../ir/types';
-import { canonicalField, canonicalSignal, floatConst, intConst, vec2Const, instanceRef } from '../../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../core/canonical-types';
-import { instanceId, domainTypeId } from '../../core/ids';
+import { canonicalField, canonicalSignal, floatConst, intConst, instanceRef } from '../../core/canonical-types';
+import { FLOAT, INT, VEC2 } from '../../core/canonical-types';
 import { DOMAIN_CIRCLE } from '../../core/domain-registry';
 
 describe('Instance Unification', () => {
@@ -29,7 +28,7 @@ describe('Instance Unification', () => {
     it('returns instanceId for index intrinsic', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const instanceRef_ = instanceRef(instance, domainTypeId("default"));
+      const instanceRef_ = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const type = canonicalField(FLOAT, { kind: "scalar" }, instanceRef_);
       const field = b.fieldIntrinsic(instance, 'index', type);
 
@@ -40,7 +39,7 @@ describe('Instance Unification', () => {
     it('returns instanceId for normalizedIndex intrinsic', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const instanceRef_ = instanceRef(instance, domainTypeId("default"));
+      const instanceRef_ = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const type = canonicalField(FLOAT, { kind: "scalar" }, instanceRef_);
       const field = b.fieldIntrinsic(instance, 'normalizedIndex', type);
 
@@ -50,7 +49,7 @@ describe('Instance Unification', () => {
     it('returns instanceId for randomId intrinsic', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const instanceRef_ = instanceRef(instance, domainTypeId("default"));
+      const instanceRef_ = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const type = canonicalField(FLOAT, { kind: "scalar" }, instanceRef_);
       const field = b.fieldIntrinsic(instance, 'randomId', type);
 
@@ -62,7 +61,7 @@ describe('Instance Unification', () => {
     it('returns undefined for broadcast fields', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const instanceRef_ = instanceRef(instance, domainTypeId("default"));
+      const instanceRef_ = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const type = canonicalField(FLOAT, { kind: "scalar" }, instanceRef_);
       const sig = b.sigConst(floatConst(1.0), canonicalSignal(FLOAT));
       const broadcast = b.Broadcast(sig, type);
@@ -74,7 +73,7 @@ describe('Instance Unification', () => {
     it('returns undefined for const fields', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const instanceRef_ = instanceRef(instance, domainTypeId("default"));
+      const instanceRef_ = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const type = canonicalField(FLOAT, { kind: "scalar" }, instanceRef_);
       const constField = b.fieldConst(floatConst(42), type);
 
@@ -87,7 +86,7 @@ describe('Instance Unification', () => {
     it('returns instanceId for kernel-based layout fields', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const instanceRef_ = instanceRef(instance, domainTypeId("default"));
+      const instanceRef_ = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const floatType = canonicalField(FLOAT, { kind: "scalar" }, instanceRef_);
       const vec2Type = canonicalField(VEC2, { kind: "scalar" }, instanceRef_);
       
@@ -114,7 +113,7 @@ describe('Instance Unification', () => {
     it('propagates instanceId through map on intrinsic', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const instanceRef_ = instanceRef(instance, domainTypeId("default"));
+      const instanceRef_ = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const type = canonicalField(FLOAT, { kind: "scalar" }, instanceRef_);
       const intrinsic = b.fieldIntrinsic(instance, 'index', type);
       const mapped = b.fieldMap(intrinsic, { kind: 'opcode', opcode: OpCode.Sin }, type);
@@ -126,7 +125,7 @@ describe('Instance Unification', () => {
     it('propagates instanceId through zipSig on intrinsic', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const instanceRef_ = instanceRef(instance, domainTypeId("default"));
+      const instanceRef_ = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const fieldType = canonicalField(FLOAT, { kind: "scalar" }, instanceRef_);
       const sigType = canonicalSignal(FLOAT);
       const intrinsic = b.fieldIntrinsic(instance, 'index', fieldType);
@@ -139,7 +138,7 @@ describe('Instance Unification', () => {
     it('unifies instance for zip of intrinsics from same instance', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const instanceRef_ = instanceRef(instance, domainTypeId("default"));
+      const instanceRef_ = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const type = canonicalField(FLOAT, { kind: "scalar" }, instanceRef_);
       const field1 = b.fieldIntrinsic(instance, 'index', type);
       const field2 = b.fieldIntrinsic(instance, 'normalizedIndex', type);
@@ -152,8 +151,8 @@ describe('Instance Unification', () => {
       const b = new IRBuilderImpl();
       const instance1 = b.createInstance(DOMAIN_CIRCLE, 10);
       const instance2 = b.createInstance(DOMAIN_CIRCLE, 20);
-      const instanceRef1 = instanceRef(instance1, domainTypeId("default"));
-      const instanceRef2 = instanceRef(instance2, domainTypeId("default"));
+      const instanceRef1 = instanceRef(DOMAIN_CIRCLE as string, instance1 as string);
+      const instanceRef2 = instanceRef(DOMAIN_CIRCLE as string, instance2 as string);
       const type1 = canonicalField(FLOAT, { kind: "scalar" }, instanceRef1);
       const type2 = canonicalField(FLOAT, { kind: "scalar" }, instanceRef2);
       const field1 = b.fieldIntrinsic(instance1, 'index', type1);
@@ -168,7 +167,7 @@ describe('Instance Unification', () => {
     it('propagates instance through zip of intrinsic and broadcast', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const instanceRef_ = instanceRef(instance, domainTypeId("default"));
+      const instanceRef_ = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const type = canonicalField(FLOAT, { kind: "scalar" }, instanceRef_);
       const intrinsic = b.fieldIntrinsic(instance, 'index', type);
       const sig = b.sigConst(floatConst(1.0), canonicalSignal(FLOAT));
@@ -182,7 +181,7 @@ describe('Instance Unification', () => {
     it('propagates instance through map after zip of intrinsics', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const instanceRef_ = instanceRef(instance, domainTypeId("default"));
+      const instanceRef_ = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const type = canonicalField(FLOAT, { kind: "scalar" }, instanceRef_);
       const field1 = b.fieldIntrinsic(instance, 'index', type);
       const field2 = b.fieldIntrinsic(instance, 'normalizedIndex', type);
@@ -197,7 +196,7 @@ describe('Instance Unification', () => {
     it('returns undefined for zip of multiple broadcasts (all instance-agnostic)', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const instanceRef_ = instanceRef(instance, domainTypeId("default"));
+      const instanceRef_ = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const type = canonicalField(FLOAT, { kind: "scalar" }, instanceRef_);
       const sig1 = b.sigConst(floatConst(1.0), canonicalSignal(FLOAT));
       const sig2 = b.sigConst(floatConst(2.0), canonicalSignal(FLOAT));
