@@ -9,7 +9,7 @@ import { registerBlock, type BlockDef } from '../../../blocks/registry';
 import { addressToString } from '../../../types/canonical-address';
 import { getOutputAddress, getInputAddress } from '../../addressing';
 import { canonicalType, unitNorm01 } from '../../../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../../core/canonical-types';
 
 // Register test blocks
 beforeAll(() => {

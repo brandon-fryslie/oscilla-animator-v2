@@ -14,7 +14,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { debugService } from './DebugService';
 import type { ValueSlot } from '../types';
 import { canonicalType } from '../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../core/canonical-types';
 
 describe('DebugService', () => {
     beforeEach(() => {

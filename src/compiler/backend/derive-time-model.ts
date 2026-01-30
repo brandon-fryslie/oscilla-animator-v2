@@ -8,7 +8,7 @@ import type { Block } from '../../graph/Patch';
 import type { TimeModelIR, TimeSignals, TypedPatch, TimeResolvedPatch } from '../ir';
 import { IRBuilderImpl } from '../ir/IRBuilderImpl';
 import { canonicalType, unitPhase01 } from '../../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../core/canonical-types';
 
 // =============================================================================
 // Error Types

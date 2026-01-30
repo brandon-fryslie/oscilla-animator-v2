@@ -15,7 +15,7 @@
 import type { Patch } from '../graph/Patch';
 import type { AddressRegistry } from '../graph/address-registry';
 import type { PayloadType } from '../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../core/canonical-types';
 import { BLOCK_DEFS_BY_TYPE } from '../blocks/registry';
 import { addressToString } from '../types/canonical-address';
 

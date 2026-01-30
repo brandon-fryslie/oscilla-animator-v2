@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../core/canonical-types';
 import type { DiagnosticCode, DiagnosticPayload, TargetRef } from '../types';
 import { generateDiagnosticId } from '../diagnosticId';
 

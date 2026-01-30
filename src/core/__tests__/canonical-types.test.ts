@@ -57,7 +57,7 @@ import {
   isPayloadVar,
   isConcretePayload,
 } from '../canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../canonical-types';
 import { instanceId, domainTypeId } from '../ids';
 
 // =============================================================================
@@ -344,7 +344,7 @@ describe('EventExpr Type Invariants', () => {
 
     // Hard invariant: payload must be bool
     expect(type.payload.kind).toBe('bool');
-    expect(isConcretePayload(type.payload) ? type.payload.stride : 1).toBe(1);
+    expect(isConcretePayload(type.payload) ? payloadStride(type.payload) : 1).toBe(1);
 
     // Hard invariant: unit must be none
     expect(type.unit.kind).toBe('none');
@@ -373,7 +373,7 @@ describe('EventExpr Type Invariants', () => {
 
     // Hard invariant: payload must be bool
     expect(type.payload.kind).toBe('bool');
-    expect(isConcretePayload(type.payload) ? type.payload.stride : 1).toBe(1);
+    expect(isConcretePayload(type.payload) ? payloadStride(type.payload) : 1).toBe(1);
 
     // Hard invariant: unit must be none
     expect(type.unit.kind).toBe('none');

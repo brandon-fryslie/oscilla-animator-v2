@@ -28,7 +28,7 @@ import {
   strideOf,
   floatConst,
 } from '../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../core/canonical-types';
 import { OpCode } from '../compiler/ir/types';
 import type { SigExprId } from '../compiler/ir/Indices';
 

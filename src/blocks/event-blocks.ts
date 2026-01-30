@@ -8,7 +8,7 @@
 
 import { registerBlock } from './registry';
 import { canonicalType, canonicalEventOne, strideOf } from '../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../core/canonical-types';
 import { OpCode, stableStateId } from '../compiler/ir/types';
 import type { SigExprId } from '../compiler/ir/Indices';
 
@@ -36,7 +36,7 @@ registerBlock({
     }
 
     // Read the event scalar as a float signal (0.0 or 1.0)
-    const sigId = ctx.b.sigEventRead(eventInput.slot, canonicalType(FLOAT));
+    const sigId = ctx.b.sigEventRead(eventInput.slot);
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
@@ -91,7 +91,7 @@ registerBlock({
     const prevId = ctx.b.sigStateRead(stateSlot, canonicalType(FLOAT));
 
     // Read event scalar as float (0.0 or 1.0)
-    const triggerSig = ctx.b.sigEventRead(triggerInput.slot, canonicalType(FLOAT));
+    const triggerSig = ctx.b.sigEventRead(triggerInput.slot);
 
     // Conditional via lerp: lerp(prev, value, trigger)
     // trigger=0 → output=prev (hold), trigger=1 → output=value (sample)

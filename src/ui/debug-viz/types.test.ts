@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { getSampleEncoding, serializeKey, type DebugTargetKey, type Stride } from './types';
 import type { PayloadType } from '../../core/canonical-types';
-import { FLOAT, INT, VEC2, COLOR, BOOL, SHAPE } from '../../core/canonical-types';
+import { FLOAT, INT, VEC2, COLOR, BOOL, } from '../../core/canonical-types';
 
 describe('getSampleEncoding', () => {
   it('returns stride=1 for float', () => {

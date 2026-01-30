@@ -7,8 +7,8 @@
  */
 
 import { registerBlock } from './registry';
-import { canonicalType, canonicalField, strideOf, floatConst, vec2Const, intConst } from '../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
+import { canonicalType, canonicalField, strideOf, payloadStride, floatConst, vec2Const, intConst } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../core/canonical-types';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../core/ids';
 import { DOMAIN_CONTROL } from '../core/domain-registry';
 import { PathVerb, type PathTopologyDef } from '../shapes/types';
@@ -183,7 +183,7 @@ registerBlock({
       topologyId,  // Numeric ID returned from registerDynamicTopology
       [],  // No topology params
       canonicalType(SHAPE),
-      { id: computedPositions, stride: VEC2.stride }  // Control point field with stride
+      { id: computedPositions, stride: payloadStride(VEC2) }  // Control point field with stride
     );
 
     const shapeSlot = ctx.b.allocSlot();
@@ -378,7 +378,7 @@ registerBlock({
       topologyId,  // Numeric ID returned from registerDynamicTopology
       [],  // No topology params
       canonicalType(SHAPE),
-      { id: computedPositions, stride: VEC2.stride }  // Control point field with stride
+      { id: computedPositions, stride: payloadStride(VEC2) }  // Control point field with stride
     );
 
     const shapeSlot = ctx.b.allocSlot();

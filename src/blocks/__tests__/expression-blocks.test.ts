@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import '../expression-blocks'; // Import to register block
 import { getBlockDefinition } from '../registry';
 import { canonicalType, type CanonicalType, strideOf, isPayloadVar, floatConst, intConst } from '../../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../core/canonical-types';
 import { IRBuilderImpl } from '../../compiler/ir/IRBuilderImpl';
 import type { LowerCtx } from '../registry';
 import { blockIndex } from '../../compiler/frontend/normalize-indexing';

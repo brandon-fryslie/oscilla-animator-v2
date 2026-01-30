@@ -18,7 +18,7 @@ import type { StepEvalSig, ValueSlot } from '../../compiler/ir/types';
 import type { CompiledProgramIR, computeStorageSizes } from '../../compiler/ir/program';
 import { computeStorageSizes as getStorageSizes } from '../../compiler/ir/program';
 import { canonicalType } from '../../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../core/canonical-types';
 
 /**
  * Build a slot->offset map from slotMeta.

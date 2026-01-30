@@ -13,7 +13,7 @@ import {
 import type { StepRender, InstanceDecl, SigExpr } from '../../compiler/ir/types';
 import { instanceId } from '../../compiler/ir/Indices';
 import type { CanonicalType } from '../../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION, canonicalType } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION, canonicalType } from '../../core/canonical-types';
 import type { RuntimeState } from '../RuntimeState';
 import { createRuntimeState } from '../RuntimeState';
 import type { ValueSlot, SigExprId } from '../../types';

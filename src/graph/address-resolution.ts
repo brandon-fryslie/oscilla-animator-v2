@@ -16,7 +16,7 @@ import {
 import type { Patch, Block, OutputPort, InputPort } from './Patch';
 import type { PortId } from '../types';
 import type { CanonicalType } from '../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION, canonicalType } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION, canonicalType } from '../core/canonical-types';
 import { BLOCK_DEFS_BY_TYPE } from '../blocks/registry';
 import { normalizeCanonicalName } from '../core/canonical-name';
 

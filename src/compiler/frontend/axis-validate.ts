@@ -24,7 +24,8 @@ import {
  * Diagnostic for axis validation violation.
  */
 export interface AxisViolation {
-  readonly typeIndex: number;
+  readonly nodeKind: string;
+  readonly nodeIndex: number;
   readonly kind: string;
   readonly message: string;
 }
@@ -43,7 +44,8 @@ export function validateTypes(types: readonly CanonicalType[]): AxisViolation[] 
       validateType(t);
     } catch (err) {
       out.push({
-        typeIndex: i,
+        nodeKind: "CanonicalType",
+        nodeIndex: i,
         kind: deriveKind(t),
         message: err instanceof Error ? err.message : String(err),
       });

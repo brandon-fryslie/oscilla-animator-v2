@@ -14,7 +14,7 @@ import {
   unitRadians,
   unitScalar,
 } from '../../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../core/canonical-types';
 import { registerBlock } from '../../blocks/registry';
 
 // Ensure adapter blocks are registered

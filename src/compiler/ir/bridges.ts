@@ -26,14 +26,13 @@ import type {
   PayloadType,
   ConcretePayloadType,
 } from '../../core/canonical-types';
-import { isAxisInst, isPayloadVar, FLOAT, INT, VEC2, VEC3, COLOR, BOOL, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
+import { isAxisInst, isPayloadVar, FLOAT, INT, VEC2, VEC3, COLOR, BOOL,  CAMERA_PROJECTION } from '../../core/canonical-types';
 import type { ShapeDescIR } from './program';
 
 // Type aliases for backward compat
 type Cardinality = CardinalityValue;
 type Temporality = TemporalityValue;
 type Binding = BindingValue;
-type AxisTag<T> = Axis<T, never>;
 
 // =============================================================================
 // Main Bridge Function: Extent → ResolvedExtent

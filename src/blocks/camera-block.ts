@@ -14,7 +14,7 @@
 
 import { registerBlock } from './registry';
 import { canonicalType, unitNorm01, unitScalar, unitDeg, strideOf, floatConst, cameraProjectionConst } from '../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../core/canonical-types';
 import { defaultSourceConst, type DefaultSource } from '../types';
 import type { CameraDeclIR } from '../compiler/ir/program';
 

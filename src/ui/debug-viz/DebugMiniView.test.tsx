@@ -18,7 +18,7 @@ import { StoreProvider } from '../../stores/context';
 import { debugService } from '../../services/DebugService';
 import type { ValueSlot } from '../../types';
 import { canonicalType } from '../../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../core/canonical-types';
 import { DebugMiniView } from './DebugMiniView';
 import { createMockCanvas2DContext } from '../../__tests__/test-utils';
 

@@ -10,7 +10,7 @@ import type { Block, BlockId, Edge, DefaultSource, UIControlHint, CombineMode } 
 import type { Patch, LensAttachment } from '../../graph/Patch';
 import type { BlockDef, InputDef } from '../../blocks/registry';
 import type { PayloadType, CanonicalType } from '../../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION, canonicalType } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION, canonicalType } from '../../core/canonical-types';
 import { formatTypeForTooltip, getTypeColor, getPortTypeFromBlockType, formatUnitForDisplay } from './typeValidation';
 import { findAdapter } from '../../graph/adapters';
 import { sortEdgesBySortKey } from '../../compiler/passes-v2/combine-utils';

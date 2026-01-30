@@ -17,7 +17,7 @@ import {
   unitMs,
   unitSeconds,
 } from '../../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../core/canonical-types';
 
 // Ensure adapter blocks are registered
 import '../../blocks/adapter-blocks';

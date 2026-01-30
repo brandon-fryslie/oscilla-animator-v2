@@ -21,7 +21,7 @@
  */
 
 import type { CanonicalType, PayloadType, UnitType, Extent } from '../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION, DEFAULTS_V0, unitsEqual } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION, DEFAULTS_V0, unitsEqual } from '../core/canonical-types';
 
 // =============================================================================
 // Adapter Specification (Spec-aligned, Decision D6)

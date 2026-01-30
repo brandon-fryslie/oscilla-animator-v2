@@ -11,7 +11,7 @@ import {
   type VarargConstraint,
 } from '../registry';
 import { canonicalType, canonicalSignal } from '../../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../core/canonical-types';
 import { defaultSourceConst } from '../../types';
 
 describe('VarargInputDef', () => {

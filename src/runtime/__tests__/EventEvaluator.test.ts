@@ -14,7 +14,7 @@ import { EventHub } from '../../events/EventHub';
 import { getTestArena } from '../../runtime/__tests__/test-arena-helper';
 import { buildPatch } from '../../graph/Patch';
 import { canonicalType, eventTypeScalar } from '../../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../core/canonical-types';
 import { sigExprId } from '../../compiler/ir/Indices';
 import type { EventExpr, StepEvalEvent } from '../../compiler/ir/types';
 import type { EventExprId } from '../../compiler/ir/Indices';

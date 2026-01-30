@@ -244,7 +244,7 @@ export interface IRBuilder {
    * Create a signal that reads the fired/not-fired state of an event slot as float (0.0 or 1.0).
    * This is the canonical event→signal bridge (spec §9.2).
    */
-  sigEventRead(eventSlot: EventSlotId, type: CanonicalType): SigExprId;
+  sigEventRead(eventSlot: EventSlotId): SigExprId;
 
   /** Allocate an event slot for an event expression. Returns a distinct EventSlotId. */
   allocEventSlot(eventId: EventExprId): EventSlotId;

@@ -20,7 +20,7 @@ import { describe, it, expect } from 'vitest';
 import { IRBuilderImpl } from '../ir/IRBuilderImpl';
 import { OpCode } from '../ir/types';
 import { canonicalField, canonicalSignal, floatConst, intConst, vec2Const, instanceRef } from '../../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../core/canonical-types';
 import { instanceId, domainTypeId } from '../../core/ids';
 import { DOMAIN_CIRCLE } from '../../core/domain-registry';
 

@@ -4,7 +4,7 @@
  * Additional types for signal and event expressions.
  */
 
-import { type PayloadType, type ConcretePayloadType, isPayloadVar } from '../../core/canonical-types';
+import { payloadStride,  type PayloadType, type ConcretePayloadType, isPayloadVar } from '../../core/canonical-types';
 
 export type Stride = 0 | 1 | 2 | 3 | 4 | 8;
 
@@ -27,7 +27,7 @@ export function payloadStride(payload: PayloadType): Stride {
   // After the guard, payload is guaranteed to be a ConcretePayloadType
   // Stride is now baked into the type, so we can just return it directly!
   const concretePayload = payload as ConcretePayloadType;
-  return concretePayload.stride as Stride;
+  return payloadStride(concretePayload) as Stride;
 }
 
 /** True iff this payload can be sampled into numeric components. */

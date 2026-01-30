@@ -5,7 +5,7 @@
  */
 
 import type { CanonicalType, ConstValue } from '../../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION, canonicalType, unitScalar, eventTypeScalar, requireManyInstance } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, CAMERA_PROJECTION, canonicalType, unitScalar, eventTypeScalar, requireManyInstance, constValueMatchesPayload } from '../../core/canonical-types';
 import type { TopologyId } from '../../shapes/types';
 import type { IRBuilder } from './IRBuilder';
 import type {
@@ -116,6 +116,10 @@ export class IRBuilderImpl implements IRBuilder {
   // =========================================================================
 
   sigConst(value: ConstValue, type: CanonicalType): SigExprId {
+    // Per gap analysis #3: validate ConstValue matches payload
+    if (!constValueMatchesPayload(type.payload, value)) {
+      throw new Error(`ConstValue kind "${value.kind}" does not match payload kind "${type.payload.kind}"`);
+    }
     // Hash-consing (I13): check cache before creating new ID
     const expr = { kind: 'const' as const, value, type };
     const hash = hashSigExpr(expr);
@@ -280,6 +284,10 @@ export class IRBuilderImpl implements IRBuilder {
   // =========================================================================
 
   fieldConst(value: ConstValue, type: CanonicalType): FieldExprId {
+    // Per gap analysis #3: validate ConstValue matches payload
+    if (!constValueMatchesPayload(type.payload, value)) {
+      throw new Error(`ConstValue kind "${value.kind}" does not match payload kind "${type.payload.kind}"`);
+    }
     const expr = { kind: 'const' as const, value, type };
     const hash = hashFieldExpr(expr);
     const existing = this.fieldExprCache.get(hash);
@@ -866,8 +874,9 @@ export class IRBuilderImpl implements IRBuilder {
     return id;
   }
 
-  sigEventRead(eventSlot: EventSlotId, type: CanonicalType): SigExprId {
-    // EventRead: produces a signal that is 1.0 on frames when the event fires, 0.0 otherwise
+  sigEventRead(eventSlot: EventSlotId): SigExprId {
+    // Per gap analysis #10: eventRead always produces signal float scalar
+    const type = canonicalType(FLOAT, unitScalar());
     const expr = { kind: 'eventRead' as const, eventSlot, type };
     const hash = hashSigExpr(expr);
     const existing = this.sigExprCache.get(hash);
