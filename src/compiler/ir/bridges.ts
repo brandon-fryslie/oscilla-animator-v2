@@ -235,7 +235,7 @@ export function payloadTypeToShapeDescIR(payload: PayloadType): ShapeDescIR {
     case 'bool':
       return { kind: 'bool' };
 
-    case 'shape':
+    // TODO: Q6 case 'shape':
       return { kind: 'shape' };
 
     case 'cameraProjection':

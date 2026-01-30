@@ -26,7 +26,7 @@ export const TYPE_COLORS: Record<ConcretePayloadType["kind"], string> = {
 
   color: '#ec4899',   // Magenta/Pink
   bool: '#f97316',    // Orange
-  shape: '#facc15',   // Yellow
+  // TODO: Q6 shape: '#facc15',   // Yellow
   cameraProjection: '#8b5cf6', // Purple (enum-like projection mode)
 };
 

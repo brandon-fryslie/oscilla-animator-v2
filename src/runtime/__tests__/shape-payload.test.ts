@@ -16,7 +16,7 @@ import {
   readShape2D,
   writeShape2D,
 } from '../RuntimeState';
-import { FLOAT, INT, BOOL, } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, SHAPE, } from '../../core/canonical-types';
 
 // =============================================================================
 // BufferPool: shape2d format

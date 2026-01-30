@@ -45,7 +45,7 @@ export function getBufferFormat(payload: PayloadType): BufferFormat {
       return 'f32';
 
     // Shape descriptors -> shape2d
-    case 'shape':
+    // TODO: Q6 case 'shape':
       return 'shape2d';
 
     // 2D vectors

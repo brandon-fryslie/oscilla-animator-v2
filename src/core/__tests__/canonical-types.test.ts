@@ -57,7 +57,7 @@ import {
   isPayloadVar,
   isConcretePayload,
 } from '../canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION, payloadStride } from '../canonical-types';
 import { instanceId, domainTypeId } from '../ids';
 
 // =============================================================================

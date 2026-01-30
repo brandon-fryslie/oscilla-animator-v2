@@ -14,7 +14,7 @@ import {
 import type { Block, Edge } from '../../graph/Patch';
 import type { BlockDef } from '../../blocks/registry';
 import { blockId } from '../../types';
-import { canonicalType, FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../core/canonical-types';
+import { canonicalType, FLOAT, SHAPE, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../core/canonical-types';
 import { createTestBlock, resetBlockFactory } from '../../test-utils/block-factory';
 
 describe('exportFormats', () => {

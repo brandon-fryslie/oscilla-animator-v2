@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import React from 'react';
 import { getValueRenderer, registerRenderer, type ValueRenderer } from './ValueRenderer';
 import { canonicalType, unitPhase01, unitNorm01 } from '../../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
 import type { RendererSample } from './types';
 import { getDataAttr } from '../../__tests__/test-utils';
 import { testSignalType } from '../../__tests__/type-test-helpers';

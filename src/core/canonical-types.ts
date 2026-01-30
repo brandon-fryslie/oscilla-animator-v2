@@ -408,7 +408,7 @@ export function payloadStride(p: PayloadType): number {
     case 'cameraProjection': return 1;
     default: {
       // Exhaustiveness check - if we reach here, we missed a case
-      const _exhaustive: never = p;
+      const _exhaustive: never = p as never;
       throw new Error(`Unknown payload kind: ${(_exhaustive as ConcretePayloadType).kind}`);
     }
   }

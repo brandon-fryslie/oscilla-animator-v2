@@ -104,7 +104,7 @@ export function getSampleEncoding(payload: PayloadType): SampleEncoding {
       return { payload: concretePayload, stride: 4, components: ['r', 'g', 'b', 'a'], sampleable: true };
     case 'bool':
       return { payload: concretePayload, stride: 0, components: [], sampleable: false };
-    case 'shape':
+    // TODO: Q6 case 'shape':
       return { payload: concretePayload, stride: 0, components: [], sampleable: false };
     case 'cameraProjection':
       return { payload: concretePayload, stride: 1, components: ['projection'], sampleable: true };
