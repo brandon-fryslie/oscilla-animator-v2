@@ -6,7 +6,9 @@
  */
 
 import type { CanonicalType, PayloadType } from '../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION, payloadsEqual } from '../core/canonical-types';
+import type { InferenceCanonicalType, InferencePayloadType } from '../core/inference-types';
+import { isPayloadVar } from '../core/inference-types';
 import type { UIControlHint, DefaultSource } from '../types';
 import type { IRBuilder } from '../compiler/ir/IRBuilder';
 import type { BlockIndex } from '../graph/normalize';
@@ -156,8 +158,6 @@ export interface BlockCardinalityMetadata {
 // Payload-Generic Block Metadata (Spec §8)
 // =============================================================================
 
-import { isPayloadVar, payloadsEqual } from '../core/canonical-types';
-
 /**
  * Semantics category for payload-generic blocks.
  *
@@ -265,10 +265,14 @@ export interface VarargConstraint {
  * - `isVararg` flag marks inputs that accept variable-length connections
  * - Varargs inputs bypass the normal combine system
  * - Varargs inputs have no defaultSource (explicit connections only)
+ *
+ * TYPE SYSTEM (2026-01-29):
+ * - Uses InferenceCanonicalType to allow payload/unit vars in block definitions
+ * - Vars are resolved during type inference, then finalized to CanonicalType
  */
 export interface InputDef {
   readonly label?: string;           // Display label (defaults to key name)
-  readonly type: CanonicalType;         // Required - all inputs have a type
+  readonly type: InferenceCanonicalType; // Required - all inputs have a type (may contain vars)
   readonly value?: unknown;          // Default value (was in params)
   readonly defaultSource?: DefaultSource;
   readonly uiHint?: UIControlHint;
@@ -306,10 +310,14 @@ export function isVarargInput(def: InputDef): boolean {
  * UNIFIED DESIGN (2026-01-20):
  * - Now a Record for symmetry with inputs
  * - Object key (in BlockDef.outputs Record) is the identifier
+ *
+ * TYPE SYSTEM (2026-01-29):
+ * - Uses InferenceCanonicalType to allow payload/unit vars in block definitions
+ * - Vars are resolved during type inference, then finalized to CanonicalType
  */
 export interface OutputDef {
   readonly label?: string;           // Display label (defaults to key name)
-  readonly type: CanonicalType;         // Required
+  readonly type: InferenceCanonicalType; // Required (may contain vars)
   readonly hidden?: boolean;         // For symmetry
 }
 
@@ -468,11 +476,11 @@ export function registerBlock(def: BlockDef): void {
   const normalizedInputs: Record<string, InputDef> = {};
 
   /**
-   * Get a sensible zero/default value for a CanonicalType.
+   * Get a sensible zero/default value for an InferenceCanonicalType.
    * The Const block is payload-polymorphic and will handle broadcasting
    * this value to the appropriate payload type (vec2, vec3, color, etc.).
    */
-  const getZeroValue = (type: CanonicalType): number => {
+  const getZeroValue = (type: InferenceCanonicalType): number => {
     // For all payload types, return 0
     // The Const block will broadcast this to the appropriate shape:
     // - float: 0
@@ -636,7 +644,7 @@ export function getBlockPayloadMetadata(blockType: string): BlockPayloadMetadata
  *
  * @param blockType - The block type
  * @param portName - The port name (input or output key)
- * @param payload - The payload type to check
+ * @param payload - The payload type to check (may be InferencePayloadType with vars)
  * @returns true if allowed, false if disallowed, undefined if no constraints
  *
  * Note: PayloadVar types are always allowed - constraint solving will handle actual type validation.
@@ -644,7 +652,7 @@ export function getBlockPayloadMetadata(blockType: string): BlockPayloadMetadata
 export function isPayloadAllowed(
   blockType: string,
   portName: string,
-  payload: PayloadType
+  payload: PayloadType | InferencePayloadType
 ): boolean | undefined {
   // PayloadVar is always allowed - constraint solving will handle validation
   if (isPayloadVar(payload)) return true;
@@ -656,7 +664,7 @@ export function isPayloadAllowed(
   if (!allowed || allowed.length === 0) return undefined;
 
   // Check if any allowed type matches (handling both concrete and payloadVar in allowed list)
-  return allowed.some(a => payloadsEqual(a, payload));
+  return allowed.some(a => payloadsEqual(a, payload as PayloadType));
 }
 
 /**
@@ -689,7 +697,7 @@ export function findPayloadCombination(
     if (combo.inputs.length !== inputPayloads.length) return false;
     return combo.inputs.every((p, i) => {
       // PayloadVar matches anything
-      if (isPayloadVar(inputPayloads[i]) || isPayloadVar(p)) return true;
+      // Note: We can't use isPayloadVar here since inputPayloads is PayloadType[] (concrete only)
       return payloadsEqual(p, inputPayloads[i]);
     });
   });

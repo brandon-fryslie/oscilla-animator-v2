@@ -6,7 +6,8 @@
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../core/ids';
-import { canonicalType, canonicalField, strideOf, type PayloadType, unitVar, payloadVar } from '../core/canonical-types';
+import { canonicalType, canonicalField, strideOf, type PayloadType } from '../core/canonical-types';
+import { unitVar, payloadVar, inferType, inferField } from '../core/inference-types';
 import type { SigExprId, FieldExprId } from '../compiler/ir/Indices';
 
 // =============================================================================
@@ -54,10 +55,10 @@ registerBlock({
     semantics: 'typeSpecific',
   },
   inputs: {
-    signal: { label: 'Signal', type: canonicalType(payloadVar('broadcast_payload'), unitVar('broadcast_in')) },
+    signal: { label: 'Signal', type: inferType(payloadVar('broadcast_payload'), unitVar('broadcast_in')) },
   },
   outputs: {
-    field: { label: 'Field', type: canonicalField(payloadVar('broadcast_payload'), unitVar('broadcast_in'), { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+    field: { label: 'Field', type: inferField(payloadVar('broadcast_payload'), unitVar('broadcast_in'), { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
   },
   lower: ({ ctx, inputsById }) => {
     // Get resolved payload type from ctx.outTypes (populated from pass1 portTypes)
@@ -97,19 +98,19 @@ registerBlock({
 
 /**
  * Payload-Generic field reduction block.
- * 
+ *
  * Reduces a field to a scalar signal using an aggregation operation.
  * Supports componentwise reduction for structured types (e.g., vec2).
- * 
+ *
  * Operations:
  * - sum: Σ(field[i]) per component
  * - avg: Σ(field[i]) / count per component
  * - min: min(field) per component
  * - max: max(field) per component
- * 
+ *
  * Empty field behavior: Returns 0
  * NaN behavior: Propagates NaN if any element is NaN
- * 
+ *
  * Spec: 02-block-system.md:436, 04-compilation.md:394
  */
 registerBlock({
@@ -136,15 +137,15 @@ registerBlock({
     semantics: 'typeSpecific',
   },
   inputs: {
-    field: { 
-      label: 'Field', 
-      type: canonicalField(payloadVar('reduce_payload'), unitVar('reduce_in'), { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
+    field: {
+      label: 'Field',
+      type: inferField(payloadVar('reduce_payload'), unitVar('reduce_in'), { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
     },
   },
   outputs: {
-    signal: { 
-      label: 'Result', 
-      type: canonicalType(payloadVar('reduce_payload'), unitVar('reduce_in'))
+    signal: {
+      label: 'Result',
+      type: inferType(payloadVar('reduce_payload'), unitVar('reduce_in'))
     },
   },
   lower: ({ ctx, inputsById, config }) => {

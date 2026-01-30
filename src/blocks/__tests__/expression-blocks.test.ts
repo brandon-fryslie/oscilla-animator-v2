@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import '../expression-blocks'; // Import to register block
 import { getBlockDefinition } from '../registry';
-import { canonicalType, type CanonicalType, strideOf, isPayloadVar, floatConst, intConst } from '../../core/canonical-types';
+import { canonicalType, type CanonicalType, strideOf, floatConst, intConst } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../core/canonical-types';
 import { IRBuilderImpl } from '../../compiler/ir/IRBuilderImpl';
 import type { LowerCtx } from '../registry';
@@ -18,7 +18,7 @@ import type { ValueRefPacked } from '../../compiler/ir/lowerTypes';
 
 /** Helper to create a signal ValueRefPacked with proper fields */
 function sigRef(id: SigExprId, slot: ValueSlot, type: CanonicalType): ValueRefPacked {
-  const stride = isPayloadVar(type.payload) ? 1 : strideOf(type.payload);
+  const stride = strideOf(type.payload);
   return { k: 'sig', id, slot, type, stride };
 }
 
