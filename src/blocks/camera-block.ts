@@ -13,7 +13,7 @@
  */
 
 import { registerBlock } from './registry';
-import { canonicalType, unitNorm01, unitScalar, unitDeg, strideOf, floatConst, cameraProjectionConst } from '../core/canonical-types';
+import { canonicalType, unitNorm01, unitScalar, unitDegrees, strideOf, floatConst, cameraProjectionConst } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { defaultSourceConst, type DefaultSource } from '../types';
 import type { CameraDeclIR } from '../compiler/ir/program';
@@ -115,21 +115,21 @@ registerBlock({
     },
     tiltDeg: {
       label: 'Tilt',
-      type: canonicalType(FLOAT, unitDeg()),
+      type: canonicalType(FLOAT, unitDegrees()),
       value: 35.0,
       defaultSource: defaultSourceDeg(35.0),
       uiHint: { kind: 'slider', min: -90, max: 90, step: 1 },
     },
     yawDeg: {
       label: 'Yaw',
-      type: canonicalType(FLOAT, unitDeg()),
+      type: canonicalType(FLOAT, unitDegrees()),
       value: 0.0,
       defaultSource: defaultSourceDeg(0.0),
       uiHint: { kind: 'slider', min: -180, max: 180, step: 1 },
     },
     fovYDeg: {
       label: 'FOV',
-      type: canonicalType(FLOAT, unitDeg()),
+      type: canonicalType(FLOAT, unitDegrees()),
       value: 60.0,
       defaultSource: defaultSourceDeg(60.0),
       uiHint: { kind: 'slider', min: 10, max: 120, step: 1 },

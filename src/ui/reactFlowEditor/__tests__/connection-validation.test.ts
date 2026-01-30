@@ -405,31 +405,31 @@ describe('Adapter-aware Connection Validation', () => {
 describe('Unit Display Functions', () => {
   describe('formatUnitForDisplay', () => {
     it('returns empty string for scalar', () => {
-      expect(formatUnitForDisplay({ kind: 'scalar' })).toBe('');
+      expect(formatUnitForDisplay(unitScalar())).toBe('');
     });
 
     it('returns "phase" for phase01', () => {
-      expect(formatUnitForDisplay({ kind: 'phase01' })).toBe('phase');
+      expect(formatUnitForDisplay(unitPhase01())).toBe('phase');
     });
 
     it('returns "rad" for radians', () => {
-      expect(formatUnitForDisplay({ kind: 'radians' })).toBe('rad');
+      expect(formatUnitForDisplay(unitRadians())).toBe('rad');
     });
 
     it('returns "deg" for degrees', () => {
-      expect(formatUnitForDisplay({ kind: 'degrees' })).toBe('deg');
+      expect(formatUnitForDisplay(unitDegrees())).toBe('deg');
     });
 
     it('returns "0..1" for norm01', () => {
-      expect(formatUnitForDisplay({ kind: 'norm01' })).toBe('0..1');
+      expect(formatUnitForDisplay(unitNorm01())).toBe('0..1');
     });
 
     it('returns "ms" for ms', () => {
-      expect(formatUnitForDisplay({ kind: 'ms' })).toBe('ms');
+      expect(formatUnitForDisplay(unitMs())).toBe('ms');
     });
 
     it('returns "s" for seconds', () => {
-      expect(formatUnitForDisplay({ kind: 'seconds' })).toBe('s');
+      expect(formatUnitForDisplay(unitSeconds())).toBe('s');
     });
   });
 

@@ -72,39 +72,67 @@ export function getTypeColor(payload: InferencePayloadType): string {
 /**
  * Format a unit kind for display.
  * Returns short human-readable unit labels.
+ *
+ * Updated for structured UnitType (#18):
+ * - Simple kinds: none, scalar, norm01, count
+ * - Structured kinds: angle{radians|degrees|phase01}, time{ms|seconds},
+ *   space{ndc|world|view,dims}, color{rgba01}
  */
 export function formatUnitForDisplay(unit: UnitType | InferenceUnitType): string {
+  if (unit.kind === 'var') return ''; // Inference vars have no display
+
   switch (unit.kind) {
     case 'none':
     case 'scalar':
       return '';
     case 'norm01':
       return '0..1';
-    case 'phase01':
-      return 'phase';
-    case 'radians':
-      return 'rad';
-    case 'degrees':
-    case 'deg':
-      return 'deg';
-    case 'ms':
-      return 'ms';
-    case 'seconds':
-      return 's';
     case 'count':
       return 'count';
-    case 'ndc2':
-      return 'ndc2';
-    case 'ndc3':
-      return 'ndc3';
-    case 'world2':
-      return 'world2';
-    case 'world3':
-      return 'world3';
-    case 'rgba01':
-      return 'rgba';
-    default:
+
+    // Structured: angle
+    case 'angle': {
+      const angleUnit = (unit as Extract<UnitType, { kind: 'angle' }>).unit;
+      switch (angleUnit) {
+        case 'phase01': return 'phase';
+        case 'radians': return 'rad';
+        case 'degrees': return 'deg';
+      }
       return '';
+    }
+
+    // Structured: time
+    case 'time': {
+      const timeUnit = (unit as Extract<UnitType, { kind: 'time' }>).unit;
+      switch (timeUnit) {
+        case 'ms': return 'ms';
+        case 'seconds': return 's';
+      }
+      return '';
+    }
+
+    // Structured: space
+    case 'space': {
+      const spaceType = unit as Extract<UnitType, { kind: 'space' }>;
+      const suffix = spaceType.dims;
+      switch (spaceType.unit) {
+        case 'ndc': return `ndc${suffix}`;
+        case 'world': return `world${suffix}`;
+        case 'view': return `view${suffix}`;
+      }
+      return '';
+    }
+
+    // Structured: color
+    case 'color': {
+      const colorUnit = (unit as Extract<UnitType, { kind: 'color' }>).unit;
+      return colorUnit === 'rgba01' ? 'rgba' : '';
+    }
+
+    default: {
+      const _exhaustive: never = unit;
+      return '';
+    }
   }
 }
 
@@ -119,15 +147,16 @@ export function formatTypeForDisplay(type: InferenceCanonicalType): string {
   // Cardinality prefix
   let cardStr: string;
   switch (card.kind) {
-    case 'zero':
-      cardStr = 'Const';
-      break;
     case 'one':
       cardStr = 'Signal';
       break;
     case 'many':
       cardStr = 'Field';
       break;
+    default: {
+      const _exhaustive: never = card;
+      cardStr = 'Unknown';
+    }
   }
 
   // Unit suffix (only show non-trivial units)
@@ -278,12 +307,12 @@ function isTypeCompatible(from: InferenceCanonicalType, to: InferenceCanonicalTy
     }
 
     // Domain types must match exactly OR have a valid transformation
-    if (fromInstance.domainTypeId === toInstance.domainTypeId) {
+    if (fromInstance.domainType === toInstance.domainType) {
       return true;
     }
 
     // Check if domain transformation exists (stub for now)
-    return canTransformDomain(fromInstance.domainTypeId, toInstance.domainTypeId);
+    return canTransformDomain(fromInstance.domainType, toInstance.domainType);
   }
 
   return true;

@@ -21,7 +21,7 @@ import {
   unitScalar,
   unitRadians,
   unitDegrees,
-  unitDeg,
+  
   unitNorm01,
   unitMs,
   unitSeconds,
@@ -454,7 +454,7 @@ registerBlock({
     in: { label: 'In', type: canonicalType(FLOAT, unitScalar()) },
   },
   outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT, unitDeg()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitDegrees()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;

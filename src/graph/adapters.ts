@@ -41,7 +41,7 @@ export type ExtentPattern =
  * Transform for extent values through an adapter.
  * - 'preserve': keep input extent unchanged
  * - Partial<Extent>: change specific axes (e.g., broadcast: one→many)
- * 
+ *
  * Decision D6: Limited to preserve, broadcast (one→many), reduce (many→one)
  */
 export type ExtentTransform =
@@ -75,10 +75,10 @@ export interface AdapterSpec {
 
   /** Description for debugging/UI */
   readonly description: string;
-  
+
   /** Purity: adapters must be pure (no time/state dependence) */
   readonly purity: 'pure';
-  
+
   /** Stability: same input always produces same output */
   readonly stability: 'stable';
 }
@@ -99,6 +99,8 @@ export interface AdapterRule {
 /**
  * Registered adapter rules.
  * Order matters — more specific rules before general rules; first match wins.
+ *
+ * Updated for #18 structured units: uses { kind: 'angle', unit: 'phase01' } etc.
  */
 const ADAPTER_RULES: AdapterRule[] = [
   // ==========================================================================
@@ -108,7 +110,7 @@ const ADAPTER_RULES: AdapterRule[] = [
 
   // --- Phase / Scalar ---
   {
-    from: { payload: FLOAT, unit: { kind: 'phase01' }, extent: 'any' },
+    from: { payload: FLOAT, unit: { kind: 'angle', unit: 'phase01' }, extent: 'any' },
     to: { payload: FLOAT, unit: { kind: 'scalar' }, extent: 'any' },
     adapter: {
       blockType: 'Adapter_PhaseToScalar01',
@@ -121,7 +123,7 @@ const ADAPTER_RULES: AdapterRule[] = [
   },
   {
     from: { payload: FLOAT, unit: { kind: 'scalar' }, extent: 'any' },
-    to: { payload: FLOAT, unit: { kind: 'phase01' }, extent: 'any' },
+    to: { payload: FLOAT, unit: { kind: 'angle', unit: 'phase01' }, extent: 'any' },
     adapter: {
       blockType: 'Adapter_ScalarToPhase01',
       inputPortId: 'in',
@@ -134,8 +136,8 @@ const ADAPTER_RULES: AdapterRule[] = [
 
   // --- Phase / Radians ---
   {
-    from: { payload: FLOAT, unit: { kind: 'phase01' }, extent: 'any' },
-    to: { payload: FLOAT, unit: { kind: 'radians' }, extent: 'any' },
+    from: { payload: FLOAT, unit: { kind: 'angle', unit: 'phase01' }, extent: 'any' },
+    to: { payload: FLOAT, unit: { kind: 'angle', unit: 'radians' }, extent: 'any' },
     adapter: {
       blockType: 'Adapter_PhaseToRadians',
       inputPortId: 'in',
@@ -146,8 +148,8 @@ const ADAPTER_RULES: AdapterRule[] = [
     },
   },
   {
-    from: { payload: FLOAT, unit: { kind: 'radians' }, extent: 'any' },
-    to: { payload: FLOAT, unit: { kind: 'phase01' }, extent: 'any' },
+    from: { payload: FLOAT, unit: { kind: 'angle', unit: 'radians' }, extent: 'any' },
+    to: { payload: FLOAT, unit: { kind: 'angle', unit: 'phase01' }, extent: 'any' },
     adapter: {
       blockType: 'Adapter_RadiansToPhase01',
       inputPortId: 'in',
@@ -160,8 +162,8 @@ const ADAPTER_RULES: AdapterRule[] = [
 
   // --- Degrees / Radians ---
   {
-    from: { payload: FLOAT, unit: { kind: 'degrees' }, extent: 'any' },
-    to: { payload: FLOAT, unit: { kind: 'radians' }, extent: 'any' },
+    from: { payload: FLOAT, unit: { kind: 'angle', unit: 'degrees' }, extent: 'any' },
+    to: { payload: FLOAT, unit: { kind: 'angle', unit: 'radians' }, extent: 'any' },
     adapter: {
       blockType: 'Adapter_DegreesToRadians',
       inputPortId: 'in',
@@ -172,8 +174,8 @@ const ADAPTER_RULES: AdapterRule[] = [
     },
   },
   {
-    from: { payload: FLOAT, unit: { kind: 'radians' }, extent: 'any' },
-    to: { payload: FLOAT, unit: { kind: 'degrees' }, extent: 'any' },
+    from: { payload: FLOAT, unit: { kind: 'angle', unit: 'radians' }, extent: 'any' },
+    to: { payload: FLOAT, unit: { kind: 'angle', unit: 'degrees' }, extent: 'any' },
     adapter: {
       blockType: 'Adapter_RadiansToDegrees',
       inputPortId: 'in',
@@ -186,8 +188,8 @@ const ADAPTER_RULES: AdapterRule[] = [
 
   // --- Time ---
   {
-    from: { payload: INT, unit: { kind: 'ms' }, extent: 'any' },
-    to: { payload: FLOAT, unit: { kind: 'seconds' }, extent: 'any' },
+    from: { payload: INT, unit: { kind: 'time', unit: 'ms' }, extent: 'any' },
+    to: { payload: FLOAT, unit: { kind: 'time', unit: 'seconds' }, extent: 'any' },
     adapter: {
       blockType: 'Adapter_MsToSeconds',
       inputPortId: 'in',
@@ -198,8 +200,8 @@ const ADAPTER_RULES: AdapterRule[] = [
     },
   },
   {
-    from: { payload: FLOAT, unit: { kind: 'seconds' }, extent: 'any' },
-    to: { payload: INT, unit: { kind: 'ms' }, extent: 'any' },
+    from: { payload: FLOAT, unit: { kind: 'time', unit: 'seconds' }, extent: 'any' },
+    to: { payload: INT, unit: { kind: 'time', unit: 'ms' }, extent: 'any' },
     adapter: {
       blockType: 'Adapter_SecondsToMs',
       inputPortId: 'in',
@@ -278,22 +280,22 @@ export function extractPattern(type: InferenceCanonicalType): TypePattern {
  */
 function extentMatches(actual: Extent, pattern: ExtentPattern): boolean {
   if (pattern === 'any') return true;
-  
+
   // Partial extent pattern - check specified axes
   for (const key in pattern) {
     const k = key as keyof Extent;
     const patternAxis = pattern[k];
     const actualAxis = actual[k];
-    
+
     if (!patternAxis) continue;
-    
+
     // Both must be inst with same value kind (detailed comparison needed)
     // For now, simplified: require exact match if pattern specifies
     if (JSON.stringify(actualAxis) !== JSON.stringify(patternAxis)) {
       return false;
     }
   }
-  
+
   return true;
 }
 
@@ -307,7 +309,7 @@ function patternMatches(actual: TypePattern, pattern: TypePattern): boolean {
       return false;
     }
   }
-  
+
   // Unit must match unless pattern allows 'any' or 'same'
   if (pattern.unit !== 'any' && pattern.unit !== 'same') {
     const actualUnit = actual.unit;
@@ -315,13 +317,13 @@ function patternMatches(actual: TypePattern, pattern: TypePattern): boolean {
     if (actualUnit.kind === 'var' || pattern.unit.kind === 'var') return true; // vars match anything
     if (!unitsEqual(actualUnit as UnitType, pattern.unit as UnitType)) return false;
   }
-  
+
   // Extent must match
   if (actual.extent === 'any') {
     // Actual shouldn't be 'any' in practice, but allow it for rules
     return pattern.extent === 'any';
   }
-  
+
   return extentMatches(actual.extent as Extent, pattern.extent);
 }
 
