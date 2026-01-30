@@ -401,6 +401,48 @@ export function cameraProjectionConst(value: CameraProjection): ConstValue {
   return { kind: 'cameraProjection', value };
 }
 
+// --- Helper Extractors for ConstValue ---
+
+/**
+ * Extract a scalar number from a ConstValue.
+ * Works for float, int, bool (as 0|1), and single-component payload types.
+ * Throws for vec2, vec3, color, and cameraProjection.
+ *
+ * Use this when you need a single numeric value from a const expression.
+ */
+export function constValueAsNumber(cv: ConstValue): number {
+  switch (cv.kind) {
+    case 'float':
+    case 'int':
+      return cv.value;
+    case 'bool':
+      return cv.value ? 1 : 0;
+    case 'cameraProjection':
+      // cameraProjection is an enum string, not a number
+      throw new Error(`Cannot convert cameraProjection const value to number: ${cv.value}`);
+    case 'vec2':
+    case 'vec3':
+    case 'color':
+      throw new Error(`Cannot convert ${cv.kind} const value to scalar number (use component access instead)`);
+    default: {
+      const _exhaustive: never = cv;
+      throw new Error(`Unknown ConstValue kind: ${(_exhaustive as ConstValue).kind}`);
+    }
+  }
+}
+
+/**
+ * Extract a boolean from a ConstValue.
+ * Only works for bool kind.
+ * Throws for other kinds.
+ */
+export function constValueAsBool(cv: ConstValue): boolean {
+  if (cv.kind !== 'bool') {
+    throw new Error(`Expected bool ConstValue, got: ${cv.kind}`);
+  }
+  return cv.value;
+}
+
 
 
 /**

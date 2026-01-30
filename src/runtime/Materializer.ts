@@ -152,7 +152,7 @@ import type {
   FieldExprId,
   SigExprId,
 } from '../types';
-import type { CanonicalType } from '../core/canonical-types';
+import type { CanonicalType, ConstValue } from '../core/canonical-types';
 import type {
   FieldExpr,
   InstanceDecl,
@@ -169,6 +169,7 @@ import { evaluateSignal } from './SignalEvaluator';
 import { applyOpcode } from './OpcodeInterpreter';
 import { ensurePlacementBasis } from './PlacementBasis';
 import { applyFieldKernel, applyFieldKernelZipSig } from './FieldKernels';
+import { constValueAsNumber } from '../core/canonical-types';
 
 /**
  * Materialize a field expression into a typed array
@@ -287,30 +288,40 @@ function fillBuffer(
   switch (expr.kind) {
     case 'const': {
       // Fill with constant value
-      const arr = buffer as Float32Array | Uint8ClampedArray;
-      if (typeof expr.value !== 'number') {
-        throw new Error(`instance.count ${expr.kind} ${expr.type} is not a number: ${expr.value}`);
-      }
-      const value = expr.value;
-
-      if (expr.type.payload .kind === 'color') {
-        // Color: broadcast to RGBA
+      const cv = expr.value;
+      
+      // Dispatch based on ConstValue kind
+      if (cv.kind === 'color') {
+        // Color RGBA tuple
         const rgba = buffer as Uint8ClampedArray;
+        const [r, g, b, a] = cv.value;
         for (let i = 0; i < N; i++) {
-          rgba[i * 4 + 0] = 255; // R
-          rgba[i * 4 + 1] = 255; // G
-          rgba[i * 4 + 2] = 255; // B
-          rgba[i * 4 + 3] = 255; // A
+          rgba[i * 4 + 0] = Math.round(r * 255);
+          rgba[i * 4 + 1] = Math.round(g * 255);
+          rgba[i * 4 + 2] = Math.round(b * 255);
+          rgba[i * 4 + 3] = Math.round(a * 255);
         }
-      } else if (expr.type.payload .kind === 'vec2') {
-        // Vec2: broadcast to (value, value)
+      } else if (cv.kind === 'vec2') {
+        // Vec2 tuple
         const vec = buffer as Float32Array;
+        const [x, y] = cv.value;
         for (let i = 0; i < N; i++) {
-          vec[i * 2 + 0] = value;
-          vec[i * 2 + 1] = value;
+          vec[i * 2 + 0] = x;
+          vec[i * 2 + 1] = y;
+        }
+      } else if (cv.kind === 'vec3') {
+        // Vec3 tuple
+        const vec = buffer as Float32Array;
+        const [x, y, z] = cv.value;
+        for (let i = 0; i < N; i++) {
+          vec[i * 3 + 0] = x;
+          vec[i * 3 + 1] = y;
+          vec[i * 3 + 2] = z;
         }
       } else {
-        // Scalar: broadcast single value
+        // Scalar (float, int, bool)
+        const arr = buffer as Float32Array;
+        const value = constValueAsNumber(cv);
         for (let i = 0; i < N; i++) {
           arr[i] = value;
         }

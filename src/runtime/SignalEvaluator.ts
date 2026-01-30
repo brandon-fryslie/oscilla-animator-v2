@@ -66,6 +66,7 @@ import type { SigExprId } from '../types';
 import type { RuntimeState } from './RuntimeState';
 import { applyOpcode } from './OpcodeInterpreter';
 import { recordNaN, recordInfinity } from './HealthMonitor';
+import { constValueAsNumber } from '../core/canonical-types';
 
 /**
  * Evaluate a signal expression with caching
@@ -132,7 +133,7 @@ function evaluateSigExpr(
 
   switch (expr.kind) {
     case 'const': {
-      return typeof expr.value === 'number' ? expr.value : 0;
+      return constValueAsNumber(expr.value);
     }
 
     case 'slot': {

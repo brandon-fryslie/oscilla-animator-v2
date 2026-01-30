@@ -30,7 +30,7 @@ describe('compileExpression Integration', () => {
     if (result.ok) {
       const sigExpr = extractSigExpr(builder, result.value);
       expect(sigExpr?.kind).toBe('const');
-      expect((sigExpr as any)?.value).toBe(42);
+      expect((sigExpr as any)?.value).toEqual({ kind: 'int', value: 42 });
     }
   });
 

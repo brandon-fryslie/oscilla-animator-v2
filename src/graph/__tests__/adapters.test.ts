@@ -203,7 +203,7 @@ describe('Adapter Registry', () => {
       const type = canonicalType(FLOAT, unitPhase01());
       const pattern = extractPattern(type);
       expect(pattern.payload).toBe(FLOAT);
-      expect(pattern.unit).toEqual({ kind: 'phase01' });
+      expect(pattern.unit).toEqual({ kind: 'angle', unit: 'phase01' });
       expect(pattern.extent).toEqual(type.extent);
     });
   });
