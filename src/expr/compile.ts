@@ -73,7 +73,19 @@ export function compile(node: ExprNode, ctx: CompileContext): SigExprId {
  */
 function compileLiteral(node: ExprNode & { kind: 'literal' }, ctx: CompileContext): SigExprId {
   const type = canonicalType(node.type as PayloadType);
-  return ctx.builder.sigConst(floatConst(node.value), type);
+  
+  // Create the correct ConstValue based on the node's payload type
+  let constValue;
+  if ((node.type as PayloadType).kind === 'int') {
+    constValue = intConst(node.value);
+  } else if ((node.type as PayloadType).kind === 'bool') {
+    constValue = intConst(node.value); // bool is 0 or 1
+  } else {
+    // float or other numeric types default to float
+    constValue = floatConst(node.value);
+  }
+  
+  return ctx.builder.sigConst(constValue, type);
 }
 
 /**
