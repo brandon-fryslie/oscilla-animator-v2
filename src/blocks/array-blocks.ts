@@ -85,6 +85,11 @@ registerBlock({
     // Create instance (layout is now handled via field kernels, not instance metadata)
     const instanceId = ctx.b.createInstance(DOMAIN_CIRCLE, count);
 
+    const outType0 = ctx.outTypes[0];
+    const outType1 = ctx.outTypes[1];
+    const outType2 = ctx.outTypes[2];
+    const outType3 = ctx.outTypes[3];
+
     // Create field expressions
     // 1. Elements field - broadcasts the input signal across the array
     // NOTE: elementInput is required - FieldExprArray (identity) has been removed per spec
@@ -92,19 +97,14 @@ registerBlock({
     if (!elementInput || elementInput.k !== 'sig') {
       throw new Error('Array block requires an element signal input');
     }
-    const elementsField = ctx.b.Broadcast(elementInput.id, canonicalField(SHAPE, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
+    const elementsField = ctx.b.Broadcast(elementInput.id, outType0);
 
     // 2. Intrinsic fields (index, t, active)
-    const indexField = ctx.b.fieldIntrinsic(instanceId, 'index', canonicalField(INT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
-    const tField = ctx.b.fieldIntrinsic(instanceId, 'normalizedIndex', canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
+    const indexField = ctx.b.fieldIntrinsic(instanceId, 'index', outType1);
+    const tField = ctx.b.fieldIntrinsic(instanceId, 'normalizedIndex', outType2);
     // For static arrays, active is always true - we can use a constant broadcast
     const activeSignal = ctx.b.sigConst(boolConst(true), canonicalType(BOOL));
-    const activeField = ctx.b.Broadcast(activeSignal, canonicalField(BOOL, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
-
-    const outType0 = ctx.outTypes[0];
-    const outType1 = ctx.outTypes[1];
-    const outType2 = ctx.outTypes[2];
-    const outType3 = ctx.outTypes[3];
+    const activeField = ctx.b.Broadcast(activeSignal, outType3);
 
     return {
       outputsById: {

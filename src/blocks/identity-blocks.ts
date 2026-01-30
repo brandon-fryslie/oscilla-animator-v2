@@ -43,15 +43,16 @@ registerBlock({
       throw new Error('StableIdHash requires instance context');
     }
 
+    const randType = ctx.outTypes[0];
+    const id01Type = ctx.outTypes[1];
+
     // Create field expressions that map instance index to random values
     // Use fieldIntrinsic to get instance-specific values
-    const randField = ctx.b.fieldIntrinsic(instance, 'randomId', canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
-    const id01Field = ctx.b.fieldIntrinsic(instance, 'normalizedIndex', canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
+    const randField = ctx.b.fieldIntrinsic(instance, 'randomId', randType);
+    const id01Field = ctx.b.fieldIntrinsic(instance, 'normalizedIndex', id01Type);
 
     const randSlot = ctx.b.allocSlot();
     const id01Slot = ctx.b.allocSlot();
-    const randType = ctx.outTypes[0];
-    const id01Type = ctx.outTypes[1];
 
     return {
       outputsById: {
@@ -90,14 +91,15 @@ registerBlock({
       throw new Error('DomainIndex requires instance context');
     }
 
+    const indexType = ctx.outTypes[0];
+    const indexIntType = ctx.outTypes[1];
+
     // Create field expressions that expose instance index
-    const indexField = ctx.b.fieldIntrinsic(instance, 'normalizedIndex', canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
-    const indexIntField = ctx.b.fieldIntrinsic(instance, 'index', canonicalField(INT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }));
+    const indexField = ctx.b.fieldIntrinsic(instance, 'normalizedIndex', indexType);
+    const indexIntField = ctx.b.fieldIntrinsic(instance, 'index', indexIntType);
 
     const indexSlot = ctx.b.allocSlot();
     const indexIntSlot = ctx.b.allocSlot();
-    const indexType = ctx.outTypes[0];
-    const indexIntType = ctx.outTypes[1];
 
     return {
       outputsById: {

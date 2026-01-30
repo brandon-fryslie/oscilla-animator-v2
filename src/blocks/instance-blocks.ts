@@ -68,6 +68,10 @@ registerBlock({
       throw new Error('GridLayout requires instance context from upstream Array block');
     }
 
+    // Get resolved output type first
+    const posType = ctx.outTypes[0];
+    const floatFieldType = { ...posType, payload: FLOAT, unit: { kind: 'scalar' as const } };
+
     // Get grid dimensions as signals
     const rowsSig = inputsById.rows?.k === 'sig'
       ? inputsById.rows.id
@@ -80,7 +84,7 @@ registerBlock({
     const indexField = ctx.b.fieldIntrinsic(
       instanceId,
       'index',
-      canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
+      floatFieldType
     );
 
     // Apply gridLayout kernel: index + [cols, rows] → vec3 positions
@@ -88,10 +92,9 @@ registerBlock({
       indexField,
       [colsSig, rowsSig],
       { kind: 'kernel', name: 'gridLayout' },
-      canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
+      posType
     );
 
-    const posType = ctx.outTypes[0];
     const posSlot = ctx.b.allocSlot();
 
     return {
@@ -151,6 +154,10 @@ registerBlock({
       throw new Error('LinearLayout requires instance context from upstream Array block');
     }
 
+    // Get resolved output type first
+    const posType = ctx.outTypes[0];
+    const floatFieldType = { ...posType, payload: FLOAT, unit: { kind: 'scalar' as const } };
+
     // Get length parameter (renamed from spacing for clarity)
     const length = (config?.spacing as number) ?? 0.8;
 
@@ -164,7 +171,7 @@ registerBlock({
     const normalizedIndexField = ctx.b.fieldIntrinsic(
       instanceId,
       'normalizedIndex',
-      canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
+      floatFieldType
     );
 
     // Apply lineLayout kernel: normalizedIndex + [x0, y0, x1, y1] → vec3 positions
@@ -172,10 +179,9 @@ registerBlock({
       normalizedIndexField,
       [x0Sig, y0Sig, x1Sig, y1Sig],
       { kind: 'kernel', name: 'lineLayout' },
-      canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
+      posType
     );
 
-    const posType = ctx.outTypes[0];
     const posSlot = ctx.b.allocSlot();
 
     return {
@@ -239,6 +245,10 @@ registerBlock({
       throw new Error('CircleLayout requires instance context from upstream Array block');
     }
 
+    // Get resolved output type first
+    const posType = ctx.outTypes[0];
+    const floatFieldType = { ...posType, payload: FLOAT, unit: { kind: 'scalar' as const } };
+
     // Get radius and phase as signals
     const radiusSig = inputsById.radius?.k === 'sig'
       ? inputsById.radius.id
@@ -251,7 +261,7 @@ registerBlock({
     const normalizedIndexField = ctx.b.fieldIntrinsic(
       instanceId,
       'normalizedIndex',
-      canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
+      floatFieldType
     );
 
     // Apply circleLayout kernel: normalizedIndex + [radius, phase] → vec3 positions
@@ -259,10 +269,9 @@ registerBlock({
       normalizedIndexField,
       [radiusSig, phaseSig],
       { kind: 'kernel', name: 'circleLayout' },
-      canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
+      posType
     );
 
-    const posType = ctx.outTypes[0];
     const posSlot = ctx.b.allocSlot();
 
     return {
@@ -323,6 +332,10 @@ registerBlock({
       throw new Error('LineLayout requires instance context from upstream Array block');
     }
 
+    // Get resolved output type first
+    const posType = ctx.outTypes[0];
+    const floatFieldType = { ...posType, payload: FLOAT, unit: { kind: 'scalar' as const } };
+
     // Get line endpoints as signals
     const x0Sig = inputsById.x0?.k === 'sig'
       ? inputsById.x0.id
@@ -341,7 +354,7 @@ registerBlock({
     const normalizedIndexField = ctx.b.fieldIntrinsic(
       instanceId,
       'normalizedIndex',
-      canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
+      floatFieldType
     );
 
     // Apply lineLayout kernel: normalizedIndex + [x0, y0, x1, y1] → vec3 positions
@@ -349,10 +362,9 @@ registerBlock({
       normalizedIndexField,
       [x0Sig, y0Sig, x1Sig, y1Sig],
       { kind: 'kernel', name: 'lineLayout' },
-      canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
+      posType
     );
 
-    const posType = ctx.outTypes[0];
     const posSlot = ctx.b.allocSlot();
 
     return {
@@ -411,6 +423,10 @@ registerBlock({
       throw new Error('CircleLayoutUV requires instance context from upstream Array block');
     }
 
+    // Get resolved output type first
+    const posType = ctx.outTypes[0];
+    const vec2FieldType = { ...posType, payload: VEC2, unit: { kind: 'scalar' as const } };
+
     // Get radius and phase as signals
     const radiusSig = inputsById.radius?.k === 'sig'
       ? inputsById.radius.id
@@ -427,7 +443,7 @@ registerBlock({
       instanceId,
       'uv',
       basisKind,
-      canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
+      vec2FieldType
     );
 
     // Apply circleLayoutUV kernel: uv + [radius, phase] → vec3 positions
@@ -435,10 +451,9 @@ registerBlock({
       uvField,
       [radiusSig, phaseSig],
       { kind: 'kernel', name: 'circleLayoutUV' },
-      canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
+      posType
     );
 
-    const posType = ctx.outTypes[0];
     const posSlot = ctx.b.allocSlot();
 
     return {
@@ -499,6 +514,10 @@ registerBlock({
       throw new Error('LineLayoutUV requires instance context from upstream Array block');
     }
 
+    // Get resolved output type first
+    const posType = ctx.outTypes[0];
+    const vec2FieldType = { ...posType, payload: VEC2, unit: { kind: 'scalar' as const } };
+
     // Get line endpoints as signals
     const x0Sig = inputsById.x0?.k === 'sig'
       ? inputsById.x0.id
@@ -521,7 +540,7 @@ registerBlock({
       instanceId,
       'uv',
       basisKind,
-      canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
+      vec2FieldType
     );
 
     // Apply lineLayoutUV kernel: uv + [x0, y0, x1, y1] → vec3 positions
@@ -529,10 +548,9 @@ registerBlock({
       uvField,
       [x0Sig, y0Sig, x1Sig, y1Sig],
       { kind: 'kernel', name: 'lineLayoutUV' },
-      canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
+      posType
     );
 
-    const posType = ctx.outTypes[0];
     const posSlot = ctx.b.allocSlot();
 
     return {
@@ -591,6 +609,10 @@ registerBlock({
       throw new Error('GridLayoutUV requires instance context from upstream Array block');
     }
 
+    // Get resolved output type first
+    const posType = ctx.outTypes[0];
+    const vec2FieldType = { ...posType, payload: VEC2, unit: { kind: 'scalar' as const } };
+
     // Get cols and rows as signals
     const colsSig = inputsById.cols?.k === 'sig'
       ? inputsById.cols.id
@@ -607,7 +629,7 @@ registerBlock({
       instanceId,
       'uv',
       basisKind,
-      canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
+      vec2FieldType
     );
 
     // Apply gridLayoutUV kernel: uv + [cols, rows] → vec3 positions
@@ -615,10 +637,9 @@ registerBlock({
       uvField,
       [colsSig, rowsSig],
       { kind: 'kernel', name: 'gridLayoutUV' },
-      canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
+      posType
     );
 
-    const posType = ctx.outTypes[0];
     const posSlot = ctx.b.allocSlot();
 
     return {

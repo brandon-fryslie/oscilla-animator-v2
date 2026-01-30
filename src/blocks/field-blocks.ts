@@ -76,7 +76,7 @@ registerBlock({
     // Create field broadcast operation with the resolved type
     const fieldId = ctx.b.Broadcast(
       signalValue.id as SigExprId,
-      canonicalField(payloadType, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
+      outType
     );
     const slot = ctx.b.allocSlot();
 

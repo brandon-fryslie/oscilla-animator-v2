@@ -10,7 +10,8 @@
 import type { NormalizedPatch, BlockIndex } from '../ir/patches';
 import type { Block } from '../../graph/Patch';
 import type { CanonicalType, Extent, PayloadType, UnitType } from '../../core/canonical-types';
-import { getBlockDefinition } from '../../blocks/registry';
+import { isAxisInst, cardinalityMany } from '../../core/canonical-types';
+import { getBlockDefinition, getBlockCardinalityMetadata } from '../../blocks/registry';
 
 // =============================================================================
 // Port key
@@ -397,10 +398,11 @@ export function pass1TypeConstraints(normalized: NormalizedPatch): Pass1Result {
   // I recommend: keep going to report unresolveds too (more actionable).
   // (no early return)
 
-  // ---- Phase C: Build resolved CanonicalType for every port
+  // ---- Phase C: Build resolved CanonicalType for every port.
+  // Process inputs first so cardinality-preserve blocks can inherit field cardinality.
   const portTypes = new Map<PortKey, CanonicalType>();
 
-  for (const [k, info] of portInfos) {
+  const resolvePort = (k: PortKey, info: PortInfo): boolean => {
     const payload = payloadUF.resolved(info.payloadNode);
     const unit = unitUF.resolved(info.unitNode);
 
@@ -416,7 +418,7 @@ export function pass1TypeConstraints(normalized: NormalizedPatch): Pass1Result {
           'Add an explicit payload annotation on this block/port (or eliminate polymorphism)',
         ],
       });
-      continue;
+      return false;
     }
     if (!unit) {
       errors.push({
@@ -430,15 +432,56 @@ export function pass1TypeConstraints(normalized: NormalizedPatch): Pass1Result {
           'Add an explicit unit annotation on this block/port (or eliminate polymorphism)',
         ],
       });
-      continue;
+      return false;
     }
 
-    // Canonical output: fully resolved, extent copied from template (must already be instantiated)
     portTypes.set(k, {
       payload,
       unit,
       extent: info.template.extent,
     });
+    return true;
+  };
+
+  // Pass 1: resolve all input ports
+  for (const [k, info] of portInfos) {
+    if (info.direction === 'in') resolvePort(k, info);
+  }
+
+  // Pass 2: resolve output ports
+  for (const [k, info] of portInfos) {
+    if (info.direction === 'out') resolvePort(k, info);
+  }
+
+  // Pass 3: specialize cardinality for preserve-mode blocks.
+  // Uses fixpoint iteration to handle chains of preserve blocks (A → B → C).
+  // Each iteration propagates field cardinality one step further through the chain.
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const [k, info] of portInfos) {
+      if (info.direction !== 'out') continue;
+      const meta = getBlockCardinalityMetadata(info.block.type);
+      if (!meta || meta.cardinalityMode !== 'preserve') continue;
+
+      const current = portTypes.get(k);
+      if (!current) continue;
+      const currentCard = current.extent.cardinality;
+      // Skip if already specialized to many
+      if (isAxisInst(currentCard) && currentCard.value.kind === 'many') continue;
+
+      const fieldInstance = findFieldCardinalityFromUpstream(info.blockIndex, normalized.edges, portTypes);
+      if (fieldInstance) {
+        portTypes.set(k, {
+          ...current,
+          extent: {
+            ...current.extent,
+            cardinality: cardinalityMany(fieldInstance),
+          },
+        });
+        changed = true;
+      }
+    }
   }
 
   if (errors.length) return { kind: 'error', errors };
@@ -449,6 +492,29 @@ export function pass1TypeConstraints(normalized: NormalizedPatch): Pass1Result {
 // =============================================================================
 // Small helpers
 // =============================================================================
+
+/**
+ * For a cardinality-preserve block, find the field cardinality (InstanceRef) from upstream sources.
+ * Looks at edges wired into this block's inputs and checks the source port types.
+ * Returns the InstanceRef if any upstream source has cardinality=many, null otherwise.
+ */
+function findFieldCardinalityFromUpstream(
+  blockIndex: BlockIndex,
+  edges: ReadonlyArray<{ fromBlock: BlockIndex; fromPort: string; toBlock: BlockIndex; toPort: string }>,
+  portTypes: ReadonlyMap<PortKey, CanonicalType>,
+): import('../../core/canonical-types').InstanceRef | null {
+  for (const edge of edges) {
+    if (edge.toBlock !== blockIndex) continue;
+    const sourceKey = `${edge.fromBlock}:${edge.fromPort}:out` as PortKey;
+    const sourceType = portTypes.get(sourceKey);
+    if (!sourceType) continue;
+    const card = sourceType.extent.cardinality;
+    if (isAxisInst(card) && card.value.kind === 'many') {
+      return card.value.instance;
+    }
+  }
+  return null;
+}
 
 function isDefUnitVar(u: UnitTemplate): u is DefUnitVar {
   return typeof u === 'object' && u !== null && (u as any).kind === 'unitVar';

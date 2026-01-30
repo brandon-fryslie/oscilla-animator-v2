@@ -152,14 +152,14 @@ registerBlock({
       throw new Error('HsvToRgb sat and val must be signals');
     }
 
+    const outType = ctx.outTypes[0];
     const hsvFn = ctx.b.kernel('hsvToRgb');
     const colorField = ctx.b.fieldZipSig(
       hue.id as FieldExprId,
       [sat.id as SigExprId, val.id as SigExprId],
       hsvFn,
-      canonicalField(COLOR, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
+      outType
     );
-    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
     return {
@@ -206,13 +206,13 @@ registerBlock({
       throw new Error('ApplyOpacity opacity must be a field');
     }
 
+    const outType = ctx.outTypes[0];
     const opacityFn = ctx.b.kernel('perElementOpacity');
     const result = ctx.b.fieldZip(
       [color.id as FieldExprId, opacity.id as FieldExprId],
       opacityFn,
-      canonicalField(COLOR, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') })
+      outType
     );
-    const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
     return {

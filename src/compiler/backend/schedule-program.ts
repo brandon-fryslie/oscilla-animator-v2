@@ -294,11 +294,9 @@ function inferFieldInstanceFromExprs(
     case 'stateRead':
       return expr.instanceId;
     case 'map':
-      return requireManyInstance(expr.type).instanceId;
     case 'zip':
-      return requireManyInstance(expr.type).instanceId;
     case 'zipSig':
-      return requireManyInstance(expr.type).instanceId;
+      return expr.instanceId;
     case 'broadcast':
     case 'const':
       return undefined;

@@ -261,7 +261,7 @@ export interface FieldExprMap {
   readonly input: FieldExprId;
   readonly fn: PureFn;
   readonly type: CanonicalType;
-  // instanceId derived via requireManyInstance(expr.type)
+  readonly instanceId: InstanceId | undefined;
 }
 
 export interface FieldExprZip {
@@ -269,7 +269,7 @@ export interface FieldExprZip {
   readonly inputs: readonly FieldExprId[];
   readonly fn: PureFn;
   readonly type: CanonicalType;
-  // instanceId derived via requireManyInstance(expr.type)
+  readonly instanceId: InstanceId | undefined;
 }
 
 export interface FieldExprZipSig {
@@ -278,7 +278,7 @@ export interface FieldExprZipSig {
   readonly signals: readonly SigExprId[];
   readonly fn: PureFn;
   readonly type: CanonicalType;
-  // instanceId derived via requireManyInstance(expr.type)
+  readonly instanceId: InstanceId | undefined;
 }
 
 /**

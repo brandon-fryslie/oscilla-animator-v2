@@ -479,11 +479,9 @@ export class IRBuilderImpl implements IRBuilder {
       case 'placement':
         return expr.instanceId; // These ARE bound to an instance
       case 'map':
-        return requireManyInstance(expr.type).instanceId;
       case 'zip':
-        return requireManyInstance(expr.type).instanceId;
       case 'zipSig':
-        return requireManyInstance(expr.type).instanceId;
+        return expr.instanceId;
       case 'pathDerivative':
         return this.inferFieldInstance(expr.input);
       case 'broadcast':
@@ -530,7 +528,8 @@ export class IRBuilderImpl implements IRBuilder {
   ): FieldExprId {
     // For combining fields, we use zip with appropriate combine function
     const fn: PureFn = { kind: 'kernel', name: `combine_${mode}` };
-    const expr = { kind: 'zip' as const, inputs, fn, type };
+    const instanceId = this.inferZipInstance(inputs);
+    const expr = { kind: 'zip' as const, inputs, fn, type, instanceId };
     const hash = hashFieldExpr(expr);
     const existing = this.fieldExprCache.get(hash);
     if (existing !== undefined) {

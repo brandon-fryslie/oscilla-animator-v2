@@ -214,7 +214,7 @@ export function materialize(
   // Get instance
   const instance = instances.get(instanceId);
   if (!instance) {
-    throw new Error(`Instance ${instanceId} not found`);
+    throw new Error(`Instance ${instanceId} not found. Field expr: ${JSON.stringify(expr)}.\nAvailable instances: ${Array.from(instances.keys()).join(', ')}`);
   }
 
   // Resolve count
