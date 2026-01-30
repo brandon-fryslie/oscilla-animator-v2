@@ -11,8 +11,9 @@
 - [ ] #28: Zero-cardinality lifts either have explicit IR ops or documented design decision
 - [ ] #29: IR const expressions verified against spec ValueExprConst shape
 
-### Sprint-Level Gates
-- [ ] TypeScript compiles: `npx tsc --noEmit` exits 0
-- [ ] All gap-analysis-scoped tests pass
-- [ ] `grep -r 'instanceId' src/compiler/ir/types.ts` returns 0 for field expression types
-- [ ] No regressions in passing tests
+Definition of Done (sprint)
+- ValueExpr canonical file exists and compiles
+- AdapterSpec moved + per-axis matching works + broadcast expressed correctly
+- Field node instanceId removed; all consumers derive from type
+- ConstValue is payload-keyed and validated
+- Zero-cardinality is emitted by Const blocks and lifted explicitly to runtime lanes
