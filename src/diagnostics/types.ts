@@ -95,6 +95,7 @@ export type DiagnosticCode =
   // --- Type System Errors ---
   | 'E_TYPE_MISMATCH' // Port types cannot unify
   | 'E_DOMAIN_MISMATCH' // Domain cardinalities conflict
+  | 'E_AXIS_INVALID' // Axis invariant violation (Item #20)
 
   // --- Cardinality Errors (Sprint 2A - Cardinality-Generic Blocks) ---
   | 'E_CARDINALITY_MISMATCH' // Block output cardinality differs from required preserved cardinality
@@ -165,6 +166,7 @@ export type DiagnosticPayload =
   | { code: 'E_PAYLOAD_COMBINATION_NOT_ALLOWED'; inputPayloads: string[]; blockType: string }
   | { code: 'E_UNIT_MISMATCH'; port: string; expectedUnit: string; actualUnit: string }
   | { code: 'E_IMPLICIT_CAST_DISALLOWED'; fromPayload: string; toPayload: string; port: string }
+  | { code: 'E_AXIS_INVALID'; axisKind: string; expectedType: string; actualType: string } // Item #20
   | undefined;
 
 // =============================================================================
@@ -183,17 +185,17 @@ export interface PortTargetRef {
 
 /**
  * DiagnosticAction represents an automated or user-initiated fix for a diagnostic issue.
- * 
+ *
  * Actions follow the Action Determinism Contract:
  * - Serializable: Can be sent over network or saved to disk
  * - Replayable: Same action + same state = same result
  * - Safe: All references by ID, not mutable object pointers
- * 
+ *
  * Each action variant must specify:
  * - Exact targets (by ID)
  * - Exact operation parameters
  * - User-facing label for UI buttons
- * 
+ *
  * @see design-docs/.../07-diagnostics-system.md:368-379 for spec
  * @see design-docs/.../07-diagnostics-system.md:835-854 for Action Determinism Contract
  */
@@ -209,7 +211,7 @@ export type DiagnosticAction =
 /**
  * Navigate to a specific target in the UI (block, port, edge, etc.)
  * Used for "jump to problem" functionality.
- * 
+ *
  * @example
  * { kind: 'goToTarget', label: 'Go to Block', target: { kind: 'block', blockId: 'abc123' } }
  */
@@ -222,7 +224,7 @@ export interface GoToTargetAction {
 /**
  * Insert a new block into the patch.
  * Used for adding missing blocks (e.g., TimeRoot, Adapter).
- * 
+ *
  * @example
  * { kind: 'insertBlock', label: 'Add InfiniteTimeRoot', blockType: 'InfiniteTimeRoot' }
  * @example
@@ -239,7 +241,7 @@ export interface InsertBlockAction {
 /**
  * Remove a block from the patch.
  * Used for cleaning up disconnected or problematic blocks.
- * 
+ *
  * @example
  * { kind: 'removeBlock', label: 'Remove Disconnected Block', blockId: 'abc123' }
  */
@@ -252,7 +254,7 @@ export interface RemoveBlockAction {
 /**
  * Add an adapter block between two ports to fix type mismatches.
  * Used for automatic type coercion (e.g., Signal → Value, Field → Signal).
- * 
+ *
  * @example
  * { kind: 'addAdapter', label: 'Insert Adapter', fromPort: { blockId: 'a', portId: 'out', portKind: 'output' }, adapterType: 'SignalToValue' }
  */
@@ -266,7 +268,7 @@ export interface AddAdapterAction {
 /**
  * Create a time root block (required for patch execution).
  * Used when patch is missing a TimeRoot.
- * 
+ *
  * @example
  * { kind: 'createTimeRoot', label: 'Add InfiniteTimeRoot', timeRootKind: 'Infinite' }
  */
@@ -279,7 +281,7 @@ export interface CreateTimeRootAction {
 /**
  * Mute/hide a specific diagnostic (user dismissal).
  * Used when user wants to suppress warnings they consider acceptable.
- * 
+ *
  * @example
  * { kind: 'muteDiagnostic', label: 'Mute Warning', diagnosticId: 'diag-xyz' }
  */
@@ -292,7 +294,7 @@ export interface MuteDiagnosticAction {
 /**
  * Open documentation in external browser or help panel.
  * Used for "Learn More" links on diagnostics.
- * 
+ *
  * @example
  * { kind: 'openDocs', label: 'Learn More', docUrl: 'https://docs.example.com/signals' }
  */
