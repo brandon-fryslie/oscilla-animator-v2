@@ -73,7 +73,7 @@ describe('FloatValueRenderer', () => {
     });
 
     it('phase01: shows "phase" label', () => {
-      const renderer = createFloatValueRenderer({ kind: 'phase01' });
+      const renderer = createFloatValueRenderer({ kind: 'angle', unit: 'phase01' });
       const el = renderer.renderFull(scalarSample(0.75));
       const { container } = render(el);
       expect(container.textContent).toContain('phase');
@@ -86,21 +86,21 @@ describe('FloatValueRenderer', () => {
     });
 
     it('radians: shows "rad" label', () => {
-      const renderer = createFloatValueRenderer({ kind: 'radians' });
+      const renderer = createFloatValueRenderer({ kind: 'angle', unit: 'radians' });
       const el = renderer.renderFull(scalarSample(3.14159));
       const { container } = render(el);
       expect(container.textContent).toContain('rad');
     });
 
     it('ms: shows "ms" label', () => {
-      const renderer = createFloatValueRenderer({ kind: 'ms' });
+      const renderer = createFloatValueRenderer({ kind: 'time', unit: 'ms' });
       const el = renderer.renderFull(scalarSample(16.67));
       const { container } = render(el);
       expect(container.textContent).toContain('ms');
     });
 
     it('degrees: shows "deg" label', () => {
-      const renderer = createFloatValueRenderer({ kind: 'degrees' });
+      const renderer = createFloatValueRenderer({ kind: 'angle', unit: 'degrees' });
       const el = renderer.renderFull(scalarSample(180));
       const { container } = render(el);
       expect(container.textContent).toContain('deg');
@@ -126,7 +126,7 @@ describe('FloatValueRenderer', () => {
     });
 
     it('scalar with unit: shows label', () => {
-      const renderer = createFloatValueRenderer({ kind: 'phase01' });
+      const renderer = createFloatValueRenderer({ kind: 'angle', unit: 'phase01' });
       const el = renderer.renderInline(scalarSample(0.25));
       const { container } = render(el);
       expect(container.textContent).toBe('0.2500 phase');

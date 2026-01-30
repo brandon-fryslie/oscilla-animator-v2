@@ -3,6 +3,8 @@
  *
  * Import this module for side-effects to populate the ValueRenderer registry
  * with all built-in renderers.
+ *
+ * Updated for structured UnitType (#18).
  */
 
 import { registerRenderer } from '../ValueRenderer';
@@ -20,9 +22,10 @@ registerRenderer('float', floatValueRenderer);
 registerRenderer('color', colorValueRenderer);
 
 // Exact matches (tier 1) — unit-specific float renderers
-registerRenderer('float:phase01', createFloatValueRenderer({ kind: 'phase01' }));
+// Use structured unit constructors
+registerRenderer('float:phase01', createFloatValueRenderer({ kind: 'angle', unit: 'phase01' }));
 registerRenderer('float:norm01', createFloatValueRenderer({ kind: 'norm01' }));
-registerRenderer('float:radians', createFloatValueRenderer({ kind: 'radians' }));
-registerRenderer('float:degrees', createFloatValueRenderer({ kind: 'degrees' }));
-registerRenderer('float:ms', createFloatValueRenderer({ kind: 'ms' }));
-registerRenderer('float:seconds', createFloatValueRenderer({ kind: 'seconds' }));
+registerRenderer('float:radians', createFloatValueRenderer({ kind: 'angle', unit: 'radians' }));
+registerRenderer('float:degrees', createFloatValueRenderer({ kind: 'angle', unit: 'degrees' }));
+registerRenderer('float:ms', createFloatValueRenderer({ kind: 'time', unit: 'ms' }));
+registerRenderer('float:seconds', createFloatValueRenderer({ kind: 'time', unit: 'seconds' }));

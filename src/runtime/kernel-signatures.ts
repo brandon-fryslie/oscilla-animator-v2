@@ -17,25 +17,23 @@
  */
 
 import type { UnitType } from '../core/canonical-types';
-
-/**
- * Unit kind string for kernel signatures (lighter weight than full Unit objects).
- */
-type UnitKind = UnitType['kind'];
+import { unitPhase01, unitScalar, unitRadians, unitCount } from '../core/canonical-types';
 
 /**
  * Kernel input signature - declares expected unit for an input parameter
+ * Updated for #18: uses full UnitType instead of just kind string
  */
 export interface KernelInputSignature {
-  readonly expectedUnit?: UnitKind;
+  readonly expectedUnit?: UnitType;
   readonly description?: string;
 }
 
 /**
  * Kernel output signature - declares unit of output value
+ * Updated for #18: uses full UnitType instead of just kind string
  */
 export interface KernelOutputSignature {
-  readonly unit?: UnitKind;
+  readonly unit?: UnitType;
   readonly description?: string;
 }
 
@@ -48,10 +46,12 @@ export interface KernelSignature {
 }
 
 /**
- * Kernel signature registry
+ * Kernel signature database.
  *
- * Maps kernel name to its unit signature.
- * Only kernels with specific unit requirements/outputs are listed.
+ * Format:
+ * - inputs: array of input parameter signatures (in order)
+ * - output: output value signature
+ *
  * Kernels not listed have no unit constraints (accept/output any unit).
  */
 export const KERNEL_SIGNATURES: Readonly<Record<string, KernelSignature>> = {
@@ -59,18 +59,18 @@ export const KERNEL_SIGNATURES: Readonly<Record<string, KernelSignature>> = {
   // These expect PHASE [0,1), auto-wrap internally, output [-1,1]
 
   oscSin: {
-    inputs: [{ expectedUnit: 'phase01', description: 'Phase [0,1) - wraps internally' }],
-    output: { unit: 'scalar', description: 'Sine value [-1,1]' },
+    inputs: [{ expectedUnit: unitPhase01(), description: 'Phase [0,1) - wraps internally' }],
+    output: { unit: unitScalar(), description: 'Sine value [-1,1]' },
   },
 
   oscCos: {
-    inputs: [{ expectedUnit: 'phase01', description: 'Phase [0,1) - wraps internally' }],
-    output: { unit: 'scalar', description: 'Cosine value [-1,1]' },
+    inputs: [{ expectedUnit: unitPhase01(), description: 'Phase [0,1) - wraps internally' }],
+    output: { unit: unitScalar(), description: 'Cosine value [-1,1]' },
   },
 
   oscTan: {
-    inputs: [{ expectedUnit: 'phase01', description: 'Phase [0,1) - wraps internally' }],
-    output: { unit: 'scalar', description: 'Tangent value (unbounded)' },
+    inputs: [{ expectedUnit: unitPhase01(), description: 'Phase [0,1) - wraps internally' }],
+    output: { unit: unitScalar(), description: 'Tangent value (unbounded)' },
   },
 
 
@@ -78,290 +78,48 @@ export const KERNEL_SIGNATURES: Readonly<Record<string, KernelSignature>> = {
   // These expect phase [0,1), auto-wrap internally, output [-1,1]
 
   triangle: {
-    inputs: [{ expectedUnit: 'phase01', description: 'Phase [0,1) - wraps internally' }],
-    output: { unit: 'scalar', description: 'Triangle wave [-1,1]' },
+    inputs: [{ expectedUnit: unitPhase01(), description: 'Phase [0,1) - wraps internally' }],
+    output: { unit: unitScalar(), description: 'Triangle wave [-1,1]' },
   },
 
   square: {
-    inputs: [{ expectedUnit: 'phase01', description: 'Phase [0,1) - wraps internally' }],
-    output: { unit: 'scalar', description: 'Square wave [-1,1]' },
+    inputs: [{ expectedUnit: unitPhase01(), description: 'Phase [0,1) - wraps internally' }],
+    output: { unit: unitScalar(), description: 'Square wave [-1,1]' },
   },
 
   sawtooth: {
-    inputs: [{ expectedUnit: 'phase01', description: 'Phase [0,1) - wraps internally' }],
-    output: { unit: 'scalar', description: 'Sawtooth wave [-1,1]' },
+    inputs: [{ expectedUnit: unitPhase01(), description: 'Phase [0,1) - wraps internally' }],
+    output: { unit: unitScalar(), description: 'Sawtooth wave [-1,1]' },
   },
 
-  // === FIELD-LEVEL POLAR FUNCTIONS ===
-  // These work directly in radians (NOT phase)
-
-  circleAngle: {
+  pulse: {
     inputs: [
-      { expectedUnit: 'norm01', description: 'Normalized index [0,1]' },
-      { expectedUnit: 'phase01', description: 'Phase offset [0,1)' },
+      { expectedUnit: unitPhase01(), description: 'Phase [0,1) - wraps internally' },
+      { expectedUnit: unitScalar(), description: 'Duty cycle [0,1] - clamped' },
     ],
-    output: { unit: 'radians', description: 'Angle in radians [0, 2π)' },
+    output: { unit: unitScalar(), description: 'Pulse wave [-1,1]' },
   },
 
-  fieldPolarToCartesian: {
-    inputs: [
-      { expectedUnit: 'scalar', description: 'Center X' },
-      { expectedUnit: 'scalar', description: 'Center Y' },
-      { expectedUnit: 'scalar', description: 'Radius' },
-      { expectedUnit: 'radians', description: 'Angle in radians' },
-    ],
-    output: { unit: 'scalar', description: 'Cartesian position (vec3)' },
+
+  // === COORDINATE TRANSFORMS (Field-level) ===
+
+  polarR: {
+    inputs: [], // No unit constraints - operates on vec2 positions
+    output: { description: 'Radial distance (scalar)' },
   },
 
-  fieldAngularOffset: {
-    inputs: [
-      { expectedUnit: 'norm01', description: 'Normalized index [0,1]' },
-      { expectedUnit: 'phase01', description: 'Phase [0,1)' },
-      { expectedUnit: 'scalar', description: 'Spin multiplier' },
-    ],
-    output: { unit: 'radians', description: 'Angular offset in radians' },
+  polarTheta: {
+    inputs: [], // No unit constraints - operates on vec2 positions
+    output: { unit: unitRadians(), description: 'Angle in radians [0, 2π)' },
   },
 
-  fieldGoldenAngle: {
-    inputs: [
-      { expectedUnit: 'norm01', description: 'Normalized index [0,1]' },
-    ],
-    output: { unit: 'radians', description: 'Golden angle * turns in radians' },
-  },
 
-  // === EASING FUNCTIONS ===
-  // Input clamped to [0,1], output [0,1]
+  // === INDEX/NORMALIZATION ===
 
-  easeInQuad: {
-    inputs: [{ expectedUnit: 'norm01', description: 'Progress [0,1] - clamped internally' }],
-    output: { unit: 'norm01', description: 'Eased value [0,1]' },
-  },
+  // These provide normalized access to array indices
 
-  easeOutQuad: {
-    inputs: [{ expectedUnit: 'norm01', description: 'Progress [0,1] - clamped internally' }],
-    output: { unit: 'norm01', description: 'Eased value [0,1]' },
-  },
-
-  easeInOutQuad: {
-    inputs: [{ expectedUnit: 'norm01', description: 'Progress [0,1] - clamped internally' }],
-    output: { unit: 'norm01', description: 'Eased value [0,1]' },
-  },
-
-  easeInCubic: {
-    inputs: [{ expectedUnit: 'norm01', description: 'Progress [0,1] - clamped internally' }],
-    output: { unit: 'norm01', description: 'Eased value [0,1]' },
-  },
-
-  easeOutCubic: {
-    inputs: [{ expectedUnit: 'norm01', description: 'Progress [0,1] - clamped internally' }],
-    output: { unit: 'norm01', description: 'Eased value [0,1]' },
-  },
-
-  easeInOutCubic: {
-    inputs: [{ expectedUnit: 'norm01', description: 'Progress [0,1] - clamped internally' }],
-    output: { unit: 'norm01', description: 'Eased value [0,1]' },
-  },
-
-  easeInElastic: {
-    inputs: [{ expectedUnit: 'norm01', description: 'Progress [0,1] - clamped internally' }],
-    output: { unit: 'norm01', description: 'Eased value [0,1]' },
-  },
-
-  easeOutElastic: {
-    inputs: [{ expectedUnit: 'norm01', description: 'Progress [0,1] - clamped internally' }],
-    output: { unit: 'norm01', description: 'Eased value [0,1]' },
-  },
-
-  easeOutBounce: {
-    inputs: [{ expectedUnit: 'norm01', description: 'Progress [0,1] - clamped internally' }],
-    output: { unit: 'norm01', description: 'Eased value [0,1]' },
-  },
-
-  // === FIELD ANIMATION FUNCTIONS ===
-
-  fieldPulse: {
-    inputs: [
-      { expectedUnit: 'norm01', description: 'Normalized index [0,1]' },
-      { expectedUnit: 'phase01', description: 'Phase [0,1)' },
-      { expectedUnit: 'scalar', description: 'Base value' },
-      { expectedUnit: 'scalar', description: 'Amplitude' },
-      { expectedUnit: 'scalar', description: 'Spread' },
-    ],
-    output: { unit: 'scalar', description: 'Pulsed value' },
-  },
-
-  fieldHueFromPhase: {
-    inputs: [
-      { expectedUnit: 'norm01', description: 'Normalized index [0,1]' },
-      { expectedUnit: 'phase01', description: 'Phase [0,1)' },
-    ],
-    output: { unit: 'norm01', description: 'Hue [0,1]' },
-  },
-
-  circleLayout: {
-    inputs: [
-      { expectedUnit: 'norm01', description: 'Normalized index [0,1]' },
-      { expectedUnit: 'scalar', description: 'Radius' },
-      { expectedUnit: 'phase01', description: 'Phase offset [0,1)' },
-    ],
-    output: { unit: 'scalar', description: 'Position (vec3)' },
-  },
-
-  // === LAYOUT KERNELS ===
-
-  lineLayout: {
-    inputs: [
-      { expectedUnit: 'norm01', description: 'Normalized index [0,1]' },
-      { expectedUnit: 'scalar', description: 'Start X' },
-      { expectedUnit: 'scalar', description: 'Start Y' },
-      { expectedUnit: 'scalar', description: 'End X' },
-      { expectedUnit: 'scalar', description: 'End Y' },
-    ],
-    output: { unit: 'scalar', description: 'Position (vec3)' },
-  },
-
-  gridLayout: {
-    inputs: [
-      { expectedUnit: 'count', description: 'Element index (integer)' },
-      { expectedUnit: 'count', description: 'Columns' },
-      { expectedUnit: 'count', description: 'Rows' },
-    ],
-    output: { unit: 'scalar', description: 'Position (vec3)' },
-  },
-
-  // === VEC CONSTRUCTION ===
-
-  makeVec3: {
-    inputs: [
-      { expectedUnit: 'scalar', description: 'X component' },
-      { expectedUnit: 'scalar', description: 'Y component' },
-    ],
-    output: { unit: 'scalar', description: 'Vec3 position (z=0.0)' },
-  },
-
-  makeVec2: {
-    inputs: [
-      { expectedUnit: 'scalar', description: 'X component' },
-      { expectedUnit: 'scalar', description: 'Y component' },
-    ],
-    output: { unit: 'scalar', description: 'Vec2 (control points, tangents) - coord-space AGNOSTIC' },
-  },
-
-  // === COLOR KERNELS ===
-
-  hsvToRgb: {
-    inputs: [
-      { expectedUnit: 'norm01', description: 'Hue [0,1] - wraps' },
-      { expectedUnit: 'norm01', description: 'Saturation [0,1] - clamped' },
-      { expectedUnit: 'norm01', description: 'Value [0,1] - clamped' },
-    ],
-    output: { unit: 'rgba01', description: 'RGBA color' },
-  },
-
-  applyOpacity: {
-    inputs: [
-      { expectedUnit: 'rgba01', description: 'Color field (RGBA)' },
-      { expectedUnit: 'norm01', description: 'Opacity [0,1] - clamped' },
-    ],
-    output: { unit: 'rgba01', description: 'RGBA color with applied opacity' },
-  },
-
-  // === JITTER / EFFECTS ===
-
-  jitter2d: {
-    inputs: [
-      { expectedUnit: 'scalar', description: 'Position (vec2) - coord-space AGNOSTIC' },
-      { expectedUnit: 'scalar', description: 'Random seed value' },
-      { expectedUnit: 'scalar', description: 'Amount X - same units as position' },
-      { expectedUnit: 'scalar', description: 'Amount Y - same units as position' },
-    ],
-    output: { unit: 'scalar', description: 'Jittered position (vec2) - preserves input space' },
-  },
-
-  fieldJitterVec: {
-    inputs: [
-      { expectedUnit: 'scalar', description: 'Position (vec3) - coord-space AGNOSTIC' },
-      { expectedUnit: 'scalar', description: 'Random seed value' },
-      { expectedUnit: 'scalar', description: 'Amount X - same units as position' },
-      { expectedUnit: 'scalar', description: 'Amount Y - same units as position' },
-      { expectedUnit: 'scalar', description: 'Amount Z - same units as position' },
-    ],
-    output: { unit: 'scalar', description: 'Jittered position (vec3)' },
-  },
-
-  attract2d: {
-    inputs: [
-      { expectedUnit: 'scalar', description: 'Position (vec2) - coord-space AGNOSTIC' },
-      { expectedUnit: 'scalar', description: 'Target X - same space as position' },
-      { expectedUnit: 'scalar', description: 'Target Y - same space as position' },
-      { expectedUnit: 'phase01', description: 'Phase [0,1) - modulates drift' },
-      { expectedUnit: 'norm01', description: 'Strength [0,1]' },
-    ],
-    output: { unit: 'scalar', description: 'Attracted position (vec2) - preserves input space' },
-  },
-
-  // === FIELD MATH ===
-
-  fieldAdd: {
-    inputs: [
-      { expectedUnit: 'scalar', description: 'Field A (float)' },
-      { expectedUnit: 'scalar', description: 'Field B (float)' },
-    ],
-    output: { unit: 'scalar', description: 'Element-wise sum' },
-  },
-
-  fieldRadiusSqrt: {
-    inputs: [
-      { expectedUnit: 'norm01', description: 'Normalized index [0,1]' },
-      { expectedUnit: 'scalar', description: 'Radius - units preserved' },
-    ],
-    output: { unit: 'scalar', description: 'Scaled radius: radius * sqrt(id01)' },
-  },
-
-  // === GEOMETRY KERNELS ===
-
-  polygonVertex: {
-    inputs: [
-      { expectedUnit: 'count', description: 'Vertex index (integer)' },
-      { expectedUnit: 'count', description: 'Number of sides (≥3)' },
-      { expectedUnit: 'scalar', description: 'Radius X - LOCAL-SPACE units' },
-      { expectedUnit: 'scalar', description: 'Radius Y - LOCAL-SPACE units' },
-    ],
-    output: { unit: 'scalar', description: 'Vertex position (vec2) - LOCAL-SPACE centered at (0,0)' },
-  },
-
-  starVertex: {
-    inputs: [
-      { expectedUnit: 'count', description: 'Vertex index (integer)' },
-      { expectedUnit: 'count', description: 'Number of points' },
-      { expectedUnit: 'scalar', description: 'Outer radius - LOCAL-SPACE units' },
-      { expectedUnit: 'scalar', description: 'Inner radius - LOCAL-SPACE units' },
-    ],
-    output: { unit: 'scalar', description: 'Vertex position (vec2) - LOCAL-SPACE centered at (0,0)' },
-  },
-
-  // === POSITION MANIPULATION ===
-
-  fieldSetZ: {
-    inputs: [
-      { expectedUnit: 'scalar', description: 'Position (vec3) - WORLD-SPACE' },
-      { expectedUnit: 'scalar', description: 'Z value - WORLD-SPACE units' },
-    ],
-    output: { unit: 'scalar', description: 'Position (vec3) with new Z - WORLD-SPACE' },
+  normalizedIndex: {
+    inputs: [{ expectedUnit: unitCount(), description: 'Element count (integer)' }],
+    output: { description: 'Index normalized to [0,1]' },
   },
 };
-
-/**
- * Get kernel signature by name.
- * Returns undefined if kernel has no specific unit constraints.
- */
-export function getKernelSignature(kernelName: string): KernelSignature | undefined {
-  return KERNEL_SIGNATURES[kernelName];
-}
-
-/**
- * Check if a kernel has a signature (i.e., has unit constraints).
- */
-export function hasKernelSignature(kernelName: string): boolean {
-  return kernelName in KERNEL_SIGNATURES;
-}
