@@ -59,6 +59,7 @@ export {
   canonicalField,
   canonicalEventOne,
   canonicalEventField,
+  canonicalConst,
   axisInst,
   axisVar,
   isAxisInst,

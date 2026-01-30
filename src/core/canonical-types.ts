@@ -707,6 +707,28 @@ export function canonicalEventField(instance: InstanceRef): CanonicalType {
   };
 }
 
+/**
+ * Create a Const canonical type (zero + continuous).
+ *
+ * Const types represent compile-time constants (no runtime lanes).
+ * Examples: literal values, configuration parameters.
+ *
+ * Item #22 / T02-U-1: canonicalConst constructor
+ */
+export function canonicalConst(payload: PayloadType, unit: UnitType): CanonicalType {
+  return {
+    payload,
+    unit,
+    extent: {
+      cardinality: axisInst({ kind: 'zero' }),
+      temporality: axisInst({ kind: 'continuous' }),
+      binding: axisInst(DEFAULT_BINDING),
+      perspective: axisInst(DEFAULT_PERSPECTIVE),
+      branch: axisInst(DEFAULT_BRANCH),
+    },
+  };
+}
+
 // =============================================================================
 // Derived Classification Helpers
 // =============================================================================
@@ -716,10 +738,11 @@ export function canonicalEventField(instance: InstanceRef): CanonicalType {
  *
  * Classification rules:
  * - temporality=discrete → 'event'
+ * - temporality=continuous + cardinality=zero → 'const' (Item #14)
  * - temporality=continuous + cardinality=many → 'field'
  * - temporality=continuous + cardinality=one → 'signal'
  */
-export type DerivedKind = 'signal' | 'field' | 'event';
+export type DerivedKind = 'signal' | 'field' | 'event' | 'const';
 
 export function deriveKind(t: CanonicalType): DerivedKind {
   const card = t.extent.cardinality;
@@ -737,6 +760,8 @@ export function deriveKind(t: CanonicalType): DerivedKind {
     throw new Error('Cannot derive kind from type with uninstantiated cardinality axis');
   }
 
+  // Item #14 / T03-C-1: Handle zero cardinality
+  if (card.value.kind === 'zero') return 'const';
   if (card.value.kind === 'many') return 'field';
   return 'signal';
 }
@@ -757,6 +782,7 @@ export function tryDeriveKind(t: CanonicalType): DerivedKind | null {
 
   // All axes instantiated - same logic as deriveKind
   if (tempo.value.kind === 'discrete') return 'event';
+  if (card.value.kind === 'zero') return 'const';
   if (card.value.kind === 'many') return 'field';
   return 'signal';
 }

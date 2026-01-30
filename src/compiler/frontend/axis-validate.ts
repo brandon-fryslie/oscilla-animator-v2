@@ -5,10 +5,11 @@
  * This is the "belt buckle" that prevents nonsense from reaching the backend.
  *
  * ENFORCEMENT SCOPE (D4):
- * - **Hard invariants (enforce)**: 
+ * - **Hard invariants (enforce)**:
  *   - Event: payload=bool, unit=none, temporality=discrete
  *   - Field: cardinality=many(instance), temporality=continuous
  *   - Signal: cardinality=one, temporality=continuous
+ *   - Const: cardinality=zero, temporality=continuous (Item #14)
  * - **Avoid over-enforcing**: payload/unit combos unless genuinely non-negotiable
  */
 
@@ -63,10 +64,34 @@ export function validateType(t: CanonicalType): void {
   // Core family invariants are derived from CanonicalType
   const k = deriveKind(t);
 
-  // Enforce family invariants
+  // Enforce family invariants (Item #14: handle 'const')
   if (k === 'signal') assertSignalType(t);
   else if (k === 'field') assertFieldType(t);
-  else assertEventType(t);
+  else if (k === 'event') assertEventType(t);
+  else if (k === 'const') assertConstType(t);
+  else {
+    // Exhaustiveness check
+    const _exhaustive: never = k;
+    throw new Error(`Unknown derived kind: ${_exhaustive}`);
+  }
+}
+
+/**
+ * Assert type is a const (zero + continuous).
+ * Item #14 / T03-C-1: Handle const types.
+ */
+export function assertConstType(t: CanonicalType): void {
+  const k = deriveKind(t);
+  if (k !== 'const') throw new Error(`Expected const type, got ${k}`);
+
+  const card = t.extent.cardinality;
+  if (card.kind !== 'inst' || card.value.kind !== 'zero') {
+    throw new Error('Const types must have cardinality=zero (instantiated)');
+  }
+  const tempo = t.extent.temporality;
+  if (tempo.kind !== 'inst' || tempo.value.kind !== 'continuous') {
+    throw new Error('Const types must have temporality=continuous (instantiated)');
+  }
 }
 
 /**
