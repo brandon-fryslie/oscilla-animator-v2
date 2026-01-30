@@ -20,7 +20,8 @@
  * - Any int↔float without explicit rounding policy
  */
 
-import type { CanonicalType, PayloadType, UnitType, Extent } from '../core/canonical-types';
+import type { UnitType, Extent } from '../core/canonical-types';
+import type { InferenceCanonicalType, InferencePayloadType, InferenceUnitType } from '../core/inference-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION, DEFAULTS_V0, unitsEqual } from '../core/canonical-types';
 
 // =============================================================================
@@ -54,8 +55,8 @@ export type ExtentTransform =
  * - Specific type: matches/produces this specific type
  */
 export interface TypePattern {
-  readonly payload: PayloadType | 'same' | 'any';
-  readonly unit: UnitType | 'same' | 'any';
+  readonly payload: InferencePayloadType | 'same' | 'any';
+  readonly unit: InferenceUnitType | 'same' | 'any';
   readonly extent: ExtentPattern;
 }
 
@@ -264,7 +265,7 @@ const ADAPTER_RULES: AdapterRule[] = [
 /**
  * Extract a type pattern from a CanonicalType for matching.
  */
-export function extractPattern(type: CanonicalType): TypePattern {
+export function extractPattern(type: InferenceCanonicalType): TypePattern {
   return {
     payload: type.payload,
     unit: type.unit,
@@ -311,7 +312,8 @@ function patternMatches(actual: TypePattern, pattern: TypePattern): boolean {
   if (pattern.unit !== 'any' && pattern.unit !== 'same') {
     const actualUnit = actual.unit;
     if (actualUnit === 'any' || actualUnit === 'same') return false;
-    if (!unitsEqual(actualUnit as UnitType, pattern.unit)) return false;
+    if (actualUnit.kind === 'var' || pattern.unit.kind === 'var') return true; // vars match anything
+    if (!unitsEqual(actualUnit as UnitType, pattern.unit as UnitType)) return false;
   }
   
   // Extent must match
@@ -353,7 +355,7 @@ function patternsAreCompatible(from: TypePattern, to: TypePattern): boolean {
  * @param to - Target CanonicalType
  * @returns AdapterSpec if an adapter exists, null otherwise
  */
-export function findAdapter(from: CanonicalType, to: CanonicalType): AdapterSpec | null {
+export function findAdapter(from: InferenceCanonicalType, to: InferenceCanonicalType): AdapterSpec | null {
   const fromPattern = extractPattern(from);
   const toPattern = extractPattern(to);
 
@@ -371,16 +373,32 @@ export function findAdapter(from: CanonicalType, to: CanonicalType): AdapterSpec
           continue;
         }
       }
-      // For rules with 'any' unit on both sides, require actual units to match
-      if (rule.from.unit === 'any' && rule.to.unit === 'any') {
+      // For rules with 'same' or 'any' unit, require actual units to match
+      // (adapters that preserve units must not match when units differ)
+      if (rule.to.unit === 'same' || (rule.from.unit === 'any' && rule.to.unit === 'any')) {
         const fromUnit = fromPattern.unit;
         const toUnit = toPattern.unit;
         if (fromUnit !== 'any' && toUnit !== 'any' && fromUnit !== 'same' && toUnit !== 'same') {
-          if (!unitsEqual(fromUnit as UnitType, toUnit as UnitType)) {
-            continue;
+          if (typeof fromUnit === 'object' && typeof toUnit === 'object') {
+            if (fromUnit.kind === 'var' || toUnit.kind === 'var') {
+              // vars match anything
+            } else if (!unitsEqual(fromUnit as UnitType, toUnit as UnitType)) {
+              continue;
+            }
           }
         }
       }
+      // Broadcast adapter: verify cardinality direction (one → many only)
+      if (rule.adapter.blockType === 'Broadcast') {
+        const fromCard = from.extent.cardinality;
+        const toCard = to.extent.cardinality;
+        const fromIsOne = fromCard.kind === 'inst' && fromCard.value.kind === 'one';
+        const toIsMany = toCard.kind === 'inst' && toCard.value.kind === 'many';
+        if (!fromIsOne || !toIsMany) {
+          continue;
+        }
+      }
+
       return rule.adapter;
     }
   }
@@ -391,7 +409,7 @@ export function findAdapter(from: CanonicalType, to: CanonicalType): AdapterSpec
 /**
  * Check if types need an adapter (and one exists).
  */
-export function needsAdapter(from: CanonicalType, to: CanonicalType): boolean {
+export function needsAdapter(from: InferenceCanonicalType, to: InferenceCanonicalType): boolean {
   const fromPattern = extractPattern(from);
   const toPattern = extractPattern(to);
 
