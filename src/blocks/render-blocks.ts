@@ -11,7 +11,7 @@
 
 import { registerBlock } from './registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../core/ids';
-import { canonicalType, canonicalField } from '../core/canonical-types';
+import { canonicalType, canonicalField, unitWorld3 } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { defaultSourceConst } from '../types';
 
@@ -32,7 +32,7 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    pos: { label: 'Position', type: canonicalField(VEC3, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+    pos: { label: 'Position', type: canonicalField(VEC3, unitWorld3(), { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
     color: { label: 'Color', type: canonicalField(COLOR, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
     shape: { label: 'Shape', type: canonicalType(SHAPE) },
     scale: {
