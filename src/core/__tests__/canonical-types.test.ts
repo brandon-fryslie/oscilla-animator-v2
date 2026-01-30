@@ -54,9 +54,8 @@ import {
   eventType,
   eventTypeScalar,
   eventTypePerInstance,
-  isPayloadVar,
-  isConcretePayload,
 } from '../canonical-types';
+import { isPayloadVar, isConcretePayload } from '../inference-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION, payloadStride } from '../canonical-types';
 import { instanceId, domainTypeId } from '../ids';
 

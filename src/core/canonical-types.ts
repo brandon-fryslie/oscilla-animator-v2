@@ -14,6 +14,9 @@
  * - No optional fields - use discriminated unions (Axis<T,V> pattern)
  * - Runtime erasure - all type info resolved at compile time
  * - Single source of truth - this is the authoritative type system
+ *
+ * IMPORTANT: CanonicalType is final, resolved, backend-safe. It NEVER contains vars.
+ * Inference types (which CAN have vars) are in inference-types.ts.
  */
 
 import {
@@ -75,16 +78,6 @@ export function unitWorld2(): UnitType { return { kind: 'world2' }; }
 export function unitWorld3(): UnitType { return { kind: 'world3' }; }
 export function unitRgba01(): UnitType { return { kind: 'rgba01' }; }
 
-let unitVarCounter = 0;
-/**
- * REMOVED per D5: Unit variables belong in inference wrappers, not canonical types.
- * This function is no longer valid.
- * @deprecated Use InferenceUnit from analyze-type-constraints instead
- */
-export function unitVar(_id?: string): never {
-  throw new Error('unitVar() removed per D5 - use InferenceUnit in constraint solver instead');
-}
-
 /**
  * Compare two units for deep equality.
  */
@@ -121,6 +114,14 @@ export type ConcretePayloadType =
   | { readonly kind: 'vec3' }
   | { readonly kind: 'color' }
   | { readonly kind: 'cameraProjection' };
+
+/**
+ * PayloadType is the final, concrete payload type.
+ * In canonical types, PayloadType = ConcretePayloadType (no vars allowed).
+ *
+ * For inference types (which CAN have vars), see InferencePayloadType in inference-types.ts.
+ */
+export type PayloadType = ConcretePayloadType;
 
 /**
  * The kind discriminator for concrete payload types.
@@ -181,66 +182,18 @@ export function payloadFromKind(kind: PayloadKind): ConcretePayloadType {
 }
 
 /**
- * The base data type of a value, including unresolved variables.
- *
- * PayloadType can be either:
- * - A concrete type object with kind (e.g., FLOAT, VEC2)
- * - A payload variable { kind: 'var', id: string } for polymorphic ports
- *
- * Payload variables MUST be resolved by the constraint solver before compilation.
- */
-export type PayloadType =
-  | ConcretePayloadType
-  | { readonly kind: 'var'; readonly id: string };  // Unresolved payload variable
-
-let payloadVarCounter = 0;
-/**
- * Create an unresolved payload variable.
- * Payload variables MUST be resolved by the constraint solver before compilation.
- */
-export function payloadVar(id?: string): PayloadType {
-  return { kind: 'var', id: id ?? `_pv${payloadVarCounter++}` };
-}
-
-/**
- * Check if a payload is an unresolved variable.
- */
-export function isPayloadVar(payload: PayloadType): payload is { kind: 'var'; id: string } {
-  return typeof payload === 'object' && payload !== null && payload.kind === 'var';
-}
-
-/**
- * Check if a payload is a concrete (non-variable) type.
- */
-export function isConcretePayload(payload: PayloadType): payload is ConcretePayloadType {
-  // After removing stride field, check that it's not a var
-  return typeof payload === 'object' && payload !== null && payload.kind !== 'var';
-}
-
-/**
  * Compare two payloads for equality.
  */
 export function payloadsEqual(a: PayloadType, b: PayloadType): boolean {
-  if (isPayloadVar(a) && isPayloadVar(b)) {
-    return a.id === b.id;
-  }
-  if (isPayloadVar(a) || isPayloadVar(b)) {
-    return false;  // One is var, other is concrete
-  }
-  // Both concrete - compare by kind
+  // Both are concrete - compare by kind
   return a.kind === b.kind;
 }
 
 /**
  * Check if a (payload, unit) combination is valid per spec §A4.
- * Note: Unit variables removed per D5. This now only checks concrete units.
  */
 export function isValidPayloadUnit(payload: PayloadType, unit: UnitType): boolean {
-  // Payload variables are always valid during inference (will be resolved later)
-  if (isPayloadVar(payload)) return true;
-  // After isPayloadVar check, payload is ConcretePayloadType
-  const concretePayload = payload as ConcretePayloadType;
-  const allowed = ALLOWED_UNITS[concretePayload.kind];
+  const allowed = ALLOWED_UNITS[payload.kind];
   if (!allowed) return false;
   return allowed.includes(unit.kind);
 }
@@ -248,15 +201,9 @@ export function isValidPayloadUnit(payload: PayloadType, unit: UnitType): boolea
 /**
  * Get the default unit for a payload type.
  * Used for ergonomic helpers where unit can be omitted.
- * Throws if given a payload variable (must resolve payload first).
  */
 export function defaultUnitForPayload(payload: PayloadType): UnitType {
-  if (isPayloadVar(payload)) {
-    throw new Error(`Cannot get default unit for payload variable ${payload.id} - resolve payload first`);
-  }
-  // After isPayloadVar check, payload is ConcretePayloadType
-  const concretePayload = payload as ConcretePayloadType;
-  switch (concretePayload.kind) {
+  switch (payload.kind) {
     case 'float': return unitScalar();
     case 'int': return unitCount();
     case 'vec2': return unitWorld2();
@@ -265,7 +212,7 @@ export function defaultUnitForPayload(payload: PayloadType): UnitType {
     case 'bool': return unitNone();
     case 'cameraProjection': return unitNone();
     default: {
-      const _exhaustive: never = concretePayload;
+      const _exhaustive: never = payload;
       throw new Error(`Unknown payload kind: ${(_exhaustive as ConcretePayloadType).kind}`);
     }
   }
@@ -393,10 +340,6 @@ export function strideOf(type: PayloadType): number {
  * Per resolution Q4: Exhaustive switch with explicit case for every PayloadType kind.
  */
 export function payloadStride(p: PayloadType): number {
-  if (isPayloadVar(p)) {
-    throw new Error('Cannot get stride for payload variable - resolve payload first');
-  }
-
   // Exhaustive switch - no default fall-through
   switch (p.kind) {
     case 'float': return 1;
@@ -597,9 +540,9 @@ export interface Extent {
 // Default Axis Values (used by canonical constructors)
 // =============================================================================
 
-const DEFAULT_BINDING: BindingValue = { kind: 'unbound' };
-const DEFAULT_PERSPECTIVE: PerspectiveValue = { kind: 'default' };
-const DEFAULT_BRANCH: BranchValue = { kind: 'default' };
+export const DEFAULT_BINDING: BindingValue = { kind: 'unbound' };
+export const DEFAULT_PERSPECTIVE: PerspectiveValue = { kind: 'default' };
+export const DEFAULT_BRANCH: BranchValue = { kind: 'default' };
 
 // =============================================================================
 // CanonicalType - Complete Type Contract
@@ -884,13 +827,11 @@ export function assertEventType(t: CanonicalType): void {
 /**
  * Create a CanonicalType with specified payload and unit.
  *
- * Overload 1: canonicalType(payload) - uses default unit for payload (only for concrete payloads)
- * Overload 2: canonicalType(payload, unit) - explicit unit (required for payload variables)
+ * Overload 1: canonicalType(payload) - uses default unit for payload
+ * Overload 2: canonicalType(payload, unit) - explicit unit
  * Overload 3: canonicalType(payload, unit, extentOverrides) - full control
  *
  * Legacy: canonicalType(payload, extentOverrides) still works during migration.
- *
- * Note: When using payloadVar(), you MUST provide an explicit unit (use unitVar for polymorphism).
  */
 export function canonicalType(
   payload: PayloadType,
@@ -901,21 +842,15 @@ export function canonicalType(
   let extOverrides: Partial<Extent> | undefined;
 
   if (unitOrExtent === undefined) {
-    // canonicalType(FLOAT) -> use default unit (only for concrete payloads)
-    if (isPayloadVar(payload)) {
-      throw new Error(`Cannot omit unit for payload variable ${payload.id} - use unitVar() for polymorphic unit`);
-    }
+    // canonicalType(FLOAT) -> use default unit
     unit = defaultUnitForPayload(payload);
     extOverrides = undefined;
   } else if ('kind' in unitOrExtent) {
-    // canonicalType(FLOAT, unitPhase01(), {...}) or canonicalType(payloadVar('x'), unitVar('y'))
+    // canonicalType(FLOAT, unitPhase01(), {...})
     unit = unitOrExtent as UnitType;
     extOverrides = extentOverrides;
   } else {
     // Legacy: canonicalType(FLOAT, { cardinality: ... })
-    if (isPayloadVar(payload)) {
-      throw new Error(`Cannot omit unit for payload variable ${payload.id} - use unitVar() for polymorphic unit`);
-    }
     unit = defaultUnitForPayload(payload);
     extOverrides = unitOrExtent as Partial<Extent>;
   }
