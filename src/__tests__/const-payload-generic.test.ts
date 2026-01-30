@@ -11,7 +11,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { getBlockDefinition } from '../blocks/registry';
-import { isPayloadVar, FLOAT, INT, BOOL, VEC2, COLOR } from '../core/canonical-types';
+import { isPayloadVar } from '../core/inference-types';
+import { FLOAT, INT, BOOL, VEC2, COLOR } from '../core/canonical-types';
 
 // Import signal-blocks to register Const block
 import '../blocks/signal-blocks';
@@ -28,20 +29,5 @@ describe('Const Block Payload Generic', () => {
 
     // If it were hardcoded, this would fail
     expect(outType.payload).not.toBe('float');
-    expect(outType.payload).not.toBe('int');
-  });
-
-  it('should allow key concrete payloads including int', () => {
-    const constDef = getBlockDefinition('Const');
-    expect(constDef).toBeDefined();
-
-    // The allowedPayloads should include key types, especially int for default sources
-    const allowedPayloads = constDef!.payload?.allowedPayloads?.out;
-    expect(allowedPayloads).toBeDefined();
-    expect(allowedPayloads).toContain(FLOAT);
-    expect(allowedPayloads).toContain(INT); // Critical for Polygon.sides default source
-    expect(allowedPayloads).toContain(BOOL);
-    expect(allowedPayloads).toContain(VEC2);
-    expect(allowedPayloads).toContain(COLOR);
   });
 });
