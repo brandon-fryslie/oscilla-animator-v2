@@ -1163,3 +1163,14 @@ export function eventTypeScalar(): CanonicalType {
 export function eventTypePerInstance(instance: InstanceRef): CanonicalType {
   return eventType(axisInst({ kind: 'many', instance }));
 }
+
+// =============================================================================
+// TEMPORARY: SHAPE placeholder for migration (Q6)
+// =============================================================================
+
+/**
+ * TODO: Remove after resource graph system implemented (Q6)
+ * Temporary placeholder - shape is a resource, not a payload
+ * @deprecated Use resource graph system instead
+ */
+export const SHAPE = FLOAT; // Placeholder to allow compilation

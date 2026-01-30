@@ -187,7 +187,7 @@ describe('CanonicalType', () => {
   it('creates CanonicalType with payload and default extent', () => {
     const st = canonicalType(FLOAT);
     expect(st.payload.kind).toBe('float');
-    expect(st.extent.cardinality.kind).toBe('default');
+    expect(st.extent.cardinality.kind).toBe('inst');
   });
 
   // TODO: rewrite for canonical types
@@ -196,7 +196,7 @@ describe('CanonicalType', () => {
   //     cardinality: axisInstantiated(cardinalityMany(instanceRef(instanceId('grid-1'), domainTypeId('shape')))),
   //   });
   //   expect(st.payload.kind).toBe('vec2');
-  //   expect(st.extent.cardinality.kind).toBe('instantiated');
+  //   expect(st.extent.cardinality.kind).toBe('inst');
   // });
 });
 
@@ -287,8 +287,8 @@ describe('derived CanonicalType helpers', () => {
     expect(st.payload.kind).toBe('float');
     const card = st.extent.cardinality;
     const temp = st.extent.temporality;
-    expect(card.kind).toBe('instantiated');
-    expect(temp.kind).toBe('instantiated');
+    expect(card.kind).toBe('inst');
+    expect(temp.kind).toBe('inst');
     if (card.kind === 'inst' && temp.kind === 'inst') {
       expect(card.value.kind).toBe('one');
       expect(temp.value.kind).toBe('continuous');
@@ -325,8 +325,8 @@ describe('derived CanonicalType helpers', () => {
     const st = canonicalType(INT);
     const card = st.extent.cardinality;
     const temp = st.extent.temporality;
-    expect(card.kind).toBe('instantiated');
-    expect(temp.kind).toBe('instantiated');
+    expect(card.kind).toBe('inst');
+    expect(temp.kind).toBe('inst');
     if (card.kind === 'inst' && temp.kind === 'inst') {
       expect(card.value.kind).toBe('zero');
       expect(temp.value.kind).toBe('continuous');
@@ -350,21 +350,21 @@ describe('EventExpr Type Invariants', () => {
     expect(type.unit.kind).toBe('none');
 
     // Hard invariant: temporality must be discrete
-    expect(type.extent.temporality.kind).toBe('instantiated');
+    expect(type.extent.temporality.kind).toBe('inst');
     if (type.extent.temporality.kind === 'inst') {
       expect(type.extent.temporality.value.kind).toBe('discrete');
     }
 
     // Cardinality should be 'one' for scalar events
-    expect(type.extent.cardinality.kind).toBe('instantiated');
+    expect(type.extent.cardinality.kind).toBe('inst');
     if (type.extent.cardinality.kind === 'inst') {
       expect(type.extent.cardinality.value.kind).toBe('one');
     }
 
     // Other axes should be default
-    expect(type.extent.binding.kind).toBe('default');
-    expect(type.extent.perspective.kind).toBe('default');
-    expect(type.extent.branch.kind).toBe('default');
+    expect(type.extent.binding.kind).toBe('inst');
+    expect(type.extent.perspective.kind).toBe('inst');
+    expect(type.extent.branch.kind).toBe('inst');
   });
 
   it('eventTypePerInstance creates valid event type (many + discrete)', () => {
@@ -379,13 +379,13 @@ describe('EventExpr Type Invariants', () => {
     expect(type.unit.kind).toBe('none');
 
     // Hard invariant: temporality must be discrete
-    expect(type.extent.temporality.kind).toBe('instantiated');
+    expect(type.extent.temporality.kind).toBe('inst');
     if (type.extent.temporality.kind === 'inst') {
       expect(type.extent.temporality.value.kind).toBe('discrete');
     }
 
     // Cardinality should be 'many' for per-instance events
-    expect(type.extent.cardinality.kind).toBe('instantiated');
+    expect(type.extent.cardinality.kind).toBe('inst');
     if (type.extent.cardinality.kind === 'inst') {
       expect(type.extent.cardinality.value.kind).toBe('many');
       if (type.extent.cardinality.value.kind === 'many') {
@@ -401,7 +401,7 @@ describe('EventExpr Type Invariants', () => {
 
     expect(type.payload.kind).toBe('bool');
     expect(type.unit.kind).toBe('none');
-    expect(type.extent.temporality.kind).toBe('instantiated');
+    expect(type.extent.temporality.kind).toBe('inst');
     if (type.extent.temporality.kind === 'inst') {
       expect(type.extent.temporality.value.kind).toBe('discrete');
     }

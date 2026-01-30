@@ -9,7 +9,7 @@
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../core/ids';
 import { canonicalType, canonicalField, unitPhase01, strideOf, type PayloadType, floatConst, vec2Const, vec3Const, colorConst, intConst } from '../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { DOMAIN_CIRCLE } from '../core/domain-registry';
 import { defaultSourceConst } from '../types';
 

@@ -9,7 +9,7 @@
 import { registerBlock, STANDARD_NUMERIC_PAYLOADS } from './registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../core/ids';
 import { canonicalType, canonicalField, unitPhase01, strideOf, floatConst, vec2Const, vec3Const } from '../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { defaultSourceConst, defaultSourceTimeRoot } from '../types';
 import type { SigExprId, FieldExprId } from '../compiler/ir/Indices';
 import { slotOffset } from '../compiler/ir/Indices';
