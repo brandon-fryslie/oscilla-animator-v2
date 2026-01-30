@@ -13,6 +13,7 @@
  * 5. Normalize.Varargs        - Validate vararg configurations
  * 6. Analyze.TypeConstraints  - Union-find solver for types
  * 7. Analyze.TypeGraph        - Produce TypedPatch
+ * 7.5 Analyze.AxisValidation  - Validate axis invariants (Item #15)
  * 8. Analyze.CycleClassify    - Classify cycles for UI
  *
  * Output: FrontendResult with TypedPatch, CycleSummary, diagnostics, backendReady flag
@@ -25,20 +26,24 @@
 import type { Patch } from '../../graph';
 import { normalize, type NormalizedPatch, type NormError } from '../../graph/normalize';
 import type { TypedPatch } from '../ir/patches';
+import type { CanonicalType } from '../../core/canonical-types';
 import { compilationInspector } from '../../services/CompilationInspectorService';
 
 // Frontend passes
 import { pass1TypeConstraints, type TypeResolvedPatch, type Pass1Error, type TypeConstraintError } from './analyze-type-constraints';
 import { pass2TypeGraph } from './analyze-type-graph';
 import { analyzeCycles, type CycleSummary } from './analyze-cycles';
+import { validateTypes, validateNoVarAxes, type AxisViolation } from './axis-validate';
 
 // Re-export types for consumers
 export type { TypeResolvedPatch, Pass1Error, TypeConstraintError } from './analyze-type-constraints';
 export type { TypedPatch } from '../ir/patches';
 export type { CycleSummary, ClassifiedSCC, CycleFix, SCCClassification, CycleLegality } from './analyze-cycles';
+export type { AxisViolation } from './axis-validate';
 export { analyzeCycles } from './analyze-cycles';
 export { pass1TypeConstraints, getPortType } from './analyze-type-constraints';
 export { pass2TypeGraph } from './analyze-type-graph';
+export { validateTypes, validateNoVarAxes } from './axis-validate';
 
 // =============================================================================
 // Frontend Result Types
@@ -166,6 +171,32 @@ export function compileFrontend(patch: Patch): FrontendCompileResult {
   }
 
   // =========================================================================
+  // Step 3.5: Axis Validation (Item #15)
+  // =========================================================================
+  // Collect all resolved CanonicalTypes from TypedPatch
+  const allTypes: CanonicalType[] = Array.from(typeResolved.portTypes.values());
+
+  // Run axis validation
+  const axisViolations = validateTypes(allTypes);
+  const varEscapeViolations = validateNoVarAxes(allTypes);
+  const allViolations = [...axisViolations, ...varEscapeViolations];
+
+  if (allViolations.length > 0) {
+    // Map violations to FrontendErrors with context
+    const axisErrors = allViolations.map((v) => convertAxisViolation(v, typeResolved));
+    errors.push(...axisErrors);
+  }
+
+  try {
+    compilationInspector.capturePass('frontend:axis-validation', typedPatch, {
+      violations: allViolations,
+      typeCount: allTypes.length,
+    });
+  } catch (e) {
+    // Ignore inspector errors
+  }
+
+  // =========================================================================
   // Step 4: Cycle Classification (for UI)
   // =========================================================================
   const cycleSummary = analyzeCycles(typedPatch);
@@ -246,4 +277,34 @@ function convertNormError(e: NormError): FrontendError {
       };
     }
   }
+}
+
+/**
+ * Convert AxisViolation to FrontendError with block/port context.
+ * Item #15: Map violations to errors with source context.
+ */
+function convertAxisViolation(violation: AxisViolation, patch: TypeResolvedPatch): FrontendError {
+  // Find the port that corresponds to this type index
+  // PortKey format: `${blockIndex}:${portName}:${'in' | 'out'}`
+  const portTypes = Array.from(patch.portTypes.entries());
+
+  if (violation.nodeIndex < portTypes.length) {
+    const [portKey, _type] = portTypes[violation.nodeIndex];
+    const [blockIndexStr, portName, _direction] = portKey.split(':');
+    const blockIndex = parseInt(blockIndexStr, 10);
+    const block = patch.blocks[blockIndex];
+
+    return {
+      kind: 'AxisInvalid',
+      message: violation.message,
+      blockId: block?.id,
+      portId: portName,
+    };
+  }
+
+  // Fallback if we can't find the port
+  return {
+    kind: 'AxisInvalid',
+    message: violation.message,
+  };
 }

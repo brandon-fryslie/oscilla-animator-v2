@@ -19,6 +19,7 @@ import {
   assertFieldType,
   assertSignalType,
   deriveKind,
+  isAxisVar,
 } from '../../core/canonical-types';
 
 /**
@@ -92,6 +93,43 @@ export function assertConstType(t: CanonicalType): void {
   if (tempo.kind !== 'inst' || tempo.value.kind !== 'continuous') {
     throw new Error('Const types must have temporality=continuous (instantiated)');
   }
+}
+
+/**
+ * Validate that no type has var axes (all axes must be instantiated).
+ * Item #21 / T03-U-2: Axis var escape check.
+ *
+ * This enforces guardrail #4: "Vars" are inference-only and must not
+ * escape the frontend boundary into backend/runtime/renderer.
+ *
+ * @param types - Collection of CanonicalTypes to validate
+ * @returns Array of violations (empty if all valid)
+ */
+export function validateNoVarAxes(types: readonly CanonicalType[]): AxisViolation[] {
+  const violations: AxisViolation[] = [];
+
+  for (let i = 0; i < types.length; i++) {
+    const t = types[i];
+    const varAxes: string[] = [];
+
+    // Check all 5 axes
+    if (isAxisVar(t.extent.cardinality)) varAxes.push('cardinality');
+    if (isAxisVar(t.extent.temporality)) varAxes.push('temporality');
+    if (isAxisVar(t.extent.binding)) varAxes.push('binding');
+    if (isAxisVar(t.extent.perspective)) varAxes.push('perspective');
+    if (isAxisVar(t.extent.branch)) varAxes.push('branch');
+
+    if (varAxes.length > 0) {
+      violations.push({
+        nodeKind: 'CanonicalType',
+        nodeIndex: i,
+        kind: 'var-escape',
+        message: `Type has uninstantiated axes: ${varAxes.join(', ')}. All axes must be instantiated before backend compilation.`,
+      });
+    }
+  }
+
+  return violations;
 }
 
 /**
