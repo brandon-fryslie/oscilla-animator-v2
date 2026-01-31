@@ -508,9 +508,8 @@ export function executeFrame(
   for (const step of steps) {
     if (step.kind === 'evalSig') {
       const lookup = resolveSlotOffset(step.target);
-      if (lookup.storage === 'f64') {
+      // Include all signals regardless of storage type
         sigToSlot.set(step.expr as number, lookup.slot as number);
-      }
     }
   }
 

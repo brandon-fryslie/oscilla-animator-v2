@@ -12,7 +12,7 @@ import { getTestArena } from '../../runtime/__tests__/test-arena-helper';
 import { buildPatch, type PatchBuilder } from '../../graph/Patch';
 import { createSessionState, createProgramState, createRuntimeState, createRuntimeStateFromSession } from '../../runtime';
 import { executeFrame } from '../../runtime/ScheduleExecutor';
-import { evaluateSignal } from '../../runtime/SignalEvaluator';
+import { evaluateValueExprSignal } from '../../runtime/ValueExprSignalEvaluator';
 import { sigExprId, eventSlotId } from '../../compiler/ir/Indices';
 import type { StepEvalSig, ValueSlot } from '../../compiler/ir/types';
 import type { CompiledProgramIR, computeStorageSizes } from '../../compiler/ir/program';
@@ -197,7 +197,7 @@ describe('EventToSignalMask', () => {
 
 describe('SampleHold', () => {
   it('sigEventRead returns 0.0 when event has not fired', () => {
-    // Unit test: directly test evaluateSignal with an eventRead expr
+    // Unit test: directly test evaluateValueExprSignal with an eventRead expr
     // when eventScalars[slot] is 0
     const state = createRuntimeState(4, 0, 4, 0);
     state.time = { tAbsMs: 0, tMs: 100, phaseA: 0, phaseB: 0, dt: 16, pulse: 0, palette: new Float32Array([0, 0, 0, 1]), energy: 0.5 };
@@ -209,7 +209,7 @@ describe('SampleHold', () => {
       { kind: 'eventRead' as const, eventSlot: eventSlotId(0), type: canonicalType(FLOAT) },
     ];
 
-    const result = evaluateSignal(sigExprId(0), signals, state);
+    const result = evaluateValueExprSignal(sigExprId(0), signals, state);
     expect(result).toBe(0);
   });
 
