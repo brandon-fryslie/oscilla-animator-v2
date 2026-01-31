@@ -63,7 +63,6 @@ export {
   axisVar,
   isAxisInst,
   isAxisVar,
-  tryDeriveKind,
   requireManyInstance,
   payloadStride,
   FLOAT,

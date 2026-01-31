@@ -2,8 +2,7 @@
  * Enforcement test: No production code imports deriveKind.
  *
  * deriveKind is @deprecated. Consumers should dispatch on CanonicalType
- * extent axes directly using isSignalType/isFieldType/isEventType or
- * direct axis checks (requireInst + cardinality/temporality).
+ * extent axes directly using requireInst() + cardinality/temporality checks.
  *
  * This test scans all .ts source files to ensure no production code
  * imports deriveKind. Only canonical-types.ts (definition) and test
