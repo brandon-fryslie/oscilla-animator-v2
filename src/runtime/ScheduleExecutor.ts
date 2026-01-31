@@ -267,10 +267,10 @@ export function executeFrame(
 
       case 'materialize': {
         // Materialize field to buffer and store in slot
-        const fieldExpr = fields[step.value as number];
+        const fieldExpr = fields[step.field as number];
         const instanceIdStr = fieldExpr ? String(requireManyInstance(fieldExpr.type).instanceId) : '';
         const buffer = materialize(
-          step.value,
+          step.field,
           instanceIdStr,
           fields,
           signals,
@@ -280,10 +280,10 @@ export function executeFrame(
         );
         // Store directly in objects map using slot as key
         // (Object storage doesn't need slotMeta offset lookup)
-        state.values.objects.set(step.slot, buffer);
+        state.values.objects.set(step.target, buffer);
 
         // Debug tap: Record field value
-        state.tap?.recordFieldValue?.(step.slot, buffer);
+        state.tap?.recordFieldValue?.(step.target, buffer);
         break;
       }
 

@@ -5,7 +5,6 @@
  */
 
 import type { CanonicalType, ConstValue } from '../../core/canonical-types';
-import { requireManyInstance } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, CAMERA_PROJECTION, canonicalType, unitScalar, canonicalEvent, requireManyInstance, constValueMatchesPayload } from '../../core/canonical-types';
 import type { TopologyId } from '../../shapes/types';
 import type { IRBuilder } from './IRBuilder';

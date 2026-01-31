@@ -220,15 +220,13 @@ describe('Hash-consing (I13)', () => {
       expect(id1).toBe(id2);
     });
 
-    it('distinguishes fieldIntrinsic with different instanceIds', () => {
+    it('distinguishes fieldIntrinsic with different intrinsic names', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
-      const inst1 = instanceId('inst1');
-      const inst2 = instanceId('inst2');
-      
+
       const id1 = b.fieldIntrinsic('index', type);
-      const id2 = b.fieldIntrinsic('index', type);
-      
+      const id2 = b.fieldIntrinsic('randomId', type);
+
       expect(id1).not.toBe(id2);
     });
 
@@ -248,8 +246,8 @@ describe('Hash-consing (I13)', () => {
       const type = canonicalType(VEC2);
       const inst = instanceId('inst1');
       
-      const id1 = b.fieldPlacement(inst, 'uv', 'halton2D', type);
-      const id2 = b.fieldPlacement(inst, 'uv', 'halton2D', type);
+      const id1 = b.fieldPlacement('uv', 'halton2D', type);
+      const id2 = b.fieldPlacement('uv', 'halton2D', type);
       
       expect(id1).toBe(id2);
     });

@@ -34,7 +34,6 @@ export type {
   SigExprId,
   FieldExprId,
   EventExprId,
-  ValueExprId,
   EventSlotId,
   TransformChainId,
   NodeId,
@@ -54,7 +53,6 @@ export {
   sigExprId,
   fieldExprId,
   eventExprId,
-  valueExprId,
   eventSlotId,
   nodeId,
   stepId,
@@ -159,10 +157,10 @@ export interface SigExprShapeRef {
 /**
  * Reduce field to scalar signal expression.
  * Aggregates all elements of a field using a reduction operation.
- *
+ * 
  * Semantics: Componentwise reduction (e.g., vec2 sum: (Σx, Σy))
  * Empty field behavior: Returns 0 for numeric types
- *
+ * 
  * Spec: 04-compilation.md:394, 409
  */
 export interface SigExprReduceField {
@@ -261,14 +259,14 @@ export interface FieldExprMap {
   readonly input: FieldExprId;
   readonly fn: PureFn;
   readonly type: CanonicalType;
-  }
+}
 
 export interface FieldExprZip {
   readonly kind: 'zip';
   readonly inputs: readonly FieldExprId[];
   readonly fn: PureFn;
   readonly type: CanonicalType;
-  }
+}
 
 export interface FieldExprZipSig {
   readonly kind: 'zipSig';
@@ -276,7 +274,7 @@ export interface FieldExprZipSig {
   readonly signals: readonly SigExprId[];
   readonly fn: PureFn;
   readonly type: CanonicalType;
-  }
+}
 
 /**
  * Per-lane state read for stateful cardinality-generic blocks.
@@ -493,106 +491,210 @@ export type Step =
   | StepEvalSig
   | StepSlotWriteStrided
   | StepMaterialize
-  | StepFieldState
-  | StepEvalRenderOp
-  | StepEvalEvent
-  | StepStateWrite;
+  | StepRender
+  | StepStateWrite
+  | StepFieldStateWrite
+  | StepContinuityMapBuild
+  | StepContinuityApply
+  | StepEvalEvent;
 
-/**
- * Evaluate a signal expression and write to a slot.
- */
 export interface StepEvalSig {
   readonly kind: 'evalSig';
-  readonly value: SigExprId;
-  readonly slot: ValueSlot;
+  readonly expr: SigExprId;
+  readonly target: ValueSlot;
 }
 
 /**
- * Write strided signal values to a field slot.
- * Used for composite values (vec2, vec3, color).
+ * Strided slot write step - writes multiple scalar signal components to contiguous slots.
+ *
+ * This is the canonical way to materialize multi-component signal values (vec2, vec3, color)
+ * into value slots without requiring array-returning evaluators or side-effect kernels.
+ *
+ * Contract:
+ * - inputs.length must equal the stride of slotBase (from slotMeta)
+ * - Each input is evaluated as a scalar signal
+ * - Results are written sequentially: values.f64[slotBase + i] = evaluateSignal(inputs[i])
+ *
+ * Example: vec2 output
+ *   slotBase = allocSlot(stride=2)
+ *   inputs = [sigExprX, sigExprY]
+ *   → writes values.f64[slotBase+0] = eval(sigExprX), values.f64[slotBase+1] = eval(sigExprY)
  */
 export interface StepSlotWriteStrided {
   readonly kind: 'slotWriteStrided';
-  readonly signalIds: readonly SigExprId[];
-  readonly slot: ValueSlot;
+  readonly slotBase: ValueSlot;
+  readonly inputs: readonly SigExprId[];
 }
 
-/**
- * Materialize a field expression into buffers.
- */
 export interface StepMaterialize {
   readonly kind: 'materialize';
-  readonly value: FieldExprId;
-  readonly slot: ValueSlot;
+  readonly field: FieldExprId;
+  readonly instanceId: InstanceId;
+  readonly target: ValueSlot;
 }
 
-/**
- * State step kinds.
- * Field state writes use per-lane state storage.
- */
-export type FieldStateKind = 'fieldStateWrite';
+export interface StepRender {
+  readonly kind: 'render';
+  readonly instanceId: InstanceId;
+  /** Slot containing position buffer (after continuity applied) */
+  readonly positionSlot: ValueSlot;
+  /** Slot containing color buffer (after continuity applied) */
+  readonly colorSlot: ValueSlot;
+  /** Scale multiplier for shape dimensions (uniform signal, default 1.0) */
+  readonly scale?: { readonly k: 'sig'; readonly id: SigExprId };
+  /** Shape - topology + param signals (REQUIRED at runtime, types now enforce this) */
+  readonly shape:
+    | { readonly k: 'sig'; readonly topologyId: TopologyId; readonly paramSignals: readonly SigExprId[] }
+    | { readonly k: 'slot'; readonly slot: ValueSlot };
+  /** Optional control points for path rendering - P5c: Add control points field */
+  readonly controlPoints?: { readonly k: 'slot'; readonly slot: ValueSlot };
+  /** C-13: Per-instance rotation (radians) - slot containing Float32Array */
+  readonly rotationSlot?: ValueSlot;
+  /** C-13: Per-instance anisotropic scale (x,y pairs) - slot containing Float32Array */
+  readonly scale2Slot?: ValueSlot;
+}
 
-/**
- * Field state write step.
- * Writes field values to per-lane state storage.
- */
-export interface StepFieldState {
-  readonly kind: FieldStateKind;
-  readonly value: FieldExprId;
+export interface StepStateWrite {
+  readonly kind: 'stateWrite';
   readonly stateSlot: StateSlotId;
+  readonly value: SigExprId;
 }
 
 /**
- * Evaluate a render operation.
+ * Per-lane state write for stateful cardinality-generic blocks.
+ * Each lane writes its corresponding value to state.
  */
-export interface StepEvalRenderOp {
-  readonly kind: 'evalRenderOp';
-  readonly renderOp: RenderOpIR;
+export interface StepFieldStateWrite {
+  readonly kind: 'fieldStateWrite';
+  readonly stateSlot: StateSlotId;
+  readonly value: FieldExprId;
 }
 
 /**
- * Evaluate an event expression and write to an event slot.
+ * Continuity map build step (spec §5.1).
+ * Detects domain changes and builds element mappings.
+ */
+export interface StepContinuityMapBuild {
+  readonly kind: 'continuityMapBuild';
+  readonly instanceId: InstanceId;
+  readonly outputMapping: string; // Mapping identifier
+}
+
+/**
+ * Continuity apply step (spec §5.1).
+ * Applies continuity policy to a field target.
+ */
+export interface StepContinuityApply {
+  readonly kind: 'continuityApply';
+  readonly targetKey: string; // Unique identifier for this target
+  readonly instanceId: InstanceId;
+  readonly policy: ContinuityPolicy;
+  readonly baseSlot: ValueSlot; // Input buffer (base values)
+  readonly outputSlot: ValueSlot; // Output buffer (continuity-applied values)
+  readonly semantic: 'position' | 'radius' | 'opacity' | 'color' | 'custom';
+  readonly stride: number; // Components per element (from payload type, not semantic)
+}
+
+/**
+ * Event evaluation step.
+ * Evaluates an event expression and writes result to event storage.
  */
 export interface StepEvalEvent {
   readonly kind: 'evalEvent';
-  readonly value: EventExprId;
-  readonly slot: EventSlotId;
-}
-
-/**
- * State write step (signal-level state).
- */
-export interface StepStateWrite {
-  readonly kind: 'stateWrite';
-  readonly value: SigExprId;
-  readonly stateSlot: StateSlotId;
+  readonly expr: EventExprId;
+  readonly target: EventSlotId;
 }
 
 // =============================================================================
-// Render Operations
+// Stable State Identity (for hot-swap migration)
 // =============================================================================
 
 /**
- * Render operation IR.
- * These are schedule steps that produce render side-effects.
+ * Stable state ID - semantic identity that survives recompilation.
+ *
+ * Format: "blockId:stateKind" (e.g., "b3:delay", "b7:slew")
+ *
+ * The lane index is NOT part of StableStateId - lanes are remapped using
+ * the continuity mapping service during hot-swap.
  */
-export interface RenderOpIR {
-  readonly op: 'drawShape' | 'drawPath' | 'drawPaths' | 'fill' | 'clear';
-  readonly shapeId?: SigExprId;
-  readonly pathField?: FieldExprId;
-  readonly fillColor?: SigExprId;
-  readonly strokeColor?: SigExprId;
-  readonly strokeWidth?: SigExprId;
-}
-
-// =============================================================================
-// Schedule
-// =============================================================================
+export type StableStateId = string & { readonly __brand: 'StableStateId' };
 
 /**
- * Schedule - Ordered list of steps to execute per frame.
+ * Create a stable state ID from block ID and state kind.
+ *
+ * @param blockId - The block's stable ID (survives recompilation)
+ * @param stateKind - Type of state (e.g., 'delay', 'slew', 'phase')
  */
-export interface Schedule {
-  readonly steps: readonly Step[];
-  readonly timeModel: TimeModel;
+export function stableStateId(blockId: string, stateKind: string): StableStateId {
+  return `${blockId}:${stateKind}` as StableStateId;
 }
+
+/**
+ * State mapping for scalar (signal cardinality) state.
+ *
+ * Used for stateful primitives operating on a single value per frame.
+ */
+export interface StateMappingScalar {
+  readonly kind: 'scalar';
+  /** Stable semantic identity */
+  readonly stateId: StableStateId;
+  /** Positional slot index (changes each compile) */
+  readonly slotIndex: number;
+  /** Floats per state element (usually 1) */
+  readonly stride: number;
+  /** Initial values (length = stride) */
+  readonly initial: readonly number[];
+}
+
+/**
+ * Spec-aligned type alias for scalar state slot declarations.
+ *
+ * This is the name used in the specification (04-compilation.md §I9).
+ * The implementation uses `StateMappingScalar` as the canonical name
+ * because it clarifies the "mapping" between semantic state IDs and
+ * positional slots.
+ *
+ * @see StateMappingScalar
+ * @see design-docs/CANONICAL-oscilla-v2.5-20260109/topics/04-compilation.md §I9
+ */
+export type ScalarSlotDecl = StateMappingScalar;
+
+/**
+ * State mapping for field (many cardinality) state.
+ *
+ * Used for stateful primitives operating on per-lane state arrays.
+ * Lane remapping during hot-swap uses the continuity mapping service.
+ */
+export interface StateMappingField {
+  readonly kind: 'field';
+  /** Stable semantic identity */
+  readonly stateId: StableStateId;
+  /** Instance this state tracks (for lane mapping) */
+  readonly instanceId: InstanceId;
+  /** Start offset in state array (positional, changes each compile) */
+  readonly slotStart: number;
+  /** Number of lanes at compile time */
+  readonly laneCount: number;
+  /** Floats per lane (>=1) */
+  readonly stride: number;
+  /** Per-lane initial values template (length = stride) */
+  readonly initial: readonly number[];
+}
+
+/**
+ * Spec-aligned type alias for field state slot declarations.
+ *
+ * This is the name used in the specification (04-compilation.md §I9).
+ * The implementation uses `StateMappingField` as the canonical name
+ * because it clarifies the "mapping" between semantic state IDs and
+ * positional slots, with lane remapping for hot-swap.
+ *
+ * @see StateMappingField
+ * @see design-docs/CANONICAL-oscilla-v2.5-20260109/topics/04-compilation.md §I9
+ */
+export type FieldSlotDecl = StateMappingField;
+
+/**
+ * Union of scalar and field state mappings.
+ */
+export type StateMapping = StateMappingScalar | StateMappingField;
