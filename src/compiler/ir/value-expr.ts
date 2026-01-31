@@ -5,7 +5,7 @@
  * SigExpr/FieldExpr/EventExpr split with a single canonical table.
  *
  * Design Principles:
- * - Small top-level kind discriminant (9 values)
+ * - Small top-level kind discriminant (10 values)
  * - Every variant carries CanonicalType (payload + unit + extent)
  * - No instanceId stored — derive from requireManyInstance(type)
  * - No op discriminant — only kind at top level
@@ -18,7 +18,7 @@
  */
 
 import type { CanonicalType, ConstValue } from '../../core/canonical-types';
-import type { StateSlotId, EventSlotId } from './Indices';
+import type { StateSlotId, EventSlotId, ValueSlot, ValueExprId } from './Indices';
 import type { TopologyId } from '../../shapes/types';
 import type {
   IntrinsicPropertyName,
@@ -52,7 +52,7 @@ export type KernelId =
   | 'pathDerivative';
 
 // =============================================================================
-// ValueExpr - Canonical Expression Union (9 kinds)
+// ValueExpr - Canonical Expression Union (10 kinds)
 // =============================================================================
 
 /**
@@ -61,7 +61,7 @@ export type KernelId =
  * Replaces legacy SigExpr/FieldExpr/EventExpr with a unified table.
  * CanonicalType.extent determines signal/field/event semantics.
  *
- * Top-level kinds (9):
+ * Top-level kinds (10):
  * - const: Constant values (zero/one/many cardinality)
  * - external: External input channels (mouse, keyboard, etc.)
  * - intrinsic: Instance-bound data (index, randomId, placement)
@@ -71,6 +71,7 @@ export type KernelId =
  * - shapeRef: Shape topology references
  * - eventRead: Event→signal bridge
  * - event: Event-specific operations (pulse, wrap, combine, never)
+ * - slotRead: Value slot read (register file)
  */
 export type ValueExpr =
   | ValueExprConst
@@ -81,7 +82,8 @@ export type ValueExpr =
   | ValueExprTime
   | ValueExprShapeRef
   | ValueExprEventRead
-  | ValueExprEvent;
+  | ValueExprEvent
+  | ValueExprSlotRead;
 
 // =============================================================================
 // ValueExpr Variants
@@ -137,21 +139,57 @@ export type ValueExprIntrinsic =
 /**
  * Kernel operation.
  *
- * Unified kernel kind:
+ * Discriminated sub-union on kernelKind:
  * - map: Unary pure function (per-lane)
  * - zip: Binary pure function (per-lane)
+ * - zipSig: Binary zip for signals only (strict signal typing)
  * - broadcast: Cardinality one → many
  * - reduce: Cardinality many → one
- * - zipSig: Binary zip for signals only (strict signal typing)
  * - pathDerivative: Path → tangent/normal (field operation)
  */
-export interface ValueExprKernel {
-  readonly kind: 'kernel';
-  readonly type: CanonicalType;
-  readonly kernelKind: KernelId;
-  readonly args: ValueExpr[];
-  readonly fn?: PureFn; // Only for map/zip — pure function to apply
-}
+export type ValueExprKernel =
+  | {
+      readonly kind: 'kernel';
+      readonly type: CanonicalType;
+      readonly kernelKind: 'map';
+      readonly input: ValueExprId;
+      readonly fn: PureFn;
+    }
+  | {
+      readonly kind: 'kernel';
+      readonly type: CanonicalType;
+      readonly kernelKind: 'zip';
+      readonly inputs: readonly ValueExprId[];
+      readonly fn: PureFn;
+    }
+  | {
+      readonly kind: 'kernel';
+      readonly type: CanonicalType;
+      readonly kernelKind: 'zipSig';
+      readonly field: ValueExprId;
+      readonly signals: readonly ValueExprId[];
+      readonly fn: PureFn;
+    }
+  | {
+      readonly kind: 'kernel';
+      readonly type: CanonicalType;
+      readonly kernelKind: 'broadcast';
+      readonly signal: ValueExprId;
+    }
+  | {
+      readonly kind: 'kernel';
+      readonly type: CanonicalType;
+      readonly kernelKind: 'reduce';
+      readonly field: ValueExprId;
+      readonly op: 'min' | 'max' | 'sum' | 'avg';
+    }
+  | {
+      readonly kind: 'kernel';
+      readonly type: CanonicalType;
+      readonly kernelKind: 'pathDerivative';
+      readonly field: ValueExprId;
+      readonly op: 'tangent' | 'arcLength';
+    };
 
 /**
  * State slot read.
@@ -172,7 +210,7 @@ export interface ValueExprState {
 export interface ValueExprTime {
   readonly kind: 'time';
   readonly type: CanonicalType;
-  readonly which: 'tMs' | 'phaseA';
+  readonly which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'progress' | 'palette' | 'energy';
 }
 
 /**
@@ -184,7 +222,13 @@ export interface ValueExprShapeRef {
   readonly kind: 'shapeRef';
   readonly type: CanonicalType;
   readonly topologyId: TopologyId;
-  readonly paramArgs: ValueExpr[];
+  readonly paramArgs: readonly ValueExprId[];
+  /**
+   * Optional control points for paths.
+   * Referenced expr MUST have field-extent (cardinality many).
+   * Stride is derivable via payloadStride(expr.type.payload) at consumer site.
+   */
+  readonly controlPointField?: ValueExprId;
 }
 
 /**
@@ -202,9 +246,9 @@ export interface ValueExprEventRead {
  * Event operation.
  *
  * Event-specific operations:
- * - pulse: Single-frame pulse at time T
+ * - pulse: Single-frame pulse from time root (fires every tick)
  * - wrap: Signal→event (rising edge)
- * - combine: Merge multiple events (OR semantics)
+ * - combine: Merge multiple events (any/all semantics)
  * - never: Empty event (never triggers)
  * - const: Constant event (always true or always false)
  */
@@ -213,19 +257,20 @@ export type ValueExprEvent =
       readonly kind: 'event';
       readonly type: CanonicalType;
       readonly eventKind: 'pulse';
-      readonly pulseTimeMs: number;
+      readonly source: 'timeRoot';
     }
   | {
       readonly kind: 'event';
       readonly type: CanonicalType;
       readonly eventKind: 'wrap';
-      readonly input: ValueExpr;
+      readonly input: ValueExprId;
     }
   | {
       readonly kind: 'event';
       readonly type: CanonicalType;
       readonly eventKind: 'combine';
-      readonly inputs: ValueExpr[];
+      readonly inputs: readonly ValueExprId[];
+      readonly mode: 'any' | 'all';
     }
   | {
       readonly kind: 'event';
@@ -236,5 +281,20 @@ export type ValueExprEvent =
       readonly kind: 'event';
       readonly type: CanonicalType;
       readonly eventKind: 'const';
-      readonly value: boolean;
+      readonly fired: boolean;
     };
+
+/**
+ * Slot read expression.
+ *
+ * Reads from ValueSlot storage (register file). Used for strided
+ * multi-component signal reads (e.g., vec3 components via slotWriteStrided).
+ *
+ * NOT a state op — slotRead is executor/register-file plumbing.
+ * State ops (hold/delay/integrate/slew/preserve) use ValueExprState.
+ */
+export interface ValueExprSlotRead {
+  readonly kind: 'slotRead';
+  readonly type: CanonicalType;
+  readonly slot: ValueSlot;
+}

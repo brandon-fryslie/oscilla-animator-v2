@@ -3,7 +3,7 @@
  *
  * These tests enforce the structural properties of the ValueExpr canonical table.
  * They verify at the TYPE LEVEL that:
- * - Exactly 9 top-level kinds exist
+ * - Exactly 10 top-level kinds exist
  * - Every variant carries CanonicalType as 'type'
  * - No 'op' discriminant (only 'kind' at top level)
  * - No instanceId stored on variants
@@ -17,6 +17,8 @@ import type {
   ValueExprIntrinsic,
   ValueExprKernel,
   ValueExprEvent,
+  ValueExprShapeRef,
+  ValueExprTime,
 } from '../value-expr';
 import type { CanonicalType } from '../../../core/canonical-types';
 
@@ -35,6 +37,7 @@ const EXPECTED_KINDS = [
   'shapeRef',
   'eventRead',
   'event',
+  'slotRead',
 ] as const;
 
 // =============================================================================
@@ -63,14 +66,14 @@ void _checkMissing; void _checkExtra;
 // =============================================================================
 
 describe('ValueExpr structural invariants', () => {
-  it('has exactly 9 top-level kinds', () => {
-    expect(EXPECTED_KINDS.length).toBe(9);
+  it('has exactly 10 top-level kinds', () => {
+    expect(EXPECTED_KINDS.length).toBe(10);
   });
 
   it('exhaustive kind check: EXPECTED_KINDS matches ValueExpr union', () => {
     // Compile-time types above enforce bidirectional coverage.
-    // Runtime check verifies the count is still 9.
-    expect(EXPECTED_KINDS.length).toBe(9);
+    // Runtime check verifies the count is still 10.
+    expect(EXPECTED_KINDS.length).toBe(10);
 
     // Verify each kind in the array is a valid discriminant
     for (const kind of EXPECTED_KINDS) {
@@ -83,7 +86,7 @@ describe('ValueExpr structural invariants', () => {
     // This test uses TypeScript's type system to verify every variant has 'type'.
     // If a variant drops its 'type' field, this function won't compile.
     function extractType(expr: ValueExpr): CanonicalType {
-      // All 9 variants must have .type — if one doesn't, this won't compile
+      // All 10 variants must have .type — if one doesn't, this won't compile
       return expr.type;
     }
 
@@ -93,12 +96,13 @@ describe('ValueExpr structural invariants', () => {
       { kind: 'const', type: mockType, value: { kind: 'float', value: 0 } },
       { kind: 'external', type: mockType, channel: 'test' },
       { kind: 'intrinsic', type: mockType, intrinsicKind: 'property', intrinsic: 'index' },
-      { kind: 'kernel', type: mockType, kernelKind: 'map', args: [] },
+      { kind: 'kernel', type: mockType, kernelKind: 'map', input: 0 as any, fn: { kind: 'opcode', opcode: 'add' } as any },
       { kind: 'state', type: mockType, stateSlot: 0 as any },
       { kind: 'time', type: mockType, which: 'tMs' },
       { kind: 'shapeRef', type: mockType, topologyId: 0 as any, paramArgs: [] },
       { kind: 'eventRead', type: mockType, eventSlot: 0 as any },
       { kind: 'event', type: mockType, eventKind: 'never' },
+      { kind: 'slotRead', type: mockType, slot: 0 as any },
     ];
 
     for (const v of variants) {
@@ -114,12 +118,13 @@ describe('ValueExpr structural invariants', () => {
       { kind: 'const', type: mockType, value: { kind: 'float', value: 0 } },
       { kind: 'external', type: mockType, channel: 'test' },
       { kind: 'intrinsic', type: mockType, intrinsicKind: 'property', intrinsic: 'index' },
-      { kind: 'kernel', type: mockType, kernelKind: 'map', args: [] },
+      { kind: 'kernel', type: mockType, kernelKind: 'map', input: 0 as any, fn: { kind: 'opcode', opcode: 'add' } as any },
       { kind: 'state', type: mockType, stateSlot: 0 as any },
       { kind: 'time', type: mockType, which: 'tMs' },
       { kind: 'shapeRef', type: mockType, topologyId: 0 as any, paramArgs: [] },
       { kind: 'eventRead', type: mockType, eventSlot: 0 as any },
       { kind: 'event', type: mockType, eventKind: 'never' },
+      { kind: 'slotRead', type: mockType, slot: 0 as any },
     ];
 
     for (const v of variants) {
@@ -135,12 +140,13 @@ describe('ValueExpr structural invariants', () => {
       { kind: 'const', type: mockType, value: { kind: 'float', value: 0 } },
       { kind: 'external', type: mockType, channel: 'test' },
       { kind: 'intrinsic', type: mockType, intrinsicKind: 'property', intrinsic: 'index' },
-      { kind: 'kernel', type: mockType, kernelKind: 'map', args: [] },
+      { kind: 'kernel', type: mockType, kernelKind: 'map', input: 0 as any, fn: { kind: 'opcode', opcode: 'add' } as any },
       { kind: 'state', type: mockType, stateSlot: 0 as any },
       { kind: 'time', type: mockType, which: 'tMs' },
       { kind: 'shapeRef', type: mockType, topologyId: 0 as any, paramArgs: [] },
       { kind: 'eventRead', type: mockType, eventSlot: 0 as any },
       { kind: 'event', type: mockType, eventKind: 'never' },
+      { kind: 'slotRead', type: mockType, slot: 0 as any },
     ];
 
     for (const v of variants) {
@@ -151,29 +157,41 @@ describe('ValueExpr structural invariants', () => {
   describe('sub-discriminant correctness', () => {
     it('ValueExprKernel.kernelKind covers all kernel operations', () => {
       const expectedKernelKinds = ['map', 'zip', 'broadcast', 'reduce', 'zipSig', 'pathDerivative'];
-      // Create a kernel for each kind to verify the type system accepts them
       const mockType = {} as CanonicalType;
-      for (const kk of expectedKernelKinds) {
-        const expr: ValueExprKernel = {
-          kind: 'kernel',
-          type: mockType,
-          kernelKind: kk as any,
-          args: [],
-        };
-        expect(expr.kernelKind).toBe(kk);
+      const mockFn = { kind: 'opcode', opcode: 'add' } as any;
+
+      // Create properly-typed kernels for each kernelKind (in matching order)
+      const kernels: ValueExprKernel[] = [
+        { kind: 'kernel', type: mockType, kernelKind: 'map', input: 0 as any, fn: mockFn },
+        { kind: 'kernel', type: mockType, kernelKind: 'zip', inputs: [], fn: mockFn },
+        { kind: 'kernel', type: mockType, kernelKind: 'broadcast', signal: 0 as any },
+        { kind: 'kernel', type: mockType, kernelKind: 'reduce', field: 0 as any, op: 'sum' },
+        { kind: 'kernel', type: mockType, kernelKind: 'zipSig', field: 0 as any, signals: [], fn: mockFn },
+        { kind: 'kernel', type: mockType, kernelKind: 'pathDerivative', field: 0 as any, op: 'tangent' },
+      ];
+
+      expect(kernels.length).toBe(expectedKernelKinds.length);
+      for (let i = 0; i < kernels.length; i++) {
+        expect(kernels[i].kernelKind).toBe(expectedKernelKinds[i]);
       }
     });
 
     it('ValueExprEvent.eventKind covers all event operations', () => {
       const expectedEventKinds = ['pulse', 'wrap', 'combine', 'never', 'const'];
       const mockType = {} as CanonicalType;
-      for (const ek of expectedEventKinds) {
-        const expr: ValueExprEvent = {
-          kind: 'event',
-          type: mockType,
-          eventKind: ek as any,
-        };
-        expect(expr.eventKind).toBe(ek);
+
+      // Create properly-typed events for each eventKind
+      const events: ValueExprEvent[] = [
+        { kind: 'event', type: mockType, eventKind: 'pulse', source: 'timeRoot' },
+        { kind: 'event', type: mockType, eventKind: 'wrap', input: 0 as any },
+        { kind: 'event', type: mockType, eventKind: 'combine', inputs: [], mode: 'any' },
+        { kind: 'event', type: mockType, eventKind: 'never' },
+        { kind: 'event', type: mockType, eventKind: 'const', fired: true },
+      ];
+
+      expect(events.length).toBe(expectedEventKinds.length);
+      for (let i = 0; i < events.length; i++) {
+        expect(events[i].eventKind).toBe(expectedEventKinds[i]);
       }
     });
 
@@ -194,6 +212,121 @@ describe('ValueExpr structural invariants', () => {
       };
       expect(property.intrinsicKind).toBe('property');
       expect(placement.intrinsicKind).toBe('placement');
+    });
+  });
+
+  describe('kernel sub-union type safety', () => {
+    it('map kernel requires fn', () => {
+      const mockType = {} as CanonicalType;
+      const mapKernel: ValueExprKernel = {
+        kind: 'kernel',
+        type: mockType,
+        kernelKind: 'map',
+        input: 0 as any,
+        fn: { kind: 'opcode', opcode: 'add' } as any,
+      };
+      expect(mapKernel.fn).toBeDefined();
+    });
+
+    it('broadcast kernel does not have fn', () => {
+      const mockType = {} as CanonicalType;
+      const broadcastKernel: ValueExprKernel = {
+        kind: 'kernel',
+        type: mockType,
+        kernelKind: 'broadcast',
+        signal: 0 as any,
+      };
+      expect('fn' in broadcastKernel).toBe(false);
+    });
+
+    it('reduce kernel has op field', () => {
+      const mockType = {} as CanonicalType;
+      const reduceKernel: ValueExprKernel = {
+        kind: 'kernel',
+        type: mockType,
+        kernelKind: 'reduce',
+        field: 0 as any,
+        op: 'sum',
+      };
+      expect(reduceKernel.op).toBe('sum');
+    });
+
+    it('pathDerivative kernel has op field', () => {
+      const mockType = {} as CanonicalType;
+      const pathDerivKernel: ValueExprKernel = {
+        kind: 'kernel',
+        type: mockType,
+        kernelKind: 'pathDerivative',
+        field: 0 as any,
+        op: 'tangent',
+      };
+      expect(pathDerivKernel.op).toBe('tangent');
+    });
+  });
+
+  describe('event variant type safety', () => {
+    it('pulse event has source: timeRoot', () => {
+      const mockType = {} as CanonicalType;
+      const pulseEvent: ValueExprEvent = {
+        kind: 'event',
+        type: mockType,
+        eventKind: 'pulse',
+        source: 'timeRoot',
+      };
+      expect(pulseEvent.source).toBe('timeRoot');
+    });
+
+    it('const event has fired field', () => {
+      const mockType = {} as CanonicalType;
+      const constEvent: ValueExprEvent = {
+        kind: 'event',
+        type: mockType,
+        eventKind: 'const',
+        fired: true,
+      };
+      expect(constEvent.fired).toBe(true);
+    });
+
+    it('combine event has mode field', () => {
+      const mockType = {} as CanonicalType;
+      const combineEvent: ValueExprEvent = {
+        kind: 'event',
+        type: mockType,
+        eventKind: 'combine',
+        inputs: [],
+        mode: 'all',
+      };
+      expect(combineEvent.mode).toBe('all');
+    });
+  });
+
+  describe('time variant completeness', () => {
+    it('ValueExprTime.which accepts all 7 time signals', () => {
+      const mockType = {} as CanonicalType;
+      const timeSignals = ['tMs', 'phaseA', 'phaseB', 'dt', 'progress', 'palette', 'energy'] as const;
+
+      for (const which of timeSignals) {
+        const timeExpr: ValueExprTime = {
+          kind: 'time',
+          type: mockType,
+          which,
+        };
+        expect(timeExpr.which).toBe(which);
+      }
+    });
+  });
+
+  describe('shapeRef has controlPointField', () => {
+    it('shapeRef can have controlPointField', () => {
+      const mockType = {} as CanonicalType;
+      const shapeRef: ValueExprShapeRef = {
+        kind: 'shapeRef',
+        type: mockType,
+        topologyId: 0 as any,
+        paramArgs: [],
+        controlPointField: 42 as any,
+      };
+      expect(shapeRef.controlPointField).toBe(42);
     });
   });
 });
