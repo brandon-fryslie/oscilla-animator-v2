@@ -21,7 +21,7 @@
 import type { CompiledProgramIR, ValueExprTable } from './program';
 import type { SigExpr, FieldExpr, EventExpr } from './types';
 import type { ValueExpr } from './value-expr';
-import { valueExprId, type ValueExprId, type SigExprId, type FieldExprId, type EventExprId } from './Indices';
+import { valueExprId, type ValueExprId } from './Indices';
 
 /**
  * Lower legacy expression tables to unified ValueExpr table.

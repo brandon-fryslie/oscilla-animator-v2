@@ -201,6 +201,12 @@ export interface FrameCache {
 
   /** Frame stamps for field cache validation (nested Map: fieldId -> instanceId -> stamp) */
   fieldStamps: Map<number, Map<number, number>>;
+
+  /** Cached ValueExpr signal values (indexed by ValueExprId) - migration path */
+  valueExprValues: Float64Array;
+
+  /** Frame stamps for ValueExpr cache validation */
+  valueExprStamps: Uint32Array;
 }
 
 /**
@@ -208,7 +214,8 @@ export interface FrameCache {
  */
 export function createFrameCache(
   maxSigExprs: number = 1000,
-  maxFieldExprs: number = 1000
+  maxFieldExprs: number = 1000,
+  maxValueExprs: number = 0
 ): FrameCache {
   return {
     frameId: 1, // Start at 1 so initial sigStamps[n]=0 don't match
@@ -216,6 +223,8 @@ export function createFrameCache(
     sigStamps: new Uint32Array(maxSigExprs),
     fieldBuffers: new Map(),
     fieldStamps: new Map(),
+    valueExprValues: new Float64Array(maxValueExprs),
+    valueExprStamps: new Uint32Array(maxValueExprs),
   };
 }
 
@@ -568,11 +577,12 @@ export function createProgramState(
   slotCount: number,
   stateSlotCount: number = 0,
   eventSlotCount: number = 0,
-  eventExprCount: number = 0
+  eventExprCount: number = 0,
+  valueExprCount: number = 0
 ): ProgramState {
   return {
     values: createValueStore(slotCount),
-    cache: createFrameCache(),
+    cache: createFrameCache(1000, 1000, valueExprCount),
     time: null,
     state: new Float64Array(stateSlotCount),
     eventScalars: new Uint8Array(eventSlotCount),
@@ -591,10 +601,11 @@ export function createRuntimeState(
   slotCount: number,
   stateSlotCount: number = 0,
   eventSlotCount: number = 0,
-  eventExprCount: number = 0
+  eventExprCount: number = 0,
+  valueExprCount: number = 0
 ): RuntimeState {
   const session = createSessionState();
-  return createRuntimeStateFromSession(session, slotCount, stateSlotCount, eventSlotCount, eventExprCount);
+  return createRuntimeStateFromSession(session, slotCount, stateSlotCount, eventSlotCount, eventExprCount, valueExprCount);
 }
 
 /**
@@ -607,9 +618,10 @@ export function createRuntimeStateFromSession(
   slotCount: number,
   stateSlotCount: number = 0,
   eventSlotCount: number = 0,
-  eventExprCount: number = 0
+  eventExprCount: number = 0,
+  valueExprCount: number = 0
 ): RuntimeState {
-  const program = createProgramState(slotCount, stateSlotCount, eventSlotCount, eventExprCount);
+  const program = createProgramState(slotCount, stateSlotCount, eventSlotCount, eventExprCount, valueExprCount);
   return {
     // ProgramState (fresh)
     values: program.values,
