@@ -9,6 +9,7 @@ import type { CompiledProgramIR, ValueSlot, FieldSlotEntry } from '../compiler/i
 import type { ScheduleIR } from '../compiler/backend/schedule-program';
 import type { Step, InstanceDecl, DomainInstance, StepRender } from '../compiler/ir/types';
 import type { SigExprId, IrInstanceId as InstanceId } from '../types';
+import { instanceId as makeInstanceId } from '../core/ids';
 import type { RuntimeState } from './RuntimeState';
 import type { TopologyId } from '../shapes/types';
 import type { RenderFrameIR } from '../render/types';
@@ -27,6 +28,7 @@ import { resolveCameraFromGlobals } from './CameraResolver';
 import { requireManyInstance } from '../core/canonical-types';
 import { evaluateValueExprSignal } from './ValueExprSignalEvaluator';
 import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
+import { materializeValueExpr } from './ValueExprMaterializer';
 
 /**
  * Shadow evaluation mode flag
@@ -57,12 +59,68 @@ const SHADOW_EVAL = false; // Toggle to true during testing
 const VALUE_EXPR_ONLY = false; // Toggle to true after shadow validation passes
 
 /**
+ * Shadow materialization mode flag (WI-5)
+ *
+ * When true, run both legacy materialize() and materializeValueExpr() in parallel,
+ * comparing results to validate migration correctness.
+ *
+ * IMPORTANT: This adds significant overhead to field materialization. Only enable
+ * during development/testing with deterministic sampling.
+ *
+ * Set to false for normal operation (legacy-only).
+ * Set to true for shadow mode (legacy + ValueExpr with validation).
+ */
+const SHADOW_MATERIALIZE = false; // Toggle to true during testing
+
+/**
+ * ValueExpr-only materialization cutover mode flag (WI-6)
+ *
+ * When true, use materializeValueExpr() instead of legacy materialize().
+ * This is the final cutover step for field materialization migration.
+ *
+ * IMPORTANT: Only enable this after SHADOW_MATERIALIZE has validated equivalence.
+ * When VALUE_EXPR_MATERIALIZE is true, SHADOW_MATERIALIZE is ignored (no comparison needed).
+ *
+ * Set to false for legacy materialization.
+ * Set to true for ValueExpr-only materialization (final cutover).
+ */
+const VALUE_EXPR_MATERIALIZE = false; // Toggle to true after shadow validation passes
+
+/**
  * Shadow evaluation comparison epsilon
  *
  * Tolerance for floating point comparison when validating ValueExpr results
  * against legacy results. Uses the same precision as existing tests.
  */
 const SHADOW_EPSILON = 1e-10;
+
+/**
+ * Shadow materialization sampling policy (WI-5)
+ *
+ * Controls deterministic sampling for shadow mode to manage overhead:
+ * - SAMPLE_FRAME_INTERVAL: Compare every Nth frame (10 → every 10th frame)
+ * - SAMPLE_MAT_PER_FRAME: Compare only first K materializations per frame (5 → first 5)
+ *
+ * Sampling reduces overhead from O(all fields × all frames) to manageable levels.
+ */
+const SHADOW_MAT_FRAME_INTERVAL = 10;  // Compare every 10th frame
+const SHADOW_MAT_PER_FRAME_LIMIT = 5;  // Compare first 5 materializations per frame
+
+/**
+ * Shadow materialization state (per-executor instance)
+ *
+ * Tracks sampling counters for deterministic shadow mode validation.
+ */
+interface ShadowMaterializeState {
+  frameCount: number;           // Total frames executed
+  materializeCountThisFrame: number;  // Materializations so far this frame
+}
+
+// Module-level shadow state (reset at frame boundaries)
+const SHADOW_MAT_STATE: ShadowMaterializeState = {
+  frameCount: 0,
+  materializeCountThisFrame: 0,
+};
 
 /**
  * Compare two signal values for equivalence
@@ -85,6 +143,34 @@ function valuesEqual(legacy: number, valueExpr: number): boolean {
   return Math.abs(legacy - valueExpr) < SHADOW_EPSILON;
 }
 
+/**
+ * Compare two buffers for equivalence (WI-5)
+ *
+ * Element-wise comparison with epsilon tolerance.
+ * Returns true if all elements match within SHADOW_EPSILON.
+ */
+function buffersEqual(legacy: ArrayBufferView, valueExpr: ArrayBufferView): boolean {
+  if (legacy.byteLength !== valueExpr.byteLength) {
+    return false;
+  }
+
+  // Convert to Float32Array for comparison (all field buffers are Float32Array)
+  const legacyBuf = legacy as Float32Array;
+  const valueExprBuf = valueExpr as Float32Array;
+
+  if (legacyBuf.length !== valueExprBuf.length) {
+    return false;
+  }
+
+  for (let i = 0; i < legacyBuf.length; i++) {
+    if (!valuesEqual(legacyBuf[i], valueExprBuf[i])) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 
 /**
  * Slot lookup cache entry
@@ -103,6 +189,10 @@ const SLOT_LOOKUP_CACHE = new WeakMap<CompiledProgramIR, Map<ValueSlot, SlotLook
 // These buffers are CACHED in RuntimeState.cache.fieldBuffers and reused across frames,
 // so they don't need arena semantics. The pool grows once and then stabilizes.
 const MATERIALIZER_POOL = new BufferPool();
+
+// Separate buffer pool for shadow mode validation (WI-5)
+// Prevents legacy and ValueExpr materializers from interfering via shared pool state
+const SHADOW_POOL = new BufferPool();
 
 function getSlotLookupMap(program: CompiledProgramIR): Map<ValueSlot, SlotLookup> {
   const cached = SLOT_LOOKUP_CACHE.get(program);
@@ -204,6 +294,10 @@ export function executeFrame(
 
   // 1. Advance frame (cache owns frameId)
   state.cache.frameId++;
+
+  // WI-5: Reset shadow materialization frame counters
+  SHADOW_MAT_STATE.frameCount++;
+  SHADOW_MAT_STATE.materializeCountThisFrame = 0;
 
   // 1.5. Commit external channel writes (spec: External Input System Section 3.1)
   state.externalChannels.commit();
@@ -387,18 +481,97 @@ export function executeFrame(
       }
 
       case 'materialize': {
-        // Materialize field to buffer and store in slot
+        // ═════════════════════════════════════════════════════════════════════
+        // VALUEEXPR MIGRATION: Field Materialization (WI-5, WI-6)
+        // ═════════════════════════════════════════════════════════════════════
+
+        let buffer: ArrayBufferView;
+
+        // Get field expression for instance context
         const fieldExpr = fields[step.field as number];
         const instanceIdStr = fieldExpr ? String(requireManyInstance(fieldExpr.type).instanceId) : '';
-        const buffer = materialize(
-          step.field,
-          instanceIdStr,
-          fields,
-          signals,
-          instances as ReadonlyMap<string, InstanceDecl>,
-          state,
-          MATERIALIZER_POOL
-        );
+        const instanceDecl = instances.get(makeInstanceId(instanceIdStr));
+        const count = instanceDecl && typeof instanceDecl.count === 'number' ? instanceDecl.count : 0;
+
+        if (VALUE_EXPR_MATERIALIZE) {
+          // WI-6: Final cutover mode - use ValueExpr materializer only
+          const veId = program.valueExprs.fieldToValue?.[step.field as number];
+          if (veId === undefined) {
+            throw new Error(`No ValueExpr mapping for FieldExpr ${step.field}`);
+          }
+          buffer = materializeValueExpr(
+            veId,
+            program.valueExprs,
+            makeInstanceId(instanceIdStr),
+            count,
+            state,
+            program,
+            MATERIALIZER_POOL
+          );
+        } else {
+          // Legacy mode or shadow mode
+          buffer = materialize(
+            step.field,
+            instanceIdStr,
+            fields,
+            signals,
+            instances as ReadonlyMap<string, InstanceDecl>,
+            state,
+            MATERIALIZER_POOL
+          );
+
+          // WI-5: Shadow mode validation (if enabled and within sampling policy)
+          if (SHADOW_MATERIALIZE) {
+            const veId = program.valueExprs.fieldToValue?.[step.field as number];
+            if (veId !== undefined) {
+              // Apply deterministic sampling policy
+              const shouldSample =
+                (SHADOW_MAT_STATE.frameCount === 1) ||  // Always sample first frame
+                (SHADOW_MAT_STATE.frameCount % SHADOW_MAT_FRAME_INTERVAL === 0);  // Every Nth frame
+
+              const withinPerFrameLimit =
+                SHADOW_MAT_STATE.materializeCountThisFrame < SHADOW_MAT_PER_FRAME_LIMIT;
+
+              if (shouldSample && withinPerFrameLimit) {
+                // Run ValueExpr materializer with separate pool to prevent interference
+                const veBuffer = materializeValueExpr(
+                  veId,
+                  program.valueExprs,
+                  makeInstanceId(instanceIdStr),
+                  count,
+                  state,
+                  program,
+                  SHADOW_POOL
+                );
+
+                // Compare buffers
+                if (!buffersEqual(buffer, veBuffer)) {
+                  console.warn(
+                    `[SHADOW_MAT] Buffer mismatch: FieldExpr=${step.field} VE=${veId} ` +
+                    `frame=${SHADOW_MAT_STATE.frameCount} count=${count} ` +
+                    `legacyLen=${buffer.byteLength} veLen=${veBuffer.byteLength}`
+                  );
+
+                  // Log first mismatch for debugging
+                  const legacyBuf = buffer as Float32Array;
+                  const veBuf = veBuffer as Float32Array;
+                  for (let i = 0; i < Math.min(legacyBuf.length, veBuf.length); i++) {
+                    if (!valuesEqual(legacyBuf[i], veBuf[i])) {
+                      console.warn(
+                        `[SHADOW_MAT]   First mismatch at index ${i}: ` +
+                        `legacy=${legacyBuf[i]} valueExpr=${veBuf[i]}`
+                      );
+                      break;
+                    }
+                  }
+                }
+
+                SHADOW_MAT_STATE.materializeCountThisFrame++;
+              }
+            }
+          }
+        }
+
         // Store directly in objects map using slot as key
         // (Object storage doesn't need slotMeta offset lookup)
         state.values.objects.set(step.target, buffer);
