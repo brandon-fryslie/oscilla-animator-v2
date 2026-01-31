@@ -9,7 +9,7 @@
  * This file now only contains types used by the compiler passes.
  */
 
-import { deriveKind, type CanonicalType } from '../../core/canonical-types';
+import { requireInst, type CanonicalType } from '../../core/canonical-types';
 import type {
   SigExprId,
   FieldExprId,
@@ -64,23 +64,32 @@ export type ValueRefPacked =
   | { readonly k: 'scalar'; readonly value: unknown };
 
 /**
- * Assert that a ValueRefPacked's `k` tag agrees with `deriveKind(type)`.
- * Per gap analysis resolutions Q4/Q5: discriminant tags must agree with deriveKind
- * when a `.type` field is present. Called at lowering boundaries.
+ * Assert that a ValueRefPacked's `k` tag agrees with its CanonicalType extent.
+ * Dispatches on extent axes directly (no deriveKind dependency).
+ *
+ * Rules:
+ * - k='event' ↔ temporality=discrete
+ * - k='field' ↔ cardinality=many + temporality=continuous
+ * - k='sig'   ↔ cardinality=zero|one + temporality=continuous
  */
-const K_TO_DERIVED_KIND: Record<string, string> = {
-  sig: 'signal',
-  field: 'field',
-  event: 'event',
-};
-
 export function assertKindAgreement(ref: ValueRefPacked): void {
   if (ref.k === 'instance' || ref.k === 'scalar') return; // No .type field
-  const expected = K_TO_DERIVED_KIND[ref.k];
-  const actual = deriveKind(ref.type);
-  if (expected !== actual) {
+  const card = requireInst(ref.type.extent.cardinality, 'cardinality');
+  const tempo = requireInst(ref.type.extent.temporality, 'temporality');
+
+  let derivedK: 'sig' | 'field' | 'event';
+  if (tempo.kind === 'discrete') {
+    derivedK = 'event';
+  } else if (card.kind === 'many') {
+    derivedK = 'field';
+  } else {
+    // zero or one cardinality + continuous = signal
+    derivedK = 'sig';
+  }
+
+  if (ref.k !== derivedK) {
     throw new Error(
-      `deriveKind agreement violation: ValueRefPacked.k='${ref.k}' (expected derived kind '${expected}') but deriveKind(type) returned '${actual}'`
+      `Kind agreement violation: ValueRefPacked.k='${ref.k}' but extent derives '${derivedK}' (cardinality=${card.kind}, temporality=${tempo.kind})`
     );
   }
 }

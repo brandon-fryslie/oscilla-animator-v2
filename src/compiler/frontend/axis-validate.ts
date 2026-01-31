@@ -15,7 +15,7 @@
 import {
   type CanonicalType,
   type BindingValue,
-  deriveKind,
+  requireInst,
   isAxisVar,
   isAxisInst,
 } from '../../core/canonical-types';
@@ -75,7 +75,7 @@ export function validateTypes(types: readonly CanonicalType[]): AxisViolation[] 
       out.push({
         nodeKind: "CanonicalType",
         nodeIndex: i,
-        kind: deriveKind(t),
+        kind: derivedKindLabel(t),
         message: err instanceof Error ? err.message : String(err),
       });
     }
@@ -85,21 +85,34 @@ export function validateTypes(types: readonly CanonicalType[]): AxisViolation[] 
 }
 
 /**
+ * Derive a kind label from extent axes (local to this module, not exported).
+ * Used for diagnostics only. Zero-cardinality → 'const'.
+ */
+function derivedKindLabel(t: CanonicalType): string {
+  const card = requireInst(t.extent.cardinality, 'cardinality');
+  const tempo = requireInst(t.extent.temporality, 'temporality');
+  if (tempo.kind === 'discrete') return 'event';
+  if (card.kind === 'many') return 'field';
+  if (card.kind === 'zero') return 'const';
+  return 'signal';
+}
+
+/**
  * Validate a single canonical type.
  * Throws if invariants are violated.
+ * Dispatches on extent axes directly (no deriveKind dependency).
  */
 export function validateType(t: CanonicalType): void {
-  // Core family invariants are derived from CanonicalType
-  const k = deriveKind(t);
+  const card = requireInst(t.extent.cardinality, 'cardinality');
+  const tempo = requireInst(t.extent.temporality, 'temporality');
 
-  // Enforce family invariants
-  if (k === 'signal') assertSignalInvariants(t);
-  else if (k === 'field') assertFieldInvariants(t);
-  else if (k === 'event') assertEventInvariants(t);
-  else {
-    // Exhaustiveness check
-    const _exhaustive: never = k;
-    throw new Error(`Unknown derived kind: ${_exhaustive}`);
+  if (tempo.kind === 'discrete') {
+    assertEventInvariants(t);
+  } else if (card.kind === 'many') {
+    assertFieldInvariants(t);
+  } else {
+    // zero or one cardinality + continuous = signal (or constant)
+    assertSignalInvariants(t);
   }
 }
 
