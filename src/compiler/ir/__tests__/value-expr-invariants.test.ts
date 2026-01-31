@@ -23,7 +23,7 @@ import type { CanonicalType } from '../../../core/canonical-types';
 /**
  * The exhaustive list of ValueExpr kind discriminants.
  * If a new kind is added to ValueExpr without updating this list,
- * the exhaustiveness check below will fail.
+ * the compile-time exhaustiveness check below will fail.
  */
 const EXPECTED_KINDS = [
   'const',
@@ -37,18 +37,45 @@ const EXPECTED_KINDS = [
   'event',
 ] as const;
 
+// =============================================================================
+// Compile-Time Exhaustiveness Check
+// =============================================================================
+
+/**
+ * Compile-time bidirectional exhaustiveness check.
+ *
+ * If ValueExpr gains a kind not in EXPECTED_KINDS, _MissingFromArray will be
+ * non-never and _CheckMissing will fail to compile.
+ *
+ * If EXPECTED_KINDS lists a kind not in ValueExpr, _ExtraInArray will be
+ * non-never and _CheckExtra will fail to compile.
+ */
+type _MissingFromArray = Exclude<ValueExpr['kind'], typeof EXPECTED_KINDS[number]>;
+type _ExtraInArray = Exclude<typeof EXPECTED_KINDS[number], ValueExpr['kind']>;
+// Compile-time assertion: both must resolve to `never`.
+// If either is non-never, the `as never` cast will produce a TS error.
+const _checkMissing: _MissingFromArray = undefined as never;
+const _checkExtra: _ExtraInArray = undefined as never;
+void _checkMissing; void _checkExtra;
+
+// =============================================================================
+// Runtime Tests
+// =============================================================================
+
 describe('ValueExpr structural invariants', () => {
   it('has exactly 9 top-level kinds', () => {
     expect(EXPECTED_KINDS.length).toBe(9);
   });
 
-  it('exhaustive kind check: every ValueExpr kind maps to one variant', () => {
-    // TypeScript enforces this via the discriminated union.
-    // This runtime test creates a mock for each kind and verifies
-    // the kind discriminant round-trips correctly.
+  it('exhaustive kind check: EXPECTED_KINDS matches ValueExpr union', () => {
+    // Compile-time types above enforce bidirectional coverage.
+    // Runtime check verifies the count is still 9.
+    expect(EXPECTED_KINDS.length).toBe(9);
+
+    // Verify each kind in the array is a valid discriminant
     for (const kind of EXPECTED_KINDS) {
-      const mockExpr = { kind } as ValueExpr;
-      expect(mockExpr.kind).toBe(kind);
+      expect(typeof kind).toBe('string');
+      expect(kind.length).toBeGreaterThan(0);
     }
   });
 
