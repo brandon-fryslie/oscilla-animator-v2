@@ -41,6 +41,9 @@ export type FieldExprId = number & { readonly __brand: 'FieldExprId' };
 /** Dense index for event expressions. */
 export type EventExprId = number & { readonly __brand: 'EventExprId' };
 
+/** Dense index for unified value expressions (canonical type). */
+export type ValueExprId = number & { readonly __brand: 'ValueExprId' };
+
 /** Dense index for event slots (distinct from ValueSlot — events use boolean storage). */
 export type EventSlotId = number & { readonly __brand: 'EventSlotId' };
 
@@ -116,6 +119,10 @@ export function fieldExprId(n: number): FieldExprId {
 
 export function eventExprId(n: number): EventExprId {
   return n as EventExprId;
+}
+
+export function valueExprId(n: number): ValueExprId {
+  return n as ValueExprId;
 }
 
 export function eventSlotId(n: number): EventSlotId {
