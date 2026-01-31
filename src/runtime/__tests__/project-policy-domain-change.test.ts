@@ -63,6 +63,9 @@ function createTestRuntimeState(): RuntimeState {
       fieldStamps: new Map(),
       valueExprValues: new Float64Array(0),
       valueExprStamps: new Uint32Array(0),
+    
+      valueExprFieldBuffers: [],
+      valueExprFieldStamps: [],
     },
     timeState: {
       prevTAbsMs: null,

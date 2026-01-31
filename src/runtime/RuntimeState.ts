@@ -207,6 +207,20 @@ export interface FrameCache {
 
   /** Frame stamps for ValueExpr cache validation */
   valueExprStamps: Uint32Array;
+
+  /**
+   * Cached ValueExpr field buffers (indexed by ValueExprId, simple array).
+   * WI-2: ValueExpr materializer field buffer cache.
+   * Unlike legacy fieldBuffers (which need instanceId key), ValueExpr field buffers
+   * cache by expression ID only since instanceId is embedded in the type.
+   */
+  valueExprFieldBuffers: (Float32Array | null)[];
+
+  /**
+   * Frame stamps for ValueExpr field cache validation (indexed by ValueExprId).
+   * WI-2: Matches valueExprFieldBuffers indexing.
+   */
+  valueExprFieldStamps: number[];
 }
 
 /**
@@ -225,6 +239,9 @@ export function createFrameCache(
     fieldStamps: new Map(),
     valueExprValues: new Float64Array(maxValueExprs),
     valueExprStamps: new Uint32Array(maxValueExprs),
+    // WI-2: ValueExpr field buffer cache
+    valueExprFieldBuffers: new Array(maxValueExprs).fill(null),
+    valueExprFieldStamps: new Array(maxValueExprs).fill(-1),
   };
 }
 
