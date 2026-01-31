@@ -484,8 +484,17 @@ export interface ProgramState {
   /** Event scalar storage (0=not fired, 1=fired this tick). Cleared each frame. */
   eventScalars: Uint8Array;
 
-  /** Previous predicate values for wrap edge detection (indexed by EventExprId). */
+  /**
+   * Previous predicate values for wrap edge detection (indexed by EventExprId).
+   * Used by legacy EventEvaluator during migration.
+   */
   eventPrevPredicate: Uint8Array;
+
+  /**
+   * Previous predicate values for wrap edge detection (indexed by ValueExprId).
+   * Used by ValueExpr EventEvaluator during migration and post-cutover.
+   */
+  eventPrevPredicateValue: Uint8Array;
 
   /**
    * Event payload storage (spec-compliant data-carrying events)
@@ -525,8 +534,23 @@ export interface RuntimeState {
   /** Event scalar storage (0=not fired, 1=fired this tick). Cleared each frame. */
   eventScalars: Uint8Array;
 
-  /** Previous predicate values for wrap edge detection (indexed by EventExprId). */
+  /**
+   * Previous predicate values for wrap edge detection (indexed by EventExprId).
+   * Used by legacy EventEvaluator during migration.
+   */
   eventPrevPredicate: Uint8Array;
+
+  /**
+   * Previous predicate values for wrap edge detection (indexed by ValueExprId).
+   * Used by ValueExpr EventEvaluator during migration and post-cutover.
+   */
+  eventPrevPredicateValue: Uint8Array;
+
+  /**
+   * Cycle detection bitset for event combine recursion.
+   * Allocated on-demand in evaluateValueExprEvent().
+   */
+  eventCycleDetection?: Uint8Array;
 
   /**
    * Event payload storage (spec-compliant data-carrying events)
@@ -587,6 +611,7 @@ export function createProgramState(
     state: new Float64Array(stateSlotCount),
     eventScalars: new Uint8Array(eventSlotCount),
     eventPrevPredicate: new Uint8Array(eventExprCount),
+    eventPrevPredicateValue: new Uint8Array(valueExprCount),
     events: new Map(),
   };
 }
@@ -630,6 +655,7 @@ export function createRuntimeStateFromSession(
     state: program.state,
     eventScalars: program.eventScalars,
     eventPrevPredicate: program.eventPrevPredicate,
+    eventPrevPredicateValue: program.eventPrevPredicateValue,
     events: program.events,
     // SessionState (preserved)
     timeState: session.timeState,

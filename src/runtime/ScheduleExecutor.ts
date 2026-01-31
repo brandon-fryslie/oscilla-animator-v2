@@ -26,6 +26,7 @@ import { assembleRenderFrame, type AssemblerContext } from './RenderAssembler';
 import { resolveCameraFromGlobals } from './CameraResolver';
 import { requireManyInstance } from '../core/canonical-types';
 import { evaluateValueExprSignal } from './ValueExprSignalEvaluator';
+import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
 
 /**
  * Shadow evaluation mode flag
@@ -524,15 +525,33 @@ export function executeFrame(
       }
 
       case 'evalEvent': {
+        // ═══════════════════════════════════════════════════════════════════
+        // VALUEEXPR MIGRATION: Event Evaluation
+        // ═══════════════════════════════════════════════════════════════════
         // Evaluate event expression and write to eventScalars (monotone OR)
         // Monotone OR: only write 1, never write 0 back — ensures any-fired-stays-fired
-        const fired = evaluateEvent(
+        const legacyFired = evaluateEvent(
           step.expr,
           program.eventExprs.nodes,
           state,
           signals
         );
-        if (fired) {
+
+        // Shadow mode validation (if enabled)
+        if (SHADOW_EVAL && program.valueExprs) {
+          const veId = program.valueExprs.eventToValue[step.expr as number];
+          if (veId !== undefined) {
+            const veFired = evaluateValueExprEvent(veId, program.valueExprs, state, program);
+            if (legacyFired !== veFired) {
+              console.warn(
+                `[SHADOW] Event mismatch: EventExprId=${step.expr} VeId=${veId} legacy=${legacyFired} valueExpr=${veFired}`
+              );
+            }
+          }
+        }
+
+        // Use legacy result for execution (shadow mode only validates, doesn't replace)
+        if (legacyFired) {
           state.eventScalars[step.target as number] = 1;
         }
         break;
