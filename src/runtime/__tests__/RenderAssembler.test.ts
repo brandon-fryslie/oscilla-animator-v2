@@ -106,7 +106,7 @@ describe('RenderAssembler', () => {
       };
 
       const context: AssemblerContext = {
-        signals: [],
+        sigToSlot: new Map(),
         instances: new Map(),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -129,7 +129,7 @@ describe('RenderAssembler', () => {
       };
 
       const context: AssemblerContext = {
-        signals: [],
+        sigToSlot: new Map(),
         instances: new Map([['empty-instance', createMockInstance(0)]]),
         state,
         resolvedCamera: DEFAULT_CAMERA,
@@ -148,11 +148,17 @@ describe('RenderAssembler', () => {
       state.values.objects.set(1 as ValueSlot, positionBuffer);
       state.values.objects.set(2 as ValueSlot, colorBuffer);
 
-      const signals: SigExpr[] = [
-        { kind: 'const', value: { kind: 'float', value: 1.0 }, type: SCALAR_TYPE },  // scale
-        { kind: 'const', value: { kind: 'float', value: 0.02 }, type: SCALAR_TYPE }, // rx param
-        { kind: 'const', value: { kind: 'float', value: 0.02 }, type: SCALAR_TYPE }, // ry param
-      ];
+      // Build sigToSlot mapping for scale and shape params
+      const sigToSlot = new Map<number, number>([
+        [0, 10], // scale signal at slot 10
+        [1, 11], // rx param at slot 11
+        [2, 12], // ry param at slot 12
+      ]);
+
+      // Write signal values to state
+      state.values.f64[10] = 1.0;  // scale
+      state.values.f64[11] = 0.02; // rx param
+      state.values.f64[12] = 0.02; // ry param
 
       const step: StepRender = {
         kind: 'render',
@@ -164,7 +170,7 @@ describe('RenderAssembler', () => {
       };
 
       const context: AssemblerContext = {
-        signals,
+        sigToSlot,
         instances: new Map([['test-instance', createMockInstance(10)]]),
         state,
     resolvedCamera: DEFAULT_CAMERA,
@@ -194,12 +200,19 @@ describe('RenderAssembler', () => {
       state.values.objects.set(2 as ValueSlot, colorBuffer);
       state.values.objects.set(3 as ValueSlot, controlPointsBuffer);
 
-      const signals: SigExpr[] = [
-        { kind: 'const', value: { kind: 'float', value: 2.5 }, type: SCALAR_TYPE },  // scale
-        { kind: 'const', value: { kind: 'float', value: 0.02 }, type: SCALAR_TYPE }, // radiusX param
-        { kind: 'const', value: { kind: 'float', value: 0.02 }, type: SCALAR_TYPE }, // radiusY param
-        { kind: 'const', value: { kind: 'int', value: 1 }, type: SCALAR_TYPE },    // closed param
-      ];
+      // Build sigToSlot mapping for scale and shape params
+      const sigToSlot = new Map<number, number>([
+        [0, 10], // scale signal
+        [1, 11], // radiusX param
+        [2, 12], // radiusY param
+        [3, 13], // closed param
+      ]);
+
+      // Write signal values to state
+      state.values.f64[10] = 2.5;  // scale
+      state.values.f64[11] = 0.02; // radiusX param
+      state.values.f64[12] = 0.02; // radiusY param
+      state.values.f64[13] = 1;    // closed param
 
       const step: StepRender = {
         kind: 'render',
@@ -216,7 +229,7 @@ describe('RenderAssembler', () => {
       };
 
       const context: AssemblerContext = {
-        signals,
+        sigToSlot,
         instances: new Map([['test-instance', createMockInstance(2)]]),
         state,
     resolvedCamera: DEFAULT_CAMERA,
@@ -269,12 +282,16 @@ describe('RenderAssembler', () => {
       state.values.objects.set(2 as ValueSlot, colorBuffer);
       state.values.objects.set(3 as ValueSlot, controlPointsBuffer);
 
-      const signals: SigExpr[] = [
-        { kind: 'const', value: { kind: 'float', value: 1.0 }, type: SCALAR_TYPE },
-        { kind: 'const', value: { kind: 'float', value: 0.02 }, type: SCALAR_TYPE },
-        { kind: 'const', value: { kind: 'float', value: 0.02 }, type: SCALAR_TYPE },
-        { kind: 'const', value: { kind: 'int', value: 1 }, type: SCALAR_TYPE },
-      ];
+      // Build sigToSlot mapping
+      const sigToSlot = new Map<number, number>([
+        [0, 10], [1, 11], [2, 12], [3, 13],
+      ]);
+
+      // Write signal values to state
+      state.values.f64[10] = 1.0;
+      state.values.f64[11] = 0.02;
+      state.values.f64[12] = 0.02;
+      state.values.f64[13] = 1;
 
       const step: StepRender = {
         kind: 'render',
@@ -291,7 +308,7 @@ describe('RenderAssembler', () => {
       };
 
       const context: AssemblerContext = {
-        signals,
+        sigToSlot,
         instances: new Map([['test-instance', createMockInstance(10)]]),
         state,
     resolvedCamera: DEFAULT_CAMERA,
@@ -314,12 +331,16 @@ describe('RenderAssembler', () => {
       state.values.objects.set(2 as ValueSlot, colorBuffer);
       state.values.objects.set(3 as ValueSlot, controlPointsBuffer);
 
-      const signals: SigExpr[] = [
-        { kind: 'const', value: { kind: 'float', value: 1.0 }, type: SCALAR_TYPE },
-        { kind: 'const', value: { kind: 'float', value: 0.02 }, type: SCALAR_TYPE },
-        { kind: 'const', value: { kind: 'float', value: 0.02 }, type: SCALAR_TYPE },
-        { kind: 'const', value: { kind: 'int', value: 1 }, type: SCALAR_TYPE },
-      ];
+      // Build sigToSlot mapping
+      const sigToSlot = new Map<number, number>([
+        [0, 10], [1, 11], [2, 12], [3, 13],
+      ]);
+
+      // Write signal values to state
+      state.values.f64[10] = 1.0;
+      state.values.f64[11] = 0.02;
+      state.values.f64[12] = 0.02;
+      state.values.f64[13] = 1;
 
       const step: StepRender = {
         kind: 'render',
@@ -336,7 +357,7 @@ describe('RenderAssembler', () => {
       };
 
       const context: AssemblerContext = {
-        signals,
+        sigToSlot,
         instances: new Map([['test-instance', createMockInstance(10)]]),
         state,
     resolvedCamera: DEFAULT_CAMERA,
@@ -358,12 +379,16 @@ describe('RenderAssembler', () => {
       state.values.objects.set(1 as ValueSlot, positionBuffer);
       state.values.objects.set(2 as ValueSlot, colorBuffer);
 
-      const signals: SigExpr[] = [
-        { kind: 'const', value: { kind: 'float', value: 1.0 }, type: SCALAR_TYPE },
-        { kind: 'const', value: { kind: 'float', value: 0.02 }, type: SCALAR_TYPE },
-        { kind: 'const', value: { kind: 'float', value: 0.02 }, type: SCALAR_TYPE },
-        { kind: 'const', value: { kind: 'int', value: 1 }, type: SCALAR_TYPE },
-      ];
+      // Build sigToSlot mapping
+      const sigToSlot = new Map<number, number>([
+        [0, 10], [1, 11], [2, 12], [3, 13],
+      ]);
+
+      // Write signal values to state
+      state.values.f64[10] = 1.0;
+      state.values.f64[11] = 0.02;
+      state.values.f64[12] = 0.02;
+      state.values.f64[13] = 1;
 
       const step: StepRender = {
         kind: 'render',
@@ -380,7 +405,7 @@ describe('RenderAssembler', () => {
       };
 
       const context: AssemblerContext = {
-        signals,
+        sigToSlot,
         instances: new Map([['test-instance', createMockInstance(10)]]),
         state,
     resolvedCamera: DEFAULT_CAMERA,
@@ -405,12 +430,16 @@ describe('RenderAssembler', () => {
       state.values.objects.set(5 as ValueSlot, new Uint8ClampedArray([0, 255, 0, 255]));
       state.values.objects.set(6 as ValueSlot, new Float32Array([0, 1, 0.95, 0.31, 0.59, -0.81, -0.59, -0.81, -0.95, 0.31]));
 
-      const signals: SigExpr[] = [
-        { kind: 'const', value: { kind: 'float', value: 1.0 }, type: SCALAR_TYPE },
-        { kind: 'const', value: { kind: 'float', value: 0.02 }, type: SCALAR_TYPE },
-        { kind: 'const', value: { kind: 'float', value: 0.02 }, type: SCALAR_TYPE },
-        { kind: 'const', value: { kind: 'int', value: 1 }, type: SCALAR_TYPE },
-      ];
+      // Build sigToSlot mapping
+      const sigToSlot = new Map<number, number>([
+        [0, 10], [1, 11], [2, 12], [3, 13],
+      ]);
+
+      // Write signal values to state
+      state.values.f64[10] = 1.0;
+      state.values.f64[11] = 0.02;
+      state.values.f64[12] = 0.02;
+      state.values.f64[13] = 1;
 
       const steps: StepRender[] = [
         {
@@ -442,7 +471,7 @@ describe('RenderAssembler', () => {
       ];
 
       const context: AssemblerContext = {
-        signals,
+        sigToSlot,
         instances: new Map([
           ['instance-a', createMockInstance(1)],
           ['instance-b', createMockInstance(1)],
@@ -469,6 +498,20 @@ describe('RenderAssembler', () => {
       state.values.objects.set(3 as ValueSlot, new Float32Array([0, 1, 0.95, 0.31, 0.59, -0.81, -0.59, -0.81, -0.95, 0.31]));
       state.values.objects.set(4 as ValueSlot, new Float32Array([0.5, 0.6, 0.0])); // 1 instance * 3 components
       state.values.objects.set(5 as ValueSlot, new Uint8ClampedArray([0, 255, 0, 255]));
+
+      // Build sigToSlot mapping for scale and shape params
+      const sigToSlot = new Map<number, number>([
+        [0, 10], // scale signal
+        [1, 11], // param signals for shapes
+        [2, 12],
+        [3, 13],
+      ]);
+
+      // Write signal values to state
+      state.values.f64[10] = 1.0;
+      state.values.f64[11] = 0.02;
+      state.values.f64[12] = 0.02;
+      state.values.f64[13] = 1;
 
       const signals: SigExpr[] = [
         { kind: 'const', value: { kind: 'float', value: 1.0 }, type: SCALAR_TYPE },
@@ -502,7 +545,7 @@ describe('RenderAssembler', () => {
       ];
 
       const context: AssemblerContext = {
-        signals,
+        sigToSlot,
         instances: new Map([
           ['path-instance', createMockInstance(1)],
           ['primitive-instance', createMockInstance(1)],
@@ -524,6 +567,14 @@ describe('RenderAssembler', () => {
     it('returns empty ops array when all instances are empty', () => {
       const state = createMockState();
 
+      // Build sigToSlot mapping for scale signal
+      const sigToSlot = new Map<number, number>([
+        [0, 10], // scale signal
+      ]);
+
+      // Write signal value to state
+      state.values.f64[10] = 1.0;
+
       const signals: SigExpr[] = [
         { kind: 'const', value: { kind: 'float', value: 1.0 }, type: SCALAR_TYPE },
       ];
@@ -540,7 +591,7 @@ describe('RenderAssembler', () => {
       ];
 
       const context: AssemblerContext = {
-        signals,
+        sigToSlot,
         instances: new Map([
           ['empty-instance', createMockInstance(0)], // count = 0
         ]),

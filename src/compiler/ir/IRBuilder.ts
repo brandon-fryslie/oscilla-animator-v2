@@ -144,12 +144,12 @@ export interface IRBuilder {
   fieldZip(inputs: readonly FieldExprId[], fn: PureFn, type: CanonicalType): FieldExprId;
 
   /** Zip a field with signals. */
-  fieldZipSig(
-    field: FieldExprId,
-    signals: readonly SigExprId[],
+  fieldZipSig( // LEGACY must use ValueExpr
+    field: FieldExprId, // LEGACY must use ValueExpr
+    signals: readonly SigExprId[], // LEGACY must use ValueExpr
     fn: PureFn,
     type: CanonicalType
-  ): FieldExprId;
+  ): FieldExprId; // LEGACY must use ValueExpr
 
   /**
    * Create a path derivative field expression.
@@ -363,6 +363,7 @@ export interface IRBuilder {
   sigStateRead(stateSlot: StateSlotId, type: CanonicalType): SigExprId;
 
   /**
+   * @DEPRECATED
    * Schedule a state write step.
    * State writes happen at the end of the frame, storing a value
    * that will be read by the next frame.

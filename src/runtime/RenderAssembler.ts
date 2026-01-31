@@ -16,9 +16,8 @@
  * Produces DrawPathInstancesOp and DrawPrimitiveInstancesOp (see types.ts)
  */
 
-import type { StepRender, InstanceDecl, SigExpr } from '../compiler/ir/types';
+import type { StepRender, InstanceDecl } from '../compiler/ir/types';
 import type { RuntimeState } from './RuntimeState';
-import { evaluateSignal } from './SignalEvaluator';
 import { getTopology } from '../shapes/registry';
 import type { PathTopologyDef, TopologyDef, TopologyId } from '../shapes/types';
 import type {
@@ -394,16 +393,16 @@ export function compactAndCopy(
  * AssemblerContext - Context needed for render assembly
  */
 export interface AssemblerContext {
-  /** Signal expression nodes */
-  signals: readonly SigExpr[];
   /** Instance declarations */
   instances: ReadonlyMap<string, InstanceDecl>;
-  /** Runtime state for reading slots and evaluating signals */
+  /** Runtime state for reading signal slots and field buffers */
   state: RuntimeState;
   /** Resolved camera params from frame globals (always present, defaults if no Camera block) */
   resolvedCamera: ResolvedCameraParams;
   /** Pre-allocated buffer arena for zero-allocation rendering */
   arena: RenderBufferArena;
+  /** Signal ID to slot index mapping (from schedule) */
+  sigToSlot: ReadonlyMap<number, number>;
 }
 
 /**
@@ -414,7 +413,7 @@ export interface AssemblerContext {
  */
 function resolveScale(
   scaleSpec: StepRender['scale'],
-  signals: readonly SigExpr[],
+  sigToSlot: ReadonlyMap<number, number>,
   state: RuntimeState
 ): number {
   if (scaleSpec === undefined) {
@@ -425,7 +424,14 @@ function resolveScale(
   }
 
   if (scaleSpec.k === 'sig') {
-    return evaluateSignal(scaleSpec.id, signals, state);
+    const slotIndex = sigToSlot.get(scaleSpec.id as number);
+    if (slotIndex === undefined) {
+      throw new Error(
+        `RenderAssembler: No slot mapping for signal ${scaleSpec.id}. ` +
+        'Signal must be evaluated in schedule before rendering.'
+      );
+    }
+    return state.values.f64[slotIndex];
   } else {
     throw new Error(
       `RenderAssembler: scale must be a signal, got ${scaleSpec.k}. ` +
@@ -445,7 +451,7 @@ function resolveScale(
  */
 function resolveShape(
   shapeSpec: StepRender['shape'],
-  signals: readonly SigExpr[],
+  sigToSlot: ReadonlyMap<number, number>,
   state: RuntimeState
 ): ShapeDescriptor | ArrayBufferView {
   if (shapeSpec === undefined) {
@@ -462,13 +468,19 @@ function resolveShape(
     }
     return shapeBuffer;
   } else {
-    // Signal ('sig') with topology - evaluate param signals and build descriptor
+    // Signal ('sig') with topology - resolve param signals from slots
     const { topologyId, paramSignals } = shapeSpec;
     const params: Record<string, number> = {};
 
     for (let i = 0; i < paramSignals.length; i++) {
-      const value = evaluateSignal(paramSignals[i], signals, state);
-      params[`param${i}`] = value;
+      const slotIndex = sigToSlot.get(paramSignals[i] as number);
+      if (slotIndex === undefined) {
+        throw new Error(
+          `RenderAssembler: No slot mapping for param signal ${paramSignals[i]}. ` +
+          'Signal must be evaluated in schedule before rendering.'
+        );
+      }
+      params[`param${i}`] = state.values.f64[slotIndex];
     }
 
     return {
@@ -1147,7 +1159,7 @@ export function assembleDrawPathInstancesOp(
   step: StepRender,
   context: AssemblerContext
 ): DrawOp[] {
-  const { signals, instances, state, arena } = context;
+  const { sigToSlot, instances, state, arena } = context;
 
   // Get instance declaration
   const instance = instances.get(step.instanceId);
@@ -1191,10 +1203,10 @@ export function assembleDrawPathInstancesOp(
   }
 
   // Resolve scale (uniform signal)
-  const scale = resolveScale(step.scale, signals, state);
+  const scale = resolveScale(step.scale, sigToSlot, state);
 
   // Resolve shape
-  const shape = resolveShape(step.shape, signals, state);
+  const shape = resolveShape(step.shape, sigToSlot, state);
 
   // Check if per-instance shapes (shape buffer)
   if (shape instanceof Uint32Array) {

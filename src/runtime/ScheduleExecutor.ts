@@ -503,13 +503,24 @@ export function executeFrame(
   // Resolve camera from program render globals (slots now populated by signal evaluation)
   const resolvedCamera = resolveCameraFromGlobals(program, state);
 
+  // Build signal ID to slot index mapping from schedule
+  const sigToSlot = new Map<number, number>();
+  for (const step of steps) {
+    if (step.kind === 'evalSig') {
+      const lookup = resolveSlotOffset(step.target);
+      if (lookup.storage === 'f64') {
+        sigToSlot.set(step.expr as number, lookup.slot as number);
+      }
+    }
+  }
+
   // Build assembler context with resolved camera and arena
   assemblerContext = {
-    signals,
     instances: instances as ReadonlyMap<string, InstanceDecl>,
     state,
     resolvedCamera,
     arena,
+    sigToSlot,
   };
 
   // Build v2 frame from collected render steps (zero allocations - uses arena)

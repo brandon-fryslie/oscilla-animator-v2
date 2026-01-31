@@ -36,7 +36,7 @@ registerBlock({
     }
 
     // Read the event scalar as a float signal (0.0 or 1.0)
-    const sigId = ctx.b.sigEventRead(eventInput.slot);
+    const sigId = ctx.b.sigEventRead(eventInput.slot); // LEGACY must use ValueExpr
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
@@ -91,7 +91,7 @@ registerBlock({
     const prevId = ctx.b.sigStateRead(stateSlot, canonicalType(FLOAT));
 
     // Read event scalar as float (0.0 or 1.0)
-    const triggerSig = ctx.b.sigEventRead(triggerInput.slot);
+    const triggerSig = ctx.b.sigEventRead(triggerInput.slot);// LEGACY must use ValueExpr
 
     // Conditional via lerp: lerp(prev, value, trigger)
     // trigger=0 → output=prev (hold), trigger=1 → output=value (sample)
