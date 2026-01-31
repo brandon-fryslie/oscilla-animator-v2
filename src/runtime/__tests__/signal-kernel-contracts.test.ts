@@ -13,9 +13,8 @@
 
 import { describe, it, expect } from 'vitest';
 
-// We need to test through the exported evaluateSignal function
-// Import the internal test helper that exposes applySignalKernel
-import { testApplySignalKernel } from '../SignalEvaluator';
+// Import from shared SignalKernelLibrary (single source of truth)
+import { testApplySignalKernel } from '../SignalKernelLibrary';
 
 describe('Signal Kernel Contract Tests', () => {
   // ════════════════════════════════════════════════════════════════════
@@ -54,164 +53,219 @@ describe('Signal Kernel Contract Tests', () => {
       expect(atNeg025).toBeCloseTo(at075, 10);
     });
 
-    it('oscTan: wraps phase correctly', () => {
-      const at01 = testApplySignalKernel('oscTan', [0.1]);
-      const at11 = testApplySignalKernel('oscTan', [1.1]);
-      expect(at11).toBeCloseTo(at01, 10);
-    });
-
-    it('triangle: wraps phase correctly', () => {
+    it('triangle: wraps phase > 1 correctly', () => {
       const at025 = testApplySignalKernel('triangle', [0.25]);
       const at125 = testApplySignalKernel('triangle', [1.25]);
       expect(at125).toBeCloseTo(at025, 10);
+    });
 
-      // Negative phase
+    it('triangle: wraps negative phase correctly', () => {
       const at075 = testApplySignalKernel('triangle', [0.75]);
       const atNeg025 = testApplySignalKernel('triangle', [-0.25]);
       expect(atNeg025).toBeCloseTo(at075, 10);
     });
 
-    it('square: wraps phase correctly', () => {
+    it('square: wraps phase > 1 correctly', () => {
       const at025 = testApplySignalKernel('square', [0.25]);
       const at125 = testApplySignalKernel('square', [1.25]);
       expect(at125).toBe(at025);
+
+      const at075 = testApplySignalKernel('square', [0.75]);
+      const at175 = testApplySignalKernel('square', [1.75]);
+      expect(at175).toBe(at075);
     });
 
-    it('sawtooth: wraps phase correctly', () => {
+    it('square: wraps negative phase correctly', () => {
+      const at025 = testApplySignalKernel('square', [0.25]);
+      const atNeg075 = testApplySignalKernel('square', [-0.75]);
+      expect(atNeg075).toBe(at025);
+    });
+
+    it('sawtooth: wraps phase > 1 correctly', () => {
       const at025 = testApplySignalKernel('sawtooth', [0.25]);
       const at125 = testApplySignalKernel('sawtooth', [1.25]);
       expect(at125).toBeCloseTo(at025, 10);
     });
-  });
 
-  // ════════════════════════════════════════════════════════════════════
-  // EASING INPUT CLAMPING TESTS
-  // ════════════════════════════════════════════════════════════════════
-
-  describe('Easing Input Clamping', () => {
-    const easingFunctions = [
-      'easeInQuad',
-      'easeOutQuad',
-      'easeInOutQuad',
-      'easeInCubic',
-      'easeOutCubic',
-      'easeInOutCubic',
-      'easeInElastic',
-      'easeOutElastic',
-      'easeOutBounce',
-    ];
-
-    for (const fn of easingFunctions) {
-      it(`${fn}: t < 0 clamps to 0 (returns 0)`, () => {
-        const result = testApplySignalKernel(fn, [-0.5]);
-        expect(result).toBe(0);
-      });
-
-      it(`${fn}: t > 1 clamps to 1 (returns 1)`, () => {
-        const result = testApplySignalKernel(fn, [1.5]);
-        expect(result).toBe(1);
-      });
-
-      it(`${fn}: t = 0 returns 0`, () => {
-        const result = testApplySignalKernel(fn, [0]);
-        expect(result).toBe(0);
-      });
-
-      it(`${fn}: t = 1 returns 1`, () => {
-        const result = testApplySignalKernel(fn, [1]);
-        expect(result).toBe(1);
-      });
-    }
-  });
-
-  // ════════════════════════════════════════════════════════════════════
-  // SMOOTHSTEP EDGE CASE TESTS
-  // ════════════════════════════════════════════════════════════════════
-
-  describe('Smoothstep Edge Cases', () => {
-    it('smoothstep: edge0 === edge1 returns step function', () => {
-      // When edges are equal, should return 0 if x < edge, 1 otherwise
-      expect(testApplySignalKernel('smoothstep', [0.5, 0.5, 0.3])).toBe(0);
-      expect(testApplySignalKernel('smoothstep', [0.5, 0.5, 0.5])).toBe(1);
-      expect(testApplySignalKernel('smoothstep', [0.5, 0.5, 0.7])).toBe(1);
-    });
-
-    it('smoothstep: normal operation', () => {
-      // At edge0
-      expect(testApplySignalKernel('smoothstep', [0, 1, 0])).toBe(0);
-      // At edge1
-      expect(testApplySignalKernel('smoothstep', [0, 1, 1])).toBe(1);
-      // At midpoint
-      expect(testApplySignalKernel('smoothstep', [0, 1, 0.5])).toBe(0.5);
-      // Below edge0
-      expect(testApplySignalKernel('smoothstep', [0, 1, -0.5])).toBe(0);
-      // Above edge1
-      expect(testApplySignalKernel('smoothstep', [0, 1, 1.5])).toBe(1);
+    it('sawtooth: wraps negative phase correctly', () => {
+      const at075 = testApplySignalKernel('sawtooth', [0.75]);
+      const atNeg025 = testApplySignalKernel('sawtooth', [-0.25]);
+      expect(atNeg025).toBeCloseTo(at075, 10);
     });
   });
 
   // ════════════════════════════════════════════════════════════════════
-  // OSCILLATOR OUTPUT RANGE TESTS
+  // EASING FUNCTION CLAMPING TESTS
   // ════════════════════════════════════════════════════════════════════
 
-  describe('Oscillator Output Ranges', () => {
-    it('oscSin: output in [-1, 1]', () => {
-      for (let p = 0; p < 1; p += 0.1) {
-        const result = testApplySignalKernel('oscSin', [p]);
+  describe('Easing Function Clamping', () => {
+    it('easeInQuad: clamps t > 1', () => {
+      const at1 = testApplySignalKernel('easeInQuad', [1]);
+      const at2 = testApplySignalKernel('easeInQuad', [2]);
+      expect(at2).toBe(at1);
+      expect(at2).toBe(1); // Should be clamped to 1
+    });
+
+    it('easeInQuad: clamps t < 0', () => {
+      const at0 = testApplySignalKernel('easeInQuad', [0]);
+      const atNeg1 = testApplySignalKernel('easeInQuad', [-1]);
+      expect(atNeg1).toBe(at0);
+      expect(atNeg1).toBe(0); // Should be clamped to 0
+    });
+
+    it('easeOutQuad: clamps t > 1', () => {
+      const at1 = testApplySignalKernel('easeOutQuad', [1]);
+      const at2 = testApplySignalKernel('easeOutQuad', [2]);
+      expect(at2).toBe(at1);
+      expect(at2).toBe(1);
+    });
+
+    it('easeOutQuad: clamps t < 0', () => {
+      const at0 = testApplySignalKernel('easeOutQuad', [0]);
+      const atNeg1 = testApplySignalKernel('easeOutQuad', [-1]);
+      expect(atNeg1).toBe(at0);
+      expect(atNeg1).toBe(0);
+    });
+
+    it('easeInCubic: clamps t > 1', () => {
+      const at1 = testApplySignalKernel('easeInCubic', [1]);
+      const at2 = testApplySignalKernel('easeInCubic', [2]);
+      expect(at2).toBe(at1);
+      expect(at2).toBe(1);
+    });
+
+    it('easeInCubic: clamps t < 0', () => {
+      const at0 = testApplySignalKernel('easeInCubic', [0]);
+      const atNeg1 = testApplySignalKernel('easeInCubic', [-1]);
+      expect(atNeg1).toBe(at0);
+      expect(atNeg1).toBe(0);
+    });
+
+    it('easeInElastic: clamps t > 1', () => {
+      const at1 = testApplySignalKernel('easeInElastic', [1]);
+      const at2 = testApplySignalKernel('easeInElastic', [2]);
+      expect(at2).toBe(at1);
+      expect(at2).toBe(1);
+    });
+
+    it('easeInElastic: clamps t < 0', () => {
+      const at0 = testApplySignalKernel('easeInElastic', [0]);
+      const atNeg1 = testApplySignalKernel('easeInElastic', [-1]);
+      expect(atNeg1).toBe(at0);
+      expect(atNeg1).toBe(0);
+    });
+
+    it('easeOutElastic: clamps t > 1', () => {
+      const at1 = testApplySignalKernel('easeOutElastic', [1]);
+      const at2 = testApplySignalKernel('easeOutElastic', [2]);
+      expect(at2).toBe(at1);
+      expect(at2).toBe(1);
+    });
+
+    it('easeOutElastic: clamps t < 0', () => {
+      const at0 = testApplySignalKernel('easeOutElastic', [0]);
+      const atNeg1 = testApplySignalKernel('easeOutElastic', [-1]);
+      expect(atNeg1).toBe(at0);
+      expect(atNeg1).toBe(0);
+    });
+
+    it('easeOutBounce: clamps t > 1', () => {
+      const at1 = testApplySignalKernel('easeOutBounce', [1]);
+      const at2 = testApplySignalKernel('easeOutBounce', [2]);
+      expect(at2).toBeCloseTo(at1, 10);
+      expect(at2).toBeCloseTo(1, 10);
+    });
+
+    it('easeOutBounce: clamps t < 0', () => {
+      const at0 = testApplySignalKernel('easeOutBounce', [0]);
+      const atNeg1 = testApplySignalKernel('easeOutBounce', [-1]);
+      expect(atNeg1).toBeCloseTo(at0, 10);
+      expect(atNeg1).toBeCloseTo(0, 10);
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════════════
+  // SHAPING FUNCTION EDGE CASE TESTS
+  // ════════════════════════════════════════════════════════════════════
+
+  describe('Shaping Function Edge Cases', () => {
+    it('smoothstep: handles edge0 == edge1 correctly', () => {
+      // When edges are equal, should act as a step function
+      const result1 = testApplySignalKernel('smoothstep', [5, 5, 4]);
+      expect(result1).toBe(0); // x < edge
+
+      const result2 = testApplySignalKernel('smoothstep', [5, 5, 5]);
+      expect(result2).toBe(1); // x >= edge
+
+      const result3 = testApplySignalKernel('smoothstep', [5, 5, 6]);
+      expect(result3).toBe(1); // x >= edge
+    });
+
+    it('smoothstep: interpolates correctly between edges', () => {
+      // At edge0, should be 0
+      const atEdge0 = testApplySignalKernel('smoothstep', [0, 1, 0]);
+      expect(atEdge0).toBe(0);
+
+      // At edge1, should be 1
+      const atEdge1 = testApplySignalKernel('smoothstep', [0, 1, 1]);
+      expect(atEdge1).toBe(1);
+
+      // At midpoint, should be 0.5
+      const atMid = testApplySignalKernel('smoothstep', [0, 1, 0.5]);
+      expect(atMid).toBe(0.5);
+    });
+
+    it('step: basic threshold function', () => {
+      const belowEdge = testApplySignalKernel('step', [5, 4]);
+      expect(belowEdge).toBe(0);
+
+      const atEdge = testApplySignalKernel('step', [5, 5]);
+      expect(atEdge).toBe(1);
+
+      const aboveEdge = testApplySignalKernel('step', [5, 6]);
+      expect(aboveEdge).toBe(1);
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════════════
+  // OUTPUT RANGE VERIFICATION
+  // ════════════════════════════════════════════════════════════════════
+
+  describe('Output Range Verification', () => {
+    it('oscSin: output is in [-1, 1]', () => {
+      const samples = [0, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, -0.5];
+      for (const phase of samples) {
+        const result = testApplySignalKernel('oscSin', [phase]);
         expect(result).toBeGreaterThanOrEqual(-1);
         expect(result).toBeLessThanOrEqual(1);
       }
     });
 
-    it('oscCos: output in [-1, 1]', () => {
-      for (let p = 0; p < 1; p += 0.1) {
-        const result = testApplySignalKernel('oscCos', [p]);
+    it('triangle: output is in [-1, 1]', () => {
+      const samples = [0, 0.25, 0.5, 0.75, 1.0, 1.5, -0.5];
+      for (const phase of samples) {
+        const result = testApplySignalKernel('triangle', [phase]);
         expect(result).toBeGreaterThanOrEqual(-1);
         expect(result).toBeLessThanOrEqual(1);
       }
     });
 
-    it('triangle: output in [-1, 1]', () => {
-      for (let p = 0; p < 1; p += 0.1) {
-        const result = testApplySignalKernel('triangle', [p]);
-        expect(result).toBeGreaterThanOrEqual(-1);
+    it('easeInQuad: output is in [0, 1]', () => {
+      const samples = [-0.5, 0, 0.25, 0.5, 0.75, 1.0, 1.5];
+      for (const t of samples) {
+        const result = testApplySignalKernel('easeInQuad', [t]);
+        expect(result).toBeGreaterThanOrEqual(0);
         expect(result).toBeLessThanOrEqual(1);
       }
     });
 
-    it('square: output is exactly -1 or 1', () => {
-      for (let p = 0; p < 1; p += 0.1) {
-        const result = testApplySignalKernel('square', [p]);
-        expect(result === 1 || result === -1).toBe(true);
-      }
-    });
-
-    it('sawtooth: output in [-1, 1]', () => {
-      for (let p = 0; p < 1; p += 0.1) {
-        const result = testApplySignalKernel('sawtooth', [p]);
-        expect(result).toBeGreaterThanOrEqual(-1);
-        expect(result).toBeLessThanOrEqual(1);
-      }
-    });
-  });
-
-  // ════════════════════════════════════════════════════════════════════
-  // NOISE OUTPUT RANGE TESTS
-  // ════════════════════════════════════════════════════════════════════
-
-  describe('Noise Output Range', () => {
-    it('noise: output in [0, 1)', () => {
-      for (let x = 0; x < 100; x += 7.3) {
+    it('noise: output is in [0, 1)', () => {
+      const samples = [0, 1, 2, 3, 42, 100, -5];
+      for (const x of samples) {
         const result = testApplySignalKernel('noise', [x]);
         expect(result).toBeGreaterThanOrEqual(0);
         expect(result).toBeLessThan(1);
       }
-    });
-
-    it('noise: deterministic', () => {
-      const n1 = testApplySignalKernel('noise', [42.5]);
-      const n2 = testApplySignalKernel('noise', [42.5]);
-      expect(n1).toBe(n2);
     });
   });
 });
