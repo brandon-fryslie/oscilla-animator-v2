@@ -722,12 +722,13 @@ export function canonicalEvent(): CanonicalType {
 }
 
 /**
- * Shallow const value type (one + continuous) - TEMPORARY: using cardinalityOne until pipeline supports zero.
- * Const values use whatever payload/unit is provided but always have one+continuous extent.
+ * Compile-time constant type (zero cardinality + continuous).
+ * Zero-cardinality values are universal donors — consumable by signal or field
+ * contexts without explicit lifting. The evaluator reads the constant directly.
  */
 export function canonicalConst(payload: PayloadType, unit?: UnitType): CanonicalType {
   return canonicalType(payload, unit, {
-    cardinality: cardinalityOne(), // TODO: Should be cardinalityZero() per spec, but pipeline needs broadcastConstToSignal ops first
+    cardinality: cardinalityZero(),
     temporality: temporalityContinuous(),
   });
 }
@@ -737,20 +738,27 @@ export function canonicalConst(payload: PayloadType, unit?: UnitType): Canonical
 // =============================================================================
 
 /**
- * The three derived kinds: signal, field, event.
+ * The three derived runtime kinds: signal, field, event.
  * Per spec, these are NOT stored but derived from extent axes.
+ *
+ * DEPRECATED: Slated for removal when ValueExpr unification lands.
+ * Consumers should dispatch on CanonicalType directly instead of this
+ * lossy projection. Zero-cardinality (const) maps to 'signal' here,
+ * but check `type.extent.cardinality` directly if you need to distinguish.
  */
 export type DerivedKind = 'signal' | 'field' | 'event';
 
 /**
- * Derive kind from extent axes.
+ * Derive runtime kind from extent axes.
  * Throws if any axis is var (must resolve first).
+ *
+ * DEPRECATED: Dispatch on CanonicalType directly. This function loses
+ * information (zero-cardinality constants map to 'signal').
  *
  * Rules:
  * - discrete → event
  * - many + continuous → field
- * - one + continuous → signal
- * - zero + continuous → signal (compile-time scalar)
+ * - zero/one + continuous → signal
  */
 export function deriveKind(type: CanonicalType): DerivedKind {
   const card = requireInst(type.extent.cardinality, 'cardinality');
@@ -758,7 +766,7 @@ export function deriveKind(type: CanonicalType): DerivedKind {
 
   if (tempo.kind === 'discrete') return 'event';
   if (card.kind === 'many') return 'field';
-  return 'signal'; // Both \'zero\' and \'one\' derive as signal
+  return 'signal';
 }
 
 /**
