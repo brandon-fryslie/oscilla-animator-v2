@@ -109,8 +109,8 @@ export function materializeValueExpr(
   // Determine buffer format based on payload type (matches legacy Materializer)
   const format = getBufferFormat(expr.type.payload);
 
-  // Allocate buffer from pool with correct format
-  const buffer = pool.alloc(format, count * stride);
+  // Allocate buffer from pool — pool handles stride internally based on format
+  const buffer = pool.alloc(format, count);
 
 
   // Fill buffer based on expression kind
