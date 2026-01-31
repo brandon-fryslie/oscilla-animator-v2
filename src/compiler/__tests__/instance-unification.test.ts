@@ -178,4 +178,44 @@ describe('Instance Identity (type-derived)', () => {
       expect(requireManyInstance(expr.type).instanceId).toBe(instance);
     });
   });
+
+  describe('instance name resolution enforcement', () => {
+    it('createInstance generates unique non-placeholder IDs', () => {
+      const b = new IRBuilderImpl();
+      const inst0 = b.createInstance(DOMAIN_CIRCLE, 10);
+      const inst1 = b.createInstance(DOMAIN_CIRCLE, 20);
+
+      // Instance IDs must NOT be 'default' — they are generated names
+      expect(inst0).not.toBe('default');
+      expect(inst1).not.toBe('default');
+      // Each instance gets a unique ID
+      expect(inst0).not.toBe(inst1);
+    });
+
+    it('field expressions with real instance IDs can be looked up in instances map', () => {
+      const b = new IRBuilderImpl();
+      const instance = b.createInstance(DOMAIN_CIRCLE, 10);
+      const ref = instanceRef(DOMAIN_CIRCLE as string, instance as string);
+      const type = canonicalField(FLOAT, { kind: 'scalar' }, ref);
+      const field = b.fieldIntrinsic('index', type);
+
+      // Extract instance from field expression type
+      const expr = b.getFieldExprs()[field as number];
+      const extractedRef = requireManyInstance(expr.type);
+
+      // The extracted instance ID must exist in the builder's instances map
+      const instances = b.getInstances();
+      expect(instances.has(extractedRef.instanceId)).toBe(true);
+      expect(instances.get(extractedRef.instanceId)?.count).toBe(10);
+    });
+
+    it('placeholder instance ID "default" is never resolvable in instances map', () => {
+      const b = new IRBuilderImpl();
+      b.createInstance(DOMAIN_CIRCLE, 10);
+
+      // 'default' must not exist as an instance — it's a block definition placeholder
+      const instances = b.getInstances();
+      expect(instances.has('default' as any)).toBe(false);
+    });
+  });
 });

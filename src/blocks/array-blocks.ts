@@ -7,7 +7,7 @@
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../core/ids';
-import { canonicalType, canonicalField, strideOf, type PayloadType, boolConst } from '../core/canonical-types';
+import { canonicalType, canonicalField, strideOf, type PayloadType, boolConst, withInstance, instanceRef } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { DOMAIN_CIRCLE } from '../core/domain-registry';
 import { defaultSourceConst, defaultSource } from '../types';
@@ -85,10 +85,12 @@ registerBlock({
     // Create instance (layout is now handled via field kernels, not instance metadata)
     const instanceId = ctx.b.createInstance(DOMAIN_CIRCLE, count);
 
-    const outType0 = ctx.outTypes[0];
-    const outType1 = ctx.outTypes[1];
-    const outType2 = ctx.outTypes[2];
-    const outType3 = ctx.outTypes[3];
+    // Rewrite output types with actual instance ref (ctx.outTypes has placeholder 'default')
+    const ref = instanceRef(DOMAIN_CIRCLE as string, instanceId as string);
+    const outType0 = withInstance(ctx.outTypes[0], ref);
+    const outType1 = withInstance(ctx.outTypes[1], ref);
+    const outType2 = withInstance(ctx.outTypes[2], ref);
+    const outType3 = withInstance(ctx.outTypes[3], ref);
 
     // Create field expressions
     // 1. Elements field - broadcasts the input signal across the array

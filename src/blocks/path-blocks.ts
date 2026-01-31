@@ -7,7 +7,7 @@
  */
 
 import { registerBlock } from './registry';
-import { canonicalType, canonicalField, strideOf, payloadStride, floatConst, vec2Const, intConst } from '../core/canonical-types';
+import { canonicalType, canonicalField, strideOf, payloadStride, floatConst, vec2Const, intConst, withInstance, instanceRef } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../core/ids';
 import { DOMAIN_CONTROL } from '../core/domain-registry';
@@ -147,9 +147,12 @@ registerBlock({
       'static'
     );
 
+    // Build actual instance ref from created instance
+    const ref = instanceRef(DOMAIN_CONTROL as string, controlInstance as string);
+
     // Use index to compute angle: angle = index * (2π / sides)
     const indexField = ctx.b.fieldIntrinsic('index',
-      canonicalField(INT, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainTypeId: makeDomainTypeId('default') })
+      canonicalField(INT, { kind: 'scalar' }, ref)
     );
 
     // Get radiusX and radiusY signals
@@ -173,7 +176,7 @@ registerBlock({
       indexField,
       [sidesSig, radiusXSig, radiusYSig],
       polygonVertexFn,
-      canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainTypeId: makeDomainTypeId('default') })
+      canonicalField(VEC2, { kind: 'scalar' }, ref)
     );
 
     // Create shape reference with numeric topology ID
@@ -187,7 +190,8 @@ registerBlock({
     const shapeSlot = ctx.b.allocSlot();
     const cpSlot = ctx.b.allocSlot();
     const shapeType = ctx.outTypes[0];
-    const cpType = ctx.outTypes[1];
+    // Rewrite controlPoints output type with actual instance ref
+    const cpType = withInstance(ctx.outTypes[1], ref);
 
     return {
       outputsById: {
@@ -340,9 +344,12 @@ registerBlock({
       'static'
     );
 
+    // Build actual instance ref from created instance
+    const ref = instanceRef(DOMAIN_CONTROL as string, controlInstance as string);
+
     // Use index to determine if outer (even) or inner (odd)
     const indexField = ctx.b.fieldIntrinsic('index',
-      canonicalField(INT, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainTypeId: makeDomainTypeId('default') })
+      canonicalField(INT, { kind: 'scalar' }, ref)
     );
 
     // Get outerRadius and innerRadius signals
@@ -366,7 +373,7 @@ registerBlock({
       indexField,
       [pointsSig, outerRadiusSig, innerRadiusSig],
       starVertexFn,
-      canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainTypeId: makeDomainTypeId('default') })
+      canonicalField(VEC2, { kind: 'scalar' }, ref)
     );
 
     // Create shape reference with numeric topology ID
@@ -380,7 +387,8 @@ registerBlock({
     const shapeSlot = ctx.b.allocSlot();
     const cpSlot = ctx.b.allocSlot();
     const shapeType = ctx.outTypes[0];
-    const cpType = ctx.outTypes[1];
+    // Rewrite controlPoints output type with actual instance ref
+    const cpType = withInstance(ctx.outTypes[1], ref);
 
     return {
       outputsById: {

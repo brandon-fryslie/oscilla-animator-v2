@@ -12,7 +12,7 @@ import { assertKindAgreement, type ValueRefPacked } from "../ir/lowerTypes";
 import type { InstanceId } from "../ir/Indices";
 import { getBlockDefinition, type LowerCtx, type LowerResult, hasLowerOutputsOnly } from "../../blocks/registry";
 import type { EventHub } from "../../events/EventHub";
-import type { CanonicalType } from "../../core/canonical-types";
+import { type CanonicalType, withInstance, instanceRef as makeInstanceRef } from "../../core/canonical-types";
 import type { PortKey } from "../frontend/analyze-type-constraints";
 // Multi-Input Blocks Integration
 import {
@@ -403,6 +403,30 @@ function lowerBlockInstance(
       }
     }
 
+    // Resolve output types from pass1 portTypes
+    let outTypes: CanonicalType[] = Object.keys(blockDef.outputs)
+      .map(portName => portTypes?.get(portKey(blockIndex, portName, 'out')))
+      .filter((t): t is CanonicalType => t !== undefined);
+
+    // Rewrite outTypes with actual instance ref for downstream blocks.
+    // Type inference (pass 1) uses placeholder instance IDs from block definitions.
+    // When a block has inferredInstance from upstream, rewrite field output types
+    // to carry the actual instance ID so runtime can find the instance.
+    if (inferredInstance) {
+      const instanceDecl = builder.getInstances().get(inferredInstance);
+      if (instanceDecl) {
+        const ref = makeInstanceRef(instanceDecl.domainType as string, inferredInstance as string);
+        outTypes = outTypes.map(t => {
+          // Only rewrite types that have many cardinality (field types)
+          const card = t.extent.cardinality;
+          if (card.kind === 'inst' && card.value.kind === 'many') {
+            return withInstance(t, ref);
+          }
+          return t;
+        });
+      }
+    }
+
     // Build lowering context
     const ctx: LowerCtx = {
       blockIdx: blockIndex,
@@ -414,9 +438,7 @@ function lowerBlockInstance(
         .filter(portName => blockDef.inputs[portName].exposedAsPort !== false)
         .map(portName => portTypes?.get(portKey(blockIndex, portName, 'in')))
         .filter((t): t is CanonicalType => t !== undefined),
-      outTypes: Object.keys(blockDef.outputs)
-        .map(portName => portTypes?.get(portKey(blockIndex, portName, 'out')))
-        .filter((t): t is CanonicalType => t !== undefined),
+      outTypes,
       b: builder,
       seedConstId: 0, // Seed value not used by current intrinsics (randomId uses element index only)
       inferredInstance,
