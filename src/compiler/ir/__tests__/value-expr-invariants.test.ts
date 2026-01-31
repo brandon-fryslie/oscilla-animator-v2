@@ -86,7 +86,7 @@ describe('ValueExpr structural invariants', () => {
     const variants: ValueExpr[] = [
       { kind: 'const', type: mockType, value: { kind: 'float', value: 0 } },
       { kind: 'external', type: mockType, channel: 'test' },
-      { kind: 'intrinsic', type: mockType, intrinsicKind: 'property' },
+      { kind: 'intrinsic', type: mockType, intrinsicKind: 'property', intrinsic: 'index' },
       { kind: 'kernel', type: mockType, kernelKind: 'map', args: [] },
       { kind: 'state', type: mockType, stateSlot: 0 as any },
       { kind: 'time', type: mockType, which: 'tMs' },
@@ -107,7 +107,7 @@ describe('ValueExpr structural invariants', () => {
     const variants: ValueExpr[] = [
       { kind: 'const', type: mockType, value: { kind: 'float', value: 0 } },
       { kind: 'external', type: mockType, channel: 'test' },
-      { kind: 'intrinsic', type: mockType, intrinsicKind: 'property' },
+      { kind: 'intrinsic', type: mockType, intrinsicKind: 'property', intrinsic: 'index' },
       { kind: 'kernel', type: mockType, kernelKind: 'map', args: [] },
       { kind: 'state', type: mockType, stateSlot: 0 as any },
       { kind: 'time', type: mockType, which: 'tMs' },
