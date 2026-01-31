@@ -28,6 +28,7 @@ import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../core
 // debugService import removed for strict compiler isolation (One Source of Truth)
 import { compilationInspector } from '../services/CompilationInspectorService';
 import { computeRenderReachableBlocks } from './reachability';
+import { lowerToValueExprs } from './ir/lowerToValueExprs';
 
 
 // Import block registrations (side-effect imports to register blocks)
@@ -649,11 +650,13 @@ function convertLinkedIRToProgram(
     throw new Error('E_CAMERA_MULTIPLE: Only one Camera block is permitted.');
   }
 
-  return {
+  // Build the base program with legacy tables
+  const baseProgram: CompiledProgramIR = {
     irVersion: 1,
     signalExprs: { nodes: signalNodes },
     fieldExprs: { nodes: fieldNodes },
     eventExprs: { nodes: eventNodes },
+    valueExprs: { nodes: [], sigToValue: [], fieldToValue: [], eventToValue: [] }, // Placeholder
     constants: { json: [] },
     schedule: scheduleIR,
     outputs,
@@ -661,6 +664,15 @@ function convertLinkedIRToProgram(
     debugIndex,
     fieldSlotRegistry,
     renderGlobals, // NEW - Camera system: populated from builder
+  };
+
+  // Lower legacy expressions to ValueExpr table
+  const valueExprs = lowerToValueExprs(baseProgram);
+
+  // Return final program with valueExprs populated
+  return {
+    ...baseProgram,
+    valueExprs,
   };
 }
 

@@ -44,6 +44,7 @@ function testProgramConverter(
     signalExprs: { nodes: signalNodes },
     eventExprs: { nodes: eventNodes },
     fieldExprs: { nodes: fieldNodes },
+    valueExprs: { nodes: [], sigToValue: [], fieldToValue: [], eventToValue: [] },
     constants: { json: [] },
     schedule: scheduleIR,
     outputs: [],
