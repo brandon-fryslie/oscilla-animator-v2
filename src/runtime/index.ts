@@ -33,7 +33,6 @@ export {
   ExternalChannelSnapshot,
   ExternalChannelSystem,
 } from './ExternalChannel';
-export { materialize } from './Materializer';
 export { executeFrame } from './ScheduleExecutor';
 export {
   migrateState,
