@@ -5,7 +5,7 @@
  */
 
 import type { CanonicalType, ConstValue } from '../../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, CAMERA_PROJECTION, canonicalType, unitScalar, canonicalEvent, requireManyInstance, constValueMatchesPayload } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, CAMERA_PROJECTION, canonicalType, unitScalar, canonicalEvent, constValueMatchesPayload } from '../../core/canonical-types';
 import type { TopologyId } from '../../shapes/types';
 import type { IRBuilder } from './IRBuilder';
 import type {
@@ -331,9 +331,6 @@ export class IRBuilderImpl implements IRBuilder {
     basisKind: BasisKind,
     type: CanonicalType
   ): FieldExprId {
-    if (!instanceId) {
-      throw new Error('fieldPlacement: instanceId is required');
-    }
     if (!field) {
       throw new Error('fieldPlacement: field is required');
     }
@@ -346,7 +343,6 @@ export class IRBuilderImpl implements IRBuilder {
 
     const expr = {
       kind: 'placement' as const,
-      instanceId,
       field,
       basisKind,
       type,
@@ -389,8 +385,7 @@ export class IRBuilderImpl implements IRBuilder {
   }
 
   fieldMap(input: FieldExprId, fn: PureFn, type: CanonicalType): FieldExprId {
-    const instanceId = this.inferFieldInstance(input);
-    const expr = { kind: 'map' as const, input, fn, type, instanceId };
+    const expr = { kind: 'map' as const, input, fn, type };
     const hash = hashFieldExpr(expr);
     const existing = this.fieldExprCache.get(hash);
     if (existing !== undefined) {
@@ -403,8 +398,7 @@ export class IRBuilderImpl implements IRBuilder {
   }
 
   fieldZip(inputs: readonly FieldExprId[], fn: PureFn, type: CanonicalType): FieldExprId {
-    const instanceId = this.inferZipInstance(inputs);
-    const expr = { kind: 'zip' as const, inputs, fn, type, instanceId };
+    const expr = { kind: 'zip' as const, inputs, fn, type };
     const hash = hashFieldExpr(expr);
     const existing = this.fieldExprCache.get(hash);
     if (existing !== undefined) {
@@ -422,8 +416,7 @@ export class IRBuilderImpl implements IRBuilder {
     fn: PureFn,
     type: CanonicalType
   ): FieldExprId {
-    const instanceId = this.inferFieldInstance(field);
-    const expr = { kind: 'zipSig' as const, field, signals, fn, type, instanceId };
+    const expr = { kind: 'zipSig' as const, field, signals, fn, type };
     const hash = hashFieldExpr(expr);
     const existing = this.fieldExprCache.get(hash);
     if (existing !== undefined) {
@@ -453,69 +446,6 @@ export class IRBuilderImpl implements IRBuilder {
   }
 
   // =========================================================================
-  // Instance Inference
-  // =========================================================================
-
-  /**
-   * Infer the instance a field expression operates over.
-   * Returns the InstanceId if the field is bound to a specific instance,
-   * or undefined if the field is instance-agnostic (const, broadcast).
-   *
-   * Instance binding:
-   * - intrinsic, array, stateRead → return their instanceId (bound to instance)
-   * - map, zipSig → propagate from input
-   * - zip → unify from inputs (must all be same instance)
-   * - const, broadcast → undefined (instance-agnostic)
-   */
-  inferFieldInstance(fieldId: FieldExprId): InstanceId | undefined {
-    const expr = this.fieldExprs[fieldId as number];
-    if (!expr) return undefined;
-
-    switch (expr.kind) {
-      case 'intrinsic':
-      case 'stateRead':
-      case 'placement':
-        return requireManyInstance(expr.type).instanceId; // Extract from type
-      case 'map':
-      case 'zip':
-      case 'zipSig':
-        return requireManyInstance(expr.type).instanceId;
-      case 'pathDerivative':
-        return this.inferFieldInstance(expr.input);
-      case 'broadcast':
-      case 'const':
-        return undefined; // Truly instance-agnostic
-    }
-  }
-
-  /**
-   * Infer instance from zip inputs, throwing an error if they differ.
-   * Returns the unified instance, or undefined if all inputs are instance-agnostic.
-   */
-  private inferZipInstance(inputs: readonly FieldExprId[]): InstanceId | undefined {
-    const instances: InstanceId[] = [];
-    for (const id of inputs) {
-      const inst = this.inferFieldInstance(id);
-      if (inst !== undefined) {
-        instances.push(inst);
-      }
-    }
-
-    if (instances.length === 0) return undefined;
-
-    const first = instances[0];
-    for (let i = 1; i < instances.length; i++) {
-      if (instances[i] !== first) {
-        throw new Error(
-          `Instance mismatch in fieldZip: '${first}' vs '${instances[i]}'. ` +
-          `All field inputs must share the same instance.`
-        );
-      }
-    }
-    return first;
-  }
-
-  // =========================================================================
   // Field Combine
   // =========================================================================
 
@@ -526,8 +456,7 @@ export class IRBuilderImpl implements IRBuilder {
   ): FieldExprId {
     // For combining fields, we use zip with appropriate combine function
     const fn: PureFn = { kind: 'kernel', name: `combine_${mode}` };
-    const instanceId = this.inferZipInstance(inputs);
-    const expr = { kind: 'zip' as const, inputs, fn, type, instanceId };
+    const expr = { kind: 'zip' as const, inputs, fn, type };
     const hash = hashFieldExpr(expr);
     const existing = this.fieldExprCache.get(hash);
     if (existing !== undefined) {
@@ -885,7 +814,7 @@ export class IRBuilderImpl implements IRBuilder {
   }
 
   fieldStateRead(stateSlot: StateSlotId, type: CanonicalType): FieldExprId {
-    const expr = { kind: 'stateRead' as const, stateSlot, instanceId, type };
+    const expr = { kind: 'stateRead' as const, stateSlot, type };
     const hash = hashFieldExpr(expr);
     const existing = this.fieldExprCache.get(hash);
     if (existing !== undefined) {

@@ -1,103 +1,172 @@
 /**
- * Instance Unification Tests
+ * Instance Identity Tests (NEW: type-derived)
  *
- * Verifies that instance tracking works correctly during field expression
- * composition and at render sinks.
+ * Instance identity is derived from CanonicalType via requireManyInstance(expr.type).
+ * There is no inferFieldInstance() method — instance is always in the type.
  *
- * Key insight: Intrinsics ARE bound to an instance. The `FieldExprIntrinsic`
- * has `instanceId: InstanceId` because intrinsics provide per-element
- * properties FOR that specific instance. Therefore `inferFieldInstance()`
- * returns the instanceId for intrinsics, NOT undefined.
- *
- * Instance binding:
- * - intrinsic, array, stateRead → return their instanceId (bound to instance)
- * - map, zipSig → propagate from input
- * - zip → unify from inputs (must all be same instance)
- * - const, broadcast → undefined (truly instance-agnostic)
+ * Key behavior:
+ * - Field types with cardinality=many(instanceRef) carry instance identity
+ * - requireManyInstance(expr.type) extracts the InstanceRef
+ * - Broadcast/const fields still have many cardinality (they carry the target instance type)
+ * - Instance mismatches are caught at type constraint solving, not at IR build time
  */
 
 import { describe, it, expect } from 'vitest';
 import { IRBuilderImpl } from '../ir/IRBuilderImpl';
 import { OpCode } from '../ir/types';
-import { canonicalField, canonicalSignal, floatConst, intConst, instanceRef } from '../../core/canonical-types';
+import {
+  canonicalField,
+  canonicalSignal,
+  canonicalConst,
+  floatConst,
+  intConst,
+  instanceRef,
+  requireManyInstance,
+  requireInst,
+} from '../../core/canonical-types';
 import { FLOAT, INT, VEC2 } from '../../core/canonical-types';
 import { DOMAIN_CIRCLE } from '../../core/domain-registry';
 
-describe('Instance Unification', () => {
-  describe('intrinsic field instance inference', () => {
-    it('returns instanceId for index intrinsic', () => {
+describe('Instance Identity (type-derived)', () => {
+  describe('field intrinsic instance from type', () => {
+    it('requireManyInstance extracts instanceId from intrinsic field type', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const instanceRef_ = instanceRef(DOMAIN_CIRCLE as string, instance as string);
-      const type = canonicalField(FLOAT, { kind: "scalar" }, instanceRef_);
+      const ref = instanceRef(DOMAIN_CIRCLE as string, instance as string);
+      const type = canonicalField(FLOAT, { kind: 'scalar' }, ref);
       const field = b.fieldIntrinsic('index', type);
 
-      // Intrinsics ARE bound to their instance
-      expect(b.inferFieldInstance(field)).toBe(instance);
+      const expr = b.getFieldExprs()[field as number];
+      const extracted = requireManyInstance(expr.type);
+      expect(extracted.instanceId).toBe(instance);
     });
 
-    it('returns instanceId for normalizedIndex intrinsic', () => {
+    it('requireManyInstance works for normalizedIndex', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const instanceRef_ = instanceRef(DOMAIN_CIRCLE as string, instance as string);
-      const type = canonicalField(FLOAT, { kind: "scalar" }, instanceRef_);
+      const ref = instanceRef(DOMAIN_CIRCLE as string, instance as string);
+      const type = canonicalField(FLOAT, { kind: 'scalar' }, ref);
       const field = b.fieldIntrinsic('normalizedIndex', type);
 
-      expect(b.inferFieldInstance(field)).toBe(instance);
+      const expr = b.getFieldExprs()[field as number];
+      expect(requireManyInstance(expr.type).instanceId).toBe(instance);
     });
 
-    it('returns instanceId for randomId intrinsic', () => {
+    it('requireManyInstance works for randomId', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const instanceRef_ = instanceRef(DOMAIN_CIRCLE as string, instance as string);
-      const type = canonicalField(FLOAT, { kind: "scalar" }, instanceRef_);
+      const ref = instanceRef(DOMAIN_CIRCLE as string, instance as string);
+      const type = canonicalField(FLOAT, { kind: 'scalar' }, ref);
       const field = b.fieldIntrinsic('randomId', type);
 
-      expect(b.inferFieldInstance(field)).toBe(instance);
+      const expr = b.getFieldExprs()[field as number];
+      expect(requireManyInstance(expr.type).instanceId).toBe(instance);
     });
   });
 
-  describe('instance-agnostic field operations', () => {
-    it('returns undefined for broadcast fields', () => {
+  describe('instance-agnostic fields still carry target instance in type', () => {
+    it('broadcast field carries instance from its type', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const instanceRef_ = instanceRef(DOMAIN_CIRCLE as string, instance as string);
-      const type = canonicalField(FLOAT, { kind: "scalar" }, instanceRef_);
+      const ref = instanceRef(DOMAIN_CIRCLE as string, instance as string);
+      const fieldType = canonicalField(FLOAT, { kind: 'scalar' }, ref);
+      const sig = b.sigConst(floatConst(1.0), canonicalSignal(FLOAT));
+      const broadcast = b.Broadcast(sig, fieldType);
+
+      // Broadcast has many cardinality (it's a field), so type carries instance
+      const expr = b.getFieldExprs()[broadcast as number];
+      expect(requireManyInstance(expr.type).instanceId).toBe(instance);
+    });
+
+    it('const field with zero cardinality has no instance', () => {
+      const constType = canonicalConst(FLOAT);
+      // Zero cardinality means no instance — requireManyInstance should throw
+      const card = requireInst(constType.extent.cardinality, 'cardinality');
+      expect(card.kind).toBe('zero');
+      expect(() => requireManyInstance(constType)).toThrow();
+    });
+  });
+
+  describe('instance propagation through composition', () => {
+    it('map preserves instance from type', () => {
+      const b = new IRBuilderImpl();
+      const instance = b.createInstance(DOMAIN_CIRCLE, 10);
+      const ref = instanceRef(DOMAIN_CIRCLE as string, instance as string);
+      const type = canonicalField(FLOAT, { kind: 'scalar' }, ref);
+      const intrinsic = b.fieldIntrinsic('index', type);
+      const mapped = b.fieldMap(intrinsic, { kind: 'opcode', opcode: OpCode.Sin }, type);
+
+      const expr = b.getFieldExprs()[mapped as number];
+      expect(requireManyInstance(expr.type).instanceId).toBe(instance);
+    });
+
+    it('zipSig preserves instance from field type', () => {
+      const b = new IRBuilderImpl();
+      const instance = b.createInstance(DOMAIN_CIRCLE, 10);
+      const ref = instanceRef(DOMAIN_CIRCLE as string, instance as string);
+      const fieldType = canonicalField(FLOAT, { kind: 'scalar' }, ref);
+      const sigType = canonicalSignal(FLOAT);
+      const intrinsic = b.fieldIntrinsic('index', fieldType);
+      const signal = b.sigConst(floatConst(2.0), sigType);
+      const zipped = b.fieldZipSig(intrinsic, [signal], { kind: 'opcode', opcode: OpCode.Mul }, fieldType);
+
+      const expr = b.getFieldExprs()[zipped as number];
+      expect(requireManyInstance(expr.type).instanceId).toBe(instance);
+    });
+
+    it('zip of same-instance fields preserves instance in type', () => {
+      const b = new IRBuilderImpl();
+      const instance = b.createInstance(DOMAIN_CIRCLE, 10);
+      const ref = instanceRef(DOMAIN_CIRCLE as string, instance as string);
+      const type = canonicalField(FLOAT, { kind: 'scalar' }, ref);
+      const field1 = b.fieldIntrinsic('index', type);
+      const field2 = b.fieldIntrinsic('normalizedIndex', type);
+      const zipped = b.fieldZip([field1, field2], { kind: 'opcode', opcode: OpCode.Add }, type);
+
+      const expr = b.getFieldExprs()[zipped as number];
+      expect(requireManyInstance(expr.type).instanceId).toBe(instance);
+    });
+
+    it('zip with broadcast preserves instance from non-broadcast type', () => {
+      const b = new IRBuilderImpl();
+      const instance = b.createInstance(DOMAIN_CIRCLE, 10);
+      const ref = instanceRef(DOMAIN_CIRCLE as string, instance as string);
+      const type = canonicalField(FLOAT, { kind: 'scalar' }, ref);
+      const intrinsic = b.fieldIntrinsic('index', type);
       const sig = b.sigConst(floatConst(1.0), canonicalSignal(FLOAT));
       const broadcast = b.Broadcast(sig, type);
+      const zipped = b.fieldZip([intrinsic, broadcast], { kind: 'opcode', opcode: OpCode.Add }, type);
 
-      // Broadcasts are instance-agnostic
-      expect(b.inferFieldInstance(broadcast)).toBeUndefined();
+      const expr = b.getFieldExprs()[zipped as number];
+      expect(requireManyInstance(expr.type).instanceId).toBe(instance);
     });
 
-    it('returns undefined for const fields', () => {
+    it('map after zip preserves instance', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const instanceRef_ = instanceRef(DOMAIN_CIRCLE as string, instance as string);
-      const type = canonicalField(FLOAT, { kind: "scalar" }, instanceRef_);
-      const constField = b.fieldConst(floatConst(42), type);
+      const ref = instanceRef(DOMAIN_CIRCLE as string, instance as string);
+      const type = canonicalField(FLOAT, { kind: 'scalar' }, ref);
+      const field1 = b.fieldIntrinsic('index', type);
+      const field2 = b.fieldIntrinsic('normalizedIndex', type);
+      const zipped = b.fieldZip([field1, field2], { kind: 'opcode', opcode: OpCode.Add }, type);
+      const mapped = b.fieldMap(zipped, { kind: 'opcode', opcode: OpCode.Sin }, type);
 
-      // Consts are instance-agnostic
-      expect(b.inferFieldInstance(constField)).toBeUndefined();
+      const expr = b.getFieldExprs()[mapped as number];
+      expect(requireManyInstance(expr.type).instanceId).toBe(instance);
     });
   });
 
-  describe('layout field instance inference', () => {
-    it('returns instanceId for kernel-based layout fields', () => {
+  describe('layout field instance from type', () => {
+    it('kernel-based layout fields carry instance in type', () => {
       const b = new IRBuilderImpl();
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const instanceRef_ = instanceRef(DOMAIN_CIRCLE as string, instance as string);
-      const floatType = canonicalField(FLOAT, { kind: "scalar" }, instanceRef_);
-      const vec2Type = canonicalField(VEC2, { kind: "scalar" }, instanceRef_);
-      
-      // Create normalizedIndex field
+      const ref = instanceRef(DOMAIN_CIRCLE as string, instance as string);
+      const floatType = canonicalField(FLOAT, { kind: 'scalar' }, ref);
+      const vec2Type = canonicalField(VEC2, { kind: 'scalar' }, ref);
+
       const normalizedIndex = b.fieldIntrinsic('normalizedIndex', floatType);
-      
-      // Create signals for grid dimensions
       const colsSig = b.sigConst(intConst(5), canonicalSignal(INT));
       const rowsSig = b.sigConst(intConst(2), canonicalSignal(INT));
-      
-      // Apply gridLayout kernel
       const layoutField = b.fieldZipSig(
         normalizedIndex,
         [colsSig, rowsSig],
@@ -105,107 +174,8 @@ describe('Instance Unification', () => {
         vec2Type
       );
 
-      expect(b.inferFieldInstance(layoutField)).toBe(instance);
-    });
-  });
-
-  describe('field composition with intrinsics', () => {
-    it('propagates instanceId through map on intrinsic', () => {
-      const b = new IRBuilderImpl();
-      const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const instanceRef_ = instanceRef(DOMAIN_CIRCLE as string, instance as string);
-      const type = canonicalField(FLOAT, { kind: "scalar" }, instanceRef_);
-      const intrinsic = b.fieldIntrinsic('index', type);
-      const mapped = b.fieldMap(intrinsic, { kind: 'opcode', opcode: OpCode.Sin }, type);
-
-      // Instance propagates from input
-      expect(b.inferFieldInstance(mapped)).toBe(instance);
-    });
-
-    it('propagates instanceId through zipSig on intrinsic', () => {
-      const b = new IRBuilderImpl();
-      const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const instanceRef_ = instanceRef(DOMAIN_CIRCLE as string, instance as string);
-      const fieldType = canonicalField(FLOAT, { kind: "scalar" }, instanceRef_);
-      const sigType = canonicalSignal(FLOAT);
-      const intrinsic = b.fieldIntrinsic('index', fieldType);
-      const signal = b.sigConst(floatConst(2.0), sigType);
-      const zipped = b.fieldZipSig(intrinsic, [signal], { kind: 'opcode', opcode: OpCode.Mul }, fieldType);
-
-      expect(b.inferFieldInstance(zipped)).toBe(instance);
-    });
-
-    it('unifies instance for zip of intrinsics from same instance', () => {
-      const b = new IRBuilderImpl();
-      const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const instanceRef_ = instanceRef(DOMAIN_CIRCLE as string, instance as string);
-      const type = canonicalField(FLOAT, { kind: "scalar" }, instanceRef_);
-      const field1 = b.fieldIntrinsic('index', type);
-      const field2 = b.fieldIntrinsic('normalizedIndex', type);
-
-      const zipped = b.fieldZip([field1, field2], { kind: 'opcode', opcode: OpCode.Add }, type);
-      expect(b.inferFieldInstance(zipped)).toBe(instance);
-    });
-
-    it('throws error for zip of intrinsics from different instances', () => {
-      const b = new IRBuilderImpl();
-      const instance1 = b.createInstance(DOMAIN_CIRCLE, 10);
-      const instance2 = b.createInstance(DOMAIN_CIRCLE, 20);
-      const instanceRef1 = instanceRef(DOMAIN_CIRCLE as string, instance1 as string);
-      const instanceRef2 = instanceRef(DOMAIN_CIRCLE as string, instance2 as string);
-      const type1 = canonicalField(FLOAT, { kind: "scalar" }, instanceRef1);
-      const type2 = canonicalField(FLOAT, { kind: "scalar" }, instanceRef2);
-      const field1 = b.fieldIntrinsic('index', type1);
-      const field2 = b.fieldIntrinsic('index', type2);
-
-      // Zipping fields from different instances should throw
-      expect(() => {
-        b.fieldZip([field1, field2], { kind: 'opcode', opcode: OpCode.Add }, type1);
-      }).toThrow(/Instance mismatch/);
-    });
-
-    it('propagates instance through zip of intrinsic and broadcast', () => {
-      const b = new IRBuilderImpl();
-      const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const instanceRef_ = instanceRef(DOMAIN_CIRCLE as string, instance as string);
-      const type = canonicalField(FLOAT, { kind: "scalar" }, instanceRef_);
-      const intrinsic = b.fieldIntrinsic('index', type);
-      const sig = b.sigConst(floatConst(1.0), canonicalSignal(FLOAT));
-      const broadcast = b.Broadcast(sig, type);
-
-      // Broadcast is instance-agnostic, so zip takes instance from intrinsic
-      const zipped = b.fieldZip([intrinsic, broadcast], { kind: 'opcode', opcode: OpCode.Add }, type);
-      expect(b.inferFieldInstance(zipped)).toBe(instance);
-    });
-
-    it('propagates instance through map after zip of intrinsics', () => {
-      const b = new IRBuilderImpl();
-      const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const instanceRef_ = instanceRef(DOMAIN_CIRCLE as string, instance as string);
-      const type = canonicalField(FLOAT, { kind: "scalar" }, instanceRef_);
-      const field1 = b.fieldIntrinsic('index', type);
-      const field2 = b.fieldIntrinsic('normalizedIndex', type);
-      const zipped = b.fieldZip([field1, field2], { kind: 'opcode', opcode: OpCode.Add }, type);
-      const mapped = b.fieldMap(zipped, { kind: 'opcode', opcode: OpCode.Sin }, type);
-
-      expect(b.inferFieldInstance(mapped)).toBe(instance);
-    });
-  });
-
-  describe('multiple broadcasts', () => {
-    it('returns undefined for zip of multiple broadcasts (all instance-agnostic)', () => {
-      const b = new IRBuilderImpl();
-      const instance = b.createInstance(DOMAIN_CIRCLE, 10);
-      const instanceRef_ = instanceRef(DOMAIN_CIRCLE as string, instance as string);
-      const type = canonicalField(FLOAT, { kind: "scalar" }, instanceRef_);
-      const sig1 = b.sigConst(floatConst(1.0), canonicalSignal(FLOAT));
-      const sig2 = b.sigConst(floatConst(2.0), canonicalSignal(FLOAT));
-      const broadcast1 = b.Broadcast(sig1, type);
-      const broadcast2 = b.Broadcast(sig2, type);
-
-      // Two broadcasts - no instance constraint
-      const zipped = b.fieldZip([broadcast1, broadcast2], { kind: 'opcode', opcode: OpCode.Add }, type);
-      expect(b.inferFieldInstance(zipped)).toBeUndefined();
+      const expr = b.getFieldExprs()[layoutField as number];
+      expect(requireManyInstance(expr.type).instanceId).toBe(instance);
     });
   });
 });
