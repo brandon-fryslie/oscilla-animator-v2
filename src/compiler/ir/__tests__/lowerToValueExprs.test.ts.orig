@@ -318,8 +318,6 @@ function createMinimalProgram(
       stateSlotCount: 0,
       stateSlots: [],
       stateMappings: [],
-      eventSlotCount: 0,
-      eventExprCount: 0,
     },
     outputs: [],
     slotMeta: [],
