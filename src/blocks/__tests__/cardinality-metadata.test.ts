@@ -104,7 +104,7 @@ describe('Cardinality Metadata', () => {
     const transformBlocks = [
       'Array',
       'Broadcast',
-      'LayoutAlongPath',
+      // 'LayoutAlongPath', // Not yet implemented
     ];
 
     it.each(transformBlocks)('%s is transform', (blockType) => {

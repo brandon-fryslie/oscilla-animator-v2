@@ -121,6 +121,7 @@ describe('bridgeBranchToIR', () => {
 // =============================================================================
 
 describe('bridgeBindingToIdentityIR', () => {
+  it.todo('maps binding variants to identity IR (pending BindingValue API stabilization)');
 //   it('maps unbound binding to identity.none', () => {
 //     const binding: Binding = bindingUnbound();
 //     const result = bridgeBindingToIdentityIR(binding);
@@ -199,6 +200,7 @@ describe('payloadTypeToShapeDescIR', () => {
 // =============================================================================
 
 describe('bridgeExtentToAxesDescIR', () => {
+  it.todo('bridges extent axes to IR descriptors (pending Extent API stabilization)');
 //   it('bridges signal extent (one + continuous)', () => {
 //     const extent: Extent = {
 //       cardinality: axisInst(cardinalityOne()),
