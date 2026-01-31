@@ -25,6 +25,65 @@ import { createStableDomainInstance, createUnstableDomainInstance } from './Doma
 import { assembleRenderFrame, type AssemblerContext } from './RenderAssembler';
 import { resolveCameraFromGlobals } from './CameraResolver';
 import { requireManyInstance } from '../core/canonical-types';
+import { evaluateValueExprSignal } from './ValueExprSignalEvaluator';
+
+/**
+ * Shadow evaluation mode flag
+ *
+ * Enable shadow evaluation to run both legacy and ValueExpr signal evaluators
+ * in parallel, comparing results to validate migration correctness.
+ *
+ * IMPORTANT: This adds 2x overhead to signal evaluation. Only enable during
+ * development/testing, never in production.
+ *
+ * Set to false for normal operation (legacy-only).
+ * Set to true for shadow mode (legacy + ValueExpr with validation).
+ */
+const SHADOW_EVAL = false; // Toggle to true during testing
+
+/**
+ * ValueExpr-only cutover mode flag
+ *
+ * When true, use evaluateValueExprSignal() instead of legacy evaluateSignal().
+ * This is the final cutover step for signal evaluation migration.
+ *
+ * IMPORTANT: Only enable this after shadow mode has validated equivalence.
+ * When VALUE_EXPR_ONLY is true, SHADOW_EVAL is ignored (no comparison needed).
+ *
+ * Set to false for legacy evaluation.
+ * Set to true for ValueExpr-only evaluation (final cutover).
+ */
+const VALUE_EXPR_ONLY = false; // Toggle to true after shadow validation passes
+
+/**
+ * Shadow evaluation comparison epsilon
+ *
+ * Tolerance for floating point comparison when validating ValueExpr results
+ * against legacy results. Uses the same precision as existing tests.
+ */
+const SHADOW_EPSILON = 1e-10;
+
+/**
+ * Compare two signal values for equivalence
+ *
+ * Returns true if values are equivalent within tolerance:
+ * - Both NaN
+ * - Both same-sign infinity
+ * - Numeric values within SHADOW_EPSILON
+ */
+function valuesEqual(legacy: number, valueExpr: number): boolean {
+  // Both NaN
+  if (Number.isNaN(legacy) && Number.isNaN(valueExpr)) {
+    return true;
+  }
+  // Both same-sign infinity
+  if (!Number.isFinite(legacy) && !Number.isFinite(valueExpr)) {
+    return legacy === valueExpr; // Check same sign
+  }
+  // Numeric comparison
+  return Math.abs(legacy - valueExpr) < SHADOW_EPSILON;
+}
+
 
 /**
  * Slot lookup cache entry
@@ -223,7 +282,37 @@ export function executeFrame(
           if (stride !== 1) {
             throw new Error(`evalSig: expected stride=1 for scalar signal slot ${slot}, got stride=${stride}`);
           }
-          const value = evaluateSignal(step.expr, signals, state);
+
+          // ═══════════════════════════════════════════════════════════════════
+          // VALUEEXPR MIGRATION: Signal Evaluation
+          // ═══════════════════════════════════════════════════════════════════
+          let value: number;
+
+          if (VALUE_EXPR_ONLY) {
+            // WI-4: Final cutover mode - use ValueExpr evaluator only
+            const veId = program.valueExprs.sigToValue[step.expr as number];
+            if (veId === undefined) {
+              throw new Error(`No ValueExpr mapping for SigExpr ${step.expr}`);
+            }
+            value = evaluateValueExprSignal(veId, program.valueExprs.nodes, state);
+          } else {
+            // Legacy mode or shadow mode
+            value = evaluateSignal(step.expr, signals, state);
+
+            // WI-3: Shadow mode validation (if enabled)
+            if (SHADOW_EVAL) {
+              const veId = program.valueExprs.sigToValue[step.expr as number];
+              if (veId !== undefined) {
+                const veResult = evaluateValueExprSignal(veId, program.valueExprs.nodes, state);
+                if (!valuesEqual(value, veResult)) {
+                  console.warn(
+                    `[SHADOW] Signal mismatch: SigExpr=${step.expr} VE=${veId} legacy=${value} valueExpr=${veResult}`
+                  );
+                }
+              }
+            }
+          }
+
           writeF64Scalar(state, lookup, value);
 
           // Debug tap: Record slot value (Sprint 1: Debug Probe)
@@ -256,7 +345,38 @@ export function executeFrame(
 
         // Evaluate each component and write sequentially
         for (let i = 0; i < step.inputs.length; i++) {
-          const componentValue = evaluateSignal(step.inputs[i], signals, state);
+          const sigExprId = step.inputs[i];
+
+          // ═══════════════════════════════════════════════════════════════════
+          // VALUEEXPR MIGRATION: Strided Slot Write
+          // ═══════════════════════════════════════════════════════════════════
+          let componentValue: number;
+
+          if (VALUE_EXPR_ONLY) {
+            // WI-4: Final cutover mode - use ValueExpr evaluator only
+            const veId = program.valueExprs.sigToValue[sigExprId as number];
+            if (veId === undefined) {
+              throw new Error(`No ValueExpr mapping for SigExpr ${sigExprId}`);
+            }
+            componentValue = evaluateValueExprSignal(veId, program.valueExprs.nodes, state);
+          } else {
+            // Legacy mode or shadow mode
+            componentValue = evaluateSignal(sigExprId, signals, state);
+
+            // WI-3: Shadow mode validation (if enabled)
+            if (SHADOW_EVAL) {
+              const veId = program.valueExprs.sigToValue[sigExprId as number];
+              if (veId !== undefined) {
+                const veResult = evaluateValueExprSignal(veId, program.valueExprs.nodes, state);
+                if (!valuesEqual(componentValue, veResult)) {
+                  console.warn(
+                    `[SHADOW] Strided signal mismatch: SigExpr=${sigExprId} VE=${veId} legacy=${componentValue} valueExpr=${veResult}`
+                  );
+                }
+              }
+            }
+          }
+
           state.values.f64[offset + i] = componentValue;
 
           // Debug tap: Record slot value for each component
