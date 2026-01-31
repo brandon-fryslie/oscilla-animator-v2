@@ -15,8 +15,12 @@ import type {
   InstanceId,
   ValueSlot,
   StepId,
+  SigExprId,
+  EventExprId,
+  ValueExprId,
 } from './Indices';
 import type { BlockId, PortId } from '../../types';
+import type { ValueExpr } from './value-expr';
 
 // =============================================================================
 // Version and Core Types
@@ -88,6 +92,9 @@ export interface CompiledProgramIR {
   readonly signalExprs: SignalExprTable;
   readonly fieldExprs: FieldExprTable;
   readonly eventExprs: EventExprTable;
+
+  // Unified ValueExpr table (lowered from legacy tables)
+  readonly valueExprs: ValueExprTable;
 
   // JSON-only constants
   readonly constants: {
@@ -164,6 +171,31 @@ export interface FieldExprTable {
 
 export interface EventExprTable {
   readonly nodes: readonly EventExpr[];
+}
+
+/**
+ * ValueExpr Table - Unified Expression Table
+ *
+ * This table is produced by lowering the three legacy tables (signalExprs, fieldExprs, eventExprs)
+ * into a single canonical representation. Every legacy expression has exactly one ValueExpr equivalent.
+ *
+ * The forward mapping arrays (sigToValue, fieldToValue, eventToValue) enable incremental migration:
+ * consumers can look up the ValueExpr corresponding to a legacy ID without changing the legacy evaluators.
+ *
+ * Spec Reference: TYPE-SYSTEM-INVARIANTS.md
+ */
+export interface ValueExprTable {
+  /** Unified value expression nodes (all signal/field/event expressions) */
+  readonly nodes: readonly ValueExpr[];
+
+  /** Maps SigExprId (as index) to corresponding ValueExprId */
+  readonly sigToValue: readonly ValueExprId[];
+
+  /** Maps FieldExprId (as index) to corresponding ValueExprId */
+  readonly fieldToValue: readonly ValueExprId[];
+
+  /** Maps EventExprId (as index) to corresponding ValueExprId */
+  readonly eventToValue: readonly ValueExprId[];
 }
 
 // =============================================================================
