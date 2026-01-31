@@ -37,7 +37,7 @@
  * - state: Per-lane state reads
  *
  * ──────────────────────────────────────────────────────────────────────
- * PHASE 5B: Complex Field Operations (TODO)
+ * PHASE 5B: Complex Field Operations
  * ──────────────────────────────────────────────────────────────────────
  *
  * - intrinsic.placement: uv, rank, seed from basis
@@ -56,8 +56,9 @@ import type { RuntimeState } from './RuntimeState';
 import type { BufferPool } from './BufferPool';
 import type { CompiledProgramIR } from '../compiler/ir/program';
 import { evaluateValueExprSignal } from './ValueExprSignalEvaluator';
-import { applyFieldKernel } from './FieldKernels';
+import { applyFieldKernel, applyFieldKernelZipSig } from './FieldKernels';
 import { applyOpcode } from './OpcodeInterpreter';
+import { ensurePlacementBasis } from './PlacementBasis';
 import {
   constValueAsNumber,
   payloadStride,
@@ -107,7 +108,7 @@ export function materializeValueExpr(
   const stride = payloadStride(expr.type.payload);
 
   // Allocate buffer from pool
-  const buffer = pool.alloc('f32', count) as Float32Array;
+  const buffer = pool.alloc('f32', count * stride) as Float32Array;
 
   // Ensure buffer has correct size for strided data
   if (buffer.length < count * stride) {
@@ -156,7 +157,7 @@ function fillBuffer(
         fillIntrinsicProperty(expr.intrinsic, buffer, count);
       } else {
         // Placement intrinsics: Phase 5B (WI-3)
-        throw new Error('Placement intrinsics not yet implemented in Phase 5A');
+        fillIntrinsicPlacement(expr, buffer, count, state);
       }
       break;
     }
@@ -309,6 +310,57 @@ function fillIntrinsicProperty(
 }
 
 /**
+ * Fill buffer from placement intrinsic (WI-3)
+ *
+ * Produces placement field buffers (uv/rank/seed) using PlacementBasis system.
+ * Matches legacy Materializer.ts:419-447 behavior for FieldExprPlacement.
+ */
+function fillIntrinsicPlacement(
+  expr: Extract<ValueExprIntrinsic, { intrinsicKind: 'placement' }>,
+  buffer: Float32Array,
+  count: number,
+  state: RuntimeState
+): void {
+  // Get or create placement basis for this instance
+  const instanceIdFromType = requireManyInstance(expr.type).instanceId;
+  const basis = ensurePlacementBasis(
+    state.continuity.placementBasis,
+    instanceIdFromType,
+    count,
+    expr.basisKind
+  );
+
+  // Copy data from basis buffers based on field type
+  switch (expr.field) {
+    case 'uv': {
+      // Copy uv coordinates (stride 2)
+      const src = basis.uv.subarray(0, count * 2);
+      buffer.set(src);
+      break;
+    }
+
+    case 'rank': {
+      // Copy rank values (stride 1)
+      const src = basis.rank.subarray(0, count);
+      buffer.set(src);
+      break;
+    }
+
+    case 'seed': {
+      // Copy seed values (stride 1)
+      const src = basis.seed.subarray(0, count);
+      buffer.set(src);
+      break;
+    }
+
+    default: {
+      const _exhaustive: never = expr.field;
+      throw new Error(`Unknown placement field: ${_exhaustive}`);
+    }
+  }
+}
+
+/**
  * Pseudo-random generator for deterministic per-element randomness.
  * Uses sine-based hash for smooth, deterministic results.
  *
@@ -362,11 +414,33 @@ function fillKernel(
       break;
     }
 
-    // Phase 5B kernels (WI-4)
-    case 'zipSig':
-    case 'pathDerivative':
-    case 'reduce':
-      throw new Error(`Kernel '${expr.kernelKind}' not yet implemented in Phase 5A`);
+    case 'zipSig': {
+      // WI-4: ZipSig - materialize field input, evaluate signal inputs, apply fn per-lane
+      const fieldInput = materializeValueExpr(expr.field, table, instanceId, count, state, program, pool);
+      const sigValues = expr.signals.map(id => evaluateValueExprSignal(id, table.nodes, state));
+      applyZipSig(buffer, fieldInput, sigValues, expr.fn, count, stride, instanceId);
+      break;
+    }
+
+    case 'pathDerivative': {
+      // WI-4: PathDerivative - materialize input, compute derivative
+      const input = materializeValueExpr(expr.field, table, instanceId, count, state, program, pool);
+      if (expr.op === 'tangent') {
+        fillBufferTangent(buffer, input, count);
+      } else if (expr.op === 'arcLength') {
+        fillBufferArcLength(buffer, input, count);
+      } else {
+        const _exhaustive: never = expr.op;
+        throw new Error(`Unknown pathDerivative op: ${_exhaustive}`);
+      }
+      break;
+    }
+
+    case 'reduce': {
+      // WI-4: Reduce is handled during signal evaluation, not materialization
+      // This case should not be reached during field materialization
+      throw new Error('Reduce is signal-extent, not field-extent');
+    }
 
     default: {
       const _exhaustive: never = expr;
@@ -444,5 +518,139 @@ function applyZip(
     applyFieldKernel(out, inputViews, fn.name, count, dummyType);
   } else {
     throw new Error(`Zip function kind ${fn.kind} not implemented`);
+  }
+}
+
+/**
+ * Apply zipSig function to buffers (WI-4)
+ *
+ * Combines field input with signal values, applying fn per-lane.
+ * Matches legacy Materializer.ts:586-613 behavior for applyZipSig.
+ */
+function applyZipSig(
+  out: Float32Array,
+  fieldInput: Float32Array,
+  sigValues: number[],
+  fn: PureFn,
+  count: number,
+  stride: number,
+  instanceId: InstanceId
+): void {
+  if (fn.kind === 'opcode') {
+    // Per-lane opcode application with field + signals
+    const op = fn.opcode;
+    for (let i = 0; i < count; i++) {
+      for (let c = 0; c < stride; c++) {
+        const idx = i * stride + c;
+        const values = [fieldInput[idx], ...sigValues];
+        out[idx] = applyOpcode(op, values);
+      }
+    }
+  } else if (fn.kind === 'kernel') {
+    // Field kernel with signal inputs
+    const dummyInstance = instanceRef('_dummy', instanceId as any as string);
+    const dummyType = canonicalField(FLOAT, unitScalar(), dummyInstance);
+
+    applyFieldKernelZipSig(out, fieldInput, sigValues, fn.name, count, dummyType);
+  } else {
+    throw new Error(`ZipSig function kind ${fn.kind} not implemented`);
+  }
+}
+
+/**
+ * Fill buffer with tangent vectors using central difference (WI-4)
+ *
+ * Matches legacy Materializer.ts:649-680 behavior for fillBufferTangent.
+ *
+ * MVP Scope: Polygonal paths (linear approximation).
+ * For a closed path with N control points:
+ *   tangent[i] = (point[i+1] - point[i-1]) / 2
+ *
+ * Edge cases:
+ * - Single point (N=1): tangent = (0, 0, 0)
+ * - Two points (N=2): tangent computed with wrapping
+ * - Assumes closed path (wraps at boundaries)
+ *
+ * @param out - Output buffer for tangent vectors (vec3, length N*3)
+ * @param input - Input buffer for control points (vec2, length N*2)
+ * @param count - Number of points (not components)
+ */
+function fillBufferTangent(
+  out: Float32Array,
+  input: Float32Array,
+  count: number
+): void {
+  if (count === 0) return;
+
+  if (count === 1) {
+    // Single point: no tangent
+    out[0] = 0;
+    out[1] = 0;
+    out[2] = 0;
+    return;
+  }
+
+  // Central difference for each point
+  // For closed path: [P0, P1, ..., PN-1] where PN wraps to P0
+  for (let i = 0; i < count; i++) {
+    const prevIdx = (i - 1 + count) % count;  // Wrap around for closed path
+    const nextIdx = (i + 1) % count;
+
+    const prevX = input[prevIdx * 2];
+    const prevY = input[prevIdx * 2 + 1];
+    const nextX = input[nextIdx * 2];
+    const nextY = input[nextIdx * 2 + 1];
+
+    // Central difference: (next - prev) / 2, z=0
+    out[i * 3] = (nextX - prevX) / 2;
+    out[i * 3 + 1] = (nextY - prevY) / 2;
+    out[i * 3 + 2] = 0;
+  }
+}
+
+/**
+ * Fill buffer with cumulative arc length (WI-4)
+ *
+ * Matches legacy Materializer.ts:698-725 behavior for fillBufferArcLength.
+ *
+ * MVP Scope: Polygonal paths (Euclidean distance between consecutive points).
+ * For N control points:
+ *   arcLength[0] = 0
+ *   arcLength[i] = arcLength[i-1] + ||point[i] - point[i-1]||
+ *
+ * Edge cases:
+ * - Single point (N=1): arcLength = [0]
+ * - Returns monotonically increasing values
+ *
+ * @param out - Output buffer for arc lengths (float, length N)
+ * @param input - Input buffer for control points (vec2, length N*2)
+ * @param count - Number of points
+ */
+function fillBufferArcLength(
+  out: Float32Array,
+  input: Float32Array,
+  count: number
+): void {
+  if (count === 0) return;
+
+  out[0] = 0;
+
+  if (count === 1) return;
+
+  let totalDistance = 0;
+
+  // Sum segment distances from point 0 to point i
+  for (let i = 1; i < count; i++) {
+    const prevX = input[(i - 1) * 2];
+    const prevY = input[(i - 1) * 2 + 1];
+    const currX = input[i * 2];
+    const currY = input[i * 2 + 1];
+
+    const dx = currX - prevX;
+    const dy = currY - prevY;
+    const segmentLength = Math.sqrt(dx * dx + dy * dy);
+    totalDistance += segmentLength;
+
+    out[i] = totalDistance;
   }
 }
