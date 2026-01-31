@@ -7,9 +7,7 @@
  * This materializer handles field-extent ValueExpr nodes (cardinality many,
  * temporality continuous).
  *
- * Migration Status: Shadow mode implementation for incremental ValueExpr adoption.
- * This materializer runs in parallel with legacy Materializer during migration,
- * validating equivalence before cutover.
+ * Migration Status: Production implementation - the only materializer used by runtime.
  *
  * ──────────────────────────────────────────────────────────────────────
  * IMPORTANT: FIELD-EXTENT ONLY
@@ -55,6 +53,7 @@ import type { PureFn, IntrinsicPropertyName } from '../compiler/ir/types';
 import type { RuntimeState } from './RuntimeState';
 import type { BufferPool } from './BufferPool';
 import type { CompiledProgramIR } from '../compiler/ir/program';
+import { getBufferFormat } from './BufferPool';
 import { evaluateValueExprSignal } from './ValueExprSignalEvaluator';
 import { applyFieldKernel, applyFieldKernelZipSig } from './FieldKernels';
 import { applyOpcode } from './OpcodeInterpreter';
@@ -70,7 +69,7 @@ import {
 } from '../core/canonical-types';
 
 /**
- * Materialize a ValueExpr field expression into a Float32Array buffer
+ * Materialize a ValueExpr field expression into a typed array buffer
  *
  * @param veId - ValueExpr ID to materialize
  * @param table - ValueExpr table (program.valueExprs)
@@ -79,7 +78,7 @@ import {
  * @param state - Runtime state (for caching and cross-evaluator calls)
  * @param program - Compiled program (for cross-evaluator access to signal table)
  * @param pool - Buffer pool for allocation
- * @returns Float32Array with materialized field data
+ * @returns Typed array with materialized field data (Float32Array or Uint8ClampedArray)
  */
 export function materializeValueExpr(
   veId: ValueExprId,
@@ -89,7 +88,7 @@ export function materializeValueExpr(
   state: RuntimeState,
   program: CompiledProgramIR,
   pool: BufferPool
-): Float32Array {
+): ArrayBufferView {
   // Check cache (keyed by ValueExprId, simple index lookup)
   // Cache structure added in WI-2
   const cached = state.cache.valueExprFieldBuffers?.[veId as number];
@@ -107,15 +106,12 @@ export function materializeValueExpr(
   // Derive stride from payload type (TYPE-SYSTEM-INVARIANTS #12)
   const stride = payloadStride(expr.type.payload);
 
-  // Allocate buffer from pool
-  const buffer = pool.alloc('f32', count * stride) as Float32Array;
+  // Determine buffer format based on payload type (matches legacy Materializer)
+  const format = getBufferFormat(expr.type.payload);
 
-  // Ensure buffer has correct size for strided data
-  if (buffer.length < count * stride) {
-    throw new Error(
-      `Buffer allocation failed: needed ${count * stride} elements, got ${buffer.length}`
-    );
-  }
+  // Allocate buffer from pool with correct format
+  const buffer = pool.alloc(format, count * stride);
+
 
   // Fill buffer based on expression kind
   fillBuffer(expr, buffer, veId, table, instanceId, count, stride, state, program, pool);
@@ -134,7 +130,7 @@ export function materializeValueExpr(
  */
 function fillBuffer(
   expr: ValueExpr,
-  buffer: Float32Array,
+  buffer: ArrayBufferView,
   veId: ValueExprId,
   table: { readonly nodes: readonly ValueExpr[] },
   instanceId: InstanceId,
@@ -154,10 +150,11 @@ function fillBuffer(
     case 'intrinsic': {
       if (expr.intrinsicKind === 'property') {
         // Property intrinsics: index, normalizedIndex, randomId
-        fillIntrinsicProperty(expr.intrinsic, buffer, count);
+        // These always output Float32Array
+        fillIntrinsicProperty(expr.intrinsic, buffer as Float32Array, count);
       } else {
         // Placement intrinsics: Phase 5B (WI-3)
-        fillIntrinsicPlacement(expr, buffer, count, state);
+        fillIntrinsicPlacement(expr, buffer as Float32Array, count, state);
       }
       break;
     }
@@ -168,10 +165,11 @@ function fillBuffer(
     }
 
     case 'state': {
-      // Read per-lane state values
+      // Read per-lane state values (always Float32Array)
       const stateStart = expr.stateSlot as number;
+      const buf = buffer as Float32Array;
       for (let i = 0; i < count * stride; i++) {
-        buffer[i] = state.state[stateStart + i] ?? 0;
+        buf[i] = state.state[stateStart + i] ?? 0;
       }
       break;
     }
@@ -202,7 +200,7 @@ function fillBuffer(
  */
 function fillConst(
   cv: import('../core/canonical-types').ConstValue,
-  buffer: Float32Array,
+  buffer: ArrayBufferView,
   count: number,
   stride: number
 ): void {
@@ -211,43 +209,47 @@ function fillConst(
     case 'int':
     case 'bool': {
       // Scalar: fill all components with same value
+      const buf = buffer as Float32Array;
       const value = constValueAsNumber(cv);
       for (let i = 0; i < count * stride; i++) {
-        buffer[i] = value;
+        buf[i] = value;
       }
       break;
     }
 
     case 'vec2': {
       // Vec2: fill per-lane with [x, y]
+      const buf = buffer as Float32Array;
       const [x, y] = cv.value;
       for (let i = 0; i < count; i++) {
-        buffer[i * 2 + 0] = x;
-        buffer[i * 2 + 1] = y;
+        buf[i * 2 + 0] = x;
+        buf[i * 2 + 1] = y;
       }
       break;
     }
 
     case 'vec3': {
       // Vec3: fill per-lane with [x, y, z]
+      const buf = buffer as Float32Array;
       const [x, y, z] = cv.value;
       for (let i = 0; i < count; i++) {
-        buffer[i * 3 + 0] = x;
-        buffer[i * 3 + 1] = y;
-        buffer[i * 3 + 2] = z;
+        buf[i * 3 + 0] = x;
+        buf[i * 3 + 1] = y;
+        buf[i * 3 + 2] = z;
       }
       break;
     }
 
     case 'color': {
-      // Color const values are handled in legacy as Uint8ClampedArray
-      // For Float32Array, we need to convert RGBA [0,1] to float components
+      // Color RGBA tuple - convert [0,1] float to [0,255] clamped integer
+      // Matches legacy Materializer.ts:295-302
+      const rgba = buffer as Uint8ClampedArray;
       const [r, g, b, a] = cv.value;
       for (let i = 0; i < count; i++) {
-        buffer[i * 4 + 0] = r;
-        buffer[i * 4 + 1] = g;
-        buffer[i * 4 + 2] = b;
-        buffer[i * 4 + 3] = a;
+        rgba[i * 4 + 0] = Math.round(r * 255);
+        rgba[i * 4 + 1] = Math.round(g * 255);
+        rgba[i * 4 + 2] = Math.round(b * 255);
+        rgba[i * 4 + 3] = Math.round(a * 255);
       }
       break;
     }
@@ -376,7 +378,7 @@ function pseudoRandom(seed: number): number {
  */
 function fillKernel(
   expr: ValueExprKernel,
-  buffer: Float32Array,
+  buffer: ArrayBufferView,
   veId: ValueExprId,
   table: { readonly nodes: readonly ValueExpr[] },
   instanceId: InstanceId,
@@ -386,13 +388,16 @@ function fillKernel(
   program: CompiledProgramIR,
   pool: BufferPool
 ): void {
+  // Most kernel operations output Float32Array
+  const buf = buffer as Float32Array;
+
   switch (expr.kernelKind) {
     case 'broadcast': {
       // Evaluate signal, fill all lanes with result
       const sigValue = evaluateValueExprSignal(expr.signal, table.nodes, state);
       for (let i = 0; i < count; i++) {
         for (let c = 0; c < stride; c++) {
-          buffer[i * stride + c] = sigValue;
+          buf[i * stride + c] = sigValue;
         }
       }
       break;
@@ -400,35 +405,35 @@ function fillKernel(
 
     case 'map': {
       // Materialize input, apply fn per-lane
-      const input = materializeValueExpr(expr.input, table, instanceId, count, state, program, pool);
-      applyMap(buffer, input, expr.fn, count, stride);
+      const input = materializeValueExpr(expr.input, table, instanceId, count, state, program, pool) as Float32Array;
+      applyMap(buf, input, expr.fn, count, stride);
       break;
     }
 
     case 'zip': {
       // Materialize all inputs, apply fn per-lane
       const inputs = expr.inputs.map(id =>
-        materializeValueExpr(id, table, instanceId, count, state, program, pool)
+        materializeValueExpr(id, table, instanceId, count, state, program, pool) as Float32Array
       );
-      applyZip(buffer, inputs, expr.fn, count, stride, instanceId);
+      applyZip(buf, inputs, expr.fn, count, stride, instanceId);
       break;
     }
 
     case 'zipSig': {
       // WI-4: ZipSig - materialize field input, evaluate signal inputs, apply fn per-lane
-      const fieldInput = materializeValueExpr(expr.field, table, instanceId, count, state, program, pool);
+      const fieldInput = materializeValueExpr(expr.field, table, instanceId, count, state, program, pool) as Float32Array;
       const sigValues = expr.signals.map(id => evaluateValueExprSignal(id, table.nodes, state));
-      applyZipSig(buffer, fieldInput, sigValues, expr.fn, count, stride, instanceId);
+      applyZipSig(buf, fieldInput, sigValues, expr.fn, count, stride, instanceId);
       break;
     }
 
     case 'pathDerivative': {
       // WI-4: PathDerivative - materialize input, compute derivative
-      const input = materializeValueExpr(expr.field, table, instanceId, count, state, program, pool);
+      const input = materializeValueExpr(expr.field, table, instanceId, count, state, program, pool) as Float32Array;
       if (expr.op === 'tangent') {
-        fillBufferTangent(buffer, input, count);
+        fillBufferTangent(buf, input, count);
       } else if (expr.op === 'arcLength') {
-        fillBufferArcLength(buffer, input, count);
+        fillBufferArcLength(buf, input, count);
       } else {
         const _exhaustive: never = expr.op;
         throw new Error(`Unknown pathDerivative op: ${_exhaustive}`);

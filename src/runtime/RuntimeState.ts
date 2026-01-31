@@ -214,7 +214,7 @@ export interface FrameCache {
    * Unlike legacy fieldBuffers (which need instanceId key), ValueExpr field buffers
    * cache by expression ID only since instanceId is embedded in the type.
    */
-  valueExprFieldBuffers: (Float32Array | null)[];
+  valueExprFieldBuffers: (ArrayBufferView | null)[];
 
   /**
    * Frame stamps for ValueExpr field cache validation (indexed by ValueExprId).
