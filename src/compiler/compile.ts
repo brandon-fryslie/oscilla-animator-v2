@@ -678,7 +678,7 @@ function inferFieldInstanceFromExprs(
   switch (expr.kind) {
     case 'intrinsic':
     case 'stateRead':
-      return expr.instanceId;
+      return requireManyInstance(expr.type).instanceId;
     case 'map':
       return requireManyInstance(expr.type).instanceId;
     case 'zip':

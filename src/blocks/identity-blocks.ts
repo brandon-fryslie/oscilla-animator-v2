@@ -48,8 +48,8 @@ registerBlock({
 
     // Create field expressions that map instance index to random values
     // Use fieldIntrinsic to get instance-specific values
-    const randField = ctx.b.fieldIntrinsic(instance, 'randomId', randType);
-    const id01Field = ctx.b.fieldIntrinsic(instance, 'normalizedIndex', id01Type);
+    const randField = ctx.b.fieldIntrinsic('randomId', randType);
+    const id01Field = ctx.b.fieldIntrinsic('normalizedIndex', id01Type);
 
     const randSlot = ctx.b.allocSlot();
     const id01Slot = ctx.b.allocSlot();
@@ -95,8 +95,8 @@ registerBlock({
     const indexIntType = ctx.outTypes[1];
 
     // Create field expressions that expose instance index
-    const indexField = ctx.b.fieldIntrinsic(instance, 'normalizedIndex', indexType);
-    const indexIntField = ctx.b.fieldIntrinsic(instance, 'index', indexIntType);
+    const indexField = ctx.b.fieldIntrinsic('normalizedIndex', indexType);
+    const indexIntField = ctx.b.fieldIntrinsic('index', indexIntType);
 
     const indexSlot = ctx.b.allocSlot();
     const indexIntSlot = ctx.b.allocSlot();

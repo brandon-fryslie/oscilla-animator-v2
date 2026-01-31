@@ -24,6 +24,7 @@ import { applyContinuity, finalizeContinuityFrame } from './ContinuityApply';
 import { createStableDomainInstance, createUnstableDomainInstance } from './DomainIdentity';
 import { assembleRenderFrame, type AssemblerContext } from './RenderAssembler';
 import { resolveCameraFromGlobals } from './CameraResolver';
+import { requireManyInstance } from '../core/canonical-types';
 
 /**
  * Slot lookup cache entry
@@ -266,9 +267,11 @@ export function executeFrame(
 
       case 'materialize': {
         // Materialize field to buffer and store in slot
+        const fieldExpr = fields[step.value as number];
+        const instanceIdStr = fieldExpr ? String(requireManyInstance(fieldExpr.type).instanceId) : '';
         const buffer = materialize(
-          step.field,
-          step.instanceId, // string
+          step.value,
+          instanceIdStr,
           fields,
           signals,
           instances as ReadonlyMap<string, InstanceDecl>,
@@ -277,10 +280,10 @@ export function executeFrame(
         );
         // Store directly in objects map using slot as key
         // (Object storage doesn't need slotMeta offset lookup)
-        state.values.objects.set(step.target, buffer);
+        state.values.objects.set(step.slot, buffer);
 
         // Debug tap: Record field value
-        state.tap?.recordFieldValue?.(step.target, buffer);
+        state.tap?.recordFieldValue?.(step.slot, buffer);
         break;
       }
 
@@ -494,16 +497,14 @@ export function executeFrame(
       const expr = fields[step.value as number];
       if (!expr) continue;
 
-      // Determine count from the field expression's instance
-      let count = 0;
-      if ('instanceId' in expr && expr.instanceId) {
-        const instanceDecl = instances.get(expr.instanceId as unknown as InstanceId);
-        count = instanceDecl && typeof instanceDecl.count === 'number' ? instanceDecl.count : 0;
-      }
+      // Determine count from the field expression's instance (via type)
+      const instanceRef = requireManyInstance(expr.type);
+      const instanceDecl = instances.get(instanceRef.instanceId);
+      const count = instanceDecl && typeof instanceDecl.count === 'number' ? instanceDecl.count : 0;
       if (count === 0) continue;
 
-      // Materialize the field to get values - use a string instanceId from the expression
-      const instanceIdStr = 'instanceId' in expr ? String(expr.instanceId) : '';
+      // Materialize the field to get values
+      const instanceIdStr = String(instanceRef.instanceId);
       const tempBuffer = materialize(
         step.value,
         instanceIdStr,

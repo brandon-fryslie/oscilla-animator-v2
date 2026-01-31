@@ -46,7 +46,7 @@ registerBlock({
 
     const outType = ctx.outTypes[0];
     // Use fieldIntrinsic to get normalized index (0..1) for each instance element
-    const id01Field = ctx.b.fieldIntrinsic(instance, 'normalizedIndex', outType);
+    const id01Field = ctx.b.fieldIntrinsic('normalizedIndex', outType);
     const slot = ctx.b.allocSlot();
 
     return {

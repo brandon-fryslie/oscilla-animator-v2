@@ -214,8 +214,8 @@ describe('Hash-consing (I13)', () => {
       const type = canonicalType(FLOAT);
       const inst = instanceId('inst1');
       
-      const id1 = b.fieldIntrinsic(inst, 'index', type);
-      const id2 = b.fieldIntrinsic(inst, 'index', type);
+      const id1 = b.fieldIntrinsic('index', type);
+      const id2 = b.fieldIntrinsic('index', type);
       
       expect(id1).toBe(id2);
     });
@@ -226,8 +226,8 @@ describe('Hash-consing (I13)', () => {
       const inst1 = instanceId('inst1');
       const inst2 = instanceId('inst2');
       
-      const id1 = b.fieldIntrinsic(inst1, 'index', type);
-      const id2 = b.fieldIntrinsic(inst2, 'index', type);
+      const id1 = b.fieldIntrinsic('index', type);
+      const id2 = b.fieldIntrinsic('index', type);
       
       expect(id1).not.toBe(id2);
     });
@@ -237,8 +237,8 @@ describe('Hash-consing (I13)', () => {
       const type = canonicalType(FLOAT);
       const inst = instanceId('inst1');
       
-      const id1 = b.fieldIntrinsic(inst, 'index', type);
-      const id2 = b.fieldIntrinsic(inst, 'normalizedIndex', type);
+      const id1 = b.fieldIntrinsic('index', type);
+      const id2 = b.fieldIntrinsic('normalizedIndex', type);
       
       expect(id1).not.toBe(id2);
     });

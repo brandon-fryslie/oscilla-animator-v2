@@ -5,6 +5,7 @@
  */
 
 import type { CanonicalType, ConstValue } from '../../core/canonical-types';
+import { requireManyInstance } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, CAMERA_PROJECTION, canonicalType, unitScalar, canonicalEvent, requireManyInstance, constValueMatchesPayload } from '../../core/canonical-types';
 import type { TopologyId } from '../../shapes/types';
 import type { IRBuilder } from './IRBuilder';
@@ -304,10 +305,9 @@ export class IRBuilderImpl implements IRBuilder {
    * Create a field from an intrinsic property.
    * Uses proper FieldExprIntrinsic type - no 'as any' casts needed.
    */
-  fieldIntrinsic(instanceId: InstanceId, intrinsic: IntrinsicPropertyName, type: CanonicalType): FieldExprId {
+  fieldIntrinsic(intrinsic: IntrinsicPropertyName, type: CanonicalType): FieldExprId {
     const expr = {
       kind: 'intrinsic' as const,
-      instanceId,
       intrinsic,
       type,
     };
@@ -328,7 +328,6 @@ export class IRBuilderImpl implements IRBuilder {
    * Replaces normalizedIndex for gauge-invariant layouts.
    */
   fieldPlacement(
-    instanceId: InstanceId,
     field: PlacementFieldName,
     basisKind: BasisKind,
     type: CanonicalType
@@ -477,11 +476,11 @@ export class IRBuilderImpl implements IRBuilder {
       case 'intrinsic':
       case 'stateRead':
       case 'placement':
-        return expr.instanceId; // These ARE bound to an instance
+        return requireManyInstance(expr.type).instanceId; // Extract from type
       case 'map':
       case 'zip':
       case 'zipSig':
-        return expr.instanceId;
+        return requireManyInstance(expr.type).instanceId;
       case 'pathDerivative':
         return this.inferFieldInstance(expr.input);
       case 'broadcast':
@@ -886,7 +885,7 @@ export class IRBuilderImpl implements IRBuilder {
     this.steps.push({ kind: 'stateWrite', stateSlot, value });
   }
 
-  fieldStateRead(stateSlot: StateSlotId, instanceId: InstanceId, type: CanonicalType): FieldExprId {
+  fieldStateRead(stateSlot: StateSlotId, type: CanonicalType): FieldExprId {
     const expr = { kind: 'stateRead' as const, stateSlot, instanceId, type };
     const hash = hashFieldExpr(expr);
     const existing = this.fieldExprCache.get(hash);

@@ -289,19 +289,11 @@ function inferFieldInstanceFromExprs(
   const expr = fieldExprs[fieldId as number];
   if (!expr) return undefined;
 
-  switch (expr.kind) {
-    case 'intrinsic':
-    case 'stateRead':
-      return expr.instanceId;
-    case 'map':
-    case 'zip':
-    case 'zipSig':
-      return expr.instanceId;
-    case 'broadcast':
-    case 'const':
-      return undefined;
-    default:
-      return undefined;
+  // Extract instance from CanonicalType (if many-cardinality)
+  try {
+    return requireManyInstance(expr.type).instanceId;
+  } catch {
+    return undefined;
   }
 }
 

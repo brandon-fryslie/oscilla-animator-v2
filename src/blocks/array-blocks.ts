@@ -100,8 +100,8 @@ registerBlock({
     const elementsField = ctx.b.Broadcast(elementInput.id, outType0);
 
     // 2. Intrinsic fields (index, t, active)
-    const indexField = ctx.b.fieldIntrinsic(instanceId, 'index', outType1);
-    const tField = ctx.b.fieldIntrinsic(instanceId, 'normalizedIndex', outType2);
+    const indexField = ctx.b.fieldIntrinsic('index', outType1);
+    const tField = ctx.b.fieldIntrinsic('normalizedIndex', outType2);
     // For static arrays, active is always true - we can use a constant broadcast
     const activeSignal = ctx.b.sigConst(boolConst(true), canonicalType(BOOL));
     const activeField = ctx.b.Broadcast(activeSignal, outType3);

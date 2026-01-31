@@ -30,7 +30,7 @@ describe('Instance Unification', () => {
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
       const instanceRef_ = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const type = canonicalField(FLOAT, { kind: "scalar" }, instanceRef_);
-      const field = b.fieldIntrinsic(instance, 'index', type);
+      const field = b.fieldIntrinsic('index', type);
 
       // Intrinsics ARE bound to their instance
       expect(b.inferFieldInstance(field)).toBe(instance);
@@ -41,7 +41,7 @@ describe('Instance Unification', () => {
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
       const instanceRef_ = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const type = canonicalField(FLOAT, { kind: "scalar" }, instanceRef_);
-      const field = b.fieldIntrinsic(instance, 'normalizedIndex', type);
+      const field = b.fieldIntrinsic('normalizedIndex', type);
 
       expect(b.inferFieldInstance(field)).toBe(instance);
     });
@@ -51,7 +51,7 @@ describe('Instance Unification', () => {
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
       const instanceRef_ = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const type = canonicalField(FLOAT, { kind: "scalar" }, instanceRef_);
-      const field = b.fieldIntrinsic(instance, 'randomId', type);
+      const field = b.fieldIntrinsic('randomId', type);
 
       expect(b.inferFieldInstance(field)).toBe(instance);
     });
@@ -91,7 +91,7 @@ describe('Instance Unification', () => {
       const vec2Type = canonicalField(VEC2, { kind: "scalar" }, instanceRef_);
       
       // Create normalizedIndex field
-      const normalizedIndex = b.fieldIntrinsic(instance, 'normalizedIndex', floatType);
+      const normalizedIndex = b.fieldIntrinsic('normalizedIndex', floatType);
       
       // Create signals for grid dimensions
       const colsSig = b.sigConst(intConst(5), canonicalSignal(INT));
@@ -115,7 +115,7 @@ describe('Instance Unification', () => {
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
       const instanceRef_ = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const type = canonicalField(FLOAT, { kind: "scalar" }, instanceRef_);
-      const intrinsic = b.fieldIntrinsic(instance, 'index', type);
+      const intrinsic = b.fieldIntrinsic('index', type);
       const mapped = b.fieldMap(intrinsic, { kind: 'opcode', opcode: OpCode.Sin }, type);
 
       // Instance propagates from input
@@ -128,7 +128,7 @@ describe('Instance Unification', () => {
       const instanceRef_ = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const fieldType = canonicalField(FLOAT, { kind: "scalar" }, instanceRef_);
       const sigType = canonicalSignal(FLOAT);
-      const intrinsic = b.fieldIntrinsic(instance, 'index', fieldType);
+      const intrinsic = b.fieldIntrinsic('index', fieldType);
       const signal = b.sigConst(floatConst(2.0), sigType);
       const zipped = b.fieldZipSig(intrinsic, [signal], { kind: 'opcode', opcode: OpCode.Mul }, fieldType);
 
@@ -140,8 +140,8 @@ describe('Instance Unification', () => {
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
       const instanceRef_ = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const type = canonicalField(FLOAT, { kind: "scalar" }, instanceRef_);
-      const field1 = b.fieldIntrinsic(instance, 'index', type);
-      const field2 = b.fieldIntrinsic(instance, 'normalizedIndex', type);
+      const field1 = b.fieldIntrinsic('index', type);
+      const field2 = b.fieldIntrinsic('normalizedIndex', type);
 
       const zipped = b.fieldZip([field1, field2], { kind: 'opcode', opcode: OpCode.Add }, type);
       expect(b.inferFieldInstance(zipped)).toBe(instance);
@@ -155,8 +155,8 @@ describe('Instance Unification', () => {
       const instanceRef2 = instanceRef(DOMAIN_CIRCLE as string, instance2 as string);
       const type1 = canonicalField(FLOAT, { kind: "scalar" }, instanceRef1);
       const type2 = canonicalField(FLOAT, { kind: "scalar" }, instanceRef2);
-      const field1 = b.fieldIntrinsic(instance1, 'index', type1);
-      const field2 = b.fieldIntrinsic(instance2, 'index', type2);
+      const field1 = b.fieldIntrinsic('index', type1);
+      const field2 = b.fieldIntrinsic('index', type2);
 
       // Zipping fields from different instances should throw
       expect(() => {
@@ -169,7 +169,7 @@ describe('Instance Unification', () => {
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
       const instanceRef_ = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const type = canonicalField(FLOAT, { kind: "scalar" }, instanceRef_);
-      const intrinsic = b.fieldIntrinsic(instance, 'index', type);
+      const intrinsic = b.fieldIntrinsic('index', type);
       const sig = b.sigConst(floatConst(1.0), canonicalSignal(FLOAT));
       const broadcast = b.Broadcast(sig, type);
 
@@ -183,8 +183,8 @@ describe('Instance Unification', () => {
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
       const instanceRef_ = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const type = canonicalField(FLOAT, { kind: "scalar" }, instanceRef_);
-      const field1 = b.fieldIntrinsic(instance, 'index', type);
-      const field2 = b.fieldIntrinsic(instance, 'normalizedIndex', type);
+      const field1 = b.fieldIntrinsic('index', type);
+      const field2 = b.fieldIntrinsic('normalizedIndex', type);
       const zipped = b.fieldZip([field1, field2], { kind: 'opcode', opcode: OpCode.Add }, type);
       const mapped = b.fieldMap(zipped, { kind: 'opcode', opcode: OpCode.Sin }, type);
 

@@ -169,7 +169,7 @@ import { evaluateSignal } from './SignalEvaluator';
 import { applyOpcode } from './OpcodeInterpreter';
 import { ensurePlacementBasis } from './PlacementBasis';
 import { applyFieldKernel, applyFieldKernelZipSig } from './FieldKernels';
-import { constValueAsNumber } from '../core/canonical-types';
+import { constValueAsNumber, requireManyInstance } from '../core/canonical-types';
 
 /**
  * Materialize a field expression into a typed array
@@ -422,7 +422,7 @@ function fillBuffer(
       // Get or create placement basis for this instance
       const basis = ensurePlacementBasis(
         state.continuity.placementBasis,
-        placementExpr.instanceId,
+        requireManyInstance(placementExpr.type).instanceId,
         N,
         placementExpr.basisKind
       );

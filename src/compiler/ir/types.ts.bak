@@ -235,6 +235,7 @@ export interface FieldExprConst {
  */
 export interface FieldExprIntrinsic {
   readonly kind: 'intrinsic';
+  readonly instanceId: InstanceId;
   readonly intrinsic: IntrinsicPropertyName;
   readonly type: CanonicalType;
 }
@@ -245,6 +246,7 @@ export interface FieldExprIntrinsic {
  */
 export interface FieldExprPlacement {
   readonly kind: 'placement';
+  readonly instanceId: InstanceId;
   readonly field: PlacementFieldName;
   readonly basisKind: BasisKind;
   readonly type: CanonicalType;
@@ -261,14 +263,16 @@ export interface FieldExprMap {
   readonly input: FieldExprId;
   readonly fn: PureFn;
   readonly type: CanonicalType;
-  }
+  readonly instanceId: InstanceId | undefined;
+}
 
 export interface FieldExprZip {
   readonly kind: 'zip';
   readonly inputs: readonly FieldExprId[];
   readonly fn: PureFn;
   readonly type: CanonicalType;
-  }
+  readonly instanceId: InstanceId | undefined;
+}
 
 export interface FieldExprZipSig {
   readonly kind: 'zipSig';
@@ -276,7 +280,8 @@ export interface FieldExprZipSig {
   readonly signals: readonly SigExprId[];
   readonly fn: PureFn;
   readonly type: CanonicalType;
-  }
+  readonly instanceId: InstanceId | undefined;
+}
 
 /**
  * Per-lane state read for stateful cardinality-generic blocks.
@@ -285,6 +290,7 @@ export interface FieldExprZipSig {
 export interface FieldExprStateRead {
   readonly kind: 'stateRead';
   readonly stateSlot: StateSlotId;
+  readonly instanceId: InstanceId;
   readonly type: CanonicalType;
 }
 

@@ -114,24 +114,21 @@ export interface IRBuilder {
    * Intrinsics are per-element properties automatically available for any instance.
    * Valid intrinsic names: 'index', 'normalizedIndex', 'randomId'
    *
-   * @param instanceId - The instance to query
    * @param intrinsic - Intrinsic property name (type-checked at compile time)
    * @param type - Signal type for the field
    */
-  fieldIntrinsic(instanceId: InstanceId, intrinsic: IntrinsicPropertyName, type: CanonicalType): FieldExprId;
+  fieldIntrinsic(intrinsic: IntrinsicPropertyName, type: CanonicalType): FieldExprId;
 
   /**
    * Create a field from placement basis.
    * Replaces normalizedIndex for gauge-invariant layouts.
    *
-   * @param instanceId - The instance this field operates over
    * @param field - Which placement field (uv, rank, seed)
    * @param basisKind - Generation algorithm (user-configurable)
    * @param type - Signal type of the field
    * @throws Error if any parameter is missing
    */
   fieldPlacement(
-    instanceId: InstanceId,
     field: PlacementFieldName,
     basisKind: BasisKind,
     type: CanonicalType
@@ -385,7 +382,7 @@ export interface IRBuilder {
    * @param type - Field type for the read values
    * @returns FieldExprId for the per-lane read expression
    */
-  fieldStateRead(stateSlot: StateSlotId, instanceId: InstanceId, type: CanonicalType): FieldExprId;
+  fieldStateRead(stateSlot: StateSlotId, type: CanonicalType): FieldExprId;
 
   /**
    * Schedule a per-lane state write step.

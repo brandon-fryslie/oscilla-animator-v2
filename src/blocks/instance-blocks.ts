@@ -81,9 +81,7 @@ registerBlock({
       : ctx.b.sigConst(intConst((config?.cols as number) ?? 10), canonicalType(INT));
 
     // Create index field for the instance (gridLayout expects integer indices)
-    const indexField = ctx.b.fieldIntrinsic(
-      instanceId,
-      'index',
+    const indexField = ctx.b.fieldIntrinsic('index',
       floatFieldType
     );
 
@@ -168,9 +166,7 @@ registerBlock({
     const y1Sig = ctx.b.sigConst(floatConst((1 + length) / 2), canonicalType(FLOAT));
 
     // Create normalizedIndex field for the instance
-    const normalizedIndexField = ctx.b.fieldIntrinsic(
-      instanceId,
-      'normalizedIndex',
+    const normalizedIndexField = ctx.b.fieldIntrinsic('normalizedIndex',
       floatFieldType
     );
 
@@ -258,9 +254,7 @@ registerBlock({
       : ctx.b.sigConst(floatConst((config?.phase as number) ?? 0), canonicalType(FLOAT));
 
     // Create normalizedIndex field for the instance
-    const normalizedIndexField = ctx.b.fieldIntrinsic(
-      instanceId,
-      'normalizedIndex',
+    const normalizedIndexField = ctx.b.fieldIntrinsic('normalizedIndex',
       floatFieldType
     );
 
@@ -351,9 +345,7 @@ registerBlock({
       : ctx.b.sigConst(floatConst((config?.y1 as number) ?? 0.5), canonicalType(FLOAT));
 
     // Create normalizedIndex field for the instance
-    const normalizedIndexField = ctx.b.fieldIntrinsic(
-      instanceId,
-      'normalizedIndex',
+    const normalizedIndexField = ctx.b.fieldIntrinsic('normalizedIndex',
       floatFieldType
     );
 
@@ -439,9 +431,7 @@ registerBlock({
     const basisKind: import('../compiler/ir/types').BasisKind = 'halton2D';
 
     // Create UV field from placement basis
-    const uvField = ctx.b.fieldPlacement(
-      instanceId,
-      'uv',
+    const uvField = ctx.b.fieldPlacement('uv',
       basisKind,
       vec2FieldType
     );
@@ -536,9 +526,7 @@ registerBlock({
     const basisKind: import('../compiler/ir/types').BasisKind = 'halton2D';
 
     // Create UV field from placement basis
-    const uvField = ctx.b.fieldPlacement(
-      instanceId,
-      'uv',
+    const uvField = ctx.b.fieldPlacement('uv',
       basisKind,
       vec2FieldType
     );
@@ -625,9 +613,7 @@ registerBlock({
     const basisKind: import('../compiler/ir/types').BasisKind = 'grid';
 
     // Create UV field from placement basis
-    const uvField = ctx.b.fieldPlacement(
-      instanceId,
-      'uv',
+    const uvField = ctx.b.fieldPlacement('uv',
       basisKind,
       vec2FieldType
     );

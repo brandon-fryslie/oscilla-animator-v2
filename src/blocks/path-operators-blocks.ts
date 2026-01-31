@@ -111,9 +111,7 @@ registerBlock({
     );
 
     // Create index field
-    const indexField = ctx.b.fieldIntrinsic(
-      instance,
-      'index',
+    const indexField = ctx.b.fieldIntrinsic('index',
       idxType
     );
 

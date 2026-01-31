@@ -148,9 +148,7 @@ registerBlock({
     );
 
     // Use index to compute angle: angle = index * (2π / sides)
-    const indexField = ctx.b.fieldIntrinsic(
-      controlInstance,
-      'index',
+    const indexField = ctx.b.fieldIntrinsic('index',
       canonicalField(INT, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainTypeId: makeDomainTypeId('default') })
     );
 
@@ -343,9 +341,7 @@ registerBlock({
     );
 
     // Use index to determine if outer (even) or inner (odd)
-    const indexField = ctx.b.fieldIntrinsic(
-      controlInstance,
-      'index',
+    const indexField = ctx.b.fieldIntrinsic('index',
       canonicalField(INT, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainTypeId: makeDomainTypeId('default') })
     );
 
