@@ -15,9 +15,9 @@
 
 import type { CombineMode, Edge, CanonicalType } from "../../types";
 import type { IRBuilder } from "../ir/IRBuilder";
-import { deriveKind, isExprRef, type ValueRefExpr } from "../ir/lowerTypes";
+import { isExprRef, type ValueRefExpr } from "../ir/lowerTypes";
 import type { ValueExprId } from "../ir/Indices";
-import { strideOf } from "../../core/canonical-types";
+import { strideOf, requireInst } from "../../core/canonical-types";
 
 // =============================================================================
 // Types
@@ -259,40 +259,43 @@ export function createCombineNode(
     return null;
   }
 
-  // Derive kind from the port type (not from individual refs)
-  const kind = deriveKind(type);
+  // Derive kind from the port type by checking extent directly
+  const temp = requireInst(type.extent.temporality, 'temporality');
+  const isEvent = temp.kind === 'discrete';
 
-  if (kind === 'signal') {
-    const validModes = ["sum", "average", "max", "min", "last"];
-    const safeMode = validModes.includes(normalizedMode) ? normalizedMode : "last";
-    const combineMode = safeMode as "sum" | "average" | "max" | "min" | "last";
+  if (!isEvent) {
+    const card = requireInst(type.extent.cardinality, 'cardinality');
+    const isField = card.kind === 'many';
 
-    const sigId = builder.combine(exprIds, combineMode, type);
-    const slot = builder.allocTypedSlot(type, `combine_sig_${combineMode}`);
-    builder.registerSigSlot(sigId, slot);
-    return { id: sigId, slot, type, stride: strideOf(type.payload) };
-  }
+    if (isField) {
+      // Field combine
+      const validModes = ["sum", "average", "max", "min", "last", "product"];
+      const safeMode = validModes.includes(normalizedMode) ? normalizedMode : "product";
+      const combineMode = safeMode as "sum" | "average" | "max" | "min" | "last" | "product";
 
-  if (kind === 'field') {
-    const validModes = ["sum", "average", "max", "min", "last", "product"];
-    const safeMode = validModes.includes(normalizedMode) ? normalizedMode : "product";
-    const combineMode = safeMode as "sum" | "average" | "max" | "min" | "last" | "product";
+      const fieldId = builder.combine(exprIds, combineMode, type);
+      const slot = builder.allocTypedSlot(type, `combine_field_${combineMode}`);
+      builder.registerFieldSlot(fieldId, slot);
+      return { id: fieldId, slot, type, stride: strideOf(type.payload) };
+    } else {
+      // Signal combine
+      const validModes = ["sum", "average", "max", "min", "last"];
+      const safeMode = validModes.includes(normalizedMode) ? normalizedMode : "last";
+      const combineMode = safeMode as "sum" | "average" | "max" | "min" | "last";
 
-    const fieldId = builder.combine(exprIds, combineMode, type);
-    const slot = builder.allocTypedSlot(type, `combine_field_${combineMode}`);
-    builder.registerFieldSlot(fieldId, slot);
-    return { id: fieldId, slot, type, stride: strideOf(type.payload) };
-  }
-
-  if (kind === 'event') {
+      const sigId = builder.combine(exprIds, combineMode, type);
+      const slot = builder.allocTypedSlot(type, `combine_sig_${combineMode}`);
+      builder.registerSigSlot(sigId, slot);
+      return { id: sigId, slot, type, stride: strideOf(type.payload) };
+    }
+  } else {
+    // Event combine
     const eventMode = normalizedMode === 'last' ? 'any' : 'any';
     const eventId = builder.eventCombine(exprIds, eventMode);
     const eventSlot = builder.allocEventSlot(eventId);
     const slot = builder.allocTypedSlot(type, `combine_event`);
     return { id: eventId, slot, type, stride: 1, eventSlot };
   }
-
-  return null;
 }
 
 /**
