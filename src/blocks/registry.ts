@@ -224,15 +224,13 @@ export const STANDARD_SCALAR_PAYLOADS: readonly PayloadType[] = [FLOAT, INT, BOO
 export const STANDARD_VECTOR_PAYLOADS: readonly PayloadType[] = [VEC2];
 export const STANDARD_COLOR_PAYLOADS: readonly PayloadType[] = [COLOR];
 /** All concrete payload types */
-export const ALL_CONCRETE_PAYLOADS: readonly PayloadType[
-] = [
+export const ALL_CONCRETE_PAYLOADS: readonly PayloadType[] = [
   FLOAT,
   INT,
   BOOL,
   VEC2,
   VEC3,
   COLOR,
-  FLOAT,
   CAMERA_PROJECTION,
 ];
 

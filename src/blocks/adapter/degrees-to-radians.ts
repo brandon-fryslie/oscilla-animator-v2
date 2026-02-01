@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, unitDegrees, unitScalar, unitRadians, strideOf, floatConst } from '../../core/canonical-types';
+import { canonicalType, unitDegrees, unitScalar, unitRadians, payloadStride, floatConst } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 
@@ -47,7 +47,7 @@ registerBlock({
     const slot = ctx.b.allocSlot();
     return {
       outputsById: {
-        out: { id: radians, slot, type: outType, stride: strideOf(outType.payload) },
+        out: { id: radians, slot, type: outType, stride: payloadStride(outType.payload) },
       },
     };
   },

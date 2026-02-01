@@ -17,7 +17,7 @@ import type { CombineMode, Edge, CanonicalType } from "../../types";
 import type { IRBuilder } from "../ir/IRBuilder";
 import { isExprRef, type ValueRefExpr } from "../ir/lowerTypes";
 import type { ValueExprId } from "../ir/Indices";
-import { strideOf, requireInst } from "../../core/canonical-types";
+import { payloadStride, requireInst } from "../../core/canonical-types";
 
 // =============================================================================
 // Types
@@ -276,7 +276,7 @@ export function createCombineNode(
       const fieldId = builder.combine(exprIds, combineMode, type);
       const slot = builder.allocTypedSlot(type, `combine_field_${combineMode}`);
       builder.registerFieldSlot(fieldId, slot);
-      return { id: fieldId, slot, type, stride: strideOf(type.payload) };
+      return { id: fieldId, slot, type, stride: payloadStride(type.payload) };
     } else {
       // Signal combine
       const validModes = ["sum", "average", "max", "min", "last"];
@@ -286,7 +286,7 @@ export function createCombineNode(
       const sigId = builder.combine(exprIds, combineMode, type);
       const slot = builder.allocTypedSlot(type, `combine_sig_${combineMode}`);
       builder.registerSigSlot(sigId, slot);
-      return { id: sigId, slot, type, stride: strideOf(type.payload) };
+      return { id: sigId, slot, type, stride: payloadStride(type.payload) };
     }
   } else {
     // Event combine

@@ -10,8 +10,8 @@
  */
 
 import {
-  DEFAULTS_V0,
   type CanonicalType,
+  requireInst,
 } from "../../core/canonical-types";
 import type { TypedPatch, BlockIndex } from "../ir/patches";
 import { getBlockDefinition, getBlockCardinalityMetadata } from "../../blocks/registry";
@@ -50,10 +50,10 @@ export type Pass2Error = PortTypeUnknownError | NoConversionPathError;
  * Sprint 2 will add proper constraint-based cardinality resolution in the frontend solver.
  */
 function isTypeCompatible(from: CanonicalType, to: CanonicalType, allowsBroadcast = false): boolean {
-  const fromCard = from.extent.cardinality.kind === 'inst' ? from.extent.cardinality.value : DEFAULTS_V0.cardinality;
-  const fromTemp = from.extent.temporality.kind === 'inst' ? from.extent.temporality.value : DEFAULTS_V0.temporality;
-  const toCard = to.extent.cardinality.kind === 'inst' ? to.extent.cardinality.value : DEFAULTS_V0.cardinality;
-  const toTemp = to.extent.temporality.kind === 'inst' ? to.extent.temporality.value : DEFAULTS_V0.temporality;
+  const fromCard = requireInst(from.extent.cardinality, 'cardinality');
+  const fromTemp = requireInst(from.extent.temporality, 'temporality');
+  const toCard = requireInst(to.extent.cardinality, 'cardinality');
+  const toTemp = requireInst(to.extent.temporality, 'temporality');
 
   // Payload must match (resolved types - no variables)
   if (from.payload !== to.payload) {
@@ -164,10 +164,10 @@ export function pass2TypeGraph(typeResolved: TypeResolvedPatch): TypedPatch {
 
     // Validate type compatibility
     if (!isTypeCompatible(fromType, toType, allowsBroadcast)) {
-      const fromCard = fromType.extent.cardinality.kind === 'inst' ? fromType.extent.cardinality.value : DEFAULTS_V0.cardinality;
-      const fromTemp = fromType.extent.temporality.kind === 'inst' ? fromType.extent.temporality.value : DEFAULTS_V0.temporality;
-      const toCard = toType.extent.cardinality.kind === 'inst' ? toType.extent.cardinality.value : DEFAULTS_V0.cardinality;
-      const toTemp = toType.extent.temporality.kind === 'inst' ? toType.extent.temporality.value : DEFAULTS_V0.temporality;
+      const fromCard = requireInst(fromType.extent.cardinality, 'cardinality');
+      const fromTemp = requireInst(fromType.extent.temporality, 'temporality');
+      const toCard = requireInst(toType.extent.cardinality, 'cardinality');
+      const toTemp = requireInst(toType.extent.temporality, 'temporality');
 
       errors.push({
         kind: "NoConversionPath",

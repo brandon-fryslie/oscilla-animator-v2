@@ -24,7 +24,7 @@ import type { ValueRefPacked } from '../ir/lowerTypes';
 import type { TopologyId } from '../../shapes/types';
 import { getBlockDefinition } from '../../blocks/registry';
 import { getPolicyForSemantic } from '../../runtime/ContinuityDefaults';
-import { requireManyInstance, strideOf, requireInst } from '../../core/canonical-types';
+import { requireManyInstance, payloadStride, requireInst } from '../../core/canonical-types';
 import type { CanonicalType } from '../../core/canonical-types';
 
 // =============================================================================
@@ -403,7 +403,7 @@ function resolveShapeInfo(
     const controlPointField = cpId !== undefined
       ? (() => {
           const cpExpr = valueExprs[cpId as number];
-          const stride = cpExpr ? strideOf(cpExpr.type.payload) : 1;
+          const stride = cpExpr ? payloadStride(cpExpr.type.payload) : 1;
           return { id: cpId, stride };
         })()
       : undefined;

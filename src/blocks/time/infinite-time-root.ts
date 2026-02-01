@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, canonicalEvent, unitPhase01, strideOf } from '../../core/canonical-types';
+import { canonicalType, canonicalEvent, unitPhase01, payloadStride } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
 import { defaultSourceConst } from '../../types';
 import { valueSlot, SYSTEM_PALETTE_SLOT } from '../../compiler/ir/Indices';
@@ -73,13 +73,13 @@ registerBlock({
 
     return {
       outputsById: {
-        tMs: { id: tMs, slot: tMsSlot, type: tMsType, stride: strideOf(tMsType.payload) },
-        dt: { id: dt, slot: dtSlot, type: dtType, stride: strideOf(dtType.payload) },
-        phaseA: { id: phaseA, slot: phaseASlot, type: phaseAType, stride: strideOf(phaseAType.payload) },
-        phaseB: { id: phaseB, slot: phaseBSlot, type: phaseBType, stride: strideOf(phaseBType.payload) },
+        tMs: { id: tMs, slot: tMsSlot, type: tMsType, stride: payloadStride(tMsType.payload) },
+        dt: { id: dt, slot: dtSlot, type: dtType, stride: payloadStride(dtType.payload) },
+        phaseA: { id: phaseA, slot: phaseASlot, type: phaseAType, stride: payloadStride(phaseAType.payload) },
+        phaseB: { id: phaseB, slot: phaseBSlot, type: phaseBType, stride: payloadStride(phaseBType.payload) },
         pulse: { id: pulse, slot: valueSlot(0), type: pulseType, stride: 1, eventSlot: pulseEventSlot },
-        palette: { id: palette, slot: paletteSlot, type: paletteType, stride: strideOf(paletteType.payload) },
-        energy: { id: energy, slot: energySlot, type: energyType, stride: strideOf(energyType.payload) },
+        palette: { id: palette, slot: paletteSlot, type: paletteType, stride: payloadStride(paletteType.payload) },
+        energy: { id: energy, slot: energySlot, type: energyType, stride: payloadStride(energyType.payload) },
       },
     };
   },

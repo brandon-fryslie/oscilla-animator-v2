@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, strideOf, floatConst, requireInst } from '../../core/canonical-types';
+import { canonicalType, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
 import { FLOAT, BOOL } from '../../core/canonical-types';
 import { OpCode, stableStateId } from '../../compiler/ir/types';
 
@@ -68,7 +68,7 @@ registerBlock({
 
     return {
       outputsById: {
-        value: { id: finalValue, slot, type: outType, stride: strideOf(outType.payload) },
+        value: { id: finalValue, slot, type: outType, stride: payloadStride(outType.payload) },
       },
     };
   },

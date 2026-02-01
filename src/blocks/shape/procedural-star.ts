@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, canonicalField, strideOf, floatConst, intConst, withInstance, instanceRef, requireInst } from '../../core/canonical-types';
+import { canonicalType, canonicalField, payloadStride, floatConst, intConst, withInstance, instanceRef, requireInst } from '../../core/canonical-types';
 import { FLOAT, INT, VEC2 } from '../../core/canonical-types';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
 import { DOMAIN_CONTROL } from '../../core/domain-registry';
@@ -262,8 +262,8 @@ registerBlock({
 
     return {
       outputsById: {
-        shape: { id: shapeRefSig, slot: shapeSlot, type: shapeType, stride: strideOf(shapeType.payload) },
-        controlPoints: { id: computedPositions, slot: cpSlot, type: cpType, stride: strideOf(cpType.payload) },
+        shape: { id: shapeRefSig, slot: shapeSlot, type: shapeType, stride: payloadStride(shapeType.payload) },
+        controlPoints: { id: computedPositions, slot: cpSlot, type: cpType, stride: payloadStride(cpType.payload) },
       },
       instanceContext: controlInstance,
     };

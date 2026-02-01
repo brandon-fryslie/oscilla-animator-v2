@@ -12,14 +12,6 @@ import type { PayloadType, ConcretePayloadType } from './payloads';
 // =============================================================================
 
 /**
- * Get the stride for a given PayloadType.
- * @deprecated Use payloadStride() instead - this delegates to it
- */
-export function strideOf(type: PayloadType): number {
-  return payloadStride(type);
-}
-
-/**
  * Get payload stride (derived from payload only).
  * Per resolution Q7: This is the single authority for stride.
  * Per resolution Q4: Exhaustive switch with explicit case for every PayloadType kind.

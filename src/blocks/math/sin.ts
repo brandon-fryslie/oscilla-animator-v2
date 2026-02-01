@@ -5,7 +5,7 @@
  */
 
 import { registerBlock, STANDARD_NUMERIC_PAYLOADS } from '../registry';
-import { canonicalType, strideOf } from '../../core/canonical-types';
+import { canonicalType, payloadStride } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 
@@ -48,7 +48,7 @@ registerBlock({
 
     return {
       outputsById: {
-        result: { id: result, slot, type: outType, stride: strideOf(outType.payload) },
+        result: { id: result, slot, type: outType, stride: payloadStride(outType.payload) },
       },
       // instanceContext auto-propagated by framework
     };

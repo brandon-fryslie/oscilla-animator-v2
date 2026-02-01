@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, strideOf, cameraProjectionConst } from '../../core/canonical-types';
+import { canonicalType, payloadStride, cameraProjectionConst } from '../../core/canonical-types';
 import { INT, CAMERA_PROJECTION } from '../../core/canonical-types';
 import { defaultSourceConst } from '../../types';
 
@@ -38,6 +38,6 @@ registerBlock({
     const sigId = ctx.b.constant(cameraProjectionConst(rawValue === 1 ? 'perspective' : 'orthographic'), canonicalType(CAMERA_PROJECTION));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
-    return { outputsById: { out: { id: sigId, slot, type: outType, stride: strideOf(outType.payload) } } };
+    return { outputsById: { out: { id: sigId, slot, type: outType, stride: payloadStride(outType.payload) } } };
   },
 });

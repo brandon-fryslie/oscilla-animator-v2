@@ -6,7 +6,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, canonicalEvent, strideOf, requireInst, FLOAT } from '../../core/canonical-types';
+import { canonicalType, canonicalEvent, payloadStride, requireInst, FLOAT } from '../../core/canonical-types';
 
 registerBlock({
   type: 'EventToSignalMask',
@@ -34,7 +34,7 @@ registerBlock({
 
     return {
       outputsById: {
-        out: { id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
+        out: { id: sigId, slot, type: outType, stride: payloadStride(outType.payload) },
       },
     };
   },

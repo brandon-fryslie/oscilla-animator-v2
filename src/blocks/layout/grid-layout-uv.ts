@@ -6,7 +6,7 @@
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
-import { canonicalType, canonicalField, unitWorld3, strideOf, floatConst, intConst, requireInst } from '../../core/canonical-types';
+import { canonicalType, canonicalField, unitWorld3, payloadStride, floatConst, intConst, requireInst } from '../../core/canonical-types';
 import { FLOAT, INT, VEC3 } from '../../core/canonical-types';
 import { defaultSourceConst } from '../../types';
 import { OpCode } from '../../compiler/ir/types';
@@ -145,7 +145,7 @@ registerBlock({
 
     return {
       outputsById: {
-        position: { id: positionField, slot: posSlot, type: posType, stride: strideOf(posType.payload) },
+        position: { id: positionField, slot: posSlot, type: posType, stride: payloadStride(posType.payload) },
       },
       instanceContext: instanceId,
     };

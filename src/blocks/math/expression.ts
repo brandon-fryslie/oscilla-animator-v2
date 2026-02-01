@@ -5,7 +5,7 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
-import { canonicalType, strideOf, floatConst, requireInst } from '../../core/canonical-types';
+import { canonicalType, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import type { CanonicalType, PayloadType } from '../../core/canonical-types';
 import { compileExpression } from '../../expr';
@@ -96,7 +96,7 @@ registerBlock({
       const slot = ctx.b.allocSlot();
       return {
         outputsById: {
-          out: { id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
+          out: { id: sigId, slot, type: outType, stride: payloadStride(outType.payload) },
         },
       };
     }
@@ -174,7 +174,7 @@ registerBlock({
 
     return {
       outputsById: {
-        out: { id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
+        out: { id: sigId, slot, type: outType, stride: payloadStride(outType.payload) },
       },
     };
   },

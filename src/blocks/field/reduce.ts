@@ -6,7 +6,7 @@
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
-import { canonicalType, strideOf, type PayloadType, requireInst } from '../../core/canonical-types';
+import { canonicalType, payloadStride, type PayloadType, requireInst } from '../../core/canonical-types';
 import { unitVar, payloadVar, inferType, inferField } from '../../core/inference-types';
 
 registerBlock({
@@ -75,7 +75,7 @@ registerBlock({
 
     return {
       outputsById: {
-        signal: { id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
+        signal: { id: sigId, slot, type: outType, stride: payloadStride(outType.payload) },
       },
       // Reduce is instance-agnostic (like Broadcast)
       instanceContext: undefined,

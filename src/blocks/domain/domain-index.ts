@@ -6,7 +6,7 @@
 
 import { registerBlock } from '../registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
-import { canonicalField, strideOf, FLOAT, INT } from '../../core/canonical-types';
+import { canonicalField, payloadStride, FLOAT, INT } from '../../core/canonical-types';
 
 registerBlock({
   type: 'DomainIndex',
@@ -44,8 +44,8 @@ registerBlock({
 
     return {
       outputsById: {
-        index: { id: indexField, slot: indexSlot, type: indexType, stride: strideOf(indexType.payload) },
-        indexInt: { id: indexIntField, slot: indexIntSlot, type: indexIntType, stride: strideOf(indexIntType.payload) },
+        index: { id: indexField, slot: indexSlot, type: indexType, stride: payloadStride(indexType.payload) },
+        indexInt: { id: indexIntField, slot: indexIntSlot, type: indexIntType, stride: payloadStride(indexIntType.payload) },
       },
     };
   },

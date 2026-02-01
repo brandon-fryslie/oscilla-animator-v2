@@ -22,7 +22,7 @@ import type { ScheduleIR } from './backend/schedule-program';
 import type { AcyclicOrLegalGraph } from './ir/patches';
 import { convertCompileErrorsToDiagnostics } from './diagnosticConversion';
 import type { EventHub } from '../events/EventHub';
-import {canonicalType, isMany, requireManyInstance, strideOf} from '../core/canonical-types';
+import {canonicalType, isMany, requireManyInstance, payloadStride} from '../core/canonical-types';
 import type { ValueExpr, ValueExprId } from './ir/value-expr';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../core/canonical-types';
 // debugService import removed for strict compiler isolation (One Source of Truth)
@@ -36,13 +36,13 @@ import { createDefaultRegistry } from '../runtime/kernels/default-registry';
 import '../blocks/all';
 
 // Import passes
-import { pass1TypeConstraints } from './passes-v2';
-import { pass2TypeGraph } from './passes-v2';
-import { pass3Time } from './passes-v2';
-import { pass4DepGraph } from './passes-v2';
-import { pass5CycleValidation } from './passes-v2';
-import { pass6BlockLowering } from './passes-v2';
-import { pass7Schedule } from './passes-v2';
+import { pass1TypeConstraints } from './frontend/analyze-type-constraints';
+import { pass2TypeGraph } from './frontend/analyze-type-graph';
+import { pass3Time } from './backend/derive-time-model';
+import { pass4DepGraph } from './backend/derive-dep-graph';
+import { pass5CycleValidation } from './backend/schedule-scc';
+import { pass6BlockLowering } from './backend/lower-blocks';
+import { pass7Schedule } from './backend/schedule-program';
 
 // =============================================================================
 // Compile Errors & Results
@@ -528,7 +528,7 @@ function convertLinkedIRToProgram(
 
     // Use stride from slotInfo (which comes from registered type), fallback to computing from payload
     // Objects/fields have stride=1 since they store a single reference
-    const stride = storage === 'object' ? 1 : (slotInfo?.stride ?? strideOf(type.payload));
+    const stride = storage === 'object' ? 1 : (slotInfo?.stride ?? payloadStride(type.payload));
 
     // Offset must increment by stride, not 1 - multi-component types (color=4, vec3=3, vec2=2) need space
     const offset = storageOffsets[storage];

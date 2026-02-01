@@ -6,7 +6,7 @@
 
 import { registerBlock } from '../registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
-import { canonicalType, canonicalField, strideOf, floatConst, requireInst } from '../../core/canonical-types';
+import { canonicalType, canonicalField, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
 import { FLOAT, INT, VEC2, VEC3 } from '../../core/canonical-types';
 
 /**
@@ -135,10 +135,10 @@ registerBlock({
 
     return {
       outputsById: {
-        position: { id: positionFieldId, slot: posSlot, type: posType, stride: strideOf(posType.payload) },
-        index: { id: indexField, slot: idxSlot, type: idxType, stride: strideOf(idxType.payload) },
-        tangent: { id: tangentField, slot: tanSlot, type: tanType, stride: strideOf(tanType.payload) },
-        arcLength: { id: arcLengthField, slot: arcSlot, type: arcType, stride: strideOf(arcType.payload) },
+        position: { id: positionFieldId, slot: posSlot, type: posType, stride: payloadStride(posType.payload) },
+        index: { id: indexField, slot: idxSlot, type: idxType, stride: payloadStride(idxType.payload) },
+        tangent: { id: tangentField, slot: tanSlot, type: tanType, stride: payloadStride(tanType.payload) },
+        arcLength: { id: arcLengthField, slot: arcSlot, type: arcType, stride: payloadStride(arcType.payload) },
       },
       instanceContext: instance,
     };

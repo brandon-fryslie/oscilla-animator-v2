@@ -7,7 +7,7 @@
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
-import { canonicalType, canonicalField, strideOf, type PayloadType, boolConst, withInstance, instanceRef, requireInst } from '../../core/canonical-types';
+import { canonicalType, canonicalField, payloadStride, type PayloadType, boolConst, withInstance, instanceRef, requireInst } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL } from '../../core/canonical-types';
 import { DOMAIN_CIRCLE } from '../../core/domain-registry';
 import { defaultSourceConst, defaultSource } from '../../types';
@@ -85,10 +85,10 @@ registerBlock({
 
     return {
       outputsById: {
-        elements: { id: elementsField, slot: ctx.b.allocSlot(), type: outType0, stride: strideOf(outType0.payload) },
-        index: { id: indexField, slot: ctx.b.allocSlot(), type: outType1, stride: strideOf(outType1.payload) },
-        t: { id: tField, slot: ctx.b.allocSlot(), type: outType2, stride: strideOf(outType2.payload) },
-        active: { id: activeField, slot: ctx.b.allocSlot(), type: outType3, stride: strideOf(outType3.payload) },
+        elements: { id: elementsField, slot: ctx.b.allocSlot(), type: outType0, stride: payloadStride(outType0.payload) },
+        index: { id: indexField, slot: ctx.b.allocSlot(), type: outType1, stride: payloadStride(outType1.payload) },
+        t: { id: tField, slot: ctx.b.allocSlot(), type: outType2, stride: payloadStride(outType2.payload) },
+        active: { id: activeField, slot: ctx.b.allocSlot(), type: outType3, stride: payloadStride(outType3.payload) },
       },
       instanceContext: instanceId,
     };

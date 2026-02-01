@@ -6,7 +6,7 @@
 
 import { registerBlock } from '../registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
-import { canonicalType, canonicalField, strideOf } from '../../core/canonical-types';
+import { canonicalType, canonicalField, payloadStride } from '../../core/canonical-types';
 import { FLOAT, INT } from '../../core/canonical-types';
 
 registerBlock({
@@ -41,7 +41,7 @@ registerBlock({
 
     return {
       outputsById: {
-        id01: { id: id01Field, slot, type: outType, stride: strideOf(outType.payload) },
+        id01: { id: id01Field, slot, type: outType, stride: payloadStride(outType.payload) },
       },
       // Propagate instance context
       instanceContext: instance,

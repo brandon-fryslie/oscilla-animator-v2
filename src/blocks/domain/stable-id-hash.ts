@@ -6,7 +6,7 @@
 
 import { registerBlock } from '../registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
-import { canonicalType, canonicalField, strideOf, FLOAT, INT } from '../../core/canonical-types';
+import { canonicalType, canonicalField, payloadStride, FLOAT, INT } from '../../core/canonical-types';
 import { defaultSourceConst } from '../../types';
 
 registerBlock({
@@ -51,8 +51,8 @@ registerBlock({
 
     return {
       outputsById: {
-        rand: { id: randField, slot: randSlot, type: randType, stride: strideOf(randType.payload) },
-        id01: { id: id01Field, slot: id01Slot, type: id01Type, stride: strideOf(id01Type.payload) },
+        rand: { id: randField, slot: randSlot, type: randType, stride: payloadStride(randType.payload) },
+        id01: { id: id01Field, slot: id01Slot, type: id01Type, stride: payloadStride(id01Type.payload) },
       },
     };
   },

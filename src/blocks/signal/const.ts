@@ -5,7 +5,7 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
-import { canonicalType, type PayloadType, type CameraProjection, strideOf, floatConst, intConst, boolConst, vec2Const, colorConst, cameraProjectionConst } from '../../core/canonical-types';
+import { canonicalType, type PayloadType, type CameraProjection, payloadStride, floatConst, intConst, boolConst, vec2Const, colorConst, cameraProjectionConst } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, CAMERA_PROJECTION } from '../../core/canonical-types';
 import { inferType, payloadVar, unitVar } from '../../core/inference-types';
 
@@ -75,7 +75,7 @@ registerBlock({
       );
     }
 
-    const stride = strideOf(outType.payload);
+    const stride = payloadStride(outType.payload);
 
     switch (payloadType.kind) {
       case 'float': {

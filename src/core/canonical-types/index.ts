@@ -62,7 +62,7 @@ export {
   constValueAsBool,
 } from './const-values';
 
-export { strideOf, payloadStride } from './stride';
+export { payloadStride } from './stride';
 
 export {
   type Axis,
@@ -138,4 +138,3 @@ export {
   typesEqual,
 } from './equality';
 
-export { DEFAULTS_V0, type DerivedKind, SHAPE } from './legacy';

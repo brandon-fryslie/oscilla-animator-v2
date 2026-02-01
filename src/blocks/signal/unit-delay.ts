@@ -5,7 +5,7 @@
  */
 
 import { registerBlock, type LowerResult } from '../registry';
-import { canonicalType, strideOf, requireInst } from '../../core/canonical-types';
+import { canonicalType, payloadStride, requireInst } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { stableStateId } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
@@ -47,7 +47,7 @@ registerBlock({
 
     return {
       outputsById: {
-        out: { id: outputId, slot, type: outType, stride: strideOf(outType.payload) },
+        out: { id: outputId, slot, type: outType, stride: payloadStride(outType.payload) },
       },
       stateSlot, // Pass to phase 2
     };
@@ -88,7 +88,7 @@ registerBlock({
 
     return {
       outputsById: {
-        out: { id: outputId, slot, type: outType, stride: strideOf(outType.payload) },
+        out: { id: outputId, slot, type: outType, stride: payloadStride(outType.payload) },
       },
     };
   },

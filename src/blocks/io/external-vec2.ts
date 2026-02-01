@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, strideOf, FLOAT, VEC2 } from '../../core/canonical-types';
+import { canonicalType, payloadStride, FLOAT, VEC2 } from '../../core/canonical-types';
 
 registerBlock({
   type: 'ExternalVec2',
@@ -45,7 +45,7 @@ registerBlock({
 
     // Pack x and y into vec2 using strided slot write
     const outType = ctx.outTypes[0];
-    const stride = strideOf(outType.payload); // vec2 has stride 2
+    const stride = payloadStride(outType.payload); // vec2 has stride 2
     const slot = ctx.b.allocSlot(stride);
     const components = [xSig, ySig];
 

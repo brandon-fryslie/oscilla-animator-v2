@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, unitPhase01, unitScalar, strideOf } from '../../core/canonical-types';
+import { canonicalType, unitPhase01, unitScalar, payloadStride } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 
 registerBlock({
@@ -44,7 +44,7 @@ registerBlock({
     const slot = ctx.b.allocSlot();
     return {
       outputsById: {
-        out: { id: input.id, slot, type: outType, stride: strideOf(outType.payload) },
+        out: { id: input.id, slot, type: outType, stride: payloadStride(outType.payload) },
       },
     };
   },
