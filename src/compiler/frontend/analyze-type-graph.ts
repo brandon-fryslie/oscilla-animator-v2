@@ -16,11 +16,7 @@ import {
   type CanonicalType,
 } from "../../core/canonical-types";
 import type { TypedPatch, BlockIndex } from "../ir/patches";
-import {
-  getBlockDefinition,
-  getBlockCardinalityMetadata,
-  isCardinalityGeneric,
-} from "../../blocks/registry";
+import { getBlockDefinition } from "../../blocks/registry";
 import { type TypeResolvedPatch, getPortType } from "./analyze-type-constraints";
 
 // =============================================================================
@@ -50,9 +46,12 @@ export type Pass2Error = PortTypeUnknownError | NoConversionPathError;
 
 /**
  * Type compatibility check for wired connections.
- * Uses resolved types - no variables should be present.
+ * Pure function that checks only CanonicalType structure.
+ *
+ * Sprint 1: Removed block-name parameters and cardinality-generic exceptions.
+ * Sprint 2 will add proper constraint-based cardinality resolution in the frontend solver.
  */
-function isTypeCompatible(from: CanonicalType, to: CanonicalType, sourceBlockType?: string, targetBlockType?: string): boolean {
+function isTypeCompatible(from: CanonicalType, to: CanonicalType): boolean {
   const fromCard = from.extent.cardinality.kind === 'inst' ? from.extent.cardinality.value : DEFAULTS_V0.cardinality;
   const fromTemp = from.extent.temporality.kind === 'inst' ? from.extent.temporality.value : DEFAULTS_V0.temporality;
   const toCard = to.extent.cardinality.kind === 'inst' ? to.extent.cardinality.value : DEFAULTS_V0.cardinality;
@@ -73,29 +72,12 @@ function isTypeCompatible(from: CanonicalType, to: CanonicalType, sourceBlockTyp
     return false;
   }
 
-  // Cardinality check - may be relaxed for cardinality-generic/preserving blocks
+  // Cardinality must match exactly
   if (fromCard.kind !== toCard.kind) {
-    // Allow if target block is cardinality-generic and allows mixing
-    if (targetBlockType) {
-      const meta = getBlockCardinalityMetadata(targetBlockType);
-      if (meta && isCardinalityGeneric(targetBlockType)) {
-        if (meta.broadcastPolicy === 'allowZipSig' || meta.broadcastPolicy === 'requireBroadcastExpr') {
-          return true;
-        }
-      }
-    }
-
-    // Allow one→many if source block is cardinality-preserving.
-    // Cardinality-preserving blocks adapt their output cardinality to match
-    // their input cardinality, so the static type (cardinality: one) doesn't
-    // reflect runtime behavior when inputs are fields.
-    if (fromCard.kind === 'one' && toCard.kind === 'many' && sourceBlockType) {
-      const sourceMeta = getBlockCardinalityMetadata(sourceBlockType);
-      if (sourceMeta?.cardinalityMode === 'preserve') {
-        return true;
-      }
-    }
-
+    // TODO: Sprint 2 - frontend solver will resolve cardinality/instance
+    // Previously this allowed special cases for cardinality-generic blocks.
+    // Now we enforce strict matching - frontend type inference must produce
+    // compatible types upfront.
     return false;
   }
 
@@ -178,8 +160,8 @@ export function pass2TypeGraph(typeResolved: TypeResolvedPatch): TypedPatch {
       continue;
     }
 
-    // Validate type compatibility
-    if (!isTypeCompatible(fromType, toType, fromBlock.type, toBlock.type)) {
+    // Validate type compatibility (pure function - no block names)
+    if (!isTypeCompatible(fromType, toType)) {
       const fromCard = fromType.extent.cardinality.kind === 'inst' ? fromType.extent.cardinality.value : DEFAULTS_V0.cardinality;
       const fromTemp = fromType.extent.temporality.kind === 'inst' ? fromType.extent.temporality.value : DEFAULTS_V0.temporality;
       const toCard = toType.extent.cardinality.kind === 'inst' ? toType.extent.cardinality.value : DEFAULTS_V0.cardinality;
