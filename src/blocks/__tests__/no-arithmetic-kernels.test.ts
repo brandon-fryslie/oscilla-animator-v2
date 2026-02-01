@@ -44,6 +44,10 @@ describe('Block Lowering - No Arithmetic Kernel Names', () => {
     // Decomposed geometry kernels (now use opcode sequences)
     'polygonVertex',
     'starVertex',
+    // Decomposed layout kernels (now use opcode sequences)
+    'circleLayoutUV',
+    'lineLayoutUV',
+    'gridLayoutUV',
   ];
 
   it('block files do not emit denied arithmetic kernel names', () => {
@@ -53,6 +57,7 @@ describe('Block Lowering - No Arithmetic Kernel Names', () => {
       'math-utility-blocks.ts',
       'signal-blocks.ts',
       'path-blocks.ts',
+      'instance-blocks.ts',
     ];
 
     const violations: string[] = [];
@@ -97,5 +102,8 @@ describe('Block Lowering - No Arithmetic Kernel Names', () => {
     expect(DENIED_KERNEL_NAMES).toContain('select');
     expect(DENIED_KERNEL_NAMES).toContain('polygonVertex');
     expect(DENIED_KERNEL_NAMES).toContain('starVertex');
+    expect(DENIED_KERNEL_NAMES).toContain('circleLayoutUV');
+    expect(DENIED_KERNEL_NAMES).toContain('lineLayoutUV');
+    expect(DENIED_KERNEL_NAMES).toContain('gridLayoutUV');
   });
 });

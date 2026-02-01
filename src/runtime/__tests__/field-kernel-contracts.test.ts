@@ -11,7 +11,8 @@
  *
  * Tests for removed kernels (jitter2d, attract2d, fieldAdd, fieldMultiply,
  * fieldPolarToCartesian, circleLayout, lineLayout, gridLayout, polygonVertex,
- * starVertex, etc.) have been deleted along with their implementations.
+ * starVertex, circleLayoutUV, lineLayoutUV, gridLayoutUV, etc.) have been
+ * deleted along with their implementations.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -52,6 +53,56 @@ describe('Field Kernel Contract Tests', () => {
       expect(() =>
         applyFieldKernel(out, [x], 'makeVec2', 1, testFieldType(VEC2))
       ).toThrow(/requires exactly 2 inputs/);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════
+  // EXTRACT KERNEL TESTS (stride-reducing)
+  // ══════════════════════════════════════════════════════════════════════
+
+  describe('extractX', () => {
+    it('extracts X component from vec2 field', () => {
+      const out = new Float32Array(3);
+      const vec2Field = new Float32Array([1, 2, 3, 4, 5, 6]); // 3 vec2s: (1,2), (3,4), (5,6)
+
+      applyFieldKernel(out, [vec2Field], 'extractX', 3, testFieldType(FLOAT));
+
+      expect(out[0]).toBe(1);
+      expect(out[1]).toBe(3);
+      expect(out[2]).toBe(5);
+    });
+
+    it('throws with wrong arity', () => {
+      const out = new Float32Array(1);
+      const x = new Float32Array([1]);
+      const y = new Float32Array([2]);
+
+      expect(() =>
+        applyFieldKernel(out, [x, y], 'extractX', 1, testFieldType(FLOAT))
+      ).toThrow(/requires exactly 1 input/);
+    });
+  });
+
+  describe('extractY', () => {
+    it('extracts Y component from vec2 field', () => {
+      const out = new Float32Array(3);
+      const vec2Field = new Float32Array([1, 2, 3, 4, 5, 6]); // 3 vec2s: (1,2), (3,4), (5,6)
+
+      applyFieldKernel(out, [vec2Field], 'extractY', 3, testFieldType(FLOAT));
+
+      expect(out[0]).toBe(2);
+      expect(out[1]).toBe(4);
+      expect(out[2]).toBe(6);
+    });
+
+    it('throws with wrong arity', () => {
+      const out = new Float32Array(1);
+      const x = new Float32Array([1]);
+      const y = new Float32Array([2]);
+
+      expect(() =>
+        applyFieldKernel(out, [x, y], 'extractY', 1, testFieldType(FLOAT))
+      ).toThrow(/requires exactly 1 input/);
     });
   });
 
@@ -152,6 +203,7 @@ describe('Field Kernel Contract Tests', () => {
         'applyOpacity', 'circleLayout', 'circleAngle',
         'lineLayout', 'gridLayout', 'fieldGoldenAngle', 'broadcastColor',
         'polygonVertex', 'starVertex',  // Decomposed to opcodes in path-blocks.ts
+        'circleLayoutUV', 'lineLayoutUV', 'gridLayoutUV',  // Decomposed to opcodes in instance-blocks.ts
       ];
       for (const name of removedZipSig) {
         expect(() =>
