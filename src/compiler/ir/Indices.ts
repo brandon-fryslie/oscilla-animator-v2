@@ -35,14 +35,6 @@ export type StepIndex = number & { readonly __brand: 'StepIndex' };
 /** Dense index for unified value expressions (canonical type). */
 export type ValueExprId = number & { readonly __brand: 'ValueExprId' };
 
-/** @deprecated Use ValueExprId — unified expression table */
-export type SigExprId = ValueExprId;
-
-/** @deprecated Use ValueExprId — unified expression table */
-export type FieldExprId = ValueExprId;
-
-/** @deprecated Use ValueExprId — unified expression table */
-export type EventExprId = ValueExprId;
 
 /** Dense index for event slots (distinct from ValueSlot — events use boolean storage). */
 export type EventSlotId = number & { readonly __brand: 'EventSlotId' };
@@ -113,14 +105,6 @@ export function valueExprId(n: number): ValueExprId {
   return n as ValueExprId;
 }
 
-/** @deprecated Use valueExprId */
-export const sigExprId = valueExprId;
-
-/** @deprecated Use valueExprId */
-export const fieldExprId = valueExprId;
-
-/** @deprecated Use valueExprId */
-export const eventExprId = valueExprId;
 
 export function eventSlotId(n: number): EventSlotId {
   return n as EventSlotId;

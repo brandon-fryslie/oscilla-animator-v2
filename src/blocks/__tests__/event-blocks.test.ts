@@ -13,7 +13,7 @@ import { buildPatch, type PatchBuilder } from '../../graph/Patch';
 import { createSessionState, createProgramState, createRuntimeState, createRuntimeStateFromSession } from '../../runtime';
 import { executeFrame } from '../../runtime/ScheduleExecutor';
 import { evaluateValueExprSignal } from '../../runtime/ValueExprSignalEvaluator';
-import { sigExprId, eventSlotId } from '../../compiler/ir/Indices';
+import { valueExprId, eventSlotId } from '../../compiler/ir/Indices';
 import type { CompiledProgramIR } from '../../compiler/ir/program';
 import { computeStorageSizes as getStorageSizes } from '../../compiler/ir/program';
 import { canonicalType } from '../../core/canonical-types';
@@ -105,7 +105,7 @@ describe('SampleHold', () => {
       { kind: 'eventRead' as const, eventSlot: eventSlotId(0), type: canonicalType(FLOAT) },
     ];
 
-    const result = evaluateValueExprSignal(sigExprId(0), signals, state);
+    const result = evaluateValueExprSignal(valueExprId(0), signals, state);
     expect(result).toBe(0);
   });
 });

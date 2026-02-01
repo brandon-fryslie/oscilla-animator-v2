@@ -100,7 +100,6 @@ export {
   portIndex,
   valueSlot,
   stepIndex,
-  sigExprId,
   valueExprId,
   stepId,
   exprId,
