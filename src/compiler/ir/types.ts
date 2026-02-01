@@ -203,6 +203,7 @@ export type PlacementFieldName = 'uv' | 'rank' | 'seed';
 /**
  * Basis generation algorithm.
  * User-configurable per layout block.
+ * @DEPRECATED Must be migrated to ValueExpr
  */
 export type BasisKind =
   | 'halton2D'    // Low-discrepancy sequence (good general coverage)
@@ -210,6 +211,9 @@ export type BasisKind =
   | 'spiral'      // Spiral pattern (good for circles)
   | 'grid';       // Grid-aligned (good for grid layouts)
 
+/**
+ *  @DEPRECATED Must be migrated to ValueExpr
+ */
 export type FieldExpr =
   | FieldExprConst
   | FieldExprIntrinsic
@@ -221,7 +225,7 @@ export type FieldExpr =
   | FieldExprPathDerivative
   | FieldExprPlacement;
 
-export interface FieldExprConst {
+export interface FieldExprConst { // @DEPRECATED Must be migrated to ValueExpr
   readonly kind: 'const';
   readonly value: ConstValue;
   readonly type: CanonicalType;
@@ -230,6 +234,7 @@ export interface FieldExprConst {
 /**
  * Intrinsic field expression - properly typed intrinsic access.
  * Provides per-element properties automatically available for any instance.
+ * // @DEPRECATED Must be migrated to ValueExpr
  */
 export interface FieldExprIntrinsic {
   readonly kind: 'intrinsic';
@@ -240,6 +245,7 @@ export interface FieldExprIntrinsic {
 /**
  * Placement field expression - gauge-invariant per-element coordinates.
  * These replace normalizedIndex for layout blocks.
+ * // @DEPRECATED Must be migrated to ValueExpr
  */
 export interface FieldExprPlacement {
   readonly kind: 'placement';
@@ -248,12 +254,14 @@ export interface FieldExprPlacement {
   readonly type: CanonicalType;
 }
 
+// @DEPRECATED Must be migrated to ValueExpr
 export interface FieldExprBroadcast {
   readonly kind: 'broadcast';
   readonly signal: SigExprId;
   readonly type: CanonicalType;
 }
 
+// @DEPRECATED Must be migrated to ValueExpr
 export interface FieldExprMap {
   readonly kind: 'map';
   readonly input: FieldExprId;
@@ -261,6 +269,7 @@ export interface FieldExprMap {
   readonly type: CanonicalType;
 }
 
+// @DEPRECATED Must be migrated to ValueExpr
 export interface FieldExprZip {
   readonly kind: 'zip';
   readonly inputs: readonly FieldExprId[];
@@ -268,6 +277,7 @@ export interface FieldExprZip {
   readonly type: CanonicalType;
 }
 
+// @DEPRECATED Must be migrated to ValueExpr
 export interface FieldExprZipSig {
   readonly kind: 'zipSig';
   readonly field: FieldExprId;
@@ -279,6 +289,7 @@ export interface FieldExprZipSig {
 /**
  * Per-lane state read for stateful cardinality-generic blocks.
  * Each lane reads its corresponding state slot value.
+ * // @DEPRECATED Must be migrated to ValueExpr
  */
 export interface FieldExprStateRead {
   readonly kind: 'stateRead';
@@ -295,6 +306,7 @@ export interface FieldExprStateRead {
  * - arcLength: Cumulative Euclidean distance
  *
  * Phase 2: Will add bezier curve support via topology access.
+ * // @DEPRECATED Must be migrated to ValueExpr
  */
 export interface FieldExprPathDerivative {
   readonly kind: 'pathDerivative';

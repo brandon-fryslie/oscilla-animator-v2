@@ -50,15 +50,10 @@ describe('Cardinality Metadata', () => {
     const genericBlocks = [
       'Add', 'Subtract', 'Multiply', 'Divide', 'Modulo',
       'Oscillator', 'UnitDelay', 'Hash', 'Accumulator',
-      'ColorLFO', 'HSVToColor', 'HsvToRgb',
-      'PolarToCartesian', 'OffsetVec',
-      'Sin', 'Cos', 'Mod',
+      'Sin', 'Cos',
       'Expression',
-      'JitterVec',
-      // Field operations that are also cardinality-preserving
-      'FieldPolarToCartesian', 'FieldCartesianToPolar',
-      'Pulse', 'GoldenAngle', 'AngularOffset',
-      'RadiusSqrt', 'HueFromPhase', 'SetZ',
+      // Layout blocks (UV variants)
+      'CircleLayoutUV', 'LineLayoutUV', 'GridLayoutUV',
     ];
 
     it.each(genericBlocks)('%s is cardinality-generic', (blockType) => {
@@ -120,9 +115,9 @@ describe('Cardinality Metadata', () => {
       expect(meta?.broadcastPolicy).toBe('allowZipSig');
     });
 
-    it('GridLayout disallows Signal mixing', () => {
-      const meta = getBlockCardinalityMetadata('GridLayout');
-      expect(meta?.broadcastPolicy).toBe('disallowSignalMix');
+    it('GridLayoutUV allows ZipSig (for radius and phase signal inputs)', () => {
+      const meta = getBlockCardinalityMetadata('GridLayoutUV');
+      expect(meta?.broadcastPolicy).toBe('allowZipSig');
     });
 
     it('Broadcast requires explicit broadcast expression', () => {
@@ -135,7 +130,7 @@ describe('Cardinality Metadata', () => {
     it('Most blocks are lane-local (lane-coupled only where needed)', () => {
       const allTypes = getAllBlockTypes();
       const laneCoupledBlocks = ['Reduce']; // Blocks where all elements contribute to result
-      
+
       for (const blockType of allTypes) {
         const meta = getBlockCardinalityMetadata(blockType);
         if (meta) {

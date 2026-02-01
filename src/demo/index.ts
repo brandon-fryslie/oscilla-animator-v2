@@ -10,11 +10,7 @@ export { patchGoldenSpiral } from './golden-spiral';
 export { patchMouseSpiral } from './mouse-spiral';
 export { patchDomainTest } from './domain-test';
 export { patchTileGrid, patchTileGridUV } from './tile-grid';
-export { patchOrbitalRings } from './orbital-rings';
-export { patchRectMosaic } from './rect-mosaic';
-export { patchShapeKaleidoscope } from './shape-kaleidoscope';
 export { patchPerspectiveCamera } from './perspective-camera';
-export { patchFeedbackRotation } from './feedback-rotation';
 export { patchFeedbackSimple } from './feedback-simple';
 export { patchPathFieldDemo } from './path-field-demo';
 export { patchErrorIsolationDemo } from './error-isolation-demo';
@@ -23,11 +19,7 @@ import { patchGoldenSpiral } from './golden-spiral';
 import { patchMouseSpiral } from './mouse-spiral';
 import { patchDomainTest } from './domain-test';
 import { patchTileGrid, patchTileGridUV } from './tile-grid';
-import { patchOrbitalRings } from './orbital-rings';
-import { patchRectMosaic } from './rect-mosaic';
-import { patchShapeKaleidoscope } from './shape-kaleidoscope';
 import { patchPerspectiveCamera } from './perspective-camera';
-import { patchFeedbackRotation } from './feedback-rotation';
 import { patchFeedbackSimple } from './feedback-simple';
 import { patchPathFieldDemo } from './path-field-demo';
 import { patchErrorIsolationDemo } from './error-isolation-demo';
@@ -39,11 +31,7 @@ export const patches: { name: string; builder: PatchBuilder }[] = [
   { name: 'Domain Test', builder: patchDomainTest },
   { name: 'Tile Grid', builder: patchTileGrid },
   { name: 'Tile Grid UV', builder: patchTileGridUV },
-  { name: 'Orbital Rings', builder: patchOrbitalRings },
-  { name: 'Rect Mosaic', builder: patchRectMosaic },
-  { name: 'Shape Kaleidoscope', builder: patchShapeKaleidoscope },
   { name: 'Perspective Camera', builder: patchPerspectiveCamera },
-  { name: 'Feedback Rotation', builder: patchFeedbackRotation },
   { name: 'Feedback Simple', builder: patchFeedbackSimple },
   { name: 'Path Field Demo', builder: patchPathFieldDemo },
   { name: 'Error Isolation Demo', builder: patchErrorIsolationDemo },

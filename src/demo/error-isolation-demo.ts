@@ -26,26 +26,17 @@ export const patchErrorIsolationDemo: PatchBuilder = (b) => {
   const array = b.addBlock('Array', { count: 100 });
   b.wire(circle, 'shape', array, 'element');
 
-  // Grid layout
-  const grid = b.addBlock('GridLayout', {
-    columns: 10,
-    width: 0.8,
-    height: 0.8,
-  });
-  b.wire(array, 'idx', grid, 'idx');
-  b.wire(array, 'count', grid, 'count');
+  // Grid layout (using UV variant)
+  const grid = b.addBlock('GridLayoutUV', { rows: 10, cols: 10 });
+  b.wire(array, 'elements', grid, 'elements');
 
-  // Animated color based on position and time
-  const hue = b.addBlock('HueFromPhase', {});
-  const color = b.addBlock('HsvToRgb', { sat: 0.7, val: 0.9 });
-  b.wire(array, 't', hue, 'id01');
-  b.wire(time, 'phaseA', hue, 'phase');
-  b.wire(hue, 'hue', color, 'hue');
+  // Simple constant color
+  const color = b.addBlock('Const', { value: [0.7, 0.9, 0.8, 1.0] }); // Light cyan
 
   // Render the grid
   const render = b.addBlock('RenderInstances2D', {});
-  b.wire(grid, 'pos', render, 'pos');
-  b.wire(color, 'color', render, 'color');
+  b.wire(grid, 'position', render, 'pos');
+  b.wire(color, 'out', render, 'color');
   b.wire(circle, 'shape', render, 'shape');
 
   // ========================================================================

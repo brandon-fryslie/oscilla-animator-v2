@@ -1,8 +1,8 @@
 /**
  * Tile Grid - Rectangle mosaic with wave animation
  *
- * Grid of rectangles with diagonal color gradient and wave motion.
- * Demonstrates Rect primitive with Expression-based positioning.
+ * Grid of rectangles with simple color.
+ * Demonstrates Rect primitive with grid layout.
  */
 
 import { timeRootRole } from '../types';
@@ -19,30 +19,25 @@ export const patchTileGrid: PatchBuilder = (b) => {
   const array = b.addBlock('Array', { count: 400 }); // 20x20 grid
   b.wire(rect, 'shape', array, 'element');
 
-  // Grid layout: arranges elements in a 20x20 grid
-  const grid = b.addBlock('GridLayout', { rows: 20, cols: 20 });
+  // Grid layout: arranges elements in a 20x20 grid (using UV variant)
+  const grid = b.addBlock('GridLayoutUV', { rows: 20, cols: 20 });
   b.wire(array, 'elements', grid, 'elements');
 
-  // Rainbow gradient color from element position + time
-  const hue = b.addBlock('HueFromPhase', {});
-  b.wire(time, 'phaseB', hue, 'phase');
-  b.wire(array, 't', hue, 'id01');
-
-  const color = b.addBlock('HsvToRgb', {});
-  b.wire(hue, 'hue', color, 'hue');
+  // Simple constant color
+  const color = b.addBlock('Const', { value: [0.5, 0.8, 1.0, 1.0] }); // Light blue
 
   const render = b.addBlock('RenderInstances2D', {});
   b.wire(grid, 'position', render, 'pos');
-  b.wire(color, 'color', render, 'color');
+  b.wire(color, 'out', render, 'color');
   b.wire(rect, 'shape', render, 'shape');
 };
 
 /**
  * Tile Grid UV - Rectangle mosaic with wave animation (UV layout variant)
  *
- * Grid of rectangles with diagonal color gradient and wave motion.
+ * Grid of rectangles with simple color.
  * Uses GridLayoutUV for gauge-invariant placement basis instead of standard grid.
- * Demonstrates Rect primitive with Expression-based positioning.
+ * Demonstrates Rect primitive with grid layout.
  */
 export const patchTileGridUV: PatchBuilder = (b) => {
   const time = b.addBlock('InfiniteTimeRoot', {
@@ -59,16 +54,11 @@ export const patchTileGridUV: PatchBuilder = (b) => {
   const grid = b.addBlock('GridLayoutUV', { rows: 20, cols: 20 });
   b.wire(array, 'elements', grid, 'elements');
 
-  // Rainbow gradient color from element position + time
-  const hue = b.addBlock('HueFromPhase', {});
-  b.wire(time, 'phaseB', hue, 'phase');
-  b.wire(array, 't', hue, 'id01');
-
-  const color = b.addBlock('HsvToRgb', {});
-  b.wire(hue, 'hue', color, 'hue');
+  // Simple constant color
+  const color = b.addBlock('Const', { value: [0.5, 0.8, 1.0, 1.0] }); // Light blue
 
   const render = b.addBlock('RenderInstances2D', {});
   b.wire(grid, 'position', render, 'pos');
-  b.wire(color, 'color', render, 'color');
+  b.wire(color, 'out', render, 'color');
   b.wire(rect, 'shape', render, 'shape');
 };

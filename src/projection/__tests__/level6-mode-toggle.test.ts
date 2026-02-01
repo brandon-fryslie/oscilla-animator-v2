@@ -138,7 +138,7 @@ describe('Level 6 Integration Tests: State Preservation Across Mode Toggle', () 
       const time = b.addBlock('InfiniteTimeRoot', {});
       const ellipse = b.addBlock('Ellipse', { rx: 0.03, ry: 0.03 });
       const array = b.addBlock('Array', { count: 9 });
-      const layout = b.addBlock('GridLayout', { rows: 3, cols: 3 });
+      const layout = b.addBlock('GridLayoutUV'UV, { rows: 3, colCount: 3 });
       const sat = b.addBlock('Const', { value: 1.0 });
       const val = b.addBlock('Const', { value: 1.0 });
       const hue = b.addBlock('HueFromPhase', {});
@@ -200,7 +200,7 @@ describe('Level 6 Integration Tests: State Preservation Across Mode Toggle', () 
       const time = b.addBlock('InfiniteTimeRoot', {});
       const ellipse = b.addBlock('Ellipse', { rx: 0.03, ry: 0.03 });
       const array = b.addBlock('Array', { count: 9 });
-      const layout = b.addBlock('GridLayout', { rows: 3, cols: 3 });
+      const layout = b.addBlock('GridLayoutUV'UV, { rows: 3, colCount: 3 });
       const sat = b.addBlock('Const', { value: 1.0 });
       const val = b.addBlock('Const', { value: 1.0 });
       const hue = b.addBlock('HueFromPhase', {});
@@ -262,7 +262,7 @@ describe('Level 6 Integration Tests: State Preservation Across Mode Toggle', () 
       const time = b.addBlock('InfiniteTimeRoot', {});
       const ellipse = b.addBlock('Ellipse', { rx: 0.03, ry: 0.03 });
       const array = b.addBlock('Array', { count: 9 });
-      const layout = b.addBlock('GridLayout', { rows: 3, cols: 3 });
+      const layout = b.addBlock('GridLayoutUV'UV, { rows: 3, colCount: 3 });
       const sat = b.addBlock('Const', { value: 1.0 });
       const val = b.addBlock('Const', { value: 1.0 });
       const hue = b.addBlock('HueFromPhase', {});

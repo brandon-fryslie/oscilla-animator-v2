@@ -106,7 +106,7 @@ describe('compile', () => {
         b.addBlock('InfiniteTimeRoot', {});
         // Three-stage architecture: Array creates instances, GridLayout applies layout
         const array = b.addBlock('Array', { count: 16 });
-        const gridLayout = b.addBlock('GridLayout', { rows: 4, cols: 4 });
+        const gridLayout = b.addBlock('GridLayoutUV'UV, { rows: 4, colCount: 4 });
         // Wire Array.elements -> GridLayout.elements
         b.wire(array, 'elements', gridLayout, 'elements');
       });

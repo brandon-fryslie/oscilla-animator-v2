@@ -28,7 +28,7 @@ describe('Level 5 Unit Tests: Assembler API', () => {
       b.addBlock('InfiniteTimeRoot', {});
       const ellipse = b.addBlock('Ellipse', { rx: 0.02, ry: 0.02 });
       const array = b.addBlock('Array', { count: 4 });
-      const layout = b.addBlock('GridLayout', { rows: 2, cols: 2 });
+      const layout = b.addBlock('GridLayoutUV'UV, { rows: 2, colCount: 2 });
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
 
@@ -73,7 +73,7 @@ describe('Level 5 Unit Tests: Assembler API', () => {
       b.addBlock('InfiniteTimeRoot', {});
       const ellipse = b.addBlock('Ellipse', { rx: 0.02, ry: 0.02 });
       const array = b.addBlock('Array', { count: 4 });
-      const layout = b.addBlock('GridLayout', { rows: 2, cols: 2 });
+      const layout = b.addBlock('GridLayoutUV'UV, { rows: 2, colCount: 2 });
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
 
@@ -122,7 +122,7 @@ describe('Level 5 Unit Tests: Assembler API', () => {
       b.addBlock('InfiniteTimeRoot', {});
       const ellipse = b.addBlock('Ellipse', { rx: 0.02, ry: 0.02 });
       const array = b.addBlock('Array', { count: 4 });
-      const layout = b.addBlock('GridLayout', { rows: 2, cols: 2 });
+      const layout = b.addBlock('GridLayoutUV'UV, { rows: 2, colCount: 2 });
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
 
@@ -198,7 +198,7 @@ describe('Level 5 Integration Tests: Full Pipeline', () => {
       b.addBlock('InfiniteTimeRoot', { periodAMs: 5000, periodBMs: 10000 });
       const ellipse = b.addBlock('Ellipse', { rx: 0.02, ry: 0.02 });
       const array = b.addBlock('Array', { count: 9 });
-      const layout = b.addBlock('GridLayout', { rows: 3, cols: 3 });
+      const layout = b.addBlock('GridLayoutUV'UV, { rows: 3, colCount: 3 });
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
 

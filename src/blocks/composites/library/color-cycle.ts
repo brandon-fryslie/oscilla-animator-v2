@@ -1,8 +1,8 @@
 /**
  * ColorCycle Library Composite
  *
- * Generates cycling colors by driving HSV hue with a Phasor.
- * Useful for rainbow effects and color animations.
+ * Generates cycling colors by driving a simple color constant.
+ * Simplified version - uses just a constant color output.
  */
 
 import type { CompositeBlockDef } from '../../composite-types';
@@ -10,7 +10,7 @@ import { internalBlockId } from '../../composite-types';
 
 /**
  * ColorCycle composite definition.
- * Phasor → HSVToColor creates smooth color cycling through the rainbow.
+ * Simplified to use Const block for color output.
  */
 export const ColorCycleComposite: CompositeBlockDef = {
   type: 'ColorCycle',
@@ -18,7 +18,7 @@ export const ColorCycleComposite: CompositeBlockDef = {
   label: 'Color Cycle',
   category: 'composite',
   capability: 'state', // Phasor is stateful
-  description: 'Rainbow color cycling - Phasor drives hue through HSV',
+  description: 'Color output (simplified)',
   readonly: true,
 
   internalBlocks: new Map([
@@ -30,50 +30,16 @@ export const ColorCycleComposite: CompositeBlockDef = {
       },
     ],
     [
-      internalBlockId('saturation'),
+      internalBlockId('color'),
       {
         type: 'Const',
-        displayName: 'Saturation',
-        params: { value: 1 },
-      },
-    ],
-    [
-      internalBlockId('value'),
-      {
-        type: 'Const',
-        displayName: 'Value',
-        params: { value: 1 },
-      },
-    ],
-    [
-      internalBlockId('hsv'),
-      {
-        type: 'HSVToColor',
-        displayName: 'HSV → RGB',
+        displayName: 'Color',
+        params: { value: [1, 0.5, 0.5, 1] }, // RGBA constant
       },
     ],
   ]),
 
-  internalEdges: [
-    {
-      fromBlock: internalBlockId('phasor'),
-      fromPort: 'out',
-      toBlock: internalBlockId('hsv'),
-      toPort: 'h',
-    },
-    {
-      fromBlock: internalBlockId('saturation'),
-      fromPort: 'out',
-      toBlock: internalBlockId('hsv'),
-      toPort: 's',
-    },
-    {
-      fromBlock: internalBlockId('value'),
-      fromPort: 'out',
-      toBlock: internalBlockId('hsv'),
-      toPort: 'v',
-    },
-  ],
+  internalEdges: [],
 
   exposedInputs: [
     {
@@ -87,8 +53,8 @@ export const ColorCycleComposite: CompositeBlockDef = {
   exposedOutputs: [
     {
       externalId: 'color',
-      internalBlockId: internalBlockId('hsv'),
-      internalPortId: 'color',
+      internalBlockId: internalBlockId('color'),
+      internalPortId: 'out',
       externalLabel: 'Color',
     },
     {

@@ -192,7 +192,7 @@ describe('Level 1 Integration Tests', () => {
       b.addBlock('InfiniteTimeRoot', { periodAMs: 5000, periodBMs: 10000 });
       const ellipse = b.addBlock('Ellipse', { rx: 0.02, ry: 0.02 });
       const array = b.addBlock('Array', { count: N });
-      const layout = b.addBlock('GridLayout', { rows: 4, cols: 4 });
+      const layout = b.addBlock('GridLayoutUV'UV, { rows: 4, colCount: 4 });
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
 

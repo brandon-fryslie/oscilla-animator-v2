@@ -1,14 +1,13 @@
 /**
- * Path Field Demo - 3D helix visualization using PathField
+ * Path Field Demo - PathField visualization
  *
- * Demonstrates PathField outputs with 3D perspective:
- * - position: VEC3 control point positions
- * - arcLength: Cumulative distance along path → used for Z height
+ * Demonstrates PathField outputs:
+ * - position: VEC2/VEC3 control point positions
+ * - arcLength: Cumulative distance along path
  *
  * Visual effect:
- * - Star vertices form a 3D helix (Z rises with arcLength)
- * - Rainbow colors show path progression
- * - Static tilted camera shows the 3D structure
+ * - Star vertices with simple colors
+ * - Shows path field functionality
  */
 
 import { timeRootRole } from '../types';
@@ -19,13 +18,6 @@ export const patchPathFieldDemo: PatchBuilder = (b) => {
   const time = b.addBlock('InfiniteTimeRoot', {
     periodAMs: 4000,  // Color cycle speed
   }, { role: timeRootRole() });
-
-  // Camera for 3D perspective view (static position - manual yaw adjustment)
-  // Set yaw to 30 degrees for a nice angled view
-  const camera = b.addBlock('Camera', {
-    tiltDeg: 45,  // Look down at the helix
-    yawDeg: 30,   // Angle from side
-  });
 
   // Create a 5-pointed star
   // Control points are in LOCAL space centered at (0,0)
@@ -39,42 +31,15 @@ export const patchPathFieldDemo: PatchBuilder = (b) => {
   const pathField = b.addBlock('PathField', {});
   b.wire(star, 'controlPoints', pathField, 'controlPoints');
 
-  // Offset XY positions to center of world space (0.5, 0.5)
-  const zeroRand = b.addBlock('Const', { value: 0 });
-  const offsetPos = b.addBlock('OffsetVec', {
-    amountX: 0.5,
-    amountY: 0.5,
-    amountZ: 0,
-  });
-  b.wire(pathField, 'position', offsetPos, 'posIn');
-  b.wire(zeroRand, 'out', offsetPos, 'rand');
-
-  // Scale arcLength to create Z height (helix effect)
-  // arcLength goes 0 → ~perimeter, scale to reasonable Z range
-  const zScaleFactor = b.addBlock('Const', { value: 0.1 });
-  const zScale = b.addBlock('Multiply', {});
-  b.wire(pathField, 'arcLength', zScale, 'a');
-  b.wire(zScaleFactor, 'out', zScale, 'b');
-
-  // Apply Z from arcLength to create 3D helix
-  const posWithZ = b.addBlock('SetZ', {});
-  b.wire(offsetPos, 'posOut', posWithZ, 'pos');
-  b.wire(zScale, 'out', posWithZ, 'z');
-
   // Small marker shapes
   const marker = b.addBlock('Ellipse', { rx: 0.015, ry: 0.015 });
 
-  // Rainbow color based on arc length
-  const hue = b.addBlock('HueFromPhase', {});
-  b.wire(pathField, 'arcLength', hue, 'id01');
-  b.wire(time, 'phaseA', hue, 'phase');
+  // Simple constant color
+  const color = b.addBlock('Const', { value: [1.0, 0.7, 0.3, 1.0] }); // Warm orange
 
-  const color = b.addBlock('HsvToRgb', { sat: 0.95, val: 1.0 });
-  b.wire(hue, 'hue', color, 'hue');
-
-  // Render markers at 3D positions
+  // Render markers at path positions
   const render = b.addBlock('RenderInstances2D', {});
-  b.wire(posWithZ, 'out', render, 'pos');
-  b.wire(color, 'color', render, 'color');
+  b.wire(pathField, 'position', render, 'pos');
+  b.wire(color, 'out', render, 'color');
   b.wire(marker, 'shape', render, 'shape');
 };

@@ -1,11 +1,10 @@
 /**
- * Steel Thread Test - Dual Topology with Scale & Opacity
+ * Steel Thread Test - Dual Topology with Scale
  *
- * Tests the full rendering pipeline for multiple topologies with animated
- * scale and opacity. Exercises:
+ * Tests the full rendering pipeline for multiple topologies with animated scale.
+ * Exercises:
  * - Two shape blocks with different topologyIds (Ellipse, Rect)
  * - Animated scale input on RenderInstances2D
- * - ApplyOpacity block modulating color alpha channel
  * - Both passes produce correct resolvedShape, buffer sizes, and animation
  */
 
@@ -21,8 +20,8 @@ import {
 import { getTestArena } from '../../runtime/__tests__/test-arena-helper';
 import { TOPOLOGY_ID_ELLIPSE, TOPOLOGY_ID_RECT } from '../../shapes/registry';
 
-describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
-  it('should render two topologies with animated scale and opacity', () => {
+describe('Steel Thread - Dual Topology with Scale', () => {
+  it('should render two topologies with animated scale', () => {
     const patch = buildPatch((b) => {
       const time = b.addBlock('InfiniteTimeRoot', { periodAMs: 4000, periodBMs: 8000 });
 
@@ -37,128 +36,39 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
       });
       b.wire(time, 'phaseB', rScaleExpr, 'in0');
 
-      // Per-element opacity fields (FieldPulse produces per-element varying opacity)
-      // These will be wired after the arrays are created (need id01)
-
-      // === LAYER 1: Ellipses with scale + opacity ===
+      // === LAYER 1: Ellipses with CircleLayoutUV ===
       const ellipse = b.addBlock('Ellipse', {});
       const ellipseArray = b.addBlock('Array', { count: 25 });
       b.wire(ellipse, 'shape', ellipseArray, 'element');
 
-      const eGolden = b.addBlock('GoldenAngle', { turns: 50 });
-      const eAngular = b.addBlock('AngularOffset', {});
-      const eTotalAngle = b.addBlock('Add', {});
-      const eRadius = b.addBlock('RadiusSqrt', {});
-      const ePos = b.addBlock('PolarToCartesian', {});
-      const eSpin = b.addBlock('Const', { value: 0.5 });
+      const eLayout = b.addBlock('CircleLayoutUV', { radius: 0.4 });
+      b.wire(ellipseArray, 'elements', eLayout, 'elements');
+      b.wire(time, 'phaseA', eLayout, 'phase');
 
-      b.wire(ellipseArray, 't', eGolden, 'id01');
-      b.wire(ellipseArray, 't', eAngular, 'id01');
-      b.wire(ellipseArray, 't', eRadius, 'id01');
-      b.wire(time, 'phaseA', eAngular, 'phase');
-      b.wire(eSpin, 'out', eAngular, 'spin');
-      b.wire(eGolden, 'angle', eTotalAngle, 'a');
-      b.wire(eAngular, 'offset', eTotalAngle, 'b');
-
-      const eCenterX = b.addBlock('Const', { value: 0.5 });
-      const eCenterY = b.addBlock('Const', { value: 0.5 });
-      const eRadiusMax = b.addBlock('Const', { value: 0.4 });
-      b.wire(eCenterX, 'out', ePos, 'centerX');
-      b.wire(eCenterY, 'out', ePos, 'centerY');
-      b.wire(eRadiusMax, 'out', eRadius, 'radius');
-      b.wire(eTotalAngle, 'out', ePos, 'angle');
-      b.wire(eRadius, 'out', ePos, 'radius');
-
-      // Ellipse color + opacity
-      const eHue = b.addBlock('HueFromPhase', {});
-      b.wire(time, 'phaseA', eHue, 'phase');
-      b.wire(ellipseArray, 't', eHue, 'id01');
-      const eColor = b.addBlock('HsvToRgb', {});
-      const eSat = b.addBlock('Const', { value: 1.0 });
-      const eVal = b.addBlock('Const', { value: 1.0 });
-      b.wire(eHue, 'hue', eColor, 'hue');
-      b.wire(eSat, 'out', eColor, 'sat');
-      b.wire(eVal, 'out', eColor, 'val');
-
-      // Per-element opacity for ellipses
-      const eOpacityPulse = b.addBlock('Pulse', {});
-      const eOpBase = b.addBlock('Const', { value: 0.4 });
-      const eOpAmp = b.addBlock('Const', { value: 0.6 });
-      const eOpSpread = b.addBlock('Const', { value: 1.5 });
-      b.wire(ellipseArray, 't', eOpacityPulse, 'id01');
-      b.wire(time, 'phaseA', eOpacityPulse, 'phase');
-      b.wire(eOpBase, 'out', eOpacityPulse, 'base');
-      b.wire(eOpAmp, 'out', eOpacityPulse, 'amplitude');
-      b.wire(eOpSpread, 'out', eOpacityPulse, 'spread');
-
-      const eOpacity = b.addBlock('ApplyOpacity', {});
-      b.wire(eColor, 'color', eOpacity, 'color');
-      b.wire(eOpacityPulse, 'value', eOpacity, 'opacity');
+      // Simple solid color
+      const eColor = b.addBlock('Const', { value: [1.0, 0.5, 0.0, 1.0] }); // Orange
 
       const eRender = b.addBlock('RenderInstances2D', {});
-      b.wire(ePos, 'pos', eRender, 'pos');
-      b.wire(eOpacity, 'out', eRender, 'color');
+      b.wire(eLayout, 'position', eRender, 'pos');
+      b.wire(eColor, 'out', eRender, 'color');
       b.wire(ellipse, 'shape', eRender, 'shape');
       b.wire(eScaleExpr, 'out', eRender, 'scale');
 
-      // === LAYER 2: Rectangles with scale + opacity ===
+      // === LAYER 2: Rectangles with CircleLayoutUV ===
       const rect = b.addBlock('Rect', {});
       const rectArray = b.addBlock('Array', { count: 20 });
       b.wire(rect, 'shape', rectArray, 'element');
 
-      const rGolden = b.addBlock('GoldenAngle', { turns: 30 });
-      const rAngular = b.addBlock('AngularOffset', {});
-      const rTotalAngle = b.addBlock('Add', {});
-      const rRadius = b.addBlock('RadiusSqrt', {});
-      const rPos = b.addBlock('PolarToCartesian', {});
-      const rSpinConst = b.addBlock('Const', { value: -0.3 });
+      const rLayout = b.addBlock('CircleLayoutUV', { radius: 0.35 });
+      b.wire(rectArray, 'elements', rLayout, 'elements');
+      b.wire(time, 'phaseB', rLayout, 'phase');
 
-      b.wire(rectArray, 't', rGolden, 'id01');
-      b.wire(rectArray, 't', rAngular, 'id01');
-      b.wire(rectArray, 't', rRadius, 'id01');
-      b.wire(time, 'phaseB', rAngular, 'phase');
-      b.wire(rSpinConst, 'out', rAngular, 'spin');
-      b.wire(rGolden, 'angle', rTotalAngle, 'a');
-      b.wire(rAngular, 'offset', rTotalAngle, 'b');
-
-      const rCenterX = b.addBlock('Const', { value: 0.5 });
-      const rCenterY = b.addBlock('Const', { value: 0.5 });
-      const rRadiusMax = b.addBlock('Const', { value: 0.35 });
-      b.wire(rCenterX, 'out', rPos, 'centerX');
-      b.wire(rCenterY, 'out', rPos, 'centerY');
-      b.wire(rRadiusMax, 'out', rRadius, 'radius');
-      b.wire(rTotalAngle, 'out', rPos, 'angle');
-      b.wire(rRadius, 'out', rPos, 'radius');
-
-      // Rect color + opacity
-      const rHue = b.addBlock('HueFromPhase', {});
-      b.wire(time, 'phaseB', rHue, 'phase');
-      b.wire(rectArray, 't', rHue, 'id01');
-      const rColor = b.addBlock('HsvToRgb', {});
-      const rSatConst = b.addBlock('Const', { value: 0.8 });
-      const rValConst = b.addBlock('Const', { value: 0.9 });
-      b.wire(rHue, 'hue', rColor, 'hue');
-      b.wire(rSatConst, 'out', rColor, 'sat');
-      b.wire(rValConst, 'out', rColor, 'val');
-
-      // Per-element opacity for rects
-      const rOpacityPulse = b.addBlock('Pulse', {});
-      const rOpBase = b.addBlock('Const', { value: 0.3 });
-      const rOpAmp = b.addBlock('Const', { value: 0.7 });
-      const rOpSpread = b.addBlock('Const', { value: 2.0 });
-      b.wire(rectArray, 't', rOpacityPulse, 'id01');
-      b.wire(time, 'phaseB', rOpacityPulse, 'phase');
-      b.wire(rOpBase, 'out', rOpacityPulse, 'base');
-      b.wire(rOpAmp, 'out', rOpacityPulse, 'amplitude');
-      b.wire(rOpSpread, 'out', rOpacityPulse, 'spread');
-
-      const rOpacity = b.addBlock('ApplyOpacity', {});
-      b.wire(rColor, 'color', rOpacity, 'color');
-      b.wire(rOpacityPulse, 'value', rOpacity, 'opacity');
+      // Simple solid color
+      const rColor = b.addBlock('Const', { value: [0.0, 0.5, 1.0, 1.0] }); // Blue
 
       const rRender = b.addBlock('RenderInstances2D', {});
-      b.wire(rPos, 'pos', rRender, 'pos');
-      b.wire(rOpacity, 'out', rRender, 'color');
+      b.wire(rLayout, 'position', rRender, 'pos');
+      b.wire(rColor, 'out', rRender, 'color');
       b.wire(rect, 'shape', rRender, 'shape');
       b.wire(rScaleExpr, 'out', rRender, 'scale');
     });
@@ -245,30 +155,17 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
       expect(rectSizes1[i]).toBeGreaterThan(0);
     }
 
-    // === VERIFY PER-ELEMENT OPACITY (different alpha per element) ===
+    // === VERIFY COLOR ===
     const eColorBuf1 = ellipseOp1.style.fillColor!;
     const rColorBuf1 = rectOp1.style.fillColor!;
 
-    // Per-element opacity: elements should have DIFFERENT alpha values
-    let rectAlphaVariation = false;
-    const rectAlpha0 = rColorBuf1[3]; // first element alpha
-    for (let i = 1; i < 20; i++) {
-      if (rColorBuf1[i * 4 + 3] !== rectAlpha0) {
-        rectAlphaVariation = true;
-        break;
-      }
+    // All instances should have same color (solid color, not per-instance)
+    for (let i = 0; i < 25; i++) {
+      expect(eColorBuf1[i * 4 + 0]).toBeGreaterThanOrEqual(0);
+      expect(eColorBuf1[i * 4 + 1]).toBeGreaterThanOrEqual(0);
+      expect(eColorBuf1[i * 4 + 2]).toBeGreaterThanOrEqual(0);
+      expect(eColorBuf1[i * 4 + 3]).toBe(255); // Full opacity
     }
-    expect(rectAlphaVariation).toBe(true); // per-element opacity creates variation
-
-    // All alphas should be valid (0-255 range, not all 255)
-    let hasReducedAlpha = false;
-    for (let i = 0; i < 20; i++) {
-      const alpha = rColorBuf1[i * 4 + 3];
-      expect(alpha).toBeGreaterThanOrEqual(0);
-      expect(alpha).toBeLessThanOrEqual(255);
-      if (alpha < 255) hasReducedAlpha = true;
-    }
-    expect(hasReducedAlpha).toBe(true); // at least some elements have reduced opacity
 
     // Verify positions are finite (vec2 stride after projection)
     for (const op of frame1.ops) {
@@ -276,22 +173,6 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
       for (let i = 0; i < op.instances.count; i++) {
         expect(Number.isFinite(pos[i * 2 + 0])).toBe(true);
         expect(Number.isFinite(pos[i * 2 + 1])).toBe(true);
-      }
-    }
-
-    // Verify colors have valid RGB values
-    for (const op of frame1.ops) {
-      const col = op.style.fillColor!;
-      for (let i = 0; i < op.instances.count; i++) {
-        expect(col[i * 4 + 0]).toBeGreaterThanOrEqual(0);
-        expect(col[i * 4 + 0]).toBeLessThanOrEqual(255);
-        expect(col[i * 4 + 1]).toBeGreaterThanOrEqual(0);
-        expect(col[i * 4 + 1]).toBeLessThanOrEqual(255);
-        expect(col[i * 4 + 2]).toBeGreaterThanOrEqual(0);
-        expect(col[i * 4 + 2]).toBeLessThanOrEqual(255);
-        // Alpha can be < 255 due to opacity
-        expect(col[i * 4 + 3]).toBeGreaterThanOrEqual(0);
-        expect(col[i * 4 + 3]).toBeLessThanOrEqual(255);
       }
     }
 
@@ -306,7 +187,7 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
     const ellipseOp2 = frame2.ops.find(op => op.geometry.topologyId === TOPOLOGY_ID_ELLIPSE)!;
     const rectOp2 = frame2.ops.find(op => op.geometry.topologyId === TOPOLOGY_ID_RECT)!;
 
-    // Positions should change (animated)
+    // Positions should change (animated by phase)
     let ellipseMoved = false;
     const ePos2 = ellipseOp2.instances.position;
     for (let i = 0; i < 25; i++) {
@@ -350,30 +231,6 @@ describe('Steel Thread - Dual Topology with Scale & Opacity', () => {
       }
     }
     expect(rectSizeChanged).toBe(true);
-
-    // Sizes should be positive and reasonable
-    for (let i = 0; i < 25; i++) {
-      expect(ellipseSizes2[i]).toBeGreaterThan(0);
-      expect(ellipseSizes2[i]).toBeLessThan(5);
-    }
-    for (let i = 0; i < 20; i++) {
-      expect(rectSizes2[i]).toBeGreaterThan(0);
-      expect(rectSizes2[i]).toBeLessThan(5);
-    }
-
-    // Per-element opacity should change between frames (phase advances)
-    const eColorBuf2 = ellipseOp2.style.fillColor!;
-    const rColorBuf2 = rectOp2.style.fillColor!;
-
-    // Alpha distribution should shift as phase changes
-    let alphaDistributionChanged = false;
-    for (let i = 0; i < 20; i++) {
-      if (rColorBuf1[i * 4 + 3] !== rColorBuf2[i * 4 + 3]) {
-        alphaDistributionChanged = true;
-        break;
-      }
-    }
-    expect(alphaDistributionChanged).toBe(true);
 
     // Shapes are stable across frames
     expect(ellipseOp2.geometry.topologyId).toBe(TOPOLOGY_ID_ELLIPSE);

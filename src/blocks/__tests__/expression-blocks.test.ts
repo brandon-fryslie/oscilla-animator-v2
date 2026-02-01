@@ -19,7 +19,7 @@ import type { ValueRefPacked } from '../../compiler/ir/lowerTypes';
 /** Helper to create a signal ValueRefPacked with proper fields */
 function sigRef(id: SigExprId, slot: ValueSlot, type: CanonicalType): ValueRefPacked {
   const stride = strideOf(type.payload);
-  return { k: 'sig', id, slot, type, stride };
+  return { k: 'sig', id, slot, type, stride }; // k: 'sig' is illegal.  k: 'value' or k: 'slot' ONLY
 }
 
 describe('Expression Block Definition', () => {

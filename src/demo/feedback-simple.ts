@@ -47,13 +47,13 @@ export const patchFeedbackSimple: PatchBuilder = (b) => {
   // The feedback loop
   const delay = b.addBlock('UnitDelay', { initialValue: 0 });
   const accumulate = b.addBlock('Add', {});
-  const wrap = b.addBlock('Mod', {});
+  const wrap = b.addBlock('Modulo', {});
 
   b.wire(delay, 'out', accumulate, 'a');      // Previous phase
   b.wire(delta, 'out', accumulate, 'b');       // Variable delta
   b.wire(accumulate, 'out', wrap, 'a');
   b.wire(one, 'out', wrap, 'b');
-  b.wire(wrap, 'result', delay, 'in');         // Feedback!
+  b.wire(wrap, 'out', delay, 'in');         // Feedback!
 
   // ===========================================================================
   // OUTER RING: Feedback-driven (variable speed)
@@ -63,42 +63,12 @@ export const patchFeedbackSimple: PatchBuilder = (b) => {
   const outerArray = b.addBlock('Array', { count: 16 });
   b.wire(outerShape, 'shape', outerArray, 'element');
 
-  const twoPi = b.addBlock('Const', { value: 6.283185307 });
+  // Use CircleLayoutUV
+  const outerLayout = b.addBlock('CircleLayoutUV', { radius: 0.35 });
+  b.wire(outerArray, 'elements', outerLayout, 'elements');
 
-  // Base angle from array index
-  const outerBaseAngle = b.addBlock('Multiply', {});
-  b.wire(outerArray, 't', outerBaseAngle, 'a');
-  b.wire(twoPi, 'out', outerBaseAngle, 'b');
-
-  // Rotation from accumulated phase (broadcast to field)
-  const outerPhaseBroadcast = b.addBlock('Broadcast', { payloadType: 'float' });
-  b.wire(wrap, 'result', outerPhaseBroadcast, 'signal');
-
-  const outerRotation = b.addBlock('Multiply', {});
-  b.wire(outerPhaseBroadcast, 'field', outerRotation, 'a');
-  b.wire(twoPi, 'out', outerRotation, 'b');
-
-  const outerTotalAngle = b.addBlock('Add', {});
-  b.wire(outerBaseAngle, 'out', outerTotalAngle, 'a');
-  b.wire(outerRotation, 'out', outerTotalAngle, 'b');
-
-  // Position
-  const outerRadius = b.addBlock('Const', { value: 0.35 });
-  const outerRadiusBroadcast = b.addBlock('Broadcast', { payloadType: 'float' });
-  b.wire(outerRadius, 'out', outerRadiusBroadcast, 'signal');
-
-  const outerPos = b.addBlock('FieldPolarToCartesian', {});
-  b.wire(outerTotalAngle, 'out', outerPos, 'angle');
-  b.wire(outerRadiusBroadcast, 'field', outerPos, 'radius');
-
-  // Color: cyan (hue ~0.5)
-  const outerHueConst = b.addBlock('Const', { value: 0.52 });
-  const outerHue = b.addBlock('HueFromPhase', {});
-  b.wire(outerArray, 't', outerHue, 'id01');
-  b.wire(outerHueConst, 'out', outerHue, 'phase');
-
-  const outerColor = b.addBlock('HsvToRgb', { sat: 0.9, val: 1.0 });
-  b.wire(outerHue, 'hue', outerColor, 'hue');
+  // Color: cyan
+  const outerColor = b.addBlock('Const', { value: [0.3, 0.9, 0.9, 1.0] });
 
   // ===========================================================================
   // INNER RING: Time-driven (constant speed) - for comparison
@@ -108,52 +78,24 @@ export const patchFeedbackSimple: PatchBuilder = (b) => {
   const innerArray = b.addBlock('Array', { count: 12 });
   b.wire(innerShape, 'shape', innerArray, 'element');
 
-  // Base angle from array index
-  const innerBaseAngle = b.addBlock('Multiply', {});
-  b.wire(innerArray, 't', innerBaseAngle, 'a');
-  b.wire(twoPi, 'out', innerBaseAngle, 'b');
+  // Use CircleLayoutUV
+  const innerLayout = b.addBlock('CircleLayoutUV', { radius: 0.18 });
+  b.wire(innerArray, 'elements', innerLayout, 'elements');
 
-  // Rotation directly from time (constant speed)
-  const innerPhaseBroadcast = b.addBlock('Broadcast', { payloadType: 'float' });
-  b.wire(time, 'phaseB', innerPhaseBroadcast, 'signal');
-
-  const innerRotation = b.addBlock('Multiply', {});
-  b.wire(innerPhaseBroadcast, 'field', innerRotation, 'a');
-  b.wire(twoPi, 'out', innerRotation, 'b');
-
-  const innerTotalAngle = b.addBlock('Add', {});
-  b.wire(innerBaseAngle, 'out', innerTotalAngle, 'a');
-  b.wire(innerRotation, 'out', innerTotalAngle, 'b');
-
-  // Position
-  const innerRadius = b.addBlock('Const', { value: 0.18 });
-  const innerRadiusBroadcast = b.addBlock('Broadcast', { payloadType: 'float' });
-  b.wire(innerRadius, 'out', innerRadiusBroadcast, 'signal');
-
-  const innerPos = b.addBlock('FieldPolarToCartesian', {});
-  b.wire(innerTotalAngle, 'out', innerPos, 'angle');
-  b.wire(innerRadiusBroadcast, 'field', innerPos, 'radius');
-
-  // Color: orange (hue ~0.08)
-  const innerHueConst = b.addBlock('Const', { value: 0.08 });
-  const innerHue = b.addBlock('HueFromPhase', {});
-  b.wire(innerArray, 't', innerHue, 'id01');
-  b.wire(innerHueConst, 'out', innerHue, 'phase');
-
-  const innerColor = b.addBlock('HsvToRgb', { sat: 0.9, val: 1.0 });
-  b.wire(innerHue, 'hue', innerColor, 'hue');
+  // Color: orange
+  const innerColor = b.addBlock('Const', { value: [1.0, 0.6, 0.3, 1.0] });
 
   // ===========================================================================
   // RENDER BOTH RINGS
   // ===========================================================================
 
   const renderOuter = b.addBlock('RenderInstances2D', {});
-  b.wire(outerPos, 'pos', renderOuter, 'pos');
-  b.wire(outerColor, 'color', renderOuter, 'color');
+  b.wire(outerLayout, 'position', renderOuter, 'pos');
+  b.wire(outerColor, 'out', renderOuter, 'color');
   b.wire(outerShape, 'shape', renderOuter, 'shape');
 
   const renderInner = b.addBlock('RenderInstances2D', {});
-  b.wire(innerPos, 'pos', renderInner, 'pos');
-  b.wire(innerColor, 'color', renderInner, 'color');
+  b.wire(innerLayout, 'position', renderInner, 'pos');
+  b.wire(innerColor, 'out', renderInner, 'color');
   b.wire(innerShape, 'shape', renderInner, 'shape');
 };

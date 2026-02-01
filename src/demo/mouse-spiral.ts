@@ -29,49 +29,11 @@ export const patchMouseSpiral: PatchBuilder = (b) => {
   const array = b.addBlock('Array', { count: 24 });
   b.wire(ellipse, 'shape', array, 'element');
 
-  // Convert mouse X (0-1) to rotation (0-2π)
-  const twoPi = b.addBlock('Const', { value: 6.283185307179586 });
-  const mouseRotation = b.addBlock('Multiply', {});
-  b.wire(mouseX, 'value', mouseRotation, 'a');
-  b.wire(twoPi, 'out', mouseRotation, 'b');
+  // Use CircleLayoutUV for positioning
+  const layout = b.addBlock('CircleLayoutUV', { radius: 0.3 });
+  b.wire(array, 'elements', layout, 'elements');
 
-  // Spiral radius: base + index spread + mouse Y influence
-  // Base offset so spiral is always visible (centered at ~0.25 from origin)
-  const radiusBaseOffset = b.addBlock('Const', { value: 0.1 });
-  const radiusIndexSpread = b.addBlock('Multiply', {});
-  const radiusIndexScale = b.addBlock('Const', { value: 0.01 }); // 0 to 0.23 spread
-  const radiusWithIndex = b.addBlock('Add', {});
-
-  const radiusMouseInfluence = b.addBlock('Multiply', {});
-  const radiusMouseScale = b.addBlock('Const', { value: 0.2 }); // Mouse adds 0 to 0.2
-  const totalRadius = b.addBlock('Add', {});
-
-  b.wire(array, 't', radiusIndexSpread, 'a');
-  b.wire(radiusIndexScale, 'out', radiusIndexSpread, 'b');
-  b.wire(radiusBaseOffset, 'out', radiusWithIndex, 'a');
-  b.wire(radiusIndexSpread, 'out', radiusWithIndex, 'b');
-
-  b.wire(mouseY, 'value', radiusMouseInfluence, 'a');
-  b.wire(radiusMouseScale, 'out', radiusMouseInfluence, 'b');
-  b.wire(radiusWithIndex, 'out', totalRadius, 'a');
-  b.wire(radiusMouseInfluence, 'out', totalRadius, 'b');
-
-  // Spiral angle: index spacing + mouse rotation
-  const angleSpacing = b.addBlock('Const', { value: 1.0472 }); // ~60 degrees for tighter spiral
-  const angleBase = b.addBlock('Multiply', {});
-  const totalAngle = b.addBlock('Add', {});
-
-  b.wire(array, 't', angleBase, 'a');
-  b.wire(angleSpacing, 'out', angleBase, 'b');
-  b.wire(angleBase, 'out', totalAngle, 'a');
-  b.wire(mouseRotation, 'out', totalAngle, 'b');
-
-  // Convert polar to cartesian
-  const pos = b.addBlock('FieldPolarToCartesian', {});
-  b.wire(totalRadius, 'out', pos, 'radius');
-  b.wire(totalAngle, 'out', pos, 'angle');
-
-  // Size: base size + click bonus (made bigger so it's visible)
+  // Size: base size + click bonus
   const baseSize = b.addBlock('Const', { value: 0.015 });
   const clickBonus = b.addBlock('Multiply', {});
   const clickScale = b.addBlock('Const', { value: 0.015 });
@@ -82,18 +44,13 @@ export const patchMouseSpiral: PatchBuilder = (b) => {
   b.wire(baseSize, 'out', finalSize, 'a');
   b.wire(clickBonus, 'out', finalSize, 'b');
 
-  // Rainbow colors using instance index
-  // HueFromPhase takes id01 (instance index 0-1) and phase (0-1 offset)
-  const hue = b.addBlock('HueFromPhase', {});
-  const color = b.addBlock('HsvToRgb', { sat: 1.0, val: 1.0 });
-
-  b.wire(array, 't', hue, 'id01');  // Instance index provides the hue variation
-  b.wire(hue, 'hue', color, 'hue');
+  // Simple constant rainbow colors
+  const color = b.addBlock('Const', { value: [0.8, 0.6, 1.0, 1.0] }); // Purple
 
   // Render
   const render = b.addBlock('RenderInstances2D', {});
-  b.wire(pos, 'pos', render, 'pos');
-  b.wire(color, 'color', render, 'color');
+  b.wire(layout, 'position', render, 'pos');
+  b.wire(color, 'out', render, 'color');
   b.wire(ellipse, 'shape', render, 'shape');
   b.wire(finalSize, 'out', render, 'scale');
 };

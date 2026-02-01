@@ -26,7 +26,7 @@ import { TOPOLOGY_ID_ELLIPSE, TOPOLOGY_ID_RECT } from '../../shapes/registry';
 
 describe('Steel Thread - Rect Shape Pipeline', () => {
   it('should compile and execute a patch using Rect topology', () => {
-    // Build the patch: Rect → Array → position/color → Render
+    // Build the patch: Rect → Array → CircleLayoutUV → color → Render
     const patch = buildPatch((b) => {
       const time = b.addBlock('InfiniteTimeRoot', { periodAMs: 3000, periodBMs: 6000 });
 
@@ -35,49 +35,18 @@ describe('Steel Thread - Rect Shape Pipeline', () => {
       const array = b.addBlock('Array', { count: 50 });
       b.wire(rect, 'shape', array, 'element');
 
-      // Position: golden spiral pattern
-      const centerX = b.addBlock('Const', { value: 0.5 });
-      const centerY = b.addBlock('Const', { value: 0.5 });
-      const radius = b.addBlock('Const', { value: 0.35 });
-      const spin = b.addBlock('Const', { value: 0.4 });
+      // Position: circle layout with rotation
+      const layout = b.addBlock('CircleLayoutUV', { radius: 0.35 });
+      b.wire(array, 'elements', layout, 'elements');
+      b.wire(time, 'phaseA', layout, 'phase');
 
-      const goldenAngle = b.addBlock('GoldenAngle', { turns: 50 });
-      const angularOffset = b.addBlock('AngularOffset', {});
-      const totalAngle = b.addBlock('Add', {});
-      const effectiveRadius = b.addBlock('RadiusSqrt', {});
-      const pos = b.addBlock('PolarToCartesian', {});
-
-      b.wire(time, 'phaseA', angularOffset, 'phase');
-      b.wire(array, 't', goldenAngle, 'id01');
-      b.wire(array, 't', angularOffset, 'id01');
-      b.wire(array, 't', effectiveRadius, 'id01');
-      b.wire(spin, 'out', angularOffset, 'spin');
-
-      b.wire(goldenAngle, 'angle', totalAngle, 'a');
-      b.wire(angularOffset, 'offset', totalAngle, 'b');
-
-      b.wire(centerX, 'out', pos, 'centerX');
-      b.wire(centerY, 'out', pos, 'centerY');
-      b.wire(radius, 'out', effectiveRadius, 'radius');
-      b.wire(totalAngle, 'out', pos, 'angle');
-      b.wire(effectiveRadius, 'out', pos, 'radius');
-
-      // Color: hue from phase (must wire phase explicitly)
-      const hue = b.addBlock('HueFromPhase', {});
-      b.wire(time, 'phaseA', hue, 'phase');
-      b.wire(array, 't', hue, 'id01');
-
-      const sat = b.addBlock('Const', { value: 0.9 });
-      const val = b.addBlock('Const', { value: 1.0 });
-      const color = b.addBlock('HsvToRgb', {});
-      b.wire(hue, 'hue', color, 'hue');
-      b.wire(sat, 'out', color, 'sat');
-      b.wire(val, 'out', color, 'val');
+      // Color: solid color
+      const color = b.addBlock('Const', { value: [0.9, 0.4, 0.1, 1.0] });
 
       // Render with Rect shape
       const render = b.addBlock('RenderInstances2D', {});
-      b.wire(pos, 'pos', render, 'pos');
-      b.wire(color, 'color', render, 'color');
+      b.wire(layout, 'position', render, 'pos');
+      b.wire(color, 'out', render, 'color');
       b.wire(rect, 'shape', render, 'shape');
     });
 
@@ -182,7 +151,7 @@ describe('Steel Thread - Rect Shape Pipeline', () => {
     const op2 = frame2.ops[0] as DrawPrimitiveInstancesOp;
     const pos2 = op2.instances.position as Float32Array;
 
-    // Positions should differ between frames (animated)
+    // Positions should differ between frames (animated by phase)
     let hasDifference = false;
     for (let i = 0; i < 50; i++) {
       if (
@@ -208,35 +177,15 @@ describe('Steel Thread - Rect Shape Pipeline', () => {
       const array = b.addBlock('Array', { count: 10 });
       b.wire(ellipse, 'shape', array, 'element');
 
-      const pos = b.addBlock('PolarToCartesian', {});
-      const centerX = b.addBlock('Const', { value: 0.5 });
-      const centerY = b.addBlock('Const', { value: 0.5 });
-      const radius = b.addBlock('Const', { value: 0.3 });
-      const goldenAngle = b.addBlock('GoldenAngle', { turns: 50 });
-      const effectiveRadius = b.addBlock('RadiusSqrt', {});
+      const layout = b.addBlock('CircleLayoutUV', { radius: 0.3 });
+      b.wire(array, 'elements', layout, 'elements');
+      b.wire(time, 'phaseA', layout, 'phase');
 
-      b.wire(array, 't', goldenAngle, 'id01');
-      b.wire(array, 't', effectiveRadius, 'id01');
-      b.wire(centerX, 'out', pos, 'centerX');
-      b.wire(centerY, 'out', pos, 'centerY');
-      b.wire(radius, 'out', effectiveRadius, 'radius');
-      b.wire(goldenAngle, 'angle', pos, 'angle');
-      b.wire(effectiveRadius, 'out', pos, 'radius');
-
-      const hue = b.addBlock('HueFromPhase', {});
-      b.wire(time, 'phaseA', hue, 'phase');
-      b.wire(array, 't', hue, 'id01');
-
-      const sat = b.addBlock('Const', { value: 1.0 });
-      const val = b.addBlock('Const', { value: 1.0 });
-      const color = b.addBlock('HsvToRgb', {});
-      b.wire(hue, 'hue', color, 'hue');
-      b.wire(sat, 'out', color, 'sat');
-      b.wire(val, 'out', color, 'val');
+      const color = b.addBlock('Const', { value: [1.0, 0.0, 0.0, 1.0] });
 
       const render = b.addBlock('RenderInstances2D', {});
-      b.wire(pos, 'pos', render, 'pos');
-      b.wire(color, 'color', render, 'color');
+      b.wire(layout, 'position', render, 'pos');
+      b.wire(color, 'out', render, 'color');
       b.wire(ellipse, 'shape', render, 'shape');
     });
 
@@ -247,35 +196,15 @@ describe('Steel Thread - Rect Shape Pipeline', () => {
       const array = b.addBlock('Array', { count: 10 });
       b.wire(rect, 'shape', array, 'element');
 
-      const pos = b.addBlock('PolarToCartesian', {});
-      const centerX = b.addBlock('Const', { value: 0.5 });
-      const centerY = b.addBlock('Const', { value: 0.5 });
-      const radius = b.addBlock('Const', { value: 0.3 });
-      const goldenAngle = b.addBlock('GoldenAngle', { turns: 50 });
-      const effectiveRadius = b.addBlock('RadiusSqrt', {});
+      const layout = b.addBlock('CircleLayoutUV', { radius: 0.3 });
+      b.wire(array, 'elements', layout, 'elements');
+      b.wire(time, 'phaseA', layout, 'phase');
 
-      b.wire(array, 't', goldenAngle, 'id01');
-      b.wire(array, 't', effectiveRadius, 'id01');
-      b.wire(centerX, 'out', pos, 'centerX');
-      b.wire(centerY, 'out', pos, 'centerY');
-      b.wire(radius, 'out', effectiveRadius, 'radius');
-      b.wire(goldenAngle, 'angle', pos, 'angle');
-      b.wire(effectiveRadius, 'out', pos, 'radius');
-
-      const hue = b.addBlock('HueFromPhase', {});
-      b.wire(time, 'phaseA', hue, 'phase');
-      b.wire(array, 't', hue, 'id01');
-
-      const sat = b.addBlock('Const', { value: 1.0 });
-      const val = b.addBlock('Const', { value: 1.0 });
-      const color = b.addBlock('HsvToRgb', {});
-      b.wire(hue, 'hue', color, 'hue');
-      b.wire(sat, 'out', color, 'sat');
-      b.wire(val, 'out', color, 'val');
+      const color = b.addBlock('Const', { value: [0.0, 0.0, 1.0, 1.0] });
 
       const render = b.addBlock('RenderInstances2D', {});
-      b.wire(pos, 'pos', render, 'pos');
-      b.wire(color, 'color', render, 'color');
+      b.wire(layout, 'position', render, 'pos');
+      b.wire(color, 'out', render, 'color');
       b.wire(rect, 'shape', render, 'shape');
     });
 

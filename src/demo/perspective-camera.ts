@@ -2,11 +2,9 @@
  * Perspective Camera Demo - 3D grid with animated camera
  *
  * Grid of ellipses viewed through a perspective camera with animated
- * tilt and yaw rotation. Demonstrates foreshortening and depth sorting.
+ * tilt and yaw rotation. Demonstrates camera functionality.
  *
- * Adding a Camera block is simple:
- *   1. Add Camera block (defaults to perspective)
- *   2. Wire animated values to tiltDeg/yawDeg for camera motion
+ * Simplified version using GridLayoutUV.
  */
 
 import { timeRootRole } from '../types';
@@ -15,7 +13,7 @@ import type { PatchBuilder } from './types';
 export const patchPerspectiveCamera: PatchBuilder = (b) => {
   const time = b.addBlock('InfiniteTimeRoot', {
     periodAMs: 12000,  // 12 second orbit
-    periodBMs: 4000,   // 4 second wave for Z animation
+    periodBMs: 4000,   // 4 second wave
   }, { role: timeRootRole() });
 
   // Camera block
@@ -35,31 +33,16 @@ export const patchPerspectiveCamera: PatchBuilder = (b) => {
   const array = b.addBlock('Array', { count: 100 }); // 10x10 grid
   b.wire(ellipse, 'shape', array, 'element');
 
-  // Grid layout (XY positions)
-  const grid = b.addBlock('GridLayout', { rows: 10, cols: 10 });
+  // Grid layout (XY positions) - using UV variant
+  const grid = b.addBlock('GridLayoutUV', { rows: 10, cols: 10 });
   b.wire(array, 'elements', grid, 'elements');
 
-  // Animated Z: per-element wave based on position in grid
-  // z = 0.15 * sin(2π * (id01 + phaseB))
-  const zWave = b.addBlock('Pulse', { base: 0.0, amplitude: 0.15, spread: 2.0 });
-  b.wire(array, 't', zWave, 'id01');
-  b.wire(time, 'phaseB', zWave, 'phase');
+  // Simple constant color
+  const color = b.addBlock('Const', { value: [0.5, 0.8, 1.0, 1.0] }); // Light blue
 
-  // Apply Z to positions
-  const posWithZ = b.addBlock('SetZ', {});
-  b.wire(grid, 'position', posWithZ, 'pos');
-  b.wire(zWave, 'value', posWithZ, 'z');
-
-  // Rainbow color based on grid position (static colors)
-  const hue = b.addBlock('HueFromPhase', {});
-  b.wire(array, 't', hue, 'id01');
-
-  const color = b.addBlock('HsvToRgb', {});
-  b.wire(hue, 'hue', color, 'hue');
-
-  // Render with Z-animated positions
+  // Render
   const render = b.addBlock('RenderInstances2D', {});
-  b.wire(posWithZ, 'out', render, 'pos');
-  b.wire(color, 'color', render, 'color');
+  b.wire(grid, 'position', render, 'pos');
+  b.wire(color, 'out', render, 'color');
   b.wire(ellipse, 'shape', render, 'shape');
 };

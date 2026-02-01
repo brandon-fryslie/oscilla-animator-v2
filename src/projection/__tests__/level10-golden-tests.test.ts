@@ -51,7 +51,7 @@ function buildGoldenPatch() {
     const time = b.addBlock('InfiniteTimeRoot', {});
     const ellipse = b.addBlock('Ellipse', { rx: 0.03, ry: 0.03 });
     const array = b.addBlock('Array', { count: 25 });
-    const layout = b.addBlock('GridLayout', { rows: 5, cols: 5 });
+    const layout = b.addBlock('GridLayoutUV'UV, { rows: 5, colCount: 5 });
 
     // Color pipeline (Field-level hue from phase)
     const sat = b.addBlock('Const', { value: 1.0 });
@@ -311,7 +311,7 @@ describe('Level 10 Golden Tests: Stress Test', () => {
       const time = b.addBlock('InfiniteTimeRoot', {});
       const ellipse = b.addBlock('Ellipse', { rx: 0.01, ry: 0.01 });
       const array = b.addBlock('Array', { count: 2500 });
-      const layout = b.addBlock('GridLayout', { rows: 50, cols: 50 });
+      const layout = b.addBlock('GridLayoutUV'UV, { rows: 50, colCount: 50 });
 
       const sat = b.addBlock('Const', { value: 1.0 });
       const val = b.addBlock('Const', { value: 1.0 });
@@ -481,7 +481,7 @@ describe('Level 10 Golden Tests: Multi-Backend Comparison', () => {
       const time = b.addBlock('InfiniteTimeRoot', {});
       const ellipse = b.addBlock('Ellipse', { rx: 0.03, ry: 0.03 });
       const array = b.addBlock('Array', { count: 25 });
-      const layout = b.addBlock('GridLayout', { rows: 5, cols: 5 });
+      const layout = b.addBlock('GridLayoutUV'UV, { rows: 5, colCount: 5 });
 
       const sat = b.addBlock('Const', { value: 1.0 });
       const val = b.addBlock('Const', { value: 1.0 });
