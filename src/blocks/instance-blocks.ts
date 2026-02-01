@@ -11,6 +11,7 @@ import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '
 import { canonicalType, canonicalField, unitPhase01, unitWorld3, strideOf, floatConst, intConst, requireInst } from '../core/canonical-types';
 import { FLOAT, INT, VEC2, VEC3, SHAPE } from '../core/canonical-types';
 import { defaultSourceConst } from '../types';
+import { OpCode } from '../compiler/ir/types';
 
 // =============================================================================
 // UV Layout Blocks (Gauge-Invariant)
@@ -67,6 +68,7 @@ registerBlock({
 
     // Get resolved output type first
     const posType = ctx.outTypes[0];
+    const floatFieldType = { ...posType, payload: FLOAT, unit: { kind: 'scalar' as const } };
     const vec2FieldType = { ...posType, payload: VEC2, unit: { kind: 'scalar' as const } };
 
     // Get radius and phase as signals
@@ -86,13 +88,59 @@ registerBlock({
       vec2FieldType
     );
 
-    // Apply circleLayoutUV kernel: uv + [radius, phase] → vec3 positions
-    const positionField = ctx.b.kernelZipSig(
-      uvField,
-      [radiusSig, phaseSig],
-      { kind: 'kernel', name: 'circleLayoutUV' },
-      posType
-    );
+    // Decompose circleLayoutUV into opcode sequence:
+    // u = extractX(uvField)
+    const extractXFn = ctx.b.kernel('extractX');
+    const u = ctx.b.kernelZip([uvField], extractXFn, floatFieldType);
+
+    // Constants
+    const const0 = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
+    const const1 = ctx.b.constant(floatConst(1), canonicalType(FLOAT));
+    const const0_5 = ctx.b.constant(floatConst(0.5), canonicalType(FLOAT));
+    const twoPi = ctx.b.constant(floatConst(Math.PI * 2), canonicalType(FLOAT));
+
+    // Broadcast constants and signals to fields
+    const const0Broadcast = ctx.b.broadcast(const0, floatFieldType);
+    const const1Broadcast = ctx.b.broadcast(const1, floatFieldType);
+    const const0_5Broadcast = ctx.b.broadcast(const0_5, floatFieldType);
+    const twoPiBroadcast = ctx.b.broadcast(twoPi, floatFieldType);
+    const phaseBroadcast = ctx.b.broadcast(phaseSig, floatFieldType);
+    const radiusBroadcast = ctx.b.broadcast(radiusSig, floatFieldType);
+
+    // Opcodes
+    const clamp = ctx.b.opcode(OpCode.Clamp);
+    const add = ctx.b.opcode(OpCode.Add);
+    const mul = ctx.b.opcode(OpCode.Mul);
+    const cos = ctx.b.opcode(OpCode.Cos);
+    const sin = ctx.b.opcode(OpCode.Sin);
+
+    // u_clamped = clamp(u, 0, 1)
+    const u_clamped = ctx.b.kernelZip([u, const0Broadcast, const1Broadcast], clamp, floatFieldType);
+
+    // angle_base = add(u_clamped, phase_field)
+    const angle_base = ctx.b.kernelZip([u_clamped, phaseBroadcast], add, floatFieldType);
+
+    // angle = mul(angle_base, twoPi)
+    const angle = ctx.b.kernelZip([angle_base, twoPiBroadcast], mul, floatFieldType);
+
+    // x_raw = cos(angle), y_raw = sin(angle)
+    const x_raw = ctx.b.kernelMap(angle, cos, floatFieldType);
+    const y_raw = ctx.b.kernelMap(angle, sin, floatFieldType);
+
+    // x_scaled = mul(x_raw, radius), y_scaled = mul(y_raw, radius)
+    const x_scaled = ctx.b.kernelZip([x_raw, radiusBroadcast], mul, floatFieldType);
+    const y_scaled = ctx.b.kernelZip([y_raw, radiusBroadcast], mul, floatFieldType);
+
+    // x = add(x_scaled, 0.5), y = add(y_scaled, 0.5)
+    const x = ctx.b.kernelZip([x_scaled, const0_5Broadcast], add, floatFieldType);
+    const y = ctx.b.kernelZip([y_scaled, const0_5Broadcast], add, floatFieldType);
+
+    // z = broadcast(0)
+    const z = const0Broadcast;
+
+    // pos = makeVec3(x, y, z)
+    const makeVec3Fn = ctx.b.kernel('makeVec3');
+    const positionField = ctx.b.kernelZip([x, y, z], makeVec3Fn, posType);
 
     const posSlot = ctx.b.allocSlot();
 
@@ -156,6 +204,7 @@ registerBlock({
 
     // Get resolved output type first
     const posType = ctx.outTypes[0];
+    const floatFieldType = { ...posType, payload: FLOAT, unit: { kind: 'scalar' as const } };
     const vec2FieldType = { ...posType, payload: VEC2, unit: { kind: 'scalar' as const } };
 
     // Get line endpoints as signals
@@ -181,13 +230,42 @@ registerBlock({
       vec2FieldType
     );
 
-    // Apply lineLayoutUV kernel: uv + [x0, y0, x1, y1] → vec3 positions
-    const positionField = ctx.b.kernelZipSig(
-      uvField,
-      [x0Sig, y0Sig, x1Sig, y1Sig],
-      { kind: 'kernel', name: 'lineLayoutUV' },
-      posType
-    );
+    // Decompose lineLayoutUV into opcode sequence:
+    // u = extractX(uvField)
+    const extractXFn = ctx.b.kernel('extractX');
+    const u = ctx.b.kernelZip([uvField], extractXFn, floatFieldType);
+
+    // Constants
+    const const0 = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
+    const const1 = ctx.b.constant(floatConst(1), canonicalType(FLOAT));
+
+    // Broadcast constants and signals to fields
+    const const0Broadcast = ctx.b.broadcast(const0, floatFieldType);
+    const const1Broadcast = ctx.b.broadcast(const1, floatFieldType);
+    const x0Broadcast = ctx.b.broadcast(x0Sig, floatFieldType);
+    const y0Broadcast = ctx.b.broadcast(y0Sig, floatFieldType);
+    const x1Broadcast = ctx.b.broadcast(x1Sig, floatFieldType);
+    const y1Broadcast = ctx.b.broadcast(y1Sig, floatFieldType);
+
+    // Opcodes
+    const clamp = ctx.b.opcode(OpCode.Clamp);
+    const lerp = ctx.b.opcode(OpCode.Lerp);
+
+    // u_clamped = clamp(u, 0, 1)
+    const u_clamped = ctx.b.kernelZip([u, const0Broadcast, const1Broadcast], clamp, floatFieldType);
+
+    // x = lerp(x0, x1, u_clamped)
+    const x = ctx.b.kernelZip([x0Broadcast, x1Broadcast, u_clamped], lerp, floatFieldType);
+
+    // y = lerp(y0, y1, u_clamped)
+    const y = ctx.b.kernelZip([y0Broadcast, y1Broadcast, u_clamped], lerp, floatFieldType);
+
+    // z = broadcast(0)
+    const z = const0Broadcast;
+
+    // pos = makeVec3(x, y, z)
+    const makeVec3Fn = ctx.b.kernel('makeVec3');
+    const positionField = ctx.b.kernelZip([x, y, z], makeVec3Fn, posType);
 
     const posSlot = ctx.b.allocSlot();
 
@@ -249,6 +327,7 @@ registerBlock({
 
     // Get resolved output type first
     const posType = ctx.outTypes[0];
+    const floatFieldType = { ...posType, payload: FLOAT, unit: { kind: 'scalar' as const } };
     const vec2FieldType = { ...posType, payload: VEC2, unit: { kind: 'scalar' as const } };
 
     // Get cols and rows as signals
@@ -268,13 +347,70 @@ registerBlock({
       vec2FieldType
     );
 
-    // Apply gridLayoutUV kernel: uv + [cols, rows] → vec3 positions
-    const positionField = ctx.b.kernelZipSig(
-      uvField,
-      [colsSig, rowsSig],
-      { kind: 'kernel', name: 'gridLayoutUV' },
-      posType
-    );
+    // Decompose gridLayoutUV into opcode sequence:
+    // u = extractX(uvField), v = extractY(uvField)
+    const extractXFn = ctx.b.kernel('extractX');
+    const extractYFn = ctx.b.kernel('extractY');
+    const u = ctx.b.kernelZip([uvField], extractXFn, floatFieldType);
+    const v = ctx.b.kernelZip([uvField], extractYFn, floatFieldType);
+
+    // Constants
+    const const0 = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
+    const const1 = ctx.b.constant(floatConst(1), canonicalType(FLOAT));
+    const const0_5 = ctx.b.constant(floatConst(0.5), canonicalType(FLOAT));
+
+    // Broadcast constants and signals to fields
+    const const0Broadcast = ctx.b.broadcast(const0, floatFieldType);
+    const const1Broadcast = ctx.b.broadcast(const1, floatFieldType);
+    const const0_5Broadcast = ctx.b.broadcast(const0_5, floatFieldType);
+    const colsBroadcast = ctx.b.broadcast(colsSig, floatFieldType);
+    const rowsBroadcast = ctx.b.broadcast(rowsSig, floatFieldType);
+
+    // Opcodes
+    const clamp = ctx.b.opcode(OpCode.Clamp);
+    const mul = ctx.b.opcode(OpCode.Mul);
+    const floor = ctx.b.opcode(OpCode.Floor);
+    const min = ctx.b.opcode(OpCode.Min);
+    const sub = ctx.b.opcode(OpCode.Sub);
+    const div = ctx.b.opcode(OpCode.Div);
+    const select = ctx.b.opcode(OpCode.Select);
+
+    // u_clamped = clamp(u, 0, 1), v_clamped = clamp(v, 0, 1)
+    const u_clamped = ctx.b.kernelZip([u, const0Broadcast, const1Broadcast], clamp, floatFieldType);
+    const v_clamped = ctx.b.kernelZip([v, const0Broadcast, const1Broadcast], clamp, floatFieldType);
+
+    // u_scaled = mul(u_clamped, cols), v_scaled = mul(v_clamped, rows)
+    const u_scaled = ctx.b.kernelZip([u_clamped, colsBroadcast], mul, floatFieldType);
+    const v_scaled = ctx.b.kernelZip([v_clamped, rowsBroadcast], mul, floatFieldType);
+
+    // col = floor(u_scaled), row = floor(v_scaled)
+    const col = ctx.b.kernelMap(u_scaled, floor, floatFieldType);
+    const row = ctx.b.kernelMap(v_scaled, floor, floatFieldType);
+
+    // cols_m1 = sub(cols, 1), rows_m1 = sub(rows, 1)
+    const cols_m1 = ctx.b.kernelZip([colsBroadcast, const1Broadcast], sub, floatFieldType);
+    const rows_m1 = ctx.b.kernelZip([rowsBroadcast, const1Broadcast], sub, floatFieldType);
+
+    // col_safe = min(col, cols_m1), row_safe = min(row, rows_m1)
+    const col_safe = ctx.b.kernelZip([col, cols_m1], min, floatFieldType);
+    const row_safe = ctx.b.kernelZip([row, rows_m1], min, floatFieldType);
+
+    // x_ratio = div(col_safe, cols_m1), y_ratio = div(row_safe, rows_m1)
+    const x_ratio = ctx.b.kernelZip([col_safe, cols_m1], div, floatFieldType);
+    const y_ratio = ctx.b.kernelZip([row_safe, rows_m1], div, floatFieldType);
+
+    // x = select(cols_m1 > 0, x_ratio, 0.5) - use cols_m1 as condition (truthy if > 0)
+    const x = ctx.b.kernelZip([cols_m1, x_ratio, const0_5Broadcast], select, floatFieldType);
+
+    // y = select(rows_m1 > 0, y_ratio, 0.5) - use rows_m1 as condition (truthy if > 0)
+    const y = ctx.b.kernelZip([rows_m1, y_ratio, const0_5Broadcast], select, floatFieldType);
+
+    // z = broadcast(0)
+    const z = const0Broadcast;
+
+    // pos = makeVec3(x, y, z)
+    const makeVec3Fn = ctx.b.kernel('makeVec3');
+    const positionField = ctx.b.kernelZip([x, y, z], makeVec3Fn, posType);
 
     const posSlot = ctx.b.allocSlot();
 
