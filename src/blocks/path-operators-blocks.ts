@@ -6,10 +6,9 @@
 
 import { registerBlock } from './registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../core/ids';
-import { canonicalType, canonicalField, strideOf, floatConst, vec2Const } from '../core/canonical-types';
+import { canonicalType, canonicalField, strideOf, floatConst, vec2Const, requireInst } from '../core/canonical-types';
 import { domainTypeId as domainPath } from '../core/domain-registry';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
-import type { FieldExprId, SigExprId } from '../compiler/ir/Indices';
 import { defaultSourceConst } from '../types';
 
 // =============================================================================
@@ -85,11 +84,11 @@ registerBlock({
   },
   lower: ({ ctx, inputsById }) => {
     const controlPointsInput = inputsById.controlPoints;
-    if (!controlPointsInput || controlPointsInput.k !== 'field') {
+    if (!controlPointsInput || !('type' in controlPointsInput && requireInst(controlPointsInput.type.extent.cardinality, 'cardinality').kind === 'many')) {
       throw new Error('PathField requires a controlPoints field input');
     }
 
-    const controlPointsFieldId = controlPointsInput.id as FieldExprId;
+    const controlPointsFieldId = controlPointsInput.id;
 
     // Get instance from context (inferred from input fields by lowering system)
     const instance = ctx.inferredInstance ?? ctx.instance;
@@ -104,27 +103,27 @@ registerBlock({
 
     // Position output: convert VEC2 control points to VEC3 (z=0)
     const vec2ToVec3Fn = ctx.b.kernel('vec2ToVec3');
-    const positionFieldId = ctx.b.fieldZip(
+    const positionFieldId = ctx.b.kernelZip(
       [controlPointsFieldId],
       vec2ToVec3Fn,
       posType
     );
 
     // Create index field
-    const indexField = ctx.b.fieldIntrinsic('index',
+    const indexField = ctx.b.intrinsic('index',
       idxType
     );
 
     // Create tangent field (MVP: polygonal paths, linear approximation)
     // Outputs VEC3 (z=0) for compatibility with render pipeline
-    const tangentField = ctx.b.fieldPathDerivative(
+    const tangentField = ctx.b.pathDerivative(
       controlPointsFieldId,
       'tangent',
       tanType
     );
 
     // Create arc length field (MVP: cumulative Euclidean distance)
-    const arcLengthField = ctx.b.fieldPathDerivative(
+    const arcLengthField = ctx.b.pathDerivative(
       controlPointsFieldId,
       'arcLength',
       arcType
@@ -137,10 +136,10 @@ registerBlock({
 
     return {
       outputsById: {
-        position: { k: 'field', id: positionFieldId, slot: posSlot, type: posType, stride: strideOf(posType.payload) },
-        index: { k: 'field', id: indexField, slot: idxSlot, type: idxType, stride: strideOf(idxType.payload) },
-        tangent: { k: 'field', id: tangentField, slot: tanSlot, type: tanType, stride: strideOf(tanType.payload) },
-        arcLength: { k: 'field', id: arcLengthField, slot: arcSlot, type: arcType, stride: strideOf(arcType.payload) },
+        position: { id: positionFieldId, slot: posSlot, type: posType, stride: strideOf(posType.payload) },
+        index: { id: indexField, slot: idxSlot, type: idxType, stride: strideOf(idxType.payload) },
+        tangent: { id: tangentField, slot: tanSlot, type: tanType, stride: strideOf(tanType.payload) },
+        arcLength: { id: arcLengthField, slot: arcSlot, type: arcType, stride: strideOf(arcType.payload) },
       },
       instanceContext: instance,
     };

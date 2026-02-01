@@ -8,6 +8,7 @@ import { registerBlock } from './registry';
 import { canonicalType, canonicalEvent, unitPhase01, strideOf } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { defaultSourceConst } from '../types';
+import { valueSlot } from '../compiler/ir/Indices';
 
 // =============================================================================
 // InfiniteTimeRoot
@@ -43,20 +44,20 @@ registerBlock({
     // TimeRoot blocks don't produce IR directly
     // Their outputs are provided by the time system (pass 3)
     // We create placeholder signals that reference the time system
-    const tMs = ctx.b.sigTime('tMs', canonicalType(FLOAT));
-    const dt = ctx.b.sigTime('dt', canonicalType(FLOAT));
-    const phaseA = ctx.b.sigTime('phaseA', canonicalType(FLOAT, unitPhase01()));
-    const phaseB = ctx.b.sigTime('phaseB', canonicalType(FLOAT, unitPhase01()));
+    const tMs = ctx.b.time('tMs', canonicalType(FLOAT));
+    const dt = ctx.b.time('dt', canonicalType(FLOAT));
+    const phaseA = ctx.b.time('phaseA', canonicalType(FLOAT, unitPhase01()));
+    const phaseB = ctx.b.time('phaseB', canonicalType(FLOAT, unitPhase01()));
     const pulse = ctx.b.eventPulse('InfiniteTimeRoot');
-    const palette = ctx.b.sigTime('palette', canonicalType(COLOR));
-    const energy = ctx.b.sigTime('energy', canonicalType(FLOAT));
+    const palette = ctx.b.time('palette', canonicalType(COLOR));
+    const energy = ctx.b.time('energy', canonicalType(FLOAT));
 
     // Allocate slots for time outputs
     const tMsSlot = ctx.b.allocSlot();
     const dtSlot = ctx.b.allocSlot();
     const phaseASlot = ctx.b.allocSlot();
     const phaseBSlot = ctx.b.allocSlot();
-    const pulseSlot = ctx.b.allocEventSlot(pulse);
+    const pulseEventSlot = ctx.b.allocEventSlot(pulse);
     const paletteSlot = ctx.b.allocSlot();
     const energySlot = ctx.b.allocSlot();
 
@@ -76,13 +77,13 @@ registerBlock({
 
     return {
       outputsById: {
-        tMs: { k: 'sig', id: tMs, slot: tMsSlot, type: tMsType, stride: strideOf(tMsType.payload) },
-        dt: { k: 'sig', id: dt, slot: dtSlot, type: dtType, stride: strideOf(dtType.payload) },
-        phaseA: { k: 'sig', id: phaseA, slot: phaseASlot, type: phaseAType, stride: strideOf(phaseAType.payload) },
-        phaseB: { k: 'sig', id: phaseB, slot: phaseBSlot, type: phaseBType, stride: strideOf(phaseBType.payload) },
-        pulse: { k: 'event', id: pulse, slot: pulseSlot, type: pulseType },
-        palette: { k: 'sig', id: palette, slot: paletteSlot, type: paletteType, stride: strideOf(paletteType.payload) },
-        energy: { k: 'sig', id: energy, slot: energySlot, type: energyType, stride: strideOf(energyType.payload) },
+        tMs: { id: tMs, slot: tMsSlot, type: tMsType, stride: strideOf(tMsType.payload) },
+        dt: { id: dt, slot: dtSlot, type: dtType, stride: strideOf(dtType.payload) },
+        phaseA: { id: phaseA, slot: phaseASlot, type: phaseAType, stride: strideOf(phaseAType.payload) },
+        phaseB: { id: phaseB, slot: phaseBSlot, type: phaseBType, stride: strideOf(phaseBType.payload) },
+        pulse: { id: pulse, slot: valueSlot(0), type: pulseType, stride: 1, eventSlot: pulseEventSlot },
+        palette: { id: palette, slot: paletteSlot, type: paletteType, stride: strideOf(paletteType.payload) },
+        energy: { id: energy, slot: energySlot, type: energyType, stride: strideOf(energyType.payload) },
       },
     };
   },

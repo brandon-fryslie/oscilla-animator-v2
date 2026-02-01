@@ -14,7 +14,7 @@
  * UNIFIED VARARGS SYSTEM (2026-01-26):
  * - SINGLE CODE PATH: Legacy in0/in1 AND varargs refs flow through ONE processing loop
  * - in0/in1 are shims: converted to synthetic vararg-style entries internally
- * - ALL inputs processed identically: build unified Map<string, SigExprId>
+ * - ALL inputs processed identically: build unified Map<string, ValueExprId>
  * - No dual processing paths - ONE loop handles everything
  *
  * Design Decisions:
@@ -24,10 +24,10 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
-import { canonicalType, strideOf, floatConst, FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
+import { canonicalType, strideOf, floatConst, requireInst, FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import type { CanonicalType, PayloadType } from '../core/canonical-types';
 import { compileExpression } from '../expr';
-import type { SigExprId, SigExpr } from '../compiler/ir/types';
+import type { ValueExprId } from '../compiler/ir/Indices';
 
 // =============================================================================
 // Expression (Payload-Generic)
@@ -114,7 +114,7 @@ registerBlock({
    * Step 1: SHIM - Convert legacy in0/in1 to synthetic vararg-style entries
    * Step 2: MERGE - Combine synthetic entries with actual varargs refs
    * Step 3: SINGLE LOOP - Process ALL inputs through ONE code path
-   * Step 4: Compile with unified Map<string, SigExprId>
+   * Step 4: Compile with unified Map<string, ValueExprId>
    *
    * Algorithm:
    * 1. Extract expression text from config
@@ -136,19 +136,19 @@ registerBlock({
 
     // Step 2: Handle empty expression (output constant 0)
     if (exprText.trim() === '') {
-      const sigId = ctx.b.sigConst(floatConst(0), canonicalType(FLOAT));
+      const sigId = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
       return {
         outputsById: {
-          out: { k: 'sig', id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
+          out: { id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
         },
       };
     }
 
     // Helper: Get actual type from signal expression
     // IRBuilder tracks types for all signal expressions
-    const getSigType = (sigId: SigExprId): CanonicalType => {
+    const getSigType = (sigId: ValueExprId): CanonicalType => {
       const sigExprs = ctx.b.getSigExprs();
       const sigExpr = sigExprs[sigId as number];
       if (!sigExpr) {
@@ -159,13 +159,14 @@ registerBlock({
 
     // Step 3: Build unified input list
     // SHIM: Convert legacy inputs to synthetic vararg-style entries
-    const allInputEntries: Array<{ alias: string; signal: SigExprId }> = [];
+    const allInputEntries: Array<{ alias: string; signal: ValueExprId }> = [];
 
     // Legacy inputs (in0, in1) become synthetic vararg entries
     for (const key of ['in0', 'in1'] as const) {
       const input = inputsById[key];
-      if (input && input.k === 'sig') {
-        allInputEntries.push({ alias: key, signal: input.id as SigExprId });
+      const isSignal = input && 'type' in input && requireInst(input.type.extent.cardinality, 'cardinality').kind !== 'many';
+      if (input && isSignal) {
+        allInputEntries.push({ alias: key, signal: input.id });
       }
     }
 
@@ -175,17 +176,18 @@ registerBlock({
     for (let i = 0; i < refsValues.length; i++) {
       const value = refsValues[i];
       const conn = refsConnections[i];
-      if (value && value.k === 'sig' && conn) {
+      const isSignal = value && 'type' in value && requireInst(value.type.extent.cardinality, 'cardinality').kind !== 'many';
+      if (value && isSignal && conn) {
         // Use alias if available, otherwise fall back to sourceAddress
         const alias = conn.alias ?? conn.sourceAddress;
-        allInputEntries.push({ alias, signal: value.id as SigExprId });
+        allInputEntries.push({ alias, signal: value.id });
       }
     }
 
     // Step 4: SINGLE PROCESSING LOOP - the ONE code path
     // Process ALL inputs (legacy via shim + actual varargs) identically
     const inputs = new Map<string, CanonicalType>();
-    const inputSignals = new Map<string, SigExprId>();
+    const inputSignals = new Map<string, ValueExprId>();
 
     for (const { alias, signal } of allInputEntries) {
       const inputType = getSigType(signal);
@@ -219,7 +221,7 @@ registerBlock({
 
     return {
       outputsById: {
-        out: { k: 'sig', id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
+        out: { id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },

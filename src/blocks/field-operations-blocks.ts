@@ -8,10 +8,10 @@
 
 import { registerBlock, STANDARD_NUMERIC_PAYLOADS } from './registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../core/ids';
-import { canonicalType, canonicalField, unitPhase01, strideOf, floatConst, vec2Const, vec3Const } from '../core/canonical-types';
+import { canonicalType, canonicalField, unitPhase01, strideOf, floatConst, vec2Const, vec3Const, requireInst } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { defaultSourceConst, defaultSourceTimeRoot } from '../types';
-import type { SigExprId, FieldExprId } from '../compiler/ir/Indices';
+import type { ValueExprId } from '../compiler/ir/Indices';
 import { slotOffset } from '../compiler/ir/Indices';
 import { OpCode } from '../compiler/ir/types';
 
@@ -45,13 +45,13 @@ registerBlock({
     }
 
     const outType = ctx.outTypes[0];
-    // Use fieldIntrinsic to get normalized index (0..1) for each instance element
-    const id01Field = ctx.b.fieldIntrinsic('normalizedIndex', outType);
+    // Use intrinsic to get normalized index (0..1) for each instance element
+    const id01Field = ctx.b.intrinsic('normalizedIndex', outType);
     const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        id01: { k: 'field', id: id01Field, slot, type: outType, stride: strideOf(outType.payload) },
+        id01: { id: id01Field, slot, type: outType, stride: strideOf(outType.payload) },
       },
       // Propagate instance context
       instanceContext: instance,
@@ -99,31 +99,31 @@ registerBlock({
       throw new Error('Sin input required');
     }
 
-    if (input.k === 'sig') {
+    const isField = 'type' in input && requireInst(input.type.extent.cardinality, 'cardinality').kind === 'many';
+
+    if (!isField) {
       // Signal path - use opcode
       const sinFn = ctx.b.opcode(OpCode.Sin);
-      const result = ctx.b.sigMap(input.id, sinFn, canonicalType(FLOAT));
+      const result = ctx.b.kernelMap(input.id, sinFn, canonicalType(FLOAT));
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
       return {
         outputsById: {
-          result: { k: 'sig', id: result, slot, type: outType, stride: strideOf(outType.payload) },
+          result: { id: result, slot, type: outType, stride: strideOf(outType.payload) },
         },
       };
-    } else if (input.k === 'field') {
+    } else {
       // Field path - use field kernel
       const outType = ctx.outTypes[0];
       const sinFn = ctx.b.kernel('fieldSin');
-      const result = ctx.b.fieldMap(input.id, sinFn, outType);
+      const result = ctx.b.kernelMap(input.id, sinFn, outType);
       const slot = ctx.b.allocSlot();
       return {
         outputsById: {
-          result: { k: 'field', id: result, slot, type: outType, stride: strideOf(outType.payload) },
+          result: { id: result, slot, type: outType, stride: strideOf(outType.payload) },
         },
         instanceContext: ctx.inferredInstance,
       };
-    } else {
-      throw new Error('Sin input must be signal or field');
     }
   },
 });
@@ -164,31 +164,31 @@ registerBlock({
       throw new Error('Cos input required');
     }
 
-    if (input.k === 'sig') {
+    const isField = 'type' in input && requireInst(input.type.extent.cardinality, 'cardinality').kind === 'many';
+
+    if (!isField) {
       // Signal path - use opcode
       const cosFn = ctx.b.opcode(OpCode.Cos);
-      const result = ctx.b.sigMap(input.id, cosFn, canonicalType(FLOAT));
+      const result = ctx.b.kernelMap(input.id, cosFn, canonicalType(FLOAT));
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
       return {
         outputsById: {
-          result: { k: 'sig', id: result, slot, type: outType, stride: strideOf(outType.payload) },
+          result: { id: result, slot, type: outType, stride: strideOf(outType.payload) },
         },
       };
-    } else if (input.k === 'field') {
+    } else {
       // Field path - use field kernel
       const outType = ctx.outTypes[0];
       const cosFn = ctx.b.kernel('fieldCos');
-      const result = ctx.b.fieldMap(input.id, cosFn, outType);
+      const result = ctx.b.kernelMap(input.id, cosFn, outType);
       const slot = ctx.b.allocSlot();
       return {
         outputsById: {
-          result: { k: 'field', id: result, slot, type: outType, stride: strideOf(outType.payload) },
+          result: { id: result, slot, type: outType, stride: strideOf(outType.payload) },
         },
         instanceContext: ctx.inferredInstance,
       };
-    } else {
-      throw new Error('Cos input must be signal or field');
     }
   },
 });
@@ -232,26 +232,29 @@ registerBlock({
       throw new Error('Mod inputs required');
     }
 
-    if (a.k === 'sig' && b.k === 'sig') {
+    const aIsField = 'type' in a && requireInst(a.type.extent.cardinality, 'cardinality').kind === 'many';
+    const bIsField = 'type' in b && requireInst(b.type.extent.cardinality, 'cardinality').kind === 'many';
+
+    if (!aIsField && !bIsField) {
       // Signal path
       const modFn = ctx.b.opcode(OpCode.Mod);
-      const result = ctx.b.sigZip([a.id, b.id], modFn, canonicalType(FLOAT));
+      const result = ctx.b.kernelZip([a.id, b.id], modFn, canonicalType(FLOAT));
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
       return {
         outputsById: {
-          result: { k: 'sig', id: result, slot, type: outType, stride: strideOf(outType.payload) },
+          result: { id: result, slot, type: outType, stride: strideOf(outType.payload) },
         },
       };
-    } else if (a.k === 'field' && b.k === 'field') {
+    } else if (aIsField && bIsField) {
       // Field path
       const outType = ctx.outTypes[0];
       const modFn = ctx.b.kernel('fieldMod');
-      const result = ctx.b.fieldZip([a.id, b.id], modFn, outType);
+      const result = ctx.b.kernelZip([a.id, b.id], modFn, outType);
       const slot = ctx.b.allocSlot();
       return {
         outputsById: {
-          result: { k: 'field', id: result, slot, type: outType, stride: strideOf(outType.payload) },
+          result: { id: result, slot, type: outType, stride: strideOf(outType.payload) },
         },
         instanceContext: ctx.inferredInstance,
       };
@@ -298,45 +301,50 @@ registerBlock({
     }
 
     // Get center signals (or create default constants)
-    const centerXSig = centerX?.k === 'sig' ? centerX.id : ctx.b.sigConst(floatConst(0.5), canonicalType(FLOAT));
-    const centerYSig = centerY?.k === 'sig' ? centerY.id : ctx.b.sigConst(floatConst(0.5), canonicalType(FLOAT));
+    const centerXIsSignal = centerX && 'type' in centerX && requireInst(centerX.type.extent.cardinality, 'cardinality').kind !== 'many';
+    const centerYIsSignal = centerY && 'type' in centerY && requireInst(centerY.type.extent.cardinality, 'cardinality').kind !== 'many';
+    const centerXSig = centerXIsSignal ? centerX.id : ctx.b.constant(floatConst(0.5), canonicalType(FLOAT));
+    const centerYSig = centerYIsSignal ? centerY.id : ctx.b.constant(floatConst(0.5), canonicalType(FLOAT));
 
-    if (angle.k === 'sig' && radius.k === 'sig') {
+    const angleIsField = 'type' in angle && requireInst(angle.type.extent.cardinality, 'cardinality').kind === 'many';
+    const radiusIsField = 'type' in radius && requireInst(radius.type.extent.cardinality, 'cardinality').kind === 'many';
+
+    if (!angleIsField && !radiusIsField) {
       // Signal path - build compound operation: pos.x = centerX + radius * cos(angle), pos.y = centerY + radius * sin(angle)
       const cosFn = ctx.b.opcode(OpCode.Cos);
       const sinFn = ctx.b.opcode(OpCode.Sin);
       const mulFn = ctx.b.opcode(OpCode.Mul);
       const addFn = ctx.b.opcode(OpCode.Add);
 
-      const cosAngle = ctx.b.sigMap(angle.id, cosFn, canonicalType(FLOAT));
-      const sinAngle = ctx.b.sigMap(angle.id, sinFn, canonicalType(FLOAT));
-      const xOffset = ctx.b.sigZip([radius.id, cosAngle], mulFn, canonicalType(FLOAT));
-      const yOffset = ctx.b.sigZip([radius.id, sinAngle], mulFn, canonicalType(FLOAT));
-      const x = ctx.b.sigZip([centerXSig, xOffset], addFn, canonicalType(FLOAT));
-      const y = ctx.b.sigZip([centerYSig, yOffset], addFn, canonicalType(FLOAT));
-      const z = ctx.b.sigConst(floatConst(0), canonicalType(FLOAT));
+      const cosAngle = ctx.b.kernelMap(angle.id, cosFn, canonicalType(FLOAT));
+      const sinAngle = ctx.b.kernelMap(angle.id, sinFn, canonicalType(FLOAT));
+      const xOffset = ctx.b.kernelZip([radius.id, cosAngle], mulFn, canonicalType(FLOAT));
+      const yOffset = ctx.b.kernelZip([radius.id, sinAngle], mulFn, canonicalType(FLOAT));
+      const x = ctx.b.kernelZip([centerXSig, xOffset], addFn, canonicalType(FLOAT));
+      const y = ctx.b.kernelZip([centerYSig, yOffset], addFn, canonicalType(FLOAT));
+      const z = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
 
       // Package as vec3 - use composed kernel to build vec3 from (x, y, z)
       const vec3Fn = ctx.b.kernel('vec3FromComponents');
-      const result = ctx.b.sigZip([x, y, z], vec3Fn, canonicalType(VEC3));
+      const result = ctx.b.kernelZip([x, y, z], vec3Fn, canonicalType(VEC3));
 
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
       return {
         outputsById: {
-          pos: { k: 'sig', id: result, slot, type: outType, stride: strideOf(outType.payload) },
+          pos: { id: result, slot, type: outType, stride: strideOf(outType.payload) },
         },
       };
-    } else if (angle.k === 'field' && radius.k === 'field') {
+    } else if (angleIsField && radiusIsField) {
       // Field path - use broadcast for center signals
       const outType = ctx.outTypes[0];
       const floatFieldType = { ...outType, payload: FLOAT, unit: { kind: 'scalar' as const } };
-      const centerXField = ctx.b.Broadcast(centerXSig, floatFieldType);
-      const centerYField = ctx.b.Broadcast(centerYSig, floatFieldType);
+      const centerXField = ctx.b.broadcast(centerXSig, floatFieldType);
+      const centerYField = ctx.b.broadcast(centerYSig, floatFieldType);
 
       // Zip all four fields together: centerX, centerY, radius, angle -> vec3
       const polarFn = ctx.b.kernel('fieldPolarToCartesian');
-      const posField = ctx.b.fieldZip(
+      const posField = ctx.b.kernelZip(
         [centerXField, centerYField, radius.id, angle.id],
         polarFn,
         outType
@@ -346,7 +354,7 @@ registerBlock({
 
       return {
         outputsById: {
-          pos: { k: 'field', id: posField, slot, type: outType, stride: strideOf(outType.payload) },
+          pos: { id: posField, slot, type: outType, stride: strideOf(outType.payload) },
         },
         instanceContext: ctx.inferredInstance,
       };
@@ -354,13 +362,13 @@ registerBlock({
       // Mixed path - broadcast signals to fields
       const outType = ctx.outTypes[0];
       const floatFieldType = { ...outType, payload: FLOAT, unit: { kind: 'scalar' as const } };
-      const angleField = angle.k === 'field' ? angle.id : ctx.b.Broadcast((angle as { k: 'sig'; id: SigExprId }).id, floatFieldType);
-      const radiusField = radius.k === 'field' ? radius.id : ctx.b.Broadcast((radius as { k: 'sig'; id: SigExprId }).id, floatFieldType);
-      const centerXField = ctx.b.Broadcast(centerXSig, floatFieldType);
-      const centerYField = ctx.b.Broadcast(centerYSig, floatFieldType);
+      const angleField = angleIsField ? angle.id : ctx.b.broadcast(angle.id, floatFieldType);
+      const radiusField = radiusIsField ? radius.id : ctx.b.broadcast(radius.id, floatFieldType);
+      const centerXField = ctx.b.broadcast(centerXSig, floatFieldType);
+      const centerYField = ctx.b.broadcast(centerYSig, floatFieldType);
 
       const polarFn = ctx.b.kernel('fieldPolarToCartesian');
-      const posField = ctx.b.fieldZip(
+      const posField = ctx.b.kernelZip(
         [centerXField, centerYField, radiusField, angleField],
         polarFn,
         outType
@@ -370,7 +378,7 @@ registerBlock({
 
       return {
         outputsById: {
-          pos: { k: 'field', id: posField, slot, type: outType, stride: strideOf(outType.payload) },
+          pos: { id: posField, slot, type: outType, stride: strideOf(outType.payload) },
         },
         instanceContext: ctx.inferredInstance,
       };
@@ -414,25 +422,29 @@ registerBlock({
     }
 
     // Get center signals (or create default constants)
-    const centerXSig = centerX?.k === 'sig' ? centerX.id : ctx.b.sigConst(floatConst(0.5), canonicalType(FLOAT));
-    const centerYSig = centerY?.k === 'sig' ? centerY.id : ctx.b.sigConst(floatConst(0.5), canonicalType(FLOAT));
+    const centerXIsSignal = centerX && 'type' in centerX && requireInst(centerX.type.extent.cardinality, 'cardinality').kind !== 'many';
+    const centerYIsSignal = centerY && 'type' in centerY && requireInst(centerY.type.extent.cardinality, 'cardinality').kind !== 'many';
+    const centerXSig = centerXIsSignal ? centerX.id : ctx.b.constant(floatConst(0.5), canonicalType(FLOAT));
+    const centerYSig = centerYIsSignal ? centerY.id : ctx.b.constant(floatConst(0.5), canonicalType(FLOAT));
 
-    if (pos.k === 'sig') {
+    const posIsField = 'type' in pos && requireInst(pos.type.extent.cardinality, 'cardinality').kind === 'many';
+
+    if (!posIsField) {
       // Signal path - extract components and compute angle/radius
       // This would need vec3 component extraction and atan2/sqrt opcodes
       // For now, use kernel approach for signal path too
       const extractFn = ctx.b.kernel('vec3ExtractXY');
-      const xySig = ctx.b.sigMap(pos.id, extractFn, canonicalType(VEC2));
+      const xySig = ctx.b.kernelMap(pos.id, extractFn, canonicalType(VEC2));
 
       // Compute dx = x - centerX, dy = y - centerY
       const subFn = ctx.b.opcode(OpCode.Sub);
       const xyComponents = ctx.b.kernel('vec2ToComponents');
-      const components = ctx.b.sigMap(xySig, xyComponents, canonicalType(FLOAT));
+      const components = ctx.b.kernelMap(xySig, xyComponents, canonicalType(FLOAT));
 
       // Use atan2 and sqrt through kernel
       const polarFn = ctx.b.kernel('cartesianToPolarSig');
-      const angleResult = ctx.b.sigZip([pos.id, centerXSig, centerYSig], polarFn, canonicalType(FLOAT));
-      const radiusResult = ctx.b.sigZip([pos.id, centerXSig, centerYSig], polarFn, canonicalType(FLOAT));
+      const angleResult = ctx.b.kernelZip([pos.id, centerXSig, centerYSig], polarFn, canonicalType(FLOAT));
+      const radiusResult = ctx.b.kernelZip([pos.id, centerXSig, centerYSig], polarFn, canonicalType(FLOAT));
 
       const outTypeAngle = ctx.outTypes[0];
       const outTypeRadius = ctx.outTypes[1];
@@ -441,26 +453,26 @@ registerBlock({
 
       return {
         outputsById: {
-          angle: { k: 'sig', id: angleResult, slot: angleSlot, type: outTypeAngle, stride: strideOf(outTypeAngle.payload) },
-          radius: { k: 'sig', id: radiusResult, slot: radiusSlot, type: outTypeRadius, stride: strideOf(outTypeRadius.payload) },
+          angle: { id: angleResult, slot: angleSlot, type: outTypeAngle, stride: strideOf(outTypeAngle.payload) },
+          radius: { id: radiusResult, slot: radiusSlot, type: outTypeRadius, stride: strideOf(outTypeRadius.payload) },
         },
       };
-    } else if (pos.k === 'field') {
+    } else {
       // Field path - use broadcast for center signals
       const outTypeAngle = ctx.outTypes[0];
       const outTypeRadius = ctx.outTypes[1];
       const floatFieldType = { ...outTypeAngle, payload: FLOAT, unit: { kind: 'scalar' as const } };
-      const centerXField = ctx.b.Broadcast(centerXSig, floatFieldType);
-      const centerYField = ctx.b.Broadcast(centerYSig, floatFieldType);
+      const centerXField = ctx.b.broadcast(centerXSig, floatFieldType);
+      const centerYField = ctx.b.broadcast(centerYSig, floatFieldType);
 
       // Zip all three fields together: pos, centerX, centerY -> (angle, radius)
       const polarFn = ctx.b.kernel('fieldCartesianToPolar');
-      const angleField = ctx.b.fieldZip(
+      const angleField = ctx.b.kernelZip(
         [pos.id, centerXField, centerYField],
         polarFn,
         outTypeAngle
       );
-      const radiusField = ctx.b.fieldZip(
+      const radiusField = ctx.b.kernelZip(
         [pos.id, centerXField, centerYField],
         polarFn,
         outTypeRadius
@@ -471,13 +483,11 @@ registerBlock({
 
       return {
         outputsById: {
-          angle: { k: 'field', id: angleField, slot: angleSlot, type: outTypeAngle, stride: strideOf(outTypeAngle.payload) },
-          radius: { k: 'field', id: radiusField, slot: radiusSlot, type: outTypeRadius, stride: strideOf(outTypeRadius.payload) },
+          angle: { id: angleField, slot: angleSlot, type: outTypeAngle, stride: strideOf(outTypeAngle.payload) },
+          radius: { id: radiusField, slot: radiusSlot, type: outTypeRadius, stride: strideOf(outTypeRadius.payload) },
         },
         instanceContext: ctx.inferredInstance,
       };
-    } else {
-      throw new Error('CartesianToPolar pos must be signal or field');
     }
   },
 });
@@ -521,45 +531,52 @@ registerBlock({
     }
 
     // Get signal inputs (or create default constants)
-    const phaseSig = phase?.k === 'sig' ? phase.id : ctx.b.sigConst(floatConst(0), canonicalType(FLOAT, unitPhase01()));
-    const baseSig = base?.k === 'sig' ? base.id : ctx.b.sigConst(floatConst(0.5), canonicalType(FLOAT));
-    const ampSig = amplitude?.k === 'sig' ? amplitude.id : ctx.b.sigConst(floatConst(1), canonicalType(FLOAT));
-    const spreadSig = spread?.k === 'sig' ? spread.id : ctx.b.sigConst(floatConst(1), canonicalType(FLOAT));
+    const phaseIsSignal = phase && 'type' in phase && requireInst(phase.type.extent.cardinality, 'cardinality').kind !== 'many';
+    const baseIsSignal = base && 'type' in base && requireInst(base.type.extent.cardinality, 'cardinality').kind !== 'many';
+    const ampIsSignal = amplitude && 'type' in amplitude && requireInst(amplitude.type.extent.cardinality, 'cardinality').kind !== 'many';
+    const spreadIsSignal = spread && 'type' in spread && requireInst(spread.type.extent.cardinality, 'cardinality').kind !== 'many';
 
-    if (id01.k === 'sig') {
+    const phaseSig = phaseIsSignal ? phase.id : ctx.b.constant(floatConst(0), canonicalType(FLOAT, unitPhase01()));
+    const baseSig = baseIsSignal ? base.id : ctx.b.constant(floatConst(0.5), canonicalType(FLOAT));
+    const ampSig = ampIsSignal ? amplitude.id : ctx.b.constant(floatConst(1), canonicalType(FLOAT));
+    const spreadSig = spreadIsSignal ? spread.id : ctx.b.constant(floatConst(1), canonicalType(FLOAT));
+
+    const id01IsField = 'type' in id01 && requireInst(id01.type.extent.cardinality, 'cardinality').kind === 'many';
+
+    if (!id01IsField) {
       // Signal path - compute: base + amplitude * sin(2π * (phase + id01 * spread))
       const mulFn = ctx.b.opcode(OpCode.Mul);
       const addFn = ctx.b.opcode(OpCode.Add);
       const sinFn = ctx.b.opcode(OpCode.Sin);
 
-      const idSpread = ctx.b.sigZip([id01.id, spreadSig], mulFn, canonicalType(FLOAT));
-      const phaseOffset = ctx.b.sigZip([phaseSig, idSpread], addFn, canonicalType(FLOAT));
-      const tau = ctx.b.sigConst(floatConst(2 * Math.PI), canonicalType(FLOAT));
-      const angle = ctx.b.sigZip([tau, phaseOffset], mulFn, canonicalType(FLOAT));
-      const sinValue = ctx.b.sigMap(angle, sinFn, canonicalType(FLOAT));
-      const scaled = ctx.b.sigZip([ampSig, sinValue], mulFn, canonicalType(FLOAT));
-      const result = ctx.b.sigZip([baseSig, scaled], addFn, canonicalType(FLOAT));
+      const idSpread = ctx.b.kernelZip([id01.id, spreadSig], mulFn, canonicalType(FLOAT));
+      const phaseOffset = ctx.b.kernelZip([phaseSig, idSpread], addFn, canonicalType(FLOAT));
+      const tau = ctx.b.constant(floatConst(2 * Math.PI), canonicalType(FLOAT));
+      const angle = ctx.b.kernelZip([tau, phaseOffset], mulFn, canonicalType(FLOAT));
+      const sinValue = ctx.b.kernelMap(angle, sinFn, canonicalType(FLOAT));
+      const scaled = ctx.b.kernelZip([ampSig, sinValue], mulFn, canonicalType(FLOAT));
+      const result = ctx.b.kernelZip([baseSig, scaled], addFn, canonicalType(FLOAT));
 
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
 
       return {
         outputsById: {
-          value: { k: 'sig', id: result, slot, type: outType, stride: strideOf(outType.payload) },
+          value: { id: result, slot, type: outType, stride: strideOf(outType.payload) },
         },
       };
-    } else if (id01.k === 'field') {
+    } else {
       // Field path - broadcast signal inputs to fields
       const outType = ctx.outTypes[0];
       const floatFieldType = { ...outType, payload: FLOAT, unit: { kind: 'scalar' as const } };
-      const phaseField = ctx.b.Broadcast(phaseSig, floatFieldType);
-      const baseField = ctx.b.Broadcast(baseSig, floatFieldType);
-      const ampField = ctx.b.Broadcast(ampSig, floatFieldType);
-      const spreadField = ctx.b.Broadcast(spreadSig, floatFieldType);
+      const phaseField = ctx.b.broadcast(phaseSig, floatFieldType);
+      const baseField = ctx.b.broadcast(baseSig, floatFieldType);
+      const ampField = ctx.b.broadcast(ampSig, floatFieldType);
+      const spreadField = ctx.b.broadcast(spreadSig, floatFieldType);
 
       // Compute: base + amplitude * sin(2π * (phase + id01 * spread))
       const pulseFn = ctx.b.kernel('fieldPulse');
-      const result = ctx.b.fieldZip(
+      const result = ctx.b.kernelZip(
         [id01.id, phaseField, baseField, ampField, spreadField],
         pulseFn,
         outType
@@ -569,12 +586,10 @@ registerBlock({
 
       return {
         outputsById: {
-          value: { k: 'field', id: result, slot, type: outType, stride: strideOf(outType.payload) },
+          value: { id: result, slot, type: outType, stride: strideOf(outType.payload) },
         },
         instanceContext: ctx.inferredInstance,
       };
-    } else {
-      throw new Error('Pulse id01 must be signal or field');
     }
   },
 });
@@ -614,38 +629,39 @@ registerBlock({
     const GOLDEN_ANGLE = 2.39996322972865332;
 
     // Get turns signal (or create default constant)
-    const turnsSig = turns?.k === 'sig' ? turns.id : ctx.b.sigConst(floatConst(50), canonicalType(FLOAT));
+    const turnsIsSignal = turns && 'type' in turns && requireInst(turns.type.extent.cardinality, 'cardinality').kind !== 'many';
+    const turnsSig = turnsIsSignal ? turns.id : ctx.b.constant(floatConst(50), canonicalType(FLOAT));
 
-    if (id01.k === 'sig') {
+    const id01IsField = 'type' in id01 && requireInst(id01.type.extent.cardinality, 'cardinality').kind === 'many';
+
+    if (!id01IsField) {
       // Signal path - angle = id01 * turns * goldenAngle
-      const goldenAngleConst = ctx.b.sigConst(floatConst(GOLDEN_ANGLE), canonicalType(FLOAT));
+      const goldenAngleConst = ctx.b.constant(floatConst(GOLDEN_ANGLE), canonicalType(FLOAT));
       const mulFn = ctx.b.opcode(OpCode.Mul);
-      const turnsScaled = ctx.b.sigZip([id01.id, turnsSig], mulFn, canonicalType(FLOAT));
-      const result = ctx.b.sigZip([turnsScaled, goldenAngleConst], mulFn, canonicalType(FLOAT));
+      const turnsScaled = ctx.b.kernelZip([id01.id, turnsSig], mulFn, canonicalType(FLOAT));
+      const result = ctx.b.kernelZip([turnsScaled, goldenAngleConst], mulFn, canonicalType(FLOAT));
 
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
 
       return {
         outputsById: {
-          angle: { k: 'sig', id: result, slot, type: outType, stride: strideOf(outType.payload) },
+          angle: { id: result, slot, type: outType, stride: strideOf(outType.payload) },
         },
       };
-    } else if (id01.k === 'field') {
-      // Field path - use fieldZipSig kernel with turns signal
+    } else {
+      // Field path - use kernelZipSig kernel with turns signal
       const goldenAngleFn = ctx.b.kernel('fieldGoldenAngle');
       const outType = ctx.outTypes[0];
-      const result = ctx.b.fieldZipSig(id01.id, [turnsSig], goldenAngleFn, outType);
+      const result = ctx.b.kernelZipSig(id01.id, [turnsSig], goldenAngleFn, outType);
       const slot = ctx.b.allocSlot();
 
       return {
         outputsById: {
-          angle: { k: 'field', id: result, slot, type: outType, stride: strideOf(outType.payload) },
+          angle: { id: result, slot, type: outType, stride: strideOf(outType.payload) },
         },
         instanceContext: ctx.inferredInstance,
       };
-    } else {
-      throw new Error('GoldenAngle id01 must be signal or field');
     }
   },
 });
@@ -684,34 +700,38 @@ registerBlock({
     }
 
     // Get signal inputs (or create default constants)
-    const phaseSig = phase?.k === 'sig' ? phase.id : ctx.b.sigConst(floatConst(0), canonicalType(FLOAT));
-    const spinSig = spin?.k === 'sig' ? spin.id : ctx.b.sigConst(floatConst(1), canonicalType(FLOAT));
+    const phaseIsSignal = phase && 'type' in phase && requireInst(phase.type.extent.cardinality, 'cardinality').kind !== 'many';
+    const spinIsSignal = spin && 'type' in spin && requireInst(spin.type.extent.cardinality, 'cardinality').kind !== 'many';
+    const phaseSig = phaseIsSignal ? phase.id : ctx.b.constant(floatConst(0), canonicalType(FLOAT));
+    const spinSig = spinIsSignal ? spin.id : ctx.b.constant(floatConst(1), canonicalType(FLOAT));
 
-    if (id01.k === 'sig') {
+    const id01IsField = 'type' in id01 && requireInst(id01.type.extent.cardinality, 'cardinality').kind === 'many';
+
+    if (!id01IsField) {
       // Signal path - offset = 2π * phase * spin
-      const tau = ctx.b.sigConst(floatConst(2 * Math.PI), canonicalType(FLOAT));
+      const tau = ctx.b.constant(floatConst(2 * Math.PI), canonicalType(FLOAT));
       const mulFn = ctx.b.opcode(OpCode.Mul);
-      const phaseSpin = ctx.b.sigZip([phaseSig, spinSig], mulFn, canonicalType(FLOAT));
-      const result = ctx.b.sigZip([tau, phaseSpin], mulFn, canonicalType(FLOAT));
+      const phaseSpin = ctx.b.kernelZip([phaseSig, spinSig], mulFn, canonicalType(FLOAT));
+      const result = ctx.b.kernelZip([tau, phaseSpin], mulFn, canonicalType(FLOAT));
 
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
 
       return {
         outputsById: {
-          offset: { k: 'sig', id: result, slot, type: outType, stride: strideOf(outType.payload) },
+          offset: { id: result, slot, type: outType, stride: strideOf(outType.payload) },
         },
       };
-    } else if (id01.k === 'field') {
+    } else {
       // Field path - broadcast signal inputs to fields
       const outType = ctx.outTypes[0];
       const floatFieldType = { ...outType, payload: FLOAT, unit: { kind: 'scalar' as const } };
-      const phaseField = ctx.b.Broadcast(phaseSig, floatFieldType);
-      const spinField = ctx.b.Broadcast(spinSig, floatFieldType);
+      const phaseField = ctx.b.broadcast(phaseSig, floatFieldType);
+      const spinField = ctx.b.broadcast(spinSig, floatFieldType);
 
       // offset = 2π * phase * spin
       const offsetFn = ctx.b.kernel('fieldAngularOffset');
-      const result = ctx.b.fieldZip(
+      const result = ctx.b.kernelZip(
         [id01.id, phaseField, spinField],
         offsetFn,
         outType
@@ -721,12 +741,10 @@ registerBlock({
 
       return {
         outputsById: {
-          offset: { k: 'field', id: result, slot, type: outType, stride: strideOf(outType.payload) },
+          offset: { id: result, slot, type: outType, stride: strideOf(outType.payload) },
         },
         instanceContext: ctx.inferredInstance,
       };
-    } else {
-      throw new Error('AngularOffset id01 must be signal or field');
     }
   },
 });
@@ -762,26 +780,29 @@ registerBlock({
       throw new Error('RadiusSqrt id01 and radius required');
     }
 
-    if (id01.k === 'sig' && radius.k === 'sig') {
+    const id01IsField = 'type' in id01 && requireInst(id01.type.extent.cardinality, 'cardinality').kind === 'many';
+    const radiusIsField = 'type' in radius && requireInst(radius.type.extent.cardinality, 'cardinality').kind === 'many';
+
+    if (!id01IsField && !radiusIsField) {
       // Signal path - effective_radius = radius * sqrt(id01)
       const sqrtFn = ctx.b.opcode(OpCode.Sqrt);
       const mulFn = ctx.b.opcode(OpCode.Mul);
-      const sqrtId = ctx.b.sigMap(id01.id, sqrtFn, canonicalType(FLOAT));
-      const result = ctx.b.sigZip([radius.id, sqrtId], mulFn, canonicalType(FLOAT));
+      const sqrtId = ctx.b.kernelMap(id01.id, sqrtFn, canonicalType(FLOAT));
+      const result = ctx.b.kernelZip([radius.id, sqrtId], mulFn, canonicalType(FLOAT));
 
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
 
       return {
         outputsById: {
-          out: { k: 'sig', id: result, slot, type: outType, stride: strideOf(outType.payload) },
+          out: { id: result, slot, type: outType, stride: strideOf(outType.payload) },
         },
       };
-    } else if (id01.k === 'field' && radius.k === 'field') {
+    } else if (id01IsField && radiusIsField) {
       // Field path - use field kernel
       const outType = ctx.outTypes[0];
       const sqrtFn = ctx.b.kernel('fieldRadiusSqrt');
-      const result = ctx.b.fieldZip(
+      const result = ctx.b.kernelZip(
         [id01.id, radius.id],
         sqrtFn,
         outType
@@ -791,7 +812,7 @@ registerBlock({
 
       return {
         outputsById: {
-          out: { k: 'field', id: result, slot, type: outType, stride: strideOf(outType.payload) },
+          out: { id: result, slot, type: outType, stride: strideOf(outType.payload) },
         },
         instanceContext: ctx.inferredInstance,
       };
@@ -799,11 +820,11 @@ registerBlock({
       // Mixed path - broadcast signals to fields
       const outType = ctx.outTypes[0];
       const floatFieldType = { ...outType, payload: FLOAT, unit: { kind: 'scalar' as const } };
-      const id01Field = id01.k === 'field' ? id01.id : ctx.b.Broadcast((id01 as { k: 'sig'; id: SigExprId }).id, floatFieldType);
-      const radiusField = radius.k === 'field' ? radius.id : ctx.b.Broadcast((radius as { k: 'sig'; id: SigExprId }).id, floatFieldType);
+      const id01Field = id01IsField ? id01.id : ctx.b.broadcast(id01.id, floatFieldType);
+      const radiusField = radiusIsField ? radius.id : ctx.b.broadcast(radius.id, floatFieldType);
 
       const sqrtFn = ctx.b.kernel('fieldRadiusSqrt');
-      const result = ctx.b.fieldZip(
+      const result = ctx.b.kernelZip(
         [id01Field, radiusField],
         sqrtFn,
         outType
@@ -813,7 +834,7 @@ registerBlock({
 
       return {
         outputsById: {
-          out: { k: 'field', id: result, slot, type: outType, stride: strideOf(outType.payload) },
+          out: { id: result, slot, type: outType, stride: strideOf(outType.payload) },
         },
         instanceContext: ctx.inferredInstance,
       };
@@ -859,11 +880,17 @@ registerBlock({
     }
 
     // Get amount signals (or create default constants)
-    const amountXSig = amountX?.k === 'sig' ? amountX.id : ctx.b.sigConst(floatConst(0.01), canonicalType(FLOAT));
-    const amountYSig = amountY?.k === 'sig' ? amountY.id : ctx.b.sigConst(floatConst(0.01), canonicalType(FLOAT));
-    const amountZSig = amountZ?.k === 'sig' ? amountZ.id : ctx.b.sigConst(floatConst(0.0), canonicalType(FLOAT));
+    const amountXIsSignal = amountX && 'type' in amountX && requireInst(amountX.type.extent.cardinality, 'cardinality').kind !== 'many';
+    const amountYIsSignal = amountY && 'type' in amountY && requireInst(amountY.type.extent.cardinality, 'cardinality').kind !== 'many';
+    const amountZIsSignal = amountZ && 'type' in amountZ && requireInst(amountZ.type.extent.cardinality, 'cardinality').kind !== 'many';
+    const amountXSig = amountXIsSignal ? amountX.id : ctx.b.constant(floatConst(0.01), canonicalType(FLOAT));
+    const amountYSig = amountYIsSignal ? amountY.id : ctx.b.constant(floatConst(0.01), canonicalType(FLOAT));
+    const amountZSig = amountZIsSignal ? amountZ.id : ctx.b.constant(floatConst(0.0), canonicalType(FLOAT));
 
-    if (pos.k === 'sig' && rand.k === 'sig') {
+    const posIsField = 'type' in pos && requireInst(pos.type.extent.cardinality, 'cardinality').kind === 'many';
+    const randIsField = 'type' in rand && requireInst(rand.type.extent.cardinality, 'cardinality').kind === 'many';
+
+    if (!posIsField && !randIsField) {
       // Signal path - decompose input vec3, compute jittered components, recompose
       // Read input vec3 components from slot
       const posSlot = pos.slot;
@@ -877,19 +904,19 @@ registerBlock({
       const addFn = ctx.b.opcode(OpCode.Add);
       const subFn = ctx.b.opcode(OpCode.Sub);
 
-      const half = ctx.b.sigConst(floatConst(0.5), canonicalType(FLOAT));
-      const two = ctx.b.sigConst(floatConst(2), canonicalType(FLOAT));
+      const half = ctx.b.constant(floatConst(0.5), canonicalType(FLOAT));
+      const two = ctx.b.constant(floatConst(2), canonicalType(FLOAT));
 
-      const centered = ctx.b.sigZip([rand.id, half], subFn, canonicalType(FLOAT));
-      const scaled = ctx.b.sigZip([centered, two], mulFn, canonicalType(FLOAT));
+      const centered = ctx.b.kernelZip([rand.id, half], subFn, canonicalType(FLOAT));
+      const scaled = ctx.b.kernelZip([centered, two], mulFn, canonicalType(FLOAT));
 
-      const jitterX = ctx.b.sigZip([amountXSig, scaled], mulFn, canonicalType(FLOAT));
-      const jitterY = ctx.b.sigZip([amountYSig, scaled], mulFn, canonicalType(FLOAT));
-      const jitterZ = ctx.b.sigZip([amountZSig, scaled], mulFn, canonicalType(FLOAT));
+      const jitterX = ctx.b.kernelZip([amountXSig, scaled], mulFn, canonicalType(FLOAT));
+      const jitterY = ctx.b.kernelZip([amountYSig, scaled], mulFn, canonicalType(FLOAT));
+      const jitterZ = ctx.b.kernelZip([amountZSig, scaled], mulFn, canonicalType(FLOAT));
 
-      const xOut = ctx.b.sigZip([xIn, jitterX], addFn, canonicalType(FLOAT));
-      const yOut = ctx.b.sigZip([yIn, jitterY], addFn, canonicalType(FLOAT));
-      const zOut = ctx.b.sigZip([zIn, jitterZ], addFn, canonicalType(FLOAT));
+      const xOut = ctx.b.kernelZip([xIn, jitterX], addFn, canonicalType(FLOAT));
+      const yOut = ctx.b.kernelZip([yIn, jitterY], addFn, canonicalType(FLOAT));
+      const zOut = ctx.b.kernelZip([zIn, jitterZ], addFn, canonicalType(FLOAT));
 
       // Multi-component signal: allocate strided slot, emit write step
       const outType = ctx.outTypes[0];
@@ -901,19 +928,19 @@ registerBlock({
 
       return {
         outputsById: {
-          out: { k: 'sig', id: xOut, slot, type: outType, stride, components },
+          out: { id: xOut, slot, type: outType, stride, components },
         },
       };
-    } else if (pos.k === 'field' && rand.k === 'field') {
+    } else if (posIsField && randIsField) {
       // Field path - broadcast amount signals to fields
       const outType = ctx.outTypes[0];
       const floatFieldType = { ...outType, payload: FLOAT, unit: { kind: 'scalar' as const } };
-      const amountXField = ctx.b.Broadcast(amountXSig, floatFieldType);
-      const amountYField = ctx.b.Broadcast(amountYSig, floatFieldType);
-      const amountZField = ctx.b.Broadcast(amountZSig, floatFieldType);
+      const amountXField = ctx.b.broadcast(amountXSig, floatFieldType);
+      const amountYField = ctx.b.broadcast(amountYSig, floatFieldType);
+      const amountZField = ctx.b.broadcast(amountZSig, floatFieldType);
 
       const jitterFn = ctx.b.kernel('fieldJitterVec');
-      const result = ctx.b.fieldZip(
+      const result = ctx.b.kernelZip(
         [pos.id, rand.id, amountXField, amountYField, amountZField],
         jitterFn,
         outType
@@ -923,7 +950,7 @@ registerBlock({
 
       return {
         outputsById: {
-          out: { k: 'field', id: result, slot, type: outType, stride: strideOf(outType.payload) },
+          out: { id: result, slot, type: outType, stride: strideOf(outType.payload) },
         },
         instanceContext: ctx.inferredInstance,
       };
@@ -932,14 +959,14 @@ registerBlock({
       const outType = ctx.outTypes[0];
       const vec3FieldType = outType;
       const floatFieldType = { ...outType, payload: FLOAT, unit: { kind: 'scalar' as const } };
-      const posField = pos.k === 'field' ? pos.id : ctx.b.Broadcast((pos as { k: 'sig'; id: SigExprId }).id, vec3FieldType);
-      const randField = rand.k === 'field' ? rand.id : ctx.b.Broadcast((rand as { k: 'sig'; id: SigExprId }).id, floatFieldType);
-      const amountXField = ctx.b.Broadcast(amountXSig, floatFieldType);
-      const amountYField = ctx.b.Broadcast(amountYSig, floatFieldType);
-      const amountZField = ctx.b.Broadcast(amountZSig, floatFieldType);
+      const posField = posIsField ? pos.id : ctx.b.broadcast(pos.id, vec3FieldType);
+      const randField = randIsField ? rand.id : ctx.b.broadcast(rand.id, floatFieldType);
+      const amountXField = ctx.b.broadcast(amountXSig, floatFieldType);
+      const amountYField = ctx.b.broadcast(amountYSig, floatFieldType);
+      const amountZField = ctx.b.broadcast(amountZSig, floatFieldType);
 
       const jitterFn = ctx.b.kernel('fieldJitterVec');
-      const result = ctx.b.fieldZip(
+      const result = ctx.b.kernelZip(
         [posField, randField, amountXField, amountYField, amountZField],
         jitterFn,
         outType
@@ -949,7 +976,7 @@ registerBlock({
 
       return {
         outputsById: {
-          out: { k: 'field', id: result, slot, type: outType, stride: strideOf(outType.payload) },
+          out: { id: result, slot, type: outType, stride: strideOf(outType.payload) },
         },
         instanceContext: ctx.inferredInstance,
       };
@@ -989,33 +1016,36 @@ registerBlock({
     }
 
     // Get phase signal (or create default constant)
-    const phaseSig = phase?.k === 'sig' ? phase.id : ctx.b.sigConst(floatConst(0), canonicalType(FLOAT));
+    const phaseIsSignal = phase && 'type' in phase && requireInst(phase.type.extent.cardinality, 'cardinality').kind !== 'many';
+    const phaseSig = phaseIsSignal ? phase.id : ctx.b.constant(floatConst(0), canonicalType(FLOAT));
 
-    if (id01.k === 'sig') {
+    const id01IsField = 'type' in id01 && requireInst(id01.type.extent.cardinality, 'cardinality').kind === 'many';
+
+    if (!id01IsField) {
       // Signal path - hue = (id01 + phase) mod 1.0
       const addFn = ctx.b.opcode(OpCode.Add);
       const modFn = ctx.b.opcode(OpCode.Mod);
-      const sum = ctx.b.sigZip([id01.id, phaseSig], addFn, canonicalType(FLOAT));
-      const one = ctx.b.sigConst(floatConst(1.0), canonicalType(FLOAT));
-      const result = ctx.b.sigZip([sum, one], modFn, canonicalType(FLOAT));
+      const sum = ctx.b.kernelZip([id01.id, phaseSig], addFn, canonicalType(FLOAT));
+      const one = ctx.b.constant(floatConst(1.0), canonicalType(FLOAT));
+      const result = ctx.b.kernelZip([sum, one], modFn, canonicalType(FLOAT));
 
       const outType = ctx.outTypes[0];
       const slot = ctx.b.allocSlot();
 
       return {
         outputsById: {
-          hue: { k: 'sig', id: result, slot, type: outType, stride: strideOf(outType.payload) },
+          hue: { id: result, slot, type: outType, stride: strideOf(outType.payload) },
         },
       };
-    } else if (id01.k === 'field') {
+    } else {
       // Field path - broadcast phase to field
       const outType = ctx.outTypes[0];
       const floatFieldType = { ...outType, payload: FLOAT, unit: { kind: 'scalar' as const } };
-      const phaseField = ctx.b.Broadcast(phaseSig, floatFieldType);
+      const phaseField = ctx.b.broadcast(phaseSig, floatFieldType);
 
       // hue = (id01 + phase) mod 1.0
       const hueFn = ctx.b.kernel('fieldHueFromPhase');
-      const result = ctx.b.fieldZip(
+      const result = ctx.b.kernelZip(
         [id01.id, phaseField],
         hueFn,
         outType
@@ -1025,12 +1055,10 @@ registerBlock({
 
       return {
         outputsById: {
-          hue: { k: 'field', id: result, slot, type: outType, stride: strideOf(outType.payload) },
+          hue: { id: result, slot, type: outType, stride: strideOf(outType.payload) },
         },
         instanceContext: ctx.inferredInstance,
       };
-    } else {
-      throw new Error('HueFromPhase id01 must be signal or field');
     }
   },
 });
@@ -1070,7 +1098,10 @@ registerBlock({
       throw new Error('SetZ pos and z required');
     }
 
-    if (pos.k === 'sig' && z.k === 'sig') {
+    const posIsField = 'type' in pos && requireInst(pos.type.extent.cardinality, 'cardinality').kind === 'many';
+    const zIsField = 'type' in z && requireInst(z.type.extent.cardinality, 'cardinality').kind === 'many';
+
+    if (!posIsField && !zIsField) {
       // Signal path - decompose input vec3, replace z component, recompose
       // Read input vec3 components from slot
       const posSlot = pos.slot;
@@ -1087,14 +1118,14 @@ registerBlock({
 
       return {
         outputsById: {
-          out: { k: 'sig', id: xIn, slot, type: outType, stride, components },
+          out: { id: xIn, slot, type: outType, stride, components },
         },
       };
-    } else if (pos.k === 'field' && z.k === 'field') {
+    } else if (posIsField && zIsField) {
       // Field path - zip position and z together
       const outType = ctx.outTypes[0];
       const setZFn = ctx.b.kernel('fieldSetZ');
-      const result = ctx.b.fieldZip(
+      const result = ctx.b.kernelZip(
         [pos.id, z.id],
         setZFn,
         outType
@@ -1104,7 +1135,7 @@ registerBlock({
 
       return {
         outputsById: {
-          out: { k: 'field', id: result, slot, type: outType, stride: strideOf(outType.payload) },
+          out: { id: result, slot, type: outType, stride: strideOf(outType.payload) },
         },
         instanceContext: ctx.inferredInstance,
       };
@@ -1113,11 +1144,11 @@ registerBlock({
       const outType = ctx.outTypes[0];
       const vec3FieldType = outType;
       const floatFieldType = { ...outType, payload: FLOAT, unit: { kind: 'scalar' as const } };
-      const posField = pos.k === 'field' ? pos.id : ctx.b.Broadcast((pos as { k: 'sig'; id: SigExprId }).id, vec3FieldType);
-      const zField = z.k === 'field' ? z.id : ctx.b.Broadcast((z as { k: 'sig'; id: SigExprId }).id, floatFieldType);
+      const posField = posIsField ? pos.id : ctx.b.broadcast(pos.id, vec3FieldType);
+      const zField = zIsField ? z.id : ctx.b.broadcast(z.id, floatFieldType);
 
       const setZFn = ctx.b.kernel('fieldSetZ');
-      const result = ctx.b.fieldZip(
+      const result = ctx.b.kernelZip(
         [posField, zField],
         setZFn,
         outType
@@ -1127,7 +1158,7 @@ registerBlock({
 
       return {
         outputsById: {
-          out: { k: 'field', id: result, slot, type: outType, stride: strideOf(outType.payload) },
+          out: { id: result, slot, type: outType, stride: strideOf(outType.payload) },
         },
         instanceContext: ctx.inferredInstance,
       };

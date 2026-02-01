@@ -61,13 +61,13 @@ registerBlock({
   },
   lower: ({ ctx, config }) => {
     const channel = (config?.channel as string) ?? 'mouse.x';
-    const sig = ctx.b.sigExternal(channel, canonicalType(FLOAT));
+    const sig = ctx.b.external(channel, canonicalType(FLOAT));
     const slot = ctx.b.allocSlot();
     const outType = ctx.outTypes[0];
 
     return {
       outputsById: {
-        value: { k: 'sig', id: sig, slot, type: outType, stride: strideOf(outType.payload) },
+        value: { id: sig, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
@@ -128,30 +128,30 @@ registerBlock({
     const channel = (config?.channel as string) ?? 'mouse.x';
     const threshold = (config?.threshold as number) ?? 0.5;
 
-    const inputSig = ctx.b.sigExternal(channel, canonicalType(FLOAT));
-    const thresholdSig = ctx.b.sigConst(floatConst(threshold), canonicalType(FLOAT));
+    const inputSig = ctx.b.external(channel, canonicalType(FLOAT));
+    const thresholdSig = ctx.b.constant(floatConst(threshold), canonicalType(FLOAT));
 
     // gate = input >= threshold ? 1 : 0
     // We need >= but only have Gt (>), Lt (<), and Eq (==)
     // Implement: a >= b  <=>  NOT(b > a)  <=>  1 - (b > a)
     // Since Gt returns 0 or 1: if threshold > input, returns 1, then 1-1=0 (correct)
     //                          if threshold <= input, returns 0, then 1-0=1 (correct)
-    const oneSig = ctx.b.sigConst(floatConst(1), canonicalType(FLOAT));
+    const oneSig = ctx.b.constant(floatConst(1), canonicalType(FLOAT));
     const gtFn = ctx.b.opcode(OpCode.Gt);
     const subFn = ctx.b.opcode(OpCode.Sub);
 
     // thresholdGtInput = (threshold > input) ? 1 : 0
-    const thresholdGtInput = ctx.b.sigZip([thresholdSig, inputSig], gtFn, canonicalType(FLOAT));
+    const thresholdGtInput = ctx.b.kernelZip([thresholdSig, inputSig], gtFn, canonicalType(FLOAT));
 
     // gateSig = 1 - thresholdGtInput  =>  (input >= threshold) ? 1 : 0
-    const gateSig = ctx.b.sigZip([oneSig, thresholdGtInput], subFn, canonicalType(FLOAT));
+    const gateSig = ctx.b.kernelZip([oneSig, thresholdGtInput], subFn, canonicalType(FLOAT));
 
     const slot = ctx.b.allocSlot();
     const outType = ctx.outTypes[0];
 
     return {
       outputsById: {
-        gate: { k: 'sig', id: gateSig, slot, type: outType, stride: strideOf(outType.payload) },
+        gate: { id: gateSig, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
@@ -194,8 +194,8 @@ registerBlock({
   lower: ({ ctx, config }) => {
     const channelBase = (config?.channelBase as string) ?? 'mouse';
 
-    const xSig = ctx.b.sigExternal(`${channelBase}.x`, canonicalType(FLOAT));
-    const ySig = ctx.b.sigExternal(`${channelBase}.y`, canonicalType(FLOAT));
+    const xSig = ctx.b.external(`${channelBase}.x`, canonicalType(FLOAT));
+    const ySig = ctx.b.external(`${channelBase}.y`, canonicalType(FLOAT));
 
     // Pack x and y into vec2 using strided slot write
     const outType = ctx.outTypes[0];
@@ -208,7 +208,7 @@ registerBlock({
 
     return {
       outputsById: {
-        position: { k: 'sig', id: xSig, slot, type: outType, stride, components },
+        position: { id: xSig, slot, type: outType, stride, components },
       },
     };
   },

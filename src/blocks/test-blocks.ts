@@ -6,9 +6,9 @@
  */
 
 import { registerBlock } from './registry';
-import { canonicalType } from '../core/canonical-types';
+import { canonicalType, requireInst } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
-import type { SigExprId } from '../types';
+import type { ValueExprId } from '../compiler/ir/Indices';
 
 // =============================================================================
 // TestSignal - Captures a signal value for testing
@@ -58,13 +58,13 @@ registerBlock({
   lower: ({ ctx, inputsById }) => {
     const value = inputsById.value;
 
-    if (!value || value.k !== 'sig') {
+    if (!value || requireInst(value.type.extent.temporality, 'temporality').kind !== 'continuous') {
       throw new Error('TestSignal value input must be a signal');
     }
 
     // Emit a StepEvalSig to force evaluation of this signal
     const slot = ctx.b.allocSlot();
-    ctx.b.stepEvalSig(value.id as SigExprId, slot);
+    ctx.b.stepEvalSig(value.id as ValueExprId, slot);
 
     // Sink block - no outputs
     return {

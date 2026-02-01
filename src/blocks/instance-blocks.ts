@@ -8,7 +8,7 @@
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../core/ids';
-import { canonicalType, canonicalField, unitPhase01, unitWorld3, strideOf, type PayloadType, floatConst, vec2Const, vec3Const, colorConst, intConst } from '../core/canonical-types';
+import { canonicalType, canonicalField, unitPhase01, unitWorld3, strideOf, type PayloadType, floatConst, vec2Const, vec3Const, colorConst, intConst, requireInst } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { DOMAIN_CIRCLE } from '../core/domain-registry';
 import { defaultSourceConst } from '../types';
@@ -59,7 +59,7 @@ registerBlock({
   lower: ({ ctx, inputsById, config }) => {
     const elementsInput = inputsById.elements;
 
-    if (!elementsInput || elementsInput.k !== 'field') {
+    if (!elementsInput || !('type' in elementsInput && requireInst(elementsInput.type.extent.cardinality, 'cardinality').kind === 'many')) {
       throw new Error('GridLayout requires a field input (from Array block)');
     }
 
@@ -73,20 +73,20 @@ registerBlock({
     const floatFieldType = { ...posType, payload: FLOAT, unit: { kind: 'scalar' as const } };
 
     // Get grid dimensions as signals
-    const rowsSig = inputsById.rows?.k === 'sig'
-      ? inputsById.rows.id
-      : ctx.b.sigConst(intConst((config?.rows as number) ?? 10), canonicalType(INT));
-    const colsSig = inputsById.cols?.k === 'sig'
-      ? inputsById.cols.id
-      : ctx.b.sigConst(intConst((config?.cols as number) ?? 10), canonicalType(INT));
+    const rowsSig = ('type' in inputsById.rows! && requireInst(inputsById.rows!.type.extent.cardinality, 'cardinality').kind === 'one')
+      ? inputsById.rows!.id
+      : ctx.b.constant(intConst((config?.rows as number) ?? 10), canonicalType(INT));
+    const colsSig = ('type' in inputsById.cols! && requireInst(inputsById.cols!.type.extent.cardinality, 'cardinality').kind === 'one')
+      ? inputsById.cols!.id
+      : ctx.b.constant(intConst((config?.cols as number) ?? 10), canonicalType(INT));
 
     // Create index field for the instance (gridLayout expects integer indices)
-    const indexField = ctx.b.fieldIntrinsic('index',
+    const indexField = ctx.b.intrinsic('index',
       floatFieldType
     );
 
     // Apply gridLayout kernel: index + [cols, rows] → vec3 positions
-    const positionField = ctx.b.fieldZipSig(
+    const positionField = ctx.b.kernelZipSig(
       indexField,
       [colsSig, rowsSig],
       { kind: 'kernel', name: 'gridLayout' },
@@ -97,7 +97,7 @@ registerBlock({
 
     return {
       outputsById: {
-        position: { k: 'field', id: positionField, slot: posSlot, type: posType, stride: strideOf(posType.payload) },
+        position: { id: positionField, slot: posSlot, type: posType, stride: strideOf(posType.payload) },
       },
       // Propagate instance context downstream
       instanceContext: instanceId,
@@ -142,7 +142,7 @@ registerBlock({
   lower: ({ ctx, inputsById, config }) => {
     const elementsInput = inputsById.elements;
 
-    if (!elementsInput || elementsInput.k !== 'field') {
+    if (!elementsInput || !('type' in elementsInput && requireInst(elementsInput.type.extent.cardinality, 'cardinality').kind === 'many')) {
       throw new Error('LinearLayout requires a field input (from Array block)');
     }
 
@@ -160,18 +160,18 @@ registerBlock({
     const length = (config?.spacing as number) ?? 0.8;
 
     // Create vertical line: center X, Y spans from (1-length)/2 to (1+length)/2
-    const x0Sig = ctx.b.sigConst(floatConst(0.5), canonicalType(FLOAT));
-    const y0Sig = ctx.b.sigConst(floatConst((1 - length) / 2), canonicalType(FLOAT));
-    const x1Sig = ctx.b.sigConst(floatConst(0.5), canonicalType(FLOAT));
-    const y1Sig = ctx.b.sigConst(floatConst((1 + length) / 2), canonicalType(FLOAT));
+    const x0Sig = ctx.b.constant(floatConst(0.5), canonicalType(FLOAT));
+    const y0Sig = ctx.b.constant(floatConst((1 - length) / 2), canonicalType(FLOAT));
+    const x1Sig = ctx.b.constant(floatConst(0.5), canonicalType(FLOAT));
+    const y1Sig = ctx.b.constant(floatConst((1 + length) / 2), canonicalType(FLOAT));
 
     // Create normalizedIndex field for the instance
-    const normalizedIndexField = ctx.b.fieldIntrinsic('normalizedIndex',
+    const normalizedIndexField = ctx.b.intrinsic('normalizedIndex',
       floatFieldType
     );
 
     // Apply lineLayout kernel: normalizedIndex + [x0, y0, x1, y1] → vec3 positions
-    const positionField = ctx.b.fieldZipSig(
+    const positionField = ctx.b.kernelZipSig(
       normalizedIndexField,
       [x0Sig, y0Sig, x1Sig, y1Sig],
       { kind: 'kernel', name: 'lineLayout' },
@@ -182,7 +182,7 @@ registerBlock({
 
     return {
       outputsById: {
-        position: { k: 'field', id: positionField, slot: posSlot, type: posType, stride: strideOf(posType.payload) },
+        position: { id: positionField, slot: posSlot, type: posType, stride: strideOf(posType.payload) },
       },
       // Propagate instance context downstream
       instanceContext: instanceId,
@@ -232,7 +232,7 @@ registerBlock({
   lower: ({ ctx, inputsById, config }) => {
     const elementsInput = inputsById.elements;
 
-    if (!elementsInput || elementsInput.k !== 'field') {
+    if (!elementsInput || !('type' in elementsInput && requireInst(elementsInput.type.extent.cardinality, 'cardinality').kind === 'many')) {
       throw new Error('CircleLayout requires a field input (from Array block)');
     }
 
@@ -246,20 +246,20 @@ registerBlock({
     const floatFieldType = { ...posType, payload: FLOAT, unit: { kind: 'scalar' as const } };
 
     // Get radius and phase as signals
-    const radiusSig = inputsById.radius?.k === 'sig'
-      ? inputsById.radius.id
-      : ctx.b.sigConst(floatConst((config?.radius as number) ?? 0.3), canonicalType(FLOAT));
-    const phaseSig = inputsById.phase?.k === 'sig'
-      ? inputsById.phase.id
-      : ctx.b.sigConst(floatConst((config?.phase as number) ?? 0), canonicalType(FLOAT));
+    const radiusSig = ('type' in inputsById.radius! && requireInst(inputsById.radius!.type.extent.cardinality, 'cardinality').kind === 'one')
+      ? inputsById.radius!.id
+      : ctx.b.constant(floatConst((config?.radius as number) ?? 0.3), canonicalType(FLOAT));
+    const phaseSig = ('type' in inputsById.phase! && requireInst(inputsById.phase!.type.extent.cardinality, 'cardinality').kind === 'one')
+      ? inputsById.phase!.id
+      : ctx.b.constant(floatConst((config?.phase as number) ?? 0), canonicalType(FLOAT));
 
     // Create normalizedIndex field for the instance
-    const normalizedIndexField = ctx.b.fieldIntrinsic('normalizedIndex',
+    const normalizedIndexField = ctx.b.intrinsic('normalizedIndex',
       floatFieldType
     );
 
     // Apply circleLayout kernel: normalizedIndex + [radius, phase] → vec3 positions
-    const positionField = ctx.b.fieldZipSig(
+    const positionField = ctx.b.kernelZipSig(
       normalizedIndexField,
       [radiusSig, phaseSig],
       { kind: 'kernel', name: 'circleLayout' },
@@ -270,7 +270,7 @@ registerBlock({
 
     return {
       outputsById: {
-        position: { k: 'field', id: positionField, slot: posSlot, type: posType, stride: strideOf(posType.payload) },
+        position: { id: positionField, slot: posSlot, type: posType, stride: strideOf(posType.payload) },
       },
       instanceContext: instanceId,
     };
@@ -317,7 +317,7 @@ registerBlock({
   lower: ({ ctx, inputsById, config }) => {
     const elementsInput = inputsById.elements;
 
-    if (!elementsInput || elementsInput.k !== 'field') {
+    if (!elementsInput || !('type' in elementsInput && requireInst(elementsInput.type.extent.cardinality, 'cardinality').kind === 'many')) {
       throw new Error('LineLayout requires a field input (from Array block)');
     }
 
@@ -331,26 +331,26 @@ registerBlock({
     const floatFieldType = { ...posType, payload: FLOAT, unit: { kind: 'scalar' as const } };
 
     // Get line endpoints as signals
-    const x0Sig = inputsById.x0?.k === 'sig'
-      ? inputsById.x0.id
-      : ctx.b.sigConst(floatConst((config?.x0 as number) ?? 0.1), canonicalType(FLOAT));
-    const y0Sig = inputsById.y0?.k === 'sig'
-      ? inputsById.y0.id
-      : ctx.b.sigConst(floatConst((config?.y0 as number) ?? 0.5), canonicalType(FLOAT));
-    const x1Sig = inputsById.x1?.k === 'sig'
-      ? inputsById.x1.id
-      : ctx.b.sigConst(floatConst((config?.x1 as number) ?? 0.9), canonicalType(FLOAT));
-    const y1Sig = inputsById.y1?.k === 'sig'
-      ? inputsById.y1.id
-      : ctx.b.sigConst(floatConst((config?.y1 as number) ?? 0.5), canonicalType(FLOAT));
+    const x0Sig = ('type' in inputsById.x0! && requireInst(inputsById.x0!.type.extent.cardinality, 'cardinality').kind === 'one')
+      ? inputsById.x0!.id
+      : ctx.b.constant(floatConst((config?.x0 as number) ?? 0.1), canonicalType(FLOAT));
+    const y0Sig = ('type' in inputsById.y0! && requireInst(inputsById.y0!.type.extent.cardinality, 'cardinality').kind === 'one')
+      ? inputsById.y0!.id
+      : ctx.b.constant(floatConst((config?.y0 as number) ?? 0.5), canonicalType(FLOAT));
+    const x1Sig = ('type' in inputsById.x1! && requireInst(inputsById.x1!.type.extent.cardinality, 'cardinality').kind === 'one')
+      ? inputsById.x1!.id
+      : ctx.b.constant(floatConst((config?.x1 as number) ?? 0.9), canonicalType(FLOAT));
+    const y1Sig = ('type' in inputsById.y1! && requireInst(inputsById.y1!.type.extent.cardinality, 'cardinality').kind === 'one')
+      ? inputsById.y1!.id
+      : ctx.b.constant(floatConst((config?.y1 as number) ?? 0.5), canonicalType(FLOAT));
 
     // Create normalizedIndex field for the instance
-    const normalizedIndexField = ctx.b.fieldIntrinsic('normalizedIndex',
+    const normalizedIndexField = ctx.b.intrinsic('normalizedIndex',
       floatFieldType
     );
 
     // Apply lineLayout kernel: normalizedIndex + [x0, y0, x1, y1] → vec3 positions
-    const positionField = ctx.b.fieldZipSig(
+    const positionField = ctx.b.kernelZipSig(
       normalizedIndexField,
       [x0Sig, y0Sig, x1Sig, y1Sig],
       { kind: 'kernel', name: 'lineLayout' },
@@ -361,7 +361,7 @@ registerBlock({
 
     return {
       outputsById: {
-        position: { k: 'field', id: positionField, slot: posSlot, type: posType, stride: strideOf(posType.payload) },
+        position: { id: positionField, slot: posSlot, type: posType, stride: strideOf(posType.payload) },
       },
       instanceContext: instanceId,
     };
@@ -406,7 +406,7 @@ registerBlock({
   lower: ({ ctx, inputsById }) => {
     const elementsInput = inputsById.elements;
 
-    if (!elementsInput || elementsInput.k !== 'field') {
+    if (!elementsInput || !('type' in elementsInput && requireInst(elementsInput.type.extent.cardinality, 'cardinality').kind === 'many')) {
       throw new Error('CircleLayoutUV requires a field input (from Array block)');
     }
 
@@ -420,24 +420,24 @@ registerBlock({
     const vec2FieldType = { ...posType, payload: VEC2, unit: { kind: 'scalar' as const } };
 
     // Get radius and phase as signals
-    const radiusSig = inputsById.radius?.k === 'sig'
-      ? inputsById.radius.id
-      : ctx.b.sigConst(floatConst(0.3), canonicalType(FLOAT));
-    const phaseSig = inputsById.phase?.k === 'sig'
-      ? inputsById.phase.id
-      : ctx.b.sigConst(floatConst(0), canonicalType(FLOAT));
+    const radiusSig = ('type' in inputsById.radius! && requireInst(inputsById.radius!.type.extent.cardinality, 'cardinality').kind === 'one')
+      ? inputsById.radius!.id
+      : ctx.b.constant(floatConst(0.3), canonicalType(FLOAT));
+    const phaseSig = ('type' in inputsById.phase! && requireInst(inputsById.phase!.type.extent.cardinality, 'cardinality').kind === 'one')
+      ? inputsById.phase!.id
+      : ctx.b.constant(floatConst(0), canonicalType(FLOAT));
 
     // Use halton2D as default basis kind (user-configurable when BlockDef supports config)
     const basisKind: import('../compiler/ir/types').BasisKind = 'halton2D';
 
     // Create UV field from placement basis
-    const uvField = ctx.b.fieldPlacement('uv',
+    const uvField = ctx.b.placement('uv',
       basisKind,
       vec2FieldType
     );
 
     // Apply circleLayoutUV kernel: uv + [radius, phase] → vec3 positions
-    const positionField = ctx.b.fieldZipSig(
+    const positionField = ctx.b.kernelZipSig(
       uvField,
       [radiusSig, phaseSig],
       { kind: 'kernel', name: 'circleLayoutUV' },
@@ -448,7 +448,7 @@ registerBlock({
 
     return {
       outputsById: {
-        position: { k: 'field', id: positionField, slot: posSlot, type: posType, stride: strideOf(posType.payload) },
+        position: { id: positionField, slot: posSlot, type: posType, stride: strideOf(posType.payload) },
       },
       instanceContext: instanceId,
     };
@@ -495,7 +495,7 @@ registerBlock({
   lower: ({ ctx, inputsById }) => {
     const elementsInput = inputsById.elements;
 
-    if (!elementsInput || elementsInput.k !== 'field') {
+    if (!elementsInput || !('type' in elementsInput && requireInst(elementsInput.type.extent.cardinality, 'cardinality').kind === 'many')) {
       throw new Error('LineLayoutUV requires a field input (from Array block)');
     }
 
@@ -509,30 +509,30 @@ registerBlock({
     const vec2FieldType = { ...posType, payload: VEC2, unit: { kind: 'scalar' as const } };
 
     // Get line endpoints as signals
-    const x0Sig = inputsById.x0?.k === 'sig'
-      ? inputsById.x0.id
-      : ctx.b.sigConst(floatConst(0.2), canonicalType(FLOAT));
-    const y0Sig = inputsById.y0?.k === 'sig'
-      ? inputsById.y0.id
-      : ctx.b.sigConst(floatConst(0.2), canonicalType(FLOAT));
-    const x1Sig = inputsById.x1?.k === 'sig'
-      ? inputsById.x1.id
-      : ctx.b.sigConst(floatConst(0.8), canonicalType(FLOAT));
-    const y1Sig = inputsById.y1?.k === 'sig'
-      ? inputsById.y1.id
-      : ctx.b.sigConst(floatConst(0.8), canonicalType(FLOAT));
+    const x0Sig = ('type' in inputsById.x0! && requireInst(inputsById.x0!.type.extent.cardinality, 'cardinality').kind === 'one')
+      ? inputsById.x0!.id
+      : ctx.b.constant(floatConst(0.2), canonicalType(FLOAT));
+    const y0Sig = ('type' in inputsById.y0! && requireInst(inputsById.y0!.type.extent.cardinality, 'cardinality').kind === 'one')
+      ? inputsById.y0!.id
+      : ctx.b.constant(floatConst(0.2), canonicalType(FLOAT));
+    const x1Sig = ('type' in inputsById.x1! && requireInst(inputsById.x1!.type.extent.cardinality, 'cardinality').kind === 'one')
+      ? inputsById.x1!.id
+      : ctx.b.constant(floatConst(0.8), canonicalType(FLOAT));
+    const y1Sig = ('type' in inputsById.y1! && requireInst(inputsById.y1!.type.extent.cardinality, 'cardinality').kind === 'one')
+      ? inputsById.y1!.id
+      : ctx.b.constant(floatConst(0.8), canonicalType(FLOAT));
 
     // Use halton2D as default basis kind (user-configurable when BlockDef supports config)
     const basisKind: import('../compiler/ir/types').BasisKind = 'halton2D';
 
     // Create UV field from placement basis
-    const uvField = ctx.b.fieldPlacement('uv',
+    const uvField = ctx.b.placement('uv',
       basisKind,
       vec2FieldType
     );
 
     // Apply lineLayoutUV kernel: uv + [x0, y0, x1, y1] → vec3 positions
-    const positionField = ctx.b.fieldZipSig(
+    const positionField = ctx.b.kernelZipSig(
       uvField,
       [x0Sig, y0Sig, x1Sig, y1Sig],
       { kind: 'kernel', name: 'lineLayoutUV' },
@@ -543,7 +543,7 @@ registerBlock({
 
     return {
       outputsById: {
-        position: { k: 'field', id: positionField, slot: posSlot, type: posType, stride: strideOf(posType.payload) },
+        position: { id: positionField, slot: posSlot, type: posType, stride: strideOf(posType.payload) },
       },
       instanceContext: instanceId,
     };
@@ -588,7 +588,7 @@ registerBlock({
   lower: ({ ctx, inputsById }) => {
     const elementsInput = inputsById.elements;
 
-    if (!elementsInput || elementsInput.k !== 'field') {
+    if (!elementsInput || !('type' in elementsInput && requireInst(elementsInput.type.extent.cardinality, 'cardinality').kind === 'many')) {
       throw new Error('GridLayoutUV requires a field input (from Array block)');
     }
 
@@ -602,24 +602,24 @@ registerBlock({
     const vec2FieldType = { ...posType, payload: VEC2, unit: { kind: 'scalar' as const } };
 
     // Get cols and rows as signals
-    const colsSig = inputsById.cols?.k === 'sig'
-      ? inputsById.cols.id
-      : ctx.b.sigConst(intConst(5), canonicalType(INT));
-    const rowsSig = inputsById.rows?.k === 'sig'
-      ? inputsById.rows.id
-      : ctx.b.sigConst(intConst(5), canonicalType(INT));
+    const colsSig = ('type' in inputsById.cols! && requireInst(inputsById.cols!.type.extent.cardinality, 'cardinality').kind === 'one')
+      ? inputsById.cols!.id
+      : ctx.b.constant(intConst(5), canonicalType(INT));
+    const rowsSig = ('type' in inputsById.rows! && requireInst(inputsById.rows!.type.extent.cardinality, 'cardinality').kind === 'one')
+      ? inputsById.rows!.id
+      : ctx.b.constant(intConst(5), canonicalType(INT));
 
     // Use 'grid' as default basis kind for proper grid alignment
     const basisKind: import('../compiler/ir/types').BasisKind = 'grid';
 
     // Create UV field from placement basis
-    const uvField = ctx.b.fieldPlacement('uv',
+    const uvField = ctx.b.placement('uv',
       basisKind,
       vec2FieldType
     );
 
     // Apply gridLayoutUV kernel: uv + [cols, rows] → vec3 positions
-    const positionField = ctx.b.fieldZipSig(
+    const positionField = ctx.b.kernelZipSig(
       uvField,
       [colsSig, rowsSig],
       { kind: 'kernel', name: 'gridLayoutUV' },
@@ -630,7 +630,7 @@ registerBlock({
 
     return {
       outputsById: {
-        position: { k: 'field', id: positionField, slot: posSlot, type: posType, stride: strideOf(posType.payload) },
+        position: { id: positionField, slot: posSlot, type: posType, stride: strideOf(posType.payload) },
       },
       instanceContext: instanceId,
     };

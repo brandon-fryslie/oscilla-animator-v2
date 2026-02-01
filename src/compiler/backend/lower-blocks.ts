@@ -8,7 +8,7 @@ import type { VarargConnection } from "../../graph/Patch";
 import type { IRBuilder } from "../ir/IRBuilder";
 import { IRBuilderImpl } from "../ir/IRBuilderImpl";
 import type { CompileError } from "../types";
-import { assertKindAgreement, type ValueRefPacked } from "../ir/lowerTypes";
+import { deriveKind, isExprRef, type ValueRefExpr } from "../ir/lowerTypes";
 import type { InstanceId } from "../ir/Indices";
 import { getBlockDefinition, type LowerCtx, type LowerResult, hasLowerOutputsOnly } from "../../blocks/registry";
 import type { EventHub } from "../../events/EventHub";
@@ -47,7 +47,7 @@ export interface UnlinkedIRFragments {
   builder: IRBuilder;
 
   /** Map from block index to map of port ID to ValueRef */
-  blockOutputs: Map<BlockIndex, Map<string, ValueRefPacked>>;
+  blockOutputs: Map<BlockIndex, Map<string, ValueRefExpr>>;
 
   /** Compilation errors encountered during lowering */
   errors: CompileError[];
@@ -119,7 +119,7 @@ function isNonTrivialSCC(scc: SCC, graph: DepGraph): boolean {
  * @param errors - Error accumulator
  * @param blockOutputs - Map of block outputs for wire resolution
  * @param blockIdToIndex - Map from block ID to block index
- * @returns Map of slotId → ValueRefPacked
+ * @returns Map of slotId → ValueRefExpr
  */
 function resolveInputsWithMultiInput(
   block: Block,
@@ -127,11 +127,11 @@ function resolveInputsWithMultiInput(
   blocks: readonly Block[],
   builder: IRBuilder,
   errors: CompileError[],
-  blockOutputs?: Map<BlockIndex, Map<string, ValueRefPacked>>,
+  blockOutputs?: Map<BlockIndex, Map<string, ValueRefExpr>>,
   blockIdToIndex?: Map<string, BlockIndex>
-): Map<string, ValueRefPacked> {
+): Map<string, ValueRefExpr> {
   const resolved = resolveBlockInputs(block, edges, blocks);
-  const inputRefs = new Map<string, ValueRefPacked>();
+  const inputRefs = new Map<string, ValueRefExpr>();
 
   for (const [slotId, spec] of resolved.entries()) {
     const { writers, combine, portType, endpoint, optional } = spec;
@@ -154,7 +154,7 @@ function resolveInputsWithMultiInput(
     }
 
     // Convert writers to ValueRefs
-    const writerRefs: ValueRefPacked[] = [];
+    const writerRefs: ValueRefExpr[] = [];
     for (const writer of writers) {
       const writerRef = getWriterValueRef(writer, errors, blockOutputs, blockIdToIndex);
       if (writerRef !== null) {
@@ -217,21 +217,21 @@ function resolveInputsWithMultiInput(
 /**
  * Get ValueRef for a writer.
  *
- * Converts Writer (from resolveWriters) to ValueRefPacked by looking up
+ * Converts Writer (from resolveWriters) to ValueRefExpr by looking up
  * in blockOutputs (IR-lowered blocks).
  *
  * @param writer - Writer specification
  * @param errors - Error accumulator
  * @param blockOutputs - Map of block outputs for wire resolution
  * @param blockIdToIndex - Map from block ID to block index
- * @returns ValueRefPacked or null if writer cannot be resolved
+ * @returns ValueRefExpr or null if writer cannot be resolved
  */
 function getWriterValueRef(
   writer: Writer,
   errors: CompileError[],
-  blockOutputs?: Map<BlockIndex, Map<string, ValueRefPacked>>,
+  blockOutputs?: Map<BlockIndex, Map<string, ValueRefExpr>>,
   blockIdToIndex?: Map<string, BlockIndex>
-): ValueRefPacked | null {
+): ValueRefExpr | null {
   if (writer.kind === 'wire') {
     // Look in blockOutputs (IR-lowered blocks)
     if (blockOutputs !== undefined && blockIdToIndex !== undefined) {
@@ -321,7 +321,7 @@ function inferInstanceContext(
  * @param instanceContextByBlock - Map from block index to instance context
  * @param portTypes - Resolved port types from pass1
  * @param existingOutputs - Existing outputs from phase 1 (for two-pass lowering)
- * @returns Map of port ID to ValueRefPacked
+ * @returns Map of port ID to ValueRefExpr
  */
 function lowerBlockInstance(
   block: Block,
@@ -330,13 +330,13 @@ function lowerBlockInstance(
   errors: CompileError[],
   edges?: readonly NormalizedEdge[],
   blocks?: readonly Block[],
-  blockOutputs?: Map<BlockIndex, Map<string, ValueRefPacked>>,
+  blockOutputs?: Map<BlockIndex, Map<string, ValueRefExpr>>,
   blockIdToIndex?: Map<string, BlockIndex>,
   instanceContextByBlock?: Map<BlockIndex, InstanceId>,
   portTypes?: ReadonlyMap<PortKey, CanonicalType>,
   existingOutputs?: Partial<LowerResult>
-): Map<string, ValueRefPacked> {
-  const outputRefs = new Map<string, ValueRefPacked>();
+): Map<string, ValueRefExpr> {
+  const outputRefs = new Map<string, ValueRefExpr>();
   const blockDef = getBlockDefinition(block.type);
 
   if (blockDef === undefined) {
@@ -355,11 +355,11 @@ function lowerBlockInstance(
   try {
     // Collect input ValueRefs
     // Use resolveInputsWithMultiInput if edges and blocks available
-    const inputsById: Record<string, ValueRefPacked> = (edges !== undefined && blocks !== undefined)
+    const inputsById: Record<string, ValueRefExpr> = (edges !== undefined && blocks !== undefined)
       ? Object.fromEntries(resolveInputsWithMultiInput(block, edges, blocks, builder, errors, blockOutputs, blockIdToIndex).entries())
       : {};
 
-    const inputs: ValueRefPacked[] = [];
+    const inputs: ValueRefExpr[] = [];
     let hasUnresolvedInputs = false;
     for (const [portId, inputDef] of Object.entries(blockDef.inputs)) {
       // CRITICAL: Skip config-only inputs (exposedAsPort: false)
@@ -476,25 +476,23 @@ function lowerBlockInstance(
         continue;
       }
 
-      // Register slot for signal/field outputs
-      if (ref.k === 'sig') {
-        // Only register scalar signals (stride=1) for evalSig step generation.
-        // Multi-component signals (stride>1) are written by stepSlotWriteStrided.
-        if (ref.stride === 1) {
-          builder.registerSigSlot(ref.id, ref.slot);
+      // Register slot for signal/field/event outputs
+      // Derive kind from type (no stored discriminant)
+      if (isExprRef(ref)) {
+        const kind = deriveKind(ref.type);
+        if (kind === 'signal') {
+          if (ref.stride === 1) {
+            builder.registerSigSlot(ref.id, ref.slot);
+          }
+          builder.registerSlotType(ref.slot, ref.type);
+        } else if (kind === 'field') {
+          builder.registerFieldSlot(ref.id, ref.slot);
+          builder.registerSlotType(ref.slot, ref.type);
+        } else {
+          // Event — register slot type
+          builder.registerSlotType(ref.slot, ref.type);
         }
-        // CRITICAL: Register slot type for slotMeta generation
-        // Without this, slots allocated via allocSlot(stride) won't have type information,
-        // causing slotMeta to default to stride=1, which breaks slotWriteStrided at runtime
-        builder.registerSlotType(ref.slot, ref.type);
-      } else if (ref.k === 'field') {
-        builder.registerFieldSlot(ref.id, ref.slot);
-        // CRITICAL: Register slot type for slotMeta generation
-        builder.registerSlotType(ref.slot, ref.type);
       }
-
-      // Gap analysis #12 (Q4/Q5): Assert kind tag agrees with deriveKind(type)
-      assertKindAgreement(ref);
       outputRefs.set(portId, ref);
     }
 
@@ -562,7 +560,7 @@ function lowerSCCTwoPass(
   edges: readonly NormalizedEdge[],
   builder: IRBuilder,
   errors: CompileError[],
-  blockOutputs: Map<BlockIndex, Map<string, ValueRefPacked>>,
+  blockOutputs: Map<BlockIndex, Map<string, ValueRefExpr>>,
   blockIdToIndex: Map<string, BlockIndex>,
   instanceContextByBlock: Map<BlockIndex, InstanceId>,
   portTypes: ReadonlyMap<PortKey, CanonicalType>,
@@ -614,17 +612,22 @@ function lowerSCCTwoPass(
 
         // Register outputs in blockOutputs (making them available to other blocks)
         if (partialResult.outputsById) {
-          const outputRefs = new Map<string, ValueRefPacked>();
+          const outputRefs = new Map<string, ValueRefExpr>();
           for (const [portId, ref] of Object.entries(partialResult.outputsById)) {
             // Register slot types
-            if (ref.k === 'sig') {
-              if (ref.stride === 1) {
-                builder.registerSigSlot(ref.id, ref.slot);
+            if (isExprRef(ref)) {
+              const kind = deriveKind(ref.type);
+              if (kind === 'signal') {
+                if (ref.stride === 1) {
+                  builder.registerSigSlot(ref.id, ref.slot);
+                }
+                builder.registerSlotType(ref.slot, ref.type);
+              } else if (kind === 'field') {
+                builder.registerFieldSlot(ref.id, ref.slot);
+                builder.registerSlotType(ref.slot, ref.type);
+              } else {
+                builder.registerSlotType(ref.slot, ref.type);
               }
-              builder.registerSlotType(ref.slot, ref.type);
-            } else if (ref.k === 'field') {
-              builder.registerFieldSlot(ref.id, ref.slot);
-              builder.registerSlotType(ref.slot, ref.type);
             }
             outputRefs.set(portId, ref);
           }
@@ -813,7 +816,7 @@ export function pass6BlockLowering(
   // Extract blocks and edges from validated patch
   const blocks = validated.blocks;
   const edges = validated.edges;
-  const blockOutputs = new Map<BlockIndex, Map<string, ValueRefPacked>>();
+  const blockOutputs = new Map<BlockIndex, Map<string, ValueRefExpr>>();
   const errors: CompileError[] = [];
 
   // Track instance context for propagation

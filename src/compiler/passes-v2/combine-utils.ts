@@ -15,10 +15,8 @@
 
 import type { CombineMode, Edge, CanonicalType } from "../../types";
 import type { IRBuilder } from "../ir/IRBuilder";
-import type { ValueRefPacked } from "../ir/lowerTypes";
-import type { EventExprId } from "../ir/types";
-import type { SigExprId, FieldExprId } from "../ir/Indices";
-import type { EventCombineMode } from "../ir/signalExpr";
+import { deriveKind, isExprRef, type ValueRefExpr } from "../ir/lowerTypes";
+import type { ValueExprId } from "../ir/Indices";
 import { strideOf } from "../../core/canonical-types";
 
 // =============================================================================
@@ -234,10 +232,10 @@ function normalizeCombineMode(mode: CombineMode | 'error' | 'layer'): CombineMod
  */
 export function createCombineNode(
   mode: CombineMode | 'error' | 'layer',
-  inputs: readonly ValueRefPacked[],
+  inputs: readonly ValueRefExpr[],
   type: CanonicalType,
   builder: IRBuilder
-): ValueRefPacked | null {
+): ValueRefExpr | null {
   // Handle empty inputs - caller should materialize default
   if (inputs.length === 0) {
     return null;
@@ -249,83 +247,51 @@ export function createCombineNode(
   // Handle 'first' mode by reversing input order
   const orderedInputs = mode === 'first' ? [...inputs].reverse() : inputs;
 
-  // Note: Caller should handle N=1 case with direct passthrough for optimization.
-  // We still create a combine node here for semantic clarity (e.g., 'last' of 1 item).
-
-  // Collect terms by world type
-  const sigTerms: SigExprId[] = [];
-  const fieldTerms: FieldExprId[] = [];
-  const eventTerms: EventExprId[] = [];
-
+  // Collect expression IDs from all inputs
+  const exprIds: ValueExprId[] = [];
   for (const ref of orderedInputs) {
-    if (ref.k === "sig") {
-      sigTerms.push(ref.id);
-    } else if (ref.k === "field") {
-      fieldTerms.push(ref.id);
-    } else if (ref.k === "event") {
-      eventTerms.push(ref.id as EventExprId);
+    if (isExprRef(ref)) {
+      exprIds.push(ref.id);
     }
   }
 
-  // FIX IMMEDIATELY
-  // Determine world from legacy type or infer from inputs
-  const world = ('world' in type) ? type.world :
-                (sigTerms.length > 0 ? 'signal' :
-                 fieldTerms.length > 0 ? 'field' :
-                 eventTerms.length > 0 ? 'event' : 'signal');
+  if (exprIds.length === 0) {
+    return null;
+  }
 
-  // Convert to CanonicalType if needed (for IRBuilder API)
-  const canonicalType = ('payload' in type) ? type : type as unknown as CanonicalType;
+  // Derive kind from the port type (not from individual refs)
+  const kind = deriveKind(type);
 
-  // Handle Signal world
-  if (world === "signal") {
-    if (sigTerms.length === 0) {
-      return null; // No valid signal terms
-    }
-
-    // Map to Signal combine mode
+  if (kind === 'signal') {
     const validModes = ["sum", "average", "max", "min", "last"];
     const safeMode = validModes.includes(normalizedMode) ? normalizedMode : "last";
     const combineMode = safeMode as "sum" | "average" | "max" | "min" | "last";
 
-    const sigId = builder.sigCombine(sigTerms, combineMode, canonicalType);
-    const slot = builder.allocTypedSlot(canonicalType, `combine_sig_${combineMode}`);
+    const sigId = builder.sigCombine(exprIds, combineMode, type);
+    const slot = builder.allocTypedSlot(type, `combine_sig_${combineMode}`);
     builder.registerSigSlot(sigId, slot);
-    return { k: "sig", id: sigId, slot, type: canonicalType, stride: strideOf(canonicalType.payload) };
+    return { id: sigId, slot, type, stride: strideOf(type.payload) };
   }
 
-  // Handle Field world
-  if (world === "field") {
-    if (fieldTerms.length === 0) {
-      return null; // No valid field terms
-    }
-
-    // Map to Field combine mode
+  if (kind === 'field') {
     const validModes = ["sum", "average", "max", "min", "last", "product"];
     const safeMode = validModes.includes(normalizedMode) ? normalizedMode : "product";
     const combineMode = safeMode as "sum" | "average" | "max" | "min" | "last" | "product";
 
-    const fieldId = builder.fieldCombine(fieldTerms, combineMode, canonicalType);
-    const slot = builder.allocTypedSlot(canonicalType, `combine_field_${combineMode}`);
+    const fieldId = builder.fieldCombine(exprIds, combineMode, type);
+    const slot = builder.allocTypedSlot(type, `combine_field_${combineMode}`);
     builder.registerFieldSlot(fieldId, slot);
-    return { k: "field", id: fieldId, slot, type: canonicalType, stride: strideOf(canonicalType.payload) };
+    return { id: fieldId, slot, type, stride: strideOf(type.payload) };
   }
 
-  // Handle Event world
-  if (world === "event") {
-    if (eventTerms.length === 0) {
-      return null; // No valid event terms
-    }
-
-    // Map BLOCK combineMode to event combine semantics
-    // For events: 'any' combines all streams (fire on any), 'all' requires all to fire
+  if (kind === 'event') {
     const eventMode = normalizedMode === 'last' ? 'any' : 'any';
-    const eventId = builder.eventCombine(eventTerms, eventMode);
-    const slot = builder.allocEventSlot(eventId);
-    return { k: "event", id: eventId, slot, type: canonicalType };
+    const eventId = builder.eventCombine(exprIds, eventMode);
+    const eventSlot = builder.allocEventSlot(eventId);
+    const slot = builder.allocTypedSlot(type, `combine_event`);
+    return { id: eventId, slot, type, stride: 1, eventSlot };
   }
 
-  // Unsupported world
   return null;
 }
 

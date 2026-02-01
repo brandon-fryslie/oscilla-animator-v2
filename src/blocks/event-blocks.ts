@@ -7,10 +7,10 @@
  */
 
 import { registerBlock } from './registry';
-import { canonicalType, canonicalEvent, strideOf } from '../core/canonical-types';
+import { canonicalType, canonicalEvent, strideOf, requireInst } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { OpCode, stableStateId } from '../compiler/ir/types';
-import type { SigExprId } from '../compiler/ir/Indices';
+import type { ValueExprId } from '../compiler/ir/Indices';
 
 // =============================================================================
 // EventToSignalMask - Event → Signal bridge (spec §9.2.1)
@@ -31,18 +31,18 @@ registerBlock({
   },
   lower: ({ ctx, inputsById }) => {
     const eventInput = inputsById.event;
-    if (!eventInput || eventInput.k !== 'event') {
+    if (!eventInput || !('type' in eventInput) || requireInst(eventInput.type.extent.temporality, 'temporality').kind !== 'discrete') {
       throw new Error('EventToSignalMask: event input must be an event');
     }
 
     // Read the event scalar as a float signal (0.0 or 1.0)
-    const sigId = ctx.b.sigEventRead(eventInput.slot); // LEGACY must use ValueExpr
+    const sigId = ctx.b.eventRead(eventInput.id);
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        out: { k: 'sig', id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
+        out: { id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
@@ -72,10 +72,10 @@ registerBlock({
     const valueInput = inputsById.value;
     const triggerInput = inputsById.trigger;
 
-    if (!valueInput || valueInput.k !== 'sig') {
+    if (!valueInput || !('type' in valueInput) || requireInst(valueInput.type.extent.temporality, 'temporality').kind !== 'continuous') {
       throw new Error('SampleHold: value input must be a signal');
     }
-    if (!triggerInput || triggerInput.k !== 'event') {
+    if (!triggerInput || !('type' in triggerInput) || requireInst(triggerInput.type.extent.temporality, 'temporality').kind !== 'discrete') {
       throw new Error('SampleHold: trigger input must be an event');
     }
 
@@ -88,16 +88,16 @@ registerBlock({
     );
 
     // Read previous held value (Phase 1 — reads previous frame's state)
-    const prevId = ctx.b.sigStateRead(stateSlot, canonicalType(FLOAT));
+    const prevId = ctx.b.stateRead(stateSlot, canonicalType(FLOAT));
 
     // Read event scalar as float (0.0 or 1.0)
-    const triggerSig = ctx.b.sigEventRead(triggerInput.slot);// LEGACY must use ValueExpr
+    const triggerSig = ctx.b.eventRead(triggerInput.id);
 
     // Conditional via lerp: lerp(prev, value, trigger)
     // trigger=0 → output=prev (hold), trigger=1 → output=value (sample)
     const lerpFn = ctx.b.opcode(OpCode.Lerp);
-    const outputId = ctx.b.sigZip(
-      [prevId, valueInput.id as SigExprId, triggerSig],
+    const outputId = ctx.b.kernelZip(
+      [prevId, valueInput.id as ValueExprId, triggerSig],
       lerpFn,
       canonicalType(FLOAT)
     );
@@ -110,7 +110,7 @@ registerBlock({
 
     return {
       outputsById: {
-        out: { k: 'sig', id: outputId, slot, type: outType, stride: strideOf(outType.payload) },
+        out: { id: outputId, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },

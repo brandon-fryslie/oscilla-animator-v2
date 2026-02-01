@@ -7,13 +7,15 @@
  *
  * NOTE: The actual block registry and lowering functions have moved to src/blocks/registry.ts
  * This file now only contains types used by the compiler passes.
+ *
+ * MIGRATION (2026-01-31): ValueRefPacked now uses unified ValueExprId.
+ * The k:'sig'|'field'|'event' discriminant is GONE — derive via deriveKind(ref.type).
  */
 
-import { requireInst, type CanonicalType } from '../../core/canonical-types';
+import { requireInst } from '../../core/canonical-types';
+import type { CanonicalType } from '../../core/canonical-types';
 import type {
-  SigExprId,
-  FieldExprId,
-  EventExprId,
+  ValueExprId,
   EventSlotId,
   ValueSlot,
   InstanceId,
@@ -26,72 +28,78 @@ import type { IRBuilder } from './IRBuilder';
 // =============================================================================
 
 /**
- * Packed value reference - represents a signal, field, event, instance, or scalar.
- * Used throughout the compiler pipeline for tracking IR expressions.
+ * Packed value reference — unified around ValueExprId.
+ *
+ * The legacy k:'sig'|'field'|'event' discriminant is REMOVED.
+ * Signal/field/event semantics are derived from type.extent via deriveKind().
+ *
+ * Variants:
+ * - ValueRefExpr: Any expression (signal, field, or event)
+ * - ValueRefInstance: Instance context
+ * - ValueRefScalar: Scalar config value
  */
 export type ValueRefPacked =
-  | {
-      readonly k: 'sig';
-      readonly id: SigExprId;
-      /** Base slot for lane 0. Multi-component signals occupy [slotMeta.offset, slotMeta.offset + stride). */
-      readonly slot: ValueSlot;
-      readonly type: CanonicalType;
-      /** Components per sample for this value (e.g. float=1, vec2=2, vec3=3, color=4). */
-      readonly stride: number;
-      /**
-       * For multi-component signals (stride > 1), this array contains the scalar SigExprIds
-       * that produce each component. Required when stride > 1, undefined when stride === 1.
-       * The runtime writes these component expressions into the slot range [slot, slot+stride).
-       */
-      readonly components?: readonly SigExprId[];
-    }
-  | {
-      readonly k: 'field';
-      readonly id: FieldExprId;
-      /** Slot that will hold the materialized field buffer (typed by `type`). */
-      readonly slot: ValueSlot;
-      readonly type: CanonicalType;
-      /** Components per lane element in the materialized buffer. */
-      readonly stride: number;
-    }
-  | {
-      readonly k: 'event';
-      readonly id: EventExprId;
-      readonly slot: EventSlotId;
-      readonly type: CanonicalType;
-    }
+  | ValueRefExpr
   | { readonly k: 'instance'; readonly id: InstanceId }
   | { readonly k: 'scalar'; readonly value: unknown };
 
 /**
- * Assert that a ValueRefPacked's `k` tag agrees with its CanonicalType extent.
- * Dispatches on extent axes directly (no deriveKind dependency).
- *
- * Rules:
- * - k='event' ↔ temporality=discrete
- * - k='field' ↔ cardinality=many + temporality=continuous
- * - k='sig'   ↔ cardinality=zero|one + temporality=continuous
+ * Unified expression reference.
+ * No k discriminant — derive signal/field/event from type.extent.
  */
-export function assertKindAgreement(ref: ValueRefPacked): void {
-  if (ref.k === 'instance' || ref.k === 'scalar') return; // No .type field
-  const card = requireInst(ref.type.extent.cardinality, 'cardinality');
-  const tempo = requireInst(ref.type.extent.temporality, 'temporality');
+export interface ValueRefExpr {
+  /** Expression ID into the unified valueExprs table */
+  readonly id: ValueExprId;
+  /** Value slot for runtime storage */
+  readonly slot: ValueSlot;
+  /** Canonical type (payload + unit + extent) */
+  readonly type: CanonicalType;
+  /** Components per sample (derived from payload stride) */
+  readonly stride: number;
+  /**
+   * For multi-component signals (stride > 1), scalar ValueExprIds
+   * producing each component. Required when stride > 1.
+   */
+  readonly components?: readonly ValueExprId[];
+  /**
+   * For event expressions, the event-specific slot.
+   * Only present when deriveKind(type) === 'event'.
+   */
+  readonly eventSlot?: EventSlotId;
+}
 
-  let derivedK: 'sig' | 'field' | 'event';
-  if (tempo.kind === 'discrete') {
-    derivedK = 'event';
-  } else if (card.kind === 'many') {
-    derivedK = 'field';
-  } else {
-    // zero or one cardinality + continuous = signal
-    derivedK = 'sig';
-  }
+/**
+ * Type guard: is this ValueRefPacked an expression reference?
+ * Instance and scalar variants have `k`, ValueRefExpr does not.
+ */
+export function isExprRef(ref: ValueRefPacked): ref is ValueRefExpr {
+  return !('k' in ref);
+}
 
-  if (ref.k !== derivedK) {
-    throw new Error(
-      `Kind agreement violation: ValueRefPacked.k='${ref.k}' but extent derives '${derivedK}' (cardinality=${card.kind}, temporality=${tempo.kind})`
-    );
+/**
+ * Assert and narrow a ValueRefPacked to ValueRefExpr.
+ * Throws if the ref is instance or scalar.
+ */
+export function asExpr(ref: ValueRefPacked): ValueRefExpr {
+  if ('k' in ref) {
+    throw new Error(`Expected ValueRefExpr, got variant with k='${(ref as { k: string }).k}'`);
   }
+  return ref as ValueRefExpr;
+}
+
+/**
+ * Derive signal/field/event semantics from CanonicalType extent.
+ * This is THE way to determine if a value is signal, field, or event.
+ * No stored discriminant — always derived from type.
+ */
+export type DerivedKind = 'signal' | 'field' | 'event';
+
+export function deriveKind(type: CanonicalType): DerivedKind {
+  const temp = requireInst(type.extent.temporality, 'temporality');
+  if (temp.kind === 'discrete') return 'event';
+  const card = requireInst(type.extent.cardinality, 'cardinality');
+  if (card.kind === 'many') return 'field';
+  return 'signal';
 }
 
 // =============================================================================
@@ -109,20 +117,16 @@ export type LoweredOutput =
 
 export interface LoweredSignal {
   readonly kind: 'signal';
-  readonly sigId: SigExprId;
-  /** Base slot for lane 0. Multi-component signals occupy a contiguous region sized by `stride`. */
+  readonly sigId: ValueExprId;
   readonly slot: ValueSlot;
-  /** Components per sample for this signal (payload geometry; unit does not affect stride). */
   readonly stride: number;
   readonly type: CanonicalType;
 }
 
 export interface LoweredField {
   readonly kind: 'field';
-  readonly fieldId: FieldExprId;
-  /** Slot that will hold the materialized field buffer. */
+  readonly fieldId: ValueExprId;
   readonly slot: ValueSlot;
-  /** Components per lane element in the materialized buffer. */
   readonly stride: number;
   readonly type: CanonicalType;
 }
@@ -151,20 +155,16 @@ export type LoweredInput =
 
 export interface LoweredSignalInput {
   readonly kind: 'signal';
-  readonly sigId: SigExprId;
-  /** Base slot for lane 0. Multi-component signals occupy a contiguous region sized by `stride`. */
+  readonly sigId: ValueExprId;
   readonly slot: ValueSlot;
-  /** Components per sample for this signal. */
   readonly stride: number;
   readonly type: CanonicalType;
 }
 
 export interface LoweredFieldInput {
   readonly kind: 'field';
-  readonly fieldId: FieldExprId;
-  /** Slot that will hold the materialized field buffer. */
+  readonly fieldId: ValueExprId;
   readonly slot: ValueSlot;
-  /** Components per lane element in the materialized buffer. */
   readonly stride: number;
   readonly type: CanonicalType;
 }
@@ -183,7 +183,6 @@ export interface LoweredInstanceInput {
 
 export interface LoweredUnconnectedInput {
   readonly kind: 'unconnected';
-  /** Default value to use when unconnected. `undefined` means "no default" and should be treated as a compile error where required. */
   readonly defaultValue: unknown | undefined;
   readonly type: CanonicalType;
 }

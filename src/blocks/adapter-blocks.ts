@@ -21,16 +21,16 @@ import {
   unitScalar,
   unitRadians,
   unitDegrees,
-  
+
   unitNorm01,
   unitMs,
   unitSeconds,
   strideOf,
   floatConst,
+  requireInst,
 } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { OpCode } from '../compiler/ir/types';
-import type { SigExprId } from '../compiler/ir/Indices';
 
 // =============================================================================
 // Phase / Scalar Lens Blocks
@@ -60,13 +60,19 @@ registerBlock({
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
-    if (!input || input.k !== 'sig') throw new Error('Lens block input must be a signal');
+    if (!input) throw new Error('Lens block input is required');
+
+    const inputCard = requireInst(input.type.extent.cardinality, 'cardinality');
+    if (inputCard.kind === 'many') {
+      throw new Error('Lens block input must be a signal');
+    }
+
     // Identity — no conversion needed, just re-type
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return {
       outputsById: {
-        out: { k: 'sig', id: input.id as SigExprId, slot, type: outType, stride: strideOf(outType.payload) },
+        out: { id: input.id, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
@@ -96,14 +102,20 @@ registerBlock({
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
-    if (!input || input.k !== 'sig') throw new Error('Lens block input must be a signal');
+    if (!input) throw new Error('Lens block input is required');
+
+    const inputCard = requireInst(input.type.extent.cardinality, 'cardinality');
+    if (inputCard.kind === 'many') {
+      throw new Error('Lens block input must be a signal');
+    }
+
     const wrapFn = ctx.b.opcode(OpCode.Wrap01);
-    const wrapped = ctx.b.sigMap(input.id as SigExprId, wrapFn, canonicalType(FLOAT, unitPhase01()));
+    const wrapped = ctx.b.kernelMap(input.id, wrapFn, canonicalType(FLOAT, unitPhase01()));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return {
       outputsById: {
-        out: { k: 'sig', id: wrapped, slot, type: outType, stride: strideOf(outType.payload) },
+        out: { id: wrapped, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
@@ -137,15 +149,21 @@ registerBlock({
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
-    if (!input || input.k !== 'sig') throw new Error('Lens block input must be a signal');
-    const twoPi = ctx.b.sigConst(floatConst(6.283185307179586), canonicalType(FLOAT, unitScalar()));
+    if (!input) throw new Error('Lens block input is required');
+
+    const inputCard = requireInst(input.type.extent.cardinality, 'cardinality');
+    if (inputCard.kind === 'many') {
+      throw new Error('Lens block input must be a signal');
+    }
+
+    const twoPi = ctx.b.constant(floatConst(6.283185307179586), canonicalType(FLOAT, unitScalar()));
     const mulFn = ctx.b.opcode(OpCode.Mul);
-    const radians = ctx.b.sigZip([input.id as SigExprId, twoPi], mulFn, canonicalType(FLOAT, unitRadians()));
+    const radians = ctx.b.kernelZip([input.id, twoPi], mulFn, canonicalType(FLOAT, unitRadians()));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return {
       outputsById: {
-        out: { k: 'sig', id: radians, slot, type: outType, stride: strideOf(outType.payload) },
+        out: { id: radians, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
@@ -175,17 +193,23 @@ registerBlock({
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
-    if (!input || input.k !== 'sig') throw new Error('Lens block input must be a signal');
-    const twoPi = ctx.b.sigConst(floatConst(6.283185307179586), canonicalType(FLOAT, unitScalar()));
+    if (!input) throw new Error('Lens block input is required');
+
+    const inputCard = requireInst(input.type.extent.cardinality, 'cardinality');
+    if (inputCard.kind === 'many') {
+      throw new Error('Lens block input must be a signal');
+    }
+
+    const twoPi = ctx.b.constant(floatConst(6.283185307179586), canonicalType(FLOAT, unitScalar()));
     const divFn = ctx.b.opcode(OpCode.Div);
-    const divided = ctx.b.sigZip([input.id as SigExprId, twoPi], divFn, canonicalType(FLOAT, unitScalar()));
+    const divided = ctx.b.kernelZip([input.id, twoPi], divFn, canonicalType(FLOAT, unitScalar()));
     const wrapFn = ctx.b.opcode(OpCode.Wrap01);
-    const wrapped = ctx.b.sigMap(divided, wrapFn, canonicalType(FLOAT, unitPhase01()));
+    const wrapped = ctx.b.kernelMap(divided, wrapFn, canonicalType(FLOAT, unitPhase01()));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return {
       outputsById: {
-        out: { k: 'sig', id: wrapped, slot, type: outType, stride: strideOf(outType.payload) },
+        out: { id: wrapped, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
@@ -219,15 +243,21 @@ registerBlock({
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
-    if (!input || input.k !== 'sig') throw new Error('Lens block input must be a signal');
-    const factor = ctx.b.sigConst(floatConst(0.017453292519943295), canonicalType(FLOAT, unitScalar())); // π/180
+    if (!input) throw new Error('Lens block input is required');
+
+    const inputCard = requireInst(input.type.extent.cardinality, 'cardinality');
+    if (inputCard.kind === 'many') {
+      throw new Error('Lens block input must be a signal');
+    }
+
+    const factor = ctx.b.constant(floatConst(0.017453292519943295), canonicalType(FLOAT, unitScalar())); // π/180
     const mulFn = ctx.b.opcode(OpCode.Mul);
-    const radians = ctx.b.sigZip([input.id as SigExprId, factor], mulFn, canonicalType(FLOAT, unitRadians()));
+    const radians = ctx.b.kernelZip([input.id, factor], mulFn, canonicalType(FLOAT, unitRadians()));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return {
       outputsById: {
-        out: { k: 'sig', id: radians, slot, type: outType, stride: strideOf(outType.payload) },
+        out: { id: radians, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
@@ -257,15 +287,21 @@ registerBlock({
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
-    if (!input || input.k !== 'sig') throw new Error('Lens block input must be a signal');
-    const factor = ctx.b.sigConst(floatConst(57.29577951308232), canonicalType(FLOAT, unitScalar())); // 180/π
+    if (!input) throw new Error('Lens block input is required');
+
+    const inputCard = requireInst(input.type.extent.cardinality, 'cardinality');
+    if (inputCard.kind === 'many') {
+      throw new Error('Lens block input must be a signal');
+    }
+
+    const factor = ctx.b.constant(floatConst(57.29577951308232), canonicalType(FLOAT, unitScalar())); // 180/π
     const mulFn = ctx.b.opcode(OpCode.Mul);
-    const degrees = ctx.b.sigZip([input.id as SigExprId, factor], mulFn, canonicalType(FLOAT, unitDegrees()));
+    const degrees = ctx.b.kernelZip([input.id, factor], mulFn, canonicalType(FLOAT, unitDegrees()));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return {
       outputsById: {
-        out: { k: 'sig', id: degrees, slot, type: outType, stride: strideOf(outType.payload) },
+        out: { id: degrees, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
@@ -299,16 +335,22 @@ registerBlock({
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
-    if (!input || input.k !== 'sig') throw new Error('Lens block input must be a signal');
+    if (!input) throw new Error('Lens block input is required');
+
+    const inputCard = requireInst(input.type.extent.cardinality, 'cardinality');
+    if (inputCard.kind === 'many') {
+      throw new Error('Lens block input must be a signal');
+    }
+
     // int:ms → float division → float:seconds
-    const divisor = ctx.b.sigConst(floatConst(1000), canonicalType(FLOAT, unitScalar()));
+    const divisor = ctx.b.constant(floatConst(1000), canonicalType(FLOAT, unitScalar()));
     const divFn = ctx.b.opcode(OpCode.Div);
-    const seconds = ctx.b.sigZip([input.id as SigExprId, divisor], divFn, canonicalType(FLOAT, unitSeconds()));
+    const seconds = ctx.b.kernelZip([input.id, divisor], divFn, canonicalType(FLOAT, unitSeconds()));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return {
       outputsById: {
-        out: { k: 'sig', id: seconds, slot, type: outType, stride: strideOf(outType.payload) },
+        out: { id: seconds, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
@@ -338,17 +380,23 @@ registerBlock({
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
-    if (!input || input.k !== 'sig') throw new Error('Lens block input must be a signal');
-    const multiplier = ctx.b.sigConst(floatConst(1000), canonicalType(FLOAT, unitScalar()));
+    if (!input) throw new Error('Lens block input is required');
+
+    const inputCard = requireInst(input.type.extent.cardinality, 'cardinality');
+    if (inputCard.kind === 'many') {
+      throw new Error('Lens block input must be a signal');
+    }
+
+    const multiplier = ctx.b.constant(floatConst(1000), canonicalType(FLOAT, unitScalar()));
     const mulFn = ctx.b.opcode(OpCode.Mul);
-    const floatMs = ctx.b.sigZip([input.id as SigExprId, multiplier], mulFn, canonicalType(FLOAT, unitMs()));
+    const floatMs = ctx.b.kernelZip([input.id, multiplier], mulFn, canonicalType(FLOAT, unitMs()));
     const floorFn = ctx.b.opcode(OpCode.Floor);
-    const intMs = ctx.b.sigMap(floatMs, floorFn, canonicalType(INT, unitMs()));
+    const intMs = ctx.b.kernelMap(floatMs, floorFn, canonicalType(INT, unitMs()));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return {
       outputsById: {
-        out: { k: 'sig', id: intMs, slot, type: outType, stride: strideOf(outType.payload) },
+        out: { id: intMs, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
@@ -382,16 +430,22 @@ registerBlock({
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
-    if (!input || input.k !== 'sig') throw new Error('Lens block input must be a signal');
-    const zero = ctx.b.sigConst(floatConst(0), canonicalType(FLOAT, unitScalar()));
-    const one = ctx.b.sigConst(floatConst(1), canonicalType(FLOAT, unitScalar()));
+    if (!input) throw new Error('Lens block input is required');
+
+    const inputCard = requireInst(input.type.extent.cardinality, 'cardinality');
+    if (inputCard.kind === 'many') {
+      throw new Error('Lens block input must be a signal');
+    }
+
+    const zero = ctx.b.constant(floatConst(0), canonicalType(FLOAT, unitScalar()));
+    const one = ctx.b.constant(floatConst(1), canonicalType(FLOAT, unitScalar()));
     const clampFn = ctx.b.opcode(OpCode.Clamp);
-    const clamped = ctx.b.sigZip([input.id as SigExprId, zero, one], clampFn, canonicalType(FLOAT, unitNorm01()));
+    const clamped = ctx.b.kernelZip([input.id, zero, one], clampFn, canonicalType(FLOAT, unitNorm01()));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return {
       outputsById: {
-        out: { k: 'sig', id: clamped, slot, type: outType, stride: strideOf(outType.payload) },
+        out: { id: clamped, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
@@ -421,13 +475,19 @@ registerBlock({
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
-    if (!input || input.k !== 'sig') throw new Error('Lens block input must be a signal');
+    if (!input) throw new Error('Lens block input is required');
+
+    const inputCard = requireInst(input.type.extent.cardinality, 'cardinality');
+    if (inputCard.kind === 'many') {
+      throw new Error('Lens block input must be a signal');
+    }
+
     // Identity — no conversion needed, just re-type
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return {
       outputsById: {
-        out: { k: 'sig', id: input.id as SigExprId, slot, type: outType, stride: strideOf(outType.payload) },
+        out: { id: input.id, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
@@ -458,13 +518,19 @@ registerBlock({
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
-    if (!input || input.k !== 'sig') throw new Error('Lens block input must be a signal');
+    if (!input) throw new Error('Lens block input is required');
+
+    const inputCard = requireInst(input.type.extent.cardinality, 'cardinality');
+    if (inputCard.kind === 'many') {
+      throw new Error('Lens block input must be a signal');
+    }
+
     // Identity — no conversion needed, just re-type
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return {
       outputsById: {
-        out: { k: 'sig', id: input.id as SigExprId, slot, type: outType, stride: strideOf(outType.payload) },
+        out: { id: input.id, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },

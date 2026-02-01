@@ -6,10 +6,9 @@
 
 import { registerBlock } from './registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../core/ids';
-import { canonicalType, canonicalField, unitPhase01, strideOf, floatConst } from '../core/canonical-types';
+import { canonicalType, canonicalField, unitPhase01, strideOf, floatConst, requireInst } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { defaultSourceConst } from '../types';
-import type { SigExprId, FieldExprId } from '../compiler/ir/Indices';
 
 // =============================================================================
 // ColorLFO
@@ -42,7 +41,12 @@ registerBlock({
     const sat = inputsById.sat;
     const val = inputsById.val;
 
-    if (!phase || phase.k !== 'sig') {
+    if (!phase) {
+      throw new Error('ColorLFO phase input is required');
+    }
+
+    const phaseCard = requireInst(phase.type.extent.cardinality, 'cardinality');
+    if (phaseCard.kind === 'many') {
       throw new Error('ColorLFO phase input must be a signal');
     }
 
@@ -51,20 +55,20 @@ registerBlock({
     const colorFn = ctx.b.kernel('hsvToRgb');
 
     // Build HSV triple from inputs
-    const inputs: SigExprId[] = [
-      phase.id as SigExprId,
-      hue?.k === 'sig' ? (hue.id as SigExprId) : ctx.b.sigConst(floatConst(0), canonicalType(FLOAT)),
-      sat?.k === 'sig' ? (sat.id as SigExprId) : ctx.b.sigConst(floatConst(1), canonicalType(FLOAT)),
-      val?.k === 'sig' ? (val.id as SigExprId) : ctx.b.sigConst(floatConst(1), canonicalType(FLOAT)),
+    const inputs = [
+      phase.id,
+      hue && requireInst(hue.type.extent.cardinality, 'cardinality').kind !== 'many' ? hue.id : ctx.b.constant(floatConst(0), canonicalType(FLOAT)),
+      sat && requireInst(sat.type.extent.cardinality, 'cardinality').kind !== 'many' ? sat.id : ctx.b.constant(floatConst(1), canonicalType(FLOAT)),
+      val && requireInst(val.type.extent.cardinality, 'cardinality').kind !== 'many' ? val.id : ctx.b.constant(floatConst(1), canonicalType(FLOAT)),
     ];
 
-    const sigId = ctx.b.sigZip(inputs, colorFn, canonicalType(COLOR));
+    const sigId = ctx.b.kernelZip(inputs, colorFn, canonicalType(COLOR));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        color: { k: 'sig', id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
+        color: { id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
@@ -99,18 +103,25 @@ registerBlock({
     const sat = inputsById.sat;
     const val = inputsById.val;
 
-    if (!hue || hue.k !== 'sig' || !sat || sat.k !== 'sig' || !val || val.k !== 'sig') {
+    if (!hue || !sat || !val) {
+      throw new Error('HSVToColor inputs are required');
+    }
+
+    const hueCard = requireInst(hue.type.extent.cardinality, 'cardinality');
+    const satCard = requireInst(sat.type.extent.cardinality, 'cardinality');
+    const valCard = requireInst(val.type.extent.cardinality, 'cardinality');
+    if (hueCard.kind === 'many' || satCard.kind === 'many' || valCard.kind === 'many') {
       throw new Error('HSVToColor inputs must be signals');
     }
 
     const hsvFn = ctx.b.kernel('hsvToRgb');
-    const sigId = ctx.b.sigZip([hue.id as SigExprId, sat.id as SigExprId, val.id as SigExprId], hsvFn, canonicalType(COLOR));
+    const sigId = ctx.b.kernelZip([hue.id, sat.id, val.id], hsvFn, canonicalType(COLOR));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        color: { k: 'sig', id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
+        color: { id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
@@ -145,18 +156,26 @@ registerBlock({
     const sat = inputsById.sat;
     const val = inputsById.val;
 
-    if (!hue || hue.k !== 'field') {
+    if (!hue || !sat || !val) {
+      throw new Error('HsvToRgb inputs are required');
+    }
+
+    const hueCard = requireInst(hue.type.extent.cardinality, 'cardinality');
+    const satCard = requireInst(sat.type.extent.cardinality, 'cardinality');
+    const valCard = requireInst(val.type.extent.cardinality, 'cardinality');
+
+    if (hueCard.kind !== 'many') {
       throw new Error('HsvToRgb hue must be a field');
     }
-    if (!sat || sat.k !== 'sig' || !val || val.k !== 'sig') {
+    if (satCard.kind === 'many' || valCard.kind === 'many') {
       throw new Error('HsvToRgb sat and val must be signals');
     }
 
     const outType = ctx.outTypes[0];
     const hsvFn = ctx.b.kernel('hsvToRgb');
-    const colorField = ctx.b.fieldZipSig(
-      hue.id as FieldExprId,
-      [sat.id as SigExprId, val.id as SigExprId],
+    const colorField = ctx.b.kernelZipSig(
+      hue.id,
+      [sat.id, val.id],
       hsvFn,
       outType
     );
@@ -164,7 +183,7 @@ registerBlock({
 
     return {
       outputsById: {
-        color: { k: 'field', id: colorField, slot, type: outType, stride: strideOf(outType.payload) },
+        color: { id: colorField, slot, type: outType, stride: strideOf(outType.payload) },
       },
       // Propagate instance context from inputs
       instanceContext: ctx.inferredInstance,
@@ -199,17 +218,24 @@ registerBlock({
     const color = inputsById.color;
     const opacity = inputsById.opacity;
 
-    if (!color || color.k !== 'field') {
+    if (!color || !opacity) {
+      throw new Error('ApplyOpacity inputs are required');
+    }
+
+    const colorCard = requireInst(color.type.extent.cardinality, 'cardinality');
+    const opacityCard = requireInst(opacity.type.extent.cardinality, 'cardinality');
+
+    if (colorCard.kind !== 'many') {
       throw new Error('ApplyOpacity color must be a field');
     }
-    if (!opacity || opacity.k !== 'field') {
+    if (opacityCard.kind !== 'many') {
       throw new Error('ApplyOpacity opacity must be a field');
     }
 
     const outType = ctx.outTypes[0];
     const opacityFn = ctx.b.kernel('perElementOpacity');
-    const result = ctx.b.fieldZip(
-      [color.id as FieldExprId, opacity.id as FieldExprId],
+    const result = ctx.b.kernelZip(
+      [color.id, opacity.id],
       opacityFn,
       outType
     );
@@ -217,7 +243,7 @@ registerBlock({
 
     return {
       outputsById: {
-        out: { k: 'field', id: result, slot, type: outType, stride: strideOf(outType.payload) },
+        out: { id: result, slot, type: outType, stride: strideOf(outType.payload) },
       },
       instanceContext: ctx.inferredInstance,
     };

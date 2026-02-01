@@ -11,7 +11,7 @@
 
 import { registerBlock } from './registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../core/ids';
-import { canonicalType, canonicalField, unitWorld3 } from '../core/canonical-types';
+import { canonicalType, canonicalField, unitWorld3, requireInst } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { defaultSourceConst } from '../types';
 
@@ -48,10 +48,13 @@ registerBlock({
     const pos = inputsById.pos;
     const color = inputsById.color;
 
-    if (!pos || pos.k !== 'field') {
+    const posIsField = pos && 'type' in pos && requireInst(pos.type.extent.cardinality, 'cardinality').kind === 'many';
+    const colorIsField = color && 'type' in color && requireInst(color.type.extent.cardinality, 'cardinality').kind === 'many';
+
+    if (!pos || !posIsField) {
       throw new Error('RenderInstances2D pos input must be a field');
     }
-    if (!color || color.k !== 'field') {
+    if (!color || !colorIsField) {
       throw new Error('RenderInstances2D color input must be a field');
     }
 

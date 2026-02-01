@@ -13,7 +13,7 @@
  */
 
 import { registerBlock } from './registry';
-import { canonicalType, unitNorm01, unitScalar, unitDegrees, strideOf, floatConst, cameraProjectionConst } from '../core/canonical-types';
+import { canonicalType, unitNorm01, unitScalar, unitDegrees, strideOf, floatConst, cameraProjectionConst, requireInst } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { defaultSourceConst, type DefaultSource } from '../types';
 import type { CameraDeclIR } from '../compiler/ir/program';
@@ -52,10 +52,10 @@ registerBlock({
   },
   lower: ({ ctx, config }) => {
     const rawValue = (config?.value as number) ?? 0;
-    const sigId = ctx.b.sigConst(cameraProjectionConst(rawValue === 1 ? 'perspective' : 'orthographic'), canonicalType(CAMERA_PROJECTION));
+    const sigId = ctx.b.constant(cameraProjectionConst(rawValue === 1 ? 'perspective' : 'orthographic'), canonicalType(CAMERA_PROJECTION));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
-    return { outputsById: { out: { k: 'sig', id: sigId, slot, type: outType, stride: strideOf(outType.payload) } } };
+    return { outputsById: { out: { id: sigId, slot, type: outType, stride: strideOf(outType.payload) } } };
   },
 });
 
@@ -155,8 +155,9 @@ registerBlock({
     // Extract the slots from the resolved inputs.
     const getSlot = (portId: string) => {
       const ref = inputsById[portId];
-      if (!ref || ref.k !== 'sig') {
-        throw new Error(`Camera block: input '${portId}' must be a signal (got ${ref?.k ?? 'undefined'})`);
+      const isSignal = ref && 'type' in ref && requireInst(ref.type.extent.cardinality, 'cardinality').kind !== 'many';
+      if (!ref || !isSignal) {
+        throw new Error(`Camera block: input '${portId}' must be a signal (got ${ref ? 'field' : 'undefined'})`);
       }
       return ref.slot;
     };

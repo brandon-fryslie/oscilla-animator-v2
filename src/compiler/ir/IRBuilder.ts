@@ -2,17 +2,18 @@
  * IRBuilder Interface
  *
  * Builder pattern for constructing IR expressions.
- * Provides methods for creating signal, field, and event expressions.
+ * All methods return ValueExprId — the ONE index type for the unified valueExprs table.
+ *
+ * MIGRATION (2026-01-31): Legacy method names (sigConst, fieldZip, etc.) are retained
+ * as aliases for backward compatibility during block migration. The canonical names
+ * are the new unified ones (constant, kernelZip, etc.).
  */
 
 import type { CanonicalType, ConstValue } from '../../core/canonical-types';
 import type {
-  SigExprId,
-  FieldExprId,
-  EventExprId,
+  ValueExprId,
   EventSlotId,
   ValueSlot,
-  StateId,
   StateSlotId,
   InstanceId,
   DomainTypeId,
@@ -28,13 +29,11 @@ import type {
   PlacementFieldName,
   BasisKind,
   ContinuityPolicy,
-  SigExpr,
-  FieldExpr,
-  EventExpr,
   StableStateId,
   StateMapping,
 } from './types';
 import type { CameraDeclIR } from './program';
+import type { ValueExpr } from './value-expr';
 
 // =============================================================================
 // IRBuilder Interface
@@ -42,400 +41,162 @@ import type { CameraDeclIR } from './program';
 
 /**
  * IRBuilder provides methods for constructing IR expressions.
- * All methods return stable IDs for the created expressions.
+ * All methods return ValueExprId — indices into the unified valueExprs table.
  */
 export interface IRBuilder {
   // =========================================================================
-  // Signal Expressions
+  // Canonical Value Expression Methods (unified)
   // =========================================================================
 
-  /** Create a constant signal expression. */
-  sigConst(value: ConstValue, type: CanonicalType): SigExprId;
+  /** Create a constant expression. Works for signal, field, or event extent. */
+  constant(value: ConstValue, type: CanonicalType): ValueExprId;
 
-  /** Create a signal from a slot reference. */
-  sigSlot(slot: ValueSlot, type: CanonicalType): SigExprId;
+  /** Create a slot-read expression. */
+  slotRead(slot: ValueSlot, type: CanonicalType): ValueExprId;
 
-  /** Create a time-derived signal. */
-  sigTime(which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'progress' | 'palette' | 'energy', type: CanonicalType): SigExprId;
+  /** Create a time-derived expression. */
+  time(which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'progress' | 'palette' | 'energy', type: CanonicalType): ValueExprId;
 
-  /** Create an external input signal. */
-  sigExternal(channel: string, type: CanonicalType): SigExprId;
+  /** Create an external input expression. */
+  external(channel: string, type: CanonicalType): ValueExprId;
 
-  /** Map a function over a signal. */
-  sigMap(input: SigExprId, fn: PureFn, type: CanonicalType): SigExprId;
+  /** Map a function over an expression (unary kernel). */
+  kernelMap(input: ValueExprId, fn: PureFn, type: CanonicalType): ValueExprId;
 
-  /** Zip multiple signals with a function. */
-  sigZip(inputs: readonly SigExprId[], fn: PureFn, type: CanonicalType): SigExprId;
+  /** Zip multiple expressions with a function (n-ary kernel). */
+  kernelZip(inputs: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId;
 
   /**
-   * Create a shape reference signal.
-   *
-   * @param topologyId - Numeric topology identifier (e.g., TOPOLOGY_ID_ELLIPSE, TOPOLOGY_ID_RECT)
-   * @param paramSignals - Signal IDs for each topology parameter
-   * @param type - Signal type (should be canonicalType(SHAPE))
-   * @param controlPointField - Optional control point field with stride
-   * @returns SigExprId for the shape reference
+   * Zip a field expression with signal expressions.
+   * The field provides per-lane values, signals provide uniform values.
    */
-  sigShapeRef(
+  kernelZipSig(field: ValueExprId, signals: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId;
+
+  /** Broadcast a signal to a field (cardinality one → many). */
+  broadcast(signal: ValueExprId, type: CanonicalType): ValueExprId;
+
+  /** Reduce a field to a signal (cardinality many → one). */
+  reduce(field: ValueExprId, op: 'min' | 'max' | 'sum' | 'avg', type: CanonicalType): ValueExprId;
+
+  /** Create an intrinsic field expression (index, randomId, normalizedIndex). */
+  intrinsic(intrinsic: IntrinsicPropertyName, type: CanonicalType): ValueExprId;
+
+  /** Create a placement field expression (uv, rank, seed). */
+  placement(field: PlacementFieldName, basisKind: BasisKind, type: CanonicalType): ValueExprId;
+
+  /** Create a state-read expression. */
+  stateRead(stateSlot: StateSlotId, type: CanonicalType): ValueExprId;
+
+  /** Read an event expression as a float signal (0.0 or 1.0). */
+  eventRead(eventExpr: ValueExprId): ValueExprId;
+
+  /** Create a path derivative expression (tangent or arcLength). */
+  pathDerivative(input: ValueExprId, op: 'tangent' | 'arcLength', type: CanonicalType): ValueExprId;
+
+  /** Create a shape reference expression. */
+  shapeRef(
     topologyId: TopologyId,
-    paramSignals: readonly SigExprId[],
+    paramArgs: readonly ValueExprId[],
     type: CanonicalType,
-    controlPointField?: { id: FieldExprId; stride: number }
-  ): SigExprId;
+    controlPointField?: ValueExprId
+  ): ValueExprId;
 
-  /**
-   * Create a reduce field signal expression.
-   * Aggregates a field into a scalar signal using the specified reduction operation.
-   * 
-   * @param field - Field expression to reduce
-   * @param op - Reduction operation: 'min' | 'max' | 'sum' | 'avg'
-   * @param type - Signal type (output, cardinality=one, payload matches input field)
-   * @returns SigExprId for the reduce expression
-   * 
-   * Example:
-   *   const sumSig = b.ReduceField(fieldId, 'sum', canonicalType('float'));
-   */
-  ReduceField(
-    field: FieldExprId,
-    op: 'min' | 'max' | 'sum' | 'avg',
-    type: CanonicalType
-  ): SigExprId;
-
-  // =========================================================================
-  // Field Expressions
-  // =========================================================================
-
-  /** Create a constant field expression. */
-  fieldConst(value: ConstValue, type: CanonicalType): FieldExprId;
-
-  /**
-   * Create a field from an intrinsic property.
-   *
-   * Intrinsics are per-element properties automatically available for any instance.
-   * Valid intrinsic names: 'index', 'normalizedIndex', 'randomId'
-   *
-   * @param intrinsic - Intrinsic property name (type-checked at compile time)
-   * @param type - Signal type for the field
-   */
-  fieldIntrinsic(intrinsic: IntrinsicPropertyName, type: CanonicalType): FieldExprId;
-
-  /**
-   * Create a field from placement basis.
-   * Replaces normalizedIndex for gauge-invariant layouts.
-   *
-   * @param field - Which placement field (uv, rank, seed)
-   * @param basisKind - Generation algorithm (user-configurable)
-   * @param type - Signal type of the field
-   * @throws Error if any parameter is missing
-   */
-  fieldPlacement(
-    field: PlacementFieldName,
-    basisKind: BasisKind,
-    type: CanonicalType
-  ): FieldExprId;
-
-  /** Broadcast a signal to a field. */
-  Broadcast(signal: SigExprId, type: CanonicalType): FieldExprId;
-
-  /** Map a function over a field. */
-  fieldMap(input: FieldExprId, fn: PureFn, type: CanonicalType): FieldExprId;
-
-  /** Zip multiple fields with a function. */
-  fieldZip(inputs: readonly FieldExprId[], fn: PureFn, type: CanonicalType): FieldExprId;
-
-  /** Zip a field with signals. */
-  fieldZipSig( // LEGACY must use ValueExpr
-    field: FieldExprId, // LEGACY must use ValueExpr
-    signals: readonly SigExprId[], // LEGACY must use ValueExpr
-    fn: PureFn,
-    type: CanonicalType
-  ): FieldExprId; // LEGACY must use ValueExpr
-
-  /**
-   * Create a path derivative field expression.
-   * Computes tangent or arc length from path control points.
-   *
-   * MVP Scope: Polygonal paths only (linear approximation).
-   * - tangent: Central difference between adjacent points (assumes closed path)
-   * - arcLength: Cumulative Euclidean distance from first point
-   *
-   * Instance binding: Inherited from input field (same instance as control points).
-   *
-   * @param input - Field expression for control points (typically vec2 field)
-   * @param operation - Derivative operation: 'tangent' or 'arcLength'
-   * @param type - Signal type for the result (vec2 for tangent, float for arcLength)
-   * @returns FieldExprId for the derivative field
-   */
-  fieldPathDerivative(
-    input: FieldExprId,
-    operation: 'tangent' | 'arcLength',
-    type: CanonicalType
-  ): FieldExprId;
-
-  // =========================================================================
-  // Event Expressions
-  // =========================================================================
-
-  /** Create a pulse event. */
-  eventPulse(source: 'InfiniteTimeRoot'): EventExprId;
-
-  /** Create a wrap event from a signal. */
-  eventWrap(signal: SigExprId): EventExprId;
-
-  /** Combine multiple events. */
-  eventCombine(events: readonly EventExprId[], mode: 'any' | 'all' | 'merge' | 'last', type?: CanonicalType): EventExprId;
-
-  // =========================================================================
-  // Combine Operations
-  // =========================================================================
-
-  /** Combine multiple signals. */
-  sigCombine(
-    inputs: readonly SigExprId[],
-    mode: 'sum' | 'average' | 'max' | 'min' | 'last',
-    type: CanonicalType
-  ): SigExprId;
-
-  /** Combine multiple fields. */
-  fieldCombine(
-    inputs: readonly FieldExprId[],
+  /** Combine multiple expressions (sum, average, max, min, last, product). */
+  combine(
+    inputs: readonly ValueExprId[],
     mode: 'sum' | 'average' | 'max' | 'min' | 'last' | 'product',
     type: CanonicalType
-  ): FieldExprId;
+  ): ValueExprId;
 
   // =========================================================================
-  // Slot Registration
+  // Event Expression Methods
   // =========================================================================
 
-  /**
-   * Allocate a typed value slot.
-   *
-   * IMPORTANT CONTRACT:
-   * - The returned `ValueSlot` is the *base* slot identifier for lane 0.
-   * - Slot allocation is stride-aware: allocating a slot for a multi-component payload (e.g. vec2/vec3/color)
-   *   reserves a contiguous region sized by the payload stride.
-   * - At runtime, the executor reads/writes that contiguous region using `program.slotMeta[slot].offset` as the
-   *   start lane and `program.slotMeta[slot].stride` as the component count.
-   */
+  /** Create a pulse event (fires every tick from time root). */
+  eventPulse(source: 'InfiniteTimeRoot'): ValueExprId;
+
+  /** Create a wrap event from a signal (rising edge). */
+  eventWrap(signal: ValueExprId): ValueExprId;
+
+  /** Combine multiple events (any/all). */
+  eventCombine(events: readonly ValueExprId[], mode: 'any' | 'all' | 'merge' | 'last', type?: CanonicalType): ValueExprId;
+
+  /** Create a "never fires" event. */
+  eventNever(): ValueExprId;
+
+  // =========================================================================
+  // Legacy Method Aliases (deprecated — use canonical names above)
+  // =========================================================================
+
+  /** @deprecated Use constant() */
+  sigConst(value: ConstValue, type: CanonicalType): ValueExprId;
+  /** @deprecated Use slotRead() */
+  sigSlot(slot: ValueSlot, type: CanonicalType): ValueExprId;
+  /** @deprecated Use time() */
+  sigTime(which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'progress' | 'palette' | 'energy', type: CanonicalType): ValueExprId;
+  /** @deprecated Use external() */
+  sigExternal(channel: string, type: CanonicalType): ValueExprId;
+  /** @deprecated Use kernelMap() */
+  sigMap(input: ValueExprId, fn: PureFn, type: CanonicalType): ValueExprId;
+  /** @deprecated Use kernelZip() */
+  sigZip(inputs: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId;
+  /** @deprecated Use shapeRef() */
+  sigShapeRef(
+    topologyId: TopologyId,
+    paramSignals: readonly ValueExprId[],
+    type: CanonicalType,
+    controlPointField?: { id: ValueExprId; stride: number }
+  ): ValueExprId;
+  /** @deprecated Use reduce() */
+  ReduceField(field: ValueExprId, op: 'min' | 'max' | 'sum' | 'avg', type: CanonicalType): ValueExprId;
+  /** @deprecated Use constant() */
+  fieldConst(value: ConstValue, type: CanonicalType): ValueExprId;
+  /** @deprecated Use intrinsic() */
+  fieldIntrinsic(intrinsic: IntrinsicPropertyName, type: CanonicalType): ValueExprId;
+  /** @deprecated Use placement() */
+  fieldPlacement(field: PlacementFieldName, basisKind: BasisKind, type: CanonicalType): ValueExprId;
+  /** @deprecated Use broadcast() */
+  Broadcast(signal: ValueExprId, type: CanonicalType): ValueExprId;
+  /** @deprecated Use kernelMap() */
+  fieldMap(input: ValueExprId, fn: PureFn, type: CanonicalType): ValueExprId;
+  /** @deprecated Use kernelZip() */
+  fieldZip(inputs: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId;
+  /** @deprecated Use kernelZipSig() */
+  fieldZipSig(field: ValueExprId, signals: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId;
+  /** @deprecated Use pathDerivative() */
+  fieldPathDerivative(input: ValueExprId, operation: 'tangent' | 'arcLength', type: CanonicalType): ValueExprId;
+  /** @deprecated Use stateRead() */
+  sigStateRead(stateSlot: StateSlotId, type: CanonicalType): ValueExprId;
+  /** @deprecated Use stateRead() */
+  fieldStateRead(stateSlot: StateSlotId, type: CanonicalType): ValueExprId;
+  /** @deprecated Use eventRead() */
+  sigEventRead(eventSlot: EventSlotId): ValueExprId;
+  /** @deprecated Use combine() */
+  sigCombine(inputs: readonly ValueExprId[], mode: 'sum' | 'average' | 'max' | 'min' | 'last', type: CanonicalType): ValueExprId;
+  /** @deprecated Use combine() */
+  fieldCombine(inputs: readonly ValueExprId[], mode: 'sum' | 'average' | 'max' | 'min' | 'last' | 'product', type: CanonicalType): ValueExprId;
+
+  // =========================================================================
+  // Slot Registration & Allocation
+  // =========================================================================
+
   allocTypedSlot(type: CanonicalType, label?: string): ValueSlot;
-
-  /**
-   * Register a slot type for slotMeta generation.
-   *
-   * CRITICAL: This must be called after lowering produces slots via allocSlot(stride).
-   * Without type registration, slotMeta generation defaults to stride=1, causing runtime errors
-   * when slotWriteStrided tries to write multiple components to a single-component slot.
-   *
-   * @param slot - The slot to register
-   * @param type - The signal type for this slot
-   */
   registerSlotType(slot: ValueSlot, type: CanonicalType): void;
-
-  /** Register a signal expression with a slot. */
-  registerSigSlot(sigId: SigExprId, slot: ValueSlot): void;
-
-  /** Register a field expression with a slot. */
-  registerFieldSlot(fieldId: FieldExprId, slot: ValueSlot): void;
-
-  /**
-   * Create a signal that reads the fired/not-fired state of an event slot as float (0.0 or 1.0).
-   * This is the canonical event→signal bridge (spec §9.2).
-   */
-  sigEventRead(eventSlot: EventSlotId): SigExprId;
-
-  /** Allocate an event slot for an event expression. Returns a distinct EventSlotId. */
-  allocEventSlot(eventId: EventExprId): EventSlotId;
-
-  // =========================================================================
-  // Slot Allocation (Simple)
-  // =========================================================================
-
-  /**
-   * Allocate a simple slot (without type information).
-   *
-   * STRIDED ALLOCATION:
-   * - Pass stride > 1 for multi-component values (vec2=2, vec3=3, color=4)
-   * - Returns base slot for contiguous region of length stride
-   * - Slot allocator increments by stride to reserve the full region
-   *
-   * LEGACY ONLY (stride=1):
-   * - Do not use for signal/field execution.
-   * - All executable values MUST use `allocTypedSlot(type)` so slotMeta can carry (storage, offset, stride).
-   */
+  registerSigSlot(sigId: ValueExprId, slot: ValueSlot): void;
+  registerFieldSlot(fieldId: ValueExprId, slot: ValueSlot): void;
+  allocEventSlot(eventId: ValueExprId): EventSlotId;
   allocSlot(stride?: number): ValueSlot;
 
   // =========================================================================
-  // Strided Slot Write (Multi-Component Signals)
+  // Execution Steps
   // =========================================================================
 
-  /**
-   * Schedule a strided slot write step for multi-component signal outputs.
-   *
-   * This is the canonical way to produce multi-component signal values (vec2, vec3, color).
-   * Each input signal is evaluated and written to a contiguous slot region.
-   *
-   * CRITICAL CONTRACT:
-   * - `slotBase` must have been allocated with `allocSlot(stride=inputs.length)`
-   * - `inputs.length` must equal the stride of the output slot
-   * - No kernel side effects - only the scheduler writes to slots
-   *
-   * Example: Producing a vec3 signal output
-   * ```typescript
-   * const slotBase = builder.allocSlot(3);
-   * const xSig = builder.sigConst(1.0, floatType);
-   * const ySig = builder.sigConst(2.0, floatType);
-   * const zSig = builder.sigConst(3.0, floatType);
-   * builder.stepSlotWriteStrided(slotBase, [xSig, ySig, zSig]);
-   * // Runtime writes: slot[0]=1.0, slot[1]=2.0, slot[2]=3.0
-   * ```
-   *
-   * @param slotBase - Base slot for the contiguous write region
-   * @param inputs - Component signal expressions to evaluate and write
-   */
-  stepSlotWriteStrided(slotBase: ValueSlot, inputs: readonly SigExprId[]): void;
-
-  /** Get slot count for iteration. */
-  getSlotCount(): number;
-
-  /**
-   * Get slot metadata inputs for slotMeta generation.
-   *
-   * NOTE:
-   * - `stride` is required and must match the payload geometry for the slot's type.
-   * - `ValueSlot` remains the base identifier; the actual storage span is described by (offset, stride).
-   */
-  getSlotMetaInputs(): ReadonlyMap<ValueSlot, { readonly type: CanonicalType; readonly stride: number }>;
-
-  // =========================================================================
-  // State Slot Allocation (Persistent Cross-Frame Storage)
-  // =========================================================================
-
-  /**
-   * Allocate a persistent state slot with stable identity.
-   *
-   * State slots survive across frames and are used for feedback/delay.
-   * The stableId provides semantic identity that survives recompilation,
-   * enabling state migration during hot-swap.
-   *
-   * For scalar state (signal cardinality):
-   * ```typescript
-   * const slot = builder.allocStateSlot(
-   *   stableStateId(blockId, 'delay'),
-   *   { initialValue: 0 }
-   * );
-   * ```
-   *
-   * For field state (many cardinality):
-   * ```typescript
-   * const slot = builder.allocStateSlot(
-   *   stableStateId(blockId, 'slew'),
-   *   { initialValue: 0, instanceId, laneCount: 1000 }
-   * );
-   * ```
-   *
-   * @param stableId - Stable semantic identity (survives recompilation)
-   * @param options - State allocation options
-   * @returns StateSlotId for referencing this state slot
-   */
-  allocStateSlot(
-    stableId: StableStateId,
-    options?: {
-      /** Initial value per element (default: 0) */
-      initialValue?: number;
-      /** Floats per state element (default: 1) */
-      stride?: number;
-      /** Instance ID for field state (omit for scalar) */
-      instanceId?: InstanceId;
-      /** Lane count for field state (required if instanceId provided) */
-      laneCount?: number;
-    }
-  ): StateSlotId;
-
-  /**
-   * Create a signal expression that reads from a state slot.
-   * State reads happen at the beginning of the frame, reading the value
-   * written by the previous frame.
-   *
-   * @param stateSlot - State slot to read from
-   * @param type - Signal type for the read value
-   * @returns SigExprId for the read expression
-   */
-  sigStateRead(stateSlot: StateSlotId, type: CanonicalType): SigExprId;
-
-  /**
-   * @DEPRECATED
-   * Schedule a state write step.
-   * State writes happen at the end of the frame, storing a value
-   * that will be read by the next frame.
-   *
-   * @param stateSlot - State slot to write to
-   * @param value - Signal expression to evaluate and write
-   */
-  stepStateWrite(stateSlot: StateSlotId, value: SigExprId): void;
-
-  /**
-   * Create a field expression that reads from per-lane state.
-   * Used by stateful cardinality-generic blocks operating on fields.
-   * Each lane reads its corresponding state value.
-   *
-   * @param stateSlot - State slot to read from (base slot for lane 0)
-   * @param instanceId - Instance defining the lane count
-   * @param type - Field type for the read values
-   * @returns FieldExprId for the per-lane read expression
-   */
-  fieldStateRead(stateSlot: StateSlotId, type: CanonicalType): FieldExprId;
-
-  /**
-   * Schedule a per-lane state write step.
-   * Each lane writes its corresponding value to state.
-   *
-   * @param stateSlot - State slot to write to (base slot for lane 0)
-   * @param value - Field expression to evaluate and write per-lane
-   */
-  stepFieldStateWrite(stateSlot: StateSlotId, value: FieldExprId): void;
-
-  /**
-   * Schedule a signal evaluation step.
-   * Forces evaluation of a signal expression and stores the result in a slot.
-   * Used by test blocks to capture signal values for assertion.
-   *
-   * @param expr - Signal expression to evaluate
-   * @param target - Slot to store the evaluated value
-   */
-  stepEvalSig(expr: SigExprId, target: ValueSlot): void;
-
-  /**
-   * Schedule a field materialization step.
-   * Materializes a field expression and stores the result in a slot.
-   *
-   * @param field - Field expression to materialize
-   * @param instanceId - Instance context for materialization
-   * @param target - Slot to store the materialized buffer
-   */
-  stepMaterialize(field: FieldExprId, instanceId: InstanceId, target: ValueSlot): void;
-
-  /**
-   * Schedule a continuity map build step.
-   * Builds element mapping when domain changes (hot-swap boundaries).
-   * Executed rarely, only when domain changes.
-   *
-   * @param instanceId - Instance to build mapping for
-   */
+  stepSlotWriteStrided(slotBase: ValueSlot, inputs: readonly ValueExprId[]): void;
+  stepStateWrite(stateSlot: StateSlotId, value: ValueExprId): void;
+  stepFieldStateWrite(stateSlot: StateSlotId, value: ValueExprId): void;
+  stepEvalSig(expr: ValueExprId, target: ValueSlot): void;
+  stepMaterialize(field: ValueExprId, instanceId: InstanceId, target: ValueSlot): void;
   stepContinuityMapBuild(instanceId: InstanceId): void;
-
-  /**
-   * Schedule a continuity apply step.
-   * Applies continuity policy to a field target.
-   * Executed per-frame for targets with policy != none.
-   *
-   * @param targetKey - Stable target ID for continuity state lookup
-   * @param instanceId - Instance context
-   * @param policy - Continuity policy to apply
-   * @param baseSlot - Slot containing base (materialized) values
-   * @param outputSlot - Slot to store continuity-applied values
-   * @param semantic - Semantic role of target (position, color, etc.)
-   * @param stride - Components per element (from buffer type, not semantic)
-   */
   stepContinuityApply(
     targetKey: string,
     instanceId: InstanceId,
@@ -447,109 +208,69 @@ export interface IRBuilder {
   ): void;
 
   // =========================================================================
+  // State Slots
+  // =========================================================================
+
+  allocStateSlot(
+    stableId: StableStateId,
+    options?: {
+      initialValue?: number;
+      stride?: number;
+      instanceId?: InstanceId;
+      laneCount?: number;
+    }
+  ): StateSlotId;
+
+  // =========================================================================
   // Render Globals
   // =========================================================================
 
-  /**
-   * Register a render-global declaration (e.g., CameraDeclIR).
-   * Render globals provide frame-level context for the render assembler.
-   *
-   * @param decl - Camera declaration with slots for projection parameters
-   */
   addRenderGlobal(decl: CameraDeclIR): void;
-
-  /**
-   * Get all registered render globals.
-   * Used by compiler to populate program.renderGlobals.
-   *
-   * @returns Array of render global declarations
-   */
   getRenderGlobals(): readonly CameraDeclIR[];
 
   // =========================================================================
   // Utility
   // =========================================================================
 
-  /** Create a pure function reference (kernel). */
   kernel(name: string): PureFn;
-
-  /** Create an opcode-based pure function. */
   opcode(op: OpCode): PureFn;
-
-  /** Create an expression-based pure function. */
   expr(expression: string): PureFn;
 
-  /**
-   * Create an instance.
-   * @param domainType - Domain type ID (shape, circle, etc.)
-   * @param count - Number of elements
-   * @param lifecycle - Lifecycle mode (default: 'static')
-   * @returns InstanceId for the created instance
-   */
   createInstance(
     domainType: DomainTypeId,
     count: number,
     lifecycle?: 'static' | 'dynamic' | 'pooled'
   ): InstanceId;
 
-  /**
-   * Get all instances.
-   * @returns ReadonlyMap of all instance declarations
-   */
   getInstances(): ReadonlyMap<InstanceId, InstanceDecl>;
-
-  /** Get schedule. */
   getSchedule(): TimeModelIR;
 
   // =========================================================================
   // Build Results
   // =========================================================================
 
-  /** Get all emitted steps (state writes, etc). */
   getSteps(): readonly Step[];
-
-  /** Get state mappings with stable IDs for hot-swap migration. */
   getStateMappings(): readonly StateMapping[];
-
-
-  /** Get state slot count. */
   getStateSlotCount(): number;
+  getSlotCount(): number;
+  getSlotMetaInputs(): ReadonlyMap<ValueSlot, { readonly type: CanonicalType; readonly stride: number }>;
 
-  /**
-   * Get a single signal expression by ID.
-   * @param id Signal expression ID
-   * @returns The signal expression, or undefined if not found
-   */
-  getSigExpr(id: SigExprId): SigExpr | undefined;
+  /** Get a single value expression by ID. */
+  getValueExpr(id: ValueExprId): ValueExpr | undefined;
 
-  /**
-   * Get all signal expressions.
-   * @returns Readonly array of all signal expressions
-   */
-  getSigExprs(): readonly SigExpr[];
+  /** Get all value expressions. */
+  getValueExprs(): readonly ValueExpr[];
 
-  /**
-   * Get all field expressions.
-   * @returns Readonly array of all field expressions
-   */
-  getFieldExprs(): readonly FieldExpr[];
+  /** @deprecated Use getValueExpr() */
+  getSigExpr(id: ValueExprId): unknown;
+  /** @deprecated Use getValueExprs() */
+  getSigExprs(): readonly unknown[];
+  /** @deprecated Use getValueExprs() */
+  getFieldExprs(): readonly unknown[];
+  /** @deprecated Use getValueExprs() */
+  getEventExprs(): readonly unknown[];
 
-  /**
-   * Get all event expressions.
-   * @returns Readonly array of all event expressions
-   */
-  getEventExprs(): readonly EventExpr[];
-
-  /**
-   * Get signal-to-slot mappings.
-   * Used by scheduler to generate evalSig steps for debug probing.
-   * @returns Map from signal expr ID to slot
-   */
   getSigSlots(): ReadonlyMap<number, ValueSlot>;
-
-  /** Get event expression to EventSlotId mappings. */
-  getEventSlots(): ReadonlyMap<EventExprId, EventSlotId>;
-
-  /** Get total number of allocated event slots. */
+  getEventSlots(): ReadonlyMap<ValueExprId, EventSlotId>;
   getEventSlotCount(): number;
 }

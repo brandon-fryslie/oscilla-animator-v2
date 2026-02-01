@@ -5,12 +5,12 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS, type LowerResult } from './registry';
-import { canonicalType, type PayloadType, type CameraProjection, unitPhase01, unitNorm01, strideOf, floatConst, intConst, boolConst, vec2Const, colorConst, cameraProjectionConst } from '../core/canonical-types';
+import { canonicalType, type PayloadType, type CameraProjection, unitPhase01, unitNorm01, strideOf, floatConst, intConst, boolConst, vec2Const, colorConst, cameraProjectionConst, requireInst } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, CAMERA_PROJECTION } from '../core/canonical-types';
 import { inferType, payloadVar, unitVar } from '../core/inference-types';
 import { OpCode, stableStateId } from '../compiler/ir/types';
 import { defaultSourceConst } from '../types';
-import type { SigExprId, StateSlotId } from '../compiler/ir/Indices';
+import type { ValueExprId, StateSlotId } from '../compiler/ir/Indices';
 
 // =============================================================================
 // Const (Payload-Generic)
@@ -90,11 +90,11 @@ registerBlock({
         if (typeof rawValue !== 'number') {
           throw new Error(`Const<float> requires number value, got ${typeof rawValue}`);
         }
-        const sigId = ctx.b.sigConst(floatConst(rawValue), canonicalType(FLOAT));
+        const id = ctx.b.constant(floatConst(rawValue), canonicalType(FLOAT));
         const slot = ctx.b.allocSlot(stride);
         return {
           outputsById: {
-            out: { k: 'sig', id: sigId, slot, type: outType, stride },
+            out: { id, slot, type: outType, stride },
           },
         };
       }
@@ -102,11 +102,11 @@ registerBlock({
         if (typeof rawValue !== 'number') {
           throw new Error(`Const<${payloadType.kind}> requires number value, got ${typeof rawValue}`);
         }
-        const sigId = ctx.b.sigConst(intConst(Math.floor(rawValue)), canonicalType(INT));
+        const id = ctx.b.constant(intConst(Math.floor(rawValue)), canonicalType(INT));
         const slot = ctx.b.allocSlot(stride);
         return {
           outputsById: {
-            out: { k: 'sig', id: sigId, slot, type: outType, stride },
+            out: { id, slot, type: outType, stride },
           },
         };
       }
@@ -114,11 +114,11 @@ registerBlock({
         if (typeof rawValue !== 'boolean' && typeof rawValue !== 'number') {
           throw new Error(`Const<bool> requires boolean or number value, got ${typeof rawValue}`);
         }
-        const sigId = ctx.b.sigConst(boolConst(Boolean(rawValue)), canonicalType(BOOL));
+        const id = ctx.b.constant(boolConst(Boolean(rawValue)), canonicalType(BOOL));
         const slot = ctx.b.allocSlot(stride);
         return {
           outputsById: {
-            out: { k: 'sig', id: sigId, slot, type: outType, stride },
+            out: { id, slot, type: outType, stride },
           },
         };
       }
@@ -133,15 +133,15 @@ registerBlock({
 
         // Multi-component signal: allocate strided slot, compute components, emit write step
         const slot = ctx.b.allocSlot(stride);
-        const xSig = ctx.b.sigConst(floatConst(val.x), canonicalType(FLOAT));
-        const ySig = ctx.b.sigConst(floatConst(val.y), canonicalType(FLOAT));
+        const xSig = ctx.b.constant(floatConst(val.x), canonicalType(FLOAT));
+        const ySig = ctx.b.constant(floatConst(val.y), canonicalType(FLOAT));
         const components = [xSig, ySig];
 
         ctx.b.stepSlotWriteStrided(slot, components);
 
         return {
           outputsById: {
-            out: { k: 'sig', id: xSig, slot, type: outType, stride, components },
+            out: { id: xSig, slot, type: outType, stride, components },
           },
         };
       }
@@ -157,17 +157,17 @@ registerBlock({
 
         // Multi-component signal: allocate strided slot, compute components, emit write step
         const slot = ctx.b.allocSlot(stride);
-        const rSig = ctx.b.sigConst(floatConst(val.r), canonicalType(FLOAT));
-        const gSig = ctx.b.sigConst(floatConst(val.g), canonicalType(FLOAT));
-        const bSig = ctx.b.sigConst(floatConst(val.b), canonicalType(FLOAT));
-        const aSig = ctx.b.sigConst(floatConst(val.a), canonicalType(FLOAT));
+        const rSig = ctx.b.constant(floatConst(val.r), canonicalType(FLOAT));
+        const gSig = ctx.b.constant(floatConst(val.g), canonicalType(FLOAT));
+        const bSig = ctx.b.constant(floatConst(val.b), canonicalType(FLOAT));
+        const aSig = ctx.b.constant(floatConst(val.a), canonicalType(FLOAT));
         const components = [rSig, gSig, bSig, aSig];
 
         ctx.b.stepSlotWriteStrided(slot, components);
 
         return {
           outputsById: {
-            out: { k: 'sig', id: rSig, slot, type: outType, stride, components },
+            out: { id: rSig, slot, type: outType, stride, components },
           },
         };
       }
@@ -175,11 +175,11 @@ registerBlock({
         if (typeof rawValue !== 'string') {
           throw new Error(`Const<cameraProjection> requires string value, got ${typeof rawValue}`);
         }
-        const sigId = ctx.b.sigConst(cameraProjectionConst(rawValue as CameraProjection), canonicalType(CAMERA_PROJECTION));
+        const id = ctx.b.constant(cameraProjectionConst(rawValue as CameraProjection), canonicalType(CAMERA_PROJECTION));
         const slot = ctx.b.allocSlot(stride);
         return {
           outputsById: {
-            out: { k: 'sig', id: sigId, slot, type: outType, stride },
+            out: { id, slot, type: outType, stride },
           },
         };
       }
@@ -232,23 +232,24 @@ registerBlock({
   },
   lower: ({ ctx, inputsById, config }) => {
     const phase = inputsById.phase;
-    if (!phase || phase.k !== 'sig') {
+    const isPhaseSignal = phase && 'type' in phase && requireInst(phase.type.extent.temporality, 'temporality').kind === 'continuous';
+    if (!phase || !isPhaseSignal) {
       throw new Error('Oscillator phase required as signal');
     }
 
     const mode = (config?.mode as number) ?? 0;
     const outType = ctx.outTypes[0];
 
-    let sigId: SigExprId;
+    let id: ValueExprId;
 
     switch (mode) {
       case 0: {
         // Sin
         const mul = ctx.b.opcode(OpCode.Mul);
         const sin = ctx.b.opcode(OpCode.Sin);
-        const tau = ctx.b.sigConst(floatConst(Math.PI * 2), canonicalType(FLOAT));
-        const phaseRadians = ctx.b.sigZip([phase.id, tau], mul, canonicalType(FLOAT, unitPhase01()));
-        sigId = ctx.b.sigMap(phaseRadians, sin, canonicalType(FLOAT, unitNorm01()));
+        const tau = ctx.b.constant(floatConst(Math.PI * 2), canonicalType(FLOAT));
+        const phaseRadians = ctx.b.kernelZip([phase.id, tau], mul, canonicalType(FLOAT, unitPhase01()));
+        id = ctx.b.kernelMap(phaseRadians, sin, canonicalType(FLOAT, unitNorm01()));
         break;
       }
       case 1: {
@@ -256,29 +257,29 @@ registerBlock({
         const floor = ctx.b.opcode(OpCode.Floor);
         const sub = ctx.b.opcode(OpCode.Sub);
         const mul = ctx.b.opcode(OpCode.Mul);
-        const two = ctx.b.sigConst(floatConst(2), canonicalType(FLOAT));
-        const one = ctx.b.sigConst(floatConst(1), canonicalType(FLOAT));
+        const two = ctx.b.constant(floatConst(2), canonicalType(FLOAT));
+        const one = ctx.b.constant(floatConst(1), canonicalType(FLOAT));
 
-        const phaseFloor = ctx.b.sigMap(phase.id, floor, canonicalType(FLOAT, unitPhase01()));
-        const frac = ctx.b.sigZip([phase.id, phaseFloor], sub, canonicalType(FLOAT, unitNorm01()));
-        const scaled = ctx.b.sigZip([two, frac], mul, canonicalType(FLOAT, unitNorm01()));
-        sigId = ctx.b.sigZip([scaled, one], sub, canonicalType(FLOAT, unitNorm01()));
+        const phaseFloor = ctx.b.kernelMap(phase.id, floor, canonicalType(FLOAT, unitPhase01()));
+        const frac = ctx.b.kernelZip([phase.id, phaseFloor], sub, canonicalType(FLOAT, unitNorm01()));
+        const scaled = ctx.b.kernelZip([two, frac], mul, canonicalType(FLOAT, unitNorm01()));
+        id = ctx.b.kernelZip([scaled, one], sub, canonicalType(FLOAT, unitNorm01()));
         break;
       }
       case 2: {
         // Square: phase < 0.5 ? 1 : -1
         const sub = ctx.b.opcode(OpCode.Sub);
-        const half = ctx.b.sigConst(floatConst(0.5), canonicalType(FLOAT));
+        const half = ctx.b.constant(floatConst(0.5), canonicalType(FLOAT));
         const sign = ctx.b.opcode(OpCode.Sign);
 
-        const shifted = ctx.b.sigZip([phase.id, half], sub, canonicalType(FLOAT));
-        sigId = ctx.b.sigMap(shifted, sign, canonicalType(FLOAT, unitNorm01()));
+        const shifted = ctx.b.kernelZip([phase.id, half], sub, canonicalType(FLOAT));
+        id = ctx.b.kernelMap(shifted, sign, canonicalType(FLOAT, unitNorm01()));
         break;
       }
       case 3: {
         // Noise: Use simplexNoise1D with phase as seed
         const noise = ctx.b.kernel('simplexNoise1D');
-        sigId = ctx.b.sigMap(phase.id, noise, canonicalType(FLOAT, unitNorm01()));
+        id = ctx.b.kernelMap(phase.id, noise, canonicalType(FLOAT, unitNorm01()));
         break;
       }
       default: {
@@ -290,7 +291,7 @@ registerBlock({
 
     return {
       outputsById: {
-        out: { k: 'sig', id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
+        out: { id, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
@@ -324,10 +325,13 @@ registerBlock({
     const delta = inputsById.delta;
     const reset = inputsById.reset;
 
-    if (!delta || delta.k !== 'sig') {
+    const isDeltaSignal = delta && 'type' in delta && requireInst(delta.type.extent.temporality, 'temporality').kind === 'continuous';
+    const isResetSignal = reset && 'type' in reset && requireInst(reset.type.extent.temporality, 'temporality').kind === 'continuous';
+
+    if (!delta || !isDeltaSignal) {
       throw new Error('Accumulator delta required as signal');
     }
-    if (!reset || reset.k !== 'sig') {
+    if (!reset || !isResetSignal) {
       throw new Error('Accumulator reset required as signal');
     }
 
@@ -338,16 +342,16 @@ registerBlock({
     const stateSlot = ctx.b.allocStateSlot(stateId, { initialValue: 0 });
 
     // Read current state
-    const currentValue = ctx.b.sigStateRead(stateSlot, canonicalType(FLOAT));
+    const currentValue = ctx.b.stateRead(stateSlot, canonicalType(FLOAT));
 
     // Compute new value: reset ? 0 : (currentValue + delta)
     const add = ctx.b.opcode(OpCode.Add);
-    const zero = ctx.b.sigConst(floatConst(0), canonicalType(FLOAT));
-    const newValue = ctx.b.sigZip([currentValue, delta.id], add, canonicalType(FLOAT));
+    const zero = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
+    const newValue = ctx.b.kernelZip([currentValue, delta.id], add, canonicalType(FLOAT));
 
     // Select: reset ? 0 : newValue
     const select = ctx.b.kernel('select');
-    const finalValue = ctx.b.sigZip([reset.id, zero, newValue], select, canonicalType(FLOAT));
+    const finalValue = ctx.b.kernelZip([reset.id, zero, newValue], select, canonicalType(FLOAT));
 
     // Write back to state
     ctx.b.stepStateWrite(stateSlot, finalValue);
@@ -356,7 +360,7 @@ registerBlock({
 
     return {
       outputsById: {
-        value: { k: 'sig', id: finalValue, slot, type: outType, stride: strideOf(outType.payload) },
+        value: { id: finalValue, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
@@ -396,13 +400,13 @@ registerBlock({
     const stateSlot = ctx.b.allocStateSlot(stateId, { initialValue });
 
     // Read previous state (this is the output - delayed by 1 frame)
-    const outputId = ctx.b.sigStateRead(stateSlot, canonicalType(FLOAT));
+    const outputId = ctx.b.stateRead(stateSlot, canonicalType(FLOAT));
 
     const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        out: { k: 'sig', id: outputId, slot, type: outType, stride: strideOf(outType.payload) },
+        out: { id: outputId, slot, type: outType, stride: strideOf(outType.payload) },
       },
       stateSlot, // Pass to phase 2
     };
@@ -410,7 +414,8 @@ registerBlock({
   // Phase 2: Generate state write step using resolved input
   lower: ({ ctx, inputsById, config, existingOutputs }): LowerResult => {
     const input = inputsById.in;
-    if (!input || input.k !== 'sig') {
+    const isInputSignal = input && 'type' in input && requireInst(input.type.extent.temporality, 'temporality').kind === 'continuous';
+    if (!input || !isInputSignal) {
       throw new Error('UnitDelay requires signal input');
     }
 
@@ -433,7 +438,7 @@ registerBlock({
     const stateSlot = ctx.b.allocStateSlot(stateId, { initialValue });
 
     // Read previous state (this is the output - delayed by 1 frame)
-    const outputId = ctx.b.sigStateRead(stateSlot, canonicalType(FLOAT));
+    const outputId = ctx.b.stateRead(stateSlot, canonicalType(FLOAT));
 
     // Write current input to state for next frame
     ctx.b.stepStateWrite(stateSlot, input.id);
@@ -442,7 +447,7 @@ registerBlock({
 
     return {
       outputsById: {
-        out: { k: 'sig', id: outputId, slot, type: outType, stride: strideOf(outType.payload) },
+        out: { id: outputId, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
@@ -475,7 +480,8 @@ registerBlock({
   },
   lower: ({ ctx, inputsById, config }) => {
     const target = inputsById.target;
-    if (!target || target.k !== 'sig') {
+    const isTargetSignal = target && 'type' in target && requireInst(target.type.extent.temporality, 'temporality').kind === 'continuous';
+    if (!target || !isTargetSignal) {
       throw new Error('Lag requires target signal input');
     }
 
@@ -488,12 +494,12 @@ registerBlock({
     const stateSlot = ctx.b.allocStateSlot(stateId, { initialValue });
 
     // Read previous state
-    const prevValue = ctx.b.sigStateRead(stateSlot, canonicalType(FLOAT));
+    const prevValue = ctx.b.stateRead(stateSlot, canonicalType(FLOAT));
 
     // Compute: lerp(prev, target, smoothing)
     const lerpFn = ctx.b.opcode(OpCode.Lerp);
-    const smoothConst = ctx.b.sigConst(floatConst(smoothing), canonicalType(FLOAT));
-    const newValue = ctx.b.sigZip([prevValue, target.id, smoothConst], lerpFn, canonicalType(FLOAT));
+    const smoothConst = ctx.b.constant(floatConst(smoothing), canonicalType(FLOAT));
+    const newValue = ctx.b.kernelZip([prevValue, target.id, smoothConst], lerpFn, canonicalType(FLOAT));
 
     // Write new value to state
     ctx.b.stepStateWrite(stateSlot, newValue);
@@ -502,7 +508,7 @@ registerBlock({
 
     return {
       outputsById: {
-        out: { k: 'sig', id: newValue, slot, type: outType, stride: strideOf(outType.payload) },
+        out: { id: newValue, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
@@ -533,7 +539,8 @@ registerBlock({
   },
   lower: ({ ctx, inputsById, config }) => {
     const frequency = inputsById.frequency;
-    if (!frequency || frequency.k !== 'sig') {
+    const isFrequencySignal = frequency && 'type' in frequency && requireInst(frequency.type.extent.temporality, 'temporality').kind === 'continuous';
+    if (!frequency || !isFrequencySignal) {
       throw new Error('Phasor requires frequency signal input');
     }
 
@@ -545,25 +552,25 @@ registerBlock({
     const stateSlot = ctx.b.allocStateSlot(stateId, { initialValue: initialPhase });
 
     // Read previous phase
-    const prevPhase = ctx.b.sigStateRead(stateSlot, canonicalType(FLOAT, unitPhase01()));
+    const prevPhase = ctx.b.stateRead(stateSlot, canonicalType(FLOAT, unitPhase01()));
 
     // Read dt from time system (in seconds)
-    const dtSig = ctx.b.sigTime('dt', canonicalType(FLOAT));
+    const dtSig = ctx.b.time('dt', canonicalType(FLOAT));
 
     // Compute: phase increment = frequency * dt / 1000 (dt is in ms)
     const mulFn = ctx.b.opcode(OpCode.Mul);
     const divFn = ctx.b.opcode(OpCode.Div);
-    const thousand = ctx.b.sigConst(floatConst(1000), canonicalType(FLOAT));
-    const dtSeconds = ctx.b.sigZip([dtSig, thousand], divFn, canonicalType(FLOAT));
-    const increment = ctx.b.sigZip([frequency.id, dtSeconds], mulFn, canonicalType(FLOAT));
+    const thousand = ctx.b.constant(floatConst(1000), canonicalType(FLOAT));
+    const dtSeconds = ctx.b.kernelZip([dtSig, thousand], divFn, canonicalType(FLOAT));
+    const increment = ctx.b.kernelZip([frequency.id, dtSeconds], mulFn, canonicalType(FLOAT));
 
     // Add increment to previous phase
     const addFn = ctx.b.opcode(OpCode.Add);
-    const rawPhase = ctx.b.sigZip([prevPhase, increment], addFn, canonicalType(FLOAT));
+    const rawPhase = ctx.b.kernelZip([prevPhase, increment], addFn, canonicalType(FLOAT));
 
     // Wrap to [0, 1)
     const wrapFn = ctx.b.opcode(OpCode.Wrap01);
-    const wrappedPhase = ctx.b.sigMap(rawPhase, wrapFn, canonicalType(FLOAT, unitPhase01()));
+    const wrappedPhase = ctx.b.kernelMap(rawPhase, wrapFn, canonicalType(FLOAT, unitPhase01()));
 
     // Write wrapped phase to state
     ctx.b.stepStateWrite(stateSlot, wrappedPhase);
@@ -572,7 +579,7 @@ registerBlock({
 
     return {
       outputsById: {
-        out: { k: 'sig', id: wrappedPhase, slot, type: outType, stride: strideOf(outType.payload) },
+        out: { id: wrappedPhase, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },
@@ -603,27 +610,29 @@ registerBlock({
   },
   lower: ({ ctx, inputsById }) => {
     const value = inputsById.value;
-    if (!value || value.k !== 'sig') {
+    const isValueSignal = value && 'type' in value && requireInst(value.type.extent.temporality, 'temporality').kind === 'continuous';
+    if (!value || !isValueSignal) {
       throw new Error('Hash requires value signal input');
     }
 
     const seed = inputsById.seed;
-    let seedId: SigExprId;
-    if (seed && seed.k === 'sig') {
+    let seedId: ValueExprId;
+    const isSeedSignal = seed && 'type' in seed && requireInst(seed.type.extent.temporality, 'temporality').kind === 'continuous';
+    if (seed && isSeedSignal) {
       seedId = seed.id;
     } else {
-      seedId = ctx.b.sigConst(floatConst(0), canonicalType(FLOAT));
+      seedId = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
     }
 
     const hashFn = ctx.b.opcode(OpCode.Hash);
-    const hashId = ctx.b.sigZip([value.id, seedId], hashFn, canonicalType(FLOAT));
+    const hashId = ctx.b.kernelZip([value.id, seedId], hashFn, canonicalType(FLOAT));
 
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        out: { k: 'sig', id: hashId, slot, type: outType, stride: strideOf(outType.payload) },
+        out: { id: hashId, slot, type: outType, stride: strideOf(outType.payload) },
       },
     };
   },

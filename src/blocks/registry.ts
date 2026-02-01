@@ -16,7 +16,7 @@ import type { InstanceId, StateSlotId } from '../compiler/ir/Indices';
 import type { VarargConnection } from '../graph/Patch';
 
 // Re-export lowering types from compiler
-export type { ValueRefPacked } from '../compiler/ir/lowerTypes';
+export type { ValueRefPacked, ValueRefExpr } from '../compiler/ir/lowerTypes';
 
 /**
  * Lower context - provided to block lower functions.
@@ -56,14 +56,14 @@ export interface LowerCtx {
  */
 export interface LowerArgs {
   readonly ctx: LowerCtx;
-  readonly inputs: readonly import('../compiler/ir/lowerTypes').ValueRefPacked[];
-  readonly inputsById: Record<string, import('../compiler/ir/lowerTypes').ValueRefPacked>;
+  readonly inputs: readonly import('../compiler/ir/lowerTypes').ValueRefExpr[];
+  readonly inputsById: Record<string, import('../compiler/ir/lowerTypes').ValueRefExpr>;
   /**
    * Vararg inputs - array of values per vararg port.
    * Only populated for blocks with vararg inputs.
-   * Key is port ID, value is array of ValueRefPacked in sortKey order.
+   * Key is port ID, value is array of ValueRefExpr in sortKey order.
    */
-  readonly varargInputsById?: Record<string, readonly import('../compiler/ir/lowerTypes').ValueRefPacked[]>;
+  readonly varargInputsById?: Record<string, readonly import('../compiler/ir/lowerTypes').ValueRefExpr[]>;
   readonly config?: Readonly<Record<string, unknown>>;
   /**
    * Existing outputs from phase 1 (lowerOutputsOnly).
@@ -77,7 +77,7 @@ export interface LowerArgs {
  */
 export interface LowerResult {
   /** Map of port ID to ValueRef (required) */
-  readonly outputsById: Record<string, import('../compiler/ir/lowerTypes').ValueRefPacked>;
+  readonly outputsById: Record<string, import('../compiler/ir/lowerTypes').ValueRefExpr>;
 
   /**
    * Instance context (optional).

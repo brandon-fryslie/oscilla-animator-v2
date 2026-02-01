@@ -12,7 +12,7 @@
  */
 
 import {registerBlock} from './registry';
-import {canonicalType, strideOf, floatConst} from '../core/canonical-types';
+import {canonicalType, strideOf, floatConst, requireInst} from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import {TOPOLOGY_ID_ELLIPSE, TOPOLOGY_ID_RECT} from '../shapes/registry';
 import {defaultSourceConst} from '../types';
@@ -73,32 +73,35 @@ registerBlock({
         // Resolve rx parameter
         const rxInput = inputsById.rx;
         let rxSig;
-        if (rxInput && rxInput.k === 'sig') {
+        const rxIsSignal = rxInput && 'type' in rxInput && requireInst(rxInput.type.extent.cardinality, 'cardinality').kind !== 'many';
+        if (rxInput && rxIsSignal) {
             rxSig = rxInput.id;
         } else {
-            rxSig = ctx.b.sigConst(floatConst((config?.rx as number) ?? 0.02), canonicalType(FLOAT));
+            rxSig = ctx.b.constant(floatConst((config?.rx as number) ?? 0.02), canonicalType(FLOAT));
         }
 
         // Resolve ry parameter
         const ryInput = inputsById.ry;
         let rySig;
-        if (ryInput && ryInput.k === 'sig') {
+        const ryIsSignal = ryInput && 'type' in ryInput && requireInst(ryInput.type.extent.cardinality, 'cardinality').kind !== 'many';
+        if (ryInput && ryIsSignal) {
             rySig = ryInput.id;
         } else {
-            rySig = ctx.b.sigConst(floatConst((config?.ry as number) ?? 0.02), canonicalType(FLOAT));
+            rySig = ctx.b.constant(floatConst((config?.ry as number) ?? 0.02), canonicalType(FLOAT));
         }
 
         // Resolve rotation parameter
         const rotationInput = inputsById.rotation;
         let rotationSig;
-        if (rotationInput && rotationInput.k === 'sig') {
+        const rotationIsSignal = rotationInput && 'type' in rotationInput && requireInst(rotationInput.type.extent.cardinality, 'cardinality').kind !== 'many';
+        if (rotationInput && rotationIsSignal) {
             rotationSig = rotationInput.id;
         } else {
-            rotationSig = ctx.b.sigConst(floatConst((config?.rotation as number) ?? 0), canonicalType(FLOAT));
+            rotationSig = ctx.b.constant(floatConst((config?.rotation as number) ?? 0), canonicalType(FLOAT));
         }
 
         // Create shape reference with ellipse topology and param signals
-        const shapeRefSig = ctx.b.sigShapeRef(
+        const shapeRefSig = ctx.b.shapeRef(
             TOPOLOGY_ID_ELLIPSE,
             [rxSig, rySig, rotationSig],
             canonicalType(SHAPE)
@@ -109,7 +112,7 @@ registerBlock({
 
         return {
             outputsById: {
-                shape: {k: 'sig', id: shapeRefSig, slot, type: shapeType, stride: strideOf(shapeType.payload)},
+                shape: {id: shapeRefSig, slot, type: shapeType, stride: strideOf(shapeType.payload)},
             },
         };
     },
@@ -178,41 +181,45 @@ registerBlock({
         // Resolve width parameter
         const widthInput = inputsById.width;
         let widthSig;
-        if (widthInput && widthInput.k === 'sig') {
+        const widthIsSignal = widthInput && 'type' in widthInput && requireInst(widthInput.type.extent.cardinality, 'cardinality').kind !== 'many';
+        if (widthInput && widthIsSignal) {
             widthSig = widthInput.id;
         } else {
-            widthSig = ctx.b.sigConst(floatConst((config?.width as number) ?? 0.04), canonicalType(FLOAT));
+            widthSig = ctx.b.constant(floatConst((config?.width as number) ?? 0.04), canonicalType(FLOAT));
         }
 
         // Resolve height parameter
         const heightInput = inputsById.height;
         let heightSig;
-        if (heightInput && heightInput.k === 'sig') {
+        const heightIsSignal = heightInput && 'type' in heightInput && requireInst(heightInput.type.extent.cardinality, 'cardinality').kind !== 'many';
+        if (heightInput && heightIsSignal) {
             heightSig = heightInput.id;
         } else {
-            heightSig = ctx.b.sigConst(floatConst((config?.height as number) ?? 0.02), canonicalType(FLOAT));
+            heightSig = ctx.b.constant(floatConst((config?.height as number) ?? 0.02), canonicalType(FLOAT));
         }
 
         // Resolve rotation parameter
         const rotationInput = inputsById.rotation;
         let rotationSig;
-        if (rotationInput && rotationInput.k === 'sig') {
+        const rotationIsSignal = rotationInput && 'type' in rotationInput && requireInst(rotationInput.type.extent.cardinality, 'cardinality').kind !== 'many';
+        if (rotationInput && rotationIsSignal) {
             rotationSig = rotationInput.id;
         } else {
-            rotationSig = ctx.b.sigConst(floatConst((config?.rotation as number) ?? 0), canonicalType(FLOAT));
+            rotationSig = ctx.b.constant(floatConst((config?.rotation as number) ?? 0), canonicalType(FLOAT));
         }
 
         // Resolve cornerRadius parameter
         const cornerRadiusInput = inputsById.cornerRadius;
         let cornerRadiusSig;
-        if (cornerRadiusInput && cornerRadiusInput.k === 'sig') {
+        const cornerRadiusIsSignal = cornerRadiusInput && 'type' in cornerRadiusInput && requireInst(cornerRadiusInput.type.extent.cardinality, 'cardinality').kind !== 'many';
+        if (cornerRadiusInput && cornerRadiusIsSignal) {
             cornerRadiusSig = cornerRadiusInput.id;
         } else {
-            cornerRadiusSig = ctx.b.sigConst(floatConst((config?.cornerRadius as number) ?? 0), canonicalType(FLOAT));
+            cornerRadiusSig = ctx.b.constant(floatConst((config?.cornerRadius as number) ?? 0), canonicalType(FLOAT));
         }
 
         // Create shape reference with rect topology and param signals
-        const shapeRefSig = ctx.b.sigShapeRef(
+        const shapeRefSig = ctx.b.shapeRef(
             TOPOLOGY_ID_RECT,
             [widthSig, heightSig, rotationSig, cornerRadiusSig],
             canonicalType(SHAPE)
@@ -223,7 +230,7 @@ registerBlock({
 
         return {
             outputsById: {
-                shape: {k: 'sig', id: shapeRefSig, slot, type: shapeType, stride: strideOf(shapeType.payload)},
+                shape: {id: shapeRefSig, slot, type: shapeType, stride: strideOf(shapeType.payload)},
             },
         };
     },

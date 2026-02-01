@@ -6,9 +6,9 @@
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../core/ids';
-import { canonicalType, canonicalField, strideOf, type PayloadType } from '../core/canonical-types';
+import { canonicalType, canonicalField, strideOf, type PayloadType, requireInst } from '../core/canonical-types';
 import { unitVar, payloadVar, inferType, inferField } from '../core/inference-types';
-import type { SigExprId, FieldExprId } from '../compiler/ir/Indices';
+import type { ValueExprId } from '../compiler/ir/Indices';
 
 // =============================================================================
 // Broadcast (Payload-Generic)
@@ -69,20 +69,21 @@ registerBlock({
     const payloadType = outType.payload as PayloadType;
 
     const signalValue = inputsById.signal;
-    if (!signalValue || signalValue.k !== 'sig') {
+    const isSignalValue = signalValue && 'type' in signalValue && requireInst(signalValue.type.extent.temporality, 'temporality').kind === 'continuous';
+    if (!signalValue || !isSignalValue) {
       throw new Error('Broadcast signal input must be a signal');
     }
 
     // Create field broadcast operation with the resolved type
-    const fieldId = ctx.b.Broadcast(
-      signalValue.id as SigExprId,
+    const fieldId = ctx.b.broadcast(
+      signalValue.id,
       outType
     );
     const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        field: { k: 'field', id: fieldId, slot, type: outType, stride: strideOf(outType.payload) },
+        field: { id: fieldId, slot, type: outType, stride: strideOf(outType.payload) },
       },
       // Propagate instance context from inputs
       // Broadcast is special - it can receive instance context even though
@@ -158,7 +159,8 @@ registerBlock({
 
     // Get field input
     const fieldInput = inputsById.field;
-    if (!fieldInput || fieldInput.k !== 'field') {
+    const isFieldInput = fieldInput && 'type' in fieldInput && requireInst(fieldInput.type.extent.cardinality, 'cardinality').kind === 'many';
+    if (!fieldInput || !isFieldInput) {
       throw new Error('Reduce field input must be a field');
     }
 
@@ -169,8 +171,8 @@ registerBlock({
     }
 
     // Create reduce signal expression
-    const sigId = ctx.b.ReduceField(
-      fieldInput.id as FieldExprId,
+    const sigId = ctx.b.reduce(
+      fieldInput.id,
       op,
       canonicalType(payloadType)
     );
@@ -178,7 +180,7 @@ registerBlock({
 
     return {
       outputsById: {
-        signal: { k: 'sig', id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
+        signal: { id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
       },
       // Reduce is instance-agnostic (like Broadcast)
       instanceContext: undefined,

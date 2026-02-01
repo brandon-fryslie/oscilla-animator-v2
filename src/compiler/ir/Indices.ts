@@ -32,17 +32,17 @@ export type StateSlotId = number & { readonly __brand: 'StateSlotId' };
 /** Dense index for steps in the Schedule. */
 export type StepIndex = number & { readonly __brand: 'StepIndex' };
 
-/** Dense index for signal expressions. */
-export type SigExprId = number & { readonly __brand: 'SigExprId' };
-
-/** Dense index for field expressions. */
-export type FieldExprId = number & { readonly __brand: 'FieldExprId' };
-
-/** Dense index for event expressions. */
-export type EventExprId = number & { readonly __brand: 'EventExprId' };
-
 /** Dense index for unified value expressions (canonical type). */
 export type ValueExprId = number & { readonly __brand: 'ValueExprId' };
+
+/** @deprecated Use ValueExprId — unified expression table */
+export type SigExprId = ValueExprId;
+
+/** @deprecated Use ValueExprId — unified expression table */
+export type FieldExprId = ValueExprId;
+
+/** @deprecated Use ValueExprId — unified expression table */
+export type EventExprId = ValueExprId;
 
 /** Dense index for event slots (distinct from ValueSlot — events use boolean storage). */
 export type EventSlotId = number & { readonly __brand: 'EventSlotId' };
@@ -109,21 +109,18 @@ export function stepIndex(n: number): StepIndex {
   return n as StepIndex;
 }
 
-export function sigExprId(n: number): SigExprId {
-  return n as SigExprId;
-}
-
-export function fieldExprId(n: number): FieldExprId {
-  return n as FieldExprId;
-}
-
-export function eventExprId(n: number): EventExprId {
-  return n as EventExprId;
-}
-
 export function valueExprId(n: number): ValueExprId {
   return n as ValueExprId;
 }
+
+/** @deprecated Use valueExprId */
+export const sigExprId = valueExprId;
+
+/** @deprecated Use valueExprId */
+export const fieldExprId = valueExprId;
+
+/** @deprecated Use valueExprId */
+export const eventExprId = valueExprId;
 
 export function eventSlotId(n: number): EventSlotId {
   return n as EventSlotId;

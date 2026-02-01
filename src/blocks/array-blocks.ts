@@ -7,7 +7,7 @@
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../core/ids';
-import { canonicalType, canonicalField, strideOf, type PayloadType, boolConst, withInstance, instanceRef } from '../core/canonical-types';
+import { canonicalType, canonicalField, strideOf, type PayloadType, boolConst, withInstance, instanceRef, requireInst } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { DOMAIN_CIRCLE } from '../core/domain-registry';
 import { defaultSourceConst, defaultSource } from '../types';
@@ -96,24 +96,24 @@ registerBlock({
     // 1. Elements field - broadcasts the input signal across the array
     // NOTE: elementInput is required - FieldExprArray (identity) has been removed per spec
     // until it has concrete backing store, lifetime rules, and runtime storage contract
-    if (!elementInput || elementInput.k !== 'sig') {
+    if (!elementInput || !('type' in elementInput && requireInst(elementInput.type.extent.cardinality, 'cardinality').kind === 'one')) {
       throw new Error('Array block requires an element signal input');
     }
-    const elementsField = ctx.b.Broadcast(elementInput.id, outType0);
+    const elementsField = ctx.b.broadcast(elementInput.id, outType0);
 
     // 2. Intrinsic fields (index, t, active)
-    const indexField = ctx.b.fieldIntrinsic('index', outType1);
-    const tField = ctx.b.fieldIntrinsic('normalizedIndex', outType2);
+    const indexField = ctx.b.intrinsic('index', outType1);
+    const tField = ctx.b.intrinsic('normalizedIndex', outType2);
     // For static arrays, active is always true - we can use a constant broadcast
-    const activeSignal = ctx.b.sigConst(boolConst(true), canonicalType(BOOL));
-    const activeField = ctx.b.Broadcast(activeSignal, outType3);
+    const activeSignal = ctx.b.constant(boolConst(true), canonicalType(BOOL));
+    const activeField = ctx.b.broadcast(activeSignal, outType3);
 
     return {
       outputsById: {
-        elements: { k: 'field', id: elementsField, slot: ctx.b.allocSlot(), type: outType0, stride: strideOf(outType0.payload) },
-        index: { k: 'field', id: indexField, slot: ctx.b.allocSlot(), type: outType1, stride: strideOf(outType1.payload) },
-        t: { k: 'field', id: tField, slot: ctx.b.allocSlot(), type: outType2, stride: strideOf(outType2.payload) },
-        active: { k: 'field', id: activeField, slot: ctx.b.allocSlot(), type: outType3, stride: strideOf(outType3.payload) },
+        elements: { id: elementsField, slot: ctx.b.allocSlot(), type: outType0, stride: strideOf(outType0.payload) },
+        index: { id: indexField, slot: ctx.b.allocSlot(), type: outType1, stride: strideOf(outType1.payload) },
+        t: { id: tField, slot: ctx.b.allocSlot(), type: outType2, stride: strideOf(outType2.payload) },
+        active: { id: activeField, slot: ctx.b.allocSlot(), type: outType3, stride: strideOf(outType3.payload) },
       },
       // Set instance context for downstream blocks
       instanceContext: instanceId,
