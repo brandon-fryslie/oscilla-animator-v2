@@ -88,4 +88,78 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
     // TODO: Change to expect(filtered).toEqual([]) after gap analysis Sprint 4 item #25
     expect(filtered.length).toBeLessThanOrEqual(12); // 9 pre-existing + 3 added for map/zip/zipSig (needed for instance inference without relying on type)
   });
+
+  // =============================================================================
+  // Sprint 1: Purity & Authority Hardening
+  // =============================================================================
+
+  describe('Purity & Authority (Sprint 1)', () => {
+
+    it('backend cannot mutate types', () => {
+      // Backend must never call type mutation functions
+      const mutators = [
+        'withInstance',
+        'withCardinality',
+        'withTemporality',
+        'withPayload',
+        'withUnit',
+      ];
+
+      for (const mutator of mutators) {
+        const matches = grepSrc(mutator, 'src/compiler/backend/');
+        // Allow imports but not calls
+        const filtered = matches.filter(m => {
+          const content = m.substring(m.indexOf(':', m.indexOf(':') + 1) + 1).trim();
+          // Skip import lines
+          if (content.startsWith('import ') || content.includes('from ')) return false;
+          // Skip comments
+          if (content.startsWith('//') || content.startsWith('*')) return false;
+          return true;
+        });
+        expect(filtered, `Backend must not call ${mutator}()`).toEqual([]);
+      }
+    });
+
+    it('backend cannot import frontend modules', () => {
+      const matches = grepSrc("from '\\.\\./frontend/", 'src/compiler/backend/');
+      // Allow only PortKey type import (read-only type reference)
+      const filtered = matches.filter(m => {
+        const content = m.substring(m.indexOf(':', m.indexOf(':') + 1) + 1).trim();
+        // Allow: import type { PortKey } from "../frontend/analyze-type-constraints";
+        if (content.includes('import type') && content.includes('PortKey')) return false;
+        return true;
+      });
+      expect(filtered, 'Backend must not import from frontend (except read-only types)').toEqual([]);
+    });
+
+    it('isTypeCompatible is pure (no block-name parameters)', () => {
+      // isTypeCompatible should not reference block metadata or cardinality helpers
+      const forbiddenInTypeCompat = [
+        'getBlockCardinalityMetadata',
+        'isCardinalityGeneric',
+        'sourceBlockType',
+        'targetBlockType',
+      ];
+
+      for (const forbidden of forbiddenInTypeCompat) {
+        const matches = grepSrc(forbidden, 'src/compiler/frontend/analyze-type-graph.ts');
+        expect(matches, `isTypeCompatible must not use ${forbidden}`).toEqual([]);
+      }
+    });
+
+    it.skip('schedule steps contain no evalSig/evalEvent (Sprint 3)', () => {
+      // TODO: Sprint 3 - after IR unification
+      // Schedule steps should use unified ValueExpr, not separate evalSig/evalEvent
+      const matches = grepSrc('evalSig\\|evalEvent', 'src/compiler/ir/types.ts');
+      expect(matches, 'Schedule steps must use unified ValueExpr').toEqual([]);
+    });
+
+    it.skip('adapter insertion uses only types (Sprint 3)', () => {
+      // TODO: Sprint 3 - after adapter refactor
+      // Adapter insertion should dispatch on CanonicalType only, not block names
+      // This will be enforced once adapter registry is refactored
+      expect(true).toBe(true); // Placeholder
+    });
+
+  });
 });
