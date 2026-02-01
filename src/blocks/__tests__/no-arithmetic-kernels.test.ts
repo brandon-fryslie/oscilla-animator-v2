@@ -11,6 +11,8 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { buildPatch } from '../../graph';
+import { compile } from '../../compiler/compile';
 
 describe('Block Lowering - No Arithmetic Kernel Names', () => {
   // Denylist of arithmetic kernel names that should NEVER appear in block lower() functions
@@ -50,7 +52,7 @@ describe('Block Lowering - No Arithmetic Kernel Names', () => {
     'gridLayoutUV',
   ];
 
-  it('block files do not emit denied arithmetic kernel names', () => {
+  it('block files do not emit denied arithmetic kernel names (regex)', () => {
     const blockFiles = [
       'math-blocks.ts',
       'field-operations-blocks.ts',
@@ -73,8 +75,8 @@ describe('Block Lowering - No Arithmetic Kernel Names', () => {
       }
 
       for (const kernelName of DENIED_KERNEL_NAMES) {
-        // Check for ctx.b.kernel('kernelName') pattern
-        const pattern = new RegExp(`ctx\\.b\\.kernel\\s*\\(\\s*['"\`]${kernelName}['"\`]\\s*\\)`, 'g');
+        // Task 3.1: Loosen regex to catch extra args after kernel name
+        const pattern = new RegExp(`ctx\\.b\\.kernel\\s*\\(\\s*['"\`]${kernelName}['"\`]`, 'g');
         if (pattern.test(content)) {
           violations.push(`${file}: Found ctx.b.kernel('${kernelName}')`);
         }
@@ -86,6 +88,61 @@ describe('Block Lowering - No Arithmetic Kernel Names', () => {
         `Arithmetic kernel names found in block files (should use opcodes instead):\n${violations.join('\n')}`
       );
     }
+  });
+
+  it('compiled arithmetic blocks only use opcodes, not kernel names', () => {
+    // Task 3.2: Create a minimal compilable patch with Add block and verify
+    // that the lowered IR only uses 'opcode' kernel functions, not 'kernel' names
+
+    const patch = buildPatch((b) => {
+      // Need TimeRoot for compilation to succeed
+      const time = b.addBlock('InfiniteTimeRoot', { periodAMs: 1000, periodBMs: 2000 });
+
+      // Create an Add block (represents all binary math blocks)
+      const add = b.addBlock('Add', {});
+
+      // Wire phase to both inputs (signal+signal → signal)
+      b.wire(time, 'phaseA', add, 'a');
+      b.wire(time, 'phaseB', add, 'b');
+    });
+
+    const result = compile(patch);
+
+    if (result.kind === 'error') {
+      throw new Error(`Compilation failed: ${JSON.stringify(result.errors, null, 2)}`);
+    }
+
+    // Inspect the compiled IR and verify all kernel expressions use opcodes
+    const { program } = result;
+
+    // Check all value expressions in the unified ValueExprTable
+    for (const expr of program.valueExprs.nodes) {
+      // Filter to kernel expressions (kind === 'kernel')
+      if (expr.kind === 'kernel') {
+        // Only map, zip, and zipSig kernel kinds have an 'fn' field
+        // (broadcast, reduce, pathDerivative do not)
+        if (
+          expr.kernelKind === 'map' ||
+          expr.kernelKind === 'zip' ||
+          expr.kernelKind === 'zipSig'
+        ) {
+          // Kernel expressions with fn have a 'fn' field that can be either { kind: 'opcode', opcode: ... }
+          // or { kind: 'kernel', name: ... }
+          if (expr.fn.kind === 'kernel') {
+            // Check if this is a denied arithmetic kernel
+            const kernelName = expr.fn.name;
+            if (DENIED_KERNEL_NAMES.includes(kernelName)) {
+              throw new Error(
+                `Found arithmetic kernel '${kernelName}' in compiled IR (should use opcode instead)`
+              );
+            }
+          }
+        }
+      }
+    }
+
+    // If we got here, no arithmetic kernel names were found (success)
+    expect(result.kind).toBe('ok');
   });
 
   it('denylist is comprehensive (documents all removed arithmetic kernels)', () => {
