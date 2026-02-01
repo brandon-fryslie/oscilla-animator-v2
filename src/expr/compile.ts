@@ -2,14 +2,14 @@
  * Expression DSL IR Compiler
  *
  * Compiles typed AST to IR expressions using IRBuilder.
- * Maps AST nodes to IR primitives (sigConst, sigMap, sigZip, etc.).
+ * Maps AST nodes to IR primitives (constant, kernelMap, kernelZip, etc.).
  *
  * IR mapping reference: src/expr/FUNCTIONS.md
  */
 
 import type { ExprNode } from './ast';
 import type { IRBuilder } from '../compiler/ir/IRBuilder';
-import type { SigExprId } from '../compiler/ir/types';
+import type { ValueExprId } from '../compiler/ir/Indices';
 import { OpCode } from '../compiler/ir/types';
 import { canonicalType, type PayloadType, floatConst, intConst } from '../core/canonical-types';
 import { FLOAT, INT, BOOL } from '../core/canonical-types';
@@ -21,9 +21,9 @@ import { isVectorType, swizzleResultType } from './swizzle';
  */
 export interface CompileContext {
   readonly builder: IRBuilder;
-  readonly inputs: ReadonlyMap<string, SigExprId>;
+  readonly inputs: ReadonlyMap<string, ValueExprId>;
   /** Block reference signals by canonical address (optional - for member access support) */
-  readonly blockRefs?: ReadonlyMap<string, SigExprId>;
+  readonly blockRefs?: ReadonlyMap<string, ValueExprId>;
 }
 
 /**
@@ -34,7 +34,7 @@ export interface CompileContext {
  * @param ctx Compilation context
  * @returns IR signal expression ID
  */
-export function compile(node: ExprNode, ctx: CompileContext): SigExprId {
+export function compile(node: ExprNode, ctx: CompileContext): ValueExprId {
   // All nodes must be typed at this point
   if (!node.type) {
     throw new Error(`Cannot compile untyped AST node: ${node.kind}`);
@@ -71,9 +71,9 @@ export function compile(node: ExprNode, ctx: CompileContext): SigExprId {
 /**
  * Compile literal node to constant signal.
  */
-function compileLiteral(node: ExprNode & { kind: 'literal' }, ctx: CompileContext): SigExprId {
+function compileLiteral(node: ExprNode & { kind: 'literal' }, ctx: CompileContext): ValueExprId {
   const type = canonicalType(node.type as PayloadType);
-  
+
   // Create the correct ConstValue based on the node's payload type
   let constValue;
   if ((node.type as PayloadType).kind === 'int') {
@@ -84,14 +84,14 @@ function compileLiteral(node: ExprNode & { kind: 'literal' }, ctx: CompileContex
     // float or other numeric types default to float
     constValue = floatConst(node.value);
   }
-  
+
   return ctx.builder.constant(constValue, type);
 }
 
 /**
  * Compile identifier node to input signal reference.
  */
-function compileIdentifier(node: ExprNode & { kind: 'identifier' }, ctx: CompileContext): SigExprId {
+function compileIdentifier(node: ExprNode & { kind: 'identifier' }, ctx: CompileContext): ValueExprId {
   if (!ctx.inputs.has(node.name)) {
     throw new Error(`Undefined input '${node.name}' during compilation (should have been caught by type checker)`);
   }
@@ -101,7 +101,7 @@ function compileIdentifier(node: ExprNode & { kind: 'identifier' }, ctx: Compile
 /**
  * Compile unary operator node.
  */
-function compileUnary(node: ExprNode & { kind: 'unary' }, ctx: CompileContext): SigExprId {
+function compileUnary(node: ExprNode & { kind: 'unary' }, ctx: CompileContext): ValueExprId {
   const arg = compile(node.arg, ctx);
   const type = canonicalType(node.type as PayloadType);
 
@@ -133,7 +133,7 @@ function compileUnary(node: ExprNode & { kind: 'unary' }, ctx: CompileContext): 
 /**
  * Compile binary operator node.
  */
-function compileBinary(node: ExprNode & { kind: 'binary' }, ctx: CompileContext): SigExprId {
+function compileBinary(node: ExprNode & { kind: 'binary' }, ctx: CompileContext): ValueExprId {
   const left = compile(node.left, ctx);
   const right = compile(node.right, ctx);
   const type = canonicalType(node.type as PayloadType);
@@ -211,7 +211,7 @@ function compileBinary(node: ExprNode & { kind: 'binary' }, ctx: CompileContext)
  *
  * This works because cond is bool (0 or 1 after comparison).
  */
-function compileTernary(node: ExprNode & { kind: 'ternary' }, ctx: CompileContext): SigExprId {
+function compileTernary(node: ExprNode & { kind: 'ternary' }, ctx: CompileContext): ValueExprId {
   const cond = compile(node.cond, ctx);
   const thenBranch = compile(node.then, ctx);
   const elseBranch = compile(node.else, ctx);
@@ -237,7 +237,7 @@ function compileTernary(node: ExprNode & { kind: 'ternary' }, ctx: CompileContex
 /**
  * Compile function call node.
  */
-function compileCall(node: ExprNode & { kind: 'call' }, ctx: CompileContext): SigExprId {
+function compileCall(node: ExprNode & { kind: 'call' }, ctx: CompileContext): ValueExprId {
   const args = node.args.map(arg => compile(arg, ctx));
   const type = canonicalType(node.type as PayloadType);
 
@@ -334,7 +334,7 @@ function compileCall(node: ExprNode & { kind: 'call' }, ctx: CompileContext): Si
 /**
  * Compile member access node (component access or block output reference).
  */
-function compileMemberAccess(node: ExprNode & { kind: 'member' }, ctx: CompileContext): SigExprId {
+function compileMemberAccess(node: ExprNode & { kind: 'member' }, ctx: CompileContext): ValueExprId {
   // Type is already validated by type checker
   const objectSig = compile(node.object, ctx);
   const objectType = node.object.type!;
@@ -351,10 +351,7 @@ function compileMemberAccess(node: ExprNode & { kind: 'member' }, ctx: CompileCo
       return ctx.builder.kernelMap(objectSig, fn, resultType);
     } else {
       // Multi-component swizzle: extract each component and combine
-      /**
-       * @DEPRECATED: must remove reference to SigExprId
-       */
-      const componentSigs: SigExprId[] = [];
+      const componentSigs: ValueExprId[] = [];
       for (const char of pattern) {
         const kernelName = getExtractionKernel(objectType, char);
         const fn = ctx.builder.kernel(kernelName);

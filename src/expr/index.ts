@@ -12,8 +12,8 @@
  *   builder
  * );
  * if (result.ok) {
- *   const sigId = result.value;
- *   // Use sigId in block lowering
+ *   const exprId = result.value;
+ *   // Use exprId in block lowering
  * } else {
  *   // Handle compilation errors
  *   console.error(result.error.message);
@@ -23,7 +23,7 @@
 
 import type { CanonicalType, PayloadType } from '../core/canonical-types';
 import type { IRBuilder } from '../compiler/ir/IRBuilder';
-import type { SigExprId } from '../compiler/ir/types';
+import type { ValueExprId } from '../compiler/ir/Indices';
 import { tokenize } from './lexer';
 import { parse, ParseError } from './parser';
 import { typecheck, TypeError } from './typecheck';
@@ -43,7 +43,7 @@ export interface ExpressionCompileError {
  * Result type for compilation.
  */
 export type CompileResult =
-  | { ok: true; value: SigExprId }
+  | { ok: true; value: ValueExprId }
   | { ok: false; error: ExpressionCompileError };
 
 /**
@@ -52,7 +52,7 @@ export type CompileResult =
  * @param exprText Expression string (e.g., "sin(phase * 2) + 0.5")
  * @param inputs Input type environment (maps input names to signal types)
  * @param builder IRBuilder instance
- * @param inputSignals Compiled input signal IDs (maps input names to SigExprIds)
+ * @param inputSignals Compiled input signal IDs (maps input names to ValueExprIds)
  * @returns Compiled signal ID or error
  *
  * @example
@@ -77,7 +77,7 @@ export function compileExpression(
   exprText: string,
   inputs: ReadonlyMap<string, CanonicalType>,
   builder: IRBuilder,
-  inputSignals: ReadonlyMap<string, SigExprId>
+  inputSignals: ReadonlyMap<string, ValueExprId>
 ): CompileResult {
   try {
     // Step 1: Tokenize
@@ -95,9 +95,9 @@ export function compileExpression(
       builder,
       inputs: inputSignals,
     };
-    const sigId = compile(typedAst, ctx);
+    const exprId = compile(typedAst, ctx);
 
-    return { ok: true, value: sigId };
+    return { ok: true, value: exprId };
   } catch (err) {
     // Convert internal errors to public ExpressionCompileError
     if (err instanceof ParseError) {
