@@ -1,3 +1,4 @@
+# SUPERSEDED — See SPRINT-20260201-140000-purity-authority-PLAN.md
 # Sprint: Housekeeping - Cleanup and Enforcement Hardening
 
 Generated: 2026-02-01T12:00:00Z

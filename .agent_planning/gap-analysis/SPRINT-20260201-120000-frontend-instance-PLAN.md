@@ -1,3 +1,4 @@
+# SUPERSEDED — See SPRINT-20260201-140000-frontend-solver-PLAN.md
 # Sprint: Frontend-Instance - Move Instance Resolution from Backend to Frontend
 
 Generated: 2026-02-01T12:00:00Z

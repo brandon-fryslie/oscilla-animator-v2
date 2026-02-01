@@ -88,13 +88,12 @@ registerBlock({
 
     const resultId = ctx.b.kernelZip([aId, bId], addFn, outType);
     const slot = ctx.b.allocSlot();
-    const isField = isAField || isBField;
 
     return {
       outputsById: {
         out: { id: resultId, slot, type: outType, stride: strideOf(outType.payload) },
       },
-      ...(isField ? { instanceContext: ctx.inferredInstance } : {}),
+      // instanceContext auto-propagated by framework
     };
   },
 });
@@ -178,13 +177,12 @@ registerBlock({
 
     const resultId = ctx.b.kernelZip([aId, bId], subFn, outType);
     const slot = ctx.b.allocSlot();
-    const isField = isAField || isBField;
 
     return {
       outputsById: {
         out: { id: resultId, slot, type: outType, stride: strideOf(outType.payload) },
       },
-      ...(isField ? { instanceContext: ctx.inferredInstance } : {}),
+      // instanceContext auto-propagated by framework
     };
   },
 });
@@ -268,13 +266,12 @@ registerBlock({
 
     const resultId = ctx.b.kernelZip([aId, bId], mulFn, outType);
     const slot = ctx.b.allocSlot();
-    const isField = isAField || isBField;
 
     return {
       outputsById: {
         out: { id: resultId, slot, type: outType, stride: strideOf(outType.payload) },
       },
-      ...(isField ? { instanceContext: ctx.inferredInstance } : {}),
+      // instanceContext auto-propagated by framework
     };
   },
 });
@@ -358,13 +355,12 @@ registerBlock({
 
     const resultId = ctx.b.kernelZip([aId, bId], divFn, outType);
     const slot = ctx.b.allocSlot();
-    const isField = isAField || isBField;
 
     return {
       outputsById: {
         out: { id: resultId, slot, type: outType, stride: strideOf(outType.payload) },
       },
-      ...(isField ? { instanceContext: ctx.inferredInstance } : {}),
+      // instanceContext auto-propagated by framework
     };
   },
 });
@@ -448,13 +444,12 @@ registerBlock({
 
     const resultId = ctx.b.kernelZip([aId, bId], modFn, outType);
     const slot = ctx.b.allocSlot();
-    const isField = isAField || isBField;
 
     return {
       outputsById: {
         out: { id: resultId, slot, type: outType, stride: strideOf(outType.payload) },
       },
-      ...(isField ? { instanceContext: ctx.inferredInstance } : {}),
+      // instanceContext auto-propagated by framework
     };
   },
 });

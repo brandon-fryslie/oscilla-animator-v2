@@ -1,3 +1,4 @@
+# SUPERSEDED — See SPRINT-20260201-140000-step-format-PLAN.md (rescoped to format only)
 # Sprint: Step-Unification - Replace Hard-Coded Step Kinds with Type-Driven Dispatch
 
 Generated: 2026-02-01T12:00:00Z

@@ -8,7 +8,7 @@
 
 import { registerBlock, STANDARD_NUMERIC_PAYLOADS } from './registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../core/ids';
-import { canonicalType, canonicalField, strideOf, requireInst } from '../core/canonical-types';
+import { canonicalType, canonicalField, strideOf } from '../core/canonical-types';
 import { FLOAT, INT } from '../core/canonical-types';
 import { OpCode } from '../compiler/ir/types';
 
@@ -97,14 +97,11 @@ registerBlock({
     const result = ctx.b.kernelMap(input.id, sinFn, outType);
     const slot = ctx.b.allocSlot();
 
-    // Check if input is field-extent to propagate instanceContext
-    const isField = requireInst(input.type.extent.cardinality, 'cardinality').kind === 'many';
-
     return {
       outputsById: {
         result: { id: result, slot, type: outType, stride: strideOf(outType.payload) },
       },
-      ...(isField ? { instanceContext: ctx.inferredInstance } : {}),
+      // instanceContext auto-propagated by framework
     };
   },
 });
@@ -150,14 +147,11 @@ registerBlock({
     const result = ctx.b.kernelMap(input.id, cosFn, outType);
     const slot = ctx.b.allocSlot();
 
-    // Check if input is field-extent to propagate instanceContext
-    const isField = requireInst(input.type.extent.cardinality, 'cardinality').kind === 'many';
-
     return {
       outputsById: {
         result: { id: result, slot, type: outType, stride: strideOf(outType.payload) },
       },
-      ...(isField ? { instanceContext: ctx.inferredInstance } : {}),
+      // instanceContext auto-propagated by framework
     };
   },
 });

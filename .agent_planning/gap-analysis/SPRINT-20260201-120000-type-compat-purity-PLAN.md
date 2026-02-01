@@ -1,3 +1,4 @@
+# SUPERSEDED — See SPRINT-20260201-140000-purity-authority-PLAN.md + SPRINT-20260201-140000-frontend-solver-PLAN.md
 # Sprint: Type-Compat-Purity - Remove Block-Name Exceptions from isTypeCompatible
 
 Generated: 2026-02-01T12:00:00Z
