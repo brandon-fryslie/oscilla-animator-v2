@@ -5,9 +5,8 @@
  */
 
 import { registerBlock, STANDARD_NUMERIC_PAYLOADS } from './registry';
-import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../core/ids';
-import { canonicalType, canonicalField, strideOf, floatConst, requireInst, extentsEqual } from '../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
+import { canonicalType, strideOf, floatConst, requireInst, extentsEqual } from '../core/canonical-types';
+import { FLOAT } from '../core/canonical-types';
 import { OpCode } from '../compiler/ir/types';
 
 // =============================================================================
