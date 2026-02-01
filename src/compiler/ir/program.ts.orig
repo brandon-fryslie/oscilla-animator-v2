@@ -17,7 +17,6 @@ import type {
 } from './Indices';
 import type { BlockId, PortId } from '../../types';
 import type { ValueExpr } from './value-expr';
-import type { KernelRegistry } from '../../runtime/KernelRegistry';
 
 // =============================================================================
 // Version and Core Types
@@ -126,19 +125,6 @@ export interface CompiledProgramIR {
    * Spec Reference: design-docs/_new/3d/camera-v2/01-basics.md §3
    */
   readonly renderGlobals: readonly CameraDeclIR[];
-
-  /**
-   * Kernel Registry (Phase B: Kernel Registry Sprint)
-   *
-   * Registry of kernel implementations with handle-based dispatch.
-   * All kernel references in valueExprs are pre-resolved to handles.
-   *
-   * Invariant: All PureFn nodes with kind='kernelResolved' have valid handles
-   * into this registry. Missing kernels fail at program load (not runtime).
-   *
-   * The registry is immutable after program construction.
-   */
-  readonly kernelRegistry: KernelRegistry;
 }
 
 /**

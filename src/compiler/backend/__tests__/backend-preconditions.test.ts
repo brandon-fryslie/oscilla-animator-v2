@@ -17,6 +17,7 @@ import type { CompiledProgramIR } from '../../ir/program';
 import type { UnlinkedIRFragments } from '../lower-blocks';
 import type { ScheduleIR } from '../schedule-program';
 import type { AcyclicOrLegalGraph } from '../../ir/patches';
+import { createDefaultRegistry } from '../../../runtime/kernels/default-registry';
 
 // Import blocks to trigger registration
 import '../../../blocks/time-blocks';
@@ -55,6 +56,7 @@ function testProgramConverter(
     },
     fieldSlotRegistry: new Map(),
     renderGlobals: [],
+    kernelRegistry: createDefaultRegistry(),
   };
 }
 

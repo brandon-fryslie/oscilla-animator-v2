@@ -9,6 +9,7 @@
  * 5. Pass 5: Cycle Validation (SCC) - Check for illegal cycles
  * 6. Pass 6: Block Lowering - Lower blocks to IR expressions
  * 7. Pass 7: Schedule Construction - Build execution schedule
+ * 8. Kernel Resolution - Resolve kernel names to handles (Phase B)
  *
  * Integrated with event emission for diagnostics.
  */
@@ -27,6 +28,8 @@ import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../core
 // debugService import removed for strict compiler isolation (One Source of Truth)
 import { compilationInspector } from '../services/CompilationInspectorService';
 import { computeRenderReachableBlocks } from './reachability';
+import { resolveKernels } from './resolve-kernels';
+import { createDefaultRegistry } from '../runtime/kernels/default-registry';
 
 
 // Import block registrations (side-effect imports to register blocks)
@@ -354,8 +357,23 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
       console.warn('[CompilationInspector] Failed to capture schedule:', e);
     }
 
-    // Convert to CompiledProgramIR
-    const compiledIR = convertLinkedIRToProgram(unlinkedIR, scheduleIR, acyclicPatch);
+    // Phase B: Kernel Resolution
+    // Create default registry and resolve all kernel references to handles
+    const registry = createDefaultRegistry();
+    // Cast to mutable: we need to mutate PureFn nodes to add handles
+    const valueExprs = unlinkedIR.builder.getValueExprs() as ValueExpr[];
+    const kernelResolutionErrors = resolveKernels(valueExprs, registry);
+
+    if (kernelResolutionErrors.length > 0) {
+      const compileErrors: CompileError[] = kernelResolutionErrors.map((e) => ({
+        kind: e.kind,
+        message: e.message,
+      }));
+      return emitFailure(options, startTime, compileId, compileErrors);
+    }
+
+    // Convert to CompiledProgramIR (now with registry)
+    const compiledIR = convertLinkedIRToProgram(unlinkedIR, scheduleIR, acyclicPatch, registry);
 
     // Build edge-to-slot map logic removed from compiler (migrated to main.ts)
 
@@ -469,12 +487,15 @@ function emitFailure(
  *
  * @param unlinkedIR - Unlinked IR fragments from Pass 6
  * @param scheduleIR - Execution schedule from Pass 7
+ * @param acyclicPatch - Acyclic patch for debug index
+ * @param registry - Kernel registry (Phase B)
  * @returns CompiledProgramIR
  */
 function convertLinkedIRToProgram(
   unlinkedIR: UnlinkedIRFragments,
   scheduleIR: ScheduleIR,
-  acyclicPatch: AcyclicOrLegalGraph
+  acyclicPatch: AcyclicOrLegalGraph,
+  registry: import('../runtime/KernelRegistry').KernelRegistry
 ): CompiledProgramIR {
   // Extract data from the IR builder (ValueExpr-only)
   const builder = unlinkedIR.builder;
@@ -653,7 +674,7 @@ function convertLinkedIRToProgram(
     throw new Error('E_CAMERA_MULTIPLE: Only one Camera block is permitted.');
   }
 
-  // Build the program (ValueExpr-only)
+  // Build the program (ValueExpr-only, with kernel registry)
   const program: CompiledProgramIR = {
     irVersion: 1,
     valueExprs: { nodes: valueExprNodes },
@@ -664,6 +685,7 @@ function convertLinkedIRToProgram(
     debugIndex,
     fieldSlotRegistry,
     renderGlobals, // NEW - Camera system: populated from builder
+    kernelRegistry: registry, // Phase B: Kernel registry with resolved handles
   };
 
   return program;
