@@ -17,6 +17,7 @@ import { emptyPatchData, type PatchData } from './internal';
 import type { EventHub } from '../events/EventHub';
 import { requireBlockDef } from '../blocks/registry';
 import { normalizeCanonicalName, detectCanonicalNameCollisions, generateLensId } from '../core/canonical-name';
+import { exportPatchAsHCL, importPatchFromHCL } from '../services/PatchPersistence';
 
 /**
  * Opaque type for immutable patch access.
@@ -122,6 +123,7 @@ export class PatchStore {
       updateEdge: action,
       loadPatch: action,
       clear: action,
+      loadFromHCL: action,
     });
   }
 
@@ -1029,5 +1031,41 @@ export class PatchStore {
         patchRevision: this.getPatchRevision(),
       });
     }
+  }
+
+  // =============================================================================
+  // HCL Import/Export
+  // =============================================================================
+
+  /**
+   * Load patch from HCL text.
+   * Updates current patch state.
+   *
+   * @param hcl - HCL text to deserialize
+   * @throws Error if total parse failure
+   */
+  @action
+  loadFromHCL(hcl: string): void {
+    const result = importPatchFromHCL(hcl);
+    if (!result) {
+      throw new Error('Failed to import HCL: total parse failure');
+    }
+
+    if (result.errors.length > 0) {
+      console.warn('HCL import had errors:', result.errors);
+      // TODO: Optionally add errors to DiagnosticHub
+    }
+
+    this.loadPatch(result.patch);
+  }
+
+  /**
+   * Export current patch as HCL text.
+   *
+   * @param name - Optional patch name (defaults to "Untitled")
+   * @returns HCL text representation
+   */
+  exportToHCL(name?: string): string {
+    return exportPatchAsHCL(this.patch, name);
   }
 }

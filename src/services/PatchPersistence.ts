@@ -6,6 +6,7 @@
 
 import type { Patch } from '../graph';
 import type { BlockId, EdgeRole } from '../types';
+import { serializePatchToHCL, deserializePatchFromHCL, type PatchDslError } from '../patch-dsl';
 
 export const STORAGE_KEY = 'oscilla-v2-patch-v10'; // Bumped to invalidate stale patches after block genericization (FieldSin->Sin, etc.)
 
@@ -92,6 +93,37 @@ export function deserializePatch(json: string): { patch: Patch; presetIndex: num
   } catch {
     return null;
   }
+}
+
+/**
+ * Export patch as HCL text.
+ *
+ * @param patch - The patch to serialize
+ * @param name - Optional patch name (defaults to "Untitled")
+ * @returns HCL text representation
+ */
+export function exportPatchAsHCL(patch: Patch, name?: string): string {
+  return serializePatchToHCL(patch, { name });
+}
+
+/**
+ * Import patch from HCL text.
+ *
+ * Returns null if total failure (no blocks and errors exist).
+ * Returns partial patch + errors otherwise.
+ *
+ * @param hcl - HCL text to deserialize
+ * @returns Patch and errors, or null if total failure
+ */
+export function importPatchFromHCL(hcl: string): { patch: Patch; errors: PatchDslError[] } | null {
+  const result = deserializePatchFromHCL(hcl);
+
+  // Total failure: no blocks and errors exist
+  if (result.patch.blocks.size === 0 && result.errors.length > 0) {
+    return null;
+  }
+
+  return { patch: result.patch, errors: result.errors };
 }
 
 /**
