@@ -9,6 +9,7 @@
  *   - Event: payload=bool, unit=none, temporality=discrete
  *   - Field: cardinality=many(instance), temporality=continuous
  *   - Signal: cardinality=one, temporality=continuous
+ *   - Const: cardinality=zero, temporality=continuous (no const events)
  * - **Avoid over-enforcing**: payload/unit combos unless genuinely non-negotiable
  */
 
@@ -110,8 +111,10 @@ export function validateType(t: CanonicalType): void {
     assertEventInvariants(t);
   } else if (card.kind === 'many') {
     assertFieldInvariants(t);
+  } else if (card.kind === 'zero') {
+    assertConstInvariants(t);
   } else {
-    // zero or one cardinality + continuous = signal (or constant)
+    // one cardinality + continuous = signal
     assertSignalInvariants(t);
   }
 }
@@ -123,8 +126,8 @@ function assertSignalInvariants(t: CanonicalType): void {
   const card = t.extent.cardinality;
   const tempo = t.extent.temporality;
 
-  if (!isAxisInst(card) || (card.value.kind !== 'one' && card.value.kind !== 'zero')) {
-    throw new Error('Signal types must have cardinality=one or zero (instantiated)');
+  if (!isAxisInst(card) || card.value.kind !== 'one') {
+    throw new Error('Signal types must have cardinality=one (instantiated)');
   }
   if (!isAxisInst(tempo) || tempo.value.kind !== 'continuous') {
     throw new Error('Signal types must have temporality=continuous (instantiated)');
@@ -147,14 +150,36 @@ function assertFieldInvariants(t: CanonicalType): void {
 }
 
 /**
+ * Assert const type invariants (zero + continuous).
+ * TYPE-SYSTEM-INVARIANTS #P2: zero-cardinality + discrete is forbidden (no const events).
+ */
+function assertConstInvariants(t: CanonicalType): void {
+  const card = t.extent.cardinality;
+  const tempo = t.extent.temporality;
+
+  if (!isAxisInst(card) || card.value.kind !== 'zero') {
+    throw new Error('Const types must have cardinality=zero (instantiated)');
+  }
+  if (!isAxisInst(tempo) || tempo.value.kind !== 'continuous') {
+    throw new Error('Const types must have temporality=continuous (zero-cardinality events are forbidden)');
+  }
+}
+
+/**
  * Assert event type invariants (discrete + bool + none unit).
  */
 function assertEventInvariants(t: CanonicalType): void {
   const tempo = t.extent.temporality;
+  const card = t.extent.cardinality;
 
   // Hard invariant: temporality must be discrete
   if (!isAxisInst(tempo) || tempo.value.kind !== 'discrete') {
     throw new Error('Event types must have temporality=discrete (instantiated)');
+  }
+
+  // Hard invariant: cardinality must be one (not zero - no const events)
+  if (!isAxisInst(card) || card.value.kind !== 'one') {
+    throw new Error('Event types must have cardinality=one (const events are forbidden)');
   }
 
   // Hard invariant: payload must be bool

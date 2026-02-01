@@ -1,3 +1,4 @@
+# SUPERSEDED — See SPRINT-20260201-140000-step-format-DOD.md
 # Definition of Done: Step-Unification
 
 Generated: 2026-02-01T12:00:00Z

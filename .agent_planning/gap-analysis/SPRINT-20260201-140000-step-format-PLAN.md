@@ -110,7 +110,7 @@ The hot loop runs every frame. Looking up `ValueExpr.type.extent.temporality` pe
 - [ ] No runtime type inspection in hot loop
 - [ ] TypeScript compiles
 
-### P1: Update Executor [MEDIUM]
+### P1: Update Executor [HIGH]
 
 **File:** `src/runtime/ScheduleExecutor.ts`
 

@@ -42,7 +42,7 @@ This restores the invariant: compatibility is about types only. Policy (broadcas
 
 ## Work Items
 
-### P0: Cardinality Constraint Variables [MEDIUM]
+### P0: Cardinality Constraint Variables [HIGH]
 
 **Files:** `src/compiler/frontend/analyze-type-constraints.ts`, `src/core/inference-types.ts`
 
@@ -96,7 +96,7 @@ The infrastructure already exists. `Cardinality = Axis<CardinalityValue, Cardina
 - [ ] `isTypeCompatible` remains pure (no regressions from Sprint 1)
 - [ ] Performance: solver runs in < 1ms for typical graph sizes (union-find is O(α(n)))
 
-### P1: Instance Identity Resolution in Frontend [MEDIUM]
+### P1: Instance Identity Resolution in Frontend [HIGH]
 
 **Files:** `src/compiler/frontend/analyze-type-constraints.ts`, `src/compiler/frontend/analyze-type-graph.ts`
 

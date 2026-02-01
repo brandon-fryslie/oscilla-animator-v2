@@ -12,6 +12,8 @@
 
 import { makeAutoObservable } from 'mobx';
 import type { CompileError } from '../compiler/compile';
+import type { ValueExprTable } from '../compiler/ir/program';
+import type { ValueExpr, ValueExprId } from '../compiler/ir/value-expr';
 
 /**
  * Snapshot of a single compilation pass.
@@ -83,6 +85,23 @@ export interface SearchResult {
 }
 
 /**
+ * Summary statistics about the value expression table.
+ */
+export interface ValueExprStats {
+  /** Total number of value expressions */
+  total: number;
+
+  /** Count by top-level kind */
+  byKind: Record<string, number>;
+
+  /** Count by derived kind (signal/field/event/const) */
+  byDerivedKind: Record<string, number>;
+
+  /** Count by payload type */
+  byPayload: Record<string, number>;
+}
+
+/**
  * CompilationInspectorService - Captures compiler pass outputs
  *
  * Responsibilities:
@@ -90,6 +109,7 @@ export interface SearchResult {
  * - Store last 2 compilation snapshots for comparison
  * - Handle circular references and functions in IR
  * - Provide search API for finding IDs across passes
+ * - Query ValueExprTable with dispatch on ValueExpr.kind
  *
  * Limitations:
  * - Only stores last 2 snapshots (memory bounded)
@@ -305,11 +325,147 @@ class CompilationInspectorService {
 
     return cyclePass.output;
   }
+
+  // =============================================================================
+  // ValueExpr Query API (ValueExpr dispatch migration)
+  // =============================================================================
+
+  /**
+   * Get the ValueExprTable from the block-lowering pass.
+   * The table is in unlinkedIR.builder.
+   *
+   * @returns ValueExprTable or undefined if not available
+   */
+  getValueExprTable(): ValueExprTable | undefined {
+    const latest = this.getLatestSnapshot();
+    if (!latest) return undefined;
+
+    // Find the block-lowering pass that produces UnlinkedIRFragments
+    const loweringPass = latest.passes.find(
+      (p) => p.passName === 'block-lowering' || p.passName === 'backend:lowering'
+    );
+    if (!loweringPass) return undefined;
+
+    // UnlinkedIRFragments has a builder with getValueExprs() method
+    const output = loweringPass.output as { builder?: { getValueExprs?: () => readonly ValueExpr[] } };
+    if (!output || typeof output !== 'object' || !output.builder) return undefined;
+
+    const valueExprs = output.builder.getValueExprs?.();
+    if (!valueExprs) return undefined;
+
+    return { nodes: valueExprs };
+  }
+
+  /**
+   * Get all value expressions of a specific kind.
+   * Dispatches on ValueExpr.kind (not legacy sig/field/event).
+   *
+   * @param kind - ValueExpr kind discriminant
+   * @returns Array of matching value expressions
+   */
+  getValueExprsByKind(kind: ValueExpr['kind']): ValueExpr[] {
+    const table = this.getValueExprTable();
+    if (!table) return [];
+
+    // Dispatch on ValueExpr.kind
+    return table.nodes.filter((expr) => expr.kind === kind);
+  }
+
+  /**
+   * Get a value expression by ID.
+   *
+   * @param id - ValueExprId
+   * @returns ValueExpr or undefined if not found
+   */
+  getValueExpr(id: ValueExprId): ValueExpr | undefined {
+    const table = this.getValueExprTable();
+    if (!table) return undefined;
+
+    // ValueExprId is a dense array index
+    const idx = id as number;
+    if (idx < 0 || idx >= table.nodes.length) return undefined;
+
+    return table.nodes[idx];
+  }
+
+  /**
+   * Get summary statistics about the value expression table.
+   * Dispatches on ValueExpr.kind and CanonicalType properties.
+   *
+   * @returns Statistics object
+   */
+  getValueExprStats(): ValueExprStats {
+    const table = this.getValueExprTable();
+    if (!table) {
+      return {
+        total: 0,
+        byKind: {},
+        byDerivedKind: {},
+        byPayload: {},
+      };
+    }
+
+    const byKind: Record<string, number> = {};
+    const byDerivedKind: Record<string, number> = {};
+    const byPayload: Record<string, number> = {};
+
+    for (const expr of table.nodes) {
+      // Count by top-level kind
+      byKind[expr.kind] = (byKind[expr.kind] || 0) + 1;
+
+      // Count by derived kind (signal/field/event/const)
+      const derivedKind = deriveDerivedKind(expr);
+      byDerivedKind[derivedKind] = (byDerivedKind[derivedKind] || 0) + 1;
+
+      // Count by payload kind
+      const payloadKind = expr.type.payload.kind;
+      byPayload[payloadKind] = (byPayload[payloadKind] || 0) + 1;
+    }
+
+    return {
+      total: table.nodes.length,
+      byKind,
+      byDerivedKind,
+      byPayload,
+    };
+  }
 }
 
 // =============================================================================
 // Helper Functions
 // =============================================================================
+
+/**
+ * Derive the signal/field/event/const family from CanonicalType.
+ * Mirrors derivedKindLabel from axis-validate.ts but accessible here.
+ *
+ * @param expr - ValueExpr with CanonicalType
+ * @returns Derived kind label
+ */
+function deriveDerivedKind(expr: ValueExpr): string {
+  const extent = expr.type.extent;
+
+  // Check temporality
+  if (extent.temporality.kind === 'inst') {
+    const tempo = extent.temporality.value;
+    if (tempo.kind === 'discrete') {
+      return 'event';
+    }
+  }
+
+  // Check cardinality
+  if (extent.cardinality.kind === 'inst') {
+    const card = extent.cardinality.value;
+    if (card.kind === 'many') {
+      return 'field';
+    }
+    if (card.kind === 'zero') {
+      return 'const';
+    }
+  }
+
+  return 'signal';
+}
 
 /**
  * Serialize IR with circular reference and function handling.

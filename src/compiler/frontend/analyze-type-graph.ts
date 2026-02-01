@@ -9,9 +9,7 @@
  * TypeResolvedPatch.portTypes.
  */
 
-import type { Block } from "../../graph/Patch";
 import {
-  isAxisInst,
   DEFAULTS_V0,
   type CanonicalType,
 } from "../../core/canonical-types";

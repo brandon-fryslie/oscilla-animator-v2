@@ -1,3 +1,4 @@
+# SUPERSEDED — See SPRINT-20260201-140000-purity-authority-CONTEXT.md + SPRINT-20260201-140000-frontend-solver-CONTEXT.md
 # Implementation Context: Type-Compat-Purity
 
 Generated: 2026-02-01T12:00:00Z

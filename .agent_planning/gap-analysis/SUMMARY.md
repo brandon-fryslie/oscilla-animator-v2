@@ -3,7 +3,7 @@ scope: full
 spec_source: design-docs/canonical-types/
 impl_source: src/
 generated: 2026-01-29
-updated: 2026-02-01T12:30:00Z
+updated: 2026-02-01T15:00:00Z
 previous_run: 2026-01-29T18:00:00Z
 topics_audited: 5 (core types, IR/exprs, runtime/enforcement, compiler/adapters, naming/legacy)
 totals: { trivial: 12, critical: 5, to-review: 13, unimplemented: 7 }
@@ -11,9 +11,25 @@ totals: { trivial: 12, critical: 5, to-review: 13, unimplemented: 7 }
 
 # Gap Analysis: CanonicalType System Spec vs Implementation
 
-## UPDATE: 2026-02-01
+## UPDATE: 2026-02-01T15:00
 
-This is an UPDATE run against the previous 2026-01-29 analysis. Significant progress has been made.
+All sprint plans finalized. Unknowns resolved. Plans 1-3 are READY FOR IMPLEMENTATION.
+
+## Sprint Plan Status
+
+| Sprint | Status | Confidence | Files |
+|--------|--------|-----------|-------|
+| 1: Purity & Authority Hardening | **READY FOR IMPLEMENTATION** | HIGH: 4, MED: 1 | PLAN, DOD, CONTEXT |
+| 2: Frontend Solver Completeness | **READY FOR IMPLEMENTATION** | HIGH: 3, MED: 0 | PLAN, DOD, CONTEXT |
+| 3: Step Format Unification | **READY FOR IMPLEMENTATION** | HIGH: 2, MED: 0 | PLAN, DOD, CONTEXT |
+| 4: Runtime Semantic Upgrades | **DEFERRED** (research required) | LOW: 3 | PLAN, DOD, CONTEXT |
+
+### Key Decisions Made (since 14:00)
+- **Cardinality inference**: Uses existing `Axis<CardinalityValue, CardinalityVarId>` infrastructure. No new types needed in `canonical-types.ts`. New union-find solver in `solve-cardinality.ts`.
+- **Constraint templates**: Derived from existing `BlockCardinalityMetadata` on `BlockDef`. No changes to block definitions.
+- **Slot types**: Keep `ValueSlot` and `EventSlotId` separate (different storage backends). Use discriminated union `EvalTarget` in unified step.
+- **StepMaterialize**: Remains separate from unified `StepEvalValue` (different fields, different semantics).
+- **EvalStrategy**: `const enum` for hot-loop performance, pre-resolved at compile time.
 
 ## Executive Summary
 
@@ -141,7 +157,23 @@ Many items from the previous analysis have been completed:
 - payloadStride() as single stride authority (A+)
 - Direct extent checks replacing deriveKind (improvement over spec) (A+)
 
-## New Audit Files (2026-02-01)
+## Sprint Plan Files (finalized 2026-02-01T15:00)
+
+| Sprint | PLAN | DOD | CONTEXT |
+|--------|------|-----|---------|
+| 1: Purity & Authority | [PLAN](SPRINT-20260201-140000-purity-authority-PLAN.md) | [DOD](SPRINT-20260201-140000-purity-authority-DOD.md) | [CONTEXT](SPRINT-20260201-140000-purity-authority-CONTEXT.md) |
+| 2: Frontend Solver | [PLAN](SPRINT-20260201-140000-frontend-solver-PLAN.md) | [DOD](SPRINT-20260201-140000-frontend-solver-DOD.md) | [CONTEXT](SPRINT-20260201-140000-frontend-solver-CONTEXT.md) |
+| 3: Step Format | [PLAN](SPRINT-20260201-140000-step-format-PLAN.md) | [DOD](SPRINT-20260201-140000-step-format-DOD.md) | [CONTEXT](SPRINT-20260201-140000-step-format-CONTEXT.md) |
+| 4: Runtime Semantics | [PLAN](SPRINT-20260201-140000-runtime-semantics-PLAN.md) | [DOD](SPRINT-20260201-140000-runtime-semantics-DOD.md) | [CONTEXT](SPRINT-20260201-140000-runtime-semantics-CONTEXT.md) |
+
+### Superseded Plans (12 files)
+All `SPRINT-20260201-120000-*` files marked SUPERSEDED in their headers:
+- `SPRINT-20260201-120000-housekeeping-*` → Sprint 1
+- `SPRINT-20260201-120000-type-compat-purity-*` → Sprint 1 + Sprint 2
+- `SPRINT-20260201-120000-frontend-instance-*` → Sprint 2
+- `SPRINT-20260201-120000-step-unification-*` → Sprint 3
+
+## Audit Files (2026-02-01)
 
 | Category | File | Topic |
 |----------|------|-------|

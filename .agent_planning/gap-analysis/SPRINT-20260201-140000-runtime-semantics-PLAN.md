@@ -1,8 +1,9 @@
 # Sprint 4: Runtime Semantic Upgrades (Optional/Deferred)
 
 Generated: 2026-02-01T14:00:00Z
+Updated: 2026-02-01T15:00:00Z
 Confidence: HIGH: 0, MEDIUM: 0, LOW: 3
-Status: RESEARCH REQUIRED — Do when needed, not before
+Status: DEFERRED — Research required when triggered. CONTEXT and DOD files added for completeness.
 Depends on: Sprints 1-3
 
 ## Sprint Goal

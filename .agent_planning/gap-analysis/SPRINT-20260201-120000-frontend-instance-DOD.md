@@ -1,3 +1,4 @@
+# SUPERSEDED — See SPRINT-20260201-140000-frontend-solver-DOD.md
 # Definition of Done: Frontend-Instance
 
 Generated: 2026-02-01T12:00:00Z
