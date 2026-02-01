@@ -6,7 +6,7 @@
  */
 
 import type { CanonicalType, ConstValue } from '../../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, CAMERA_PROJECTION, canonicalType, unitScalar, canonicalEvent, constValueMatchesPayload } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, CAMERA_PROJECTION, canonicalType, unitScalar, canonicalEvent, constValueMatchesPayload, requireInst } from '../../core/canonical-types';
 import type { TopologyId } from '../../shapes/types';
 import type { IRBuilder } from './IRBuilder';
 import type {
@@ -36,9 +36,32 @@ import type {
   ContinuityPolicy,
   StableStateId,
   StateMapping,
+  EvalStrategy,
+  EvalTarget,
 } from './types';
 import type { CameraDeclIR } from './program';
 import type { ValueExpr } from './value-expr';
+
+// =============================================================================
+// Helper Functions
+// =============================================================================
+
+/**
+ * Derive evaluation strategy from CanonicalType.
+ * Used by legacy stepEvalSig compat shim.
+ */
+function deriveStrategyFromType(type: CanonicalType): EvalStrategy {
+  const temp = requireInst(type.extent.temporality, 'temporality');
+  const card = requireInst(type.extent.cardinality, 'cardinality');
+
+  const isDiscrete = temp.kind === 'discrete';
+  const isMany = card.kind === 'many';
+
+  if (isDiscrete) {
+    return isMany ? 3 /* EvalStrategy.DiscreteField */ : 2 /* EvalStrategy.DiscreteScalar */;
+  }
+  return isMany ? 1 /* EvalStrategy.ContinuousField */ : 0 /* EvalStrategy.ContinuousScalar */;
+}
 
 // =============================================================================
 // IRBuilderImpl
@@ -342,8 +365,24 @@ export class IRBuilderImpl implements IRBuilder {
     this.steps.push({ kind: 'fieldStateWrite', stateSlot, value });
   }
 
+  /**
+   * New unified step method (Sprint 3).
+   * Replaces stepEvalSig and stepEvalEvent with strategy-based dispatch.
+   */
+  stepEvalValue(expr: ValueExprId, target: EvalTarget, strategy: EvalStrategy): void {
+    this.steps.push({ kind: 'evalValue', expr, target, strategy });
+  }
+
+  /**
+   * Legacy compat shim for stepEvalSig.
+   * Derives strategy from expr type and forwards to stepEvalValue.
+   * Used by test-blocks.ts.
+   */
   stepEvalSig(expr: ValueExprId, target: ValueSlot): void {
-    this.steps.push({ kind: 'evalSig', expr, target });
+    const exprNode = this.valueExprs[expr as number];
+    if (!exprNode) throw new Error(`stepEvalSig: expr ${expr} not found`);
+    const strategy = deriveStrategyFromType(exprNode.type);
+    this.stepEvalValue(expr, { storage: 'value', slot: target }, strategy);
   }
 
   stepSlotWriteStrided(slotBase: ValueSlot, inputs: readonly ValueExprId[]): void {

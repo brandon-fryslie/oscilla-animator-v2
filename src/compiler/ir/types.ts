@@ -237,22 +237,52 @@ export type TimeModel = TimeModelIR;
 // Execution Steps
 // =============================================================================
 
+/**
+ * Evaluation strategy for value expressions.
+ * Pre-resolved at compile time to avoid runtime type inspection.
+ *
+ * const enum inlines to integer constants for zero-overhead dispatch.
+ */
+export const enum EvalStrategy {
+  ContinuousScalar = 0,  // Continuous temporality, cardinality one (scalar signal)
+  ContinuousField  = 1,  // Continuous temporality, cardinality many (field)
+  DiscreteScalar   = 2,  // Discrete temporality, cardinality one (scalar event)
+  DiscreteField    = 3,  // Discrete temporality, cardinality many (field event, future)
+}
+
+/**
+ * Evaluation target discriminated union.
+ * Keeps ValueSlot and EventSlotId separate for type safety at storage backend boundary.
+ */
+export type EvalTarget =
+  | { readonly storage: 'value'; readonly slot: ValueSlot }
+  | { readonly storage: 'event'; readonly slot: EventSlotId };
+
+/**
+ * Unified value evaluation step.
+ * Replaces StepEvalSig and StepEvalEvent with strategy-based dispatch.
+ *
+ * Sprint 3: Step Format Unification
+ * - Strategy is pre-resolved from CanonicalType during schedule construction
+ * - No runtime type inspection in hot loop
+ * - Executor dispatches on step.strategy (integer enum)
+ */
+export interface StepEvalValue {
+  readonly kind: 'evalValue';
+  readonly expr: ValueExprId;
+  readonly target: EvalTarget;
+  readonly strategy: EvalStrategy;
+}
+
 export type Step =
-  | StepEvalSig
+  | StepEvalValue
   | StepSlotWriteStrided
   | StepMaterialize
   | StepRender
   | StepStateWrite
   | StepFieldStateWrite
   | StepContinuityMapBuild
-  | StepContinuityApply
-  | StepEvalEvent;
-
-export interface StepEvalSig {
-  readonly kind: 'evalSig';
-  readonly expr: ValueExprId;
-  readonly target: ValueSlot;
-}
+  | StepContinuityApply;
 
 /**
  * Strided slot write step - writes multiple scalar signal components to contiguous slots.
@@ -343,16 +373,6 @@ export interface StepContinuityApply {
   readonly outputSlot: ValueSlot; // Output buffer (continuity-applied values)
   readonly semantic: 'position' | 'radius' | 'opacity' | 'color' | 'custom';
   readonly stride: number; // Components per element (from payload type, not semantic)
-}
-
-/**
- * Event evaluation step.
- * Evaluates an event expression and writes result to event storage.
- */
-export interface StepEvalEvent {
-  readonly kind: 'evalEvent';
-  readonly expr: ValueExprId;
-  readonly target: EventSlotId;
 }
 
 // =============================================================================

@@ -3,7 +3,7 @@
  *
  * Builds execution schedule with explicit phase ordering:
  * 1. Update rails/time inputs
- * 2. Execute continuous scalars (evalSig)
+ * 2. Execute continuous scalars (evalValue)
  * 3. Build continuity mappings (continuityMapBuild)
  * 4. Execute continuous fields (materialize)
  * 5. Apply continuity to field targets (continuityApply)
@@ -15,7 +15,7 @@
  * deterministic execution order.
  */
 
-import type { Step, StepEvalEvent, StepRender, StepMaterialize, StepContinuityMapBuild, StepContinuityApply, TimeModel, InstanceId, InstanceDecl, ValueSlot, StateMapping, EventSlotId, ScalarSlotDecl, FieldSlotDecl } from '../ir/types';
+import type { Step, StepEvalValue, StepRender, StepMaterialize, StepContinuityMapBuild, StepContinuityApply, TimeModel, InstanceId, InstanceDecl, ValueSlot, StateMapping, EventSlotId, ScalarSlotDecl, FieldSlotDecl, EvalStrategy, EvalTarget } from '../ir/types';
 import type { ValueExpr, ValueExprId } from '../ir/value-expr';
 import type { UnlinkedIRFragments } from './lower-blocks';
 import type { AcyclicOrLegalGraph, NormalizedEdge, Block, BlockIndex } from '../ir/patches';
@@ -24,7 +24,8 @@ import type { ValueRefPacked } from '../ir/lowerTypes';
 import type { TopologyId } from '../../shapes/types';
 import { getBlockDefinition } from '../../blocks/registry';
 import { getPolicyForSemantic } from '../../runtime/ContinuityDefaults';
-import { requireManyInstance, strideOf } from '../../core/canonical-types';
+import { requireManyInstance, strideOf, requireInst } from '../../core/canonical-types';
+import type { CanonicalType } from '../../core/canonical-types';
 
 // =============================================================================
 // Schedule IR Types
@@ -166,6 +167,31 @@ export function getScalarSlots(schedule: ScheduleIR): ScalarSlotDecl[] {
  */
 export function getFieldSlots(schedule: ScheduleIR): FieldSlotDecl[] {
   return schedule.stateMappings.filter((m): m is FieldSlotDecl => m.kind === 'field');
+}
+
+/**
+ * Derive evaluation strategy from CanonicalType at compile time.
+ * Pre-resolving strategy avoids runtime type inspection in the hot loop.
+ *
+ * Sprint 3: Step Format Unification
+ * - Replaces runtime kind discrimination (evalSig/evalEvent)
+ * - Strategy is const enum → inlines to integer constants
+ * - No performance overhead vs current string switch
+ *
+ * @param type - Fully resolved canonical type (no vars)
+ * @returns Evaluation strategy for executor dispatch
+ */
+function deriveStrategy(type: CanonicalType): EvalStrategy {
+  const temp = requireInst(type.extent.temporality, 'temporality');
+  const card = requireInst(type.extent.cardinality, 'cardinality');
+
+  const isDiscrete = temp.kind === 'discrete';
+  const isMany = card.kind === 'many';
+
+  if (isDiscrete) {
+    return isMany ? 3 /* EvalStrategy.DiscreteField */ : 2 /* EvalStrategy.DiscreteScalar */;
+  }
+  return isMany ? 1 /* EvalStrategy.ContinuousField */ : 0 /* EvalStrategy.ContinuousScalar */;
 }
 
 /**
@@ -605,7 +631,7 @@ export function pass7Schedule(
   const builderSteps = unlinkedIR.builder.getSteps();
 
   // Collect slots that are targets of slotWriteStrided steps.
-  // These slots are written by the strided write step, not evalSig.
+  // These slots are written by the strided write step, not evalValue.
   const stridedWriteSlots = new Set<ValueSlot>();
   for (const step of builderSteps) {
     if (step.kind === 'slotWriteStrided') {
@@ -613,7 +639,7 @@ export function pass7Schedule(
     }
   }
 
-  // Generate evalSig steps for all signals with registered slots.
+  // Generate evalValue steps for all signals with registered slots.
   // This enables the debug tap to record signal values for the debug probe.
   //
   // NOTE: Only Signal edges support debug probing. Field edges (arrays) use
@@ -627,42 +653,58 @@ export function pass7Schedule(
   // Pre-event signals go in Phase 1, post-event signals go after evalEvent.
   //
   // CRITICAL: Skip slots that are targets of slotWriteStrided steps.
-  // Those slots have stride > 1 and are written by the strided write, not evalSig.
+  // Those slots have stride > 1 and are written by the strided write, not evalValue.
   const sigSlots = unlinkedIR.builder.getSigSlots();
-  const evalSigStepsPre: Step[] = [];
-  const evalSigStepsPost: Step[] = [];
+  const evalValueStepsPre: Step[] = [];
+  const evalValueStepsPost: Step[] = [];
   for (const [sigId, slot] of sigSlots) {
     // Skip slots that are written by slotWriteStrided
     if (stridedWriteSlots.has(slot)) {
       continue;
     }
 
-    const step: Step = {
-      kind: 'evalSig',
-      expr: sigId as ValueExprId,
-      target: slot,
+    const exprId = sigId as ValueExprId;
+    const expr = valueExprs[exprId as number];
+    if (!expr) continue;
+
+    const strategy = deriveStrategy(expr.type);
+    const target: EvalTarget = { storage: 'value', slot };
+
+    const step: StepEvalValue = {
+      kind: 'evalValue',
+      expr: exprId,
+      target,
+      strategy,
     };
+
     if (sigDependsOnEvent(sigId as number, valueExprs)) {
-      evalSigStepsPost.push(step);
+      evalValueStepsPost.push(step);
     } else {
-      evalSigStepsPre.push(step);
+      evalValueStepsPre.push(step);
     }
   }
 
-  // Generate evalEvent steps for all registered event slots.
+  // Generate evalValue steps for all registered event slots.
   // Events are evaluated after continuityApply and before render.
   const eventSlots = unlinkedIR.builder.getEventSlots();
-  const evalEventSteps: StepEvalEvent[] = [];
+  const evalEventSteps: Step[] = [];
   for (const [eventId, eventSlot] of eventSlots) {
+    const expr = valueExprs[eventId as number];
+    if (!expr) continue;
+
+    const strategy = deriveStrategy(expr.type);
+    const target: EvalTarget = { storage: 'event', slot: eventSlot };
+
     evalEventSteps.push({
-      kind: 'evalEvent',
+      kind: 'evalValue',
       expr: eventId,
-      target: eventSlot,
+      target,
+      strategy,
     });
   }
 
   // Separate builder steps by kind:
-  // - slotWriteStrided goes in Phase 1 (with evalSig)
+  // - slotWriteStrided goes in Phase 1 (with evalValue)
   // - stateWrite/fieldStateWrite goes in Phase 8 (end)
   const slotWriteStridedSteps: Step[] = [];
   const stateWriteSteps: Step[] = [];
@@ -676,22 +718,22 @@ export function pass7Schedule(
   }
 
   // Combine all steps in correct execution order:
-  // 1. EvalSig-pre + SlotWriteStrided (signals NOT dependent on events)
+  // 1. EvalValue-pre + SlotWriteStrided (signals NOT dependent on events)
   // 2. ContinuityMapBuild (detect domain changes, compute mappings)
   // 3. Materialize (evaluate fields to buffers)
   // 4. ContinuityApply (apply gauge/slew/crossfade to buffers)
   // 5. EvalEvent (evaluate discrete events → eventScalars)
-  // 6. EvalSig-post (signals that depend on eventRead)
+  // 6. EvalValue-post (signals that depend on eventRead)
   // 7. Render (use continuity-applied buffers)
   // 8. StateWrite (persist state for next frame)
   const steps: Step[] = [
-    ...evalSigStepsPre,
+    ...evalValueStepsPre,
     ...slotWriteStridedSteps,
     ...mapBuildSteps,
     ...materializeSteps,
     ...continuityApplySteps,
     ...evalEventSteps,
-    ...evalSigStepsPost,
+    ...evalValueStepsPost,
     ...renderSteps,
     ...stateWriteSteps,
   ];
