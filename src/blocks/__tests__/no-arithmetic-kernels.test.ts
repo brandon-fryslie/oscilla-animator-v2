@@ -41,6 +41,9 @@ describe('Block Lowering - No Arithmetic Kernel Names', () => {
     'fieldMax',
     'simplexNoise1D',
     'select',
+    // Decomposed geometry kernels (now use opcode sequences)
+    'polygonVertex',
+    'starVertex',
   ];
 
   it('block files do not emit denied arithmetic kernel names', () => {
@@ -49,6 +52,7 @@ describe('Block Lowering - No Arithmetic Kernel Names', () => {
       'field-operations-blocks.ts',
       'math-utility-blocks.ts',
       'signal-blocks.ts',
+      'path-blocks.ts',
     ];
 
     const violations: string[] = [];
@@ -91,5 +95,7 @@ describe('Block Lowering - No Arithmetic Kernel Names', () => {
     expect(DENIED_KERNEL_NAMES).toContain('fieldCos');
     expect(DENIED_KERNEL_NAMES).toContain('simplexNoise1D');
     expect(DENIED_KERNEL_NAMES).toContain('select');
+    expect(DENIED_KERNEL_NAMES).toContain('polygonVertex');
+    expect(DENIED_KERNEL_NAMES).toContain('starVertex');
   });
 });

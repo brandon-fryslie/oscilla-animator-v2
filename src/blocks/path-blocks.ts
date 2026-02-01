@@ -14,6 +14,7 @@ import { DOMAIN_CONTROL } from '../core/domain-registry';
 import { PathVerb, type PathTopologyDef } from '../shapes/types';
 import { registerDynamicTopology } from '../shapes/registry';
 import { defaultSourceConst } from '../types';
+import { OpCode } from '../compiler/ir/types';
 
 // =============================================================================
 // Helper: Create Polygon Topology
@@ -169,13 +170,55 @@ registerBlock({
 
     const sidesSig = ctx.b.constant(intConst(sides), canonicalType(INT));
 
-    // Compute control point positions using kernel
-    // kernel('polygonVertex') takes: (index, sides, radiusX, radiusY) → vec2
-    const polygonVertexFn = ctx.b.kernel('polygonVertex');
-    const computedPositions = ctx.b.kernelZipSig(
-      indexField,
-      [sidesSig, radiusXSig, radiusYSig],
-      polygonVertexFn,
+    // ═══════════════════════════════════════════════════════════════════════
+    // DECOMPOSED POLYGON VERTEX COMPUTATION (was polygonVertex kernel)
+    // ═══════════════════════════════════════════════════════════════════════
+    //
+    // Original kernel logic:
+    //   angle = (index / sides) * 2π - π/2
+    //   x = radiusX * cos(angle)
+    //   y = radiusY * sin(angle)
+    //   output = makeVec2(x, y)
+    //
+    // Now decomposed into explicit opcode sequences.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    // Constants
+    const twoPi = ctx.b.constant(floatConst(Math.PI * 2), canonicalType(FLOAT));
+    const halfPi = ctx.b.constant(floatConst(Math.PI / 2), canonicalType(FLOAT));
+
+    // The field type for intermediates (float, same instance ref as index)
+    const floatFieldType = canonicalField(FLOAT, { kind: 'scalar' }, ref);
+
+    // Step 1: broadcast signals to field extent
+    const sidesBroadcast = ctx.b.broadcast(sidesSig, floatFieldType);
+    const radiusXBroadcast = ctx.b.broadcast(radiusXSig, floatFieldType);
+    const radiusYBroadcast = ctx.b.broadcast(radiusYSig, floatFieldType);
+    const twoPiBroadcast = ctx.b.broadcast(twoPi, floatFieldType);
+    const halfPiBroadcast = ctx.b.broadcast(halfPi, floatFieldType);
+
+    // Step 2: angle = (index / sides) * 2π - π/2
+    const div = ctx.b.opcode(OpCode.Div);
+    const mul = ctx.b.opcode(OpCode.Mul);
+    const sub = ctx.b.opcode(OpCode.Sub);
+    const cos = ctx.b.opcode(OpCode.Cos);
+    const sin = ctx.b.opcode(OpCode.Sin);
+
+    const angleFrac = ctx.b.kernelZip([indexField, sidesBroadcast], div, floatFieldType);
+    const angleScaled = ctx.b.kernelZip([angleFrac, twoPiBroadcast], mul, floatFieldType);
+    const angle = ctx.b.kernelZip([angleScaled, halfPiBroadcast], sub, floatFieldType);
+
+    // Step 3: x = radiusX * cos(angle), y = radiusY * sin(angle)
+    const cosAngle = ctx.b.kernelMap(angle, cos, floatFieldType);
+    const sinAngle = ctx.b.kernelMap(angle, sin, floatFieldType);
+    const xField = ctx.b.kernelZip([radiusXBroadcast, cosAngle], mul, floatFieldType);
+    const yField = ctx.b.kernelZip([radiusYBroadcast, sinAngle], mul, floatFieldType);
+
+    // Step 4: makeVec2(x, y) - this remains as a named kernel (stride-changing)
+    const makeVec2Fn = ctx.b.kernel('makeVec2');
+    const computedPositions = ctx.b.kernelZip(
+      [xField, yField],
+      makeVec2Fn,
       canonicalField(VEC2, { kind: 'scalar' }, ref)
     );
 
@@ -366,13 +409,82 @@ registerBlock({
 
     const pointsSig = ctx.b.constant(intConst(points), canonicalType(INT));
 
-    // Compute control point positions using kernel
-    // kernel('starVertex') takes: (index, points, outerRadius, innerRadius) → vec2
-    const starVertexFn = ctx.b.kernel('starVertex');
-    const computedPositions = ctx.b.kernelZipSig(
-      indexField,
-      [pointsSig, outerRadiusSig, innerRadiusSig],
-      starVertexFn,
+    // ═══════════════════════════════════════════════════════════════════════
+    // DECOMPOSED STAR VERTEX COMPUTATION (was starVertex kernel)
+    // ═══════════════════════════════════════════════════════════════════════
+    //
+    // Original kernel logic:
+    //   isOuter = floor(index) % 2 === 0
+    //   radius = isOuter ? outerRadius : innerRadius
+    //   angle = (index / (points * 2)) * 2π - π/2
+    //   x = radius * cos(angle)
+    //   y = radius * sin(angle)
+    //   output = makeVec2(x, y)
+    //
+    // Now decomposed into explicit opcode sequences.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    // Constants
+    const twoPi = ctx.b.constant(floatConst(Math.PI * 2), canonicalType(FLOAT));
+    const halfPi = ctx.b.constant(floatConst(Math.PI / 2), canonicalType(FLOAT));
+    const two = ctx.b.constant(floatConst(2), canonicalType(FLOAT));
+
+    // The field type for intermediates (float, same instance ref as index)
+    const floatFieldType = canonicalField(FLOAT, { kind: 'scalar' }, ref);
+
+    // Step 1: broadcast signals to field extent
+    const pointsBroadcast = ctx.b.broadcast(pointsSig, floatFieldType);
+    const outerRadiusBroadcast = ctx.b.broadcast(outerRadiusSig, floatFieldType);
+    const innerRadiusBroadcast = ctx.b.broadcast(innerRadiusSig, floatFieldType);
+    const twoPiBroadcast = ctx.b.broadcast(twoPi, floatFieldType);
+    const halfPiBroadcast = ctx.b.broadcast(halfPi, floatFieldType);
+    const twoBroadcast = ctx.b.broadcast(two, floatFieldType);
+
+    // Step 2: Compute angle (same as polygon)
+    // totalPoints = points * 2
+    const mul = ctx.b.opcode(OpCode.Mul);
+    const totalPoints = ctx.b.kernelZip([pointsBroadcast, twoBroadcast], mul, floatFieldType);
+
+    // angleFrac = index / totalPoints
+    const div = ctx.b.opcode(OpCode.Div);
+    const angleFrac = ctx.b.kernelZip([indexField, totalPoints], div, floatFieldType);
+
+    // angleScaled = angleFrac * 2π
+    const angleScaled = ctx.b.kernelZip([angleFrac, twoPiBroadcast], mul, floatFieldType);
+
+    // angle = angleScaled - π/2
+    const sub = ctx.b.opcode(OpCode.Sub);
+    const angle = ctx.b.kernelZip([angleScaled, halfPiBroadcast], sub, floatFieldType);
+
+    // Step 3: Radius selection using Select opcode
+    // indexFloor = floor(index)
+    const floor = ctx.b.opcode(OpCode.Floor);
+    const indexFloor = ctx.b.kernelMap(indexField, floor, floatFieldType);
+
+    // indexMod2 = mod(indexFloor, 2)
+    const mod = ctx.b.opcode(OpCode.Mod);
+    const indexMod2 = ctx.b.kernelZip([indexFloor, twoBroadcast], mod, floatFieldType);
+
+    // radius = select(indexMod2, innerRadius, outerRadius)
+    // Select semantics: select(cond, ifTrue, ifFalse) → returns ifTrue when cond > 0
+    // indexMod2 = 0 (outer): returns ifFalse = outerRadius
+    // indexMod2 = 1 (inner): returns ifTrue = innerRadius
+    const select = ctx.b.opcode(OpCode.Select);
+    const radius = ctx.b.kernelZip([indexMod2, innerRadiusBroadcast, outerRadiusBroadcast], select, floatFieldType);
+
+    // Step 4: Position computation
+    const cos = ctx.b.opcode(OpCode.Cos);
+    const sin = ctx.b.opcode(OpCode.Sin);
+    const cosAngle = ctx.b.kernelMap(angle, cos, floatFieldType);
+    const sinAngle = ctx.b.kernelMap(angle, sin, floatFieldType);
+    const xField = ctx.b.kernelZip([radius, cosAngle], mul, floatFieldType);
+    const yField = ctx.b.kernelZip([radius, sinAngle], mul, floatFieldType);
+
+    // Step 5: makeVec2(x, y) - this remains as a named kernel (stride-changing)
+    const makeVec2Fn = ctx.b.kernel('makeVec2');
+    const computedPositions = ctx.b.kernelZip(
+      [xField, yField],
+      makeVec2Fn,
       canonicalField(VEC2, { kind: 'scalar' }, ref)
     );
 

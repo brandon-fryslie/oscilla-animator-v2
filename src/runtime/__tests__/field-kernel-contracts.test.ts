@@ -10,8 +10,8 @@
  * - Mathematical correctness
  *
  * Tests for removed kernels (jitter2d, attract2d, fieldAdd, fieldMultiply,
- * fieldPolarToCartesian, circleLayout, lineLayout, gridLayout, etc.)
- * have been deleted along with their implementations.
+ * fieldPolarToCartesian, circleLayout, lineLayout, gridLayout, polygonVertex,
+ * starVertex, etc.) have been deleted along with their implementations.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -123,60 +123,6 @@ describe('Field Kernel Contract Tests', () => {
   });
 
   // ══════════════════════════════════════════════════════════════════════
-  // LAYOUT KERNEL TESTS (ZIPSIG) — Kept: polygonVertex
-  // ══════════════════════════════════════════════════════════════════════
-
-  describe('polygonVertex (zipSig)', () => {
-    it('outputs LOCAL-SPACE vertices centered at origin', () => {
-      const out = new Float32Array(8); // 4 vertices
-      const indices = new Float32Array([0, 1, 2, 3]);
-      const signals = [4, 1, 1]; // 4 sides, radiusX=1, radiusY=1
-
-      applyFieldKernelZipSig(out, indices, signals, 'polygonVertex', 4, testFieldType(VEC2));
-
-      // Square (4 sides): vertices at top, right, bottom, left
-      expect(out[0]).toBeCloseTo(0);
-      expect(out[1]).toBeCloseTo(-1);
-      expect(out[2]).toBeCloseTo(1);
-      expect(out[3]).toBeCloseTo(0);
-      expect(out[4]).toBeCloseTo(0);
-      expect(out[5]).toBeCloseTo(1);
-      expect(out[6]).toBeCloseTo(-1);
-      expect(out[7]).toBeCloseTo(0);
-    });
-
-    it('vertices are at unit radius (local space)', () => {
-      const out = new Float32Array(10); // 5 vertices
-      const indices = new Float32Array([0, 1, 2, 3, 4]);
-      const signals = [5, 1, 1]; // pentagon
-
-      applyFieldKernelZipSig(out, indices, signals, 'polygonVertex', 5, testFieldType(VEC2));
-
-      for (let i = 0; i < 5; i++) {
-        const x = out[i * 2];
-        const y = out[i * 2 + 1];
-        const dist = Math.sqrt(x * x + y * y);
-        expect(dist).toBeCloseTo(1);
-      }
-    });
-
-    it('respects radiusX/radiusY for elliptical polygons', () => {
-      const out = new Float32Array(8);
-      const indices = new Float32Array([0, 1, 2, 3]);
-      const signals = [4, 2, 1]; // 4 sides, radiusX=2, radiusY=1
-
-      applyFieldKernelZipSig(out, indices, signals, 'polygonVertex', 4, testFieldType(VEC2));
-
-      // Right vertex should be at (2, 0)
-      expect(out[2]).toBeCloseTo(2);
-      expect(out[3]).toBeCloseTo(0);
-      // Bottom vertex should be at (0, 1)
-      expect(out[4]).toBeCloseTo(0);
-      expect(out[5]).toBeCloseTo(1);
-    });
-  });
-
-  // ══════════════════════════════════════════════════════════════════════
   // REMOVED KERNEL VERIFICATION
   // ══════════════════════════════════════════════════════════════════════
 
@@ -205,6 +151,7 @@ describe('Field Kernel Contract Tests', () => {
       const removedZipSig = [
         'applyOpacity', 'circleLayout', 'circleAngle',
         'lineLayout', 'gridLayout', 'fieldGoldenAngle', 'broadcastColor',
+        'polygonVertex', 'starVertex',  // Decomposed to opcodes in path-blocks.ts
       ];
       for (const name of removedZipSig) {
         expect(() =>

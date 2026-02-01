@@ -28,8 +28,10 @@
  *   makeVec2, makeVec3, hsvToRgb, vec2ToVec3, fieldSetZ
  *
  * ZIPSIG KERNELS (field + signal inputs):
- *   hsvToRgb, polygonVertex, starVertex, circleLayoutUV, lineLayoutUV,
- *   gridLayoutUV, select
+ *   hsvToRgb, circleLayoutUV, lineLayoutUV, gridLayoutUV
+ *
+ * REMOVED (decomposed to opcodes):
+ *   polygonVertex, starVertex - now use opcode sequences in path-blocks.ts
  *
  * ──────────────────────────────────────────────────────────────────────
  * ARCHITECTURAL RULES
@@ -167,47 +169,6 @@ export function applyFieldKernelZipSig(
       outArr[i * 4 + 1] = g;
       outArr[i * 4 + 2] = b;
       outArr[i * 4 + 3] = 255; // Full opacity
-    }
-  } else if (fieldOp === 'polygonVertex') {
-    // ════════════════════════════════════════════════════════════════
-    // polygonVertex: Generate regular polygon vertices
-    // ════════════════════════════════════════════════════════════════
-    if (sigValues.length !== 3) {
-      throw new Error('polygonVertex requires 3 signals (sides, radiusX, radiusY)');
-    }
-    const outArr = out as Float32Array;
-    const indexArr = fieldInput as Float32Array;
-    const sides = Math.max(3, Math.round(sigValues[0]));
-    const radiusX = sigValues[1];
-    const radiusY = sigValues[2];
-    const TWO_PI = Math.PI * 2;
-
-    for (let i = 0; i < N; i++) {
-      const angle = (indexArr[i] / sides) * TWO_PI - Math.PI / 2;
-      outArr[i * 2 + 0] = radiusX * Math.cos(angle);
-      outArr[i * 2 + 1] = radiusY * Math.sin(angle);
-    }
-  } else if (fieldOp === 'starVertex') {
-    // ════════════════════════════════════════════════════════════════
-    // starVertex: Generate star polygon vertices
-    // ════════════════════════════════════════════════════════════════
-    if (sigValues.length !== 3) {
-      throw new Error('starVertex requires 3 signals (points, outerRadius, innerRadius)');
-    }
-    const outArr = out as Float32Array;
-    const indexArr = fieldInput as Float32Array;
-    const points = Math.max(3, Math.round(sigValues[0]));
-    const outerRadius = sigValues[1];
-    const innerRadius = sigValues[2];
-    const TWO_PI = Math.PI * 2;
-
-    for (let i = 0; i < N; i++) {
-      const idx = indexArr[i];
-      const isOuter = Math.floor(idx) % 2 === 0;
-      const radius = isOuter ? outerRadius : innerRadius;
-      const angle = (idx / (points * 2)) * TWO_PI - Math.PI / 2;
-      outArr[i * 2 + 0] = radius * Math.cos(angle);
-      outArr[i * 2 + 1] = radius * Math.sin(angle);
     }
   } else if (fieldOp === 'circleLayoutUV') {
     // ════════════════════════════════════════════════════════════════
