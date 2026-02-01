@@ -6,7 +6,7 @@
 
 import { registerBlock, STANDARD_NUMERIC_PAYLOADS } from './registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../core/ids';
-import { canonicalType, canonicalField, strideOf, floatConst, requireInst } from '../core/canonical-types';
+import { canonicalType, canonicalField, strideOf, floatConst, requireInst, extentsEqual } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { OpCode } from '../compiler/ir/types';
 
@@ -57,6 +57,26 @@ registerBlock({
     const bCard = requireInst(b.type.extent.cardinality, 'cardinality');
     const isAField = aCard.kind === 'many';
     const isBField = bCard.kind === 'many';
+
+    // Task 2: Assert field+field inputs share the same instance domain
+    if (isAField && isBField) {
+      const aInst = aCard.instance;
+      const bInst = bCard.instance;
+      if (aInst.instanceId !== bInst.instanceId || aInst.domainTypeId !== bInst.domainTypeId) {
+        throw new Error('Add: field+field zip requires matching instance domains');
+      }
+    }
+
+    // Task 1: Assert outType extent matches the many-input's extent
+    if (isAField && !isBField) {
+      if (!extentsEqual(outType.extent, a.type.extent)) {
+        throw new Error('Add: outType extent does not match field input extent');
+      }
+    } else if (!isAField && isBField) {
+      if (!extentsEqual(outType.extent, b.type.extent)) {
+        throw new Error('Add: outType extent does not match field input extent');
+      }
+    }
 
     // If either input is field-extent, broadcast the other
     let aId = a.id;
@@ -128,6 +148,26 @@ registerBlock({
     const isAField = aCard.kind === 'many';
     const isBField = bCard.kind === 'many';
 
+    // Task 2: Assert field+field inputs share the same instance domain
+    if (isAField && isBField) {
+      const aInst = aCard.instance;
+      const bInst = bCard.instance;
+      if (aInst.instanceId !== bInst.instanceId || aInst.domainTypeId !== bInst.domainTypeId) {
+        throw new Error('Subtract: field+field zip requires matching instance domains');
+      }
+    }
+
+    // Task 1: Assert outType extent matches the many-input's extent
+    if (isAField && !isBField) {
+      if (!extentsEqual(outType.extent, a.type.extent)) {
+        throw new Error('Subtract: outType extent does not match field input extent');
+      }
+    } else if (!isAField && isBField) {
+      if (!extentsEqual(outType.extent, b.type.extent)) {
+        throw new Error('Subtract: outType extent does not match field input extent');
+      }
+    }
+
     // If either input is field-extent, broadcast the other
     let aId = a.id;
     let bId = b.id;
@@ -197,6 +237,26 @@ registerBlock({
     const bCard = requireInst(b.type.extent.cardinality, 'cardinality');
     const isAField = aCard.kind === 'many';
     const isBField = bCard.kind === 'many';
+
+    // Task 2: Assert field+field inputs share the same instance domain
+    if (isAField && isBField) {
+      const aInst = aCard.instance;
+      const bInst = bCard.instance;
+      if (aInst.instanceId !== bInst.instanceId || aInst.domainTypeId !== bInst.domainTypeId) {
+        throw new Error('Multiply: field+field zip requires matching instance domains');
+      }
+    }
+
+    // Task 1: Assert outType extent matches the many-input's extent
+    if (isAField && !isBField) {
+      if (!extentsEqual(outType.extent, a.type.extent)) {
+        throw new Error('Multiply: outType extent does not match field input extent');
+      }
+    } else if (!isAField && isBField) {
+      if (!extentsEqual(outType.extent, b.type.extent)) {
+        throw new Error('Multiply: outType extent does not match field input extent');
+      }
+    }
 
     // If either input is field-extent, broadcast the other
     let aId = a.id;
@@ -268,6 +328,26 @@ registerBlock({
     const isAField = aCard.kind === 'many';
     const isBField = bCard.kind === 'many';
 
+    // Task 2: Assert field+field inputs share the same instance domain
+    if (isAField && isBField) {
+      const aInst = aCard.instance;
+      const bInst = bCard.instance;
+      if (aInst.instanceId !== bInst.instanceId || aInst.domainTypeId !== bInst.domainTypeId) {
+        throw new Error('Divide: field+field zip requires matching instance domains');
+      }
+    }
+
+    // Task 1: Assert outType extent matches the many-input's extent
+    if (isAField && !isBField) {
+      if (!extentsEqual(outType.extent, a.type.extent)) {
+        throw new Error('Divide: outType extent does not match field input extent');
+      }
+    } else if (!isAField && isBField) {
+      if (!extentsEqual(outType.extent, b.type.extent)) {
+        throw new Error('Divide: outType extent does not match field input extent');
+      }
+    }
+
     // If either input is field-extent, broadcast the other
     let aId = a.id;
     let bId = b.id;
@@ -337,6 +417,26 @@ registerBlock({
     const bCard = requireInst(b.type.extent.cardinality, 'cardinality');
     const isAField = aCard.kind === 'many';
     const isBField = bCard.kind === 'many';
+
+    // Task 2: Assert field+field inputs share the same instance domain
+    if (isAField && isBField) {
+      const aInst = aCard.instance;
+      const bInst = bCard.instance;
+      if (aInst.instanceId !== bInst.instanceId || aInst.domainTypeId !== bInst.domainTypeId) {
+        throw new Error('Modulo: field+field zip requires matching instance domains');
+      }
+    }
+
+    // Task 1: Assert outType extent matches the many-input's extent
+    if (isAField && !isBField) {
+      if (!extentsEqual(outType.extent, a.type.extent)) {
+        throw new Error('Modulo: outType extent does not match field input extent');
+      }
+    } else if (!isAField && isBField) {
+      if (!extentsEqual(outType.extent, b.type.extent)) {
+        throw new Error('Modulo: outType extent does not match field input extent');
+      }
+    }
 
     // If either input is field-extent, broadcast the other
     let aId = a.id;
