@@ -1544,58 +1544,54 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
       {/* Const Block - Type-Aware Value Editor */}
       {isConstBlock && (
         <div style={{ marginBottom: '12px' }}>
-          {payloadType.kind === 'float' && (
-            <SliderWithInput
-              label="Value"
-              value={constValue as number}
-              onChange={(value) => handleParamChange('value', value)}
-              min={getConstSliderMin(inputDef, portType)}
-              max={getConstSliderMax(inputDef, portType)}
-              step={getConstSliderStep(inputDef, portType)}
-            />
-          )}
-          {payloadType.kind === 'int' && (
-            <SliderWithInput
-              label="Value"
-              value={constValue as number}
-              onChange={(value) => handleParamChange('value', value)}
-              min={getConstSliderMin(inputDef, portType) ?? 0}
-              max={getConstSliderMax(inputDef, portType) ?? 100}
-              step={1}
-            />
-          )}
+          {(payloadType.kind === 'float' || payloadType.kind === 'int') && (() => {
+            const cfg = getSliderConfig(inputDef, portType);
+            return (
+              <SliderWithInput
+                label="Value"
+                value={constValue as number}
+                onChange={(value) => handleParamChange('value', value)}
+                min={cfg.min}
+                max={cfg.max}
+                step={cfg.step}
+              />
+            );
+          })()}
           {payloadType.kind === 'bool' && (
             <MuiCheckboxInput
               checked={!!constValue}
               onChange={(value) => handleParamChange('value', value)}
             />
           )}
-          {payloadType.kind === 'vec2' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <SliderWithInput
-                label="X"
-                value={Array.isArray(constValue) ? (constValue as any)[0] ?? 0 : 0}
-                min={-1000}
-                max={1000}
-                step={1}
-                onChange={(v) => {
-                  const cur = Array.isArray(constValue) ? (constValue as any) : [0, 0];
-                  handleParamChange('value', [v, cur[1] ?? 0]);
-                }}
-              />
-              <SliderWithInput
-                label="Y"
-                value={Array.isArray(constValue) ? (constValue as any)[1] ?? 0 : 0}
-                min={-1000}
-                max={1000}
-                step={1}
-                onChange={(v) => {
-                  const cur = Array.isArray(constValue) ? (constValue as any) : [0, 0];
-                  handleParamChange('value', [cur[0] ?? 0, v]);
-                }}
-              />
-            </div>
-          )}
+          {payloadType.kind === 'vec2' && (() => {
+            const cfg = getSliderConfig(inputDef, portType);
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <SliderWithInput
+                  label="X"
+                  value={Array.isArray(constValue) ? (constValue as any)[0] ?? 0 : 0}
+                  min={cfg.min}
+                  max={cfg.max}
+                  step={cfg.step}
+                  onChange={(v) => {
+                    const cur = Array.isArray(constValue) ? (constValue as any) : [0, 0];
+                    handleParamChange('value', [v, cur[1] ?? 0]);
+                  }}
+                />
+                <SliderWithInput
+                  label="Y"
+                  value={Array.isArray(constValue) ? (constValue as any)[1] ?? 0 : 0}
+                  min={cfg.min}
+                  max={cfg.max}
+                  step={cfg.step}
+                  onChange={(v) => {
+                    const cur = Array.isArray(constValue) ? (constValue as any) : [0, 0];
+                    handleParamChange('value', [cur[0] ?? 0, v]);
+                  }}
+                />
+              </div>
+            );
+          })()}
           {payloadType.kind === 'color' && (
             <MuiColorInput
               value={
@@ -1611,16 +1607,19 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
               ⚙️ Camera projection values are configured via projection properties
             </div>
           )}
-          {payloadType.kind !== 'float' && payloadType.kind !== 'int' && payloadType.kind !== 'bool' && payloadType.kind !== 'vec2' && payloadType.kind !== 'color' && payloadType.kind !== 'cameraProjection' && (
-            <SliderWithInput
-              label="Value"
-              value={constValue as number}
-              onChange={(value) => handleParamChange('value', value)}
-              min={-100}
-              max={100}
-              step={0.1}
-            />
-          )}
+          {payloadType.kind !== 'float' && payloadType.kind !== 'int' && payloadType.kind !== 'bool' && payloadType.kind !== 'vec2' && payloadType.kind !== 'color' && payloadType.kind !== 'cameraProjection' && (() => {
+            const cfg = getSliderConfig(inputDef, portType);
+            return (
+              <SliderWithInput
+                label="Value"
+                value={constValue as number}
+                onChange={(value) => handleParamChange('value', value)}
+                min={cfg.min}
+                max={cfg.max}
+                step={cfg.step}
+              />
+            );
+          })()}
         </div>
       )}
 

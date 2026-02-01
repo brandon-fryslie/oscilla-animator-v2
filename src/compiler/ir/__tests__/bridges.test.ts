@@ -331,7 +331,6 @@ describe('bridging edge cases', () => {
       VEC2,
       COLOR,
       BOOL,
-
     ];
 
     for (const payload of payloads) {
