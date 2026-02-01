@@ -52,7 +52,6 @@ registerBlock({
     value: {
       type: canonicalType(FLOAT),
       value: 0,
-      uiHint: { kind: 'slider', min: 1, max: 10000, step: 1 },
       exposedAsPort: false,
     },
   },
