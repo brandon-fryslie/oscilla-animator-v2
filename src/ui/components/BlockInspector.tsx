@@ -2225,13 +2225,16 @@ const ParamField = observer(function ParamField({ blockId, paramKey, value, type
   }, [blockId, paramKey]);
 
   // Render based on uiHint or inferred type
-  if (uiHint) {
+  // Only use numeric hints (slider/int/float) when value is actually a number
+  const hintIsNumeric = uiHint && (uiHint.kind === 'slider' || uiHint.kind === 'int' || uiHint.kind === 'float');
+  const useHint = uiHint && (!hintIsNumeric || typeof value === 'number');
+  if (useHint) {
     return (
       <div>
         <label style={{ fontSize: '12px', color: colors.textSecondary, display: 'block', marginBottom: '4px' }}>
           {paramKey}
         </label>
-        <HintedControl hint={uiHint} value={value} onChange={handleChange} />
+        <HintedControl hint={uiHint!} value={value} onChange={handleChange} />
       </div>
     );
   }

@@ -105,7 +105,7 @@ export function SliderWithInput({
             disabled={disabled}
             size="sm"
             color="violet"
-            label={(val) => val.toFixed(2)}
+            label={(val) => typeof val === 'number' ? val.toFixed(2) : String(val)}
             styles={{
               track: {
                 background: 'rgba(139, 92, 246, 0.2)',
