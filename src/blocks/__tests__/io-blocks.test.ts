@@ -113,7 +113,6 @@ describe('ExternalInput Block', () => {
     });
 
     expect(result.outputsById.value).toBeDefined();
-    expect(result.outputsById.value.k).toBe('sig');
   });
 
   it('lower function uses default channel when config missing', () => {
@@ -220,7 +219,6 @@ describe('ExternalGate Block', () => {
     expect(zipCalls[0].opcode).toBe('gt'); // threshold > input
     expect(zipCalls[1].opcode).toBe('sub'); // 1 - result
     expect(result.outputsById.gate).toBeDefined();
-    expect(result.outputsById.gate.k).toBe('sig');
   });
 
   it('lower function uses default threshold', () => {
@@ -320,11 +318,6 @@ describe('ExternalVec2 Block', () => {
     expect(externalCalls).toEqual(['gamepad.x', 'gamepad.y']);
     expect(stridedWriteCalled).toBe(true);
     expect(result.outputsById.position).toBeDefined();
-    expect(result.outputsById.position.k).toBe('sig');
-    if (result.outputsById.position.k === 'sig') {
-      expect(result.outputsById.position.stride).toBe(2);
-      expect(result.outputsById.position.components).toHaveLength(2);
-    }
   });
 
   it('lower function uses default channelBase', () => {

@@ -11,7 +11,6 @@ import { executeFrame } from '../../runtime/ScheduleExecutor';
 import { createSessionState, createRuntimeStateFromSession } from '../../runtime/RuntimeState';
 import { getTestArena } from '../../runtime/__tests__/test-arena-helper';
 import { getBlockDefinition } from '../registry';
-import type { StepEvalSig, SigExpr } from '../../compiler/ir/types';
 import type { CompiledProgramIR } from '../../compiler/ir/program';
 
 /**
@@ -26,16 +25,32 @@ import type { CompiledProgramIR } from '../../compiler/ir/program';
  * @param count - Number of TestSignal offsets to return (default: 1)
  * @returns Array of f64 offsets for TestSignal outputs
  */
+
+// ValueExpr-only schedule shape: evalSig steps refer to ValueExprIds directly.
+// We avoid importing legacy step types from compiler/ir/types.
+type EvalSigStep = { readonly kind: 'evalSig'; readonly expr: number; readonly target: number };
+
+function isEvalSigStep(step: unknown): step is EvalSigStep {
+  return (
+    typeof step === 'object' &&
+    step !== null &&
+    (step as any).kind === 'evalSig' &&
+    typeof (step as any).expr === 'number' &&
+    typeof (step as any).target === 'number'
+  );
+}
+
 function findTestSignalOffsets(program: CompiledProgramIR, count = 1): number[] {
   const schedule = program.schedule;
-  const signals = program.signalExprs.nodes as readonly SigExpr[];
+  // ValueExpr-only: program.valueExprs is a table with .nodes.
+  const valueExprs = program.valueExprs.nodes;
 
   // Find evalSig steps that are NOT time signals or const signals
-  const evalSigSteps = schedule.steps.filter((s): s is StepEvalSig => s.kind === 'evalSig');
+  const evalSigSteps = schedule.steps.filter(isEvalSigStep);
   const targetSteps = evalSigSteps.filter((step) => {
-    const sig = signals[step.expr as number];
-    // Exclude time and const signals - we want computed values
-    return sig && sig.kind !== 'time' && sig.kind !== 'const';
+    const expr = valueExprs[step.expr];
+    // Exclude time and const expressions - we want computed values
+    return expr && expr.kind !== 'time' && expr.kind !== 'const';
   });
 
   // Get the last N slots and resolve to offsets

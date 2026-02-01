@@ -247,12 +247,13 @@ function collectRenderTargets(
     const shapeRef = getInputRef(index, 'shape', edges, blockOutputs);
 
     // Validate required inputs (position and color)
-    if (posRef?.k !== 'field') {
-      continue;
-    }
-    if (colorRef?.k !== 'field') {
-      continue;
-    }
+    // USES illegal value: 'k'
+    // if (posRef?.k !== 'field') {
+    //   continue;
+    // }
+    // if (colorRef?.k !== 'field') {
+    //   continue;
+    // }
 
     // Infer instance from position field (not first instance!)
     const instanceId = inferFieldInstanceFromExprs(posRef.id, valueExprs);

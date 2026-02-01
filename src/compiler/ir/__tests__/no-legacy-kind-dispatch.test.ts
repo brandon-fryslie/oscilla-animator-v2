@@ -7,13 +7,7 @@
  * This ensures new code uses ValueExpr dispatch instead of legacy dispatch.
  *
  * Allowed files (legacy evaluators, to be migrated later):
- * - SignalEvaluator.ts
- * - Materializer.ts
- * - EventEvaluator.ts
- * - lowerToValueExprs.ts (the lowering pass itself)
- * - types.ts (type definitions)
- * - value-expr.ts (type definitions)
- * - ir/IRBuilder*.ts (IR builder uses legacy types)
+ * NONE (
  *
  * Spec Reference: SPRINT-20260131-100000-dual-emit-PLAN.md WI-3
  */
@@ -27,13 +21,12 @@ describe('no-legacy-kind-dispatch', () => {
     // Allowed files (legacy evaluators + type definitions + lowering pass)
     const allowedFiles = [
       'SignalEvaluator.ts',
-      'Materializer.ts',
-      'EventEvaluator.ts',
-      'lowerToValueExprs.ts',
-      'types.ts',
-      'value-expr.ts',
-      'IRBuilder.ts',
-      'IRBuilderImpl.ts',
+      // 'Materializer.ts',
+      // 'EventEvaluator.ts',
+      // 'types.ts',
+      // 'value-expr.ts',
+      // 'IRBuilder.ts',
+      // 'IRBuilderImpl.ts',
     ];
 
     // Patterns that indicate legacy kind dispatch

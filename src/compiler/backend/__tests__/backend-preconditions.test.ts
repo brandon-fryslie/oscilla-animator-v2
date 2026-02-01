@@ -35,16 +35,13 @@ function testProgramConverter(
 ): CompiledProgramIR {
   // Access the actual IR from the builder (matching compile.ts)
   const builder = unlinkedIR.builder;
-  const signalNodes = builder.getSigExprs();
-  const fieldNodes = builder.getFieldExprs();
-  const eventNodes = builder.getEventExprs();
+  // const signalNodes = builder.getSigExprs();
+  // const fieldNodes = builder.getFieldExprs();
+  // const eventNodes = builder.getEventExprs();
   
   return {
     irVersion: 1,
-    signalExprs: { nodes: signalNodes },
-    eventExprs: { nodes: eventNodes },
-    fieldExprs: { nodes: fieldNodes },
-    valueExprs: { nodes: [], sigToValue: [], fieldToValue: [], eventToValue: [] },
+    valueExprs: { nodes: [], },
     constants: { json: [] },
     schedule: scheduleIR,
     outputs: [],
@@ -123,7 +120,7 @@ describe('Backend Preconditions', () => {
 
           // Verify program structure
           expect(program).toBeDefined();
-          expect(program.signalExprs).toBeDefined();
+          // expect(program.signalExprs).toBeDefined();
           expect(program.schedule).toBeDefined();
 
           // Verify intermediate representations

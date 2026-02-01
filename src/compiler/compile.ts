@@ -28,7 +28,6 @@ import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../core
 // debugService import removed for strict compiler isolation (One Source of Truth)
 import { compilationInspector } from '../services/CompilationInspectorService';
 import { computeRenderReachableBlocks } from './reachability';
-import { lowerToValueExprs } from './ir/lowerToValueExprs';
 
 
 // Import block registrations (side-effect imports to register blocks)
