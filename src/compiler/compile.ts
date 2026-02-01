@@ -32,28 +32,8 @@ import { resolveKernels } from './resolve-kernels';
 import { createDefaultRegistry } from '../runtime/kernels/default-registry';
 
 
-// Import block registrations (side-effect imports to register blocks)
-import '../blocks/time-blocks';
-import '../blocks/signal-blocks';
-import '../blocks/primitive-blocks'; // NEW - Sprint 9: Three-stage architecture (Stage 1)
-import '../blocks/array-blocks'; // NEW - Sprint 9: Three-stage architecture (Stage 2)
-import '../blocks/instance-blocks'; // NEW - Sprint 3 (replaces domain-blocks)
-import '../blocks/field-blocks';
-import '../blocks/math-blocks';
-import '../blocks/event-blocks';
-import '../blocks/expression-blocks'; // NEW - Expression DSL Integration Sprint 3
-import '../blocks/color-blocks';
-import '../blocks/geometry-blocks';
-import '../blocks/identity-blocks';
-import '../blocks/render-blocks';
-import '../blocks/field-operations-blocks';
-import '../blocks/path-blocks'; // NEW - Path foundation sprint
-import '../blocks/path-operators-blocks'; // NEW - Path operators sprint
-import '../blocks/adapter-blocks'; // Unit-conversion adapters (Spec §B4.1)
-import '../blocks/camera-block'; // NEW - Camera system
-import '../blocks/io-blocks'; // NEW - External input system
-
-import '../blocks/test-blocks'; // Test blocks for signal evaluation in tests
+// Import all block registrations (side-effect import)
+import '../blocks/all';
 
 // Import passes
 import { pass1TypeConstraints } from './passes-v2';

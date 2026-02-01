@@ -1,0 +1,53 @@
+/**
+ * ScalarToPhase01 Block
+ *
+ * Wrap scalar to phase [0,1) with cyclic semantics.
+ */
+
+import { registerBlock } from '../registry';
+import { canonicalType, unitPhase01, unitScalar, strideOf } from '../../core/canonical-types';
+import { FLOAT } from '../../core/canonical-types';
+import { OpCode } from '../../compiler/ir/types';
+
+registerBlock({
+  type: 'Adapter_ScalarToPhase01',
+  label: 'Scalar → Phase',
+  category: 'adapter',
+  description: 'Wrap scalar to phase [0,1) with cyclic semantics',
+  form: 'primitive',
+  capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'preserve',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'allowZipSig',
+  },
+  adapterSpec: {
+    from: { payload: FLOAT, unit: { kind: 'scalar' }, extent: 'any' },
+    to: { payload: FLOAT, unit: { kind: 'angle', unit: 'phase01' }, extent: 'any' },
+    inputPortId: 'in',
+    outputPortId: 'out',
+    description: 'Scalar → phase [0,1) with wrapping',
+    purity: 'pure',
+    stability: 'stable',
+  },
+  inputs: {
+    in: { label: 'In', type: canonicalType(FLOAT, unitScalar()) },
+  },
+  outputs: {
+    out: { label: 'Out', type: canonicalType(FLOAT, unitPhase01()) },
+  },
+  lower: ({ inputsById, ctx }) => {
+    const input = inputsById.in;
+    if (!input) throw new Error('Lens block input is required');
+
+    const wrapFn = ctx.b.opcode(OpCode.Wrap01);
+    const wrapped = ctx.b.kernelMap(input.id, wrapFn, canonicalType(FLOAT, unitPhase01()));
+    const outType = ctx.outTypes[0];
+    const slot = ctx.b.allocSlot();
+    return {
+      outputsById: {
+        out: { id: wrapped, slot, type: outType, stride: strideOf(outType.payload) },
+      },
+    };
+  },
+});
