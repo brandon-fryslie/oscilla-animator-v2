@@ -70,7 +70,7 @@ describe('Instance Identity (type-derived)', () => {
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
       const ref = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const fieldType = canonicalField(FLOAT, { kind: 'scalar' }, ref);
-      const sig = b.sigConst(floatConst(1.0), canonicalSignal(FLOAT));
+      const sig = b.constant(floatConst(1.0), canonicalSignal(FLOAT));
       const broadcast = b.Broadcast(sig, fieldType);
 
       // Broadcast has many cardinality (it's a field), so type carries instance
@@ -107,7 +107,7 @@ describe('Instance Identity (type-derived)', () => {
       const fieldType = canonicalField(FLOAT, { kind: 'scalar' }, ref);
       const sigType = canonicalSignal(FLOAT);
       const intrinsic = b.fieldIntrinsic('index', fieldType);
-      const signal = b.sigConst(floatConst(2.0), sigType);
+      const signal = b.constant(floatConst(2.0), sigType);
       const zipped = b.fieldZipSig(intrinsic, [signal], { kind: 'opcode', opcode: OpCode.Mul }, fieldType);
 
       const expr = b.getFieldExprs()[zipped as number];
@@ -133,7 +133,7 @@ describe('Instance Identity (type-derived)', () => {
       const ref = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const type = canonicalField(FLOAT, { kind: 'scalar' }, ref);
       const intrinsic = b.fieldIntrinsic('index', type);
-      const sig = b.sigConst(floatConst(1.0), canonicalSignal(FLOAT));
+      const sig = b.constant(floatConst(1.0), canonicalSignal(FLOAT));
       const broadcast = b.Broadcast(sig, type);
       const zipped = b.fieldZip([intrinsic, broadcast], { kind: 'opcode', opcode: OpCode.Add }, type);
 
@@ -165,8 +165,8 @@ describe('Instance Identity (type-derived)', () => {
       const vec2Type = canonicalField(VEC2, { kind: 'scalar' }, ref);
 
       const normalizedIndex = b.fieldIntrinsic('normalizedIndex', floatType);
-      const colsSig = b.sigConst(intConst(5), canonicalSignal(INT));
-      const rowsSig = b.sigConst(intConst(2), canonicalSignal(INT));
+      const colsSig = b.constant(intConst(5), canonicalSignal(INT));
+      const rowsSig = b.constant(intConst(2), canonicalSignal(INT));
       const layoutField = b.fieldZipSig(
         normalizedIndex,
         [colsSig, rowsSig],

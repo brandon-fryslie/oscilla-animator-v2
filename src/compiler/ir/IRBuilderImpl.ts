@@ -225,28 +225,21 @@ export class IRBuilderImpl implements IRBuilder {
   }
 
   eventNever(): ValueExprId {
-    return this.pushExpr({ kind: 'event', eventKind: 'never', type: canonicalEvent() });
+    return this.pushExpr({ kind: 'event' +
+          '', eventKind: 'never', type: canonicalEvent() });
   }
 
   // =========================================================================
   // Legacy Method Aliases (delegate to canonical methods)
   // =========================================================================
 
-  sigConst(value: ConstValue, type: CanonicalType): ValueExprId { return this.constant(value, type); }
-  sigSlot(slot: ValueSlot, type: CanonicalType): ValueExprId { return this.slotRead(slot, type); }
-  sigTime(which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'progress' | 'palette' | 'energy', type: CanonicalType): ValueExprId { return this.time(which, type); }
-  sigExternal(channel: string, type: CanonicalType): ValueExprId { return this.external(channel, type); }
-  sigMap(input: ValueExprId, fn: PureFn, type: CanonicalType): ValueExprId { return this.kernelMap(input, fn, type); }
-  sigZip(inputs: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId { return this.kernelZip(inputs, fn, type); }
-  sigShapeRef(
-    topologyId: TopologyId,
-    paramSignals: readonly ValueExprId[],
-    type: CanonicalType,
-    controlPointField?: { id: ValueExprId; stride: number }
-  ): ValueExprId {
-    return this.shapeRef(topologyId, paramSignals, type, controlPointField?.id);
-  }
-  ReduceField(field: ValueExprId, op: 'min' | 'max' | 'sum' | 'avg', type: CanonicalType): ValueExprId { return this.reduce(field, op, type); }
+  // constant(value: ConstValue, type: CanonicalType): ValueExprId { return this.constant(value, type); }
+  // slotRead(slot: ValueSlot, type: CanonicalType): ValueExprId { return this.slotRead(slot, type); }
+  // time(which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'progress' | 'palette' | 'energy', type: CanonicalType): ValueExprId { return this.time(which, type); }
+  // external(channel: string, type: CanonicalType): ValueExprId { return this.external(channel, type); }
+  // kernelMap(input: ValueExprId, fn: PureFn, type: CanonicalType): ValueExprId { return this.kernelMap(input, fn, type); }
+  // kernelZip(inputs: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId { return this.kernelZip(inputs, fn, type); }
+  // reduce(field: ValueExprId, op: 'min' | 'max' | 'sum' | 'avg', type: CanonicalType): ValueExprId { return this.reduce(field, op, type); }
   fieldConst(value: ConstValue, type: CanonicalType): ValueExprId { return this.constant(value, type); }
   fieldIntrinsic(intrinsic: IntrinsicPropertyName, type: CanonicalType): ValueExprId { return this.intrinsic(intrinsic, type); }
   fieldPlacement(field: PlacementFieldName, basisKind: BasisKind, type: CanonicalType): ValueExprId { return this.placement(field, basisKind, type); }

@@ -94,15 +94,15 @@ function generateTimeSignals(timeModel: TimeModelIR): TimeSignals {
   const builder = new IRBuilderImpl();
 
   // All models have tModelMs - float scalar
-  const tModelMs = builder.sigTime('tMs', canonicalType(FLOAT));
+  const tModelMs = builder.time('tMs', canonicalType(FLOAT));
 
   // Infinite time model
-  const phaseA = builder.sigTime('phaseA', canonicalType(FLOAT, unitPhase01()));
-  const phaseB = builder.sigTime('phaseB', canonicalType(FLOAT, unitPhase01()));
-  const dt = builder.sigTime('dt', canonicalType(FLOAT));
+  const phaseA = builder.time('phaseA', canonicalType(FLOAT, unitPhase01()));
+  const phaseB = builder.time('phaseB', canonicalType(FLOAT, unitPhase01()));
+  const dt = builder.time('dt', canonicalType(FLOAT));
   const pulse = builder.eventPulse('InfiniteTimeRoot');
-  const palette = builder.sigTime('palette', canonicalType(COLOR));
-  const energy = builder.sigTime('energy', canonicalType(FLOAT));
+  const palette = builder.time('palette', canonicalType(COLOR));
+  const energy = builder.time('energy', canonicalType(FLOAT));
 
   return {
     tModelMs,
