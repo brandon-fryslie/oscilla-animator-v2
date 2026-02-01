@@ -227,24 +227,43 @@ function processBlock(
     } else if (child.type === 'lens' && child.labels.length === 1) {
       // Lens attachment block
       const lensType = child.labels[0];
+      const portAttr = child.attributes.port;
       const sourceAddressAttr = child.attributes.sourceAddress;
 
-      if (sourceAddressAttr) {
+      if (!portAttr) {
+        warnings.push(new PatchDslWarning(`Lens block missing port attribute: "${lensType}"`, child.pos));
+      } else if (!sourceAddressAttr) {
+        warnings.push(new PatchDslWarning(`Lens block missing sourceAddress: "${lensType}"`, child.pos));
+      } else {
+        const portId = convertHclValue(portAttr) as string;
         const sourceAddress = convertHclValue(sourceAddressAttr) as string;
-        // Extract lens params (exclude sourceAddress)
+
+        // Extract lens params (exclude reserved attributes)
         const lensParams: Record<string, unknown> = {};
         for (const [key, value] of Object.entries(child.attributes)) {
-          if (key !== 'sourceAddress') {
+          if (key !== 'port' && key !== 'sourceAddress') {
             lensParams[key] = convertHclValue(value);
           }
         }
 
-        // Find the port that this lens attaches to (lens blocks appear after port blocks)
-        // For now, attach to the last port that has been processed
-        // In a more complete implementation, we'd need parent context
-        // Since lens blocks are nested inside block bodies, we need a different approach
-        // TODO: Determine which port this lens attaches to
-        warnings.push(new PatchDslWarning(`Lens deserialization not fully implemented: "${lensType}"`, child.pos));
+        const port = inputPorts.get(portId);
+        if (port) {
+          const lens: LensAttachment = {
+            id: `lens_${lensType}_${sourceAddress}`,
+            lensType,
+            sourceAddress,
+            params: Object.keys(lensParams).length > 0 ? lensParams : undefined,
+            sortKey: (port.lenses?.length ?? 0),
+          };
+          const existingLenses = port.lenses ?? [];
+          const newPort: InputPort = {
+            ...port,
+            lenses: [...existingLenses, lens],
+          };
+          inputPorts.set(portId, newPort);
+        } else {
+          warnings.push(new PatchDslWarning(`Lens for unknown port "${portId}"`, child.pos));
+        }
       }
     }
   }

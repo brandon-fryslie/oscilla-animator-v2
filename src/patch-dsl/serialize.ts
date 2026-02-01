@@ -269,7 +269,7 @@ function emitVarargConnections(
  * @param indent - Indentation level
  * @returns HCL text for lens attachments
  */
-function emitLenses(_portId: string, lenses: readonly LensAttachment[], indent: number): string {
+function emitLenses(portId: string, lenses: readonly LensAttachment[], indent: number): string {
   const ind = '  '.repeat(indent);
 
   // Sort lenses by sortKey
@@ -278,6 +278,7 @@ function emitLenses(_portId: string, lenses: readonly LensAttachment[], indent: 
   let output = '';
   for (const lens of sorted) {
     output += `${ind}lens "${lens.lensType}" {\n`;
+    output += `${ind}  port = "${portId}"\n`;
     output += `${ind}  sourceAddress = "${lens.sourceAddress}"\n`;
 
     // Emit lens params if present

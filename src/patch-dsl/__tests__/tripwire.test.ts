@@ -7,6 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { tokenize, TokenKind } from '../lexer';
 import { deserializePatchFromHCL, serializePatchToHCL } from '../index';
+import '../../blocks/all';
 
 describe('tripwire: lexer exceptions', () => {
   it('does not throw on garbage input', () => {
@@ -290,7 +291,7 @@ patch "Test" {
 });
 
 describe('tripwire: vararg/port override deserialization', () => {
-  it('parses port override syntax without error', () => {
+  it('deserializes port override combineMode and defaultSource', () => {
     const hcl = `
 patch "Test" {
   block "Oscillator" "osc" {
@@ -302,13 +303,18 @@ patch "Test" {
 }
 `;
     const result = deserializePatchFromHCL(hcl);
-    // Should parse without errors (even if port might not exist in registry)
     expect(result.errors).toHaveLength(0);
     const block = Array.from(result.patch.blocks.values())[0];
     expect(block).toBeDefined();
+
+    // Verify port override data actually survived
+    const phasePort = block.inputPorts.get('phase');
+    expect(phasePort).toBeDefined();
+    expect(phasePort!.combineMode).toBe('sum');
+    expect(phasePort!.defaultSource).toBe(0.5);
   });
 
-  it('parses vararg syntax without error', () => {
+  it('deserializes vararg connections with data preserved', () => {
     const hcl = `
 patch "Test" {
   block "Const" "foo" {}
@@ -329,35 +335,101 @@ patch "Test" {
 }
 `;
     const result = deserializePatchFromHCL(hcl);
-    // Should parse without errors
     expect(result.errors).toHaveLength(0);
     const osc = Array.from(result.patch.blocks.values()).find(b => b.displayName === 'osc');
     expect(osc).toBeDefined();
-  });
-});
 
-describe('tripwire: parser recovery', () => {
-  it('recoverToBlockEnd respects bracket depth', () => {
-    // Parser should recover from errors and continue parsing subsequent blocks
+    // Verify vararg connections actually survived
+    const phasePort = osc!.inputPorts.get('phase');
+    expect(phasePort).toBeDefined();
+    expect(phasePort!.varargConnections).toBeDefined();
+    expect(phasePort!.varargConnections!.length).toBe(2);
+    expect(phasePort!.varargConnections![0].sourceAddress).toBe('foo.out');
+    expect(phasePort!.varargConnections![0].alias).toBe('first');
+    expect(phasePort!.varargConnections![0].sortKey).toBe(0);
+    expect(phasePort!.varargConnections![1].sortKey).toBe(1);
+  });
+
+  it('deserializes lens attachments with data preserved', () => {
     const hcl = `
 patch "Test" {
-  block "Const" "bad" {
-    value = { a = 1
-    # Missing closing brace
-  }
-
-  block "Const" "good" {
-    value = 123
+  block "Oscillator" "osc" {
+    lens "Adapter_DegreesToRadians" {
+      port = "phase"
+      sourceAddress = "v1:blocks.foo.outputs.out"
+    }
   }
 }
 `;
     const result = deserializePatchFromHCL(hcl);
-    // Should have errors from the malformed block
+    expect(result.errors).toHaveLength(0);
+    const osc = Array.from(result.patch.blocks.values())[0];
+    expect(osc).toBeDefined();
+
+    // Verify lens data survived
+    const phasePort = osc.inputPorts.get('phase');
+    expect(phasePort).toBeDefined();
+    expect(phasePort!.lenses).toBeDefined();
+    expect(phasePort!.lenses!.length).toBe(1);
+    expect(phasePort!.lenses![0].lensType).toBe('Adapter_DegreesToRadians');
+    expect(phasePort!.lenses![0].sourceAddress).toBe('v1:blocks.foo.outputs.out');
+  });
+});
+
+describe('tripwire: parser recovery', () => {
+  it('recovers from bad attribute and continues parsing', () => {
+    // Parser should recover from a bad attribute value and continue parsing the block
+    const hcl = `
+patch "Test" {
+  block "Const" "bad" {
+    value = @invalid
+    other = 42
+  }
+}
+`;
+    const result = deserializePatchFromHCL(hcl);
+    // Should have errors (the lexer throws on @, caught by try/catch in deserializer)
     expect(result.errors.length).toBeGreaterThan(0);
-    // Should still have created at least one block
+  });
+
+  it('recovers from missing block body and parses next block', () => {
+    // Block with no body followed by valid block
+    const hcl = `
+patch "Test" {
+  block "Const" "first" {
+    value = 123
+  }
+
+  block "Const" "second" {
+    value = 456
+  }
+}
+`;
+    const result = deserializePatchFromHCL(hcl);
+    expect(result.errors).toHaveLength(0);
     const blocks = Array.from(result.patch.blocks.values());
-    expect(blocks.length).toBeGreaterThan(0);
-    // The second block should ideally be parsed (recovery worked)
-    // But this is best-effort, so we just verify some blocks exist
+    expect(blocks.length).toBe(2);
+    // Both blocks should be parsed
+    const first = blocks.find(b => b.displayName === 'first');
+    const second = blocks.find(b => b.displayName === 'second');
+    expect(first).toBeDefined();
+    expect(second).toBeDefined();
+    expect(first!.params.value).toBe(123);
+    expect(second!.params.value).toBe(456);
+  });
+
+  it('recoverToBlockEnd does not escape bracket containers', () => {
+    // List with error — recovery should not consume past the ]
+    const hcl = `
+patch "Test" {
+  block "Const" "arr" {
+    value = [1, 2, 3]
+  }
+}
+`;
+    const result = deserializePatchFromHCL(hcl);
+    expect(result.errors).toHaveLength(0);
+    const block = Array.from(result.patch.blocks.values())[0];
+    expect(block.params.value).toEqual([1, 2, 3]);
   });
 });
