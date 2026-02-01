@@ -12,7 +12,7 @@
  */
 
 import type { BlockIndex } from '../ir/patches';
-import type { CanonicalType, Cardinality, CardinalityValue, InstanceRef } from '../../core/canonical-types';
+import type { CanonicalType, Cardinality, CardinalityValue } from '../../core/canonical-types';
 import { isAxisInst, cardinalityOne, cardinalityMany } from '../../core/canonical-types';
 import type { CardinalityVarId } from '../../core/ids';
 import type { PortKey } from './analyze-type-constraints';

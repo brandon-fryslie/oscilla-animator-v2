@@ -14,6 +14,7 @@ import {
   createRuntimeStateFromSession,
   migrateState,
   createInitialState,
+  reconcilePhaseOffsets,
   type SessionState,
 } from '../runtime';
 import type { RuntimeState } from '../runtime/RuntimeState';
@@ -65,6 +66,7 @@ export interface CompileOrchestratorDeps {
  * - Continuity preservation
  * - Debug probe setup
  * - Domain change detection
+ * - Phase continuity offset reconciliation
  *
  * @param isInitial - True for first compile (hard swap), false for recompile (soft swap)
  */
@@ -158,6 +160,22 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
     // Initialize fresh (first compile or no old state)
     const initialState = createInitialState(newStateSlotCount, newStateMappings);
     state.currentState.state.set(initialState);
+  }
+
+  // Reconcile phase offsets when time model periods change (hot-swap continuity)
+  if (!isInitial && state.currentProgram?.schedule) {
+    const oldTimeModel = state.currentProgram.schedule.timeModel;
+    const newTimeModel = program.schedule.timeModel;
+    const monotonicTMs = state.sessionState!.timeState.prevTMs ?? 0;
+
+    if (oldTimeModel && newTimeModel) {
+      reconcilePhaseOffsets(
+        oldTimeModel,
+        newTimeModel,
+        monotonicTMs,
+        state.sessionState!.timeState
+      );
+    }
   }
 
   // Set RuntimeState reference in ContinuityStore

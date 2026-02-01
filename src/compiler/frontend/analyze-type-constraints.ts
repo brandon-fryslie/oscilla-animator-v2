@@ -10,10 +10,11 @@
 
 import type { NormalizedPatch, BlockIndex } from '../ir/patches';
 import type { Block } from '../../graph/Patch';
-import type { CanonicalType, Extent, PayloadType, UnitType } from '../../core/canonical-types';
-import { isAxisInst } from '../../core/canonical-types';
+import type { CanonicalType, Extent, PayloadType, UnitType, CardinalityValue } from '../../core/canonical-types';
+import { isAxisInst, cardinalityMany, instanceRef } from '../../core/canonical-types';
 import { getBlockDefinition, getBlockCardinalityMetadata } from '../../blocks/registry';
 import type { CardinalityVarId } from '../../core/ids';
+import { instanceId, domainTypeId } from '../../core/ids';
 import { solveCardinality, type CardinalityConstraint } from './solve-cardinality';
 
 // =============================================================================
@@ -66,8 +67,8 @@ export type Pass1Result = TypeResolvedPatch | Pass1Error;
 type UnitVarId = string & { readonly __brand: 'UnitVarId' };
 type PayloadVarId = string & { readonly __brand: 'PayloadVarId' };
 
-function unitVarId(s: string): UnitVarId { return s as UnitVarId; }
-function payloadVarId(s: string): PayloadVarId { return s as PayloadVarId; }
+function _unitVarId(s: string): UnitVarId { return s as UnitVarId; }
+function _payloadVarId(s: string): PayloadVarId { return s as PayloadVarId; }
 function cardinalityVarId(s: string): CardinalityVarId { return s as CardinalityVarId; }
 
 // Template-level "variables" referenced by BlockDef authoring (defVar ids)
@@ -98,60 +99,53 @@ function payloadsEqual(a: PayloadType, b: PayloadType): boolean {
 // Union-find (generic, tagged, no string collision)
 // =============================================================================
 
-type UFNodeId = string & { readonly __brand: 'UFNodeId' };
-function ufNodeId(s: string): UFNodeId { return s as UFNodeId; }
+type UFNodeId<V> = string & { readonly __brand: 'UFNodeId'; readonly __varType?: V };
+function ufNodeId<V>(s: string): UFNodeId<V> { return s as UFNodeId<V>; }
 
-type UFParent<T> =
-    | { readonly tag: 'parent'; readonly id: UFNodeId }
+type UFParent<T, V> =
+    | { readonly tag: 'parent'; readonly id: UFNodeId<V> }
     | { readonly tag: 'value'; readonly value: T };
 
 class UnionFind<T> {
-  private parent = new Map<UFNodeId, UFParent<T>>();
+  private parent = new Map<UFNodeId<any>, UFParent<T, any>>();
 
-  /** Ensure a node exists. */
-  ensure(id: UFNodeId): void {
+  ensure(id: UFNodeId<any>): void {
     if (!this.parent.has(id)) this.parent.set(id, { tag: 'parent', id });
   }
 
-  /** Find root, with path compression. */
-  find(id: UFNodeId): UFParent<T> {
+  find(id: UFNodeId<any>): UFParent<T, any> {
     this.ensure(id);
     const p = this.parent.get(id)!;
 
     if (p.tag === 'value') return p;
-    if (p.id === id) return p; // root (self-parent)
+    if (p.id === id) return p; // root
 
     const root = this.find(p.id);
-    // compress:
+    // path compression:
     if (root.tag === 'parent') this.parent.set(id, { tag: 'parent', id: root.id });
     else this.parent.set(id, root);
     return root;
   }
 
-  /** Assign a concrete value to a node (unifies with existing assignment if present). */
-  assign(id: UFNodeId, value: T, eq: (a: T, b: T) => boolean): { ok: true } | { ok: false; conflict: [T, T] } {
+  assign(id: UFNodeId<any>, value: T, eq: (a: T, b: T) => boolean): { ok: true } | { ok: false; conflict: [T, T] } {
     const r = this.find(id);
     if (r.tag === 'value') {
       if (eq(r.value, value)) return { ok: true };
       return { ok: false, conflict: [r.value, value] };
     }
-    // r is root parent
     this.parent.set(r.id, { tag: 'value', value });
     return { ok: true };
   }
 
-  /** Union two nodes. */
-  union(a: UFNodeId, b: UFNodeId, eq: (x: T, y: T) => boolean): { ok: true } | { ok: false; conflict: [T, T] } {
+  union(a: UFNodeId<any>, b: UFNodeId<any>, eq: (a: T, b: T) => boolean): { ok: true } | { ok: false; conflict: [T, T] } {
     const ra = this.find(a);
     const rb = this.find(b);
 
-    // both resolved:
     if (ra.tag === 'value' && rb.tag === 'value') {
       if (eq(ra.value, rb.value)) return { ok: true };
       return { ok: false, conflict: [ra.value, rb.value] };
     }
 
-    // one resolved:
     if (ra.tag === 'value' && rb.tag === 'parent') {
       this.parent.set(rb.id, ra);
       return { ok: true };
@@ -161,25 +155,45 @@ class UnionFind<T> {
       return { ok: true };
     }
 
-    // both parent roots:
     if (ra.tag === 'parent' && rb.tag === 'parent') {
       if (ra.id !== rb.id) this.parent.set(ra.id, { tag: 'parent', id: rb.id });
       return { ok: true };
     }
 
-    // unreachable
     return { ok: true };
   }
 
-  /** If node is resolved, return value. */
-  resolved(id: UFNodeId): T | null {
+  resolved(id: UFNodeId<any>): T | null {
     const r = this.find(id);
     return r.tag === 'value' ? r.value : null;
   }
 }
 
 // =============================================================================
-// Port collection
+// Node ID constructors
+// =============================================================================
+
+type UnitNodeId = UFNodeId<UnitType>;
+type PayloadNodeId = UFNodeId<PayloadType>;
+
+function unitNodeFor(blockIndex: BlockIndex, defVarId: string): UnitNodeId {
+  return ufNodeId(`block:${blockIndex}:unitVar:${defVarId}`);
+}
+
+function unitNodeConcrete(blockIndex: BlockIndex, portName: string, dir: 'in' | 'out'): UnitNodeId {
+  return ufNodeId(`block:${blockIndex}:port:${portName}:${dir}:unit`);
+}
+
+function payloadNodeFor(blockIndex: BlockIndex, defVarId: string): PayloadNodeId {
+  return ufNodeId(`block:${blockIndex}:payloadVar:${defVarId}`);
+}
+
+function payloadNodeConcrete(blockIndex: BlockIndex, portName: string, dir: 'in' | 'out'): PayloadNodeId {
+  return ufNodeId(`block:${blockIndex}:port:${portName}:${dir}:payload`);
+}
+
+// =============================================================================
+// Template bridging (legacy BlockDef.inputs/outputs.type compatibility)
 // =============================================================================
 
 interface PortInfo {
@@ -187,26 +201,15 @@ interface PortInfo {
   readonly blockIndex: BlockIndex;
   readonly portName: string;
   readonly direction: 'in' | 'out';
-
-  /** Template from BlockDef (may reference def vars) */
   readonly template: TypeTemplate;
-
-  /** Inference node ids for this port's payload+unit (always node ids, never concrete) */
-  readonly unitNode: UFNodeId;
-  readonly payloadNode: UFNodeId;
+  readonly unitNode: UnitNodeId;
+  readonly payloadNode: PayloadNodeId;
 }
 
-// =============================================================================
-// BlockDef -> TypeTemplate
-// =============================================================================
-
 /**
- * REQUIRED TARGET SHAPE (recommended): BlockDef stores a TypeTemplate for every port:
- *   - payload: PayloadType | {kind:'payloadVar', id:string}
- *   - unit: UnitType | {kind:'unitVar', id:string}
- *   - extent: Extent (already instantiated)
- *
- * If you still store "canonical types with vars" in BlockDef today, use the bridge below:
+ * Convert a BlockDef port type to TypeTemplate.
+ * If the port type is already a template with vars, return as-is.
+ * Otherwise bridge legacy canonical types to template form.
  */
 function defPortTypeToTemplate(defPortType: any): TypeTemplate {
   // "payload"
@@ -241,12 +244,12 @@ function getTemplateForPort(block: Block, portName: string, dir: 'in' | 'out'): 
   const portDef = dir === 'in' ? def.inputs[portName] : def.outputs[portName];
   if (!portDef?.type) return null;
 
-  // Recommended: portDef.type is already TypeTemplate. If not, bridge it.
+  /* Recommended: portDef.type is already TypeTemplate. If not, bridge it. */
   const t = portDef.type as any;
   if (t && t.payload && t.unit && t.extent) {
-    // If authored as template already:
+    /* If authored as template already: */
     if (t.payload.kind === 'payloadVar' || t.unit.kind === 'unitVar') return t as TypeTemplate;
-    // If authored as canonical (maybe with legacy vars), bridge:
+    /* If authored as canonical (maybe with legacy vars), bridge: */
     return defPortTypeToTemplate(t);
   }
   return null;
@@ -256,42 +259,20 @@ function getTemplateForPort(block: Block, portName: string, dir: 'in' | 'out'): 
 // Inference var identity
 // =============================================================================
 
-/**
- * The *only* correct identity for inference nodes:
- *   - per block instance
- *   - per def-level variable id
- *
- * i.e. one UF node per (blockIndex, defVarId, axis).
- *
- * No per-port UF nodes. Ports *reference* the block's UF node for their def var.
- */
-function unitNodeFor(blockIndex: BlockIndex, defVarId: string): UFNodeId {
-  return ufNodeId(`U:${blockIndex}:${defVarId}`);
-}
-function payloadNodeFor(blockIndex: BlockIndex, defVarId: string): UFNodeId {
-  return ufNodeId(`P:${blockIndex}:${defVarId}`);
-}
-
-/** Concrete ports get their own singleton node so we can union uniformly. */
-function unitNodeConcrete(blockIndex: BlockIndex, portName: string, dir: 'in' | 'out'): UFNodeId {
-  return ufNodeId(`UC:${blockIndex}:${dir}:${portName}`);
-}
-function payloadNodeConcrete(blockIndex: BlockIndex, portName: string, dir: 'in' | 'out'): UFNodeId {
-  return ufNodeId(`PC:${blockIndex}:${dir}:${portName}`);
-}
+// UnitVarId and PayloadVarId (branded strings with block scope)
+// This prevents collision between blocks that happen to use the same variable name.
 
 // =============================================================================
-// Cardinality Constraint Gathering (Sprint 2)
+// Cardinality constraint gathering (Sprint 2)
 // =============================================================================
 
 /**
- * Gather cardinality constraints from BlockCardinalityMetadata.
+ * Gather cardinality constraints from block metadata.
  *
- * Maps existing metadata to constraint templates:
- * - preserve + allowZipSig → zipBroadcast constraint (only for variable-cardinality ports)
- * - preserve + disallowSignalMix → equal constraint (only for variable-cardinality ports)
- * - transform → fixed constraint (output = many)
- * - signalOnly → fixed constraint (all = one)
+ * Strategy per cardinalityMode:
+ * - preserve → all variable-cardinality ports share a CardinalityVarId
+ * - signalOnly → all ports fixed to 'one'
+ * - transform → output cardinality is 'many' with block-specific instance ref
  * - fieldOnly → (handled by type validation, no constraint needed here)
  *
  * Key insight: Only ports that can vary (field vs signal) participate in preserve constraints.
@@ -371,16 +352,115 @@ function gatherCardinalityConstraints(
 
       case 'transform':
       case 'fieldOnly': {
-        // Transform mode: output cardinality is determined by instance context
-        // This will be resolved during instance resolution (Sprint 2 P1)
-        // For now, we don't emit fixed constraints here because we need the instance ref
-        // The solver will propagate instance identity from upstream blocks
+        // Transform mode: output cardinality is 'many' with block-specific instance ref
+        // The instance ref is based on the block index to ensure uniqueness
+        // This is resolved in resolveInstanceRefs() before cardinality solving
         break;
       }
     }
   }
 
   return constraints;
+}
+
+// =============================================================================
+// Instance identity resolution (Sprint 2 P1)
+// =============================================================================
+
+/**
+ * Check if a block is an instance source (creates new instances).
+ * Instance sources have NO field inputs but DO have field outputs.
+ */
+function isInstanceSource(
+  blockIndex: BlockIndex,
+  portInfos: Map<PortKey, PortInfo>,
+  portTypes: Map<PortKey, CanonicalType>,
+): boolean {
+  let hasFieldInput = false;
+  let hasFieldOutput = false;
+
+  for (const [k, info] of portInfos) {
+    if (info.blockIndex !== blockIndex) continue;
+
+    const type = portTypes.get(k);
+    if (!type) continue;
+
+    const card = type.extent.cardinality;
+    if (isAxisInst(card) && card.value.kind === 'many') {
+      if (info.direction === 'in') {
+        hasFieldInput = true;
+      } else {
+        hasFieldOutput = true;
+      }
+    }
+  }
+
+  // Instance source: has field outputs but NO field inputs
+  return hasFieldOutput && !hasFieldInput;
+}
+
+/**
+ * Resolve instance references for transform-mode blocks.
+ *
+ * Transform-mode blocks create new instances. Their output types have placeholder
+ * 'default' instance refs in the BlockDef. This function replaces those placeholders
+ * with block-specific instance refs.
+ *
+ * Strategy:
+ * 1. For each transform-mode block, check if it's an instance source
+ * 2. Instance sources get block-specific instance refs
+ * 3. Other transform blocks inherit instance refs via edge propagation (cardinality solver)
+ *
+ * This ensures that by the time cardinality solving runs, instance-source blocks have
+ * concrete refs that can propagate downstream.
+ */
+function resolveInstanceRefs(
+  normalized: NormalizedPatch,
+  portInfos: Map<PortKey, PortInfo>,
+  portTypes: Map<PortKey, CanonicalType>,
+): void {
+  for (let i = 0; i < normalized.blocks.length; i++) {
+    const block = normalized.blocks[i];
+    const blockIndex = i as BlockIndex;
+    const meta = getBlockCardinalityMetadata(block.type);
+
+    // Only handle transform-mode blocks (instance-creating blocks)
+    if (!meta || meta.cardinalityMode !== 'transform') continue;
+
+    // Check if this block is an instance source
+    if (!isInstanceSource(blockIndex, portInfos, portTypes)) continue;
+
+    // Determine domain type for this block
+    // For now, we use 'Circle' as the default domain for all transform blocks
+    // TODO: Extract domain type from block definition metadata
+    const domain = domainTypeId('Circle');
+    const instance = instanceId(`block-${blockIndex}`);
+    const ref = instanceRef(domain as string, instance as string);
+
+    // Update all output ports of this block to use the concrete instance ref
+    for (const [k, info] of portInfos) {
+      if (info.blockIndex !== blockIndex) continue;
+      if (info.direction !== 'out') continue;
+
+      const currentType = portTypes.get(k);
+      if (!currentType) continue;
+
+      // Check if this port has a 'many' cardinality with a placeholder instance
+      const card = currentType.extent.cardinality;
+      if (isAxisInst(card) && card.value.kind === 'many') {
+        // Replace the placeholder instance ref with the block-specific ref
+        const newCard = cardinalityMany(ref);
+        const newType: CanonicalType = {
+          ...currentType,
+          extent: {
+            ...currentType.extent,
+            cardinality: newCard,
+          },
+        };
+        portTypes.set(k, newType);
+      }
+    }
+  }
 }
 
 // =============================================================================
@@ -422,7 +502,7 @@ export function pass1TypeConstraints(normalized: NormalizedPatch): Pass1Result {
 
       portInfos.set(k, { block, blockIndex, portName, direction: 'out', template: tmpl, unitNode, payloadNode });
 
-      // Assign concrete constraints immediately for concrete ports:
+      /* Assign concrete constraints immediately for concrete ports: */
       if (!isDefUnitVar(tmpl.unit)) {
         const res = unitUF.assign(unitNode, tmpl.unit, unitsEqual);
         if (!res.ok) addUnitConflict(errors, blockIndex, portName, 'out', res.conflict);
@@ -561,6 +641,10 @@ export function pass1TypeConstraints(normalized: NormalizedPatch): Pass1Result {
   for (const [k, info] of portInfos) {
     if (info.direction === 'out') resolvePort(k, info);
   }
+
+  // ---- Phase C2: Instance identity resolution (Sprint 2 P1)
+  // Replace placeholder instance refs in transform-mode blocks with concrete refs
+  resolveInstanceRefs(normalized, portInfos, portTypes);
 
   // ---- Phase D: Cardinality constraint solving (Sprint 2)
   // Gather constraints from BlockCardinalityMetadata

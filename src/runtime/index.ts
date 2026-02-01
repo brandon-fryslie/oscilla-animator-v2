@@ -10,6 +10,7 @@ export {
   type TimeState,
   createTimeState,
   resolveTime,
+  reconcilePhaseOffsets,
 } from './timeResolution';
 export {
   type ValueStore,

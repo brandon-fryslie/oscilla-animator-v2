@@ -34,7 +34,7 @@ export interface EffectiveTime {
   /** Palette: phase-derived RGBA color as Float32Array(4) [r, g, b, a] */
   palette: Float32Array;
 
-  /** Energy: phase-derived energy [0,1] */
+  /** Energy: phase-derived energy [0-1] */
   energy: number;
 }
 
@@ -81,6 +81,103 @@ export function createTimeState(): TimeState {
 export function wrapPhase(value: number): number {
   const wrapped = value % 1.0;
   return wrapped < 0 ? wrapped + 1.0 : wrapped;
+}
+
+/**
+ * Reconcile phase offsets when time model periods change.
+ * Adjusts offsetA/offsetB so effective phases remain continuous.
+ * Called during hot-swap when the compiled schedule changes.
+ *
+ * Formula (from spec §11-continuity-system.md §1.3):
+ *   old_effective = wrap(old_raw_phase + old_offset)
+ *   new_raw = (monotonicTMs / new_period) % 1.0
+ *   We want: wrap(new_raw + new_offset) = old_effective
+ *
+ * Since offsets can be any value (not constrained to [0,1)), we find the
+ * new offset that:
+ * 1. Produces the correct effective phase when wrapped
+ * 2. Minimizes the change from the old offset (continuity)
+ *
+ * @param oldTimeModel - Previous compiled time model
+ * @param newTimeModel - New compiled time model
+ * @param monotonicTMs - Current monotonic time in ms
+ * @param timeState - Mutable time state (offsets are updated in place)
+ */
+export function reconcilePhaseOffsets(
+  oldTimeModel: TimeModel,
+  newTimeModel: TimeModel,
+  monotonicTMs: number,
+  timeState: TimeState
+): void {
+  // Extract old and new periods
+  const oldPeriodA = (oldTimeModel.kind === 'infinite' ? oldTimeModel.periodAMs : undefined) ?? 4000;
+  const newPeriodA = (newTimeModel.kind === 'infinite' ? newTimeModel.periodAMs : undefined) ?? 4000;
+  const oldPeriodB = (oldTimeModel.kind === 'infinite' ? oldTimeModel.periodBMs : undefined) ?? 8000;
+  const newPeriodB = (newTimeModel.kind === 'infinite' ? newTimeModel.periodBMs : undefined) ?? 8000;
+
+  // Reconcile A if period changed
+  if (oldPeriodA !== newPeriodA && oldPeriodA > 0 && newPeriodA > 0) {
+    const oldRaw = (monotonicTMs / oldPeriodA) % 1.0;
+    const oldEffective = wrapPhase(oldRaw + timeState.offsetA);
+    const newRaw = (monotonicTMs / newPeriodA) % 1.0;
+
+    // We need: wrap(newRaw + newOffset) = oldEffective
+    // One solution is: newOffset = oldEffective - newRaw
+    // But there are infinite solutions: newOffset = oldEffective - newRaw + k (for integer k)
+    // Choose k to minimize |newOffset - oldOffset|
+
+    // Start with the base solution
+    let candidateOffset = oldEffective - newRaw;
+
+    // Find the k that minimizes distance to oldOffset
+    // Try k = -1, 0, +1 and pick the closest
+    const candidates = [
+      candidateOffset - 1.0,
+      candidateOffset,
+      candidateOffset + 1.0,
+    ];
+
+    let bestOffset = candidates[0];
+    let bestDistance = Math.abs(bestOffset - timeState.offsetA);
+
+    for (const candidate of candidates) {
+      const distance = Math.abs(candidate - timeState.offsetA);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestOffset = candidate;
+      }
+    }
+
+    timeState.offsetA = bestOffset;
+  }
+
+  // Reconcile B if period changed
+  if (oldPeriodB !== newPeriodB && oldPeriodB > 0 && newPeriodB > 0) {
+    const oldRaw = (monotonicTMs / oldPeriodB) % 1.0;
+    const oldEffective = wrapPhase(oldRaw + timeState.offsetB);
+    const newRaw = (monotonicTMs / newPeriodB) % 1.0;
+
+    let candidateOffset = oldEffective - newRaw;
+
+    const candidates = [
+      candidateOffset - 1.0,
+      candidateOffset,
+      candidateOffset + 1.0,
+    ];
+
+    let bestOffset = candidates[0];
+    let bestDistance = Math.abs(bestOffset - timeState.offsetB);
+
+    for (const candidate of candidates) {
+      const distance = Math.abs(candidate - timeState.offsetB);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestOffset = candidate;
+      }
+    }
+
+    timeState.offsetB = bestOffset;
+  }
 }
 
 /**
