@@ -27,7 +27,6 @@ import {
   unitSeconds,
   strideOf,
   floatConst,
-  requireInst,
 } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { OpCode } from '../compiler/ir/types';
@@ -71,10 +70,6 @@ registerBlock({
     const input = inputsById.in;
     if (!input) throw new Error('Lens block input is required');
 
-    const inputCard = requireInst(input.type.extent.cardinality, 'cardinality');
-    if (inputCard.kind === 'many') {
-      throw new Error('Lens block input must be a signal');
-    }
 
     // Identity — no conversion needed, just re-type
     const outType = ctx.outTypes[0];
@@ -122,10 +117,6 @@ registerBlock({
     const input = inputsById.in;
     if (!input) throw new Error('Lens block input is required');
 
-    const inputCard = requireInst(input.type.extent.cardinality, 'cardinality');
-    if (inputCard.kind === 'many') {
-      throw new Error('Lens block input must be a signal');
-    }
 
     const wrapFn = ctx.b.opcode(OpCode.Wrap01);
     const wrapped = ctx.b.kernelMap(input.id, wrapFn, canonicalType(FLOAT, unitPhase01()));
@@ -178,10 +169,6 @@ registerBlock({
     const input = inputsById.in;
     if (!input) throw new Error('Lens block input is required');
 
-    const inputCard = requireInst(input.type.extent.cardinality, 'cardinality');
-    if (inputCard.kind === 'many') {
-      throw new Error('Lens block input must be a signal');
-    }
 
     const twoPi = ctx.b.constant(floatConst(6.283185307179586), canonicalType(FLOAT, unitScalar()));
     const mulFn = ctx.b.opcode(OpCode.Mul);
@@ -231,10 +218,6 @@ registerBlock({
     const input = inputsById.in;
     if (!input) throw new Error('Lens block input is required');
 
-    const inputCard = requireInst(input.type.extent.cardinality, 'cardinality');
-    if (inputCard.kind === 'many') {
-      throw new Error('Lens block input must be a signal');
-    }
 
     const twoPi = ctx.b.constant(floatConst(6.283185307179586), canonicalType(FLOAT, unitScalar()));
     const divFn = ctx.b.opcode(OpCode.Div);
@@ -290,10 +273,6 @@ registerBlock({
     const input = inputsById.in;
     if (!input) throw new Error('Lens block input is required');
 
-    const inputCard = requireInst(input.type.extent.cardinality, 'cardinality');
-    if (inputCard.kind === 'many') {
-      throw new Error('Lens block input must be a signal');
-    }
 
     const factor = ctx.b.constant(floatConst(0.017453292519943295), canonicalType(FLOAT, unitScalar())); // π/180
     const mulFn = ctx.b.opcode(OpCode.Mul);
@@ -343,10 +322,6 @@ registerBlock({
     const input = inputsById.in;
     if (!input) throw new Error('Lens block input is required');
 
-    const inputCard = requireInst(input.type.extent.cardinality, 'cardinality');
-    if (inputCard.kind === 'many') {
-      throw new Error('Lens block input must be a signal');
-    }
 
     const factor = ctx.b.constant(floatConst(57.29577951308232), canonicalType(FLOAT, unitScalar())); // 180/π
     const mulFn = ctx.b.opcode(OpCode.Mul);
@@ -400,10 +375,6 @@ registerBlock({
     const input = inputsById.in;
     if (!input) throw new Error('Lens block input is required');
 
-    const inputCard = requireInst(input.type.extent.cardinality, 'cardinality');
-    if (inputCard.kind === 'many') {
-      throw new Error('Lens block input must be a signal');
-    }
 
     // int:ms → float division → float:seconds
     const divisor = ctx.b.constant(floatConst(1000), canonicalType(FLOAT, unitScalar()));
@@ -454,10 +425,6 @@ registerBlock({
     const input = inputsById.in;
     if (!input) throw new Error('Lens block input is required');
 
-    const inputCard = requireInst(input.type.extent.cardinality, 'cardinality');
-    if (inputCard.kind === 'many') {
-      throw new Error('Lens block input must be a signal');
-    }
 
     const multiplier = ctx.b.constant(floatConst(1000), canonicalType(FLOAT, unitScalar()));
     const mulFn = ctx.b.opcode(OpCode.Mul);
@@ -513,10 +480,6 @@ registerBlock({
     const input = inputsById.in;
     if (!input) throw new Error('Lens block input is required');
 
-    const inputCard = requireInst(input.type.extent.cardinality, 'cardinality');
-    if (inputCard.kind === 'many') {
-      throw new Error('Lens block input must be a signal');
-    }
 
     const zero = ctx.b.constant(floatConst(0), canonicalType(FLOAT, unitScalar()));
     const one = ctx.b.constant(floatConst(1), canonicalType(FLOAT, unitScalar()));
@@ -567,10 +530,6 @@ registerBlock({
     const input = inputsById.in;
     if (!input) throw new Error('Lens block input is required');
 
-    const inputCard = requireInst(input.type.extent.cardinality, 'cardinality');
-    if (inputCard.kind === 'many') {
-      throw new Error('Lens block input must be a signal');
-    }
 
     // Identity — no conversion needed, just re-type
     const outType = ctx.outTypes[0];
@@ -619,10 +578,6 @@ registerBlock({
     const input = inputsById.in;
     if (!input) throw new Error('Lens block input is required');
 
-    const inputCard = requireInst(input.type.extent.cardinality, 'cardinality');
-    if (inputCard.kind === 'many') {
-      throw new Error('Lens block input must be a signal');
-    }
 
     // Identity — no conversion needed, just re-type
     const outType = ctx.outTypes[0];

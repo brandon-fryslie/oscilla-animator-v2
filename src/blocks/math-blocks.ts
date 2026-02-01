@@ -1,13 +1,64 @@
 /**
  * Math Blocks
  *
- * Blocks that perform mathematical operations on signals.
+ * Blocks that perform mathematical operations on signals and fields.
+ * All binary blocks are cardinality-polymorphic via alignInputs().
  */
 
 import { registerBlock, STANDARD_NUMERIC_PAYLOADS } from './registry';
-import { canonicalType, strideOf, floatConst, requireInst, extentsEqual } from '../core/canonical-types';
+import { canonicalType, strideOf, floatConst } from '../core/canonical-types';
 import { FLOAT } from '../core/canonical-types';
 import { OpCode } from '../compiler/ir/types';
+import { alignInputs } from './lower-utils';
+
+// =============================================================================
+// Helper: binary math block lower function factory
+// =============================================================================
+
+function binaryMathLower(opName: string, opCode: OpCode) {
+  return ({ ctx, inputsById }: { ctx: any; inputsById: any }) => {
+    const a = inputsById.a;
+    const b = inputsById.b;
+    if (!a || !b) throw new Error(`${opName} requires both inputs`);
+
+    const outType = ctx.outTypes[0];
+    const [aId, bId] = alignInputs(a.id, a.type, b.id, b.type, outType, ctx.b);
+    const resultId = ctx.b.kernelZip([aId, bId], ctx.b.opcode(opCode), outType);
+    const slot = ctx.b.allocSlot();
+
+    return {
+      outputsById: {
+        out: { id: resultId, slot, type: outType, stride: strideOf(outType.payload) },
+      },
+    };
+  };
+}
+
+// Shared cardinality + payload config for binary math blocks
+const BINARY_MATH_CONFIG = {
+  form: 'primitive' as const,
+  capability: 'pure' as const,
+  cardinality: {
+    cardinalityMode: 'preserve' as const,
+    laneCoupling: 'laneLocal' as const,
+    broadcastPolicy: 'allowZipSig' as const,
+  },
+  payload: {
+    allowedPayloads: {
+      a: STANDARD_NUMERIC_PAYLOADS,
+      b: STANDARD_NUMERIC_PAYLOADS,
+      out: STANDARD_NUMERIC_PAYLOADS,
+    },
+    semantics: 'componentwise' as const,
+  },
+  inputs: {
+    a: { label: 'A', type: canonicalType(FLOAT) },
+    b: { label: 'B', type: canonicalType(FLOAT) },
+  },
+  outputs: {
+    out: { label: 'Output', type: canonicalType(FLOAT) },
+  },
+};
 
 // =============================================================================
 // Add
@@ -18,84 +69,8 @@ registerBlock({
   label: 'Add',
   category: 'math',
   description: 'Adds two numbers (signals or fields)',
-  form: 'primitive',
-  capability: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
-  payload: {
-    allowedPayloads: {
-      a: STANDARD_NUMERIC_PAYLOADS,
-      b: STANDARD_NUMERIC_PAYLOADS,
-      out: STANDARD_NUMERIC_PAYLOADS,
-    },
-    semantics: 'componentwise',
-  },
-  inputs: {
-    a: { label: 'A', type: canonicalType(FLOAT) },
-    b: { label: 'B', type: canonicalType(FLOAT) },
-  },
-  outputs: {
-    out: { label: 'Output', type: canonicalType(FLOAT) },
-  },
-  lower: ({ ctx, inputsById }) => {
-    const a = inputsById.a;
-    const b = inputsById.b;
-
-    if (!a || !b) {
-      throw new Error('Add requires both expression inputs');
-    }
-
-    const outType = ctx.outTypes[0];
-    const addFn = ctx.b.opcode(OpCode.Add);  // ALWAYS opcode
-
-    // Check if either input is field-extent
-    const aCard = requireInst(a.type.extent.cardinality, 'cardinality');
-    const bCard = requireInst(b.type.extent.cardinality, 'cardinality');
-    const isAField = aCard.kind === 'many';
-    const isBField = bCard.kind === 'many';
-
-    // Task 2: Assert field+field inputs share the same instance domain
-    if (isAField && isBField) {
-      const aInst = aCard.instance;
-      const bInst = bCard.instance;
-      if (aInst.instanceId !== bInst.instanceId || aInst.domainTypeId !== bInst.domainTypeId) {
-        throw new Error('Add: field+field zip requires matching instance domains');
-      }
-    }
-
-    // Task 1: Assert outType extent matches the many-input's extent
-    if (isAField && !isBField) {
-      if (!extentsEqual(outType.extent, a.type.extent)) {
-        throw new Error('Add: outType extent does not match field input extent');
-      }
-    } else if (!isAField && isBField) {
-      if (!extentsEqual(outType.extent, b.type.extent)) {
-        throw new Error('Add: outType extent does not match field input extent');
-      }
-    }
-
-    // If either input is field-extent, broadcast the other
-    let aId = a.id;
-    let bId = b.id;
-    if (isAField && !isBField) {
-      bId = ctx.b.broadcast(b.id, outType);
-    } else if (!isAField && isBField) {
-      aId = ctx.b.broadcast(a.id, outType);
-    }
-
-    const resultId = ctx.b.kernelZip([aId, bId], addFn, outType);
-    const slot = ctx.b.allocSlot();
-
-    return {
-      outputsById: {
-        out: { id: resultId, slot, type: outType, stride: strideOf(outType.payload) },
-      },
-      // instanceContext auto-propagated by framework
-    };
-  },
+  ...BINARY_MATH_CONFIG,
+  lower: binaryMathLower('Add', OpCode.Add),
 });
 
 // =============================================================================
@@ -107,84 +82,8 @@ registerBlock({
   label: 'Subtract',
   category: 'math',
   description: 'Subtracts two numbers (signals or fields)',
-  form: 'primitive',
-  capability: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
-  payload: {
-    allowedPayloads: {
-      a: STANDARD_NUMERIC_PAYLOADS,
-      b: STANDARD_NUMERIC_PAYLOADS,
-      out: STANDARD_NUMERIC_PAYLOADS,
-    },
-    semantics: 'componentwise',
-  },
-  inputs: {
-    a: { label: 'A', type: canonicalType(FLOAT) },
-    b: { label: 'B', type: canonicalType(FLOAT) },
-  },
-  outputs: {
-    out: { label: 'Output', type: canonicalType(FLOAT) },
-  },
-  lower: ({ ctx, inputsById }) => {
-    const a = inputsById.a;
-    const b = inputsById.b;
-
-    if (!a || !b) {
-      throw new Error('Subtract requires both expression inputs');
-    }
-
-    const outType = ctx.outTypes[0];
-    const subFn = ctx.b.opcode(OpCode.Sub);  // ALWAYS opcode
-
-    // Check if either input is field-extent
-    const aCard = requireInst(a.type.extent.cardinality, 'cardinality');
-    const bCard = requireInst(b.type.extent.cardinality, 'cardinality');
-    const isAField = aCard.kind === 'many';
-    const isBField = bCard.kind === 'many';
-
-    // Task 2: Assert field+field inputs share the same instance domain
-    if (isAField && isBField) {
-      const aInst = aCard.instance;
-      const bInst = bCard.instance;
-      if (aInst.instanceId !== bInst.instanceId || aInst.domainTypeId !== bInst.domainTypeId) {
-        throw new Error('Subtract: field+field zip requires matching instance domains');
-      }
-    }
-
-    // Task 1: Assert outType extent matches the many-input's extent
-    if (isAField && !isBField) {
-      if (!extentsEqual(outType.extent, a.type.extent)) {
-        throw new Error('Subtract: outType extent does not match field input extent');
-      }
-    } else if (!isAField && isBField) {
-      if (!extentsEqual(outType.extent, b.type.extent)) {
-        throw new Error('Subtract: outType extent does not match field input extent');
-      }
-    }
-
-    // If either input is field-extent, broadcast the other
-    let aId = a.id;
-    let bId = b.id;
-    if (isAField && !isBField) {
-      bId = ctx.b.broadcast(b.id, outType);
-    } else if (!isAField && isBField) {
-      aId = ctx.b.broadcast(a.id, outType);
-    }
-
-    const resultId = ctx.b.kernelZip([aId, bId], subFn, outType);
-    const slot = ctx.b.allocSlot();
-
-    return {
-      outputsById: {
-        out: { id: resultId, slot, type: outType, stride: strideOf(outType.payload) },
-      },
-      // instanceContext auto-propagated by framework
-    };
-  },
+  ...BINARY_MATH_CONFIG,
+  lower: binaryMathLower('Subtract', OpCode.Sub),
 });
 
 // =============================================================================
@@ -196,84 +95,8 @@ registerBlock({
   label: 'Multiply',
   category: 'math',
   description: 'Multiplies two numbers (signals or fields)',
-  form: 'primitive',
-  capability: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
-  payload: {
-    allowedPayloads: {
-      a: STANDARD_NUMERIC_PAYLOADS,
-      b: STANDARD_NUMERIC_PAYLOADS,
-      out: STANDARD_NUMERIC_PAYLOADS,
-    },
-    semantics: 'componentwise',
-  },
-  inputs: {
-    a: { label: 'A', type: canonicalType(FLOAT) },
-    b: { label: 'B', type: canonicalType(FLOAT) },
-  },
-  outputs: {
-    out: { label: 'Output', type: canonicalType(FLOAT) },
-  },
-  lower: ({ ctx, inputsById }) => {
-    const a = inputsById.a;
-    const b = inputsById.b;
-
-    if (!a || !b) {
-      throw new Error('Multiply requires both expression inputs');
-    }
-
-    const outType = ctx.outTypes[0];
-    const mulFn = ctx.b.opcode(OpCode.Mul);  // ALWAYS opcode
-
-    // Check if either input is field-extent
-    const aCard = requireInst(a.type.extent.cardinality, 'cardinality');
-    const bCard = requireInst(b.type.extent.cardinality, 'cardinality');
-    const isAField = aCard.kind === 'many';
-    const isBField = bCard.kind === 'many';
-
-    // Task 2: Assert field+field inputs share the same instance domain
-    if (isAField && isBField) {
-      const aInst = aCard.instance;
-      const bInst = bCard.instance;
-      if (aInst.instanceId !== bInst.instanceId || aInst.domainTypeId !== bInst.domainTypeId) {
-        throw new Error('Multiply: field+field zip requires matching instance domains');
-      }
-    }
-
-    // Task 1: Assert outType extent matches the many-input's extent
-    if (isAField && !isBField) {
-      if (!extentsEqual(outType.extent, a.type.extent)) {
-        throw new Error('Multiply: outType extent does not match field input extent');
-      }
-    } else if (!isAField && isBField) {
-      if (!extentsEqual(outType.extent, b.type.extent)) {
-        throw new Error('Multiply: outType extent does not match field input extent');
-      }
-    }
-
-    // If either input is field-extent, broadcast the other
-    let aId = a.id;
-    let bId = b.id;
-    if (isAField && !isBField) {
-      bId = ctx.b.broadcast(b.id, outType);
-    } else if (!isAField && isBField) {
-      aId = ctx.b.broadcast(a.id, outType);
-    }
-
-    const resultId = ctx.b.kernelZip([aId, bId], mulFn, outType);
-    const slot = ctx.b.allocSlot();
-
-    return {
-      outputsById: {
-        out: { id: resultId, slot, type: outType, stride: strideOf(outType.payload) },
-      },
-      // instanceContext auto-propagated by framework
-    };
-  },
+  ...BINARY_MATH_CONFIG,
+  lower: binaryMathLower('Multiply', OpCode.Mul),
 });
 
 // =============================================================================
@@ -285,84 +108,8 @@ registerBlock({
   label: 'Divide',
   category: 'math',
   description: 'Divides two numbers (signals or fields)',
-  form: 'primitive',
-  capability: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
-  payload: {
-    allowedPayloads: {
-      a: STANDARD_NUMERIC_PAYLOADS,
-      b: STANDARD_NUMERIC_PAYLOADS,
-      out: STANDARD_NUMERIC_PAYLOADS,
-    },
-    semantics: 'componentwise',
-  },
-  inputs: {
-    a: { label: 'A', type: canonicalType(FLOAT) },
-    b: { label: 'B', type: canonicalType(FLOAT) },
-  },
-  outputs: {
-    out: { label: 'Output', type: canonicalType(FLOAT) },
-  },
-  lower: ({ ctx, inputsById }) => {
-    const a = inputsById.a;
-    const b = inputsById.b;
-
-    if (!a || !b) {
-      throw new Error('Divide requires both expression inputs');
-    }
-
-    const outType = ctx.outTypes[0];
-    const divFn = ctx.b.opcode(OpCode.Div);  // ALWAYS opcode
-
-    // Check if either input is field-extent
-    const aCard = requireInst(a.type.extent.cardinality, 'cardinality');
-    const bCard = requireInst(b.type.extent.cardinality, 'cardinality');
-    const isAField = aCard.kind === 'many';
-    const isBField = bCard.kind === 'many';
-
-    // Task 2: Assert field+field inputs share the same instance domain
-    if (isAField && isBField) {
-      const aInst = aCard.instance;
-      const bInst = bCard.instance;
-      if (aInst.instanceId !== bInst.instanceId || aInst.domainTypeId !== bInst.domainTypeId) {
-        throw new Error('Divide: field+field zip requires matching instance domains');
-      }
-    }
-
-    // Task 1: Assert outType extent matches the many-input's extent
-    if (isAField && !isBField) {
-      if (!extentsEqual(outType.extent, a.type.extent)) {
-        throw new Error('Divide: outType extent does not match field input extent');
-      }
-    } else if (!isAField && isBField) {
-      if (!extentsEqual(outType.extent, b.type.extent)) {
-        throw new Error('Divide: outType extent does not match field input extent');
-      }
-    }
-
-    // If either input is field-extent, broadcast the other
-    let aId = a.id;
-    let bId = b.id;
-    if (isAField && !isBField) {
-      bId = ctx.b.broadcast(b.id, outType);
-    } else if (!isAField && isBField) {
-      aId = ctx.b.broadcast(a.id, outType);
-    }
-
-    const resultId = ctx.b.kernelZip([aId, bId], divFn, outType);
-    const slot = ctx.b.allocSlot();
-
-    return {
-      outputsById: {
-        out: { id: resultId, slot, type: outType, stride: strideOf(outType.payload) },
-      },
-      // instanceContext auto-propagated by framework
-    };
-  },
+  ...BINARY_MATH_CONFIG,
+  lower: binaryMathLower('Divide', OpCode.Div),
 });
 
 // =============================================================================
@@ -374,84 +121,8 @@ registerBlock({
   label: 'Modulo',
   category: 'math',
   description: 'Computes modulo of two numbers (signals or fields)',
-  form: 'primitive',
-  capability: 'pure',
-  cardinality: {
-    cardinalityMode: 'preserve',
-    laneCoupling: 'laneLocal',
-    broadcastPolicy: 'allowZipSig',
-  },
-  payload: {
-    allowedPayloads: {
-      a: STANDARD_NUMERIC_PAYLOADS,
-      b: STANDARD_NUMERIC_PAYLOADS,
-      out: STANDARD_NUMERIC_PAYLOADS,
-    },
-    semantics: 'componentwise',
-  },
-  inputs: {
-    a: { label: 'A', type: canonicalType(FLOAT) },
-    b: { label: 'B', type: canonicalType(FLOAT) },
-  },
-  outputs: {
-    out: { label: 'Output', type: canonicalType(FLOAT) },
-  },
-  lower: ({ ctx, inputsById }) => {
-    const a = inputsById.a;
-    const b = inputsById.b;
-
-    if (!a || !b) {
-      throw new Error('Modulo requires both expression inputs');
-    }
-
-    const outType = ctx.outTypes[0];
-    const modFn = ctx.b.opcode(OpCode.Mod);  // ALWAYS opcode
-
-    // Check if either input is field-extent
-    const aCard = requireInst(a.type.extent.cardinality, 'cardinality');
-    const bCard = requireInst(b.type.extent.cardinality, 'cardinality');
-    const isAField = aCard.kind === 'many';
-    const isBField = bCard.kind === 'many';
-
-    // Task 2: Assert field+field inputs share the same instance domain
-    if (isAField && isBField) {
-      const aInst = aCard.instance;
-      const bInst = bCard.instance;
-      if (aInst.instanceId !== bInst.instanceId || aInst.domainTypeId !== bInst.domainTypeId) {
-        throw new Error('Modulo: field+field zip requires matching instance domains');
-      }
-    }
-
-    // Task 1: Assert outType extent matches the many-input's extent
-    if (isAField && !isBField) {
-      if (!extentsEqual(outType.extent, a.type.extent)) {
-        throw new Error('Modulo: outType extent does not match field input extent');
-      }
-    } else if (!isAField && isBField) {
-      if (!extentsEqual(outType.extent, b.type.extent)) {
-        throw new Error('Modulo: outType extent does not match field input extent');
-      }
-    }
-
-    // If either input is field-extent, broadcast the other
-    let aId = a.id;
-    let bId = b.id;
-    if (isAField && !isBField) {
-      bId = ctx.b.broadcast(b.id, outType);
-    } else if (!isAField && isBField) {
-      aId = ctx.b.broadcast(a.id, outType);
-    }
-
-    const resultId = ctx.b.kernelZip([aId, bId], modFn, outType);
-    const slot = ctx.b.allocSlot();
-
-    return {
-      outputsById: {
-        out: { id: resultId, slot, type: outType, stride: strideOf(outType.payload) },
-      },
-      // instanceContext auto-propagated by framework
-    };
-  },
+  ...BINARY_MATH_CONFIG,
+  lower: binaryMathLower('Modulo', OpCode.Mod),
 });
 
 // =============================================================================
@@ -478,20 +149,13 @@ registerBlock({
   },
   lower: ({ ctx, inputsById }) => {
     const x = inputsById.x;
-    if (!x) {
-      throw new Error('Noise x input is required');
-    }
-
-    const xCard = requireInst(x.type.extent.cardinality, 'cardinality');
-    if (xCard.kind === 'many') {
-      throw new Error('Noise x input must be a signal');
-    }
+    if (!x) throw new Error('Noise x input is required');
 
     // Use Hash opcode with fixed seed=0 for deterministic noise
+    const outType = ctx.outTypes[0];
     const seedId = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
     const hashFn = ctx.b.opcode(OpCode.Hash);
-    const hashId = ctx.b.kernelZip([x.id, seedId], hashFn, canonicalType(FLOAT));
-    const outType = ctx.outTypes[0];
+    const hashId = ctx.b.kernelZip([x.id, seedId], hashFn, outType);
     const slot = ctx.b.allocSlot();
 
     return {
@@ -530,36 +194,24 @@ registerBlock({
     const x = inputsById.x;
     const y = inputsById.y;
     const z = inputsById.z;
+    if (!x || !y) throw new Error('Length requires x and y inputs');
 
-    if (!x || !y) {
-      throw new Error('Length requires x and y inputs');
-    }
-
-    const xCard = requireInst(x.type.extent.cardinality, 'cardinality');
-    const yCard = requireInst(y.type.extent.cardinality, 'cardinality');
-    if (xCard.kind === 'many' || yCard.kind === 'many') {
-      throw new Error('Length requires signal inputs');
-    }
-
-    // Compute x² + y² [+ z²]
+    const outType = ctx.outTypes[0];
     const mulFn = ctx.b.opcode(OpCode.Mul);
     const addFn = ctx.b.opcode(OpCode.Add);
     const sqrtFn = ctx.b.opcode(OpCode.Sqrt);
 
-    const x2 = ctx.b.kernelZip([x.id, x.id], mulFn, canonicalType(FLOAT));
-    const y2 = ctx.b.kernelZip([y.id, y.id], mulFn, canonicalType(FLOAT));
-    let sumSq = ctx.b.kernelZip([x2, y2], addFn, canonicalType(FLOAT));
+    // x² + y² [+ z²] → sqrt
+    const x2 = ctx.b.kernelZip([x.id, x.id], mulFn, outType);
+    const y2 = ctx.b.kernelZip([y.id, y.id], mulFn, outType);
+    let sumSq = ctx.b.kernelZip([x2, y2], addFn, outType);
 
     if (z) {
-      const zCard = requireInst(z.type.extent.cardinality, 'cardinality');
-      if (zCard.kind !== 'many') {
-        const z2 = ctx.b.kernelZip([z.id, z.id], mulFn, canonicalType(FLOAT));
-        sumSq = ctx.b.kernelZip([sumSq, z2], addFn, canonicalType(FLOAT));
-      }
+      const z2 = ctx.b.kernelZip([z.id, z.id], mulFn, outType);
+      sumSq = ctx.b.kernelZip([sumSq, z2], addFn, outType);
     }
 
-    const lengthId = ctx.b.kernelMap(sumSq, sqrtFn, canonicalType(FLOAT));
-    const outType = ctx.outTypes[0];
+    const lengthId = ctx.b.kernelMap(sumSq, sqrtFn, outType);
     const slot = ctx.b.allocSlot();
 
     return {
@@ -600,52 +252,42 @@ registerBlock({
     const x = inputsById.x;
     const y = inputsById.y;
     const z = inputsById.z;
+    if (!x || !y) throw new Error('Normalize requires x and y inputs');
 
-    if (!x || !y) {
-      throw new Error('Normalize requires x and y inputs');
-    }
-
-    const xCard = requireInst(x.type.extent.cardinality, 'cardinality');
-    const yCard = requireInst(y.type.extent.cardinality, 'cardinality');
-    if (xCard.kind === 'many' || yCard.kind === 'many') {
-      throw new Error('Normalize requires signal inputs');
-    }
-
+    const outTypeX = ctx.outTypes[0];
     const mulFn = ctx.b.opcode(OpCode.Mul);
     const addFn = ctx.b.opcode(OpCode.Add);
     const sqrtFn = ctx.b.opcode(OpCode.Sqrt);
     const divFn = ctx.b.opcode(OpCode.Div);
     const maxFn = ctx.b.opcode(OpCode.Max);
 
-    // Compute length = sqrt(x² + y² [+ z²])
-    const x2 = ctx.b.kernelZip([x.id, x.id], mulFn, canonicalType(FLOAT));
-    const y2 = ctx.b.kernelZip([y.id, y.id], mulFn, canonicalType(FLOAT));
-    let sumSq = ctx.b.kernelZip([x2, y2], addFn, canonicalType(FLOAT));
+    // length = sqrt(x² + y² [+ z²])
+    const x2 = ctx.b.kernelZip([x.id, x.id], mulFn, outTypeX);
+    const y2 = ctx.b.kernelZip([y.id, y.id], mulFn, outTypeX);
+    let sumSq = ctx.b.kernelZip([x2, y2], addFn, outTypeX);
 
-    const hasZ = z && requireInst(z.type.extent.cardinality, 'cardinality').kind !== 'many';
-    if (hasZ) {
-      const z2 = ctx.b.kernelZip([z.id, z.id], mulFn, canonicalType(FLOAT));
-      sumSq = ctx.b.kernelZip([sumSq, z2], addFn, canonicalType(FLOAT));
+    if (z) {
+      const z2 = ctx.b.kernelZip([z.id, z.id], mulFn, outTypeX);
+      sumSq = ctx.b.kernelZip([sumSq, z2], addFn, outTypeX);
     }
 
-    const lengthId = ctx.b.kernelMap(sumSq, sqrtFn, canonicalType(FLOAT));
+    const lengthId = ctx.b.kernelMap(sumSq, sqrtFn, outTypeX);
 
-    // Guard against division by zero: use max(length, epsilon)
+    // Guard against division by zero
     const epsilon = ctx.b.constant(floatConst(1e-10), canonicalType(FLOAT));
-    const safeLengthId = ctx.b.kernelZip([lengthId, epsilon], maxFn, canonicalType(FLOAT));
+    const safeLengthId = ctx.b.kernelZip([lengthId, epsilon], maxFn, outTypeX);
 
     // Divide each component by length
-    const outXId = ctx.b.kernelZip([x.id, safeLengthId], divFn, canonicalType(FLOAT));
-    const outYId = ctx.b.kernelZip([y.id, safeLengthId], divFn, canonicalType(FLOAT));
+    const outXId = ctx.b.kernelZip([x.id, safeLengthId], divFn, outTypeX);
+    const outYId = ctx.b.kernelZip([y.id, safeLengthId], divFn, outTypeX);
 
     let outZId;
-    if (hasZ && z) {
-      outZId = ctx.b.kernelZip([z.id, safeLengthId], divFn, canonicalType(FLOAT));
+    if (z) {
+      outZId = ctx.b.kernelZip([z.id, safeLengthId], divFn, outTypeX);
     } else {
       outZId = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
     }
 
-    const outTypeX = ctx.outTypes[0];
     const outTypeY = ctx.outTypes[1];
     const outTypeZ = ctx.outTypes[2];
     const slotX = ctx.b.allocSlot();
