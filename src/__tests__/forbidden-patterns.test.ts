@@ -147,7 +147,7 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       }
     });
 
-    it.skip('schedule steps contain no evalSig/evalEvent (Sprint 3)', () => {
+    it('schedule steps contain no evalSig/evalEvent (Sprint 3)', () => {
       // TODO: Sprint 3 - after IR unification
       // Schedule steps should use unified ValueExpr, not separate evalSig/evalEvent
       const matches = grepSrc('evalSig\\|evalEvent', 'src/compiler/ir/types.ts');

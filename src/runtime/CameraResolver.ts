@@ -77,7 +77,7 @@ function sanitize(v: number, fallback: number): number {
 /**
  * Resolve camera parameters from program render globals.
  *
- * Called after schedule execution (all evalSig steps done), before render assembly.
+ * Called after schedule execution (all evalValue steps done), before render assembly.
  * Reads slot values, applies sanitization, returns ResolvedCameraParams.
  *
  * @param program - Compiled program with renderGlobals

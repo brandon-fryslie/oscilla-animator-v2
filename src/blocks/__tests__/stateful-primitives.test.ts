@@ -24,9 +24,9 @@ import { evaluateValueExprSignal } from '../../runtime/ValueExprSignalEvaluator'
 //   const schedule = program.schedule;
 //   const signals = program.signalExprs.nodes as readonly SigExpr[];
 //
-//   // Find evalSig steps that are NOT time signals or const signals
-//   const evalSigSteps = schedule.steps.filter((s): s is StepEvalSig => s.kind === 'evalSig');
-//   const targetSteps = evalSigSteps.filter((step) => {
+//   // Find evalValue steps that are NOT time signals or const signals
+//   const evalValueSteps = schedule.steps.filter((s): s is StepEvalValue => s.kind === 'evalValue');
+//   const targetSteps = evalValueSteps.filter((step) => {
 //     const sig = signals[step.expr as number];
 //     // Exclude time and const signals - we want computed values
 //     return sig && sig.kind !== 'time' && sig.kind !== 'const';

@@ -89,7 +89,7 @@ describe('RenderAssembler', () => {
     });
 
     it('returns false for non-render steps', () => {
-      expect(isRenderStep({ kind: 'evalSig' })).toBe(false);
+      expect(isRenderStep({ kind: 'evalValue' })).toBe(false);
       expect(isRenderStep({ kind: 'materialize' })).toBe(false);
       expect(isRenderStep({ kind: 'stateWrite' })).toBe(false);
     });

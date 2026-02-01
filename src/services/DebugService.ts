@@ -18,7 +18,7 @@ import { HistoryService, type KeyResolver, type ResolvedKeyMetadata } from '../u
 import type { DebugTargetKey } from '../ui/debug-viz/types';
 
 /**
- * Signal value result - scalar value from evalSig step.
+ * Signal value result - scalar value from evalValue step.
  */
 export interface SignalValueResult {
   kind: 'signal';

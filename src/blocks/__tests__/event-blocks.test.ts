@@ -129,9 +129,9 @@ describe('Event Consumer Blocks Integration', () => {
  * Find the slot that contains an event-dependent signal value.
  * Returns the slot index of the first signal with value > 0.
  */
-function findEventDependentSlot(program: CompiledProgramIR, evalSigSteps: any[], state: any): number {
+function findEventDependentSlot(program: CompiledProgramIR, evalValueSteps: any[], state: any): number {
   const slotToOffset = buildSlotToOffsetMap(program);
-  for (const step of evalSigSteps) {
+  for (const step of evalValueSteps) {
     const slot = step.target as number;
     const offset = slotToOffset.get(slot);
     if (offset === undefined) {
@@ -141,9 +141,9 @@ function findEventDependentSlot(program: CompiledProgramIR, evalSigSteps: any[],
       return slot;
     }
   }
-  // Fallback: return last evalSig slot
-  if (evalSigSteps.length > 0) {
-    return evalSigSteps[evalSigSteps.length - 1].target as number;
+  // Fallback: return last evalValue slot
+  if (evalValueSteps.length > 0) {
+    return evalValueSteps[evalValueSteps.length - 1].target as number;
   }
   return -1;
 }
@@ -153,14 +153,14 @@ function findEventDependentSlot(program: CompiledProgramIR, evalSigSteps: any[],
  * SampleHold's output is the zip(lerp) expression which depends on eventRead.
  */
 function findSampleHoldOutputSlot(program: CompiledProgramIR, schedule: any, state: any): number {
-  // Find evalSig steps that are after evalEvent steps (post-event signals)
+  // Find evalValue steps that are after evalValue steps (post-event signals)
   let afterEvent = false;
   for (const step of schedule.steps) {
-    if (step.kind === 'evalEvent') {
+    if (step.kind === 'evalValue') {
       afterEvent = true;
       continue;
     }
-    if (afterEvent && step.kind === 'evalSig') {
+    if (afterEvent && step.kind === 'evalValue') {
       return step.target as number;
     }
   }

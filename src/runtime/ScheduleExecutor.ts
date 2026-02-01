@@ -7,7 +7,7 @@
 
 import type { CompiledProgramIR, ValueSlot, FieldSlotEntry } from '../compiler/ir/program';
 import type { ScheduleIR } from '../compiler/backend/schedule-program';
-import type { Step, InstanceDecl, DomainInstance, StepRender } from '../compiler/ir/types';
+import type { Step, InstanceDecl, EvalStrategy, DomainInstance, StepRender } from '../compiler/ir/types';
 import type { IrInstanceId as InstanceId } from '../types';
 import { instanceId as makeInstanceId } from '../core/ids';
 import type { RuntimeState } from './RuntimeState';
@@ -211,47 +211,73 @@ export function executeFrame(
   // PHASE 1: Execute all non-stateWrite steps
   for (const step of steps) {
     switch (step.kind) {
-      case 'evalSig': {
-        // Evaluate signal and store in slot using slotMeta.offset
-        const lookup = resolveSlotOffset(step.target);
-        const { storage, offset, slot, stride } = lookup;
-
-        if (storage === 'shape2d') {
-          // Shape signal: write Shape2D record to shape2d bank
-          const veId = step.expr;
-          const exprNode = valueExprs[veId as number];
-          if (exprNode.kind === 'shapeRef') {
-            writeShape2D(state.values.shape2d, offset, {
-              topologyId: exprNode.topologyId,
-              // TODO: if Shape2D slot encoding changes, update this mapping.
-              // For now we preserve prior behavior: store the field slot index as a number.
-              pointsFieldSlot:
-                (exprNode.kind === 'shapeRef' && exprNode.controlPointField != null
-                  ? ((fieldExprToSlot.get(exprNode.controlPointField as number) as number | undefined) ?? 0)
-                  : 0),
-              pointsCount: 0,
-              styleRef: 0,
-              flags: 0,
-            });
+      case 'evalValue': {
+        // Unified value evaluation with strategy-based dispatch (Sprint 3)
+        // Strategy is pre-resolved at compile time to avoid runtime type inspection
+        const strategy = step.strategy;
+        
+        if (strategy === 0 /* EvalStrategy.ContinuousScalar */ || strategy === 1 /* EvalStrategy.ContinuousField */) {
+          // Continuous path (signals) - was evalSig
+          if (step.target.storage !== 'value') {
+            throw new Error(`evalValue: ContinuousScalar/Field requires value storage, got ${step.target.storage}`);
           }
-        } else if (storage === 'f64') {
-          if (stride !== 1) {
-            throw new Error(`evalSig: expected stride=1 for scalar signal slot ${slot}, got stride=${stride}`);
+          
+          const targetSlot = step.target.slot;
+          const lookup = resolveSlotOffset(targetSlot);
+          const { storage, offset, slot, stride } = lookup;
+
+          if (storage === 'shape2d') {
+            // Shape signal: write Shape2D record to shape2d bank
+            const veId = step.expr;
+            const exprNode = valueExprs[veId as number];
+            if (exprNode.kind === 'shapeRef') {
+              writeShape2D(state.values.shape2d, offset, {
+                topologyId: exprNode.topologyId,
+                // TODO: if Shape2D slot encoding changes, update this mapping.
+                // For now we preserve prior behavior: store the field slot index as a number.
+                pointsFieldSlot:
+                  (exprNode.kind === 'shapeRef' && exprNode.controlPointField != null
+                    ? ((fieldExprToSlot.get(exprNode.controlPointField as number) as number | undefined) ?? 0)
+                    : 0),
+                pointsCount: 0,
+                styleRef: 0,
+                flags: 0,
+              });
+            }
+          } else if (storage === 'f64') {
+            if (stride !== 1) {
+              throw new Error(`evalValue: expected stride=1 for scalar signal slot ${slot}, got stride=${stride}`);
+            }
+
+            // ValueExpr-only evaluation (cutover complete)
+            const value = evaluateValueExprSignal(step.expr as any, program.valueExprs.nodes, state);
+
+            writeF64Scalar(state, lookup, value);
+
+            // Debug tap: Record slot value (Sprint 1: Debug Probe)
+            state.tap?.recordSlotValue?.(slot, value);
+
+            // Cache (indexed by expr id). Under Option B these ids are ValueExprIds.
+            state.cache.values[step.expr as number] = value;
+            state.cache.stamps[step.expr as number] = state.cache.frameId;
+          } else {
+            throw new Error(`evalValue: unsupported storage type '${storage}'`);
           }
+        } else if (strategy === 2 /* EvalStrategy.DiscreteScalar */ || strategy === 3 /* EvalStrategy.DiscreteField */) {
+          // Discrete path (events) - was evalEvent
+          if (step.target.storage !== 'event') {
+            throw new Error(`evalValue: DiscreteScalar/Field requires event storage, got ${step.target.storage}`);
+          }
+          
+          // ValueExpr-only event evaluation (cutover complete)
+          const fired = evaluateValueExprEvent(step.expr as any, program.valueExprs, state, program);
 
-          // ValueExpr-only evaluation (cutover complete)
-          const value = evaluateValueExprSignal(step.expr as any, program.valueExprs.nodes, state);
-
-          writeF64Scalar(state, lookup, value);
-
-          // Debug tap: Record slot value (Sprint 1: Debug Probe)
-          state.tap?.recordSlotValue?.(slot, value);
-
-          // Cache (indexed by expr id). Under Option B these ids are ValueExprIds.
-          state.cache.values[step.expr as number] = value;
-          state.cache.stamps[step.expr as number] = state.cache.frameId;
+          // Monotone OR: only write 1, never write 0 back — ensures any-fired-stays-fired
+          if (fired) {
+            state.eventScalars[step.target.slot as number] = 1;
+          }
         } else {
-          throw new Error(`evalSig: unsupported storage type '${storage}'`);
+          throw new Error(`evalValue: unknown strategy ${strategy}`);
         }
         break;
       }
@@ -429,16 +455,7 @@ export function executeFrame(
         break;
       }
 
-      case 'evalEvent': {
-        // ValueExpr-only event evaluation (cutover complete)
-        const fired = evaluateValueExprEvent(step.expr as any, program.valueExprs, state, program);
 
-        // Monotone OR: only write 1, never write 0 back — ensures any-fired-stays-fired
-        if (fired) {
-          state.eventScalars[step.target as number] = 1;
-        }
-        break;
-      }
 
       case 'fieldStateWrite': {
         // Per-lane state write is handled in PHASE 2 (after all reads complete)
@@ -504,8 +521,8 @@ export function executeFrame(
   // Build signal ID to slot index mapping from schedule
   const sigToSlot = new Map<number, number>();
   for (const step of steps) {
-    if (step.kind === 'evalSig') {
-      const lookup = resolveSlotOffset(step.target);
+    if (step.kind === 'evalValue' && step.target.storage === 'value') {
+      const lookup = resolveSlotOffset(step.target.slot);
       // Include all signals regardless of storage type
         sigToSlot.set(step.expr as number, lookup.slot as number);
     }

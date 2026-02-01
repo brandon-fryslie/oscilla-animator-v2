@@ -232,10 +232,10 @@ describe('TimeModel', () => {
 });
 
 describe('Debug Probe Support', () => {
-  it('generates evalSig steps for signals with registered slots (enables debug tap)', () => {
-    // This test verifies that the compiler generates evalSig steps,
+  it('generates evalValue steps for signals with registered slots (enables debug tap)', () => {
+    // This test verifies that the compiler generates evalValue steps,
     // which are necessary for the runtime tap to record slot values.
-    // Without evalSig steps, the debug probe cannot show signal values.
+    // Without evalValue steps, the debug probe cannot show signal values.
     const patch = buildPatch((b) => {
       const time = b.addBlock('InfiniteTimeRoot', { periodAMs: 1000, periodBMs: 2000 });
       const osc = b.addBlock('Oscillator', { waveform: 'oscSin' });
@@ -247,22 +247,22 @@ describe('Debug Probe Support', () => {
     expect(result.kind).toBe('ok');
     if (result.kind === 'ok') {
       const schedule = result.program.schedule as ScheduleIR;
-      const evalSigSteps = schedule.steps.filter(s => s.kind === 'evalSig');
+      const evalValueSteps = schedule.steps.filter(s => s.kind === 'evalValue');
 
-      // Should have at least one evalSig step for the oscillator output
-      expect(evalSigSteps.length).toBeGreaterThan(0);
+      // Should have at least one evalValue step for the oscillator output
+      expect(evalValueSteps.length).toBeGreaterThan(0);
 
-      // Each evalSig step should have expr and target
-      for (const step of evalSigSteps) {
-        if (step.kind === 'evalSig') {
+      // Each evalValue step should have expr and target
+      for (const step of evalValueSteps) {
+        if (step.kind === 'evalValue') {
           expect(typeof step.expr).toBe('number');
-          expect(typeof step.target).toBe('number');
+          expect(typeof step.target.slot).toBe('number');
         }
       }
     }
   });
 
-  it('evalSig steps come before materialize steps in schedule', () => {
+  it('evalValue steps come before materialize steps in schedule', () => {
     // Execution order matters: signals must be evaluated before fields materialize
     // Use a simple patch that compiles - just TimeRoot + Oscillator
     const patch = buildPatch((b) => {
@@ -279,19 +279,19 @@ describe('Debug Probe Support', () => {
       const steps = schedule.steps;
 
       // Find indices of step types
-      const firstEvalSig = steps.findIndex(s => s.kind === 'evalSig');
+      const firstEvalSig = steps.findIndex(s => s.kind === 'evalValue');
       const firstMaterialize = steps.findIndex(s => s.kind === 'materialize');
       const firstRender = steps.findIndex(s => s.kind === 'render');
 
-      // evalSig should exist (for signal outputs)
+      // evalValue should exist (for signal outputs)
       expect(firstEvalSig).toBeGreaterThanOrEqual(0);
 
-      // If materialize exists, evalSig should come first
+      // If materialize exists, evalValue should come first
       if (firstMaterialize !== -1) {
         expect(firstEvalSig).toBeLessThan(firstMaterialize);
       }
 
-      // If render exists, evalSig should come first
+      // If render exists, evalValue should come first
       if (firstRender !== -1) {
         expect(firstEvalSig).toBeLessThan(firstRender);
       }

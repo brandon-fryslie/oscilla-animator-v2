@@ -31,7 +31,7 @@ import type { ValueExprId } from '../compiler/ir/Indices';
  *   b.wire(hash, 'out', testSig, 'value');
  * });
  *
- * // After compile, find the evalSig step to get the slot:
+ * // After compile, find the evalValue step to get the slot:
  * const schedule = program.schedule;
  * const evalSigStep = schedule.steps.find(s => s.kind === 'evalSig');
  * const slot = evalSigStep.target;
@@ -62,7 +62,7 @@ registerBlock({
       throw new Error('TestSignal value input must be a signal');
     }
 
-    // Emit a StepEvalSig to force evaluation of this signal
+    // Emit a StepEvalValue to force evaluation of this signal
     const slot = ctx.b.allocSlot();
     ctx.b.stepEvalSig(value.id as ValueExprId, slot);
 
