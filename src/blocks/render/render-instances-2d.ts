@@ -39,14 +39,14 @@ registerBlock({
     const color = inputsById.color;
 
     const posIsField = pos && 'type' in pos && requireInst(pos.type.extent.cardinality, 'cardinality').kind === 'many';
-    const colorIsField = color && 'type' in color && requireInst(color.type.extent.cardinality, 'cardinality').kind === 'many';
 
     if (!pos || !posIsField) {
       throw new Error('RenderInstances2D pos input must be a field');
     }
-    if (!color || !colorIsField) {
-      throw new Error('RenderInstances2D color input must be a field');
+    if (!color) {
+      throw new Error('RenderInstances2D color input is required');
     }
+    // color may be a signal (one) when wired from a Const via allowZipSig broadcast — that's valid
 
     const instance = ctx.inferredInstance;
     if (!instance) {

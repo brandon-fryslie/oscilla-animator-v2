@@ -138,57 +138,68 @@ function areTypesCompatible(sourceType: InferenceCanonicalType | undefined, targ
 }
 
 /**
- * Get slider min value for Const default source editor.
- * Priority: inputDef.uiHint > inputDef.defaultSource.params.value-based > type-based defaults
+ * Derive slider config {min, max, step} from a CanonicalType's payload + unit.
+ * Unit-aware: phase01 → [0,1), radians → [-π,π], ms → [0,10000], etc.
  */
-function getConstSliderMin(inputDef: InputDef | undefined, portType: InferenceCanonicalType | undefined): number {
-  // Check uiHint first
-  const hint = inputDef?.uiHint;
-  if (hint && 'min' in hint && hint.min !== undefined) {
-    return hint.min;
+interface SliderConfig { min: number; max: number; step: number }
+
+function sliderConfigForType(type: InferenceCanonicalType | undefined): SliderConfig {
+  if (!type) return { min: 0, max: 1, step: 0.01 };
+
+  const unit = type.unit;
+  const payload = type.payload;
+
+  if (unit.kind !== 'var') {
+    switch (unit.kind) {
+      case 'angle':
+        switch (unit.unit) {
+          case 'phase01': return { min: 0, max: 1, step: 0.01 };
+          case 'radians': return { min: -Math.PI, max: Math.PI, step: 0.01 };
+          case 'degrees': return { min: -180, max: 360, step: 1 };
+        }
+        break;
+      case 'time':
+        switch (unit.unit) {
+          case 'ms': return { min: 0, max: 10000, step: 1 };
+          case 'seconds': return { min: 0, max: 10, step: 0.01 };
+        }
+        break;
+      case 'norm01': return { min: 0, max: 1, step: 0.01 };
+      case 'count': return { min: 0, max: 10000, step: 1 };
+      case 'color': return { min: 0, max: 1, step: 0.01 };
+      case 'space':
+        switch (unit.unit) {
+          case 'ndc': return { min: -1, max: 1, step: 0.01 };
+          case 'world': return { min: -100, max: 100, step: 0.1 };
+          case 'view': return { min: -1, max: 1, step: 0.01 };
+        }
+        break;
+    }
   }
-  // Type-based defaults
-  switch (portType?.payload.kind) {
-    case 'int': return 0;
-    case 'float': return 0;
-    default: return 0;
+
+  switch (payload.kind) {
+    case 'int': return { min: 0, max: 100, step: 1 };
+    case 'bool': return { min: 0, max: 1, step: 1 };
+    case 'float':
+    default:
+      return { min: 0, max: 1, step: 0.01 };
   }
 }
 
 /**
- * Get slider max value for Const default source editor.
- * Priority: inputDef.uiHint > type-based defaults
+ * Get slider config for a port, with uiHint overrides.
+ * uiHint fields override individual derived values (partial override supported).
  */
-function getConstSliderMax(inputDef: InputDef | undefined, portType: InferenceCanonicalType | undefined): number {
-  // Check uiHint first
+function getSliderConfig(inputDef: InputDef | undefined, portType: InferenceCanonicalType | undefined): SliderConfig {
+  const derived = sliderConfigForType(portType);
   const hint = inputDef?.uiHint;
-  if (hint && 'max' in hint && hint.max !== undefined) {
-    return hint.max;
-  }
-  // Type-based defaults
-  switch (portType?.payload.kind) {
-    case 'int': return 100;  // Reasonable default for integers
-    case 'float': return 1;
-    default: return 1;
-  }
-}
+  if (!hint) return derived;
 
-/**
- * Get slider step value for Const default source editor.
- * Priority: inputDef.uiHint > type-based defaults
- */
-function getConstSliderStep(inputDef: InputDef | undefined, portType: InferenceCanonicalType | undefined): number {
-  // Check uiHint first
-  const hint = inputDef?.uiHint;
-  if (hint && 'step' in hint && hint.step !== undefined) {
-    return hint.step;
-  }
-  // Type-based defaults
-  switch (portType?.payload.kind) {
-    case 'int': return 1;
-    case 'float': return 0.01;
-    default: return 0.01;
-  }
+  return {
+    min: ('min' in hint && hint.min !== undefined) ? hint.min : derived.min,
+    max: ('max' in hint && hint.max !== undefined) ? hint.max : derived.max,
+    step: ('step' in hint && hint.step !== undefined) ? hint.step : derived.step,
+  };
 }
 
 /**

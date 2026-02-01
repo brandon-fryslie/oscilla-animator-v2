@@ -14,7 +14,7 @@ import {
   type CanonicalType,
 } from "../../core/canonical-types";
 import type { TypedPatch, BlockIndex } from "../ir/patches";
-import { getBlockDefinition } from "../../blocks/registry";
+import { getBlockDefinition, getBlockCardinalityMetadata } from "../../blocks/registry";
 import { type TypeResolvedPatch, getPortType } from "./analyze-type-constraints";
 
 // =============================================================================
@@ -49,7 +49,7 @@ export type Pass2Error = PortTypeUnknownError | NoConversionPathError;
  * Sprint 1: Removed block-name parameters and cardinality-generic exceptions.
  * Sprint 2 will add proper constraint-based cardinality resolution in the frontend solver.
  */
-function isTypeCompatible(from: CanonicalType, to: CanonicalType): boolean {
+function isTypeCompatible(from: CanonicalType, to: CanonicalType, allowsBroadcast = false): boolean {
   const fromCard = from.extent.cardinality.kind === 'inst' ? from.extent.cardinality.value : DEFAULTS_V0.cardinality;
   const fromTemp = from.extent.temporality.kind === 'inst' ? from.extent.temporality.value : DEFAULTS_V0.temporality;
   const toCard = to.extent.cardinality.kind === 'inst' ? to.extent.cardinality.value : DEFAULTS_V0.cardinality;
@@ -70,12 +70,12 @@ function isTypeCompatible(from: CanonicalType, to: CanonicalType): boolean {
     return false;
   }
 
-  // Cardinality must match exactly
+  // Cardinality must match, with broadcast exception
   if (fromCard.kind !== toCard.kind) {
-    // TODO: Sprint 2 - frontend solver will resolve cardinality/instance
-    // Previously this allowed special cases for cardinality-generic blocks.
-    // Now we enforce strict matching - frontend type inference must produce
-    // compatible types upfront.
+    // Allow one → many when the destination block permits signal broadcast (allowZipSig)
+    if (allowsBroadcast && fromCard.kind === 'one' && toCard.kind === 'many') {
+      return true;
+    }
     return false;
   }
 
@@ -158,8 +158,12 @@ export function pass2TypeGraph(typeResolved: TypeResolvedPatch): TypedPatch {
       continue;
     }
 
-    // Validate type compatibility (pure function - no block names)
-    if (!isTypeCompatible(fromType, toType)) {
+    // Check if the destination block allows signal→field broadcast
+    const toMeta = getBlockCardinalityMetadata(toBlock.type);
+    const allowsBroadcast = toMeta?.broadcastPolicy === 'allowZipSig';
+
+    // Validate type compatibility
+    if (!isTypeCompatible(fromType, toType, allowsBroadcast)) {
       const fromCard = fromType.extent.cardinality.kind === 'inst' ? fromType.extent.cardinality.value : DEFAULTS_V0.cardinality;
       const fromTemp = fromType.extent.temporality.kind === 'inst' ? fromType.extent.temporality.value : DEFAULTS_V0.temporality;
       const toCard = toType.extent.cardinality.kind === 'inst' ? toType.extent.cardinality.value : DEFAULTS_V0.cardinality;

@@ -389,3 +389,34 @@ describe('error isolation for unreachable blocks', () => {
     expect(unreachableWarning.message).toContain('not connected to render pipeline');
   });
 });
+
+describe('zipBroadcast cardinality', () => {
+  it('allows signal Const wired directly to fieldOnly RenderInstances2D.color (golden-spiral pattern)', () => {
+    // Reproduces the golden-spiral demo: Const (signal, one) → RenderInstances2D.color (field, many).
+    // RenderInstances2D has broadcastPolicy: 'allowZipSig', so this must compile without error.
+    const patch = buildPatch((b) => {
+      b.addBlock('InfiniteTimeRoot', { periodAMs: 4000, periodBMs: 120000 });
+      const ellipse = b.addBlock('Ellipse', { rx: 0.02, ry: 0.02 });
+      const array = b.addBlock('Array', { count: 100 });
+      b.wire(ellipse, 'shape', array, 'element');
+
+      const circleLayout = b.addBlock('CircleLayoutUV', { radius: 0.35 });
+      b.wire(array, 'elements', circleLayout, 'elements');
+
+      const color = b.addBlock('Const', { value: { r: 0.9, g: 0.7, b: 0.5, a: 1.0 } });
+
+      const render = b.addBlock('RenderInstances2D', {});
+      b.wire(circleLayout, 'position', render, 'pos');
+      b.wire(color, 'out', render, 'color');
+      b.wire(ellipse, 'shape', render, 'shape');
+    });
+
+    const result = compile(patch);
+    if (result.kind === 'error') {
+      throw new Error(
+        `Expected compilation to succeed, got errors:\n${result.errors.map(e => `  [${e.kind}] ${e.message}`).join('\n')}`
+      );
+    }
+    expect(result.kind).toBe('ok');
+  });
+});

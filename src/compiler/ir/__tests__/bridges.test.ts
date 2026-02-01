@@ -38,7 +38,6 @@ import {
   VEC2,
   COLOR,
   BOOL,
-  SHAPE,
 } from '../../../core/canonical-types';
 import { instanceId, domainTypeId } from '../../../core/ids';
 
@@ -170,8 +169,8 @@ describe('payloadTypeToShapeDescIR', () => {
   });
 
   it('maps shape to shape kind', () => {
-    // Per Q6: SHAPE === FLOAT now
-    expect(payloadTypeToShapeDescIR(SHAPE)).toEqual({ kind: 'number' });
+    // Per Q6: SHAPE was aliased to FLOAT
+    expect(payloadTypeToShapeDescIR(FLOAT)).toEqual({ kind: 'number' });
   });
 
   it('maps bool to bool shape', () => {
@@ -332,7 +331,7 @@ describe('bridging edge cases', () => {
       VEC2,
       COLOR,
       BOOL,
-      SHAPE,
+
     ];
 
     for (const payload of payloads) {

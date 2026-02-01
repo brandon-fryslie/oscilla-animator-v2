@@ -28,7 +28,6 @@ import {
   VEC2,
   VEC3,
   COLOR,
-  SHAPE,
   CAMERA_PROJECTION,
   type PayloadType,
   type CanonicalType,
@@ -214,7 +213,7 @@ export function testBool(): CanonicalType {
  * @returns A CanonicalType with payload='shape'
  */
 export function testShape(): CanonicalType {
-  return makeSignalType(SHAPE, unitNone());
+  return makeSignalType(FLOAT, unitNone());
 }
 
 /**

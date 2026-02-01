@@ -29,7 +29,7 @@ import {
   instanceRef,
 } from '../canonical-types';
 import { isConcretePayload } from '../inference-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION, payloadStride } from '../canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, CAMERA_PROJECTION, payloadStride } from '../canonical-types';
 
 // =============================================================================
 // PayloadType Tests
@@ -37,13 +37,13 @@ import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION, payloadS
 
 describe('PayloadType', () => {
   it('includes all core payload types', () => {
-    const payloads: PayloadType[] = [FLOAT, INT, VEC2, COLOR, BOOL, SHAPE];
+    const payloads: PayloadType[] = [FLOAT, INT, VEC2, COLOR, BOOL];
     expect(payloads.length).toBe(6);
   });
 
   it('does NOT include event or domain (these are axis concepts)', () => {
     // TypeScript will catch this at compile time, but documenting intent
-    const validPayloads: PayloadType[] = [FLOAT, INT, VEC2, COLOR, BOOL, SHAPE];
+    const validPayloads: PayloadType[] = [FLOAT, INT, VEC2, COLOR, BOOL];
     expect(validPayloads).not.toContain('event');
     expect(validPayloads).not.toContain('domain');
   });
@@ -172,6 +172,5 @@ describe('payloadStride', () => {
     expect(payloadStride(VEC3)).toBe(3);
     expect(payloadStride(COLOR)).toBe(4);
     expect(payloadStride(CAMERA_PROJECTION)).toBe(1);
-    expect(payloadStride(SHAPE)).toBe(1);
   });
 });
