@@ -11,8 +11,10 @@
  * - Reuses Position type from expr/ast.ts
  */
 
+import type { Position as ExprPosition } from '../expr/ast';
+
 // Reuse Position type from expression DSL
-export type { Position } from '../expr/ast';
+export type Position = ExprPosition;
 
 /**
  * HCL value types (right side of `=`).
