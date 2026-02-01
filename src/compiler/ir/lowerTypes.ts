@@ -87,20 +87,6 @@ export function asExpr(ref: ValueRefPacked): ValueRefExpr {
   return ref as ValueRefExpr;
 }
 
-/**
- * Derive signal/field/event semantics from CanonicalType extent.
- * This is THE way to determine if a value is signal, field, or event.
- * No stored discriminant — always derived from type.
- */
-export type DerivedKind = 'signal' | 'field' | 'event';
-
-export function deriveKind(type: CanonicalType): DerivedKind {
-  const temp = requireInst(type.extent.temporality, 'temporality');
-  if (temp.kind === 'discrete') return 'event';
-  const card = requireInst(type.extent.cardinality, 'cardinality');
-  if (card.kind === 'many') return 'field';
-  return 'signal';
-}
 
 // =============================================================================
 // Lowered Types (compiler pass contract)
