@@ -25,13 +25,14 @@
  * ──────────────────────────────────────────────────────────────────────
  *
  * ZIP KERNELS (multiple field inputs):
- *   makeVec2, makeVec3, hsvToRgb, vec2ToVec3, fieldSetZ
+ *   makeVec2, makeVec3, hsvToRgb, vec2ToVec3, fieldSetZ, extractX, extractY
  *
  * ZIPSIG KERNELS (field + signal inputs):
- *   hsvToRgb, circleLayoutUV, lineLayoutUV, gridLayoutUV
+ *   hsvToRgb
  *
  * REMOVED (decomposed to opcodes):
  *   polygonVertex, starVertex - now use opcode sequences in path-blocks.ts
+ *   circleLayoutUV, lineLayoutUV, gridLayoutUV - now use opcode sequences in instance-blocks.ts
  *
  * ──────────────────────────────────────────────────────────────────────
  * ARCHITECTURAL RULES
@@ -85,6 +86,30 @@ export function applyFieldKernel(
       outArr[i * 3 + 0] = xArr[i];
       outArr[i * 3 + 1] = yArr[i];
       outArr[i * 3 + 2] = 0.0;
+    }
+  } else if (fieldOp === 'extractX') {
+    // ════════════════════════════════════════════════════════════════
+    // extractX: Extract X component from vec2 field
+    // ════════════════════════════════════════════════════════════════
+    if (inputs.length !== 1) {
+      throw new Error('extractX requires exactly 1 input (vec2)');
+    }
+    const outArr = out as Float32Array;
+    const inArr = inputs[0] as Float32Array;
+    for (let i = 0; i < N; i++) {
+      outArr[i] = inArr[i * 2 + 0];
+    }
+  } else if (fieldOp === 'extractY') {
+    // ════════════════════════════════════════════════════════════════
+    // extractY: Extract Y component from vec2 field
+    // ════════════════════════════════════════════════════════════════
+    if (inputs.length !== 1) {
+      throw new Error('extractY requires exactly 1 input (vec2)');
+    }
+    const outArr = out as Float32Array;
+    const inArr = inputs[0] as Float32Array;
+    for (let i = 0; i < N; i++) {
+      outArr[i] = inArr[i * 2 + 1];
     }
   } else if (fieldOp === 'hsvToRgb') {
     // ════════════════════════════════════════════════════════════════
@@ -169,74 +194,6 @@ export function applyFieldKernelZipSig(
       outArr[i * 4 + 1] = g;
       outArr[i * 4 + 2] = b;
       outArr[i * 4 + 3] = 255; // Full opacity
-    }
-  } else if (fieldOp === 'circleLayoutUV') {
-    // ════════════════════════════════════════════════════════════════
-    // circleLayoutUV: Arrange elements in a circle using UV coordinates
-    // ════════════════════════════════════════════════════════════════
-    if (sigValues.length !== 2) {
-      throw new Error('circleLayoutUV requires 2 signals (radius, phase)');
-    }
-    const outArr = out as Float32Array;
-    const uvArr = fieldInput as Float32Array;
-    const radius = sigValues[0];
-    const phase = sigValues[1];
-    const TWO_PI = Math.PI * 2;
-    const cx = 0.5;
-    const cy = 0.5;
-
-    for (let i = 0; i < N; i++) {
-      const u = Math.max(0, Math.min(1, uvArr[i * 2 + 0]));
-      const angle = TWO_PI * (u + phase);
-      outArr[i * 3 + 0] = cx + radius * Math.cos(angle);
-      outArr[i * 3 + 1] = cy + radius * Math.sin(angle);
-      outArr[i * 3 + 2] = 0.0;
-    }
-  } else if (fieldOp === 'lineLayoutUV') {
-    // ════════════════════════════════════════════════════════════════
-    // lineLayoutUV: Arrange elements along a line using UV coordinates
-    // ════════════════════════════════════════════════════════════════
-    if (sigValues.length !== 4) {
-      throw new Error('lineLayoutUV requires 4 signals (x0, y0, x1, y1)');
-    }
-    const outArr = out as Float32Array;
-    const uvArr = fieldInput as Float32Array;
-    const x0 = sigValues[0];
-    const y0 = sigValues[1];
-    const x1 = sigValues[2];
-    const y1 = sigValues[3];
-
-    for (let i = 0; i < N; i++) {
-      const u = Math.max(0, Math.min(1, uvArr[i * 2 + 0]));
-      outArr[i * 3 + 0] = (1 - u) * x0 + u * x1;
-      outArr[i * 3 + 1] = (1 - u) * y0 + u * y1;
-      outArr[i * 3 + 2] = 0.0;
-    }
-  } else if (fieldOp === 'gridLayoutUV') {
-    // ════════════════════════════════════════════════════════════════
-    // gridLayoutUV: Arrange elements in a grid using UV coordinates
-    // ════════════════════════════════════════════════════════════════
-    if (sigValues.length !== 2) {
-      throw new Error('gridLayoutUV requires 2 signals (cols, rows)');
-    }
-    const outArr = out as Float32Array;
-    const uvArr = fieldInput as Float32Array;
-    const cols = Math.max(1, Math.round(sigValues[0]));
-    const rows = Math.max(1, Math.round(sigValues[1]));
-
-    for (let i = 0; i < N; i++) {
-      const u = Math.max(0, Math.min(1, uvArr[i * 2 + 0]));
-      const v = Math.max(0, Math.min(1, uvArr[i * 2 + 1]));
-
-      const col = Math.min(Math.floor(u * cols), cols - 1);
-      const row = Math.min(Math.floor(v * rows), rows - 1);
-
-      const x = cols > 1 ? col / (cols - 1) : 0.5;
-      const y = rows > 1 ? row / (rows - 1) : 0.5;
-
-      outArr[i * 3 + 0] = x;
-      outArr[i * 3 + 1] = y;
-      outArr[i * 3 + 2] = 0.0;
     }
   } else {
     throw new Error(`Unknown field kernel (zipSig): ${fieldOp}`);
