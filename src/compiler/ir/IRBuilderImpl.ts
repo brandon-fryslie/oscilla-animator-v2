@@ -6,7 +6,7 @@
  */
 
 import type { CanonicalType, ConstValue } from '../../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, CAMERA_PROJECTION, canonicalType, unitScalar, canonicalEvent, constValueMatchesPayload, requireInst } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, CAMERA_PROJECTION, canonicalType, unitScalar, canonicalEvent, constValueMatchesPayload, requireInst, payloadStride } from '../../core/canonical-types';
 import type { TopologyId } from '../../shapes/types';
 import type { IRBuilder } from './IRBuilder';
 import type {
@@ -23,11 +23,11 @@ import {
   valueSlot,
   stateSlotId,
   instanceId,
+  SYSTEM_PALETTE_SLOT,
 } from './Indices';
 import type { TimeModelIR } from './schedule';
 import type {
   PureFn,
-  OpCode,
   InstanceDecl,
   Step,
   IntrinsicPropertyName,
@@ -39,6 +39,7 @@ import type {
   EvalStrategy,
   EvalTarget,
 } from './types';
+import { OpCode } from './types';
 import type { CameraDeclIR } from './program';
 import type { ValueExpr } from './value-expr';
 
@@ -101,14 +102,15 @@ export class IRBuilderImpl implements IRBuilder {
   constructor() {
     // Reserve system slots at fixed positions (compiler-runtime contract)
     // Slot 0: time.palette (color, stride=4)
-    this.reserveSystemSlot(0, canonicalType(COLOR));
+    this.reserveSystemSlot(SYSTEM_PALETTE_SLOT as number, canonicalType(COLOR));
   }
 
   private reserveSystemSlot(slotId: number, type: CanonicalType): void {
     const slot = slotId as ValueSlot;
+    const stride = payloadStride(type.payload);
     this.slotTypes.set(slot, type);
-    if (this.slotCounter <= slotId) {
-      this.slotCounter = slotId + 1;
+    if (this.slotCounter < slotId + stride) {
+      this.slotCounter = slotId + stride;
     }
   }
 
@@ -219,8 +221,60 @@ export class IRBuilderImpl implements IRBuilder {
     mode: 'sum' | 'average' | 'max' | 'min' | 'last' | 'product',
     type: CanonicalType
   ): ValueExprId {
-    const fn: PureFn = { kind: 'kernel', name: `combine_${mode}` };
-    return this.pushExpr({ kind: 'kernel', kernelKind: 'zip', inputs, fn, type });
+    if (inputs.length === 0) throw new Error('combine requires at least 1 input');
+    if (inputs.length === 1) return inputs[0];
+
+    if (mode === 'last') {
+      return inputs[inputs.length - 1];
+    }
+
+    // Map mode to binary opcode
+    const opcodeMap: Record<string, OpCode> = {
+      sum: OpCode.Add,
+      max: OpCode.Max,
+      min: OpCode.Min,
+      product: OpCode.Mul,
+    };
+
+    if (mode === 'average') {
+      // Sum all, then divide by count
+      let acc = inputs[0];
+      for (let i = 1; i < inputs.length; i++) {
+        acc = this.pushExpr({
+          kind: 'kernel', kernelKind: 'zip',
+          inputs: [acc, inputs[i]],
+          fn: { kind: 'opcode', opcode: OpCode.Add },
+          type,
+        });
+      }
+      // Divide by count
+      const countExpr = this.pushExpr({
+        kind: 'const',
+        value: { kind: 'float', value: inputs.length },
+        type,
+      });
+      return this.pushExpr({
+        kind: 'kernel', kernelKind: 'zip',
+        inputs: [acc, countExpr],
+        fn: { kind: 'opcode', opcode: OpCode.Div },
+        type,
+      });
+    }
+
+    const opcode = opcodeMap[mode];
+    if (!opcode) throw new Error(`Unknown combine mode: ${mode}`);
+
+    // Chain binary ops: fold left
+    let acc = inputs[0];
+    for (let i = 1; i < inputs.length; i++) {
+      acc = this.pushExpr({
+        kind: 'kernel', kernelKind: 'zip',
+        inputs: [acc, inputs[i]],
+        fn: { kind: 'opcode', opcode },
+        type,
+      });
+    }
+    return acc;
   }
   // =========================================================================
   // Structural Operations (Extract/Construct)

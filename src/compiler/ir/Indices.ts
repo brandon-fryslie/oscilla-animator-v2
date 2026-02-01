@@ -127,6 +127,17 @@ export function stateId(s: string): StateId {
   return s as StateId;
 }
 
+// =============================================================================
+// System-Reserved Slot Constants (compiler ↔ runtime contract)
+// =============================================================================
+
+/**
+ * Fixed slot for time.palette (COLOR, stride=4).
+ * Reserved at slot 0 by IRBuilderImpl constructor.
+ * Written each frame by ScheduleExecutor before phase execution.
+ */
+export const SYSTEM_PALETTE_SLOT = 0 as ValueSlot;
+
 export function slotId(s: string): SlotId {
   return s as SlotId;
 }

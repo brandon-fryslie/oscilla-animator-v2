@@ -8,7 +8,7 @@
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../core/ids';
-import { canonicalType, canonicalField, unitPhase01, unitWorld3, strideOf, floatConst, intConst, requireInst } from '../core/canonical-types';
+import { canonicalType, canonicalField, unitPhase01, unitWorld3, strideOf, floatConst, intConst, requireInst, withInstance, instanceRef } from '../core/canonical-types';
 import { FLOAT, INT, VEC2, VEC3, SHAPE } from '../core/canonical-types';
 import { defaultSourceConst } from '../types';
 import { OpCode } from '../compiler/ir/types';

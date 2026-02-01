@@ -8,7 +8,7 @@ import { registerBlock } from './registry';
 import { canonicalType, canonicalEvent, unitPhase01, strideOf } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
 import { defaultSourceConst } from '../types';
-import { valueSlot } from '../compiler/ir/Indices';
+import { valueSlot, SYSTEM_PALETTE_SLOT } from '../compiler/ir/Indices';
 
 // =============================================================================
 // InfiniteTimeRoot
@@ -58,7 +58,7 @@ registerBlock({
     const phaseASlot = ctx.b.allocSlot();
     const phaseBSlot = ctx.b.allocSlot();
     const pulseEventSlot = ctx.b.allocEventSlot(pulse);
-    const paletteSlot = ctx.b.allocSlot();
+    const paletteSlot = SYSTEM_PALETTE_SLOT;
     const energySlot = ctx.b.allocSlot();
 
     // Get output types from context

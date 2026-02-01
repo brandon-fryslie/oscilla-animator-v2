@@ -408,8 +408,8 @@ function lowerBlockInstance(
       .map(portName => portTypes?.get(portKey(blockIndex, portName, 'out')))
       .filter((t): t is CanonicalType => t !== undefined);
     // Backend reads portTypes from TypedPatch - never modifies them.
-    // TODO: Sprint 2 - frontend solver will resolve cardinality/instance
-
+    // Blocks with 'preserve' cardinality must rewrite placeholder instance IDs
+    // in their own lower() function using withInstance() (see Array, GridLayoutUV, etc.)
 
     // Build lowering context
     const ctx: LowerCtx = {

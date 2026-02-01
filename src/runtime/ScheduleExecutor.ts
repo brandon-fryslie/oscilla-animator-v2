@@ -23,6 +23,7 @@ import { createStableDomainInstance, createUnstableDomainInstance } from './Doma
 import { assembleRenderFrame, type AssemblerContext } from './RenderAssembler';
 import { resolveCameraFromGlobals } from './CameraResolver';
 import { requireManyInstance } from '../core/canonical-types';
+import { SYSTEM_PALETTE_SLOT } from '../compiler/ir/Indices';
 import { evaluateValueExprSignal } from './ValueExprSignalEvaluator';
 import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
 import { materializeValueExpr } from './ValueExprMaterializer';
@@ -174,7 +175,7 @@ export function executeFrame(
   // === System-reserved time outputs ===
   // These are part of the runtime contract: they are written deterministically from resolved time each frame.
   // Slot allocation/stride is enforced via slotMeta; no runtime-only side channels.
-  const TIME_PALETTE_SLOT = 0 as ValueSlot;
+  const TIME_PALETTE_SLOT = SYSTEM_PALETTE_SLOT;
   if (!(time.palette instanceof Float32Array) || time.palette.length !== 4) {
     throw new Error('time.palette must be Float32Array(4) in RGBA [0..1]');
   }
