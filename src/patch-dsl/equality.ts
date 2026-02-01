@@ -8,7 +8,7 @@
  * Uses simple JSON comparison for nested structures.
  */
 
-import type { Patch, Block, Edge, Endpoint, InputPort, OutputPort } from '../graph/Patch';
+import type { Patch, Block, Edge, Endpoint } from '../graph/Patch';
 
 /**
  * Deep equality check for patches.

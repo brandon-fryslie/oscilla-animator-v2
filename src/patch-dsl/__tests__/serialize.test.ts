@@ -92,7 +92,7 @@ describe('serialize', () => {
     builder.addEdge(
       { kind: 'port', blockId: a, slotId: 'out' },
       { kind: 'port', blockId: b, slotId: 'value' },
-      { role: { kind: 'derived', source: 'normalization', meta: {} } }
+      { role: { kind: 'default', meta: { defaultSourceBlockId: a } } }
     );
 
     const patch = builder.build();
@@ -139,12 +139,12 @@ describe('serialize', () => {
 
   it('emits role if not user', () => {
     const builder = new PatchBuilder();
-    builder.addBlock('Const', {}, { displayName: 'time', role: { kind: 'time_root', meta: {} } });
+    builder.addBlock('Const', {}, { displayName: 'time', role: { kind: 'timeRoot', meta: {} } });
     const patch = builder.build();
 
     const hcl = serializePatchToHCL(patch);
 
-    expect(hcl).toContain('role = "time_root"');
+    expect(hcl).toContain('role = "timeRoot"');
   });
 
   it('emits domain if non-null', () => {

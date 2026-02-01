@@ -11,7 +11,7 @@
  * - Pretty-printed with 2-space indentation
  */
 
-import type { Patch, Block, Edge, InputPort, OutputPort, LensAttachment, VarargConnection } from '../graph/Patch';
+import type { Patch, Block, Edge, InputPort, LensAttachment, VarargConnection } from '../graph/Patch';
 import type { BlockId } from '../types';
 import { normalizeCanonicalName } from '../core/canonical-name';
 
@@ -82,7 +82,6 @@ function buildBlockNameMap(patch: Patch): Map<BlockId, string> {
     let suffix = 2;
 
     // Check for canonical name collisions
-    const canonicalCandidate = normalizeCanonicalName(candidate);
     while (usedNames.has(normalizeCanonicalName(candidate))) {
       candidate = `${block.displayName}_${suffix}`;
       suffix++;
@@ -219,7 +218,7 @@ function emitVarargConnections(
  * @param indent - Indentation level
  * @returns HCL text for lens attachments
  */
-function emitLenses(portId: string, lenses: readonly LensAttachment[], indent: number): string {
+function emitLenses(_portId: string, lenses: readonly LensAttachment[], indent: number): string {
   const ind = '  '.repeat(indent);
 
   // Sort lenses by sortKey
