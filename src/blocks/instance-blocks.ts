@@ -89,9 +89,8 @@ registerBlock({
     );
 
     // Decompose circleLayoutUV into opcode sequence:
-    // u = extractX(uvField)
-    const extractXFn = ctx.b.kernel('extractX');
-    const u = ctx.b.kernelZip([uvField], extractXFn, floatFieldType);
+    // u = extract(uvField, 0) — component 0 = X
+    const u = ctx.b.extract(uvField, 0, floatFieldType);
 
     // Constants
     const const0 = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
@@ -138,9 +137,8 @@ registerBlock({
     // z = broadcast(0)
     const z = const0Broadcast;
 
-    // pos = makeVec3(x, y, z)
-    const makeVec3Fn = ctx.b.kernel('makeVec3');
-    const positionField = ctx.b.kernelZip([x, y, z], makeVec3Fn, posType);
+    // pos = construct([x, y, z]) → vec3
+    const positionField = ctx.b.construct([x, y, z], posType);
 
     const posSlot = ctx.b.allocSlot();
 
@@ -231,9 +229,8 @@ registerBlock({
     );
 
     // Decompose lineLayoutUV into opcode sequence:
-    // u = extractX(uvField)
-    const extractXFn = ctx.b.kernel('extractX');
-    const u = ctx.b.kernelZip([uvField], extractXFn, floatFieldType);
+    // u = extract(uvField, 0) — component 0 = X
+    const u = ctx.b.extract(uvField, 0, floatFieldType);
 
     // Constants
     const const0 = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
@@ -263,9 +260,8 @@ registerBlock({
     // z = broadcast(0)
     const z = const0Broadcast;
 
-    // pos = makeVec3(x, y, z)
-    const makeVec3Fn = ctx.b.kernel('makeVec3');
-    const positionField = ctx.b.kernelZip([x, y, z], makeVec3Fn, posType);
+    // pos = construct([x, y, z]) → vec3
+    const positionField = ctx.b.construct([x, y, z], posType);
 
     const posSlot = ctx.b.allocSlot();
 
@@ -348,11 +344,9 @@ registerBlock({
     );
 
     // Decompose gridLayoutUV into opcode sequence:
-    // u = extractX(uvField), v = extractY(uvField)
-    const extractXFn = ctx.b.kernel('extractX');
-    const extractYFn = ctx.b.kernel('extractY');
-    const u = ctx.b.kernelZip([uvField], extractXFn, floatFieldType);
-    const v = ctx.b.kernelZip([uvField], extractYFn, floatFieldType);
+    // u = extract(uvField, 0), v = extract(uvField, 1)
+    const u = ctx.b.extract(uvField, 0, floatFieldType);
+    const v = ctx.b.extract(uvField, 1, floatFieldType);
 
     // Constants
     const const0 = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
@@ -408,9 +402,8 @@ registerBlock({
     // z = broadcast(0)
     const z = const0Broadcast;
 
-    // pos = makeVec3(x, y, z)
-    const makeVec3Fn = ctx.b.kernel('makeVec3');
-    const positionField = ctx.b.kernelZip([x, y, z], makeVec3Fn, posType);
+    // pos = construct([x, y, z]) → vec3
+    const positionField = ctx.b.construct([x, y, z], posType);
 
     const posSlot = ctx.b.allocSlot();
 

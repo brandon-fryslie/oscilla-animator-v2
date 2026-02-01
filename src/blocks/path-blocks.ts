@@ -178,7 +178,7 @@ registerBlock({
     //   angle = (index / sides) * 2π - π/2
     //   x = radiusX * cos(angle)
     //   y = radiusY * sin(angle)
-    //   output = makeVec2(x, y)
+    //   output = construct([x, y]) → vec2
     //
     // Now decomposed into explicit opcode sequences.
     // ═══════════════════════════════════════════════════════════════════════
@@ -214,11 +214,9 @@ registerBlock({
     const xField = ctx.b.kernelZip([radiusXBroadcast, cosAngle], mul, floatFieldType);
     const yField = ctx.b.kernelZip([radiusYBroadcast, sinAngle], mul, floatFieldType);
 
-    // Step 4: makeVec2(x, y) - this remains as a named kernel (stride-changing)
-    const makeVec2Fn = ctx.b.kernel('makeVec2');
-    const computedPositions = ctx.b.kernelZip(
+    // Step 4: construct([x, y]) → vec2
+    const computedPositions = ctx.b.construct(
       [xField, yField],
-      makeVec2Fn,
       canonicalField(VEC2, { kind: 'scalar' }, ref)
     );
 
@@ -419,7 +417,7 @@ registerBlock({
     //   angle = (index / (points * 2)) * 2π - π/2
     //   x = radius * cos(angle)
     //   y = radius * sin(angle)
-    //   output = makeVec2(x, y)
+    //   output = construct([x, y]) → vec2
     //
     // Now decomposed into explicit opcode sequences.
     // ═══════════════════════════════════════════════════════════════════════
@@ -480,11 +478,9 @@ registerBlock({
     const xField = ctx.b.kernelZip([radius, cosAngle], mul, floatFieldType);
     const yField = ctx.b.kernelZip([radius, sinAngle], mul, floatFieldType);
 
-    // Step 5: makeVec2(x, y) - this remains as a named kernel (stride-changing)
-    const makeVec2Fn = ctx.b.kernel('makeVec2');
-    const computedPositions = ctx.b.kernelZip(
+    // Step 5: construct([x, y]) → vec2
+    const computedPositions = ctx.b.construct(
       [xField, yField],
-      makeVec2Fn,
       canonicalField(VEC2, { kind: 'scalar' }, ref)
     );
 

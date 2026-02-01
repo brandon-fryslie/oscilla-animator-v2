@@ -222,6 +222,18 @@ export class IRBuilderImpl implements IRBuilder {
     const fn: PureFn = { kind: 'kernel', name: `combine_${mode}` };
     return this.pushExpr({ kind: 'kernel', kernelKind: 'zip', inputs, fn, type });
   }
+  // =========================================================================
+  // Structural Operations (Extract/Construct)
+  // =========================================================================
+
+  extract(input: ValueExprId, componentIndex: number, type: CanonicalType): ValueExprId {
+    return this.pushExpr({ kind: 'extract', input, componentIndex, type });
+  }
+
+  construct(components: readonly ValueExprId[], type: CanonicalType): ValueExprId {
+    return this.pushExpr({ kind: 'construct', components, type });
+  }
+
 
   // =========================================================================
   // Event Expression Methods

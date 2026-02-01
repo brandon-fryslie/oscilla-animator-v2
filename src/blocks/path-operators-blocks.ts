@@ -102,10 +102,15 @@ registerBlock({
     const arcType = ctx.outTypes[3];
 
     // Position output: convert VEC2 control points to VEC3 (z=0)
-    const vec2ToVec3Fn = ctx.b.kernel('vec2ToVec3');
-    const positionFieldId = ctx.b.kernelZip(
-      [controlPointsFieldId],
-      vec2ToVec3Fn,
+    // vec2ToVec3 logic: extract x and y, then construct vec3 with z=0
+    const floatFieldType = { ...posType, payload: FLOAT, unit: { kind: 'scalar' as const } };
+    const xField = ctx.b.extract(controlPointsFieldId, 0, floatFieldType);  // X component
+    const yField = ctx.b.extract(controlPointsFieldId, 1, floatFieldType);  // Y component
+    const const0 = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
+    const zField = ctx.b.broadcast(const0, floatFieldType);  // Z = 0
+
+    const positionFieldId = ctx.b.construct(
+      [xField, yField, zField],
       posType
     );
 

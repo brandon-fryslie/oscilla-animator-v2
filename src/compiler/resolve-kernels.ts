@@ -125,18 +125,15 @@ function resolvePureFn(
   const kid = kernelId(name);
 
   // Resolve kernel ID to handle + ABI
+  // During migration: skip kernels not yet in the registry.
+  // These are handled by legacy string-dispatch (FieldKernels.ts / SignalKernelLibrary.ts).
+  // Once all kernels are migrated, this check becomes a hard error.
   let resolved: { handle: KernelHandle; abi: KernelABI; meta: any };
   try {
     resolved = registry.resolve(kid);
-  } catch (e) {
-    return {
-      error: {
-        kind: 'KernelNotImplemented',
-        message: `Kernel not found: ${name}`,
-        kernelName: name,
-        valueExprIndex: exprIndex,
-      },
-    };
+  } catch (_e) {
+    // Kernel not in registry — leave as unresolved (legacy dispatch handles it)
+    return {};
   }
 
   const { handle, abi, meta } = resolved;

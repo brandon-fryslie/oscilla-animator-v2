@@ -61,7 +61,7 @@ export type KernelId =
  * Replaces legacy SigExpr/FieldExpr/EventExpr with a unified table.
  * CanonicalType.extent determines signal/field/event semantics.
  *
- * Top-level kinds (10):
+ * Top-level kinds (12):
  * - const: Constant values (zero/one/many cardinality)
  * - external: External input channels (mouse, keyboard, etc.)
  * - intrinsic: Instance-bound data (index, randomId, placement)
@@ -72,6 +72,8 @@ export type KernelId =
  * - eventRead: Event→signal bridge
  * - event: Event-specific operations (pulse, wrap, combine, never)
  * - slotRead: Value slot read (register file)
+ * - extract: Extract component from composite payload (structural, not compute)
+ * - construct: Construct composite from components (structural, not compute)
  */
 export type ValueExpr =
   | ValueExprConst
@@ -83,7 +85,9 @@ export type ValueExpr =
   | ValueExprShapeRef
   | ValueExprEventRead
   | ValueExprEvent
-  | ValueExprSlotRead;
+  | ValueExprSlotRead
+  | ValueExprExtract
+  | ValueExprConstruct;
 
 // =============================================================================
 // ValueExpr Variants
@@ -297,4 +301,39 @@ export interface ValueExprSlotRead {
   readonly kind: 'slotRead';
   readonly type: CanonicalType;
   readonly slot: ValueSlot;
+}
+
+/**
+ * Extract component from composite payload.
+ *
+ * Structural operation (not a compute kernel).
+ * Extracts a single scalar component from a multi-component payload (vec2, vec3, color).
+ *
+ * Examples:
+ * - extractX: extract(input, 0) where input.type.payload = vec2 or vec3
+ * - extractY: extract(input, 1) where input.type.payload = vec2 or vec3
+ * - extractZ: extract(input, 2) where input.type.payload = vec3
+ */
+export interface ValueExprExtract {
+  readonly kind: 'extract';
+  readonly type: CanonicalType;
+  readonly input: ValueExprId;
+  readonly componentIndex: number; // 0=x, 1=y, 2=z, 3=w
+}
+
+/**
+ * Construct composite from components.
+ *
+ * Structural operation (not a compute kernel).
+ * Constructs a multi-component payload from individual scalar components.
+ *
+ * Examples:
+ * - makeVec2: construct('vec2', [x, y])
+ * - makeVec3: construct('vec3', [x, y, z])
+ * - vec2ToVec3: construct('vec3', [extract(v, 0), extract(v, 1), z])
+ */
+export interface ValueExprConstruct {
+  readonly kind: 'construct';
+  readonly type: CanonicalType;
+  readonly components: readonly ValueExprId[]; // Must match payloadStride(type.payload)
 }

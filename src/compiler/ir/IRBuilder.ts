@@ -105,6 +105,16 @@ export interface IRBuilder {
   ): ValueExprId;
 
   // =========================================================================
+  // Structural Operations (Extract/Construct)
+  // =========================================================================
+
+  /** Extract a component from a composite payload (extractX, extractY, extractZ). */
+  extract(input: ValueExprId, componentIndex: number, type: CanonicalType): ValueExprId;
+
+  /** Construct a composite from components (makeVec2, makeVec3). */
+  construct(components: readonly ValueExprId[], type: CanonicalType): ValueExprId;
+
+  // =========================================================================
   // Event Expression Methods
   // =========================================================================
 

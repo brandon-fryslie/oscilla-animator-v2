@@ -174,6 +174,48 @@ function fillBuffer(
       break;
     }
 
+    case 'extract': {
+      // Extract a single scalar component from a multi-component field.
+      // Input is a field with stride > 1 (vec2, vec3, color).
+      // Output is a scalar field (stride 1).
+      const inputExpr = table.nodes[expr.input as unknown as number];
+      if (!inputExpr) throw new Error(`extract: input ValueExpr ${expr.input} not found`);
+      const inputStride = payloadStride(inputExpr.type.payload);
+      const inputBuf = materializeValueExpr(
+        expr.input, table, instanceId, count, state, program, pool
+      ) as Float32Array;
+      const out = buffer as Float32Array;
+      const ci = expr.componentIndex;
+      if (ci < 0 || ci >= inputStride) {
+        throw new Error(`extract: componentIndex ${ci} out of range for stride ${inputStride}`);
+      }
+      for (let i = 0; i < count; i++) {
+        out[i] = inputBuf[i * inputStride + ci];
+      }
+      break;
+    }
+
+    case 'construct': {
+      // Construct a multi-component field from scalar component fields.
+      // Each component is a scalar field (stride 1).
+      // Output is a field with stride = components.length (vec2, vec3, color).
+      const out = buffer as Float32Array;
+      const componentBufs: Float32Array[] = [];
+      for (const compId of expr.components) {
+        const compBuf = materializeValueExpr(
+          compId, table, instanceId, count, state, program, pool
+        ) as Float32Array;
+        componentBufs.push(compBuf);
+      }
+      const outStride = stride;
+      for (let i = 0; i < count; i++) {
+        for (let c = 0; c < componentBufs.length && c < outStride; c++) {
+          out[i * outStride + c] = componentBufs[c][i];
+        }
+      }
+      break;
+    }
+
     // Signal-extent kinds should not appear in field materialization
     case 'slotRead':
     case 'time':

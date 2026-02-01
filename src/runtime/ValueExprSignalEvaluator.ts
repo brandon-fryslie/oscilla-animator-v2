@@ -165,6 +165,24 @@ function evaluateSignalExtent(
       throw new Error('Event expressions must be evaluated by EventEvaluator');
     }
 
+    case 'extract': {
+      // Extract a component from a multi-component signal.
+      // In signal context, multi-component values use slotWriteStrided,
+      // so extract reads from the source and picks one component.
+      const inputVal = evaluateValueExprSignal(expr.input, valueExprs, state);
+      // For signal-extent, the input is a single scalar — extract(0) returns it as-is.
+      // Multi-component signals are decomposed at compile time via slotRead.
+      if (expr.componentIndex === 0) return inputVal;
+      throw new Error(
+        `extract(${expr.componentIndex}) on signal-extent: multi-component signals use slotRead, not extract`
+      );
+    }
+
+    case 'construct': {
+      // Construct is field-extent only in practice (signal vec3 uses slotWriteStrided).
+      throw new Error('construct expressions are field-extent, not signal-extent');
+    }
+
     default: {
       const _exhaustive: never = expr;
       throw new Error(`Unknown ValueExpr kind: ${(_exhaustive as ValueExpr).kind}`);
