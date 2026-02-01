@@ -18,7 +18,8 @@ import { compile } from '../compiler/compile';
 describe('initial compile invariant: broken patches MUST produce errors', () => {
   it('rejects a patch with no TimeRoot (missing required infrastructure)', () => {
     const patch = buildPatch((b) => {
-      b.addBlock('Const', { value: 1 });
+      const constId = b.addBlock('Const');
+      b.setConfig(constId, 'value', 1);
     });
 
     const result = compile(patch);

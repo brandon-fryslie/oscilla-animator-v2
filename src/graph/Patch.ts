@@ -357,10 +357,22 @@ export class PatchBuilder {
   private edges: Edge[] = [];
   private nextBlockId = 0;
   private nextEdgeId = 0;
+  private snapshotInvalidated = false;
 
+  /**
+   * Add a block to the patch.
+   *
+   * SINGLE SOURCE OF TRUTH (2026-02-01):
+   * - Block.params contains ONLY config values (exposedAsPort: false)
+   * - Config defaults are loaded from InputDef.value automatically
+   * - Port default values must be set via setPortDefault() after creation
+   *
+   * @param type - Block type (from registry)
+   * @param options - Optional block metadata
+   * @returns BlockId of the created block
+   */
   addBlock(
     type: BlockType,
-    params: Record<string, unknown> = {},
     options?: {
       label?: string;
       displayName?: string;
@@ -387,9 +399,6 @@ export class PatchBuilder {
       inputPorts.set(inputId, { id: inputId, combineMode: 'last' });
     }
 
-    // Merge config defaults with provided params (provided params take precedence)
-    const mergedParams = { ...configDefaults, ...params };
-
     // Create output ports from registry
     const outputPorts = new Map<string, OutputPort>();
     for (const outputId of Object.keys(blockDef.outputs)) {
@@ -412,7 +421,7 @@ export class PatchBuilder {
     this.blocks.set(id, {
       id,
       type,
-      params: mergedParams,
+      params: configDefaults,
       label: options?.label,
       displayName,
       domainId: options?.domainId ?? null,
@@ -420,7 +429,54 @@ export class PatchBuilder {
       inputPorts,
       outputPorts,
     });
+    this.invalidateSnapshot();
     return id;
+  }
+
+  /**
+   * Set a default value for an exposed port.
+   * Creates a Const defaultSource with the given value.
+   *
+   * @param blockId - Block ID
+   * @param portId - Input port ID (must be an exposed port)
+   * @param value - Constant value
+   * @returns this (for chaining)
+   */
+  setPortDefault(blockId: BlockId, portId: string, value: unknown): this {
+    const block = this.blocks.get(blockId);
+    if (!block) throw new Error(`Block ${blockId} not found`);
+    const port = block.inputPorts.get(portId);
+    if (!port) throw new Error(`Port ${portId} not found on block ${blockId}`);
+
+    const newPort = {
+      ...port,
+      defaultSource: {
+        blockType: 'Const' as const,
+        output: 'out',
+        params: { value }
+      }
+    };
+    const newPorts = new Map(block.inputPorts);
+    newPorts.set(portId, newPort);
+    this.blocks.set(blockId, { ...block, inputPorts: newPorts });
+    this.invalidateSnapshot();
+    return this;
+  }
+
+  /**
+   * Set a config parameter value (for exposedAsPort: false inputs).
+   *
+   * @param blockId - Block ID
+   * @param key - Config parameter key
+   * @param value - Config value
+   * @returns this (for chaining)
+   */
+  setConfig(blockId: BlockId, key: string, value: unknown): this {
+    const block = this.blocks.get(blockId);
+    if (!block) throw new Error(`Block ${blockId} not found`);
+    this.blocks.set(blockId, { ...block, params: { ...block.params, [key]: value } });
+    this.invalidateSnapshot();
+    return this;
   }
 
   addEdge(from: Endpoint, to: Endpoint, options?: { enabled?: boolean; sortKey?: number; role?: EdgeRole }): this {
@@ -433,6 +489,7 @@ export class PatchBuilder {
       sortKey: options?.sortKey ?? this.edges.length,
       role: options?.role ?? { kind: 'user', meta: {} as Record<string, never> },
     });
+    this.invalidateSnapshot();
     return this;
   }
 
@@ -503,6 +560,7 @@ export class PatchBuilder {
     };
 
     this.blocks.set(blockId, updatedBlock);
+    this.invalidateSnapshot();
     return this;
   }
 
@@ -552,7 +610,12 @@ export class PatchBuilder {
     updatedInputPorts.set(portId, updatedPort);
 
     this.blocks.set(blockId, { ...block, inputPorts: updatedInputPorts });
+    this.invalidateSnapshot();
     return this;
+  }
+
+  private invalidateSnapshot(): void {
+    this.snapshotInvalidated = true;
   }
 
   build(): Patch {

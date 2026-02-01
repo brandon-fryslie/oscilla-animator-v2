@@ -13,7 +13,8 @@ describe('compile', () => {
   describe('TimeRoot validation', () => {
     it('fails if no TimeRoot block', () => {
       const patch = buildPatch((b) => {
-        b.addBlock('Const', { value: 42 });
+        const c = b.addBlock('Const');
+        b.setConfig(c, 'value', 42);
       });
 
       const result = compile(patch);
@@ -28,8 +29,8 @@ describe('compile', () => {
 
     it('fails if multiple TimeRoot blocks', () => {
       const patch = buildPatch((b) => {
-        b.addBlock('InfiniteTimeRoot', {});
-        b.addBlock('InfiniteTimeRoot', {});
+        b.addBlock('InfiniteTimeRoot');
+        b.addBlock('InfiniteTimeRoot');
       });
 
       const result = compile(patch);
@@ -42,7 +43,7 @@ describe('compile', () => {
 
     it('succeeds with exactly one TimeRoot', () => {
       const patch = buildPatch((b) => {
-        b.addBlock('InfiniteTimeRoot', {});
+        b.addBlock('InfiniteTimeRoot');
       });
 
       const result = compile(patch);
@@ -60,9 +61,10 @@ describe('compile', () => {
     // it('compiles constant signals', () => {
     //   // Const block must be wired to something so its type can be inferred
     //   const patch = buildPatch((b) => {
-    //     b.addBlock('InfiniteTimeRoot', {});
-    //     const c = b.addBlock('Const', { value: 42 });
-    //     const add = b.addBlock('Add', {});
+    //     b.addBlock('InfiniteTimeRoot');
+    //     const c = b.addBlock('Const');
+    //     b.setConfig(c, 'value', 42);
+    //     const add = b.addBlock('Add');
     //     b.wire(c, 'out', add, 'a');
     //     b.wire(c, 'out', add, 'b');
     //   });
@@ -83,8 +85,11 @@ describe('compile', () => {
     it('compiles connected signal blocks', () => {
       // INVALID TEST: tests implementation
       const patch = buildPatch((b) => {
-        const time = b.addBlock('InfiniteTimeRoot', { periodAMs: 1000, periodBMs: 2000 });
-        const osc = b.addBlock('Oscillator', { waveform: 'oscSin' });
+        const time = b.addBlock('InfiniteTimeRoot');
+        b.setPortDefault(time, 'periodAMs', 1000);
+        b.setPortDefault(time, 'periodBMs', 2000);
+        const osc = b.addBlock('Oscillator');
+        b.setPortDefault(osc, 'waveform', 'oscSin');
         b.wire(time, 'phaseA', osc, 'phase');
       });
 
@@ -97,7 +102,7 @@ describe('compile', () => {
       expect(result.kind).toBe('ok');
       // if (result.kind === 'ok') {
       //   // Should have oscillator output
-      //   expect(result.program.signalExprs.nodes.length).toBeGreaterThan(0);
+      //   //   expect(result.program.signalExprs.nodes.length).toBeGreaterThan(0);
       // }
     });
   });
@@ -105,10 +110,13 @@ describe('compile', () => {
   describe('instance compilation', () => {
     it('compiles grid instance with Array + GridLayout', () => {
       const patch = buildPatch((b) => {
-        b.addBlock('InfiniteTimeRoot', {});
+        b.addBlock('InfiniteTimeRoot');
         // Three-stage architecture: Array creates instances, GridLayout applies layout
-        const array = b.addBlock('Array', { count: 16 });
-        const gridLayout = b.addBlock('GridLayoutUV', { rows: 4, cols: 4 });
+        const array = b.addBlock('Array');
+        b.setPortDefault(array, 'count', 16);
+        const gridLayout = b.addBlock('GridLayoutUV');
+        b.setPortDefault(gridLayout, 'rows', 4);
+        b.setPortDefault(gridLayout, 'cols', 4);
         // Wire Array.elements -> GridLayout.elements
         b.wire(array, 'elements', gridLayout, 'elements');
       });
@@ -135,9 +143,10 @@ describe('compile', () => {
 
     it('compiles instance with count using Array block', () => {
       const patch = buildPatch((b) => {
-        b.addBlock('InfiniteTimeRoot', {});
+        b.addBlock('InfiniteTimeRoot');
         // Array block creates instances (layout handled separately via field kernels)
-        b.addBlock('Array', { count: 100 });
+        const array = b.addBlock('Array');
+        b.setPortDefault(array, 'count', 100);
       });
 
       const result = compile(patch);
@@ -161,9 +170,10 @@ describe('compile', () => {
   describe('field compilation', () => {
     it('broadcasts signal to field', () => {
       const patch = buildPatch((b) => {
-        const time = b.addBlock('InfiniteTimeRoot', {});
-        const osc = b.addBlock('Oscillator', { waveform: 'oscSin' });
-        const broadcast = b.addBlock('Broadcast', {});
+        const time = b.addBlock('InfiniteTimeRoot');
+        const osc = b.addBlock('Oscillator');
+        b.setPortDefault(osc, 'waveform', 'oscSin');
+        const broadcast = b.addBlock('Broadcast');
 
         b.wire(time, 'phaseA', osc, 'phase');
         b.wire(osc, 'out', broadcast, 'signal');
@@ -188,7 +198,7 @@ describe('compile', () => {
     it('reports unknown block types', () => {
       // Construct patch manually to bypass PatchBuilder's requireBlockDef check
       const patch = buildPatch((b) => {
-        b.addBlock('InfiniteTimeRoot', {});
+        b.addBlock('InfiniteTimeRoot');
       });
       // Inject an unknown block directly into the patch
       (patch.blocks as Map<any, any>).set('b99' as any, {
@@ -217,7 +227,7 @@ describe('compile', () => {
 describe('TimeModel', () => {
   it('InfiniteTimeRoot sets infinite time model', () => {
     const patch = buildPatch((b) => {
-      b.addBlock('InfiniteTimeRoot', {});
+      b.addBlock('InfiniteTimeRoot');
     });
 
     const result = compile(patch);
@@ -237,8 +247,11 @@ describe('Debug Probe Support', () => {
     // which are necessary for the runtime tap to record slot values.
     // Without evalValue steps, the debug probe cannot show signal values.
     const patch = buildPatch((b) => {
-      const time = b.addBlock('InfiniteTimeRoot', { periodAMs: 1000, periodBMs: 2000 });
-      const osc = b.addBlock('Oscillator', { waveform: 'oscSin' });
+      const time = b.addBlock('InfiniteTimeRoot');
+      b.setPortDefault(time, 'periodAMs', 1000);
+      b.setPortDefault(time, 'periodBMs', 2000);
+      const osc = b.addBlock('Oscillator');
+      b.setPortDefault(osc, 'waveform', 'oscSin');
       b.wire(time, 'phaseA', osc, 'phase');
     });
 
@@ -266,8 +279,11 @@ describe('Debug Probe Support', () => {
     // Execution order matters: signals must be evaluated before fields materialize
     // Use a simple patch that compiles - just TimeRoot + Oscillator
     const patch = buildPatch((b) => {
-      const time = b.addBlock('InfiniteTimeRoot', { periodAMs: 1000, periodBMs: 2000 });
-      const osc = b.addBlock('Oscillator', { waveform: 'oscSin' });
+      const time = b.addBlock('InfiniteTimeRoot');
+      b.setPortDefault(time, 'periodAMs', 1000);
+      b.setPortDefault(time, 'periodBMs', 2000);
+      const osc = b.addBlock('Oscillator');
+      b.setPortDefault(osc, 'waveform', 'oscSin');
       b.wire(time, 'phaseA', osc, 'phase');
     });
 
@@ -303,13 +319,12 @@ describe('error isolation for unreachable blocks', () => {
   it('compiles successfully when only disconnected blocks have errors', () => {
     // Build a minimal working patch (just TimeRoot)
     const patch = buildPatch((b) => {
-      b.addBlock('InfiniteTimeRoot', {});
+      b.addBlock('InfiniteTimeRoot');
 
       // Add a disconnected Expression block with a syntax error
       // Note: parameter name is 'expression', not 'expr'
-      b.addBlock('Expression', {
-        expression: 'this is not valid +++',  // Syntax error
-      });
+      const expr = b.addBlock('Expression');
+      b.setConfig(expr, 'expression', 'this is not valid +++');  // Syntax error
     });
 
     const result = compile(patch);
@@ -324,12 +339,14 @@ describe('error isolation for unreachable blocks', () => {
   it('excludes errors from disconnected subgraph', () => {
     // Build a patch with disconnected subgraph with errors
     const patch = buildPatch((b) => {
-      b.addBlock('InfiniteTimeRoot', {});
+      b.addBlock('InfiniteTimeRoot');
 
       // Disconnected subgraph with multiple errors
       // Note: parameter name is 'expression', not 'expr'
-      const expr1 = b.addBlock('Expression', { expression: 'error 1 +++' });
-      const expr2 = b.addBlock('Expression', { expression: 'error 2 +++' });
+      const expr1 = b.addBlock('Expression');
+      b.setConfig(expr1, 'expression', 'error 1 +++');
+      const expr2 = b.addBlock('Expression');
+      b.setConfig(expr2, 'expression', 'error 2 +++');
       // Wire them together but not to anything else
       b.wire(expr1, 'out', expr2, 'in0');
     });
@@ -346,14 +363,13 @@ describe('error isolation for unreachable blocks', () => {
   it('emits warnings for unreachable block errors in CompileEnd event', () => {
     // Build a patch with a disconnected block that has an error
     const patch = buildPatch((b) => {
-      const time = b.addBlock('InfiniteTimeRoot', {});
+      const time = b.addBlock('InfiniteTimeRoot');
 
       // Create Expression block with a syntax error but leave it disconnected from any render
       // Note: parameter name is 'expression', not 'expr'
       // Use "in0 +" which is a guaranteed syntax error (incomplete expression)
-      const expr = b.addBlock('Expression', {
-        expression: 'in0 +',  // Incomplete expression - guaranteed syntax error
-      });
+      const expr = b.addBlock('Expression');
+      b.setConfig(expr, 'expression', 'in0 +');  // Incomplete expression - guaranteed syntax error
       // Wire time to the Expression so it actually tries to compile
       b.wire(time, 'tMs', expr, 'in0');
     });
@@ -395,17 +411,24 @@ describe('zipBroadcast cardinality', () => {
     // Reproduces the golden-spiral demo: Const (signal, one) → RenderInstances2D.color (field, many).
     // RenderInstances2D has broadcastPolicy: 'allowZipSig', so this must compile without error.
     const patch = buildPatch((b) => {
-      b.addBlock('InfiniteTimeRoot', { periodAMs: 4000, periodBMs: 120000 });
-      const ellipse = b.addBlock('Ellipse', { rx: 0.02, ry: 0.02 });
-      const array = b.addBlock('Array', { count: 100 });
+      const time = b.addBlock('InfiniteTimeRoot');
+      b.setPortDefault(time, 'periodAMs', 4000);
+      b.setPortDefault(time, 'periodBMs', 120000);
+      const ellipse = b.addBlock('Ellipse');
+      b.setPortDefault(ellipse, 'rx', 0.02);
+      b.setPortDefault(ellipse, 'ry', 0.02);
+      const array = b.addBlock('Array');
+      b.setPortDefault(array, 'count', 100);
       b.wire(ellipse, 'shape', array, 'element');
 
-      const circleLayout = b.addBlock('CircleLayoutUV', { radius: 0.35 });
+      const circleLayout = b.addBlock('CircleLayoutUV');
+      b.setPortDefault(circleLayout, 'radius', 0.35);
       b.wire(array, 'elements', circleLayout, 'elements');
 
-      const color = b.addBlock('Const', { value: { r: 0.9, g: 0.7, b: 0.5, a: 1.0 } });
+      const color = b.addBlock('Const');
+      b.setConfig(color, 'value', { r: 0.9, g: 0.7, b: 0.5, a: 1.0 });
 
-      const render = b.addBlock('RenderInstances2D', {});
+      const render = b.addBlock('RenderInstances2D');
       b.wire(circleLayout, 'position', render, 'pos');
       b.wire(color, 'out', render, 'color');
       b.wire(ellipse, 'shape', render, 'shape');
