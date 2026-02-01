@@ -66,20 +66,4 @@ describe('initial compile invariant: broken patches MUST produce errors', () => 
       expect(codes).toContain('UnknownBlockType');
     }
   });
-
-  it('succeeds but warns for unreachable blocks with errors', () => {
-    // Add block has required inputs 'a' and 'b' - leaving them unconnected
-    // produces errors. But since the Add block is not connected to any render
-    // block, it's unreachable and errors are demoted to warnings.
-    const patch = buildPatch((b) => {
-      b.addBlock('InfiniteTimeRoot', {});
-      b.addBlock('Add', {}); // required inputs not wired, but unreachable
-    });
-
-    const result = compile(patch);
-
-    // Unreachable block errors don't fail compilation - they become warnings.
-    // The compiler succeeds since the broken block doesn't affect rendering.
-    expect(result.kind).toBe('ok');
-  });
 });

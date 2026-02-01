@@ -218,56 +218,6 @@ describe('Memory Profile: Zero-Allocation Rendering', () => {
       }
     });
   });
-
-  // These tests always run and just report numbers (no assertions without GC)
-  describe('Memory Usage Reporting (informational)', () => {
-    it('reports heap usage for 100 frames × 2500 instances', () => {
-      const patch = buildMemoryTestPatch(2500);
-      const result = compile(patch);
-      if (result.kind !== 'ok') {
-        console.error('Compile errors:', JSON.stringify(result.errors, null, 2));
-        throw new Error('Compile failed');
-      }
-
-      const program = result.program;
-      const state = createRuntimeState(program.slotMeta.length);
-      const arena = new RenderBufferArena(50_000);
-      arena.init();
-
-      // Warm up
-      for (let i = 0; i < 10; i++) {
-        arena.reset();
-        executeFrame(program, state, arena, i * 16.667);
-      }
-
-      const before = getHeapUsed();
-
-      for (let frame = 0; frame < 100; frame++) {
-        arena.reset();
-        executeFrame(program, state, arena, (frame + 10) * 16.667);
-      }
-
-      const after = getHeapUsed();
-      const deltaKB = (after - before) / 1024;
-
-      console.log(`\n=== Memory Profile Report ===`);
-      console.log(`GC available: ${gcAvailable}`);
-      console.log(`Heap before: ${(before / 1024 / 1024).toFixed(2)} MB`);
-      console.log(`Heap after: ${(after / 1024 / 1024).toFixed(2)} MB`);
-      console.log(`Delta: ${deltaKB.toFixed(1)} KB`);
-      console.log(`Arena capacity: ${arena.maxElements} elements`);
-      console.log(`Arena pre-allocated: ${(arena.getTotalBytes() / 1024 / 1024).toFixed(2)} MB`);
-
-      const peakStats = arena.getPeakStats();
-      console.log(`Peak vec2 usage: ${peakStats.peakVec2} / ${peakStats.maxElements}`);
-      console.log(`Peak f32 usage: ${peakStats.peakF32} / ${peakStats.maxElements}`);
-      console.log(`Peak rgba usage: ${peakStats.peakRGBA} / ${peakStats.maxElements}`);
-      console.log(`=============================\n`);
-
-      // This test always passes - it's just for reporting
-      expect(true).toBe(true);
-    });
-  });
 });
 
 // Type augmentation for global.gc

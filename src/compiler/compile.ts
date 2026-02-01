@@ -18,12 +18,11 @@ import { normalize, type NormalizedPatch } from '../graph/normalize';
 import type { CompiledProgramIR, SlotMetaEntry, ValueSlot, FieldSlotEntry, OutputSpecIR } from './ir/program';
 import type { UnlinkedIRFragments } from './backend/lower-blocks';
 import type { ScheduleIR } from './backend/schedule-program';
-import type { FieldExpr, FieldExprId, InstanceId } from './ir/types';
-import { payloadStride } from './ir/signalExpr';
 import type { AcyclicOrLegalGraph } from './ir/patches';
 import { convertCompileErrorsToDiagnostics } from './diagnosticConversion';
 import type { EventHub } from '../events/EventHub';
-import { canonicalType, requireManyInstance } from '../core/canonical-types';
+import { canonicalType, requireManyInstance, strideOf } from '../core/canonical-types';
+import type { ValueExpr, ValueExprId } from './ir/value-expr';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../core/canonical-types';
 // debugService import removed for strict compiler isolation (One Source of Truth)
 import { compilationInspector } from '../services/CompilationInspectorService';
@@ -477,11 +476,9 @@ function convertLinkedIRToProgram(
   scheduleIR: ScheduleIR,
   acyclicPatch: AcyclicOrLegalGraph
 ): CompiledProgramIR {
-  // Extract data from the IR builder
+  // Extract data from the IR builder (ValueExpr-only)
   const builder = unlinkedIR.builder;
-  const signalNodes = builder.getSigExprs();
-  const fieldNodes = builder.getFieldExprs();
-  const eventNodes = builder.getEventExprs();
+  const valueExprNodes = builder.getValueExprs();
 
   // Build fieldSlotRegistry from blockOutputs (field outputs that can be materialized on demand)
   const fieldSlotRegistry = new Map<ValueSlot, FieldSlotEntry>();
@@ -490,7 +487,7 @@ function convertLinkedIRToProgram(
     for (const [, outputs] of unlinkedIR.blockOutputs.entries()) {
       for (const [, ref] of outputs.entries()) {
         if (ref.k === 'field') {
-          const instanceId = inferFieldInstanceFromExprs(ref.id, fieldNodes);
+          const instanceId = inferFieldInstanceFromValueExprs(ref.id as unknown as ValueExprId, valueExprNodes);
           if (instanceId) {
             fieldSlotRegistry.set(ref.slot, { fieldId: ref.id, instanceId });
             fieldSlotSet.add(ref.slot as number);
@@ -530,7 +527,7 @@ function convertLinkedIRToProgram(
 
     // Use stride from slotInfo (which comes from registered type), fallback to computing from payload
     // Objects/fields have stride=1 since they store a single reference
-    const stride = storage === 'object' ? 1 : (slotInfo?.stride ?? payloadStride(type.payload));
+    const stride = storage === 'object' ? 1 : (slotInfo?.stride ?? strideOf(type.payload));
 
     // Offset must increment by stride, not 1 - multi-component types (color=4, vec3=3, vec2=2) need space
     const offset = storageOffsets[storage];
@@ -649,13 +646,10 @@ function convertLinkedIRToProgram(
     throw new Error('E_CAMERA_MULTIPLE: Only one Camera block is permitted.');
   }
 
-  // Build the base program with legacy tables
-  const baseProgram: CompiledProgramIR = {
+  // Build the program (ValueExpr-only)
+  const program: CompiledProgramIR = {
     irVersion: 1,
-    signalExprs: { nodes: signalNodes },
-    fieldExprs: { nodes: fieldNodes },
-    eventExprs: { nodes: eventNodes },
-    valueExprs: { nodes: [], sigToValue: [], fieldToValue: [], eventToValue: [] }, // Placeholder
+    valueExprs: { nodes: valueExprNodes },
     constants: { json: [] },
     schedule: scheduleIR,
     outputs,
@@ -665,41 +659,23 @@ function convertLinkedIRToProgram(
     renderGlobals, // NEW - Camera system: populated from builder
   };
 
-  // Lower legacy expressions to ValueExpr table
-  const valueExprs = lowerToValueExprs(baseProgram);
-
-  // Return final program with valueExprs populated
-  return {
-    ...baseProgram,
-    valueExprs,
-  };
+  return program;
 }
 
+
 /**
- * Infer instance from a field expression by walking the expression tree.
+ * Infer instance from a field ValueExpr.
  * Used to build fieldSlotRegistry for demand-driven materialization.
  */
-function inferFieldInstanceFromExprs(
-  fieldId: FieldExprId,
-  fieldExprs: readonly FieldExpr[]
-): InstanceId | undefined {
-  const expr = fieldExprs[fieldId as number];
+function inferFieldInstanceFromValueExprs(
+  fieldId: ValueExprId,
+  valueExprs: readonly ValueExpr[]
+): any {
+  const expr = valueExprs[fieldId as unknown as number];
   if (!expr) return undefined;
 
-  switch (expr.kind) {
-    case 'intrinsic':
-    case 'stateRead':
-      return requireManyInstance(expr.type).instanceId;
-    case 'map':
-      return requireManyInstance(expr.type).instanceId;
-    case 'zip':
-      return requireManyInstance(expr.type).instanceId;
-    case 'zipSig':
-      return requireManyInstance(expr.type).instanceId;
-    case 'broadcast':
-    case 'const':
-      return undefined;
-    default:
-      return undefined;
-  }
+  // Only field-extent expressions have a meaningful instance.
+  if (expr.type.extent.cardinality !== 'many') return undefined;
+
+  return requireManyInstance(expr.type).instanceId;
 }
