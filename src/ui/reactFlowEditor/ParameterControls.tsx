@@ -335,6 +335,14 @@ const DefaultSourceSlider: React.FC<DefaultSourceSliderProps> = observer(({
         },
       };
       patch.updateInputPort(blockId, portId, { defaultSource: updatedDefaultSource });
+
+      // Also sync block.params if a param with this port's name exists.
+      // Some blocks (e.g., Array) read config params in their lower() function,
+      // so the block param must stay in sync with the default source value.
+      const block = patch.blocks.get(blockId);
+      if (block && portId in block.params) {
+        patch.updateBlockParams(blockId, { [portId]: val });
+      }
     }, 100);
 
     setUpdateTimer(timer);

@@ -1793,10 +1793,14 @@ const ParamsEditor = observer(function ParamsEditor({ block, typeInfo, patch }: 
   const params = block.params || {};
   const paramKeys = Object.keys(params);
 
-  // Filter out internal params that shouldn't be shown
+  // Filter out params that shouldn't be shown in the inspector
   const editableParams = paramKeys.filter(key => {
     // Hide payloadType - it's set by normalizer
     if (key === 'payloadType') return false;
+    // Hide params that are exposed as ports — those are already editable
+    // on the node via DefaultSourceControl (single source of truth)
+    const inputDef = typeInfo.inputs[key];
+    if (inputDef && inputDef.exposedAsPort !== false) return false;
     return true;
   });
 

@@ -5,78 +5,24 @@
  * Useful for creating chained animations or sequenced events.
  */
 
-import type { CompositeBlockDef } from '../../composite-types';
-import { internalBlockId } from '../../composite-types';
+import { composite } from '../builder';
 
-/**
- * DelayedTrigger composite definition.
- * SampleHold → UnitDelay creates a 1-frame delayed latch.
- */
-export const DelayedTriggerComposite: CompositeBlockDef = {
-  type: 'DelayedTrigger',
-  form: 'composite',
-  label: 'Delayed Trigger',
-  category: 'composite',
-  capability: 'state', // Both SampleHold and UnitDelay are stateful
-  description: 'One-frame delayed sample-and-hold - for sequenced animations',
-  readonly: true,
-
-  internalBlocks: new Map([
-    [
-      internalBlockId('sampleHold'),
-      {
-        type: 'SampleHold',
-        displayName: 'Sample & Hold',
-      },
-    ],
-    [
-      internalBlockId('delay'),
-      {
-        type: 'UnitDelay',
-        displayName: '1-Frame Delay',
-      },
-    ],
-  ]),
-
-  internalEdges: [
-    {
-      fromBlock: internalBlockId('sampleHold'),
-      fromPort: 'out',
-      toBlock: internalBlockId('delay'),
-      toPort: 'in',
-    },
-  ],
-
-  exposedInputs: [
-    {
-      externalId: 'value',
-      internalBlockId: internalBlockId('sampleHold'),
-      internalPortId: 'value',
-      externalLabel: 'Value',
-    },
-    {
-      externalId: 'trigger',
-      internalBlockId: internalBlockId('sampleHold'),
-      internalPortId: 'trigger',
-      externalLabel: 'Trigger',
-    },
-  ],
-
-  exposedOutputs: [
-    {
-      externalId: 'out',
-      internalBlockId: internalBlockId('delay'),
-      internalPortId: 'out',
-      externalLabel: 'Output (Delayed)',
-    },
-    {
-      externalId: 'immediate',
-      internalBlockId: internalBlockId('sampleHold'),
-      internalPortId: 'out',
-      externalLabel: 'Immediate',
-    },
-  ],
-
-  inputs: {},
-  outputs: {},
-};
+//  composite(type, label?) — type must be unique across all registered blocks
+export const DelayedTriggerComposite = composite('DelayedTrigger', 'Delayed Trigger')
+  //  .desc(text) — optional, no effect on compilation
+  .desc('One-frame delayed sample-and-hold - for sequenced animations')
+  //  .capability(cap) — 'pure' | 'state' | 'render' | 'io'. Both SampleHold and UnitDelay hold state
+  .capability('state')
+  //  .block(id, type, params?) — no params needed here; SampleHold and UnitDelay use port defaults
+  .block('sampleHold', 'SampleHold')     // latches value on trigger
+  .block('delay', 'UnitDelay')           // delays output by one frame
+  //  .connect(from, to) — "blockId.portId" → "blockId.portId"
+  .connect('sampleHold.out', 'delay.in') // feed latched value into delay
+  //  .in(externalId, ref, label?) — label auto-titlecases externalId when omitted ("value" → "Value")
+  .in('value', 'sampleHold.value')       // expose the value to latch
+  .in('trigger', 'sampleHold.trigger')   // expose the trigger signal
+  //  .out(externalId, ref, label?) — label can contain any string, including punctuation
+  .out('out', 'delay.out', 'Output (Delayed)') // expose delayed result
+  .out('immediate', 'sampleHold.out')    // expose un-delayed latch (label auto → "Immediate")
+  //  .build() — fails if no blocks or no exposed outputs
+  .build();

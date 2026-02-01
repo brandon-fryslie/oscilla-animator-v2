@@ -1044,7 +1044,6 @@ export class PatchStore {
    * @param hcl - HCL text to deserialize
    * @throws Error if total parse failure
    */
-  @action
   loadFromHCL(hcl: string): void {
     const result = importPatchFromHCL(hcl);
     if (!result) {

@@ -5,153 +5,34 @@
  * Formula: 1 - |2*phase - 1| = triangle wave
  */
 
-import type { CompositeBlockDef } from '../../composite-types';
-import { internalBlockId } from '../../composite-types';
+import { composite } from '../builder';
 
-/**
- * PingPong composite definition.
- * Phasor → math operations → triangle wave output.
- *
- * The math is: out = 1 - |2*phase - 1|
- * When phase goes 0→1, output goes 0→1→0
- */
-export const PingPongComposite: CompositeBlockDef = {
-  type: 'PingPong',
-  form: 'composite',
-  label: 'Ping Pong',
-  category: 'composite',
-  capability: 'state', // Phasor is stateful
-  description: 'Triangle wave (0→1→0) - bouncing animation from Phasor',
-  readonly: true,
-
-  internalBlocks: new Map([
-    [
-      internalBlockId('phasor'),
-      {
-        type: 'Phasor',
-        displayName: 'Phase',
-      },
-    ],
-    [
-      internalBlockId('two'),
-      {
-        type: 'Const',
-        displayName: '2',
-        params: { value: 2 },
-      },
-    ],
-    [
-      internalBlockId('one'),
-      {
-        type: 'Const',
-        displayName: '1',
-        params: { value: 1 },
-      },
-    ],
-    [
-      internalBlockId('mult'),
-      {
-        type: 'Multiply',
-        displayName: '2 * phase',
-      },
-    ],
-    [
-      internalBlockId('sub1'),
-      {
-        type: 'Subtract',
-        displayName: '2*phase - 1',
-      },
-    ],
-    [
-      internalBlockId('expr'),
-      {
-        type: 'Expression',
-        displayName: 'abs',
-        params: { expression: 'abs(a)' },
-      },
-    ],
-    [
-      internalBlockId('sub2'),
-      {
-        type: 'Subtract',
-        displayName: '1 - |...|',
-      },
-    ],
-  ]),
-
-  internalEdges: [
-    // Phasor → Multiply (phase * 2)
-    {
-      fromBlock: internalBlockId('phasor'),
-      fromPort: 'out',
-      toBlock: internalBlockId('mult'),
-      toPort: 'a',
-    },
-    {
-      fromBlock: internalBlockId('two'),
-      fromPort: 'out',
-      toBlock: internalBlockId('mult'),
-      toPort: 'b',
-    },
-    // Multiply → Subtract (2*phase - 1)
-    {
-      fromBlock: internalBlockId('mult'),
-      fromPort: 'out',
-      toBlock: internalBlockId('sub1'),
-      toPort: 'a',
-    },
-    {
-      fromBlock: internalBlockId('one'),
-      fromPort: 'out',
-      toBlock: internalBlockId('sub1'),
-      toPort: 'b',
-    },
-    // Subtract → Expression (abs)
-    {
-      fromBlock: internalBlockId('sub1'),
-      fromPort: 'out',
-      toBlock: internalBlockId('expr'),
-      toPort: 'a',
-    },
-    // 1 - |2*phase - 1|
-    {
-      fromBlock: internalBlockId('one'),
-      fromPort: 'out',
-      toBlock: internalBlockId('sub2'),
-      toPort: 'a',
-    },
-    {
-      fromBlock: internalBlockId('expr'),
-      fromPort: 'out',
-      toBlock: internalBlockId('sub2'),
-      toPort: 'b',
-    },
-  ],
-
-  exposedInputs: [
-    {
-      externalId: 'frequency',
-      internalBlockId: internalBlockId('phasor'),
-      internalPortId: 'frequency',
-      externalLabel: 'Frequency',
-    },
-  ],
-
-  exposedOutputs: [
-    {
-      externalId: 'out',
-      internalBlockId: internalBlockId('sub2'),
-      internalPortId: 'out',
-      externalLabel: 'Output',
-    },
-    {
-      externalId: 'phase',
-      internalBlockId: internalBlockId('phasor'),
-      internalPortId: 'out',
-      externalLabel: 'Raw Phase',
-    },
-  ],
-
-  inputs: {},
-  outputs: {},
-};
+//  composite(type, label?) — 'PingPong' is the block type, 'Ping Pong' is the display label
+export const PingPongComposite = composite('PingPong', 'Ping Pong')
+  //  .desc(text) — optional human-readable description
+  .desc('Triangle wave (0→1→0) - bouncing animation from Phasor')
+  //  .capability(cap) — 'pure' | 'state' | 'render' | 'io'. Phasor accumulates phase across frames
+  .capability('state')
+  //  .block(id, type, params?) — id is a local name used in .connect/.in/.out refs. params is optional Record<string, unknown>
+  .block('phasor', 'Phasor')             // 0→1 sawtooth phase
+  .block('two', 'Const', { value: 2 })   // constant 2
+  .block('one', 'Const', { value: 1 })   // constant 1
+  .block('mult', 'Multiply')             // 2 * phase
+  .block('sub1', 'Subtract')             // 2*phase - 1
+  .block('expr', 'Expression', { expression: 'abs(a)' }) // |2*phase - 1|
+  .block('sub2', 'Subtract')             // 1 - |2*phase - 1|
+  //  .connect(from, to) — both args are "blockId.portId" strings
+  .connect('phasor.out', 'mult.a')       // phase → multiply
+  .connect('two.out', 'mult.b')          // 2 → multiply
+  .connect('mult.out', 'sub1.a')         // 2*phase → subtract
+  .connect('one.out', 'sub1.b')          // 1 → subtract
+  .connect('sub1.out', 'expr.a')         // (2*phase - 1) → abs
+  .connect('one.out', 'sub2.a')          // 1 → final subtract
+  .connect('expr.out', 'sub2.b')         // |...| → final subtract
+  //  .in(externalId, ref, label?) — externalId is the port name users see, ref is "blockId.portId" internally
+  .in('frequency', 'phasor.frequency')   // expose oscillation speed
+  //  .out(externalId, ref, label?) — same as .in(). label defaults to titleCase(externalId) if omitted
+  .out('out', 'sub2.out', 'Output')      // expose triangle wave (0→1→0)
+  .out('phase', 'phasor.out', 'Raw Phase') // expose raw sawtooth (0→1)
+  //  .build() — validates and returns CompositeBlockDef
+  .build();

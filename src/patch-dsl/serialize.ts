@@ -9,6 +9,7 @@
  * - Block name collision handling (append _2, _3 suffixes)
  * - Skip derived edges (only emit user edges)
  * - Pretty-printed with 2-space indentation
+ * - Quote param keys that aren't valid identifiers
  */
 
 import type { Patch, Block, Edge, InputPort, LensAttachment, VarargConnection } from '../graph/Patch';
@@ -113,6 +114,38 @@ export function toIdentifier(displayName: string): string {
 }
 
 /**
+ * Check if a string is a valid HCL identifier.
+ * Valid identifiers start with [a-zA-Z_] and continue with [a-zA-Z0-9_-].
+ *
+ * @param key - The string to check
+ * @returns True if valid identifier, false otherwise
+ */
+function isValidIdentifier(key: string): boolean {
+  if (key.length === 0) return false;
+  // Must start with letter or underscore
+  if (!/[a-zA-Z_]/.test(key[0])) return false;
+  // Rest must be alphanumeric, underscore, or dash
+  if (!/^[a-zA-Z_][a-zA-Z0-9_-]*$/.test(key)) return false;
+  return true;
+}
+
+/**
+ * Emit a key for an attribute or object entry.
+ * If the key is not a valid identifier, quote it.
+ *
+ * @param key - The key to emit
+ * @returns Quoted or unquoted key string
+ */
+function emitKey(key: string): string {
+  if (isValidIdentifier(key)) {
+    return key;
+  } else {
+    // Quote the key and escape any quotes inside it
+    return `"${key.replace(/"/g, '\\"')}"`;
+  }
+}
+
+/**
  * Emit a single block.
  *
  * @param block - The block to emit
@@ -129,7 +162,7 @@ function emitBlock(block: Block, nameMap: Map<BlockId, string>, indent: number):
   // Emit params (sorted by key, excluding reserved fields)
   const paramKeys = Object.keys(block.params).sort();
   for (const key of paramKeys) {
-    output += `${ind}  ${key} = ${emitValue(block.params[key])}\n`;
+    output += `${ind}  ${emitKey(key)} = ${emitValue(block.params[key])}\n`;
   }
 
   // Emit role (if not default 'user')
@@ -251,7 +284,7 @@ function emitLenses(_portId: string, lenses: readonly LensAttachment[], indent: 
     if (lens.params) {
       const paramKeys = Object.keys(lens.params).sort();
       for (const key of paramKeys) {
-        output += `${ind}  ${key} = ${emitValue(lens.params[key])}\n`;
+        output += `${ind}  ${emitKey(key)} = ${emitValue(lens.params[key])}\n`;
       }
     }
 
@@ -321,7 +354,7 @@ function emitValue(value: unknown): string {
   if (typeof value === 'object') {
     const entries = Object.entries(value as Record<string, unknown>)
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([k, v]) => `${k} = ${emitValue(v)}`)
+      .map(([k, v]) => `${emitKey(k)} = ${emitValue(v)}`)
       .join(', ');
     return `{ ${entries} }`;
   }

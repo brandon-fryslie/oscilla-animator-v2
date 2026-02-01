@@ -45,8 +45,7 @@ registerBlock({
     count: {
       label: 'Count',
       type: canonicalType(INT),
-      value: 100,
-      defaultSource: defaultSourceConst(100),
+      defaultSource: defaultSourceConst(500),
       exposedAsPort: true,
       uiHint: { kind: 'slider', min: 1, max: 10000, step: 1 },
     },
@@ -58,7 +57,7 @@ registerBlock({
     active: { label: 'Active', type: canonicalField(BOOL, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
   },
   lower: ({ ctx, inputsById, config }) => {
-    const count = (config?.count as number) ?? 100;
+    const count = (config?.count as number);
     const elementInput = inputsById.element;
 
     // Create instance (layout is now handled via field kernels, not instance metadata)

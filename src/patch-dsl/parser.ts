@@ -10,10 +10,10 @@
  * block        := IDENT label* LBRACE body RBRACE
  * label        := STRING
  * body         := (attribute | block)*
- * attribute    := IDENT EQUALS value
- * value        := NUMBER | STRING | BOOL | reference | object | list
+ * attribute    := (IDENT | STRING) EQUALS value
+ * value        := NUMBER | STRING | BOOL | NULL | reference | object | list
  * reference    := IDENT (DOT IDENT)*
- * object       := LBRACE (IDENT EQUALS value (COMMA? IDENT EQUALS value)*)? RBRACE
+ * object       := LBRACE ((IDENT | STRING) EQUALS value (COMMA? (IDENT | STRING) EQUALS value)*)? RBRACE
  * list         := LBRACKET (value (COMMA value)*)? RBRACKET
  */
 
@@ -161,11 +161,13 @@ class Parser {
 
   /**
    * Parse attribute.
-   * Grammar: attribute := IDENT EQUALS value
+   * Grammar: attribute := (IDENT | STRING) EQUALS value
+   * Attributes can have quoted keys to support special characters in param names.
    */
   private parseAttribute(): { key: string; value: HclValue } | null {
-    if (!this.check(TokenKind.IDENT)) {
-      this.addError('Expected attribute name (identifier)', this.peek().pos);
+    // Accept both IDENT and STRING as attribute key
+    if (!this.check(TokenKind.IDENT) && !this.check(TokenKind.STRING)) {
+      this.addError('Expected attribute name (identifier or quoted string)', this.peek().pos);
       this.recoverToNewline();
       return null;
     }
@@ -189,7 +191,7 @@ class Parser {
 
   /**
    * Parse value.
-   * Grammar: value := NUMBER | STRING | BOOL | reference | object | list
+   * Grammar: value := NUMBER | STRING | BOOL | NULL | reference | object | list
    */
   private parseValue(): HclValue | null {
     // Number literal
@@ -208,6 +210,11 @@ class Parser {
     if (this.match(TokenKind.BOOL)) {
       const token = this.previous();
       return { kind: 'bool', value: token.value === 'true' };
+    }
+
+    // Null literal
+    if (this.match(TokenKind.NULL)) {
+      return { kind: 'null' };
     }
 
     // Object
@@ -255,7 +262,8 @@ class Parser {
 
   /**
    * Parse object.
-   * Grammar: object := LBRACE (IDENT EQUALS value (COMMA? IDENT EQUALS value)*)? RBRACE
+   * Grammar: object := LBRACE ((IDENT | STRING) EQUALS value (COMMA? (IDENT | STRING) EQUALS value)*)? RBRACE
+   * Object keys can be quoted strings to support special characters.
    */
   private parseObject(): HclValue | null {
     if (!this.match(TokenKind.LBRACE)) {
@@ -272,7 +280,7 @@ class Parser {
     }
 
     // Parse first entry
-    if (this.check(TokenKind.IDENT)) {
+    if (this.check(TokenKind.IDENT) || this.check(TokenKind.STRING)) {
       const key = this.advance().value;
       if (!this.match(TokenKind.EQUALS)) {
         this.addError("Expected '=' after object key", this.peek().pos);
@@ -297,7 +305,7 @@ class Parser {
           break; // Trailing comma/newline before closing brace
         }
 
-        if (!this.check(TokenKind.IDENT)) {
+        if (!this.check(TokenKind.IDENT) && !this.check(TokenKind.STRING)) {
           break; // End of object entries
         }
 
@@ -385,15 +393,26 @@ class Parser {
 
   // Error recovery
   private recoverToBlockEnd(): void {
-    // Skip tokens until we find RBRACE or EOF
-    let depth = 1; // We're already inside a block
-    while (!this.isAtEnd() && depth > 0) {
+    // Skip tokens until we find balanced RBRACE or EOF
+    // Track both brace depth and bracket depth to avoid escaping list/object containers
+    let braceDepth = 1; // We're already inside a block
+    let bracketDepth = 0;
+
+    while (!this.isAtEnd() && (braceDepth > 0 || bracketDepth > 0)) {
       if (this.check(TokenKind.LBRACE)) {
-        depth++;
+        braceDepth++;
       } else if (this.check(TokenKind.RBRACE)) {
-        depth--;
-        if (depth === 0) {
+        braceDepth--;
+        if (braceDepth === 0 && bracketDepth === 0) {
           this.advance(); // Consume the closing brace
+          break;
+        }
+      } else if (this.check(TokenKind.LBRACKET)) {
+        bracketDepth++;
+      } else if (this.check(TokenKind.RBRACKET)) {
+        bracketDepth--;
+        // Don't consume past container boundaries
+        if (bracketDepth < 0) {
           break;
         }
       }

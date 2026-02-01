@@ -12,7 +12,7 @@ export interface AppSettings extends Record<string, unknown> {
 
 export const appSettings = defineSettings<AppSettings>('app', {
   defaults: {
-    defaultPatchIndex: 5, // Default to Shape Kaleidoscope (matches DEFAULT_PATCH_INDEX in main.ts)
+    defaultPatchIndex: 0, // Default to Simple (matches DEFAULT_PATCH_INDEX in main.ts)
   },
   ui: {
     label: 'Application',
@@ -24,7 +24,7 @@ export const appSettings = defineSettings<AppSettings>('app', {
         description: 'Patch to load on startup when no saved patch exists (requires page reload)',
         control: 'number',
         min: 0,
-        max: 6,
+        max: 9,
         step: 1,
       },
     },

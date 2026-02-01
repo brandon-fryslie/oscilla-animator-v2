@@ -18,12 +18,13 @@ export type Position = ExprPosition;
 
 /**
  * HCL value types (right side of `=`).
- * Discriminated union with 6 variants.
+ * Discriminated union with 7 variants.
  */
 export type HclValue =
   | HclNumberValue
   | HclStringValue
   | HclBoolValue
+  | HclNullValue
   | HclReferenceValue
   | HclObjectValue
   | HclListValue;
@@ -50,6 +51,13 @@ export interface HclStringValue {
 export interface HclBoolValue {
   readonly kind: 'bool';
   readonly value: boolean;
+}
+
+/**
+ * Null literal value.
+ */
+export interface HclNullValue {
+  readonly kind: 'null';
 }
 
 /**

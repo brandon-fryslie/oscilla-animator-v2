@@ -316,15 +316,15 @@ export function executeFrame(
         // ValueExpr-only materialization (cutover complete)
         const veId = step.field;
 
-        const fieldNode = valueExprs[veId as number];
-        const instanceIdStr = String(requireManyInstance(fieldNode.type).instanceId);
-        const instanceDecl = instances.get(makeInstanceId(instanceIdStr));
+        // Use the instanceId from the schedule step (set by schedule-program.ts)
+        // rather than deriving from the ValueExpr type, which may have a stale placeholder
+        const instanceDecl = instances.get(step.instanceId);
         const count = instanceDecl && typeof instanceDecl.count === 'number' ? instanceDecl.count : 0;
 
         const buffer = materializeValueExpr(
           veId,
           program.valueExprs,
-          makeInstanceId(instanceIdStr),
+          step.instanceId,
           count,
           state,
           program,
@@ -494,7 +494,6 @@ export function executeFrame(
         const veId = entry.fieldId as any;
         if (veId === undefined) continue;
 
-        const fieldNode = valueExprs[veId as number];
         const instanceIdStr = entry.instanceId as unknown as string;
         const instanceDecl = instances.get(makeInstanceId(instanceIdStr));
         const count = instanceDecl && typeof instanceDecl.count === 'number' ? instanceDecl.count : 0;

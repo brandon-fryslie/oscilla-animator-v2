@@ -198,7 +198,6 @@ function fillBuffer(
       // Construct a multi-component field from scalar component fields.
       // Each component is a scalar field (stride 1).
       // Output is a field with stride = components.length (vec2, vec3, color).
-      const out = buffer as Float32Array;
       const componentBufs: Float32Array[] = [];
       for (const compId of expr.components) {
         const compBuf = materializeValueExpr(
@@ -207,9 +206,19 @@ function fillBuffer(
         componentBufs.push(compBuf);
       }
       const outStride = stride;
-      for (let i = 0; i < count; i++) {
-        for (let c = 0; c < componentBufs.length && c < outStride; c++) {
-          out[i * outStride + c] = componentBufs[c][i];
+      if (buffer instanceof Uint8ClampedArray) {
+        // Color output: convert float [0,1] to uint8 [0,255]
+        for (let i = 0; i < count; i++) {
+          for (let c = 0; c < componentBufs.length && c < outStride; c++) {
+            buffer[i * outStride + c] = Math.round(componentBufs[c][i] * 255);
+          }
+        }
+      } else {
+        const out = buffer as Float32Array;
+        for (let i = 0; i < count; i++) {
+          for (let c = 0; c < componentBufs.length && c < outStride; c++) {
+            out[i * outStride + c] = componentBufs[c][i];
+          }
         }
       }
       break;
@@ -434,11 +443,33 @@ function fillKernel(
 
   switch (expr.kernelKind) {
     case 'broadcast': {
-      // Evaluate signal, fill all lanes with result
-      const sigValue = evaluateValueExprSignal(expr.signal, table.nodes, state);
-      for (let i = 0; i < count; i++) {
-        for (let c = 0; c < stride; c++) {
-          buf[i * stride + c] = sigValue;
+      if (expr.signalComponents && expr.signalComponents.length > 1) {
+        // Multi-component broadcast (vec2, vec3, color)
+        // Evaluate each component signal separately
+        const componentValues = expr.signalComponents.map(
+          compId => evaluateValueExprSignal(compId, table.nodes, state)
+        );
+        if (buffer instanceof Uint8ClampedArray) {
+          // Color: convert float [0,1] to uint8 [0,255]
+          for (let i = 0; i < count; i++) {
+            for (let c = 0; c < componentValues.length; c++) {
+              buffer[i * stride + c] = Math.round(componentValues[c] * 255);
+            }
+          }
+        } else {
+          for (let i = 0; i < count; i++) {
+            for (let c = 0; c < componentValues.length; c++) {
+              buf[i * stride + c] = componentValues[c];
+            }
+          }
+        }
+      } else {
+        // Scalar broadcast: fill all lanes with single value
+        const sigValue = evaluateValueExprSignal(expr.signal, table.nodes, state);
+        for (let i = 0; i < count; i++) {
+          for (let c = 0; c < stride; c++) {
+            buf[i * stride + c] = sigValue;
+          }
         }
       }
       break;
@@ -549,7 +580,7 @@ function applyZip(
   fn: PureFn,
   count: number,
   stride: number,
-  instanceId: InstanceId,
+  _instanceId: InstanceId,
   program: CompiledProgramIR
 ): void {
   if (fn.kind === 'opcode') {
@@ -602,7 +633,7 @@ function applyZipSig(
   fn: PureFn,
   count: number,
   stride: number,
-  instanceId: InstanceId,
+  _instanceId: InstanceId,
   program: CompiledProgramIR
 ): void {
   if (fn.kind === 'opcode') {

@@ -12,7 +12,7 @@
  * - Duplicate names → rename with suffix, add warning
  */
 
-import type { Patch, Block, Edge, Endpoint, InputPort, OutputPort } from '../graph/Patch';
+import type { Patch, Block, Edge, Endpoint, InputPort, OutputPort, VarargConnection, LensAttachment } from '../graph/Patch';
 import type { HclDocument, HclBlock, HclValue } from './ast';
 import { PatchDslError, PatchDslWarning } from './errors';
 import { normalizeCanonicalName } from '../core/canonical-name';
@@ -176,8 +176,78 @@ function processBlock(
     }
   }
 
-  // TODO: Process nested blocks for port overrides, varargs, lenses
-  // For now, just create basic block structure
+  // Process nested blocks for port overrides, varargs, lenses
+  for (const child of hclBlock.children) {
+    if (child.type === 'port' && child.labels.length === 1) {
+      // Port override block
+      const portId = child.labels[0];
+      const port = inputPorts.get(portId);
+      if (port) {
+        // Create new port object with overrides (readonly fields require replacement)
+        const combineModeAttr = child.attributes.combineMode;
+        const defaultSourceAttr = child.attributes.defaultSource;
+        
+        const newPort: InputPort = {
+          ...port,
+          ...(combineModeAttr ? { combineMode: convertHclValue(combineModeAttr) as 'last' | 'sum' } : {}),
+          ...(defaultSourceAttr ? { defaultSource: convertHclValue(defaultSourceAttr) as any } : {}),
+        };
+        inputPorts.set(portId, newPort);
+      } else {
+        warnings.push(new PatchDslWarning(`Port override for unknown port "${portId}"`, child.pos));
+      }
+    } else if (child.type === 'vararg' && child.labels.length === 1) {
+      // Vararg connections block
+      const portId = child.labels[0];
+      const port = inputPorts.get(portId);
+      if (port) {
+        const connections: VarargConnection[] = [];
+        for (const connectBlock of child.children.filter(b => b.type === 'connect')) {
+          const sourceAddressAttr = connectBlock.attributes.sourceAddress;
+          const aliasAttr = connectBlock.attributes.alias;
+          const sortKeyAttr = connectBlock.attributes.sortKey;
+
+          if (sourceAddressAttr) {
+            connections.push({
+              sourceAddress: convertHclValue(sourceAddressAttr) as string,
+              alias: aliasAttr ? convertHclValue(aliasAttr) as string : undefined,
+              sortKey: sortKeyAttr ? convertHclValue(sortKeyAttr) as number : connections.length,
+            });
+          }
+        }
+        // Create new port object with varargs (readonly fields require replacement)
+        const newPort: InputPort = {
+          ...port,
+          varargConnections: connections,
+        };
+        inputPorts.set(portId, newPort);
+      } else {
+        warnings.push(new PatchDslWarning(`Vararg for unknown port "${portId}"`, child.pos));
+      }
+    } else if (child.type === 'lens' && child.labels.length === 1) {
+      // Lens attachment block
+      const lensType = child.labels[0];
+      const sourceAddressAttr = child.attributes.sourceAddress;
+
+      if (sourceAddressAttr) {
+        const sourceAddress = convertHclValue(sourceAddressAttr) as string;
+        // Extract lens params (exclude sourceAddress)
+        const lensParams: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(child.attributes)) {
+          if (key !== 'sourceAddress') {
+            lensParams[key] = convertHclValue(value);
+          }
+        }
+
+        // Find the port that this lens attaches to (lens blocks appear after port blocks)
+        // For now, attach to the last port that has been processed
+        // In a more complete implementation, we'd need parent context
+        // Since lens blocks are nested inside block bodies, we need a different approach
+        // TODO: Determine which port this lens attaches to
+        warnings.push(new PatchDslWarning(`Lens deserialization not fully implemented: "${lensType}"`, child.pos));
+      }
+    }
+  }
 
   const block: Block = {
     id: blockId,
@@ -220,12 +290,12 @@ function processEdge(
   const to = resolveReference(toAttr, blockMap);
 
   if (!from) {
-    errors.push(new PatchDslError(`Unresolved from reference: ${JSON.stringify(fromAttr)}`, hclBlock.pos));
+    errors.push(new PatchDslError(`Unresolved from reference: ${formatHclValue(fromAttr)}`, hclBlock.pos));
     return null;
   }
 
   if (!to) {
-    errors.push(new PatchDslError(`Unresolved to reference: ${JSON.stringify(toAttr)}`, hclBlock.pos));
+    errors.push(new PatchDslError(`Unresolved to reference: ${formatHclValue(toAttr)}`, hclBlock.pos));
     return null;
   }
 
@@ -267,6 +337,25 @@ function resolveReference(value: HclValue, blockMap: Map<string, BlockId>): Endp
 }
 
 /**
+ * Format HclValue for error messages.
+ * Returns user-friendly string representation.
+ *
+ * @param value - HCL value node
+ * @returns Formatted string
+ */
+function formatHclValue(value: HclValue): string {
+  switch (value.kind) {
+    case 'number': return value.value.toString();
+    case 'string': return `"${value.value}"`;
+    case 'bool': return value.value.toString();
+    case 'null': return 'null';
+    case 'reference': return value.parts.join('.');
+    case 'object': return '{...}';
+    case 'list': return '[...]';
+  }
+}
+
+/**
  * Convert HCL value to JavaScript value.
  *
  * @param value - HCL value node
@@ -277,6 +366,7 @@ function convertHclValue(value: HclValue): unknown {
     case 'number': return value.value;
     case 'string': return value.value;
     case 'bool': return value.value;
+    case 'null': return null;
     case 'reference': return value.parts.join('.');  // Convert to string
     case 'object': {
       const obj: Record<string, unknown> = {};

@@ -6,8 +6,9 @@
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
-import { canonicalType, payloadStride, type PayloadType, requireInst } from '../../core/canonical-types';
+import { payloadStride, type PayloadType, requireInst } from '../../core/canonical-types';
 import { unitVar, payloadVar, inferType, inferField } from '../../core/inference-types';
+import { rewriteFieldType } from '../layout/_helpers';
 
 /**
  * Payload-Generic, Unit-Generic field broadcast block.
@@ -67,28 +68,37 @@ registerBlock({
   },
   lower: ({ ctx, inputsById }) => {
     // Get resolved payload type from ctx.outTypes (populated from pass1 portTypes)
-    const outType = ctx.outTypes[0];
+    let outType = ctx.outTypes[0];
     if (!outType) {
       throw new Error(`Broadcast block missing resolved output type from pass1`);
     }
-    const payloadType = outType.payload as PayloadType;
-
+    // Rewrite placeholder instanceId with the actual instance from upstream context
+    if (ctx.inferredInstance) {
+      outType = rewriteFieldType(outType, ctx.inferredInstance, ctx.b);
+    }
     const signalValue = inputsById.signal;
     const isSignalValue = signalValue && 'type' in signalValue && requireInst(signalValue.type.extent.temporality, 'temporality').kind === 'continuous';
     if (!signalValue || !isSignalValue) {
       throw new Error('Broadcast signal input must be a signal');
     }
 
-    // Create field broadcast operation with the resolved type
+    const stride = payloadStride(outType.payload);
+
+    // For multi-component signals (vec2, vec3, color), pass component IDs
+    // so the materializer can evaluate each component separately
     const fieldId = ctx.b.broadcast(
       signalValue.id,
-      outType
+      outType,
+      signalValue.components && signalValue.components.length > 1
+        ? signalValue.components
+        : undefined
     );
+
     const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        field: { id: fieldId, slot, type: outType, stride: payloadStride(outType.payload) },
+        field: { id: fieldId, slot, type: outType, stride },
       },
       // Propagate instance context from inputs
       // Broadcast is special - it can receive instance context even though

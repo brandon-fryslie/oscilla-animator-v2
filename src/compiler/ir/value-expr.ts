@@ -179,6 +179,8 @@ export type ValueExprKernel =
       readonly type: CanonicalType;
       readonly kernelKind: 'broadcast';
       readonly signal: ValueExprId;
+      /** For multi-component signals (vec2, color, etc), the per-component signal IDs */
+      readonly signalComponents?: readonly ValueExprId[];
     }
   | {
       readonly kind: 'kernel';

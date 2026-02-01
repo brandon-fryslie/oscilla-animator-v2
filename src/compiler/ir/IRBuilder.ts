@@ -69,7 +69,7 @@ export interface IRBuilder {
   kernelZipSig(field: ValueExprId, signals: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId;
 
   /** Broadcast a signal to a field (cardinality one → many). */
-  broadcast(signal: ValueExprId, type: CanonicalType): ValueExprId;
+  broadcast(signal: ValueExprId, type: CanonicalType, signalComponents?: readonly ValueExprId[]): ValueExprId;
 
   /** Reduce a field to a signal (cardinality many → one). */
   reduce(field: ValueExprId, op: 'min' | 'max' | 'sum' | 'avg', type: CanonicalType): ValueExprId;

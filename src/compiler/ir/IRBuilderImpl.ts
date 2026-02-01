@@ -167,8 +167,10 @@ export class IRBuilderImpl implements IRBuilder {
     return this.pushExpr({ kind: 'kernel', kernelKind: 'zipSig', field, signals, fn, type });
   }
 
-  broadcast(signal: ValueExprId, type: CanonicalType): ValueExprId {
-    return this.pushExpr({ kind: 'kernel', kernelKind: 'broadcast', signal, type });
+  broadcast(signal: ValueExprId, type: CanonicalType, signalComponents?: readonly ValueExprId[]): ValueExprId {
+    const node: any = { kind: 'kernel', kernelKind: 'broadcast', signal, type };
+    if (signalComponents) node.signalComponents = signalComponents;
+    return this.pushExpr(node);
   }
 
   reduce(field: ValueExprId, op: 'min' | 'max' | 'sum' | 'avg', type: CanonicalType): ValueExprId {

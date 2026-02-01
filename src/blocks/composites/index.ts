@@ -21,6 +21,7 @@ export * from '../composite-types';
 export * from './schema';
 export * from './loader';
 export * from './persistence';
+export { composite } from './builder';
 export { LIBRARY_COMPOSITES } from './library';
 
 // =============================================================================
