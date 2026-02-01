@@ -940,6 +940,29 @@ export function applyFieldKernelZipSig(
     for (let i = 0; i < N; i++) {
       outArr[i] = id01Arr[i] * turns * goldenAngle;
     }
+  } else if (fieldOp === 'broadcastColor') {
+    // ════════════════════════════════════════════════════════════════
+    // broadcastColor: Fill all elements with same color from signals
+    // ────────────────────────────────────────────────────────────────
+    // Field input: ignored (typically UV field for domain alignment)
+    // Signals: [r: float, g: float, b: float, a: float] (0-1 range)
+    // Output: color (rgba, Uint8ClampedArray, stride 4)
+    // ════════════════════════════════════════════════════════════════
+    if (sigValues.length !== 4) {
+      throw new Error('broadcastColor requires exactly 4 signals (r, g, b, a)');
+    }
+    const outArr = out as Uint8ClampedArray;
+    const r = Math.round(Math.max(0, Math.min(1, sigValues[0])) * 255);
+    const g = Math.round(Math.max(0, Math.min(1, sigValues[1])) * 255);
+    const b = Math.round(Math.max(0, Math.min(1, sigValues[2])) * 255);
+    const a = Math.round(Math.max(0, Math.min(1, sigValues[3])) * 255);
+
+    for (let i = 0; i < N; i++) {
+      outArr[i * 4 + 0] = r;
+      outArr[i * 4 + 1] = g;
+      outArr[i * 4 + 2] = b;
+      outArr[i * 4 + 3] = a;
+    }
   } else {
     throw new Error(`Unknown field kernel (zipSig): ${fieldOp}`);
   }

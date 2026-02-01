@@ -31,7 +31,7 @@ export const patchErrorIsolationDemo: PatchBuilder = (b) => {
   b.wire(array, 'elements', grid, 'elements');
 
   // Simple constant color
-  const color = b.addBlock('Const', { value: [0.7, 0.9, 0.8, 1.0] }); // Light cyan
+  const color = b.addBlock('Const', { value: { r: 0.7, g: 0.9, b: 0.8, a: 1.0 } }); // Light cyan
 
   // Render the grid
   const render = b.addBlock('RenderInstances2D', {});

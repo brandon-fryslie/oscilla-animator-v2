@@ -14,25 +14,9 @@ import { compile } from '../../compiler/compile';
 import { executeFrame } from '../../runtime/ScheduleExecutor';
 import { createRuntimeState, type RuntimeState } from '../../runtime/RuntimeState';
 import { getTestArena } from '../../runtime/__tests__/test-arena-helper';
-import { DEFAULT_CAMERA, type ResolvedCameraParams } from '../../runtime/CameraResolver';
+import type { ResolvedCameraParams } from '../../runtime/CameraResolver';
 import type { CompiledProgramIR, ValueSlot } from '../../compiler/ir/program';
 
-// =============================================================================
-// Camera Constants
-// =============================================================================
-
-const orthoCam: ResolvedCameraParams = DEFAULT_CAMERA;
-const perspCam: ResolvedCameraParams = {
-  projection: 'persp',
-  centerX: 0.5,
-  centerY: 0.5,
-  distance: 2.0,
-  tiltRad: (35 * Math.PI) / 180,
-  yawRad: 0,
-  fovYRad: (45 * Math.PI) / 180,
-  near: 0.01,
-  far: 100,
-};
 
 // =============================================================================
 // Helper Functions
@@ -40,41 +24,29 @@ const perspCam: ResolvedCameraParams = {
 
 /**
  * Build a 5×5 grid patch (25 instances) with:
- * - GridLayout (world positions)
- * - FieldHueFromPhase (per-instance color)
+ * - GridLayoutUV (world positions)
+ * - Const color (white)
  * - RenderInstances2D (render sink)
  *
  * NOTE: No Camera block - tests use DEFAULT_CAMERA (ortho) or manually wire camera params
  */
 function buildGoldenPatch() {
   return buildPatch((b) => {
-    const time = b.addBlock('InfiniteTimeRoot', {});
+    b.addBlock('InfiniteTimeRoot', {});
     const ellipse = b.addBlock('Ellipse', { rx: 0.03, ry: 0.03 });
     const array = b.addBlock('Array', { count: 25 });
-    const layout = b.addBlock('GridLayoutUV'UV, { rows: 5, colCount: 5 });
+    const layout = b.addBlock('GridLayoutUV', { rows: 5, cols: 5 });
 
-    // Color pipeline (Field-level hue from phase)
-    const sat = b.addBlock('Const', { value: 1.0 });
-    const val = b.addBlock('Const', { value: 1.0 });
-    const hue = b.addBlock('HueFromPhase', {});
-    const color = b.addBlock('HsvToRgb', {});
-
+    const color = b.addBlock('Const', { value: { r: 1.0, g: 1.0, b: 1.0, a: 1.0 } });
     const render = b.addBlock('RenderInstances2D', {});
 
     // Wire topology
     b.wire(ellipse, 'shape', array, 'element');
     b.wire(array, 'elements', layout, 'elements');
 
-    // Wire color
-    b.wire(time, 'phaseA', hue, 'phase');
-    b.wire(array, 't', hue, 'id01');
-    b.wire(hue, 'hue', color, 'hue');
-    b.wire(sat, 'out', color, 'sat');
-    b.wire(val, 'out', color, 'val');
-
     // Wire to render
     b.wire(layout, 'position', render, 'pos');
-    b.wire(color, 'color', render, 'color');
+    b.wire(color, 'out', render, 'color');
     b.wire(ellipse, 'shape', render, 'shape');
   });
 }
@@ -118,20 +90,6 @@ function setCameraParams(
 // =============================================================================
 
 describe('Level 10 Golden Tests: The Golden Patch', () => {
-  /**
-   * Build a 5×5 grid patch (25 instances) with:
-   * - GridLayout (world positions)
-   * - FieldHueFromPhase (per-instance color)
-   * - RenderInstances2D (render sink)
-   *
-   * Note: RenderInstances2D has default scale=1.0.
-   * The Ellipse rx/ry params (0.03) are shape params, not the world radius.
-   * The world radius used for projection is the scale parameter (1.0).
-   *
-   * Camera: No Camera block in patch → uses DEFAULT_CAMERA (ortho identity)
-   */
-
-
   it('Test 1.1: Run 120 frames ortho - verify identity projection', () => {
     const patch = buildGoldenPatch();
     const result = compile(patch);
@@ -147,7 +105,6 @@ describe('Level 10 Golden Tests: The Golden Patch', () => {
     const expectedRadius = Math.fround(1.0); // Default scale from RenderInstances2D
 
     // Run 120 frames with ortho camera (default)
-    // No Camera block in patch → uses DEFAULT_CAMERA which is ortho
     for (let frame = 0; frame < 120; frame++) {
       const frameIR = executeFrame(program, state, arena, frame * 16.667);
 
@@ -165,8 +122,6 @@ describe('Level 10 Golden Tests: The Golden Patch', () => {
       expect(op.instances.depth!.length).toBe(N);
 
       // Ortho projection: screenPosition.xy should match worldPosition.xy (identity)
-      // GridLayout outputs world positions in the range [0,1]
-      // Verify all screen positions are in [0,1] and finite
       for (let i = 0; i < N; i++) {
         const sx = op.instances.position![i * 2];
         const sy = op.instances.position![i * 2 + 1];
@@ -178,23 +133,18 @@ describe('Level 10 Golden Tests: The Golden Patch', () => {
         expect(sy).toBeLessThanOrEqual(1);
 
         // Ortho: screenRadius === worldRadius (identity)
-        // worldRadius = scale parameter = 1.0 (RenderInstances2D default)
         expect((op.instances.size as Float32Array)[i]).toBe(expectedRadius);
 
-        // Verify depth is finite (ortho depth depends on z, which is 0 for GridLayout)
+        // Verify depth is finite
         expect(Number.isFinite(op.instances.depth![i])).toBe(true);
       }
 
-      // All z=0 instances are visible under ortho
-      // (no visible field in compacted output, but count should match)
       expect(op.instances.count).toBe(N);
     }
   });
 
   it.skip('Test 1.2: Toggle to perspective at frame 121, run to 180 - verify non-identity projection', () => {
     // SKIPPED: This test requires runtime camera toggle which needs a different architecture
-    // (e.g., wiring camera params from animated signals, not static Camera block)
-    // TODO: Redesign this test to wire camera params from blocks instead of using setCameraParams
   });
 
   it.skip('Test 1.3: Toggle back to ortho at frame 181, run to 240 - verify identity restored', () => {
@@ -256,9 +206,6 @@ describe('Level 10 Golden Tests: The Golden Patch', () => {
 // =============================================================================
 
 describe('Level 10 Golden Tests: Determinism', () => {
-  /**
-   * Helper for determinism test
-   */
   function runDeterministicSequence(): Float32Array[] {
     const patch = buildGoldenPatch();
     const result = compile(patch);
@@ -274,7 +221,6 @@ describe('Level 10 Golden Tests: Determinism', () => {
     for (let frame = 0; frame < 60; frame++) {
       const frameIR = executeFrame(program, state, arena, frame * 16.667);
       const op = frameIR.ops[0];
-      // Store a COPY of the screenPosition buffer
       recordings.push(new Float32Array(op.instances.position!));
     }
 
@@ -308,26 +254,18 @@ describe('Level 10 Golden Tests: Determinism', () => {
 describe('Level 10 Golden Tests: Stress Test', () => {
   it('Test 3.1: 50×50 grid (2500 instances), toggle sequence, verify no NaN/Inf', () => {
     const patch = buildPatch((b) => {
-      const time = b.addBlock('InfiniteTimeRoot', {});
+      b.addBlock('InfiniteTimeRoot', {});
       const ellipse = b.addBlock('Ellipse', { rx: 0.01, ry: 0.01 });
       const array = b.addBlock('Array', { count: 2500 });
-      const layout = b.addBlock('GridLayoutUV'UV, { rows: 50, colCount: 50 });
+      const layout = b.addBlock('GridLayoutUV', { rows: 50, cols: 50 });
 
-      const sat = b.addBlock('Const', { value: 1.0 });
-      const val = b.addBlock('Const', { value: 1.0 });
-      const hue = b.addBlock('HueFromPhase', {});
-      const color = b.addBlock('HsvToRgb', {});
+      const color = b.addBlock('Const', { value: { r: 1.0, g: 1.0, b: 1.0, a: 1.0 } });
       const render = b.addBlock('RenderInstances2D', {});
 
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
-      b.wire(time, 'phaseA', hue, 'phase');
-      b.wire(array, 't', hue, 'id01');
-      b.wire(hue, 'hue', color, 'hue');
-      b.wire(sat, 'out', color, 'sat');
-      b.wire(val, 'out', color, 'val');
       b.wire(layout, 'position', render, 'pos');
-      b.wire(color, 'color', render, 'color');
+      b.wire(color, 'out', render, 'color');
       b.wire(ellipse, 'shape', render, 'shape');
     });
 
@@ -342,7 +280,7 @@ describe('Level 10 Golden Tests: Stress Test', () => {
 
     // Run 30 frames ortho (no Camera block → DEFAULT_CAMERA)
     for (let frame = 0; frame < 30; frame++) {
-      arena.reset(); // Reset arena each frame (simulates real frame loop)
+      arena.reset();
       const frameIR = executeFrame(program, state, arena, frame * 16.667);
       const op = frameIR.ops[0];
 
@@ -437,7 +375,6 @@ describe('Level 10 Golden Tests: Export Isolation', () => {
 describe.skip('Level 10 Golden Tests: Explicit Camera Override', () => {
   it('Test 5.1: CameraBlock overrides viewer-level camera (future feature)', () => {
     // Placeholder for when CameraBlock is implemented
-    // This would test that a CameraBlock in the patch overrides the viewer-level camera param
   });
 });
 
@@ -447,18 +384,10 @@ describe.skip('Level 10 Golden Tests: Explicit Camera Override', () => {
 
 describe('Level 10 Golden Tests: CombineMode Enforcement', () => {
   it.skip('Test 6.1: Compile with two float writers using CombineMode "sum"', () => {
-    // This tests whether the compiler accepts CombineMode 'sum' for float writers
-    // If compile-time enforcement is working, this should compile without error
-
-    // This test requires a block that accepts multiple inputs with CombineMode
-    // For now, this is skipped as a placeholder - the actual test depends on block definitions
-
     const patch = buildPatch((b) => {
-      const time = b.addBlock('InfiniteTimeRoot', {});
-      const const1 = b.addBlock('Const', { value: 1.0 });
-      const const2 = b.addBlock('Const', { value: 2.0 });
-
-      // Would need a block that can combine multiple inputs here
+      b.addBlock('InfiniteTimeRoot', {});
+      b.addBlock('Const', { value: 1.0 });
+      b.addBlock('Const', { value: 2.0 });
     });
 
     const result = compile(patch);
@@ -467,7 +396,6 @@ describe('Level 10 Golden Tests: CombineMode Enforcement', () => {
 
   it.skip('Test 6.2: Compile with shape2d writers using CombineMode "layer" (if exists)', () => {
     // Placeholder for shape2d combine mode tests
-    // This depends on whether 'layer' mode exists for shape2d
   });
 });
 
@@ -478,26 +406,18 @@ describe('Level 10 Golden Tests: CombineMode Enforcement', () => {
 describe('Level 10 Golden Tests: Multi-Backend Comparison', () => {
   it('Test 7.1: Run golden patch for 60 frames, verify coordinate math consistency', () => {
     const patch = buildPatch((b) => {
-      const time = b.addBlock('InfiniteTimeRoot', {});
+      b.addBlock('InfiniteTimeRoot', {});
       const ellipse = b.addBlock('Ellipse', { rx: 0.03, ry: 0.03 });
       const array = b.addBlock('Array', { count: 25 });
-      const layout = b.addBlock('GridLayoutUV'UV, { rows: 5, colCount: 5 });
+      const layout = b.addBlock('GridLayoutUV', { rows: 5, cols: 5 });
 
-      const sat = b.addBlock('Const', { value: 1.0 });
-      const val = b.addBlock('Const', { value: 1.0 });
-      const hue = b.addBlock('HueFromPhase', {});
-      const color = b.addBlock('HsvToRgb', {});
+      const color = b.addBlock('Const', { value: { r: 1.0, g: 1.0, b: 1.0, a: 1.0 } });
       const render = b.addBlock('RenderInstances2D', {});
 
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
-      b.wire(time, 'phaseA', hue, 'phase');
-      b.wire(array, 't', hue, 'id01');
-      b.wire(hue, 'hue', color, 'hue');
-      b.wire(sat, 'out', color, 'sat');
-      b.wire(val, 'out', color, 'val');
       b.wire(layout, 'position', render, 'pos');
-      b.wire(color, 'color', render, 'color');
+      b.wire(color, 'out', render, 'color');
       b.wire(ellipse, 'shape', render, 'shape');
     });
 
@@ -520,13 +440,6 @@ describe('Level 10 Golden Tests: Multi-Backend Comparison', () => {
     expect(op.instances.position).toBeTruthy();
     expect(op.instances.size).toBeTruthy();
 
-    // The coordinate math is the same for both Canvas2D and SVG:
-    // pixelX = screenPosition[i*2] * width
-    // pixelY = screenPosition[i*2+1] * height
-    //
-    // This is verified by Level 8 tests, but we can check that the data
-    // is in the expected normalized range [0,1]
-
     const N = op.instances.count;
     for (let i = 0; i < N; i++) {
       const sx = op.instances.position![i * 2];
@@ -537,15 +450,5 @@ describe('Level 10 Golden Tests: Multi-Backend Comparison', () => {
       expect(sy).toBeGreaterThanOrEqual(0);
       expect(sy).toBeLessThanOrEqual(1);
     }
-
-    // If we were to render this with Canvas2D at 1000×1000:
-    // Instance 0 at screenPos [0.1, 0.1] → pixel (100, 100)
-    // Instance at screenPos [0.5, 0.5] → pixel (500, 500)
-    //
-    // If we were to render this with SVG at 1000×1000:
-    // Same mapping: [0.1, 0.1] → translate(100 100)
-    //
-    // Both backends use the same math, proven by Level 8.
-    // This test verifies the pipeline produces valid normalized coordinates.
   });
 });

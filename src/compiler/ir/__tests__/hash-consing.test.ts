@@ -84,54 +84,57 @@ describe('Hash-consing (I13)', () => {
       expect(sum1).toBe(sum2);
     });
 
-    it('deduplicates identical sigBinOp (uses sigZip)', () => {
+    it('deduplicates identical sigZip via opcode helper', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
-      
+
       const a = b.sigConst(floatConst(2.0), type);
       const b1 = b.sigConst(floatConst(3.0), type);
-      
-      const sum1 = b.sigBinOp(a, b1, OpCode.Add, type);
-      const sum2 = b.sigBinOp(a, b1, OpCode.Add, type);
-      
+      const fn = { kind: 'opcode' as const, opcode: OpCode.Add };
+
+      const sum1 = b.sigZip([a, b1], fn, type);
+      const sum2 = b.sigZip([a, b1], fn, type);
+
       expect(sum1).toBe(sum2);
     });
 
     it('deduplicates identical sigUnaryOp (uses sigMap)', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
-      
+
       const input = b.sigConst(floatConst(1.0), type);
-      
-      const result1 = b.sigUnaryOp(input, OpCode.Sin, type);
-      const result2 = b.sigUnaryOp(input, OpCode.Sin, type);
-      
+
+      const fn = { kind: 'opcode' as const, opcode: OpCode.Sin };
+
+      const result1 = b.sigMap(input, fn, type);
+      const result2 = b.sigMap(input, fn, type);
+
       expect(result1).toBe(result2);
     });
 
     it('deduplicates identical sigCombine', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
-      
+
       const a = b.sigConst(floatConst(1.0), type);
       const b1 = b.sigConst(floatConst(2.0), type);
-      
+
       const sum1 = b.sigCombine([a, b1], 'sum', type);
       const sum2 = b.sigCombine([a, b1], 'sum', type);
-      
+
       expect(sum1).toBe(sum2);
     });
 
     it('deduplicates identical ReduceField', () => {
       const b = new IRBuilderImpl();
       const sigType = canonicalType(FLOAT);
-      
+
       const sig = b.sigConst(floatConst(1.0), sigType);
       const field = b.Broadcast(sig, sigType);
-      
+
       const reduce1 = b.ReduceField(field, 'sum', sigType);
       const reduce2 = b.ReduceField(field, 'sum', sigType);
-      
+
       expect(reduce1).toBe(reduce2);
     });
   });
@@ -140,36 +143,40 @@ describe('Hash-consing (I13)', () => {
     it('deduplicates transitively', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
-      
+
       // Constants deduplicate
       const a = b.sigConst(floatConst(2.0), type);
       const b1 = b.sigConst(floatConst(3.0), type);
       const b2 = b.sigConst(floatConst(3.0), type);
       expect(b1).toBe(b2);
-      
+
       // Operations using deduplicated inputs also deduplicate
-      const sum1 = b.sigBinOp(a, b1, OpCode.Add, type);
-      const sum2 = b.sigBinOp(a, b2, OpCode.Add, type);
+      const addFn = { kind: 'opcode' as const, opcode: OpCode.Add };
+      const sum1 = b.sigZip([a, b1], addFn, type);
+      const sum2 = b.sigZip([a, b2], addFn, type);
       expect(sum1).toBe(sum2);
     });
 
     it('deduplicates nested expressions', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
-      
+
       const a = b.sigConst(floatConst(1.0), type);
       const b1 = b.sigConst(floatConst(2.0), type);
-      
+
+      const addFn = { kind: 'opcode' as const, opcode: OpCode.Add };
+      const mulFn = { kind: 'opcode' as const, opcode: OpCode.Mul };
+
       // Build: (a + b) * 2
-      const sum1 = b.sigBinOp(a, b1, OpCode.Add, type);
+      const sum1 = b.sigZip([a, b1], addFn, type);
       const two1 = b.sigConst(floatConst(2.0), type);
-      const result1 = b.sigBinOp(sum1, two1, OpCode.Mul, type);
-      
+      const result1 = b.sigZip([sum1, two1], mulFn, type);
+
       // Build same expression again
-      const sum2 = b.sigBinOp(a, b1, OpCode.Add, type);
+      const sum2 = b.sigZip([a, b1], addFn, type);
       const two2 = b.sigConst(floatConst(2.0), type);
-      const result2 = b.sigBinOp(sum2, two2, OpCode.Mul, type);
-      
+      const result2 = b.sigZip([sum2, two2], mulFn, type);
+
       // All subexpressions should be deduplicated
       expect(sum1).toBe(sum2);
       expect(two1).toBe(two2);
@@ -201,11 +208,11 @@ describe('Hash-consing (I13)', () => {
     it('deduplicates identical Broadcast', () => {
       const b = new IRBuilderImpl();
       const sigType = canonicalType(FLOAT);
-      
+
       const sig = b.sigConst(floatConst(1.0), sigType);
       const id1 = b.Broadcast(sig, sigType);
       const id2 = b.Broadcast(sig, sigType);
-      
+
       expect(id1).toBe(id2);
     });
 
@@ -213,10 +220,10 @@ describe('Hash-consing (I13)', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
       const inst = instanceId('inst1');
-      
+
       const id1 = b.fieldIntrinsic('index', type);
       const id2 = b.fieldIntrinsic('index', type);
-      
+
       expect(id1).toBe(id2);
     });
 
@@ -234,10 +241,10 @@ describe('Hash-consing (I13)', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
       const inst = instanceId('inst1');
-      
+
       const id1 = b.fieldIntrinsic('index', type);
       const id2 = b.fieldIntrinsic('normalizedIndex', type);
-      
+
       expect(id1).not.toBe(id2);
     });
 
@@ -245,10 +252,10 @@ describe('Hash-consing (I13)', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(VEC2);
       const inst = instanceId('inst1');
-      
+
       const id1 = b.fieldPlacement('uv', 'halton2D', type);
       const id2 = b.fieldPlacement('uv', 'halton2D', type);
-      
+
       expect(id1).toBe(id2);
     });
   });
@@ -256,42 +263,42 @@ describe('Hash-consing (I13)', () => {
   describe('EventExpr deduplication', () => {
     it('deduplicates identical eventPulse', () => {
       const b = new IRBuilderImpl();
-      
+
       const id1 = b.eventPulse('InfiniteTimeRoot');
       const id2 = b.eventPulse('InfiniteTimeRoot');
-      
+
       expect(id1).toBe(id2);
     });
 
     it('deduplicates identical eventNever', () => {
       const b = new IRBuilderImpl();
-      
+
       const id1 = b.eventNever();
       const id2 = b.eventNever();
-      
+
       expect(id1).toBe(id2);
     });
 
     it('deduplicates identical eventWrap', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
-      
+
       const sig = b.sigConst(floatConst(1.0), type);
       const id1 = b.eventWrap(sig);
       const id2 = b.eventWrap(sig);
-      
+
       expect(id1).toBe(id2);
     });
 
     it('deduplicates identical eventCombine', () => {
       const b = new IRBuilderImpl();
-      
+
       const evt1 = b.eventPulse('InfiniteTimeRoot');
       const evt2 = b.eventNever();
-      
+
       const combine1 = b.eventCombine([evt1, evt2], 'any');
       const combine2 = b.eventCombine([evt1, evt2], 'any');
-      
+
       expect(combine1).toBe(combine2);
     });
   });
@@ -300,51 +307,51 @@ describe('Hash-consing (I13)', () => {
     it('handles array order correctly (different order = different expr)', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
-      
+
       const a = b.sigConst(floatConst(1.0), type);
       const b1 = b.sigConst(floatConst(2.0), type);
       const fn = { kind: 'opcode' as const, opcode: OpCode.Add };
-      
+
       const zip1 = b.sigZip([a, b1], fn, type);
       const zip2 = b.sigZip([b1, a], fn, type);
-      
+
       expect(zip1).not.toBe(zip2); // Order matters
     });
 
     it('handles PureFn opcodes correctly', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
-      
+
       const input = b.sigConst(floatConst(1.0), type);
       const fn = { kind: 'opcode' as const, opcode: OpCode.Sin };
-      
+
       const id1 = b.sigMap(input, fn, type);
       const id2 = b.sigMap(input, fn, type);
-      
+
       expect(id1).toBe(id2);
     });
 
     it('distinguishes different PureFn opcodes', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
-      
+
       const input = b.sigConst(floatConst(1.0), type);
       const fn1 = { kind: 'opcode' as const, opcode: OpCode.Sin };
       const fn2 = { kind: 'opcode' as const, opcode: OpCode.Cos };
-      
+
       const id1 = b.sigMap(input, fn1, type);
       const id2 = b.sigMap(input, fn2, type);
-      
+
       expect(id1).not.toBe(id2);
     });
 
     it('handles float precision consistently', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
-      
+
       const id1 = b.sigConst(floatConst(1.0), type);
       const id2 = b.sigConst(floatConst(1.00), type);
-      
+
       expect(id1).toBe(id2); // JS number normalization
     });
 
@@ -352,23 +359,23 @@ describe('Hash-consing (I13)', () => {
       const b = new IRBuilderImpl();
       const floatType = canonicalType(FLOAT);
       const intType = canonicalType(INT);
-      
+
       const id1 = b.sigConst(floatConst(1), floatType);
       const id2 = b.sigConst(intConst(1), intType);
-      
+
       expect(id1).not.toBe(id2);
     });
 
     it('handles composed PureFn correctly', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
-      
+
       const input = b.sigConst(floatConst(1.0), type);
       const fn = { kind: 'composed' as const, ops: [OpCode.Sin, OpCode.Cos] as readonly OpCode[] };
-      
+
       const id1 = b.sigMap(input, fn, type);
       const id2 = b.sigMap(input, fn, type);
-      
+
       expect(id1).toBe(id2);
     });
   });
@@ -377,24 +384,30 @@ describe('Hash-consing (I13)', () => {
     it('reduces expression count in typical patch', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
-      
+
       // Simulate a patch with repeated time references
       const time1 = b.sigTime('tMs', type);
       const time2 = b.sigTime('tMs', type);
       const time3 = b.sigTime('tMs', type);
-      
+
       // All should be the same ID
       expect(time1).toBe(time2);
       expect(time2).toBe(time3);
-      
+
       // Create multiple instances of same computation
       const one = b.sigConst(floatConst(1.0), type);
       const pi = b.sigConst(floatConst(3.14159), type);
-      
+
+      const addFn = { kind: 'opcode' as const, opcode: OpCode.Add };
+      const mulFn = { kind: 'opcode' as const, opcode: OpCode.Mul };
+
       for (let i = 0; i < 5; i++) {
-        const result = b.sigBinOp(time1, one, OpCode.Add, type);
-        const scaled = b.sigBinOp(result, pi, OpCode.Mul, type);
-        const sin = b.sigUnaryOp(scaled, OpCode.Sin, type);
+        const result = b.sigZip([time1, one], addFn, type);
+        const scaled = b.sigZip([result, pi], mulFn, type);
+
+        const fn = { kind: 'opcode' as const, opcode: OpCode.Sin };
+
+        const sin = b.sigMap(scaled, fn, type);
         
         // Each iteration should reuse the same expressions
         if (i > 0) {

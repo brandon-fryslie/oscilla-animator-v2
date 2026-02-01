@@ -22,7 +22,7 @@ export const patchDomainTest: PatchBuilder = (b) => {
   b.wire(array, 'elements', circleLayout, 'elements');
 
   // Simple constant color
-  const color = b.addBlock('Const', { value: [0.8, 0.6, 1.0, 1.0] }); // Purple
+  const color = b.addBlock('Const', { value: { r: 0.8, g: 0.6, b: 1.0, a: 1.0 } }); // Purple
 
   const render = b.addBlock('RenderInstances2D', {});
   b.wire(circleLayout, 'position', render, 'pos');

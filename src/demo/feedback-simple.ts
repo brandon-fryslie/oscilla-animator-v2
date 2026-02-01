@@ -68,7 +68,7 @@ export const patchFeedbackSimple: PatchBuilder = (b) => {
   b.wire(outerArray, 'elements', outerLayout, 'elements');
 
   // Color: cyan
-  const outerColor = b.addBlock('Const', { value: [0.3, 0.9, 0.9, 1.0] });
+  const outerColor = b.addBlock('Const', { value: { r: 0.3, g: 0.9, b: 0.9, a: 1.0 } });
 
   // ===========================================================================
   // INNER RING: Time-driven (constant speed) - for comparison
@@ -83,7 +83,7 @@ export const patchFeedbackSimple: PatchBuilder = (b) => {
   b.wire(innerArray, 'elements', innerLayout, 'elements');
 
   // Color: orange
-  const innerColor = b.addBlock('Const', { value: [1.0, 0.6, 0.3, 1.0] });
+  const innerColor = b.addBlock('Const', { value: { r: 1.0, g: 0.6, b: 0.3, a: 1.0 } });
 
   // ===========================================================================
   // RENDER BOTH RINGS

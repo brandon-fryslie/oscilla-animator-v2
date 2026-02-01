@@ -37,7 +37,7 @@ describe('Steel Thread - Animated Particles', () => {
       b.wire(array, 'elements', layout, 'elements');
 
       // Simple constant color
-      const color = b.addBlock('Const', { value: [1.0, 0.5, 0.5, 1.0] }); // Red
+      const color = b.addBlock('Const', { value: { r: 1.0, g: 0.5, b: 0.5, a: 1.0 } }); // Red
 
       const render = b.addBlock('RenderInstances2D', {});
 

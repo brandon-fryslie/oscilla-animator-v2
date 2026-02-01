@@ -24,7 +24,7 @@ export const patchTileGrid: PatchBuilder = (b) => {
   b.wire(array, 'elements', grid, 'elements');
 
   // Simple constant color
-  const color = b.addBlock('Const', { value: [0.5, 0.8, 1.0, 1.0] }); // Light blue
+  const color = b.addBlock('Const', { value: { r: 0.5, g: 0.8, b: 1.0, a: 1.0 } }); // Light blue
 
   const render = b.addBlock('RenderInstances2D', {});
   b.wire(grid, 'position', render, 'pos');
@@ -55,7 +55,7 @@ export const patchTileGridUV: PatchBuilder = (b) => {
   b.wire(array, 'elements', grid, 'elements');
 
   // Simple constant color
-  const color = b.addBlock('Const', { value: [0.5, 0.8, 1.0, 1.0] }); // Light blue
+  const color = b.addBlock('Const', { value: { r: 0.5, g: 0.8, b: 1.0, a: 1.0 } }); // Light blue
 
   const render = b.addBlock('RenderInstances2D', {});
   b.wire(grid, 'position', render, 'pos');

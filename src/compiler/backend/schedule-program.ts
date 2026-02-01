@@ -15,8 +15,8 @@
  * deterministic execution order.
  */
 
-import type { Step, StepEvalEvent, StepRender, StepMaterialize, StepContinuityMapBuild, StepContinuityApply, TimeModel, InstanceId, InstanceDecl, FieldExprId, SigExprId, SigExpr, FieldExpr, ValueSlot, ContinuityPolicy, StateMapping, EventSlotId, ScalarSlotDecl, FieldSlotDecl } from '../ir/types';
-import type { EventExprId } from '../ir/Indices';
+import type { Step, StepEvalEvent, StepRender, StepMaterialize, StepContinuityMapBuild, StepContinuityApply, TimeModel, InstanceId, InstanceDecl, ValueSlot, StateMapping, EventSlotId, ScalarSlotDecl, FieldSlotDecl } from '../ir/types';
+import type { ValueExpr, ValueExprId } from '../ir/value-expr';
 import type { UnlinkedIRFragments } from './lower-blocks';
 import type { AcyclicOrLegalGraph, NormalizedEdge, Block, BlockIndex } from '../ir/patches';
 import type { TimeModelIR } from '../ir/schedule';
@@ -217,10 +217,12 @@ function getInputRef(
  */
 interface RenderTargetInfo {
   instanceId: InstanceId;
-  position: { id: FieldExprId; stride: number };
-  color: { id: FieldExprId; stride: number };
-  scale?: { k: 'sig'; id: SigExprId };
-  shape?: { k: 'sig'; id: SigExprId } | { k: 'field'; id: FieldExprId; stride: number };
+  position: { id: ValueExprId; stride: number };
+  color: { id: ValueExprId; stride: number };
+  scale?: { k: 'sig'; id: ValueExprId };
+  shape?:
+    | { k: 'sig'; id: ValueExprId }
+    | { k: 'field'; id: ValueExprId; stride: number };
 }
 
 /**
@@ -232,7 +234,7 @@ function collectRenderTargets(
   edges: readonly NormalizedEdge[],
   blockOutputs: Map<BlockIndex, Map<string, ValueRefPacked>>,
   instances: ReadonlyMap<InstanceId, InstanceDecl>,
-  fieldExprs: readonly FieldExpr[]
+  valueExprs: readonly ValueExpr[]
 ): RenderTargetInfo[] {
   const targets: RenderTargetInfo[] = [];
   const renderBlocks = findRenderBlocks(blocks);
@@ -253,7 +255,7 @@ function collectRenderTargets(
     }
 
     // Infer instance from position field (not first instance!)
-    const instanceId = inferFieldInstanceFromExprs(posRef.id, fieldExprs);
+    const instanceId = inferFieldInstanceFromExprs(posRef.id, valueExprs);
     if (!instanceId) {
       continue;
     }
@@ -283,13 +285,12 @@ function collectRenderTargets(
  * Mirrors IRBuilderImpl.inferFieldInstance() logic.
  */
 function inferFieldInstanceFromExprs(
-  fieldId: FieldExprId,
-  fieldExprs: readonly FieldExpr[]
+  fieldId: ValueExprId,
+  valueExprs: readonly ValueExpr[]
 ): InstanceId | undefined {
-  const expr = fieldExprs[fieldId as number];
+  const expr = valueExprs[fieldId as number];
   if (!expr) return undefined;
 
-  // Extract instance from CanonicalType (if many-cardinality)
   try {
     return requireManyInstance(expr.type).instanceId;
   } catch {
@@ -302,10 +303,16 @@ function inferFieldInstanceFromExprs(
  * Returns topologyId, paramSignals, and optional controlPointField with stride if the signal is a shapeRef.
  */
 function resolveShapeInfo(
-  sigId: SigExprId,
-  signals: readonly SigExpr[]
-): { topologyId: TopologyId; paramSignals: readonly SigExprId[]; controlPointField?: { id: FieldExprId; stride: number } } | undefined {
-  const expr = signals[sigId as number];
+  sigId: ValueExprId,
+  valueExprs: readonly ValueExpr[]
+):
+  | {
+      topologyId: TopologyId;
+      paramSignals: readonly ValueExprId[];
+      controlPointField?: { id: ValueExprId; stride: number };
+    }
+  | undefined {
+  const expr = valueExprs[sigId as number];
   if (!expr) return undefined;
 
   if (expr.kind === 'shapeRef') {
@@ -331,7 +338,7 @@ function resolveShapeInfo(
 function buildContinuityPipeline(
   targets: RenderTargetInfo[],
   instances: ReadonlyMap<InstanceId, InstanceDecl>,
-  signals: readonly SigExpr[],
+  valueExprs: readonly ValueExpr[],
   slotAllocator: () => ValueSlot
 ): {
   mapBuildSteps: StepContinuityMapBuild[];
@@ -366,7 +373,7 @@ function buildContinuityPipeline(
 
     // Helper to get or create slots for a field
     const getFieldSlots = (
-      fieldId: FieldExprId,
+      fieldId: ValueExprId,
       semantic: 'position' | 'radius' | 'opacity' | 'color' | 'custom',
       stride: number
     ): { baseSlot: ValueSlot; outputSlot: ValueSlot } => {
@@ -427,7 +434,7 @@ function buildContinuityPipeline(
         shapeOutput = { k: 'slot', slot: shapeSlots.outputSlot };
       } else {
         // Signal - resolve topology + param signals + control points
-        const shapeInfo = resolveShapeInfo(shape.id, signals);
+        const shapeInfo = resolveShapeInfo(shape.id, valueExprs);
         if (shapeInfo) {
           shapeOutput = {
             k: 'sig',
@@ -509,8 +516,7 @@ export function pass7Schedule(
   };
 
   // Get expressions for instance inference and shape resolution
-  const fieldExprs = unlinkedIR.builder.getFieldExprs();
-  const signals = unlinkedIR.builder.getSigExprs();
+  const valueExprs = unlinkedIR.builder.getValueExprs();
 
   // Collect render targets from render blocks (instance inferred from position field)
   const renderTargets = collectRenderTargets(
@@ -518,7 +524,7 @@ export function pass7Schedule(
     validated.edges,
     unlinkedIR.blockOutputs,
     instances,
-    fieldExprs
+    valueExprs
   );
 
   // Build the complete continuity pipeline
@@ -527,7 +533,7 @@ export function pass7Schedule(
     materializeSteps,
     continuityApplySteps,
     renderSteps,
-  } = buildContinuityPipeline(renderTargets, instances, signals, slotAllocator);
+  } = buildContinuityPipeline(renderTargets, instances, valueExprs, slotAllocator);
 
   // Collect steps from builder (stateWrite steps from stateful blocks)
   const builderSteps = unlinkedIR.builder.getSteps();
@@ -567,10 +573,10 @@ export function pass7Schedule(
 
     const step: Step = {
       kind: 'evalSig',
-      expr: sigId as SigExprId,
+      expr: sigId as ValueExprId,
       target: slot,
     };
-    if (sigDependsOnEvent(sigId as number, signals)) {
+    if (sigDependsOnEvent(sigId as number, valueExprs)) {
       evalSigStepsPost.push(step);
     } else {
       evalSigStepsPre.push(step);
@@ -666,30 +672,52 @@ export function pass7Schedule(
  * Check if a signal expression transitively depends on an eventRead.
  * Used to schedule event-dependent signals after event evaluation.
  */
-function sigDependsOnEvent(sigId: number, signals: readonly SigExpr[]): boolean {
+function sigDependsOnEvent(sigId: number, valueExprs: readonly ValueExpr[]): boolean {
   const visited = new Set<number>();
 
   function check(id: number): boolean {
     if (visited.has(id)) return false;
     visited.add(id);
 
-    const expr = signals[id];
+    const expr = valueExprs[id];
     if (!expr) return false;
 
     switch (expr.kind) {
       case 'eventRead':
         return true;
-      case 'map':
-        return check(expr.input as number);
-      case 'zip':
-        return expr.inputs.some(input => check(input as number));
+
+      case 'kernel': {
+        switch (expr.kernelKind) {
+          case 'map':
+            return check(expr.input as number);
+          case 'zip':
+            return expr.inputs.some(input => check(input as number));
+          case 'zipSig':
+            return (
+              check(expr.field as number) ||
+              expr.signals.some(sig => check(sig as number))
+            );
+          case 'broadcast':
+            return check(expr.signal as number);
+          case 'reduce':
+            return check(expr.field as number);
+          case 'pathDerivative':
+            return check(expr.field as number);
+          default:
+            return false;
+        }
+      }
+
       case 'const':
-      case 'slot':
+      case 'slotRead':
       case 'time':
       case 'external':
-      case 'stateRead':
+      case 'state':
       case 'shapeRef':
+      case 'intrinsic':
+      case 'event':
         return false;
+
       default:
         return false;
     }

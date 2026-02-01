@@ -7,16 +7,12 @@
  */
 
 // Import the legacy types for now (will be replaced with proper execution node types)
-import type { SigExpr, FieldExpr, EventExpr } from './types';
 import type { CanonicalType } from '../../core/canonical-types';
 import type { ScheduleIR } from '../backend/schedule-program';
 import type {
-  FieldExprId,
   InstanceId,
   ValueSlot,
   StepId,
-  SigExprId,
-  EventExprId,
   ValueExprId,
 } from './Indices';
 import type { BlockId, PortId } from '../../types';
@@ -73,7 +69,7 @@ export interface CameraDeclIR {
  * CompiledProgramIR is the single canonical representation of a compiled program.
  *
  * Key Invariants:
- * - Dense execution tables (no hash maps)
+ * - Dense execution table (no hash maps)
  * - Explicit slot metadata with required offsets
  * - Axes exposed on every slot type
  * - Outputs contract for frame extraction
@@ -88,12 +84,7 @@ export interface CameraDeclIR {
 export interface CompiledProgramIR {
   readonly irVersion: IrVersion;
 
-  // Dense execution tables per class
-  readonly signalExprs: SignalExprTable;
-  readonly fieldExprs: FieldExprTable;
-  readonly eventExprs: EventExprTable;
-
-  // Unified ValueExpr table (lowered from legacy tables)
+  // Unified ValueExpr table (authoritative execution nodes)
   readonly valueExprs: ValueExprTable;
 
   // JSON-only constants
@@ -141,7 +132,8 @@ export interface CompiledProgramIR {
  * Provides everything needed to materialize a field on demand.
  */
 export interface FieldSlotEntry {
-  readonly fieldId: FieldExprId;
+  /** ValueExprId of a field-extent expression */
+  readonly fieldId: ValueExprId;
   readonly instanceId: InstanceId;
 }
 
@@ -158,44 +150,14 @@ export type { ScheduleIR } from '../backend/schedule-program';
 // =============================================================================
 
 /**
- * Dense, cache-friendly execution tables.
- * For v0, we use the legacy expr types but wrap them in dense arrays.
- */
-export interface SignalExprTable {
-  readonly nodes: readonly SigExpr[];
-}
-
-export interface FieldExprTable {
-  readonly nodes: readonly FieldExpr[];
-}
-
-export interface EventExprTable {
-  readonly nodes: readonly EventExpr[];
-}
-
-/**
- * ValueExpr Table - Unified Expression Table
+ * Dense, cache-friendly unified execution table.
  *
- * This table is produced by lowering the three legacy tables (signalExprs, fieldExprs, eventExprs)
- * into a single canonical representation. Every legacy expression has exactly one ValueExpr equivalent.
- *
- * The forward mapping arrays (sigToValue, fieldToValue, eventToValue) enable incremental migration:
- * consumers can look up the ValueExpr corresponding to a legacy ID without changing the legacy evaluators.
- *
- * Spec Reference: TYPE-SYSTEM-INVARIANTS.md
+ * This is the ONLY execution-node table in the runtime. All evaluation dispatch
+ * (signal/field/event) is derived from `ValueExpr.type.extent`.
  */
 export interface ValueExprTable {
   /** Unified value expression nodes (all signal/field/event expressions) */
   readonly nodes: readonly ValueExpr[];
-
-  /** Maps SigExprId (as index) to corresponding ValueExprId */
-  readonly sigToValue: readonly ValueExprId[];
-
-  /** Maps FieldExprId (as index) to corresponding ValueExprId */
-  readonly fieldToValue: readonly ValueExprId[];
-
-  /** Maps EventExprId (as index) to corresponding ValueExprId */
-  readonly eventToValue: readonly ValueExprId[];
 }
 
 // =============================================================================

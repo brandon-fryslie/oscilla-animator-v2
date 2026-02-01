@@ -41,7 +41,7 @@ describe('Steel Thread - Rect Shape Pipeline', () => {
       b.wire(time, 'phaseA', layout, 'phase');
 
       // Color: solid color
-      const color = b.addBlock('Const', { value: [0.9, 0.4, 0.1, 1.0] });
+      const color = b.addBlock('Const', { value: { r: 0.9, g: 0.4, b: 0.1, a: 1.0 } });
 
       // Render with Rect shape
       const render = b.addBlock('RenderInstances2D', {});
@@ -181,7 +181,7 @@ describe('Steel Thread - Rect Shape Pipeline', () => {
       b.wire(array, 'elements', layout, 'elements');
       b.wire(time, 'phaseA', layout, 'phase');
 
-      const color = b.addBlock('Const', { value: [1.0, 0.0, 0.0, 1.0] });
+      const color = b.addBlock('Const', { value: { r: 1.0, g: 0.0, b: 0.0, a: 1.0 } });
 
       const render = b.addBlock('RenderInstances2D', {});
       b.wire(layout, 'position', render, 'pos');
@@ -200,7 +200,7 @@ describe('Steel Thread - Rect Shape Pipeline', () => {
       b.wire(array, 'elements', layout, 'elements');
       b.wire(time, 'phaseA', layout, 'phase');
 
-      const color = b.addBlock('Const', { value: [0.0, 0.0, 1.0, 1.0] });
+      const color = b.addBlock('Const', { value: { r: 0.0, g: 0.0, b: 1.0, a: 1.0 } });
 
       const render = b.addBlock('RenderInstances2D', {});
       b.wire(layout, 'position', render, 'pos');

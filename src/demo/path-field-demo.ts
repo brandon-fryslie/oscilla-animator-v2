@@ -35,7 +35,7 @@ export const patchPathFieldDemo: PatchBuilder = (b) => {
   const marker = b.addBlock('Ellipse', { rx: 0.015, ry: 0.015 });
 
   // Simple constant color
-  const color = b.addBlock('Const', { value: [1.0, 0.7, 0.3, 1.0] }); // Warm orange
+  const color = b.addBlock('Const', { value: { r: 1.0, g: 0.7, b: 0.3, a: 1.0 } }); // Warm orange
 
   // Render markers at path positions
   const render = b.addBlock('RenderInstances2D', {});

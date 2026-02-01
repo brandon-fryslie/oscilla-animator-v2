@@ -225,6 +225,9 @@ export type FieldExpr =
   | FieldExprPathDerivative
   | FieldExprPlacement;
 
+/**
+ *  @DEPRECATED Must be migrated to ValueExpr
+ */
 export interface FieldExprConst { // @DEPRECATED Must be migrated to ValueExpr
   readonly kind: 'const';
   readonly value: ConstValue;
@@ -254,31 +257,35 @@ export interface FieldExprPlacement {
   readonly type: CanonicalType;
 }
 
-// @DEPRECATED Must be migrated to ValueExpr
-export interface FieldExprBroadcast {
+/**
+ *  @DEPRECATED Must be migrated to ValueExpr
+ */export interface FieldExprBroadcast {
   readonly kind: 'broadcast';
   readonly signal: SigExprId;
   readonly type: CanonicalType;
 }
 
-// @DEPRECATED Must be migrated to ValueExpr
-export interface FieldExprMap {
+/**
+ *  @DEPRECATED Must be migrated to ValueExpr
+ */export interface FieldExprMap {
   readonly kind: 'map';
   readonly input: FieldExprId;
   readonly fn: PureFn;
   readonly type: CanonicalType;
 }
 
-// @DEPRECATED Must be migrated to ValueExpr
-export interface FieldExprZip {
+/**
+ *  @DEPRECATED Must be migrated to ValueExpr
+ */export interface FieldExprZip {
   readonly kind: 'zip';
   readonly inputs: readonly FieldExprId[];
   readonly fn: PureFn;
   readonly type: CanonicalType;
 }
 
-// @DEPRECATED Must be migrated to ValueExpr
-export interface FieldExprZipSig {
+/**
+ *  @DEPRECATED Must be migrated to ValueExpr
+ */export interface FieldExprZipSig {
   readonly kind: 'zipSig';
   readonly field: FieldExprId;
   readonly signals: readonly SigExprId[];
@@ -289,7 +296,7 @@ export interface FieldExprZipSig {
 /**
  * Per-lane state read for stateful cardinality-generic blocks.
  * Each lane reads its corresponding state slot value.
- * // @DEPRECATED Must be migrated to ValueExpr
+ * @DEPRECATED Must be migrated to ValueExpr
  */
 export interface FieldExprStateRead {
   readonly kind: 'stateRead';
@@ -306,7 +313,7 @@ export interface FieldExprStateRead {
  * - arcLength: Cumulative Euclidean distance
  *
  * Phase 2: Will add bezier curve support via topology access.
- * // @DEPRECATED Must be migrated to ValueExpr
+ * @DEPRECATED Must be migrated to ValueExpr
  */
 export interface FieldExprPathDerivative {
   readonly kind: 'pathDerivative';
@@ -318,39 +325,51 @@ export interface FieldExprPathDerivative {
 // =============================================================================
 // Event Expressions
 // =============================================================================
-
+/**
+ *  @DEPRECATED Must be migrated to ValueExpr
+ */
 export type EventExpr =
   | EventExprConst
   | EventExprPulse
   | EventExprWrap
   | EventExprCombine
   | EventExprNever;
-
+/**
+ *  @DEPRECATED Must be migrated to ValueExpr
+ */
 export interface EventExprConst {
   readonly kind: 'const';
   readonly type: CanonicalType;
   readonly fired: boolean;
 }
-
+/**
+ *  @DEPRECATED Must be migrated to ValueExpr
+ */
 export interface EventExprPulse {
   readonly kind: 'pulse';
   readonly type: CanonicalType;
   readonly source: 'timeRoot';
 }
-
+/**
+ *  @DEPRECATED Must be migrated to ValueExpr
+ */
 export interface EventExprWrap {
   readonly kind: 'wrap';
   readonly type: CanonicalType;
   readonly signal: SigExprId;
 }
-
+/**
+ *  @DEPRECATED Must be migrated to ValueExpr
+ */
 export interface EventExprCombine {
   readonly kind: 'combine';
   readonly type: CanonicalType;
   readonly events: readonly EventExprId[];
   readonly mode: 'any' | 'all';
 }
-
+/**
+ *  @DEPRECATED Must be migrated to ValueExpr
+ */
 export interface EventExprNever {
   readonly kind: 'never';
   readonly type: CanonicalType;

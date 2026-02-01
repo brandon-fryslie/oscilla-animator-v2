@@ -16,7 +16,27 @@ import { buildPatch } from '../../graph';
 import { compile } from '../../compiler/compile';
 import { createRuntimeState, executeFrame, type RenderFrameIR } from '../../runtime';
 import { getTestArena } from '../../runtime/__tests__/test-arena-helper';
-import { DEFAULT_CAMERA, type ResolvedCameraParams } from '../../runtime/CameraResolver';
+
+/**
+ * Helper: build a simple patch with GridLayoutUV + constant color for testing.
+ */
+function buildSimplePatch(count: number, rows: number, cols: number) {
+  return buildPatch((b) => {
+    b.addBlock('InfiniteTimeRoot', {});
+    const ellipse = b.addBlock('Ellipse', { rx: 0.02, ry: 0.02 });
+    const array = b.addBlock('Array', { count });
+    const layout = b.addBlock('GridLayoutUV', { rows, cols });
+    b.wire(ellipse, 'shape', array, 'element');
+    b.wire(array, 'elements', layout, 'elements');
+
+    const color = b.addBlock('Const', { value: { r: 1.0, g: 1.0, b: 1.0, a: 1.0 } });
+
+    const render = b.addBlock('RenderInstances2D', {});
+    b.wire(layout, 'position', render, 'pos');
+    b.wire(color, 'out', render, 'color');
+    b.wire(ellipse, 'shape', render, 'shape');
+  });
+}
 
 // =============================================================================
 // LEVEL 5 UNIT TESTS: Assembler API surface
@@ -24,30 +44,7 @@ import { DEFAULT_CAMERA, type ResolvedCameraParams } from '../../runtime/CameraR
 
 describe('Level 5 Unit Tests: Assembler API', () => {
   it('executeFrame runs without a camera block (uses default ortho camera)', () => {
-    const patch = buildPatch((b) => {
-      b.addBlock('InfiniteTimeRoot', {});
-      const ellipse = b.addBlock('Ellipse', { rx: 0.02, ry: 0.02 });
-      const array = b.addBlock('Array', { count: 4 });
-      const layout = b.addBlock('GridLayoutUV'UV, { rows: 2, colCount: 2 });
-      b.wire(ellipse, 'shape', array, 'element');
-      b.wire(array, 'elements', layout, 'elements');
-
-      const hue = b.addBlock('HueFromPhase', {});
-      b.wire(array, 't', hue, 'id01');
-      const phase = b.addBlock('Const', { value: 0.0 });
-      b.wire(phase, 'out', hue, 'phase');
-      const sat = b.addBlock('Const', { value: 0.0 });
-      const val = b.addBlock('Const', { value: 1.0 });
-      const color = b.addBlock('HsvToRgb', {});
-      b.wire(hue, 'hue', color, 'hue');
-      b.wire(sat, 'out', color, 'sat');
-      b.wire(val, 'out', color, 'val');
-
-      const render = b.addBlock('RenderInstances2D', {});
-      b.wire(layout, 'position', render, 'pos');
-      b.wire(color, 'color', render, 'color');
-      b.wire(ellipse, 'shape', render, 'shape');
-    });
+    const patch = buildSimplePatch(4, 2, 2);
 
     const result = compile(patch);
     expect(result.kind).toBe('ok');
@@ -69,30 +66,7 @@ describe('Level 5 Unit Tests: Assembler API', () => {
   });
 
   it('Frame with no camera block produces world-space (vec3) positions', () => {
-    const patch = buildPatch((b) => {
-      b.addBlock('InfiniteTimeRoot', {});
-      const ellipse = b.addBlock('Ellipse', { rx: 0.02, ry: 0.02 });
-      const array = b.addBlock('Array', { count: 4 });
-      const layout = b.addBlock('GridLayoutUV'UV, { rows: 2, colCount: 2 });
-      b.wire(ellipse, 'shape', array, 'element');
-      b.wire(array, 'elements', layout, 'elements');
-
-      const hue = b.addBlock('HueFromPhase', {});
-      b.wire(array, 't', hue, 'id01');
-      const phase = b.addBlock('Const', { value: 0.0 });
-      b.wire(phase, 'out', hue, 'phase');
-      const sat = b.addBlock('Const', { value: 0.0 });
-      const val = b.addBlock('Const', { value: 1.0 });
-      const color = b.addBlock('HsvToRgb', {});
-      b.wire(hue, 'hue', color, 'hue');
-      b.wire(sat, 'out', color, 'sat');
-      b.wire(val, 'out', color, 'val');
-
-      const render = b.addBlock('RenderInstances2D', {});
-      b.wire(layout, 'position', render, 'pos');
-      b.wire(color, 'color', render, 'color');
-      b.wire(ellipse, 'shape', render, 'shape');
-    });
+    const patch = buildSimplePatch(4, 2, 2);
 
     const result = compile(patch);
     expect(result.kind).toBe('ok');
@@ -118,30 +92,7 @@ describe('Level 5 Unit Tests: Assembler API', () => {
   });
 
   it('Frame with default camera produces screen-space (vec2) positions and per-instance sizes', () => {
-    const patch = buildPatch((b) => {
-      b.addBlock('InfiniteTimeRoot', {});
-      const ellipse = b.addBlock('Ellipse', { rx: 0.02, ry: 0.02 });
-      const array = b.addBlock('Array', { count: 4 });
-      const layout = b.addBlock('GridLayoutUV'UV, { rows: 2, colCount: 2 });
-      b.wire(ellipse, 'shape', array, 'element');
-      b.wire(array, 'elements', layout, 'elements');
-
-      const hue = b.addBlock('HueFromPhase', {});
-      b.wire(array, 't', hue, 'id01');
-      const phase = b.addBlock('Const', { value: 0.0 });
-      b.wire(phase, 'out', hue, 'phase');
-      const sat = b.addBlock('Const', { value: 0.0 });
-      const val = b.addBlock('Const', { value: 1.0 });
-      const color = b.addBlock('HsvToRgb', {});
-      b.wire(hue, 'hue', color, 'hue');
-      b.wire(sat, 'out', color, 'sat');
-      b.wire(val, 'out', color, 'val');
-
-      const render = b.addBlock('RenderInstances2D', {});
-      b.wire(layout, 'position', render, 'pos');
-      b.wire(color, 'color', render, 'color');
-      b.wire(ellipse, 'shape', render, 'shape');
-    });
+    const patch = buildSimplePatch(4, 2, 2);
 
     const result = compile(patch);
     expect(result.kind).toBe('ok');
@@ -188,37 +139,8 @@ describe('Level 5 Unit Tests: Assembler API', () => {
 
 describe('Level 5 Integration Tests: Full Pipeline', () => {
   it('Pipeline runs signals → fields → projection → render IR with correct ordering (real end-to-end test)', () => {
-    // Build a complete patch with:
-    // - Time root (produces phase scalar)
-    // - Array (produces instance + t field)
-    // - GridLayout (produces position vec3 field)
-    // - HsvToRgb (produces color vec4 field)
-    // - RenderInstances2D (render sink)
-    const patch = buildPatch((b) => {
-      b.addBlock('InfiniteTimeRoot', { periodAMs: 5000, periodBMs: 10000 });
-      const ellipse = b.addBlock('Ellipse', { rx: 0.02, ry: 0.02 });
-      const array = b.addBlock('Array', { count: 9 });
-      const layout = b.addBlock('GridLayoutUV'UV, { rows: 3, colCount: 3 });
-      b.wire(ellipse, 'shape', array, 'element');
-      b.wire(array, 'elements', layout, 'elements');
-
-      // Color pipeline: FieldHueFromPhase → HsvToRgb
-      const hue = b.addBlock('HueFromPhase', {});
-      b.wire(array, 't', hue, 'id01');
-      const phase = b.addBlock('Const', { value: 0.5 });
-      b.wire(phase, 'out', hue, 'phase');
-      const sat = b.addBlock('Const', { value: 0.8 });
-      const val = b.addBlock('Const', { value: 0.9 });
-      const color = b.addBlock('HsvToRgb', {});
-      b.wire(hue, 'hue', color, 'hue');
-      b.wire(sat, 'out', color, 'sat');
-      b.wire(val, 'out', color, 'val');
-
-      const render = b.addBlock('RenderInstances2D', {});
-      b.wire(layout, 'position', render, 'pos');
-      b.wire(color, 'color', render, 'color');
-      b.wire(ellipse, 'shape', render, 'shape');
-    });
+    const N = 9;
+    const patch = buildSimplePatch(N, 3, 3);
 
     // Compile the patch
     const result = compile(patch);
@@ -247,7 +169,6 @@ describe('Level 5 Integration Tests: Full Pipeline', () => {
 
     // After L7 compaction: count reflects visible instances only.
     // All 9 instances are at z=0, within ortho frustum, so all visible.
-    const N = 9;
     expect(op.instances.count).toBe(N);
     expect(op.instances.position.length).toBe(N * 2); // stride 2 (screen-space)
     expect((op.instances.size as Float32Array).length).toBe(N);
@@ -265,7 +186,7 @@ describe('Level 5 Integration Tests: Full Pipeline', () => {
     // PROOF OF ORDERING:
     // If this test passes, pipeline ordering is proven correct:
     // 1. Signals evaluated (Const values, time phase produced)
-    // 2. Fields materialized (GridLayout produced world positions, HsvToRgb produced colors)
+    // 2. Fields materialized (GridLayout produced world positions)
     // 3. Projection applied (orthoProject converted vec3 positions → vec2 screen coords + depth)
     // 4. RenderFrameIR assembled with screen-space fields
 

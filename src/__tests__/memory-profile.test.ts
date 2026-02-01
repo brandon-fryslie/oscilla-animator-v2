@@ -68,13 +68,10 @@ function buildMemoryTestPatch(instanceCount: number) {
 
     const ellipse = b.addBlock('Ellipse', { rx: 0.01, ry: 0.01 });
     const array = b.addBlock('Array', { count: instanceCount });
-    const layout = b.addBlock('GridLayout', { rows, cols });
+    const layout = b.addBlock('GridLayoutUV', { rows, cols });
 
-    // Color pipeline (required for RenderInstances2D)
-    const sat = b.addBlock('Const', { value: 1.0 });
-    const val = b.addBlock('Const', { value: 1.0 });
-    const hue = b.addBlock('HueFromPhase', {});
-    const color = b.addBlock('HsvToRgb', {});
+    // Simple white color
+    const color = b.addBlock('Const', { value: { r: 1.0, g: 1.0, b: 1.0, a: 1.0 } });
 
     const render = b.addBlock('RenderInstances2D', {});
 
@@ -82,16 +79,9 @@ function buildMemoryTestPatch(instanceCount: number) {
     b.wire(ellipse, 'shape', array, 'element');
     b.wire(array, 'elements', layout, 'elements');
 
-    // Wire color
-    b.wire(time, 'phaseA', hue, 'phase');
-    b.wire(array, 't', hue, 'id01');
-    b.wire(hue, 'hue', color, 'hue');
-    b.wire(sat, 'out', color, 'sat');
-    b.wire(val, 'out', color, 'val');
-
     // Wire to render
     b.wire(layout, 'position', render, 'pos');
-    b.wire(color, 'color', render, 'color');
+    b.wire(color, 'out', render, 'color');
     b.wire(ellipse, 'shape', render, 'shape');
   });
 }

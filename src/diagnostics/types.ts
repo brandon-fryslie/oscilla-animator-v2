@@ -137,7 +137,7 @@ export type DiagnosticCode =
   | 'E_EXPR_COMPILE' // Expression compilation error (IR generation failure)
 
   // --- Authoring Hints ---
-  | 'I_SILENT_VALUE_USED' // Unconnected input using default value
+  | 'I_SILENT_VALUE_USED' // Unconnected input using default value (pre-normalization only)
 
   // --- Compile Info ---
   | 'I_COMPILE_SUCCESS'; // Compilation successful (info)

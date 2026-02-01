@@ -44,7 +44,7 @@ describe('Phase 7 - Layer 1: Opcode Sanity', () => {
     expect(h1).toBe(h2); // Deterministic
     expect(h1).toBeGreaterThanOrEqual(0);
     expect(h1).toBeLessThan(1);
-    
+
     // Different seeds → different results
     const h3 = applyOpcode('hash', [42, 1]);
     expect(h3).not.toBe(h1);
@@ -68,7 +68,7 @@ describe('Phase 7 - Layer 2: Signal Kernel Sanity', () => {
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot', {});
       const array = b.addBlock('Array', { count: 4 });
-      const gridLayout = b.addBlock('GridLayout', { rows: 2, cols: 2 });
+      const gridLayout = b.addBlock('GridLayoutUV', { rows: 2, cols: 2 });
       b.wire(array, 'elements', gridLayout, 'elements');
     });
 
@@ -97,7 +97,7 @@ describe('Phase 7 - Layer 3: Field Kernel Sanity', () => {
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot', {});
       const array = b.addBlock('Array', { count: 8 });
-      const gridLayout = b.addBlock('GridLayout', { rows: 2, cols: 4 });
+      const gridLayout = b.addBlock('GridLayoutUV', { rows: 2, cols: 4 });
       b.wire(array, 'elements', gridLayout, 'elements');
     });
 
@@ -124,7 +124,7 @@ describe('Phase 7 - Layer 4: End-to-End Smoke Tests', () => {
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot', {});
       const array = b.addBlock('Array', { count: 4 });
-      const gridLayout = b.addBlock('GridLayout', { rows: 2, cols: 2 });
+      const gridLayout = b.addBlock('GridLayoutUV', { rows: 2, cols: 2 });
       b.wire(array, 'elements', gridLayout, 'elements');
     });
 

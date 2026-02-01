@@ -95,7 +95,7 @@ describe('Level 1 Unit Tests', () => {
 // =============================================================================
 
 describe('Level 1 Integration Tests', () => {
-  it('GridLayout(4x4) produces a Field<vec3> with 16 entries, each z === 0.0 (exact)', () => {
+  it('GridLayoutUV(4x4) produces a Field<vec3> with 16 entries, each z === 0.0 (exact)', () => {
     const N = 16;
     const out = createPositionField(N);
     gridLayout3D(out, N, 4, 4);
@@ -114,7 +114,7 @@ describe('Level 1 Integration Tests', () => {
     }
   });
 
-  it('LineLayout(N=8) produces a Field<vec3> with 8 entries, each z === 0.0 (exact)', () => {
+  it('LineLayoutUV(N=8) produces a Field<vec3> with 8 entries, each z === 0.0 (exact)', () => {
     const N = 8;
     const out = createPositionField(N);
     lineLayout3D(out, N, 0.1, 0.2, 0.9, 0.8);
@@ -140,7 +140,7 @@ describe('Level 1 Integration Tests', () => {
     expect(y7).toBeCloseTo(0.8);
   });
 
-  it('CircleLayout(N=12) produces a Field<vec3> with 12 entries, each z === 0.0 (exact)', () => {
+  it('CircleLayoutUV(N=12) produces a Field<vec3> with 12 entries, each z === 0.0 (exact)', () => {
     const N = 12;
     const out = createPositionField(N);
     circleLayout3D(out, N, 0.5, 0.5, 0.3, 0);
@@ -192,26 +192,17 @@ describe('Level 1 Integration Tests', () => {
       b.addBlock('InfiniteTimeRoot', { periodAMs: 5000, periodBMs: 10000 });
       const ellipse = b.addBlock('Ellipse', { rx: 0.02, ry: 0.02 });
       const array = b.addBlock('Array', { count: N });
-      const layout = b.addBlock('GridLayoutUV'UV, { rows: 4, colCount: 4 });
+      const layout = b.addBlock('GridLayoutUV', { rows: 4, cols: 4 });
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
 
-      // Color: constant white via HSV
-      const hue = b.addBlock('HueFromPhase', {});
-      b.wire(array, 't', hue, 'id01');
-      const phase = b.addBlock('Const', { value: 0.0 });
-      b.wire(phase, 'out', hue, 'phase');
-      const sat = b.addBlock('Const', { value: 0.0 }); // S=0 → white
-      const val = b.addBlock('Const', { value: 1.0 });
-      const color = b.addBlock('HsvToRgb', {});
-      b.wire(hue, 'hue', color, 'hue');
-      b.wire(sat, 'out', color, 'sat');
-      b.wire(val, 'out', color, 'val');
+      // Color: constant color value
+      const color = b.addBlock('Const', { value: { r: 1.0, g: 1.0, b: 1.0, a: 1.0 } });
 
       // Render: wire layout position directly to render block
       const render = b.addBlock('RenderInstances2D', {});
       b.wire(layout, 'position', render, 'pos');
-      b.wire(color, 'color', render, 'color');
+      b.wire(color, 'out', render, 'color');
       b.wire(ellipse, 'shape', render, 'shape');
     });
 
@@ -248,7 +239,7 @@ describe('Level 1 Integration Tests', () => {
 // =============================================================================
 
 describe('Level 1 Property Tests', () => {
-  it('GridLayout positions are evenly distributed in [0,1]^2', () => {
+  it('GridLayoutUV positions are evenly distributed in [0,1]^2', () => {
     const N = 25;
     const out = createPositionField(N);
     gridLayout3D(out, N, 5, 5);
@@ -271,7 +262,7 @@ describe('Level 1 Property Tests', () => {
     expect(y24).toBeCloseTo(1.0);
   });
 
-  it('CircleLayout positions are at correct radius from center', () => {
+  it('CircleLayoutUV positions are at correct radius from center', () => {
     const N = 12;
     const radius = 0.3;
     const out = createPositionField(N);
@@ -286,7 +277,7 @@ describe('Level 1 Property Tests', () => {
     }
   });
 
-  it('LineLayout positions are evenly spaced along the line', () => {
+  it('LineLayoutUV positions are evenly spaced along the line', () => {
     const N = 5;
     const out = createPositionField(N);
     lineLayout3D(out, N, 0.0, 0.0, 1.0, 1.0);

@@ -144,50 +144,6 @@ export interface LoweredInstance {
 }
 
 /**
- * Lowered input - resolved input value for a block.
- */
-export type LoweredInput =
-  | LoweredSignalInput
-  | LoweredFieldInput
-  | LoweredScalarInput
-  | LoweredInstanceInput
-  | LoweredUnconnectedInput;
-
-export interface LoweredSignalInput {
-  readonly kind: 'signal';
-  readonly sigId: ValueExprId;
-  readonly slot: ValueSlot;
-  readonly stride: number;
-  readonly type: CanonicalType;
-}
-
-export interface LoweredFieldInput {
-  readonly kind: 'field';
-  readonly fieldId: ValueExprId;
-  readonly slot: ValueSlot;
-  readonly stride: number;
-  readonly type: CanonicalType;
-}
-
-export interface LoweredScalarInput {
-  readonly kind: 'scalar';
-  readonly value: unknown;
-  readonly type: CanonicalType;
-}
-
-export interface LoweredInstanceInput {
-  readonly kind: 'instance';
-  readonly instanceId: InstanceId;
-  readonly count: number;
-}
-
-export interface LoweredUnconnectedInput {
-  readonly kind: 'unconnected';
-  readonly defaultValue: unknown | undefined;
-  readonly type: CanonicalType;
-}
-
-/**
  * Result of lowering a single block.
  */
 export interface LoweredBlock {
@@ -198,12 +154,17 @@ export interface LoweredBlock {
   readonly stateWrites?: readonly StateId[];
 }
 
+
+
 /**
  * Context for block lowering.
+ *
+ * Invariant: after graph normalization, every input port is connected,
+ * so lowering never receives an "unconnected" input or a defaultValue fallback.
  */
 export interface LowerContext {
   readonly builder: IRBuilder;
-  readonly resolvedInputs: ReadonlyMap<string, LoweredInput>;
+  readonly resolvedInputs: ReadonlyMap<string, ValueRefPacked>;
   readonly params: Readonly<Record<string, unknown>>;
 }
 

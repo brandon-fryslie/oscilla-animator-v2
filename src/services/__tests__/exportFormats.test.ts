@@ -14,7 +14,7 @@ import {
 import type { Block, Edge } from '../../graph/Patch';
 import type { BlockDef } from '../../blocks/registry';
 import { blockId } from '../../types';
-import { canonicalType, FLOAT, SHAPE, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../core/canonical-types';
+import { canonicalType, FLOAT, SHAPE, INT, BOOL, VEC2, VEC3 } from '../../core/canonical-types';
 import { createTestBlock, resetBlockFactory } from '../../test-utils/block-factory';
 
 describe('exportFormats', () => {
@@ -178,26 +178,26 @@ describe('exportFormats', () => {
     it('formats expression values', () => {
       const block = createTestBlock({
         id: blockId('b4'),
-        type: 'HSVColor',
-        params: { h: 'index*0.1' },
+        type: 'Const',
+        params: { value: 'index*0.1' },
       });
 
       const definition: BlockDef = {
-        type: 'HSVColor',
-        label: 'HSV Color',
-        category: 'Color',
+        type: 'Const',
+        label: 'Constant',
+        category: 'Math',
         form: 'primitive',
         capability: 'pure',
         inputs: {
-          h: { type: canonicalType(FLOAT), value: 0 },
+          value: { type: canonicalType(FLOAT), value: 0 },
         },
         outputs: {
-          color: { type: canonicalType(COLOR) },
+          out: { type: canonicalType(FLOAT) },
         },
         lower: () => ({ outputsById: {} }),
       };
 
-      expect(formatBlockShorthand(block, definition)).toBe('b4:HSVColor(h=index*0.1)');
+      expect(formatBlockShorthand(block, definition)).toBe('b4:Const(value=index*0.1)');
     });
   });
 
@@ -210,7 +210,7 @@ describe('exportFormats', () => {
       });
       const block2 = createTestBlock({
         id: blockId('b2'),
-        type: 'CircleLayout',
+        type: 'CircleLayoutUV',
         inputPorts: new Map([['instances', { id: 'instances', combineMode: 'last' as const }]]),
       });
       const blocks = new Map<string, Block>([

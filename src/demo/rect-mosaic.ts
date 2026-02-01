@@ -25,7 +25,7 @@ export const patchRectMosaic: PatchBuilder = (b) => {
   b.wire(array, 'elements', layout, 'elements');
 
   // Simple constant color
-  const color = b.addBlock('Const', { value: [1.0, 0.6, 0.4, 1.0] }); // Warm salmon
+  const color = b.addBlock('Const', { value: { r: 1.0, g: 0.6, b: 0.4, a: 1.0 } }); // Warm salmon
 
   // Animated scale: pulsing
   const scaleExpr = b.addBlock('Expression', {

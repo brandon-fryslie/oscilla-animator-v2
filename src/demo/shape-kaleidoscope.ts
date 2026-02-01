@@ -36,7 +36,7 @@ export const patchShapeKaleidoscope: PatchBuilder = (b) => {
   b.wire(ellipseArray, 'elements', eCircleLayout, 'elements');
 
   // Ellipse color: warm constant
-  const eColor = b.addBlock('Const', { value: [1.0, 0.5, 0.3, 0.8] }); // Warm orange
+  const eColor = b.addBlock('Const', { value: { r: 1.0, g: 0.5, b: 0.3, a: 0.8 } }); // Warm orange
 
   const eRender = b.addBlock('RenderInstances2D', {});
   b.wire(eCircleLayout, 'position', eRender, 'pos');
@@ -54,7 +54,7 @@ export const patchShapeKaleidoscope: PatchBuilder = (b) => {
   b.wire(rectArray, 'elements', rGridLayout, 'elements');
 
   // Rect color: cool constant
-  const rColor = b.addBlock('Const', { value: [0.3, 0.5, 1.0, 0.7] }); // Cool blue
+  const rColor = b.addBlock('Const', { value: { r: 0.3, g: 0.5, b: 1.0, a: 0.7 } }); // Cool blue
 
   const rRender = b.addBlock('RenderInstances2D', {});
   b.wire(rGridLayout, 'position', rRender, 'pos');

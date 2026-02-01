@@ -46,7 +46,7 @@ describe('Steel Thread - Dual Topology with Scale', () => {
       b.wire(time, 'phaseA', eLayout, 'phase');
 
       // Simple solid color
-      const eColor = b.addBlock('Const', { value: [1.0, 0.5, 0.0, 1.0] }); // Orange
+      const eColor = b.addBlock('Const', { value: { r: 1.0, g: 0.5, b: 0.0, a: 1.0 } }); // Orange
 
       const eRender = b.addBlock('RenderInstances2D', {});
       b.wire(eLayout, 'position', eRender, 'pos');
@@ -64,7 +64,7 @@ describe('Steel Thread - Dual Topology with Scale', () => {
       b.wire(time, 'phaseB', rLayout, 'phase');
 
       // Simple solid color
-      const rColor = b.addBlock('Const', { value: [0.0, 0.5, 1.0, 1.0] }); // Blue
+      const rColor = b.addBlock('Const', { value: { r: 0.0, g: 0.5, b: 1.0, a: 1.0 } }); // Blue
 
       const rRender = b.addBlock('RenderInstances2D', {});
       b.wire(rLayout, 'position', rRender, 'pos');

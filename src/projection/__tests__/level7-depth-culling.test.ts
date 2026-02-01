@@ -409,23 +409,14 @@ describe('Level 7 End-to-End: Real Pipeline Depth Sort + Cull', () => {
       b.addBlock('InfiniteTimeRoot', {});
       const ellipse = b.addBlock('Ellipse', { rx: 0.03, ry: 0.03 });
       const array = b.addBlock('Array', { count: 9 });
-      const layout = b.addBlock('GridLayoutUV'UV, { rows: 3, colCount: 3 });
-      const sat = b.addBlock('Const', { value: 1.0 });
-      const val = b.addBlock('Const', { value: 1.0 });
-      const hue = b.addBlock('HueFromPhase', {});
-      const color = b.addBlock('HsvToRgb', {});
+      const layout = b.addBlock('GridLayoutUV', { rows: 3, cols: 3 });
+      const color = b.addBlock('Const', { value: { r: 1.0, g: 1.0, b: 1.0, a: 1.0 } });
       const render = b.addBlock('RenderInstances2D', {});
 
       b.wire(ellipse, 'shape', array, 'element');
       b.wire(array, 'elements', layout, 'elements');
-      b.wire(array, 't', hue, 'id01');
-      const phase = b.addBlock('Const', { value: 0.0 });
-      b.wire(phase, 'out', hue, 'phase');
-      b.wire(hue, 'hue', color, 'hue');
-      b.wire(sat, 'out', color, 'sat');
-      b.wire(val, 'out', color, 'val');
       b.wire(layout, 'position', render, 'pos');
-      b.wire(color, 'color', render, 'color');
+      b.wire(color, 'out', render, 'color');
       b.wire(ellipse, 'shape', render, 'shape');
     });
 

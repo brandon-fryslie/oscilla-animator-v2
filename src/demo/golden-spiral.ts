@@ -23,7 +23,7 @@ export const patchGoldenSpiral: PatchBuilder = (b) => {
   b.wire(array, 'elements', circleLayout, 'elements');
 
   // Simple constant color
-  const color = b.addBlock('Const', { value: [0.9, 0.7, 0.5, 1.0] }); // Warm yellow
+  const color = b.addBlock('Const', { value: { r: 0.9, g: 0.7, b: 0.5, a: 1.0 } }); // Warm yellow
 
   const render = b.addBlock('RenderInstances2D', {});
   b.wire(circleLayout, 'position', render, 'pos');

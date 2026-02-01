@@ -12,7 +12,7 @@
 import { registerBlock } from './registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../core/ids';
 import { canonicalType, canonicalField, unitWorld3, requireInst } from '../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../core/canonical-types';
+import { FLOAT, VEC3, COLOR, SHAPE } from '../core/canonical-types';
 import { defaultSourceConst } from '../types';
 
 // =============================================================================

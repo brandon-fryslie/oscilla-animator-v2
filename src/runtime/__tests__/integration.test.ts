@@ -13,11 +13,11 @@ import { getTestArena } from '../../runtime/__tests__/test-arena-helper';
 
 describe('Runtime Integration', () => {
   it('executes a simple animated grid', () => {
-    // Build patch: TimeRoot -> Array + GridLayout
+    // Build patch: TimeRoot -> Array + GridLayoutUV
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot', {});
       const array = b.addBlock('Array', { count: 4 });
-      const gridLayout = b.addBlock('GridLayout', { rows: 2, cols: 2 });
+      const gridLayout = b.addBlock('GridLayoutUV', { rows: 2, cols: 2 });
       b.wire(array, 'elements', gridLayout, 'elements');
     });
 

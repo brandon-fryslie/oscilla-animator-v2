@@ -40,6 +40,26 @@ const perspCam: ResolvedCameraParams = {
   far: 100,
 };
 
+/**
+ * Helper: build a 3×3 grid patch with constant color for state toggle tests.
+ */
+function buildToggleTestPatch() {
+  return buildPatch((b) => {
+    b.addBlock('InfiniteTimeRoot', {});
+    const ellipse = b.addBlock('Ellipse', { rx: 0.03, ry: 0.03 });
+    const array = b.addBlock('Array', { count: 9 });
+    const layout = b.addBlock('GridLayoutUV', { rows: 3, cols: 3 });
+    const color = b.addBlock('Const', { value: { r: 1.0, g: 1.0, b: 1.0, a: 1.0 } });
+    const render = b.addBlock('RenderInstances2D', {});
+
+    b.wire(ellipse, 'shape', array, 'element');
+    b.wire(array, 'elements', layout, 'elements');
+    b.wire(layout, 'position', render, 'pos');
+    b.wire(color, 'out', render, 'color');
+    b.wire(ellipse, 'shape', render, 'shape');
+  });
+}
+
 // =============================================================================
 // Unit Tests
 // =============================================================================
@@ -132,30 +152,7 @@ describe('Level 6 Unit Tests: ProjectionMode Type', () => {
 describe('Level 6 Integration Tests: State Preservation Across Mode Toggle', () => {
   it('50-frame ortho run produces valid state snapshot (compiledSchedule, runtimeSlots, continuityMap)', () => {
     // DoD Checkbox 4: Compile a patch, run 50 frames with ortho camera, snapshot state
-    //
-    // Build a real patch that compiles to a valid program
-    const patch = buildPatch((b) => {
-      const time = b.addBlock('InfiniteTimeRoot', {});
-      const ellipse = b.addBlock('Ellipse', { rx: 0.03, ry: 0.03 });
-      const array = b.addBlock('Array', { count: 9 });
-      const layout = b.addBlock('GridLayoutUV'UV, { rows: 3, colCount: 3 });
-      const sat = b.addBlock('Const', { value: 1.0 });
-      const val = b.addBlock('Const', { value: 1.0 });
-      const hue = b.addBlock('HueFromPhase', {});
-      const color = b.addBlock('HsvToRgb', {});
-      const render = b.addBlock('RenderInstances2D', {});
-
-      b.wire(ellipse, 'shape', array, 'element');
-      b.wire(array, 'elements', layout, 'elements');
-      b.wire(time, 'phaseA', hue, 'phase');
-      b.wire(array, 't', hue, 'id01');
-      b.wire(hue, 'hue', color, 'hue');
-      b.wire(sat, 'out', color, 'sat');
-      b.wire(val, 'out', color, 'val');
-      b.wire(layout, 'position', render, 'pos');
-      b.wire(color, 'color', render, 'color');
-      b.wire(ellipse, 'shape', render, 'shape');
-    });
+    const patch = buildToggleTestPatch();
 
     const result = compile(patch);
     if (result.kind !== 'ok') {
@@ -175,49 +172,17 @@ describe('Level 6 Integration Tests: State Preservation Across Mode Toggle', () 
     // Take snapshot of state after 50 frames
     const compiledSchedule = program; // This is the immutable compiled schedule
     const runtimeSlots = new Float64Array(state.values.f64); // Copy scalar state
-    // continuityMap would be in state.continuity if it exists
-    // For now, we just verify state.values exists
 
     // Verify snapshot is valid
     expect(compiledSchedule).toBeDefined();
     expect(compiledSchedule.schedule).toBeDefined();
     expect(runtimeSlots.length).toBe(state.values.f64.length);
     expect(runtimeSlots.length).toBeGreaterThan(0);
-
-    // State snapshot is valid ✓
   });
 
   it('Toggle to perspective, run 1 frame → compiledSchedule unchanged (referential ===)', () => {
     // DoD Checkboxes 5, 6, 7, 8: State preservation across mode toggle
-    //
-    // NOTE: With the new API, camera mode is resolved from program.renderGlobals.
-    // Since these tests don't have a Camera block, they all use DEFAULT_CAMERA (ortho).
-    // To test perspective mode, we would need to inject camera slots into the program.
-    //
-    // For now, this test verifies that repeated executeFrame calls don't mutate the program.
-
-    const patch = buildPatch((b) => {
-      const time = b.addBlock('InfiniteTimeRoot', {});
-      const ellipse = b.addBlock('Ellipse', { rx: 0.03, ry: 0.03 });
-      const array = b.addBlock('Array', { count: 9 });
-      const layout = b.addBlock('GridLayoutUV'UV, { rows: 3, colCount: 3 });
-      const sat = b.addBlock('Const', { value: 1.0 });
-      const val = b.addBlock('Const', { value: 1.0 });
-      const hue = b.addBlock('HueFromPhase', {});
-      const color = b.addBlock('HsvToRgb', {});
-      const render = b.addBlock('RenderInstances2D', {});
-
-      b.wire(ellipse, 'shape', array, 'element');
-      b.wire(array, 'elements', layout, 'elements');
-      b.wire(time, 'phaseA', hue, 'phase');
-      b.wire(array, 't', hue, 'id01');
-      b.wire(hue, 'hue', color, 'hue');
-      b.wire(sat, 'out', color, 'sat');
-      b.wire(val, 'out', color, 'val');
-      b.wire(layout, 'position', render, 'pos');
-      b.wire(color, 'color', render, 'color');
-      b.wire(ellipse, 'shape', render, 'shape');
-    });
+    const patch = buildToggleTestPatch();
 
     const result = compile(patch);
     if (result.kind !== 'ok') {
@@ -236,7 +201,6 @@ describe('Level 6 Integration Tests: State Preservation Across Mode Toggle', () 
 
     // Snapshot after frame 49 (before frame 50)
     const compiledScheduleBefore = program;
-    const runtimeSlotsBeforeFrame50 = new Float64Array(state.values.f64);
 
     // Run frame 50
     arena.reset();
@@ -246,40 +210,11 @@ describe('Level 6 Integration Tests: State Preservation Across Mode Toggle', () 
     // DoD Checkbox 6: compiledSchedule is same object (referential ===)
     expect(program).toBe(compiledScheduleBefore);
     // This proves the program IR is never mutated by executeFrame
-
-    // Since we can't toggle camera modes without injecting camera blocks,
-    // we verify that the program remains unchanged across frames.
-    expect(program).toBe(compiledScheduleBefore);
   });
 
   it('Toggle back to ortho produces bitwise-identical screen output to pre-toggle', () => {
     // DoD Checkboxes 9, 10: Toggle back to ortho, verify output is identical
-    //
-    // Note: Without Camera block support, all runs use default ortho.
-    // This test verifies determinism across multiple runs.
-
-    const patch = buildPatch((b) => {
-      const time = b.addBlock('InfiniteTimeRoot', {});
-      const ellipse = b.addBlock('Ellipse', { rx: 0.03, ry: 0.03 });
-      const array = b.addBlock('Array', { count: 9 });
-      const layout = b.addBlock('GridLayoutUV'UV, { rows: 3, colCount: 3 });
-      const sat = b.addBlock('Const', { value: 1.0 });
-      const val = b.addBlock('Const', { value: 1.0 });
-      const hue = b.addBlock('HueFromPhase', {});
-      const color = b.addBlock('HsvToRgb', {});
-      const render = b.addBlock('RenderInstances2D', {});
-
-      b.wire(ellipse, 'shape', array, 'element');
-      b.wire(array, 'elements', layout, 'elements');
-      b.wire(time, 'phaseA', hue, 'phase');
-      b.wire(array, 't', hue, 'id01');
-      b.wire(hue, 'hue', color, 'hue');
-      b.wire(sat, 'out', color, 'sat');
-      b.wire(val, 'out', color, 'val');
-      b.wire(layout, 'position', render, 'pos');
-      b.wire(color, 'color', render, 'color');
-      b.wire(ellipse, 'shape', render, 'shape');
-    });
+    const patch = buildToggleTestPatch();
 
     const result = compile(patch);
     if (result.kind !== 'ok') {
@@ -416,11 +351,6 @@ describe('Level 6 Integration Tests: Output Correctness', () => {
 describe('Level 6 Integration Tests: World-Space Continuity Across Toggle', () => {
   it('150-frame run with toggles at f50 and f100 shows smooth world-space trajectories', () => {
     // DoD Checkbox 16: Sine-modulated z, toggle at f50 and f100, verify smooth world positions
-    //
-    // Strategy: Manually set z values each frame with a sine wave.
-    // This directly proves world-space is unaffected by camera mode.
-    // If camera mode affected world-space, the trajectory would have discontinuities
-    // at toggle points (f50, f100).
 
     const N = 9;
     const positions = createPositionField(N);
@@ -470,7 +400,6 @@ describe('Level 6 Integration Tests: World-Space Continuity Across Toggle', () =
     }
 
     // Check for spikes at f50 and f100 (indices 49→50 and 99→100)
-    const maxDerivative = Math.max(...derivatives);
     const derivativeAtToggle50 = derivatives[49]; // f49→f50
     const derivativeAtToggle100 = derivatives[99]; // f99→f100
 
