@@ -12,7 +12,7 @@ import { isExprRef, type ValueRefExpr } from "../ir/lowerTypes";
 import type { InstanceId } from "../ir/Indices";
 import { getBlockDefinition, type LowerCtx, type LowerResult, hasLowerOutputsOnly } from "../../blocks/registry";
 import type { EventHub } from "../../events/EventHub";
-import { type CanonicalType, withInstance, instanceRef as makeInstanceRef, requireInst } from "../../core/canonical-types";
+import { type CanonicalType, requireInst } from "../../core/canonical-types";
 import type { PortKey } from "../frontend/analyze-type-constraints";
 // Multi-Input Blocks Integration
 import {
@@ -404,28 +404,12 @@ function lowerBlockInstance(
     }
 
     // Resolve output types from pass1 portTypes
-    let outTypes: CanonicalType[] = Object.keys(blockDef.outputs)
+    const outTypes: CanonicalType[] = Object.keys(blockDef.outputs)
       .map(portName => portTypes?.get(portKey(blockIndex, portName, 'out')))
       .filter((t): t is CanonicalType => t !== undefined);
+    // Backend reads portTypes from TypedPatch - never modifies them.
+    // TODO: Sprint 2 - frontend solver will resolve cardinality/instance
 
-    // Rewrite outTypes with actual instance ref for downstream blocks.
-    // Type inference (pass 1) uses placeholder instance IDs from block definitions.
-    // When a block has inferredInstance from upstream, rewrite field output types
-    // to carry the actual instance ID so runtime can find the instance.
-    if (inferredInstance) {
-      const instanceDecl = builder.getInstances().get(inferredInstance);
-      if (instanceDecl) {
-        const ref = makeInstanceRef(instanceDecl.domainType as string, inferredInstance as string);
-        outTypes = outTypes.map(t => {
-          // Only rewrite types that have many cardinality (field types)
-          const card = t.extent.cardinality;
-          if (card.kind === 'inst' && card.value.kind === 'many') {
-            return withInstance(t, ref);
-          }
-          return t;
-        });
-      }
-    }
 
     // Build lowering context
     const ctx: LowerCtx = {
@@ -449,7 +433,34 @@ function lowerBlockInstance(
     const config = block.params;
 
     // Call lowering function (with existingOutputs if this is phase 2)
-    const result = blockDef.lower({ ctx, inputs, inputsById, config, existingOutputs });
+    let result = blockDef.lower({ ctx, inputs, inputsById, config, existingOutputs });
+
+    // Auto-propagate instanceContext for blocks with field outputs
+    // Only applies if the block didn't explicitly set instanceContext
+    if (!('instanceContext' in result)) {
+      // Check if any output has many-cardinality (is a field)
+      let hasFieldOutput = false;
+      if (result.outputsById) {
+        for (const ref of Object.values(result.outputsById)) {
+          if (isExprRef(ref)) {
+            const card = requireInst(ref.type.extent.cardinality, 'cardinality');
+            if (card.kind === 'many') {
+              hasFieldOutput = true;
+              break;
+            }
+          }
+        }
+      }
+
+      // If block has field outputs and didn't explicitly set instanceContext,
+      // auto-propagate from ctx.inferredInstance
+      if (hasFieldOutput && ctx.inferredInstance !== undefined) {
+        result = {
+          ...result,
+          instanceContext: ctx.inferredInstance,
+        };
+      }
+    }
 
     // All blocks MUST use outputsById pattern
     // Allow empty outputsById only if block has no declared outputs
@@ -817,6 +828,8 @@ function lowerSCCTwoPass(
  * Instance Context Propagation:
  * - Tracks instanceContext returned by blocks (e.g., Array)
  * - Propagates to downstream blocks via ctx.inferredInstance
+ * - Auto-propagates instanceContext for blocks with field outputs
+ *   when not explicitly set by the block
  *
  * Two-Pass Lowering for Feedback Loops:
  * - Non-trivial SCCs (cycles) use two-pass lowering
