@@ -16,7 +16,7 @@
  * It never sees raw Patch directly.
  */
 
-import type { SigExprId, EventExprId } from "./types";
+import type { ValueExprId } from "./Indices";
 import type { CanonicalType, InstanceRef } from "../../core/canonical-types";
 import type { TimeModelIR } from "./schedule";
 
@@ -100,25 +100,25 @@ export interface TimeResolvedPatch extends TypedPatch {
  */
 export interface TimeSignals {
   /** Signal expression ID for tModelMs (model time) */
-  readonly tModelMs: SigExprId;
+  readonly tModelMs: ValueExprId;
 
   /** Signal expression ID for phaseA (primary phase) */
-  readonly phaseA?: SigExprId;
+  readonly phaseA?: ValueExprId;
 
   /** Signal expression ID for phaseB (secondary phase) */
-  readonly phaseB?: SigExprId;
+  readonly phaseB?: ValueExprId;
 
   /** Signal expression ID for dt (delta time) */
-  readonly dt?: SigExprId;
+  readonly dt?: ValueExprId;
 
   /** Event expression ID for pulse (fires on phase wrap) */
-  readonly pulse: EventExprId | null;
+  readonly pulse: ValueExprId | null;
 
   /** Signal expression ID for palette (phase-derived color) */
-  readonly palette?: SigExprId;
+  readonly palette?: ValueExprId;
 
   /** Signal expression ID for energy (phase-derived energy) */
-  readonly energy?: SigExprId;
+  readonly energy?: ValueExprId;
 }
 
 // =============================================================================
