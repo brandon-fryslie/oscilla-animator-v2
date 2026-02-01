@@ -277,9 +277,10 @@ registerBlock({
         break;
       }
       case 3: {
-        // Noise: Use simplexNoise1D with phase as seed
-        const noise = ctx.b.kernel('simplexNoise1D');
-        id = ctx.b.kernelMap(phase.id, noise, canonicalType(FLOAT, unitNorm01()));
+        // Noise: Deterministic hash of phase (produces pseudo-random [0,1) output)
+        const hash = ctx.b.opcode(OpCode.Hash);
+        const seed = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
+        id = ctx.b.kernelZip([phase.id, seed], hash, canonicalType(FLOAT, unitNorm01()));
         break;
       }
       default: {
@@ -350,7 +351,7 @@ registerBlock({
     const newValue = ctx.b.kernelZip([currentValue, delta.id], add, canonicalType(FLOAT));
 
     // Select: reset ? 0 : newValue
-    const select = ctx.b.kernel('select');
+    const select = ctx.b.opcode(OpCode.Select);
     const finalValue = ctx.b.kernelZip([reset.id, zero, newValue], select, canonicalType(FLOAT));
 
     // Write back to state

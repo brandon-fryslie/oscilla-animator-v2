@@ -438,6 +438,9 @@ export enum OpCode {
   Exp = 'exp',
   Log = 'log',
   Sign = 'sign',
+
+  // Control flow
+  Select = 'select',
 }
 
 // =============================================================================

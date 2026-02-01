@@ -40,6 +40,7 @@
  * TERNARY (exactly 3 arguments):
  *   clamp    - Clamp: clamp(x, min, max)
  *   lerp     - Linear interp: lerp(a, b, t)
+ *   select   - Conditional: select(cond, ifTrue, ifFalse) → cond > 0 ? ifTrue : ifFalse
  *
  * VARIADIC (1+ arguments):
  *   add      - Sum: a + b + c + ...
@@ -182,6 +183,10 @@ function applyNaryOp(op: string, values: number[]): number {
       // Normalize to [0, 1)
       return h / 0x100000000;
     }
+    case 'select':
+      expectArity('select', values.length, 3);
+      // select(condition, valueIfTrue, valueIfFalse)
+      return values[0] > 0 ? values[1] : values[2];
     default:
       throw new Error(`OpCode ${op} not implemented for ${values.length} args`);
   }

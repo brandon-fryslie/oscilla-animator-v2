@@ -39,6 +39,8 @@ describe('Block Lowering - No Arithmetic Kernel Names', () => {
     'fieldPow',
     'fieldMin',
     'fieldMax',
+    'simplexNoise1D',
+    'select',
   ];
 
   it('block files do not emit denied arithmetic kernel names', () => {
@@ -46,6 +48,7 @@ describe('Block Lowering - No Arithmetic Kernel Names', () => {
       'math-blocks.ts',
       'field-operations-blocks.ts',
       'math-utility-blocks.ts',
+      'signal-blocks.ts',
     ];
 
     const violations: string[] = [];
@@ -86,5 +89,7 @@ describe('Block Lowering - No Arithmetic Kernel Names', () => {
     expect(DENIED_KERNEL_NAMES).toContain('fieldModulo');
     expect(DENIED_KERNEL_NAMES).toContain('fieldSin');
     expect(DENIED_KERNEL_NAMES).toContain('fieldCos');
+    expect(DENIED_KERNEL_NAMES).toContain('simplexNoise1D');
+    expect(DENIED_KERNEL_NAMES).toContain('select');
   });
 });

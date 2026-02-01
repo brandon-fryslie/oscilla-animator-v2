@@ -8,7 +8,7 @@
  * Coverage:
  * - Unary ops: sin, cos, floor, ceil, round, fract, sqrt, exp, log, sign
  * - Binary ops: sub, div, mod, pow, hash
- * - Ternary ops: clamp, lerp
+ * - Ternary ops: clamp, lerp, select
  * - Variadic ops: add, mul, min, max
  * - Special cases: wrap01, abs, neg
  */
@@ -185,6 +185,18 @@ describe('OpcodeInterpreter - Ternary Operations', () => {
     expect(applyOpcode('lerp', [0, 10, 0.25])).toBe(2.5);
     expect(applyOpcode('lerp', [5, 15, 0.5])).toBe(10);
   });
+
+  it('select: conditional selection', () => {
+    // Condition true (> 0): returns valueIfTrue
+    expect(applyOpcode('select', [1, 10, 20])).toBe(10);
+    expect(applyOpcode('select', [0.5, 10, 20])).toBe(10);
+    expect(applyOpcode('select', [100, 10, 20])).toBe(10);
+
+    // Condition false (<= 0): returns valueIfFalse
+    expect(applyOpcode('select', [0, 10, 20])).toBe(20);
+    expect(applyOpcode('select', [-1, 10, 20])).toBe(20);
+    expect(applyOpcode('select', [-0.5, 10, 20])).toBe(20);
+  });
 });
 
 describe('OpcodeInterpreter - Variadic Operations', () => {
@@ -265,6 +277,14 @@ describe('OpcodeInterpreter - Strict Arity Enforcement', () => {
 
     it('lerp: throws on 4+ arguments', () => {
       expect(() => applyOpcode('lerp', [0, 10, 0.5, 1])).toThrow(/exactly 3 argument/);
+    });
+
+    it('select: throws on 2 arguments', () => {
+      expect(() => applyOpcode('select', [1, 10])).toThrow(/exactly 3 argument/);
+    });
+
+    it('select: throws on 4+ arguments', () => {
+      expect(() => applyOpcode('select', [1, 10, 20, 30])).toThrow(/exactly 3 argument/);
     });
   });
 });
