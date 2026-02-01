@@ -14,9 +14,9 @@ import {
 } from '../../../blocks/registry';
 import { FLOAT, VEC2 } from '../../../core/canonical-types';
 
-// Import blocks to ensure registry is populated
-import '../../../blocks/math-blocks';
-import '../../../blocks/signal-blocks';
+// Import blocks to trigger registration
+import '../../../blocks/all';
+
 
 describe('Payload Validation', () => {
   describe('isPayloadAllowed', () => {

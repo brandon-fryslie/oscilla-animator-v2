@@ -10,8 +10,9 @@ import { RootStore } from '../../stores/RootStore';
 import type { Diagnostic } from '../types';
 
 // Import block registrations (needed for PatchStore.addBlock)
-import '../../blocks/time-blocks';
-import '../../blocks/adapter-blocks';
+// Import blocks to trigger registration
+import '../../blocks/all';
+
 
 describe('actionExecutor integration', () => {
   let rootStore: RootStore;

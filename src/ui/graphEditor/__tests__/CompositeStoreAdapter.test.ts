@@ -11,9 +11,9 @@ import { CompositeEditorStore } from '../../../stores/CompositeEditorStore';
 import { CompositeStoreAdapter } from '../CompositeStoreAdapter';
 import type { InternalEdge } from '../../../blocks/composite-types';
 
-// Import blocks to ensure they're registered
-import '../../../blocks/signal-blocks';
-import '../../../blocks/math-blocks';
+// Import blocks to trigger registration
+import '../../../blocks/all';
+
 
 describe('CompositeStoreAdapter', () => {
   let store: CompositeEditorStore;

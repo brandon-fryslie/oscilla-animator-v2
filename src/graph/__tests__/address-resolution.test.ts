@@ -9,7 +9,7 @@ import { addressToString } from '../../types/canonical-address';
 import { getBlockAddress, getOutputAddress, getInputAddress } from '../addressing';
 
 // Import blocks to trigger registration
-import '../../blocks/signal-blocks';
+import '../../blocks/all';
 
 describe('resolveAddress', () => {
   it('resolves block address', () => {

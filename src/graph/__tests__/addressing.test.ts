@@ -17,7 +17,8 @@ import { portId } from '../../types';
 import { normalizeCanonicalName } from '../../core/canonical-name';
 
 // Import blocks to trigger registration
-import '../../blocks/signal-blocks';
+import '../../blocks/all';
+
 
 describe('getBlockAddress', () => {
   it('generates address from displayName', () => {

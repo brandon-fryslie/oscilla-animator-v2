@@ -12,9 +12,9 @@ import { portId } from '../../types';
 import { EventHub } from '../../events/EventHub';
 import type { EditorEvent } from '../../events/types';
 
-// Import blocks to ensure they're registered
-import '../../blocks/signal-blocks';
-import '../../blocks/math-blocks';
+// Import blocks to trigger registration
+import '../../blocks/all';
+
 
 describe('SelectionStore', () => {
   let patchStore: PatchStore;

@@ -26,12 +26,9 @@ import { registerBlock } from '../../../blocks/registry';
 
 // Import block definitions to register them
 // These modules self-register when loaded
-import '../../../blocks/signal-blocks';
-import '../../../blocks/math-blocks';
-import '../../../blocks/color-blocks';
-import '../../../blocks/field-operations-blocks';
-import '../../../blocks/array-blocks';
-import '../../../blocks/adapter-blocks';
+// Import blocks to trigger registration
+import '../../../blocks/all';
+
 
 describe('Connection Validation - Behavioral Tests', () => {
   // Tests removed during type system refactor

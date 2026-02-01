@@ -19,10 +19,9 @@ import {
   isPayloadGeneric,
 } from '../registry';
 
-// Import blocks to ensure they're registered
-import '../math-blocks';
-import '../signal-blocks';
-import '../time-blocks';
+// Import all blocks to ensure they're registered
+import '../all';
+
 
 describe('requireBlockDef', () => {
   it('returns BlockDef for a registered block type', () => {

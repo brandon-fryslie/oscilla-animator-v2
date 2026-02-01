@@ -7,9 +7,9 @@ import { PatchStore } from '../PatchStore';
 import type { BlockId } from '../../types';
 
 // Import block registrations
-import '../../blocks/signal-blocks';
-import '../../blocks/adapter-blocks';
-import '../../blocks/math-blocks';
+// Import blocks to trigger registration
+import '../../blocks/all';
+
 
 describe('PatchStore Lens Methods', () => {
   let store: PatchStore;

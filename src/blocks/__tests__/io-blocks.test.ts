@@ -13,8 +13,9 @@ import {
   getAllBlockTypes,
 } from '../registry';
 
-// Import blocks to register them
-import '../io-blocks';
+// Import all blocks to ensure they're registered
+import '../all';
+
 
 describe('IO Blocks - Registry', () => {
   it('registers ExternalInput block', () => {

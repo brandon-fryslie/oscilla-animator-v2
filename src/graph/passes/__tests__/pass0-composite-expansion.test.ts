@@ -14,9 +14,9 @@ import type { Patch, Block, Edge } from '../../Patch';
 import type { BlockId, BlockRole } from '../../../types';
 import { userRole } from '../../../types';
 
-// Import blocks to ensure they're registered (Add, Mul, Noise, Lag, Const)
-import '../../../blocks/math-blocks';   // Add, Mul, Noise
-import '../../../blocks/signal-blocks'; // Lag, Const
+// Import blocks to trigger registration
+import '../../../blocks/all';
+
 
 // =============================================================================
 // Test Fixtures

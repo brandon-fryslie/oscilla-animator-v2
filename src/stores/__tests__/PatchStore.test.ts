@@ -11,9 +11,9 @@ import type { Endpoint } from '../../graph/Patch';
 import { blockId } from '../../types';
 import { createTestBlock, resetBlockFactory } from '../../test-utils/block-factory';
 
-// Import blocks to ensure they're registered
-import '../../blocks/signal-blocks';
-import '../../blocks/math-blocks';
+// Import blocks to trigger registration
+import '../../blocks/all';
+
 
 describe('PatchStore', () => {
   let store: PatchStore;

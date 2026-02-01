@@ -9,9 +9,9 @@ import { RootStore } from '../RootStore';
 import type { Endpoint } from '../../graph/Patch';
 import { blockId } from '../../types';
 
-// Import blocks to ensure they're registered
-import '../../blocks/signal-blocks';
-import '../../blocks/math-blocks';
+// Import blocks to trigger registration
+import '../../blocks/all';
+
 
 describe('Store Integration', () => {
   let root: RootStore;

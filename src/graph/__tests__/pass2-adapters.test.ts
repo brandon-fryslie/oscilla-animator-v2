@@ -18,7 +18,9 @@ import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../c
 import { registerBlock } from '../../blocks/registry';
 
 // Ensure adapter blocks are registered
-import '../../blocks/adapter-blocks';
+// Import blocks to trigger registration
+import '../../blocks/all';
+
 
 // =============================================================================
 // Test block registrations

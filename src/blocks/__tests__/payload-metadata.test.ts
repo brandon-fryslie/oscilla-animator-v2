@@ -22,8 +22,8 @@ import {
 } from '../registry';
 
 // Import all blocks to ensure they're registered
-import '../math-blocks';
-import '../signal-blocks';
+import '../all';
+
 
 describe('Payload Metadata', () => {
   describe('Registry types', () => {

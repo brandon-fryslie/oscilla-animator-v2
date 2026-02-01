@@ -15,22 +15,8 @@ import {
 } from '../registry';
 
 // Import all blocks to ensure they're registered
-import '../math-blocks';
-import '../signal-blocks';
-import '../time-blocks';
-import '../field-blocks';
-import '../render-blocks';
-import '../instance-blocks';
-import '../array-blocks';
-import '../primitive-blocks';
-import '../color-blocks';
-import '../geometry-blocks';
-import '../expression-blocks';
-import '../identity-blocks';
-import '../test-blocks';
-import '../field-operations-blocks';
-import '../path-blocks';
-import '../path-operators-blocks';
+import '../all';
+
 
 describe('Cardinality Metadata', () => {
   describe('Registry types', () => {

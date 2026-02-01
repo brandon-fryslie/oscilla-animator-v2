@@ -7,9 +7,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { PatchStore } from '../PatchStore';
 
-// Import blocks to ensure they're registered
-import '../../blocks/signal-blocks';
-import '../../blocks/math-blocks';
+// Import blocks to trigger registration
+import '../../blocks/all';
+
 
 describe('PatchStore - Display Name Auto-generation', () => {
   let store: PatchStore;

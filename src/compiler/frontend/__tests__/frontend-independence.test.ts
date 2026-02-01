@@ -17,11 +17,8 @@ import { compileFrontend } from '../index';
 import type { FrontendResult } from '../index';
 
 // Import blocks to trigger registration
-import '../../../blocks/time-blocks';
-import '../../../blocks/math-blocks';
-import '../../../blocks/primitive-blocks';
-import '../../../blocks/signal-blocks';
-import '../../../blocks/adapter-blocks';
+import '../../../blocks/all';
+
 
 describe('Frontend Independence', () => {
   describe('Type Resolution', () => {

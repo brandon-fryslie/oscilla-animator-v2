@@ -20,7 +20,9 @@ import {
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../core/canonical-types';
 
 // Ensure adapter blocks are registered
-import '../../blocks/adapter-blocks';
+// Import blocks to trigger registration
+import '../all';
+
 
 describe('Adapter Registry', () => {
   describe('findAdapter - unit conversion adapters (§B4.1)', () => {

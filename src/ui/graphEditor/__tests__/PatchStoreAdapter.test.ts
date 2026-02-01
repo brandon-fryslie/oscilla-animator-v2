@@ -11,9 +11,9 @@ import { PatchStore } from '../../../stores/PatchStore';
 import { LayoutStore } from '../../../stores/LayoutStore';
 import { PatchStoreAdapter } from '../PatchStoreAdapter';
 
-// Import blocks to ensure they're registered
-import '../../../blocks/signal-blocks';
-import '../../../blocks/math-blocks';
+// Import blocks to trigger registration
+import '../../../blocks/all';
+
 
 describe('PatchStoreAdapter', () => {
   let patchStore: PatchStore;

@@ -14,13 +14,9 @@ import { canonicalType, canonicalField } from '../../../core/canonical-types';
 import { isCardinalityGeneric } from '../../../blocks/registry';
 import { buildPatch } from '../../../graph/Patch';
 
-// Import blocks to ensure registry is populated
-import '../../../blocks/math-blocks';
-import '../../../blocks/signal-blocks';
-import '../../../blocks/time-blocks';
-import '../../../blocks/field-blocks';
-import '../../../blocks/render-blocks';
-import '../../../blocks/array-blocks';
+// Import blocks to trigger registration
+import '../../../blocks/all';
+
 
 describe('Cardinality Specialization', () => {
   describe('Type compatibility', () => {

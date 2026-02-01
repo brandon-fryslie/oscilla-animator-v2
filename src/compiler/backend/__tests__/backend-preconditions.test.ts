@@ -20,10 +20,8 @@ import type { AcyclicOrLegalGraph } from '../../ir/patches';
 import { createDefaultRegistry } from '../../../runtime/kernels/default-registry';
 
 // Import blocks to trigger registration
-import '../../../blocks/time-blocks';
-import '../../../blocks/math-blocks';
-import '../../../blocks/primitive-blocks';
-import '../../../blocks/signal-blocks';
+import '../../../blocks/all';
+
 
 /**
  * Minimal program converter for testing.

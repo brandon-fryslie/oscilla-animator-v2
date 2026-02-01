@@ -31,10 +31,9 @@ function buildSlotToOffsetMap(program: CompiledProgramIR): Map<number, number> {
 }
 
 // Import block registrations
-import '../signal-blocks';
-import '../math-blocks';
-import '../time-blocks';
-import '../event-blocks';
+// Import all blocks to ensure they're registered
+import '../all';
+
 
 // =============================================================================
 // Test Helpers
