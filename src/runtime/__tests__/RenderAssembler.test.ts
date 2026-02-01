@@ -10,13 +10,14 @@ import {
   isRenderStep,
   type AssemblerContext,
 } from '../RenderAssembler';
-import type { StepRender, InstanceDecl, SigExpr } from '../../compiler/ir/types';
+import type { StepRender, InstanceDecl } from '../../compiler/ir/types';
+import type { ValueExpr } from '../../compiler/ir/value-expr';
 import { instanceId } from '../../compiler/ir/Indices';
 import type { CanonicalType } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION, canonicalType } from '../../core/canonical-types';
 import type { RuntimeState } from '../RuntimeState';
 import { createRuntimeState } from '../RuntimeState';
-import type { ValueSlot, SigExprId } from '../../types';
+import type { ValueSlot, ValueExprId } from '../../types';
 import { registerDynamicTopology, TOPOLOGY_ID_ELLIPSE } from '../../shapes/registry';
 import type { RenderSpace2D } from '../../shapes/types';
 import { PathVerb } from '../../shapes/types';
@@ -165,8 +166,8 @@ describe('RenderAssembler', () => {
         instanceId: instanceId('test-instance'),
         positionSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
-        scale: { k: 'sig', id: 0 as SigExprId },
-        shape: { k: 'sig', topologyId: TOPOLOGY_ID_ELLIPSE, paramSignals: [1 as SigExprId, 2 as SigExprId] },
+        scale: { k: 'sig', id: 0 as ValueExprId },
+        shape: { k: 'sig', topologyId: TOPOLOGY_ID_ELLIPSE, paramSignals: [1 as ValueExprId, 2 as ValueExprId] },
       };
 
       const context: AssemblerContext = {
@@ -219,11 +220,11 @@ describe('RenderAssembler', () => {
         instanceId: instanceId('test-instance'),
         positionSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
-        scale: { k: 'sig', id: 0 as SigExprId },
+        scale: { k: 'sig', id: 0 as ValueExprId },
         shape: {
           k: 'sig',
           topologyId: TEST_PENTAGON_ID,
-          paramSignals: [1 as SigExprId, 2 as SigExprId, 3 as SigExprId],
+          paramSignals: [1 as ValueExprId, 2 as ValueExprId, 3 as ValueExprId],
         },
         controlPoints: { k: 'slot', slot: 3 as ValueSlot },
       };
@@ -298,11 +299,11 @@ describe('RenderAssembler', () => {
         instanceId: instanceId('test-instance'),
         positionSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
-        scale: { k: 'sig', id: 0 as SigExprId },
+        scale: { k: 'sig', id: 0 as ValueExprId },
         shape: {
           k: 'sig',
           topologyId: TEST_PENTAGON_ID,
-          paramSignals: [1 as SigExprId, 2 as SigExprId, 3 as SigExprId],
+          paramSignals: [1 as ValueExprId, 2 as ValueExprId, 3 as ValueExprId],
         },
         controlPoints: { k: 'slot', slot: 3 as ValueSlot },
       };
@@ -347,11 +348,11 @@ describe('RenderAssembler', () => {
         instanceId: instanceId('test-instance'),
         positionSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
-        scale: { k: 'sig', id: 0 as SigExprId },
+        scale: { k: 'sig', id: 0 as ValueExprId },
         shape: {
           k: 'sig',
           topologyId: TEST_PENTAGON_ID,
-          paramSignals: [1 as SigExprId, 2 as SigExprId, 3 as SigExprId],
+          paramSignals: [1 as ValueExprId, 2 as ValueExprId, 3 as ValueExprId],
         },
         controlPoints: { k: 'slot', slot: 3 as ValueSlot },
       };
@@ -395,11 +396,11 @@ describe('RenderAssembler', () => {
         instanceId: instanceId('test-instance'),
         positionSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
-        scale: { k: 'sig', id: 0 as SigExprId },
+        scale: { k: 'sig', id: 0 as ValueExprId },
         shape: {
           k: 'sig',
           topologyId: TEST_PENTAGON_ID,
-          paramSignals: [1 as SigExprId, 2 as SigExprId, 3 as SigExprId],
+          paramSignals: [1 as ValueExprId, 2 as ValueExprId, 3 as ValueExprId],
         },
         // controlPoints not specified!
       };
@@ -447,11 +448,11 @@ describe('RenderAssembler', () => {
           instanceId: instanceId('instance-a'),
           positionSlot: 1 as ValueSlot,
           colorSlot: 2 as ValueSlot,
-          scale: { k: 'sig', id: 0 as SigExprId },
+          scale: { k: 'sig', id: 0 as ValueExprId },
           shape: {
             k: 'sig',
             topologyId: TEST_PENTAGON_ID,
-            paramSignals: [1 as SigExprId, 2 as SigExprId, 3 as SigExprId],
+            paramSignals: [1 as ValueExprId, 2 as ValueExprId, 3 as ValueExprId],
           },
           controlPoints: { k: 'slot', slot: 3 as ValueSlot },
         },
@@ -460,11 +461,11 @@ describe('RenderAssembler', () => {
           instanceId: instanceId('instance-b'),
           positionSlot: 4 as ValueSlot,
           colorSlot: 5 as ValueSlot,
-          scale: { k: 'sig', id: 0 as SigExprId },
+          scale: { k: 'sig', id: 0 as ValueExprId },
           shape: {
             k: 'sig',
             topologyId: TEST_PENTAGON_ID,
-            paramSignals: [1 as SigExprId, 2 as SigExprId, 3 as SigExprId],
+            paramSignals: [1 as ValueExprId, 2 as ValueExprId, 3 as ValueExprId],
           },
           controlPoints: { k: 'slot', slot: 6 as ValueSlot },
         },
@@ -513,7 +514,7 @@ describe('RenderAssembler', () => {
       state.values.f64[12] = 0.02;
       state.values.f64[13] = 1;
 
-      const signals: SigExpr[] = [
+      const signals: ValueExpr[] = [
         { kind: 'const', value: { kind: 'float', value: 1.0 }, type: SCALAR_TYPE },
         { kind: 'const', value: { kind: 'float', value: 0.02 }, type: SCALAR_TYPE },
         { kind: 'const', value: { kind: 'float', value: 0.02 }, type: SCALAR_TYPE },
@@ -526,11 +527,11 @@ describe('RenderAssembler', () => {
           instanceId: instanceId('path-instance'),
           positionSlot: 1 as ValueSlot,
           colorSlot: 2 as ValueSlot,
-          scale: { k: 'sig', id: 0 as SigExprId },
+          scale: { k: 'sig', id: 0 as ValueExprId },
           shape: {
             k: 'sig',
             topologyId: TEST_PENTAGON_ID,
-            paramSignals: [1 as SigExprId, 2 as SigExprId, 3 as SigExprId],
+            paramSignals: [1 as ValueExprId, 2 as ValueExprId, 3 as ValueExprId],
           },
           controlPoints: { k: 'slot', slot: 3 as ValueSlot },
         },
@@ -539,8 +540,8 @@ describe('RenderAssembler', () => {
           instanceId: instanceId('primitive-instance'),
           positionSlot: 4 as ValueSlot,
           colorSlot: 5 as ValueSlot,
-          scale: { k: 'sig', id: 0 as SigExprId },
-          shape: { k: 'sig', topologyId: TOPOLOGY_ID_ELLIPSE, paramSignals: [1 as SigExprId, 2 as SigExprId] },
+          scale: { k: 'sig', id: 0 as ValueExprId },
+          shape: { k: 'sig', topologyId: TOPOLOGY_ID_ELLIPSE, paramSignals: [1 as ValueExprId, 2 as ValueExprId] },
         },
       ];
 
@@ -575,7 +576,7 @@ describe('RenderAssembler', () => {
       // Write signal value to state
       state.values.f64[10] = 1.0;
 
-      const signals: SigExpr[] = [
+      const signals: ValueExpr[] = [
         { kind: 'const', value: { kind: 'float', value: 1.0 }, type: SCALAR_TYPE },
       ];
 
@@ -585,7 +586,7 @@ describe('RenderAssembler', () => {
           instanceId: instanceId('empty-instance'),
           positionSlot: 1 as ValueSlot,
           colorSlot: 2 as ValueSlot,
-          scale: { k: 'sig', id: 0 as SigExprId },
+          scale: { k: 'sig', id: 0 as ValueExprId },
           shape: { k: 'sig', topologyId: TOPOLOGY_ID_ELLIPSE, paramSignals: [] },
         },
       ];

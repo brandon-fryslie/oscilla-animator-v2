@@ -5,9 +5,7 @@
  * These types are actively used by CompiledProgramIR in ./program.ts.
  *
  * Contents:
- * - SigExpr: Signal expressions (evaluated once per frame)
- * - FieldExpr: Field expressions (evaluated per-element at sinks)
- * - EventExpr: Event expressions (edge-triggered)
+ * - ValueExpr: Unified expression type (in value-expr.ts)
  * - Steps: Execution schedule step types
  * - PureFn: Pure function representations
  * - Instance System: Domain instances, layouts, and declarations
@@ -20,7 +18,7 @@
 import type { CanonicalType, ConstValue } from '../../core/canonical-types';
 
 // Import ValueSlot and StateSlotId for use in this file
-import type { ValueSlot as _ValueSlot, StateSlotId as _StateSlotId } from './Indices';
+import type { ValueSlot as _ValueSlot, StateSlotId as _StateSlotId, ValueExprId, EventSlotId } from './Indices';
 type ValueSlot = _ValueSlot;
 type StateSlotId = _StateSlotId;
 
@@ -31,9 +29,7 @@ export type {
   ValueSlot,
   StateSlotId,
   StepIndex,
-  SigExprId,
-  FieldExprId,
-  EventExprId,
+  ValueExprId,
   EventSlotId,
   TransformChainId,
   NodeId,
@@ -50,9 +46,7 @@ export {
   valueSlot,
   stateSlotId,
   stepIndex,
-  sigExprId,
-  fieldExprId,
-  eventExprId,
+  valueExprId,
   eventSlotId,
   nodeId,
   stepId,
@@ -62,127 +56,14 @@ export {
   instanceId,
 } from './Indices';
 
-import type {
-  SigExprId,
-  FieldExprId,
-  EventExprId,
-  EventSlotId,
-  SlotId,
-} from './Indices';
-
 // Import shape types
 import type { TopologyId } from '../../shapes/types';
 
 // Import time model types
 import type { TimeModelIR } from './schedule';
 
-
 // =============================================================================
-// Signal Expressions
-// =============================================================================
-
-export type SigExpr =
-  | SigExprConst
-  | SigExprSlot
-  | SigExprTime
-  | SigExprExternal
-  | SigExprMap
-  | SigExprZip
-  | SigExprStateRead
-  | SigExprShapeRef
-  | SigExprReduceField
-  | SigExprEventRead;
-
-export interface SigExprConst {
-  readonly kind: 'const';
-  readonly value: ConstValue;
-  readonly type: CanonicalType;
-}
-
-export interface SigExprSlot {
-  readonly kind: 'slot';
-  readonly slot: ValueSlot;
-  readonly type: CanonicalType;
-}
-
-export interface SigExprTime {
-  readonly kind: 'time';
-  readonly which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'progress' | 'palette' | 'energy';
-  readonly type: CanonicalType;
-}
-
-export interface SigExprExternal {
-  readonly kind: 'external';
-  readonly which: string;
-  readonly type: CanonicalType;
-}
-
-export interface SigExprMap {
-  readonly kind: 'map';
-  readonly input: SigExprId;
-  readonly fn: PureFn;
-  readonly type: CanonicalType;
-}
-
-export interface SigExprZip {
-  readonly kind: 'zip';
-  readonly inputs: readonly SigExprId[];
-  readonly fn: PureFn;
-  readonly type: CanonicalType;
-}
-
-/**
- * State read signal expression.
- * Reads a persistent state value from the state store.
- */
-export interface SigExprStateRead {
-  readonly kind: 'stateRead';
-  readonly stateSlot: StateSlotId;
-  readonly type: CanonicalType;
-}
-
-/**
- * Shape reference signal expression.
- * References a shape topology with runtime parameters.
- */
-export interface SigExprShapeRef {
-  readonly kind: 'shapeRef';
-  readonly topologyId: TopologyId;
-  readonly paramSignals: readonly SigExprId[]; // Signals for each topology param
-  /** Optional control points for paths - carries stride like all field refs */
-  readonly controlPointField?: { readonly id: FieldExprId; readonly stride: number };
-  readonly type: CanonicalType; // Should be canonicalType(SHAPE)
-}
-
-/**
- * Reduce field to scalar signal expression.
- * Aggregates all elements of a field using a reduction operation.
- * 
- * Semantics: Componentwise reduction (e.g., vec2 sum: (Σx, Σy))
- * Empty field behavior: Returns 0 for numeric types
- * 
- * Spec: 04-compilation.md:394, 409
- */
-export interface SigExprReduceField {
-  readonly kind: 'reduceField';
-  readonly field: FieldExprId;
-  readonly op: 'min' | 'max' | 'sum' | 'avg';
-  readonly type: CanonicalType;
-}
-
-/**
- * Event read signal expression.
- * Reads the fired/not-fired state of an event slot as a float (0.0 or 1.0).
- * This is the canonical event→signal bridge (spec §9.2).
- */
-export interface SigExprEventRead {
-  readonly kind: 'eventRead';
-  readonly eventSlot: EventSlotId;
-  readonly type: CanonicalType;
-}
-
-// =============================================================================
-// Field Expressions
+// Valid intrinsic property names (closed union)
 // =============================================================================
 
 /**
@@ -203,177 +84,12 @@ export type PlacementFieldName = 'uv' | 'rank' | 'seed';
 /**
  * Basis generation algorithm.
  * User-configurable per layout block.
- * @DEPRECATED Must be migrated to ValueExpr
  */
 export type BasisKind =
   | 'halton2D'    // Low-discrepancy sequence (good general coverage)
   | 'random'      // Pure random (specified seed)
   | 'spiral'      // Spiral pattern (good for circles)
   | 'grid';       // Grid-aligned (good for grid layouts)
-
-/**
- *  @DEPRECATED Must be migrated to ValueExpr
- */
-export type FieldExpr =
-  | FieldExprConst
-  | FieldExprIntrinsic
-  | FieldExprBroadcast
-  | FieldExprMap
-  | FieldExprZip
-  | FieldExprZipSig
-  | FieldExprStateRead
-  | FieldExprPathDerivative
-  | FieldExprPlacement;
-
-/**
- *  @DEPRECATED Must be migrated to ValueExpr
- */
-export interface FieldExprConst { // @DEPRECATED Must be migrated to ValueExpr
-  readonly kind: 'const';
-  readonly value: ConstValue;
-  readonly type: CanonicalType;
-}
-
-/**
- * Intrinsic field expression - properly typed intrinsic access.
- * Provides per-element properties automatically available for any instance.
- * // @DEPRECATED Must be migrated to ValueExpr
- */
-export interface FieldExprIntrinsic {
-  readonly kind: 'intrinsic';
-  readonly intrinsic: IntrinsicPropertyName;
-  readonly type: CanonicalType;
-}
-
-/**
- * Placement field expression - gauge-invariant per-element coordinates.
- * These replace normalizedIndex for layout blocks.
- * // @DEPRECATED Must be migrated to ValueExpr
- */
-export interface FieldExprPlacement {
-  readonly kind: 'placement';
-  readonly field: PlacementFieldName;
-  readonly basisKind: BasisKind;
-  readonly type: CanonicalType;
-}
-
-/**
- *  @DEPRECATED Must be migrated to ValueExpr
- */export interface FieldExprBroadcast {
-  readonly kind: 'broadcast';
-  readonly signal: SigExprId;
-  readonly type: CanonicalType;
-}
-
-/**
- *  @DEPRECATED Must be migrated to ValueExpr
- */export interface FieldExprMap {
-  readonly kind: 'map';
-  readonly input: FieldExprId;
-  readonly fn: PureFn;
-  readonly type: CanonicalType;
-}
-
-/**
- *  @DEPRECATED Must be migrated to ValueExpr
- */export interface FieldExprZip {
-  readonly kind: 'zip';
-  readonly inputs: readonly FieldExprId[];
-  readonly fn: PureFn;
-  readonly type: CanonicalType;
-}
-
-/**
- *  @DEPRECATED Must be migrated to ValueExpr
- */export interface FieldExprZipSig {
-  readonly kind: 'zipSig';
-  readonly field: FieldExprId;
-  readonly signals: readonly SigExprId[];
-  readonly fn: PureFn;
-  readonly type: CanonicalType;
-}
-
-/**
- * Per-lane state read for stateful cardinality-generic blocks.
- * Each lane reads its corresponding state slot value.
- * @DEPRECATED Must be migrated to ValueExpr
- */
-export interface FieldExprStateRead {
-  readonly kind: 'stateRead';
-  readonly stateSlot: StateSlotId;
-  readonly type: CanonicalType;
-}
-
-/**
- * Path derivative field expression.
- * Computes tangent or arc length from path control points.
- *
- * MVP Scope: Polygonal paths only (linear approximation).
- * - tangent: Central difference between adjacent points
- * - arcLength: Cumulative Euclidean distance
- *
- * Phase 2: Will add bezier curve support via topology access.
- * @DEPRECATED Must be migrated to ValueExpr
- */
-export interface FieldExprPathDerivative {
-  readonly kind: 'pathDerivative';
-  readonly input: FieldExprId;
-  readonly operation: 'tangent' | 'arcLength';
-  readonly type: CanonicalType;
-}
-
-// =============================================================================
-// Event Expressions
-// =============================================================================
-/**
- *  @DEPRECATED Must be migrated to ValueExpr
- */
-export type EventExpr =
-  | EventExprConst
-  | EventExprPulse
-  | EventExprWrap
-  | EventExprCombine
-  | EventExprNever;
-/**
- *  @DEPRECATED Must be migrated to ValueExpr
- */
-export interface EventExprConst {
-  readonly kind: 'const';
-  readonly type: CanonicalType;
-  readonly fired: boolean;
-}
-/**
- *  @DEPRECATED Must be migrated to ValueExpr
- */
-export interface EventExprPulse {
-  readonly kind: 'pulse';
-  readonly type: CanonicalType;
-  readonly source: 'timeRoot';
-}
-/**
- *  @DEPRECATED Must be migrated to ValueExpr
- */
-export interface EventExprWrap {
-  readonly kind: 'wrap';
-  readonly type: CanonicalType;
-  readonly signal: SigExprId;
-}
-/**
- *  @DEPRECATED Must be migrated to ValueExpr
- */
-export interface EventExprCombine {
-  readonly kind: 'combine';
-  readonly type: CanonicalType;
-  readonly events: readonly EventExprId[];
-  readonly mode: 'any' | 'all';
-}
-/**
- *  @DEPRECATED Must be migrated to ValueExpr
- */
-export interface EventExprNever {
-  readonly kind: 'never';
-  readonly type: CanonicalType;
-}
 
 // =============================================================================
 // Pure Functions
@@ -534,7 +250,7 @@ export type Step =
 
 export interface StepEvalSig {
   readonly kind: 'evalSig';
-  readonly expr: SigExprId;
+  readonly expr: ValueExprId;
   readonly target: ValueSlot;
 }
 
@@ -557,12 +273,12 @@ export interface StepEvalSig {
 export interface StepSlotWriteStrided {
   readonly kind: 'slotWriteStrided';
   readonly slotBase: ValueSlot;
-  readonly inputs: readonly SigExprId[];
+  readonly inputs: readonly ValueExprId[];
 }
 
 export interface StepMaterialize {
   readonly kind: 'materialize';
-  readonly field: FieldExprId;
+  readonly field: ValueExprId;
   readonly instanceId: InstanceId;
   readonly target: ValueSlot;
 }
@@ -575,10 +291,10 @@ export interface StepRender {
   /** Slot containing color buffer (after continuity applied) */
   readonly colorSlot: ValueSlot;
   /** Scale multiplier for shape dimensions (uniform signal, default 1.0) */
-  readonly scale?: { readonly k: 'sig'; readonly id: SigExprId };
+  readonly scale?: { readonly k: 'sig'; readonly id: ValueExprId };
   /** Shape - topology + param signals (REQUIRED at runtime, types now enforce this) */
   readonly shape:
-    | { readonly k: 'sig'; readonly topologyId: TopologyId; readonly paramSignals: readonly SigExprId[] }
+    | { readonly k: 'sig'; readonly topologyId: TopologyId; readonly paramSignals: readonly ValueExprId[] }
     | { readonly k: 'slot'; readonly slot: ValueSlot };
   /** Optional control points for path rendering - P5c: Add control points field */
   readonly controlPoints?: { readonly k: 'slot'; readonly slot: ValueSlot };
@@ -591,7 +307,7 @@ export interface StepRender {
 export interface StepStateWrite {
   readonly kind: 'stateWrite';
   readonly stateSlot: StateSlotId;
-  readonly value: SigExprId;
+  readonly value: ValueExprId;
 }
 
 /**
@@ -601,7 +317,7 @@ export interface StepStateWrite {
 export interface StepFieldStateWrite {
   readonly kind: 'fieldStateWrite';
   readonly stateSlot: StateSlotId;
-  readonly value: FieldExprId;
+  readonly value: ValueExprId;
 }
 
 /**
@@ -635,7 +351,7 @@ export interface StepContinuityApply {
  */
 export interface StepEvalEvent {
   readonly kind: 'evalEvent';
-  readonly expr: EventExprId;
+  readonly expr: ValueExprId;
   readonly target: EventSlotId;
 }
 

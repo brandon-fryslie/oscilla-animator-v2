@@ -2,6 +2,9 @@
 export * from './types';
 export * from './Indices';
 
+// Value expression types (unified)
+export * from './value-expr';
+
 // Patch transformation types (compiler passes)
 export * from './patches';
 

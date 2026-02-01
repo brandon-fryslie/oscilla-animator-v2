@@ -10,13 +10,14 @@ import {
   assembleRenderFrame,
   type AssemblerContext,
 } from '../RenderAssembler';
-import type { StepRender, InstanceDecl, SigExpr } from '../../compiler/ir/types';
+import type { StepRender, InstanceDecl } from '../../compiler/ir/types';
+import type { ValueExpr } from '../../compiler/ir/value-expr';
 import { instanceId, domainTypeId } from '../../compiler/ir/Indices';
 import type { CanonicalType } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION, canonicalType } from '../../core/canonical-types';
 import type { RuntimeState } from '../RuntimeState';
 import { createRuntimeState, SHAPE2D_WORDS, writeShape2D } from '../RuntimeState';
-import type { ValueSlot, SigExprId } from '../../types';
+import type { ValueSlot, ValueExprId } from '../../types';
 import { registerDynamicTopology } from '../../shapes/registry';
 import type { RenderSpace2D } from '../../shapes/types';
 import { PathVerb } from '../../shapes/types';
@@ -134,7 +135,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         instanceId: instanceId('test-instance'),
         positionSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
-        scale: { k: 'sig', id: 0 as SigExprId },
+        scale: { k: 'sig', id: 0 as ValueExprId },
         shape: { k: 'slot', slot: 3 as ValueSlot }, // Per-instance shapes
       };
 
@@ -200,7 +201,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         instanceId: instanceId('test-instance'),
         positionSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
-        scale: { k: 'sig', id: 0 as SigExprId },
+        scale: { k: 'sig', id: 0 as ValueExprId },
         shape: { k: 'slot', slot: 3 as ValueSlot },
       };
 
@@ -278,7 +279,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         instanceId: instanceId('test-instance'),
         positionSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
-        scale: { k: 'sig', id: 0 as SigExprId },
+        scale: { k: 'sig', id: 0 as ValueExprId },
         shape: { k: 'slot', slot: 3 as ValueSlot },
       };
 
@@ -359,7 +360,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         instanceId: instanceId('test-instance'),
         positionSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
-        scale: { k: 'sig', id: 0 as SigExprId },
+        scale: { k: 'sig', id: 0 as ValueExprId },
         shape: { k: 'slot', slot: 3 as ValueSlot },
       };
 
@@ -428,7 +429,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         instanceId: instanceId('test-instance'),
         positionSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
-        scale: { k: 'sig', id: 0 as SigExprId },
+        scale: { k: 'sig', id: 0 as ValueExprId },
         shape: { k: 'slot', slot: 3 as ValueSlot },
       };
 
@@ -507,7 +508,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         instanceId: instanceId('test-instance'),
         positionSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
-        scale: { k: 'sig', id: 0 as SigExprId },
+        scale: { k: 'sig', id: 0 as ValueExprId },
         shape: { k: 'slot', slot: 3 as ValueSlot },
       };
 
@@ -557,7 +558,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
         instanceId: instanceId('test-instance'),
         positionSlot: 1 as ValueSlot,
         colorSlot: 2 as ValueSlot,
-        scale: { k: 'sig', id: 0 as SigExprId },
+        scale: { k: 'sig', id: 0 as ValueExprId },
         shape: { k: 'slot', slot: 3 as ValueSlot },
       };
 
@@ -618,7 +619,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
       state.values.objects.set(10 as ValueSlot, circlePoints);
       state.values.objects.set(11 as ValueSlot, squarePoints);
 
-      const signals: SigExpr[] = [
+      const signals: ValueExpr[] = [
         { kind: 'const', value: { kind: 'float', value: 1.0 }, type: SCALAR_TYPE },
       ];
 
@@ -636,7 +637,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
           instanceId: instanceId('instance-a'),
           positionSlot: 1 as ValueSlot,
           colorSlot: 2 as ValueSlot,
-          scale: { k: 'sig', id: 0 as SigExprId },
+          scale: { k: 'sig', id: 0 as ValueExprId },
           shape: { k: 'slot', slot: 3 as ValueSlot },
         },
         {
@@ -644,7 +645,7 @@ describe('RenderAssembler - Per-Instance Shapes', () => {
           instanceId: instanceId('instance-b'),
           positionSlot: 4 as ValueSlot,
           colorSlot: 5 as ValueSlot,
-          scale: { k: 'sig', id: 0 as SigExprId },
+          scale: { k: 'sig', id: 0 as ValueExprId },
           shape: { k: 'slot', slot: 6 as ValueSlot },
         },
       ];
