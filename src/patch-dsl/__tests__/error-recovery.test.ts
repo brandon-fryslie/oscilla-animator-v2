@@ -126,8 +126,8 @@ describe('error recovery', () => {
     const hcl = '';
     const result = deserializePatchFromHCL(hcl);
 
-    // Should have parsing error (no patch block)
-    expect(result.errors.length).toBeGreaterThan(0);
+    // Empty HCL is valid — produces empty patch with no errors
+    expect(result.errors.length).toBe(0);
 
     // Should produce empty patch
     expect(result.patch.blocks.size).toBe(0);

@@ -17,6 +17,7 @@ import type { HclDocument, HclBlock, HclValue } from './ast';
 import { PatchDslError, PatchDslWarning } from './errors';
 import { normalizeCanonicalName } from '../core/canonical-name';
 import { getBlockDefinition } from '../blocks/registry';
+import { toIdentifier } from './serialize';
 import type { BlockId } from '../types';
 
 /**
@@ -128,7 +129,13 @@ function processBlock(
     finalDisplayName = candidate;
     warnings.push(new PatchDslWarning(`Duplicate block name "${displayName}", renamed to "${candidate}"`, hclBlock.pos));
   }
-  blockMap.set(normalizeCanonicalName(finalDisplayName), blockId);
+  const canonicalFinal = normalizeCanonicalName(finalDisplayName);
+  blockMap.set(canonicalFinal, blockId);
+  // Also register under identifier form (ASCII-only) so serialized references resolve
+  const identFinal = toIdentifier(finalDisplayName);
+  if (identFinal !== canonicalFinal) {
+    blockMap.set(identFinal, blockId);
+  }
 
   // Extract params (exclude reserved: role, domain)
   const params: Record<string, unknown> = {};

@@ -103,7 +103,7 @@ function buildBlockNameMap(patch: Patch): Map<BlockId, string> {
  * @param displayName - The display name
  * @returns Valid HCL identifier (ASCII only, no special chars)
  */
-function toIdentifier(displayName: string): string {
+export function toIdentifier(displayName: string): string {
   // First apply canonical normalization (lowercase, strip special chars, replace spaces)
   const canonical = normalizeCanonicalName(displayName);
 
