@@ -228,11 +228,10 @@ export interface FrameCache {
  */
 export function createFrameCache(
   maxLegacyExprs: number = 1000,
-  maxLegacyFieldExprs: number = 1000,
   maxValueExprs: number = 0
 ): FrameCache {
   return {
-    frameId: 1, // Start at 1 so initial sigStamps[n]=0 don't match
+    frameId: 1, // Start at 1 so initial stamps[n]=0 don't match
     values: new Float64Array(maxLegacyExprs),
     stamps: new Uint32Array(maxLegacyExprs),
     fieldBuffers: new Map(),
@@ -623,7 +622,7 @@ export function createProgramState(
 ): ProgramState {
   return {
     values: createValueStore(slotCount),
-    cache: createFrameCache(1000, 1000, valueExprCount),
+    cache: createFrameCache(1000, valueExprCount),
     time: null,
     state: new Float64Array(stateSlotCount),
     eventScalars: new Uint8Array(eventSlotCount),
