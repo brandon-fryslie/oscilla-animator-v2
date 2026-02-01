@@ -71,7 +71,12 @@ class CardinalityUnionFind {
   assign(id: UFNodeId, value: CardinalityValue): { ok: true } | { ok: false; conflict: [CardinalityValue, CardinalityValue] } {
     const r = this.find(id);
     if (r.tag === 'value') {
-      if (cardinalitiesEqual(r.value, value)) return { ok: true };
+      if (cardinalitiesEqual(r.value, value)) {
+        // Prefer concrete over placeholder
+        const preferred = preferConcreteCardinality(r.value, value);
+        this.parent.set(id, { tag: 'value', value: preferred });
+        return { ok: true };
+      }
       return { ok: false, conflict: [r.value, value] };
     }
     // r is root parent
@@ -86,7 +91,14 @@ class CardinalityUnionFind {
 
     // both resolved:
     if (ra.tag === 'value' && rb.tag === 'value') {
-      if (cardinalitiesEqual(ra.value, rb.value)) return { ok: true };
+      if (cardinalitiesEqual(ra.value, rb.value)) {
+        // Prefer concrete over placeholder
+        const preferred = preferConcreteCardinality(ra.value, rb.value);
+        // Update both roots to use the preferred value
+        this.parent.set(a, { tag: 'value', value: preferred });
+        this.parent.set(b, { tag: 'value', value: preferred });
+        return { ok: true };
+      }
       return { ok: false, conflict: [ra.value, rb.value] };
     }
 
@@ -121,15 +133,42 @@ class CardinalityUnionFind {
 // Equality
 // =============================================================================
 
+/**
+ * Check if an instance ref is a placeholder ('default'/'default').
+ * Block definitions use placeholder instance refs for field ports
+ * that will be resolved to concrete refs during type inference.
+ */
+function isPlaceholderInstance(instance: CardinalityValue): boolean {
+  if (instance.kind !== 'many') return false;
+  return instance.instance.domainTypeId === 'default' && instance.instance.instanceId === 'default';
+}
+
+/**
+ * Cardinality equality for union-find merging.
+ * Placeholder instance refs ('default'/'default') are compatible with any concrete ref.
+ */
 function cardinalitiesEqual(a: CardinalityValue, b: CardinalityValue): boolean {
   if (a.kind !== b.kind) return false;
   if (a.kind === 'many' && b.kind === 'many') {
+    // Placeholder is compatible with anything
+    if (isPlaceholderInstance(a) || isPlaceholderInstance(b)) return true;
     return (
       a.instance.domainTypeId === b.instance.domainTypeId &&
       a.instance.instanceId === b.instance.instanceId
     );
   }
   return true;
+}
+
+/**
+ * When merging two compatible many values, prefer the concrete one over placeholder.
+ */
+function preferConcreteCardinality(a: CardinalityValue, b: CardinalityValue): CardinalityValue {
+  if (a.kind === 'many' && b.kind === 'many') {
+    if (isPlaceholderInstance(a) && !isPlaceholderInstance(b)) return b;
+    if (!isPlaceholderInstance(a) && isPlaceholderInstance(b)) return a;
+  }
+  return a; // default: keep first
 }
 
 // =============================================================================
