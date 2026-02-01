@@ -37,6 +37,9 @@ export function applySignalKernel(name: string, _values: number[]): number {
  * Apply a pure function to values
  *
  * Handles opcodes, kernels, and composed operations.
+ *
+ * Note: kernelResolved case will be implemented in Phase D (Migration).
+ * For now, it throws to catch any premature usage.
  */
 export function applyPureFn(
   fn: PureFn,
@@ -48,6 +51,12 @@ export function applyPureFn(
 
     case 'kernel':
       return applySignalKernel(fn.name, values);
+
+    case 'kernelResolved':
+      // Phase D: This will call registry.callScalar(fn.handle, values)
+      throw new Error(
+        `kernelResolved not yet implemented (Phase D pending). Handle: ${fn.handle}, ABI: ${fn.abi}`
+      );
 
     case 'expr':
       throw new Error(`PureFn kind 'expr' not yet implemented`);

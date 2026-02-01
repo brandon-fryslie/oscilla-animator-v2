@@ -62,6 +62,9 @@ import type { TopologyId } from '../../shapes/types';
 // Import time model types
 import type { TimeModelIR } from './schedule';
 
+// Import kernel types (for resolved kernel references)
+import type { KernelHandle, KernelABI } from '../../runtime/KernelRegistry';
+
 // =============================================================================
 // Valid intrinsic property names (closed union)
 // =============================================================================
@@ -99,10 +102,17 @@ export type BasisKind =
  * PureFn - Pure function representation for map/zip operations
  *
  * Can be a primitive opcode, a kernel function, or an expression string.
+ *
+ * Kernel lifecycle:
+ * - Pre-resolution: { kind: 'kernel', name: 'noise3' } (emitted by lowering)
+ * - Post-resolution: { kind: 'kernelResolved', handle: 42, abi: 'scalar' } (after kernel resolution pass)
+ *
+ * Runtime evaluators only see kernelResolved variant (kernel pass runs at program load).
  */
 export type PureFn =
   | { readonly kind: 'opcode'; readonly opcode: OpCode }
   | { readonly kind: 'kernel'; readonly name: string }
+  | { readonly kind: 'kernelResolved'; readonly handle: KernelHandle; readonly abi: KernelABI }
   | { readonly kind: 'expr'; readonly expr: string }
   | { readonly kind: 'composed'; readonly ops: readonly OpCode[] };
 
