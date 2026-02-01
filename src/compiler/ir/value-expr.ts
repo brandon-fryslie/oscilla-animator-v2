@@ -9,10 +9,10 @@
  * - Every variant carries CanonicalType (payload + unit + extent)
  * - No instanceId stored — derive from requireManyInstance(type)
  * - No op discriminant — only kind at top level
- * - No sig/field/event family tags — derive from extent via deriveKind()
+ * - No sig/field/event family tags — derive from extent by checking temporality and cardinality
  *
- * This is the TARGET type for migration. Legacy SigExpr/FieldExpr/EventExpr
- * remain functional during migration.
+ * This is the canonical expression type. Legacy SigExpr/FieldExpr/EventExpr have been deleted.
+ * Migration complete.
  *
  * Spec Reference: TYPE-SYSTEM-INVARIANTS.md
  */

@@ -9,7 +9,7 @@
  * This file now only contains types used by the compiler passes.
  *
  * MIGRATION (2026-01-31): ValueRefPacked now uses unified ValueExprId.
- * The k:'sig'|'field'|'event' discriminant is GONE — derive via deriveKind(ref.type).
+ * The k:'sig'|'field'|'event' discriminant is GONE — derive by checking extent axes.
  */
 
 import { requireInst } from '../../core/canonical-types';
@@ -31,7 +31,7 @@ import type { IRBuilder } from './IRBuilder';
  * Packed value reference — unified around ValueExprId.
  *
  * The legacy k:'sig'|'field'|'event' discriminant is REMOVED.
- * Signal/field/event semantics are derived from type.extent via deriveKind().
+ * Signal/field/event semantics are derived from type.extent by checking axes.
  *
  * Variants:
  * - ValueRefExpr: Any expression (signal, field, or event)
@@ -63,7 +63,7 @@ export interface ValueRefExpr {
   readonly components?: readonly ValueExprId[];
   /**
    * For event expressions, the event-specific slot.
-   * Only present when deriveKind(type) === 'event'.
+   * Only present when temporality is discrete (event).
    */
   readonly eventSlot?: EventSlotId;
 }
