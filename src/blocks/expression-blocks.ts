@@ -146,17 +146,14 @@ registerBlock({
       };
     }
 
-    // USES ILLEGAL PROPERTY: getSigExprs.  must be rewritten
-    // // Helper: Get actual type from signal expression
-    // // IRBuilder tracks types for all signal expressions
-    // const getSigType = (sigId: ValueExprId): CanonicalType => {
-    //   const sigExprs = ctx.b.getSigExprs();
-    //   const sigExpr = sigExprs[sigId as number];
-    //   if (!sigExpr) {
-    //     throw new Error(`Signal expression ${sigId} not found - this indicates a compiler bug`);
-    //   }
-    //   return sigExpr.type;
-    // };
+    // Helper: Get actual type from ValueExpr using unified getValueExpr()
+    const getExprType = (exprId: ValueExprId): CanonicalType => {
+      const expr = ctx.b.getValueExpr(exprId);
+      if (!expr) {
+        throw new Error(`ValueExpr ${exprId} not found - this indicates a compiler bug`);
+      }
+      return expr.type;
+    };
 
     // Step 3: Build unified input list
     // SHIM: Convert legacy inputs to synthetic vararg-style entries
@@ -190,12 +187,11 @@ registerBlock({
     const inputs = new Map<string, CanonicalType>();
     const inputSignals = new Map<string, ValueExprId>();
 
-    // USES ILLEGAL FN getSigType - must be rewritten
-    // for (const { alias, signal } of allInputEntries) {
-    //   const inputType = getSigType(signal);
-    //   inputs.set(alias, inputType);
-    //   inputSignals.set(alias, signal);
-    // }
+    for (const { alias, signal } of allInputEntries) {
+      const inputType = getExprType(signal);
+      inputs.set(alias, inputType);
+      inputSignals.set(alias, signal);
+    }
 
     // Step 5: Compile expression using Expression DSL
     const result = compileExpression(exprText, inputs, ctx.b, inputSignals);
