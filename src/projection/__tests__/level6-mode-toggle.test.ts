@@ -45,12 +45,18 @@ const perspCam: ResolvedCameraParams = {
  */
 function buildToggleTestPatch() {
   return buildPatch((b) => {
-    b.addBlock('InfiniteTimeRoot', {});
-    const ellipse = b.addBlock('Ellipse', { rx: 0.03, ry: 0.03 });
-    const array = b.addBlock('Array', { count: 9 });
-    const layout = b.addBlock('GridLayoutUV', { rows: 3, cols: 3 });
-    const color = b.addBlock('Const', { value: { r: 1.0, g: 1.0, b: 1.0, a: 1.0 } });
-    const render = b.addBlock('RenderInstances2D', {});
+    b.addBlock('InfiniteTimeRoot');
+    const ellipse = b.addBlock('Ellipse');
+    b.setPortDefault(ellipse, 'rx', 0.03);
+    b.setPortDefault(ellipse, 'ry', 0.03);
+    const array = b.addBlock('Array');
+    b.setPortDefault(array, 'count', 9);
+    const layout = b.addBlock('GridLayoutUV');
+    b.setPortDefault(layout, 'rows', 3);
+    b.setPortDefault(layout, 'cols', 3);
+    const color = b.addBlock('Const');
+    b.setConfig(color, 'value', { r: 1.0, g: 1.0, b: 1.0, a: 1.0 });
+    const render = b.addBlock('RenderInstances2D');
 
     b.wire(ellipse, 'shape', array, 'element');
     b.wire(array, 'elements', layout, 'elements');

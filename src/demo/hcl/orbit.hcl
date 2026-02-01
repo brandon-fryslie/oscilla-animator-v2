@@ -63,6 +63,8 @@ patch "Orbit" {
   block "Ellipse" "inner-dot" {
     rx = 0.035
     ry = 0.035
+
+    outputs 
   }
 
   block "Array" "inner-instances" {

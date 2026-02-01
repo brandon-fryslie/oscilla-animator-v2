@@ -96,10 +96,12 @@ describe('Block Lowering - No Arithmetic Kernel Names', () => {
 
     const patch = buildPatch((b) => {
       // Need TimeRoot for compilation to succeed
-      const time = b.addBlock('InfiniteTimeRoot', { periodAMs: 1000, periodBMs: 2000 });
+      const time = b.addBlock('InfiniteTimeRoot');
+      b.setPortDefault(time, 'periodAMs', 1000);
+      b.setPortDefault(time, 'periodBMs', 2000);
 
       // Create an Add block (represents all binary math blocks)
-      const add = b.addBlock('Add', {});
+      const add = b.addBlock('Add');
 
       // Wire phase to both inputs (signal+signal → signal)
       b.wire(time, 'phaseA', add, 'a');

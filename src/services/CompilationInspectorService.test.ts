@@ -841,7 +841,7 @@ describe('CompilationInspectorService', () => {
     describe('with real compilation', () => {
       it('extracts ValueExprTable from successful compilation', () => {
         const patch = buildPatch((b) => {
-          b.addBlock('InfiniteTimeRoot', {});
+          b.addBlock('InfiniteTimeRoot');
         });
 
         const result = compile(patch);
@@ -860,8 +860,9 @@ describe('CompilationInspectorService', () => {
 
       it('dispatches on ValueExpr.kind', () => {
         const patch = buildPatch((b) => {
-          const time = b.addBlock('InfiniteTimeRoot', {});
-          const osc = b.addBlock('Oscillator', { waveform: 'oscSin' });
+          const time = b.addBlock('InfiniteTimeRoot');
+          const osc = b.addBlock('Oscillator');
+          b.setPortDefault(osc, 'waveform', 'oscSin');
           b.wire(time, 'phaseA', osc, 'phase');
         });
 
@@ -876,7 +877,7 @@ describe('CompilationInspectorService', () => {
 
       it('gets ValueExpr by ID', () => {
         const patch = buildPatch((b) => {
-          b.addBlock('InfiniteTimeRoot', {});
+          b.addBlock('InfiniteTimeRoot');
         });
 
         const result = compile(patch);
@@ -895,7 +896,7 @@ describe('CompilationInspectorService', () => {
 
       it('returns undefined for out-of-bounds ID', () => {
         const patch = buildPatch((b) => {
-          b.addBlock('InfiniteTimeRoot', {});
+          b.addBlock('InfiniteTimeRoot');
         });
 
         const result = compile(patch);
@@ -908,8 +909,9 @@ describe('CompilationInspectorService', () => {
 
       it('computes statistics with dispatch on ValueExpr.kind and CanonicalType', () => {
         const patch = buildPatch((b) => {
-          const time = b.addBlock('InfiniteTimeRoot', {});
-          const osc = b.addBlock('Oscillator', { waveform: 'oscSin' });
+          const time = b.addBlock('InfiniteTimeRoot');
+          const osc = b.addBlock('Oscillator');
+          b.setPortDefault(osc, 'waveform', 'oscSin');
           b.wire(time, 'phaseA', osc, 'phase');
         });
 
@@ -937,8 +939,9 @@ describe('CompilationInspectorService', () => {
 
       it('derives signal/field/event/const from CanonicalType axes', () => {
         const patch = buildPatch((b) => {
-          b.addBlock('InfiniteTimeRoot', {});
-          const array = b.addBlock('Array', { count: 10 });
+          b.addBlock('InfiniteTimeRoot');
+          const array = b.addBlock('Array');
+          b.setPortDefault(array, 'count', 10);
         });
 
         const result = compile(patch);
@@ -955,8 +958,9 @@ describe('CompilationInspectorService', () => {
 
       it('invariant: every ValueExpr has CanonicalType', () => {
         const patch = buildPatch((b) => {
-          const time = b.addBlock('InfiniteTimeRoot', {});
-          const osc = b.addBlock('Oscillator', { waveform: 'oscSin' });
+          const time = b.addBlock('InfiniteTimeRoot');
+          const osc = b.addBlock('Oscillator');
+          b.setPortDefault(osc, 'waveform', 'oscSin');
           b.wire(time, 'phaseA', osc, 'phase');
         });
 

@@ -32,13 +32,19 @@ import type { CompiledProgramIR, ValueSlot } from '../../compiler/ir/program';
  */
 function buildGoldenPatch() {
   return buildPatch((b) => {
-    b.addBlock('InfiniteTimeRoot', {});
-    const ellipse = b.addBlock('Ellipse', { rx: 0.03, ry: 0.03 });
-    const array = b.addBlock('Array', { count: 25 });
-    const layout = b.addBlock('GridLayoutUV', { rows: 5, cols: 5 });
+    b.addBlock('InfiniteTimeRoot');
+    const ellipse = b.addBlock('Ellipse');
+    b.setPortDefault(ellipse, 'rx', 0.03);
+    b.setPortDefault(ellipse, 'ry', 0.03);
+    const array = b.addBlock('Array');
+    b.setPortDefault(array, 'count', 25);
+    const layout = b.addBlock('GridLayoutUV');
+    b.setPortDefault(layout, 'rows', 5);
+    b.setPortDefault(layout, 'cols', 5);
 
-    const color = b.addBlock('Const', { value: { r: 1.0, g: 1.0, b: 1.0, a: 1.0 } });
-    const render = b.addBlock('RenderInstances2D', {});
+    const color = b.addBlock('Const');
+    b.setConfig(color, 'value', { r: 1.0, g: 1.0, b: 1.0, a: 1.0 });
+    const render = b.addBlock('RenderInstances2D');
 
     // Wire topology
     b.wire(ellipse, 'shape', array, 'element');
@@ -164,9 +170,11 @@ describe.skip('Level 10 Golden Tests: Explicit Camera Override', () => {
 describe('Level 10 Golden Tests: CombineMode Enforcement', () => {
   it.skip('Test 6.1: Compile with two float writers using CombineMode "sum"', () => {
     const patch = buildPatch((b) => {
-      b.addBlock('InfiniteTimeRoot', {});
-      b.addBlock('Const', { value: 1.0 });
-      b.addBlock('Const', { value: 2.0 });
+      b.addBlock('InfiniteTimeRoot');
+      const c1 = b.addBlock('Const');
+      b.setConfig(c1, 'value', 1.0);
+      const c2 = b.addBlock('Const');
+      b.setConfig(c2, 'value', 2.0);
     });
 
     const result = compile(patch);

@@ -23,7 +23,8 @@ describe('AddressRegistry', () => {
 
     it('builds registry from patch with single block', () => {
       const patch = buildPatch(b => {
-        b.addBlock('Const', { value: 1 }, { displayName: 'My Const' });
+        const c = b.addBlock('Const', { displayName: 'My Const' });
+        b.setConfig(c, 'value', 1);
       });
 
       const registry = AddressRegistry.buildFromPatch(patch);
@@ -36,9 +37,11 @@ describe('AddressRegistry', () => {
 
     it('builds registry from patch with multiple blocks', () => {
       const patch = buildPatch(b => {
-        b.addBlock('Const', { value: 1 }, { displayName: 'Const 1' });
-        b.addBlock('Const', { value: 2 }, { displayName: 'Const 2' });
-        b.addBlock('Oscillator', {}, { displayName: 'Osc' });
+        const c1 = b.addBlock('Const', { displayName: 'Const 1' });
+        b.setConfig(c1, 'value', 1);
+        const c2 = b.addBlock('Const', { displayName: 'Const 2' });
+        b.setConfig(c2, 'value', 2);
+        b.addBlock('Oscillator', { displayName: 'Osc' });
       });
 
       const registry = AddressRegistry.buildFromPatch(patch);
@@ -49,7 +52,8 @@ describe('AddressRegistry', () => {
 
     it('indexes all output ports', () => {
       const patch = buildPatch(b => {
-        b.addBlock('Const', { value: 1 }, { displayName: 'My Const' });
+        const c = b.addBlock('Const', { displayName: 'My Const' });
+        b.setConfig(c, 'value', 1);
       });
 
       const block = Array.from(patch.blocks.values())[0];
@@ -65,7 +69,7 @@ describe('AddressRegistry', () => {
 
     it('indexes all input ports', () => {
       const patch = buildPatch(b => {
-        b.addBlock('Oscillator', {}, { displayName: 'My Osc' });
+        b.addBlock('Oscillator', { displayName: 'My Osc' });
       });
 
       const block = Array.from(patch.blocks.values())[0];
@@ -81,7 +85,8 @@ describe('AddressRegistry', () => {
 
     it('indexes block addresses', () => {
       const patch = buildPatch(b => {
-        b.addBlock('Const', { value: 1 }, { displayName: 'My Const' });
+        const c = b.addBlock('Const', { displayName: 'My Const' });
+        b.setConfig(c, 'value', 1);
       });
 
       const block = Array.from(patch.blocks.values())[0];
@@ -98,7 +103,8 @@ describe('AddressRegistry', () => {
   describe('resolve', () => {
     it('resolves valid block address', () => {
       const patch = buildPatch(b => {
-        b.addBlock('Const', { value: 1 }, { displayName: 'My Const' });
+        const c = b.addBlock('Const', { displayName: 'My Const' });
+        b.setConfig(c, 'value', 1);
       });
 
       const block = Array.from(patch.blocks.values())[0];
@@ -114,7 +120,8 @@ describe('AddressRegistry', () => {
 
     it('resolves valid output address', () => {
       const patch = buildPatch(b => {
-        b.addBlock('Const', { value: 1 }, { displayName: 'My Const' });
+        const c = b.addBlock('Const', { displayName: 'My Const' });
+        b.setConfig(c, 'value', 1);
       });
 
       const block = Array.from(patch.blocks.values())[0];
@@ -133,7 +140,7 @@ describe('AddressRegistry', () => {
 
     it('resolves valid input address', () => {
       const patch = buildPatch(b => {
-        b.addBlock('Oscillator', {}, { displayName: 'My Osc' });
+        b.addBlock('Oscillator', { displayName: 'My Osc' });
       });
 
       const block = Array.from(patch.blocks.values())[0];
@@ -152,7 +159,8 @@ describe('AddressRegistry', () => {
 
     it('returns null for invalid address', () => {
       const patch = buildPatch(b => {
-        b.addBlock('Const', { value: 1 }, { displayName: 'My Const' });
+        const c = b.addBlock('Const', { displayName: 'My Const' });
+        b.setConfig(c, 'value', 1);
       });
 
       const registry = AddressRegistry.buildFromPatch(patch);
@@ -165,7 +173,8 @@ describe('AddressRegistry', () => {
       // Build a large patch
       const patch = buildPatch(b => {
         for (let i = 0; i < 100; i++) {
-          b.addBlock('Const', { value: i }, { displayName: `Const ${i}` });
+          const c = b.addBlock('Const', { displayName: `Const ${i}` });
+          b.setConfig(c, 'value', i);
         }
       });
 
@@ -186,7 +195,8 @@ describe('AddressRegistry', () => {
   describe('resolveShorthand', () => {
     it('resolves valid output shorthand', () => {
       const patch = buildPatch(b => {
-        b.addBlock('Const', { value: 1 }, { displayName: 'My Const' });
+        const c = b.addBlock('Const', { displayName: 'My Const' });
+        b.setConfig(c, 'value', 1);
       });
 
       const registry = AddressRegistry.buildFromPatch(patch);
@@ -201,7 +211,8 @@ describe('AddressRegistry', () => {
 
     it('returns null for invalid shorthand', () => {
       const patch = buildPatch(b => {
-        b.addBlock('Const', { value: 1 }, { displayName: 'My Const' });
+        const c = b.addBlock('Const', { displayName: 'My Const' });
+        b.setConfig(c, 'value', 1);
       });
 
       const registry = AddressRegistry.buildFromPatch(patch);
@@ -214,7 +225,8 @@ describe('AddressRegistry', () => {
       // Build a large patch
       const patch = buildPatch(b => {
         for (let i = 0; i < 100; i++) {
-          b.addBlock('Const', { value: i }, { displayName: `Const ${i}` });
+          const c = b.addBlock('Const', { displayName: `Const ${i}` });
+          b.setConfig(c, 'value', i);
         }
       });
 
@@ -235,7 +247,8 @@ describe('AddressRegistry', () => {
       const patch = buildPatch(b => {
         // Create 1000 blocks
         for (let i = 0; i < 1000; i++) {
-          b.addBlock('Const', { value: i }, { displayName: `Block ${i}` });
+          const c = b.addBlock('Const', { displayName: `Block ${i}` });
+          b.setConfig(c, 'value', i);
         }
       });
 
@@ -259,7 +272,8 @@ describe('AddressRegistry', () => {
     it('correctly indexes all elements in large patch', () => {
       const patch = buildPatch(b => {
         for (let i = 0; i < 100; i++) {
-          b.addBlock('Const', { value: i }, { displayName: `Block ${i}` });
+          const c = b.addBlock('Const', { displayName: `Block ${i}` });
+          b.setConfig(c, 'value', i);
         }
       });
 
@@ -276,8 +290,9 @@ describe('AddressRegistry', () => {
   describe('integration', () => {
     it('registry and direct resolution produce same results', () => {
       const patch = buildPatch(b => {
-        b.addBlock('Const', { value: 1 }, { displayName: 'My Const' });
-        b.addBlock('Oscillator', {}, { displayName: 'My Osc' });
+        const c = b.addBlock('Const', { displayName: 'My Const' });
+        b.setConfig(c, 'value', 1);
+        b.addBlock('Oscillator', { displayName: 'My Osc' });
       });
 
       const registry = AddressRegistry.buildFromPatch(patch);

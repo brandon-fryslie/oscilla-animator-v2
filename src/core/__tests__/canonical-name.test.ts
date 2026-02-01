@@ -191,9 +191,9 @@ describe('detectCanonicalNameCollisions', () => {
 describe('validateDisplayNameUniqueness', () => {
   it('returns null when all displayNames are unique', () => {
     const patch = buildPatch(b => {
-      b.addBlock('Add', {}, { displayName: 'Circle' });
-      b.addBlock('Add', {}, { displayName: 'Square' });
-      b.addBlock('Add', {}, { displayName: 'Triangle' });
+      b.addBlock('Add', { displayName: 'Circle' });
+      b.addBlock('Add', { displayName: 'Square' });
+      b.addBlock('Add', { displayName: 'Triangle' });
     });
 
     const error = validateDisplayNameUniqueness(patch);
@@ -204,8 +204,8 @@ describe('validateDisplayNameUniqueness', () => {
     // addBlock now throws when creating a block with a colliding displayName
     expect(() => {
       buildPatch(b => {
-        b.addBlock('Add', {}, { displayName: 'My Block' });
-        b.addBlock('Add', {}, { displayName: 'my block' });
+        b.addBlock('Add', { displayName: 'My Block' });
+        b.addBlock('Add', { displayName: 'my block' });
       });
     }).toThrow(/conflicts with existing block/);
   });
@@ -214,17 +214,17 @@ describe('validateDisplayNameUniqueness', () => {
     // addBlock now throws when creating a block with a colliding displayName
     expect(() => {
       buildPatch(b => {
-        b.addBlock('Add', {}, { displayName: 'Circle!' });
-        b.addBlock('Add', {}, { displayName: 'Circle?' });
+        b.addBlock('Add', { displayName: 'Circle!' });
+        b.addBlock('Add', { displayName: 'Circle?' });
       });
     }).toThrow(/conflicts with existing block/);
   });
 
   it('generates unique displayNames when not provided', () => {
     const patch = buildPatch(b => {
-      b.addBlock('Add', {});
-      b.addBlock('Add', {});
-      b.addBlock('Add', {}, { displayName: 'Valid' });
+      b.addBlock('Add');
+      b.addBlock('Add');
+      b.addBlock('Add', { displayName: 'Valid' });
     });
 
     const error = validateDisplayNameUniqueness(patch);
@@ -234,9 +234,9 @@ describe('validateDisplayNameUniqueness', () => {
 
   it('auto-generates displayName when empty string provided', () => {
     const patch = buildPatch(b => {
-      b.addBlock('Add', {}, { displayName: '' });
-      b.addBlock('Add', {}, { displayName: '  ' });
-      b.addBlock('Add', {}, { displayName: 'Valid' });
+      b.addBlock('Add', { displayName: '' });
+      b.addBlock('Add', { displayName: '  ' });
+      b.addBlock('Add', { displayName: 'Valid' });
     });
 
     const error = validateDisplayNameUniqueness(patch);
@@ -247,8 +247,8 @@ describe('validateDisplayNameUniqueness', () => {
     // addBlock now throws on the first collision attempt
     expect(() => {
       buildPatch(b => {
-        b.addBlock('Add', {}, { displayName: 'My Block' });
-        b.addBlock('Add', {}, { displayName: 'my block' }); // This will throw
+        b.addBlock('Add', { displayName: 'My Block' });
+        b.addBlock('Add', { displayName: 'my block' }); // This will throw
       });
     }).toThrow(/conflicts with existing block/);
   });
@@ -257,8 +257,8 @@ describe('validateDisplayNameUniqueness', () => {
     // addBlock now throws on the first collision attempt
     expect(() => {
       buildPatch(b => {
-        b.addBlock('Add', {}, { displayName: 'Block A' });
-        b.addBlock('Add', {}, { displayName: 'block a' }); // This will throw
+        b.addBlock('Add', { displayName: 'Block A' });
+        b.addBlock('Add', { displayName: 'block a' }); // This will throw
       });
     }).toThrow(/conflicts with existing block/);
   });

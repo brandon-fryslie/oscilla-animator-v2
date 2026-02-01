@@ -37,7 +37,7 @@ function testProgramConverter(
   // const signalNodes = builder.getSigExprs();
   // const fieldNodes = builder.getFieldExprs();
   // const eventNodes = builder.getEventExprs();
-  
+
   return {
     irVersion: 1,
     valueExprs: { nodes: [], },
@@ -62,9 +62,10 @@ describe('Backend Preconditions', () => {
   describe('TypedPatch Validation', () => {
     it('accepts valid TypedPatch from Frontend', () => {
       const patch = buildPatch((b) => {
-        b.addBlock('InfiniteTimeRoot', {});
-        const c = b.addBlock('Const', { value: 42 });
-        const add = b.addBlock('Add', {});
+        b.addBlock('InfiniteTimeRoot');
+        const c = b.addBlock('Const');
+        b.setConfig(c, 'value', 42);
+        const add = b.addBlock('Add');
         b.wire(c, 'out', add, 'a');
         b.wire(c, 'out', add, 'b');
       });
@@ -98,8 +99,9 @@ describe('Backend Preconditions', () => {
 
     it('produces valid program from valid input', () => {
       const patch = buildPatch((b) => {
-        const time = b.addBlock('InfiniteTimeRoot', {});
-        const osc = b.addBlock('Oscillator', { waveform: 'oscSin' });
+        const time = b.addBlock('InfiniteTimeRoot');
+        const osc = b.addBlock('Oscillator');
+        b.setConfig(osc, 'waveform', 'oscSin');
         b.wire(time, 'phaseA', osc, 'phase');
       });
 
@@ -135,9 +137,9 @@ describe('Backend Preconditions', () => {
     it('fails when Frontend indicates backendReady=false', () => {
       // Create an instantaneous illegal cycle
       const patch = buildPatch((b) => {
-        b.addBlock('InfiniteTimeRoot', {});
-        const add1 = b.addBlock('Add', {});
-        const add2 = b.addBlock('Add', {});
+        b.addBlock('InfiniteTimeRoot');
+        const add1 = b.addBlock('Add');
+        const add2 = b.addBlock('Add');
 
         b.wire(add1, 'out', add2, 'a');
         b.wire(add2, 'out', add1, 'a');
@@ -163,7 +165,7 @@ describe('Backend Preconditions', () => {
         if (backendResult.kind === 'error') {
           // Should have errors
           expect(backendResult.errors.length).toBeGreaterThan(0);
-          
+
           // Errors should mention cycle or compilation failure
           const hasRelevantError = backendResult.errors.some(
             (e) =>
@@ -180,10 +182,11 @@ describe('Backend Preconditions', () => {
     it('succeeds with legal feedback loops', () => {
       // Create a legal feedback loop with UnitDelay
       const patch = buildPatch((b) => {
-        b.addBlock('InfiniteTimeRoot', {});
-        const delay = b.addBlock('UnitDelay', {});
-        const add = b.addBlock('Add', {});
-        const c = b.addBlock('Const', { value: 1 });
+        b.addBlock('InfiniteTimeRoot');
+        const delay = b.addBlock('UnitDelay');
+        const add = b.addBlock('Add');
+        const c = b.addBlock('Const');
+        b.setConfig(c, 'value', 1);
 
         // Legal feedback: add -> delay -> add
         b.wire(add, 'out', delay, 'in');
@@ -215,9 +218,10 @@ describe('Backend Preconditions', () => {
     it('requires fully resolved types', () => {
       // Create a minimal valid patch
       const patch = buildPatch((b) => {
-        b.addBlock('InfiniteTimeRoot', {});
-        const c = b.addBlock('Const', { value: 1 });
-        const add = b.addBlock('Add', {});
+        b.addBlock('InfiniteTimeRoot');
+        const c = b.addBlock('Const');
+        b.setConfig(c, 'value', 1);
+        const add = b.addBlock('Add');
         b.wire(c, 'out', add, 'a');
       });
 
@@ -245,8 +249,8 @@ describe('Backend Preconditions', () => {
   describe('Backend Pipeline Stages', () => {
     it('executes all backend passes', () => {
       const patch = buildPatch((b) => {
-        const time = b.addBlock('InfiniteTimeRoot', {});
-        const osc = b.addBlock('Oscillator', {});
+        const time = b.addBlock('InfiniteTimeRoot');
+        const osc = b.addBlock('Oscillator');
         b.wire(time, 'phaseA', osc, 'phase');
       });
 
@@ -280,10 +284,12 @@ describe('Backend Preconditions', () => {
 
     it('produces execution schedule', () => {
       const patch = buildPatch((b) => {
-        b.addBlock('InfiniteTimeRoot', {});
-        const c1 = b.addBlock('Const', { value: 1 });
-        const c2 = b.addBlock('Const', { value: 2 });
-        const add = b.addBlock('Add', {});
+        b.addBlock('InfiniteTimeRoot');
+        const c1 = b.addBlock('Const');
+        b.setConfig(c1, 'value', 1);
+        const c2 = b.addBlock('Const');
+        b.setConfig(c2, 'value', 2);
+        const add = b.addBlock('Add');
         b.wire(c1, 'out', add, 'a');
         b.wire(c2, 'out', add, 'b');
       });
@@ -316,9 +322,9 @@ describe('Backend Preconditions', () => {
     it('reports clear errors when backend fails', () => {
       // Create a patch that might fail in backend
       const patch = buildPatch((b) => {
-        b.addBlock('InfiniteTimeRoot', {});
-        const add1 = b.addBlock('Add', {});
-        const add2 = b.addBlock('Add', {});
+        b.addBlock('InfiniteTimeRoot');
+        const add1 = b.addBlock('Add');
+        const add2 = b.addBlock('Add');
 
         // Illegal instantaneous cycle
         b.wire(add1, 'out', add2, 'a');
@@ -356,7 +362,7 @@ describe('Backend Preconditions', () => {
   describe('Contract Verification', () => {
     it('follows Frontend->Backend contract', () => {
       const patch = buildPatch((b) => {
-        b.addBlock('InfiniteTimeRoot', {});
+        b.addBlock('InfiniteTimeRoot');
       });
 
       // Step 1: Frontend produces TypedPatch
@@ -382,8 +388,8 @@ describe('Backend Preconditions', () => {
 
     it('Backend receives only normalized, typed blocks', () => {
       const patch = buildPatch((b) => {
-        const time = b.addBlock('InfiniteTimeRoot', {});
-        const osc = b.addBlock('Oscillator', {});
+        const time = b.addBlock('InfiniteTimeRoot');
+        const osc = b.addBlock('Oscillator');
         b.wire(time, 'phaseA', osc, 'phase');
       });
 

@@ -14,7 +14,8 @@ import '../../blocks/all';
 describe('resolveAddress', () => {
   it('resolves block address', () => {
     const patch = buildPatch(b => {
-      b.addBlock('Const', { value: 1 }, { displayName: 'My Const' });
+      const c = b.addBlock('Const', { displayName: 'My Const' });
+      b.setConfig(c, 'value', 1);
     });
 
     const block = Array.from(patch.blocks.values())[0];
@@ -31,7 +32,8 @@ describe('resolveAddress', () => {
 
   it('resolves output port address', () => {
     const patch = buildPatch(b => {
-      b.addBlock('Const', { value: 1 }, { displayName: 'My Const' });
+      const c = b.addBlock('Const', { displayName: 'My Const' });
+      b.setConfig(c, 'value', 1);
     });
 
     const block = Array.from(patch.blocks.values())[0];
@@ -52,7 +54,7 @@ describe('resolveAddress', () => {
 
   it('resolves input port address', () => {
     const patch = buildPatch(b => {
-      b.addBlock('Oscillator', {}, { displayName: 'My Osc' });
+      b.addBlock('Oscillator', { displayName: 'My Osc' });
     });
 
     const block = Array.from(patch.blocks.values())[0];
@@ -73,7 +75,8 @@ describe('resolveAddress', () => {
 
   it('resolves param address', () => {
     const patch = buildPatch(b => {
-      b.addBlock('Const', { value: 42 }, { displayName: 'My Const' });
+      const c = b.addBlock('Const', { displayName: 'My Const' });
+      b.setConfig(c, 'value', 42);
     });
 
     const block = Array.from(patch.blocks.values())[0];
@@ -92,7 +95,8 @@ describe('resolveAddress', () => {
 
   it('returns null for invalid address syntax', () => {
     const patch = buildPatch(b => {
-      b.addBlock('Const', { value: 1 }, { displayName: 'My Const' });
+      const c = b.addBlock('Const', { displayName: 'My Const' });
+      b.setConfig(c, 'value', 1);
     });
 
     const resolved = resolveAddress(patch, 'invalid-address');
@@ -102,7 +106,8 @@ describe('resolveAddress', () => {
 
   it('returns null for missing block', () => {
     const patch = buildPatch(b => {
-      b.addBlock('Const', { value: 1 }, { displayName: 'My Const' });
+      const c = b.addBlock('Const', { displayName: 'My Const' });
+      b.setConfig(c, 'value', 1);
     });
 
     const resolved = resolveAddress(patch, 'v1:blocks.nonexistent');
@@ -112,7 +117,8 @@ describe('resolveAddress', () => {
 
   it('returns null for missing output port', () => {
     const patch = buildPatch(b => {
-      b.addBlock('Const', { value: 1 }, { displayName: 'My Const' });
+      const c = b.addBlock('Const', { displayName: 'My Const' });
+      b.setConfig(c, 'value', 1);
     });
 
     const resolved = resolveAddress(patch, 'v1:blocks.my_const.outputs.nonexistent');
@@ -122,7 +128,8 @@ describe('resolveAddress', () => {
 
   it('returns null for missing input port', () => {
     const patch = buildPatch(b => {
-      b.addBlock('Const', { value: 1 }, { displayName: 'My Const' });
+      const c = b.addBlock('Const', { displayName: 'My Const' });
+      b.setConfig(c, 'value', 1);
     });
 
     const resolved = resolveAddress(patch, 'v1:blocks.my_const.inputs.nonexistent');
@@ -132,7 +139,8 @@ describe('resolveAddress', () => {
 
   it('resolves auto-generated displayNames', () => {
     const patch = buildPatch(b => {
-      b.addBlock('Const', { value: 1 });
+      const c = b.addBlock('Const');
+      b.setConfig(c, 'value', 1);
     });
 
     const block = Array.from(patch.blocks.values())[0];
@@ -148,7 +156,8 @@ describe('resolveAddress', () => {
 
   it('includes type information for output ports', () => {
     const patch = buildPatch(b => {
-      b.addBlock('Const', { value: 1 }, { displayName: 'My Const' });
+      const c = b.addBlock('Const', { displayName: 'My Const' });
+      b.setConfig(c, 'value', 1);
     });
 
     const block = Array.from(patch.blocks.values())[0];
@@ -168,7 +177,7 @@ describe('resolveAddress', () => {
 
   it('includes type information for input ports', () => {
     const patch = buildPatch(b => {
-      b.addBlock('Oscillator', {}, { displayName: 'My Osc' });
+      b.addBlock('Oscillator', { displayName: 'My Osc' });
     });
 
     const block = Array.from(patch.blocks.values())[0];
@@ -188,7 +197,7 @@ describe('resolveAddress', () => {
 
   it('handles param with undefined value', () => {
     const patch = buildPatch(b => {
-      b.addBlock('Const', {}, { displayName: 'My Const' });
+      b.addBlock('Const', { displayName: 'My Const' });
     });
 
     const addrStr = 'v1:blocks.my_const.params.nonexistent';
@@ -205,7 +214,8 @@ describe('resolveAddress', () => {
 describe('resolveAddressWithDiagnostic', () => {
   it('resolves valid address with no error', () => {
     const patch = buildPatch(b => {
-      b.addBlock('Const', { value: 1 }, { displayName: 'My Const' });
+      const c = b.addBlock('Const', { displayName: 'My Const' });
+      b.setConfig(c, 'value', 1);
     });
 
     const block = Array.from(patch.blocks.values())[0];
@@ -220,7 +230,8 @@ describe('resolveAddressWithDiagnostic', () => {
 
   it('returns helpful error for invalid syntax', () => {
     const patch = buildPatch(b => {
-      b.addBlock('Const', { value: 1 }, { displayName: 'My Const' });
+      const c = b.addBlock('Const', { displayName: 'My Const' });
+      b.setConfig(c, 'value', 1);
     });
 
     const result = resolveAddressWithDiagnostic(patch, 'invalid-address');
@@ -231,7 +242,8 @@ describe('resolveAddressWithDiagnostic', () => {
 
   it('returns helpful error for missing block', () => {
     const patch = buildPatch(b => {
-      b.addBlock('Const', { value: 1 }, { displayName: 'My Const' });
+      const c = b.addBlock('Const', { displayName: 'My Const' });
+      b.setConfig(c, 'value', 1);
     });
 
     const result = resolveAddressWithDiagnostic(patch, 'v1:blocks.nonexistent');
@@ -242,7 +254,8 @@ describe('resolveAddressWithDiagnostic', () => {
 
   it('returns helpful error for missing output port', () => {
     const patch = buildPatch(b => {
-      b.addBlock('Const', { value: 1 }, { displayName: 'My Const' });
+      const c = b.addBlock('Const', { displayName: 'My Const' });
+      b.setConfig(c, 'value', 1);
     });
 
     const result = resolveAddressWithDiagnostic(patch, 'v1:blocks.my_const.outputs.nonexistent');
@@ -254,7 +267,8 @@ describe('resolveAddressWithDiagnostic', () => {
 
   it('returns helpful error for missing input port', () => {
     const patch = buildPatch(b => {
-      b.addBlock('Const', { value: 1 }, { displayName: 'My Const' });
+      const c = b.addBlock('Const', { displayName: 'My Const' });
+      b.setConfig(c, 'value', 1);
     });
 
     const result = resolveAddressWithDiagnostic(patch, 'v1:blocks.my_const.inputs.nonexistent');
@@ -266,7 +280,8 @@ describe('resolveAddressWithDiagnostic', () => {
 
   it('returns helpful error for missing parameter', () => {
     const patch = buildPatch(b => {
-      b.addBlock('Const', { value: 1 }, { displayName: 'My Const' });
+      const c = b.addBlock('Const', { displayName: 'My Const' });
+      b.setConfig(c, 'value', 1);
     });
 
     // Note: params don't really fail - they just return undefined value
@@ -279,7 +294,8 @@ describe('resolveAddressWithDiagnostic', () => {
 
   it('error message includes block type', () => {
     const patch = buildPatch(b => {
-      b.addBlock('Const', { value: 1 }, { displayName: 'My Const' });
+      const c = b.addBlock('Const', { displayName: 'My Const' });
+      b.setConfig(c, 'value', 1);
     });
 
     const result = resolveAddressWithDiagnostic(patch, 'v1:blocks.my_const.outputs.nonexistent');

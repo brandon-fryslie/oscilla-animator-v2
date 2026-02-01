@@ -25,9 +25,10 @@ describe('Frontend Independence', () => {
     it('resolves port types without backend compilation', () => {
       // Create a simple patch with type inference
       const patch = buildPatch((b) => {
-        b.addBlock('InfiniteTimeRoot', {});
-        const constBlock = b.addBlock('Const', { value: 42 });
-        const addBlock = b.addBlock('Add', {});
+        b.addBlock('InfiniteTimeRoot');
+        const constBlock = b.addBlock('Const');
+        b.setConfig(constBlock, 'value', 42);
+        const addBlock = b.addBlock('Add');
         b.wire(constBlock, 'out', addBlock, 'a');
         b.wire(constBlock, 'out', addBlock, 'b');
       });
@@ -60,8 +61,10 @@ describe('Frontend Independence', () => {
 
     it('provides type information accessible to UI', () => {
       const patch = buildPatch((b) => {
-        const time = b.addBlock('InfiniteTimeRoot', { periodAMs: 1000 });
-        const osc = b.addBlock('Oscillator', { waveform: 'oscSin' });
+        const time = b.addBlock('InfiniteTimeRoot');
+        b.setPortDefault(time, 'periodAMs', 1000);
+        const osc = b.addBlock('Oscillator');
+        b.setConfig(osc, 'waveform', 'oscSin');
         b.wire(time, 'phaseA', osc, 'phase');
       });
 
@@ -86,12 +89,14 @@ describe('Frontend Independence', () => {
     it('inserts adapters without backend compilation', () => {
       // Create a patch that requires adapter insertion
       const patch = buildPatch((b) => {
-        b.addBlock('InfiniteTimeRoot', {});
-        const phaseBlock = b.addBlock('Const', { value: 0.5 });
-        const scalar = b.addBlock('Const', { value: 1.0 });
-        
+        b.addBlock('InfiniteTimeRoot');
+        const phaseBlock = b.addBlock('Const');
+        b.setConfig(phaseBlock, 'value', 0.5);
+        const scalar = b.addBlock('Const');
+        b.setConfig(scalar, 'value', 1.0);
+
         // This should require adapter insertion during normalization
-        const add = b.addBlock('Add', {});
+        const add = b.addBlock('Add');
         b.wire(phaseBlock, 'out', add, 'a');
         b.wire(scalar, 'out', add, 'b');
       });
@@ -115,9 +120,10 @@ describe('Frontend Independence', () => {
 
     it('reports adapter insertion in normalized patch', () => {
       const patch = buildPatch((b) => {
-        b.addBlock('InfiniteTimeRoot', {});
-        const c = b.addBlock('Const', { value: 10 });
-        const add = b.addBlock('Add', {});
+        b.addBlock('InfiniteTimeRoot');
+        const c = b.addBlock('Const');
+        b.setConfig(c, 'value', 10);
+        const add = b.addBlock('Add');
         b.wire(c, 'out', add, 'a');
       });
 
@@ -134,7 +140,7 @@ describe('Frontend Independence', () => {
         // Check that normalization produced a valid structure with blockIndex map
         expect(normalizedPatch.blockIndex).toBeDefined();
         expect(normalizedPatch.blockIndex.size).toBeGreaterThan(0);
-        
+
         // Verify blocks can be indexed
         expect(normalizedPatch.blockIndex.size).toBe(normalizedPatch.blocks.length);
       }
@@ -145,10 +151,11 @@ describe('Frontend Independence', () => {
     it('classifies cycles without backend compilation', () => {
       // Create a simple feedback loop
       const patch = buildPatch((b) => {
-        b.addBlock('InfiniteTimeRoot', {});
-        const delay = b.addBlock('UnitDelay', {});
-        const add = b.addBlock('Add', {});
-        const c = b.addBlock('Const', { value: 1 });
+        b.addBlock('InfiniteTimeRoot');
+        const delay = b.addBlock('UnitDelay');
+        const add = b.addBlock('Add');
+        const c = b.addBlock('Const');
+        b.setConfig(c, 'value', 1);
 
         // Create feedback: add -> delay -> add
         b.wire(add, 'out', delay, 'in');
@@ -182,9 +189,10 @@ describe('Frontend Independence', () => {
 
     it('provides cycle summary accessible to UI', () => {
       const patch = buildPatch((b) => {
-        b.addBlock('InfiniteTimeRoot', {});
-        const c = b.addBlock('Const', { value: 42 });
-        const add = b.addBlock('Add', {});
+        b.addBlock('InfiniteTimeRoot');
+        const c = b.addBlock('Const');
+        b.setConfig(c, 'value', 42);
+        const add = b.addBlock('Add');
         b.wire(c, 'out', add, 'a');
       });
 
@@ -214,10 +222,11 @@ describe('Frontend Independence', () => {
     it('reports illegal cycles without backend failure', () => {
       // Create an instantaneous illegal cycle (no delay)
       const patch = buildPatch((b) => {
-        b.addBlock('InfiniteTimeRoot', {});
-        const add1 = b.addBlock('Add', {});
-        const add2 = b.addBlock('Add', {});
-        const c = b.addBlock('Const', { value: 1 });
+        b.addBlock('InfiniteTimeRoot');
+        const add1 = b.addBlock('Add');
+        const add2 = b.addBlock('Add');
+        const c = b.addBlock('Const');
+        b.setConfig(c, 'value', 1);
 
         // Instantaneous cycle: add1 -> add2 -> add1
         b.wire(add1, 'out', add2, 'a');
@@ -251,9 +260,10 @@ describe('Frontend Independence', () => {
   describe('Backend Readiness', () => {
     it('sets backendReady=true for valid graphs', () => {
       const patch = buildPatch((b) => {
-        b.addBlock('InfiniteTimeRoot', {});
-        const c = b.addBlock('Const', { value: 42 });
-        const add = b.addBlock('Add', {});
+        b.addBlock('InfiniteTimeRoot');
+        const c = b.addBlock('Const');
+        b.setConfig(c, 'value', 42);
+        const add = b.addBlock('Add');
         b.wire(c, 'out', add, 'a');
         b.wire(c, 'out', add, 'b');
       });
@@ -273,9 +283,9 @@ describe('Frontend Independence', () => {
     it('sets backendReady=false for illegal cycles', () => {
       // Already tested in cycle classification above
       const patch = buildPatch((b) => {
-        b.addBlock('InfiniteTimeRoot', {});
-        const add1 = b.addBlock('Add', {});
-        const add2 = b.addBlock('Add', {});
+        b.addBlock('InfiniteTimeRoot');
+        const add1 = b.addBlock('Add');
+        const add2 = b.addBlock('Add');
 
         b.wire(add1, 'out', add2, 'a');
         b.wire(add2, 'out', add1, 'a');
@@ -291,9 +301,9 @@ describe('Frontend Independence', () => {
     it('sets backendReady=false for type resolution errors', () => {
       // Create a patch with unresolvable types (dangling edge)
       const patch = buildPatch((b) => {
-        b.addBlock('InfiniteTimeRoot', {});
+        b.addBlock('InfiniteTimeRoot');
         // Add block with no inputs - may have unresolved type variables
-        b.addBlock('Add', {});
+        b.addBlock('Add');
       });
 
       const result = compileFrontend(patch);
@@ -315,7 +325,7 @@ describe('Frontend Independence', () => {
   describe('Frontend Structure', () => {
     it('returns complete FrontendResult structure', () => {
       const patch = buildPatch((b) => {
-        b.addBlock('InfiniteTimeRoot', {});
+        b.addBlock('InfiniteTimeRoot');
       });
 
       const result = compileFrontend(patch);
@@ -339,8 +349,8 @@ describe('Frontend Independence', () => {
 
     it('produces serializable output for UI', () => {
       const patch = buildPatch((b) => {
-        const time = b.addBlock('InfiniteTimeRoot', {});
-        const osc = b.addBlock('Oscillator', {});
+        const time = b.addBlock('InfiniteTimeRoot');
+        const osc = b.addBlock('Oscillator');
         b.wire(time, 'phaseA', osc, 'phase');
       });
 

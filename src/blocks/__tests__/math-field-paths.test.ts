@@ -27,17 +27,23 @@ describe('Field-Path Math Integration', () => {
       // vec3 math operations via opcode dispatch. If the dispatch was broken,
       // this would fail with "Unknown opcode" errors.
       const patch = buildPatch((b) => {
-        const time = b.addBlock('InfiniteTimeRoot', {});
+        const time = b.addBlock('InfiniteTimeRoot');
 
-        const ellipse = b.addBlock('Ellipse', { rx: 0.01, ry: 0.01 });
-        const array = b.addBlock('Array', { count: 9 });
-        const layout = b.addBlock('GridLayoutUV', { rows: 3, cols: 3 });
+        const ellipse = b.addBlock('Ellipse');
+        b.setPortDefault(ellipse, 'rx', 0.01);
+        b.setPortDefault(ellipse, 'ry', 0.01);
+        const array = b.addBlock('Array');
+        b.setPortDefault(array, 'count', 9);
+        const layout = b.addBlock('GridLayoutUV');
+        b.setPortDefault(layout, 'rows', 3);
+        b.setPortDefault(layout, 'cols', 3);
 
-        const colorSignal = b.addBlock('Const', { value: { r: 1.0, g: 1.0, b: 1.0, a: 1.0 } });
-        const colorField = b.addBlock('Broadcast', {});
+        const colorSignal = b.addBlock('Const');
+        b.setConfig(colorSignal, 'value', { r: 1.0, g: 1.0, b: 1.0, a: 1.0 });
+        const colorField = b.addBlock('Broadcast');
         b.wire(colorSignal, 'out', colorField, 'signal');
 
-        const render = b.addBlock('RenderInstances2D', {});
+        const render = b.addBlock('RenderInstances2D');
 
         b.wire(ellipse, 'shape', array, 'element');
         b.wire(array, 'elements', layout, 'elements');
@@ -55,17 +61,22 @@ describe('Field-Path Math Integration', () => {
 
     it('compiles CircleLayoutUV successfully', () => {
       const patch = buildPatch((b) => {
-        const time = b.addBlock('InfiniteTimeRoot', {});
+        const time = b.addBlock('InfiniteTimeRoot');
 
-        const ellipse = b.addBlock('Ellipse', { rx: 0.01, ry: 0.01 });
-        const array = b.addBlock('Array', { count: 12 });
-        const layout = b.addBlock('CircleLayoutUV', { radius: 0.3 });
+        const ellipse = b.addBlock('Ellipse');
+        b.setPortDefault(ellipse, 'rx', 0.01);
+        b.setPortDefault(ellipse, 'ry', 0.01);
+        const array = b.addBlock('Array');
+        b.setPortDefault(array, 'count', 12);
+        const layout = b.addBlock('CircleLayoutUV');
+        b.setPortDefault(layout, 'radius', 0.3);
 
-        const colorSignal = b.addBlock('Const', { value: { r: 0.2, g: 0.8, b: 1.0, a: 1.0 } });
-        const colorField = b.addBlock('Broadcast', {});
+        const colorSignal = b.addBlock('Const');
+        b.setConfig(colorSignal, 'value', { r: 0.2, g: 0.8, b: 1.0, a: 1.0 });
+        const colorField = b.addBlock('Broadcast');
         b.wire(colorSignal, 'out', colorField, 'signal');
 
-        const render = b.addBlock('RenderInstances2D', {});
+        const render = b.addBlock('RenderInstances2D');
 
         b.wire(ellipse, 'shape', array, 'element');
         b.wire(array, 'elements', layout, 'elements');
@@ -80,17 +91,21 @@ describe('Field-Path Math Integration', () => {
 
     it('compiles LineLayoutUV successfully', () => {
       const patch = buildPatch((b) => {
-        const time = b.addBlock('InfiniteTimeRoot', {});
+        const time = b.addBlock('InfiniteTimeRoot');
 
-        const ellipse = b.addBlock('Ellipse', { rx: 0.01, ry: 0.01 });
-        const array = b.addBlock('Array', { count: 8 });
-        const layout = b.addBlock('LineLayoutUV', {});
+        const ellipse = b.addBlock('Ellipse');
+        b.setPortDefault(ellipse, 'rx', 0.01);
+        b.setPortDefault(ellipse, 'ry', 0.01);
+        const array = b.addBlock('Array');
+        b.setPortDefault(array, 'count', 8);
+        const layout = b.addBlock('LineLayoutUV');
 
-        const colorSignal = b.addBlock('Const', { value: { r: 1.0, g: 1.0, b: 0.0, a: 1.0 } });
-        const colorField = b.addBlock('Broadcast', {});
+        const colorSignal = b.addBlock('Const');
+        b.setConfig(colorSignal, 'value', { r: 1.0, g: 1.0, b: 0.0, a: 1.0 });
+        const colorField = b.addBlock('Broadcast');
         b.wire(colorSignal, 'out', colorField, 'signal');
 
-        const render = b.addBlock('RenderInstances2D', {});
+        const render = b.addBlock('RenderInstances2D');
 
         b.wire(ellipse, 'shape', array, 'element');
         b.wire(array, 'elements', layout, 'elements');
@@ -111,17 +126,23 @@ describe('Field-Path Math Integration', () => {
         const rows = Math.ceil(count / cols);
 
         const patch = buildPatch((b) => {
-          const time = b.addBlock('InfiniteTimeRoot', {});
+          const time = b.addBlock('InfiniteTimeRoot');
 
-          const ellipse = b.addBlock('Ellipse', { rx: 0.001, ry: 0.001 });
-          const array = b.addBlock('Array', { count });
-          const layout = b.addBlock('GridLayoutUV', { rows, cols });
+          const ellipse = b.addBlock('Ellipse');
+          b.setPortDefault(ellipse, 'rx', 0.001);
+          b.setPortDefault(ellipse, 'ry', 0.001);
+          const array = b.addBlock('Array');
+          b.setPortDefault(array, 'count', count);
+          const layout = b.addBlock('GridLayoutUV');
+          b.setPortDefault(layout, 'rows', rows);
+          b.setPortDefault(layout, 'cols', cols);
 
-          const colorSignal = b.addBlock('Const', { value: { r: 0.5, g: 0.5, b: 0.5, a: 1.0 } });
-          const colorField = b.addBlock('Broadcast', {});
+          const colorSignal = b.addBlock('Const');
+          b.setConfig(colorSignal, 'value', { r: 0.5, g: 0.5, b: 0.5, a: 1.0 });
+          const colorField = b.addBlock('Broadcast');
           b.wire(colorSignal, 'out', colorField, 'signal');
 
-          const render = b.addBlock('RenderInstances2D', {});
+          const render = b.addBlock('RenderInstances2D');
 
           b.wire(ellipse, 'shape', array, 'element');
           b.wire(array, 'elements', layout, 'elements');
@@ -143,17 +164,23 @@ describe('Field-Path Math Integration', () => {
       // path is correctly wired.
 
       const patch = buildPatch((b) => {
-        const time = b.addBlock('InfiniteTimeRoot', {});
+        const time = b.addBlock('InfiniteTimeRoot');
 
-        const ellipse = b.addBlock('Ellipse', { rx: 0.005, ry: 0.005 });
-        const array = b.addBlock('Array', { count: 36 });
-        const layout = b.addBlock('GridLayoutUV', { rows: 6, cols: 6 });
+        const ellipse = b.addBlock('Ellipse');
+        b.setPortDefault(ellipse, 'rx', 0.005);
+        b.setPortDefault(ellipse, 'ry', 0.005);
+        const array = b.addBlock('Array');
+        b.setPortDefault(array, 'count', 36);
+        const layout = b.addBlock('GridLayoutUV');
+        b.setPortDefault(layout, 'rows', 6);
+        b.setPortDefault(layout, 'cols', 6);
 
-        const colorSignal = b.addBlock('Const', { value: { r: 1.0, g: 1.0, b: 1.0, a: 1.0 } });
-        const colorField = b.addBlock('Broadcast', {});
+        const colorSignal = b.addBlock('Const');
+        b.setConfig(colorSignal, 'value', { r: 1.0, g: 1.0, b: 1.0, a: 1.0 });
+        const colorField = b.addBlock('Broadcast');
         b.wire(colorSignal, 'out', colorField, 'signal');
 
-        const render = b.addBlock('RenderInstances2D', {});
+        const render = b.addBlock('RenderInstances2D');
 
         b.wire(ellipse, 'shape', array, 'element');
         b.wire(array, 'elements', layout, 'elements');
@@ -176,17 +203,23 @@ describe('Field-Path Math Integration', () => {
 
     it('lowers circleLayoutUV kernel without errors', () => {
       const patch = buildPatch((b) => {
-        const time = b.addBlock('InfiniteTimeRoot', {});
+        const time = b.addBlock('InfiniteTimeRoot');
 
-        const ellipse = b.addBlock('Ellipse', { rx: 0.01, ry: 0.01 });
-        const array = b.addBlock('Array', { count: 16 });
-        const layout = b.addBlock('CircleLayoutUV', { radius: 0.4, phase: 0.0 });
+        const ellipse = b.addBlock('Ellipse');
+        b.setPortDefault(ellipse, 'rx', 0.01);
+        b.setPortDefault(ellipse, 'ry', 0.01);
+        const array = b.addBlock('Array');
+        b.setPortDefault(array, 'count', 16);
+        const layout = b.addBlock('CircleLayoutUV');
+        b.setPortDefault(layout, 'radius', 0.4);
+        b.setPortDefault(layout, 'phase', 0.0);
 
-        const colorSignal = b.addBlock('Const', { value: { r: 1.0, g: 0.5, b: 0.2, a: 1.0 } });
-        const colorField = b.addBlock('Broadcast', {});
+        const colorSignal = b.addBlock('Const');
+        b.setConfig(colorSignal, 'value', { r: 1.0, g: 0.5, b: 0.2, a: 1.0 });
+        const colorField = b.addBlock('Broadcast');
         b.wire(colorSignal, 'out', colorField, 'signal');
 
-        const render = b.addBlock('RenderInstances2D', {});
+        const render = b.addBlock('RenderInstances2D');
 
         b.wire(ellipse, 'shape', array, 'element');
         b.wire(array, 'elements', layout, 'elements');
@@ -207,17 +240,21 @@ describe('Field-Path Math Integration', () => {
 
     it('lowers lineLayoutUV kernel without errors', () => {
       const patch = buildPatch((b) => {
-        const time = b.addBlock('InfiniteTimeRoot', {});
+        const time = b.addBlock('InfiniteTimeRoot');
 
-        const ellipse = b.addBlock('Ellipse', { rx: 0.01, ry: 0.01 });
-        const array = b.addBlock('Array', { count: 10 });
-        const layout = b.addBlock('LineLayoutUV', {});
+        const ellipse = b.addBlock('Ellipse');
+        b.setPortDefault(ellipse, 'rx', 0.01);
+        b.setPortDefault(ellipse, 'ry', 0.01);
+        const array = b.addBlock('Array');
+        b.setPortDefault(array, 'count', 10);
+        const layout = b.addBlock('LineLayoutUV');
 
-        const colorSignal = b.addBlock('Const', { value: { r: 0.8, g: 0.2, b: 0.9, a: 1.0 } });
-        const colorField = b.addBlock('Broadcast', {});
+        const colorSignal = b.addBlock('Const');
+        b.setConfig(colorSignal, 'value', { r: 0.8, g: 0.2, b: 0.9, a: 1.0 });
+        const colorField = b.addBlock('Broadcast');
         b.wire(colorSignal, 'out', colorField, 'signal');
 
-        const render = b.addBlock('RenderInstances2D', {});
+        const render = b.addBlock('RenderInstances2D');
 
         b.wire(ellipse, 'shape', array, 'element');
         b.wire(array, 'elements', layout, 'elements');

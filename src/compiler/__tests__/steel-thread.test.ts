@@ -45,15 +45,23 @@ describe('Steel Thread - Animated Particles', () => {
   it('compiles and renders a grid of ellipses', () => {
     // Three-stage: Ellipse (shape) → Array (cardinality) → GridLayoutUV (layout) → Render
     const patch = buildPatch((b) => {
-      b.addBlock('InfiniteTimeRoot', { periodAMs: 1000, periodBMs: 2000 });
-      const ellipse = b.addBlock('Ellipse', { rx: 0.03, ry: 0.03 });
-      const array = b.addBlock('Array', { count: 4 });
-      const layout = b.addBlock('GridLayoutUV', { rows: 2, cols: 2 });
-      const render = b.addBlock('RenderInstances2D', {});
+      const time = b.addBlock('InfiniteTimeRoot');
+      b.setPortDefault(time, 'periodAMs', 1000);
+      b.setPortDefault(time, 'periodBMs', 2000);
+      const ellipse = b.addBlock('Ellipse');
+      b.setPortDefault(ellipse, 'rx', 0.03);
+      b.setPortDefault(ellipse, 'ry', 0.03);
+      const array = b.addBlock('Array');
+      b.setPortDefault(array, 'count', 4);
+      const layout = b.addBlock('GridLayoutUV');
+      b.setPortDefault(layout, 'rows', 2);
+      b.setPortDefault(layout, 'cols', 2);
+      const render = b.addBlock('RenderInstances2D');
 
       // Color requires explicit Broadcast (signal→field)
-      const colorSig = b.addBlock('Const', { value: { r: 1, g: 0.5, b: 0.2, a: 1 } });
-      const colorField = b.addBlock('Broadcast', {});
+      const colorSig = b.addBlock('Const');
+      b.setConfig(colorSig, 'value', { r: 1, g: 0.5, b: 0.2, a: 1 });
+      const colorField = b.addBlock('Broadcast');
       b.wire(colorSig, 'out', colorField, 'signal');
 
       b.wire(ellipse, 'shape', array, 'element');
@@ -93,15 +101,21 @@ describe('Steel Thread - Animated Particles', () => {
   it('compiles and renders a circle layout with oscillator', () => {
     // Three-stage with oscillator: Time → Osc, Ellipse → Array → CircleLayoutUV → Render
     const patch = buildPatch((b) => {
-      b.addBlock('InfiniteTimeRoot', { periodAMs: 1000 });
-      const ellipse = b.addBlock('Ellipse', { rx: 0.05, ry: 0.05 });
-      const array = b.addBlock('Array', { count: 8 });
-      const layout = b.addBlock('CircleLayoutUV', { radius: 0.3 });
-      const render = b.addBlock('RenderInstances2D', {});
+      const time = b.addBlock('InfiniteTimeRoot');
+      b.setPortDefault(time, 'periodAMs', 1000);
+      const ellipse = b.addBlock('Ellipse');
+      b.setPortDefault(ellipse, 'rx', 0.05);
+      b.setPortDefault(ellipse, 'ry', 0.05);
+      const array = b.addBlock('Array');
+      b.setPortDefault(array, 'count', 8);
+      const layout = b.addBlock('CircleLayoutUV');
+      b.setPortDefault(layout, 'radius', 0.3);
+      const render = b.addBlock('RenderInstances2D');
 
       // Color requires explicit Broadcast (signal→field)
-      const colorSig = b.addBlock('Const', { value: { r: 0, g: 1, b: 0, a: 1 } });
-      const colorField = b.addBlock('Broadcast', {});
+      const colorSig = b.addBlock('Const');
+      b.setConfig(colorSig, 'value', { r: 0, g: 1, b: 0, a: 1 });
+      const colorField = b.addBlock('Broadcast');
       b.wire(colorSig, 'out', colorField, 'signal');
 
       b.wire(ellipse, 'shape', array, 'element');

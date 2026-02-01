@@ -210,7 +210,7 @@ describe('pass2Adapters - Adapter Materialization', () => {
     it('adapter block inherits domainId from target block', () => {
       const patch = buildPatch((b) => {
         const src = b.addBlock('TestAdapterPhaseSource');
-        const sink = b.addBlock('TestAdapterRadiansSink', {}, { domainId: 'my-domain' });
+        const sink = b.addBlock('TestAdapterRadiansSink', { domainId: 'my-domain' });
         b.wire(src, 'out', sink, 'in');
       });
 

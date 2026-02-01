@@ -13,10 +13,12 @@ describe('Feedback Loops with UnitDelay', () => {
     // Const -> Add.a, UnitDelay -> Add.b (feedback), Add -> UnitDelay
     // This is a phase accumulator: each frame adds 1 to the previous value
     const patch = buildPatch((b) => {
-      b.addBlock('InfiniteTimeRoot', {});
-      const constBlock = b.addBlock('Const', { value: 1 });
-      const add = b.addBlock('Add', {});
-      const delay = b.addBlock('UnitDelay', { initialValue: 0 });
+      b.addBlock('InfiniteTimeRoot');
+      const constBlock = b.addBlock('Const');
+      b.setConfig(constBlock, 'value', 1);
+      const add = b.addBlock('Add');
+      const delay = b.addBlock('UnitDelay');
+      b.setConfig(delay, 'initialValue', 0);
 
       // Const -> Add.a
       b.wire(constBlock, 'out', add, 'a');
@@ -43,11 +45,13 @@ describe('Feedback Loops with UnitDelay', () => {
   it('compiles multi-block feedback loop', () => {
     // A longer cycle: Add -> Multiply -> UnitDelay -> back to Add
     const patch = buildPatch((b) => {
-      b.addBlock('InfiniteTimeRoot', {});
-      const constBlock = b.addBlock('Const', { value: 2 });
-      const add = b.addBlock('Add', {});
-      const mul = b.addBlock('Multiply', {});
-      const delay = b.addBlock('UnitDelay', { initialValue: 1 });
+      b.addBlock('InfiniteTimeRoot');
+      const constBlock = b.addBlock('Const');
+      b.setConfig(constBlock, 'value', 2);
+      const add = b.addBlock('Add');
+      const mul = b.addBlock('Multiply');
+      const delay = b.addBlock('UnitDelay');
+      b.setConfig(delay, 'initialValue', 1);
 
       // Const -> Add.a
       b.wire(constBlock, 'out', add, 'a');
@@ -78,10 +82,11 @@ describe('Feedback Loops with UnitDelay', () => {
   it('rejects cycle without stateful block', () => {
     // Add -> Multiply -> back to Add (no UnitDelay, illegal cycle)
     const patch = buildPatch((b) => {
-      b.addBlock('InfiniteTimeRoot', {});
-      const constBlock = b.addBlock('Const', { value: 1 });
-      const add = b.addBlock('Add', {});
-      const mul = b.addBlock('Multiply', {});
+      b.addBlock('InfiniteTimeRoot');
+      const constBlock = b.addBlock('Const');
+      b.setConfig(constBlock, 'value', 1);
+      const add = b.addBlock('Add');
+      const mul = b.addBlock('Multiply');
 
       // Create an illegal cycle: Add -> Multiply -> Add
       b.wire(add, 'out', mul, 'a');
