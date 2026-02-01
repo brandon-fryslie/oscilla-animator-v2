@@ -87,8 +87,8 @@ export function cameraProjectionConst(value: CameraProjection): ConstValue {
 
 /**
  * Extract a scalar number from a ConstValue.
- * Works for float, int, bool (as 0|1).
- * Throws for vec2, vec3, color, and cameraProjection.
+ * Works for float, int, bool (as 0|1), cameraProjection (0=ortho, 1=persp).
+ * Throws for vec2, vec3, color.
  */
 export function constValueAsNumber(cv: ConstValue): number {
   switch (cv.kind) {
@@ -98,7 +98,7 @@ export function constValueAsNumber(cv: ConstValue): number {
     case 'bool':
       return cv.value ? 1 : 0;
     case 'cameraProjection':
-      throw new Error(`Cannot convert cameraProjection const value to number: ${cv.value}`);
+      return cv.value === 'perspective' ? 1 : 0;
     case 'vec2':
     case 'vec3':
     case 'color':

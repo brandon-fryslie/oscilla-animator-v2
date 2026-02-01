@@ -313,8 +313,11 @@ function gatherCardinalityConstraints(
 
     switch (meta.cardinalityMode) {
       case 'preserve': {
-        // Only include variable-cardinality ports in the preserve constraint
-        if (variablePorts.length > 0) {
+        // Include ALL ports (concrete + variable) so the UF links them together.
+        // This ensures instance refs propagate from inputs to outputs within the block.
+        // Concrete ports have placeholder instance refs that need upgrading via edge propagation.
+        const allPreservePorts = [...concretePorts, ...variablePorts];
+        if (allPreservePorts.length > 0) {
           const varId = cardinalityVarId(`block:${blockIndex}`);
           blockCardinalityVar.set(blockIndex, varId);
 
@@ -323,14 +326,14 @@ function gatherCardinalityConstraints(
             constraints.push({
               kind: 'zipBroadcast',
               varId,
-              ports: variablePorts,
+              ports: allPreservePorts,
             });
           } else {
             // Strict equality (disallowSignalMix or requireBroadcastExpr)
             constraints.push({
               kind: 'equal',
               varId,
-              ports: variablePorts,
+              ports: allPreservePorts,
             });
           }
         }

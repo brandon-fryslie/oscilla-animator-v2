@@ -3,15 +3,11 @@
  *
  * Resolves cardinality variables to concrete CardinalityValue via union-find.
  *
- * Key principles:
- * - Cardinality variables are created during constraint gathering
- * - Concrete values propagate through union-find groups
- * - Conflicts (two different concrete values in same group) → error
- * - zipBroadcast groups allow mixed one+many (many wins, one ports get broadcast)
- *
- * IMPORTANT: zipBroadcast ports must NOT be eagerly unioned in Phase 1.
- * They are kept as independent UF nodes and resolved in Phase 4 after
- * all concrete values have propagated. This prevents false one-vs-many conflicts.
+ * Key insight: zipBroadcast ports must NOT be eagerly unioned in Phase 1.
+ * They are kept as independent UF nodes. In Phase 3, edges involving zip
+ * members attempt union — compatible edges (many-many) succeed and propagate
+ * instance refs, while one-vs-many conflicts are suppressed (broadcast case).
+ * Phase 4 then upgrades placeholder many values to concrete refs.
  */
 
 import type { BlockIndex } from '../ir/patches';
@@ -36,66 +32,81 @@ export type CardinalityConstraint =
 type UFNodeId = string & { readonly __brand: 'CardinalityUFNodeId' };
 function ufNodeId(s: string): UFNodeId { return s as UFNodeId; }
 
-type UFParent =
-  | { readonly tag: 'parent'; readonly id: UFNodeId }
-  | { readonly tag: 'value'; readonly value: CardinalityValue };
-
+/**
+ * Union-Find with properly separated parent pointers and values.
+ * Values are stored only on root nodes. All nodes in a group share
+ * the root's value, so updating the root propagates to all members.
+ */
 class CardinalityUnionFind {
-  private parent = new Map<UFNodeId, UFParent>();
+  private parent = new Map<UFNodeId, UFNodeId>();
+  private value = new Map<UFNodeId, CardinalityValue>();
 
   ensure(id: UFNodeId): void {
-    if (!this.parent.has(id)) this.parent.set(id, { tag: 'parent', id });
+    if (!this.parent.has(id)) this.parent.set(id, id); // self-root
   }
 
-  find(id: UFNodeId): UFParent {
+  /** Returns the root node ID (with path compression). */
+  find(id: UFNodeId): UFNodeId {
     this.ensure(id);
     const p = this.parent.get(id)!;
-    if (p.tag === 'value') return p;
-    if (p.id === id) return p;
-    const root = this.find(p.id);
-    if (root.tag === 'parent') this.parent.set(id, { tag: 'parent', id: root.id });
-    else this.parent.set(id, root);
+    if (p === id) return id;
+    const root = this.find(p);
+    this.parent.set(id, root); // path compression
     return root;
   }
 
-  assign(id: UFNodeId, value: CardinalityValue): { ok: true } | { ok: false; conflict: [CardinalityValue, CardinalityValue] } {
-    const r = this.find(id);
-    if (r.tag === 'value') {
-      if (cardinalitiesEqual(r.value, value)) {
-        const preferred = preferConcreteCardinality(r.value, value);
-        this.parent.set(id, { tag: 'value', value: preferred });
+  assign(id: UFNodeId, val: CardinalityValue): { ok: true } | { ok: false; conflict: [CardinalityValue, CardinalityValue] } {
+    const root = this.find(id);
+    const existing = this.value.get(root);
+    if (existing !== undefined) {
+      if (cardinalitiesEqual(existing, val)) {
+        this.value.set(root, preferConcreteCardinality(existing, val));
         return { ok: true };
       }
-      return { ok: false, conflict: [r.value, value] };
+      return { ok: false, conflict: [existing, val] };
     }
-    this.parent.set(r.id, { tag: 'value', value });
+    this.value.set(root, val);
     return { ok: true };
   }
 
   union(a: UFNodeId, b: UFNodeId): { ok: true } | { ok: false; conflict: [CardinalityValue, CardinalityValue] } {
-    const ra = this.find(a);
-    const rb = this.find(b);
-    if (ra.tag === 'value' && rb.tag === 'value') {
-      if (cardinalitiesEqual(ra.value, rb.value)) {
-        const preferred = preferConcreteCardinality(ra.value, rb.value);
-        this.parent.set(a, { tag: 'value', value: preferred });
-        this.parent.set(b, { tag: 'value', value: preferred });
-        return { ok: true };
+    const rootA = this.find(a);
+    const rootB = this.find(b);
+    if (rootA === rootB) return { ok: true };
+
+    const valA = this.value.get(rootA);
+    const valB = this.value.get(rootB);
+
+    if (valA !== undefined && valB !== undefined) {
+      if (!cardinalitiesEqual(valA, valB)) {
+        return { ok: false, conflict: [valA, valB] };
       }
-      return { ok: false, conflict: [ra.value, rb.value] };
-    }
-    if (ra.tag === 'value' && rb.tag === 'parent') { this.parent.set(rb.id, ra); return { ok: true }; }
-    if (rb.tag === 'value' && ra.tag === 'parent') { this.parent.set(ra.id, rb); return { ok: true }; }
-    if (ra.tag === 'parent' && rb.tag === 'parent') {
-      if (ra.id !== rb.id) this.parent.set(ra.id, { tag: 'parent', id: rb.id });
+      const preferred = preferConcreteCardinality(valA, valB);
+      // Merge B into A, keep preferred value on new root
+      this.parent.set(rootB, rootA);
+      this.value.set(rootA, preferred);
+      this.value.delete(rootB);
       return { ok: true };
     }
+
+    if (valA !== undefined) {
+      // A has value, merge B into A
+      this.parent.set(rootB, rootA);
+      return { ok: true };
+    }
+    if (valB !== undefined) {
+      // B has value, merge A into B
+      this.parent.set(rootA, rootB);
+      return { ok: true };
+    }
+    // Neither has value, merge A into B
+    this.parent.set(rootA, rootB);
     return { ok: true };
   }
 
   resolved(id: UFNodeId): CardinalityValue | null {
-    const r = this.find(id);
-    return r.tag === 'value' ? r.value : null;
+    const root = this.find(id);
+    return this.value.get(root) ?? null;
   }
 }
 
@@ -103,9 +114,9 @@ class CardinalityUnionFind {
 // Equality helpers
 // =============================================================================
 
-function isPlaceholderInstance(instance: CardinalityValue): boolean {
-  if (instance.kind !== 'many') return false;
-  return instance.instance.domainTypeId === 'default' && instance.instance.instanceId === 'default';
+function isPlaceholderInstance(val: CardinalityValue): boolean {
+  if (val.kind !== 'many') return false;
+  return val.instance.domainTypeId === 'default' && val.instance.instanceId === 'default';
 }
 
 function cardinalitiesEqual(a: CardinalityValue, b: CardinalityValue): boolean {
@@ -195,7 +206,7 @@ export function solveCardinality(input: SolveCardinalityInput): SolveCardinality
           const [blockIndex, portName] = parsePortKey(port);
           errors.push({
             kind: 'CardinalityConflict', port, blockIndex, portName,
-            message: `Cardinality conflict in constraint group ${constraint.varId} at ${formatPort(port, blockName)}`,
+            message: `Cardinality conflict in group ${constraint.varId} at ${formatPort(port, blockName)}`,
             details: { conflict: res.conflict, varId: constraint.varId },
           });
         }
@@ -217,7 +228,7 @@ export function solveCardinality(input: SolveCardinalityInput): SolveCardinality
         const [blockIndex, portName] = parsePortKey(constraint.port);
         errors.push({
           kind: 'CardinalityConflict', port: constraint.port, blockIndex, portName,
-          message: `Cardinality conflict at ${formatPort(constraint.port, blockName)}: fixed value conflicts with inferred`,
+          message: `Cardinality conflict at ${formatPort(constraint.port, blockName)}: fixed value conflicts`,
           details: { conflict: res.conflict },
         });
       }
@@ -250,43 +261,67 @@ export function solveCardinality(input: SolveCardinalityInput): SolveCardinality
     }
   }
 
-  // Phase 3: Propagate along edges. Skip zip member edges (allow mismatch).
+  // Phase 3: Propagate along edges.
+  // For zip member edges: try union. Suppress one-vs-many conflicts (broadcast case).
+  // Compatible edges (many-many, one-one) succeed and propagate instance refs.
   for (const edge of input.edges) {
     const fromPort: PortKey = `${edge.fromBlock}:${edge.fromPort}:out` as PortKey;
     const toPort: PortKey = `${edge.toBlock}:${edge.toPort}:in` as PortKey;
     const fromNode = portToNode.get(fromPort);
     const toNode = portToNode.get(toPort);
     if (fromNode && toNode) {
-      if (zipMemberPorts.has(fromPort) || zipMemberPorts.has(toPort)) continue;
+      const hasZipMember = zipMemberPorts.has(fromPort) || zipMemberPorts.has(toPort);
       const res = uf.union(fromNode, toNode);
       if (!res.ok) {
-        const [blockIndex, portName] = parsePortKey(toPort);
-        errors.push({
-          kind: 'CardinalityConflict', port: toPort, blockIndex, portName,
-          message: `Cardinality conflict along edge from ${formatPort(fromPort, blockName)} to ${formatPort(toPort, blockName)}`,
-          details: { conflict: res.conflict },
-        });
+        const [conflictA, conflictB] = res.conflict;
+        const isOneVsMany = (conflictA.kind === 'one' && conflictB.kind === 'many') ||
+                            (conflictA.kind === 'many' && conflictB.kind === 'one');
+        if (hasZipMember && isOneVsMany) {
+          // Suppress: this is the broadcast case. Pass 2 handles it.
+        } else {
+          const [blockIndex, portName] = parsePortKey(toPort);
+          errors.push({
+            kind: 'CardinalityConflict', port: toPort, blockIndex, portName,
+            message: `Cardinality conflict along edge from ${formatPort(fromPort, blockName)} to ${formatPort(toPort, blockName)}`,
+            details: { conflict: res.conflict },
+          });
+        }
       }
     }
   }
 
-  // Phase 4: Resolve zipBroadcast groups. Many wins; unresolved get many; one stays one.
+  // Phase 4: Resolve zipBroadcast groups.
+  // Find best concrete many value. Upgrade placeholder many to concrete.
+  // Commit pending ones for signal ports. Assign many to truly unresolved.
   for (const [_varId, ports] of zipBroadcastGroups) {
-    let manyValue: CardinalityValue | null = null;
+    let bestMany: CardinalityValue | null = null;
     for (const port of ports) {
       const nodeId = portToNode.get(port);
       if (!nodeId) continue;
       const resolved = uf.resolved(nodeId);
-      if (resolved && resolved.kind === 'many') { manyValue = resolved; break; }
+      if (resolved && resolved.kind === 'many') {
+        if (!bestMany || (isPlaceholderInstance(bestMany) && !isPlaceholderInstance(resolved))) {
+          bestMany = resolved;
+        }
+      }
     }
-    if (manyValue) {
+    if (bestMany) {
       for (const port of ports) {
         const nodeId = portToNode.get(port);
         if (!nodeId) continue;
         const resolved = uf.resolved(nodeId);
         if (!resolved) {
-          uf.assign(nodeId, manyValue);
-          pendingOneNodes.delete(nodeId);
+          if (pendingOneNodes.has(nodeId)) {
+            // Signal port: commit as one (broadcast adapter handles it)
+            uf.assign(nodeId, pendingOneNodes.get(nodeId)!);
+            pendingOneNodes.delete(nodeId);
+          } else {
+            // Truly unresolved: assign many
+            uf.assign(nodeId, bestMany);
+          }
+        } else if (resolved.kind === 'many' && isPlaceholderInstance(resolved) && !isPlaceholderInstance(bestMany)) {
+          // Upgrade placeholder many to concrete ref
+          uf.assign(nodeId, bestMany);
         }
       }
     }

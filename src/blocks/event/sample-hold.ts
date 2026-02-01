@@ -18,6 +18,11 @@ registerBlock({
   form: 'primitive',
   capability: 'state',
   isStateful: true,
+  cardinality: {
+    cardinalityMode: 'signalOnly',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'disallowSignalMix',
+  },
   inputs: {
     value: { label: 'Value', type: canonicalType(FLOAT) },
     trigger: { label: 'Trigger', type: canonicalEvent() },

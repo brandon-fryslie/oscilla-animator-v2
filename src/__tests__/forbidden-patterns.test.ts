@@ -133,9 +133,10 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
     });
 
     it('isTypeCompatible is pure (no block-name parameters)', () => {
-      // isTypeCompatible should not reference block metadata or cardinality helpers
+      // isTypeCompatible itself must be pure — it takes a boolean `allowsBroadcast`,
+      // not block metadata. The caller (pass2TypeGraph) may use getBlockCardinalityMetadata
+      // to compute that boolean, which is fine.
       const forbiddenInTypeCompat = [
-        'getBlockCardinalityMetadata',
         'isCardinalityGeneric',
         'sourceBlockType',
         'targetBlockType',

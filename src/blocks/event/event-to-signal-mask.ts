@@ -15,6 +15,11 @@ registerBlock({
   description: 'Outputs 1.0 on the tick an event fires, 0.0 otherwise',
   form: 'primitive',
   capability: 'pure',
+  cardinality: {
+    cardinalityMode: 'signalOnly',
+    laneCoupling: 'laneLocal',
+    broadcastPolicy: 'disallowSignalMix',
+  },
   inputs: {
     event: { label: 'Event', type: canonicalEvent() },
   },
