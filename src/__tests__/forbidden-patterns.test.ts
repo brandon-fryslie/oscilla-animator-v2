@@ -86,7 +86,7 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
     // Currently instanceId still exists on some field expressions (gap analysis #25 will remove)
     // This test documents the current state; tighten after #25 is complete
     // TODO: Change to expect(filtered).toEqual([]) after gap analysis Sprint 4 item #25
-    expect(filtered.length).toBeLessThanOrEqual(12); // 9 pre-existing + 3 added for map/zip/zipSig (needed for instance inference without relying on type)
+    expect(filtered.length).toBeLessThanOrEqual(6); // All on Step types, not expressions
   });
 
   // =============================================================================
