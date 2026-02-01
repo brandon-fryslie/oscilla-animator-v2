@@ -13,7 +13,7 @@ import type { PayloadType } from '../../core/canonical-types';
 import type { InferenceCanonicalType, InferencePayloadType } from '../../core/inference-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION, canonicalType } from '../../core/canonical-types';
 import { formatTypeForTooltip, getTypeColor, getPortTypeFromBlockType, formatUnitForDisplay } from './typeValidation';
-import { findAdapter } from '../../graph/adapters';
+import { findAdapter } from '../../blocks/adapter-spec';
 import { sortEdgesBySortKey } from '../../compiler/passes-v2/combine-utils';
 
 /**

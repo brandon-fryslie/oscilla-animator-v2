@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { findAdapter, needsAdapter, extractPattern } from '../adapters';
+import { findAdapter, needsAdapter, extractPattern } from '../adapter-spec';
 import {
   canonicalType,
   unitPhase01,

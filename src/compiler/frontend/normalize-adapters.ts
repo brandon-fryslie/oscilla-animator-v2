@@ -43,7 +43,7 @@ import type { BlockId, BlockRole } from '../../types';
 import type { InferenceCanonicalType } from '../../core/inference-types';
 import type { Block, Edge, Patch, LensAttachment } from '../../graph/Patch';
 import { getBlockDefinition, requireBlockDef } from '../../blocks/registry';
-import { findAdapter } from '../../graph/adapters';
+import { findAdapter } from '../../blocks/adapter-spec';
 
 /**
  * Check if a block has cardinalityMode: 'preserve'.

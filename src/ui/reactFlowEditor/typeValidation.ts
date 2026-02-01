@@ -16,7 +16,7 @@ import type {
 import { FLOAT, unitsEqual } from '../../core/canonical-types';
 import { isPayloadVar, type InferenceCanonicalType, type InferencePayloadType, type InferenceUnitType } from '../../core/inference-types';
 import { getBlockDefinition } from '../../blocks/registry';
-import { findAdapter, type AdapterSpec } from '../../graph/adapters';
+import { findAdapter, type AdapterSpec } from '../../blocks/adapter-spec';
 
 // =============================================================================
 // Type Colors - Visual differentiation by payload type

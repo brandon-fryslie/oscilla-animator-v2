@@ -21,7 +21,7 @@ import type { DiagnosticsStore } from '../../stores/DiagnosticsStore';
 import { getBlockDefinition, type BlockDef } from '../../blocks/registry';
 import { createNodeFromBlock, createEdgeFromPatchEdge, computeAllNonContributingEdges, type OscillaNode } from './nodes';
 import { getPortTypeFromBlockType, formatUnitForDisplay } from './typeValidation';
-import { findAdapter } from '../../graph/adapters';
+import { findAdapter } from '../../blocks/adapter-spec';
 
 // Flag to prevent sync loops
 let isSyncing = false;

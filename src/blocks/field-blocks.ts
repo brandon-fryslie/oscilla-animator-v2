@@ -43,6 +43,16 @@ registerBlock({
     laneCoupling: 'laneLocal',
     broadcastPolicy: 'requireBroadcastExpr',
   },
+  adapterSpec: {
+    from: { payload: 'any', unit: 'any', extent: 'any' },
+    to: { payload: 'same', unit: 'same', extent: 'any' },
+    inputPortId: 'signal',
+    outputPortId: 'field',
+    description: 'Broadcast signal to field',
+    purity: 'pure',
+    stability: 'stable',
+    priority: 100,
+  },
   payload: {
     allowedPayloads: {
       signal: ALL_CONCRETE_PAYLOADS,
@@ -97,23 +107,6 @@ registerBlock({
 // Reduce (Payload-Generic)
 // =============================================================================
 
-/**
- * Payload-Generic field reduction block.
- *
- * Reduces a field to a scalar signal using an aggregation operation.
- * Supports componentwise reduction for structured types (e.g., vec2).
- *
- * Operations:
- * - sum: Σ(field[i]) per component
- * - avg: Σ(field[i]) / count per component
- * - min: min(field) per component
- * - max: max(field) per component
- *
- * Empty field behavior: Returns 0
- * NaN behavior: Propagates NaN if any element is NaN
- *
- * Spec: 02-block-system.md:436, 04-compilation.md:394
- */
 registerBlock({
   type: 'Reduce',
   label: 'Reduce',
