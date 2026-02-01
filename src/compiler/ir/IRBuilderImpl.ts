@@ -6,7 +6,7 @@
  */
 
 import type { CanonicalType, ConstValue } from '../../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, CAMERA_PROJECTION, canonicalType, unitScalar, canonicalEvent, constValueMatchesPayload, canonicalConst } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, CAMERA_PROJECTION, canonicalType, unitScalar, canonicalEvent, constValueMatchesPayload } from '../../core/canonical-types';
 import type { TopologyId } from '../../shapes/types';
 import type { IRBuilder } from './IRBuilder';
 import type {
@@ -111,11 +111,11 @@ export class IRBuilderImpl implements IRBuilder {
     if (!constValueMatchesPayload(type.payload, value)) {
       throw new Error(`ConstValue kind "${value.kind}" does not match payload kind "${type.payload.kind}"`);
     }
-    // INVARIANT: Constants have zero cardinality (TYPE-SYSTEM-INVARIANTS #P0)
-    // Override caller's type to enforce cardinality=zero, temporality=continuous
-    // Constants are "universal donors" — consumable by signal/field contexts without explicit lift
-    const constType = canonicalConst(type.payload, type.unit);
-    return this.pushExpr({ kind: 'const', value, type: constType });
+    // NOTE: Zero-cardinality for constants is deferred until the cardinality solver
+    // supports zero as a "universal donor" compatible with any other cardinality.
+    // Until then, constants keep the caller-provided type to avoid solver conflicts.
+    // See bead oscilla-animator-v2-73lv for tracking.
+    return this.pushExpr({ kind: 'const', value, type });
   }
 
   slotRead(slot: ValueSlot, type: CanonicalType): ValueExprId {

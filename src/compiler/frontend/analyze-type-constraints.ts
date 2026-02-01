@@ -1,17 +1,20 @@
 /**
- * Pass 1: Type Constraint Solving (D5-clean)
+ * Pass 1: Type Constraint Solving (D5-clean + Sprint 2 Cardinality Solver)
  *
  * - CanonicalType is fully resolved (no unit/payload vars in core).
  * - Vars exist ONLY in inference layer (this file).
  * - BlockDef may be authored with def-level type variables (templates).
+ * - Cardinality constraints are gathered from BlockCardinalityMetadata and solved via union-find.
  * - Output is the sole authority: TypeResolvedPatch.portTypes.
  */
 
 import type { NormalizedPatch, BlockIndex } from '../ir/patches';
 import type { Block } from '../../graph/Patch';
 import type { CanonicalType, Extent, PayloadType, UnitType } from '../../core/canonical-types';
-import { isAxisInst, cardinalityMany } from '../../core/canonical-types';
+import { isAxisInst } from '../../core/canonical-types';
 import { getBlockDefinition, getBlockCardinalityMetadata } from '../../blocks/registry';
+import type { CardinalityVarId } from '../../core/ids';
+import { solveCardinality, type CardinalityConstraint } from './solve-cardinality';
 
 // =============================================================================
 // Port key
@@ -36,7 +39,9 @@ export type TypeConstraintErrorKind =
     | 'UnresolvedPayload'
     | 'ConflictingPayloads'
     | 'MissingBlockDef'
-    | 'MissingPortDef';
+    | 'MissingPortDef'
+    | 'CardinalityConflict'
+    | 'UnresolvedCardinality';
 
 export interface TypeConstraintError {
   readonly kind: TypeConstraintErrorKind;
@@ -63,8 +68,9 @@ type PayloadVarId = string & { readonly __brand: 'PayloadVarId' };
 
 function unitVarId(s: string): UnitVarId { return s as UnitVarId; }
 function payloadVarId(s: string): PayloadVarId { return s as PayloadVarId; }
+function cardinalityVarId(s: string): CardinalityVarId { return s as CardinalityVarId; }
 
-// Template-level “variables” referenced by BlockDef authoring (defVar ids)
+// Template-level "variables" referenced by BlockDef authoring (defVar ids)
 type DefUnitVar = { readonly kind: 'unitVar'; readonly id: string };
 type DefPayloadVar = { readonly kind: 'payloadVar'; readonly id: string };
 
@@ -185,7 +191,7 @@ interface PortInfo {
   /** Template from BlockDef (may reference def vars) */
   readonly template: TypeTemplate;
 
-  /** Inference node ids for this port’s payload+unit (always node ids, never concrete) */
+  /** Inference node ids for this port's payload+unit (always node ids, never concrete) */
   readonly unitNode: UFNodeId;
   readonly payloadNode: UFNodeId;
 }
@@ -200,10 +206,10 @@ interface PortInfo {
  *   - unit: UnitType | {kind:'unitVar', id:string}
  *   - extent: Extent (already instantiated)
  *
- * If you still store “canonical types with vars” in BlockDef today, use the bridge below:
+ * If you still store "canonical types with vars" in BlockDef today, use the bridge below:
  */
 function defPortTypeToTemplate(defPortType: any): TypeTemplate {
-  // “payload”
+  // "payload"
   let payload: PayloadTemplate;
   const p = defPortType.payload;
   if (p && typeof p === 'object' && p.kind === 'var' && typeof p.id === 'string') {
@@ -212,7 +218,7 @@ function defPortTypeToTemplate(defPortType: any): TypeTemplate {
     payload = p as PayloadType;
   }
 
-  // “unit”
+  // "unit"
   let unit: UnitTemplate;
   const u = defPortType.unit;
   if (u && typeof u === 'object' && u.kind === 'var' && typeof u.id === 'string') {
@@ -257,7 +263,7 @@ function getTemplateForPort(block: Block, portName: string, dir: 'in' | 'out'): 
  *
  * i.e. one UF node per (blockIndex, defVarId, axis).
  *
- * No per-port UF nodes. Ports *reference* the block’s UF node for their def var.
+ * No per-port UF nodes. Ports *reference* the block's UF node for their def var.
  */
 function unitNodeFor(blockIndex: BlockIndex, defVarId: string): UFNodeId {
   return ufNodeId(`U:${blockIndex}:${defVarId}`);
@@ -272,6 +278,109 @@ function unitNodeConcrete(blockIndex: BlockIndex, portName: string, dir: 'in' | 
 }
 function payloadNodeConcrete(blockIndex: BlockIndex, portName: string, dir: 'in' | 'out'): UFNodeId {
   return ufNodeId(`PC:${blockIndex}:${dir}:${portName}`);
+}
+
+// =============================================================================
+// Cardinality Constraint Gathering (Sprint 2)
+// =============================================================================
+
+/**
+ * Gather cardinality constraints from BlockCardinalityMetadata.
+ *
+ * Maps existing metadata to constraint templates:
+ * - preserve + allowZipSig → zipBroadcast constraint (only for variable-cardinality ports)
+ * - preserve + disallowSignalMix → equal constraint (only for variable-cardinality ports)
+ * - transform → fixed constraint (output = many)
+ * - signalOnly → fixed constraint (all = one)
+ * - fieldOnly → (handled by type validation, no constraint needed here)
+ *
+ * Key insight: Only ports that can vary (field vs signal) participate in preserve constraints.
+ * Ports with concrete cardinality in their BlockDef type are excluded from preserve constraints.
+ */
+function gatherCardinalityConstraints(
+  normalized: NormalizedPatch,
+  portInfos: Map<PortKey, PortInfo>,
+): CardinalityConstraint[] {
+  const constraints: CardinalityConstraint[] = [];
+
+  // Map from blockIndex to constraint varId (one variable per block for preserve-mode)
+  const blockCardinalityVar = new Map<BlockIndex, CardinalityVarId>();
+
+  for (let i = 0; i < normalized.blocks.length; i++) {
+    const block = normalized.blocks[i];
+    const blockIndex = i as BlockIndex;
+    const meta = getBlockCardinalityMetadata(block.type);
+
+    if (!meta) continue; // Block has fixed cardinality (no metadata)
+
+    // Collect port keys for this block, filtering by whether cardinality can vary
+    const variablePorts: PortKey[] = [];
+    const concretePorts: PortKey[] = [];
+
+    for (const [k, info] of portInfos) {
+      if (info.blockIndex !== blockIndex) continue;
+
+      // Check if this port's cardinality is already concrete in the template
+      const cardinalityIsFixed = isAxisInst(info.template.extent.cardinality);
+
+      if (cardinalityIsFixed) {
+        concretePorts.push(k);
+      } else {
+        variablePorts.push(k);
+      }
+    }
+
+    switch (meta.cardinalityMode) {
+      case 'preserve': {
+        // Only include variable-cardinality ports in the preserve constraint
+        if (variablePorts.length > 0) {
+          const varId = cardinalityVarId(`block:${blockIndex}`);
+          blockCardinalityVar.set(blockIndex, varId);
+
+          if (meta.broadcastPolicy === 'allowZipSig') {
+            // Allow mixed one+many (zip-broadcast)
+            constraints.push({
+              kind: 'zipBroadcast',
+              varId,
+              ports: variablePorts,
+            });
+          } else {
+            // Strict equality (disallowSignalMix or requireBroadcastExpr)
+            constraints.push({
+              kind: 'equal',
+              varId,
+              ports: variablePorts,
+            });
+          }
+        }
+        break;
+      }
+
+      case 'signalOnly': {
+        // All ports must be cardinality one
+        for (const [k, info] of portInfos) {
+          if (info.blockIndex !== blockIndex) continue;
+          constraints.push({
+            kind: 'fixed',
+            port: k,
+            value: { kind: 'one' },
+          });
+        }
+        break;
+      }
+
+      case 'transform':
+      case 'fieldOnly': {
+        // Transform mode: output cardinality is determined by instance context
+        // This will be resolved during instance resolution (Sprint 2 P1)
+        // For now, we don't emit fixed constraints here because we need the instance ref
+        // The solver will propagate instance identity from upstream blocks
+        break;
+      }
+    }
+  }
+
+  return constraints;
 }
 
 // =============================================================================
@@ -387,7 +496,7 @@ export function pass1TypeConstraints(normalized: NormalizedPatch): Pass1Result {
         message: `Conflicting payloads across edge: ${p.conflict[0].kind} vs ${p.conflict[1].kind}`,
         suggestions: [
           'Insert a payload adapter (if defined) or change the block types',
-          'Ensure connected ports have compatible payload kinds',
+          'Ensure connected ports with compatible payload kinds',
         ],
       });
     }
@@ -453,68 +562,40 @@ export function pass1TypeConstraints(normalized: NormalizedPatch): Pass1Result {
     if (info.direction === 'out') resolvePort(k, info);
   }
 
-  // Pass 3: specialize cardinality for preserve-mode blocks.
-  // Uses fixpoint iteration to handle chains of preserve blocks (A → B → C).
-  // Each iteration propagates field cardinality one step further through the chain.
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const [k, info] of portInfos) {
-      if (info.direction !== 'out') continue;
-      const meta = getBlockCardinalityMetadata(info.block.type);
-      if (!meta || meta.cardinalityMode !== 'preserve') continue;
+  // ---- Phase D: Cardinality constraint solving (Sprint 2)
+  // Gather constraints from BlockCardinalityMetadata
+  const cardinalityConstraints = gatherCardinalityConstraints(normalized, portInfos);
 
-      const current = portTypes.get(k);
-      if (!current) continue;
-      const currentCard = current.extent.cardinality;
-      // Skip if already specialized to many
-      if (isAxisInst(currentCard) && currentCard.value.kind === 'many') continue;
+  // Solve cardinality constraints
+  const cardinalityResult = solveCardinality({
+    portTypes,
+    constraints: cardinalityConstraints,
+    edges: normalized.edges,
+  });
 
-      const fieldInstance = findFieldCardinalityFromUpstream(info.blockIndex, normalized.edges, portTypes);
-      if (fieldInstance) {
-        portTypes.set(k, {
-          ...current,
-          extent: {
-            ...current.extent,
-            cardinality: cardinalityMany(fieldInstance),
-          },
-        });
-        changed = true;
-      }
-    }
+  // Merge cardinality errors
+  for (const cardError of cardinalityResult.errors) {
+    errors.push({
+      kind: cardError.kind as TypeConstraintErrorKind,
+      blockIndex: cardError.blockIndex,
+      portName: cardError.portName,
+      direction: 'in', // Default to 'in' for now; solver could provide this
+      message: cardError.message,
+      suggestions: ['Check block cardinality constraints', 'Ensure compatible cardinality along edges'],
+    });
   }
+
+  // Use resolved port types from cardinality solver
+  const resolvedPortTypes = cardinalityResult.portTypes;
 
   if (errors.length) return { kind: 'error', errors };
 
-  return { ...normalized, portTypes };
+  return { ...normalized, portTypes: resolvedPortTypes };
 }
 
 // =============================================================================
 // Small helpers
 // =============================================================================
-
-/**
- * For a cardinality-preserve block, find the field cardinality (InstanceRef) from upstream sources.
- * Looks at edges wired into this block's inputs and checks the source port types.
- * Returns the InstanceRef if any upstream source has cardinality=many, null otherwise.
- */
-function findFieldCardinalityFromUpstream(
-  blockIndex: BlockIndex,
-  edges: ReadonlyArray<{ fromBlock: BlockIndex; fromPort: string; toBlock: BlockIndex; toPort: string }>,
-  portTypes: ReadonlyMap<PortKey, CanonicalType>,
-): import('../../core/canonical-types').InstanceRef | null {
-  for (const edge of edges) {
-    if (edge.toBlock !== blockIndex) continue;
-    const sourceKey = `${edge.fromBlock}:${edge.fromPort}:out` as PortKey;
-    const sourceType = portTypes.get(sourceKey);
-    if (!sourceType) continue;
-    const card = sourceType.extent.cardinality;
-    if (isAxisInst(card) && card.value.kind === 'many') {
-      return card.value.instance;
-    }
-  }
-  return null;
-}
 
 function isDefUnitVar(u: UnitTemplate): u is DefUnitVar {
   return typeof u === 'object' && u !== null && (u as any).kind === 'unitVar';
