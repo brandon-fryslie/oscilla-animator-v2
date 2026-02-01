@@ -8,7 +8,7 @@
 import type { CompiledProgramIR, ValueSlot, FieldSlotEntry } from '../compiler/ir/program';
 import type { ScheduleIR } from '../compiler/backend/schedule-program';
 import type { Step, InstanceDecl, DomainInstance, StepRender } from '../compiler/ir/types';
-import type { SigExprId, IrInstanceId as InstanceId } from '../types';
+import type { IrInstanceId as InstanceId } from '../types';
 import { instanceId as makeInstanceId } from '../core/ids';
 import type { RuntimeState } from './RuntimeState';
 import type { TopologyId } from '../shapes/types';
@@ -130,6 +130,15 @@ export function executeFrame(
   const instances = schedule.instances;
   const steps = schedule.steps;
 
+  // Option B: schedule steps reference ValueExprIds directly.
+  // Precompute where each field ValueExprId materializes so other steps (eg shapeRef) can reference the produced slot.
+  const fieldExprToSlot = new Map<number, ValueSlot>();
+  for (const s of steps) {
+    if (s.kind === 'materialize') {
+      fieldExprToSlot.set(s.field as number, s.target);
+    }
+  }
+
   // C-16: Pre-compute slot lookup map to eliminate O(n*m) runtime dispatch
   // Use module-level cache for slot lookup tables.
   const slotLookupMap = getSlotLookupMap(program);
@@ -189,9 +198,8 @@ export function executeFrame(
   // See: docs/runtime/execution-model.md for full rationale and examples.
   // ═══════════════════════════════════════════════════════════════════════════
 
-  // Get dense arrays from program
-  const signals = program.signalExprs.nodes;
-  const fields = program.fieldExprs.nodes;
+  // Unified ValueExpr table (signals/fields/events live here)
+  const valueExprs = program.valueExprs.nodes;
 
   // Resolve camera from program render globals (will be populated after signal evaluation)
   // Note: assemblerContext is constructed after Phase 1 when slots are populated
@@ -210,11 +218,17 @@ export function executeFrame(
 
         if (storage === 'shape2d') {
           // Shape signal: write Shape2D record to shape2d bank
-          const exprNode = signals[step.expr as number];
+          const veId = step.expr;
+          const exprNode = valueExprs[veId as number];
           if (exprNode.kind === 'shapeRef') {
             writeShape2D(state.values.shape2d, offset, {
               topologyId: exprNode.topologyId,
-              pointsFieldSlot: exprNode.controlPointField?.id as number ?? 0,
+              // TODO: if Shape2D slot encoding changes, update this mapping.
+              // For now we preserve prior behavior: store the field slot index as a number.
+              pointsFieldSlot:
+                (exprNode.kind === 'shapeRef' && exprNode.controlPointField != null
+                  ? ((fieldExprToSlot.get(exprNode.controlPointField as number) as number | undefined) ?? 0)
+                  : 0),
               pointsCount: 0,
               styleRef: 0,
               flags: 0,
@@ -226,18 +240,14 @@ export function executeFrame(
           }
 
           // ValueExpr-only evaluation (cutover complete)
-          const veId = program.valueExprs.sigToValue[step.expr as number];
-          if (veId === undefined) {
-            throw new Error(`No ValueExpr mapping for SigExpr ${step.expr}`);
-          }
-          const value = evaluateValueExprSignal(veId, program.valueExprs.nodes, state);
+          const value = evaluateValueExprSignal(step.expr as any, program.valueExprs.nodes, state);
 
           writeF64Scalar(state, lookup, value);
 
           // Debug tap: Record slot value (Sprint 1: Debug Probe)
           state.tap?.recordSlotValue?.(slot, value);
 
-          // Cache the result
+          // Cache (indexed by expr id). Under Option B these ids are ValueExprIds.
           state.cache.sigValues[step.expr as number] = value;
           state.cache.sigStamps[step.expr as number] = state.cache.frameId;
         } else {
@@ -264,14 +274,8 @@ export function executeFrame(
 
         // Evaluate each component and write sequentially
         for (let i = 0; i < step.inputs.length; i++) {
-          const sigExprId = step.inputs[i];
-
-          // ValueExpr-only evaluation (cutover complete)
-          const veId = program.valueExprs.sigToValue[sigExprId as number];
-          if (veId === undefined) {
-            throw new Error(`No ValueExpr mapping for SigExpr ${sigExprId}`);
-          }
-          const componentValue = evaluateValueExprSignal(veId, program.valueExprs.nodes, state);
+          const veId = step.inputs[i];
+          const componentValue = evaluateValueExprSignal(veId as any, program.valueExprs.nodes, state);
 
           state.values.f64[offset + i] = componentValue;
 
@@ -283,15 +287,13 @@ export function executeFrame(
 
       case 'materialize': {
         // ValueExpr-only materialization (cutover complete)
-        const fieldExpr = fields[step.field as number];
-        const instanceIdStr = fieldExpr ? String(requireManyInstance(fieldExpr.type).instanceId) : '';
+        const veId = step.field;
+
+        const fieldNode = valueExprs[veId as number];
+        const instanceIdStr = String(requireManyInstance(fieldNode.type).instanceId);
         const instanceDecl = instances.get(makeInstanceId(instanceIdStr));
         const count = instanceDecl && typeof instanceDecl.count === 'number' ? instanceDecl.count : 0;
 
-        const veId = program.valueExprs.fieldToValue?.[step.field as number];
-        if (veId === undefined) {
-          throw new Error(`No ValueExpr mapping for FieldExpr ${step.field}`);
-        }
         const buffer = materializeValueExpr(
           veId,
           program.valueExprs,
@@ -429,11 +431,7 @@ export function executeFrame(
 
       case 'evalEvent': {
         // ValueExpr-only event evaluation (cutover complete)
-        const veId = program.valueExprs.eventToValue[step.expr as number];
-        if (veId === undefined) {
-          throw new Error(`No ValueExpr mapping for EventExpr ${step.expr}`);
-        }
-        const fired = evaluateValueExprEvent(veId, program.valueExprs, state, program);
+        const fired = evaluateValueExprEvent(step.expr as any, program.valueExprs, state, program);
 
         // Monotone OR: only write 1, never write 0 back — ensures any-fired-stays-fired
         if (fired) {
@@ -475,13 +473,13 @@ export function executeFrame(
         if (!entry) continue;
 
         // Materialize the field on demand using ValueExpr materializer
-        const fieldExpr = fields[entry.fieldId as number];
+        const veId = entry.fieldId as any;
+        if (veId === undefined) continue;
+
+        const fieldNode = valueExprs[veId as number];
         const instanceIdStr = entry.instanceId as unknown as string;
         const instanceDecl = instances.get(makeInstanceId(instanceIdStr));
         const count = instanceDecl && typeof instanceDecl.count === 'number' ? instanceDecl.count : 0;
-
-        const veId = program.valueExprs.fieldToValue?.[entry.fieldId as number];
-        if (veId === undefined) continue;
 
         const buffer = materializeValueExpr(
           veId,
@@ -530,31 +528,22 @@ export function executeFrame(
   for (const step of steps) {
     if (step.kind === 'stateWrite') {
       // Write to persistent state array using ValueExpr evaluation
-      const veId = program.valueExprs.sigToValue[step.value as number];
-      if (veId === undefined) {
-        throw new Error(`No ValueExpr mapping for SigExpr ${step.value}`);
-      }
-      const value = evaluateValueExprSignal(veId, program.valueExprs.nodes, state);
+      const value = evaluateValueExprSignal(step.value as any, program.valueExprs.nodes, state);
       state.state[step.stateSlot as number] = value;
     }
     if (step.kind === 'fieldStateWrite') {
       // Per-lane state write: evaluate field and write each lane
-      // Get the field expression to find the instance
-      const expr = fields[step.value as number];
-      if (!expr) continue;
+      const veId = step.value as any;
+      const exprNode = valueExprs[veId as number];
 
-      // Determine count from the field expression's instance (via type)
-      const instanceRef = requireManyInstance(expr.type);
+      // Determine count from the ValueExpr's instance (via type)
+      const instanceRef = requireManyInstance(exprNode.type);
       const instanceDecl = instances.get(instanceRef.instanceId);
       const count = instanceDecl && typeof instanceDecl.count === 'number' ? instanceDecl.count : 0;
       if (count === 0) continue;
 
       // Materialize the field to get values using ValueExpr materializer
       const instanceIdStr = String(instanceRef.instanceId);
-      const veId = program.valueExprs.fieldToValue?.[step.value as number];
-      if (veId === undefined) {
-        throw new Error(`No ValueExpr mapping for FieldExpr ${step.value}`);
-      }
 
       const tempBuffer = materializeValueExpr(
         veId,
