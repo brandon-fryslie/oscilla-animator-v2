@@ -1,29 +1,21 @@
 /**
  * Patch DSL Public API
  *
- * HCL parsing infrastructure for Patch serialization/deserialization.
- * Sprint 1: Core HCL parsing only (no Patch conversion yet).
+ * HCL-based serialization/deserialization for Patch objects.
+ * Sprint 2: Adds bidirectional Patch ↔ HCL conversion.
  */
-
-// AST types
-export type {
-  Position,
-  HclValue,
-  HclNumberValue,
-  HclStringValue,
-  HclBoolValue,
-  HclReferenceValue,
-  HclObjectValue,
-  HclListValue,
-  HclBlock,
-  HclDocument,
-} from './ast';
 
 // Error types
 export { PatchDslError, PatchDslWarning } from './errors';
 
-// Lexer
-export { tokenize, TokenKind, type Token } from './lexer';
+// Serialization (Patch → HCL)
+export { serializePatchToHCL, type SerializeOptions } from './serialize';
 
-// Parser
-export { parse, type ParseResult } from './parser';
+// Deserialization (HCL → Patch)
+export { deserializePatchFromHCL, type DeserializeResult } from './deserialize';
+
+// Testing utilities
+export { patchesEqual } from './equality';
+
+// Internal modules (ast, lexer, parser, patch-from-ast) are NOT exported
+// They are implementation details of the serializer/deserializer
