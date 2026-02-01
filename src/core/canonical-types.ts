@@ -4,6 +4,8 @@
  * This module implements the 5-axis type system as specified in:
  * design-docs/spec/CANONICAL-ARCHITECTURE-oscilla-v2.5-20260109-160000.md
  *
+ * Unified reference: design-docs/CANONICAL-TYPES.md
+ *
  * The type system separates concerns into:
  * - PayloadType: What the value is made of (float, vec2, color, etc.)
  * - Extent: Where/when/about-what a value exists (5 independent axes)

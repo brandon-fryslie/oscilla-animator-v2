@@ -14,6 +14,7 @@ import type { IRBuilder } from '../compiler/ir/IRBuilder';
 import type { BlockIndex } from '../graph/normalize';
 import type { InstanceId, StateSlotId } from '../compiler/ir/Indices';
 import type { VarargConnection } from '../graph/Patch';
+import type { AdapterBlockSpec } from './adapter-spec';
 
 // Re-export lowering types from compiler
 export type { ValueRefPacked, ValueRefExpr } from '../compiler/ir/lowerTypes';
@@ -364,6 +365,15 @@ export interface BlockDef {
    * Spec Reference: .agent_planning/_future/0-PayloadGeneriic-Block-Type-Spec.md §8
    */
   readonly payload?: BlockPayloadMetadata;
+
+  /**
+   * Adapter type conversion spec. Present only on adapter/lens blocks.
+   * Defines the type conversion pattern for this adapter.
+   *
+   * Moved from graph/adapters.ts (2026-02-01).
+   * Each adapter block self-declares its conversion pattern here.
+   */
+  readonly adapterSpec?: AdapterBlockSpec;
 
   // Port definitions (UNIFIED DESIGN 2026-01-20)
   readonly inputs: Record<string, InputDef>;

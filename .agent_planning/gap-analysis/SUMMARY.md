@@ -1,189 +1,168 @@
 ---
 scope: full
-spec_source: design-docs/canonical-types/_output/CANONICAL-canonical-types-20260129-235000/
+spec_source: design-docs/canonical-types/
 impl_source: src/
 generated: 2026-01-29
-updated: 2026-01-29T18:00:00Z
-previous_run: none — fresh analysis
-topics_audited: 5
-totals: { trivial: 8, critical: 18, to-review: 0 (all resolved), unimplemented: 11 }
+updated: 2026-02-01T12:30:00Z
+previous_run: 2026-01-29T18:00:00Z
+topics_audited: 5 (core types, IR/exprs, runtime/enforcement, compiler/adapters, naming/legacy)
+totals: { trivial: 12, critical: 5, to-review: 13, unimplemented: 7 }
 ---
 
 # Gap Analysis: CanonicalType System Spec vs Implementation
 
+## UPDATE: 2026-02-01
+
+This is an UPDATE run against the previous 2026-01-29 analysis. Significant progress has been made.
+
 ## Executive Summary
 
-The CanonicalType foundation is solid — the triple structure (payload, unit, extent), Axis<T,V> polymorphism, 5-axis Extent, deriveKind(), instance helpers, and canonical constructors all work correctly. All 12 design questions have been resolved (see [RESOLUTIONS.md](RESOLUTIONS.md)). The resolutions add new P1 work items (delete AxisTag alias, split inference types, remove shape payload, remove stride fields, lock eventRead type, add CI gates) alongside the original P1 fixes.
+The type system refactor has made **major progress** since the last analysis. The core type definitions, IR expression system, and naming/legacy cleanup are **essentially complete**. The remaining work is concentrated in two areas: (1) **compiler/adapter layer** where `isTypeCompatible` violates purity, and (2) **runtime layer** where schedule steps and storage keying don't yet align with the spec's type-driven dispatch model.
+
+### Overall Status by Layer
+
+| Layer | Status | Grade |
+|-------|--------|-------|
+| Core Types (CanonicalType, axes, payload, unit) | Production Ready | A+ |
+| IR Expressions (ValueExpr, ConstValue, IRBuilder) | Fully Compliant | A+ |
+| Naming & Legacy Cleanup | Complete | A+ |
+| Compiler Passes & Adapters | Mostly Compliant (1 critical violation) | B+ |
+| Runtime & Enforcement | Solid Foundation (architectural gaps) | B |
 
 ## Resolved Since Last Run
 
-All P3 (to-review) items have been resolved. Resolutions recorded in [RESOLUTIONS.md](RESOLUTIONS.md).
+Many items from the previous analysis have been completed:
 
-| Item | Was | Now | Resolution |
-|------|-----|-----|------------|
-| Q2: PayloadType var | TO-REVIEW | NEW WORK (P1) | Split into InferencePayloadType / PayloadType |
-| Q3: deriveKind totality | TO-REVIEW | NEW WORK (P1) | Add tryDeriveKind() + fix spec wording |
-| Q4: LoweredOutput kind | TO-REVIEW | ACCEPTED + NEW WORK (P1) | Keep tags, add assert at lowering boundary |
-| Q5: DebugService kind | TO-REVIEW | ACCEPTED + NEW WORK (P1) | Same as Q4 |
-| Q6: shape payload | TO-REVIEW | NEW WORK (P1) | Remove from PayloadType, reclassify as resource |
-| Q7: stride on payload | TO-REVIEW | NEW WORK (P1) | Remove stored stride, single path via payloadStride() |
-| Q8: cameraProjection | TO-REVIEW | NEW WORK (P1) | Change to closed enum CameraProjection, not string |
-| Q9: binding diagnostics | TO-REVIEW | NEW WORK (P2) | Structured BindingMismatchError required |
-| Q10: eventRead type | TO-REVIEW | NEW WORK (P1) | Lock output type in builder, remove caller arg |
-| Q11: typeIndex naming | TO-REVIEW | NEW WORK (P1) | Standardize nodeKind + nodeIndex |
-| Q12: DoD checklist | TO-REVIEW | TRACKING | Change impl to match spec (already tracked) |
-| Q13: CI enforcement | TO-REVIEW | NEW WORK (P1) | Add Vitest grep-based forbidden pattern test |
-| Q1: AxisTag alias | TO-REVIEW | NEW WORK (P1) | Delete it |
+| Previous Item | Status | Notes |
+|---------------|--------|-------|
+| P1 #1-13 (13 independent fixes) | DONE | Tests fixed, DEFAULTS_V0 fixed, constValueMatchesPayload wired, etc. |
+| P5 #23-25 (ValueExpr unification) | DONE | SigExpr/FieldExpr/EventExpr deleted, unified ValueExpr with 10 kinds |
+| P5 #25 (Remove instanceId from field exprs) | DONE | Instance identity in type.extent.cardinality only |
+| Legacy type elimination | DONE | 0 hits for banned symbols, 29 enforcement tests passing |
+| deriveKind deletion | DONE | Replaced with direct extent checks (requireInst pattern) |
+| Axis validation gate | DONE | axis-validate.ts is single enforcement point |
+| Inference type separation | DONE | InferencePayloadType / InferenceCanonicalType in inference-types.ts |
 
 ## Priority Work Queue
 
-### P1: Critical — No Dependencies (start immediately)
+### P1: Critical -- No Dependencies
 
-| # | Item | Source | Description | Context |
-|---|------|--------|-------------|---------|
-| 1 | T03-C-5 | Audit | Fix 6 broken canonical type tests (stale discriminants) | [context-03](critical/context-03-axes.md) |
-| 2 | T03-C-3 | Audit | Fix DEFAULTS_V0 perspective/branch — `{ kind: 'default' }` not strings | [context-03](critical/context-03-axes.md) |
-| 3 | T03-C-4 | Audit | Wire constValueMatchesPayload() into IR builder | [context-03](critical/context-03-axes.md) |
-| 4 | T02-C-4 | Audit | Fix payloadStride() return type and values | [context-02](critical/context-02-type-system.md) |
-| 5 | Q1 | Resolution | Delete AxisTag<T> alias from bridges.ts | [RESOLUTIONS](RESOLUTIONS.md) |
-| 6 | Q7 | Resolution | Remove stride field from ConcretePayloadType; delete strideOf() | [RESOLUTIONS](RESOLUTIONS.md) |
-| 7 | Q6 | Resolution | Remove shape from PayloadType; reclassify as resource | [RESOLUTIONS](RESOLUTIONS.md) |
-| 8 | Q8 | Resolution | Change cameraProjection ConstValue to closed CameraProjection enum | [RESOLUTIONS](RESOLUTIONS.md) |
-| 9 | Q3 | Resolution | Add tryDeriveKind() returning DerivedKind \| null | [RESOLUTIONS](RESOLUTIONS.md) |
-| 10 | Q10 | Resolution | Lock eventRead output type in builder (no caller arg) | [RESOLUTIONS](RESOLUTIONS.md) |
-| 11 | Q11 | Resolution | Rename AxisViolation to use nodeKind + nodeIndex | [RESOLUTIONS](RESOLUTIONS.md) |
-| 12 | Q4/Q5 | Resolution | Add deriveKind agreement assert at lowering + debug boundaries | [RESOLUTIONS](RESOLUTIONS.md) |
-| 13 | Q13 | Resolution | Add Vitest CI gate test for forbidden patterns | [RESOLUTIONS](RESOLUTIONS.md) |
+| # | Item | Source | Description | Detail File |
+|---|------|--------|-------------|-------------|
+| 1 | isTypeCompatible purity | Compiler audit | Remove sourceBlockType/targetBlockType params; type compat must be pure function of CanonicalType only | [critical/topic-compiler-adapters.md](critical/topic-compiler-adapters.md) |
+| 2 | Backend type rewriting | Compiler audit | Backend (lower-blocks.ts:415-428) rewrites types with inferred instance IDs; violates read-only contract | [critical/topic-compiler-adapters-CONTEXT.md](critical/topic-compiler-adapters-CONTEXT.md) |
 
-### P2: Critical — Has Dependencies
+### P2: Critical -- Has Dependencies
 
-| # | Item | Source | Blocked By | Context |
-|---|------|--------|------------|---------|
-| 14 | T03-C-1 | Audit | Decision made: handle zero in deriveKind | [context-03](critical/context-03-axes.md) |
-| 15 | T01/T03/T04-C | Audit | #14 (deriveKind zero) | [context-04](critical/context-04-validation.md) |
-| 16 | Q2 | Resolution | #7 (stride removal) — split InferencePayloadType / PayloadType / InferenceCanonicalType | [RESOLUTIONS](RESOLUTIONS.md) |
-| 17 | Q9 | Resolution | #15 (validation gate) — structured BindingMismatchError | [RESOLUTIONS](RESOLUTIONS.md) |
-| 18 | T05a-C-1 | Audit | Large refactor — UnitType flat→structured (57+ files) | [context-05a](critical/context-05a-unit-restructure.md) |
-| 19 | T05a-C-2 | Audit | Part of #18 — collapse degrees/deg | [context-05a](critical/context-05a-unit-restructure.md) |
-| 20 | T04-C-3 | Audit | #15 — AxisInvalid diagnostic category | [context-04](critical/context-04-validation.md) |
+| # | Item | Blocked By | Description | Detail File |
+|---|------|------------|-------------|-------------|
+| 3 | Schedule step unification | Decision on approach | Replace evalSig/evalEvent hard-coded kinds with type-driven dispatch | [critical/topic-runtime-enforcement.md](critical/topic-runtime-enforcement.md) |
+| 4 | Branch-scoped state | #3 + branch axis v1+ | Runtime state storage not keyed by branch; flat Float64Array | [unimplemented/topic-runtime-enforcement.md](unimplemented/topic-runtime-enforcement.md) |
+| 5 | Lane identity tracking | #3 | Field state writes use implicit offset math without explicit metadata | [critical/topic-runtime-enforcement.md](critical/topic-runtime-enforcement.md) |
 
-### P3: To-Review — User Must Decide
+### P3: To-Review -- User Must Decide
 
-**ALL RESOLVED.** See [RESOLUTIONS.md](RESOLUTIONS.md).
+| # | Item | Topic | Question | Detail File |
+|---|------|-------|----------|-------------|
+| 6 | Cardinality polymorphism | Compiler | Type variables vs runtime dispatch for cardinality-generic blocks? | [to-review/topic-compiler-adapters.md](to-review/topic-compiler-adapters.md) |
+| 7 | Instance resolution location | Compiler | Frontend type solver vs backend lowering? | [to-review/topic-compiler-adapters.md](to-review/topic-compiler-adapters.md) |
+| 8 | Adapter auto-insertion | Compiler | Keep as permanent feature or make user-driven? | [to-review/topic-compiler-adapters.md](to-review/topic-compiler-adapters.md) |
+| 9 | ValueSlot vs (ValueExprId, lane) | Runtime | Is opaque slot abstraction sufficient or need explicit keying? | [to-review/topic-runtime-enforcement.md](to-review/topic-runtime-enforcement.md) |
+| 10 | defaultUnitForPayload usage | Runtime | Ergonomic construction OK or must eliminate entirely? | [to-review/topic-runtime-enforcement.md](to-review/topic-runtime-enforcement.md) |
+| 11 | Event stamp buffers | Runtime | Required by spec or deferrable? | [to-review/topic-runtime-enforcement.md](to-review/topic-runtime-enforcement.md) |
+| 12 | Extended UnitType (count/space/color) | Core types | Keep implementation extensions or align with minimal spec? | [to-review/topic-core-types.md](to-review/topic-core-types.md) |
+| 13 | Generic 'specific' pattern | Core types | Named perspective/branch variants vs generic InstanceRef pattern? | [to-review/topic-core-types.md](to-review/topic-core-types.md) |
 
-### P4: Unimplemented — Blocks Higher Priority
+### P4: Unimplemented -- Blocks Higher Priority
 
-| # | Item | Topic | Unblocks | Context |
-|---|------|-------|----------|---------|
-| 21 | T03-U-2 | Axes | Axis var escape check — supports validation gate (#15) | [context-03](unimplemented/context-03-axes.md) |
-| 22 | T02-U-1 | Type System | canonicalConst() — supports zero-cardinality (#14) | [context-02](unimplemented/context-02-type-system.md) |
+| # | Item | Unblocks | Description | Detail File |
+|---|------|----------|-------------|-------------|
+| 14 | Stamp buffers for discrete temporality | #11 review | Missing valueStamp[ValueExprId, lane] tracking | [unimplemented/topic-runtime-enforcement.md](unimplemented/topic-runtime-enforcement.md) |
 
-### P5: Unimplemented — Standalone (after P1-P4 resolved)
+### P5: Unimplemented -- Standalone
 
-| # | Item | Topic | Description | Context |
-|---|------|-------|-------------|---------|
-| 23 | T05b-U-1 | Migration | Unify SigExpr/FieldExpr/EventExpr into ValueExpr (24→6 variants) | [context-05b](unimplemented/context-05b-valueexpr.md) |
-| 24 | T05b-U-2 | Migration | Align expression discriminant kind values with spec | [context-05b](unimplemented/context-05b-valueexpr.md) |
-| 25 | T05b-U-3 | Migration | Remove instanceId from FieldExprIntrinsic/Placement/StateRead | [context-05b](unimplemented/context-05b-valueexpr.md) |
-| 26 | T05c-U-1 | Migration | Add branded IDs to AdapterSpec | [context-05c](unimplemented/context-05c-adapter-restructure.md) |
-| 27 | T05c-U-2 | Migration | Per-axis ExtentPattern for adapter matching | [context-05c](unimplemented/context-05c-adapter-restructure.md) |
-| 28 | T03-U-1 | Axes | Zero-cardinality lift operations | [context-03](unimplemented/context-03-axes.md) |
-| 29 | T02-U-2 | Type System | Verify ValueExprConst shape | [context-02](unimplemented/context-02-type-system.md) |
-| 30 | T03-U-3 | Axes | Runtime state keying by branch (v1+ scope) | [context-03](unimplemented/context-03-axes.md) |
-| 31 | T03-U-4 | Axes | Perspective/branch v1+ values (v1+ scope) | [context-03](unimplemented/context-03-axes.md) |
+| # | Item | Description | Detail File |
+|---|------|-------------|-------------|
+| 15 | Perspective axis full values (v1+) | world/view/screen instead of default/specific | [unimplemented/topic-core-types.md](unimplemented/topic-core-types.md) |
+| 16 | Branch axis full values (v1+) | main/preview/checkpoint/etc instead of default/specific | [unimplemented/topic-core-types.md](unimplemented/topic-core-types.md) |
+| 17 | Unified evaluateValue() dispatch | Replace separate signal/field/event evaluators | [unimplemented/topic-runtime-enforcement.md](unimplemented/topic-runtime-enforcement.md) |
+| 18 | Explicit lane metadata | Track (ValueExprId, instanceId, lane) -> slot mapping | [unimplemented/topic-runtime-enforcement.md](unimplemented/topic-runtime-enforcement.md) |
+| 19 | AdapterSpec branded IDs | From previous analysis -- add branded IDs | [unimplemented/topic-05-migration-adapter-restructure.md](unimplemented/topic-05-migration-adapter-restructure.md) |
 
-### Trivial (cosmetic, no action unless cleanup pass)
+### Trivial (cosmetic)
 
-- 3 items in [trivial/topic-01-principles.md](trivial/topic-01-principles.md)
-- 1 item in [trivial/topic-03-axes.md](trivial/topic-03-axes.md)
-- 4 items in [trivial/topic-04-05-naming.md](trivial/topic-04-05-naming.md)
+- 2 items: [trivial/topic-core-types.md](trivial/topic-core-types.md) (canonicalEvent naming, deriveKind deletion)
+- 2 items: [trivial/topic-naming-legacy.md](trivial/topic-naming-legacy.md) (backup files, ExpressionCompileError naming)
+- 3 items: [trivial/topic-ir-exprs.md -- N/A, covered in to-review] (sub-variant discriminants, step kinds)
+- 10 items: [trivial/topic-compiler-adapters.md](trivial/topic-compiler-adapters.md) (documentation/comment fixes)
+- Previous trivial items: [trivial/topic-01-principles.md](trivial/topic-01-principles.md), [trivial/topic-03-axes.md](trivial/topic-03-axes.md), [trivial/topic-04-05-naming.md](trivial/topic-04-05-naming.md)
 
 ## Dependency Graph
 
 ```
 ── P1 (no deps) ──────────────────────────────────────────────────
-#1  Fix broken tests
-#2  Fix DEFAULTS_V0
-#3  Wire constValueMatchesPayload
-#4  Fix payloadStride
-#5  Delete AxisTag alias
-#6  Remove stride from payload
-#7  Remove shape from PayloadType
-#8  cameraProjection → closed enum
-#9  Add tryDeriveKind()
-#10 Lock eventRead output type
-#11 Rename AxisViolation fields
-#12 Add deriveKind agreement asserts
-#13 Add CI forbidden-pattern test
+#1  Fix isTypeCompatible purity (remove block-name params)
+#2  Fix backend type rewriting (move instance resolution to frontend)
 
 ── P2 (has deps) ─────────────────────────────────────────────────
-#14 deriveKind zero handling ──blocks──> #15 validation gate wiring
-#15 validation gate ──blocks──> #17 BindingMismatchError, #20 AxisInvalid diagnostics
-#16 Split InferencePayloadType ──after──> #6 stride removal, #7 shape removal
-#18 UnitType restructure ──blocks──> #19 deg/degrees collapse, P5 adapter work
-#20 AxisInvalid diagnostic ──after──> #15
+#3  Unify schedule step dispatch ──depends on──> decision #6
+#4  Branch-scoped state ──depends on──> #3, v1+ branch axis
+#5  Lane identity tracking ──depends on──> #3
 
-── P4 (supports P2) ─────────────────────────────────────────────
-#21 Axis var escape check ──supports──> #15
-#22 canonicalConst() ──supports──> #14
+── P3 (user decisions) ───────────────────────────────────────────
+#6  Cardinality polymorphism strategy ──informs──> #1, #3
+#7  Instance resolution location ──informs──> #2
+#8  Adapter auto-insertion permanence ──informs──> documentation
+#9  ValueSlot sufficiency ──informs──> #18
+#10 defaultUnitForPayload intent ──informs──> spec update
+#11 Event stamp requirement ──informs──> #14
+#12 Extended UnitType ──informs──> spec update
+#13 Generic 'specific' pattern ──informs──> #15, #16
 
 ── P5 (standalone) ───────────────────────────────────────────────
-#23-25 ValueExpr unification (largest item)
-#26-27 Adapter restructure ──after──> #18
-#28 Zero-cardinality lifts
-#29 Verify ValueExprConst
-#30-31 v1+ scope (deferred)
+#15-16 v1+ axis values (deferred)
+#17 Unified evaluateValue
+#18 Explicit lane metadata
+#19 AdapterSpec branded IDs
 ```
-
-## Cross-Cutting Concerns
-
-1. **P1 is now 13 items**: The resolutions converted 9 design questions into concrete P1 work (delete AxisTag, remove stride/shape, lock eventRead, add CI gates, etc.). These are all independent with no blockers.
-
-2. **Validation gate (#15) is the systemic linchpin**: Still depends on deriveKind zero handling (#14). Once wired, it catches many other issues. Now also blocks structured binding diagnostics (#17) and AxisInvalid category (#20).
-
-3. **Type split (#16) is new foundational work**: InferencePayloadType / InferenceCanonicalType separation is a clean architectural boundary. Should be done after stride/shape cleanup (#6, #7) to avoid rework.
-
-4. **UnitType restructure (#18) remains the largest migration**: 57+ files. Blocks adapter work downstream. Should be its own sprint.
-
-5. **v1+ items safely deferred**: #30, #31.
 
 ## What IS Working Well
 
-- CanonicalType triple structure (payload, unit, extent)
-- Axis<T,V> polymorphic pattern with var/inst
-- 5-axis Extent with all required axes
-- deriveKind() priority logic (discrete > many > signal)
-- Instance helpers (tryGetManyInstance, requireManyInstance)
-- ConstValue discriminated union with constValueMatchesPayload() defined
-- Canonical constructors (canonicalSignal, canonicalField, canonicalEventOne, canonicalEventField)
-- Old parallel type systems removed (SignalType, ResolvedExtent, etc.)
-- unitVar() throws (removed per resolution D5)
-- No axis var escaping to backend/runtime (verified)
-- Adapter rules have purity/stability fields
-- Binding unification uses equality (no lattice)
+- CanonicalType = { payload, unit, extent } is single authority (A+)
+- Unified ValueExpr IR with 10 kinds, all carrying CanonicalType (A+)
+- 29 enforcement tests preventing regression (A+)
+- Zero legacy types in production code (A+)
+- Single axis-validation gate (axis-validate.ts) (A+)
+- No Axis.var escaping to backend (A+)
+- ConstValue discriminated union, payload-shaped (A+)
+- Branded IDs throughout (InstanceId, ValueExprId, etc.) (A+)
+- Clean inference/canonical type separation (A+)
+- Adapter insertion as frontend normalization with explicit blocks (A)
+- payloadStride() as single stride authority (A+)
+- Direct extent checks replacing deriveKind (improvement over spec) (A+)
 
-## Files Index
+## New Audit Files (2026-02-01)
 
-| Category | File |
-|----------|------|
-| **SUMMARY** | `SUMMARY.md` |
-| **RESOLUTIONS** | `RESOLUTIONS.md` |
-| **Critical** | |
-| Topic 01 | `critical/topic-01-principles.md`, `critical/context-01-principles.md` |
-| Topic 02 | `critical/topic-02-type-system.md`, `critical/context-02-type-system.md` |
-| Topic 03 | `critical/topic-03-axes.md`, `critical/context-03-axes.md` |
-| Topic 04 | `critical/topic-04-validation.md`, `critical/context-04-validation.md` |
-| Topic 05a | `critical/topic-05-migration-unit-restructure.md`, `critical/context-05a-unit-restructure.md` |
-| **To-Review (all resolved)** | |
-| Topic 02 | `to-review/topic-02-type-system.md`, `to-review/context-02-type-system.md` |
-| Topic 03 | `to-review/topic-03-axes.md`, `to-review/context-03-axes.md` |
-| Topic 05d | `to-review/topic-05-migration-done-checklist.md`, `to-review/context-05d-done-checklist.md` |
-| **Unimplemented** | |
-| Topic 02 | `unimplemented/topic-02-type-system.md`, `unimplemented/context-02-type-system.md` |
-| Topic 03 | `unimplemented/topic-03-axes.md`, `unimplemented/context-03-axes.md` |
-| Topic 05b | `unimplemented/topic-05-migration-valueexpr.md`, `unimplemented/context-05b-valueexpr.md` |
-| Topic 05c | `unimplemented/topic-05-migration-adapter-restructure.md`, `unimplemented/context-05c-adapter-restructure.md` |
-| **Trivial** | |
-| Topic 01 | `trivial/topic-01-principles.md` |
-| Topic 03 | `trivial/topic-03-axes.md` |
-| Topics 04-05 | `trivial/topic-04-05-naming.md` |
+| Category | File | Topic |
+|----------|------|-------|
+| Summary | CORE-TYPES-AUDIT-SUMMARY.md | Core types audit executive summary |
+| Summary | IR-AUDIT-SUMMARY-20260201.md | IR expression system audit |
+| Summary | RUNTIME-ENFORCEMENT-AUDIT.md | Runtime & enforcement audit |
+| Summary | COMPILER-ADAPTERS-AUDIT.md | Compiler passes & adapters audit |
+| Summary | NAMING-LEGACY-SUMMARY.md | Naming conventions & legacy cleanup |
+| Critical | critical/topic-core-types.md | No critical gaps in core types |
+| Critical | critical/topic-compiler-adapters.md | isTypeCompatible purity violation |
+| Critical | critical/topic-compiler-adapters-CONTEXT.md | Fix strategies |
+| Critical | critical/topic-runtime-enforcement.md | Schedule steps, branch scoping |
+| Critical | critical/context-runtime-enforcement.md | Runtime enforcement context |
+| To-Review | to-review/topic-core-types.md | Extended units, generic pattern |
+| To-Review | to-review/topic-compiler-adapters.md | Cardinality polymorphism, instance resolution |
+| To-Review | to-review/topic-ir-exprs.md | Discriminant naming |
+| To-Review | to-review/topic-runtime-enforcement.md | ValueSlot, defaultUnit, stamps |
+| To-Review | to-review/topic-naming-legacy.md | Debug discriminants, comments |
+| Unimplemented | unimplemented/topic-core-types.md | v1+ perspective/branch |
+| Unimplemented | unimplemented/topic-runtime-enforcement.md | Stamps, lane metadata, unified dispatch |
+| Trivial | trivial/topic-core-types.md | Naming differences |
+| Trivial | trivial/topic-naming-legacy.md | Backup files, ExpressionCompileError |
+| Trivial | trivial/topic-compiler-adapters.md | Documentation fixes |
+| Compliant | topic-ir-exprs-COMPLIANT.md | Full IR compliance report |
