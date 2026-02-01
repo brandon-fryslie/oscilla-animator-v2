@@ -154,11 +154,27 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       expect(matches, 'Schedule steps must use unified ValueExpr').toEqual([]);
     });
 
-    it.skip('adapter insertion uses only types (Sprint 3)', () => {
-      // TODO: Sprint 3 - after adapter refactor
-      // Adapter insertion should dispatch on CanonicalType only, not block names
-      // This will be enforced once adapter registry is refactored
-      expect(true).toBe(true); // Placeholder
+    it('adapter insertion uses only types', () => {
+      // Verify findAdapter signature: takes only CanonicalType parameters
+      const adapterSpecFile = 'src/blocks/adapter-spec.ts';
+
+      // Check 1: findAdapter signature must have (from: InferenceCanonicalType, to: InferenceCanonicalType)
+      const findAdapterSig = grepSrc('export function findAdapter', adapterSpecFile);
+      expect(findAdapterSig.length).toBeGreaterThan(0);
+
+      // Should contain InferenceCanonicalType parameters only
+      const hasTypeParams = findAdapterSig.some(line =>
+        line.includes('InferenceCanonicalType') &&
+        !line.includes('blockType') &&
+        !line.includes('sourceBlock') &&
+        !line.includes('targetBlock')
+      );
+      expect(hasTypeParams, 'findAdapter must dispatch on CanonicalType only').toBe(true);
+
+      // Check 2: normalize-adapters.ts must NOT import isCardinalityGeneric
+      const normalizeAdaptersFile = 'src/compiler/frontend/normalize-adapters.ts';
+      const cardinalityGenericImports = grepSrc('isCardinalityGeneric', normalizeAdaptersFile);
+      expect(cardinalityGenericImports, 'normalize-adapters.ts must not import isCardinalityGeneric').toEqual([]);
     });
 
   });

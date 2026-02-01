@@ -342,27 +342,18 @@ function expandExplicitLenses(patch: Patch): Pass2Result | Pass2Error {
 // =============================================================================
 
 /**
- * PHASE 2: Auto-insertion (Backwards Compatibility)
+ * PHASE 2: Auto-insert adapters when type mismatch is detected.
  *
- * NOTE: Sprint 2 is transitional. Eventually, users will add lenses explicitly
- * and Phase 2 will be split into:
- *   - Phase 2a: Validate type compatibility (report errors only)
- *   - Phase 2b: (Removed in future sprint)
+ * Adapter insertion dispatches on CanonicalType via findAdapter(). The
+ * isCardinalityPreserving check prevents spurious Broadcast adapter insertion
+ * for blocks that naturally preserve cardinality.
  *
- * For now, this phase still auto-inserts adapters for backward compatibility.
- * But the design is set up to remove auto-insertion in Sprint 3+.
- *
- * CONTRACT (temporary):
+ * CONTRACT:
  *   - Input: Patch (after Phase 1 lens expansion)
  *   - For each edge with type mismatch, check if adapter exists
- *   - If yes: insert adapter block (backward compat)
+ *   - If yes: insert adapter block
  *   - If no: report error
  *   - Output: Patch with auto-inserted adapters, or errors
- *
- * FUTURE (Sprint 3+):
- *   - Remove auto-insertion entirely
- *   - Users add lenses explicitly via UI
- *   - Phase 2 becomes type validation only
  */
 function autoInsertAdapters(patch: Patch): Pass2Result | Pass2Error {
   const errors: AdapterError[] = [];
@@ -415,7 +406,7 @@ function autoInsertAdapters(patch: Patch): Pass2Result | Pass2Error {
         continue;
       }
 
-      // Auto-insert adapter (temporary, for backwards compatibility)
+      // Auto-insert adapter block for type mismatch
       const adapterId = `_adapter_${edge.id}` as BlockId;
       const adapterBlockDef = requireBlockDef(adapterSpec.blockType);
 
@@ -521,7 +512,7 @@ function autoInsertAdapters(patch: Patch): Pass2Result | Pass2Error {
  * Pass 2: Execute both phases in order
  *
  * 1. Phase 1: Expand explicit lenses
- * 2. Phase 2: Auto-insert adapters (temporary, for backwards compatibility)
+ * 2. Phase 2: Auto-insert adapters for type mismatches
  *
  * @param patch - Patch from Pass 1
  * @returns Patch with lenses expanded and adapters inserted, or errors
@@ -533,7 +524,7 @@ export function pass2Adapters(patch: Patch): Pass2Result | Pass2Error {
     return p1Result;
   }
 
-  // Phase 2: Auto-insert adapters (temporary, for backwards compatibility)
+  // Phase 2: Auto-insert adapters for type mismatches
   const p2Result = autoInsertAdapters(p1Result.patch);
   return p2Result;
 }
