@@ -12,6 +12,20 @@ import { canonicalType, canonicalField, unitPhase01, unitWorld3, strideOf, float
 import { FLOAT, INT, VEC2, VEC3, SHAPE } from '../core/canonical-types';
 import { defaultSourceConst } from '../types';
 import { OpCode } from '../compiler/ir/types';
+import type { InstanceId } from '../compiler/ir/Indices';
+import type { IRBuilder } from '../compiler/ir/IRBuilder';
+import type { CanonicalType } from '../core/canonical-types';
+
+/**
+ * Rewrite placeholder 'default' instance in a field output type with the actual instance.
+ * Used by layout blocks that preserve cardinality from upstream Array blocks.
+ */
+function rewriteFieldType(outType: CanonicalType, instId: InstanceId, builder: IRBuilder): CanonicalType {
+  const decl = builder.getInstances().get(instId);
+  if (!decl) return outType;
+  const ref = instanceRef(decl.domainType as string, instId as string);
+  return withInstance(outType, ref);
+}
 
 // =============================================================================
 // UV Layout Blocks (Gauge-Invariant)
@@ -66,8 +80,8 @@ registerBlock({
       throw new Error('CircleLayoutUV requires instance context from upstream Array block');
     }
 
-    // Get resolved output type first
-    const posType = ctx.outTypes[0];
+    // Rewrite output type with actual instance (ctx.outTypes has placeholder 'default')
+    const posType = rewriteFieldType(ctx.outTypes[0], instanceId, ctx.b);
     const floatFieldType = { ...posType, payload: FLOAT, unit: { kind: 'scalar' as const } };
     const vec2FieldType = { ...posType, payload: VEC2, unit: { kind: 'scalar' as const } };
 
@@ -321,8 +335,8 @@ registerBlock({
       throw new Error('GridLayoutUV requires instance context from upstream Array block');
     }
 
-    // Get resolved output type first
-    const posType = ctx.outTypes[0];
+    // Rewrite output type with actual instance (ctx.outTypes has placeholder 'default')
+    const posType = rewriteFieldType(ctx.outTypes[0], instanceId, ctx.b);
     const floatFieldType = { ...posType, payload: FLOAT, unit: { kind: 'scalar' as const } };
     const vec2FieldType = { ...posType, payload: VEC2, unit: { kind: 'scalar' as const } };
 
