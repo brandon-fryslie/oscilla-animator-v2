@@ -124,17 +124,11 @@ redChannel = position.r  // Same as position.x
 
 ### IR Mapping
 
-Component extraction uses dedicated signal kernels:
-- `vec3ExtractX`, `vec3ExtractY`, `vec3ExtractZ`
-- `colorExtractR`, `colorExtractG`, `colorExtractB`, `colorExtractA`
-
-Multi-component swizzle synthesizes multiple extractions:
-```typescript
-// vec.xy compiles to:
-const xSig = builder.sigMap(vecSig, kernel('vec3ExtractX'), FLOAT);
-const ySig = builder.sigMap(vecSig, kernel('vec3ExtractY'), FLOAT);
-const result = builder.sigZip([xSig, ySig], kernel('makeVec2'), VEC2);
-```
+Component extraction and vector construction kernels (`vec3ExtractX/Y/Z`,
+`colorExtractR/G/B/A`, `makeVec2Sig`, `makeVec3Sig`, `makeColorSig`) have been
+removed. These will be replaced by a generic extract/construct mechanism using
+opcode-based dispatch. Component access and swizzle currently throw "not yet
+implemented" at compile time.
 
 ---
 

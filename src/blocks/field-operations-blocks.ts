@@ -92,32 +92,20 @@ registerBlock({
       throw new Error('Sin input required');
     }
 
+    const outType = ctx.outTypes[0];
+    const sinFn = ctx.b.opcode(OpCode.Sin);  // ALWAYS opcode
+    const result = ctx.b.kernelMap(input.id, sinFn, outType);
+    const slot = ctx.b.allocSlot();
+
+    // Check if input is field-extent to propagate instanceContext
     const isField = 'type' in input && requireInst(input.type.extent.cardinality, 'cardinality').kind === 'many';
 
-    if (!isField) {
-      // Signal path - use opcode
-      const sinFn = ctx.b.opcode(OpCode.Sin);
-      const result = ctx.b.kernelMap(input.id, sinFn, canonicalType(FLOAT));
-      const outType = ctx.outTypes[0];
-      const slot = ctx.b.allocSlot();
-      return {
-        outputsById: {
-          result: { id: result, slot, type: outType, stride: strideOf(outType.payload) },
-        },
-      };
-    } else {
-      // Field path - use field kernel
-      const outType = ctx.outTypes[0];
-      const sinFn = ctx.b.kernel('fieldSin');
-      const result = ctx.b.kernelMap(input.id, sinFn, outType);
-      const slot = ctx.b.allocSlot();
-      return {
-        outputsById: {
-          result: { id: result, slot, type: outType, stride: strideOf(outType.payload) },
-        },
-        instanceContext: ctx.inferredInstance,
-      };
-    }
+    return {
+      outputsById: {
+        result: { id: result, slot, type: outType, stride: strideOf(outType.payload) },
+      },
+      ...(isField ? { instanceContext: ctx.inferredInstance } : {}),
+    };
   },
 });
 
@@ -157,31 +145,19 @@ registerBlock({
       throw new Error('Cos input required');
     }
 
+    const outType = ctx.outTypes[0];
+    const cosFn = ctx.b.opcode(OpCode.Cos);  // ALWAYS opcode
+    const result = ctx.b.kernelMap(input.id, cosFn, outType);
+    const slot = ctx.b.allocSlot();
+
+    // Check if input is field-extent to propagate instanceContext
     const isField = 'type' in input && requireInst(input.type.extent.cardinality, 'cardinality').kind === 'many';
 
-    if (!isField) {
-      // Signal path - use opcode
-      const cosFn = ctx.b.opcode(OpCode.Cos);
-      const result = ctx.b.kernelMap(input.id, cosFn, canonicalType(FLOAT));
-      const outType = ctx.outTypes[0];
-      const slot = ctx.b.allocSlot();
-      return {
-        outputsById: {
-          result: { id: result, slot, type: outType, stride: strideOf(outType.payload) },
-        },
-      };
-    } else {
-      // Field path - use field kernel
-      const outType = ctx.outTypes[0];
-      const cosFn = ctx.b.kernel('fieldCos');
-      const result = ctx.b.kernelMap(input.id, cosFn, outType);
-      const slot = ctx.b.allocSlot();
-      return {
-        outputsById: {
-          result: { id: result, slot, type: outType, stride: strideOf(outType.payload) },
-        },
-        instanceContext: ctx.inferredInstance,
-      };
-    }
+    return {
+      outputsById: {
+        result: { id: result, slot, type: outType, stride: strideOf(outType.payload) },
+      },
+      ...(isField ? { instanceContext: ctx.inferredInstance } : {}),
+    };
   },
 });

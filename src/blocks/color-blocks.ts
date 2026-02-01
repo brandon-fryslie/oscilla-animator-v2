@@ -12,7 +12,7 @@
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from './registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../core/ids';
-import { canonicalType, canonicalField, payloadStride, floatConst, requireInst } from '../core/canonical-types';
+import { canonicalType, canonicalField, floatConst, requireInst } from '../core/canonical-types';
 import { FLOAT, COLOR, SHAPE } from '../core/canonical-types';
 import { defaultSourceConst } from '../types';
 
@@ -76,26 +76,15 @@ registerBlock({
       ? inputsById.a.id
       : ctx.b.constant(floatConst(1.0), canonicalType(FLOAT));
 
-    // Use placement basis to get a UV field (same domain as elements)
-    const vec2FieldType = { ...colorType, payload: { kind: 'vec2' as const }, unit: { kind: 'scalar' as const } };
-    const uvField = ctx.b.placement('uv', 'halton2D', vec2FieldType);
-
-    // Apply broadcastColor kernel: uv + [r, g, b, a] → Field<color>
-    // The kernel ignores the UV input and just fills each lane with the signal color
-    const colorField = ctx.b.kernelZipSig(
-      uvField,
-      [rSig, gSig, bSig, aSig],
-      { kind: 'kernel', name: 'broadcastColor' },
-      colorType
+    // TODO: broadcastColor kernel was removed. This block needs a color
+    // construction kernel (float4 -> color) or per-lane opcode dispatch.
+    // Suppress unused variable warnings for signals that will be used
+    // once a replacement kernel is available.
+    void rSig; void gSig; void bSig; void aSig;
+    void colorType; void instanceId;
+    throw new Error(
+      'FieldConstColor: broadcastColor kernel removed. ' +
+      'Color construction kernel not yet implemented.'
     );
-
-    const colorSlot = ctx.b.allocSlot();
-
-    return {
-      outputsById: {
-        color: { id: colorField, slot: colorSlot, type: colorType, stride: payloadStride(colorType.payload) },
-      },
-      instanceContext: instanceId,
-    };
   },
 });

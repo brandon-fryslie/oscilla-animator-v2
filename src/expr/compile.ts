@@ -11,9 +11,9 @@ import type { ExprNode } from './ast';
 import type { IRBuilder } from '../compiler/ir/IRBuilder';
 import type { SigExprId } from '../compiler/ir/types';
 import { OpCode } from '../compiler/ir/types';
-import { canonicalType, type PayloadType, floatConst, intConst, boolConst } from '../core/canonical-types';
+import { canonicalType, type PayloadType, floatConst, intConst } from '../core/canonical-types';
 import { FLOAT, INT, BOOL } from '../core/canonical-types';
-import { isVectorType, componentIndex, swizzleResultType } from './swizzle';
+import { isVectorType, swizzleResultType } from './swizzle';
 
 /**
  * Compilation context.
@@ -392,27 +392,30 @@ function compileMemberAccess(node: ExprNode & { kind: 'member' }, ctx: CompileCo
 
 /**
  * Get extraction kernel name for a component.
+ *
+ * Named extraction kernels (vec3ExtractX/Y/Z, colorExtractR/G/B/A) have been
+ * removed. Component extraction needs to be redesigned using opcode-based
+ * dispatch or a generic extract-by-index mechanism.
  */
-function getExtractionKernel(sourceType: PayloadType, component: string): string {
-  const idx = componentIndex(component);
-  if (sourceType.kind === 'color') {
-    return ['colorExtractR', 'colorExtractG', 'colorExtractB', 'colorExtractA'][idx];
-  } else {
-    // vec2 or vec3
-    return ['vec3ExtractX', 'vec3ExtractY', 'vec3ExtractZ'][idx];
-  }
+function getExtractionKernel(_sourceType: PayloadType, _component: string): string {
+  throw new Error(
+    'Component extraction kernels removed. ' +
+    'Generic extract/construct redesign not yet implemented.'
+  );
 }
 
 /**
  * Get combine kernel name for constructing a vector.
+ *
+ * Named combine kernels (makeVec2Sig, makeVec3Sig, makeColorSig) have been
+ * removed. Vector construction needs to be redesigned using opcode-based
+ * dispatch or a generic construct mechanism.
  */
-function getCombineKernel(componentCount: number): string {
-  switch (componentCount) {
-    case 2: return 'makeVec2Sig';
-    case 3: return 'makeVec3Sig';
-    case 4: return 'makeColorSig';
-    default: throw new Error(`Invalid component count: ${componentCount}`);
-  }
+function getCombineKernel(_componentCount: number): string {
+  throw new Error(
+    'Vector construction kernels removed. ' +
+    'Generic extract/construct redesign not yet implemented.'
+  );
 }
 
 // =============================================================================

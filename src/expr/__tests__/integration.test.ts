@@ -76,10 +76,10 @@ describe('compileExpression Integration', () => {
 
   describe('Component Access (Swizzle)', () => {
 
-    it('compiles multi-component swizzle (field-level only)', () => {
-      // Multi-component swizzle (.xy, .rgb) compiles successfully but is
-      // FIELD-LEVEL ONLY. Signal-level execution is not yet supported.
-      // See WORK-EVALUATION-20260127-181500.md for details.
+    it('multi-component swizzle fails (extraction kernels removed)', () => {
+      // Extraction kernels (vec3ExtractX/Y/Z, etc.) and construction kernels
+      // (makeVec2Sig, etc.) have been removed. Swizzle compilation now throws.
+      // Will be restored when generic extract/construct mechanism is implemented.
       const vSig = builder.constant(vec3Const(0, 0, 0), canonicalType(VEC3));
 
       const result = compileExpression(
@@ -89,13 +89,7 @@ describe('compileExpression Integration', () => {
         new Map([['v', vSig]])
       );
 
-      if (!result.ok) {
-        console.error('Compilation failed:', result.error);
-      }
-      // Should compile (type-check and IR generation work)
-      expect(result.ok).toBe(true);
-      // Note: Runtime execution would fail at signal level due to makeVec2Sig
-      // throwing "not yet supported". This is documented as field-level only.
+      expect(result.ok).toBe(false);
     });
 
     it('returns error for invalid component', () => {

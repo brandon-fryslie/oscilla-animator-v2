@@ -2,10 +2,8 @@
  * Patch Persistence Service
  *
  * Handles serialization, deserialization, and localStorage persistence of patches.
- * Includes patch migration support for handling removed/renamed blocks.
  */
 
-import { migratePatch } from '../graph/patchMigrations';
 import type { Patch } from '../graph';
 import type { BlockId, EdgeRole } from '../types';
 
@@ -57,7 +55,7 @@ export function serializePatch(patch: Patch, presetIndex: number): string {
 }
 
 /**
- * Deserialize a JSON string to a patch, applying migrations if needed.
+ * Deserialize a JSON string to a patch.
  * Returns null if deserialization fails.
  */
 export function deserializePatch(json: string): { patch: Patch; presetIndex: number } | null {
@@ -85,21 +83,10 @@ export function deserializePatch(json: string): { patch: Patch; presetIndex: num
       sortKey: e.sortKey ?? i,
       role: (e.role ?? { kind: 'user' as const, meta: {} as Record<string, never> }) as EdgeRole,
     }));
-    const rawPatch: Patch = { blocks, edges: normalizedEdges };
-
-    // Apply patch migrations for removed/renamed blocks
-    const { patch: migratedPatch, migrations } = migratePatch(rawPatch);
-
-    // Log migrations to console for debugging
-    if (migrations.length > 0) {
-      console.warn(
-        `[PatchMigration] Applied ${migrations.length} migrations to patch:`,
-        migrations.map(m => `  - ${m.kind}: ${m.reason}`).join('\n'),
-      );
-    }
+    const patch: Patch = { blocks, edges: normalizedEdges };
 
     return {
-      patch: migratedPatch,
+      patch,
       presetIndex: data.presetIndex,
     };
   } catch {

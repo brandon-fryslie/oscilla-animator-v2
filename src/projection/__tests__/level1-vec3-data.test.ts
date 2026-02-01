@@ -3,10 +3,12 @@
  *
  * Tests proving the 3D data shape is correct.
  * Position fields are Float32Array stride 3, size fields are Float32Array stride 1.
- * Layout blocks produce z=0.0 explicitly.
+ *
+ * Note: Layout kernel tests (gridLayout3D, lineLayout3D, circleLayout3D,
+ * applyZModulation) have been removed along with their implementations.
+ * Layout is now handled by field kernels (circleLayoutUV, lineLayoutUV, gridLayoutUV).
  */
 import { describe, it, expect } from 'vitest';
-import type { RenderFrameIR } from '../../runtime';
 import {
   createPositionField,
   createSizeField,
@@ -15,12 +17,6 @@ import {
   positionFieldCount,
   sizeFieldCount,
 } from '../fields';
-import {
-  gridLayout3D,
-  lineLayout3D,
-  circleLayout3D,
-  applyZModulation,
-} from '../layout-kernels';
 
 // =============================================================================
 // Unit Tests
@@ -81,7 +77,7 @@ describe('Level 1 Unit Tests', () => {
     field[3] = 0.5;
     field[4] = 1.0;
 
-    // Read back — values are in world-space units (not pixels)
+    // Read back
     expect(field[0]).toBeCloseTo(0.05);
     expect(field[1]).toBeCloseTo(0.1);
     expect(field[2]).toBeCloseTo(0.03);
@@ -91,155 +87,10 @@ describe('Level 1 Unit Tests', () => {
 });
 
 // =============================================================================
-// Integration Tests
-// =============================================================================
-
-describe('Level 1 Integration Tests', () => {
-  it('GridLayoutUV(4x4) produces a Field<vec3> with 16 entries, each z === 0.0 (exact)', () => {
-    const N = 16;
-    const out = createPositionField(N);
-    gridLayout3D(out, N, 4, 4);
-
-    expect(positionFieldCount(out)).toBe(16);
-
-    // Every z must be exactly 0.0
-    for (let i = 0; i < N; i++) {
-      const [x, y, z] = readPosition(out, i);
-      expect(z).toBe(0.0); // Exact, not close-to
-      // XY should be in [0,1]
-      expect(x).toBeGreaterThanOrEqual(0);
-      expect(x).toBeLessThanOrEqual(1);
-      expect(y).toBeGreaterThanOrEqual(0);
-      expect(y).toBeLessThanOrEqual(1);
-    }
-  });
-
-  it('LineLayoutUV(N=8) produces a Field<vec3> with 8 entries, each z === 0.0 (exact)', () => {
-    const N = 8;
-    const out = createPositionField(N);
-    lineLayout3D(out, N, 0.1, 0.2, 0.9, 0.8);
-
-    expect(positionFieldCount(out)).toBe(8);
-
-    for (let i = 0; i < N; i++) {
-      const [x, y, z] = readPosition(out, i);
-      expect(z).toBe(0.0); // Exact
-      expect(x).toBeGreaterThanOrEqual(0);
-      expect(x).toBeLessThanOrEqual(1);
-      expect(y).toBeGreaterThanOrEqual(0);
-      expect(y).toBeLessThanOrEqual(1);
-    }
-
-    // Verify endpoints
-    const [x0, y0] = readPosition(out, 0);
-    expect(x0).toBeCloseTo(0.1);
-    expect(y0).toBeCloseTo(0.2);
-
-    const [x7, y7] = readPosition(out, 7);
-    expect(x7).toBeCloseTo(0.9);
-    expect(y7).toBeCloseTo(0.8);
-  });
-
-  it('CircleLayoutUV(N=12) produces a Field<vec3> with 12 entries, each z === 0.0 (exact)', () => {
-    const N = 12;
-    const out = createPositionField(N);
-    circleLayout3D(out, N, 0.5, 0.5, 0.3, 0);
-
-    expect(positionFieldCount(out)).toBe(12);
-
-    for (let i = 0; i < N; i++) {
-      const [_x, _y, z] = readPosition(out, i);
-      expect(z).toBe(0.0); // Exact
-    }
-  });
-
-  it('A layout block that receives z-modulation input writes non-zero z values into the position field', () => {
-    const N = 8;
-    const out = createPositionField(N);
-    gridLayout3D(out, N, 4, 2);
-
-    // Verify z=0 initially
-    for (let i = 0; i < N; i++) {
-      expect(readPosition(out, i)[2]).toBe(0.0);
-    }
-
-    // Apply z-modulation
-    const zMod = new Float32Array(N);
-    for (let i = 0; i < N; i++) {
-      zMod[i] = 0.1 * (i + 1); // 0.1, 0.2, ..., 0.8
-    }
-    applyZModulation(out, zMod, N);
-
-    // Now z values are non-zero
-    for (let i = 0; i < N; i++) {
-      const [_x, _y, z] = readPosition(out, i);
-      expect(z).not.toBe(0.0);
-      expect(z).toBeCloseTo(0.1 * (i + 1));
-    }
-  });
-
-  it('_placeholder_removed', () => {
-    // Test removed during type system refactor
-    expect(true).toBe(true);
-  });
-});
-
-// =============================================================================
 // Additional property tests
 // =============================================================================
 
 describe('Level 1 Property Tests', () => {
-  it('GridLayoutUV positions are evenly distributed in [0,1]^2', () => {
-    const N = 25;
-    const out = createPositionField(N);
-    gridLayout3D(out, N, 5, 5);
-
-    // Check corners
-    const [x0, y0] = readPosition(out, 0);
-    expect(x0).toBeCloseTo(0.0);
-    expect(y0).toBeCloseTo(0.0);
-
-    const [x4, y4] = readPosition(out, 4);
-    expect(x4).toBeCloseTo(1.0);
-    expect(y4).toBeCloseTo(0.0);
-
-    const [x20, y20] = readPosition(out, 20);
-    expect(x20).toBeCloseTo(0.0);
-    expect(y20).toBeCloseTo(1.0);
-
-    const [x24, y24] = readPosition(out, 24);
-    expect(x24).toBeCloseTo(1.0);
-    expect(y24).toBeCloseTo(1.0);
-  });
-
-  it('CircleLayoutUV positions are at correct radius from center', () => {
-    const N = 12;
-    const radius = 0.3;
-    const out = createPositionField(N);
-    circleLayout3D(out, N, 0.5, 0.5, radius, 0);
-
-    for (let i = 0; i < N; i++) {
-      const [x, y] = readPosition(out, i);
-      const dx = x - 0.5;
-      const dy = y - 0.5;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      expect(dist).toBeCloseTo(radius, 5);
-    }
-  });
-
-  it('LineLayoutUV positions are evenly spaced along the line', () => {
-    const N = 5;
-    const out = createPositionField(N);
-    lineLayout3D(out, N, 0.0, 0.0, 1.0, 1.0);
-
-    for (let i = 0; i < N; i++) {
-      const [x, y] = readPosition(out, i);
-      const expected = i / (N - 1);
-      expect(x).toBeCloseTo(expected);
-      expect(y).toBeCloseTo(expected);
-    }
-  });
-
   it('Position field with N=0 produces empty array (no crash)', () => {
     const field = createPositionField(0);
     expect(field.length).toBe(0);

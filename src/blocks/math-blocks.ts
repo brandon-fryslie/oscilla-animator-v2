@@ -49,56 +49,34 @@ registerBlock({
       throw new Error('Add requires both expression inputs');
     }
 
+    const outType = ctx.outTypes[0];
+    const addFn = ctx.b.opcode(OpCode.Add);  // ALWAYS opcode
+
+    // Check if either input is field-extent
     const aCard = requireInst(a.type.extent.cardinality, 'cardinality');
     const bCard = requireInst(b.type.extent.cardinality, 'cardinality');
     const isAField = aCard.kind === 'many';
     const isBField = bCard.kind === 'many';
 
-    // Signal path
-    if (!isAField && !isBField) {
-      const addFn = ctx.b.opcode(OpCode.Add);
-      const sigId = ctx.b.kernelZip([a.id, b.id], addFn, canonicalType(FLOAT));
-      const outType = ctx.outTypes[0];
-      const slot = ctx.b.allocSlot();
-      return {
-        outputsById: {
-          out: { id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
-        },
-      };
+    // If either input is field-extent, broadcast the other
+    let aId = a.id;
+    let bId = b.id;
+    if (isAField && !isBField) {
+      bId = ctx.b.broadcast(b.id, outType);
+    } else if (!isAField && isBField) {
+      aId = ctx.b.broadcast(a.id, outType);
     }
 
-    // Field path (or mixed signal/field with broadcast)
-    if (isAField || isBField) {
-      const outType = ctx.outTypes[0];
-      const floatFieldType = { ...outType, payload: FLOAT, unit: { kind: 'scalar' as const } };
+    const resultId = ctx.b.kernelZip([aId, bId], addFn, outType);
+    const slot = ctx.b.allocSlot();
+    const isField = isAField || isBField;
 
-      let aField;
-      if (isAField) {
-        aField = a.id;
-      } else {
-        aField = ctx.b.broadcast(a.id, floatFieldType);
-      }
-
-      let bField;
-      if (isBField) {
-        bField = b.id;
-      } else {
-        bField = ctx.b.broadcast(b.id, floatFieldType);
-      }
-
-      const addFn = ctx.b.kernel('fieldAdd');
-      const fieldId = ctx.b.kernelZip([aField, bField], addFn, outType);
-      const slot = ctx.b.allocSlot();
-
-      return {
-        outputsById: {
-          out: { id: fieldId, slot, type: outType, stride: strideOf(outType.payload) },
-        },
-        instanceContext: ctx.inferredInstance,
-      };
-    }
-
-    throw new Error('Add: Invalid input types');
+    return {
+      outputsById: {
+        out: { id: resultId, slot, type: outType, stride: strideOf(outType.payload) },
+      },
+      ...(isField ? { instanceContext: ctx.inferredInstance } : {}),
+    };
   },
 });
 
@@ -141,56 +119,34 @@ registerBlock({
       throw new Error('Subtract requires both expression inputs');
     }
 
+    const outType = ctx.outTypes[0];
+    const subFn = ctx.b.opcode(OpCode.Sub);  // ALWAYS opcode
+
+    // Check if either input is field-extent
     const aCard = requireInst(a.type.extent.cardinality, 'cardinality');
     const bCard = requireInst(b.type.extent.cardinality, 'cardinality');
     const isAField = aCard.kind === 'many';
     const isBField = bCard.kind === 'many';
 
-    // Signal path
-    if (!isAField && !isBField) {
-      const subFn = ctx.b.opcode(OpCode.Sub);
-      const sigId = ctx.b.kernelZip([a.id, b.id], subFn, canonicalType(FLOAT));
-      const outType = ctx.outTypes[0];
-      const slot = ctx.b.allocSlot();
-      return {
-        outputsById: {
-          out: { id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
-        },
-      };
+    // If either input is field-extent, broadcast the other
+    let aId = a.id;
+    let bId = b.id;
+    if (isAField && !isBField) {
+      bId = ctx.b.broadcast(b.id, outType);
+    } else if (!isAField && isBField) {
+      aId = ctx.b.broadcast(a.id, outType);
     }
 
-    // Field path
-    if (isAField || isBField) {
-      const outType = ctx.outTypes[0];
-      const floatFieldType = { ...outType, payload: FLOAT, unit: { kind: 'scalar' as const } };
+    const resultId = ctx.b.kernelZip([aId, bId], subFn, outType);
+    const slot = ctx.b.allocSlot();
+    const isField = isAField || isBField;
 
-      let aField;
-      if (isAField) {
-        aField = a.id;
-      } else {
-        aField = ctx.b.broadcast(a.id, floatFieldType);
-      }
-
-      let bField;
-      if (isBField) {
-        bField = b.id;
-      } else {
-        bField = ctx.b.broadcast(b.id, floatFieldType);
-      }
-
-      const subFn = ctx.b.kernel('fieldSubtract');
-      const fieldId = ctx.b.kernelZip([aField, bField], subFn, outType);
-      const slot = ctx.b.allocSlot();
-
-      return {
-        outputsById: {
-          out: { id: fieldId, slot, type: outType, stride: strideOf(outType.payload) },
-        },
-        instanceContext: ctx.inferredInstance,
-      };
-    }
-
-    throw new Error('Subtract: Invalid input types');
+    return {
+      outputsById: {
+        out: { id: resultId, slot, type: outType, stride: strideOf(outType.payload) },
+      },
+      ...(isField ? { instanceContext: ctx.inferredInstance } : {}),
+    };
   },
 });
 
@@ -233,56 +189,34 @@ registerBlock({
       throw new Error('Multiply requires both expression inputs');
     }
 
+    const outType = ctx.outTypes[0];
+    const mulFn = ctx.b.opcode(OpCode.Mul);  // ALWAYS opcode
+
+    // Check if either input is field-extent
     const aCard = requireInst(a.type.extent.cardinality, 'cardinality');
     const bCard = requireInst(b.type.extent.cardinality, 'cardinality');
     const isAField = aCard.kind === 'many';
     const isBField = bCard.kind === 'many';
 
-    // Signal path
-    if (!isAField && !isBField) {
-      const mulFn = ctx.b.opcode(OpCode.Mul);
-      const sigId = ctx.b.kernelZip([a.id, b.id], mulFn, canonicalType(FLOAT));
-      const outType = ctx.outTypes[0];
-      const slot = ctx.b.allocSlot();
-      return {
-        outputsById: {
-          out: { id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
-        },
-      };
+    // If either input is field-extent, broadcast the other
+    let aId = a.id;
+    let bId = b.id;
+    if (isAField && !isBField) {
+      bId = ctx.b.broadcast(b.id, outType);
+    } else if (!isAField && isBField) {
+      aId = ctx.b.broadcast(a.id, outType);
     }
 
-    // Field path
-    if (isAField || isBField) {
-      const outType = ctx.outTypes[0];
-      const floatFieldType = { ...outType, payload: FLOAT, unit: { kind: 'scalar' as const } };
+    const resultId = ctx.b.kernelZip([aId, bId], mulFn, outType);
+    const slot = ctx.b.allocSlot();
+    const isField = isAField || isBField;
 
-      let aField;
-      if (isAField) {
-        aField = a.id;
-      } else {
-        aField = ctx.b.broadcast(a.id, floatFieldType);
-      }
-
-      let bField;
-      if (isBField) {
-        bField = b.id;
-      } else {
-        bField = ctx.b.broadcast(b.id, floatFieldType);
-      }
-
-      const mulFn = ctx.b.kernel('fieldMultiply');
-      const fieldId = ctx.b.kernelZip([aField, bField], mulFn, outType);
-      const slot = ctx.b.allocSlot();
-
-      return {
-        outputsById: {
-          out: { id: fieldId, slot, type: outType, stride: strideOf(outType.payload) },
-        },
-        instanceContext: ctx.inferredInstance,
-      };
-    }
-
-    throw new Error('Multiply: Invalid input types');
+    return {
+      outputsById: {
+        out: { id: resultId, slot, type: outType, stride: strideOf(outType.payload) },
+      },
+      ...(isField ? { instanceContext: ctx.inferredInstance } : {}),
+    };
   },
 });
 
@@ -325,56 +259,34 @@ registerBlock({
       throw new Error('Divide requires both expression inputs');
     }
 
+    const outType = ctx.outTypes[0];
+    const divFn = ctx.b.opcode(OpCode.Div);  // ALWAYS opcode
+
+    // Check if either input is field-extent
     const aCard = requireInst(a.type.extent.cardinality, 'cardinality');
     const bCard = requireInst(b.type.extent.cardinality, 'cardinality');
     const isAField = aCard.kind === 'many';
     const isBField = bCard.kind === 'many';
 
-    // Signal path
-    if (!isAField && !isBField) {
-      const divFn = ctx.b.opcode(OpCode.Div);
-      const sigId = ctx.b.kernelZip([a.id, b.id], divFn, canonicalType(FLOAT));
-      const outType = ctx.outTypes[0];
-      const slot = ctx.b.allocSlot();
-      return {
-        outputsById: {
-          out: { id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
-        },
-      };
+    // If either input is field-extent, broadcast the other
+    let aId = a.id;
+    let bId = b.id;
+    if (isAField && !isBField) {
+      bId = ctx.b.broadcast(b.id, outType);
+    } else if (!isAField && isBField) {
+      aId = ctx.b.broadcast(a.id, outType);
     }
 
-    // Field path
-    if (isAField || isBField) {
-      const outType = ctx.outTypes[0];
-      const floatFieldType = { ...outType, payload: FLOAT, unit: { kind: 'scalar' as const } };
+    const resultId = ctx.b.kernelZip([aId, bId], divFn, outType);
+    const slot = ctx.b.allocSlot();
+    const isField = isAField || isBField;
 
-      let aField;
-      if (isAField) {
-        aField = a.id;
-      } else {
-        aField = ctx.b.broadcast(a.id, floatFieldType);
-      }
-
-      let bField;
-      if (isBField) {
-        bField = b.id;
-      } else {
-        bField = ctx.b.broadcast(b.id, floatFieldType);
-      }
-
-      const divFn = ctx.b.kernel('fieldDivide');
-      const fieldId = ctx.b.kernelZip([aField, bField], divFn, outType);
-      const slot = ctx.b.allocSlot();
-
-      return {
-        outputsById: {
-          out: { id: fieldId, slot, type: outType, stride: strideOf(outType.payload) },
-        },
-        instanceContext: ctx.inferredInstance,
-      };
-    }
-
-    throw new Error('Divide: Invalid input types');
+    return {
+      outputsById: {
+        out: { id: resultId, slot, type: outType, stride: strideOf(outType.payload) },
+      },
+      ...(isField ? { instanceContext: ctx.inferredInstance } : {}),
+    };
   },
 });
 
@@ -417,56 +329,34 @@ registerBlock({
       throw new Error('Modulo requires both expression inputs');
     }
 
+    const outType = ctx.outTypes[0];
+    const modFn = ctx.b.opcode(OpCode.Mod);  // ALWAYS opcode
+
+    // Check if either input is field-extent
     const aCard = requireInst(a.type.extent.cardinality, 'cardinality');
     const bCard = requireInst(b.type.extent.cardinality, 'cardinality');
     const isAField = aCard.kind === 'many';
     const isBField = bCard.kind === 'many';
 
-    // Signal path
-    if (!isAField && !isBField) {
-      const modFn = ctx.b.opcode(OpCode.Mod);
-      const sigId = ctx.b.kernelZip([a.id, b.id], modFn, canonicalType(FLOAT));
-      const outType = ctx.outTypes[0];
-      const slot = ctx.b.allocSlot();
-      return {
-        outputsById: {
-          out: { id: sigId, slot, type: outType, stride: strideOf(outType.payload) },
-        },
-      };
+    // If either input is field-extent, broadcast the other
+    let aId = a.id;
+    let bId = b.id;
+    if (isAField && !isBField) {
+      bId = ctx.b.broadcast(b.id, outType);
+    } else if (!isAField && isBField) {
+      aId = ctx.b.broadcast(a.id, outType);
     }
 
-    // Field path
-    if (isAField || isBField) {
-      const outType = ctx.outTypes[0];
-      const floatFieldType = { ...outType, payload: FLOAT, unit: { kind: 'scalar' as const } };
+    const resultId = ctx.b.kernelZip([aId, bId], modFn, outType);
+    const slot = ctx.b.allocSlot();
+    const isField = isAField || isBField;
 
-      let aField;
-      if (isAField) {
-        aField = a.id;
-      } else {
-        aField = ctx.b.broadcast(a.id, floatFieldType);
-      }
-
-      let bField;
-      if (isBField) {
-        bField = b.id;
-      } else {
-        bField = ctx.b.broadcast(b.id, floatFieldType);
-      }
-
-      const modFn = ctx.b.kernel('fieldModulo');
-      const fieldId = ctx.b.kernelZip([aField, bField], modFn, outType);
-      const slot = ctx.b.allocSlot();
-
-      return {
-        outputsById: {
-          out: { id: fieldId, slot, type: outType, stride: strideOf(outType.payload) },
-        },
-        instanceContext: ctx.inferredInstance,
-      };
-    }
-
-    throw new Error('Modulo: Invalid input types');
+    return {
+      outputsById: {
+        out: { id: resultId, slot, type: outType, stride: strideOf(outType.payload) },
+      },
+      ...(isField ? { instanceContext: ctx.inferredInstance } : {}),
+    };
   },
 });
 
