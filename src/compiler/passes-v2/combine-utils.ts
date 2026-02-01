@@ -267,7 +267,7 @@ export function createCombineNode(
     const safeMode = validModes.includes(normalizedMode) ? normalizedMode : "last";
     const combineMode = safeMode as "sum" | "average" | "max" | "min" | "last";
 
-    const sigId = builder.sigCombine(exprIds, combineMode, type);
+    const sigId = builder.combine(exprIds, combineMode, type);
     const slot = builder.allocTypedSlot(type, `combine_sig_${combineMode}`);
     builder.registerSigSlot(sigId, slot);
     return { id: sigId, slot, type, stride: strideOf(type.payload) };
@@ -278,7 +278,7 @@ export function createCombineNode(
     const safeMode = validModes.includes(normalizedMode) ? normalizedMode : "product";
     const combineMode = safeMode as "sum" | "average" | "max" | "min" | "last" | "product";
 
-    const fieldId = builder.fieldCombine(exprIds, combineMode, type);
+    const fieldId = builder.combine(exprIds, combineMode, type);
     const slot = builder.allocTypedSlot(type, `combine_field_${combineMode}`);
     builder.registerFieldSlot(fieldId, slot);
     return { id: fieldId, slot, type, stride: strideOf(type.payload) };

@@ -119,8 +119,8 @@ describe('Hash-consing (I13)', () => {
       const a = b.constant(floatConst(1.0), type);
       const b1 = b.constant(floatConst(2.0), type);
 
-      const sum1 = b.sigCombine([a, b1], 'sum', type);
-      const sum2 = b.sigCombine([a, b1], 'sum', type);
+      const sum1 = b.combine([a, b1], 'sum', type);
+      const sum2 = b.combine([a, b1], 'sum', type);
 
       expect(sum1).toBe(sum2);
     });
@@ -130,7 +130,7 @@ describe('Hash-consing (I13)', () => {
       const sigType = canonicalType(FLOAT);
 
       const sig = b.constant(floatConst(1.0), sigType);
-      const field = b.Broadcast(sig, sigType);
+      const field = b.broadcast(sig, sigType);
 
       const reduce1 = b.reduce(field, 'sum', sigType);
       const reduce2 = b.reduce(field, 'sum', sigType);
@@ -189,8 +189,8 @@ describe('Hash-consing (I13)', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
 
-      const id1 = b.fieldConst(floatConst(1.0), type);
-      const id2 = b.fieldConst(floatConst(1.0), type);
+      const id1 = b.constant(floatConst(1.0), type);
+      const id2 = b.constant(floatConst(1.0), type);
 
       expect(id1).toBe(id2);
     });
@@ -199,8 +199,8 @@ describe('Hash-consing (I13)', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
 
-      const id1 = b.fieldConst(floatConst(1.0), type);
-      const id2 = b.fieldConst(floatConst(2.0), type);
+      const id1 = b.constant(floatConst(1.0), type);
+      const id2 = b.constant(floatConst(2.0), type);
 
       expect(id1).not.toBe(id2);
     });
@@ -210,8 +210,8 @@ describe('Hash-consing (I13)', () => {
       const sigType = canonicalType(FLOAT);
 
       const sig = b.constant(floatConst(1.0), sigType);
-      const id1 = b.Broadcast(sig, sigType);
-      const id2 = b.Broadcast(sig, sigType);
+      const id1 = b.broadcast(sig, sigType);
+      const id2 = b.broadcast(sig, sigType);
 
       expect(id1).toBe(id2);
     });
@@ -221,8 +221,8 @@ describe('Hash-consing (I13)', () => {
       const type = canonicalType(FLOAT);
       const inst = instanceId('inst1');
 
-      const id1 = b.fieldIntrinsic('index', type);
-      const id2 = b.fieldIntrinsic('index', type);
+      const id1 = b.intrinsic('index', type);
+      const id2 = b.intrinsic('index', type);
 
       expect(id1).toBe(id2);
     });
@@ -231,8 +231,8 @@ describe('Hash-consing (I13)', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
 
-      const id1 = b.fieldIntrinsic('index', type);
-      const id2 = b.fieldIntrinsic('randomId', type);
+      const id1 = b.intrinsic('index', type);
+      const id2 = b.intrinsic('randomId', type);
 
       expect(id1).not.toBe(id2);
     });
@@ -242,8 +242,8 @@ describe('Hash-consing (I13)', () => {
       const type = canonicalType(FLOAT);
       const inst = instanceId('inst1');
 
-      const id1 = b.fieldIntrinsic('index', type);
-      const id2 = b.fieldIntrinsic('normalizedIndex', type);
+      const id1 = b.intrinsic('index', type);
+      const id2 = b.intrinsic('normalizedIndex', type);
 
       expect(id1).not.toBe(id2);
     });
@@ -253,8 +253,8 @@ describe('Hash-consing (I13)', () => {
       const type = canonicalType(VEC2);
       const inst = instanceId('inst1');
 
-      const id1 = b.fieldPlacement('uv', 'halton2D', type);
-      const id2 = b.fieldPlacement('uv', 'halton2D', type);
+      const id1 = b.placement('uv', 'halton2D', type);
+      const id2 = b.placement('uv', 'halton2D', type);
 
       expect(id1).toBe(id2);
     });
@@ -423,9 +423,9 @@ describe('Hash-consing (I13)', () => {
       const time = b.time('tMs', type);
       
       // Multiple broadcasts of same signal
-      const broadcast1 = b.Broadcast(time, type);
-      const broadcast2 = b.Broadcast(time, type);
-      const broadcast3 = b.Broadcast(time, type);
+      const broadcast1 = b.broadcast(time, type);
+      const broadcast2 = b.broadcast(time, type);
+      const broadcast3 = b.broadcast(time, type);
       
       expect(broadcast1).toBe(broadcast2);
       expect(broadcast2).toBe(broadcast3);

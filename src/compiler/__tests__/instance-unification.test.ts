@@ -34,7 +34,7 @@ describe('Instance Identity (type-derived)', () => {
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
       const ref = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const type = canonicalField(FLOAT, { kind: 'scalar' }, ref);
-      const field = b.fieldIntrinsic('index', type);
+      const field = b.intrinsic('index', type);
 
       const expr = b.getFieldExprs()[field as number];
       const extracted = requireManyInstance(expr.type);
@@ -46,7 +46,7 @@ describe('Instance Identity (type-derived)', () => {
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
       const ref = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const type = canonicalField(FLOAT, { kind: 'scalar' }, ref);
-      const field = b.fieldIntrinsic('normalizedIndex', type);
+      const field = b.intrinsic('normalizedIndex', type);
 
       const expr = b.getFieldExprs()[field as number];
       expect(requireManyInstance(expr.type).instanceId).toBe(instance);
@@ -57,7 +57,7 @@ describe('Instance Identity (type-derived)', () => {
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
       const ref = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const type = canonicalField(FLOAT, { kind: 'scalar' }, ref);
-      const field = b.fieldIntrinsic('randomId', type);
+      const field = b.intrinsic('randomId', type);
 
       const expr = b.getFieldExprs()[field as number];
       expect(requireManyInstance(expr.type).instanceId).toBe(instance);
@@ -71,7 +71,7 @@ describe('Instance Identity (type-derived)', () => {
       const ref = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const fieldType = canonicalField(FLOAT, { kind: 'scalar' }, ref);
       const sig = b.constant(floatConst(1.0), canonicalSignal(FLOAT));
-      const broadcast = b.Broadcast(sig, fieldType);
+      const broadcast = b.broadcast(sig, fieldType);
 
       // Broadcast has many cardinality (it's a field), so type carries instance
       const expr = b.getFieldExprs()[broadcast as number];
@@ -93,8 +93,8 @@ describe('Instance Identity (type-derived)', () => {
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
       const ref = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const type = canonicalField(FLOAT, { kind: 'scalar' }, ref);
-      const intrinsic = b.fieldIntrinsic('index', type);
-      const mapped = b.fieldMap(intrinsic, { kind: 'opcode', opcode: OpCode.Sin }, type);
+      const intrinsic = b.intrinsic('index', type);
+      const mapped = b.kernelMap(intrinsic, { kind: 'opcode', opcode: OpCode.Sin }, type);
 
       const expr = b.getFieldExprs()[mapped as number];
       expect(requireManyInstance(expr.type).instanceId).toBe(instance);
@@ -106,9 +106,9 @@ describe('Instance Identity (type-derived)', () => {
       const ref = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const fieldType = canonicalField(FLOAT, { kind: 'scalar' }, ref);
       const sigType = canonicalSignal(FLOAT);
-      const intrinsic = b.fieldIntrinsic('index', fieldType);
+      const intrinsic = b.intrinsic('index', fieldType);
       const signal = b.constant(floatConst(2.0), sigType);
-      const zipped = b.fieldZipSig(intrinsic, [signal], { kind: 'opcode', opcode: OpCode.Mul }, fieldType);
+      const zipped = b.kernelZipSig(intrinsic, [signal], { kind: 'opcode', opcode: OpCode.Mul }, fieldType);
 
       const expr = b.getFieldExprs()[zipped as number];
       expect(requireManyInstance(expr.type).instanceId).toBe(instance);
@@ -119,9 +119,9 @@ describe('Instance Identity (type-derived)', () => {
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
       const ref = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const type = canonicalField(FLOAT, { kind: 'scalar' }, ref);
-      const field1 = b.fieldIntrinsic('index', type);
-      const field2 = b.fieldIntrinsic('normalizedIndex', type);
-      const zipped = b.fieldZip([field1, field2], { kind: 'opcode', opcode: OpCode.Add }, type);
+      const field1 = b.intrinsic('index', type);
+      const field2 = b.intrinsic('normalizedIndex', type);
+      const zipped = b.kernelZip([field1, field2], { kind: 'opcode', opcode: OpCode.Add }, type);
 
       const expr = b.getFieldExprs()[zipped as number];
       expect(requireManyInstance(expr.type).instanceId).toBe(instance);
@@ -132,10 +132,10 @@ describe('Instance Identity (type-derived)', () => {
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
       const ref = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const type = canonicalField(FLOAT, { kind: 'scalar' }, ref);
-      const intrinsic = b.fieldIntrinsic('index', type);
+      const intrinsic = b.intrinsic('index', type);
       const sig = b.constant(floatConst(1.0), canonicalSignal(FLOAT));
-      const broadcast = b.Broadcast(sig, type);
-      const zipped = b.fieldZip([intrinsic, broadcast], { kind: 'opcode', opcode: OpCode.Add }, type);
+      const broadcast = b.broadcast(sig, type);
+      const zipped = b.kernelZip([intrinsic, broadcast], { kind: 'opcode', opcode: OpCode.Add }, type);
 
       const expr = b.getFieldExprs()[zipped as number];
       expect(requireManyInstance(expr.type).instanceId).toBe(instance);
@@ -146,10 +146,10 @@ describe('Instance Identity (type-derived)', () => {
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
       const ref = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const type = canonicalField(FLOAT, { kind: 'scalar' }, ref);
-      const field1 = b.fieldIntrinsic('index', type);
-      const field2 = b.fieldIntrinsic('normalizedIndex', type);
-      const zipped = b.fieldZip([field1, field2], { kind: 'opcode', opcode: OpCode.Add }, type);
-      const mapped = b.fieldMap(zipped, { kind: 'opcode', opcode: OpCode.Sin }, type);
+      const field1 = b.intrinsic('index', type);
+      const field2 = b.intrinsic('normalizedIndex', type);
+      const zipped = b.kernelZip([field1, field2], { kind: 'opcode', opcode: OpCode.Add }, type);
+      const mapped = b.kernelMap(zipped, { kind: 'opcode', opcode: OpCode.Sin }, type);
 
       const expr = b.getFieldExprs()[mapped as number];
       expect(requireManyInstance(expr.type).instanceId).toBe(instance);
@@ -164,10 +164,10 @@ describe('Instance Identity (type-derived)', () => {
       const floatType = canonicalField(FLOAT, { kind: 'scalar' }, ref);
       const vec2Type = canonicalField(VEC2, { kind: 'scalar' }, ref);
 
-      const normalizedIndex = b.fieldIntrinsic('normalizedIndex', floatType);
+      const normalizedIndex = b.intrinsic('normalizedIndex', floatType);
       const colsSig = b.constant(intConst(5), canonicalSignal(INT));
       const rowsSig = b.constant(intConst(2), canonicalSignal(INT));
-      const layoutField = b.fieldZipSig(
+      const layoutField = b.kernelZipSig(
         normalizedIndex,
         [colsSig, rowsSig],
         { kind: 'kernel', name: 'gridLayout' },
@@ -197,7 +197,7 @@ describe('Instance Identity (type-derived)', () => {
       const instance = b.createInstance(DOMAIN_CIRCLE, 10);
       const ref = instanceRef(DOMAIN_CIRCLE as string, instance as string);
       const type = canonicalField(FLOAT, { kind: 'scalar' }, ref);
-      const field = b.fieldIntrinsic('index', type);
+      const field = b.intrinsic('index', type);
 
       // Extract instance from field expression type
       const expr = b.getFieldExprs()[field as number];

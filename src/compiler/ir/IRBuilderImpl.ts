@@ -225,37 +225,8 @@ export class IRBuilderImpl implements IRBuilder {
   }
 
   eventNever(): ValueExprId {
-    return this.pushExpr({ kind: 'event' +
-          '', eventKind: 'never', type: canonicalEvent() });
+    return this.pushExpr({ kind: 'event', eventKind: 'never', type: canonicalEvent() });
   }
-
-  // =========================================================================
-  // Legacy Method Aliases (delegate to canonical methods)
-  // =========================================================================
-
-  // constant(value: ConstValue, type: CanonicalType): ValueExprId { return this.constant(value, type); }
-  // slotRead(slot: ValueSlot, type: CanonicalType): ValueExprId { return this.slotRead(slot, type); }
-  // time(which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'progress' | 'palette' | 'energy', type: CanonicalType): ValueExprId { return this.time(which, type); }
-  // external(channel: string, type: CanonicalType): ValueExprId { return this.external(channel, type); }
-  // kernelMap(input: ValueExprId, fn: PureFn, type: CanonicalType): ValueExprId { return this.kernelMap(input, fn, type); }
-  // kernelZip(inputs: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId { return this.kernelZip(inputs, fn, type); }
-  // reduce(field: ValueExprId, op: 'min' | 'max' | 'sum' | 'avg', type: CanonicalType): ValueExprId { return this.reduce(field, op, type); }
-  fieldConst(value: ConstValue, type: CanonicalType): ValueExprId { return this.constant(value, type); }
-  fieldIntrinsic(intrinsic: IntrinsicPropertyName, type: CanonicalType): ValueExprId { return this.intrinsic(intrinsic, type); }
-  fieldPlacement(field: PlacementFieldName, basisKind: BasisKind, type: CanonicalType): ValueExprId { return this.placement(field, basisKind, type); }
-  Broadcast(signal: ValueExprId, type: CanonicalType): ValueExprId { return this.broadcast(signal, type); }
-  fieldMap(input: ValueExprId, fn: PureFn, type: CanonicalType): ValueExprId { return this.kernelMap(input, fn, type); }
-  fieldZip(inputs: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId { return this.kernelZip(inputs, fn, type); }
-  fieldZipSig(field: ValueExprId, signals: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId { return this.kernelZipSig(field, signals, fn, type); }
-  fieldPathDerivative(input: ValueExprId, operation: 'tangent' | 'arcLength', type: CanonicalType): ValueExprId { return this.pathDerivative(input, operation, type); }
-  sigStateRead(stateSlot: StateSlotId, type: CanonicalType): ValueExprId { return this.stateRead(stateSlot, type); }
-  fieldStateRead(stateSlot: StateSlotId, type: CanonicalType): ValueExprId { return this.stateRead(stateSlot, type); }
-  sigEventRead(eventSlot: EventSlotId): ValueExprId {
-    // Legacy: takes EventSlotId directly. Create eventRead expr.
-    return this.pushExpr({ kind: 'eventRead', eventSlot, type: canonicalType(FLOAT, unitScalar()) });
-  }
-  sigCombine(inputs: readonly ValueExprId[], mode: 'sum' | 'average' | 'max' | 'min' | 'last', type: CanonicalType): ValueExprId { return this.combine(inputs, mode, type); }
-  fieldCombine(inputs: readonly ValueExprId[], mode: 'sum' | 'average' | 'max' | 'min' | 'last' | 'product', type: CanonicalType): ValueExprId { return this.combine(inputs, mode, type); }
 
   // =========================================================================
   // Instances

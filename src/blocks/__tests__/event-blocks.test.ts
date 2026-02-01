@@ -92,7 +92,7 @@ describe('EventToSignalMask', () => {
 // =============================================================================
 
 describe('SampleHold', () => {
-  it('sigEventRead returns 0.0 when event has not fired', () => {
+  it('xxx returns 0.0 when event has not fired', () => {
     // Unit test: directly test evaluateValueExprSignal with an eventRead expr
     // when eventScalars[slot] is 0
     const state = createRuntimeState(4, 0, 4, 0);

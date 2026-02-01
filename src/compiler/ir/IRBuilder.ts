@@ -125,58 +125,6 @@ export interface IRBuilder {
   eventNever(): ValueExprId;
 
   // =========================================================================
-  // Legacy Method Aliases (deprecated — use canonical names above)
-  // =========================================================================
-
-  /** @deprecated Use constant() */
-  sigConst(value: ConstValue, type: CanonicalType): ValueExprId;
-  /** @deprecated Use slotRead() */
-  sigSlot(slot: ValueSlot, type: CanonicalType): ValueExprId;
-  /** @deprecated Use time() */
-  sigTime(which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'progress' | 'palette' | 'energy', type: CanonicalType): ValueExprId;
-  /** @deprecated Use external() */
-  sigExternal(channel: string, type: CanonicalType): ValueExprId;
-  /** @deprecated Use kernelMap() */
-  sigMap(input: ValueExprId, fn: PureFn, type: CanonicalType): ValueExprId;
-  /** @deprecated Use kernelZip() */
-  sigZip(inputs: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId;
-  /** @deprecated Use shapeRef() */
-  sigShapeRef(
-    topologyId: TopologyId,
-    paramSignals: readonly ValueExprId[],
-    type: CanonicalType,
-    controlPointField?: { id: ValueExprId; stride: number }
-  ): ValueExprId;
-  /** @deprecated Use reduce() */
-  ReduceField(field: ValueExprId, op: 'min' | 'max' | 'sum' | 'avg', type: CanonicalType): ValueExprId;
-  /** @deprecated Use constant() */
-  fieldConst(value: ConstValue, type: CanonicalType): ValueExprId;
-  /** @deprecated Use intrinsic() */
-  fieldIntrinsic(intrinsic: IntrinsicPropertyName, type: CanonicalType): ValueExprId;
-  /** @deprecated Use placement() */
-  fieldPlacement(field: PlacementFieldName, basisKind: BasisKind, type: CanonicalType): ValueExprId;
-  /** @deprecated Use broadcast() */
-  Broadcast(signal: ValueExprId, type: CanonicalType): ValueExprId;
-  /** @deprecated Use kernelMap() */
-  fieldMap(input: ValueExprId, fn: PureFn, type: CanonicalType): ValueExprId;
-  /** @deprecated Use kernelZip() */
-  fieldZip(inputs: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId;
-  /** @deprecated Use kernelZipSig() */
-  fieldZipSig(field: ValueExprId, signals: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId;
-  /** @deprecated Use pathDerivative() */
-  fieldPathDerivative(input: ValueExprId, operation: 'tangent' | 'arcLength', type: CanonicalType): ValueExprId;
-  /** @deprecated Use stateRead() */
-  sigStateRead(stateSlot: StateSlotId, type: CanonicalType): ValueExprId;
-  /** @deprecated Use stateRead() */
-  fieldStateRead(stateSlot: StateSlotId, type: CanonicalType): ValueExprId;
-  /** @deprecated Use eventRead() */
-  sigEventRead(eventSlot: EventSlotId): ValueExprId;
-  /** @deprecated Use combine() */
-  sigCombine(inputs: readonly ValueExprId[], mode: 'sum' | 'average' | 'max' | 'min' | 'last', type: CanonicalType): ValueExprId;
-  /** @deprecated Use combine() */
-  fieldCombine(inputs: readonly ValueExprId[], mode: 'sum' | 'average' | 'max' | 'min' | 'last' | 'product', type: CanonicalType): ValueExprId;
-
-  // =========================================================================
   // Slot Registration & Allocation
   // =========================================================================
 
