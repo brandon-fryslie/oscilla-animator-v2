@@ -65,6 +65,12 @@ export interface CompilationSnapshot {
 
   /** Compilation status */
   status: 'success' | 'failure';
+
+  /**
+   * ValueExprTable extracted from block-lowering pass (raw, not serialized).
+   * Stored separately to preserve function references that would be lost in serialization.
+   */
+  valueExprs?: readonly ValueExpr[];
 }
 
 /**
@@ -164,6 +170,14 @@ class CompilationInspectorService {
     this.passStartTime = now;
 
     try {
+      // Extract ValueExprs from block-lowering pass BEFORE serialization
+      if (passName === 'block-lowering' && output && typeof output === 'object') {
+        const unlinkedIR = output as { builder?: { getValueExprs?: () => readonly ValueExpr[] } };
+        if (unlinkedIR.builder?.getValueExprs) {
+          this.currentSnapshot.valueExprs = unlinkedIR.builder.getValueExprs();
+        }
+      }
+
       // Serialize with circular reference handling
       const serializedInput = serializeIR(input);
       const serializedOutput = serializeIR(output);
@@ -331,29 +345,16 @@ class CompilationInspectorService {
   // =============================================================================
 
   /**
-   * Get the ValueExprTable from the block-lowering pass.
-   * The table is in unlinkedIR.builder.
+   * Get the ValueExprTable from the latest snapshot.
+   * ValueExprs are extracted during block-lowering pass before serialization.
    *
    * @returns ValueExprTable or undefined if not available
    */
   getValueExprTable(): ValueExprTable | undefined {
     const latest = this.getLatestSnapshot();
-    if (!latest) return undefined;
+    if (!latest || !latest.valueExprs) return undefined;
 
-    // Find the block-lowering pass that produces UnlinkedIRFragments
-    const loweringPass = latest.passes.find(
-      (p) => p.passName === 'block-lowering' || p.passName === 'backend:lowering'
-    );
-    if (!loweringPass) return undefined;
-
-    // UnlinkedIRFragments has a builder with getValueExprs() method
-    const output = loweringPass.output as { builder?: { getValueExprs?: () => readonly ValueExpr[] } };
-    if (!output || typeof output !== 'object' || !output.builder) return undefined;
-
-    const valueExprs = output.builder.getValueExprs?.();
-    if (!valueExprs) return undefined;
-
-    return { nodes: valueExprs };
+    return { nodes: latest.valueExprs };
   }
 
   /**

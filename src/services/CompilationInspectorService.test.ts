@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { compilationInspector } from './CompilationInspectorService';
 import type { CompilationSnapshot, PassSnapshot } from './CompilationInspectorService';
+import { buildPatch } from '../graph';
+import { compile } from '../compiler/compile';
+import { valueExprId } from '../compiler/ir/value-expr';
 
 // =============================================================================
 // Test Helpers
@@ -823,6 +826,186 @@ describe('CompilationInspectorService', () => {
       compilationInspector.endCompile('success');
 
       expect(compilationInspector.snapshots.length).toBe(initialLength + 1);
+    });
+  });
+
+  // =============================================================================
+  // ValueExpr Query API Tests (ValueExpr dispatch migration)
+  // =============================================================================
+
+  describe('ValueExpr Query API', () => {
+    beforeEach(() => {
+      compilationInspector.clear();
+    });
+
+    describe('with real compilation', () => {
+      it('extracts ValueExprTable from successful compilation', () => {
+        const patch = buildPatch((b) => {
+          b.addBlock('InfiniteTimeRoot', {});
+        });
+
+        const result = compile(patch);
+        expect(result.kind).toBe('ok');
+
+        const table = compilationInspector.getValueExprTable();
+        expect(table).toBeDefined();
+        expect(table?.nodes).toBeDefined();
+        expect(Array.isArray(table?.nodes)).toBe(true);
+      });
+
+      it('returns undefined when no compilation exists', () => {
+        const table = compilationInspector.getValueExprTable();
+        expect(table).toBeUndefined();
+      });
+
+      it('dispatches on ValueExpr.kind', () => {
+        const patch = buildPatch((b) => {
+          const time = b.addBlock('InfiniteTimeRoot', {});
+          const osc = b.addBlock('Oscillator', { waveform: 'oscSin' });
+          b.wire(time, 'phaseA', osc, 'phase');
+        });
+
+        const result = compile(patch);
+        expect(result.kind).toBe('ok');
+
+        // Get time kind expressions
+        const timeExprs = compilationInspector.getValueExprsByKind('time');
+        expect(timeExprs.length).toBeGreaterThan(0);
+        expect(timeExprs.every((expr) => expr.kind === 'time')).toBe(true);
+      });
+
+      it('gets ValueExpr by ID', () => {
+        const patch = buildPatch((b) => {
+          b.addBlock('InfiniteTimeRoot', {});
+        });
+
+        const result = compile(patch);
+        expect(result.kind).toBe('ok');
+
+        const table = compilationInspector.getValueExprTable();
+        if (!table || table.nodes.length === 0) {
+          throw new Error('Expected non-empty ValueExprTable');
+        }
+
+        const id = valueExprId(0);
+        const expr = compilationInspector.getValueExpr(id);
+        expect(expr).toBeDefined();
+        expect(expr).toBe(table.nodes[0]);
+      });
+
+      it('returns undefined for out-of-bounds ID', () => {
+        const patch = buildPatch((b) => {
+          b.addBlock('InfiniteTimeRoot', {});
+        });
+
+        const result = compile(patch);
+        expect(result.kind).toBe('ok');
+
+        const invalidId = valueExprId(9999);
+        const expr = compilationInspector.getValueExpr(invalidId);
+        expect(expr).toBeUndefined();
+      });
+
+      it('computes statistics with dispatch on ValueExpr.kind and CanonicalType', () => {
+        const patch = buildPatch((b) => {
+          const time = b.addBlock('InfiniteTimeRoot', {});
+          const osc = b.addBlock('Oscillator', { waveform: 'oscSin' });
+          b.wire(time, 'phaseA', osc, 'phase');
+        });
+
+        const result = compile(patch);
+        expect(result.kind).toBe('ok');
+
+        const stats = compilationInspector.getValueExprStats();
+        expect(stats.total).toBeGreaterThan(0);
+        expect(stats.byKind).toBeDefined();
+        expect(stats.byDerivedKind).toBeDefined();
+        expect(stats.byPayload).toBeDefined();
+
+        // Verify every ValueExpr has a type (invariant test)
+        const table = compilationInspector.getValueExprTable();
+        expect(table).toBeDefined();
+        if (table) {
+          for (const expr of table.nodes) {
+            expect(expr.type).toBeDefined();
+            expect(expr.type.payload).toBeDefined();
+            expect(expr.type.unit).toBeDefined();
+            expect(expr.type.extent).toBeDefined();
+          }
+        }
+      });
+
+      it('derives signal/field/event/const from CanonicalType axes', () => {
+        const patch = buildPatch((b) => {
+          b.addBlock('InfiniteTimeRoot', {});
+          const array = b.addBlock('Array', { count: 10 });
+        });
+
+        const result = compile(patch);
+        expect(result.kind).toBe('ok');
+
+        const stats = compilationInspector.getValueExprStats();
+
+        // Should have signal (cardinality one, continuous)
+        expect(stats.byDerivedKind.signal).toBeGreaterThan(0);
+
+        // May have field expressions (cardinality many, continuous)
+        // May have const expressions (cardinality zero)
+      });
+
+      it('invariant: every ValueExpr has CanonicalType', () => {
+        const patch = buildPatch((b) => {
+          const time = b.addBlock('InfiniteTimeRoot', {});
+          const osc = b.addBlock('Oscillator', { waveform: 'oscSin' });
+          b.wire(time, 'phaseA', osc, 'phase');
+        });
+
+        const result = compile(patch);
+        expect(result.kind).toBe('ok');
+
+        const table = compilationInspector.getValueExprTable();
+        expect(table).toBeDefined();
+
+        if (table) {
+          for (const expr of table.nodes) {
+            // Every ValueExpr MUST have a type field
+            expect(expr).toHaveProperty('type');
+            const type = expr.type;
+
+            // CanonicalType has payload, unit, extent
+            expect(type).toHaveProperty('payload');
+            expect(type).toHaveProperty('unit');
+            expect(type).toHaveProperty('extent');
+
+            // Extent has all 5 axes
+            expect(type.extent).toHaveProperty('cardinality');
+            expect(type.extent).toHaveProperty('temporality');
+            expect(type.extent).toHaveProperty('perspective');
+            expect(type.extent).toHaveProperty('branch');
+            expect(type.extent).toHaveProperty('binding');
+          }
+        }
+      });
+    });
+
+    describe('without compilation', () => {
+      it('returns empty stats when no compilation', () => {
+        const stats = compilationInspector.getValueExprStats();
+        expect(stats.total).toBe(0);
+        expect(stats.byKind).toEqual({});
+        expect(stats.byDerivedKind).toEqual({});
+        expect(stats.byPayload).toEqual({});
+      });
+
+      it('returns empty array when querying by kind', () => {
+        const exprs = compilationInspector.getValueExprsByKind('time');
+        expect(exprs).toEqual([]);
+      });
+
+      it('returns undefined when getting by ID', () => {
+        const expr = compilationInspector.getValueExpr(valueExprId(0));
+        expect(expr).toBeUndefined();
+      });
     });
   });
 });
