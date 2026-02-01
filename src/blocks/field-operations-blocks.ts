@@ -98,7 +98,7 @@ registerBlock({
     const slot = ctx.b.allocSlot();
 
     // Check if input is field-extent to propagate instanceContext
-    const isField = 'type' in input && requireInst(input.type.extent.cardinality, 'cardinality').kind === 'many';
+    const isField = requireInst(input.type.extent.cardinality, 'cardinality').kind === 'many';
 
     return {
       outputsById: {
@@ -151,7 +151,7 @@ registerBlock({
     const slot = ctx.b.allocSlot();
 
     // Check if input is field-extent to propagate instanceContext
-    const isField = 'type' in input && requireInst(input.type.extent.cardinality, 'cardinality').kind === 'many';
+    const isField = requireInst(input.type.extent.cardinality, 'cardinality').kind === 'many';
 
     return {
       outputsById: {
