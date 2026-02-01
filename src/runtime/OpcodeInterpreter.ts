@@ -49,6 +49,20 @@
  *   max      - Maximum: max(a, b, c, ...)
  *
  * ──────────────────────────────────────────────────────────────────────
+ * VECTOR SEMANTICS (component-wise)
+ * ──────────────────────────────────────────────────────────────────────
+ *
+ * Opcodes are SCALAR operations. When applied to vector fields (vec2,
+ * vec3, color), the materializer dispatches per-lane, per-component:
+ *
+ *   sin(vec2) = [sin(x), sin(y)]
+ *   add(vec3, vec3) = [x1+x2, y1+y2, z1+z2]
+ *
+ * This component-wise application is intentional. The materializer
+ * iterates: for each element i, for each component c, apply opcode.
+ * See ValueExprMaterializer.ts applyZip/applyMap for the dispatch loop.
+ *
+ * ──────────────────────────────────────────────────────────────────────
  * IMPORTANT: RADIANS vs PHASE
  * ──────────────────────────────────────────────────────────────────────
  *
