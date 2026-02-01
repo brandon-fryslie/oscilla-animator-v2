@@ -36,7 +36,7 @@ describe('Instance Identity (type-derived)', () => {
       const type = canonicalField(FLOAT, { kind: 'scalar' }, ref);
       const field = b.intrinsic('index', type);
 
-      const expr = b.getFieldExprs()[field as number];
+      const expr = b.getValueExprs()[field as number];
       const extracted = requireManyInstance(expr.type);
       expect(extracted.instanceId).toBe(instance);
     });
@@ -48,7 +48,7 @@ describe('Instance Identity (type-derived)', () => {
       const type = canonicalField(FLOAT, { kind: 'scalar' }, ref);
       const field = b.intrinsic('normalizedIndex', type);
 
-      const expr = b.getFieldExprs()[field as number];
+      const expr = b.getValueExprs()[field as number];
       expect(requireManyInstance(expr.type).instanceId).toBe(instance);
     });
 
@@ -59,7 +59,7 @@ describe('Instance Identity (type-derived)', () => {
       const type = canonicalField(FLOAT, { kind: 'scalar' }, ref);
       const field = b.intrinsic('randomId', type);
 
-      const expr = b.getFieldExprs()[field as number];
+      const expr = b.getValueExprs()[field as number];
       expect(requireManyInstance(expr.type).instanceId).toBe(instance);
     });
   });
@@ -74,7 +74,7 @@ describe('Instance Identity (type-derived)', () => {
       const broadcast = b.broadcast(sig, fieldType);
 
       // Broadcast has many cardinality (it's a field), so type carries instance
-      const expr = b.getFieldExprs()[broadcast as number];
+      const expr = b.getValueExprs()[broadcast as number];
       expect(requireManyInstance(expr.type).instanceId).toBe(instance);
     });
 
@@ -96,7 +96,7 @@ describe('Instance Identity (type-derived)', () => {
       const intrinsic = b.intrinsic('index', type);
       const mapped = b.kernelMap(intrinsic, { kind: 'opcode', opcode: OpCode.Sin }, type);
 
-      const expr = b.getFieldExprs()[mapped as number];
+      const expr = b.getValueExprs()[mapped as number];
       expect(requireManyInstance(expr.type).instanceId).toBe(instance);
     });
 
@@ -110,7 +110,7 @@ describe('Instance Identity (type-derived)', () => {
       const signal = b.constant(floatConst(2.0), sigType);
       const zipped = b.kernelZipSig(intrinsic, [signal], { kind: 'opcode', opcode: OpCode.Mul }, fieldType);
 
-      const expr = b.getFieldExprs()[zipped as number];
+      const expr = b.getValueExprs()[zipped as number];
       expect(requireManyInstance(expr.type).instanceId).toBe(instance);
     });
 
@@ -123,7 +123,7 @@ describe('Instance Identity (type-derived)', () => {
       const field2 = b.intrinsic('normalizedIndex', type);
       const zipped = b.kernelZip([field1, field2], { kind: 'opcode', opcode: OpCode.Add }, type);
 
-      const expr = b.getFieldExprs()[zipped as number];
+      const expr = b.getValueExprs()[zipped as number];
       expect(requireManyInstance(expr.type).instanceId).toBe(instance);
     });
 
@@ -137,7 +137,7 @@ describe('Instance Identity (type-derived)', () => {
       const broadcast = b.broadcast(sig, type);
       const zipped = b.kernelZip([intrinsic, broadcast], { kind: 'opcode', opcode: OpCode.Add }, type);
 
-      const expr = b.getFieldExprs()[zipped as number];
+      const expr = b.getValueExprs()[zipped as number];
       expect(requireManyInstance(expr.type).instanceId).toBe(instance);
     });
 
@@ -151,7 +151,7 @@ describe('Instance Identity (type-derived)', () => {
       const zipped = b.kernelZip([field1, field2], { kind: 'opcode', opcode: OpCode.Add }, type);
       const mapped = b.kernelMap(zipped, { kind: 'opcode', opcode: OpCode.Sin }, type);
 
-      const expr = b.getFieldExprs()[mapped as number];
+      const expr = b.getValueExprs()[mapped as number];
       expect(requireManyInstance(expr.type).instanceId).toBe(instance);
     });
   });
@@ -174,7 +174,7 @@ describe('Instance Identity (type-derived)', () => {
         vec2Type
       );
 
-      const expr = b.getFieldExprs()[layoutField as number];
+      const expr = b.getValueExprs()[layoutField as number];
       expect(requireManyInstance(expr.type).instanceId).toBe(instance);
     });
   });
@@ -200,7 +200,7 @@ describe('Instance Identity (type-derived)', () => {
       const field = b.intrinsic('index', type);
 
       // Extract instance from field expression type
-      const expr = b.getFieldExprs()[field as number];
+      const expr = b.getValueExprs()[field as number];
       const extractedRef = requireManyInstance(expr.type);
 
       // The extracted instance ID must exist in the builder's instances map

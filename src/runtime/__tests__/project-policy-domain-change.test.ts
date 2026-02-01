@@ -57,8 +57,8 @@ function createTestRuntimeState(): RuntimeState {
     events: new Map(),
     cache: {
       frameId: 0,
-      sigValues: new Float64Array(100),
-      sigStamps: new Uint32Array(100),
+      values: new Float64Array(100),
+      stamps: new Uint32Array(100),
       fieldBuffers: new Map(),
       fieldStamps: new Map(),
       valueExprValues: new Float64Array(0),

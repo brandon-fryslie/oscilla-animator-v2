@@ -56,7 +56,7 @@ function compileAndRun(patchFn: (b: PatchBuilder) => void, frames: number[] = [1
     sizes.f64,
     schedule.stateSlotCount ?? 0,
     schedule.eventSlotCount ?? 0,
-    schedule.eventExprCount ?? 0
+    schedule.eventCount ?? 0
   );
   const arena = getTestArena();
 

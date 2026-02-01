@@ -190,11 +190,11 @@ export interface FrameCache {
   /** Current frame ID (monotonic, starts at 0) */
   frameId: number;
 
-  /** Cached signal values (indexed by SigExprId) */
-  sigValues: Float64Array;
+  /** Legacy cached signal values (indexed by legacy ValueExprId) */
+  values: Float64Array;
 
-  /** Frame stamps for signal cache validation */
-  sigStamps: Uint32Array;
+  /** Frame stamps for legacy signal cache validation */
+  stamps: Uint32Array;
 
   /** Cached field buffers (nested Map: fieldId -> instanceId -> buffer) */
   fieldBuffers: Map<number, Map<number, ArrayBufferView>>;
@@ -227,14 +227,14 @@ export interface FrameCache {
  * Create a FrameCache
  */
 export function createFrameCache(
-  maxSigExprs: number = 1000,
-  maxFieldExprs: number = 1000,
+  maxLegacyExprs: number = 1000,
+  maxLegacyFieldExprs: number = 1000,
   maxValueExprs: number = 0
 ): FrameCache {
   return {
     frameId: 1, // Start at 1 so initial sigStamps[n]=0 don't match
-    sigValues: new Float64Array(maxSigExprs),
-    sigStamps: new Uint32Array(maxSigExprs),
+    values: new Float64Array(maxLegacyExprs),
+    stamps: new Uint32Array(maxLegacyExprs),
     fieldBuffers: new Map(),
     fieldStamps: new Map(),
     valueExprValues: new Float64Array(maxValueExprs),
@@ -502,7 +502,7 @@ export interface ProgramState {
   eventScalars: Uint8Array;
 
   /**
-   * Previous predicate values for wrap edge detection (indexed by EventExprId).
+   * Previous predicate values for wrap edge detection (indexed by ValueExprId).
    * Used by legacy EventEvaluator during migration.
    */
   eventPrevPredicate: Uint8Array;
@@ -552,7 +552,7 @@ export interface RuntimeState {
   eventScalars: Uint8Array;
 
   /**
-   * Previous predicate values for wrap edge detection (indexed by EventExprId).
+   * Previous predicate values for wrap edge detection (indexed by ValueExprId).
    * Used by legacy EventEvaluator during migration.
    */
   eventPrevPredicate: Uint8Array;

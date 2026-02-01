@@ -38,10 +38,10 @@ import { evaluateValueExprSignal } from './ValueExprSignalEvaluator';
  * This should never happen with valid IR (compiler must prevent cycles),
  * but we detect it at runtime as a safety measure.
  */
-export class CycleInEventExprError extends Error {
+export class CycleInEventEvalError extends Error {
   constructor(veId: ValueExprId) {
     super(`Cycle detected in event expression: ValueExprId=${veId}`);
-    this.name = 'CycleInEventExprError';
+    this.name = 'CycleInEventEvalError';
   }
 }
 
@@ -76,7 +76,7 @@ export function evaluateValueExprEvent(
 
   // Check for cycle
   if (state.eventCycleDetection[veId as number] === 1) {
-    throw new CycleInEventExprError(veId);
+    throw new CycleInEventEvalError(veId);
   }
 
   // Mark as visiting

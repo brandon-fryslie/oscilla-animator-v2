@@ -111,7 +111,7 @@ export interface ScheduleIR {
   readonly eventSlotCount: number;
 
   /** Number of event expressions (for sizing eventPrevPredicate Uint8Array) */
-  readonly eventExprCount: number;
+  readonly eventCount: number;
 }
 
 /**
@@ -229,13 +229,13 @@ interface RenderTargetInfo {
  * Collect render target info from render blocks.
  * Instance is inferred from the position field, not grabbed blindly.
  */
-function isEventExpr(id: ValueExprId, valueExprs: readonly ValueExpr[]): boolean {
+function isEventExtent(id: ValueExprId, valueExprs: readonly ValueExpr[]): boolean {
   const expr = valueExprs[id as number];
   // New type system: treat explicit ValueExpr kind 'event' as event-extent.
   return !!expr && expr.kind === 'event';
 }
 
-function isFieldExpr(id: ValueExprId, valueExprs: readonly ValueExpr[]): boolean {
+function isFieldExtent(id: ValueExprId, valueExprs: readonly ValueExpr[]): boolean {
   const expr = valueExprs[id as number];
   if (!expr) return false;
   if (expr.kind === 'event') return false;
@@ -255,7 +255,7 @@ function isSignalExpr(id: ValueExprId, valueExprs: readonly ValueExpr[]): boolea
   if (expr.kind === 'event') return false;
 
   // If it isn't a field and isn't an event, treat it as signal-extent.
-  return !isFieldExpr(id, valueExprs);
+  return !isFieldExtent(id, valueExprs);
 }
 
 function asExprValueRef(ref: ValueRefPacked | undefined): { id: ValueExprId; stride: number } | undefined {
@@ -298,8 +298,8 @@ function collectRenderTargets(
     }
 
     // Ensure pos/color are fields
-    if (!isFieldExpr(pos.id, valueExprs)) continue;
-    if (!isFieldExpr(color.id, valueExprs)) continue;
+    if (!isFieldExtent(pos.id, valueExprs)) continue;
+    if (!isFieldExtent(color.id, valueExprs)) continue;
 
     // Infer instance from position field (not first instance!)
     const instanceId = inferFieldInstanceFromExprs(pos.id, valueExprs);
@@ -312,7 +312,7 @@ function collectRenderTargets(
       ? { k: 'sig' as const, id: scaleExpr.id }
       : undefined;
 
-    const shape = shapeExpr && isFieldExpr(shapeExpr.id, valueExprs)
+    const shape = shapeExpr && isFieldExtent(shapeExpr.id, valueExprs)
       ? { k: 'field' as const, id: shapeExpr.id, stride: shapeExpr.stride }
       : shapeExpr && isSignalExpr(shapeExpr.id, valueExprs)
         ? { k: 'sig' as const, id: shapeExpr.id }
@@ -364,7 +364,7 @@ function resolveShapeInfo(
   | undefined {
   const expr = valueExprs[sigId as number];
   if (!expr) return undefined;
-  if (isEventExpr(sigId, valueExprs)) return undefined;
+  if (isEventExtent(sigId, valueExprs)) return undefined;
 
   if (expr.kind === 'shapeRef') {
     // shapeRef field names are owned by the ValueExpr IR. Do not reintroduce legacy tags.
@@ -720,7 +720,7 @@ export function pass7Schedule(
 
   // Get event counts for runtime allocation
   const eventSlotCount = unlinkedIR.builder.getEventSlotCount();
-  const eventExprCount = unlinkedIR.builder.getEventExprs().length;
+  const eventCount = unlinkedIR.builder.getValueExprs().filter(e => e.kind === 'event').length;
 
   return {
     timeModel,
@@ -730,7 +730,7 @@ export function pass7Schedule(
     stateSlots,
     stateMappings,
     eventSlotCount,
-    eventExprCount,
+    eventCount,
   };
 }
 

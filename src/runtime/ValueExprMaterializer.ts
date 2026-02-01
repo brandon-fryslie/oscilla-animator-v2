@@ -315,7 +315,7 @@ function fillIntrinsicProperty(
  * Fill buffer from placement intrinsic (WI-3)
  *
  * Produces placement field buffers (uv/rank/seed) using PlacementBasis system.
- * Matches legacy Materializer.ts:419-447 behavior for FieldExprPlacement.
+ * Matches legacy Materializer.ts:419-447 behavior for intrinsic placement field.
  */
 function fillIntrinsicPlacement(
   expr: Extract<ValueExprIntrinsic, { intrinsicKind: 'placement' }>,

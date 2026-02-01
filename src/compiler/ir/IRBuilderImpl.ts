@@ -3,9 +3,6 @@
  *
  * Concrete implementation of the IRBuilder interface.
  * Stores ALL expressions in a single valueExprs: ValueExpr[] table.
- *
- * MIGRATION (2026-01-31): Unified from three separate arrays (sigExprs, fieldExprs, eventExprs)
- * to a single valueExprs array. All methods return ValueExprId indices into this table.
  */
 
 import type { CanonicalType, ConstValue } from '../../core/canonical-types';
@@ -419,12 +416,6 @@ export class IRBuilderImpl implements IRBuilder {
   getValueExprs(): readonly ValueExpr[] {
     return this.valueExprs;
   }
-
-  // Legacy accessors - return the unified array (types are aliased)
-  getSigExpr(id: ValueExprId): ValueExpr | undefined { return this.valueExprs[id as number]; }
-  getSigExprs(): readonly ValueExpr[] { return this.valueExprs; }
-  getFieldExprs(): readonly ValueExpr[] { return this.valueExprs; }
-  getEventExprs(): readonly ValueExpr[] { return this.valueExprs; }
 
   getSigSlots(): ReadonlyMap<number, ValueSlot> { return this.sigSlots; }
   getFieldSlots(): ReadonlyMap<number, ValueSlot> { return this.fieldSlots; }

@@ -16,7 +16,7 @@ describe('State Slot Accessors', () => {
       stateSlots: [],
       stateMappings,
       eventSlotCount: 0,
-      eventExprCount: 0
+      eventCount: 0
     };
   }
 

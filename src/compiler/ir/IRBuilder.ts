@@ -3,10 +3,6 @@
  *
  * Builder pattern for constructing IR expressions.
  * All methods return ValueExprId — the ONE index type for the unified valueExprs table.
- *
- * MIGRATION (2026-01-31): Legacy method names (sigConst, fieldZip, etc.) are retained
- * as aliases for backward compatibility during block migration. The canonical names
- * are the new unified ones (constant, kernelZip, etc.).
  */
 
 import type { CanonicalType, ConstValue } from '../../core/canonical-types';
@@ -208,15 +204,6 @@ export interface IRBuilder {
 
   /** Get all value expressions. */
   getValueExprs(): readonly ValueExpr[];
-
-  /** @deprecated Use getValueExpr() */
-  getSigExpr(id: ValueExprId): unknown;
-  /** @deprecated Use getValueExprs() */
-  getSigExprs(): readonly unknown[];
-  /** @deprecated Use getValueExprs() */
-  getFieldExprs(): readonly unknown[];
-  /** @deprecated Use getValueExprs() */
-  getEventExprs(): readonly unknown[];
 
   getSigSlots(): ReadonlyMap<number, ValueSlot>;
   getEventSlots(): ReadonlyMap<ValueExprId, EventSlotId>;

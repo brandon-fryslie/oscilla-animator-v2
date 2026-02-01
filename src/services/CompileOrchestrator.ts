@@ -112,7 +112,7 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
   const newStateSlotCount = newSchedule?.stateSlotCount ?? 0;
   const newStateMappings = newSchedule?.stateMappings ?? [];
   const newEventSlotCount = (newSchedule as { eventSlotCount?: number })?.eventSlotCount ?? 0;
-  const newEventExprCount = (newSchedule as { eventExprCount?: number })?.eventExprCount ?? 0;
+  const newEventCount = (newSchedule as { eventCount?: number })?.eventCount ?? 0;
   const newValueExprCount = program.valueExprs?.nodes.length ?? 0;
 
   // For recompile: detect domain changes
@@ -136,7 +136,7 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
     newSlotCount,
     newStateSlotCount,
     newEventSlotCount,
-    newEventExprCount,
+    newEventCount,
     newValueExprCount
   );
 

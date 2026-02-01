@@ -94,7 +94,7 @@ registerBlock({
 
     // Create field expressions
     // 1. Elements field - broadcasts the input signal across the array
-    // NOTE: elementInput is required - FieldExprArray (identity) has been removed per spec
+    // NOTE: elementInput is required - identity field expression has been removed per spec
     // until it has concrete backing store, lifetime rules, and runtime storage contract
     if (!elementInput || !('type' in elementInput && requireInst(elementInput.type.extent.cardinality, 'cardinality').kind === 'one')) {
       throw new Error('Array block requires an element signal input');

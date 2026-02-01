@@ -248,8 +248,8 @@ export function executeFrame(
           state.tap?.recordSlotValue?.(slot, value);
 
           // Cache (indexed by expr id). Under Option B these ids are ValueExprIds.
-          state.cache.sigValues[step.expr as number] = value;
-          state.cache.sigStamps[step.expr as number] = state.cache.frameId;
+          state.cache.values[step.expr as number] = value;
+          state.cache.stamps[step.expr as number] = state.cache.frameId;
         } else {
           throw new Error(`evalSig: unsupported storage type '${storage}'`);
         }

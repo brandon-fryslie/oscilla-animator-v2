@@ -136,8 +136,8 @@ export type LaneCoupling = 'laneLocal' | 'laneCoupled';
 /**
  * How Signal+Field mixing is handled.
  *
- * - 'allowZipSig': Signals may be consumed alongside fields via FieldExprZipSig
- * - 'requireBroadcastExpr': Compiler must materialize FieldExprBroadcast explicitly
+ * - 'allowZipSig': Signals may be consumed alongside fields via KernelZipSig (field + signals)
+ * - 'requireBroadcastExpr': Compiler must materialize Broadcast kernel explicitly
  * - 'disallowSignalMix': Only all-field or all-signal instantiations allowed
  */
 export type BroadcastPolicy = 'allowZipSig' | 'requireBroadcastExpr' | 'disallowSignalMix';

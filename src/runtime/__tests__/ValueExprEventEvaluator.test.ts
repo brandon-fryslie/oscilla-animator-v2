@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { evaluateValueExprEvent, CycleInEventExprError } from '../ValueExprEventEvaluator';
+import { evaluateValueExprEvent, CycleInEventEvalError } from '../ValueExprEventEvaluator';
 import type { ValueExpr } from '../../compiler/ir/value-expr';
 import type { RuntimeState } from '../RuntimeState';
 import { createRuntimeState } from '../RuntimeState';
@@ -410,7 +410,7 @@ describe('ValueExprEventEvaluator', () => {
   });
 
   describe('cycle detection', () => {
-    it('throws CycleInEventExprError on cyclic combine', () => {
+    it('throws CycleInEventEvalError on cyclic combine', () => {
       // This is a degenerate case that should never happen with valid IR,
       // but we test the safety mechanism.
       const nodes: ValueExpr[] = [
@@ -437,7 +437,7 @@ describe('ValueExprEventEvaluator', () => {
       // Should throw cycle error
       expect(() => {
         evaluateValueExprEvent(valueExprId(0), { nodes }, state, program);
-      }).toThrow(CycleInEventExprError);
+      }).toThrow(CycleInEventEvalError);
     });
 
     it('clears visiting flag after successful evaluation', () => {
