@@ -24,7 +24,7 @@ import type { ValueRefPacked } from '../ir/lowerTypes';
 import type { TopologyId } from '../../shapes/types';
 import { getBlockDefinition } from '../../blocks/registry';
 import { getPolicyForSemantic } from '../../runtime/ContinuityDefaults';
-import { requireManyInstance } from '../../core/canonical-types';
+import { requireManyInstance, strideOf } from '../../core/canonical-types';
 
 // =============================================================================
 // Schedule IR Types
@@ -229,6 +229,47 @@ interface RenderTargetInfo {
  * Collect render target info from render blocks.
  * Instance is inferred from the position field, not grabbed blindly.
  */
+function isEventExpr(id: ValueExprId, valueExprs: readonly ValueExpr[]): boolean {
+  const expr = valueExprs[id as number];
+  // New type system: treat explicit ValueExpr kind 'event' as event-extent.
+  return !!expr && expr.kind === 'event';
+}
+
+function isFieldExpr(id: ValueExprId, valueExprs: readonly ValueExpr[]): boolean {
+  const expr = valueExprs[id as number];
+  if (!expr) return false;
+  if (expr.kind === 'event') return false;
+
+  // Field-extent is defined by having a Many-instance extent.
+  try {
+    requireManyInstance(expr.type);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isSignalExpr(id: ValueExprId, valueExprs: readonly ValueExpr[]): boolean {
+  const expr = valueExprs[id as number];
+  if (!expr) return false;
+  if (expr.kind === 'event') return false;
+
+  // If it isn't a field and isn't an event, treat it as signal-extent.
+  return !isFieldExpr(id, valueExprs);
+}
+
+function asExprValueRef(ref: ValueRefPacked | undefined): { id: ValueExprId; stride: number } | undefined {
+  if (!ref) return undefined;
+  // ValueRefPacked may be scalar/instance/etc. Only expr-backed refs carry id+stride.
+  if (!('id' in ref)) return undefined;
+  if (!('stride' in ref)) return undefined;
+
+  const id = (ref as any).id as ValueExprId;
+  const stride = (ref as any).stride;
+  if (typeof stride !== 'number') return undefined;
+  return { id, stride };
+}
+
 function collectRenderTargets(
   blocks: readonly Block[],
   edges: readonly NormalizedEdge[],
@@ -246,33 +287,41 @@ function collectRenderTargets(
     const scaleRef = getInputRef(index, 'scale', edges, blockOutputs);
     const shapeRef = getInputRef(index, 'shape', edges, blockOutputs);
 
-    // Validate required inputs (position and color)
-    // USES illegal value: 'k'
-    // if (posRef?.k !== 'field') {
-    //   continue;
-    // }
-    // if (colorRef?.k !== 'field') {
-    //   continue;
-    // }
+    const pos = asExprValueRef(posRef);
+    const color = asExprValueRef(colorRef);
+    const scaleExpr = asExprValueRef(scaleRef);
+    const shapeExpr = asExprValueRef(shapeRef);
+
+    // Hard check that pos/color exist and are expr-backed
+    if (!pos || !color) {
+      continue;
+    }
+
+    // Ensure pos/color are fields
+    if (!isFieldExpr(pos.id, valueExprs)) continue;
+    if (!isFieldExpr(color.id, valueExprs)) continue;
 
     // Infer instance from position field (not first instance!)
-    const instanceId = inferFieldInstanceFromExprs(posRef.id, valueExprs);
+    const instanceId = inferFieldInstanceFromExprs(pos.id, valueExprs);
     if (!instanceId) {
       continue;
     }
 
     // Build optional scale (uniform signal only - no per-particle scale)
-    const scale = scaleRef?.k === 'sig' ? { k: 'sig' as const, id: scaleRef.id }
-               : undefined;
+    const scale = scaleExpr && isSignalExpr(scaleExpr.id, valueExprs)
+      ? { k: 'sig' as const, id: scaleExpr.id }
+      : undefined;
 
-    const shape = shapeRef?.k === 'field' ? { k: 'field' as const, id: shapeRef.id, stride: shapeRef.stride }
-                : shapeRef?.k === 'sig' ? { k: 'sig' as const, id: shapeRef.id }
-                : undefined;
+    const shape = shapeExpr && isFieldExpr(shapeExpr.id, valueExprs)
+      ? { k: 'field' as const, id: shapeExpr.id, stride: shapeExpr.stride }
+      : shapeExpr && isSignalExpr(shapeExpr.id, valueExprs)
+        ? { k: 'sig' as const, id: shapeExpr.id }
+        : undefined;
 
     targets.push({
       instanceId,
-      position: { id: posRef.id, stride: posRef.stride },
-      color: { id: colorRef.id, stride: colorRef.stride },
+      position: { id: pos.id, stride: pos.stride },
+      color: { id: color.id, stride: color.stride },
       scale,
       shape,
     });
@@ -315,12 +364,28 @@ function resolveShapeInfo(
   | undefined {
   const expr = valueExprs[sigId as number];
   if (!expr) return undefined;
+  if (isEventExpr(sigId, valueExprs)) return undefined;
 
   if (expr.kind === 'shapeRef') {
+    // shapeRef field names are owned by the ValueExpr IR. Do not reintroduce legacy tags.
+    const topologyId = (expr as any).topologyId as TopologyId;
+
+    // Prefer the canonical field name; fall back only if the IR uses an older field name.
+    const paramSignals = ((expr as any).paramSignals ?? (expr as any).paramArgs ?? []) as readonly ValueExprId[];
+
+    const cpId = (expr as any).controlPointField as ValueExprId | undefined;
+    const controlPointField = cpId !== undefined
+      ? (() => {
+          const cpExpr = valueExprs[cpId as number];
+          const stride = cpExpr ? strideOf(cpExpr.type.payload) : 1;
+          return { id: cpId, stride };
+        })()
+      : undefined;
+
     return {
-      topologyId: expr.topologyId,
-      paramSignals: expr.paramSignals,
-      controlPointField: expr.controlPointField,
+      topologyId,
+      paramSignals,
+      controlPointField,
     };
   }
 

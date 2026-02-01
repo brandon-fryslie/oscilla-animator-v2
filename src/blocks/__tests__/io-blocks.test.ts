@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../core/canonical-types';
+import { FLOAT, VEC2 } from '../../core/canonical-types';
 import {
   getBlockDefinition,
   requireBlockDef,

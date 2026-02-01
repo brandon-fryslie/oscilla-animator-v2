@@ -568,6 +568,18 @@ export function requireManyInstance(type: CanonicalType): InstanceRef {
   return card.instance;
 }
 
+export function isMany(c: CardinalityValue): c is { readonly kind: 'many'; readonly instance: InstanceRef } {
+  return c.kind === 'many';
+}
+
+export function isOne(c: CardinalityValue): c is { readonly kind: 'one' } {
+  return c.kind === 'one';
+}
+
+export function isZero(c: CardinalityValue): c is { readonly kind: 'zero' } {
+  return c.kind === 'zero';
+}
+
 /**
  * Return a copy of the type with its cardinality instance replaced.
  * Only valid for types that already have many cardinality.

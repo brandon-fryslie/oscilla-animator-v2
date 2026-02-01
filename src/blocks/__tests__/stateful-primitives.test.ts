@@ -12,9 +12,6 @@ import { executeFrame } from '../../runtime/ScheduleExecutor';
 import { createSessionState, createRuntimeStateFromSession, createRuntimeState } from '../../runtime';
 import { getTestArena } from '../../runtime/__tests__/test-arena-helper';
 import { evaluateValueExprSignal } from '../../runtime/ValueExprSignalEvaluator';
-import type { SigExprId } from '../../types';
-import type { StepEvalSig, SigExpr } from '../../compiler/ir/types';
-import type { CompiledProgramIR } from '../../compiler/ir/program';
 
 /**
  * Helper to find TestSignal output offsets.

@@ -21,7 +21,7 @@ import type { ScheduleIR } from './backend/schedule-program';
 import type { AcyclicOrLegalGraph } from './ir/patches';
 import { convertCompileErrorsToDiagnostics } from './diagnosticConversion';
 import type { EventHub } from '../events/EventHub';
-import { canonicalType, requireManyInstance, strideOf } from '../core/canonical-types';
+import {canonicalType, isMany, requireManyInstance, strideOf} from '../core/canonical-types';
 import type { ValueExpr, ValueExprId } from './ir/value-expr';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../core/canonical-types';
 // debugService import removed for strict compiler isolation (One Source of Truth)
@@ -486,12 +486,12 @@ function convertLinkedIRToProgram(
   if (unlinkedIR.blockOutputs) {
     for (const [, outputs] of unlinkedIR.blockOutputs.entries()) {
       for (const [, ref] of outputs.entries()) {
-        if (ref.k === 'field') {
-          const instanceId = inferFieldInstanceFromValueExprs(ref.id as unknown as ValueExprId, valueExprNodes);
-          if (instanceId) {
-            fieldSlotRegistry.set(ref.slot, { fieldId: ref.id, instanceId });
-            fieldSlotSet.add(ref.slot as number);
-          }
+        // Treat ref.id as ValueExprId and infer field instance
+        const valueId = ref.id as unknown as ValueExprId;
+        const instanceId = inferFieldInstanceFromValueExprs(valueId, valueExprNodes);
+        if (instanceId) {
+          fieldSlotRegistry.set(ref.slot, { fieldId: valueId, instanceId });
+          fieldSlotSet.add(ref.slot as number);
         }
       }
     }
@@ -513,7 +513,7 @@ function convertLinkedIRToProgram(
 
   // Build slotMeta entries for all allocated slots
   // Slots are indexed from 0, so iterate through all slot IDs
-  for (let slotId = 0; slotId < builder.getSlotCount?.() || 0; slotId++) {
+  for (let slotId = 0; slotId < (builder.getSlotCount?.() || 0); slotId++) {
     const slot = slotId as ValueSlot;
     const slotInfo = slotTypes.get(slot);
     const type = slotInfo?.type || canonicalType(FLOAT); // Default to float if no type info
@@ -604,28 +604,35 @@ function convertLinkedIRToProgram(
 
     for (const [blockIndex, outputs] of unlinkedIR.blockOutputs.entries()) {
       for (const [portId, ref] of outputs.entries()) {
-        // Only map signal and field slots to debug index
-        // Events use separate storage (eventScalars Uint8Array) and don't have debug support yet
-        if (ref.k === 'sig' || ref.k === 'field') {
-          const slot = ref.slot;
+        // Only map slot-backed outputs (signals/fields) to debug index.
+        // Events (discrete temporality) don't have debug slot support yet.
+        const valueId = ref.id as unknown as ValueExprId;
+        const expr = valueExprNodes[valueId as unknown as number];
+        if (!expr) continue;
 
-          // Generate stable port ID
-          // We don't have a PortId type factory exposed here easily, so cast
-          const portIndex = portCounter++;
-
-          // Record slot->port mapping
-          slotToPort.set(slot, portIndex);
-
-          // Add port binding info
-          ports.push({
-            port: portIndex,
-            block: blockIndex,
-            portName: portId,
-            direction: 'out',
-            domain: ref.k === 'field' ? 'field' : 'signal',
-            role: 'userWire',
-          });
+        const tempAxis = expr.type.extent.temporality;
+        if (tempAxis.kind === 'inst' && tempAxis.value.kind === 'discrete') {
+          continue;
         }
+
+        const domain = inferFieldInstanceFromValueExprs(valueId, valueExprNodes) ? 'field' : 'signal';
+        const slot = ref.slot;
+
+        // Generate stable port ID
+        const portIndex = portCounter++;
+
+        // Record slot->port mapping
+        slotToPort.set(slot, portIndex);
+
+        // Add port binding info
+        ports.push({
+          port: portIndex,
+          block: blockIndex,
+          portName: portId,
+          direction: 'out',
+          domain,
+          role: 'userWire',
+        });
       }
     }
   }
@@ -675,7 +682,15 @@ function inferFieldInstanceFromValueExprs(
   if (!expr) return undefined;
 
   // Only field-extent expressions have a meaningful instance.
-  if (expr.type.extent.cardinality !== 'many') return undefined;
+  // In the compiler pipeline, CanonicalType axes must be instantiated.
+  const cardAxis = expr.type.extent.cardinality;
+  if (cardAxis.kind !== 'inst') {
+    throw new Error(
+      `E_UNINSTANTIATED_CARDINALITY: expected instantiated cardinality for field ValueExprId=${Number(fieldId)}`
+    );
+  }
+  if (cardAxis.value.kind !== 'many') return undefined;
 
+  // Canonical: derive instance via CanonicalType helper (also enforces invariants)
   return requireManyInstance(expr.type).instanceId;
 }
