@@ -365,6 +365,20 @@ export class KernelRegistry {
   }
 
   /**
+   * List all registered kernels (for testing/validation).
+   *
+   * Returns entries with id, abi, handle, and metadata.
+   */
+  listAll(): ReadonlyArray<{ id: KernelId; abi: KernelABI; handle: KernelHandle; meta: KernelMeta }> {
+    const result: { id: KernelId; abi: KernelABI; handle: KernelHandle; meta: KernelMeta }[] = [];
+    for (const [, entry] of this.lookupMap) {
+      const { handle } = this.resolve(entry.id);
+      result.push({ id: entry.id, abi: entry.abi, handle, meta: entry.meta });
+    }
+    return result;
+  }
+
+  /**
    * Validate kernel metadata.
    */
   private validateMeta(meta: KernelMeta, abi: KernelABI): void {

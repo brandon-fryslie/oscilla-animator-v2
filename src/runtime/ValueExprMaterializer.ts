@@ -448,7 +448,7 @@ function fillKernel(
     case 'map': {
       // Materialize input, apply fn per-lane
       const input = materializeValueExpr(expr.input, table, instanceId, count, state, program, pool) as Float32Array;
-      applyMap(buf, input, expr.fn, count, stride);
+      applyMap(buf, input, expr.fn, count, stride, program);
       break;
     }
 
@@ -457,7 +457,7 @@ function fillKernel(
       const inputs = expr.inputs.map(id =>
         materializeValueExpr(id, table, instanceId, count, state, program, pool) as Float32Array
       );
-      applyZip(buf, inputs, expr.fn, count, stride, instanceId);
+      applyZip(buf, inputs, expr.fn, count, stride, instanceId, program);
       break;
     }
 
@@ -465,7 +465,7 @@ function fillKernel(
       // WI-4: ZipSig - materialize field input, evaluate signal inputs, apply fn per-lane
       const fieldInput = materializeValueExpr(expr.field, table, instanceId, count, state, program, pool) as Float32Array;
       const sigValues = expr.signals.map(id => evaluateValueExprSignal(id, table.nodes, state));
-      applyZipSig(buf, fieldInput, sigValues, expr.fn, count, stride, instanceId);
+      applyZipSig(buf, fieldInput, sigValues, expr.fn, count, stride, instanceId, program);
       break;
     }
 
@@ -506,7 +506,8 @@ function applyMap(
   input: Float32Array,
   fn: PureFn,
   count: number,
-  stride: number
+  stride: number,
+  program: CompiledProgramIR
 ): void {
   if (fn.kind === 'opcode') {
     // Per-lane opcode application
@@ -517,11 +518,21 @@ function applyMap(
         out[idx] = applyOpcode(op, [input[idx]]);
       }
     }
+  } else if (fn.kind === 'kernelResolved') {
+    if (fn.abi === 'scalar') {
+      for (let i = 0; i < count; i++) {
+        for (let c = 0; c < stride; c++) {
+          const idx = i * stride + c;
+          out[idx] = program.kernelRegistry.callScalar(fn.handle, [input[idx]]);
+        }
+      }
+    } else {
+      throw new Error('Map does not support lane kernels (use zip or zipSig)');
+    }
   } else if (fn.kind === 'kernel') {
-    // Kernels are not allowed in map (use zip or zipSig)
     throw new Error(
-      `Map only supports opcodes, not kernels. ` +
-      `Kernel '${fn.name}' should use zip or zipSig instead.`
+      `Map only supports opcodes, not unresolved kernels. ` +
+      `Kernel '${fn.name}' should have been resolved at program load.`
     );
   } else {
     throw new Error(`Map function kind ${fn.kind} not implemented`);
@@ -539,7 +550,8 @@ function applyZip(
   fn: PureFn,
   count: number,
   stride: number,
-  instanceId: InstanceId
+  instanceId: InstanceId,
+  program: CompiledProgramIR
 ): void {
   if (fn.kind === 'opcode') {
     // Per-lane opcode application
@@ -551,17 +563,33 @@ function applyZip(
         out[idx] = applyOpcode(op, values);
       }
     }
+  } else if (fn.kind === 'kernelResolved') {
+    const registry = program.kernelRegistry;
+    if (fn.abi === 'scalar') {
+      // Scalar kernel: call per lane per component
+      for (let i = 0; i < count; i++) {
+        for (let c = 0; c < stride; c++) {
+          const idx = i * stride + c;
+          const values = inputs.map(buf => buf[idx]);
+          out[idx] = registry.callScalar(fn.handle, values);
+        }
+      }
+    } else {
+      // Lane kernel: call per lane, writes outStride components
+      const args: number[] = [];
+      for (let i = 0; i < count; i++) {
+        args.length = 0;
+        for (const buf of inputs) {
+          args.push(buf[i]); // Each input is stride-1 scalar
+        }
+        registry.callLane(fn.handle, out, i * stride, args);
+      }
+    }
   } else if (fn.kind === 'kernel') {
-    // Field kernels operate on entire buffers
-    // Cast to ArrayBufferView for applyFieldKernel signature
+    // Legacy string-dispatch (transitional — will be removed)
     const inputViews = inputs.map(buf => buf as ArrayBufferView);
-
-    // Create a dummy CanonicalType for applyFieldKernel
-    // The type is only used for validation, not for runtime behavior
-    // We construct it with proper axis structure per TYPE-SYSTEM-INVARIANTS
     const dummyInstance = instanceRef('_dummy', instanceId as any as string);
     const dummyType = canonicalField(FLOAT, unitScalar(), dummyInstance);
-
     applyFieldKernel(out, inputViews, fn.name, count, dummyType);
   } else {
     throw new Error(`Zip function kind ${fn.kind} not implemented`);
@@ -581,7 +609,8 @@ function applyZipSig(
   fn: PureFn,
   count: number,
   stride: number,
-  instanceId: InstanceId
+  instanceId: InstanceId,
+  program: CompiledProgramIR
 ): void {
   if (fn.kind === 'opcode') {
     // Per-lane opcode application with field + signals
@@ -593,11 +622,25 @@ function applyZipSig(
         out[idx] = applyOpcode(op, values);
       }
     }
+  } else if (fn.kind === 'kernelResolved') {
+    const registry = program.kernelRegistry;
+    if (fn.abi === 'scalar') {
+      for (let i = 0; i < count; i++) {
+        for (let c = 0; c < stride; c++) {
+          const idx = i * stride + c;
+          out[idx] = registry.callScalar(fn.handle, [fieldInput[idx], ...sigValues]);
+        }
+      }
+    } else {
+      // Lane kernel with field + signal inputs
+      for (let i = 0; i < count; i++) {
+        registry.callLane(fn.handle, out, i * stride, [fieldInput[i], ...sigValues]);
+      }
+    }
   } else if (fn.kind === 'kernel') {
-    // Field kernel with signal inputs
+    // Legacy string-dispatch (transitional — will be removed)
     const dummyInstance = instanceRef('_dummy', instanceId as any as string);
     const dummyType = canonicalField(FLOAT, unitScalar(), dummyInstance);
-
     applyFieldKernelZipSig(out, fieldInput, sigValues, fn.name, count, dummyType);
   } else {
     throw new Error(`ZipSig function kind ${fn.kind} not implemented`);
