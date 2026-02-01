@@ -6,6 +6,7 @@
  */
 
 export { type PatchBuilder } from './types';
+export { patchSimple } from './simple';
 export { patchGoldenSpiral } from './golden-spiral';
 export { patchMouseSpiral } from './mouse-spiral';
 export { patchDomainTest } from './domain-test';
@@ -15,6 +16,7 @@ export { patchFeedbackSimple } from './feedback-simple';
 export { patchPathFieldDemo } from './path-field-demo';
 export { patchErrorIsolationDemo } from './error-isolation-demo';
 
+import { patchSimple } from './simple';
 import { patchGoldenSpiral } from './golden-spiral';
 import { patchMouseSpiral } from './mouse-spiral';
 import { patchDomainTest } from './domain-test';
@@ -26,6 +28,7 @@ import { patchErrorIsolationDemo } from './error-isolation-demo';
 import type { PatchBuilder } from './types';
 
 export const patches: { name: string; builder: PatchBuilder }[] = [
+  { name: 'Simple', builder: patchSimple },
   { name: 'Golden Spiral', builder: patchGoldenSpiral },
   { name: 'Mouse Spiral', builder: patchMouseSpiral },
   { name: 'Domain Test', builder: patchDomainTest },
@@ -37,4 +40,4 @@ export const patches: { name: string; builder: PatchBuilder }[] = [
   { name: 'Error Isolation Demo', builder: patchErrorIsolationDemo },
 ];
 
-export const DEFAULT_PATCH_INDEX = 0; // Golden Spiral
+export const DEFAULT_PATCH_INDEX = 0; // Simple

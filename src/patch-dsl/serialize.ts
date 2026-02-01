@@ -95,6 +95,24 @@ function buildBlockNameMap(patch: Patch): Map<BlockId, string> {
 }
 
 /**
+ * Convert a display name to a valid HCL identifier.
+ *
+ * Applies canonical normalization first, then strips any remaining non-ASCII
+ * or non-identifier characters (only allows a-z, 0-9, _, -).
+ *
+ * @param displayName - The display name
+ * @returns Valid HCL identifier (ASCII only, no special chars)
+ */
+function toIdentifier(displayName: string): string {
+  // First apply canonical normalization (lowercase, strip special chars, replace spaces)
+  const canonical = normalizeCanonicalName(displayName);
+
+  // Then strip any remaining non-identifier characters (only allow a-z, 0-9, _, -)
+  // This handles Unicode characters and any other edge cases
+  return canonical.replace(/[^a-z0-9_-]/g, '');
+}
+
+/**
  * Emit a single block.
  *
  * @param block - The block to emit
@@ -246,6 +264,9 @@ function emitLenses(_portId: string, lenses: readonly LensAttachment[], indent: 
 /**
  * Emit an edge (connection).
  *
+ * NOTE: Uses identifier-safe names (canonical + ASCII-only) for references, not display names.
+ * This ensures references work in the lexer even with Unicode/special chars in display names.
+ *
  * @param edge - The edge to emit
  * @param nameMap - Map from BlockId to display name
  * @param indent - Indentation level
@@ -253,12 +274,16 @@ function emitLenses(_portId: string, lenses: readonly LensAttachment[], indent: 
  */
 function emitEdge(edge: Edge, nameMap: Map<BlockId, string>, indent: number): string {
   const ind = '  '.repeat(indent);
-  const fromBlock = nameMap.get(edge.from.blockId as BlockId)!;
-  const toBlock = nameMap.get(edge.to.blockId as BlockId)!;
+  const fromBlockName = nameMap.get(edge.from.blockId as BlockId)!;
+  const toBlockName = nameMap.get(edge.to.blockId as BlockId)!;
+
+  // Convert display names to identifiers (canonical + ASCII-only, safe for lexer)
+  const fromIdent = toIdentifier(fromBlockName);
+  const toIdent = toIdentifier(toBlockName);
 
   let output = `${ind}connect {\n`;
-  output += `${ind}  from = ${fromBlock}.${edge.from.slotId}\n`;
-  output += `${ind}  to = ${toBlock}.${edge.to.slotId}\n`;
+  output += `${ind}  from = ${fromIdent}.${edge.from.slotId}\n`;
+  output += `${ind}  to = ${toIdent}.${edge.to.slotId}\n`;
 
   if (!edge.enabled) {
     output += `${ind}  enabled = false\n`;
