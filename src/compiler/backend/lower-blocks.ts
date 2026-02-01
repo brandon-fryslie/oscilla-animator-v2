@@ -8,11 +8,11 @@ import type { VarargConnection } from "../../graph/Patch";
 import type { IRBuilder } from "../ir/IRBuilder";
 import { IRBuilderImpl } from "../ir/IRBuilderImpl";
 import type { CompileError } from "../types";
-import { deriveKind, isExprRef, type ValueRefExpr } from "../ir/lowerTypes";
+import { isExprRef, type ValueRefExpr } from "../ir/lowerTypes";
 import type { InstanceId } from "../ir/Indices";
 import { getBlockDefinition, type LowerCtx, type LowerResult, hasLowerOutputsOnly } from "../../blocks/registry";
 import type { EventHub } from "../../events/EventHub";
-import { type CanonicalType, withInstance, instanceRef as makeInstanceRef } from "../../core/canonical-types";
+import { type CanonicalType, withInstance, instanceRef as makeInstanceRef, requireInst } from "../../core/canonical-types";
 import type { PortKey } from "../frontend/analyze-type-constraints";
 // Multi-Input Blocks Integration
 import {
@@ -477,19 +477,28 @@ function lowerBlockInstance(
       }
 
       // Register slot for signal/field/event outputs
-      // Derive kind from type (no stored discriminant)
+      // Check extent directly instead of using deriveKind
       if (isExprRef(ref)) {
-        const kind = deriveKind(ref.type);
-        if (kind === 'signal') {
-          if (ref.stride === 1) {
-            builder.registerSigSlot(ref.id, ref.slot);
+        const temp = requireInst(ref.type.extent.temporality, 'temporality');
+        const isEvent = temp.kind === 'discrete';
+
+        if (!isEvent) {
+          const card = requireInst(ref.type.extent.cardinality, 'cardinality');
+          const isField = card.kind === 'many';
+
+          if (isField) {
+            // Field — register field slot and slot type
+            builder.registerFieldSlot(ref.id, ref.slot);
+            builder.registerSlotType(ref.slot, ref.type);
+          } else {
+            // Signal — register sig slot (if stride=1) and slot type
+            if (ref.stride === 1) {
+              builder.registerSigSlot(ref.id, ref.slot);
+            }
+            builder.registerSlotType(ref.slot, ref.type);
           }
-          builder.registerSlotType(ref.slot, ref.type);
-        } else if (kind === 'field') {
-          builder.registerFieldSlot(ref.id, ref.slot);
-          builder.registerSlotType(ref.slot, ref.type);
         } else {
-          // Event — register slot type
+          // Event — register slot type only
           builder.registerSlotType(ref.slot, ref.type);
         }
       }
@@ -614,18 +623,28 @@ function lowerSCCTwoPass(
         if (partialResult.outputsById) {
           const outputRefs = new Map<string, ValueRefExpr>();
           for (const [portId, ref] of Object.entries(partialResult.outputsById)) {
-            // Register slot types
+            // Register slot types - check extent directly instead of using deriveKind
             if (isExprRef(ref)) {
-              const kind = deriveKind(ref.type);
-              if (kind === 'signal') {
-                if (ref.stride === 1) {
-                  builder.registerSigSlot(ref.id, ref.slot);
+              const temp = requireInst(ref.type.extent.temporality, 'temporality');
+              const isEvent = temp.kind === 'discrete';
+
+              if (!isEvent) {
+                const card = requireInst(ref.type.extent.cardinality, 'cardinality');
+                const isField = card.kind === 'many';
+
+                if (isField) {
+                  // Field — register field slot and slot type
+                  builder.registerFieldSlot(ref.id, ref.slot);
+                  builder.registerSlotType(ref.slot, ref.type);
+                } else {
+                  // Signal — register sig slot (if stride=1) and slot type
+                  if (ref.stride === 1) {
+                    builder.registerSigSlot(ref.id, ref.slot);
+                  }
+                  builder.registerSlotType(ref.slot, ref.type);
                 }
-                builder.registerSlotType(ref.slot, ref.type);
-              } else if (kind === 'field') {
-                builder.registerFieldSlot(ref.id, ref.slot);
-                builder.registerSlotType(ref.slot, ref.type);
               } else {
+                // Event — register slot type only
                 builder.registerSlotType(ref.slot, ref.type);
               }
             }
