@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import React from 'react';
 import { getValueRenderer, registerRenderer, type ValueRenderer } from './ValueRenderer';
 import { canonicalType, unitPhase01, unitNorm01 } from '../../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, SHAPE, CAMERA_PROJECTION } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, CAMERA_PROJECTION } from '../../core/canonical-types';
 import type { RendererSample } from './types';
 import { getDataAttr } from '../../__tests__/test-utils';
 import { testSignalType } from '../../__tests__/type-test-helpers';
@@ -63,9 +63,9 @@ describe('ValueRenderer registry', () => {
       expect(getDataAttr(el, 'renderer')).toBe('cat-numeric');
     });
 
-    it('SHAPE (aliased to FLOAT) resolves to payload-float renderer', () => {
-      // Per Q6: SHAPE === FLOAT, so it matches at tier 2 (payload-float)
-      const type = canonicalType(SHAPE);
+    it('FLOAT resolves to payload-float renderer', () => {
+      // FLOAT matches at tier 2 (payload-float)
+      const type = canonicalType(FLOAT);
       const renderer = getValueRenderer(type);
       const el = renderer.renderFull({ type: 'scalar', components: new Float32Array([0]), stride: 0 });
       expect(getDataAttr(el, 'renderer')).toBe('payload-float');

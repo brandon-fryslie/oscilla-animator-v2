@@ -6,7 +6,7 @@
 
 import { registerBlock } from '../registry';
 import { canonicalType, strideOf, floatConst, requireInst } from '../../core/canonical-types';
-import { FLOAT, SHAPE } from '../../core/canonical-types';
+import { FLOAT } from '../../core/canonical-types';
 import { TOPOLOGY_ID_RECT } from '../../shapes/registry';
 import { defaultSourceConst } from '../../types';
 
@@ -63,7 +63,7 @@ registerBlock({
     },
   },
   outputs: {
-    shape: { label: 'Shape', type: canonicalType(SHAPE) },
+    shape: { label: 'Shape', type: canonicalType(FLOAT) },
   },
   lower: ({ ctx, inputsById, config }) => {
     // Resolve width parameter
@@ -110,7 +110,7 @@ registerBlock({
     const shapeRefSig = ctx.b.shapeRef(
       TOPOLOGY_ID_RECT,
       [widthSig, heightSig, rotationSig, cornerRadiusSig],
-      canonicalType(SHAPE)
+      canonicalType(FLOAT)
     );
 
     const slot = ctx.b.allocSlot();

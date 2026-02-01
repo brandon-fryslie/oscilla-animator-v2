@@ -352,9 +352,20 @@ function gatherCardinalityConstraints(
 
       case 'transform':
       case 'fieldOnly': {
-        // Transform mode: output cardinality is 'many' with block-specific instance ref
-        // The instance ref is based on the block index to ensure uniqueness
-        // This is resolved in resolveInstanceRefs() before cardinality solving
+        // For fieldOnly/transform blocks with allowZipSig, generate a zipBroadcast
+        // constraint so the solver knows mixed one+many is allowed.
+        if (meta.broadcastPolicy === 'allowZipSig') {
+          const allPorts = [...concretePorts, ...variablePorts];
+          if (allPorts.length > 0) {
+            const varId = cardinalityVarId(`block:${blockIndex}`);
+            blockCardinalityVar.set(blockIndex, varId);
+            constraints.push({
+              kind: 'zipBroadcast',
+              varId,
+              ports: allPorts,
+            });
+          }
+        }
         break;
       }
     }
@@ -655,6 +666,10 @@ export function pass1TypeConstraints(normalized: NormalizedPatch): Pass1Result {
     portTypes,
     constraints: cardinalityConstraints,
     edges: normalized.edges,
+    blockName: (idx) => {
+      const blk = normalized.blocks[idx];
+      return blk ? `${blk.displayName ?? blk.type} (${blk.type})` : `block#${idx}`;
+    },
   });
 
   // Merge cardinality errors

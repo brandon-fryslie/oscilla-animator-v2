@@ -6,7 +6,7 @@
 
 import { registerBlock } from '../registry';
 import { canonicalType, canonicalField, strideOf, floatConst, intConst, withInstance, instanceRef, requireInst } from '../../core/canonical-types';
-import { FLOAT, INT, VEC2, SHAPE } from '../../core/canonical-types';
+import { FLOAT, INT, VEC2 } from '../../core/canonical-types';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
 import { DOMAIN_CONTROL } from '../../core/domain-registry';
 import { PathVerb, type PathTopologyDef } from '../../shapes/types';
@@ -121,7 +121,7 @@ registerBlock({
     },
   },
   outputs: {
-    shape: { label: 'Shape', type: canonicalType(SHAPE) },
+    shape: { label: 'Shape', type: canonicalType(FLOAT) },
     controlPoints: { label: 'Control Points', type: canonicalField(VEC2, { kind: 'scalar' }, { instanceId: makeInstanceId('control'), domainTypeId: makeDomainTypeId('default') }) },
   },
   lower: ({ ctx, inputsById, config }) => {
@@ -250,7 +250,7 @@ registerBlock({
     const shapeRefSig = ctx.b.shapeRef(
       topologyId,  // Numeric ID returned from registerDynamicTopology
       [],  // No topology params
-      canonicalType(SHAPE),
+      canonicalType(FLOAT),
       computedPositions  // Control point field (just the ValueExprId now)
     );
 

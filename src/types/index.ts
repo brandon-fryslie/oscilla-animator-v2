@@ -72,7 +72,6 @@ export {
   VEC3,
   COLOR,
   CAMERA_PROJECTION,
-  SHAPE,
 } from '../core/canonical-types';
 
 // =============================================================================

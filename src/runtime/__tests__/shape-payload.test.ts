@@ -16,16 +16,16 @@ import {
   readShape2D,
   writeShape2D,
 } from '../RuntimeState';
-import { FLOAT, INT, BOOL, SHAPE, } from '../../core/canonical-types';
+import { FLOAT, INT, BOOL, } from '../../core/canonical-types';
 
 // =============================================================================
 // BufferPool: shape2d format
 // =============================================================================
 
 describe('BufferPool shape2d format', () => {
-  it('maps SHAPE (now aliased to FLOAT) to f32 format', () => {
-    // Per Q6: shapes are resources, not payloads. SHAPE === FLOAT.
-    expect(getBufferFormat(SHAPE)).toBe('f32');
+  it('maps FLOAT to f32 format', () => {
+    // Per Q6: shapes are resources, not payloads. SHAPE was aliased to FLOAT.
+    expect(getBufferFormat(FLOAT)).toBe('f32');
   });
 
   it('does NOT map numeric payloads to shape2d', () => {
@@ -76,16 +76,16 @@ describe('BufferPool shape2d format', () => {
 // =============================================================================
 
 describe('IR bridges shape kind', () => {
-  it('maps SHAPE (aliased to FLOAT) to {kind: "number"} descriptor', () => {
+  it('maps FLOAT to {kind: "number"} descriptor', () => {
     // Per Q6: SHAPE === FLOAT, so maps to number
-    expect(payloadTypeToShapeDescIR(SHAPE)).toEqual({ kind: 'number' });
+    expect(payloadTypeToShapeDescIR(FLOAT)).toEqual({ kind: 'number' });
   });
 
-  it('SHAPE descriptor equals FLOAT descriptor (SHAPE === FLOAT per Q6)', () => {
-    const shapeDesc = payloadTypeToShapeDescIR(SHAPE);
+  it('FLOAT descriptor is {kind: "number"}', () => {
+    const shapeDesc = payloadTypeToShapeDescIR(FLOAT);
     const numberDesc = payloadTypeToShapeDescIR(FLOAT);
 
-    // Per Q6: SHAPE is aliased to FLOAT, both are {kind:'number'}
+    // Per Q6: SHAPE was aliased to FLOAT, both are {kind:'number'}
     expect(shapeDesc.kind).toBe(numberDesc.kind);
   });
 });

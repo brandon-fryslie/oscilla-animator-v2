@@ -6,7 +6,7 @@
 
 import { registerBlock } from '../registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
-import { canonicalType, canonicalField, unitWorld3, requireInst, FLOAT, VEC3, COLOR, SHAPE } from '../../core/canonical-types';
+import { canonicalType, canonicalField, unitWorld3, requireInst, FLOAT, VEC3, COLOR } from '../../core/canonical-types';
 import { defaultSourceConst } from '../../types';
 
 registerBlock({
@@ -24,7 +24,7 @@ registerBlock({
   inputs: {
     pos: { label: 'Position', type: canonicalField(VEC3, unitWorld3(), { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
     color: { label: 'Color', type: canonicalField(COLOR, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
-    shape: { label: 'Shape', type: canonicalType(SHAPE) },
+    shape: { label: 'Shape', type: canonicalType(FLOAT) },
     scale: {
       label: 'Scale',
       type: canonicalType(FLOAT),

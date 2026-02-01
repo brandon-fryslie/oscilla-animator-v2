@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Critical Rules (NEVER BREAK)
+
+- **NEVER use `git stash`**. Do not stash, pop, or manipulate the stash in any way. This is a destructive operation that can lose work and interact badly with linters. If you need to test old code, use `git diff` or `git show` to read it — never modify the working tree state.
+
 ## Project Overview
 
 Oscilla Animator v2 is a clean rewrite of the Oscilla animation system. It's a browser-based animation editor for creating procedural, node-graph-based animations with precise continuity guarantees and hot-swappable live editing.

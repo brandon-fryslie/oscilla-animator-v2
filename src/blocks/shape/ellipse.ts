@@ -6,7 +6,7 @@
 
 import { registerBlock } from '../registry';
 import { canonicalType, strideOf, floatConst, requireInst } from '../../core/canonical-types';
-import { FLOAT, FLOAT } from '../../core/canonical-types';
+import { FLOAT } from '../../core/canonical-types';
 import { TOPOLOGY_ID_ELLIPSE } from '../../shapes/registry';
 import { defaultSourceConst } from '../../types';
 

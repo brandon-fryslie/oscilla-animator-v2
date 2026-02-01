@@ -40,7 +40,7 @@ export function getBufferFormat(payload: PayloadType): BufferFormat {
       return 'f32';
 
     // NOTE: 'shape' removed per Q6 - shapes are resources, not payloads.
-    // SHAPE is aliased to FLOAT and handled by the float case above.
+    // SHAPE was aliased to FLOAT and handled by the float case above.
 
     // 2D vectors
     case 'vec2':

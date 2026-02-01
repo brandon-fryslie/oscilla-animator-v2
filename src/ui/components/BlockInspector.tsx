@@ -34,6 +34,7 @@ import type { Suggestion, OutputSuggestion } from '../../expr/suggestions';
 import { AutocompleteDropdown } from '../expression-editor/AutocompleteDropdown';
 import { getCursorPosition, adjustPositionForViewport } from '../expression-editor/cursorPosition';
 import { DisplayNameEditor } from './DisplayNameEditor';
+import { compilationInspector } from '../../services/CompilationInspectorService';
 
 // =============================================================================
 // Helper Functions
@@ -1412,6 +1413,15 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
   const { patch: patchStore } = useStores();
   const validBlockTypes = getValidDefaultSourceBlockTypes(portType);
 
+  // Resolved type from compilation (preferred for slider config over static portType)
+  const resolvedType = useMemo(() => {
+    const resolved = compilationInspector.getResolvedPortType(blockId, portId, 'in');
+    return resolved as InferenceCanonicalType | undefined;
+  }, [blockId, portId]);
+
+  // Use resolved type for slider config, fall back to static port type
+  const sliderType = resolvedType ?? portType;
+
   // Current selection
   const currentBlockType = currentDefaultSource.blockType;
   const currentOutputPort = currentDefaultSource.output;
@@ -1545,7 +1555,7 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
       {isConstBlock && (
         <div style={{ marginBottom: '12px' }}>
           {(payloadType.kind === 'float' || payloadType.kind === 'int') && (() => {
-            const cfg = getSliderConfig(inputDef, portType);
+            const cfg = getSliderConfig(inputDef, sliderType);
             return (
               <SliderWithInput
                 label="Value"
@@ -1564,7 +1574,7 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
             />
           )}
           {payloadType.kind === 'vec2' && (() => {
-            const cfg = getSliderConfig(inputDef, portType);
+            const cfg = getSliderConfig(inputDef, sliderType);
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <SliderWithInput
@@ -1608,7 +1618,7 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
             </div>
           )}
           {payloadType.kind !== 'float' && payloadType.kind !== 'int' && payloadType.kind !== 'bool' && payloadType.kind !== 'vec2' && payloadType.kind !== 'color' && payloadType.kind !== 'cameraProjection' && (() => {
-            const cfg = getSliderConfig(inputDef, portType);
+            const cfg = getSliderConfig(inputDef, sliderType);
             return (
               <SliderWithInput
                 label="Value"

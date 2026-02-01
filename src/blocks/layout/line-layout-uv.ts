@@ -7,7 +7,7 @@
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
 import { canonicalType, canonicalField, unitWorld3, strideOf, floatConst, requireInst } from '../../core/canonical-types';
-import { FLOAT, VEC3, SHAPE } from '../../core/canonical-types';
+import { FLOAT, VEC3 } from '../../core/canonical-types';
 import { defaultSourceConst } from '../../types';
 import { OpCode } from '../../compiler/ir/types';
 
@@ -37,7 +37,7 @@ registerBlock({
     semantics: 'typeSpecific',
   },
   inputs: {
-    elements: { label: 'Elements', type: canonicalField(SHAPE, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+    elements: { label: 'Elements', type: canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
     x0: { label: 'Start X', type: canonicalType(FLOAT), value: 0.2, defaultSource: defaultSourceConst(0.2), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
     y0: { label: 'Start Y', type: canonicalType(FLOAT), value: 0.2, defaultSource: defaultSourceConst(0.2), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
     x1: { label: 'End X', type: canonicalType(FLOAT), value: 0.8, defaultSource: defaultSourceConst(0.8), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },

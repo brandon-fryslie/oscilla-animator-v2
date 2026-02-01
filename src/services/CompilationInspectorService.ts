@@ -323,6 +323,53 @@ class CompilationInspectorService {
   }
 
   /**
+   * Look up the resolved CanonicalType for a specific port by blockId.
+   * Handles the blockId → blockIndex mapping internally.
+   *
+   * @returns Resolved CanonicalType or undefined if not available
+   */
+  getResolvedPortType(blockId: string, portName: string, dir: 'in' | 'out'): unknown | undefined {
+    const latest = this.getLatestSnapshot();
+    if (!latest) return undefined;
+
+    // type-constraints pass output is TypeResolvedPatch (has blockIndex + portTypes)
+    const tcPass = latest.passes.find(
+      (p) => p.passName === 'type-constraints'
+    );
+    if (!tcPass) return undefined;
+
+    const output = tcPass.output as {
+      blockIndex?: ReadonlyMap<string, number> | [string, number][];
+      portTypes?: ReadonlyMap<string, unknown> | [string, unknown][];
+    };
+    if (!output || typeof output !== 'object') return undefined;
+
+    // Reconstruct blockIndex map
+    let blockIndexMap: ReadonlyMap<string, number> | undefined;
+    if (output.blockIndex instanceof Map) {
+      blockIndexMap = output.blockIndex;
+    } else if (Array.isArray(output.blockIndex)) {
+      blockIndexMap = new Map(output.blockIndex);
+    }
+    if (!blockIndexMap) return undefined;
+
+    const idx = blockIndexMap.get(blockId);
+    if (idx === undefined) return undefined;
+
+    // Reconstruct portTypes map
+    let portTypes: ReadonlyMap<string, unknown> | undefined;
+    if (output.portTypes instanceof Map) {
+      portTypes = output.portTypes;
+    } else if (Array.isArray(output.portTypes)) {
+      portTypes = new Map(output.portTypes);
+    }
+    if (!portTypes) return undefined;
+
+    const key = `${idx}:${portName}:${dir}`;
+    return portTypes.get(key);
+  }
+
+  /**
    * Get the CycleSummary from the latest Frontend compilation.
    *
    * @returns CycleSummary or undefined if not available

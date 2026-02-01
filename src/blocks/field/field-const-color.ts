@@ -7,7 +7,7 @@
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
 import { canonicalType, canonicalField, floatConst, requireInst } from '../../core/canonical-types';
-import { FLOAT, COLOR, SHAPE } from '../../core/canonical-types';
+import { FLOAT, COLOR } from '../../core/canonical-types';
 import { defaultSourceConst } from '../../types';
 
 registerBlock({
@@ -29,7 +29,7 @@ registerBlock({
     semantics: 'typeSpecific',
   },
   inputs: {
-    elements: { label: 'Elements', type: canonicalField(SHAPE, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+    elements: { label: 'Elements', type: canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
     r: { label: 'Red', type: canonicalType(FLOAT), value: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
     g: { label: 'Green', type: canonicalType(FLOAT), value: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
     b: { label: 'Blue', type: canonicalType(FLOAT), value: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },

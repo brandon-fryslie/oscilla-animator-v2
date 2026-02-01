@@ -38,7 +38,7 @@ import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, CAMERA_PROJECTION, payloadStride }
 describe('PayloadType', () => {
   it('includes all core payload types', () => {
     const payloads: PayloadType[] = [FLOAT, INT, VEC2, COLOR, BOOL];
-    expect(payloads.length).toBe(6);
+    expect(payloads.length).toBe(5);
   });
 
   it('does NOT include event or domain (these are axis concepts)', () => {

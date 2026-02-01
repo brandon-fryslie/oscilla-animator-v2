@@ -14,7 +14,7 @@ import {
 import type { Block, Edge } from '../../graph/Patch';
 import type { BlockDef } from '../../blocks/registry';
 import { blockId } from '../../types';
-import { canonicalType, FLOAT, SHAPE, INT, BOOL, VEC2, VEC3 } from '../../core/canonical-types';
+import { canonicalType, FLOAT, INT, BOOL, VEC2, VEC3 } from '../../core/canonical-types';
 import { createTestBlock, resetBlockFactory } from '../../test-utils/block-factory';
 
 describe('exportFormats', () => {
@@ -165,7 +165,7 @@ describe('exportFormats', () => {
           rx: { type: canonicalType(FLOAT), value: 0.5 },
         },
         outputs: {
-          shape: { type: canonicalType(SHAPE) },
+          shape: { type: canonicalType(FLOAT) },
         },
         lower: () => ({ outputsById: {} }),
       };
