@@ -1,21 +1,29 @@
 # Definition of Done: Frontend Solver Completeness
 
 Generated: 2026-02-01T14:00:00Z
+Updated: 2026-02-01T15:00:00Z
 Plan: SPRINT-20260201-140000-frontend-solver-PLAN.md
 
 ## Gate: Sprint Complete
 
 All of these must be true:
 
-- [ ] Cardinality constraint variables exist and are resolved by the type solver
-- [ ] Instance identity is resolved in frontend (TypedPatch contains concrete instance refs)
+- [ ] `src/compiler/frontend/solve-cardinality.ts` exists with union-find solver
+- [ ] Cardinality constraint variables (`{ kind: 'var', var: CardinalityVarId }`) created during Pass 1
+- [ ] Cardinality constraints derived from existing `BlockCardinalityMetadata` (not new fields)
+- [ ] Union-find resolves all cardinality variables to concrete `CardinalityValue` by end of Pass 1
+- [ ] `findFieldCardinalityFromUpstream` fixpoint loop replaced with `solveCardinality()` call
+- [ ] Instance identity resolved in frontend (TypedPatch.portTypes contains concrete instance refs for all `many` cardinalities)
 - [ ] `isTypeCompatible` remains pure 2-arg function (Sprint 1 enforcement tests still green)
 - [ ] Zero `withInstance()` in backend (Sprint 1 enforcement test still green)
+- [ ] Zero `getBlockCardinalityMetadata` calls in `analyze-type-graph.ts` (moved to constraint emission)
 - [ ] Adapter insertion uses only resolved types + adapter registry (no block-name lookups)
 - [ ] All Sprint 1 regression TODOs resolved (tests that broke from removing impurities are green)
+- [ ] Mixed cardinality test: Add block with signal input + field input compiles correctly
 - [ ] TypeScript compiles with zero errors
 - [ ] Full test suite passes (`npm run test`)
 - [ ] No new enforcement test regressions
+- [ ] Un-skip enforcement test 5 from Sprint 1 (adapter insertion purity)
 
 ## Verification Commands
 
@@ -23,9 +31,16 @@ All of these must be true:
 # All Sprint 1 enforcement tests still pass
 npm run test -- --include "**/forbidden-patterns*"
 
-# No block-name lookups in type compatibility or adapter insertion
-grep -r 'getBlockCardinalityMetadata\|isCardinalityGeneric' src/compiler/frontend/
+# New solver file exists
+test -f src/compiler/frontend/solve-cardinality.ts && echo "OK" || echo "MISSING"
+
+# No block-name lookups in type compatibility
+grep -r 'getBlockCardinalityMetadata\|isCardinalityGeneric' src/compiler/frontend/analyze-type-graph.ts
 # Expected: 0 hits
+
+# Constraint emission reads metadata (this IS expected in analyze-type-constraints.ts)
+grep -r 'getBlockCardinalityMetadata' src/compiler/frontend/analyze-type-constraints.ts
+# Expected: some hits (this is where metadata → constraints happens)
 
 # No withInstance in backend
 grep -r 'withInstance' src/compiler/backend/

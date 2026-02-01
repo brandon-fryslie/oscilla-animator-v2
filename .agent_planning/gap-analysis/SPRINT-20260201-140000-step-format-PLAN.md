@@ -1,8 +1,9 @@
 # Sprint 3: Step Format Unification (Minimal)
 
 Generated: 2026-02-01T14:00:00Z
-Confidence: HIGH: 0, MEDIUM: 2, LOW: 0
-Status: PARTIALLY READY
+Updated: 2026-02-01T15:00:00Z
+Confidence: HIGH: 2, MEDIUM: 0, LOW: 0
+Status: READY FOR IMPLEMENTATION
 Supersedes: SPRINT-20260201-120000-step-unification (rescoped: format only, no runtime semantics)
 Depends on: Sprint 1 + Sprint 2
 
@@ -34,39 +35,80 @@ The schedule format changes, but the executor can keep internal code splits (sig
 
 ## Work Items
 
-### P0: Unified Step Kind [MEDIUM]
+### P0: Unified Step Kind [HIGH]
 
 **Files:** `src/compiler/ir/types.ts`, `src/compiler/backend/schedule-program.ts`
 
+**Design Decisions (resolved):**
+
+1. **Keep `ValueSlot` and `EventSlotId` separate.** They index different storage backends (`Float64Array` vs boolean array) and unifying would lose type safety at the branded-type level. The unified step uses a discriminated union target:
+   ```typescript
+   type EvalTarget =
+     | { storage: 'value'; slot: ValueSlot }
+     | { storage: 'event'; slot: EventSlotId }
+   ```
+
+2. **`StepMaterialize` remains separate.** It has fundamentally different fields (`instanceId`, `field`) and represents field materialization, not expression evaluation. The unification targets only the `evalSig`/`evalEvent` split. The full Step union becomes:
+   ```typescript
+   type Step =
+     | StepEvalValue          // NEW: replaces StepEvalSig + StepEvalEvent
+     | StepSlotWriteStrided   // unchanged
+     | StepMaterialize        // unchanged (separate: has instanceId, different semantics)
+     | StepRender             // unchanged
+     | StepStateWrite         // unchanged
+     | StepFieldStateWrite    // unchanged
+     | StepContinuityMapBuild // unchanged
+     | StepContinuityApply    // unchanged
+   ```
+
+3. **`EvalStrategy` is a const enum for hot-loop performance:**
+   ```typescript
+   const enum EvalStrategy {
+     ContinuousScalar = 0,   // was evalSig, cardinality one
+     ContinuousField  = 1,   // was evalSig but with field evaluation path
+     DiscreteScalar   = 2,   // was evalEvent, cardinality one
+     DiscreteField    = 3,   // future: field events
+   }
+   ```
+
 **What to do:**
-1. Replace `StepEvalSig` and `StepEvalEvent` with a single `StepEvalValue` (or similar)
-2. The step carries:
-   - `valueExprId: ValueExprId`
-   - `target: ValueSlot | EventSlotId` (or a unified slot type)
-   - `strategy: EvalStrategy` — pre-resolved from CanonicalType during schedule construction
-3. `EvalStrategy` is a small enum derived from `(temporality, cardinality)`:
-   - `continuous_one` (scalar signal)
-   - `continuous_many` (field)
-   - `discrete_one` (scalar event)
-   - `discrete_many` (field event, if applicable)
+1. Define `StepEvalValue` in `types.ts`:
+   ```typescript
+   interface StepEvalValue {
+     readonly kind: 'evalValue';
+     readonly expr: ValueExprId;
+     readonly target: EvalTarget;
+     readonly strategy: EvalStrategy;
+   }
+   ```
+2. Delete `StepEvalSig` and `StepEvalEvent` interfaces
+3. Update `Step` union (8 variants instead of 9)
+4. Update `schedule-program.ts` (lines 640-660): create `StepEvalValue` with strategy derived from `ValueExpr.type`
+5. Update `IRBuilderImpl.ts`: replace `stepEvalSig()` and `stepEvalEvent()` with `stepEvalValue()`
+
+**Strategy derivation** (compile-time, in schedule-program.ts):
+```typescript
+function deriveStrategy(type: CanonicalType): EvalStrategy {
+  const temp = requireInst(type.extent.temporality, 'temporality');
+  const card = requireInst(type.extent.cardinality, 'cardinality');
+  if (temp.kind === 'continuous') {
+    return card.kind === 'one' ? EvalStrategy.ContinuousScalar : EvalStrategy.ContinuousField;
+  } else {
+    return card.kind === 'one' ? EvalStrategy.DiscreteScalar : EvalStrategy.DiscreteField;
+  }
+}
+```
 
 **Why pre-resolved strategy (not runtime type inspection):**
-The hot loop runs every frame. Looking up `ValueExpr.type.extent.temporality` per step per frame is wasteful when the answer is known at compile time. Pre-resolving during schedule construction gives zero runtime overhead.
+The hot loop runs every frame. Looking up `ValueExpr.type.extent.temporality` per step per frame is wasteful when the answer is known at compile time. Pre-resolving during schedule construction gives zero runtime overhead. `const enum` inlines to integer constants.
 
 **Acceptance Criteria:**
 - [ ] No `evalSig` or `evalEvent` string literals in `src/compiler/ir/types.ts`
-- [ ] Schedule construction derives strategy from CanonicalType
-- [ ] Executor switch uses strategy enum, not kind strings
+- [ ] `StepEvalValue` with `EvalTarget` and `EvalStrategy` defined
+- [ ] Schedule construction derives strategy from CanonicalType via `deriveStrategy()`
+- [ ] Executor switch uses `step.strategy` (integer), not kind strings
 - [ ] No runtime type inspection in hot loop
 - [ ] TypeScript compiles
-
-#### Unknowns to Resolve
-- Exact unified slot type (keep separate `ValueSlot`/`EventSlotId`, or unify?)
-- Whether `StepMaterialize` should also be unified or remain separate
-
-#### Exit Criteria (to reach HIGH)
-- [ ] Step kind design finalized
-- [ ] All existing step kinds mapped to new model
 
 ### P1: Update Executor [MEDIUM]
 
