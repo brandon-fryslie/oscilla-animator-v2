@@ -300,14 +300,21 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
               </Text>
               <Stack gap={4} mt={4}>
                 {port.lenses.map((lens) => (
-                  <Group key={lens.id} gap="xs">
-                    <Badge size="xs" color="orange" variant="light">
-                      {getLensLabel(lens.lensType)}
-                    </Badge>
-                    <Text size="xs" c="dimmed" style={{ fontFamily: 'monospace' }}>
-                      {lens.sourceAddress.split('.').slice(-2).join('.')}
-                    </Text>
-                  </Group>
+                  <Stack key={lens.id} gap={2}>
+                    <Group gap="xs" wrap="wrap">
+                      <Badge size="xs" color="orange" variant="light">
+                        {getLensLabel(lens.lensType)}
+                      </Badge>
+                      <Text size="xs" c="dimmed" style={{ fontFamily: 'monospace' }}>
+                        {lens.sourceAddress.split('.').slice(-2).join('.')}
+                      </Text>
+                    </Group>
+                    {lens.params && Object.keys(lens.params).length > 0 && (
+                      <Text size="xs" c="dimmed" style={{ fontFamily: 'monospace', paddingLeft: '8px' }}>
+                        ({Object.entries(lens.params).map(([k, v]) => `${k}: ${String(v)}`).join(', ')})
+                      </Text>
+                    )}
+                  </Stack>
                 ))}
               </Stack>
             </Box>
