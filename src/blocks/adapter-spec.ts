@@ -13,7 +13,16 @@
 
 import type { UnitType, Extent } from '../core/canonical-types';
 import type { InferenceCanonicalType, InferencePayloadType, InferenceUnitType } from '../core/inference-types';
-import { unitsEqual } from '../core/canonical-types';
+import { unitsEqual, extentsEqual } from '../core/canonical-types';
+import { requireInst } from '../core/canonical-types/axis';
+import {
+  cardinalitiesEqual,
+  temporalitiesEqual,
+  bindingsEqual,
+  perspectivesEqual,
+  branchesEqual,
+} from '../core/canonical-types/equality';
+import type { Axis } from '../core/canonical-types/axis';
 import { BLOCK_DEFS_BY_TYPE } from './registry';
 
 // =============================================================================
@@ -121,6 +130,22 @@ export function extractPattern(type: InferenceCanonicalType): TypePattern {
 }
 
 /**
+ * Check if an axis value equals a pattern axis value.
+ * Uses structural comparison via per-axis equality functions.
+ */
+function axisValuesEqual(axisName: keyof Extent, a: Axis<unknown>, b: Axis<unknown>): boolean {
+  const aVal = requireInst(a, axisName);
+  const bVal = requireInst(b, axisName);
+  switch (axisName) {
+    case 'cardinality': return cardinalitiesEqual(aVal, bVal);
+    case 'temporality': return temporalitiesEqual(aVal, bVal);
+    case 'binding': return bindingsEqual(aVal, bVal);
+    case 'perspective': return perspectivesEqual(aVal, bVal);
+    case 'branch': return branchesEqual(aVal, bVal);
+  }
+}
+
+/**
  * Check if an extent matches a pattern.
  */
 function extentMatches(actual: Extent, pattern: ExtentPattern): boolean {
@@ -134,9 +159,8 @@ function extentMatches(actual: Extent, pattern: ExtentPattern): boolean {
 
     if (!patternAxis) continue;
 
-    // Both must be inst with same value kind (detailed comparison needed)
-    // For now, simplified: require exact match if pattern specifies
-    if (JSON.stringify(actualAxis) !== JSON.stringify(patternAxis)) {
+    // Use per-axis structural equality
+    if (!axisValuesEqual(k, actualAxis, patternAxis)) {
       return false;
     }
   }
@@ -188,7 +212,7 @@ function patternsAreCompatible(from: TypePattern, to: TypePattern): boolean {
 
   // Extent must match exactly
   if (from.extent === 'any' || to.extent === 'any') return true;
-  return JSON.stringify(from.extent) === JSON.stringify(to.extent);
+  return extentsEqual(from.extent as Extent, to.extent as Extent);
 }
 
 // =============================================================================
