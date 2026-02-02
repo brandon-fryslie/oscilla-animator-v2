@@ -38,6 +38,9 @@ registerBlock({
 
     const scale = (config?.scale as number) ?? 1.0;
     const bias = (config?.bias as number) ?? 0.0;
+    if (!isFinite(scale) || !isFinite(bias)) {
+      throw new Error(`ScaleBias params must be finite (got scale=${scale}, bias=${bias})`);
+    }
     const outType = ctx.outTypes[0];
 
     // y = x * scale + bias

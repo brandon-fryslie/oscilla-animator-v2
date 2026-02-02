@@ -42,6 +42,12 @@ registerBlock({
 
     const rate = (config?.rate as number) ?? 0.5;
     const initialValue = (config?.initialValue as number) ?? 0;
+    if (!isFinite(rate) || rate < 0 || rate > 1) {
+      throw new Error(`Slew rate must be in [0, 1] and finite (got ${rate})`);
+    }
+    if (!isFinite(initialValue)) {
+      throw new Error(`Slew initialValue must be finite (got ${initialValue})`);
+    }
     const outType = ctx.outTypes[0];
 
     // Create state for smoothed value

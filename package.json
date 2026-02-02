@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:memory": "VITEST_EXPOSE_GC=1 vitest run src/__tests__/memory-profile.test.ts",
-    "bench": "vitest bench"
+    "bench": "vitest bench",
+    "lint": "eslint src/blocks/"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
@@ -35,6 +36,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.2",
     "@playwright/test": "^1.57.0",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
@@ -42,9 +44,11 @@
     "@testing-library/user-event": "^14.6.1",
     "@types/node": "^25.0.10",
     "@vitest/coverage-v8": "^2.1.9",
+    "eslint": "^9.39.2",
     "jsdom": "^27.4.0",
     "playwright": "^1.57.0",
     "typescript": "^5.7.2",
+    "typescript-eslint": "^8.54.0",
     "vite": "^6.0.0",
     "vitest": "^2.1.8"
   }

@@ -36,13 +36,16 @@ registerBlock({
     if (!input) throw new Error('Deadzone input is required');
 
     const threshold = (config?.threshold as number) ?? 0.01;
+    if (!isFinite(threshold) || threshold < 0) {
+      throw new Error(`Deadzone threshold must be >= 0 and finite (got ${threshold})`);
+    }
     const outType = ctx.outTypes[0];
 
     // Implementation: abs(x) - threshold > 0 ? x : 0
     // Using Select opcode: select(cond, ifTrue, ifFalse) → cond > 0 ? ifTrue : ifFalse
 
     const absFn = ctx.b.opcode(OpCode.Abs);
-    const absVal = ctx.b.kernelZip([input.id], absFn, canonicalType(FLOAT));
+    const absVal = ctx.b.kernelMap(input.id, absFn, canonicalType(FLOAT));
 
     const thresholdConst = ctx.b.constant(floatConst(threshold), canonicalType(FLOAT));
     const subFn = ctx.b.opcode(OpCode.Sub);

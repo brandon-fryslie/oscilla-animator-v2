@@ -37,6 +37,9 @@ registerBlock({
 
     const min = (config?.min as number) ?? 0.0;
     const max = (config?.max as number) ?? 1.0;
+    if (!isFinite(min) || !isFinite(max)) {
+      throw new Error(`Clamp params must be finite (got min=${min}, max=${max})`);
+    }
     const outType = ctx.outTypes[0];
 
     // clamp(x, min, max)

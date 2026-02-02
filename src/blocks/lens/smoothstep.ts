@@ -38,6 +38,12 @@ registerBlock({
 
     const edge0 = (config?.edge0 as number) ?? 0.0;
     const edge1 = (config?.edge1 as number) ?? 1.0;
+    if (!isFinite(edge0) || !isFinite(edge1)) {
+      throw new Error(`Smoothstep edges must be finite (got edge0=${edge0}, edge1=${edge1})`);
+    }
+    if (edge1 === edge0) {
+      throw new Error(`Smoothstep edge0 and edge1 must differ (both are ${edge0})`);
+    }
     const outType = ctx.outTypes[0];
 
     // t = clamp((x - edge0) / (edge1 - edge0), 0, 1)

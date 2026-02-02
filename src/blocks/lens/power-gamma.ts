@@ -35,6 +35,9 @@ registerBlock({
     if (!input) throw new Error('PowerGamma input is required');
 
     const gamma = (config?.gamma as number) ?? 1.0;
+    if (!isFinite(gamma) || gamma < 0) {
+      throw new Error(`PowerGamma gamma must be >= 0 and finite (got ${gamma})`);
+    }
     const outType = ctx.outTypes[0];
 
     // clamp(x, 0, 1)

@@ -35,6 +35,9 @@ registerBlock({
     if (!input) throw new Error('StepQuantize input is required');
 
     const step = (config?.step as number) ?? 0.1;
+    if (!isFinite(step) || step <= 0) {
+      throw new Error(`StepQuantize step must be > 0 and finite (got ${step})`);
+    }
     const outType = ctx.outTypes[0];
 
     // y = round(x / step) * step
