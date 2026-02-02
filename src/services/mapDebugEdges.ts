@@ -1,8 +1,8 @@
 import type { Patch } from '../graph';
-import type { CompiledProgramIR, PortBindingIR } from '../compiler/ir/program';
+import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { ValueSlot, PortId } from '../types';
 import type { CanonicalType } from '../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION, canonicalType } from '../core/canonical-types';
+import { FLOAT, canonicalType } from '../core/canonical-types';
 
 /**
  * Edge metadata stored alongside slot mapping.
