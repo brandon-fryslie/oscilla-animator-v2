@@ -2,8 +2,8 @@
  * 3D Layout Kernels
  *
  * Most layout kernels (lineLayout3D, circleLayout3D, applyZModulation) have
- * been removed. Layout is now handled by field kernels (circleLayoutUV,
- * lineLayoutUV, gridLayoutUV) in FieldKernels.ts.
+ * been removed. Layout is now handled by layout blocks in src/blocks/layout/
+ * (circle-layout-uv.ts, line-layout-uv.ts, grid-layout-uv.ts).
  *
  * gridLayout3D is retained as a test utility — it is only imported by
  * projection test files for populating position fields.

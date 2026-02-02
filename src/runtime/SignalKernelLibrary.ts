@@ -3,17 +3,14 @@
  * SIGNAL KERNEL LIBRARY
  * ══════════════════════════════════════════════════════════════════════
  *
- * Shared implementation of signal kernel functions used by both legacy
- * SignalEvaluator and ValueExprSignalEvaluator.
+ * Signal kernel dispatch used by ValueExprSignalEvaluator.
  *
- * These kernels are PURE functions: they take primitive inputs (numbers)
- * and return a number, with no side effects or evaluator-specific state.
+ * applyPureFn is the single entry point for evaluating PureFn nodes.
+ * It dispatches to opcodes (primary path), registry-resolved kernels,
+ * composed pipelines, or throws for unresolved kernel names.
  *
- * Named signal kernels have been removed in favor of opcode-based dispatch.
- * The applySignalKernel function now only handles unknown kernel errors.
- * All oscillator, easing, shaping, combine, extraction, and construction
- * kernels have been deleted — they will be replaced by composite blocks
- * or opcode-based dispatch in a future task.
+ * applySignalKernel exists as a runtime safety net — any unresolved
+ * kernel name that reaches runtime will throw, surfacing stale references.
  */
 
 import type { PureFn } from '@/compiler/ir/types';

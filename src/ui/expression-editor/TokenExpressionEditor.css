@@ -1,0 +1,72 @@
+/**
+ * Token Expression Editor Styles
+ *
+ * Styles for contentEditable expression editor with reference chips.
+ */
+
+/* Editor container - styled like the existing textarea */
+.token-expr-editor {
+  width: 100%;
+  min-height: 60px;
+  padding: 8px;
+  border: 1px solid #0f3460;
+  border-radius: 4px;
+  background-color: #0f0f23;
+  color: #eee;
+  font-family: monospace;
+  font-size: 12px;
+  box-sizing: border-box;
+  outline: none;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-y: auto;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.token-expr-editor:focus {
+  border-color: #4ecdc4;
+}
+
+.token-expr-editor--error {
+  border-color: #ff4444;
+}
+
+/* Placeholder text */
+.token-expr-editor[data-placeholder]:empty::before {
+  content: attr(data-placeholder);
+  color: #666;
+  pointer-events: none;
+}
+
+/* Reference chips */
+.expr-ref-chip {
+  display: inline;
+  padding: 0 4px;
+  margin: 0 1px;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 12px;
+  cursor: default;
+  user-select: all;  /* Select entire chip on click */
+  white-space: nowrap;
+}
+
+/* Valid reference (connected via vararg) */
+.expr-ref-chip--valid {
+  background: rgba(78, 205, 196, 0.2);
+  border: 1px solid #4ecdc4;
+  color: #4ecdc4;
+}
+
+/* Invalid/unconnected reference */
+.expr-ref-chip--error {
+  background: rgba(240, 173, 78, 0.2);
+  border: 1px solid #f0ad4e;
+  color: #f0ad4e;
+}
+
+/* Hover effect */
+.expr-ref-chip:hover {
+  filter: brightness(1.2);
+}

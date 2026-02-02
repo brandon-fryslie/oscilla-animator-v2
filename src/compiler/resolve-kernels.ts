@@ -25,7 +25,7 @@
 
 import type { ValueExpr } from './ir/value-expr';
 import type { PureFn } from './ir/types';
-import type { KernelRegistry, KernelId, KernelHandle, KernelABI } from '../runtime/KernelRegistry';
+import type { KernelRegistry, KernelHandle, KernelABI } from '../runtime/KernelRegistry';
 import { kernelId } from '../runtime/KernelRegistry';
 import { payloadStride } from '../core/canonical-types';
 
@@ -124,15 +124,14 @@ function resolvePureFn(
   const name = fn.name;
   const kid = kernelId(name);
 
-  // Resolve kernel ID to handle + ABI
-  // During migration: skip kernels not yet in the registry.
-  // These are handled by legacy string-dispatch (FieldKernels.ts / SignalKernelLibrary.ts).
-  // Once all kernels are migrated, this check becomes a hard error.
+  // Resolve kernel ID to handle + ABI.
+  // Unresolved kernels are left as-is — they will throw at runtime
+  // via applySignalKernel in SignalKernelLibrary.ts, surfacing stale references.
   let resolved: { handle: KernelHandle; abi: KernelABI; meta: any };
   try {
     resolved = registry.resolve(kid);
   } catch (_e) {
-    // Kernel not in registry — leave as unresolved (legacy dispatch handles it)
+    // Kernel not in registry — leave as unresolved (throws at runtime)
     return {};
   }
 

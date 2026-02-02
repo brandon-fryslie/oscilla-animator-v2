@@ -10,10 +10,9 @@ import { findAdapter, needsAdapter, extractPattern } from '../adapter-spec';
 import {
   canonicalType,
   unitTurns, contractWrap01,
-  unitScalar,
+  unitScalar, contractClamp01,
   unitRadians,
   unitDegrees,
-  unitScalar, contractClamp01,
   unitMs,
   unitSeconds,
 } from '../../core/canonical-types';

@@ -15,6 +15,7 @@ import type { BlockIndex } from '../graph/normalize';
 import type { InstanceId, StateSlotId } from '../compiler/ir/Indices';
 import type { VarargConnection } from '../graph/Patch';
 import type { AdapterBlockSpec } from './adapter-spec';
+import type { DomainTypeId } from '../core/domain-registry';
 
 // Re-export lowering types from compiler
 export type { ValueRefPacked, ValueRefExpr } from '../compiler/ir/lowerTypes';
@@ -155,13 +156,25 @@ export type BroadcastPolicy = 'allowZipSig' | 'requireBroadcastExpr' | 'disallow
  * Cardinality metadata for compile-time specialization.
  * This metadata is compile-time only and does not exist at runtime.
  *
+ * Discriminated union on cardinalityMode:
+ * - 'transform' blocks MUST declare a domainType (instance-creating transforms like Array)
+ * - Other modes CANNOT declare a domainType
+ *
  * Spec Reference: .agent_planning/_future/0-CardinalityGeneric-Block-Type-Spec.md §8
  */
-export interface BlockCardinalityMetadata {
-  readonly cardinalityMode: CardinalityMode;
-  readonly laneCoupling: LaneCoupling;
-  readonly broadcastPolicy: BroadcastPolicy;
-}
+export type BlockCardinalityMetadata =
+  | {
+      readonly cardinalityMode: 'transform';
+      readonly laneCoupling: LaneCoupling;
+      readonly broadcastPolicy: BroadcastPolicy;
+      readonly domainType: DomainTypeId;  // REQUIRED for transform blocks
+    }
+  | {
+      readonly cardinalityMode: 'preserve' | 'signalOnly' | 'fieldOnly';
+      readonly laneCoupling: LaneCoupling;
+      readonly broadcastPolicy: BroadcastPolicy;
+      readonly domainType?: never;  // IMPOSSIBLE for non-transform blocks
+    };
 
 // =============================================================================
 // Payload-Generic Block Metadata (Spec §8)
