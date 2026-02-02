@@ -6,6 +6,7 @@
  * - Combine Mode: Cycle through valid combine modes (input ports only)
  * - Add Block: Create new block that auto-connects
  * - Add/Remove Lens: Signal transformations (input ports only)
+ * - Expose as Input/Output: Expose ports when editing composites
  * - Disconnect: Remove incoming/outgoing edges
  * - Reset to Default: Clear connection and use default source
  */
@@ -20,6 +21,8 @@ import {
   SwapHoriz as CombineIcon,
   Transform as LensIcon,
   RemoveCircle as RemoveLensIcon,
+  Output as ExposeIcon,
+  VisibilityOff as UnexposeIcon,
 } from '@mui/icons-material';
 import type { BlockId, PortId, CombineMode } from '../../../types';
 import { COMBINE_MODE_CATEGORY } from '../../../types';
@@ -29,6 +32,7 @@ import { validateConnection, getPortTypeFromBlockType } from '../typeValidation'
 import { requireAnyBlockDef, getBlockCategories, getBlockTypesByCategory, type AnyBlockDef } from '../../../blocks/registry';
 import { isPayloadVar, type InferencePayloadType } from '../../../core/inference-types';
 import { getAvailableLensTypes, getLensLabel, findCompatibleLenses } from '../lensUtils';
+import { internalBlockId } from '../../../blocks/composite-types';
 
 /** Maximum number of "add block" suggestions to show */
 const MAX_ADD_BLOCK = 3;
@@ -227,7 +231,7 @@ export const PortContextMenu: React.FC<PortContextMenuProps> = observer(({
   anchorPosition,
   onClose,
 }) => {
-  const { patch, layout, selection } = useStores();
+  const { patch, layout, selection, compositeEditor } = useStores();
 
   const items = useMemo<ContextMenuItem[]>(() => {
     const block = patch.blocks.get(blockId);
@@ -378,7 +382,7 @@ export const PortContextMenu: React.FC<PortContextMenuProps> = observer(({
             if (compatibleLenses.length > 0) {
               // Limit to 5 lenses in menu
               const lensesToShow = compatibleLenses.slice(0, 5);
-              
+
               // Add each lens as a direct menu item
               for (const lens of lensesToShow) {
                 menuItems.push({
@@ -401,7 +405,7 @@ export const PortContextMenu: React.FC<PortContextMenuProps> = observer(({
     // ==========================================================================
     if (isInput) {
       const existingLenses = patch.getLensesForPort(blockId, portId);
-      
+
       if (existingLenses.length > 0) {
         // Add each lens removal as a direct menu item
         for (const lens of existingLenses) {
@@ -423,7 +427,51 @@ export const PortContextMenu: React.FC<PortContextMenuProps> = observer(({
     }
 
     // ==========================================================================
-    // Section 6: Disconnect / Reset
+    // Section 6: Expose as Input/Output (composite editing only)
+    // ==========================================================================
+    if (compositeEditor.isOpen) {
+      // Convert blockId to InternalBlockId
+      const internalBlockIdValue = internalBlockId(blockId);
+
+      if (isInput) {
+        const isExposed = compositeEditor.exposedInputs.some(
+          exp => exp.internalBlockId === internalBlockIdValue && exp.internalPortId === portId
+        );
+        menuItems.push({
+          label: isExposed ? 'Unexpose Input' : 'Expose as Input',
+          icon: isExposed ? <UnexposeIcon fontSize="small" /> : <ExposeIcon fontSize="small" />,
+          action: () => {
+            if (isExposed) {
+              compositeEditor.unexposeInputPort(internalBlockIdValue, portId);
+            } else {
+              // Use portId as the external ID by default
+              compositeEditor.exposeInputPort(portId, internalBlockIdValue, portId);
+            }
+          },
+          dividerAfter: true,
+        });
+      } else {
+        const isExposed = compositeEditor.exposedOutputs.some(
+          exp => exp.internalBlockId === internalBlockIdValue && exp.internalPortId === portId
+        );
+        menuItems.push({
+          label: isExposed ? 'Unexpose Output' : 'Expose as Output',
+          icon: isExposed ? <UnexposeIcon fontSize="small" /> : <ExposeIcon fontSize="small" />,
+          action: () => {
+            if (isExposed) {
+              compositeEditor.unexposeOutputPort(internalBlockIdValue, portId);
+            } else {
+              // Use portId as the external ID by default
+              compositeEditor.exposeOutputPort(portId, internalBlockIdValue, portId);
+            }
+          },
+          dividerAfter: true,
+        });
+      }
+    }
+
+    // ==========================================================================
+    // Section 7: Disconnect / Reset
     // ==========================================================================
     if (isInput) {
       const connectedEdge = patch.edges.find(
@@ -477,7 +525,7 @@ export const PortContextMenu: React.FC<PortContextMenuProps> = observer(({
     }
 
     return menuItems;
-  }, [blockId, portId, isInput, patch, layout, selection]);
+  }, [blockId, portId, isInput, patch, layout, selection, compositeEditor]);
 
   return <ContextMenu items={items} anchorPosition={anchorPosition} onClose={onClose} />;
 });
