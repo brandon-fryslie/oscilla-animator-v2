@@ -129,7 +129,7 @@ registerBlock({
   capability: 'pure',
   inputs: {},
   outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT, unitTurns, contractWrap01) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()) },
   },
   lower: () => ({ outputsById: {} }),
 });
@@ -142,7 +142,7 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   inputs: {
-    in: { label: 'In', type: canonicalType(FLOAT, unitRadians) },
+    in: { label: 'In', type: canonicalType(FLOAT, unitRadians()) },
   },
   outputs: {},
   lower: () => ({ outputsById: {} }),
@@ -157,7 +157,7 @@ registerBlock({
   capability: 'pure',
   inputs: {},
   outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT, unitScalar) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitScalar()) },
   },
   lower: () => ({ outputsById: {} }),
 });
@@ -481,7 +481,7 @@ describe('Adapter-aware Connection Validation', () => {
         capability: 'pure',
         inputs: {},
         outputs: {
-          out: { label: 'Out', type: canonicalType(FLOAT, unitTurns, contractWrap01) },
+          out: { label: 'Out', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()) },
         },
         lower: () => ({ outputsById: {} }),
       });
@@ -525,11 +525,11 @@ describe('Unit Display Functions', () => {
     });
 
     it('returns "rad" for radians', () => {
-      expect(formatUnitForDisplay(unitRadians)).toBe('rad');
+      expect(formatUnitForDisplay(unitRadians())).toBe('rad');
     });
 
     it('returns "deg" for degrees', () => {
-      expect(formatUnitForDisplay(unitDegrees)).toBe('deg');
+      expect(formatUnitForDisplay(unitDegrees())).toBe('deg');
     });
 
     it('returns "0..1" for norm01', () => {
@@ -537,32 +537,32 @@ describe('Unit Display Functions', () => {
     });
 
     it('returns "ms" for ms', () => {
-      expect(formatUnitForDisplay(unitMs)).toBe('ms');
+      expect(formatUnitForDisplay(unitMs())).toBe('ms');
     });
 
     it('returns "s" for seconds', () => {
-      expect(formatUnitForDisplay(unitSeconds)).toBe('s');
+      expect(formatUnitForDisplay(unitSeconds())).toBe('s');
     });
   });
 
   describe('formatTypeForDisplay with units', () => {
     it('includes unit for phase01: Signal<float:phase>', () => {
-      const type = canonicalType(FLOAT, unitTurns, contractWrap01);
+      const type = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
       expect(formatTypeForDisplay(type)).toBe('Signal<float:phase>');
     });
 
     it('includes unit for radians: Signal<float:rad>', () => {
-      const type = canonicalType(FLOAT, unitRadians);
+      const type = canonicalType(FLOAT, unitRadians());
       expect(formatTypeForDisplay(type)).toBe('Signal<float:rad>');
     });
 
     it('omits unit for scalar: Signal<float>', () => {
-      const type = canonicalType(FLOAT, unitScalar);
+      const type = canonicalType(FLOAT, unitScalar());
       expect(formatTypeForDisplay(type)).toBe('Signal<float>');
     });
 
     it('includes unit for degrees: Signal<float:deg>', () => {
-      const type = canonicalType(FLOAT, unitDegrees);
+      const type = canonicalType(FLOAT, unitDegrees());
       expect(formatTypeForDisplay(type)).toBe('Signal<float:deg>');
     });
 

@@ -32,7 +32,9 @@ import { AddressRegistry } from '../../graph/address-registry';
 import { SuggestionProvider } from '../../expr/suggestions';
 import type { Suggestion, OutputSuggestion } from '../../expr/suggestions';
 import { AutocompleteDropdown } from '../expression-editor/AutocompleteDropdown';
-import { getCursorPosition, adjustPositionForViewport } from '../expression-editor/cursorPosition';
+import { adjustPositionForViewport } from '../expression-editor/cursorPosition';
+import { TokenExpressionEditor } from '../expression-editor/TokenExpressionEditor';
+import type { TokenExpressionEditorHandle } from '../expression-editor/TokenExpressionEditor';
 import { DisplayNameEditor } from './DisplayNameEditor';
 import { compilationInspector } from '../../services/CompilationInspectorService';
 
@@ -1946,7 +1948,7 @@ function computeSuggestionInsertion(
 const ExpressionEditor = observer(function ExpressionEditor({ blockId, value, patch }: ExpressionEditorProps) {
   const { patch: patchStore, diagnostics: diagnosticsStore } = useStores();
   const [localValue, setLocalValue] = useState(value);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const tokenEditorRef = useRef<TokenExpressionEditorHandle>(null);
 
   // Autocomplete state
   const [showAutocomplete, setShowAutocomplete] = useState(false);
@@ -1956,7 +1958,6 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value, pa
   const [blockContext, setBlockContext] = useState<string | null>(null);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
   const [filteredSuggestions, setFilteredSuggestions] = useState<readonly Suggestion[]>([]);
-  const pendingCursorPos = useRef<number | null>(null);
 
   // Create SuggestionProvider (recreate when patch changes)
   const suggestionProvider = useMemo(() => {
@@ -1968,15 +1969,6 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value, pa
   useEffect(() => {
     setLocalValue(value);
   }, [value]);
-
-  // Restore cursor position after React re-renders with inserted suggestion
-  useEffect(() => {
-    if (pendingCursorPos.current !== null && textareaRef.current) {
-      textareaRef.current.selectionStart = pendingCursorPos.current;
-      textareaRef.current.selectionEnd = pendingCursorPos.current;
-      pendingCursorPos.current = null;
-    }
-  }, [localValue]);
 
   // Get expression-related errors for this block
   const expressionError = useMemo(() => {
@@ -2000,11 +1992,8 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value, pa
     let suggestions: readonly Suggestion[];
 
     if (blockContext) {
-      // Port completion context - get ports for specific block
       suggestions = suggestionProvider.suggestBlockPorts(blockContext);
 
-      // Filter the block's ports by the port name prefix (if any)
-      // Extract just the port part after the dot (e.g., "b14.rad" -> "rad")
       if (filterPrefix) {
         const dotIndex = filterPrefix.indexOf('.');
         const portPrefix = dotIndex >= 0 ? filterPrefix.substring(dotIndex + 1) : filterPrefix;
@@ -2012,21 +2001,33 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value, pa
         suggestions = suggestions.filter(s => s.label.toLowerCase().includes(lowerPrefix));
       }
     } else {
-      // All suggestions (functions, inputs, outputs, blocks)
       suggestions = suggestionProvider.filterSuggestions(filterPrefix);
     }
 
     setFilteredSuggestions(suggestions);
-    setSuggestionIndex(0); // Reset selection
+    setSuggestionIndex(0);
   }, [showAutocomplete, filterPrefix, blockContext, suggestionProvider]);
 
-  const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newValue = e.target.value;
-    if (newValue.length > 500) return; // Character limit
-    setLocalValue(newValue);
+  // Calculate dropdown position from editor element
+  const updateDropdownPosition = useCallback((cursor: number) => {
+    const editorEl = tokenEditorRef.current?.getElement();
+    if (!editorEl) return;
+    // Use the selection range to get pixel position
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      const adjusted = adjustPositionForViewport(
+        { top: rect.bottom + 4, left: rect.left },
+        400, 500
+      );
+      setDropdownPosition(adjusted);
+    }
+  }, []);
 
-    const textarea = e.target;
-    const cursor = textarea.selectionStart;
+  // Handle content changes from TokenExpressionEditor
+  const handleEditorChange = useCallback((newValue: string, cursor: number) => {
+    setLocalValue(newValue);
     setCursorPosition(cursor);
 
     // Check for block.port context
@@ -2038,28 +2039,16 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value, pa
     if (identifierData) {
       setFilterPrefix(identifierData.prefix);
       setShowAutocomplete(true);
-
-      // Calculate dropdown position
-      if (textareaRef.current) {
-        const pos = getCursorPosition(textareaRef.current, cursor);
-        const adjusted = adjustPositionForViewport(pos, 400, 500);
-        setDropdownPosition(adjusted);
-      }
+      updateDropdownPosition(cursor);
     } else if (blockCtx) {
-      // After dot, but no port name yet
       setFilterPrefix('');
       setShowAutocomplete(true);
-
-      if (textareaRef.current) {
-        const pos = getCursorPosition(textareaRef.current, cursor);
-        const adjusted = adjustPositionForViewport(pos, 400, 500);
-        setDropdownPosition(adjusted);
-      }
+      updateDropdownPosition(cursor);
     } else {
       setShowAutocomplete(false);
       setFilterPrefix('');
     }
-  }, []);
+  }, [updateDropdownPosition]);
 
   const handleBlur = useCallback(() => {
     // Delay to allow dropdown click to register
@@ -2071,45 +2060,48 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value, pa
   }, [blockId, localValue, value, patchStore]);
 
   const handleSelectSuggestion = useCallback((suggestion: Suggestion) => {
-    if (textareaRef.current) {
-      const identifierData = extractIdentifierPrefix(localValue, cursorPosition);
-      const prefixStartOffset = identifierData?.startOffset ?? cursorPosition;
-      const { newValue, newCursorPos } = computeSuggestionInsertion(
-        localValue, textareaRef.current.selectionStart, suggestion, prefixStartOffset
+    const identifierData = extractIdentifierPrefix(localValue, cursorPosition);
+    const prefixStartOffset = identifierData?.startOffset ?? cursorPosition;
+    const { newValue, newCursorPos } = computeSuggestionInsertion(
+      localValue, cursorPosition, suggestion, prefixStartOffset
+    );
+    setLocalValue(newValue);
+    setCursorPosition(newCursorPos);
+
+    // Wire vararg connection for output suggestions
+    if (suggestion.type === 'output') {
+      const outputSugg = suggestion as OutputSuggestion;
+
+      const block = patch.blocks.get(blockId);
+      const refsPort = block?.inputPorts.get('refs');
+      const existingConnections = refsPort?.varargConnections ?? [];
+      const maxSortKey = existingConnections.length > 0
+        ? Math.max(...existingConnections.map(c => c.sortKey))
+        : -1;
+
+      patchStore.addVarargConnection(
+        blockId,
+        'refs',
+        outputSugg.sourceAddress,
+        maxSortKey + 1
       );
-      pendingCursorPos.current = newCursorPos;
-      setLocalValue(newValue);
-      setCursorPosition(newCursorPos);
-
-      // Wire vararg connection for output suggestions
-      if (suggestion.type === 'output') {
-        const outputSugg = suggestion as OutputSuggestion;
-
-        // Get existing refs connections to calculate sortKey
-        const block = patch.blocks.get(blockId);
-        const refsPort = block?.inputPorts.get('refs');
-        const existingConnections = refsPort?.varargConnections ?? [];
-        const maxSortKey = existingConnections.length > 0
-          ? Math.max(...existingConnections.map(c => c.sortKey))
-          : -1;
-
-        // Wire the connection
-        patchStore.addVarargConnection(
-          blockId,
-          'refs',
-          outputSugg.sourceAddress,
-          maxSortKey + 1
-        );
-      }
-
-      setShowAutocomplete(false);
-      setFilterPrefix('');
-      setBlockContext(null);
-      textareaRef.current.focus();
     }
-  }, [localValue, cursorPosition, filterPrefix, blockId, patch, patchStore]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    setShowAutocomplete(false);
+    setFilterPrefix('');
+    setBlockContext(null);
+
+    // Restore cursor + re-render chips after state update
+    requestAnimationFrame(() => {
+      if (tokenEditorRef.current) {
+        tokenEditorRef.current.setCursorOffset(newCursorPos);
+        tokenEditorRef.current.refreshChips();
+        tokenEditorRef.current.focus();
+      }
+    });
+  }, [localValue, cursorPosition, blockId, patch, patchStore]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
     if (showAutocomplete && filteredSuggestions.length > 0) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
@@ -2144,11 +2136,7 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value, pa
       setShowAutocomplete(true);
       setFilterPrefix('');
       setBlockContext(null);
-      if (textareaRef.current) {
-        const pos = getCursorPosition(textareaRef.current, textareaRef.current.selectionStart);
-        const adjusted = adjustPositionForViewport(pos, 400, 500);
-        setDropdownPosition(adjusted);
-      }
+      updateDropdownPosition(cursorPosition);
       return;
     }
 
@@ -2156,7 +2144,7 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value, pa
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       e.currentTarget.blur();
     }
-  }, [showAutocomplete, filteredSuggestions, suggestionIndex, handleSelectSuggestion]);
+  }, [showAutocomplete, filteredSuggestions, suggestionIndex, handleSelectSuggestion, updateDropdownPosition, cursorPosition]);
 
   const hasError = expressionError !== null;
 
@@ -2165,27 +2153,17 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value, pa
       <label style={{ fontSize: '12px', color: colors.textSecondary, display: 'block', marginBottom: '4px' }}>
         Expression
       </label>
-      <textarea
-        ref={textareaRef}
+      <TokenExpressionEditor
+        ref={tokenEditorRef}
+        blockId={blockId}
         value={localValue}
-        onChange={handleChange}
+        patch={patch}
+        onChange={handleEditorChange}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
-        placeholder="e.g., sin(in0 * 2) + 0.5"
-        rows={3}
         maxLength={500}
-        style={{
-          width: '100%',
-          padding: '8px',
-          border: `1px solid ${hasError ? colors.error : colors.border}`,
-          borderRadius: '4px',
-          backgroundColor: colors.bgPanel,
-          color: colors.textPrimary,
-          fontFamily: 'monospace',
-          fontSize: '12px',
-          resize: 'vertical',
-          boxSizing: 'border-box',
-        }}
+        placeholder="e.g., sin(circle_1.radius * 2)"
+        hasError={hasError}
       />
       <div style={{ fontSize: '10px', color: colors.textSecondary, textAlign: 'right', marginTop: '2px' }}>
         {localValue.length} / 500

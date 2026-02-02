@@ -14,16 +14,7 @@ export {
 export type { CursorPosition } from './cursorPosition';
 
 export { TokenExpressionEditor } from './TokenExpressionEditor';
-export type { TokenExpressionEditorProps } from './TokenExpressionEditor';
-
-export { ReferencePopover } from './ReferencePopover';
-export type { ReferencePopoverProps } from './ReferencePopover';
+export type { TokenExpressionEditorProps, TokenExpressionEditorHandle } from './TokenExpressionEditor';
 
 export { tokenizeExpression } from './referenceTokenizer';
 export type { TokenizedSegment } from './referenceTokenizer';
-
-export {
-  getContentEditableCursorOffset,
-  setContentEditableCursorOffset,
-  getContentEditableTextValue,
-} from './contentEditableCursor';
