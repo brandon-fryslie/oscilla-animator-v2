@@ -92,14 +92,16 @@ function createTestPatch(): TestPatchWithIds {
 
   const patch = buildPatch((b) => {
     // Signal blocks
-    ids.osc = b.addBlock('Oscillator', {});
-    ids.const = b.addBlock('Const', { value: 1.0 });
-    ids.add = b.addBlock('Add', {});
-    ids.multiply = b.addBlock('Multiply', {});
+    ids.osc = b.addBlock('Oscillator');
+    ids.const = b.addBlock('Const');
+    b.setConfig(ids.const, 'value', 1.0);
+    ids.add = b.addBlock('Add');
+    ids.multiply = b.addBlock('Multiply');
 
     // Field block (FromDomainId requires Array)
-    ids.array = b.addBlock('Array', { size: 10 });
-    ids.fieldBlock = b.addBlock('FromDomainId', {}, { domainId: ids.array });
+    ids.array = b.addBlock('Array');
+    b.setPortDefault(ids.array, 'count', 10);
+    ids.fieldBlock = b.addBlock('FromDomainId', { domainId: ids.array });
   });
 
   return { patch, ids };
@@ -124,13 +126,14 @@ function createPatchWithFieldInstances(): FieldPatchWithIds {
 
   const patch = buildPatch((b) => {
     // Create an Array block (defines a domain instance)
-    ids.array = b.addBlock('Array', { size: 10 });
+    ids.array = b.addBlock('Array');
+    b.setPortDefault(ids.array, 'count', 10);
 
     // Create field blocks that should use this instance
     // Note: In reality, the instance comes from compilation context,
     // but for testing we rely on the type system to handle this.
-    ids.fieldA = b.addBlock('FromDomainId', {}, { domainId: ids.array });
-    ids.fieldB = b.addBlock('FromDomainId', {}, { domainId: ids.array });
+    ids.fieldA = b.addBlock('FromDomainId', { domainId: ids.array });
+    ids.fieldB = b.addBlock('FromDomainId', { domainId: ids.array });
   });
 
   return { patch, ids };
@@ -144,12 +147,14 @@ function createPatchWithDifferentInstances(): FieldPatchWithIds {
 
   const patch = buildPatch((b) => {
     // Create two separate Array blocks (different instances)
-    ids.array1 = b.addBlock('Array', { size: 10 });
-    ids.array2 = b.addBlock('Array', { size: 20 });
+    ids.array1 = b.addBlock('Array');
+    b.setPortDefault(ids.array1, 'count', 10);
+    ids.array2 = b.addBlock('Array');
+    b.setPortDefault(ids.array2, 'count', 20);
 
     // Create field blocks using different instances
-    ids.fieldA = b.addBlock('FromDomainId', {}, { domainId: ids.array1 });
-    ids.fieldB = b.addBlock('FromDomainId', {}, { domainId: ids.array2 });
+    ids.fieldA = b.addBlock('FromDomainId', { domainId: ids.array1 });
+    ids.fieldB = b.addBlock('FromDomainId', { domainId: ids.array2 });
   });
 
   return { patch, ids };
@@ -244,8 +249,8 @@ describe('Adapter-aware Connection Validation', () => {
       // Use Add.out → Add.a: both are Signal<float:scalar>
       // This should connect directly without any adapter
       const patch = buildPatch((b) => {
-        b.addBlock('Add', {}); // b0: first Add block
-        b.addBlock('Add', {}); // b1: second Add block
+        b.addBlock('Add'); // b0: first Add block
+        b.addBlock('Add'); // b1: second Add block
       });
 
       // Add.out (float:scalar) → Add.a (float:scalar) should connect directly

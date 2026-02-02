@@ -26,7 +26,7 @@ registerBlock({
   inputs: {
     value: { label: 'Value', type: canonicalType(FLOAT) },
     trigger: { label: 'Trigger', type: canonicalEvent() },
-    initialValue: { type: canonicalType(FLOAT), value: 0, exposedAsPort: false },
+    initialValue: { type: canonicalType(FLOAT), defaultValue: 0, exposedAsPort: false },
   },
   outputs: {
     out: { label: 'Held', type: canonicalType(FLOAT) },

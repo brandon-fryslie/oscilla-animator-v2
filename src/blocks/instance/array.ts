@@ -56,8 +56,13 @@ registerBlock({
     t: { label: 'T (0-1)', type: canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
     active: { label: 'Active', type: canonicalField(BOOL, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
   },
-  lower: ({ ctx, inputsById, config }) => {
-    const count = (config?.count as number);
+  lower: ({ ctx, inputsById, config, block }) => {
+    // Read count from port defaultSource (not config — count is an exposed port)
+    const port = block?.inputPorts.get('count');
+    const countFromPort = port?.defaultSource?.blockType === 'Const'
+      ? (port.defaultSource.params?.value as number | undefined)
+      : undefined;
+    const count = countFromPort ?? 500; // Registry default
     const elementInput = inputsById.element;
 
     // Create instance (layout is now handled via field kernels, not instance metadata)

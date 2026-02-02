@@ -66,6 +66,8 @@ export interface LowerArgs {
    */
   readonly varargInputsById?: Record<string, readonly import('../compiler/ir/lowerTypes').ValueRefExpr[]>;
   readonly config?: Readonly<Record<string, unknown>>;
+  /** The source block (for reading port defaultSource values at compile time) */
+  readonly block?: import('../graph/Patch').Block;
   /**
    * Existing outputs from phase 1 (lowerOutputsOnly).
    * Only populated when called as phase 2 of two-pass lowering.
@@ -273,7 +275,7 @@ export interface VarargConstraint {
 export interface InputDef {
   readonly label?: string;           // Display label (defaults to key name)
   readonly type: InferenceCanonicalType; // Required - all inputs have a type (may contain vars)
-  readonly value?: unknown;          // Default value (was in params)
+  readonly defaultValue?: unknown;   // Default value for auto-generated Const default source
   readonly defaultSource?: DefaultSource;
   readonly uiHint?: UIControlHint;
   readonly exposedAsPort?: boolean;  // Default: true (backward compat)
@@ -480,55 +482,15 @@ export function registerBlock(def: BlockDef): void {
     }
   }
 
-  // Auto-generate defaultSource for any port that doesn't have one (architectural law)
-  // Like a 404 page or BIOS - there's ALWAYS a fallback, never a crash
-  const normalizedInputs: Record<string, InputDef> = {};
-
-  /**
-   * Get a sensible zero/default value for an InferenceCanonicalType.
-   * The Const block is payload-polymorphic and will handle broadcasting
-   * this value to the appropriate payload type (vec2, vec3, color, etc.).
-   */
-  const getZeroValue = (type: InferenceCanonicalType): number => {
-    // For all payload types, return 0
-    // The Const block will broadcast this to the appropriate shape:
-    // - float: 0
-    // - int: 0
-    // - bool: 0 (false)
-    // - vec2: [0, 0]
-    // - vec3: [0, 0, 0]
-    // - color: [0, 0, 0, 0] (transparent black)
-    // - shape: 0 (empty/null shape)
-    // - cameraProjection: 0 (orthographic)
-    return 0;
-  };
-
+  // Validate vararg constraints
   for (const [portId, inputDef] of Object.entries(def.inputs)) {
-    const isExposedPort = inputDef.exposedAsPort !== false;
-
-    // Auto-generate defaultSource if missing
-    if (isExposedPort && !inputDef.defaultSource && !isVarargInput(inputDef)) {
-      // Use the value if provided, otherwise use a sensible zero value
-      const defaultValue = inputDef.value ?? getZeroValue(inputDef.type);
-      normalizedInputs[portId] = {
-        ...inputDef,
-        defaultSource: { blockType: 'Const', output: 'out', params: { value: defaultValue } },
-      };
-    } else {
-      normalizedInputs[portId] = inputDef;
-    }
-
-    const actualDef = normalizedInputs[portId];
-    if (isVarargInput(actualDef)) {
-      // Varargs inputs must have a constraint
-      if (!actualDef.varargConstraint) {
+    if (isVarargInput(inputDef)) {
+      if (!inputDef.varargConstraint) {
         throw new Error(
           `Vararg input "${portId}" in block ${def.type} must have varargConstraint`
         );
       }
-
-      // Varargs inputs cannot have a defaultSource (explicit connections only)
-      if (actualDef.defaultSource) {
+      if (inputDef.defaultSource) {
         throw new Error(
           `Vararg input "${portId}" in block ${def.type} cannot have defaultSource`
         );
@@ -536,13 +498,7 @@ export function registerBlock(def: BlockDef): void {
     }
   }
 
-  // Register the block with normalized inputs (auto-generated defaultSources)
-  const normalizedDef: BlockDef = {
-    ...def,
-    inputs: normalizedInputs,
-  };
-
-  registry.set(def.type, normalizedDef);
+  registry.set(def.type, def);
 }
 
 /**

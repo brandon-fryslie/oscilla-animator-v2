@@ -17,10 +17,16 @@ patch "Mouse Reactive" {
 
   block "ExternalInput" "mouse-x" {
     channel = "mouse.x"
+    outputs {
+      value = mouse-contrib.a
+    }
   }
 
   block "ExternalInput" "click" {
     channel = "mouse.button.left.held"
+    outputs {
+      value = click-contrib.a
+    }
   }
 
   # --- Scale: base + click bonus ---
@@ -30,60 +36,47 @@ patch "Mouse Reactive" {
 
   block "Const" "scale-base" {
     value = 0.8
+    outputs {
+      out = base-scale.a
+    }
   }
 
   block "Const" "scale-mouse-range" {
     value = 0.4
+    outputs {
+      out = mouse-contrib.b
+    }
   }
 
-  block "Multiply" "mouse-contrib" {}
-  block "Add" "base-scale" {}
+  block "Multiply" "mouse-contrib" {
+    outputs {
+      out = base-scale.b
+    }
+  }
+
+  block "Add" "base-scale" {
+    outputs {
+      out = final-scale.a
+    }
+  }
 
   block "Const" "click-amount" {
     value = 0.5
+    outputs {
+      out = click-contrib.b
+    }
   }
 
-  block "Multiply" "click-contrib" {}
-  block "Add" "final-scale" {}
-
-  connect {
-    from = mouse-x.value
-    to = mouse-contrib.a
+  block "Multiply" "click-contrib" {
+    outputs {
+      out = final-scale.b
+    }
   }
 
-  connect {
-    from = scale-mouse-range.out
-    to = mouse-contrib.b
-  }
-
-  connect {
-    from = scale-base.out
-    to = base-scale.a
-  }
-
-  connect {
-    from = mouse-contrib.out
-    to = base-scale.b
-  }
-
-  connect {
-    from = click.value
-    to = click-contrib.a
-  }
-
-  connect {
-    from = click-amount.out
-    to = click-contrib.b
-  }
-
-  connect {
-    from = base-scale.out
-    to = final-scale.a
-  }
-
-  connect {
-    from = click-contrib.out
-    to = final-scale.b
+  block "Add" "final-scale" {
+    outputs {
+      out = render.scale
+    }
   }
 
   # --- Visuals ---
@@ -91,49 +84,31 @@ patch "Mouse Reactive" {
   block "Ellipse" "dot" {
     rx = 0.025
     ry = 0.025
+    outputs {
+      shape = [instances.element, render.shape]
+    }
   }
 
   block "Array" "instances" {
     count = 16
+    outputs {
+      elements = ring.elements
+    }
   }
 
   block "CircleLayoutUV" "ring" {
     radius = 0.25
+    outputs {
+      position = render.pos
+    }
   }
 
   block "Const" "color" {
     value = { r = 0.9, g = 0.5, b = 1, a = 1 }
+    outputs {
+      out = render.color
+    }
   }
 
   block "RenderInstances2D" "render" {}
-
-  connect {
-    from = dot.shape
-    to = instances.element
-  }
-
-  connect {
-    from = instances.elements
-    to = ring.elements
-  }
-
-  connect {
-    from = ring.position
-    to = render.pos
-  }
-
-  connect {
-    from = color.out
-    to = render.color
-  }
-
-  connect {
-    from = dot.shape
-    to = render.shape
-  }
-
-  connect {
-    from = final-scale.out
-    to = render.scale
-  }
 }

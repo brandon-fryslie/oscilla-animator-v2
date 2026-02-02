@@ -89,7 +89,7 @@ describe('compile', () => {
         b.setPortDefault(time, 'periodAMs', 1000);
         b.setPortDefault(time, 'periodBMs', 2000);
         const osc = b.addBlock('Oscillator');
-        b.setPortDefault(osc, 'waveform', 'oscSin');
+        b.setPortDefault(osc, 'mode', 0);
         b.wire(time, 'phaseA', osc, 'phase');
       });
 
@@ -172,7 +172,7 @@ describe('compile', () => {
       const patch = buildPatch((b) => {
         const time = b.addBlock('InfiniteTimeRoot');
         const osc = b.addBlock('Oscillator');
-        b.setPortDefault(osc, 'waveform', 'oscSin');
+        b.setPortDefault(osc, 'mode', 0);
         const broadcast = b.addBlock('Broadcast');
 
         b.wire(time, 'phaseA', osc, 'phase');
@@ -251,7 +251,7 @@ describe('Debug Probe Support', () => {
       b.setPortDefault(time, 'periodAMs', 1000);
       b.setPortDefault(time, 'periodBMs', 2000);
       const osc = b.addBlock('Oscillator');
-      b.setPortDefault(osc, 'waveform', 'oscSin');
+      b.setPortDefault(osc, 'mode', 0);
       b.wire(time, 'phaseA', osc, 'phase');
     });
 
@@ -283,7 +283,7 @@ describe('Debug Probe Support', () => {
       b.setPortDefault(time, 'periodAMs', 1000);
       b.setPortDefault(time, 'periodBMs', 2000);
       const osc = b.addBlock('Oscillator');
-      b.setPortDefault(osc, 'waveform', 'oscSin');
+      b.setPortDefault(osc, 'mode', 0);
       b.wire(time, 'phaseA', osc, 'phase');
     });
 

@@ -8,97 +8,74 @@ patch "Breathing Ring" {
     periodAMs = 2000
     periodBMs = 10000
     role = "timeRoot"
+    outputs {
+      phaseA = breath.phase
+    }
   }
 
   # Shape and instances
   block "Ellipse" "dot" {
     rx = 0.03
     ry = 0.03
+    outputs {
+      shape = [instances.element, render.shape]
+    }
   }
 
   block "Array" "instances" {
     count = 20
+    outputs {
+      elements = ring.elements
+    }
   }
 
   block "CircleLayoutUV" "ring" {
     radius = 0.3
+    outputs {
+      position = render.pos
+    }
   }
 
   # Breathing animation: scale oscillates between 0.5 and 1.5
-  block "Oscillator" "breath" {}
+  block "Oscillator" "breath" {
+    outputs {
+      out = breath-scaled.a
+    }
+  }
 
   block "Const" "half" {
     value = 0.5
+    outputs {
+      out = breath-scaled.b
+    }
   }
 
   block "Const" "one" {
     value = 1
+    outputs {
+      out = breath-offset.a
+    }
   }
 
-  block "Multiply" "breath-scaled" {}
-  block "Add" "breath-offset" {}
+  block "Multiply" "breath-scaled" {
+    outputs {
+      out = breath-offset.b
+    }
+  }
+
+  block "Add" "breath-offset" {
+    outputs {
+      out = render.scale
+    }
+  }
 
   # Color: warm pink
   block "Const" "color" {
     value = { r = 1, g = 0.4, b = 0.6, a = 1 }
+    outputs {
+      out = render.color
+    }
   }
 
   block "RenderInstances2D" "render" {}
-
-  # Wiring: shape → array → layout → render
-  connect {
-    from = dot.shape
-    to = instances.element
-  }
-
-  connect {
-    from = instances.elements
-    to = ring.elements
-  }
-
-  connect {
-    from = ring.position
-    to = render.pos
-  }
-
-  connect {
-    from = color.out
-    to = render.color
-  }
-
-  connect {
-    from = dot.shape
-    to = render.shape
-  }
-
-  # Wiring: oscillator → scale math → render scale
-  connect {
-    from = clock.phaseA
-    to = breath.phase
-  }
-
-  connect {
-    from = breath.out
-    to = breath-scaled.a
-  }
-
-  connect {
-    from = half.out
-    to = breath-scaled.b
-  }
-
-  connect {
-    from = one.out
-    to = breath-offset.a
-  }
-
-  connect {
-    from = breath-scaled.out
-    to = breath-offset.b
-  }
-
-  connect {
-    from = breath-offset.out
-    to = render.scale
-  }
 }

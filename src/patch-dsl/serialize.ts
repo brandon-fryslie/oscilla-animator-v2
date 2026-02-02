@@ -5,9 +5,10 @@
  * This is the simpler direction (no reference resolution needed).
  *
  * Key features:
- * - Deterministic output (sorted blocks, edges, params)
+ * - Deterministic output (sorted blocks, params, edges)
  * - Block name collision handling (append _2, _3 suffixes)
- * - Skip derived edges (only emit user edges)
+ * - Inline edge syntax: edges emitted as outputs {} inside source block
+ * - Skip derived and disabled edges
  * - Pretty-printed with 2-space indentation
  * - Quote param keys that aren't valid identifiers
  */
@@ -15,6 +16,7 @@
 import type { Patch, Block, Edge, InputPort, LensAttachment, VarargConnection } from '../graph/Patch';
 import type { BlockId } from '../types';
 import { normalizeCanonicalName } from '../core/canonical-name';
+import { emitKey, emitValue } from './hcl-emit-utils';
 
 /**
  * Options for serialization.
@@ -35,6 +37,16 @@ export function serializePatchToHCL(patch: Patch, options?: SerializeOptions): s
   const patchName = options?.name ?? 'Untitled';
   const nameMap = buildBlockNameMap(patch);
 
+  // Build map: sourceBlockId → enabled user edges
+  const edgesBySource = new Map<string, Edge[]>();
+  for (const edge of patch.edges) {
+    if (edge.role.kind !== 'user') continue;
+    if (!edge.enabled) continue;
+    const key = edge.from.blockId as string;
+    if (!edgesBySource.has(key)) edgesBySource.set(key, []);
+    edgesBySource.get(key)!.push(edge);
+  }
+
   let output = `patch "${patchName}" {\n`;
 
   // Emit blocks (sorted by canonical name for determinism)
@@ -46,15 +58,8 @@ export function serializePatchToHCL(patch: Patch, options?: SerializeOptions): s
     });
 
   for (const block of sortedBlocks) {
-    output += emitBlock(block, nameMap, 1);
-  }
-
-  // Emit edges (only user edges, sorted by sortKey)
-  const userEdges = patch.edges.filter(e => e.role.kind === 'user');
-  const sortedEdges = [...userEdges].sort((a, b) => a.sortKey - b.sortKey);
-
-  for (const edge of sortedEdges) {
-    output += emitEdge(edge, nameMap, 1);
+    const blockEdges = edgesBySource.get(block.id as string) ?? [];
+    output += emitBlock(block, nameMap, 1, blockEdges);
   }
 
   output += '}\n';
@@ -114,46 +119,15 @@ export function toIdentifier(displayName: string): string {
 }
 
 /**
- * Check if a string is a valid HCL identifier.
- * Valid identifiers start with [a-zA-Z_] and continue with [a-zA-Z0-9_-].
- *
- * @param key - The string to check
- * @returns True if valid identifier, false otherwise
- */
-function isValidIdentifier(key: string): boolean {
-  if (key.length === 0) return false;
-  // Must start with letter or underscore
-  if (!/[a-zA-Z_]/.test(key[0])) return false;
-  // Rest must be alphanumeric, underscore, or dash
-  if (!/^[a-zA-Z_][a-zA-Z0-9_-]*$/.test(key)) return false;
-  return true;
-}
-
-/**
- * Emit a key for an attribute or object entry.
- * If the key is not a valid identifier, quote it.
- *
- * @param key - The key to emit
- * @returns Quoted or unquoted key string
- */
-function emitKey(key: string): string {
-  if (isValidIdentifier(key)) {
-    return key;
-  } else {
-    // Quote the key and escape any quotes inside it
-    return `"${key.replace(/"/g, '\\"')}"`;
-  }
-}
-
-/**
  * Emit a single block.
  *
  * @param block - The block to emit
  * @param nameMap - Map from BlockId to display name
  * @param indent - Indentation level
+ * @param edges - Edges sourced from this block (enabled user edges only)
  * @returns HCL text for this block
  */
-function emitBlock(block: Block, nameMap: Map<BlockId, string>, indent: number): string {
+function emitBlock(block: Block, nameMap: Map<BlockId, string>, indent: number, edges: Edge[]): string {
   const ind = '  '.repeat(indent);
   const blockName = nameMap.get(block.id)!;
 
@@ -192,6 +166,11 @@ function emitBlock(block: Block, nameMap: Map<BlockId, string>, indent: number):
     if (port.lenses && port.lenses.length > 0) {
       output += emitLenses(portId, port.lenses, indent + 1);
     }
+  }
+
+  // Emit inline edges as outputs {}
+  if (edges.length > 0) {
+    output += emitOutputs(edges, nameMap, indent + 1);
   }
 
   output += `${ind}}\n\n`;
@@ -296,69 +275,50 @@ function emitLenses(portId: string, lenses: readonly LensAttachment[], indent: n
 }
 
 /**
- * Emit an edge (connection).
+ * Emit inline edges as an outputs {} block.
  *
- * NOTE: Uses identifier-safe names (canonical + ASCII-only) for references, not display names.
- * This ensures references work in the lexer even with Unicode/special chars in display names.
+ * Groups edges by source port. Single-target ports use direct reference,
+ * multi-target ports use list syntax [ref1, ref2].
  *
- * @param edge - The edge to emit
+ * NOTE: Uses identifier-safe names (canonical + ASCII-only) for references.
+ *
+ * @param edges - Edges sourced from this block (already filtered to enabled user edges)
  * @param nameMap - Map from BlockId to display name
  * @param indent - Indentation level
- * @returns HCL text for this edge
+ * @returns HCL text for outputs block
  */
-function emitEdge(edge: Edge, nameMap: Map<BlockId, string>, indent: number): string {
+function emitOutputs(edges: Edge[], nameMap: Map<BlockId, string>, indent: number): string {
   const ind = '  '.repeat(indent);
-  const fromBlockName = nameMap.get(edge.from.blockId as BlockId)!;
-  const toBlockName = nameMap.get(edge.to.blockId as BlockId)!;
 
-  // Convert display names to identifiers (canonical + ASCII-only, safe for lexer)
-  const fromIdent = toIdentifier(fromBlockName);
-  const toIdent = toIdentifier(toBlockName);
-
-  let output = `${ind}connect {\n`;
-  output += `${ind}  from = ${fromIdent}.${edge.from.slotId}\n`;
-  output += `${ind}  to = ${toIdent}.${edge.to.slotId}\n`;
-
-  if (!edge.enabled) {
-    output += `${ind}  enabled = false\n`;
+  // Group edges by source port
+  const byPort = new Map<string, Edge[]>();
+  const sortedEdges = [...edges].sort((a, b) => a.sortKey - b.sortKey);
+  for (const edge of sortedEdges) {
+    const port = edge.from.slotId;
+    if (!byPort.has(port)) byPort.set(port, []);
+    byPort.get(port)!.push(edge);
   }
 
-  output += `${ind}}\n\n`;
+  let output = `${ind}outputs {\n`;
+
+  // Sort ports alphabetically for determinism
+  const sortedPorts = Array.from(byPort.entries()).sort(([a], [b]) => a.localeCompare(b));
+  for (const [port, portEdges] of sortedPorts) {
+    if (portEdges.length === 1) {
+      const edge = portEdges[0];
+      const toBlockName = nameMap.get(edge.to.blockId as BlockId)!;
+      const toIdent = toIdentifier(toBlockName);
+      output += `${ind}  ${port} = ${toIdent}.${edge.to.slotId}\n`;
+    } else {
+      const refs = portEdges.map(edge => {
+        const toBlockName = nameMap.get(edge.to.blockId as BlockId)!;
+        const toIdent = toIdentifier(toBlockName);
+        return `${toIdent}.${edge.to.slotId}`;
+      });
+      output += `${ind}  ${port} = [${refs.join(', ')}]\n`;
+    }
+  }
+
+  output += `${ind}}\n`;
   return output;
-}
-
-/**
- * Emit a value (HCL literal).
- *
- * Handles: number, string, boolean, null, arrays, objects.
- *
- * @param value - The value to emit
- * @returns HCL text representation
- */
-function emitValue(value: unknown): string {
-  if (typeof value === 'number') {
-    return value.toString();
-  }
-  if (typeof value === 'string') {
-    // Escape double quotes
-    return `"${value.replace(/"/g, '\\"')}"`;
-  }
-  if (typeof value === 'boolean') {
-    return value.toString();
-  }
-  if (value === null || value === undefined) {
-    return 'null';
-  }
-  if (Array.isArray(value)) {
-    return `[${value.map(emitValue).join(', ')}]`;
-  }
-  if (typeof value === 'object') {
-    const entries = Object.entries(value as Record<string, unknown>)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([k, v]) => `${emitKey(k)} = ${emitValue(v)}`)
-      .join(', ');
-    return `{ ${entries} }`;
-  }
-  // Fallback for unknown types
-  return 'null';
 }

@@ -73,7 +73,7 @@ registerBlock({
       label: 'Expression',
       type: canonicalType(FLOAT),  // Config-only, type not used
       exposedAsPort: false,       // Config-only, not wirable
-      value: '',                  // Default: empty expression
+      defaultValue: '',            // Default: empty expression
       uiHint: { kind: 'text' },   // Text input (Inspector will make it multiline)
     },
   },

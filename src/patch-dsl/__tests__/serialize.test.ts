@@ -20,20 +20,20 @@ describe('serialize', () => {
 
   it('serializes simple block with params', () => {
     const builder = new PatchBuilder();
-    builder.addBlock('Ellipse', { rx: 0.02, ry: 0.02 }, { displayName: 'dot' });
+    const id = builder.addBlock('Const', { displayName: 'test' });
+    builder.setConfig(id, 'value', 42);
     const patch = builder.build();
 
     const hcl = serializePatchToHCL(patch);
 
-    expect(hcl).toContain('block "Ellipse" "dot"');
-    expect(hcl).toContain('rx = 0.02');
-    expect(hcl).toContain('ry = 0.02');
+    expect(hcl).toContain('block "Const" "test"');
+    expect(hcl).toContain('value = 42');
   });
 
-  it('serializes edge between blocks', () => {
+  it('serializes edge between blocks as inline outputs', () => {
     const builder = new PatchBuilder();
-    const a = builder.addBlock('Const', {}, { displayName: 'a' });
-    const b = builder.addBlock('Const', {}, { displayName: 'b' });
+    const a = builder.addBlock('Const', { displayName: 'a' });
+    const b = builder.addBlock('Const', { displayName: 'b' });
     builder.wire(a, 'out', b, 'value');
     const patch = builder.build();
 
@@ -41,9 +41,9 @@ describe('serialize', () => {
 
     expect(hcl).toContain('block "Const" "a"');
     expect(hcl).toContain('block "Const" "b"');
-    expect(hcl).toContain('connect');
-    expect(hcl).toContain('from = a.out');
-    expect(hcl).toContain('to = b.value');
+    expect(hcl).toContain('outputs {');
+    expect(hcl).toContain('out = b.value');
+    expect(hcl).not.toContain('connect');
   });
 
   it('handles block name collisions', () => {
@@ -80,10 +80,10 @@ describe('serialize', () => {
     expect(hcl).toContain('block "Const" "foo_2"');
   });
 
-  it('skips derived edges', () => {
+  it('skips derived edges in outputs', () => {
     const builder = new PatchBuilder();
-    const a = builder.addBlock('Const', {}, { displayName: 'a' });
-    const b = builder.addBlock('Const', {}, { displayName: 'b' });
+    const a = builder.addBlock('Const', { displayName: 'a' });
+    const b = builder.addBlock('Const', { displayName: 'b' });
 
     // Add user edge
     builder.wire(a, 'out', b, 'value');
@@ -98,16 +98,17 @@ describe('serialize', () => {
     const patch = builder.build();
     const hcl = serializePatchToHCL(patch);
 
-    // Should only have one connect block (the user edge)
-    const connectCount = (hcl.match(/connect/g) || []).length;
-    expect(connectCount).toBe(1);
+    // Should only have one output line (the user edge)
+    const outCount = (hcl.match(/out = b\.value/g) || []).length;
+    expect(outCount).toBe(1);
+    expect(hcl).not.toContain('connect');
   });
 
   it('sorts blocks deterministically', () => {
     const builder = new PatchBuilder();
-    builder.addBlock('Const', {}, { displayName: 'zebra' });
-    builder.addBlock('Const', {}, { displayName: 'apple' });
-    builder.addBlock('Const', {}, { displayName: 'banana' });
+    builder.addBlock('Const', { displayName: 'zebra' });
+    builder.addBlock('Const', { displayName: 'apple' });
+    builder.addBlock('Const', { displayName: 'banana' });
     const patch = builder.build();
 
     const hcl = serializePatchToHCL(patch);
@@ -124,7 +125,10 @@ describe('serialize', () => {
 
   it('sorts params within blocks', () => {
     const builder = new PatchBuilder();
-    builder.addBlock('Const', { zulu: 3, alpha: 1, mike: 2 }, { displayName: 'test' });
+    const id = builder.addBlock('Const', { displayName: 'test' });
+    builder.setConfig(id, 'zulu', 3);
+    builder.setConfig(id, 'alpha', 1);
+    builder.setConfig(id, 'mike', 2);
     const patch = builder.build();
 
     const hcl = serializePatchToHCL(patch);
@@ -139,7 +143,7 @@ describe('serialize', () => {
 
   it('emits role if not user', () => {
     const builder = new PatchBuilder();
-    builder.addBlock('Const', {}, { displayName: 'time', role: { kind: 'timeRoot', meta: {} } });
+    builder.addBlock('Const', { displayName: 'time', role: { kind: 'timeRoot', meta: {} } });
     const patch = builder.build();
 
     const hcl = serializePatchToHCL(patch);
@@ -149,7 +153,7 @@ describe('serialize', () => {
 
   it('emits domain if non-null', () => {
     const builder = new PatchBuilder();
-    builder.addBlock('Const', {}, { displayName: 'test', domainId: 'circle1' });
+    builder.addBlock('Const', { displayName: 'test', domainId: 'circle1' });
     const patch = builder.build();
 
     const hcl = serializePatchToHCL(patch);
@@ -157,21 +161,24 @@ describe('serialize', () => {
     expect(hcl).toContain('domain = "circle1"');
   });
 
-  it('emits disabled edges', () => {
+  it('skips disabled edges from outputs', () => {
     const builder = new PatchBuilder();
-    const a = builder.addBlock('Const', {}, { displayName: 'a' });
-    const b = builder.addBlock('Const', {}, { displayName: 'b' });
+    const a = builder.addBlock('Const', { displayName: 'a' });
+    const b = builder.addBlock('Const', { displayName: 'b' });
     builder.wire(a, 'out', b, 'value', { enabled: false });
     const patch = builder.build();
 
     const hcl = serializePatchToHCL(patch);
 
-    expect(hcl).toContain('enabled = false');
+    // Disabled edges should not appear in outputs
+    expect(hcl).not.toContain('outputs');
+    expect(hcl).not.toContain('b.value');
   });
 
   it('escapes special characters in strings', () => {
     const builder = new PatchBuilder();
-    builder.addBlock('Const', { message: 'Hello "world"' }, { displayName: 'test' });
+    const id = builder.addBlock('Const', { displayName: 'test' });
+    builder.setConfig(id, 'message', 'Hello "world"');
     const patch = builder.build();
 
     const hcl = serializePatchToHCL(patch);
@@ -181,7 +188,8 @@ describe('serialize', () => {
 
   it('emits arrays', () => {
     const builder = new PatchBuilder();
-    builder.addBlock('Const', { values: [1, 2, 3] }, { displayName: 'test' });
+    const id = builder.addBlock('Const', { displayName: 'test' });
+    builder.setConfig(id, 'values', [1, 2, 3]);
     const patch = builder.build();
 
     const hcl = serializePatchToHCL(patch);
@@ -191,7 +199,8 @@ describe('serialize', () => {
 
   it('emits objects', () => {
     const builder = new PatchBuilder();
-    builder.addBlock('Const', { color: { r: 1.0, g: 0.5, b: 0.0, a: 1.0 } }, { displayName: 'test' });
+    const id = builder.addBlock('Const', { displayName: 'test' });
+    builder.setConfig(id, 'color', { r: 1.0, g: 0.5, b: 0.0, a: 1.0 });
     const patch = builder.build();
 
     const hcl = serializePatchToHCL(patch);
@@ -206,9 +215,9 @@ describe('serialize', () => {
 
   it('emits vararg connections', () => {
     const builder = new PatchBuilder();
-    const a = builder.addBlock('Const', {}, { displayName: 'a' });
-    const b = builder.addBlock('Const', {}, { displayName: 'b' });
-    const c = builder.addBlock('Array', {}, { displayName: 'arr' });
+    const a = builder.addBlock('Const', { displayName: 'a' });
+    const b = builder.addBlock('Const', { displayName: 'b' });
+    const c = builder.addBlock('Array', { displayName: 'arr' });
 
     // Add vararg connections to Array.element (Array has vararg support)
     builder.addVarargConnection(c, 'element', 'blocks.a.outputs.out', 0, 'first');
@@ -226,8 +235,8 @@ describe('serialize', () => {
 
   it('emits lenses', () => {
     const builder = new PatchBuilder();
-    const a = builder.addBlock('Const', {}, { displayName: 'a' });
-    const b = builder.addBlock('Phasor', {}, { displayName: 'phasor' });
+    const a = builder.addBlock('Const', { displayName: 'a' });
+    const b = builder.addBlock('Phasor', { displayName: 'phasor' });
 
     // Add lens to port (use 'frequency' which exists on Phasor)
     builder.addLens(b, 'frequency', 'Adapter_DegreesToRadians', 'v1:blocks.a.outputs.out');

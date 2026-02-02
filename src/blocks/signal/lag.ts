@@ -24,8 +24,8 @@ registerBlock({
   },
   inputs: {
     target: { label: 'Target', type: canonicalType(FLOAT) },
-    smoothing: { type: canonicalType(FLOAT), value: 0.5, exposedAsPort: false },
-    initialValue: { type: canonicalType(FLOAT), value: 0, exposedAsPort: false },
+    smoothing: { type: canonicalType(FLOAT), defaultValue: 0.5, exposedAsPort: false },
+    initialValue: { type: canonicalType(FLOAT), defaultValue: 0, exposedAsPort: false },
   },
   outputs: {
     out: { label: 'Output', type: canonicalType(FLOAT) },

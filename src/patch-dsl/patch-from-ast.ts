@@ -3,8 +3,11 @@
  *
  * Converts a parsed HCL AST to a Patch object.
  * Two-phase algorithm:
- * 1. Process block entries → build block map
- * 2. Process connect entries → resolve references → assemble edges
+ * 1. Process block entries → build block map + collect deferred inline edges
+ * 2. Resolve deferred inline edges → assemble edges
+ *
+ * Standalone connect {} blocks are NOT supported.
+ * Edges are declared inline via outputs {} / inputs {} inside block definitions.
  *
  * Error handling:
  * - Collect errors, don't throw (allows partial patches)
@@ -13,12 +16,24 @@
  */
 
 import type { Patch, Block, Edge, Endpoint, InputPort, OutputPort, VarargConnection, LensAttachment } from '../graph/Patch';
-import type { HclDocument, HclBlock, HclValue } from './ast';
+import type { HclDocument, HclBlock, HclValue, Position } from './ast';
 import { PatchDslError, PatchDslWarning } from './errors';
 import { normalizeCanonicalName } from '../core/canonical-name';
 import { getBlockDefinition } from '../blocks/registry';
 import { toIdentifier } from './serialize';
 import type { BlockId } from '../types';
+
+/**
+ * A deferred inline edge collected during Phase 1 block processing.
+ * Resolved in Phase 2 after all blocks are registered.
+ */
+interface DeferredInlineEdge {
+  readonly ownerBlockId: BlockId;
+  readonly direction: 'outputs' | 'inputs';
+  readonly localPort: string;
+  readonly remoteRef: HclValue;
+  readonly pos: Position;
+}
 
 /**
  * Result of AST → Patch conversion.
@@ -51,7 +66,12 @@ export function patchFromAst(document: HclDocument): PatchFromAstResult {
 }
 
 /**
- * Process the contents of a patch (blocks and connections).
+ * Process the contents of a patch (blocks and inline edges).
+ *
+ * Phase 1: Process block entries, collect deferred inline edges from outputs/inputs children.
+ * Phase 2: Resolve deferred inline edges into Edge objects.
+ *
+ * Standalone connect {} blocks produce an error.
  *
  * @param blocks - Array of HCL blocks (children of patch header)
  * @param errors - Error collection
@@ -63,26 +83,96 @@ function processPatchContents(
   errors: PatchDslError[],
   warnings: PatchDslWarning[]
 ): PatchFromAstResult {
-  // Phase 1: Extract blocks
+  // Phase 1: Extract blocks + collect deferred inline edges
   const blockMap = new Map<string, BlockId>();  // canonical name → BlockId
   const patchBlocks = new Map<BlockId, Block>();
+  const deferredEdges: DeferredInlineEdge[] = [];
 
   for (const hclBlock of blocks.filter(b => b.type === 'block')) {
     const result = processBlock(hclBlock, blockMap, errors, warnings);
     if (result) {
       patchBlocks.set(result.id, result);
+
+      // Collect inline edges from outputs/inputs children
+      for (const child of hclBlock.children) {
+        if (child.type === 'outputs' || child.type === 'inputs') {
+          for (const [localPort, remoteRef] of Object.entries(child.attributes)) {
+            if (remoteRef.kind === 'list') {
+              // Fan-out: multiple targets as list
+              for (const item of remoteRef.items) {
+                deferredEdges.push({
+                  ownerBlockId: result.id,
+                  direction: child.type as 'outputs' | 'inputs',
+                  localPort,
+                  remoteRef: item,
+                  pos: child.pos,
+                });
+              }
+            } else {
+              deferredEdges.push({
+                ownerBlockId: result.id,
+                direction: child.type as 'outputs' | 'inputs',
+                localPort,
+                remoteRef,
+                pos: child.pos,
+              });
+            }
+          }
+        }
+      }
     }
   }
 
-  // Phase 2: Extract edges
-  const edges: Edge[] = [];
-  let sortKey = 0;
+  // Reject standalone connect {} blocks
   for (const hclBlock of blocks.filter(b => b.type === 'connect')) {
-    const result = processEdge(hclBlock, blockMap, errors, sortKey);
-    if (result) {
-      edges.push(result);
-      sortKey++;
+    errors.push(new PatchDslError(
+      'Standalone connect blocks are not supported; use outputs/inputs inside block definitions',
+      hclBlock.pos
+    ));
+  }
+
+  // Phase 2: Resolve deferred inline edges
+  const edges: Edge[] = [];
+  const seenEdgeKeys = new Set<string>();
+  let sortKey = 0;
+
+  for (const deferred of deferredEdges) {
+    const remote = resolveReference(deferred.remoteRef, blockMap);
+    if (!remote) {
+      errors.push(new PatchDslError(
+        `Unresolved reference in ${deferred.direction}: ${formatHclValue(deferred.remoteRef)}`,
+        deferred.pos
+      ));
+      continue;
     }
+
+    // Determine from/to based on direction
+    let from: Endpoint;
+    let to: Endpoint;
+    if (deferred.direction === 'outputs') {
+      from = { kind: 'port', blockId: deferred.ownerBlockId, slotId: deferred.localPort };
+      to = remote;
+    } else {
+      to = { kind: 'port', blockId: deferred.ownerBlockId, slotId: deferred.localPort };
+      from = remote;
+    }
+
+    // Deduplicate: same from+to endpoints → keep first
+    const edgeKey = `${from.blockId}:${from.slotId}→${to.blockId}:${to.slotId}`;
+    if (seenEdgeKeys.has(edgeKey)) {
+      continue;
+    }
+    seenEdgeKeys.add(edgeKey);
+
+    edges.push({
+      id: generateId(),
+      from,
+      to,
+      enabled: true,
+      sortKey,
+      role: { kind: 'user', meta: {} as Record<string, never> },
+    });
+    sortKey++;
   }
 
   const patch: Patch = { blocks: patchBlocks, edges };
@@ -280,56 +370,6 @@ function processBlock(
   };
 
   return block;
-}
-
-/**
- * Process a connect entry from AST.
- *
- * @param hclBlock - HCL connect block
- * @param blockMap - Map from canonical name to BlockId
- * @param errors - Error collection
- * @param sortKey - Edge sort key
- * @returns Edge or null if failed
- */
-function processEdge(
-  hclBlock: HclBlock,
-  blockMap: Map<string, BlockId>,
-  errors: PatchDslError[],
-  sortKey: number
-): Edge | null {
-  const fromAttr = hclBlock.attributes.from;
-  const toAttr = hclBlock.attributes.to;
-
-  if (!fromAttr || !toAttr) {
-    errors.push(new PatchDslError('connect block must have from and to attributes', hclBlock.pos));
-    return null;
-  }
-
-  const from = resolveReference(fromAttr, blockMap);
-  const to = resolveReference(toAttr, blockMap);
-
-  if (!from) {
-    errors.push(new PatchDslError(`Unresolved from reference: ${formatHclValue(fromAttr)}`, hclBlock.pos));
-    return null;
-  }
-
-  if (!to) {
-    errors.push(new PatchDslError(`Unresolved to reference: ${formatHclValue(toAttr)}`, hclBlock.pos));
-    return null;
-  }
-
-  const enabled = hclBlock.attributes.enabled ? convertHclValue(hclBlock.attributes.enabled) as boolean : true;
-
-  const edge: Edge = {
-    id: generateId(),
-    from,
-    to,
-    enabled,
-    sortKey,
-    role: { kind: 'user', meta: {} as Record<string, never> },
-  };
-
-  return edge;
 }
 
 /**

@@ -30,7 +30,7 @@ registerBlock({
     },
     mode: {
       type: canonicalType(INT),
-      value: 0,
+      defaultValue: 0,
       defaultSource: defaultSourceConst(0),
       exposedAsPort: true,
       uiHint: {

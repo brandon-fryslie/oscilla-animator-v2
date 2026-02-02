@@ -101,7 +101,7 @@ describe('Backend Preconditions', () => {
       const patch = buildPatch((b) => {
         const time = b.addBlock('InfiniteTimeRoot');
         const osc = b.addBlock('Oscillator');
-        b.setConfig(osc, 'waveform', 'oscSin');
+        b.setPortDefault(osc, 'mode', 0);
         b.wire(time, 'phaseA', osc, 'phase');
       });
 

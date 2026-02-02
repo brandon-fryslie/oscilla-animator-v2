@@ -31,6 +31,25 @@ function portKey(blockIndex: BlockIndex, portName: string, direction: 'in' | 'ou
   return `${blockIndex}:${portName}:${direction}` as PortKey;
 }
 
+/**
+ * Extract a compile-time constant from a block's port defaultSource.
+ * Checks the port override first, then falls back to the registry default.
+ */
+function getPortConstValue(block: Block, portId: string): unknown {
+  // Check port-level override
+  const port = block.inputPorts.get(portId);
+  if (port?.defaultSource?.blockType === 'Const') {
+    return port.defaultSource.params?.value;
+  }
+  // Fall back to registry default
+  const def = getBlockDefinition(block.type);
+  const inputDef = def?.inputs[portId];
+  if (inputDef?.defaultSource?.blockType === 'Const') {
+    return inputDef.defaultSource.params?.value;
+  }
+  return undefined;
+}
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -433,7 +452,7 @@ function lowerBlockInstance(
     const config = block.params;
 
     // Call lowering function (with existingOutputs if this is phase 2)
-    let result = blockDef.lower({ ctx, inputs, inputsById, config, existingOutputs });
+    let result = blockDef.lower({ ctx, inputs, inputsById, config, block, existingOutputs });
 
     // Auto-propagate instanceContext for blocks with field outputs
     // Only applies if the block didn't explicitly set instanceContext
@@ -711,7 +730,7 @@ function lowerSCCTwoPass(
     if (options?.events) {
       const instanceContext = instanceContextByBlock.get(blockIndex);
       const instanceCount = block.type === 'Array'
-        ? (block.params.count as number | undefined)
+        ? (getPortConstValue(block, 'count') as number | undefined)
         : undefined;
 
       options.events.emit({
@@ -930,7 +949,7 @@ export function pass6BlockLowering(
           const instanceContext = instanceContextByBlock.get(blockIndex);
           // For instance-creating blocks (Array), get the count from params
           const instanceCount = block.type === 'Array'
-            ? (block.params.count as number | undefined)
+            ? (getPortConstValue(block, 'count') as number | undefined)
             : undefined;
 
           options.events.emit({

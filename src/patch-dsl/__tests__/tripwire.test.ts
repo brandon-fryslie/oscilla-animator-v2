@@ -254,39 +254,131 @@ patch "Test" {
 });
 
 describe('tripwire: error messages', () => {
-  it('uses blockName.portName format for unresolved references', () => {
+  it('uses blockName.portName format for unresolved references in outputs', () => {
     const hcl = `
 patch "Test" {
-  block "Const" "foo" {}
-
-  connect {
-    from = nonexistent.out
-    to = foo.in
+  block "Const" "foo" {
+    outputs {
+      out = nonexistent.value
+    }
   }
 }
 `;
     const result = deserializePatchFromHCL(hcl);
     expect(result.errors.length).toBeGreaterThan(0);
     const errorMsg = result.errors[0].message;
-    expect(errorMsg).toContain('nonexistent.out');
+    expect(errorMsg).toContain('nonexistent.value');
     expect(errorMsg).not.toContain('JSON');
     expect(errorMsg).not.toContain('kind');
   });
 
-  it('formats reference values in error messages', () => {
+  it('rejects standalone connect blocks', () => {
     const hcl = `
 patch "Test" {
+  block "Const" "foo" {}
+
   connect {
-    from = foo.bar
-    to = baz.qux
+    from = foo.out
+    to = foo.value
   }
 }
 `;
     const result = deserializePatchFromHCL(hcl);
     expect(result.errors.length).toBeGreaterThan(0);
-    // Should show "foo.bar" not JSON blob
-    const fromError = result.errors.find(e => e.message.includes('from'));
-    expect(fromError?.message).toContain('foo.bar');
+    expect(result.errors[0].message).toContain('Standalone connect blocks are not supported');
+  });
+});
+
+describe('tripwire: inline edge syntax', () => {
+  it('deserializes outputs {} inline edges', () => {
+    const hcl = `
+patch "Test" {
+  block "Const" "a" {
+    value = 1
+    outputs {
+      out = b.value
+    }
+  }
+  block "Const" "b" {}
+}
+`;
+    const result = deserializePatchFromHCL(hcl);
+    expect(result.errors).toHaveLength(0);
+    expect(result.patch.edges).toHaveLength(1);
+    expect(result.patch.edges[0].from.slotId).toBe('out');
+    expect(result.patch.edges[0].to.slotId).toBe('value');
+  });
+
+  it('deserializes inputs {} inline edges', () => {
+    const hcl = `
+patch "Test" {
+  block "Const" "a" {}
+  block "Const" "b" {
+    inputs {
+      value = a.out
+    }
+  }
+}
+`;
+    const result = deserializePatchFromHCL(hcl);
+    expect(result.errors).toHaveLength(0);
+    expect(result.patch.edges).toHaveLength(1);
+    expect(result.patch.edges[0].from.slotId).toBe('out');
+    expect(result.patch.edges[0].to.slotId).toBe('value');
+  });
+
+  it('handles fan-out with list syntax', () => {
+    const hcl = `
+patch "Test" {
+  block "Const" "a" {
+    outputs {
+      out = [b.value, c.value]
+    }
+  }
+  block "Const" "b" {}
+  block "Const" "c" {}
+}
+`;
+    const result = deserializePatchFromHCL(hcl);
+    expect(result.errors).toHaveLength(0);
+    expect(result.patch.edges).toHaveLength(2);
+  });
+
+  it('deduplicates when both ends declare same edge', () => {
+    const hcl = `
+patch "Test" {
+  block "Const" "a" {
+    outputs {
+      out = b.value
+    }
+  }
+  block "Const" "b" {
+    inputs {
+      value = a.out
+    }
+  }
+}
+`;
+    const result = deserializePatchFromHCL(hcl);
+    expect(result.errors).toHaveLength(0);
+    // Should deduplicate to a single edge
+    expect(result.patch.edges).toHaveLength(1);
+  });
+
+  it('handles forward references (outputs references block defined later)', () => {
+    const hcl = `
+patch "Test" {
+  block "Const" "first" {
+    outputs {
+      out = second.value
+    }
+  }
+  block "Const" "second" {}
+}
+`;
+    const result = deserializePatchFromHCL(hcl);
+    expect(result.errors).toHaveLength(0);
+    expect(result.patch.edges).toHaveLength(1);
   });
 });
 

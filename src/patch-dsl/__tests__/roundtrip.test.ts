@@ -90,7 +90,7 @@ describe('round-trip edge cases', () => {
 
   it('preserves blocks with no params', () => {
     const patch = buildPatch((b) => {
-      b.addBlock('Ellipse', {}, { displayName: 'circle' });
+      b.addBlock('Ellipse', { displayName: 'circle' });
     });
 
     const hcl = serializePatchToHCL(patch, { name: 'NoParams' });
@@ -105,9 +105,8 @@ describe('round-trip edge cases', () => {
 
   it('preserves blocks with complex params', () => {
     const patch = buildPatch((b) => {
-      b.addBlock('Const', {
-        value: { r: 0.5, g: 0.7, b: 0.9, a: 1.0 },
-      }, { displayName: 'color' });
+      const c = b.addBlock('Const', { displayName: 'color' });
+      b.setConfig(c, 'value', { r: 0.5, g: 0.7, b: 0.9, a: 1.0 });
     });
 
     const hcl = serializePatchToHCL(patch, { name: 'ComplexParams' });
@@ -122,9 +121,11 @@ describe('round-trip edge cases', () => {
 
   it('preserves edge sortKey and enabled state', () => {
     const patch = buildPatch((b) => {
-      const a = b.addBlock('Const', { value: 1.0 }, { displayName: 'a' });
-      const b1 = b.addBlock('Const', { value: 2.0 }, { displayName: 'b' });
-      const c = b.addBlock('Add', {}, { displayName: 'add' });
+      const a = b.addBlock('Const', { displayName: 'a' });
+      b.setConfig(a, 'value', 1.0);
+      const b1 = b.addBlock('Const', { displayName: 'b' });
+      b.setConfig(b1, 'value', 2.0);
+      const c = b.addBlock('Add', { displayName: 'add' });
 
       b.wire(a, 'out', c, 'a');
       b.wire(b1, 'out', c, 'b');

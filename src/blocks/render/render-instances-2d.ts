@@ -28,7 +28,7 @@ registerBlock({
     scale: {
       label: 'Scale',
       type: canonicalType(FLOAT),
-      value: 1.0,
+      defaultValue: 1.0,
       defaultSource: defaultSourceConst(1.0),
       uiHint: { kind: 'slider', min: 0.1, max: 1, step: 0.1 },
     },

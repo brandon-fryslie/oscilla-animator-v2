@@ -13,86 +13,71 @@ patch "Feedback Accumulator" {
     periodAMs = 3000
     periodBMs = 8000
     role = "timeRoot"
+    outputs {
+      phaseA = speed-lfo.phase
+    }
   }
 
   # --- Speed modulation: oscillating delta ---
 
   block "Const" "base-speed" {
     value = 0.01
+    outputs {
+      out = delta.a
+    }
   }
 
   block "Const" "speed-swing" {
     value = 0.008
+    outputs {
+      out = speed-variation.b
+    }
   }
 
-  block "Oscillator" "speed-lfo" {}
-
-  block "Multiply" "speed-variation" {}
-  block "Add" "delta" {}
-
-  connect {
-    from = clock.phaseA
-    to = speed-lfo.phase
+  block "Oscillator" "speed-lfo" {
+    outputs {
+      out = speed-variation.a
+    }
   }
 
-  connect {
-    from = speed-lfo.out
-    to = speed-variation.a
+  block "Multiply" "speed-variation" {
+    outputs {
+      out = delta.b
+    }
   }
 
-  connect {
-    from = speed-swing.out
-    to = speed-variation.b
-  }
-
-  connect {
-    from = base-speed.out
-    to = delta.a
-  }
-
-  connect {
-    from = speed-variation.out
-    to = delta.b
+  block "Add" "delta" {
+    outputs {
+      out = accumulate.b
+    }
   }
 
   # --- Feedback loop: phase[t] = (phase[t-1] + delta) mod 1 ---
 
   block "UnitDelay" "prev-phase" {
     initialValue = 0
+    outputs {
+      out = accumulate.a
+    }
   }
 
-  block "Add" "accumulate" {}
+  block "Add" "accumulate" {
+    outputs {
+      out = wrap.a
+    }
+  }
 
   block "Const" "wrap-at" {
     value = 1
+    outputs {
+      out = wrap.b
+    }
   }
 
-  block "Modulo" "wrap" {}
-
-  connect {
-    from = prev-phase.out
-    to = accumulate.a
-  }
-
-  connect {
-    from = delta.out
-    to = accumulate.b
-  }
-
-  connect {
-    from = accumulate.out
-    to = wrap.a
-  }
-
-  connect {
-    from = wrap-at.out
-    to = wrap.b
-  }
-
-  # The feedback edge: output feeds back to input via one-frame delay
-  connect {
-    from = wrap.out
-    to = prev-phase.in
+  block "Modulo" "wrap" {
+    outputs {
+      out = prev-phase.in
+    }
   }
 
   # --- Visuals: ring of 24 circles ---
@@ -100,44 +85,31 @@ patch "Feedback Accumulator" {
   block "Ellipse" "dot" {
     rx = 0.025
     ry = 0.025
+    outputs {
+      shape = [instances.element, render.shape]
+    }
   }
 
   block "Array" "instances" {
     count = 24
+    outputs {
+      elements = ring.elements
+    }
   }
 
   block "CircleLayoutUV" "ring" {
     radius = 0.3
+    outputs {
+      position = render.pos
+    }
   }
 
   block "Const" "color" {
     value = { r = 0.2, g = 0.9, b = 0.8, a = 1 }
+    outputs {
+      out = render.color
+    }
   }
 
   block "RenderInstances2D" "render" {}
-
-  connect {
-    from = dot.shape
-    to = instances.element
-  }
-
-  connect {
-    from = instances.elements
-    to = ring.elements
-  }
-
-  connect {
-    from = ring.position
-    to = render.pos
-  }
-
-  connect {
-    from = color.out
-    to = render.color
-  }
-
-  connect {
-    from = dot.shape
-    to = render.shape
-  }
 }

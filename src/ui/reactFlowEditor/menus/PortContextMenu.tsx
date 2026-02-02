@@ -2,9 +2,10 @@
  * PortContextMenu - Context menu for input/output ports.
  *
  * Features:
- * - Quick Connect: Shows up to 3 compatible ports to connect to
+ * - Connect to...: Submenu of all compatible ports in the patch
  * - Combine Mode: Cycle through valid combine modes (input ports only)
- * - Add Block: Create new block that auto-connects (planned)
+ * - Add Block: Create new block that auto-connects
+ * - Add/Remove Lens: Signal transformations (input ports only)
  * - Disconnect: Remove incoming/outgoing edges
  * - Reset to Default: Clear connection and use default source
  */
@@ -28,9 +29,6 @@ import { validateConnection, getPortTypeFromBlockType } from '../typeValidation'
 import { requireBlockDef, getBlockCategories, getBlockTypesByCategory, type BlockDef } from '../../../blocks/registry';
 import { isPayloadVar, type InferencePayloadType } from '../../../core/inference-types';
 import { getAvailableLensTypes, getLensLabel, findCompatibleLenses } from '../lensUtils';
-
-/** Maximum number of quick connect suggestions to show */
-const MAX_QUICK_CONNECT = 3;
 
 /** Maximum number of "add block" suggestions to show */
 const MAX_ADD_BLOCK = 3;
@@ -239,35 +237,36 @@ export const PortContextMenu: React.FC<PortContextMenuProps> = observer(({
     const menuItems: ContextMenuItem[] = [];
 
     // ==========================================================================
-    // Section 1: Quick Connect
+    // Section 1: Connect to... (submenu of all compatible ports)
     // ==========================================================================
     const compatiblePorts = findCompatiblePorts(patch.patch, blockId, portId, isInput);
-    const quickConnectPorts = randomSample(compatiblePorts, MAX_QUICK_CONNECT);
 
-    for (const port of quickConnectPorts) {
-      menuItems.push({
-        label: `Connect to ${port.blockLabel}.${port.portLabel}`,
+    if (compatiblePorts.length > 0) {
+      const children: ContextMenuItem[] = compatiblePorts.map((port) => ({
+        label: `${port.blockLabel} · ${port.portLabel}`,
         icon: <ConnectIcon fontSize="small" />,
         action: () => {
           if (isInput) {
-            // Connect: otherBlock.output -> this.input
             patch.addEdge(
               { kind: 'port', blockId: port.blockId, slotId: port.portId },
               { kind: 'port', blockId, slotId: portId }
             );
           } else {
-            // Connect: this.output -> otherBlock.input
             patch.addEdge(
               { kind: 'port', blockId, slotId: portId },
               { kind: 'port', blockId: port.blockId, slotId: port.portId }
             );
           }
         },
-      });
-    }
+      }));
 
-    if (quickConnectPorts.length > 0) {
-      menuItems[menuItems.length - 1].dividerAfter = true;
+      menuItems.push({
+        label: `Connect to\u2026`,
+        icon: <ConnectIcon fontSize="small" />,
+        action: () => {},
+        children,
+        dividerAfter: true,
+      });
     }
 
     // ==========================================================================

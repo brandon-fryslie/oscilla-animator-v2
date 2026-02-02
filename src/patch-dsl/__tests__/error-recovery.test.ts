@@ -10,15 +10,14 @@ import { deserializePatchFromHCL } from '../index';
 import '../../blocks/all';
 
 describe('error recovery', () => {
-  it('handles unresolvable block reference', () => {
+  it('handles unresolvable block reference in outputs', () => {
     const hcl = `
       patch "Test" {
         block "Const" "a" {
           value = 1.0
-        }
-        connect {
-          from = a.out
-          to = nonexistent.in
+          outputs {
+            out = nonexistent.in
+          }
         }
       }
     `;
@@ -98,7 +97,7 @@ describe('error recovery', () => {
     expect(result.patch.blocks.size).toBe(0);
   });
 
-  it('handles malformed connect block', () => {
+  it('rejects standalone connect blocks', () => {
     const hcl = `
       patch "Test" {
         block "Const" "a" {
@@ -106,19 +105,20 @@ describe('error recovery', () => {
         }
         connect {
           from = a.out
+          to = a.value
         }
       }
     `;
     const result = deserializePatchFromHCL(hcl);
 
-    // Should collect error for missing 'to' attribute
+    // Should collect error for standalone connect
     expect(result.errors.length).toBeGreaterThan(0);
-    expect(result.errors[0].message).toContain('to');
+    expect(result.errors[0].message).toContain('Standalone connect');
 
     // Block should exist
     expect(result.patch.blocks.size).toBe(1);
 
-    // Edge should be skipped
+    // Edge should be skipped (standalone connect not supported)
     expect(result.patch.edges.length).toBe(0);
   });
 

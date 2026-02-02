@@ -11,25 +11,25 @@ patch "Smooth Chase" {
     periodAMs = 2500
     periodBMs = 15000
     role = "timeRoot"
+    outputs {
+      phaseA = source.phase
+    }
   }
 
   # --- Signal chain: oscillator → lag ---
 
-  block "Oscillator" "source" {}
+  block "Oscillator" "source" {
+    outputs {
+      out = [smoother.target, raw-half.a]
+    }
+  }
 
   block "Lag" "smoother" {
     smoothing = 0.92
     initialValue = 0
-  }
-
-  connect {
-    from = clock.phaseA
-    to = source.phase
-  }
-
-  connect {
-    from = source.out
-    to = smoother.target
+    outputs {
+      out = smooth-half.a
+    }
   }
 
   # --- Scale mapping for both signals ---
@@ -37,58 +37,42 @@ patch "Smooth Chase" {
 
   block "Const" "half" {
     value = 0.5
+    outputs {
+      out = [raw-half.b, smooth-half.b]
+    }
   }
 
   block "Const" "one" {
     value = 1
+    outputs {
+      out = [raw-scale.a, smooth-scale.a]
+    }
   }
 
   # Raw oscillator scale
-  block "Multiply" "raw-half" {}
-  block "Add" "raw-scale" {}
-
-  connect {
-    from = source.out
-    to = raw-half.a
+  block "Multiply" "raw-half" {
+    outputs {
+      out = raw-scale.b
+    }
   }
 
-  connect {
-    from = half.out
-    to = raw-half.b
-  }
-
-  connect {
-    from = one.out
-    to = raw-scale.a
-  }
-
-  connect {
-    from = raw-half.out
-    to = raw-scale.b
+  block "Add" "raw-scale" {
+    outputs {
+      out = render-raw.scale
+    }
   }
 
   # Smoothed scale
-  block "Multiply" "smooth-half" {}
-  block "Add" "smooth-scale" {}
-
-  connect {
-    from = smoother.out
-    to = smooth-half.a
+  block "Multiply" "smooth-half" {
+    outputs {
+      out = smooth-scale.b
+    }
   }
 
-  connect {
-    from = half.out
-    to = smooth-half.b
-  }
-
-  connect {
-    from = one.out
-    to = smooth-scale.a
-  }
-
-  connect {
-    from = smooth-half.out
-    to = smooth-scale.b
+  block "Add" "smooth-scale" {
+    outputs {
+      out = render-smooth.scale
+    }
   }
 
   # --- Outer ring: raw oscillator (jumpy) ---
@@ -96,100 +80,64 @@ patch "Smooth Chase" {
   block "Ellipse" "outer-dot" {
     rx = 0.012
     ry = 0.012
+    outputs {
+      shape = [outer-instances.element, render-raw.shape]
+    }
   }
 
   block "Array" "outer-instances" {
     count = 24
+    outputs {
+      elements = outer-ring.elements
+    }
   }
 
   block "CircleLayoutUV" "outer-ring" {
     radius = 0.35
+    outputs {
+      position = render-raw.pos
+    }
   }
 
   block "Const" "outer-color" {
     value = { r = 1, g = 0.3, b = 0.3, a = 0.7 }
+    outputs {
+      out = render-raw.color
+    }
   }
 
   block "RenderInstances2D" "render-raw" {}
-
-  connect {
-    from = outer-dot.shape
-    to = outer-instances.element
-  }
-
-  connect {
-    from = outer-instances.elements
-    to = outer-ring.elements
-  }
-
-  connect {
-    from = outer-ring.position
-    to = render-raw.pos
-  }
-
-  connect {
-    from = outer-color.out
-    to = render-raw.color
-  }
-
-  connect {
-    from = outer-dot.shape
-    to = render-raw.shape
-  }
-
-  connect {
-    from = raw-scale.out
-    to = render-raw.scale
-  }
 
   # --- Inner ring: smoothed (silky) ---
 
   block "Ellipse" "inner-dot" {
     rx = 0.02
     ry = 0.02
+    outputs {
+      shape = [inner-instances.element, render-smooth.shape]
+    }
   }
 
   block "Array" "inner-instances" {
     count = 12
+    outputs {
+      elements = inner-ring.elements
+    }
   }
 
   block "CircleLayoutUV" "inner-ring" {
     radius = 0.18
+    outputs {
+      position = render-smooth.pos
+    }
   }
 
   block "Const" "inner-color" {
     value = { r = 0.3, g = 1, b = 0.5, a = 1 }
+    outputs {
+      out = render-smooth.color
+    }
   }
 
   block "RenderInstances2D" "render-smooth" {}
-
-  connect {
-    from = inner-dot.shape
-    to = inner-instances.element
-  }
-
-  connect {
-    from = inner-instances.elements
-    to = inner-ring.elements
-  }
-
-  connect {
-    from = inner-ring.position
-    to = render-smooth.pos
-  }
-
-  connect {
-    from = inner-color.out
-    to = render-smooth.color
-  }
-
-  connect {
-    from = inner-dot.shape
-    to = render-smooth.shape
-  }
-
-  connect {
-    from = smooth-scale.out
-    to = render-smooth.scale
-  }
 }

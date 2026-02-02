@@ -64,7 +64,7 @@ describe('Frontend Independence', () => {
         const time = b.addBlock('InfiniteTimeRoot');
         b.setPortDefault(time, 'periodAMs', 1000);
         const osc = b.addBlock('Oscillator');
-        b.setConfig(osc, 'waveform', 'oscSin');
+        b.setPortDefault(osc, 'mode', 0);
         b.wire(time, 'phaseA', osc, 'phase');
       });
 

@@ -64,16 +64,22 @@ function buildMemoryTestPatch(instanceCount: number) {
 
   return buildPatch((b) => {
     // Required: TimeRoot
-    const time = b.addBlock('InfiniteTimeRoot', {});
+    const time = b.addBlock('InfiniteTimeRoot');
 
-    const ellipse = b.addBlock('Ellipse', { rx: 0.01, ry: 0.01 });
-    const array = b.addBlock('Array', { count: instanceCount });
-    const layout = b.addBlock('GridLayoutUV', { rows, cols });
+    const ellipse = b.addBlock('Ellipse');
+    b.setPortDefault(ellipse, 'rx', 0.01);
+    b.setPortDefault(ellipse, 'ry', 0.01);
+    const array = b.addBlock('Array');
+    b.setPortDefault(array, 'count', instanceCount);
+    const layout = b.addBlock('GridLayoutUV');
+    b.setPortDefault(layout, 'rows', rows);
+    b.setPortDefault(layout, 'cols', cols);
 
     // Simple white color
-    const color = b.addBlock('Const', { value: { r: 1.0, g: 1.0, b: 1.0, a: 1.0 } });
+    const color = b.addBlock('Const');
+    b.setConfig(color, 'value', { r: 1.0, g: 1.0, b: 1.0, a: 1.0 });
 
-    const render = b.addBlock('RenderInstances2D', {});
+    const render = b.addBlock('RenderInstances2D');
 
     // Wire shape through array
     b.wire(ellipse, 'shape', array, 'element');

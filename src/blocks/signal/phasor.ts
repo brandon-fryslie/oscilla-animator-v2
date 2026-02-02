@@ -23,7 +23,7 @@ registerBlock({
   },
   inputs: {
     frequency: { label: 'Frequency (Hz)', type: canonicalType(FLOAT) },
-    initialPhase: { type: canonicalType(FLOAT), value: 0, exposedAsPort: false },
+    initialPhase: { type: canonicalType(FLOAT), defaultValue: 0, exposedAsPort: false },
   },
   outputs: {
     out: { label: 'Phase', type: canonicalType(FLOAT, unitPhase01()) },

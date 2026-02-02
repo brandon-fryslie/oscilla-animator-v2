@@ -24,10 +24,9 @@ import type { PatchBuilder } from './types';
 
 export const patchFeedbackRotation: PatchBuilder = (b) => {
   // Time root for base oscillation
-  const time = b.addBlock('InfiniteTimeRoot', {
-    periodAMs: 3000,   // 3s period for speed modulation
-    periodBMs: 8000,   // 8s period for color cycling
-  }, { role: timeRootRole() });
+  const time = b.addBlock('InfiniteTimeRoot', { role: timeRootRole() });
+  b.setPortDefault(time, 'periodAMs', 3000); // 3s period for speed modulation
+  b.setPortDefault(time, 'periodBMs', 8000); // 8s period for color cycling
 
   // ===========================================================================
   // FEEDBACK ACCUMULATOR (the core UnitDelay pattern)
@@ -40,25 +39,34 @@ export const patchFeedbackRotation: PatchBuilder = (b) => {
 
   // Speed modulation: oscillates between 0.005 and 0.025 per frame
   // This creates the "breathing" rotation effect
-  const speedBase = b.addBlock('Const', { value: 0.015 });
-  const speedAmp = b.addBlock('Const', { value: 0.01 });
-  const speedOsc = b.addBlock('Oscillator', { offset: 0 });
+  const speedBase = b.addBlock('Const');
+  b.setConfig(speedBase, 'value', 0.015);
+
+  const speedAmp = b.addBlock('Const');
+  b.setConfig(speedAmp, 'value', 0.01);
+
+  const speedOsc = b.addBlock('Oscillator');
   b.wire(time, 'phaseA', speedOsc, 'phase');
 
-  const speedModulation = b.addBlock('Multiply', {});
+  const speedModulation = b.addBlock('Multiply');
   b.wire(speedOsc, 'out', speedModulation, 'a');
   b.wire(speedAmp, 'out', speedModulation, 'b');
 
-  const speedDelta = b.addBlock('Add', {});
+  const speedDelta = b.addBlock('Add');
   b.wire(speedBase, 'out', speedDelta, 'a');
   b.wire(speedModulation, 'out', speedDelta, 'b');
 
   // The feedback loop using UnitDelay
   // accumulatedPhase = UnitDelay(accumulatedPhase + speedDelta)
-  const phaseDelay = b.addBlock('UnitDelay', { initialValue: 0 });
-  const phaseAdd = b.addBlock('Add', {});
-  const phaseWrapDivisor = b.addBlock('Const', { value: 1.0 });
-  const phaseWrap = b.addBlock('Modulo', {});
+  const phaseDelay = b.addBlock('UnitDelay');
+  b.setConfig(phaseDelay, 'initialValue', 0);
+
+  const phaseAdd = b.addBlock('Add');
+
+  const phaseWrapDivisor = b.addBlock('Const');
+  b.setConfig(phaseWrapDivisor, 'value', 1.0);
+
+  const phaseWrap = b.addBlock('Modulo');
 
   b.wire(phaseDelay, 'out', phaseAdd, 'a');  // Previous phase
   b.wire(speedDelta, 'out', phaseAdd, 'b');  // Delta
@@ -70,42 +78,54 @@ export const patchFeedbackRotation: PatchBuilder = (b) => {
   // OUTER RING: Feedback-driven rotation (variable speed)
   // ===========================================================================
 
-  const outerEllipse = b.addBlock('Ellipse', { rx: 0.02, ry: 0.02 });
-  const outerArray = b.addBlock('Array', { count: 24 });
+  const outerEllipse = b.addBlock('Ellipse');
+  b.setPortDefault(outerEllipse, 'rx', 0.02);
+  b.setPortDefault(outerEllipse, 'ry', 0.02);
+
+  const outerArray = b.addBlock('Array');
+  b.setPortDefault(outerArray, 'count', 24);
   b.wire(outerEllipse, 'shape', outerArray, 'element');
 
   // Use CircleLayoutUV for outer ring
-  const outerLayout = b.addBlock('CircleLayoutUV', { radius: 0.35 });
+  const outerLayout = b.addBlock('CircleLayoutUV');
+  b.setPortDefault(outerLayout, 'radius', 0.35);
   b.wire(outerArray, 'elements', outerLayout, 'elements');
 
   // Simple constant color - cyan
-  const outerColor = b.addBlock('Const', { value: { r: 0.3, g: 0.9, b: 0.9, a: 1.0 } });
+  const outerColor = b.addBlock('Const');
+  b.setConfig(outerColor, 'value', { r: 0.3, g: 0.9, b: 0.9, a: 1.0 });
 
   // ===========================================================================
   // INNER RING: Direct time-driven rotation (constant speed for comparison)
   // ===========================================================================
 
-  const innerEllipse = b.addBlock('Ellipse', { rx: 0.015, ry: 0.015 });
-  const innerArray = b.addBlock('Array', { count: 16 });
+  const innerEllipse = b.addBlock('Ellipse');
+  b.setPortDefault(innerEllipse, 'rx', 0.015);
+  b.setPortDefault(innerEllipse, 'ry', 0.015);
+
+  const innerArray = b.addBlock('Array');
+  b.setPortDefault(innerArray, 'count', 16);
   b.wire(innerEllipse, 'shape', innerArray, 'element');
 
   // Use CircleLayoutUV for inner ring
-  const innerLayout = b.addBlock('CircleLayoutUV', { radius: 0.18 });
+  const innerLayout = b.addBlock('CircleLayoutUV');
+  b.setPortDefault(innerLayout, 'radius', 0.18);
   b.wire(innerArray, 'elements', innerLayout, 'elements');
 
   // Simple constant color - orange
-  const innerColor = b.addBlock('Const', { value: { r: 1.0, g: 0.6, b: 0.3, a: 1.0 } });
+  const innerColor = b.addBlock('Const');
+  b.setConfig(innerColor, 'value', { r: 1.0, g: 0.6, b: 0.3, a: 1.0 });
 
   // ===========================================================================
   // RENDER BOTH RINGS
   // ===========================================================================
 
-  const renderOuter = b.addBlock('RenderInstances2D', {});
+  const renderOuter = b.addBlock('RenderInstances2D');
   b.wire(outerLayout, 'position', renderOuter, 'pos');
   b.wire(outerColor, 'out', renderOuter, 'color');
   b.wire(outerEllipse, 'shape', renderOuter, 'shape');
 
-  const renderInner = b.addBlock('RenderInstances2D', {});
+  const renderInner = b.addBlock('RenderInstances2D');
   b.wire(innerLayout, 'position', renderInner, 'pos');
   b.wire(innerColor, 'out', renderInner, 'color');
   b.wire(innerEllipse, 'shape', renderInner, 'shape');

@@ -51,7 +51,7 @@ registerBlock({
   inputs: {
     value: {
       type: canonicalType(FLOAT),
-      value: 0,
+      defaultValue: 0,
       exposedAsPort: false,
     },
   },

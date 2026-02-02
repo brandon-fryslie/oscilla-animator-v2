@@ -26,7 +26,7 @@ registerBlock({
   },
   inputs: {
     in: { label: 'Input', type: canonicalType(FLOAT), defaultSource: defaultSourceConst(0) },
-    initialValue: { type: canonicalType(FLOAT), value: 0, exposedAsPort: false },
+    initialValue: { type: canonicalType(FLOAT), defaultValue: 0, exposedAsPort: false },
   },
   outputs: {
     out: { label: 'Output', type: canonicalType(FLOAT) },

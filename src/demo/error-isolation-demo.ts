@@ -16,25 +16,31 @@ export const patchErrorIsolationDemo: PatchBuilder = (b) => {
   // WORKING RENDER PIPELINE - A simple animated grid
   // ========================================================================
 
-  const time = b.addBlock('InfiniteTimeRoot', {
-    periodAMs: 2000,
-    periodBMs: 10000,
-  }, { role: timeRootRole() });
+  const time = b.addBlock('InfiniteTimeRoot', { role: timeRootRole() });
+  b.setPortDefault(time, 'periodAMs', 2000);
+  b.setPortDefault(time, 'periodBMs', 10000);
 
   // Create a grid of circles
-  const circle = b.addBlock('Ellipse', { rx: 0.03, ry: 0.03 });
-  const array = b.addBlock('Array', { count: 100 });
+  const circle = b.addBlock('Ellipse');
+  b.setPortDefault(circle, 'rx', 0.03);
+  b.setPortDefault(circle, 'ry', 0.03);
+
+  const array = b.addBlock('Array');
+  b.setPortDefault(array, 'count', 100);
   b.wire(circle, 'shape', array, 'element');
 
   // Grid layout (using UV variant)
-  const grid = b.addBlock('GridLayoutUV', { rows: 10, cols: 10 });
+  const grid = b.addBlock('GridLayoutUV');
+  b.setPortDefault(grid, 'rows', 10);
+  b.setPortDefault(grid, 'cols', 10);
   b.wire(array, 'elements', grid, 'elements');
 
   // Simple constant color
-  const color = b.addBlock('Const', { value: { r: 0.7, g: 0.9, b: 0.8, a: 1.0 } }); // Light cyan
+  const color = b.addBlock('Const');
+  b.setConfig(color, 'value', { r: 0.7, g: 0.9, b: 0.8, a: 1.0 }); // Light cyan
 
   // Render the grid
-  const render = b.addBlock('RenderInstances2D', {});
+  const render = b.addBlock('RenderInstances2D');
   b.wire(grid, 'position', render, 'pos');
   b.wire(color, 'out', render, 'color');
   b.wire(circle, 'shape', render, 'shape');
@@ -45,23 +51,21 @@ export const patchErrorIsolationDemo: PatchBuilder = (b) => {
 
   // Expression block with invalid syntax - NOT connected to render
   // This will produce a warning, not an error
-  b.addBlock('Expression', {
-    expression: 'this is not valid +++',
-    // label: 'Broken Expression 1',
-  });
+  const brokenExpr1 = b.addBlock('Expression');
+  b.setConfig(brokenExpr1, 'expression', 'this is not valid +++');
+  // label: 'Broken Expression 1',
 
   // Another broken expression - also disconnected
-  b.addBlock('Expression', {
-    expression: 'in0 +',  // Incomplete syntax
-    // label: 'Broken Expression 2',
-  });
+  const brokenExpr2 = b.addBlock('Expression');
+  b.setConfig(brokenExpr2, 'expression', 'in0 +');  // Incomplete syntax
+  // label: 'Broken Expression 2',
 
   // A small disconnected subgraph with an error
-  const brokenExpr = b.addBlock('Expression', {
-    expression: '*** invalid ***',
-    // label: 'Broken Subgraph Source',
-  });
-  const unusedAdd = b.addBlock('Add', {});
+  const brokenExpr = b.addBlock('Expression');
+  b.setConfig(brokenExpr, 'expression', '*** invalid ***');
+  // label: 'Broken Subgraph Source',
+
+  const unusedAdd = b.addBlock('Add');
   b.wire(brokenExpr, 'out', unusedAdd, 'a');
   // This whole subgraph is disconnected from render - won't fail compilation
 

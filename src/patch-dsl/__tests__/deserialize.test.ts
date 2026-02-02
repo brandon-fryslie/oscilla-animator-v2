@@ -38,15 +38,15 @@ describe('deserialize', () => {
     expect(block.params.ry).toBe(0.02);
   });
 
-  it('deserializes edge', () => {
+  it('deserializes edge via outputs', () => {
     const hcl = `
       patch "Test" {
-        block "Const" "a" {}
-        block "Const" "b" {}
-        connect {
-          from = a.out
-          to = b.value
+        block "Const" "a" {
+          outputs {
+            out = b.value
+          }
         }
+        block "Const" "b" {}
       }
     `;
     const result = deserializePatchFromHCL(hcl);
@@ -57,12 +57,13 @@ describe('deserialize', () => {
     expect(result.patch.edges[0].to.slotId).toBe('value');
   });
 
-  it('handles unresolvable references', () => {
+  it('handles unresolvable references in outputs', () => {
     const hcl = `
       patch "Test" {
-        connect {
-          from = nonexistent.out
-          to = missing.in
+        block "Const" "a" {
+          outputs {
+            out = nonexistent.in
+          }
         }
       }
     `;
@@ -104,22 +105,22 @@ describe('deserialize', () => {
     expect(block.type).toBe('UnknownType');
   });
 
-  it('deserializes disabled edges', () => {
+  it('deserializes edges via inline outputs', () => {
     const hcl = `
       patch "Test" {
-        block "Const" "a" {}
-        block "Const" "b" {}
-        connect {
-          from = a.out
-          to = b.value
-          enabled = false
+        block "Const" "a" {
+          outputs {
+            out = b.value
+          }
         }
+        block "Const" "b" {}
       }
     `;
     const result = deserializePatchFromHCL(hcl);
 
     expect(result.errors).toHaveLength(0);
-    expect(result.patch.edges[0].enabled).toBe(false);
+    expect(result.patch.edges.length).toBe(1);
+    expect(result.patch.edges[0].enabled).toBe(true);
   });
 
   it('deserializes params with arrays', () => {
