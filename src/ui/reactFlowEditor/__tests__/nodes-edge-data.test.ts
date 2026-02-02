@@ -16,7 +16,8 @@ describe('createEdgeFromPatchEdge - lens data population', () => {
       {
         id: 'lens1',
         lensType: 'Adapter_PhaseToScalar01',
-        sourceAddr: 'v1:blocks.source.outputs.out',
+        sourceAddress: 'v1:blocks.source.outputs.out',
+        sortKey: 0,
       },
     ];
 
@@ -25,6 +26,8 @@ describe('createEdgeFromPatchEdge - lens data population', () => {
       type: 'Osc_Phasor',
       displayName: 'Source',
       params: {},
+      domainId: null,
+      role: { kind: 'user', meta: {} },
       inputPorts: new Map(),
       outputPorts: new Map(),
     };
@@ -34,6 +37,8 @@ describe('createEdgeFromPatchEdge - lens data population', () => {
       type: 'Math_Mult',
       displayName: 'Target',
       params: {},
+      domainId: null,
+      role: { kind: 'user', meta: {} },
       inputPorts: new Map([
         ['in', { id: 'in', combineMode: 'last', lenses }],
       ]),
@@ -45,6 +50,8 @@ describe('createEdgeFromPatchEdge - lens data population', () => {
       from: { kind: 'port', blockId: 'source', slotId: 'out' },
       to: { kind: 'port', blockId: 'target', slotId: 'in' },
       sortKey: 0,
+      enabled: true,
+      role: { kind: 'user', meta: {} },
     };
 
     const blocks = new Map<BlockId, Block>([
@@ -67,6 +74,8 @@ describe('createEdgeFromPatchEdge - lens data population', () => {
       type: 'Osc_Phasor',
       displayName: 'Source',
       params: {},
+      domainId: null,
+      role: { kind: 'user', meta: {} },
       inputPorts: new Map(),
       outputPorts: new Map(),
     };
@@ -76,6 +85,8 @@ describe('createEdgeFromPatchEdge - lens data population', () => {
       type: 'Math_Mult',
       displayName: 'Target',
       params: {},
+      domainId: null,
+      role: { kind: 'user', meta: {} },
       inputPorts: new Map([
         ['in', { id: 'in', combineMode: 'last' }],
       ]),
@@ -87,6 +98,8 @@ describe('createEdgeFromPatchEdge - lens data population', () => {
       from: { kind: 'port', blockId: 'source', slotId: 'out' },
       to: { kind: 'port', blockId: 'target', slotId: 'in' },
       sortKey: 0,
+      enabled: true,
+      role: { kind: 'user', meta: {} },
     };
 
     const blocks = new Map<BlockId, Block>([
@@ -105,12 +118,14 @@ describe('createEdgeFromPatchEdge - lens data population', () => {
       {
         id: 'lens1',
         lensType: 'Adapter_PhaseToScalar01',
-        sourceAddr: 'v1:blocks.source.outputs.out',
+        sourceAddress: 'v1:blocks.source.outputs.out',
+        sortKey: 0,
       },
       {
         id: 'lens2',
         lensType: 'Lens_Scale',
-        sourceAddr: 'v1:blocks.source.outputs.out',
+        sourceAddress: 'v1:blocks.source.outputs.out',
+        sortKey: 1,
       },
     ];
 
@@ -119,6 +134,8 @@ describe('createEdgeFromPatchEdge - lens data population', () => {
       type: 'Osc_Phasor',
       displayName: 'Source',
       params: {},
+      domainId: null,
+      role: { kind: 'user', meta: {} },
       inputPorts: new Map(),
       outputPorts: new Map(),
     };
@@ -128,6 +145,8 @@ describe('createEdgeFromPatchEdge - lens data population', () => {
       type: 'Math_Mult',
       displayName: 'Target',
       params: {},
+      domainId: null,
+      role: { kind: 'user', meta: {} },
       inputPorts: new Map([
         ['in', { id: 'in', combineMode: 'last', lenses }],
       ]),
@@ -139,6 +158,8 @@ describe('createEdgeFromPatchEdge - lens data population', () => {
       from: { kind: 'port', blockId: 'source', slotId: 'out' },
       to: { kind: 'port', blockId: 'target', slotId: 'in' },
       sortKey: 0,
+      enabled: true,
+      role: { kind: 'user', meta: {} },
     };
 
     const blocks = new Map<BlockId, Block>([
@@ -160,6 +181,8 @@ describe('createEdgeFromPatchEdge - lens data population', () => {
       type: 'Osc_Phasor',
       displayName: 'Source',
       params: {},
+      domainId: null,
+      role: { kind: 'user', meta: {} },
       inputPorts: new Map(),
       outputPorts: new Map(),
     };
@@ -169,6 +192,8 @@ describe('createEdgeFromPatchEdge - lens data population', () => {
       type: 'Math_Mult',
       displayName: 'Target',
       params: {},
+      domainId: null,
+      role: { kind: 'user', meta: {} },
       inputPorts: new Map([
         ['in', { id: 'in', combineMode: 'last' }], // No lenses
       ]),
@@ -180,6 +205,8 @@ describe('createEdgeFromPatchEdge - lens data population', () => {
       from: { kind: 'port', blockId: 'source', slotId: 'out' },
       to: { kind: 'port', blockId: 'target', slotId: 'in' },
       sortKey: 0,
+      enabled: true,
+      role: { kind: 'user', meta: {} },
     };
 
     const blocks = new Map<BlockId, Block>([
@@ -199,6 +226,8 @@ describe('createEdgeFromPatchEdge - lens data population', () => {
       type: 'Osc_Phasor',
       displayName: 'Source',
       params: {},
+      domainId: null,
+      role: { kind: 'user', meta: {} },
       inputPorts: new Map(),
       outputPorts: new Map(),
     };
@@ -208,6 +237,8 @@ describe('createEdgeFromPatchEdge - lens data population', () => {
       type: 'Math_Mult',
       displayName: 'Target',
       params: {},
+      domainId: null,
+      role: { kind: 'user', meta: {} },
       inputPorts: new Map([
         ['in', { id: 'in', combineMode: 'last' }],
       ]),
@@ -219,6 +250,8 @@ describe('createEdgeFromPatchEdge - lens data population', () => {
       from: { kind: 'port', blockId: 'source', slotId: 'out' },
       to: { kind: 'port', blockId: 'target', slotId: 'in' },
       sortKey: 0,
+      enabled: true,
+      role: { kind: 'user', meta: {} },
     };
 
     const blocks = new Map<BlockId, Block>([
