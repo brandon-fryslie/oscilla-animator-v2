@@ -2009,7 +2009,7 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value, pa
   }, [showAutocomplete, filterPrefix, blockContext, suggestionProvider]);
 
   // Calculate dropdown position from editor element
-  const updateDropdownPosition = useCallback((cursor: number) => {
+  const updateDropdownPosition = useCallback((_cursor: number) => {
     const editorEl = tokenEditorRef.current?.getElement();
     if (!editorEl) return;
     // Use the selection range to get pixel position
