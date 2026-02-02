@@ -8,13 +8,14 @@
 import type { Node, Edge as ReactFlowEdge } from 'reactflow';
 import type { Block, BlockId, Edge, DefaultSource, UIControlHint, CombineMode } from '../../types';
 import type { Patch, LensAttachment } from '../../graph/Patch';
-import type { BlockDef, InputDef } from '../../blocks/registry';
+import type { AnyBlockDef, InputDef } from '../../blocks/registry';
 import type { PayloadType } from '../../core/canonical-types';
 import type { InferenceCanonicalType, InferencePayloadType } from '../../core/inference-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION, canonicalType } from '../../core/canonical-types';
 import { formatTypeForTooltip, getTypeColor, getPortTypeFromBlockType, formatUnitForDisplay } from './typeValidation';
 import { findAdapter } from '../../blocks/adapter-spec';
 import { sortEdgesBySortKey } from '../../compiler/passes-v2/combine-utils';
+import { getLensLabel } from './lensUtils';
 
 /**
  * Connection info for a port
@@ -28,302 +29,209 @@ export interface PortConnectionInfo {
   portId: string;
   /** Edge ID for debug value lookup */
   edgeId: string;
+  /** Edge role (e.g., 'accumulate') if present */
+  role?: string;
 }
 
 /**
- * Port data for ReactFlow rendering
+ * Data for a single port
  */
 export interface PortData {
+  /** Port slot ID */
   id: string;
+  /** Display label */
   label: string;
+  /** Port type info */
+  type: InferenceCanonicalType | null;
+  /** Color for visual coding */
+  color: string;
+  /** Default source config (for inputs) */
   defaultSource?: DefaultSource;
-  /** Payload type for coloring handles */
-  payloadType: InferencePayloadType;
-  /** Full type for tooltip */
-  typeTooltip: string;
-  /** Color for handle based on type */
-  typeColor: string;
-  /** Whether this port is connected to an edge */
-  isConnected: boolean;
-  /** Connection info if connected */
-  connection?: PortConnectionInfo;
-  /** UI hint for default source control (min/max/step) */
-  uiHint?: UIControlHint;
-  /** Number of lenses attached to this port (input ports only) */
+  /** Combine mode (for inputs) */
+  combineMode?: CombineMode;
+  /** Number of lenses attached */
   lensCount?: number;
-  /** Lenses attached to this port (input ports only) */
+  /** Full lens attachments (for popover details) */
   lenses?: readonly LensAttachment[];
+  /** List of connected blocks (with metadata) */
+  connections: PortConnectionInfo[];
 }
 
 /**
- * Parameter data for ReactFlow rendering
- */
-export interface ParamData {
-  id: string;
-  label: string;
-  value: unknown;
-  hint?: UIControlHint;
-}
-
-/**
- * Custom data stored in each ReactFlow node.
- * Links back to the canonical block in PatchStore.
+ * Data for ReactFlow node rendering
  */
 export interface OscillaNodeData {
-  blockId: BlockId;
+  /** Block type */
   blockType: string;
+  /** Display label */
   label: string;
-  displayName: string; // User-editable display name (always has value)
+  /** Node color (from block category) */
+  color: string;
+  /** Input ports */
   inputs: PortData[];
+  /** Output ports */
   outputs: PortData[];
-  params: ParamData[];
 }
 
 /**
- * ReactFlow node type for Oscilla blocks.
- */
-export type OscillaNode = Node<OscillaNodeData>;
-
-/**
- * Get effective default source for an input port.
- * Instance override takes precedence over registry default.
- */
-function getEffectiveDefaultSource(
-  block: Block,
-  inputId: string,
-  input: InputDef
-): DefaultSource | undefined {
-  // Instance-level override takes precedence
-  const instanceOverride = block.inputPorts.get(inputId)?.defaultSource;
-  if (instanceOverride) {
-    return instanceOverride;
-  }
-  // Fall back to registry default
-  return (input as InputDef & { defaultSource?: DefaultSource }).defaultSource;
-}
-
-/**
- * Create port data with type information.
+ * Create port data from a port map (inputs or outputs).
+ * Maps Patch port data to UI-friendly format for ReactFlow nodes.
  */
 function createPortData(
-  id: string,
-  label: string,
-  type: InferenceCanonicalType | undefined,
-  isConnected: boolean,
-  defaultSource?: DefaultSource,
-  connection?: PortConnectionInfo,
-  uiHint?: UIControlHint,
-  lenses?: readonly LensAttachment[]
-): PortData {
-  // For inputs without a type (non-port inputs), use a default
-  const effectiveType: InferenceCanonicalType = type || canonicalType(FLOAT);
+  portMap: ReadonlyMap<string, { label?: string; type: InferenceCanonicalType }> | undefined,
+  portType: 'input' | 'output',
+  blockDef: AnyBlockDef,
+  block: Block,
+  patch: Patch
+): PortData[] {
+  if (!portMap) return [];
 
-  return {
-    id,
-    label,
-    defaultSource,
-    payloadType: effectiveType.payload,
-    typeTooltip: formatTypeForTooltip(effectiveType),
-    typeColor: getTypeColor(effectiveType.payload),
-    isConnected,
-    connection,
-    uiHint,
-    lensCount: lenses?.length ?? 0,
-    lenses,
-  };
+  // Get input-specific data (defaultSource, combineMode, lenses)
+  const inputPortMap = portType === 'input' ? block.inputPorts : undefined;
+
+  return Array.from(portMap.entries()).map(([id, port]) => {
+    const inputPort = inputPortMap?.get(id);
+    const blockDefPort = portType === 'input' ? blockDef.inputs[id] : blockDef.outputs[id];
+
+    // Build connections list
+    const connections: PortConnectionInfo[] = [];
+    const edges = Array.from(patch.edges.values());
+    const relevantEdges =
+      portType === 'input'
+        ? edges.filter(e => e.to.blockId === block.id && e.to.slotId === id)
+        : edges.filter(e => e.from.blockId === block.id && e.from.slotId === id);
+
+    // Sort edges by sortKey for inputs (to match combineMode order)
+    const sortedEdges = portType === 'input' ? sortEdgesBySortKey(relevantEdges) : relevantEdges;
+
+    for (const edge of sortedEdges) {
+      const connectedBlockId = portType === 'input' ? edge.from.blockId : edge.to.blockId;
+      const connectedBlock = patch.blocks.get(connectedBlockId);
+      if (connectedBlock) {
+        connections.push({
+          blockId: connectedBlockId,
+          blockLabel: connectedBlock.name,
+          portId: portType === 'input' ? edge.from.slotId : edge.to.slotId,
+          edgeId: edge.id,
+          role: edge.role,
+        });
+      }
+    }
+
+    return {
+      id,
+      label: port.label ?? id,
+      type: port.type,
+      color: port.type ? getTypeColor(port.type) : '#888',
+      defaultSource: inputPort?.defaultSource,
+      combineMode: inputPort?.combineMode,
+      lensCount: inputPort?.lenses?.length ?? 0,
+      lenses: inputPort?.lenses,
+      connections,
+    };
+  });
 }
 
 /**
- * Create ReactFlow node from Oscilla block.
- *
- * @param block - The block to convert
- * @param blockDef - Block definition from registry
- * @param edges - All edges in the patch (for connection info)
- * @param blocks - All blocks in the patch (for looking up connected block labels)
- * @param blockDefs - Block definitions map (for looking up connected block labels)
+ * Create a ReactFlow node from a Patch block.
  */
 export function createNodeFromBlock(
   block: Block,
-  blockDef: BlockDef,
-  edges?: readonly Edge[],
-  blocks?: ReadonlyMap<BlockId, Block>,
-  blockDefs?: ReadonlyMap<string, BlockDef>
-): OscillaNode {
-  // Build connection info maps for this block's ports
-  const inputConnections = new Map<string, PortConnectionInfo>();
-  const outputConnections = new Map<string, PortConnectionInfo>();
+  blockDef: AnyBlockDef,
+  patch: Patch
+): Node<OscillaNodeData> {
+  // Compute node color from category
+  const categoryColors: Record<string, string> = {
+    math: '#3b82f6',
+    signal: '#10b981',
+    shape: '#f59e0b',
+    control: '#8b5cf6',
+    adapter: '#f59e0b',
+    render: '#ef4444',
+    io: '#06b6d4',
+  };
+  const color = categoryColors[blockDef.category] ?? '#6b7280';
 
-  if (edges && blocks && blockDefs) {
-    for (const edge of edges) {
-      // Input connection: edge goes TO this block
-      if (edge.to.blockId === block.id) {
-        const sourceBlock = blocks.get(edge.from.blockId as BlockId);
-        const sourceBlockDef = sourceBlock ? blockDefs.get(sourceBlock.type) : undefined;
-        inputConnections.set(edge.to.slotId, {
-          blockId: edge.from.blockId,
-          blockLabel: sourceBlock?.displayName || sourceBlockDef?.label || edge.from.blockId,
-          portId: edge.from.slotId,
-          edgeId: edge.id,
-        });
-      }
-      // Output connection: edge comes FROM this block
-      if (edge.from.blockId === block.id) {
-        const targetBlock = blocks.get(edge.to.blockId as BlockId);
-        const targetBlockDef = targetBlock ? blockDefs.get(targetBlock.type) : undefined;
-        outputConnections.set(edge.from.slotId, {
-          blockId: edge.to.blockId,
-          blockLabel: targetBlock?.displayName || targetBlockDef?.label || edge.to.blockId,
-          portId: edge.to.slotId,
-          edgeId: edge.id,
-        });
-      }
-    }
-  }
-
-  // Extract parameters from block.params and match with input definitions
-  const params: ParamData[] = [];
-  for (const [inputId, inputDef] of Object.entries(blockDef.inputs)) {
-    // Only include params for non-port inputs (config-only inputs)
-    if (inputDef.exposedAsPort === false && block.params[inputId] !== undefined) {
-      params.push({
-        id: inputId,
-        label: inputDef.label || inputId,
-        value: block.params[inputId],
-        hint: inputDef.uiHint,
-      });
-    }
-  }
+  const inputs = createPortData(block.inputPorts, 'input', blockDef, block, patch);
+  const outputs = createPortData(block.outputPorts, 'output', blockDef, block, patch);
 
   return {
     id: block.id,
     type: 'oscilla',
-    position: { x: 0, y: 0 }, // Will be set by layout
+    position: block.position ?? { x: 0, y: 0 },
     data: {
-      blockId: block.id,
       blockType: block.type,
-      label: blockDef.label,
-      displayName: block.displayName,
-      inputs: Object.entries(blockDef.inputs).map(([inputId, input]) => {
-        const lenses = block.inputPorts.get(inputId)?.lenses;
-        return createPortData(
-          inputId,
-          input.label || inputId,
-          input.type,
-          inputConnections.has(inputId),
-          getEffectiveDefaultSource(block, inputId, input),
-          inputConnections.get(inputId),
-          input.uiHint,
-          lenses
-        );
-      }),
-      outputs: Object.entries(blockDef.outputs).map(([outputId, output]) =>
-        createPortData(
-          outputId,
-          output.label || outputId,
-          output.type,
-          outputConnections.has(outputId),
-          undefined,
-          outputConnections.get(outputId)
-        )
-      ),
-      params,
+      label: block.name,
+      color,
+      inputs,
+      outputs,
     },
   };
 }
 
 /**
- * Get IDs of edges that don't contribute to a port's final value.
- * For 'last' mode, all but the highest-sortKey edge are non-contributing.
- * For 'first' mode, all but the lowest-sortKey edge are non-contributing.
- * For commutative modes (sum, etc.), all edges contribute.
+ * Payload type name for display
  */
-export function getNonContributingEdges(
-  patch: Patch,
-  targetBlockId: string,
-  targetPortId: string,
-  combineMode: CombineMode
-): Set<string> {
-  // Get all edges targeting this port
-  const edgesToPort = patch.edges.filter(
-    e => e.to.blockId === targetBlockId && e.to.slotId === targetPortId
-  );
-
-  // Single edge always contributes
-  if (edgesToPort.length <= 1) {
-    return new Set();
+function getPayloadLabel(payload: InferencePayloadType): string {
+  switch (payload.kind) {
+    case 'float':
+      return 'Float';
+    case 'int':
+      return 'Int';
+    case 'bool':
+      return 'Bool';
+    case 'vec2':
+      return 'Vec2';
+    case 'vec3':
+      return 'Vec3';
+    case 'color':
+      return 'Color';
+    case 'camera-projection':
+      return 'Camera';
+    default:
+      return 'Unknown';
   }
-
-  // Commutative modes: all edges contribute
-  const commutativeModes: CombineMode[] = ['sum', 'average', 'max', 'min', 'mul', 'or', 'and'];
-  if (commutativeModes.includes(combineMode)) {
-    return new Set();
-  }
-
-  // Sort by sortKey (ascending), then edge ID
-  const sorted = sortEdgesBySortKey(edgesToPort);
-
-  // 'last': highest sortKey wins → all but last are non-contributing
-  if (combineMode === 'last') {
-    return new Set(sorted.slice(0, -1).map(e => e.id));
-  }
-
-  // 'first': lowest sortKey wins → all but first are non-contributing
-  if (combineMode === 'first') {
-    return new Set(sorted.slice(1).map(e => e.id));
-  }
-
-  // 'layer': all contribute (occlusion is complex, treat as all visible)
-  return new Set();
 }
 
 /**
- * Compute non-contributing edges for ALL ports in a patch.
- * Returns a Set of edge IDs that should be visually dimmed.
+ * Port type display (payload + unit)
  */
-export function computeAllNonContributingEdges(patch: Patch): Set<string> {
-  const nonContributing = new Set<string>();
-
-  // Group edges by target port
-  const edgesByTarget = new Map<string, Edge[]>();
-  for (const edge of patch.edges) {
-    const key = `${edge.to.blockId}:${edge.to.slotId}`;
-    if (!edgesByTarget.has(key)) {
-      edgesByTarget.set(key, []);
-    }
-    edgesByTarget.get(key)!.push(edge);
+export function formatPortType(type: InferenceCanonicalType): string {
+  const payloadLabel = getPayloadLabel(type.payload);
+  if (type.unit && type.unit.kind !== 'none') {
+    return `${payloadLabel} (${formatUnitForDisplay(type.unit)})`;
   }
-
-  // For each port with multiple edges, check combine mode
-  for (const [key, edges] of edgesByTarget) {
-    if (edges.length <= 1) continue;
-
-    const [blockId, portId] = key.split(':');
-    const block = patch.blocks.get(blockId as BlockId);
-    if (!block) continue;
-
-    const inputPort = block.inputPorts.get(portId);
-    if (!inputPort) continue;
-
-    const combineMode = inputPort.combineMode;
-    const nonContributingForPort = getNonContributingEdges(
-      patch, blockId, portId, combineMode
-    );
-
-    for (const edgeId of nonContributingForPort) {
-      nonContributing.add(edgeId);
-    }
-  }
-
-  return nonContributing;
+  return payloadLabel;
 }
 
 /**
- * Create ReactFlow edge from Oscilla edge.
- * Optionally computes adapter label from source/target block types.
- *
- * @param edge - The edge to convert
- * @param blocks - All blocks in the patch (for adapter detection)
- * @param nonContributingEdges - Set of edge IDs that don't contribute to final value
+ * Control hint display name
+ */
+export function getControlHintLabel(hint: UIControlHint | undefined): string {
+  if (!hint) return 'No control';
+  return hint.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+/**
+ * DefaultSource display name
+ */
+export function getDefaultSourceLabel(ds: DefaultSource | undefined): string {
+  if (!ds) return 'None';
+  switch (ds.kind) {
+    case 'constant':
+      return `Constant: ${JSON.stringify(ds.value)}`;
+    case 'external':
+      return `External: ${ds.channel}`;
+    case 'intrinsic':
+      return `Intrinsic: ${ds.property}`;
+    default:
+      return 'Unknown';
+  }
+}
+
+/**
+ * Convert a Patch edge to a ReactFlow edge with visual styling.
+ * Includes auto-adapter detection and lens attachment visualization.
  */
 export function createEdgeFromPatchEdge(
   edge: Edge,
@@ -366,6 +274,19 @@ export function createEdgeFromPatchEdge(
         }
       }
     }
+
+    // Check for user-attached lenses on the target port (in addition to auto-adapters)
+    if (targetBlock) {
+      const targetPort = targetBlock.inputPorts.get(edge.to.slotId);
+      if (targetPort?.lenses && targetPort.lenses.length > 0) {
+        const lensLabels = targetPort.lenses
+          .map(l => getLensLabel(l.lensType))
+          .join(', ');
+        rfEdge.label = lensLabels;
+        rfEdge.labelStyle = { fontSize: 10, fill: '#d97706' }; // Darker amber for text
+        rfEdge.style = { ...(rfEdge.style || {}), stroke: '#f59e0b' };
+      }
+    }
   }
 
   return rfEdge;
@@ -375,6 +296,6 @@ export function createEdgeFromPatchEdge(
  * Get handle ID for ReactFlow.
  * ReactFlow uses handle IDs to match source/target connections.
  */
-export function getHandleId(slotId: string, direction: 'input' | 'output'): string {
-  return `${direction}-${slotId}`;
+export function getHandleId(slotId: string): string {
+  return slotId;
 }
