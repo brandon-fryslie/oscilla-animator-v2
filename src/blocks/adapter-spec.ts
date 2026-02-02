@@ -22,7 +22,18 @@ import {
   perspectivesEqual,
   branchesEqual,
 } from '../core/canonical-types/equality';
-import type { Axis } from '../core/canonical-types/axis';
+import type {
+  Cardinality,
+  CardinalityValue,
+  Temporality,
+  TemporalityValue,
+  Binding,
+  BindingValue,
+  Perspective,
+  PerspectiveValue,
+  Branch,
+  BranchValue,
+} from '../core/canonical-types';
 import { BLOCK_DEFS_BY_TYPE } from './registry';
 
 // =============================================================================
@@ -133,15 +144,33 @@ export function extractPattern(type: InferenceCanonicalType): TypePattern {
  * Check if an axis value equals a pattern axis value.
  * Uses structural comparison via per-axis equality functions.
  */
-function axisValuesEqual(axisName: keyof Extent, a: Axis<unknown>, b: Axis<unknown>): boolean {
-  const aVal = requireInst(a, axisName);
-  const bVal = requireInst(b, axisName);
+function axisValuesEqual(axisName: keyof Extent, a: Extent[keyof Extent], b: Extent[keyof Extent]): boolean {
   switch (axisName) {
-    case 'cardinality': return cardinalitiesEqual(aVal, bVal);
-    case 'temporality': return temporalitiesEqual(aVal, bVal);
-    case 'binding': return bindingsEqual(aVal, bVal);
-    case 'perspective': return perspectivesEqual(aVal, bVal);
-    case 'branch': return branchesEqual(aVal, bVal);
+    case 'cardinality': {
+      const aVal = requireInst(a as Cardinality, axisName) as CardinalityValue;
+      const bVal = requireInst(b as Cardinality, axisName) as CardinalityValue;
+      return cardinalitiesEqual(aVal, bVal);
+    }
+    case 'temporality': {
+      const aVal = requireInst(a as Temporality, axisName) as TemporalityValue;
+      const bVal = requireInst(b as Temporality, axisName) as TemporalityValue;
+      return temporalitiesEqual(aVal, bVal);
+    }
+    case 'binding': {
+      const aVal = requireInst(a as Binding, axisName) as BindingValue;
+      const bVal = requireInst(b as Binding, axisName) as BindingValue;
+      return bindingsEqual(aVal, bVal);
+    }
+    case 'perspective': {
+      const aVal = requireInst(a as Perspective, axisName) as PerspectiveValue;
+      const bVal = requireInst(b as Perspective, axisName) as PerspectiveValue;
+      return perspectivesEqual(aVal, bVal);
+    }
+    case 'branch': {
+      const aVal = requireInst(a as Branch, axisName) as BranchValue;
+      const bVal = requireInst(b as Branch, axisName) as BranchValue;
+      return branchesEqual(aVal, bVal);
+    }
   }
 }
 
