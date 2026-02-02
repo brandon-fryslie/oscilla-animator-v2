@@ -14,6 +14,7 @@ import type { Extent } from './extent';
 import type { CanonicalType } from './canonical-type';
 import { payloadsEqual } from './payloads';
 import { unitsEqual } from './units';
+import { contractsEqual } from './contract';
 
 // =============================================================================
 // Per-Axis Equality
@@ -100,11 +101,13 @@ export function extentsEqual(a: Extent, b: Extent): boolean {
 /**
  * Check if two CanonicalType objects are equal (deep structural equality).
  * Does NOT support vars - both must be fully instantiated.
+ * Treats undefined contract as 'none'.
  */
 export function typesEqual(a: CanonicalType, b: CanonicalType): boolean {
   return (
     payloadsEqual(a.payload, b.payload) &&
     unitsEqual(a.unit, b.unit) &&
-    extentsEqual(a.extent, b.extent)
+    extentsEqual(a.extent, b.extent) &&
+    contractsEqual(a.contract, b.contract)
   );
 }

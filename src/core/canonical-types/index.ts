@@ -8,7 +8,7 @@
  *   units.ts, payloads.ts, const-values.ts, stride.ts,
  *   axis.ts, cardinality.ts, temporality.ts, binding.ts,
  *   perspective.ts, branch.ts, extent.ts,
- *   instance-ref.ts, canonical-type.ts, equality.ts, legacy.ts
+ *   instance-ref.ts, canonical-type.ts, contract.ts, equality.ts, legacy.ts
  */
 
 export {
@@ -119,6 +119,16 @@ export { type Extent } from './extent';
 export { type InstanceRef, instanceRef } from './instance-ref';
 
 export {
+  type ValueContract,
+  contractNone,
+  contractClamp01,
+  contractWrap01,
+  contractClamp11,
+  contractsEqual,
+  contractsCompatible,
+} from './contract';
+
+export {
   type CanonicalType,
   canonicalType,
   canonicalSignal,
@@ -138,4 +148,3 @@ export {
   extentsEqual,
   typesEqual,
 } from './equality';
-
