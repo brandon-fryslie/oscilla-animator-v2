@@ -6,7 +6,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, payloadStride, unitHsl, unitScalar } from '../../core/canonical-types';
+import { canonicalType, payloadStride, unitHsl, unitNorm01 } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
@@ -25,7 +25,7 @@ registerBlock({
   },
   inputs: {
     in: { label: 'Color', type: canonicalType(COLOR, unitHsl()) },
-    alpha: { label: 'Alpha', type: canonicalType(FLOAT, unitScalar()), defaultSource: defaultSourceConst(1.0) },
+    alpha: { label: 'Alpha', type: canonicalType(FLOAT, unitNorm01()), defaultSource: defaultSourceConst(1.0) },
   },
   outputs: {
     out: { label: 'Color', type: canonicalType(COLOR, unitHsl()) },
@@ -36,7 +36,7 @@ registerBlock({
     if (!colorInput || !alphaInput) throw new Error('AlphaMultiply requires in and alpha inputs');
 
     const outType = ctx.outTypes[0];
-    const floatType = canonicalType(FLOAT, unitScalar());
+    const floatType = canonicalType(FLOAT, unitNorm01());
 
     // Extract channels
     const h = ctx.b.extract(colorInput.id, 0, floatType);

@@ -6,7 +6,7 @@
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
-import { canonicalType, canonicalField, floatConst, requireInst, payloadStride } from '../../core/canonical-types';
+import { canonicalType, canonicalField, floatConst, requireInst, payloadStride, unitNorm01 } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
 import { defaultSourceConst } from '../../types';
 
@@ -30,10 +30,10 @@ registerBlock({
   },
   inputs: {
     elements: { label: 'Elements', type: canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
-    r: { label: 'Red', type: canonicalType(FLOAT), defaultValue: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    g: { label: 'Green', type: canonicalType(FLOAT), defaultValue: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    b: { label: 'Blue', type: canonicalType(FLOAT), defaultValue: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    a: { label: 'Alpha', type: canonicalType(FLOAT), defaultValue: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    r: { label: 'Red', type: canonicalType(FLOAT, unitNorm01()), defaultValue: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    g: { label: 'Green', type: canonicalType(FLOAT, unitNorm01()), defaultValue: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    b: { label: 'Blue', type: canonicalType(FLOAT, unitNorm01()), defaultValue: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    a: { label: 'Alpha', type: canonicalType(FLOAT, unitNorm01()), defaultValue: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
   },
   outputs: {
     color: { label: 'Color', type: canonicalField(COLOR, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
@@ -55,16 +55,16 @@ registerBlock({
     // Get r, g, b, a as signals (using defaults if not connected)
     const rSig = (inputsById.r && 'type' in inputsById.r && requireInst(inputsById.r.type.extent.cardinality, 'cardinality').kind === 'one')
       ? inputsById.r.id
-      : ctx.b.constant(floatConst(1.0), canonicalType(FLOAT));
+      : ctx.b.constant(floatConst(1.0), canonicalType(FLOAT, unitNorm01()));
     const gSig = (inputsById.g && 'type' in inputsById.g && requireInst(inputsById.g.type.extent.cardinality, 'cardinality').kind === 'one')
       ? inputsById.g.id
-      : ctx.b.constant(floatConst(1.0), canonicalType(FLOAT));
+      : ctx.b.constant(floatConst(1.0), canonicalType(FLOAT, unitNorm01()));
     const bSig = (inputsById.b && 'type' in inputsById.b && requireInst(inputsById.b.type.extent.cardinality, 'cardinality').kind === 'one')
       ? inputsById.b.id
-      : ctx.b.constant(floatConst(1.0), canonicalType(FLOAT));
+      : ctx.b.constant(floatConst(1.0), canonicalType(FLOAT, unitNorm01()));
     const aSig = (inputsById.a && 'type' in inputsById.a && requireInst(inputsById.a.type.extent.cardinality, 'cardinality').kind === 'one')
       ? inputsById.a.id
-      : ctx.b.constant(floatConst(1.0), canonicalType(FLOAT));
+      : ctx.b.constant(floatConst(1.0), canonicalType(FLOAT, unitNorm01()));
 
     // Build a scalar float field type matching the instance extent
     const floatFieldType = canonicalField(FLOAT, { kind: 'scalar' }, { instanceId, domainTypeId: makeDomainTypeId('default') });
