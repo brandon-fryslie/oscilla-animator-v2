@@ -5,7 +5,7 @@
  * Uses GraphEditorCore for the internal graph canvas.
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState, useEffect } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useStores } from '../../stores';
 import { GraphEditorCore, type GraphEditorCoreHandle } from '../graphEditor/GraphEditorCore';
@@ -26,8 +26,11 @@ export const CompositeEditor = observer(function CompositeEditor() {
   const { compositeEditor } = useStores();
   const graphEditorRef = useRef<GraphEditorCoreHandle>(null);
 
-  // DSL sidebar visibility state (hidden by default)
-  const [showDslSidebar, setShowDslSidebar] = useState(false);
+  // Right panel state
+  const [activeTab, setActiveTab] = useState<'ports' | 'hcl'>('ports');
+  const [panelWidth, setPanelWidth] = useState(350);
+  const [isResizing, setIsResizing] = useState(false);
+  const resizeStartRef = useRef<{ x: number; width: number } | null>(null);
 
   // Create adapter for GraphEditorCore
   const adapter = useMemo(
@@ -80,6 +83,41 @@ export const CompositeEditor = observer(function CompositeEditor() {
     event.dataTransfer.dropEffect = 'copy';
   }, []);
 
+  // Panel resize handlers
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    resizeStartRef.current = {
+      x: e.clientX,
+      width: panelWidth,
+    };
+  }, [panelWidth]);
+
+  const handleResizeMove = useCallback((e: MouseEvent) => {
+    if (!isResizing || !resizeStartRef.current) return;
+
+    const deltaX = resizeStartRef.current.x - e.clientX;
+    const newWidth = Math.max(200, Math.min(600, resizeStartRef.current.width + deltaX));
+    setPanelWidth(newWidth);
+  }, [isResizing]);
+
+  const handleResizeEnd = useCallback(() => {
+    setIsResizing(false);
+    resizeStartRef.current = null;
+  }, []);
+
+  // Add global mouse event listeners for resizing
+  useEffect(() => {
+    if (isResizing) {
+      document.addEventListener('mousemove', handleResizeMove);
+      document.addEventListener('mouseup', handleResizeEnd);
+      return () => {
+        document.removeEventListener('mousemove', handleResizeMove);
+        document.removeEventListener('mouseup', handleResizeEnd);
+      };
+    }
+  }, [isResizing, handleResizeMove, handleResizeEnd]);
+
   // If editor is not open, show empty state
   if (!compositeEditor.isOpen) {
     return (
@@ -110,7 +148,7 @@ export const CompositeEditor = observer(function CompositeEditor() {
       {/* Fork notice for library composites */}
       {compositeEditor.isFork && (
         <div className="composite-editor__fork-notice">
-          📋 Editing a copy of a library composite. Save will create a new user composite.
+          Editing a copy of a library composite. Save will create a new user composite.
         </div>
       )}
 
@@ -150,13 +188,6 @@ export const CompositeEditor = observer(function CompositeEditor() {
           </select>
         </div>
         <div className="composite-editor__actions">
-          <button
-            className={`composite-editor__toggle-dsl-btn ${showDslSidebar ? 'composite-editor__toggle-dsl-btn--active' : ''}`}
-            onClick={() => setShowDslSidebar(!showDslSidebar)}
-            title={showDslSidebar ? 'Hide DSL sidebar' : 'Show DSL sidebar'}
-          >
-            {showDslSidebar ? 'Hide DSL' : 'Show DSL'}
-          </button>
           <button
             className="composite-editor__save-btn"
             disabled={!compositeEditor.canSave}
@@ -225,117 +256,142 @@ export const CompositeEditor = observer(function CompositeEditor() {
           />
         </div>
 
-        {/* Middle: DSL sidebar (optional) */}
-        <CompositeEditorDslSidebar
-          store={compositeEditor}
-          visible={showDslSidebar}
-        />
+        {/* Right: Tabbed panel (Exposed Ports / HCL) */}
+        <div className="composite-editor__right-panel" style={{ width: panelWidth }}>
+          {/* Resize handle */}
+          <div
+            className="composite-editor__resize-handle"
+            onMouseDown={handleResizeStart}
+          />
 
-        {/* Right: Port exposure panel */}
-        <div className="composite-editor__ports">
-          <h3>Exposed Ports</h3>
-
-          <div className="composite-editor__port-section">
-            <h4>Inputs</h4>
-            {compositeEditor.allInternalInputPorts.length === 0 ? (
-              <p className="composite-editor__no-ports">No input ports available</p>
-            ) : (
-              <ul className="composite-editor__port-list">
-                {compositeEditor.allInternalInputPorts.map((port) => (
-                  <li
-                    key={`${port.blockId}-${port.portId}`}
-                    className="composite-editor__port-item"
-                  >
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={port.isExposed}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            compositeEditor.exposeInputPort(
-                              port.portId,  // externalId (default = portId)
-                              port.blockId, // internalBlockId
-                              port.portId   // internalPortId
-                            );
-                          } else {
-                            compositeEditor.unexposeInputPort(port.blockId, port.portId);
-                          }
-                        }}
-                      />
-                      <span className="composite-editor__port-name">
-                        {port.blockType}.{port.portId}
-                      </span>
-                    </label>
-                    {port.isExposed && (
-                      <input
-                        type="text"
-                        className="composite-editor__port-external-id"
-                        value={port.externalId || ''}
-                        placeholder="External ID"
-                        onChange={(e) =>
-                          compositeEditor.updateExposedInputId(
-                            port.blockId,
-                            port.portId,
-                            e.target.value
-                          )
-                        }
-                      />
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
+          {/* Tab headers */}
+          <div className="composite-editor__tabs">
+            <button
+              className={`composite-editor__tab ${activeTab === 'ports' ? 'composite-editor__tab--active' : ''}`}
+              onClick={() => setActiveTab('ports')}
+            >
+              Exposed Ports
+            </button>
+            <button
+              className={`composite-editor__tab ${activeTab === 'hcl' ? 'composite-editor__tab--active' : ''}`}
+              onClick={() => setActiveTab('hcl')}
+            >
+              HCL
+            </button>
           </div>
 
-          <div className="composite-editor__port-section">
-            <h4>Outputs</h4>
-            {compositeEditor.allInternalOutputPorts.length === 0 ? (
-              <p className="composite-editor__no-ports">No output ports available</p>
-            ) : (
-              <ul className="composite-editor__port-list">
-                {compositeEditor.allInternalOutputPorts.map((port) => (
-                  <li
-                    key={`${port.blockId}-${port.portId}`}
-                    className="composite-editor__port-item"
-                  >
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={port.isExposed}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            compositeEditor.exposeOutputPort(
-                              port.portId,  // externalId (default = portId)
-                              port.blockId, // internalBlockId
-                              port.portId   // internalPortId
-                            );
-                          } else {
-                            compositeEditor.unexposeOutputPort(port.blockId, port.portId);
-                          }
-                        }}
-                      />
-                      <span className="composite-editor__port-name">
-                        {port.blockType}.{port.portId}
-                      </span>
-                    </label>
-                    {port.isExposed && (
-                      <input
-                        type="text"
-                        className="composite-editor__port-external-id"
-                        value={port.externalId || ''}
-                        placeholder="External ID"
-                        onChange={(e) =>
-                          compositeEditor.updateExposedOutputId(
-                            port.blockId,
-                            port.portId,
-                            e.target.value
-                          )
-                        }
-                      />
-                    )}
-                  </li>
-                ))}
-              </ul>
+          {/* Tab content */}
+          <div className="composite-editor__tab-content">
+            {activeTab === 'ports' && (
+              <div className="composite-editor__ports">
+                <div className="composite-editor__port-section">
+                  <h4>Inputs</h4>
+                  {compositeEditor.allInternalInputPorts.length === 0 ? (
+                    <p className="composite-editor__no-ports">No input ports available</p>
+                  ) : (
+                    <ul className="composite-editor__port-list">
+                      {compositeEditor.allInternalInputPorts.map((port) => (
+                        <li
+                          key={`${port.blockId}-${port.portId}`}
+                          className="composite-editor__port-item"
+                        >
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={port.isExposed}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  compositeEditor.exposeInputPort(
+                                    port.portId,  // externalId (default = portId)
+                                    port.blockId, // internalBlockId
+                                    port.portId   // internalPortId
+                                  );
+                                } else {
+                                  compositeEditor.unexposeInputPort(port.blockId, port.portId);
+                                }
+                              }}
+                            />
+                            <span className="composite-editor__port-name">
+                              {port.blockType}.{port.portId}
+                            </span>
+                          </label>
+                          {port.isExposed && (
+                            <input
+                              type="text"
+                              className="composite-editor__port-external-id"
+                              value={port.externalId || ''}
+                              placeholder="External ID"
+                              onChange={(e) =>
+                                compositeEditor.updateExposedInputId(
+                                  port.blockId,
+                                  port.portId,
+                                  e.target.value
+                                )
+                              }
+                            />
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                <div className="composite-editor__port-section">
+                  <h4>Outputs</h4>
+                  {compositeEditor.allInternalOutputPorts.length === 0 ? (
+                    <p className="composite-editor__no-ports">No output ports available</p>
+                  ) : (
+                    <ul className="composite-editor__port-list">
+                      {compositeEditor.allInternalOutputPorts.map((port) => (
+                        <li
+                          key={`${port.blockId}-${port.portId}`}
+                          className="composite-editor__port-item"
+                        >
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={port.isExposed}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  compositeEditor.exposeOutputPort(
+                                    port.portId,  // externalId (default = portId)
+                                    port.blockId, // internalBlockId
+                                    port.portId   // internalPortId
+                                  );
+                                } else {
+                                  compositeEditor.unexposeOutputPort(port.blockId, port.portId);
+                                }
+                              }}
+                            />
+                            <span className="composite-editor__port-name">
+                              {port.blockType}.{port.portId}
+                            </span>
+                          </label>
+                          {port.isExposed && (
+                            <input
+                              type="text"
+                              className="composite-editor__port-external-id"
+                              value={port.externalId || ''}
+                              placeholder="External ID"
+                              onChange={(e) =>
+                                compositeEditor.updateExposedOutputId(
+                                  port.blockId,
+                                  port.portId,
+                                  e.target.value
+                                )
+                              }
+                            />
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'hcl' && (
+              <CompositeEditorDslSidebar store={compositeEditor} />
             )}
           </div>
         </div>

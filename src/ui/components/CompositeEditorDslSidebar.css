@@ -1,12 +1,12 @@
 /* CompositeEditorDslSidebar Styles */
 
 .composite-editor-dsl-sidebar {
-  width: 400px;
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   background: var(--bg-secondary, #252538);
   border-left: 1px solid var(--border-color, #333);
-  flex-shrink: 0;
 }
 
 .composite-editor-dsl-sidebar__header {
@@ -24,21 +24,6 @@
   color: var(--text-primary, #e0e0e0);
 }
 
-.composite-editor-dsl-sidebar__apply-btn {
-  padding: 0.3rem 0.6rem;
-  font-size: 0.75rem;
-  border: none;
-  border-radius: 3px;
-  background: var(--accent-primary, #4a9eff);
-  color: white;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.composite-editor-dsl-sidebar__apply-btn:hover {
-  background: var(--accent-hover, #3a8eef);
-}
-
 .composite-editor-dsl-sidebar__textarea {
   flex: 1;
   padding: 1rem;
@@ -51,11 +36,22 @@
   outline: none;
   resize: none;
   overflow-y: auto;
+  transition: box-shadow 0.3s ease;
 }
 
 .composite-editor-dsl-sidebar__textarea::placeholder {
   color: var(--text-tertiary, #666);
   font-style: italic;
+}
+
+/* Dirty state: faint yellow glow when user has edited but not blurred */
+.composite-editor-dsl-sidebar__textarea--dirty {
+  box-shadow: inset 0 0 8px rgba(255, 200, 0, 0.3);
+}
+
+/* Error state: red glow when parse errors exist */
+.composite-editor-dsl-sidebar__textarea--error {
+  box-shadow: inset 0 0 8px rgba(255, 50, 50, 0.4);
 }
 
 .composite-editor-dsl-sidebar__errors {

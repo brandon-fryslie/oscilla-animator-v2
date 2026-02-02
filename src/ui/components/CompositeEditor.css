@@ -107,7 +107,6 @@
   gap: 0.5rem;
 }
 
-.composite-editor__toggle-dsl-btn,
 .composite-editor__save-btn,
 .composite-editor__cancel-btn {
   padding: 0.4rem 0.8rem;
@@ -116,24 +115,6 @@
   border-radius: 4px;
   cursor: pointer;
   transition: background 0.2s;
-}
-
-.composite-editor__toggle-dsl-btn {
-  background: var(--btn-secondary, #444);
-  color: var(--text-primary, #e0e0e0);
-}
-
-.composite-editor__toggle-dsl-btn:hover {
-  background: var(--btn-secondary-hover, #555);
-}
-
-.composite-editor__toggle-dsl-btn--active {
-  background: var(--accent-primary, #4a9eff);
-  color: white;
-}
-
-.composite-editor__toggle-dsl-btn--active:hover {
-  background: var(--accent-hover, #3a8eef);
 }
 
 .composite-editor__save-btn {
@@ -209,13 +190,78 @@
   font-family: monospace;
 }
 
-/* Ports panel */
-.composite-editor__ports {
-  width: 280px;
-  padding: 1rem;
-  overflow-y: auto;
+/* Right panel with tabs and resizing */
+.composite-editor__right-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
   background: var(--bg-secondary, #252538);
   flex-shrink: 0;
+  min-width: 200px;
+  max-width: 600px;
+}
+
+/* Resize handle (left edge of right panel) */
+.composite-editor__resize-handle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  background: transparent;
+  z-index: 10;
+  transition: background 0.2s;
+}
+
+.composite-editor__resize-handle:hover {
+  background: var(--accent-primary, rgba(74, 158, 255, 0.3));
+}
+
+/* Tab headers */
+.composite-editor__tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-color, #333);
+  background: var(--bg-secondary, #252538);
+  flex-shrink: 0;
+}
+
+.composite-editor__tab {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  font-size: 0.85rem;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary, #aaa);
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  border-bottom: 2px solid transparent;
+}
+
+.composite-editor__tab:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.05));
+  color: var(--text-primary, #e0e0e0);
+}
+
+.composite-editor__tab--active {
+  color: var(--accent-primary, #4a9eff);
+  border-bottom-color: var(--accent-primary, #4a9eff);
+  background: var(--bg-hover, rgba(255, 255, 255, 0.03));
+}
+
+/* Tab content area */
+.composite-editor__tab-content {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Ports panel (inside tab content) */
+.composite-editor__ports {
+  flex: 1;
+  padding: 1rem;
+  overflow-y: auto;
 }
 
 .composite-editor__ports h3 {

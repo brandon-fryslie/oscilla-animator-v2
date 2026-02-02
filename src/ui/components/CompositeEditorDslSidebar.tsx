@@ -4,23 +4,22 @@
  * Displays HCL text representation of the composite being edited.
  * Syncs bidirectionally:
  * - Graph → DSL: Auto-update when graph changes (debounced, paused when focused)
- * - DSL → Graph: Explicit apply on blur or button
+ * - DSL → Graph: Explicit apply on blur
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { observer } from 'mobx-react-lite';
+import { reaction } from 'mobx';
 import type { CompositeEditorStore } from '../../stores/CompositeEditorStore';
 import type { PatchDslError } from '../../patch-dsl';
 import './CompositeEditorDslSidebar.css';
 
 interface Props {
   store: CompositeEditorStore;
-  visible: boolean;
 }
 
 export const CompositeEditorDslSidebar = observer(function CompositeEditorDslSidebar({
   store,
-  visible,
 }: Props) {
   // Local state for textarea content (editable by user)
   const [text, setText] = useState<string>('');
@@ -31,45 +30,64 @@ export const CompositeEditorDslSidebar = observer(function CompositeEditorDslSid
   // Track whether textarea is focused (prevents auto-update during user edit)
   const [isFocused, setIsFocused] = useState(false);
 
+  // Track if text has been edited but not yet applied (dirty state)
+  const [isDirty, setIsDirty] = useState(false);
+
   // Debounce timer for graph → DSL updates
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Sync graph → DSL (only when not focused)
+  // Sync graph → DSL using MobX reaction (only when not focused)
   useEffect(() => {
-    if (isFocused) {
-      // User is editing - don't overwrite their work
-      return;
-    }
+    // Use MobX reaction to properly track observable changes
+    const dispose = reaction(
+      // Track function: MobX tracks all observables accessed here
+      () => {
+        // Access observables to track them
+        const blocks = store.internalBlocks.size; // Access the size to track changes
+        const edges = store.internalEdges.length;
+        const inputs = store.exposedInputs.length;
+        const outputs = store.exposedOutputs.length;
+        const name = store.metadata.name;
 
-    // Debounce updates to avoid jank during rapid graph changes
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
+        // Return a tracking object that changes when graph changes
+        return { blocks, edges, inputs, outputs, name };
+      },
+      // Effect function: called when tracked values change
+      () => {
+        if (isFocused) {
+          // User is editing - don't overwrite their work
+          return;
+        }
 
-    debounceTimerRef.current = setTimeout(() => {
-      const hcl = store.toHCL();
-      if (hcl !== null) {
-        setText(hcl);
-        setErrors([]); // Clear errors when graph changes
+        // Debounce updates to avoid jank during rapid graph changes
+        if (debounceTimerRef.current) {
+          clearTimeout(debounceTimerRef.current);
+        }
+
+        debounceTimerRef.current = setTimeout(() => {
+          const hcl = store.toHCL();
+          if (hcl !== null) {
+            setText(hcl);
+            setErrors([]); // Clear errors when graph changes
+            setIsDirty(false); // Graph update resets dirty state
+          }
+        }, 200); // 200ms debounce
       }
-    }, 200); // 200ms debounce
+    );
+
+    // Initial sync when component mounts
+    const hcl = store.toHCL();
+    if (hcl !== null) {
+      setText(hcl);
+    }
 
     return () => {
+      dispose();
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [
-    store,
-    isFocused,
-    // React to any observable changes in the store
-    // MobX will track these dependencies automatically
-    store.internalBlocks,
-    store.internalEdges,
-    store.exposedInputs,
-    store.exposedOutputs,
-    store.metadata,
-  ]);
+  }, [store, isFocused]);
 
   // Apply DSL → Graph
   const handleApply = useCallback(() => {
@@ -78,41 +96,48 @@ export const CompositeEditorDslSidebar = observer(function CompositeEditorDslSid
       setErrors(result.errors);
     } else {
       setErrors([]);
+      setIsDirty(false);
     }
   }, [store, text]);
 
   // Handle textarea blur (explicit apply)
   const handleBlur = useCallback(() => {
     setIsFocused(false);
-    handleApply();
-  }, [handleApply]);
+    if (isDirty) {
+      handleApply();
+    }
+  }, [handleApply, isDirty]);
 
   // Handle textarea focus
   const handleFocus = useCallback(() => {
     setIsFocused(true);
   }, []);
 
-  if (!visible) {
-    return null;
-  }
+  // Handle text change
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setText(e.target.value);
+    setIsDirty(true);
+  }, []);
+
+  // Determine textarea className based on state
+  const textareaClass = [
+    'composite-editor-dsl-sidebar__textarea',
+    isDirty && 'composite-editor-dsl-sidebar__textarea--dirty',
+    errors.length > 0 && 'composite-editor-dsl-sidebar__textarea--error',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   return (
     <div className="composite-editor-dsl-sidebar">
       <div className="composite-editor-dsl-sidebar__header">
         <h3>HCL Definition</h3>
-        <button
-          className="composite-editor-dsl-sidebar__apply-btn"
-          onClick={handleApply}
-          title="Apply DSL changes to graph"
-        >
-          Apply
-        </button>
       </div>
 
       <textarea
-        className="composite-editor-dsl-sidebar__textarea"
+        className={textareaClass}
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={handleChange}
         onFocus={handleFocus}
         onBlur={handleBlur}
         spellCheck={false}
