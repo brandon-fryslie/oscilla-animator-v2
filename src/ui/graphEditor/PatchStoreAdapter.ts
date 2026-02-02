@@ -211,6 +211,7 @@ export class PatchStoreAdapter implements GraphDataAdapter<BlockId> {
         id: port.id,
         combineMode: port.combineMode,
         defaultSource: port.defaultSource,
+        lenses: port.lenses,
       });
     }
 

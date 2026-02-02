@@ -15,6 +15,7 @@ import { getAnyBlockDefinition, type AnyBlockDef, type InputDef } from '../../bl
 import { FLOAT, canonicalType } from '../../core/canonical-types';
 import type { InferenceCanonicalType, InferencePayloadType } from '../../core/inference-types';
 import { formatTypeForTooltip, getTypeColor } from '../reactFlowEditor/typeValidation';
+import type { OscillaEdgeData } from '../reactFlowEditor/nodes';
 
 /**
  * Connection info for a port
@@ -214,16 +215,29 @@ export function createNodeFromBlockLike(
 
 /**
  * Create ReactFlow edge from adapter EdgeLike.
+ * Populates lens data from target port when blocks are available.
  */
-export function createEdgeFromEdgeLike(edge: EdgeLike): ReactFlowEdge {
+export function createEdgeFromEdgeLike(
+  edge: EdgeLike,
+  blocks?: ReadonlyMap<string, BlockLike>
+): ReactFlowEdge<OscillaEdgeData> {
+  // Look up lenses from target port
+  const targetBlock = blocks?.get(edge.targetBlockId);
+  const targetPort = targetBlock?.inputPorts.get(edge.targetPortId);
+  const lenses = targetPort?.lenses;
+  const hasLenses = lenses != null && lenses.length > 0;
+
   return {
     id: edge.id,
     source: edge.sourceBlockId,
     sourceHandle: edge.sourcePortId,
     target: edge.targetBlockId,
     targetHandle: edge.targetPortId,
-    type: 'default', // Bezier curves (smooth lines)
+    type: 'oscilla',
     animated: false,
+    data: {
+      lenses: hasLenses ? lenses : undefined,
+    },
   };
 }
 
@@ -279,8 +293,8 @@ export function reconcileNodesFromAdapter(
     nodes.push(node);
   }
 
-  // Create edges
-  const edges = adapter.edges.map(createEdgeFromEdgeLike);
+  // Create edges (pass blocks for lens data population)
+  const edges = adapter.edges.map(e => createEdgeFromEdgeLike(e, adapter.blocks));
 
   return { nodes, edges };
 }

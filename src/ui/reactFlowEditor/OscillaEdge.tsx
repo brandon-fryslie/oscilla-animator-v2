@@ -5,7 +5,6 @@
  * Shows an amber lens badge near the target port when lenses are present.
  */
 
-import React from 'react';
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from 'reactflow';
 import type { OscillaEdgeData } from './nodes';
 import { getLensLabel } from './lensUtils';
@@ -32,7 +31,7 @@ export function OscillaEdge({
   data,
 }: EdgeProps<OscillaEdgeData>) {
   // Compute bezier path
-  const [edgePath, labelX, labelY] = getBezierPath({
+  const [edgePath] = getBezierPath({
     sourceX,
     sourceY,
     sourcePosition,

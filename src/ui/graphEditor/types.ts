@@ -11,6 +11,7 @@
  */
 
 import type { CombineMode, DefaultSource } from '../../types';
+import type { LensAttachment } from '../../graph/Patch';
 
 // =============================================================================
 // Common Shape Types
@@ -23,6 +24,7 @@ export interface InputPortLike {
   readonly id: string;
   readonly combineMode: CombineMode;
   readonly defaultSource?: DefaultSource;
+  readonly lenses?: readonly LensAttachment[];
 }
 
 /**
