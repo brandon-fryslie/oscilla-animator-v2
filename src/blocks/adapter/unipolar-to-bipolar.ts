@@ -30,6 +30,7 @@ registerBlock({
     description: 'Unipolar [0,1] → bipolar [-1,1]',
     purity: 'pure',
     stability: 'stable',
+    priority: -10, // Higher priority than general Clamp11 adapter (more specific conversion)
   },
   inputs: {
     in: { label: 'In', type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()) },
