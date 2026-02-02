@@ -16,9 +16,9 @@ import type { ValueExpr, ValueExprKernel } from '../compiler/ir/value-expr';
 import type { ValueExprId } from '../compiler/ir/Indices';
 import type { PureFn } from '../compiler/ir/types';
 import type { InstanceId } from '../compiler/ir/Indices';
-import type { Program } from '../compiler/ir/program';
+import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { BufferPool } from './BufferPool';
-import { evaluateValueExprSignal } from './SignalEvaluator';
+import { evaluateValueExprSignal } from './ValueExprSignalEvaluator';
 import { requireInst } from '../core/canonical-types';
 import { payloadStride } from '../core/canonical-types';
 import { getTopology } from '../shapes/registry';
@@ -55,7 +55,7 @@ export function materializeValueExpr(
   instanceId: InstanceId,
   count: number,
   state: RuntimeState,
-  program: Program,
+  program: CompiledProgramIR,
   pool: BufferPool
 ): Float32Array {
   const expr = table.nodes[exprId];
@@ -64,7 +64,7 @@ export function materializeValueExpr(
   }
 
   const stride = payloadStride(expr.type.payload);
-  const buf = pool.acquire(count * stride);
+  const buf = pool.alloc('f32', count * stride) as Float32Array;
 
   // Dispatch based on expr.kind
   switch (expr.kind) {
@@ -126,24 +126,29 @@ export function materializeValueExpr(
     case 'slotRead': {
       // WI-4: Slot read - copy from runtime slot
       const slot = expr.slot;
-      const slotData = state.slots[slot];
-      if (!slotData) {
-        throw new Error(`Slot ${slot} not found in runtime state`);
-      }
-      buf.set(slotData.slice(0, count * stride));
+      // Copy from value store (assumes f64 storage for now)
+      const sourceData = state.values.f64.slice(slot, slot + count * stride);
+      buf.set(sourceData);
       break;
     }
 
     case 'state': {
       // WI-4: State read - copy from persistent state
       const stateSlot = expr.stateSlot;
-      const stateData = state.stateSlots[stateSlot];
-      if (!stateData) {
-        throw new Error(`State slot ${stateSlot} not found in runtime state`);
-      }
-      buf.set(stateData.slice(0, count * stride));
+      // Copy from state array
+      const sourceData = state.state.slice(stateSlot, stateSlot + count * stride);
+      buf.set(sourceData);
       break;
     }
+
+    case 'external':
+    case 'time':
+    case 'eventRead':
+    case 'event':
+      throw new Error(`Cannot materialize signal/event expression as field: ${expr.kind}`);
+
+    case 'shapeRef':
+      throw new Error(`Shape references are not yet supported in materialize`);
 
     default: {
       const _exhaustive: never = expr;
@@ -167,7 +172,7 @@ function materializeKernel(
   instanceId: InstanceId,
   count: number,
   state: RuntimeState,
-  program: Program,
+  program: CompiledProgramIR,
   pool: BufferPool,
   stride: number
 ): void {
@@ -356,7 +361,7 @@ function applyZipSig(
   count: number,
   stride: number,
   instanceId: InstanceId,
-  program: Program
+  program: CompiledProgramIR
 ): void {
   for (let i = 0; i < count; i++) {
     const args = [fieldInput[i], ...sigValues];
@@ -422,7 +427,7 @@ function materializeIntrinsic(
   instanceId: InstanceId,
   count: number,
   state: RuntimeState,
-  program: Program
+  program: CompiledProgramIR
 ): void {
   if (intrinsic === 'index') {
     for (let i = 0; i < count; i++) {

@@ -29,7 +29,7 @@ import { SelectInput } from './common/SelectInput';
 import { TextInput } from './common/TextInput';
 import type { SettingsToken, FieldUIHint } from '../../settings/types';
 
-export const SettingsPanel: React.FC = () => {
+export const SettingsPanel: React.FC = observer(() => {
   const settingsStore = useStore('settings');
   const tokens = settingsStore.getRegisteredTokens();
 
@@ -46,7 +46,7 @@ export const SettingsPanel: React.FC = () => {
       )}
     </Stack>
   );
-};
+});
 
 /**
  * Single settings section for one namespace.

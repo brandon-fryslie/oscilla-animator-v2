@@ -27,7 +27,7 @@ import type {
   StableStateId,
   StateMapping,
 } from './types';
-import { OpCode } from './types';
+import { OpCode, EvalStrategy } from './types';
 import type { CameraDeclIR } from './program';
 import type { ValueExpr } from './value-expr';
 import type { IRBuilder } from './IRBuilder';
@@ -241,7 +241,12 @@ export class IRBuilderImpl implements IRBuilder {
   }
 
   stepEvalSig(expr: ValueExprId, target: ValueSlot): void {
-    this.steps.push({ kind: 'evalSig', expr, target });
+    this.steps.push({
+      kind: 'evalValue',
+      expr,
+      target: { storage: 'value', slot: target },
+      strategy: EvalStrategy.ContinuousScalar
+    });
   }
 
   stepMaterialize(field: ValueExprId, instanceId: InstanceId, target: ValueSlot): void {
@@ -249,7 +254,11 @@ export class IRBuilderImpl implements IRBuilder {
   }
 
   stepContinuityMapBuild(instanceId: InstanceId): void {
-    this.steps.push({ kind: 'continuityMapBuild', instanceId });
+    this.steps.push({
+      kind: 'continuityMapBuild',
+      instanceId,
+      outputMapping: `continuity-map-${instanceId}`
+    });
   }
 
   stepContinuityApply(
@@ -287,15 +296,31 @@ export class IRBuilderImpl implements IRBuilder {
     }
   ): StateSlotId {
     const slot = stateSlotId(this.stateSlotCounter++);
-    // TODO: store mapping
-    this.stateMappings.push({
-      slotId: slot,
-      stableId,
-      initialValue: options?.initialValue ?? 0,
-      stride: options?.stride ?? 1,
-      instanceId: options?.instanceId,
-      laneCount: options?.laneCount,
-    });
+    const stride = options?.stride ?? 1;
+    const initialValue = options?.initialValue ?? 0;
+    const initial = Array.from({ length: stride }, () => initialValue);
+
+    if (options?.instanceId !== undefined && options?.laneCount !== undefined) {
+      // Field state mapping
+      this.stateMappings.push({
+        kind: 'field',
+        stateId: stableId,
+        instanceId: options.instanceId,
+        slotStart: slot,
+        laneCount: options.laneCount,
+        stride,
+        initial,
+      });
+    } else {
+      // Scalar state mapping
+      this.stateMappings.push({
+        kind: 'scalar',
+        stateId: stableId,
+        slotIndex: slot,
+        stride,
+        initial,
+      });
+    }
     return slot;
   }
 
@@ -320,11 +345,11 @@ export class IRBuilderImpl implements IRBuilder {
   }
 
   opcode(op: OpCode): PureFn {
-    return { kind: 'opcode', op };
+    return { kind: 'opcode', opcode: op };
   }
 
   expr(expression: string): PureFn {
-    return { kind: 'expr', expression };
+    return { kind: 'expr', expr: expression };
   }
 
   createInstance(
@@ -332,12 +357,13 @@ export class IRBuilderImpl implements IRBuilder {
     count: number,
     lifecycle?: 'static' | 'dynamic' | 'pooled'
   ): InstanceId {
-    const id = this.instanceCounter++ as InstanceId;
+    const id = `inst-${this.instanceCounter++}` as InstanceId;
     this.instances.set(id, {
-      instanceId: id,
+      id,
       domainType,
       count,
       lifecycle: lifecycle ?? 'static',
+      identityMode: 'stable',
     });
     return id;
   }
@@ -403,6 +429,17 @@ export class IRBuilderImpl implements IRBuilder {
     this.valueExprs.push(expr);
     return id;
   }
+
+  setTimeModel(schedule: TimeModelIR): void {
+    this.schedule = schedule;
+  }
+}
+
+/**
+ * Create a new IR builder instance.
+ */
+export function createIRBuilder(): IRBuilder {
+  return new IRBuilderImpl();
 }
 
 // Helper function (imported from Indices or defined here)

@@ -49,6 +49,9 @@ export {
   type AssemblerContext,
 } from './RenderAssembler';
 
+// Test-only exports (for integration tests that bypass compile pipeline)
+export { materializeValueExpr, type ValueExprTable } from './ValueExprMaterializer';
+
 // Re-export v2 types (now the only types)
 export type {
   DrawPathInstancesOp,

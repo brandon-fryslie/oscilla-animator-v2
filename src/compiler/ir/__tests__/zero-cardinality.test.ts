@@ -14,7 +14,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { createIRBuilder } from '../IRBuilderImpl';
-import { floatConst, FLOAT, requireInst, canonicalType, canonicalConst } from '../../../core/canonical-types';
+import { floatConst, FLOAT, requireInst, canonicalType, canonicalConst, type CardinalityValue } from '../../../core/canonical-types';
+import type { CardinalityVarId } from '../../../core/ids';
 
 describe('Zero-cardinality type constructors', () => {
   it('canonicalConst() produces zero-cardinality', () => {
@@ -41,7 +42,7 @@ describe('Zero-cardinality type constructors', () => {
     // Currently preserves caller type (cardinality=one for signal)
     // TODO: After cardinality solver supports zero as universal donor,
     // constant() should enforce zero-cardinality here
-    const card = requireInst(expr!.type.extent.cardinality, 'cardinality');
+    const card = requireInst<CardinalityValue, CardinalityVarId>(expr!.type.extent.cardinality, 'cardinality');
     expect(card.kind).toBe('one');
   });
 });

@@ -39,9 +39,8 @@ export class SettingsStore {
   private persistDisposers = new Map<string, () => void>();
 
   constructor() {
-    makeAutoObservable<SettingsStore, 'tokens' | 'persistDisposers'>(this, {
-      // Internal bookkeeping - not observable
-      tokens: false,
+    makeAutoObservable<SettingsStore, 'persistDisposers'>(this, {
+      // tokens must be observable so getRegisteredTokens() triggers re-renders
       persistDisposers: false,
     });
   }
