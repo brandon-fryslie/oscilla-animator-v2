@@ -7,7 +7,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, payloadStride, unitHsl, unitPhase01, unitNorm01 } from '../../core/canonical-types';
+import { canonicalType, payloadStride, unitHsl, unitTurns, unitScalar, contractWrap01, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
@@ -25,10 +25,10 @@ registerBlock({
     broadcastPolicy: 'allowZipSig',
   },
   inputs: {
-    h: { label: 'Hue', type: canonicalType(FLOAT, unitPhase01()), defaultSource: defaultSourceConst(0.0) },
-    s: { label: 'Saturation', type: canonicalType(FLOAT, unitNorm01()), defaultSource: defaultSourceConst(1.0) },
-    l: { label: 'Lightness', type: canonicalType(FLOAT, unitNorm01()), defaultSource: defaultSourceConst(0.5) },
-    a: { label: 'Alpha', type: canonicalType(FLOAT, unitNorm01()), defaultSource: defaultSourceConst(1.0) },
+    h: { label: 'Hue', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()), defaultSource: defaultSourceConst(0.0) },
+    s: { label: 'Saturation', type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()), defaultSource: defaultSourceConst(1.0) },
+    l: { label: 'Lightness', type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()), defaultSource: defaultSourceConst(0.5) },
+    a: { label: 'Alpha', type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()), defaultSource: defaultSourceConst(1.0) },
   },
   outputs: {
     color: { label: 'Color', type: canonicalType(COLOR, unitHsl()) },
@@ -43,7 +43,7 @@ registerBlock({
     }
 
     const outType = ctx.outTypes[0];
-    const floatType = canonicalType(FLOAT, unitPhase01());
+    const floatType = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
 
     // Enforce: wrap hue, clamp s/l/a
     const wrap01 = ctx.b.opcode(OpCode.Wrap01);

@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, unitPhase01, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
+import { canonicalType, unitTurns, payloadStride, floatConst, requireInst, contractWrap01 } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode, stableStateId } from '../../compiler/ir/types';
 
@@ -26,7 +26,7 @@ registerBlock({
     initialPhase: { type: canonicalType(FLOAT), defaultValue: 0, exposedAsPort: false },
   },
   outputs: {
-    out: { label: 'Phase', type: canonicalType(FLOAT, unitPhase01()) },
+    out: { label: 'Phase', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()) },
   },
   lower: ({ ctx, inputsById, config }) => {
     const frequency = inputsById.frequency;
@@ -43,7 +43,7 @@ registerBlock({
     const stateSlot = ctx.b.allocStateSlot(stateId, { initialValue: initialPhase });
 
     // Read previous phase
-    const prevPhase = ctx.b.stateRead(stateSlot, canonicalType(FLOAT, unitPhase01()));
+    const prevPhase = ctx.b.stateRead(stateSlot, canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()));
 
     // Read dt from time system (in seconds)
     const dtSig = ctx.b.time('dt', canonicalType(FLOAT));
@@ -61,7 +61,7 @@ registerBlock({
 
     // Wrap to [0, 1)
     const wrapFn = ctx.b.opcode(OpCode.Wrap01);
-    const wrappedPhase = ctx.b.kernelMap(rawPhase, wrapFn, canonicalType(FLOAT, unitPhase01()));
+    const wrappedPhase = ctx.b.kernelMap(rawPhase, wrapFn, canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()));
 
     // Write wrapped phase to state
     ctx.b.stepStateWrite(stateSlot, wrappedPhase);

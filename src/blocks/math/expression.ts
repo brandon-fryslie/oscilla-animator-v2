@@ -5,11 +5,12 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
-import { canonicalType, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
-import { FLOAT } from '../../core/canonical-types';
+import { canonicalType, payloadStride, floatConst } from '../../core/canonical-types';
+import { FLOAT, INT } from '../../core/canonical-types';
 import type { CanonicalType } from '../../core/canonical-types';
-import { compileExpression } from '../../expr';
+import { compileExpression, type BlockRefsContext } from '../../expr';
 import type { ValueExprId } from '../../compiler/ir/Indices';
+import { parseAddress } from '../../types/canonical-address';
 
 registerBlock({
   type: 'Expression',
@@ -93,26 +94,45 @@ registerBlock({
       return expr.type;
     };
 
-    // Step 3: Build input map from vararg refs
+    // Step 3: Build input map and blockRefs from vararg refs
     const inputs = new Map<string, CanonicalType>();
     const inputSignals = new Map<string, ValueExprId>();
+    const signalsByShorthand = new Map<string, ValueExprId>();
 
     const refsValues = varargInputsById?.refs ?? [];
     const refsConnections = ctx.varargConnections?.get('refs') ?? [];
     for (let i = 0; i < refsValues.length; i++) {
       const value = refsValues[i];
       const conn = refsConnections[i];
-      const isSignal = value && 'type' in value && requireInst(value.type.extent.cardinality, 'cardinality').kind !== 'many';
-      if (value && isSignal && conn) {
-        const alias = conn.alias ?? conn.sourceAddress;
+      if (value && conn) {
         const inputType = getExprType(value.id);
+
+        // Build shorthand key from sourceAddress (e.g., "v1:blocks.circle_1.outputs.radius" → "circle_1.radius")
+        const parsed = parseAddress(conn.sourceAddress);
+        if (parsed && parsed.kind === 'output') {
+          const shorthand = `${parsed.canonicalName}.${parsed.portId}`;
+          signalsByShorthand.set(shorthand, value.id);
+        }
+
+        // Also register as regular input using alias or sourceAddress
+        const alias = conn.alias ?? conn.sourceAddress;
         inputs.set(alias, inputType);
         inputSignals.set(alias, value.id);
       }
     }
 
+    // Step 4: Build blockRefs context for member access resolution
+    let blockRefs: BlockRefsContext | undefined;
+    if (ctx.addressRegistry && signalsByShorthand.size > 0) {
+      blockRefs = {
+        addressRegistry: ctx.addressRegistry,
+        allowedPayloads: [FLOAT, INT],
+        signalsByShorthand,
+      };
+    }
+
     // Step 5: Compile expression using Expression DSL
-    const result = compileExpression(exprText, inputs, ctx.b, inputSignals);
+    const result = compileExpression(exprText, inputs, ctx.b, inputSignals, blockRefs);
 
     // Step 6 & 7: Handle compilation result
     if (!result.ok) {

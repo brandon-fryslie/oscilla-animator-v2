@@ -7,7 +7,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, payloadStride, unitHsl, unitScalar, unitNorm01 } from '../../core/canonical-types';
+import { canonicalType, payloadStride, unitHsl, unitScalar, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
@@ -27,7 +27,7 @@ registerBlock({
   inputs: {
     a: { label: 'Color A', type: canonicalType(COLOR, unitHsl()) },
     b: { label: 'Color B', type: canonicalType(COLOR, unitHsl()) },
-    t: { label: 'Mix', type: canonicalType(FLOAT, unitNorm01()), defaultSource: defaultSourceConst(0.5) },
+    t: { label: 'Mix', type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()), defaultSource: defaultSourceConst(0.5) },
   },
   outputs: {
     color: { label: 'Color', type: canonicalType(COLOR, unitHsl()) },

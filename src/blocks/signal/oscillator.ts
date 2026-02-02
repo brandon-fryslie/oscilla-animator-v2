@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, unitPhase01, unitNorm01, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
+import { canonicalType, unitTurns, unitScalar, payloadStride, floatConst, requireInst, contractWrap01, contractClamp01, contractClamp11 } from '../../core/canonical-types';
 import { FLOAT, INT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
@@ -26,7 +26,7 @@ registerBlock({
   inputs: {
     phase: {
       label: 'Phase',
-      type: canonicalType(FLOAT, unitPhase01()),
+      type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()),
     },
     mode: {
       type: canonicalType(INT),
@@ -45,7 +45,7 @@ registerBlock({
     },
   },
   outputs: {
-    out: { label: 'Output', type: canonicalType(FLOAT, unitNorm01()) },
+    out: { label: 'Output', type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp11()) },
   },
   lower: ({ ctx, inputsById, config }) => {
     const phase = inputsById.phase;
@@ -65,8 +65,8 @@ registerBlock({
         const mul = ctx.b.opcode(OpCode.Mul);
         const sin = ctx.b.opcode(OpCode.Sin);
         const tau = ctx.b.constant(floatConst(Math.PI * 2), canonicalType(FLOAT));
-        const phaseRadians = ctx.b.kernelZip([phase.id, tau], mul, canonicalType(FLOAT, unitPhase01()));
-        id = ctx.b.kernelMap(phaseRadians, sin, canonicalType(FLOAT, unitNorm01()));
+        const phaseRadians = ctx.b.kernelZip([phase.id, tau], mul, canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()));
+        id = ctx.b.kernelMap(phaseRadians, sin, canonicalType(FLOAT, unitScalar(), undefined, contractClamp11()));
         break;
       }
       case 1: {
@@ -77,10 +77,10 @@ registerBlock({
         const two = ctx.b.constant(floatConst(2), canonicalType(FLOAT));
         const one = ctx.b.constant(floatConst(1), canonicalType(FLOAT));
 
-        const phaseFloor = ctx.b.kernelMap(phase.id, floor, canonicalType(FLOAT, unitPhase01()));
-        const frac = ctx.b.kernelZip([phase.id, phaseFloor], sub, canonicalType(FLOAT, unitNorm01()));
-        const scaled = ctx.b.kernelZip([two, frac], mul, canonicalType(FLOAT, unitNorm01()));
-        id = ctx.b.kernelZip([scaled, one], sub, canonicalType(FLOAT, unitNorm01()));
+        const phaseFloor = ctx.b.kernelMap(phase.id, floor, canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()));
+        const frac = ctx.b.kernelZip([phase.id, phaseFloor], sub, canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()));
+        const scaled = ctx.b.kernelZip([two, frac], mul, canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()));
+        id = ctx.b.kernelZip([scaled, one], sub, canonicalType(FLOAT, unitScalar(), undefined, contractClamp11()));
         break;
       }
       case 2: {
@@ -90,14 +90,14 @@ registerBlock({
         const sign = ctx.b.opcode(OpCode.Sign);
 
         const shifted = ctx.b.kernelZip([phase.id, half], sub, canonicalType(FLOAT));
-        id = ctx.b.kernelMap(shifted, sign, canonicalType(FLOAT, unitNorm01()));
+        id = ctx.b.kernelMap(shifted, sign, canonicalType(FLOAT, unitScalar(), undefined, contractClamp11()));
         break;
       }
       case 3: {
         // Noise: Deterministic hash of phase (produces pseudo-random [0,1) output)
         const hash = ctx.b.opcode(OpCode.Hash);
         const seed = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
-        id = ctx.b.kernelZip([phase.id, seed], hash, canonicalType(FLOAT, unitNorm01()));
+        id = ctx.b.kernelZip([phase.id, seed], hash, canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()));
         break;
       }
       default: {

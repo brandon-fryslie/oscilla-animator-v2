@@ -6,7 +6,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, payloadStride, unitHsl, unitPhase01, unitNorm01 } from '../../core/canonical-types';
+import { canonicalType, payloadStride, unitHsl, unitTurns, unitScalar, contractWrap01, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
 
 registerBlock({
@@ -25,17 +25,17 @@ registerBlock({
     color: { label: 'Color', type: canonicalType(COLOR, unitHsl()) },
   },
   outputs: {
-    h: { label: 'Hue', type: canonicalType(FLOAT, unitPhase01()) },
-    s: { label: 'Saturation', type: canonicalType(FLOAT, unitNorm01()) },
-    l: { label: 'Lightness', type: canonicalType(FLOAT, unitNorm01()) },
-    a: { label: 'Alpha', type: canonicalType(FLOAT, unitNorm01()) },
+    h: { label: 'Hue', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()) },
+    s: { label: 'Saturation', type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()) },
+    l: { label: 'Lightness', type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()) },
+    a: { label: 'Alpha', type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()) },
   },
   lower: ({ ctx, inputsById }) => {
     const colorInput = inputsById.color;
     if (!colorInput) throw new Error('SplitColorHSL requires color input');
 
-    const hueType = canonicalType(FLOAT, unitPhase01());
-    const normType = canonicalType(FLOAT, unitNorm01());
+    const hueType = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
+    const normType = canonicalType(FLOAT, unitScalar(), undefined, contractClamp01());
 
     const h = ctx.b.extract(colorInput.id, 0, hueType);
     const s = ctx.b.extract(colorInput.id, 1, normType);

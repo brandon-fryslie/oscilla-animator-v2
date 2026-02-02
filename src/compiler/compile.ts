@@ -43,6 +43,7 @@ import { pass4DepGraph } from './backend/derive-dep-graph';
 import { pass5CycleValidation } from './backend/schedule-scc';
 import { pass6BlockLowering } from './backend/lower-blocks';
 import { pass7Schedule } from './backend/schedule-program';
+import { AddressRegistry } from '../graph/address-registry';
 
 // =============================================================================
 // Compile Errors & Results
@@ -238,10 +239,12 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
     }
 
     // Pass 6: Block Lowering
+    const addressRegistry = AddressRegistry.buildFromPatch(normalized.patch);
     const unlinkedIR = pass6BlockLowering(acyclicPatch, {
       events: options?.events,
       compileId,
       patchRevision: options?.patchRevision,
+      addressRegistry,
     });
 
     try {
