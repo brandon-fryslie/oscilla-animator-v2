@@ -8,7 +8,6 @@
  */
 
 import React, { useMemo } from 'react';
-import { observer } from 'mobx-react-lite';
 import {
   Delete as DeleteIcon,
   ArrowBack as SourceIcon,
@@ -28,7 +27,7 @@ export interface EdgeContextMenuProps {
   onNavigateToBlock: (blockId: BlockId) => void;
 }
 
-export const EdgeContextMenu: React.FC<EdgeContextMenuProps> = observer(({
+export const EdgeContextMenu: React.FC<EdgeContextMenuProps> = ({
   edgeId,
   anchorPosition,
   onClose,
@@ -114,4 +113,4 @@ export const EdgeContextMenu: React.FC<EdgeContextMenuProps> = observer(({
   }, [edgeId, onNavigateToBlock, patch]);
 
   return <ContextMenu items={items} anchorPosition={anchorPosition} onClose={onClose} />;
-});
+};

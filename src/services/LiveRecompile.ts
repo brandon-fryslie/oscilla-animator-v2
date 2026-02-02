@@ -5,7 +5,7 @@
  * Integrates with CompileOrchestrator for the actual compilation.
  */
 
-import { reaction } from 'mobx';
+import { reaction, untracked } from 'mobx';
 import type { RootStore } from '../stores';
 
 let recompileTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -64,9 +64,8 @@ export function setupLiveRecompileReaction(
   if (reactionSetup) return;
   reactionSetup = true;
 
-  // Initialize tracking state from current store
-  // Use store.patch.patch to get the ImmutablePatch (same as reaction expression)
-  const initialPatch = store.patch.patch;
+  // Initialize tracking state from current store (untracked: imperative read, not reactive)
+  const initialPatch = untracked(() => store.patch.patch);
   lastBlockParamsHash = hashBlockParams(initialPatch.blocks);
   lastBlockCount = initialPatch.blocks.size;
   lastEdgeCount = initialPatch.edges.length;

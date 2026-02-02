@@ -8,7 +8,6 @@
  */
 
 import React, { useCallback, useState, useEffect } from 'react';
-import { observer } from 'mobx-react-lite';
 import { Slider, Checkbox, FormControlLabel, Select, MenuItem, Typography, Box, type SelectChangeEvent } from '@mui/material';
 import type { BlockId, UIControlHint, DefaultSource } from '../../types';
 import { useStores } from '../../stores';
@@ -28,7 +27,7 @@ export interface ParameterControlProps {
  * Float parameter control with slider.
  * Debounces updates to avoid excessive PatchStore writes.
  */
-export const FloatControl: React.FC<ParameterControlProps> = observer(({ blockId, paramId, label, value, hint }) => {
+export const FloatControl: React.FC<ParameterControlProps> = ({ blockId, paramId, label, value, hint }) => {
   const { patch } = useStores();
   const numValue = typeof value === 'number' ? value : 0;
 
@@ -96,13 +95,13 @@ export const FloatControl: React.FC<ParameterControlProps> = observer(({ blockId
       />
     </Box>
   );
-});
+};
 
 /**
  * Boolean parameter control with checkbox.
  * Updates immediately (no debouncing needed for binary values).
  */
-export const BoolControl: React.FC<ParameterControlProps> = observer(({ blockId, paramId, label, value }) => {
+export const BoolControl: React.FC<ParameterControlProps> = ({ blockId, paramId, label, value }) => {
   const { patch } = useStores();
   const boolValue = Boolean(value);
 
@@ -126,13 +125,13 @@ export const BoolControl: React.FC<ParameterControlProps> = observer(({ blockId,
       sx={{ mb: 0.5, ml: 0 }}
     />
   );
-});
+};
 
 /**
  * Enum parameter control with dropdown select.
  * Updates immediately on selection change.
  */
-export const EnumControl: React.FC<ParameterControlProps> = observer(({ blockId, paramId, label, value, hint }) => {
+export const EnumControl: React.FC<ParameterControlProps> = ({ blockId, paramId, label, value, hint }) => {
   const { patch } = useStores();
   const stringValue = String(value ?? '');
 
@@ -177,12 +176,12 @@ export const EnumControl: React.FC<ParameterControlProps> = observer(({ blockId,
       </Select>
     </Box>
   );
-});
+};
 
 /**
  * Generic parameter control that selects the appropriate control type.
  */
-export const ParameterControl: React.FC<ParameterControlProps> = observer((props) => {
+export const ParameterControl: React.FC<ParameterControlProps> = (props) => {
   const { hint, value } = props;
 
   // Determine control type from hint
@@ -220,7 +219,7 @@ export const ParameterControl: React.FC<ParameterControlProps> = observer((props
       {props.label}: {String(value)}
     </div>
   );
-});
+};
 
 // =============================================================================
 // Default Source Value Control
@@ -242,15 +241,13 @@ export interface DefaultSourceControlProps {
  * Only renders for Const block default sources with numeric values.
  * Debounces updates to PatchStore.updateInputPort.
  */
-export const DefaultSourceControl: React.FC<DefaultSourceControlProps> = observer(({
+export const DefaultSourceControl: React.FC<DefaultSourceControlProps> = ({
   blockId,
   portId,
   portLabel,
   defaultSource,
   hint,
 }) => {
-  const { patch } = useStores();
-
   // Only handle Const blocks with numeric values
   if (defaultSource.blockType !== 'Const') {
     return null;
@@ -278,7 +275,7 @@ export const DefaultSourceControl: React.FC<DefaultSourceControlProps> = observe
       step={step}
     />
   );
-});
+};
 
 /**
  * Internal slider component with local state for smooth dragging.
@@ -294,7 +291,7 @@ interface DefaultSourceSliderProps {
   step: number;
 }
 
-const DefaultSourceSlider: React.FC<DefaultSourceSliderProps> = observer(({
+const DefaultSourceSlider: React.FC<DefaultSourceSliderProps> = ({
   blockId,
   portId,
   portLabel,
@@ -382,4 +379,4 @@ const DefaultSourceSlider: React.FC<DefaultSourceSliderProps> = observer(({
       />
     </Box>
   );
-});
+};

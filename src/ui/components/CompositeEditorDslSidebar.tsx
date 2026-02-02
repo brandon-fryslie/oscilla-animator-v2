@@ -8,7 +8,6 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { observer } from 'mobx-react-lite';
 import { reaction } from 'mobx';
 import type { CompositeEditorStore } from '../../stores/CompositeEditorStore';
 import type { PatchDslError } from '../../patch-dsl';
@@ -18,7 +17,7 @@ interface Props {
   store: CompositeEditorStore;
 }
 
-export const CompositeEditorDslSidebar = observer(function CompositeEditorDslSidebar({
+export const CompositeEditorDslSidebar = function CompositeEditorDslSidebar({
   store,
 }: Props) {
   // Local state for textarea content (editable by user)
@@ -161,4 +160,4 @@ export const CompositeEditorDslSidebar = observer(function CompositeEditorDslSid
       )}
     </div>
   );
-});
+};

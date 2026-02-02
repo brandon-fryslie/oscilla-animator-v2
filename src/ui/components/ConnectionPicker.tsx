@@ -7,7 +7,6 @@
 
 import React, { useMemo } from 'react';
 import { Autocomplete, TextField } from '@mui/material';
-import { observer } from 'mobx-react-lite';
 import type { BlockId, PortId } from '../../types';
 import type { Patch } from '../../graph/Patch';
 import { requireAnyBlockDef } from '../../blocks/registry';
@@ -46,7 +45,7 @@ interface ConnectionPickerProps {
 /**
  * ConnectionPicker component.
  */
-export const ConnectionPicker = observer(function ConnectionPicker({
+export const ConnectionPicker: React.FC<ConnectionPickerProps> = function ConnectionPicker({
   targetBlockId,
   targetPortId,
   direction,
@@ -167,4 +166,4 @@ export const ConnectionPicker = observer(function ConnectionPicker({
       </button>
     </div>
   );
-});
+};

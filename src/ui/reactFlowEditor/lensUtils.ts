@@ -25,14 +25,16 @@ export interface LensTypeInfo {
 
 /**
  * Get all available lens types for UI selection.
- * Filters adapter blocks from the registry.
+ * Includes both adapter blocks (type converters) and lens blocks (value shapers).
  *
  * @returns Array of lens type info, sorted by label
  */
 export function getAvailableLensTypes(): LensTypeInfo[] {
   const adapterBlocks = getBlockTypesByCategory('adapter');
+  const lensBlocks = getBlockTypesByCategory('lens');
+  const allBlocks = [...adapterBlocks, ...lensBlocks];
 
-  return adapterBlocks
+  return allBlocks
     .map(def => ({
       blockType: def.type,
       label: def.label,

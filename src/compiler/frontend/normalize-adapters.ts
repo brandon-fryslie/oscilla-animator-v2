@@ -1,23 +1,21 @@
 /**
- * Pass 2: Lens Expansion & Type Validation (Redesigned Sprint 2)
+ * Pass 2: Lens Expansion & Adapter Auto-Insertion
  *
- * This pass is split into TWO INDEPENDENT PHASES:
+ * Part of graph normalization (called from src/graph/passes/index.ts).
  *
- * PHASE 1: Expand Explicit Lenses
+ * This pass has TWO PHASES that run in order:
+ *
+ * PHASE 1: Expand Explicit Lenses (expandExplicitLenses)
  *   - For each lens in InputPort.lenses, create a lens block
  *   - Insert deterministically between source and target
- *   - No type checking or auto-insertion involved
+ *   - Lenses are user-controlled signal transformations (scaling, etc.)
+ *   - Lenses are NOT adapters — they don't bridge type mismatches
  *
- * PHASE 2: Type Validation
- *   - Check all remaining edges for type compatibility
- *   - Report errors (no auto-fix, no insertion)
- *   - Independent of Phase 1 (could theoretically run in either order)
- *
- * KEY DESIGN CHANGE FROM v1:
- *   - Removed automatic adapter insertion on type mismatch
- *   - Lenses are NOW user-controlled transformations
- *   - Type validation is now SEPARATE from lens expansion
- *   - No fallback logic; errors are reported to user
+ * PHASE 2: Auto-Insert Adapters (autoInsertAdapters)
+ *   - Check all edges for type mismatches (payload, unit, cardinality)
+ *   - When a mismatch is found, look up a matching adapter via findAdapter()
+ *   - If an adapter exists, insert an adapter block between source and target
+ *   - If no adapter exists, report an error
  *
  * CONTRACT FOR PHASE 1 (expandExplicitLenses):
  *   - Input: Patch with user-defined lenses in InputPort.lenses
@@ -26,17 +24,18 @@
  *   - Display names: {blockName}.{portId}.lenses.{lensId}
  *   - Output: Patch with lens blocks expanded, lenses field now empty
  *
- * CONTRACT FOR PHASE 2 (validateTypeCompatibility):
+ * CONTRACT FOR PHASE 2 (autoInsertAdapters):
  *   - Input: Patch (after Phase 1 expansion)
- *   - Check each edge's source/target port types
- *   - Collect errors for mismatches (don't insert adapters)
- *   - Output: Either ok or error list (type errors only)
+ *   - For each edge: check source/target port types via findAdapter()
+ *   - If adapter found: insert adapter block, rewire edges
+ *   - If no adapter and types mismatch: collect error
+ *   - Output: Patch with adapter blocks inserted, or errors
  *
  * INVARIANTS:
  *   - Both phases preserve existing block behavior
  *   - Deterministic: same input → same output
- *   - No auto-insertion (user controls transformations via lenses)
- *   - Type errors are reported, not silently fixed
+ *   - Adapter insertion is automatic (compiler handles type bridging)
+ *   - Lens expansion is explicit (user controls signal transformations)
  */
 
 import type { BlockId, BlockRole } from '../../types';

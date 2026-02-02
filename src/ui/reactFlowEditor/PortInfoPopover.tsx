@@ -67,6 +67,9 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
   blockId,
 }) => {
   const { debug } = useStores();
+  // Read an observable before any early return so MobX observer tracks it.
+  // Without this, renders where port=null would trigger "observer without observables" warning.
+  const debugEnabled = debug.enabled;
   const [position, setPosition] = useState<{ top: number; left: number; flipped?: boolean } | null>(null);
 
   // Calculate position when anchor changes
@@ -119,7 +122,7 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
   // - For connected ports: use edge-based lookup
   // - For unconnected output ports: use port-based lookup
   let debugValue = undefined;
-  if (debug.enabled) {
+  if (debugEnabled) {
     if (port.connection) {
       debugValue = debug.getEdgeValue(port.connection.edgeId);
     } else if (!isInput && blockId) {

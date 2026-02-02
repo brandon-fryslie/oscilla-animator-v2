@@ -824,7 +824,7 @@ interface BlockDetailsProps {
   patch: Patch;
 }
 
-const BlockDetails = observer(function BlockDetails({ block, patch }: BlockDetailsProps) {
+const BlockDetails = function BlockDetails({ block, patch }: BlockDetailsProps) {
   const typeInfo = getAnyBlockDefinition(block.type);
   const [selectedPort, setSelectedPort] = useState<PortRef | null>(null);
 
@@ -916,7 +916,7 @@ const BlockDetails = observer(function BlockDetails({ block, patch }: BlockDetai
       <ParamsEditor block={block} typeInfo={typeInfo} patch={patch} />
     </div>
   );
-});
+};
 
 // =============================================================================
 // Block Name Header (uses shared DisplayNameEditor)
@@ -968,7 +968,7 @@ interface PortItemProps {
   onClick: () => void;
 }
 
-const PortItem = observer(function PortItem({ port, portId, blockId, isConnected, connectedEdge, patch, onClick }: PortItemProps) {
+const PortItem = function PortItem({ port, portId, blockId, isConnected, connectedEdge, patch, onClick }: PortItemProps) {
   const { selection } = useStores();
   const hasDefaultSource = port.defaultSource !== undefined;
 
@@ -1056,7 +1056,7 @@ const PortItem = observer(function PortItem({ port, portId, blockId, isConnected
       )}
     </li>
   );
-});
+};
 
 // =============================================================================
 // Default Source Editor
@@ -1068,7 +1068,7 @@ interface DefaultSourceEditorProps {
   portLabel: string;
 }
 
-const DefaultSourceEditor = observer(function DefaultSourceEditor({
+const DefaultSourceEditor = function DefaultSourceEditor({
   derivedBlockId,
   value,
   portLabel
@@ -1144,7 +1144,7 @@ const DefaultSourceEditor = observer(function DefaultSourceEditor({
       />
     </div>
   );
-});
+};
 
 interface OutputPortItemProps {
   port: OutputDef;
@@ -1707,7 +1707,7 @@ interface DefaultSourceParamFieldProps {
   onChange: (value: unknown) => void;
 }
 
-const DefaultSourceParamField = observer(function DefaultSourceParamField({
+const DefaultSourceParamField = function DefaultSourceParamField({
   paramKey,
   paramLabel,
   value,
@@ -1776,7 +1776,7 @@ const DefaultSourceParamField = observer(function DefaultSourceParamField({
       />
     </div>
   );
-});
+};
 
 
 // =============================================================================
@@ -1789,7 +1789,7 @@ interface ParamsEditorProps {
   patch: Patch;
 }
 
-const ParamsEditor = observer(function ParamsEditor({ block, typeInfo, patch }: ParamsEditorProps) {
+const ParamsEditor = function ParamsEditor({ block, typeInfo, patch }: ParamsEditorProps) {
   const params = block.params || {};
   const paramKeys = Object.keys(params);
 
@@ -1827,7 +1827,7 @@ const ParamsEditor = observer(function ParamsEditor({ block, typeInfo, patch }: 
       </div>
     </div>
   );
-});
+};
 
 // =============================================================================
 // =============================================================================
@@ -1911,18 +1911,17 @@ function detectBlockContext(value: string, cursorPos: number): string | null {
 }
 
 /**
- * Insert suggestion into textarea at current cursor position.
- * Replaces the prefix and positions cursor appropriately.
+ * Compute the result of inserting a suggestion at the current cursor position.
+ * Returns the new text value and where the cursor should be placed.
  */
-function insertSuggestion(
-  textarea: HTMLTextAreaElement,
+function computeSuggestionInsertion(
+  currentValue: string,
+  selectionStart: number,
   suggestion: Suggestion,
-  filterPrefix: string,
   prefixStartOffset: number
-): void {
-  const text = textarea.value;
-  const before = text.substring(0, prefixStartOffset);
-  const after = text.substring(textarea.selectionStart);
+): { newValue: string; newCursorPos: number } {
+  const before = currentValue.substring(0, prefixStartOffset);
+  const after = currentValue.substring(selectionStart);
 
   let insertText = suggestion.label;
   let cursorOffset = insertText.length;
@@ -1938,17 +1937,10 @@ function insertSuggestion(
     cursorOffset = insertText.length; // After the dot
   }
 
-  const newValue = before + insertText + after;
-  const newCursorPos = prefixStartOffset + cursorOffset;
-
-  // Update textarea
-  textarea.value = newValue;
-  textarea.selectionStart = newCursorPos;
-  textarea.selectionEnd = newCursorPos;
-
-  // Trigger change event
-  const event = new Event('input', { bubbles: true });
-  textarea.dispatchEvent(event);
+  return {
+    newValue: before + insertText + after,
+    newCursorPos: prefixStartOffset + cursorOffset,
+  };
 }
 
 const ExpressionEditor = observer(function ExpressionEditor({ blockId, value, patch }: ExpressionEditorProps) {
@@ -1964,6 +1956,7 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value, pa
   const [blockContext, setBlockContext] = useState<string | null>(null);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
   const [filteredSuggestions, setFilteredSuggestions] = useState<readonly Suggestion[]>([]);
+  const pendingCursorPos = useRef<number | null>(null);
 
   // Create SuggestionProvider (recreate when patch changes)
   const suggestionProvider = useMemo(() => {
@@ -1975,6 +1968,15 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value, pa
   useEffect(() => {
     setLocalValue(value);
   }, [value]);
+
+  // Restore cursor position after React re-renders with inserted suggestion
+  useEffect(() => {
+    if (pendingCursorPos.current !== null && textareaRef.current) {
+      textareaRef.current.selectionStart = pendingCursorPos.current;
+      textareaRef.current.selectionEnd = pendingCursorPos.current;
+      pendingCursorPos.current = null;
+    }
+  }, [localValue]);
 
   // Get expression-related errors for this block
   const expressionError = useMemo(() => {
@@ -2040,7 +2042,7 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value, pa
       // Calculate dropdown position
       if (textareaRef.current) {
         const pos = getCursorPosition(textareaRef.current, cursor);
-        const adjusted = adjustPositionForViewport(pos, 200, 250);
+        const adjusted = adjustPositionForViewport(pos, 400, 500);
         setDropdownPosition(adjusted);
       }
     } else if (blockCtx) {
@@ -2050,7 +2052,7 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value, pa
 
       if (textareaRef.current) {
         const pos = getCursorPosition(textareaRef.current, cursor);
-        const adjusted = adjustPositionForViewport(pos, 200, 250);
+        const adjusted = adjustPositionForViewport(pos, 400, 500);
         setDropdownPosition(adjusted);
       }
     } else {
@@ -2086,7 +2088,12 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value, pa
         if (selected && textareaRef.current) {
           const identifierData = extractIdentifierPrefix(localValue, cursorPosition);
           const prefixStartOffset = identifierData?.startOffset ?? cursorPosition;
-          insertSuggestion(textareaRef.current, selected, filterPrefix, prefixStartOffset);
+          const { newValue, newCursorPos } = computeSuggestionInsertion(
+            localValue, textareaRef.current.selectionStart, selected, prefixStartOffset
+          );
+          pendingCursorPos.current = newCursorPos;
+          setLocalValue(newValue);
+          setCursorPosition(newCursorPos);
           setShowAutocomplete(false);
           setFilterPrefix('');
           setBlockContext(null);
@@ -2110,7 +2117,7 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value, pa
       setBlockContext(null);
       if (textareaRef.current) {
         const pos = getCursorPosition(textareaRef.current, textareaRef.current.selectionStart);
-        const adjusted = adjustPositionForViewport(pos, 200, 250);
+        const adjusted = adjustPositionForViewport(pos, 400, 500);
         setDropdownPosition(adjusted);
       }
       return;
@@ -2126,7 +2133,12 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value, pa
     if (textareaRef.current) {
       const identifierData = extractIdentifierPrefix(localValue, cursorPosition);
       const prefixStartOffset = identifierData?.startOffset ?? cursorPosition;
-      insertSuggestion(textareaRef.current, suggestion, filterPrefix, prefixStartOffset);
+      const { newValue, newCursorPos } = computeSuggestionInsertion(
+        localValue, textareaRef.current.selectionStart, suggestion, prefixStartOffset
+      );
+      pendingCursorPos.current = newCursorPos;
+      setLocalValue(newValue);
+      setCursorPosition(newCursorPos);
 
       // Wire vararg connection for output suggestions
       if (suggestion.type === 'output') {
@@ -2231,7 +2243,7 @@ interface ParamFieldProps {
   patch: Patch;
 }
 
-const ParamField = observer(function ParamField({ blockId, paramKey, value, typeInfo, patch }: ParamFieldProps) {
+const ParamField = function ParamField({ blockId, paramKey, value, typeInfo, patch }: ParamFieldProps) {
   const { patch: patchStore } = useStores();
   // Special case: Expression block with expression parameter
   // Render multiline textarea instead of single-line text input
@@ -2334,7 +2346,7 @@ const ParamField = observer(function ParamField({ blockId, paramKey, value, type
       />
     </div>
   );
-});
+};
 
 // =============================================================================
 // Control Components

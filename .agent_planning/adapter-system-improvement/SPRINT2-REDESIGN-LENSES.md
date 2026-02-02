@@ -14,11 +14,11 @@
 - Future: scaling, bit-depth conversion, color space transformations
 - Available on: Input ports (Sprint 2), Output ports (future)
 
-**System B: Type Checking (Compiler Validated)**
-- Compiler checks: "do all connections match in type?"
-- Reports errors if mismatches found
-- No auto-fixing or fallback insertion
-- Clean separation: lens system handles transformations, type system handles validation
+**System B: Adapter Auto-Insertion (Compiler Automatic)**
+- Compiler checks all edges for type mismatches after lens expansion
+- When a mismatch has a matching adapter (via AdapterSpec), auto-inserts the adapter block
+- When no adapter exists, reports an error
+- Clean separation: lenses are user-controlled transformations, adapters are automatic type bridging
 
 ### Key Difference
 - **Lenses**: Structural transformation layer
@@ -72,22 +72,21 @@ Similar addressing to adapters but clarifies the semantic: these are interpretiv
 
 ### 4. Lens Normalization (Pass 2 - REDESIGNED)
 
-**Old behavior** (to be removed):
-- Auto-insert adapters based on type mismatch
-- Fallback logic mixed with explicit control
+**Old behavior** (single mixed pass):
+- Auto-insert adapters and expand explicit lenses in one interleaved pass
 
-**New behavior** (independent):
-1. **Phase 1: Expand explicit lenses**
+**New behavior** (two sequential phases):
+1. **Phase 1: Expand explicit lenses** (expandExplicitLenses)
    - For each lens in `InputPort.lenses`, create a lens block
    - Insert between source and target port
    - Create deterministic block IDs: `_lens_{portId}_{lensId}`
 
-2. **Phase 2: Type validation** (separate step)
+2. **Phase 2: Auto-insert adapters** (autoInsertAdapters)
    - Check ALL remaining edges after lens expansion
-   - If type mismatch found → compile error (no auto-fix)
-   - User must add appropriate lens or fix the connection
+   - If type mismatch and adapter exists → auto-insert adapter block
+   - If type mismatch and no adapter → report error
 
-**Key separation**: Lens expansion and type checking are sequential, independent phases.
+**Key separation**: Lens expansion (user-controlled) and adapter insertion (automatic) are sequential, independent phases.
 
 ---
 

@@ -4,7 +4,6 @@
  * Data service for IDE-style autocomplete in the expression editor.
  * Provides suggestions for:
  * - Built-in functions (sin, cos, lerp, etc.)
- * - Input variables (in0-in4)
  * - Block references (from patch)
  * - Port references (from block definitions)
  * - Output ports (block.port combinations)
@@ -26,13 +25,13 @@ import { addressToString } from '../types/canonical-address';
 /**
  * Discriminated union for suggestion types.
  */
-export type SuggestionType = 'function' | 'input' | 'block' | 'port' | 'output';
+export type SuggestionType = 'function' | 'block' | 'port' | 'output';
 
 /**
  * Base suggestion interface.
  *
  * All suggestions share:
- * - label: Display text (e.g., "sin(", "in0", "Circle1")
+ * - label: Display text (e.g., "sin(", "Circle1")
  * - type: Discriminator for UI rendering
  * - description: Optional help text
  * - sortOrder: Numeric rank for sorting (lower = higher priority)
@@ -53,17 +52,6 @@ export interface FunctionSuggestion extends Suggestion {
   readonly type: 'function';
   readonly arity: number;
   readonly returnType: PayloadType;
-}
-
-/**
- * Input variable suggestion (in0-in4).
- *
- * Example: { label: "in0", type: "input", connected: true, position: 0 }
- */
-export interface InputSuggestion extends Suggestion {
-  readonly type: 'input';
-  readonly connected: boolean;
-  readonly position: number;
 }
 
 /**
@@ -169,7 +157,6 @@ export function getFunctionSignatures(): readonly FunctionSignature[] {
  *
  * Collects suggestions from:
  * - Built-in expression functions
- * - Input variables (in0-in4)
  * - Block references from the patch
  * - Port references from block definitions
  * - Output ports (flat block.port combinations)
@@ -209,25 +196,6 @@ export class SuggestionProvider {
       returnType: sig.returnType,
       description: sig.description,
       sortOrder: 100 + index, // Functions start at 100, preserve order
-    }));
-  }
-
-  /**
-   * Get all input variable suggestions (in0-in4).
-   *
-   * Returns 5 input suggestions with sortOrder 200.
-   * Connected status is always false (we don't track connections yet).
-   *
-   * @returns Read-only array of input suggestions
-   */
-  suggestInputs(): readonly InputSuggestion[] {
-    return [0, 1, 2, 3, 4].map(i => ({
-      label: `in${i}`,
-      type: 'input' as const,
-      description: `Expression input ${i}`,
-      connected: false, // TODO: Track connection status from patch
-      position: i,
-      sortOrder: 200 + i, // Inputs start at 200
     }));
   }
 
@@ -392,8 +360,6 @@ export class SuggestionProvider {
 
     if (type === 'function') {
       allSuggestions = [...this.suggestFunctions()];
-    } else if (type === 'input') {
-      allSuggestions = [...this.suggestInputs()];
     } else if (type === 'block') {
       allSuggestions = [...this.suggestBlocks()];
     } else if (type === 'port') {
@@ -405,7 +371,6 @@ export class SuggestionProvider {
       // No type filter - include all except ports (which need context)
       allSuggestions = [
         ...this.suggestFunctions(),
-        ...this.suggestInputs(),
         ...this.suggestAllOutputs(excludeBlockId),
         ...this.suggestBlocks(),
       ];

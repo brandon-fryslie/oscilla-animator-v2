@@ -22,6 +22,7 @@ import {
   getAnyBlockDefinition,
   validateCompositeDefinition,
 } from '../blocks/registry';
+
 import type { Capability, InputDef, OutputDef } from '../blocks/registry';
 import { compositeStorage } from '../blocks/composites/persistence';
 import { compositeDefToJSON } from '../blocks/composites/loader';
@@ -105,7 +106,7 @@ export class CompositeEditorStore {
   // -------------------------------------------------------------------------
 
   constructor() {
-    makeObservable(this, {
+    makeObservable<CompositeEditorStore, 'explodeCompositeBlock'>(this, {
       // Observable state
       compositeId: observable,
       internalBlocks: observable,
@@ -142,6 +143,7 @@ export class CompositeEditorStore {
       save: action,
       reset: action,
       fromHCL: action,
+      explodeCompositeBlock: action,
     });
   }
 
@@ -446,6 +448,108 @@ export class CompositeEditorStore {
     this.exposedOutputs = this.exposedOutputs.filter(exp => exp.internalBlockId !== blockId);
 
     this.isDirty = true;
+  }
+
+  /**
+   * Explode a composite internal block into its constituent blocks and edges.
+   * Replaces the single composite block with all of its internal blocks,
+   * rewiring edges that were connected to exposed ports.
+   *
+   * Returns true if the block was a composite and was exploded.
+   */
+  explodeCompositeBlock(blockId: InternalBlockId): boolean {
+    const block = this.internalBlocks.get(blockId);
+    if (!block) return false;
+
+    const compositeDef = getCompositeDefinition(block.type);
+    if (!compositeDef) return false;
+
+    // Collect edges connected to the composite block before removal
+    const incomingEdges = this.internalEdges.filter(e => e.toBlock === blockId);
+    const outgoingEdges = this.internalEdges.filter(e => e.fromBlock === blockId);
+
+    // Remove the composite block (also removes connected edges and exposed ports)
+    this.removeBlock(blockId);
+
+    // Add internal blocks with prefixed IDs to avoid collisions
+    const prefix = blockId as string;
+    const idMap = new Map<InternalBlockId, InternalBlockId>();
+
+    for (const [internalId, internalDef] of compositeDef.internalBlocks) {
+      const newId = internalBlockId(`${prefix}_${internalId}`);
+      // Ensure uniqueness
+      let finalId = newId;
+      let counter = 2;
+      while (this.internalBlocks.has(finalId)) {
+        finalId = internalBlockId(`${prefix}_${internalId}${counter}`);
+        counter++;
+      }
+      idMap.set(internalId, finalId);
+
+      this.internalBlocks.set(finalId, {
+        id: finalId,
+        type: internalDef.type,
+        position: {
+          x: (block.position?.x ?? 100) + (this.internalBlocks.size % 4) * 180,
+          y: (block.position?.y ?? 100) + Math.floor(this.internalBlocks.size / 4) * 120,
+        },
+        params: internalDef.params,
+        displayName: internalDef.displayName ?? (finalId as string),
+      });
+    }
+
+    // Add internal edges (remapped to new IDs)
+    for (const edge of compositeDef.internalEdges) {
+      const newFrom = idMap.get(edge.fromBlock);
+      const newTo = idMap.get(edge.toBlock);
+      if (newFrom && newTo) {
+        this.internalEdges.push({
+          fromBlock: newFrom,
+          fromPort: edge.fromPort,
+          toBlock: newTo,
+          toPort: edge.toPort,
+        });
+      }
+    }
+
+    // Rewire incoming edges: edges targeting exposed input ports → internal blocks
+    for (const edge of incomingEdges) {
+      const exposedInput = compositeDef.exposedInputs.find(
+        exp => exp.externalId === edge.toPort
+      );
+      if (exposedInput) {
+        const newTarget = idMap.get(exposedInput.internalBlockId);
+        if (newTarget) {
+          this.internalEdges.push({
+            fromBlock: edge.fromBlock,
+            fromPort: edge.fromPort,
+            toBlock: newTarget,
+            toPort: exposedInput.internalPortId,
+          });
+        }
+      }
+    }
+
+    // Rewire outgoing edges: edges from exposed output ports → internal blocks
+    for (const edge of outgoingEdges) {
+      const exposedOutput = compositeDef.exposedOutputs.find(
+        exp => exp.externalId === edge.fromPort
+      );
+      if (exposedOutput) {
+        const newSource = idMap.get(exposedOutput.internalBlockId);
+        if (newSource) {
+          this.internalEdges.push({
+            fromBlock: newSource,
+            fromPort: exposedOutput.internalPortId,
+            toBlock: edge.toBlock,
+            toPort: edge.toPort,
+          });
+        }
+      }
+    }
+
+    this.isDirty = true;
+    return true;
   }
 
   /**

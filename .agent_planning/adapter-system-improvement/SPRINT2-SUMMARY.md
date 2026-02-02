@@ -10,14 +10,12 @@ Call the explicit system "Lenses" to support future expansion (scaling, quantiza
 
 ## Key Changes from Sprint 1 Plan
 
-| Aspect | Sprint 1 | Sprint 2 Redesign |
-|--------|----------|-------------------|
-| **Name** | Adapters | Lenses |
-| **Semantics** | Type conversion only | Signal interpretation/transformation |
-| **Type Inference** | Fallback when no explicit adapter | Completely independent (no fallback) |
-| **Type Mismatch** | Auto-insert adapter | Report error to user |
-| **Pass 2 Logic** | Mixed (lenses + type inference) | Two independent phases |
-| **Output Ports** | Not supported | Reserved for future |
+| Aspect | Before Sprint 2 | After Sprint 2 |
+|--------|-----------------|----------------|
+| **Lenses** | Did not exist | User-controlled signal transformations (Phase 1) |
+| **Adapters** | Auto-inserted for type mismatches | Still auto-inserted for type mismatches (Phase 2) |
+| **Pass 2 Logic** | Single mixed pass | Two sequential phases (lens expansion then adapter insertion) |
+| **Output Ports** | Not supported | Reserved for future lenses |
 | **Extensibility** | Adapters only | Lenses + params (scaling, quantization, etc.) |
 
 ## Sprint 2 Implementation Strategy
@@ -43,18 +41,23 @@ For each edge:
     expand to block
 ```
 
-**New Pass 2** (independent):
+**New Pass 2** (two phases, sequential):
 ```
 Phase 1: expandExplicitLenses()
   For each port.lenses:
     create lens block
     insert between source and target
 
-Phase 2: validateTypeCompatibility()
+Phase 2: autoInsertAdapters()
   For each remaining edge:
-    if type mismatch:
-      report error (no auto-fix)
+    if type mismatch and adapter exists:
+      auto-insert adapter block
+    if type mismatch and no adapter:
+      report error
 ```
+
+NOTE: Adapters (auto-inserted for type mismatches) were NOT removed.
+Lenses (user-controlled transformations) were ADDED as a separate Phase 1.
 
 ### Phase C: Future-Proof Data Model
 
@@ -109,26 +112,22 @@ This way, output lenses can be added later without breaking changes.
 
 ## Independence Examples
 
-### Scenario 1: User provides lens
+### Scenario 1: Adapter auto-inserted (type mismatch)
 ```
 User: "Connect degrees output to radians input"
 ↓
-Editor: Adds LensAttachment(Adapter_DegreesToRadians)
-↓
-Pass 2, Phase 1: Expands lens to block
-↓
-Pass 2, Phase 2: Types now match ✓
-```
-
-### Scenario 2: User provides no lens (type mismatch)
-```
-User: "Connect degrees output to radians input" (no lens)
-↓
 Pass 2, Phase 1: No lenses to expand
 ↓
-Pass 2, Phase 2: Type check finds mismatch → ERROR
+Pass 2, Phase 2: Type mismatch found, adapter exists → auto-insert Adapter_DegreesToRadians
+```
+
+### Scenario 2: User adds a lens (explicit signal transformation)
+```
+User: Right-click port → "Add Lens: Scale 0.5x"
 ↓
-Compiler: "Type error: float:degrees ≠ float:radians. Add a lens or fix the connection."
+Pass 2, Phase 1: Expands lens to block, rewires edges
+↓
+Pass 2, Phase 2: Types match ✓ (lens doesn't change types)
 ```
 
 ### Scenario 3: Future - scaling lens

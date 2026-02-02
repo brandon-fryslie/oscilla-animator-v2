@@ -7,7 +7,6 @@ import {
   SuggestionProvider,
   getFunctionSignatures,
   type FunctionSuggestion,
-  type InputSuggestion,
   type BlockSuggestion,
   type PortSuggestion,
 } from '../suggestions';
@@ -173,46 +172,6 @@ describe('SuggestionProvider.suggestFunctions', () => {
     for (const suggestion of suggestions) {
       expect(suggestion.sortOrder).toBeGreaterThanOrEqual(100);
       expect(suggestion.sortOrder).toBeLessThan(200);
-    }
-  });
-});
-
-// =============================================================================
-// SuggestionProvider - Input Suggestions
-// =============================================================================
-
-describe('SuggestionProvider.suggestInputs', () => {
-  it('returns 5 input suggestions', () => {
-    const patch = createTestPatch([]);
-    const registry = AddressRegistry.buildFromPatch(patch);
-    const provider = new SuggestionProvider(patch, registry);
-
-    const suggestions = provider.suggestInputs();
-    expect(suggestions).toHaveLength(5);
-  });
-
-  it('input labels are in0-in4', () => {
-    const patch = createTestPatch([]);
-    const registry = AddressRegistry.buildFromPatch(patch);
-    const provider = new SuggestionProvider(patch, registry);
-
-    const suggestions = provider.suggestInputs();
-    const labels = suggestions.map(s => s.label);
-    expect(labels).toEqual(['in0', 'in1', 'in2', 'in3', 'in4']);
-  });
-
-  it('each input has correct metadata', () => {
-    const patch = createTestPatch([]);
-    const registry = AddressRegistry.buildFromPatch(patch);
-    const provider = new SuggestionProvider(patch, registry);
-
-    const suggestions = provider.suggestInputs();
-    for (let i = 0; i < suggestions.length; i++) {
-      const suggestion = suggestions[i] as InputSuggestion;
-      expect(suggestion.type).toBe('input');
-      expect(suggestion.position).toBe(i);
-      expect(suggestion.connected).toBe(false); // Not implemented yet
-      expect(suggestion.sortOrder).toBe(200 + i);
     }
   });
 });
@@ -418,19 +377,6 @@ describe('SuggestionProvider.filterSuggestions', () => {
     expect(types.has('function')).toBe(true);
   });
 
-  it('type filter: input', () => {
-    const patch = createTestPatch([]);
-    const registry = AddressRegistry.buildFromPatch(patch);
-    const provider = new SuggestionProvider(patch, registry);
-
-    const suggestions = provider.filterSuggestions('in', 'input');
-    const types = new Set(suggestions.map(s => s.type));
-
-    expect(types.size).toBe(1);
-    expect(types.has('input')).toBe(true);
-    expect(suggestions.length).toBe(5); // All in0-in4 match "in"
-  });
-
   it('type filter: block', () => {
     const blocks = [createTestBlock('Circle1', 'Circle')];
     const patch = createTestPatch(blocks);
@@ -474,7 +420,6 @@ describe('SuggestionProvider - Edge Cases', () => {
     const provider = new SuggestionProvider(patch, registry);
 
     expect(() => provider.suggestFunctions()).not.toThrow();
-    expect(() => provider.suggestInputs()).not.toThrow();
     expect(() => provider.suggestBlocks()).not.toThrow();
     expect(() => provider.filterSuggestions('')).not.toThrow();
   });
@@ -494,8 +439,8 @@ describe('SuggestionProvider - Edge Cases', () => {
     const registry = AddressRegistry.buildFromPatch(patch);
     const provider = new SuggestionProvider(patch, registry);
 
+    // Numeric prefixes should not throw, even if no matches
     const suggestions = provider.filterSuggestions('0');
-    const labels = suggestions.map(s => s.label);
-    expect(labels).toContain('in0'); // Should match in0
+    expect(Array.isArray(suggestions)).toBe(true);
   });
 });

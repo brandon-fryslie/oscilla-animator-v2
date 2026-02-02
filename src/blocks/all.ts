@@ -14,6 +14,7 @@ import './shape';
 import './layout';
 import './color';
 import './adapter';
+import './lens';
 import './event';
 import './io';
 import './render';

@@ -8,7 +8,6 @@
  */
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { observer } from 'mobx-react-lite';
 import { useStores } from '../../../stores';
 import type { ExternalWriteBus } from '../../../runtime/ExternalChannel';
 import { ActionIcon, Tooltip } from '@mantine/core';
@@ -25,7 +24,7 @@ const TARGET_ASPECT_RATIO = 1;
 // Mouse smoothing lerp factor (matches legacy behavior)
 const MOUSE_SMOOTHING_FACTOR = 0.05;
 
-export const CanvasTab: React.FC<CanvasTabProps> = observer(({ onCanvasReady, externalWriteBus }) => {
+export const CanvasTab: React.FC<CanvasTabProps> = ({ onCanvasReady, externalWriteBus }) => {
   const { viewport } = useStores();
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -345,4 +344,4 @@ export const CanvasTab: React.FC<CanvasTabProps> = observer(({ onCanvasReady, ex
       </Tooltip>
     </div>
   );
-});
+};

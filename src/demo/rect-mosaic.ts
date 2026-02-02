@@ -10,7 +10,7 @@ import { timeRootRole } from '../types';
 import type { PatchBuilder } from './types';
 
 export const patchRectMosaic: PatchBuilder = (b) => {
-  const time = b.addBlock('InfiniteTimeRoot', { role: timeRootRole() });
+  const time = b.addBlock('InfiniteTimeRoot', { displayName: 'Time', role: timeRootRole() });
   b.setPortDefault(time, 'periodAMs', 4000);
   b.setPortDefault(time, 'periodBMs', 7000);
 
@@ -34,8 +34,8 @@ export const patchRectMosaic: PatchBuilder = (b) => {
 
   // Animated scale: pulsing
   const scaleExpr = b.addBlock('Expression');
-  b.setConfig(scaleExpr, 'expression', '1.0 + 0.5 * sin(in0 * 6.28 + 1.57)'); // quarter-phase offset
-  b.wire(time, 'phaseA', scaleExpr, 'in0');
+  b.setConfig(scaleExpr, 'expression', '1.0 + 0.5 * sin(phase * 6.28 + 1.57)'); // quarter-phase offset
+  b.addVarargConnection(scaleExpr, 'refs', 'v1:blocks.time.outputs.phaseA', 0, 'phase');
 
   // Render with rect shape and animated scale
   const render = b.addBlock('RenderInstances2D');

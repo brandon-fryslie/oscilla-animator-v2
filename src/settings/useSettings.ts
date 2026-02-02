@@ -17,7 +17,8 @@
  * Auto-registers the token on first use (idempotent).
  */
 
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
+import { runInAction } from 'mobx';
 import { useStore } from '../stores';
 import type { SettingsToken } from './types';
 
@@ -34,9 +35,14 @@ export function useSettings<T extends Record<string, unknown>>(
 ): [T, (partial: Partial<T>) => void] {
   const settingsStore = useStore('settings');
 
-  // Register synchronously — idempotent, safe to call on every render.
-  // Must happen before get() to ensure the token is in the registry.
-  settingsStore.register(token);
+  // Register once per hook instance — must happen before get() so values exist.
+  // Wrapped in runInAction to ensure observable mutations are allowed even when
+  // called from within an observer component's render tracking context.
+  const registeredRef = useRef(false);
+  if (!registeredRef.current) {
+    runInAction(() => settingsStore.register(token));
+    registeredRef.current = true;
+  }
 
   // Get current values (observable)
   const values = settingsStore.get(token);

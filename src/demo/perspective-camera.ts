@@ -11,7 +11,7 @@ import { timeRootRole } from '../types';
 import type { PatchBuilder } from './types';
 
 export const patchPerspectiveCamera: PatchBuilder = (b) => {
-  const time = b.addBlock('InfiniteTimeRoot', { role: timeRootRole() });
+  const time = b.addBlock('InfiniteTimeRoot', { displayName: 'Time', role: timeRootRole() });
   b.setPortDefault(time, 'periodAMs', 12000); // 12 second orbit
   b.setPortDefault(time, 'periodBMs', 4000);  // 4 second wave
 
@@ -20,10 +20,10 @@ export const patchPerspectiveCamera: PatchBuilder = (b) => {
 
   // Animated yaw: continuous 360° orbit around the scene
   const yawExpr = b.addBlock('Expression');
-  b.setConfig(yawExpr, 'expression', 'in0 * 360.0');
+  b.setConfig(yawExpr, 'expression', 'phase * 360.0');
+  b.addVarargConnection(yawExpr, 'refs', 'v1:blocks.time.outputs.phaseA', 0, 'phase');
 
   const yawDeg = b.addBlock('Adapter_ScalarToDeg');
-  b.wire(time, 'phaseA', yawExpr, 'in0');
   b.wire(yawExpr, 'out', yawDeg, 'in');
   b.wire(yawDeg, 'out', camera, 'yawDeg');
 

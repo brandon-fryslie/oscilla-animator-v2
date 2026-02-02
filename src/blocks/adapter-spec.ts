@@ -22,18 +22,6 @@ import {
   perspectivesEqual,
   branchesEqual,
 } from '../core/canonical-types/equality';
-import type {
-  Cardinality,
-  CardinalityValue,
-  Temporality,
-  TemporalityValue,
-  Binding,
-  BindingValue,
-  Perspective,
-  PerspectiveValue,
-  Branch,
-  BranchValue,
-} from '../core/canonical-types';
 import { BLOCK_DEFS_BY_TYPE } from './registry';
 
 // =============================================================================
@@ -141,57 +129,36 @@ export function extractPattern(type: InferenceCanonicalType): TypePattern {
 }
 
 /**
- * Check if an axis value equals a pattern axis value.
- * Uses structural comparison via per-axis equality functions.
- */
-function axisValuesEqual(axisName: keyof Extent, a: Extent[keyof Extent], b: Extent[keyof Extent]): boolean {
-  switch (axisName) {
-    case 'cardinality': {
-      const aVal = requireInst(a as Cardinality, axisName) as CardinalityValue;
-      const bVal = requireInst(b as Cardinality, axisName) as CardinalityValue;
-      return cardinalitiesEqual(aVal, bVal);
-    }
-    case 'temporality': {
-      const aVal = requireInst(a as Temporality, axisName) as TemporalityValue;
-      const bVal = requireInst(b as Temporality, axisName) as TemporalityValue;
-      return temporalitiesEqual(aVal, bVal);
-    }
-    case 'binding': {
-      const aVal = requireInst(a as Binding, axisName) as BindingValue;
-      const bVal = requireInst(b as Binding, axisName) as BindingValue;
-      return bindingsEqual(aVal, bVal);
-    }
-    case 'perspective': {
-      const aVal = requireInst(a as Perspective, axisName) as PerspectiveValue;
-      const bVal = requireInst(b as Perspective, axisName) as PerspectiveValue;
-      return perspectivesEqual(aVal, bVal);
-    }
-    case 'branch': {
-      const aVal = requireInst(a as Branch, axisName) as BranchValue;
-      const bVal = requireInst(b as Branch, axisName) as BranchValue;
-      return branchesEqual(aVal, bVal);
-    }
-  }
-}
-
-/**
  * Check if an extent matches a pattern.
+ * Uses per-axis structural equality for each specified axis in the pattern.
  */
 function extentMatches(actual: Extent, pattern: ExtentPattern): boolean {
   if (pattern === 'any') return true;
 
-  // Partial extent pattern - check specified axes
-  for (const key in pattern) {
-    const k = key as keyof Extent;
-    const patternAxis = pattern[k];
-    const actualAxis = actual[k];
-
-    if (!patternAxis) continue;
-
-    // Use per-axis structural equality
-    if (!axisValuesEqual(k, actualAxis, patternAxis)) {
-      return false;
-    }
+  if (pattern.cardinality) {
+    const a = requireInst(actual.cardinality, 'cardinality');
+    const b = requireInst(pattern.cardinality, 'cardinality');
+    if (!cardinalitiesEqual(a, b)) return false;
+  }
+  if (pattern.temporality) {
+    const a = requireInst(actual.temporality, 'temporality');
+    const b = requireInst(pattern.temporality, 'temporality');
+    if (!temporalitiesEqual(a, b)) return false;
+  }
+  if (pattern.binding) {
+    const a = requireInst(actual.binding, 'binding');
+    const b = requireInst(pattern.binding, 'binding');
+    if (!bindingsEqual(a, b)) return false;
+  }
+  if (pattern.perspective) {
+    const a = requireInst(actual.perspective, 'perspective');
+    const b = requireInst(pattern.perspective, 'perspective');
+    if (!perspectivesEqual(a, b)) return false;
+  }
+  if (pattern.branch) {
+    const a = requireInst(actual.branch, 'branch');
+    const b = requireInst(pattern.branch, 'branch');
+    if (!branchesEqual(a, b)) return false;
   }
 
   return true;

@@ -297,6 +297,8 @@ export function setupStructureReaction(
 ): () => void {
   return reaction(
     () => ({
+      // Read patch in the data function so MobX tracks it reactively
+      patch: handle.patchStore.patch,
       blockCount: handle.patchStore.blocks.size,
       edgeCount: handle.patchStore.edges.length,
       // Track combineMode changes for edge dimming updates
@@ -304,12 +306,12 @@ export function setupStructureReaction(
         Array.from(block.inputPorts.values()).map(port => port.combineMode).join(',')
       ).join('|'),
     }),
-    () => {
+    ({ patch }) => {
       if (isSyncing) return;
       isSyncing = true;
       try {
         const result = reconcileNodes(
-          handle.patchStore.patch,
+          patch,
           handle.getNodes(),
           handle.layoutStore,
           diagnostics

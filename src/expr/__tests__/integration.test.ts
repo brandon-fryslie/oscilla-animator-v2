@@ -9,7 +9,6 @@ import { compileExpression } from '../index';
 import { canonicalType, floatConst, intConst, boolConst, vec3Const, colorConst } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC3, COLOR } from '../../core/canonical-types';
 import { IRBuilderImpl } from '../../compiler/ir/IRBuilderImpl';
-import { extractSigExpr } from '../../__tests__/ir-test-helpers';
 
 describe('compileExpression Integration', () => {
   let builder: IRBuilderImpl;

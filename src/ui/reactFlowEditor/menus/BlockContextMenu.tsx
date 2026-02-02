@@ -9,7 +9,6 @@
  */
 
 import React, { useMemo } from 'react';
-import { observer } from 'mobx-react-lite';
 import {
   ContentCopy as DuplicateIcon,
   Delete as DeleteIcon,
@@ -27,7 +26,7 @@ export interface BlockContextMenuProps {
   onCenter: (blockId: BlockId) => void;
 }
 
-export const BlockContextMenu: React.FC<BlockContextMenuProps> = observer(({
+export const BlockContextMenu: React.FC<BlockContextMenuProps> = ({
   blockId,
   anchorPosition,
   onClose,
@@ -93,4 +92,4 @@ export const BlockContextMenu: React.FC<BlockContextMenuProps> = observer(({
   }, [blockId, onCenter, patch]);
 
   return <ContextMenu items={items} anchorPosition={anchorPosition} onClose={onClose} />;
-});
+};

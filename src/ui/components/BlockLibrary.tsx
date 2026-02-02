@@ -6,7 +6,6 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { observer } from 'mobx-react-lite';
 import { ActionIcon, rem } from '@mantine/core';
 import type { BlockId } from '../../types';
 import { useStores } from '../../stores';
@@ -80,7 +79,7 @@ function useDebounce<T>(value: T, delay: number): T {
 /**
  * Block Library Component
  */
-export const BlockLibrary: React.FC = observer(() => {
+export const BlockLibrary: React.FC = () => {
   const { selection, diagnostics } = useStores();
   // State
   const [searchQuery, setSearchQuery] = useState('');
@@ -254,7 +253,7 @@ export const BlockLibrary: React.FC = observer(() => {
       </div>
     </div>
   );
-});
+};
 
 /**
  * Block Category Section

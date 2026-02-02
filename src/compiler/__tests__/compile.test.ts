@@ -342,13 +342,12 @@ describe('error isolation for unreachable blocks', () => {
       b.addBlock('InfiniteTimeRoot');
 
       // Disconnected subgraph with multiple errors
-      // Note: parameter name is 'expression', not 'expr'
-      const expr1 = b.addBlock('Expression');
+      const expr1 = b.addBlock('Expression', { displayName: 'Expr1' });
       b.setConfig(expr1, 'expression', 'error 1 +++');
-      const expr2 = b.addBlock('Expression');
+      const expr2 = b.addBlock('Expression', { displayName: 'Expr2' });
       b.setConfig(expr2, 'expression', 'error 2 +++');
       // Wire them together but not to anything else
-      b.wire(expr1, 'out', expr2, 'in0');
+      b.addVarargConnection(expr2, 'refs', `v1:blocks.expr1.outputs.out`, 0, 'x');
     });
 
     const result = compile(patch);
@@ -363,15 +362,14 @@ describe('error isolation for unreachable blocks', () => {
   it('emits warnings for unreachable block errors in CompileEnd event', () => {
     // Build a patch with a disconnected block that has an error
     const patch = buildPatch((b) => {
-      const time = b.addBlock('InfiniteTimeRoot');
+      b.addBlock('InfiniteTimeRoot', { displayName: 'Time' });
 
       // Create Expression block with a syntax error but leave it disconnected from any render
-      // Note: parameter name is 'expression', not 'expr'
-      // Use "in0 +" which is a guaranteed syntax error (incomplete expression)
-      const expr = b.addBlock('Expression');
-      b.setConfig(expr, 'expression', 'in0 +');  // Incomplete expression - guaranteed syntax error
+      // Use "t +" which is a guaranteed syntax error (incomplete expression)
+      const expr = b.addBlock('Expression', { displayName: 'TestExpr' });
+      b.setConfig(expr, 'expression', 't +');  // Incomplete expression - guaranteed syntax error
       // Wire time to the Expression so it actually tries to compile
-      b.wire(time, 'tMs', expr, 'in0');
+      b.addVarargConnection(expr, 'refs', `v1:blocks.time.outputs.tMs`, 0, 't');
     });
 
     // Create a mock event hub to capture the CompileEnd event

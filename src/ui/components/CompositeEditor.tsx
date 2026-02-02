@@ -16,9 +16,11 @@ import {
   ArrowForward as TargetIcon,
   Output as ExposeIcon,
   VisibilityOff as UnexposeIcon,
+  CallSplit as ExplodeIcon,
 } from '@mui/icons-material';
 import { useStores } from '../../stores';
 import type { InternalBlockId } from '../../blocks/composite-types';
+import { getCompositeDefinition } from '../../blocks/registry';
 import { GraphEditorCore, type GraphEditorCoreHandle } from '../graphEditor/GraphEditorCore';
 import { CompositeStoreAdapter } from '../graphEditor/CompositeStoreAdapter';
 import { ContextMenu, type ContextMenuItem } from '../reactFlowEditor/ContextMenu';
@@ -88,21 +90,27 @@ export const CompositeEditor = observer(function CompositeEditor() {
     return () => setEditorHandle(null);
   }, [compositeEditor.isOpen, adapter, setEditorHandle]);
 
-  // Handle drop of composite to open for editing (empty state)
+  // Handle drop on empty state: open new composite and add the dropped block
   const handleDropOnEmpty = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault();
-      const compositeType = event.dataTransfer.getData('application/oscilla-composite-type');
-      if (compositeType) {
-        compositeEditor.openExisting(compositeType);
+      const blockType =
+        event.dataTransfer.getData('application/oscilla-block-type') ||
+        event.dataTransfer.getData('application/oscilla-composite-type');
+      if (blockType) {
+        compositeEditor.openNew();
+        compositeEditor.addBlock(blockType, { x: 200, y: 200 });
       }
     },
     [compositeEditor]
   );
 
   const handleDragOverEmpty = useCallback((event: React.DragEvent) => {
-    // Only accept composite drops
-    if (event.dataTransfer.types.includes('application/oscilla-composite-type')) {
+    // Accept any block or composite drop to start a new composite
+    if (
+      event.dataTransfer.types.includes('application/oscilla-block-type') ||
+      event.dataTransfer.types.includes('application/oscilla-composite-type')
+    ) {
       event.preventDefault();
       event.dataTransfer.dropEffect = 'copy';
     }
@@ -113,7 +121,9 @@ export const CompositeEditor = observer(function CompositeEditor() {
     (event: React.DragEvent) => {
       event.preventDefault();
 
-      const blockType = event.dataTransfer.getData('application/oscilla-block-type');
+      const blockType =
+        event.dataTransfer.getData('application/oscilla-block-type') ||
+        event.dataTransfer.getData('application/oscilla-composite-type');
       if (!blockType) return;
 
       // Get drop position relative to the canvas
@@ -200,7 +210,9 @@ export const CompositeEditor = observer(function CompositeEditor() {
         (e) => e.sourceBlockId === blockId || e.targetBlockId === blockId
       );
 
-      return [
+      const isComposite = getCompositeDefinition(block.type) !== undefined;
+
+      const items: ContextMenuItem[] = [
         {
           label: 'Duplicate Block',
           icon: <DuplicateIcon fontSize="small" />,
@@ -211,8 +223,23 @@ export const CompositeEditor = observer(function CompositeEditor() {
               y: (pos?.y ?? 100) + 40,
             });
           },
-          dividerAfter: true,
         },
+      ];
+
+      if (isComposite) {
+        items.push({
+          label: 'Explode Composite',
+          icon: <ExplodeIcon fontSize="small" />,
+          action: () => {
+            compositeEditor.explodeCompositeBlock(blockId);
+          },
+          dividerAfter: true,
+        });
+      } else {
+        items[items.length - 1].dividerAfter = true;
+      }
+
+      items.push(
         {
           label: 'Disconnect All',
           icon: <DisconnectIcon fontSize="small" />,
@@ -231,7 +258,9 @@ export const CompositeEditor = observer(function CompositeEditor() {
           },
           danger: true,
         },
-      ];
+      );
+
+      return items;
     }
 
     if (contextMenu.type === 'edge') {
@@ -329,7 +358,7 @@ export const CompositeEditor = observer(function CompositeEditor() {
     }
 
     return [];
-  }, [contextMenu, adapter]);
+  }, [contextMenu, adapter, compositeEditor]);
 
   // Panel resize handlers
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
@@ -378,7 +407,7 @@ export const CompositeEditor = observer(function CompositeEditor() {
           <h2>Composite Editor</h2>
           <p>No composite is currently being edited.</p>
           <p className="composite-editor__hint">
-            Drag a composite from the library to edit it, or:
+            Drag a block from the library to start a new composite, or:
           </p>
           <button
             className="composite-editor__new-btn"

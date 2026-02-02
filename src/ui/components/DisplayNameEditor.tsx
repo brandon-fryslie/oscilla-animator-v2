@@ -6,7 +6,6 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { observer } from 'mobx-react-lite';
 import type { BlockId } from '../../types';
 import { useStores } from '../../stores';
 
@@ -29,7 +28,7 @@ interface DisplayNameEditorProps {
  * - Shows validation error on collision
  * - Auto-generates name if empty
  */
-export const DisplayNameEditor = observer(function DisplayNameEditor({
+export const DisplayNameEditor: React.FC<DisplayNameEditorProps> = function DisplayNameEditor({
   blockId,
   currentDisplayName,
   fallbackLabel,
@@ -148,4 +147,4 @@ export const DisplayNameEditor = observer(function DisplayNameEditor({
       {currentDisplayName}
     </span>
   );
-});
+};

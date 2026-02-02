@@ -154,7 +154,6 @@ export type {
   Suggestion,
   SuggestionType,
   FunctionSuggestion,
-  InputSuggestion,
   BlockSuggestion,
   PortSuggestion,
   FunctionSignature,

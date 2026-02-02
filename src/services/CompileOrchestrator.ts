@@ -8,6 +8,7 @@
  */
 
 import { compile } from '../compiler';
+import { untracked } from 'mobx';
 import type { Patch } from '../graph';
 import {
   createSessionState,
@@ -72,7 +73,7 @@ export interface CompileOrchestratorDeps {
  */
 export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: boolean = false): Promise<void> {
   const { store, state, onDomainChange } = deps;
-  const patch = store.patch.patch;
+  const patch = untracked(() => store.patch.patch);
   if (!patch) {
     return;
   }

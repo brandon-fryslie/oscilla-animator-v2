@@ -12,7 +12,6 @@
  */
 
 import React, { useMemo } from 'react';
-import { observer } from 'mobx-react-lite';
 import {
   LinkOff as DisconnectIcon,
   RestartAlt as ResetIcon,
@@ -28,10 +27,10 @@ import type { BlockId, PortId, CombineMode } from '../../../types';
 import { COMBINE_MODE_CATEGORY } from '../../../types';
 import { useStores } from '../../../stores';
 import { ContextMenu, type ContextMenuItem } from '../ContextMenu';
-import { validateConnection, getPortTypeFromBlockType } from '../typeValidation';
-import { requireAnyBlockDef, getBlockCategories, getBlockTypesByCategory, type AnyBlockDef } from '../../../blocks/registry';
+import { validateConnection } from '../typeValidation';
+import { requireAnyBlockDef, getBlockCategories, getBlockTypesByCategory } from '../../../blocks/registry';
 import { isPayloadVar, type InferencePayloadType } from '../../../core/inference-types';
-import { getAvailableLensTypes, getLensLabel, findCompatibleLenses } from '../lensUtils';
+import { getLensLabel, findCompatibleLenses } from '../lensUtils';
 import { internalBlockId } from '../../../blocks/composite-types';
 
 /** Maximum number of "add block" suggestions to show */
@@ -224,7 +223,7 @@ export interface PortContextMenuProps {
   onClose: () => void;
 }
 
-export const PortContextMenu: React.FC<PortContextMenuProps> = observer(({
+export const PortContextMenu: React.FC<PortContextMenuProps> = ({
   blockId,
   portId,
   isInput,
@@ -528,4 +527,4 @@ export const PortContextMenu: React.FC<PortContextMenuProps> = observer(({
   }, [blockId, portId, isInput, patch, layout, selection, compositeEditor]);
 
   return <ContextMenu items={items} anchorPosition={anchorPosition} onClose={onClose} />;
-});
+};
