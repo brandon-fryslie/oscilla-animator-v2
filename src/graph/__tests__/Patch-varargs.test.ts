@@ -6,7 +6,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { PatchBuilder, type VarargConnection, type InputPort } from '../Patch';
 import { registerBlock, type BlockDef } from '../../blocks/registry';
 import type { BlockId } from '../../types';
-import { canonicalType, unitNorm01 } from '../../core/canonical-types';
+import { canonicalType, unitScalar, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../core/canonical-types';
 
 // Register a test block with vararg input
@@ -19,7 +19,7 @@ beforeAll(() => {
     capability: 'pure',
     inputs: {
       values: {
-        type: canonicalType(FLOAT, unitNorm01()),
+        type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()),
         isVararg: true,
         varargConstraint: {
           payloadType: FLOAT,
@@ -29,7 +29,7 @@ beforeAll(() => {
     },
     outputs: {
       result: {
-        type: canonicalType(FLOAT, unitNorm01()),
+        type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()),
       },
     },
     lower: () => ({ outputsById: {} }),
@@ -44,7 +44,7 @@ beforeAll(() => {
     inputs: {},
     outputs: {
       value: {
-        type: canonicalType(FLOAT, unitNorm01()),
+        type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()),
       },
     },
     lower: () => ({ outputsById: {} }),

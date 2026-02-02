@@ -11,8 +11,8 @@ import {
   canonicalType as makeSignalType,
   unitScalar,
   unitCount,
-  unitPhase01,
-  unitNorm01,
+  unitTurns, contractWrap01,
+  unitScalar, contractClamp01,
   unitRadians,
   unitDegrees,
   unitNdc2,
@@ -91,7 +91,7 @@ export function testInstanceRef(instId: string, domainType: string = 'default'):
  *
  * @example
  * const floatType = testSignalType(FLOAT);
- * const phaseType = testSignalType(FLOAT, unitPhase01());
+ * const phaseType = testSignalType(FLOAT, unitTurns(), undefined, contractWrap01());
  * const posType = testSignalType(VEC2, unitWorld2());
  */
 export function testSignalType(
@@ -140,7 +140,7 @@ export function testSignalTypeWithExtent(
  *
  * @example
  * const scalar = testFloat();
- * const phase = testFloat(unitPhase01());
+ * const phase = testFloat(unitTurns(), undefined, contractWrap01());
  * const angle = testFloat(unitRadians());
  */
 export function testFloat(unit?: UnitType): CanonicalType {
@@ -259,7 +259,7 @@ export function testEventType(
 }
 
 // Re-export unit constructors for convenience
-export { unitScalar, unitCount, unitPhase01, unitNorm01, unitRadians, unitDegrees, unitNdc2, unitNdc3, unitWorld2, unitWorld3, unitRgba01, unitNone };
+export { unitScalar, unitCount, unitTurns, unitScalar, contractWrap01, contractClamp01, unitRadians, unitDegrees, unitNdc2, unitNdc3, unitWorld2, unitWorld3, unitRgba01, unitNone };
 
 // Re-export cardinality constructors
 

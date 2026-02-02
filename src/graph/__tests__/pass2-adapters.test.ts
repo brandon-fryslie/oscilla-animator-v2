@@ -10,7 +10,7 @@ import { pass2Adapters } from '../../compiler/frontend/normalize-adapters';
 import { buildPatch, type Patch } from '../Patch';
 import {
   canonicalType,
-  unitPhase01,
+  unitTurns, contractWrap01,
   unitRadians,
   unitScalar,
 } from '../../core/canonical-types';
@@ -36,7 +36,7 @@ registerBlock({
   capability: 'pure',
   inputs: {},
   outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT, unitPhase01()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()) },
   },
   lower: () => ({ outputsById: {} }),
 });
@@ -65,7 +65,7 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   inputs: {
-    in: { label: 'In', type: canonicalType(FLOAT, unitPhase01()) },
+    in: { label: 'In', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()) },
   },
   outputs: {},
   lower: () => ({ outputsById: {} }),

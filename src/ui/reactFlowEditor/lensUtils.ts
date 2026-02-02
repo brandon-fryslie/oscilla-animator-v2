@@ -133,7 +133,7 @@ function unitsEqualInference(a: InferenceUnitType, b: InferenceUnitType): boolea
       return (b as Extract<InferenceUnitType, { kind: 'color' }>).unit === a.unit;
     case 'none':
     case 'scalar':
-    case 'norm01':
+    case 'scalar':
     case 'count':
       return true; // Kind match is sufficient for simple units
     default:

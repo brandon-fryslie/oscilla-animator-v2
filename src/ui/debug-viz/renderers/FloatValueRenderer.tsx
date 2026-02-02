@@ -39,7 +39,7 @@ function unitLabel(unit: UnitType): string | null {
     case 'scalar':
     case 'none':
       return null;
-    case 'norm01':
+    case 'scalar':
       return null; // has range indicator instead
     case 'count':
       return null;
@@ -48,7 +48,7 @@ function unitLabel(unit: UnitType): string | null {
     case 'angle': {
       const angleUnit = (unit as Extract<UnitType, { kind: 'angle' }>).unit;
       switch (angleUnit) {
-        case 'phase01': return 'phase';
+        case 'turns': return 'phase';
         case 'radians': return 'rad';
         case 'degrees': return 'deg';
       }
@@ -101,7 +101,7 @@ function renderScalarFull(value: number, props: FloatRendererProps): React.React
   }
 
   // Unit-specific decorations
-  if (props.unit.kind === 'norm01') {
+  if (props.unit.kind.contract?.kind === 'clamp01') {
     children.push(
       React.createElement('span', { key: 'range', style: styles.rangeIndicator }, '[0, 1]')
     );

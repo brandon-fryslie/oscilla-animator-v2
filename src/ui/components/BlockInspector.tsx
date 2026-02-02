@@ -55,7 +55,7 @@ function formatSignalType(type: InferenceCanonicalType | undefined): string {
     case 'scalar':
       unitStr = '';
       break;
-    case 'norm01':
+    case 'scalar':
       unitStr = '0..1';
       break;
     case 'count':
@@ -63,7 +63,7 @@ function formatSignalType(type: InferenceCanonicalType | undefined): string {
       break;
     case 'angle':
       switch (unit.unit) {
-        case 'phase01':
+        case 'turns':
           unitStr = 'phase';
           break;
         case 'radians':
@@ -154,7 +154,7 @@ function sliderConfigForType(type: InferenceCanonicalType | undefined): SliderCo
     switch (unit.kind) {
       case 'angle':
         switch (unit.unit) {
-          case 'phase01': return { min: 0, max: 1, step: 0.01 };
+          case 'turns': return { min: 0, max: 1, step: 0.01 };
           case 'radians': return { min: -Math.PI, max: Math.PI, step: 0.01 };
           case 'degrees': return { min: -180, max: 360, step: 1 };
         }
@@ -165,7 +165,7 @@ function sliderConfigForType(type: InferenceCanonicalType | undefined): SliderCo
           case 'seconds': return { min: 0, max: 10, step: 0.01 };
         }
         break;
-      case 'norm01': return { min: 0, max: 1, step: 0.01 };
+      case 'scalar': return { min: 0, max: 1, step: 0.01 };
       case 'count': return { min: 0, max: 10000, step: 1 };
       case 'color': return { min: 0, max: 1, step: 0.01 };
       case 'space':

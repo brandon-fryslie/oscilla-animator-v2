@@ -129,7 +129,7 @@ registerBlock({
   capability: 'pure',
   inputs: {},
   outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT, unitPhase01()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitTurns, contractWrap01()) },
   },
   lower: () => ({ outputsById: {} }),
 });
@@ -170,7 +170,7 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   inputs: {
-    in: { label: 'In', type: canonicalType(FLOAT, unitNorm01()) },
+    in: { label: 'In', type: canonicalType(FLOAT, unitScalar, contractClamp01()) },
   },
   outputs: {},
   lower: () => ({ outputsById: {} }),
@@ -381,7 +381,7 @@ describe('Adapter-aware Connection Validation', () => {
         capability: 'pure',
         inputs: {},
         outputs: {
-          out: { label: 'Out', type: canonicalType(FLOAT, unitPhase01()) },
+          out: { label: 'Out', type: canonicalType(FLOAT, unitTurns, contractWrap01()) },
         },
         lower: () => ({ outputsById: {} }),
       });
@@ -392,7 +392,7 @@ describe('Adapter-aware Connection Validation', () => {
         form: 'primitive',
         capability: 'pure',
         inputs: {
-          in: { label: 'In', type: canonicalType(FLOAT, unitNorm01()) },
+          in: { label: 'In', type: canonicalType(FLOAT, unitScalar, contractClamp01()) },
         },
         outputs: {},
         lower: () => ({ outputsById: {} }),
@@ -421,7 +421,7 @@ describe('Unit Display Functions', () => {
     });
 
     it('returns "phase" for phase01', () => {
-      expect(formatUnitForDisplay(unitPhase01())).toBe('phase');
+      expect(formatUnitForDisplay(unitTurns(), undefined, contractWrap01())).toBe('phase');
     });
 
     it('returns "rad" for radians', () => {
@@ -433,7 +433,7 @@ describe('Unit Display Functions', () => {
     });
 
     it('returns "0..1" for norm01', () => {
-      expect(formatUnitForDisplay(unitNorm01())).toBe('0..1');
+      expect(formatUnitForDisplay(unitScalar(), undefined, contractClamp01())).toBe('0..1');
     });
 
     it('returns "ms" for ms', () => {
@@ -447,7 +447,7 @@ describe('Unit Display Functions', () => {
 
   describe('formatTypeForDisplay with units', () => {
     it('includes unit for phase01: Signal<float:phase>', () => {
-      const type = canonicalType(FLOAT, unitPhase01());
+      const type = canonicalType(FLOAT, unitTurns, contractWrap01());
       expect(formatTypeForDisplay(type)).toBe('Signal<float:phase>');
     });
 
@@ -467,7 +467,7 @@ describe('Unit Display Functions', () => {
     });
 
     it('includes unit for norm01: Signal<float:0..1>', () => {
-      const type = canonicalType(FLOAT, unitNorm01());
+      const type = canonicalType(FLOAT, unitScalar, contractClamp01());
       expect(formatTypeForDisplay(type)).toBe('Signal<float:0..1>');
     });
   });

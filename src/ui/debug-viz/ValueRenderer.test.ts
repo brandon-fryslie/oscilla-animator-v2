@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import React from 'react';
 import { getValueRenderer, registerRenderer, type ValueRenderer } from './ValueRenderer';
-import { canonicalType, unitPhase01, unitNorm01 } from '../../core/canonical-types';
+import { canonicalType, unitTurns, contractWrap01, unitScalar, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, CAMERA_PROJECTION } from '../../core/canonical-types';
 import type { RendererSample } from './types';
 import { getDataAttr } from '../../__tests__/test-utils';
@@ -33,14 +33,14 @@ describe('ValueRenderer registry', () => {
 
   describe('3-tier fallback ladder', () => {
     it('tier 1: exact match (payload + unit) wins', () => {
-      const type = canonicalType(FLOAT, unitPhase01());
+      const type = canonicalType(FLOAT, unitTurns, contractWrap01());
       const renderer = getValueRenderer(type);
       const el = renderer.renderFull({ type: 'scalar', components: new Float32Array([0.5]), stride: 1 });
       expect(getDataAttr(el, 'renderer')).toBe('exact-float-phase');
     });
 
     it('tier 2: payload-only when no exact match', () => {
-      const type = canonicalType(FLOAT, unitNorm01()); // no exact "float:norm01" registered
+      const type = canonicalType(FLOAT, unitScalar, contractClamp01()); // no exact "float:norm01" registered
       const renderer = getValueRenderer(type);
       const el = renderer.renderFull({ type: 'scalar', components: new Float32Array([0.5]), stride: 1 });
       expect(getDataAttr(el, 'renderer')).toBe('payload-float');
@@ -92,7 +92,7 @@ describe('ValueRenderer registry', () => {
 
   describe('renderInline', () => {
     it('exact match provides inline renderer', () => {
-      const type = canonicalType(FLOAT, unitPhase01());
+      const type = canonicalType(FLOAT, unitTurns, contractWrap01());
       const renderer = getValueRenderer(type);
       const el = renderer.renderInline({ type: 'scalar', components: new Float32Array([0.5]), stride: 1 });
       expect(getDataAttr(el, 'renderer')).toBe('exact-float-phase');

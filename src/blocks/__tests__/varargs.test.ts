@@ -18,7 +18,7 @@ describe('VarargInputDef', () => {
   describe('isVarargInput type guard', () => {
     it('returns true for vararg inputs', () => {
       const def: InputDef = {
-        type: canonicalSignal(FLOAT, { kind: 'norm01' }),
+        type: canonicalSignal(FLOAT, { kind: 'scalar' }),
         isVararg: true,
         varargConstraint: {
           payloadType: FLOAT,
@@ -30,14 +30,14 @@ describe('VarargInputDef', () => {
 
     it('returns false for normal inputs', () => {
       const def: InputDef = {
-        type: canonicalSignal(FLOAT, { kind: 'norm01' }),
+        type: canonicalSignal(FLOAT, { kind: 'scalar' }),
       };
       expect(isVarargInput(def)).toBe(false);
     });
 
     it('returns false for inputs with isVararg: false', () => {
       const def: InputDef = {
-        type: canonicalSignal(FLOAT, { kind: 'norm01' }),
+        type: canonicalSignal(FLOAT, { kind: 'scalar' }),
         isVararg: false,
       };
       expect(isVarargInput(def)).toBe(false);
@@ -90,7 +90,7 @@ describe('VarargInputDef', () => {
         capability: 'pure',
         inputs: {
           values: {
-            type: canonicalSignal(FLOAT, { kind: 'norm01' }),
+            type: canonicalSignal(FLOAT, { kind: 'scalar' }),
             isVararg: true,
             varargConstraint: {
               payloadType: FLOAT,
@@ -100,7 +100,7 @@ describe('VarargInputDef', () => {
         },
         outputs: {
           result: {
-            type: canonicalSignal(FLOAT, { kind: 'norm01' }),
+            type: canonicalSignal(FLOAT, { kind: 'scalar' }),
           },
         },
         lower: () => ({ outputsById: {} }),
@@ -118,14 +118,14 @@ describe('VarargInputDef', () => {
         capability: 'pure',
         inputs: {
           values: {
-            type: canonicalSignal(FLOAT, { kind: 'norm01' }),
+            type: canonicalSignal(FLOAT, { kind: 'scalar' }),
             isVararg: true,
             // Missing varargConstraint
           },
         },
         outputs: {
           result: {
-            type: canonicalSignal(FLOAT, { kind: 'norm01' }),
+            type: canonicalSignal(FLOAT, { kind: 'scalar' }),
           },
         },
         lower: () => ({ outputsById: {} }),
@@ -145,7 +145,7 @@ describe('VarargInputDef', () => {
         capability: 'pure',
         inputs: {
           values: {
-            type: canonicalSignal(FLOAT, { kind: 'norm01' }),
+            type: canonicalSignal(FLOAT, { kind: 'scalar' }),
             isVararg: true,
             varargConstraint: {
               payloadType: FLOAT,
@@ -156,7 +156,7 @@ describe('VarargInputDef', () => {
         },
         outputs: {
           result: {
-            type: canonicalSignal(FLOAT, { kind: 'norm01' }),
+            type: canonicalSignal(FLOAT, { kind: 'scalar' }),
           },
         },
         lower: () => ({ outputsById: {} }),
@@ -176,11 +176,11 @@ describe('VarargInputDef', () => {
         capability: 'pure',
         inputs: {
           normalInput: {
-            type: canonicalSignal(FLOAT, { kind: 'norm01' }),
+            type: canonicalSignal(FLOAT, { kind: 'scalar' }),
             defaultSource: defaultSourceConst(1),
           },
           varargInput: {
-            type: canonicalSignal(FLOAT, { kind: 'norm01' }),
+            type: canonicalSignal(FLOAT, { kind: 'scalar' }),
             isVararg: true,
             varargConstraint: {
               payloadType: FLOAT,
@@ -190,7 +190,7 @@ describe('VarargInputDef', () => {
         },
         outputs: {
           result: {
-            type: canonicalSignal(FLOAT, { kind: 'norm01' }),
+            type: canonicalSignal(FLOAT, { kind: 'scalar' }),
           },
         },
         lower: () => ({ outputsById: {} }),

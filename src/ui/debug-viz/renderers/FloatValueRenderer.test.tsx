@@ -45,35 +45,35 @@ describe('FloatValueRenderer', () => {
 
   describe('unit decorations', () => {
     it('norm01: shows range indicator', () => {
-      const renderer = createFloatValueRenderer({ kind: 'norm01' });
+      const renderer = createFloatValueRenderer({ kind: 'scalar' });
       const el = renderer.renderFull(scalarSample(0.5));
       const { container } = render(el);
       expect(container.textContent).toContain('[0, 1]');
     });
 
     it('norm01: shows warn badge when value > 1', () => {
-      const renderer = createFloatValueRenderer({ kind: 'norm01' });
+      const renderer = createFloatValueRenderer({ kind: 'scalar' });
       const el = renderer.renderFull(scalarSample(1.5));
       const { container } = render(el);
       expect(container.textContent).toContain('out of range');
     });
 
     it('norm01: shows warn badge when value < 0', () => {
-      const renderer = createFloatValueRenderer({ kind: 'norm01' });
+      const renderer = createFloatValueRenderer({ kind: 'scalar' });
       const el = renderer.renderFull(scalarSample(-0.1));
       const { container } = render(el);
       expect(container.textContent).toContain('out of range');
     });
 
     it('norm01: no warn badge for value in [0,1]', () => {
-      const renderer = createFloatValueRenderer({ kind: 'norm01' });
+      const renderer = createFloatValueRenderer({ kind: 'scalar' });
       const el = renderer.renderFull(scalarSample(0.5));
       const { container } = render(el);
       expect(container.textContent).not.toContain('out of range');
     });
 
     it('phase01: shows "phase" label', () => {
-      const renderer = createFloatValueRenderer({ kind: 'angle', unit: 'phase01' });
+      const renderer = createFloatValueRenderer({ kind: 'angle', unit: 'turns' });
       const el = renderer.renderFull(scalarSample(0.75));
       const { container } = render(el);
       expect(container.textContent).toContain('phase');
@@ -126,7 +126,7 @@ describe('FloatValueRenderer', () => {
     });
 
     it('scalar with unit: shows label', () => {
-      const renderer = createFloatValueRenderer({ kind: 'angle', unit: 'phase01' });
+      const renderer = createFloatValueRenderer({ kind: 'angle', unit: 'turns' });
       const el = renderer.renderInline(scalarSample(0.25));
       const { container } = render(el);
       expect(container.textContent).toBe('0.2500 phase');

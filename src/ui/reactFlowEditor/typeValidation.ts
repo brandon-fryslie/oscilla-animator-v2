@@ -85,7 +85,7 @@ export function formatUnitForDisplay(unit: UnitType | InferenceUnitType): string
     case 'none':
     case 'scalar':
       return '';
-    case 'norm01':
+    case 'scalar':
       return '0..1';
     case 'count':
       return 'count';

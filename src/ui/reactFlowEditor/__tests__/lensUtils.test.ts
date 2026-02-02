@@ -92,8 +92,8 @@ describe('lensUtils', () => {
 
   describe('canApplyLens', () => {
     it('returns true when types match exactly', () => {
-      const sourceType = canonicalType(FLOAT, unitPhase01());
-      const lensInputType = canonicalType(FLOAT, unitPhase01());
+      const sourceType = canonicalType(FLOAT, unitTurns, contractWrap01());
+      const lensInputType = canonicalType(FLOAT, unitTurns, contractWrap01());
       const lensOutputType = canonicalType(FLOAT, unitScalar());
       const targetType = canonicalType(FLOAT, unitScalar());
 
@@ -103,7 +103,7 @@ describe('lensUtils', () => {
     });
 
     it('returns false when source payload differs from lens input', () => {
-      const sourceType = canonicalType(FLOAT, unitPhase01());
+      const sourceType = canonicalType(FLOAT, unitTurns, contractWrap01());
       const lensInputType = canonicalType(FLOAT, unitRadians()); // Mismatch
       const lensOutputType = canonicalType(FLOAT, unitScalar());
       const targetType = canonicalType(FLOAT, unitScalar());
@@ -115,8 +115,8 @@ describe('lensUtils', () => {
     });
 
     it('returns false when lens output differs from target', () => {
-      const sourceType = canonicalType(FLOAT, unitPhase01());
-      const lensInputType = canonicalType(FLOAT, unitPhase01());
+      const sourceType = canonicalType(FLOAT, unitTurns, contractWrap01());
+      const lensInputType = canonicalType(FLOAT, unitTurns, contractWrap01());
       const lensOutputType = canonicalType(FLOAT, unitRadians()); // Mismatch
       const targetType = canonicalType(FLOAT, unitScalar());
 
@@ -141,8 +141,8 @@ describe('lensUtils', () => {
   describe('findCompatibleLenses', () => {
     it('returns empty array when no lenses match', () => {
       // Create types that no adapter will match
-      const sourceType = canonicalType(FLOAT, unitPhase01());
-      const targetType = canonicalType(FLOAT, unitPhase01()); // Same type, no adapter needed
+      const sourceType = canonicalType(FLOAT, unitTurns, contractWrap01());
+      const targetType = canonicalType(FLOAT, unitTurns, contractWrap01()); // Same type, no adapter needed
 
       const lenses = findCompatibleLenses(sourceType, targetType);
 
@@ -151,7 +151,7 @@ describe('lensUtils', () => {
     });
 
     it('returns matching lenses for phase → scalar conversion', () => {
-      const sourceType = canonicalType(FLOAT, unitPhase01());
+      const sourceType = canonicalType(FLOAT, unitTurns, contractWrap01());
       const targetType = canonicalType(FLOAT, unitScalar());
 
       const lenses = findCompatibleLenses(sourceType, targetType);
@@ -175,7 +175,7 @@ describe('lensUtils', () => {
     });
 
     it('does not return incompatible lenses', () => {
-      const sourceType = canonicalType(FLOAT, unitPhase01());
+      const sourceType = canonicalType(FLOAT, unitTurns, contractWrap01());
       const targetType = canonicalType(FLOAT, unitDegrees());
 
       const lenses = findCompatibleLenses(sourceType, targetType);

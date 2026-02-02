@@ -149,7 +149,7 @@ function drawSparkline(
   ctx.stroke();
 
   // Phase wrap markers (only for phase01 unit)
-  if (unit?.kind === 'angle' && unit.unit === 'phase01') {
+  if (unit?.kind === 'angle' && unit.unit === 'turns') {
     ctx.strokeStyle = WRAP_COLOR;
     ctx.lineWidth = 1 * dpr;
     ctx.setLineDash([2 * dpr, 2 * dpr]);
