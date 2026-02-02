@@ -11,9 +11,9 @@
  * Spec Reference: design-docs/_new/0-Units-and-Adapters.md Part B
  */
 
-import type { UnitType, Extent } from '../core/canonical-types';
+import type { UnitType, Extent, ValueContract } from '../core/canonical-types';
 import type { InferenceCanonicalType, InferencePayloadType, InferenceUnitType } from '../core/inference-types';
-import { unitsEqual, extentsEqual } from '../core/canonical-types';
+import { unitsEqual, extentsEqual, contractsEqual } from '../core/canonical-types';
 import { requireInst } from '../core/canonical-types/axis';
 import {
   cardinalitiesEqual,
@@ -53,11 +53,18 @@ export type ExtentTransform =
  * - 'same': output matches input for this component
  * - 'any': matches any value for this component
  * - Specific type: matches/produces this specific type
+ *
+ * Contract field is optional:
+ * - undefined: don't care about contract (matches any contract, backward compatible)
+ * - ValueContract: match specific contract
+ * - 'same': output contract matches input contract
+ * - 'any': matches any contract (explicit wildcard)
  */
 export interface TypePattern {
   readonly payload: InferencePayloadType | 'same' | 'any';
   readonly unit: InferenceUnitType | 'same' | 'any';
   readonly extent: ExtentPattern;
+  readonly contract?: ValueContract | 'same' | 'any';
 }
 
 /**
@@ -125,6 +132,7 @@ export function extractPattern(type: InferenceCanonicalType): TypePattern {
     payload: type.payload,
     unit: type.unit,
     extent: type.extent, // Full extent for precise matching
+    contract: type.contract,
   };
 }
 
@@ -165,6 +173,26 @@ function extentMatches(actual: Extent, pattern: ExtentPattern): boolean {
 }
 
 /**
+ * Check if a contract matches a pattern.
+ */
+function contractMatches(
+  actual: ValueContract | undefined,
+  pattern: ValueContract | 'same' | 'any' | undefined
+): boolean {
+  // Pattern not specified (undefined)? Always match (backward compat).
+  if (pattern === undefined) return true;
+
+  // Pattern is 'any'? Always match.
+  if (pattern === 'any') return true;
+
+  // Pattern is 'same'? Always match (caller must handle 'same' logic).
+  if (pattern === 'same') return true;
+
+  // Pattern is specific contract? Must match exactly.
+  return contractsEqual(actual, pattern);
+}
+
+/**
  * Check if a type pattern matches another pattern.
  */
 function patternMatches(actual: TypePattern, pattern: TypePattern): boolean {
@@ -189,7 +217,12 @@ function patternMatches(actual: TypePattern, pattern: TypePattern): boolean {
     return pattern.extent === 'any';
   }
 
-  return extentMatches(actual.extent as Extent, pattern.extent);
+  if (!extentMatches(actual.extent as Extent, pattern.extent)) return false;
+
+  // Contract must match
+  if (!contractMatches(actual.contract, pattern.contract)) return false;
+
+  return true;
 }
 
 /**
@@ -208,7 +241,26 @@ function patternsAreCompatible(from: TypePattern, to: TypePattern): boolean {
 
   // Extent must match exactly
   if (from.extent === 'any' || to.extent === 'any') return true;
-  return extentsEqual(from.extent as Extent, to.extent as Extent);
+  if (!extentsEqual(from.extent as Extent, to.extent as Extent)) return false;
+
+  // Contract must be compatible (treats undefined as 'none')
+  const fromContract = from.contract;
+  const toContract = to.contract;
+
+  // Handle special pattern values ('same', 'any') - these are only in rule definitions, not actual types
+  if (fromContract === 'same' || fromContract === 'any' || toContract === 'same' || toContract === 'any') {
+    // If either is a special pattern value, assume compatible (will be checked in detail by rule matching)
+    return true;
+  }
+
+  const fromKind = typeof fromContract === 'object' ? fromContract.kind : 'none';
+  const toKind = typeof toContract === 'object' ? toContract.kind : 'none';
+
+  // Target expects no contract (none)? Always compatible (dropping guarantee is OK).
+  if (toKind === 'none') return true;
+
+  // Target expects something specific? Source must provide the same guarantee.
+  return fromKind === toKind;
 }
 
 // =============================================================================
@@ -302,6 +354,15 @@ export function findAdapter(from: InferenceCanonicalType, to: InferenceCanonical
               continue;
             }
           }
+        }
+      }
+      // For rules with 'same' contract, require actual contracts to match
+      // Note: extractPattern only returns ValueContract | undefined, never 'same' or 'any'
+      if (rule.to.contract === 'same') {
+        const fromContract = fromPattern.contract as ValueContract | undefined;
+        const toContract = toPattern.contract as ValueContract | undefined;
+        if (!contractsEqual(fromContract, toContract)) {
+          continue;
         }
       }
       // Broadcast adapter: verify cardinality direction (one → many only)
