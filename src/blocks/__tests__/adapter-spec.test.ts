@@ -89,12 +89,12 @@ describe('Adapter Registry', () => {
       expect(adapter!.blockType).toBe('Adapter_SecondsToMs');
     });
 
-    it('Scalar → Norm01: returns Adapter_ScalarToNorm01Clamp', () => {
+    it('Scalar → Clamp01: returns Adapter_Clamp01', () => {
       const from = canonicalType(FLOAT, unitScalar());
       const to = canonicalType(FLOAT, unitScalar(), undefined, contractClamp01());
       const adapter = findAdapter(from, to);
       expect(adapter).not.toBeNull();
-      expect(adapter!.blockType).toBe('Adapter_ScalarToNorm01Clamp');
+      expect(adapter!.blockType).toBe('Adapter_Clamp01');
     });
 
     it('Norm01 → Scalar: returns Adapter_Norm01ToScalar', () => {

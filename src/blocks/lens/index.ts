@@ -16,3 +16,5 @@ import './mask';
 import './deadzone';
 import './extract';
 import './construct';
+import './normalize-range';
+import './denormalize-range';

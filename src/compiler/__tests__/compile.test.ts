@@ -402,6 +402,62 @@ describe('error isolation for unreachable blocks', () => {
     expect(unreachableWarning).toBeDefined();
     expect(unreachableWarning.message).toContain('not connected to render pipeline');
   });
+
+  it('fails compilation when a block connected to render has an error', () => {
+    // Build a patch where an Expression block with an error is connected to the render pipeline
+    const patch = buildPatch((b) => {
+      const time = b.addBlock('InfiniteTimeRoot', { displayName: 'Time' });
+      b.setPortDefault(time, 'periodAMs', 1000);
+
+      // Create an Array for instances
+      const array = b.addBlock('Array');
+      b.setPortDefault(array, 'count', 10);
+
+      // Create an Ellipse shape
+      const ellipse = b.addBlock('Ellipse');
+      b.setPortDefault(ellipse, 'rx', 0.05);
+      b.setPortDefault(ellipse, 'ry', 0.05);
+
+      // Create GridLayout for positioning
+      const gridLayout = b.addBlock('GridLayoutUV');
+      b.setPortDefault(gridLayout, 'rows', 2);
+      b.setPortDefault(gridLayout, 'cols', 5);
+      b.wire(array, 'elements', gridLayout, 'elements');
+
+      // Create an Expression block with a syntax error
+      const expr = b.addBlock('Expression', { displayName: 'ColorExpr' });
+      b.setConfig(expr, 'expression', 'invalid syntax +++');  // Syntax error
+      b.addVarargConnection(expr, 'refs', `v1:blocks.time.outputs.tMs`, 0, 't');
+
+      // Wire Expression to RenderInstances2D (connecting error to render pipeline)
+      const render = b.addBlock('RenderInstances2D');
+      b.wire(gridLayout, 'position', render, 'pos');
+      b.wire(ellipse, 'shape', render, 'shape');
+      b.wire(expr, 'out', render, 'color');  // Connected to render - error should NOT be isolated
+    });
+
+    const result = compile(patch);
+
+    // Should fail compilation because the errored block is connected to render
+    if (result.kind === 'ok') {
+      console.error('COMPILE SUCCEEDED (should have failed): Expression block with error is connected to render');
+    }
+    if (result.kind === 'error') {
+      console.log('Errors:', JSON.stringify(result.errors.map(e => ({ kind: e.kind, message: e.message })), null, 2));
+    }
+    expect(result.kind).toBe('error');
+    if (result.kind === 'error') {
+      // Should have at least one error (the Expression block error)
+      expect(result.errors.length).toBeGreaterThan(0);
+      // The error should NOT be downgraded to a warning - should be an actual compilation error
+      // Check for Expression-related error kinds
+      const hasExpressionError = result.errors.some(e =>
+        e.kind === 'ExpressionError' ||
+        (e.message && (e.message.includes('syntax') || e.message.includes('invalid') || e.message.includes('Expression')))
+      );
+      expect(hasExpressionError).toBe(true);
+    }
+  });
 });
 
 describe('zipBroadcast cardinality', () => {
