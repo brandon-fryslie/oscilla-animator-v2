@@ -837,6 +837,13 @@ function sigDependsOnEvent(sigId: number, valueExprs: readonly ValueExpr[]): boo
 /**
  * Convert TimeModelIR to TimeModel for schedule.
  */
-function convertTimeModel(_timeModelIR: TimeModelIR): TimeModel {
-  return { kind: 'infinite' };
+function convertTimeModel(timeModelIR: TimeModelIR): TimeModel {
+  if (timeModelIR.kind === 'finite') {
+    return { kind: 'finite', durationMs: timeModelIR.durationMs };
+  }
+  return {
+    kind: 'infinite',
+    periodAMs: timeModelIR.periodAMs,
+    periodBMs: timeModelIR.periodBMs,
+  };
 }

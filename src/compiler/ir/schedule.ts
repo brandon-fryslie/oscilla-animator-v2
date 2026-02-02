@@ -18,12 +18,10 @@ export interface TimeModelFinite {
 /** Infinite time model (unbounded) */
 export interface TimeModelInfinite {
   kind: "infinite";
-  /** Window size hint for exports/sampling TODO: remove ? */
-  windowMs?: number;
-  /** Period for phase A in milliseconds TODO: remove ? */
-  periodAMs?: number;
-  /** Period for phase B in milliseconds TODO: remove ? */
-  periodBMs?: number;
+  /** Period for phase A in milliseconds */
+  periodAMs: number;
+  /** Period for phase B in milliseconds */
+  periodBMs: number;
 }
 
 /** Time model - finite or infinite only */

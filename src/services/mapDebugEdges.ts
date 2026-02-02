@@ -48,6 +48,19 @@ export interface DebugMappings {
 }
 
 /**
+ * Generate debug port key for UI/debug layer.
+ *
+ * Format: "blockId:portName"
+ *
+ * Note: This is different from the compiler's internal portKey (which includes
+ * blockIndex and direction) and is used only in the debug/UI layer for consistent
+ * port identification across debug services.
+ */
+export function debugPortKey(blockId: string, portName: string): string {
+    return `${blockId}:${portName}`;
+}
+
+/**
  * Map patch edges to runtime slots using the compiled program's debug index.
  *
  * This function effectively "joins" the static patch structure with the
@@ -89,20 +102,22 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
         throw new Error('[mapDebugEdges] debugIndex.slotToPort is missing - compiler debug index is incomplete');
     }
 
-    // 1. Build a fast lookup: "blockStringID:portName" -> Slot
-    //    Navigate: (BlockStringID, PortName) -> (BlockIndex, PortName) -> PortIndex -> Slot
-    //    But easier: iterate ports, resolve their BlockIndex to StringID, map StringID:PortName -> Slot
+    // Build lookup map: "blockId:portName" -> Slot
+    // The debugIndex provides:
+    // - ports: Array<PortBindingIR> (block index + port name)
+    // - slotToPort: Map<ValueSlot, PortId>
+    // - blockMap: Map<BlockIndex, BlockId>
+    //
+    // We reverse slotToPort to get portToSlot, then construct the string key.
 
     // First build PortId -> Slot lookup (reverse of slotToPort)
     const portToSlot = new Map<PortId, ValueSlot>();
     for (const [slot, portId] of debugIndex.slotToPort) {
-        // Note: slotToPort keys are ValueSlots, values are PortIds
         portToSlot.set(portId, slot);
     }
 
-    // Now build the main lookup map
+    // Build main lookup map and track cardinality per port
     const targetToSlot = new Map<string, ValueSlot>();
-    // Track cardinality per port key for EdgeMetadata
     const portCardinality = new Map<string, 'signal' | 'field'>();
 
     for (const portBinding of debugIndex.ports) {
@@ -112,102 +127,20 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
             continue;
         }
 
-        // We only care about matching edge targets (which connect to INPUT ports),
-        // but the IR mostly tracks OUTPUT ports of blocks.
-        // However, for edges, we want to know what SLOT carries the value flowing INTO a destination.
-        // 
-        // In our IR model, values are carried by SLOTS. 
-        // An edge connects Source:Port -> Dest:Port.
-        // The value on the edge is the value of the Source:Port (or a wire slot).
-        // 
-        // Wait - `buildEdgeToSlotMap` logic was:
-        // "For each edge... Look up the target port... Find the slot assigned to that port"
-        //
-        // If the target port is an input, does it have a slot?
-        // In passes-v2, input resolution might map to a wire slot or a combine slot.
-        //
-        // Let's re-read the original logic being replaced:
-        // const targetPortKey = `${edge.to.blockId}:${edge.to.slotId}`;
-        // const slotId = portToSlot.get(targetPortKey);
-        //
-        // The original logic assumed `debugIndex.slotToPort` contained keys like "blockId:portId".
-        // But `debugIndex.slotToPort` in `compile.ts` (BEFORE my change) was mapping Slot -> PortKeyString.
-        //
-        // IN MY NEW `compile.ts`:
-        // `slotToPort` maps `ValueSlot` -> `PortIndex` (number).
-        // `ports` array contains `PortBindingIR` which has `block` (BlockIndex) and `portName` (string).
-
-        // So we can reconstruct the lookup:
-        // key = `${blockStringId}:${portName}` -> PortIndex
-        // Then PortIndex -> Slot (using portToSlot derived from slotToPort... wait, slotToPort is 1:1?)
-        // 
-        // Actually, `unlinkedIR.blockOutputs` maps outputs.
-        // Does it map inputs? No.
-        // 
-        // CRITICAL REALIZATION:
-        // The generic `buildEdgeToSlotMap` logic was flawed if it expected to find INPUT ports in `blockOutputs`.
-        // `blockOutputs` only lists OUTPUTS.
-        // 
-        // However, an edge's value is determined by its SOURCE, or strictly speaking, the slot it drives.
-        // If we want to debug "what is on this edge", we usually want the value of the source output.
-        // 
-        // Let's look at how `Pass 6` worked.
-        // It lowered blocks and produced `blockOutputs`.
-        //
-        // If we look at the original `buildEdgeToSlotMap`:
-        // It iterated `edge.to.blockId` and looked that up.
-        // That implies it expected the IR to register slots for INPUT ports.
-        // 
-        // Does `IRBuilder` register input slots?
-        // `resolveInputsWithMultiInput` -> creates combine nodes or passes through wires.
-        // 
-        // If `resolveInputsWithMultiInput` creates a combine node, that node has an output slot.
-        // But that output slot is not "registered" in `blockOutputs`.
-        // 
-        // If it's a direct wire, there is no specific slot for the input—it's just the source slot.
-        // 
-        // **HYPOTHESIS**: The previous implementation was likely identifying the *source* slot of the connection 
-        // (if it was a direct wire) or the *combine* slot (if it was a combine).
-        // 
-        // Wait, let's check `compile.ts` PREVIOUS state again (from memory/context):
-        // `debugIndex.slotToPort` was being populated... where?
-        // It wasn't visible in `compile.ts` pass 6 logic I read earlier.
-        // 
-        // Actually, looking at `Pass 6` code:
-        // `unlinkedIR` didn't seem to produce `debugIndex`.
-        // `convertLinkedIRToProgram` was creating an EMPTY `debugIndex`.
-        // 
-        // That was the bug! `debugIndex` didn't exist!
-        // 
-        // So my NEW logic in `compile.ts` populates `debugIndex` from `result.outputsById`.
-        // `outputsById` usually contains block OUTPUTS.
-        // 
-        // So if I want to debug an edge `A.out -> B.in`, I should look up `A.out`.
-        // 
-        // The previous (broken) logic tried to look up `edge.to` (`B.in`).
-        // `const targetPortKey = `${edge.to.blockId}:${edge.to.slotId}`;`
-        // 
-        // If I map `A.out`, I get the value flowing out of A.
-        // That is the value on the edge `A.out -> B.in`.
-        // 
-        // So I should map `edge.from.blockId` + `edge.from.slotId`.
-        // 
-        // Let's verify this assumption.
-        // If I look up `B.in`, I might find nothing if B just consumes the slot from A.
-        // 
-        // So, the mapping should be based on the SOURCE of the edge.
-        // 
-        // Correct Logic:
-        // 1. Identifying the "Value" of an edge means identifying the stored value at its source.
-        // 2. Map Key: `${edge.from.blockId}:${edge.from.slotId}`.
-        // 3. Lookup: Find the slot associated with this Source Port.
-
-        // Update the lookup key construction:
-        // TODO: needs to use canonical portKey fn
-        const key = `${blockId}:${portBinding.portName}`;
+        /**
+         * Edge value mapping strategy:
+         *
+         * An edge's value is determined by its SOURCE output port. The debugIndex
+         * tracks block outputs (not inputs), so we map source ports to their slots.
+         *
+         * For an edge A.out -> B.in:
+         * - We look up A.out to find the slot carrying the value
+         * - B.in consumes that slot directly (if it's a direct wire) or via a combine node
+         * - The edge displays the value from A.out's slot
+         */
+        const key = debugPortKey(blockId, portBinding.portName);
 
         // Find the slot for this port
-        // portToSlot map we built above maps PortIndex -> Slot
         const slot = portToSlot.get(portBinding.port);
 
         if (slot !== undefined) {
@@ -218,12 +151,12 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
         }
     }
 
-    // 2. Iterate edges and resolve, tracking unmapped edges
+    // Iterate edges and resolve, tracking unmapped edges
     const unmappedEdges: UnmappedEdgeInfo[] = [];
 
     for (const edge of patch.edges) {
         // We want the value flowing FROM the source
-        const sourceKey = `${edge.from.blockId}:${edge.from.slotId}`;
+        const sourceKey = debugPortKey(edge.from.blockId, edge.from.slotId);
         const slotId = targetToSlot.get(sourceKey);
 
         if (slotId !== undefined) {
@@ -248,7 +181,7 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
         }
     }
 
-    // 3. Build port map for direct port queries (useful for unconnected outputs)
+    // Build port map for direct port queries (useful for unconnected outputs)
     const portMetaMap = new Map<string, EdgeMetadata>();
     for (const [portKey, slotId] of targetToSlot.entries()) {
         const meta = program.slotMeta.find(m => m.slot === slotId);

@@ -109,11 +109,11 @@ export function reconcilePhaseOffsets(
   monotonicTMs: number,
   timeState: TimeState
 ): void {
-  // Extract old and new periods
-  const oldPeriodA = (oldTimeModel.kind === 'infinite' ? oldTimeModel.periodAMs : undefined) ?? 4000;
-  const newPeriodA = (newTimeModel.kind === 'infinite' ? newTimeModel.periodAMs : undefined) ?? 4000;
-  const oldPeriodB = (oldTimeModel.kind === 'infinite' ? oldTimeModel.periodBMs : undefined) ?? 8000;
-  const newPeriodB = (newTimeModel.kind === 'infinite' ? newTimeModel.periodBMs : undefined) ?? 8000;
+  // Extract periods (default fallbacks for finite models which don't have these fields)
+  const oldPeriodA = oldTimeModel.kind === 'infinite' ? oldTimeModel.periodAMs : 4000;
+  const newPeriodA = newTimeModel.kind === 'infinite' ? newTimeModel.periodAMs : 4000;
+  const oldPeriodB = oldTimeModel.kind === 'infinite' ? oldTimeModel.periodBMs : 8000;
+  const newPeriodB = newTimeModel.kind === 'infinite' ? newTimeModel.periodBMs : 8000;
 
   // Reconcile A if period changed
   if (oldPeriodA !== newPeriodA && oldPeriodA > 0 && newPeriodA > 0) {
@@ -222,9 +222,9 @@ export function resolveTime(
   const monotonicTMs = Math.max(tAbsMs, timeState.prevTMs ?? 0);
   timeState.prevTMs = monotonicTMs;
 
-  // Default periods (used for infinite models)
-  const periodAMs = (timeModel.kind === 'infinite' ? timeModel.periodAMs : undefined) ?? 4000;
-  const periodBMs = (timeModel.kind === 'infinite' ? timeModel.periodBMs : undefined) ?? 8000;
+  // Extract periods (default fallbacks for finite models which don't have these fields)
+  const periodAMs = timeModel.kind === 'infinite' ? timeModel.periodAMs : 4000;
+  const periodBMs = timeModel.kind === 'infinite' ? timeModel.periodBMs : 8000;
 
   // Compute phases
   const rawPhaseA = periodAMs > 0 ? (monotonicTMs / periodAMs) % 1.0 : 0;

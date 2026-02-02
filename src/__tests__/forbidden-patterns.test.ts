@@ -81,12 +81,13 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
     // Allow comments referencing instanceId for migration docs
     const filtered = matches.filter(m => {
       const content = m.substring(m.indexOf(':', m.indexOf(':') + 1) + 1).trim();
-      return !content.startsWith('//') && !content.startsWith('*') && !content.includes('TODO');
+      return !content.startsWith('//') && !content.startsWith('*');
     });
-    // Currently instanceId still exists on some field expressions (gap analysis #25 will remove)
-    // This test documents the current state; tighten after #25 is complete
-    // TODO: Change to expect(filtered).toEqual([]) after gap analysis Sprint 4 item #25
-    expect(filtered.length).toBeLessThanOrEqual(6); // All on Step types, not expressions
+    // Current state: 6 occurrences, all on Step types (not expression types)
+    // Lines: 56 (import), 322, 328, 369, 380, 453 (all Step variants)
+    // This is acceptable - steps need instanceId for runtime execution.
+    // Expression types (ValueExpr variants) no longer have instanceId.
+    expect(filtered.length).toBeLessThanOrEqual(6);
   });
 
   // =============================================================================
