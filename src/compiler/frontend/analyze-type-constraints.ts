@@ -53,12 +53,7 @@ export interface TypeConstraintError {
   readonly suggestions: readonly string[];
 }
 
-export interface Pass1Error {
-  readonly kind: 'error';
-  readonly errors: readonly TypeConstraintError[];
-}
-
-export type Pass1Result = TypeResolvedPatch | Pass1Error;
+export type Pass1Result = TypeResolvedPatch & { readonly errors: readonly TypeConstraintError[] };
 
 // =============================================================================
 // Inference-only atoms (D5)
@@ -689,9 +684,9 @@ export function pass1TypeConstraints(normalized: NormalizedPatch): Pass1Result {
   // Use resolved port types from cardinality solver
   const resolvedPortTypes = cardinalityResult.portTypes;
 
-  if (errors.length) return { kind: 'error', errors };
-
-  return { ...normalized, portTypes: resolvedPortTypes };
+  // ALWAYS return both resolved types AND errors (even if errors.length > 0)
+  // The resolved types are the best-effort resolution and are still useful
+  return { ...normalized, portTypes: resolvedPortTypes, errors };
 }
 
 // =============================================================================
