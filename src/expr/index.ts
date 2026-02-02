@@ -64,6 +64,7 @@ export type CompileResult =
  * @param inputs Input type environment (maps input names to signal types)
  * @param builder IRBuilder instance
  * @param inputSignals Compiled input signal IDs (maps input names to ValueExprIds)
+ * @param blockRefs Optional block reference context for member access (e.g., circle_1.radius)
  * @returns Compiled signal ID or error
  *
  * @example
@@ -88,7 +89,8 @@ export function compileExpression(
   exprText: string,
   inputs: ReadonlyMap<string, CanonicalType>,
   builder: IRBuilder,
-  inputSignals: ReadonlyMap<string, ValueExprId>
+  inputSignals: ReadonlyMap<string, ValueExprId>,
+  blockRefs?: BlockRefsContext
 ): CompileResult {
   try {
     // Step 1: Tokenize
@@ -97,14 +99,21 @@ export function compileExpression(
     // Step 2: Parse
     const ast = parse(tokens);
 
-    // Step 3: Type check
+    // Step 3: Type check (with optional block reference context)
     const inputTypes = extractPayloadTypes(inputs);
-    const typedAst = typecheck(ast, { inputs: inputTypes });
+    const typedAst = typecheck(ast, {
+      inputs: inputTypes,
+      blockRefs: blockRefs ? {
+        addressRegistry: blockRefs.addressRegistry,
+        allowedPayloads: blockRefs.allowedPayloads,
+      } : undefined,
+    });
 
     // Step 4: Compile to IR
     const ctx: CompileContext = {
       builder,
       inputs: inputSignals,
+      blockRefs: blockRefs?.signalsByShorthand,
     };
     const exprId = compile(typedAst, ctx);
 

@@ -50,6 +50,12 @@ export interface LowerCtx {
    * Used by blocks with vararg inputs to access connection aliases and source addresses.
    */
   readonly varargConnections?: ReadonlyMap<string, readonly VarargConnection[]>;
+
+  /**
+   * Address registry for resolving canonical addresses.
+   * Available for blocks that need address resolution (e.g., Expression block).
+   */
+  readonly addressRegistry?: import('../graph/address-registry').AddressRegistry;
 }
 
 /**

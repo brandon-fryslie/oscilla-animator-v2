@@ -3,8 +3,12 @@
  *
  * Closed discriminated union of 8 structured unit kinds.
  * Every typed value has (payload, unit, extent). Unit is ALWAYS present.
- * Units are semantic, not representational: phase01 != scalar even though
+ * Units are semantic, not representational: turns != scalar even though
  * both are float32 at runtime.
+ *
+ * Migration Note (ValueContract Sprint 2):
+ * - Removed 'norm01' kind (replaced by scalar + contract:clamp01)
+ * - Renamed angle unit 'phase01' → 'turns' (clearer name for [0,1) cyclic angle)
  */
 
 // =============================================================================
@@ -14,9 +18,8 @@
 export type UnitType =
   | { readonly kind: 'none' }
   | { readonly kind: 'scalar' }
-  | { readonly kind: 'norm01' }
   | { readonly kind: 'count' }
-  | { readonly kind: 'angle'; readonly unit: 'radians' | 'degrees' | 'phase01' }
+  | { readonly kind: 'angle'; readonly unit: 'radians' | 'degrees' | 'turns' }
   | { readonly kind: 'time'; readonly unit: 'ms' | 'seconds' }
   | { readonly kind: 'space'; readonly unit: 'ndc' | 'world' | 'view'; readonly dims: 2 | 3 }
   | { readonly kind: 'color'; readonly unit: 'rgba01' | 'hsl' };
@@ -35,19 +38,14 @@ export function unitScalar(): UnitType {
   return { kind: 'scalar' };
 }
 
-/** Normalized [0,1] */
-export function unitNorm01(): UnitType {
-  return { kind: 'norm01' };
-}
-
 /** Integer count/index */
 export function unitCount(): UnitType {
   return { kind: 'count' };
 }
 
-/** Angle in phase [0,1) with wrap semantics */
-export function unitPhase01(): UnitType {
-  return { kind: 'angle', unit: 'phase01' };
+/** Angle in turns [0,1) with wrap semantics (one full rotation = 1.0) */
+export function unitTurns(): UnitType {
+  return { kind: 'angle', unit: 'turns' };
 }
 
 /** Angle in radians */
@@ -125,7 +123,6 @@ export function unitsEqual(a: UnitType, b: UnitType): boolean {
       return (b as Extract<UnitType, { kind: 'color' }>).unit === a.unit;
     case 'none':
     case 'scalar':
-    case 'norm01':
     case 'count':
       return true; // Kind match is sufficient for simple units
     default: {

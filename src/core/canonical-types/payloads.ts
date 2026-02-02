@@ -27,7 +27,7 @@ export type CameraProjection = 'orthographic' | 'perspective';
  * Stride is NOT stored - use payloadStride() to derive it from kind.
  * Per resolution Q7: stride is derived, never stored.
  *
- * Note: 'phase' is NOT a payload - it's float with unit:phase01.
+ * Note: 'phase' is NOT a payload - it's float with unit:turns.
  * Note: 'event' and 'domain' are NOT PayloadTypes - they are axis/resource concepts.
  * Note: 'shape' removed per Q6 - shapes are resources, not payloads.
  */
@@ -94,9 +94,10 @@ const PAYLOAD_BY_KIND: Record<PayloadKind, ConcretePayloadType> = {
 /**
  * Map payload kinds to allowed unit kinds.
  * Updated for #18 structured units - now lists top-level kinds only.
+ * Updated for ValueContract migration: removed 'norm01' (use scalar + contract:clamp01).
  */
 const ALLOWED_UNITS: Record<PayloadKind, readonly UnitType['kind'][]> = {
-  float: ['scalar', 'norm01', 'angle', 'time'],
+  float: ['scalar', 'angle', 'time'],
   int: ['count', 'time'],
   vec2: ['space'],
   vec3: ['space'],
