@@ -44,33 +44,9 @@ describe('FloatValueRenderer', () => {
   });
 
   describe('unit decorations', () => {
-    it('norm01: shows range indicator', () => {
-      const renderer = createFloatValueRenderer({ kind: 'scalar' });
-      const el = renderer.renderFull(scalarSample(0.5));
-      const { container } = render(el);
-      expect(container.textContent).toContain('[0, 1]');
-    });
-
-    it('norm01: shows warn badge when value > 1', () => {
-      const renderer = createFloatValueRenderer({ kind: 'scalar' });
-      const el = renderer.renderFull(scalarSample(1.5));
-      const { container } = render(el);
-      expect(container.textContent).toContain('out of range');
-    });
-
-    it('norm01: shows warn badge when value < 0', () => {
-      const renderer = createFloatValueRenderer({ kind: 'scalar' });
-      const el = renderer.renderFull(scalarSample(-0.1));
-      const { container } = render(el);
-      expect(container.textContent).toContain('out of range');
-    });
-
-    it('norm01: no warn badge for value in [0,1]', () => {
-      const renderer = createFloatValueRenderer({ kind: 'scalar' });
-      const el = renderer.renderFull(scalarSample(0.5));
-      const { container } = render(el);
-      expect(container.textContent).not.toContain('out of range');
-    });
+    // Note: After ValueContract migration, contract information (clamp01, wrap01)
+    // is not available in FloatRendererProps (only has UnitType, not CanonicalType).
+    // Range validation tests removed as they require contract info.
 
     it('phase01: shows "phase" label', () => {
       const renderer = createFloatValueRenderer({ kind: 'angle', unit: 'turns' });

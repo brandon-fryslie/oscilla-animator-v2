@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { pass2TypeGraph } from '../../frontend/analyze-type-graph';
 import { pass1TypeConstraints, type TypeResolvedPatch } from '../../frontend/analyze-type-constraints';
 import type { NormalizedPatch } from '../../ir/patches';
-import { canonicalSignal, unitPhase01, unitRadians, unitScalar, FLOAT } from '../../../core/canonical-types';
+import { canonicalSignal, unitTurns, contractWrap01, unitRadians, unitScalar, FLOAT } from '../../../core/canonical-types';
 import { registerBlock } from '../../../blocks/registry';
 
 /** Helper to run pass1 and pass2 in sequence */
@@ -47,7 +47,7 @@ describe('Unit Validation', () => {
       capability: 'pure',
       inputs: {},
       outputs: {
-        phase: { label: 'Phase', type: canonicalSignal(FLOAT, unitPhase01()) },
+        phase: { label: 'Phase', type: canonicalSignal(FLOAT, unitTurns(), undefined, contractWrap01()) },
       },
       lower: () => ({ outputsById: {} }),
     });
@@ -100,7 +100,7 @@ describe('Unit Validation', () => {
       capability: 'pure',
       inputs: {},
       outputs: {
-        phase: { label: 'Phase', type: canonicalSignal(FLOAT, unitPhase01()) },
+        phase: { label: 'Phase', type: canonicalSignal(FLOAT, unitTurns(), undefined, contractWrap01()) },
       },
       lower: () => ({ outputsById: {} }),
     });
@@ -113,7 +113,7 @@ describe('Unit Validation', () => {
       form: 'primitive',
       capability: 'pure',
       inputs: {
-        phase: { label: 'Phase', type: canonicalSignal(FLOAT, unitPhase01()) },
+        phase: { label: 'Phase', type: canonicalSignal(FLOAT, unitTurns(), undefined, contractWrap01()) },
       },
       outputs: {},
       lower: () => ({ outputsById: {} }),

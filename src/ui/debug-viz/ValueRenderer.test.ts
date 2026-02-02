@@ -27,8 +27,8 @@ describe('ValueRenderer registry', () => {
     registerRenderer('float', mockRenderer('payload-float'));
     registerRenderer('color', mockRenderer('payload-color'));
 
-    // Exact match
-    registerRenderer('float:phase01', mockRenderer('exact-float-phase'));
+    // Exact match (updated from phase01 to turns)
+    registerRenderer('float:turns', mockRenderer('exact-float-phase'));
   });
 
   describe('3-tier fallback ladder', () => {
