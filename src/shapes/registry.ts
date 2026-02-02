@@ -178,3 +178,26 @@ export function registerDynamicTopology(
 export function getTopologyIdByName(name: string): TopologyId | undefined {
   return TOPOLOGY_BY_NAME.get(name);
 }
+
+/**
+ * Initialize built-in topologies at module load time
+ *
+ * Must be called AFTER topologies are defined but BEFORE any code uses the registry.
+ */
+function initializeBuiltinTopologies(
+  ellipse: AbstractTopologyDef,
+  rect: AbstractTopologyDef
+): void {
+  // Pre-assign reserved IDs
+  TOPOLOGY_REGISTRY[TOPOLOGY_ID_ELLIPSE] = { ...ellipse, id: TOPOLOGY_ID_ELLIPSE } as TopologyDef;
+  TOPOLOGY_REGISTRY[TOPOLOGY_ID_RECT] = { ...rect, id: TOPOLOGY_ID_RECT } as TopologyDef;
+
+  // Register debug names
+  TOPOLOGY_BY_NAME.set('ellipse', TOPOLOGY_ID_ELLIPSE);
+  TOPOLOGY_BY_NAME.set('rect', TOPOLOGY_ID_RECT);
+}
+
+// Import built-in topologies and initialize registry
+// Note: Import is at bottom to avoid circular dependency issues
+import { TOPOLOGY_ELLIPSE, TOPOLOGY_RECT } from './topologies';
+initializeBuiltinTopologies(TOPOLOGY_ELLIPSE, TOPOLOGY_RECT);
