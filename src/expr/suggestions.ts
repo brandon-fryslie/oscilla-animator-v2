@@ -12,11 +12,14 @@
  */
 
 import type { Patch } from '../graph/Patch';
-import type { AddressRegistry } from '../graph/address-registry';
+import { AddressRegistry } from '../graph/address-registry';
 import type { PayloadType } from '../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../core/canonical-types';
 import { BLOCK_DEFS_BY_TYPE } from '../blocks/registry';
 import { addressToString } from '../types/canonical-address';
+import { getOutputAddress } from '../graph/addressing';
+import { normalizeCanonicalName } from '../core/canonical-name';
+import type { PortId } from '../types';
 
 // =============================================================================
 // Suggestion Data Types
@@ -213,11 +216,13 @@ export class SuggestionProvider {
     for (const block of this.patch.blocks.values()) {
       const blockDef = BLOCK_DEFS_BY_TYPE.get(block.type);
       const outputCount = blockDef?.outputs ? Object.keys(blockDef.outputs).length : 0;
-      // Use displayName if set, otherwise type+id for readability
-      const displayName = block.displayName ?? `${block.type}_${block.id}`;
+      // Use canonical name (normalized for use as identifier in expressions)
+      const canonicalName = block.displayName
+        ? normalizeCanonicalName(block.displayName)
+        : block.id;
 
       suggestions.push({
-        label: displayName,
+        label: canonicalName,
         type: 'block',
         description: `Block: ${block.type}`,
         portCount: outputCount,
@@ -240,12 +245,14 @@ export class SuggestionProvider {
    * @returns Read-only array of port suggestions, or empty if block not found
    */
   suggestBlockPorts(blockName: string): readonly PortSuggestion[] {
-    // Find block by display name (or fall back to ID)
+    // Find block by canonical name (normalized display name) or fall back to ID
     let block = this.patch.blocks.get(blockName as any);
     if (!block) {
-      // Search by display name
       for (const b of this.patch.blocks.values()) {
-        if ((b.displayName ?? b.id) === blockName) {
+        const canonical = b.displayName
+          ? normalizeCanonicalName(b.displayName)
+          : b.id;
+        if (canonical === blockName) {
           block = b;
           break;
         }
@@ -263,31 +270,32 @@ export class SuggestionProvider {
     const suggestions: PortSuggestion[] = [];
 
     for (const [portId, outputDef] of Object.entries(blockDef.outputs)) {
-      // Resolve port type from registry if available
-      const shorthand = `${blockName}.${portId}`;
-      const canonicalAddr = this.registry.resolveShorthand(shorthand);
-      let payloadTypeStr: string = `(error: payloadType not resolved)`; // Default fallback
-      let cardinality: 'one' | 'many' = 'one';
+      // Filter: only float or int payloads are compatible with expressions
+      const defPayloadKind = outputDef.type.payload.kind;
+      if (defPayloadKind !== 'float' && defPayloadKind !== 'int') continue;
 
-      if (canonicalAddr) {
-        const addrString = addressToString(canonicalAddr);
-        const resolved = this.registry.resolve(addrString);
-        if (resolved?.kind === 'output') {
-          payloadTypeStr = resolved.type.payload.kind;
-          // Extract cardinality from CanonicalType's extent axes
-          const cardinalityAxis = resolved.type.extent.cardinality;
-          if (cardinalityAxis.kind === 'inst') {
-            // Cardinality is a discriminated union: { kind: 'one' } | { kind: 'many', instance: ... }
-            cardinality = cardinalityAxis.value.kind === 'one' ? 'one' : 'many';
-          }
+      // Resolve port type from registry if available
+      const sourceAddress = addressToString(getOutputAddress(block, portId as PortId));
+      const resolved = this.registry.resolve(sourceAddress);
+      let payloadTypeStr: string = defPayloadKind;
+      let cardinality: 'one' | 'many' = 'one';
+      let typeDesc: string = defPayloadKind;
+
+      if (resolved?.kind === 'output') {
+        payloadTypeStr = resolved.type.payload.kind;
+        const cardAxis = resolved.type.extent.cardinality;
+        if (cardAxis.kind === 'inst') {
+          cardinality = cardAxis.value.kind === 'one' ? 'one' : 'many';
         }
+        const kind = cardinality === 'one' ? 'Signal' : 'Field';
+        typeDesc = `${kind}<${payloadTypeStr}>`;
       }
 
       suggestions.push({
         label: portId,
         type: 'port',
-        description: `Output: ${payloadTypeStr} (${cardinality})`,
-        payloadTypeStr: payloadTypeStr,
+        description: typeDesc,
+        payloadTypeStr,
         cardinality,
         sortOrder: 400,
       });
@@ -316,21 +324,39 @@ export class SuggestionProvider {
       const blockDef = BLOCK_DEFS_BY_TYPE.get(block.type);
       if (!blockDef?.outputs) continue;
 
-      // Use displayName if set, otherwise type+id for readability
-      const displayName = block.displayName ?? `${block.type}_${block.id}`;
+      // Use canonical name (normalized for use as identifier in expressions)
+      const canonicalName = block.displayName
+        ? normalizeCanonicalName(block.displayName)
+        : block.id;
 
       for (const [portId, outputDef] of Object.entries(blockDef.outputs)) {
-        const sourceAddress = `blocks.${block.id}.outputs.${portId}`;
+        // Filter: only float or int payloads are compatible with expressions
+        const payloadKind = outputDef.type.payload.kind;
+        if (payloadKind !== 'float' && payloadKind !== 'int') continue;
+
+        const sourceAddress = addressToString(getOutputAddress(block, portId as PortId));
+
+        // Resolve type info for description
+        let typeDesc: string = payloadKind;
+        const resolved = this.registry.resolve(sourceAddress);
+        if (resolved?.kind === 'output') {
+          const cardAxis = resolved.type.extent.cardinality;
+          const card = cardAxis.kind === 'inst'
+            ? cardAxis.value.kind
+            : '?';
+          const kind = card === 'one' ? 'Signal' : card === 'many' ? 'Field' : card === 'zero' ? 'Const' : 'Signal';
+          typeDesc = `${kind}<${payloadKind}>`;
+        }
 
         suggestions.push({
-          label: `${displayName}.${portId}`,
+          label: `${canonicalName}.${portId}`,
           type: 'output',
-          description: `${block.type} output`,
+          description: typeDesc,
           blockId: block.id,
           portId,
           sourceAddress,
-          payloadType: outputDef.type.payload.kind,
-          sortOrder: 250, // Between inputs (200) and blocks (300)
+          payloadType: payloadKind,
+          sortOrder: 250,
         });
       }
     }
@@ -368,11 +394,10 @@ export class SuggestionProvider {
     } else if (type === 'output') {
       allSuggestions = [...this.suggestAllOutputs(excludeBlockId)];
     } else {
-      // No type filter - include all except ports (which need context)
+      // No type filter - show functions and compatible outputs (not bare blocks)
       allSuggestions = [
         ...this.suggestFunctions(),
         ...this.suggestAllOutputs(excludeBlockId),
-        ...this.suggestBlocks(),
       ];
     }
 

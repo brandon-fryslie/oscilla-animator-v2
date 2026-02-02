@@ -146,6 +146,11 @@ export const GraphEditorCoreInner = observer(
       },
       ref
     ) => {
+      // Read an observable before any early return so MobX observer tracks it.
+      // Without this, the first render (isInitialized=false) returns before
+      // reading adapter.blocks, triggering "observer without observables" warning.
+      void adapter.blocks.size;
+
       // Merge features with defaults
       const mergedFeatures = useMemo(() => ({ ...DEFAULT_FEATURES, ...features }), [features]);
 

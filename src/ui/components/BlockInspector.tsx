@@ -2085,18 +2085,8 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value, pa
       if (e.key === 'Enter' || e.key === 'Tab') {
         e.preventDefault();
         const selected = filteredSuggestions[suggestionIndex];
-        if (selected && textareaRef.current) {
-          const identifierData = extractIdentifierPrefix(localValue, cursorPosition);
-          const prefixStartOffset = identifierData?.startOffset ?? cursorPosition;
-          const { newValue, newCursorPos } = computeSuggestionInsertion(
-            localValue, textareaRef.current.selectionStart, selected, prefixStartOffset
-          );
-          pendingCursorPos.current = newCursorPos;
-          setLocalValue(newValue);
-          setCursorPosition(newCursorPos);
-          setShowAutocomplete(false);
-          setFilterPrefix('');
-          setBlockContext(null);
+        if (selected) {
+          handleSelectSuggestion(selected);
         }
         return;
       }

@@ -17,6 +17,7 @@
  * Spec Reference: design-docs/CANONICAL-oscilla-v2.5-20260109/topics/13-event-diagnostics-integration.md
  */
 
+import { untracked } from 'mobx';
 import type { EventHub } from '../events/EventHub';
 import type { Diagnostic, DiagnosticFilter } from './types';
 import { runAuthoringValidators } from './validators/authoringValidators';
@@ -142,8 +143,8 @@ export class DiagnosticHub {
       return;
     }
 
-    // Run authoring validators
-    const patch = this.patchGetter();
+    // Run authoring validators (untracked: event handler, not a reactive context)
+    const patch = untracked(() => this.patchGetter());
     const diagnostics = runAuthoringValidators(patch, event.patchRevision);
 
     // Replace authoring snapshot

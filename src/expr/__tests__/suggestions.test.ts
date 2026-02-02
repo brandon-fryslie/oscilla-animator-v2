@@ -203,8 +203,8 @@ describe('SuggestionProvider.suggestBlocks', () => {
     expect(suggestions).toHaveLength(2);
 
     const labels = suggestions.map(s => s.label);
-    expect(labels).toContain('Circle1');
-    expect(labels).toContain('Wave1');
+    expect(labels).toContain('circle1');
+    expect(labels).toContain('wave1');
   });
 
   it('block suggestions have correct metadata', () => {
@@ -217,7 +217,7 @@ describe('SuggestionProvider.suggestBlocks', () => {
     const suggestion = suggestions[0] as BlockSuggestion;
 
     expect(suggestion.type).toBe('block');
-    expect(suggestion.label).toBe('MyBlock');
+    expect(suggestion.label).toBe('myblock');
     expect(suggestion.displayName).toBe('TestBlock');
     expect(suggestion.sortOrder).toBe(300);
   });
@@ -236,7 +236,7 @@ describe('SuggestionProvider.suggestBlocks', () => {
     const suggestions = provider.suggestBlocks();
     const labels = suggestions.map(s => s.label);
     // Sorted alphabetically by label (displayName)
-    expect(labels).toEqual(['Apple', 'Mango', 'Zebra']);
+    expect(labels).toEqual(['apple', 'mango', 'zebra']);
   });
 });
 
