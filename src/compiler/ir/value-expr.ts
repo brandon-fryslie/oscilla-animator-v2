@@ -150,7 +150,7 @@ export type ValueExprIntrinsic =
  * - zipSig: Binary zip for signals only (strict signal typing)
  * - broadcast: Cardinality one → many
  * - reduce: Cardinality many → one
- * - pathDerivative: Path → tangent/normal (field operation)
+ * - pathDerivative: Path → tangent/arcLength (field operation)
  */
 export type ValueExprKernel =
   | {
@@ -196,6 +196,7 @@ export type ValueExprKernel =
       readonly kernelKind: 'pathDerivative';
       readonly field: ValueExprId;
       readonly op: 'tangent' | 'arcLength';
+      readonly topologyId: TopologyId;
     };
 
 /**

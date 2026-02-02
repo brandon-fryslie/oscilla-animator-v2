@@ -8,6 +8,31 @@ import { registerBlock } from '../registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
 import { canonicalType, canonicalField, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
 import { FLOAT, INT, VEC2, VEC3 } from '../../core/canonical-types';
+import type { ValueExprId } from '../../compiler/ir/Indices';
+import type { IRBuilder } from '../../compiler/ir/IRBuilder';
+import type { TopologyId } from '../../shapes/types';
+
+/**
+ * Find the topologyId for a given control point field by searching for
+ * a shapeRef expression that references it.
+ *
+ * @param builder - IRBuilder instance
+ * @param controlPointFieldId - The field ID to search for
+ * @returns The topologyId if found
+ * @throws Error if no shapeRef is found
+ */
+function findTopologyIdForField(builder: IRBuilder, controlPointFieldId: ValueExprId): TopologyId {
+  const exprs = builder.getValueExprs();
+  for (const expr of exprs) {
+    if (expr.kind === 'shapeRef' && expr.controlPointField === controlPointFieldId) {
+      return expr.topologyId;
+    }
+  }
+  throw new Error(
+    `PathField: Could not find topology for control points field. ` +
+    `The control points input must come from a shape-producing block (ProceduralPolygon, ProceduralStar, etc.)`
+  );
+}
 
 /**
  * PathField - Extract per-point properties from path control points
@@ -84,6 +109,9 @@ registerBlock({
 
     const controlPointsFieldId = controlPointsInput.id;
 
+    // Resolve topology ID from the shapeRef that produced this field
+    const topologyId = findTopologyIdForField(ctx.b, controlPointsFieldId);
+
     // Get instance from context (inferred from input fields by lowering system)
     const instance = ctx.inferredInstance ?? ctx.instance;
     if (!instance) {
@@ -118,6 +146,7 @@ registerBlock({
     const tangentField = ctx.b.pathDerivative(
       controlPointsFieldId,
       'tangent',
+      topologyId,
       tanType
     );
 
@@ -125,6 +154,7 @@ registerBlock({
     const arcLengthField = ctx.b.pathDerivative(
       controlPointsFieldId,
       'arcLength',
+      topologyId,
       arcType
     );
 

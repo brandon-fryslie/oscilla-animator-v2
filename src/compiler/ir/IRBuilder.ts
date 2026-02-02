@@ -87,7 +87,7 @@ export interface IRBuilder {
   eventRead(eventExpr: ValueExprId): ValueExprId;
 
   /** Create a path derivative expression (tangent or arcLength). */
-  pathDerivative(input: ValueExprId, op: 'tangent' | 'arcLength', type: CanonicalType): ValueExprId;
+  pathDerivative(input: ValueExprId, op: 'tangent' | 'arcLength', topologyId: TopologyId, type: CanonicalType): ValueExprId;
 
   /** Create a shape reference expression. */
   shapeRef(
