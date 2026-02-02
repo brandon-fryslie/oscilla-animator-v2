@@ -7,6 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildPatch } from '../../graph';
 import { compile } from '../compile';
+import { patchErrorIsolationDemo } from '../../demo/error-isolation-demo';
 import type { ScheduleIR } from '../backend/schedule-program';
 
 describe('compile', () => {
@@ -439,6 +440,40 @@ describe('error isolation for unreachable blocks', () => {
       throw new Error('Expected compilation to fail but it succeeded');
     }
     expect(result.errors.length).toBeGreaterThan(0);
+  });
+
+  it('error isolation demo compiles successfully with warnings for broken blocks', () => {
+    // AC4: Verify the actual Error Isolation Demo patch compiles and emits warnings
+    const patch = buildPatch(patchErrorIsolationDemo);
+
+    const emittedEvents: any[] = [];
+    const mockEventHub = {
+      emit: (event: any) => emittedEvents.push(event),
+    };
+
+    const result = compile(patch, {
+      events: mockEventHub as any,
+      patchId: 'error-isolation-demo',
+      patchRevision: 1,
+    });
+
+    // Demo must compile successfully despite broken blocks
+    if (result.kind === 'error') {
+      throw new Error(
+        `Error isolation demo should compile but got errors: ${JSON.stringify(result.errors, null, 2)}`
+      );
+    }
+
+    // CompileEnd event should contain warnings for unreachable block errors
+    const compileEnd = emittedEvents.find(e => e.type === 'CompileEnd');
+    expect(compileEnd).toBeDefined();
+    expect(compileEnd.status).toBe('success');
+
+    const warnings = compileEnd.diagnostics.filter(
+      (d: any) => d.code === 'W_BLOCK_UNREACHABLE_ERROR'
+    );
+    // The demo has 3 broken Expression blocks (brokenExpr1, brokenExpr2, brokenExpr)
+    expect(warnings.length).toBeGreaterThanOrEqual(3);
   });
 });
 
