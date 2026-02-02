@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { getBlockTypesByCategory, requireBlockDef, getBlockDefinition, type BlockDef } from '../../registry';
+import { getBlockTypesByCategory, requireBlockDef, type BlockDef } from '../../registry';
 import { getAvailableLensTypes } from '../../../ui/reactFlowEditor/lensUtils';
 
 // Ensure lens blocks are registered
@@ -34,9 +34,11 @@ describe('Lens Block Registration', () => {
     }
   });
 
-  it('all lens blocks have capability "pure"', () => {
-    const lensBlocks = getBlockTypesByCategory('lens');
-    for (const block of lensBlocks) {
+  it('pure lens blocks (Sprint 1) have capability "pure"', () => {
+    // Sprint 1 lenses are all pure
+    const pureLensTypes = ['ScaleBias', 'Clamp', 'Wrap01', 'StepQuantize', 'Smoothstep', 'PowerGamma'];
+    for (const lensType of pureLensTypes) {
+      const block = requireBlockDef(lensType);
       expect(block.capability).toBe('pure');
     }
   });

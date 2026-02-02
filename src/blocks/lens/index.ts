@@ -11,3 +11,6 @@ import './wrap01';
 import './step-quantize';
 import './smoothstep';
 import './power-gamma';
+import './slew';
+import './mask';
+import './deadzone';
