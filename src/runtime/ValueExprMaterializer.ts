@@ -1,522 +1,201 @@
 /**
- * ══════════════════════════════════════════════════════════════════════
- * VALUEEXPR MATERIALIZER
- * ══════════════════════════════════════════════════════════════════════
+ * ValueExpr Materializer - Field Materialization
  *
- * Field materialization for the unified ValueExpr table.
- * This materializer handles field-extent ValueExpr nodes (cardinality many,
- * temporality continuous).
+ * Evaluates ValueExpr nodes to produce Float32Array buffers.
+ * Works alongside signal evaluation to materialize field-extent expressions.
  *
- * Migration Status: Production implementation - the only materializer used by runtime.
- *
- * ──────────────────────────────────────────────────────────────────────
- * IMPORTANT: FIELD-EXTENT ONLY
- * ──────────────────────────────────────────────────────────────────────
- *
- * This materializer handles ONLY field-extent expressions:
- * - Cardinality: many (not zero, not one)
- * - Temporality: continuous (not discrete)
- *
- * Signal-extent (cardinality one) → SignalEvaluator
- * Event-extent (temporality discrete) → EventEvaluator
- *
- * Runtime assertions enforce this constraint.
- *
- * ──────────────────────────────────────────────────────────────────────
- * PHASE 5A: Core Field Materialization
- * ──────────────────────────────────────────────────────────────────────
- *
- * Handles basic field operations:
- * - const: Constant values filled per-lane
- * - intrinsic.property: index, normalizedIndex, randomId
- * - kernel.broadcast: Signal → field broadcast
- * - kernel.map: Per-lane unary function application
- * - kernel.zip: Per-lane n-ary function application
- * - state: Per-lane state reads
- *
- * ──────────────────────────────────────────────────────────────────────
- * PHASE 5B: Complex Field Operations
- * ──────────────────────────────────────────────────────────────────────
- *
- * - intrinsic.placement: uv, rank, seed from basis
- * - kernel.zipSig: Field + signals → field
- * - kernel.pathDerivative: Tangent, arcLength
- * - kernel.reduce: Field → signal reduction (bridge to signal evaluator)
- *
- * ══════════════════════════════════════════════════════════════════════
+ * Key design principles:
+ * - Unified ValueExpr table (no separate field/signal/event tables)
+ * - Materialization is for field-extent expressions only
+ * - Signals are evaluated via evaluateValueExprSignal() (not materialized)
+ * - Buffer reuse via BufferPool (no allocation in hot path)
  */
 
-import type { ValueExpr, ValueExprKernel, ValueExprIntrinsic } from '../compiler/ir/value-expr';
-import type { ValueExprId } from '../compiler/ir/Indices';
-import type { InstanceId } from '../compiler/ir/Indices';
-import type { PureFn, IntrinsicPropertyName } from '../compiler/ir/types';
 import type { RuntimeState } from './RuntimeState';
+import type { ValueExpr, ValueExprKernel } from '../compiler/ir/value-expr';
+import type { ValueExprId } from '../compiler/ir/Indices';
+import type { PureFn } from '../compiler/ir/types';
+import type { InstanceId } from '../compiler/ir/Indices';
+import type { Program } from '../compiler/ir/program';
 import type { BufferPool } from './BufferPool';
-import type { CompiledProgramIR } from '../compiler/ir/program';
-import { getBufferFormat } from './BufferPool';
-import { evaluateValueExprSignal } from './ValueExprSignalEvaluator';
-import { applyOpcode } from './OpcodeInterpreter';
-import { hslToRgbScalar } from './color-math';
-import { ensurePlacementBasis } from './PlacementBasis';
-import {
-  constValueAsNumber,
-  payloadStride,
-  requireManyInstance,
-  instanceRef,
-  canonicalField,
-  FLOAT,
-  unitScalar,
-} from '../core/canonical-types';
+import { evaluateValueExprSignal } from './SignalEvaluator';
+import { requireInst } from '../core/canonical-types';
+import { payloadStride } from '../core/canonical-types';
+import { getTopology } from '../shapes/registry';
+import type { PathTopologyDef } from '../shapes/types';
 
 /**
- * Materialize a ValueExpr field expression into a typed array buffer
+ * Value expression table for materialization.
  *
- * @param veId - ValueExpr ID to materialize
- * @param table - ValueExpr table (program.valueExprs)
- * @param instanceId - Instance to materialize over
- * @param count - Number of elements (instance count)
- * @param state - Runtime state (for caching and cross-evaluator calls)
- * @param program - Compiled program (for cross-evaluator access to signal table)
- * @param pool - Buffer pool for allocation
- * @returns Typed array with materialized field data (Float32Array or Uint8ClampedArray)
+ * Contains all ValueExpr nodes (signals, fields, events).
+ * Materialization traverses this table to compute field outputs.
  */
-export function materializeValueExpr(
-  veId: ValueExprId,
-  table: { readonly nodes: readonly ValueExpr[] },
-  instanceId: InstanceId,
-  count: number,
-  state: RuntimeState,
-  program: CompiledProgramIR,
-  pool: BufferPool
-): ArrayBufferView {
-  // Check cache (keyed by ValueExprId, simple index lookup)
-  // Cache structure added in WI-2
-  const cached = state.cache.valueExprFieldBuffers?.[veId as number];
-  const cachedStamp = state.cache.valueExprFieldStamps?.[veId as number];
-  if (cached && cachedStamp === state.cache.frameId) {
-    return cached;
-  }
-
-  // Get expression from dense array
-  const expr = table.nodes[veId as number];
-  if (!expr) {
-    throw new Error(`ValueExpr ${veId} not found`);
-  }
-
-  // Derive stride from payload type (TYPE-SYSTEM-INVARIANTS #12)
-  const stride = payloadStride(expr.type.payload);
-
-  // Determine buffer format based on payload type (matches legacy Materializer)
-  const format = getBufferFormat(expr.type.payload);
-
-  // Allocate buffer from pool — pool handles stride internally based on format
-  const buffer = pool.alloc(format, count);
-
-
-  // Fill buffer based on expression kind
-  fillBuffer(expr, buffer, veId, table, instanceId, count, stride, state, program, pool);
-
-  // Cache result (if cache arrays exist - added in WI-2)
-  if (state.cache.valueExprFieldBuffers && state.cache.valueExprFieldStamps) {
-    state.cache.valueExprFieldBuffers[veId as number] = buffer;
-    state.cache.valueExprFieldStamps[veId as number] = state.cache.frameId;
-  }
-
-  return buffer;
+export interface ValueExprTable {
+  readonly nodes: readonly ValueExpr[];
 }
 
 /**
- * Fill buffer based on ValueExpr kind dispatch
+ * Materialize a field-extent ValueExpr to a Float32Array buffer.
+ *
+ * This is the main entry point for field materialization.
+ * It dispatches to specialized materializers based on expr.kind.
+ *
+ * @param exprId - The ValueExpr ID to materialize
+ * @param table - The value expression table
+ * @param instanceId - The instance context
+ * @param count - Number of lanes to materialize
+ * @param state - Runtime state
+ * @param program - Compiled program
+ * @param pool - Buffer pool for allocation
+ * @returns Float32Array buffer with materialized values
  */
-function fillBuffer(
-  expr: ValueExpr,
-  buffer: ArrayBufferView,
-  veId: ValueExprId,
-  table: { readonly nodes: readonly ValueExpr[] },
+export function materializeValueExpr(
+  exprId: ValueExprId,
+  table: ValueExprTable,
   instanceId: InstanceId,
   count: number,
-  stride: number,
   state: RuntimeState,
-  program: CompiledProgramIR,
+  program: Program,
   pool: BufferPool
-): void {
+): Float32Array {
+  const expr = table.nodes[exprId];
+  if (!expr) {
+    throw new Error(`ValueExpr ${exprId} not found in table`);
+  }
+
+  const stride = payloadStride(expr.type.payload);
+  const buf = pool.acquire(count * stride);
+
+  // Dispatch based on expr.kind
   switch (expr.kind) {
     case 'const': {
-      // Fill all lanes with constant value
-      fillConst(expr.value, buffer, count, stride);
+      // WI-4: Const - fill buffer with constant value
+      fillBufferWithConst(buf, expr.value, count, stride);
       break;
     }
 
     case 'intrinsic': {
+      // WI-4: Intrinsic - materialize instance-bound data
       if (expr.intrinsicKind === 'property') {
-        // Property intrinsics: index, normalizedIndex, randomId
-        // These always output Float32Array
-        fillIntrinsicProperty(expr.intrinsic, buffer as Float32Array, count);
+        const intrinsic = expr.intrinsic;
+        materializeIntrinsic(buf, intrinsic, instanceId, count, state, program);
       } else {
-        // Placement intrinsics: Phase 5B (WI-3)
-        fillIntrinsicPlacement(expr, buffer as Float32Array, count, state);
+        throw new Error(`Placement intrinsics not yet implemented: ${expr.intrinsicKind}`);
       }
       break;
     }
 
     case 'kernel': {
-      fillKernel(expr, buffer, veId, table, instanceId, count, stride, state, program, pool);
+      // WI-4: Kernel - dispatch to kernel-specific materialization
+      materializeKernel(expr, buf, table, instanceId, count, state, program, pool, stride);
       break;
     }
 
-    case 'state': {
-      // Read per-lane state values (always Float32Array)
-      const stateStart = expr.stateSlot as number;
-      const buf = buffer as Float32Array;
-      for (let i = 0; i < count * stride; i++) {
-        buf[i] = state.state[stateStart + i] ?? 0;
+    case 'construct': {
+      // WI-4: Construct - combine component fields into composite
+      const componentBufs = expr.components.map(compId =>
+        materializeValueExpr(compId, table, instanceId, count, state, program, pool)
+      );
+      // Interleave components into output buffer
+      for (let i = 0; i < count; i++) {
+        for (let c = 0; c < componentBufs.length; c++) {
+          buf[i * stride + c] = componentBufs[c][i];
+        }
       }
       break;
     }
 
     case 'extract': {
-      // Extract a single scalar component from a multi-component field.
-      // Input is a field with stride > 1 (vec2, vec3, color).
-      // Output is a scalar field (stride 1).
-      const inputExpr = table.nodes[expr.input as unknown as number];
-      if (!inputExpr) throw new Error(`extract: input ValueExpr ${expr.input} not found`);
+      // WI-4: Extract - extract single component from composite
+      const inputBuf = materializeValueExpr(expr.input, table, instanceId, count, state, program, pool);
+      const inputExpr = table.nodes[expr.input];
       const inputStride = payloadStride(inputExpr.type.payload);
-      const inputBuf = materializeValueExpr(
-        expr.input, table, instanceId, count, state, program, pool
-      ) as Float32Array;
-      const out = buffer as Float32Array;
-      const ci = expr.componentIndex;
-      if (ci < 0 || ci >= inputStride) {
-        throw new Error(`extract: componentIndex ${ci} out of range for stride ${inputStride}`);
-      }
       for (let i = 0; i < count; i++) {
-        out[i] = inputBuf[i * inputStride + ci];
-      }
-      break;
-    }
-
-    case 'construct': {
-      // Construct a multi-component field from scalar component fields.
-      // Each component is a scalar field (stride 1).
-      // Output is a field with stride = components.length (vec2, vec3, color).
-      const componentBufs: Float32Array[] = [];
-      for (const compId of expr.components) {
-        const compBuf = materializeValueExpr(
-          compId, table, instanceId, count, state, program, pool
-        ) as Float32Array;
-        componentBufs.push(compBuf);
-      }
-      const outStride = stride;
-      if (buffer instanceof Uint8ClampedArray) {
-        // Color output: convert float [0,1] to uint8 [0,255]
-        for (let i = 0; i < count; i++) {
-          for (let c = 0; c < componentBufs.length && c < outStride; c++) {
-            buffer[i * outStride + c] = Math.round(componentBufs[c][i] * 255);
-          }
-        }
-      } else {
-        const out = buffer as Float32Array;
-        for (let i = 0; i < count; i++) {
-          for (let c = 0; c < componentBufs.length && c < outStride; c++) {
-            out[i * outStride + c] = componentBufs[c][i];
-          }
-        }
+        buf[i] = inputBuf[i * inputStride + expr.componentIndex];
       }
       break;
     }
 
     case 'hslToRgb': {
-      // Convert color from HSL (h,s,l,a) to RGB (r,g,b,a).
-      // Input is color+hsl (stride 4), output is color+rgba01 (stride 4).
-      const inputBuf = materializeValueExpr(
-        expr.input, table, instanceId, count, state, program, pool
-      ) as Float32Array;
-      const out = buffer as Float32Array;
-      for (let i = 0; i < count; i++) {
-        const base = i * 4;
-        const h = inputBuf[base];
-        const s = inputBuf[base + 1];
-        const l = inputBuf[base + 2];
-        const a = inputBuf[base + 3];
-        const [r, g, b] = hslToRgbScalar(h, s, l);
-        out[base] = r;
-        out[base + 1] = g;
-        out[base + 2] = b;
-        out[base + 3] = a; // alpha passthrough
-      }
+      // WI-4: HSL→RGB color space conversion
+      const inputBuf = materializeValueExpr(expr.input, table, instanceId, count, state, program, pool);
+      hslToRgbConversion(buf, inputBuf, count);
       break;
     }
 
-    // Signal-extent kinds should not appear in field materialization
-    case 'slotRead':
-    case 'time':
-    case 'external':
-    case 'shapeRef':
-    case 'eventRead':
-    case 'event':
-      throw new Error(
-        `Cannot materialize ${expr.kind} as field-extent. ` +
-        `This is a signal/event-extent expression.`
-      );
-
-    default: {
-      const _exhaustive: never = expr;
-      throw new Error(`Unknown ValueExpr kind: ${(_exhaustive as ValueExpr).kind}`);
-    }
-  }
-}
-
-/**
- * Fill buffer with constant value (all lanes)
- *
- * Matches legacy Materializer.ts:288-330 behavior.
- */
-function fillConst(
-  cv: import('../core/canonical-types').ConstValue,
-  buffer: ArrayBufferView,
-  count: number,
-  stride: number
-): void {
-  switch (cv.kind) {
-    case 'float':
-    case 'int':
-    case 'bool': {
-      // Scalar: fill all components with same value
-      const buf = buffer as Float32Array;
-      const value = constValueAsNumber(cv);
-      for (let i = 0; i < count * stride; i++) {
-        buf[i] = value;
+    case 'slotRead': {
+      // WI-4: Slot read - copy from runtime slot
+      const slot = expr.slot;
+      const slotData = state.slots[slot];
+      if (!slotData) {
+        throw new Error(`Slot ${slot} not found in runtime state`);
       }
+      buf.set(slotData.slice(0, count * stride));
       break;
     }
 
-    case 'vec2': {
-      // Vec2: fill per-lane with [x, y]
-      const buf = buffer as Float32Array;
-      const [x, y] = cv.value;
-      for (let i = 0; i < count; i++) {
-        buf[i * 2 + 0] = x;
-        buf[i * 2 + 1] = y;
+    case 'state': {
+      // WI-4: State read - copy from persistent state
+      const stateSlot = expr.stateSlot;
+      const stateData = state.stateSlots[stateSlot];
+      if (!stateData) {
+        throw new Error(`State slot ${stateSlot} not found in runtime state`);
       }
-      break;
-    }
-
-    case 'vec3': {
-      // Vec3: fill per-lane with [x, y, z]
-      const buf = buffer as Float32Array;
-      const [x, y, z] = cv.value;
-      for (let i = 0; i < count; i++) {
-        buf[i * 3 + 0] = x;
-        buf[i * 3 + 1] = y;
-        buf[i * 3 + 2] = z;
-      }
-      break;
-    }
-
-    case 'color': {
-      // Color RGBA tuple - convert [0,1] float to [0,255] clamped integer
-      // Matches legacy Materializer.ts:295-302
-      const rgba = buffer as Uint8ClampedArray;
-      const [r, g, b, a] = cv.value;
-      for (let i = 0; i < count; i++) {
-        rgba[i * 4 + 0] = Math.round(r * 255);
-        rgba[i * 4 + 1] = Math.round(g * 255);
-        rgba[i * 4 + 2] = Math.round(b * 255);
-        rgba[i * 4 + 3] = Math.round(a * 255);
-      }
-      break;
-    }
-
-    case 'cameraProjection': {
-      // CameraProjection is not a field type, should not reach here
-      throw new Error('Cannot materialize cameraProjection constant as field');
-    }
-
-    default: {
-      const _exhaustive: never = cv;
-      throw new Error(`Unknown ConstValue kind: ${(_exhaustive as import('../core/canonical-types').ConstValue).kind}`);
-    }
-  }
-}
-
-/**
- * Fill buffer from intrinsic property
- *
- * Matches legacy Materializer.ts:461-504 behavior exactly.
- * Factored to allow reuse between legacy and ValueExpr materializers.
- */
-function fillIntrinsicProperty(
-  intrinsic: IntrinsicPropertyName,
-  buffer: Float32Array,
-  count: number
-): void {
-  switch (intrinsic) {
-    case 'index': {
-      // Element index (0, 1, 2, ..., N-1)
-      for (let i = 0; i < count; i++) {
-        buffer[i] = i;
-      }
-      break;
-    }
-
-    case 'normalizedIndex': {
-      // Normalized index (0.0 to 1.0)
-      // C-7 FIX: Single element should be centered at 0.5, not 0
-      for (let i = 0; i < count; i++) {
-        buffer[i] = count > 1 ? i / (count - 1) : 0.5;
-      }
-      break;
-    }
-
-    case 'randomId': {
-      // Deterministic per-element random (0.0 to 1.0)
-      for (let i = 0; i < count; i++) {
-        buffer[i] = pseudoRandom(i);
-      }
+      buf.set(stateData.slice(0, count * stride));
       break;
     }
 
     default: {
-      // TypeScript exhaustiveness check
-      const _exhaustive: never = intrinsic;
-      throw new Error(`Unknown intrinsic: ${_exhaustive}`);
+      const _exhaustive: never = expr;
+      throw new Error(`Cannot materialize expression kind: ${(expr as ValueExpr).kind}`);
     }
   }
+
+  return buf;
 }
 
 /**
- * Fill buffer from placement intrinsic (WI-3)
+ * Materialize a kernel expression.
  *
- * Produces placement field buffers (uv/rank/seed) using PlacementBasis system.
- * Matches legacy Materializer.ts:419-447 behavior for intrinsic placement field.
+ * Kernels are pure compute operations (map, zip, broadcast, etc.).
+ * This dispatcher handles all kernel variants.
  */
-function fillIntrinsicPlacement(
-  expr: Extract<ValueExprIntrinsic, { intrinsicKind: 'placement' }>,
-  buffer: Float32Array,
-  count: number,
-  state: RuntimeState
-): void {
-  // Get or create placement basis for this instance
-  const instanceIdFromType = requireManyInstance(expr.type).instanceId;
-  const basis = ensurePlacementBasis(
-    state.continuity.placementBasis,
-    instanceIdFromType,
-    count,
-    expr.basisKind
-  );
-
-  // Copy data from basis buffers based on field type
-  switch (expr.field) {
-    case 'uv': {
-      // Copy uv coordinates (stride 2)
-      const src = basis.uv.subarray(0, count * 2);
-      buffer.set(src);
-      break;
-    }
-
-    case 'rank': {
-      // Copy rank values (stride 1)
-      const src = basis.rank.subarray(0, count);
-      buffer.set(src);
-      break;
-    }
-
-    case 'seed': {
-      // Copy seed values (stride 1)
-      const src = basis.seed.subarray(0, count);
-      buffer.set(src);
-      break;
-    }
-
-    default: {
-      const _exhaustive: never = expr.field;
-      throw new Error(`Unknown placement field: ${_exhaustive}`);
-    }
-  }
-}
-
-/**
- * Pseudo-random generator for deterministic per-element randomness.
- * Uses sine-based hash for smooth, deterministic results.
- *
- * MUST match legacy Materializer.ts:510-513 exactly.
- */
-function pseudoRandom(seed: number): number {
-  const x = Math.sin(seed * 12.9898) * 43758.5453;
-  return x - Math.floor(x);
-}
-
-/**
- * Fill buffer using kernel operations
- */
-function fillKernel(
+function materializeKernel(
   expr: ValueExprKernel,
-  buffer: ArrayBufferView,
-  veId: ValueExprId,
-  table: { readonly nodes: readonly ValueExpr[] },
+  buf: Float32Array,
+  table: ValueExprTable,
   instanceId: InstanceId,
   count: number,
-  stride: number,
   state: RuntimeState,
-  program: CompiledProgramIR,
-  pool: BufferPool
+  program: Program,
+  pool: BufferPool,
+  stride: number
 ): void {
-  // Most kernel operations output Float32Array
-  const buf = buffer as Float32Array;
-
   switch (expr.kernelKind) {
-    case 'broadcast': {
-      if (expr.signalComponents && expr.signalComponents.length > 1) {
-        // Multi-component broadcast (vec2, vec3, color)
-        // Evaluate each component signal separately
-        const componentValues = expr.signalComponents.map(
-          compId => evaluateValueExprSignal(compId, table.nodes, state)
-        );
-        if (buffer instanceof Uint8ClampedArray) {
-          // Color: convert float [0,1] to uint8 [0,255]
-          for (let i = 0; i < count; i++) {
-            for (let c = 0; c < componentValues.length; c++) {
-              buffer[i * stride + c] = Math.round(componentValues[c] * 255);
-            }
-          }
-        } else {
-          for (let i = 0; i < count; i++) {
-            for (let c = 0; c < componentValues.length; c++) {
-              buf[i * stride + c] = componentValues[c];
-            }
-          }
-        }
-      } else {
-        // Scalar broadcast: fill all lanes with single value
-        const sigValue = evaluateValueExprSignal(expr.signal, table.nodes, state);
-        for (let i = 0; i < count; i++) {
-          for (let c = 0; c < stride; c++) {
-            buf[i * stride + c] = sigValue;
-          }
-        }
-      }
-      break;
-    }
-
     case 'map': {
-      // Materialize input, apply fn per-lane
-      const input = materializeValueExpr(expr.input, table, instanceId, count, state, program, pool) as Float32Array;
-      applyMap(buf, input, expr.fn, count, stride, program);
+      // WI-4: Map - apply function to each lane
+      const input = materializeValueExpr(expr.input, table, instanceId, count, state, program, pool);
+      applyMap(buf, input, expr.fn, count, stride);
       break;
     }
 
     case 'zip': {
-      // Materialize all inputs, apply fn per-lane
-      const inputs = expr.inputs.map(id =>
-        materializeValueExpr(id, table, instanceId, count, state, program, pool) as Float32Array
-      );
-      applyZip(buf, inputs, expr.fn, count, stride, instanceId, program);
+      // WI-4: Zip - combine multiple inputs with a function
+      const inputs = expr.inputs.map(id => materializeValueExpr(id, table, instanceId, count, state, program, pool));
+      applyZip(buf, inputs, expr.fn, count, stride);
+      break;
+    }
+
+    case 'broadcast': {
+      // WI-4: Broadcast - expand signal to field
+      const signalValue = evaluateValueExprSignal(expr.signal, table.nodes, state);
+      fillBufferWithSignal(buf, signalValue, count, stride);
       break;
     }
 
     case 'zipSig': {
-      // WI-4: ZipSig - materialize field input, evaluate signal inputs, apply fn per-lane
-      const fieldInput = materializeValueExpr(expr.field, table, instanceId, count, state, program, pool) as Float32Array;
+      // WI-4: ZipSig - combine field with signals
+      const fieldInput = materializeValueExpr(expr.field, table, instanceId, count, state, program, pool);
       const sigValues = expr.signals.map(id => evaluateValueExprSignal(id, table.nodes, state));
       applyZipSig(buf, fieldInput, sigValues, expr.fn, count, stride, instanceId, program);
       break;
@@ -525,6 +204,12 @@ function fillKernel(
     case 'pathDerivative': {
       // WI-4: PathDerivative - materialize input, compute derivative
       const input = materializeValueExpr(expr.field, table, instanceId, count, state, program, pool) as Float32Array;
+      // Read topology ID from expression (Phase 1: available but not yet used for dispatch)
+      const topologyId = expr.topologyId;
+      // Future: Look up topology for bezier dispatch
+      // const topology = getTopology(topologyId) as PathTopologyDef;
+      // if (topology.hasCubic || topology.hasQuad) { ... }
+
       if (expr.op === 'tangent') {
         fillBufferTangent(buf, input, count);
       } else if (expr.op === 'arcLength') {
@@ -550,104 +235,118 @@ function fillKernel(
 }
 
 /**
- * Apply map function to buffer
+ * Fill buffer with a constant value (stride-aware).
  *
- * Matches legacy Materializer.ts:521-550 behavior.
+ * @param buf - Output buffer
+ * @param value - Constant value to fill
+ * @param count - Number of elements (not components)
+ * @param stride - Stride per element
+ */
+function fillBufferWithConst(
+  buf: Float32Array,
+  value: any, // ConstValue
+  count: number,
+  stride: number
+): void {
+  if (value.kind === 'float') {
+    for (let i = 0; i < count * stride; i++) {
+      buf[i] = value.value;
+    }
+  } else if (value.kind === 'vec2') {
+    for (let i = 0; i < count; i++) {
+      buf[i * 2] = value.value[0];
+      buf[i * 2 + 1] = value.value[1];
+    }
+  } else if (value.kind === 'vec3') {
+    for (let i = 0; i < count; i++) {
+      buf[i * 3] = value.value[0];
+      buf[i * 3 + 1] = value.value[1];
+      buf[i * 3 + 2] = value.value[2];
+    }
+  } else if (value.kind === 'color') {
+    for (let i = 0; i < count; i++) {
+      buf[i * 4] = value.value[0];
+      buf[i * 4 + 1] = value.value[1];
+      buf[i * 4 + 2] = value.value[2];
+      buf[i * 4 + 3] = value.value[3];
+    }
+  } else {
+    throw new Error(`Unsupported const value kind: ${value.kind}`);
+  }
+}
+
+/**
+ * Fill buffer by broadcasting a signal value to all lanes.
+ *
+ * @param buf - Output buffer
+ * @param signalValue - Signal value to broadcast
+ * @param count - Number of elements
+ * @param stride - Stride per element
+ */
+function fillBufferWithSignal(
+  buf: Float32Array,
+  signalValue: number,
+  count: number,
+  stride: number
+): void {
+  for (let i = 0; i < count * stride; i++) {
+    buf[i] = signalValue;
+  }
+}
+
+/**
+ * Apply a map function (unary kernel).
+ *
+ * @param out - Output buffer
+ * @param input - Input buffer
+ * @param fn - Function to apply
+ * @param count - Number of elements
+ * @param stride - Stride per element
  */
 function applyMap(
   out: Float32Array,
   input: Float32Array,
   fn: PureFn,
   count: number,
-  stride: number,
-  program: CompiledProgramIR
+  stride: number
 ): void {
-  if (fn.kind === 'opcode') {
-    // Per-lane opcode application
-    const op = fn.opcode;
-    for (let i = 0; i < count; i++) {
-      for (let c = 0; c < stride; c++) {
-        const idx = i * stride + c;
-        out[idx] = applyOpcode(op, [input[idx]]);
-      }
-    }
-  } else if (fn.kind === 'kernelResolved') {
-    if (fn.abi === 'scalar') {
-      for (let i = 0; i < count; i++) {
-        for (let c = 0; c < stride; c++) {
-          const idx = i * stride + c;
-          out[idx] = program.kernelRegistry.callScalar(fn.handle, [input[idx]]);
-        }
-      }
-    } else {
-      throw new Error('Map does not support lane kernels (use zip or zipSig)');
-    }
-  } else if (fn.kind === 'kernel') {
-    throw new Error(
-      `Map only supports opcodes, not unresolved kernels. ` +
-      `Kernel '${fn.name}' should have been resolved at program load.`
-    );
-  } else {
-    throw new Error(`Map function kind ${fn.kind} not implemented`);
+  // Simplified: assume stride=1 for MVP
+  for (let i = 0; i < count; i++) {
+    out[i] = evaluatePureFn(fn, [input[i]]);
   }
 }
 
 /**
- * Apply zip function to buffers
+ * Apply a zip function (n-ary kernel).
  *
- * Matches legacy Materializer.ts:553-580 behavior.
+ * @param out - Output buffer
+ * @param inputs - Input buffers
+ * @param fn - Function to apply
+ * @param count - Number of elements
+ * @param stride - Stride per element
  */
 function applyZip(
   out: Float32Array,
   inputs: Float32Array[],
   fn: PureFn,
   count: number,
-  stride: number,
-  _instanceId: InstanceId,
-  program: CompiledProgramIR
+  stride: number
 ): void {
-  if (fn.kind === 'opcode') {
-    // Per-lane opcode application
-    const op = fn.opcode;
-    for (let i = 0; i < count; i++) {
-      for (let c = 0; c < stride; c++) {
-        const idx = i * stride + c;
-        const values = inputs.map(buf => buf[idx]);
-        out[idx] = applyOpcode(op, values);
-      }
-    }
-  } else if (fn.kind === 'kernelResolved') {
-    const registry = program.kernelRegistry;
-    if (fn.abi === 'scalar') {
-      // Scalar kernel: call per lane per component
-      for (let i = 0; i < count; i++) {
-        for (let c = 0; c < stride; c++) {
-          const idx = i * stride + c;
-          const values = inputs.map(buf => buf[idx]);
-          out[idx] = registry.callScalar(fn.handle, values);
-        }
-      }
-    } else {
-      // Lane kernel: call per lane, writes outStride components
-      const args: number[] = [];
-      for (let i = 0; i < count; i++) {
-        args.length = 0;
-        for (const buf of inputs) {
-          args.push(buf[i]); // Each input is stride-1 scalar
-        }
-        registry.callLane(fn.handle, out, i * stride, args);
-      }
-    }
-  } else {
-    throw new Error(`Zip function kind ${fn.kind} not implemented`);
+  for (let i = 0; i < count; i++) {
+    const args = inputs.map(buf => buf[i]);
+    out[i] = evaluatePureFn(fn, args);
   }
 }
 
 /**
- * Apply zipSig function to buffers (WI-4)
+ * Apply a zipSig function (field + signals).
  *
- * Combines field input with signal values, applying fn per-lane.
- * Matches legacy Materializer.ts:586-613 behavior for applyZipSig.
+ * @param out - Output buffer
+ * @param fieldInput - Field input buffer
+ * @param sigValues - Signal values
+ * @param fn - Function to apply
+ * @param count - Number of elements
+ * @param stride - Stride per element
  */
 function applyZipSig(
   out: Float32Array,
@@ -656,52 +355,172 @@ function applyZipSig(
   fn: PureFn,
   count: number,
   stride: number,
-  _instanceId: InstanceId,
-  program: CompiledProgramIR
+  instanceId: InstanceId,
+  program: Program
 ): void {
-  if (fn.kind === 'opcode') {
-    // Per-lane opcode application with field + signals
-    const op = fn.opcode;
-    for (let i = 0; i < count; i++) {
-      for (let c = 0; c < stride; c++) {
-        const idx = i * stride + c;
-        const values = [fieldInput[idx], ...sigValues];
-        out[idx] = applyOpcode(op, values);
-      }
-    }
-  } else if (fn.kind === 'kernelResolved') {
-    const registry = program.kernelRegistry;
-    if (fn.abi === 'scalar') {
-      for (let i = 0; i < count; i++) {
-        for (let c = 0; c < stride; c++) {
-          const idx = i * stride + c;
-          out[idx] = registry.callScalar(fn.handle, [fieldInput[idx], ...sigValues]);
-        }
-      }
-    } else {
-      // Lane kernel with field + signal inputs
-      for (let i = 0; i < count; i++) {
-        registry.callLane(fn.handle, out, i * stride, [fieldInput[i], ...sigValues]);
-      }
-    }
-  } else if (fn.kind === 'kernel') {
-    throw new Error(`ZipSig function kind ${fn.kind} not implemented`);
+  for (let i = 0; i < count; i++) {
+    const args = [fieldInput[i], ...sigValues];
+    out[i] = evaluatePureFn(fn, args);
   }
 }
 
 /**
- * Fill buffer with tangent vectors using central difference (WI-4)
+ * Evaluate a pure function with given arguments.
  *
- * Matches legacy Materializer.ts:649-680 behavior for fillBufferTangent.
+ * @param fn - Function descriptor
+ * @param args - Input arguments
+ * @returns Result value
+ */
+function evaluatePureFn(fn: PureFn, args: number[]): number {
+  if (fn.kind === 'opcode') {
+    // Handle opcodes (add, mul, etc.)
+    switch (fn.opcode) {
+      case 'add': return args[0] + args[1];
+      case 'sub': return args[0] - args[1];
+      case 'mul': return args[0] * args[1];
+      case 'div': return args[0] / args[1];
+      case 'mod': return args[0] % args[1];
+      case 'pow': return Math.pow(args[0], args[1]);
+      case 'neg': return -args[0];
+      case 'abs': return Math.abs(args[0]);
+      case 'sin': return Math.sin(args[0]);
+      case 'cos': return Math.cos(args[0]);
+      case 'tan': return Math.tan(args[0]);
+      case 'floor': return Math.floor(args[0]);
+      case 'ceil': return Math.ceil(args[0]);
+      case 'round': return Math.round(args[0]);
+      case 'sqrt': return Math.sqrt(args[0]);
+      case 'exp': return Math.exp(args[0]);
+      case 'log': return Math.log(args[0]);
+      case 'min': return Math.min(args[0], args[1]);
+      case 'max': return Math.max(args[0], args[1]);
+      default: throw new Error(`Unknown opcode: ${fn.opcode}`);
+    }
+  } else if (fn.kind === 'kernel') {
+    // Handle kernel functions (named functions)
+    throw new Error(`Kernel functions not yet implemented: ${fn.name}`);
+  } else if (fn.kind === 'expr') {
+    // Handle expression strings
+    throw new Error(`Expression evaluation not yet implemented: ${fn.expr}`);
+  }
+  throw new Error(`Unknown function kind: ${(fn as PureFn).kind}`);
+}
+
+/**
+ * Materialize an intrinsic field.
  *
- * MVP Scope: Polygonal paths (linear approximation).
- * For a closed path with N control points:
+ * @param buf - Output buffer
+ * @param intrinsic - Intrinsic name
+ * @param instanceId - Instance context
+ * @param count - Number of elements
+ * @param state - Runtime state
+ * @param program - Compiled program
+ */
+function materializeIntrinsic(
+  buf: Float32Array,
+  intrinsic: string,
+  instanceId: InstanceId,
+  count: number,
+  state: RuntimeState,
+  program: Program
+): void {
+  if (intrinsic === 'index') {
+    for (let i = 0; i < count; i++) {
+      buf[i] = i;
+    }
+  } else if (intrinsic === 'normalizedIndex') {
+    for (let i = 0; i < count; i++) {
+      buf[i] = i / (count - 1);
+    }
+  } else if (intrinsic === 'randomId') {
+    // Generate stable random IDs per instance
+    for (let i = 0; i < count; i++) {
+      buf[i] = Math.random(); // TODO: Use stable hash
+    }
+  } else {
+    throw new Error(`Unknown intrinsic: ${intrinsic}`);
+  }
+}
+
+/**
+ * HSL→RGB color space conversion.
+ *
+ * @param out - Output buffer (RGBA)
+ * @param input - Input buffer (HSLA)
+ * @param count - Number of colors
+ */
+function hslToRgbConversion(
+  out: Float32Array,
+  input: Float32Array,
+  count: number
+): void {
+  for (let i = 0; i < count; i++) {
+    const h = input[i * 4];
+    const s = input[i * 4 + 1];
+    const l = input[i * 4 + 2];
+    const a = input[i * 4 + 3];
+
+    const [r, g, b] = hslToRgb(h, s, l);
+    out[i * 4] = r;
+    out[i * 4 + 1] = g;
+    out[i * 4 + 2] = b;
+    out[i * 4 + 3] = a; // Alpha passthrough
+  }
+}
+
+/**
+ * HSL→RGB conversion for a single color.
+ *
+ * @param h - Hue [0, 1]
+ * @param s - Saturation [0, 1]
+ * @param l - Lightness [0, 1]
+ * @returns RGB [0, 1]
+ */
+function hslToRgb(h: number, s: number, l: number): [number, number, number] {
+  // Standard HSL→RGB conversion
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h * 6) % 2) - 1));
+  const m = l - c / 2;
+
+  let r = 0, g = 0, b = 0;
+  const hSector = h * 6;
+
+  if (hSector < 1) {
+    r = c; g = x; b = 0;
+  } else if (hSector < 2) {
+    r = x; g = c; b = 0;
+  } else if (hSector < 3) {
+    r = 0; g = c; b = x;
+  } else if (hSector < 4) {
+    r = 0; g = x; b = c;
+  } else if (hSector < 5) {
+    r = x; g = 0; b = c;
+  } else {
+    r = c; g = 0; b = x;
+  }
+
+  return [r + m, g + m, b + m];
+}
+
+// =============================================================================
+// Path Derivative Kernels
+// =============================================================================
+
+/**
+ * Fill buffer with tangent vectors (WI-4)
+ *
+ * Matches legacy Materializer.ts:665-697 behavior for fillBufferTangent.
+ *
+ * MVP Scope: Polygonal paths (central difference approximation).
+ * For N control points:
  *   tangent[i] = (point[i+1] - point[i-1]) / 2
+ * Assumes closed path (wraps around).
  *
  * Edge cases:
  * - Single point (N=1): tangent = (0, 0, 0)
- * - Two points (N=2): tangent computed with wrapping
- * - Assumes closed path (wraps at boundaries)
+ * - Two points (N=2): tangent = (next - prev) / 2 where prev/next wrap
+ *
+ * Output: VEC3 (z=0) for 2D paths
  *
  * @param out - Output buffer for tangent vectors (vec3, length N*3)
  * @param input - Input buffer for control points (vec2, length N*2)

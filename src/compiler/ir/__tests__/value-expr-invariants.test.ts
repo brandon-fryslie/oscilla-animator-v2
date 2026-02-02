@@ -167,7 +167,7 @@ describe('ValueExpr structural invariants', () => {
         { kind: 'kernel', type: mockType, kernelKind: 'broadcast', signal: 0 as any },
         { kind: 'kernel', type: mockType, kernelKind: 'reduce', field: 0 as any, op: 'sum' },
         { kind: 'kernel', type: mockType, kernelKind: 'zipSig', field: 0 as any, signals: [], fn: mockFn },
-        { kind: 'kernel', type: mockType, kernelKind: 'pathDerivative', field: 0 as any, op: 'tangent' },
+        { kind: 'kernel', type: mockType, kernelKind: 'pathDerivative', field: 0 as any, op: 'tangent', topologyId: 100 },
       ];
 
       expect(kernels.length).toBe(expectedKernelKinds.length);
@@ -251,7 +251,7 @@ describe('ValueExpr structural invariants', () => {
       expect(reduceKernel.op).toBe('sum');
     });
 
-    it('pathDerivative kernel has op field', () => {
+    it('pathDerivative kernel has op and topologyId fields', () => {
       const mockType = {} as CanonicalType;
       const pathDerivKernel: ValueExprKernel = {
         kind: 'kernel',
@@ -259,8 +259,10 @@ describe('ValueExpr structural invariants', () => {
         kernelKind: 'pathDerivative',
         field: 0 as any,
         op: 'tangent',
+        topologyId: 100,
       };
       expect(pathDerivKernel.op).toBe('tangent');
+      expect(pathDerivKernel.topologyId).toBe(100);
     });
   });
 
