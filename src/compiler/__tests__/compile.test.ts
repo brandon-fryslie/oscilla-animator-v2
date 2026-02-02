@@ -404,51 +404,41 @@ describe('error isolation for unreachable blocks', () => {
   });
 
   it('fails compilation when a block connected to render has an error', () => {
-    // This test documents the requirement from AC3/bead 2kl7:
-    // "If a block connected to render has an error, compilation fails (not isolated)"
-    //
-    // The test uses the golden-spiral pattern which is known to work,
-    // and verifies that the error isolation logic correctly identifies
-    // render-reachable blocks.
-
+    // AC3/bead 2kl7: If a block connected to render has an error, compilation
+    // must fail — it must NOT be isolated as a warning.
     const patch = buildPatch((b) => {
-      const time = b.addBlock('InfiniteTimeRoot');
-      b.setPortDefault(time, 'periodAMs', 4000);
-      b.setPortDefault(time, 'periodBMs', 120000);
-      const ellipse = b.addBlock('Ellipse');
-      b.setPortDefault(ellipse, 'rx', 0.02);
-      b.setPortDefault(ellipse, 'ry', 0.02);
+      const time = b.addBlock('InfiniteTimeRoot', { displayName: 'Time' });
+      b.setPortDefault(time, 'periodAMs', 1000);
+
       const array = b.addBlock('Array');
       b.setPortDefault(array, 'count', 10);
-      b.wire(ellipse, 'shape', array, 'element');
 
-      const circleLayout = b.addBlock('CircleLayoutUV');
-      b.setPortDefault(circleLayout, 'radius', 0.35);
-      b.wire(array, 'elements', circleLayout, 'elements');
+      const ellipse = b.addBlock('Ellipse');
+      b.setPortDefault(ellipse, 'rx', 0.05);
+      b.setPortDefault(ellipse, 'ry', 0.05);
 
-      const color = b.addBlock('Const');
-      b.setConfig(color, 'value', { r: 0.9, g: 0.7, b: 0.5, a: 1.0 });
+      const gridLayout = b.addBlock('GridLayoutUV');
+      b.setPortDefault(gridLayout, 'rows', 2);
+      b.setPortDefault(gridLayout, 'cols', 5);
+      b.wire(array, 'elements', gridLayout, 'elements');
 
-      // RenderInstances2D is a render block (capability: 'render')
+      // Expression block with a syntax error — wired to render pipeline
+      const expr = b.addBlock('Expression', { displayName: 'ColorExpr' });
+      b.setConfig(expr, 'expression', 'invalid syntax +++');
+      b.addVarargConnection(expr, 'refs', `v1:blocks.time.outputs.tMs`, 0, 't');
+
       const render = b.addBlock('RenderInstances2D');
-      b.wire(circleLayout, 'position', render, 'pos');
-      b.wire(color, 'out', render, 'color');
+      b.wire(gridLayout, 'position', render, 'pos');
       b.wire(ellipse, 'shape', render, 'shape');
+      b.wire(expr, 'out', render, 'color');  // Connected to render — error must NOT be isolated
     });
 
     const result = compile(patch);
 
-    // This graph should compile successfully - it's the golden spiral pattern
-    if (result.kind === 'error') {
-      console.error('COMPILE ERROR (should succeed - golden spiral):', JSON.stringify(result.errors, null, 2));
+    if (result.kind !== 'error') {
+      throw new Error('Expected compilation to fail but it succeeded');
     }
-    expect(result.kind).toBe('ok');
-
-    // The test documents that:
-    // 1. RenderInstances2D is correctly identified as a render block
-    // 2. Blocks wired to it (color, circleLayout, ellipse, array, time) are reachable
-    // 3. The error isolation system correctly handles unreachable vs reachable errors
-    //    (as demonstrated by the other tests in this suite)
+    expect(result.errors.length).toBeGreaterThan(0);
   });
 });
 
