@@ -21,3 +21,9 @@ export type { ReferencePopoverProps } from './ReferencePopover';
 
 export { tokenizeExpression } from './referenceTokenizer';
 export type { TokenizedSegment } from './referenceTokenizer';
+
+export {
+  getContentEditableCursorOffset,
+  setContentEditableCursorOffset,
+  getContentEditableTextValue,
+} from './contentEditableCursor';
