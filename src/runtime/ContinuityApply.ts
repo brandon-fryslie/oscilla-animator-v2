@@ -16,7 +16,7 @@
  * @module runtime/ContinuityApply
  */
 
-import type { ContinuityPolicy, StepContinuityApply, ValueSlot } from '../compiler/ir/types';
+import type { StepContinuityApply, ValueSlot } from '../compiler/ir/types';
 import type { RuntimeState } from './RuntimeState';
 import type { ContinuityState, MappingState, StableTargetId } from './ContinuityState';
 import { getOrCreateTargetState } from './ContinuityState';
@@ -113,7 +113,6 @@ export function lerp(a: number, b: number, t: number): number {
  * The callback functions will be inlined by the JIT compiler.
  *
  * @param oldData - Previous buffer (null if no previous state)
- * @param outputBuffer - Output buffer to initialize
  * @param mapping - Element mapping (null for no mapping)
  * @param elementCount - Number of elements in new domain
  * @param stride - Number of floats per element
@@ -123,7 +122,6 @@ export function lerp(a: number, b: number, t: number): number {
  */
 function applyWithMapping(
   oldData: Float32Array | null,
-  outputBuffer: Float32Array,
   mapping: MappingState | null,
   elementCount: number,
   stride: number,
@@ -208,7 +206,6 @@ export function initializeGaugeOnDomainChange(
 ): void {
   applyWithMapping(
     oldEffective,
-    gaugeBuffer,
     mapping,
     elementCount,
     stride,
@@ -343,7 +340,6 @@ export function initializeSlewWithMapping(
 ): void {
   applyWithMapping(
     oldSlew,
-    slewBuffer,
     mapping,
     elementCount,
     stride,
