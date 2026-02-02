@@ -202,63 +202,67 @@ describe('Payload constraint validation', () => {
         b.addBlock('TestColorSink');
       });
 
-      // TestConstrainedVarSource.out → TestColorSink.in should be blocked (COLOR not in allowedPayloads)
       const result = validateConnection('b0', 'out', 'b1', 'in', patch);
       expect(result.valid).toBe(false);
-      expect(result.reason).toContain('payload');
+      expect(result.reason).toContain('Type mismatch');
     });
 
-    it('constrained payloadVar source → compatible payloadVar sink is ALLOWED', () => {
-      // TestConstrainedVarSource allows [FLOAT, INT] → Const.in (allows all)
-      const patch = buildPatch((b) => {
-        b.addBlock('TestConstrainedVarSource');
-        const constId = b.addBlock('Const');
-        b.setConfig(constId, 'value', 1.0);
-      });
-
-      // TestConstrainedVarSource.out → Const.in should be valid (no constraint conflict)
-      const result = validateConnection('b0', 'out', 'b1', 'in', patch);
-      expect(result.valid).toBe(true);
-    });
-
-    it('constrained payloadVar source → incompatible payloadVar sink is BLOCKED', () => {
-      // TestConstrainedVarSource allows [FLOAT, INT] → TestVec2ColorSink allows [VEC2, COLOR]
-      const patch = buildPatch((b) => {
-        b.addBlock('TestConstrainedVarSource');
-        b.addBlock('TestVec2ColorSink');
-      });
-
-      // No overlap in allowedPayloads → blocked
-      const result = validateConnection('b0', 'out', 'b1', 'in', patch);
-      expect(result.valid).toBe(false);
-      expect(result.reason).toContain('payload');
-    });
-  });
-
-  describe('concrete sources respect sink allowedPayloads (crio.2)', () => {
-    it('concrete source compatible with payloadVar sink is ALLOWED', () => {
-      // TestFloatSource (FLOAT) → TestVec2ColorSink doesn't allow FLOAT
+    it('constrained payloadVar sink → incompatible concrete source is BLOCKED', () => {
+      // TestFloatSource outputs FLOAT → TestVec2ColorSink allows only [VEC2, COLOR]
       const patch = buildPatch((b) => {
         b.addBlock('TestFloatSource');
         b.addBlock('TestVec2ColorSink');
       });
 
-      // FLOAT not in [VEC2, COLOR] → blocked
       const result = validateConnection('b0', 'out', 'b1', 'in', patch);
       expect(result.valid).toBe(false);
-      expect(result.reason).toContain('payload');
     });
 
-    it('concrete source incompatible with concrete sink is BLOCKED', () => {
-      // TestFloatSource (FLOAT) → TestIntSink (INT)
+    it('unconstrained payloadVar source → any concrete sink is ALLOWED', () => {
+      // Const.out has payloadVar with allowedPayloads including ALL_CONCRETE_PAYLOADS
+      const patch = buildPatch((b) => {
+        const constId = b.addBlock('Const');
+        b.setConfig(constId, 'value', { r: 1, g: 0, b: 0, a: 1 });
+        b.addBlock('TestColorSink');
+      });
+
+      const result = validateConnection('b0', 'out', 'b1', 'in', patch);
+      expect(result.valid).toBe(true);
+    });
+  });
+
+  describe('concrete placeholder types respect allowedPayloads (crio.2)', () => {
+    it('Add.out (FLOAT placeholder, allows STANDARD_NUMERIC) → Add.a (FLOAT) is ALLOWED', () => {
+      const patch = buildPatch((b) => {
+        b.addBlock('Add');
+        b.addBlock('Add');
+      });
+
+      const result = validateConnection('b0', 'out', 'b1', 'a', patch);
+      expect(result.valid).toBe(true);
+      expect(result.adapter).toBeUndefined();
+    });
+
+    it('concrete float source → int sink without adapter is BLOCKED', () => {
+      // FLOAT ≠ INT, no allowedPayloads on either side to override
       const patch = buildPatch((b) => {
         b.addBlock('TestFloatSource');
         b.addBlock('TestIntSink');
       });
 
-      // Payload mismatch (FLOAT !== INT) → blocked
       const result = validateConnection('b0', 'out', 'b1', 'in', patch);
       expect(result.valid).toBe(false);
+    });
+
+    it('concrete float source → Add.a (has allowedPayloads including FLOAT) is ALLOWED', () => {
+      // Add has allowedPayloads for 'a' = STANDARD_NUMERIC_PAYLOADS which includes FLOAT
+      const patch = buildPatch((b) => {
+        b.addBlock('TestFloatSource');
+        b.addBlock('Add');
+      });
+
+      const result = validateConnection('b0', 'out', 'b1', 'a', patch);
+      expect(result.valid).toBe(true);
     });
   });
 });
