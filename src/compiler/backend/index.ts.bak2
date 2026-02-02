@@ -131,13 +131,11 @@ export function compileBackend(
     }
 
     // =========================================================================
-    const addressRegistry = AddressRegistry.buildFromPatch(typedPatch.patch);
     // Step 4: Block Lowering
     // =========================================================================
     const pass6Options: Pass6Options = {
       events: options?.events,
       compileId: options?.compileId,
-      addressRegistry,
       patchRevision: options?.patchRevision,
     };
     const unlinkedIR = pass6BlockLowering(acyclicPatch, pass6Options);

@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, unitPhase01, unitScalar, unitRadians, payloadStride, floatConst } from '../../core/canonical-types';
+import { canonicalType, unitTurns, unitScalar, unitRadians, payloadStride, floatConst, contractWrap01 } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 
@@ -23,7 +23,7 @@ registerBlock({
   },
   adapterSpec: {
     from: { payload: FLOAT, unit: { kind: 'angle', unit: 'radians' }, extent: 'any' },
-    to: { payload: FLOAT, unit: { kind: 'angle', unit: 'phase01' }, extent: 'any' },
+    to: { payload: FLOAT, unit: { kind: 'angle', unit: 'turns' }, contract: { kind: 'wrap01' }, extent: 'any' },
     inputPortId: 'in',
     outputPortId: 'out',
     description: 'Radians → phase [0,1) with wrapping',
@@ -34,7 +34,7 @@ registerBlock({
     in: { label: 'In', type: canonicalType(FLOAT, unitRadians()) },
   },
   outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT, unitPhase01()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
@@ -44,7 +44,7 @@ registerBlock({
     const divFn = ctx.b.opcode(OpCode.Div);
     const divided = ctx.b.kernelZip([input.id, twoPi], divFn, canonicalType(FLOAT, unitScalar()));
     const wrapFn = ctx.b.opcode(OpCode.Wrap01);
-    const wrapped = ctx.b.kernelMap(divided, wrapFn, canonicalType(FLOAT, unitPhase01()));
+    const wrapped = ctx.b.kernelMap(divided, wrapFn, canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return {

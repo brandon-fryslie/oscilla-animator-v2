@@ -355,7 +355,7 @@ function lowerBlockInstance(
   blockIdToIndex?: Map<string, BlockIndex>,
   instanceContextByBlock?: Map<BlockIndex, InstanceId>,
   portTypes?: ReadonlyMap<PortKey, CanonicalType>,
-  existingOutputs?: Partial<LowerResult>,
+  existingOutputs?: Partial<LowerResult>
   addressRegistry?: import('../../graph/address-registry').AddressRegistry
 ): Map<string, ValueRefExpr> {
   const outputRefs = new Map<string, ValueRefExpr>();
@@ -942,9 +942,7 @@ export function pass6BlockLowering(
           blockOutputs,
           blockIdToIndex,
           instanceContextByBlock,
-          validated.portTypes,
-          undefined, // existingOutputs
-          options?.addressRegistry
+          validated.portTypes
         );
 
         if (outputRefs.size > 0) {

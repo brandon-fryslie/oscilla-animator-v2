@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, unitNorm01, unitScalar, payloadStride, floatConst } from '../../core/canonical-types';
+import { canonicalType, unitScalar, payloadStride, floatConst, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 
@@ -23,7 +23,7 @@ registerBlock({
   },
   adapterSpec: {
     from: { payload: FLOAT, unit: { kind: 'scalar' }, extent: 'any' },
-    to: { payload: FLOAT, unit: { kind: 'norm01' }, extent: 'any' },
+    to: { payload: FLOAT, unit: { kind: 'scalar' }, contract: { kind: 'clamp01' }, extent: 'any' },
     inputPortId: 'in',
     outputPortId: 'out',
     description: 'Scalar → normalized [0,1] with clamping',
@@ -34,7 +34,7 @@ registerBlock({
     in: { label: 'In', type: canonicalType(FLOAT, unitScalar()) },
   },
   outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT, unitNorm01()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
@@ -43,7 +43,7 @@ registerBlock({
     const zero = ctx.b.constant(floatConst(0), canonicalType(FLOAT, unitScalar()));
     const one = ctx.b.constant(floatConst(1), canonicalType(FLOAT, unitScalar()));
     const clampFn = ctx.b.opcode(OpCode.Clamp);
-    const clamped = ctx.b.kernelZip([input.id, zero, one], clampFn, canonicalType(FLOAT, unitNorm01()));
+    const clamped = ctx.b.kernelZip([input.id, zero, one], clampFn, canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return {

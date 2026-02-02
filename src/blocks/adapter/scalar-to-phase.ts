@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, unitPhase01, unitScalar, payloadStride } from '../../core/canonical-types';
+import { canonicalType, unitTurns, unitScalar, payloadStride, contractWrap01 } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 
@@ -23,7 +23,7 @@ registerBlock({
   },
   adapterSpec: {
     from: { payload: FLOAT, unit: { kind: 'scalar' }, extent: 'any' },
-    to: { payload: FLOAT, unit: { kind: 'angle', unit: 'phase01' }, extent: 'any' },
+    to: { payload: FLOAT, unit: { kind: 'angle', unit: 'turns' }, contract: { kind: 'wrap01' }, extent: 'any' },
     inputPortId: 'in',
     outputPortId: 'out',
     description: 'Scalar → phase [0,1) with wrapping',
@@ -34,14 +34,14 @@ registerBlock({
     in: { label: 'In', type: canonicalType(FLOAT, unitScalar()) },
   },
   outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT, unitPhase01()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()) },
   },
   lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
     if (!input) throw new Error('Lens block input is required');
 
     const wrapFn = ctx.b.opcode(OpCode.Wrap01);
-    const wrapped = ctx.b.kernelMap(input.id, wrapFn, canonicalType(FLOAT, unitPhase01()));
+    const wrapped = ctx.b.kernelMap(input.id, wrapFn, canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()));
     const outType = ctx.outTypes[0];
     const slot = ctx.b.allocSlot();
     return {

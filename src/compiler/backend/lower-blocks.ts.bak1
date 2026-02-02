@@ -82,8 +82,6 @@ export interface Pass6Options {
   compileId?: string;
   /** Patch revision for event context */
   patchRevision?: number;
-  /** Address registry for blocks that need address resolution (e.g., Expression block) */
-  addressRegistry?: import('../../graph/address-registry').AddressRegistry;
 }
 // =============================================================================
 // Helper Functions
@@ -355,8 +353,7 @@ function lowerBlockInstance(
   blockIdToIndex?: Map<string, BlockIndex>,
   instanceContextByBlock?: Map<BlockIndex, InstanceId>,
   portTypes?: ReadonlyMap<PortKey, CanonicalType>,
-  existingOutputs?: Partial<LowerResult>,
-  addressRegistry?: import('../../graph/address-registry').AddressRegistry
+  existingOutputs?: Partial<LowerResult>
 ): Map<string, ValueRefExpr> {
   const outputRefs = new Map<string, ValueRefExpr>();
   const blockDef = getBlockDefinition(block.type);
@@ -449,7 +446,6 @@ function lowerBlockInstance(
       seedConstId: 0, // Seed value not used by current intrinsics (randomId uses element index only)
       inferredInstance,
       varargConnections: varargConnectionsMap.size > 0 ? varargConnectionsMap : undefined,
-      addressRegistry,
     };
 
     // Pass block params as config (needed for DSConst blocks to access their value)
@@ -722,8 +718,7 @@ function lowerSCCTwoPass(
       blockIdToIndex,
       instanceContextByBlock,
       portTypes,
-      existingOutputs,
-      options?.addressRegistry
+      existingOutputs
     );
 
     // Update blockOutputs (may overwrite phase 1 results, but should be identical)
@@ -942,9 +937,7 @@ export function pass6BlockLowering(
           blockOutputs,
           blockIdToIndex,
           instanceContextByBlock,
-          validated.portTypes,
-          undefined, // existingOutputs
-          options?.addressRegistry
+          validated.portTypes
         );
 
         if (outputRefs.size > 0) {
