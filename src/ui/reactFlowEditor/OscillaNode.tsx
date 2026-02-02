@@ -18,6 +18,7 @@ import { useStores } from '../../stores';
 import { ParameterControl, DefaultSourceControl } from './ParameterControls';
 import { PortInfoPopover } from './PortInfoPopover';
 import { DisplayNameEditor } from '../components/DisplayNameEditor';
+import { getLensLabel } from './lensUtils';
 
 /**
  * Format a default source for display in tooltip.
@@ -251,7 +252,11 @@ export const OscillaNode: React.FC<NodeProps<OscillaNodeData>> = observer(({ dat
                   justifyContent: 'center',
                   fontWeight: 'bold',
                 }}
-                title={`${input.lensCount} lens${input.lensCount > 1 ? 'es' : ''} attached`}
+                title={
+                  input.lenses && input.lenses.length > 0
+                    ? input.lenses.map(l => getLensLabel(l.lensType)).join(', ')
+                    : `${input.lensCount} lens${input.lensCount > 1 ? 'es' : ''} attached`
+                }
               >
                 {input.lensCount > 1 ? input.lensCount : ''}
               </div>
