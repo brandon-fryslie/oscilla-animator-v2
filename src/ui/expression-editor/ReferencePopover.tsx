@@ -81,12 +81,8 @@ export const ReferencePopover: React.FC<ReferencePopoverProps> = ({
 
   // Resolve the shorthand
   const canonicalAddress = addressRegistry.resolveShorthand(shorthand);
-  const resolved = canonicalAddress
-    ? addressRegistry.resolve(
-        canonicalAddress.kind === 'output'
-          ? `v1:blocks.${canonicalAddress.blockId}.outputs.${canonicalAddress.portId}`
-          : ''
-      )
+  const resolved = canonicalAddress && canonicalAddress.kind === 'output'
+    ? addressRegistry.resolve(`v1:blocks.${canonicalAddress.blockId}.outputs.${canonicalAddress.portId}`)
     : null;
 
   // Extract metadata
@@ -95,10 +91,10 @@ export const ReferencePopover: React.FC<ReferencePopoverProps> = ({
   let payloadTypeStr = 'unknown';
   let cardinalityStr = 'Signal';
 
-  if (resolved?.kind === 'output') {
+  if (resolved?.kind === 'output' && canonicalAddress?.kind === 'output') {
     const block = resolved.block;
     blockType = block.type;
-    portName = resolved.portId;
+    portName = canonicalAddress.portId;
 
     const type = resolved.type;
     payloadTypeStr = type.payload.kind;

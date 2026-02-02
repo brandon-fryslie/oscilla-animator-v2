@@ -78,7 +78,7 @@ function serializeToPlainText(element: HTMLDivElement): string {
   const parts: string[] = [];
 
   // Iterate over child nodes
-  element.childNodes.forEach(node => {
+  const walk = (node: Node) => {
     if (node.nodeType === Node.TEXT_NODE) {
       // Plain text node
       parts.push(node.textContent || '');
@@ -91,100 +91,14 @@ function serializeToPlainText(element: HTMLDivElement): string {
           parts.push(refText);
         }
       } else {
-        // Other element - read textContent
-        parts.push(elem.textContent || '');
-      }
-    }
-  });
-
-  return parts.join('');
-}
-
-// =============================================================================
-// Helper: Get cursor offset in contentEditable
-// =============================================================================
-
-/**
- * Get character offset of cursor in contentEditable.
- *
- * Used for autocomplete positioning and context detection.
- *
- * @param element - contentEditable div
- * @returns Character offset (0-based)
- */
-function getCursorOffset(element: HTMLDivElement): number {
-  const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0) return 0;
-
-  const range = selection.getRangeAt(0);
-  const preCaretRange = range.cloneRange();
-  preCaretRange.selectNodeContents(element);
-  preCaretRange.setEnd(range.endContainer, range.endOffset);
-
-  // Serialize range to plain text and measure length
-  const tempDiv = document.createElement('div');
-  tempDiv.appendChild(preCaretRange.cloneContents());
-  return serializeToPlainText(tempDiv).length;
-}
-
-/**
- * Set cursor offset in contentEditable.
- *
- * Used to restore cursor position after suggestion insertion.
- *
- * @param element - contentEditable div
- * @param offset - Character offset (0-based)
- */
-function setCursorOffset(element: HTMLDivElement, offset: number): void {
-  const selection = window.getSelection();
-  if (!selection) return;
-
-  let currentOffset = 0;
-  let targetNode: Node | null = null;
-  let targetOffset = 0;
-
-  // Walk through nodes to find target position
-  const walk = (node: Node) => {
-    if (currentOffset >= offset) return;
-
-    if (node.nodeType === Node.TEXT_NODE) {
-      const textLength = node.textContent?.length || 0;
-      if (currentOffset + textLength >= offset) {
-        targetNode = node;
-        targetOffset = offset - currentOffset;
-        currentOffset = offset;
-      } else {
-        currentOffset += textLength;
-      }
-    } else if (node.nodeType === Node.ELEMENT_NODE) {
-      const elem = node as HTMLElement;
-      if (elem.classList.contains('expr-ref-chip')) {
-        const refText = elem.getAttribute('data-ref');
-        const refLength = refText?.length || 0;
-        if (currentOffset + refLength >= offset) {
-          // Cursor lands inside chip - snap to end of chip
-          targetNode = elem;
-          targetOffset = 1; // After chip
-          currentOffset = offset;
-        } else {
-          currentOffset += refLength;
-        }
-      } else {
-        // Recurse into children
-        node.childNodes.forEach(walk);
+        // Other element - recurse into children
+        elem.childNodes.forEach(walk);
       }
     }
   };
 
   element.childNodes.forEach(walk);
-
-  if (targetNode) {
-    const range = document.createRange();
-    range.setStart(targetNode, targetOffset);
-    range.collapse(true);
-    selection.removeAllRanges();
-    selection.addRange(range);
-  }
+  return parts.join('');
 }
 
 // =============================================================================
@@ -217,7 +131,6 @@ export const TokenExpressionEditor: React.FC<TokenExpressionEditorProps> = ({
   const internalRef = useRef<HTMLDivElement>(null);
   const editorRef = externalRef || internalRef;
   const [localValue, setLocalValue] = useState(value);
-  const suppressNextInput = useRef(false);
 
   // Update local value when prop changes
   useEffect(() => {
@@ -258,11 +171,6 @@ export const TokenExpressionEditor: React.FC<TokenExpressionEditorProps> = ({
 
   // Handle input (user typing/editing)
   const handleInput = useCallback((e: React.FormEvent<HTMLDivElement>) => {
-    if (suppressNextInput.current) {
-      suppressNextInput.current = false;
-      return;
-    }
-
     const div = e.currentTarget;
     const plainText = serializeToPlainText(div);
 
@@ -298,68 +206,6 @@ export const TokenExpressionEditor: React.FC<TokenExpressionEditorProps> = ({
     }
   }, [externalOnKeyDown]);
 
-  // Render editor HTML
-  const renderEditorHTML = useCallback(() => {
-    return segments.map((segment, index) => {
-      if (segment.isReference) {
-        // Render as chip
-        const chipClass = segment.isConnected
-          ? 'expr-ref-chip expr-ref-chip--valid'
-          : 'expr-ref-chip expr-ref-chip--error';
-
-        return (
-          <span
-            key={`ref-${index}`}
-            className={chipClass}
-            contentEditable={false}
-            data-ref={segment.text}
-          >
-            {segment.text}
-          </span>
-        );
-      } else {
-        // Render as plain text
-        return segment.text;
-      }
-    });
-  }, [segments]);
-
-  // Update editor innerHTML when segments change
-  useEffect(() => {
-    if (!editorRef.current) return;
-
-    const div = editorRef.current;
-    const currentPlainText = serializeToPlainText(div);
-
-    // Only update if the plain text differs (avoid unnecessary re-renders)
-    if (currentPlainText !== localValue) {
-      // Save cursor position
-      const cursorOffset = getCursorOffset(div);
-
-      // Update innerHTML
-      suppressNextInput.current = true;
-      div.innerHTML = '';
-      const elements = renderEditorHTML();
-      elements.forEach(el => {
-        if (typeof el === 'string') {
-          div.appendChild(document.createTextNode(el));
-        } else {
-          const tempDiv = document.createElement('div');
-          tempDiv.innerHTML = el.props.children;
-          const span = document.createElement('span');
-          span.className = el.props.className;
-          span.contentEditable = 'false';
-          span.setAttribute('data-ref', el.props['data-ref']);
-          span.textContent = el.props.children;
-          div.appendChild(span);
-        }
-      });
-
-      // Restore cursor position
-      setCursorOffset(div, cursorOffset);
-    }
-  }, [localValue, renderEditorHTML, editorRef]);
-
   // Empty placeholder rendering
   const showPlaceholder = localValue.length === 0;
 
@@ -373,6 +219,24 @@ export const TokenExpressionEditor: React.FC<TokenExpressionEditorProps> = ({
       onKeyDown={handleKeyDown}
       suppressContentEditableWarning
       data-placeholder={showPlaceholder ? placeholder : undefined}
+      dangerouslySetInnerHTML={{
+        __html: segments
+          .map(segment => {
+            if (segment.isReference) {
+              const chipClass = segment.isConnected
+                ? 'expr-ref-chip expr-ref-chip--valid'
+                : 'expr-ref-chip expr-ref-chip--error';
+              return `<span class="${chipClass}" contenteditable="false" data-ref="${segment.text}">${segment.text}</span>`;
+            } else {
+              // Escape HTML in plain text
+              return segment.text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+            }
+          })
+          .join(''),
+      }}
     />
   );
 };
