@@ -176,7 +176,7 @@ function extentMatches(actual: Extent, pattern: ExtentPattern): boolean {
  * Check if a contract matches a pattern.
  */
 function contractMatches(
-  actual: ValueContract | undefined,
+  actual: ValueContract | 'same' | 'any' | undefined,
   pattern: ValueContract | 'same' | 'any' | undefined
 ): boolean {
   // Pattern not specified (undefined)? Always match (backward compat).
@@ -188,8 +188,12 @@ function contractMatches(
   // Pattern is 'same'? Always match (caller must handle 'same' logic).
   if (pattern === 'same') return true;
 
+  // Actual is 'any' or 'same'? These are rule patterns, not concrete values.
+  // Should not happen in practice when matching actual types, but handle gracefully.
+  if (actual === 'any' || actual === 'same') return true;
+
   // Pattern is specific contract? Must match exactly.
-  return contractsEqual(actual, pattern);
+  return contractsEqual(actual as ValueContract | undefined, pattern);
 }
 
 /**
@@ -405,3 +409,4 @@ export function getAllAdapterRules(): readonly { from: TypePattern; to: TypePatt
     adapter: r.spec,
   }));
 }
+
