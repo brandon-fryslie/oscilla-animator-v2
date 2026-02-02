@@ -24,10 +24,21 @@
 import type { CanonicalType, PayloadType } from '../core/canonical-types';
 import type { IRBuilder } from '../compiler/ir/IRBuilder';
 import type { ValueExprId } from '../compiler/ir/Indices';
+import type { AddressRegistry } from '../graph/address-registry';
 import { tokenize } from './lexer';
 import { parse, ParseError } from './parser';
 import { typecheck, TypeError } from './typecheck';
 import { compile, type CompileContext } from './compile';
+
+/**
+ * Block reference context for member access support (e.g., circle_1.radius).
+ * When provided, enables block.port syntax in expressions.
+ */
+export interface BlockRefsContext {
+  readonly addressRegistry: AddressRegistry;
+  readonly allowedPayloads: readonly PayloadType[];
+  readonly signalsByShorthand: ReadonlyMap<string, ValueExprId>;
+}
 
 /**
  * Compilation error (unified format for all error types).

@@ -12,7 +12,7 @@
     "test:coverage": "vitest run --coverage",
     "test:memory": "VITEST_EXPOSE_GC=1 vitest run src/__tests__/memory-profile.test.ts",
     "bench": "vitest bench",
-    "lint": "eslint src/blocks/"
+    "lint": "eslint src/blocks/ src/runtime/ValueExprMaterializer.ts src/runtime/ValueExprSignalEvaluator.ts src/runtime/ValueExprEventEvaluator.ts src/runtime/ContinuityApply.ts src/compiler/compile.ts src/runtime/ScheduleExecutor.ts src/runtime/RenderAssembler.ts src/runtime/SignalKernelLibrary.ts src/runtime/OpcodeInterpreter.ts src/render/RenderBufferArena.ts"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

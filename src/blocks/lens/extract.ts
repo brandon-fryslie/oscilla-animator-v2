@@ -29,7 +29,7 @@ registerBlock({
       label: 'Component',
       type: canonicalType(FLOAT),
       defaultValue: 0,
-      exposedAsPort: false
+      exposedAsPort: false,
     },
   },
   outputs: {
@@ -37,12 +37,12 @@ registerBlock({
   },
   lower: ({ inputsById, ctx, config }) => {
     const input = inputsById.in;
-    if (!input) throw new Error('Extract input is required');
+    if (!input) throw new Error('Extract: in is required');
 
-    const componentIndex = (config?.component as number) ?? 0;
-
-    // Validate component index (0, 1, or 2 for vec3)
-    if (componentIndex < 0 || componentIndex > 2 || !Number.isInteger(componentIndex)) {
+    // Component index is compile-time only (IR extract takes a literal integer).
+    // Read from config — defaultValue in block def ensures it's always present.
+    const componentIndex = config?.component;
+    if (typeof componentIndex !== 'number' || componentIndex < 0 || componentIndex > 2 || !Number.isInteger(componentIndex)) {
       throw new Error(`Extract component must be 0, 1, or 2 (got ${componentIndex})`);
     }
 

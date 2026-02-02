@@ -26,19 +26,17 @@ registerBlock({
   },
   inputs: {
     in: { label: 'In', type: canonicalType(FLOAT) },
-    threshold: { label: 'Threshold', type: canonicalType(FLOAT), defaultValue: 0.01, exposedAsPort: false },
+    threshold: { label: 'Threshold', type: canonicalType(FLOAT), defaultValue: 0.01 },
   },
   outputs: {
     out: { label: 'Out', type: canonicalType(FLOAT) },
   },
-  lower: ({ inputsById, ctx, config }) => {
+  lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
-    if (!input) throw new Error('Deadzone input is required');
+    const threshold = inputsById.threshold;
+    if (!input) throw new Error('Deadzone: in is required');
+    if (!threshold) throw new Error('Deadzone: threshold is required');
 
-    const threshold = (config?.threshold as number) ?? 0.01;
-    if (!isFinite(threshold) || threshold < 0) {
-      throw new Error(`Deadzone threshold must be >= 0 and finite (got ${threshold})`);
-    }
     const outType = ctx.outTypes[0];
 
     // Implementation: abs(x) - threshold > 0 ? x : 0
@@ -47,9 +45,8 @@ registerBlock({
     const absFn = ctx.b.opcode(OpCode.Abs);
     const absVal = ctx.b.kernelMap(input.id, absFn, canonicalType(FLOAT));
 
-    const thresholdConst = ctx.b.constant(floatConst(threshold), canonicalType(FLOAT));
     const subFn = ctx.b.opcode(OpCode.Sub);
-    const diff = ctx.b.kernelZip([absVal, thresholdConst], subFn, canonicalType(FLOAT));
+    const diff = ctx.b.kernelZip([absVal, threshold.id], subFn, canonicalType(FLOAT));
 
     // If diff > 0 (i.e., |x| > threshold), use x; otherwise use 0
     const zeroConst = ctx.b.constant(floatConst(0), canonicalType(FLOAT));

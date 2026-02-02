@@ -7,7 +7,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, payloadStride, floatConst } from '../../core/canonical-types';
+import { canonicalType, payloadStride } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 
@@ -25,28 +25,24 @@ registerBlock({
   },
   inputs: {
     in: { label: 'In', type: canonicalType(FLOAT) },
-    min: { label: 'Min', type: canonicalType(FLOAT), defaultValue: 0.0, exposedAsPort: false },
-    max: { label: 'Max', type: canonicalType(FLOAT), defaultValue: 1.0, exposedAsPort: false },
+    min: { label: 'Min', type: canonicalType(FLOAT), defaultValue: 0.0 },
+    max: { label: 'Max', type: canonicalType(FLOAT), defaultValue: 1.0 },
   },
   outputs: {
     out: { label: 'Out', type: canonicalType(FLOAT) },
   },
-  lower: ({ inputsById, ctx, config }) => {
+  lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
-    if (!input) throw new Error('Clamp input is required');
+    const min = inputsById.min;
+    const max = inputsById.max;
+    if (!input) throw new Error('Clamp: in is required');
+    if (!min) throw new Error('Clamp: min is required');
+    if (!max) throw new Error('Clamp: max is required');
 
-    const min = (config?.min as number) ?? 0.0;
-    const max = (config?.max as number) ?? 1.0;
-    if (!isFinite(min) || !isFinite(max)) {
-      throw new Error(`Clamp params must be finite (got min=${min}, max=${max})`);
-    }
     const outType = ctx.outTypes[0];
 
-    // clamp(x, min, max)
-    const minConst = ctx.b.constant(floatConst(min), canonicalType(FLOAT));
-    const maxConst = ctx.b.constant(floatConst(max), canonicalType(FLOAT));
     const clampFn = ctx.b.opcode(OpCode.Clamp);
-    const result = ctx.b.kernelZip([input.id, minConst, maxConst], clampFn, outType);
+    const result = ctx.b.kernelZip([input.id, min.id, max.id], clampFn, outType);
 
     const slot = ctx.b.allocSlot();
     return {

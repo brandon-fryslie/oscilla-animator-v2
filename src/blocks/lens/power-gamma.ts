@@ -25,19 +25,17 @@ registerBlock({
   },
   inputs: {
     in: { label: 'In', type: canonicalType(FLOAT) },
-    gamma: { label: 'Gamma', type: canonicalType(FLOAT), defaultValue: 1.0, exposedAsPort: false },
+    gamma: { label: 'Gamma', type: canonicalType(FLOAT), defaultValue: 1.0 },
   },
   outputs: {
     out: { label: 'Out', type: canonicalType(FLOAT) },
   },
-  lower: ({ inputsById, ctx, config }) => {
+  lower: ({ inputsById, ctx }) => {
     const input = inputsById.in;
-    if (!input) throw new Error('PowerGamma input is required');
+    const gamma = inputsById.gamma;
+    if (!input) throw new Error('PowerGamma: in is required');
+    if (!gamma) throw new Error('PowerGamma: gamma is required');
 
-    const gamma = (config?.gamma as number) ?? 1.0;
-    if (!isFinite(gamma) || gamma < 0) {
-      throw new Error(`PowerGamma gamma must be >= 0 and finite (got ${gamma})`);
-    }
     const outType = ctx.outTypes[0];
 
     // clamp(x, 0, 1)
@@ -47,9 +45,8 @@ registerBlock({
     const clamped = ctx.b.kernelZip([input.id, zeroConst, oneConst], clampFn, outType);
 
     // pow(clamped, gamma)
-    const gammaConst = ctx.b.constant(floatConst(gamma), canonicalType(FLOAT));
     const powFn = ctx.b.opcode(OpCode.Pow);
-    const result = ctx.b.kernelZip([clamped, gammaConst], powFn, outType);
+    const result = ctx.b.kernelZip([clamped, gamma.id], powFn, outType);
 
     const slot = ctx.b.allocSlot();
     return {

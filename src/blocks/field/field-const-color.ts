@@ -8,7 +8,6 @@ import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
 import { canonicalType, canonicalField, floatConst, requireInst, payloadStride, unitNorm01 } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
-import { defaultSourceConst } from '../../types';
 
 registerBlock({
   type: 'FieldConstColor',
@@ -30,10 +29,10 @@ registerBlock({
   },
   inputs: {
     elements: { label: 'Elements', type: canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
-    r: { label: 'Red', type: canonicalType(FLOAT, unitNorm01()), defaultValue: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    g: { label: 'Green', type: canonicalType(FLOAT, unitNorm01()), defaultValue: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    b: { label: 'Blue', type: canonicalType(FLOAT, unitNorm01()), defaultValue: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
-    a: { label: 'Alpha', type: canonicalType(FLOAT, unitNorm01()), defaultValue: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    r: { label: 'Red', type: canonicalType(FLOAT, unitNorm01()), defaultValue: 1.0, exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    g: { label: 'Green', type: canonicalType(FLOAT, unitNorm01()), defaultValue: 1.0, exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    b: { label: 'Blue', type: canonicalType(FLOAT, unitNorm01()), defaultValue: 1.0, exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    a: { label: 'Alpha', type: canonicalType(FLOAT, unitNorm01()), defaultValue: 1.0, exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
   },
   outputs: {
     color: { label: 'Color', type: canonicalField(COLOR, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },

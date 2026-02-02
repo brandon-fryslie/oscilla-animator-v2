@@ -12,10 +12,11 @@ import type {
   ConcretePayloadType,
   CardinalityValue,
   TemporalityValue,
+  PayloadType,
 } from '../../core/canonical-types';
 import { FLOAT, unitsEqual } from '../../core/canonical-types';
 import { isPayloadVar, type InferenceCanonicalType, type InferencePayloadType, type InferenceUnitType } from '../../core/inference-types';
-import { getAnyBlockDefinition } from '../../blocks/registry';
+import { getAnyBlockDefinition, isPayloadAllowed } from '../../blocks/registry';
 import { findAdapter, type AdapterSpec } from '../../blocks/adapter-spec';
 
 // =============================================================================
@@ -259,33 +260,114 @@ function canTransformDomain(fromDomain: string, toDomain: string): boolean {
 // =============================================================================
 
 /**
+ * Port context for type compatibility checking.
+ * Contains both the type and block/port metadata needed to consult allowedPayloads.
+ */
+interface PortContext {
+  type: InferenceCanonicalType;
+  blockType: string;
+  portId: string;
+}
+
+/**
+ * Check if two payloads are compatible, consulting block metadata when needed.
+ *
+ * Handles three cases:
+ * 1. Both concrete and matching → compatible
+ * 2. Both concrete but not matching → check allowedPayloads metadata
+ * 3. At least one payloadVar → check allowedPayloads metadata
+ *
+ * This fixes crio.1 (payloadVar matches everything) and crio.2 (concrete placeholders
+ * don't reflect actual constraints).
+ */
+function arePayloadsCompatible(
+  fromPayload: InferencePayloadType,
+  toPayload: InferencePayloadType,
+  fromContext: PortContext,
+  toContext: PortContext
+): boolean {
+  const fromIsVar = isPayloadVar(fromPayload);
+  const toIsVar = isPayloadVar(toPayload);
+
+  // Case 1: Both concrete and matching → compatible
+  if (!fromIsVar && !toIsVar) {
+    const fromConcrete = fromPayload as ConcretePayloadType;
+    const toConcrete = toPayload as ConcretePayloadType;
+
+    if (fromConcrete.kind === toConcrete.kind) {
+      return true;
+    }
+
+    // Case 2: Both concrete but not matching → check if target allows source payload
+    const targetAllows = isPayloadAllowed(toContext.blockType, toContext.portId, fromConcrete);
+    if (targetAllows === true) {
+      return true;
+    }
+
+    // Also check if source constrains outputs that include target's payload
+    const sourceAllows = isPayloadAllowed(fromContext.blockType, fromContext.portId, toConcrete);
+    if (sourceAllows === true) {
+      return true;
+    }
+
+    return false;
+  }
+
+  // Case 3: At least one payloadVar → consult allowedPayloads
+
+  // If source is var, check if it allows target's payload (if target is concrete)
+  if (fromIsVar && !toIsVar) {
+    const toConcrete = toPayload as ConcretePayloadType;
+    const sourceAllows = isPayloadAllowed(fromContext.blockType, fromContext.portId, toConcrete);
+    // undefined means no constraints → allow
+    // true means explicitly allowed
+    // false means explicitly disallowed
+    if (sourceAllows === false) {
+      return false;
+    }
+    return true;
+  }
+
+  // If target is var, check if it allows source's payload (if source is concrete)
+  if (toIsVar && !fromIsVar) {
+    const fromConcrete = fromPayload as ConcretePayloadType;
+    const targetAllows = isPayloadAllowed(toContext.blockType, toContext.portId, fromConcrete);
+    if (targetAllows === false) {
+      return false;
+    }
+    return true;
+  }
+
+  // Both are vars → check if their constraint sets overlap
+  if (fromIsVar && toIsVar) {
+    // For now, allow all var-to-var connections (constraint solver will validate)
+    // TODO: Could check if allowedPayloads sets have non-empty intersection
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Check if two types are directly compatible (no adapter needed).
  * Based on pass2-types.ts isTypeCompatible().
  *
- * For UI validation, we're more lenient with type variables (payloadVar, unitVar)
- * since they get resolved during compilation. This allows users to make connections
- * that will be validated properly by the compiler.
+ * This version consults block metadata to properly validate polymorphic blocks.
  */
-function isTypeCompatible(from: InferenceCanonicalType, to: InferenceCanonicalType): boolean {
-  const fromCard = getInstantiatedCardinality(from);
-  const fromTemp = getInstantiatedTemporality(from);
-  const toCard = getInstantiatedCardinality(to);
-  const toTemp = getInstantiatedTemporality(to);
+function arePortsCompatible(from: PortContext, to: PortContext): boolean {
+  const fromCard = getInstantiatedCardinality(from.type);
+  const fromTemp = getInstantiatedTemporality(from.type);
+  const toCard = getInstantiatedCardinality(to.type);
+  const toTemp = getInstantiatedTemporality(to.type);
 
-  // Payload must match, but payload variables are polymorphic
-  const fromIsPayloadVar = isPayloadVar(from.payload);
-  const toIsPayloadVar = isPayloadVar(to.payload);
-  if (!fromIsPayloadVar && !toIsPayloadVar) {
-    // Both concrete - must match kind
-    if ((from.payload as ConcretePayloadType).kind !== (to.payload as ConcretePayloadType).kind) {
-      return false;
-    }
+  // Payload compatibility (with metadata-aware checking)
+  if (!arePayloadsCompatible(from.type.payload, to.type.payload, from, to)) {
+    return false;
   }
-  // If either is a payload variable, allow connection (will be resolved at compile time)
 
   // Unit must match (per spec: no implicit conversion)
   // Exception: unit variables (unitVar) are polymorphic and match any unit
-  if (!inferenceUnitsEqual(from.unit, to.unit)) {
+  if (!inferenceUnitsEqual(from.type.unit, to.type.unit)) {
     return false;
   }
 
@@ -360,8 +442,29 @@ export function validateConnection(
     return { valid: false, reason: 'Unknown target port' };
   }
 
-  // Check direct compatibility
-  if (isTypeCompatible(sourceType, targetType)) {
+  // Get block types for metadata lookup
+  const sourceBlock = patch.blocks.get(sourceBlockId as BlockId);
+  const targetBlock = patch.blocks.get(targetBlockId as BlockId);
+
+  if (!sourceBlock || !targetBlock) {
+    return { valid: false, reason: 'Block not found' };
+  }
+
+  // Build port contexts
+  const sourceContext: PortContext = {
+    type: sourceType,
+    blockType: sourceBlock.type,
+    portId: sourcePortId,
+  };
+
+  const targetContext: PortContext = {
+    type: targetType,
+    blockType: targetBlock.type,
+    portId: targetPortId,
+  };
+
+  // Check direct compatibility (with metadata-aware checking)
+  if (arePortsCompatible(sourceContext, targetContext)) {
     return { valid: true };
   }
 
