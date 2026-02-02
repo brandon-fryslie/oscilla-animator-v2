@@ -149,13 +149,13 @@ export class CompositeStoreAdapter implements GraphDataAdapter<InternalBlockId> 
   }
 
   /**
-   * Remove an edge by parsing its synthetic ID back to the 4-tuple.
+   * Remove an edge by parsing its synthetic ID back to the InternalEdge object.
    * Edge ID format: "edge-{fromBlock}-{fromPort}-{toBlock}-{toPort}"
    */
   removeEdge(id: string): void {
     const parsed = this.parseEdgeId(id);
     if (parsed) {
-      this.store.removeEdge(parsed.fromBlock, parsed.fromPort, parsed.toBlock, parsed.toPort);
+      this.store.removeEdge(parsed);
     }
   }
 
@@ -181,12 +181,10 @@ export class CompositeStoreAdapter implements GraphDataAdapter<InternalBlockId> 
   }
 
   /**
-   * Parse a synthetic edge ID back to the 4-tuple.
+   * Parse a synthetic edge ID back to an InternalEdge object.
    * Returns null if the ID format is invalid.
    */
-  private parseEdgeId(
-    id: string
-  ): { fromBlock: InternalBlockId; fromPort: string; toBlock: InternalBlockId; toPort: string } | null {
+  private parseEdgeId(id: string): InternalEdge | null {
     // Format: "edge-{fromBlock}-{fromPort}-{toBlock}-{toPort}"
     const parts = id.split('-');
 

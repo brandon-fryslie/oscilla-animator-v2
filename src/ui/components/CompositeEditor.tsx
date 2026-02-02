@@ -5,11 +5,12 @@
  * Uses GraphEditorCore for the internal graph canvas.
  */
 
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useStores } from '../../stores';
 import { GraphEditorCore, type GraphEditorCoreHandle } from '../graphEditor/GraphEditorCore';
 import { CompositeStoreAdapter } from '../graphEditor/CompositeStoreAdapter';
+import { CompositeEditorDslSidebar } from './CompositeEditorDslSidebar';
 import './CompositeEditor.css';
 
 /**
@@ -17,12 +18,16 @@ import './CompositeEditor.css';
  * Provides UI for:
  * - Internal graph editing (add/connect/remove blocks)
  * - Port exposure configuration
+ * - DSL text editing (HCL)
  * - Metadata editing (name, label, category)
  * - Save/cancel workflow
  */
 export const CompositeEditor = observer(function CompositeEditor() {
   const { compositeEditor } = useStores();
   const graphEditorRef = useRef<GraphEditorCoreHandle>(null);
+
+  // DSL sidebar visibility state (hidden by default)
+  const [showDslSidebar, setShowDslSidebar] = useState(false);
 
   // Create adapter for GraphEditorCore
   const adapter = useMemo(
@@ -146,6 +151,13 @@ export const CompositeEditor = observer(function CompositeEditor() {
         </div>
         <div className="composite-editor__actions">
           <button
+            className={`composite-editor__toggle-dsl-btn ${showDslSidebar ? 'composite-editor__toggle-dsl-btn--active' : ''}`}
+            onClick={() => setShowDslSidebar(!showDslSidebar)}
+            title={showDslSidebar ? 'Hide DSL sidebar' : 'Show DSL sidebar'}
+          >
+            {showDslSidebar ? 'Hide DSL' : 'Show DSL'}
+          </button>
+          <button
             className="composite-editor__save-btn"
             disabled={!compositeEditor.canSave}
             onClick={() => {
@@ -213,6 +225,12 @@ export const CompositeEditor = observer(function CompositeEditor() {
           />
         </div>
 
+        {/* Middle: DSL sidebar (optional) */}
+        <CompositeEditorDslSidebar
+          store={compositeEditor}
+          visible={showDslSidebar}
+        />
+
         {/* Right: Port exposure panel */}
         <div className="composite-editor__ports">
           <h3>Exposed Ports</h3>
@@ -235,9 +253,9 @@ export const CompositeEditor = observer(function CompositeEditor() {
                         onChange={(e) => {
                           if (e.target.checked) {
                             compositeEditor.exposeInputPort(
-                              port.blockId,
-                              port.portId,
-                              port.portId // Default external ID = internal port ID
+                              port.portId,  // externalId (default = portId)
+                              port.blockId, // internalBlockId
+                              port.portId   // internalPortId
                             );
                           } else {
                             compositeEditor.unexposeInputPort(port.blockId, port.portId);
@@ -287,9 +305,9 @@ export const CompositeEditor = observer(function CompositeEditor() {
                         onChange={(e) => {
                           if (e.target.checked) {
                             compositeEditor.exposeOutputPort(
-                              port.blockId,
-                              port.portId,
-                              port.portId
+                              port.portId,  // externalId (default = portId)
+                              port.blockId, // internalBlockId
+                              port.portId   // internalPortId
                             );
                           } else {
                             compositeEditor.unexposeOutputPort(port.blockId, port.portId);

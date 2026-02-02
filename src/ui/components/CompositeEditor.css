@@ -107,6 +107,7 @@
   gap: 0.5rem;
 }
 
+.composite-editor__toggle-dsl-btn,
 .composite-editor__save-btn,
 .composite-editor__cancel-btn {
   padding: 0.4rem 0.8rem;
@@ -115,6 +116,24 @@
   border-radius: 4px;
   cursor: pointer;
   transition: background 0.2s;
+}
+
+.composite-editor__toggle-dsl-btn {
+  background: var(--btn-secondary, #444);
+  color: var(--text-primary, #e0e0e0);
+}
+
+.composite-editor__toggle-dsl-btn:hover {
+  background: var(--btn-secondary-hover, #555);
+}
+
+.composite-editor__toggle-dsl-btn--active {
+  background: var(--accent-primary, #4a9eff);
+  color: white;
+}
+
+.composite-editor__toggle-dsl-btn--active:hover {
+  background: var(--accent-hover, #3a8eef);
 }
 
 .composite-editor__save-btn {
