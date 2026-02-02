@@ -202,6 +202,7 @@ export interface IRBuilder {
   getInstances(): ReadonlyMap<InstanceId, InstanceDecl>;
   getSchedule(): TimeModelIR;
   setTimeModel(schedule: TimeModelIR): void;
+  setCurrentBlockId(blockId: string): void;
 
   // =========================================================================
   // Build Results

@@ -121,6 +121,14 @@ export enum PathVerb {
   /** Close path (0 control points) */
   CLOSE = 4,
 }
+/**
+ * Segment kind for PathTopologyDef dispatch
+ *
+ * Distinguishes the geometric type of each segment in a path.
+ * Used for runtime dispatch in path derivative calculations (tangent, arc length).
+ */
+export type PathSegmentKind = 'line' | 'cubic' | 'quad';
+
 
 /**
  * PathTopologyDef - Path topology definition
@@ -150,4 +158,29 @@ export interface PathTopologyDef extends TopologyDef {
   readonly totalControlPoints: number;
   /** Whether the path is closed */
   readonly closed: boolean;
+  // Precomputed dispatch data (Sprint 1 WI-1)
+  /** Segment kind per segment (MOVE/CLOSE excluded) */
+  readonly segmentKind: readonly PathSegmentKind[];
+  /** Cumulative control point index where each segment starts */
+  readonly segmentPointBase: readonly number[];
+  /** True if any QUAD verb present */
+  readonly hasQuad: boolean;
+  /** True if any CUBIC verb present */
+  readonly hasCubic: boolean;
 }
+
+
+
+/**
+ * PathTopologyDefInput - Input type for registerDynamicTopology
+ *
+ * When creating a PathTopologyDef to pass to registerDynamicTopology,
+ * you don't need to provide the precomputed dispatch data (segmentKind, etc.)
+ * because the registry computes it automatically from verbs[].
+ *
+ * This type represents the REQUIRED fields for path topology creation.
+ */
+export type PathTopologyDefInput = Omit<
+  PathTopologyDef,
+  'id' | 'segmentKind' | 'segmentPointBase' | 'hasQuad' | 'hasCubic'
+>;

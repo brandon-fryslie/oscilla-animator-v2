@@ -10,7 +10,8 @@
  * - Dynamic topologies: IDs 100+ (auto-assigned)
  */
 
-import type { TopologyId, TopologyDef, PathTopologyDef, AbstractTopologyDef } from './types';
+import type { TopologyId, TopologyDef, PathTopologyDef, AbstractTopologyDef, PathSegmentKind } from './types';
+import { PathVerb } from './types';
 
 /**
  * Registry of all available topologies (array-indexed by TopologyId)
@@ -83,10 +84,63 @@ export function getAllTopologyIds(): readonly TopologyId[] {
 }
 
 /**
+ * Compute precomputed dispatch data for a PathTopologyDef (Sprint 1 WI-1)
+ *
+ * Computes:
+ * - segmentKind: ['line' | 'cubic' | 'quad'] per segment (MOVE/CLOSE excluded)
+ * - segmentPointBase: cumulative control point index where each segment starts
+ * - hasQuad: true if any QUAD verb present
+ * - hasCubic: true if any CUBIC verb present
+ *
+ * @param verbs - Path verbs
+ * @returns Precomputed dispatch data
+ */
+function computePathDispatchData(verbs: readonly PathVerb[]): {
+  segmentKind: PathSegmentKind[];
+  segmentPointBase: number[];
+  hasQuad: boolean;
+  hasCubic: boolean;
+} {
+  const segmentKind: PathSegmentKind[] = [];
+  const segmentPointBase: number[] = [];
+  let hasQuad = false;
+  let hasCubic = false;
+  let pointIndex = 0;
+
+  for (const verb of verbs) {
+    if (verb === PathVerb.LINE) {
+      segmentKind.push('line');
+      segmentPointBase.push(pointIndex);
+      pointIndex += 1; // LINE consumes 1 point
+    } else if (verb === PathVerb.CUBIC) {
+      segmentKind.push('cubic');
+      segmentPointBase.push(pointIndex);
+      hasCubic = true;
+      pointIndex += 3; // CUBIC consumes 3 points
+    } else if (verb === PathVerb.QUAD) {
+      segmentKind.push('quad');
+      segmentPointBase.push(pointIndex);
+      hasQuad = true;
+      pointIndex += 2; // QUAD consumes 2 points
+    } else if (verb === PathVerb.MOVE) {
+      // MOVE advances point index but doesn't create a segment
+      pointIndex += 1;
+    } else if (verb === PathVerb.CLOSE) {
+      // CLOSE doesn't consume points or create a segment
+    }
+  }
+
+  return { segmentKind, segmentPointBase, hasQuad, hasCubic };
+}
+
+/**
  * Register a dynamic topology (e.g., path topologies created by blocks)
  *
  * This is called during block lowering to register procedurally-created topologies.
  * Assigns a new numeric ID and returns it to the caller.
+ *
+ * For PathTopologyDef, automatically computes precomputed dispatch data (Sprint 1 WI-1):
+ * - segmentKind[], segmentPointBase[], hasQuad, hasCubic
  *
  * @param topology - Topology definition WITHOUT id field (id will be assigned)
  * @param debugName - Optional name for debugging/error messages
@@ -97,7 +151,17 @@ export function registerDynamicTopology(
   debugName?: string
 ): TopologyId {
   const id = nextDynamicId++;
-  const fullTopology = { ...topology, id } as TopologyDef | PathTopologyDef;
+
+  // Check if this is a PathTopologyDef (has 'verbs' field)
+  // If so, compute precomputed dispatch data
+  let fullTopology: TopologyDef;
+  if ('verbs' in topology) {
+    const dispatchData = computePathDispatchData(topology.verbs);
+    fullTopology = { ...topology, ...dispatchData, id } as PathTopologyDef;
+  } else {
+    fullTopology = { ...topology, id } as TopologyDef;
+  }
+
   TOPOLOGY_REGISTRY[id] = fullTopology;
   if (debugName) {
     TOPOLOGY_BY_NAME.set(debugName, id);
@@ -114,26 +178,3 @@ export function registerDynamicTopology(
 export function getTopologyIdByName(name: string): TopologyId | undefined {
   return TOPOLOGY_BY_NAME.get(name);
 }
-
-/**
- * Initialize built-in topologies at module load time
- *
- * Must be called AFTER topologies are defined but BEFORE any code uses the registry.
- */
-function initializeBuiltinTopologies(
-  ellipse: AbstractTopologyDef,
-  rect: AbstractTopologyDef
-): void {
-  // Pre-assign reserved IDs
-  TOPOLOGY_REGISTRY[TOPOLOGY_ID_ELLIPSE] = { ...ellipse, id: TOPOLOGY_ID_ELLIPSE } as TopologyDef;
-  TOPOLOGY_REGISTRY[TOPOLOGY_ID_RECT] = { ...rect, id: TOPOLOGY_ID_RECT } as TopologyDef;
-
-  // Register debug names
-  TOPOLOGY_BY_NAME.set('ellipse', TOPOLOGY_ID_ELLIPSE);
-  TOPOLOGY_BY_NAME.set('rect', TOPOLOGY_ID_RECT);
-}
-
-// Import built-in topologies and initialize registry
-// Note: Import is at bottom to avoid circular dependency issues
-import { TOPOLOGY_ELLIPSE, TOPOLOGY_RECT } from './topologies';
-initializeBuiltinTopologies(TOPOLOGY_ELLIPSE, TOPOLOGY_RECT);

@@ -9,7 +9,7 @@ import { canonicalType, canonicalField, payloadStride, floatConst, intConst, wit
 import { FLOAT, INT, VEC2 } from '../../core/canonical-types';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
 import { DOMAIN_CONTROL } from '../../core/domain-registry';
-import { PathVerb, type PathTopologyDef, PathTopologyDefInput } from '../../shapes/types';
+import { PathVerb, type PathTopologyDef } from '../../shapes/types';
 import { registerDynamicTopology } from '../../shapes/registry';
 import { defaultSourceConst } from '../../types';
 import { OpCode } from '../../compiler/ir/types';

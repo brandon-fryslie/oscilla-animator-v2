@@ -433,6 +433,12 @@ export class IRBuilderImpl implements IRBuilder {
   setTimeModel(schedule: TimeModelIR): void {
     this.schedule = schedule;
   }
+
+  setCurrentBlockId(_blockId: string): void {
+    // This is used for debug/error context during lowering.
+    // The implementation is currently a no-op as we don't track this state.
+    // If needed in the future, we can store it and attach it to error messages.
+  }
 }
 
 /**
