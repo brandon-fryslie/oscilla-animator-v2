@@ -6,7 +6,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, payloadStride, unitHsl, unitScalar } from '../../core/canonical-types';
+import { canonicalType, payloadStride, unitHsl, unitPhase01, unitNorm01 } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
 
 registerBlock({
@@ -25,21 +25,22 @@ registerBlock({
     color: { label: 'Color', type: canonicalType(COLOR, unitHsl()) },
   },
   outputs: {
-    h: { label: 'Hue', type: canonicalType(FLOAT, unitScalar()) },
-    s: { label: 'Saturation', type: canonicalType(FLOAT, unitScalar()) },
-    l: { label: 'Lightness', type: canonicalType(FLOAT, unitScalar()) },
-    a: { label: 'Alpha', type: canonicalType(FLOAT, unitScalar()) },
+    h: { label: 'Hue', type: canonicalType(FLOAT, unitPhase01()) },
+    s: { label: 'Saturation', type: canonicalType(FLOAT, unitNorm01()) },
+    l: { label: 'Lightness', type: canonicalType(FLOAT, unitNorm01()) },
+    a: { label: 'Alpha', type: canonicalType(FLOAT, unitNorm01()) },
   },
   lower: ({ ctx, inputsById }) => {
     const colorInput = inputsById.color;
     if (!colorInput) throw new Error('SplitColorHSL requires color input');
 
-    const floatType = canonicalType(FLOAT, unitScalar());
+    const hueType = canonicalType(FLOAT, unitPhase01());
+    const normType = canonicalType(FLOAT, unitNorm01());
 
-    const h = ctx.b.extract(colorInput.id, 0, floatType);
-    const s = ctx.b.extract(colorInput.id, 1, floatType);
-    const l = ctx.b.extract(colorInput.id, 2, floatType);
-    const a = ctx.b.extract(colorInput.id, 3, floatType);
+    const h = ctx.b.extract(colorInput.id, 0, hueType);
+    const s = ctx.b.extract(colorInput.id, 1, normType);
+    const l = ctx.b.extract(colorInput.id, 2, normType);
+    const a = ctx.b.extract(colorInput.id, 3, normType);
 
     const hSlot = ctx.b.allocSlot();
     const sSlot = ctx.b.allocSlot();
@@ -48,10 +49,10 @@ registerBlock({
 
     return {
       outputsById: {
-        h: { id: h, slot: hSlot, type: floatType, stride: payloadStride(floatType.payload) },
-        s: { id: s, slot: sSlot, type: floatType, stride: payloadStride(floatType.payload) },
-        l: { id: l, slot: lSlot, type: floatType, stride: payloadStride(floatType.payload) },
-        a: { id: a, slot: aSlot, type: floatType, stride: payloadStride(floatType.payload) },
+        h: { id: h, slot: hSlot, type: hueType, stride: payloadStride(hueType.payload) },
+        s: { id: s, slot: sSlot, type: normType, stride: payloadStride(normType.payload) },
+        l: { id: l, slot: lSlot, type: normType, stride: payloadStride(normType.payload) },
+        a: { id: a, slot: aSlot, type: normType, stride: payloadStride(normType.payload) },
       },
     };
   },
