@@ -40,7 +40,7 @@ describe('ValueRenderer registry', () => {
     });
 
     it('tier 2: payload-only when no exact match', () => {
-      const type = canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()); // no exact "float:norm01" registered
+      const type = canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()); // falls back to "float" renderer (no exact "float:scalar" registered)
       const renderer = getValueRenderer(type);
       const el = renderer.renderFull({ type: 'scalar', components: new Float32Array([0.5]), stride: 1 });
       expect(getDataAttr(el, 'renderer')).toBe('payload-float');

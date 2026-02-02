@@ -75,7 +75,7 @@ export function registerRenderer(key: string, renderer: ValueRenderer): void {
  */
 function unitToRegistryKey(unit: CanonicalType['unit']): string {
   if ('unit' in unit) return unit.unit; // angle, time, space, color
-  return unit.kind; // none, scalar, norm01, count
+  return unit.kind; // none, scalar, count
 }
 
 /**

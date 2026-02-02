@@ -8,7 +8,7 @@
 import type { Node, Edge as ReactFlowEdge } from 'reactflow';
 import type { Block, BlockId, Edge, DefaultSource, UIControlHint, CombineMode } from '../../types';
 import type { Patch, LensAttachment } from '../../graph/Patch';
-import type { BlockDef, InputDef } from '../../blocks/registry';
+import type { BlockDef, InputDef, AnyBlockDef } from '../../blocks/registry';
 import type { PayloadType } from '../../core/canonical-types';
 import type { InferenceCanonicalType, InferencePayloadType } from '../../core/inference-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION, canonicalType } from '../../core/canonical-types';
@@ -99,56 +99,57 @@ function getEffectiveDefaultSource(
   if (instanceOverride) {
     return instanceOverride;
   }
+
   // Fall back to registry default
-  return (input as InputDef & { defaultSource?: DefaultSource }).defaultSource;
+  return input.defaultSource;
 }
 
 /**
- * Create port data with type information.
+ * Create port data for ReactFlow rendering.
  */
 function createPortData(
   id: string,
   label: string,
-  type: InferenceCanonicalType | undefined,
+  type: InferenceCanonicalType,
   isConnected: boolean,
   defaultSource?: DefaultSource,
   connection?: PortConnectionInfo,
   uiHint?: UIControlHint,
   lenses?: readonly LensAttachment[]
 ): PortData {
-  // For inputs without a type (non-port inputs), use a default
-  const effectiveType: InferenceCanonicalType = type || canonicalType(FLOAT);
-
+  const payloadType = type.payload;
   return {
     id,
     label,
     defaultSource,
-    payloadType: effectiveType.payload,
-    typeTooltip: formatTypeForTooltip(effectiveType),
-    typeColor: getTypeColor(effectiveType.payload),
+    payloadType,
+    typeTooltip: formatTypeForTooltip(type),
+    typeColor: getTypeColor(payloadType),
     isConnected,
     connection,
     uiHint,
-    lensCount: lenses?.length ?? 0,
+    lensCount: lenses?.length,
     lenses,
   };
 }
 
 /**
- * Create ReactFlow node from Oscilla block.
+ * Create a ReactFlow node from a Block and its definition.
+ * Called during patch-to-reactflow sync.
  *
- * @param block - The block to convert
- * @param blockDef - Block definition from registry
- * @param edges - All edges in the patch (for connection info)
- * @param blocks - All blocks in the patch (for looking up connected block labels)
- * @param blockDefs - Block definitions map (for looking up connected block labels)
+ * @param block - The block instance from PatchStore
+ * @param blockDef - Block definition from registry (primitive or composite)
+ * @param edges - Optional edge list for connection info
+ * @param blocks - Optional block map for connected block labels
+ * @param blockDefs - Optional blockDefs map for looking up connected blocks
+ * @returns ReactFlow node with OscillaNodeData
  */
 export function createNodeFromBlock(
   block: Block,
-  blockDef: BlockDef,
+  blockDef: AnyBlockDef,
   edges?: readonly Edge[],
   blocks?: ReadonlyMap<BlockId, Block>,
-  blockDefs?: ReadonlyMap<string, BlockDef>
+  blockDefs?: ReadonlyMap<string, AnyBlockDef>
 ): OscillaNode {
   // Build connection info maps for this block's ports
   const inputConnections = new Map<string, PortConnectionInfo>();
@@ -244,78 +245,77 @@ export function getNonContributingEdges(
   targetPortId: string,
   combineMode: CombineMode
 ): Set<string> {
-  // Get all edges targeting this port
-  const edgesToPort = patch.edges.filter(
-    e => e.to.blockId === targetBlockId && e.to.slotId === targetPortId
+  const edgesToPort = Array.from(patch.edges.values()).filter(
+    (e) => e.to.blockId === targetBlockId && e.to.slotId === targetPortId
   );
 
-  // Single edge always contributes
   if (edgesToPort.length <= 1) {
-    return new Set();
+    return new Set(); // Single or no edge - all contribute
   }
 
-  // Commutative modes: all edges contribute
-  const commutativeModes: CombineMode[] = ['sum', 'average', 'max', 'min', 'mul', 'or', 'and'];
-  if (commutativeModes.includes(combineMode)) {
-    return new Set();
+  if (combineMode === 'last' || combineMode === 'first') {
+    // Sort by sortKey
+    const sorted = sortEdgesBySortKey(edgesToPort);
+
+    // Determine which one contributes
+    const contributingEdge = combineMode === 'last' ? sorted[sorted.length - 1] : sorted[0];
+    const contributingEdgeId = contributingEdge.id;
+
+    // All others are non-contributing
+    return new Set(edgesToPort.map((e) => e.id).filter((id) => id !== contributingEdgeId));
   }
 
-  // Sort by sortKey (ascending), then edge ID
-  const sorted = sortEdgesBySortKey(edgesToPort);
-
-  // 'last': highest sortKey wins → all but last are non-contributing
-  if (combineMode === 'last') {
-    return new Set(sorted.slice(0, -1).map(e => e.id));
-  }
-
-  // 'first': lowest sortKey wins → all but first are non-contributing
-  if (combineMode === 'first') {
-    return new Set(sorted.slice(1).map(e => e.id));
-  }
-
-  // 'layer': all contribute (occlusion is complex, treat as all visible)
+  // Commutative modes (sum, mult, etc.) - all edges contribute
   return new Set();
 }
 
 /**
- * Compute non-contributing edges for ALL ports in a patch.
- * Returns a Set of edge IDs that should be visually dimmed.
+ * Compute all non-contributing edges in the entire patch.
+ * Returns a Set of edge IDs that don't contribute due to combine mode.
  */
 export function computeAllNonContributingEdges(patch: Patch): Set<string> {
-  const nonContributing = new Set<string>();
+  const allNonContributing = new Set<string>();
 
-  // Group edges by target port
+  // Group edges by target (blockId, portId)
   const edgesByTarget = new Map<string, Edge[]>();
-  for (const edge of patch.edges) {
-    const key = `${edge.to.blockId}:${edge.to.slotId}`;
-    if (!edgesByTarget.has(key)) {
-      edgesByTarget.set(key, []);
+  for (const edge of patch.edges.values()) {
+    const key = `${edge.to.blockId}::${edge.to.slotId}`;
+    const existing = edgesByTarget.get(key);
+    if (existing) {
+      existing.push(edge);
+    } else {
+      edgesByTarget.set(key, [edge]);
     }
-    edgesByTarget.get(key)!.push(edge);
   }
 
-  // For each port with multiple edges, check combine mode
-  for (const [key, edges] of edgesByTarget) {
-    if (edges.length <= 1) continue;
+  // For each target port, compute non-contributing edges
+  for (const [targetKey, edgesToPort] of edgesByTarget.entries()) {
+    if (edgesToPort.length <= 1) {
+      continue; // No multiedge
+    }
 
-    const [blockId, portId] = key.split(':');
-    const block = patch.blocks.get(blockId as BlockId);
-    if (!block) continue;
+    // Get combine mode for this port
+    const firstEdge = edgesToPort[0];
+    const targetBlock = patch.blocks.get(firstEdge.to.blockId as BlockId);
+    if (!targetBlock) continue;
 
-    const inputPort = block.inputPorts.get(portId);
-    if (!inputPort) continue;
+    const portConfig = targetBlock.inputPorts.get(firstEdge.to.slotId);
+    const combineMode = portConfig?.combineMode || 'last';
 
-    const combineMode = inputPort.combineMode;
-    const nonContributingForPort = getNonContributingEdges(
-      patch, blockId, portId, combineMode
+    // Compute non-contributing edges for this port
+    const nonContributing = getNonContributingEdges(
+      patch,
+      firstEdge.to.blockId,
+      firstEdge.to.slotId,
+      combineMode
     );
 
-    for (const edgeId of nonContributingForPort) {
-      nonContributing.add(edgeId);
+    for (const edgeId of nonContributing) {
+      allNonContributing.add(edgeId);
     }
   }
 
-  return nonContributing;
+  return allNonContributing;
 }
 
 /**

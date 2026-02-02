@@ -6,7 +6,7 @@ import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { AutocompleteDropdown } from '../AutocompleteDropdown';
-import type { Suggestion, FunctionSuggestion, InputSuggestion, BlockSuggestion, PortSuggestion } from '../../../expr/suggestions';
+import type { Suggestion, FunctionSuggestion, BlockSuggestion, PortSuggestion } from '../../../expr/suggestions';
 import { FLOAT } from '../../../core/canonical-types';
 
 // =============================================================================
@@ -40,22 +40,20 @@ const mockFunctionSuggestions: FunctionSuggestion[] = [
   },
 ];
 
-const mockInputSuggestions: InputSuggestion[] = [
+// Note: These are no longer valid suggestions (no 'input' type exists)
+// Keeping for backward compatibility but using 'output' type instead
+const mockInputSuggestions: Suggestion[] = [
   {
     label: 'in0',
-    type: 'input',
+    type: 'output',
     description: 'Expression input 0',
     sortOrder: 200,
-    connected: false,
-    position: 0,
   },
   {
     label: 'in1',
-    type: 'input',
+    type: 'output',
     description: 'Expression input 1',
     sortOrder: 201,
-    connected: true,
-    position: 1,
   },
 ];
 
@@ -209,7 +207,7 @@ describe('AutocompleteDropdown - Type Icons', () => {
     expect(icons.length).toBe(mockFunctionSuggestions.length);
   });
 
-  it('renders input icon for input suggestions', () => {
+  it('renders output icon for output suggestions', () => {
     render(
       <AutocompleteDropdown
         suggestions={mockInputSuggestions}
@@ -220,7 +218,7 @@ describe('AutocompleteDropdown - Type Icons', () => {
       />
     );
 
-    const icons = screen.getAllByText('in');
+    const icons = screen.getAllByText('→');
     expect(icons.length).toBe(mockInputSuggestions.length);
   });
 
@@ -375,7 +373,7 @@ describe('AutocompleteDropdown - Mixed Suggestion Types', () => {
     );
 
     expect(screen.getByText('f(x)')).toBeInTheDocument();
-    expect(screen.getByText('in')).toBeInTheDocument();
+    expect(screen.getByText('→')).toBeInTheDocument();
     expect(screen.getByText('◆')).toBeInTheDocument();
     expect(screen.getByText('.')).toBeInTheDocument();
   });

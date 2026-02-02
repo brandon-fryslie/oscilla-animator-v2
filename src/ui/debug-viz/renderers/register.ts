@@ -23,8 +23,7 @@ registerRenderer('color', colorValueRenderer);
 
 // Exact matches (tier 1) — unit-specific float renderers
 // Use structured unit constructors
-registerRenderer('float:phase01', createFloatValueRenderer({ kind: 'angle', unit: 'turns' }));
-registerRenderer('float:norm01', createFloatValueRenderer({ kind: 'scalar' }));
+registerRenderer('float:turns', createFloatValueRenderer({ kind: 'angle', unit: 'turns' }));
 registerRenderer('float:radians', createFloatValueRenderer({ kind: 'angle', unit: 'radians' }));
 registerRenderer('float:degrees', createFloatValueRenderer({ kind: 'angle', unit: 'degrees' }));
 registerRenderer('float:ms', createFloatValueRenderer({ kind: 'time', unit: 'ms' }));

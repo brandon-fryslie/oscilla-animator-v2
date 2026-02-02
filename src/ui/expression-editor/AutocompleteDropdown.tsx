@@ -47,7 +47,6 @@ export interface AutocompleteDropdownProps {
 /**
  * Get icon for suggestion type.
  * - function: f(x)
- * - input: in
  * - block: ◆
  * - port: .
  * - output: →
@@ -56,8 +55,6 @@ function getTypeIcon(type: Suggestion['type']): string {
   switch (type) {
     case 'function':
       return 'f(x)';
-    case 'input':
-      return 'in';
     case 'block':
       return '◆';
     case 'port':
