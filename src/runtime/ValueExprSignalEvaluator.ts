@@ -167,14 +167,21 @@ function evaluateSignalExtent(
 
     case 'extract': {
       // Extract a component from a multi-component signal.
-      // In signal context, multi-component values use slotWriteStrided,
-      // so extract reads from the source and picks one component.
+      // For signal-extent, multi-component values are stored in strided slots.
+      // The input should resolve to a slot read (base slot), and we read at offset.
+      const inputExpr = valueExprs[expr.input as unknown as number];
+      if (inputExpr && inputExpr.kind === 'slotRead') {
+        // Read from the component offset of the strided slot
+        return state.values.f64[(inputExpr.slot as number) + expr.componentIndex];
+      }
+
+      // Fallback: evaluate the input and return it for componentIndex 0
+      // This handles the case where extract is applied to non-strided signals
       const inputVal = evaluateValueExprSignal(expr.input, valueExprs, state);
-      // For signal-extent, the input is a single scalar — extract(0) returns it as-is.
-      // Multi-component signals are decomposed at compile time via slotRead.
       if (expr.componentIndex === 0) return inputVal;
+
       throw new Error(
-        `extract(${expr.componentIndex}) on signal-extent: multi-component signals use slotRead, not extract`
+        `extract(${expr.componentIndex}) on signal-extent: input is not a slotRead, cannot access component ${expr.componentIndex}`
       );
     }
 
@@ -210,32 +217,36 @@ function evaluateKernelSignal(
 ): number {
   switch (expr.kernelKind) {
     case 'map': {
-      const input = evaluateValueExprSignal(expr.input, valueExprs, state);
-      return applyPureFn(expr.fn, [input]);
+      // Unary kernel: fn(input)
+      const inputVal = evaluateValueExprSignal(expr.input, valueExprs, state);
+      return applyPureFn(expr.fn, [inputVal]);
     }
 
     case 'zip': {
-      const inputs = expr.inputs.map(id => evaluateValueExprSignal(id, valueExprs, state));
-      return applyPureFn(expr.fn, inputs);
-    }
-
-    case 'reduce': {
-      // Field reduction is handled during step execution (materialization needed)
-      // This case should not be reached during signal evaluation
-      // Return 0 as placeholder (actual work done in executor)
-      return 0;
-    }
-
-    case 'broadcast': {
-      throw new Error('Broadcast is field-extent, not signal-extent');
+      // N-ary kernel: fn(inputs...)
+      const inputVals = expr.inputs.map(id => evaluateValueExprSignal(id, valueExprs, state));
+      return applyPureFn(expr.fn, inputVals);
     }
 
     case 'zipSig': {
-      throw new Error('ZipSig is field-extent, not signal-extent');
+      // ZipSig is field-extent only (requires field input)
+      throw new Error('zipSig kernels are field-extent, not signal-extent');
+    }
+
+    case 'broadcast': {
+      // Broadcast is signal → field (changes cardinality to many)
+      throw new Error('broadcast kernels are field-extent, not signal-extent');
+    }
+
+    case 'reduce': {
+      // Reduce is field → signal, but should never appear in signal evaluator
+      // (reduce itself is evaluated at field level, result is read as signal)
+      throw new Error('reduce kernels should be evaluated at field level, not signal level');
     }
 
     case 'pathDerivative': {
-      throw new Error('PathDerivative is field-extent, not signal-extent');
+      // PathDerivative is field-extent only
+      throw new Error('pathDerivative kernels are field-extent, not signal-extent');
     }
 
     default: {

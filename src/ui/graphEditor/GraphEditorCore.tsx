@@ -36,6 +36,7 @@ import type { GraphDataAdapter } from './types';
 import { GraphEditorProvider, type GraphEditorContextValue } from './GraphEditorContext';
 import { reconcileNodesFromAdapter } from './nodeDataTransform';
 import { UnifiedNode as UnifiedNodeComponent } from './UnifiedNode';
+import { OscillaEdge } from '../reactFlowEditor/OscillaEdge';
 import { getLayoutedElements } from '../reactFlowEditor/layout';
 import { validateConnection } from '../reactFlowEditor/typeValidation';
 import type { SelectionStore } from '../../stores/SelectionStore';
@@ -167,6 +168,11 @@ export const GraphEditorCoreInner = observer(
         if (customNodeTypes) return customNodeTypes;
         return { unified: UnifiedNodeComponent };
       }, [customNodeTypes]);
+
+      // Edge types - use custom OscillaEdge for lens visualization
+      const edgeTypes = useMemo(() => ({
+        oscilla: OscillaEdge,
+      }), []);
 
       // Context value for child components
       const contextValue: GraphEditorContextValue = useMemo(
@@ -520,6 +526,7 @@ export const GraphEditorCoreInner = observer(
               onEdgeMouseLeave={onEdgeMouseLeave}
               isValidConnection={isValidConnection}
               nodeTypes={nodeTypes}
+              edgeTypes={edgeTypes}
               fitView
               minZoom={0.1}
               maxZoom={4}

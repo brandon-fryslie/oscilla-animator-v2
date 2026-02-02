@@ -17,13 +17,6 @@ describe('compileExpression Integration', () => {
     builder = new IRBuilderImpl();
   });
 
-  // Tests removed during type system refactor
-
-  it('_placeholder_compiles_identifier_expression', () => {
-    // Test removed during type system refactor
-    expect(true).toBe(true);
-  });
-
   it('returns error for syntax error', () => {
     const result = compileExpression(
       'x +',
@@ -75,11 +68,30 @@ describe('compileExpression Integration', () => {
 
   describe('Component Access (Swizzle)', () => {
 
-    it('multi-component swizzle fails (extraction kernels removed)', () => {
-      // Extraction kernels (vec3ExtractX/Y/Z, etc.) and construction kernels
-      // (makeVec2Sig, etc.) have been removed. Swizzle compilation now throws.
-      // Will be restored when generic extract/construct mechanism is implemented.
-      const vSig = builder.constant(vec3Const(0, 0, 0), canonicalType(VEC3));
+    it('single-component swizzle compiles successfully (v.x)', () => {
+      const vSig = builder.constant(vec3Const(1, 2, 3), canonicalType(VEC3));
+
+      const result = compileExpression(
+        'v.x',
+        new Map([['v', canonicalType(VEC3)]]),
+        builder,
+        new Map([['v', vSig]])
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // Verify the result is a valid ValueExprId
+        const expr = builder.getValueExpr(result.value);
+        expect(expr).toBeDefined();
+        expect(expr?.kind).toBe('extract');
+        if (expr && expr.kind === 'extract') {
+          expect(expr.componentIndex).toBe(0);
+        }
+      }
+    });
+
+    it('multi-component swizzle compiles to construct/extract (v.xy)', () => {
+      const vSig = builder.constant(vec3Const(1, 2, 3), canonicalType(VEC3));
 
       const result = compileExpression(
         'v.xy',
@@ -88,7 +100,42 @@ describe('compileExpression Integration', () => {
         new Map([['v', vSig]])
       );
 
-      expect(result.ok).toBe(false);
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // Verify the result is a construct node
+        const expr = builder.getValueExpr(result.value);
+        expect(expr).toBeDefined();
+        expect(expr?.kind).toBe('construct');
+        if (expr && expr.kind === 'construct') {
+          expect(expr.components.length).toBe(2);
+          // Verify components are extract nodes
+          const comp0 = builder.getValueExpr(expr.components[0]);
+          const comp1 = builder.getValueExpr(expr.components[1]);
+          expect(comp0?.kind).toBe('extract');
+          expect(comp1?.kind).toBe('extract');
+        }
+      }
+    });
+
+    it('color.rgb compiles to construct with 3 extract nodes', () => {
+      const cSig = builder.constant(colorConst(255, 128, 64, 255), canonicalType(COLOR));
+
+      const result = compileExpression(
+        'c.rgb',
+        new Map([['c', canonicalType(COLOR)]]),
+        builder,
+        new Map([['c', cSig]])
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const expr = builder.getValueExpr(result.value);
+        expect(expr).toBeDefined();
+        expect(expr?.kind).toBe('construct');
+        if (expr && expr.kind === 'construct') {
+          expect(expr.components.length).toBe(3);
+        }
+      }
     });
 
     it('returns error for invalid component', () => {

@@ -13,7 +13,7 @@ import type { ValueExprId } from '../compiler/ir/Indices';
 import { OpCode } from '../compiler/ir/types';
 import { canonicalType, type PayloadType, floatConst, intConst } from '../core/canonical-types';
 import { FLOAT, INT, BOOL } from '../core/canonical-types';
-import { isVectorType, swizzleResultType } from './swizzle';
+import { isVectorType, swizzleResultType, componentIndex } from './swizzle';
 
 /**
  * Compilation context.
@@ -345,24 +345,20 @@ function compileMemberAccess(node: ExprNode & { kind: 'member' }, ctx: CompileCo
     const resultType = canonicalType(swizzleResultType(pattern));
 
     if (pattern.length === 1) {
-      // Single component extraction
-      const kernelName = getExtractionKernel(objectType, pattern);
-      const fn = ctx.builder.kernel(kernelName);
-      return ctx.builder.kernelMap(objectSig, fn, resultType);
+      // Single component extraction: extract(input, componentIndex, resultType)
+      const idx = componentIndex(pattern);
+      return ctx.builder.extract(objectSig, idx, resultType);
     } else {
-      // Multi-component swizzle: extract each component and combine
+      // Multi-component swizzle: extract each component and construct result
       const componentSigs: ValueExprId[] = [];
       for (const char of pattern) {
-        const kernelName = getExtractionKernel(objectType, char);
-        const fn = ctx.builder.kernel(kernelName);
-        const componentSig = ctx.builder.kernelMap(objectSig, fn, canonicalType(FLOAT));
+        const idx = componentIndex(char);
+        const componentSig = ctx.builder.extract(objectSig, idx, canonicalType(FLOAT));
         componentSigs.push(componentSig);
       }
 
-      // Combine components into result vector
-      const combineKernel = getCombineKernel(pattern.length);
-      const combineFn = ctx.builder.kernel(combineKernel);
-      return ctx.builder.kernelZip(componentSigs, combineFn, resultType);
+      // Combine components into result vector using construct
+      return ctx.builder.construct(componentSigs, resultType);
     }
   }
 
@@ -385,34 +381,6 @@ function compileMemberAccess(node: ExprNode & { kind: 'member' }, ctx: CompileCo
   }
 
   return sigId;
-}
-
-/**
- * Get extraction kernel name for a component.
- *
- * Named extraction kernels (vec3ExtractX/Y/Z, colorExtractR/G/B/A) have been
- * removed. Component extraction needs to be redesigned using opcode-based
- * dispatch or a generic extract-by-index mechanism.
- */
-function getExtractionKernel(_sourceType: PayloadType, _component: string): string {
-  throw new Error(
-    'Component extraction kernels removed. ' +
-    'Generic extract/construct redesign not yet implemented.'
-  );
-}
-
-/**
- * Get combine kernel name for constructing a vector.
- *
- * Named combine kernels (makeVec2Sig, makeVec3Sig, makeColorSig) have been
- * removed. Vector construction needs to be redesigned using opcode-based
- * dispatch or a generic construct mechanism.
- */
-function getCombineKernel(_componentCount: number): string {
-  throw new Error(
-    'Vector construction kernels removed. ' +
-    'Generic extract/construct redesign not yet implemented.'
-  );
 }
 
 // =============================================================================

@@ -153,12 +153,48 @@ registerBlock({
     // Compilation succeeded - return output signal
     const sigId = result.value;
     const outType = ctx.outTypes[0];
-    const slot = ctx.b.allocSlot();
+    const stride = payloadStride(outType.payload);
+    const slot = ctx.b.allocSlot(stride);
 
-    return {
-      outputsById: {
-        out: { id: sigId, slot, type: outType, stride: payloadStride(outType.payload) },
-      },
-    };
+    // For multi-component signals (stride > 1), decompose into component writes
+    if (stride > 1) {
+      // Check if the result is a construct node
+      const expr = ctx.b.getValueExpr(sigId);
+      if (expr && expr.kind === 'construct') {
+        // Use the construct's components directly for strided write
+        const components = expr.components;
+        if (components.length !== stride) {
+          throw new Error(
+            `Expression construct has ${components.length} components but output type requires ${stride}`
+          );
+        }
+        ctx.b.stepSlotWriteStrided(slot, components);
+        return {
+          outputsById: {
+            out: { id: components[0], slot, type: outType, stride, components: [...components] },
+          },
+        };
+      } else {
+        // The result is not a construct (e.g., a vec3 input signal)
+        // Generate extract nodes to decompose it
+        const components: ValueExprId[] = [];
+        for (let i = 0; i < stride; i++) {
+          components.push(ctx.b.extract(sigId, i, canonicalType(FLOAT)));
+        }
+        ctx.b.stepSlotWriteStrided(slot, components);
+        return {
+          outputsById: {
+            out: { id: components[0], slot, type: outType, stride, components },
+          },
+        };
+      }
+    } else {
+      // Scalar output (stride 1)
+      return {
+        outputsById: {
+          out: { id: sigId, slot, type: outType, stride },
+        },
+      };
+    }
   },
 });

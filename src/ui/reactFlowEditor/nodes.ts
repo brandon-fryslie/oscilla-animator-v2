@@ -79,6 +79,19 @@ export interface OscillaNodeData {
 }
 
 /**
+ * Custom data stored in each ReactFlow edge.
+ * Used for lens visualization and other edge metadata.
+ */
+export interface OscillaEdgeData {
+  /** Lenses attached to the target port for this connection */
+  lenses?: readonly LensAttachment[];
+  /** Whether this edge has an auto-inserted adapter */
+  hasAdapter?: boolean;
+  /** Whether this edge contributes to the final value (for multiedge ports) */
+  isNonContributing?: boolean;
+}
+
+/**
  * ReactFlow node type for Oscilla blocks.
  */
 export type OscillaNode = Node<OscillaNodeData>;
@@ -319,6 +332,7 @@ export function computeAllNonContributingEdges(patch: Patch): Set<string> {
 /**
  * Create ReactFlow edge from Oscilla edge.
  * Optionally computes adapter label from source/target block types.
+ * Populates edge.data with lens information for custom edge rendering.
  *
  * @param edge - The edge to convert
  * @param blocks - All blocks in the patch (for adapter detection)
@@ -328,16 +342,19 @@ export function createEdgeFromPatchEdge(
   edge: Edge,
   blocks?: ReadonlyMap<BlockId, Block>,
   nonContributingEdges?: Set<string>
-): ReactFlowEdge {
+): ReactFlowEdge<OscillaEdgeData> {
   const isNonContributing = nonContributingEdges?.has(edge.id) ?? false;
 
-  const rfEdge: ReactFlowEdge = {
+  const rfEdge: ReactFlowEdge<OscillaEdgeData> = {
     id: edge.id,
     source: edge.from.blockId,
     target: edge.to.blockId,
     sourceHandle: edge.from.slotId,
     targetHandle: edge.to.slotId,
-    type: 'default',
+    type: 'oscilla', // Use custom edge component
+    data: {
+      isNonContributing,
+    },
   };
 
   // Apply dimming style for non-contributing edges
@@ -362,6 +379,7 @@ export function createEdgeFromPatchEdge(
           rfEdge.label = `${fromUnit}→${toUnit}`;
           rfEdge.labelStyle = { fontSize: 10, fill: '#888' };
           rfEdge.style = { stroke: '#f59e0b', strokeDasharray: '4 2' };
+          rfEdge.data!.hasAdapter = true;
         }
       }
     }
@@ -376,6 +394,7 @@ export function createEdgeFromPatchEdge(
         rfEdge.label = lensLabels;
         rfEdge.labelStyle = { fontSize: 10, fill: '#d97706' }; // Darker amber for text
         rfEdge.style = { ...(rfEdge.style || {}), stroke: '#f59e0b' };
+        rfEdge.data!.lenses = targetPort.lenses;
       }
     }
   }

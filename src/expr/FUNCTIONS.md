@@ -1,7 +1,7 @@
 # Expression DSL Built-in Functions
 
 **Status:** FROZEN
-**Last Updated:** 2026-01-27
+**Last Updated:** 2026-02-02
 **Change Process:** Function additions require spec update
 
 ## Overview
@@ -11,6 +11,7 @@ This document catalogs all built-in functions available in the Expression DSL. E
 ## Component Access and Swizzling
 
 **Added:** 2026-01-27
+**Updated:** 2026-02-02 (extract/construct IR implementation)
 
 ### Component Access Syntax
 
@@ -84,28 +85,19 @@ floatInput.x   // ERROR: float does not support component access
 vec3Input.q    // ERROR: Invalid component 'q' (not in x/y/z/w/r/g/b/a)
 ```
 
-### Known Limitations
+### Implementation Status (2026-02-02)
 
-**Multi-component swizzle is field-level only** (as of 2026-01-27):
-- Single-component extraction (`.x`, `.r`) works at both signal and field levels
-- Multi-component swizzle (`.xy`, `.rgb`) compiles successfully but is **only functional for field operations**
-- Signal-level multi-component returns are not yet implemented (tracked in issue oscilla-animator-v2-5s8)
+**Component access is FULLY IMPLEMENTED** for both signal and field extents using generic extract/construct IR ops.
 
-Field-level usage (works):
-```
-// In field expression context (operating on arrays)
-positionArray.xy  // Extracts X,Y from each position → vec2 field
-colorArray.rgb    // Extracts RGB from each color → vec3 field
-```
+**Signal-level usage:**
+- Single component extraction (`.x`, `.r`) works at signal extent
+- Multi-component swizzle (`.xy`, `.rgb`) works at signal extent
+- Signal evaluator reads from strided slots for component access
 
-Signal-level usage (limited):
-```
-// Single component (works)
-vec3Signal.x      // Extracts X → float signal
-
-// Multi-component (compiles but not yet executable)
-vec3Signal.xy     // Type-checks and compiles, but runtime not implemented
-```
+**Field-level usage:**
+- Single component extraction works at field extent
+- Multi-component swizzle works at field extent
+- Field materializer handles extract/construct operations
 
 ### Examples
 
@@ -114,6 +106,10 @@ vec3Signal.xy     // Type-checks and compiles, but runtime not implemented
 x = position.x
 y = position.y
 distance = sqrt(x * x + y * y)
+
+// Multi-component extraction
+xy = position.xy
+rgb = color.rgb
 
 // Brightness from color
 brightness = c.r * 0.3 + c.g * 0.59 + c.b * 0.11
@@ -124,11 +120,24 @@ redChannel = position.r  // Same as position.x
 
 ### IR Mapping
 
-Component extraction and vector construction kernels (`vec3ExtractX/Y/Z`,
-`colorExtractR/G/B/A`, `makeVec2Sig`, `makeVec3Sig`, `makeColorSig`) have been
-removed. These will be replaced by a generic extract/construct mechanism using
-opcode-based dispatch. Component access and swizzle currently throw "not yet
-implemented" at compile time.
+Component access is implemented using generic structural IR operations:
+
+- **Single component**: `extract(input, componentIndex, resultType)`
+  - Example: `v.x` → `extract(v, 0, canonicalType(FLOAT))`
+
+- **Multi-component**: `construct([extract0, extract1, ...], resultType)`
+  - Example: `v.xy` → `construct([extract(v, 0), extract(v, 1)], canonicalType(VEC2))`
+
+These operations are structural (not compute kernels) and work at all extent levels (signal/field/event).
+
+**Block lowering** for multi-component outputs:
+- Allocate strided slot: `allocSlot(stride)`
+- Decompose construct into components via extract
+- Emit strided slot write: `stepSlotWriteStrided(slot, components)`
+
+**Signal evaluation**:
+- Extract reads from strided slots: `state.values.f64[baseSlot + componentIndex]`
+- Construct is decomposed at lowering time (not evaluated at runtime)
 
 ---
 
@@ -538,7 +547,20 @@ Most functions map 1:1 to OpCodes:
 ```typescript
 // Example: sin(x)
 const sinFn = ctx.b.opcode(OpCode.Sin);
-const result = ctx.b.sigMap(xSigId, sinFn, canonicalType('float'));
+const result = ctx.b.kernelMap(xSigId, sinFn, canonicalType(FLOAT));
+```
+
+### Structural Operations
+
+Component access uses generic structural IR operations (not kernels):
+```typescript
+// Example: v.x
+const result = ctx.b.extract(vSigId, 0, canonicalType(FLOAT));
+
+// Example: v.xy
+const x = ctx.b.extract(vSigId, 0, canonicalType(FLOAT));
+const y = ctx.b.extract(vSigId, 1, canonicalType(FLOAT));
+const result = ctx.b.construct([x, y], canonicalType(VEC2));
 ```
 
 ### Synthesized Functions
@@ -546,11 +568,11 @@ const result = ctx.b.sigMap(xSigId, sinFn, canonicalType('float'));
 Some functions are synthesized from primitives:
 ```typescript
 // Example: lerp(a, b, t) = (1 - t) * a + t * b
-const one = ctx.b.sigConst(1, canonicalType('float'));
-const oneMinusT = ctx.b.sigZip([one, t], ctx.b.opcode(OpCode.Sub), canonicalType('float'));
-const term1 = ctx.b.sigZip([oneMinusT, a], ctx.b.opcode(OpCode.Mul), canonicalType('float'));
-const term2 = ctx.b.sigZip([t, b], ctx.b.opcode(OpCode.Mul), canonicalType('float'));
-const result = ctx.b.sigZip([term1, term2], ctx.b.opcode(OpCode.Add), canonicalType('float'));
+const one = ctx.b.constant(floatConst(1), canonicalType(FLOAT));
+const oneMinusT = ctx.b.kernelZip([one, t], ctx.b.opcode(OpCode.Sub), canonicalType(FLOAT));
+const term1 = ctx.b.kernelZip([oneMinusT, a], ctx.b.opcode(OpCode.Mul), canonicalType(FLOAT));
+const term2 = ctx.b.kernelZip([t, b], ctx.b.opcode(OpCode.Mul), canonicalType(FLOAT));
+const result = ctx.b.kernelZip([term1, term2], ctx.b.opcode(OpCode.Add), canonicalType(FLOAT));
 ```
 
 ### Missing OpCodes
@@ -626,6 +648,8 @@ All functions verified to have IR mappings:
 | clamp | OpCode.Clamp | ✅ Exists |
 | wrap | OpCode.Wrap01 | ✅ Exists |
 | fract | OpCode.Wrap01 | ✅ Exists |
+| extract | IRBuilder.extract | ✅ Exists |
+| construct | IRBuilder.construct | ✅ Exists |
 
 **Result:** All functions can be implemented with existing IR primitives. No new OpCodes required for v1.
 
@@ -646,6 +670,8 @@ Test function composition:
 sin(cos(phase))
 clamp(lerp(a, b, smoothstep(0, 1, t)), 0, 1)
 min(max(x, 0), 1)
+v.xy
+color.rgb
 ```
 
 ### IR Compilation Tests
@@ -664,6 +690,12 @@ Verify each function compiles to correct IR:
 
 ## Version History
 
+- **2026-02-02**: Implemented extract/construct IR operations
+  - Component access fully functional at signal and field extents
+  - Multi-component swizzle works via construct/extract decomposition
+  - Block lowering handles strided slot writes for multi-component outputs
+  - Signal evaluator reads from strided slots
+  - Removed "field-only" limitation
 - **2026-01-27**: Added component access and swizzle documentation
   - GLSL-style component access (.x, .y, .z, .r, .g, .b, .a)
   - Swizzle patterns (.xy, .rgb, .zyx, etc.)
