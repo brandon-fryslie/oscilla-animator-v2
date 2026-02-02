@@ -9,7 +9,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, unitNorm01, unitScalar, unitDegrees, requireInst, FLOAT, CAMERA_PROJECTION } from '../../core/canonical-types';
+import { canonicalType, unitScalar, contractClamp01, unitDegrees, requireInst, FLOAT, CAMERA_PROJECTION } from '../../core/canonical-types';
 import { defaultSourceConst, type DefaultSource } from '../../types';
 import type { CameraDeclIR } from '../../compiler/ir/program';
 
@@ -49,14 +49,14 @@ registerBlock({
     },
     centerX: {
       label: 'Center X',
-      type: canonicalType(FLOAT, unitNorm01()),
+      type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()),
       defaultValue: 0.5,
       defaultSource: defaultSourceConst(0.5),
       uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 },
     },
     centerY: {
       label: 'Center Y',
-      type: canonicalType(FLOAT, unitNorm01()),
+      type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()),
       defaultValue: 0.5,
       defaultSource: defaultSourceConst(0.5),
       uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 },

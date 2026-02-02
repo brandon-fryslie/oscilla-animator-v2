@@ -5,7 +5,7 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, canonicalEvent, unitPhase01, payloadStride } from '../../core/canonical-types';
+import { canonicalType, canonicalEvent, unitTurns, contractWrap01, payloadStride } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
 import { defaultSourceConst } from '../../types';
 import { valueSlot, SYSTEM_PALETTE_SLOT } from '../../compiler/ir/Indices';
@@ -30,8 +30,8 @@ registerBlock({
     tMs: { label: 'Time (ms)', type: canonicalType(FLOAT) },
     dt: { label: 'Delta Time', type: canonicalType(FLOAT) },
     // Phase outputs use float payload with phase01 unit: values in [0, 1) range representing normalized time cycles
-    phaseA: { label: 'Phase A', type: canonicalType(FLOAT, unitPhase01()) },
-    phaseB: { label: 'Phase B', type: canonicalType(FLOAT, unitPhase01()) },
+    phaseA: { label: 'Phase A', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()) },
+    phaseB: { label: 'Phase B', type: canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()) },
     pulse: { label: 'Pulse', type: canonicalEvent() },
     palette: { label: 'Palette', type: canonicalType(COLOR) },
     energy: { label: 'Energy', type: canonicalType(FLOAT) },
@@ -42,8 +42,8 @@ registerBlock({
     // We create placeholder signals that reference the time system
     const tMs = ctx.b.time('tMs', canonicalType(FLOAT));
     const dt = ctx.b.time('dt', canonicalType(FLOAT));
-    const phaseA = ctx.b.time('phaseA', canonicalType(FLOAT, unitPhase01()));
-    const phaseB = ctx.b.time('phaseB', canonicalType(FLOAT, unitPhase01()));
+    const phaseA = ctx.b.time('phaseA', canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()));
+    const phaseB = ctx.b.time('phaseB', canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()));
     const pulse = ctx.b.eventPulse('InfiniteTimeRoot');
     const palette = ctx.b.time('palette', canonicalType(COLOR));
     const energy = ctx.b.time('energy', canonicalType(FLOAT));

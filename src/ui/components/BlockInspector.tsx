@@ -2070,6 +2070,45 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value, pa
     }, 200);
   }, [blockId, localValue, value, patchStore]);
 
+  const handleSelectSuggestion = useCallback((suggestion: Suggestion) => {
+    if (textareaRef.current) {
+      const identifierData = extractIdentifierPrefix(localValue, cursorPosition);
+      const prefixStartOffset = identifierData?.startOffset ?? cursorPosition;
+      const { newValue, newCursorPos } = computeSuggestionInsertion(
+        localValue, textareaRef.current.selectionStart, suggestion, prefixStartOffset
+      );
+      pendingCursorPos.current = newCursorPos;
+      setLocalValue(newValue);
+      setCursorPosition(newCursorPos);
+
+      // Wire vararg connection for output suggestions
+      if (suggestion.type === 'output') {
+        const outputSugg = suggestion as OutputSuggestion;
+
+        // Get existing refs connections to calculate sortKey
+        const block = patch.blocks.get(blockId);
+        const refsPort = block?.inputPorts.get('refs');
+        const existingConnections = refsPort?.varargConnections ?? [];
+        const maxSortKey = existingConnections.length > 0
+          ? Math.max(...existingConnections.map(c => c.sortKey))
+          : -1;
+
+        // Wire the connection
+        patchStore.addVarargConnection(
+          blockId,
+          'refs',
+          outputSugg.sourceAddress,
+          maxSortKey + 1
+        );
+      }
+
+      setShowAutocomplete(false);
+      setFilterPrefix('');
+      setBlockContext(null);
+      textareaRef.current.focus();
+    }
+  }, [localValue, cursorPosition, filterPrefix, blockId, patch, patchStore]);
+
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (showAutocomplete && filteredSuggestions.length > 0) {
       if (e.key === 'ArrowDown') {
@@ -2117,46 +2156,7 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value, pa
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       e.currentTarget.blur();
     }
-  }, [showAutocomplete, filteredSuggestions, suggestionIndex, filterPrefix, localValue, cursorPosition]);
-
-  const handleSelectSuggestion = useCallback((suggestion: Suggestion) => {
-    if (textareaRef.current) {
-      const identifierData = extractIdentifierPrefix(localValue, cursorPosition);
-      const prefixStartOffset = identifierData?.startOffset ?? cursorPosition;
-      const { newValue, newCursorPos } = computeSuggestionInsertion(
-        localValue, textareaRef.current.selectionStart, suggestion, prefixStartOffset
-      );
-      pendingCursorPos.current = newCursorPos;
-      setLocalValue(newValue);
-      setCursorPosition(newCursorPos);
-
-      // Wire vararg connection for output suggestions
-      if (suggestion.type === 'output') {
-        const outputSugg = suggestion as OutputSuggestion;
-
-        // Get existing refs connections to calculate sortKey
-        const block = patch.blocks.get(blockId);
-        const refsPort = block?.inputPorts.get('refs');
-        const existingConnections = refsPort?.varargConnections ?? [];
-        const maxSortKey = existingConnections.length > 0
-          ? Math.max(...existingConnections.map(c => c.sortKey))
-          : -1;
-
-        // Wire the connection
-        patchStore.addVarargConnection(
-          blockId,
-          'refs',
-          outputSugg.sourceAddress,
-          maxSortKey + 1
-        );
-      }
-
-      setShowAutocomplete(false);
-      setFilterPrefix('');
-      setBlockContext(null);
-      textareaRef.current.focus();
-    }
-  }, [localValue, cursorPosition, filterPrefix, blockId, patch, patchStore]);
+  }, [showAutocomplete, filteredSuggestions, suggestionIndex, handleSelectSuggestion]);
 
   const hasError = expressionError !== null;
 

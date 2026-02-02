@@ -7,7 +7,7 @@
 import type { Block } from '../../graph/Patch';
 import type { TimeModelIR, TimeSignals, TypedPatch, TimeResolvedPatch } from '../ir';
 import { IRBuilderImpl } from '../ir/IRBuilderImpl';
-import { canonicalType, unitPhase01 } from '../../core/canonical-types';
+import { canonicalType, unitTurns, contractWrap01 } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../core/canonical-types';
 
 // =============================================================================
@@ -97,8 +97,8 @@ function generateTimeSignals(timeModel: TimeModelIR): TimeSignals {
   const tModelMs = builder.time('tMs', canonicalType(FLOAT));
 
   // Infinite time model
-  const phaseA = builder.time('phaseA', canonicalType(FLOAT, unitPhase01()));
-  const phaseB = builder.time('phaseB', canonicalType(FLOAT, unitPhase01()));
+  const phaseA = builder.time('phaseA', canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()));
+  const phaseB = builder.time('phaseB', canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()));
   const dt = builder.time('dt', canonicalType(FLOAT));
   const pulse = builder.eventPulse('InfiniteTimeRoot');
   const palette = builder.time('palette', canonicalType(COLOR));
