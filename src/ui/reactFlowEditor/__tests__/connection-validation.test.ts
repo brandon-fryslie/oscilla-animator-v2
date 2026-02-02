@@ -142,7 +142,7 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   inputs: {
-    in: { label: 'In', type: canonicalType(FLOAT, unitRadians()) },
+    in: { label: 'In', type: canonicalType(FLOAT, unitRadians) },
   },
   outputs: {},
   lower: () => ({ outputsById: {} }),
@@ -525,11 +525,11 @@ describe('Unit Display Functions', () => {
     });
 
     it('returns "rad" for radians', () => {
-      expect(formatUnitForDisplay(unitRadians())).toBe('rad');
+      expect(formatUnitForDisplay(unitRadians)).toBe('rad');
     });
 
     it('returns "deg" for degrees', () => {
-      expect(formatUnitForDisplay(unitDegrees())).toBe('deg');
+      expect(formatUnitForDisplay(unitDegrees)).toBe('deg');
     });
 
     it('returns "0..1" for norm01', () => {
@@ -537,11 +537,11 @@ describe('Unit Display Functions', () => {
     });
 
     it('returns "ms" for ms', () => {
-      expect(formatUnitForDisplay(unitMs())).toBe('ms');
+      expect(formatUnitForDisplay(unitMs)).toBe('ms');
     });
 
     it('returns "s" for seconds', () => {
-      expect(formatUnitForDisplay(unitSeconds())).toBe('s');
+      expect(formatUnitForDisplay(unitSeconds)).toBe('s');
     });
   });
 
@@ -552,7 +552,7 @@ describe('Unit Display Functions', () => {
     });
 
     it('includes unit for radians: Signal<float:rad>', () => {
-      const type = canonicalType(FLOAT, unitRadians());
+      const type = canonicalType(FLOAT, unitRadians);
       expect(formatTypeForDisplay(type)).toBe('Signal<float:rad>');
     });
 
@@ -562,7 +562,7 @@ describe('Unit Display Functions', () => {
     });
 
     it('includes unit for degrees: Signal<float:deg>', () => {
-      const type = canonicalType(FLOAT, unitDegrees());
+      const type = canonicalType(FLOAT, unitDegrees);
       expect(formatTypeForDisplay(type)).toBe('Signal<float:deg>');
     });
 
