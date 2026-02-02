@@ -55,7 +55,6 @@ describe('Cardinality Metadata', () => {
     const signalOnlyBlocks = [
       'InfiniteTimeRoot',
       'Ellipse', 'Rect',
-      'ProceduralPolygon', 'ProceduralStar',
       'TestSignal',
     ];
 
@@ -85,6 +84,7 @@ describe('Cardinality Metadata', () => {
     const transformBlocks = [
       'Array',
       'Broadcast',
+      'ProceduralPolygon', 'ProceduralStar',
       // 'LayoutAlongPath', // Not yet implemented
     ];
 
