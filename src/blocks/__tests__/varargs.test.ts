@@ -50,7 +50,7 @@ describe('VarargInputDef', () => {
         allowedPayloads: [FLOAT],
         cardinalityConstraint: 'any',
       };
-      expect(constraint.payloadType).toBe(FLOAT);
+      expect(constraint.allowedPayloads).toEqual([FLOAT]);
     });
 
     it('defines cardinality constraint', () => {

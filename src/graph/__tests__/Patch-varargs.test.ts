@@ -22,7 +22,7 @@ beforeAll(() => {
         type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()),
         isVararg: true,
         varargConstraint: {
-          payloadType: FLOAT,
+          allowedPayloads: [FLOAT],
           cardinalityConstraint: 'any',
         },
       },

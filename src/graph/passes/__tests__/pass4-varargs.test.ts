@@ -24,7 +24,7 @@ beforeAll(() => {
         type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()),
         isVararg: true,
         varargConstraint: {
-          payloadType: FLOAT,
+          allowedPayloads: [FLOAT],
           cardinalityConstraint: 'any',
         },
       },
@@ -48,7 +48,7 @@ beforeAll(() => {
         type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()),
         isVararg: true,
         varargConstraint: {
-          payloadType: FLOAT,
+          allowedPayloads: [FLOAT],
           cardinalityConstraint: 'any',
           minConnections: 2,
           maxConnections: 5,
