@@ -27,6 +27,7 @@ export {
   unitWorld2,
   unitWorld3,
   unitRgba01,
+  unitHsl,
   unitsEqual,
 } from './units';
 

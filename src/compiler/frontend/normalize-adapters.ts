@@ -55,6 +55,17 @@ function isCardinalityPreserving(blockType: string): boolean {
   return blockDef.cardinality.cardinalityMode === 'preserve';
 }
 
+/**
+ * Parse sourceAddress to extract blockId and portId.
+ * Format: "v1:blocks.{blockId}.outputs.{portId}"
+ * Returns null if format doesn't match.
+ */
+function parseSourceAddress(addr: string): { blockId: string; portId: string } | null {
+  const match = addr.match(/^v1:blocks\.(.+)\.outputs\.(.+)$/);
+  if (!match) return null;
+  return { blockId: match[1], portId: match[2] };
+}
+
 // =============================================================================
 // Error Types
 // =============================================================================
@@ -188,14 +199,21 @@ function analyzeLenses(
       if (!port.lenses || port.lenses.length === 0) continue;
 
       for (const lens of port.lenses) {
-        // Find all edges targeting this (block, port) pair
-        // For now, we insert lens for all edges to this port.
-        // The sourceAddress in the lens could be used for more precise matching in the future.
+        // Find edges targeting this (block, port) pair that match the lens's sourceAddress
+        const expectedSource = parseSourceAddress(lens.sourceAddress);
+
         for (const edge of patch.edges) {
           if (edge.enabled === false) continue;
           if (edge.to.kind !== 'port') continue;
           if (edge.from.kind !== 'port') continue;
           if (edge.to.blockId !== blockId || edge.to.slotId !== portId) continue;
+
+          // Match lens to the specific source edge via sourceAddress
+          if (expectedSource &&
+              (edge.from.blockId !== expectedSource.blockId ||
+               edge.from.slotId !== expectedSource.portId)) {
+            continue;
+          }
 
           // Create lens block
           const lensBlockId = generateLensBlockId(portId, lens.id);

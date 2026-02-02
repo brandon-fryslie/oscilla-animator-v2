@@ -695,6 +695,9 @@ import type {
 export type { CompositeBlockDef, InternalBlockId } from './composite-types';
 export { isCompositeBlockDef } from './composite-types';
 
+/** Union of primitive and composite block definitions. Use in UI/display code that works with both. */
+export type AnyBlockDef = BlockDef | CompositeBlockDef;
+
 /** Separate registry for composite blocks */
 const compositeRegistry = new Map<string, CompositeBlockDef>();
 

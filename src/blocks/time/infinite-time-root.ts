@@ -77,7 +77,7 @@ registerBlock({
         dt: { id: dt, slot: dtSlot, type: dtType, stride: payloadStride(dtType.payload) },
         phaseA: { id: phaseA, slot: phaseASlot, type: phaseAType, stride: payloadStride(phaseAType.payload) },
         phaseB: { id: phaseB, slot: phaseBSlot, type: phaseBType, stride: payloadStride(phaseBType.payload) },
-        pulse: { id: pulse, slot: valueSlot(0), type: pulseType, stride: 1, eventSlot: pulseEventSlot },
+        pulse: { id: pulse, slot: valueSlot(0), type: pulseType, stride: payloadStride(pulseType.payload), eventSlot: pulseEventSlot },
         palette: { id: palette, slot: paletteSlot, type: paletteType, stride: payloadStride(paletteType.payload) },
         energy: { id: energy, slot: energySlot, type: energyType, stride: payloadStride(energyType.payload) },
       },

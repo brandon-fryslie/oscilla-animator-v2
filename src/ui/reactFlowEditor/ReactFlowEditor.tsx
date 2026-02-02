@@ -30,7 +30,7 @@ import { SimpleDebugPanel } from '../components/SimpleDebugPanel';
 import './ReactFlowEditor.css';
 
 export interface ReactFlowEditorHandle {
-  addBlock(blockId: BlockId, blockType: string): Promise<void>;
+  addBlock(blockType: string, options?: { displayName?: string; position?: { x: number; y: number } }): Promise<string>;
   removeBlock(blockId: BlockId): Promise<void>;
   zoomToFit(): Promise<void>;
   autoArrange(): Promise<void>;
@@ -75,8 +75,8 @@ function createReactFlowEditorAdapter(
   return {
     type: 'reactflow' as const,
 
-    async addBlock(blockId: BlockId, blockType: string): Promise<void> {
-      await handle.addBlock(blockId, blockType);
+    async addBlock(blockType: string, options?: { displayName?: string; position?: { x: number; y: number } }): Promise<string> {
+      return handle.addBlock(blockType, options);
     },
 
     async removeBlock(blockId: BlockId): Promise<void> {
@@ -206,14 +206,44 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorProps> = observer(({
     setContextMenu(null);
   }, []);
 
+  // Drag-and-drop handlers for dropping blocks from BlockLibrary
+  const handleDropOnCanvas = useCallback(
+    (event: React.DragEvent) => {
+      event.preventDefault();
+
+      const blockType = event.dataTransfer.getData('application/oscilla-block-type');
+      if (!blockType) return;
+
+      // Get drop position relative to the canvas
+      const bounds = event.currentTarget.getBoundingClientRect();
+      const position = {
+        x: event.clientX - bounds.left - 75,
+        y: event.clientY - bounds.top - 30,
+      };
+
+      const blockId = adapter.addBlock(blockType, position);
+      selection.selectBlock(blockId);
+    },
+    [adapter, selection]
+  );
+
+  const handleDragOverCanvas = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+  }, []);
+
   // Create handle for EditorContext
   useEffect(() => {
     if (!coreRef.current) return;
 
     const handle: ReactFlowEditorHandle = {
-      async addBlock(blockId: BlockId, blockType: string): Promise<void> {
-        // Add block via adapter (which uses patchStore)
-        adapter.addBlock(blockType, { x: 100, y: 100 });
+      async addBlock(blockType: string, options?: { displayName?: string; position?: { x: number; y: number } }): Promise<string> {
+        const pos = options?.position ?? { x: 100, y: 100 };
+        const blockId = adapter.addBlock(blockType, pos);
+        if (options?.displayName) {
+          adapter.updateBlockDisplayName?.(blockId, options.displayName);
+        }
+        return blockId;
       },
 
       async removeBlock(blockId: BlockId): Promise<void> {
@@ -246,7 +276,12 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorProps> = observer(({
 
   return (
     <>
-      <div className="react-flow-wrapper" style={{ width: '100%', height: '100%', position: 'relative' }}>
+      <div
+        className="react-flow-wrapper"
+        style={{ width: '100%', height: '100%', position: 'relative' }}
+        onDrop={handleDropOnCanvas}
+        onDragOver={handleDragOverCanvas}
+      >
         <GraphEditorCore
           ref={coreRef}
           adapter={adapter}

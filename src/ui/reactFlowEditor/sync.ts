@@ -18,7 +18,7 @@ import type { Patch, BlockId } from '../../types';
 import type { PatchStore } from '../../stores/PatchStore';
 import type { LayoutStore } from '../../stores/LayoutStore';
 import type { DiagnosticsStore } from '../../stores/DiagnosticsStore';
-import { getBlockDefinition, type BlockDef } from '../../blocks/registry';
+import { getAnyBlockDefinition, type AnyBlockDef } from '../../blocks/registry';
 import { createNodeFromBlock, createEdgeFromPatchEdge, computeAllNonContributingEdges, type OscillaNode } from './nodes';
 import { getPortTypeFromBlockType, formatUnitForDisplay } from './typeValidation';
 import { findAdapter } from '../../blocks/adapter-spec';
@@ -53,7 +53,7 @@ const PLACEMENT_GAP_Y = 20;
  * 2. Otherwise, find empty space at the right edge of the graph.
  */
 function findSmartPosition(
-  newBlockDef: BlockDef,
+  newBlockDef: AnyBlockDef,
   existingNodes: Node[],
   patchStore: PatchStore
 ): { x: number; y: number } {
@@ -77,7 +77,7 @@ function findSmartPosition(
       const nodeData = node.data as { blockType?: string } | undefined;
       if (!nodeData?.blockType) continue;
 
-      const nodeDef = getBlockDefinition(nodeData.blockType);
+      const nodeDef = getAnyBlockDefinition(nodeData.blockType);
       if (!nodeDef) continue;
 
       // Count matching output types
@@ -172,10 +172,10 @@ export function reconcileNodes(
   diagnostics: DiagnosticsStore
 ): { nodes: Node[]; edges: ReactFlowEdge[] } {
   // Build blockDefs map for looking up connected block labels
-  const blockDefs = new Map<string, BlockDef>();
+  const blockDefs = new Map<string, AnyBlockDef>();
   for (const block of patch.blocks.values()) {
     if (!blockDefs.has(block.type)) {
-      const def = getBlockDefinition(block.type);
+      const def = getAnyBlockDefinition(block.type);
       if (def) blockDefs.set(block.type, def);
     }
   }
@@ -251,10 +251,10 @@ export function buildNodesAndEdges(
   patch: Patch,
   diagnostics: DiagnosticsStore
 ): { nodes: OscillaNode[]; edges: ReactFlowEdge[] } {
-  const blockDefs = new Map<string, BlockDef>();
+  const blockDefs = new Map<string, AnyBlockDef>();
   for (const block of patch.blocks.values()) {
     if (!blockDefs.has(block.type)) {
-      const def = getBlockDefinition(block.type);
+      const def = getAnyBlockDefinition(block.type);
       if (def) blockDefs.set(block.type, def);
     }
   }
@@ -465,7 +465,7 @@ export function addBlockToReactFlow(
   setNodes: React.Dispatch<React.SetStateAction<Node[]>>,
   diagnostics: DiagnosticsStore
 ): void {
-  const def = getBlockDefinition(blockType);
+  const def = getAnyBlockDefinition(blockType);
   if (!def) {
     diagnostics.log({
       level: 'warn',

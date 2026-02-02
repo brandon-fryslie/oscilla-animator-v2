@@ -18,7 +18,7 @@ import {
 import type { BlockId } from '../../../types';
 import { useStores } from '../../../stores';
 import { ContextMenu, type ContextMenuItem } from '../ContextMenu';
-import { requireBlockDef } from '../../../blocks/registry';
+import { requireAnyBlockDef } from '../../../blocks/registry';
 import { findCompatibleLenses, getLensLabel } from '../lensUtils';
 
 export interface EdgeContextMenuProps {
@@ -65,8 +65,8 @@ export const EdgeContextMenu: React.FC<EdgeContextMenuProps> = observer(({
 
     // Add Lens option (if source and target types are available)
     if (sourceBlock && targetBlock) {
-      const sourceBlockDef = requireBlockDef(sourceBlock.type);
-      const targetBlockDef = requireBlockDef(targetBlock.type);
+      const sourceBlockDef = requireAnyBlockDef(sourceBlock.type);
+      const targetBlockDef = requireAnyBlockDef(targetBlock.type);
 
       const sourceOutput = sourceBlockDef.outputs[edge.from.slotId];
       const targetInput = targetBlockDef.inputs[edge.to.slotId];

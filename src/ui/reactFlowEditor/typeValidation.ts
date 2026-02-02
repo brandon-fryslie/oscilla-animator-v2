@@ -15,7 +15,7 @@ import type {
 } from '../../core/canonical-types';
 import { FLOAT, unitsEqual } from '../../core/canonical-types';
 import { isPayloadVar, type InferenceCanonicalType, type InferencePayloadType, type InferenceUnitType } from '../../core/inference-types';
-import { getBlockDefinition } from '../../blocks/registry';
+import { getAnyBlockDefinition } from '../../blocks/registry';
 import { findAdapter, type AdapterSpec } from '../../blocks/adapter-spec';
 
 // =============================================================================
@@ -207,7 +207,7 @@ export function getPortType(
   const block = patch.blocks.get(blockId as BlockId);
   if (!block) return null;
 
-  const blockDef = getBlockDefinition(block.type);
+  const blockDef = getAnyBlockDefinition(block.type);
   if (!blockDef) return null;
 
   const slots = direction === 'input' ? blockDef.inputs : blockDef.outputs;
@@ -224,7 +224,7 @@ export function getPortTypeFromBlockType(
   portId: string,
   direction: 'input' | 'output'
 ): InferenceCanonicalType | null {
-  const blockDef = getBlockDefinition(blockType);
+  const blockDef = getAnyBlockDefinition(blockType);
   if (!blockDef) return null;
 
   const slots = direction === 'input' ? blockDef.inputs : blockDef.outputs;

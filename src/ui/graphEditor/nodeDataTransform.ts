@@ -11,7 +11,7 @@
 import type { Node, Edge as ReactFlowEdge } from 'reactflow';
 import type { BlockLike, EdgeLike, GraphDataAdapter } from './types';
 import type { DefaultSource, UIControlHint } from '../../types';
-import { getBlockDefinition, type BlockDef, type InputDef } from '../../blocks/registry';
+import { getAnyBlockDefinition, type AnyBlockDef, type InputDef } from '../../blocks/registry';
 import { FLOAT, canonicalType } from '../../core/canonical-types';
 import type { InferenceCanonicalType, InferencePayloadType } from '../../core/inference-types';
 import { formatTypeForTooltip, getTypeColor } from '../reactFlowEditor/typeValidation';
@@ -109,7 +109,7 @@ function createPortData(
  */
 export function createNodeFromBlockLike(
   block: BlockLike,
-  blockDef: BlockDef,
+  blockDef: AnyBlockDef,
   edges: readonly EdgeLike[],
   blocks: ReadonlyMap<string, BlockLike>,
   position: { x: number; y: number }
@@ -252,7 +252,7 @@ export function reconcileNodesFromAdapter(
   for (const [blockId, block] of adapter.blocks) {
     patchBlockIds.add(blockId);
 
-    const blockDef = getBlockDefinition(block.type);
+    const blockDef = getAnyBlockDefinition(block.type);
     if (!blockDef) {
       console.warn(`Block definition not found: ${block.type}`);
       continue;

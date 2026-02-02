@@ -15,7 +15,7 @@ import type {
 } from '../composite-types';
 import { internalBlockId } from '../composite-types';
 import { CompositeDefJSONSchema, type CompositeDefJSON, type InternalBlockJSON } from './schema';
-import { getBlockDefinition, type Capability } from '../registry';
+import { getAnyBlockDefinition, type Capability, type InputDef, type OutputDef } from '../registry';
 
 // =============================================================================
 // Result Type
@@ -114,7 +114,7 @@ export function jsonToCompositeBlockDef(json: CompositeDefJSON): CompositeBlockD
   // Priority: state > render > io > pure
   let capability: Capability = 'pure';
   for (const block of internalBlocks.values()) {
-    const def = getBlockDefinition(block.type);
+    const def = getAnyBlockDefinition(block.type);
     if (def?.capability === 'state') {
       capability = 'state';
       break; // State is highest priority
@@ -125,6 +125,40 @@ export function jsonToCompositeBlockDef(json: CompositeDefJSON): CompositeBlockD
     if (def?.capability === 'io' && capability === 'pure') {
       capability = 'io';
     }
+  }
+
+  // Compute inputs from exposed input ports by looking up internal block definitions
+  const inputs: Record<string, InputDef> = {};
+  for (const exposed of exposedInputs) {
+    const internalBlock = internalBlocks.get(exposed.internalBlockId);
+    if (!internalBlock) continue;
+    const internalBlockDef = getAnyBlockDefinition(internalBlock.type);
+    if (!internalBlockDef) continue;
+    const internalInputDef = internalBlockDef.inputs[exposed.internalPortId];
+    if (!internalInputDef) continue;
+    inputs[exposed.externalId] = {
+      label: exposed.externalLabel ?? internalInputDef.label ?? exposed.externalId,
+      type: exposed.type
+        ? { payload: exposed.type.payload, unit: exposed.type.unit, extent: exposed.type.extent }
+        : internalInputDef.type,
+      defaultSource: exposed.defaultSource ?? internalInputDef.defaultSource,
+      uiHint: exposed.uiHint ?? internalInputDef.uiHint,
+    };
+  }
+
+  // Compute outputs from exposed output ports
+  const outputs: Record<string, OutputDef> = {};
+  for (const exposed of exposedOutputs) {
+    const internalBlock = internalBlocks.get(exposed.internalBlockId);
+    if (!internalBlock) continue;
+    const internalBlockDef = getAnyBlockDefinition(internalBlock.type);
+    if (!internalBlockDef) continue;
+    const internalOutputDef = internalBlockDef.outputs[exposed.internalPortId];
+    if (!internalOutputDef) continue;
+    outputs[exposed.externalId] = {
+      label: exposed.externalLabel ?? internalOutputDef.label ?? exposed.externalId,
+      type: internalOutputDef.type,
+    };
   }
 
   return {
@@ -138,8 +172,8 @@ export function jsonToCompositeBlockDef(json: CompositeDefJSON): CompositeBlockD
     internalEdges,
     exposedInputs,
     exposedOutputs,
-    inputs: {}, // Computed by registry on register
-    outputs: {}, // Computed by registry on register
+    inputs,
+    outputs,
   };
 }
 

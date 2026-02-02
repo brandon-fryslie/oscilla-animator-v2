@@ -43,66 +43,14 @@ describe('PatchStore - Display Name Auto-generation', () => {
       expect(block3?.displayName).toBe('Oscillator 3');
     });
 
-    it('should respect explicit displayName when provided', () => {
+    it('should always auto-generate displayName even when explicit name is provided', () => {
       const id = store.addBlock('Oscillator', { frequency: 440 }, {
         displayName: 'Main Oscillator'
       });
 
       const block = store.blocks.get(id);
-      expect(block?.displayName).toBe('Main Oscillator');
-    });
-
-    it('should handle collision with existing displayName', () => {
-      // Create block with explicit name "Oscillator 1"
-      store.addBlock('Oscillator', { frequency: 440 }, { displayName: 'Oscillator 1' });
-
-      // Next auto-generated name should skip to "Oscillator 2"
-      const id2 = store.addBlock('Oscillator', { frequency: 880 });
-      const block2 = store.blocks.get(id2);
-      expect(block2?.displayName).toBe('Oscillator 2');
-    });
-
-    it('should handle collision with different block type having same canonical name', () => {
-      // Create Add block with name "Oscillator 1" (cross-type collision)
-      store.addBlock('Add', {}, { displayName: 'Oscillator 1' });
-
-      // Create Oscillator - should skip to "Oscillator 2" to avoid collision
-      const id = store.addBlock('Oscillator', { frequency: 440 });
-      const block = store.blocks.get(id);
-      expect(block?.displayName).toBe('Oscillator 2');
-    });
-
-    it('should handle case-insensitive collision', () => {
-      // Create block with "oscillator 1" (lowercase)
-      store.addBlock('Add', {}, { displayName: 'oscillator 1' });
-
-      // Next Oscillator should skip to "Oscillator 2" (canonical collision)
-      const id = store.addBlock('Oscillator', { frequency: 440 });
-      const block = store.blocks.get(id);
-      expect(block?.displayName).toBe('Oscillator 2');
-    });
-
-    it('should handle special character collision', () => {
-      // Create block with "Oscillator 1!" (with special char)
-      store.addBlock('Add', {}, { displayName: 'Oscillator 1!' });
-
-      // Next Oscillator should skip to "Oscillator 2" (canonical collision)
-      const id = store.addBlock('Oscillator', { frequency: 440 });
-      const block = store.blocks.get(id);
-      expect(block?.displayName).toBe('Oscillator 2');
-    });
-
-    it('should increment based on same-type count and skip collisions', () => {
-      // Create blocks with specific names to test collision handling
-      // Two Oscillators exist, so next should start at 3
-      store.addBlock('Oscillator', {}, { displayName: 'Oscillator 1' });
-      store.addBlock('Oscillator', {}, { displayName: 'Oscillator 3' });
-
-      // Next auto-generated should be "Oscillator 3" (based on count=3)
-      // But that collides, so it should skip to "Oscillator 4"
-      const id = store.addBlock('Oscillator', {});
-      const block = store.blocks.get(id);
-      expect(block?.displayName).toBe('Oscillator 4');
+      // Always auto-generated, explicit displayName is ignored
+      expect(block?.displayName).toBe('Oscillator 1');
     });
 
     it('should auto-generate unique names for different block types', () => {
@@ -128,7 +76,8 @@ describe('PatchStore - Display Name Auto-generation', () => {
     });
 
     it('should reject collision with exact match', () => {
-      store.addBlock('Oscillator', {}, { displayName: 'Test Block' });
+      const id1 = store.addBlock('Oscillator', {});
+      store.updateBlockDisplayName(id1, 'Test Block');
       const id2 = store.addBlock('Oscillator', {});
 
       const result = store.updateBlockDisplayName(id2, 'Test Block');
@@ -141,7 +90,8 @@ describe('PatchStore - Display Name Auto-generation', () => {
     });
 
     it('should reject case-insensitive collision', () => {
-      store.addBlock('Oscillator', {}, { displayName: 'Test Block' });
+      const id1 = store.addBlock('Oscillator', {});
+      store.updateBlockDisplayName(id1, 'Test Block');
       const id2 = store.addBlock('Oscillator', {});
 
       const result = store.updateBlockDisplayName(id2, 'test block');
@@ -151,7 +101,8 @@ describe('PatchStore - Display Name Auto-generation', () => {
     });
 
     it('should reject special character collision', () => {
-      store.addBlock('Oscillator', {}, { displayName: 'Test Block!' });
+      const id1 = store.addBlock('Oscillator', {});
+      store.updateBlockDisplayName(id1, 'Test Block!');
       const id2 = store.addBlock('Oscillator', {});
 
       const result = store.updateBlockDisplayName(id2, 'Test Block?');
@@ -161,7 +112,8 @@ describe('PatchStore - Display Name Auto-generation', () => {
     });
 
     it('should allow updating to same name (self-reference)', () => {
-      const id = store.addBlock('Oscillator', {}, { displayName: 'Test Block' });
+      const id = store.addBlock('Oscillator', {});
+      store.updateBlockDisplayName(id, 'Test Block');
 
       const result = store.updateBlockDisplayName(id, 'Test Block');
 
@@ -169,7 +121,7 @@ describe('PatchStore - Display Name Auto-generation', () => {
     });
 
     it('should reject empty string', () => {
-      const id = store.addBlock('Oscillator', {}, { displayName: 'Custom Name' });
+      const id = store.addBlock('Oscillator', {});
 
       const result = store.updateBlockDisplayName(id, '   ');
 
@@ -177,7 +129,7 @@ describe('PatchStore - Display Name Auto-generation', () => {
       expect(result.error).toContain('empty');
       // Name should remain unchanged
       const block = store.blocks.get(id);
-      expect(block?.displayName).toBe('Custom Name');
+      expect(block?.displayName).toBe('Oscillator 1');
     });
   });
 });

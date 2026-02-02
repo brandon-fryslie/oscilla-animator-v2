@@ -10,7 +10,7 @@ import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { observer } from 'mobx-react-lite';
 import { useStores } from '../../stores';
 import { colors } from '../theme';
-import { getBlockDefinition, type BlockDef, type InputDef, type OutputDef, BLOCK_DEFS_BY_TYPE } from '../../blocks/registry';
+import { getAnyBlockDefinition, type AnyBlockDef, type InputDef, type OutputDef, BLOCK_DEFS_BY_TYPE } from '../../blocks/registry';
 import './BlockInspector.css';
 import type { Block, Patch, Edge, PortRef } from '../../graph/Patch';
 import type { BlockId, PortId, DefaultSource, UIControlHint } from '../../types';
@@ -257,7 +257,7 @@ export const BlockInspector = observer(function BlockInspector() {
   } else if (selectedPort && patch) {
     // Port selection mode
     const block = patch.blocks.get(selectedPort.blockId as BlockId);
-    const blockDef = block ? getBlockDefinition(block.type) : null;
+    const blockDef = block ? getAnyBlockDefinition(block.type) : null;
     if (block && blockDef) {
       content = (
         <PortInspectorStandalone
@@ -373,7 +373,7 @@ function formatCombineMode(mode: CombineMode): string {
 interface PortInspectorStandaloneProps {
   portRef: PortRef;
   block: Block;
-  blockDef: BlockDef;
+  blockDef: AnyBlockDef;
   patch: Patch;
 }
 
@@ -725,7 +725,7 @@ interface TypePreviewProps {
 }
 
 function TypePreview({ type }: TypePreviewProps) {
-  const typeInfo = getBlockDefinition(type);
+  const typeInfo = getAnyBlockDefinition(type);
 
   if (!typeInfo) {
     return (
@@ -825,7 +825,7 @@ interface BlockDetailsProps {
 }
 
 const BlockDetails = observer(function BlockDetails({ block, patch }: BlockDetailsProps) {
-  const typeInfo = getBlockDefinition(block.type);
+  const typeInfo = getAnyBlockDefinition(block.type);
   const [selectedPort, setSelectedPort] = useState<PortRef | null>(null);
 
   if (!typeInfo) {
@@ -924,7 +924,7 @@ const BlockDetails = observer(function BlockDetails({ block, patch }: BlockDetai
 
 interface BlockNameHeaderProps {
   block: Block;
-  typeInfo: BlockDef;
+  typeInfo: AnyBlockDef;
 }
 
 /**
@@ -1219,7 +1219,7 @@ function OutputPortItem({ port, edges, patch, onClick }: OutputPortItemProps) {
 interface PortInspectorProps {
   portRef: PortRef;
   block: Block;
-  typeInfo: BlockDef;
+  typeInfo: AnyBlockDef;
   patch: Patch;
   onBack: () => void;
 }
@@ -1785,7 +1785,7 @@ const DefaultSourceParamField = observer(function DefaultSourceParamField({
 
 interface ParamsEditorProps {
   block: Block;
-  typeInfo: BlockDef;
+  typeInfo: AnyBlockDef;
   patch: Patch;
 }
 
@@ -2227,7 +2227,7 @@ interface ParamFieldProps {
   blockId: BlockId;
   paramKey: string;
   value: unknown;
-  typeInfo: BlockDef;
+  typeInfo: AnyBlockDef;
   patch: Patch;
 }
 

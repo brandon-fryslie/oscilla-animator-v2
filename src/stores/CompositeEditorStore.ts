@@ -19,10 +19,10 @@ import {
   registerComposite,
   unregisterComposite,
   getCompositeDefinition,
-  getBlockDefinition,
+  getAnyBlockDefinition,
   validateCompositeDefinition,
 } from '../blocks/registry';
-import type { Capability } from '../blocks/registry';
+import type { Capability, InputDef, OutputDef } from '../blocks/registry';
 import { compositeStorage } from '../blocks/composites/persistence';
 import { compositeDefToJSON } from '../blocks/composites/loader';
 import {
@@ -247,7 +247,7 @@ export class CompositeEditorStore {
     }> = [];
 
     for (const [blockId, block] of this.internalBlocks) {
-      const blockDef = getBlockDefinition(block.type);
+      const blockDef = getAnyBlockDefinition(block.type);
       if (!blockDef) continue;
 
       for (const [portId, inputDef] of Object.entries(blockDef.inputs)) {
@@ -293,7 +293,7 @@ export class CompositeEditorStore {
     }> = [];
 
     for (const [blockId, block] of this.internalBlocks) {
-      const blockDef = getBlockDefinition(block.type);
+      const blockDef = getAnyBlockDefinition(block.type);
       if (!blockDef) continue;
 
       for (const [portId, outputDef] of Object.entries(blockDef.outputs)) {
@@ -407,7 +407,7 @@ export class CompositeEditorStore {
    */
   addBlock(type: string, position: { x: number; y: number }): InternalBlockId {
     // Generate unique internal block ID
-    const blockDef = getBlockDefinition(type);
+    const blockDef = getAnyBlockDefinition(type);
     const baseName = blockDef?.label || type;
     let counter = 1;
     let id = internalBlockId(baseName);
@@ -770,7 +770,7 @@ export class CompositeEditorStore {
     // Priority: state > render > io > pure
     let capability: Capability = 'pure';
     for (const block of this.internalBlocks.values()) {
-      const blockDef = getBlockDefinition(block.type);
+      const blockDef = getAnyBlockDefinition(block.type);
       if (blockDef?.capability === 'state') {
         capability = 'state';
         break;
@@ -783,6 +783,43 @@ export class CompositeEditorStore {
       }
     }
 
+    const exposedInputs = [...this.exposedInputs];
+    const exposedOutputs = [...this.exposedOutputs];
+
+    // Compute inputs from exposed input ports by looking up internal block definitions
+    const inputs: Record<string, InputDef> = {};
+    for (const exposed of exposedInputs) {
+      const internalBlock = internalBlocksMap.get(exposed.internalBlockId);
+      if (!internalBlock) continue;
+      const internalBlockDef = getAnyBlockDefinition(internalBlock.type);
+      if (!internalBlockDef) continue;
+      const internalInputDef = internalBlockDef.inputs[exposed.internalPortId];
+      if (!internalInputDef) continue;
+      inputs[exposed.externalId] = {
+        label: exposed.externalLabel ?? internalInputDef.label ?? exposed.externalId,
+        type: exposed.type
+          ? { payload: exposed.type.payload, unit: exposed.type.unit, extent: exposed.type.extent }
+          : internalInputDef.type,
+        defaultSource: exposed.defaultSource ?? internalInputDef.defaultSource,
+        uiHint: exposed.uiHint ?? internalInputDef.uiHint,
+      };
+    }
+
+    // Compute outputs from exposed output ports
+    const outputs: Record<string, OutputDef> = {};
+    for (const exposed of exposedOutputs) {
+      const internalBlock = internalBlocksMap.get(exposed.internalBlockId);
+      if (!internalBlock) continue;
+      const internalBlockDef = getAnyBlockDefinition(internalBlock.type);
+      if (!internalBlockDef) continue;
+      const internalOutputDef = internalBlockDef.outputs[exposed.internalPortId];
+      if (!internalOutputDef) continue;
+      outputs[exposed.externalId] = {
+        label: exposed.externalLabel ?? internalOutputDef.label ?? exposed.externalId,
+        type: internalOutputDef.type,
+      };
+    }
+
     return {
       type: this.metadata.name,
       form: 'composite',
@@ -791,10 +828,10 @@ export class CompositeEditorStore {
       capability,
       internalBlocks: internalBlocksMap,
       internalEdges: [...this.internalEdges],
-      exposedInputs: [...this.exposedInputs],
-      exposedOutputs: [...this.exposedOutputs],
-      inputs: {},
-      outputs: {},
+      exposedInputs,
+      exposedOutputs,
+      inputs,
+      outputs,
     };
   }
 }

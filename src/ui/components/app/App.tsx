@@ -126,7 +126,7 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, externalW
   // Store handle for React Flow editor
   const reactFlowHandleRef = useRef<EditorHandle | null>(null);
   const editorContextRef = useRef<{ setEditorHandle: (handle: EditorHandle | null) => void } | null>(null);
-  const [activeEditorTab, setActiveEditorTab] = useState<'flow-editor' | null>('flow-editor');
+  const [activeEditorTab, setActiveEditorTab] = useState<'flow-editor' | 'composite-editor' | null>('flow-editor');
   const [editorReady, setEditorReady] = useState(false);
 
   // Dockview API for toolbar panel focus
@@ -168,6 +168,9 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, externalW
   const handleActivePanelChange = useCallback((panelId: string | undefined) => {
     if (panelId === 'flow-editor') {
       setActiveEditorTab('flow-editor');
+    } else if (panelId === 'composite-editor') {
+      // CompositeEditor manages its own EditorHandle via useEditor()
+      setActiveEditorTab('composite-editor');
     } else {
       // Non-editor panel activated, clear active editor
       setActiveEditorTab(null);
@@ -180,6 +183,8 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, externalW
 
     if (activeEditorTab === 'flow-editor' && editorReady) {
       editorContextRef.current.setEditorHandle(reactFlowHandleRef.current);
+    } else if (activeEditorTab === 'composite-editor') {
+      // CompositeEditor sets its own handle - don't interfere
     } else if (activeEditorTab === null) {
       editorContextRef.current.setEditorHandle(null);
     }

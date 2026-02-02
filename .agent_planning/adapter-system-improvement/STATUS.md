@@ -1,12 +1,13 @@
 # Status: Adapter System Improvement (Lenses)
 
 **Topic**: adapter-system-improvement
-**Last Updated**: 2026-01-27
-**Status**: SPRINT 3 READY FOR IMPLEMENTATION
+**Last Updated**: 2026-02-01
+**Epic**: oscilla-animator-v2-8m2 / oscilla-animator-v2-o7a
+**Status**: SPRINTS 1-3 COMPLETE, TWO SPRINTS REMAINING
 
 ## Current Phase
 
-**Phase**: Sprint 3 Planning Complete - Ready for Implementation
+**Phase**: Sprints 1-3 complete. Sprint A (quality fixes) and Sprint B (visual indicators) planned and ready.
 
 ## Progress Summary
 
@@ -14,114 +15,83 @@
 |--------|-------------|--------|
 | Sprint 1 | Data Model & Addressing | COMPLETED |
 | Sprint 2 | Lenses System Redesign (Normalization) | COMPLETED |
-| Sprint 3 | Editor Integration | PLANNED - READY |
-| Sprint 4 | UI Visualization | NOT STARTED |
-| Sprint 5 | Context Menu & Editing | MERGED INTO SPRINT 3 |
+| Sprint 3 | Editor Integration (PatchStore, UI, Context Menus) | COMPLETED |
+| Sprint 5 | Context Menu & Editing | MERGED INTO SPRINT 3 - COMPLETED |
+| Sprint A (quality-fixes) | Code Quality & Correctness Fixes | PLANNED - HIGH CONFIDENCE |
+| Sprint B (visual-indicators) | Edge Visualization & Visual Indicators | PLANNED - PARTIALLY READY |
+| Sprint C (future) | Advanced Lens Editing | NOT PLANNED - LOW CONFIDENCE |
 
-## Recent Activity
+## Quality Issues (Sprint A)
 
-- 2026-01-27: **Sprint 3 Planning Complete**
-  - Created SPRINT3-EDITOR-INTEGRATION-PLAN.md
-  - Created SPRINT3-EDITOR-INTEGRATION-DOD.md
-  - Created SPRINT3-EDITOR-INTEGRATION-CONTEXT.md
-  - 15 work items defined (12 HIGH, 3 MEDIUM confidence)
-  - Estimated 14-18 hours of implementation
+Issues found during evaluation (EVALUATION-2026-02-01-195800.md, EVALUATION-20260202.md):
 
-- 2026-01-27: **Sprint 2 COMPLETED** - Lenses System Redesign
-  - Renamed `AdapterAttachment` to `LensAttachment`
-  - Renamed `InputPort.adapters` to `InputPort.lenses`
-  - Added `OutputPort.lenses` field (future-proofing)
-  - Renamed `AdapterAddress` to `LensAddress`
-  - Path changed from `.adapters.` to `.lenses.`
-  - Added `generateLensId()` function
-  - Refactored Pass 2 into two independent phases:
-    - Phase 1: `expandExplicitLenses()` - expands user-defined lenses
-    - Phase 2: `autoInsertAdapters()` - backwards compatible adapter insertion
-  - All 1907 tests pass
+1. **P0 - sourceAddress matching bug**: `normalize-adapters.ts:192-198` applies lenses to ALL edges targeting a port, ignoring `lens.sourceAddress`. Correctness bug when port has multiple inputs.
+2. **P1 - JSON.stringify for Extent equality**: `adapter-spec.ts:139,191` uses fragile comparison. Proper `extentsEqual()` exists in canonical-types.
+3. **P1 - Debug console.logs**: `lensUtils.ts:111,119,128` has `[Lens Debug]` logs that should be removed.
 
-- 2026-01-27: **Sprint 1 COMPLETED** - Data Model & Addressing
-  - Added `AdapterAttachment` interface
-  - Extended `InputPort` with optional `adapters` field
-  - Added canonical addressing for adapters
-  - All tests passing
+Additional items from 20260202 evaluation:
+4. **P0 - Phase 1 test coverage**: expandExplicitLenses has ZERO tests
+5. **P0 - typesMatch() too shallow**: angle{radians} matches angle{degrees}
+6. **P1 - Doc comment contradiction**: normalize-adapters.ts header misrepresents Phase 2
+7. **P1 - Broken diagnostic action**: "Add Adapter" creates orphan blocks
 
-## Sprint 3 Overview
+## Remaining Work (Sprint B)
 
-**Goal**: Enable users to add, view, and remove lenses through the editor UI.
+1. Edge labels/styling for edges with lenses
+2. Lens indicator tooltip enhancement (show lens names)
+3. PortInfoPopover params display gap
+4. Test coverage for lensUtils.ts (currently zero)
 
-**Key Deliverables**:
-1. PatchStore methods: `addLens`, `removeLens`, `getLensesForPort`, `updateLensParams`
-2. Visual indicator on ports with lenses (amber badge)
-3. PortInfoPopover extension to display lens information
-4. Port context menu with Add Lens / Remove Lens options
-5. Edge context menu with Add Lens option
+## Future Work (Sprint C - LOW confidence)
 
-**Confidence**: HIGH (12 items), MEDIUM (3 items)
+- Double-click adapter indicator to edit params
+- Keyboard shortcuts for lens management
+- Parameterized lens editing UI
 
-**Estimated Effort**: 14-18 hours
+## Sprint Plans
 
-**Files to Modify**:
-- `src/stores/PatchStore.ts` - Lens CRUD methods
-- `src/graph/Patch.ts` - PatchBuilder extension
-- `src/ui/reactFlowEditor/nodes.ts` - PortData extension
-- `src/ui/reactFlowEditor/OscillaNode.tsx` - Lens indicator
-- `src/ui/reactFlowEditor/PortInfoPopover.tsx` - Lenses section
-- `src/ui/reactFlowEditor/menus/PortContextMenu.tsx` - Lens menu items
-- `src/ui/reactFlowEditor/menus/EdgeContextMenu.tsx` - Lens menu items
-- `src/ui/reactFlowEditor/lensUtils.ts` - NEW: Lens utilities
-- `src/stores/__tests__/PatchStore-lens.test.ts` - NEW: Unit tests
+### Current (20260201)
+| File | Confidence | Status |
+|------|-----------|--------|
+| SPRINT-20260201-quality-fixes-PLAN.md | HIGH | READY FOR IMPLEMENTATION |
+| SPRINT-20260201-quality-fixes-DOD.md | - | Definition of Done |
+| SPRINT-20260201-quality-fixes-CONTEXT.md | - | Implementation Context |
+| SPRINT-20260201-visual-indicators-PLAN.md | PARTIALLY READY | Research needed for edge viz |
+| SPRINT-20260201-visual-indicators-DOD.md | - | Definition of Done |
+| SPRINT-20260201-visual-indicators-CONTEXT.md | - | Implementation Context |
 
-## Blockers
+### Superseded (20260202 plans cover overlapping scope but lack CONTEXT files)
+| File | Notes |
+|------|-------|
+| SPRINT-20260202-sprint3-cleanup-PLAN.md | Overlaps with quality-fixes sprint |
+| SPRINT-20260202-sprint3-cleanup-DOD.md | Overlaps with quality-fixes sprint |
+| SPRINT-20260202-sprint4-ui-viz-PLAN.md | Overlaps with visual-indicators sprint |
+| SPRINT-20260202-sprint4-ui-viz-DOD.md | Overlaps with visual-indicators sprint |
 
-None currently.
+## Beads Status
 
-## Next Actions
+| Bead | Title | Status | Notes |
+|------|-------|--------|-------|
+| oscilla-animator-v2-8m2 | Domain Transformation System (epic) | open | |
+| oscilla-animator-v2-o7a | Adapter System Improvement (epic) | open | |
+| oscilla-animator-v2-53c | Sprint 1: Data Model | closed | Complete |
+| oscilla-animator-v2-mtc | Sprint 2: Normalization | in_progress | **Should be closed** |
+| oscilla-animator-v2-lrc | Sprint 3: Editor Integration | in_progress | Substantially done |
+| oscilla-animator-v2-vqkj | AdapterSpec restructure | closed | Complete |
+| oscilla-animator-v2-166 | Sprint 4: UI Visualization | open | Not started |
+| oscilla-animator-v2-u01 | Sprint 5: Context Menu | open | Merged into Sprint 3 |
 
-1. **Start Sprint 3 Implementation**
-   - Begin with PatchStore lens methods (items 1-4)
-   - Create unit tests as methods are implemented
-   - Then proceed to UI components
+## Key Decisions
 
-2. **Recommended Order**:
-   - Day 1: PatchStore methods + tests
-   - Day 2: Lens utilities + PatchBuilder
-   - Day 3: Port indicators + popover
-   - Day 4: Context menus
-   - Day 5: Edge visualization + polish
-
-## Key Decisions Made
-
-1. **Lenses vs Adapters**:
-   - "Lenses" is the user-facing term for explicit transformations
-   - "Adapters" remain as compiler auto-inserted blocks (backwards compat)
-   - Both systems coexist independently
-
-2. **UI Entry Points**:
-   - Port context menu for connected input ports
-   - Edge context menu as alternative
-   - Visual indicator on ports with lenses
-
-3. **Type Compatibility**:
-   - Filter lens options by type compatibility
-   - Source type must match lens input, lens output must match target
-
-## Open Questions
-
-None - Sprint 3 is fully specified.
-
-## Dependencies
-
-- Sprint 2 completion (DONE)
-- Canonical addressing system (implemented)
-- Block registry (implemented)
-- Normalization pipeline with lens expansion (implemented)
+1. **Lenses vs Adapters**: "Lenses" = user-facing explicit transformations; "Adapters" = compiler auto-inserted blocks. Both coexist.
+2. **Sprint A before B**: Quality fixes (especially sourceAddress bug) should be done before edge visualization.
+3. **Sprint C deferred**: Advanced editing requires selection model and param editing UI. Research needed.
 
 ## References
 
-- SPRINT3-EDITOR-INTEGRATION-PLAN.md - Full implementation plan
-- SPRINT3-EDITOR-INTEGRATION-DOD.md - Definition of Done
-- SPRINT3-EDITOR-INTEGRATION-CONTEXT.md - Implementation context
-- SPRINT2-REDESIGN-LENSES.md - Sprint 2 design doc
-- SPRINT2-SUMMARY.md - Sprint 2 summary
-- `src/graph/passes/pass2-adapters.ts` - Lens expansion pass
-- `src/blocks/adapter-blocks.ts` - Available lens blocks
+- EVALUATION-20260202.md - Latest evaluation
+- EVALUATION-2026-02-01-195800.md - Prior evaluation
+- SPRINT3-EDITOR-INTEGRATION-PLAN.md - Completed Sprint 3 plan
+- src/compiler/frontend/normalize-adapters.ts - Normalization pass
+- src/ui/reactFlowEditor/lensUtils.ts - Lens UI utilities
+- src/blocks/adapter-spec.ts - AdapterSpec on BlockDef

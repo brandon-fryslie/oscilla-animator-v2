@@ -56,6 +56,7 @@ import type { CompiledProgramIR } from '../compiler/ir/program';
 import { getBufferFormat } from './BufferPool';
 import { evaluateValueExprSignal } from './ValueExprSignalEvaluator';
 import { applyOpcode } from './OpcodeInterpreter';
+import { hslToRgbScalar } from './color-math';
 import { ensurePlacementBasis } from './PlacementBasis';
 import {
   constValueAsNumber,
@@ -220,6 +221,28 @@ function fillBuffer(
             out[i * outStride + c] = componentBufs[c][i];
           }
         }
+      }
+      break;
+    }
+
+    case 'hslToRgb': {
+      // Convert color from HSL (h,s,l,a) to RGB (r,g,b,a).
+      // Input is color+hsl (stride 4), output is color+rgba01 (stride 4).
+      const inputBuf = materializeValueExpr(
+        expr.input, table, instanceId, count, state, program, pool
+      ) as Float32Array;
+      const out = buffer as Float32Array;
+      for (let i = 0; i < count; i++) {
+        const base = i * 4;
+        const h = inputBuf[base];
+        const s = inputBuf[base + 1];
+        const l = inputBuf[base + 2];
+        const a = inputBuf[base + 3];
+        const [r, g, b] = hslToRgbScalar(h, s, l);
+        out[base] = r;
+        out[base + 1] = g;
+        out[base + 2] = b;
+        out[base + 3] = a; // alpha passthrough
       }
       break;
     }

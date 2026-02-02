@@ -16,8 +16,8 @@
 import { makeObservable, computed } from 'mobx';
 import type { InternalBlockId, InternalEdge } from '../../blocks/composite-types';
 import type { CompositeEditorStore } from '../../stores/CompositeEditorStore';
-import { getBlockDefinition } from '../../blocks/registry';
-import type { BlockDef } from '../../blocks/registry';
+import { getAnyBlockDefinition } from '../../blocks/registry';
+import type { AnyBlockDef } from '../../blocks/registry';
 import type {
   GraphDataAdapter,
   BlockLike,
@@ -49,7 +49,7 @@ export class CompositeStoreAdapter implements GraphDataAdapter<InternalBlockId> 
     const blockMap = new Map<InternalBlockId, BlockLike>();
 
     for (const [id, blockState] of this.store.internalBlocks) {
-      const blockDef = getBlockDefinition(blockState.type);
+      const blockDef = getAnyBlockDefinition(blockState.type);
       if (!blockDef) {
         // Skip blocks with missing definitions (shouldn't happen in normal use)
         continue;
@@ -211,7 +211,7 @@ export class CompositeStoreAdapter implements GraphDataAdapter<InternalBlockId> 
    * CompositeEditorStore doesn't store per-instance port overrides,
    * so we derive ports from the registry definition with default combineMode.
    */
-  private getInputPortsForBlock(blockDef: BlockDef): ReadonlyMap<string, InputPortLike> {
+  private getInputPortsForBlock(blockDef: AnyBlockDef): ReadonlyMap<string, InputPortLike> {
     const portMap = new Map<string, InputPortLike>();
 
     for (const [id, inputDef] of Object.entries(blockDef.inputs)) {
@@ -229,7 +229,7 @@ export class CompositeStoreAdapter implements GraphDataAdapter<InternalBlockId> 
   /**
    * Get output ports for a block from its definition.
    */
-  private getOutputPortsForBlock(blockDef: BlockDef): ReadonlyMap<string, OutputPortLike> {
+  private getOutputPortsForBlock(blockDef: AnyBlockDef): ReadonlyMap<string, OutputPortLike> {
     const portMap = new Map<string, OutputPortLike>();
 
     for (const portId of Object.keys(blockDef.outputs)) {

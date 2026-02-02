@@ -26,7 +26,7 @@ import { COMBINE_MODE_CATEGORY } from '../../../types';
 import { useStores } from '../../../stores';
 import { ContextMenu, type ContextMenuItem } from '../ContextMenu';
 import { validateConnection, getPortTypeFromBlockType } from '../typeValidation';
-import { requireBlockDef, getBlockCategories, getBlockTypesByCategory, type BlockDef } from '../../../blocks/registry';
+import { requireAnyBlockDef, getBlockCategories, getBlockTypesByCategory, type AnyBlockDef } from '../../../blocks/registry';
 import { isPayloadVar, type InferencePayloadType } from '../../../core/inference-types';
 import { getAvailableLensTypes, getLensLabel, findCompatibleLenses } from '../lensUtils';
 
@@ -69,7 +69,7 @@ function findCompatiblePorts(
     // Skip self
     if (otherBlockId === blockId) continue;
 
-    const otherBlockDef = requireBlockDef(otherBlock.type);
+    const otherBlockDef = requireAnyBlockDef(otherBlock.type);
     const portsToCheck = isInput ? otherBlockDef.outputs : otherBlockDef.inputs;
 
     for (const [otherPortId, portDef] of Object.entries(portsToCheck)) {
@@ -141,7 +141,7 @@ function findCompatibleBlockTypes(
   const thisBlock = patch.blocks.get(blockId);
   if (!thisBlock) return compatible;
 
-  const thisBlockDef = requireBlockDef(thisBlock.type);
+  const thisBlockDef = requireAnyBlockDef(thisBlock.type);
   const thisPortDef = isInput
     ? thisBlockDef.inputs[portId]
     : thisBlockDef.outputs[portId];
@@ -233,7 +233,7 @@ export const PortContextMenu: React.FC<PortContextMenuProps> = observer(({
     const block = patch.blocks.get(blockId);
     if (!block) return [];
 
-    const blockDef = requireBlockDef(block.type);
+    const blockDef = requireAnyBlockDef(block.type);
     const menuItems: ContextMenuItem[] = [];
 
     // ==========================================================================
@@ -365,7 +365,7 @@ export const PortContextMenu: React.FC<PortContextMenuProps> = observer(({
       if (incomingEdge) {
         const sourceBlock = patch.blocks.get(incomingEdge.from.blockId as BlockId);
         if (sourceBlock) {
-          const sourceBlockDef = requireBlockDef(sourceBlock.type);
+          const sourceBlockDef = requireAnyBlockDef(sourceBlock.type);
           const sourceOutput = sourceBlockDef.outputs[incomingEdge.from.slotId];
           const sourceType = sourceOutput?.type;
           const targetInput = blockDef.inputs[portId];

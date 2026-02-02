@@ -15,7 +15,7 @@ import type { Block, Edge, Endpoint, Patch, BlockType, InputPort, OutputPort, Le
 import type { BlockId, BlockRole, CombineMode, EdgeRole, PortId } from '../types';
 import { emptyPatchData, type PatchData } from './internal';
 import type { EventHub } from '../events/EventHub';
-import { requireBlockDef } from '../blocks/registry';
+import { requireAnyBlockDef } from '../blocks/registry';
 import { normalizeCanonicalName, detectCanonicalNameCollisions, generateLensId } from '../core/canonical-name';
 import { exportPatchAsHCL, importPatchFromHCL } from '../services/PatchPersistence';
 
@@ -51,7 +51,7 @@ function generateDefaultDisplayName(
   blockType: string,
   existingBlocks: ReadonlyMap<BlockId, Block>
 ): string {
-  const blockDef = requireBlockDef(blockType);
+  const blockDef = requireAnyBlockDef(blockType);
   const baseLabel = blockDef.label;
 
   // Count existing blocks of the same type
@@ -255,7 +255,7 @@ export class PatchStore {
     options?: BlockOptions
   ): BlockId {
     const id = `b${this._nextBlockId++}` as BlockId;
-    const blockDef = requireBlockDef(type);
+    const blockDef = requireAnyBlockDef(type);
 
     // Create input ports from registry
     // Also collect default values for config params (exposedAsPort: false)
@@ -281,18 +281,8 @@ export class PatchStore {
       outputPorts.set(outputId, { id: outputId });
     }
 
-    // Auto-generate displayName if not provided or empty
-    const displayName = options?.displayName && options.displayName.trim()
-      ? options.displayName
-      : generateDefaultDisplayName(type, this._data.blocks);
-
-    // Validate no collision with existing displayNames
-    const existingNames = Array.from(this._data.blocks.values())
-      .map(b => b.displayName);
-    const { collisions } = detectCanonicalNameCollisions([...existingNames, displayName]);
-    if (collisions.length > 0) {
-      throw new Error(`Display name "${displayName}" conflicts with existing block (canonical: "${normalizeCanonicalName(displayName)}")`);
-    }
+    // Always auto-generate a unique displayName from the block's label
+    const displayName = generateDefaultDisplayName(type, this._data.blocks);
 
     const block: Block = {
       id,
@@ -492,7 +482,7 @@ export class PatchStore {
     let port = block.inputPorts.get(portId);
     if (!port) {
       // Port not in block's map - check if it exists in registry
-      const blockDef = requireBlockDef(block.type);
+      const blockDef = requireAnyBlockDef(block.type);
       const inputDef = blockDef.inputs[portId];
       if (!inputDef) {
         throw new Error(`Port ${portId} not found on block ${blockId}`);
@@ -576,7 +566,7 @@ export class PatchStore {
     let port = block.inputPorts.get(portId);
     if (!port) {
       // Port not in block's map - check if it exists in registry
-      const blockDef = requireBlockDef(block.type);
+      const blockDef = requireAnyBlockDef(block.type);
       const inputDef = blockDef.inputs[portId];
       if (!inputDef) {
         throw new Error(`Port ${portId} not found on block ${blockId}`);
@@ -672,7 +662,7 @@ export class PatchStore {
     // Validate port exists (either in inputPorts or registry)
     let port = block.inputPorts.get(portId);
     if (!port) {
-      const blockDef = requireBlockDef(block.type);
+      const blockDef = requireAnyBlockDef(block.type);
       const inputDef = blockDef.inputs[portId];
       if (!inputDef) {
         throw new Error(`Port ${portId} not found on block ${blockId}`);
@@ -685,7 +675,7 @@ export class PatchStore {
     }
 
     // Validate lens type is registered
-    requireBlockDef(lensType);
+    requireAnyBlockDef(lensType);
 
     // Generate deterministic lens ID
     const lensId = generateLensId(sourceAddress);

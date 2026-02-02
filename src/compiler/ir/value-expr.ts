@@ -87,7 +87,8 @@ export type ValueExpr =
   | ValueExprEvent
   | ValueExprSlotRead
   | ValueExprExtract
-  | ValueExprConstruct;
+  | ValueExprConstruct
+  | ValueExprHslToRgb;
 
 // =============================================================================
 // ValueExpr Variants
@@ -338,4 +339,19 @@ export interface ValueExprConstruct {
   readonly kind: 'construct';
   readonly type: CanonicalType;
   readonly components: readonly ValueExprId[]; // Must match payloadStride(type.payload)
+}
+
+/**
+ * HSL→RGB color space conversion (structural intrinsic).
+ *
+ * Takes a color+hsl input (stride 4: h,s,l,a) and produces color+rgba01
+ * output (stride 4: r,g,b,a). Alpha passes through unchanged.
+ *
+ * This is a structural intrinsic (not a component-wise opcode) because
+ * HSL→RGB conversion requires access to all 3 color components at once.
+ */
+export interface ValueExprHslToRgb {
+  readonly kind: 'hslToRgb';
+  readonly type: CanonicalType;
+  readonly input: ValueExprId; // Must be color+hsl (stride 4)
 }

@@ -12,6 +12,7 @@ import './math';
 import './field';
 import './shape';
 import './layout';
+import './color';
 import './adapter';
 import './event';
 import './io';

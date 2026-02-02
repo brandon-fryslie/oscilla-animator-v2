@@ -19,7 +19,7 @@ export type UnitType =
   | { readonly kind: 'angle'; readonly unit: 'radians' | 'degrees' | 'phase01' }
   | { readonly kind: 'time'; readonly unit: 'ms' | 'seconds' }
   | { readonly kind: 'space'; readonly unit: 'ndc' | 'world' | 'view'; readonly dims: 2 | 3 }
-  | { readonly kind: 'color'; readonly unit: 'rgba01' };
+  | { readonly kind: 'color'; readonly unit: 'rgba01' | 'hsl' };
 
 // =============================================================================
 // Constructors
@@ -90,9 +90,14 @@ export function unitWorld3(): UnitType {
   return { kind: 'space', unit: 'world', dims: 3 };
 }
 
-/** Float color RGBA each in [0,1] */
+/** Float color RGBA each in [0,1] (sRGB-encoded) */
 export function unitRgba01(): UnitType {
   return { kind: 'color', unit: 'rgba01' };
+}
+
+/** HSL+A color: h ∈ [0,1) wrap, s/l/a ∈ [0,1] clamp */
+export function unitHsl(): UnitType {
+  return { kind: 'color', unit: 'hsl' };
 }
 
 // =============================================================================

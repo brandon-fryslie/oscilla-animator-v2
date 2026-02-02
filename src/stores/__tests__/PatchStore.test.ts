@@ -40,13 +40,12 @@ describe('PatchStore', () => {
 
     it('should add a block with options', () => {
       const id = store.addBlock('Oscillator', { frequency: 440 }, {
-        displayName: 'Main Osc',
         domainId: 'd1',
         role: { kind: 'bus', meta: {} },
       });
 
       const block = store.blocks.get(id);
-      expect(block?.displayName).toBe('Main Osc');
+      expect(block?.displayName).toBe('Oscillator 1');
       expect(block?.domainId).toBe('d1');
       expect(block?.role).toEqual({ kind: 'bus', meta: {} });
     });

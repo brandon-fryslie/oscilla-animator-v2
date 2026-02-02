@@ -17,7 +17,7 @@
 
 import type { CompositeBlockDef, InternalBlockId, ExposedInputPort, ExposedOutputPort, InternalEdge } from '../composite-types';
 import { internalBlockId } from '../composite-types';
-import type { Capability } from '../registry';
+import { getAnyBlockDefinition, type Capability, type InputDef, type OutputDef } from '../registry';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -124,6 +124,44 @@ class CompositeBuilder {
     if (this._blocks.size === 0) throw new Error(`Composite "${this._type}" has no internal blocks`);
     if (this._outputs.length === 0) throw new Error(`Composite "${this._type}" has no exposed outputs`);
 
+    const internalBlocks = new Map(this._blocks) as ReadonlyMap<InternalBlockId, { type: string; displayName?: string; params?: Record<string, unknown> }>;
+    const exposedInputs = [...this._inputs];
+    const exposedOutputs = [...this._outputs];
+
+    // Compute inputs from exposed input ports
+    const inputs: Record<string, InputDef> = {};
+    for (const exposed of exposedInputs) {
+      const internalBlock = internalBlocks.get(exposed.internalBlockId);
+      if (!internalBlock) continue;
+      const internalBlockDef = getAnyBlockDefinition(internalBlock.type);
+      if (!internalBlockDef) continue;
+      const internalInputDef = internalBlockDef.inputs[exposed.internalPortId];
+      if (!internalInputDef) continue;
+      inputs[exposed.externalId] = {
+        label: exposed.externalLabel ?? internalInputDef.label ?? exposed.externalId,
+        type: exposed.type
+          ? { payload: exposed.type.payload, unit: exposed.type.unit, extent: exposed.type.extent }
+          : internalInputDef.type,
+        defaultSource: exposed.defaultSource ?? internalInputDef.defaultSource,
+        uiHint: exposed.uiHint ?? internalInputDef.uiHint,
+      };
+    }
+
+    // Compute outputs from exposed output ports
+    const outputs: Record<string, OutputDef> = {};
+    for (const exposed of exposedOutputs) {
+      const internalBlock = internalBlocks.get(exposed.internalBlockId);
+      if (!internalBlock) continue;
+      const internalBlockDef = getAnyBlockDefinition(internalBlock.type);
+      if (!internalBlockDef) continue;
+      const internalOutputDef = internalBlockDef.outputs[exposed.internalPortId];
+      if (!internalOutputDef) continue;
+      outputs[exposed.externalId] = {
+        label: exposed.externalLabel ?? internalOutputDef.label ?? exposed.externalId,
+        type: internalOutputDef.type,
+      };
+    }
+
     return {
       type: this._type,
       form: 'composite',
@@ -132,12 +170,12 @@ class CompositeBuilder {
       capability: this._capability,
       description: this._description,
       readonly: this._readonly,
-      internalBlocks: new Map(this._blocks) as ReadonlyMap<InternalBlockId, { type: string; displayName?: string; params?: Record<string, unknown> }>,
+      internalBlocks,
       internalEdges: [...this._edges],
-      exposedInputs: [...this._inputs],
-      exposedOutputs: [...this._outputs],
-      inputs: {},
-      outputs: {},
+      exposedInputs,
+      exposedOutputs,
+      inputs,
+      outputs,
     };
   }
 }

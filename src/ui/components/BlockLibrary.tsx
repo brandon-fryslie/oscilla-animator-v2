@@ -8,6 +8,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { observer } from 'mobx-react-lite';
 import { ActionIcon, rem } from '@mantine/core';
+import type { BlockId } from '../../types';
 import { useStores } from '../../stores';
 import {
   getBlockCategories,
@@ -80,7 +81,7 @@ function useDebounce<T>(value: T, delay: number): T {
  * Block Library Component
  */
 export const BlockLibrary: React.FC = observer(() => {
-  const { selection, patch, diagnostics } = useStores();
+  const { selection, diagnostics } = useStores();
   // State
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearchQuery = useDebounce(searchQuery, SEARCH_DEBOUNCE_MS);
@@ -117,20 +118,18 @@ export const BlockLibrary: React.FC = observer(() => {
 
   const handleBlockDoubleClick = useCallback(
     (type: BlockTypeInfo) => {
-      // Add block to PatchStore
-      const blockId = patch.addBlock(type.type, {}, {
-        displayName: type.label,
-      });
+      if (!editorHandle) return;
 
-      // If editor is ready, add node to editor using generic interface
-      if (editorHandle) {
-        editorHandle.addBlock(blockId, type.type).then(() => {
-          // Select the new block
-          selection.selectBlock(blockId);
-        });
-      }
+      // EditorHandle is the single authority for block creation.
+      // It routes to the correct store (PatchStore or CompositeEditorStore).
+      editorHandle.addBlock(type.type, { displayName: type.label }).then((blockId) => {
+        // Selection only applies in the main patch editor context
+        if (editorHandle.type === 'reactflow') {
+          selection.selectBlock(blockId as BlockId);
+        }
+      });
     },
-    [selection, patch, editorHandle]
+    [selection, editorHandle]
   );
 
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {

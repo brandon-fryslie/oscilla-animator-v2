@@ -5,7 +5,7 @@
  * visualization rendering of debug probe data.
  */
 
-import { type PayloadType, type ConcretePayloadType } from '../../core/canonical-types';
+import { type PayloadType, type ConcretePayloadType, payloadStride } from '../../core/canonical-types';
 import { isPayloadVar } from '../../core/inference-types';
 
 // =============================================================================
@@ -91,24 +91,22 @@ export function getSampleEncoding(payload: PayloadType): SampleEncoding {
 
   // After the isPayloadVar check, payload is now a ConcretePayloadType
   const concretePayload = payload as ConcretePayloadType;
+  const stride = payloadStride(concretePayload) as Stride;
   switch (concretePayload.kind) {
     case 'float':
-      return { payload: concretePayload, stride: 1, components: ['value'], sampleable: true };
+      return { payload: concretePayload, stride, components: ['value'], sampleable: true };
     case 'int':
-      return { payload: concretePayload, stride: 1, components: ['value'], sampleable: true };
+      return { payload: concretePayload, stride, components: ['value'], sampleable: true };
     case 'vec2':
-      return { payload: concretePayload, stride: 2, components: ['x', 'y'], sampleable: true };
+      return { payload: concretePayload, stride, components: ['x', 'y'], sampleable: true };
     case 'vec3':
-      return { payload: concretePayload, stride: 3, components: ['x', 'y', 'z'], sampleable: true };
-
+      return { payload: concretePayload, stride, components: ['x', 'y', 'z'], sampleable: true };
     case 'color':
-      return { payload: concretePayload, stride: 4, components: ['r', 'g', 'b', 'a'], sampleable: true };
+      return { payload: concretePayload, stride, components: ['r', 'g', 'b', 'a'], sampleable: true };
     case 'bool':
       return { payload: concretePayload, stride: 0, components: [], sampleable: false };
-    // TODO: Q6 case 'shape':
-      return { payload: concretePayload, stride: 0, components: [], sampleable: false };
     case 'cameraProjection':
-      return { payload: concretePayload, stride: 1, components: ['projection'], sampleable: true };
+      return { payload: concretePayload, stride, components: ['projection'], sampleable: true };
     default: {
       const _exhaustive: never = concretePayload;
       throw new Error(`Unknown PayloadType: ${_exhaustive}`);

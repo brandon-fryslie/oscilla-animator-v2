@@ -6,7 +6,7 @@
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
-import { canonicalType, canonicalField, floatConst, requireInst } from '../../core/canonical-types';
+import { canonicalType, canonicalField, floatConst, requireInst, payloadStride } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
 import { defaultSourceConst } from '../../types';
 
@@ -66,15 +66,21 @@ registerBlock({
       ? inputsById.a.id
       : ctx.b.constant(floatConst(1.0), canonicalType(FLOAT));
 
-    // TODO: broadcastColor kernel was removed. This block needs a color
-    // construction kernel (float4 -> color) or per-lane opcode dispatch.
-    // Suppress unused variable warnings for signals that will be used
-    // once a replacement kernel is available.
-    void rSig; void gSig; void bSig; void aSig;
-    void colorType; void instanceId;
-    throw new Error(
-      'FieldConstColor: broadcastColor kernel removed. ' +
-      'Color construction kernel not yet implemented.'
-    );
+    // Build a scalar float field type matching the instance extent
+    const floatFieldType = canonicalField(FLOAT, { kind: 'scalar' }, { instanceId, domainTypeId: makeDomainTypeId('default') });
+
+    // Broadcast each scalar signal to field, then construct color
+    const rField = ctx.b.broadcast(rSig, floatFieldType);
+    const gField = ctx.b.broadcast(gSig, floatFieldType);
+    const bField = ctx.b.broadcast(bSig, floatFieldType);
+    const aField = ctx.b.broadcast(aSig, floatFieldType);
+    const result = ctx.b.construct([rField, gField, bField, aField], colorType);
+    const slot = ctx.b.allocSlot();
+
+    return {
+      outputsById: {
+        color: { id: result, slot, type: colorType, stride: payloadStride(colorType.payload) },
+      },
+    };
   },
 });

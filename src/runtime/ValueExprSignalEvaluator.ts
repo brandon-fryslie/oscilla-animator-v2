@@ -183,6 +183,11 @@ function evaluateSignalExtent(
       throw new Error('construct expressions are field-extent, not signal-extent');
     }
 
+    case 'hslToRgb': {
+      // HSL→RGB is field-extent only (signal color uses slotWriteStrided).
+      throw new Error('hslToRgb expressions are field-extent, not signal-extent');
+    }
+
     default: {
       const _exhaustive: never = expr;
       throw new Error(`Unknown ValueExpr kind: ${(_exhaustive as ValueExpr).kind}`);

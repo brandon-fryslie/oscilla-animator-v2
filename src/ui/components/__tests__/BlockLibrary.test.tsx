@@ -15,9 +15,10 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { MantineProvider } from '@mantine/core';
 import { BlockLibrary } from '../BlockLibrary';
-import { EditorProvider } from '../../editorCommon';
+import { EditorProvider, useEditor, type EditorHandle } from '../../editorCommon';
 import { RootStore, StoreProvider } from '../../../stores';
 import { getBlockCategories, getBlockTypesByCategory } from '../../../blocks/registry';
+import { useEffect } from 'react';
 
 // Create a fresh store instance for tests (not the global singleton)
 let testStore: RootStore;
@@ -44,12 +45,45 @@ Object.defineProperty(window, 'localStorage', {
   value: localStorageMock,
 });
 
+/**
+ * Injects an EditorHandle into the EditorContext.
+ * Must be rendered inside EditorProvider.
+ */
+function InjectEditorHandle({ handle }: { handle: EditorHandle | null }) {
+  const { setEditorHandle } = useEditor();
+  useEffect(() => {
+    setEditorHandle(handle);
+    return () => setEditorHandle(null);
+  }, [handle, setEditorHandle]);
+  return null;
+}
+
+/** Create a mock EditorHandle that delegates addBlock to testStore.patch */
+function createMockEditorHandle(): EditorHandle {
+  return {
+    type: 'reactflow',
+    async addBlock(blockType: string, options?: { displayName?: string }) {
+      return testStore.patch.addBlock(blockType, {}, {
+        displayName: options?.displayName,
+      });
+    },
+    async removeBlock() {},
+    async zoomToFit() {},
+    getRawHandle() { return null; },
+  };
+}
+
+let mockEditorHandle: EditorHandle | null = null;
+
 // Wrapper component to provide required context
 function TestWrapper({ children }: { children: React.ReactNode }) {
   return (
     <MantineProvider>
       <StoreProvider store={testStore}>
-        <EditorProvider>{children}</EditorProvider>
+        <EditorProvider>
+          <InjectEditorHandle handle={mockEditorHandle} />
+          {children}
+        </EditorProvider>
       </StoreProvider>
     </MantineProvider>
   );
@@ -62,6 +96,7 @@ describe('BlockLibrary', () => {
     localStorageMock.clear();
     testStore.selection.clearSelection();
     testStore.selection.clearPreview();
+    mockEditorHandle = createMockEditorHandle();
   });
 
   afterEach(() => {

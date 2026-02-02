@@ -290,6 +290,10 @@ export class IRBuilderImpl implements IRBuilder {
     return this.pushExpr({ kind: 'construct', components, type });
   }
 
+  hslToRgb(input: ValueExprId, type: CanonicalType): ValueExprId {
+    return this.pushExpr({ kind: 'hslToRgb', input, type });
+  }
+
 
   // =========================================================================
   // Event Expression Methods

@@ -7,10 +7,23 @@
 
 import { useCallback, useMemo, useRef, useState, useEffect } from 'react';
 import { observer } from 'mobx-react-lite';
+import type { NodeMouseHandler, EdgeMouseHandler } from 'reactflow';
+import {
+  ContentCopy as DuplicateIcon,
+  Delete as DeleteIcon,
+  LinkOff as DisconnectIcon,
+  ArrowBack as SourceIcon,
+  ArrowForward as TargetIcon,
+  Output as ExposeIcon,
+  VisibilityOff as UnexposeIcon,
+} from '@mui/icons-material';
 import { useStores } from '../../stores';
+import type { InternalBlockId } from '../../blocks/composite-types';
 import { GraphEditorCore, type GraphEditorCoreHandle } from '../graphEditor/GraphEditorCore';
 import { CompositeStoreAdapter } from '../graphEditor/CompositeStoreAdapter';
+import { ContextMenu, type ContextMenuItem } from '../reactFlowEditor/ContextMenu';
 import { CompositeEditorDslSidebar } from './CompositeEditorDslSidebar';
+import { useEditor, type EditorHandle } from '../editorCommon';
 import './CompositeEditor.css';
 
 /**
@@ -32,11 +45,48 @@ export const CompositeEditor = observer(function CompositeEditor() {
   const [isResizing, setIsResizing] = useState(false);
   const resizeStartRef = useRef<{ x: number; width: number } | null>(null);
 
+  // Context menu state
+  type ContextMenuState =
+    | { type: 'block'; blockId: InternalBlockId; position: { top: number; left: number } }
+    | { type: 'edge'; edgeId: string; position: { top: number; left: number } }
+    | { type: 'port'; blockId: InternalBlockId; portId: string; isInput: boolean; position: { top: number; left: number } }
+    | null;
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
+
   // Create adapter for GraphEditorCore
   const adapter = useMemo(
     () => new CompositeStoreAdapter(compositeEditor),
     [compositeEditor]
   );
+
+  // Register an EditorHandle so BlockLibrary double-click works in composite context
+  const { setEditorHandle } = useEditor();
+  useEffect(() => {
+    if (!compositeEditor.isOpen) return;
+
+    const handle: EditorHandle = {
+      type: 'composite',
+      async addBlock(blockType: string, options?: { displayName?: string; position?: { x: number; y: number } }): Promise<string> {
+        const pos = options?.position ?? { x: 100, y: 100 };
+        return adapter.addBlock(blockType, pos);
+      },
+      async removeBlock(blockId) {
+        adapter.removeBlock(blockId as any);
+      },
+      async zoomToFit() {
+        graphEditorRef.current?.zoomToFit();
+      },
+      async autoArrange() {
+        graphEditorRef.current?.autoArrange();
+      },
+      getRawHandle() {
+        return graphEditorRef.current;
+      },
+    };
+
+    setEditorHandle(handle);
+    return () => setEditorHandle(null);
+  }, [compositeEditor.isOpen, adapter, setEditorHandle]);
 
   // Handle drop of composite to open for editing (empty state)
   const handleDropOnEmpty = useCallback(
@@ -82,6 +132,204 @@ export const CompositeEditor = observer(function CompositeEditor() {
     event.preventDefault();
     event.dataTransfer.dropEffect = 'copy';
   }, []);
+
+  // Context menu handlers for GraphEditorCore
+  const handleNodeContextMenu = useCallback<NodeMouseHandler>(
+    (event, node) => {
+      event.preventDefault();
+      setContextMenu({
+        type: 'block',
+        blockId: node.id as InternalBlockId,
+        position: { top: event.clientY, left: event.clientX },
+      });
+    },
+    []
+  );
+
+  const handleEdgeContextMenu = useCallback<EdgeMouseHandler>(
+    (event, edge) => {
+      event.preventDefault();
+      setContextMenu({
+        type: 'edge',
+        edgeId: edge.id,
+        position: { top: event.clientY, left: event.clientX },
+      });
+    },
+    []
+  );
+
+  const handlePaneClick = useCallback(() => {
+    setContextMenu(null);
+  }, []);
+
+  // Port context menu handler - called from UnifiedNode via window global
+  const handlePortContextMenu = useCallback(
+    (blockId: unknown, portId: unknown, isInput: boolean, event: React.MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setContextMenu({
+        type: 'port',
+        blockId: blockId as InternalBlockId,
+        portId: portId as string,
+        isInput,
+        position: { top: event.clientY, left: event.clientX },
+      });
+    },
+    []
+  );
+
+  // Register port context menu handler on window for UnifiedNode access
+  useEffect(() => {
+    if (!compositeEditor.isOpen) return;
+    window.__reactFlowPortContextMenu = handlePortContextMenu;
+    return () => {
+      delete window.__reactFlowPortContextMenu;
+    };
+  }, [compositeEditor.isOpen, handlePortContextMenu]);
+
+  // Build context menu items based on what was right-clicked
+  const contextMenuItems = useMemo<ContextMenuItem[]>(() => {
+    if (!contextMenu) return [];
+
+    if (contextMenu.type === 'block') {
+      const blockId = contextMenu.blockId;
+      const block = adapter.blocks.get(blockId);
+      if (!block) return [];
+
+      const connectedEdges = adapter.edges.filter(
+        (e) => e.sourceBlockId === blockId || e.targetBlockId === blockId
+      );
+
+      return [
+        {
+          label: 'Duplicate Block',
+          icon: <DuplicateIcon fontSize="small" />,
+          action: () => {
+            const pos = adapter.getBlockPosition(blockId);
+            adapter.addBlock(block.type, {
+              x: (pos?.x ?? 100) + 40,
+              y: (pos?.y ?? 100) + 40,
+            });
+          },
+          dividerAfter: true,
+        },
+        {
+          label: 'Disconnect All',
+          icon: <DisconnectIcon fontSize="small" />,
+          action: () => {
+            for (const edge of connectedEdges) {
+              adapter.removeEdge(edge.id);
+            }
+          },
+          disabled: connectedEdges.length === 0,
+        },
+        {
+          label: 'Delete Block',
+          icon: <DeleteIcon fontSize="small" />,
+          action: () => {
+            adapter.removeBlock(blockId);
+          },
+          danger: true,
+        },
+      ];
+    }
+
+    if (contextMenu.type === 'edge') {
+      const edgeId = contextMenu.edgeId;
+      const edge = adapter.edges.find((e) => e.id === edgeId);
+      if (!edge) return [];
+
+      const sourceBlock = adapter.blocks.get(edge.sourceBlockId as InternalBlockId);
+      const targetBlock = adapter.blocks.get(edge.targetBlockId as InternalBlockId);
+      const sourceLabel = sourceBlock?.displayName || sourceBlock?.type || edge.sourceBlockId;
+      const targetLabel = targetBlock?.displayName || targetBlock?.type || edge.targetBlockId;
+
+      return [
+        {
+          label: `Go to Source (${sourceLabel})`,
+          icon: <SourceIcon fontSize="small" />,
+          action: () => {
+            // Selection not available in composite editor - just close menu
+          },
+        },
+        {
+          label: `Go to Target (${targetLabel})`,
+          icon: <TargetIcon fontSize="small" />,
+          action: () => {
+            // Selection not available in composite editor - just close menu
+          },
+          dividerAfter: true,
+        },
+        {
+          label: 'Delete Connection',
+          icon: <DeleteIcon fontSize="small" />,
+          action: () => {
+            adapter.removeEdge(edgeId);
+          },
+          danger: true,
+        },
+      ];
+    }
+
+    if (contextMenu.type === 'port') {
+      const { blockId, portId, isInput } = contextMenu;
+      const items: ContextMenuItem[] = [];
+
+      if (isInput) {
+        const isExposed = compositeEditor.exposedInputs.some(
+          exp => exp.internalBlockId === blockId && exp.internalPortId === portId
+        );
+        items.push({
+          label: isExposed ? 'Unexpose Input' : 'Expose as Input',
+          icon: isExposed ? <UnexposeIcon fontSize="small" /> : <ExposeIcon fontSize="small" />,
+          action: () => {
+            if (isExposed) {
+              compositeEditor.unexposeInputPort(blockId, portId);
+            } else {
+              compositeEditor.exposeInputPort(portId, blockId, portId);
+            }
+          },
+        });
+      } else {
+        const isExposed = compositeEditor.exposedOutputs.some(
+          exp => exp.internalBlockId === blockId && exp.internalPortId === portId
+        );
+        items.push({
+          label: isExposed ? 'Unexpose Output' : 'Expose as Output',
+          icon: isExposed ? <UnexposeIcon fontSize="small" /> : <ExposeIcon fontSize="small" />,
+          action: () => {
+            if (isExposed) {
+              compositeEditor.unexposeOutputPort(blockId, portId);
+            } else {
+              compositeEditor.exposeOutputPort(portId, blockId, portId);
+            }
+          },
+        });
+      }
+
+      // Disconnect edges on this port
+      const connectedEdges = adapter.edges.filter((e) =>
+        isInput
+          ? (e.targetBlockId === blockId && e.targetPortId === portId)
+          : (e.sourceBlockId === blockId && e.sourcePortId === portId)
+      );
+      if (connectedEdges.length > 0) {
+        items.push({
+          label: `Disconnect (${connectedEdges.length})`,
+          icon: <DisconnectIcon fontSize="small" />,
+          action: () => {
+            for (const edge of connectedEdges) {
+              adapter.removeEdge(edge.id);
+            }
+          },
+        });
+      }
+
+      return items;
+    }
+
+    return [];
+  }, [contextMenu, adapter]);
 
   // Panel resize handlers
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
@@ -247,12 +495,14 @@ export const CompositeEditor = observer(function CompositeEditor() {
               enableAutoArrange: true,
               enableMinimap: true,
             }}
-            // No stores needed for composite editor (no selection, debug, etc.)
             selection={null}
             portHighlight={null}
             diagnostics={null}
             debug={null}
             patch={null}
+            onNodeContextMenu={handleNodeContextMenu}
+            onEdgeContextMenu={handleEdgeContextMenu}
+            onPaneClick={handlePaneClick}
           />
         </div>
 
@@ -396,6 +646,15 @@ export const CompositeEditor = observer(function CompositeEditor() {
           </div>
         </div>
       </div>
+
+      {/* Context menu for blocks and edges */}
+      {contextMenu && (
+        <ContextMenu
+          items={contextMenuItems}
+          anchorPosition={contextMenu.position}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </div>
   );
 });
