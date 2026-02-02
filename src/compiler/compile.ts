@@ -30,6 +30,10 @@ import { compilationInspector } from '../services/CompilationInspectorService';
 import { computeRenderReachableBlocks } from './reachability';
 import { resolveKernels } from './resolve-kernels';
 import { createDefaultRegistry } from '../runtime/kernels/default-registry';
+import { partitionByFlags, getDefaultDiagnosticFlags, type DiagnosticSeverityOverride } from './diagnostic-flags';
+import type { TypeConstraintError, PortKey } from './frontend/analyze-type-constraints';
+import { unitScalar } from '../core/canonical-types/units';
+
 
 
 // Import all block registrations (side-effect import)
@@ -77,6 +81,8 @@ export interface CompileOptions {
   readonly patchId?: string;
   readonly patchRevision?: number;
   readonly events: EventHub;
+  readonly diagnosticFlags?: Record<string, DiagnosticSeverityOverride>;
+
 }
 
 // =============================================================================
@@ -185,16 +191,40 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
     // Resolves polymorphic unit and payload variables through constraint propagation
     // Output is TypeResolvedPatch - THE source of truth for all port types
     const pass1Result = pass1TypeConstraints(normalized);
-    if ('kind' in pass1Result && pass1Result.kind === 'error') {
-      const compileErrors: CompileError[] = pass1Result.errors.map((e: { kind: string; blockIndex: number; portName: string; message: string; suggestions: readonly string[] }) => ({
-        kind: e.kind,
-        message: `${e.message}\nSuggestions:\n${e.suggestions.map((s: string) => `  - ${s}`).join('\n')}`,
-        blockId: normalized.blocks[e.blockIndex]?.id,
-        portId: e.portName,
-      }));
-      return emitFailure(options, startTime, compileId, compileErrors);
+    let flagWarnings: TypeConstraintError[] = [];
+    if (pass1Result.errors.length > 0) {
+      const { errors: fatalErrors, warnings } = partitionByFlags(
+        pass1Result.errors,
+        options?.diagnosticFlags,
+      );
+      flagWarnings = warnings;
+      if (fatalErrors.length > 0) {
+        const compileErrors: CompileError[] = fatalErrors.map((e) => ({
+          kind: e.kind,
+          message: `${e.message}\nSuggestions:\n${e.suggestions.map((s: string) => `  - ${s}`).join('\n')}`,
+          blockId: normalized.blocks[e.blockIndex]?.id,
+          portId: e.portName,
+        }));
+        return emitFailure(options, startTime, compileId, compileErrors);
+      }
     }
-    const typeResolved = pass1Result as import('./frontend/analyze-type-constraints').TypeResolvedPatch;
+
+    // Unitless fallback: when ConflictingUnits is downgraded to warning,
+    // replace the conflicting unit with unitScalar (unitless)
+    let typeResolved = pass1Result;
+    if (flagWarnings.some((w) => w.kind === 'ConflictingUnits')) {
+      const patchedPortTypes = new Map(pass1Result.portTypes);
+      for (const w of flagWarnings) {
+        if (w.kind === 'ConflictingUnits') {
+          const key = `${w.blockIndex}:${w.portName}:${w.direction}` as PortKey;
+          const existing = patchedPortTypes.get(key);
+          if (existing) {
+            patchedPortTypes.set(key, { ...existing, unit: unitScalar() });
+          }
+        }
+      }
+      typeResolved = { ...pass1Result, portTypes: patchedPortTypes };
+    }
 
     try {
       compilationInspector.capturePass('type-constraints', normalized, typeResolved);
@@ -387,8 +417,23 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
           occurrenceCount: 1,
         },
       };
-      // Combine success diagnostic with any unreachable block warnings
-      const diagnostics = [successDiagnostic, ...unreachableBlockWarnings];
+      // Flag warning diagnostics (errors downgraded to warnings by user settings)
+      const flagWarningDiagnostics = flagWarnings.map((w) => ({
+        id: `W_FLAG_DOWNGRADED:${w.kind}:${normalized.blocks[w.blockIndex]?.id}:${w.portName}:rev${options.patchRevision || 0}`,
+        code: 'W_FLAG_DOWNGRADED' as const,
+        severity: 'warn' as const,
+        domain: 'compile' as const,
+        primaryTarget: {
+          kind: 'port' as const,
+          blockId: normalized.blocks[w.blockIndex]?.id || 'unknown',
+          portId: w.portName,
+        },
+        title: `${w.kind} (downgraded to warning)`,
+        message: `${w.message}\n\nThis error was downgraded to a warning by compiler flag settings.`,
+        scope: { patchRevision: options.patchRevision || 0, compileId },
+        metadata: { firstSeenAt: Date.now(), lastSeenAt: Date.now(), occurrenceCount: 1 },
+      }));
+      const diagnostics = [successDiagnostic, ...unreachableBlockWarnings, ...flagWarningDiagnostics];
       options.events.emit({
         type: 'CompileEnd',
         compileId,

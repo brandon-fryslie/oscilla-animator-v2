@@ -272,7 +272,15 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
                     if (dockviewApi) {
                       const panel = dockviewApi.getPanel('settings');
                       if (panel) {
-                        panel.api.setActive();
+                        const group = panel.group;
+                        if (panel.api.isActive && group) {
+                          // Toggle off: collapse the settings group
+                          group.api.setSize({ width: 0 });
+                        } else if (group) {
+                          // Toggle on: expand and activate
+                          group.api.setSize({ width: 280 });
+                          panel.api.setActive();
+                        }
                       }
                     }
                   }}

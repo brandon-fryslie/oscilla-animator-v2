@@ -118,6 +118,12 @@ async function initializeRuntime(rootStore: RootStore) {
   // Initialize render buffer arena (50k elements, zero allocations after init)
   arena = initGlobalRenderArena(50_000);
 
+  // Register all settings tokens unconditionally (before any compile call)
+  const { appSettings } = await import('./settings/tokens/app-settings');
+  store.settings.register(appSettings);
+  const { compilerFlagsSettings } = await import('./settings/tokens/compiler-flags-settings');
+  store.settings.register(compilerFlagsSettings);
+
   // Try to restore from localStorage, otherwise use default preset
   const saved = loadPatchFromStorage();
   if (saved) {
@@ -133,8 +139,6 @@ async function initializeRuntime(rootStore: RootStore) {
     );
   } else {
     // Use settings-configured default patch index (falls back to DEFAULT_PATCH_INDEX)
-    const { appSettings } = await import('./settings/tokens/app-settings');
-    store.settings.register(appSettings);
     const appValues = store.settings.get(appSettings);
     const settingsIndex = appValues.defaultPatchIndex;
     if (settingsIndex >= 0 && settingsIndex < patches.length) {

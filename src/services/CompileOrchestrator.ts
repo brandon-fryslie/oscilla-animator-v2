@@ -9,6 +9,7 @@
 
 import { compile } from '../compiler';
 import { untracked } from 'mobx';
+import { compilerFlagsSettings } from '../settings/tokens/compiler-flags-settings';
 import type { Patch } from '../graph';
 import {
   createSessionState,
@@ -78,11 +79,15 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
     return;
   }
 
+  // Read compiler flag settings (severity overrides for diagnostic codes)
+  const diagnosticFlags = store.settings.get(compilerFlagsSettings);
+
   // Compile the patch
   const result = compile(patch, {
     events: store.events,
     patchRevision: store.getPatchRevision(),
     patchId: 'patch-0',
+    diagnosticFlags,
   });
 
   if (result.kind !== 'ok') {

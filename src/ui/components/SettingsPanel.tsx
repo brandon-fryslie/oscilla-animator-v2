@@ -1,26 +1,20 @@
 /**
  * SettingsPanel Component
  *
- * Renders all registered settings grouped by namespace.
- * Dual-mount: accessible as both Dockview panel and Drawer.
- *
- * Features:
- * - Iterates all registered tokens, ordered by ui.order
- * - Renders appropriate controls based on FieldUIHint.control
- * - Auto-persists on change (no save button needed)
- * - Reset to defaults per section
+ * Compact settings panel for the right sidebar.
+ * Renders all registered settings grouped by namespace with inline controls.
  */
 
 import React from 'react';
 import { observer } from 'mobx-react-lite';
 import {
   Stack,
-  Paper,
-  Title,
+  Group,
   Text,
   Switch,
   Button,
   Divider,
+  Tooltip,
   rem,
 } from '@mantine/core';
 import { useStore } from '../../stores';
@@ -33,16 +27,35 @@ export const SettingsPanel: React.FC = observer(() => {
   const settingsStore = useStore('settings');
   const tokens = settingsStore.getRegisteredTokens();
 
+  const handleResetAll = () => {
+    for (const token of tokens) {
+      settingsStore.reset(token);
+    }
+  };
+
   return (
-    <Stack gap="lg" p="md" style={{ overflowY: 'auto', height: '100%' }}>
+    <Stack gap="xs" p="xs" style={{ overflowY: 'auto', height: '100%' }}>
       {tokens.length === 0 ? (
         <Text c="dimmed" size="sm">
           No settings registered yet.
         </Text>
       ) : (
-        tokens.map((token) => (
-          <SettingsSection key={token.namespace} token={token} />
-        ))
+        <>
+          {tokens.map((token) => (
+            <SettingsSection key={token.namespace} token={token} />
+          ))}
+          <Divider color="dark.5" mt="xs" />
+          <Button
+            variant="subtle"
+            color="gray"
+            size="compact-xs"
+            fullWidth
+            onClick={handleResetAll}
+            styles={{ root: { opacity: 0.6, '&:hover': { opacity: 1 } } }}
+          >
+            Reset All to Defaults
+          </Button>
+        </>
       )}
     </Stack>
   );
@@ -55,75 +68,35 @@ const SettingsSection: React.FC<{ token: SettingsToken<any> }> = observer(({ tok
   const settingsStore = useStore('settings');
   const values = settingsStore.get(token);
 
-  const handleReset = () => {
-    settingsStore.reset(token);
-  };
-
   const handleFieldChange = (key: string, value: unknown) => {
     settingsStore.update(token, { [key]: value });
   };
 
   return (
-    <Paper
-      p="md"
-      style={{
-        background: 'rgba(0, 0, 0, 0.2)',
-        border: '1px solid rgba(139, 92, 246, 0.2)',
-      }}
-    >
-      <Stack gap="md">
-        {/* Section header */}
-        <div>
-          <Title order={4} size="h5" c="violet">
-            {token.ui.label}
-          </Title>
-          {token.ui.description && (
-            <Text size="xs" c="dimmed" mt={rem(4)}>
-              {token.ui.description}
-            </Text>
-          )}
-        </div>
-
-        <Divider color="dark.5" />
-
-        {/* Fields */}
-        <Stack gap="sm">
-          {Object.keys(token.defaults).map((key) => {
-            const fieldHint = token.ui.fields[key];
-            const value = values[key];
-            return (
-              <FieldControl
-                key={key}
-                fieldKey={key}
-                value={value}
-                hint={fieldHint}
-                onChange={(newValue) => handleFieldChange(key, newValue)}
-              />
-            );
-          })}
-        </Stack>
-
-        {/* Reset button */}
-        <Button
-          variant="subtle"
-          color="gray"
-          size="xs"
-          onClick={handleReset}
-          styles={{
-            root: {
-              border: '1px solid rgba(139, 92, 246, 0.2)',
-            },
-          }}
-        >
-          Reset to Defaults
-        </Button>
-      </Stack>
-    </Paper>
+    <Stack gap={rem(2)}>
+      <Text size="xs" fw={600} c="violet" mt="xs">
+        {token.ui.label}
+      </Text>
+      <Divider color="dark.5" mb={rem(2)} />
+      {Object.keys(token.defaults).map((key) => {
+        const fieldHint = token.ui.fields[key];
+        const value = values[key];
+        return (
+          <FieldControl
+            key={key}
+            fieldKey={key}
+            value={value}
+            hint={fieldHint}
+            onChange={(newValue) => handleFieldChange(key, newValue)}
+          />
+        );
+      })}
+    </Stack>
   );
 });
 
 /**
- * Renders a single field control based on its UI hint.
+ * Renders a single field control inline: label left, control right.
  */
 const FieldControl: React.FC<{
   fieldKey: string;
@@ -131,54 +104,42 @@ const FieldControl: React.FC<{
   hint: FieldUIHint;
   onChange: (value: unknown) => void;
 }> = ({ value, hint, onChange }) => {
+  const label = (
+    <Tooltip label={hint.description} position="left" withArrow multiline maw={250} disabled={!hint.description}>
+      <Text size="xs" c="gray.4" style={{ cursor: hint.description ? 'help' : 'default' }}>
+        {hint.label}
+      </Text>
+    </Tooltip>
+  );
+
   switch (hint.control) {
     case 'toggle':
       return (
-        <Switch
-          checked={value as boolean}
-          onChange={(e) => onChange(e.currentTarget.checked)}
-          label={hint.label}
-          description={hint.description}
-          size="sm"
-          color="violet"
-          styles={{
-            label: {
-              fontSize: rem(13),
-              color: 'var(--mantine-color-gray-3)',
-            },
-            description: {
-              fontSize: rem(11),
-              fontStyle: 'italic',
-              opacity: 0.7,
-            },
-          }}
-        />
+        <Group justify="space-between" wrap="nowrap" gap="xs" py={rem(1)}>
+          {label}
+          <Switch
+            checked={value as boolean}
+            onChange={(e) => onChange(e.currentTarget.checked)}
+            size="xs"
+            color="violet"
+          />
+        </Group>
       );
 
     case 'number':
-      return (
-        <NumberInput
-          value={value as number}
-          onChange={onChange}
-          label={hint.label}
-          helperText={hint.description}
-          min={hint.min}
-          max={hint.max}
-          step={hint.step}
-        />
-      );
-
     case 'slider':
       return (
-        <NumberInput
-          value={value as number}
-          onChange={onChange}
-          label={hint.label}
-          helperText={hint.description}
-          min={hint.min}
-          max={hint.max}
-          step={hint.step}
-        />
+        <Group justify="space-between" wrap="nowrap" gap="xs" py={rem(1)}>
+          {label}
+          <NumberInput
+            value={value as number}
+            onChange={onChange}
+            min={hint.min}
+            max={hint.max}
+            step={hint.step}
+            size="xs"
+          />
+        </Group>
       );
 
     case 'select':
@@ -190,26 +151,30 @@ const FieldControl: React.FC<{
         );
       }
       return (
-        <SelectInput
-          value={value as string}
-          onChange={onChange}
-          options={hint.options.map((opt) => ({
-            value: String(opt.value),
-            label: opt.label,
-          }))}
-          label={hint.label}
-          helperText={hint.description}
-        />
+        <Group justify="space-between" wrap="nowrap" gap="xs" py={rem(1)}>
+          {label}
+          <SelectInput
+            value={value as string}
+            onChange={onChange}
+            options={hint.options.map((opt) => ({
+              value: String(opt.value),
+              label: opt.label,
+            }))}
+            size="xs"
+          />
+        </Group>
       );
 
     case 'text':
       return (
-        <TextInput
-          value={value as string}
-          onChange={(v) => onChange(v)}
-          label={hint.label}
-          helperText={hint.description}
-        />
+        <Group justify="space-between" wrap="nowrap" gap="xs" py={rem(1)}>
+          {label}
+          <TextInput
+            value={value as string}
+            onChange={(v) => onChange(v)}
+            size="xs"
+          />
+        </Group>
       );
 
     default:

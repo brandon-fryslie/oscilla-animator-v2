@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { pass2TypeGraph } from '../../frontend/analyze-type-graph';
-import { pass1TypeConstraints, type TypeResolvedPatch } from '../../frontend/analyze-type-constraints';
+import { pass1TypeConstraints } from '../../frontend/analyze-type-constraints';
 import type { NormalizedPatch } from '../../ir/patches';
 import { canonicalSignal, unitTurns, contractWrap01, unitRadians, FLOAT } from '../../../core/canonical-types';
 import { registerBlock } from '../../../blocks/registry';
@@ -14,10 +14,10 @@ import { registerBlock } from '../../../blocks/registry';
 /** Helper to run pass1 and pass2 in sequence */
 function runPass1AndPass2(patch: NormalizedPatch) {
   const pass1Result = pass1TypeConstraints(patch);
-  if ('kind' in pass1Result && pass1Result.kind === 'error') {
+  if (pass1Result.errors.length > 0) {
     throw new Error(`Pass1 error: ${pass1Result.errors.map((e) => e.message).join(', ')}`);
   }
-  return pass2TypeGraph(pass1Result as TypeResolvedPatch);
+  return pass2TypeGraph(pass1Result);
 }
 
 describe('Unit Validation', () => {

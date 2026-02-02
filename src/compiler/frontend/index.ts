@@ -30,13 +30,13 @@ import type { CanonicalType } from '../../core/canonical-types';
 import { compilationInspector } from '../../services/CompilationInspectorService';
 
 // Frontend passes
-import { pass1TypeConstraints, type TypeResolvedPatch, type Pass1Error, type TypeConstraintError } from './analyze-type-constraints';
+import { pass1TypeConstraints, type TypeResolvedPatch, type TypeConstraintError } from './analyze-type-constraints';
 import { pass2TypeGraph } from './analyze-type-graph';
 import { analyzeCycles, type CycleSummary } from './analyze-cycles';
 import { validateTypes, validateNoVarAxes, type AxisViolation } from './axis-validate';
 
 // Re-export types for consumers
-export type { TypeResolvedPatch, Pass1Error, TypeConstraintError } from './analyze-type-constraints';
+export type { TypeResolvedPatch, TypeConstraintError } from './analyze-type-constraints';
 export type { TypedPatch } from '../ir/patches';
 export type { CycleSummary, ClassifiedSCC, CycleFix, SCCClassification, CycleLegality } from './analyze-cycles';
 export type { AxisViolation } from './axis-validate';
@@ -134,8 +134,8 @@ export function compileFrontend(patch: Patch): FrontendCompileResult {
   // =========================================================================
   const pass1Result = pass1TypeConstraints(normalizedPatch);
 
-  if ('kind' in pass1Result && pass1Result.kind === 'error') {
-    // Type resolution failed - but we might still have partial types
+  if (pass1Result.errors.length > 0) {
+    // Type resolution had errors - collect them
     const typeErrors = pass1Result.errors.map((e: TypeConstraintError) => ({
       kind: e.kind,
       message: `${e.message}\nSuggestions:\n${e.suggestions.map((s: string) => `  - ${s}`).join('\n')}`,
@@ -144,7 +144,7 @@ export function compileFrontend(patch: Patch): FrontendCompileResult {
     }));
     errors.push(...typeErrors);
 
-    // Return failure - can't produce TypedPatch without resolved types
+    // Return failure - can't produce TypedPatch without clean types
     return {
       kind: 'error',
       errors,
@@ -152,7 +152,7 @@ export function compileFrontend(patch: Patch): FrontendCompileResult {
     };
   }
 
-  const typeResolved = pass1Result as TypeResolvedPatch;
+  const typeResolved = pass1Result;
 
   try {
     compilationInspector.capturePass('frontend:type-constraints', normalizedPatch, typeResolved);

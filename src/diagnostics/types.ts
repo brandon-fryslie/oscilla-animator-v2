@@ -121,6 +121,7 @@ export type DiagnosticCode =
   | 'W_GRAPH_DISCONNECTED_BLOCK' // Block not reachable from TimeRoot
   | 'W_GRAPH_UNUSED_OUTPUT' // Block output has no consumers
   | 'W_BLOCK_UNREACHABLE_ERROR' // Block has error but is not reachable from render (Error Isolation)
+  | 'W_FLAG_DOWNGRADED' // Compiler error downgraded to warning by diagnostic flag setting
 
   // --- Bus Warnings (Sprint 2 - Compile Stream) ---
   | 'W_BUS_EMPTY' // Bus has publishers but no listeners
@@ -167,6 +168,7 @@ export type DiagnosticPayload =
   | { code: 'E_UNIT_MISMATCH'; port: string; expectedUnit: string; actualUnit: string }
   | { code: 'E_IMPLICIT_CAST_DISALLOWED'; fromPayload: string; toPayload: string; port: string }
   | { code: 'E_AXIS_INVALID'; axisKind: string; expectedType: string; actualType: string } // Item #20
+  | { code: 'W_FLAG_DOWNGRADED'; originalCode: string; configuredSeverity: string }
   | undefined;
 
 // =============================================================================
