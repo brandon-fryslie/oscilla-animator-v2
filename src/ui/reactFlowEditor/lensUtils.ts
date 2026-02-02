@@ -4,7 +4,7 @@
  * Provides helper functions for lens management in the editor.
  */
 
-import type { InferenceCanonicalType } from '../../core/inference-types';
+import type { InferenceCanonicalType, InferenceUnitType } from '../../core/inference-types';
 import { getBlockTypesByCategory } from '../../blocks/registry';
 
 /**
@@ -80,19 +80,65 @@ export function canApplyLens(
 
 /**
  * Check if two signal types match.
- * Handles payload and unit comparison.
+ * Handles payload and unit comparison with full structural equality.
  */
 function typesMatch(a: InferenceCanonicalType, b: InferenceCanonicalType): boolean {
   // Payload must match
   if (a.payload.kind !== b.payload.kind) return false;
 
-  // Unit comparison (if both have units)
-  if (a.unit && b.unit) {
-    return a.unit.kind === b.unit.kind;
+  // Unit comparison - must be structurally equal
+  const aUnit = a.unit;
+  const bUnit = b.unit;
+
+  // If both have no unit, match
+  if (!aUnit && !bUnit) return true;
+
+  // If one has unit and other doesn't, no match
+  if (!aUnit || !bUnit) return false;
+
+  // Both have units - check structural equality
+  return unitsEqualInference(aUnit, bUnit);
+}
+
+/**
+ * Check if two inference unit types are equal.
+ * Handles both concrete units and unit variables.
+ */
+function unitsEqualInference(a: InferenceUnitType, b: InferenceUnitType): boolean {
+  // Handle unit variables
+  if (a.kind === 'var' || b.kind === 'var') {
+    // Variables only match if same id
+    if (a.kind === 'var' && b.kind === 'var') {
+      return a.id === b.id;
+    }
+    return false;
   }
 
-  // If either has no unit, consider compatible (scalar)
-  return true;
+  // Both are concrete units - structural comparison
+  if (a.kind !== b.kind) return false;
+
+  // For units with nested fields, check them
+  switch (a.kind) {
+    case 'angle':
+      return (b as Extract<InferenceUnitType, { kind: 'angle' }>).unit === a.unit;
+    case 'time':
+      return (b as Extract<InferenceUnitType, { kind: 'time' }>).unit === a.unit;
+    case 'space': {
+      const bSpace = b as Extract<InferenceUnitType, { kind: 'space' }>;
+      return bSpace.unit === a.unit && bSpace.dims === a.dims;
+    }
+    case 'color':
+      return (b as Extract<InferenceUnitType, { kind: 'color' }>).unit === a.unit;
+    case 'none':
+    case 'scalar':
+    case 'norm01':
+    case 'count':
+      return true; // Kind match is sufficient for simple units
+    default:
+      // Exhaustiveness check
+      const _exhaustive: never = a;
+      return false;
+  }
 }
 
 /**
@@ -107,24 +153,7 @@ export function findCompatibleLenses(
   targetType: InferenceCanonicalType
 ): LensTypeInfo[] {
   const allLenses = getAvailableLensTypes();
-  
-  console.log('[Lens Debug] Finding lenses for:', {
-    source: sourceType,
-    target: targetType,
-    availableLenses: allLenses.length,
-  });
-  
-  const compatible = allLenses.filter(lens => {
-    const canApply = canApplyLens(sourceType, lens.inputType, lens.outputType, targetType);
-    console.log('[Lens Debug] Checking lens:', {
-      lens: lens.label,
-      lensInput: lens.inputType,
-      lensOutput: lens.outputType,
-      canApply,
-    });
-    return canApply;
-  });
-  
-  console.log('[Lens Debug] Compatible lenses found:', compatible.length);
-  return compatible;
+  return allLenses.filter(lens =>
+    canApplyLens(sourceType, lens.inputType, lens.outputType, targetType)
+  );
 }
