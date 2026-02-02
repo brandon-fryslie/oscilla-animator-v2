@@ -11,7 +11,7 @@
  * - One function (finalizeInferenceType) converts inference → canonical, or fails
  */
 
-import type { PayloadType, UnitType, Extent, CanonicalType, InstanceRef } from './canonical-types';
+import type { PayloadType, UnitType, Extent, CanonicalType, InstanceRef, ValueContract } from './canonical-types';
 import { axisInst, type Axis, DEFAULT_BINDING, DEFAULT_PERSPECTIVE, DEFAULT_BRANCH } from './canonical-types';
 
 // =============================================================================
@@ -72,11 +72,15 @@ export function isConcreteUnit(u: InferenceUnitType): u is UnitType {
  *
  * CanonicalType is assignable to InferenceCanonicalType (every final type
  * is also a valid inference type), but not vice versa.
+ *
+ * Note: contract is NOT inferred. It's an explicit declaration that can be
+ * specified on block definitions, but there are no contract variables.
  */
 export interface InferenceCanonicalType {
   readonly payload: InferencePayloadType;
   readonly unit: InferenceUnitType;
   readonly extent: Extent;
+  readonly contract?: ValueContract;
 }
 
 // =============================================================================
@@ -90,7 +94,8 @@ export interface InferenceCanonicalType {
 export function inferType(
   payload: InferencePayloadType,
   unit: InferenceUnitType,
-  extentOverrides?: Partial<Extent>
+  extentOverrides?: Partial<Extent>,
+  contract?: ValueContract
 ): InferenceCanonicalType {
   return {
     payload,
@@ -102,6 +107,7 @@ export function inferType(
       perspective: extentOverrides?.perspective ?? axisInst(DEFAULT_PERSPECTIVE),
       branch: extentOverrides?.branch ?? axisInst(DEFAULT_BRANCH),
     },
+    contract,
   };
 }
 
@@ -111,7 +117,8 @@ export function inferType(
 export function inferField(
   payload: InferencePayloadType,
   unit: InferenceUnitType,
-  instance: InstanceRef
+  instance: InstanceRef,
+  contract?: ValueContract
 ): InferenceCanonicalType {
   return {
     payload,
@@ -123,6 +130,7 @@ export function inferField(
       perspective: axisInst(DEFAULT_PERSPECTIVE),
       branch: axisInst(DEFAULT_BRANCH),
     },
+    contract,
   };
 }
 
@@ -140,6 +148,7 @@ export interface Substitution {
  * Throws if any variable survives after substitution.
  *
  * This is the ONLY function in the codebase that crosses the inference→canonical boundary.
+ * Contracts pass through unchanged (they are never inferred, only declared).
  */
 export function finalizeInferenceType(
   t: InferenceCanonicalType,
@@ -169,5 +178,5 @@ export function finalizeInferenceType(
     unit = t.unit as UnitType;
   }
 
-  return { payload, unit, extent: t.extent };
+  return { payload, unit, extent: t.extent, contract: t.contract };
 }
