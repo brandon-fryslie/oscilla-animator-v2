@@ -8,10 +8,8 @@
 import type { Node, Edge as ReactFlowEdge } from 'reactflow';
 import type { Block, BlockId, Edge, DefaultSource, UIControlHint, CombineMode } from '../../types';
 import type { Patch, LensAttachment } from '../../graph/Patch';
-import type { BlockDef, InputDef, AnyBlockDef } from '../../blocks/registry';
-import type { PayloadType } from '../../core/canonical-types';
+import type { InputDef, AnyBlockDef } from '../../blocks/registry';
 import type { InferenceCanonicalType, InferencePayloadType } from '../../core/inference-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION, canonicalType } from '../../core/canonical-types';
 import { formatTypeForTooltip, getTypeColor, getPortTypeFromBlockType, formatUnitForDisplay } from './typeValidation';
 import { findAdapter } from '../../blocks/adapter-spec';
 import { sortEdgesBySortKey } from '../../compiler/passes-v2/combine-utils';
@@ -289,7 +287,7 @@ export function computeAllNonContributingEdges(patch: Patch): Set<string> {
   }
 
   // For each target port, compute non-contributing edges
-  for (const [targetKey, edgesToPort] of edgesByTarget.entries()) {
+  for (const [, edgesToPort] of edgesByTarget.entries()) {
     if (edgesToPort.length <= 1) {
       continue; // No multiedge
     }

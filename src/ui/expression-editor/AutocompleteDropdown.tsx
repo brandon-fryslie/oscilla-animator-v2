@@ -100,7 +100,6 @@ export const AutocompleteDropdown: React.FC<AutocompleteDropdownProps> = ({
   onSelect,
   isVisible,
   position,
-  onClose,
 }) => {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const selectedItemRef = useRef<HTMLDivElement>(null);
