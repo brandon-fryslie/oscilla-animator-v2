@@ -14,7 +14,7 @@ import type { CanonicalType, Extent, PayloadType, UnitType, CardinalityValue } f
 import { isAxisInst, cardinalityMany, instanceRef } from '../../core/canonical-types';
 import { getBlockDefinition, getBlockCardinalityMetadata } from '../../blocks/registry';
 import type { CardinalityVarId } from '../../core/ids';
-import { instanceId, domainTypeId } from '../../core/ids';
+import { instanceId } from '../../core/ids';
 import { solveCardinality, type CardinalityConstraint } from './solve-cardinality';
 
 // =============================================================================

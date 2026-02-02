@@ -57,7 +57,7 @@ registerBlock({
     t: { label: 'T (0-1)', type: canonicalField(FLOAT, unitScalar(), { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }, contractClamp01()) },
     active: { label: 'Active', type: canonicalField(BOOL, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }, contractClamp01()) },
   },
-  lower: ({ ctx, inputsById, config, block }) => {
+  lower: ({ ctx, inputsById, block }) => {
     // Read count from port defaultSource (not config — count is an exposed port)
     const port = block?.inputPorts.get('count');
     const countFromPort = port?.defaultSource?.blockType === 'Const'
