@@ -14,3 +14,5 @@ import './power-gamma';
 import './slew';
 import './mask';
 import './deadzone';
+import './extract';
+import './construct';
