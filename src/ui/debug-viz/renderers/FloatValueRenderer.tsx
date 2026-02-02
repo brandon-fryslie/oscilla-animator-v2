@@ -39,8 +39,6 @@ function unitLabel(unit: UnitType): string | null {
     case 'scalar':
     case 'none':
       return null;
-    case 'scalar':
-      return null; // has range indicator instead
     case 'count':
       return null;
 
