@@ -521,7 +521,7 @@ describe('Unit Display Functions', () => {
     });
 
     it('returns "phase" for phase01', () => {
-      expect(formatUnitForDisplay(unitTurns, undefined, contractWrap01)).toBe('phase');
+      expect(formatUnitForDisplay(unitTurns())).toBe('phase');
     });
 
     it('returns "rad" for radians', () => {
@@ -533,7 +533,7 @@ describe('Unit Display Functions', () => {
     });
 
     it('returns "0..1" for norm01', () => {
-      expect(formatUnitForDisplay(unitScalar, undefined, contractClamp01)).toBe('0..1');
+      expect(formatUnitForDisplay(unitScalar())).toBe('0..1');
     });
 
     it('returns "ms" for ms', () => {
@@ -567,7 +567,7 @@ describe('Unit Display Functions', () => {
     });
 
     it('includes unit for norm01: Signal<float:0..1>', () => {
-      const type = canonicalType(FLOAT, unitScalar, contractClamp01);
+      const type = canonicalType(FLOAT, unitScalar, undefined, contractClamp01);
       expect(formatTypeForDisplay(type)).toBe('Signal<float:0..1>');
     });
   });

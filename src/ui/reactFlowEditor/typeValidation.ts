@@ -94,7 +94,7 @@ export function formatUnitForDisplay(unit: UnitType | InferenceUnitType): string
     case 'angle': {
       const angleUnit = (unit as Extract<UnitType, { kind: 'angle' }>).unit;
       switch (angleUnit) {
-        case 'phase01': return 'phase';
+        case 'turns': return 'phase';
         case 'radians': return 'rad';
         case 'degrees': return 'deg';
       }
