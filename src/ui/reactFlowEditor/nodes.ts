@@ -15,6 +15,7 @@ import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION, canonicalType 
 import { formatTypeForTooltip, getTypeColor, getPortTypeFromBlockType, formatUnitForDisplay } from './typeValidation';
 import { findAdapter } from '../../blocks/adapter-spec';
 import { sortEdgesBySortKey } from '../../compiler/passes-v2/combine-utils';
+import { getLensLabel } from './lensUtils';
 
 /**
  * Connection info for a port
@@ -364,6 +365,19 @@ export function createEdgeFromPatchEdge(
           rfEdge.labelStyle = { fontSize: 10, fill: '#888' };
           rfEdge.style = { stroke: '#f59e0b', strokeDasharray: '4 2' };
         }
+      }
+    }
+
+    // Check for user-attached lenses on the target port (in addition to auto-adapters)
+    if (targetBlock) {
+      const targetPort = targetBlock.inputPorts.get(edge.to.slotId);
+      if (targetPort?.lenses && targetPort.lenses.length > 0) {
+        const lensLabels = targetPort.lenses
+          .map(l => getLensLabel(l.lensType))
+          .join(', ');
+        rfEdge.label = lensLabels;
+        rfEdge.labelStyle = { fontSize: 10, fill: '#d97706' }; // Darker amber for text
+        rfEdge.style = { ...(rfEdge.style || {}), stroke: '#f59e0b' };
       }
     }
   }
