@@ -6,7 +6,7 @@
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
-import { canonicalType, canonicalField, unitWorld3, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
+import { canonicalType, canonicalField, unitWorld3, unitPhase01, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
 import { FLOAT, VEC3 } from '../../core/canonical-types';
 import { defaultSourceConst } from '../../types';
 import { OpCode } from '../../compiler/ir/types';
@@ -40,7 +40,7 @@ registerBlock({
   inputs: {
     elements: { label: 'Elements', type: canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
     radius: { label: 'Radius', type: canonicalType(FLOAT), defaultValue: 0.3, defaultSource: defaultSourceConst(0.3), exposedAsPort: true, uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 } },
-    phase: { label: 'Phase', type: canonicalType(FLOAT, { kind: 'angle', unit: 'phase01' }), defaultValue: 0, defaultSource: defaultSourceConst(0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
+    phase: { label: 'Phase', type: canonicalType(FLOAT, unitPhase01()), defaultValue: 0, defaultSource: defaultSourceConst(0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
   },
   outputs: {
     position: { label: 'Position', type: canonicalField(VEC3, unitWorld3(), { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
@@ -68,7 +68,7 @@ registerBlock({
       : ctx.b.constant(floatConst(0.3), canonicalType(FLOAT));
     const phaseSig = ('type' in inputsById.phase! && requireInst(inputsById.phase!.type.extent.cardinality, 'cardinality').kind === 'one')
       ? inputsById.phase!.id
-      : ctx.b.constant(floatConst(0), canonicalType(FLOAT));
+      : ctx.b.constant(floatConst(0), canonicalType(FLOAT, unitPhase01()));
 
     // Use halton2D as default basis kind (user-configurable when BlockDef supports config)
     const basisKind: import('../../compiler/ir/types').BasisKind = 'halton2D';

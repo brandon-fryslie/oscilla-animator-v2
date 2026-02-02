@@ -7,7 +7,7 @@
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
-import { canonicalType, canonicalField, payloadStride, type PayloadType, boolConst, withInstance, instanceRef, requireInst } from '../../core/canonical-types';
+import { canonicalType, canonicalField, payloadStride, type PayloadType, boolConst, withInstance, instanceRef, requireInst, unitNorm01 } from '../../core/canonical-types';
 import { FLOAT, INT, BOOL } from '../../core/canonical-types';
 import { DOMAIN_CIRCLE } from '../../core/domain-registry';
 import { defaultSourceConst, defaultSource } from '../../types';
@@ -53,7 +53,7 @@ registerBlock({
   outputs: {
     elements: { label: 'Elements', type: canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
     index: { label: 'Index', type: canonicalField(INT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
-    t: { label: 'T (0-1)', type: canonicalField(FLOAT, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+    t: { label: 'T (0-1)', type: canonicalField(FLOAT, unitNorm01(), { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
     active: { label: 'Active', type: canonicalField(BOOL, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
   },
   lower: ({ ctx, inputsById, config, block }) => {
