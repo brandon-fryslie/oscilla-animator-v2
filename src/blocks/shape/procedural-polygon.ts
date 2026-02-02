@@ -87,9 +87,10 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   cardinality: {
-    cardinalityMode: 'signalOnly',
+    cardinalityMode: 'transform',
     laneCoupling: 'laneLocal',
     broadcastPolicy: 'disallowSignalMix',
+    domainType: DOMAIN_CONTROL,
   },
   inputs: {
     sides: {

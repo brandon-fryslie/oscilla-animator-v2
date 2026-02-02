@@ -14,6 +14,7 @@ import type {
 } from '../../core/canonical-types';
 import { FLOAT, unitsEqual } from '../../core/canonical-types';
 import { isPayloadVar, type InferenceCanonicalType, type InferencePayloadType, type InferenceUnitType } from '../../core/inference-types';
+import { isAxisVar } from '../../core/canonical-types';
 import { getAnyBlockDefinition, isPayloadAllowed } from '../../blocks/registry';
 import { findAdapter, type AdapterSpec } from '../../blocks/adapter-spec';
 
@@ -366,13 +367,17 @@ function arePortsCompatible(from: PortContext, to: PortContext): boolean {
     return false;
   }
 
-  // Temporality must match
-  if (fromTemp.kind !== toTemp.kind) {
+  // Temporality: axis vars are polymorphic (match anything), same as payload/unit vars
+  const fromTempVar = isAxisVar(from.type.extent.temporality);
+  const toTempVar = isAxisVar(to.type.extent.temporality);
+  if (!fromTempVar && !toTempVar && fromTemp.kind !== toTemp.kind) {
     return false;
   }
 
-  // Cardinality must match
-  if (fromCard.kind !== toCard.kind) {
+  // Cardinality: axis vars are polymorphic (match anything), same as payload/unit vars
+  const fromCardVar = isAxisVar(from.type.extent.cardinality);
+  const toCardVar = isAxisVar(to.type.extent.cardinality);
+  if (!fromCardVar && !toCardVar && fromCard.kind !== toCard.kind) {
     return false;
   }
 

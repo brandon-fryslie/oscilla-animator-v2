@@ -264,8 +264,8 @@ export const ALL_CONCRETE_PAYLOADS: readonly PayloadType[] = [
  * Defines type and cardinality requirements for variable-length inputs.
  */
 export interface VarargConstraint {
-  /** Required payload type for all vararg connections (e.g., 'float') */
-  readonly payloadType: PayloadType;
+  /** Allowed payload types for vararg connections (e.g., [FLOAT] or [FLOAT, VEC3, COLOR]) */
+  readonly allowedPayloads: readonly PayloadType[];
   /** Required cardinality constraint: 'signal', 'field', or 'any' */
   readonly cardinalityConstraint: 'signal' | 'field' | 'any';
   /** Minimum number of connections (default: 0) */

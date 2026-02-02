@@ -21,7 +21,7 @@ describe('VarargInputDef', () => {
         type: canonicalSignal(FLOAT, { kind: 'scalar' }),
         isVararg: true,
         varargConstraint: {
-          payloadType: FLOAT,
+          allowedPayloads: [FLOAT],
           cardinalityConstraint: 'any',
         },
       };
@@ -47,7 +47,7 @@ describe('VarargInputDef', () => {
   describe('VarargConstraint', () => {
     it('defines payload type constraint', () => {
       const constraint: VarargConstraint = {
-        payloadType: FLOAT,
+        allowedPayloads: [FLOAT],
         cardinalityConstraint: 'any',
       };
       expect(constraint.payloadType).toBe(FLOAT);
@@ -55,7 +55,7 @@ describe('VarargInputDef', () => {
 
     it('defines cardinality constraint', () => {
       const constraint: VarargConstraint = {
-        payloadType: FLOAT,
+        allowedPayloads: [FLOAT],
         cardinalityConstraint: 'field',
       };
       expect(constraint.cardinalityConstraint).toBe('field');
@@ -63,7 +63,7 @@ describe('VarargInputDef', () => {
 
     it('allows minConnections constraint', () => {
       const constraint: VarargConstraint = {
-        payloadType: FLOAT,
+        allowedPayloads: [FLOAT],
         cardinalityConstraint: 'any',
         minConnections: 1,
       };
@@ -72,7 +72,7 @@ describe('VarargInputDef', () => {
 
     it('allows maxConnections constraint', () => {
       const constraint: VarargConstraint = {
-        payloadType: FLOAT,
+        allowedPayloads: [FLOAT],
         cardinalityConstraint: 'any',
         maxConnections: 10,
       };
@@ -93,7 +93,7 @@ describe('VarargInputDef', () => {
             type: canonicalSignal(FLOAT, { kind: 'scalar' }),
             isVararg: true,
             varargConstraint: {
-              payloadType: FLOAT,
+              allowedPayloads: [FLOAT],
               cardinalityConstraint: 'any',
             },
           },
@@ -148,7 +148,7 @@ describe('VarargInputDef', () => {
             type: canonicalSignal(FLOAT, { kind: 'scalar' }),
             isVararg: true,
             varargConstraint: {
-              payloadType: FLOAT,
+              allowedPayloads: [FLOAT],
               cardinalityConstraint: 'any',
             },
             defaultSource: defaultSourceConst(0),
@@ -183,7 +183,7 @@ describe('VarargInputDef', () => {
             type: canonicalSignal(FLOAT, { kind: 'scalar' }),
             isVararg: true,
             varargConstraint: {
-              payloadType: FLOAT,
+              allowedPayloads: [FLOAT],
               cardinalityConstraint: 'any',
             },
           },

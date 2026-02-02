@@ -5,12 +5,14 @@
  */
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
-import { canonicalType, payloadStride, floatConst } from '../../core/canonical-types';
-import { FLOAT, INT } from '../../core/canonical-types';
+import { canonicalType, payloadStride, floatConst, axisVar } from '../../core/canonical-types';
+import { FLOAT, INT, VEC2, VEC3, COLOR } from '../../core/canonical-types';
 import type { CanonicalType } from '../../core/canonical-types';
+import { payloadVar, unitVar, inferType } from '../../core/inference-types';
 import { compileExpression, type BlockRefsContext } from '../../expr';
 import type { ValueExprId } from '../../compiler/ir/Indices';
 import { parseAddress } from '../../types/canonical-address';
+import { cardinalityVarId } from '../../core/ids';
 
 registerBlock({
   type: 'Expression',
@@ -42,12 +44,14 @@ registerBlock({
     // Varargs cannot have defaultSource (explicit connections only)
     refs: {
       label: 'Block Refs',
-      type: canonicalType(FLOAT),  // Base type for validation
+      type: inferType(payloadVar('expr_refs'), unitVar('expr_refs'), {
+        cardinality: axisVar(cardinalityVarId('expr_refs')),
+      }),
       optional: true,
       exposedAsPort: true,
       isVararg: true,
       varargConstraint: {
-        payloadType: FLOAT,
+        allowedPayloads: [FLOAT, INT, VEC2, VEC3, COLOR],
         cardinalityConstraint: 'any',  // Accept Signal or Field
       },
     },
@@ -126,7 +130,7 @@ registerBlock({
     if (ctx.addressRegistry && signalsByShorthand.size > 0) {
       blockRefs = {
         addressRegistry: ctx.addressRegistry,
-        allowedPayloads: [FLOAT, INT],
+        allowedPayloads: [FLOAT, INT, VEC2, VEC3, COLOR],
         signalsByShorthand,
       };
     }
