@@ -264,8 +264,8 @@ export class PatchStore {
     for (const [inputId, inputDef] of Object.entries(blockDef.inputs)) {
       if (inputDef.exposedAsPort === false) {
         // Config param - collect default value if present
-        if (inputDef.value !== undefined) {
-          configDefaults[inputId] = inputDef.value;
+        if (inputDef.defaultValue !== undefined) {
+          configDefaults[inputId] = inputDef.defaultValue;
         }
         continue;
       }

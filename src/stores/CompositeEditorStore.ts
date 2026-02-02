@@ -25,6 +25,11 @@ import {
 import type { Capability } from '../blocks/registry';
 import { compositeStorage } from '../blocks/composites/persistence';
 import { compositeDefToJSON } from '../blocks/composites/loader';
+import {
+  serializeCompositeToHCL,
+  deserializeCompositeFromHCL,
+  type PatchDslError,
+} from '../patch-dsl';
 
 // =============================================================================
 // Types
@@ -136,6 +141,7 @@ export class CompositeEditorStore {
       updateMetadata: action,
       save: action,
       reset: action,
+      fromHCL: action,
     });
   }
 
@@ -337,54 +343,41 @@ export class CompositeEditorStore {
   openExisting(compositeType: string): void {
     const def = getCompositeDefinition(compositeType);
     if (!def) {
-      console.error(`Composite not found: ${compositeType}`);
+      console.warn(`Composite "${compositeType}" not found in registry`);
       return;
     }
 
     this.reset();
 
-    // Check if this is a readonly (library) composite
-    const isReadonly = def.readonly === true;
-    this.isFork = isReadonly;
-
-    if (isReadonly) {
-      // Fork mode: generate new name, don't link to original
-      const baseName = def.type.replace(/^My/, ''); // Remove "My" prefix if present
-      const forkName = CompositeEditorStore.generateUniqueName(`My${baseName}`);
-      this.compositeId = null; // Not editing original
+    // Set fork mode if readonly
+    if (def.readonly) {
+      this.isFork = true;
+      const autoName = CompositeEditorStore.generateUniqueName(def.type);
       this.metadata = {
-        name: forkName,
+        name: autoName,
         label: `${def.label} (Copy)`,
-        category: 'user', // User composites go to 'user' category
-        description: `Fork of ${def.type}`,
+        category: def.category,
+        description: def.description,
       };
     } else {
-      // Edit mode: editing existing user composite
-      this.compositeId = compositeType;
+      this.compositeId = def.type;
       this.metadata = {
         name: def.type,
         label: def.label,
         category: def.category,
-        description: '',
+        description: def.description,
       };
     }
 
-    // Load internal blocks with auto-layout
-    let layoutX = 100;
-    let layoutY = 100;
-    for (const [id, blockDef] of def.internalBlocks) {
-      this.internalBlocks.set(id, {
-        id,
+    // Load internal blocks
+    for (const [blockId, blockDef] of def.internalBlocks) {
+      this.internalBlocks.set(blockId, {
+        id: blockId,
         type: blockDef.type,
-        position: { x: layoutX, y: layoutY },
+        position: { x: 0, y: 0 },  // Position not stored in def
         params: blockDef.params,
         displayName: blockDef.displayName,
       });
-      layoutY += 120; // Stack blocks vertically for initial layout
-      if (layoutY > 400) {
-        layoutY = 100;
-        layoutX += 200;
-      }
     }
 
     // Load internal edges
@@ -395,13 +388,17 @@ export class CompositeEditorStore {
     this.exposedOutputs = [...def.exposedOutputs];
 
     this.isOpen = true;
-    this.isDirty = isReadonly; // Fork is immediately dirty (needs save)
+    this.isDirty = false;
   }
 
   /**
-   * Close the editor.
+   * Close the editor without saving.
    */
   close(): void {
+    if (this.isDirty) {
+      // In a real app, would show confirmation dialog
+      console.warn('Closing editor with unsaved changes');
+    }
     this.isOpen = false;
   }
 
@@ -409,43 +406,57 @@ export class CompositeEditorStore {
    * Add a new internal block.
    */
   addBlock(type: string, position: { x: number; y: number }): InternalBlockId {
-    const id = internalBlockId(`block_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+    // Generate unique internal block ID
+    const blockDef = getBlockDefinition(type);
+    const baseName = blockDef?.label || type;
+    let counter = 1;
+    let id = internalBlockId(baseName);
+
+    while (this.internalBlocks.has(id)) {
+      counter++;
+      id = internalBlockId(`${baseName}${counter}`);
+    }
+
     this.internalBlocks.set(id, {
       id,
       type,
       position,
+      displayName: id as string,
     });
+
     this.isDirty = true;
     return id;
   }
 
   /**
-   * Remove an internal block and all its edges.
+   * Remove an internal block.
+   * Also removes any edges connected to it and unexposes any ports.
    */
-  removeBlock(id: InternalBlockId): void {
-    this.internalBlocks.delete(id);
-    // Remove edges connected to this block
+  removeBlock(blockId: InternalBlockId): void {
+    // Remove block
+    this.internalBlocks.delete(blockId);
+
+    // Remove connected edges
     this.internalEdges = this.internalEdges.filter(
-      e => e.fromBlock !== id && e.toBlock !== id
+      edge => edge.fromBlock !== blockId && edge.toBlock !== blockId
     );
-    // Remove exposed ports for this block
-    this.exposedInputs = this.exposedInputs.filter(
-      p => p.internalBlockId !== id
-    );
-    this.exposedOutputs = this.exposedOutputs.filter(
-      p => p.internalBlockId !== id
-    );
+
+    // Unexpose ports
+    this.exposedInputs = this.exposedInputs.filter(exp => exp.internalBlockId !== blockId);
+    this.exposedOutputs = this.exposedOutputs.filter(exp => exp.internalBlockId !== blockId);
+
     this.isDirty = true;
   }
 
   /**
-   * Update block position.
+   * Update internal block position.
    */
-  updateBlockPosition(id: InternalBlockId, position: { x: number; y: number }): void {
-    const block = this.internalBlocks.get(id);
-    if (block) {
-      this.internalBlocks.set(id, { ...block, position });
-    }
+  updateBlockPosition(blockId: InternalBlockId, position: { x: number; y: number }): void {
+    const block = this.internalBlocks.get(blockId);
+    if (!block) return;
+
+    this.internalBlocks.set(blockId, { ...block, position });
+    this.isDirty = true;
   }
 
   /**
@@ -460,6 +471,7 @@ export class CompositeEditorStore {
         e.toBlock === edge.toBlock &&
         e.toPort === edge.toPort
     );
+
     if (!exists) {
       this.internalEdges.push(edge);
       this.isDirty = true;
@@ -469,55 +481,67 @@ export class CompositeEditorStore {
   /**
    * Remove an internal edge.
    */
-  removeEdge(fromBlock: InternalBlockId, fromPort: string, toBlock: InternalBlockId, toPort: string): void {
+  removeEdge(edge: InternalEdge): void {
     this.internalEdges = this.internalEdges.filter(
       e =>
         !(
-          e.fromBlock === fromBlock &&
-          e.fromPort === fromPort &&
-          e.toBlock === toBlock &&
-          e.toPort === toPort
+          e.fromBlock === edge.fromBlock &&
+          e.fromPort === edge.fromPort &&
+          e.toBlock === edge.toBlock &&
+          e.toPort === edge.toPort
         )
     );
     this.isDirty = true;
   }
 
   /**
-   * Expose an internal input port.
+   * Expose an input port.
    */
   exposeInputPort(
+    externalId: string,
     internalBlockId: InternalBlockId,
     internalPortId: string,
-    externalId: string
+    externalLabel?: string
   ): void {
     // Check if already exposed
-    const existing = this.exposedInputs.find(
-      p => p.internalBlockId === internalBlockId && p.internalPortId === internalPortId
+    const exists = this.exposedInputs.some(
+      exp => exp.internalBlockId === internalBlockId && exp.internalPortId === internalPortId
     );
-    if (existing) {
-      return;
+
+    if (!exists) {
+      this.exposedInputs.push({
+        externalId,
+        externalLabel,
+        internalBlockId,
+        internalPortId,
+      });
+      this.isDirty = true;
     }
-    this.exposedInputs.push({ externalId, internalBlockId, internalPortId });
-    this.isDirty = true;
   }
 
   /**
-   * Expose an internal output port.
+   * Expose an output port.
    */
   exposeOutputPort(
+    externalId: string,
     internalBlockId: InternalBlockId,
     internalPortId: string,
-    externalId: string
+    externalLabel?: string
   ): void {
     // Check if already exposed
-    const existing = this.exposedOutputs.find(
-      p => p.internalBlockId === internalBlockId && p.internalPortId === internalPortId
+    const exists = this.exposedOutputs.some(
+      exp => exp.internalBlockId === internalBlockId && exp.internalPortId === internalPortId
     );
-    if (existing) {
-      return;
+
+    if (!exists) {
+      this.exposedOutputs.push({
+        externalId,
+        externalLabel,
+        internalBlockId,
+        internalPortId,
+      });
+      this.isDirty = true;
     }
-    this.exposedOutputs.push({ externalId, internalBlockId, internalPortId });
-    this.isDirty = true;
   }
 
   /**
@@ -525,7 +549,7 @@ export class CompositeEditorStore {
    */
   unexposeInputPort(internalBlockId: InternalBlockId, internalPortId: string): void {
     this.exposedInputs = this.exposedInputs.filter(
-      p => !(p.internalBlockId === internalBlockId && p.internalPortId === internalPortId)
+      exp => !(exp.internalBlockId === internalBlockId && exp.internalPortId === internalPortId)
     );
     this.isDirty = true;
   }
@@ -535,43 +559,47 @@ export class CompositeEditorStore {
    */
   unexposeOutputPort(internalBlockId: InternalBlockId, internalPortId: string): void {
     this.exposedOutputs = this.exposedOutputs.filter(
-      p => !(p.internalBlockId === internalBlockId && p.internalPortId === internalPortId)
+      exp => !(exp.internalBlockId === internalBlockId && exp.internalPortId === internalPortId)
     );
     this.isDirty = true;
   }
 
   /**
-   * Update the external ID of an exposed input port.
+   * Update an exposed input port's external ID.
    */
   updateExposedInputId(
     internalBlockId: InternalBlockId,
     internalPortId: string,
     newExternalId: string
   ): void {
-    const port = this.exposedInputs.find(
-      p => p.internalBlockId === internalBlockId && p.internalPortId === internalPortId
+    const index = this.exposedInputs.findIndex(
+      exp => exp.internalBlockId === internalBlockId && exp.internalPortId === internalPortId
     );
-    if (port) {
-      const index = this.exposedInputs.indexOf(port);
-      this.exposedInputs[index] = { ...port, externalId: newExternalId };
+    if (index >= 0) {
+      this.exposedInputs[index] = {
+        ...this.exposedInputs[index],
+        externalId: newExternalId,
+      };
       this.isDirty = true;
     }
   }
 
   /**
-   * Update the external ID of an exposed output port.
+   * Update an exposed output port's external ID.
    */
   updateExposedOutputId(
     internalBlockId: InternalBlockId,
     internalPortId: string,
     newExternalId: string
   ): void {
-    const port = this.exposedOutputs.find(
-      p => p.internalBlockId === internalBlockId && p.internalPortId === internalPortId
+    const index = this.exposedOutputs.findIndex(
+      exp => exp.internalBlockId === internalBlockId && exp.internalPortId === internalPortId
     );
-    if (port) {
-      const index = this.exposedOutputs.indexOf(port);
-      this.exposedOutputs[index] = { ...port, externalId: newExternalId };
+    if (index >= 0) {
+      this.exposedOutputs[index] = {
+        ...this.exposedOutputs[index],
+        externalId: newExternalId,
+      };
       this.isDirty = true;
     }
   }
@@ -579,22 +607,25 @@ export class CompositeEditorStore {
   /**
    * Update composite metadata.
    */
-  updateMetadata(meta: Partial<CompositeMetadata>): void {
-    this.metadata = { ...this.metadata, ...meta };
+  updateMetadata(metadata: Partial<CompositeMetadata>): void {
+    this.metadata = { ...this.metadata, ...metadata };
     this.isDirty = true;
   }
 
   /**
-   * Save the composite to the registry and persist to localStorage.
-   * Returns the saved definition or null if validation failed.
+   * Save the current composite.
+   * Registers with block registry and persists to localStorage.
+   * Returns the saved CompositeBlockDef, or null if validation fails.
    */
   save(): CompositeBlockDef | null {
     if (!this.canSave) {
+      console.warn('Cannot save composite with validation errors:', this.validationErrors);
       return null;
     }
 
     const def = this.buildCompositeDef();
     if (!def) {
+      console.error('Failed to build composite definition');
       return null;
     }
 
@@ -645,6 +676,72 @@ export class CompositeEditorStore {
     };
     this.isDirty = false;
     this.isFork = false;
+  }
+
+  /**
+   * Serialize current state to HCL text.
+   *
+   * @returns HCL text representation of the composite, or null if validation fails
+   */
+  toHCL(): string | null {
+    const def = this.buildCompositeDef();
+    if (!def) {
+      return null;
+    }
+    return serializeCompositeToHCL(def);
+  }
+
+  /**
+   * Load composite from HCL text into editor state.
+   * On error, editor state is unchanged.
+   *
+   * @param hcl - HCL text to deserialize
+   * @returns Errors array (empty if successful)
+   */
+  fromHCL(hcl: string): { errors: PatchDslError[] } {
+    const result = deserializeCompositeFromHCL(hcl);
+
+    if (result.errors.length > 0 || !result.def) {
+      return { errors: result.errors };
+    }
+
+    // Load def into store state
+    this.reset();
+
+    this.metadata = {
+      name: result.def.type,
+      label: result.def.label,
+      category: result.def.category,
+      description: result.def.description,
+    };
+
+    // Load internal blocks (assign default positions since they're not in HCL)
+    let x = 100;
+    let y = 100;
+    for (const [blockId, blockDef] of result.def.internalBlocks) {
+      this.internalBlocks.set(blockId, {
+        id: blockId,
+        type: blockDef.type,
+        position: { x, y },
+        params: blockDef.params,
+        displayName: blockDef.displayName,
+      });
+      x += 200;
+      if (x > 800) {
+        x = 100;
+        y += 150;
+      }
+    }
+
+    // Load internal edges
+    this.internalEdges = [...result.def.internalEdges];
+
+    // Load exposed ports
+    this.exposedInputs = [...result.def.exposedInputs];
+    this.exposedOutputs = [...result.def.exposedOutputs];
+
+    this.isDirty = true;
+    return { errors: [] };
   }
 
   // -------------------------------------------------------------------------

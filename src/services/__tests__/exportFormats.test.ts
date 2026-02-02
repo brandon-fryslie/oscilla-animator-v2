@@ -111,7 +111,7 @@ describe('exportFormats', () => {
         form: 'primitive',
         capability: 'pure',
         inputs: {
-          count: { type: canonicalType(FLOAT), value: 100 },
+          count: { type: canonicalType(FLOAT), defaultValue: 100 },
         },
         outputs: {
           instances: { type: canonicalType(FLOAT) },
@@ -136,7 +136,7 @@ describe('exportFormats', () => {
         form: 'primitive',
         capability: 'pure',
         inputs: {
-          count: { type: canonicalType(FLOAT), value: 100 },
+          count: { type: canonicalType(FLOAT), defaultValue: 100 },
         },
         outputs: {
           instances: { type: canonicalType(FLOAT) },
@@ -161,8 +161,8 @@ describe('exportFormats', () => {
         form: 'primitive',
         capability: 'pure',
         inputs: {
-          sides: { type: canonicalType(FLOAT), value: 3 },
-          rx: { type: canonicalType(FLOAT), value: 0.5 },
+          sides: { type: canonicalType(FLOAT), defaultValue: 3 },
+          rx: { type: canonicalType(FLOAT), defaultValue: 0.5 },
         },
         outputs: {
           shape: { type: canonicalType(FLOAT) },
@@ -189,7 +189,7 @@ describe('exportFormats', () => {
         form: 'primitive',
         capability: 'pure',
         inputs: {
-          value: { type: canonicalType(FLOAT), value: 0 },
+          value: { type: canonicalType(FLOAT), defaultValue: 0 },
         },
         outputs: {
           out: { type: canonicalType(FLOAT) },

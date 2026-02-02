@@ -1674,7 +1674,7 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
               </label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {Object.entries(currentBlockDef.inputs).map(([inputId, input]) => {
-                  const paramValue = currentParams[inputId] ?? input.value;
+                  const paramValue = currentParams[inputId] ?? input.defaultValue;
                   return (
                     <DefaultSourceParamField
                       key={inputId}

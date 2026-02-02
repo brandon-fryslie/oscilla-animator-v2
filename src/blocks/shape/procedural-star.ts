@@ -101,21 +101,21 @@ registerBlock({
     points: {
       label: 'Points',
       type: canonicalType(INT),
-      value: 5,  // 5-pointed star by default
+      defaultValue: 5,  // 5-pointed star by default
       defaultSource: defaultSourceConst(5),
       uiHint: { kind: 'slider', min: 3, max: 12, step: 1 },
     },
     outerRadius: {
       label: 'Outer Radius',
       type: canonicalType(FLOAT),
-      value: 0.15,
+      defaultValue: 0.15,
       defaultSource: defaultSourceConst(0.15),
       uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 },
     },
     innerRadius: {
       label: 'Inner Radius',
       type: canonicalType(FLOAT),
-      value: 0.06,
+      defaultValue: 0.06,
       defaultSource: defaultSourceConst(0.06),
       uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 },
     },

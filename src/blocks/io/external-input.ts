@@ -25,7 +25,7 @@ registerBlock({
     channel: {
       label: 'Channel',
       type: canonicalType(FLOAT),
-      value: 'mouse.x',
+      defaultValue: 'mouse.x',
       exposedAsPort: false,
       uiHint: {
         kind: 'select',

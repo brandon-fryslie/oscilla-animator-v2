@@ -71,7 +71,7 @@ describe('ExternalInput Block', () => {
 
   it('has channel config input with default value', () => {
     expect(def.inputs.channel).toBeDefined();
-    expect(def.inputs.channel.value).toBe('mouse.x');
+    expect(def.inputs.channel.defaultValue).toBe('mouse.x');
     expect(def.inputs.channel.exposedAsPort).toBe(false);
   });
 
@@ -100,11 +100,11 @@ describe('ExternalGate Block', () => {
 
   it('has channel and threshold config inputs', () => {
     expect(def.inputs.channel).toBeDefined();
-    expect(def.inputs.channel.value).toBe('mouse.x');
+    expect(def.inputs.channel.defaultValue).toBe('mouse.x');
     expect(def.inputs.channel.exposedAsPort).toBe(false);
 
     expect(def.inputs.threshold).toBeDefined();
-    expect(def.inputs.threshold.value).toBe(0.5);
+    expect(def.inputs.threshold.defaultValue).toBe(0.5);
     expect(def.inputs.threshold.exposedAsPort).toBe(false);
   });
 
@@ -130,7 +130,7 @@ describe('ExternalVec2 Block', () => {
 
   it('has channelBase config input', () => {
     expect(def.inputs.channelBase).toBeDefined();
-    expect(def.inputs.channelBase.value).toBe('mouse');
+    expect(def.inputs.channelBase.defaultValue).toBe('mouse');
     expect(def.inputs.channelBase.exposedAsPort).toBe(false);
   });
 

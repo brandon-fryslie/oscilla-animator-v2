@@ -95,21 +95,21 @@ registerBlock({
     sides: {
       label: 'Sides',
       type: canonicalType(INT),
-      value: 5,  // Pentagon by default
+      defaultValue: 5,  // Pentagon by default
       defaultSource: defaultSourceConst(5),
       uiHint: { kind: 'slider', min: 3, max: 12, step: 1 },
     },
     radiusX: {
       label: 'Radius X',
       type: canonicalType(FLOAT),
-      value: 0.1,
+      defaultValue: 0.1,
       defaultSource: defaultSourceConst(0.1),
       uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 },
     },
     radiusY: {
       label: 'Radius Y',
       type: canonicalType(FLOAT),
-      value: 0.1,
+      defaultValue: 0.1,
       defaultSource: defaultSourceConst(0.1),
       uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 },
     },

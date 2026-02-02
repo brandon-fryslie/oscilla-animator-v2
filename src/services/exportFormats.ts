@@ -25,7 +25,7 @@ export function formatBlockShorthand(block: Block, definition?: BlockDef): strin
       const inputDef = definition.inputs[key];
       if (!inputDef) continue;
 
-      const defaultValue = inputDef.value;
+      const defaultValue = inputDef.defaultValue;
       if (!isNonDefault(currentValue, defaultValue)) continue;
 
       // Non-default value - format it

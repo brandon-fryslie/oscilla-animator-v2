@@ -23,8 +23,8 @@ registerBlock({
     broadcastPolicy: 'disallowSignalMix',
   },
   inputs: {
-    periodAMs: { type: canonicalType(FLOAT), value: 1000, defaultSource: defaultSourceConst(1000), exposedAsPort: true, uiHint: { kind: 'slider', min: 100, max: 10000, step: 100 } },
-    periodBMs: { type: canonicalType(FLOAT), value: 2000, defaultSource: defaultSourceConst(2000), exposedAsPort: true, uiHint: { kind: 'slider', min: 100, max: 10000, step: 100 } },
+    periodAMs: { type: canonicalType(FLOAT), defaultValue: 1000, defaultSource: defaultSourceConst(1000), exposedAsPort: true, uiHint: { kind: 'slider', min: 100, max: 10000, step: 100 } },
+    periodBMs: { type: canonicalType(FLOAT), defaultValue: 2000, defaultSource: defaultSourceConst(2000), exposedAsPort: true, uiHint: { kind: 'slider', min: 100, max: 10000, step: 100 } },
   },
   outputs: {
     tMs: { label: 'Time (ms)', type: canonicalType(FLOAT) },

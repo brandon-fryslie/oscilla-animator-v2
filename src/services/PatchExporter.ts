@@ -122,7 +122,7 @@ function exportNormal(
         const inputDef = def.inputs[key];
         if (!inputDef) continue;
 
-        const defaultValue = inputDef.value;
+        const defaultValue = inputDef.defaultValue;
         if (!opts.includeDefaults && !isNonDefault(currentValue, defaultValue)) {
           continue;
         }
@@ -185,7 +185,7 @@ function exportVerbose(
       const inputDef = def.inputs[key];
       if (!inputDef) continue;
 
-      const defaultValue = inputDef.value;
+      const defaultValue = inputDef.defaultValue;
       if (isNonDefault(currentValue, defaultValue)) {
         nonDefaults.push([key, currentValue, defaultValue]);
       }

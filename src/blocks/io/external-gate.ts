@@ -25,7 +25,7 @@ registerBlock({
     channel: {
       label: 'Channel',
       type: canonicalType(FLOAT),
-      value: 'mouse.x',
+      defaultValue: 'mouse.x',
       exposedAsPort: false,
       uiHint: {
         kind: 'select',
@@ -47,7 +47,7 @@ registerBlock({
     threshold: {
       label: 'Threshold',
       type: canonicalType(FLOAT),
-      value: 0.5,
+      defaultValue: 0.5,
       defaultSource: defaultSourceConst(0.5),
       exposedAsPort: false,
       uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 },

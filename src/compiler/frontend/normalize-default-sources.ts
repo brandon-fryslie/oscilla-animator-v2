@@ -200,7 +200,7 @@ function analyzeDefaultSources(patch: Patch): DefaultSourceInsertion[] {
             const effectiveDefault: DefaultSource = portOverride ?? registryDefault ?? {
                 blockType: 'Const',
                 output: 'out',
-                params: { value: input.value ?? 0 },
+                params: { value: input.defaultValue ?? 0 },
             };
 
             // Materialize the effective default source
