@@ -18,7 +18,6 @@ import type { TopologyId } from '../../shapes/types';
 import type { TimeModelIR } from './schedule';
 import type {
   PureFn,
-  OpCode,
   InstanceDecl,
   Step,
   IntrinsicPropertyName,
@@ -28,6 +27,7 @@ import type {
   StableStateId,
   StateMapping,
 } from './types';
+import { OpCode } from './types';
 import type { CameraDeclIR } from './program';
 import type { ValueExpr } from './value-expr';
 import type { IRBuilder } from './IRBuilder';
@@ -47,7 +47,7 @@ export class IRBuilderImpl implements IRBuilder {
   private fieldSlots = new Map<number, ValueSlot>();
   private eventSlots = new Map<ValueExprId, EventSlotId>();
   private slotMeta = new Map<ValueSlot, { type: CanonicalType; stride: number }>();
-  private schedule: TimeModelIR = { infiniteTimeRoots: [] };
+  private schedule: TimeModelIR = { kind: 'infinite', periodAMs: 10000, periodBMs: 10000 };
   private renderGlobals: CameraDeclIR[] = [];
 
   // ===========================================================================
@@ -134,12 +134,12 @@ export class IRBuilderImpl implements IRBuilder {
   ): ValueExprId {
     // Map combine modes to zip functions
     const fnMap: Record<typeof mode, PureFn> = {
-      sum: { kind: 'opcode', op: 'add' },
+      sum: { kind: 'opcode', opcode: OpCode.Add },
       average: { kind: 'kernel', name: 'average' },
       max: { kind: 'kernel', name: 'max' },
       min: { kind: 'kernel', name: 'min' },
       last: { kind: 'kernel', name: 'last' },
-      product: { kind: 'opcode', op: 'mul' },
+      product: { kind: 'opcode', opcode: OpCode.Mul },
     };
     return this.pushExpr({ kind: 'kernel', type, kernelKind: 'zip', inputs, fn: fnMap[mode] });
   }
