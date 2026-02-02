@@ -532,8 +532,8 @@ describe('Unit Display Functions', () => {
       expect(formatUnitForDisplay(unitDegrees())).toBe('deg');
     });
 
-    it('returns "0..1" for norm01', () => {
-      expect(formatUnitForDisplay(unitScalar())).toBe('0..1');
+    it('returns empty string for scalar (with contract)', () => {
+      expect(formatUnitForDisplay(unitScalar())).toBe('');
     });
 
     it('returns "ms" for ms', () => {
@@ -566,9 +566,9 @@ describe('Unit Display Functions', () => {
       expect(formatTypeForDisplay(type)).toBe('Signal<float:deg>');
     });
 
-    it('includes unit for norm01: Signal<float:0..1>', () => {
+    it('omits contract in display: Signal<float> (contract not shown)', () => {
       const type = canonicalType(FLOAT, unitScalar(), undefined, contractClamp01());
-      expect(formatTypeForDisplay(type)).toBe('Signal<float:0..1>');
+      expect(formatTypeForDisplay(type)).toBe('Signal<float>');
     });
   });
 });
