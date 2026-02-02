@@ -170,7 +170,7 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   inputs: {
-    in: { label: 'In', type: canonicalType(FLOAT, unitScalar, contractClamp01) },
+    in: { label: 'In', type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()) },
   },
   outputs: {},
   lower: () => ({ outputsById: {} }),
@@ -492,7 +492,7 @@ describe('Adapter-aware Connection Validation', () => {
         form: 'primitive',
         capability: 'pure',
         inputs: {
-          in: { label: 'In', type: canonicalType(FLOAT, unitScalar, contractClamp01) },
+          in: { label: 'In', type: canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()) },
         },
         outputs: {},
         lower: () => ({ outputsById: {} }),
@@ -567,7 +567,7 @@ describe('Unit Display Functions', () => {
     });
 
     it('includes unit for norm01: Signal<float:0..1>', () => {
-      const type = canonicalType(FLOAT, unitScalar, undefined, contractClamp01);
+      const type = canonicalType(FLOAT, unitScalar(), undefined, contractClamp01());
       expect(formatTypeForDisplay(type)).toBe('Signal<float:0..1>');
     });
   });

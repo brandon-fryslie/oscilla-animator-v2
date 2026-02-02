@@ -100,6 +100,65 @@ export function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
+/**
+ * Apply a mapping operation to buffers with element-wise processing.
+ *
+ * This helper encapsulates the common pattern of:
+ * 1. Null guard: if no old data or mapping, fill with defaults
+ * 2. Loop over elements and lookup old indices via mapping
+ * 3. For mapped elements: copy/transform data from old buffer
+ * 4. For unmapped elements: fill with defaults
+ *
+ * Performance: This runs in the hot loop and must be zero-overhead.
+ * The callback functions will be inlined by the JIT compiler.
+ *
+ * @param oldData - Previous buffer (null if no previous state)
+ * @param outputBuffer - Output buffer to initialize
+ * @param mapping - Element mapping (null for no mapping)
+ * @param elementCount - Number of elements in new domain
+ * @param stride - Number of floats per element
+ * @param fillDefault - Called when no mapping exists: () => void
+ * @param onMapped - Called for mapped element: (newBufIdx, oldBufIdx) => void
+ * @param onUnmapped - Called for unmapped element: (newBufIdx) => void
+ */
+function applyWithMapping(
+  oldData: Float32Array | null,
+  outputBuffer: Float32Array,
+  mapping: MappingState | null,
+  elementCount: number,
+  stride: number,
+  fillDefault: () => void,
+  onMapped: (newBufIdx: number, oldBufIdx: number) => void,
+  onUnmapped: (newBufIdx: number) => void
+): void {
+  if (!oldData || !mapping) {
+    fillDefault();
+    return;
+  }
+
+  const oldElementCount = oldData.length / stride;
+
+  // Single code path: always use newToOld lookup
+  // For identity mappings, newToOld[i] === i (allocated once at domain creation)
+  for (let i = 0; i < elementCount; i++) {
+    const oldIdx = mapping.newToOld[i];
+    if (oldIdx >= 0 && oldIdx < oldElementCount) {
+      // Mapped element: apply transformation
+      for (let s = 0; s < stride; s++) {
+        const newBufIdx = i * stride + s;
+        const oldBufIdx = oldIdx * stride + s;
+        onMapped(newBufIdx, oldBufIdx);
+      }
+    } else {
+      // New element: fill with default
+      for (let s = 0; s < stride; s++) {
+        const newBufIdx = i * stride + s;
+        onUnmapped(newBufIdx);
+      }
+    }
+  }
+}
+
 // =============================================================================
 // Gauge Operations
 // =============================================================================
@@ -147,32 +206,23 @@ export function initializeGaugeOnDomainChange(
   elementCount: number,
   stride: number = 1
 ): void {
-  if (!oldEffective || !mapping) {
-    // No previous state - all elements start at base
-    gaugeBuffer.fill(0);
-    return;
-  }
-
-  const oldElementCount = oldEffective.length / stride;
-
-  // Single code path: always use newToOld lookup
-  // For identity mappings, newToOld[i] === i (allocated once at domain creation)
-  for (let i = 0; i < elementCount; i++) {
-    const oldIdx = mapping.newToOld[i];
-    if (oldIdx >= 0 && oldIdx < oldElementCount) {
-      // Mapped element: preserve effective value
-      for (let s = 0; s < stride; s++) {
-        const newBufIdx = i * stride + s;
-        const oldBufIdx = oldIdx * stride + s;
-        gaugeBuffer[newBufIdx] = oldEffective[oldBufIdx] - newBase[newBufIdx];
-      }
-    } else {
-      // New element: start at base (no jump)
-      for (let s = 0; s < stride; s++) {
-        gaugeBuffer[i * stride + s] = 0;
-      }
+  applyWithMapping(
+    oldEffective,
+    gaugeBuffer,
+    mapping,
+    elementCount,
+    stride,
+    // fillDefault: all elements start at base (no jump)
+    () => gaugeBuffer.fill(0),
+    // onMapped: preserve effective value
+    (newBufIdx, oldBufIdx) => {
+      gaugeBuffer[newBufIdx] = oldEffective![oldBufIdx] - newBase[newBufIdx];
+    },
+    // onUnmapped: start at base (no jump)
+    (newBufIdx) => {
+      gaugeBuffer[newBufIdx] = 0;
     }
-  }
+  );
 }
 
 /**
@@ -289,35 +339,30 @@ export function initializeSlewWithMapping(
   slewBuffer: Float32Array,
   mapping: MappingState | null,
   elementCount: number,
-  stride: number = 1 // WRONG: stride bug!
+  stride: number = 1
 ): void {
-  const bufferLength = elementCount * stride;
-
-  if (!oldSlew || !mapping) {
-    // No previous state - start at base values
-    for (let i = 0; i < bufferLength; i++) {
-      slewBuffer[i] = newBase[i];
-    }
-    return;
-  }
-
-  const oldElementCount = oldSlew.length / stride;
-
-  // Single code path: always use newToOld lookup
-  for (let i = 0; i < elementCount; i++) {
-    const oldIdx = mapping.newToOld[i];
-    if (oldIdx >= 0 && oldIdx < oldElementCount) {
-      // Mapped: transfer slew state
-      for (let s = 0; s < stride; s++) {
-        slewBuffer[i * stride + s] = oldSlew[oldIdx * stride + s];
+  applyWithMapping(
+    oldSlew,
+    slewBuffer,
+    mapping,
+    elementCount,
+    stride,
+    // fillDefault: start at base values
+    () => {
+      const bufferLength = elementCount * stride;
+      for (let i = 0; i < bufferLength; i++) {
+        slewBuffer[i] = newBase[i];
       }
-    } else {
-      // New element: start at base (will slew from there)
-      for (let s = 0; s < stride; s++) {
-        slewBuffer[i * stride + s] = newBase[i * stride + s];
-      }
+    },
+    // onMapped: transfer slew state
+    (newBufIdx, oldBufIdx) => {
+      slewBuffer[newBufIdx] = oldSlew![oldBufIdx];
+    },
+    // onUnmapped: start at base (will slew from there)
+    (newBufIdx) => {
+      slewBuffer[newBufIdx] = newBase[newBufIdx];
     }
-  }
+  );
 }
 
 // =============================================================================
