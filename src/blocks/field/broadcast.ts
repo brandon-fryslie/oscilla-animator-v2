@@ -8,6 +8,7 @@ import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
 import { payloadStride, type PayloadType, requireInst } from '../../core/canonical-types';
 import { unitVar, payloadVar, inferType, inferField } from '../../core/inference-types';
+import { DOMAIN_SHAPE } from '../../core/domain-registry';
 import { rewriteFieldType } from '../layout/_helpers';
 
 /**
@@ -38,6 +39,7 @@ registerBlock({
     cardinalityMode: 'transform',
     laneCoupling: 'laneLocal',
     broadcastPolicy: 'requireBroadcastExpr',
+    domainType: DOMAIN_SHAPE,  // Broadcast works with any domain (uses inferred instance)
   },
   adapterSpec: {
     from: { payload: 'any', unit: 'any', extent: 'any' },

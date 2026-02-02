@@ -258,7 +258,7 @@ export function testEventType(
 }
 
 // Re-export unit constructors for convenience
-export { unitScalar, unitCount, unitTurns, unitScalar, contractWrap01, contractClamp01, unitRadians, unitDegrees, unitNdc2, unitNdc3, unitWorld2, unitWorld3, unitRgba01, unitNone };
+export { unitScalar, unitCount, unitTurns, contractWrap01, contractClamp01, unitRadians, unitDegrees, unitNdc2, unitNdc3, unitWorld2, unitWorld3, unitRgba01, unitNone };
 
 // Re-export cardinality constructors
 

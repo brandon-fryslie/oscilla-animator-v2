@@ -12,11 +12,11 @@ import { buildPatch } from '../../../graph/Patch';
 import { validateConnection, formatTypeForDisplay, formatUnitForDisplay } from '../typeValidation';
 import {
   canonicalType,
-  unitPhase01,
+  unitTurns,
   unitRadians,
   unitScalar,
   unitDegrees,
-  unitNorm01,
+  contractClamp01, contractWrap01,
   unitMs,
   unitSeconds,
 } from '../../../core/canonical-types';
@@ -129,7 +129,7 @@ registerBlock({
   capability: 'pure',
   inputs: {},
   outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT, unitTurns, contractWrap01()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitTurns, contractWrap01) },
   },
   lower: () => ({ outputsById: {} }),
 });
@@ -157,7 +157,7 @@ registerBlock({
   capability: 'pure',
   inputs: {},
   outputs: {
-    out: { label: 'Out', type: canonicalType(FLOAT, unitScalar()) },
+    out: { label: 'Out', type: canonicalType(FLOAT, unitScalar) },
   },
   lower: () => ({ outputsById: {} }),
 });
@@ -170,7 +170,7 @@ registerBlock({
   form: 'primitive',
   capability: 'pure',
   inputs: {
-    in: { label: 'In', type: canonicalType(FLOAT, unitScalar, contractClamp01()) },
+    in: { label: 'In', type: canonicalType(FLOAT, unitScalar, contractClamp01) },
   },
   outputs: {},
   lower: () => ({ outputsById: {} }),
@@ -263,6 +263,106 @@ describe('Payload constraint validation', () => {
 
       const result = validateConnection('b0', 'out', 'b1', 'a', patch);
       expect(result.valid).toBe(true);
+    });
+  });
+});
+
+// =============================================================================
+// Regression tests for validateConnection correctness (crio.5)
+// Uses real block definitions to catch regressions with actual block types.
+// =============================================================================
+
+describe('Regression: validateConnection with real blocks (crio.5)', () => {
+  describe('InfiniteTimeRoot connections', () => {
+    it('InfiniteTimeRoot.tMs (float) → Add.a (float) is ALLOWED', () => {
+      const patch = buildPatch((b) => {
+        b.addBlock('InfiniteTimeRoot');
+        b.addBlock('Add');
+      });
+
+      const result = validateConnection('b0', 'tMs', 'b1', 'a', patch);
+      expect(result.valid).toBe(true);
+    });
+
+    it('InfiniteTimeRoot.phaseA (float:phase01) → Add.a (float:scalar) requires adapter', () => {
+      const patch = buildPatch((b) => {
+        b.addBlock('InfiniteTimeRoot');
+        b.addBlock('Add');
+      });
+
+      // phase01 ≠ scalar, but an adapter should exist
+      const result = validateConnection('b0', 'phaseA', 'b1', 'a', patch);
+      expect(result.valid).toBe(true);
+      expect(result.adapter).toBeDefined();
+    });
+
+    it('InfiniteTimeRoot.palette (color) → Add.a (float) is BLOCKED', () => {
+      const patch = buildPatch((b) => {
+        b.addBlock('InfiniteTimeRoot');
+        b.addBlock('Add');
+      });
+
+      // COLOR ≠ FLOAT, and Add only allows STANDARD_NUMERIC_PAYLOADS (no color)
+      const result = validateConnection('b0', 'palette', 'b1', 'a', patch);
+      expect(result.valid).toBe(false);
+    });
+  });
+
+  describe('Ellipse → Array connections', () => {
+    it('Ellipse.shape (float) → Array.element (float, allows ALL) is ALLOWED', () => {
+      const patch = buildPatch((b) => {
+        b.addBlock('Ellipse');
+        b.addBlock('Array');
+      });
+
+      const result = validateConnection('b0', 'shape', 'b1', 'element', patch);
+      expect(result.valid).toBe(true);
+    });
+  });
+
+  describe('Const (polymorphic) connections', () => {
+    it('Const.out (payloadVar) → Add.a (float, allows STANDARD_NUMERIC) is ALLOWED', () => {
+      const patch = buildPatch((b) => {
+        const c = b.addBlock('Const');
+        b.setConfig(c, 'value', 42);
+        b.addBlock('Add');
+      });
+
+      const result = validateConnection('b0', 'out', 'b1', 'a', patch);
+      expect(result.valid).toBe(true);
+    });
+
+    it('Const.out (payloadVar) → Array.element (allows ALL) is ALLOWED', () => {
+      const patch = buildPatch((b) => {
+        const c = b.addBlock('Const');
+        b.setConfig(c, 'value', 1.0);
+        b.addBlock('Array');
+      });
+
+      const result = validateConnection('b0', 'out', 'b1', 'element', patch);
+      expect(result.valid).toBe(true);
+    });
+  });
+
+  describe('Cross-type mismatches with real blocks', () => {
+    it('InfiniteTimeRoot.tMs (float) → TestColorSink (color) is BLOCKED', () => {
+      const patch = buildPatch((b) => {
+        b.addBlock('InfiniteTimeRoot');
+        b.addBlock('TestColorSink');
+      });
+
+      const result = validateConnection('b0', 'tMs', 'b1', 'in', patch);
+      expect(result.valid).toBe(false);
+    });
+
+    it('InfiniteTimeRoot.palette (color) → TestIntSink (int) is BLOCKED', () => {
+      const patch = buildPatch((b) => {
+        b.addBlock('InfiniteTimeRoot');
+        b.addBlock('TestIntSink');
+      });
+
+      const result = validateConnection('b0', 'palette', 'b1', 'in', patch);
+      expect(result.valid).toBe(false);
     });
   });
 });
@@ -381,7 +481,7 @@ describe('Adapter-aware Connection Validation', () => {
         capability: 'pure',
         inputs: {},
         outputs: {
-          out: { label: 'Out', type: canonicalType(FLOAT, unitTurns, contractWrap01()) },
+          out: { label: 'Out', type: canonicalType(FLOAT, unitTurns, contractWrap01) },
         },
         lower: () => ({ outputsById: {} }),
       });
@@ -392,7 +492,7 @@ describe('Adapter-aware Connection Validation', () => {
         form: 'primitive',
         capability: 'pure',
         inputs: {
-          in: { label: 'In', type: canonicalType(FLOAT, unitScalar, contractClamp01()) },
+          in: { label: 'In', type: canonicalType(FLOAT, unitScalar, contractClamp01) },
         },
         outputs: {},
         lower: () => ({ outputsById: {} }),
@@ -447,7 +547,7 @@ describe('Unit Display Functions', () => {
 
   describe('formatTypeForDisplay with units', () => {
     it('includes unit for phase01: Signal<float:phase>', () => {
-      const type = canonicalType(FLOAT, unitTurns, contractWrap01());
+      const type = canonicalType(FLOAT, unitTurns, contractWrap01);
       expect(formatTypeForDisplay(type)).toBe('Signal<float:phase>');
     });
 
@@ -457,7 +557,7 @@ describe('Unit Display Functions', () => {
     });
 
     it('omits unit for scalar: Signal<float>', () => {
-      const type = canonicalType(FLOAT, unitScalar());
+      const type = canonicalType(FLOAT, unitScalar);
       expect(formatTypeForDisplay(type)).toBe('Signal<float>');
     });
 
@@ -467,7 +567,7 @@ describe('Unit Display Functions', () => {
     });
 
     it('includes unit for norm01: Signal<float:0..1>', () => {
-      const type = canonicalType(FLOAT, unitScalar, contractClamp01());
+      const type = canonicalType(FLOAT, unitScalar, contractClamp01);
       expect(formatTypeForDisplay(type)).toBe('Signal<float:0..1>');
     });
   });

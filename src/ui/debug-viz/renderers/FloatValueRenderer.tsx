@@ -101,7 +101,7 @@ function renderScalarFull(value: number, props: FloatRendererProps): React.React
   }
 
   // Unit-specific decorations
-  if (props.unit.kind.contract?.kind === 'clamp01') {
+  if (false) {
     children.push(
       React.createElement('span', { key: 'range', style: styles.rangeIndicator }, '[0, 1]')
     );

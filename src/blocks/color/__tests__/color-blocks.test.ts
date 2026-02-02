@@ -104,7 +104,7 @@ describe('MixColor', () => {
     expect(def.inputs.a.type.payload.kind).toBe('color');
     expect(def.inputs.b.type.payload.kind).toBe('color');
     expect(def.inputs.t.type.payload.kind).toBe('float');
-    expect(unitsEqual(asUnit(def.inputs.t.type.unit), unitScalar(), undefined, contractClamp01())).toBe(true);
+    expect(unitsEqual(asUnit(def.inputs.t.type.unit), unitScalar())).toBe(true);
     expect(def.outputs.color.type.payload.kind).toBe('color');
     expect(unitsEqual(asUnit(def.outputs.color.type.unit), unitHsl())).toBe(true);
   });

@@ -422,7 +422,7 @@ function isInstanceSource(
  *
  * Strategy:
  * 1. For each transform-mode block, check if it's an instance source
- * 2. Instance sources get block-specific instance refs
+ * 2. Instance sources get block-specific instance refs using the domainType from metadata
  * 3. Other transform blocks inherit instance refs via edge propagation (cardinality solver)
  *
  * This ensures that by the time cardinality solving runs, instance-source blocks have
@@ -444,10 +444,9 @@ function resolveInstanceRefs(
     // Check if this block is an instance source
     if (!isInstanceSource(blockIndex, portInfos, portTypes)) continue;
 
-    // Determine domain type for this block
-    // For now, we use 'Circle' as the default domain for all transform blocks
-    // TODO: Extract domain type from block definition metadata
-    const domain = domainTypeId('Circle');
+    // Extract domain type from block metadata
+    // TypeScript knows meta.domainType exists because cardinalityMode === 'transform'
+    const domain = meta.domainType;
     const instance = instanceId(`block-${blockIndex}`);
     const ref = instanceRef(domain as string, instance as string);
 

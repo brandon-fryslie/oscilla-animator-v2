@@ -23,6 +23,7 @@ registerBlock({
     cardinalityMode: 'transform',
     laneCoupling: 'laneLocal',
     broadcastPolicy: 'allowZipSig',
+    domainType: DOMAIN_CIRCLE,  // Array creates Circle domain instances
   },
   payload: {
     allowedPayloads: {

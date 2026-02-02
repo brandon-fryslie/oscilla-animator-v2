@@ -8,6 +8,7 @@ import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
 import { canonicalType, payloadStride, type PayloadType, requireInst } from '../../core/canonical-types';
 import { unitVar, payloadVar, inferType, inferField } from '../../core/inference-types';
+import { DOMAIN_SHAPE } from '../../core/domain-registry';
 
 registerBlock({
   type: 'Reduce',
@@ -20,6 +21,7 @@ registerBlock({
     cardinalityMode: 'transform',
     laneCoupling: 'laneCoupled',
     broadcastPolicy: 'disallowSignalMix',
+    domainType: DOMAIN_SHAPE,  // Reduce works with any domain (consumes from inferred instance)
   },
   payload: {
     allowedPayloads: {
