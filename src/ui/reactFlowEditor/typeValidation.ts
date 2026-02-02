@@ -7,12 +7,10 @@
 
 import type { Patch, BlockId } from '../../types';
 import type {
-  CanonicalType,
   UnitType,
   ConcretePayloadType,
   CardinalityValue,
   TemporalityValue,
-  PayloadType,
 } from '../../core/canonical-types';
 import { FLOAT, unitsEqual } from '../../core/canonical-types';
 import { isPayloadVar, type InferenceCanonicalType, type InferencePayloadType, type InferenceUnitType } from '../../core/inference-types';
@@ -180,7 +178,6 @@ export function formatTypeForDisplay(type: InferenceCanonicalType): string {
  */
 export function formatTypeForTooltip(type: InferenceCanonicalType): string {
   const card = getInstantiatedCardinality(type);
-  const temp = getInstantiatedTemporality(type);
 
   const base = formatTypeForDisplay(type);
 
@@ -249,7 +246,7 @@ export function getPortTypeFromBlockType(
  * @param toDomain - Target domain
  * @returns true if a transformation exists, false otherwise
  */
-function canTransformDomain(fromDomain: string, toDomain: string): boolean {
+function canTransformDomain(_fromDomain: string, _toDomain: string): boolean {
   // Stub: No transformation system implemented yet
   // When domain transformation system is ready, check it here
   return false;

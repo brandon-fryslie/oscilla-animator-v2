@@ -10,7 +10,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildPatch } from '../../../graph/Patch';
 import { validateConnection, formatTypeForDisplay, formatUnitForDisplay } from '../typeValidation';
-import type { Patch } from '../../../graph/Patch';
 import {
   canonicalType,
   unitPhase01,
@@ -21,150 +20,106 @@ import {
   unitMs,
   unitSeconds,
 } from '../../../core/canonical-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../../core/canonical-types';
+import { FLOAT, INT, VEC2, COLOR } from '../../../core/canonical-types';
+import { inferType, payloadVar, unitVar } from '../../../core/inference-types';
 import { registerBlock } from '../../../blocks/registry';
 
 // Import block definitions to register them
-// These modules self-register when loaded
-// Import blocks to trigger registration
 import '../../../blocks/all';
 
 
-describe('Connection Validation - Behavioral Tests', () => {
-  // Tests removed during type system refactor
-  describe('Compatible connections should be ALLOWED', () => {
-    it('_placeholder_allows_Signal_float_to_Signal_float', () => {
-      expect(true).toBe(true);
-    });
-  });
+// =============================================================================
+// Test Blocks for payload constraint testing
+// =============================================================================
 
-  describe('Type mismatches should be BLOCKED', () => {
-    it('_placeholder_blocks_float_to_color', () => {
-      expect(true).toBe(true);
-    });
-  });
-
-  describe('Self-connections behavior', () => {
-    // Tests removed during type system refactor
-    it('_placeholder_removed', () => {
-      expect(true).toBe(true);
-    });
-  });
-
-  describe('Invalid blocks/ports should be BLOCKED', () => {
-    // Tests removed during type system refactor
-    it('_placeholder_removed', () => {
-      expect(true).toBe(true);
-    });
-  });
-
-  describe('Field instance matching', () => {
-    // Tests removed during type system refactor
-    it('_placeholder_blocks_Field_to_Signal_connections', () => {
-      expect(true).toBe(true);
-    });
-  });
+// A source with payloadVar and constrained allowedPayloads (only float, int)
+registerBlock({
+  type: 'TestConstrainedVarSource',
+  label: 'Constrained Var Source',
+  category: 'test',
+  description: 'Test: payloadVar output constrained to float and int only',
+  form: 'primitive',
+  capability: 'pure',
+  payload: {
+    allowedPayloads: {
+      out: [FLOAT, INT],
+    },
+    semantics: 'typeSpecific',
+  },
+  inputs: {},
+  outputs: {
+    out: { label: 'Out', type: inferType(payloadVar('test_constrained'), unitVar('test_unit')) },
+  },
+  lower: () => ({ outputsById: {} }),
 });
 
-// =============================================================================
-// Test Fixtures
-// =============================================================================
+// A sink that only accepts color
+registerBlock({
+  type: 'TestColorSink',
+  label: 'Color Sink',
+  category: 'test',
+  description: 'Test: expects color input',
+  form: 'primitive',
+  capability: 'pure',
+  inputs: {
+    in: { label: 'In', type: canonicalType(COLOR) },
+  },
+  outputs: {},
+  lower: () => ({ outputsById: {} }),
+});
 
-/**
- * Create a test patch with various blocks for connection testing.
- *
- * Returns both the patch and the block IDs for testing.
- */
-interface TestPatchWithIds {
-  patch: Patch;
-  ids: {
-    osc: string;
-    const: string;
-    add: string;
-    multiply: string;
-    array: string;
-    fieldBlock: string;
-  };
-}
+// A sink with payloadVar and constrained allowedPayloads (only vec2, color)
+registerBlock({
+  type: 'TestVec2ColorSink',
+  label: 'Vec2/Color Sink',
+  category: 'test',
+  description: 'Test: payloadVar input constrained to vec2 and color only',
+  form: 'primitive',
+  capability: 'pure',
+  payload: {
+    allowedPayloads: {
+      in: [VEC2, COLOR],
+    },
+    semantics: 'typeSpecific',
+  },
+  inputs: {
+    in: { label: 'In', type: inferType(payloadVar('test_v2c'), unitVar('test_v2c_unit')) },
+  },
+  outputs: {},
+  lower: () => ({ outputsById: {} }),
+});
 
-function createTestPatch(): TestPatchWithIds {
-  let ids: any = {};
+// A concrete float source (no payload metadata, no payloadVar)
+registerBlock({
+  type: 'TestFloatSource',
+  label: 'Float Source',
+  category: 'test',
+  description: 'Test: outputs concrete float',
+  form: 'primitive',
+  capability: 'pure',
+  inputs: {},
+  outputs: {
+    out: { label: 'Out', type: canonicalType(FLOAT) },
+  },
+  lower: () => ({ outputsById: {} }),
+});
 
-  const patch = buildPatch((b) => {
-    // Signal blocks
-    ids.osc = b.addBlock('Oscillator');
-    ids.const = b.addBlock('Const');
-    b.setConfig(ids.const, 'value', 1.0);
-    ids.add = b.addBlock('Add');
-    ids.multiply = b.addBlock('Multiply');
+// A concrete int sink (no payload metadata)
+registerBlock({
+  type: 'TestIntSink',
+  label: 'Int Sink',
+  category: 'test',
+  description: 'Test: expects int input',
+  form: 'primitive',
+  capability: 'pure',
+  inputs: {
+    in: { label: 'In', type: canonicalType(INT) },
+  },
+  outputs: {},
+  lower: () => ({ outputsById: {} }),
+});
 
-    // Field block (FromDomainId requires Array)
-    ids.array = b.addBlock('Array');
-    b.setPortDefault(ids.array, 'count', 10);
-    ids.fieldBlock = b.addBlock('FromDomainId', { domainId: ids.array });
-  });
-
-  return { patch, ids };
-}
-
-/**
- * Create a patch with field blocks using the same instance.
- */
-interface FieldPatchWithIds {
-  patch: Patch;
-  ids: {
-    array?: string;
-    array1?: string;
-    array2?: string;
-    fieldA: string;
-    fieldB: string;
-  };
-}
-
-function createPatchWithFieldInstances(): FieldPatchWithIds {
-  let ids: any = {};
-
-  const patch = buildPatch((b) => {
-    // Create an Array block (defines a domain instance)
-    ids.array = b.addBlock('Array');
-    b.setPortDefault(ids.array, 'count', 10);
-
-    // Create field blocks that should use this instance
-    // Note: In reality, the instance comes from compilation context,
-    // but for testing we rely on the type system to handle this.
-    ids.fieldA = b.addBlock('FromDomainId', { domainId: ids.array });
-    ids.fieldB = b.addBlock('FromDomainId', { domainId: ids.array });
-  });
-
-  return { patch, ids };
-}
-
-/**
- * Create a patch with field blocks using different instances.
- */
-function createPatchWithDifferentInstances(): FieldPatchWithIds {
-  let ids: any = {};
-
-  const patch = buildPatch((b) => {
-    // Create two separate Array blocks (different instances)
-    ids.array1 = b.addBlock('Array');
-    b.setPortDefault(ids.array1, 'count', 10);
-    ids.array2 = b.addBlock('Array');
-    b.setPortDefault(ids.array2, 'count', 20);
-
-    // Create field blocks using different instances
-    ids.fieldA = b.addBlock('FromDomainId', { domainId: ids.array1 });
-    ids.fieldB = b.addBlock('FromDomainId', { domainId: ids.array2 });
-  });
-
-  return { patch, ids };
-}
-
-// =============================================================================
-// Adapter-aware Connection Validation Tests
-// =============================================================================
-
-// Register test blocks with specific unit annotations
+// Register test blocks for adapter tests
 registerBlock({
   type: 'TestUIPhaseSource',
   label: 'Phase Source',
@@ -221,6 +176,165 @@ registerBlock({
   lower: () => ({ outputsById: {} }),
 });
 
+// =============================================================================
+// Payload constraint tests (crio.1 + crio.2)
+// =============================================================================
+
+describe('Payload constraint validation', () => {
+  describe('payloadVar sources respect allowedPayloads (crio.1)', () => {
+    it('constrained payloadVar source → compatible concrete sink is ALLOWED', () => {
+      // Use Const (allows ALL) → Add.a (FLOAT)
+      const patch = buildPatch((b) => {
+        const constId = b.addBlock('Const');
+        b.setConfig(constId, 'value', 1.0);
+        b.addBlock('Add');
+      });
+
+      // Const.out (payloadVar, ALL_CONCRETE_PAYLOADS) → Add.a (FLOAT) should be valid
+      const result = validateConnection('b0', 'out', 'b1', 'a', patch);
+      expect(result.valid).toBe(true);
+    });
+
+    it('constrained payloadVar source → incompatible concrete sink is BLOCKED', () => {
+      // TestConstrainedVarSource allows only [FLOAT, INT] → TestColorSink expects COLOR
+      const patch = buildPatch((b) => {
+        b.addBlock('TestConstrainedVarSource');
+        b.addBlock('TestColorSink');
+      });
+
+      const result = validateConnection('b0', 'out', 'b1', 'in', patch);
+      expect(result.valid).toBe(false);
+      expect(result.reason).toContain('Type mismatch');
+    });
+
+    it('constrained payloadVar sink → incompatible concrete source is BLOCKED', () => {
+      // TestFloatSource outputs FLOAT → TestVec2ColorSink allows only [VEC2, COLOR]
+      const patch = buildPatch((b) => {
+        b.addBlock('TestFloatSource');
+        b.addBlock('TestVec2ColorSink');
+      });
+
+      const result = validateConnection('b0', 'out', 'b1', 'in', patch);
+      expect(result.valid).toBe(false);
+    });
+
+    it('unconstrained payloadVar source → any concrete sink is ALLOWED', () => {
+      // Const.out has payloadVar with allowedPayloads including ALL_CONCRETE_PAYLOADS
+      const patch = buildPatch((b) => {
+        const constId = b.addBlock('Const');
+        b.setConfig(constId, 'value', { r: 1, g: 0, b: 0, a: 1 });
+        b.addBlock('TestColorSink');
+      });
+
+      const result = validateConnection('b0', 'out', 'b1', 'in', patch);
+      expect(result.valid).toBe(true);
+    });
+  });
+
+  describe('concrete placeholder types respect allowedPayloads (crio.2)', () => {
+    it('Add.out (FLOAT placeholder, allows STANDARD_NUMERIC) → Add.a (FLOAT) is ALLOWED', () => {
+      const patch = buildPatch((b) => {
+        b.addBlock('Add');
+        b.addBlock('Add');
+      });
+
+      const result = validateConnection('b0', 'out', 'b1', 'a', patch);
+      expect(result.valid).toBe(true);
+      expect(result.adapter).toBeUndefined();
+    });
+
+    it('concrete float source → int sink without adapter is BLOCKED', () => {
+      // FLOAT ≠ INT, no allowedPayloads on either side to override
+      const patch = buildPatch((b) => {
+        b.addBlock('TestFloatSource');
+        b.addBlock('TestIntSink');
+      });
+
+      const result = validateConnection('b0', 'out', 'b1', 'in', patch);
+      expect(result.valid).toBe(false);
+    });
+
+    it('concrete float source → Add.a (has allowedPayloads including FLOAT) is ALLOWED', () => {
+      // Add has allowedPayloads for 'a' = STANDARD_NUMERIC_PAYLOADS which includes FLOAT
+      const patch = buildPatch((b) => {
+        b.addBlock('TestFloatSource');
+        b.addBlock('Add');
+      });
+
+      const result = validateConnection('b0', 'out', 'b1', 'a', patch);
+      expect(result.valid).toBe(true);
+    });
+  });
+});
+
+// =============================================================================
+// Basic connection validation
+// =============================================================================
+
+describe('Connection Validation - Behavioral Tests', () => {
+  describe('Compatible connections should be ALLOWED', () => {
+    it('Signal<float> → Signal<float> (same type, direct match)', () => {
+      const patch = buildPatch((b) => {
+        b.addBlock('Add');
+        b.addBlock('Add');
+      });
+
+      const result = validateConnection('b0', 'out', 'b1', 'a', patch);
+      expect(result.valid).toBe(true);
+      expect(result.adapter).toBeUndefined();
+    });
+  });
+
+  describe('Type mismatches should be BLOCKED', () => {
+    it('Signal<float> → Signal<color> without adapter is BLOCKED', () => {
+      const patch = buildPatch((b) => {
+        b.addBlock('TestFloatSource');
+        b.addBlock('TestColorSink');
+      });
+
+      const result = validateConnection('b0', 'out', 'b1', 'in', patch);
+      expect(result.valid).toBe(false);
+    });
+  });
+
+  describe('Self-connections behavior', () => {
+    it('blocks connecting a port to itself', () => {
+      const patch = buildPatch((b) => {
+        b.addBlock('Add');
+      });
+
+      const result = validateConnection('b0', 'out', 'b0', 'out', patch);
+      expect(result.valid).toBe(false);
+      expect(result.reason).toContain('Cannot connect port to itself');
+    });
+  });
+
+  describe('Invalid blocks/ports should be BLOCKED', () => {
+    it('nonexistent source block is BLOCKED', () => {
+      const patch = buildPatch((b) => {
+        b.addBlock('Add');
+      });
+
+      const result = validateConnection('nonexistent', 'out', 'b0', 'a', patch);
+      expect(result.valid).toBe(false);
+    });
+
+    it('nonexistent port is BLOCKED', () => {
+      const patch = buildPatch((b) => {
+        b.addBlock('Add');
+        b.addBlock('Add');
+      });
+
+      const result = validateConnection('b0', 'nonexistent', 'b1', 'a', patch);
+      expect(result.valid).toBe(false);
+    });
+  });
+});
+
+// =============================================================================
+// Adapter-aware Connection Validation Tests
+// =============================================================================
+
 describe('Adapter-aware Connection Validation', () => {
   describe('connections with available adapters should be ALLOWED', () => {
     it('allows phase01 → radians (adapter exists)', () => {
@@ -246,14 +360,11 @@ describe('Adapter-aware Connection Validation', () => {
     });
 
     it('does not set adapter field when types match directly', () => {
-      // Use Add.out → Add.a: both are Signal<float:scalar>
-      // This should connect directly without any adapter
       const patch = buildPatch((b) => {
-        b.addBlock('Add'); // b0: first Add block
-        b.addBlock('Add'); // b1: second Add block
+        b.addBlock('Add');
+        b.addBlock('Add');
       });
 
-      // Add.out (float:scalar) → Add.a (float:scalar) should connect directly
       const res = validateConnection('b0', 'out', 'b1', 'a', patch);
       expect(res.valid).toBe(true);
       expect(res.adapter).toBeUndefined();
@@ -298,6 +409,10 @@ describe('Adapter-aware Connection Validation', () => {
     });
   });
 });
+
+// =============================================================================
+// Unit Display Functions
+// =============================================================================
 
 describe('Unit Display Functions', () => {
   describe('formatUnitForDisplay', () => {
