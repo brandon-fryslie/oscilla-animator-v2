@@ -14,6 +14,10 @@
  * MIGRATION (2026-02-03): ValueRefExpr.slot is now optional.
  * Pure blocks return ValueRefExpr with slot: undefined. The orchestrator allocates
  * slots on behalf of pure blocks after lowering completes.
+ *
+ * MIGRATION (2026-02-03): LowerEffects added for effects-as-data pattern.
+ * Blocks return effects (state declarations, step requests, slot requests) instead
+ * of calling imperative methods on IRBuilder.
  */
 
 import type { CanonicalType } from '../../core/canonical-types';
@@ -23,8 +27,10 @@ import type {
   ValueSlot,
   InstanceId,
   StateId,
+  StateSlotId,
 } from './Indices';
 import type { IRBuilder } from './IRBuilder';
+import type { StableStateId, ContinuityPolicy } from './types';
 
 // =============================================================================
 // Value Reference Types
@@ -97,6 +103,73 @@ export function asExpr(ref: ValueRefPacked): ValueRefExpr {
     throw new Error(`Expected ValueRefExpr, got variant with k='${(ref as { k: string }).k}'`);
   }
   return ref as ValueRefExpr;
+}
+
+
+// =============================================================================
+// Effects-as-Data Types (WI-1)
+// =============================================================================
+
+/**
+ * State declaration (symbolic).
+ * Declares a state slot that needs to be allocated by the binding pass.
+ */
+export interface StateDecl {
+  /** Symbolic state key (blockId:stateKind) */
+  readonly key: StableStateId;
+  /** Initial value for scalar state, or per-lane initial value for field state */
+  readonly initialValue: number;
+  /** Stride (floats per state element, default 1) */
+  readonly stride?: number;
+  /** Instance ID for field state (undefined for scalar state) */
+  readonly instanceId?: InstanceId;
+  /** Lane count for field state (undefined for scalar state) */
+  readonly laneCount?: number;
+}
+
+/**
+ * Step request (declarative).
+ * Declares a step that needs to be registered by the binding pass.
+ * References symbolic StableStateId, not physical StateSlotId.
+ */
+export type StepRequest =
+  | { readonly kind: 'stateWrite'; readonly stateKey: StableStateId; readonly value: ValueExprId }
+  | { readonly kind: 'fieldStateWrite'; readonly stateKey: StableStateId; readonly value: ValueExprId }
+  | { readonly kind: 'materialize'; readonly field: ValueExprId; readonly instanceId: InstanceId; readonly target: ValueSlot }
+  | { readonly kind: 'continuityMapBuild'; readonly instanceId: InstanceId }
+  | {
+      readonly kind: 'continuityApply';
+      readonly targetKey: string;
+      readonly instanceId: InstanceId;
+      readonly policy: ContinuityPolicy;
+      readonly baseSlot: ValueSlot;
+      readonly outputSlot: ValueSlot;
+      readonly semantic: 'position' | 'radius' | 'opacity' | 'color' | 'custom';
+      readonly stride: number;
+    };
+
+/**
+ * Slot request (declarative).
+ * Declares an output slot that needs to be allocated by the binding pass.
+ */
+export interface SlotRequest {
+  /** Port ID for this slot */
+  readonly portId: string;
+  /** Type of the value stored in this slot */
+  readonly type: CanonicalType;
+}
+
+/**
+ * Lower effects (declarative side effects).
+ * Blocks return effects instead of calling imperative methods on IRBuilder.
+ */
+export interface LowerEffects {
+  /** State declarations (symbolic keys, allocated by binding pass) */
+  readonly stateDecls?: readonly StateDecl[];
+  /** Step requests (symbolic state keys, resolved by binding pass) */
+  readonly stepRequests?: readonly StepRequest[];
+  /** Slot requests (allocated by binding pass) */
+  readonly slotRequests?: readonly SlotRequest[];
 }
 
 

@@ -18,7 +18,7 @@ import type { AdapterBlockSpec } from './adapter-spec';
 import type { DomainTypeId } from '../core/domain-registry';
 
 // Re-export lowering types from compiler
-export type { ValueRefPacked, ValueRefExpr } from '../compiler/ir/lowerTypes';
+export type { ValueRefPacked, ValueRefExpr, LowerEffects } from '../compiler/ir/lowerTypes';
 
 /**
  * Lower context - provided to block lower functions.
@@ -101,6 +101,13 @@ export interface LowerResult {
    * Passed to phase 2 to ensure consistent state slot allocation.
    */
   readonly stateSlot?: StateSlotId;
+
+  /**
+   * Declarative effects (optional).
+   * Blocks return effects (state declarations, step requests, slot requests) instead
+   * of calling imperative methods on IRBuilder. Optional during migration.
+   */
+  readonly effects?: import('../compiler/ir/lowerTypes').LowerEffects;
 }
 
 // =============================================================================
