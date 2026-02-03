@@ -121,6 +121,23 @@ export type BlockForm = 'primitive' | 'macro' | 'composite';
  */
 export type Capability = 'time' | 'identity' | 'state' | 'render' | 'io' | 'pure';
 
+/**
+ * Lowering purity classification.
+ *
+ * Determines whether a block's lower() function can be invoked as a pure macro
+ * during lowering of other blocks (e.g., DefaultSource).
+ *
+ * - 'pure': Block lower() is pure (deterministic, no side effects, no slot allocation).
+ *           Can be invoked via LowerSandbox. The orchestrator allocates slots on behalf
+ *           of pure blocks after lowering completes.
+ * - undefined/absent: Block is impure (allocates slots directly, may have side effects).
+ *                     Cannot be invoked via LowerSandbox. Existing blocks default to this.
+ *
+ * Note: This field controls macro expansion capability only. It does NOT affect
+ * the block's semantics or runtime behavior.
+ */
+export type LoweringPurity = 'pure';
+
 // =============================================================================
 // Cardinality-Generic Block Metadata (Spec §8)
 // =============================================================================
@@ -367,6 +384,23 @@ export interface BlockDef {
    * - false/undefined: Block is combinatorial - cycles through it are illegal
    */
   readonly isStateful?: boolean;
+
+  /**
+   * Lowering purity classification.
+   *
+   * Determines whether a block's lower() function can be invoked as a pure macro
+   * during lowering of other blocks (e.g., DefaultSource).
+   *
+   * - 'pure': Block lower() is pure (deterministic, no side effects, no slot allocation).
+   *           Can be invoked via LowerSandbox. The orchestrator allocates slots on behalf
+   *           of pure blocks after lowering completes.
+   * - undefined/absent: Block is impure (allocates slots directly, may have side effects).
+   *                     Cannot be invoked via LowerSandbox. Existing blocks default to this.
+   *
+   * Note: This field controls macro expansion capability only. It does NOT affect
+   * the block's semantics or runtime behavior.
+   */
+  readonly loweringPurity?: LoweringPurity;
 
   /**
    * Cardinality metadata for cardinality-generic blocks.
