@@ -546,18 +546,18 @@ function lowerBlockInstance(
 
           if (isField) {
             // Field — register field slot and slot type
-            builder.registerFieldSlot(finalRef.id, finalRef.slot);
-            builder.registerSlotType(finalRef.slot, finalRef.type);
+            builder.registerFieldSlot(finalRef.id, finalRef.slot!);
+            builder.registerSlotType(finalRef.slot!, finalRef.type);
           } else {
             // Signal — register sig slot (if stride=1) and slot type
             if (finalRef.stride === 1) {
-              builder.registerSigSlot(finalRef.id, finalRef.slot);
+              builder.registerSigSlot(finalRef.id, finalRef.slot!);
             }
-            builder.registerSlotType(finalRef.slot, finalRef.type);
+            builder.registerSlotType(finalRef.slot!, finalRef.type);
           }
         } else {
           // Event — register slot type only
-          builder.registerSlotType(finalRef.slot, finalRef.type);
+          builder.registerSlotType(finalRef.slot!, finalRef.type);
         }
       }
       outputRefs.set(portId, finalRef);
@@ -680,33 +680,54 @@ function lowerSCCTwoPass(
         // Register outputs in blockOutputs (making them available to other blocks)
         if (partialResult.outputsById) {
           const outputRefs = new Map<string, ValueRefExpr>();
-          for (const [portId, ref] of Object.entries(partialResult.outputsById)) {
+                    for (const [portId, ref] of Object.entries(partialResult.outputsById)) {
+            // Handle pure blocks: allocate slots on their behalf if not already allocated
+            let finalRef = ref;
+            if (isExprRef(ref) && ref.slot === undefined) {
+              // Pure block output — allocate slot now
+              if (blockDef.loweringPurity === 'pure') {
+                const allocatedSlot = builder.allocTypedSlot(ref.type, `${block.id}.${portId}`);
+                finalRef = {
+                  ...ref,
+                  slot: allocatedSlot,
+                };
+              } else {
+                // Impure block with missing slot — this is a bug
+                errors.push({
+                  code: "IRValidationFailed",
+                  message: `Block ${block.type}#${block.id} phase1 output '${portId}' missing slot (impure blocks must allocate slots)`,
+                  where: { blockId: block.id },
+                });
+                continue;
+              }
+            }
+
             // Register slot types - check extent directly instead of using deriveKind
-            if (isExprRef(ref)) {
-              const temp = requireInst(ref.type.extent.temporality, 'temporality');
+            if (isExprRef(finalRef)) {
+              const temp = requireInst(finalRef.type.extent.temporality, 'temporality');
               const isEvent = temp.kind === 'discrete';
 
               if (!isEvent) {
-                const card = requireInst(ref.type.extent.cardinality, 'cardinality');
+                const card = requireInst(finalRef.type.extent.cardinality, 'cardinality');
                 const isField = card.kind === 'many';
 
                 if (isField) {
                   // Field — register field slot and slot type
-                  builder.registerFieldSlot(ref.id, ref.slot);
-                  builder.registerSlotType(ref.slot, ref.type);
+                  builder.registerFieldSlot(finalRef.id, finalRef.slot!);
+                  builder.registerSlotType(finalRef.slot!, finalRef.type);
                 } else {
                   // Signal — register sig slot (if stride=1) and slot type
-                  if (ref.stride === 1) {
-                    builder.registerSigSlot(ref.id, ref.slot);
+                  if (finalRef.stride === 1) {
+                    builder.registerSigSlot(finalRef.id, finalRef.slot!);
                   }
-                  builder.registerSlotType(ref.slot, ref.type);
+                  builder.registerSlotType(finalRef.slot!, finalRef.type);
                 }
               } else {
                 // Event — register slot type only
-                builder.registerSlotType(ref.slot, ref.type);
+                builder.registerSlotType(finalRef.slot!, finalRef.type);
               }
             }
-            outputRefs.set(portId, ref);
+            outputRefs.set(portId, finalRef);
           }
           blockOutputs.set(blockIndex, outputRefs);
         }

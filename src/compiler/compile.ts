@@ -594,8 +594,8 @@ function convertLinkedIRToProgram(
         const valueId = ref.id as unknown as ValueExprId;
         const instanceId = inferFieldInstanceFromValueExprs(valueId, valueExprNodes);
         if (instanceId) {
-          fieldSlotRegistry.set(ref.slot, { fieldId: valueId, instanceId });
-          fieldSlotSet.add(ref.slot as number);
+          fieldSlotRegistry.set(ref.slot!, { fieldId: valueId, instanceId });
+          fieldSlotSet.add(ref.slot! as number);
         }
       }
     }

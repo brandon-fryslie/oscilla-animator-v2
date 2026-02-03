@@ -17,12 +17,12 @@
  */
 
 import type { IRBuilder } from './IRBuilder';
+import type { BlockIndex } from '../../graph/normalize';
 import type { PureIRBuilder } from './PureIRBuilder';
 import type { CanonicalType, ConstValue } from '../../core/canonical-types';
 import { payloadStride } from '../../core/canonical-types';
 import type {
   ValueExprId,
-  BlockIndex,
   InstanceId,
   DomainTypeId,
 } from './Indices';
@@ -211,7 +211,7 @@ export class LowerSandbox implements PureIRBuilder {
         .filter((def) => def.exposedAsPort !== false)
         .map((def) => def.type as CanonicalType),
       outTypes,
-      b: this as PureIRBuilder,
+      b: this as unknown as IRBuilder,
       seedConstId: 0,
     };
 

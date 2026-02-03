@@ -112,7 +112,7 @@ registerBlock({
       if (!ref || !isSignal) {
         throw new Error(`Camera block: input '${portId}' must be a signal (got ${ref ? 'field' : 'undefined'})`);
       }
-      return ref.slot;
+      return ref.slot!; // Slot is always present after orchestrator allocation
     };
 
     const cameraDecl: CameraDeclIR = {
