@@ -81,7 +81,7 @@ export interface IRBuilder {
   placement(field: PlacementFieldName, basisKind: BasisKind, type: CanonicalType): ValueExprId;
 
   /** Create a state-read expression. */
-  stateRead(stateSlot: StateSlotId, type: CanonicalType): ValueExprId;
+  stateRead(stateKey: StableStateId, type: CanonicalType): ValueExprId;
 
   /** Read an event expression as a float signal (0.0 or 1.0). */
   eventRead(eventExpr: ValueExprId): ValueExprId;

@@ -15,6 +15,10 @@
  * Migration complete.
  *
  * Spec Reference: TYPE-SYSTEM-INVARIANTS.md
+ *
+ * MIGRATION (2026-02-03): ValueExprState now uses stateKey: StableStateId (symbolic)
+ * instead of stateSlot: StateSlotId (physical). The binding pass resolves symbolic keys
+ * to physical slots after lowering.
  */
 
 import type { CanonicalType, ConstValue } from '../../core/canonical-types';
@@ -25,6 +29,7 @@ import type {
   PlacementFieldName,
   BasisKind,
   PureFn,
+  StableStateId,
 } from './types';
 
 // =============================================================================
@@ -163,16 +168,16 @@ export type ValueExprKernel =
   | {
       readonly kind: 'kernel';
       readonly type: CanonicalType;
-      readonly kernelKind: 'zip';
-      readonly inputs: readonly ValueExprId[];
+      readonly kernelKind: 'zipSig';
+      readonly field: ValueExprId;
+      readonly signals: readonly ValueExprId[];
       readonly fn: PureFn;
     }
   | {
       readonly kind: 'kernel';
       readonly type: CanonicalType;
-      readonly kernelKind: 'zipSig';
-      readonly field: ValueExprId;
-      readonly signals: readonly ValueExprId[];
+      readonly kernelKind: 'zip';
+      readonly inputs: readonly ValueExprId[];
       readonly fn: PureFn;
     }
   | {
@@ -200,14 +205,15 @@ export type ValueExprKernel =
     };
 
 /**
- * State slot read.
+ * State read expression (symbolic).
  *
  * Reads persistent state from stateful blocks (unitDelay, lag, phasor, etc.).
+ * Uses symbolic StableStateId key — the binding pass resolves to physical StateSlotId.
  */
 export interface ValueExprState {
   readonly kind: 'state';
   readonly type: CanonicalType;
-  readonly stateSlot: StateSlotId;
+  readonly stateKey: StableStateId;
 }
 
 /**

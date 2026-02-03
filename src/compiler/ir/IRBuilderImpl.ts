@@ -99,8 +99,8 @@ export class IRBuilderImpl implements IRBuilder {
     return this.pushExpr({ kind: 'intrinsic', type, intrinsicKind: 'placement', field, basisKind });
   }
 
-  stateRead(stateSlot: StateSlotId, type: CanonicalType): ValueExprId {
-    return this.pushExpr({ kind: 'state', type, stateSlot });
+  stateRead(stateKey: StableStateId, type: CanonicalType): ValueExprId {
+    return this.pushExpr({ kind: 'state', type, stateKey });
   }
 
   eventRead(eventExpr: ValueExprId): ValueExprId {
