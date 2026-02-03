@@ -10,6 +10,10 @@
  *
  * MIGRATION (2026-01-31): ValueRefPacked now uses unified ValueExprId.
  * The k:'sig'|'field'|'event' discriminant is GONE — derive by checking extent axes.
+ *
+ * MIGRATION (2026-02-03): ValueRefExpr.slot is now optional.
+ * Pure blocks return ValueRefExpr with slot: undefined. The orchestrator allocates
+ * slots on behalf of pure blocks after lowering completes.
  */
 
 import { requireInst } from '../../core/canonical-types';
@@ -46,12 +50,21 @@ export type ValueRefPacked =
 /**
  * Unified expression reference.
  * No k discriminant — derive signal/field/event from type.extent.
+ *
+ * PURE LOWERING (2026-02-03):
+ * - slot is now OPTIONAL
+ * - Pure blocks return ValueRefExpr with slot: undefined
+ * - The orchestrator (lower-blocks.ts) allocates slots for pure blocks post-lowering
+ * - Impure blocks continue allocating slots directly (slot is present)
  */
 export interface ValueRefExpr {
   /** Expression ID into the unified valueExprs table */
   readonly id: ValueExprId;
-  /** Value slot for runtime storage */
-  readonly slot: ValueSlot;
+  /**
+   * Value slot for runtime storage.
+   * Optional — undefined for pure block outputs (orchestrator allocates later).
+   */
+  readonly slot?: ValueSlot;
   /** Canonical type (payload + unit + extent) */
   readonly type: CanonicalType;
   /** Components per sample (derived from payload stride) */
