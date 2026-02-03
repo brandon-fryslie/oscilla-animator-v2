@@ -12,3 +12,4 @@ import './lag';
 import './phasor';
 import './hash';
 import './camera-projection-const';
+import './default-source';
