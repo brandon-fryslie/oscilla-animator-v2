@@ -61,6 +61,51 @@ registerBlock({
       outputsById: {
         out: { id: rgb, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
       },
+      effects: {
+        slotRequests: [
+          { portId: 'out', type: outType },
+        ],
+      },
+    };
+    return {
+      outputsById: {
+        out: { id: rgb, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'out', type: outType },
+        ],
+      },
+    };
+    return {
+      outputsById: {
+        out: { id: rgb, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'out', type: outType },
+        ],
+      },
+    };
+    return {
+      outputsById: {
+        out: { id: rgb, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'out', type: outType },
+        ],
+      },
+    };
+    return {
+      outputsById: {
+        out: { id: rgb, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'out', type: outType },
+        ],
+      },
     };
   },
 });

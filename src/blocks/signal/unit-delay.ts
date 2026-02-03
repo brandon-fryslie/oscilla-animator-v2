@@ -9,7 +9,6 @@ import { canonicalType, payloadStride, requireInst } from '../../core/canonical-
 import { FLOAT } from '../../core/canonical-types';
 import { stableStateId } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
-import type { StateSlotId } from '../../compiler/ir/Indices';
 
 registerBlock({
   type: 'UnitDelay',
@@ -36,20 +35,27 @@ registerBlock({
     const initialValue = (config?.initialValue as number) ?? 0;
     const outType = ctx.outTypes[0];
 
-    // Allocate state slot (will be reused in phase 2)
-    const stateId = stableStateId(ctx.instanceId, 'delay');
-    const stateSlot = ctx.b.allocStateSlot(stateId, { initialValue });
+    // Symbolic state key (will be reused in phase 2)
+    const stateKey = stableStateId(ctx.instanceId, 'delay');
 
-    // Read previous state (this is the output - delayed by 1 frame)
-    const outputId = ctx.b.stateRead(stateSlot, canonicalType(FLOAT));
+    // Read previous state (this is the output - delayed by 1 frame, symbolic key)
+    const outputId = ctx.b.stateRead(stateKey, canonicalType(FLOAT));
 
-    const slot = ctx.b.allocSlot();
-
+    // Phase 1: declare state and output slot, but NO step request yet (phase 2 writes to state)
     return {
       outputsById: {
-        out: { id: outputId, slot, type: outType, stride: payloadStride(outType.payload) },
+        out: { id: outputId, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
       },
-      stateSlot, // Pass to phase 2
+      effects: {
+        stateDecls: [
+          { key: stateKey, initialValue },
+        ],
+        stepRequests: [], // Phase 2 will add the state write
+        slotRequests: [
+          { portId: 'out', type: outType },
+        ],
+      },
+      stateSlot: stateKey as any, // Pass symbolic key to phase 2 (temporary compatibility)
     };
   },
   // Phase 2: Generate state write step using resolved input
@@ -60,13 +66,17 @@ registerBlock({
       throw new Error('UnitDelay requires signal input');
     }
 
-    // If called from two-phase lowering, reuse existing outputs and state slot
+    // If called from two-phase lowering, reuse existing outputs and add state write effect
     if (existingOutputs?.outputsById && existingOutputs?.stateSlot !== undefined) {
-      // Write current input to state for next frame
-      ctx.b.stepStateWrite(existingOutputs.stateSlot as StateSlotId, input.id);
-      // Return the existing outputs (already registered in phase 1)
+      const stateKey = existingOutputs.stateSlot as any; // Symbolic key passed from phase 1
+      // Return existing outputs with additional step request for state write
       return {
         outputsById: existingOutputs.outputsById,
+        effects: {
+          stepRequests: [
+            { kind: 'stateWrite' as const, stateKey, value: input.id },
+          ],
+        },
       };
     }
 
@@ -74,21 +84,27 @@ registerBlock({
     const initialValue = (config?.initialValue as number) ?? 0;
     const outType = ctx.outTypes[0];
 
-    // Create state for delayed value
-    const stateId = stableStateId(ctx.instanceId, 'delay');
-    const stateSlot = ctx.b.allocStateSlot(stateId, { initialValue });
+    // Symbolic state key
+    const stateKey = stableStateId(ctx.instanceId, 'delay');
 
-    // Read previous state (this is the output - delayed by 1 frame)
-    const outputId = ctx.b.stateRead(stateSlot, canonicalType(FLOAT));
+    // Read previous state (this is the output - delayed by 1 frame, symbolic key)
+    const outputId = ctx.b.stateRead(stateKey, canonicalType(FLOAT));
 
-    // Write current input to state for next frame
-    ctx.b.stepStateWrite(stateSlot, input.id);
-
-    const slot = ctx.b.allocSlot();
-
+    // Return effects-as-data (no imperative calls)
     return {
       outputsById: {
-        out: { id: outputId, slot, type: outType, stride: payloadStride(outType.payload) },
+        out: { id: outputId, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        stateDecls: [
+          { key: stateKey, initialValue },
+        ],
+        stepRequests: [
+          { kind: 'stateWrite' as const, stateKey, value: input.id },
+        ],
+        slotRequests: [
+          { portId: 'out', type: outType },
+        ],
       },
     };
   },

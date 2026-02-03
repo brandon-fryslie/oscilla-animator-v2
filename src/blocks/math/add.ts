@@ -47,11 +47,16 @@ registerBlock({
     const [aId, bId] = alignInputs(a.id, a.type, b.id, b.type, outType, ctx.b);
     const resultId = ctx.b.kernelZip([aId, bId], ctx.b.opcode(OpCode.Add), outType);
 
-    // MIGRATION (2026-02-03): Pure blocks don't allocate slots directly.
-    // The orchestrator (lower-blocks.ts) allocates slots on behalf of pure blocks.
+    // MIGRATION (2026-02-03): Pure blocks return effects-as-data.
+    // The orchestrator allocates slots on behalf of pure blocks via slotRequests.
     return {
       outputsById: {
         out: { id: resultId, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'out', type: outType },
+        ],
       },
     };
   },
