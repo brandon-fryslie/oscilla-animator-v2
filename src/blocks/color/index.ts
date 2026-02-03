@@ -11,3 +11,4 @@ import './hue-shift';
 import './mix-color';
 import './alpha-multiply';
 import './hsl-to-rgba';
+import './hue-rainbow';
