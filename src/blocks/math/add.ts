@@ -17,6 +17,7 @@ registerBlock({
   description: 'Adds two numbers (signals or fields)',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure', // MIGRATION (2026-02-03): Pure block for macro expansion
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
@@ -45,11 +46,12 @@ registerBlock({
     const outType = ctx.outTypes[0];
     const [aId, bId] = alignInputs(a.id, a.type, b.id, b.type, outType, ctx.b);
     const resultId = ctx.b.kernelZip([aId, bId], ctx.b.opcode(OpCode.Add), outType);
-    const slot = ctx.b.allocSlot();
 
+    // MIGRATION (2026-02-03): Pure blocks don't allocate slots directly.
+    // The orchestrator (lower-blocks.ts) allocates slots on behalf of pure blocks.
     return {
       outputsById: {
-        out: { id: resultId, slot, type: outType, stride: payloadStride(outType.payload) },
+        out: { id: resultId, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
       },
     };
   },
