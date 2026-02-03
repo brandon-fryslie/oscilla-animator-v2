@@ -32,10 +32,11 @@ import type { CameraDeclIR } from './program';
 import type { ValueExpr } from './value-expr';
 import type { IRBuilder } from './IRBuilder';
 import { valueExprId } from './Indices';
-import { canonicalType, FLOAT, unitScalar } from '../../core/canonical-types';
+import { canonicalType, canonicalEvent, FLOAT, unitScalar, payloadStride } from '../../core/canonical-types';
 
 export class IRBuilderImpl implements IRBuilder {
   private valueExprs: ValueExpr[] = [];
+  private valueExprCache = new Map<string, ValueExprId>();
   private steps: Step[] = [];
   private stateMappings: StateMapping[] = [];
   private slotCounter = 0;
@@ -165,25 +166,21 @@ export class IRBuilderImpl implements IRBuilder {
   // ===========================================================================
 
   eventPulse(source: 'InfiniteTimeRoot'): ValueExprId {
-    // Event type: discrete temporality, bool payload, none unit
-    const type = canonicalType(FLOAT /* placeholder */, unitScalar()); // TODO: fix to proper event type
-    return this.pushExpr({ kind: 'event', type, eventKind: 'pulse', source: 'timeRoot' });
+    return this.pushExpr({ kind: 'event', type: canonicalEvent(), eventKind: 'pulse', source: 'timeRoot' });
   }
 
   eventWrap(signal: ValueExprId): ValueExprId {
-    const type = canonicalType(FLOAT, unitScalar()); // TODO: proper event type
-    return this.pushExpr({ kind: 'event', type, eventKind: 'wrap', input: signal });
+    return this.pushExpr({ kind: 'event', type: canonicalEvent(), eventKind: 'wrap', input: signal });
   }
 
   eventCombine(events: readonly ValueExprId[], mode: 'any' | 'all' | 'merge' | 'last', type?: CanonicalType): ValueExprId {
-    const actualType = type ?? canonicalType(FLOAT, unitScalar()); // TODO: proper event type
+    const actualType = type ?? canonicalEvent();
     const normalizedMode = mode === 'merge' || mode === 'last' ? 'any' : mode;
     return this.pushExpr({ kind: 'event', type: actualType, eventKind: 'combine', inputs: events, mode: normalizedMode });
   }
 
   eventNever(): ValueExprId {
-    const type = canonicalType(FLOAT, unitScalar()); // TODO: proper event type
-    return this.pushExpr({ kind: 'event', type, eventKind: 'never' });
+    return this.pushExpr({ kind: 'event', type: canonicalEvent(), eventKind: 'never' });
   }
 
   // ===========================================================================
@@ -192,13 +189,13 @@ export class IRBuilderImpl implements IRBuilder {
 
   allocTypedSlot(type: CanonicalType, label?: string): ValueSlot {
     const slot = this.slotCounter++ as ValueSlot;
-    const stride = 1; // TODO: derive from type
+    const stride = payloadStride(type.payload);
     this.slotMeta.set(slot, { type, stride });
     return slot;
   }
 
   registerSlotType(slot: ValueSlot, type: CanonicalType): void {
-    const stride = 1; // TODO: derive from type
+    const stride = payloadStride(type.payload);
     this.slotMeta.set(slot, { type, stride });
   }
 
@@ -425,8 +422,13 @@ export class IRBuilderImpl implements IRBuilder {
   // ===========================================================================
 
   private pushExpr(expr: ValueExpr): ValueExprId {
+    const hash = JSON.stringify(expr);
+    const existing = this.valueExprCache.get(hash);
+    if (existing !== undefined) return existing;
+
     const id = valueExprId(this.valueExprs.length);
     this.valueExprs.push(expr);
+    this.valueExprCache.set(hash, id);
     return id;
   }
 

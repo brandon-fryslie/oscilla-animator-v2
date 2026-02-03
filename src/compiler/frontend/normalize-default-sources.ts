@@ -196,11 +196,12 @@ function analyzeDefaultSources(patch: Patch): DefaultSourceInsertion[] {
             const portOverride = block.inputPorts.get(inputId)?.defaultSource;
             // 2. Fall back to registry default
             const registryDefault = (input as InputDef & { defaultSource?: DefaultSource }).defaultSource;
-            // 3. Generate Const(value ?? 0) if no explicit default exists
+            // 3. Insert a polymorphic DefaultSource block that defers value selection
+            //    until after type resolution, when lowering can dispatch on resolved type.
             const effectiveDefault: DefaultSource = portOverride ?? registryDefault ?? {
-                blockType: 'Const',
+                blockType: 'DefaultSource',
                 output: 'out',
-                params: { value: input.defaultValue ?? 0 },
+                params: {},
             };
 
             // Materialize the effective default source

@@ -80,7 +80,8 @@ export function materializeValueExpr(
         const intrinsic = expr.intrinsic;
         materializeIntrinsic(buf, intrinsic, instanceId, count, state, program);
       } else {
-        throw new Error(`Placement intrinsics not yet implemented: ${expr.intrinsicKind}`);
+        // Placement intrinsic: uv, rank, seed with basis kind
+        materializePlacement(buf, expr.field, expr.basisKind, count, stride);
       }
       break;
     }
@@ -399,6 +400,9 @@ function evaluatePureFn(fn: PureFn, args: number[]): number {
       case 'log': return Math.log(args[0]);
       case 'min': return Math.min(args[0], args[1]);
       case 'max': return Math.max(args[0], args[1]);
+      case 'clamp': return Math.min(Math.max(args[0], args[1]), args[2]);
+      case 'lerp': return args[0] + (args[1] - args[0]) * args[2];
+      case 'select': return args[0] ? args[1] : args[2];
       default: throw new Error(`Unknown opcode: ${fn.opcode}`);
     }
   } else if (fn.kind === 'kernel') {
@@ -445,6 +449,106 @@ function materializeIntrinsic(
   } else {
     throw new Error(`Unknown intrinsic: ${intrinsic}`);
   }
+}
+
+/**
+ * Materialize placement basis field (uv, rank, seed).
+ *
+ * Produces per-element values based on the chosen basis algorithm.
+ * - uv: 2D coordinates in [0,1]² (stride=2)
+ * - rank: 1D ordering value in [0,1) (stride=1)
+ * - seed: pseudo-random value per element (stride=1)
+ */
+function materializePlacement(
+  buf: Float32Array,
+  field: import('../compiler/ir/types').PlacementFieldName,
+  basisKind: import('../compiler/ir/types').BasisKind,
+  count: number,
+  stride: number
+): void {
+  switch (field) {
+    case 'uv': {
+      // Produce vec2 UV coordinates based on basis kind
+      switch (basisKind) {
+        case 'grid': {
+          // Grid-aligned: approximate square grid from count
+          const cols = Math.ceil(Math.sqrt(count));
+          const rows = Math.ceil(count / cols);
+          for (let i = 0; i < count; i++) {
+            const col = i % cols;
+            const row = Math.floor(i / cols);
+            buf[i * stride] = cols > 1 ? col / (cols - 1) : 0.5;
+            buf[i * stride + 1] = rows > 1 ? row / (rows - 1) : 0.5;
+          }
+          break;
+        }
+        case 'halton2D': {
+          // Halton sequence bases 2 and 3
+          for (let i = 0; i < count; i++) {
+            buf[i * stride] = halton(i + 1, 2);
+            buf[i * stride + 1] = halton(i + 1, 3);
+          }
+          break;
+        }
+        case 'spiral': {
+          // Fermat spiral
+          const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+          for (let i = 0; i < count; i++) {
+            const r = Math.sqrt(i / count);
+            const theta = i * goldenAngle;
+            buf[i * stride] = 0.5 + 0.5 * r * Math.cos(theta);
+            buf[i * stride + 1] = 0.5 + 0.5 * r * Math.sin(theta);
+          }
+          break;
+        }
+        case 'random': {
+          // Pseudo-random (deterministic from index)
+          for (let i = 0; i < count; i++) {
+            buf[i * stride] = pseudoRandom(i * 2);
+            buf[i * stride + 1] = pseudoRandom(i * 2 + 1);
+          }
+          break;
+        }
+      }
+      break;
+    }
+    case 'rank': {
+      // 1D ordering value in [0, 1)
+      for (let i = 0; i < count; i++) {
+        buf[i * stride] = count > 1 ? i / (count - 1) : 0;
+      }
+      break;
+    }
+    case 'seed': {
+      // Pseudo-random stable seed per element
+      for (let i = 0; i < count; i++) {
+        buf[i * stride] = pseudoRandom(i);
+      }
+      break;
+    }
+  }
+}
+
+/** Halton sequence value for index n in given base. */
+function halton(n: number, base: number): number {
+  let result = 0;
+  let f = 1 / base;
+  let i = n;
+  while (i > 0) {
+    result += f * (i % base);
+    i = Math.floor(i / base);
+    f /= base;
+  }
+  return result;
+}
+
+/** Simple deterministic pseudo-random from integer seed. */
+function pseudoRandom(seed: number): number {
+  let x = (seed + 1) * 2654435761;
+  x = ((x >>> 16) ^ x) * 0x45d9f3b;
+  x = ((x >>> 16) ^ x) * 0x45d9f3b;
+  x = (x >>> 16) ^ x;
+  return (x & 0x7fffffff) / 0x7fffffff;
 }
 
 /**

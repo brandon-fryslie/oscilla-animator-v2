@@ -10,7 +10,7 @@
  * 3. releaseAll() - return all buffers to pool at frame end
  */
 
-import { type PayloadType, type ConcretePayloadType } from '../core/canonical-types';
+import { type PayloadType } from '../core/canonical-types';
 
 /** Shape2D words per record (must match RuntimeState.SHAPE2D_WORDS) */
 const SHAPE2D_WORDS = 8;
@@ -144,6 +144,7 @@ export class BufferPool {
   /**
    * Ensure both maps have arrays for this key.
    * Cold path only — called on first encounter of a key (graph change, not per-frame).
+   * NOTE: ALLOCATES
    */
   private ensureKey(key: string): void {
     if (this.pools.has(key)) return;

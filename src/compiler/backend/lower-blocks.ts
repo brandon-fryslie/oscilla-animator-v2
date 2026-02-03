@@ -425,10 +425,12 @@ function lowerBlockInstance(
       }
     }
 
-    // Resolve output types from pass1 portTypes
+    // Resolve output types from pass1 portTypes, falling back to declared type.
+    // The array MUST be positionally complete (one entry per output port in declaration order)
+    // so that blocks can index into it by position.
     const outTypes: CanonicalType[] = Object.keys(blockDef.outputs)
-      .map(portName => portTypes?.get(portKey(blockIndex, portName, 'out')))
-      .filter((t): t is CanonicalType => t !== undefined);
+      .map(portName => (portTypes?.get(portKey(blockIndex, portName, 'out'))
+        ?? blockDef.outputs[portName].type) as CanonicalType);
     // Backend reads portTypes from TypedPatch - never modifies them.
     // Blocks with 'preserve' cardinality must rewrite placeholder instance IDs
     // in their own lower() function using withInstance() (see Array, GridLayoutUV, etc.)
@@ -639,8 +641,8 @@ function lowerSCCTwoPass(
             .map(portName => portTypes?.get(portKey(blockIndex, portName, 'in')))
             .filter((t): t is CanonicalType => t !== undefined),
           outTypes: Object.keys(blockDef.outputs)
-            .map(portName => portTypes?.get(portKey(blockIndex, portName, 'out')))
-            .filter((t): t is CanonicalType => t !== undefined),
+            .map(portName => (portTypes?.get(portKey(blockIndex, portName, 'out'))
+              ?? blockDef.outputs[portName].type) as CanonicalType),
           b: builder,
           seedConstId: 0,
         };

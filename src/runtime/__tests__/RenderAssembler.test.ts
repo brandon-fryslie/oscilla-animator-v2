@@ -321,11 +321,11 @@ describe('RenderAssembler', () => {
       );
     });
 
-    it('throws when color buffer is not Uint8ClampedArray', () => {
+    it('throws when color buffer is not Uint8ClampedArray or Float32Array', () => {
       const state = createMockState();
       // Position buffer must be stride-3 (vec3 world-space positions)
       const positionBuffer = new Float32Array(30); // 10 instances * 3 components
-      const colorBuffer = new Float32Array(40); // Wrong type!
+      const colorBuffer = new Int32Array(40); // Wrong type!
       const controlPointsBuffer = new Float32Array(10);
 
       state.values.objects.set(1 as ValueSlot, positionBuffer);
@@ -366,7 +366,7 @@ describe('RenderAssembler', () => {
       };
 
       expect(() => assembleDrawPathInstancesOp(step, context)).toThrow(
-        /Color buffer must be Uint8ClampedArray/
+        /Color buffer must be Float32Array or Uint8ClampedArray/
       );
     });
 

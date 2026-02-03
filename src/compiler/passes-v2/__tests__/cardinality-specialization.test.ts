@@ -92,9 +92,11 @@ describe('Cardinality Specialization', () => {
         const arr = b.addBlock('Array');
         const ellipse = b.addBlock('Ellipse');
         const grid = b.addBlock('GridLayoutUV');
+        const render = b.addBlock('RenderInstances2D');
 
         b.wire(ellipse, 'shape', arr, 'element');
         b.wire(arr, 'elements', grid, 'elements');
+        b.wire(grid, 'position', render, 'pos');
 
         // Try to connect a field to a signal-only block
         // This should fail validation

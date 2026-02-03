@@ -318,12 +318,25 @@ describe('Debug Probe Support', () => {
 
 describe('error isolation for unreachable blocks', () => {
   it('compiles successfully when only disconnected blocks have errors', () => {
-    // Build a minimal working patch (just TimeRoot)
+    // Build a patch with a working render pipeline and a disconnected Expression with an error.
+    // The Expression is not connected to any render block, so its error should be isolated.
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot');
 
-      // Add a disconnected Expression block with a syntax error
-      // Note: parameter name is 'expression', not 'expr'
+      // Working render pipeline
+      const arr = b.addBlock('Array');
+      b.setPortDefault(arr, 'count', 4);
+      const ellipse = b.addBlock('Ellipse');
+      const grid = b.addBlock('GridLayoutUV');
+      b.wire(arr, 'elements', grid, 'elements');
+      const color = b.addBlock('Const');
+      b.setConfig(color, 'value', { r: 1, g: 0, b: 0, a: 1 });
+      const render = b.addBlock('RenderInstances2D');
+      b.wire(grid, 'position', render, 'pos');
+      b.wire(ellipse, 'shape', render, 'shape');
+      b.wire(color, 'out', render, 'color');
+
+      // Disconnected Expression block with a syntax error (not wired to render)
       const expr = b.addBlock('Expression');
       b.setConfig(expr, 'expression', 'this is not valid +++');  // Syntax error
     });
@@ -338,16 +351,30 @@ describe('error isolation for unreachable blocks', () => {
   });
 
   it('excludes errors from disconnected subgraph', () => {
-    // Build a patch with disconnected subgraph with errors
+    // Build a patch with a working render pipeline and a disconnected subgraph with errors.
+    // The disconnected subgraph is not connected to any render block.
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot');
 
-      // Disconnected subgraph with multiple errors
+      // Working render pipeline
+      const arr = b.addBlock('Array');
+      b.setPortDefault(arr, 'count', 4);
+      const ellipse = b.addBlock('Ellipse');
+      const grid = b.addBlock('GridLayoutUV');
+      b.wire(arr, 'elements', grid, 'elements');
+      const color = b.addBlock('Const');
+      b.setConfig(color, 'value', { r: 1, g: 0, b: 0, a: 1 });
+      const render = b.addBlock('RenderInstances2D');
+      b.wire(grid, 'position', render, 'pos');
+      b.wire(ellipse, 'shape', render, 'shape');
+      b.wire(color, 'out', render, 'color');
+
+      // Disconnected subgraph with multiple errors (not wired to render)
       const expr1 = b.addBlock('Expression', { displayName: 'Expr1' });
       b.setConfig(expr1, 'expression', 'error 1 +++');
       const expr2 = b.addBlock('Expression', { displayName: 'Expr2' });
       b.setConfig(expr2, 'expression', 'error 2 +++');
-      // Wire them together but not to anything else
+      // Wire them together but not to any render block
       b.addVarargConnection(expr2, 'refs', `v1:blocks.expr1.outputs.out`, 0, 'x');
     });
 
@@ -361,15 +388,27 @@ describe('error isolation for unreachable blocks', () => {
   });
 
   it('emits warnings for unreachable block errors in CompileEnd event', () => {
-    // Build a patch with a disconnected block that has an error
+    // Build a patch with a working render pipeline and a disconnected Expression with an error.
+    // The Expression is wired to time (so it compiles) but NOT to any render block.
     const patch = buildPatch((b) => {
-      b.addBlock('InfiniteTimeRoot', { displayName: 'Time' });
+      const time = b.addBlock('InfiniteTimeRoot', { displayName: 'Time' });
 
-      // Create Expression block with a syntax error but leave it disconnected from any render
-      // Use "t +" which is a guaranteed syntax error (incomplete expression)
+      // Working render pipeline
+      const arr = b.addBlock('Array');
+      b.setPortDefault(arr, 'count', 4);
+      const ellipse = b.addBlock('Ellipse');
+      const grid = b.addBlock('GridLayoutUV');
+      b.wire(arr, 'elements', grid, 'elements');
+      const color = b.addBlock('Const');
+      b.setConfig(color, 'value', { r: 1, g: 0, b: 0, a: 1 });
+      const render = b.addBlock('RenderInstances2D');
+      b.wire(grid, 'position', render, 'pos');
+      b.wire(ellipse, 'shape', render, 'shape');
+      b.wire(color, 'out', render, 'color');
+
+      // Expression block with a syntax error — wired to time but NOT to render
       const expr = b.addBlock('Expression', { displayName: 'TestExpr' });
       b.setConfig(expr, 'expression', 't +');  // Incomplete expression - guaranteed syntax error
-      // Wire time to the Expression so it actually tries to compile
       b.addVarargConnection(expr, 'refs', `v1:blocks.time.outputs.tMs`, 0, 't');
     });
 

@@ -55,21 +55,18 @@ registerBlock({
     const phaseBSlot = ctx.b.allocSlot();
     const pulseEventSlot = ctx.b.allocEventSlot(pulse);
     const paletteSlot = SYSTEM_PALETTE_SLOT;
+    ctx.b.registerSlotType(paletteSlot, canonicalType(COLOR));
     const energySlot = ctx.b.allocSlot();
 
-    // Get output types from context
-    // NOTE: ctx.outTypes might exclude event outputs, check what ports are provided
+    // Get output types from context (positionally matches outputs declaration order:
+    // tMs=0, dt=1, phaseA=2, phaseB=3, pulse=4, palette=5, energy=6)
     const tMsType = ctx.outTypes[0];
     const dtType = ctx.outTypes[1];
     const phaseAType = ctx.outTypes[2];
     const phaseBType = ctx.outTypes[3];
-
-    // Event outputs SHOULD have a type in portTypes per spec - it's discrete+bool+none
-    // If ctx.outTypes includes events (length=7), use indices 4,5,6 for pulse,palette,energy
-    // If ctx.outTypes excludes events (length=6), use indices 4,5 for palette,energy
-    const pulseType = canonicalEvent(); // Events always have this type
-    const paletteType = ctx.outTypes.length === 7 ? ctx.outTypes[5] : ctx.outTypes[4];
-    const energyType = ctx.outTypes.length === 7 ? ctx.outTypes[6] : ctx.outTypes[5];
+    const pulseType = ctx.outTypes[4] ?? canonicalEvent();
+    const paletteType = ctx.outTypes[5];
+    const energyType = ctx.outTypes[6];
 
     return {
       outputsById: {

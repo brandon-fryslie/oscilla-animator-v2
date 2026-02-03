@@ -423,7 +423,7 @@ function resolveScale(
     );
   }
 
-  if (scaleSpec.k === 'sig') {
+  if (scaleSpec.k === 'sig') { // TODO: k === 'sig' is deprecated/removed
     const slotIndex = sigToSlot.get(scaleSpec.id as number);
     if (slotIndex === undefined) {
       throw new Error(
@@ -435,7 +435,7 @@ function resolveScale(
   } else {
     throw new Error(
       `RenderAssembler: scale must be a signal, got ${scaleSpec.k}. ` +
-      'Per-particle scale is not supported.'
+      'Per-particle scale is not supported.' // TODO: why?
     );
   }
 }
@@ -1190,15 +1190,23 @@ export function assembleDrawPathInstancesOp(
   }
 
   // Read color buffer from slot
-  const colorBuffer = state.values.objects.get(step.colorSlot) as ArrayBufferView;
-  if (!colorBuffer) {
+  const rawColorBuffer = state.values.objects.get(step.colorSlot) as ArrayBufferView;
+  if (!rawColorBuffer) {
     throw new Error(`RenderAssembler: Color buffer not found in slot ${step.colorSlot}`);
   }
 
-  // Color must be Uint8ClampedArray for v2
-  if (!(colorBuffer instanceof Uint8ClampedArray)) {
+  // Convert Float32Array [0,1] RGBA to Uint8ClampedArray [0,255] if needed
+  let colorBuffer: Uint8ClampedArray;
+  if (rawColorBuffer instanceof Uint8ClampedArray) {
+    colorBuffer = rawColorBuffer;
+  } else if (rawColorBuffer instanceof Float32Array) {
+    colorBuffer = new Uint8ClampedArray(rawColorBuffer.length);
+    for (let i = 0; i < rawColorBuffer.length; i++) {
+      colorBuffer[i] = rawColorBuffer[i] * 255;
+    }
+  } else {
     throw new Error(
-      `RenderAssembler: Color buffer must be Uint8ClampedArray, got ${colorBuffer.constructor.name}`
+      `RenderAssembler: Color buffer must be Float32Array or Uint8ClampedArray, got ${rawColorBuffer.constructor.name}`
     );
   }
 
