@@ -134,8 +134,11 @@ export function materializeValueExpr(
     }
 
     case 'state': {
-      // WI-4: State read - copy from persistent state
-      const stateSlot = expr.stateSlot;
+      // State read - copy from persistent state using resolved physical slot
+      if (expr.resolvedSlot === undefined) {
+        throw new Error(`State expression for key "${expr.stateKey}" has no resolved slot — binding pass may not have run`);
+      }
+      const stateSlot = expr.resolvedSlot as number;
       // Copy from state array
       const sourceData = state.state.slice(stateSlot, stateSlot + count * stride);
       buf.set(sourceData);

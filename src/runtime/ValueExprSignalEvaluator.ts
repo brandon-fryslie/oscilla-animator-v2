@@ -141,8 +141,11 @@ function evaluateSignalExtent(
     }
 
     case 'state': {
-      // Read from persistent state array
-      return state.state[expr.stateSlot as number];
+      // Read from persistent state array using resolved physical slot
+      if (expr.resolvedSlot === undefined) {
+        throw new Error(`State expression for key "${expr.stateKey}" has no resolved slot — binding pass may not have run`);
+      }
+      return state.state[expr.resolvedSlot as number];
     }
 
     case 'shapeRef': {

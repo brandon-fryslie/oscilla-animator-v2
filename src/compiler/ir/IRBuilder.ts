@@ -178,6 +178,12 @@ export interface IRBuilder {
     }
   ): StateSlotId;
 
+  /**
+   * Look up an already-allocated state slot by symbolic key.
+   * Returns undefined if the key has not been allocated yet.
+   */
+  findStateSlot(stableId: StableStateId): StateSlotId | undefined;
+
   // =========================================================================
   // Render Globals
   // =========================================================================
@@ -223,4 +229,10 @@ export interface IRBuilder {
   getSigSlots(): ReadonlyMap<number, ValueSlot>;
   getEventSlots(): ReadonlyMap<ValueExprId, EventSlotId>;
   getEventSlotCount(): number;
+
+  /**
+   * Resolve symbolic state keys to physical slots in all state expressions.
+   * Called after state slot allocation to populate ValueExprState.resolvedSlot.
+   */
+  resolveStateExprs(stateKeyToSlot: ReadonlyMap<string, StateSlotId>): void;
 }

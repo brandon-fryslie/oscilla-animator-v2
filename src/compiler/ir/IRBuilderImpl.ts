@@ -321,6 +321,24 @@ export class IRBuilderImpl implements IRBuilder {
     return slot;
   }
 
+  /**
+   * Look up an already-allocated state slot by symbolic key.
+   * Returns undefined if the key has not been allocated yet.
+   * Used by effects processing to resolve symbolic state keys in step requests.
+   */
+  findStateSlot(stableId: StableStateId): StateSlotId | undefined {
+    for (const mapping of this.stateMappings) {
+      if (mapping.stateId === stableId) {
+        if (mapping.kind === 'scalar') {
+          return mapping.slotIndex as StateSlotId;
+        } else {
+          return mapping.slotStart as StateSlotId;
+        }
+      }
+    }
+    return undefined;
+  }
+
   // ===========================================================================
   // Render Globals
   // ===========================================================================
@@ -403,6 +421,22 @@ export class IRBuilderImpl implements IRBuilder {
 
   getValueExprs(): readonly ValueExpr[] {
     return this.valueExprs;
+  }
+
+  /**
+   * Resolve symbolic state keys to physical slots in all state expressions.
+   * Called by processBlockEffects after state slot allocation.
+   */
+  resolveStateExprs(stateKeyToSlot: ReadonlyMap<string, StateSlotId>): void {
+    for (const expr of this.valueExprs) {
+      if (expr.kind === 'state' && expr.resolvedSlot === undefined) {
+        const slot = stateKeyToSlot.get(expr.stateKey);
+        if (slot !== undefined) {
+          // Mutate in place — this is a one-time resolution during compilation
+          (expr as { resolvedSlot?: StateSlotId }).resolvedSlot = slot;
+        }
+      }
+    }
   }
 
   getSigSlots(): ReadonlyMap<number, ValueSlot> {

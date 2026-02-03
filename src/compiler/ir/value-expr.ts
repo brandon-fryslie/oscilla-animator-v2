@@ -214,6 +214,12 @@ export interface ValueExprState {
   readonly kind: 'state';
   readonly type: CanonicalType;
   readonly stateKey: StableStateId;
+  /**
+   * Physical state slot index, resolved after lowering by the binding/effects pass.
+   * Symbolic stateKey is set during lowering; resolvedSlot is populated when
+   * processBlockEffects (or the future binding pass) maps StableStateId → StateSlotId.
+   */
+  resolvedSlot?: StateSlotId;
 }
 
 /**

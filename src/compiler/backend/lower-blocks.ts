@@ -9,7 +9,7 @@ import type { IRBuilder } from "../ir/IRBuilder";
 import { IRBuilderImpl } from "../ir/IRBuilderImpl";
 import type { CompileError } from "../types";
 import { isExprRef, type ValueRefExpr } from "../ir/lowerTypes";
-import type { InstanceId, StateSlotId } from "../ir/Indices";
+import type { InstanceId, StateSlotId, ValueSlot } from "../ir/Indices";
 import { getBlockDefinition, type LowerCtx, type LowerResult, hasLowerOutputsOnly } from "../../blocks/registry";
 import type { EventHub } from "../../events/EventHub";
 import { type CanonicalType, requireInst } from "../../core/canonical-types";
@@ -352,6 +352,8 @@ function processBlockEffects(
       });
       stateKeyToSlot.set(decl.key, slot);
     }
+    // Resolve symbolic stateKey → physical slot in all state read expressions
+    builder.resolveStateExprs(stateKeyToSlot);
   }
 
   // Pass 2: Process step requests
@@ -359,17 +361,25 @@ function processBlockEffects(
     for (const req of effects.stepRequests) {
       switch (req.kind) {
         case 'stateWrite': {
-          const slot = stateKeyToSlot.get(req.stateKey);
+          // Look up slot: first check local map (from stateDecls in this call),
+          // then check builder's global state mappings (from earlier allocations)
+          let slot = stateKeyToSlot.get(req.stateKey);
           if (slot === undefined) {
-            throw new Error(`State key ${req.stateKey} not declared in stateDecls`);
+            slot = builder.findStateSlot(req.stateKey);
+          }
+          if (slot === undefined) {
+            throw new Error(`State key ${req.stateKey} not declared in stateDecls and not previously allocated`);
           }
           builder.stepStateWrite(slot, req.value);
           break;
         }
         case 'fieldStateWrite': {
-          const slot = stateKeyToSlot.get(req.stateKey);
+          let slot = stateKeyToSlot.get(req.stateKey);
           if (slot === undefined) {
-            throw new Error(`State key ${req.stateKey} not declared in stateDecls`);
+            slot = builder.findStateSlot(req.stateKey);
+          }
+          if (slot === undefined) {
+            throw new Error(`State key ${req.stateKey} not declared in stateDecls and not previously allocated`);
           }
           builder.stepFieldStateWrite(slot, req.value);
           break;
@@ -716,6 +726,7 @@ function lowerSCCTwoPass(
   options?: Pass6Options
 ): void {
   // Storage for phase 1 results
+  // Phase 1 returns symbolic outputs + effects; binding happens before registration
   const phase1Results = new Map<BlockIndex, Partial<LowerResult>>();
 
   // Pass 1: Generate outputs for stateful blocks with lowerOutputsOnly
@@ -755,29 +766,55 @@ function lowerSCCTwoPass(
 
         // Call lowerOutputsOnly
         const partialResult = blockDef.lowerOutputsOnly!({ ctx, config });
-
         // Store partial result for phase 2
         phase1Results.set(blockIndex, partialResult);
 
-        // Register outputs in blockOutputs (making them available to other blocks)
+        // BINDING PASS for phase 1: process effects before registering outputs
+        // This is the SCC-specific binding that allocates physical resources from symbolic declarations
+
+        // Step 1: Process state declarations (allocate state slots, resolve state expressions)
+        if (partialResult.effects?.stateDecls) {
+          const stateKeyToSlot = new Map<string, StateSlotId>();
+          for (const decl of partialResult.effects.stateDecls) {
+            const slot = builder.allocStateSlot(decl.key, {
+              initialValue: decl.initialValue,
+              stride: decl.stride,
+              instanceId: decl.instanceId,
+              laneCount: decl.laneCount,
+            });
+            stateKeyToSlot.set(decl.key, slot);
+          }
+          // Resolve symbolic state keys → physical slots in all state read expressions
+          builder.resolveStateExprs(stateKeyToSlot);
+        }
+
+        // Step 2: Allocate output slots from slotRequests
+        const allocatedSlots = new Map<string, ValueSlot>();
+        if (partialResult.effects?.slotRequests) {
+          for (const req of partialResult.effects.slotRequests) {
+            const slot = builder.allocTypedSlot(req.type, `${block.id}.${req.portId}`);
+            allocatedSlots.set(req.portId, slot);
+          }
+        }
+        // Step 3: Bind outputs (fill in physical slots)
         if (partialResult.outputsById) {
           const outputRefs = new Map<string, ValueRefExpr>();
-                    for (const [portId, ref] of Object.entries(partialResult.outputsById)) {
-            // Handle pure blocks: allocate slots on their behalf if not already allocated
+          for (const [portId, ref] of Object.entries(partialResult.outputsById)) {
             let finalRef = ref;
             if (isExprRef(ref) && ref.slot === undefined) {
-              // Pure block output — allocate slot now
-              if (blockDef.loweringPurity === 'pure') {
+              const effectSlot = allocatedSlots.get(portId);
+              if (effectSlot !== undefined) {
+                // Effects-as-data block — bind slot from slotRequests
+                finalRef = { ...ref, slot: effectSlot };
+              } else if (blockDef.loweringPurity === 'pure') {
+                // Pure block fallback — allocate slot now
                 const allocatedSlot = builder.allocTypedSlot(ref.type, `${block.id}.${portId}`);
-                finalRef = {
-                  ...ref,
-                  slot: allocatedSlot,
-                };
+                finalRef = { ...ref, slot: allocatedSlot };
               } else {
-                // Impure block with missing slot — this is a bug
+                // Impure block with missing slot and no slotRequest — this is a bug
                 errors.push({
                   code: "IRValidationFailed",
-                  message: `Block ${block.type}#${block.id} phase1 output '${portId}' missing slot (impure blocks must allocate slots)`,
+                  message: `Block ${block.type}#${block.id} phase1 output '${portId}' missing slot (no slotRequest in effects)`,
                   where: { blockId: block.id },
                 });
                 continue;
@@ -812,6 +849,13 @@ function lowerSCCTwoPass(
             outputRefs.set(portId, finalRef);
           }
           blockOutputs.set(blockIndex, outputRefs);
+
+          // Update phase1Results with bound outputs so phase 2 sees the resolved slots
+          const boundResult: Partial<LowerResult> = {
+            ...partialResult,
+            outputsById: Object.fromEntries(outputRefs.entries())
+          };
+          phase1Results.set(blockIndex, boundResult);
         }
       } catch (error) {
         errors.push({
