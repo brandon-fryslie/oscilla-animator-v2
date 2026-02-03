@@ -1,7 +1,8 @@
 # Sprint: effects-as-data - LowerEffects + Symbolic State Keys + Binding Pass
 Generated: 2026-02-03
-Confidence: HIGH: 4, MEDIUM: 2, LOW: 0
-Status: PARTIALLY READY
+Updated: 2026-02-03 (post-implementation)
+Confidence: HIGH: 5, MEDIUM: 1, LOW: 0
+Status: NEARLY COMPLETE (WI-1,2,3,5 done; WI-4 reframed)
 
 ## Sprint Goal
 Migrate stateful block lowering from imperative side effects to declarative effects-as-data. Introduce symbolic state keys in IR (StableStateId replaces StateSlotId in expressions), define the LowerEffects return type, and build a post-lowering binding pass that resolves symbolic keys to physical slots.
@@ -16,10 +17,10 @@ Migrate stateful block lowering from imperative side effects to declarative effe
 
 ## Work Items
 
-### WI-1 [HIGH]: Define LowerEffects type and update LowerResult
+### WI-1 [COMPLETE]: Define LowerEffects type and update LowerResult
 
 **Acceptance Criteria:**
-- [ ] `LowerEffects` type defined with: `stateDecls`, `stepRequests`, `slotRequests`
+- [x] `LowerEffects` type defined with: `stateDecls`, `stepRequests`, `slotRequests`
 - [ ] `StateDecl`: `{ key: StableStateId, initialValue: number, stride?: number, instanceId?: InstanceId, laneCount?: number }`
 - [ ] `StepRequest`: discriminated union covering `stateWrite`, `fieldStateWrite`, `materialize`, `continuityMapBuild`, `continuityApply`
 - [ ] `SlotRequest`: `{ portId: string, type: CanonicalType }`
