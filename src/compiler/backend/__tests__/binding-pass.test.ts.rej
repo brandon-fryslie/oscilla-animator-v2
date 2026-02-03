@@ -1,0 +1,14 @@
+@@ -48,7 +48,11 @@
+   });
+ 
+   it('allocates slots deterministically (lexical order)', () => {
+-    const type = canonicalType(FLOAT, { kind: 'none' }, {
++    const type = canonicalType(
++      FLOAT,
++      { kind: 'none' },
++      {
++        binding: { kind: 'inst', value: 'free' },
+         cardinality: cardinalityOne(),
+         temporality: temporalityContinuous(),
+-        perspective: { kind: 'inst', id: 'default' as any },
++        perspective: { kind: 'inst', value: { kind: 'default' } },

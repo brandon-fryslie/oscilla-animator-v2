@@ -9,7 +9,7 @@ import type { IRBuilder } from "../ir/IRBuilder";
 import { IRBuilderImpl } from "../ir/IRBuilderImpl";
 import type { CompileError } from "../types";
 import { isExprRef, type ValueRefExpr } from "../ir/lowerTypes";
-import type { InstanceId, StateSlotId, ValueSlot } from "../ir/Indices";
+import type { InstanceId } from "../ir/Indices";
 import { getBlockDefinition, type LowerCtx, type LowerResult, hasLowerOutputsOnly } from "../../blocks/registry";
 import type { EventHub } from "../../events/EventHub";
 import { type CanonicalType, requireInst } from "../../core/canonical-types";
@@ -25,6 +25,8 @@ import {
   shouldCombine,
 } from "../passes-v2/combine-utils";
 import type { NormalizedEdge } from "../ir/patches";
+// Binding Pass Integration (WI-4)
+import { bindEffects, applyBinding, bindOutputs } from "./binding-pass";
 
 // Helper to create port key
 function portKey(blockIndex: BlockIndex, portName: string, direction: 'in' | 'out'): PortKey {
@@ -325,93 +327,6 @@ function inferInstanceContext(
 // =============================================================================
 
 /**
- * Process LowerEffects (compatibility shim for effects-as-data migration).
- *
- * Two-pass processing:
- * 1. Allocate state slots from stateDecls → build symbolic→physical mapping
- * 2. Process step requests using the mapping
- *
- * @param effects - Effects returned by block lowering
- * @param builder - IRBuilder for imperative calls
- * @param blockId - Block ID for error context
- */
-function processBlockEffects(
-  effects: import('../ir/lowerTypes').LowerEffects,
-  builder: IRBuilder,
-  blockId: string
-): void {
-  // Pass 1: Allocate state slots and build mapping
-  const stateKeyToSlot = new Map<string, StateSlotId>();
-  if (effects.stateDecls) {
-    for (const decl of effects.stateDecls) {
-      const slot = builder.allocStateSlot(decl.key, {
-        initialValue: decl.initialValue,
-        stride: decl.stride,
-        instanceId: decl.instanceId,
-        laneCount: decl.laneCount,
-      });
-      stateKeyToSlot.set(decl.key, slot);
-    }
-    // Resolve symbolic stateKey → physical slot in all state read expressions
-    builder.resolveStateExprs(stateKeyToSlot);
-  }
-
-  // Pass 2: Process step requests
-  if (effects.stepRequests) {
-    for (const req of effects.stepRequests) {
-      switch (req.kind) {
-        case 'stateWrite': {
-          // Look up slot: first check local map (from stateDecls in this call),
-          // then check builder's global state mappings (from earlier allocations)
-          let slot = stateKeyToSlot.get(req.stateKey);
-          if (slot === undefined) {
-            slot = builder.findStateSlot(req.stateKey);
-          }
-          if (slot === undefined) {
-            throw new Error(`State key ${req.stateKey} not declared in stateDecls and not previously allocated`);
-          }
-          builder.stepStateWrite(slot, req.value);
-          break;
-        }
-        case 'fieldStateWrite': {
-          let slot = stateKeyToSlot.get(req.stateKey);
-          if (slot === undefined) {
-            slot = builder.findStateSlot(req.stateKey);
-          }
-          if (slot === undefined) {
-            throw new Error(`State key ${req.stateKey} not declared in stateDecls and not previously allocated`);
-          }
-          builder.stepFieldStateWrite(slot, req.value);
-          break;
-        }
-        case 'materialize': {
-          builder.stepMaterialize(req.field, req.instanceId, req.target);
-          break;
-        }
-        case 'continuityMapBuild': {
-          builder.stepContinuityMapBuild(req.instanceId);
-          break;
-        }
-        case 'continuityApply': {
-          builder.stepContinuityApply(
-            req.targetKey,
-            req.instanceId,
-            req.policy,
-            req.baseSlot,
-            req.outputSlot,
-            req.semantic,
-            req.stride
-          );
-          break;
-        }
-      }
-    }
-  }
-
-  // Slot requests already handled by pure block slot allocation (lines 516-535)
-}
-
-/**
  * Lower a block instance using its registered lowering function.
  *
  * All blocks MUST have registered IR lowering functions.
@@ -586,6 +501,45 @@ function lowerBlockInstance(
       return outputRefs;
     }
 
+    // Process effects using binding pass (WI-4)
+    if (result.effects) {
+      const bindingInputs = {
+        effects: result.effects,
+        existingState: undefined, // Non-SCC path has no prior state
+        origin: { blockId: block.id },
+      };
+      const binding = bindEffects(bindingInputs, builder);
+
+      // Check for binding diagnostics
+      if (binding.diagnostics.length > 0) {
+        for (const diag of binding.diagnostics) {
+          errors.push({
+            code: diag.level === 'error' ? 'IRValidationFailed' : 'NotImplemented',
+            message: diag.message,
+            where: { blockId: block.id },
+          });
+        }
+      }
+
+      // Apply binding (mechanical execution)
+      applyBinding(builder, binding, result.effects);
+
+      // Bind outputs using the new helper
+      const boundOutputsMap = bindOutputs(
+        result.outputsById,
+        binding.slotMap,
+        block.id,
+        blockDef.loweringPurity,
+        builder
+      );
+
+      // Use bound outputs instead of raw outputs
+      result = {
+        ...result,
+        outputsById: Object.fromEntries(boundOutputsMap.entries()),
+      };
+    }
+
     // Map outputs to port IDs using outputsById
     const portOrder = Object.keys(blockDef.outputs);
     for (const portId of portOrder) {
@@ -653,11 +607,6 @@ function lowerBlockInstance(
     // Track instance context for downstream propagation
     if (result.instanceContext !== undefined && instanceContextByBlock !== undefined) {
       instanceContextByBlock.set(blockIndex, result.instanceContext);
-    }
-
-    // Process effects (compatibility shim for effects-as-data migration)
-    if (result.effects) {
-      processBlockEffects(result.effects, builder, block.id);
     }
 
   } catch (error) {
@@ -769,59 +718,40 @@ function lowerSCCTwoPass(
         // Store partial result for phase 2
         phase1Results.set(blockIndex, partialResult);
 
-        // BINDING PASS for phase 1: process effects before registering outputs
-        // This is the SCC-specific binding that allocates physical resources from symbolic declarations
+        // BINDING PASS for phase 1: process effects using new binding pass (WI-4)
+        if (partialResult.effects) {
+          const bindingInputs = {
+            effects: partialResult.effects,
+            existingState: undefined, // Phase 1 has no prior state
+            origin: { blockId: block.id, phase: 'phase1' as const },
+          };
+          const binding = bindEffects(bindingInputs, builder);
 
-        // Step 1: Process state declarations (allocate state slots, resolve state expressions)
-        if (partialResult.effects?.stateDecls) {
-          const stateKeyToSlot = new Map<string, StateSlotId>();
-          for (const decl of partialResult.effects.stateDecls) {
-            const slot = builder.allocStateSlot(decl.key, {
-              initialValue: decl.initialValue,
-              stride: decl.stride,
-              instanceId: decl.instanceId,
-              laneCount: decl.laneCount,
-            });
-            stateKeyToSlot.set(decl.key, slot);
-          }
-          // Resolve symbolic state keys → physical slots in all state read expressions
-          builder.resolveStateExprs(stateKeyToSlot);
-        }
-
-        // Step 2: Allocate output slots from slotRequests
-        const allocatedSlots = new Map<string, ValueSlot>();
-        if (partialResult.effects?.slotRequests) {
-          for (const req of partialResult.effects.slotRequests) {
-            const slot = builder.allocTypedSlot(req.type, `${block.id}.${req.portId}`);
-            allocatedSlots.set(req.portId, slot);
-          }
-        }
-        // Step 3: Bind outputs (fill in physical slots)
-        if (partialResult.outputsById) {
-          const outputRefs = new Map<string, ValueRefExpr>();
-          for (const [portId, ref] of Object.entries(partialResult.outputsById)) {
-            let finalRef = ref;
-            if (isExprRef(ref) && ref.slot === undefined) {
-              const effectSlot = allocatedSlots.get(portId);
-              if (effectSlot !== undefined) {
-                // Effects-as-data block — bind slot from slotRequests
-                finalRef = { ...ref, slot: effectSlot };
-              } else if (blockDef.loweringPurity === 'pure') {
-                // Pure block fallback — allocate slot now
-                const allocatedSlot = builder.allocTypedSlot(ref.type, `${block.id}.${portId}`);
-                finalRef = { ...ref, slot: allocatedSlot };
-              } else {
-                // Impure block with missing slot and no slotRequest — this is a bug
-                errors.push({
-                  code: "IRValidationFailed",
-                  message: `Block ${block.type}#${block.id} phase1 output '${portId}' missing slot (no slotRequest in effects)`,
-                  where: { blockId: block.id },
-                });
-                continue;
-              }
+          // Check for binding diagnostics
+          if (binding.diagnostics.length > 0) {
+            for (const diag of binding.diagnostics) {
+              errors.push({
+                code: diag.level === 'error' ? 'IRValidationFailed' : 'NotImplemented',
+                message: diag.message,
+                where: { blockId: block.id },
+              });
             }
+          }
 
-            // Register slot types - check extent directly instead of using deriveKind
+          // Apply binding (mechanical execution)
+          applyBinding(builder, binding, partialResult.effects);
+
+          // Bind outputs using the new helper
+          const boundOutputsMap = bindOutputs(
+            partialResult.outputsById,
+            binding.slotMap,
+            block.id,
+            blockDef.loweringPurity,
+            builder
+          );
+
+          // Register slot types - same logic as in lowerBlockInstance
+          for (const [, finalRef] of boundOutputsMap.entries()) {
             if (isExprRef(finalRef)) {
               const temp = requireInst(finalRef.type.extent.temporality, 'temporality');
               const isEvent = temp.kind === 'discrete';
@@ -846,14 +776,13 @@ function lowerSCCTwoPass(
                 builder.registerSlotType(finalRef.slot!, finalRef.type);
               }
             }
-            outputRefs.set(portId, finalRef);
           }
-          blockOutputs.set(blockIndex, outputRefs);
 
-          // Update phase1Results with bound outputs so phase 2 sees the resolved slots
+          // Update blockOutputs and phase1Results with bound outputs
+          blockOutputs.set(blockIndex, boundOutputsMap);
           const boundResult: Partial<LowerResult> = {
             ...partialResult,
-            outputsById: Object.fromEntries(outputRefs.entries())
+            outputsById: Object.fromEntries(boundOutputsMap.entries())
           };
           phase1Results.set(blockIndex, boundResult);
         }
