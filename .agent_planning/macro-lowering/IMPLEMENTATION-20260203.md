@@ -1,6 +1,6 @@
 # Implementation Summary: Effects-as-Data Migration
 Date: 2026-02-03
-Status: WI-1,2,3,5 COMPLETE; WI-4 reframed
+Status: ✅ COMPLETE (WI-1,2,3,4,5); WI-6 DEFERRED
 
 ## What Was Completed
 
@@ -71,38 +71,75 @@ Status: WI-1,2,3,5 COMPLETE; WI-4 reframed
 
 **Commit:** `e2602a1`
 
-## What Remains (WI-4 Reframed)
+## What Remains
 
-### WI-4: Global Binding Pass Extraction & Unification [HIGH confidence]
-**Scope changed:** From "build binding pass (unknown SCC integration)" to "extract & generalize proven binder"
+### WI-6: Remove Legacy Imperative Path (DEFERRED)
+**Status:** Deferred per user decision (MEDIUM confidence, unknowns about Array/render blocks)
 
-**Remaining work:**
-1. Extract binder from SCC phase-1 into reusable module:
-   - `allocateState(stateDecls)`
-   - `allocateSlots(slotRequests)`
-   - `resolveStateExprs()` patching
-   - `bindOutputs()`
+**Out of scope for now:**
+- Removing ValueRefExpr.slot optionality
+- Removing all legacy orchestrator slot allocation code
 
-2. Define integration point for non-SCC paths:
-   - After full graph lowering (or per-block, depending on architecture)
+---
 
-3. Unify SCC and non-SCC paths to call same binder code
+## WI-4: Global Binding Pass Extraction & Unification ✅ COMPLETE
 
-4. Stabilize invariants:
-   - Idempotent allocation by `StableStateId`
-   - "All stepRequests referring to state must resolve" (assertion)
-   - Deterministic slot assignment policy
+**Scope:** Extract proven binding logic from SCC path into reusable module that all lowering paths share.
 
-5. Clean up API surfaces:
-   - `findStateSlot` becomes sanctioned lookup mechanism
-   - `resolvedSlot` documented as physical binding result
+**Implementation approach:** Option A - Pure binding function with mechanical apply.
 
-**Out of scope:**
-- Aggressive materialization policy redesign
-- Removing all slotRequests (not ready yet)
+### What Was Implemented
 
-**Why not mark complete?**
-A binder living only inside SCC phase-1 is the classic "works in the hard case but now we have two systems" trap. Until extracted and routed through all paths, WI-4 isn't done—the deliverable is a consistent compiler architecture, not a working SCC special case.
+**Created `src/compiler/backend/binding-pass.ts`:**
+- `bindEffects(inputs, builder)`: Pure, deterministic binding function
+  - Takes LowerEffects + existingState (for SCC idempotency)
+  - Returns BindingResult with all allocation decisions
+  - No side effects, no hidden state
+  - Deterministic: lexical sort of StableStateId for state, portId for slots
+- `applyBinding(builder, result)`: Mechanical applier
+  - Executes binding decisions via builder methods
+  - Processes step requests (stateWrite, fieldStateWrite, materialize, etc.)
+- `bindOutputs(effects, slotMap)`: Helper for binding output ValueRefExprs
+
+**Modified `src/compiler/backend/lower-blocks.ts`:**
+- Replaced `processBlockEffects()` function (lines 338-412) with calls to pure binder
+- Replaced inline SCC phase-1 binding (lines 772-849) with same approach
+- Both SCC and non-SCC paths now use identical binding code
+- Single source of truth: no duplicated logic
+
+**Created comprehensive tests `src/compiler/backend/__tests__/binding-pass.test.ts`:**
+- 10 tests demonstrating determinism, idempotency, purity
+- Tests verify lexical ordering of allocations
+- Tests verify SCC phase-2 reuses phase-1 state
+- Tests verify same inputs → bit-identical outputs
+
+### Key Features
+
+1. **Deterministic allocation:**
+   - State: lexical sort of StableStateId
+   - Slots: lexical sort of portId
+   - Same inputs always produce identical BindingResult
+
+2. **Idempotent:**
+   - Reuses existing state when provided (for SCC phase-2)
+   - `findStateSlot()` fallback for cross-phase references
+
+3. **Pure:**
+   - No side effects outside returned data
+   - No dependence on builder state or call order
+   - Internal BinderState accumulates deterministically
+
+4. **Unified:**
+   - SCC and non-SCC paths use same binder
+   - No duplicated binding logic anywhere
+   - Single source of truth
+
+### Test Results
+- All 2137 tests pass
+- Type checking clean
+- SCC feedback loop tests pass
+
+**Commit:** `4d4407d`
 
 ## Architecture Decision: Symbolic State + Resolved Slot
 
