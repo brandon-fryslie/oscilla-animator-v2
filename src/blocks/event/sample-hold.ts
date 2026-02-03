@@ -44,14 +44,11 @@ registerBlock({
 
     const initialValue = (config?.initialValue as number) ?? 0;
 
-    // Allocate persistent state slot with stable ID
-    const stateSlot = ctx.b.allocStateSlot(
-      stableStateId(ctx.instanceId, 'sample'),
-      { initialValue }
-    );
+    // Symbolic state key
+    const stateKey = stableStateId(ctx.instanceId, 'sample');
 
-    // Read previous held value (Phase 1 — reads previous frame's state)
-    const prevId = ctx.b.stateRead(stateSlot, canonicalType(FLOAT));
+    // Read previous held value (Phase 1 — reads previous frame's state, symbolic key)
+    const prevId = ctx.b.stateRead(stateKey, canonicalType(FLOAT));
 
     // Read event scalar as float (0.0 or 1.0)
     const triggerSig = ctx.b.eventRead(triggerInput.id);
@@ -65,15 +62,23 @@ registerBlock({
       canonicalType(FLOAT)
     );
 
-    // Write output to state for next frame (Phase 2)
-    ctx.b.stepStateWrite(stateSlot, outputId);
-
     const outType = ctx.outTypes[0];
-    const slot = ctx.b.allocSlot();
 
+    // Return effects-as-data (no imperative calls)
     return {
       outputsById: {
-        out: { id: outputId, slot, type: outType, stride: payloadStride(outType.payload) },
+        out: { id: outputId, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        stateDecls: [
+          { key: stateKey, initialValue },
+        ],
+        stepRequests: [
+          { kind: 'stateWrite' as const, stateKey, value: outputId },
+        ],
+        slotRequests: [
+          { portId: 'out', type: outType },
+        ],
       },
     };
   },

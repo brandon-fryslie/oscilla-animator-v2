@@ -9,7 +9,7 @@ import type { IRBuilder } from "../ir/IRBuilder";
 import { IRBuilderImpl } from "../ir/IRBuilderImpl";
 import type { CompileError } from "../types";
 import { isExprRef, type ValueRefExpr } from "../ir/lowerTypes";
-import type { InstanceId } from "../ir/Indices";
+import type { InstanceId, StateSlotId } from "../ir/Indices";
 import { getBlockDefinition, type LowerCtx, type LowerResult, hasLowerOutputsOnly } from "../../blocks/registry";
 import type { EventHub } from "../../events/EventHub";
 import { type CanonicalType, requireInst } from "../../core/canonical-types";
@@ -325,6 +325,83 @@ function inferInstanceContext(
 // =============================================================================
 
 /**
+ * Process LowerEffects (compatibility shim for effects-as-data migration).
+ *
+ * Two-pass processing:
+ * 1. Allocate state slots from stateDecls → build symbolic→physical mapping
+ * 2. Process step requests using the mapping
+ *
+ * @param effects - Effects returned by block lowering
+ * @param builder - IRBuilder for imperative calls
+ * @param blockId - Block ID for error context
+ */
+function processBlockEffects(
+  effects: import('../ir/lowerTypes').LowerEffects,
+  builder: IRBuilder,
+  blockId: string
+): void {
+  // Pass 1: Allocate state slots and build mapping
+  const stateKeyToSlot = new Map<string, StateSlotId>();
+  if (effects.stateDecls) {
+    for (const decl of effects.stateDecls) {
+      const slot = builder.allocStateSlot(decl.key, {
+        initialValue: decl.initialValue,
+        stride: decl.stride,
+        instanceId: decl.instanceId,
+        laneCount: decl.laneCount,
+      });
+      stateKeyToSlot.set(decl.key, slot);
+    }
+  }
+
+  // Pass 2: Process step requests
+  if (effects.stepRequests) {
+    for (const req of effects.stepRequests) {
+      switch (req.kind) {
+        case 'stateWrite': {
+          const slot = stateKeyToSlot.get(req.stateKey);
+          if (slot === undefined) {
+            throw new Error(`State key ${req.stateKey} not declared in stateDecls`);
+          }
+          builder.stepStateWrite(slot, req.value);
+          break;
+        }
+        case 'fieldStateWrite': {
+          const slot = stateKeyToSlot.get(req.stateKey);
+          if (slot === undefined) {
+            throw new Error(`State key ${req.stateKey} not declared in stateDecls`);
+          }
+          builder.stepFieldStateWrite(slot, req.value);
+          break;
+        }
+        case 'materialize': {
+          builder.stepMaterialize(req.field, req.instanceId, req.target);
+          break;
+        }
+        case 'continuityMapBuild': {
+          builder.stepContinuityMapBuild(req.instanceId);
+          break;
+        }
+        case 'continuityApply': {
+          builder.stepContinuityApply(
+            req.targetKey,
+            req.instanceId,
+            req.policy,
+            req.baseSlot,
+            req.outputSlot,
+            req.semantic,
+            req.stride
+          );
+          break;
+        }
+      }
+    }
+  }
+
+  // Slot requests already handled by pure block slot allocation (lines 516-535)
+}
+
+/**
  * Lower a block instance using its registered lowering function.
  *
  * All blocks MUST have registered IR lowering functions.
@@ -566,6 +643,11 @@ function lowerBlockInstance(
     // Track instance context for downstream propagation
     if (result.instanceContext !== undefined && instanceContextByBlock !== undefined) {
       instanceContextByBlock.set(blockIndex, result.instanceContext);
+    }
+
+    // Process effects (compatibility shim for effects-as-data migration)
+    if (result.effects) {
+      processBlockEffects(result.effects, builder, block.id);
     }
 
   } catch (error) {

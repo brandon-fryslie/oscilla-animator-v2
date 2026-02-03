@@ -45,12 +45,11 @@ registerBlock({
 
     const outType = ctx.outTypes[0];
 
-    // Create state for accumulated value
-    const stateId = stableStateId(ctx.instanceId, 'accumulator');
-    const stateSlot = ctx.b.allocStateSlot(stateId, { initialValue: 0 });
+    // Symbolic state key
+    const stateKey = stableStateId(ctx.instanceId, 'accumulator');
 
-    // Read current state
-    const currentValue = ctx.b.stateRead(stateSlot, canonicalType(FLOAT));
+    // Read current state (symbolic key, no allocation)
+    const currentValue = ctx.b.stateRead(stateKey, canonicalType(FLOAT));
 
     // Compute new value: reset ? 0 : (currentValue + delta)
     const add = ctx.b.opcode(OpCode.Add);
@@ -61,14 +60,21 @@ registerBlock({
     const select = ctx.b.opcode(OpCode.Select);
     const finalValue = ctx.b.kernelZip([reset.id, zero, newValue], select, canonicalType(FLOAT));
 
-    // Write back to state
-    ctx.b.stepStateWrite(stateSlot, finalValue);
-
-    const slot = ctx.b.allocSlot();
-
+    // Return effects-as-data (no imperative calls)
     return {
       outputsById: {
-        value: { id: finalValue, slot, type: outType, stride: payloadStride(outType.payload) },
+        value: { id: finalValue, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        stateDecls: [
+          { key: stateKey, initialValue: 0 },
+        ],
+        stepRequests: [
+          { kind: 'stateWrite' as const, stateKey, value: finalValue },
+        ],
+        slotRequests: [
+          { portId: 'value', type: outType },
+        ],
       },
     };
   },

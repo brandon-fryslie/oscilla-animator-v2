@@ -41,26 +41,32 @@ registerBlock({
     const initialValue = (config?.initialValue as number) ?? 0;
     const outType = ctx.outTypes[0];
 
-    // Create state for smoothed value
-    const stateId = stableStateId(ctx.instanceId, 'lag');
-    const stateSlot = ctx.b.allocStateSlot(stateId, { initialValue });
+    // Symbolic state key
+    const stateKey = stableStateId(ctx.instanceId, 'lag');
 
-    // Read previous state
-    const prevValue = ctx.b.stateRead(stateSlot, canonicalType(FLOAT));
+    // Read previous state (symbolic key, no allocation)
+    const prevValue = ctx.b.stateRead(stateKey, canonicalType(FLOAT));
 
     // Compute: lerp(prev, target, smoothing)
     const lerpFn = ctx.b.opcode(OpCode.Lerp);
     const smoothConst = ctx.b.constant(floatConst(smoothing), canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()));
     const newValue = ctx.b.kernelZip([prevValue, target.id, smoothConst], lerpFn, canonicalType(FLOAT));
 
-    // Write new value to state
-    ctx.b.stepStateWrite(stateSlot, newValue);
-
-    const slot = ctx.b.allocSlot();
-
+    // Return effects-as-data (no imperative calls)
     return {
       outputsById: {
-        out: { id: newValue, slot, type: outType, stride: payloadStride(outType.payload) },
+        out: { id: newValue, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        stateDecls: [
+          { key: stateKey, initialValue },
+        ],
+        stepRequests: [
+          { kind: 'stateWrite' as const, stateKey, value: newValue },
+        ],
+        slotRequests: [
+          { portId: 'out', type: outType },
+        ],
       },
     };
   },

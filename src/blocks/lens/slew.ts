@@ -41,25 +41,31 @@ registerBlock({
 
     const outType = ctx.outTypes[0];
 
-    // Create state for smoothed value
-    const stateId = stableStateId(ctx.instanceId, 'slew');
-    const stateSlot = ctx.b.allocStateSlot(stateId, { initialValue: 0 });
+    // Symbolic state key
+    const stateKey = stableStateId(ctx.instanceId, 'slew');
 
-    // Read previous state
-    const prevValue = ctx.b.stateRead(stateSlot, outType);
+    // Read previous state (symbolic key, no allocation)
+    const prevValue = ctx.b.stateRead(stateKey, outType);
 
     // Compute: lerp(prev, input, rate)
     const lerpFn = ctx.b.opcode(OpCode.Lerp);
     const newValue = ctx.b.kernelZip([prevValue, input.id, rate.id], lerpFn, outType);
 
-    // Write new value to state
-    ctx.b.stepStateWrite(stateSlot, newValue);
-
-    const slot = ctx.b.allocSlot();
-
+    // Return effects-as-data (no imperative calls)
     return {
       outputsById: {
-        out: { id: newValue, slot, type: outType, stride: payloadStride(outType.payload) },
+        out: { id: newValue, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        stateDecls: [
+          { key: stateKey, initialValue: 0 },
+        ],
+        stepRequests: [
+          { kind: 'stateWrite' as const, stateKey, value: newValue },
+        ],
+        slotRequests: [
+          { portId: 'out', type: outType },
+        ],
       },
     };
   },

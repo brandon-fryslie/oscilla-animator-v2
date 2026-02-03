@@ -38,12 +38,11 @@ registerBlock({
     const initialPhase = (config?.initialPhase as number) ?? 0;
     const outType = ctx.outTypes[0];
 
-    // Create state for accumulated phase
-    const stateId = stableStateId(ctx.instanceId, 'phasor');
-    const stateSlot = ctx.b.allocStateSlot(stateId, { initialValue: initialPhase });
+    // Symbolic state key
+    const stateKey = stableStateId(ctx.instanceId, 'phasor');
 
-    // Read previous phase
-    const prevPhase = ctx.b.stateRead(stateSlot, canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()));
+    // Read previous phase (symbolic key, no allocation)
+    const prevPhase = ctx.b.stateRead(stateKey, canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()));
 
     // Read dt from time system (in seconds)
     const dtSig = ctx.b.time('dt', canonicalType(FLOAT));
@@ -63,14 +62,21 @@ registerBlock({
     const wrapFn = ctx.b.opcode(OpCode.Wrap01);
     const wrappedPhase = ctx.b.kernelMap(rawPhase, wrapFn, canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()));
 
-    // Write wrapped phase to state
-    ctx.b.stepStateWrite(stateSlot, wrappedPhase);
-
-    const slot = ctx.b.allocSlot();
-
+    // Return effects-as-data (no imperative calls)
     return {
       outputsById: {
-        out: { id: wrappedPhase, slot, type: outType, stride: payloadStride(outType.payload) },
+        out: { id: wrappedPhase, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        stateDecls: [
+          { key: stateKey, initialValue: initialPhase },
+        ],
+        stepRequests: [
+          { kind: 'stateWrite' as const, stateKey, value: wrappedPhase },
+        ],
+        slotRequests: [
+          { portId: 'out', type: outType },
+        ],
       },
     };
   },
