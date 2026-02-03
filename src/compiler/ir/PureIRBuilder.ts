@@ -27,7 +27,6 @@ import type {
   InstanceId,
   DomainTypeId,
 } from './Indices';
-import type { TopologyId } from '../../shapes/types';
 import type {
   PureFn,
   OpCode,

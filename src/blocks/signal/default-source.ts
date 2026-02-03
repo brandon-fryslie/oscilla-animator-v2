@@ -22,16 +22,11 @@ import {
   canonicalType,
   payloadStride,
   FLOAT,
-  INT,
-  BOOL,
-  VEC2,
-  VEC3,
-  COLOR,
   requireInst,
 } from '../../core/canonical-types';
-import {  isPayloadVar } from '../../core/inference-types';
+import { isPayloadVar } from '../../core/inference-types';
 import { LowerSandbox } from '../../compiler/ir/LowerSandbox';
-import type { CanonicalType, PayloadType } from '../../core/canonical-types';
+import type { PayloadType } from '../../core/canonical-types';
 
 registerBlock({
   type: 'DefaultSource',
@@ -137,7 +132,6 @@ registerBlock({
         // Color → HueRainbow(phaseA) via macro expansion
         const sandbox = new LowerSandbox(
           ctx.b,
-          ctx.blockIdx,
           ctx.blockType,
           ctx.instanceId
         );

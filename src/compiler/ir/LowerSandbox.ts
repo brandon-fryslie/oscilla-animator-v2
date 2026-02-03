@@ -1,154 +1,48 @@
 /**
  * LowerSandbox
  *
- * A constrained IR builder that allows pure blocks to be invoked as macros
- * during lowering. Enforces purity by restricting access to the IRBuilder API.
+ * Allows pure blocks to be invoked as macros during lowering.
+ * Enforces that only blocks tagged loweringPurity:'pure' can be macro-expanded.
  *
- * The sandbox wraps an IRBuilder instance and implements PureIRBuilder,
- * exposing only pure expression-building methods. It throws if impure methods
- * (slot allocation, step emission) are accessed.
+ * Purity enforcement at the API level is via the PureIRBuilder TypeScript interface
+ * (compile-time restriction). The sandbox checks the loweringPurity tag at runtime
+ * as a safety gate before invoking a block's lower().
  *
  * Usage:
  * ```typescript
- * const sandbox = new LowerSandbox(ctx.b, blockDef, portTypes);
+ * const sandbox = new LowerSandbox(ctx.b, ctx.blockType, ctx.instanceId);
  * const outputExprs = sandbox.lowerBlock('HueRainbow', { t: phaseExpr }, {});
  * // outputExprs['out'] is a ValueExprId (no slot allocated yet)
  * ```
  */
 
 import type { IRBuilder } from './IRBuilder';
-import type { BlockIndex } from '../../graph/normalize';
-import type { PureIRBuilder } from './PureIRBuilder';
-import type { CanonicalType, ConstValue } from '../../core/canonical-types';
+import type { BlockIndex } from '../frontend/normalize-indexing';
+import type { CanonicalType } from '../../core/canonical-types';
 import { payloadStride } from '../../core/canonical-types';
-import type {
-  ValueExprId,
-  InstanceId,
-  DomainTypeId,
-} from './Indices';
-import type { TopologyId } from '../../shapes/types';
-import type {
-  PureFn,
-  OpCode,
-  IntrinsicPropertyName,
-  PlacementFieldName,
-  BasisKind,
-} from './types';
+import type { ValueExprId } from './Indices';
 import { requireBlockDef, type LowerArgs, type LowerCtx } from '../../blocks/registry';
 import type { ValueRefExpr } from './lowerTypes';
 
 /**
- * LowerSandbox provides a constrained IRBuilder for macro expansion.
+ * LowerSandbox — macro expansion utility for pure blocks.
  *
- * It implements PureIRBuilder by delegating pure methods to the inner IRBuilder,
- * and blocking impure methods by not exposing them.
+ * Builds synthetic LowerArgs and invokes a pure block's lower() function,
+ * returning only ValueExprIds (no slots allocated). The orchestrator
+ * (lower-blocks.ts) allocates slots on behalf of pure blocks post-lowering.
  */
-export class LowerSandbox implements PureIRBuilder {
+export class LowerSandbox {
   constructor(
-    private readonly inner: IRBuilder,
-    private readonly parentBlockIdx: BlockIndex,
+    private readonly builder: IRBuilder,
     private readonly parentBlockType: string,
     private readonly parentInstanceId: string,
-    private readonly portTypesFromParent?: ReadonlyMap<string, CanonicalType>
   ) {}
-
-  // =========================================================================
-  // Pure Expression Methods (delegated to inner)
-  // =========================================================================
-
-  constant(value: ConstValue, type: CanonicalType): ValueExprId {
-    return this.inner.constant(value, type);
-  }
-
-  time(which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'progress' | 'palette' | 'energy', type: CanonicalType): ValueExprId {
-    return this.inner.time(which, type);
-  }
-
-  kernelMap(input: ValueExprId, fn: PureFn, type: CanonicalType): ValueExprId {
-    return this.inner.kernelMap(input, fn, type);
-  }
-
-  kernelZip(inputs: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId {
-    return this.inner.kernelZip(inputs, fn, type);
-  }
-
-  kernelZipSig(field: ValueExprId, signals: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId {
-    return this.inner.kernelZipSig(field, signals, fn, type);
-  }
-
-  broadcast(signal: ValueExprId, type: CanonicalType, signalComponents?: readonly ValueExprId[]): ValueExprId {
-    return this.inner.broadcast(signal, type, signalComponents);
-  }
-
-  reduce(field: ValueExprId, op: 'min' | 'max' | 'sum' | 'avg', type: CanonicalType): ValueExprId {
-    return this.inner.reduce(field, op, type);
-  }
-
-  combine(
-    inputs: readonly ValueExprId[],
-    mode: 'sum' | 'average' | 'max' | 'min' | 'last' | 'product',
-    type: CanonicalType
-  ): ValueExprId {
-    return this.inner.combine(inputs, mode, type);
-  }
-
-  intrinsic(intrinsic: IntrinsicPropertyName, type: CanonicalType): ValueExprId {
-    return this.inner.intrinsic(intrinsic, type);
-  }
-
-  placement(field: PlacementFieldName, basisKind: BasisKind, type: CanonicalType): ValueExprId {
-    return this.inner.placement(field, basisKind, type);
-  }
-
-  extract(input: ValueExprId, componentIndex: number, type: CanonicalType): ValueExprId {
-    return this.inner.extract(input, componentIndex, type);
-  }
-
-  construct(components: readonly ValueExprId[], type: CanonicalType): ValueExprId {
-    return this.inner.construct(components, type);
-  }
-
-  hslToRgb(input: ValueExprId, type: CanonicalType): ValueExprId {
-    return this.inner.hslToRgb(input, type);
-  }
-
-  eventPulse(source: 'InfiniteTimeRoot'): ValueExprId {
-    return this.inner.eventPulse(source);
-  }
-
-  eventNever(): ValueExprId {
-    return this.inner.eventNever();
-  }
-
-  kernel(name: string): PureFn {
-    return this.inner.kernel(name);
-  }
-
-  opcode(op: OpCode): PureFn {
-    return this.inner.opcode(op);
-  }
-
-  expr(expression: string): PureFn {
-    return this.inner.expr(expression);
-  }
-
-  createInstance(
-    domainType: DomainTypeId,
-    count: number,
-    lifecycle?: 'static' | 'dynamic' | 'pooled'
-  ): InstanceId {
-    return this.inner.createInstance(domainType, count, lifecycle);
-  }
-
-  // =========================================================================
-  // Macro Expansion
-  // =========================================================================
 
   /**
    * Lower a block as a pure macro.
    *
-   * Invokes the block's lower() function through the sandbox, returning only
-   * ValueExprIds (no slots allocated). The orchestrator allocates slots later.
+   * Invokes the block's lower() function, returning only ValueExprIds
+   * (no slots allocated). The calling block's orchestrator handles slot allocation.
    *
    * @param blockType - The block type to lower
    * @param inputsById - Map of port ID to ValueExprId for inputs
@@ -157,7 +51,6 @@ export class LowerSandbox implements PureIRBuilder {
    *
    * @throws Error if the block is not registered
    * @throws Error if the block is not tagged loweringPurity: 'pure'
-   * @throws Error if the block's lower() function fails
    */
   lowerBlock(
     blockType: string,
@@ -175,14 +68,9 @@ export class LowerSandbox implements PureIRBuilder {
       );
     }
 
-    // Build synthetic LowerCtx for the macro-expanded block
-    // Use a synthetic block index (negative to avoid collision)
-    const syntheticBlockIdx = -1 as BlockIndex;
-
     // Convert ValueExprIds to ValueRefExprs (with slot: undefined for pure blocks)
     const inputRefExprsById: Record<string, ValueRefExpr> = {};
     for (const [portId, exprId] of Object.entries(inputsById)) {
-      // Resolve type from inputDef (or use generic if not available)
       const inputDef = blockDef.inputs[portId];
       if (!inputDef) {
         throw new Error(
@@ -192,16 +80,19 @@ export class LowerSandbox implements PureIRBuilder {
       const inputType = inputDef.type as CanonicalType;
       inputRefExprsById[portId] = {
         id: exprId,
-        slot: undefined, // Pure blocks don't have slots yet
+        slot: undefined,
         type: inputType,
         stride: payloadStride(inputType.payload),
       };
     }
 
-    // Build outTypes from output definitions (or resolve from portTypes if available)
+    // Build outTypes from output definitions
     const outTypes: CanonicalType[] = Object.values(blockDef.outputs).map(
       (outDef) => outDef.type as CanonicalType
     );
+
+    // Synthetic block index (negative to avoid collision with real blocks)
+    const syntheticBlockIdx = -1 as BlockIndex;
 
     const ctx: LowerCtx = {
       blockIdx: syntheticBlockIdx,
@@ -211,11 +102,10 @@ export class LowerSandbox implements PureIRBuilder {
         .filter((def) => def.exposedAsPort !== false)
         .map((def) => def.type as CanonicalType),
       outTypes,
-      b: this as unknown as IRBuilder,
+      b: this.builder,
       seedConstId: 0,
     };
 
-    // Call the block's lower() function
     const lowerArgs: LowerArgs = {
       ctx,
       inputs: Object.values(inputRefExprsById),

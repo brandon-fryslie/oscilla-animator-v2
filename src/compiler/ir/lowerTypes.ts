@@ -16,7 +16,6 @@
  * slots on behalf of pure blocks after lowering completes.
  */
 
-import { requireInst } from '../../core/canonical-types';
 import type { CanonicalType } from '../../core/canonical-types';
 import type {
   ValueExprId,
