@@ -73,12 +73,16 @@ registerBlock({
     const thresholdGtInput = ctx.b.kernelZip([thresholdSig, inputSig], gtFn, canonicalType(FLOAT));
     const gateSig = ctx.b.kernelZip([oneSig, thresholdGtInput], subFn, canonicalType(FLOAT));
 
-    const slot = ctx.b.allocSlot();
     const outType = ctx.outTypes[0];
 
     return {
       outputsById: {
-        gate: { id: gateSig, slot, type: outType, stride: payloadStride(outType.payload) },
+        gate: { id: gateSig, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'gate', type: outType },
+        ],
       },
     };
   },

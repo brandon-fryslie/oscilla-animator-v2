@@ -55,12 +55,16 @@ registerBlock({
   lower: ({ ctx, config }) => {
     const channel = (config?.channel as string) ?? 'mouse.x';
     const sig = ctx.b.external(channel, canonicalType(FLOAT));
-    const slot = ctx.b.allocSlot();
     const outType = ctx.outTypes[0];
 
     return {
       outputsById: {
-        value: { id: sig, slot, type: outType, stride: payloadStride(outType.payload) },
+        value: { id: sig, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'value', type: outType },
+        ],
       },
     };
   },

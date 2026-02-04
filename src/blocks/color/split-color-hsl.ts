@@ -43,17 +43,20 @@ registerBlock({
     const l = ctx.b.extract(colorInput.id, 2, normType);
     const a = ctx.b.extract(colorInput.id, 3, normType);
 
-    const hSlot = ctx.b.allocSlot();
-    const sSlot = ctx.b.allocSlot();
-    const lSlot = ctx.b.allocSlot();
-    const aSlot = ctx.b.allocSlot();
-
     return {
       outputsById: {
-        h: { id: h, slot: hSlot, type: hueType, stride: payloadStride(hueType.payload) },
-        s: { id: s, slot: sSlot, type: normType, stride: payloadStride(normType.payload) },
-        l: { id: l, slot: lSlot, type: normType, stride: payloadStride(normType.payload) },
-        a: { id: a, slot: aSlot, type: normType, stride: payloadStride(normType.payload) },
+        h: { id: h, slot: undefined, type: hueType, stride: payloadStride(hueType.payload) },
+        s: { id: s, slot: undefined, type: normType, stride: payloadStride(normType.payload) },
+        l: { id: l, slot: undefined, type: normType, stride: payloadStride(normType.payload) },
+        a: { id: a, slot: undefined, type: normType, stride: payloadStride(normType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'h', type: hueType },
+          { portId: 's', type: normType },
+          { portId: 'l', type: normType },
+          { portId: 'a', type: normType },
+        ],
       },
     };
   },

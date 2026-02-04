@@ -49,19 +49,12 @@ registerBlock({
     const palette = ctx.b.time('palette', canonicalType(COLOR));
     const energy = ctx.b.time('energy', canonicalType(FLOAT));
 
-    // Allocate slots for time outputs
-    const tMsSlot = ctx.b.allocSlot();
-    const dtSlot = ctx.b.allocSlot();
-    const phaseASlot = ctx.b.allocSlot();
-    const phaseBSlot = ctx.b.allocSlot();
+    // Event slot still needed for time root
     const pulseEventSlot = ctx.b.allocEventSlot(pulse);
-    const pulseSlot = ctx.b.allocSlot(); // Events also need a value slot for type registration
     const paletteSlot = SYSTEM_PALETTE_SLOT;
     ctx.b.registerSlotType(paletteSlot, canonicalType(COLOR));
-    const energySlot = ctx.b.allocSlot();
 
-    // Get output types from context (positionally matches outputs declaration order:
-    // tMs=0, dt=1, phaseA=2, phaseB=3, pulse=4, palette=5, energy=6)
+    // Get output types
     const tMsType = ctx.outTypes[0];
     const dtType = ctx.outTypes[1];
     const phaseAType = ctx.outTypes[2];
@@ -72,13 +65,24 @@ registerBlock({
 
     return {
       outputsById: {
-        tMs: { id: tMs, slot: tMsSlot, type: tMsType, stride: payloadStride(tMsType.payload) },
-        dt: { id: dt, slot: dtSlot, type: dtType, stride: payloadStride(dtType.payload) },
-        phaseA: { id: phaseA, slot: phaseASlot, type: phaseAType, stride: payloadStride(phaseAType.payload) },
-        phaseB: { id: phaseB, slot: phaseBSlot, type: phaseBType, stride: payloadStride(phaseBType.payload) },
-        pulse: { id: pulse, slot: pulseSlot, type: pulseType, stride: payloadStride(pulseType.payload), eventSlot: pulseEventSlot },
-        palette: { id: palette, slot: paletteSlot, type: paletteType, stride: payloadStride(paletteType.payload) },
-        energy: { id: energy, slot: energySlot, type: energyType, stride: payloadStride(energyType.payload) },
+        tMs: { id: tMs, slot: undefined, type: tMsType, stride: payloadStride(tMsType.payload) },
+        dt: { id: dt, slot: undefined, type: dtType, stride: payloadStride(dtType.payload) },
+        phaseA: { id: phaseA, slot: undefined, type: phaseAType, stride: payloadStride(phaseAType.payload) },
+        phaseB: { id: phaseB, slot: undefined, type: phaseBType, stride: payloadStride(phaseBType.payload) },
+        pulse: { id: pulse, slot: undefined, type: pulseType, stride: payloadStride(pulseType.payload), eventSlot: pulseEventSlot },
+        palette: { id: palette, slot: paletteSlot, type: paletteType, stride: payloadStride(paletteType.payload) }, // System slot
+        energy: { id: energy, slot: undefined, type: energyType, stride: payloadStride(energyType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'tMs', type: tMsType },
+          { portId: 'dt', type: dtType },
+          { portId: 'phaseA', type: phaseAType },
+          { portId: 'phaseB', type: phaseBType },
+          { portId: 'pulse', type: pulseType },
+          // palette uses SYSTEM_PALETTE_SLOT, not requested
+          { portId: 'energy', type: energyType },
+        ],
       },
     };
   },

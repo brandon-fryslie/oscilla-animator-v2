@@ -42,10 +42,14 @@ registerBlock({
 
     // Identity — no conversion needed, just re-type
     const outType = ctx.outTypes[0];
-    const slot = ctx.b.allocSlot();
     return {
       outputsById: {
-        out: { id: input.id, slot, type: outType, stride: payloadStride(outType.payload) },
+        out: { id: input.id, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'out', type: outType },
+        ],
       },
     };
   },
