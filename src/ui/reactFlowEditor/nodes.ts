@@ -14,6 +14,7 @@ import { formatTypeForTooltip, getTypeColor, getPortTypeFromBlockType, formatUni
 import { findAdapter } from '../../blocks/adapter-spec';
 import { sortEdgesBySortKey } from '../../compiler/passes-v2/combine-utils';
 import { getLensLabel } from './lensUtils';
+import type { FrontendResultStore } from '../../stores/FrontendResultStore';
 
 /**
  * Connection info for a port
@@ -98,20 +99,38 @@ export type OscillaNode = Node<OscillaNodeData>;
 
 /**
  * Get effective default source for an input port.
- * Instance override takes precedence over registry default.
+ *
+ * Checks FrontendResultStore first (compiler snapshot), then falls back to
+ * instance override, then registry default.
+ *
+ * @param block - Block instance
+ * @param inputId - Input port ID
+ * @param input - Input definition from registry
+ * @param frontendStore - FrontendResultStore (optional, for snapshot-based lookup)
+ * @returns DefaultSource if port has a materialized default, undefined otherwise
  */
 function getEffectiveDefaultSource(
   block: Block,
   inputId: string,
-  input: InputDef
+  input: InputDef,
+  frontendStore?: FrontendResultStore
 ): DefaultSource | undefined {
-  // Instance-level override takes precedence
+  // 1. Check FrontendResultStore snapshot (when status is not 'none')
+  if (frontendStore && frontendStore.snapshot.status !== 'none') {
+    const hasDefault = frontendStore.hasDefaultSourceByIds(block.id, inputId);
+    if (hasDefault) {
+      // Frontend snapshot says this port has a default source - use registry default as indicator
+      return input.defaultSource;
+    }
+  }
+
+  // 2. Instance-level override takes precedence (when snapshot is 'none' or missing)
   const instanceOverride = block.inputPorts.get(inputId)?.defaultSource;
   if (instanceOverride) {
     return instanceOverride;
   }
 
-  // Fall back to registry default
+  // 3. Fall back to registry default
   return input.defaultSource;
 }
 
@@ -153,6 +172,7 @@ function createPortData(
  * @param edges - Optional edge list for connection info
  * @param blocks - Optional block map for connected block labels
  * @param blockDefs - Optional blockDefs map for looking up connected blocks
+ * @param frontendStore - Optional FrontendResultStore for snapshot-based queries
  * @returns ReactFlow node with OscillaNodeData
  */
 export function createNodeFromBlock(
@@ -160,7 +180,8 @@ export function createNodeFromBlock(
   blockDef: AnyBlockDef,
   edges?: readonly Edge[],
   blocks?: ReadonlyMap<BlockId, Block>,
-  blockDefs?: ReadonlyMap<string, AnyBlockDef>
+  blockDefs?: ReadonlyMap<string, AnyBlockDef>,
+  frontendStore?: FrontendResultStore
 ): OscillaNode {
   // Build connection info maps for this block's ports
   const inputConnections = new Map<string, PortConnectionInfo>();
@@ -223,7 +244,7 @@ export function createNodeFromBlock(
           input.label || inputId,
           input.type,
           inputConnections.has(inputId),
-          getEffectiveDefaultSource(block, inputId, input),
+          getEffectiveDefaultSource(block, inputId, input, frontendStore),
           inputConnections.get(inputId),
           input.uiHint,
           lenses

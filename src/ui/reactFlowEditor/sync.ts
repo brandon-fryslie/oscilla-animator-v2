@@ -18,6 +18,7 @@ import type { Patch, BlockId } from '../../types';
 import type { PatchStore } from '../../stores/PatchStore';
 import type { LayoutStore } from '../../stores/LayoutStore';
 import type { DiagnosticsStore } from '../../stores/DiagnosticsStore';
+import type { FrontendResultStore } from '../../stores/FrontendResultStore';
 import { getAnyBlockDefinition, type AnyBlockDef } from '../../blocks/registry';
 import { createNodeFromBlock, createEdgeFromPatchEdge, computeAllNonContributingEdges, type OscillaNode } from './nodes';
 import { getPortTypeFromBlockType, formatUnitForDisplay } from './typeValidation';
@@ -32,6 +33,7 @@ let isSyncing = false;
 export interface SyncHandle {
   patchStore: PatchStore;
   layoutStore: LayoutStore;
+  frontendResultStore: FrontendResultStore;
   setNodes: React.Dispatch<React.SetStateAction<Node[]>>;
   setEdges: React.Dispatch<React.SetStateAction<ReactFlowEdge[]>>;
   getNodes: () => Node[];
@@ -169,7 +171,8 @@ export function reconcileNodes(
   patch: Patch,
   currentNodes: Node[],
   layoutStore: LayoutStore,
-  diagnostics: DiagnosticsStore
+  diagnostics: DiagnosticsStore,
+  frontendResultStore: FrontendResultStore
 ): { nodes: Node[]; edges: ReactFlowEdge[] } {
   // Build blockDefs map for looking up connected block labels
   const blockDefs = new Map<string, AnyBlockDef>();
@@ -203,8 +206,8 @@ export function reconcileNodes(
       continue;
     }
 
-    // Create node with updated data
-    const node = createNodeFromBlock(block, def, patch.edges, patch.blocks, blockDefs);
+    // Create node with updated data (pass frontendResultStore)
+    const node = createNodeFromBlock(block, def, patch.edges, patch.blocks, blockDefs, frontendResultStore);
 
     // Determine position (priority: existing node > LayoutStore > empty space)
     const existingNode = existingNodeMap.get(block.id);
@@ -249,7 +252,8 @@ export function reconcileNodes(
  */
 export function buildNodesAndEdges(
   patch: Patch,
-  diagnostics: DiagnosticsStore
+  diagnostics: DiagnosticsStore,
+  frontendResultStore: FrontendResultStore
 ): { nodes: OscillaNode[]; edges: ReactFlowEdge[] } {
   const blockDefs = new Map<string, AnyBlockDef>();
   for (const block of patch.blocks.values()) {
@@ -271,7 +275,7 @@ export function buildNodesAndEdges(
       continue;
     }
 
-    const node = createNodeFromBlock(block, def, patch.edges, patch.blocks, blockDefs);
+    const node = createNodeFromBlock(block, def, patch.edges, patch.blocks, blockDefs, frontendResultStore);
     // Placeholder position - will be computed by ELK
     node.position = { x: 0, y: 0 };
     nodes.push(node);
@@ -290,6 +294,8 @@ export function buildNodesAndEdges(
  * Setup MobX reaction to reconcile PatchStore changes into ReactFlow.
  * This handles external changes (e.g., from TableView, delete key, etc.).
  * PRESERVES node positions - only adds/removes/updates node data.
+ *
+ * Also observes FrontendResultStore snapshot to trigger re-render when frontend result changes.
  */
 export function setupStructureReaction(
   handle: SyncHandle,
@@ -305,6 +311,9 @@ export function setupStructureReaction(
       combineModes: Array.from(handle.patchStore.blocks.values()).map(block =>
         Array.from(block.inputPorts.values()).map(port => port.combineMode).join(',')
       ).join('|'),
+      // Track frontend snapshot changes (default source indicators, resolved types)
+      frontendSnapshotRevision: handle.frontendResultStore.snapshot.patchRevision,
+      frontendSnapshotStatus: handle.frontendResultStore.snapshot.status,
     }),
     ({ patch }) => {
       if (isSyncing) return;
@@ -314,7 +323,8 @@ export function setupStructureReaction(
           patch,
           handle.getNodes(),
           handle.layoutStore,
-          diagnostics
+          diagnostics,
+          handle.frontendResultStore
         );
         handle.setNodes(result.nodes);
         handle.setEdges(result.edges);
@@ -464,6 +474,7 @@ export function addBlockToReactFlow(
   currentNodes: Node[],
   layoutStore: LayoutStore,
   patchStore: PatchStore,
+  frontendResultStore: FrontendResultStore,
   setNodes: React.Dispatch<React.SetStateAction<Node[]>>,
   diagnostics: DiagnosticsStore
 ): void {
@@ -489,7 +500,10 @@ export function addBlockToReactFlow(
       outputPorts: new Map(),
     },
     def,
-    [] // No edges for new block
+    [], // No edges for new block
+    undefined,
+    undefined,
+    frontendResultStore
   );
 
   // Smart position: near compatible source block
