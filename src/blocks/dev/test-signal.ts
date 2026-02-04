@@ -15,6 +15,7 @@ registerBlock({
   description: 'Captures a signal value for testing (sink block)',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'signalOnly',
     laneCoupling: 'laneLocal',
@@ -31,13 +32,13 @@ registerBlock({
       throw new Error('TestSignal value input must be a signal');
     }
 
-    // Emit a StepEvalValue to force evaluation of this signal
-    const slot = ctx.b.allocSlot();
-    ctx.b.stepEvalSig(value.id as ValueExprId, slot);
-
-    // Sink block - no outputs
+    // Sink block - no outputs, but needs to evaluate the signal
     return {
       outputsById: {},
+      effects: {
+        // Request evaluation of the input signal (for testing/debugging)
+        evalRequests: [{ exprId: value.id as ValueExprId }],
+      },
     };
   },
 });

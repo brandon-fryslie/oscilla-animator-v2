@@ -160,6 +160,17 @@ export interface SlotRequest {
 }
 
 /**
+ * Event slot request (declarative).
+ * Declares an event slot that needs to be allocated by the binding pass.
+ */
+export interface EventSlotRequest {
+  /** Port ID for this event slot */
+  readonly portId: string;
+  /** Event expression ID */
+  readonly eventExprId: ValueExprId;
+}
+
+/**
  * Lower effects (declarative side effects).
  * Blocks return effects instead of calling imperative methods on IRBuilder.
  */
@@ -170,6 +181,10 @@ export interface LowerEffects {
   readonly stepRequests?: readonly StepRequest[];
   /** Slot requests (allocated by binding pass) */
   readonly slotRequests?: readonly SlotRequest[];
+  /** Event slot requests (allocated by binding pass) */
+  readonly eventSlotRequests?: readonly EventSlotRequest[];
+  /** Eval requests for sink blocks (e.g., TestSignal) */
+  readonly evalRequests?: readonly { exprId: ValueExprId }[];
 }
 
 

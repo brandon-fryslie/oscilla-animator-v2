@@ -49,8 +49,7 @@ registerBlock({
     const palette = ctx.b.time('palette', canonicalType(COLOR));
     const energy = ctx.b.time('energy', canonicalType(FLOAT));
 
-    // Event slot still needed for time root
-    const pulseEventSlot = ctx.b.allocEventSlot(pulse);
+    // System palette slot - special case
     const paletteSlot = SYSTEM_PALETTE_SLOT;
     ctx.b.registerSlotType(paletteSlot, canonicalType(COLOR));
 
@@ -69,8 +68,8 @@ registerBlock({
         dt: { id: dt, slot: undefined, type: dtType, stride: payloadStride(dtType.payload) },
         phaseA: { id: phaseA, slot: undefined, type: phaseAType, stride: payloadStride(phaseAType.payload) },
         phaseB: { id: phaseB, slot: undefined, type: phaseBType, stride: payloadStride(phaseBType.payload) },
-        pulse: { id: pulse, slot: undefined, type: pulseType, stride: payloadStride(pulseType.payload), eventSlot: pulseEventSlot },
-        palette: { id: palette, slot: paletteSlot, type: paletteType, stride: payloadStride(paletteType.payload) }, // System slot
+        pulse: { id: pulse, slot: undefined, type: pulseType, stride: payloadStride(pulseType.payload), eventSlot: undefined },
+        palette: { id: palette, slot: paletteSlot, type: paletteType, stride: payloadStride(paletteType.payload) },
         energy: { id: energy, slot: undefined, type: energyType, stride: payloadStride(energyType.payload) },
       },
       effects: {
@@ -82,6 +81,9 @@ registerBlock({
           { portId: 'pulse', type: pulseType },
           // palette uses SYSTEM_PALETTE_SLOT, not requested
           { portId: 'energy', type: energyType },
+        ],
+        eventSlotRequests: [
+          { portId: 'pulse', eventExprId: pulse },
         ],
       },
     };
