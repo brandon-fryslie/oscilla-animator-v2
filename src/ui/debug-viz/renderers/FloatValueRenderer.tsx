@@ -18,16 +18,17 @@ import type { UnitType } from '../../../core/canonical-types';
 import { formatFloat, isInvalidFloat } from './formatFloat';
 
 const styles = {
-  container: { fontFamily: 'monospace', fontSize: '12px', color: '#e0e0e0' } as const,
-  value: { fontSize: '16px', fontWeight: 'bold' } as const,
-  invalidBadge: { color: '#ff4444', fontWeight: 'bold', fontSize: '14px' } as const,
-  warnBadge: { color: '#ffaa00', fontSize: '10px', marginLeft: '4px' } as const,
-  unitLabel: { color: '#888', fontSize: '10px', marginLeft: '4px' } as const,
-  rangeIndicator: { color: '#666', fontSize: '10px', marginLeft: '4px' } as const,
-  row: { display: 'flex', gap: '8px', alignItems: 'baseline' } as const,
-  statRow: { display: 'flex', gap: '6px', alignItems: 'center', fontSize: '11px' } as const,
-  statLabel: { color: '#666', width: '32px' } as const,
-  countBadge: { color: '#666', fontSize: '10px', marginTop: '2px' } as const,
+  container: { fontFamily: 'monospace', fontSize: '13px', color: '#e0e0e0', display: 'flex', flexDirection: 'column' as const, gap: '4px' } as const,
+  valueRow: { display: 'flex', alignItems: 'baseline', gap: '6px' } as const,
+  value: { fontSize: '20px', fontWeight: 'bold', color: '#4ecdc4' } as const,
+  invalidBadge: { color: '#ef4444', fontWeight: 'bold', fontSize: '16px' } as const,
+  warnBadge: { color: '#f59e0b', fontSize: '10px', padding: '2px 4px', borderRadius: '3px', background: 'rgba(245, 158, 11, 0.15)' } as const,
+  unitLabel: { color: '#94a3b8', fontSize: '11px' } as const,
+  rangeIndicator: { color: '#64748b', fontSize: '10px' } as const,
+  statRow: { display: 'flex', gap: '12px', alignItems: 'center', fontSize: '11px' } as const,
+  statLabel: { color: '#64748b', minWidth: '32px' } as const,
+  statValue: { color: '#cbd5e1', fontFamily: 'monospace', fontSize: '12px' } as const,
+  countBadge: { color: '#64748b', fontSize: '10px' } as const,
 };
 
 /**
@@ -88,14 +89,21 @@ interface FloatRendererProps {
 function renderScalarFull(value: number, props: FloatRendererProps): React.ReactElement {
   const children: React.ReactElement[] = [];
 
+  // Value with unit label
+  const valueStyle = isInvalidFloat(value) ? styles.invalidBadge : styles.value;
+  const formattedValue = formatFloat(value);
+  const label = unitLabel(props.unit);
+
+  children.push(
+    React.createElement('div', { key: 'row', style: styles.valueRow },
+      React.createElement('span', { style: valueStyle }, formattedValue),
+      label && React.createElement('span', { style: styles.unitLabel }, label)
+    )
+  );
+
+  // Return early if invalid
   if (isInvalidFloat(value)) {
-    children.push(
-      React.createElement('span', { key: 'val', style: styles.invalidBadge }, formatFloat(value))
-    );
-  } else {
-    children.push(
-      React.createElement('span', { key: 'val', style: { ...styles.container, ...styles.value } }, formatFloat(value))
-    );
+    return React.createElement('div', { style: styles.container }, ...children);
   }
 
   // Unit-specific decorations
@@ -117,30 +125,55 @@ function renderScalarFull(value: number, props: FloatRendererProps): React.React
     }
   }
 
-  return React.createElement('div', { style: { ...styles.container, ...styles.row } }, ...children);
+  // Check for out-of-range warnings (phase should be 0-1)
+  if (props.unit.kind === 'angle' && (props.unit as any).unit === 'turns') {
+    if (value < 0 || value > 1) {
+      children.push(
+        React.createElement('div', { key: 'warn', style: styles.warnBadge }, '⚠ Out of range [0, 1]')
+      );
+    }
+  }
+
+  return React.createElement('div', { style: styles.container }, ...children);
 }
 
 function renderAggregateFull(stats: AggregateStats, props: FloatRendererProps): React.ReactElement {
-  const rows: React.ReactElement[] = [];
-  const labels = ['min', 'mean', 'max'] as const;
-  const arrays = [stats.min, stats.mean, stats.max] as const;
-
-  for (let i = 0; i < 3; i++) {
-    const val = arrays[i][0];
-    rows.push(
-      React.createElement('div', { key: labels[i], style: styles.statRow },
-        React.createElement('span', { style: styles.statLabel }, labels[i]),
-        isInvalidFloat(val)
-          ? React.createElement('span', { style: styles.invalidBadge }, formatFloat(val))
-          : React.createElement('span', null, formatFloat(val))
-      )
-    );
-  }
-
+  const min = stats.min[0];
+  const max = stats.max[0];
+  const mean = stats.mean[0];
+  const { count } = stats;
   const label = unitLabel(props.unit);
+
+  const rows: React.ReactElement[] = [];
+
+  // Mean value (prominent display)
   rows.push(
-    React.createElement('div', { key: 'meta', style: styles.countBadge },
-      `n=${stats.count}${label ? ` ${label}` : ''}`)
+    React.createElement('div', { key: 'mean', style: styles.valueRow },
+      React.createElement('span', { style: { color: '#94a3b8', fontSize: '11px', minWidth: '40px' } }, 'Mean:'),
+      React.createElement('span', { style: { ...styles.value, fontSize: '18px' } }, formatFloat(mean)),
+      label && React.createElement('span', { style: styles.unitLabel }, label)
+    )
+  );
+
+  // Range display
+  rows.push(
+    React.createElement('div', { key: 'range', style: { ...styles.statRow, marginTop: '4px' } },
+      React.createElement('div', { style: { display: 'flex', flexDirection: 'column' as const, gap: '2px', flex: 1 } },
+        React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between' } },
+          React.createElement('span', { style: { color: '#64748b', fontSize: '10px' } }, 'Min'),
+          React.createElement('span', { style: { color: '#64748b', fontSize: '10px' } }, 'Max')
+        ),
+        React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between' } },
+          React.createElement('span', { style: { color: '#60a5fa', fontFamily: 'monospace', fontSize: '11px' } }, formatFloat(min)),
+          React.createElement('span', { style: { color: '#f472b6', fontFamily: 'monospace', fontSize: '11px' } }, formatFloat(max))
+        )
+      )
+    )
+  );
+
+  // Count
+  rows.push(
+    React.createElement('div', { key: 'count', style: { ...styles.countBadge, marginTop: '4px' } }, `${count} instances`)
   );
 
   return React.createElement('div', { style: styles.container }, ...rows);

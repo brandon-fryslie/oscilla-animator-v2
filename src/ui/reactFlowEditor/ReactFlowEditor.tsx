@@ -26,7 +26,7 @@ import { PatchStoreAdapter } from '../graphEditor/PatchStoreAdapter';
 import { BlockContextMenu } from './menus/BlockContextMenu';
 import { EdgeContextMenu } from './menus/EdgeContextMenu';
 import { PortContextMenu } from './menus/PortContextMenu';
-import { SimpleDebugPanel } from '../components/SimpleDebugPanel';
+import { DebugMiniView } from '../debug-viz/DebugMiniView';
 import './ReactFlowEditor.css';
 
 export interface ReactFlowEditorHandle {
@@ -348,13 +348,29 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorProps> = observer(({
           </Panel>
         </GraphEditorCore>
 
-        {/* Debug Panel (Sprint 1: Debug Probe) - outside ReactFlow, absolute positioned */}
-        <SimpleDebugPanel
-          edgeValue={debug.edgeValue}
-          edgeLabel={edgeLabel}
-          enabled={debug.enabled}
-          status={debug.status}
-        />
+        {/* Debug Panel - uses new renderer system */}
+        {debug.enabled && (
+          <div
+            style={{
+              position: 'fixed',
+              bottom: 20,
+              right: 20,
+              width: 360,
+              background: 'rgba(16, 24, 40, 0.95)',
+              border: '1px solid rgba(78, 205, 196, 0.3)',
+              borderRadius: 8,
+              padding: 16,
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
+              zIndex: 1000,
+              pointerEvents: 'none',
+            }}
+          >
+            <div style={{ fontWeight: 600, marginBottom: 8, color: '#4ecdc4' }}>
+              Debug Probe
+            </div>
+            <DebugMiniView />
+          </div>
+        )}
       </div>
 
       {/* Context Menus */}
