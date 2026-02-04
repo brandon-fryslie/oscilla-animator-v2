@@ -21,6 +21,7 @@ import { DebugStore } from './DebugStore';
 import { LayoutStore } from './LayoutStore';
 import { CameraStore } from './CameraStore';
 import { SettingsStore } from './SettingsStore';
+import { FrontendResultStore } from './FrontendResultStore';
 import { EventHub } from '../events/EventHub';
 import { DiagnosticHub } from '../diagnostics/DiagnosticHub';
 import { CompositeEditorStore } from './CompositeEditorStore';
@@ -41,6 +42,7 @@ export class RootStore {
   readonly settings: SettingsStore;
   readonly events: EventHub;
   readonly compositeEditor: CompositeEditorStore;
+  readonly frontend: FrontendResultStore;
 
   // Patch revision tracking (for diagnostics)
   private patchRevision: number = 0;
@@ -88,6 +90,9 @@ export class RootStore {
 
     // Create CompositeEditorStore (composite block editor state)
     this.compositeEditor = new CompositeEditorStore();
+
+    // Create FrontendResultStore (frontend compilation results for UI)
+    this.frontend = new FrontendResultStore();
 
     // Wire up callback for MobX reactivity
     this.diagnosticHub.setOnRevisionChange(() => this.diagnostics.incrementRevision());
