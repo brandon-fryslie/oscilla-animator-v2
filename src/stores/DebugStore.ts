@@ -66,11 +66,7 @@ export class DebugStore {
   private settingsSyncDisposer: (() => void) | null = null;
 
   constructor(settingsStore?: SettingsStore) {
-    makeAutoObservable(this, {
-      // Don't make poll interval observable
-      // status reads from non-observable debugService, so exclude from computed
-      status: false,
-    });
+    makeAutoObservable(this);
 
     // Sync with settings if provided
     if (settingsStore) {

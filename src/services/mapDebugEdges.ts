@@ -33,6 +33,10 @@ export interface UnmappedEdgeInfo {
     toBlockId: string;
     /** Target port name */
     toPort: string;
+    /** Detailed failure reason */
+    reason: 'block-eliminated' | 'port-not-found' | 'slot-not-allocated' | 'debug-index-missing';
+    /** Additional context about the failure */
+    details?: string;
 }
 
 /**
@@ -170,13 +174,41 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
                 cardinality,
             });
         } else {
-            // Track unmapped edge for error reporting
+            // Track unmapped edge with detailed reason
+            // Try to determine why the edge couldn't be mapped
+            let reason: UnmappedEdgeInfo['reason'] = 'debug-index-missing';
+            let details: string | undefined;
+
+            // Check if source block exists in debug index
+            const sourceBlockExists = Array.from(debugIndex.blockMap.values()).includes(edge.from.blockId);
+            if (!sourceBlockExists) {
+                reason = 'block-eliminated';
+                details = `Source block '${edge.from.blockId}' was eliminated during compilation (likely constant-folding or dead code elimination)`;
+            } else {
+                // Block exists but port not found
+                const sourcePortBinding = debugIndex.ports.find(p => {
+                    const blockId = debugIndex.blockMap.get(p.block);
+                    return blockId === edge.from.blockId && p.portName === edge.from.slotId;
+                });
+                
+                if (!sourcePortBinding) {
+                    reason = 'port-not-found';
+                    details = `Output port '${edge.from.slotId}' not found in debug index for block '${edge.from.blockId}'`;
+                } else {
+                    // Port exists but no slot allocated
+                    reason = 'slot-not-allocated';
+                    details = `Port '${edge.from.slotId}' exists but no runtime slot was allocated (may be optimized away or unused)`;
+                }
+            }
+
             unmappedEdges.push({
                 edgeId: edge.id,
                 fromBlockId: edge.from.blockId,
                 fromPort: edge.from.slotId,
                 toBlockId: edge.to.blockId,
                 toPort: edge.to.slotId,
+                reason,
+                details,
             });
         }
     }

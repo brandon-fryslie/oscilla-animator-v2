@@ -108,6 +108,28 @@ const styles = {
 };
 
 // =============================================================================
+// Helper Functions
+// =============================================================================
+
+/**
+ * Convert reason code to human-readable label.
+ */
+function getReasonLabel(reason: string): string {
+  switch (reason) {
+    case 'block-eliminated':
+      return '⚠️ Block Eliminated During Optimization';
+    case 'port-not-found':
+      return '⚠️ Port Not Found in Debug Index';
+    case 'slot-not-allocated':
+      return '⚠️ No Runtime Slot Allocated';
+    case 'debug-index-missing':
+      return '❌ Debug Index Missing';
+    default:
+      return '❓ Unknown Reason';
+  }
+}
+
+// =============================================================================
 // Helper Components
 // =============================================================================
 
@@ -239,6 +261,36 @@ export const DebugMiniView: React.FC = observer(() => {
   }
 
   if (!data) {
+    // Check if this edge is unmapped
+    const { debug: debugStore } = useStores();
+    const status = debugStore.status;
+    
+    if (hoveredEdgeId && status) {
+      const unmapped = status.unmappedEdges.find((e: any) => e.edgeId === hoveredEdgeId);
+      if (unmapped) {
+        return React.createElement('div', { style: { ...styles.container, maxHeight: '300px' } },
+          React.createElement('div', { style: { ...styles.header, color: '#ff6b6b' } },
+            React.createElement('span', { style: styles.label }, `Edge not mapped`),
+            React.createElement('span', { style: { ...styles.badge, background: 'rgba(255, 107, 107, 0.3)', color: '#ff6b6b' } }, 'Unmapped')
+          ),
+          React.createElement('div', { style: { ...styles.typeLine, marginTop: '8px' } },
+            `${unmapped.fromBlockId}.${unmapped.fromPort} → ${unmapped.toBlockId}.${unmapped.toPort}`
+          ),
+          React.createElement('div', { style: { marginTop: '12px', fontSize: '12px' } },
+            React.createElement('div', { style: { color: '#ffaa00', marginBottom: '6px', fontWeight: 'bold' } }, 
+              getReasonLabel(unmapped.reason)
+            ),
+            unmapped.details && React.createElement('div', { style: { color: '#aaa', fontSize: '11px', lineHeight: '1.4' } },
+              unmapped.details
+            )
+          ),
+          React.createElement('div', { style: { ...styles.storageLine, marginTop: '12px', color: '#666' } },
+            'This edge was not mapped to a runtime slot during compilation. The value cannot be inspected.'
+          )
+        );
+      }
+    }
+    
     return React.createElement('div', { style: { ...styles.container, ...styles.placeholder } },
       'Hover an edge to inspect');
   }
