@@ -17,6 +17,7 @@ registerBlock({
   description: 'Root block for patches with infinite time',
   form: 'primitive',
   capability: 'time',
+  loweringPurity: 'impure',
   cardinality: {
     cardinalityMode: 'signalOnly',
     laneCoupling: 'laneLocal',

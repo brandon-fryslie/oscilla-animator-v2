@@ -29,6 +29,7 @@ registerBlock({
   description: 'Renders 2D instances at positions with color. Shape is automatically looked up from the instance.',
   form: 'primitive',
   capability: 'render',
+  loweringPurity: 'impure',
   cardinality: {
     cardinalityMode: 'fieldOnly',
     laneCoupling: 'laneLocal',

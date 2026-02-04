@@ -16,6 +16,7 @@ registerBlock({
   description: 'Convert external channel to gate (0/1) via threshold comparison',
   form: 'primitive',
   capability: 'io',
+  loweringPurity: 'impure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',

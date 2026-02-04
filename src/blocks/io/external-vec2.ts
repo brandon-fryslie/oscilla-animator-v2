@@ -14,6 +14,7 @@ registerBlock({
   description: 'Read external channels as vec2 (channelBase.x, channelBase.y)',
   form: 'primitive',
   capability: 'io',
+  loweringPurity: 'impure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',

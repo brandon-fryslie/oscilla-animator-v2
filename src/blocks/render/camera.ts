@@ -33,6 +33,7 @@ registerBlock({
   category: 'render',
   form: 'primitive',
   capability: 'render',
+  loweringPurity: 'impure',
   description: 'Declares camera projection parameters for 3D rendering',
   cardinality: {
     cardinalityMode: 'signalOnly',

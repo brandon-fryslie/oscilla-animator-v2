@@ -16,6 +16,7 @@ registerBlock({
   description: 'Read a named external channel as a float signal',
   form: 'primitive',
   capability: 'io',
+  loweringPurity: 'impure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
