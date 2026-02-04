@@ -31,6 +31,7 @@ interface ToolbarProps {
 
 export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', dockviewApi }) => {
   const camera = useStore('camera');
+  const patch = useStore('patch');
   const exportPatch = useExportPatch();
   const [toastOpen, setToastOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -79,6 +80,15 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
     const clearStorageAndReload = (window as unknown as { clearStorageAndReload?: () => void }).clearStorageAndReload;
     if (clearStorageAndReload) {
       clearStorageAndReload();
+    }
+  };
+
+  const handleNewPatch = () => {
+    if (confirm('Create a new patch? This will clear the current patch.')) {
+      patch.clear();
+      setToastMessage('New patch created');
+      setToastSeverity('success');
+      setToastOpen(true);
     }
   };
 
@@ -185,6 +195,7 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
                   variant="subtle"
                   color="gray"
                   size="xs"
+                  onClick={handleNewPatch}
                   styles={{
                     root: {
                       border: '1px solid rgba(139, 92, 246, 0.2)',
