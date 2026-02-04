@@ -327,13 +327,14 @@ describe('error isolation for unreachable blocks', () => {
       const arr = b.addBlock('Array');
       b.setPortDefault(arr, 'count', 4);
       const ellipse = b.addBlock('Ellipse');
+      b.wire(ellipse, 'shape', arr, 'element'); // Shape wired to Array
       const grid = b.addBlock('GridLayoutUV');
       b.wire(arr, 'elements', grid, 'elements');
       const color = b.addBlock('Const');
       b.setConfig(color, 'value', { r: 1, g: 0, b: 0, a: 1 });
       const render = b.addBlock('RenderInstances2D');
       b.wire(grid, 'position', render, 'pos');
-      b.wire(ellipse, 'shape', render, 'shape');
+      // Shape port removed - automatically looked up from instance
       b.wire(color, 'out', render, 'color');
 
       // Disconnected Expression block with a syntax error (not wired to render)
@@ -360,13 +361,14 @@ describe('error isolation for unreachable blocks', () => {
       const arr = b.addBlock('Array');
       b.setPortDefault(arr, 'count', 4);
       const ellipse = b.addBlock('Ellipse');
+      b.wire(ellipse, 'shape', arr, 'element'); // Shape wired to Array
       const grid = b.addBlock('GridLayoutUV');
       b.wire(arr, 'elements', grid, 'elements');
       const color = b.addBlock('Const');
       b.setConfig(color, 'value', { r: 1, g: 0, b: 0, a: 1 });
       const render = b.addBlock('RenderInstances2D');
       b.wire(grid, 'position', render, 'pos');
-      b.wire(ellipse, 'shape', render, 'shape');
+      // Shape port removed - automatically looked up from instance
       b.wire(color, 'out', render, 'color');
 
       // Disconnected subgraph with multiple errors (not wired to render)
@@ -397,13 +399,14 @@ describe('error isolation for unreachable blocks', () => {
       const arr = b.addBlock('Array');
       b.setPortDefault(arr, 'count', 4);
       const ellipse = b.addBlock('Ellipse');
+      b.wire(ellipse, 'shape', arr, 'element'); // Shape wired to Array
       const grid = b.addBlock('GridLayoutUV');
       b.wire(arr, 'elements', grid, 'elements');
       const color = b.addBlock('Const');
       b.setConfig(color, 'value', { r: 1, g: 0, b: 0, a: 1 });
       const render = b.addBlock('RenderInstances2D');
       b.wire(grid, 'position', render, 'pos');
-      b.wire(ellipse, 'shape', render, 'shape');
+      // Shape port removed - automatically looked up from instance
       b.wire(color, 'out', render, 'color');
 
       // Expression block with a syntax error — wired to time but NOT to render
@@ -541,7 +544,7 @@ describe('zipBroadcast cardinality', () => {
       const render = b.addBlock('RenderInstances2D');
       b.wire(circleLayout, 'position', render, 'pos');
       b.wire(color, 'out', render, 'color');
-      b.wire(ellipse, 'shape', render, 'shape');
+      // Shape port removed - automatically looked up from instance
     });
 
     const result = compile(patch);

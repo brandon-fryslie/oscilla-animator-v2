@@ -39,7 +39,7 @@ export class IRBuilderImpl implements IRBuilder {
   private valueExprCache = new Map<string, ValueExprId>();
   private steps: Step[] = [];
   private stateMappings: StateMapping[] = [];
-  private slotCounter = 0;
+  private slotCounter = 1; // Reserve slot 0 for SYSTEM_PALETTE_SLOT
   private stateSlotCounter = 0;
   private eventSlotCounter = 0;
   private instanceCounter = 0;

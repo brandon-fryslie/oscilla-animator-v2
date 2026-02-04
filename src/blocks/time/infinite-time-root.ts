@@ -8,7 +8,7 @@ import { registerBlock } from '../registry';
 import { canonicalType, canonicalEvent, unitTurns, contractWrap01, payloadStride } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
 import { defaultSourceConst } from '../../types';
-import { valueSlot, SYSTEM_PALETTE_SLOT } from '../../compiler/ir/Indices';
+import { SYSTEM_PALETTE_SLOT } from '../../compiler/ir/Indices';
 
 registerBlock({
   type: 'InfiniteTimeRoot',
@@ -54,6 +54,7 @@ registerBlock({
     const phaseASlot = ctx.b.allocSlot();
     const phaseBSlot = ctx.b.allocSlot();
     const pulseEventSlot = ctx.b.allocEventSlot(pulse);
+    const pulseSlot = ctx.b.allocSlot(); // Events also need a value slot for type registration
     const paletteSlot = SYSTEM_PALETTE_SLOT;
     ctx.b.registerSlotType(paletteSlot, canonicalType(COLOR));
     const energySlot = ctx.b.allocSlot();
@@ -74,7 +75,7 @@ registerBlock({
         dt: { id: dt, slot: dtSlot, type: dtType, stride: payloadStride(dtType.payload) },
         phaseA: { id: phaseA, slot: phaseASlot, type: phaseAType, stride: payloadStride(phaseAType.payload) },
         phaseB: { id: phaseB, slot: phaseBSlot, type: phaseBType, stride: payloadStride(phaseBType.payload) },
-        pulse: { id: pulse, slot: valueSlot(0), type: pulseType, stride: payloadStride(pulseType.payload), eventSlot: pulseEventSlot },
+        pulse: { id: pulse, slot: pulseSlot, type: pulseType, stride: payloadStride(pulseType.payload), eventSlot: pulseEventSlot },
         palette: { id: palette, slot: paletteSlot, type: paletteType, stride: payloadStride(paletteType.payload) },
         energy: { id: energy, slot: energySlot, type: energyType, stride: payloadStride(energyType.payload) },
       },

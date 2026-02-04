@@ -278,13 +278,18 @@ describe('PatchStore', () => {
   });
 
   describe('clear', () => {
-    it('should clear all blocks and edges', () => {
+    it('should clear all blocks and edges, then auto-insert InfiniteTimeRoot', () => {
       store.addBlock('Oscillator');
       expect(store.blocks.size).toBeGreaterThan(0);
 
       store.clear();
-      expect(store.blocks.size).toBe(0);
+      // After clear(), patch should have exactly one block (InfiniteTimeRoot)
+      expect(store.blocks.size).toBe(1);
       expect(store.edges.length).toBe(0);
+
+      // Verify the block is InfiniteTimeRoot
+      const blocks = Array.from(store.blocks.values());
+      expect(blocks[0].type).toBe('InfiniteTimeRoot');
     });
   });
 

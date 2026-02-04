@@ -42,11 +42,12 @@ describe('DefaultSource field cardinality', () => {
       const arr = b.addBlock('Array');
       b.setPortDefault(arr, 'count', 4);
       const ellipse = b.addBlock('Ellipse');
+      b.wire(ellipse, 'shape', arr, 'element'); // Wire shape to Array element
       const grid = b.addBlock('GridLayoutUV');
       b.wire(arr, 'elements', grid, 'elements');
       const render = b.addBlock('RenderInstances2D');
       b.wire(grid, 'position', render, 'pos');
-      b.wire(ellipse, 'shape', render, 'shape');
+      // Shape port removed - automatically looked up from instance
       // color is unconnected — DefaultSource should provide a field-cardinality color
     });
 
@@ -66,11 +67,12 @@ describe('DefaultSource field cardinality', () => {
       const arr = b.addBlock('Array');
       b.setPortDefault(arr, 'count', 4);
       const ellipse = b.addBlock('Ellipse');
+      b.wire(ellipse, 'shape', arr, 'element'); // Wire shape to Array element
       const grid = b.addBlock('GridLayoutUV');
       b.wire(arr, 'elements', grid, 'elements');
       const render = b.addBlock('RenderInstances2D');
       b.wire(grid, 'position', render, 'pos');
-      b.wire(ellipse, 'shape', render, 'shape');
+      // Shape port removed - automatically looked up from instance
       // color unconnected — should get a field-cardinality DefaultSource
     });
 

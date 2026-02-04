@@ -68,7 +68,7 @@ describe('Steel Thread - Animated Particles', () => {
       b.wire(array, 'elements', layout, 'elements');
       b.wire(layout, 'position', render, 'pos');
       b.wire(colorField, 'field', render, 'color');
-      b.wire(ellipse, 'shape', render, 'shape');
+      // Shape port removed - automatically looked up from instance
     });
 
     // 1. Compile
@@ -122,7 +122,7 @@ describe('Steel Thread - Animated Particles', () => {
       b.wire(array, 'elements', layout, 'elements');
       b.wire(layout, 'position', render, 'pos');
       b.wire(colorField, 'field', render, 'color');
-      b.wire(ellipse, 'shape', render, 'shape');
+      // Shape port removed - automatically looked up from instance
     });
 
     // 1. Compile
