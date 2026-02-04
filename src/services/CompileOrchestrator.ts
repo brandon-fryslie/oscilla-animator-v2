@@ -8,6 +8,7 @@
  */
 
 import { compile } from '../compiler';
+import { compileFrontend } from '../compiler/frontend';
 import { untracked } from 'mobx';
 import { compilerFlagsSettings } from '../settings/tokens/compiler-flags-settings';
 import type { Patch } from '../graph';
@@ -64,6 +65,7 @@ export interface CompileOrchestratorDeps {
  * Compile the current patch from store and swap to the new program.
  *
  * Handles:
+ * - Frontend-first compilation with snapshot storage
  * - State migration with stable StateIds
  * - Continuity preservation
  * - Debug probe setup
@@ -79,22 +81,26 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
     return;
   }
 
-  // Read compiler flag settings (severity overrides for diagnostic codes)
-  const diagnosticFlags = store.settings.get(compilerFlagsSettings);
+  const patchRevision = store.getPatchRevision();
 
-  // Compile the patch
-  const result = compile(patch, {
-    events: store.events,
-    patchRevision: store.getPatchRevision(),
-    patchId: 'patch-0',
-    diagnosticFlags,
-  });
+  // =========================================================================
+  // Step 1: Run Frontend Compilation
+  // =========================================================================
+  const frontendResult = compileFrontend(patch);
 
-  if (result.kind !== 'ok') {
-    const errorMsg = result.errors.map(e => e.message).join(', ');
+  // Store frontend snapshot regardless of success/failure
+  if (frontendResult.kind === 'ok') {
+    store.frontend.updateFromFrontendResult(frontendResult.result, patchRevision);
+  } else {
+    store.frontend.updateFromFrontendFailure(frontendResult, patchRevision);
+  }
+
+  // If frontend failed or backend is not ready, emit diagnostics and bail early
+  if (frontendResult.kind === 'error') {
+    const errorMsg = frontendResult.errors.map((e: { message: string }) => e.message).join(', ');
     store.diagnostics.log({
       level: 'error',
-      message: `Compile failed: ${isInitial ? JSON.stringify(result.errors) : errorMsg}`,
+      message: `Compile failed (frontend): ${isInitial ? JSON.stringify(frontendResult.errors) : errorMsg}`,
     });
     if (isInitial) {
       // INVARIANT: Initial compile MUST succeed. Failure means the demo patch
@@ -102,7 +108,50 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
       // This throw exists to surface those bugs immediately. Do NOT remove it or
       // wrap it in a try/catch - fix the underlying patch instead.
       // See: src/__tests__/initial-compile-invariant.test.ts
-      throw new Error(`Initial compile failed: ${errorMsg}`);
+      throw new Error(`Initial compile failed (frontend): ${errorMsg}`);
+    }
+    // For recompile, keep running with old program
+    return;
+  }
+
+  // Frontend succeeded - check if backend can proceed
+  if (!frontendResult.result.backendReady) {
+    const errorMsg = frontendResult.result.errors.map((e: { message: string }) => e.message).join(', ');
+    store.diagnostics.log({
+      level: 'error',
+      message: `Compile failed (frontend not ready for backend): ${errorMsg}`,
+    });
+    if (isInitial) {
+      throw new Error(`Initial compile failed (frontend not ready): ${errorMsg}`);
+    }
+    // For recompile, keep running with old program
+    return;
+  }
+
+  // =========================================================================
+  // Step 2: Run Backend Compilation (reuse precomputed frontend)
+  // =========================================================================
+
+  // Read compiler flag settings (severity overrides for diagnostic codes)
+  const diagnosticFlags = store.settings.get(compilerFlagsSettings);
+
+  // Compile the patch (with precomputed frontend result)
+  const result = compile(patch, {
+    events: store.events,
+    patchRevision,
+    patchId: 'patch-0',
+    diagnosticFlags,
+    precomputedFrontend: frontendResult.result,
+  });
+
+  if (result.kind !== 'ok') {
+    const errorMsg = result.errors.map(e => e.message).join(', ');
+    store.diagnostics.log({
+      level: 'error',
+      message: `Compile failed (backend): ${isInitial ? JSON.stringify(result.errors) : errorMsg}`,
+    });
+    if (isInitial) {
+      throw new Error(`Initial compile failed (backend): ${errorMsg}`);
     }
     // For recompile, keep running with old program
     return;
@@ -209,7 +258,7 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
   store.events.emit({
     type: 'ProgramSwapped',
     patchId: 'patch-0',
-    patchRevision: store.getPatchRevision(),
+    patchRevision,
     compileId: isInitial ? 'compile-0' : `compile-live-${Date.now()}`,
     swapMode: isInitial ? 'hard' : 'soft',
     instanceCounts: isInitial ? undefined : instanceCounts,

@@ -15,10 +15,11 @@
 
 import { makeAutoObservable } from 'mobx';
 import type { CanonicalType } from '../core/canonical-types';
-import type { FrontendResult, CycleSummary, FrontendError } from '../compiler/frontend';
-import type { Patch } from '../graph/Patch';
-import type { BlockId, PortId } from '../types';
-import { getInputAddress, getOutputAddress } from '../graph/addressing';
+import type { FrontendResult, FrontendFailure, CycleSummary, FrontendError } from '../compiler/frontend';
+import type { NormalizedPatch } from '../compiler/frontend/normalize-indexing';
+import type { TypedPatch } from '../compiler/ir/patches';
+import type { PortId } from '../types';
+import { getBlockAddress, getInputAddress, getOutputAddress } from '../graph/addressing';
 import { addressToString } from '../types/canonical-address';
 
 // =============================================================================
@@ -84,6 +85,9 @@ export class FrontendResultStore {
   /** Observable snapshot */
   snapshot: FrontendSnapshot = EMPTY_SNAPSHOT;
 
+  /** Internal blockId → canonicalName map for id-based convenience queries */
+  private blockIdToCanonicalName = new Map<string, string>();
+
   constructor() {
     makeAutoObservable(this);
   }
@@ -93,43 +97,19 @@ export class FrontendResultStore {
   // ===========================================================================
 
   /**
-   * Update snapshot from a FrontendCompileResult.
+   * Update snapshot from a successful FrontendResult.
    *
    * Builds the canonical address index by translating PortKey → canonical address.
    * Extracts provenance from normalized edges by examining edge roles.
-   *
-   * @param result - Frontend compilation result (ok or error)
-   * @param patchRevision - Current patch revision number
-   * @param patch - Original patch (for fallback blockId lookup)
    */
   updateFromFrontendResult(
-    result: FrontendResult | { errors: readonly FrontendError[]; normalizedPatch?: any; typedPatch?: any },
+    result: FrontendResult,
     patchRevision: number,
-    patch: Patch
   ): void {
-    // Check if this is a FrontendResult (ok) or FrontendFailure (error)
-    const isOk = 'normalizedPatch' in result && 'typedPatch' in result && 'backendReady' in result;
+    const { normalizedPatch, typedPatch, cycleSummary, errors, backendReady } = result;
 
-    if (!isOk) {
-      // Partial result from error case
-      const errorResult = result as { errors: readonly FrontendError[]; normalizedPatch?: any; typedPatch?: any };
-      this.snapshot = {
-        status: 'frontendError',
-        patchRevision,
-        portProvenance: new Map(),
-        resolvedPortTypes: errorResult.typedPatch
-          ? this.buildResolvedPortTypes(errorResult.typedPatch, errorResult.normalizedPatch)
-          : new Map(),
-        errors: errorResult.errors,
-        backendReady: false,
-        cycleSummary: null,
-      };
-      return;
-    }
-
-    // Full result from ok case
-    const okResult = result as FrontendResult;
-    const { normalizedPatch, typedPatch, cycleSummary, errors, backendReady } = okResult;
+    // Build blockId → canonicalName map
+    this.rebuildBlockIdMap(normalizedPatch);
 
     // Build canonical address maps
     const resolvedPortTypes = this.buildResolvedPortTypes(typedPatch, normalizedPatch);
@@ -143,6 +123,32 @@ export class FrontendResultStore {
       errors,
       backendReady,
       cycleSummary,
+    };
+  }
+
+  /**
+   * Update snapshot from a FrontendFailure (partial data).
+   */
+  updateFromFrontendFailure(
+    failure: FrontendFailure,
+    patchRevision: number,
+  ): void {
+    if (failure.normalizedPatch) {
+      this.rebuildBlockIdMap(failure.normalizedPatch);
+    }
+
+    this.snapshot = {
+      status: 'frontendError',
+      patchRevision,
+      portProvenance: failure.normalizedPatch
+        ? this.buildPortProvenance(failure.normalizedPatch)
+        : new Map(),
+      resolvedPortTypes: failure.typedPatch && failure.normalizedPatch
+        ? this.buildResolvedPortTypes(failure.typedPatch, failure.normalizedPatch)
+        : new Map(),
+      errors: failure.errors,
+      backendReady: false,
+      cycleSummary: null,
     };
   }
 
@@ -223,17 +229,26 @@ export class FrontendResultStore {
 
   /**
    * Build canonical address from blockId + portId.
-   * Uses the snapshot's internal blockId→canonicalName map if available,
-   * otherwise falls back to blockId as canonicalName.
+   * Uses the blockId→canonicalName map built during updateFromFrontendResult.
    */
   private buildCanonicalAddressFromIds(blockId: string, portId: string, dir: 'in' | 'out'): string | null {
-    // For now, use blockId as canonicalName (fallback).
-    // TODO: Build blockId→canonicalName map during updateFromFrontendResult for better lookup.
-    const canonicalName = blockId;
+    const canonicalName = this.blockIdToCanonicalName.get(blockId);
+    if (!canonicalName) return null;
     if (dir === 'in') {
       return `v1:blocks.${canonicalName}.inputs.${portId}`;
     } else {
       return `v1:blocks.${canonicalName}.outputs.${portId}`;
+    }
+  }
+
+  /**
+   * Build blockId → canonicalName map from NormalizedPatch blocks.
+   */
+  private rebuildBlockIdMap(normalizedPatch: NormalizedPatch): void {
+    this.blockIdToCanonicalName.clear();
+    for (const block of normalizedPatch.blocks) {
+      const addr = getBlockAddress(block);
+      this.blockIdToCanonicalName.set(block.id as string, addr.canonicalName);
     }
   }
 
@@ -243,26 +258,20 @@ export class FrontendResultStore {
    * Translates PortKey (blockIndex:portName:dir) → canonical address.
    */
   private buildResolvedPortTypes(
-    typedPatch: any,
-    normalizedPatch: any
+    typedPatch: TypedPatch,
+    normalizedPatch: NormalizedPatch,
   ): ReadonlyMap<string, CanonicalType> {
     const map = new Map<string, CanonicalType>();
 
-    if (!typedPatch?.portTypes || !normalizedPatch?.blocks) {
+    if (!typedPatch.portTypes) {
       return map;
-    }
-
-    // Build blockIndex → Block mapping
-    const blocksByIndex = new Map<number, any>();
-    for (let i = 0; i < normalizedPatch.blocks.length; i++) {
-      blocksByIndex.set(i, normalizedPatch.blocks[i]);
     }
 
     // Iterate portTypes map (keyed by PortKey = "blockIndex:portName:dir")
     for (const [portKey, type] of typedPatch.portTypes) {
       const [blockIndexStr, portName, dir] = portKey.split(':');
       const blockIndex = parseInt(blockIndexStr, 10);
-      const block = blocksByIndex.get(blockIndex);
+      const block = normalizedPatch.blocks[blockIndex];
 
       if (!block) continue;
 
@@ -271,41 +280,27 @@ export class FrontendResultStore {
         ? getInputAddress(block, portName as PortId)
         : getOutputAddress(block, portName as PortId);
 
-      map.set(addressToString(addr), type as CanonicalType);
+      map.set(addressToString(addr), type);
     }
 
     return map;
   }
 
   /**
-   * Build portProvenance map from NormalizedPatch edges.
+   * Build portProvenance map from NormalizedPatch.
    *
-   * Examines edge roles to determine provenance:
-   * - role: { kind: 'default', ... } → defaultSource
-   * - role: { kind: 'adapter', ... } → adapter
-   * - role: { kind: 'user', ... } → userEdge
-   * - (no incoming edges) → unresolved
+   * Uses the original patch edges (which have role information) to determine provenance.
    */
-  private buildPortProvenance(normalizedPatch: any): ReadonlyMap<string, PortProvenance> {
+  private buildPortProvenance(normalizedPatch: NormalizedPatch): ReadonlyMap<string, PortProvenance> {
     const map = new Map<string, PortProvenance>();
 
-    if (!normalizedPatch?.blocks || !normalizedPatch?.patch?.edges) {
-      return map;
-    }
-
-    // Build blockIndex → Block mapping
-    const blocksByIndex = new Map<number, any>();
-    for (let i = 0; i < normalizedPatch.blocks.length; i++) {
-      blocksByIndex.set(i, normalizedPatch.blocks[i]);
-    }
-
-    // Build blockId → Block mapping for edge lookup
-    const blocksById = new Map<string, any>();
+    // Build blockId → Block mapping for edge lookup (edges reference blockId)
+    const blocksById = new Map<string, typeof normalizedPatch.blocks[number]>();
     for (const block of normalizedPatch.blocks) {
-      blocksById.set(block.id, block);
+      blocksById.set(block.id as string, block);
     }
 
-    // Iterate patch edges (which have role information)
+    // Iterate original patch edges (which have role information)
     for (const edge of normalizedPatch.patch.edges) {
       if (edge.to.kind !== 'port') continue;
 
@@ -317,25 +312,21 @@ export class FrontendResultStore {
 
       const role = edge.role;
 
-      if (role?.kind === 'default') {
-        // Default source edge
+      if (role.kind === 'default') {
         const sourceBlock = blocksById.get(edge.from.blockId);
         map.set(targetAddrStr, {
           kind: 'defaultSource',
           sourceBlockType: sourceBlock?.type ?? 'DefaultSource',
         });
-      } else if (role?.kind === 'adapter') {
-        // Adapter edge
+      } else if (role.kind === 'adapter') {
         const sourceBlock = blocksById.get(edge.from.blockId);
         map.set(targetAddrStr, {
           kind: 'adapter',
           adapterType: sourceBlock?.type ?? 'Adapter',
         });
-      } else if (role?.kind === 'user') {
-        // User wire
+      } else if (role.kind === 'user') {
         map.set(targetAddrStr, { kind: 'userEdge' });
       } else {
-        // Unknown or missing role - mark as unresolved
         map.set(targetAddrStr, { kind: 'unresolved' });
       }
     }

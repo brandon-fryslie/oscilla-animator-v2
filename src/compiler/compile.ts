@@ -33,6 +33,7 @@ import { createDefaultRegistry } from '../runtime/kernels/default-registry';
 import { partitionByFlags, getDefaultDiagnosticFlags, type DiagnosticSeverityOverride } from './diagnostic-flags';
 import type { TypeConstraintError, PortKey } from './frontend/analyze-type-constraints';
 import { unitScalar } from '../core/canonical-types/units';
+import type { FrontendResult } from './frontend';
 
 
 
@@ -82,6 +83,8 @@ export interface CompileOptions {
   readonly patchRevision?: number;
   readonly events: EventHub;
   readonly diagnosticFlags?: Record<string, DiagnosticSeverityOverride>;
+  /** Precomputed frontend result (normalization + type resolution). When provided, compile() skips inline frontend passes. */
+  readonly precomputedFrontend?: FrontendResult;
 
 }
 
@@ -119,182 +122,207 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
   }
 
   try {
-    // Pass 1: Normalization
-    const normResult = normalize(patch);
+    let normalized: NormalizedPatch;
+    let typedPatch: ReturnType<typeof pass2TypeGraph>;
+    let flagWarnings: TypeConstraintError[] = [];
 
-    if (normResult.kind === 'error') {
-      const compileErrors: CompileError[] = normResult.errors.map((e) => {
-        switch (e.kind) {
-          case 'DanglingEdge':
-            return {
+    // =========================================================================
+    // Frontend: Use precomputed result or run inline
+    // =========================================================================
+    if (options?.precomputedFrontend) {
+      // Reuse precomputed frontend result
+      normalized = options.precomputedFrontend.normalizedPatch;
+      typedPatch = options.precomputedFrontend.typedPatch;
+
+      // Capture precomputed passes (for inspection)
+      try {
+        compilationInspector.capturePass('normalization', patch, normalized);
+        compilationInspector.capturePass('type-constraints', normalized, typedPatch);
+        compilationInspector.capturePass('type-graph', normalized, typedPatch);
+      } catch (e) {
+        console.warn('[CompilationInspector] Failed to capture precomputed frontend:', e);
+      }
+    } else {
+      // Run frontend inline (original monolithic path)
+      // Pass 1: Normalization
+      const normResult = normalize(patch);
+
+      if (normResult.kind === 'error') {
+        const compileErrors: CompileError[] = normResult.errors.map((e) => {
+          switch (e.kind) {
+            case 'DanglingEdge':
+              return {
+                kind: e.kind,
+                message: `Edge references missing block (${e.missing})`,
+                blockId: e.edge.from.blockId,
+              };
+            case 'DuplicateBlockId':
+              return {
+                kind: e.kind,
+                message: `Duplicate block ID: ${e.id}`,
+                blockId: e.id,
+              };
+            case 'UnknownPort':
+              return {
+                kind: 'UnknownBlockType',
+                message: `Port '${e.portId}' does not exist on block '${e.blockId}' (${e.direction})`,
+                blockId: e.blockId,
+                portId: e.portId,
+              };
+            case 'NoAdapterFound':
+              return {
+                kind: 'TypeMismatch',
+                message: `No adapter found for type conversion: ${e.fromType} → ${e.toType}`,
+                blockId: e.edge.to.blockId,
+                portId: e.edge.to.slotId,
+              };
+            case 'vararg':
+              return {
+                kind: 'VarargError',
+                message: e.message,
+                blockId: e.where.blockId,
+                portId: e.where.portId,
+              };
+            case 'CompositeExpansion':
+              return {
+                kind: 'CompositeExpansion',
+                message: e.message,
+                blockId: e.compositeBlockId,
+                code: e.code,
+              };
+            default: {
+              const _exhaustive: never = e;
+              return {
+                kind: 'UnknownBlockType',
+                message: `Unknown normalization error: ${JSON.stringify(_exhaustive)}`,
+              };
+            }
+          }
+        });
+
+        return emitFailure(options, startTime, compileId, compileErrors);
+      }
+
+      normalized = normResult.patch;
+
+      // Capture normalization pass
+      try {
+        compilationInspector.capturePass('normalization', patch, normalized);
+      } catch (e) {
+        console.warn('[CompilationInspector] Failed to capture normalization:', e);
+      }
+
+      // Pass 1: Type Constraints (unit and payload inference)
+      // Resolves polymorphic unit and payload variables through constraint propagation
+      // Output is TypeResolvedPatch - THE source of truth for all port types
+      const pass1Result = pass1TypeConstraints(normalized);
+      // Track block indices that had pass1 errors filtered out (unreachable)
+      const pass1FilteredBlockIndices = new Set<number>();
+      if (pass1Result.errors.length > 0) {
+        const { errors: fatalErrors, warnings } = partitionByFlags(
+          pass1Result.errors,
+          options?.diagnosticFlags,
+        );
+        flagWarnings = warnings;
+        if (fatalErrors.length > 0) {
+          // Apply reachability filtering: errors on blocks not reachable from
+          // render blocks become warnings. Only applies when the patch has
+          // render blocks — if there are no render blocks, all errors are fatal
+          // (there's no output to isolate errors from).
+          const reachableBlocks = computeRenderReachableBlocks(
+            normalized.blocks,
+            normalized.edges
+          );
+          let reachableFatalErrors: typeof fatalErrors;
+          if (reachableBlocks.size === 0) {
+            // No render blocks: all errors are fatal (no error isolation)
+            reachableFatalErrors = fatalErrors;
+          } else {
+            reachableFatalErrors = [];
+            for (const e of fatalErrors) {
+              if (reachableBlocks.has(e.blockIndex as import('./ir/patches').BlockIndex)) {
+                reachableFatalErrors.push(e);
+              } else {
+                pass1FilteredBlockIndices.add(e.blockIndex);
+              }
+            }
+          }
+          if (reachableFatalErrors.length > 0) {
+            const compileErrors: CompileError[] = reachableFatalErrors.map((e) => ({
               kind: e.kind,
-              message: `Edge references missing block (${e.missing})`,
-              blockId: e.edge.from.blockId,
-            };
-          case 'DuplicateBlockId':
-            return {
-              kind: e.kind,
-              message: `Duplicate block ID: ${e.id}`,
-              blockId: e.id,
-            };
-          case 'UnknownPort':
-            return {
-              kind: 'UnknownBlockType',
-              message: `Port '${e.portId}' does not exist on block '${e.blockId}' (${e.direction})`,
-              blockId: e.blockId,
-              portId: e.portId,
-            };
-          case 'NoAdapterFound':
-            return {
-              kind: 'TypeMismatch',
-              message: `No adapter found for type conversion: ${e.fromType} → ${e.toType}`,
-              blockId: e.edge.to.blockId,
-              portId: e.edge.to.slotId,
-            };
-          case 'vararg':
-            return {
-              kind: 'VarargError',
-              message: e.message,
-              blockId: e.where.blockId,
-              portId: e.where.portId,
-            };
-          case 'CompositeExpansion':
-            return {
-              kind: 'CompositeExpansion',
-              message: e.message,
-              blockId: e.compositeBlockId,
-              code: e.code,
-            };
-          default: {
-            const _exhaustive: never = e;
-            return {
-              kind: 'UnknownBlockType',
-              message: `Unknown normalization error: ${JSON.stringify(_exhaustive)}`,
-            };
+              message: `${e.message}\nSuggestions:\n${e.suggestions.map((s: string) => `  - ${s}`).join('\n')}`,
+              blockId: normalized.blocks[e.blockIndex]?.id,
+              portId: e.portName,
+            }));
+            return emitFailure(options, startTime, compileId, compileErrors);
           }
         }
-      });
+      }
 
-      return emitFailure(options, startTime, compileId, compileErrors);
-    }
-
-    const normalized = normResult.patch;
-
-    // Capture normalization pass
-    try {
-      compilationInspector.capturePass('normalization', patch, normalized);
-    } catch (e) {
-      console.warn('[CompilationInspector] Failed to capture normalization:', e);
-    }
-
-    // Pass 1: Type Constraints (unit and payload inference)
-    // Resolves polymorphic unit and payload variables through constraint propagation
-    // Output is TypeResolvedPatch - THE source of truth for all port types
-    const pass1Result = pass1TypeConstraints(normalized);
-    let flagWarnings: TypeConstraintError[] = [];
-    // Track block indices that had pass1 errors filtered out (unreachable)
-    const pass1FilteredBlockIndices = new Set<number>();
-    if (pass1Result.errors.length > 0) {
-      const { errors: fatalErrors, warnings } = partitionByFlags(
-        pass1Result.errors,
-        options?.diagnosticFlags,
-      );
-      flagWarnings = warnings;
-      if (fatalErrors.length > 0) {
-        // Apply reachability filtering: errors on blocks not reachable from
-        // render blocks become warnings. Only applies when the patch has
-        // render blocks — if there are no render blocks, all errors are fatal
-        // (there's no output to isolate errors from).
-        const reachableBlocks = computeRenderReachableBlocks(
-          normalized.blocks,
-          normalized.edges
-        );
-        let reachableFatalErrors: typeof fatalErrors;
-        if (reachableBlocks.size === 0) {
-          // No render blocks: all errors are fatal (no error isolation)
-          reachableFatalErrors = fatalErrors;
-        } else {
-          reachableFatalErrors = [];
-          for (const e of fatalErrors) {
-            if (reachableBlocks.has(e.blockIndex as import('./ir/patches').BlockIndex)) {
-              reachableFatalErrors.push(e);
-            } else {
-              pass1FilteredBlockIndices.add(e.blockIndex);
+      // Unitless fallback: when ConflictingUnits is downgraded to warning,
+      // replace the conflicting unit with unitScalar (unitless)
+      let typeResolved = pass1Result;
+      if (flagWarnings.some((w) => w.kind === 'ConflictingUnits')) {
+        const patchedPortTypes = new Map(pass1Result.portTypes);
+        for (const w of flagWarnings) {
+          if (w.kind === 'ConflictingUnits') {
+            const key = `${w.blockIndex}:${w.portName}:${w.direction}` as PortKey;
+            const existing = patchedPortTypes.get(key);
+            if (existing) {
+              patchedPortTypes.set(key, { ...existing, unit: unitScalar() });
             }
           }
         }
-        if (reachableFatalErrors.length > 0) {
-          const compileErrors: CompileError[] = reachableFatalErrors.map((e) => ({
-            kind: e.kind,
-            message: `${e.message}\nSuggestions:\n${e.suggestions.map((s: string) => `  - ${s}`).join('\n')}`,
-            blockId: normalized.blocks[e.blockIndex]?.id,
-            portId: e.portName,
-          }));
-          return emitFailure(options, startTime, compileId, compileErrors);
-        }
+        typeResolved = { ...pass1Result, portTypes: patchedPortTypes };
       }
-    }
 
-    // Unitless fallback: when ConflictingUnits is downgraded to warning,
-    // replace the conflicting unit with unitScalar (unitless)
-    let typeResolved = pass1Result;
-    if (flagWarnings.some((w) => w.kind === 'ConflictingUnits')) {
-      const patchedPortTypes = new Map(pass1Result.portTypes);
-      for (const w of flagWarnings) {
-        if (w.kind === 'ConflictingUnits') {
-          const key = `${w.blockIndex}:${w.portName}:${w.direction}` as PortKey;
-          const existing = patchedPortTypes.get(key);
-          if (existing) {
-            patchedPortTypes.set(key, { ...existing, unit: unitScalar() });
+      try {
+        compilationInspector.capturePass('type-constraints', normalized, typeResolved);
+      } catch (e) {
+        console.warn('[CompilationInspector] Failed to capture type-constraints:', e);
+      }
+
+      // Pass 2: Type Graph (validates types using resolved types from pass1)
+      try {
+        typedPatch = pass2TypeGraph(typeResolved);
+      } catch (pass2Error) {
+        // Pass 2 may fail due to unresolved types on blocks that had pass 1 errors filtered out.
+        // Only suppress if ALL error-referenced blocks had their pass 1 errors filtered.
+        if (pass1FilteredBlockIndices.size === 0) {
+          throw pass2Error; // No filtered blocks — all pass 2 errors are genuine
+        }
+        // Check if error only references blocks that had pass 1 errors filtered
+        const errMsg = (pass2Error as Error).message || '';
+        const blockRefPattern = /block\[(\d+)\]/g;
+        let match: RegExpExecArray | null;
+        let allFiltered = true;
+        while ((match = blockRefPattern.exec(errMsg)) !== null) {
+          const blockIdx = parseInt(match[1], 10);
+          if (!pass1FilteredBlockIndices.has(blockIdx)) {
+            allFiltered = false;
+            break;
           }
         }
-      }
-      typeResolved = { ...pass1Result, portTypes: patchedPortTypes };
-    }
-
-    try {
-      compilationInspector.capturePass('type-constraints', normalized, typeResolved);
-    } catch (e) {
-      console.warn('[CompilationInspector] Failed to capture type-constraints:', e);
-    }
-
-    // Pass 2: Type Graph (validates types using resolved types from pass1)
-    let typedPatch: ReturnType<typeof pass2TypeGraph>;
-    try {
-      typedPatch = pass2TypeGraph(typeResolved);
-    } catch (pass2Error) {
-      // Pass 2 may fail due to unresolved types on blocks that had pass 1 errors filtered out.
-      // Only suppress if ALL error-referenced blocks had their pass 1 errors filtered.
-      if (pass1FilteredBlockIndices.size === 0) {
-        throw pass2Error; // No filtered blocks — all pass 2 errors are genuine
-      }
-      // Check if error only references blocks that had pass 1 errors filtered
-      const errMsg = (pass2Error as Error).message || '';
-      const blockRefPattern = /block\[(\d+)\]/g;
-      let match: RegExpExecArray | null;
-      let allFiltered = true;
-      while ((match = blockRefPattern.exec(errMsg)) !== null) {
-        const blockIdx = parseInt(match[1], 10);
-        if (!pass1FilteredBlockIndices.has(blockIdx)) {
-          allFiltered = false;
-          break;
+        if (!allFiltered) {
+          throw pass2Error; // Some blocks with pass 2 errors weren't filtered in pass 1
         }
+        // All pass 2 errors are on blocks that already had pass 1 errors filtered — continue
+        typedPatch = {
+          ...typeResolved,
+          blockOutputTypes: new Map(),
+        };
       }
-      if (!allFiltered) {
-        throw pass2Error; // Some blocks with pass 2 errors weren't filtered in pass 1
+
+      try {
+        compilationInspector.capturePass('type-graph', normalized, typedPatch);
+      } catch (e) {
+        console.warn('[CompilationInspector] Failed to capture type-graph:', e);
       }
-      // All pass 2 errors are on blocks that already had pass 1 errors filtered — continue
-      typedPatch = {
-        ...typeResolved,
-        blockOutputTypes: new Map(),
-      };
     }
 
-    try {
-      compilationInspector.capturePass('type-graph', normalized, typedPatch);
-    } catch (e) {
-      console.warn('[CompilationInspector] Failed to capture type-graph:', e);
-    }
+    // =========================================================================
+    // Backend: Always runs (requires frontend output)
+    // =========================================================================
 
     // Pass 3: Time Topology
     const timeResolvedPatch = pass3Time(typedPatch);

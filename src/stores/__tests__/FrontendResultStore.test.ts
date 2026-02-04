@@ -9,6 +9,7 @@ import '../../blocks/all'; // Trigger block registrations
 import { FrontendResultStore } from '../FrontendResultStore';
 import { buildPatch } from '../../graph';
 import { compileFrontend } from '../../compiler/frontend';
+import type { BlockId } from '../../types';
 
 describe('FrontendResultStore', () => {
   it('starts with empty snapshot', () => {
@@ -24,18 +25,16 @@ describe('FrontendResultStore', () => {
   it('updates snapshot from successful frontend compilation', () => {
     const store = new FrontendResultStore();
 
-    let ellipse: string;
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot');
-      ellipse = b.addBlock('Ellipse');
-      b.setPortDefault(ellipse, 'rx', 2.0);
+      b.addBlock('Ellipse');
     });
 
     const result = compileFrontend(patch);
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
 
-    store.updateFromFrontendResult(result.result, 1, patch);
+    store.updateFromFrontendResult(result.result, 1);
 
     expect(store.snapshot.status).toBe('frontendOk');
     expect(store.snapshot.patchRevision).toBe(1);
@@ -46,110 +45,98 @@ describe('FrontendResultStore', () => {
   it('hasDefaultSource() returns true for unconnected inputs', () => {
     const store = new FrontendResultStore();
 
-    let ellipse: string;
+    let ellipseId: BlockId;
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot');
-      ellipse = b.addBlock('Ellipse');
-      // rx port is unconnected → should get default source
+      ellipseId = b.addBlock('Ellipse');
     });
 
     const result = compileFrontend(patch);
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
 
-    store.updateFromFrontendResult(result.result, 1, patch);
-    console.log("\nEllipse ID:", ellipse!);
-    console.log("Port Provenance entries:", store.snapshot.portProvenance.size);
-    for (const [addr, prov] of store.snapshot.portProvenance) {
-      console.log(`  ${addr} => ${prov.kind}`);
-    }
+    store.updateFromFrontendResult(result.result, 1);
 
-
-    // Check by canonical address
-    const rxAddr = `v1:blocks.${ellipse!}.inputs.rx`;
+    // Check by canonical address (displayName-based, e.g. "ellipse_1")
+    const rxAddr = `v1:blocks.ellipse_1.inputs.rx`;
     expect(store.hasDefaultSource(rxAddr)).toBe(true);
 
-    // Check by ids
-    expect(store.hasDefaultSourceByIds(ellipse!, 'rx')).toBe(true);
+    // Check by ids (convenience method uses blockId → canonicalName map)
+    expect(store.hasDefaultSourceByIds(ellipseId!, 'rx')).toBe(true);
   });
 
   it('hasDefaultSource() returns false for connected inputs', () => {
     const store = new FrontendResultStore();
 
-    let ellipse: string;
-    let constBlock: string;
+    let ellipseId: BlockId;
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot');
-      ellipse = b.addBlock('Ellipse');
-      constBlock = b.addBlock('Const');
+      ellipseId = b.addBlock('Ellipse');
+      const constBlock = b.addBlock('Const');
       b.setConfig(constBlock, 'value', 5.0);
-      b.wire(constBlock, 'out', ellipse, 'rx');
-      // rx is now connected → no default source
+      b.wire(constBlock, 'out', ellipseId, 'rx');
     });
 
     const result = compileFrontend(patch);
     expect(result.kind).toBe('ok');
-    if (result.kind !== 'ok') {
-      console.error('Frontend errors:', result.errors);
-      return;
-    }
+    if (result.kind !== 'ok') return;
 
-    store.updateFromFrontendResult(result.result, 1, patch);
+    store.updateFromFrontendResult(result.result, 1);
 
-    // Check by canonical address
-    const rxAddr = `v1:blocks.${ellipse!}.inputs.rx`;
+    // Connected port should have 'userEdge' provenance, not 'defaultSource'
+    const rxAddr = `v1:blocks.ellipse_1.inputs.rx`;
     expect(store.hasDefaultSource(rxAddr)).toBe(false);
+    expect(store.getPortProvenance(rxAddr)?.kind).toBe('userEdge');
 
     // Check by ids
-    expect(store.hasDefaultSourceByIds(ellipse!, 'rx')).toBe(false);
+    expect(store.hasDefaultSourceByIds(ellipseId!, 'rx')).toBe(false);
   });
 
   it('getResolvedPortType() returns resolved types', () => {
     const store = new FrontendResultStore();
 
-    let ellipse: string;
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot');
-      ellipse = b.addBlock('Ellipse');
+      b.addBlock('Ellipse');
     });
 
     const result = compileFrontend(patch);
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
 
-    store.updateFromFrontendResult(result.result, 1, patch);
+    store.updateFromFrontendResult(result.result, 1);
 
-    // Ellipse output 'shape' should have a resolved type
-    const shapeAddr = `v1:blocks.${ellipse!}.outputs.shape`;
+    // Ellipse output 'shape' should have a resolved type (Ellipse outputs float, not shape2d)
+    const shapeAddr = `v1:blocks.ellipse_1.outputs.shape`;
     const type = store.getResolvedPortType(shapeAddr);
     expect(type).toBeDefined();
-    expect(type?.payload.kind).toBe('shape2d');
+    expect(type?.payload.kind).toBe('float');
   });
 
   it('getResolvedPortTypeByIds() works for both inputs and outputs', () => {
     const store = new FrontendResultStore();
 
-    let ellipse: string;
+    let ellipseId: BlockId;
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot');
-      ellipse = b.addBlock('Ellipse');
+      ellipseId = b.addBlock('Ellipse');
     });
 
     const result = compileFrontend(patch);
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
 
-    store.updateFromFrontendResult(result.result, 1, patch);
+    store.updateFromFrontendResult(result.result, 1);
 
     // Input port type
-    const rxType = store.getResolvedPortTypeByIds(ellipse!, 'rx', 'in');
+    const rxType = store.getResolvedPortTypeByIds(ellipseId!, 'rx', 'in');
     expect(rxType).toBeDefined();
     expect(rxType?.payload.kind).toBe('float');
 
-    // Output port type
-    const shapeType = store.getResolvedPortTypeByIds(ellipse!, 'shape', 'out');
+    // Output port type (Ellipse outputs float for shape)
+    const shapeType = store.getResolvedPortTypeByIds(ellipseId!, 'shape', 'out');
     expect(shapeType).toBeDefined();
-    expect(shapeType?.payload.kind).toBe('shape2d');
+    expect(shapeType?.payload.kind).toBe('float');
   });
 
   it('clear() resets snapshot to empty state', () => {
@@ -163,7 +150,7 @@ describe('FrontendResultStore', () => {
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
 
-    store.updateFromFrontendResult(result.result, 1, patch);
+    store.updateFromFrontendResult(result.result, 1);
     expect(store.snapshot.status).toBe('frontendOk');
 
     store.clear();
@@ -176,23 +163,20 @@ describe('FrontendResultStore', () => {
 
   it('handles frontend errors gracefully', () => {
     const store = new FrontendResultStore();
-    // Create a patch with a cycle (will cause frontend error)
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot');
       const lag1 = b.addBlock('Lag');
       const lag2 = b.addBlock('Lag');
       b.wire(lag1, 'out', lag2, 'in');
-      b.wire(lag2, 'out', lag1, 'in'); // Cycle without delay
+      b.wire(lag2, 'out', lag1, 'in');
     });
 
     const result = compileFrontend(patch);
-    // Frontend may return ok with backendReady=false, or error
     if (result.kind === 'ok') {
-      store.updateFromFrontendResult(result.result, 1, patch);
+      store.updateFromFrontendResult(result.result, 1);
       expect(store.snapshot.status).toBe('frontendOk');
-      // May have errors even with ok status
     } else {
-      store.updateFromFrontendResult(result, 1, patch);
+      store.updateFromFrontendFailure(result, 1);
       expect(store.snapshot.status).toBe('frontendError');
       expect(store.snapshot.errors.length).toBeGreaterThan(0);
     }
