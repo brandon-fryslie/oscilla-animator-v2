@@ -11,6 +11,8 @@ import { registerRenderer } from '../ValueRenderer';
 import { genericNumericRenderer } from './GenericNumericRenderer';
 import { floatValueRenderer, createFloatValueRenderer } from './FloatValueRenderer';
 import { colorValueRenderer } from './ColorValueRenderer';
+import { vec2ValueRenderer } from './Vec2ValueRenderer';
+import { boolValueRenderer, eventValueRenderer } from './BoolEventValueRenderer';
 
 // Category fallbacks (tier 3)
 registerRenderer('category:numeric', genericNumericRenderer);
@@ -20,6 +22,9 @@ registerRenderer('category:shape', genericNumericRenderer); // shape uses generi
 // Payload-level (tier 2)
 registerRenderer('float', floatValueRenderer);
 registerRenderer('color', colorValueRenderer);
+registerRenderer('vec2', vec2ValueRenderer);
+registerRenderer('bool', boolValueRenderer);
+// Note: 'event' is not a payload type in the current system, events are bool-valued
 
 // Exact matches (tier 1) — unit-specific float renderers
 // Use structured unit constructors
