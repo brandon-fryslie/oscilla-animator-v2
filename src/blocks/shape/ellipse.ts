@@ -59,7 +59,7 @@ registerBlock({
   outputs: {
     shape: { label: 'Shape', type: canonicalType(FLOAT) },
   },
-  lower: ({ ctx, inputsById, config }) => {
+  lower: ({ ctx, inputsById, config, block }) => {
     // Resolve rx parameter
     const rxInput = inputsById.rx;
     let rxSig;
@@ -67,7 +67,10 @@ registerBlock({
     if (rxInput && rxIsSignal) {
       rxSig = rxInput.id;
     } else {
-      rxSig = ctx.b.constant(floatConst((config?.rx as number) ?? 0.02), canonicalType(FLOAT));
+      // Read from port default (via setPortDefault) or fall back to registry default
+      const rxPort = block?.inputPorts.get('rx');
+      const rxValue = (rxPort?.defaultSource?.params?.value as number | undefined) ?? (config?.rx as number) ?? 0.02;
+      rxSig = ctx.b.constant(floatConst(rxValue), canonicalType(FLOAT));
     }
 
     // Resolve ry parameter
@@ -77,7 +80,10 @@ registerBlock({
     if (ryInput && ryIsSignal) {
       rySig = ryInput.id;
     } else {
-      rySig = ctx.b.constant(floatConst((config?.ry as number) ?? 0.02), canonicalType(FLOAT));
+      // Read from port default (via setPortDefault) or fall back to registry default
+      const ryPort = block?.inputPorts.get('ry');
+      const ryValue = (ryPort?.defaultSource?.params?.value as number | undefined) ?? (config?.ry as number) ?? 0.02;
+      rySig = ctx.b.constant(floatConst(ryValue), canonicalType(FLOAT));
     }
 
     // Resolve rotation parameter
@@ -87,7 +93,10 @@ registerBlock({
     if (rotationInput && rotationIsSignal) {
       rotationSig = rotationInput.id;
     } else {
-      rotationSig = ctx.b.constant(floatConst((config?.rotation as number) ?? 0), canonicalType(FLOAT));
+      // Read from port default (via setPortDefault) or fall back to registry default
+      const rotationPort = block?.inputPorts.get('rotation');
+      const rotationValue = (rotationPort?.defaultSource?.params?.value as number | undefined) ?? (config?.rotation as number) ?? 0;
+      rotationSig = ctx.b.constant(floatConst(rotationValue), canonicalType(FLOAT));
     }
 
     // Create shape reference with ellipse topology and param signals
