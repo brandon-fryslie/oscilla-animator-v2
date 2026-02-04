@@ -317,6 +317,7 @@ export const CanvasTab: React.FC<CanvasTabProps> = ({ onCanvasReady, externalWri
       }}
     >
       <canvas
+        id="canvas"
         ref={canvasRef}
         width={canvasSize.width}
         height={canvasSize.height}

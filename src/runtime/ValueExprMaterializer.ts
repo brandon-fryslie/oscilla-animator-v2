@@ -197,8 +197,22 @@ function materializeKernel(
 
     case 'broadcast': {
       // WI-4: Broadcast - expand signal to field
-      const signalValue = evaluateValueExprSignal(expr.signal, table.nodes, state);
-      fillBufferWithSignal(buf, signalValue, count, stride);
+      // For multi-component signals (vec2, color, etc), evaluate each component separately
+      if (expr.signalComponents && expr.signalComponents.length > 1) {
+        // Multi-component broadcast: evaluate and interleave components
+        const componentValues = expr.signalComponents.map(id => 
+          evaluateValueExprSignal(id, table.nodes, state)
+        );
+        for (let i = 0; i < count; i++) {
+          for (let c = 0; c < componentValues.length; c++) {
+            buf[i * stride + c] = componentValues[c];
+          }
+        }
+      } else {
+        // Single-component broadcast: fill entire buffer with signal value
+        const signalValue = evaluateValueExprSignal(expr.signal, table.nodes, state);
+        fillBufferWithSignal(buf, signalValue, count, stride);
+      }
       break;
     }
 
