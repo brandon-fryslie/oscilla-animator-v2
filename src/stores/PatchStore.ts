@@ -320,6 +320,12 @@ export class PatchStore {
    * Emits EdgeRemoved for each edge, then BlockRemoved.
    */
   removeBlock(id: BlockId): void {
+    // Protect TimeRoot blocks from deletion (silently ignore)
+    const block = this._data.blocks.get(id);
+    if (block?.type === 'InfiniteTimeRoot') {
+      return;
+    }
+
     // Find edges to remove (for event emission)
     const edgesToRemove = this._data.edges.filter(
       (edge) => edge.from.blockId === id || edge.to.blockId === id
