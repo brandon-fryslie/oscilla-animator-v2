@@ -34,6 +34,8 @@ import {
   isMany,
   unitTurns,
   unitHsl,
+  withInstance,
+  instanceRef,
 } from '../../core/canonical-types';
 import type { PayloadType, CanonicalType } from '../../core/canonical-types';
 import { isPayloadVar, payloadVar, unitVar, inferType } from '../../core/inference-types';
@@ -230,27 +232,51 @@ registerBlock({
     // typevars are fully implemented. DefaultSource should only emit signals;
     // the cardinality solver will handle broadcast/lift automatically.
     if (isMany(cardinality)) {
+      // Create instance for field defaults (required by intrinsics like normalizedIndex)
+      // Extract domain from cardinality's instance ref
+      const card = requireInst(outType.extent.cardinality, 'cardinality');
+      if (card.kind !== 'many') {
+        throw new Error('DefaultSource: field path requires cardinality=many');
+      }
+      const domainTypeId = card.instance.domainTypeId;
+
+      // Create a default circle shape for the instance using pure Ellipse block
+      const sandbox = new LowerSandbox(ctx.b, ctx.blockType, ctx.instanceId);
+      const radiusConst = ctx.b.constant({ kind: 'float', value: 0.05 }, canonicalSignal(FLOAT));
+      // Ellipse is pure, so we can lower it directly without DefaultSource recursion
+      const shapeOutputs = sandbox.lowerBlock('Ellipse', { rx: radiusConst, ry: radiusConst }, { rx: 0.05, ry: 0.05 });
+      const shapeId = shapeOutputs.shape;
+
+      // Use a default count of 8 elements
+      const defaultCount = ctx.b.constant({ kind: 'int', value: 8 }, canonicalSignal({ kind: 'int' }));
+      const instanceId = ctx.b.createInstance(domainTypeId, defaultCount, shapeId);
+
+      // Update output type with actual instance reference
+      const ref = instanceRef(domainTypeId as string, instanceId as string);
+      const actualOutType = withInstance(outType, ref);
+
       let id: ValueExprId;
 
       switch (payload.kind) {
         case 'vec3':
-          id = fieldVec3Default(ctx, outType);
+          id = fieldVec3Default(ctx, actualOutType);
           break;
         case 'color':
-          id = fieldColorDefault(ctx, outType);
+          id = fieldColorDefault(ctx, actualOutType);
           break;
         default: {
           // For other types, broadcast the signal-level default
           const sigId = signalDefault(ctx, payload);
-          id = fieldBroadcastDefault(ctx, sigId, outType);
+          id = fieldBroadcastDefault(ctx, sigId, actualOutType);
           break;
         }
       }
 
       return {
         outputsById: {
-          out: { id, type: outType, stride: payloadStride(outType.payload) },
+          out: { id, type: actualOutType, stride: payloadStride(actualOutType.payload) },
         },
+        instanceContext: instanceId,
       };
     }
 

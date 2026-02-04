@@ -27,6 +27,7 @@ registerBlock({
   description: 'Creates an ellipse shape (circle when rx=ry)',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'signalOnly',
     laneCoupling: 'laneLocal',
