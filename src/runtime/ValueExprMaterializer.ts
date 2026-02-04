@@ -23,6 +23,7 @@ import { requireInst } from '../core/canonical-types';
 import { payloadStride } from '../core/canonical-types';
 import { getTopology } from '../shapes/registry';
 import type { PathTopologyDef } from '../shapes/types';
+import { applyOpcode } from './OpcodeInterpreter';
 
 /**
  * Value expression table for materialization.
@@ -459,9 +460,10 @@ function materializeIntrinsic(
       buf[i] = i / (count - 1);
     }
   } else if (intrinsic === 'randomId') {
-    // Generate stable random IDs per instance
+    // Generate stable random IDs per instance using hash function
+    // seed=0 for deterministic randomness based on index
     for (let i = 0; i < count; i++) {
-      buf[i] = Math.random(); // TODO: Use stable hash
+      buf[i] = applyOpcode('hash', [i, 0]);
     }
   } else {
     throw new Error(`Unknown intrinsic: ${intrinsic}`);
