@@ -1,0 +1,200 @@
+/**
+ * FrontendResultStore Tests
+ *
+ * Verifies observable snapshot updates and query methods.
+ */
+
+import { describe, it, expect } from 'vitest';
+import '../../blocks/all'; // Trigger block registrations
+import { FrontendResultStore } from '../FrontendResultStore';
+import { buildPatch } from '../../graph';
+import { compileFrontend } from '../../compiler/frontend';
+
+describe('FrontendResultStore', () => {
+  it('starts with empty snapshot', () => {
+    const store = new FrontendResultStore();
+
+    expect(store.snapshot.status).toBe('none');
+    expect(store.snapshot.patchRevision).toBe(-1);
+    expect(store.snapshot.portProvenance.size).toBe(0);
+    expect(store.snapshot.resolvedPortTypes.size).toBe(0);
+    expect(store.snapshot.backendReady).toBe(false);
+  });
+
+  it('updates snapshot from successful frontend compilation', () => {
+    const store = new FrontendResultStore();
+
+    let ellipse: string;
+    const patch = buildPatch((b) => {
+      b.addBlock('InfiniteTimeRoot');
+      ellipse = b.addBlock('Ellipse');
+      b.setPortDefault(ellipse, 'rx', 2.0);
+    });
+
+    const result = compileFrontend(patch);
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+
+    store.updateFromFrontendResult(result.result, 1, patch);
+
+    expect(store.snapshot.status).toBe('frontendOk');
+    expect(store.snapshot.patchRevision).toBe(1);
+    expect(store.snapshot.backendReady).toBe(true);
+    expect(store.snapshot.resolvedPortTypes.size).toBeGreaterThan(0);
+  });
+
+  it('hasDefaultSource() returns true for unconnected inputs', () => {
+    const store = new FrontendResultStore();
+
+    let ellipse: string;
+    const patch = buildPatch((b) => {
+      b.addBlock('InfiniteTimeRoot');
+      ellipse = b.addBlock('Ellipse');
+      // rx port is unconnected → should get default source
+    });
+
+    const result = compileFrontend(patch);
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+
+    store.updateFromFrontendResult(result.result, 1, patch);
+    console.log("\nEllipse ID:", ellipse!);
+    console.log("Port Provenance entries:", store.snapshot.portProvenance.size);
+    for (const [addr, prov] of store.snapshot.portProvenance) {
+      console.log(`  ${addr} => ${prov.kind}`);
+    }
+
+
+    // Check by canonical address
+    const rxAddr = `v1:blocks.${ellipse!}.inputs.rx`;
+    expect(store.hasDefaultSource(rxAddr)).toBe(true);
+
+    // Check by ids
+    expect(store.hasDefaultSourceByIds(ellipse!, 'rx')).toBe(true);
+  });
+
+  it('hasDefaultSource() returns false for connected inputs', () => {
+    const store = new FrontendResultStore();
+
+    let ellipse: string;
+    let constBlock: string;
+    const patch = buildPatch((b) => {
+      b.addBlock('InfiniteTimeRoot');
+      ellipse = b.addBlock('Ellipse');
+      constBlock = b.addBlock('Const');
+      b.setConfig(constBlock, 'value', 5.0);
+      b.wire(constBlock, 'out', ellipse, 'rx');
+      // rx is now connected → no default source
+    });
+
+    const result = compileFrontend(patch);
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') {
+      console.error('Frontend errors:', result.errors);
+      return;
+    }
+
+    store.updateFromFrontendResult(result.result, 1, patch);
+
+    // Check by canonical address
+    const rxAddr = `v1:blocks.${ellipse!}.inputs.rx`;
+    expect(store.hasDefaultSource(rxAddr)).toBe(false);
+
+    // Check by ids
+    expect(store.hasDefaultSourceByIds(ellipse!, 'rx')).toBe(false);
+  });
+
+  it('getResolvedPortType() returns resolved types', () => {
+    const store = new FrontendResultStore();
+
+    let ellipse: string;
+    const patch = buildPatch((b) => {
+      b.addBlock('InfiniteTimeRoot');
+      ellipse = b.addBlock('Ellipse');
+    });
+
+    const result = compileFrontend(patch);
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+
+    store.updateFromFrontendResult(result.result, 1, patch);
+
+    // Ellipse output 'shape' should have a resolved type
+    const shapeAddr = `v1:blocks.${ellipse!}.outputs.shape`;
+    const type = store.getResolvedPortType(shapeAddr);
+    expect(type).toBeDefined();
+    expect(type?.payload.kind).toBe('shape2d');
+  });
+
+  it('getResolvedPortTypeByIds() works for both inputs and outputs', () => {
+    const store = new FrontendResultStore();
+
+    let ellipse: string;
+    const patch = buildPatch((b) => {
+      b.addBlock('InfiniteTimeRoot');
+      ellipse = b.addBlock('Ellipse');
+    });
+
+    const result = compileFrontend(patch);
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+
+    store.updateFromFrontendResult(result.result, 1, patch);
+
+    // Input port type
+    const rxType = store.getResolvedPortTypeByIds(ellipse!, 'rx', 'in');
+    expect(rxType).toBeDefined();
+    expect(rxType?.payload.kind).toBe('float');
+
+    // Output port type
+    const shapeType = store.getResolvedPortTypeByIds(ellipse!, 'shape', 'out');
+    expect(shapeType).toBeDefined();
+    expect(shapeType?.payload.kind).toBe('shape2d');
+  });
+
+  it('clear() resets snapshot to empty state', () => {
+    const store = new FrontendResultStore();
+    const patch = buildPatch((b) => {
+      b.addBlock('InfiniteTimeRoot');
+      b.addBlock('Ellipse');
+    });
+
+    const result = compileFrontend(patch);
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+
+    store.updateFromFrontendResult(result.result, 1, patch);
+    expect(store.snapshot.status).toBe('frontendOk');
+
+    store.clear();
+
+    expect(store.snapshot.status).toBe('none');
+    expect(store.snapshot.patchRevision).toBe(-1);
+    expect(store.snapshot.portProvenance.size).toBe(0);
+    expect(store.snapshot.resolvedPortTypes.size).toBe(0);
+  });
+
+  it('handles frontend errors gracefully', () => {
+    const store = new FrontendResultStore();
+    // Create a patch with a cycle (will cause frontend error)
+    const patch = buildPatch((b) => {
+      b.addBlock('InfiniteTimeRoot');
+      const lag1 = b.addBlock('Lag');
+      const lag2 = b.addBlock('Lag');
+      b.wire(lag1, 'out', lag2, 'in');
+      b.wire(lag2, 'out', lag1, 'in'); // Cycle without delay
+    });
+
+    const result = compileFrontend(patch);
+    // Frontend may return ok with backendReady=false, or error
+    if (result.kind === 'ok') {
+      store.updateFromFrontendResult(result.result, 1, patch);
+      expect(store.snapshot.status).toBe('frontendOk');
+      // May have errors even with ok status
+    } else {
+      store.updateFromFrontendResult(result, 1, patch);
+      expect(store.snapshot.status).toBe('frontendError');
+      expect(store.snapshot.errors.length).toBeGreaterThan(0);
+    }
+  });
+});
