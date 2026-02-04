@@ -39,13 +39,19 @@ registerBlock({
     const indexField = ctx.b.intrinsic('normalizedIndex', indexType);
     const indexIntField = ctx.b.intrinsic('index', indexIntType);
 
-    const indexSlot = ctx.b.allocSlot();
-    const indexIntSlot = ctx.b.allocSlot();
+    // Slot will be allocated by orchestrator
+    // Slot will be allocated by orchestrator
 
     return {
       outputsById: {
-        index: { id: indexField, slot: indexSlot, type: indexType, stride: payloadStride(indexType.payload) },
-        indexInt: { id: indexIntField, slot: indexIntSlot, type: indexIntType, stride: payloadStride(indexIntType.payload) },
+        index: { id: indexField, slot: undefined, type: indexType, stride: payloadStride(indexType.payload) },
+        indexInt: { id: indexIntField, slot: undefined, type: indexIntType, stride: payloadStride(indexIntType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'index', type: indexType },
+          { portId: 'indexInt', type: indexIntType },
+        ],
       },
     };
   },

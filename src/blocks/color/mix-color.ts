@@ -19,6 +19,7 @@ registerBlock({
   description: 'Blend two HSL colors using shortest-arc hue interpolation',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',

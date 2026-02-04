@@ -16,6 +16,7 @@ registerBlock({
   description: 'Unpack color+hsl into h, s, l, a channels',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',

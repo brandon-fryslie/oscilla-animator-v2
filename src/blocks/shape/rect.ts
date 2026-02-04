@@ -27,6 +27,7 @@ registerBlock({
   description: 'Creates a rectangle shape (square when width=height)',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'signalOnly',
     laneCoupling: 'laneLocal',
@@ -113,12 +114,16 @@ registerBlock({
       canonicalType(FLOAT)
     );
 
-    const slot = ctx.b.allocSlot();
     const shapeType = ctx.outTypes[0];
 
     return {
       outputsById: {
-        shape: { id: shapeRefSig, slot, type: shapeType, stride: payloadStride(shapeType.payload) },
+        shape: { id: shapeRefSig, slot: undefined, type: shapeType, stride: payloadStride(shapeType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'shape', type: shapeType },
+        ],
       },
     };
   },

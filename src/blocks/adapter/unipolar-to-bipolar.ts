@@ -17,6 +17,7 @@ registerBlock({
   description: 'Convert unipolar [0,1] to bipolar [-1,1]: b = u * 2 - 1',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
@@ -54,10 +55,14 @@ registerBlock({
     const subFn = ctx.b.opcode(OpCode.Sub);
     const result = ctx.b.kernelZip([scaled, one], subFn, outType);
 
-    const slot = ctx.b.allocSlot();
     return {
       outputsById: {
-        out: { id: result, slot, type: outType, stride: payloadStride(outType.payload) },
+        out: { id: result, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'out', type: outType },
+        ],
       },
     };
   },

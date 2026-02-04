@@ -18,6 +18,7 @@ registerBlock({
   description: 'y = pow(clamp01(x), gamma) - gamma curve control',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
@@ -48,10 +49,14 @@ registerBlock({
     const powFn = ctx.b.opcode(OpCode.Pow);
     const result = ctx.b.kernelZip([clamped, gamma.id], powFn, outType);
 
-    const slot = ctx.b.allocSlot();
     return {
       outputsById: {
-        out: { id: result, slot, type: outType, stride: payloadStride(outType.payload) },
+        out: { id: result, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'out', type: outType },
+        ],
       },
     };
   },

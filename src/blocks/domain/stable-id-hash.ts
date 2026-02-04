@@ -46,13 +46,19 @@ registerBlock({
     const randField = ctx.b.intrinsic('randomId', randType);
     const id01Field = ctx.b.intrinsic('normalizedIndex', id01Type);
 
-    const randSlot = ctx.b.allocSlot();
-    const id01Slot = ctx.b.allocSlot();
+    // Slot will be allocated by orchestrator
+    // Slot will be allocated by orchestrator
 
     return {
       outputsById: {
-        rand: { id: randField, slot: randSlot, type: randType, stride: payloadStride(randType.payload) },
-        id01: { id: id01Field, slot: id01Slot, type: id01Type, stride: payloadStride(id01Type.payload) },
+        rand: { id: randField, slot: undefined, type: randType, stride: payloadStride(randType.payload) },
+        id01: { id: id01Field, slot: undefined, type: id01Type, stride: payloadStride(id01Type.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'rand', type: randType },
+          { portId: 'id01', type: id01Type },
+        ],
       },
     };
   },

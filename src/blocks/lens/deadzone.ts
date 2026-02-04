@@ -19,6 +19,7 @@ registerBlock({
   description: 'Zero small magnitudes: y = |x| > threshold ? x : 0',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
@@ -53,10 +54,14 @@ registerBlock({
     const selectFn = ctx.b.opcode(OpCode.Select);
     const result = ctx.b.kernelZip([diff, input.id, zeroConst], selectFn, outType);
 
-    const slot = ctx.b.allocSlot();
     return {
       outputsById: {
-        out: { id: result, slot, type: outType, stride: payloadStride(outType.payload) },
+        out: { id: result, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'out', type: outType },
+        ],
       },
     };
   },

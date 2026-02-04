@@ -16,6 +16,7 @@ registerBlock({
   description: 'Clamp scalar to normalized [0,1] with contract guarantee',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
@@ -45,10 +46,14 @@ registerBlock({
     const clampFn = ctx.b.opcode(OpCode.Clamp);
     const clamped = ctx.b.kernelZip([input.id, zero, one], clampFn, canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()));
     const outType = ctx.outTypes[0];
-    const slot = ctx.b.allocSlot();
     return {
       outputsById: {
-        out: { id: clamped, slot, type: outType, stride: payloadStride(outType.payload) },
+        out: { id: clamped, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'out', type: outType },
+        ],
       },
     };
   },

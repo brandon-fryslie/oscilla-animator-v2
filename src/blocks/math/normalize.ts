@@ -16,6 +16,7 @@ registerBlock({
   description: 'Normalize a 2D or 3D vector to unit length',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
@@ -73,15 +74,19 @@ registerBlock({
 
     const outTypeY = ctx.outTypes[1];
     const outTypeZ = ctx.outTypes[2];
-    const slotX = ctx.b.allocSlot();
-    const slotY = ctx.b.allocSlot();
-    const slotZ = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        outX: { id: outXId, slot: slotX, type: outTypeX, stride: payloadStride(outTypeX.payload) },
-        outY: { id: outYId, slot: slotY, type: outTypeY, stride: payloadStride(outTypeY.payload) },
-        outZ: { id: outZId, slot: slotZ, type: outTypeZ, stride: payloadStride(outTypeZ.payload) },
+        outX: { id: outXId, slot: undefined, type: outTypeX, stride: payloadStride(outTypeX.payload) },
+        outY: { id: outYId, slot: undefined, type: outTypeY, stride: payloadStride(outTypeY.payload) },
+        outZ: { id: outZId, slot: undefined, type: outTypeZ, stride: payloadStride(outTypeZ.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'outX', type: outTypeX },
+          { portId: 'outY', type: outTypeY },
+          { portId: 'outZ', type: outTypeZ },
+        ],
       },
     };
   },

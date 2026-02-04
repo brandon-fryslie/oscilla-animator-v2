@@ -25,6 +25,7 @@ registerBlock({
   description: 'Arranges elements along a line using UV placement basis (gauge-invariant)',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
@@ -121,11 +122,16 @@ registerBlock({
     // pos = construct([x, y, z]) → vec3
     const positionField = ctx.b.construct([x, y, z], posType);
 
-    const posSlot = ctx.b.allocSlot();
+    // Slot will be allocated by orchestrator
 
     return {
       outputsById: {
-        position: { id: positionField, slot: posSlot, type: posType, stride: payloadStride(posType.payload) },
+        position: { id: positionField, slot: undefined, type: posType, stride: payloadStride(posType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'position', type: posType },
+        ],
       },
       instanceContext: instanceId,
     };

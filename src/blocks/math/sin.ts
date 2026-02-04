@@ -16,6 +16,7 @@ registerBlock({
   description: 'Per-element sine (works with both signals and fields)',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
@@ -42,15 +43,18 @@ registerBlock({
     }
 
     const outType = ctx.outTypes[0];
-    const sinFn = ctx.b.opcode(OpCode.Sin);  // ALWAYS opcode
+    const sinFn = ctx.b.opcode(OpCode.Sin);
     const result = ctx.b.kernelMap(input.id, sinFn, outType);
-    const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        result: { id: result, slot, type: outType, stride: payloadStride(outType.payload) },
+        result: { id: result, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
       },
-      // instanceContext auto-propagated by framework
+      effects: {
+        slotRequests: [
+          { portId: 'result', type: outType },
+        ],
+      },
     };
   },
 });

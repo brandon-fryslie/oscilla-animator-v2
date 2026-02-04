@@ -18,6 +18,7 @@ registerBlock({
   description: 'Construct a vec3 from three scalar components (x, y, z)',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
@@ -45,10 +46,14 @@ registerBlock({
     // Use IR construct operation to pack components
     const result = ctx.b.construct([xInput.id, yInput.id, zInput.id], outType);
 
-    const slot = ctx.b.allocSlot();
     return {
       outputsById: {
-        out: { id: result, slot, type: outType, stride: payloadStride(outType.payload) },
+        out: { id: result, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'out', type: outType },
+        ],
       },
     };
   },

@@ -17,6 +17,7 @@ registerBlock({
   description: 'Convert color from HSL to RGBA color space',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
@@ -45,11 +46,14 @@ registerBlock({
 
     // Use the hslToRgb structural intrinsic
     const result = ctx.b.hslToRgb(input.id, outType);
-    const slot = ctx.b.allocSlot();
-
     return {
       outputsById: {
-        out: { id: result, slot, type: outType, stride: payloadStride(outType.payload) },
+        out: { id: result, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'out', type: outType },
+        ],
       },
     };
   },

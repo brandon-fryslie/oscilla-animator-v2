@@ -16,6 +16,7 @@ registerBlock({
   description: 'Wrap scalar to [0,1) with contract guarantee (cyclic wrap)',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
@@ -46,10 +47,14 @@ registerBlock({
     const wrapFn = ctx.b.opcode(OpCode.Wrap01);
     const wrapped = ctx.b.kernelMap(input.id, wrapFn, outType);
 
-    const slot = ctx.b.allocSlot();
     return {
       outputsById: {
-        out: { id: wrapped, slot, type: outType, stride: payloadStride(outType.payload) },
+        out: { id: wrapped, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'out', type: outType },
+        ],
       },
     };
   },

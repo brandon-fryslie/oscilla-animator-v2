@@ -16,6 +16,7 @@ registerBlock({
   description: 'Convert milliseconds to seconds',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
@@ -45,10 +46,14 @@ registerBlock({
     const divFn = ctx.b.opcode(OpCode.Div);
     const seconds = ctx.b.kernelZip([input.id, divisor], divFn, canonicalType(FLOAT, unitSeconds()));
     const outType = ctx.outTypes[0];
-    const slot = ctx.b.allocSlot();
     return {
       outputsById: {
-        out: { id: seconds, slot, type: outType, stride: payloadStride(outType.payload) },
+        out: { id: seconds, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'out', type: outType },
+        ],
       },
     };
   },

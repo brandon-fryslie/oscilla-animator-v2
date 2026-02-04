@@ -16,6 +16,7 @@ registerBlock({
   description: 'Euclidean length (magnitude) of a 2D or 3D vector',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
@@ -51,11 +52,15 @@ registerBlock({
     }
 
     const lengthId = ctx.b.kernelMap(sumSq, sqrtFn, outType);
-    const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        out: { id: lengthId, slot, type: outType, stride: payloadStride(outType.payload) },
+        out: { id: lengthId, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'out', type: outType },
+        ],
       },
     };
   },

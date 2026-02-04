@@ -15,6 +15,7 @@ registerBlock({
   description: 'Promote normalized [0,1] to scalar (identity)',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',

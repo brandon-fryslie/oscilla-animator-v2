@@ -18,6 +18,7 @@ registerBlock({
   description: 'Extract a single scalar component from vec3 (x=0, y=1, z=2)',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
@@ -51,10 +52,14 @@ registerBlock({
     // Use IR extract operation
     const result = ctx.b.extract(input.id, componentIndex, outType);
 
-    const slot = ctx.b.allocSlot();
     return {
       outputsById: {
-        out: { id: result, slot, type: outType, stride: payloadStride(outType.payload) },
+        out: { id: result, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'out', type: outType },
+        ],
       },
     };
   },

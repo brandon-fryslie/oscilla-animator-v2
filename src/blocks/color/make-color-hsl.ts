@@ -19,6 +19,7 @@ registerBlock({
   description: 'Pack h, s, l, a into a color+hsl value with enforcement (wrap hue, clamp others)',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',

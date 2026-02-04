@@ -18,6 +18,7 @@ registerBlock({
   description: 'y = x * scale + bias',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
@@ -48,10 +49,14 @@ registerBlock({
     const addFn = ctx.b.opcode(OpCode.Add);
     const result = ctx.b.kernelZip([scaled, bias.id], addFn, outType);
 
-    const slot = ctx.b.allocSlot();
     return {
       outputsById: {
-        out: { id: result, slot, type: outType, stride: payloadStride(outType.payload) },
+        out: { id: result, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'out', type: outType },
+        ],
       },
     };
   },

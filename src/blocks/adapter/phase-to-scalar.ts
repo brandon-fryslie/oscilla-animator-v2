@@ -15,6 +15,7 @@ registerBlock({
   description: 'Semantic boundary: phase [0,1) to dimensionless scalar (identity)',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',

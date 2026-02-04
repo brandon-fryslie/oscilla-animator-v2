@@ -19,6 +19,7 @@ registerBlock({
   description: 'Constant HSL+A color source',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
@@ -57,11 +58,15 @@ registerBlock({
     const aClamped = ctx.b.kernelZip([aInput.id, zero, one], clamp, floatType);
 
     const result = ctx.b.construct([hWrapped, sClamped, lClamped, aClamped], outType);
-    const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        color: { id: result, slot, type: outType, stride: payloadStride(outType.payload) },
+        color: { id: result, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'color', type: outType },
+        ],
       },
     };
   },

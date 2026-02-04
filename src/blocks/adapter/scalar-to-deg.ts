@@ -15,6 +15,7 @@ registerBlock({
   description: 'Reinterpret scalar as degrees (identity)',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',

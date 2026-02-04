@@ -18,6 +18,7 @@ registerBlock({
   description: 'y = clamp(x, min, max) - bounds enforcement',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
@@ -44,10 +45,14 @@ registerBlock({
     const clampFn = ctx.b.opcode(OpCode.Clamp);
     const result = ctx.b.kernelZip([input.id, min.id, max.id], clampFn, outType);
 
-    const slot = ctx.b.allocSlot();
     return {
       outputsById: {
-        out: { id: result, slot, type: outType, stride: payloadStride(outType.payload) },
+        out: { id: result, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'out', type: outType },
+        ],
       },
     };
   },

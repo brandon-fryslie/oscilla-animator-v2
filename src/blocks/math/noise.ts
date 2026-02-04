@@ -16,6 +16,7 @@ registerBlock({
   description: 'Deterministic procedural noise. Output in [0, 1)',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
@@ -36,11 +37,15 @@ registerBlock({
     const seedId = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
     const hashFn = ctx.b.opcode(OpCode.Hash);
     const hashId = ctx.b.kernelZip([x.id, seedId], hashFn, outType);
-    const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        out: { id: hashId, slot, type: outType, stride: payloadStride(outType.payload) },
+        out: { id: hashId, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'out', type: outType },
+        ],
       },
     };
   },

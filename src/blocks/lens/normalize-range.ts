@@ -19,6 +19,7 @@ registerBlock({
   description: 'y = (x - min) / (max - min) - maps [min, max] → [0,1]',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
@@ -50,10 +51,14 @@ registerBlock({
     const divFn = ctx.b.opcode(OpCode.Div);
     const result = ctx.b.kernelZip([numerator, range], divFn, outType);
 
-    const slot = ctx.b.allocSlot();
     return {
       outputsById: {
-        out: { id: result, slot, type: outType, stride: payloadStride(outType.payload) },
+        out: { id: result, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'out', type: outType },
+        ],
       },
     };
   },

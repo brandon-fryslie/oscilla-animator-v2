@@ -16,6 +16,7 @@ registerBlock({
   description: 'Convert radians to degrees',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
@@ -44,10 +45,14 @@ registerBlock({
     const mulFn = ctx.b.opcode(OpCode.Mul);
     const degrees = ctx.b.kernelZip([input.id, factor], mulFn, canonicalType(FLOAT, unitDegrees()));
     const outType = ctx.outTypes[0];
-    const slot = ctx.b.allocSlot();
     return {
       outputsById: {
-        out: { id: degrees, slot, type: outType, stride: payloadStride(outType.payload) },
+        out: { id: degrees, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'out', type: outType },
+        ],
       },
     };
   },

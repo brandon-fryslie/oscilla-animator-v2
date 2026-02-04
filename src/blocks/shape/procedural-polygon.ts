@@ -86,6 +86,7 @@ registerBlock({
   description: 'Creates a procedural regular polygon with N sides',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'transform',
     laneCoupling: 'laneLocal',
@@ -221,16 +222,22 @@ registerBlock({
       computedPositions  // Control point field (just the ValueExprId now)
     );
 
-    const shapeSlot = ctx.b.allocSlot();
-    const cpSlot = ctx.b.allocSlot();
+    // Slot will be allocated by orchestrator
+    // Slot will be allocated by orchestrator
     const shapeType = ctx.outTypes[0];
     // Rewrite controlPoints output type with actual instance ref
     const cpType = withInstance(ctx.outTypes[1], ref);
 
     return {
       outputsById: {
-        shape: { id: shapeRefSig, slot: shapeSlot, type: shapeType, stride: payloadStride(shapeType.payload) },
-        controlPoints: { id: computedPositions, slot: cpSlot, type: cpType, stride: payloadStride(cpType.payload) },
+        shape: { id: shapeRefSig, slot: undefined, type: shapeType, stride: payloadStride(shapeType.payload) },
+        controlPoints: { id: computedPositions, slot: undefined, type: cpType, stride: payloadStride(cpType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'shape', type: shapeType },
+          { portId: 'controlPoints', type: cpType },
+        ],
       },
       instanceContext: controlInstance,
     };

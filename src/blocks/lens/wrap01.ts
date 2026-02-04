@@ -19,6 +19,7 @@ registerBlock({
   description: 'y = fract(x) - wrap to [0,1) without changing type',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
@@ -40,10 +41,14 @@ registerBlock({
     const wrapFn = ctx.b.opcode(OpCode.Wrap01);
     const result = ctx.b.kernelMap(input.id, wrapFn, outType);
 
-    const slot = ctx.b.allocSlot();
     return {
       outputsById: {
-        out: { id: result, slot, type: outType, stride: payloadStride(outType.payload) },
+        out: { id: result, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'out', type: outType },
+        ],
       },
     };
   },

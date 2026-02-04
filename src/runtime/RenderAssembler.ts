@@ -480,7 +480,8 @@ function resolveShape(
           'Signal must be evaluated in schedule before rendering.'
         );
       }
-      params[`param${i}`] = state.values.f64[slotIndex];
+      const value = state.values.f64[slotIndex];
+      params[`param${i}`] = value;
     }
 
     return {
