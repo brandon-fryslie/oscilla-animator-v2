@@ -1012,12 +1012,16 @@ export class PatchStore {
   }
 
   /**
-   * Clears all blocks and edges.
+   * Clears all blocks and edges, then auto-inserts InfiniteTimeRoot.
+   * Every patch must have exactly one TimeRoot (system-managed).
    * Emits PatchReset event.
    */
   clear(): void {
     this._data = emptyPatchData();
     this.invalidateSnapshot();
+
+    // Auto-insert TimeRoot (required for all patches, system-managed)
+    this.addBlock('InfiniteTimeRoot');
 
     // Emit PatchReset event
     if (this.eventHub && this.getPatchRevision) {
