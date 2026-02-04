@@ -19,6 +19,7 @@ registerBlock({
   description: 'Creates multiple copies of an element (Signal<T> → Field<T>)',
   form: 'primitive',
   capability: 'identity',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'transform',
     laneCoupling: 'laneLocal',
@@ -100,10 +101,18 @@ registerBlock({
 
     return {
       outputsById: {
-        elements: { id: elementsField, slot: ctx.b.allocSlot(), type: outType0, stride: payloadStride(outType0.payload) },
-        index: { id: indexField, slot: ctx.b.allocSlot(), type: outType1, stride: payloadStride(outType1.payload) },
-        t: { id: tField, slot: ctx.b.allocSlot(), type: outType2, stride: payloadStride(outType2.payload) },
-        active: { id: activeField, slot: ctx.b.allocSlot(), type: outType3, stride: payloadStride(outType3.payload) },
+        elements: { id: elementsField, slot: undefined, type: outType0, stride: payloadStride(outType0.payload) },
+        index: { id: indexField, slot: undefined, type: outType1, stride: payloadStride(outType1.payload) },
+        t: { id: tField, slot: undefined, type: outType2, stride: payloadStride(outType2.payload) },
+        active: { id: activeField, slot: undefined, type: outType3, stride: payloadStride(outType3.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'elements', type: outType0 },
+          { portId: 'index', type: outType1 },
+          { portId: 't', type: outType2 },
+          { portId: 'active', type: outType3 },
+        ],
       },
       instanceContext: instanceId,
     };

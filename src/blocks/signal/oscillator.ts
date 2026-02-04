@@ -18,6 +18,7 @@ registerBlock({
   description: 'Generates oscillating signals (sin, saw, square, noise)',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
@@ -105,11 +106,14 @@ registerBlock({
       }
     }
 
-    const slot = ctx.b.allocSlot();
-
     return {
       outputsById: {
-        out: { id, slot, type: outType, stride: payloadStride(outType.payload) },
+        out: { id, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'out', type: outType },
+        ],
       },
     };
   },

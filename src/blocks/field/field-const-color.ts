@@ -16,6 +16,7 @@ registerBlock({
   description: 'Broadcasts a constant color to all instances in a field. Produces Field<color>.',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
@@ -74,11 +75,15 @@ registerBlock({
     const bField = ctx.b.broadcast(bSig, floatFieldType);
     const aField = ctx.b.broadcast(aSig, floatFieldType);
     const result = ctx.b.construct([rField, gField, bField, aField], colorType);
-    const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        color: { id: result, slot, type: colorType, stride: payloadStride(colorType.payload) },
+        color: { id: result, slot: undefined, type: colorType, stride: payloadStride(colorType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'color', type: colorType },
+        ],
       },
     };
   },

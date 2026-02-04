@@ -17,6 +17,7 @@ registerBlock({
   description: 'Latches input value when event fires, holds until next fire',
   form: 'primitive',
   capability: 'state',
+  loweringPurity: 'stateful',
   isStateful: true,
   cardinality: {
     cardinalityMode: 'signalOnly',

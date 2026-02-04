@@ -19,6 +19,7 @@ registerBlock({
   description: 'Rate-limited smoothing: y += (x - y) * rate * dt',
   form: 'primitive',
   capability: 'state',
+  loweringPurity: 'stateful',
   isStateful: true,  // Allows feedback cycles - reads from previous frame
   cardinality: {
     cardinalityMode: 'preserve',

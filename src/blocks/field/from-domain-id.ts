@@ -16,6 +16,7 @@ registerBlock({
   description: 'Generates normalized (0..1) ID for each element in a domain',
   form: 'primitive',
   capability: 'identity',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'fieldOnly',
     laneCoupling: 'laneLocal',
@@ -35,15 +36,17 @@ registerBlock({
     }
 
     const outType = ctx.outTypes[0];
-    // Use intrinsic to get normalized index (0..1) for each instance element
     const id01Field = ctx.b.intrinsic('normalizedIndex', outType);
-    const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        id01: { id: id01Field, slot, type: outType, stride: payloadStride(outType.payload) },
+        id01: { id: id01Field, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
       },
-      // Propagate instance context
+      effects: {
+        slotRequests: [
+          { portId: 'id01', type: outType },
+        ],
+      },
       instanceContext: instance,
     };
   },

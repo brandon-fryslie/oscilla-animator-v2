@@ -17,6 +17,7 @@ registerBlock({
   description: 'Reduce a field to a scalar using an aggregation operation',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'transform',
     laneCoupling: 'laneCoupled',
@@ -73,13 +74,16 @@ registerBlock({
       op,
       canonicalType(payloadType)
     );
-    const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        signal: { id: sigId, slot, type: outType, stride: payloadStride(outType.payload) },
+        signal: { id: sigId, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
       },
-      // Reduce is instance-agnostic (like Broadcast)
+      effects: {
+        slotRequests: [
+          { portId: 'signal', type: outType },
+        ],
+      },
       instanceContext: undefined,
     };
   },

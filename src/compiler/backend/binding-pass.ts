@@ -370,7 +370,7 @@ export function bindOutputs(
   outputsById: Record<string, ValueRefExpr> | undefined,
   slotMap: ReadonlyMap<string, ValueSlot>,
   blockId: string,
-  loweringPurity: 'pure' | 'impure' | undefined,
+  loweringPurity: 'pure' | 'stateful' | 'impure' | undefined,
   builder: IRBuilder
 ): Map<string, ValueRefExpr> {
   const bound = new Map<string, ValueRefExpr>();

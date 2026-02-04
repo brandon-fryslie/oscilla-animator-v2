@@ -35,6 +35,7 @@ registerBlock({
   description: 'Broadcasts a signal value to all elements of a field (type inferred)',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'transform',
     laneCoupling: 'laneLocal',
@@ -96,15 +97,15 @@ registerBlock({
         : undefined
     );
 
-    const slot = ctx.b.allocSlot();
-
     return {
       outputsById: {
-        field: { id: fieldId, slot, type: outType, stride },
+        field: { id: fieldId, slot: undefined, type: outType, stride },
       },
-      // Propagate instance context from inputs
-      // Broadcast is special - it can receive instance context even though
-      // it doesn't have field inputs (it's inserted by adapters in field contexts)
+      effects: {
+        slotRequests: [
+          { portId: 'field', type: outType },
+        ],
+      },
       instanceContext: ctx.inferredInstance,
     };
   },

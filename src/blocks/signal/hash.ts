@@ -17,6 +17,7 @@ registerBlock({
   description: 'Deterministic hash function. Output in [0, 1)',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
@@ -49,11 +50,15 @@ registerBlock({
     const hashId = ctx.b.kernelZip([value.id, seedId], hashFn, canonicalType(FLOAT));
 
     const outType = ctx.outTypes[0];
-    const slot = ctx.b.allocSlot();
 
     return {
       outputsById: {
-        out: { id: hashId, slot, type: outType, stride: payloadStride(outType.payload) },
+        out: { id: hashId, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'out', type: outType },
+        ],
       },
     };
   },

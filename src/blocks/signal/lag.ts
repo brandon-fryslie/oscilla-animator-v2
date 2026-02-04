@@ -16,6 +16,7 @@ registerBlock({
   description: 'Exponential smoothing filter',
   form: 'primitive',
   capability: 'state',
+  loweringPurity: 'stateful',
   isStateful: true,  // Allows feedback cycles - reads from previous frame
   cardinality: {
     cardinalityMode: 'preserve',

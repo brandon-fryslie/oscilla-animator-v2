@@ -16,6 +16,7 @@ registerBlock({
   description: 'Generates stable random values from domain element IDs',
   form: 'primitive',
   capability: 'identity',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'fieldOnly',
     laneCoupling: 'laneLocal',

@@ -16,6 +16,7 @@ registerBlock({
   description: 'Phase accumulator that wraps at 1.0',
   form: 'primitive',
   capability: 'state',
+  loweringPurity: 'stateful',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',

@@ -16,6 +16,7 @@ registerBlock({
   description: 'Accumulates value over time with delta input',
   form: 'primitive',
   capability: 'state',
+  loweringPurity: 'stateful',
   isStateful: true,  // Allows feedback cycles - reads from previous frame
   cardinality: {
     cardinalityMode: 'preserve',

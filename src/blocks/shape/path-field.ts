@@ -84,6 +84,7 @@ registerBlock({
   description: 'Extract per-point properties from path control points (MVP: polygonal paths)',
   form: 'primitive',
   capability: 'pure',
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'fieldOnly',
     laneCoupling: 'laneLocal',
@@ -158,17 +159,20 @@ registerBlock({
       arcType
     );
 
-    const posSlot = ctx.b.allocSlot();
-    const idxSlot = ctx.b.allocSlot();
-    const tanSlot = ctx.b.allocSlot();
-    const arcSlot = ctx.b.allocSlot();
-
     return {
       outputsById: {
-        position: { id: positionFieldId, slot: posSlot, type: posType, stride: payloadStride(posType.payload) },
-        index: { id: indexField, slot: idxSlot, type: idxType, stride: payloadStride(idxType.payload) },
-        tangent: { id: tangentField, slot: tanSlot, type: tanType, stride: payloadStride(tanType.payload) },
-        arcLength: { id: arcLengthField, slot: arcSlot, type: arcType, stride: payloadStride(arcType.payload) },
+        position: { id: positionFieldId, slot: undefined, type: posType, stride: payloadStride(posType.payload) },
+        index: { id: indexField, slot: undefined, type: idxType, stride: payloadStride(idxType.payload) },
+        tangent: { id: tangentField, slot: undefined, type: tanType, stride: payloadStride(tanType.payload) },
+        arcLength: { id: arcLengthField, slot: undefined, type: arcType, stride: payloadStride(arcType.payload) },
+      },
+      effects: {
+        slotRequests: [
+          { portId: 'position', type: posType },
+          { portId: 'index', type: idxType },
+          { portId: 'tangent', type: tanType },
+          { portId: 'arcLength', type: arcType },
+        ],
       },
       instanceContext: instance,
     };

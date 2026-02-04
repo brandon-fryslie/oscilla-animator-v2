@@ -17,6 +17,7 @@ registerBlock({
   description: 'Delays input by one frame',
   form: 'primitive',
   capability: 'state',
+  loweringPurity: 'stateful',
   isStateful: true,  // Allows feedback cycles - reads from previous frame
   cardinality: {
     cardinalityMode: 'preserve',

@@ -143,7 +143,7 @@ export type Capability = 'time' | 'identity' | 'state' | 'render' | 'io' | 'pure
  * Note: This field controls macro expansion capability only. It does NOT affect
  * the block's semantics or runtime behavior.
  */
-export type LoweringPurity = 'pure';
+export type LoweringPurity = 'pure' | 'stateful' | 'impure';
 
 // =============================================================================
 // Cardinality-Generic Block Metadata (Spec §8)
