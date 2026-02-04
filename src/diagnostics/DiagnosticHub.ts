@@ -432,6 +432,87 @@ export class DiagnosticHub {
   }
 
   /**
+   * Returns diagnostics for a specific block.
+   * Includes both direct block targets and port targets on that block.
+   *
+   * @param blockId Block ID to query
+   * @returns Array of diagnostics affecting this block
+   */
+  getDiagnosticsForBlock(blockId: string): Diagnostic[] {
+    const active = this.getActive();
+    return active.filter(diag => {
+      const target = diag.primaryTarget;
+      if (target.kind === 'block' && target.blockId === blockId) {
+        return true;
+      }
+      if (target.kind === 'port' && target.blockId === blockId) {
+        return true;
+      }
+      if (target.kind === 'timeRoot' && target.blockId === blockId) {
+        return true;
+      }
+      if (target.kind === 'binding' && target.blockId === blockId) {
+        return true;
+      }
+      if (target.kind === 'graphSpan' && target.blockIds.includes(blockId)) {
+        return true;
+      }
+      return false;
+    });
+  }
+
+  /**
+   * Returns diagnostics for a specific edge.
+   * Edges don't have direct diagnostics, so we check the source/target ports.
+   *
+   * @param edge Edge to query (needs from/to blocks and ports)
+   * @returns Array of diagnostics affecting this edge
+   */
+  getDiagnosticsForEdge(edge: { from: { blockId: string; slotId: string }; to: { blockId: string; slotId: string } }): Diagnostic[] {
+    const active = this.getActive();
+    return active.filter(diag => {
+      const target = diag.primaryTarget;
+      // Check source port
+      if (target.kind === 'port' && target.blockId === edge.from.blockId && target.portId === edge.from.slotId) {
+        return true;
+      }
+      // Check target port
+      if (target.kind === 'port' && target.blockId === edge.to.blockId && target.portId === edge.to.slotId) {
+        return true;
+      }
+      // Check if it's a binding diagnostic involving either port
+      if (target.kind === 'binding') {
+        if (target.blockId === edge.from.blockId || target.blockId === edge.to.blockId) {
+          return true;
+        }
+      }
+      return false;
+    });
+  }
+
+  /**
+   * Returns diagnostics for a specific port.
+   *
+   * @param blockId Block ID
+   * @param portId Port ID
+   * @returns Array of diagnostics affecting this port
+   */
+  getDiagnosticsForPort(blockId: string, portId: string): Diagnostic[] {
+    const active = this.getActive();
+    return active.filter(diag => {
+      const target = diag.primaryTarget;
+      if (target.kind === 'port' && target.blockId === blockId && target.portId === portId) {
+        return true;
+      }
+      if (target.kind === 'binding' && target.blockId === blockId) {
+        // Could be more specific with port matching if binding has port info
+        return true;
+      }
+      return false;
+    });
+  }
+
+  /**
    * Returns diagnostics filtered by severity.
    *
    * @param severity Severity level to filter by

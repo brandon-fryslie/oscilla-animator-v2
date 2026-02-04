@@ -229,16 +229,21 @@ export function createNodeFromBlockLike(
 /**
  * Create ReactFlow edge from adapter EdgeLike.
  * Populates lens data from target port when blocks are available.
+ * Optionally includes diagnostics for error visualization.
  */
 export function createEdgeFromEdgeLike(
   edge: EdgeLike,
-  blocks?: ReadonlyMap<string, BlockLike>
+  blocks?: ReadonlyMap<string, BlockLike>,
+  diagnosticsGetter?: (edge: EdgeLike) => any[]
 ): ReactFlowEdge<OscillaEdgeData> {
   // Look up lenses from target port
   const targetBlock = blocks?.get(edge.targetBlockId);
   const targetPort = targetBlock?.inputPorts.get(edge.targetPortId);
   const lenses = targetPort?.lenses;
   const hasLenses = lenses != null && lenses.length > 0;
+
+  // Get diagnostics for this edge
+  const diagnostics = diagnosticsGetter ? diagnosticsGetter(edge) : undefined;
 
   return {
     id: edge.id,
@@ -250,6 +255,7 @@ export function createEdgeFromEdgeLike(
     animated: false,
     data: {
       lenses: hasLenses ? lenses : undefined,
+      diagnostics,
     },
   };
 }
@@ -261,11 +267,13 @@ export function createEdgeFromEdgeLike(
  * @param adapter - Data adapter
  * @param currentNodes - Current ReactFlow nodes
  * @param getBlockPosition - Function to get stored position for a block
+ * @param diagnosticsGetter - Optional function to get diagnostics for edges
  */
 export function reconcileNodesFromAdapter(
   adapter: GraphDataAdapter,
   currentNodes: Node[],
-  getBlockPosition: (blockId: string) => { x: number; y: number } | undefined
+  getBlockPosition: (blockId: string) => { x: number; y: number } | undefined,
+  diagnosticsGetter?: (edge: EdgeLike) => any[]
 ): { nodes: Node[]; edges: ReactFlowEdge[] } {
   // Build map of existing nodes by ID for fast lookup
   const existingNodeMap = new Map<string, Node>();
@@ -307,7 +315,7 @@ export function reconcileNodesFromAdapter(
   }
 
   // Create edges (pass blocks for lens data population)
-  const edges = adapter.edges.map(e => createEdgeFromEdgeLike(e, adapter.blocks));
+  const edges = adapter.edges.map(e => createEdgeFromEdgeLike(e, adapter.blocks, diagnosticsGetter));
 
   return { nodes, edges };
 }

@@ -8,10 +8,11 @@
  */
 
 import type { LensAttachment } from '../../graph/Patch';
+import type { Diagnostic } from '../../diagnostics/types';
 
 /**
  * Custom data stored in each ReactFlow edge.
- * Used for lens visualization and other edge metadata.
+ * Used for lens visualization, error display, and other edge metadata.
  */
 export interface OscillaEdgeData {
   /** Lenses attached to the target port for this connection */
@@ -20,4 +21,6 @@ export interface OscillaEdgeData {
   hasAdapter?: boolean;
   /** Whether this edge contributes to the final value (for multiedge ports) */
   isNonContributing?: boolean;
+  /** Diagnostics affecting this edge (errors, warnings) */
+  diagnostics?: Diagnostic[];
 }

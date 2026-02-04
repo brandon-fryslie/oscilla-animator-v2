@@ -1,21 +1,55 @@
 /**
  * OscillaEdge - Custom Edge Component
  *
- * Renders edges with visual indicators for lenses and adapters.
- * Shows an amber lens badge near the target port when lenses are present.
+ * Renders edges with visual indicators for:
+ * - Lenses and adapters (amber badge)
+ * - Errors and warnings (red/orange stroke)
+ * - Debug hover state
  */
 
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from 'reactflow';
 import type { OscillaEdgeData } from './nodes';
 import { getLensLabel } from './lensUtils';
+import type { Diagnostic } from '../../diagnostics/types';
+
+/**
+ * Extended edge data including diagnostics.
+ */
+export interface OscillaEdgeDataWithDiagnostics extends OscillaEdgeData {
+  /** Diagnostics affecting this edge */
+  diagnostics?: Diagnostic[];
+}
+
+/**
+ * Determine edge stroke color based on diagnostics.
+ */
+function getEdgeStrokeColor(diagnostics?: Diagnostic[]): string {
+  if (!diagnostics || diagnostics.length === 0) {
+    return '#4ecdc4'; // Default teal
+  }
+
+  const hasError = diagnostics.some(d => d.severity === 'error' || d.severity === 'fatal');
+  const hasWarning = diagnostics.some(d => d.severity === 'warn');
+
+  if (hasError) {
+    return '#ef4444'; // Red for errors
+  }
+
+  if (hasWarning) {
+    return '#f59e0b'; // Orange for warnings
+  }
+
+  return '#4ecdc4'; // Default
+}
 
 /**
  * Custom edge component for Oscilla connections.
  *
  * Features:
  * - Standard bezier edge path
+ * - Error/warning indication (red/orange stroke)
  * - Amber lens indicator near target port when lenses are present
- * - Hover tooltip showing lens details
+ * - Hover tooltip showing lens details or errors
  * - Preserves all existing edge styling (adapters, non-contributing)
  */
 export function OscillaEdge({
@@ -29,7 +63,7 @@ export function OscillaEdge({
   style = {},
   markerEnd,
   data,
-}: EdgeProps<OscillaEdgeData>) {
+}: EdgeProps<OscillaEdgeDataWithDiagnostics>) {
   // Compute bezier path
   const [edgePath] = getBezierPath({
     sourceX,
@@ -39,6 +73,17 @@ export function OscillaEdge({
     targetY,
     targetPosition,
   });
+
+  // Determine stroke color based on diagnostics
+  const strokeColor = getEdgeStrokeColor(data?.diagnostics);
+  const hasDiagnostics = data?.diagnostics && data.diagnostics.length > 0;
+
+  // Apply diagnostic styling
+  const edgeStyle = {
+    ...style,
+    stroke: strokeColor,
+    strokeWidth: hasDiagnostics ? 2.5 : (style.strokeWidth ?? 2),
+  };
 
   // Check if this edge has lenses
   const hasLenses = data?.lenses && data.lenses.length > 0;
@@ -50,14 +95,53 @@ export function OscillaEdge({
   const indicatorY = targetY * 0.9 + sourceY * 0.1;
 
   // Build tooltip text
-  const tooltipText = hasLenses
-    ? data!.lenses!.map(l => getLensLabel(l.lensType)).join(', ')
-    : '';
+  let tooltipText = '';
+  if (hasDiagnostics) {
+    tooltipText = data!.diagnostics!
+      .map(d => `${d.severity.toUpperCase()}: ${d.message}`)
+      .join('\n');
+  } else if (hasLenses) {
+    tooltipText = data!.lenses!.map(l => getLensLabel(l.lensType)).join(', ');
+  }
 
   return (
     <>
       {/* Main edge path */}
-      <BaseEdge id={id} path={edgePath} markerEnd={markerEnd} style={style} />
+      <BaseEdge id={id} path={edgePath} markerEnd={markerEnd} style={edgeStyle} />
+
+      {/* Diagnostic indicator (errors/warnings) */}
+      {hasDiagnostics && !hasLenses && (
+        <EdgeLabelRenderer>
+          <div
+            style={{
+              position: 'absolute',
+              transform: `translate(-50%, -50%) translate(${indicatorX}px, ${indicatorY}px)`,
+              pointerEvents: 'all',
+              cursor: 'help',
+            }}
+            title={tooltipText}
+          >
+            <div
+              style={{
+                width: '16px',
+                height: '16px',
+                borderRadius: '50%',
+                background: strokeColor,
+                border: '2px solid #fff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '10px',
+                fontWeight: 'bold',
+                color: '#fff',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+              }}
+            >
+              !
+            </div>
+          </div>
+        </EdgeLabelRenderer>
+      )}
 
       {/* Lens indicator badge (only if lenses present) */}
       {hasLenses && (

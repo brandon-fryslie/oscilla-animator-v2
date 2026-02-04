@@ -39,6 +39,7 @@ import { UnifiedNode as UnifiedNodeComponent } from './UnifiedNode';
 import { OscillaEdge } from '../reactFlowEditor/OscillaEdge';
 import { getLayoutedElements } from '../reactFlowEditor/layout';
 import { validateConnection } from '../reactFlowEditor/typeValidation';
+import { ErrorBadgeOverlay } from './ErrorBadgeOverlay';
 import type { SelectionStore } from '../../stores/SelectionStore';
 import type { PortHighlightStore } from '../../stores/PortHighlightStore';
 import type { DiagnosticsStore } from '../../stores/DiagnosticsStore';
@@ -390,10 +391,19 @@ export const GraphEditorCoreInner = observer(
           }
 
           // Build nodes/edges
+          // Create diagnostics getter if diagnostics store available
+          const diagnosticsGetter = diagnostics
+            ? (edge: any) => diagnostics.getDiagnosticsForEdge({
+                from: { blockId: edge.sourceBlockId, slotId: edge.sourcePortId },
+                to: { blockId: edge.targetBlockId, slotId: edge.targetPortId },
+              })
+            : undefined;
+
           const { nodes: initialNodes, edges: initialEdges } = reconcileNodesFromAdapter(
             adapter,
             [],
-            (blockId) => adapter.getBlockPosition(blockId)
+            (blockId) => adapter.getBlockPosition(blockId),
+            diagnosticsGetter
           );
 
           // Single node: just center it
@@ -474,10 +484,19 @@ export const GraphEditorCoreInner = observer(
           }),
           () => {
             // Adapter changed - reconcile nodes/edges
+            // Create diagnostics getter if diagnostics store available
+            const diagnosticsGetter = diagnostics
+              ? (edge: any) => diagnostics.getDiagnosticsForEdge({
+                  from: { blockId: edge.sourceBlockId, slotId: edge.sourcePortId },
+                  to: { blockId: edge.targetBlockId, slotId: edge.targetPortId },
+                })
+              : undefined;
+
             const { nodes: reconciledNodes, edges: reconciledEdges } = reconcileNodesFromAdapter(
               adapter,
               nodesRef.current,
-              (blockId) => adapter.getBlockPosition(blockId)
+              (blockId) => adapter.getBlockPosition(blockId),
+              diagnosticsGetter
             );
 
             setNodes(reconciledNodes);
@@ -538,6 +557,10 @@ export const GraphEditorCoreInner = observer(
               <Background color="#4ecdc4" gap={16} />
               <Controls />
               {mergedFeatures.enableMinimap && <MiniMap />}
+              
+              {/* Error badge overlay - shows errors/warnings on nodes */}
+              {diagnostics && <ErrorBadgeOverlay diagnostics={diagnostics} />}
+              
               {children}
             </ReactFlow>
           </div>

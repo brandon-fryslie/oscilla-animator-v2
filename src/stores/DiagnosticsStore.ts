@@ -248,6 +248,38 @@ export class DiagnosticsStore {
   }
 
   /**
+   * Returns diagnostics for a specific block (reactive).
+   * Includes errors on the block itself and its ports.
+   */
+  getDiagnosticsForBlock(blockId: string): Diagnostic[] {
+    if (!this.hub) return [];
+    // Force dependency on revision for reactivity
+    this.revision;
+    return this.hub.getDiagnosticsForBlock(blockId);
+  }
+
+  /**
+   * Returns diagnostics for a specific edge (reactive).
+   * Checks diagnostics on source and target ports.
+   */
+  getDiagnosticsForEdge(edge: { from: { blockId: string; slotId: string }; to: { blockId: string; slotId: string } }): Diagnostic[] {
+    if (!this.hub) return [];
+    // Force dependency on revision for reactivity
+    this.revision;
+    return this.hub.getDiagnosticsForEdge(edge);
+  }
+
+  /**
+   * Returns diagnostics for a specific port (reactive).
+   */
+  getDiagnosticsForPort(blockId: string, portId: string): Diagnostic[] {
+    if (!this.hub) return [];
+    // Force dependency on revision for reactivity
+    this.revision;
+    return this.hub.getDiagnosticsForPort(blockId, portId);
+  }
+
+  /**
    * Returns authoring diagnostics (current).
    */
   getAuthoringSnapshot(): Diagnostic[] {
