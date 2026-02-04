@@ -42,5 +42,4 @@ export const patchPathFieldDemo: PatchBuilder = (b) => {
   const render = b.addBlock('RenderInstances2D');
   b.wire(pathField, 'position', render, 'pos');
   b.wire(color, 'out', render, 'color');
-  b.wire(marker, 'shape', render, 'shape');
 };

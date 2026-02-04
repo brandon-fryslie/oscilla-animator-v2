@@ -12,11 +12,13 @@
  */
 
 import { makeObservable, computed } from 'mobx';
-import type { BlockId, CombineMode, DefaultSource, PortId } from '../../types';
+import type { BlockId, CombineMode, DefaultSource } from '../../types';
 import { portId } from '../../types';
 import type { PatchStore } from '../../stores/PatchStore';
 import type { LayoutStore } from '../../stores/LayoutStore';
+import type { FrontendResultStore } from '../../stores/FrontendResultStore';
 import type { InputPort, OutputPort } from '../../graph/Patch';
+import { getAnyBlockDefinition, type InputDef } from '../../blocks/registry';
 import type {
   GraphDataAdapter,
   BlockLike,
@@ -31,11 +33,13 @@ import type {
 export class PatchStoreAdapter implements GraphDataAdapter<BlockId> {
   constructor(
     private readonly patchStore: PatchStore,
-    private readonly layoutStore: LayoutStore
+    private readonly layoutStore: LayoutStore,
+    private readonly frontendStore: FrontendResultStore,
   ) {
     makeObservable(this, {
       blocks: computed,
       edges: computed,
+      dataVersion: computed,
     });
   }
 
@@ -53,14 +57,18 @@ export class PatchStoreAdapter implements GraphDataAdapter<BlockId> {
     // We create a new Map here, but MobX computed will cache it
     const blockMap = new Map<BlockId, BlockLike>();
 
+    // Read snapshot so MobX tracks it as a dependency of this computed
+    const snapshot = this.frontendStore.snapshot;
+    const hasFrontend = snapshot.status !== 'none';
+
     for (const [id, block] of this.patchStore.blocks) {
       blockMap.set(id, {
         id,
         type: block.type,
         displayName: block.displayName,
         params: block.params as Record<string, unknown>,
-        inputPorts: this.transformInputPorts(block.inputPorts),
-        outputPorts: this.transformOutputPorts(block.outputPorts),
+        inputPorts: this.transformInputPorts(block.inputPorts, hasFrontend ? id : undefined, block.type),
+        outputPorts: this.transformOutputPorts(block.outputPorts, hasFrontend ? id : undefined),
       });
     }
 
@@ -79,6 +87,15 @@ export class PatchStoreAdapter implements GraphDataAdapter<BlockId> {
       targetBlockId: edge.to.blockId,
       targetPortId: edge.to.slotId,
     }));
+  }
+
+  /**
+   * Version number that changes when frontend snapshot data changes.
+   * Used by MobX reactions to detect data-only changes (port types, default sources)
+   * that don't alter block/edge structure.
+   */
+  get dataVersion(): number {
+    return this.frontendStore.snapshot.patchRevision;
   }
 
   // ---------------------------------------------------------------------------
@@ -199,19 +216,56 @@ export class PatchStoreAdapter implements GraphDataAdapter<BlockId> {
 
   /**
    * Transform InputPort map to InputPortLike map.
-   * Extracts only the properties needed for rendering.
+   *
+   * When the frontend snapshot is available, default sources come from the
+   * compiler's normalization pass (the single enforcer for "which ports have
+   * materialized defaults"). When no snapshot exists, falls back to instance
+   * overrides and registry defaults.
    */
   private transformInputPorts(
-    ports: ReadonlyMap<string, InputPort>
+    ports: ReadonlyMap<string, InputPort>,
+    blockId?: BlockId,
+    blockType?: string,
   ): ReadonlyMap<string, InputPortLike> {
     const portMap = new Map<string, InputPortLike>();
+    const blockDef = blockType ? getAnyBlockDefinition(blockType) : undefined;
 
     for (const [id, port] of ports) {
+      // Use frontend snapshot data if available (even from failed compilations - helps debugging)
+      // The snapshot is always the LATEST attempt, so it reflects current patch state
+      const hasSnapshot = this.frontendStore.snapshot.status !== 'none';
+
+      // Determine effective default source
+      let ds: DefaultSource | undefined;
+      if (blockId && hasSnapshot) {
+        // Frontend snapshot is the authority (even if compilation failed)
+        ds = this.frontendStore.getDefaultSourceByIds(blockId, id);
+      }
+
+      // If no snapshot data, fall back to instance override or registry default
+      if (!ds) {
+        ds = port.defaultSource
+          ?? (blockDef?.inputs[id] as InputDef & { defaultSource?: DefaultSource } | undefined)?.defaultSource;
+      }
+
+      // Resolve type from frontend snapshot when available
+      const resolvedType = blockId && hasSnapshot
+        ? this.frontendStore.getResolvedPortTypeByIds(blockId, id, 'in')
+        : undefined;
+
+      // Get provenance from frontend snapshot
+      // If the snapshot has no data for this port, provenance will be undefined
+      const provenance = blockId && hasSnapshot
+        ? this.frontendStore.getPortProvenanceByIds(blockId, id, 'in')
+        : undefined;
+
       portMap.set(id, {
         id: port.id,
         combineMode: port.combineMode,
-        defaultSource: port.defaultSource,
+        defaultSource: ds,
         lenses: port.lenses,
+        resolvedType,
+        provenance,
       });
     }
 
@@ -223,13 +277,19 @@ export class PatchStoreAdapter implements GraphDataAdapter<BlockId> {
    * Extracts only the properties needed for rendering.
    */
   private transformOutputPorts(
-    ports: ReadonlyMap<string, OutputPort>
+    ports: ReadonlyMap<string, OutputPort>,
+    blockId?: BlockId,
   ): ReadonlyMap<string, OutputPortLike> {
     const portMap = new Map<string, OutputPortLike>();
 
     for (const [id, port] of ports) {
+      const resolvedType = blockId
+        ? this.frontendStore.getResolvedPortTypeByIds(blockId, id, 'out')
+        : undefined;
+
       portMap.set(id, {
         id: port.id,
+        resolvedType,
       });
     }
 

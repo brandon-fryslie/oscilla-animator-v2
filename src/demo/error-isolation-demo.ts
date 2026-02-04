@@ -43,7 +43,6 @@ export const patchErrorIsolationDemo: PatchBuilder = (b) => {
   const render = b.addBlock('RenderInstances2D');
   b.wire(grid, 'position', render, 'pos');
   b.wire(color, 'out', render, 'color');
-  b.wire(circle, 'shape', render, 'shape');
 
   // ========================================================================
   // BROKEN DISCONNECTED BLOCKS - These should NOT stop compilation

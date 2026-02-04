@@ -25,6 +25,12 @@ import type { DefaultSource, PortId, BlockId } from '../../types';
 import { ParameterControl, DefaultSourceControl } from '../reactFlowEditor/ParameterControls';
 import { PortInfoPopover } from '../reactFlowEditor/PortInfoPopover';
 import { DisplayNameEditor } from '../components/DisplayNameEditor';
+import {
+  formatProvenanceTooltip,
+  formatCanonicalTypeTooltip,
+  getAdapterBadgeLabel,
+  getUnresolvedWarning,
+} from './portTooltipFormatters';
 
 /**
  * Format a default source for display in tooltip.
@@ -248,8 +254,61 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
                   background: getIndicatorColor(input.defaultSource),
                   pointerEvents: 'none',
                 }}
-                title={formatDefaultSource(input.defaultSource)}
+                title={[
+                  formatProvenanceTooltip(input.provenance),
+                  input.resolvedType ? formatCanonicalTypeTooltip(input.resolvedType) : input.typeTooltip,
+                ].join('\n\n')}
               />
+            )}
+
+            {/* Adapter Badge */}
+            {input.provenance && getAdapterBadgeLabel(input.provenance) && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '-18px',
+                  top: `calc(${topPercent}% - 4px)`,
+                  width: '12px',
+                  height: '12px',
+                  borderRadius: '3px',
+                  background: '#f59e0b',
+                  color: '#fff',
+                  fontSize: '10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  pointerEvents: 'none',
+                  fontWeight: 'bold',
+                }}
+                title={formatProvenanceTooltip(input.provenance)}
+              >
+                {getAdapterBadgeLabel(input.provenance)}
+              </div>
+            )}
+
+            {/* Unresolved Warning */}
+            {input.provenance && getUnresolvedWarning(input.provenance) && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '-18px',
+                  top: `calc(${topPercent}% - 4px)`,
+                  width: '12px',
+                  height: '12px',
+                  borderRadius: '3px',
+                  background: '#ef4444',
+                  color: '#fff',
+                  fontSize: '10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  pointerEvents: 'none',
+                  fontWeight: 'bold',
+                }}
+                title={formatProvenanceTooltip(input.provenance)}
+              >
+                {getUnresolvedWarning(input.provenance)}
+              </div>
             )}
           </React.Fragment>
         );

@@ -128,5 +128,4 @@ export const patchFeedbackRotation: PatchBuilder = (b) => {
   const renderInner = b.addBlock('RenderInstances2D');
   b.wire(innerLayout, 'position', renderInner, 'pos');
   b.wire(innerColor, 'out', renderInner, 'color');
-  b.wire(innerEllipse, 'shape', renderInner, 'shape');
 };

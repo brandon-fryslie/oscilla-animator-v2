@@ -370,6 +370,7 @@ export class IRBuilderImpl implements IRBuilder {
   createInstance(
     domainType: DomainTypeId,
     count: number,
+    shapeField?: ValueExprId,
     lifecycle?: 'static' | 'dynamic' | 'pooled'
   ): InstanceId {
     const id = `inst-${this.instanceCounter++}` as InstanceId;
@@ -379,6 +380,7 @@ export class IRBuilderImpl implements IRBuilder {
       count,
       lifecycle: lifecycle ?? 'static',
       identityMode: 'stable',
+      ...(shapeField !== undefined && { shapeField }), // Store shape field reference if provided
     });
     return id;
   }

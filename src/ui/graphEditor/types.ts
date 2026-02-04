@@ -12,6 +12,8 @@
 
 import type { CombineMode, DefaultSource } from '../../types';
 import type { LensAttachment } from '../../graph/Patch';
+import type { InferenceCanonicalType } from '../../core/inference-types';
+import type { PortProvenance } from '../../stores/FrontendResultStore';
 
 // =============================================================================
 // Common Shape Types
@@ -25,6 +27,8 @@ export interface InputPortLike {
   readonly combineMode: CombineMode;
   readonly defaultSource?: DefaultSource;
   readonly lenses?: readonly LensAttachment[];
+  readonly resolvedType?: InferenceCanonicalType;
+  readonly provenance?: PortProvenance;
 }
 
 /**
@@ -32,6 +36,7 @@ export interface InputPortLike {
  */
 export interface OutputPortLike {
   readonly id: string;
+  readonly resolvedType?: InferenceCanonicalType;
 }
 
 /**
@@ -80,6 +85,14 @@ export interface GraphDataAdapter<BlockIdT = string> {
   // -------------------------------------------------------------------------
   // Read Operations
   // -------------------------------------------------------------------------
+
+  /**
+   * Version number that changes when port data (types, default sources) changes
+   * without structural block/edge changes. MobX reactions should track this
+   * to detect data-only updates from the compiler frontend.
+   * Returns 0 when not available (e.g., CompositeStoreAdapter).
+   */
+  readonly dataVersion?: number;
 
   /**
    * All blocks in the graph.

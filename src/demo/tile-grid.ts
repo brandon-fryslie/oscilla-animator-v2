@@ -35,7 +35,6 @@ export const patchTileGrid: PatchBuilder = (b) => {
   const render = b.addBlock('RenderInstances2D');
   b.wire(grid, 'position', render, 'pos');
   b.wire(color, 'out', render, 'color');
-  b.wire(rect, 'shape', render, 'shape');
 };
 
 /**

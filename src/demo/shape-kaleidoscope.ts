@@ -59,6 +59,5 @@
 //   const rRender = b.addBlock('RenderInstances2D', {});
 //   b.wire(rGridLayout, 'position', rRender, 'pos');
 //   b.wire(rColor, 'out', rRender, 'color');
-//   b.wire(rect, 'shape', rRender, 'shape');
 //   b.wire(rScaleExpr, 'out', rRender, 'scale'); // animated counter-pulse scale
 // };

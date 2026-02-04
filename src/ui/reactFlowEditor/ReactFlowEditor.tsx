@@ -110,6 +110,7 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorProps> = observer(({
     diagnostics,
     debug,
     layout: layoutStore,
+    frontend,
     portHighlight,
   } = useStores();
 
@@ -124,8 +125,8 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorProps> = observer(({
 
   // Create PatchStoreAdapter
   const adapter = useMemo(
-    () => new PatchStoreAdapter(patchStore, layoutStore),
-    [patchStore, layoutStore]
+    () => new PatchStoreAdapter(patchStore, layoutStore, frontend),
+    [patchStore, layoutStore, frontend]
   );
 
   // Port context menu handler - called from UnifiedNode

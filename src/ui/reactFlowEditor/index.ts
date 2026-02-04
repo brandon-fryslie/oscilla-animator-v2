@@ -7,4 +7,3 @@
 export { ReactFlowEditor } from './ReactFlowEditor';
 export type { ReactFlowEditorHandle } from './ReactFlowEditor';
 export * from './nodes';
-export * from './sync';

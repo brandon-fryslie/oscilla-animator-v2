@@ -469,6 +469,8 @@ export const GraphEditorCoreInner = observer(
             // Track structural changes
             blockIds: Array.from(adapter.blocks.keys()).join(','),
             edgeIds: adapter.edges.map((e) => e.id).join(','),
+            // Track data-only changes (port types, default sources from frontend snapshot)
+            dataVersion: adapter.dataVersion ?? 0,
           }),
           () => {
             // Adapter changed - reconcile nodes/edges

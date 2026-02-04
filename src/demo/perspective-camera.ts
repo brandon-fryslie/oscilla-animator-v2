@@ -50,5 +50,4 @@ export const patchPerspectiveCamera: PatchBuilder = (b) => {
   const render = b.addBlock('RenderInstances2D');
   b.wire(grid, 'position', render, 'pos');
   b.wire(color, 'out', render, 'color');
-  b.wire(ellipse, 'shape', render, 'shape');
 };

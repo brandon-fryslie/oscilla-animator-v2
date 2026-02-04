@@ -41,6 +41,5 @@ export const patchRectMosaic: PatchBuilder = (b) => {
   const render = b.addBlock('RenderInstances2D');
   b.wire(layout, 'position', render, 'pos');
   b.wire(color, 'out', render, 'color');
-  b.wire(rect, 'shape', render, 'shape');
   b.wire(scaleExpr, 'out', render, 'scale');
 };

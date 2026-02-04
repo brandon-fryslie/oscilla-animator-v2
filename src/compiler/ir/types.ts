@@ -183,14 +183,49 @@ import type { DomainTypeId, InstanceId } from './Indices';
  * An instance is a specific instantiation of a domain type with count and lifecycle.
  * Layout is now handled entirely through field kernels (circleLayout, lineLayout, gridLayout).
  */
+/**
+ * Instance declaration - metadata for a set of elements created by transform blocks.
+ *
+ * SHAPE FIELD REFERENCE (2026-02-04):
+ * Instances store a reference to their shape field/signal via shapeField.
+ * This enables automatic shape lookup during rendering without requiring
+ * separate wiring of shape data.
+ *
+ * Design rationale:
+ * - ONE SOURCE OF TRUTH: Shape data lives in the field, InstanceDecl just points to it
+ * - SIMPLIFIED WIRING: RenderInstances2D only needs position input (shape looked up via instance)
+ * - PRESERVES CAPABILITY: Supports both uniform (Signal<shape>) and per-element (Field<shape>) shapes
+ *
+ * Example:
+ *   Ellipse.shape → Array.element (creates instance with shapeField = elements field)
+ *   Array.elements → GridLayout.elements → GridLayout.position → RenderInstances2D.pos
+ *   RenderInstances2D extracts instanceId from position field → looks up shapeField from instance
+ */
 export interface InstanceDecl {
   readonly id: InstanceId;
   readonly domainType: DomainTypeId;
   readonly count: number | 'dynamic';
   readonly lifecycle: 'static' | 'dynamic' | 'pooled';
+
   // Continuity System: Identity specification
   readonly identityMode: 'stable' | 'none';
   readonly elementIdSeed?: number; // For deterministic ID generation
+
+  /**
+   * Shape field reference - points to the ValueExpr containing shape data.
+   *
+   * Set by instance-creating blocks (Array, etc.) when they create instances
+   * intended for rendering. Contains either:
+   * - Signal<shape>: All elements share the same shape (common case)
+   * - Field<shape>: Each element can have different shape (heterogeneous, rare)
+   *
+   * Optional because some instances are not meant for rendering (e.g., control
+   * point instances in ProceduralStar are internal data structures, not visual elements).
+   *
+   * Used by RenderInstances2D to automatically look up shape without requiring
+   * a separate shape input port.
+   */
+  readonly shapeField?: ValueExprId;
 }
 
 // =============================================================================

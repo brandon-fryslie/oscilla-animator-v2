@@ -33,5 +33,4 @@ export const patchSimple: PatchBuilder = (b) => {
   const render = b.addBlock('RenderInstances2D');
   b.wire(layout, 'position', render, 'pos');
   b.wire(colorField, 'field', render, 'color');
-  b.wire(ellipse, 'shape', render, 'shape');
 };

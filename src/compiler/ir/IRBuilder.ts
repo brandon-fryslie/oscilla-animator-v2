@@ -199,9 +199,19 @@ export interface IRBuilder {
   opcode(op: OpCode): PureFn;
   expr(expression: string): PureFn;
 
+  /**
+   * Create a new instance of a domain type.
+   *
+   * @param domainType - The domain type ID (e.g., DOMAIN_CIRCLE)
+   * @param count - Number of elements in this instance
+   * @param shapeField - ValueExprId of the shape field/signal for this instance (optional - only needed for renderable instances)
+   * @param lifecycle - Lifecycle mode (default: 'static')
+   * @returns The created InstanceId
+   */
   createInstance(
     domainType: DomainTypeId,
     count: number,
+    shapeField?: ValueExprId,
     lifecycle?: 'static' | 'dynamic' | 'pooled'
   ): InstanceId;
 

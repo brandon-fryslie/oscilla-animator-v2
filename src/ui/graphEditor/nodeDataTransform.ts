@@ -11,11 +11,13 @@
 import type { Node, Edge as ReactFlowEdge } from 'reactflow';
 import type { BlockLike, EdgeLike, GraphDataAdapter } from './types';
 import type { DefaultSource, UIControlHint } from '../../types';
+import type { LensAttachment } from '../../graph/Patch';
 import { getAnyBlockDefinition, type AnyBlockDef, type InputDef } from '../../blocks/registry';
 import { FLOAT, canonicalType } from '../../core/canonical-types';
 import type { InferenceCanonicalType, InferencePayloadType } from '../../core/inference-types';
 import { formatTypeForTooltip, getTypeColor } from '../reactFlowEditor/typeValidation';
 import type { OscillaEdgeData } from '../reactFlowEditor/nodes';
+import type { PortProvenance } from '../../stores/FrontendResultStore';
 
 /**
  * Connection info for a port
@@ -40,6 +42,9 @@ export interface PortData {
   isConnected: boolean;
   connection?: PortConnectionInfo;
   uiHint?: UIControlHint;
+  lenses?: readonly LensAttachment[];
+  resolvedType?: InferenceCanonicalType;
+  provenance?: PortProvenance;
 }
 
 /**
@@ -81,7 +86,9 @@ function createPortData(
   isConnected: boolean,
   defaultSource?: DefaultSource,
   connection?: PortConnectionInfo,
-  uiHint?: UIControlHint
+  uiHint?: UIControlHint,
+  lenses?: readonly LensAttachment[],
+  provenance?: PortProvenance
 ): PortData {
   // For inputs without a type (non-port inputs), use a default
   const effectiveType: InferenceCanonicalType = type || canonicalType(FLOAT);
@@ -96,6 +103,9 @@ function createPortData(
     isConnected,
     connection,
     uiHint,
+    lenses,
+    resolvedType: type,
+    provenance,
   };
 }
 
@@ -165,11 +175,13 @@ export function createNodeFromBlockLike(
       createPortData(
         inputId,
         inputDef.label || inputId, // Fallback to inputId if label undefined
-        inputDef.type,
+        portState?.resolvedType ?? inputDef.type,
         isConnected,
         defaultSource,
         connection,
-        (inputDef as InputDef & { uiHint?: UIControlHint }).uiHint
+        (inputDef as InputDef & { uiHint?: UIControlHint }).uiHint,
+        portState?.lenses,
+        portState?.provenance
       )
     );
   }
@@ -177,6 +189,7 @@ export function createNodeFromBlockLike(
   // Build output ports
   const outputs: PortData[] = [];
   for (const [outputId, outputDef] of Object.entries(blockDef.outputs)) {
+    const outputPortState = block.outputPorts.get(outputId);
     const connection = outputConnections.get(outputId);
     const isConnected = connection !== undefined;
 
@@ -184,7 +197,7 @@ export function createNodeFromBlockLike(
       createPortData(
         outputId,
         outputDef.label || outputId, // Fallback to outputId if label undefined
-        outputDef.type,
+        outputPortState?.resolvedType ?? outputDef.type,
         isConnected,
         undefined,
         connection

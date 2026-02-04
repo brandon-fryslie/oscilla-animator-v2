@@ -142,9 +142,11 @@ registerBlock({
     const totalVertices = points * 2;
 
     // Create instance over DOMAIN_CONTROL with 2*N control points
+    // No shapeField - control points are internal data, not rendered directly
     const controlInstance = ctx.b.createInstance(
       DOMAIN_CONTROL,
       totalVertices,
+      undefined,  // No shapeField (control points aren't rendered)
       'static'
     );
 

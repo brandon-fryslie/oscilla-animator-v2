@@ -66,6 +66,5 @@ export const patchMouseSpiral: PatchBuilder = (b) => {
   const render = b.addBlock('RenderInstances2D');
   b.wire(layout, 'position', render, 'pos');
   b.wire(color, 'out', render, 'color');
-  b.wire(ellipse, 'shape', render, 'shape');
   b.wire(finalSize, 'out', render, 'scale');
 };

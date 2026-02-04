@@ -14,10 +14,16 @@
 import React, { useEffect, useState } from 'react';
 import { Portal, Text, Stack, Group, Badge, Box, Paper, Divider } from '@mantine/core';
 import { observer } from 'mobx-react-lite';
-import type { PortData } from './nodes';
+import type { PortData } from '../graphEditor/nodeDataTransform';
 import type { DefaultSource } from '../../types';
 import { useStores, formatDebugValue } from '../../stores';
 import { getLensLabel } from './lensUtils';
+import {
+  formatProvenanceTooltip,
+  formatCanonicalTypeTooltip,
+  getAdapterBadgeLabel,
+  getUnresolvedWarning,
+} from '../graphEditor/portTooltipFormatters';
 
 interface PortInfoPopoverProps {
   port: PortData | null;
@@ -205,11 +211,45 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
                   flexShrink: 0,
                 }}
               />
-              <Text size="sm" c="white" style={{ fontFamily: 'monospace' }}>
-                {port.typeTooltip}
-              </Text>
+              <Stack gap={2}>
+                <Text size="sm" c="white" style={{ fontFamily: 'monospace' }}>
+                  {port.typeTooltip}
+                </Text>
+                {/* Enhanced canonical type breakdown */}
+                {port.resolvedType && (
+                  <Text size="xs" c="dimmed" style={{ fontFamily: 'monospace', whiteSpace: 'pre-line' }}>
+                    {formatCanonicalTypeTooltip(port.resolvedType)}
+                  </Text>
+                )}
+              </Stack>
             </Group>
           </Box>
+
+          {/* Provenance Info */}
+          {port.provenance && (
+            <Box>
+              <Text size="xs" c="dimmed">
+                Provenance
+              </Text>
+              <Group gap="xs" mt={2}>
+                {/* Adapter badge */}
+                {getAdapterBadgeLabel(port.provenance) && (
+                  <Badge size="xs" color="orange" variant="filled">
+                    Adapter
+                  </Badge>
+                )}
+                {/* Unresolved warning */}
+                {getUnresolvedWarning(port.provenance) && (
+                  <Badge size="xs" color="red" variant="filled">
+                    Unresolved
+                  </Badge>
+                )}
+                <Text size="sm" c="white">
+                  {formatProvenanceTooltip(port.provenance)}
+                </Text>
+              </Group>
+            </Box>
+          )}
 
           {/* Connection Info */}
           {port.connection ? (

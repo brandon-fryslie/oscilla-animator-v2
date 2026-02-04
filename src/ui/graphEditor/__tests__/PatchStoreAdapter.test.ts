@@ -9,6 +9,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { reaction } from 'mobx';
 import { PatchStore } from '../../../stores/PatchStore';
 import { LayoutStore } from '../../../stores/LayoutStore';
+import { FrontendResultStore } from '../../../stores/FrontendResultStore';
 import { PatchStoreAdapter } from '../PatchStoreAdapter';
 
 // Import blocks to trigger registration
@@ -23,7 +24,7 @@ describe('PatchStoreAdapter', () => {
   beforeEach(() => {
     patchStore = new PatchStore();
     layoutStore = new LayoutStore();
-    adapter = new PatchStoreAdapter(patchStore, layoutStore);
+    adapter = new PatchStoreAdapter(patchStore, layoutStore, new FrontendResultStore());
   });
 
   describe('blocks getter', () => {

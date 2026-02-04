@@ -121,6 +121,7 @@ export interface PureIRBuilder {
   createInstance(
     domainType: DomainTypeId,
     count: number,
+    shapeField?: ValueExprId,
     lifecycle?: 'static' | 'dynamic' | 'pooled'
   ): InstanceId;
 }

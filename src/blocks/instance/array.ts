@@ -66,8 +66,24 @@ registerBlock({
     const count = countFromPort ?? 500; // Registry default
     const elementInput = inputsById.element;
 
-    // Create instance (layout is now handled via field kernels, not instance metadata)
-    const instanceId = ctx.b.createInstance(DOMAIN_CIRCLE, count);
+    // Validate element input
+    if (!elementInput || !('type' in elementInput && requireInst(elementInput.type.extent.cardinality, 'cardinality').kind === 'one')) {
+      throw new Error('Array block requires an element signal input');
+    }
+
+    /**
+     * Create instance with shape field reference.
+     *
+     * The elementInput.id points to the shape signal (e.g., from Ellipse.shape).
+     * This gets stored in InstanceDecl.shapeField, enabling RenderInstances2D
+     * to automatically look up the shape without requiring separate wiring.
+     *
+     * Flow:
+     *   Ellipse.shape (Signal<shape>) → Array.element → stored as instance.shapeField
+     *   Array.elements (Field<shape>) → Layout → position → RenderInstances2D
+     *   RenderInstances2D extracts instanceId from position → looks up shapeField
+     */
+    const instanceId = ctx.b.createInstance(DOMAIN_CIRCLE, count, elementInput.id);
 
     // Rewrite output types with actual instance ref (ctx.outTypes has placeholder 'default')
     const ref = instanceRef(DOMAIN_CIRCLE as string, instanceId as string);
@@ -77,9 +93,6 @@ registerBlock({
     const outType3 = withInstance(ctx.outTypes[3], ref);
 
     // Create field expressions
-    if (!elementInput || !('type' in elementInput && requireInst(elementInput.type.extent.cardinality, 'cardinality').kind === 'one')) {
-      throw new Error('Array block requires an element signal input');
-    }
     const elementsField = ctx.b.broadcast(elementInput.id, outType0);
 
     // Intrinsic fields (index, t, active)

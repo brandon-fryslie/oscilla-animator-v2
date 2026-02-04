@@ -32,5 +32,4 @@ export const patchDomainTest: PatchBuilder = (b) => {
   const render = b.addBlock('RenderInstances2D');
   b.wire(circleLayout, 'position', render, 'pos');
   b.wire(color, 'out', render, 'color');
-  b.wire(ellipse, 'shape', render, 'shape');
 };

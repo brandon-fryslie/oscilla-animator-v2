@@ -18,7 +18,7 @@ import type { CanonicalType } from '../core/canonical-types';
 import type { FrontendResult, FrontendFailure, CycleSummary, FrontendError } from '../compiler/frontend';
 import type { NormalizedPatch } from '../compiler/frontend/normalize-indexing';
 import type { TypedPatch } from '../compiler/ir/patches';
-import type { PortId } from '../types';
+import type { DefaultSource, PortId } from '../types';
 import { getBlockAddress, getInputAddress, getOutputAddress } from '../graph/addressing';
 import { addressToString } from '../types/canonical-address';
 
@@ -60,7 +60,7 @@ export interface FrontendSnapshot {
  */
 export type PortProvenance =
   | { readonly kind: 'userEdge' }
-  | { readonly kind: 'defaultSource'; readonly sourceBlockType: string }
+  | { readonly kind: 'defaultSource'; readonly source: DefaultSource }
   | { readonly kind: 'adapter'; readonly adapterType: string }
   | { readonly kind: 'unresolved' };
 
@@ -194,6 +194,19 @@ export class FrontendResultStore {
     return this.snapshot.portProvenance.get(canonicalAddr);
   }
 
+  /**
+   * Get provenance for a port (id-based query).
+   *
+   * @param blockId - Block ID
+   * @param portId - Port ID
+   * @param dir - Port direction ('in' or 'out')
+   * @returns PortProvenance, or undefined if not known
+   */
+  getPortProvenanceByIds(blockId: string, portId: string, dir: 'in' | 'out'): PortProvenance | undefined {
+    const addr = this.buildCanonicalAddressFromIds(blockId, portId, dir);
+    return addr ? this.getPortProvenance(addr) : undefined;
+  }
+
   // ===========================================================================
   // Convenience Queries (BlockId + PortId Based)
   // ===========================================================================
@@ -208,6 +221,19 @@ export class FrontendResultStore {
   hasDefaultSourceByIds(blockId: string, portId: string): boolean {
     const addr = this.buildCanonicalAddressFromIds(blockId, portId, 'in');
     return addr ? this.hasDefaultSource(addr) : false;
+  }
+
+  /**
+   * Get the DefaultSource descriptor for a port (id-based query).
+   *
+   * Returns the DefaultSource from provenance if this port has a materialized
+   * default source, undefined otherwise.
+   */
+  getDefaultSourceByIds(blockId: string, portId: string): DefaultSource | undefined {
+    const addr = this.buildCanonicalAddressFromIds(blockId, portId, 'in');
+    if (!addr) return undefined;
+    const prov = this.snapshot.portProvenance.get(addr);
+    return prov?.kind === 'defaultSource' ? prov.source : undefined;
   }
 
   /**
@@ -316,7 +342,11 @@ export class FrontendResultStore {
         const sourceBlock = blocksById.get(edge.from.blockId);
         map.set(targetAddrStr, {
           kind: 'defaultSource',
-          sourceBlockType: sourceBlock?.type ?? 'DefaultSource',
+          source: {
+            blockType: sourceBlock?.type ?? 'DefaultSource',
+            output: edge.from.slotId,
+            params: sourceBlock?.params,
+          },
         });
       } else if (role.kind === 'adapter') {
         const sourceBlock = blocksById.get(edge.from.blockId);

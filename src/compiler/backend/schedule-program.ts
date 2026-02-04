@@ -296,6 +296,21 @@ function asExprValueRef(ref: ValueRefPacked | undefined): { id: ValueExprId; str
   return { id, stride };
 }
 
+/**
+ * Collect render target info from render blocks.
+ *
+ * SHAPE LOOKUP (2026-02-04):
+ * Shape is no longer extracted from a shape input port. Instead, it's looked up
+ * from InstanceDecl.shapeField using the instanceId inferred from the position field.
+ *
+ * This simplifies wiring - users only need to wire position and color, not shape separately.
+ * The shape field reference is stored when the instance is created (e.g., Array block stores
+ * elementInput.id as the shapeField when creating the instance).
+ *
+ * Supports both uniform and heterogeneous shapes:
+ * - If InstanceDecl.shapeField points to Signal<shape>: all elements share one shape
+ * - If InstanceDecl.shapeField points to Field<shape>: each element can have different shape
+ */
 function collectRenderTargets(
   blocks: readonly Block[],
   edges: readonly NormalizedEdge[],
@@ -311,12 +326,11 @@ function collectRenderTargets(
     const posRef = getInputRef(index, 'pos', edges, blockOutputs);
     const colorRef = getInputRef(index, 'color', edges, blockOutputs);
     const scaleRef = getInputRef(index, 'scale', edges, blockOutputs);
-    const shapeRef = getInputRef(index, 'shape', edges, blockOutputs);
+    // Shape input port REMOVED - shape now looked up from InstanceDecl
 
     const pos = asExprValueRef(posRef);
     const color = asExprValueRef(colorRef);
     const scaleExpr = asExprValueRef(scaleRef);
-    const shapeExpr = asExprValueRef(shapeRef);
 
     // Hard check that pos/color exist and are expr-backed
     if (!pos || !color) {
@@ -333,16 +347,42 @@ function collectRenderTargets(
       continue;
     }
 
+    // Look up instance to get shape field reference
+    const instanceDecl = instances.get(instanceId);
+    if (!instanceDecl) {
+      throw new Error(
+        `RenderInstances2D: Instance ${instanceId} not found in instances registry. ` +
+        `This indicates a compiler bug - instanceId was inferred from position field but instance doesn't exist.`
+      );
+    }
+
+    if (!instanceDecl.shapeField) {
+      throw new Error(
+        `RenderInstances2D: Instance ${instanceId} does not have a shapeField. ` +
+        `Ensure the instance was created with a shape (e.g., Array block with Ellipse.shape as element).`
+      );
+    }
+
     // Build optional scale (uniform signal only - no per-particle scale)
     const scale = scaleExpr && isSignalExpr(scaleExpr.id, valueExprs)
       ? { k: 'sig' as const, id: scaleExpr.id }
       : undefined;
 
-    const shape = shapeExpr && isFieldExtent(shapeExpr.id, valueExprs)
-      ? { k: 'field' as const, id: shapeExpr.id, stride: shapeExpr.stride }
-      : shapeExpr && isSignalExpr(shapeExpr.id, valueExprs)
-        ? { k: 'sig' as const, id: shapeExpr.id }
-        : undefined;
+    // Get shape from InstanceDecl.shapeField
+    // Determine if it's a field or signal based on the ValueExpr
+    const shapeFieldId = instanceDecl.shapeField;
+    const shapeExpr = valueExprs[shapeFieldId as number];
+    if (!shapeExpr) {
+      throw new Error(
+        `RenderInstances2D: Shape field ${shapeFieldId} not found in valueExprs. ` +
+        `Instance ${instanceId} has invalid shapeField reference.`
+      );
+    }
+
+    const shapeFieldStride = payloadStride(shapeExpr.type.payload);
+    const shape = isFieldExtent(shapeFieldId, valueExprs)
+      ? { k: 'field' as const, id: shapeFieldId, stride: shapeFieldStride }
+      : { k: 'sig' as const, id: shapeFieldId };
 
     targets.push({
       instanceId,
