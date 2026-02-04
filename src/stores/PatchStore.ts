@@ -1014,7 +1014,7 @@ export class PatchStore {
   /**
    * Clears all blocks and edges, then auto-inserts InfiniteTimeRoot.
    * Every patch must have exactly one TimeRoot (system-managed).
-   * Emits PatchReset event.
+   * Emits PatchReset and GraphCommitted events.
    */
   clear(): void {
     this._data = emptyPatchData();
@@ -1023,12 +1023,28 @@ export class PatchStore {
     // Auto-insert TimeRoot (required for all patches, system-managed)
     this.addBlock('InfiniteTimeRoot');
 
-    // Emit PatchReset event
+    // Emit events
     if (this.eventHub && this.getPatchRevision) {
+      const rev = this.getPatchRevision();
+
+      // Emit PatchReset
       this.eventHub.emit({
         type: 'PatchReset',
         patchId: this.patchId,
-        patchRevision: this.getPatchRevision(),
+        patchRevision: rev,
+      });
+
+      // Emit GraphCommitted to trigger recompilation and authoring validation
+      this.eventHub.emit({
+        type: 'GraphCommitted',
+        patchId: this.patchId,
+        patchRevision: rev + 1,
+        reason: 'import', // Closest semantic match for patch clear/reset
+        diffSummary: {
+          blocksAdded: 1, // TimeRoot
+          blocksRemoved: 0,
+          edgesChanged: 0,
+        },
       });
     }
   }
