@@ -54,7 +54,6 @@ function formatSignalType(type: InferenceCanonicalType | undefined): string {
   let unitStr = '';
   switch (unit.kind) {
     case 'none':
-    case 'scalar':
       unitStr = '';
       break;
     case 'scalar':
