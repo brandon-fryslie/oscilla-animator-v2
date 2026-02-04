@@ -60,10 +60,7 @@ registerBlock({
   lower: ({ ctx, inputsById, block }) => {
     // Read count from port defaultSource (not config — count is an exposed port)
     const port = block?.inputPorts.get('count');
-    const countFromPort = port?.defaultSource?.blockType === 'Const'
-      ? (port.defaultSource.params?.value as number | undefined)
-      : undefined;
-    const count = countFromPort ?? 500; // Registry default
+    const count = (port?.defaultSource?.params?.value as number | undefined) ?? 500; // Registry default
     const elementInput = inputsById.element;
 
     // Validate element input
