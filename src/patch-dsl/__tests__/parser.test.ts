@@ -308,4 +308,38 @@ block "Test" {
     expect(result.document.blocks[0].pos.start).toBe(0);
     expect(result.document.blocks[0].pos.end).toBeGreaterThan(0);
   });
+
+  describe('error recovery on malformed input', () => {
+    it('terminates on mismatched braces and brackets: invalid syntax { ] }', () => {
+      const result = parseHcl('invalid syntax { ] }');
+      expect(result.errors.length).toBeGreaterThan(0);
+      // Must terminate — the bug was an infinite loop here
+    });
+
+    it('terminates on bare mismatched delimiters: { ] }', () => {
+      const result = parseHcl('{ ] }');
+      expect(result.errors.length).toBeGreaterThan(0);
+    });
+
+    it('terminates on reversed delimiters: ] } [', () => {
+      const result = parseHcl('] } [');
+      expect(result.errors.length).toBeGreaterThan(0);
+    });
+
+    it('terminates on lone closing bracket', () => {
+      const result = parseHcl(']');
+      expect(result.errors.length).toBeGreaterThan(0);
+    });
+
+    it('terminates on lone closing brace', () => {
+      const result = parseHcl('}');
+      expect(result.errors.length).toBeGreaterThan(0);
+    });
+
+    it('produces bounded errors (not millions)', () => {
+      const result = parseHcl('invalid syntax { ] }');
+      // Before the fix, this produced ~169M errors. Now it should be a small number.
+      expect(result.errors.length).toBeLessThan(100);
+    });
+  });
 });

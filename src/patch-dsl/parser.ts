@@ -56,9 +56,15 @@ class Parser {
 
     // Parse blocks until EOF
     while (!this.isAtEnd()) {
+      const before = this.current;
       const block = this.parseBlock();
       if (block) {
         blocks.push(block);
+      }
+      // Safety: if parsing made no progress, force advance to prevent infinite loop
+      if (this.current === before) {
+        this.addError('Unexpected token, skipping', this.peek().pos);
+        this.advance();
       }
       this.skipNewlines();
     }
@@ -83,7 +89,7 @@ class Parser {
     // Block type (identifier)
     if (!this.check(TokenKind.IDENT)) {
       this.addError('Expected block type (identifier)', this.peek().pos);
-      this.recoverToBlockEnd();
+      this.recoverToBlockEnd('top');
       return null;
     }
     const typeToken = this.advance();
@@ -98,7 +104,7 @@ class Parser {
     // Opening brace
     if (!this.match(TokenKind.LBRACE)) {
       this.addError("Expected '{' after block header", this.peek().pos);
-      this.recoverToBlockEnd();
+      this.recoverToBlockEnd('top');
       return null;
     }
 
@@ -134,6 +140,8 @@ class Parser {
     this.skipNewlines();
 
     while (!this.check(TokenKind.RBRACE) && !this.isAtEnd()) {
+      const before = this.current;
+
       // Check if it's a nested block (IDENT followed by STRING or LBRACE)
       if (this.check(TokenKind.IDENT)) {
         const lookahead = this.peekAhead(1);
@@ -144,7 +152,7 @@ class Parser {
             children.push(block);
           }
           this.skipNewlines();
-          continue;
+          if (this.current !== before) continue;
         }
       }
 
@@ -152,6 +160,12 @@ class Parser {
       const attr = this.parseAttribute();
       if (attr) {
         attributes[attr.key] = attr.value;
+      }
+
+      // Safety: if parsing made no progress, force advance to prevent infinite loop
+      if (this.current === before) {
+        this.addError('Unexpected token in block body, skipping', this.peek().pos);
+        this.advance();
       }
       this.skipNewlines();
     }
@@ -358,7 +372,7 @@ class Parser {
     const firstItem = this.parseValue();
     if (!firstItem) {
       this.addError('Expected value in list', this.peek().pos);
-      this.recoverToBlockEnd();
+      this.recoverToBlockEnd('bracket');
       return null;
     }
     items.push(firstItem);
@@ -374,7 +388,7 @@ class Parser {
       const item = this.parseValue();
       if (!item) {
         this.addError('Expected value after comma in list', this.peek().pos);
-        this.recoverToBlockEnd();
+        this.recoverToBlockEnd('bracket');
         return null;
       }
       items.push(item);
@@ -384,26 +398,37 @@ class Parser {
 
     if (!this.match(TokenKind.RBRACKET)) {
       this.addError("Expected ']' to close list", this.peek().pos);
-      this.recoverToBlockEnd();
+      this.recoverToBlockEnd('bracket');
       return null;
     }
 
     return { kind: 'list', items };
   }
 
-  // Error recovery
-  private recoverToBlockEnd(): void {
-    // Skip tokens until we find balanced RBRACE or EOF
-    // Track both brace depth and bracket depth to avoid escaping list/object containers
-    let braceDepth = 1; // We're already inside a block
-    let bracketDepth = 0;
+  // Error recovery — skip tokens until we find the balanced closing delimiter or EOF.
+  // INVARIANT: always advances the cursor by at least 1 token.
+  private recoverToBlockEnd(context: 'brace' | 'bracket' | 'top' = 'brace'): void {
+    const startPos = this.current;
+    let braceDepth = context === 'brace' ? 1 : 0;
+    let bracketDepth = context === 'bracket' ? 1 : 0;
+
+    // At top level, just skip to the next block-start (IDENT) or EOF
+    if (context === 'top') {
+      while (!this.isAtEnd() && !this.check(TokenKind.IDENT)) {
+        this.advance();
+      }
+      if (this.current === startPos && !this.isAtEnd()) {
+        this.advance();
+      }
+      return;
+    }
 
     while (!this.isAtEnd() && (braceDepth > 0 || bracketDepth > 0)) {
       if (this.check(TokenKind.LBRACE)) {
         braceDepth++;
       } else if (this.check(TokenKind.RBRACE)) {
         braceDepth--;
-        if (braceDepth === 0 && bracketDepth === 0) {
+        if (braceDepth <= 0 && bracketDepth <= 0) {
           this.advance(); // Consume the closing brace
           break;
         }
@@ -411,11 +436,16 @@ class Parser {
         bracketDepth++;
       } else if (this.check(TokenKind.RBRACKET)) {
         bracketDepth--;
-        // Don't consume past container boundaries
-        if (bracketDepth < 0) {
+        if (bracketDepth <= 0 && braceDepth <= 0) {
+          this.advance(); // Consume the closing bracket
           break;
         }
       }
+      this.advance();
+    }
+
+    // Safety: guarantee forward progress even if the loop didn't advance
+    if (this.current === startPos && !this.isAtEnd()) {
       this.advance();
     }
   }
@@ -466,6 +496,9 @@ class Parser {
   }
 
   private previous(): Token {
+    if (this.current === 0) {
+      return this.tokens[0]; // No previous token; return first token as fallback
+    }
     return this.tokens[this.current - 1];
   }
 
