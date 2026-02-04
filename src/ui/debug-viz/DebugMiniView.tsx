@@ -151,7 +151,40 @@ function SignalValueSection({ value, meta, history }: {
 }): React.ReactElement {
   const children: React.ReactElement[] = [];
 
-  // Current value via renderer
+  // Handle constant values (compile-time constants)
+  if (value && value.kind === 'constant') {
+    const renderer = getValueRenderer(value.type);
+    children.push(
+      React.createElement('div', { key: 'constant-badge', style: { ...styles.badge, background: 'rgba(255, 165, 0, 0.3)', color: '#ffa500', marginBottom: '6px' } },
+        '📌 Compile-Time Constant'
+      )
+    );
+    
+    if (renderer) {
+      const sample: RendererSample = {
+        type: 'scalar',
+        components: new Float32Array([value.value as number]),
+        stride: 1,
+      };
+      children.push(
+        React.createElement('div', { key: 'value' }, renderer.renderFull(sample))
+      );
+    } else {
+      children.push(
+        React.createElement('div', { key: 'value', style: { fontSize: '16px', color: '#ffa500' } }, String(value.value))
+      );
+    }
+    
+    children.push(
+      React.createElement('div', { key: 'description', style: { ...styles.typeLine, marginTop: '6px', color: '#999' } },
+        value.description
+      )
+    );
+    
+    return React.createElement('div', { style: styles.valueSection }, ...children);
+  }
+
+  // Current value via renderer (runtime signal)
   if (value && value.kind === 'signal') {
     const sample: RendererSample = {
       type: 'scalar',

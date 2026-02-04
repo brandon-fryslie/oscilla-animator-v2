@@ -26,6 +26,7 @@ import type { RootStore } from '../stores';
 import { type ValueSlot } from '../types';
 import { debugService } from './DebugService';
 import { mapDebugMappings } from './mapDebugEdges';
+import { extractConstantValues } from './ConstantValueTracker';
 
 /**
  * Wire DebugService to the runtime state and update debug mappings.
@@ -41,10 +42,19 @@ function setupDebugProbe(state: RuntimeState, patch: Patch, program: any): void 
 
   // Build and set debug mappings (edge→slot and port→slot)
   const { edgeMap, portMap, unmappedEdges } = mapDebugMappings(patch, program);
+  
+  // Extract constant values for unmapped edges from eliminated blocks
+  const constantValues = extractConstantValues(patch, unmappedEdges);
+  
   if (unmappedEdges.length > 0) {
-    console.warn('[DebugProbe] Unmapped edges:', unmappedEdges.map(e => `${e.edgeId}: ${e.fromBlockId}.${e.fromPort} → ${e.toBlockId}.${e.toPort}`));
+    const mappedCount = constantValues.size;
+    const unmappedCount = unmappedEdges.length - mappedCount;
+    console.warn(
+      `[DebugProbe] ${unmappedEdges.length} unmapped edges: ${mappedCount} resolved as constants, ${unmappedCount} remain unmapped`
+    );
   }
-  debugService.setEdgeToSlotMap(edgeMap);
+  
+  debugService.setEdgeToSlotMap(edgeMap, constantValues);
   debugService.setPortToSlotMap(portMap);
   debugService.setUnmappedEdges(unmappedEdges);
 }

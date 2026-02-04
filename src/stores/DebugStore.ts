@@ -231,6 +231,10 @@ export class DebugStore {
         return `[${this._cachedEdgeValue.count}] ${this._cachedEdgeValue.mean.toFixed(2)}`;
       case 'field-untracked':
         return null;
+      case 'constant':
+        return `${this._cachedEdgeValue.value} (constant)`;
+      default:
+        return null;
     }
   }
 

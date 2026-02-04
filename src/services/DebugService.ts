@@ -14,6 +14,7 @@
 import type { ValueSlot } from '../types';
 import type { CanonicalType } from '../core/canonical-types';
 import type { UnmappedEdgeInfo, EdgeMetadata } from './mapDebugEdges';
+import type { ConstantValue } from './ConstantValueTracker';
 import { HistoryService, type KeyResolver, type ResolvedKeyMetadata } from '../ui/debug-viz/HistoryService';
 import type { DebugTargetKey } from '../ui/debug-viz/types';
 
@@ -52,9 +53,23 @@ export interface FieldUntrackedResult {
 }
 
 /**
+ * Constant value result - value from an optimized-away block.
+ * Shows compile-time constant instead of runtime value.
+ */
+export interface ConstantValueResult {
+  kind: 'constant';
+  value: unknown;
+  type: CanonicalType;
+  /** Why this is shown as a constant */
+  reason: 'const-block' | 'default-value' | 'computed-constant';
+  /** Human-readable explanation for UI */
+  description: string;
+}
+
+/**
  * Discriminated union of all possible debug value results.
  */
-export type EdgeValueResult = SignalValueResult | FieldValueResult | FieldUntrackedResult;
+export type EdgeValueResult = SignalValueResult | FieldValueResult | FieldUntrackedResult | ConstantValueResult;
 
 /**
  * Debug service health status.
@@ -106,6 +121,9 @@ class DebugService {
   /** Edges that couldn't be mapped (for error reporting) */
   private unmappedEdges: UnmappedEdgeInfo[] = [];
 
+  /** Constant values for optimized-away edges */
+  private constantValues = new Map<string, ConstantValueResult>();
+
   /** Temporal history tracking service */
   readonly historyService: HistoryService;
 
@@ -131,11 +149,12 @@ class DebugService {
   }
 
   /**
-   * Set the edge-to-slot mapping.
+   * Set the edge-to-slot mapping (and optional constant values).
    * Called by compiler after successful compilation.
    */
-  setEdgeToSlotMap(map: Map<string, EdgeMetadata>): void {
+  setEdgeToSlotMap(map: Map<string, EdgeMetadata>, constantValues?: Map<string, ConstantValue>): void {
     this.edgeToSlotMap = map;
+    this.constantValues = constantValues ?? new Map();
     this.historyService.onMappingChanged();
   }
 
