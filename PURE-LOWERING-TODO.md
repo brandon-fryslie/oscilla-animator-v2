@@ -3,31 +3,31 @@
 ## Summary
 
 **Total Blocks**: ~80 blocks
-**Migrated**: 68 blocks with `loweringPurity` annotation
-**Remaining**: 12 blocks need migration
+**Migrated**: 77 blocks with `loweringPurity` annotation ✅
+**Remaining**: 3 blocks need design decision
 
 ## Completed Categories
 
-✅ Math: 9/10 (missing: expression)
-✅ Adapters: 15/15
-✅ Lens: 13/13
-✅ Color: 8/8
-✅ Shape: 5/5
-✅ Layout: 3/3
-✅ Domain: 2/2
-✅ Field: 4/4
-✅ Instance: 1/1
-✅ Event: 2/2
-✅ Signal: 7/9 (missing: const, default-source)
-✅ IO: 3/3 (marked impure)
-✅ Render: 2/2 (marked impure)
-✅ Time: 1/1 (marked impure)
+✅ Math: 9/10 (missing: expression - blocked)
+✅ Adapters: 18/18 ✅ COMPLETE
+✅ Lens: 13/13 ✅ COMPLETE
+✅ Color: 11/11 ✅ COMPLETE
+✅ Shape: 5/5 ✅ COMPLETE
+✅ Layout: 3/3 ✅ COMPLETE
+✅ Domain: 2/2 ✅ COMPLETE
+✅ Field: 4/4 ✅ COMPLETE
+✅ Instance: 1/1 ✅ COMPLETE
+✅ Event: 2/2 ✅ COMPLETE
+✅ Signal: 7/9 (missing: const, default-source - blocked)
+✅ IO: 3/3 ✅ COMPLETE
+✅ Render: 2/2 ✅ COMPLETE
+✅ Time: 1/1 ✅ COMPLETE
 
 ## Blocks Still Using Direct Slot Allocation
 
-These blocks call `ctx.b.allocSlot()` directly and need migration to effects-as-data:
+Only 3 blocks remain unmigrated due to design decision needed:
 
-### 1. **src/blocks/signal/const.ts** - COMPLEX
+### 1. **src/blocks/signal/const.ts** - ⚠️ BLOCKED
 **Issue**: Multi-component signals (vec2, color) use `stepSlotWriteStrided()`
 ```typescript
 // Current pattern for color:
@@ -51,7 +51,7 @@ ctx.b.stepSlotWriteStrided(slot, components); // ⚠️ Imperative schedule muta
 
 ---
 
-### 2. **src/blocks/math/expression.ts** - COMPLEX
+### 2. **src/blocks/math/expression.ts** - ⚠️ BLOCKED
 **Issue**: Uses `stepSlotWriteStrided()` for multi-component results AND has varargs
 ```typescript
 // Current pattern:
@@ -67,7 +67,7 @@ if (stride > 1) {
 
 ---
 
-### 3. **src/blocks/signal/default-source.ts** - SPECIAL
+### 3. **src/blocks/signal/default-source.ts** - ⚠️ ARCHITECTURAL
 **Issue**: This is the macro expansion block from the design doc
 ```typescript
 // DefaultSource is meant to be expanded during normalization
@@ -78,63 +78,24 @@ if (stride > 1) {
 
 ---
 
-### 4-6. **Identity Adapters** - TRIVIAL
-- src/blocks/adapter/norm01-to-scalar.ts
-- src/blocks/adapter/phase-to-scalar.ts  
-- src/blocks/adapter/scalar-to-deg.ts
+## ✅ COMPLETED (9 blocks migrated in last commit)
 
-**Pattern**: Simple identity adapters that just re-type
-```typescript
-const slot = ctx.b.allocSlot();
-return {
-  outputsById: {
-    out: { id: input.id, slot, type: outType, stride },
-  },
-};
-```
+### Identity Adapters ✅
+- ~~norm01-to-scalar~~ ✅
+- ~~phase-to-scalar~~ ✅
+- ~~scalar-to-deg~~ ✅
 
-**Status**: ✅ EASY - just need to add effects section
+### Color Multi-Output ✅
+- ~~make-color-hsl~~ ✅
+- ~~mix-color~~ ✅
+- ~~split-color-hsl~~ ✅
 
----
+### IO Blocks ✅
+- ~~external-gate~~ ✅
+- ~~external-input~~ ✅
 
-### 7-9. **Color Multi-Output** - STRAIGHTFORWARD
-- src/blocks/color/make-color-hsl.ts
-- src/blocks/color/mix-color.ts
-- src/blocks/color/split-color-hsl.ts
-
-**Pattern**: Multiple output ports, each needs slot
-```typescript
-const slotH = ctx.b.allocSlot();
-const slotS = ctx.b.allocSlot();
-const slotL = ctx.b.allocSlot();
-```
-
-**Status**: ✅ EASY - just list all ports in slotRequests
-
----
-
-### 10-11. **IO Blocks** - SIMPLE
-- src/blocks/io/external-gate.ts
-- src/blocks/io/external-input.ts
-
-**Pattern**: Single output, straightforward
-```typescript
-const slot = ctx.b.allocSlot();
-return { outputsById: { out: { id, slot, type, stride } } };
-```
-
-**Status**: ✅ EASY - already marked impure, just need effects section
-
----
-
-### 12. **src/blocks/time/infinite-time-root.ts** - SIMPLE
-**Pattern**: Time root with multiple rail outputs
-```typescript
-const slotA = ctx.b.allocSlot();
-const slotB = ctx.b.allocSlot();
-```
-
-**Status**: ✅ EASY - just list all rail outputs in slotRequests
+### Time Block ✅
+- ~~infinite-time-root~~ ✅
 
 ---
 
@@ -178,19 +139,13 @@ loweringPurity: 'impure' // Multi-component constants require schedule mutation
 
 ## Next Steps
 
-### Immediate (EASY - 9 blocks, ~30 min):
-1. ✅ Migrate 3 identity adapters (norm01-to-scalar, phase-to-scalar, scalar-to-deg)
-2. ✅ Migrate 3 color multi-output blocks (make-color-hsl, mix-color, split-color-hsl)
-3. ✅ Migrate 2 IO blocks (external-gate, external-input)
-4. ✅ Migrate 1 time block (infinite-time-root)
+### ⚠️ Design Decision Required (HARD - 2 blocks):
+1. Decide on `stepSlotWriteStrided` handling for pure model (see options above)
+2. Migrate Const block based on decision
+3. Migrate Expression block based on decision
 
-### Design Decision Required (HARD - 2 blocks):
-5. ⚠️ Decide on `stepSlotWriteStrided` handling for pure model
-6. ⚠️ Migrate Const block based on decision
-7. ⚠️ Migrate Expression block based on decision
-
-### Architectural Review (SPECIAL - 1 block):
-8. 🔍 Review DefaultSource block - may be eliminated by normalization phase
+### 🔍 Architectural Review (SPECIAL - 1 block):
+4. Review DefaultSource block - may be eliminated by normalization phase
 
 ---
 
