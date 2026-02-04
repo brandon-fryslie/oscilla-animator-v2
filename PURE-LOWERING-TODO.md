@@ -3,12 +3,12 @@
 ## Summary
 
 **Total Blocks**: ~80 blocks
-**Migrated**: 77 blocks with `loweringPurity` annotation ✅
-**Remaining**: 3 blocks need design decision
+**Pure Migrated**: 78 blocks ✅ (97.5%)
+**Remaining**: 4 blocks blocked on `stepSlotWriteStrided` design decision
 
-## Completed Categories
+## Migration Complete By Category
 
-✅ Math: 9/10 (missing: expression - blocked)
+✅ Math: 9/10 (missing: expression - stepSlotWriteStrided)
 ✅ Adapters: 18/18 ✅ COMPLETE
 ✅ Lens: 13/13 ✅ COMPLETE
 ✅ Color: 11/11 ✅ COMPLETE
@@ -19,13 +19,14 @@
 ✅ Instance: 1/1 ✅ COMPLETE
 ✅ Event: 2/2 ✅ COMPLETE
 ✅ Signal: 7/9 (missing: const, default-source - blocked)
-✅ IO: 3/3 ✅ COMPLETE
+✅ IO: 3/3 (external-vec2 has stepSlotWriteStrided blocker documented)
 ✅ Render: 2/2 ✅ COMPLETE
 ✅ Time: 1/1 ✅ COMPLETE
+✅ Dev: 1/1 (test-signal uses evalRequests) ✅ COMPLETE
 
-## Blocks Still Using Direct Slot Allocation
+## Blocks Still Using stepSlotWriteStrided
 
-Only 3 blocks remain unmigrated due to design decision needed:
+Only 4 blocks remain, all blocked on the same design decision:
 
 ### 1. **src/blocks/signal/const.ts** - ⚠️ BLOCKED
 **Issue**: Multi-component signals (vec2, color) use `stepSlotWriteStrided()`
@@ -76,25 +77,51 @@ if (stride > 1) {
 
 **Status**: ⚠️ Needs architectural review - may be eliminated by normalization
 
+### 4. **src/blocks/io/external-vec2.ts** - ⚠️ BLOCKED
+**Issue**: Multi-component external signal uses `stepSlotWriteStrided()`
+```typescript
+const xSig = ctx.b.external(`${channelBase}.x`, ...);
+const ySig = ctx.b.external(`${channelBase}.y`, ...);
+const slot = ctx.b.allocSlot(stride);
+ctx.b.stepSlotWriteStrided(slot, [xSig, ySig]); // ⚠️ Imperative
+```
+
+**Challenge**: Same as Const - multi-component packing requires strided write
+
+**Status**: ⚠️ Blocked - same design decision needed
+
 ---
 
-## ✅ COMPLETED (9 blocks migrated in last commit)
+## ✅ COMPLETED RECENTLY (Latest commits)
 
-### Identity Adapters ✅
+### Event Slots ✅
+- ~~infinite-time-root~~ ✅ Now uses eventSlotRequests
+
+### Eval Requests ✅
+- ~~test-signal~~ ✅ Now uses evalRequests
+
+### LowerEffects Extended ✅
+Added to lowerTypes.ts:
+- `eventSlotRequests` for declarative event slot allocation
+- `evalRequests` for sink blocks
+
+---
+
+### Identity Adapters ✅ (commit 1329019)
 - ~~norm01-to-scalar~~ ✅
 - ~~phase-to-scalar~~ ✅
 - ~~scalar-to-deg~~ ✅
 
-### Color Multi-Output ✅
+### Color Multi-Output ✅ (commit 1329019)
 - ~~make-color-hsl~~ ✅
 - ~~mix-color~~ ✅
 - ~~split-color-hsl~~ ✅
 
-### IO Blocks ✅
+### IO Blocks ✅ (commit 1329019)
 - ~~external-gate~~ ✅
 - ~~external-input~~ ✅
 
-### Time Block ✅
+### Time Block ✅ (commit 1329019)
 - ~~infinite-time-root~~ ✅
 
 ---
@@ -139,13 +166,17 @@ loweringPurity: 'impure' // Multi-component constants require schedule mutation
 
 ## Next Steps
 
-### ⚠️ Design Decision Required (HARD - 2 blocks):
-1. Decide on `stepSlotWriteStrided` handling for pure model (see options above)
-2. Migrate Const block based on decision
-3. Migrate Expression block based on decision
+### ⚠️ Design Decision Required (HARD - 4 blocks):
+1. **Decide on `stepSlotWriteStrided` handling** for pure model (see options above)
+   - This is the ONLY blocker remaining
+   - Affects: Const, Expression, external-vec2, (and partially DefaultSource)
+2. Implement chosen solution in binding pass
+3. Migrate all 4 blocks based on decision
 
 ### 🔍 Architectural Review (SPECIAL - 1 block):
 4. Review DefaultSource block - may be eliminated by normalization phase
+
+**Note**: Once step 1 is resolved, the remaining migrations are straightforward.
 
 ---
 
