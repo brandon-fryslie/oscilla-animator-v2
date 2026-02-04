@@ -242,12 +242,22 @@ registerBlock({
 
       // Create a default circle shape for the instance using pure Ellipse block
       const sandbox = new LowerSandbox(ctx.b, ctx.blockType, ctx.instanceId);
-      const radiusConst = ctx.b.constant({ kind: 'float', value: 0.05 }, canonicalSignal(FLOAT));
-      // Register the constant so it gets evaluated
-      const radiusSlot = ctx.b.allocSlot();
-      ctx.b.registerSigSlot(radiusConst, radiusSlot);
+
+      // Create and register all shape parameter constants (rx, ry, rotation)
+      const rxConst = ctx.b.constant({ kind: 'float', value: 0.05 }, canonicalSignal(FLOAT));
+      const ryConst = ctx.b.constant({ kind: 'float', value: 0.05 }, canonicalSignal(FLOAT));
+      const rotationConst = ctx.b.constant({ kind: 'float', value: 0 }, canonicalSignal(FLOAT));
+
+      // Register all constants so they get evaluated
+      const rxSlot = ctx.b.allocSlot();
+      const rySlot = ctx.b.allocSlot();
+      const rotationSlot = ctx.b.allocSlot();
+      ctx.b.registerSigSlot(rxConst, rxSlot);
+      ctx.b.registerSigSlot(ryConst, rySlot);
+      ctx.b.registerSigSlot(rotationConst, rotationSlot);
+
       // Ellipse is pure, so we can lower it directly without DefaultSource recursion
-      const shapeOutputs = sandbox.lowerBlock('Ellipse', { rx: radiusConst, ry: radiusConst }, { rx: 0.05, ry: 0.05 });
+      const shapeOutputs = sandbox.lowerBlock('Ellipse', { rx: rxConst, ry: ryConst, rotation: rotationConst }, { rx: 0.05, ry: 0.05, rotation: 0 });
       const shapeId = shapeOutputs.shape;
 
       // Use a default count of 8 elements
