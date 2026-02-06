@@ -857,7 +857,6 @@ function sigDependsOnEvent(sigId: number, valueExprs: readonly ValueExpr[]): boo
       }
 
       case 'const':
-      case 'slotRead':
       case 'time':
       case 'external':
       case 'state':

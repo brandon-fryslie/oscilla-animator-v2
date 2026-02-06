@@ -22,7 +22,7 @@
  */
 
 import type { CanonicalType, ConstValue } from '../../core/canonical-types';
-import type { StateSlotId, EventSlotId, ValueSlot, ValueExprId } from './Indices';
+import type { StateSlotId, EventSlotId, ValueExprId } from './Indices';
 import type { TopologyId } from '../../shapes/types';
 import type {
   IntrinsicPropertyName,
@@ -66,7 +66,7 @@ export type KernelId =
  * Replaces legacy SigExpr/FieldExpr/EventExpr with a unified table.
  * CanonicalType.extent determines signal/field/event semantics.
  *
- * Top-level kinds (12):
+ * Top-level kinds (11):
  * - const: Constant values (zero/one/many cardinality)
  * - external: External input channels (mouse, keyboard, etc.)
  * - intrinsic: Instance-bound data (index, randomId, placement)
@@ -76,9 +76,9 @@ export type KernelId =
  * - shapeRef: Shape topology references
  * - eventRead: Event→signal bridge
  * - event: Event-specific operations (pulse, wrap, combine, never)
- * - slotRead: Value slot read (register file)
  * - extract: Extract component from composite payload (structural, not compute)
  * - construct: Construct composite from components (structural, not compute)
+ * - hslToRgb: HSL→RGB color space conversion (structural intrinsic)
  */
 export type ValueExpr =
   | ValueExprConst
@@ -90,7 +90,6 @@ export type ValueExpr =
   | ValueExprShapeRef
   | ValueExprEventRead
   | ValueExprEvent
-  | ValueExprSlotRead
   | ValueExprExtract
   | ValueExprConstruct
   | ValueExprHslToRgb;
@@ -304,20 +303,11 @@ export type ValueExprEvent =
       readonly fired: boolean;
     };
 
-/**
- * Slot read expression.
- *
- * Reads from ValueSlot storage (register file). Used for strided
- * multi-component signal reads (e.g., vec3 components via slotWriteStrided).
- *
- * NOT a state op — slotRead is executor/register-file plumbing.
- * State ops (hold/delay/integrate/slew/preserve) use ValueExprState.
- */
-export interface ValueExprSlotRead {
-  readonly kind: 'slotRead';
-  readonly type: CanonicalType;
-  readonly slot: ValueSlot;
-}
+// REMOVED 2026-02-06: ValueExprSlotRead
+// Reason: Dead code - slotRead() was never called in production, only in tests.
+// The slot→offset indirection required program.slotMeta lookup, which evaluators
+// don't have access to. This was a correctness hazard (treating slot as offset).
+// Extract optimization (reading from strided slots) is handled via direct evaluation.
 
 /**
  * Extract component from composite payload.

@@ -15,6 +15,8 @@
  * - Operates directly on Float32Array buffers (no object conversion)
  */
 
+import { assertFieldBufferSizes, assertRadiusBufferSizes } from './kernel-assertions';
+
 // =============================================================================
 // Camera Params
 // =============================================================================
@@ -122,6 +124,7 @@ export function projectFieldOrtho(
   outDepth: Float32Array,
   outVisible: Uint8Array,
 ): void {
+  assertFieldBufferSizes(worldPositions, N, outScreenPos, outDepth, outVisible);
   const range = camera.far - camera.near;
   const near = camera.near;
   const far = camera.far;
@@ -189,6 +192,7 @@ export function projectFieldRadiusOrtho(
   _camera: OrthoCameraParams,
   outScreenRadii: Float32Array,
 ): void {
+  assertRadiusBufferSizes(worldRadii, N, outScreenRadii);
   for (let i = 0; i < N; i++) {
     outScreenRadii[i] = worldRadii[i];
   }

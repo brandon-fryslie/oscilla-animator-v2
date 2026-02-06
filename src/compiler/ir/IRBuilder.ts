@@ -47,8 +47,7 @@ export interface IRBuilder {
   /** Create a constant expression. Works for signal, field, or event extent. */
   constant(value: ConstValue, type: CanonicalType): ValueExprId;
 
-  /** Create a slot-read expression. */
-  slotRead(slot: ValueSlot, type: CanonicalType): ValueExprId;
+  // REMOVED 2026-02-06: slotRead() - dead code, never called in production
 
   /** Create a time-derived expression. */
   time(which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'progress' | 'palette' | 'energy', type: CanonicalType): ValueExprId;

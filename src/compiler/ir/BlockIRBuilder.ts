@@ -42,8 +42,7 @@ export interface BlockIRBuilder {
   /** Create a constant expression. */
   constant(value: ConstValue, type: CanonicalType): ValueExprId;
 
-  /** Create a slot-read expression (for reading allocated slots). */
-  slotRead(slot: any, type: CanonicalType): ValueExprId;
+  // REMOVED 2026-02-06: slotRead() - dead code, never called in production
 
   /** Create a time-derived expression. */
   time(which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'progress' | 'palette' | 'energy', type: CanonicalType): ValueExprId;

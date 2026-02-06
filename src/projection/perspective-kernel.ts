@@ -16,6 +16,7 @@
  */
 
 import type { ProjectionResult } from './ortho-kernel';
+import { assertFieldBufferSizes, assertRadiusBufferSizes } from './kernel-assertions';
 
 // =============================================================================
 // Camera Params
@@ -274,6 +275,8 @@ export function projectFieldPerspective(
   outDepth: Float32Array,
   outVisible: Uint8Array,
 ): void {
+  assertFieldBufferSizes(worldPositions, N, outScreenPos, outDepth, outVisible);
+
   // Pre-compute view basis (once for all instances)
   const basis = computeViewBasis(
     camera.camPosX, camera.camPosY, camera.camPosZ,
@@ -384,6 +387,7 @@ export function projectFieldRadiusPerspective(
   camera: PerspectiveCameraParams,
   outScreenRadii: Float32Array,
 ): void {
+  assertRadiusBufferSizes(worldRadii, N, outScreenRadii);
   const basis = computeViewBasis(
     camera.camPosX, camera.camPosY, camera.camPosZ,
     camera.camTargetX, camera.camTargetY, camera.camTargetZ,

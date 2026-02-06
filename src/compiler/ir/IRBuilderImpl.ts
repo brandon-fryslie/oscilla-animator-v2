@@ -67,9 +67,8 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     return this.pushExpr({ kind: 'const', type, value });
   }
 
-  slotRead(slot: ValueSlot, type: CanonicalType): ValueExprId {
-    return this.pushExpr({ kind: 'slotRead', type, slot });
-  }
+  // REMOVED 2026-02-06: slotRead() - dead code, never called in production
+  // Extract expressions handle component access directly
 
   time(which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'progress' | 'palette' | 'energy', type: CanonicalType): ValueExprId {
     return this.pushExpr({ kind: 'time', type, which });

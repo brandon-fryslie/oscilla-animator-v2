@@ -37,7 +37,9 @@ const EXPECTED_KINDS = [
   'shapeRef',
   'eventRead',
   'event',
-  'slotRead',
+  'extract',
+  'construct',
+  'hslToRgb',
 ] as const;
 
 // =============================================================================
@@ -66,14 +68,14 @@ void _checkMissing; void _checkExtra;
 // =============================================================================
 
 describe('ValueExpr structural invariants', () => {
-  it('has exactly 10 top-level kinds', () => {
-    expect(EXPECTED_KINDS.length).toBe(10);
+  it('has exactly 12 top-level kinds', () => {
+    expect(EXPECTED_KINDS.length).toBe(12);
   });
 
   it('exhaustive kind check: EXPECTED_KINDS matches ValueExpr union', () => {
     // Compile-time types above enforce bidirectional coverage.
-    // Runtime check verifies the count is still 10.
-    expect(EXPECTED_KINDS.length).toBe(10);
+    // Runtime check verifies the count is still 12.
+    expect(EXPECTED_KINDS.length).toBe(12);
 
     // Verify each kind in the array is a valid discriminant
     for (const kind of EXPECTED_KINDS) {
@@ -102,7 +104,9 @@ describe('ValueExpr structural invariants', () => {
       { kind: 'shapeRef', type: mockType, topologyId: 0 as any, paramArgs: [] },
       { kind: 'eventRead', type: mockType, eventSlot: 0 as any },
       { kind: 'event', type: mockType, eventKind: 'never' },
-      { kind: 'slotRead', type: mockType, slot: 0 as any },
+      { kind: 'extract', type: mockType, input: 0 as any, componentIndex: 0 },
+      { kind: 'construct', type: mockType, components: [] },
+      { kind: 'hslToRgb', type: mockType, input: 0 as any },
     ];
 
     for (const v of variants) {
@@ -124,7 +128,9 @@ describe('ValueExpr structural invariants', () => {
       { kind: 'shapeRef', type: mockType, topologyId: 0 as any, paramArgs: [] },
       { kind: 'eventRead', type: mockType, eventSlot: 0 as any },
       { kind: 'event', type: mockType, eventKind: 'never' },
-      { kind: 'slotRead', type: mockType, slot: 0 as any },
+      { kind: 'extract', type: mockType, input: 0 as any, componentIndex: 0 },
+      { kind: 'construct', type: mockType, components: [] },
+      { kind: 'hslToRgb', type: mockType, input: 0 as any },
     ];
 
     for (const v of variants) {
@@ -146,7 +152,9 @@ describe('ValueExpr structural invariants', () => {
       { kind: 'shapeRef', type: mockType, topologyId: 0 as any, paramArgs: [] },
       { kind: 'eventRead', type: mockType, eventSlot: 0 as any },
       { kind: 'event', type: mockType, eventKind: 'never' },
-      { kind: 'slotRead', type: mockType, slot: 0 as any },
+      { kind: 'extract', type: mockType, input: 0 as any, componentIndex: 0 },
+      { kind: 'construct', type: mockType, components: [] },
+      { kind: 'hslToRgb', type: mockType, input: 0 as any },
     ];
 
     for (const v of variants) {
