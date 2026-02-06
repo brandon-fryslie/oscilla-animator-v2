@@ -57,7 +57,8 @@ describe('deserialize', () => {
     expect(result.patch.edges[0].to.slotId).toBe('value');
   });
 
-  it('handles unresolvable references in outputs', () => {
+  it('throws on unresolvable references in outputs', () => {
+    // Important: this should be an error
     const hcl = `
       patch "Test" {
         block "Const" "a" {
@@ -73,7 +74,8 @@ describe('deserialize', () => {
     expect(result.patch.edges.length).toBe(0);  // Edge skipped
   });
 
-  it('handles duplicate block names', () => {
+  it('errors on duplicate block names', () => {
+    // Important: this is illegal and should throw an error.
     const hcl = `
       patch "Test" {
         block "Const" "foo" {}
@@ -82,13 +84,7 @@ describe('deserialize', () => {
     `;
     const result = deserializePatchFromHCL(hcl);
 
-    expect(result.warnings.length).toBeGreaterThan(0);
-    expect(result.patch.blocks.size).toBe(2);
-
-    // Check that one was renamed
-    const displayNames = Array.from(result.patch.blocks.values()).map(b => b.displayName);
-    expect(displayNames).toContain('foo');
-    expect(displayNames).toContain('foo_2');
+    expect(result.errors.length).toBeGreaterThan(0);
   });
 
   it('handles unknown block types', () => {

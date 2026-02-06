@@ -489,6 +489,18 @@ Even when underlying `x_base(t)` jumps due to scrubbing, looping, hot-swap, or t
 
 ---
 
+### I37: External Inputs Are Snapshot-Immutable
+
+**Rule**: Once `commit()` is called at frame start, the ExternalChannelSnapshot is immutable for the entire frame. No mid-frame writes are visible to evaluation.
+
+**Rationale**: Without this, external inputs could produce different values when evaluated multiple times in the same frame, breaking determinism and replay.
+
+**Consequences of Violation**: Non-deterministic evaluation, broken replay, potential race conditions in multi-threaded scenarios.
+
+**Enforcement**: ExternalChannelSystem.commit() swaps reference atomically; reader interface has no write methods.
+
+---
+
 ## Invariant Quick Reference
 
 | ID | Category | Rule (Brief) |
@@ -529,6 +541,7 @@ Even when underlying `x_base(t)` jumps due to scrubbing, looping, hot-swap, or t
 | I34 | Type System | Axis enforcement is centralized (validateAxes) |
 | I35 | Type System | State scoped by axes (branch + instance) |
 | I36 | Type System | Const literal matches payload kind |
+| I37 | External Input | External inputs are snapshot-immutable |
 
 ---
 
@@ -540,3 +553,4 @@ Even when underlying `x_base(t)` jumps due to scrubbing, looping, hot-swap, or t
 - [05-runtime](./topics/05-runtime.md) - Enforces I1-I5 (time/state invariants)
 - [06-renderer](./topics/06-renderer.md) - Enforces I15-I18 (render invariants)
 - [20-type-validation](./topics/20-type-validation.md) - Enforces I32-I36 (type validation gate)
+- [22-external-input-system](./topics/22-external-input-system.md) - Enforces I37 (external input snapshot immutability)

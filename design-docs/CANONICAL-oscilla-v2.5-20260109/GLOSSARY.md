@@ -1967,6 +1967,90 @@ type ValueSummary =
 
 ---
 
+## External Input System
+
+### ExternalChannelSnapshot
+
+**Definition**: Immutable per-frame map of channel values. Read-only during frame execution.
+
+**Type**: class
+
+**Canonical Form**: `ExternalChannelSnapshot`
+
+**Structure**:
+```typescript
+class ExternalChannelSnapshot {
+  getFloat(name: string): number;       // returns 0 if absent
+  getVec2(name: string): { x: number; y: number }; // returns {0,0} if absent
+}
+```
+
+**Source**: [22-external-input-system.md](./topics/22-external-input-system.md)
+
+**Note**: Once committed at frame start, snapshot is immutable for the entire frame (I37).
+
+---
+
+### ExternalWriteBus
+
+**Definition**: Thread-safe write-side structure accepting set/pulse/add operations. Drained at frame boundary and folded into snapshot.
+
+**Type**: class
+
+**Canonical Form**: `ExternalWriteBus`
+
+**Structure**:
+```typescript
+class ExternalWriteBus {
+  set(name: string, v: number): void;   // For 'value' channels
+  pulse(name: string): void;             // For 'pulse' channels
+  add(name: string, dv: number): void;  // For 'accum' channels
+}
+```
+
+**Source**: [22-external-input-system.md](./topics/22-external-input-system.md)
+
+**Note**: Writers never mutate the snapshot, only the staging structure.
+
+---
+
+### ChannelKind
+
+**Definition**: Semantics for how writes fold into snapshot. Defines whether a channel persists, pulses, or accumulates.
+
+**Type**: enum
+
+**Canonical Form**: `ChannelKind = 'value' | 'pulse' | 'accum' | 'latch'`
+
+**Values**:
+- `value`: Sample-and-hold, last write wins, persists across frames
+- `pulse`: 1 for exactly one frame if any event occurred, then 0
+- `accum`: Sums deltas/counts since last commit, then clears
+- `latch`: *(optional)* Holds nonzero until explicitly cleared
+
+**Source**: [22-external-input-system.md](./topics/22-external-input-system.md)
+
+---
+
+### ExternalInput
+
+**Definition**: Block that reads a named external channel as a signal. Config-only (no inputs), single output.
+
+**Type**: block
+
+**Canonical Form**: `ExternalInput`
+
+**Config**: `channel: string`
+**Output**: `value: float` (or other allowed PayloadType)
+
+**Lowering**: `ctx.b.sigExternal(channel, canonicalType('float'))`
+
+**Source**: [22-external-input-system.md](./topics/22-external-input-system.md)
+
+**Note**: Part of the io category; uses ExternalChannelSnapshot via runtime.
+
+---
+
 ## Forbidden Terms
 
 Terms that MUST NOT appear in new code. If encountered in existing code, use the canonical term.

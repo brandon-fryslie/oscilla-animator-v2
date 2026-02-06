@@ -56,7 +56,7 @@ If not fully resolved: Generate updated outputs
 
 ## Step 6: Generate Updated Outputs
 
-Load and follow the output templates: `@references/output-templates.md`
+Load and follow the output templates: `@.claude/skills/canonicalize-architecture/references/output-templates.md`
 
 Generate four files (superseding the prior versions):
 1. `CANONICALIZED-SUMMARY-<topic>-<timestamp>.md` - Updated counts

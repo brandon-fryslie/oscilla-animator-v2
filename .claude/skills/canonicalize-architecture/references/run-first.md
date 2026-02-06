@@ -108,7 +108,7 @@ For every contradiction, ambiguity, and gap identified, note which topic directo
 
 ## Step 5: Generate Outputs
 
-Load and follow the output templates: `@references/output-templates.md`
+Load and follow the output templates: `@.claude/skills/canonicalize-architecture/references/output-templates.md`
 
 Generate three files:
 1. `CANONICALIZED-QUESTIONS-<topic>-<timestamp>.md`

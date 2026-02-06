@@ -2005,6 +2005,48 @@ PathGeometryTemplate references `topologyId: number` but the spec never defines 
 
 ---
 
+### EXT-CHANNELTYPE: External Channels Use PayloadType (No Separate ChannelType)
+
+**Date**: 2026-02-06
+
+**Category**: Design Decision (from external-input)
+
+**Resolution**: External channels use PayloadType/CanonicalType with an explicit allowed payload whitelist (float|int|bool|vec2|vec3|color). Hard error/diagnostic for handle payloads (shape2d/shape3d/cameraProjection). NO separate ChannelType concept. Aligns with I32 (Single Type Authority).
+
+**Rationale**: Avoid parallel type systems. A ChannelType separate from PayloadType would inevitably drift and create type confusion at the boundary between external inputs and the rest of the graph. Whitelisting allowed payloads at the external input layer keeps the type system unified while preventing nonsensical handle-type channels.
+
+**Impact**: Topic 22 created. I32 alignment confirmed.
+
+---
+
+### EXT-REGISTRY: Hybrid Channel Registry with Diagnostic for Unknown
+
+**Date**: 2026-02-06
+
+**Category**: Design Decision (from external-input)
+
+**Resolution**: Hybrid registry approach: static registry for well-known channels (mouse.x, keyboard.key.space.held), prefix family rules for dynamic channels (audio.fft.bin.*, midi.*.cc.*), unknown channels return safe default `{kind: 'value', type: float}` AND emit diagnostic W_UNKNOWN_CHANNEL once per patchRevision.
+
+**Rationale**: Provides flexibility for dynamic channel discovery (FFT bins, MIDI CCs) while catching configuration errors early (typo detection). Silently defaulting to 0 forever hides bugs; emitting a diagnostic once per revision provides actionable feedback without spam.
+
+**Impact**: Topic 22 created. Topic 07 updated (new diagnostic code).
+
+---
+
+### EXT-TIER: External Input System Is T2 (Structural)
+
+**Date**: 2026-02-06
+
+**Category**: Organizational (from external-input)
+
+**Resolution**: External input system classified as T2 (Structural). Affects: Runtime (ExternalChannelSnapshot in RuntimeState), IR (SigExpr { kind: 'external' }), Compilation (channel resolution), Blocks (ExternalInput, ExternalGate, ExternalVec2). Frame-boundary snapshot model is a key design decision.
+
+**Rationale**: The "read external inputs" scheduling step already exists at 04-compilation.md. The snapshot-immutable model touches runtime semantics, IR variants, and block lowering across multiple systems. Change cost is "work, affects many things" — classic T2.
+
+**Impact**: Topic 22 created as T2. Invariant I37 added.
+
+---
+
 ## Statistics
 
 | Phase | Date | Sources | Topics | Resolutions |
@@ -2021,5 +2063,6 @@ PathGeometryTemplate references `topologyId: number` but the spec never defines 
 | **Phase 7 (Kernel Roadmap + Local-Space)** | 2026-01-22 | +7 | +1 | +7 |
 | **Phase 8 (Renderer Architecture)** | 2026-01-22 | +4 | +0 | +5 |
 | **Phase 10 (CanonicalType System)** | 2026-02-05 | +31 | +2 | +12 |
-| **Total** | — | **102** | **22** | **121** |
+| **Phase 11 (External Input System)** | 2026-02-06 | +4 | +1 | +3 |
+| **Total** | — | **106** | **23** | **124** |
 

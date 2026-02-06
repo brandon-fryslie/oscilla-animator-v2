@@ -83,6 +83,13 @@ update_history:
     topics_updated: [01-type-system]
     resolutions_made: 12
     notes: "Merged canonical-types encyclopedia; CanonicalType now {payload,unit,extent}; Axis<T,V> replaces AxisTag; UnitType 8 structured kinds; deriveKind/tryDeriveKind; InferenceCanonicalType; 17 guardrails; validateAxes; AdapterSpec/TypePattern; Invariants I32-I36; Migration content in appendices"
+  - date: 2026-02-06T00:00:00Z
+    action: "External Input System Integration"
+    sources_integrated: [design-docs/external-input/ (4 files)]
+    topics_created: [22-external-input-system]
+    topics_updated: []
+    resolutions_made: 3
+    notes: "Unified channel-based input for MIDI/OSC/audio/keyboard/mouse; Frame-boundary commit with snapshot-immutable reads; ExternalChannelSnapshot, ExternalWriteBus, ChannelKind; PayloadType whitelist (no separate ChannelType per I32); Hybrid registry with diagnostic for unknown channels; Invariant I37 added"
 ---
 
 # Oscilla v2.5: Canonical Specification Index
@@ -95,10 +102,10 @@ update_history:
 > Approved by: Brandon Fryslie
 
 Generated: 2026-01-09T17:00:00Z
-Last Updated: 2026-02-05
+Last Updated: 2026-02-06
 Approved by: Brandon Fryslie
-Source Documents: 102 files
-Total Resolutions: 121
+Source Documents: 106 files
+Total Resolutions: 124
 
 ---
 
@@ -168,6 +175,7 @@ This condensed spec contains all invariants, glossary core terms, and T1 content
 | 19 | [2.5D Profile](./topics/19-2_5d-profile.md) | Constrained authoring mode (T3) | PatchProfile, depth policy, tilt-only camera |
 | 20 | [Type Validation](./topics/20-type-validation.md) | Enforcement gate and guardrails | validateAxes, AxisViolation, 17 Guardrails, BindingMismatchError |
 | 21 | [Adapter System](./topics/21-adapter-system.md) | Type pattern matching and transforms | TypePattern, ExtentPattern, ExtentTransform, AdapterSpec |
+| 22 | [External Input System](./topics/22-external-input-system.md) | Unified channel-based input (MIDI/OSC/audio/keyboard/mouse) | ExternalChannelSnapshot, ChannelKind, ExternalInput, frame-boundary commit |
 
 ## Recommended Reading Order
 
@@ -258,8 +266,10 @@ Looking for something specific? Here's where to find it:
 | TypePattern, ExtentPattern, AdapterSpec | [21-adapter-system.md](./topics/21-adapter-system.md) |
 | ValueExpr (24→6 mapping) | [appendices/type-system-migration.md](./appendices/type-system-migration.md) |
 | Type migration checklists, CI gates | [appendices/type-system-migration.md](./appendices/type-system-migration.md) |
+| ExternalChannelSnapshot, ExternalWriteBus, ChannelKind | [22-external-input-system.md](./topics/22-external-input-system.md) |
+| External input channels (mouse, keyboard, MIDI, OSC, audio) | [22-external-input-system.md](./topics/22-external-input-system.md) |
 | All term definitions | [GLOSSARY.md](./GLOSSARY.md) |
-| All invariant rules (I1-I36) | [INVARIANTS.md](./INVARIANTS.md) |
+| All invariant rules (I1-I37) | [INVARIANTS.md](./INVARIANTS.md) |
 
 ## Appendices
 

@@ -119,6 +119,26 @@ First determine where to write your output.  Then determine which files to use a
 
 Before reading any source files, determine the **output contract** and run type.
 
+### Reference Files Location (Important)
+
+This skill uses bundled reference files stored at:
+
+- `.claude/skills/canonicalize-architecture/references/`
+
+When instructed to "load a reference file", use the full repo-relative path above (not `references/...`, which will not resolve from the repo root).
+
+**Do not try to “discover” these via search/glob.** Some tooling/workflows ignore hidden directories like `.claude/`. Instead, directly read the exact file you need.
+
+**Required reference files (must exist):**
+- `.claude/skills/canonicalize-architecture/references/run-first.md`
+- `.claude/skills/canonicalize-architecture/references/run-middle.md`
+- `.claude/skills/canonicalize-architecture/references/run-review.md`
+- `.claude/skills/canonicalize-architecture/references/run-approval.md`
+- `.claude/skills/canonicalize-architecture/references/run-update.md`
+- `.claude/skills/canonicalize-architecture/references/run-final.md`
+
+If any required reference file cannot be read, stop and report which path failed (do not “proceed anyway”).
+
 ### Output Contract Detection (LOCKED)
 
 The contract defines the canonical directory structure and cannot change mid-stream unless the user explicitly opts in.
@@ -144,16 +164,16 @@ Check for existing files/directories:
 
 | Condition | Run Type | Action |
 |-----------|----------|--------|
-| `CANONICAL-<topic>-*/` directory exists AND user chooses "update existing" | UPDATE | Load `references/run-update.md` |
-| `CANONICAL-<topic>-*/` directory exists AND user chooses "start fresh" | FIRST | Archive old, load `references/run-first.md` |
+| `CANONICAL-<topic>-*/` directory exists AND user chooses "update existing" | UPDATE | Load `.claude/skills/canonicalize-architecture/references/run-update.md` |
+| `CANONICAL-<topic>-*/` directory exists AND user chooses "start fresh" | FIRST | Archive old, load `.claude/skills/canonicalize-architecture/references/run-first.md` |
 | `CANONICAL-<topic>-*/` directory exists AND user chooses "abort" | ABORT | Exit without changes |
-| No `CANONICALIZED-*` files exist | FIRST | Load `references/run-first.md` |
-| `CANONICALIZED-*` exist with `indexed: true`, progress < 100% | MIDDLE | Load `references/run-middle.md` |
-| `CANONICALIZED-*` exist, progress = 100%, no `EDITORIAL-REVIEW-*.md` exists | REVIEW | Load `references/run-review.md` |
-| `EDITORIAL-REVIEW-*.md` exists, no `USER-APPROVAL-*.md` exists | APPROVAL | Load `references/run-approval.md` |
-| `USER-APPROVAL-*.md` exists with `approved: true` | FINAL | Load `references/run-final.md` |
+| No `CANONICALIZED-*` files exist | FIRST | Load `.claude/skills/canonicalize-architecture/references/run-first.md` |
+| `CANONICALIZED-*` exist with `indexed: true`, progress < 100% | MIDDLE | Load `.claude/skills/canonicalize-architecture/references/run-middle.md` |
+| `CANONICALIZED-*` exist, progress = 100%, no `EDITORIAL-REVIEW-*.md` exists | REVIEW | Load `.claude/skills/canonicalize-architecture/references/run-review.md` |
+| `EDITORIAL-REVIEW-*.md` exists, no `USER-APPROVAL-*.md` exists | APPROVAL | Load `.claude/skills/canonicalize-architecture/references/run-approval.md` |
+| `USER-APPROVAL-*.md` exists with `approved: true` | FINAL | Load `.claude/skills/canonicalize-architecture/references/run-final.md` |
 
-**Print the detected run type**, then load and follow the appropriate reference file.
+**Print the detected run type**, then load and follow the appropriate reference file from `.claude/skills/canonicalize-architecture/references/`.
 
 ---
 
