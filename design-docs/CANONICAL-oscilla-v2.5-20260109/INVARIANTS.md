@@ -427,6 +427,68 @@ Even when underlying `x_base(t)` jumps due to scrubbing, looping, hot-swap, or t
 
 ---
 
+## E. Type System Soundness
+
+### I32: Single Type Authority
+
+**Rule**: CanonicalType (`{ payload, unit, extent }`) is the ONLY type authority for all values. No parallel type representations (SignalType, PortType, FieldType, EventType, ResolvedPortType) may exist. Signal/field/event are derived from axes via `deriveKind()`, never stored as authoritative data.
+
+**Rationale**: Duplicate type information will drift. When it drifts, you get "the type says signal but the kind field says field" bugs that are invisible until production.
+
+**Consequences of Violation**: Type confusion, incorrect dispatch, silent data corruption, adapter insertion failures.
+
+**Enforcement**: CI gate test for forbidden patterns; code review litmus tests. See [20-type-validation](./topics/20-type-validation.md).
+
+---
+
+### I33: Only Explicit Ops Change Axes
+
+**Rule**: Extent axes may only be changed by a small, named set of explicit operations: broadcast (cardinality), reduce (cardinality), state ops (binding), adapters (declared transform). Ordinary computation (math kernels, constructors, getters) preserves all extent axes.
+
+**Rationale**: If arbitrary operations could change axes, the type system cannot predict what a value "is" at any point in the graph.
+
+**Consequences of Violation**: Silent signal→field conversion in a math kernel breaks all downstream type assumptions.
+
+**Enforcement**: Kernel contracts are type-driven — output extent is determined by input extents and declared transform, never by "what kind of IR node this came from."
+
+---
+
+### I34: Axis Enforcement Is Centralized
+
+**Rule**: There is exactly one enforcement gate — `validateAxes()` — that decides whether IR is valid. Small local asserts at boundaries are permitted as defense-in-depth, but the gate is the authority. No bypass in debug, preview, or partial compile paths.
+
+**Rationale**: Multiple enforcement points will disagree on edge cases. One gate means one truth.
+
+**Consequences of Violation**: "Passes the check in module A but fails in module B" → developer whack-a-mole with validation.
+
+**Enforcement**: Single `validateAxes()` call in compilation pipeline. See [20-type-validation](./topics/20-type-validation.md).
+
+---
+
+### I35: State Is Scoped by Axes
+
+**Rule**: Runtime storage is keyed by branch + instance lane identity. State operations must respect axis scoping — a value in branch A cannot silently read state from branch B.
+
+**Rationale**: Preview, undo, and speculative execution rely on branch isolation. Instance identity relies on lane isolation.
+
+**Consequences of Violation**: Preview changes corrupt main state, or undo accidentally uses prediction values.
+
+**Enforcement**: Runtime state key includes branch + instance identity.
+
+---
+
+### I36: Const Literal Matches Payload
+
+**Rule**: `ConstValue` is a discriminated union keyed by payload kind. A const value's kind must match its CanonicalType's payload kind. Constants are NOT stored as `number | string | boolean`.
+
+**Rationale**: Untyped constants bypass the type system. `3.14` could be a float, a norm01, an angle-in-radians — the type is what gives it meaning.
+
+**Consequences of Violation**: A bool constant with payload=float → runtime interprets `true` as `1.0` silently, or crashes on type mismatch.
+
+**Enforcement**: `constValueMatchesPayload()` validation in compilation pipeline.
+
+---
+
 ## Invariant Quick Reference
 
 | ID | Category | Rule (Brief) |
@@ -462,13 +524,19 @@ Even when underlying `x_base(t)` jumps due to scrubbing, looping, hot-swap, or t
 | I29 | Debug | Error taxonomy by domain/severity |
 | I30 | Continuity | Continuity is deterministic |
 | I31 | Continuity | Export matches playback |
+| I32 | Type System | Single type authority (CanonicalType only) |
+| I33 | Type System | Only explicit ops change axes |
+| I34 | Type System | Axis enforcement is centralized (validateAxes) |
+| I35 | Type System | State scoped by axes (branch + instance) |
+| I36 | Type System | Const literal matches payload kind |
 
 ---
 
 ## Related Documents
 
-- [01-type-system](./topics/01-type-system.md) - Enforces I22 (unit discipline)
+- [01-type-system](./topics/01-type-system.md) - Enforces I22 (unit discipline), I32-I36 (type system soundness)
 - [02-block-system](./topics/02-block-system.md) - Enforces I6, I26 (graph invariants)
 - [04-compilation](./topics/04-compilation.md) - Enforces I7, I8, I9 (scheduling)
 - [05-runtime](./topics/05-runtime.md) - Enforces I1-I5 (time/state invariants)
 - [06-renderer](./topics/06-renderer.md) - Enforces I15-I18 (render invariants)
+- [20-type-validation](./topics/20-type-validation.md) - Enforces I32-I36 (type validation gate)

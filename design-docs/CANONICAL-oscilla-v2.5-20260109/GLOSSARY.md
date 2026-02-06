@@ -14,32 +14,32 @@ Use these definitions consistently. When in doubt, this is the canonical source.
 
 ### PayloadType
 
-**Definition**: The base data type of a value - what the payload is made of.
+**Definition**: The base data shape of a value — what the payload is made of. Closed set of discriminated union kinds.
 
 **Type**: type
 
-**Canonical Form**: `PayloadType`
+**Canonical Form**: `PayloadType = { kind: 'float' } | { kind: 'int' } | { kind: 'bool' } | { kind: 'vec2' } | { kind: 'vec3' } | { kind: 'color' } | { kind: 'cameraProjection' } | { kind: 'shape2d' } | { kind: 'shape3d' }`
 
-**Values**: `'float' | 'int' | 'vec2' | 'vec3' | 'color' | 'bool' | 'unit' | 'shape2d'`
+Phase is represented as `float` with `unit: { kind: 'angle', unit: 'phase01' }`.
 
-Phase is represented as `float` with `unit: 'phase01'`.
-
-**Stride by PayloadType**:
-- `float`, `int`, `bool`, `unit` → 1 float
-- `vec2` → 2 floats
-- `vec3` → 3 floats
-- `color` → 4 floats (RGBA)
-- `shape2d` → 8 u32 words (handle type, not arithmetic)
+**Stride by PayloadType** (derived via `payloadStride()`, never stored):
+- `float`, `int`, `bool` → 1
+- `vec2` → 2
+- `vec3` → 3
+- `color` → 4 (RGBA)
+- `cameraProjection` → 16
+- `shape2d` → 8 u32 words (opaque handle)
+- `shape3d` → 12 u32 words (opaque handle)
 
 **Source**: [01-type-system.md](./topics/01-type-system.md)
 
-**Note**: Replaces `ValueType` and `DomainTag`. Does NOT include 'event' or 'domain'.
+**Note**: Does NOT include 'event' or 'domain'. Adding a new payload kind is a foundational change.
 
 ---
 
 ### Extent
 
-**Definition**: The 5-axis coordinate describing where/when/about-what a value exists.
+**Definition**: The 5-axis coordinate describing where/when/about-what a value exists. Independent of payload and unit.
 
 **Type**: type
 
@@ -48,23 +48,23 @@ Phase is represented as `float` with `unit: 'phase01'`.
 **Structure**:
 ```typescript
 type Extent = {
-  cardinality: AxisTag<Cardinality>;
-  temporality: AxisTag<Temporality>;
-  binding: AxisTag<Binding>;
-  perspective: AxisTag<PerspectiveId>;
-  branch: AxisTag<BranchId>;
+  cardinality: CardinalityAxis;  // Axis<CardinalityValue, CardinalityVar>
+  temporality: TemporalityAxis;  // Axis<TemporalityValue, TemporalityVar>
+  binding: BindingAxis;          // Axis<BindingValue, BindingVar>
+  perspective: PerspectiveAxis;  // Axis<PerspectiveValue, PerspectiveVar>
+  branch: BranchAxis;            // Axis<BranchValue, BranchVar>
 };
 ```
 
 **Source**: [01-type-system.md](./topics/01-type-system.md)
 
-**Note**: Replaces `World`. Independent of payload.
+**Note**: Each axis uses `Axis<T, V>` polymorphic pattern.
 
 ---
 
 ### CanonicalType
 
-**Definition**: Complete type description for a port or wire. The full contract.
+**Definition**: The single type authority for all values. Complete type description composed of payload, unit, and extent.
 
 **Type**: type
 
@@ -73,31 +73,27 @@ type Extent = {
 **Structure**:
 ```typescript
 type CanonicalType = {
-  payload: PayloadType;
-  extent: Extent;
+  readonly payload: PayloadType;
+  readonly unit: UnitType;
+  readonly extent: Extent;
 };
 ```
 
 **Source**: [01-type-system.md](./topics/01-type-system.md)
 
-**Note**: Replaces `Type` / `TypeDesc`. No optional fields.
+**Note**: The ONLY type authority for all values. No parallel type systems (SignalType, PortType, etc.) may exist. Signal/field/event are derived from axes via `deriveKind()`, never stored.
 
 ---
 
-### AxisTag
+### Axis\<T, V\>
 
-**Definition**: Discriminated union representing "default unless instantiated".
+**Definition**: Polymorphic axis representation supporting either a type variable (inference) or an instantiated value.
 
 **Type**: type
 
-**Canonical Form**: `AxisTag<T>`
+**Canonical Form**: `Axis<T, V> = { kind: 'var'; var: V } | { kind: 'inst'; value: T }`
 
-**Structure**:
-```typescript
-type AxisTag<T> =
-  | { kind: 'default' }
-  | { kind: 'instantiated'; value: T };
-```
+**Hard constraints**: `var` branches MUST NOT escape the frontend boundary into backend/runtime/renderer. After type solving, all axes are `{ kind: 'inst'; value: ... }`.
 
 **Source**: [01-type-system.md](./topics/01-type-system.md)
 
@@ -570,7 +566,7 @@ interface StateMappingField {
 
 **Source**: [16-coordinate-spaces.md](./topics/16-coordinate-spaces.md)
 
-**Note**: Formerly called `size` in source documents; renamed to `scale` per D32.
+**Note**: Reference dimension: `min(viewportWidth, viewportHeight)` ensures aspect-independent sizing.
 
 ---
 
@@ -605,7 +601,7 @@ interface RenderFrameIR {
 
 **Source**: [06-renderer.md](./topics/06-renderer.md)
 
-**Note**: Replaces the previous `RenderIR` (instance-centric model) with a draw-op-centric model.
+**Note**: Draw-op-centric model. Each pass contains draw operations that reference geometry templates and instance transforms.
 
 ---
 
@@ -1109,20 +1105,6 @@ interface PathTopologyDef {
 **Canonical Form**: `RenderInstances2D`
 
 **Source**: [06-renderer.md](./topics/06-renderer.md)
-
----
-
-### RenderIR
-
-**Definition**: Generic render intermediate produced by patch. Now superseded by `RenderFrameIR` (draw-op-centric model).
-
-**Type**: type (deprecated — use `RenderFrameIR`)
-
-**Canonical Form**: `RenderFrameIR`
-
-**Source**: [06-renderer.md](./topics/06-renderer.md)
-
-**Note**: The old instance-centric RenderIR is replaced by the draw-op-centric RenderFrameIR per D34.
 
 ---
 
@@ -1769,35 +1751,255 @@ type ValueSummary =
 
 ---
 
-## Deprecated Terms
+## Type Validation & Adapter Terms
 
-| Deprecated | Use Instead | Notes |
-|------------|-------------|-------|
-| `DomainTag` | `PayloadType` | Domain is now ontological classification |
-| `ValueType` | `PayloadType` | More precise name |
-| `World` | `Extent` | 5-axis coordinate |
-| `Type` / `TypeDesc` | `CanonicalType` | Complete contract |
-| `config` / `scalar` (world) | `cardinality = zero` | Explicit axis |
-| `signal` (world) | `one + continuous` | Explicit axes |
-| `field` (world) | `many(instance) + continuous` | Now references InstanceRef, not DomainRef |
-| `event` (world) | `discrete` temporality | Orthogonal axis |
-| `Block.type` | `Block.kind` | Reserved for types |
-| `structural` (role) | `derived` | System-generated |
-| State block | `UnitDelay` | Proper name |
-| custom combine | (removed) | Built-in only |
-| `DomainDecl` | `InstanceDecl` | Domain is classification, not instantiation |
-| `DomainId` (for instances) | `InstanceId` | Domain is classification, instance is collection |
-| `DomainRef` | `InstanceRef` | References instance, not domain type |
-| `DomainDef` | `InstanceDecl` | Old conflated IR type |
-| `DomainN` block | Primitive + Array | Conflated domain with instantiation |
-| `GridDomain` block | Primitive + Array + Grid Layout | Conflated three concerns |
-| `domain.shape.grid_2d` | Layout block | Layout is separate from domain/instance |
-| `StateKey { blockId, laneIndex }` | `StateId` + `StateMappingScalar`/`StateMappingField` | Lane index is not semantic identity |
-| Polymorphism / Monomorphization | Payload-Generic Block + Cardinality-Generic Block | Replaced with explicit classification properties |
-| Generic blocks (type variables) | Payload-Generic Block | Formal contract replaces ad-hoc polymorphism |
-| `RenderIR` (instance-centric) | `RenderFrameIR` (draw-op-centric) | DrawPathInstancesOp replaces RenderInstance model |
-| `RenderInstance` | `DrawPathInstancesOp` + `PathInstanceSet` | Instances are now per-op transform arrays |
-| `GeometryAsset` | `PathGeometryTemplate` | Local-space geometry with topology |
-| `GeometryRegistry` | Topology registry + numeric ID lookup | No string maps; O(1) array indexing |
-| `MaterialAsset` | `PathStyle` | Style per draw-op, not per-instance |
-| `size` (as parameter name) | `scale` | Renamed for clarity — isotropic local→world scale factor |
+### UnitType
+
+**Definition**: Semantic interpretation of a value's numbers. 8 structured kinds with no `var` branch in canonical type.
+
+**Type**: type
+
+**Canonical Form**: `none | scalar | norm01 | count | angle(radians|degrees|phase01) | time(ms|seconds) | space(ndc|world|view, dims:2|3) | color(rgba01)`
+
+**Source**: [01-type-system.md](./topics/01-type-system.md)
+
+**Note**: Unit variables exist only in inference-only wrappers (`InferenceUnitType`), never in `UnitType`.
+
+---
+
+### DerivedKind
+
+**Definition**: Classification (signal/field/event) derived from CanonicalType axes. NOT stored, NOT authoritative.
+
+**Type**: concept
+
+**Canonical Form**: `deriveKind(type): 'signal' | 'field' | 'event'`
+
+**Source**: [01-type-system.md](./topics/01-type-system.md)
+
+**Related**: [tryDeriveKind](#tryderivekind)
+
+---
+
+### tryDeriveKind
+
+**Definition**: Partial helper returning DerivedKind or null when axes contain variables. Safe for UI/inference paths.
+
+**Type**: function
+
+**Canonical Form**: `tryDeriveKind(t: CanonicalType | InferenceCanonicalType): DerivedKind | null`
+
+**Source**: [01-type-system.md](./topics/01-type-system.md)
+
+**Note**: UI/inference paths MUST use `tryDeriveKind`; backend MUST use strict `deriveKind`.
+
+---
+
+### payloadStride
+
+**Definition**: Function returning scalar lane count for a payload kind. ALWAYS derived, never stored.
+
+**Type**: function
+
+**Canonical Form**: `payloadStride(payload: PayloadType): number`
+
+**Source**: [01-type-system.md](./topics/01-type-system.md)
+
+---
+
+### tryGetManyInstance
+
+**Definition**: Pure query helper. Returns InstanceRef if cardinality=many, null otherwise. Never throws.
+
+**Type**: function
+
+**Canonical Form**: `tryGetManyInstance(t: CanonicalType): InstanceRef | null`
+
+**Source**: [01-type-system.md](./topics/01-type-system.md)
+
+---
+
+### requireManyInstance
+
+**Definition**: Asserts field-ness. Returns InstanceRef. Throws if not many-instanced.
+
+**Type**: function
+
+**Canonical Form**: `requireManyInstance(t: CanonicalType): InstanceRef`
+
+**Source**: [01-type-system.md](./topics/01-type-system.md)
+
+---
+
+### InferenceCanonicalType
+
+**Definition**: Inference-only type wrapper allowing payload and unit variables. MUST NOT escape frontend/solver boundary.
+
+**Type**: type
+
+**Canonical Form**: `InferenceCanonicalType = { payload: InferencePayloadType; unit: InferenceUnitType; extent: Extent }`
+
+**Source**: [01-type-system.md](./topics/01-type-system.md)
+
+---
+
+### InferencePayloadType
+
+**Definition**: Inference-only payload type with var branch for type variables.
+
+**Type**: type
+
+**Canonical Form**: `InferencePayloadType = PayloadType | { kind: 'var'; var: PayloadVarId }`
+
+**Source**: [01-type-system.md](./topics/01-type-system.md)
+
+---
+
+### ConstValue
+
+**Definition**: Discriminated union for constant values, keyed by payload kind. NOT `number | string | boolean`.
+
+**Type**: type
+
+**Canonical Form**: `{ kind: PayloadKind, value: ... }` — cameraProjection uses closed enum.
+
+**Source**: [01-type-system.md](./topics/01-type-system.md)
+
+---
+
+### validateAxes
+
+**Definition**: Single enforcement point for axis validity. Produces AxisViolation diagnostics.
+
+**Type**: function
+
+**Canonical Form**: `validateAxes(exprs: readonly ValueExpr[]): AxisViolation[]`
+
+**Source**: [20-type-validation.md](./topics/20-type-validation.md)
+
+---
+
+### AxisViolation
+
+**Definition**: Diagnostic produced by axis validation pass when a node violates axis-shape contracts.
+
+**Type**: type
+
+**Canonical Form**: `AxisViolation = { nodeKind: string, nodeIndex: number, message: string }`
+
+**Source**: [20-type-validation.md](./topics/20-type-validation.md)
+
+---
+
+### BindingMismatchError
+
+**Definition**: Structured diagnostic for binding axis unification failures.
+
+**Type**: type
+
+**Canonical Form**: `BindingMismatchError = { left: BindingValue, right: BindingValue, location: ..., remedy: string }`
+
+**Source**: [20-type-validation.md](./topics/20-type-validation.md)
+
+---
+
+### AdapterSpec
+
+**Definition**: Full adapter specification with mandatory purity and stability. Describes how to insert a type-converting block.
+
+**Type**: type
+
+**Canonical Form**: `AdapterSpec`
+
+**Source**: [21-adapter-system.md](./topics/21-adapter-system.md)
+
+---
+
+### TypePattern
+
+**Definition**: Extent-aware type matching pattern for adapter specs. Matches on all 5 axes.
+
+**Type**: type
+
+**Source**: [21-adapter-system.md](./topics/21-adapter-system.md)
+
+---
+
+### ExtentPattern
+
+**Definition**: Pattern for matching extent axes in adapter rules.
+
+**Type**: type
+
+**Source**: [21-adapter-system.md](./topics/21-adapter-system.md)
+
+---
+
+### ExtentTransform
+
+**Definition**: Description of how an adapter transforms extent axes.
+
+**Type**: type
+
+**Source**: [21-adapter-system.md](./topics/21-adapter-system.md)
+
+---
+
+### ValueExpr
+
+**Definition**: Unified expression IR. Uses `kind` discriminant. 6 variants: Const, External, Intrinsic, Kernel, State, Time.
+
+**Type**: type
+
+**Source**: [appendices/type-system-migration.md](./appendices/type-system-migration.md)
+
+---
+
+### CameraProjection
+
+**Definition**: Closed string enum for camera projection modes. NOT a 4×4 matrix.
+
+**Type**: type
+
+**Canonical Form**: `CameraProjection = 'orthographic' | 'perspective'`
+
+**Source**: [01-type-system.md](./topics/01-type-system.md)
+
+---
+
+## Forbidden Terms
+
+Terms that MUST NOT appear in new code. If encountered in existing code, use the canonical term.
+
+| Forbidden | Canonical Term |
+|-----------|---------------|
+| `DomainTag` | `PayloadType` |
+| `ValueType` | `PayloadType` |
+| `World` | `Extent` |
+| `Type` / `TypeDesc` | `CanonicalType` |
+| `Block.type` | `Block.kind` |
+| `structural` (role) | `derived` |
+| `DomainDecl` | `InstanceDecl` |
+| `DomainId` (for instances) | `InstanceId` |
+| `DomainRef` | `InstanceRef` |
+| `DomainDef` | `InstanceDecl` |
+| `DomainN` block | Primitive + Array |
+| `GridDomain` block | Primitive + Array + Grid Layout |
+| `StateKey { blockId, laneIndex }` | `StateId` + `StateMappingScalar`/`StateMappingField` |
+| `RenderIR` | `RenderFrameIR` |
+| `RenderInstance` | `DrawPathInstancesOp` + `PathInstanceSet` |
+| `GeometryAsset` | `PathGeometryTemplate` |
+| `GeometryRegistry` | Topology registry + numeric ID lookup |
+| `MaterialAsset` | `PathStyle` |
+| `size` (as parameter name) | `scale` |
+| `AxisTag<T>` | `Axis<T, V>` |
+| `SignalType` | `CanonicalType` |
+| `PortType` | `CanonicalType` |
+| `FieldType` | `CanonicalType` |
+| `EventType` | `CanonicalType` |
+| `ResolvedPortType` | `CanonicalType` |
+| `getManyInstance` | `tryGetManyInstance` + `requireManyInstance` |
+| `TypeSignature` | `TypePattern` |
+| `SigExpr` | `ValueExpr` |
+| `FieldExpr` | `ValueExpr` |
+| `EventExpr` | `ValueExpr` |

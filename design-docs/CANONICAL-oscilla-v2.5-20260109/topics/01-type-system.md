@@ -8,29 +8,76 @@ order: 1
 
 > The foundation of Oscilla's type safety and compile-time guarantees.
 
-**Related Topics**: [02-block-system](./02-block-system.md), [04-compilation](./04-compilation.md)
-**Key Terms**: [PayloadType](../GLOSSARY.md#payloadtype), [Extent](../GLOSSARY.md#extent), [CanonicalType](../GLOSSARY.md#canonicalType)
-**Relevant Invariants**: [I22](../INVARIANTS.md#i22-safe-modulation-ranges)
+**Related Topics**: [02-block-system](./02-block-system.md), [04-compilation](./04-compilation.md), [20-type-validation](./20-type-validation.md), [21-adapter-system](./21-adapter-system.md)
+**Key Terms**: [PayloadType](../GLOSSARY.md#payloadtype), [Extent](../GLOSSARY.md#extent), [CanonicalType](../GLOSSARY.md#canonicaltype), [UnitType](../GLOSSARY.md#unittype)
+**Relevant Invariants**: [I22](../INVARIANTS.md#i22-safe-modulation-ranges), [I32-I36](../INVARIANTS.md#i32-single-type-authority)
 
 ---
 
-## Overview
+## Core Principle: Single Type Authority
 
-Oscilla v2.5 introduces a **five-axis type coordinate system** that cleanly separates concerns without concept conflation. This replaces the v2 `World` enum with explicit, orthogonal axes.
+**CanonicalType is the ONLY type authority for all values in the system.**
 
-The type system has three layers:
-1. **PayloadType** - What the value is made of (float, vec2, color, etc.)
-2. **Extent** - Where/when/about-what the value exists (5 axes)
-3. **CanonicalType** - The complete contract (PayloadType + Extent)
+Every value — whether it represents a signal, a field, an event, a constant, or any future classification — has exactly one type: `CanonicalType`. There is no second type system, no parallel representation, no "also stores type info" field.
 
----
-
-## PayloadType
-
-The base data type of a value - what the payload is made of.
+Signal, field, and event are **derived classifications** — computed from CanonicalType axes via `deriveKind()`, never stored as authoritative data.
 
 ```typescript
-type PayloadType = 'float' | 'int' | 'vec2' | 'vec3' | 'color' | 'bool' | 'unit' | 'shape2d' | 'shape3d';
+// CORRECT: derive classification from type
+if (deriveKind(type) === 'field') { ... }
+
+// WRONG: store classification as authoritative
+interface Port { kind: 'signal' | 'field' | 'event'; ... }  // VIOLATION
+```
+
+### Why This Cannot Change
+
+Without single type authority:
+- Every subsystem needs its own type representation — N representations that drift
+- Type-dependent dispatch (kernels, adapters, continuity) becomes "which type do I trust?"
+- Refactoring any type concept requires updating N places instead of 1
+- Testing type invariants requires testing N systems, not 1
+
+This principle is what makes the type system a *system* rather than a collection of ad-hoc type checks.
+
+---
+
+## CanonicalType (Complete Contract)
+
+The full type description for a port, wire, or value-producing expression.
+
+```typescript
+type CanonicalType = {
+  readonly payload: PayloadType;
+  readonly unit: UnitType;
+  readonly extent: Extent;
+};
+```
+
+**Foundational Rules**:
+1. **Every value has a type**: No value-producing node/expr/slot exists without `type: CanonicalType`
+2. **Type is sufficient**: No additional "kind" or "family" field is needed — derive from axes
+3. **Payload determines stride**: `payloadStride(type.payload)` is the only source of stride information
+4. **Unit is semantic**: Unit describes what the numbers mean, not how they're stored
+5. **Extent is orthogonal**: The 5 axes are independent dimensions; each can vary independently
+
+---
+
+## PayloadType (Closed Set)
+
+The base data shape of a value — what the payload is made of.
+
+```typescript
+type PayloadType =
+  | { kind: 'float' }
+  | { kind: 'int' }
+  | { kind: 'bool' }
+  | { kind: 'vec2' }
+  | { kind: 'vec3' }
+  | { kind: 'color' }
+  | { kind: 'cameraProjection' }
+  | { kind: 'shape2d' }
+  | { kind: 'shape3d' };
 ```
 
 ### PayloadType Semantics
@@ -39,22 +86,46 @@ type PayloadType = 'float' | 'int' | 'vec2' | 'vec3' | 'color' | 'bool' | 'unit'
 |------|-------------|--------|-------------|
 | `float` | 32-bit floating point | 1 | IEEE 754 |
 | `int` | 32-bit signed integer | 1 | -2^31 to 2^31-1 |
+| `bool` | Boolean | 1 | true/false |
 | `vec2` | 2D vector (x, y) | 2 | Two floats |
 | `vec3` | 3D vector (x, y, z) | 3 | Three floats |
 | `color` | RGBA color | 4 | Four floats, 0..1 each |
-| `float(phase01)` | Float with unit:phase01 | 1 | 0..1 with wrap semantics |
-| `bool` | Boolean | 1 | true/false |
-| `unit` | Unit interval | 1 | 0..1 clamped |
+| `cameraProjection` | Camera projection mode | 16 | Closed enum (see below) |
 | `shape2d` | 2D shape reference | 8 | Packed u32 words (opaque handle) |
 | `shape3d` | 3D shape reference (T3) | 12 | Packed u32 words (opaque handle, future) |
+
+### Stride
+
+Stride is ALWAYS derived from payload via `payloadStride()`. Never stored as a separate field. Never used as a parallel type system.
+
+```typescript
+function payloadStride(payload: PayloadType): number;
+// float=1, int=1, bool=1, vec2=2, vec3=3, color=4, cameraProjection=16, shape2d=8, shape3d=12
+```
+
+### Important Notes
+
+- `float` and `int` are **PayloadTypes** (domain model); `number` is **TypeScript-only** (implementation detail)
+- PayloadType does **NOT** include `'event'` or `'domain'`
+- Phase is `float` with `unit: { kind: 'angle', unit: 'phase01' }` (see [Phase Semantics](#phase-type-semantics))
+- Adding a new payload kind is a foundational change
+
+### CameraProjection Enum
+
+`cameraProjection` is a closed string enum, NOT a 4×4 matrix:
+
+```typescript
+type CameraProjection = 'orthographic' | 'perspective';  // closed set
+```
 
 ### Opaque Handle Payloads
 
 `shape2d` and `shape3d` are **opaque handle payloads** — they refer to geometry definitions rather than representing computable values. Unlike arithmetic types (float, vec2, etc.), you cannot add, multiply, or interpolate handle values.
 
-### shape2d: Handle Type
+**Valid operations**: equality comparison, assignment, pass-through
+**Invalid operations**: arithmetic, interpolation, combine modes (except `last`/`first`)
 
-`shape2d` is a **handle/reference type** — it refers to a geometry definition rather than representing a computable value. Unlike arithmetic types (float, vec2, etc.), you cannot add, multiply, or interpolate shape2d values.
+#### shape2d: Handle Type
 
 ```typescript
 // shape2d packed layout (8 × u32 words)
@@ -71,12 +142,7 @@ enum Shape2DWord {
 }
 ```
 
-**Valid operations**: equality comparison, assignment, pass-through
-**Invalid operations**: arithmetic, interpolation, combine modes (except `last`/`first`)
-
-### shape3d: Handle Type (T3 Future Extension)
-
-`shape3d` extends the handle concept to 3D geometry. It follows the same opaque-handle rules as `shape2d`.
+#### shape3d: Handle Type (T3 Future Extension)
 
 ```typescript
 // shape3d packed layout (12 × u32 words) — T3, not yet implemented
@@ -97,90 +163,95 @@ enum Shape3DWord {
 }
 ```
 
-### CombineMode Restrictions by PayloadType
+---
 
-CombineMode defines how multiple writers to the same bus are resolved. Not all modes are valid for all payload types.
+## UnitType (8 Structured Kinds)
 
-| PayloadType | Allowed CombineModes | Rationale |
-|-------------|---------------------|-----------|
-| `float` | sum, product, min, max, last, first | Full arithmetic |
-| `int` | sum, product, min, max, last, first | Full arithmetic |
-| `vec2` | sum, last, first | Component-wise sum; min/max ambiguous |
-| `vec3` | sum, last, first | Component-wise sum; min/max ambiguous |
-| `color` | sum, last, first, blend | Color-specific blend mode |
-| `float(phase01)` | last, first | Phase arithmetic is restricted |
-| `bool` | or, and, last, first | Boolean logic |
-| `unit` | last, first | Clamped semantics prohibit accumulation |
-| `shape2d` | last, first | **Opaque handle — non-arithmetic** |
-| `shape3d` | last, first | **Opaque handle — non-arithmetic** |
+Semantic interpretation of a value's numbers. Structured nesting with 8 top-level kinds.
 
-### CombineMode Invariants
+```typescript
+type UnitType =
+  | { kind: 'none' }
+  | { kind: 'scalar' }
+  | { kind: 'norm01' }
+  | { kind: 'count' }
+  | { kind: 'angle'; unit: 'radians' | 'degrees' | 'phase01' }
+  | { kind: 'time'; unit: 'ms' | 'seconds' }
+  | { kind: 'space'; space: 'ndc' | 'world' | 'view'; dims: 2 | 3 }
+  | { kind: 'color'; space: 'rgba01' };
+```
 
-1. **No payload type change**: CombineMode never changes the PayloadType of the bus
-2. **No cardinality increase**: CombineMode never increases cardinality (no fan-out)
-3. **No composite allocation**: CombineMode never allocates new composite values
-4. **Pure function over fixed-size representation**: CombineMode must be definable as a pure function `(accumulator: T, incoming: T) → T` where T is a fixed-size value
+**Hard constraints**:
+- No `{ kind: 'var' }` inside `UnitType` — unit variables exist only in inference-only wrappers during type solving
+- Unit semantics are only changed by explicit ops (adapter blocks, unit-converting kernels)
+- `defaultUnitForPayload()` is NOT used by type checking; it is allowed only for UI display defaults or explicit authoring helpers
 
-### Important Notes
+### Benefits of Structured Nesting
 
-- `float` and `int` are **PayloadTypes** (domain model)
-- `number` is **TypeScript-only** (implementation detail)
-- PayloadType does **NOT** include `'event'` or `'domain'`
-- Phase is `float` with `unit: 'phase01'` (see [Phase Semantics](#phase-type-semantics))
-- `shape2d` is a handle type — see above for restrictions
+- Adapter matching can operate on "is this an angle?" rather than checking 3 separate kinds
+- Unit conversion within a family (radians↔degrees) is structurally encoded
+- The flat explosion of `ndc2/ndc3/world2/world3/view2/view3` collapses to parameterized `space`
 
 ---
 
 ## Extent (Five-Axis Coordinate)
 
-Describes where/when/about-what a value exists. Independent of payload.
+Describes where/when/about-what a value exists. Independent of payload and unit.
 
 ```typescript
 type Extent = {
-  cardinality: AxisTag<Cardinality>;
-  temporality: AxisTag<Temporality>;
-  binding: AxisTag<Binding>;
-  perspective: AxisTag<PerspectiveId>;
-  branch: AxisTag<BranchId>;
+  readonly cardinality: CardinalityAxis;
+  readonly temporality: TemporalityAxis;
+  readonly binding: BindingAxis;
+  readonly perspective: PerspectiveAxis;
+  readonly branch: BranchAxis;
 };
 ```
 
 ### The Five Axes
 
-| Axis | Question | Values |
-|------|----------|--------|
-| Cardinality | How many lanes? | zero, one, many(domain) |
-| Temporality | When does it exist? | continuous, discrete |
-| Binding | What is it about? | unbound, weak, strong, identity |
-| Perspective | From whose viewpoint? | (v0: 'global' only) |
-| Branch | Which timeline? | (v0: 'main' only) |
+| Axis | Value Type | Question | Default |
+|------|-----------|----------|---------|
+| cardinality | `CardinalityValue` | How many lanes? | `one` |
+| temporality | `TemporalityValue` | When does it exist? | `continuous` |
+| binding | `BindingValue` | What is it about? | `unbound` |
+| perspective | `PerspectiveValue` | From whose viewpoint? | `default` |
+| branch | `BranchValue` | Which timeline? | `default` |
 
 ---
 
-## AxisTag (No Optional Fields)
+## Axis Polymorphism Pattern: Axis\<T, V\>
 
-A discriminated union representing "default unless instantiated."
+The canonical axis representation.
 
 ```typescript
-type AxisTag<T> =
-  | { kind: 'default' }
-  | { kind: 'instantiated'; value: T };
+type Axis<T, V> =
+  | { kind: 'var'; var: V }    // Type variable (inference only)
+  | { kind: 'inst'; value: T }  // Instantiated value
 ```
 
-This pattern eliminates optional fields while preserving compile-time default semantics.
+**Hard constraints**:
+- `var` branches MUST NOT escape the frontend boundary into backend/runtime/renderer
+- After type solving, all axes are `{ kind: 'inst'; value: ... }`
+- Default values are expressed by constructors producing `inst` values, never by a third axis variant
+- `var` is NOT "default" — it is an inference variable carrying a typed ID
 
-### Why AxisTag?
+### Axis Type Specializations
 
-- **No optional fields** - The union branch determines what exists
-- **TypeScript type narrowing** - `if (tag.kind === 'instantiated')` gives you the value
-- **Explicit defaults** - Default behavior is a conscious choice, not absence of data
+```typescript
+type CardinalityAxis = Axis<CardinalityValue, CardinalityVar>;
+type TemporalityAxis = Axis<TemporalityValue, TemporalityVar>;
+type BindingAxis     = Axis<BindingValue, BindingVar>;
+type PerspectiveAxis = Axis<PerspectiveValue, PerspectiveVar>;
+type BranchAxis      = Axis<BranchValue, BranchVar>;
+```
 
 ---
 
 ## Cardinality (How Many Lanes)
 
 ```typescript
-type Cardinality =
+type CardinalityValue =
   | { kind: 'zero' }                          // compile-time constant, no runtime lanes
   | { kind: 'one' }                           // single lane (Signal)
   | { kind: 'many'; instance: InstanceRef };  // N lanes aligned by instance (Field)
@@ -190,32 +261,64 @@ type Cardinality =
 
 | Cardinality | Concept | Runtime Representation | Use Case |
 |-------------|---------|------------------------|----------|
-| `zero` | Constant | Inlined constant | Parameters, constants |
-| `one` | Signal | Single slot | Per-frame values |
-| `many(instance)` | Field | Array of N slots | Per-element values |
+| `zero` | Constant | Inlined constant (compile-time-only) | Parameters, constants |
+| `one` | Signal | Single slot per frame | Per-frame values |
+| `many(instance)` | Field | Array of N slots per frame | Per-element values |
 
-### Important: Instance vs Domain
+### zero: Compile-Time-Only
 
-**Domain** is the element classification (what kind of thing).
-**Instance** is a specific collection of those elements (how many, which pool).
+`zero` means compile-time-only. The value exists at compile time, produces no runtime lanes, and occupies no per-frame storage.
+
+- `zero` is NOT "scalar" — scalar is `cardinality=one + temporality=continuous`
+- No implicit coercion from zero into runtime cardinalities
+- Only explicit lift ops: `broadcastConstToSignal(const)`: zero → one, `broadcastConstToField(const, instance)`: zero → many(instance)
+- Allowed for: const, compile-time table lookups, folded pure kernels whose args are all zero
+- Forbidden for: anything that reads time, state, events, instance intrinsics, or runtime inputs
+
+### many(instance): Instance Identity in Type
+
+The `InstanceRef` inside `many` is the ONLY place instance identity lives. Per invariant I32, there must be no separate `instanceId` field on expressions that carry `type: CanonicalType`.
 
 ```typescript
-// Instance reference includes both the domain type AND instance ID
-interface InstanceRef {
-  readonly kind: 'instance';
-  readonly domainType: DomainTypeId;  // e.g., 'circle'
-  readonly instanceId: InstanceId;     // e.g., 'inst_1'
-}
+type InstanceRef = {
+  readonly instanceId: InstanceId;   // branded
+  readonly domainTypeId: DomainTypeId; // branded
+};
 ```
 
-At runtime, instances become loop bounds + active masks (erased as objects).
+### Instance Extraction Helpers
+
+```typescript
+function tryGetManyInstance(t: CanonicalType): InstanceRef | null;
+// Returns InstanceRef if cardinality=many(instance), null otherwise.
+// Never throws. Use in UI, diagnostics, when handling incomplete types.
+
+function requireManyInstance(t: CanonicalType): InstanceRef;
+// Returns InstanceRef. Throws crisp error if not many-instanced.
+// Use in compiler backend, lowering, field-expected paths.
+```
+
+### Cardinality Transforms
+
+Only explicit operations change cardinality:
+
+| Operation | From | To | Notes |
+|-----------|------|----|-------|
+| Broadcast (const→signal) | zero | one | Explicit lift |
+| Broadcast (const→field) | zero | many(instance) | Explicit lift |
+| Broadcast (signal→field) | one | many(instance) | Requires explicit adapter |
+| Reduce (field→signal) | many(instance) | one | Requires explicit reducer |
+
+### Instance Alignment
+
+Two `many` values are aligned iff they reference the **same InstanceId**. No mapping/resampling in v0.
 
 ---
 
 ## Temporality (When)
 
 ```typescript
-type Temporality =
+type TemporalityValue =
   | { kind: 'continuous' }  // value exists every frame/tick
   | { kind: 'discrete' };   // event occurrences only
 ```
@@ -227,71 +330,147 @@ type Temporality =
 | `continuous` | Value exists every frame | Once per frame |
 | `discrete` | Event occurrences only | When event fires |
 
+### Event Hard Invariants
+
+Discrete temporality implies event semantics:
+- `temporality=discrete` ⇒ `payload=bool` (always)
+- `temporality=discrete` ⇒ `unit=none` (always)
+
+There are no "discrete float" or "discrete vec3" values. If you need a value that changes at event boundaries, use a continuous value gated by an event (via `eventRead` kernel).
+
 ### Discrete Never Implicitly Fills Time
 
 Discrete outputs do NOT become continuous signals unless an explicit stateful operator performs that conversion (SampleAndHold, etc.). This keeps causality explicit.
 
----
+### Event Read Pattern
 
-## Binding (v0: Default-Only)
+`eventRead` produces a continuous float signal (0.0/1.0), NOT a discrete event. The IR builder MUST NOT accept a caller-provided type for eventRead — the builder sets the type internally:
 
 ```typescript
-type ReferentId = string;
-type ReferentRef = { kind: 'referent'; id: ReferentId };
-
-type Binding =
-  | { kind: 'unbound' }
-  | { kind: 'weak'; referent: ReferentRef }
-  | { kind: 'strong'; referent: ReferentRef }
-  | { kind: 'identity'; referent: ReferentRef };
+canonicalSignal({ kind: 'float' }, { kind: 'scalar' })
 ```
 
-### Binding Semantics
+---
 
-| Binding | Meaning | Example |
-|---------|---------|---------|
-| `unbound` | Pure value/signal/field | Color signal, phase value |
-| `weak` | Measurement-like about referent | Distance to object |
-| `strong` | Property-like about referent | Object's position |
-| `identity` | Stable entity identity | Object ID |
+## Binding (Nominal Tags, NOT a Lattice)
+
+```typescript
+type BindingValue =
+  | { kind: 'unbound' }
+  | { kind: 'weak' }
+  | { kind: 'strong' }
+  | { kind: 'identity' };
+```
+
+**Critical**: BindingValue has **NO ordering**. The values are nominal tags with equality-only semantics. It is NOT a lattice, NOT a partial order. There are no "join" or "meet" operations. There is no "stronger/weaker" relationship.
+
+### Tag Semantics
+
+- **unbound**: No continuity identity requirement. Safe default.
+- **weak**: Continuity may attempt association if a referent is available in the operation config.
+- **strong**: Continuity requires a referent association. Missing referent is a compile error.
+- **identity**: Continuity must preserve lane identity 1:1 (stable IDs).
 
 ### Binding is Independent of Domain
 
-The same domain can host unbound image vs bound mask. The same referent can have scalar properties and per-vertex fields. This is the resolution of "Binding: Is this what Domain currently represents?" - **no, domain is topology; binding is aboutness.**
+The same domain can host unbound image vs bound mask. Domain is topology; binding is aboutness.
+
+### Referent Data
+
+No referent data lives in BindingValue or CanonicalType. Referent data lives in continuity policies and state/continuity ops as explicit args.
 
 **v0 Behavior**: Binding uses canonical default (`unbound`) everywhere. The axis exists for future extensibility.
+
+### Unification
+
+During type inference, if two bindings differ and both are instantiated, it is a **type error** (or requires an explicit adapter). There is no "choose the stronger binding" logic.
 
 ---
 
 ## Perspective and Branch (v0: Default-Only)
 
+### Perspective
+
 ```typescript
-type PerspectiveId = string;
-type BranchId = string;
+// v0 (current)
+type PerspectiveValue = { kind: 'default' };
+
+// v1+ (future — included for completeness)
+type PerspectiveValue =
+  | { kind: 'default' }
+  | { kind: 'world' }
+  | { kind: 'view'; viewId: ViewId }
+  | { kind: 'screen'; screenId: ScreenId };
 ```
 
-These axes exist in the type coordinate so you can add multi-view and multi-history later, but they are **defaults-only in v0**.
+Perspective governs semantic coordinate frame interpretation, not the rendering API:
+- World-space values can be transformed to view-space via camera projection
+- View-space values from different views cannot be directly compared
+- Screen-space values are resolution-dependent
 
-**v0 Defaults**:
-- Perspective: `'global'`
-- Branch: `'main'`
+Changing perspective requires an explicit adapter (e.g., world→view transform).
+
+### Branch
+
+```typescript
+// v0 (current)
+type BranchValue = { kind: 'default' };
+
+// v1+ (future — included for completeness)
+type BranchValue =
+  | { kind: 'default' }
+  | { kind: 'main' }
+  | { kind: 'preview'; previewId: PreviewId }
+  | { kind: 'checkpoint'; checkpointId: CheckpointId }
+  | { kind: 'undo'; undoId: UndoId }
+  | { kind: 'prediction'; predictionId: PredictionId }
+  | { kind: 'speculative'; speculativeId: SpeculativeId }
+  | { kind: 'replay'; replayId: ReplayId };
+```
+
+Branch isolation ensures preview changes don't corrupt main state, undo operates on its own timeline, and speculative execution is sandboxed. Per invariant I35, runtime storage is keyed by branch + instance lane identity.
 
 ---
 
-## CanonicalType (Complete Contract)
+## Derived Classifications
 
-The full type description for a port or wire.
+Signal, field, and event are computed from CanonicalType axes, never stored.
+
+### deriveKind()
 
 ```typescript
-type CanonicalType = {
-  payload: PayloadType;
-  extent: Extent;
-};
+function deriveKind(type: CanonicalType): 'signal' | 'field' | 'event' {
+  const card = getInstValue(type.extent.cardinality);
+  const temp = getInstValue(type.extent.temporality);
+
+  // Priority: event > field > signal
+  if (temp.kind === 'discrete') return 'event';
+  if (card.kind === 'many') return 'field';
+  return 'signal';
+}
 ```
 
-### Derived Type Concepts
+**Properties**:
+- Total over fully instantiated types
+- Deterministic: same input always produces same output
+- Priority-ordered: discrete temporality > many cardinality > default (signal)
+- Throws if axes contain `{ kind: 'var' }` — use `tryDeriveKind` for inference paths
+- `cardinality=zero` derives as 'signal' (compile-time scalar)
 
-These are NOT separate types - they're constraints on CanonicalType:
+### tryDeriveKind()
+
+```typescript
+function tryDeriveKind(t: CanonicalType | InferenceCanonicalType): DerivedKind | null;
+// Returns null when cardinality or temporality axes are { kind: 'var' }.
+// Returns 'signal' | 'field' | 'event' when both are instantiated.
+// Never throws.
+```
+
+**Usage rules**:
+- **UI/inference paths** MUST use `tryDeriveKind` (axes may be unresolved)
+- **Backend/lowered paths** MUST use strict `deriveKind` (all axes guaranteed instantiated)
+
+### Derived Type Table
 
 | Concept | Cardinality | Temporality | Definition |
 |---------|-------------|-------------|------------|
@@ -300,37 +479,123 @@ These are NOT separate types - they're constraints on CanonicalType:
 | **Trigger** | `one` | `discrete` | Single event stream |
 | **Per-lane Event** | `many(domain)` | `discrete` | Per-element event stream |
 
+### Boolean Check Helpers
+
 ```typescript
-// Field predicate
-function isField(t: CanonicalType): boolean {
-  return (
-    t.extent.cardinality.kind === 'instantiated' &&
-    t.extent.cardinality.value.kind === 'many' &&
-    t.extent.temporality.kind === 'instantiated' &&
-    t.extent.temporality.value.kind === 'continuous'
-  );
-}
+function isSignalType(t: CanonicalType): boolean;  // cardinality=one, temporality=continuous
+function isFieldType(t: CanonicalType): boolean;    // cardinality=many(instance)
+function isEventType(t: CanonicalType): boolean;    // temporality=discrete
+```
+
+### Assertion Helpers
+
+```typescript
+function requireSignalType(t: CanonicalType): void;           // throws if not signal
+function requireFieldType(t: CanonicalType): InstanceRef;      // throws if not field, returns InstanceRef
+function requireEventType(t: CanonicalType): void;              // throws if not event
 ```
 
 ---
 
-## V0 Canonical Defaults
+## Inference Types (Frontend-Only)
+
+The type solver and frontend inference machinery require type variables in payload and unit positions. These inference-only wrappers extend canonical types with var branches. They MUST NOT escape the frontend boundary.
 
 ```typescript
-const DEFAULTS_V0 = {
-  cardinality: { kind: 'canonical', value: { kind: 'one' } },
-  temporality: { kind: 'canonical', value: { kind: 'continuous' } },
-  binding:     { kind: 'canonical', value: { kind: 'unbound' } },
-  perspective: { kind: 'canonical', value: 'global' },
-  branch:      { kind: 'canonical', value: 'main' },
+type InferencePayloadType =
+  | PayloadType                          // All concrete payload kinds
+  | { kind: 'var'; var: PayloadVarId };  // Inference variable
+
+type InferenceUnitType =
+  | UnitType                          // All 8 structured unit kinds
+  | { kind: 'var'; var: UnitVarId };  // Inference variable
+
+type InferenceCanonicalType = {
+  readonly payload: InferencePayloadType;
+  readonly unit: InferenceUnitType;
+  readonly extent: Extent;  // Extent already has var support via Axis<T, V>
 };
-
-const FRAME_V0: EvalFrame = { perspective: 'global', branch: 'main' };
-
-type DefaultSemantics<T> =
-  | { kind: 'canonical'; value: T }  // v0
-  | { kind: 'inherit' };             // v1+
 ```
+
+### Boundary Rule
+
+| Component | Canonical (backend) | Inference (frontend) |
+|-----------|-------------------|---------------------|
+| Payload | `PayloadType` (concrete only) | `InferencePayloadType` (+ var) |
+| Unit | `UnitType` (concrete only) | `InferenceUnitType` (+ var) |
+| Extent axes | `Axis<T, never>` (inst only) | `Axis<T, V>` (inst + var) |
+
+These types MUST NOT appear in: Backend IR, runtime state, renderer, or any serialized structure.
+
+---
+
+## ConstValue
+
+Constants are stored as a discriminated union keyed by payload kind, NOT as `number | string | boolean`.
+
+```typescript
+type ConstValue =
+  | { kind: 'float'; value: number }
+  | { kind: 'int'; value: number }
+  | { kind: 'bool'; value: boolean }
+  | { kind: 'vec2'; value: [number, number] }
+  | { kind: 'vec3'; value: [number, number, number] }
+  | { kind: 'color'; value: [number, number, number, number] }
+  | { kind: 'cameraProjection'; value: CameraProjection };
+```
+
+The ConstValue's kind MUST match `type.payload.kind`. Validated by `constValueMatchesPayload()`.
+
+### EventExprNever Pattern
+
+The "never fires" event is canonically: `{ kind: 'const', type: canonicalEventOne(), value: { kind: 'bool', value: false } }`
+
+---
+
+## Constructor Contracts
+
+### canonicalSignal(payload, unit?)
+- Creates: cardinality=one, temporality=continuous
+- Default unit: `{ kind: 'scalar' }` (convenience only, never inference fallback)
+- All other axes: default instantiated values
+
+### canonicalField(payload, unit, instance)
+- Creates: cardinality=many(instance), temporality=continuous
+- Unit: REQUIRED (no default — field values are domain-attached)
+
+### canonicalConst(payload, unit)
+- Creates: cardinality=zero, temporality=continuous
+- Zero means compile-time-only — no runtime lanes
+
+### canonicalEventOne()
+- Creates: payload=bool, unit=none, cardinality=one, temporality=discrete
+
+### canonicalEventField(instance)
+- Creates: payload=bool, unit=none, cardinality=many(instance), temporality=discrete
+
+---
+
+## CombineMode Restrictions by PayloadType
+
+CombineMode defines how multiple writers to the same bus are resolved. Not all modes are valid for all payload types.
+
+| PayloadType | Allowed CombineModes | Rationale |
+|-------------|---------------------|-----------|
+| `float` | sum, product, min, max, last, first | Full arithmetic |
+| `int` | sum, product, min, max, last, first | Full arithmetic |
+| `vec2` | sum, last, first | Component-wise sum; min/max ambiguous |
+| `vec3` | sum, last, first | Component-wise sum; min/max ambiguous |
+| `color` | sum, last, first, blend | Color-specific blend mode |
+| `bool` | or, and, last, first | Boolean logic |
+| `shape2d` | last, first | **Opaque handle — non-arithmetic** |
+| `shape3d` | last, first | **Opaque handle — non-arithmetic** |
+
+### CombineMode Invariants
+
+1. **No payload type change**: CombineMode never changes the PayloadType of the bus
+2. **No cardinality increase**: CombineMode never increases cardinality (no fan-out)
+3. **No composite allocation**: CombineMode never allocates new composite values
+4. **Pure function over fixed-size representation**: CombineMode must be definable as a pure function `(accumulator: T, incoming: T) → T` where T is a fixed-size value
 
 ---
 
@@ -355,19 +620,6 @@ instantiated(X) + instantiated(Y), X≠Y → TYPE ERROR
 
 ---
 
-## World → Axes Mapping Table
-
-For migration from v2:
-
-| Old World | Cardinality | Temporality |
-|-----------|-------------|-------------|
-| `static` | `zero` | `continuous` |
-| `signal` | `one` | `continuous` |
-| `field(domain)` | `many(domain)` | `continuous` |
-| `event` | `one` OR `many(domain)` | `discrete` |
-
----
-
 ## Domain System
 
 ### What is a Domain?
@@ -386,20 +638,11 @@ A domain is **NOT**:
 
 ### Domain vs Instance: The Key Distinction
 
-**Domain** and **instantiation** are orthogonal concerns:
-
 | Concept | Question | Example |
 |---------|----------|---------|
 | **Domain** | "What kind of thing?" | shape, circle, particle |
 | **Instance** | "How many of them?" | 100 circles (from pool of 200) |
 | **Layout** | "Where are they?" | grid, spiral, random scatter |
-
-You can have:
-- 100 circles in a grid
-- 100 circles along a spiral
-- 50 rectangles scattered randomly
-
-Same domain (shape) can have different instantiations. Same layout can apply to different domains.
 
 ### Domain Type Specification (DomainSpec)
 
@@ -421,8 +664,6 @@ interface IntrinsicSpec {
 
 ### Domain Hierarchy (Subtyping)
 
-Domains form a hierarchy where subtypes inherit from parent domains:
-
 ```
 shape (base domain)
 ├── circle    → intrinsics: radius, center
@@ -439,8 +680,6 @@ shape (base domain)
 
 ### Instance Declaration (InstanceDecl)
 
-Instances are per-patch declarations that create collections of domain elements:
-
 ```typescript
 type InstanceId = string & { readonly __brand: 'InstanceId' };
 
@@ -454,38 +693,6 @@ interface InstanceDecl {
 }
 ```
 
-### Instance Reference in Cardinality
-
-The Cardinality axis references instances (not domains directly):
-
-```typescript
-interface InstanceRef {
-  readonly kind: 'instance';
-  readonly domainType: DomainTypeId;
-  readonly instanceId: InstanceId;
-}
-
-type Cardinality =
-  | { readonly kind: 'zero' }
-  | { readonly kind: 'one' }
-  | { readonly kind: 'many'; readonly instance: InstanceRef };
-```
-
-### Domain Catalog (MVP)
-
-**Immediate priority:**
-
-| Domain | Elements | Intrinsics |
-|--------|----------|------------|
-| `shape` | 2D geometric primitives | position, bounds, area, centroid |
-| `circle` | Circles (extends shape) | radius, center |
-| `rectangle` | Rectangles (extends shape) | width, height, cornerRadius |
-| `control` | Animatable parameters | value, min, max, default |
-| `event` | Discrete occurrences | time, payload, fired |
-
-**Roadmap:**
-- `mesh`, `path`, `text`, `particle`, `audio`
-
 ### Domain Properties (Runtime)
 
 - Domain types are **compile-time** constructs
@@ -493,15 +700,11 @@ type Cardinality =
 - At runtime: erased to loop bounds + active mask
 - **Invariant**: Every instance compiles to dense lanes 0..maxCount-1
 
-### Instance Alignment
-
-Two `many` values are aligned iff they reference the **same InstanceId**. No mapping/resampling in v0.
-
 ---
 
 ## Phase Type Semantics
 
-Phase is `float` with `unit: 'phase01'`. Arithmetic rules:
+Phase is `float` with `unit: { kind: 'angle', unit: 'phase01' }`. Arithmetic rules:
 
 | Operation | Result | Notes |
 |-----------|--------|-------|
@@ -524,70 +727,13 @@ Phase is `float` with `unit: 'phase01'`. Arithmetic rules:
 
 ---
 
-## Examples
-
-### Signal Type (Per-Frame Float)
-
-```typescript
-const phaseSignal: CanonicalType = {
-  payload: 'float',
-  unit: 'phase01',
-  extent: {
-    cardinality: { kind: 'instantiated', value: { kind: 'one' } },
-    temporality: { kind: 'instantiated', value: { kind: 'continuous' } },
-    binding: { kind: 'default' },
-    perspective: { kind: 'default' },
-    branch: { kind: 'default' },
-  }
-};
-```
-
-### Field Type (Per-Element Color)
-
-```typescript
-const colorField: CanonicalType = {
-  payload: 'color',
-  extent: {
-    cardinality: {
-      kind: 'instantiated',
-      value: {
-        kind: 'many',
-        instance: {
-          kind: 'instance',
-          domainType: 'circle' as DomainTypeId,
-          instanceId: 'inst_1' as InstanceId
-        }
-      }
-    },
-    temporality: { kind: 'instantiated', value: { kind: 'continuous' } },
-    binding: { kind: 'default' },
-    perspective: { kind: 'default' },
-    branch: { kind: 'default' },
-  }
-};
-```
-
-### Event Type (Trigger)
-
-```typescript
-const pulse: CanonicalType = {
-  payload: 'unit',
-  extent: {
-    cardinality: { kind: 'instantiated', value: { kind: 'one' } },
-    temporality: { kind: 'instantiated', value: { kind: 'discrete' } },
-    binding: { kind: 'default' },
-    perspective: { kind: 'default' },
-    branch: { kind: 'default' },
-  }
-};
-```
-
----
-
 ## See Also
 
 - [02-block-system](./02-block-system.md) - How blocks use CanonicalType
 - [04-compilation](./04-compilation.md) - Type unification and resolution
+- [20-type-validation](./20-type-validation.md) - Enforcement gate and guardrails
+- [21-adapter-system](./21-adapter-system.md) - Adapter type patterns
 - [Glossary: PayloadType](../GLOSSARY.md#payloadtype)
 - [Glossary: Extent](../GLOSSARY.md#extent)
-- [Glossary: CanonicalType](../GLOSSARY.md#canonicalType)
+- [Glossary: CanonicalType](../GLOSSARY.md#canonicaltype)
+- [Glossary: UnitType](../GLOSSARY.md#unittype)

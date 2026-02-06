@@ -81,23 +81,37 @@
 | I30 | Continuity is deterministic | Uses t_model_ms only |
 | I31 | Export matches playback | Same schedule/continuity |
 
+### I. Type System Soundness
+
+| ID | Rule | Enforcement |
+|----|------|-------------|
+| I32 | Single type authority (CanonicalType only) | CI gate, code review |
+| I33 | Only explicit ops change axes | Type-driven kernel contracts |
+| I34 | Axis enforcement centralized (validateAxes) | Single gate, no bypass |
+| I35 | State scoped by axes (branch + instance) | Runtime state keying |
+| I36 | Const literal matches payload kind | constValueMatchesPayload() |
+
 ---
 
 ## Glossary (Core Terms)
 
 ### Type System
 
-**PayloadType**: Base data type - `'float' | 'int' | 'vec2' | 'vec3' | 'color' | 'bool' | 'unit' | 'shape2d'`
+**PayloadType**: Discriminated union - `{ kind: 'float' } | { kind: 'int' } | { kind: 'bool' } | { kind: 'vec2' } | { kind: 'vec3' } | { kind: 'color' } | { kind: 'cameraProjection' } | { kind: 'shape2d' } | { kind: 'shape3d' }`
 
-**Stride**: Floats per element. `float/int/bool/unit=1`, `vec2=2`, `vec3=3`, `color=4`, `shape2d=8` (u32 words, handle type)
+**payloadStride()**: Always derived from payload. `float/int/bool=1`, `vec2=2`, `vec3=3`, `color=4`, `cameraProjection=16`, `shape2d=8`, `shape3d=12`
 
-**Phase**: Represented as `float` with `unit: 'phase01'`. Not a distinct PayloadType.
+**UnitType**: 8 structured kinds - `none | scalar | norm01 | count | angle(radians|degrees|phase01) | time(ms|seconds) | space(ndc|world|view, dims:2|3) | color(rgba01)`. No `var` in canonical type.
+
+**Phase**: Represented as `float` with `unit: { kind: 'angle', unit: 'phase01' }`. Not a distinct PayloadType.
 
 **Extent**: 5-axis coordinate (cardinality, temporality, binding, perspective, branch)
 
-**CanonicalType**: Complete type = `{ payload: PayloadType; extent: Extent }`
+**CanonicalType**: Single type authority = `{ payload: PayloadType; unit: UnitType; extent: Extent }`. No parallel type systems.
 
-**AxisTag<T>**: `{ kind: 'default' } | { kind: 'instantiated'; value: T }`
+**Axis\<T, V\>**: `{ kind: 'var'; var: V } | { kind: 'inst'; value: T }`. `var` MUST NOT escape frontend.
+
+**deriveKind()**: Total function `(type) → 'signal' | 'field' | 'event'`. Priority: discrete > many > default. Use `tryDeriveKind()` when axes may be unresolved.
 
 **Cardinality**: `zero` (constant) | `one` (signal) | `many(instance)` (field)
 
@@ -681,27 +695,6 @@ Each op is inherently a batch (shared geometry+style = one draw call).
 ---
 
 ## Quick Reference
-
-### World → Axes Mapping (v2 Migration)
-
-| Old World | Cardinality | Temporality |
-|-----------|-------------|-------------|
-| `static` | `zero` | `continuous` |
-| `signal` | `one` | `continuous` |
-| `field(domain)` | `many(domain)` | `continuous` |
-| `event` | `one` or `many` | `discrete` |
-
-### Deprecated Terms
-
-| Deprecated | Use Instead |
-|------------|-------------|
-| `Block.type` | `Block.kind` |
-| `DomainTag` | `PayloadType` |
-| `World` | `Extent` |
-| `structural` role | `derived` |
-| State block | `UnitDelay` |
-| `DomainN` | Primitive + Array |
-| `GridDomain` | Primitive + Array + Grid Layout |
 
 ### Error Types
 

@@ -71,23 +71,16 @@ User Patch (RawGraph)
 4. **Runtime** executes IR per-frame with explicit state management
 5. **Renderer** receives instances and renders them
 
-## What's New in v2.5
+## Five-Axis Type System
 
-The major change is the **five-axis type system** that replaces the single `World` discriminator:
+Every value in the system has a single authoritative type: `CanonicalType = { payload, unit, extent }`.
 
-| Old (v2) | New (v2.5) |
-|----------|------------|
-| `World = static \| signal \| field \| event` | Five independent axes |
-| `Type = { world, value, domain? }` | `CanonicalType = { payload, extent }` |
-| Optional domain field | Domain in Cardinality axis |
-| Event as separate world | Temporality axis (continuous/discrete) |
-
-The five axes are:
-1. **Cardinality** - How many lanes (zero/one/many)
-2. **Temporality** - When values exist (continuous/discrete)
-3. **Binding** - Referential anchoring (v0: default only)
-4. **Perspective** - Viewpoint (v0: default only)
-5. **Branch** - Timeline branch (v0: default only)
+The **extent** describes where/when/about-what a value exists via five independent axes:
+1. **Cardinality** — How many lanes (zero/one/many)
+2. **Temporality** — When values exist (continuous/discrete)
+3. **Binding** — Referential anchoring (v0: default only)
+4. **Perspective** — Viewpoint (v0: default only)
+5. **Branch** — Timeline branch (v0: default only)
 
 This cleanly separates concerns without concept conflation while maintaining runtime performance via compile-time erasure.
 

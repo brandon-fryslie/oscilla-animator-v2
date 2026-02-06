@@ -1,12 +1,17 @@
 ---
-status: CANONICAL
+status: UPDATING
 generated: 2026-01-09T17:00:00Z
-updated: 2026-01-22T23:00:00Z
+updated: 2026-02-05T00:00:00Z
+updating_sources:
+  - design-docs/external-input/01-External-Input-High-Level.md
+  - design-docs/external-input/02-External-Input-Spec.md
+  - design-docs/external-input/03-External-Input-Roadmap-Phase-1.md
+  - design-docs/external-input/04-External-Input-Roadmap-Phase-2.md
 approved_by: Brandon Fryslie
-approval_method: full_walkthrough + domain_system_reconceptualization + cardinality_generic_integration + payload_generic_integration + kernel_roadmap_integration + renderer_architecture_integration + layout_system_integration + camera_projection_integration
-source_documents: 77
-topics: 20
-resolutions: 115
+approval_method: full_walkthrough + domain_system_reconceptualization + cardinality_generic_integration + payload_generic_integration + kernel_roadmap_integration + renderer_architecture_integration + layout_system_integration + camera_projection_integration + canonical_types_integration
+source_documents: 102
+topics: 22
+resolutions: 121
 update_history:
   - date: 2026-01-10T19:45:00Z
     sources_added: 23
@@ -71,19 +76,29 @@ update_history:
     topics_updated: [01-type-system, 05-runtime, 16-coordinate-spaces]
     resolutions_made: 4
     notes: "New Topic 19 (2.5D Profile); CombineMode restrictions table + 4 invariants in T01; shape3d packed layout (T3) in T01; World extended to [0,1]³ in T16; Camera pipeline steps in T05 RenderAssembler"
+  - date: 2026-02-05T00:00:00Z
+    action: "CanonicalType System Integration"
+    sources_integrated: [design-docs/canonical-types/_output/CANONICAL-canonical-types-20260129-235000/ (31 files)]
+    topics_created: [20-type-validation, 21-adapter-system]
+    topics_updated: [01-type-system]
+    resolutions_made: 12
+    notes: "Merged canonical-types encyclopedia; CanonicalType now {payload,unit,extent}; Axis<T,V> replaces AxisTag; UnitType 8 structured kinds; deriveKind/tryDeriveKind; InferenceCanonicalType; 17 guardrails; validateAxes; AdapterSpec/TypePattern; Invariants I32-I36; Migration content in appendices"
 ---
 
 # Oscilla v2.5: Canonical Specification Index
 
-> **STATUS: ✅ CANONICAL**
-> Last updated: 2026-01-22T23:30:00Z (added topics 18, 19; updated topics 01, 05, 16)
+> **STATUS: UPDATING**
+> Integration in progress. New sources: external-input system (4 files)
+> Started: 2026-02-05
+>
+> Previous: 2026-02-05 (integrated CanonicalType system: 31 sources, 12 resolutions, 2 new topics)
 > Approved by: Brandon Fryslie
 
 Generated: 2026-01-09T17:00:00Z
-Last Updated: 2026-01-22T22:00:00Z
+Last Updated: 2026-02-05
 Approved by: Brandon Fryslie
-Source Documents: 77 files
-Total Resolutions: 115
+Source Documents: 102 files
+Total Resolutions: 121
 
 ---
 
@@ -104,6 +119,9 @@ This condensed spec contains all invariants, glossary core terms, and T1 content
 | Implementing UI panels | 09-debug-ui-spec.md, 14-modulation-table-ui.md, 15-graph-editor-ui.md |
 | Disputed design questions | RESOLUTION-LOG.md |
 | Deep type system details | 01-type-system.md |
+| Type validation / guardrails | 20-type-validation.md |
+| Adapter matching / TypePattern | 21-adapter-system.md |
+| Type system migration (ValueExpr, CI gates) | appendices/type-system-migration.md |
 | Coordinate spaces / transforms | 16-coordinate-spaces.md |
 | Layout kernels / positioning | 17-layout-system.md |
 | Camera, projection, depth ordering | 18-camera-projection.md |
@@ -128,7 +146,7 @@ This condensed spec contains all invariants, glossary core terms, and T1 content
 
 | # | Topic | Description | Key Concepts |
 |---|-------|-------------|--------------|
-| 01 | [Type System](./topics/01-type-system.md) | Five-axis type model | PayloadType, Extent, CanonicalType, DomainSpec, InstanceDecl |
+| 01 | [Type System](./topics/01-type-system.md) | Five-axis type model | PayloadType, UnitType, Extent, CanonicalType, Axis\<T,V\>, deriveKind, InferenceCanonicalType, DomainSpec, InstanceDecl |
 | 02 | [Block System](./topics/02-block-system.md) | Compute units and roles | Block, BlockRole, Primitive → Array → Layout |
 | 03 | [Time System](./topics/03-time-system.md) | Time sources and rails | TimeRoot, Rails, tMs, phase |
 | 04 | [Compilation](./topics/04-compilation.md) | Graph normalization and IR | NormalizedGraph, CompiledProgramIR |
@@ -148,6 +166,8 @@ This condensed spec contains all invariants, glossary core terms, and T1 content
 | 17 | [Layout System](./topics/17-layout-system.md) | Field-based positioning via kernels | circleLayout, lineLayout, gridLayout, intrinsics |
 | 18 | [Camera & Projection](./topics/18-camera-projection.md) | Projection kernels and camera pipeline | projectWorldToScreenOrtho, Camera Block, depth ordering |
 | 19 | [2.5D Profile](./topics/19-2_5d-profile.md) | Constrained authoring mode (T3) | PatchProfile, depth policy, tilt-only camera |
+| 20 | [Type Validation](./topics/20-type-validation.md) | Enforcement gate and guardrails | validateAxes, AxisViolation, 17 Guardrails, BindingMismatchError |
+| 21 | [Adapter System](./topics/21-adapter-system.md) | Type pattern matching and transforms | TypePattern, ExtentPattern, ExtentTransform, AdapterSpec |
 
 ## Recommended Reading Order
 
@@ -223,13 +243,29 @@ Looking for something specific? Here's where to find it:
 | PatchProfile, 2D/2.5D/3D profiles | [19-2_5d-profile.md](./topics/19-2_5d-profile.md) |
 | Depth policy, bounded depth authoring | [19-2_5d-profile.md](./topics/19-2_5d-profile.md) |
 | Tilt-only camera, constrained camera controls | [19-2_5d-profile.md](./topics/19-2_5d-profile.md) |
+| UnitType (8 structured kinds) | [01-type-system.md](./topics/01-type-system.md) |
+| Axis\<T,V\> | [01-type-system.md](./topics/01-type-system.md) |
+| deriveKind, tryDeriveKind | [01-type-system.md](./topics/01-type-system.md) |
+| InferenceCanonicalType, InferencePayloadType | [01-type-system.md](./topics/01-type-system.md) |
+| ConstValue, CameraProjection enum | [01-type-system.md](./topics/01-type-system.md) |
+| Constructor contracts (canonicalSignal, canonicalField) | [01-type-system.md](./topics/01-type-system.md) |
+| tryGetManyInstance, requireManyInstance | [01-type-system.md](./topics/01-type-system.md) |
+| BindingValue (NOT a lattice) | [01-type-system.md](./topics/01-type-system.md) |
+| CardinalityValue.zero (compile-time-only) | [01-type-system.md](./topics/01-type-system.md) |
+| validateAxes, enforcement gate | [20-type-validation.md](./topics/20-type-validation.md) |
+| 17 guardrails | [20-type-validation.md](./topics/20-type-validation.md) |
+| AxisViolation, BindingMismatchError | [20-type-validation.md](./topics/20-type-validation.md) |
+| TypePattern, ExtentPattern, AdapterSpec | [21-adapter-system.md](./topics/21-adapter-system.md) |
+| ValueExpr (24→6 mapping) | [appendices/type-system-migration.md](./appendices/type-system-migration.md) |
+| Type migration checklists, CI gates | [appendices/type-system-migration.md](./appendices/type-system-migration.md) |
 | All term definitions | [GLOSSARY.md](./GLOSSARY.md) |
-| All invariant rules (I1-I31) | [INVARIANTS.md](./INVARIANTS.md) |
+| All invariant rules (I1-I36) | [INVARIANTS.md](./INVARIANTS.md) |
 
 ## Appendices
 
 - [Source Map](./appendices/source-map.md) - Which sources contributed to which sections
 - [Superseded Documents](./appendices/superseded-docs.md) - Archived original documents
+- [Type System Migration](./appendices/type-system-migration.md) - ValueExpr mapping, UnitType restructure, migration checklists, CI gates
 
 ---
 
@@ -248,6 +284,15 @@ This specification series was generated through a structured canonicalization pr
    - 2 invariants added (I28, I29)
    - 5 new glossary terms
    - Total resolutions: 53 → 73
+
+6. **Update** (Phase 10, 2026-02-05): CanonicalType system integrated (31 files, 12 resolutions)
+   - Merged CANONICAL-canonical-types-20260129-235000 encyclopedia
+   - Topic 01 rewritten: CanonicalType now `{payload, unit, extent}`; `Axis<T,V>` replaces `AxisTag`; UnitType 8 structured kinds; deriveKind/tryDeriveKind; InferenceCanonicalType
+   - 2 new topics created (20-type-validation, 21-adapter-system)
+   - 5 new invariants (I32-I36)
+   - 18 new glossary terms
+   - Migration content in appendices
+   - Total resolutions: 109 → 121
 
 Resolution history is preserved in [RESOLUTION-LOG.md](./RESOLUTION-LOG.md).
 

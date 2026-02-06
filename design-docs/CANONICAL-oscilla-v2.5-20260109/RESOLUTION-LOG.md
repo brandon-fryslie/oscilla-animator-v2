@@ -1847,6 +1847,164 @@ PathGeometryTemplate references `topologyId: number` but the spec never defines 
 
 ---
 
+## Phase 10: CanonicalType System Integration (2026-02-05)
+
+> Merged CANONICAL-canonical-types-20260129-235000 encyclopedia (31 source documents, 26 resolutions) into the main spec.
+
+### CT-C1: Axis Representation — Axis\<T,V\> Replaces AxisTag\<T\>
+
+**Date**: 2026-02-05
+
+**Category**: Critical Contradiction (canonical-types spec wins)
+
+**The Problem**: Main spec used `AxisTag<T> = { kind: 'default' } | { kind: 'instantiated'; value: T }`. Canonical-types spec defined `Axis<T, V> = { kind: 'var'; var: V } | { kind: 'inst'; value: T }`. Structurally incompatible.
+
+**Resolution**: Adopt `Axis<T, V>` from canonical-types spec. `AxisTag<T>` is deprecated.
+
+**Rationale**: Without type variables, the system cannot track "these two unknown cardinalities must unify to the same value." Type inference requires the var branch.
+
+**Impact**: Topic 01 rewritten. GLOSSARY updated.
+
+---
+
+### CT-C2: UnitType Restructure — 8 Structured Kinds
+
+**Date**: 2026-02-05
+
+**Category**: Critical Contradiction (canonical-types spec wins)
+
+**The Problem**: Main spec defined CanonicalType as `{ payload, extent }` (no unit field). Canonical-types spec defines `{ payload, unit, extent }` with UnitType as 8 structured kinds replacing 16+ flat kinds.
+
+**Resolution**: Adopt `CanonicalType = { payload, unit, extent }` with 8 structured UnitType kinds. No `{ kind: 'var' }` in canonical UnitType.
+
+**Rationale**: Unit is semantic metadata that cannot be derived from payload alone. Structured nesting enables family-level matching.
+
+**Impact**: Topic 01 rewritten. GLOSSARY: UnitType term updated. Mapping table in appendix.
+
+---
+
+### CT-C3: Instance Extraction API — try/require Split
+
+**Date**: 2026-02-05
+
+**Category**: Critical Contradiction (canonical-types spec wins)
+
+**The Problem**: `getManyInstance` had ambiguous failure semantics (returns null OR should crash?).
+
+**Resolution**: Two functions: `tryGetManyInstance` (returns null) + `requireManyInstance` (throws). `getManyInstance` deprecated.
+
+**Impact**: Topic 01 updated. GLOSSARY updated.
+
+---
+
+### CT-A1: ValueExpr Discriminant — Uses `kind`
+
+**Date**: 2026-02-05
+
+**Category**: High-Impact Resolution (from canonical-types)
+
+**Resolution**: All IR discriminated unions use `kind` as discriminant, including ValueExpr. Not `op`.
+
+**Impact**: Appendix (type-system-migration.md).
+
+---
+
+### CT-A2: Adapter Restructure — TypePattern/ExtentPattern
+
+**Date**: 2026-02-05
+
+**Category**: High-Impact Resolution (from canonical-types)
+
+**Resolution**: Adapters match on full 5-axis `TypePattern` with `ExtentPattern`, not flattened 2-axis `TypeSignature`. AdapterSpec requires `purity: 'pure'` and `stability: 'stable'`.
+
+**Impact**: New topic 21-adapter-system.md.
+
+---
+
+### CT-G1-G17: Type System Guardrails and Validation Gate
+
+**Date**: 2026-02-05
+
+**Category**: New Content (from canonical-types)
+
+**Resolution**: 17 operational guardrails codified. Single enforcement gate (`validateAxes`) established. No bypass in debug/preview modes.
+
+**Impact**: New topic 20-type-validation.md. Invariants I32-I36 added.
+
+---
+
+### CT-INF: Inference Types — Frontend-Only Wrappers
+
+**Date**: 2026-02-05
+
+**Category**: New Content (from canonical-types)
+
+**Resolution**: `InferencePayloadType`, `InferenceUnitType`, `InferenceCanonicalType` defined as frontend-only extensions with var branches. MUST NOT escape to backend/runtime/renderer.
+
+**Impact**: Topic 01 updated.
+
+---
+
+### CT-DERIVE: Derived Classifications — deriveKind/tryDeriveKind
+
+**Date**: 2026-02-05
+
+**Category**: New Content (from canonical-types)
+
+**Resolution**: `deriveKind()` is total over instantiated types. `tryDeriveKind()` returns null for unresolved vars. UI/inference paths MUST use tryDeriveKind; backend MUST use strict deriveKind.
+
+**Impact**: Topic 01 updated.
+
+---
+
+### CT-CONST: ConstValue Specification
+
+**Date**: 2026-02-05
+
+**Category**: New Content (from canonical-types)
+
+**Resolution**: ConstValue is discriminated union keyed by payload kind. CameraProjection is closed string enum ('orthographic' | 'perspective'), not a matrix. EventExprNever = const false with event type.
+
+**Impact**: Topic 01 updated.
+
+---
+
+### CT-BIND: Binding Is NOT a Lattice
+
+**Date**: 2026-02-05
+
+**Category**: Clarification (from canonical-types)
+
+**Resolution**: BindingValue has NO ordering. Nominal tags with equality-only semantics. No join/meet operations. No "stronger/weaker" relationship. Referent data removed from binding — lives in continuity policies.
+
+**Impact**: Topic 01 updated.
+
+---
+
+### CT-ZERO: CardinalityValue.zero Is Compile-Time-Only
+
+**Date**: 2026-02-05
+
+**Category**: Clarification (from canonical-types)
+
+**Resolution**: `zero` means compile-time-only. No runtime lanes. Must be explicitly lifted via broadcast ops. NOT the same as "scalar" (which is cardinality=one).
+
+**Impact**: Topic 01 updated.
+
+---
+
+### CT-EVENTREAD: eventRead Output Type Locked
+
+**Date**: 2026-02-05
+
+**Category**: Clarification (from canonical-types)
+
+**Resolution**: IR builder MUST NOT accept caller-provided type for eventRead. Builder sets `canonicalSignal(float, scalar)` internally. Output is continuous float (0.0/1.0), not discrete event.
+
+**Impact**: Topic 01 updated.
+
+---
+
 ## Statistics
 
 | Phase | Date | Sources | Topics | Resolutions |
@@ -1862,5 +2020,6 @@ PathGeometryTemplate references `topologyId: number` but the spec never defines 
 | **Phase 6 (Payload-Generic + State)** | 2026-01-22 | +2 | +0 | +5 |
 | **Phase 7 (Kernel Roadmap + Local-Space)** | 2026-01-22 | +7 | +1 | +7 |
 | **Phase 8 (Renderer Architecture)** | 2026-01-22 | +4 | +0 | +5 |
-| **Total** | — | **71** | **16** | **108** |
+| **Phase 10 (CanonicalType System)** | 2026-02-05 | +31 | +2 | +12 |
+| **Total** | — | **102** | **22** | **121** |
 

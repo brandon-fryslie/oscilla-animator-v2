@@ -700,23 +700,6 @@ This is a **presentation choice**, not an architectural one.
 
 ---
 
-## Deprecated Terminology
-
-| Deprecated | Use Instead | Notes |
-|------------|-------------|-------|
-| `Block.type` | `Block.kind` | Reserved for type system |
-| `structural` (role) | `derived` | Better describes system-generated |
-| Hidden block | Derived block | "Hidden" implies invisible to compiler |
-| Phantom block | Derived block | Same issue |
-| Implicit block | Derived block with specific meta.kind | Be specific |
-| State block | UnitDelay | Proper name |
-| `DomainN` | Primitive + Array | Conflates domain and instance |
-| `GridDomain` | Primitive + Array + Grid Layout | Conflates domain, instance, and layout |
-| `DomainDef` | `InstanceDecl` | Old conflated type |
-| `DomainId` (for instance) | `InstanceId` | Domain is classification, instance is collection |
-
----
-
 ## See Also
 
 - [01-type-system](./01-type-system.md) - CanonicalType for ports

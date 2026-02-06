@@ -332,43 +332,6 @@ At compile time:
 
 ---
 
-## Migration from Legacy System
-
-### Removed Constructs
-
-The following constructs are **removed** in the target state:
-
-| Construct | Replacement |
-|-----------|-------------|
-| `FieldExprLayout` | `FieldExprZipSig` + layout kernel |
-| `position` intrinsic | `circleLayout(normalizedIndex, ...)` or other kernel |
-| `radius` intrinsic | Signal parameter to layout kernel |
-| `InstanceDecl.layout` | Position field from layout block |
-
-### Migration Steps
-
-1. **Remove position/radius intrinsics**:
-   - Update `IntrinsicPropertyName` to exclude `'position'` and `'radius'`
-   - Remove any code branches handling these intrinsics
-
-2. **Remove InstanceDecl.layout**:
-   - Remove `layout` property from `InstanceDecl`
-   - Eliminate code that reads or branches on `instance.layout`
-
-3. **Remove FieldExprLayout**:
-   - Remove from `FieldExpr` union
-   - Replace existing usage with kernel-based expressions
-
-4. **Add layout kernels**:
-   - Implement `circleLayout`, `lineLayout`, `gridLayout` kernels
-   - Register in field-kernel registry
-
-5. **Update layout blocks**:
-   - Rewrite to emit `FieldExprZipSig` with kernel references
-   - Ensure output is `Field<vec2>` in world space
-
----
-
 ## See Also
 
 - [01-type-system](./01-type-system.md) - PayloadType (vec2), Cardinality (many), Field definition
