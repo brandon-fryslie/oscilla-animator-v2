@@ -70,7 +70,7 @@ If a UI spec document says "Domain blocks have jitter, spacing, and origin param
 ## Output Contract (Locked)
 
 **Contract**: `topic_dirs_with_tiers`  
-**Status**: LOCKED (do not change unless the user explicitly opts in)
+**Status**: LOCKED (single allowed structure; enforce, do not prompt)
 
 The canonical output organizes content by **topic** (directories) and **tier** (file prefixes):
 
@@ -79,19 +79,23 @@ CANONICAL-<topic>-<timestamp>/
 ├── INDEX.md                       # Master navigation and overview (derived)
 ├── TIERS.md                       # Tier system (derived)
 ├── ESSENTIAL-SPEC.md              # Minimal baseline (derived, required)
-├── <topic-1>/                     # Topic directory
-│   ├── t1_<slug>.md               # Foundational content
-│   ├── t2_<slug>.md               # Structural content
-│   └── t3_<slug>.md               # Optional content
-├── <topic-2>/                     # Not all topics need all tiers
-│   ├── t1_<slug>.md
-│   └── t2_<slug>.md
 ├── GLOSSARY.md                    # Authoritative terminology
 ├── RESOLUTION-LOG.md              # Decision history with rationale
+├── QUESTIONS.md                   # Open + resolved items (authoritative record)
+├── topics/
+│   ├── <topic-id>-<slug>/         # Topic directory
+│   │   ├── t1_<slug>.md           # Foundational content
+│   │   ├── t2_<slug>.md           # Structural content
+│   │   └── t3_<slug>.md           # Optional content
+│   └── ...
 └── appendices/
     ├── source-map.md              # Which sources contributed to what
     └── superseded-docs.md         # List of archived originals
 ```
+
+**Forbidden legacy layout** (must not exist in canonical output):
+- `topics/<topic-id>-<slug>.md`
+- `topics/<topic-id>-<slug>.INDEX.md`
 
 ### Why This Organization
 
@@ -136,19 +140,31 @@ When instructed to "load a reference file", use the full repo-relative path abov
 - `.claude/skills/canonicalize-architecture/references/run-approval.md`
 - `.claude/skills/canonicalize-architecture/references/run-update.md`
 - `.claude/skills/canonicalize-architecture/references/run-final.md`
+- `.claude/skills/canonicalize-architecture/references/run-migrate.md`
 
 If any required reference file cannot be read, stop and report which path failed (do not “proceed anyway”).
 
-### Output Contract Detection (LOCKED)
+### Output Contract Enforcement (NO PROMPTS)
 
-The contract defines the canonical directory structure and cannot change mid-stream unless the user explicitly opts in.
+There is **one allowed structure**: `topic_dirs_with_tiers`.
 
-Detection order:
-1. If a `CANONICAL-<topic>-*/` directory exists, **detect the on-disk contract**.
-2. If the on-disk contract is not `topic_dirs_with_tiers`, **pause and ask the user whether to migrate**. Do not proceed silently.
-3. If no canonical directory exists, default to **`topic_dirs_with_tiers`**.
+**No prompting, no opt-in.** If the on-disk canonical directory does not conform, run a deterministic migration (MIGRATE run) before doing any UPDATE/FIRST/MIDDLE/FINAL work.
 
-**UPDATE runs must never change contracts unless the user explicitly opts in.**
+#### Contract: `topic_dirs_with_tiers`
+
+Within a canonical directory `CANONICAL-<topic>-<timestamp>/`:
+
+- Canonical topic content lives under `topics/<topic-id>-<slug>/`
+- Each topic directory contains tiered files:
+  - `t1_*.md` (foundational)
+  - `t2_*.md` (structural)
+  - `t3_*.md` (optional)
+
+**Forbidden legacy layout** (must be migrated):
+- `topics/<topic-id>-<slug>.md` (flat topic files)
+- `topics/<topic-id>-<slug>.INDEX.md` (flat topic index files)
+
+If you see forbidden legacy files, the run type is **MIGRATE**. Do not continue without migrating.
 
 **Output Directory**: Determine the common ancestor directory of all input files.
 
@@ -164,9 +180,9 @@ Check for existing files/directories:
 
 | Condition | Run Type | Action |
 |-----------|----------|--------|
-| `CANONICAL-<topic>-*/` directory exists AND user chooses "update existing" | UPDATE | Load `.claude/skills/canonicalize-architecture/references/run-update.md` |
-| `CANONICAL-<topic>-*/` directory exists AND user chooses "start fresh" | FIRST | Archive old, load `.claude/skills/canonicalize-architecture/references/run-first.md` |
-| `CANONICAL-<topic>-*/` directory exists AND user chooses "abort" | ABORT | Exit without changes |
+| `CANONICAL-<topic>-*/` directory exists AND forbidden legacy layout exists (`topics/*.md` or `topics/*.INDEX.md`) | MIGRATE | Load `.claude/skills/canonicalize-architecture/references/run-migrate.md` |
+| `CANONICAL-<topic>-*/` directory exists AND user provides any non-canonical source inputs | UPDATE | Load `.claude/skills/canonicalize-architecture/references/run-update.md` |
+| `CANONICAL-<topic>-*/` directory exists AND user provides no non-canonical source inputs | UPDATE | Load `.claude/skills/canonicalize-architecture/references/run-update.md` |
 | No `CANONICALIZED-*` files exist | FIRST | Load `.claude/skills/canonicalize-architecture/references/run-first.md` |
 | `CANONICALIZED-*` exist with `indexed: true`, progress < 100% | MIDDLE | Load `.claude/skills/canonicalize-architecture/references/run-middle.md` |
 | `CANONICALIZED-*` exist, progress = 100%, no `EDITORIAL-REVIEW-*.md` exists | REVIEW | Load `.claude/skills/canonicalize-architecture/references/run-review.md` |
@@ -284,9 +300,15 @@ topics:
 
 ### Cross-Linking Convention
 
-Within the encyclopedia, use relative links:
-- `[Foundational Rules](../<topic>/t1_<slug>.md)`
-- `[Type System](../type-system/t2_<slug>.md)`
+Within the encyclopedia, use relative links.
+
+From root-level files (e.g. `INDEX.md`):
+- `[Type System](./topics/01-type-system/t2_type-system.md)`
+- `[Glossary: SignalType](./GLOSSARY.md#signaltype)`
+
+From within a topic file (located at `topics/<topic>/...`):
+- `[Foundational Rules](../00-foundation/t1_foundation.md)` (example)
+- `[Another Topic](../02-block-system/t2_block-system.md)` (example)
 - `[Glossary: SignalType](../GLOSSARY.md#signaltype)`
 
 ### Encyclopedia Index Requirements
@@ -305,7 +327,7 @@ The INDEX.md must include:
 After generating or updating outputs, run an integrity check. If any check fails, add a **blocking item** to the QUESTIONS file (existing canonical `QUESTIONS.md` for UPDATE runs; `CANONICALIZED-QUESTIONS-*.md` for FIRST/MIDDLE runs).
 
 Minimum checks:
-- **Contract conformity**: Output matches `topic_dirs_with_tiers` (topic dirs + `t1_/t2_/t3_` files).
+- **Contract conformity**: Output matches `topic_dirs_with_tiers` (topic directories under `topics/` + `t1_/t2_/t3_` files; no legacy `topics/*.md` or `topics/*.INDEX.md`).
 - **No deprecated tokens in derived files** (e.g., known deprecated terms that were explicitly replaced).
 - **Counts are computed, not handwritten** (sources, topics, resolutions).
 - **Cross-link validity**: All links resolve to existing files/anchors.

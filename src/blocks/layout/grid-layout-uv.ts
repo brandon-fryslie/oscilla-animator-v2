@@ -59,7 +59,7 @@ registerBlock({
     }
 
     // Rewrite output type with actual instance (ctx.outTypes has placeholder 'default')
-    const posType = rewriteFieldType(ctx.outTypes[0], instanceId, ctx.b);
+    const posType = rewriteFieldType(ctx.outTypes[0], instanceId, ctx.instances);
     const floatFieldType = { ...posType, payload: FLOAT, unit: { kind: 'scalar' as const } };
     const vec2FieldType = { ...posType, payload: { kind: 'vec2' as const }, unit: { kind: 'scalar' as const } };
 

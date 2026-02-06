@@ -82,11 +82,13 @@ registerBlock({
         if (typeof rawValue !== 'number') {
           throw new Error(`Const<float> requires number value, got ${typeof rawValue}`);
         }
-        const id = ctx.b.constant(floatConst(rawValue), canonicalType(FLOAT));
-        const slot = ctx.b.allocSlot(stride);
+        const id = ctx.b.constant(floatConst(rawValue), outType);
         return {
           outputsById: {
-            out: { id, slot, type: outType, stride },
+            out: { id, slot: undefined, type: outType, stride },
+          },
+          effects: {
+            slotRequests: [{ portId: 'out', type: outType }],
           },
         };
       }
@@ -94,11 +96,13 @@ registerBlock({
         if (typeof rawValue !== 'number') {
           throw new Error(`Const<${payloadType.kind}> requires number value, got ${typeof rawValue}`);
         }
-        const id = ctx.b.constant(intConst(Math.floor(rawValue)), canonicalType(INT));
-        const slot = ctx.b.allocSlot(stride);
+        const id = ctx.b.constant(intConst(Math.floor(rawValue)), outType);
         return {
           outputsById: {
-            out: { id, slot, type: outType, stride },
+            out: { id, slot: undefined, type: outType, stride },
+          },
+          effects: {
+            slotRequests: [{ portId: 'out', type: outType }],
           },
         };
       }
@@ -106,11 +110,13 @@ registerBlock({
         if (typeof rawValue !== 'boolean' && typeof rawValue !== 'number') {
           throw new Error(`Const<bool> requires boolean or number value, got ${typeof rawValue}`);
         }
-        const id = ctx.b.constant(boolConst(Boolean(rawValue)), canonicalType(BOOL));
-        const slot = ctx.b.allocSlot(stride);
+        const id = ctx.b.constant(boolConst(Boolean(rawValue)), outType);
         return {
           outputsById: {
-            out: { id, slot, type: outType, stride },
+            out: { id, slot: undefined, type: outType, stride },
+          },
+          effects: {
+            slotRequests: [{ portId: 'out', type: outType }],
           },
         };
       }
@@ -123,17 +129,17 @@ registerBlock({
           throw new Error(`Const<vec2> requires {x: number, y: number}, got {x: ${typeof val.x}, y: ${typeof val.y}}`);
         }
 
-        // Multi-component signal: allocate strided slot, compute components, emit write step
-        const slot = ctx.b.allocSlot(stride);
+        // Pure lowering: construct multi-component signal from scalar components
         const xSig = ctx.b.constant(floatConst(val.x), canonicalType(FLOAT));
         const ySig = ctx.b.constant(floatConst(val.y), canonicalType(FLOAT));
-        const components = [xSig, ySig];
-
-        ctx.b.stepSlotWriteStrided(slot, components);
+        const vec2Sig = ctx.b.construct([xSig, ySig], outType);
 
         return {
           outputsById: {
-            out: { id: xSig, slot, type: outType, stride, components },
+            out: { id: vec2Sig, slot: undefined, type: outType, stride, components: [xSig, ySig] },
+          },
+          effects: {
+            slotRequests: [{ portId: 'out', type: outType }],
           },
         };
       }
@@ -147,19 +153,19 @@ registerBlock({
           throw new Error(`Const<color> requires {r, g, b, a} as numbers`);
         }
 
-        // Multi-component signal: allocate strided slot, compute components, emit write step
-        const slot = ctx.b.allocSlot(stride);
+        // Pure lowering: construct multi-component signal from scalar components
         const rSig = ctx.b.constant(floatConst(val.r), canonicalType(FLOAT));
         const gSig = ctx.b.constant(floatConst(val.g), canonicalType(FLOAT));
         const bSig = ctx.b.constant(floatConst(val.b), canonicalType(FLOAT));
         const aSig = ctx.b.constant(floatConst(val.a), canonicalType(FLOAT));
-        const components = [rSig, gSig, bSig, aSig];
-
-        ctx.b.stepSlotWriteStrided(slot, components);
+        const colorSig = ctx.b.construct([rSig, gSig, bSig, aSig], outType);
 
         return {
           outputsById: {
-            out: { id: rSig, slot, type: outType, stride, components },
+            out: { id: colorSig, slot: undefined, type: outType, stride, components: [rSig, gSig, bSig, aSig] },
+          },
+          effects: {
+            slotRequests: [{ portId: 'out', type: outType }],
           },
         };
       }
@@ -167,11 +173,13 @@ registerBlock({
         if (typeof rawValue !== 'string') {
           throw new Error(`Const<cameraProjection> requires string value, got ${typeof rawValue}`);
         }
-        const id = ctx.b.constant(cameraProjectionConst(rawValue as CameraProjection), canonicalType(CAMERA_PROJECTION));
-        const slot = ctx.b.allocSlot(stride);
+        const id = ctx.b.constant(cameraProjectionConst(rawValue as CameraProjection), outType);
         return {
           outputsById: {
-            out: { id, slot, type: outType, stride },
+            out: { id, slot: undefined, type: outType, stride },
+          },
+          effects: {
+            slotRequests: [{ portId: 'out', type: outType }],
           },
         };
       }

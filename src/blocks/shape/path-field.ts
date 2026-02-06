@@ -21,7 +21,7 @@ import type { TopologyId } from '../../shapes/types';
  * @returns The topologyId if found
  * @throws Error if no shapeRef is found
  */
-function findTopologyIdForField(builder: IRBuilder, controlPointFieldId: ValueExprId): TopologyId {
+function findTopologyIdForField(builder: import('../../compiler/ir/BlockIRBuilder').BlockIRBuilder, controlPointFieldId: ValueExprId): TopologyId {
   const exprs = builder.getValueExprs();
   for (const expr of exprs) {
     if (expr.kind === 'shapeRef' && expr.controlPointField === controlPointFieldId) {

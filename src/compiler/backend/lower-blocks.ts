@@ -5,7 +5,7 @@
 import type { AcyclicOrLegalGraph, BlockIndex, DepGraph, SCC } from "../ir/patches";
 import type { Block } from "../../types";
 import type { VarargConnection } from "../../graph/Patch";
-import type { IRBuilder } from "../ir/IRBuilder";
+import type { OrchestratorIRBuilder } from "../ir/OrchestratorIRBuilder";
 import { IRBuilderImpl } from "../ir/IRBuilderImpl";
 import type { CompileError } from "../types";
 import { isExprRef, type ValueRefExpr } from "../ir/lowerTypes";
@@ -65,7 +65,7 @@ function getPortConstValue(block: Block, portId: string): unknown {
  */
 export interface UnlinkedIRFragments {
   /** IRBuilder instance containing all emitted nodes */
-  builder: IRBuilder;
+  builder: OrchestratorIRBuilder;
 
   /** Map from block index to map of port ID to ValueRef */
   blockOutputs: Map<BlockIndex, Map<string, ValueRefExpr>>;
@@ -148,7 +148,7 @@ function resolveInputsWithMultiInput(
   block: Block,
   edges: readonly NormalizedEdge[],
   blocks: readonly Block[],
-  builder: IRBuilder,
+  builder: OrchestratorIRBuilder,
   errors: CompileError[],
   blockOutputs?: Map<BlockIndex, Map<string, ValueRefExpr>>,
   blockIdToIndex?: Map<string, BlockIndex>
@@ -349,7 +349,7 @@ function inferInstanceContext(
 function lowerBlockInstance(
   block: Block,
   blockIndex: BlockIndex,
-  builder: IRBuilder,
+  builder: OrchestratorIRBuilder,
   errors: CompileError[],
   edges?: readonly NormalizedEdge[],
   blocks?: readonly Block[],
@@ -454,6 +454,7 @@ function lowerBlockInstance(
       inferredInstance,
       varargConnections: varargConnectionsMap.size > 0 ? varargConnectionsMap : undefined,
       addressRegistry,
+      instances: builder.getInstances(),
     };
 
     // Pass block params as config (needed for DSConst blocks to access their value)
@@ -666,7 +667,7 @@ function lowerSCCTwoPass(
   scc: SCC,
   blocks: readonly Block[],
   edges: readonly NormalizedEdge[],
-  builder: IRBuilder,
+  builder: OrchestratorIRBuilder,
   errors: CompileError[],
   blockOutputs: Map<BlockIndex, Map<string, ValueRefExpr>>,
   blockIdToIndex: Map<string, BlockIndex>,
@@ -709,6 +710,7 @@ function lowerSCCTwoPass(
               ?? blockDef.outputs[portName].type) as CanonicalType),
           b: builder,
           seedConstId: 0,
+          instances: builder.getInstances(),
         };
 
         const config = block.params;

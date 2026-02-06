@@ -137,15 +137,15 @@ The specification will be organized by **topic** (directories) and **tier** (fil
 CANONICAL-<topic>-<timestamp>/
 ├── INDEX.md
 ├── TIERS.md
-├── <topic-1>/
-│   ├── t1_<slug>.md     # Foundational (N files)
-│   ├── t2_<slug>.md     # Structural (N files)
-│   └── t3_<slug>.md     # Optional (N files)
-├── <topic-2>/
-│   ├── t1_<slug>.md
-│   └── t2_<slug>.md     # (not all topics need all tiers)
 ├── GLOSSARY.md
 ├── RESOLUTION-LOG.md
+├── QUESTIONS.md
+├── topics/
+│   ├── <topic-id>-<slug>/
+│   │   ├── t1_<slug>.md     # Foundational (N files)
+│   │   ├── t2_<slug>.md     # Structural (N files)
+│   │   └── t3_<slug>.md     # Optional (N files)
+│   └── ...
 └── appendices/
 ```
 
@@ -155,9 +155,9 @@ CANONICAL-<topic>-<timestamp>/
 - T3 (Optional): N files across M topics - "Change freely"
 
 **Reading Guide**:
-- Always read: **/t1_*.md (foundational across all topics)
-- Usually read: **/t2_*.md (structural for relevant topics)
-- Consult as needed: **/t3_*.md (reference material)
+- Always read: topics/**/t1_*.md (foundational across all topics)
+- Usually read: topics/**/t2_*.md (structural for relevant topics)
+- Consult as needed: topics/**/t3_*.md (reference material)
 
 **Questions**:
 - Does this structure make sense?

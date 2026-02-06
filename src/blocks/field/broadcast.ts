@@ -77,7 +77,7 @@ registerBlock({
     }
     // Rewrite placeholder instanceId with the actual instance from upstream context
     if (ctx.inferredInstance) {
-      outType = rewriteFieldType(outType, ctx.inferredInstance, ctx.b);
+      outType = rewriteFieldType(outType, ctx.inferredInstance, ctx.instances);
     }
     const signalValue = inputsById.signal;
     const isSignalValue = signalValue && 'type' in signalValue && requireInst(signalValue.type.extent.temporality, 'temporality').kind === 'continuous';

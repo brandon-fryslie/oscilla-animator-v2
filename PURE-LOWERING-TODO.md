@@ -138,7 +138,7 @@ Added to lowerTypes.ts:
 
 **Options**:
 
-1. **Add to Effects** (recommended):
+1. **Add to Effects**:
 ```typescript
 effects: {
   slotRequests: [{ portId: 'out', type: outType }],
@@ -200,3 +200,75 @@ Key principles:
 - **Effects as data**: Schedule steps, slot allocations via effects object
 - **Macro expansion**: Pure blocks can be reused as IR libraries
 - **Determinism**: Same inputs → same IR output
+
+========
+
+Design Solution
+
+You want Option 2 (Construct pattern) as the default, and you should treat stepSlotWriteStrided as an API that simply does not exist in the pure model.
+
+Why Option 2 is the right fix
+
+In a pure lowering world, a block’s lower() should output only:
+•	symbolic storage requests (slotRequests, stateDecls, etc.), and
+•	an expression graph (ValueExprIds) that represents computation.
+
+⸻
+
+Decision: Construct is the canonical mechanism
+
+Const block
+•	Either:
+•	emit per-component scalar const nodes + construct, or
+•	add a single “strided const” expression node (still pure) if you want fewer nodes.
+
+Expression block
+•	If the expression typechecker already produces component expressions for swizzles, emit construct for vecN/color results.
+•	If the expression already emits a “vector expression,” you can still normalize to construct at lowering time.
+
+This works for both “constant initialization” and “computed results” because the schedule should not care which it is—only the expression DAG does.
+
+⸻
+
+Steps to fix resolve this issue and finish the migration:
+
+A) Make construct a first-class signal expression
+
+You already have extract/construct in IR. Ensure the signal evaluator supports:
+•	construct([exprId...], outType) producing a value with stride = payloadStride(outType.payload).
+
+Runtime behavior:
+•	Evaluate each component expression in order.
+•	Write them contiguously into the target slot’s stride lanes.
+
+B) Define the invariant: “outputs are produced by eval steps, never by direct slot writes”
+
+In the pure model:
+•	Blocks never cause schedule steps directly.
+•	Blocks never write slots.
+•	Blocks only return expression IDs and effect requests.
+
+"Define the invariant" means:
+- Write an eslint rule that enforces this behavior
+- Configure eslint to run it
+- Ensure it fails for these 4 blocks
+- fix any other failures first
+- Then fix the 4 remaining blocks via the next steps
+
+C) Const multi-component policy
+
+=== Scalar consts + construct (no new IR nodes)
+•	vec2: construct([const(x), const(y)], vec2Type)
+•	color: construct([const(r), const(g), const(b), const(a)], colorType)
+
+C1 is the minimal-change approach because you already have scalar const and construct.
+
+D) Remove / deprecate stepSlotWriteStrided
+•	Either delete it or keep it only as a backend/internal helper that cannot be called from block lower().
+•	If it must exist for legacy, wrap it behind a “legacy lowering” compatibility layer, not the new pure contract.
+
+⸻
+
+Decision
+
+Make multi-component signal initialization and results use construct (Option 2), and make it a hard rule that schedule steps are only emitted by the orchestrator from effects + expression roots, never from block lower functions.

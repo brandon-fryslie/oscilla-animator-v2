@@ -30,11 +30,19 @@ import type {
 import { OpCode, EvalStrategy } from './types';
 import type { CameraDeclIR } from './program';
 import type { ValueExpr } from './value-expr';
-import type { IRBuilder } from './IRBuilder';
+import type { OrchestratorIRBuilder } from './OrchestratorIRBuilder';
 import { valueExprId } from './Indices';
 import { canonicalType, canonicalEvent, FLOAT, unitScalar, payloadStride } from '../../core/canonical-types';
 
-export class IRBuilderImpl implements IRBuilder {
+/**
+ * IRBuilderImpl - Implements OrchestratorIRBuilder (full surface)
+ *
+ * This class implements the complete builder interface including allocation,
+ * registration, and schedule emission. It is used by orchestrator code.
+ *
+ * When passing to blocks, upcast to BlockIRBuilder to restrict the surface.
+ */
+export class IRBuilderImpl implements OrchestratorIRBuilder {
   private valueExprs: ValueExpr[] = [];
   private valueExprCache = new Map<string, ValueExprId>();
   private steps: Step[] = [];
@@ -187,6 +195,10 @@ export class IRBuilderImpl implements IRBuilder {
   // Slot Management
   // ===========================================================================
 
+  // ===========================================================================
+  // Slot Allocation & Registration (orchestrator-only)
+  // ===========================================================================
+
   allocTypedSlot(type: CanonicalType, label?: string): ValueSlot {
     const slot = this.slotCounter++ as ValueSlot;
     const stride = payloadStride(type.payload);
@@ -207,12 +219,6 @@ export class IRBuilderImpl implements IRBuilder {
     this.fieldSlots.set(fieldId, slot);
   }
 
-  allocEventSlot(eventId: ValueExprId): EventSlotId {
-    const slot = eventSlotId(this.eventSlotCounter++);
-    this.eventSlots.set(eventId, slot);
-    return slot;
-  }
-
   allocSlot(stride?: number): ValueSlot {
     const slot = this.slotCounter++ as ValueSlot;
     if (stride !== undefined) {
@@ -221,8 +227,14 @@ export class IRBuilderImpl implements IRBuilder {
     return slot;
   }
 
+  allocEventSlot(eventId: ValueExprId): EventSlotId {
+    const slot = eventSlotId(this.eventSlotCounter++);
+    this.eventSlots.set(eventId, slot);
+    return slot;
+  }
+
   // ===========================================================================
-  // Steps
+  // Steps (orchestrator-only)
   // ===========================================================================
 
   stepSlotWriteStrided(slotBase: ValueSlot, inputs: readonly ValueExprId[]): void {
@@ -480,9 +492,9 @@ export class IRBuilderImpl implements IRBuilder {
 }
 
 /**
- * Create a new IR builder instance.
+ * Create a new IR builder instance (full orchestrator surface).
  */
-export function createIRBuilder(): IRBuilder {
+export function createIRBuilder(): OrchestratorIRBuilder {
   return new IRBuilderImpl();
 }
 

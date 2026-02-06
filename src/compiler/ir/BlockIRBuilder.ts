@@ -1,54 +1,49 @@
 /**
- * IRBuilder Interface
+ * BlockIRBuilder Interface - Pure Surface for Block Lowering
  *
- * Builder pattern for constructing IR expressions.
- * All methods return ValueExprId — the ONE index type for the unified valueExprs table.
+ * This is the ONLY builder interface that blocks see in their lower() function.
+ * It provides pure expression construction - no allocation, no schedule mutation,
+ * no slot registration.
+ *
+ * Blocks return effects as data (slotRequests, stateDecls, stepRequests).
+ * The orchestrator processes those effects using OrchestratorIRBuilder.
  */
 
 import type { CanonicalType, ConstValue } from '../../core/canonical-types';
 import type {
   ValueExprId,
   EventSlotId,
-  ValueSlot,
-  StateSlotId,
-  InstanceId,
   DomainTypeId,
+  InstanceId,
 } from './Indices';
 import type { TopologyId } from '../../shapes/types';
-import type { TimeModelIR } from './schedule';
 import type {
   PureFn,
   OpCode,
-  InstanceDecl,
-  Step,
   IntrinsicPropertyName,
   PlacementFieldName,
   BasisKind,
-  ContinuityPolicy,
   StableStateId,
-  StateMapping,
 } from './types';
-import type { CameraDeclIR } from './program';
-import type { ValueExpr } from './value-expr';
 
 // =============================================================================
-// IRBuilder Interface
+// BlockIRBuilder Interface (Pure)
 // =============================================================================
 
 /**
- * IRBuilder provides methods for constructing IR expressions.
- * All methods return ValueExprId — indices into the unified valueExprs table.
+ * Pure builder interface for block lowering.
+ * Blocks construct expression graphs and declare effects as data.
  */
-export interface IRBuilder {
+export interface BlockIRBuilder {
   // =========================================================================
-  // Canonical Value Expression Methods (unified)
+  // Canonical Value Expression Methods (pure graph construction)
   // =========================================================================
 
-  /** Create a constant expression. Works for signal, field, or event extent. */
+  /** Create a constant expression. */
   constant(value: ConstValue, type: CanonicalType): ValueExprId;
 
-  /** Create a slot-read expression. */
-  slotRead(slot: ValueSlot, type: CanonicalType): ValueExprId;
+  /** Create a slot-read expression (for reading allocated slots). */
+  slotRead(slot: any, type: CanonicalType): ValueExprId;
 
   /** Create a time-derived expression. */
   time(which: 'tMs' | 'phaseA' | 'phaseB' | 'dt' | 'progress' | 'palette' | 'energy', type: CanonicalType): ValueExprId;
@@ -62,10 +57,7 @@ export interface IRBuilder {
   /** Zip multiple expressions with a function (n-ary kernel). */
   kernelZip(inputs: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId;
 
-  /**
-   * Zip a field expression with signal expressions.
-   * The field provides per-lane values, signals provide uniform values.
-   */
+  /** Zip a field with signals. */
   kernelZipSig(field: ValueExprId, signals: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId;
 
   /** Broadcast a signal to a field (cardinality one → many). */
@@ -80,7 +72,7 @@ export interface IRBuilder {
   /** Create a placement field expression (uv, rank, seed). */
   placement(field: PlacementFieldName, basisKind: BasisKind, type: CanonicalType): ValueExprId;
 
-  /** Create a state-read expression. */
+  /** Create a state-read expression (symbolic - resolved by orchestrator). */
   stateRead(stateKey: StableStateId, type: CanonicalType): ValueExprId;
 
   /** Read an event expression as a float signal (0.0 or 1.0). */
@@ -108,10 +100,10 @@ export interface IRBuilder {
   // Structural Operations (Extract/Construct)
   // =========================================================================
 
-  /** Extract a component from a composite payload (extractX, extractY, extractZ). */
+  /** Extract a component from a composite payload. */
   extract(input: ValueExprId, componentIndex: number, type: CanonicalType): ValueExprId;
 
-  /** Construct a composite from components (makeVec2, makeVec3). */
+  /** Construct a composite from components. */
   construct(components: readonly ValueExprId[], type: CanonicalType): ValueExprId;
 
   /** Convert color from HSL to RGB (alpha passthrough). */
@@ -121,70 +113,23 @@ export interface IRBuilder {
   // Event Expression Methods
   // =========================================================================
 
-  /** Create a pulse event (fires every tick from time root). */
+  /** Create a pulse event (fires every tick). */
   eventPulse(source: 'InfiniteTimeRoot'): ValueExprId;
 
   /** Create a wrap event from a signal (rising edge). */
   eventWrap(signal: ValueExprId): ValueExprId;
 
-  /** Combine multiple events (any/all). */
+  /** Combine multiple events (any/all/merge/last). */
   eventCombine(events: readonly ValueExprId[], mode: 'any' | 'all' | 'merge' | 'last', type?: CanonicalType): ValueExprId;
 
   /** Create a "never fires" event. */
   eventNever(): ValueExprId;
 
   // =========================================================================
-  // Slot Registration & Allocation
+  // Event Slot Allocation (allowed - events are special)
   // =========================================================================
-  // REMOVED: allocSlot, allocTypedSlot, registerSigSlot, registerSlotType, registerFieldSlot
-  // Pure blocks use effects.slotRequests instead
-  // Only the binder/orchestrator allocates slots
 
   allocEventSlot(eventId: ValueExprId): EventSlotId;
-
-  // =========================================================================
-  // Execution Steps
-  // =========================================================================
-  // REMOVED: stepSlotWriteStrided, stepStateWrite, stepFieldStateWrite, stepEvalSig, stepMaterialize
-  // Pure blocks use effects.stepRequests instead
-  // Only the binder/orchestrator emits schedule steps
-  stepContinuityMapBuild(instanceId: InstanceId): void;
-  stepContinuityApply(
-    targetKey: string,
-    instanceId: InstanceId,
-    policy: ContinuityPolicy,
-    baseSlot: ValueSlot,
-    outputSlot: ValueSlot,
-    semantic: 'position' | 'radius' | 'opacity' | 'color' | 'custom',
-    stride: number
-  ): void;
-
-  // =========================================================================
-  // State Slots
-  // =========================================================================
-
-  allocStateSlot(
-    stableId: StableStateId,
-    options?: {
-      initialValue?: number;
-      stride?: number;
-      instanceId?: InstanceId;
-      laneCount?: number;
-    }
-  ): StateSlotId;
-
-  /**
-   * Look up an already-allocated state slot by symbolic key.
-   * Returns undefined if the key has not been allocated yet.
-   */
-  findStateSlot(stableId: StableStateId): StateSlotId | undefined;
-
-  // =========================================================================
-  // Render Globals
-  // =========================================================================
-
-  addRenderGlobal(decl: CameraDeclIR): void;
-  getRenderGlobals(): readonly CameraDeclIR[];
 
   // =========================================================================
   // Utility
@@ -194,15 +139,7 @@ export interface IRBuilder {
   opcode(op: OpCode): PureFn;
   expr(expression: string): PureFn;
 
-  /**
-   * Create a new instance of a domain type.
-   *
-   * @param domainType - The domain type ID (e.g., DOMAIN_CIRCLE)
-   * @param count - Number of elements in this instance
-   * @param shapeField - ValueExprId of the shape field/signal for this instance (optional - only needed for renderable instances)
-   * @param lifecycle - Lifecycle mode (default: 'static')
-   * @returns The created InstanceId
-   */
+  /** Create a new instance of a domain type. */
   createInstance(
     domainType: DomainTypeId,
     count: number,
@@ -210,34 +147,21 @@ export interface IRBuilder {
     lifecycle?: 'static' | 'dynamic' | 'pooled'
   ): InstanceId;
 
-  getInstances(): ReadonlyMap<InstanceId, InstanceDecl>;
-  getSchedule(): TimeModelIR;
-  setTimeModel(schedule: TimeModelIR): void;
   setCurrentBlockId(blockId: string): void;
 
   // =========================================================================
-  // Build Results
+  // Query Methods (read-only access)
   // =========================================================================
 
-  getSteps(): readonly Step[];
-  getStateMappings(): readonly StateMapping[];
-  getStateSlotCount(): number;
-  getSlotCount(): number;
-  getSlotMetaInputs(): ReadonlyMap<ValueSlot, { readonly type: CanonicalType; readonly stride: number }>;
+  /** Get a single value expression by ID (for inspection). */
+  getValueExpr(id: ValueExprId): any;
 
-  /** Get a single value expression by ID. */
-  getValueExpr(id: ValueExprId): ValueExpr | undefined;
+  /** Get all value expressions (read-only). Used for searching/inspecting IR during lowering. */
+  getValueExprs(): readonly any[];
 
-  /** Get all value expressions. */
-  getValueExprs(): readonly ValueExpr[];
+  // =========================================================================
+  // Render Globals (blocks can declare camera/render settings)
+  // =========================================================================
 
-  getSigSlots(): ReadonlyMap<number, ValueSlot>;
-  getEventSlots(): ReadonlyMap<ValueExprId, EventSlotId>;
-  getEventSlotCount(): number;
-
-  /**
-   * Resolve symbolic state keys to physical slots in all state expressions.
-   * Called after state slot allocation to populate ValueExprState.resolvedSlot.
-   */
-  resolveStateExprs(stateKeyToSlot: ReadonlyMap<string, StateSlotId>): void;
+  addRenderGlobal(decl: any): void;
 }

@@ -16,7 +16,7 @@
  * ```
  */
 
-import type { IRBuilder } from './IRBuilder';
+import type { BlockIRBuilder } from './BlockIRBuilder';
 import type { BlockIndex } from '../frontend/normalize-indexing';
 import type { CanonicalType } from '../../core/canonical-types';
 import { payloadStride } from '../../core/canonical-types';
@@ -33,9 +33,10 @@ import type { ValueRefExpr } from './lowerTypes';
  */
 export class LowerSandbox {
   constructor(
-    private readonly builder: IRBuilder,
+    private readonly builder: BlockIRBuilder,
     private readonly parentBlockType: string,
     private readonly parentInstanceId: string,
+    private readonly instances: ReadonlyMap<import('./Indices').InstanceId, import('./types').InstanceDecl>,
   ) {}
 
   /**
@@ -104,6 +105,7 @@ export class LowerSandbox {
       outTypes,
       b: this.builder,
       seedConstId: 0,
+      instances: this.instances,
     };
 
     const lowerArgs: LowerArgs = {

@@ -131,14 +131,15 @@ If no issues are found (no contradictions, ambiguities, or gaps):
    CANONICAL-<topic>-<timestamp>/
    ├── INDEX.md
    ├── TIERS.md
-   ├── <topic-1>/
-   │   ├── t1_<slug>.md     # Foundational (<N> files)
-   │   ├── t2_<slug>.md     # Structural (<N> files)
-   │   └── t3_<slug>.md     # Optional (<N> files)
-   ├── <topic-2>/
-   │   └── t1_<slug>.md     # (not all topics need all tiers)
    ├── GLOSSARY.md
    ├── RESOLUTION-LOG.md
+   ├── QUESTIONS.md
+   ├── topics/
+   │   ├── <topic-id>-<slug>/
+   │   │   ├── t1_<slug>.md     # Foundational (<N> files)
+   │   │   ├── t2_<slug>.md     # Structural (<N> files)
+   │   │   └── t3_<slug>.md     # Optional (<N> files)
+   │   └── ...
    └── appendices/
    ```
 5. **Display tier distribution:**

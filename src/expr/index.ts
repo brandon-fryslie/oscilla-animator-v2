@@ -88,7 +88,7 @@ export type CompileResult =
 export function compileExpression(
   exprText: string,
   inputs: ReadonlyMap<string, CanonicalType>,
-  builder: IRBuilder,
+  builder: import('../compiler/ir/BlockIRBuilder').BlockIRBuilder,
   inputSignals: ReadonlyMap<string, ValueExprId>,
   blockRefs?: BlockRefsContext
 ): CompileResult {

@@ -10,7 +10,7 @@ import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR, CAMERA_PROJECTION, payloadsEqual }
 import type { InferenceCanonicalType, InferencePayloadType } from '../core/inference-types';
 import { isPayloadVar } from '../core/inference-types';
 import type { UIControlHint, DefaultSource } from '../types';
-import type { IRBuilder } from '../compiler/ir/IRBuilder';
+import type { BlockIRBuilder } from '../compiler/ir/BlockIRBuilder';
 import type { BlockIndex } from '../graph/normalize';
 import type { InstanceId, StateSlotId } from '../compiler/ir/Indices';
 import type { VarargConnection } from '../graph/Patch';
@@ -22,6 +22,9 @@ export type { ValueRefPacked, ValueRefExpr, LowerEffects } from '../compiler/ir/
 
 /**
  * Lower context - provided to block lower functions.
+ *
+ * IMPORTANT: Uses BlockIRBuilder (pure surface) not OrchestratorIRBuilder.
+ * Blocks cannot allocate slots or emit schedule steps directly.
  */
 export interface LowerCtx {
   readonly blockIdx: BlockIndex;
@@ -30,7 +33,7 @@ export interface LowerCtx {
   readonly label?: string;
   readonly inTypes: readonly CanonicalType[];
   readonly outTypes: readonly CanonicalType[];
-  readonly b: IRBuilder;
+  readonly b: BlockIRBuilder;
   readonly seedConstId: number;
 
   /**
@@ -57,6 +60,13 @@ export interface LowerCtx {
    * Available for blocks that need address resolution (e.g., Expression block).
    */
   readonly addressRegistry?: import('../graph/address-registry').AddressRegistry;
+
+  /**
+   * Read-only instance registry.
+   * Allows blocks to query instance declarations without accessing the builder.
+   * This keeps BlockIRBuilder focused on expression construction only.
+   */
+  readonly instances: ReadonlyMap<import('../compiler/ir/Indices').InstanceId, import('../compiler/ir/types').InstanceDecl>;
 }
 
 /**

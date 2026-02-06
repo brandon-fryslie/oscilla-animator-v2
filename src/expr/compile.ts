@@ -8,7 +8,7 @@
  */
 
 import type { ExprNode } from './ast';
-import type { IRBuilder } from '../compiler/ir/IRBuilder';
+import type { BlockIRBuilder } from '../compiler/ir/BlockIRBuilder';
 import type { ValueExprId } from '../compiler/ir/Indices';
 import { OpCode } from '../compiler/ir/types';
 import { canonicalType, type PayloadType, floatConst, intConst } from '../core/canonical-types';
@@ -20,7 +20,7 @@ import { isVectorType, swizzleResultType, componentIndex } from './swizzle';
  * Maps identifier names to their IR signal expressions.
  */
 export interface CompileContext {
-  readonly builder: IRBuilder;
+  readonly builder: BlockIRBuilder;
   readonly inputs: ReadonlyMap<string, ValueExprId>;
   /** Block reference signals by canonical address (optional - for member access support) */
   readonly blockRefs?: ReadonlyMap<string, ValueExprId>;

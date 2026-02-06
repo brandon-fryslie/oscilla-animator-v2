@@ -35,6 +35,31 @@ import { constValueAsNumber } from '../core/canonical-types';
 import { applyPureFn } from './SignalKernelLibrary';
 
 /**
+ * Evaluate a construct expression and write all components contiguously to a buffer
+ *
+ * @param expr - Construct ValueExpr node
+ * @param valueExprs - Dense array of ValueExpr nodes
+ * @param state - Runtime state
+ * @param targetBuffer - Target f64 buffer
+ * @param targetOffset - Starting offset in buffer
+ * @returns Number of components written (stride)
+ */
+export function evaluateConstructSignal(
+  expr: Extract<ValueExpr, { kind: 'construct' }>,
+  valueExprs: readonly ValueExpr[],
+  state: RuntimeState,
+  targetBuffer: Float64Array,
+  targetOffset: number
+): number {
+  // Evaluate each component and write contiguously
+  for (let i = 0; i < expr.components.length; i++) {
+    const componentValue = evaluateValueExprSignal(expr.components[i], valueExprs, state);
+    targetBuffer[targetOffset + i] = componentValue;
+  }
+  return expr.components.length;
+}
+
+/**
  * Evaluate a ValueExpr signal with caching
  *
  * @param veId - ValueExpr ID to evaluate
@@ -189,8 +214,15 @@ function evaluateSignalExtent(
     }
 
     case 'construct': {
-      // Construct is field-extent only in practice (signal vec3 uses slotWriteStrided).
-      throw new Error('construct expressions are field-extent, not signal-extent');
+      // Construct evaluates component expressions and returns the first component's value.
+      // For multi-component signals (vec2, vec3, color), the evaluator is responsible
+      // for writing ALL components contiguously when this expression is used as a step target.
+      // When construct is evaluated recursively (not as a step root), we return component[0].
+      if (expr.components.length === 0) {
+        throw new Error('construct expression has no components');
+      }
+      // Return first component value (caller may write all components if this is a step root)
+      return evaluateValueExprSignal(expr.components[0], valueExprs, state);
     }
 
     case 'hslToRgb': {

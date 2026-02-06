@@ -14,7 +14,7 @@
  */
 
 import type { CombineMode, Edge, CanonicalType } from "../../types";
-import type { IRBuilder } from "../ir/IRBuilder";
+import type { OrchestratorIRBuilder } from "../ir/OrchestratorIRBuilder";
 import { isExprRef, type ValueRefExpr } from "../ir/lowerTypes";
 import type { ValueExprId } from "../ir/Indices";
 import { payloadStride, requireInst } from "../../core/canonical-types";
@@ -234,7 +234,7 @@ export function createCombineNode(
   mode: CombineMode | 'error' | 'layer',
   inputs: readonly ValueRefExpr[],
   type: CanonicalType,
-  builder: IRBuilder
+  builder: OrchestratorIRBuilder
 ): ValueRefExpr | null {
   // Handle empty inputs - caller should materialize default
   if (inputs.length === 0) {

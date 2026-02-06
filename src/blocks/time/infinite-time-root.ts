@@ -50,8 +50,8 @@ registerBlock({
     const energy = ctx.b.time('energy', canonicalType(FLOAT));
 
     // System palette slot - special case
+    // Note: Orchestrator handles slot type registration now
     const paletteSlot = SYSTEM_PALETTE_SLOT;
-    ctx.b.registerSlotType(paletteSlot, canonicalType(COLOR));
 
     // Get output types
     const tMsType = ctx.outTypes[0];

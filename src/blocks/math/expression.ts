@@ -79,12 +79,14 @@ registerBlock({
 
     // Step 2: Handle empty expression (output constant 0)
     if (exprText.trim() === '') {
-      const sigId = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
       const outType = ctx.outTypes[0];
-      const slot = ctx.b.allocSlot();
+      const sigId = ctx.b.constant(floatConst(0), outType);
       return {
         outputsById: {
-          out: { id: sigId, slot, type: outType, stride: payloadStride(outType.payload) },
+          out: { id: sigId, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+        },
+        effects: {
+          slotRequests: [{ portId: 'out', type: outType }],
         },
       };
     }
@@ -158,37 +160,41 @@ registerBlock({
     const sigId = result.value;
     const outType = ctx.outTypes[0];
     const stride = payloadStride(outType.payload);
-    const slot = ctx.b.allocSlot(stride);
 
-    // For multi-component signals (stride > 1), decompose into component writes
+    // For multi-component signals (stride > 1), ensure we have a construct expression
     if (stride > 1) {
-      // Check if the result is a construct node
+      // Check if the result is already a construct node
       const expr = ctx.b.getValueExpr(sigId);
       if (expr && expr.kind === 'construct') {
-        // Use the construct's components directly for strided write
+        // Use the construct directly
         const components = expr.components;
         if (components.length !== stride) {
           throw new Error(
             `Expression construct has ${components.length} components but output type requires ${stride}`
           );
         }
-        ctx.b.stepSlotWriteStrided(slot, components);
         return {
           outputsById: {
-            out: { id: components[0], slot, type: outType, stride, components: [...components] },
+            out: { id: sigId, slot: undefined, type: outType, stride, components: [...components] },
+          },
+          effects: {
+            slotRequests: [{ portId: 'out', type: outType }],
           },
         };
       } else {
         // The result is not a construct (e.g., a vec3 input signal)
-        // Generate extract nodes to decompose it
+        // Generate extract nodes and reconstruct
         const components: ValueExprId[] = [];
         for (let i = 0; i < stride; i++) {
           components.push(ctx.b.extract(sigId, i, canonicalType(FLOAT)));
         }
-        ctx.b.stepSlotWriteStrided(slot, components);
+        const constructedSig = ctx.b.construct(components, outType);
         return {
           outputsById: {
-            out: { id: components[0], slot, type: outType, stride, components },
+            out: { id: constructedSig, slot: undefined, type: outType, stride, components },
+          },
+          effects: {
+            slotRequests: [{ portId: 'out', type: outType }],
           },
         };
       }
@@ -196,7 +202,10 @@ registerBlock({
       // Scalar output (stride 1)
       return {
         outputsById: {
-          out: { id: sigId, slot, type: outType, stride },
+          out: { id: sigId, slot: undefined, type: outType, stride },
+        },
+        effects: {
+          slotRequests: [{ portId: 'out', type: outType }],
         },
       };
     }

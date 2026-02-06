@@ -4,7 +4,7 @@
 
 import type { ValueExprId } from '../compiler/ir/Indices';
 import type { CanonicalType } from '../core/canonical-types';
-import type { IRBuilder } from '../compiler/ir/IRBuilder';
+import type { BlockIRBuilder } from '../compiler/ir/BlockIRBuilder';
 import { requireInst } from '../core/canonical-types';
 
 /**
@@ -24,7 +24,7 @@ export function alignInputs(
   bId: ValueExprId,
   bType: CanonicalType,
   outType: CanonicalType,
-  b: IRBuilder,
+  b: BlockIRBuilder,
 ): [ValueExprId, ValueExprId] {
   const aCard = requireInst(aType.extent.cardinality, 'cardinality');
   const bCard = requireInst(bType.extent.cardinality, 'cardinality');

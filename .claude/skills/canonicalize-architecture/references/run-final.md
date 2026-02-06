@@ -30,15 +30,15 @@ From the TOPICS file and your analysis, finalize the three-tier encyclopedia str
 CANONICAL-<topic>-<timestamp>/
 ├── INDEX.md                      # Master navigation
 ├── TIERS.md                      # Explains tier system
-├── <topic-1>/                    # Topic directories
-│   ├── t1_<slug>.md             # Foundational content
-│   ├── t2_<slug>.md             # Structural content
-│   └── t3_<slug>.md             # Optional content
-├── <topic-2>/
-│   ├── t1_<slug>.md
-│   └── t2_<slug>.md             # Not all topics need all tiers
 ├── GLOSSARY.md                   # All terms, alphabetically
 ├── RESOLUTION-LOG.md             # Decision history
+├── QUESTIONS.md                  # Open + resolved items
+├── topics/
+│   ├── <topic-id>-<slug>/        # Topic directories
+│   │   ├── t1_<slug>.md          # Foundational content
+│   │   ├── t2_<slug>.md          # Structural content
+│   │   └── t3_<slug>.md          # Optional content
+│   └── ...
 └── appendices/
     ├── source-map.md
     └── superseded-docs.md
@@ -51,8 +51,8 @@ CANONICAL-<topic>-<timestamp>/
 ## Step 2: Create Directory Structure
 
 ```bash
-mkdir -p CANONICAL-<topic>-<timestamp>/<topic-dir-1>
-mkdir -p CANONICAL-<topic>-<timestamp>/<topic-dir-2>
+mkdir -p CANONICAL-<topic>-<timestamp>/topics/<topic-dir-1>
+mkdir -p CANONICAL-<topic>-<timestamp>/topics/<topic-dir-2>
 mkdir -p CANONICAL-<topic>-<timestamp>/appendices
 ```
 
@@ -94,8 +94,8 @@ Source Documents: <count> files from `<source_path>`
 
 | # | Topic | T1 Files | T2 Files | T3 Files |
 |---|-------|----------|----------|----------|
-| 01 | [<topic-1>](./<topic-1>/) | <slugs> | <slugs> | <slugs> |
-| 02 | [<topic-2>](./<topic-2>/) | <slugs> | <slugs> | - |
+| 01 | [<topic-1>](./topics/<topic-dir-1>/) | <slugs> | <slugs> | <slugs> |
+| 02 | [<topic-2>](./topics/<topic-dir-2>/) | <slugs> | <slugs> | - |
 | ... | | | | |
 
 ## Recommended Reading Order
@@ -103,20 +103,20 @@ Source Documents: <count> files from `<source_path>`
 For newcomers to this architecture:
 
 1. **[TIERS](./TIERS.md)** - Understand the organization system
-2. **All `**/t1_*.md` files** - Foundational content (small and critical)
-3. **Relevant `**/t2_*.md` files** - Structural context for your area
+2. **All `topics/**/t1_*.md` files** - Foundational content (small and critical)
+3. **Relevant `topics/**/t2_*.md` files** - Structural context for your area
 4. **[GLOSSARY](./GLOSSARY.md)** - Reference as needed
 
 For implementers:
-1. All `**/t1_*.md` files - Cannot violate these
-2. Relevant `**/t2_*.md` files for your component
-3. Consult `**/t3_*.md` files when you need specific details
+1. All `topics/**/t1_*.md` files - Cannot violate these
+2. Relevant `topics/**/t2_*.md` files for your component
+3. Consult `topics/**/t3_*.md` files when you need specific details
 4. [GLOSSARY](./GLOSSARY.md) - Naming conventions
 
 For agents:
-- **Always read**: `**/t1_*.md` (foundational across all topics)
-- **Usually read**: `**/t2_*.md` (structural for relevant topics)
-- **Consult as needed**: `**/t3_*.md` (reference material)
+- **Always read**: `topics/**/t1_*.md` (foundational across all topics)
+- **Usually read**: `topics/**/t2_*.md` (structural for relevant topics)
+- **Consult as needed**: `topics/**/t3_*.md` (reference material)
 
 ## Search Hints
 
@@ -186,21 +186,21 @@ If a `t3_*.md` file conflicts with a `t1_*.md` file, the t1 file wins. No except
 
 For agents working with this specification:
 
-- **Always read**: `**/t1_*.md` (all foundational content across all topics - small and critical)
-- **Usually read**: `**/t2_*.md` (all structural content for relevant topics)
-- **Consult as needed**: `**/t3_*.md` (reference material when you need specific details)
+- **Always read**: `topics/**/t1_*.md` (all foundational content across all topics - small and critical)
+- **Usually read**: `topics/**/t2_*.md` (all structural content for relevant topics)
+- **Consult as needed**: `topics/**/t3_*.md` (reference material when you need specific details)
 
 ## Example Structure
 
 ```
-type-system/
+topics/01-type-system/
 ├── t1_core-types.md     # float, int, 5 axes - cannot change
 ├── t2_block-roles.md    # BlockRole architecture - hard to change
 └── t3_diagnostics.md    # event types - change freely
 
-topology/
-├── t1_invariants.md     # multi-in/multi-out - cannot change
-└── t2_dataflow.md       # edge semantics - hard to change
+topics/04-compilation/
+├── t1_invariants.md     # non-negotiable compilation rules
+└── t2_dataflow.md       # IR + normalization - hard to change
 ```
 ```
 
@@ -585,15 +585,15 @@ Before announcing completion, verify:
    CANONICAL-<topic>-<timestamp>/
    ├── INDEX.md (master navigation)
    ├── TIERS.md (explains tier system)
-   ├── <topic-1>/
-   │   ├── t1_<slug>.md (foundational - N files)
-   │   ├── t2_<slug>.md (structural - N files)
-   │   └── t3_<slug>.md (optional - N files)
-   ├── <topic-2>/
-   │   ├── t1_<slug>.md
-   │   └── t2_<slug>.md
    ├── GLOSSARY.md (N terms)
    ├── RESOLUTION-LOG.md (N decisions)
+   ├── QUESTIONS.md
+   ├── topics/
+   │   ├── <topic-id>-<slug>/
+   │   │   ├── t1_<slug>.md (foundational - N files)
+   │   │   ├── t2_<slug>.md (structural - N files)
+   │   │   └── t3_<slug>.md (optional - N files)
+   │   └── ...
    └── appendices/ (source map, superseded docs)
 
    Tier Distribution:
@@ -605,5 +605,5 @@ Before announcing completion, verify:
 5. Print: "Canonicalization complete!"
 6. Suggest:
    - "Start with TIERS.md to understand the organization"
-   - "Read all **/t1_*.md files for foundational content (small and critical)"
-   - "For agents: Use glob patterns (**/t1_*.md, **/t2_*.md, **/t3_*.md) to filter by tier"
+   - "Read all topics/**/t1_*.md files for foundational content (small and critical)"
+   - "For agents: Use glob patterns (topics/**/t1_*.md, topics/**/t2_*.md, topics/**/t3_*.md) to filter by tier"

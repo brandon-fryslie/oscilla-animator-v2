@@ -14,7 +14,7 @@ registerBlock({
   description: 'Read external channels as vec2 (channelBase.x, channelBase.y)',
   form: 'primitive',
   capability: 'io',
-  loweringPurity: 'impure', // Multi-component external signal - TODO: needs stridedWrites in effects
+  loweringPurity: 'pure',
   cardinality: {
     cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
@@ -46,17 +46,16 @@ registerBlock({
 
     const outType = ctx.outTypes[0];
     const stride = payloadStride(outType.payload);
-    const components = [xSig, ySig];
 
-    // TODO: This uses stepSlotWriteStrided which violates pure lowering
-    // Should be: effects: { stridedWrites: [{ components }] }
-    // For now, keep imperative until design decision is made
-    const slot = ctx.b.allocSlot(stride);
-    ctx.b.stepSlotWriteStrided(slot, components);
+    // Pure lowering: construct multi-component signal from scalar components
+    const vec2Sig = ctx.b.construct([xSig, ySig], outType);
 
     return {
       outputsById: {
-        position: { id: xSig, slot, type: outType, stride, components },
+        position: { id: vec2Sig, slot: undefined, type: outType, stride, components: [xSig, ySig] },
+      },
+      effects: {
+        slotRequests: [{ portId: 'position', type: outType }],
       },
     };
   },

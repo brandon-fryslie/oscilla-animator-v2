@@ -24,7 +24,7 @@ import { assembleRenderFrame, type AssemblerContext } from './RenderAssembler';
 import { resolveCameraFromGlobals } from './CameraResolver';
 import { requireManyInstance } from '../core/canonical-types';
 import { SYSTEM_PALETTE_SLOT } from '../compiler/ir/Indices';
-import { evaluateValueExprSignal } from './ValueExprSignalEvaluator';
+import { evaluateValueExprSignal, evaluateConstructSignal } from './ValueExprSignalEvaluator';
 import { evaluateValueExprEvent } from './ValueExprEventEvaluator';
 import { materializeValueExpr } from './ValueExprMaterializer';
 
@@ -246,21 +246,51 @@ export function executeFrame(
               });
             }
           } else if (storage === 'f64') {
-            if (stride !== 1) {
-              throw new Error(`evalValue: expected stride=1 for scalar signal slot ${slot}, got stride=${stride}`);
+            // Check if this is a multi-component construct expression
+            const exprNode = valueExprs[step.expr as number];
+
+            if (stride > 1 && exprNode?.kind === 'construct') {
+              // Multi-component signal: use construct evaluator to write all components
+              const written = evaluateConstructSignal(
+                exprNode,
+                valueExprs,
+                state,
+                state.values.f64,
+                offset
+              );
+
+              if (written !== stride) {
+                throw new Error(
+                  `evalValue: construct wrote ${written} components but slot stride is ${stride}`
+                );
+              }
+
+              // Debug tap: Record each component value
+              for (let i = 0; i < stride; i++) {
+                state.tap?.recordSlotValue?.((slot + i) as ValueSlot, state.values.f64[offset + i]);
+              }
+
+              // Cache first component (for backward compatibility)
+              state.cache.values[step.expr as number] = state.values.f64[offset];
+              state.cache.stamps[step.expr as number] = state.cache.frameId;
+            } else if (stride === 1) {
+              // Scalar signal: evaluate and write single value
+              const value = evaluateValueExprSignal(step.expr as any, program.valueExprs.nodes, state);
+
+              writeF64Scalar(state, lookup, value);
+
+              // Debug tap: Record slot value (Sprint 1: Debug Probe)
+              state.tap?.recordSlotValue?.(slot, value);
+
+              // Cache (indexed by expr id). Under Option B these ids are ValueExprIds.
+              state.cache.values[step.expr as number] = value;
+              state.cache.stamps[step.expr as number] = state.cache.frameId;
+            } else {
+              // stride>1 but not construct - invalid
+              throw new Error(
+                `evalValue: stride=${stride} slot ${slot} requires construct expression, got ${exprNode?.kind ?? 'unknown'}`
+              );
             }
-
-            // ValueExpr-only evaluation (cutover complete)
-            const value = evaluateValueExprSignal(step.expr as any, program.valueExprs.nodes, state);
-
-            writeF64Scalar(state, lookup, value);
-
-            // Debug tap: Record slot value (Sprint 1: Debug Probe)
-            state.tap?.recordSlotValue?.(slot, value);
-
-            // Cache (indexed by expr id). Under Option B these ids are ValueExprIds.
-            state.cache.values[step.expr as number] = value;
-            state.cache.stamps[step.expr as number] = state.cache.frameId;
           } else {
             throw new Error(`evalValue: unsupported storage type '${storage}'`);
           }

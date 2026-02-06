@@ -8,7 +8,7 @@
  * WI-4: Global Binding Pass Extraction & Unification
  */
 
-import type { IRBuilder } from "../ir/IRBuilder";
+import type { OrchestratorIRBuilder } from "../ir/OrchestratorIRBuilder";
 import type { LowerEffects, StepRequest } from "../ir/lowerTypes";
 import type { StableStateId } from "../ir/types";
 import type { StateSlotId, ValueSlot } from "../ir/Indices";
@@ -106,7 +106,7 @@ class BinderState {
  * @param builder - IRBuilder (only for querying capacity, not mutating)
  * @returns Binding result with all allocation decisions
  */
-export function bindEffects(inputs: BindInputs, builder: IRBuilder): BindingResult {
+export function bindEffects(inputs: BindInputs, builder: OrchestratorIRBuilder): BindingResult {
   const state = new BinderState();
 
   // Step 1: Allocate state from stateDecls (lexically sorted)
@@ -144,7 +144,7 @@ export function bindEffects(inputs: BindInputs, builder: IRBuilder): BindingResu
 function allocateStateDeterministic(
   inputs: BindInputs,
   state: BinderState,
-  builder: IRBuilder
+  builder: OrchestratorIRBuilder
 ): void {
   const { effects, existingState } = inputs;
 
@@ -185,7 +185,7 @@ function allocateStateDeterministic(
 function allocateSlotsDeterministic(
   inputs: BindInputs,
   state: BinderState,
-  builder: IRBuilder
+  builder: OrchestratorIRBuilder
 ): void {
   const { effects } = inputs;
 
@@ -212,7 +212,7 @@ function allocateSlotsDeterministic(
 function validateStepRequests(
   inputs: BindInputs,
   state: BinderState,
-  builder: IRBuilder
+  builder: OrchestratorIRBuilder
 ): void {
   const { effects, origin } = inputs;
 
@@ -262,7 +262,7 @@ function validateStepRequests(
  * @param effects - Original effects (for step requests)
  */
 export function applyBinding(
-  builder: IRBuilder,
+  builder: OrchestratorIRBuilder,
   result: BindingResult,
   effects: LowerEffects
 ): void {
@@ -291,7 +291,7 @@ export function applyBinding(
 function applyStepRequest(
   req: StepRequest,
   result: BindingResult,
-  builder: IRBuilder
+  builder: OrchestratorIRBuilder
 ): void {
   switch (req.kind) {
     case 'stateWrite': {
@@ -371,7 +371,7 @@ export function bindOutputs(
   slotMap: ReadonlyMap<string, ValueSlot>,
   blockId: string,
   loweringPurity: 'pure' | 'stateful' | 'impure' | undefined,
-  builder: IRBuilder
+  builder: OrchestratorIRBuilder
 ): Map<string, ValueRefExpr> {
   const bound = new Map<string, ValueRefExpr>();
 

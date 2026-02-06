@@ -2,6 +2,18 @@
 
 This is an UPDATE run. A canonical specification encyclopedia already exists and you are integrating new source documents.
 
+## Step 0: Contract Check (Required)
+
+Before making any changes, confirm the canonical directory conforms to `topic_dirs_with_tiers`.
+
+If the canonical directory contains forbidden legacy files:
+- `topics/*.md`
+- `topics/*.INDEX.md`
+
+Stop immediately and run the MIGRATE reference:
+
+- `.claude/skills/canonicalize-architecture/references/run-migrate.md`
+
 ## Step 1: Downgrade Status to UPDATING
 
 Before analysis, update the INDEX.md file:
@@ -27,8 +39,8 @@ Add a prominent notice at the top:
 Read and understand the existing canonical specification:
 
 1. **Read INDEX.md** - Current topics, source count, resolution count
-2. **Read all `**/t1_*.md` files** - Foundational rules (including invariants)
-3. **Read relevant `**/t2_*.md` files** - Structural architecture
+2. **Read all `topics/**/t1_*.md` files** - Foundational rules (including invariants)
+3. **Read relevant `topics/**/t2_*.md` files** - Structural architecture
 4. **Read GLOSSARY.md** - Current canonical terms
 5. **Read RESOLUTION-LOG.md** - All prior resolutions
 
@@ -164,8 +176,13 @@ Once all CRITICAL and HIGH items are resolved:
    - Preserve resolution rationale
 
 2. **Create new topic documents** (if approved)
-   - Follow existing topic template
-   - Cross-link to related topics
+   - Create the topic directory: `topics/<topic-id>-<slug>/`
+   - Write the canonical topic file at the correct tier:
+     - T1 → `topics/<topic-id>-<slug>/t1_<slug>.md`
+     - T2 → `topics/<topic-id>-<slug>/t2_<slug>.md`
+     - T3 → `topics/<topic-id>-<slug>/t3_<slug>.md`
+   - Follow the existing topic template conventions (frontmatter, headings, cross-links)
+   - Cross-link to related topics using `../<other-topic>/t2_...` style paths
 
 3. **Update GLOSSARY.md**
    - Add new terms
