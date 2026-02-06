@@ -277,9 +277,6 @@ export interface HealthMetrics {
   /** Count of field materializations (for perf diagnostics) */
   materializationCount: number;
 
-  /** Blocks with heavy materialization overhead */
-  heavyMaterializationBlocks: Map<string, number>;
-
   /** Timestamp of last health snapshot emission (performance.now()) */
   lastSnapshotTime: number;
 
@@ -368,7 +365,6 @@ export function createHealthMetrics(): HealthMetrics {
     lastNanBlockId: null,
     lastInfBlockId: null,
     materializationCount: 0,
-    heavyMaterializationBlocks: new Map(),
     lastSnapshotTime: 0,
     samplingBatchStart: 0,
     nanBatchCount: 0,

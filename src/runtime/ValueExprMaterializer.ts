@@ -451,7 +451,7 @@ function materializeIntrinsic(
     }
   } else if (intrinsic === 'normalizedIndex') {
     for (let i = 0; i < count; i++) {
-      buf[i] = i / (count - 1);
+      buf[i] = count > 1 ? i / (count - 1) : 0;
     }
   } else if (intrinsic === 'randomId') {
     // Generate stable random IDs per instance using hash function

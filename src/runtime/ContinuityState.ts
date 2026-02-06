@@ -191,6 +191,34 @@ export function clearContinuityState(continuity: ContinuityState): void {
 }
 
 /**
+ * Remove entries for instances that no longer exist in the active program.
+ * Call after hot-swap to prevent unbounded accumulation of stale state.
+ *
+ * @param continuity - Continuity state to prune
+ * @param activeInstanceIds - Set of instance IDs in the current program
+ */
+export function pruneStaleContinuity(
+  continuity: ContinuityState,
+  activeInstanceIds: ReadonlySet<string>
+): void {
+  for (const id of continuity.prevDomains.keys()) {
+    if (!activeInstanceIds.has(id)) {
+      continuity.prevDomains.delete(id);
+    }
+  }
+  for (const id of continuity.mappings.keys()) {
+    if (!activeInstanceIds.has(id)) {
+      continuity.mappings.delete(id);
+    }
+  }
+  for (const id of continuity.placementBasis.keys()) {
+    if (!activeInstanceIds.has(id)) {
+      continuity.placementBasis.delete(id);
+    }
+  }
+}
+
+/**
  * Reset frame-local flags at start of frame.
  *
  * @param continuity - Continuity state

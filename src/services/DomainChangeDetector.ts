@@ -69,10 +69,11 @@ export function detectAndLogDomainChanges(
     prevInstanceCounts.set(id, newCount);
   }
 
-  // Check for removed instances
+  // Check for removed instances — clean up both tracking maps
   for (const [id, _oldDecl] of oldInstances) {
     if (!newInstances.has(id)) {
       prevInstanceCounts.delete(id);
+      domainChangeLogThrottle.delete(id);
     }
   }
 }

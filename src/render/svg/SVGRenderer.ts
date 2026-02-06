@@ -228,6 +228,12 @@ export class SVGRenderer {
     const uniformFill = hasFill && style.fillColor!.length === 4;
     const uniformStroke = hasStroke && style.strokeColor!.length === 4;
 
+    // Pre-compute dash string outside the per-instance loop (style & D are uniform)
+    const dashStr = style.dashPattern && style.dashPattern.length > 0
+      ? style.dashPattern.map(d => d * D).join(' ')
+      : null;
+    const dashOffsetStr = dashStr && style.dashOffset ? String(style.dashOffset * D) : null;
+
     for (let i = 0; i < count; i++) {
       const x = position[i * 2] * this.width;
       const y = position[i * 2 + 1] * this.height;
@@ -283,11 +289,10 @@ export class SVGRenderer {
         if (style.lineJoin) use.setAttribute('stroke-linejoin', style.lineJoin);
         if (style.lineCap) use.setAttribute('stroke-linecap', style.lineCap);
 
-        if (style.dashPattern && style.dashPattern.length > 0) {
-          const dashPx = style.dashPattern.map(d => d * D).join(' ');
-          use.setAttribute('stroke-dasharray', dashPx);
-          if (style.dashOffset) {
-            use.setAttribute('stroke-dashoffset', String(style.dashOffset * D));
+        if (dashStr) {
+          use.setAttribute('stroke-dasharray', dashStr);
+          if (dashOffsetStr) {
+            use.setAttribute('stroke-dashoffset', dashOffsetStr);
           }
         }
       }
@@ -311,6 +316,12 @@ export class SVGRenderer {
 
     const hasStroke = style.strokeColor !== undefined && style.strokeColor.length > 0;
     const uniformStroke = hasStroke && style.strokeColor!.length === 4;
+
+    // Pre-compute dash string outside the per-instance loop (style & D are uniform)
+    const primDashStr = style.dashPattern && style.dashPattern.length > 0
+      ? style.dashPattern.map(d => d * D).join(' ')
+      : null;
+    const primDashOffsetStr = primDashStr && style.dashOffset ? String(style.dashOffset * D) : null;
 
     for (let i = 0; i < count; i++) {
       const x = position[i * 2] * this.width;
@@ -388,11 +399,10 @@ export class SVGRenderer {
         if (style.lineJoin) element.setAttribute('stroke-linejoin', style.lineJoin);
         if (style.lineCap) element.setAttribute('stroke-linecap', style.lineCap);
 
-        if (style.dashPattern && style.dashPattern.length > 0) {
-          const dashPx = style.dashPattern.map(d => d * D).join(' ');
-          element.setAttribute('stroke-dasharray', dashPx);
-          if (style.dashOffset) {
-            element.setAttribute('stroke-dashoffset', String(style.dashOffset * D));
+        if (primDashStr) {
+          element.setAttribute('stroke-dasharray', primDashStr);
+          if (primDashOffsetStr) {
+            element.setAttribute('stroke-dashoffset', primDashOffsetStr);
           }
         }
       }
@@ -409,6 +419,17 @@ export class SVGRenderer {
     while (this.renderGroup.firstChild) {
       this.renderGroup.removeChild(this.renderGroup.firstChild);
     }
+  }
+
+  /**
+   * Invalidate geometry cache on program change (hot-swap).
+   * New programs produce new Float32Array buffers, so old cache keys are stale.
+   */
+  invalidateGeometryCache(): void {
+    while (this.defs.firstChild) {
+      this.defs.removeChild(this.defs.firstChild);
+    }
+    this.geomDefs.clear();
   }
 
   /**

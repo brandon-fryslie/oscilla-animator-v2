@@ -27,6 +27,7 @@ import { type ValueSlot } from '../types';
 import { debugService } from './DebugService';
 import { mapDebugMappings } from './mapDebugEdges';
 import { extractConstantValues } from './ConstantValueTracker';
+import { pruneStaleContinuity } from '../runtime/ContinuityState';
 
 /**
  * Wire DebugService to the runtime state and update debug mappings.
@@ -316,6 +317,11 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
         state.prevInstanceCounts.set(id, count);
       }
     }
+  }
+
+  // Prune stale continuity entries for instances removed from the graph
+  if (!isInitial && state.sessionState) {
+    pruneStaleContinuity(state.sessionState.continuity, new Set(instanceCounts.keys()));
   }
 
   // Compilation succeeded - emit CompileEnd with success

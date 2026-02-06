@@ -56,6 +56,7 @@ export class DiagnosticHub {
 
   // Runtime diagnostics (merged on RuntimeHealthSnapshot)
   // Sprint 1: Not fully implemented (deferred to Sprint 2)
+  private static readonly MAX_RUNTIME_DIAGNOSTICS = 200;
   private runtimeDiagnostics = new Map<string, Diagnostic>();
 
   // Active revision tracking
@@ -248,6 +249,15 @@ export class DiagnosticHub {
     // Remove resolved diagnostics
     for (const id of event.diagnosticsDelta.resolved) {
       this.runtimeDiagnostics.delete(id);
+    }
+
+    // Evict oldest entries if over capacity (Map iterates in insertion order)
+    if (this.runtimeDiagnostics.size > DiagnosticHub.MAX_RUNTIME_DIAGNOSTICS) {
+      const excess = this.runtimeDiagnostics.size - DiagnosticHub.MAX_RUNTIME_DIAGNOSTICS;
+      const iter = this.runtimeDiagnostics.keys();
+      for (let i = 0; i < excess; i++) {
+        this.runtimeDiagnostics.delete(iter.next().value!);
+      }
     }
 
     // Increment revision to trigger UI updates

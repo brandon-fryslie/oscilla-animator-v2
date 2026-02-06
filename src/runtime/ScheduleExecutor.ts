@@ -41,6 +41,12 @@ interface SlotLookup {
 // Cache slot lookup tables per compiled program to avoid per-frame Map allocation.
 const SLOT_LOOKUP_CACHE = new WeakMap<CompiledProgramIR, Map<ValueSlot, SlotLookup>>();
 
+// Cache fieldExprId→slot mapping per program (deterministic per schedule).
+const FIELD_EXPR_SLOT_CACHE = new WeakMap<CompiledProgramIR, Map<number, ValueSlot>>();
+
+// Cache signalExprId→slot mapping per program (deterministic per schedule).
+const SIG_TO_SLOT_CACHE = new WeakMap<CompiledProgramIR, Map<number, number>>();
+
 // Module-level pool for Materializer buffers.
 // These buffers are CACHED in RuntimeState.cache.fieldBuffers and reused across frames,
 // so they don't need arena semantics. The pool grows once and then stabilizes.
@@ -62,6 +68,41 @@ function getSlotLookupMap(program: CompiledProgramIR): Map<ValueSlot, SlotLookup
     });
   }
   SLOT_LOOKUP_CACHE.set(program, map);
+  return map;
+}
+
+function getFieldExprToSlotMap(program: CompiledProgramIR): Map<number, ValueSlot> {
+  const cached = FIELD_EXPR_SLOT_CACHE.get(program);
+  if (cached) return cached;
+  const map = new Map<number, ValueSlot>();
+  const steps = (program.schedule as ScheduleIR).steps;
+  for (const s of steps) {
+    if (s.kind === 'materialize') {
+      map.set(s.field as number, s.target);
+    }
+  }
+  FIELD_EXPR_SLOT_CACHE.set(program, map);
+  return map;
+}
+
+function getSigToSlotMap(
+  program: CompiledProgramIR,
+  slotLookupMap: Map<ValueSlot, SlotLookup>
+): Map<number, number> {
+  const cached = SIG_TO_SLOT_CACHE.get(program);
+  if (cached) return cached;
+  const map = new Map<number, number>();
+  const steps = (program.schedule as ScheduleIR).steps;
+  for (const step of steps) {
+    if (step.kind === 'evalValue' && step.target.storage === 'value') {
+      const lookup = slotLookupMap.get(step.target.slot);
+      if (lookup) {
+        // Map ValueExprId → physical f64 offset (not slot id)
+        map.set(step.expr as number, lookup.offset);
+      }
+    }
+  }
+  SIG_TO_SLOT_CACHE.set(program, map);
   return map;
 }
 
@@ -131,14 +172,9 @@ export function executeFrame(
   const instances = schedule.instances;
   const steps = schedule.steps;
 
-  // Option B: schedule steps reference ValueExprIds directly.
   // Precompute where each field ValueExprId materializes so other steps (eg shapeRef) can reference the produced slot.
-  const fieldExprToSlot = new Map<number, ValueSlot>();
-  for (const s of steps) {
-    if (s.kind === 'materialize') {
-      fieldExprToSlot.set(s.field as number, s.target);
-    }
-  }
+  // Cached per program since schedule steps are deterministic.
+  const fieldExprToSlot = getFieldExprToSlotMap(program);
 
   // C-16: Pre-compute slot lookup map to eliminate O(n*m) runtime dispatch
   // Use module-level cache for slot lookup tables.
@@ -548,15 +584,8 @@ export function executeFrame(
   // Resolve camera from program render globals (slots now populated by signal evaluation)
   const resolvedCamera = resolveCameraFromGlobals(program, state);
 
-  // Build signal ID to slot index mapping from schedule
-  const sigToSlot = new Map<number, number>();
-  for (const step of steps) {
-    if (step.kind === 'evalValue' && step.target.storage === 'value') {
-      const lookup = resolveSlotOffset(step.target.slot);
-      // Include all signals regardless of storage type
-        sigToSlot.set(step.expr as number, lookup.slot as number);
-    }
-  }
+  // Signal ID → physical f64 offset mapping (cached per program since schedule is deterministic)
+  const sigToSlot = getSigToSlotMap(program, slotLookupMap);
 
   // Build assembler context with resolved camera and arena
   assemblerContext = {

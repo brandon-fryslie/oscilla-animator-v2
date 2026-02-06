@@ -85,7 +85,6 @@ function createTestRuntimeState(): RuntimeState {
       lastNanBlockId: null,
       lastInfBlockId: null,
       materializationCount: 0,
-      heavyMaterializationBlocks: new Map(),
       lastSnapshotTime: 0,
       samplingBatchStart: 0,
       nanBatchCount: 0,

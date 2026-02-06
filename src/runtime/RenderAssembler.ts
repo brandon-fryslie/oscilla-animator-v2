@@ -401,7 +401,7 @@ export interface AssemblerContext {
   resolvedCamera: ResolvedCameraParams;
   /** Pre-allocated buffer arena for zero-allocation rendering */
   arena: RenderBufferArena;
-  /** Signal ID to slot index mapping (from schedule) */
+  /** Signal ValueExprId -> physical f64 offset mapping (from schedule slotMeta.offset) */
   sigToSlot: ReadonlyMap<number, number>;
 }
 
