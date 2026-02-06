@@ -27,9 +27,9 @@ Add a prominent notice at the top:
 Read and understand the existing canonical specification:
 
 1. **Read INDEX.md** - Current topics, source count, resolution count
-2. **Read all existing topic files** (topics/*.md) - Current canonical content
-3. **Read GLOSSARY.md** - Current canonical terms
-4. **Read INVARIANTS.md** - Current rules
+2. **Read all `**/t1_*.md` files** - Foundational rules (including invariants)
+3. **Read relevant `**/t2_*.md` files** - Structural architecture
+4. **Read GLOSSARY.md** - Current canonical terms
 5. **Read RESOLUTION-LOG.md** - All prior resolutions
 
 **Create a mental model of:**
@@ -107,33 +107,27 @@ For each new document, compare against existing canonical specification:
 
 ## Step 5: Generate Update Outputs
 
-Create working files with "update" prefix:
+Update the **existing QUESTIONS file** in the canonical directory (do not create a new questions file).
 
-1. **CANONICALIZED-QUESTIONS-update-<timestamp>.md**
-   - All contradictions (canonical vs new, internal)
-   - All ambiguities requiring resolution
-   - Format: Same as regular QUESTIONS file but with comparative context
+1. **QUESTIONS.md**
+   - Append a new section `## Update <timestamp>`
+   - Include all contradictions (canonical vs new, internal)
+   - Include all ambiguities requiring resolution
+   - Include gaps and new-topic proposals
 
-2. **CANONICALIZED-SUMMARY-update-<timestamp>.md**
-   - Summary of new sources analyzed
-   - List of affected existing topics
-   - List of proposed new topics
-   - Overlap analysis
-   - Gap analysis
-
-3. **CANONICALIZED-GLOSSARY-update-<timestamp>.md**
+2. **CANONICALIZED-GLOSSARY-update-<timestamp>.md**
    - NEW terms from new sources (not in existing GLOSSARY)
    - CONFLICTING terms (new source vs canonical)
    - COMPLEMENTARY definitions (new source adds detail)
 
-4. **CANONICALIZED-TOPICS-update-<timestamp>.md** (if new topics proposed)
+3. **CANONICALIZED-TOPICS-update-<timestamp>.md** (if new topics proposed)
    - Proposed new topic documents
    - Updates to existing topics
    - Topic dependency map (updated)
 
 ## Step 6: Resolution Process
 
-**User must resolve issues in QUESTIONS file:**
+**User must resolve issues in the canonical QUESTIONS.md file:**
 
 For each item:
 - **CONTRADICTION-T1**: Almost always keep canonical; T1 is foundational and cannot change
@@ -194,6 +188,14 @@ Once all CRITICAL and HIGH items are resolved:
    - Map new sources to topics
    - Note which topics were updated
 
+## Step 7.5: Canonical Integrity Gate (Required)
+
+Run the integrity checks. If any fail, append blocking items to **QUESTIONS.md** under a new `## Integrity <timestamp>` section.
+
+## Step 7.6: Regenerate ESSENTIAL-SPEC.md (Required)
+
+Regenerate `ESSENTIAL-SPEC.md` from authoritative content after updates. It must remain a minimal baseline (T1 + smallest necessary T2 only).
+
 ## Step 8: Status Upgrade to CANONICAL
 
 After all integration work is complete:
@@ -233,20 +235,20 @@ Remove UPDATING notice, add completion note:
    - Overlaps: <count>
    - New topics proposed: <count>
    - Gaps identified: <count>
-6. List the created update working files with full paths
+6. List the updated working files with full paths (including `QUESTIONS.md`)
 7. Show resolution progress: "X of Y items must be resolved"
 8. Highlight CRITICAL issues (T1 contradictions - foundational cannot change)
 9. Explain tier-based severity:
    - "T1 contradictions are CRITICAL - foundational content cannot change"
    - "T2 contradictions are HIGH - structural changes are costly"
    - "T3 contradictions are NORMAL - pick what works better"
-10. Remind user: "Resolve all CRITICAL items in QUESTIONS file, then re-run to integrate"
+10. Remind user: "Resolve all CRITICAL items in QUESTIONS.md, then re-run to integrate"
 11. Note: "INDEX.md status set to UPDATING until integration complete"
 
 ## Special Cases
 
 **If no contradictions or ambiguities found:**
-- Create SUMMARY showing overlaps/complements only
+- Note overlaps/complements directly in QUESTIONS.md or GLOSSARY update
 - Ask user: "New sources align with canonical. Integrate immediately? [Y/n]"
 - If yes, proceed directly to integration phase
 - Still update RESOLUTION-LOG with "No conflicts" note

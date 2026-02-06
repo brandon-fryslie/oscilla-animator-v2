@@ -110,14 +110,13 @@ For every contradiction, ambiguity, and gap identified, note which topic directo
 
 Load and follow the output templates: `@references/output-templates.md`
 
-Generate four files:
-1. `CANONICALIZED-SUMMARY-<topic>-<timestamp>.md`
-2. `CANONICALIZED-QUESTIONS-<topic>-<timestamp>.md`
-3. `CANONICALIZED-GLOSSARY-<topic>-<timestamp>.md`
-4. `CANONICALIZED-TOPICS-<topic>-<timestamp>.md` (NEW - topic breakdown)
+Generate three files:
+1. `CANONICALIZED-QUESTIONS-<topic>-<timestamp>.md`
+2. `CANONICALIZED-GLOSSARY-<topic>-<timestamp>.md`
+3. `CANONICALIZED-TOPICS-<topic>-<timestamp>.md` (topic breakdown)
 
 If no issues are found (no contradictions, ambiguities, or gaps):
-- Still generate SUMMARY, GLOSSARY, and TOPICS
+- Still generate GLOSSARY and TOPICS
 - Skip QUESTIONS or note it's empty
 - Inform user they can proceed directly to FINAL run
 

@@ -24,23 +24,23 @@ You are analyzing architecture and technical specification documents to surface 
 
 The canonical specification organizes content by answering: **"How expensive would this be to change?"**
 
-| Tier | Directory | Meaning | Contents |
-|------|-----------|---------|----------|
-| **1_foundational** | `1_foundational/` | Cannot change. Would make this a different application. | Core invariants, fundamental principles |
-| **2_structural** | `2_structural/` | Can change, but it's work. Affects many other things. | Architecture, type system, core topology |
-| **3_optional** | `3_optional/` | Use it or don't. Change freely if something works better. | Examples, implementation notes, details |
+| Tier | File Prefix | Meaning | Contents |
+|------|-------------|---------|----------|
+| **T1** | `t1_*.md` | Cannot change. Would make this a different application. | Core invariants, fundamental principles |
+| **T2** | `t2_*.md` | Can change, but it's work. Affects many other things. | Architecture, type system, core topology |
+| **T3** | `t3_*.md` | Use it or don't. Change freely if something works better. | Examples, implementation notes, details |
 
 ### Conflict Resolution
 
 **Lower number wins.**
 
-If content in `3_optional/` conflicts with `1_foundational/`, the foundational tier wins. No exceptions.
+If content in `t3_*.md` conflicts with `t1_*.md`, the foundational tier wins. No exceptions.
 
 ### Agent Reading Pattern
 
-- **Always read**: `1_foundational/` (small and critical)
-- **Usually read**: `2_structural/` (core architecture context)
-- **Consult as needed**: `3_optional/` (reference material)
+- **Always read**: `**/t1_*.md` (small and critical)
+- **Usually read**: `**/t2_*.md` (core architecture context)
+- **Consult as needed**: `**/t3_*.md` (reference material)
 
 ## Critical Context: Documents Represent Historical Systems
 
@@ -67,29 +67,30 @@ When integrating source documents into the canonical spec:
 
 If a UI spec document says "Domain blocks have jitter, spacing, and origin parameters," but the canonical spec defines `DomainDecl` with only `shape` parameters, the canonical spec wins. The UI spec's claims about domain parameters are rejected as outdated speculation from a previous system iteration.
 
-## Output Model: Three-Tier Encyclopedia
+## Output Contract (Locked)
 
-The final output organizes content by **topic** (directories) and **tier** (file prefixes):
+**Contract**: `topic_dirs_with_tiers`  
+**Status**: LOCKED (do not change unless the user explicitly opts in)
+
+The canonical output organizes content by **topic** (directories) and **tier** (file prefixes):
 
 ```
 CANONICAL-<topic>-<timestamp>/
-├── INDEX.md                      # Master navigation and overview
-├── TIERS.md                      # Explains the tier system
-├── type-system/                  # Topic directory
-│   ├── t1_core-types.md         # Foundational: float, int, 5 axes
-│   ├── t2_block-roles.md        # Structural: BlockRole architecture
-│   └── t3_diagnostics.md        # Optional: event type details
-├── topology/
-│   ├── t1_invariants.md         # Foundational: multi-in/multi-out
-│   ├── t2_dataflow.md           # Structural: edge semantics
-│   └── t3_examples.md           # Optional: example graphs
-├── principles/                   # Not all topics need all tiers
-│   └── t1_identity.md           # What makes this app unique
-├── GLOSSARY.md                   # Complete terminology reference
-├── RESOLUTION-LOG.md             # Decision history with rationale
+├── INDEX.md                       # Master navigation and overview (derived)
+├── TIERS.md                       # Tier system (derived)
+├── ESSENTIAL-SPEC.md              # Minimal baseline (derived, required)
+├── <topic-1>/                     # Topic directory
+│   ├── t1_<slug>.md               # Foundational content
+│   ├── t2_<slug>.md               # Structural content
+│   └── t3_<slug>.md               # Optional content
+├── <topic-2>/                     # Not all topics need all tiers
+│   ├── t1_<slug>.md
+│   └── t2_<slug>.md
+├── GLOSSARY.md                    # Authoritative terminology
+├── RESOLUTION-LOG.md              # Decision history with rationale
 └── appendices/
-    ├── source-map.md             # Which sources contributed to what
-    └── superseded-docs.md        # List of archived originals
+    ├── source-map.md              # Which sources contributed to what
+    └── superseded-docs.md         # List of archived originals
 ```
 
 ### Why This Organization
@@ -114,15 +115,25 @@ This may be:
 
 First determine where to write your output.  Then determine which files to use as input.
 
-## Step 0: Determine Run Type (DISPATCHER)
+## Step 0: Determine Output Contract + Run Type (DISPATCHER)
 
-Before reading any source files, determine the run type by checking for existing outputs.
+Before reading any source files, determine the **output contract** and run type.
+
+### Output Contract Detection (LOCKED)
+
+The contract defines the canonical directory structure and cannot change mid-stream unless the user explicitly opts in.
+
+Detection order:
+1. If a `CANONICAL-<topic>-*/` directory exists, **detect the on-disk contract**.
+2. If the on-disk contract is not `topic_dirs_with_tiers`, **pause and ask the user whether to migrate**. Do not proceed silently.
+3. If no canonical directory exists, default to **`topic_dirs_with_tiers`**.
+
+**UPDATE runs must never change contracts unless the user explicitly opts in.**
 
 **Output Directory**: Determine the common ancestor directory of all input files.
 
 Check for existing files/directories:
 - `CANONICAL-<topic>-*/` directory (completed encyclopedia)
-- `CANONICALIZED-SUMMARY-*.md` (in-progress working files)
 - `CANONICALIZED-QUESTIONS-*.md`
 - `CANONICALIZED-GLOSSARY-*.md`
 - `CANONICALIZED-TOPICS-*.md` (topic breakdown)
@@ -156,6 +167,53 @@ These rules apply to all run types:
 2. **Carry forward all resolutions** - Every `RESOLVED` item from prior QUESTIONS files must appear in the new output
 3. **Migrate resolved ambiguous terms** - When a term in the Ambiguous Terms table is marked resolved, move it to the GLOSSARY file in the next run
 
+### Authoritative vs Derived Content
+
+**Authoritative (source of truth):**
+- All `**/t1_*.md`, `**/t2_*.md`, `**/t3_*.md` topic files
+- `GLOSSARY.md`
+- `RESOLUTION-LOG.md`
+- `appendices/source-map.md`
+
+**Derived (regenerate every run or omit if unnecessary):**
+- `INDEX.md`
+- `TIERS.md`
+- `ESSENTIAL-SPEC.md` (required minimal baseline)
+- Any extra summary or index files (e.g., `*.INDEX.md`, `SUMMARY.md`) only if the user opts in
+
+**Rule**: Derived files must be regenerated from authoritative content on each run. If efficiency is a concern, prefer **smaller authoritative files** over larger derived summaries.
+
+**ESSENTIAL-SPEC.md Rules (Required)**
+- Purpose: a **minimal baseline** for any agent or implementer.
+- Content: T1 content plus the **smallest necessary** T2 content for core flows (type system, compilation, runtime, renderer).
+- Must exclude T3/UI/implementation examples.
+- Must be short, consistent, and **never introduce new concepts** not in authoritative files.
+
+### QUESTIONS File Handling (User Preference)
+
+- **FIRST/MIDDLE runs**: Use `CANONICALIZED-QUESTIONS-*.md` working files.
+- **UPDATE runs**: Use the existing canonical `QUESTIONS.md` in-place. Append new sections; do not create a new questions file.
+
+### Progressive Disclosure for Agents (Required)
+
+The tier system exists to let agents load **a slim foundation** and only the topic-specific details they need.
+
+Requirements:
+- **T1 files must be small and critical** (no examples, no implementation details).
+- **Each T2 file must start with a "Prerequisites" section** listing the minimal T1 files and any cross-topic dependencies.
+- **Each T2 file must include a "Touchpoints" section** listing other topics/systems it interacts with.
+
+This replaces the need for heavy derived summaries while still enabling efficient, targeted loading.
+
+### Pruning & Signal Discipline (Required)
+
+Remove or avoid generating anything that is:
+- **Distracting**: process reports, compression stats, or workflow artifacts
+- **Vague**: non-actionable principles without constraints or enforcement
+- **Redundant**: indexes of indexes, duplicate summaries
+
+If a document is not authoritative or directly useful for implementation, it should not be generated by default.
+
 ### Topic Identification and Tier Classification
 
 During analysis, identify distinct topics that warrant separate documents AND classify them into tiers.
@@ -170,13 +228,13 @@ During analysis, identify distinct topics that warrant separate documents AND cl
 
 For each topic, ask: **"How expensive would this be to change?"**
 
-- **1_foundational**: "Cannot change" / "Would make this a different application"
+- **T1 (Foundational)**: "Cannot change" / "Would make this a different application"
   - Example: Core invariants, fundamental principles defining what this app IS
 
-- **2_structural**: "Can change, but it's work" / "Touches many other things"
+- **T2 (Structural)**: "Can change, but it's work" / "Touches many other things"
   - Example: Type system architecture, core topology, data flow patterns
 
-- **3_optional**: "Use it or don't" / "Change freely"
+- **T3 (Optional)**: "Use it or don't" / "Change freely"
   - Example: Implementation examples, detailed specifications, code patterns
 
 **Naming Convention**: Use kebab-case slugs:
@@ -207,8 +265,8 @@ topics:
 ### Cross-Linking Convention
 
 Within the encyclopedia, use relative links:
-- `[See Invariants](../INVARIANTS.md)`
-- `[Type System](./01-type-system.md)`
+- `[Foundational Rules](../<topic>/t1_<slug>.md)`
+- `[Type System](../type-system/t2_<slug>.md)`
 - `[Glossary: SignalType](../GLOSSARY.md#signaltype)`
 
 ### Encyclopedia Index Requirements
@@ -222,3 +280,13 @@ The INDEX.md must include:
 5. **Search hints**: Key terms and where to find them
 6. **Version info**: When generated, from what sources, approval status
 
+### Canonical Integrity Gate (Required)
+
+After generating or updating outputs, run an integrity check. If any check fails, add a **blocking item** to the QUESTIONS file (existing canonical `QUESTIONS.md` for UPDATE runs; `CANONICALIZED-QUESTIONS-*.md` for FIRST/MIDDLE runs).
+
+Minimum checks:
+- **Contract conformity**: Output matches `topic_dirs_with_tiers` (topic dirs + `t1_/t2_/t3_` files).
+- **No deprecated tokens in derived files** (e.g., known deprecated terms that were explicitly replaced).
+- **Counts are computed, not handwritten** (sources, topics, resolutions).
+- **Cross-link validity**: All links resolve to existing files/anchors.
+- **Tier sanity**: T1 is small and critical; T3 is non-critical; flag any misclassification.

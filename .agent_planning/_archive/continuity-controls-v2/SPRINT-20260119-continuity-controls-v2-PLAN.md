@@ -1,3 +1,4 @@
+
 # Sprint: continuity-controls-v2 - Enhanced Continuity Controls
 
 Generated: 2026-01-19

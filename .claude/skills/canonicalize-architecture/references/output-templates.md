@@ -5,54 +5,6 @@ These intermediate files guide the resolution process before the final encyclope
 
 ---
 
-## CANONICALIZED-SUMMARY Template
-
-```markdown
----
-command: /canonicalize-architecture $ARGUMENTS
-files: [space-separated list of actual files processed]
-indexed: true
-source_files:
-  - [path/to/source1.md]
-  - [path/to/source2.md]
----
-
-# Canonical Architecture Summary: <Topic>
-
-Generated: <timestamp>
-Supersedes: [list any prior CANONICALIZED-SUMMARY files found]
-Documents Analyzed: [list with brief description of each]
-
-## Executive Summary
-[2-3 paragraph overview of the architecture/design]
-
-## Document Purposes
-[What each source document covers and its role]
-
-## Architecture Overview
-[High-level synthesis of the architecture as described]
-
-## Key Components
-[For each major component: purpose, responsibilities, interfaces]
-
-## Data Flow
-[How data moves through the system]
-
-## Invariants
-[Non-negotiable constraints that must always hold]
-
-## Canonicalization Status
-- Fully Resolved: [count]
-- Pending Questions: [count] (see QUESTIONS file)
-- Ambiguous Terms: [count] (see QUESTIONS file)
-- Topics Identified: [count] (see TOPICS file)
-
-## Recommendations for Next Steps
-[Ordered list of actions to complete canonicalization]
-```
-
----
-
 ## CANONICALIZED-QUESTIONS Template
 
 ```markdown

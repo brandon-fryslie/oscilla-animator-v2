@@ -126,7 +126,7 @@ Looking for something specific? Here's where to find it:
 |---------|----------|
 | [concept] | [file#section] |
 | [term] | [GLOSSARY.md#term] |
-| [invariant] | [INVARIANTS.md#section] |
+| [invariant] | [<topic>/t1_<slug>.md#section] |
 
 ## Appendices
 
@@ -204,60 +204,21 @@ topology/
 ```
 ```
 
-## Step 5: Generate SUMMARY.md (REMOVED)
+## Step 5: Optional SUMMARY.md (Derived, Opt-In)
 
-This step is removed. The encyclopedia no longer has a monolithic SUMMARY.md. The purpose is served by:
-- TIERS.md (explains the system)
-- INDEX.md (navigation)
-- Individual tier files (actual content)
+Only generate `SUMMARY.md` if the user explicitly requests it. If generated, it is **derived** and must be regenerated from authoritative content each run.
 
-## Step 6: Generate GLOSSARY.md (formerly Step 4)
+## Step 6: Generate ESSENTIAL-SPEC.md (Required)
 
-```markdown
----
-parent: INDEX.md
----
+`ESSENTIAL-SPEC.md` is a **minimal baseline** for agents and implementers.
 
-# <Topic>: Executive Summary
+Requirements:
+- Include **all T1** content that constrains behavior.
+- Include only the **smallest necessary** T2 content for core flows (type system, compilation, runtime, renderer).
+- Exclude T3/UI/implementation examples.
+- No new concepts beyond authoritative files.
 
-> Start here for a high-level understanding of the architecture.
-
-## What This System Does
-
-[2-3 paragraphs explaining the purpose and value proposition]
-
-## Key Design Principles
-
-1. **[Principle 1]** - [Brief explanation]
-2. **[Principle 2]** - [Brief explanation]
-3. **[Principle 3]** - [Brief explanation]
-
-## Architecture at a Glance
-
-[High-level architecture diagram or description]
-
-### Major Components
-
-| Component | Purpose | Key Document |
-|-----------|---------|--------------|
-| [Name] | [Brief] | [Link to topic] |
-
-### Data Flow
-
-[Brief description of how data moves through the system]
-
-## What's New / What Changed
-
-[If this is an update to a prior spec, summarize changes]
-
-## Quick Reference
-
-- **Invariants**: [INVARIANTS.md](./INVARIANTS.md)
-- **Glossary**: [GLOSSARY.md](./GLOSSARY.md)
-- **Full Topic List**: [INDEX.md](./INDEX.md)
-```
-
-## Step 6: Generate GLOSSARY.md (no longer Step 5, INVARIANTS.md removed)
+## Step 7: Generate GLOSSARY.md
 
 Merge from CANONICALIZED-GLOSSARY plus all resolved terms from QUESTIONS.
 
@@ -449,6 +410,15 @@ tier: 2
 
 ---
 
+## Prerequisites
+
+- [List the minimal `t1_*.md` files required]
+- [List cross-topic dependencies]
+
+## Touchpoints
+
+- [Other topics/systems this interacts with]
+
 ## Overview
 
 [Architectural decisions for this area]
@@ -528,8 +498,8 @@ Which original documents contributed to which parts of this specification.
 
 | Specification Section | Primary Sources |
 |-----------------------|-----------------|
-| [INVARIANTS.md] | [source1.md], [source2.md] |
-| [topics/01-xxx.md] | [source3.md] |
+| [<topic>/t1_<slug>.md] | [source1.md], [source2.md] |
+| [<topic>/t2_<slug>.md] | [source3.md] |
 | [GLOSSARY.md] | All sources |
 ```
 
@@ -569,48 +539,7 @@ They should NOT be used for:
 - Design decisions
 ```
 
-## Step 10: Generate Monolith Document (REMOVED)
-
-This step is removed. The encyclopedia structure with TIERS.md and INDEX.md serves the "quick reference" purpose.
-
-Agents can easily filter by tier using glob patterns (`**/t1_*.md`), and humans can navigate via INDEX.md.
-
-## Step 11: Archive Source Files (was Step 11, now Step 9)
-
-```markdown
----
-command: /canonicalize-architecture <arguments>
-files: [list of files]
-status: CANONICAL
-source_files:
-  - [list]
-encyclopedia: CANONICAL-<topic>-<timestamp>/
-archived_to: <archive-directory>/
----
-
-# <Topic>: Canonical Architecture Specification
-
-> **This is the authoritative source of truth for <topic>.**
-> For detailed specifications, see the encyclopedia: [CANONICAL-<topic>-<timestamp>/](./CANONICAL-<topic>-<timestamp>/)
-
-Generated: <timestamp>
-Approved by: <user>
-
-[Condensed version of the specification covering:]
-1. Overview (2-3 paragraphs)
-2. Invariants (summary table with links to encyclopedia)
-3. Architecture overview (high-level, with links to topic docs for detail)
-4. Key components (brief descriptions)
-5. Glossary (abbreviated - key terms only, with link to full glossary)
-6. Resolution log (summary table)
-
-[For each section, include a note like:]
-> **Full specification**: See [01-type-system.md](./CANONICAL-<topic>-<timestamp>/topics/01-type-system.md)
-```
-
-**Key principle**: The monolith is a **summary document** that links to the encyclopedia for detail. It should be self-contained enough to understand the architecture, but explicitly defer to topic documents for exhaustive specification.
-
-## Step 9: Archive Source Files (formerly Step 11)
+## Step 9: Archive Source Files
 
 After generating the encyclopedia:
 
@@ -631,12 +560,14 @@ After generating the encyclopedia:
 
 Before announcing completion, verify:
 
+- [ ] Integrity gate passed (no new blocking items added)
 - [ ] INDEX.md has valid links to all topic directories
 - [ ] TIERS.md exists and explains the system
 - [ ] All tier files exist (t1, t2, t3 as planned)
 - [ ] T1 files are small and critical
 - [ ] T2 files contain structural/architectural content
 - [ ] T3 files contain examples/implementation details
+- [ ] ESSENTIAL-SPEC.md is minimal and consistent with authoritative files
 - [ ] GLOSSARY.md includes all terms from CANONICALIZED-GLOSSARY plus resolved terms
 - [ ] Cross-links work (no broken relative links)
 - [ ] No TODO/TBD markers remain
