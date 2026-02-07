@@ -15,6 +15,7 @@ import {
   computeFrameTimingStats,
   resetFrameTimingStats,
 } from '../runtime/HealthMonitor';
+import { JANK_THRESHOLD_MS } from '../stores/DiagnosticsStore';
 import type { RuntimeState } from '../runtime/RuntimeState';
 import type { RootStore } from '../stores';
 import type { RenderFrameIR } from '../render/types';
@@ -142,8 +143,25 @@ export function executeAnimationFrame(
   // Reset arena for this frame (O(1) - just resets write heads)
   arena.reset();
 
+  // Capture delta BEFORE recordFrameDelta updates prevRafTimestamp
+  const prevRaf = currentState.health.prevRafTimestamp;
+  const rafDelta = prevRaf !== null ? tMs - prevRaf : 0;
+
   // Record frame delta FIRST (using rAF timestamp for precision)
   recordFrameDelta(currentState, tMs);
+
+  // Jank detection — state.execTime/renderTime still hold PREVIOUS frame's values
+  if (rafDelta > JANK_THRESHOLD_MS) {
+    const prevExec = state.execTime;
+    const prevRender = state.renderTime;
+    store.diagnostics.recordJank({
+      wallTime: new Date().toLocaleTimeString('en-US', { hour12: false }),
+      deltaMs: rafDelta,
+      prevExecMs: prevExec,
+      prevRenderMs: prevRender,
+      browserGapMs: Math.max(0, rafDelta - prevExec - prevRender),
+    });
+  }
 
   const frameStart = performance.now();
 

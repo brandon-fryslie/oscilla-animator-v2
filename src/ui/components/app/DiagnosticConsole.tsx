@@ -22,6 +22,7 @@ import { ToggleButton, ToggleButtonGroup } from '@mui/material';
 import { useStores } from '../../../stores';
 import type { RootStore } from '../../../stores';
 import type { Diagnostic, Severity, TargetRef, DiagnosticAction } from '../../../diagnostics/types';
+import type { TimingWindowEntry, TimingRangeStats, JankEvent } from '../../../stores/DiagnosticsStore';
 
 // =============================================================================
 // DiagnosticConsole Component
@@ -60,8 +61,11 @@ export const DiagnosticConsole: React.FC = observer(() => {
   const medianMs = diagnosticsStore.medianCompileMs;
   const lastMs = diagnosticsStore.lastCompileMs;
 
-  // Get frame timing stats (reactive)
-  const timing = diagnosticsStore.frameTiming;
+  // Get multi-window frame timing stats (reactive)
+  const timingWindows = diagnosticsStore.frameTimingWindows;
+
+  // Get jank events (reactive)
+  const jankLog = diagnosticsStore.jankLog;
 
   // Get memory stats (reactive) - Sprint: memory-instrumentation
   const memory = diagnosticsStore.memoryStats;
@@ -76,29 +80,115 @@ export const DiagnosticConsole: React.FC = observer(() => {
         color: '#eee',
       }}
     >
-      {/* Frame Timing Stats Bar */}
-      {timing.frameCount > 0 && (
+      {/* Frame Timing Multi-Window Table */}
+      {timingWindows.length > 0 && (
         <div
           style={{
-            padding: '6px 12px',
+            padding: '4px 12px',
             borderBottom: '1px solid #0f3460',
             fontFamily: 'monospace',
             fontSize: '11px',
             background: '#0a0a18',
-            color: timing.jitterRatio > 5 ? '#f88' : timing.jitterRatio > 2 ? '#fa8' : '#8a8',
           }}
         >
-          <span style={{ color: '#8af' }}>Frame Timing:</span>{' '}
-          {(1000 / timing.avgDelta).toFixed(0)}fps |{' '}
-          {timing.avgDelta.toFixed(2)}ms avg |{' '}
-          <span style={{ color: timing.stdDev > 2 ? '#f88' : timing.stdDev > 1 ? '#fa8' : '#8a8' }}>
-            {timing.stdDev.toFixed(2)}ms jitter
-          </span>{' '}
-          ({timing.jitterRatio.toFixed(1)}%) |{' '}
-          [{timing.minDelta.toFixed(1)}-{timing.maxDelta.toFixed(1)}ms] |{' '}
-          <span style={{ color: timing.droppedFrames > 0 ? '#f88' : '#8a8' }}>
-            {timing.droppedFrames} dropped
-          </span>
+          {/* Header row */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '36px 1fr 1fr 1fr 60px',
+            gap: '0 6px',
+            color: '#8af',
+            paddingBottom: '2px',
+            borderBottom: '1px solid #1a2a4a',
+            marginBottom: '1px',
+          }}>
+            <span></span>
+            <span style={{ textAlign: 'right' }}>fps</span>
+            <span style={{ textAlign: 'right' }}>ms/frame</span>
+            <span style={{ textAlign: 'right' }}>jitter</span>
+            <span style={{ textAlign: 'right' }}>dropped</span>
+          </div>
+          {/* Data rows */}
+          {timingWindows.map((w: TimingWindowEntry) => (
+            <div key={w.label} style={{
+              display: 'grid',
+              gridTemplateColumns: '36px 1fr 1fr 1fr 60px',
+              gap: '0 6px',
+              lineHeight: '16px',
+              opacity: w.full ? 1 : 0.5,
+            }}>
+              <span style={{ color: '#888' }}>{w.label}</span>
+              <span style={{ textAlign: 'right', color: fpsColor(w.stats.fps.mean) }}>
+                {formatRange(w.stats.fps, 0)}
+              </span>
+              <span style={{ textAlign: 'right', color: msColor(w.stats.msPerFrame.max) }}>
+                {formatRange(w.stats.msPerFrame, 1)}
+              </span>
+              <span style={{ textAlign: 'right', color: jitterColor(w.stats.jitter.mean) }}>
+                {formatRange(w.stats.jitter, 1)}
+              </span>
+              <span style={{ textAlign: 'right', color: droppedColor(w.stats.dropped) }}>
+                {w.stats.dropped}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Jank Event Log */}
+      {jankLog.length > 0 && (
+        <div
+          style={{
+            padding: '4px 12px',
+            borderBottom: '1px solid #0f3460',
+            fontFamily: 'monospace',
+            fontSize: '11px',
+            background: '#0a0a18',
+            maxHeight: '120px',
+            overflowY: 'auto',
+          }}
+        >
+          <div style={{ color: '#f88', paddingBottom: '2px', borderBottom: '1px solid #1a2a4a', marginBottom: '1px' }}>
+            Jank Log ({jankLog.length} events)
+          </div>
+          {/* Header */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '64px 70px 60px 60px 1fr',
+            gap: '0 6px',
+            color: '#666',
+            lineHeight: '14px',
+          }}>
+            <span>time</span>
+            <span style={{ textAlign: 'right' }}>delta</span>
+            <span style={{ textAlign: 'right' }}>exec</span>
+            <span style={{ textAlign: 'right' }}>render</span>
+            <span style={{ textAlign: 'right' }}>browser gap</span>
+          </div>
+          {/* Events, newest first */}
+          {[...jankLog].reverse().map((e: JankEvent, i: number) => {
+            const isBrowser = e.browserGapMs > e.prevExecMs + e.prevRenderMs;
+            return (
+              <div key={i} style={{
+                display: 'grid',
+                gridTemplateColumns: '64px 70px 60px 60px 1fr',
+                gap: '0 6px',
+                lineHeight: '16px',
+                color: '#ccc',
+              }}>
+                <span style={{ color: '#888' }}>{e.wallTime}</span>
+                <span style={{ textAlign: 'right', color: '#f88' }}>{e.deltaMs.toFixed(0)}ms</span>
+                <span style={{ textAlign: 'right', color: e.prevExecMs > 50 ? '#f88' : '#8a8' }}>
+                  {e.prevExecMs.toFixed(1)}ms
+                </span>
+                <span style={{ textAlign: 'right', color: e.prevRenderMs > 50 ? '#f88' : '#8a8' }}>
+                  {e.prevRenderMs.toFixed(1)}ms
+                </span>
+                <span style={{ textAlign: 'right', color: isBrowser ? '#fa8' : '#8a8' }}>
+                  {e.browserGapMs.toFixed(0)}ms{isBrowser ? ' ← browser/GC' : ''}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -396,6 +486,44 @@ const DiagnosticRow: React.FC<DiagnosticRowProps> = ({ diagnostic, rootStore }) 
 // =============================================================================
 // Helper Functions
 // =============================================================================
+
+/**
+ * Format a range stat as "mean [min-max]"
+ */
+function formatRange(r: TimingRangeStats, decimals: number): string {
+  const m = r.mean.toFixed(decimals);
+  const lo = r.min.toFixed(decimals);
+  const hi = r.max.toFixed(decimals);
+  return `${m} [${lo}-${hi}]`;
+}
+
+/** Color for fps values (higher = better) */
+function fpsColor(fps: number): string {
+  if (fps >= 58) return '#8a8';
+  if (fps >= 50) return '#fa8';
+  return '#f88';
+}
+
+/** Color for ms/frame max values (lower = better) */
+function msColor(maxMs: number): string {
+  if (maxMs < 20) return '#8a8';
+  if (maxMs < 33) return '#fa8';
+  return '#f88';
+}
+
+/** Color for jitter mean (lower = better) */
+function jitterColor(jitter: number): string {
+  if (jitter < 1) return '#8a8';
+  if (jitter < 2) return '#fa8';
+  return '#f88';
+}
+
+/** Color for dropped frame count (zero = best) */
+function droppedColor(dropped: number): string {
+  if (dropped === 0) return '#8a8';
+  if (dropped < 5) return '#fa8';
+  return '#f88';
+}
 
 /**
  * Formats bytes into human-readable string.

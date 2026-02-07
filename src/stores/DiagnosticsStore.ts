@@ -69,6 +69,181 @@ export interface MemoryStats {
 }
 
 // =============================================================================
+// Multi-Window Frame Timing Aggregation
+// =============================================================================
+
+/**
+ * Range stats for a single metric across a time window.
+ */
+export interface TimingRangeStats {
+  mean: number;
+  min: number;
+  max: number;
+}
+
+/**
+ * Aggregated frame timing stats for a single time window.
+ */
+export interface TimingWindowStats {
+  fps: TimingRangeStats;
+  msPerFrame: TimingRangeStats;
+  jitter: TimingRangeStats;
+  dropped: number;
+}
+
+/**
+ * A labeled time window with its aggregated stats.
+ */
+export interface TimingWindowEntry {
+  label: string;
+  stats: TimingWindowStats;
+  /** true if enough snapshots exist to fill this window's full duration */
+  full: boolean;
+}
+
+/** Window configurations: label and snapshot count at 5Hz */
+const TIMING_WINDOW_CONFIGS = [
+  { label: '1s', snapshots: 5 },
+  { label: '10s', snapshots: 50 },
+  { label: '1m', snapshots: 300 },
+  { label: '5m', snapshots: 1500 },
+] as const;
+
+/**
+ * Compute aggregated stats from a range of the history array.
+ * Uses index range to avoid array allocation.
+ */
+function computeWindowStatsFromRange(
+  history: readonly FrameTimingStats[],
+  count: number
+): TimingWindowStats {
+  const start = Math.max(0, history.length - count);
+  const end = history.length;
+  const n = end - start;
+
+  if (n === 0) {
+    return {
+      fps: { mean: 0, min: 0, max: 0 },
+      msPerFrame: { mean: 0, min: 0, max: 0 },
+      jitter: { mean: 0, min: 0, max: 0 },
+      dropped: 0,
+    };
+  }
+
+  let fpsSum = 0, fpsMin = Infinity, fpsMax = 0;
+  let deltaMeanSum = 0, deltaMin = Infinity, deltaMax = 0;
+  let jitterSum = 0, jitterMin = Infinity, jitterMax = 0;
+  let dropped = 0;
+  let counted = 0;
+
+  for (let i = start; i < end; i++) {
+    const s = history[i];
+    // Skip empty snapshots that may have leaked in
+    if (s.avgDelta <= 0 || s.frameCount === 0) continue;
+
+    counted++;
+    const fps = 1000 / s.avgDelta;
+    fpsSum += fps;
+    fpsMin = Math.min(fpsMin, fps);
+    fpsMax = Math.max(fpsMax, fps);
+    deltaMeanSum += s.avgDelta;
+    // Use per-snapshot extremes for absolute min/max frame times
+    if (s.minDelta > 0) deltaMin = Math.min(deltaMin, s.minDelta);
+    deltaMax = Math.max(deltaMax, s.maxDelta);
+    jitterSum += s.stdDev;
+    jitterMin = Math.min(jitterMin, s.stdDev);
+    jitterMax = Math.max(jitterMax, s.stdDev);
+    dropped += s.droppedFrames;
+  }
+
+  if (counted === 0) {
+    return {
+      fps: { mean: 0, min: 0, max: 0 },
+      msPerFrame: { mean: 0, min: 0, max: 0 },
+      jitter: { mean: 0, min: 0, max: 0 },
+      dropped: 0,
+    };
+  }
+
+  return {
+    fps: {
+      mean: fpsSum / counted,
+      min: fpsMin === Infinity ? 0 : fpsMin,
+      max: fpsMax,
+    },
+    msPerFrame: {
+      mean: deltaMeanSum / counted,
+      min: deltaMin === Infinity ? 0 : deltaMin,
+      max: deltaMax,
+    },
+    jitter: {
+      mean: jitterSum / counted,
+      min: jitterMin === Infinity ? 0 : jitterMin,
+      max: jitterMax,
+    },
+    dropped,
+  };
+}
+
+/** Lifetime accumulator shape */
+interface LifetimeTimingAccumulator {
+  totalSnapshots: number;
+  fpsSum: number;
+  fpsMin: number;
+  fpsMax: number;
+  deltaMeanSum: number;
+  deltaMin: number;
+  deltaMax: number;
+  jitterSum: number;
+  jitterMin: number;
+  jitterMax: number;
+  totalDropped: number;
+}
+
+function createLifetimeAccumulator(): LifetimeTimingAccumulator {
+  return {
+    totalSnapshots: 0,
+    fpsSum: 0,
+    fpsMin: Infinity,
+    fpsMax: 0,
+    deltaMeanSum: 0,
+    deltaMin: Infinity,
+    deltaMax: 0,
+    jitterSum: 0,
+    jitterMin: Infinity,
+    jitterMax: 0,
+    totalDropped: 0,
+  };
+}
+
+// =============================================================================
+// Jank Event Types
+// =============================================================================
+
+/** Threshold for jank detection (ms). Frames with delta > this are logged. */
+export const JANK_THRESHOLD_MS = 100;
+
+/**
+ * A captured jank event with timing breakdown.
+ *
+ * Tells you WHERE the time went:
+ * - prevExecMs + prevRenderMs = our code (previous frame's work)
+ * - browserGapMs = browser overhead (GC, layout, other scripts)
+ */
+export interface JankEvent {
+  /** Wall clock time string for display */
+  wallTime: string;
+  /** Time between rAF callbacks (ms) — the total pause duration */
+  deltaMs: number;
+  /** Previous frame's executeFrame() time (ms) */
+  prevExecMs: number;
+  /** Previous frame's renderFrame() time (ms) */
+  prevRenderMs: number;
+  /** Unexplained gap: delta - prevExec - prevRender (ms) — browser/GC overhead */
+  browserGapMs: number;
+}
+
+// =============================================================================
 // Log Types
 // =============================================================================
 
@@ -137,9 +312,16 @@ export class DiagnosticsStore {
     maxDelta: 0,
   };
 
-  // Historical frame timing for trend analysis (last 30 snapshots = ~6 seconds)
+  // Historical frame timing snapshots (5Hz, up to 5 minutes)
   private _frameTimingHistory: FrameTimingStats[] = [];
-  private static readonly MAX_TIMING_HISTORY = 30;
+  private static readonly MAX_TIMING_HISTORY = 1500;
+
+  // Lifetime accumulator (never resets, survives history eviction)
+  private _lifetimeStats: LifetimeTimingAccumulator = createLifetimeAccumulator();
+
+  // Jank event log (bounded, most recent events)
+  private static readonly MAX_JANK_EVENTS = 50;
+  private _jankLog: JankEvent[] = [];
 
   // Memory statistics (Sprint: memory-instrumentation)
   private _memoryStats: MemoryStats = {
@@ -158,7 +340,7 @@ export class DiagnosticsStore {
 
     makeObservable<
       DiagnosticsStore,
-      '_revision' | '_logs' | '_compilationStats' | '_frameTiming' | '_frameTimingHistory' | '_memoryStats' | 'incrementRevision'
+      '_revision' | '_logs' | '_compilationStats' | '_frameTiming' | '_frameTimingHistory' | '_lifetimeStats' | '_jankLog' | '_memoryStats' | 'incrementRevision'
     >(this, {
       // Observable revision counter
       _revision: observable,
@@ -188,9 +370,16 @@ export class DiagnosticsStore {
       // Frame Timing API
       _frameTiming: observable,
       _frameTimingHistory: observable,
+      _lifetimeStats: observable,
       frameTiming: computed,
       frameTimingHistory: computed,
+      frameTimingWindows: computed,
       updateFrameTiming: action,
+
+      // Jank Log API
+      _jankLog: observable,
+      jankLog: computed,
+      recordJank: action,
 
       // Memory Stats API (Sprint: memory-instrumentation)
       _memoryStats: observable,
@@ -468,10 +657,118 @@ export class DiagnosticsStore {
   updateFrameTiming(stats: FrameTimingStats): void {
     this._frameTiming = stats;
 
-    // Add to history
+    // Skip empty snapshots — no real frame data to aggregate
+    if (stats.frameCount === 0 || stats.avgDelta <= 0) return;
+
+    // Add to history (ring buffer via shift)
     this._frameTimingHistory.push(stats);
     if (this._frameTimingHistory.length > DiagnosticsStore.MAX_TIMING_HISTORY) {
       this._frameTimingHistory.shift();
+    }
+
+    // Update lifetime accumulator
+    const fps = 1000 / stats.avgDelta;
+    const life = this._lifetimeStats;
+    life.totalSnapshots++;
+    life.fpsSum += fps;
+    life.fpsMin = Math.min(life.fpsMin, fps);
+    life.fpsMax = Math.max(life.fpsMax, fps);
+    life.deltaMeanSum += stats.avgDelta;
+    life.deltaMin = Math.min(life.deltaMin, stats.minDelta);
+    life.deltaMax = Math.max(life.deltaMax, stats.maxDelta);
+    life.jitterSum += stats.stdDev;
+    life.jitterMin = Math.min(life.jitterMin, stats.stdDev);
+    life.jitterMax = Math.max(life.jitterMax, stats.stdDev);
+    life.totalDropped += stats.droppedFrames;
+  }
+
+  /**
+   * Multi-window frame timing aggregation.
+   *
+   * Returns stats for 1s, 10s, 1m, 5m, and lifetime windows.
+   * Each window shows mean/min/max for fps, ms/frame, jitter, plus total dropped.
+   *
+   * - fps min/max: per-snapshot fps extremes (reveals sustained slow periods)
+   * - msPerFrame min/max: absolute individual frame extremes (reveals jank spikes)
+   * - jitter min/max: per-snapshot stdDev extremes
+   * - dropped: total count across the window
+   */
+  get frameTimingWindows(): TimingWindowEntry[] {
+    const history = this._frameTimingHistory;
+    const life = this._lifetimeStats;
+
+    const entries: TimingWindowEntry[] = TIMING_WINDOW_CONFIGS.map(config => {
+      const available = history.length;
+      if (available === 0) {
+        return {
+          label: config.label,
+          stats: {
+            fps: { mean: 0, min: 0, max: 0 },
+            msPerFrame: { mean: 0, min: 0, max: 0 },
+            jitter: { mean: 0, min: 0, max: 0 },
+            dropped: 0,
+          },
+          full: false,
+        };
+      }
+
+      return {
+        label: config.label,
+        stats: computeWindowStatsFromRange(history, config.snapshots),
+        full: available >= config.snapshots,
+      };
+    });
+
+    // Lifetime window from accumulator
+    if (life.totalSnapshots > 0) {
+      const n = life.totalSnapshots;
+      entries.push({
+        label: 'life',
+        stats: {
+          fps: {
+            mean: life.fpsSum / n,
+            min: life.fpsMin === Infinity ? 0 : life.fpsMin,
+            max: life.fpsMax,
+          },
+          msPerFrame: {
+            mean: life.deltaMeanSum / n,
+            min: life.deltaMin === Infinity ? 0 : life.deltaMin,
+            max: life.deltaMax,
+          },
+          jitter: {
+            mean: life.jitterSum / n,
+            min: life.jitterMin === Infinity ? 0 : life.jitterMin,
+            max: life.jitterMax,
+          },
+          dropped: life.totalDropped,
+        },
+        full: true,
+      });
+    }
+
+    return entries;
+  }
+
+  // =============================================================================
+  // Jank Log API
+  // =============================================================================
+
+  /**
+   * Recent jank events with timing breakdown.
+   * Each event tells you where the time went: our code vs browser overhead.
+   */
+  get jankLog(): readonly JankEvent[] {
+    return this._jankLog;
+  }
+
+  /**
+   * Record a jank event.
+   * Called by the animation loop when frame delta exceeds JANK_THRESHOLD_MS.
+   */
+  recordJank(event: JankEvent): void {
+    this._jankLog.push(event);
+    if (this._jankLog.length > DiagnosticsStore.MAX_JANK_EVENTS) {
+      this._jankLog.shift();
     }
   }
 
