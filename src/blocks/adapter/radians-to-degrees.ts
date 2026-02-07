@@ -41,10 +41,10 @@ registerBlock({
     const input = inputsById.in;
     if (!input) throw new Error('Lens block input is required');
 
+    const outType = ctx.outTypes[0];
     const factor = ctx.b.constant(floatConst(57.29577951308232), canonicalType(FLOAT, unitScalar())); // 180/π
     const mulFn = ctx.b.opcode(OpCode.Mul);
-    const degrees = ctx.b.kernelZip([input.id, factor], mulFn, canonicalType(FLOAT, unitDegrees()));
-    const outType = ctx.outTypes[0];
+    const degrees = ctx.b.kernelZip([input.id, factor], mulFn, outType);
     return {
       outputsById: {
         out: { id: degrees, slot: undefined, type: outType, stride: payloadStride(outType.payload) },

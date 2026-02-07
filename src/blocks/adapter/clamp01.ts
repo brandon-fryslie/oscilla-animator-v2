@@ -41,11 +41,11 @@ registerBlock({
     const input = inputsById.in;
     if (!input) throw new Error('Adapter_Clamp01: input is required');
 
+    const outType = ctx.outTypes[0];
     const zero = ctx.b.constant(floatConst(0), canonicalType(FLOAT, unitScalar()));
     const one = ctx.b.constant(floatConst(1), canonicalType(FLOAT, unitScalar()));
     const clampFn = ctx.b.opcode(OpCode.Clamp);
-    const clamped = ctx.b.kernelZip([input.id, zero, one], clampFn, canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()));
-    const outType = ctx.outTypes[0];
+    const clamped = ctx.b.kernelZip([input.id, zero, one], clampFn, outType);
     return {
       outputsById: {
         out: { id: clamped, slot: undefined, type: outType, stride: payloadStride(outType.payload) },

@@ -41,9 +41,9 @@ registerBlock({
     const input = inputsById.in;
     if (!input) throw new Error('Lens block input is required');
 
-    const wrapFn = ctx.b.opcode(OpCode.Wrap01);
-    const wrapped = ctx.b.kernelMap(input.id, wrapFn, canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()));
     const outType = ctx.outTypes[0];
+    const wrapFn = ctx.b.opcode(OpCode.Wrap01);
+    const wrapped = ctx.b.kernelMap(input.id, wrapFn, outType);
     return {
       outputsById: {
         out: { id: wrapped, slot: undefined, type: outType, stride: payloadStride(outType.payload) },

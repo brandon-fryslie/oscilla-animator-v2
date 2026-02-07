@@ -8,9 +8,10 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, payloadStride, contractClamp01 } from '../../core/canonical-types';
+import { canonicalType, payloadStride, contractClamp01, requireInst, withInstance } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
+import { alignInputs, withoutContract } from '../lower-utils';
 
 registerBlock({
   type: 'Lens_NormalizeRange',
@@ -42,22 +43,52 @@ registerBlock({
     if (!max) throw new Error('Lens_NormalizeRange: max is required');
 
     const outType = ctx.outTypes[0];
+    const inCard = requireInst(input.type.extent.cardinality, 'cardinality');
+    const outTypeWithInstance = inCard.kind === 'many' ? withInstance(outType, inCard.instance) : outType;
+
+    const intermediateType = withoutContract(outTypeWithInstance);
+    const intermediateSignalType = withoutContract(min.type);
 
     // y = (x - min) / (max - min)
     const subFn = ctx.b.opcode(OpCode.Sub);
-    const numerator = ctx.b.kernelZip([input.id, min.id], subFn, canonicalType(FLOAT));
-    const range = ctx.b.kernelZip([max.id, min.id], subFn, canonicalType(FLOAT));
+
+    const numerator =
+      inCard.kind === 'many'
+        ? (() => {
+          const [x, mn] = alignInputs(input.id, input.type, min.id, min.type, intermediateType, ctx.b);
+          return ctx.b.kernelZip([x, mn], subFn, intermediateType);
+        })()
+        : ctx.b.kernelZip([input.id, min.id], subFn, intermediateSignalType);
+
+    const maxCard = requireInst(max.type.extent.cardinality, 'cardinality');
+    const minCard = requireInst(min.type.extent.cardinality, 'cardinality');
+    const range =
+      (maxCard.kind === 'many' || minCard.kind === 'many')
+        ? (() => {
+          const [mx, mn] = alignInputs(max.id, max.type, min.id, min.type, intermediateType, ctx.b);
+          return ctx.b.kernelZip([mx, mn], subFn, intermediateType);
+        })()
+        : ctx.b.kernelZip([max.id, min.id], subFn, intermediateSignalType);
 
     const divFn = ctx.b.opcode(OpCode.Div);
-    const result = ctx.b.kernelZip([numerator, range], divFn, outType);
+    const result =
+      inCard.kind === 'many'
+        ? (() => {
+          const rangeField =
+            (maxCard.kind === 'many' || minCard.kind === 'many')
+              ? range
+              : ctx.b.broadcast(range, intermediateType);
+          return ctx.b.kernelZip([numerator, rangeField], divFn, outTypeWithInstance);
+        })()
+        : ctx.b.kernelZip([numerator, range], divFn, outTypeWithInstance);
 
     return {
       outputsById: {
-        out: { id: result, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+        out: { id: result, slot: undefined, type: outTypeWithInstance, stride: payloadStride(outTypeWithInstance.payload) },
       },
       effects: {
         slotRequests: [
-          { portId: 'out', type: outType },
+          { portId: 'out', type: outTypeWithInstance },
         ],
       },
     };

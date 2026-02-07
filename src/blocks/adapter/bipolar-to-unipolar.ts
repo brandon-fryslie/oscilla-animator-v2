@@ -50,7 +50,7 @@ registerBlock({
     const halfConst = ctx.b.constant(floatConst(0.5), canonicalType(FLOAT, unitScalar()));
 
     const addFn = ctx.b.opcode(OpCode.Add);
-    const added = ctx.b.kernelZip([input.id, one], addFn, canonicalType(FLOAT, unitScalar()));
+    const added = ctx.b.kernelZip([input.id, one], addFn, outType);
 
     const mulFn = ctx.b.opcode(OpCode.Mul);
     const result = ctx.b.kernelZip([added, halfConst], mulFn, outType);

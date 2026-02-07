@@ -19,7 +19,7 @@
 
 import { registerBlock } from '../registry';
 import { instanceId as makeInstanceId, domainTypeId as makeDomainTypeId } from '../../core/ids';
-import { canonicalField, unitWorld3, requireInst, VEC3, COLOR, FLOAT } from '../../core/canonical-types';
+import { canonicalField, unitWorld3, unitHsl, requireInst, VEC3, COLOR, FLOAT } from '../../core/canonical-types';
 import { defaultSourceConst, canonicalType } from '../../types';
 
 registerBlock({
@@ -37,7 +37,7 @@ registerBlock({
   },
   inputs: {
     pos: { label: 'Position', type: canonicalField(VEC3, unitWorld3(), { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
-    color: { label: 'Color', type: canonicalField(COLOR, { kind: 'scalar' }, { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
+    color: { label: 'Color', type: canonicalField(COLOR, unitHsl(), { instanceId: makeInstanceId('default'), domainTypeId: makeDomainTypeId('default') }) },
     // Shape input REMOVED - now looked up automatically from instance
     scale: {
       label: 'Scale',
@@ -61,11 +61,6 @@ registerBlock({
       throw new Error('RenderInstances2D color input is required');
     }
     // color may be a signal (one) when wired from a Const via allowZipSig broadcast — that's valid
-
-    const instance = ctx.inferredInstance;
-    if (!instance) {
-      throw new Error('RenderInstances2D requires field inputs with instance context');
-    }
 
     // Shape is automatically looked up from instance.shapeField in schedule-program.ts
     // No need to extract it here - the backend handles it

@@ -11,6 +11,7 @@ import { canonicalType, payloadStride, unitHsl, unitScalar, contractClamp01 } fr
 import { FLOAT, COLOR } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
+import { withoutContract } from '../lower-utils';
 
 registerBlock({
   type: 'MixColor',
@@ -40,24 +41,29 @@ registerBlock({
     if (!aInput || !bInput || !tInput) throw new Error('MixColor requires a, b, and t inputs');
 
     const outType = ctx.outTypes[0];
-    const floatType = canonicalType(FLOAT, unitScalar());
+    // Derive intermediate float type from resolved output extent (preserves cardinality)
+    const intermediateFloat = withoutContract({
+      payload: FLOAT,
+      unit: unitScalar(),
+      extent: outType.extent,
+    });
 
     // Extract channels from both colors
-    const ah = ctx.b.extract(aInput.id, 0, floatType);
-    const as = ctx.b.extract(aInput.id, 1, floatType);
-    const al = ctx.b.extract(aInput.id, 2, floatType);
-    const aa = ctx.b.extract(aInput.id, 3, floatType);
+    const ah = ctx.b.extract(aInput.id, 0, intermediateFloat);
+    const as = ctx.b.extract(aInput.id, 1, intermediateFloat);
+    const al = ctx.b.extract(aInput.id, 2, intermediateFloat);
+    const aa = ctx.b.extract(aInput.id, 3, intermediateFloat);
 
-    const bh = ctx.b.extract(bInput.id, 0, floatType);
-    const bs = ctx.b.extract(bInput.id, 1, floatType);
-    const bl = ctx.b.extract(bInput.id, 2, floatType);
-    const ba = ctx.b.extract(bInput.id, 3, floatType);
+    const bh = ctx.b.extract(bInput.id, 0, intermediateFloat);
+    const bs = ctx.b.extract(bInput.id, 1, intermediateFloat);
+    const bl = ctx.b.extract(bInput.id, 2, intermediateFloat);
+    const ba = ctx.b.extract(bInput.id, 3, intermediateFloat);
 
     // Clamp t to [0,1]
     const clampFn = ctx.b.opcode(OpCode.Clamp);
-    const zero = ctx.b.constant({ kind: 'float', value: 0 }, floatType);
-    const one = ctx.b.constant({ kind: 'float', value: 1 }, floatType);
-    const tClamped = ctx.b.kernelZip([tInput.id, zero, one], clampFn, floatType);
+    const zero = ctx.b.constant({ kind: 'float', value: 0 }, intermediateFloat);
+    const one = ctx.b.constant({ kind: 'float', value: 1 }, intermediateFloat);
+    const tClamped = ctx.b.kernelZip([tInput.id, zero, one], clampFn, intermediateFloat);
 
     // Shortest-arc hue interpolation:
     //   diff = bh - ah
@@ -70,20 +76,20 @@ registerBlock({
     const fractFn = ctx.b.opcode(OpCode.Fract);
     const wrap01Fn = ctx.b.opcode(OpCode.Wrap01);
 
-    const half = ctx.b.constant({ kind: 'float', value: 0.5 }, floatType);
-    const diff = ctx.b.kernelZip([bh, ah], subFn, floatType);
-    const shifted = ctx.b.kernelZip([diff, half], addFn, floatType);
-    const fractVal = ctx.b.kernelMap(shifted, fractFn, floatType);
-    const dh = ctx.b.kernelZip([fractVal, half], subFn, floatType);
-    const dhScaled = ctx.b.kernelZip([dh, tClamped], mulFn, floatType);
-    const hSum = ctx.b.kernelZip([ah, dhScaled], addFn, floatType);
-    const hOut = ctx.b.kernelMap(hSum, wrap01Fn, floatType);
+    const half = ctx.b.constant({ kind: 'float', value: 0.5 }, intermediateFloat);
+    const diff = ctx.b.kernelZip([bh, ah], subFn, intermediateFloat);
+    const shifted = ctx.b.kernelZip([diff, half], addFn, intermediateFloat);
+    const fractVal = ctx.b.kernelMap(shifted, fractFn, intermediateFloat);
+    const dh = ctx.b.kernelZip([fractVal, half], subFn, intermediateFloat);
+    const dhScaled = ctx.b.kernelZip([dh, tClamped], mulFn, intermediateFloat);
+    const hSum = ctx.b.kernelZip([ah, dhScaled], addFn, intermediateFloat);
+    const hOut = ctx.b.kernelMap(hSum, wrap01Fn, intermediateFloat);
 
     // Linear lerp for s, l, a
     const lerpFn = ctx.b.opcode(OpCode.Lerp);
-    const sOut = ctx.b.kernelZip([as, bs, tClamped], lerpFn, floatType);
-    const lOut = ctx.b.kernelZip([al, bl, tClamped], lerpFn, floatType);
-    const aOut = ctx.b.kernelZip([aa, ba, tClamped], lerpFn, floatType);
+    const sOut = ctx.b.kernelZip([as, bs, tClamped], lerpFn, intermediateFloat);
+    const lOut = ctx.b.kernelZip([al, bl, tClamped], lerpFn, intermediateFloat);
+    const aOut = ctx.b.kernelZip([aa, ba, tClamped], lerpFn, intermediateFloat);
 
     // Reconstruct
     const result = ctx.b.construct([hOut, sOut, lOut, aOut], outType);

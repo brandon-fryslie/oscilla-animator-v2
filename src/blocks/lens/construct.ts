@@ -8,8 +8,9 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, payloadStride } from '../../core/canonical-types';
+import { canonicalType, payloadStride, requireInst, withInstance } from '../../core/canonical-types';
 import { FLOAT, VEC3 } from '../../core/canonical-types';
+import { withoutContract } from '../lower-utils';
 
 registerBlock({
   type: 'Construct',
@@ -41,10 +42,55 @@ registerBlock({
       throw new Error('Construct requires all inputs (x, y, z)');
     }
 
-    const outType = ctx.outTypes[0];
+    const baseOutType = ctx.outTypes[0];
+    const xCard = requireInst(xInput.type.extent.cardinality, 'cardinality');
+    const yCard = requireInst(yInput.type.extent.cardinality, 'cardinality');
+    const zCard = requireInst(zInput.type.extent.cardinality, 'cardinality');
+    const fieldInstance =
+      xCard.kind === 'many' ? xCard.instance :
+      yCard.kind === 'many' ? yCard.instance :
+      zCard.kind === 'many' ? zCard.instance :
+      null;
+    const outType = fieldInstance ? withInstance(baseOutType, fieldInstance) : baseOutType;
+
+    const xId = (() => {
+      if (!fieldInstance) return xInput.id;
+      if (xCard.kind === 'many') {
+        if (xCard.instance.instanceId !== fieldInstance.instanceId || xCard.instance.domainTypeId !== fieldInstance.domainTypeId) {
+          throw new Error('Construct: x field instance does not match');
+        }
+        return xInput.id;
+      }
+      const xFieldType = withInstance(withoutContract(xInput.type), fieldInstance);
+      return ctx.b.broadcast(xInput.id, xFieldType);
+    })();
+
+    const yId = (() => {
+      if (!fieldInstance) return yInput.id;
+      if (yCard.kind === 'many') {
+        if (yCard.instance.instanceId !== fieldInstance.instanceId || yCard.instance.domainTypeId !== fieldInstance.domainTypeId) {
+          throw new Error('Construct: y field instance does not match');
+        }
+        return yInput.id;
+      }
+      const yFieldType = withInstance(withoutContract(yInput.type), fieldInstance);
+      return ctx.b.broadcast(yInput.id, yFieldType);
+    })();
+
+    const zId = (() => {
+      if (!fieldInstance) return zInput.id;
+      if (zCard.kind === 'many') {
+        if (zCard.instance.instanceId !== fieldInstance.instanceId || zCard.instance.domainTypeId !== fieldInstance.domainTypeId) {
+          throw new Error('Construct: z field instance does not match');
+        }
+        return zInput.id;
+      }
+      const zFieldType = withInstance(withoutContract(zInput.type), fieldInstance);
+      return ctx.b.broadcast(zInput.id, zFieldType);
+    })();
 
     // Use IR construct operation to pack components
-    const result = ctx.b.construct([xInput.id, yInput.id, zInput.id], outType);
+    const result = ctx.b.construct([xId, yId, zId], outType);
 
     return {
       outputsById: {

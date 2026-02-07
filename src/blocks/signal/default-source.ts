@@ -22,7 +22,7 @@
  * - other → broadcast of signal default
  */
 
-import { registerBlock } from '../registry';
+import { registerBlock, requireBlockDef } from '../registry';
 import type { LowerCtx } from '../registry';
 import {
   canonicalType,
@@ -107,6 +107,8 @@ function fieldVec3Default(ctx: LowerCtx, outType: CanonicalType): ValueExprId {
  * color field default: per-element rainbow that shifts over time.
  * hue = normalizedIndex + phaseA (each element different hue, all shift with time)
  * saturation = 0.8, lightness = 0.5, alpha = 1.0
+ *
+ * Output is HSL - conversion to RGB happens at render boundary (single enforcer).
  */
 function fieldColorDefault(ctx: LowerCtx, outType: CanonicalType): ValueExprId {
   const floatFieldType = { ...canonicalSignal(FLOAT), extent: outType.extent };
@@ -121,12 +123,10 @@ function fieldColorDefault(ctx: LowerCtx, outType: CanonicalType): ValueExprId {
   const lightField = ctx.b.broadcast(light, floatFieldType);
   const alphaField = ctx.b.broadcast(alpha, floatFieldType);
 
-  // Construct HSL color field
+  // Construct HSL color field - output is HSL (no conversion here)
+  // HSL→RGB conversion happens at render boundary (RenderAssembler)
   const hslType: CanonicalType = { ...canonicalType(COLOR, unitHsl()), extent: outType.extent };
-  const hsl = ctx.b.construct([hue, satField, lightField, alphaField], hslType);
-
-  // Convert HSL → RGB
-  return ctx.b.hslToRgb(hsl, outType);
+  return ctx.b.construct([hue, satField, lightField, alphaField], hslType);
 }
 
 /**
@@ -250,7 +250,9 @@ registerBlock({
       const rotationConst = ctx.b.constant({ kind: 'float', value: 0 }, canonicalSignal(FLOAT));
 
       // Ellipse is pure, so we can lower it directly without DefaultSource recursion
-      const shapeOutputs = sandbox.lowerBlock('Ellipse', { rx: rxConst, ry: ryConst, rotation: rotationConst }, { rx: 0.05, ry: 0.05, rotation: 0 });
+      const ellipseDef = requireBlockDef('Ellipse');
+      const ellipseOutTypes = Object.values(ellipseDef.outputs).map(o => o.type as CanonicalType);
+      const shapeOutputs = sandbox.lowerBlock('Ellipse', { rx: rxConst, ry: ryConst, rotation: rotationConst }, { rx: 0.05, ry: 0.05, rotation: 0 }, ellipseOutTypes);
       const shapeId = shapeOutputs.shape;
 
       // Use a default count of 8 elements
@@ -292,7 +294,9 @@ registerBlock({
       const sandbox = new LowerSandbox(ctx.b, ctx.blockType, ctx.instanceId, ctx.instances);
       const phaseType = canonicalType(FLOAT);
       const phaseA = ctx.b.time('phaseA', phaseType);
-      const rainbowOutputs = sandbox.lowerBlock('HueRainbow', { t: phaseA }, {});
+      const rainbowDef = requireBlockDef('HueRainbow');
+      const rainbowOutTypes = Object.values(rainbowDef.outputs).map(o => o.type as CanonicalType);
+      const rainbowOutputs = sandbox.lowerBlock('HueRainbow', { t: phaseA }, {}, rainbowOutTypes);
 
       return {
         outputsById: {

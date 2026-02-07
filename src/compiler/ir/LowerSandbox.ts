@@ -11,7 +11,7 @@
  * Usage:
  * ```typescript
  * const sandbox = new LowerSandbox(ctx.b, ctx.blockType, ctx.instanceId);
- * const outputExprs = sandbox.lowerBlock('HueRainbow', { t: phaseExpr }, {});
+ * const outputExprs = sandbox.lowerBlock('HueRainbow', { t: phaseExpr }, {}, outTypes);
  * // outputExprs['out'] is a ValueExprId (no slot allocated yet)
  * ```
  */
@@ -56,7 +56,8 @@ export class LowerSandbox {
   lowerBlock(
     blockType: string,
     inputsById: Record<string, ValueExprId>,
-    params?: Record<string, unknown>
+    params: Record<string, unknown> | undefined,
+    resolvedOutTypes: CanonicalType[]
   ): Record<string, ValueExprId> {
     const blockDef = requireBlockDef(blockType);
 
@@ -87,10 +88,7 @@ export class LowerSandbox {
       };
     }
 
-    // Build outTypes from output definitions
-    const outTypes: CanonicalType[] = Object.values(blockDef.outputs).map(
-      (outDef) => outDef.type as CanonicalType
-    );
+    const outTypes: CanonicalType[] = resolvedOutTypes;
 
     // Synthetic block index (negative to avoid collision with real blocks)
     const syntheticBlockIdx = -1 as BlockIndex;

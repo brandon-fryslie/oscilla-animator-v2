@@ -41,11 +41,11 @@ registerBlock({
     const input = inputsById.in;
     if (!input) throw new Error('Lens block input is required');
 
+    const outType = ctx.outTypes[0];
     // int:ms → float division → float:seconds
     const divisor = ctx.b.constant(floatConst(1000), canonicalType(FLOAT, unitScalar()));
     const divFn = ctx.b.opcode(OpCode.Div);
-    const seconds = ctx.b.kernelZip([input.id, divisor], divFn, canonicalType(FLOAT, unitSeconds()));
-    const outType = ctx.outTypes[0];
+    const seconds = ctx.b.kernelZip([input.id, divisor], divFn, outType);
     return {
       outputsById: {
         out: { id: seconds, slot: undefined, type: outType, stride: payloadStride(outType.payload) },

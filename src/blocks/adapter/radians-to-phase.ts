@@ -41,12 +41,12 @@ registerBlock({
     const input = inputsById.in;
     if (!input) throw new Error('Lens block input is required');
 
+    const outType = ctx.outTypes[0];
     const twoPi = ctx.b.constant(floatConst(6.283185307179586), canonicalType(FLOAT, unitScalar()));
     const divFn = ctx.b.opcode(OpCode.Div);
-    const divided = ctx.b.kernelZip([input.id, twoPi], divFn, canonicalType(FLOAT, unitScalar()));
+    const divided = ctx.b.kernelZip([input.id, twoPi], divFn, outType);
     const wrapFn = ctx.b.opcode(OpCode.Wrap01);
-    const wrapped = ctx.b.kernelMap(divided, wrapFn, canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()));
-    const outType = ctx.outTypes[0];
+    const wrapped = ctx.b.kernelMap(divided, wrapFn, outType);
     return {
       outputsById: {
         out: { id: wrapped, slot: undefined, type: outType, stride: payloadStride(outType.payload) },

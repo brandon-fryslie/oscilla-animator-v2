@@ -10,6 +10,7 @@ import { canonicalType, payloadStride, unitHsl, unitScalar } from '../../core/ca
 import { FLOAT, COLOR } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
+import { withoutContract } from '../lower-utils';
 
 registerBlock({
   type: 'HueShift',
@@ -37,19 +38,24 @@ registerBlock({
     if (!colorInput || !shiftInput) throw new Error('HueShift requires color and shift inputs');
 
     const outType = ctx.outTypes[0];
-    const floatType = canonicalType(FLOAT, unitScalar());
+    // Derive intermediate float type from resolved output extent (preserves cardinality)
+    const intermediateFloat = withoutContract({
+      payload: FLOAT,
+      unit: unitScalar(),
+      extent: outType.extent,
+    });
 
     // Extract channels
-    const h = ctx.b.extract(colorInput.id, 0, floatType);
-    const s = ctx.b.extract(colorInput.id, 1, floatType);
-    const l = ctx.b.extract(colorInput.id, 2, floatType);
-    const a = ctx.b.extract(colorInput.id, 3, floatType);
+    const h = ctx.b.extract(colorInput.id, 0, intermediateFloat);
+    const s = ctx.b.extract(colorInput.id, 1, intermediateFloat);
+    const l = ctx.b.extract(colorInput.id, 2, intermediateFloat);
+    const a = ctx.b.extract(colorInput.id, 3, intermediateFloat);
 
     // h2 = wrap01(h + shift)
     const addFn = ctx.b.opcode(OpCode.Add);
     const wrap01 = ctx.b.opcode(OpCode.Wrap01);
-    const hShifted = ctx.b.kernelZip([h, shiftInput.id], addFn, floatType);
-    const hWrapped = ctx.b.kernelMap(hShifted, wrap01, floatType);
+    const hShifted = ctx.b.kernelZip([h, shiftInput.id], addFn, intermediateFloat);
+    const hWrapped = ctx.b.kernelMap(hShifted, wrap01, intermediateFloat);
 
     // Reconstruct with shifted hue
     const result = ctx.b.construct([hWrapped, s, l, a], outType);

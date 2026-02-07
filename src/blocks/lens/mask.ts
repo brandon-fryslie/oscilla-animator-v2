@@ -8,9 +8,10 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, payloadStride, floatConst } from '../../core/canonical-types';
+import { canonicalType, payloadStride, floatConst, requireInst } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
+import { alignInputs, withoutContract } from '../lower-utils';
 
 registerBlock({
   type: 'Mask',
@@ -40,12 +41,22 @@ registerBlock({
     if (!mask) throw new Error('Mask mask input is required');
 
     const outType = ctx.outTypes[0];
+    const outCard = requireInst(outType.extent.cardinality, 'cardinality');
 
     // y = select(mask, input, 0)
     // Select: cond > 0 ? ifTrue : ifFalse
     const zeroConst = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
     const selectFn = ctx.b.opcode(OpCode.Select);
-    const result = ctx.b.kernelZip([mask.id, input.id, zeroConst], selectFn, outType);
+
+    const result =
+      outCard.kind === 'many'
+        ? (() => {
+          const intermediateField = withoutContract(outType);
+          const [maskField, inputField] = alignInputs(mask.id, mask.type, input.id, input.type, intermediateField, ctx.b);
+          const zeroField = ctx.b.broadcast(zeroConst, intermediateField);
+          return ctx.b.kernelZip([maskField, inputField, zeroField], selectFn, outType);
+        })()
+        : ctx.b.kernelZip([mask.id, input.id, zeroConst], selectFn, outType);
 
     return {
       outputsById: {

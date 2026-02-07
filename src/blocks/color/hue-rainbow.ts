@@ -43,63 +43,26 @@ registerBlock({
     }
 
     const outType = ctx.outTypes[0];
-    const floatType = canonicalType(FLOAT, unitTurns());
+    // Derive intermediate float type from resolved output extent (preserves cardinality)
+    const intermediateFloat = {
+      payload: FLOAT,
+      unit: unitTurns(),
+      extent: outType.extent,
+    };
 
     // Fixed saturation (~0.8), lightness (~0.5), alpha (1.0)
-    const sat = ctx.b.constant({ kind: 'float', value: 0.8 }, floatType);
-    const light = ctx.b.constant({ kind: 'float', value: 0.5 }, floatType);
-    const alpha = ctx.b.constant({ kind: 'float', value: 1.0 }, floatType);
+    const sat = ctx.b.constant({ kind: 'float', value: 0.8 }, intermediateFloat);
+    const light = ctx.b.constant({ kind: 'float', value: 0.5 }, intermediateFloat);
+    const alpha = ctx.b.constant({ kind: 'float', value: 1.0 }, intermediateFloat);
 
     // Construct HSL color (t as hue, fixed s/l/a)
-    const hsl = ctx.b.construct([tInput.id, sat, light, alpha], canonicalType(COLOR, unitHsl()));
-
-    // Convert HSL to RGB
-    const rgb = ctx.b.hslToRgb(hsl, outType);
+    // Output is HSL - conversion to RGB happens at render boundary (single enforcer)
+    const hsl = ctx.b.construct([tInput.id, sat, light, alpha], outType);
 
     // Pure block: no slot allocation (orchestrator handles it)
     return {
       outputsById: {
-        out: { id: rgb, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
-      },
-      effects: {
-        slotRequests: [
-          { portId: 'out', type: outType },
-        ],
-      },
-    };
-    return {
-      outputsById: {
-        out: { id: rgb, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
-      },
-      effects: {
-        slotRequests: [
-          { portId: 'out', type: outType },
-        ],
-      },
-    };
-    return {
-      outputsById: {
-        out: { id: rgb, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
-      },
-      effects: {
-        slotRequests: [
-          { portId: 'out', type: outType },
-        ],
-      },
-    };
-    return {
-      outputsById: {
-        out: { id: rgb, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
-      },
-      effects: {
-        slotRequests: [
-          { portId: 'out', type: outType },
-        ],
-      },
-    };
-    return {
-      outputsById: {
-        out: { id: rgb, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
+        out: { id: hsl, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
       },
       effects: {
         slotRequests: [

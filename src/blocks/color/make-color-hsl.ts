@@ -7,10 +7,11 @@
  */
 
 import { registerBlock } from '../registry';
-import { canonicalType, payloadStride, unitHsl, unitTurns, unitScalar, contractWrap01, contractClamp01 } from '../../core/canonical-types';
+import { canonicalType, canonicalConst, payloadStride, unitHsl, unitTurns, unitScalar, contractWrap01, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT, COLOR } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
+import { withoutContract, zipAuto } from '../lower-utils';
 
 registerBlock({
   type: 'MakeColorHSL',
@@ -44,18 +45,23 @@ registerBlock({
     }
 
     const outType = ctx.outTypes[0];
-    const floatType = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
-
+    // Derive intermediate float type from resolved output extent (preserves cardinality)
+    const intermediateFloat = withoutContract({
+      payload: FLOAT,
+      unit: unitTurns(),
+      extent: outType.extent,
+    });
     // Enforce: wrap hue, clamp s/l/a
     const wrap01 = ctx.b.opcode(OpCode.Wrap01);
     const clamp = ctx.b.opcode(OpCode.Clamp);
-    const zero = ctx.b.constant({ kind: 'float', value: 0 }, floatType);
-    const one = ctx.b.constant({ kind: 'float', value: 1 }, floatType);
+    // Constants are card=zero (universal donors) — zipAuto handles cardinality alignment
+    const zero = ctx.b.constant({ kind: 'float', value: 0 }, canonicalConst(FLOAT, unitScalar()));
+    const one = ctx.b.constant({ kind: 'float', value: 1 }, canonicalConst(FLOAT, unitScalar()));
 
-    const hWrapped = ctx.b.kernelMap(hInput.id, wrap01, floatType);
-    const sClamped = ctx.b.kernelZip([sInput.id, zero, one], clamp, floatType);
-    const lClamped = ctx.b.kernelZip([lInput.id, zero, one], clamp, floatType);
-    const aClamped = ctx.b.kernelZip([aInput.id, zero, one], clamp, floatType);
+    const hWrapped = ctx.b.kernelMap(hInput.id, wrap01, intermediateFloat);
+    const sClamped = zipAuto([sInput.id, zero, one], clamp, intermediateFloat, ctx.b);
+    const lClamped = zipAuto([lInput.id, zero, one], clamp, intermediateFloat, ctx.b);
+    const aClamped = zipAuto([aInput.id, zero, one], clamp, intermediateFloat, ctx.b);
 
     const result = ctx.b.construct([hWrapped, sClamped, lClamped, aClamped], outType);
 

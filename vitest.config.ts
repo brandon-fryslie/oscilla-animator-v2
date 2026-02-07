@@ -4,7 +4,10 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
-    setupFiles: ['./src/ui/components/__tests__/setup.ts'],
+    setupFiles: [
+      './src/__tests__/setup-blocks.ts',
+      './src/ui/components/__tests__/setup.ts',
+    ],
     // Pass --expose-gc to worker threads for memory profiling tests
     pool: 'forks',
     poolOptions: {

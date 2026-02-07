@@ -103,11 +103,20 @@ describe('BlockLibrary', () => {
     vi.clearAllMocks();
   });
 
+  // The component filters out categories where all blocks have capability:'time'.
+  // Tests must use visible categories to match what the component renders.
+  function getVisibleCategories(): string[] {
+    return getBlockCategories().filter((category: string) => {
+      const types = getBlockTypesByCategory(category);
+      return types.some((t: any) => t.capability !== 'time');
+    });
+  }
+
   describe('Category Organization', () => {
     it('should display blocks grouped by BlockCategory enum', () => {
       render(<BlockLibrary />, { wrapper: TestWrapper });
 
-      const categories = getBlockCategories();
+      const categories = getVisibleCategories();
       categories.forEach((category: string) => {
         expect(screen.getByText(category)).toBeInTheDocument();
       });
@@ -116,18 +125,20 @@ describe('BlockLibrary', () => {
     it('should show correct count of blocks per category', () => {
       render(<BlockLibrary />, { wrapper: TestWrapper });
 
-      const categories = getBlockCategories();
+      const categories = getVisibleCategories();
       categories.forEach((category: string) => {
         const types = getBlockTypesByCategory(category);
+        // The component also filters out timeRoot blocks within each category
+        const visibleTypes = types.filter((t: any) => t.capability !== 'time');
         const countElement = screen.getByText(category).parentElement?.querySelector('.block-category__count');
-        expect(countElement?.textContent).toBe(String(types.length));
+        expect(countElement?.textContent).toBe(String(visibleTypes.length));
       });
     });
 
     it('should allow toggling category collapse', () => {
       render(<BlockLibrary />, { wrapper: TestWrapper });
 
-      const categories = getBlockCategories();
+      const categories = getVisibleCategories();
       if (categories.length === 0) return;
 
       const firstCategory = categories[0];
@@ -221,7 +232,7 @@ describe('BlockLibrary', () => {
     it('should preview block on single click', async () => {
       render(<BlockLibrary />, { wrapper: TestWrapper });
 
-      const categories = getBlockCategories();
+      const categories = getVisibleCategories();
       if (categories.length === 0) return;
 
       const types = getBlockTypesByCategory(categories[0]);
@@ -238,7 +249,7 @@ describe('BlockLibrary', () => {
     it('should add block on double click', async () => {
       render(<BlockLibrary />, { wrapper: TestWrapper });
 
-      const categories = getBlockCategories();
+      const categories = getVisibleCategories();
       if (categories.length === 0) return;
 
       const types = getBlockTypesByCategory(categories[0]);
@@ -261,7 +272,7 @@ describe('BlockLibrary', () => {
     it('should persist collapsed categories to localStorage', () => {
       render(<BlockLibrary />, { wrapper: TestWrapper });
 
-      const categories = getBlockCategories();
+      const categories = getVisibleCategories();
       if (categories.length === 0) return;
 
       const firstCategory = categories[0];
@@ -276,7 +287,7 @@ describe('BlockLibrary', () => {
     });
 
     it('should restore collapsed state from localStorage', () => {
-      const categories = getBlockCategories();
+      const categories = getVisibleCategories();
       if (categories.length === 0) return;
 
       const firstCategory = categories[0];
