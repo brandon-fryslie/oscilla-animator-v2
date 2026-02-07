@@ -184,7 +184,8 @@ function evaluateSignalExtent(
     }
 
     case 'intrinsic': {
-      throw new Error('Intrinsic expressions are field-extent, not signal-extent');
+      const intrinsicName = expr.intrinsicKind === 'property' ? expr.intrinsic : expr.field;
+      throw new Error(`Intrinsic expressions are field-extent, not signal-extent (intrinsic=${intrinsicName})`);
     }
 
     case 'event': {

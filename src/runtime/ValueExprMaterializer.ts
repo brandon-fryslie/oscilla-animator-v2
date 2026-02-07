@@ -328,9 +328,11 @@ function applyMap(
   count: number,
   stride: number
 ): void {
-  // Simplified: assume stride=1 for MVP
   for (let i = 0; i < count; i++) {
-    out[i] = evaluatePureFn(fn, [input[i]]);
+    const base = i * stride;
+    for (let c = 0; c < stride; c++) {
+      out[base + c] = evaluatePureFn(fn, [input[base + c]]);
+    }
   }
 }
 
@@ -351,8 +353,11 @@ function applyZip(
   stride: number
 ): void {
   for (let i = 0; i < count; i++) {
-    const args = inputs.map(buf => buf[i]);
-    out[i] = evaluatePureFn(fn, args);
+    const base = i * stride;
+    for (let c = 0; c < stride; c++) {
+      const args = inputs.map(buf => buf[base + c]);
+      out[base + c] = evaluatePureFn(fn, args);
+    }
   }
 }
 
@@ -377,54 +382,53 @@ function applyZipSig(
   program: CompiledProgramIR
 ): void {
   for (let i = 0; i < count; i++) {
-    const args = [fieldInput[i], ...sigValues];
-    out[i] = evaluatePureFn(fn, args);
+    const base = i * stride;
+    for (let c = 0; c < stride; c++) {
+      const args = [fieldInput[base + c], ...sigValues];
+      out[base + c] = evaluatePureFn(fn, args);
+    }
   }
 }
 
 /**
  * Evaluate a pure function with given arguments.
  *
+ * Delegates to OpcodeInterpreter for all opcode operations.
+ * This ensures SINGLE ENFORCER: all scalar math is defined in one place.
+ *
  * @param fn - Function descriptor
  * @param args - Input arguments
  * @returns Result value
  */
 function evaluatePureFn(fn: PureFn, args: number[]): number {
-  if (fn.kind === 'opcode') {
-    // Handle opcodes (add, mul, etc.)
-    switch (fn.opcode) {
-      case 'add': return args[0] + args[1];
-      case 'sub': return args[0] - args[1];
-      case 'mul': return args[0] * args[1];
-      case 'div': return args[0] / args[1];
-      case 'mod': return args[0] % args[1];
-      case 'pow': return Math.pow(args[0], args[1]);
-      case 'neg': return -args[0];
-      case 'abs': return Math.abs(args[0]);
-      case 'sin': return Math.sin(args[0]);
-      case 'cos': return Math.cos(args[0]);
-      case 'tan': return Math.tan(args[0]);
-      case 'floor': return Math.floor(args[0]);
-      case 'ceil': return Math.ceil(args[0]);
-      case 'round': return Math.round(args[0]);
-      case 'sqrt': return Math.sqrt(args[0]);
-      case 'exp': return Math.exp(args[0]);
-      case 'log': return Math.log(args[0]);
-      case 'min': return Math.min(args[0], args[1]);
-      case 'max': return Math.max(args[0], args[1]);
-      case 'clamp': return Math.min(Math.max(args[0], args[1]), args[2]);
-      case 'lerp': return args[0] + (args[1] - args[0]) * args[2];
-      case 'select': return args[0] ? args[1] : args[2];
-      default: throw new Error(`Unknown opcode: ${fn.opcode}`);
+  switch (fn.kind) {
+    case 'opcode':
+      // Delegate to single enforcer for all opcodes
+      return applyOpcode(fn.opcode, args);
+
+    case 'kernel':
+      throw new Error(`Kernel functions not yet implemented: ${fn.name}`);
+
+    case 'kernelResolved':
+      throw new Error(`kernelResolved not yet implemented: ${fn.handle}`);
+
+    case 'expr':
+      throw new Error(`Expression evaluation not yet implemented: ${fn.expr}`);
+
+    case 'composed': {
+      // Apply each opcode in sequence (same pattern as SignalKernelLibrary)
+      let result = args[0];
+      for (const op of fn.ops) {
+        result = applyOpcode(op, [result]);
+      }
+      return result;
     }
-  } else if (fn.kind === 'kernel') {
-    // Handle kernel functions (named functions)
-    throw new Error(`Kernel functions not yet implemented: ${fn.name}`);
-  } else if (fn.kind === 'expr') {
-    // Handle expression strings
-    throw new Error(`Expression evaluation not yet implemented: ${fn.expr}`);
+
+    default: {
+      const _exhaustive: never = fn;
+      throw new Error(`Unknown function kind: ${(_exhaustive as PureFn).kind}`);
+    }
   }
-  throw new Error(`Unknown function kind: ${(fn as PureFn).kind}`);
 }
 
 /**

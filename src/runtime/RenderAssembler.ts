@@ -37,6 +37,7 @@ import {
   projectFieldRadiusOrtho,
   ORTHO_CAMERA_DEFAULTS,
 } from '../projection/ortho-kernel';
+import { hslToRgbScalar } from './color-math';
 import {
   projectFieldPerspective,
   projectFieldRadiusPerspective,
@@ -760,6 +761,47 @@ export function sliceColorBuffer(
 }
 
 /**
+ * Convert color buffer from Float32Array to Uint8ClampedArray.
+ *
+ * SINGLE ENFORCER: HSL→RGB conversion happens here at the render boundary.
+ * Color blocks output HSL values; the renderer expects RGB. This is the
+ * one place where conversion occurs — no conversion inside blocks.
+ *
+ * Format: Input is [h,s,l,a] stride-4 Float32Array in [0,1] range.
+ * Output: Uint8ClampedArray [r,g,b,a] in [0,255] range.
+ *
+ * @param input - Float32Array with HSLA values (stride 4)
+ * @param count - Number of color entries
+ * @param arena - Buffer arena for allocation
+ * @returns Uint8ClampedArray with RGBA values
+ */
+function convertColorBufferToRgba(
+  input: Float32Array,
+  count: number,
+  arena: RenderBufferArena
+): Uint8ClampedArray {
+  const output = arena.allocRGBA(count);
+
+  for (let i = 0; i < count; i++) {
+    const h = input[i * 4];
+    const s = input[i * 4 + 1];
+    const l = input[i * 4 + 2];
+    const a = input[i * 4 + 3];
+
+    // HSL→RGB conversion (single enforcer for color space conversion)
+    const [r, g, b] = hslToRgbScalar(h, s, l);
+
+    // Convert [0,1] → [0,255]
+    output[i * 4] = r * 255;
+    output[i * 4 + 1] = g * 255;
+    output[i * 4 + 2] = b * 255;
+    output[i * 4 + 3] = a * 255;
+  }
+
+  return output;
+}
+
+/**
  * Record assembler timing metrics to HealthMetrics ring buffers
  */
 function recordAssemblerTiming(
@@ -1196,15 +1238,13 @@ export function assembleDrawPathInstancesOp(
     throw new Error(`RenderAssembler: Color buffer not found in slot ${step.colorSlot}`);
   }
 
-  // Convert Float32Array [0,1] RGBA to Uint8ClampedArray [0,255] if needed
+  // Convert color buffer to Uint8ClampedArray [0,255] RGBA
+  // HSL→RGB conversion happens here at render boundary (single enforcer)
   let colorBuffer: Uint8ClampedArray;
   if (rawColorBuffer instanceof Uint8ClampedArray) {
     colorBuffer = rawColorBuffer;
   } else if (rawColorBuffer instanceof Float32Array) {
-    colorBuffer = new Uint8ClampedArray(rawColorBuffer.length);
-    for (let i = 0; i < rawColorBuffer.length; i++) {
-      colorBuffer[i] = rawColorBuffer[i] * 255;
-    }
+    colorBuffer = convertColorBufferToRgba(rawColorBuffer, count, arena);
   } else {
     throw new Error(
       `RenderAssembler: Color buffer must be Float32Array or Uint8ClampedArray, got ${rawColorBuffer.constructor.name}`

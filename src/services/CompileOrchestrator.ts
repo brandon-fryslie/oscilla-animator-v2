@@ -12,6 +12,7 @@ import { compileFrontend } from '../compiler/frontend';
 import { convertFrontendErrorsToDiagnostics } from '../compiler/frontend/frontendDiagnosticConversion';
 import { untracked } from 'mobx';
 import { compilerFlagsSettings } from '../settings/tokens/compiler-flags-settings';
+import { debugSettings } from '../settings/tokens/debug-settings';
 import type { Patch } from '../graph';
 import {
   createSessionState,
@@ -109,7 +110,10 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
   // =========================================================================
   // Step 1: Run Frontend Compilation
   // =========================================================================
-  const frontendResult = compileFrontend(patch);
+  const debugValues = store.settings.get(debugSettings);
+  const frontendResult = compileFrontend(patch, {
+    traceCardinalitySolver: debugValues?.traceCardinalitySolver,
+  });
 
   // Store frontend snapshot regardless of success/failure
   if (frontendResult.kind === 'ok') {
