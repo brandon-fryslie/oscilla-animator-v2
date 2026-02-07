@@ -6,6 +6,7 @@
 
 import './phase-to-scalar';
 import './scalar-to-phase';
+import './phase-to-degrees';
 import './phase-to-radians';
 import './radians-to-phase';
 import './degrees-to-radians';

@@ -81,7 +81,7 @@ patch "Smooth Chase" {
     rx = 0.012
     ry = 0.012
     outputs {
-      shape = [outer-instances.element, render-raw.shape]
+      shape = outer-instances.element
     }
   }
 
@@ -114,7 +114,7 @@ patch "Smooth Chase" {
     rx = 0.02
     ry = 0.02
     outputs {
-      shape = [inner-instances.element, render-smooth.shape]
+      shape = inner-instances.element
     }
   }
 

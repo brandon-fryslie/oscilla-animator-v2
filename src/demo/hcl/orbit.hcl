@@ -18,7 +18,7 @@ patch "Orbit" {
     rx = 0.015
     ry = 0.015
     outputs {
-      shape = [outer-instances.element, render-outer.shape]
+      shape = outer-instances.element
     }
   }
 
@@ -51,7 +51,7 @@ patch "Orbit" {
     rx = 0.035
     ry = 0.035
     outputs {
-      shape = [inner-instances.element, render-inner.shape]
+      shape = inner-instances.element
     }
   }
 

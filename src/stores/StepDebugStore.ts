@@ -479,24 +479,73 @@ export class StepDebugStore {
     const build = (exprId: ValueExprId, depth: number): ExprTreeNode | null => {
       const numId = exprId as number;
       if (visited.has(numId)) {
-        return { id: numId, label: '(cycle)', blockName: null, value: null, isAnomaly: false, children: [] };
+        return { id: numId, label: '(cycle)', blockName: null, portName: null, role: null, value: null, isAnomaly: false, children: [] };
       }
 
       const expr = nodes[numId];
       if (!expr) return null;
 
       if (depth > 30) {
-        return { id: numId, label: '(too deep)', blockName: null, value: null, isAnomaly: false, children: [] };
+        return { id: numId, label: '(too deep)', blockName: null, portName: null, role: null, value: null, isAnomaly: false, children: [] };
       }
 
       visited.add(numId);
 
-      // Resolve block name (prefer user-friendly displayNames, fall back to blockMap UUID)
-      const blockId = exprToBlock.get(exprId);
+      // Resolve provenance-aware block name, port name, and role
       const blockDisplayNames = program.debugIndex.blockDisplayNames;
-      const blockName = blockId != null
-        ? (blockDisplayNames?.get(blockId) ?? blockMap.get(blockId) ?? null)
-        : null;
+      const prov = program.debugIndex.exprProvenance?.get(exprId);
+      let blockName: string | null = null;
+      let portName: string | null = null;
+      let role: ExprTreeNode['role'] = null;
+
+      if (prov) {
+        if (prov.userTarget) {
+          switch (prov.userTarget.kind) {
+            case 'defaultSource': {
+              blockName = blockDisplayNames?.get(prov.userTarget.targetBlockId)
+                ?? blockMap.get(prov.userTarget.targetBlockId) ?? null;
+              portName = prov.userTarget.targetPortName;
+              role = 'default';
+              break;
+            }
+            case 'adapter': {
+              blockName = prov.userTarget.adapterType;
+              role = 'adapter';
+              break;
+            }
+            case 'wireState': {
+              blockName = blockDisplayNames?.get(prov.blockId)
+                ?? blockMap.get(prov.blockId) ?? null;
+              role = 'wireState';
+              break;
+            }
+            case 'lens': {
+              blockName = blockDisplayNames?.get(prov.blockId)
+                ?? blockMap.get(prov.blockId) ?? null;
+              role = 'lens';
+              break;
+            }
+            case 'compositeExpansion': {
+              blockName = blockDisplayNames?.get(prov.blockId)
+                ?? blockMap.get(prov.blockId) ?? null;
+              role = 'composite';
+              break;
+            }
+          }
+        } else {
+          // User block — resolve directly
+          blockName = blockDisplayNames?.get(prov.blockId)
+            ?? blockMap.get(prov.blockId) ?? null;
+          portName = prov.portName;
+          role = 'user';
+        }
+      } else {
+        // Fallback: no provenance available (infrastructure exprs like time)
+        const blockId = exprToBlock.get(exprId);
+        blockName = blockId != null
+          ? (blockDisplayNames?.get(blockId) ?? blockMap.get(blockId) ?? null)
+          : null;
+      }
 
       // Read cached scalar value
       const value = this._session?.getCachedValue(exprId) ?? null;
@@ -514,6 +563,8 @@ export class StepDebugStore {
         id: numId,
         label: formatExprLabel(expr),
         blockName,
+        portName,
+        role,
         value,
         isAnomaly,
         children,

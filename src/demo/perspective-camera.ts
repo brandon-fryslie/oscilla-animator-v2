@@ -13,13 +13,10 @@ export const patchPerspectiveCamera: PatchBuilder = (b) => {
   b.setPortDefault(time, 'periodAMs', 12000);
   b.setPortDefault(time, 'periodBMs', 8000);
 
-  // Camera with animated yaw
+  // Camera with animated yaw: phaseA [0,1) → degrees [0,360)
+  const yawDeg = b.addBlock('Adapter_PhaseToDegrees');
+  b.wire(time, 'phaseA', yawDeg, 'in');
   const camera = b.addBlock('Camera');
-  const yawExpr = b.addBlock('Expression');
-  b.setConfig(yawExpr, 'expression', 'phase * 360.0');
-  b.addVarargConnection(yawExpr, 'refs', 'v1:blocks.time.outputs.phaseA', 0, 'phase');
-  const yawDeg = b.addBlock('Adapter_ScalarToDeg');
-  b.wire(yawExpr, 'out', yawDeg, 'in');
   b.wire(yawDeg, 'out', camera, 'yawDeg');
 
   const ellipse = b.addBlock('Ellipse');

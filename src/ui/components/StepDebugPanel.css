@@ -569,6 +569,45 @@
   font-size: 0.688rem;
 }
 
+.sdp-expr-port {
+  color: var(--text-secondary);
+}
+
+.sdp-expr-role-badge {
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 0.563rem;
+  font-weight: 600;
+  text-transform: lowercase;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+
+.sdp-expr-role-default {
+  background: rgba(255, 211, 61, 0.15);
+  color: var(--warning);
+}
+
+.sdp-expr-role-adapter {
+  background: rgba(163, 120, 255, 0.15);
+  color: #a378ff;
+}
+
+.sdp-expr-role-wireState {
+  background: rgba(100, 181, 246, 0.15);
+  color: #64b5f6;
+}
+
+.sdp-expr-role-lens {
+  background: rgba(78, 205, 196, 0.15);
+  color: var(--primary);
+}
+
+.sdp-expr-role-composite {
+  background: rgba(136, 136, 136, 0.15);
+  color: var(--text-secondary);
+}
+
 .sdp-expr-value {
   color: var(--primary);
   font-size: 0.688rem;

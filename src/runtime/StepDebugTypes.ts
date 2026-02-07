@@ -202,6 +202,10 @@ export interface ExprTreeNode {
   readonly label: string;
   /** Source block display name (from debugIndex.blockMap), or null */
   readonly blockName: string | null;
+  /** Port name for provenance context (e.g. "Count", "Output"), or null */
+  readonly portName: string | null;
+  /** Provenance role — how this expression relates to the user's patch */
+  readonly role: 'user' | 'default' | 'adapter' | 'wireState' | 'lens' | 'composite' | null;
   /** Current scalar value (from runtime cache), or null if not a cached scalar */
   readonly value: number | null;
   /** Whether value contains NaN or Infinity */

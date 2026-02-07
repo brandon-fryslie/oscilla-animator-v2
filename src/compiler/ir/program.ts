@@ -298,7 +298,35 @@ export interface DebugIndexIR {
 
   /** Optional: general labels for debugging */
   readonly labels?: ReadonlyMap<string, string>;
+
+  /** Optional: expression provenance — maps each expr to its source block and resolved user-facing target */
+  readonly exprProvenance?: ReadonlyMap<ValueExprId, ExprProvenanceIR>;
 }
+
+// =============================================================================
+// Expression Provenance
+// =============================================================================
+
+/**
+ * Provenance for a single value expression — which block emitted it,
+ * which output port it represents, and (for derived blocks) which
+ * user-visible block/port it ultimately serves.
+ */
+export interface ExprProvenanceIR {
+  readonly blockId: BlockId;
+  readonly portName: string | null;
+  readonly userTarget: ExprUserTarget | null;
+}
+
+/**
+ * For derived blocks, identifies the user-visible concept this expression serves.
+ */
+export type ExprUserTarget =
+  | { readonly kind: 'defaultSource'; readonly targetBlockId: BlockId; readonly targetPortName: string }
+  | { readonly kind: 'adapter'; readonly edgeId: string; readonly adapterType: string }
+  | { readonly kind: 'wireState'; readonly wireId: string }
+  | { readonly kind: 'lens'; readonly nodeRef: string }
+  | { readonly kind: 'compositeExpansion'; readonly compositeId: string; readonly internalBlockId: string };
 
 /**
  * Port Binding - Slot/Step to Port Mapping

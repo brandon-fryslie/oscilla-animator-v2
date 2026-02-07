@@ -9,6 +9,19 @@ import { CanonicalAddress, addressToString } from '../types/canonical-address';
 import type { Patch } from './Patch';
 import { getBlockAddress, getOutputAddress, getInputAddress, getAllAddresses, getShorthandForOutput } from './addressing';
 import { resolveAddress, ResolvedAddress } from './address-resolution';
+import { normalizeCanonicalName } from '../core/canonical-name';
+
+/**
+ * Normalize the canonical name portion of an address string.
+ * Converts 'v1:blocks.MyBlock.outputs.out' → 'v1:blocks.myblock.outputs.out'
+ */
+function normalizeAddressCanonicalName(address: string): string {
+  // Parse: v1:blocks.{canonicalName}.{rest...}
+  const match = address.match(/^(v\d+:blocks\.)([^.]+)(.*)$/);
+  if (!match) return address;
+  const [, prefix, canonicalName, suffix] = match;
+  return `${prefix}${normalizeCanonicalName(canonicalName)}${suffix}`;
+}
 
 /**
  * AddressRegistry provides fast O(1) lookup of addresses.
@@ -99,11 +112,15 @@ export class AddressRegistry {
   /**
    * Resolve a canonical address string.
    *
+   * Normalizes the canonical name portion for case-insensitive lookup.
+   *
    * @param address - Canonical address string (e.g., "v1:blocks.my_block.outputs.out")
    * @returns Resolved address or null if not found
    */
   resolve(address: string): ResolvedAddress | null {
-    return this.byCanonical.get(address) || null;
+    // Normalize the canonical name portion for case-insensitive lookup
+    const normalized = normalizeAddressCanonicalName(address);
+    return this.byCanonical.get(normalized) || null;
   }
 
   /**

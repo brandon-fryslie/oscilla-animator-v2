@@ -86,7 +86,7 @@ patch "Feedback Accumulator" {
     rx = 0.025
     ry = 0.025
     outputs {
-      shape = [instances.element, render.shape]
+      shape = instances.element
     }
   }
 

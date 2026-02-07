@@ -16,7 +16,8 @@
 
 import type { Patch } from '../graph';
 import { normalize, type NormalizedPatch } from '../graph/normalize';
-import type { CompiledProgramIR, SlotMetaEntry, ValueSlot, FieldSlotEntry, OutputSpecIR } from './ir/program';
+import type { CompiledProgramIR, SlotMetaEntry, ValueSlot, FieldSlotEntry, OutputSpecIR, ExprProvenanceIR, ExprUserTarget } from './ir/program';
+import type { BlockId } from '../types';
 import type { UnlinkedIRFragments } from './backend/lower-blocks';
 import type { ScheduleIR } from './backend/schedule-program';
 import type { AcyclicOrLegalGraph } from './ir/patches';
@@ -795,6 +796,94 @@ function convertLinkedIRToProgram(
     }
   }
 
+  // Build expression provenance map
+  // Maps each ValueExprId to its source block + resolved user-facing target for derived blocks
+  const exprProvenance = new Map<ValueExprId, ExprProvenanceIR>();
+
+  if (exprToBlock.size > 0) {
+    // Reverse lookup: string block ID → block object (for role access)
+    const patchBlocks = acyclicPatch.blocks || [];
+    const stringIdToBlock = new Map<string, typeof patchBlocks[number]>();
+    for (const block of patchBlocks) {
+      stringIdToBlock.set(block.id, block);
+    }
+
+    // Reverse lookup: string block ID → numeric index (for blockMap-compatible IDs)
+    const stringIdToIndex = new Map<string, number>();
+    for (const [idx, strId] of blockMap.entries()) {
+      stringIdToIndex.set(strId, idx as number);
+    }
+
+    // Map ValueExprId → portName via blockOutputs
+    const exprIdToPortName = new Map<number, string>();
+    if (unlinkedIR.blockOutputs) {
+      for (const [, outputsByPort] of unlinkedIR.blockOutputs.entries()) {
+        for (const [portName, ref] of outputsByPort.entries()) {
+          exprIdToPortName.set(ref.id as unknown as number, portName);
+        }
+      }
+    }
+
+    for (const [exprId, blockStringId] of exprToBlock) {
+      const blockStr = blockStringId as unknown as string;
+      const block = stringIdToBlock.get(blockStr);
+      if (!block) continue;
+
+      const portName = exprIdToPortName.get(exprId as unknown as number) ?? null;
+      let userTarget: ExprUserTarget | null = null;
+
+      if (block.role.kind === 'derived') {
+        const meta = block.role.meta;
+        switch (meta.kind) {
+          case 'defaultSource': {
+            const targetStr = meta.target.port.blockId as string;
+            const targetIdx = stringIdToIndex.get(targetStr);
+            if (targetIdx !== undefined) {
+              userTarget = {
+                kind: 'defaultSource',
+                targetBlockId: targetStr as BlockId,
+                targetPortName: meta.target.port.portId as string,
+              };
+            }
+            break;
+          }
+          case 'adapter':
+            userTarget = {
+              kind: 'adapter',
+              edgeId: meta.edgeId,
+              adapterType: meta.adapterType,
+            };
+            break;
+          case 'wireState':
+            userTarget = {
+              kind: 'wireState',
+              wireId: meta.target.wire as string,
+            };
+            break;
+          case 'lens':
+            userTarget = {
+              kind: 'lens',
+              nodeRef: JSON.stringify(meta.target.node),
+            };
+            break;
+          case 'compositeExpansion':
+            userTarget = {
+              kind: 'compositeExpansion',
+              compositeId: meta.compositeDefId,
+              internalBlockId: meta.internalBlockId,
+            };
+            break;
+        }
+      }
+
+      exprProvenance.set(exprId, {
+        blockId: blockStringId,
+        portName,
+        userTarget,
+      });
+    }
+  }
+
   const debugIndex = {
     stepToBlock,
     slotToBlock,
@@ -804,6 +893,7 @@ function convertLinkedIRToProgram(
     blockMap,
     blockDisplayNames,
     stepToPort: stepToPortMap,
+    exprProvenance,
   };
 
   // Collect render globals from builder

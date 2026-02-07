@@ -15,7 +15,7 @@ patch "Neon Grid" {
     height = 0.012
     cornerRadius = 0.002
     outputs {
-      shape = [grid-elements.element, render.shape]
+      shape = grid-elements.element
     }
   }
 

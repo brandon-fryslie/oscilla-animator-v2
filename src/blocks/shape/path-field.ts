@@ -86,7 +86,7 @@ registerBlock({
   capability: 'pure',
   loweringPurity: 'pure',
   cardinality: {
-    cardinalityMode: 'fieldOnly',
+    cardinalityMode: 'preserve',
     laneCoupling: 'laneLocal',
     broadcastPolicy: 'disallowSignalMix',
   },

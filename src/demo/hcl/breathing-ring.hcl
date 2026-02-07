@@ -18,7 +18,7 @@ patch "Breathing Ring" {
     rx = 0.03
     ry = 0.03
     outputs {
-      shape = [instances.element, render.shape]
+      shape = instances.element
     }
   }
 

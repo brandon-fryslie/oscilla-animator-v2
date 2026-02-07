@@ -950,7 +950,15 @@ const ExprTreeNodeView: React.FC<{
         </span>
         <span className="sdp-expr-kind">{node.label}</span>
         {node.blockName && (
-          <span className="sdp-expr-block">{node.blockName}</span>
+          <span className="sdp-expr-block">
+            {node.blockName}
+            {node.portName && <span className="sdp-expr-port"> . {node.portName}</span>}
+          </span>
+        )}
+        {node.role && node.role !== 'user' && (
+          <span className={`sdp-expr-role-badge sdp-expr-role-${node.role}`}>
+            {node.role === 'wireState' ? 'state' : node.role}
+          </span>
         )}
         {node.value != null && (
           <span className={node.isAnomaly ? 'sdp-expr-value-anomaly' : 'sdp-expr-value'}>
