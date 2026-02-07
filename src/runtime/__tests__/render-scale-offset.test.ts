@@ -49,9 +49,9 @@ describe('Render scale reads f64 by slotMeta.offset', () => {
     const program = result.program;
     const schedule = program.schedule as ScheduleIR;
 
-    const renderStep = schedule.steps.find((s: any) => s.kind === 'render');
+    const renderStep = schedule.steps.find((s): s is import('../../compiler/ir/types').StepRender => s.kind === 'render');
     expect(renderStep).toBeTruthy();
-    expect(renderStep.scale).toBeTruthy();
+    expect(renderStep?.scale).toBeTruthy();
 
     const scaleExprId = (renderStep as any).scale.id as number;
     const scaleEvalStep = schedule.steps.find(

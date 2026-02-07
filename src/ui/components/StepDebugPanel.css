@@ -1,0 +1,685 @@
+/**
+ * StepDebugPanel Styles
+ *
+ * Styles for the step-through debugger panel, including:
+ * - Header bar with mode indicator
+ * - Control bar (play/pause/step)
+ * - Step list (left pane)
+ * - Slot inspector (right pane)
+ * - Breakpoint manager (bottom)
+ * - Expression tree (collapsible)
+ * - Why-not-evaluated display
+ */
+
+/* =============================================================================
+ * Base
+ * ========================================================================== */
+
+.step-debug-panel {
+  --bg-content: #0f0f23;
+  --bg-panel: #16213e;
+  --bg-hover: rgba(255, 255, 255, 0.05);
+  --border-color: #0f3460;
+  --primary: #4ecdc4;
+  --primary-dim: rgba(78, 205, 196, 0.2);
+  --error: #ff6b6b;
+  --warning: #ffd93d;
+  --text-primary: #eee;
+  --text-secondary: #888;
+  --text-muted: #666;
+
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-content);
+  color: var(--text-primary);
+  font-size: 0.813rem;
+}
+
+/* =============================================================================
+ * Header
+ * ========================================================================== */
+
+.sdp-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.sdp-title {
+  font-weight: 600;
+  color: var(--primary);
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
+.sdp-mode-badge {
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-weight: 600;
+  font-size: 0.688rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sdp-mode-idle {
+  background: rgba(136, 136, 136, 0.2);
+  color: var(--text-secondary);
+}
+
+.sdp-mode-paused {
+  background: rgba(255, 211, 61, 0.2);
+  color: var(--warning);
+}
+
+.sdp-mode-running {
+  background: rgba(78, 205, 196, 0.2);
+  color: var(--primary);
+}
+
+.sdp-mode-completed {
+  background: rgba(78, 205, 196, 0.15);
+  color: var(--primary);
+}
+
+.sdp-toggle-btn {
+  margin-left: auto;
+  padding: 4px 12px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.sdp-toggle-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--text-secondary);
+  color: var(--text-primary);
+}
+
+.sdp-toggle-btn-active {
+  background: var(--primary-dim);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.sdp-toggle-btn-active:hover {
+  background: rgba(78, 205, 196, 0.3);
+}
+
+/* =============================================================================
+ * Controls
+ * ========================================================================== */
+
+.sdp-controls {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-color);
+  flex-wrap: wrap;
+}
+
+.sdp-ctrl-btn {
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.sdp-ctrl-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--text-secondary);
+  color: var(--text-primary);
+}
+
+.sdp-ctrl-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.sdp-ctrl-btn-primary {
+  background: var(--primary-dim);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.sdp-ctrl-btn-primary:hover:not(:disabled) {
+  background: rgba(78, 205, 196, 0.3);
+}
+
+.sdp-frame-info {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-family: 'Courier New', monospace;
+  font-size: 0.688rem;
+  white-space: nowrap;
+}
+
+/* =============================================================================
+ * Main content split
+ * ========================================================================== */
+
+.sdp-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Step list (left) */
+.sdp-step-list {
+  width: 280px;
+  min-width: 200px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--border-color);
+  background: var(--bg-content);
+}
+
+.sdp-step-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(15, 52, 96, 0.4);
+  transition: background 0.1s;
+  font-family: 'Courier New', monospace;
+  font-size: 0.75rem;
+}
+
+.sdp-step-item:hover {
+  background: var(--bg-hover);
+}
+
+.sdp-step-item-current {
+  background: var(--primary-dim);
+  border-left: 3px solid var(--primary);
+}
+
+.sdp-step-item-anomaly {
+  background: rgba(255, 107, 107, 0.1);
+  border-left: 3px solid var(--error);
+}
+
+.sdp-step-index {
+  color: var(--text-muted);
+  min-width: 28px;
+  text-align: right;
+}
+
+.sdp-step-phase {
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.sdp-phase-phase1 {
+  background: rgba(78, 205, 196, 0.2);
+  color: var(--primary);
+}
+
+.sdp-phase-phase2 {
+  background: rgba(163, 120, 255, 0.2);
+  color: #a378ff;
+}
+
+.sdp-phase-pre-frame,
+.sdp-phase-post-frame {
+  background: rgba(136, 136, 136, 0.15);
+  color: var(--text-secondary);
+}
+
+.sdp-phase-phase-boundary {
+  background: rgba(255, 211, 61, 0.2);
+  color: var(--warning);
+}
+
+.sdp-step-block {
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.sdp-step-port {
+  color: var(--text-muted);
+  font-size: 0.688rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 80px;
+}
+
+/* Slot inspector (right) */
+.sdp-inspector {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.sdp-inspector-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* =============================================================================
+ * Slot Table
+ * ========================================================================== */
+
+.sdp-slot-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+
+.sdp-slot-table th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-color);
+  padding: 6px 10px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 0.688rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  z-index: 1;
+}
+
+.sdp-slot-table td {
+  padding: 4px 10px;
+  border-bottom: 1px solid rgba(15, 52, 96, 0.3);
+  font-family: 'Courier New', monospace;
+  white-space: nowrap;
+}
+
+.sdp-slot-table tr:hover {
+  background: var(--bg-hover);
+}
+
+.sdp-slot-table tr.sdp-anomaly-row {
+  background: rgba(255, 107, 107, 0.1);
+}
+
+.sdp-slot-id {
+  color: var(--text-muted);
+}
+
+.sdp-slot-value {
+  color: var(--primary);
+  font-weight: 500;
+}
+
+.sdp-slot-value-nan {
+  color: var(--error);
+  font-weight: 700;
+}
+
+.sdp-slot-type {
+  color: var(--text-secondary);
+}
+
+.sdp-slot-block {
+  color: #9cdcfe;
+}
+
+.sdp-slot-delta {
+  font-size: 0.688rem;
+  margin-left: 6px;
+}
+
+.sdp-delta-positive {
+  color: #ff6b6b;
+}
+
+.sdp-delta-negative {
+  color: #4ade80;
+}
+
+.sdp-delta-nan {
+  color: #ffa726;
+}
+
+.sdp-buffer-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(163, 120, 255, 0.15);
+  color: #a378ff;
+  font-size: 0.688rem;
+  cursor: pointer;
+}
+
+.sdp-buffer-badge:hover {
+  background: rgba(163, 120, 255, 0.25);
+}
+
+/* =============================================================================
+ * Expandable Sections
+ * ========================================================================== */
+
+.sdp-section {
+  border-top: 1px solid var(--border-color);
+}
+
+.sdp-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--bg-panel);
+  cursor: pointer;
+  user-select: none;
+  font-weight: 500;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  transition: background 0.1s;
+}
+
+.sdp-section-header:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.sdp-section-toggle {
+  font-size: 0.625rem;
+  color: var(--text-muted);
+  width: 10px;
+  text-align: center;
+}
+
+.sdp-section-content {
+  padding: 8px 12px;
+}
+
+/* =============================================================================
+ * Breakpoint Manager
+ * ========================================================================== */
+
+.sdp-bp-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sdp-bp-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 0.75rem;
+}
+
+.sdp-bp-kind {
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  background: rgba(78, 205, 196, 0.15);
+  color: var(--primary);
+}
+
+.sdp-bp-label {
+  flex: 1;
+  color: var(--text-primary);
+  font-family: 'Courier New', monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sdp-bp-remove {
+  padding: 0 4px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.875rem;
+  line-height: 1;
+  transition: color 0.1s;
+}
+
+.sdp-bp-remove:hover {
+  color: var(--error);
+}
+
+.sdp-bp-add-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.sdp-bp-select {
+  flex: 1;
+  padding: 3px 6px;
+  border-radius: 3px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-content);
+  color: var(--text-primary);
+  font-size: 0.75rem;
+}
+
+.sdp-bp-input {
+  width: 80px;
+  padding: 3px 6px;
+  border-radius: 3px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-content);
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  font-family: 'Courier New', monospace;
+}
+
+.sdp-bp-add-btn {
+  padding: 3px 8px;
+  border-radius: 3px;
+  border: 1px solid var(--primary);
+  background: var(--primary-dim);
+  color: var(--primary);
+  font-size: 0.688rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.sdp-bp-add-btn:hover {
+  background: rgba(78, 205, 196, 0.3);
+}
+
+/* =============================================================================
+ * Expression Tree
+ * ========================================================================== */
+
+.sdp-expr-tree {
+  font-family: 'Courier New', monospace;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.sdp-expr-node {
+  padding-left: 16px;
+}
+
+.sdp-expr-node-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.sdp-expr-node-header:hover {
+  background: var(--bg-hover);
+}
+
+.sdp-expr-toggle {
+  width: 12px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.625rem;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.sdp-expr-kind {
+  color: #9cdcfe;
+  font-weight: 500;
+}
+
+.sdp-expr-type {
+  color: var(--text-muted);
+  font-size: 0.688rem;
+}
+
+.sdp-expr-block {
+  color: var(--warning);
+  font-size: 0.688rem;
+}
+
+/* =============================================================================
+ * Why Not Evaluated
+ * ========================================================================== */
+
+.sdp-whynot {
+  padding: 8px 12px;
+}
+
+.sdp-whynot-reason {
+  padding: 6px 10px;
+  margin-bottom: 6px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  border-left: 3px solid var(--warning);
+  background: rgba(255, 211, 61, 0.08);
+}
+
+.sdp-whynot-reason-error {
+  border-left-color: var(--error);
+  background: rgba(255, 107, 107, 0.08);
+}
+
+.sdp-whynot-kind {
+  font-weight: 600;
+  font-size: 0.688rem;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--warning);
+  margin-bottom: 2px;
+}
+
+.sdp-whynot-reason-error .sdp-whynot-kind {
+  color: var(--error);
+}
+
+.sdp-whynot-detail {
+  color: var(--text-secondary);
+}
+
+/* =============================================================================
+ * Lane Identity
+ * ========================================================================== */
+
+.sdp-lane-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.688rem;
+  margin-top: 6px;
+}
+
+.sdp-lane-table th {
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-color);
+  padding: 3px 8px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  font-size: 0.625rem;
+}
+
+.sdp-lane-table td {
+  padding: 2px 8px;
+  border-bottom: 1px solid rgba(15, 52, 96, 0.2);
+  font-family: 'Courier New', monospace;
+  color: var(--text-secondary);
+}
+
+/* =============================================================================
+ * Scrollbar
+ * ========================================================================== */
+
+.sdp-step-list::-webkit-scrollbar,
+.sdp-inspector::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sdp-step-list::-webkit-scrollbar-track,
+.sdp-inspector::-webkit-scrollbar-track {
+  background-color: var(--bg-content);
+}
+
+.sdp-step-list::-webkit-scrollbar-thumb,
+.sdp-inspector::-webkit-scrollbar-thumb {
+  background-color: var(--border-color);
+  border-radius: 3px;
+}
+
+.sdp-step-list::-webkit-scrollbar-thumb:hover,
+.sdp-inspector::-webkit-scrollbar-thumb:hover {
+  background-color: var(--primary);
+}
+
+/* =============================================================================
+ * Empty / inactive state
+ * ========================================================================== */
+
+.sdp-inactive {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-muted);
+  padding: 32px;
+  text-align: center;
+}
+
+.sdp-inactive-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}

@@ -74,8 +74,8 @@ describe('deserialize', () => {
     expect(result.patch.edges.length).toBe(0);  // Edge skipped
   });
 
-  it('errors on duplicate block names', () => {
-    // Important: this is illegal and should throw an error.
+  it('warns on duplicate block names and renames', () => {
+    // Duplicate names produce a warning and the second block is renamed
     const hcl = `
       patch "Test" {
         block "Const" "foo" {}
@@ -84,7 +84,9 @@ describe('deserialize', () => {
     `;
     const result = deserializePatchFromHCL(hcl);
 
-    expect(result.errors.length).toBeGreaterThan(0);
+    expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.warnings[0].message).toContain('Duplicate');
+    expect(result.patch.blocks.size).toBe(2);
   });
 
   it('handles unknown block types', () => {

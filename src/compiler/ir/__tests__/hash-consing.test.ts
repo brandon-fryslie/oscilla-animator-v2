@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { IRBuilderImpl } from '../IRBuilderImpl';
-import { canonicalType, floatConst, vec2Const, intConst } from '../../../core/canonical-types';
+import { canonicalType, canonicalField, floatConst, vec2Const, intConst, instanceRef } from '../../../core/canonical-types';
 import { FLOAT, INT, VEC2 } from '../../../core/canonical-types';
 import { OpCode } from '../types';
 import { instanceId } from '../Indices';
@@ -128,9 +128,10 @@ describe('Hash-consing (I13)', () => {
     it('deduplicates identical ReduceField', () => {
       const b = new IRBuilderImpl();
       const sigType = canonicalType(FLOAT);
+      const fieldType = canonicalField(FLOAT, undefined, instanceRef('test', 'inst-0'));
 
       const sig = b.constant(floatConst(1.0), sigType);
-      const field = b.broadcast(sig, sigType);
+      const field = b.broadcast(sig, fieldType);
 
       const reduce1 = b.reduce(field, 'sum', sigType);
       const reduce2 = b.reduce(field, 'sum', sigType);
@@ -208,10 +209,11 @@ describe('Hash-consing (I13)', () => {
     it('deduplicates identical Broadcast', () => {
       const b = new IRBuilderImpl();
       const sigType = canonicalType(FLOAT);
+      const fieldType = canonicalField(FLOAT, undefined, instanceRef('test', 'inst-0'));
 
       const sig = b.constant(floatConst(1.0), sigType);
-      const id1 = b.broadcast(sig, sigType);
-      const id2 = b.broadcast(sig, sigType);
+      const id1 = b.broadcast(sig, fieldType);
+      const id2 = b.broadcast(sig, fieldType);
 
       expect(id1).toBe(id2);
     });
@@ -419,14 +421,15 @@ describe('Hash-consing (I13)', () => {
     it('deduplicates broadcast patterns', () => {
       const b = new IRBuilderImpl();
       const type = canonicalType(FLOAT);
-      
+      const fieldType = canonicalField(FLOAT, undefined, instanceRef('test', 'inst-0'));
+
       const time = b.time('tMs', type);
-      
+
       // Multiple broadcasts of same signal
-      const broadcast1 = b.broadcast(time, type);
-      const broadcast2 = b.broadcast(time, type);
-      const broadcast3 = b.broadcast(time, type);
-      
+      const broadcast1 = b.broadcast(time, fieldType);
+      const broadcast2 = b.broadcast(time, fieldType);
+      const broadcast3 = b.broadcast(time, fieldType);
+
       expect(broadcast1).toBe(broadcast2);
       expect(broadcast2).toBe(broadcast3);
     });

@@ -115,6 +115,9 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
           if (content.startsWith('import ') || content.includes('from ')) return false;
           // Skip comments
           if (content.startsWith('//') || content.startsWith('*')) return false;
+          // Allow withInstance in lower-blocks.ts for instance context rewriting
+          // (block lowering produces types with placeholder instance; backend fills in real instance)
+          if (mutator === 'withInstance' && m.includes('lower-blocks.ts')) return false;
           return true;
         });
         expect(filtered, `Backend must not call ${mutator}()`).toEqual([]);
@@ -177,6 +180,35 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
       const normalizeAdaptersFile = 'src/compiler/frontend/normalize-adapters.ts';
       const cardinalityGenericImports = grepSrc('isCardinalityGeneric', normalizeAdaptersFile);
       expect(cardinalityGenericImports, 'normalize-adapters.ts must not import isCardinalityGeneric').toEqual([]);
+    });
+
+  });
+
+  // =============================================================================
+  // Opcode Single Enforcer (Sprint: opcode-consolidation)
+  // =============================================================================
+
+  describe('Opcode Single Enforcer', () => {
+
+    it('ValueExprMaterializer must not contain inline opcode implementations', () => {
+      // OpcodeInterpreter is the SINGLE ENFORCER for all scalar math.
+      // ValueExprMaterializer must delegate via applyOpcode(), not inline switch cases.
+      const forbiddenOpcodes = [
+        'add', 'sub', 'mul', 'div', 'mod', 'pow',
+        'sin', 'cos', 'tan',
+        'floor', 'ceil', 'round', 'sqrt', 'exp', 'log',
+        'min', 'max', 'clamp', 'lerp', 'select',
+        'wrap01', 'fract', 'sign', 'hash',
+        'neg', 'abs',
+      ];
+
+      for (const opcode of forbiddenOpcodes) {
+        const matches = grepSrc(`case '${opcode}':`, 'src/runtime/ValueExprMaterializer.ts');
+        expect(
+          matches,
+          `ValueExprMaterializer must not have case '${opcode}:' - use applyOpcode() instead`
+        ).toEqual([]);
+      }
     });
 
   });

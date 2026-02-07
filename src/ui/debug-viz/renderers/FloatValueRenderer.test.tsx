@@ -87,10 +87,10 @@ describe('FloatValueRenderer', () => {
     it('shows min/mean/max with count', () => {
       const el = floatValueRenderer.renderFull(aggregateSample(0.1, 0.5, 0.9, 64));
       const { container } = render(el);
-      expect(container.textContent).toContain('min');
-      expect(container.textContent).toContain('mean');
-      expect(container.textContent).toContain('max');
-      expect(container.textContent).toContain('n=64');
+      expect(container.textContent).toContain('Min');
+      expect(container.textContent).toContain('Mean');
+      expect(container.textContent).toContain('Max');
+      expect(container.textContent).toContain('64 instances');
     });
   });
 
