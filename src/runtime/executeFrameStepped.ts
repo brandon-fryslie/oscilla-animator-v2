@@ -241,7 +241,11 @@ export function* executeFrameStepped(
                 topologyId: exprNode.topologyId,
                 pointsFieldSlot:
                   (exprNode.kind === 'shapeRef' && exprNode.controlPointField != null
-                    ? ((fieldExprToSlot.get(exprNode.controlPointField as number) as number | undefined) ?? 0)
+                    ? (() => {
+                        const cpSlot = fieldExprToSlot.get(exprNode.controlPointField as number);
+                        if (cpSlot === undefined) throw new Error(`Control point field ${exprNode.controlPointField} not in fieldExprToSlot — compiler bug`);
+                        return cpSlot;
+                      })()
                     : 0),
                 pointsCount: 0,
                 styleRef: 0,
@@ -459,7 +463,10 @@ export function* executeFrameStepped(
       writtenStateSlots.set(step.stateSlot, {
         kind: 'scalar',
         value,
-        stateId: mapping?.stateId ?? (`unknown:${step.stateSlot}` as StableStateId),
+        stateId: (() => {
+          if (!mapping?.stateId) throw new Error(`State slot ${step.stateSlot} has no mapping — incomplete compiler metadata`);
+          return mapping.stateId;
+        })(),
       });
 
       yield buildSnapshot(stepIdx, step, 'phase2', totalSteps, program, state, tAbsMs, new Map(), prevValues, writtenStateSlots);
@@ -491,7 +498,10 @@ export function* executeFrameStepped(
         writtenStateSlots.set(step.stateSlot, {
           kind: 'field',
           values: writtenValues,
-          stateId: mapping?.stateId ?? (`unknown:${step.stateSlot}` as StableStateId),
+          stateId: (() => {
+            if (!mapping?.stateId) throw new Error(`State slot ${step.stateSlot} has no mapping — incomplete compiler metadata`);
+            return mapping.stateId;
+          })(),
           laneCount: count,
         });
       }

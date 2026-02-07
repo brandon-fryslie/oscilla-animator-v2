@@ -24,7 +24,9 @@
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "cherry-chrome",
-    "chromedevtools/chrome-devtools-mcp"
+    "chromedevtools/chrome-devtools-mcp",
+    "cherry-chatgpt",
+    "chatgpt-mcp"
   ],
   "disabledMcpjsonServers": [
     "chromedevtools/chrome-devtools-mcp"

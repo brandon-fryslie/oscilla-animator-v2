@@ -33,6 +33,7 @@ We’ll fill this in sequentially with your answers and intent for V2 and V3.
 ## Decision Log (V3-Relevant)
 
 - V3 carry-forward baseline: `design-docs/CANONICAL-oscilla-v2.5-20260109/` is the authoritative spec baseline.
+- V3 scope default: include *everything* from V2 functionality-wise, but re-architect so the system is structurally simpler, more deterministic, and collaboration/undo-first. Default assumption is “no backsliding,” unless explicitly called out as an intentional removal.
 - Collaboration model (V3): server-sequenced ops is the source of truth.
 - Undo/redo scope (V3): undo/redo applies to serializable patch state (graph, params, settings, and layout), not pure UI state (selection/hover).
 - Command transactions (V3): atomic op batches are the foundation for undo/redo, collaboration, and reproducible replay.
@@ -337,7 +338,7 @@ We’ll fill this in sequentially with your answers and intent for V2 and V3.
 - Canvas2D per-instance `save/restore` and path rebuilding in inner loops may become a performance limit at higher instance counts (may be acceptable for now).
 
 **Progress / decisions captured so far**
-- Default/authoritative backend priority (V3 intent): #1 WebGL, #2 SVG; Canvas is not a target.
+- Default/authoritative backend priority (V3 intent): #1 WebGL, #2 SVG, with Canvas supported as a parity/fallback backend until higher-priority backends fully match V2 behavior.
 - Depth sorting: always required.
 - Stable identity: treat “stable across recompile” as a universal requirement (geometry/topology/cache identity should not churn on recompile).
 - Multi-runtime constraint: no global singletons; render arenas and renderers should be owned per engine instance (or equivalent instance boundary).
@@ -811,19 +812,86 @@ We’ll fill this in sequentially with your answers and intent for V2 and V3.
   - Diagnostic ID determinism.
   - No bypass of the canonical “command doorway” for emitting graph commit events / diagnostics inputs.
   - No `console.warn`/`console.error` for user-visible diagnostics (must use structured diagnostics).
+- V3 canonical substrate: ops log is the source of truth; “events” are a derived view. Persisting an explicit event stream is optional and only justified when it adds concrete value (debugging/telemetry), not as a second source of truth.
+- V3 diagnostic targeting: primary location for user-facing diagnostics is canonical addresses (scoped to patch revision), with optional secondary identifiers for continuity/debugging (e.g., stable runtime `StateId`, slot IDs, binder IDs) carried in payload/provenance.
+- V3 diagnostics computation: compute diagnostics client-side by default (deterministic from ops + snapshots) for low-latency UX. The collaboration server may additionally compute and broadcast an authoritative diagnostic set per revision when/if cross-client consistency is required.
+- V3 “five-event contract” concept: keep a small engine-level contract, but constrain it to engine-relevant events only. Recommended minimal set:
+  - `TransactionCommitted` (ops applied; patch revision advanced; replaces `GraphCommitted`)
+  - `CompileBegin`
+  - `CompileEnd`
+  - `ProgramSwapped`
+  - `RuntimeHealthSnapshot`
+  - All selection/hover/panel/viewport events are UI-only and must not leak into engine packages (enforce via module boundaries + lint).
+- V3 severity overrides: allowed only as an explicit, versioned input (settings), applied in exactly one place in the diagnostics pipeline with provenance. Default stance is “no suppressions for correctness errors”; allow targeted downgrades/hides for non-correctness concerns (hints/warns, unreachable blocks, debug sinks) to prevent silent correctness holes.
 
 **Open questions**
-- For V3, should the canonical substrate be:
-  - `ops log` only (events/diagnostics derived from replay), or
-  - `ops log + explicit event stream` (events are first-class artifacts), or
-  - both (events as a derived view, but still persisted for debugging)?
-- For V3 diagnostics targeting, what is the intended primary identifier in diagnostics/logging:
-  - canonical addresses only, or
-  - canonical address + stable runtime `StateId`, or
-  - something else?
-- Should diagnostics be computed client-side, server-side, or both:
-  - If server-sequenced ops is primary, do we expect a server to also generate authoritative diagnostics (for consistency across clients), or is “diagnostics are local” acceptable?
-- Do you want to keep the “five-event contract” concept in V3:
-  - If yes, what are the minimal core events/contracts the engine must expose (and which events should be UI-only and forbidden to leak into engine packages)?
-- What is the V3 stance on severity overrides/suppressions:
-  - Do we allow them at all, and if so, where is the single authorized place they can exist so they don’t become silent correctness holes?
+- None (resolved as of this pass).
+
+---
+
+## 13) Services and Utilities
+
+**What I see**
+- `src/services/` is an “orchestration” layer: glue code that binds stores/UI concerns to the compiler/runtime/render subsystems.
+- Compilation orchestration:
+  - `src/services/CompileOrchestrator.ts` is the *single* compile path (“initial compile” and “live recompile”) and handles:
+    - emitting `CompileBegin`/`CompileEnd` events
+    - frontend compile snapshot updates (`store.frontend.*`)
+    - backend compile and program swap
+    - runtime state creation/migration/continuity
+    - wiring debug probes (tap + edge/port mapping)
+  - `src/services/LiveRecompile.ts` uses MobX `reaction()` + a debounce (`16ms`) to trigger recompilation on patch changes.
+- Runtime/render loop:
+  - `src/services/AnimationLoop.ts` owns the `requestAnimationFrame` loop, `executeFrame()`, `renderFrame()`, viewport pan/zoom transforms, content-bounds extraction, and health snapshot emission.
+- Persistence/export:
+  - `src/services/PatchPersistence.ts` persists a JSON snapshot of the patch to `localStorage` (versioned key) and provides Patch DSL HCL import/export wrappers.
+  - `src/services/PatchExporter.ts` + `src/services/exportFormats.ts` handle export surface area (formats, naming).
+- Debug/inspection utilities:
+  - `src/services/CompilationInspectorService.ts` is explicitly a singleton debugging tool (MobX observable) that captures pass snapshots (bounded to last 2).
+  - `src/services/DebugService.ts` is a singleton bridging runtime taps (slot/field values) to UI queries; includes demand-driven field tracking and a `HistoryService`.
+  - `src/services/mapDebugEdges.ts`, `src/services/ConstantValueTracker.ts` support debug mapping and “optimized-away constant” visibility.
+  - `src/services/DomainChangeDetector.ts` suggests orchestration around “domain changes” during recompilation.
+
+**What looks right**
+- Centralizing compilation into one orchestrator is correct:
+  - It’s the natural choke point for undo/redo/collab in V3 (the “transaction committed → compile → swap” lifecycle).
+  - It prevents “someone compiled the patch differently over here” drift.
+- The frame loop uses the right boundary objects:
+  - Runtime produces `RenderFrameIR`, renderer consumes it; `RenderBufferArena.reset()` enforces “bounded allocations per frame”.
+  - Health snapshots are throttled and emitted via the event/diagnostics pipeline, not ad-hoc UI logging.
+- Debug/inspection is treated as a first-class subsystem:
+  - Bounded compilation snapshots (last 2) is a good “prevent accidental memory blowup” choice.
+  - Demand-driven field tracking avoids always-on materialization costs.
+- Persistence is versioned and defensive:
+  - Storage key bumping avoids crashes from stale on-disk data after schema changes.
+  - Patch DSL import returns partial patches with errors instead of throwing (good dev + UX affordance).
+
+**What looks wrong / risky**
+- The service layer currently punches through boundaries:
+  - `CompileOrchestrator` imports `mobx/untracked` and `RootStore`, and directly updates stores, logs, and debug systems. This is pragmatic for V2 but is exactly what makes V3 boundary enforcement hard if repeated.
+- Global singleton services conflict with V3’s “multi-engine / multi-editor / multi-user” direction:
+  - `compilationInspector` and `debugService` are process-global. In V3 they must be instance-scoped (per engine/session) or they will create cross-patch and cross-runtime bleed.
+- Live recompile change detection is inherently “expensive and leaky” as a pattern:
+  - Hashing large block maps with `JSON.stringify` on every reactive tick is an O(n) hot path that will eventually become jank, and it exists largely to compensate for shallow observable tracking.
+  - This is a signal that V3 should *not* rely on “observe deep mutable state”; it should rely on an explicit op stream and a deterministic snapshot boundary.
+- Non-deterministic identifiers leak into orchestration:
+  - `compileId` uses `Date.now()`. Fine for logs, but in V3 anything that influences cache keys, snapshots, or replay must be derived deterministically from ops/revisions.
+- Console logging still exists in core flows (e.g., debug probe warnings, recompile error logging):
+  - In V3, user-visible issues must flow through structured diagnostics; console logs are dev-only and must be mechanically prevented from becoming a hidden correctness channel.
+
+**Progress / decisions captured so far**
+- V3 scope default applies here: these orchestration capabilities are *kept*, but the shape changes to enforce boundaries.
+- V3 service layering (default):
+  - “Engine” packages are pure/deterministic and do not import MobX/React/DOM or the app store.
+  - “App shell” services own `requestAnimationFrame`, persistence IO, and debouncing/throttling.
+  - The bridge between them is the op/transaction pipeline:
+    - `dispatch(transaction)` → reducer applies ops → revision increments → derived compilation request enqueued → compile/swap executed.
+- V3 instance scoping: all “services” that hold mutable state (debug mapping, inspector snapshots, arenas, caches) are owned by an `EngineInstance`/`Session` object, never as module-level singletons.
+- V3 enforcement-first guardrail (services edition):
+  - Lint boundaries: engine packages may not import `mobx`, `react`, `window`, `document`, or app stores.
+  - Test gates: “every patch change is an op”, “compile triggers only on transaction commit”, and “no hidden compilation pathways”.
+
+**Open questions**
+- Default: `src/services/*` maps to V3 “app shell” responsibilities, while engine packages stay pure. Any V2 service you want to live *inside* the engine boundary (as opposed to the shell)?
+- Default: keep `CompilationInspector` + `DebugService` as shipped-but-guarded tooling (debug flag, bounded memory), and make them instance-scoped. Any constraints on what must be available in production builds vs dev builds?
+- Default: replace MobX-deep-change detection (`LiveRecompile`) with an op-driven compile scheduler keyed off `TransactionCommitted` (debounced to animation frames). Any cases where compilation must trigger *without* a committed transaction (e.g., purely UI-time “preview”)?

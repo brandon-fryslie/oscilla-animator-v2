@@ -48,6 +48,9 @@ export class DiagnosticHub {
   // Private State
   // =============================================================================
 
+  // Maximum compile snapshots to retain (evicts oldest, preserves activeRevision)
+  private static readonly MAX_COMPILE_SNAPSHOTS = 5;
+
   // Compile snapshots (keyed by patchRevision)
   private compileSnapshots = new Map<number, Diagnostic[]>();
 
@@ -192,6 +195,13 @@ export class DiagnosticHub {
 
     // Replace compile snapshot (not merge!)
     this.compileSnapshots.set(event.patchRevision, [...event.diagnostics]);
+
+    // Evict oldest snapshots to prevent unbounded growth (Map iterates in insertion order)
+    while (this.compileSnapshots.size > DiagnosticHub.MAX_COMPILE_SNAPSHOTS) {
+      const oldest = this.compileSnapshots.keys().next().value!;
+      if (oldest === this.activeRevision) break; // never evict active revision
+      this.compileSnapshots.delete(oldest);
+    }
 
     // Clear pending compile
     if (this.pendingCompileRevision === event.patchRevision) {
@@ -644,5 +654,8 @@ export class DiagnosticHub {
       unsubscribe();
     }
     this.unsubscribers = [];
+    this.compileSnapshots.clear();
+    this.runtimeDiagnostics.clear();
+    this.authoringSnapshot = [];
   }
 }

@@ -243,4 +243,79 @@ describe('DiagnosticHub', () => {
     // Compile domain should have at least the E_TIME_ROOT_MISSING we added
     expect(compile.length).toBeGreaterThanOrEqual(1);
   });
+
+  it('evicts oldest compile snapshots when exceeding MAX_COMPILE_SNAPSHOTS', () => {
+    // Emit 20 CompileEnd events with unique revisions
+    for (let rev = 1; rev <= 20; rev++) {
+      events.emit(makeCompileBegin(rev, `compile-${rev}`));
+      events.emit(
+        makeCompileEnd(rev, `compile-${rev}`, [
+          makeDiagnostic('E_TYPE_MISMATCH', rev, {
+            id: `E_TYPE_MISMATCH:block-b1:rev${rev}`,
+            primaryTarget: { kind: 'port', blockId: 'b1', portId: 'p1' },
+          }),
+        ])
+      );
+    }
+
+    // Verify: at most 5 snapshots retained
+    // Query all revisions to count how many have data
+    let snapshotsWithData = 0;
+    for (let rev = 1; rev <= 20; rev++) {
+      if (hub.getCompileSnapshot(rev).length > 0) {
+        snapshotsWithData++;
+      }
+    }
+    expect(snapshotsWithData).toBeLessThanOrEqual(5);
+
+    // The most recent 5 revisions should be present
+    for (let rev = 16; rev <= 20; rev++) {
+      expect(hub.getCompileSnapshot(rev).length).toBe(1);
+    }
+  });
+
+  it('never evicts the active revision from compile snapshots', () => {
+    // Set active revision to 1
+    events.emit(makeCompileBegin(1, 'compile-1'));
+    events.emit(
+      makeCompileEnd(1, 'compile-1', [
+        makeDiagnostic('E_TYPE_MISMATCH', 1, {
+          id: 'E_TYPE_MISMATCH:block-b1:rev1',
+        }),
+      ])
+    );
+    events.emit(makeProgramSwapped(1, 'compile-1'));
+
+    // Now emit many more compile snapshots (but don't swap active)
+    for (let rev = 2; rev <= 20; rev++) {
+      events.emit(makeCompileBegin(rev, `compile-${rev}`));
+      events.emit(
+        makeCompileEnd(rev, `compile-${rev}`, [
+          makeDiagnostic('E_TYPE_MISMATCH', rev, {
+            id: `E_TYPE_MISMATCH:block-b1:rev${rev}`,
+          }),
+        ])
+      );
+    }
+
+    // Active revision 1 should still be accessible
+    expect(hub.getCompileSnapshot(1).length).toBe(1);
+  });
+
+  it('clears all snapshots on dispose', () => {
+    events.emit(makeCompileBegin(1, 'compile-1'));
+    events.emit(
+      makeCompileEnd(1, 'compile-1', [
+        makeDiagnostic('E_TYPE_MISMATCH', 1),
+      ])
+    );
+    events.emit(makeProgramSwapped(1, 'compile-1'));
+
+    expect(hub.getActive().length).toBeGreaterThan(0);
+
+    hub.dispose();
+
+    // After dispose, no diagnostics should be returned
+    expect(hub.getCompileSnapshot(1)).toEqual([]);
+  });
 });

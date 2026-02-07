@@ -12,7 +12,7 @@ import type {
   CardinalityValue,
   TemporalityValue,
 } from '../../core/canonical-types';
-import { FLOAT, unitsEqual } from '../../core/canonical-types';
+import { unitsEqual } from '../../core/canonical-types';
 import { isPayloadVar, type InferenceCanonicalType, type InferencePayloadType, type InferenceUnitType } from '../../core/inference-types';
 import { isAxisVar } from '../../core/canonical-types';
 import { getAnyBlockDefinition, isPayloadAllowed } from '../../blocks/registry';
@@ -63,7 +63,7 @@ export function getTypeColor(payload: InferencePayloadType): string {
     return '#888888'; // Gray for unresolved payload variables
   }
   // After the isPayloadVar check, payload is now a ConcretePayloadType
-  return TYPE_COLORS[(payload as ConcretePayloadType).kind] ?? TYPE_COLORS[FLOAT.kind];
+  return TYPE_COLORS[(payload as ConcretePayloadType).kind];
 }
 
 // =============================================================================
@@ -209,7 +209,11 @@ export function getPortType(
 
   const slots = direction === 'input' ? blockDef.inputs : blockDef.outputs;
   const slot = slots[portId];
-  return slot?.type ?? null;
+  if (!slot) {
+    console.warn(`Port '${portId}' not found in block def for '${block.type}'`);
+    return null;
+  }
+  return slot.type ?? null;
 }
 
 /**
@@ -226,7 +230,11 @@ export function getPortTypeFromBlockType(
 
   const slots = direction === 'input' ? blockDef.inputs : blockDef.outputs;
   const slot = slots[portId];
-  return slot?.type ?? null;
+  if (!slot) {
+    console.warn(`Port '${portId}' not found in block def for '${blockType}'`);
+    return null;
+  }
+  return slot.type ?? null;
 }
 
 // =============================================================================

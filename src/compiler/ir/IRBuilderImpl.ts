@@ -70,6 +70,21 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     return this.pushExpr({ kind: 'const', type, value });
   }
 
+  constantWithKey(value: ConstValue, type: CanonicalType, key: string): ValueExprId {
+    const expr: ValueExpr = { kind: 'const', type, value };
+    // Include key in dedup hash so same-value constants from different origins stay separate
+    const hash = JSON.stringify({ ...expr, _key: key });
+    const existing = this.valueExprCache.get(hash);
+    if (existing !== undefined) return existing;
+    const id = valueExprId(this.valueExprs.length);
+    this.valueExprs.push(expr);
+    this.valueExprCache.set(hash, id);
+    if (this._currentBlockId !== null) {
+      this._exprToBlock.set(id, this._currentBlockId);
+    }
+    return id;
+  }
+
   // REMOVED 2026-02-06: slotRead() - dead code, never called in production
   // Extract expressions handle component access directly
 
@@ -476,6 +491,7 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
       id,
       domainType,
       count,
+      maxCount: Math.max(count, 10_000),
       lifecycle: lifecycle ?? 'static',
       identityMode: 'stable',
       ...(shapeField !== undefined && { shapeField }), // Store shape field reference if provided

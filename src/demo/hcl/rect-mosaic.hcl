@@ -46,13 +46,6 @@ patch "Rect Mosaic" {
     }
   }
 
-  block "Const" "hue-base" {
-    value = 0.25
-    outputs {
-      out = hue-offset.b
-    }
-  }
-
   block "Multiply" "hue-scaled" {
     outputs {
       out = hue-offset.a
@@ -78,19 +71,20 @@ patch "Rect Mosaic" {
   }
 
   # Pulsing scale using Expression with vararg reference
-  block "Expression" "scale-expr" {
-    expression = "1.0 + 0.5 * sin(phase * 6.28 + 1.57)"
-    vararg "refs" {
-      connect {
-        sourceAddress = "v1:blocks.time.outputs.phaseA"
-        alias = "phase"
-        sortKey = 0
-      }
-    }
-    outputs {
-      out = render.scale
-    }
-  }
+  # block "Expression" "scale-expr" {
+    # expression = "1.0 + 0.5 * sin(phase * 6.28 + 1.57)"
+    # expression = "1.0"
+    # vararg "refs" {
+    #   connect {
+    #     sourceAddress = "v1:blocks.time.outputs.phaseA"
+    #     alias = "phase"
+    #     sortKey = 0
+    #   }
+    # }
+    # outputs {
+    #   out = render.scale
+    # }
+  # }
 
   block "RenderInstances2D" "render" {}
 }

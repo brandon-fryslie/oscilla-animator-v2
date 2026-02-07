@@ -15,7 +15,6 @@ import {
 } from '../types/canonical-address';
 import type { Patch, Block, OutputPort, InputPort } from './Patch';
 import type { InferenceCanonicalType } from '../core/inference-types';
-import { FLOAT, canonicalType } from '../core/canonical-types';
 import { BLOCK_DEFS_BY_TYPE } from '../blocks/registry';
 import { normalizeCanonicalName } from '../core/canonical-name';
 
@@ -72,11 +71,11 @@ export function resolveAddress(patch: Patch, addressStr: string): ResolvedAddres
     const port = block.outputPorts.get(addr.portId);
     if (!port) return null;
 
-    // Get type from block definition
+    // Get type from block definition — block def or port def may be absent for unregistered block types
     const blockDef = BLOCK_DEFS_BY_TYPE.get(block.type);
     const outputDef = blockDef?.outputs?.[addr.portId];
-    // Use type from definition, or fallback to a default type
-    const type: InferenceCanonicalType = outputDef?.type ?? canonicalType(FLOAT);
+    if (!outputDef?.type) return null;
+    const type: InferenceCanonicalType = outputDef.type;
 
     return { kind: 'output', block, port, type, addr };
   }
@@ -85,11 +84,11 @@ export function resolveAddress(patch: Patch, addressStr: string): ResolvedAddres
     const port = block.inputPorts.get(addr.portId);
     if (!port) return null;
 
-    // Get type from block definition
+    // Get type from block definition — block def or port def may be absent for unregistered block types
     const blockDef = BLOCK_DEFS_BY_TYPE.get(block.type);
     const inputDef = blockDef?.inputs?.[addr.portId];
-    // Use type from definition, or fallback to a default type
-    const type: InferenceCanonicalType = inputDef?.type ?? canonicalType(FLOAT);
+    if (!inputDef?.type) return null;
+    const type: InferenceCanonicalType = inputDef.type;
 
     return { kind: 'input', block, port, type, addr };
   }

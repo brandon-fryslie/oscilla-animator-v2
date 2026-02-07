@@ -52,13 +52,19 @@ export class ExternalWriteBus {
     this.queue.push({ op: 'add', name, dv });
   }
 
+  /** Double-buffer for drain: swap instead of allocating */
+  private swapQueue: WriteRecord[] = [];
+
   /**
    * Drain all pending writes (called by runtime at frame start)
    * Returns all records and clears the queue.
+   * Uses double-buffer swap to avoid per-frame allocation.
    */
   drain(): WriteRecord[] {
     const records = this.queue;
-    this.queue = [];
+    this.queue = this.swapQueue;
+    this.queue.length = 0;
+    this.swapQueue = records;
     return records;
   }
 }
@@ -68,9 +74,10 @@ export class ExternalWriteBus {
  *
  * Immutable snapshot of channel values for one frame.
  * All runtime reads go through this interface.
+ * The backing Map is owned by ExternalChannelSystem and reused via double-buffer.
  */
 export class ExternalChannelSnapshot {
-  constructor(private readonly values: Map<string, number>) {
+  constructor(private readonly values: ReadonlyMap<string, number>) {
     Object.freeze(this);
   }
 
@@ -102,7 +109,11 @@ export class ExternalChannelSnapshot {
 export class ExternalChannelSystem {
   readonly writeBus = new ExternalWriteBus();
   private staging = new Map<string, number>();
-  private _snapshot = new ExternalChannelSnapshot(new Map());
+  /** Double-buffered committed Maps — swap each frame to avoid new Map() per frame */
+  private committedA = new Map<string, number>();
+  private committedB = new Map<string, number>();
+  private useA = true;
+  private _snapshot = new ExternalChannelSnapshot(this.committedA);
 
   /**
    * Current committed snapshot (immutable for entire frame)
@@ -148,8 +159,16 @@ export class ExternalChannelSystem {
       }
     }
 
-    // Swap snapshot (creates new immutable view of current staging)
-    this._snapshot = new ExternalChannelSnapshot(new Map(this.staging));
+    // Double-buffer swap: fill the inactive map, create snapshot pointing to it.
+    // The previous snapshot still holds a reference to the other map (immutable from its perspective).
+    // Only the ExternalChannelSnapshot object is allocated per frame (16 bytes); Maps are reused.
+    const target = this.useA ? this.committedA : this.committedB;
+    target.clear();
+    for (const [k, v] of this.staging) {
+      target.set(k, v);
+    }
+    this._snapshot = new ExternalChannelSnapshot(target);
+    this.useA = !this.useA;
   }
 
   /**

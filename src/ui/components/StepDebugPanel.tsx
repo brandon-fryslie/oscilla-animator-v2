@@ -441,8 +441,9 @@ const Inspector: React.FC<{ store: StepDebugStore; blockEntries: { id: string; l
   const [bpThreshold, setBpThreshold] = useState<string>('0.1');
 
   // Sections collapsed state
+  const [showSlots, setShowSlots] = useState(false);
   const [showBreakpoints, setShowBreakpoints] = useState(true);
-  const [showExprTree, setShowExprTree] = useState(false);
+  const [showExprTree, setShowExprTree] = useState(true);
   const [showWhyNot, setShowWhyNot] = useState(false);
 
   const deltas = store.currentDeltas;
@@ -500,31 +501,46 @@ const Inspector: React.FC<{ store: StepDebugStore; blockEntries: { id: string; l
         />
       )}
 
+      {/* Expression tree section — primary debugger view, shown first */}
+      <CollapsibleSection
+        title="Expression Tree"
+        open={showExprTree}
+        onToggle={() => setShowExprTree(v => !v)}
+      >
+        <ExprTreeSection store={store} />
+      </CollapsibleSection>
+
       {/* Per-step writes (value slots + state slots) */}
-      {hasPerStepWrites ? (
-        <>
-          {snapshot.writtenSlots.size > 0 && (
-            <SlotTable
-              writtenSlots={snapshot.writtenSlots}
-              deltas={deltas}
-              store={store}
-              expandedBuffers={expandedBuffers}
-              onToggleBuffer={toggleBuffer}
-            />
-          )}
-          {snapshot.writtenStateSlots.size > 0 && (
-            <StateSlotTable writtenStateSlots={snapshot.writtenStateSlots} />
-          )}
-        </>
-      ) : snapshot ? (
-        <CumulativeStateView store={store} />
-      ) : store.mode === 'completed' && store.frameSummary ? (
-        <FrameSummaryView summary={store.frameSummary} />
-      ) : store.mode === 'completed' ? (
-        <div className="sdp-inspector-empty">Frame complete. Select a step from the history.</div>
-      ) : (
-        <div className="sdp-inspector-empty">Select a step to inspect</div>
-      )}
+      <CollapsibleSection
+        title="Slots"
+        open={showSlots}
+        onToggle={() => setShowSlots(v => !v)}
+      >
+        {hasPerStepWrites ? (
+          <>
+            {snapshot.writtenSlots.size > 0 && (
+              <SlotTable
+                writtenSlots={snapshot.writtenSlots}
+                deltas={deltas}
+                store={store}
+                expandedBuffers={expandedBuffers}
+                onToggleBuffer={toggleBuffer}
+              />
+            )}
+            {snapshot.writtenStateSlots.size > 0 && (
+              <StateSlotTable writtenStateSlots={snapshot.writtenStateSlots} />
+            )}
+          </>
+        ) : snapshot ? (
+          <CumulativeStateView store={store} />
+        ) : store.mode === 'completed' && store.frameSummary ? (
+          <FrameSummaryView summary={store.frameSummary} />
+        ) : store.mode === 'completed' ? (
+          <div className="sdp-inspector-empty">Frame complete. Select a step from the history.</div>
+        ) : (
+          <div className="sdp-inspector-empty">Select a step to inspect</div>
+        )}
+      </CollapsibleSection>
 
       {/* Breakpoints section */}
       <CollapsibleSection
@@ -579,15 +595,6 @@ const Inspector: React.FC<{ store: StepDebugStore; blockEntries: { id: string; l
             Advanced...
           </button>
         )}
-      </CollapsibleSection>
-
-      {/* Expression tree section */}
-      <CollapsibleSection
-        title="Expression Tree"
-        open={showExprTree}
-        onToggle={() => setShowExprTree(v => !v)}
-      >
-        <ExprTreeSection store={store} />
       </CollapsibleSection>
 
       {/* Why Not Evaluated section */}
@@ -961,7 +968,7 @@ const ExprTreeNodeView: React.FC<{
   defaultExpanded?: boolean;
   onSelectBlock: (blockId: string) => void;
   onSelectPort: (blockId: string, portId: string) => void;
-}> = ({ node, depth, defaultExpanded = false, onSelectBlock, onSelectPort }) => {
+}> = ({ node, depth, defaultExpanded = true, onSelectBlock, onSelectPort }) => {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const hasChildren = node.children.length > 0;
   const hasProvenance = node.blockName != null;

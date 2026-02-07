@@ -105,7 +105,7 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
   const compileId = options?.patchId ? `${options.patchId}:${options.patchRevision || 0}` : 'unknown';
   const startTime = performance.now();
 
-  // Begin compilation inspection
+  // [LAW:one-source-of-truth] compile() owns the inspector snapshot lifecycle unconditionally.
   try {
     compilationInspector.beginCompile(compileId);
   } catch (e) {
@@ -141,6 +141,12 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
         compilationInspector.capturePass('normalization', patch, normalized);
         compilationInspector.capturePass('type-constraints', normalized, typedPatch);
         compilationInspector.capturePass('type-graph', normalized, typedPatch);
+        compilationInspector.capturePass('axis-validation', typedPatch, {
+          errors: options.precomputedFrontend.errors,
+        });
+        compilationInspector.capturePass('cycle-analysis', typedPatch,
+          options.precomputedFrontend.cycleSummary,
+        );
       } catch (e) {
         console.warn('[CompilationInspector] Failed to capture precomputed frontend:', e);
       }
@@ -650,7 +656,8 @@ function convertLinkedIRToProgram(
   for (let slotId = 0; slotId < (builder.getSlotCount?.() || 0); slotId++) {
     const slot = slotId as ValueSlot;
     const slotInfo = slotTypes.get(slot);
-    const type = slotInfo?.type || canonicalType(FLOAT); // Default to float if no type info
+    if (!slotInfo?.type) throw new Error(`Slot ${slot} has no registered type — IR builder bug`);
+    const type = slotInfo.type;
 
     // Determine storage class from type
     // Field output slots store buffer references in the objects Map
@@ -661,7 +668,7 @@ function convertLinkedIRToProgram(
 
     // Use stride from slotInfo (which comes from registered type), fallback to computing from payload
     // Objects/fields have stride=1 since they store a single reference
-    const stride = storage === 'object' ? 1 : (slotInfo?.stride ?? payloadStride(type.payload));
+    const stride = storage === 'object' ? 1 : (slotInfo.stride ?? payloadStride(type.payload));
 
     // Offset must increment by stride, not 1 - multi-component types (color=4, vec3=3, vec2=2) need space
     const offset = storageOffsets[storage];
@@ -916,6 +923,12 @@ function convertLinkedIRToProgram(
     fieldSlotRegistry,
     renderGlobals, // NEW - Camera system: populated from builder
     kernelRegistry: registry, // Phase B: Kernel registry with resolved handles
+    constantProvenance: unlinkedIR.constantProvenance.size > 0
+      ? unlinkedIR.constantProvenance
+      : undefined,
+    instanceCountProvenance: unlinkedIR.instanceCountProvenance.size > 0
+      ? unlinkedIR.instanceCountProvenance
+      : undefined,
   };
 
   return program;

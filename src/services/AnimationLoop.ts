@@ -295,14 +295,20 @@ function executeAnimationFrameDebug(
 }
 
 /**
- * Start the animation loop
+ * Start the animation loop.
+ *
+ * @returns Cancel function — call it to stop the loop (e.g., on HMR dispose).
  */
 export function startAnimationLoop(
   deps: AnimationLoopDeps,
   state: AnimationLoopState,
   onError?: (err: unknown) => void
-): void {
+): () => void {
+  let cancelled = false;
+  let rafId = 0;
+
   function animate(tMs: number) {
+    if (cancelled) return;
     try {
       executeAnimationFrame(tMs, deps, state);
     } catch (err) {
@@ -312,8 +318,15 @@ export function startAnimationLoop(
         console.error('Runtime error:', err);
       }
     }
-    requestAnimationFrame(animate);
+    if (!cancelled) {
+      rafId = requestAnimationFrame(animate);
+    }
   }
 
-  requestAnimationFrame(animate);
+  rafId = requestAnimationFrame(animate);
+
+  return () => {
+    cancelled = true;
+    cancelAnimationFrame(rafId);
+  };
 }

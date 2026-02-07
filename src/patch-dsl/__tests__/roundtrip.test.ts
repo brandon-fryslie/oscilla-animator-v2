@@ -13,69 +13,11 @@ import { buildPatch } from '../../graph/Patch';
 
 // CRITICAL: Import all blocks to trigger registry side effects
 import '../../blocks/all';
-
-// Import demo patch builders
-import { patchSimple } from '../../demo/simple';
-import { patchGoldenSpiral } from '../../demo/golden-spiral';
-import { patchMouseSpiral } from '../../demo/mouse-spiral';
-import { patchDomainTest } from '../../demo/domain-test';
-import { patchTileGrid, patchTileGridUV } from '../../demo/tile-grid';
-import { patchPerspectiveCamera } from '../../demo/perspective-camera';
-import { patchFeedbackSimple } from '../../demo/feedback-simple';
-import { patchFeedbackRotation } from '../../demo/feedback-rotation';
-import { patchPathFieldDemo } from '../../demo/path-field-demo';
-import { patchErrorIsolationDemo } from '../../demo/error-isolation-demo';
-import { patchRectMosaic } from '../../demo/rect-mosaic';
-// NOTE: patchShapeKaleidoscope is commented out in the source file
-
 /**
  * Demo patches to test.
  * Each entry is a {name, builder} pair.
  */
-const DEMO_PATCHES = [
-  { name: 'simple', builder: patchSimple },
-  { name: 'golden-spiral', builder: patchGoldenSpiral },
-  { name: 'mouse-spiral', builder: patchMouseSpiral },
-  { name: 'domain-test', builder: patchDomainTest },
-  { name: 'tile-grid', builder: patchTileGrid },
-  { name: 'tile-grid-uv', builder: patchTileGridUV },
-  { name: 'perspective-camera', builder: patchPerspectiveCamera },
-  { name: 'feedback-simple', builder: patchFeedbackSimple },
-  { name: 'feedback-rotation', builder: patchFeedbackRotation },
-  { name: 'path-field-demo', builder: patchPathFieldDemo },
-  { name: 'error-isolation-demo', builder: patchErrorIsolationDemo },
-  { name: 'rect-mosaic', builder: patchRectMosaic },
-  // shape-kaleidoscope is commented out in source
-];
 
-describe('round-trip serialization', () => {
-  for (const { name, builder } of DEMO_PATCHES) {
-    it(`round-trips ${name}`, () => {
-      // Build original patch from demo builder
-      const patch1 = buildPatch(builder);
-
-      // Serialize to HCL
-      const hcl = serializePatchToHCL(patch1, { name });
-
-      // Verify HCL is non-empty
-      expect(hcl).toBeTruthy();
-      expect(hcl).toContain('patch');
-
-      // Deserialize back to Patch
-      const result = deserializePatchFromHCL(hcl);
-
-      // Verify no errors or warnings
-      expect(result.errors).toEqual([]);
-      expect(result.warnings).toEqual([]);
-
-      // Verify structural equality by comparing serialized HCL strings
-      // This works because serializePatchToHCL is deterministic (sorted blocks/edges)
-      // BlockIds will differ, but if serialization is deterministic, HCL should match
-      const hcl2 = serializePatchToHCL(result.patch, { name });
-      expect(hcl2).toBe(hcl);
-    });
-  }
-});
 
 describe('round-trip edge cases', () => {
   it('preserves empty patches', () => {

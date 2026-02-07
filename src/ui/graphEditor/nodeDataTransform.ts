@@ -175,7 +175,10 @@ export function createNodeFromBlockLike(
       createPortData(
         inputId,
         inputDef.label || inputId, // Fallback to inputId if label undefined
-        portState?.resolvedType ?? inputDef.type,
+        portState?.resolvedType ?? (() => {
+          console.warn(`Port '${inputId}' on block '${block.id}' has no resolved type — using static def type`);
+          return inputDef.type;
+        })(),
         isConnected,
         defaultSource,
         connection,
@@ -197,7 +200,10 @@ export function createNodeFromBlockLike(
       createPortData(
         outputId,
         outputDef.label || outputId, // Fallback to outputId if label undefined
-        outputPortState?.resolvedType ?? outputDef.type,
+        outputPortState?.resolvedType ?? (() => {
+          console.warn(`Port '${outputId}' on block '${block.id}' has no resolved type — using static def type`);
+          return outputDef.type;
+        })(),
         isConnected,
         undefined,
         connection

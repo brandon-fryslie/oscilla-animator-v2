@@ -27,6 +27,7 @@ function makeInstanceDecl(id: InstanceId, count: number): InstanceDecl {
     id,
     domainType: 'circle' as any,
     count,
+    maxCount: Math.max(count, 10_000),
     lifecycle: 'static',
     identityMode: 'stable',
     elementIdSeed: 0,

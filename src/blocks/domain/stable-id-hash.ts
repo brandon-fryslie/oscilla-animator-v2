@@ -34,10 +34,8 @@ registerBlock({
     const seed = (config?.seed as number) ?? 0;
 
     // Get instance context from Array block or inferred from inputs
-    const instance = ctx.inferredInstance ?? ctx.instance;
-    if (!instance) {
-      throw new Error('StableIdHash requires instance context');
-    }
+    const instance = ctx.inferredInstance;
+    if (!instance) throw new Error('StableIdHash: instance inference failed — field block requires inferredInstance');
 
     const randType = ctx.outTypes[0];
     const id01Type = ctx.outTypes[1];

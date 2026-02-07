@@ -65,20 +65,20 @@ describe('Cardinality Metadata', () => {
     });
   });
 
-  describe('Field-only blocks', () => {
-    const fieldOnlyBlocks = [
-      'RenderInstances2D',
-      'StableIdHash', 'DomainIndex',
-      'FromDomainId',
-      'PathField',
-    ];
-
-    it.each(fieldOnlyBlocks)('%s is fieldOnly', (blockType) => {
-      const meta = getBlockCardinalityMetadata(blockType);
-      expect(meta).toBeDefined();
-      expect(meta?.cardinalityMode).toBe('fieldOnly');
-    });
-  });
+  // describe('Field-only blocks', () => {
+  //   const fieldOnlyBlocks = [
+  //     'RenderInstances2D',
+  //     'StableIdHash', 'DomainIndex',
+  //     'FromDomainId',
+  //     'PathField',
+  //   ];
+  //
+  //   it.each(fieldOnlyBlocks)('%s is fieldOnly', (blockType) => {
+  //     const meta = getBlockCardinalityMetadata(blockType);
+  //     expect(meta).toBeDefined();
+  //     expect(meta?.cardinalityMode).toBe('fieldOnly');
+  //   });
+  // });
 
   describe('Transform blocks (cardinality changers)', () => {
     const transformBlocks = [

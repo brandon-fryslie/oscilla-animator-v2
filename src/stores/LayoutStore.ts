@@ -26,6 +26,7 @@ export class LayoutStore {
       setPosition: action,
       setPositions: action,
       removePosition: action,
+      pruneOrphans: action,
       clear: action,
     });
   }
@@ -58,6 +59,18 @@ export class LayoutStore {
    */
   removePosition(blockId: BlockId): void {
     this.positions.delete(blockId);
+  }
+
+  /**
+   * Remove positions for blocks no longer in the graph.
+   * Call after block removal to prevent unbounded growth.
+   */
+  pruneOrphans(activeBlockIds: ReadonlySet<BlockId>): void {
+    for (const id of this.positions.keys()) {
+      if (!activeBlockIds.has(id)) {
+        this.positions.delete(id);
+      }
+    }
   }
 
   /**

@@ -207,6 +207,13 @@ export interface InstanceDecl {
   readonly count: number | 'dynamic';
   readonly lifecycle: 'static' | 'dynamic' | 'pooled';
 
+  /**
+   * Maximum element capacity for fast-path instance count patching.
+   * Count patching cannot exceed this value — changes beyond maxCount
+   * fall back to full recompile.
+   */
+  readonly maxCount: number;
+
   // Continuity System: Identity specification
   readonly identityMode: 'stable' | 'none';
   readonly elementIdSeed?: number; // For deterministic ID generation

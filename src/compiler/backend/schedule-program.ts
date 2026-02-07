@@ -436,8 +436,8 @@ function resolveShapeInfo(
     // shapeRef field names are owned by the ValueExpr IR. Do not reintroduce legacy tags.
     const topologyId = (expr as any).topologyId as TopologyId;
 
-    // Prefer the canonical field name; fall back only if the IR uses an older field name.
-    const paramSignals = ((expr as any).paramSignals ?? (expr as any).paramArgs ?? []) as readonly ValueExprId[];
+    const paramSignals = (expr as any).paramArgs as readonly ValueExprId[];
+    if (!paramSignals) throw new Error('shapeRef missing paramArgs field — malformed ValueExprShapeRef');
 
     const cpId = (expr as any).controlPointField as ValueExprId | undefined;
     const controlPointField = cpId !== undefined

@@ -218,7 +218,8 @@ export function mapDebugMappings(patch: Patch, program: CompiledProgramIR): Debu
     for (const [portKey, slotId] of targetToSlot.entries()) {
         const meta = program.slotMeta.find(m => m.slot === slotId);
         const type = meta?.type || canonicalType(FLOAT);
-        const cardinality = portCardinality.get(portKey) ?? 'signal';
+        const cardinality = portCardinality.get(portKey);
+        if (!cardinality) throw new Error(`Port ${portKey} missing cardinality after type solve`);
         portMetaMap.set(portKey, { slotId, type, cardinality });
     }
 

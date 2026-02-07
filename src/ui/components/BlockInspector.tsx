@@ -1269,7 +1269,13 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
   }, [blockId, portId]);
 
   // Use resolved type for slider config, fall back to static port type
-  const sliderType = resolvedType ?? portType;
+  const sliderType = useMemo(() => {
+    if (!resolvedType) {
+      console.warn(`BlockInspector: No resolved type for port '${portId}' on block '${blockId}' — using static type`);
+      return portType;
+    }
+    return resolvedType;
+  }, [resolvedType, portType, portId, blockId]);
 
   // Current selection
   const currentBlockType = currentDefaultSource.blockType;

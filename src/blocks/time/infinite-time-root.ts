@@ -58,7 +58,8 @@ registerBlock({
     const dtType = ctx.outTypes[1];
     const phaseAType = ctx.outTypes[2];
     const phaseBType = ctx.outTypes[3];
-    const pulseType = ctx.outTypes[4] ?? canonicalEvent();
+    const pulseType = ctx.outTypes[4];
+    if (!pulseType) throw new Error('InfiniteTimeRoot: frontend failed to resolve pulse output type (index 4)');
     const paletteType = ctx.outTypes[5];
     const energyType = ctx.outTypes[6];
 

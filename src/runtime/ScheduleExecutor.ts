@@ -39,6 +39,9 @@ import {
 // so they don't need arena semantics. The pool grows once and then stabilizes.
 const MATERIALIZER_POOL = new BufferPool();
 
+// Module-level render steps array — reused across frames to avoid per-frame allocation.
+const _renderSteps: StepRender[] = [];
+
 function writeF64Scalar(state: RuntimeState, lookup: SlotLookup, value: number): void {
   if (lookup.storage !== 'f64') {
     throw new Error(`writeF64Scalar: expected f64 storage for slot ${lookup.slot}, got ${lookup.storage}`);
@@ -153,8 +156,8 @@ export function executeFrame(
   // Note: assemblerContext is constructed after Phase 1 when slots are populated
   let assemblerContext: AssemblerContext;
 
-  // Collect render steps for v2 batch assembly
-  const renderSteps: StepRender[] = [];
+  // Collect render steps for v2 batch assembly (reuse module-level array)
+  _renderSteps.length = 0;
 
   // PHASE 1: Execute all non-stateWrite steps
   for (const step of steps) {
@@ -185,7 +188,11 @@ export function executeFrame(
                 // For now we preserve prior behavior: store the field slot index as a number.
                 pointsFieldSlot:
                   (exprNode.kind === 'shapeRef' && exprNode.controlPointField != null
-                    ? ((fieldExprToSlot.get(exprNode.controlPointField as number) as number | undefined) ?? 0)
+                    ? (() => {
+                        const cpSlot = fieldExprToSlot.get(exprNode.controlPointField as number);
+                        if (cpSlot === undefined) throw new Error(`Control point field ${exprNode.controlPointField} not in fieldExprToSlot — compiler bug`);
+                        return cpSlot;
+                      })()
                     : 0),
                 pointsCount: 0,
                 styleRef: 0,
@@ -319,7 +326,7 @@ export function executeFrame(
 
       case 'render': {
         // Collect render steps for v2 batch assembly (after Phase 1)
-        renderSteps.push(step);
+        _renderSteps.push(step);
         break;
       }
 
@@ -508,7 +515,7 @@ export function executeFrame(
   };
 
   // Build v2 frame from collected render steps (zero allocations - uses arena)
-  const frame = assembleRenderFrame(renderSteps, assemblerContext);
+  const frame = assembleRenderFrame(_renderSteps, assemblerContext);
 
   // PHASE 2: Execute all stateWrite steps
   // This ensures state reads in Phase 1 saw previous frame's values
@@ -550,6 +557,10 @@ export function executeFrame(
       }
     }
   }
+
+  // Release all materializer pool buffers back to the pool for reuse next frame.
+  // At this point all materialized buffers have been consumed into state.values.
+  MATERIALIZER_POOL.releaseAll();
 
   // 3.5 Finalize continuity frame (spec §5.1)
   // Updates time tracking and clears frame-local flags

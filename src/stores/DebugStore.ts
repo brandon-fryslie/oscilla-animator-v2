@@ -69,7 +69,10 @@ export class DebugStore {
   private settingsSyncDisposer: (() => void) | null = null;
 
   constructor(settingsStore?: SettingsStore) {
-    makeAutoObservable(this);
+    makeAutoObservable(this, {
+      // status reads from non-observable debugService singleton — not a true computed
+      status: false,
+    });
 
     // Sync with settings if provided
     if (settingsStore) {

@@ -59,7 +59,8 @@ export function scheduleRecompile(onRecompile: () => Promise<void>): void {
  */
 export function setupLiveRecompileReaction(
   store: RootStore,
-  onRecompile: () => Promise<void>
+  onRecompile: () => Promise<void>,
+  onValuePatch?: (changes: ReadonlyMap<string, unknown>) => boolean,
 ): void {
   if (reactionSetup) return;
   reactionSetup = true;
@@ -90,6 +91,13 @@ export function setupLiveRecompileReaction(
       lastBlockParamsHash = hash;
       lastBlockCount = blockCount;
       lastEdgeCount = edgeCount;
+
+      // Fast-path: if only constant values changed, try patching without full recompile
+      const pending = store.patch.consumePendingChanges();
+      if (pending.kind === 'valueOnly' && onValuePatch) {
+        const handled = onValuePatch(pending.changes);
+        if (handled) return; // Fast path succeeded, skip full recompile
+      }
       scheduleRecompile(onRecompile);
     },
     {

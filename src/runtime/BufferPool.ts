@@ -87,8 +87,17 @@ export class BufferPool {
   /** Currently allocated buffers by key */
   private inUse = new Map<string, ArrayBufferView[]>();
 
-  /** Maximum number of different pool keys before triggering cleanup */
-  private maxPoolSize = 1000;
+  /** Frame counter for stale-key tracking */
+  private frameCounter = 0;
+
+  /** Last-used frame per key (for stale-key eviction) */
+  private lastUsedFrame = new Map<string, number>();
+
+  /** Frames between stale-key pruning sweeps */
+  private static readonly PRUNE_INTERVAL = 300;
+
+  /** Keys unused for this many frames are pruned */
+  private static readonly STALE_THRESHOLD = 300;
 
   // === Memory Instrumentation (Sprint: memory-instrumentation) ===
 
@@ -168,6 +177,7 @@ export class BufferPool {
 
     this.allocsThisFrame++;
     this.ensureKey(key);
+    this.lastUsedFrame.set(key, this.frameCounter);
 
     const pool = this.pools.get(key)!;
     const inUseList = this.inUse.get(key)!;
@@ -212,6 +222,57 @@ export class BufferPool {
     this.lastFrameAllocs = this.allocsThisFrame;
     this.lastFrameReleases = releasedCount;
     this.allocsThisFrame = 0;
+
+    this.frameCounter++;
+
+    // Periodic stale-key pruning: reclaim memory for keys no longer in use
+    if (this.frameCounter % BufferPool.PRUNE_INTERVAL === 0) {
+      this.pruneStaleKeys();
+    }
+  }
+
+  /**
+   * Prune pool keys that haven't been used for STALE_THRESHOLD frames.
+   * Reclaims both buffer memory and map entries.
+   */
+  private pruneStaleKeys(): void {
+    const threshold = this.frameCounter - BufferPool.STALE_THRESHOLD;
+    for (let k = this.knownKeys.length - 1; k >= 0; k--) {
+      const key = this.knownKeys[k];
+      const lastUsed = this.lastUsedFrame.get(key);
+      if (lastUsed !== undefined && lastUsed <= threshold) {
+        // Reclaim byte count
+        const pool = this.pools.get(key);
+        if (pool) {
+          for (const buf of pool) this.totalBytes -= buf.byteLength;
+        }
+        const inUseList = this.inUse.get(key);
+        if (inUseList) {
+          for (const buf of inUseList) this.totalBytes -= buf.byteLength;
+        }
+        this.pools.delete(key);
+        this.inUse.delete(key);
+        this.lastUsedFrame.delete(key);
+        this.knownKeys.splice(k, 1);
+      }
+    }
+  }
+
+  /**
+   * Reset the entire pool. Clears all buffers and state.
+   * Use on recompile when pool contents are completely invalid.
+   */
+  reset(): void {
+    this.pools.clear();
+    this.inUse.clear();
+    this.lastUsedFrame.clear();
+    this.knownKeys.length = 0;
+    this.keyCache.clear();
+    this.totalBytes = 0;
+    this.frameCounter = 0;
+    this.allocsThisFrame = 0;
+    this.lastFrameAllocs = 0;
+    this.lastFrameReleases = 0;
   }
 
   /**

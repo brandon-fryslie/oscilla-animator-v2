@@ -260,6 +260,73 @@ describe('exprProvenance mapping', () => {
     }
   });
 
+  it('defaultSource targetBlockId resolves via blockMap to a display name', () => {
+    // This test verifies the full data pipeline: provenance stores string block IDs,
+    // blockMap maps numeric→string, blockDisplayNames maps numeric→name.
+    // The store must resolve string IDs to display names — if the key types mismatch
+    // (numeric vs string), lookups silently return undefined and the UI falls back
+    // to showing the raw IR label instead of the provenance badge.
+    const patch = buildPatch((b) => {
+      const time = b.addBlock('InfiniteTimeRoot');
+      b.setPortDefault(time, 'periodAMs', 1000);
+
+      const ellipse = b.addBlock('Ellipse');
+      b.setPortDefault(ellipse, 'rx', 0.03);
+      b.setPortDefault(ellipse, 'ry', 0.03);
+
+      const array = b.addBlock('Array');
+      b.setPortDefault(array, 'count', 4);
+
+      const layout = b.addBlock('GridLayoutUV');
+      b.setPortDefault(layout, 'rows', 2);
+      b.setPortDefault(layout, 'cols', 2);
+
+      const colorSig = b.addBlock('Const');
+      b.setConfig(colorSig, 'value', { r: 1, g: 0.5, b: 0.2, a: 1 });
+      const colorField = b.addBlock('Broadcast');
+
+      const render = b.addBlock('RenderInstances2D');
+
+      b.wire(ellipse, 'shape', array, 'element');
+      b.wire(array, 'elements', layout, 'elements');
+      b.wire(colorSig, 'out', colorField, 'signal');
+      b.wire(layout, 'position', render, 'pos');
+      b.wire(colorField, 'field', render, 'color');
+    });
+
+    const program = compileOk(patch);
+    const provenance = program.debugIndex.exprProvenance!;
+    const { blockMap, blockDisplayNames } = program.debugIndex;
+
+    // Build the same reverse map the store uses
+    const stringIdToDisplayName = new Map<string, string>();
+    for (const [numIdx, strId] of blockMap.entries()) {
+      const displayName = blockDisplayNames?.get(numIdx) ?? strId;
+      stringIdToDisplayName.set(strId, displayName);
+    }
+
+    // Find all defaultSource entries
+    const defaultSourceEntries = [...provenance.values()].filter(
+      (p) => p.userTarget?.kind === 'defaultSource'
+    );
+    expect(defaultSourceEntries.length).toBeGreaterThan(0);
+
+    for (const entry of defaultSourceEntries) {
+      if (entry.userTarget?.kind !== 'defaultSource') continue;
+      const tgtId = entry.userTarget.targetBlockId as string;
+
+      // The target block string ID must exist in blockMap values
+      const allStringIds = new Set(blockMap.values());
+      expect(allStringIds.has(tgtId)).toBe(true);
+
+      // The reverse map must resolve to a non-empty display name
+      const displayName = stringIdToDisplayName.get(tgtId);
+      expect(displayName).toBeDefined();
+      expect(typeof displayName).toBe('string');
+      expect(displayName!.length).toBeGreaterThan(0);
+    }
+  });
+
   it('marks user blocks with null userTarget', () => {
     const patch = buildPatch((b) => {
       const time = b.addBlock('InfiniteTimeRoot');

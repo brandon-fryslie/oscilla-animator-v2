@@ -298,9 +298,9 @@ class CompilationInspectorService {
     const latest = this.getLatestSnapshot();
     if (!latest) return undefined;
 
-    // Find the type-graph pass (or frontend:type-graph)
+    // Find the type-graph pass
     const typeGraphPass = latest.passes.find(
-      (p) => p.passName === 'type-graph' || p.passName === 'frontend:type-graph'
+      (p) => p.passName === 'type-graph'
     );
     if (!typeGraphPass) return undefined;
 
@@ -380,7 +380,7 @@ class CompilationInspectorService {
 
     // Find the cycle-analysis pass
     const cyclePass = latest.passes.find(
-      (p) => p.passName === 'frontend:cycle-analysis'
+      (p) => p.passName === 'cycle-analysis'
     );
     if (!cyclePass) return undefined;
 

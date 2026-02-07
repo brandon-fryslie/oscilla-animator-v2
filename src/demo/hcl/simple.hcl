@@ -51,5 +51,10 @@ patch "Simple" {
     }
   }
 
-  block "RenderInstances2D" "render" {}
+  block "RenderInstances2D" "render" {
+    inputs {
+      color = color.color
+      pos = layout.position
+    }
+  }
 }

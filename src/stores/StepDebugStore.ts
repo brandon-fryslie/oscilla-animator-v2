@@ -32,6 +32,8 @@ import { computeSlotDeltas, type SlotDelta } from '../runtime/ValueInspector';
 import { getValueExprChildren } from '../runtime/ValueExprTreeWalker';
 import type { ValueExpr } from '../compiler/ir/value-expr';
 
+const MAX_HISTORY = 2000;
+
 export class StepDebugStore {
   /** Whether the step debugger is active (controls animation loop branching) */
   active: boolean = false;
@@ -133,6 +135,9 @@ export class StepDebugStore {
         this.mode = 'paused';
         this.currentSnapshot = snapshot;
         this.history.push(snapshot);
+        if (this.history.length > MAX_HISTORY) {
+          this.history = this.history.slice(-MAX_HISTORY);
+        }
       } else {
         this.mode = 'completed';
         this.currentSnapshot = null;
@@ -452,7 +457,10 @@ export class StepDebugStore {
       case 'materialize': return step.field;
       case 'stateWrite': return step.value;
       case 'fieldStateWrite': return step.value;
-      case 'slotWriteStrided': return step.inputs[0] ?? null;
+      case 'slotWriteStrided': {
+        if (step.inputs.length === 0) throw new Error('slotWriteStrided step has no inputs — malformed IR');
+        return step.inputs[0];
+      }
       default: return null;
     }
   }
@@ -474,7 +482,19 @@ export class StepDebugStore {
     const nodes = program.valueExprs.nodes;
     const exprToBlock = program.debugIndex.exprToBlock;
     const blockMap = program.debugIndex.blockMap;
+    const blockDisplayNames = program.debugIndex.blockDisplayNames;
     const visited = new Set<number>();
+
+    // blockMap and blockDisplayNames are keyed by numeric indices (BlockId),
+    // but exprProvenance stores string block IDs (e.g. "b0", "_ds_b0_count").
+    // Build a reverse map: string block ID → display name for provenance lookups.
+    // [LAW:one-source-of-truth] blockMap is the canonical numeric→string mapping;
+    // we derive this reverse map from it rather than storing a second source.
+    const stringIdToDisplayName = new Map<string, string>();
+    for (const [numIdx, strId] of blockMap.entries()) {
+      const displayName = blockDisplayNames?.get(numIdx) ?? strId;
+      stringIdToDisplayName.set(strId, displayName);
+    }
 
     const build = (exprId: ValueExprId, depth: number): ExprTreeNode | null => {
       const numId = exprId as number;
@@ -491,8 +511,9 @@ export class StepDebugStore {
 
       visited.add(numId);
 
-      // Resolve provenance-aware block name, port name, and role
-      const blockDisplayNames = program.debugIndex.blockDisplayNames;
+      // Resolve provenance-aware block name, port name, and role.
+      // Uses stringIdToDisplayName (built above) since provenance stores string
+      // block IDs but blockMap/blockDisplayNames are keyed by numeric indices.
       const prov = program.debugIndex.exprProvenance?.get(exprId);
       let blockName: string | null = null;
       let portName: string | null = null;
@@ -504,11 +525,11 @@ export class StepDebugStore {
         if (prov.userTarget) {
           switch (prov.userTarget.kind) {
             case 'defaultSource': {
-              blockName = blockDisplayNames?.get(prov.userTarget.targetBlockId)
-                ?? blockMap.get(prov.userTarget.targetBlockId) ?? null;
+              const tgtId = prov.userTarget.targetBlockId as string;
+              blockName = stringIdToDisplayName.get(tgtId) ?? null;
               portName = prov.userTarget.targetPortName;
               role = 'default';
-              targetBlockId = prov.userTarget.targetBlockId as string;
+              targetBlockId = tgtId;
               targetPortId = prov.userTarget.targetPortName;
               break;
             }
@@ -519,22 +540,19 @@ export class StepDebugStore {
               break;
             }
             case 'wireState': {
-              blockName = blockDisplayNames?.get(prov.blockId)
-                ?? blockMap.get(prov.blockId) ?? null;
+              blockName = stringIdToDisplayName.get(prov.blockId as string) ?? null;
               role = 'wireState';
               targetBlockId = prov.blockId as string;
               break;
             }
             case 'lens': {
-              blockName = blockDisplayNames?.get(prov.blockId)
-                ?? blockMap.get(prov.blockId) ?? null;
+              blockName = stringIdToDisplayName.get(prov.blockId as string) ?? null;
               role = 'lens';
               targetBlockId = prov.blockId as string;
               break;
             }
             case 'compositeExpansion': {
-              blockName = blockDisplayNames?.get(prov.blockId)
-                ?? blockMap.get(prov.blockId) ?? null;
+              blockName = stringIdToDisplayName.get(prov.blockId as string) ?? null;
               role = 'composite';
               targetBlockId = prov.blockId as string;
               break;
@@ -542,8 +560,7 @@ export class StepDebugStore {
           }
         } else {
           // User block — resolve directly
-          blockName = blockDisplayNames?.get(prov.blockId)
-            ?? blockMap.get(prov.blockId) ?? null;
+          blockName = stringIdToDisplayName.get(prov.blockId as string) ?? null;
           portName = prov.portName;
           role = 'user';
           targetBlockId = prov.blockId as string;
@@ -553,7 +570,7 @@ export class StepDebugStore {
         // Fallback: no provenance available (infrastructure exprs like time)
         const blockId = exprToBlock.get(exprId);
         blockName = blockId != null
-          ? (blockDisplayNames?.get(blockId) ?? blockMap.get(blockId) ?? null)
+          ? (stringIdToDisplayName.get(blockId as unknown as string) ?? null)
           : null;
       }
 

@@ -155,6 +155,11 @@ class DebugService {
   setEdgeToSlotMap(map: Map<string, EdgeMetadata>, constantValues?: Map<string, ConstantValue>): void {
     this.edgeToSlotMap = map;
     this.constantValues = constantValues ?? new Map();
+    // Slot namespace changed — old values are stale and new slots haven't been written yet.
+    // Reset so queries return undefined (graceful) instead of throwing (scheduling bug).
+    this.signalValues.clear();
+    this.fieldBuffers.clear();
+    this.runtimeStarted = false;
     this.historyService.onMappingChanged();
   }
 
@@ -243,11 +248,14 @@ class DebugService {
    */
   updateFieldValue(slotId: ValueSlot, buffer: ArrayBufferView): void {
     this.runtimeStarted = true;
-    // Store a copy so we're not holding references to pooled buffers
+    // Reuse existing buffer if same length to avoid per-frame allocation
     const src = buffer as Float32Array;
-    const copy = new Float32Array(src.length);
+    let copy = this.fieldBuffers.get(slotId);
+    if (!copy || copy.length !== src.length) {
+      copy = new Float32Array(src.length);
+      this.fieldBuffers.set(slotId, copy);
+    }
     copy.set(src);
-    this.fieldBuffers.set(slotId, copy);
   }
 
   // ===========================================================================

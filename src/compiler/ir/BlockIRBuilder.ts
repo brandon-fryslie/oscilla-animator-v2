@@ -42,6 +42,9 @@ export interface BlockIRBuilder {
   /** Create a constant expression. */
   constant(value: ConstValue, type: CanonicalType): ValueExprId;
 
+  /** Create a constant with a stable provenance key (prevents cross-origin dedup). */
+  constantWithKey(value: ConstValue, type: CanonicalType, key: string): ValueExprId;
+
   // REMOVED 2026-02-06: slotRead() - dead code, never called in production
 
   /** Create a time-derived expression. */

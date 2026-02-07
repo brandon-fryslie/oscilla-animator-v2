@@ -54,10 +54,10 @@ export const FloatControl: React.FC<ParameterControlProps> = ({ blockId, paramId
       clearTimeout(updateTimer);
     }
 
-    // Debounce: update PatchStore after 100ms of no changes
+    // Debounce: update PatchStore after ~16ms (one frame)
     const timer = window.setTimeout(() => {
       patch.updateBlockParams(blockId, { [paramId]: val });
-    }, 100);
+    }, 16);
 
     setUpdateTimer(timer);
   }, [blockId, paramId, patch, updateTimer]);
@@ -321,7 +321,7 @@ const DefaultSourceSlider: React.FC<DefaultSourceSliderProps> = ({
       clearTimeout(updateTimer);
     }
 
-    // Debounce: update PatchStore after 100ms of no changes
+    // Debounce: update PatchStore after ~16ms (one frame)
     const timer = window.setTimeout(() => {
       // Update the default source with new value
       const updatedDefaultSource: DefaultSource = {
@@ -332,15 +332,7 @@ const DefaultSourceSlider: React.FC<DefaultSourceSliderProps> = ({
         },
       };
       patch.updateInputPort(blockId, portId, { defaultSource: updatedDefaultSource });
-
-      // Also sync block.params if a param with this port's name exists.
-      // Some blocks (e.g., Array) read config params in their lower() function,
-      // so the block param must stay in sync with the default source value.
-      const block = patch.blocks.get(blockId);
-      if (block && portId in block.params) {
-        patch.updateBlockParams(blockId, { [portId]: val });
-      }
-    }, 100);
+    }, 16);
 
     setUpdateTimer(timer);
   }, [blockId, portId, defaultSource, patch, updateTimer]);

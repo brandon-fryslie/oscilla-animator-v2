@@ -30,6 +30,7 @@ import { mapDebugMappings } from './mapDebugEdges';
 import { extractConstantValues } from './ConstantValueTracker';
 import { pruneStaleContinuity } from '../runtime/ContinuityState';
 
+
 /**
  * Wire DebugService to the runtime state and update debug mappings.
  * Called after every compile/recompile to ensure debug state stays in sync.
@@ -113,6 +114,7 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
   const debugValues = store.settings.get(debugSettings);
   const frontendResult = compileFrontend(patch, {
     traceCardinalitySolver: debugValues?.traceCardinalitySolver,
+    useFixpointFrontend: debugValues?.useFixpointFrontend,
   });
 
   // Store frontend snapshot regardless of success/failure

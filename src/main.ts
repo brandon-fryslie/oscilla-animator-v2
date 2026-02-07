@@ -23,6 +23,7 @@ import {
 } from './services/CompileOrchestrator';
 import { detectAndLogDomainChanges, getPrevInstanceCounts } from './services/DomainChangeDetector';
 import { setupLiveRecompileReaction, cleanupReaction } from './services/LiveRecompile';
+import { patchProgramConstants } from './services/ConstantPatcher';
 import {
   startAnimationLoop,
   createAnimationLoopState,
@@ -55,6 +56,11 @@ let store: RootStore | null = null;
 
 // Currently loaded demo filename (null if restored from localStorage or custom)
 let currentDemoFilename: string | null = null;
+
+// Disposers for HMR cleanup
+let cancelAnimationLoop: (() => void) | null = null;
+let disposePersistReaction: (() => void) | null = null;
+let unsubCompileEnd: (() => void) | null = null;
 
 // Expose clearStorageAndReload globally for UI
 (window as unknown as { clearStorageAndReload: typeof clearStorageAndReload }).clearStorageAndReload = clearStorageAndReload;
@@ -155,13 +161,13 @@ async function initializeRuntime(rootStore: RootStore) {
   exposeDemosToUI();
 
   // Auto-persist patch to localStorage on changes (debounced by MobX)
-  reaction(
+  disposePersistReaction = reaction(
     () => store!.patch.patch,
     (patch) => savePatchToStorage(patch, 0),
     { delay: 500 }
   );
 
-  // Set up live recompile reaction
+  // Set up live recompile reaction with fast-path for constant value changes
   setupLiveRecompileReaction(store, async () => {
     await compileAndSwap(
       {
@@ -171,17 +177,24 @@ async function initializeRuntime(rootStore: RootStore) {
       },
       false
     );
+  }, (changes) => {
+    const program = compileState.currentProgram;
+    if (!program) return false;
+    const patched = patchProgramConstants(program, changes);
+    if (!patched) return false;
+    compileState.currentProgram = patched;
+    return true;
   });
 
   // Subscribe to CompileEnd events for compilation statistics
-  store.events.on('CompileEnd', (event) => {
+  unsubCompileEnd = store.events.on('CompileEnd', (event) => {
     if (event.status === 'success') {
       store!.diagnostics.recordCompilation(event.durationMs);
     }
   });
 
-  // Start animation loop
-  startAnimationLoop(
+  // Start animation loop (store cancel handle for HMR cleanup)
+  cancelAnimationLoop = startAnimationLoop(
     {
       getCurrentProgram: () => compileState.currentProgram,
       getCurrentState: () => compileState.currentState,
@@ -262,6 +275,16 @@ async function main() {
 
 // Export cleanupReaction for testing
 export { cleanupReaction };
+
+// HMR cleanup: cancel all long-lived resources on module hot-replace
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    cancelAnimationLoop?.();
+    disposePersistReaction?.();
+    unsubCompileEnd?.();
+    cleanupReaction();
+  });
+}
 
 // Run main
 main();

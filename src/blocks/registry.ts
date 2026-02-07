@@ -156,6 +156,54 @@ export type Capability = 'time' | 'identity' | 'state' | 'render' | 'io' | 'pure
 export type LoweringPurity = 'pure' | 'stateful' | 'impure';
 
 // =============================================================================
+// Lane Topology (Final Normalization Fixpoint - future use)
+// =============================================================================
+
+/**
+ * How lanes relate to each other within a group.
+ *
+ * - 'allEqual': all lanes in the group must have the same cardinality
+ * - 'zipBroadcast': lanes can be zipped (field+signal mixing allowed)
+ * - 'reducible': lanes can be reduced (many→one)
+ * - 'broadcastOnly': only broadcast (one→many) is allowed
+ * - custom: named custom relation for domain-specific blocks
+ */
+export type LaneRelation =
+  | 'allEqual'
+  | 'zipBroadcast'
+  | 'reducible'
+  | 'broadcastOnly'
+  | { readonly kind: 'custom'; readonly name: string };
+
+/**
+ * Direction of cardinality constraint flow within a lane group.
+ *
+ * - 'bidirectional': constraints flow both ways (all ports constrain each other)
+ * - 'inputToOutput': input cardinality determines output cardinality
+ * - 'outputToInput': output cardinality determines input cardinality
+ */
+export type LaneDirectionality = 'bidirectional' | 'inputToOutput' | 'outputToInput';
+
+/**
+ * A group of ports whose cardinalities are related.
+ */
+export interface LaneGroup {
+  readonly id: string;
+  readonly members: readonly string[];
+  readonly relation: LaneRelation;
+  readonly directionality?: LaneDirectionality;
+}
+
+/**
+ * Lane topology for a block — describes how port cardinalities relate.
+ * When present, this is authoritative for constraint extraction.
+ * When absent, fall back to legacy BlockCardinalityMetadata.
+ */
+export interface BlockLaneTopology {
+  readonly groups: readonly LaneGroup[];
+}
+
+// =============================================================================
 // Cardinality-Generic Block Metadata (Spec §8)
 // =============================================================================
 
@@ -343,6 +391,15 @@ export interface InputDef {
    * - Bypass the normal combine system
    * - Cannot have a defaultSource (explicit connections only)
    */
+  /**
+   * Port semantic — declares the compile-time role of this input.
+   *
+   * - 'instanceCount': This port controls the instance count of a cardinality-transform block.
+   *   Used by the provenance builder to determine which ports are eligible for
+   *   fast-path instance count patching (no full recompile needed).
+   */
+  readonly semantic?: 'instanceCount';
+
   readonly isVararg?: boolean;
 
   /**
@@ -436,6 +493,16 @@ export interface BlockDef {
    * Spec Reference: .agent_planning/_future/0-PayloadGeneriic-Block-Type-Spec.md §8
    */
   readonly payload?: BlockPayloadMetadata;
+
+  /**
+   * Lane topology — describes how port cardinalities relate.
+   * When present, authoritative for constraint extraction during the
+   * normalization fixpoint. When absent, fall back to legacy
+   * BlockCardinalityMetadata for backward compatibility.
+   *
+   * New blocks should declare laneTopology; existing blocks use fallback.
+   */
+  readonly laneTopology?: BlockLaneTopology;
 
   /**
    * Adapter type conversion spec. Present only on adapter/lens blocks.

@@ -144,11 +144,29 @@ export function createContinuityState(): ContinuityState {
 }
 
 /**
+ * Resize a Float32Array preserving the prefix (existing elements keep their values).
+ *
+ * @param old - Existing buffer
+ * @param newLen - New length
+ * @returns New buffer with prefix copied from old
+ */
+export function resizePreservePrefix(old: Float32Array, newLen: number): Float32Array {
+  const result = new Float32Array(newLen);
+  const copyCount = Math.min(old.length, newLen);
+  result.set(old.subarray(0, copyCount));
+  return result;
+}
+
+/**
  * Get or create target continuity state.
- * Handles buffer reallocation when count changes.
+ * Handles buffer reallocation when count changes, preserving existing data
+ * for the prefix (elements that existed before the count change).
  *
  * Per spec §5.3: Continuity must never allocate per frame.
  * This function only allocates when count changes.
+ *
+ * Prefix-stable: existing elements keep their gauge/slew values when count
+ * increases or decreases. New elements start at zero.
  *
  * @param continuity - Parent continuity state
  * @param targetId - Stable target ID
@@ -163,12 +181,26 @@ export function getOrCreateTargetState(
   let state = continuity.targets.get(targetId);
 
   if (!state || state.count !== count) {
-    // Allocate new buffers
-    state = {
-      gaugeBuffer: new Float32Array(count),
-      slewBuffer: new Float32Array(count),
-      count,
-    };
+    if (state) {
+      // Resize preserving prefix — existing elements keep their values
+      const crossfadeOldBuffer = state.crossfadeOldBuffer
+        ? resizePreservePrefix(state.crossfadeOldBuffer, count)
+        : undefined;
+      state = {
+        gaugeBuffer: resizePreservePrefix(state.gaugeBuffer, count),
+        slewBuffer: resizePreservePrefix(state.slewBuffer, count),
+        count,
+        ...(state.crossfadeStartMs !== undefined && { crossfadeStartMs: state.crossfadeStartMs }),
+        ...(crossfadeOldBuffer && { crossfadeOldBuffer }),
+      };
+    } else {
+      // Fresh allocation — no prefix to preserve
+      state = {
+        gaugeBuffer: new Float32Array(count),
+        slewBuffer: new Float32Array(count),
+        count,
+      };
+    }
     continuity.targets.set(targetId, state);
   }
 
@@ -214,6 +246,14 @@ export function pruneStaleContinuity(
   for (const id of continuity.placementBasis.keys()) {
     if (!activeInstanceIds.has(id)) {
       continuity.placementBasis.delete(id);
+    }
+  }
+  // Prune targets: StableTargetId format is "semantic:instanceId:portName"
+  for (const targetId of continuity.targets.keys()) {
+    const parts = targetId.split(':');
+    const instanceId = parts[1];
+    if (instanceId && !activeInstanceIds.has(instanceId)) {
+      continuity.targets.delete(targetId);
     }
   }
 }

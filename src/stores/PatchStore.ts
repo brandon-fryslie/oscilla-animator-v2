@@ -91,6 +91,10 @@ export class PatchStore {
   private _snapshotVersion = 0;
   private _dataVersion = 0;
 
+  // Fast-path change tracking: classify mutations as value-only vs structural
+  private _pendingValueChanges: Map<string, unknown> = new Map();
+  private _hasStructuralChange: boolean = false;
+
   // Optional EventHub for emitting ParamChanged events
   // Set via setEventHub() after construction (due to circular dependency with RootStore)
   private eventHub: EventHub | null = null;
@@ -124,6 +128,7 @@ export class PatchStore {
       loadPatch: action,
       clear: action,
       loadFromHCL: action,
+      consumePendingChanges: action,
     });
   }
 
@@ -254,6 +259,7 @@ export class PatchStore {
     params: Record<string, unknown> = {},
     options?: BlockOptions
   ): BlockId {
+    this._hasStructuralChange = true;
     const id = `b${this._nextBlockId++}` as BlockId;
     const blockDef = requireAnyBlockDef(type);
 
@@ -320,6 +326,7 @@ export class PatchStore {
    * Emits EdgeRemoved for each edge, then BlockRemoved.
    */
   removeBlock(id: BlockId): void {
+    this._hasStructuralChange = true;
     // Protect TimeRoot blocks from deletion (silently ignore)
     const block = this._data.blocks.get(id);
     if (block?.type === 'InfiniteTimeRoot') {
@@ -374,6 +381,7 @@ export class PatchStore {
     id: BlockId,
     params: Partial<Record<string, unknown>>
   ): void {
+    this._hasStructuralChange = true;
     const block = this._data.blocks.get(id);
     if (!block) {
       throw new Error(`Block not found: ${id}`);
@@ -501,6 +509,37 @@ export class PatchStore {
       port = { id: portId, combineMode: 'last' };
     }
 
+    // Classify: value-only if only defaultSource.params changed.
+    // First-time defaultSource setting is also value-only because normalization
+    // already created a derived Const block from the registry default —
+    // the provenance map covers it.
+    const isValueOnly = (() => {
+      if (!updates.defaultSource) return false;
+      const updateKeys = Object.keys(updates);
+      if (updateKeys.length !== 1 || updateKeys[0] !== 'defaultSource') return false;
+      // If port already has a defaultSource, check same blockType/output (value-only change)
+      if (port.defaultSource) {
+        return (
+          port.defaultSource.blockType === updates.defaultSource.blockType &&
+          port.defaultSource.output === updates.defaultSource.output
+        );
+      }
+      // First-time: check registry default matches the update's blockType
+      const blockDef = requireAnyBlockDef(block.type);
+      const inputDef = blockDef.inputs[portId];
+      if (!inputDef?.defaultSource) return false;
+      return inputDef.defaultSource.blockType === updates.defaultSource.blockType;
+    })();
+
+    if (isValueOnly) {
+      const rawValue = updates.defaultSource!.params?.value;
+      if (rawValue !== undefined) {
+        this._pendingValueChanges.set(`${blockId}:${portId}`, rawValue);
+      }
+    } else {
+      this._hasStructuralChange = true;
+    }
+
     // Update port
     const updatedPort: InputPort = { ...port, ...updates };
     const updatedInputPorts = new Map(block.inputPorts);
@@ -563,6 +602,7 @@ export class PatchStore {
     sortKey: number,
     alias?: string
   ): void {
+    this._hasStructuralChange = true;
     const block = this._data.blocks.get(blockId);
     if (!block) {
       throw new Error(`Block ${blockId} not found`);
@@ -660,6 +700,7 @@ export class PatchStore {
     sourceAddress: string,
     params?: Record<string, unknown>
   ): string {
+    this._hasStructuralChange = true;
     const block = this._data.blocks.get(blockId);
     if (!block) {
       throw new Error(`Block ${blockId} not found`);
@@ -753,6 +794,7 @@ export class PatchStore {
    * @param lensId - Lens ID to remove
    */
   removeLens(blockId: BlockId, portId: string, lensId: string): void {
+    this._hasStructuralChange = true;
     const block = this._data.blocks.get(blockId);
     if (!block) {
       throw new Error(`Block ${blockId} not found`);
@@ -836,6 +878,7 @@ export class PatchStore {
     lensId: string,
     params: Record<string, unknown>
   ): void {
+    this._hasStructuralChange = true;
     const block = this._data.blocks.get(blockId);
     if (!block) {
       throw new Error(`Block ${blockId} not found`);
@@ -893,6 +936,7 @@ export class PatchStore {
    * Emits EdgeAdded event.
    */
   addEdge(from: Endpoint, to: Endpoint, options?: EdgeOptions): string {
+    this._hasStructuralChange = true;
     const id = `e${this._nextEdgeId++}`;
     const edge: Edge = {
       id,
@@ -925,6 +969,7 @@ export class PatchStore {
    * Emits EdgeRemoved event.
    */
   removeEdge(id: string): void {
+    this._hasStructuralChange = true;
     this._data.edges = this._data.edges.filter((edge) => edge.id !== id);
     this.invalidateSnapshot();
 
@@ -943,6 +988,7 @@ export class PatchStore {
    * Updates edge properties.
    */
   updateEdge(id: string, updates: Partial<Edge>): void {
+    this._hasStructuralChange = true;
     const index = this._data.edges.findIndex((edge) => edge.id === id);
     if (index === -1) {
       throw new Error(`Edge not found: ${id}`);
@@ -963,6 +1009,7 @@ export class PatchStore {
    * Emits PatchReset event.
    */
   loadPatch(patch: Patch): void {
+    this._hasStructuralChange = true;
     this._data = {
       blocks: new Map(patch.blocks),
       edges: [...patch.edges],
@@ -1017,6 +1064,7 @@ export class PatchStore {
    * Emits PatchReset and GraphCommitted events.
    */
   clear(): void {
+    this._hasStructuralChange = true;
     this._data = emptyPatchData();
     this.invalidateSnapshot();
 
@@ -1061,6 +1109,7 @@ export class PatchStore {
    * @throws Error if total parse failure
    */
   loadFromHCL(hcl: string): void {
+    this._hasStructuralChange = true;
     const result = importPatchFromHCL(hcl);
     if (!result) {
       throw new Error('Failed to import HCL: total parse failure');
@@ -1082,5 +1131,30 @@ export class PatchStore {
    */
   exportToHCL(name?: string): string {
     return exportPatchAsHCL(this.patch, name);
+  }
+
+  // =============================================================================
+  // Fast-Path Change Tracking
+  // =============================================================================
+
+  /**
+   * Consume pending change classification for the fast-path recompile decision.
+   *
+   * Returns `{ kind: 'valueOnly', changes }` if only default-source param values
+   * changed since the last consumption. Returns `{ kind: 'structural' }` if any
+   * structural mutation occurred (or no changes at all).
+   *
+   * Resets tracking state after consumption.
+   */
+  consumePendingChanges(): { kind: 'valueOnly'; changes: ReadonlyMap<string, unknown> } | { kind: 'structural' } {
+    if (this._hasStructuralChange || this._pendingValueChanges.size === 0) {
+      this._hasStructuralChange = false;
+      this._pendingValueChanges.clear();
+      return { kind: 'structural' };
+    }
+    const changes = new Map(this._pendingValueChanges);
+    this._pendingValueChanges.clear();
+    this._hasStructuralChange = false;
+    return { kind: 'valueOnly', changes };
   }
 }

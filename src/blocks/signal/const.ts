@@ -82,7 +82,7 @@ registerBlock({
         if (typeof rawValue !== 'number') {
           throw new Error(`Const<float> requires number value, got ${typeof rawValue}`);
         }
-        const id = ctx.b.constant(floatConst(rawValue), outType);
+        const id = ctx.b.constantWithKey(floatConst(rawValue), outType, ctx.instanceId);
         return {
           outputsById: {
             out: { id, slot: undefined, type: outType, stride },
@@ -96,7 +96,7 @@ registerBlock({
         if (typeof rawValue !== 'number') {
           throw new Error(`Const<${payloadType.kind}> requires number value, got ${typeof rawValue}`);
         }
-        const id = ctx.b.constant(intConst(Math.floor(rawValue)), outType);
+        const id = ctx.b.constantWithKey(intConst(Math.floor(rawValue)), outType, ctx.instanceId);
         return {
           outputsById: {
             out: { id, slot: undefined, type: outType, stride },
@@ -110,7 +110,7 @@ registerBlock({
         if (typeof rawValue !== 'boolean' && typeof rawValue !== 'number') {
           throw new Error(`Const<bool> requires boolean or number value, got ${typeof rawValue}`);
         }
-        const id = ctx.b.constant(boolConst(Boolean(rawValue)), outType);
+        const id = ctx.b.constantWithKey(boolConst(Boolean(rawValue)), outType, ctx.instanceId);
         return {
           outputsById: {
             out: { id, slot: undefined, type: outType, stride },
@@ -130,8 +130,8 @@ registerBlock({
         }
 
         // Pure lowering: construct multi-component signal from scalar components
-        const xSig = ctx.b.constant(floatConst(val.x), canonicalType(FLOAT));
-        const ySig = ctx.b.constant(floatConst(val.y), canonicalType(FLOAT));
+        const xSig = ctx.b.constantWithKey(floatConst(val.x), canonicalType(FLOAT), ctx.instanceId);
+        const ySig = ctx.b.constantWithKey(floatConst(val.y), canonicalType(FLOAT), ctx.instanceId);
         const vec2Sig = ctx.b.construct([xSig, ySig], outType);
 
         return {
@@ -154,10 +154,10 @@ registerBlock({
         }
 
         // Pure lowering: construct multi-component signal from scalar components
-        const rSig = ctx.b.constant(floatConst(val.r), canonicalType(FLOAT));
-        const gSig = ctx.b.constant(floatConst(val.g), canonicalType(FLOAT));
-        const bSig = ctx.b.constant(floatConst(val.b), canonicalType(FLOAT));
-        const aSig = ctx.b.constant(floatConst(val.a), canonicalType(FLOAT));
+        const rSig = ctx.b.constantWithKey(floatConst(val.r), canonicalType(FLOAT), ctx.instanceId);
+        const gSig = ctx.b.constantWithKey(floatConst(val.g), canonicalType(FLOAT), ctx.instanceId);
+        const bSig = ctx.b.constantWithKey(floatConst(val.b), canonicalType(FLOAT), ctx.instanceId);
+        const aSig = ctx.b.constantWithKey(floatConst(val.a), canonicalType(FLOAT), ctx.instanceId);
         const colorSig = ctx.b.construct([rSig, gSig, bSig, aSig], outType);
 
         return {
@@ -173,7 +173,7 @@ registerBlock({
         if (typeof rawValue !== 'string') {
           throw new Error(`Const<cameraProjection> requires string value, got ${typeof rawValue}`);
         }
-        const id = ctx.b.constant(cameraProjectionConst(rawValue as CameraProjection), outType);
+        const id = ctx.b.constantWithKey(cameraProjectionConst(rawValue as CameraProjection), outType, ctx.instanceId);
         return {
           outputsById: {
             out: { id, slot: undefined, type: outType, stride },
