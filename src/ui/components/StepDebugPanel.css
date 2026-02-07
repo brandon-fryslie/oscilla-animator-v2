@@ -564,13 +564,52 @@
   font-size: 0.688rem;
 }
 
-.sdp-expr-block {
+/* Expression tree: clickable block badge (provenance-first display) */
+.sdp-expr-block-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(255, 211, 61, 0.12);
   color: var(--warning);
   font-size: 0.688rem;
+  font-weight: 500;
+  cursor: pointer;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.sdp-expr-block-badge:hover {
+  background: rgba(255, 211, 61, 0.25);
 }
 
-.sdp-expr-port {
-  color: var(--text-secondary);
+/* Expression tree: arrow between block and port badges */
+.sdp-expr-arrow {
+  color: var(--text-tertiary);
+  font-size: 0.625rem;
+  margin: 0 3px;
+  vertical-align: middle;
+}
+
+/* Expression tree: clickable port badge */
+.sdp-expr-port-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(100, 181, 246, 0.12);
+  color: #64b5f6;
+  font-size: 0.688rem;
+  font-weight: 500;
+  cursor: pointer;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.sdp-expr-port-badge:hover {
+  background: rgba(100, 181, 246, 0.25);
 }
 
 .sdp-expr-role-badge {

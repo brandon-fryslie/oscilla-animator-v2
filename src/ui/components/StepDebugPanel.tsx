@@ -23,7 +23,7 @@ import type { Breakpoint, SlotValue, StateSlotValue, LaneIdentity, ExecutionPhas
 import type { StateSlotId } from '../../compiler/ir/types';
 import type { WhyNotReason } from '../../runtime/WhyNotEvaluated';
 import type { SlotDelta } from '../../runtime/ValueInspector';
-import type { ValueSlot, BlockId, DebugIndexIR, PortBindingIR } from '../../compiler/ir/program';
+import type { ValueSlot, BlockId, PortId, DebugIndexIR, PortBindingIR } from '../../compiler/ir/program';
 import type { ValueAnomaly } from '../../runtime/StepDebugTypes';
 import type { PatchStore } from '../../stores/PatchStore';
 import './StepDebugPanel.css';
@@ -913,31 +913,58 @@ const BreakpointList: React.FC<{
 // Expression Tree Section
 // =============================================================================
 
+const ExprTreeEmpty: React.FC<{ message: string }> = ({ message }) => (
+  <div className="sdp-expr-empty">{message}</div>
+);
+
+const ExprTreeRoot: React.FC<{
+  tree: ExprTreeNode;
+  onSelectBlock: (blockId: string) => void;
+  onSelectPort: (blockId: string, portId: string) => void;
+}> = ({ tree, onSelectBlock, onSelectPort }) => (
+  <div className="sdp-expr-tree">
+    <ExprTreeNodeView node={tree} depth={0} defaultExpanded onSelectBlock={onSelectBlock} onSelectPort={onSelectPort} />
+  </div>
+);
+
+/**
+ * Observer that resolves reactive state into a discriminated result,
+ * then delegates to a pure rendering component.
+ */
 const ExprTreeSection: React.FC<{ store: StepDebugStore }> = observer(({ store }) => {
+  const { selection } = useStores();
+
+  const handleSelectBlock = useCallback((blockId: string) => {
+    selection.selectBlock(blockId as BlockId);
+  }, [selection]);
+
+  const handleSelectPort = useCallback((blockId: string, portId: string) => {
+    selection.selectPort(blockId as BlockId, portId as PortId);
+  }, [selection]);
+
   const rootId = store.getRootExprId();
-  if (rootId == null) {
-    return <div className="sdp-expr-empty">No expression tree for this step type.</div>;
-  }
+  const tree = rootId != null ? store.buildExprTree(rootId) : null;
 
-  const tree = store.buildExprTree(rootId);
   if (!tree) {
-    return <div className="sdp-expr-empty">Unable to build expression tree.</div>;
+    const message = rootId == null
+      ? 'No expression tree for this step type.'
+      : 'Unable to build expression tree.';
+    return <ExprTreeEmpty message={message} />;
   }
 
-  return (
-    <div className="sdp-expr-tree">
-      <ExprTreeNodeView node={tree} depth={0} defaultExpanded />
-    </div>
-  );
+  return <ExprTreeRoot tree={tree} onSelectBlock={handleSelectBlock} onSelectPort={handleSelectPort} />;
 });
 
 const ExprTreeNodeView: React.FC<{
   node: ExprTreeNode;
   depth: number;
   defaultExpanded?: boolean;
-}> = ({ node, depth, defaultExpanded = false }) => {
+  onSelectBlock: (blockId: string) => void;
+  onSelectPort: (blockId: string, portId: string) => void;
+}> = ({ node, depth, defaultExpanded = false, onSelectBlock, onSelectPort }) => {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const hasChildren = node.children.length > 0;
+  const hasProvenance = node.blockName != null;
 
   return (
     <div className="sdp-expr-node" style={{ paddingLeft: depth > 0 ? 16 : 0 }}>
@@ -948,12 +975,29 @@ const ExprTreeNodeView: React.FC<{
         <span className="sdp-expr-toggle">
           {hasChildren ? (expanded ? '\u25BC' : '\u25B6') : '\u00B7'}
         </span>
-        <span className="sdp-expr-kind">{node.label}</span>
-        {node.blockName && (
-          <span className="sdp-expr-block">
-            {node.blockName}
-            {node.portName && <span className="sdp-expr-port"> . {node.portName}</span>}
-          </span>
+        {hasProvenance ? (
+          <>
+            <span
+              className="sdp-expr-block-badge"
+              title={node.label}
+              onClick={(e) => { e.stopPropagation(); if (node.targetBlockId) onSelectBlock(node.targetBlockId); }}
+            >
+              {node.blockName}
+            </span>
+            {node.portName && node.targetPortId && (
+              <>
+                <span className="sdp-expr-arrow">{'\u2192'}</span>
+                <span
+                  className="sdp-expr-port-badge"
+                  onClick={(e) => { e.stopPropagation(); if (node.targetBlockId && node.targetPortId) onSelectPort(node.targetBlockId, node.targetPortId); }}
+                >
+                  {node.portName}
+                </span>
+              </>
+            )}
+          </>
+        ) : (
+          <span className="sdp-expr-kind">{node.label}</span>
         )}
         {node.role && node.role !== 'user' && (
           <span className={`sdp-expr-role-badge sdp-expr-role-${node.role}`}>
@@ -967,7 +1011,7 @@ const ExprTreeNodeView: React.FC<{
         )}
       </div>
       {expanded && hasChildren && node.children.map(child => (
-        <ExprTreeNodeView key={child.id} node={child} depth={depth + 1} />
+        <ExprTreeNodeView key={child.id} node={child} depth={depth + 1} onSelectBlock={onSelectBlock} onSelectPort={onSelectPort} />
       ))}
     </div>
   );

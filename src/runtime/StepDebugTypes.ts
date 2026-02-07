@@ -206,6 +206,10 @@ export interface ExprTreeNode {
   readonly portName: string | null;
   /** Provenance role — how this expression relates to the user's patch */
   readonly role: 'user' | 'default' | 'adapter' | 'wireState' | 'lens' | 'composite' | null;
+  /** String BlockId for click-to-select navigation, or null */
+  readonly targetBlockId: string | null;
+  /** Port ID for click-to-select navigation, or null */
+  readonly targetPortId: string | null;
   /** Current scalar value (from runtime cache), or null if not a cached scalar */
   readonly value: number | null;
   /** Whether value contains NaN or Infinity */

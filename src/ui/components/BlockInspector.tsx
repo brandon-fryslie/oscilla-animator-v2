@@ -15,9 +15,8 @@ import './BlockInspector.css';
 import type { Block, Patch, Edge, PortRef } from '../../graph/Patch';
 import type { BlockId, PortId, DefaultSource, UIControlHint } from '../../types';
 import type { CombineMode } from '../../types';
-import type { CanonicalType } from '../../core/canonical-types';
 import type { InferenceCanonicalType } from '../../core/inference-types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../../core/canonical-types';
+import { formatSignalType } from './typeFormatters';
 import {
   NumberInput as MuiNumberInput,
   TextInput as MuiTextInput,
@@ -37,77 +36,11 @@ import { TokenExpressionEditor } from '../expression-editor/TokenExpressionEdito
 import type { TokenExpressionEditorHandle } from '../expression-editor/TokenExpressionEditor';
 import { DisplayNameEditor } from './DisplayNameEditor';
 import { compilationInspector } from '../../services/CompilationInspectorService';
+import { EdgeInspector } from './EdgeInspector';
 
 // =============================================================================
 // Helper Functions
 // =============================================================================
-
-/**
- * Format a CanonicalType for display, non-throwing, shows unit if meaningful.
- */
-function formatSignalType(type: InferenceCanonicalType | undefined): string {
-  if (!type) return 'unknown';
-
-  const payload = type.payload.kind;
-  const unit = type.unit;
-
-  let unitStr = '';
-  switch (unit.kind) {
-    case 'none':
-      unitStr = '';
-      break;
-    case 'scalar':
-      unitStr = '0..1';
-      break;
-    case 'count':
-      unitStr = '#';
-      break;
-    case 'angle':
-      switch (unit.unit) {
-        case 'turns':
-          unitStr = 'phase';
-          break;
-        case 'radians':
-          unitStr = 'rad';
-          break;
-        case 'degrees':
-          unitStr = 'deg';
-          break;
-      }
-      break;
-    case 'time':
-      switch (unit.unit) {
-        case 'ms':
-          unitStr = 'ms';
-          break;
-        case 'seconds':
-          unitStr = 's';
-          break;
-      }
-      break;
-    case 'space':
-      switch (unit.unit) {
-        case 'ndc':
-          unitStr = 'ndc';
-          break;
-        case 'world':
-          unitStr = 'world';
-          break;
-        case 'view':
-          unitStr = 'view';
-          break;
-      }
-      break;
-    case 'color':
-      unitStr = 'rgba';
-      break;
-    default:
-      unitStr = '';
-      break;
-  }
-
-  return unitStr ? `${payload}:${unitStr}` : payload;
-}
 
 /**
  * Format a DefaultSource for display.
@@ -631,91 +564,6 @@ const PortInspectorStandalone = observer(function PortInspectorStandalone({ port
   );
 });
 
-
-// =============================================================================
-// Edge Inspector
-// =============================================================================
-
-interface EdgeInspectorProps {
-  edge: Edge;
-  patch: Patch;
-}
-
-function EdgeInspector({ edge, patch }: EdgeInspectorProps) {
-  const { selection } = useStores();
-  const sourceBlock = patch.blocks.get(edge.from.blockId as BlockId);
-  const targetBlock = patch.blocks.get(edge.to.blockId as BlockId);
-
-  const handleSourceClick = useCallback(() => {
-    selection.selectBlock(edge.from.blockId as BlockId);
-  }, [selection, edge.from.blockId]);
-
-  const handleTargetClick = useCallback(() => {
-    selection.selectBlock(edge.to.blockId as BlockId);
-  }, [selection, edge.to.blockId]);
-
-  return (
-    <div>
-      <div style={{
-        padding: '8px 12px',
-        background: colors.primary + '22',
-        borderRadius: '4px',
-        marginBottom: '16px',
-        fontSize: '12px',
-        fontWeight: '600',
-        color: colors.primary
-      }}>
-        [EDGE]
-      </div>
-
-      <div style={{ marginBottom: '16px' }}>
-        <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: colors.textSecondary }}>
-          Source
-        </h4>
-        <div
-          onClick={handleSourceClick}
-          style={{
-            padding: '8px 12px',
-            background: colors.bgPanel,
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '13px',
-          }}
-        >
-          <span style={{ color: colors.primary, textDecoration: 'underline' }}>
-            {sourceBlock?.displayName || sourceBlock?.type || edge.from.blockId}
-          </span>
-          <span style={{ color: colors.textSecondary }}>.{edge.from.slotId}</span>
-        </div>
-      </div>
-
-      <div style={{ marginBottom: '16px', textAlign: 'center', color: colors.textSecondary }}>
-        ↓
-      </div>
-
-      <div>
-        <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: colors.textSecondary }}>
-          Target
-        </h4>
-        <div
-          onClick={handleTargetClick}
-          style={{
-            padding: '8px 12px',
-            background: colors.bgPanel,
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '13px',
-          }}
-        >
-          <span style={{ color: colors.primary, textDecoration: 'underline' }}>
-            {targetBlock?.displayName || targetBlock?.type || edge.to.blockId}
-          </span>
-          <span style={{ color: colors.textSecondary }}>.{edge.to.slotId}</span>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // =============================================================================
 // Type Preview (from library)

@@ -479,14 +479,14 @@ export class StepDebugStore {
     const build = (exprId: ValueExprId, depth: number): ExprTreeNode | null => {
       const numId = exprId as number;
       if (visited.has(numId)) {
-        return { id: numId, label: '(cycle)', blockName: null, portName: null, role: null, value: null, isAnomaly: false, children: [] };
+        return { id: numId, label: '(cycle)', blockName: null, portName: null, role: null, targetBlockId: null, targetPortId: null, value: null, isAnomaly: false, children: [] };
       }
 
       const expr = nodes[numId];
       if (!expr) return null;
 
       if (depth > 30) {
-        return { id: numId, label: '(too deep)', blockName: null, portName: null, role: null, value: null, isAnomaly: false, children: [] };
+        return { id: numId, label: '(too deep)', blockName: null, portName: null, role: null, targetBlockId: null, targetPortId: null, value: null, isAnomaly: false, children: [] };
       }
 
       visited.add(numId);
@@ -497,6 +497,8 @@ export class StepDebugStore {
       let blockName: string | null = null;
       let portName: string | null = null;
       let role: ExprTreeNode['role'] = null;
+      let targetBlockId: string | null = null;
+      let targetPortId: string | null = null;
 
       if (prov) {
         if (prov.userTarget) {
@@ -506,29 +508,35 @@ export class StepDebugStore {
                 ?? blockMap.get(prov.userTarget.targetBlockId) ?? null;
               portName = prov.userTarget.targetPortName;
               role = 'default';
+              targetBlockId = prov.userTarget.targetBlockId as string;
+              targetPortId = prov.userTarget.targetPortName;
               break;
             }
             case 'adapter': {
               blockName = prov.userTarget.adapterType;
               role = 'adapter';
+              targetBlockId = prov.blockId as string;
               break;
             }
             case 'wireState': {
               blockName = blockDisplayNames?.get(prov.blockId)
                 ?? blockMap.get(prov.blockId) ?? null;
               role = 'wireState';
+              targetBlockId = prov.blockId as string;
               break;
             }
             case 'lens': {
               blockName = blockDisplayNames?.get(prov.blockId)
                 ?? blockMap.get(prov.blockId) ?? null;
               role = 'lens';
+              targetBlockId = prov.blockId as string;
               break;
             }
             case 'compositeExpansion': {
               blockName = blockDisplayNames?.get(prov.blockId)
                 ?? blockMap.get(prov.blockId) ?? null;
               role = 'composite';
+              targetBlockId = prov.blockId as string;
               break;
             }
           }
@@ -538,6 +546,8 @@ export class StepDebugStore {
             ?? blockMap.get(prov.blockId) ?? null;
           portName = prov.portName;
           role = 'user';
+          targetBlockId = prov.blockId as string;
+          targetPortId = prov.portName;
         }
       } else {
         // Fallback: no provenance available (infrastructure exprs like time)
@@ -565,6 +575,8 @@ export class StepDebugStore {
         blockName,
         portName,
         role,
+        targetBlockId,
+        targetPortId,
         value,
         isAnomaly,
         children,

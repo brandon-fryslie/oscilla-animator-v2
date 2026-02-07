@@ -11,7 +11,7 @@
 import React from 'react';
 import { observer } from 'mobx-react-lite';
 import { useStores } from '../../stores';
-import { useDebugMiniView } from './useDebugMiniView';
+import { useDebugMiniView, type MiniViewData } from './useDebugMiniView';
 import { getValueRenderer } from './ValueRenderer';
 import { Sparkline } from './charts/Sparkline';
 import { DistributionBar } from './charts/DistributionBar';
@@ -25,10 +25,10 @@ import type { CanonicalType } from '../../core/canonical-types';
 import './renderers/register';
 
 // =============================================================================
-// Styles
+// Styles (exported for reuse by EdgeInspector)
 // =============================================================================
 
-const styles = {
+export const debugMiniViewStyles = {
   container: {
     maxWidth: '360px',
     maxHeight: '220px',
@@ -133,7 +133,7 @@ function getReasonLabel(reason: string): string {
 // Helper Components
 // =============================================================================
 
-function formatTypeLine(type: CanonicalType, cardinality: 'signal' | 'field'): string {
+export function formatTypeLine(type: CanonicalType, cardinality: 'signal' | 'field'): string {
   const unitKind = type.unit.kind;
   // PayloadType is an object with a 'kind' property (e.g., { kind: 'float', stride: 1 })
   const payloadKind = type.payload.kind;
@@ -144,7 +144,7 @@ function formatTypeLine(type: CanonicalType, cardinality: 'signal' | 'field'): s
   return `${payloadUnit} · ${card} · cont`;
 }
 
-function SignalValueSection({ value, meta, history }: {
+export function SignalValueSection({ value, meta, history }: {
   value: EdgeValueResult | null;
   meta: EdgeMetadata;
   history: { buffer: Float32Array; writeIndex: number; capacity: number; stride: 0 | 1 | 2 | 3 | 4; filled: boolean } | null;
@@ -155,7 +155,7 @@ function SignalValueSection({ value, meta, history }: {
   if (value && value.kind === 'constant') {
     const renderer = getValueRenderer(value.type);
     children.push(
-      React.createElement('div', { key: 'constant-badge', style: { ...styles.badge, background: 'rgba(255, 165, 0, 0.3)', color: '#ffa500', marginBottom: '6px' } },
+      React.createElement('div', { key: 'constant-badge', style: { ...debugMiniViewStyles.badge, background: 'rgba(255, 165, 0, 0.3)', color: '#ffa500', marginBottom: '6px' } },
         '📌 Compile-Time Constant'
       )
     );
@@ -176,12 +176,12 @@ function SignalValueSection({ value, meta, history }: {
     }
     
     children.push(
-      React.createElement('div', { key: 'description', style: { ...styles.typeLine, marginTop: '6px', color: '#999' } },
+      React.createElement('div', { key: 'description', style: { ...debugMiniViewStyles.typeLine, marginTop: '6px', color: '#999' } },
         value.description
       )
     );
     
-    return React.createElement('div', { style: styles.valueSection }, ...children);
+    return React.createElement('div', { style: debugMiniViewStyles.valueSection }, ...children);
   }
 
   // Current value via renderer (runtime signal)
@@ -205,7 +205,7 @@ function SignalValueSection({ value, meta, history }: {
   if (history) {
     const sampleCount = history.filled ? history.capacity : Math.min(history.writeIndex, history.capacity);
     children.push(
-      React.createElement('div', { key: 'sparkline', style: styles.sparklineContainer },
+      React.createElement('div', { key: 'sparkline', style: debugMiniViewStyles.sparklineContainer },
         React.createElement(Sparkline, {
           history,
           width: 280,
@@ -226,10 +226,10 @@ function SignalValueSection({ value, meta, history }: {
     );
   }
 
-  return React.createElement('div', { style: styles.valueSection }, ...children);
+  return React.createElement('div', { style: debugMiniViewStyles.valueSection }, ...children);
 }
 
-function FieldValueSection({ value }: {
+export function FieldValueSection({ value }: {
   value: EdgeValueResult | null;
 }): React.ReactElement {
   if (!value || value.kind !== 'field') {
@@ -247,25 +247,63 @@ function FieldValueSection({ value }: {
     mean: new Float32Array([value.mean, 0, 0, 0]),
   };
 
-  return React.createElement('div', { style: styles.fieldStats },
-    React.createElement('div', { style: styles.statRow },
+  return React.createElement('div', { style: debugMiniViewStyles.fieldStats },
+    React.createElement('div', { style: debugMiniViewStyles.statRow },
       React.createElement('span', null, `N=${value.count}`)
     ),
-    React.createElement('div', { style: styles.statRow },
-      React.createElement('span', { style: styles.statLabel }, 'min'),
+    React.createElement('div', { style: debugMiniViewStyles.statRow },
+      React.createElement('span', { style: debugMiniViewStyles.statLabel }, 'min'),
       React.createElement('span', null, value.min.toFixed(4)),
     ),
-    React.createElement('div', { style: styles.statRow },
-      React.createElement('span', { style: styles.statLabel }, 'mean'),
+    React.createElement('div', { style: debugMiniViewStyles.statRow },
+      React.createElement('span', { style: debugMiniViewStyles.statLabel }, 'mean'),
       React.createElement('span', null, value.mean.toFixed(4)),
     ),
-    React.createElement('div', { style: styles.statRow },
-      React.createElement('span', { style: styles.statLabel }, 'max'),
+    React.createElement('div', { style: debugMiniViewStyles.statRow },
+      React.createElement('span', { style: debugMiniViewStyles.statLabel }, 'max'),
       React.createElement('span', null, value.max.toFixed(4)),
     ),
     React.createElement('div', { style: { marginTop: '4px' } },
       React.createElement(DistributionBar, { stats, width: 280 })
     )
+  );
+}
+
+// =============================================================================
+// Reusable Debug Value Display
+// =============================================================================
+
+/**
+ * DebugEdgeValueDisplay - Renders debug value data without any store dependencies.
+ * Accepts MiniViewData as props, making it reusable in both hover and inspector contexts.
+ */
+export function DebugEdgeValueDisplay({ data }: { data: MiniViewData }): React.ReactElement {
+  return React.createElement('div', { style: debugMiniViewStyles.container },
+    // Header
+    React.createElement('div', { style: debugMiniViewStyles.header },
+      React.createElement('span', { style: debugMiniViewStyles.label }, data.label),
+      React.createElement('span', { style: debugMiniViewStyles.badge },
+        data.key.kind === 'edge' ? 'Edge' : 'Port')
+    ),
+
+    // Type line
+    React.createElement('div', { style: debugMiniViewStyles.typeLine },
+      formatTypeLine(data.meta.type, data.meta.cardinality)),
+
+    // Value section
+    data.meta.cardinality === 'signal'
+      ? React.createElement(SignalValueSection, {
+          value: data.value,
+          meta: data.meta,
+          history: data.history,
+        })
+      : React.createElement(FieldValueSection, {
+          value: data.value,
+        }),
+
+    // Storage line
+    React.createElement('div', { style: debugMiniViewStyles.storageLine },
+      `Slot: ${data.meta.slotId}`)
   );
 }
 
@@ -289,7 +327,7 @@ export const DebugMiniView: React.FC = observer(() => {
   const data = useDebugMiniView(hoveredEdgeId, edgeLabel);
 
   if (!debug.enabled) {
-    return React.createElement('div', { style: { ...styles.container, ...styles.placeholder } },
+    return React.createElement('div', { style: { ...debugMiniViewStyles.container, ...debugMiniViewStyles.placeholder } },
       'Debug disabled');
   }
 
@@ -301,12 +339,12 @@ export const DebugMiniView: React.FC = observer(() => {
     if (hoveredEdgeId && status) {
       const unmapped = status.unmappedEdges.find((e: any) => e.edgeId === hoveredEdgeId);
       if (unmapped) {
-        return React.createElement('div', { style: { ...styles.container, maxHeight: '300px' } },
-          React.createElement('div', { style: { ...styles.header, color: '#ff6b6b' } },
-            React.createElement('span', { style: styles.label }, `Edge not mapped`),
-            React.createElement('span', { style: { ...styles.badge, background: 'rgba(255, 107, 107, 0.3)', color: '#ff6b6b' } }, 'Unmapped')
+        return React.createElement('div', { style: { ...debugMiniViewStyles.container, maxHeight: '300px' } },
+          React.createElement('div', { style: { ...debugMiniViewStyles.header, color: '#ff6b6b' } },
+            React.createElement('span', { style: debugMiniViewStyles.label }, `Edge not mapped`),
+            React.createElement('span', { style: { ...debugMiniViewStyles.badge, background: 'rgba(255, 107, 107, 0.3)', color: '#ff6b6b' } }, 'Unmapped')
           ),
-          React.createElement('div', { style: { ...styles.typeLine, marginTop: '8px' } },
+          React.createElement('div', { style: { ...debugMiniViewStyles.typeLine, marginTop: '8px' } },
             `${unmapped.fromBlockId}.${unmapped.fromPort} → ${unmapped.toBlockId}.${unmapped.toPort}`
           ),
           React.createElement('div', { style: { marginTop: '12px', fontSize: '12px' } },
@@ -317,42 +355,16 @@ export const DebugMiniView: React.FC = observer(() => {
               unmapped.details
             )
           ),
-          React.createElement('div', { style: { ...styles.storageLine, marginTop: '12px', color: '#666' } },
+          React.createElement('div', { style: { ...debugMiniViewStyles.storageLine, marginTop: '12px', color: '#666' } },
             'This edge was not mapped to a runtime slot during compilation. The value cannot be inspected.'
           )
         );
       }
     }
     
-    return React.createElement('div', { style: { ...styles.container, ...styles.placeholder } },
+    return React.createElement('div', { style: { ...debugMiniViewStyles.container, ...debugMiniViewStyles.placeholder } },
       'Hover an edge to inspect');
   }
 
-  return React.createElement('div', { style: styles.container },
-    // Header
-    React.createElement('div', { style: styles.header },
-      React.createElement('span', { style: styles.label }, data.label),
-      React.createElement('span', { style: styles.badge },
-        data.key.kind === 'edge' ? 'Edge' : 'Port')
-    ),
-
-    // Type line
-    React.createElement('div', { style: styles.typeLine },
-      formatTypeLine(data.meta.type, data.meta.cardinality)),
-
-    // Value section
-    data.meta.cardinality === 'signal'
-      ? React.createElement(SignalValueSection, {
-          value: data.value,
-          meta: data.meta,
-          history: data.history,
-        })
-      : React.createElement(FieldValueSection, {
-          value: data.value,
-        }),
-
-    // Storage line
-    React.createElement('div', { style: styles.storageLine },
-      `Slot: ${data.meta.slotId}`)
-  );
+  return React.createElement(DebugEdgeValueDisplay, { data });
 });

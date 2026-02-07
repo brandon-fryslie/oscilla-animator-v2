@@ -18,7 +18,7 @@ import type { CanonicalType } from '../core/canonical-types';
 import type { FrontendResult, FrontendFailure, CycleSummary, FrontendError } from '../compiler/frontend';
 import type { NormalizedPatch } from '../compiler/frontend/normalize-indexing';
 import type { TypedPatch } from '../compiler/ir/patches';
-import type { DefaultSource, PortId } from '../types';
+import type { DefaultSource, PortId, TransformStep } from '../types';
 import { getBlockAddress, getInputAddress, getOutputAddress } from '../graph/addressing';
 import { addressToString } from '../types/canonical-address';
 
@@ -57,11 +57,32 @@ export interface FrontendSnapshot {
 
 /**
  * Port provenance - where did this port's value come from?
+ *
+ * Every resolved variant carries optional type and chain data:
+ * - sourceType/targetType: resolved types from TypedPatch (undefined if not available)
+ * - chain: ordered list of TransformStep (lenses, then adapter if present)
  */
 export type PortProvenance =
-  | { readonly kind: 'userEdge' }
-  | { readonly kind: 'defaultSource'; readonly source: DefaultSource }
-  | { readonly kind: 'adapter'; readonly adapterType: string }
+  | {
+      readonly kind: 'userEdge';
+      readonly sourceType: CanonicalType | undefined;
+      readonly targetType: CanonicalType | undefined;
+      readonly chain: readonly TransformStep[];
+    }
+  | {
+      readonly kind: 'defaultSource';
+      readonly source: DefaultSource;
+      readonly sourceType: CanonicalType | undefined;
+      readonly targetType: CanonicalType | undefined;
+      readonly chain: readonly TransformStep[];
+    }
+  | {
+      readonly kind: 'adapter';
+      readonly adapterType: string;
+      readonly sourceType: CanonicalType | undefined;
+      readonly targetType: CanonicalType | undefined;
+      readonly chain: readonly TransformStep[];
+    }
   | { readonly kind: 'unresolved' };
 
 /**
@@ -113,7 +134,7 @@ export class FrontendResultStore {
 
     // Build canonical address maps
     const resolvedPortTypes = this.buildResolvedPortTypes(typedPatch, normalizedPatch);
-    const portProvenance = this.buildPortProvenance(normalizedPatch);
+    const portProvenance = this.buildPortProvenance(normalizedPatch, typedPatch);
 
     this.snapshot = {
       status: 'frontendOk',
@@ -141,7 +162,7 @@ export class FrontendResultStore {
       status: 'frontendError',
       patchRevision,
       portProvenance: failure.normalizedPatch
-        ? this.buildPortProvenance(failure.normalizedPatch)
+        ? this.buildPortProvenance(failure.normalizedPatch, failure.typedPatch ?? null)
         : new Map(),
       resolvedPortTypes: failure.typedPatch && failure.normalizedPatch
         ? this.buildResolvedPortTypes(failure.typedPatch, failure.normalizedPatch)
@@ -316,8 +337,12 @@ export class FrontendResultStore {
    * Build portProvenance map from NormalizedPatch.
    *
    * Uses the original patch edges (which have role information) to determine provenance.
+   * When typedPatch is available, enriches with resolved types and transform chain.
    */
-  private buildPortProvenance(normalizedPatch: NormalizedPatch): ReadonlyMap<string, PortProvenance> {
+  private buildPortProvenance(
+    normalizedPatch: NormalizedPatch,
+    typedPatch: TypedPatch | null,
+  ): ReadonlyMap<string, PortProvenance> {
     const map = new Map<string, PortProvenance>();
 
     // Build blockId → Block mapping for edge lookup (edges reference blockId)
@@ -325,6 +350,102 @@ export class FrontendResultStore {
     for (const block of normalizedPatch.blocks) {
       blocksById.set(block.id as string, block);
     }
+
+    // Helper to resolve a port type from TypedPatch
+    const resolvePortType = (blockId: string, portName: string, dir: 'in' | 'out'): CanonicalType | undefined => {
+      if (!typedPatch?.portTypes) return undefined;
+      const idx = normalizedPatch.blockIndex.get(blockId as any);
+      if (idx === undefined) return undefined;
+      const key = `${idx}:${portName}:${dir}`;
+      return typedPatch.portTypes.get(key as any);
+    };
+
+    // Helper to build transform chain for an edge.
+    // Walks normalized edges from the original source to the final target,
+    // collecting intermediate adapter/lens blocks.
+    const buildChain = (sourceBlockId: string, sourcePortId: string, targetBlockId: string, targetPortId: string): TransformStep[] => {
+      if (!typedPatch) return [];
+
+      const chain: TransformStep[] = [];
+
+      // Look through normalized patch edges for adapter/lens blocks between source and target.
+      // These blocks were inserted by normalization (pass2Adapters) and have role.kind === 'derived'
+      // with meta.kind === 'adapter'. We walk the edge chain:
+      // source.out → [lens1.in, lens1.out → lens2.in, lens2.out → ...] → target.in
+      //
+      // Strategy: follow the path from source output through any intermediate blocks.
+      // Build an adjacency map from the normalized patch's original edges (which include lens/adapter edges).
+      const normalizedEdges = normalizedPatch.patch.edges;
+
+      // Find the chain by tracing from sourceBlockId.sourcePortId to targetBlockId.targetPortId
+      // through intermediate adapter/lens blocks.
+      let currentBlockId = sourceBlockId;
+      let currentPortId = sourcePortId;
+      const visited = new Set<string>();
+      const MAX_CHAIN_DEPTH = 10;
+
+      for (let depth = 0; depth < MAX_CHAIN_DEPTH; depth++) {
+        // Find edge from current block/port
+        const nextEdge = normalizedEdges.find(e =>
+          e.from.kind === 'port' &&
+          e.from.blockId === currentBlockId &&
+          e.from.slotId === currentPortId &&
+          e.to.kind === 'port' &&
+          !visited.has(e.id)
+        );
+
+        if (!nextEdge || nextEdge.to.kind !== 'port') break;
+        visited.add(nextEdge.id);
+
+        const nextBlockId = nextEdge.to.blockId;
+        const nextPortId = nextEdge.to.slotId;
+
+        // If we've reached the target, we're done
+        if (nextBlockId === targetBlockId && nextPortId === targetPortId) break;
+
+        // This is an intermediate block (lens or adapter)
+        const intermediateBlock = blocksById.get(nextBlockId);
+        if (!intermediateBlock) break;
+
+        const inType = resolvePortType(nextBlockId, nextPortId, 'in');
+
+        // Find the output port of the intermediate block
+        const outEdge = normalizedEdges.find(e =>
+          e.from.kind === 'port' &&
+          e.from.blockId === nextBlockId &&
+          !visited.has(e.id)
+        );
+
+        const outPortId = outEdge?.from.slotId ?? 'out';
+        const outType = resolvePortType(nextBlockId, outPortId, 'out');
+
+        // Determine if this is a lens or adapter based on block ID pattern
+        const isLens = (nextBlockId as string).startsWith('_lens_');
+
+        if (isLens) {
+          chain.push({
+            kind: 'lens',
+            lens: {
+              lensId: intermediateBlock.type,
+              params: {},
+            },
+          });
+        } else if (inType && outType) {
+          chain.push({
+            kind: 'adapter',
+            from: inType,
+            to: outType,
+            adapter: intermediateBlock.type,
+          });
+        }
+
+        // Continue from the intermediate block's output
+        currentBlockId = nextBlockId;
+        currentPortId = outPortId;
+      }
+
+      return chain;
+    };
 
     // Iterate original patch edges (which have role information)
     for (const edge of normalizedPatch.patch.edges) {
@@ -338,6 +459,13 @@ export class FrontendResultStore {
 
       const role = edge.role;
 
+      // Resolve source and target types
+      const sourceType = resolvePortType(edge.from.blockId, edge.from.slotId, 'out');
+      const targetType = resolvePortType(edge.to.blockId, edge.to.slotId, 'in');
+
+      // Build transform chain
+      const chain = buildChain(edge.from.blockId, edge.from.slotId, edge.to.blockId, edge.to.slotId);
+
       if (role.kind === 'default') {
         const sourceBlock = blocksById.get(edge.from.blockId);
         map.set(targetAddrStr, {
@@ -347,15 +475,26 @@ export class FrontendResultStore {
             output: edge.from.slotId,
             params: sourceBlock?.params,
           },
+          sourceType,
+          targetType,
+          chain,
         });
       } else if (role.kind === 'adapter') {
         const sourceBlock = blocksById.get(edge.from.blockId);
         map.set(targetAddrStr, {
           kind: 'adapter',
           adapterType: sourceBlock?.type ?? 'Adapter',
+          sourceType,
+          targetType,
+          chain,
         });
       } else if (role.kind === 'user') {
-        map.set(targetAddrStr, { kind: 'userEdge' });
+        map.set(targetAddrStr, {
+          kind: 'userEdge',
+          sourceType,
+          targetType,
+          chain,
+        });
       } else {
         map.set(targetAddrStr, { kind: 'unresolved' });
       }
