@@ -18,6 +18,7 @@ import { CompilationInspectorPanel } from './panels/CompilationInspectorPanel';
 import { DebugMiniViewPanel } from './panels/DebugMiniViewPanel';
 import { SettingsPanelWrapper } from './panels/SettingsPanelWrapper';
 import { CompositeEditorPanel } from './panels/CompositeEditorPanel';
+import { StepDebugPanel } from './panels/StepDebugPanel';
 
 /**
  * Panel group assignments for layout.
@@ -68,6 +69,7 @@ export const PANEL_DEFINITIONS: PanelDefinition[] = [
   { id: 'continuity-panel', component: 'continuity-panel', title: 'Continuity', group: 'bottom-left' },
   { id: 'compilation-inspector', component: 'compilation-inspector', title: 'Compilation', group: 'bottom-left' },
   { id: 'debug-miniview', component: 'debug-miniview', title: 'Debug', group: 'bottom-right' },
+  { id: 'step-debugger', component: 'step-debugger', title: 'Step Debugger', group: 'bottom-right' },
 
   // Floating
   { id: 'preview', component: 'preview', title: 'Preview', group: 'preview-float', floating: true },
@@ -91,4 +93,5 @@ export const PANEL_COMPONENTS = {
   'compilation-inspector': CompilationInspectorPanel,
   'debug-miniview': DebugMiniViewPanel,
   'settings': SettingsPanelWrapper,
+  'step-debugger': StepDebugPanel,
 };
