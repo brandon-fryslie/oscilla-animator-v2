@@ -45,55 +45,104 @@ npx vitest run --coverage src/compiler/
 
 ### Core Layers (Bottom-up)
 
-1. **Types & Constants** (`src/types`, `src/core`)
-   - Domain system (`DomainType`, `DomainIdentity`)
-   - Shape types (`Shape2D`, topologies)
-   - Role enums (`BlockRole`, `EdgeRole`)
+1. **Types & Constants** (`src/types/`, `src/core/`)
+   - `src/core/canonical-types/`: The canonical type system — `CanonicalType = { payload, unit, extent }`
+   - `src/core/ids.ts`: Branded ID types (`InstanceId`, `CardinalityVarId`, etc.)
+   - `src/core/domain-registry.ts`: Domain registration (Circle, Grid, etc.)
+   - `src/core/types.ts`: Base type definitions, `Shape2D`, topologies
+   - `src/types/`: Role enums (`BlockRole`, `EdgeRole`), `ValueSlot`
 
-2. **Graph Representation** (`src/graph`)
+2. **Graph Representation** (`src/graph/`)
    - `Patch.ts`: User-facing graph model (Blocks and Edges)
-   - `normalize.ts`: Canonicalize user graphs
+   - `normalize.ts`: Canonicalize user graphs (barrel for all normalization passes)
    - `adapters.ts`: Domain transformation system
    - `passes/`: Graph transformation passes (e.g., default source resolution)
 
-3. **Block Registry** (`src/blocks`)
-   - `registry.ts`: Central block definition database
-   - Intrinsic field definitions (index, position, randomId, etc.)
-   - Per-block validation and metadata
+3. **Block Registry** (`src/blocks/`)
+   - `registry.ts`: Central block definition database via `defineBlock()`
+   - Block categories in subdirectories: `adapter/`, `color/`, `composites/`, `dev/`, `domain/`, `event/`, `field/`, `instance/`, `io/`, `layout/`, `lens/`, `math/`, `render/`, `shape/`, `signal/`, `time/`
+   - `lower-utils.ts`: Shared lowering utilities for block IR emission
 
-4. **Compiler** (`src/compiler`)
-   - **IR (Intermediate Representation)**:
-     - `ir/types.ts`: Signal, Field, Event expression types
-     - `ir/IRBuilder.ts`: Safe builder API for IR construction
-     - `ir/lowerTypes.ts`: Type lowering to concrete payloads
-   - **Passes** (`compiler/passes-v2/`):
-     - `pass1-type-constraints.ts`: Type inference & constraint gathering
-     - `pass2-types.ts`: Type solver
-     - `pass3-time.ts`: Time model resolution
-     - `pass4-depgraph.ts`: Build dependency graph
-     - `pass5-scc.ts`: Detect cycles, compute SCC
-     - `pass6-block-lowering.ts`: Compile blocks to IR operations
-     - `pass7-schedule.ts`: Produce execution schedule
-   - **Main entry**: `compile.ts` orchestrates all passes
+4. **Compiler** (`src/compiler/`)
+   - **Frontend** (`compiler/frontend/`): Produces `TypedPatch` + `CycleSummary` for UI. Can succeed even when backend fails.
+     - `index.ts`: Frontend entry point, orchestrates all frontend passes
+     - Normalization: `normalize-composites.ts`, `normalize-default-sources.ts`, `normalize-adapters.ts`, `normalize-indexing.ts`, `normalize-varargs.ts`
+     - Analysis: `analyze-type-constraints.ts` (union-find type solver + cardinality), `analyze-type-graph.ts` (TypedPatch), `axis-validate.ts` (axis invariants), `analyze-cycles.ts` (cycle classification)
+     - `solve-cardinality.ts`: Cardinality constraint solver (union-find). See `DEBUGGING.md` for trace mode.
+   - **Backend** (`compiler/backend/`): Produces `CompiledProgramIR` from `TypedPatch`.
+     - `index.ts`: Backend entry point
+     - `derive-time-model.ts`: Time signal generation (pass 3)
+     - `derive-dep-graph.ts`: Execution dependency graph (pass 4)
+     - `schedule-scc.ts`: SCC decomposition (pass 5)
+     - `lower-blocks.ts`: Block-to-IR lowering (pass 6)
+     - `schedule-program.ts`: Execution schedule (pass 7)
+   - **IR** (`compiler/ir/`): `types.ts` (expression types), `IRBuilder.ts` (builder API), `lowerTypes.ts` (type lowering), `patches.ts` (`NormalizedPatch`, `TypedPatch`, `BlockIndex`)
+   - **Main entry**: `compile.ts` orchestrates frontend + backend
+   - **NOTE**: `compiler/passes-v2/` is **legacy and excluded from build**. All active passes are in `frontend/` and `backend/`.
 
-5. **Runtime** (`src/runtime`)
+5. **Runtime** (`src/runtime/`)
    - `RuntimeState.ts`: Frame-level state (value store, continuity)
-   - `Materializer.ts`: Realize intrinsics and initial values into buffers
    - `ScheduleExecutor.ts`: Execute compiled schedule frame-by-frame
-   - `ExternalChannel.ts`: Mouse/input event bridge
+   - `ValueExprMaterializer.ts`: Realize values into buffers
    - `RenderAssembler.ts`: Prepare render operations from runtime state
    - `FieldKernels.ts`: Signal processing kernels (sample, slew, lerp, etc.)
+   - `ExternalChannel.ts`: Mouse/input event bridge
+   - `StateMigration.ts`: State migration for hot-swap continuity
+   - `ContinuityState.ts`: Continuity state management and pruning
 
-6. **Rendering** (`src/render`)
+6. **Services** (`src/services/`)
+   - `CompileOrchestrator.ts`: **Single compile path** — handles frontend, backend, state migration, debug probe setup. Called for both initial and live recompile.
+   - `AnimationLoop.ts`: Main animation loop (frame-by-frame execution)
+   - `LiveRecompile.ts`: Hot-swap orchestration for graph changes
+   - `DebugService.ts`: Runtime value observation for debug viz
+   - `CompilationInspectorService.ts`: Inspect compiled IR snapshots per pass
+   - `DomainChangeDetector.ts`: Detect domain changes requiring recompile
+   - `PatchPersistence.ts` / `PatchExporter.ts`: Save/load/export patches
+   - `mapDebugEdges.ts`: Build edge-to-slot and port-to-slot debug mappings
+
+7. **Settings** (`src/settings/`)
+   - `defineSettings.ts`: Token-based settings definition with UI hints
+   - `tokens/`: Setting tokens — `app-settings.ts`, `compiler-flags-settings.ts`, `debug-settings.ts`, `editor-settings.ts`
+   - `useSettings.ts`: React hook for consuming settings
+   - Settings flow: `SettingsStore` owns all values, tokens define schema + defaults + UI controls
+
+8. **Stores** (`src/stores/`) — MobX state management
+   - `RootStore.ts`: Owns all other stores
+   - `PatchStore.ts`: Patch (graph) state
+   - `FrontendResultStore.ts`: Frontend compilation results for UI
+   - `PlaybackStore.ts`: Play/pause/frame controls
+   - `SelectionStore.ts`, `LayoutStore.ts`, `ViewportStore.ts`: Editor state
+   - `DebugStore.ts`: Debug panel state (syncs with `debug-settings` token)
+   - `DiagnosticsStore.ts`: Error/warning display
+   - `ContinuityStore.ts`: Continuity state management
+   - `SettingsStore.ts`: Application settings (token registry)
+   - `CameraStore.ts`: 3D camera state
+
+9. **Rendering** (`src/render/`)
    - `Canvas2DRenderer.ts`: 2D canvas rendering
    - `SVGRenderer.ts`: SVG export
    - `types.ts`: Render IR (DrawOp, PathStyle, etc.)
 
-7. **UI & Editor** (`src/ui`)
-   - `components/`: React components (graph editor, playback, debug panels)
-   - `reactFlowEditor/`: ReactFlow-based graph visualization
-   - `dockview/`: Dockview panel layout system
-   - `stores/`: MobX state management
+10. **Projection** (`src/projection/`)
+    - `perspective-kernel.ts`, `ortho-kernel.ts`: 3D projection kernels
+    - `layout-kernels.ts`: Layout kernel operations
+
+11. **UI & Editor** (`src/ui/`)
+    - `components/`: React components (graph editor, playback, debug panels, settings panel)
+    - `reactFlowEditor/`: ReactFlow-based graph visualization
+    - `dockview/`: Dockview panel layout system
+    - `debug-viz/`: Live value visualization (hover ports to see values)
+
+12. **Patch DSL** (`src/patch-dsl/`)
+    - HCL-like text format for patches — enables text-based authoring and version control
+    - `lexer.ts` → `parser.ts` → `ast.ts` → `patch-from-ast.ts`: Text-to-Patch pipeline
+    - `serialize.ts` / `deserialize.ts`: Round-trip serialization
+    - `composite-serialize.ts` / `composite-deserialize.ts`: Composite block serialization
+
+13. **Demos** (`src/demo/`)
+    - Pre-built demo patches (`simple.ts`, `golden-spiral.ts`, `mouse-spiral.ts`, etc.)
+    - `index.ts`: Exports `patches` array used by the app on startup
+    - `hcl/`: Demo patches written in the Patch DSL format
 
 ### Key Design Patterns
 
@@ -114,16 +163,26 @@ npx vitest run --coverage src/compiler/
 
 Blocks register themselves at module load time via `defineBlock()`.
 
-#### Compiler as Multi-Pass Pipeline
-Compilation follows a strict staged pipeline (no back-edges):
-1. Normalization (transform Patch to canonical form)
-2. Type inference & constraints (pass1-2)
-3. Time resolution (pass3)
-4. Dependency tracking & cycle detection (pass4-5)
-5. Block lowering & IR emission (pass6)
-6. Schedule generation (pass7)
+#### Compiler as Frontend/Backend Pipeline
+Compilation is split into two independent stages:
 
-Each pass produces new data without mutating inputs. Errors are collected, not thrown on first occurrence.
+**Frontend** (`src/compiler/frontend/index.ts` → `compileFrontend()`):
+1. Normalization — composites, default sources, adapters, indexing, varargs
+2. Type constraints — union-find solver for payload/unit/cardinality
+3. Type graph — produce `TypedPatch`
+4. Axis validation — enforce axis invariants
+5. Cycle classification — for UI display
+
+**Backend** (`src/compiler/backend/index.ts`):
+3. Time model — derive time signals
+4. Dependency graph — build execution DAG
+5. SCC — detect cycles, compute strongly connected components
+6. Block lowering — compile blocks to IR operations
+7. Schedule — produce execution order
+
+Each pass produces new data without mutating inputs. Errors are collected, not thrown on first occurrence. The frontend can succeed independently (UI gets `TypedPatch` even if backend fails).
+
+**Orchestration**: `src/services/CompileOrchestrator.ts` is the single compile path. It runs frontend, stores the snapshot for UI, then runs backend if frontend succeeds.
 
 #### Hot Swap via State Continuity
 When the graph changes (live editing):
@@ -132,7 +191,7 @@ When the graph changes (live editing):
 3. If valid, `advanceFrame()` seamlessly transitions
 4. If invalid, old state rolls back (no corruption)
 
-State continuity is the responsibility of `StateMigration.ts`.
+State continuity is the responsibility of `src/runtime/StateMigration.ts`.
 
 #### Runtime as Frame-by-Frame Executor
 The main loop:
@@ -150,16 +209,16 @@ The runtime executes each frame in two phases: **Phase 1** evaluates all signals
 ### Module Dependency Arrows (Simplified)
 
 ```
-UI/React ←── Stores (MobX) ←── Compiler + Runtime
-          ↓
-        Graph ←── Patch (user-facing)
-                    ↓
-                  Blocks Registry
-                    ↓
-                  Types & Core
+UI/React ←── Stores (MobX) ←── Services ←── Compiler + Runtime
+                                                  ↓
+                                                Graph ←── Patch (user-facing)
+                                                            ↓
+                                                          Blocks Registry
+                                                            ↓
+                                                          Types & Core
 ```
 
-**One-way rule**: No upward calls. UI may call Stores, Stores may call Compiler/Runtime, but never the reverse.
+**One-way rule**: No upward calls. UI may call Stores, Stores may call Services/Compiler/Runtime, but never the reverse.
 
 ## Spec Reference & Invariants
 
@@ -197,19 +256,9 @@ See `.claude/rules/spec/invariants.md` for the full list and enforcement strateg
 - **Unit tests**: Live alongside code as `__tests__/` directories
 - **Test framework**: Vitest with jsdom for React components
 - **Fixtures**: `src/compiler/__tests__/fixtures/` for reusable test data
+- **Cross-cutting tests**: `src/__tests__/forbidden-patterns.test.ts` enforces architectural constraints (no banned type aliases, no deprecated patterns)
+- **Test helpers**: `src/__tests__/runtime-test-helpers.ts`, `src/__tests__/type-test-helpers.ts`
 - **Pattern**: Test the *interface*, not the implementation
-
-Example:
-```typescript
-// Tests verify behavior (what); implementation can change (how)
-describe('compile', () => {
-  it('produces a valid schedule for a simple graph', () => {
-    const result = compile(patch);
-    expect(result.ok).toBe(true);
-    expect(result.value.schedule.steps.length).toBeGreaterThan(0);
-  });
-});
-```
 
 ### Module Structure
 
@@ -225,6 +274,13 @@ describe('compile', () => {
 - **Constants**: UPPER_SNAKE_CASE for true constants; camelCase for runtime-computed values
 
 ## Project Rules (from `.claude/rules/`)
+
+### Type System Invariants (`TYPE-SYSTEM-INVARANTS.md`)
+- `CanonicalType = { payload, unit, extent }` is the single type authority
+- `deriveKind()` derives signal/field/event from axes — never store kind directly
+- Axis vars (`kind: 'var'`) must not escape frontend into backend/runtime
+- One enforcement gate for axis validation (`axis-validate.ts`)
+- See the full 17-rule guardrail document for complete rules
 
 ### Compilation Pipeline Rules (`compiler/compilation.md`)
 - Stages are independent and testable
@@ -254,19 +310,25 @@ describe('compile', () => {
 
 ### Key Entry Points
 - `src/index.ts`: Main public API (exports types, graph, compiler, blocks)
-- `src/compiler/index.ts`: Compiler API (compile, IR types)
+- `src/compiler/index.ts`: Compiler API (`compile()`, IR types)
+- `src/compiler/frontend/index.ts`: Frontend API (`compileFrontend()`)
+- `src/compiler/backend/index.ts`: Backend API
 - `src/runtime/index.ts`: Runtime API (createRuntimeState, executeFrame, etc.)
 - `src/stores/index.ts`: Store API (only public store classes exported)
+- `src/services/CompileOrchestrator.ts`: Single compile path (initial + live recompile)
 
 ### Debug & Inspection
+- `src/compiler/frontend/DEBUGGING.md`: Cardinality solver trace mode docs
 - `src/ui/debug-viz/`: Live value visualization (hover ports to see values)
 - `src/diagnostics/DiagnosticHub.ts`: Error/warning collection and display
 - `src/services/CompilationInspectorService.ts`: Inspect compiled IR (useful for debugging)
 - `src/runtime/DebugTap.ts`: Tap into signal values for inspection
+- Settings → Debug → "Trace Cardinality Solver" toggle: Logs solver phases to browser console
 
 ### Hot Swap & State Migration
 - `src/runtime/StateMigration.ts`: Validate new schedule against old state
 - `src/runtime/RuntimeState.ts`: State container (frame cache, value store)
+- `src/runtime/ContinuityState.ts`: Continuity state and pruning
 - `src/stores/PatchStore.ts`: Graph change orchestration
 
 ### Domain System
@@ -276,22 +338,22 @@ describe('compile', () => {
 ## Common Tasks
 
 ### Adding a New Block Type
-1. Define block in `src/blocks/` (e.g., `src/blocks/math-blocks.ts`)
+1. Define block in `src/blocks/<category>/` (e.g., `src/blocks/math/`)
 2. Export and register in `src/blocks/registry.ts` via `defineBlock()`
 3. Add tests in `src/blocks/__tests__/`
 4. Blocks automatically get intrinsic fields (index, position, etc.) via instance declarations
 5. Verify with: `npm run test -- blocks`
 
 ### Adding a Compiler Pass
-1. Create `src/compiler/passes-v2/passN-name.ts`
-2. Implement the pass function (takes IR, returns IR or result)
-3. Add to pipeline in `src/compiler/passes-v2/index.ts`
-4. Add tests in `src/compiler/passes-v2/__tests__/`
-5. The pass must not mutate input (return new IR)
+Frontend passes go in `src/compiler/frontend/`, backend passes in `src/compiler/backend/`.
+1. Create the pass file (e.g., `src/compiler/frontend/analyze-foo.ts`)
+2. Implement the pass function (takes previous pass output, returns new data — no mutation)
+3. Wire into the pipeline in the appropriate `index.ts`
+4. Add tests in the corresponding `__tests__/` directory
 
 ### Fixing a Compilation Error
-1. Check `src/compiler/diagnosticConversion.ts` (error formatting)
-2. Errors may originate from any pass; search for `compileError()` calls
+1. Check `src/compiler/frontend/frontendDiagnosticConversion.ts` (error formatting)
+2. Errors may originate from any pass; search for error-producing calls in `frontend/` or `backend/`
 3. Add source context (block ID, port ID) to the error
 4. Add a test to `src/compiler/__tests__/` that reproduces the error
 
@@ -301,6 +363,7 @@ describe('compile', () => {
 3. Set breakpoints in `ScheduleExecutor.ts` to step through frame execution
 4. Use `DebugTap.ts` to log signal values mid-frame
 5. Check `RuntimeState.ts` to understand the state layout
+6. For cardinality bugs: Enable "Trace Cardinality Solver" in Settings → Debug (see `src/compiler/frontend/DEBUGGING.md`)
 
 ### Modifying the Graph Model
 1. Changes to `Patch.ts` affect serialization and normalization
@@ -308,6 +371,12 @@ describe('compile', () => {
 3. Update `src/graph/passes/` if passes need to handle new fields
 4. Update tests in `src/graph/__tests__/`
 5. **Do NOT add compiled artifacts to Patch** (types, slots, schedules)
+
+### Adding a New Setting
+1. Add field to the appropriate token in `src/settings/tokens/` (or create a new token with `defineSettings()`)
+2. Add UI hints in the token's `ui.fields` section
+3. If a store needs to react, add a `reaction()` in the store's `setupSettingsSync()`
+4. Read the setting value via `store.settings.get(token)`
 
 ## TypeScript Configuration & Strictness
 
@@ -330,6 +399,7 @@ Benchmark with: `npm run bench`
 ### Within the Codebase
 - **v1 reference**: `~/code/oscilla-animator_codex` (for block patterns, graph normalizer)
 - **Block/Edge roles**: `design-docs/final-System-Invariants/15-Block-Edge-Roles.md` (v1 reference doc)
+- **Agent planning**: `.agent_planning/` contains RCA docs, sprint plans, and archived work context
 
 ### External Tools
 - **React Flow docs**: Used for graph visualization (`src/ui/reactFlowEditor/`)
@@ -355,3 +425,4 @@ When reviewing code (or asking for review), check:
 - Invariants are non-negotiable. See `.claude/rules/spec/invariants.md` for the full list.
 - Hot swap must preserve state. Read `StateMigration.ts` before making runtime changes.
 - Every concept has exactly one authoritative representation. No caches, caches are derived.
+- `src/__tests__/forbidden-patterns.test.ts` enforces architectural constraints via grep — if CI fails on a forbidden pattern, the code must be restructured, not the test.
