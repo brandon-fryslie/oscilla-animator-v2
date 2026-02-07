@@ -1,7 +1,7 @@
 /**
  * Domain Test - Slow spiral for continuity testing
  *
- * 50 large ellipses for observing element identity during count changes.
+ * 50 large ellipses with rotating motion and animated per-element rainbow.
  */
 
 import { timeRootRole } from '../types';
@@ -10,7 +10,7 @@ import type { PatchBuilder } from './types';
 export const patchDomainTest: PatchBuilder = (b) => {
   const time = b.addBlock('InfiniteTimeRoot', { role: timeRootRole() });
   b.setPortDefault(time, 'periodAMs', 8000);
-  b.setPortDefault(time, 'periodBMs', 8000);
+  b.setPortDefault(time, 'periodBMs', 20000);
 
   const ellipse = b.addBlock('Ellipse');
   b.setPortDefault(ellipse, 'rx', 0.025);
@@ -20,16 +20,20 @@ export const patchDomainTest: PatchBuilder = (b) => {
   b.setPortDefault(array, 'count', 50);
   b.wire(ellipse, 'shape', array, 'element');
 
-  // Circle layout instead of golden spiral
   const circleLayout = b.addBlock('CircleLayoutUV');
   b.setPortDefault(circleLayout, 'radius', 0.35);
   b.wire(array, 'elements', circleLayout, 'elements');
+  b.wire(time, 'phaseA', circleLayout, 'phase');
 
-  // Simple constant color
-  const color = b.addBlock('Const');
-  b.setConfig(color, 'value', { r: 0.8, g: 0.6, b: 1.0, a: 1.0 }); // Purple
+  // Per-element animated hue: rainbow shifts over time
+  const hueAdd = b.addBlock('Add');
+  b.wire(array, 't', hueAdd, 'a');
+  b.wire(time, 'phaseB', hueAdd, 'b');
+
+  const color = b.addBlock('MakeColorHSL');
+  b.wire(hueAdd, 'out', color, 'h');
 
   const render = b.addBlock('RenderInstances2D');
   b.wire(circleLayout, 'position', render, 'pos');
-  b.wire(color, 'out', render, 'color');
+  b.wire(color, 'color', render, 'color');
 };

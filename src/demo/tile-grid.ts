@@ -1,8 +1,8 @@
 /**
- * Tile Grid - Rectangle mosaic with wave animation
+ * Tile Grid - Rectangle mosaic with per-element color
  *
- * Grid of rectangles with simple color.
- * Demonstrates Rect primitive with grid layout.
+ * 20x20 grid of rectangles. Each tile gets a unique hue from the spectrum,
+ * slowly cycling over time.
  */
 
 import { timeRootRole } from '../types';
@@ -11,65 +11,85 @@ import type { PatchBuilder } from './types';
 export const patchTileGrid: PatchBuilder = (b) => {
   const time = b.addBlock('InfiniteTimeRoot', { role: timeRootRole() });
   b.setPortDefault(time, 'periodAMs', 3000);
-  b.setPortDefault(time, 'periodBMs', 7000);
+  b.setPortDefault(time, 'periodBMs', 15000);
 
-  // Rectangles - wider than tall for tile effect
   const rect = b.addBlock('Rect');
   b.setPortDefault(rect, 'width', 0.018);
   b.setPortDefault(rect, 'height', 0.012);
 
   const array = b.addBlock('Array');
-  b.setPortDefault(array, 'count', 400); // 20x20 grid
+  b.setPortDefault(array, 'count', 400);
   b.wire(rect, 'shape', array, 'element');
 
-  // Grid layout: arranges elements in a 20x20 grid (using UV variant)
   const grid = b.addBlock('GridLayoutUV');
   b.setPortDefault(grid, 'rows', 20);
   b.setPortDefault(grid, 'cols', 20);
   b.wire(array, 'elements', grid, 'elements');
 
-  // Simple constant color
-  const color = b.addBlock('Const');
-  b.setConfig(color, 'value', { r: 0.5, g: 0.8, b: 1.0, a: 1.0 }); // Light blue
+  // Per-element cycling hue
+  const hueAdd = b.addBlock('Add');
+  b.wire(array, 't', hueAdd, 'a');
+  b.wire(time, 'phaseA', hueAdd, 'b');
+
+  const color = b.addBlock('MakeColorHSL');
+  b.wire(hueAdd, 'out', color, 'h');
 
   const render = b.addBlock('RenderInstances2D');
   b.wire(grid, 'position', render, 'pos');
-  b.wire(color, 'out', render, 'color');
+  b.wire(color, 'color', render, 'color');
 };
 
 /**
- * Tile Grid UV - Rectangle mosaic with wave animation (UV layout variant)
+ * Tile Grid UV - Rectangle mosaic (UV layout variant)
  *
- * Grid of rectangles with simple color.
- * Uses GridLayoutUV for gauge-invariant placement basis instead of standard grid.
- * Demonstrates Rect primitive with grid layout.
+ * Same as Tile Grid but with per-element desaturated blue-to-cyan gradient.
  */
 export const patchTileGridUV: PatchBuilder = (b) => {
   const time = b.addBlock('InfiniteTimeRoot', { role: timeRootRole() });
   b.setPortDefault(time, 'periodAMs', 3000);
-  b.setPortDefault(time, 'periodBMs', 7000);
+  b.setPortDefault(time, 'periodBMs', 10000);
 
-  // Rectangles - wider than tall for tile effect
   const rect = b.addBlock('Rect');
   b.setPortDefault(rect, 'width', 0.018);
   b.setPortDefault(rect, 'height', 0.012);
 
   const array = b.addBlock('Array');
-  b.setPortDefault(array, 'count', 400); // 20x20 grid
+  b.setPortDefault(array, 'count', 400);
   b.wire(rect, 'shape', array, 'element');
 
-  // Grid UV layout: arranges elements in a 20x20 grid with UV placement basis
   const grid = b.addBlock('GridLayoutUV');
   b.setPortDefault(grid, 'rows', 20);
   b.setPortDefault(grid, 'cols', 20);
   b.wire(array, 'elements', grid, 'elements');
 
-  // Simple constant color
-  const color = b.addBlock('Const');
-  b.setConfig(color, 'value', { r: 0.5, g: 0.8, b: 1.0, a: 1.0 }); // Light blue
+  // Per-element hue in the blue-cyan range (0.5–0.75), shifting with time
+  // Multiply t by 0.25 to compress the hue range, then add 0.5 base + time offset
+  const hueRange = b.addBlock('Const');
+  b.setConfig(hueRange, 'value', 0.25);
+  const hueBase = b.addBlock('Const');
+  b.setConfig(hueBase, 'value', 0.5);
+
+  const hueScaled = b.addBlock('Multiply');
+  b.wire(array, 't', hueScaled, 'a');
+  b.wire(hueRange, 'out', hueScaled, 'b');
+
+  const hueOffset = b.addBlock('Add');
+  b.wire(hueScaled, 'out', hueOffset, 'a');
+  b.wire(hueBase, 'out', hueOffset, 'b');
+
+  const hueAnimated = b.addBlock('Add');
+  b.wire(hueOffset, 'out', hueAnimated, 'a');
+  b.wire(time, 'phaseB', hueAnimated, 'b');
+
+  const saturation = b.addBlock('Const');
+  b.setConfig(saturation, 'value', 0.6);
+
+  const color = b.addBlock('MakeColorHSL');
+  b.wire(hueAnimated, 'out', color, 'h');
+  b.wire(saturation, 'out', color, 's');
 
   const render = b.addBlock('RenderInstances2D');
   b.wire(grid, 'position', render, 'pos');
-  b.wire(color, 'out', render, 'color');
+  b.wire(color, 'color', render, 'color');
   b.wire(rect, 'shape', render, 'shape');
 };

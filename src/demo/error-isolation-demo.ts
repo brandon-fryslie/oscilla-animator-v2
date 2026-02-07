@@ -1,9 +1,8 @@
 /**
  * Error Isolation Demo
  *
- * Demonstrates that blocks with errors that are NOT connected to the render
- * pipeline don't break compilation. The main animation runs while warnings
- * are emitted for the broken disconnected blocks.
+ * Demonstrates that disconnected broken blocks don't stop compilation.
+ * The main grid animates with per-element purple-to-pink gradient.
  *
  * Check the diagnostic console for W_BLOCK_UNREACHABLE_ERROR warnings.
  */
@@ -13,14 +12,13 @@ import type { PatchBuilder } from './types';
 
 export const patchErrorIsolationDemo: PatchBuilder = (b) => {
   // ========================================================================
-  // WORKING RENDER PIPELINE - A simple animated grid
+  // WORKING RENDER PIPELINE
   // ========================================================================
 
   const time = b.addBlock('InfiniteTimeRoot', { role: timeRootRole() });
   b.setPortDefault(time, 'periodAMs', 2000);
   b.setPortDefault(time, 'periodBMs', 10000);
 
-  // Create a grid of circles
   const circle = b.addBlock('Ellipse');
   b.setPortDefault(circle, 'rx', 0.03);
   b.setPortDefault(circle, 'ry', 0.03);
@@ -29,49 +27,49 @@ export const patchErrorIsolationDemo: PatchBuilder = (b) => {
   b.setPortDefault(array, 'count', 100);
   b.wire(circle, 'shape', array, 'element');
 
-  // Grid layout (using UV variant)
   const grid = b.addBlock('GridLayoutUV');
   b.setPortDefault(grid, 'rows', 10);
   b.setPortDefault(grid, 'cols', 10);
   b.wire(array, 'elements', grid, 'elements');
 
-  // Simple constant color
-  const color = b.addBlock('Const');
-  b.setConfig(color, 'value', { r: 0.7, g: 0.9, b: 0.8, a: 1.0 }); // Light cyan
+  // Per-element purple-to-pink (hue 0.75→0.95), shifting with time
+  const hueRange = b.addBlock('Const');
+  b.setConfig(hueRange, 'value', 0.2);
+  const hueBase = b.addBlock('Const');
+  b.setConfig(hueBase, 'value', 0.75);
 
-  // Render the grid
+  const hueScaled = b.addBlock('Multiply');
+  b.wire(array, 't', hueScaled, 'a');
+  b.wire(hueRange, 'out', hueScaled, 'b');
+
+  const hueOffset = b.addBlock('Add');
+  b.wire(hueScaled, 'out', hueOffset, 'a');
+  b.wire(hueBase, 'out', hueOffset, 'b');
+
+  const hueAnimated = b.addBlock('Add');
+  b.wire(hueOffset, 'out', hueAnimated, 'a');
+  b.wire(time, 'phaseA', hueAnimated, 'b');
+
+  const color = b.addBlock('MakeColorHSL');
+  b.wire(hueAnimated, 'out', color, 'h');
+
   const render = b.addBlock('RenderInstances2D');
   b.wire(grid, 'position', render, 'pos');
-  b.wire(color, 'out', render, 'color');
+  b.wire(color, 'color', render, 'color');
 
   // ========================================================================
   // BROKEN DISCONNECTED BLOCKS - These should NOT stop compilation
   // ========================================================================
 
-  // Expression block with invalid syntax - NOT connected to render
-  // This will produce a warning, not an error
   const brokenExpr1 = b.addBlock('Expression');
   b.setConfig(brokenExpr1, 'expression', 'this is not valid +++');
-  // label: 'Broken Expression 1',
 
-  // Another broken expression - also disconnected
   const brokenExpr2 = b.addBlock('Expression');
-  b.setConfig(brokenExpr2, 'expression', 'in0 +');  // Incomplete syntax
-  // label: 'Broken Expression 2',
+  b.setConfig(brokenExpr2, 'expression', 'in0 +');
 
-  // A small disconnected subgraph with an error
   const brokenExpr = b.addBlock('Expression');
   b.setConfig(brokenExpr, 'expression', '*** invalid ***');
-  // label: 'Broken Subgraph Source',
 
   const unusedAdd = b.addBlock('Add');
   b.wire(brokenExpr, 'out', unusedAdd, 'a');
-  // This whole subgraph is disconnected from render - won't fail compilation
-
-  // ========================================================================
-  // This demo proves:
-  // 1. The animation runs despite broken blocks
-  // 2. Warnings appear in diagnostics for unreachable errors
-  // 3. Only blocks feeding into render affect compilation success
-  // ========================================================================
 };

@@ -13,8 +13,10 @@ export { patchDomainTest } from './domain-test';
 export { patchTileGrid, patchTileGridUV } from './tile-grid';
 export { patchPerspectiveCamera } from './perspective-camera';
 export { patchFeedbackSimple } from './feedback-simple';
+export { patchFeedbackRotation } from './feedback-rotation';
 export { patchPathFieldDemo } from './path-field-demo';
 export { patchErrorIsolationDemo } from './error-isolation-demo';
+export { patchRectMosaic } from './rect-mosaic';
 
 import { patchSimple } from './simple';
 import { patchGoldenSpiral } from './golden-spiral';
@@ -23,8 +25,10 @@ import { patchDomainTest } from './domain-test';
 import { patchTileGrid, patchTileGridUV } from './tile-grid';
 import { patchPerspectiveCamera } from './perspective-camera';
 import { patchFeedbackSimple } from './feedback-simple';
+import { patchFeedbackRotation } from './feedback-rotation';
 import { patchPathFieldDemo } from './path-field-demo';
 import { patchErrorIsolationDemo } from './error-isolation-demo';
+import { patchRectMosaic } from './rect-mosaic';
 import type { PatchBuilder } from './types';
 
 export const patches: { name: string; builder: PatchBuilder }[] = [
@@ -36,8 +40,10 @@ export const patches: { name: string; builder: PatchBuilder }[] = [
   { name: 'Tile Grid UV', builder: patchTileGridUV },
   { name: 'Perspective Camera', builder: patchPerspectiveCamera },
   { name: 'Feedback Simple', builder: patchFeedbackSimple },
+  { name: 'Feedback Rotation', builder: patchFeedbackRotation },
   { name: 'Path Field Demo', builder: patchPathFieldDemo },
   { name: 'Error Isolation Demo', builder: patchErrorIsolationDemo },
+  { name: 'Rect Mosaic', builder: patchRectMosaic },
 ];
 
 export const DEFAULT_PATCH_INDEX = 0; // Simple

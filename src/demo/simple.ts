@@ -1,7 +1,7 @@
 /**
  * Simple Demo - Minimum viable patch
  *
- * 4 circles in a circle layout. The simplest possible working patch.
+ * 4 circles in a rotating circle layout with per-element rainbow that shifts over time.
  */
 
 import { timeRootRole } from '../types';
@@ -10,7 +10,7 @@ import type { PatchBuilder } from './types';
 export const patchSimple: PatchBuilder = (b) => {
   const timeRoot = b.addBlock('InfiniteTimeRoot', { role: timeRootRole() });
   b.setPortDefault(timeRoot, 'periodAMs', 4000);
-  b.setPortDefault(timeRoot, 'periodBMs', 120000);
+  b.setPortDefault(timeRoot, 'periodBMs', 12000);
 
   const ellipse = b.addBlock('Ellipse');
   b.setPortDefault(ellipse, 'rx', 0.04);
@@ -23,14 +23,17 @@ export const patchSimple: PatchBuilder = (b) => {
   const layout = b.addBlock('CircleLayoutUV');
   b.setPortDefault(layout, 'radius', 0.2);
   b.wire(array, 'elements', layout, 'elements');
+  b.wire(timeRoot, 'phaseA', layout, 'phase');
 
-  // Color: signal→field requires explicit Broadcast
-  const colorSig = b.addBlock('Const');
-  b.setConfig(colorSig, 'value', { r: 0.4, g: 0.6, b: 1.0, a: 1.0 });
-  const colorField = b.addBlock('Broadcast');
-  b.wire(colorSig, 'out', colorField, 'signal');
+  // Per-element rainbow: hue = normalizedIndex + time
+  const hueAdd = b.addBlock('Add');
+  b.wire(array, 't', hueAdd, 'a');
+  b.wire(timeRoot, 'phaseB', hueAdd, 'b');
+
+  const color = b.addBlock('MakeColorHSL');
+  b.wire(hueAdd, 'out', color, 'h');
 
   const render = b.addBlock('RenderInstances2D');
   b.wire(layout, 'position', render, 'pos');
-  b.wire(colorField, 'field', render, 'color');
+  b.wire(color, 'color', render, 'color');
 };

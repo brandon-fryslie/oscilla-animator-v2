@@ -70,10 +70,11 @@ export const patchFeedbackSimple: PatchBuilder = (b) => {
   b.setPortDefault(outerArray, 'count', 16);
   b.wire(outerShape, 'shape', outerArray, 'element');
 
-  // Use CircleLayoutUV
+  // Use CircleLayoutUV with slow rotation from phaseB
   const outerLayout = b.addBlock('CircleLayoutUV');
   b.setPortDefault(outerLayout, 'radius', 0.35);
   b.wire(outerArray, 'elements', outerLayout, 'elements');
+  b.wire(time, 'phaseB', outerLayout, 'phase');
 
   // Color: cyan
   const outerColor = b.addBlock('Const');

@@ -1,9 +1,8 @@
 /**
  * Rect Mosaic - Animated rectangle spiral
  *
- * Rectangles in a circle layout with animated scale.
- * Demonstrates Rect topology + scale through shape2d pipeline.
- * Simplified to use CircleLayoutUV.
+ * 400 rectangles in a rotating circle layout with pulsing scale
+ * and per-element green-to-teal gradient that shifts over time.
  */
 
 import { timeRootRole } from '../types';
@@ -14,7 +13,6 @@ export const patchRectMosaic: PatchBuilder = (b) => {
   b.setPortDefault(time, 'periodAMs', 4000);
   b.setPortDefault(time, 'periodBMs', 7000);
 
-  // Rectangle shape
   const rect = b.addBlock('Rect');
   b.setPortDefault(rect, 'width', 0.03);
   b.setPortDefault(rect, 'height', 0.015);
@@ -23,23 +21,39 @@ export const patchRectMosaic: PatchBuilder = (b) => {
   b.setPortDefault(array, 'count', 400);
   b.wire(rect, 'shape', array, 'element');
 
-  // Circle layout instead of golden spiral
   const layout = b.addBlock('CircleLayoutUV');
   b.setPortDefault(layout, 'radius', 0.45);
   b.wire(array, 'elements', layout, 'elements');
+  b.wire(time, 'phaseA', layout, 'phase');
 
-  // Simple constant color
-  const color = b.addBlock('Const');
-  b.setConfig(color, 'value', { r: 1.0, g: 0.6, b: 0.4, a: 1.0 }); // Warm salmon
+  // Per-element green-to-teal (hue 0.25→0.5), shifting with time
+  const hueRange = b.addBlock('Const');
+  b.setConfig(hueRange, 'value', 0.25);
+  const hueBase = b.addBlock('Const');
+  b.setConfig(hueBase, 'value', 0.25);
 
-  // Animated scale: pulsing
+  const hueScaled = b.addBlock('Multiply');
+  b.wire(array, 't', hueScaled, 'a');
+  b.wire(hueRange, 'out', hueScaled, 'b');
+
+  const hueOffset = b.addBlock('Add');
+  b.wire(hueScaled, 'out', hueOffset, 'a');
+  b.wire(hueBase, 'out', hueOffset, 'b');
+
+  const hueAnimated = b.addBlock('Add');
+  b.wire(hueOffset, 'out', hueAnimated, 'a');
+  b.wire(time, 'phaseB', hueAnimated, 'b');
+
+  const color = b.addBlock('MakeColorHSL');
+  b.wire(hueAnimated, 'out', color, 'h');
+
+  // Pulsing scale
   const scaleExpr = b.addBlock('Expression');
-  b.setConfig(scaleExpr, 'expression', '1.0 + 0.5 * sin(phase * 6.28 + 1.57)'); // quarter-phase offset
+  b.setConfig(scaleExpr, 'expression', '1.0 + 0.5 * sin(phase * 6.28 + 1.57)');
   b.addVarargConnection(scaleExpr, 'refs', 'v1:blocks.time.outputs.phaseA', 0, 'phase');
 
-  // Render with rect shape and animated scale
   const render = b.addBlock('RenderInstances2D');
   b.wire(layout, 'position', render, 'pos');
-  b.wire(color, 'out', render, 'color');
+  b.wire(color, 'color', render, 'color');
   b.wire(scaleExpr, 'out', render, 'scale');
 };
