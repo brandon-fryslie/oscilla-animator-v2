@@ -12,11 +12,10 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { reaction } from 'mobx';
-import { buildPatch, type Patch } from './graph';
 import { initGlobalRenderArena, type RenderBufferArena } from './render';
 import { App } from './ui/components';
 import { StoreProvider, type RootStore } from './stores';
-import { patches, DEFAULT_PATCH_INDEX, type PatchBuilder } from './demo';
+import { hclDemos } from './demo';
 import { loadPatchFromStorage, savePatchToStorage, clearStorageAndReload } from './services/PatchPersistence';
 import {
   compileAndSwap,
@@ -54,34 +53,27 @@ let arena: RenderBufferArena | null = null;
 // Store reference - set via callback from React when StoreProvider mounts
 let store: RootStore | null = null;
 
-// Current patch index
-let currentPatchIndex = DEFAULT_PATCH_INDEX;
+// Currently loaded demo filename (null if restored from localStorage or custom)
+let currentDemoFilename: string | null = null;
 
 // Expose clearStorageAndReload globally for UI
 (window as unknown as { clearStorageAndReload: typeof clearStorageAndReload }).clearStorageAndReload = clearStorageAndReload;
 
 // =============================================================================
-// Patch Management
+// Demo Management
 // =============================================================================
 
 /**
- * Build a patch from a PatchBuilder and load it into the store.
- * Does NOT compile - call compileAndSwap() after this.
+ * Switch to an HCL demo by filename.
  */
-function build(patchBuilder: PatchBuilder): Patch {
-  const patch = buildPatch(patchBuilder);
-  store!.patch.loadPatch(patch);
-  return patch;
-}
+async function switchDemo(filename: string) {
+  const demo = hclDemos.find(d => d.filename === filename);
+  if (!demo) return;
 
-/**
- * Switch to a different patch by index
- */
-async function switchPatch(index: number) {
-  if (index < 0 || index >= patches.length) return;
-  currentPatchIndex = index;
-  window.__oscilla_currentPreset = String(index);
-  build(patches[index].builder);
+  currentDemoFilename = filename;
+  window.__oscilla_currentDemo = filename;
+
+  store!.patch.loadFromHCL(demo.hcl);
   await compileAndSwap(
     {
       store: store!,
@@ -90,17 +82,16 @@ async function switchPatch(index: number) {
     },
     true
   );
-  savePatchToStorage(store!.patch.patch, currentPatchIndex);
+  savePatchToStorage(store!.patch.patch, 0);
 }
 
 /**
- * Expose presets to React toolbar UI via window globals
+ * Expose HCL demos to React toolbar UI via window globals
  */
-function exposePresetsToUI() {
-  window.__oscilla_presets = patches.map((p, i) => ({ label: p.name, value: String(i) }));
-  window.__oscilla_currentPreset = String(currentPatchIndex);
-  window.__oscilla_defaultPreset = String(DEFAULT_PATCH_INDEX);
-  window.__oscilla_switchPreset = (index: string) => switchPatch(Number(index));
+function exposeDemosToUI() {
+  window.__oscilla_demos = hclDemos.map(d => ({ name: d.name, filename: d.filename }));
+  window.__oscilla_switchDemo = (filename: string) => switchDemo(filename);
+  window.__oscilla_currentDemo = currentDemoFilename;
 }
 
 // =============================================================================
@@ -124,10 +115,11 @@ async function initializeRuntime(rootStore: RootStore) {
   const { compilerFlagsSettings } = await import('./settings/tokens/compiler-flags-settings');
   store.settings.register(compilerFlagsSettings);
 
-  // Try to restore from localStorage, otherwise use default preset
+  // Try to restore from localStorage, otherwise load default HCL demo
   const saved = loadPatchFromStorage();
   if (saved) {
-    currentPatchIndex = saved.presetIndex;
+    // Restored from localStorage — no demo is "selected"
+    currentDemoFilename = null;
     store.patch.loadPatch(saved.patch);
     await compileAndSwap(
       {
@@ -138,13 +130,12 @@ async function initializeRuntime(rootStore: RootStore) {
       true
     );
   } else {
-    // Use settings-configured default patch index (falls back to DEFAULT_PATCH_INDEX)
-    const appValues = store.settings.get(appSettings);
-    const settingsIndex = appValues.defaultPatchIndex;
-    if (settingsIndex >= 0 && settingsIndex < patches.length) {
-      currentPatchIndex = settingsIndex;
+    // First load: use "Simple" HCL demo
+    const defaultDemo = hclDemos.find(d => d.filename === 'simple.hcl') ?? hclDemos[0];
+    if (defaultDemo) {
+      currentDemoFilename = defaultDemo.filename;
+      store.patch.loadFromHCL(defaultDemo.hcl);
     }
-    build(patches[currentPatchIndex].builder);
     await compileAndSwap(
       {
         store,
@@ -160,13 +151,13 @@ async function initializeRuntime(rootStore: RootStore) {
     (window as any).__renderApp();
   }
 
-  // Expose presets to React toolbar UI
-  exposePresetsToUI();
+  // Expose HCL demos to React toolbar UI
+  exposeDemosToUI();
 
   // Auto-persist patch to localStorage on changes (debounced by MobX)
   reaction(
     () => store!.patch.patch,
-    (patch) => savePatchToStorage(patch, currentPatchIndex),
+    (patch) => savePatchToStorage(patch, 0),
     { delay: 500 }
   );
 

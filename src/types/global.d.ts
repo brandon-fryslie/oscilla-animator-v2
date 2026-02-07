@@ -5,26 +5,23 @@
  * and React components without prop drilling through the entire tree.
  */
 
-interface OscillaPresetOption {
-  label: string;
-  value: string;
+interface HclDemoInfo {
+  name: string;
+  filename: string;
 }
 
 interface Window {
   /** Stats display callback, set by App.tsx, called by main.ts render loop */
   __setStats?: (text: string) => void;
 
-  /** Available preset patches for the toolbar dropdown */
-  __oscilla_presets?: OscillaPresetOption[];
+  /** Available HCL demo patches for the toolbar dropdown */
+  __oscilla_demos?: HclDemoInfo[];
 
-  /** Currently active preset index (as string) */
-  __oscilla_currentPreset?: string;
+  /** Switch to a different demo by filename */
+  __oscilla_switchDemo?: (filename: string) => void;
 
-  /** Default preset index (as string) */
-  __oscilla_defaultPreset?: string;
-
-  /** Switch to a different preset by index string */
-  __oscilla_switchPreset?: (index: string) => void;
+  /** Currently loaded demo filename, or null if custom/restored patch */
+  __oscilla_currentDemo?: string | null;
 
   /** Port context menu handler, set by ReactFlowEditor, read by OscillaNode */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

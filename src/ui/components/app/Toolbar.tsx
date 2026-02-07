@@ -37,16 +37,16 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
   const [toastMessage, setToastMessage] = useState('');
   const [toastSeverity, setToastSeverity] = useState<'success' | 'error'>('success');
 
-  // Preset dropdown state - reads from window globals set by main.ts
-  const [presets, setPresets] = useState<Array<{ label: string; value: string }>>([]);
-  const [currentPreset, setCurrentPreset] = useState<string | null>(null);
+  // HCL demo dropdown state - reads from window globals set by main.ts
+  const [demos, setDemos] = useState<Array<{ label: string; value: string }>>([]);
+  const [currentDemo, setCurrentDemo] = useState<string | null>(null);
 
   useEffect(() => {
-    // Poll for presets availability (set by main.ts after runtime init)
+    // Poll for demos availability (set by main.ts after runtime init)
     const check = () => {
-      if (window.__oscilla_presets) {
-        setPresets(window.__oscilla_presets);
-        setCurrentPreset(window.__oscilla_currentPreset ?? '0');
+      if (window.__oscilla_demos) {
+        setDemos(window.__oscilla_demos.map(d => ({ label: d.name, value: d.filename })));
+        setCurrentDemo(window.__oscilla_currentDemo ?? null);
       }
     };
     check();
@@ -54,11 +54,10 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
     return () => clearInterval(interval);
   }, []);
 
-  const handlePresetChange = (value: string | null) => {
+  const handleDemoChange = (value: string | null) => {
     if (value === null) return;
-    setCurrentPreset(value);
-    const switchFn = window.__oscilla_switchPreset;
-    if (switchFn) switchFn(value);
+    setCurrentDemo(value);
+    window.__oscilla_switchDemo?.(value);
   };
 
   const handleExport = async () => {
@@ -141,14 +140,16 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
 
           {/* Preset Selector + Stats and Actions */}
           <Group gap="md">
-            {/* Preset Dropdown */}
-            {presets.length > 0 && (
+            {/* Demo Dropdown */}
+            {demos.length > 0 && (
               <Select
-                data={presets}
-                value={currentPreset}
-                onChange={handlePresetChange}
+                data={demos}
+                value={currentDemo}
+                onChange={handleDemoChange}
+                searchable
+                placeholder="Select demo..."
                 size="xs"
-                w={180}
+                w={200}
                 allowDeselect={false}
                 styles={{
                   input: {

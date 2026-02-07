@@ -45,9 +45,11 @@ export function useGlobalHotkeys(options: UseGlobalHotkeysOptions = {}): void {
 
     'reset-patch': (event) => {
       event.preventDefault();
-      const defaultIndex = window.__oscilla_defaultPreset;
-      if (window.__oscilla_switchPreset && defaultIndex != null) {
-        window.__oscilla_switchPreset(defaultIndex);
+      const demos = window.__oscilla_demos;
+      const switchFn = window.__oscilla_switchDemo;
+      if (switchFn && demos && demos.length > 0) {
+        const defaultDemo = demos.find(d => d.filename === 'simple.hcl') ?? demos[0];
+        switchFn(defaultDemo.filename);
         showFeedback('Patch reset to default');
       }
     },

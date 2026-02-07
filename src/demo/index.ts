@@ -47,3 +47,5 @@ export const patches: { name: string; builder: PatchBuilder }[] = [
 ];
 
 export const DEFAULT_PATCH_INDEX = 0; // Simple
+
+export { type HclDemo, hclDemos } from './hcl-demos';
