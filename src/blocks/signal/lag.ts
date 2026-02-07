@@ -51,7 +51,7 @@ registerBlock({
     // Compute: lerp(prev, target, smoothing)
     const lerpFn = ctx.b.opcode(OpCode.Lerp);
     const smoothConst = ctx.b.constant(floatConst(smoothing), canonicalType(FLOAT, unitScalar(), undefined, contractClamp01()));
-    const newValue = ctx.b.kernelZip([prevValue, target.id, smoothConst], lerpFn, canonicalType(FLOAT));
+    const newValue = ctx.b.kernelZip([prevValue, target.id, smoothConst], lerpFn, outType);
 
     // Return effects-as-data (no imperative calls)
     return {

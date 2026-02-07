@@ -14,7 +14,7 @@
 
 import type { CompiledProgramIR, ValueSlot } from '../compiler/ir/program';
 import type { ScheduleIR } from '../compiler/backend/schedule-program';
-import type { Step, InstanceDecl, DomainInstance, StepRender } from '../compiler/ir/types';
+import type { Step, InstanceDecl, DomainInstance, StepRender, StateMapping, StableStateId, StateSlotId } from '../compiler/ir/types';
 import type { IrInstanceId as InstanceId } from '../types';
 import { instanceId as makeInstanceId } from '../core/ids';
 import type { RuntimeState } from './RuntimeState';
@@ -40,7 +40,7 @@ import {
   getSigToSlotMap,
   assertF64Stride,
 } from './SlotLookupCache';
-import type { StepSnapshot, SlotValue, ExecutionPhase } from './StepDebugTypes';
+import type { StepSnapshot, SlotValue, StateSlotValue, ExecutionPhase } from './StepDebugTypes';
 import { readSlotValue, readEventSlotValue, detectAnomalies } from './ValueInspector';
 
 // Separate pool for stepped execution (avoid interference with production pool)
@@ -87,6 +87,7 @@ function buildSnapshot(
   tMs: number,
   writtenSlots: Map<ValueSlot, SlotValue>,
   previousFrameValues: ReadonlyMap<ValueSlot, number> | null,
+  writtenStateSlots?: Map<StateSlotId, StateSlotValue>,
 ): StepSnapshot {
   const debugIndex = program.debugIndex;
 
@@ -106,7 +107,9 @@ function buildSnapshot(
       }
     }
     if (blockId !== null) {
-      blockName = debugIndex.blockMap.get(blockId) ?? null;
+      blockName = debugIndex.blockDisplayNames?.get(blockId)
+        ?? debugIndex.blockMap.get(blockId)
+        ?? null;
     }
     if (debugIndex.stepToPort) {
       for (const [sid, pid] of debugIndex.stepToPort) {
@@ -131,6 +134,7 @@ function buildSnapshot(
     frameId: state.cache.frameId,
     tMs,
     writtenSlots,
+    writtenStateSlots: writtenStateSlots ?? new Map(),
     anomalies,
     previousFrameValues,
   };
@@ -177,6 +181,16 @@ export function* executeFrameStepped(
   const slotToMeta = new Map<ValueSlot, (typeof program.slotMeta)[number]>();
   for (const meta of program.slotMeta) {
     slotToMeta.set(meta.slot, meta);
+  }
+
+  // Build reverse lookup from state slot index to StateMapping for debug labeling
+  const stateSlotToMapping = new Map<number, StateMapping>();
+  for (const mapping of schedule.stateMappings) {
+    if (mapping.kind === 'scalar') {
+      stateSlotToMapping.set(mapping.slotIndex, mapping);
+    } else {
+      stateSlotToMapping.set(mapping.slotStart, mapping);
+    }
   }
 
   // --- PRE-FRAME SETUP ---
@@ -440,10 +454,15 @@ export function* executeFrameStepped(
       const value = evaluateValueExprSignal(step.value as any, program.valueExprs.nodes, state);
       state.state[step.stateSlot as number] = value;
 
-      const writtenSlots = new Map<ValueSlot, SlotValue>();
-      // StateSlot values are in state.state, not in value slots — record as scalar
-      // We use the stateSlot number as a pseudo-slot for tracking
-      yield buildSnapshot(stepIdx, step, 'phase2', totalSteps, program, state, tAbsMs, writtenSlots, prevValues);
+      const writtenStateSlots = new Map<StateSlotId, StateSlotValue>();
+      const mapping = stateSlotToMapping.get(step.stateSlot as number);
+      writtenStateSlots.set(step.stateSlot, {
+        kind: 'scalar',
+        value,
+        stateId: mapping?.stateId ?? (`unknown:${step.stateSlot}` as StableStateId),
+      });
+
+      yield buildSnapshot(stepIdx, step, 'phase2', totalSteps, program, state, tAbsMs, new Map(), prevValues, writtenStateSlots);
     }
 
     if (step.kind === 'fieldStateWrite') {
@@ -452,6 +471,9 @@ export function* executeFrameStepped(
       const instanceRef = requireManyInstance(exprNode.type);
       const instanceDecl = instances.get(instanceRef.instanceId);
       const count = instanceDecl && typeof instanceDecl.count === 'number' ? instanceDecl.count : 0;
+
+      const writtenStateSlots = new Map<StateSlotId, StateSlotValue>();
+
       if (count > 0) {
         const instanceIdStr = String(instanceRef.instanceId);
         const tempBuffer = materializeValueExpr(
@@ -459,12 +481,22 @@ export function* executeFrameStepped(
         );
         const baseSlot = step.stateSlot as number;
         const src = tempBuffer as Float32Array;
+        const writtenValues: number[] = [];
         for (let i = 0; i < count && i < src.length; i++) {
           state.state[baseSlot + i] = src[i];
+          writtenValues.push(src[i]);
         }
+
+        const mapping = stateSlotToMapping.get(baseSlot);
+        writtenStateSlots.set(step.stateSlot, {
+          kind: 'field',
+          values: writtenValues,
+          stateId: mapping?.stateId ?? (`unknown:${step.stateSlot}` as StableStateId),
+          laneCount: count,
+        });
       }
 
-      yield buildSnapshot(stepIdx, step, 'phase2', totalSteps, program, state, tAbsMs, new Map(), prevValues);
+      yield buildSnapshot(stepIdx, step, 'phase2', totalSteps, program, state, tAbsMs, new Map(), prevValues, writtenStateSlots);
     }
   }
 

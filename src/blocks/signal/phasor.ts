@@ -52,16 +52,16 @@ registerBlock({
     const mulFn = ctx.b.opcode(OpCode.Mul);
     const divFn = ctx.b.opcode(OpCode.Div);
     const thousand = ctx.b.constant(floatConst(1000), canonicalType(FLOAT));
-    const dtSeconds = ctx.b.kernelZip([dtSig, thousand], divFn, canonicalType(FLOAT));
-    const increment = ctx.b.kernelZip([frequency.id, dtSeconds], mulFn, canonicalType(FLOAT));
+    const dtSeconds = ctx.b.kernelZip([dtSig, thousand], divFn, outType);
+    const increment = ctx.b.kernelZip([frequency.id, dtSeconds], mulFn, outType);
 
     // Add increment to previous phase
     const addFn = ctx.b.opcode(OpCode.Add);
-    const rawPhase = ctx.b.kernelZip([prevPhase, increment], addFn, canonicalType(FLOAT));
+    const rawPhase = ctx.b.kernelZip([prevPhase, increment], addFn, outType);
 
     // Wrap to [0, 1)
     const wrapFn = ctx.b.opcode(OpCode.Wrap01);
-    const wrappedPhase = ctx.b.kernelMap(rawPhase, wrapFn, canonicalType(FLOAT, unitTurns(), undefined, contractWrap01()));
+    const wrappedPhase = ctx.b.kernelMap(rawPhase, wrapFn, outType);
 
     // Return effects-as-data (no imperative calls)
     return {

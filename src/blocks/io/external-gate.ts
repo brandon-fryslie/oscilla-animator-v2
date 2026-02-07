@@ -60,6 +60,7 @@ registerBlock({
   lower: ({ ctx, config }) => {
     const channel = (config?.channel as string) ?? 'mouse.x';
     const threshold = (config?.threshold as number) ?? 0.5;
+    const outType = ctx.outTypes[0];
 
     const inputSig = ctx.b.external(channel, canonicalType(FLOAT));
     const thresholdSig = ctx.b.constant(floatConst(threshold), canonicalType(FLOAT));
@@ -70,10 +71,8 @@ registerBlock({
     const gtFn = ctx.b.opcode(OpCode.Gt);
     const subFn = ctx.b.opcode(OpCode.Sub);
 
-    const thresholdGtInput = ctx.b.kernelZip([thresholdSig, inputSig], gtFn, canonicalType(FLOAT));
-    const gateSig = ctx.b.kernelZip([oneSig, thresholdGtInput], subFn, canonicalType(FLOAT));
-
-    const outType = ctx.outTypes[0];
+    const thresholdGtInput = ctx.b.kernelZip([thresholdSig, inputSig], gtFn, outType);
+    const gateSig = ctx.b.kernelZip([oneSig, thresholdGtInput], subFn, outType);
 
     return {
       outputsById: {

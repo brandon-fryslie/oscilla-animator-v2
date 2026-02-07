@@ -24,6 +24,7 @@ import { convertCompileErrorsToDiagnostics } from './diagnosticConversion';
 import type { EventHub } from '../events/EventHub';
 import {canonicalType, isMany, requireManyInstance, payloadStride} from '../core/canonical-types';
 import type { ValueExpr, ValueExprId } from './ir/value-expr';
+import type { Step } from './ir/types';
 import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../core/canonical-types';
 // debugService import removed for strict compiler isolation (One Source of Truth)
 import { compilationInspector } from '../services/CompilationInspectorService';
@@ -722,6 +723,7 @@ function convertLinkedIRToProgram(
   const ports: any[] = [];
   const slotToPort = new Map();
   const blockMap = new Map(); // Map numeric BlockId -> string ID
+  const blockDisplayNames = new Map(); // Map numeric BlockId -> user-facing name
 
   // Populate debug index from unlinkedIR.blockOutputs (provenance)
   if (unlinkedIR.blockOutputs) {
@@ -732,6 +734,7 @@ function convertLinkedIRToProgram(
     const blocks = acyclicPatch.blocks || []; // AcyclicOrLegalGraph has blocks array
     for (let i = 0; i < blocks.length; i++) {
       blockMap.set(i, blocks[i].id);
+      blockDisplayNames.set(i, blocks[i].displayName || blocks[i].type);
     }
 
     for (const [blockIndex, outputs] of unlinkedIR.blockOutputs.entries()) {
@@ -769,13 +772,38 @@ function convertLinkedIRToProgram(
     }
   }
 
+  // Populate stepToBlock and stepToPort from schedule steps + exprToBlock provenance
+  const exprToBlock = builder.getExprToBlock();
+  const stepToPortMap = new Map();
+  const scheduleSteps = scheduleIR.steps as readonly Step[];
+  for (let i = 0; i < scheduleSteps.length; i++) {
+    const step = scheduleSteps[i];
+    const exprId = getStepExprId(step);
+    if (exprId !== null) {
+      const blockIdx = exprToBlock.get(exprId);
+      if (blockIdx !== undefined) {
+        stepToBlock.set(i, blockIdx);
+      }
+      // Resolve step → port via slotToPort (for steps that write to a slot)
+      const targetSlot = getStepTargetSlot(step);
+      if (targetSlot !== null) {
+        const portIdx = slotToPort.get(targetSlot);
+        if (portIdx !== undefined) {
+          stepToPortMap.set(i, portIdx);
+        }
+      }
+    }
+  }
+
   const debugIndex = {
     stepToBlock,
     slotToBlock,
-    exprToBlock: builder.getExprToBlock(),
+    exprToBlock,
     ports,
     slotToPort,
     blockMap,
+    blockDisplayNames,
+    stepToPort: stepToPortMap,
   };
 
   // Collect render globals from builder
@@ -803,6 +831,58 @@ function convertLinkedIRToProgram(
   return program;
 }
 
+
+/**
+ * Extract the primary expression ID from a schedule step.
+ * Returns null for infrastructure steps that don't reference a value expression.
+ */
+function getStepExprId(step: Step): ValueExprId | null {
+  switch (step.kind) {
+    case 'evalValue':
+      return step.expr;
+    case 'slotWriteStrided':
+      return step.inputs.length > 0 ? step.inputs[0] : null;
+    case 'materialize':
+      return step.field;
+    case 'stateWrite':
+    case 'fieldStateWrite':
+      return step.value;
+    case 'render':
+      return step.scale?.id ?? null;
+    case 'continuityMapBuild':
+    case 'continuityApply':
+      return null;
+    default: {
+      const _exhaustive: never = step;
+      return _exhaustive;
+    }
+  }
+}
+
+/**
+ * Extract the target slot from a step (for step-to-port resolution).
+ * Returns null if the step doesn't write to a tracked value slot.
+ */
+function getStepTargetSlot(step: Step): ValueSlot | null {
+  switch (step.kind) {
+    case 'evalValue':
+      return step.target.storage === 'value' ? step.target.slot : null;
+    case 'slotWriteStrided':
+      return step.slotBase;
+    case 'materialize':
+      return step.target;
+    case 'render':
+    case 'stateWrite':
+    case 'fieldStateWrite':
+    case 'continuityMapBuild':
+    case 'continuityApply':
+      return null;
+    default: {
+      const _exhaustive: never = step;
+      return _exhaustive;
+    }
+  }
+}
 
 /**
  * Infer instance from a field ValueExpr.

@@ -188,6 +188,47 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
   // Opcode Single Enforcer (Sprint: opcode-consolidation)
   // =============================================================================
 
+  // =============================================================================
+  // Block Lowering Type Authority
+  // =============================================================================
+
+  describe('Block Lowering Type Authority', () => {
+
+    it('block lower() must not use canonicalType() for kernel operations', () => {
+      // Kernel operations (kernelZip, kernelMap, kernelBroadcast) should derive types
+      // from ctx.outTypes[0] or input types, NOT from canonicalType().
+      // canonicalType() loses cardinality/extent resolved during type inference.
+      //
+      // ACCEPTABLE uses of canonicalType():
+      // - Constants: ctx.b.constant(..., canonicalType(...))
+      // - State reads: ctx.b.stateRead(..., canonicalType(...))
+      // - External inputs: ctx.b.external(..., canonicalType(...))
+      // - Time signals: ctx.b.time(..., canonicalType(...))
+      //
+      // FORBIDDEN:
+      // - ctx.b.kernelZip([...], fn, canonicalType(...))
+      // - ctx.b.kernelMap(..., fn, canonicalType(...))
+      // - ctx.b.kernelBroadcast(..., fn, canonicalType(...))
+
+      const kernelOps = ['kernelZip', 'kernelMap', 'kernelBroadcast'];
+      const violations: string[] = [];
+
+      for (const op of kernelOps) {
+        // Find lines containing both the kernel op and canonicalType
+        // This pattern catches: ctx.b.kernelZip([...], fn, canonicalType(...))
+        const matches = grepSrc(`${op}.*canonicalType`, 'src/blocks/');
+        violations.push(...matches);
+      }
+
+      expect(
+        violations,
+        `Block lower() must derive kernel types from ctx.outTypes[0], not canonicalType().\n` +
+        `Found violations:\n${violations.join('\n')}`
+      ).toEqual([]);
+    });
+
+  });
+
   describe('Opcode Single Enforcer', () => {
 
     it('ValueExprMaterializer must not contain inline opcode implementations', () => {

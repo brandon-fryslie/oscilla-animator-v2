@@ -569,6 +569,25 @@
   font-size: 0.688rem;
 }
 
+.sdp-expr-value {
+  color: var(--primary);
+  font-size: 0.688rem;
+  margin-left: auto;
+}
+
+.sdp-expr-value-anomaly {
+  color: var(--error);
+  font-weight: 700;
+  font-size: 0.688rem;
+  margin-left: auto;
+}
+
+.sdp-expr-empty {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: 0.75rem;
+}
+
 /* =============================================================================
  * Why Not Evaluated
  * ========================================================================== */
@@ -682,4 +701,372 @@
 .sdp-inactive-hint {
   font-size: 0.75rem;
   color: var(--text-muted);
+}
+
+/* =============================================================================
+ * Step Status Icons (E5)
+ * ========================================================================== */
+
+.sdp-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  font-size: 0.625rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.sdp-icon-anomaly {
+  background: rgba(255, 107, 107, 0.25);
+  color: var(--error);
+}
+
+.sdp-icon-materialize {
+  background: rgba(163, 120, 255, 0.2);
+  color: #a378ff;
+}
+
+.sdp-icon-state {
+  background: rgba(255, 211, 61, 0.2);
+  color: var(--warning);
+}
+
+.sdp-icon-continuity {
+  background: rgba(100, 181, 246, 0.2);
+  color: #64b5f6;
+}
+
+.sdp-icon-render {
+  background: rgba(78, 205, 196, 0.2);
+  color: var(--primary);
+}
+
+.sdp-icon-ok {
+  color: rgba(78, 205, 196, 0.5);
+}
+
+.sdp-icon-none {
+  color: rgba(136, 136, 136, 0.3);
+}
+
+/* =============================================================================
+ * View Mode Toggle (E5)
+ * ========================================================================== */
+
+.sdp-view-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-left: 4px;
+}
+
+.sdp-view-toggle-btn {
+  padding: 3px 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.688rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.sdp-view-toggle-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.sdp-view-toggle-active {
+  background: var(--primary-dim);
+  color: var(--primary);
+}
+
+.sdp-view-toggle-active:hover {
+  background: rgba(78, 205, 196, 0.3);
+}
+
+/* =============================================================================
+ * Block-Centric Step List (E5)
+ * ========================================================================== */
+
+.sdp-block-group {
+  border-bottom: 1px solid var(--border-color);
+}
+
+.sdp-block-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  background: var(--bg-panel);
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.75rem;
+  transition: background 0.1s;
+}
+
+.sdp-block-group-header:hover {
+  background: var(--bg-hover);
+}
+
+.sdp-block-group-name {
+  color: var(--text-primary);
+  font-weight: 500;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sdp-block-group-count {
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 0.625rem;
+  font-weight: 600;
+  background: rgba(136, 136, 136, 0.15);
+  color: var(--text-secondary);
+}
+
+.sdp-block-group-anomaly {
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 0.625rem;
+  font-weight: 700;
+  background: rgba(255, 107, 107, 0.2);
+  color: var(--error);
+}
+
+/* =============================================================================
+ * Frame Summary (E5)
+ * ========================================================================== */
+
+.sdp-frame-summary {
+  padding: 8px 0;
+}
+
+.sdp-summary-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  font-weight: 600;
+  font-size: 0.813rem;
+  color: var(--primary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.sdp-summary-stats {
+  font-weight: 400;
+  font-size: 0.688rem;
+  color: var(--text-secondary);
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sdp-summary-anomaly-badge {
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(255, 107, 107, 0.2);
+  color: var(--error);
+  font-weight: 600;
+}
+
+.sdp-summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+
+.sdp-summary-table th {
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-color);
+  padding: 4px 10px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.sdp-summary-table td {
+  padding: 4px 10px;
+  border-bottom: 1px solid rgba(15, 52, 96, 0.3);
+}
+
+.sdp-summary-table tr:hover {
+  background: var(--bg-hover);
+}
+
+.sdp-summary-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.sdp-summary-dot-ok {
+  background: var(--primary);
+}
+
+.sdp-summary-dot-error {
+  background: var(--error);
+}
+
+.sdp-summary-block-name {
+  color: var(--text-primary);
+  font-family: 'Courier New', monospace;
+  font-weight: 500;
+}
+
+.sdp-summary-step-count {
+  color: var(--text-secondary);
+  text-align: center;
+  font-family: 'Courier New', monospace;
+}
+
+.sdp-summary-values {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Courier New', monospace;
+}
+
+.sdp-summary-range {
+  color: var(--primary);
+  font-size: 0.688rem;
+}
+
+.sdp-summary-lanes {
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 0.625rem;
+  background: rgba(163, 120, 255, 0.15);
+  color: #a378ff;
+}
+
+.sdp-summary-anomaly-count {
+  color: var(--error);
+  font-weight: 700;
+}
+
+/* =============================================================================
+ * Quick Breakpoint Toggle (E4)
+ * ========================================================================== */
+
+.sdp-step-bp-toggle {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  transition: all 0.15s;
+}
+
+.sdp-step-bp-toggle:hover {
+  border-color: var(--error);
+  background: rgba(255, 107, 107, 0.3);
+}
+
+.sdp-step-bp-active {
+  background: var(--error);
+  border-color: var(--error);
+}
+
+.sdp-step-bp-active:hover {
+  background: rgba(255, 107, 107, 0.7);
+}
+
+.sdp-step-bp-placeholder {
+  width: 10px;
+  flex-shrink: 0;
+}
+
+/* =============================================================================
+ * Anomaly Context Panel (E4)
+ * ========================================================================== */
+
+.sdp-anomaly-context {
+  padding: 8px 12px;
+  background: rgba(255, 107, 107, 0.08);
+  border-bottom: 1px solid rgba(255, 107, 107, 0.3);
+}
+
+.sdp-anomaly-context-header {
+  font-weight: 600;
+  font-size: 0.688rem;
+  color: var(--error);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 4px;
+}
+
+.sdp-anomaly-context-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 0.75rem;
+}
+
+.sdp-anomaly-kind {
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 0.625rem;
+  font-weight: 700;
+  background: rgba(255, 107, 107, 0.2);
+  color: var(--error);
+  min-width: 28px;
+  text-align: center;
+}
+
+.sdp-anomaly-source {
+  color: var(--text-primary);
+  font-family: 'Courier New', monospace;
+}
+
+/* =============================================================================
+ * Advanced Toggle & Slot Picker (E4)
+ * ========================================================================== */
+
+.sdp-bp-advanced-toggle {
+  font-size: 0.688rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 2px 0;
+  text-decoration: underline;
+  margin-top: 2px;
+}
+
+.sdp-bp-advanced-toggle:hover {
+  color: var(--text-secondary);
+}
+
+.sdp-slot-picker {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.sdp-slot-picker .sdp-bp-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.sdp-slot-picker .sdp-bp-input {
+  width: 60px;
+  flex-shrink: 0;
 }

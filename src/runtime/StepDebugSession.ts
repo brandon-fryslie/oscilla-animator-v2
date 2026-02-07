@@ -14,6 +14,7 @@ import type { CompiledProgramIR, ValueSlot } from '../compiler/ir/program';
 import type { RuntimeState } from './RuntimeState';
 import type { RenderBufferArena } from '../render/RenderBufferArena';
 import type { RenderFrameIR } from '../render/types';
+import type { ValueExprId } from '../compiler/ir/Indices';
 import type { StepSnapshot, Breakpoint, SessionMode, LaneIdentity } from './StepDebugTypes';
 import { executeFrameStepped } from './executeFrameStepped';
 import { buildLaneIdentityMap } from './ValueInspector';
@@ -256,6 +257,28 @@ export class StepDebugSession {
     return identityMap.get(slot) ?? null;
   }
 
+  // =========================================================================
+  // Expression Tree Query (E3: DAG visualization)
+  // =========================================================================
+
+  /**
+   * Read the cached scalar value for an expression from runtime state.
+   * Returns null if the expression hasn't been evaluated this frame or isn't a scalar.
+   */
+  getCachedValue(exprId: ValueExprId): number | null {
+    const numId = exprId as number;
+    const cache = this._state.cache;
+    if (cache.stamps[numId] === cache.frameId) {
+      return cache.values[numId];
+    }
+    return null;
+  }
+
+  /** Expose the compiled program for expression tree building (read-only). */
+  get program(): CompiledProgramIR {
+    return this._program;
+  }
+
   /**
    * Dispose the session. If a frame is in progress, finishes it first
    * to leave RuntimeState in a consistent state.
@@ -281,9 +304,15 @@ export class StepDebugSession {
         case 'step-index':
           if (snapshot.stepIndex === bp.index) return true;
           break;
-        case 'block-id':
-          if (snapshot.blockId === bp.blockId) return true;
+        case 'block-id': {
+          // Resolve numeric blockId to string ID via blockMap, since breakpoints
+          // store the patch string key (e.g. "b0") not the numeric block index
+          if (snapshot.blockId !== null) {
+            const stringId = this._program.debugIndex.blockMap.get(snapshot.blockId);
+            if (stringId === (bp.blockId as string)) return true;
+          }
           break;
+        }
         case 'phase-boundary':
           if (snapshot.phase === 'phase-boundary') return true;
           break;

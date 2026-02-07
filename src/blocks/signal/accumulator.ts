@@ -55,11 +55,11 @@ registerBlock({
     // Compute new value: reset ? 0 : (currentValue + delta)
     const add = ctx.b.opcode(OpCode.Add);
     const zero = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
-    const newValue = ctx.b.kernelZip([currentValue, delta.id], add, canonicalType(FLOAT));
+    const newValue = ctx.b.kernelZip([currentValue, delta.id], add, outType);
 
     // Select: reset ? 0 : newValue
     const select = ctx.b.opcode(OpCode.Select);
-    const finalValue = ctx.b.kernelZip([reset.id, zero, newValue], select, canonicalType(FLOAT));
+    const finalValue = ctx.b.kernelZip([reset.id, zero, newValue], select, outType);
 
     // Return effects-as-data (no imperative calls)
     return {
