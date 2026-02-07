@@ -28,6 +28,12 @@ export type PerspectiveVarId = Brand<string, 'PerspectiveVarId'>;
 export type BranchVarId = Brand<string, 'BranchVarId'>;
 
 // =============================================================================
+// Instance Variable IDs (for cardinality solver)
+// =============================================================================
+
+export type InstanceVarId = Brand<string, 'InstanceVarId'>;
+
+// =============================================================================
 // Domain and Instance IDs
 // =============================================================================
 
@@ -52,6 +58,8 @@ export const temporalityVarId = (s: string) => s as TemporalityVarId;
 export const bindingVarId = (s: string) => s as BindingVarId;
 export const perspectiveVarId = (s: string) => s as PerspectiveVarId;
 export const branchVarId = (s: string) => s as BranchVarId;
+
+export const instanceVarId = (s: string) => s as InstanceVarId;
 
 export const domainTypeId = (s: string) => s as DomainTypeId;
 export const instanceId = (s: string) => s as InstanceId;

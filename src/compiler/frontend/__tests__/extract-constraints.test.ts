@@ -48,8 +48,9 @@ describe('extractConstraints', () => {
     const edgeConstraints = constraints.payloadUnit.filter((c) => c.kind === 'edge');
     expect(edgeConstraints.length).toBeGreaterThanOrEqual(1);
 
-    // Edge pairs should match
-    expect(constraints.edgePairs.length).toBeGreaterThanOrEqual(1);
+    // Edge → equal cardinality constraints should exist
+    const cardEqualConstraints = constraints.cardinality.filter((c) => c.kind === 'equal');
+    expect(cardEqualConstraints.length).toBeGreaterThanOrEqual(1);
   });
 
   it('emits same-var constraints for polymorphic blocks', () => {
@@ -97,7 +98,7 @@ describe('extractConstraints', () => {
     // Same constraint count
     expect(c1.payloadUnit.length).toBe(c2.payloadUnit.length);
     expect(c1.cardinality.length).toBe(c2.cardinality.length);
-    expect(c1.edgePairs.length).toBe(c2.edgePairs.length);
+    expect(c1.baseCardinalityAxis.size).toBe(c2.baseCardinalityAxis.size);
   });
 
   it('empty graph produces empty constraints', () => {
@@ -108,7 +109,7 @@ describe('extractConstraints', () => {
     expect(constraints.portBaseTypes.size).toBe(0);
     expect(constraints.payloadUnit.length).toBe(0);
     expect(constraints.cardinality.length).toBe(0);
-    expect(constraints.edgePairs.length).toBe(0);
+    expect(constraints.baseCardinalityAxis.size).toBe(0);
   });
 
   it('portBaseTypes types come from InferenceCanonicalType (may have vars)', () => {

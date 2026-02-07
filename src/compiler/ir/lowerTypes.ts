@@ -107,6 +107,31 @@ export function asExpr(ref: ValueRefPacked): ValueRefExpr {
 
 
 // =============================================================================
+// Collect Input Types
+// =============================================================================
+
+/**
+ * A single entry in a collect port's input list.
+ * Each incoming edge to a collect port produces one entry with its own type.
+ *
+ * // [LAW:one-type-per-behavior] Collect entries are derived from normal edges.
+ */
+export interface CollectInputEntry {
+  /** Resolved value reference for this edge's output */
+  readonly value: ValueRefExpr;
+  /** Per-edge resolved type (from collectEdgeTypes) */
+  readonly type: CanonicalType;
+  /** Edge alias (from Edge.alias, used for Expression DSL member access) */
+  readonly alias?: string;
+  /** Source block ID (for building canonical addresses) */
+  readonly sourceBlockId: string;
+  /** Source port name */
+  readonly sourcePort: string;
+  /** Edge sort key for deterministic ordering */
+  readonly sortKey: number;
+}
+
+// =============================================================================
 // Effects-as-Data Types (WI-1)
 // =============================================================================
 

@@ -39,7 +39,7 @@ export interface TokenizedSegment {
   /** Only for references: full canonical address */
   readonly sourceAddress?: string;
 
-  /** Only for references: whether this reference has a vararg connection */
+  /** Only for references: whether this reference has a collect edge */
   readonly isConnected?: boolean;
 }
 
@@ -63,7 +63,7 @@ const REFERENCE_PATTERN = /\b([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\
  *
  * @param text - Expression text to tokenize
  * @param addressRegistry - Registry for resolving shorthands to canonical addresses
- * @param connectedShorthands - Set of shorthand strings that have vararg connections
+ * @param connectedShorthands - Set of shorthand strings that have collect edges
  * @returns Array of tokenized segments
  *
  * @example

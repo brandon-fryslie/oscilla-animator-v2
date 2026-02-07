@@ -16,7 +16,7 @@ import type { BlockId, PortId, BlockRole, EdgeRole, DefaultSource } from '../../
 import type { Block, Edge, Patch, InputPort, OutputPort } from '../../graph/Patch';
 import type { NormalizedPatch, NormalizedEdge, BlockIndex } from './normalize-indexing';
 import { blockIndex } from './normalize-indexing';
-import type { TypeResolvedPatch, PortKey } from './analyze-type-constraints';
+import type { TypeResolvedPatch, PortKey, CollectEdgeKey } from '../ir/patches';
 import type { CanonicalType } from '../../core/canonical-types';
 import type { StrictTypedGraph, DraftPortKey } from './type-facts';
 import type { DraftBlock, DraftEdge, DraftEdgeRole } from './draft-graph';
@@ -70,6 +70,9 @@ export function bridgeToNormalizedPatch(
   // Step 5: Translate DraftPortKey → PortKey for type map
   const portTypes = translatePortTypes(strict.portTypes, stringIndexMap);
 
+  // Step 6: Translate collectEdgeTypes (DraftPortKey-flavored keys → CollectEdgeKey)
+  const collectEdgeTypes = translateCollectEdgeTypes(strict.collectEdgeTypes, stringIndexMap);
+
   const normalizedPatch: NormalizedPatch = {
     patch: syntheticPatch,
     blockIndex: blockIndexMap,
@@ -80,6 +83,7 @@ export function bridgeToNormalizedPatch(
   const typeResolved: TypeResolvedPatch = {
     ...normalizedPatch,
     portTypes,
+    collectEdgeTypes: collectEdgeTypes.size > 0 ? collectEdgeTypes : undefined,
   };
 
   return { normalizedPatch, typeResolved };
@@ -94,7 +98,7 @@ export function bridgeToNormalizedPatch(
  *
  * For blocks that exist in the expandedPatch (user/composite blocks), we pull
  * inputPorts/outputPorts from there to preserve per-instance overrides (combineMode,
- * defaultSource, lenses, varargConnections).
+ * defaultSource, lenses).
  *
  * For elaborated blocks (inserted by the fixpoint engine, not in expandedPatch),
  * we build ports from the BlockDef with defaults.
@@ -284,4 +288,41 @@ function translatePortKey(
   if (idx === undefined) return null;
 
   return `${idx}:${portName}:${dir}` as PortKey;
+}
+
+// =============================================================================
+// Collect Edge Type Translation
+// =============================================================================
+
+/**
+ * Translate collect edge types from DraftPortKey-flavored keys to CollectEdgeKey.
+ *
+ * Input key format: `${blockId}:${portName}:${edgeIndex}` (from tryFinalizeStrict)
+ * Output key format: `${blockIndex}:${portName}:${edgeIndex}` (CollectEdgeKey)
+ */
+function translateCollectEdgeTypes(
+  draftCollectTypes: ReadonlyMap<string, CanonicalType> | undefined,
+  blockIndexMap: ReadonlyMap<string, BlockIndex>,
+): ReadonlyMap<CollectEdgeKey, CanonicalType> {
+  const result = new Map<CollectEdgeKey, CanonicalType>();
+  if (!draftCollectTypes) return result;
+
+  for (const [draftKey, type] of draftCollectTypes) {
+    // Format: `${blockId}:${portName}:${edgeIndex}`
+    // edgeIndex is always a number (the last segment)
+    const parts = draftKey.split(':');
+    if (parts.length < 3) continue;
+
+    const edgeIndex = parts[parts.length - 1];
+    const portName = parts[parts.length - 2];
+    const blockId = parts.slice(0, -2).join(':');
+
+    const idx = blockIndexMap.get(blockId);
+    if (idx === undefined) continue;
+
+    const collectKey = `${idx}:${portName}:${edgeIndex}` as CollectEdgeKey;
+    result.set(collectKey, type);
+  }
+
+  return result;
 }

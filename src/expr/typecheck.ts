@@ -52,7 +52,7 @@ export type TypeEnv = ReadonlyMap<string, PayloadType>;
 export interface BlockReferenceContext {
   /** Address registry for resolving block references */
   readonly addressRegistry: AddressRegistry;
-  /** Allowed payload types (from vararg constraint) */
+  /** Allowed payload types (from collect AcceptsSpec) */
   readonly allowedPayloads: readonly PayloadType[];
 }
 

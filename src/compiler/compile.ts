@@ -15,36 +15,27 @@
  */
 
 import type { Patch } from '../graph';
-import { normalize, type NormalizedPatch } from '../graph/normalize';
+import type { NormalizedPatch } from '../graph/normalize';
 import type { CompiledProgramIR, SlotMetaEntry, ValueSlot, FieldSlotEntry, OutputSpecIR, ExprProvenanceIR, ExprUserTarget } from './ir/program';
 import type { BlockId } from '../types';
 import type { UnlinkedIRFragments } from './backend/lower-blocks';
 import type { ScheduleIR } from './backend/schedule-program';
 import type { AcyclicOrLegalGraph } from './ir/patches';
-import { convertCompileErrorsToDiagnostics } from './diagnosticConversion';
 import type { EventHub } from '../events/EventHub';
-import {canonicalType, isMany, requireManyInstance, payloadStride} from '../core/canonical-types';
+import { canonicalType, requireManyInstance, payloadStride } from '../core/canonical-types';
 import type { ValueExpr, ValueExprId } from './ir/value-expr';
 import type { Step } from './ir/types';
-import { FLOAT, INT, BOOL, VEC2, VEC3, COLOR,  CAMERA_PROJECTION } from '../core/canonical-types';
-// debugService import removed for strict compiler isolation (One Source of Truth)
+import { FLOAT } from '../core/canonical-types';
 import { compilationInspector } from '../services/CompilationInspectorService';
 import { computeRenderReachableBlocks } from './reachability';
 import { resolveKernels } from './resolve-kernels';
 import { createDefaultRegistry } from '../runtime/kernels/default-registry';
-import { partitionByFlags, getDefaultDiagnosticFlags, type DiagnosticSeverityOverride } from './diagnostic-flags';
-import type { TypeConstraintError, PortKey } from './frontend/analyze-type-constraints';
-import { unitScalar } from '../core/canonical-types/units';
-import type { FrontendResult } from './frontend';
-
-
+import { compileFrontend, type FrontendResult } from './frontend';
 
 // Import all block registrations (side-effect import)
 import '../blocks/all';
 
 // Import passes
-import { pass1TypeConstraints } from './frontend/analyze-type-constraints';
-import { pass2TypeGraph } from './frontend/analyze-type-graph';
 import { pass3Time } from './backend/derive-time-model';
 import { pass4DepGraph } from './backend/derive-dep-graph';
 import { pass5CycleValidation } from './backend/schedule-scc';
@@ -67,6 +58,7 @@ export interface CompileError {
 export type CompileSuccess = {
   readonly kind: 'ok';
   readonly program: CompiledProgramIR;
+  readonly warnings: readonly CompileError[];
 };
 
 export type CompileFailure = {
@@ -84,10 +76,8 @@ export interface CompileOptions {
   readonly patchId?: string;
   readonly patchRevision?: number;
   readonly events: EventHub;
-  readonly diagnosticFlags?: Record<string, DiagnosticSeverityOverride>;
-  /** Precomputed frontend result (normalization + type resolution). When provided, compile() skips inline frontend passes. */
+  /** Precomputed frontend result. When provided, compile() reuses it. Otherwise runs compileFrontend() internally. */
   readonly precomputedFrontend?: FrontendResult;
-
 }
 
 // =============================================================================
@@ -103,230 +93,54 @@ export interface CompileOptions {
  */
 export function compile(patch: Patch, options?: CompileOptions): CompileResult {
   const compileId = options?.patchId ? `${options.patchId}:${options.patchRevision || 0}` : 'unknown';
-  const startTime = performance.now();
 
   // [LAW:one-source-of-truth] compile() owns the inspector snapshot lifecycle unconditionally.
-  try {
-    compilationInspector.beginCompile(compileId);
-  } catch (e) {
-    console.warn('[CompilationInspector] Failed to begin compile:', e);
-  }
-
-  // Emit CompileBegin event
-  if (options) {
-    options.events.emit({
-      type: 'CompileBegin',
-      compileId,
-      patchId: options.patchId || 'unknown',
-      patchRevision: options.patchRevision || 0,
-      trigger: 'manual',
-    });
-  }
+  // [LAW:single-enforcer] Inspector is internally resilient — no try/catch needed.
+  compilationInspector.beginCompile(compileId);
 
   try {
-    let normalized: NormalizedPatch;
-    let typedPatch: ReturnType<typeof pass2TypeGraph>;
-    let flagWarnings: TypeConstraintError[] = [];
-
     // =========================================================================
-    // Frontend: Use precomputed result or run inline
+    // Frontend: Use precomputed result or run compileFrontend()
     // =========================================================================
+    let frontend: FrontendResult;
     if (options?.precomputedFrontend) {
-      // Reuse precomputed frontend result
-      normalized = options.precomputedFrontend.normalizedPatch;
-      typedPatch = options.precomputedFrontend.typedPatch;
-
-      // Capture precomputed passes (for inspection)
-      try {
-        compilationInspector.capturePass('normalization', patch, normalized);
-        compilationInspector.capturePass('type-constraints', normalized, typedPatch);
-        compilationInspector.capturePass('type-graph', normalized, typedPatch);
-        compilationInspector.capturePass('axis-validation', typedPatch, {
-          errors: options.precomputedFrontend.errors,
-        });
-        compilationInspector.capturePass('cycle-analysis', typedPatch,
-          options.precomputedFrontend.cycleSummary,
-        );
-      } catch (e) {
-        console.warn('[CompilationInspector] Failed to capture precomputed frontend:', e);
-      }
+      frontend = options.precomputedFrontend;
     } else {
-      // Run frontend inline (original monolithic path)
-      // Pass 1: Normalization
-      const normResult = normalize(patch);
-
-      if (normResult.kind === 'error') {
-        const compileErrors: CompileError[] = normResult.errors.map((e) => {
-          switch (e.kind) {
-            case 'DanglingEdge':
-              return {
-                kind: e.kind,
-                message: `Edge references missing block (${e.missing})`,
-                blockId: e.edge.from.blockId,
-              };
-            case 'DuplicateBlockId':
-              return {
-                kind: e.kind,
-                message: `Duplicate block ID: ${e.id}`,
-                blockId: e.id,
-              };
-            case 'UnknownPort':
-              return {
-                kind: 'UnknownBlockType',
-                message: `Port '${e.portId}' does not exist on block '${e.blockId}' (${e.direction})`,
-                blockId: e.blockId,
-                portId: e.portId,
-              };
-            case 'NoAdapterFound':
-              return {
-                kind: 'TypeMismatch',
-                message: `No adapter found for type conversion: ${e.fromType} → ${e.toType}`,
-                blockId: e.edge.to.blockId,
-                portId: e.edge.to.slotId,
-              };
-            case 'vararg':
-              return {
-                kind: 'VarargError',
-                message: e.message,
-                blockId: e.where.blockId,
-                portId: e.where.portId,
-              };
-            case 'CompositeExpansion':
-              return {
-                kind: 'CompositeExpansion',
-                message: e.message,
-                blockId: e.compositeBlockId,
-                code: e.code,
-              };
-            default: {
-              const _exhaustive: never = e;
-              return {
-                kind: 'UnknownBlockType',
-                message: `Unknown normalization error: ${JSON.stringify(_exhaustive)}`,
-              };
-            }
-          }
-        });
-
-        return emitFailure(options, startTime, compileId, compileErrors);
+      const frontendResult = compileFrontend(patch);
+      if (frontendResult.kind === 'error') {
+        const compileErrors: CompileError[] = frontendResult.errors.map((e) => ({
+          kind: e.kind,
+          message: e.message,
+          blockId: e.blockId,
+          portId: e.portId,
+        }));
+        return makeFailure(compileErrors);
       }
-
-      normalized = normResult.patch;
-
-      // Capture normalization pass
-      try {
-        compilationInspector.capturePass('normalization', patch, normalized);
-      } catch (e) {
-        console.warn('[CompilationInspector] Failed to capture normalization:', e);
+      if (!frontendResult.result.backendReady) {
+        const compileErrors: CompileError[] = frontendResult.result.errors.map((e) => ({
+          kind: e.kind,
+          message: e.message,
+          blockId: e.blockId,
+          portId: e.portId,
+        }));
+        return makeFailure(compileErrors);
       }
-
-      // Pass 1: Type Constraints (unit and payload inference)
-      // Resolves polymorphic unit and payload variables through constraint propagation
-      // Output is TypeResolvedPatch - THE source of truth for all port types
-      const pass1Result = pass1TypeConstraints(normalized);
-      // Track block indices that had pass1 errors filtered out (unreachable)
-      const pass1FilteredBlockIndices = new Set<number>();
-      if (pass1Result.errors.length > 0) {
-        const { errors: fatalErrors, warnings } = partitionByFlags(
-          pass1Result.errors,
-          options?.diagnosticFlags,
-        );
-        flagWarnings = warnings;
-        if (fatalErrors.length > 0) {
-          // Apply reachability filtering: errors on blocks not reachable from
-          // render blocks become warnings. Only applies when the patch has
-          // render blocks — if there are no render blocks, all errors are fatal
-          // (there's no output to isolate errors from).
-          const reachableBlocks = computeRenderReachableBlocks(
-            normalized.blocks,
-            normalized.edges
-          );
-          let reachableFatalErrors: typeof fatalErrors;
-          if (reachableBlocks.size === 0) {
-            // No render blocks: all errors are fatal (no error isolation)
-            reachableFatalErrors = fatalErrors;
-          } else {
-            reachableFatalErrors = [];
-            for (const e of fatalErrors) {
-              if (reachableBlocks.has(e.blockIndex as import('./ir/patches').BlockIndex)) {
-                reachableFatalErrors.push(e);
-              } else {
-                pass1FilteredBlockIndices.add(e.blockIndex);
-              }
-            }
-          }
-          if (reachableFatalErrors.length > 0) {
-            const compileErrors: CompileError[] = reachableFatalErrors.map((e) => ({
-              kind: e.kind,
-              message: `${e.message}\nSuggestions:\n${e.suggestions.map((s: string) => `  - ${s}`).join('\n')}`,
-              blockId: normalized.blocks[e.blockIndex]?.id,
-              portId: e.portName,
-            }));
-            return emitFailure(options, startTime, compileId, compileErrors);
-          }
-        }
-      }
-
-      // Unitless fallback: when ConflictingUnits is downgraded to warning,
-      // replace the conflicting unit with unitScalar (unitless)
-      let typeResolved = pass1Result;
-      if (flagWarnings.some((w) => w.kind === 'ConflictingUnits')) {
-        const patchedPortTypes = new Map(pass1Result.portTypes);
-        for (const w of flagWarnings) {
-          if (w.kind === 'ConflictingUnits') {
-            const key = `${w.blockIndex}:${w.portName}:${w.direction}` as PortKey;
-            const existing = patchedPortTypes.get(key);
-            if (existing) {
-              patchedPortTypes.set(key, { ...existing, unit: unitScalar() });
-            }
-          }
-        }
-        typeResolved = { ...pass1Result, portTypes: patchedPortTypes };
-      }
-
-      try {
-        compilationInspector.capturePass('type-constraints', normalized, typeResolved);
-      } catch (e) {
-        console.warn('[CompilationInspector] Failed to capture type-constraints:', e);
-      }
-
-      // Pass 2: Type Graph (validates types using resolved types from pass1)
-      try {
-        typedPatch = pass2TypeGraph(typeResolved);
-      } catch (pass2Error) {
-        // Pass 2 may fail due to unresolved types on blocks that had pass 1 errors filtered out.
-        // Only suppress if ALL error-referenced blocks had their pass 1 errors filtered.
-        if (pass1FilteredBlockIndices.size === 0) {
-          throw pass2Error; // No filtered blocks — all pass 2 errors are genuine
-        }
-        // Check if error only references blocks that had pass 1 errors filtered
-        const errMsg = (pass2Error as Error).message || '';
-        const blockRefPattern = /block\[(\d+)\]/g;
-        let match: RegExpExecArray | null;
-        let allFiltered = true;
-        while ((match = blockRefPattern.exec(errMsg)) !== null) {
-          const blockIdx = parseInt(match[1], 10);
-          if (!pass1FilteredBlockIndices.has(blockIdx)) {
-            allFiltered = false;
-            break;
-          }
-        }
-        if (!allFiltered) {
-          throw pass2Error; // Some blocks with pass 2 errors weren't filtered in pass 1
-        }
-        // All pass 2 errors are on blocks that already had pass 1 errors filtered — continue
-        typedPatch = {
-          ...typeResolved,
-          blockOutputTypes: new Map(),
-        };
-      }
-
-      try {
-        compilationInspector.capturePass('type-graph', normalized, typedPatch);
-      } catch (e) {
-        console.warn('[CompilationInspector] Failed to capture type-graph:', e);
-      }
+      frontend = frontendResult.result;
     }
+
+    const normalized = frontend.normalizedPatch;
+    const typedPatch = frontend.typedPatch;
+
+    // Capture frontend passes (for inspection)
+    compilationInspector.capturePass('normalization', patch, normalized);
+    compilationInspector.capturePass('type-constraints', normalized, typedPatch);
+    compilationInspector.capturePass('type-graph', normalized, typedPatch);
+    compilationInspector.capturePass('axis-validation', typedPatch, {
+      errors: frontend.errors,
+    });
+    compilationInspector.capturePass('cycle-analysis', typedPatch,
+      frontend.cycleSummary,
+    );
 
     // =========================================================================
     // Backend: Always runs (requires frontend output)
@@ -335,29 +149,17 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
     // Pass 3: Time Topology
     const timeResolvedPatch = pass3Time(typedPatch);
 
-    try {
-      compilationInspector.capturePass('time', typedPatch, timeResolvedPatch);
-    } catch (e) {
-      console.warn('[CompilationInspector] Failed to capture time:', e);
-    }
+    compilationInspector.capturePass('time', typedPatch, timeResolvedPatch);
 
     // Pass 4: Dependency Graph
     const depGraphPatch = pass4DepGraph(timeResolvedPatch);
 
-    try {
-      compilationInspector.capturePass('depgraph', timeResolvedPatch, depGraphPatch);
-    } catch (e) {
-      console.warn('[CompilationInspector] Failed to capture depgraph:', e);
-    }
+    compilationInspector.capturePass('depgraph', timeResolvedPatch, depGraphPatch);
 
     // Pass 5: Cycle Validation (SCC)
     const acyclicPatch = pass5CycleValidation(depGraphPatch);
 
-    try {
-      compilationInspector.capturePass('scc', depGraphPatch, acyclicPatch);
-    } catch (e) {
-      console.warn('[CompilationInspector] Failed to capture scc:', e);
-    }
+    compilationInspector.capturePass('scc', depGraphPatch, acyclicPatch);
 
     // Pass 6: Block Lowering
     const addressRegistry = AddressRegistry.buildFromPatch(normalized.patch);
@@ -368,25 +170,11 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
       addressRegistry,
     });
 
-    try {
-      compilationInspector.capturePass('block-lowering', acyclicPatch, unlinkedIR);
-    } catch (e) {
-      console.warn('[CompilationInspector] Failed to capture block-lowering:', e);
-    }
+    compilationInspector.capturePass('block-lowering', acyclicPatch, unlinkedIR);
 
     // Check for errors from pass 6 - Filter by reachability
-    // Collect warnings for unreachable blocks to include in CompileEnd event
-    let unreachableBlockWarnings: Array<{
-      id: string;
-      code: 'W_BLOCK_UNREACHABLE_ERROR';
-      severity: 'warn';
-      domain: 'compile';
-      primaryTarget: { kind: 'block'; blockId: string };
-      title: string;
-      message: string;
-      scope: { patchRevision: number; compileId: string };
-      metadata: { firstSeenAt: number; lastSeenAt: number; occurrenceCount: number };
-    }> = [];
+    // Collect warnings for unreachable blocks to surface on result
+    let unreachableBlockWarnings: CompileError[] = [];
 
     if (unlinkedIR.errors.length > 0) {
       // Compute which blocks are reachable from render blocks
@@ -420,25 +208,12 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
         }
       }
 
-      // Build warning diagnostics for unreachable block errors
-      // These will be emitted with the CompileEnd event so DiagnosticHub can process them
-      if (unreachableErrors.length > 0 && options) {
-        unreachableBlockWarnings = unreachableErrors.map((error) => ({
-          id: `W_BLOCK_UNREACHABLE_ERROR:${error.where?.blockId}:rev${options.patchRevision || 0}`,
-          code: 'W_BLOCK_UNREACHABLE_ERROR' as const,
-          severity: 'warn' as const,
-          domain: 'compile' as const,
-          primaryTarget: { kind: 'block' as const, blockId: error.where?.blockId || 'unknown' },
-          title: `Unreachable Block Error: ${error.code}`,
-          message: `Block '${error.where?.blockId || 'unknown'}' has error but is not connected to render pipeline: ${error.message}\n\nSuggestion: Connect this block to the render pipeline or remove it.`,
-          scope: { patchRevision: options.patchRevision || 0, compileId },
-          metadata: {
-            firstSeenAt: Date.now(),
-            lastSeenAt: Date.now(),
-            occurrenceCount: 1,
-          },
-        }));
-      }
+      // Build warnings for unreachable block errors
+      unreachableBlockWarnings = unreachableErrors.map((error) => ({
+        kind: 'W_BLOCK_UNREACHABLE_ERROR',
+        message: `Block '${error.where?.blockId || 'unknown'}' has error but is not connected to render pipeline: ${error.message}\n\nSuggestion: Connect this block to the render pipeline or remove it.`,
+        blockId: error.where?.blockId,
+      }));
 
       // Only fail compilation if there are reachable errors
       if (reachableErrors.length > 0) {
@@ -447,7 +222,7 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
           message: e.message,
           blockId: e.where?.blockId,
         }));
-        return emitFailure(options, startTime, compileId, compileErrors);
+        return makeFailure(compileErrors);
       }
     }
 
@@ -455,11 +230,7 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
     // Pass 7: Schedule Construction
     const scheduleIR = pass7Schedule(unlinkedIR, acyclicPatch);
 
-    try {
-      compilationInspector.capturePass('schedule', unlinkedIR, scheduleIR);
-    } catch (e) {
-      console.warn('[CompilationInspector] Failed to capture schedule:', e);
-    }
+    compilationInspector.capturePass('schedule', unlinkedIR, scheduleIR);
 
     // Phase B: Kernel Resolution
     // Create default registry and resolve all kernel references to handles
@@ -473,92 +244,22 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
         kind: e.kind,
         message: e.message,
       }));
-      return emitFailure(options, startTime, compileId, compileErrors);
+      return makeFailure(compileErrors);
     }
 
     // Convert to CompiledProgramIR (now with registry)
     const compiledIR = convertLinkedIRToProgram(unlinkedIR, scheduleIR, acyclicPatch, registry);
 
-    // Build edge-to-slot map logic removed from compiler (migrated to main.ts)
-
-
-    // End compilation inspection (success)
-    try {
-      compilationInspector.endCompile('success');
-    } catch (e) {
-      console.warn('[CompilationInspector] Failed to end compile:', e);
-    }
-
-    // Emit CompileEnd event (success)
-    // Include warnings for unreachable blocks that had errors (they didn't block compilation)
-    if (options) {
-      const durationMs = performance.now() - startTime;
-      const successDiagnostic = {
-        id: `compile-success:rev${options.patchRevision || 0}`,
-        code: 'I_COMPILE_SUCCESS' as const,
-        severity: 'info' as const,
-        domain: 'compile' as const,
-        primaryTarget: { kind: 'graphSpan' as const, blockIds: [] },
-        title: 'Compilation Successful',
-        message: `Compiled in ${durationMs.toFixed(1)}ms`,
-        scope: { patchRevision: options.patchRevision || 0, compileId },
-        metadata: {
-          firstSeenAt: Date.now(),
-          lastSeenAt: Date.now(),
-          occurrenceCount: 1,
-        },
-      };
-      // Flag warning diagnostics (errors downgraded to warnings by user settings)
-      const flagWarningDiagnostics = flagWarnings.map((w) => ({
-        id: `W_FLAG_DOWNGRADED:${w.kind}:${normalized.blocks[w.blockIndex]?.id}:${w.portName}:rev${options.patchRevision || 0}`,
-        code: 'W_FLAG_DOWNGRADED' as const,
-        severity: 'warn' as const,
-        domain: 'compile' as const,
-        primaryTarget: {
-          kind: 'port' as const,
-          blockId: normalized.blocks[w.blockIndex]?.id || 'unknown',
-          portId: w.portName,
-        },
-        title: `${w.kind} (downgraded to warning)`,
-        message: `${w.message}\n\nThis error was downgraded to a warning by compiler flag settings.`,
-        scope: { patchRevision: options.patchRevision || 0, compileId },
-        metadata: { firstSeenAt: Date.now(), lastSeenAt: Date.now(), occurrenceCount: 1 },
-      }));
-      const diagnostics = [successDiagnostic, ...unreachableBlockWarnings, ...flagWarningDiagnostics];
-      options.events.emit({
-        type: 'CompileEnd',
-        compileId,
-        patchId: options.patchId || 'unknown',
-        patchRevision: options.patchRevision || 0,
-        status: 'success',
-        durationMs,
-        diagnostics,
-      });
-    }
-
+    compilationInspector.endCompile('success');
     return {
       kind: 'ok',
       program: compiledIR,
+      warnings: unreachableBlockWarnings,
     };
   } catch (e: unknown) {
-    // Catch errors from any pass
     const error = e instanceof Error ? e : new Error(String(e));
     const errorKind = (e as { code?: string }).code || 'CompilationFailed';
-    const errorMessage = error.message || 'Unknown compilation error';
-
-    const compileErrors: CompileError[] = [{
-      kind: errorKind,
-      message: errorMessage,
-    }];
-
-    // End compilation inspection (failure)
-    try {
-      compilationInspector.endCompile('failure');
-    } catch (e2) {
-      console.warn('[CompilationInspector] Failed to end compile:', e2);
-    }
-
-    return emitFailure(options, startTime, compileId, compileErrors);
+    return makeFailure([{ kind: errorKind, message: error.message || 'Unknown compilation error' }]);
   }
 }
 
@@ -566,39 +267,10 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
 // Helper Functions
 // =============================================================================
 
-function emitFailure(
-  options: CompileOptions | undefined,
-  startTime: number,
-  compileId: string,
-  errors: CompileError[]
-): CompileFailure {
-  // End compilation inspection (failure) if not already called
-  try {
-    if (compilationInspector['currentSnapshot']) {
-      compilationInspector.endCompile('failure');
-    }
-  } catch (e) {
-    console.warn('[CompilationInspector] Failed to end compile:', e);
-  }
-
-  if (options) {
-    const durationMs = performance.now() - startTime;
-    const diagnostics = convertCompileErrorsToDiagnostics(errors, options.patchRevision || 0, compileId);
-    options.events.emit({
-      type: 'CompileEnd',
-      compileId,
-      patchId: options.patchId || 'unknown',
-      patchRevision: options.patchRevision || 0,
-      status: 'failure',
-      durationMs,
-      diagnostics,
-    });
-  }
-
-  return {
-    kind: 'error',
-    errors,
-  };
+// [LAW:single-enforcer] Events are emitted by CompileOrchestrator, not compile().
+function makeFailure(errors: CompileError[]): CompileFailure {
+  compilationInspector.endCompile('failure');
+  return { kind: 'error', errors };
 }
 
 /**

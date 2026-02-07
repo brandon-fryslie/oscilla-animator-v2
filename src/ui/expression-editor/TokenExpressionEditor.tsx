@@ -253,19 +253,20 @@ export const TokenExpressionEditor = forwardRef<TokenExpressionEditorHandle, Tok
       return AddressRegistry.buildFromPatch(patch);
     }, [patch]);
 
-    // Build set of connected shorthands
+    // Build set of connected shorthands from collect edges targeting refs port
+    // [LAW:one-type-per-behavior] Read from edges.
     const connectedShorthands = useMemo(() => {
       const set = new Set<string>();
-      const block = patch.blocks.get(blockId);
-      if (!block) return set;
 
-      const refsPort = block.inputPorts.get('refs');
-      if (!refsPort?.varargConnections) return set;
+      for (const edge of patch.edges) {
+        if (edge.to.kind !== 'port') continue;
+        if (edge.to.blockId !== blockId || edge.to.slotId !== 'refs') continue;
+        if (edge.from.kind !== 'port') continue;
 
-      for (const conn of refsPort.varargConnections) {
-        const match = conn.sourceAddress.match(/blocks\.([^.]+)\.outputs\.([^.]+)/);
-        if (match) {
-          set.add(`${match[1]}.${match[2]}`);
+        // Build shorthand from source block ID and port
+        const sourceBlock = patch.blocks.get(edge.from.blockId as import('../../types').BlockId);
+        if (sourceBlock) {
+          set.add(`${sourceBlock.id}.${edge.from.slotId}`);
         }
       }
       return set;

@@ -221,7 +221,7 @@ function createLifetimeAccumulator(): LifetimeTimingAccumulator {
 // =============================================================================
 
 /** Threshold for jank detection (ms). Frames with delta > this are logged. */
-export const JANK_THRESHOLD_MS = 100;
+export const JANK_THRESHOLD_MS = 500;
 
 /**
  * A captured jank event with timing breakdown.

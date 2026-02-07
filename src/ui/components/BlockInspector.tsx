@@ -295,6 +295,7 @@ function formatCombineMode(mode: CombineMode): string {
     layer: 'Layer',
     or: 'OR (boolean)',
     and: 'AND (boolean)',
+    collect: 'Collect',
   };
   return labels[mode] ?? mode;
 }
@@ -1921,22 +1922,15 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value, pa
     setLocalValue(newValue);
     setCursorPosition(newCursorPos);
 
-    // Wire vararg connection for output suggestions
+    // Wire collect edge for output suggestions
+    // [LAW:one-type-per-behavior] Collect edges are standard edges.
     if (suggestion.type === 'output') {
       const outputSugg = suggestion as OutputSuggestion;
 
-      const block = patch.blocks.get(blockId);
-      const refsPort = block?.inputPorts.get('refs');
-      const existingConnections = refsPort?.varargConnections ?? [];
-      const maxSortKey = existingConnections.length > 0
-        ? Math.max(...existingConnections.map(c => c.sortKey))
-        : -1;
-
-      patchStore.addVarargConnection(
-        blockId,
-        'refs',
-        outputSugg.sourceAddress,
-        maxSortKey + 1
+      patchStore.addCollectEdge(
+        { kind: 'port', blockId: outputSugg.blockId, slotId: outputSugg.portId },
+        { kind: 'port', blockId, slotId: 'refs' },
+        `${outputSugg.blockId}.${outputSugg.portId}`
       );
     }
 

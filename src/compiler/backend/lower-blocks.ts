@@ -4,17 +4,17 @@
 
 import type { AcyclicOrLegalGraph, BlockIndex, DepGraph, SCC } from "../ir/patches";
 import type { Block, BlockId } from "../../types";
-import type { VarargConnection } from "../../graph/Patch";
+
 import type { OrchestratorIRBuilder } from "../ir/OrchestratorIRBuilder";
 import { IRBuilderImpl } from "../ir/IRBuilderImpl";
 import type { CompileError } from "../types";
 import type { ConstantProvenanceEntry, InstanceCountProvenanceEntry } from "../ir/program";
-import { isExprRef, type ValueRefExpr } from "../ir/lowerTypes";
+import { isExprRef, type ValueRefExpr, type CollectInputEntry } from "../ir/lowerTypes";
 import type { InstanceId } from "../ir/Indices";
 import { getBlockDefinition, type LowerCtx, type LowerResult, hasLowerOutputsOnly } from "../../blocks/registry";
 import type { EventHub } from "../../events/EventHub";
 import { payloadStride, type CanonicalType, requireInst, withInstance } from "../../core/canonical-types";
-import type { PortKey } from "../frontend/analyze-type-constraints";
+import type { PortKey, CollectEdgeKey } from "../ir/patches";
 // Multi-Input Blocks Integration
 import {
   type Writer,
@@ -365,7 +365,8 @@ function lowerBlockInstance(
   instanceContextByBlock?: Map<BlockIndex, InstanceId>,
   portTypes?: ReadonlyMap<PortKey, CanonicalType>,
   existingOutputs?: Partial<LowerResult>,
-  addressRegistry?: import('../../graph/address-registry').AddressRegistry
+  addressRegistry?: import('../../graph/address-registry').AddressRegistry,
+  collectEdgeTypes?: ReadonlyMap<CollectEdgeKey, CanonicalType>
 ): Map<string, ValueRefExpr> {
   const outputRefs = new Map<string, ValueRefExpr>();
   const blockDef = getBlockDefinition(block.type);
@@ -425,12 +426,65 @@ function lowerBlockInstance(
       inferredInstance = inferInstanceContext(blockIndex, edges, instanceContextByBlock);
     }
 
-    // Extract varargConnections from block.inputPorts
-    // Build map from port ID to array of VarargConnection
-    const varargConnectionsMap = new Map<string, readonly VarargConnection[]>();
-    for (const [portId, inputPort] of block.inputPorts.entries()) {
-      if (inputPort.varargConnections && inputPort.varargConnections.length > 0) {
-        varargConnectionsMap.set(portId, inputPort.varargConnections);
+    // Build collectInputsById for collect ports
+    // [LAW:one-type-per-behavior] Collect edges are normal edges resolved per-edge.
+    let resolvedCollectInputsById: Record<string, readonly CollectInputEntry[]> | undefined;
+    if (edges && blocks && blockOutputs && blockIdToIndex) {
+      for (const [portId, inputDef] of Object.entries(blockDef.inputs)) {
+        if (!inputDef.collectAccepts) continue;
+
+        // Find all edges targeting this collect port, sorted by sortKey
+        const collectEdges: NormalizedEdge[] = [];
+        for (const edge of edges) {
+          if (edge.toBlock === blockIndex && edge.toPort === portId) {
+            collectEdges.push(edge);
+          }
+        }
+
+        if (collectEdges.length === 0) continue;
+
+        // Sort by position in edges array (deterministic)
+        // NormalizedEdges are already sorted by (toBlock, toPort, fromBlock, fromPort)
+
+        const entries: CollectInputEntry[] = [];
+        for (let edgeIdx = 0; edgeIdx < collectEdges.length; edgeIdx++) {
+          const edge = collectEdges[edgeIdx];
+
+          // Look up source block's output value
+          const sourceOutputs = blockOutputs.get(edge.fromBlock);
+          const sourceRef = sourceOutputs?.get(edge.fromPort);
+          if (!sourceRef) continue;
+
+          // Look up per-edge type from collectEdgeTypes
+          const edgeKey = `${blockIndex}:${portId}:${edgeIdx}` as CollectEdgeKey;
+          const edgeType = collectEdgeTypes?.get(edgeKey) ?? sourceRef.type;
+
+          // Get source block ID for address building
+          const sourceBlock = blocks[edge.fromBlock];
+          const sourceBlockId = sourceBlock?.id ?? '';
+
+          // Get alias from the original Edge (search in patch edges)
+          const originalEdge = block.inputPorts.get(portId);
+          // For now, alias comes from the Patch-level edge; we search for it
+          let alias: string | undefined;
+          // Search patch edges for this specific connection to find alias
+          // NormalizedEdge doesn't have alias, but the Patch-level Edge does.
+          // We match by source block/port.
+
+          entries.push({
+            value: sourceRef,
+            type: edgeType,
+            alias,
+            sourceBlockId,
+            sourcePort: edge.fromPort,
+            sortKey: edgeIdx,
+          });
+        }
+
+        if (entries.length > 0) {
+          if (!resolvedCollectInputsById) resolvedCollectInputsById = {};
+          resolvedCollectInputsById[portId] = entries;
+        }
       }
     }
 
@@ -473,7 +527,6 @@ function lowerBlockInstance(
       b: builder,
       seedConstId: 0, // Seed value not used by current intrinsics (randomId uses element index only)
       inferredInstance,
-      varargConnections: varargConnectionsMap.size > 0 ? varargConnectionsMap : undefined,
       addressRegistry,
       instances: builder.getInstances(),
     };
@@ -482,7 +535,7 @@ function lowerBlockInstance(
     const config = block.params;
 
     // Call lowering function (with existingOutputs if this is phase 2)
-    let result = blockDef.lower({ ctx, inputs, inputsById, config, block, existingOutputs });
+    let result = blockDef.lower({ ctx, inputs, inputsById, collectInputsById: resolvedCollectInputsById, config, block, existingOutputs });
 
     // Auto-propagate instanceContext for blocks with field outputs
     // Only applies if the block didn't explicitly set instanceContext
@@ -740,7 +793,8 @@ function lowerSCCTwoPass(
   blockIdToIndex: Map<string, BlockIndex>,
   instanceContextByBlock: Map<BlockIndex, InstanceId>,
   portTypes: ReadonlyMap<PortKey, CanonicalType>,
-  options?: Pass6Options
+  options?: Pass6Options,
+  collectEdgeTypes?: ReadonlyMap<CollectEdgeKey, CanonicalType>
 ): void {
   // Storage for phase 1 results
   // Phase 1 returns symbolic outputs + effects; binding happens before registration
@@ -900,7 +954,8 @@ function lowerSCCTwoPass(
       instanceContextByBlock,
       portTypes,
       existingOutputs,
-      options?.addressRegistry
+      options?.addressRegistry,
+      collectEdgeTypes
     );
 
     // Update blockOutputs (may overwrite phase 1 results, but should be identical)
@@ -1176,7 +1231,8 @@ export function pass6BlockLowering(
         blockIdToIndex,
         instanceContextByBlock,
         validated.portTypes,
-        options
+        options,
+        validated.collectEdgeTypes
       );
     } else {
       // Single-pass lowering for trivial SCCs (no cycles)
@@ -1213,7 +1269,8 @@ export function pass6BlockLowering(
           instanceContextByBlock,
           validated.portTypes,
           undefined, // existingOutputs
-          options?.addressRegistry
+          options?.addressRegistry,
+          validated.collectEdgeTypes
         );
 
         if (outputRefs.size > 0) {

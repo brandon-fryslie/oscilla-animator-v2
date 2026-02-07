@@ -265,6 +265,10 @@ export function resolveBlockInputs(
     // These are NOT ports and should NOT have writers resolved for them
     if (inputSlot.exposedAsPort === false) continue;
 
+    // Skip collect ports — resolved separately via collectInputsById
+    // [LAW:one-type-per-behavior] Collect edges are normal edges but bypass combine.
+    if (inputSlot.collectAccepts) continue;
+
     const endpoint: InputEndpoint = {
       blockId: block.id,
       slotId,

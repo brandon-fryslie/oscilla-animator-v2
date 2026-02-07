@@ -213,26 +213,6 @@ describe('serialize', () => {
     expect(hcl).toContain('r = 1');
   });
 
-  it('emits vararg connections', () => {
-    const builder = new PatchBuilder();
-    const a = builder.addBlock('Const', { displayName: 'a' });
-    const b = builder.addBlock('Const', { displayName: 'b' });
-    const c = builder.addBlock('Array', { displayName: 'arr' });
-
-    // Add vararg connections to Array.element (Array has vararg support)
-    builder.addVarargConnection(c, 'element', 'blocks.a.outputs.out', 0, 'first');
-    builder.addVarargConnection(c, 'element', 'blocks.b.outputs.out', 1, 'second');
-
-    const patch = builder.build();
-    const hcl = serializePatchToHCL(patch);
-
-    expect(hcl).toContain('vararg "element"');
-    expect(hcl).toContain('sourceAddress = "blocks.a.outputs.out"');
-    expect(hcl).toContain('alias = "first"');
-    expect(hcl).toContain('sourceAddress = "blocks.b.outputs.out"');
-    expect(hcl).toContain('alias = "second"');
-  });
-
   it('emits lenses', () => {
     const builder = new PatchBuilder();
     const a = builder.addBlock('Const', { displayName: 'a' });

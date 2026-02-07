@@ -10,8 +10,8 @@
 import { compile } from '../compiler';
 import { compileFrontend } from '../compiler/frontend';
 import { convertFrontendErrorsToDiagnostics } from '../compiler/frontend/frontendDiagnosticConversion';
+import { convertCompileErrorsToDiagnostics } from '../compiler/diagnosticConversion';
 import { untracked } from 'mobx';
-import { compilerFlagsSettings } from '../settings/tokens/compiler-flags-settings';
 import { debugSettings } from '../settings/tokens/debug-settings';
 import type { Patch } from '../graph';
 import {
@@ -114,7 +114,6 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
   const debugValues = store.settings.get(debugSettings);
   const frontendResult = compileFrontend(patch, {
     traceCardinalitySolver: debugValues?.traceCardinalitySolver,
-    useFixpointFrontend: debugValues?.useFixpointFrontend,
   });
 
   // Store frontend snapshot regardless of success/failure
@@ -124,10 +123,19 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
     store.frontend.updateFromFrontendFailure(frontendResult, patchRevision);
   }
 
+  // [LAW:one-source-of-truth] Compute frontend diagnostics once for all paths.
+  const frontendDiagnostics = (() => {
+    const errors = frontendResult.kind === 'error'
+      ? frontendResult.errors
+      : frontendResult.result.errors;
+    return errors.length > 0
+      ? convertFrontendErrorsToDiagnostics(errors, patchRevision, compileId)
+      : [];
+  })();
+
   // If frontend failed or backend is not ready, emit diagnostics and bail early
   if (frontendResult.kind === 'error') {
     const errorMsg = frontendResult.errors.map((e: { message: string }) => e.message).join(', ');
-    const diagnostics = convertFrontendErrorsToDiagnostics(frontendResult.errors, patchRevision, compileId);
 
     // Emit CompileEnd with frontend errors
     store.events.emit({
@@ -137,7 +145,7 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
       patchRevision,
       status: 'failure',
       durationMs: Date.now() - startTime,
-      diagnostics,
+      diagnostics: frontendDiagnostics,
     });
 
     store.diagnostics.log({
@@ -160,7 +168,6 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
   // Frontend succeeded - check if backend can proceed
   if (!frontendResult.result.backendReady) {
     const errorMsg = frontendResult.result.errors.map((e: { message: string }) => e.message).join(', ');
-    const diagnostics = convertFrontendErrorsToDiagnostics(frontendResult.result.errors, patchRevision, compileId);
 
     // Emit CompileEnd with partial frontend errors (backend not ready)
     store.events.emit({
@@ -170,7 +177,7 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
       patchRevision,
       status: 'failure',
       durationMs: Date.now() - startTime,
-      diagnostics,
+      diagnostics: frontendDiagnostics,
     });
 
     store.diagnostics.log({
@@ -189,23 +196,18 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
   // Step 2: Run Backend Compilation (reuse precomputed frontend)
   // =========================================================================
 
-  // Read compiler flag settings (severity overrides for diagnostic codes)
-  const diagnosticFlags = store.settings.get(compilerFlagsSettings);
-
   // Compile the patch (with precomputed frontend result)
   const result = compile(patch, {
     events: store.events,
     patchRevision,
     patchId: 'patch-0',
-    diagnosticFlags,
     precomputedFrontend: frontendResult.result,
   });
 
   if (result.kind !== 'ok') {
     const errorMsg = result.errors.map(e => e.message).join(', ');
 
-    // Emit CompileEnd with backend errors (empty for now - backend errors not yet converted to Diagnostic)
-    // TODO: Convert backend CompileErrors to Diagnostics using convertCompileErrorsToDiagnostics
+    // Emit CompileEnd with backend errors + frontend diagnostics
     store.events.emit({
       type: 'CompileEnd',
       compileId,
@@ -213,7 +215,10 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
       patchRevision,
       status: 'failure',
       durationMs: Date.now() - startTime,
-      diagnostics: [],
+      diagnostics: [
+        ...convertCompileErrorsToDiagnostics(result.errors, patchRevision, compileId),
+        ...frontendDiagnostics,
+      ],
     });
 
     store.diagnostics.log({
@@ -331,9 +336,9 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
   }
 
   // Compilation succeeded - emit CompileEnd with success
-  // Frontend errors (if any non-fatal warnings) should be included
-  const frontendDiagnostics = frontendResult.result.errors.length > 0
-    ? convertFrontendErrorsToDiagnostics(frontendResult.result.errors, patchRevision, compileId)
+  // Include frontend diagnostics and backend warnings (unreachable block errors, flag downgrades)
+  const backendWarningDiagnostics = result.warnings.length > 0
+    ? convertCompileErrorsToDiagnostics(result.warnings, patchRevision, compileId, 'warn')
     : [];
 
   store.events.emit({
@@ -343,7 +348,7 @@ export async function compileAndSwap(deps: CompileOrchestratorDeps, isInitial: b
     patchRevision,
     status: 'success',
     durationMs: Date.now() - startTime,
-    diagnostics: frontendDiagnostics,
+    diagnostics: [...frontendDiagnostics, ...backendWarningDiagnostics],
   });
 
   // Emit ProgramSwapped event

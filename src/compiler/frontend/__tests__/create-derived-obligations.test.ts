@@ -15,7 +15,7 @@ import type { ObligationId } from '../obligations';
 // =============================================================================
 
 function makeFacts(entries: [DraftPortKey, PortTypeHint][]): TypeFacts {
-  return { ports: new Map(entries) };
+  return { ports: new Map(entries), instances: new Map() };
 }
 
 function okHint(ct: CanonicalType): PortTypeHint {

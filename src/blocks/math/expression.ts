@@ -11,7 +11,7 @@ import type { CanonicalType } from '../../core/canonical-types';
 import { payloadVar, unitVar, inferType } from '../../core/inference-types';
 import { compileExpression, type BlockRefsContext } from '../../expr';
 import type { ValueExprId } from '../../compiler/ir/Indices';
-import { parseAddress } from '../../types/canonical-address';
+
 import { cardinalityVarId } from '../../core/ids';
 
 registerBlock({
@@ -39,9 +39,9 @@ registerBlock({
   // Inputs include both wirable ports AND config parameters
   // Config parameters have exposedAsPort: false
   inputs: {
-    // Varargs input port for block references
-    // Accepts variable-length connections with aliases
-    // Varargs cannot have defaultSource (explicit connections only)
+    // Collect input port for block references
+    // Accepts variable-length connections with per-edge types
+    // [LAW:one-type-per-behavior] Collect edges are normal edges, not a parallel mechanism.
     refs: {
       label: 'Block Refs',
       type: inferType(payloadVar('expr_refs'), unitVar('expr_refs'), {
@@ -49,10 +49,10 @@ registerBlock({
       }),
       optional: true,
       exposedAsPort: true,
-      isVararg: true,
-      varargConstraint: {
-        allowedPayloads: [FLOAT, INT, VEC2, VEC3, COLOR],
-        cardinalityConstraint: 'any',  // Accept Signal or Field
+      collectAccepts: {
+        payloads: [FLOAT, INT, VEC2, VEC3, COLOR],
+        units: { kind: 'any' },
+        extent: { kind: 'signalOnly' },
       },
     },
     // Config parameter (not a port - cannot be wired)
@@ -73,7 +73,7 @@ registerBlock({
     },
   },
 
-  lower: ({ ctx, varargInputsById, config }) => {
+  lower: ({ ctx, collectInputsById, config }) => {
     // Step 1: Extract expression text from config
     const exprText = (config?.expression as string | undefined) ?? '';
 
@@ -100,31 +100,24 @@ registerBlock({
       return expr.type;
     };
 
-    // Step 3: Build input map and blockRefs from vararg refs
+    // Step 3: Build input map and blockRefs from collect refs
+    // [LAW:one-type-per-behavior] Collect entries come from normal edges.
     const inputs = new Map<string, CanonicalType>();
     const inputSignals = new Map<string, ValueExprId>();
     const signalsByShorthand = new Map<string, ValueExprId>();
 
-    const refsValues = varargInputsById?.refs ?? [];
-    const refsConnections = ctx.varargConnections?.get('refs') ?? [];
-    for (let i = 0; i < refsValues.length; i++) {
-      const value = refsValues[i];
-      const conn = refsConnections[i];
-      if (value && conn) {
-        const inputType = getExprType(value.id);
+    const refsEntries = collectInputsById?.refs ?? [];
+    for (const entry of refsEntries) {
+      const inputType = getExprType(entry.value.id);
 
-        // Build shorthand key from sourceAddress (e.g., "v1:blocks.circle_1.outputs.radius" → "circle_1.radius")
-        const parsed = parseAddress(conn.sourceAddress);
-        if (parsed && parsed.kind === 'output') {
-          const shorthand = `${parsed.canonicalName}.${parsed.portId}`;
-          signalsByShorthand.set(shorthand, value.id);
-        }
+      // Build shorthand key from sourceBlockId.sourcePort (canonical address format)
+      const shorthand = `${entry.sourceBlockId}.${entry.sourcePort}`;
+      signalsByShorthand.set(shorthand, entry.value.id);
 
-        // Also register as regular input using alias or sourceAddress
-        const alias = conn.alias ?? conn.sourceAddress;
-        inputs.set(alias, inputType);
-        inputSignals.set(alias, value.id);
-      }
+      // Register as regular input using alias or shorthand
+      const alias = entry.alias ?? shorthand;
+      inputs.set(alias, inputType);
+      inputSignals.set(alias, entry.value.id);
     }
 
     // Step 4: Build blockRefs context for member access resolution

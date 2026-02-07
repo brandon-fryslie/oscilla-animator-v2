@@ -13,7 +13,7 @@ import type { UIControlHint, DefaultSource } from '../types';
 import type { BlockIRBuilder } from '../compiler/ir/BlockIRBuilder';
 import type { BlockIndex } from '../graph/normalize';
 import type { InstanceId, StateSlotId } from '../compiler/ir/Indices';
-import type { VarargConnection } from '../graph/Patch';
+
 import type { AdapterBlockSpec } from './adapter-spec';
 import type { DomainTypeId } from '../core/domain-registry';
 
@@ -49,13 +49,6 @@ export interface LowerCtx {
   readonly inferredInstance?: InstanceId;
 
   /**
-   * Vararg connections metadata.
-   * Map from vararg port ID to array of VarargConnection in sortKey order.
-   * Used by blocks with vararg inputs to access connection aliases and source addresses.
-   */
-  readonly varargConnections?: ReadonlyMap<string, readonly VarargConnection[]>;
-
-  /**
    * Address registry for resolving canonical addresses.
    * Available for blocks that need address resolution (e.g., Expression block).
    */
@@ -77,11 +70,11 @@ export interface LowerArgs {
   readonly inputs: readonly import('../compiler/ir/lowerTypes').ValueRefExpr[];
   readonly inputsById: Record<string, import('../compiler/ir/lowerTypes').ValueRefExpr>;
   /**
-   * Vararg inputs - array of values per vararg port.
-   * Only populated for blocks with vararg inputs.
-   * Key is port ID, value is array of ValueRefExpr in sortKey order.
+   * Collect inputs - per-edge entries for collect ports.
+   * Each entry has its own type, value, alias, and source info.
+   * Key is port ID, value is array of CollectInputEntry in sortKey order.
    */
-  readonly varargInputsById?: Record<string, readonly import('../compiler/ir/lowerTypes').ValueRefExpr[]>;
+  readonly collectInputsById?: Record<string, readonly import('../compiler/ir/lowerTypes').CollectInputEntry[]>;
   readonly config?: Readonly<Record<string, unknown>>;
   /** The source block (for reading port defaultSource values at compile time) */
   readonly block?: import('../graph/Patch').Block;
@@ -338,22 +331,24 @@ export const ALL_CONCRETE_PAYLOADS: readonly PayloadType[] = [
 ];
 
 // =============================================================================
-// Varargs Support
+// Collect Port Support
 // =============================================================================
 
 /**
- * Constraint for a varargs input.
- * Defines type and cardinality requirements for variable-length inputs.
+ * Type constraint for a collect port.
+ * Collect ports preserve individual edge types (no union-find unification).
+ * Each incoming edge is independently validated against this spec.
+ *
+ * // [LAW:one-type-per-behavior] Collect ports are normal edges with
+ * combineMode:'collect', not a parallel connection mechanism.
  */
-export interface VarargConstraint {
-  /** Allowed payload types for vararg connections (e.g., [FLOAT] or [FLOAT, VEC3, COLOR]) */
-  readonly allowedPayloads: readonly PayloadType[];
-  /** Required cardinality constraint: 'signal', 'field', or 'any' */
-  readonly cardinalityConstraint: 'signal' | 'field' | 'any';
-  /** Minimum number of connections (default: 0) */
-  readonly minConnections?: number;
-  /** Maximum number of connections (default: unlimited) */
-  readonly maxConnections?: number;
+export interface AcceptsSpec {
+  /** Allowed payload types for incoming edges */
+  readonly payloads: readonly PayloadType[];
+  /** Unit constraint: 'any' accepts all units, 'set' restricts to specific values */
+  readonly units: { readonly kind: 'any' } | { readonly kind: 'set'; readonly values: readonly import('../core/canonical-types').UnitType[] };
+  /** Extent constraint: 'any' accepts all, 'signalOnly' requires one+continuous (signal) */
+  readonly extent: { readonly kind: 'any' } | { readonly kind: 'signalOnly' };
 }
 
 /**
@@ -363,11 +358,6 @@ export interface VarargConstraint {
  * - Both wirable ports AND config-only parameters use this type
  * - `exposedAsPort` distinguishes between ports (true) and config (false)
  * - Object key (in BlockDef.inputs Record) is the identifier
- *
- * VARARGS EXTENSION (2026-01-26):
- * - `isVararg` flag marks inputs that accept variable-length connections
- * - Varargs inputs bypass the normal combine system
- * - Varargs inputs have no defaultSource (explicit connections only)
  *
  * TYPE SYSTEM (2026-01-29):
  * - Uses InferenceCanonicalType to allow payload/unit vars in block definitions
@@ -384,14 +374,6 @@ export interface InputDef {
   readonly hidden?: boolean;         // Hide from UI (normalizer params)
 
   /**
-   * Varargs flag - marks this input as accepting variable-length connections.
-   * Varargs inputs:
-   * - Accept 0..N connections without combining them
-   * - Receive connections as an array in LowerArgs.varargInputsById
-   * - Bypass the normal combine system
-   * - Cannot have a defaultSource (explicit connections only)
-   */
-  /**
    * Port semantic — declares the compile-time role of this input.
    *
    * - 'instanceCount': This port controls the instance count of a cardinality-transform block.
@@ -400,20 +382,13 @@ export interface InputDef {
    */
   readonly semantic?: 'instanceCount';
 
-  readonly isVararg?: boolean;
-
   /**
-   * Varargs constraint - type and cardinality requirements.
-   * Required if isVararg is true.
+   * Collect port constraint.
+   * Present only when the port uses combineMode: 'collect'.
+   * Each incoming edge is independently validated against this spec
+   * instead of being unified via union-find.
    */
-  readonly varargConstraint?: VarargConstraint;
-}
-
-/**
- * Type guard to check if an InputDef is a vararg input.
- */
-export function isVarargInput(def: InputDef): boolean {
-  return def.isVararg === true;
+  readonly collectAccepts?: AcceptsSpec;
 }
 
 /**
@@ -619,17 +594,12 @@ export function registerBlock(def: BlockDef): void {
     }
   }
 
-  // Validate vararg constraints
+  // Validate collect constraints
   for (const [portId, inputDef] of Object.entries(def.inputs)) {
-    if (isVarargInput(inputDef)) {
-      if (!inputDef.varargConstraint) {
+    if (inputDef.collectAccepts) {
+      if (inputDef.collectAccepts.payloads.length === 0) {
         throw new Error(
-          `Vararg input "${portId}" in block ${def.type} must have varargConstraint`
-        );
-      }
-      if (inputDef.defaultSource) {
-        throw new Error(
-          `Vararg input "${portId}" in block ${def.type} cannot have defaultSource`
+          `Collect input "${portId}" in block ${def.type} must allow at least one payload type`
         );
       }
     }

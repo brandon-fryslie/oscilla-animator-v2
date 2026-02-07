@@ -2,7 +2,7 @@
 #
 # 400 rectangles in a rotating circle layout with pulsing scale
 # and per-element green-to-teal gradient that shifts over time.
-# Demonstrates: Expression block with vararg refs, pulsing scale animation.
+# Demonstrates: Expression block with collect refs, pulsing scale animation.
 
 patch "Rect Mosaic" {
   block "InfiniteTimeRoot" "time" {
@@ -70,17 +70,11 @@ patch "Rect Mosaic" {
     }
   }
 
-  # Pulsing scale using Expression with vararg reference
+  # Pulsing scale using Expression with collect edge reference
   # block "Expression" "scale-expr" {
     # expression = "1.0 + 0.5 * sin(phase * 6.28 + 1.57)"
     # expression = "1.0"
-    # vararg "refs" {
-    #   connect {
-    #     sourceAddress = "v1:blocks.time.outputs.phaseA"
-    #     alias = "phase"
-    #     sortKey = 0
-    #   }
-    # }
+    # collect edges from time.phaseA → refs (alias "phase")
     # outputs {
     #   out = render.scale
     # }

@@ -406,7 +406,7 @@ patch "Test" {
     expect(phasePort!.defaultSource).toBe(0.5);
   });
 
-  it('deserializes vararg connections with data preserved', () => {
+  it('emits deprecation warning for legacy vararg blocks', () => {
     const hcl = `
 patch "Test" {
   block "Const" "foo" {}
@@ -415,31 +415,16 @@ patch "Test" {
     vararg "phase" {
       connect {
         sourceAddress = "foo.out"
-        alias = "first"
         sortKey = 0
-      }
-      connect {
-        sourceAddress = "foo.out"
-        sortKey = 1
       }
     }
   }
 }
 `;
     const result = deserializePatchFromHCL(hcl);
-    expect(result.errors).toHaveLength(0);
-    const osc = Array.from(result.patch.blocks.values()).find(b => b.displayName === 'osc');
-    expect(osc).toBeDefined();
-
-    // Verify vararg connections actually survived
-    const phasePort = osc!.inputPorts.get('phase');
-    expect(phasePort).toBeDefined();
-    expect(phasePort!.varargConnections).toBeDefined();
-    expect(phasePort!.varargConnections!.length).toBe(2);
-    expect(phasePort!.varargConnections![0].sourceAddress).toBe('foo.out');
-    expect(phasePort!.varargConnections![0].alias).toBe('first');
-    expect(phasePort!.varargConnections![0].sortKey).toBe(0);
-    expect(phasePort!.varargConnections![1].sortKey).toBe(1);
+    // Legacy vararg blocks produce a deprecation warning
+    expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.warnings.some(w => w.message.includes('deprecated'))).toBe(true);
   });
 
   it('deserializes lens attachments with data preserved', () => {

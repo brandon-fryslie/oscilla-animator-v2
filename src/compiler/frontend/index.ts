@@ -5,50 +5,42 @@
  * Frontend is independent of Backend - can run and produce useful output
  * even when Backend would fail (unresolved types, illegal cycles, etc.)
  *
- * Pipeline:
- * 1. Normalize.Composites     - Expand composite blocks
- * 2. Normalize.DefaultSources - Wire up default sources
- * 3. Normalize.Adapters       - Auto-insert type adapters
- * 4. Normalize.Indexing       - Dense block/port indexing
- * 5. Normalize.Varargs        - Validate vararg configurations
- * 6. Analyze.TypeConstraints  - Union-find solver for types
- * 7. Analyze.TypeGraph        - Produce TypedPatch
- * 7.5 Analyze.AxisValidation  - Validate axis invariants (Item #15)
- * 8. Analyze.CycleClassify    - Classify cycles for UI
+ * Pipeline (fixpoint engine):
+ * 1. Composite expansion
+ * 2. Build DraftGraph
+ * 3. Fixpoint normalization (default sources, adapters, indexing, type solving, cardinality)
+ * 4. Bridge → NormalizedPatch + TypeResolvedPatch
+ * 5. Type graph (TypedPatch)
+ * 6. Axis validation
+ * 7. Cycle classification
  *
  * Output: FrontendResult with TypedPatch, CycleSummary, diagnostics, backendReady flag
- *
- * References:
- * - .agent_planning/compiler-design-frontend-backend/ALIGNMENT.md §7
- * - .agent_planning/compiler-design-frontend-backend/PROPOSAL.md §2
  */
 
 import type { Patch } from '../../graph';
-import { normalize, type NormalizedPatch, type NormError } from '../../graph/normalize';
-import type { TypedPatch } from '../ir/patches';
+import type { NormalizedPatch, NormError } from '../../graph/normalize';
+import type { TypedPatch, TypeResolvedPatch } from '../ir/patches';
 import type { CanonicalType } from '../../core/canonical-types';
 // Frontend passes
-import { pass1TypeConstraints, type TypeResolvedPatch, type TypeConstraintError } from './analyze-type-constraints';
 import { pass2TypeGraph } from './analyze-type-graph';
 import { analyzeCycles, type CycleSummary } from './analyze-cycles';
 import { validateTypes, validateNoVarAxes, type AxisViolation } from './axis-validate';
 
-// V2 fixpoint imports
+// Fixpoint engine
 import { pass0CompositeExpansion } from './normalize-composites';
-import { pass4Varargs } from './normalize-varargs';
+
 import { buildDraftGraph } from './draft-graph';
 import { finalizeNormalizationFixpoint } from './final-normalization';
 import { bridgeToNormalizedPatch } from './draft-graph-bridge';
 import { BLOCK_DEFS_BY_TYPE } from '../../blocks/registry';
 
 // Re-export types for consumers
-export type { TypeResolvedPatch, TypeConstraintError } from './analyze-type-constraints';
+export type { TypeResolvedPatch, PortKey } from '../ir/patches';
 export type { TypedPatch } from '../ir/patches';
 export type { CycleSummary, ClassifiedSCC, CycleFix, SCCClassification, CycleLegality } from './analyze-cycles';
 export type { AxisViolation } from './axis-validate';
 export type { BindingMismatchError, BindingMismatchRemedy } from './axis-validate';
 export { analyzeCycles } from './analyze-cycles';
-export { pass1TypeConstraints, getPortType } from './analyze-type-constraints';
 export { pass2TypeGraph } from './analyze-type-graph';
 export { validateTypes, validateNoVarAxes } from './axis-validate';
 
@@ -113,74 +105,10 @@ export type FrontendCompileResult =
  */
 export interface FrontendOptions {
   readonly traceCardinalitySolver?: boolean;
-  readonly useFixpointFrontend?: boolean;
 }
 
 export function compileFrontend(patch: Patch, options?: FrontendOptions): FrontendCompileResult {
-  // [LAW:dataflow-not-control-flow] Gate at entrypoint, not buried in passes.
-  if (options?.useFixpointFrontend) {
-    return compileFrontendV2(patch, options);
-  }
-  return compileFrontendV1(patch, options);
-}
-
-// =============================================================================
-// V1 Frontend (existing linear pass chain)
-// =============================================================================
-
-function compileFrontendV1(patch: Patch, options?: FrontendOptions): FrontendCompileResult {
-  // Step 1: Normalization (passes 0-4)
-  const normResult = normalize(patch);
-
-  if (normResult.kind === 'error') {
-    return { kind: 'error', errors: normResult.errors.map(convertNormError) };
-  }
-
-  return compileFrontendV1Internal(normResult.patch, options);
-}
-
-/**
- * V1 internal pipeline (post-normalization).
- * Takes an already-normalized patch and runs type solving + analysis.
- * Extracted so the V2 fallback can reuse it without re-running normalization.
- */
-function compileFrontendV1Internal(
-  normalizedPatch: NormalizedPatch,
-  options?: FrontendOptions,
-): FrontendCompileResult {
-  const errors: FrontendError[] = [];
-
-  // Type Constraints (union-find solver)
-  const pass1Result = pass1TypeConstraints(normalizedPatch, {
-    traceCardinalitySolver: options?.traceCardinalitySolver,
-  });
-
-  if (pass1Result.errors.length > 0) {
-    const typeErrors = pass1Result.errors.map((e: TypeConstraintError) => ({
-      kind: e.kind,
-      message: `${e.message}\nSuggestions:\n${e.suggestions.map((s: string) => `  - ${s}`).join('\n')}`,
-      blockId: normalizedPatch.blocks[e.blockIndex]?.id,
-      portId: e.portName,
-    }));
-    errors.push(...typeErrors);
-    return { kind: 'error', errors, normalizedPatch };
-  }
-
-  return compileFrontendTail(pass1Result, normalizedPatch, errors);
-}
-
-// =============================================================================
-// V2 Frontend (fixpoint normalization engine)
-// =============================================================================
-
-/**
- * V2 pipeline: fixpoint engine → bridge → shared tail.
- *
- * Falls back to V1 when the fixpoint can't fully resolve
- * (e.g., cardinality vars unresolved, since that solver isn't adapted yet).
- */
-function compileFrontendV2(patch: Patch, options?: FrontendOptions): FrontendCompileResult {
-  // Step 1: Composite expansion (same as V1)
+  // Step 1: Composite expansion
   const p0Result = pass0CompositeExpansion(patch);
   if (p0Result.kind === 'error') {
     return { kind: 'error', errors: p0Result.errors.map(convertNormError) };
@@ -197,23 +125,24 @@ function compileFrontendV2(patch: Patch, options?: FrontendOptions): FrontendCom
     { maxIterations: 20 },
   );
 
-  // Step 4: If strict resolution failed, fall back to V1
-  // Use the already-expanded patch to avoid re-running composite expansion.
+  // Step 4: If strict resolution failed, return failure with diagnostics
   if (fixpointResult.strict === null) {
-    // Collect fixpoint diagnostics as warnings
-    const v2Errors: FrontendError[] = fixpointResult.diagnostics.map((d) => ({
+    const errors: FrontendError[] = fixpointResult.diagnostics.map((d) => ({
       kind: 'FixpointDiagnostic',
       message: typeof d === 'object' && d !== null && 'message' in d
         ? String((d as { message: string }).message)
         : String(d),
     }));
 
-    // Run V1 normalization on the expanded patch (skips composite expansion)
-    const normResult = normalize(expandedPatch);
-    if (normResult.kind === 'error') {
-      return { kind: 'error', errors: [...v2Errors, ...normResult.errors.map(convertNormError)] };
+    // If no diagnostics were collected, provide a generic message
+    if (errors.length === 0) {
+      errors.push({
+        kind: 'FixpointFailed',
+        message: 'Fixpoint normalization could not fully resolve the graph',
+      });
     }
-    return compileFrontendV1Internal(normResult.patch, options);
+
+    return { kind: 'error', errors };
   }
 
   // Step 5: Bridge StrictTypedGraph → NormalizedPatch + TypeResolvedPatch
@@ -223,13 +152,7 @@ function compileFrontendV2(patch: Patch, options?: FrontendOptions): FrontendCom
     BLOCK_DEFS_BY_TYPE,
   );
 
-  // Step 6: Varargs validation on synthetic patch (has all elaborated blocks)
-  const varargResult = pass4Varargs(normalizedPatch.patch);
-  if (varargResult.kind === 'error') {
-    return { kind: 'error', errors: varargResult.errors.map((e) => convertNormError(e)) };
-  }
-
-  // Step 7: Shared tail (type graph → axis validation → cycle analysis)
+  // Step 6: Shared tail (type graph → axis validation → cycle analysis)
   const errors: FrontendError[] = [];
 
   // Collect fixpoint diagnostics as non-fatal warnings
@@ -250,8 +173,7 @@ function compileFrontendV2(patch: Patch, options?: FrontendOptions): FrontendCom
 // =============================================================================
 
 /**
- * Shared compilation tail used by both V1 and V2.
- * Takes a TypeResolvedPatch and runs type graph, axis validation, and cycle analysis.
+ * Run type graph, axis validation, and cycle analysis.
  */
 function compileFrontendTail(
   typeResolved: TypeResolvedPatch,
@@ -325,13 +247,6 @@ function convertNormError(e: NormError): FrontendError {
         blockId: e.edge.to.blockId,
         portId: e.edge.to.slotId,
       };
-    case 'vararg':
-      return {
-        kind: 'VarargError',
-        message: e.message,
-        blockId: e.where.blockId,
-        portId: e.where.portId,
-      };
     case 'CompositeExpansion':
       return {
         kind: 'CompositeExpansion',
@@ -350,11 +265,8 @@ function convertNormError(e: NormError): FrontendError {
 
 /**
  * Convert AxisViolation to FrontendError with block/port context.
- * Item #15: Map violations to errors with source context.
  */
 function convertAxisViolation(violation: AxisViolation, patch: TypeResolvedPatch): FrontendError {
-  // Find the port that corresponds to this type index
-  // PortKey format: `${blockIndex}:${portName}:${'in' | 'out'}`
   const portTypes = Array.from(patch.portTypes.entries());
 
   if (violation.nodeIndex < portTypes.length) {
@@ -371,7 +283,6 @@ function convertAxisViolation(violation: AxisViolation, patch: TypeResolvedPatch
     };
   }
 
-  // Fallback if we can't find the port
   return {
     kind: 'AxisInvalid',
     message: violation.message,

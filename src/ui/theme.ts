@@ -27,7 +27,7 @@ export const colors = {
   error: '#ff6b6b',        // Error color (alias for secondary)
 
   // Port colors
-  varargPort: '#9d4edd',   // Purple - distinct from primary teal (for varargs ports)
+  collectPort: '#9d4edd',  // Purple - distinct from primary teal (for collect ports)
 
   // Text
   textPrimary: '#eee',

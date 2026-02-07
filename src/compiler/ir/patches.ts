@@ -59,9 +59,32 @@ export type LensBinding = { kind: 'literal'; value: unknown };
 // Type-Resolved Patch - Pass 1 output
 // =============================================================================
 
-// Re-export from pass1 for convenience
-export type { TypeResolvedPatch, PortKey } from '../frontend/analyze-type-constraints';
-import type { TypeResolvedPatch } from '../frontend/analyze-type-constraints';
+/**
+ * Key for a port in the type map.
+ * Format: `${blockIndex}:${portName}:${'in' | 'out'}`
+ */
+export type PortKey = `${number}:${string}:${'in' | 'out'}`;
+
+/**
+ * Key for a per-edge type on a collect port.
+ * Format: `${blockIndex}:${portName}:${edgeIndex}`
+ * where edgeIndex is the sorted position among edges targeting this collect port.
+ */
+export type CollectEdgeKey = `${number}:${string}:${number}`;
+
+/**
+ * Patch with all port types resolved.
+ * The portTypes map is the single source of truth for all port types.
+ */
+export interface TypeResolvedPatch extends NormalizedPatch {
+  readonly portTypes: ReadonlyMap<PortKey, CanonicalType>;
+  /**
+   * Per-edge types for collect ports.
+   * Collect ports opt out of union-find unification — each incoming edge
+   * gets its own independently validated CanonicalType.
+   */
+  readonly collectEdgeTypes?: ReadonlyMap<CollectEdgeKey, CanonicalType>;
+}
 
 // =============================================================================
 // Typed Patch - Pass 2
@@ -156,6 +179,9 @@ export interface DepGraphWithTimeModel {
   /** Port types from pass1 - THE source of truth */
   readonly portTypes: TypeResolvedPatch['portTypes'];
 
+  /** Per-edge types for collect ports (threaded from TypeResolvedPatch) */
+  readonly collectEdgeTypes?: TypeResolvedPatch['collectEdgeTypes'];
+
   /** Blocks threaded through from NormalizedPatch */
   readonly blocks: readonly Block[];
 
@@ -196,6 +222,9 @@ export interface AcyclicOrLegalGraph {
 
   /** Port types from pass1 - THE source of truth */
   readonly portTypes: TypeResolvedPatch['portTypes'];
+
+  /** Per-edge types for collect ports (threaded from TypeResolvedPatch) */
+  readonly collectEdgeTypes?: TypeResolvedPatch['collectEdgeTypes'];
 
   /** Blocks threaded through for downstream passes */
   readonly blocks: readonly Block[];

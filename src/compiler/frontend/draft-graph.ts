@@ -166,8 +166,8 @@ export function buildDraftGraph(patch: Patch): DraftGraph {
     for (const [inputId, inputDef] of Object.entries(blockDef.inputs)) {
       // Skip config-only inputs
       if (inputDef.exposedAsPort === false) continue;
-      // Skip vararg inputs (they don't get default sources)
-      if (inputDef.isVararg) continue;
+      // Skip collect ports (they don't get default sources — explicit connections only)
+      if (inputDef.collectAccepts) continue;
       // Skip if already connected
       if (hasIncomingEdge(blockId, inputId, patch.edges)) continue;
 

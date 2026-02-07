@@ -202,6 +202,7 @@ export function pass5CycleValidation(
     graph: depGraphWithTime.graph,
     timeModel: depGraphWithTime.timeModel,
     portTypes: depGraphWithTime.portTypes,
+    collectEdgeTypes: depGraphWithTime.collectEdgeTypes,
     blocks: depGraphWithTime.blocks,
     edges: depGraphWithTime.edges,
     sccs,

@@ -12,7 +12,7 @@
  * // [LAW:dataflow-not-control-flow] Status is always present (ok/unknown/conflict), never absent.
  */
 
-import type { CanonicalType } from '../../core/canonical-types';
+import type { CanonicalType, InstanceRef } from '../../core/canonical-types';
 import type { InferenceCanonicalType } from '../../core/inference-types';
 import type { DraftGraph } from './draft-graph';
 
@@ -47,16 +47,34 @@ export interface PortTypeHint {
 }
 
 // =============================================================================
+// Instance Index
+// =============================================================================
+
+/** Ports grouped by a shared InstanceRef. */
+export interface InstancePorts {
+  readonly ref: InstanceRef;
+  readonly ports: readonly DraftPortKey[];
+}
+
+/** Canonical key for an InstanceRef: `${domainTypeId}:${instanceId}` */
+export function instanceKey(ref: InstanceRef): string {
+  return `${ref.domainTypeId}:${ref.instanceId}`;
+}
+
+// =============================================================================
 // TypeFacts
 // =============================================================================
 
 export interface TypeFacts {
   readonly ports: ReadonlyMap<DraftPortKey, PortTypeHint>;
+  /** Index of InstanceRef → ports sharing that instance. Key is instanceKey(ref). */
+  readonly instances: ReadonlyMap<string, InstancePorts>;
 }
 
 /** Empty TypeFacts (all ports unknown). */
 export const EMPTY_TYPE_FACTS: TypeFacts = {
   ports: new Map(),
+  instances: new Map(),
 };
 
 // =============================================================================
@@ -74,6 +92,12 @@ export const EMPTY_TYPE_FACTS: TypeFacts = {
 export interface StrictTypedGraph {
   readonly graph: DraftGraph;
   readonly portTypes: ReadonlyMap<DraftPortKey, CanonicalType>;
+  /**
+   * Per-edge types for collect ports.
+   * Key: DraftPortKey-flavored `${blockId}:${portName}:${edgeIndex}`.
+   * Each incoming edge to a collect port gets its own resolved CanonicalType.
+   */
+  readonly collectEdgeTypes?: ReadonlyMap<string, CanonicalType>;
   readonly diagnostics: readonly unknown[];
 }
 

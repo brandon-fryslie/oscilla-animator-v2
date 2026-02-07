@@ -55,6 +55,25 @@ import type { ResolvedCameraParams } from './CameraResolver';
 import type { RenderBufferArena } from '../render/RenderBufferArena';
 
 // =============================================================================
+// Cached Topology Verbs (avoid per-frame Uint8Array allocation)
+// =============================================================================
+
+/**
+ * Cache topology.verbs (readonly PathVerb[]) → Uint8Array conversions.
+ * Topology verbs are static — no need to copy every frame.
+ */
+const _topologyVerbsCache = new Map<TopologyId, Uint8Array>();
+
+function getCachedVerbs(topology: PathTopologyDef): Uint8Array {
+  let cached = _topologyVerbsCache.get(topology.id);
+  if (!cached) {
+    cached = new Uint8Array(topology.verbs);
+    _topologyVerbsCache.set(topology.id, cached);
+  }
+  return cached;
+}
+
+// =============================================================================
 // Internal Types (v1 compatibility)
 // =============================================================================
 
@@ -572,7 +591,7 @@ function resolveShapeFully(
       topologyId: shape.topologyId,
       mode: 'path',
       params,
-      verbs: new Uint8Array(topology.verbs),
+      verbs: getCachedVerbs(topology),
       controlPoints,
     };
   } else {
@@ -961,7 +980,7 @@ function assemblePerInstanceShapes(
 
       const geometry: PathGeometry = {
         topologyId: group.topologyId,
-        verbs: new Uint8Array(topology.verbs),
+        verbs: getCachedVerbs(topology),
         points: controlPointsBuffer,
         pointsCount: group.pointsCount,
         flags: group.flags,
@@ -1374,7 +1393,10 @@ export function assembleRenderFrame(
 
   for (const step of renderSteps) {
     const stepOps = assembleDrawPathInstancesOp(step, context);
-    ops.push(...stepOps);  // Flatten array of ops from each step
+    // Avoid spread allocation — push individually
+    for (let i = 0; i < stepOps.length; i++) {
+      ops.push(stepOps[i]);
+    }
   }
 
   return {

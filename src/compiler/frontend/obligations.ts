@@ -26,8 +26,7 @@ export type ObligationKind =
   | 'missingInputSource'
   | 'needsAdapter'
   | 'needsLaneAlignment'
-  | 'needsDomainElaboration'
-  | 'needsVarargMaterialization';
+  | 'needsDomainElaboration';
 
 // =============================================================================
 // Fact Dependencies

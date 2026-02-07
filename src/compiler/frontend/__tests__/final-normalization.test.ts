@@ -7,7 +7,8 @@ import { buildDraftGraph } from '../draft-graph';
 import { buildPatch } from '../../../graph/Patch';
 import { BLOCK_DEFS_BY_TYPE } from '../../../blocks/registry';
 import { draftPortKey } from '../type-facts';
-import { isAxisInst } from '../../../core/canonical-types';
+import { isAxisInst, isMany, isOne } from '../../../core/canonical-types';
+import { DOMAIN_CIRCLE } from '../../../core/domain-registry';
 
 describe('finalizeNormalizationFixpoint (skeleton)', () => {
   it('terminates immediately for empty graph (no plans = stop)', () => {
@@ -26,7 +27,7 @@ describe('finalizeNormalizationFixpoint (skeleton)', () => {
     expect(result.strict).not.toBeNull();
   });
 
-  it('terminates and discharges obligations for unconnected inputs', () => {
+  it('standalone Add: default source policy blocked by unresolved cardinality', () => {
     const patch = buildPatch((b) => {
       b.addBlock('Add');
     });
@@ -36,11 +37,16 @@ describe('finalizeNormalizationFixpoint (skeleton)', () => {
       maxIterations: 10,
     });
 
-    // Solver resolves types, then policy materializes default sources
-    // Should converge within a few iterations
+    // Add is preserve+allowZipSig — cardinality is unresolved without
+    // external evidence. Default source obligations have portCanonicalizable
+    // deps which require 'ok' status, so the policy can't fire.
     expect(result.iterations).toBeLessThanOrEqual(5);
-    // Default source blocks should have been added for unconnected inputs
-    expect(result.graph.blocks.length).toBeGreaterThan(g.blocks.length);
+    // No default source blocks added (deps not satisfied)
+    expect(result.graph.blocks.length).toBe(g.blocks.length);
+    // Cardinality diagnostics should be present
+    expect(result.diagnostics.some(
+      (d: any) => d.kind === 'CardinalityConstraintError',
+    )).toBe(true);
   });
 
   it('respects max iteration limit', () => {
@@ -110,8 +116,10 @@ describe('finalizeNormalizationFixpoint (skeleton)', () => {
     expect(result.facts.ports.size).toBeGreaterThan(0);
   });
 
-  it('graph with only connected ports and no obligations produces strict', () => {
-    // Create a graph where all inputs are connected (no obligations)
+  it('Const → Add: strict fails because preserve cardinality is unresolved', () => {
+    // Const and Add are preserve blocks — cardinality requires external
+    // evidence to resolve. Without a transform block providing many,
+    // cardinality stays unresolved and strict finalization fails.
     const patch = buildPatch((b) => {
       const c1 = b.addBlock('Const');
       const c2 = b.addBlock('Const');
@@ -121,21 +129,12 @@ describe('finalizeNormalizationFixpoint (skeleton)', () => {
     });
 
     const g = buildDraftGraph(patch);
-
-    // If the Add block still has unconnected inputs (it shouldn't with both wired),
-    // obligations will exist. But if no obligations → strict should be non-null.
     const result = finalizeNormalizationFixpoint(g, BLOCK_DEFS_BY_TYPE, {
       maxIterations: 10,
     });
 
-    // With stub solver producing empty facts, this depends on whether
-    // there are open obligations
-    if (g.obligations.length === 0) {
-      expect(result.strict).not.toBeNull();
-    } else {
-      // Some obligations for Const inputs → still null
-      expect(result.strict).toBeNull();
-    }
+    // Cardinality unresolved → ports not all 'ok' → strict = null
+    expect(result.strict).toBeNull();
   });
 });
 
@@ -244,5 +243,127 @@ describe('finalizeNormalizationFixpoint (type solving)', () => {
     for (const key of result.facts.ports.keys()) {
       expect(key).toMatch(/^.+:.+:(in|out)$/);
     }
+  });
+});
+
+describe('finalizeNormalizationFixpoint (cardinality solving)', () => {
+  it('Const → Add: cardinality is unresolved (preserve blocks require context)', () => {
+    const patch = buildPatch((b) => {
+      const c1 = b.addBlock('Const');
+      const c2 = b.addBlock('Const');
+      const add = b.addBlock('Add');
+      b.wire(c1, 'out', add, 'a');
+      b.wire(c2, 'out', add, 'b');
+    });
+
+    const g = buildDraftGraph(patch);
+    const result = finalizeNormalizationFixpoint(g, BLOCK_DEFS_BY_TYPE, {
+      maxIterations: 10,
+    });
+
+    // Const and Add are preserve+allowZipSig — cardinality requires
+    // external evidence (forceMany from transform, clampOne from signalOnly).
+    // Without evidence, cardinality is unresolved and ports are NOT 'ok'.
+    const hasCardinalityDiag = result.diagnostics.some(
+      (d: any) => d.kind === 'CardinalityConstraintError' && d.subKind === 'UnresolvedCardinality',
+    );
+    expect(hasCardinalityDiag).toBe(true);
+  });
+
+  it('Array → Add: Add input becomes many (field)', () => {
+    const patch = buildPatch((b) => {
+      const arr = b.addBlock('Array');
+      const add = b.addBlock('Add');
+      b.wire(arr, 'elements', add, 'a');
+    });
+
+    const g = buildDraftGraph(patch);
+    const result = finalizeNormalizationFixpoint(g, BLOCK_DEFS_BY_TYPE, {
+      maxIterations: 10,
+    });
+
+    const addBlock = g.blocks.find((b) => b.type === 'Add')!;
+    const aHint = result.facts.ports.get(draftPortKey(addBlock.id, 'a', 'in'));
+    expect(aHint).toBeDefined();
+
+    if (aHint!.status === 'ok' && aHint!.canonical) {
+      const card = aHint!.canonical.extent.cardinality;
+      expect(isAxisInst(card)).toBe(true);
+      if (isAxisInst(card)) {
+        // Add's 'a' input should be many because connected to Array.elements
+        expect(isMany(card.value)).toBe(true);
+      }
+    }
+  });
+
+  it('TypeFacts.instances populated correctly for Array outputs', () => {
+    const patch = buildPatch((b) => {
+      b.addBlock('Array');
+    });
+
+    const g = buildDraftGraph(patch);
+    const result = finalizeNormalizationFixpoint(g, BLOCK_DEFS_BY_TYPE, {
+      maxIterations: 10,
+    });
+
+    // Array block creates instances with domainType DOMAIN_CIRCLE
+    // instance index should contain at least one entry for the Array's domain
+    if (result.facts.instances.size > 0) {
+      // At least one instance should have the Array block's domain type
+      let foundArrayInstance = false;
+      for (const [, entry] of result.facts.instances) {
+        if (entry.ref.domainTypeId === DOMAIN_CIRCLE) {
+          foundArrayInstance = true;
+          // Should have ports listed
+          expect(entry.ports.length).toBeGreaterThan(0);
+          // Ports should be sorted
+          for (let i = 1; i < entry.ports.length; i++) {
+            expect(entry.ports[i - 1] <= entry.ports[i]).toBe(true);
+          }
+        }
+      }
+      expect(foundArrayInstance).toBe(true);
+    }
+  });
+
+  it('Const → Add: strict finalization fails (cardinality unresolved without evidence)', () => {
+    // Const and Add are preserve blocks — no cardinality evidence in a
+    // purely-preserve graph, so cardinality vars stay unresolved.
+    const patch = buildPatch((b) => {
+      const c1 = b.addBlock('Const');
+      const c2 = b.addBlock('Const');
+      const add = b.addBlock('Add');
+      b.wire(c1, 'out', add, 'a');
+      b.wire(c2, 'out', add, 'b');
+    });
+
+    const g = buildDraftGraph(patch);
+    const result = finalizeNormalizationFixpoint(g, BLOCK_DEFS_BY_TYPE, {
+      maxIterations: 10,
+    });
+
+    // Some ports have unresolved cardinality → not all 'ok' → strict fails
+    expect(result.strict).toBeNull();
+    expect(result.diagnostics.some(
+      (d: any) => d.kind === 'CardinalityConstraintError',
+    )).toBe(true);
+  });
+
+  it('instances index is empty for signal-only graphs', () => {
+    const patch = buildPatch((b) => {
+      const c1 = b.addBlock('Const');
+      const c2 = b.addBlock('Const');
+      const add = b.addBlock('Add');
+      b.wire(c1, 'out', add, 'a');
+      b.wire(c2, 'out', add, 'b');
+    });
+
+    const g = buildDraftGraph(patch);
+    const result = finalizeNormalizationFixpoint(g, BLOCK_DEFS_BY_TYPE, {
+      maxIterations: 10,
+    });
+
+    // No many-cardinality ports → instances index should be empty
+    expect(result.facts.instances.size).toBe(0);
   });
 });

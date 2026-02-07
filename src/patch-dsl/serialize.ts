@@ -13,7 +13,7 @@
  * - Quote param keys that aren't valid identifiers
  */
 
-import type { Patch, Block, Edge, InputPort, LensAttachment, VarargConnection } from '../graph/Patch';
+import type { Patch, Block, Edge, InputPort, LensAttachment } from '../graph/Patch';
 import type { BlockId } from '../types';
 import { normalizeCanonicalName } from '../core/canonical-name';
 import { emitKey, emitValue } from './hcl-emit-utils';
@@ -157,11 +157,6 @@ function emitBlock(block: Block, nameMap: Map<BlockId, string>, indent: number, 
       output += emitPortOverride(portId, port, indent + 1);
     }
 
-    // Emit varargs if present
-    if (port.varargConnections && port.varargConnections.length > 0) {
-      output += emitVarargConnections(portId, port.varargConnections, indent + 1);
-    }
-
     // Emit lenses if present
     if (port.lenses && port.lenses.length > 0) {
       output += emitLenses(portId, port.lenses, indent + 1);
@@ -204,38 +199,6 @@ function emitPortOverride(portId: string, port: InputPort, indent: number): stri
     }
   }
 
-  output += `${ind}}\n`;
-  return output;
-}
-
-/**
- * Emit vararg connections for a port.
- *
- * @param portId - The port ID
- * @param connections - Array of vararg connections
- * @param indent - Indentation level
- * @returns HCL text for vararg connections
- */
-function emitVarargConnections(
-  portId: string,
-  connections: readonly VarargConnection[],
-  indent: number
-): string {
-  const ind = '  '.repeat(indent);
-
-  // Sort connections by sortKey
-  const sorted = [...connections].sort((a, b) => a.sortKey - b.sortKey);
-
-  let output = `${ind}vararg "${portId}" {\n`;
-  for (const conn of sorted) {
-    output += `${ind}  connect {\n`;
-    output += `${ind}    sourceAddress = "${conn.sourceAddress}"\n`;
-    if (conn.alias) {
-      output += `${ind}    alias = "${conn.alias}"\n`;
-    }
-    output += `${ind}    sortKey = ${conn.sortKey}\n`;
-    output += `${ind}  }\n`;
-  }
   output += `${ind}}\n`;
   return output;
 }

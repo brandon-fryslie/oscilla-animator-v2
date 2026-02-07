@@ -17,16 +17,18 @@ import type { Obligation, ObligationId, FactDependency } from './obligations';
 import { isOpen } from './obligations';
 import type { ElaborationPlan } from './elaboration';
 import { applyAllPlans } from './apply-elaboration';
-import type { TypeFacts, PortTypeHint, StrictTypedGraph, DraftPortKey } from './type-facts';
-import { EMPTY_TYPE_FACTS, draftPortKey, getPortHint } from './type-facts';
+import type { TypeFacts, PortTypeHint, StrictTypedGraph, DraftPortKey, InstancePorts } from './type-facts';
+import { EMPTY_TYPE_FACTS, draftPortKey, getPortHint, instanceKey } from './type-facts';
 import type { PolicyContext, PolicyResult } from './policies/policy-types';
 import type { BlockDef } from '../../blocks/registry';
 import { BLOCK_DEFS_BY_TYPE } from '../../blocks/registry';
 import { extractConstraints, type ExtractedConstraints } from './extract-constraints';
 import { solvePayloadUnit, buildPortVarMapping } from './solve-payload-unit';
-import type { CanonicalType } from '../../core/canonical-types';
+import type { CanonicalType, InstanceRef } from '../../core/canonical-types';
+import { isAxisInst } from '../../core/canonical-types';
 import type { InferenceCanonicalType } from '../../core/inference-types';
 import { isPayloadVar, isUnitVar, isInferenceCanonicalizable, finalizeInferenceType, applyPartialSubstitution, type Substitution, EMPTY_SUBSTITUTION } from '../../core/inference-types';
+import { solveCardinality } from './cardinality/solve';
 import { defaultSourcePolicyV1 } from './policies/default-source-policy';
 import { adapterPolicyV1 } from './policies/adapter-policy';
 import { createDerivedObligations } from './create-derived-obligations';
@@ -75,7 +77,7 @@ export function finalizeNormalizationFixpoint(
     let didMutateGraph = false;
 
     // 1) Solve (pure) — extract constraints + run payload/unit solver + compute TypeFacts
-    const { facts, solveDiagnostics } = solveAndComputeFacts(g, registry);
+    const { facts, solveDiagnostics, collectPorts } = solveAndComputeFacts(g, registry);
     lastFacts = facts;
     diagnostics.push(...solveDiagnostics);
 
@@ -90,7 +92,7 @@ export function finalizeNormalizationFixpoint(
 
     // 4) Apply — stop when no plans AND no new obligations were added
     if (plans.length === 0 && !didMutateGraph) {
-      const strict = tryFinalizeStrict(g, facts);
+      const strict = tryFinalizeStrict(g, facts, collectPorts);
       return { graph: g, facts, strict, diagnostics, iterations: i + 1 };
     }
 
@@ -126,12 +128,12 @@ export function finalizeNormalizationFixpoint(
 function solveAndComputeFacts(
   g: DraftGraph,
   registry: ReadonlyMap<string, BlockDef>,
-): { facts: TypeFacts; solveDiagnostics: unknown[] } {
+): { facts: TypeFacts; solveDiagnostics: unknown[]; collectPorts: ReadonlySet<DraftPortKey> } {
   const solveDiagnostics: unknown[] = [];
 
   // Empty graph → empty facts
   if (g.blocks.length === 0) {
-    return { facts: EMPTY_TYPE_FACTS, solveDiagnostics };
+    return { facts: EMPTY_TYPE_FACTS, solveDiagnostics, collectPorts: new Set() };
   }
 
   // 1) Extract constraints
@@ -153,15 +155,31 @@ function solveAndComputeFacts(
     });
   }
 
-  // 4) Build Substitution from solver output
+  // 4) Run cardinality solver
+  const cardResult = solveCardinality({
+    ports: [...extracted.portBaseTypes.keys()].sort(),
+    baseCardinalityAxis: extracted.baseCardinalityAxis,
+    constraints: extracted.cardinality,
+  });
+
+  // Collect cardinality errors
+  for (const error of cardResult.errors) {
+    solveDiagnostics.push({
+      kind: 'CardinalityConstraintError',
+      subKind: error.kind,
+      ports: error.ports,
+      message: error.message,
+    });
+  }
+
+  // 5) Build Substitution from solver outputs
   const subst: Substitution = {
     payloads: puResult.payloads,
     units: puResult.units,
-    // Cardinality solving is deferred — will be added when cardinality solver
-    // is adapted for DraftGraph. For now, axis vars stay unresolved.
+    cardinalities: cardResult.cardinalities,
   };
 
-  // 5) Compute TypeFacts
+  // 6) Compute TypeFacts port hints
   const ports = new Map<DraftPortKey, PortTypeHint>();
 
   for (const [key, baseType] of extracted.portBaseTypes) {
@@ -169,7 +187,10 @@ function solveAndComputeFacts(
     ports.set(key, hint);
   }
 
-  return { facts: { ports }, solveDiagnostics };
+  // 7) Build instance index from resolved port hints
+  const instances = buildInstanceIndex(ports);
+
+  return { facts: { ports, instances }, solveDiagnostics, collectPorts: extracted.collectPorts };
 }
 
 /**
@@ -362,7 +383,11 @@ function callPolicy(obligation: Obligation, ctx: PolicyContext): PolicyResult | 
  * Try to produce a StrictTypedGraph from the current state.
  * Returns null if any ports are unresolved or obligations remain open.
  */
-function tryFinalizeStrict(g: DraftGraph, facts: TypeFacts): StrictTypedGraph | null {
+function tryFinalizeStrict(
+  g: DraftGraph,
+  facts: TypeFacts,
+  collectPortKeys?: ReadonlySet<DraftPortKey>,
+): StrictTypedGraph | null {
   // Check no open obligations
   const hasOpenObligations = g.obligations.some((o) => isOpen(o));
   if (hasOpenObligations) return null;
@@ -375,9 +400,74 @@ function tryFinalizeStrict(g: DraftGraph, facts: TypeFacts): StrictTypedGraph | 
     portTypes.set(key, hint.canonical);
   }
 
+  // Build collectEdgeTypes: for each edge targeting a collect port,
+  // the edge's type is the source output's resolved type.
+  let collectEdgeTypes: Map<string, import('../../core/canonical-types').CanonicalType> | undefined;
+  if (collectPortKeys && collectPortKeys.size > 0) {
+    collectEdgeTypes = new Map();
+    // Group edges by target collect port and assign per-edge indices
+    const edgesByTarget = new Map<string, typeof g.edges[number][]>();
+    for (const edge of g.edges) {
+      const toKey = draftPortKey(edge.to.blockId, edge.to.port, 'in');
+      if (!collectPortKeys.has(toKey)) continue;
+      const targetId = `${edge.to.blockId}:${edge.to.port}`;
+      const list = edgesByTarget.get(targetId) ?? [];
+      list.push(edge);
+      edgesByTarget.set(targetId, list);
+    }
+
+    for (const [, edges] of edgesByTarget) {
+      // Edges are already in graph insertion order; use index as edge position
+      for (let i = 0; i < edges.length; i++) {
+        const edge = edges[i];
+        const sourceKey = draftPortKey(edge.from.blockId, edge.from.port, 'out');
+        const sourceType = portTypes.get(sourceKey);
+        if (sourceType) {
+          // Key format matches CollectEdgeKey when translated through bridge
+          const edgeKey = `${edge.to.blockId}:${edge.to.port}:${i}`;
+          collectEdgeTypes.set(edgeKey, sourceType);
+        }
+      }
+    }
+  }
+
   return {
     graph: g,
     portTypes,
+    collectEdgeTypes: collectEdgeTypes && collectEdgeTypes.size > 0 ? collectEdgeTypes : undefined,
     diagnostics: [],
   };
+}
+
+// =============================================================================
+// Instance Index Builder
+// =============================================================================
+
+/**
+ * Build an index of InstanceRef → ports from resolved port hints.
+ * Only includes ports with status 'ok' and cardinality many(instance).
+ */
+function buildInstanceIndex(
+  portHints: ReadonlyMap<DraftPortKey, PortTypeHint>,
+): ReadonlyMap<string, InstancePorts> {
+  const byKey = new Map<string, { ref: InstanceRef; ports: DraftPortKey[] }>();
+
+  for (const [port, hint] of portHints) {
+    if (hint.status !== 'ok' || !hint.canonical) continue;
+    const card = hint.canonical.extent.cardinality;
+    if (!isAxisInst(card) || card.value.kind !== 'many') continue;
+    const key = instanceKey(card.value.instance);
+    let entry = byKey.get(key);
+    if (!entry) {
+      entry = { ref: card.value.instance, ports: [] };
+      byKey.set(key, entry);
+    }
+    entry.ports.push(port);
+  }
+
+  const instances = new Map<string, InstancePorts>();
+  for (const [k, v] of byKey) {
+    instances.set(k, { ref: v.ref, ports: v.ports.sort() });
+  }
+  return instances;
 }

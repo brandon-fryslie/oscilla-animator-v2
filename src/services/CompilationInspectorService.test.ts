@@ -110,28 +110,14 @@ describe('CompilationInspectorService', () => {
       vi.restoreAllMocks();
     });
 
-    it('warns when capturePass called without beginCompile', () => {
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      compilationInspector.capturePass('test-pass', {}, {});
-
-      expect(consoleSpy).toHaveBeenCalledWith(
-        '[CompilationInspector] capturePass called without beginCompile'
-      );
-
-      consoleSpy.mockRestore();
+    it('silently no-ops when capturePass called without beginCompile', () => {
+      // Internally resilient — no crash, no warn
+      expect(() => compilationInspector.capturePass('test-pass', {}, {})).not.toThrow();
     });
 
-    it('warns when endCompile called without beginCompile', () => {
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      compilationInspector.endCompile('success');
-
-      expect(consoleSpy).toHaveBeenCalledWith(
-        '[CompilationInspector] endCompile called without beginCompile'
-      );
-
-      consoleSpy.mockRestore();
+    it('silently no-ops when endCompile called without beginCompile', () => {
+      // Idempotent — safe to call without beginCompile
+      expect(() => compilationInspector.endCompile('success')).not.toThrow();
     });
   });
 
@@ -640,15 +626,9 @@ describe('CompilationInspectorService', () => {
       compilationInspector.beginCompile('compile-1');
       compilationInspector.clear();
 
-      // Should warn because currentSnapshot was cleared
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      compilationInspector.endCompile('success');
-
-      expect(consoleSpy).toHaveBeenCalledWith(
-        '[CompilationInspector] endCompile called without beginCompile'
-      );
-
-      consoleSpy.mockRestore();
+      // endCompile after clear is idempotent — no crash, no snapshot added
+      expect(() => compilationInspector.endCompile('success')).not.toThrow();
+      expect(compilationInspector.snapshots.length).toBe(0);
     });
 
     it('allows starting new compilation after clear', () => {

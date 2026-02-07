@@ -141,14 +141,19 @@ class CompilationInspectorService {
    *
    * @param compileId - Unique ID for this compilation
    */
+  // [LAW:single-enforcer] Inspector methods are internally resilient — callers never need try/catch.
   beginCompile(compileId: string): void {
-    this.currentSnapshot = {
-      compileId,
-      timestamp: Date.now(),
-      totalDurationMs: 0,
-      passes: [],
-      status: 'success',
-    };
+    try {
+      this.currentSnapshot = {
+        compileId,
+        timestamp: Date.now(),
+        totalDurationMs: 0,
+        passes: [],
+        status: 'success',
+      };
+    } catch (e) {
+      console.error('[CompilationInspector] Failed in beginCompile:', e);
+    }
   }
 
   /**
@@ -161,8 +166,7 @@ class CompilationInspectorService {
    */
   capturePass(passName: string, input: unknown, output: unknown): void {
     if (!this.currentSnapshot) {
-      console.warn('[CompilationInspector] capturePass called without beginCompile');
-      return;
+      return; // Expected when compile() early-exits before inspector starts
     }
 
     const now = performance.now();
@@ -208,23 +212,26 @@ class CompilationInspectorService {
    */
   endCompile(status: 'success' | 'failure'): void {
     if (!this.currentSnapshot) {
-      console.warn('[CompilationInspector] endCompile called without beginCompile');
-      return;
+      return; // Idempotent — safe to call multiple times or without beginCompile
     }
 
-    this.currentSnapshot.status = status;
-    this.currentSnapshot.totalDurationMs = Date.now() - this.currentSnapshot.timestamp;
+    try {
+      this.currentSnapshot.status = status;
+      this.currentSnapshot.totalDurationMs = Date.now() - this.currentSnapshot.timestamp;
 
-    // Add to snapshots array
-    this.snapshots.push(this.currentSnapshot);
+      // Add to snapshots array
+      this.snapshots.push(this.currentSnapshot);
 
-    // Keep only last 2 snapshots
-    if (this.snapshots.length > 2) {
-      this.snapshots.shift();
+      // Keep only last 2 snapshots
+      if (this.snapshots.length > 2) {
+        this.snapshots.shift();
+      }
+    } catch (e) {
+      console.error('[CompilationInspector] Failed in endCompile:', e);
+    } finally {
+      this.currentSnapshot = null;
+      this.passStartTime = 0;
     }
-
-    this.currentSnapshot = null;
-    this.passStartTime = 0;
   }
 
   /**

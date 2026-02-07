@@ -15,7 +15,7 @@
  * - Duplicate names → rename with suffix, add warning
  */
 
-import type { Patch, Block, Edge, Endpoint, InputPort, OutputPort, VarargConnection, LensAttachment } from '../graph/Patch';
+import type { Patch, Block, Edge, Endpoint, InputPort, OutputPort, LensAttachment } from '../graph/Patch';
 import type { HclDocument, HclBlock, HclValue, Position } from './ast';
 import { PatchDslError, PatchDslWarning } from './errors';
 import { normalizeCanonicalName } from '../core/canonical-name';
@@ -266,7 +266,7 @@ function processBlock(
     }
   }
 
-  // Process nested blocks for port overrides, varargs, lenses
+  // Process nested blocks for port overrides, lenses
   for (const child of hclBlock.children) {
     if (child.type === 'port' && child.labels.length === 1) {
       // Port override block
@@ -276,7 +276,7 @@ function processBlock(
         // Create new port object with overrides (readonly fields require replacement)
         const combineModeAttr = child.attributes.combineMode;
         const defaultSourceAttr = child.attributes.defaultSource;
-        
+
         const newPort: InputPort = {
           ...port,
           ...(combineModeAttr ? { combineMode: convertHclValue(combineModeAttr) as 'last' | 'sum' } : {}),
@@ -287,33 +287,8 @@ function processBlock(
         warnings.push(new PatchDslWarning(`Port override for unknown port "${portId}"`, child.pos));
       }
     } else if (child.type === 'vararg' && child.labels.length === 1) {
-      // Vararg connections block
-      const portId = child.labels[0];
-      const port = inputPorts.get(portId);
-      if (port) {
-        const connections: VarargConnection[] = [];
-        for (const connectBlock of child.children.filter(b => b.type === 'connect')) {
-          const sourceAddressAttr = connectBlock.attributes.sourceAddress;
-          const aliasAttr = connectBlock.attributes.alias;
-          const sortKeyAttr = connectBlock.attributes.sortKey;
-
-          if (sourceAddressAttr) {
-            connections.push({
-              sourceAddress: convertHclValue(sourceAddressAttr) as string,
-              alias: aliasAttr ? convertHclValue(aliasAttr) as string : undefined,
-              sortKey: sortKeyAttr ? convertHclValue(sortKeyAttr) as number : connections.length,
-            });
-          }
-        }
-        // Create new port object with varargs (readonly fields require replacement)
-        const newPort: InputPort = {
-          ...port,
-          varargConnections: connections,
-        };
-        inputPorts.set(portId, newPort);
-      } else {
-        warnings.push(new PatchDslWarning(`Vararg for unknown port "${portId}"`, child.pos));
-      }
+      // Legacy vararg block — ignored (collect edges replace varargs)
+      warnings.push(new PatchDslWarning(`Vararg block ignored (deprecated): "${child.labels[0]}"`, child.pos));
     } else if (child.type === 'lens' && child.labels.length === 1) {
       // Lens attachment block
       const lensType = child.labels[0];

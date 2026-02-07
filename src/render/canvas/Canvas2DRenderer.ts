@@ -36,6 +36,12 @@ import type {
   RenderFrameIR,
 } from '../types';
 
+/** Singleton empty dash array — avoids per-frame allocation from setLineDash([]) */
+const EMPTY_DASH: number[] = [];
+
+/** Reusable dash pattern buffer — avoids .map() allocation per frame */
+let _dashBuffer: number[] = [];
+
 /**
  * Calculate stroke width in pixels from world units.
  *
@@ -137,12 +143,16 @@ export function renderDrawPathInstancesOp(
     ctx.lineCap = style.lineCap ?? 'butt';
 
     if (style.dashPattern && style.dashPattern.length > 0) {
-      // Scale dash pattern from world units to pixels
-      const dashPx = style.dashPattern.map((d: number) => d * D);
-      ctx.setLineDash(dashPx);
+      // Scale dash pattern from world units to pixels (reuse buffer)
+      const patLen = style.dashPattern.length;
+      _dashBuffer.length = patLen;
+      for (let d = 0; d < patLen; d++) {
+        _dashBuffer[d] = style.dashPattern[d] * D;
+      }
+      ctx.setLineDash(_dashBuffer);
       ctx.lineDashOffset = (style.dashOffset ?? 0) * D;
     } else {
-      ctx.setLineDash([]);
+      ctx.setLineDash(EMPTY_DASH);
     }
   }
 
@@ -211,7 +221,7 @@ export function renderDrawPathInstancesOp(
 
   // Reset dash pattern after pass
   if (hasStroke && style.dashPattern && style.dashPattern.length > 0) {
-    ctx.setLineDash([]);
+    ctx.setLineDash(EMPTY_DASH);
   }
 }
 

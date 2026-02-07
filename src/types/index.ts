@@ -148,7 +148,8 @@ export type CombineMode =
   | 'mul'       // numeric: Multiplicative
   | 'layer'     // any: Layer composition
   | 'or'        // boolean: Logical OR
-  | 'and';      // boolean: Logical AND
+  | 'and'       // boolean: Logical AND
+  | 'collect';  // any: Preserve individual edge types (no unification)
 
 /**
  * Category for combine modes based on type compatibility.
@@ -170,6 +171,7 @@ export const COMBINE_MODE_CATEGORY: Record<CombineMode, CombineModeCategory> = {
   layer: 'any',
   or: 'boolean',
   and: 'boolean',
+  collect: 'any',
 };
 
 // Import CanonicalType for local use in interface definitions
@@ -371,7 +373,8 @@ export type EdgeRole =
   | { readonly kind: "default"; readonly meta: { readonly defaultSourceBlockId: BlockId } }
   | { readonly kind: "auto";    readonly meta: { readonly reason: "portMoved" | "rehydrate" | "migrate" } }
   | { readonly kind: "adapter"; readonly meta: { readonly adapterId: BlockId; readonly originalEdgeId: string } }
-  | { readonly kind: "composite"; readonly meta: { readonly compositeInstanceId: string } };
+  | { readonly kind: "composite"; readonly meta: { readonly compositeInstanceId: string } }
+  | { readonly kind: "collect"; readonly meta: { readonly alias?: string } };
 
 // =============================================================================
 // Canonical Addressing System
@@ -401,4 +404,4 @@ export {
 // Lens Attachments (from Patch.ts)
 // =============================================================================
 
-export type { LensAttachment, VarargConnection } from '../graph/Patch';
+export type { LensAttachment } from '../graph/Patch';

@@ -95,12 +95,14 @@ export function materializeValueExpr(
 
     case 'construct': {
       // WI-4: Construct - combine component fields into composite
-      const componentBufs = expr.components.map(compId =>
-        materializeValueExpr(compId, table, instanceId, count, state, program, pool)
-      );
+      const componentCount = expr.components.length;
+      const componentBufs = new Array<Float32Array>(componentCount);
+      for (let c = 0; c < componentCount; c++) {
+        componentBufs[c] = materializeValueExpr(expr.components[c], table, instanceId, count, state, program, pool);
+      }
       // Interleave components into output buffer
       for (let i = 0; i < count; i++) {
-        for (let c = 0; c < componentBufs.length; c++) {
+        for (let c = 0; c < componentCount; c++) {
           buf[i * stride + c] = componentBufs[c][i];
         }
       }
@@ -134,9 +136,8 @@ export function materializeValueExpr(
         throw new Error(`State expression for key "${expr.stateKey}" has no resolved slot — binding pass may not have run`);
       }
       const stateSlot = expr.resolvedSlot as number;
-      // Copy from state array
-      const sourceData = state.state.slice(stateSlot, stateSlot + count * stride);
-      buf.set(sourceData);
+      // Copy directly via subarray view (no intermediate allocation)
+      buf.set(state.state.subarray(stateSlot, stateSlot + count * stride));
       break;
     }
 
@@ -185,7 +186,11 @@ function materializeKernel(
 
     case 'zip': {
       // WI-4: Zip - combine multiple inputs with a function
-      const inputs = expr.inputs.map(id => materializeValueExpr(id, table, instanceId, count, state, program, pool));
+      const inputCount = expr.inputs.length;
+      const inputs = new Array<Float32Array>(inputCount);
+      for (let j = 0; j < inputCount; j++) {
+        inputs[j] = materializeValueExpr(expr.inputs[j], table, instanceId, count, state, program, pool);
+      }
       applyZip(buf, inputs, expr.fn, count, stride);
       break;
     }
@@ -195,9 +200,11 @@ function materializeKernel(
       // For multi-component signals (vec2, color, etc), evaluate each component separately
       if (expr.signalComponents && expr.signalComponents.length > 1) {
         // Multi-component broadcast: evaluate and interleave components
-        const componentValues = expr.signalComponents.map(id => 
-          evaluateValueExprSignal(id, table.nodes, state)
-        );
+        const compCount = expr.signalComponents.length;
+        const componentValues = new Array<number>(compCount);
+        for (let j = 0; j < compCount; j++) {
+          componentValues[j] = evaluateValueExprSignal(expr.signalComponents[j], table.nodes, state);
+        }
         for (let i = 0; i < count; i++) {
           for (let c = 0; c < componentValues.length; c++) {
             buf[i * stride + c] = componentValues[c];
@@ -214,7 +221,11 @@ function materializeKernel(
     case 'zipSig': {
       // WI-4: ZipSig - combine field with signals
       const fieldInput = materializeValueExpr(expr.field, table, instanceId, count, state, program, pool);
-      const sigValues = expr.signals.map(id => evaluateValueExprSignal(id, table.nodes, state));
+      const sigCount = expr.signals.length;
+      const sigValues = new Array<number>(sigCount);
+      for (let j = 0; j < sigCount; j++) {
+        sigValues[j] = evaluateValueExprSignal(expr.signals[j], table.nodes, state);
+      }
       applyZipSig(buf, fieldInput, sigValues, expr.fn, count, stride, instanceId, program);
       break;
     }
@@ -312,14 +323,23 @@ function fillBufferWithSignal(
   }
 }
 
+// =============================================================================
+// Pre-allocated args buffers for kernel hot loops (single-threaded safe)
+// These eliminate per-instance-per-component array allocations.
+// =============================================================================
+
+/** Reusable single-element args buffer for applyMap */
+const _mapArgs: number[] = [0];
+
+/** Reusable args buffer for applyZip (resized as needed) */
+const _zipArgs: number[] = [];
+
+/** Reusable args buffer for applyZipSig (resized as needed) */
+const _zipSigArgs: number[] = [];
+
 /**
  * Apply a map function (unary kernel).
- *
- * @param out - Output buffer
- * @param input - Input buffer
- * @param fn - Function to apply
- * @param count - Number of elements
- * @param stride - Stride per element
+ * Zero per-instance allocations — reuses module-level args buffer.
  */
 function applyMap(
   out: Float32Array,
@@ -331,19 +351,15 @@ function applyMap(
   for (let i = 0; i < count; i++) {
     const base = i * stride;
     for (let c = 0; c < stride; c++) {
-      out[base + c] = evaluatePureFn(fn, [input[base + c]]);
+      _mapArgs[0] = input[base + c];
+      out[base + c] = evaluatePureFn(fn, _mapArgs);
     }
   }
 }
 
 /**
  * Apply a zip function (n-ary kernel).
- *
- * @param out - Output buffer
- * @param inputs - Input buffers
- * @param fn - Function to apply
- * @param count - Number of elements
- * @param stride - Stride per element
+ * Zero per-instance allocations — reuses module-level args buffer.
  */
 function applyZip(
   out: Float32Array,
@@ -352,24 +368,23 @@ function applyZip(
   count: number,
   stride: number
 ): void {
+  const n = inputs.length;
+  _zipArgs.length = n;
+
   for (let i = 0; i < count; i++) {
     const base = i * stride;
     for (let c = 0; c < stride; c++) {
-      const args = inputs.map(buf => buf[base + c]);
-      out[base + c] = evaluatePureFn(fn, args);
+      for (let j = 0; j < n; j++) {
+        _zipArgs[j] = inputs[j][base + c];
+      }
+      out[base + c] = evaluatePureFn(fn, _zipArgs);
     }
   }
 }
 
 /**
  * Apply a zipSig function (field + signals).
- *
- * @param out - Output buffer
- * @param fieldInput - Field input buffer
- * @param sigValues - Signal values
- * @param fn - Function to apply
- * @param count - Number of elements
- * @param stride - Stride per element
+ * One allocation per call (args array) — not per instance.
  */
 function applyZipSig(
   out: Float32Array,
@@ -381,11 +396,18 @@ function applyZipSig(
   instanceId: InstanceId,
   program: CompiledProgramIR
 ): void {
+  const argCount = 1 + sigValues.length;
+  _zipSigArgs.length = argCount;
+  // Copy signal values once (constant across all instances)
+  for (let s = 0; s < sigValues.length; s++) {
+    _zipSigArgs[1 + s] = sigValues[s];
+  }
+
   for (let i = 0; i < count; i++) {
     const base = i * stride;
     for (let c = 0; c < stride; c++) {
-      const args = [fieldInput[base + c], ...sigValues];
-      out[base + c] = evaluatePureFn(fn, args);
+      _zipSigArgs[0] = fieldInput[base + c];
+      out[base + c] = evaluatePureFn(fn, _zipSigArgs);
     }
   }
 }
@@ -581,51 +603,38 @@ function hslToRgbConversion(
   count: number
 ): void {
   for (let i = 0; i < count; i++) {
-    const h = input[i * 4];
-    const s = input[i * 4 + 1];
-    const l = input[i * 4 + 2];
-    const a = input[i * 4 + 3];
+    const offset = i * 4;
+    const h = input[offset];
+    const s = input[offset + 1];
+    const l = input[offset + 2];
 
-    const [r, g, b] = hslToRgb(h, s, l);
-    out[i * 4] = r;
-    out[i * 4 + 1] = g;
-    out[i * 4 + 2] = b;
-    out[i * 4 + 3] = a; // Alpha passthrough
+    // Inline HSL→RGB (no tuple allocation)
+    const c = (1 - Math.abs(2 * l - 1)) * s;
+    const x = c * (1 - Math.abs(((h * 6) % 2) - 1));
+    const m = l - c / 2;
+
+    let r = 0, g = 0, b = 0;
+    const hSector = h * 6;
+
+    if (hSector < 1) {
+      r = c; g = x; b = 0;
+    } else if (hSector < 2) {
+      r = x; g = c; b = 0;
+    } else if (hSector < 3) {
+      r = 0; g = c; b = x;
+    } else if (hSector < 4) {
+      r = 0; g = x; b = c;
+    } else if (hSector < 5) {
+      r = x; g = 0; b = c;
+    } else {
+      r = c; g = 0; b = x;
+    }
+
+    out[offset] = r + m;
+    out[offset + 1] = g + m;
+    out[offset + 2] = b + m;
+    out[offset + 3] = input[offset + 3]; // Alpha passthrough
   }
-}
-
-/**
- * HSL→RGB conversion for a single color.
- *
- * @param h - Hue [0, 1]
- * @param s - Saturation [0, 1]
- * @param l - Lightness [0, 1]
- * @returns RGB [0, 1]
- */
-function hslToRgb(h: number, s: number, l: number): [number, number, number] {
-  // Standard HSL→RGB conversion
-  const c = (1 - Math.abs(2 * l - 1)) * s;
-  const x = c * (1 - Math.abs(((h * 6) % 2) - 1));
-  const m = l - c / 2;
-
-  let r = 0, g = 0, b = 0;
-  const hSector = h * 6;
-
-  if (hSector < 1) {
-    r = c; g = x; b = 0;
-  } else if (hSector < 2) {
-    r = x; g = c; b = 0;
-  } else if (hSector < 3) {
-    r = 0; g = c; b = x;
-  } else if (hSector < 4) {
-    r = 0; g = x; b = c;
-  } else if (hSector < 5) {
-    r = x; g = 0; b = c;
-  } else {
-    r = c; g = 0; b = x;
-  }
-
-  return [r + m, g + m, b + m];
 }
 
 // =============================================================================

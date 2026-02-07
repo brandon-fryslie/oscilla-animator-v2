@@ -39,7 +39,6 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
     const allowlist = [
       /canonical-types\.ts/,       // Type definitions and constructors
       /inference/i,                 // Any inference module
-      /analyze-type-constraints/,   // Type constraint gathering
       /analyze-type-graph/,         // Type solver
       /type-env/i,                  // Type environment
       /\.test\./,                   // Test files
@@ -126,14 +125,8 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
 
     it('backend cannot import frontend modules', () => {
       const matches = grepSrc("from '\\.\\./frontend/", 'src/compiler/backend/');
-      // Allow only PortKey type import (read-only type reference)
-      const filtered = matches.filter(m => {
-        const content = m.substring(m.indexOf(':', m.indexOf(':') + 1) + 1).trim();
-        // Allow: import type { PortKey } from "../frontend/analyze-type-constraints";
-        if (content.includes('import type') && content.includes('PortKey')) return false;
-        return true;
-      });
-      expect(filtered, 'Backend must not import from frontend (except read-only types)').toEqual([]);
+      // Backend should not import from frontend at all — PortKey now lives in ir/patches
+      expect(matches, 'Backend must not import from frontend').toEqual([]);
     });
 
     it('isTypeCompatible is pure (no block-name parameters)', () => {
@@ -225,6 +218,60 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
         `Block lower() must derive kernel types from ctx.outTypes[0], not canonicalType().\n` +
         `Found violations:\n${violations.join('\n')}`
       ).toEqual([]);
+    });
+
+  });
+
+  // =============================================================================
+  // Vararg Removal (Phase 6: Collect Refactor)
+  // =============================================================================
+
+  describe('Vararg Removal', () => {
+
+    it('no VarargConnection type anywhere in src/', () => {
+      const matches = grepSrc('VarargConnection');
+      const allowlist = [
+        /forbidden-patterns\.test\.ts/,  // This file
+        /patch-from-ast\.ts/,            // Deprecation warning for legacy HCL
+      ];
+      const filtered = filterAllowlist(matches, allowlist);
+      expect(filtered, 'VarargConnection was removed — use collect edges instead').toEqual([]);
+    });
+
+    it('no isVararg field anywhere in src/', () => {
+      const matches = grepSrc('isVararg');
+      const allowlist = [
+        /forbidden-patterns\.test\.ts/,  // This file
+      ];
+      const filtered = filterAllowlist(matches, allowlist);
+      expect(filtered, 'isVararg was removed — use collectAccepts instead').toEqual([]);
+    });
+
+    it('no varargInputsById anywhere in src/', () => {
+      const matches = grepSrc('varargInputsById');
+      const allowlist = [
+        /forbidden-patterns\.test\.ts/,  // This file
+      ];
+      const filtered = filterAllowlist(matches, allowlist);
+      expect(filtered, 'varargInputsById was removed — use collectInputsById instead').toEqual([]);
+    });
+
+    it('no VarargConstraint type anywhere in src/', () => {
+      const matches = grepSrc('VarargConstraint');
+      const allowlist = [
+        /forbidden-patterns\.test\.ts/,  // This file
+      ];
+      const filtered = filterAllowlist(matches, allowlist);
+      expect(filtered, 'VarargConstraint was removed — use AcceptsSpec instead').toEqual([]);
+    });
+
+    it('no varargConnections field anywhere in src/', () => {
+      const matches = grepSrc('varargConnections');
+      const allowlist = [
+        /forbidden-patterns\.test\.ts/,  // This file
+      ];
+      const filtered = filterAllowlist(matches, allowlist);
+      expect(filtered, 'varargConnections was removed — use collect edges instead').toEqual([]);
     });
 
   });

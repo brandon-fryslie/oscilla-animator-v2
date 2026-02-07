@@ -59,7 +59,7 @@
   white-space: nowrap;
 }
 
-/* Valid reference (connected via vararg) */
+/* Valid reference (connected via collect edge) */
 .expr-ref-chip--valid {
   background: rgba(78, 205, 196, 0.2);
   border: 1px solid #4ecdc4;

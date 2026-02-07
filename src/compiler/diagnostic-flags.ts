@@ -2,13 +2,11 @@
  * Diagnostic Flag System (GCC-Style)
  *
  * Configurable severity overrides for compiler diagnostic codes.
- * Each TypeConstraintErrorKind can be set to 'error', 'warn', or 'ignore'.
+ * Each diagnostic code can be set to 'error', 'warn', or 'ignore'.
  *
  * Single source of truth: DIAGNOSTIC_FLAGS array.
  * To add a new flag: add one entry to the array.
  */
-
-import type { TypeConstraintError } from './frontend/analyze-type-constraints';
 
 export type DiagnosticSeverityOverride = 'error' | 'warn' | 'ignore';
 
@@ -84,32 +82,5 @@ export function getDefaultDiagnosticFlags(): Record<string, DiagnosticSeverityOv
   for (const flag of DIAGNOSTIC_FLAGS) {
     result[flag.code] = flag.defaultSeverity;
   }
-  return result;
-}
-
-export function partitionByFlags(
-  errors: readonly TypeConstraintError[],
-  flags: Record<string, DiagnosticSeverityOverride> | undefined,
-): { errors: TypeConstraintError[]; warnings: TypeConstraintError[]; ignored: TypeConstraintError[] } {
-  const defaults = getDefaultDiagnosticFlags();
-  const effectiveFlags = flags ?? defaults;
-
-  const result = {
-    errors: [] as TypeConstraintError[],
-    warnings: [] as TypeConstraintError[],
-    ignored: [] as TypeConstraintError[],
-  };
-
-  for (const error of errors) {
-    const severity = effectiveFlags[error.kind] ?? defaults[error.kind] ?? 'error';
-    if (severity === 'error') {
-      result.errors.push(error);
-    } else if (severity === 'warn') {
-      result.warnings.push(error);
-    } else {
-      result.ignored.push(error);
-    }
-  }
-
   return result;
 }

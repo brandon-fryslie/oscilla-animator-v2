@@ -376,7 +376,7 @@ describe('error isolation for unreachable blocks', () => {
       const expr2 = b.addBlock('Expression', { displayName: 'Expr2' });
       b.setConfig(expr2, 'expression', 'error 2 +++');
       // Wire them together but not to any render block
-      b.addVarargConnection(expr2, 'refs', `v1:blocks.expr1.outputs.out`, 0, 'x');
+      b.wireCollect(expr1, 'out', expr2, 'refs', 'x');
     });
 
     const result = compile(patch);
@@ -388,7 +388,8 @@ describe('error isolation for unreachable blocks', () => {
     expect(result.kind).toBe('ok');
   });
 
-  it('emits warnings for unreachable block errors in CompileEnd event', () => {
+  // [LAW:behavior-not-structure] Test result.warnings, not mock event emission.
+  it('returns warnings for unreachable block errors', () => {
     // Build a patch with a working render pipeline and a disconnected Expression with an error.
     // The Expression is wired to time (so it compiles) but NOT to any render block.
     const patch = buildPatch((b) => {
@@ -405,44 +406,22 @@ describe('error isolation for unreachable blocks', () => {
       b.setConfig(color, 'value', { r: 1, g: 0, b: 0, a: 1 });
       const render = b.addBlock('RenderInstances2D');
       b.wire(grid, 'position', render, 'pos');
-      // Shape port removed - automatically looked up from instance
       b.wire(color, 'out', render, 'color');
 
       // Expression block with a syntax error — wired to time but NOT to render
       const expr = b.addBlock('Expression', { displayName: 'TestExpr' });
       b.setConfig(expr, 'expression', 't +');  // Incomplete expression - guaranteed syntax error
-      b.addVarargConnection(expr, 'refs', `v1:blocks.time.outputs.tMs`, 0, 't');
+      b.wireCollect(time, 'tMs', expr, 'refs', 't');
     });
 
-    // Create a mock event hub to capture the CompileEnd event
-    const emittedEvents: any[] = [];
-    const mockEventHub = {
-      emit: (event: any) => emittedEvents.push(event),
-    };
-
-    const result = compile(patch, {
-      events: mockEventHub as any,
-      patchId: 'test',
-      patchRevision: 1,
-    });
-
-    // Should compile successfully
+    const result = compile(patch);
     expect(result.kind).toBe('ok');
 
-    // Should have emitted a CompileEnd event with warnings
-    const compileEndEvent = emittedEvents.find(e => e.type === 'CompileEnd');
-    expect(compileEndEvent).toBeDefined();
-    expect(compileEndEvent.status).toBe('success');
-    expect(compileEndEvent.diagnostics).toBeDefined();
-
-    // Should have at least one warning diagnostic for the unreachable block
-    const warnings = compileEndEvent.diagnostics.filter((d: any) => d.severity === 'warn');
-    expect(warnings.length).toBeGreaterThan(0);
-
-    // Warning should include original error info
-    const unreachableWarning = warnings.find((d: any) => d.code === 'W_BLOCK_UNREACHABLE_ERROR');
-    expect(unreachableWarning).toBeDefined();
-    expect(unreachableWarning.message).toContain('not connected to render pipeline');
+    if (result.kind === 'ok') {
+      const unreachable = result.warnings.find(w => w.kind === 'W_BLOCK_UNREACHABLE_ERROR');
+      expect(unreachable).toBeDefined();
+      expect(unreachable!.message).toContain('not connected to render pipeline');
+    }
   });
 
   it('fails compilation when a block connected to render has an error', () => {
@@ -467,7 +446,7 @@ describe('error isolation for unreachable blocks', () => {
       // Expression block with a syntax error — wired to render pipeline
       const expr = b.addBlock('Expression', { displayName: 'ColorExpr' });
       b.setConfig(expr, 'expression', 'invalid syntax +++');
-      b.addVarargConnection(expr, 'refs', `v1:blocks.time.outputs.tMs`, 0, 't');
+      b.wireCollect(time, 'tMs', expr, 'refs', 't');
 
       const render = b.addBlock('RenderInstances2D');
       b.wire(gridLayout, 'position', render, 'pos');

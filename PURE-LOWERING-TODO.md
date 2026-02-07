@@ -53,7 +53,7 @@ ctx.b.stepSlotWriteStrided(slot, components); // ⚠️ Imperative schedule muta
 ---
 
 ### 2. **src/blocks/math/expression.ts** - ⚠️ BLOCKED
-**Issue**: Uses `stepSlotWriteStrided()` for multi-component results AND has varargs
+**Issue**: Uses `stepSlotWriteStrided()` for multi-component results AND has collect inputs
 ```typescript
 // Current pattern:
 const slot = ctx.b.allocSlot(stride);

@@ -111,6 +111,7 @@ export function pass4DepGraph(
     },
     timeModel: timeResolved.timeModel,
     portTypes: timeResolved.portTypes,
+    collectEdgeTypes: timeResolved.collectEdgeTypes,
     blocks: timeResolved.blocks,
     edges: timeResolved.edges,
   };

@@ -5,8 +5,7 @@
  * - Pass 0: Composite expansion (expands composite blocks into derived blocks)
  * - Pass 1: Default source materialization
  * - Pass 2: Adapter insertion
- * - Pass 3: Varargs validation
- * - Pass 4: Block indexing
+ * - Pass 3: Block indexing
  *
  * NOTE: These passes have moved to src/compiler/frontend/ as part of the
  * Frontend/Backend split. This file re-exports for backward compatibility.
@@ -18,7 +17,6 @@ import type { Patch } from '../Patch';
 import { pass0CompositeExpansion, type ExpansionError } from '../../compiler/frontend/normalize-composites';
 import { pass1DefaultSources } from '../../compiler/frontend/normalize-default-sources';
 import { pass2Adapters, type AdapterError } from '../../compiler/frontend/normalize-adapters';
-import { pass4Varargs, type VarargError } from '../../compiler/frontend/normalize-varargs';
 import { pass3Indexing, type IndexingError, type NormalizedPatch } from '../../compiler/frontend/normalize-indexing';
 
 // =============================================================================
@@ -27,12 +25,11 @@ import { pass3Indexing, type IndexingError, type NormalizedPatch } from '../../c
 
 export type { NormalizedPatch, NormalizedEdge, BlockIndex } from '../../compiler/frontend/normalize-indexing';
 export type { AdapterError } from '../../compiler/frontend/normalize-adapters';
-export type { VarargError } from '../../compiler/frontend/normalize-varargs';
 export type { ExpansionError, CompositeExpansionResult } from '../../compiler/frontend/normalize-composites';
 export type { CompositeExpansionInfo } from '../../blocks/composite-types';
 
 // Unified error type
-export type NormError = AdapterError | IndexingError | VarargError | ExpansionError;
+export type NormError = AdapterError | IndexingError | ExpansionError;
 
 export interface NormalizeResult {
   readonly kind: 'ok';
@@ -55,7 +52,6 @@ export interface NormalizeError {
  * - Composite blocks expanded
  * - Default sources materialized
  * - Type adapters inserted
- * - Varargs validated
  * - Dense block indices
  * - Canonical edge ordering
  *
@@ -81,19 +77,13 @@ export function runNormalizationPasses(patch: Patch): NormalizeResult | Normaliz
     return { kind: 'error', errors: p2Result.errors };
   }
 
-  // Pass 3: Varargs validation (before indexing)
-  const p3Result = pass4Varargs(p2Result.patch);
+  // Pass 3: Block indexing
+  const p3Result = pass3Indexing(p2Result.patch);
   if (p3Result.kind === 'error') {
     return { kind: 'error', errors: p3Result.errors };
   }
 
-  // Pass 4: Block indexing
-  const p4Result = pass3Indexing(p3Result.patch);
-  if (p4Result.kind === 'error') {
-    return { kind: 'error', errors: p4Result.errors };
-  }
-
-  return { kind: 'ok', patch: p4Result.patch };
+  return { kind: 'ok', patch: p3Result.patch };
 }
 
 // =============================================================================
@@ -103,5 +93,4 @@ export function runNormalizationPasses(patch: Patch): NormalizeResult | Normaliz
 export { pass0CompositeExpansion } from '../../compiler/frontend/normalize-composites';
 export { pass1DefaultSources } from '../../compiler/frontend/normalize-default-sources';
 export { pass2Adapters } from '../../compiler/frontend/normalize-adapters';
-export { pass4Varargs } from '../../compiler/frontend/normalize-varargs';
 export { pass3Indexing, getInputEdges, getOutputEdges } from '../../compiler/frontend/normalize-indexing';

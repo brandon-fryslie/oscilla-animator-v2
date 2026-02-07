@@ -83,11 +83,13 @@ const ERROR_CODE_TO_DIAGNOSTIC_CODE: Record<string, DiagnosticCode> = {
   IRValidationFailed: 'E_UNKNOWN_BLOCK_TYPE',
   UpstreamError: 'E_UNKNOWN_BLOCK_TYPE',
   TransformError: 'E_UNKNOWN_BLOCK_TYPE',
-  VarargError: 'E_UNKNOWN_BLOCK_TYPE',
   // Expression DSL errors (Sprint 3)
   ExprSyntaxError: 'E_EXPR_SYNTAX',
   ExprTypeError: 'E_EXPR_TYPE',
   ExprCompileError: 'E_EXPR_COMPILE',
+  // Warning codes (compile lifecycle)
+  W_BLOCK_UNREACHABLE_ERROR: 'W_BLOCK_UNREACHABLE_ERROR',
+  W_FLAG_DOWNGRADED: 'W_FLAG_DOWNGRADED',
   // Cardinality errors (Sprint 2A - Cardinality-Generic Blocks)
   CardinalityMismatch: 'E_CARDINALITY_MISMATCH',
   InstanceMismatch: 'E_INSTANCE_MISMATCH',
@@ -152,7 +154,8 @@ function extractTargetRef(error: CompileError): TargetRef {
 export function convertCompileErrorToDiagnostic(
   error: CompileError | LegacyCompileError,
   patchRevision: number,
-  compileId: string
+  compileId: string,
+  severity: 'error' | 'warn' | 'info' = 'error'
 ): Diagnostic {
   // Normalize legacy errors to new format
   const normalizedError = isLegacyError(error) ? normalizeLegacyError(error) : error;
@@ -173,7 +176,7 @@ export function convertCompileErrorToDiagnostic(
   return {
     id,
     code,
-    severity: 'error', // All compile errors are 'error' severity
+    severity,
     domain: 'compile',
     primaryTarget,
     title,
@@ -207,10 +210,11 @@ export function convertCompileErrorToDiagnostic(
 export function convertCompileErrorsToDiagnostics(
   errors: readonly (CompileError | LegacyCompileError)[],
   patchRevision: number,
-  compileId: string
+  compileId: string,
+  severity: 'error' | 'warn' | 'info' = 'error'
 ): Diagnostic[] {
   return errors.map((error) =>
-    convertCompileErrorToDiagnostic(error, patchRevision, compileId)
+    convertCompileErrorToDiagnostic(error, patchRevision, compileId, severity)
   );
 }
 

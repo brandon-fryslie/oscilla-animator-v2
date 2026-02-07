@@ -120,54 +120,12 @@ export interface LensAttachment {
 }
 
 // =============================================================================
-// Varargs Support
-// =============================================================================
-
-/**
- * A single vararg connection - references an output by canonical address.
- *
- * Varargs inputs accept variable-length connections without combining them.
- * Each connection is stored explicitly with a sort key for deterministic ordering.
- *
- * NOTE: Varargs connections are stored on the port, NOT as edges.
- * This is intentional - varargs bypass the normal edge/combine system.
- */
-export interface VarargConnection {
-  /**
-   * Canonical address of the output being referenced.
-   * Format: "blocks.<blockId>.outputs.<portId>"
-   *
-   * This address is resolved during normalization using the AddressRegistry
-   * (from Sprint 1: canonical-addressing).
-   */
-  readonly sourceAddress: string;
-
-  /**
-   * User-provided alias for display (optional).
-   * Used in the UI for labeling vararg connections.
-   */
-  readonly alias?: string;
-
-  /**
-   * Sort key for deterministic ordering.
-   * Connections are sorted by this key, lowest first.
-   * Block lowering receives connections in this order.
-   */
-  readonly sortKey: number;
-}
-
-// =============================================================================
 // Port Types
 // =============================================================================
 
 /**
  * Input port - a first-class object on a block.
  * Contains per-instance properties like defaultSource overrides.
- *
- * VARARGS EXTENSION (2026-01-26):
- * - Normal inputs use edges and combine system
- * - Varargs inputs use varargConnections array (bypass combine)
- * - A port is EITHER normal OR vararg, never both
  *
  * LENSES EXTENSION (Sprint 2: 2026-01-27):
  * - Lenses are attached per-port-per-connection
@@ -183,16 +141,8 @@ export interface InputPort {
   /**
    * Combine mode for multiple inputs.
    * Determines how values from multiple edges are combined.
-   * IGNORED for vararg inputs (varargs bypass combine system).
    */
   readonly combineMode: CombineMode;
-
-  /**
-   * Vararg connections (only for vararg inputs).
-   * If present, this is a vararg input and normal edges are ignored.
-   * Connections are ordered by sortKey for deterministic indexing.
-   */
-  readonly varargConnections?: readonly VarargConnection[];
 
   /**
    * Lens attachments for incoming connections (Sprint 2: 2026-01-27).
@@ -290,6 +240,13 @@ export interface Edge {
 
   /** Semantic role for editor behavior */
   readonly role: EdgeRole;
+
+  /**
+   * Alias for collect edges.
+   * Used by collect ports to identify input references (e.g., for Expression DSL member access).
+   * Only meaningful when role.kind === 'collect'.
+   */
+  readonly alias?: string;
 }
 
 /**
@@ -479,7 +436,7 @@ export class PatchBuilder {
     return this;
   }
 
-  addEdge(from: Endpoint, to: Endpoint, options?: { enabled?: boolean; sortKey?: number; role?: EdgeRole }): this {
+  addEdge(from: Endpoint, to: Endpoint, options?: { enabled?: boolean; sortKey?: number; role?: EdgeRole; alias?: string }): this {
     const id = `e${this.nextEdgeId++}`;
     this.edges.push({
       id,
@@ -488,6 +445,7 @@ export class PatchBuilder {
       enabled: options?.enabled ?? true,
       sortKey: options?.sortKey ?? this.edges.length,
       role: options?.role ?? { kind: 'user', meta: {} as Record<string, never> },
+      alias: options?.alias,
     });
     this.invalidateSnapshot();
     return this;
@@ -508,58 +466,41 @@ export class PatchBuilder {
   }
 
   /**
-   * Add a vararg connection to an input port.
+   * Create a collect edge — a normal edge with role 'collect'.
+   * Collect edges target ports with combineMode: 'collect' and preserve
+   * individual edge types instead of unifying via union-find.
    *
-   * @param blockId - Block ID
-   * @param portId - Input port ID (must be a vararg input)
-   * @param sourceAddress - Canonical address of the output (e.g., "blocks.b1.outputs.value")
-   * @param sortKey - Sort key for ordering (connections sorted by this key)
-   * @param alias - Optional display alias
+   * Also sets the target port's combineMode to 'collect' if not already set.
    */
-  addVarargConnection(
-    blockId: BlockId,
-    portId: string,
-    sourceAddress: string,
-    sortKey: number,
+  wireCollect(
+    fromBlock: BlockId,
+    fromPort: string,
+    toBlock: BlockId,
+    toPort: string,
     alias?: string
   ): this {
-    const block = this.blocks.get(blockId);
-    if (!block) {
-      throw new Error(`Block ${blockId} not found`);
-    }
-
-    const port = block.inputPorts.get(portId);
-    if (!port) {
-      throw new Error(`Input port ${portId} not found on block ${blockId}`);
-    }
-
-    // Create new vararg connection
-    const newConnection: VarargConnection = {
-      sourceAddress,
-      sortKey,
+    const id = `e${this.nextEdgeId++}`;
+    this.edges.push({
+      id,
+      from: { kind: 'port', blockId: fromBlock, slotId: fromPort as PortId },
+      to: { kind: 'port', blockId: toBlock, slotId: toPort as PortId },
+      enabled: true,
+      sortKey: this.edges.length,
+      role: { kind: 'collect', meta: { alias } },
       alias,
-    };
+    });
 
-    // Append to existing connections (or create new array)
-    const existingConnections = port.varargConnections ?? [];
-    const updatedConnections = [...existingConnections, newConnection];
+    // Ensure the target port has combineMode: 'collect'
+    const block = this.blocks.get(toBlock);
+    if (block) {
+      const port = block.inputPorts.get(toPort);
+      if (port && port.combineMode !== 'collect') {
+        const updatedPorts = new Map(block.inputPorts);
+        updatedPorts.set(toPort, { ...port, combineMode: 'collect' as import('../types').CombineMode });
+        this.blocks.set(toBlock, { ...block, inputPorts: updatedPorts });
+      }
+    }
 
-    // Update the port with new connections array
-    const updatedPort: InputPort = {
-      ...port,
-      varargConnections: updatedConnections,
-    };
-
-    // Update block with new port
-    const updatedInputPorts = new Map(block.inputPorts);
-    updatedInputPorts.set(portId, updatedPort);
-
-    const updatedBlock: Block = {
-      ...block,
-      inputPorts: updatedInputPorts,
-    };
-
-    this.blocks.set(blockId, updatedBlock);
     this.invalidateSnapshot();
     return this;
   }

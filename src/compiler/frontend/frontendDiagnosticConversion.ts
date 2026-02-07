@@ -48,9 +48,6 @@ const FRONTEND_ERROR_KIND_TO_DIAGNOSTIC_CODE: Record<string, DiagnosticCode> = {
   // Axis validation errors
   AxisViolation: 'E_TYPE_MISMATCH',
   VarAxisEscaped: 'E_TYPE_MISMATCH',
-
-  // Vararg errors
-  VarargError: 'E_UNKNOWN_BLOCK_TYPE',
 };
 
 // =============================================================================

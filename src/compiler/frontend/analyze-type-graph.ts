@@ -13,9 +13,25 @@ import {
   type CanonicalType,
   requireInst,
 } from "../../core/canonical-types";
-import type { TypedPatch, BlockIndex } from "../ir/patches";
+import type { TypedPatch, BlockIndex, TypeResolvedPatch, PortKey } from "../ir/patches";
 import { getBlockDefinition, getBlockCardinalityMetadata } from "../../blocks/registry";
-import { type TypeResolvedPatch, getPortType } from "./analyze-type-constraints";
+
+// =============================================================================
+// Port Type Lookup (inlined from analyze-type-constraints.ts)
+// =============================================================================
+
+function portKey(blockIndex: BlockIndex, portName: string, dir: 'in' | 'out'): PortKey {
+  return `${blockIndex}:${portName}:${dir}` as PortKey;
+}
+
+function getPortType(
+  patch: TypeResolvedPatch,
+  blockIndex: BlockIndex,
+  portName: string,
+  direction: 'in' | 'out',
+): import("../../core/canonical-types").CanonicalType | undefined {
+  return patch.portTypes.get(portKey(blockIndex, portName, direction));
+}
 
 // =============================================================================
 // Error Types
