@@ -105,7 +105,11 @@ export type FrontendCompileResult =
  * @param patch - The patch to compile
  * @returns FrontendCompileResult with typed graph and cycle info
  */
-export function compileFrontend(patch: Patch): FrontendCompileResult {
+export interface FrontendOptions {
+  readonly traceCardinalitySolver?: boolean;
+}
+
+export function compileFrontend(patch: Patch, options?: FrontendOptions): FrontendCompileResult {
   const errors: FrontendError[] = [];
 
   // =========================================================================
@@ -132,7 +136,9 @@ export function compileFrontend(patch: Patch): FrontendCompileResult {
   // =========================================================================
   // Step 2: Type Constraints (union-find solver)
   // =========================================================================
-  const pass1Result = pass1TypeConstraints(normalizedPatch);
+  const pass1Result = pass1TypeConstraints(normalizedPatch, {
+    traceCardinalitySolver: options?.traceCardinalitySolver,
+  });
 
   if (pass1Result.errors.length > 0) {
     // Type resolution had errors - collect them

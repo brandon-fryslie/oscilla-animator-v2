@@ -475,7 +475,11 @@ function resolveInstanceRefs(
 // Main pass
 // =============================================================================
 
-export function pass1TypeConstraints(normalized: NormalizedPatch): Pass1Result {
+export interface Pass1Options {
+  readonly traceCardinalitySolver?: boolean;
+}
+
+export function pass1TypeConstraints(normalized: NormalizedPatch, options?: Pass1Options): Pass1Result {
   const unitUF = new UnionFind<UnitType>();
   const payloadUF = new UnionFind<PayloadType>();
   const errors: TypeConstraintError[] = [];
@@ -667,6 +671,7 @@ export function pass1TypeConstraints(normalized: NormalizedPatch): Pass1Result {
       const blk = normalized.blocks[idx];
       return blk ? `${blk.displayName ?? blk.type} (${blk.type})` : `block#${idx}`;
     },
+    trace: options?.traceCardinalitySolver,
   });
 
   // Merge cardinality errors
