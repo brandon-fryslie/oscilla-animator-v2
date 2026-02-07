@@ -272,6 +272,9 @@ export interface DebugIndexIR {
   /** Maps slots to source block IDs */
   readonly slotToBlock: ReadonlyMap<ValueSlot, BlockId>;
 
+  /** Maps value expression IDs to the block that emitted them */
+  readonly exprToBlock: ReadonlyMap<ValueExprId, BlockId>;
+
   /** Port binding information */
   readonly ports: readonly PortBindingIR[];
 

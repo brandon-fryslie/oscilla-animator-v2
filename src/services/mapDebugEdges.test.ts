@@ -51,6 +51,7 @@ describe('mapDebugEdges', () => {
                 ports,
                 stepToBlock: new Map(),
                 slotToBlock: new Map(),
+                exprToBlock: new Map(),
             } as DebugIndexIR,
             slotMeta: [
                 // Meta for slot 10
@@ -92,7 +93,7 @@ describe('mapDebugEdges', () => {
         ];
 
         const mockProgram = {
-            debugIndex: { blockMap, slotToPort, ports, stepToBlock: new Map(), slotToBlock: new Map() } as DebugIndexIR,
+            debugIndex: { blockMap, slotToPort, ports, stepToBlock: new Map(), slotToBlock: new Map(), exprToBlock: new Map() } as DebugIndexIR,
             slotMeta: [
                 { slot: 10 as ValueSlot, type: { kind: 'float' }, storage: 'f64', offset: 0 },
                 { slot: 11 as ValueSlot, type: { kind: 'float' }, storage: 'f64', offset: 1 },
@@ -114,7 +115,8 @@ describe('mapDebugEdges', () => {
                 slotToPort: new Map(),
                 ports: [],
                 stepToBlock: new Map(),
-                slotToBlock: new Map()
+                slotToBlock: new Map(),
+                exprToBlock: new Map(),
             } as DebugIndexIR,
             slotMeta: []
         } as unknown as CompiledProgramIR;
@@ -137,7 +139,8 @@ describe('mapDebugEdges', () => {
                 slotToPort: new Map(),
                 ports: [],
                 stepToBlock: new Map(),
-                slotToBlock: new Map()
+                slotToBlock: new Map(),
+                exprToBlock: new Map(),
             } as DebugIndexIR,
             slotMeta: []
         } as unknown as CompiledProgramIR;

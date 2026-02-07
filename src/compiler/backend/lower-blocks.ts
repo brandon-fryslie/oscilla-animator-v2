@@ -3,7 +3,7 @@
  */
 
 import type { AcyclicOrLegalGraph, BlockIndex, DepGraph, SCC } from "../ir/patches";
-import type { Block } from "../../types";
+import type { Block, BlockId } from "../../types";
 import type { VarargConnection } from "../../graph/Patch";
 import type { OrchestratorIRBuilder } from "../ir/OrchestratorIRBuilder";
 import { IRBuilderImpl } from "../ir/IRBuilderImpl";
@@ -12,7 +12,7 @@ import { isExprRef, type ValueRefExpr } from "../ir/lowerTypes";
 import type { InstanceId } from "../ir/Indices";
 import { getBlockDefinition, type LowerCtx, type LowerResult, hasLowerOutputsOnly } from "../../blocks/registry";
 import type { EventHub } from "../../events/EventHub";
-import { type CanonicalType, requireInst } from "../../core/canonical-types";
+import { payloadStride, type CanonicalType, requireInst, withInstance } from "../../core/canonical-types";
 import type { PortKey } from "../frontend/analyze-type-constraints";
 // Multi-Input Blocks Integration
 import {
@@ -427,12 +427,26 @@ function lowerBlockInstance(
       }
     }
 
-    // Resolve output types from pass1 portTypes, falling back to declared type.
+    // Resolve output types from pass1 portTypes (the solver's source of truth).
     // The array MUST be positionally complete (one entry per output port in declaration order)
     // so that blocks can index into it by position.
+    if (!portTypes) {
+      throw new Error(
+        `portTypes not provided for ${block.type}#${block.id}. ` +
+        `This is a compiler bug — all blocks must have solver-resolved port types.`
+      );
+    }
     const outTypes: CanonicalType[] = Object.keys(blockDef.outputs)
-      .map(portName => (portTypes?.get(portKey(blockIndex, portName, 'out'))
-        ?? blockDef.outputs[portName].type) as CanonicalType);
+      .map(portName => {
+        const resolved = portTypes.get(portKey(blockIndex, portName, 'out'));
+        if (!resolved) {
+          throw new Error(
+            `Cardinality solver did not produce a type for ${block.type}#${block.id}.${portName}:out. ` +
+            `This is a compiler bug — the solver must resolve all port types.`
+          );
+        }
+        return resolved;
+      });
     // Backend reads portTypes from TypedPatch - never modifies them.
     // Blocks with 'preserve' cardinality must rewrite placeholder instance IDs
     // in their own lower() function using withInstance() (see Array, GridLayoutUV, etc.)
@@ -446,7 +460,7 @@ function lowerBlockInstance(
       // Use resolved types from pass1 (portTypes) - THE source of truth
       inTypes: Object.keys(blockDef.inputs)
         .filter(portName => blockDef.inputs[portName].exposedAsPort !== false)
-        .map(portName => portTypes?.get(portKey(blockIndex, portName, 'in')))
+        .map(portName => portTypes.get(portKey(blockIndex, portName, 'in')))
         .filter((t): t is CanonicalType => t !== undefined),
       outTypes,
       b: builder,
@@ -486,6 +500,52 @@ function lowerBlockInstance(
         result = {
           ...result,
           instanceContext: ctx.inferredInstance,
+        };
+      }
+    }
+
+    // If this block has an instanceContext, rewrite any many-cardinality output types
+    // to use the real instance ID (not the placeholder block ID used during type solving).
+    //
+    // IMPORTANT: This also mutates the underlying ValueExpr node type in the builder,
+    // because later passes (e.g. schedule-program.ts) infer instances from ValueExpr.type,
+    // not from the ValueRefExpr wrapper returned by blocks.
+    if ('instanceContext' in result && result.instanceContext !== undefined) {
+      const instanceDecl = builder.getInstances().get(result.instanceContext);
+      if (instanceDecl !== undefined && result.outputsById) {
+        const instance = { domainTypeId: instanceDecl.domainType, instanceId: result.instanceContext };
+
+        const rewrittenOutputsById: Record<string, ValueRefExpr> = { ...result.outputsById };
+        for (const [portId, ref] of Object.entries(result.outputsById)) {
+          if (!isExprRef(ref)) continue;
+          const card = requireInst(ref.type.extent.cardinality, 'cardinality');
+          if (card.kind !== 'many') continue;
+
+          const rewrittenType = withInstance(ref.type, instance);
+          const expr = builder.getValueExpr(ref.id);
+          if (expr) {
+            (expr as { type: CanonicalType }).type = rewrittenType;
+          }
+
+          rewrittenOutputsById[portId] = {
+            ...ref,
+            type: rewrittenType,
+            stride: payloadStride(rewrittenType.payload),
+          };
+        }
+
+        const rewrittenSlotRequests = result.effects?.slotRequests?.map((req) => {
+          const reqCard = requireInst(req.type.extent.cardinality, 'cardinality');
+          if (reqCard.kind !== 'many') return req;
+          return { ...req, type: withInstance(req.type, instance) };
+        });
+
+        result = {
+          ...result,
+          outputsById: rewrittenOutputsById,
+          ...(rewrittenSlotRequests
+            ? { effects: { ...result.effects, slotRequests: rewrittenSlotRequests } }
+            : {}),
         };
       }
     }
@@ -692,7 +752,7 @@ function lowerSCCTwoPass(
 
     // Only process stateful blocks with lowerOutputsOnly
     if (blockDef.isStateful && hasLowerOutputsOnly(blockDef)) {
-      (builder as any).setCurrentBlockId(block.id);
+      builder.setCurrentBlock(block.id as BlockId);
 
       try {
         // Build lowering context (similar to lowerBlockInstance but no input resolution)
@@ -703,11 +763,19 @@ function lowerSCCTwoPass(
           label: block.label,
           inTypes: Object.keys(blockDef.inputs)
             .filter(portName => blockDef.inputs[portName].exposedAsPort !== false)
-            .map(portName => portTypes?.get(portKey(blockIndex, portName, 'in')))
+            .map(portName => portTypes.get(portKey(blockIndex, portName, 'in')))
             .filter((t): t is CanonicalType => t !== undefined),
           outTypes: Object.keys(blockDef.outputs)
-            .map(portName => (portTypes?.get(portKey(blockIndex, portName, 'out'))
-              ?? blockDef.outputs[portName].type) as CanonicalType),
+            .map(portName => {
+              const resolved = portTypes.get(portKey(blockIndex, portName, 'out'));
+              if (!resolved) {
+                throw new Error(
+                  `Cardinality solver did not produce a type for ${block.type}#${block.id}.${portName}:out. ` +
+                  `This is a compiler bug — the solver must resolve all port types.`
+                );
+              }
+              return resolved;
+            }),
           b: builder,
           seedConstId: 0,
           instances: builder.getInstances(),
@@ -807,7 +875,7 @@ function lowerSCCTwoPass(
     const block = blocks[blockIndex];
     if (!block) return;
 
-    (builder as any).setCurrentBlockId(block.id);
+    builder.setCurrentBlock(block.id as BlockId);
 
     // Get existing outputs from phase 1 (if any)
     const existingOutputs = phase1Results.get(blockIndex);
@@ -1029,8 +1097,8 @@ export function pass6BlockLowering(
           continue;
         }
 
-        // Set current block ID for debug index tracking (Phase 7)
-        (builder as any).setCurrentBlockId(block.id);
+        // Set current block ID for debug index tracking
+        builder.setCurrentBlock(block.id as BlockId);
 
 
         // Lower this block instance
@@ -1076,7 +1144,7 @@ export function pass6BlockLowering(
   }
 
   // Clear block ID after processing all blocks
-  (builder as any).setCurrentBlockId(undefined);
+  builder.clearCurrentBlock();
 
   return {
     builder,

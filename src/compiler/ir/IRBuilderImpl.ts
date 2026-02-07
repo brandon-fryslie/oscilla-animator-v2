@@ -14,6 +14,7 @@ import type {
   InstanceId,
   DomainTypeId,
 } from './Indices';
+import type { BlockId } from '../../types';
 import type { TopologyId } from '../../shapes/types';
 import type { TimeModelIR } from './schedule';
 import type {
@@ -32,7 +33,7 @@ import type { CameraDeclIR } from './program';
 import type { ValueExpr } from './value-expr';
 import type { OrchestratorIRBuilder } from './OrchestratorIRBuilder';
 import { valueExprId } from './Indices';
-import { canonicalType, canonicalEvent, FLOAT, unitScalar, payloadStride } from '../../core/canonical-types';
+import { canonicalType, canonicalEvent, FLOAT, unitScalar, payloadStride, requireInst } from '../../core/canonical-types';
 
 /**
  * IRBuilderImpl - Implements OrchestratorIRBuilder (full surface)
@@ -58,6 +59,8 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
   private slotMeta = new Map<ValueSlot, { type: CanonicalType; stride: number }>();
   private schedule: TimeModelIR = { kind: 'infinite', periodAMs: 10000, periodBMs: 10000 };
   private renderGlobals: CameraDeclIR[] = [];
+  private _currentBlockId: BlockId | null = null;
+  private _exprToBlock = new Map<ValueExprId, BlockId>();
 
   // ===========================================================================
   // Value Expression Construction
@@ -79,22 +82,93 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
   }
 
   kernelMap(input: ValueExprId, fn: PureFn, type: CanonicalType): ValueExprId {
+    const outCard = requireInst(type.extent.cardinality, 'cardinality').kind;
+    const inCard = this.cardKindOf(input);
+    if ((outCard === 'many') !== (inCard === 'many')) {
+      throw new Error(
+        `IRBuilder.kernelMap: cardinality mismatch — output=${outCard} but input=${inCard} (input id=${input})`
+      );
+    }
     return this.pushExpr({ kind: 'kernel', type, kernelKind: 'map', input, fn });
   }
 
   kernelZip(inputs: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId {
+    const outCard = requireInst(type.extent.cardinality, 'cardinality').kind;
+    if (outCard === 'many') {
+      for (const id of inputs) {
+        const inCard = this.cardKindOf(id);
+        if (inCard !== 'many') {
+          throw new Error(
+            `IRBuilder.kernelZip: output is many but input id=${id} is ${inCard} — use kernelZipSig for mixed cardinality`
+          );
+        }
+      }
+    } else {
+      for (const id of inputs) {
+        const inCard = this.cardKindOf(id);
+        if (inCard === 'many') {
+          throw new Error(
+            `IRBuilder.kernelZip: output is ${outCard} but input id=${id} is many — field inputs require many output`
+          );
+        }
+      }
+    }
     return this.pushExpr({ kind: 'kernel', type, kernelKind: 'zip', inputs, fn });
   }
 
   kernelZipSig(field: ValueExprId, signals: readonly ValueExprId[], fn: PureFn, type: CanonicalType): ValueExprId {
+    const outCard = requireInst(type.extent.cardinality, 'cardinality').kind;
+    if (outCard !== 'many') {
+      throw new Error(
+        `IRBuilder.kernelZipSig: output must be many, got ${outCard}`
+      );
+    }
+    const fieldCard = this.cardKindOf(field);
+    if (fieldCard !== 'many') {
+      throw new Error(
+        `IRBuilder.kernelZipSig: field input id=${field} must be many, got ${fieldCard}`
+      );
+    }
+    for (const id of signals) {
+      const sigCard = this.cardKindOf(id);
+      if (sigCard === 'many') {
+        throw new Error(
+          `IRBuilder.kernelZipSig: signal input id=${id} must not be many — use kernelZip for all-field inputs`
+        );
+      }
+    }
     return this.pushExpr({ kind: 'kernel', type, kernelKind: 'zipSig', field, signals, fn });
   }
 
   broadcast(signal: ValueExprId, type: CanonicalType, signalComponents?: readonly ValueExprId[]): ValueExprId {
+    const outCard = requireInst(type.extent.cardinality, 'cardinality').kind;
+    if (outCard !== 'many') {
+      throw new Error(
+        `IRBuilder.broadcast: output must be many, got ${outCard}`
+      );
+    }
+    const sigCard = this.cardKindOf(signal);
+    if (sigCard === 'many') {
+      throw new Error(
+        `IRBuilder.broadcast: signal input id=${signal} must not be many (already a field)`
+      );
+    }
     return this.pushExpr({ kind: 'kernel', type, kernelKind: 'broadcast', signal, signalComponents });
   }
 
   reduce(field: ValueExprId, op: 'min' | 'max' | 'sum' | 'avg', type: CanonicalType): ValueExprId {
+    const outCard = requireInst(type.extent.cardinality, 'cardinality').kind;
+    if (outCard !== 'one') {
+      throw new Error(
+        `IRBuilder.reduce: output must be one, got ${outCard}`
+      );
+    }
+    const fieldCard = this.cardKindOf(field);
+    if (fieldCard !== 'many') {
+      throw new Error(
+        `IRBuilder.reduce: field input id=${field} must be many, got ${fieldCard}`
+      );
+    }
     return this.pushExpr({ kind: 'kernel', type, kernelKind: 'reduce', field, op });
   }
 
@@ -123,6 +197,18 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
   }
 
   pathDerivative(input: ValueExprId, op: 'tangent' | 'arcLength', topologyId: TopologyId, type: CanonicalType): ValueExprId {
+    const outCard = requireInst(type.extent.cardinality, 'cardinality').kind;
+    if (outCard !== 'many') {
+      throw new Error(
+        `IRBuilder.pathDerivative: output must be many, got ${outCard}`
+      );
+    }
+    const inCard = this.cardKindOf(input);
+    if (inCard !== 'many') {
+      throw new Error(
+        `IRBuilder.pathDerivative: input id=${input} must be many, got ${inCard}`
+      );
+    }
     return this.pushExpr({ kind: 'kernel', kernelKind: 'pathDerivative', field: input, op, topologyId, type });
   }
 
@@ -149,7 +235,8 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
       last: { kind: 'kernel', name: 'last' },
       product: { kind: 'opcode', opcode: OpCode.Mul },
     };
-    return this.pushExpr({ kind: 'kernel', type, kernelKind: 'zip', inputs, fn: fnMap[mode] });
+    // Delegate to kernelZip so cardinality assertions apply
+    return this.kernelZip(inputs, fnMap[mode], type);
   }
 
   // ===========================================================================
@@ -436,6 +523,13 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     return this.valueExprs;
   }
 
+  /** Extract instantiated cardinality kind from an already-pushed expression. */
+  private cardKindOf(id: ValueExprId): 'zero' | 'one' | 'many' {
+    const expr = this.valueExprs[id];
+    if (!expr) throw new Error(`IRBuilder: invalid ValueExprId ${id}`);
+    return requireInst(expr.type.extent.cardinality, 'cardinality').kind;
+  }
+
   /**
    * Resolve symbolic state keys to physical slots in all state expressions.
    * Called by processBlockEffects after state slot allocation.
@@ -476,6 +570,11 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     const id = valueExprId(this.valueExprs.length);
     this.valueExprs.push(expr);
     this.valueExprCache.set(hash, id);
+
+    if (this._currentBlockId !== null) {
+      this._exprToBlock.set(id, this._currentBlockId);
+    }
+
     return id;
   }
 
@@ -483,10 +582,20 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     this.schedule = schedule;
   }
 
-  setCurrentBlockId(_blockId: string): void {
-    // This is used for debug/error context during lowering.
-    // The implementation is currently a no-op as we don't track this state.
-    // If needed in the future, we can store it and attach it to error messages.
+  setCurrentBlockId(blockId: string): void {
+    this._currentBlockId = blockId as BlockId;
+  }
+
+  setCurrentBlock(blockId: BlockId): void {
+    this._currentBlockId = blockId;
+  }
+
+  clearCurrentBlock(): void {
+    this._currentBlockId = null;
+  }
+
+  getExprToBlock(): ReadonlyMap<ValueExprId, BlockId> {
+    return this._exprToBlock;
   }
 }
 

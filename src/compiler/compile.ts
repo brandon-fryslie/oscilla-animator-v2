@@ -772,6 +772,7 @@ function convertLinkedIRToProgram(
   const debugIndex = {
     stepToBlock,
     slotToBlock,
+    exprToBlock: builder.getExprToBlock(),
     ports,
     slotToPort,
     blockMap,

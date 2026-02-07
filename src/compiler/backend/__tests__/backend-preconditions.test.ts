@@ -50,6 +50,7 @@ function testProgramConverter(
       slotToPort: new Map(),
       stepToBlock: new Map(),
       slotToBlock: new Map(),
+      exprToBlock: new Map(),
       ports: [],
     },
     fieldSlotRegistry: new Map(),

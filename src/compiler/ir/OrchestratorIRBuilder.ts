@@ -13,6 +13,7 @@
 
 import type { BlockIRBuilder } from './BlockIRBuilder';
 import type { CanonicalType } from '../../core/canonical-types';
+import type { BlockId } from '../../types';
 import type {
   ValueExprId,
   ValueSlot,
@@ -149,4 +150,17 @@ export interface OrchestratorIRBuilder extends BlockIRBuilder {
   getSigSlots(): ReadonlyMap<number, ValueSlot>;
   getEventSlots(): ReadonlyMap<ValueExprId, any>;
   getEventSlotCount(): number;
+
+  // =========================================================================
+  // Debug Provenance Tracking
+  // =========================================================================
+
+  /** Set the current block context for expression provenance tracking. */
+  setCurrentBlock(blockId: BlockId): void;
+
+  /** Clear the current block context. */
+  clearCurrentBlock(): void;
+
+  /** Get the expr→block provenance map built during lowering. */
+  getExprToBlock(): ReadonlyMap<ValueExprId, BlockId>;
 }
