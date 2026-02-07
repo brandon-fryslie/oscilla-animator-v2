@@ -47,6 +47,9 @@ export class DebugStore {
   /** Whether debug panel/probing is enabled */
   enabled: boolean = true;
 
+  /** Whether cardinality solver trace is enabled */
+  traceCardinalitySolver: boolean = false;
+
   /** Currently hovered edge ID for probing */
   hoveredEdgeId: string | null = null;
 
@@ -89,14 +92,18 @@ export class DebugStore {
     // Register settings token
     settingsStore.register(debugSettings);
 
-    // Load initial value
+    // Load initial values
     const values = settingsStore.get(debugSettings) as DebugSettings;
     this.enabled = values.enabled;
+    this.traceCardinalitySolver = values.traceCardinalitySolver;
 
     // React to settings changes (settings panel → DebugStore)
     this.settingsSyncDisposer = reaction(
-      () => (settingsStore.get(debugSettings) as DebugSettings).enabled,
-      (enabled: boolean) => {
+      () => {
+        const s = settingsStore.get(debugSettings) as DebugSettings;
+        return { enabled: s.enabled, traceCardinalitySolver: s.traceCardinalitySolver };
+      },
+      ({ enabled, traceCardinalitySolver }) => {
         if (this.enabled !== enabled) {
           this.enabled = enabled;
           if (!enabled) {
@@ -104,6 +111,9 @@ export class DebugStore {
             this.untrackCurrentField();
             this._cachedEdgeValue = null;
           }
+        }
+        if (this.traceCardinalitySolver !== traceCardinalitySolver) {
+          this.traceCardinalitySolver = traceCardinalitySolver;
         }
       }
     );

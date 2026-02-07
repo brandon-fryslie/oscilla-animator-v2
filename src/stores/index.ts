@@ -26,6 +26,7 @@ export {
   type LogEntry,
 } from './DiagnosticsStore';
 export { CompositeEditorStore } from './CompositeEditorStore';
+export { StepDebugStore } from './StepDebugStore';
 
 // React integration
 export { StoreProvider, useStores, useStore } from './context';

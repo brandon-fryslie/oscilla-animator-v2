@@ -121,6 +121,14 @@ export function executeAnimationFrame(
 ): void {
   const { getCurrentProgram, getCurrentState, getCanvas, getContext, getArena, store, onStatsUpdate } = deps;
 
+  // Step debugger branch: when active, execution is driven by the user
+  // stepping through the schedule. The animation loop keeps running at rAF
+  // rate for rendering, but only advances when the user steps via UI.
+  if (store.stepDebug?.active) {
+    executeAnimationFrameDebug(tMs, deps, state);
+    return;
+  }
+
   const currentProgram = getCurrentProgram();
   const currentState = getCurrentState();
   const ctx = getContext();
@@ -233,6 +241,56 @@ export function executeAnimationFrame(
     state.minFrameTime = Infinity;
     state.maxFrameTime = 0;
     state.frameTimeSum = 0;
+  }
+}
+
+/**
+ * Debug-mode animation frame handler.
+ *
+ * When the step debugger is active, the animation loop keeps running at rAF
+ * rate for rendering, but execution only advances when the user steps via UI.
+ *
+ * - If no frame is in progress and mode is idle/completed: starts a new frame
+ * - If paused: renders the last completed frame (user is stepping)
+ * - If completed: renders the completed frame result
+ */
+function executeAnimationFrameDebug(
+  tMs: number,
+  deps: AnimationLoopDeps,
+  _state: AnimationLoopState,
+): void {
+  const { getCurrentProgram, getCurrentState, getCanvas, getContext, getArena, store } = deps;
+  const stepDebug = store.stepDebug;
+
+  const currentProgram = getCurrentProgram();
+  const currentState = getCurrentState();
+  const ctx = getContext();
+  const canvas = getCanvas();
+  const arena = getArena();
+
+  if (!currentProgram || !currentState || !ctx || !canvas || !arena) {
+    return;
+  }
+
+  // If idle or completed with no active frame, start a new frame
+  if (stepDebug.mode === 'idle' || stepDebug.mode === 'completed') {
+    arena.reset();
+    stepDebug.startFrame(currentProgram, currentState, arena, tMs);
+  }
+
+  // Render the last completed frame if available
+  const frame = stepDebug.lastFrameResult;
+  if (frame) {
+    const { zoom, pan } = store.viewport;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.translate(canvas.width / 2 + pan.x * zoom, canvas.height / 2 + pan.y * zoom);
+    ctx.scale(zoom, zoom);
+    ctx.translate(-canvas.width / 2, -canvas.height / 2);
+    renderFrame(ctx, frame, canvas.width, canvas.height, true);
+    ctx.restore();
   }
 }
 
