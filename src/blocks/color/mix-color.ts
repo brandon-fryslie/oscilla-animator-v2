@@ -11,7 +11,7 @@ import { canonicalType, payloadStride, unitHsl, unitNone, contractClamp01 } from
 import { FLOAT, COLOR } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
-import { withoutContract } from '../lower-utils';
+import { withoutContract, zipAuto, mapAuto } from '../lower-utils';
 
 registerBlock({
   type: 'MixColor',
@@ -63,7 +63,7 @@ registerBlock({
     const clampFn = ctx.b.opcode(OpCode.Clamp);
     const zero = ctx.b.constant({ kind: 'float', value: 0 }, intermediateFloat);
     const one = ctx.b.constant({ kind: 'float', value: 1 }, intermediateFloat);
-    const tClamped = ctx.b.kernelZip([tInput.id, zero, one], clampFn, intermediateFloat);
+    const tClamped = zipAuto([tInput.id, zero, one], clampFn, intermediateFloat, ctx.b);
 
     // Shortest-arc hue interpolation:
     //   diff = bh - ah
@@ -77,19 +77,19 @@ registerBlock({
     const wrap01Fn = ctx.b.opcode(OpCode.Wrap01);
 
     const half = ctx.b.constant({ kind: 'float', value: 0.5 }, intermediateFloat);
-    const diff = ctx.b.kernelZip([bh, ah], subFn, intermediateFloat);
-    const shifted = ctx.b.kernelZip([diff, half], addFn, intermediateFloat);
-    const fractVal = ctx.b.kernelMap(shifted, fractFn, intermediateFloat);
-    const dh = ctx.b.kernelZip([fractVal, half], subFn, intermediateFloat);
-    const dhScaled = ctx.b.kernelZip([dh, tClamped], mulFn, intermediateFloat);
-    const hSum = ctx.b.kernelZip([ah, dhScaled], addFn, intermediateFloat);
-    const hOut = ctx.b.kernelMap(hSum, wrap01Fn, intermediateFloat);
+    const diff = zipAuto([bh, ah], subFn, intermediateFloat, ctx.b);
+    const shifted = zipAuto([diff, half], addFn, intermediateFloat, ctx.b);
+    const fractVal = mapAuto(shifted, fractFn, intermediateFloat, ctx.b);
+    const dh = zipAuto([fractVal, half], subFn, intermediateFloat, ctx.b);
+    const dhScaled = zipAuto([dh, tClamped], mulFn, intermediateFloat, ctx.b);
+    const hSum = zipAuto([ah, dhScaled], addFn, intermediateFloat, ctx.b);
+    const hOut = mapAuto(hSum, wrap01Fn, intermediateFloat, ctx.b);
 
     // Linear lerp for s, l, a
     const lerpFn = ctx.b.opcode(OpCode.Lerp);
-    const sOut = ctx.b.kernelZip([as, bs, tClamped], lerpFn, intermediateFloat);
-    const lOut = ctx.b.kernelZip([al, bl, tClamped], lerpFn, intermediateFloat);
-    const aOut = ctx.b.kernelZip([aa, ba, tClamped], lerpFn, intermediateFloat);
+    const sOut = zipAuto([as, bs, tClamped], lerpFn, intermediateFloat, ctx.b);
+    const lOut = zipAuto([al, bl, tClamped], lerpFn, intermediateFloat, ctx.b);
+    const aOut = zipAuto([aa, ba, tClamped], lerpFn, intermediateFloat, ctx.b);
 
     // Reconstruct
     const result = ctx.b.construct([hOut, sOut, lOut, aOut], outType);

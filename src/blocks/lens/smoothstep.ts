@@ -12,6 +12,7 @@ import { canonicalType, payloadStride, floatConst } from '../../core/canonical-t
 import { FLOAT } from '../../core/canonical-types';
 import { inferType, unitVar } from '../../core/inference-types';
 import { OpCode } from '../../compiler/ir/types';
+import { zipAuto } from '../lower-utils';
 
 registerBlock({
   type: 'Smoothstep',
@@ -46,28 +47,28 @@ registerBlock({
 
     // t = clamp((x - edge0) / (edge1 - edge0), 0, 1)
     const subFn = ctx.b.opcode(OpCode.Sub);
-    const numerator = ctx.b.kernelZip([input.id, edge0.id], subFn, outType);
-    const denominator = ctx.b.kernelZip([edge1.id, edge0.id], subFn, outType);
+    const numerator = zipAuto([input.id, edge0.id], subFn, outType, ctx.b);
+    const denominator = zipAuto([edge1.id, edge0.id], subFn, outType, ctx.b);
 
     const divFn = ctx.b.opcode(OpCode.Div);
-    const ratio = ctx.b.kernelZip([numerator, denominator], divFn, outType);
+    const ratio = zipAuto([numerator, denominator], divFn, outType, ctx.b);
 
     const zeroConst = ctx.b.constant(floatConst(0.0), canonicalType(FLOAT));
     const oneConst = ctx.b.constant(floatConst(1.0), canonicalType(FLOAT));
     const clampFn = ctx.b.opcode(OpCode.Clamp);
-    const t = ctx.b.kernelZip([ratio, zeroConst, oneConst], clampFn, outType);
+    const t = zipAuto([ratio, zeroConst, oneConst], clampFn, outType, ctx.b);
 
     // y = t * t * (3 - 2 * t)
     const mulFn = ctx.b.opcode(OpCode.Mul);
-    const tt = ctx.b.kernelZip([t, t], mulFn, outType);
+    const tt = zipAuto([t, t], mulFn, outType, ctx.b);
 
     const twoConst = ctx.b.constant(floatConst(2.0), canonicalType(FLOAT));
-    const twoT = ctx.b.kernelZip([twoConst, t], mulFn, outType);
+    const twoT = zipAuto([twoConst, t], mulFn, outType, ctx.b);
 
     const threeConst = ctx.b.constant(floatConst(3.0), canonicalType(FLOAT));
-    const threeMinusTwoT = ctx.b.kernelZip([threeConst, twoT], subFn, outType);
+    const threeMinusTwoT = zipAuto([threeConst, twoT], subFn, outType, ctx.b);
 
-    const result = ctx.b.kernelZip([tt, threeMinusTwoT], mulFn, outType);
+    const result = zipAuto([tt, threeMinusTwoT], mulFn, outType, ctx.b);
 
     return {
       outputsById: {

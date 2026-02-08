@@ -10,6 +10,7 @@ import { canonicalType, canonicalEvent, payloadStride, requireInst, FLOAT } from
 import { inferType, unitVar } from '../../core/inference-types';
 import { OpCode, stableStateId } from '../../compiler/ir/types';
 import type { ValueExprId } from '../../compiler/ir/Indices';
+import { zipAuto } from '../lower-utils';
 
 registerBlock({
   type: 'SampleHold',
@@ -58,13 +59,13 @@ registerBlock({
     // Conditional via lerp: lerp(prev, value, trigger)
     // trigger=0 → output=prev (hold), trigger=1 → output=value (sample)
     const lerpFn = ctx.b.opcode(OpCode.Lerp);
-    const outputId = ctx.b.kernelZip(
+    const outType = ctx.outTypes[0];
+    const outputId = zipAuto(
       [prevId, valueInput.id as ValueExprId, triggerSig],
       lerpFn,
-      canonicalType(FLOAT)
+      outType,
+      ctx.b
     );
-
-    const outType = ctx.outTypes[0];
 
     // Return effects-as-data (no imperative calls)
     return {

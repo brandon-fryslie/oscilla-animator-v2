@@ -9,6 +9,7 @@ import { canonicalType, payloadStride, floatConst, requireInst } from '../../cor
 import { FLOAT, BOOL } from '../../core/canonical-types';
 import { inferType, unitVar } from '../../core/inference-types';
 import { OpCode, stableStateId } from '../../compiler/ir/types';
+import { zipAuto } from '../lower-utils';
 
 registerBlock({
   type: 'Accumulator',
@@ -56,11 +57,11 @@ registerBlock({
     // Compute new value: reset ? 0 : (currentValue + delta)
     const add = ctx.b.opcode(OpCode.Add);
     const zero = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
-    const newValue = ctx.b.kernelZip([currentValue, delta.id], add, outType);
+    const newValue = zipAuto([currentValue, delta.id], add, outType, ctx.b);
 
     // Select: reset ? 0 : newValue
     const select = ctx.b.opcode(OpCode.Select);
-    const finalValue = ctx.b.kernelZip([reset.id, zero, newValue], select, outType);
+    const finalValue = zipAuto([reset.id, zero, newValue], select, outType, ctx.b);
 
     // Return effects-as-data (no imperative calls)
     return {

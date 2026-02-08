@@ -8,6 +8,7 @@ import { registerBlock } from '../registry';
 import { canonicalType, payloadStride, floatConst } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
+import { zipAuto, mapAuto } from '../lower-utils';
 
 registerBlock({
   type: 'Normalize',
@@ -46,28 +47,28 @@ registerBlock({
     const maxFn = ctx.b.opcode(OpCode.Max);
 
     // length = sqrt(x² + y² [+ z²])
-    const x2 = ctx.b.kernelZip([x.id, x.id], mulFn, outTypeX);
-    const y2 = ctx.b.kernelZip([y.id, y.id], mulFn, outTypeX);
-    let sumSq = ctx.b.kernelZip([x2, y2], addFn, outTypeX);
+    const x2 = zipAuto([x.id, x.id], mulFn, outTypeX, ctx.b);
+    const y2 = zipAuto([y.id, y.id], mulFn, outTypeX, ctx.b);
+    let sumSq = zipAuto([x2, y2], addFn, outTypeX, ctx.b);
 
     if (z) {
-      const z2 = ctx.b.kernelZip([z.id, z.id], mulFn, outTypeX);
-      sumSq = ctx.b.kernelZip([sumSq, z2], addFn, outTypeX);
+      const z2 = zipAuto([z.id, z.id], mulFn, outTypeX, ctx.b);
+      sumSq = zipAuto([sumSq, z2], addFn, outTypeX, ctx.b);
     }
 
-    const lengthId = ctx.b.kernelMap(sumSq, sqrtFn, outTypeX);
+    const lengthId = mapAuto(sumSq, sqrtFn, outTypeX, ctx.b);
 
     // Guard against division by zero
     const epsilon = ctx.b.constant(floatConst(1e-10), canonicalType(FLOAT));
-    const safeLengthId = ctx.b.kernelZip([lengthId, epsilon], maxFn, outTypeX);
+    const safeLengthId = zipAuto([lengthId, epsilon], maxFn, outTypeX, ctx.b);
 
     // Divide each component by length
-    const outXId = ctx.b.kernelZip([x.id, safeLengthId], divFn, outTypeX);
-    const outYId = ctx.b.kernelZip([y.id, safeLengthId], divFn, outTypeX);
+    const outXId = zipAuto([x.id, safeLengthId], divFn, outTypeX, ctx.b);
+    const outYId = zipAuto([y.id, safeLengthId], divFn, outTypeX, ctx.b);
 
     let outZId;
     if (z) {
-      outZId = ctx.b.kernelZip([z.id, safeLengthId], divFn, outTypeX);
+      outZId = zipAuto([z.id, safeLengthId], divFn, outTypeX, ctx.b);
     } else {
       outZId = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
     }

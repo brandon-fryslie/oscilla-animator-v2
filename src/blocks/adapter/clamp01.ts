@@ -8,6 +8,7 @@ import { registerBlock } from '../registry';
 import { canonicalType, unitNone, payloadStride, floatConst, contractClamp01 } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
+import { zipAuto, mapAuto } from '../lower-utils';
 
 registerBlock({
   type: 'Adapter_Clamp01',
@@ -45,7 +46,7 @@ registerBlock({
     const zero = ctx.b.constant(floatConst(0), canonicalType(FLOAT, unitNone()));
     const one = ctx.b.constant(floatConst(1), canonicalType(FLOAT, unitNone()));
     const clampFn = ctx.b.opcode(OpCode.Clamp);
-    const clamped = ctx.b.kernelZip([input.id, zero, one], clampFn, outType);
+    const clamped = zipAuto([input.id, zero, one], clampFn, outType, ctx.b);
     return {
       outputsById: {
         out: { id: clamped, slot: undefined, type: outType, stride: payloadStride(outType.payload) },

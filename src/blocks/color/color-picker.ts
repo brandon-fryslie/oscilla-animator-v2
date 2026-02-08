@@ -11,6 +11,7 @@ import { canonicalType, payloadStride, unitHsl, unitTurns, unitNone, contractWra
 import { FLOAT, COLOR } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
+import { zipAuto, mapAuto } from '../lower-utils';
 
 registerBlock({
   type: 'ColorPicker',
@@ -52,10 +53,10 @@ registerBlock({
     const zero = ctx.b.constant({ kind: 'float', value: 0 }, floatType);
     const one = ctx.b.constant({ kind: 'float', value: 1 }, floatType);
 
-    const hWrapped = ctx.b.kernelMap(hInput.id, wrap01, floatType);
-    const sClamped = ctx.b.kernelZip([sInput.id, zero, one], clamp, floatType);
-    const lClamped = ctx.b.kernelZip([lInput.id, zero, one], clamp, floatType);
-    const aClamped = ctx.b.kernelZip([aInput.id, zero, one], clamp, floatType);
+    const hWrapped = mapAuto(hInput.id, wrap01, floatType, ctx.b);
+    const sClamped = zipAuto([sInput.id, zero, one], clamp, floatType, ctx.b);
+    const lClamped = zipAuto([lInput.id, zero, one], clamp, floatType, ctx.b);
+    const aClamped = zipAuto([aInput.id, zero, one], clamp, floatType, ctx.b);
 
     const result = ctx.b.construct([hWrapped, sClamped, lClamped, aClamped], outType);
 

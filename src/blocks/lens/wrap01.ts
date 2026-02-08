@@ -12,6 +12,7 @@ import { canonicalType, payloadStride } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { inferType, unitVar } from '../../core/inference-types';
 import { OpCode } from '../../compiler/ir/types';
+import { mapAuto } from '../lower-utils';
 
 registerBlock({
   type: 'Wrap01',
@@ -40,7 +41,7 @@ registerBlock({
 
     // fract(x) using Wrap01 opcode
     const wrapFn = ctx.b.opcode(OpCode.Wrap01);
-    const result = ctx.b.kernelMap(input.id, wrapFn, outType);
+    const result = mapAuto(input.id, wrapFn, outType, ctx.b);
 
     return {
       outputsById: {

@@ -8,6 +8,7 @@ import { registerBlock } from '../registry';
 import { canonicalType, unitMs, unitNone, unitSeconds, payloadStride, floatConst } from '../../core/canonical-types';
 import { INT, FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
+import { zipAuto, mapAuto } from '../lower-utils';
 
 registerBlock({
   type: 'Adapter_SecondsToMs',
@@ -44,9 +45,9 @@ registerBlock({
     const outType = ctx.outTypes[0];
     const multiplier = ctx.b.constant(floatConst(1000), canonicalType(FLOAT, unitNone()));
     const mulFn = ctx.b.opcode(OpCode.Mul);
-    const floatMs = ctx.b.kernelZip([input.id, multiplier], mulFn, outType);
+    const floatMs = zipAuto([input.id, multiplier], mulFn, outType, ctx.b);
     const floorFn = ctx.b.opcode(OpCode.Floor);
-    const intMs = ctx.b.kernelMap(floatMs, floorFn, outType);
+    const intMs = mapAuto(floatMs, floorFn, outType, ctx.b);
     return {
       outputsById: {
         out: { id: intMs, slot: undefined, type: outType, stride: payloadStride(outType.payload) },

@@ -11,6 +11,7 @@ import { payloadStride } from '../../core/canonical-types';
 import { FLOAT, INT } from '../../core/canonical-types';
 import { inferType, unitVar } from '../../core/inference-types';
 import { OpCode } from '../../compiler/ir/types';
+import { zipAuto, mapAuto } from '../lower-utils';
 
 registerBlock({
   type: 'Adapter_CastFloatToInt',
@@ -46,7 +47,7 @@ registerBlock({
 
     const outType = ctx.outTypes[0];
     const truncFn = ctx.b.opcode(OpCode.F64ToI32Trunc);
-    const result = ctx.b.kernelMap(input.id, truncFn, outType);
+    const result = mapAuto(input.id, truncFn, outType, ctx.b);
     return {
       outputsById: {
         out: { id: result, slot: undefined, type: outType, stride: payloadStride(outType.payload) },

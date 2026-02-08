@@ -8,6 +8,7 @@ import { registerBlock } from '../registry';
 import { canonicalType, unitTurns, unitDegrees, payloadStride, floatConst, contractWrap01 } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
+import { zipAuto, mapAuto } from '../lower-utils';
 
 registerBlock({
   type: 'Adapter_PhaseToDegrees',
@@ -44,7 +45,7 @@ registerBlock({
     const outType = ctx.outTypes[0];
     const threeSixty = ctx.b.constant(floatConst(360), canonicalType(FLOAT, unitDegrees()));
     const mulFn = ctx.b.opcode(OpCode.Mul);
-    const degrees = ctx.b.kernelZip([input.id, threeSixty], mulFn, outType);
+    const degrees = zipAuto([input.id, threeSixty], mulFn, outType, ctx.b);
     return {
       outputsById: {
         out: { id: degrees, slot: undefined, type: outType, stride: payloadStride(outType.payload) },

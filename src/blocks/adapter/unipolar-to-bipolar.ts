@@ -9,6 +9,7 @@ import { registerBlock } from '../registry';
 import { canonicalType, unitNone, payloadStride, floatConst, contractClamp01, contractClamp11 } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
+import { zipAuto } from '../lower-utils';
 
 registerBlock({
   type: 'Adapter_UnipolarToBipolar',
@@ -50,10 +51,10 @@ registerBlock({
     const one = ctx.b.constant(floatConst(1), canonicalType(FLOAT, unitNone()));
 
     const mulFn = ctx.b.opcode(OpCode.Mul);
-    const scaled = ctx.b.kernelZip([input.id, two], mulFn, outType);
+    const scaled = zipAuto([input.id, two], mulFn, outType, ctx.b);
 
     const subFn = ctx.b.opcode(OpCode.Sub);
-    const result = ctx.b.kernelZip([scaled, one], subFn, outType);
+    const result = zipAuto([scaled, one], subFn, outType, ctx.b);
 
     return {
       outputsById: {

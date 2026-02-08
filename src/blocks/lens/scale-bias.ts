@@ -11,6 +11,7 @@ import { canonicalType, payloadStride } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { inferType, unitVar } from '../../core/inference-types';
 import { OpCode } from '../../compiler/ir/types';
+import { zipAuto } from '../lower-utils';
 
 registerBlock({
   type: 'ScaleBias',
@@ -45,10 +46,10 @@ registerBlock({
 
     // y = x * scale + bias
     const mulFn = ctx.b.opcode(OpCode.Mul);
-    const scaled = ctx.b.kernelZip([input.id, scale.id], mulFn, outType);
+    const scaled = zipAuto([input.id, scale.id], mulFn, outType, ctx.b);
 
     const addFn = ctx.b.opcode(OpCode.Add);
-    const result = ctx.b.kernelZip([scaled, bias.id], addFn, outType);
+    const result = zipAuto([scaled, bias.id], addFn, outType, ctx.b);
 
     return {
       outputsById: {

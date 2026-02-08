@@ -11,6 +11,7 @@ import { canonicalType, payloadStride } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { inferType, unitVar } from '../../core/inference-types';
 import { OpCode } from '../../compiler/ir/types';
+import { zipAuto } from '../lower-utils';
 
 registerBlock({
   type: 'Clamp',
@@ -44,7 +45,7 @@ registerBlock({
     const outType = ctx.outTypes[0];
 
     const clampFn = ctx.b.opcode(OpCode.Clamp);
-    const result = ctx.b.kernelZip([input.id, min.id, max.id], clampFn, outType);
+    const result = zipAuto([input.id, min.id, max.id], clampFn, outType, ctx.b);
 
     return {
       outputsById: {

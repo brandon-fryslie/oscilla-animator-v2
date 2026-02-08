@@ -12,6 +12,7 @@ import { canonicalType, payloadStride, requireInst, unitNone, contractClamp01 } 
 import { FLOAT } from '../../core/canonical-types';
 import { inferType, unitVar } from '../../core/inference-types';
 import { OpCode, stableStateId } from '../../compiler/ir/types';
+import { zipAuto } from '../lower-utils';
 
 registerBlock({
   type: 'Slew',
@@ -51,7 +52,7 @@ registerBlock({
 
     // Compute: lerp(prev, input, rate)
     const lerpFn = ctx.b.opcode(OpCode.Lerp);
-    const newValue = ctx.b.kernelZip([prevValue, input.id, rate.id], lerpFn, outType);
+    const newValue = zipAuto([prevValue, input.id, rate.id], lerpFn, outType, ctx.b);
 
     // Return effects-as-data (no imperative calls)
     return {

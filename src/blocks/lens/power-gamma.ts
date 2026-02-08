@@ -10,6 +10,7 @@ import { registerBlock } from '../registry';
 import { canonicalType, payloadStride, floatConst } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
+import { zipAuto } from '../lower-utils';
 
 registerBlock({
   type: 'PowerGamma',
@@ -43,11 +44,11 @@ registerBlock({
     const zeroConst = ctx.b.constant(floatConst(0.0), canonicalType(FLOAT));
     const oneConst = ctx.b.constant(floatConst(1.0), canonicalType(FLOAT));
     const clampFn = ctx.b.opcode(OpCode.Clamp);
-    const clamped = ctx.b.kernelZip([input.id, zeroConst, oneConst], clampFn, outType);
+    const clamped = zipAuto([input.id, zeroConst, oneConst], clampFn, outType, ctx.b);
 
     // pow(clamped, gamma)
     const powFn = ctx.b.opcode(OpCode.Pow);
-    const result = ctx.b.kernelZip([clamped, gamma.id], powFn, outType);
+    const result = zipAuto([clamped, gamma.id], powFn, outType, ctx.b);
 
     return {
       outputsById: {

@@ -10,6 +10,7 @@ import { canonicalType, payloadStride, unitHsl, unitNone, contractClamp01 } from
 import { FLOAT, COLOR } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
+import { zipAuto } from '../lower-utils';
 
 registerBlock({
   type: 'AlphaMultiply',
@@ -51,8 +52,8 @@ registerBlock({
     const zero = ctx.b.constant({ kind: 'float', value: 0 }, floatType);
     const one = ctx.b.constant({ kind: 'float', value: 1 }, floatType);
 
-    const aMultiplied = ctx.b.kernelZip([a, alphaInput.id], mulFn, floatType);
-    const aClamped = ctx.b.kernelZip([aMultiplied, zero, one], clampFn, floatType);
+    const aMultiplied = zipAuto([a, alphaInput.id], mulFn, floatType, ctx.b);
+    const aClamped = zipAuto([aMultiplied, zero, one], clampFn, floatType, ctx.b);
 
     // Reconstruct with modified alpha
     const result = ctx.b.construct([h, s, l, aClamped], outType);

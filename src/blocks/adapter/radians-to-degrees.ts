@@ -8,6 +8,7 @@ import { registerBlock } from '../registry';
 import { canonicalType, unitDegrees, unitNone, unitRadians, payloadStride, floatConst } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
+import { zipAuto } from '../lower-utils';
 
 registerBlock({
   type: 'Adapter_RadiansToDegrees',
@@ -44,7 +45,7 @@ registerBlock({
     const outType = ctx.outTypes[0];
     const factor = ctx.b.constant(floatConst(57.29577951308232), canonicalType(FLOAT, unitNone())); // 180/π
     const mulFn = ctx.b.opcode(OpCode.Mul);
-    const degrees = ctx.b.kernelZip([input.id, factor], mulFn, outType);
+    const degrees = zipAuto([input.id, factor], mulFn, outType, ctx.b);
     return {
       outputsById: {
         out: { id: degrees, slot: undefined, type: outType, stride: payloadStride(outType.payload) },

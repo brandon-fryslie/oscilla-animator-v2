@@ -8,6 +8,7 @@ import { registerBlock } from '../registry';
 import { canonicalType, unitTurns, payloadStride, floatConst, requireInst, contractWrap01 } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode, stableStateId } from '../../compiler/ir/types';
+import { zipAuto, mapAuto } from '../lower-utils';
 
 registerBlock({
   type: 'Phasor',
@@ -52,16 +53,16 @@ registerBlock({
     const mulFn = ctx.b.opcode(OpCode.Mul);
     const divFn = ctx.b.opcode(OpCode.Div);
     const thousand = ctx.b.constant(floatConst(1000), canonicalType(FLOAT));
-    const dtSeconds = ctx.b.kernelZip([dtSig, thousand], divFn, outType);
-    const increment = ctx.b.kernelZip([frequency.id, dtSeconds], mulFn, outType);
+    const dtSeconds = zipAuto([dtSig, thousand], divFn, outType, ctx.b);
+    const increment = zipAuto([frequency.id, dtSeconds], mulFn, outType, ctx.b);
 
     // Add increment to previous phase
     const addFn = ctx.b.opcode(OpCode.Add);
-    const rawPhase = ctx.b.kernelZip([prevPhase, increment], addFn, outType);
+    const rawPhase = zipAuto([prevPhase, increment], addFn, outType, ctx.b);
 
     // Wrap to [0, 1)
     const wrapFn = ctx.b.opcode(OpCode.Wrap01);
-    const wrappedPhase = ctx.b.kernelMap(rawPhase, wrapFn, outType);
+    const wrappedPhase = mapAuto(rawPhase, wrapFn, outType, ctx.b);
 
     // Return effects-as-data (no imperative calls)
     return {

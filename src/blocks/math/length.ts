@@ -8,6 +8,7 @@ import { registerBlock } from '../registry';
 import { canonicalType, payloadStride } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
+import { zipAuto, mapAuto } from '../lower-utils';
 
 registerBlock({
   type: 'Length',
@@ -42,16 +43,16 @@ registerBlock({
     const sqrtFn = ctx.b.opcode(OpCode.Sqrt);
 
     // x² + y² [+ z²] → sqrt
-    const x2 = ctx.b.kernelZip([x.id, x.id], mulFn, outType);
-    const y2 = ctx.b.kernelZip([y.id, y.id], mulFn, outType);
-    let sumSq = ctx.b.kernelZip([x2, y2], addFn, outType);
+    const x2 = zipAuto([x.id, x.id], mulFn, outType, ctx.b);
+    const y2 = zipAuto([y.id, y.id], mulFn, outType, ctx.b);
+    let sumSq = zipAuto([x2, y2], addFn, outType, ctx.b);
 
     if (z) {
-      const z2 = ctx.b.kernelZip([z.id, z.id], mulFn, outType);
-      sumSq = ctx.b.kernelZip([sumSq, z2], addFn, outType);
+      const z2 = zipAuto([z.id, z.id], mulFn, outType, ctx.b);
+      sumSq = zipAuto([sumSq, z2], addFn, outType, ctx.b);
     }
 
-    const lengthId = ctx.b.kernelMap(sumSq, sqrtFn, outType);
+    const lengthId = mapAuto(sumSq, sqrtFn, outType, ctx.b);
 
     return {
       outputsById: {

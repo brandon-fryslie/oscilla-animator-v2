@@ -17,6 +17,7 @@ import { payloadStride } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { inferType, unitVar } from '../../core/inference-types';
 import { OpCode } from '../../compiler/ir/types';
+import { zipAuto, mapAuto } from '../lower-utils';
 
 registerBlock({
   type: 'Adapter_PayloadAnchorFloat',
@@ -52,7 +53,7 @@ registerBlock({
     if (!input) throw new Error('PayloadAnchorFloat: input required');
     const outType = ctx.outTypes[0];
     const identityFn = ctx.b.opcode(OpCode.Identity);
-    const result = ctx.b.kernelMap(input.id, identityFn, outType);
+    const result = mapAuto(input.id, identityFn, outType, ctx.b);
     return {
       outputsById: {
         out: {

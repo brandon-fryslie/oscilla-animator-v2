@@ -8,6 +8,7 @@ import { registerBlock, STANDARD_NUMERIC_PAYLOADS } from '../registry';
 import { canonicalType, payloadStride } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
+import { mapAuto } from '../lower-utils';
 
 registerBlock({
   type: 'Sin',
@@ -45,7 +46,7 @@ registerBlock({
 
     const outType = ctx.outTypes[0];
     const sinFn = ctx.b.opcode(OpCode.Sin);
-    const result = ctx.b.kernelMap(input.id, sinFn, outType);
+    const result = mapAuto(input.id, sinFn, outType, ctx.b);
 
     return {
       outputsById: {

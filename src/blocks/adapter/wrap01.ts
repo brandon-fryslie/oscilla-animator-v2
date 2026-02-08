@@ -8,6 +8,7 @@ import { registerBlock } from '../registry';
 import { canonicalType, unitNone, payloadStride, contractWrap01 } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
+import { zipAuto, mapAuto } from '../lower-utils';
 
 registerBlock({
   type: 'Adapter_Wrap01',
@@ -45,7 +46,7 @@ registerBlock({
 
     // fract(x) using Wrap01 opcode
     const wrapFn = ctx.b.opcode(OpCode.Wrap01);
-    const wrapped = ctx.b.kernelMap(input.id, wrapFn, outType);
+    const wrapped = mapAuto(input.id, wrapFn, outType, ctx.b);
 
     return {
       outputsById: {

@@ -11,6 +11,7 @@ import { canonicalType, payloadStride } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { inferType, unitVar } from '../../core/inference-types';
 import { OpCode } from '../../compiler/ir/types';
+import { zipAuto, mapAuto } from '../lower-utils';
 
 registerBlock({
   type: 'StepQuantize',
@@ -42,13 +43,13 @@ registerBlock({
 
     // y = round(x / step) * step
     const divFn = ctx.b.opcode(OpCode.Div);
-    const divided = ctx.b.kernelZip([input.id, step.id], divFn, outType);
+    const divided = zipAuto([input.id, step.id], divFn, outType, ctx.b);
 
     const roundFn = ctx.b.opcode(OpCode.Round);
-    const rounded = ctx.b.kernelMap(divided, roundFn, outType);
+    const rounded = mapAuto(divided, roundFn, outType, ctx.b);
 
     const mulFn = ctx.b.opcode(OpCode.Mul);
-    const result = ctx.b.kernelZip([rounded, step.id], mulFn, outType);
+    const result = zipAuto([rounded, step.id], mulFn, outType, ctx.b);
 
     return {
       outputsById: {

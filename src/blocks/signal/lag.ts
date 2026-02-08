@@ -9,6 +9,7 @@ import { canonicalType, payloadStride, floatConst, requireInst, unitNone, contra
 import { FLOAT } from '../../core/canonical-types';
 import { inferType, unitVar } from '../../core/inference-types';
 import { OpCode, stableStateId } from '../../compiler/ir/types';
+import { zipAuto } from '../lower-utils';
 
 registerBlock({
   type: 'Lag',
@@ -52,7 +53,7 @@ registerBlock({
     // Compute: lerp(prev, target, smoothing)
     const lerpFn = ctx.b.opcode(OpCode.Lerp);
     const smoothConst = ctx.b.constant(floatConst(smoothing), canonicalType(FLOAT, unitNone(), undefined, contractClamp01()));
-    const newValue = ctx.b.kernelZip([prevValue, target.id, smoothConst], lerpFn, outType);
+    const newValue = zipAuto([prevValue, target.id, smoothConst], lerpFn, outType, ctx.b);
 
     // Return effects-as-data (no imperative calls)
     return {

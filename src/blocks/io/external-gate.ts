@@ -8,6 +8,7 @@ import { registerBlock } from '../registry';
 import { canonicalType, payloadStride, floatConst, FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
+import { zipAuto } from '../lower-utils';
 
 registerBlock({
   type: 'ExternalGate',
@@ -71,8 +72,8 @@ registerBlock({
     const gtFn = ctx.b.opcode(OpCode.Gt);
     const subFn = ctx.b.opcode(OpCode.Sub);
 
-    const thresholdGtInput = ctx.b.kernelZip([thresholdSig, inputSig], gtFn, outType);
-    const gateSig = ctx.b.kernelZip([oneSig, thresholdGtInput], subFn, outType);
+    const thresholdGtInput = zipAuto([thresholdSig, inputSig], gtFn, outType, ctx.b);
+    const gateSig = zipAuto([oneSig, thresholdGtInput], subFn, outType, ctx.b);
 
     return {
       outputsById: {

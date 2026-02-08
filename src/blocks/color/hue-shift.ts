@@ -10,7 +10,7 @@ import { canonicalType, payloadStride, unitHsl, unitNone } from '../../core/cano
 import { FLOAT, COLOR } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
 import { defaultSourceConst } from '../../types';
-import { withoutContract } from '../lower-utils';
+import { withoutContract, zipAuto, mapAuto } from '../lower-utils';
 
 registerBlock({
   type: 'HueShift',
@@ -54,8 +54,8 @@ registerBlock({
     // h2 = wrap01(h + shift)
     const addFn = ctx.b.opcode(OpCode.Add);
     const wrap01 = ctx.b.opcode(OpCode.Wrap01);
-    const hShifted = ctx.b.kernelZip([h, shiftInput.id], addFn, intermediateFloat);
-    const hWrapped = ctx.b.kernelMap(hShifted, wrap01, intermediateFloat);
+    const hShifted = zipAuto([h, shiftInput.id], addFn, intermediateFloat, ctx.b);
+    const hWrapped = mapAuto(hShifted, wrap01, intermediateFloat, ctx.b);
 
     // Reconstruct with shifted hue
     const result = ctx.b.construct([hWrapped, s, l, a], outType);

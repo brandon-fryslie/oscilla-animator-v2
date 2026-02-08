@@ -8,6 +8,7 @@ import { registerBlock } from '../registry';
 import { canonicalType, unitTurns, unitNone, payloadStride, contractWrap01 } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
+import { zipAuto, mapAuto } from '../lower-utils';
 
 registerBlock({
   type: 'Adapter_ScalarToPhase01',
@@ -43,7 +44,7 @@ registerBlock({
 
     const outType = ctx.outTypes[0];
     const wrapFn = ctx.b.opcode(OpCode.Wrap01);
-    const wrapped = ctx.b.kernelMap(input.id, wrapFn, outType);
+    const wrapped = mapAuto(input.id, wrapFn, outType, ctx.b);
     return {
       outputsById: {
         out: { id: wrapped, slot: undefined, type: outType, stride: payloadStride(outType.payload) },

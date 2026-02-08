@@ -8,6 +8,7 @@ import { registerBlock } from '../registry';
 import { canonicalType, unitTurns, unitNone, unitRadians, payloadStride, floatConst, contractWrap01 } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
+import { zipAuto } from '../lower-utils';
 
 registerBlock({
   type: 'Adapter_PhaseToRadians',
@@ -44,7 +45,7 @@ registerBlock({
     const outType = ctx.outTypes[0];
     const twoPi = ctx.b.constant(floatConst(6.283185307179586), canonicalType(FLOAT, unitNone()));
     const mulFn = ctx.b.opcode(OpCode.Mul);
-    const radians = ctx.b.kernelZip([input.id, twoPi], mulFn, outType);
+    const radians = zipAuto([input.id, twoPi], mulFn, outType, ctx.b);
     return {
       outputsById: {
         out: { id: radians, slot: undefined, type: outType, stride: payloadStride(outType.payload) },

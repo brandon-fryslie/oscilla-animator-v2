@@ -8,6 +8,7 @@ import { registerBlock } from '../registry';
 import { canonicalType, payloadStride, floatConst } from '../../core/canonical-types';
 import { FLOAT } from '../../core/canonical-types';
 import { OpCode } from '../../compiler/ir/types';
+import { zipAuto } from '../lower-utils';
 
 registerBlock({
   type: 'Noise',
@@ -36,7 +37,7 @@ registerBlock({
     const outType = ctx.outTypes[0];
     const seedId = ctx.b.constant(floatConst(0), canonicalType(FLOAT));
     const hashFn = ctx.b.opcode(OpCode.Hash);
-    const hashId = ctx.b.kernelZip([x.id, seedId], hashFn, outType);
+    const hashId = zipAuto([x.id, seedId], hashFn, outType, ctx.b);
 
     return {
       outputsById: {
