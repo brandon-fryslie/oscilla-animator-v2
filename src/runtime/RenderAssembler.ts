@@ -443,7 +443,7 @@ function resolveScale(
     );
   }
 
-  if (scaleSpec.k === 'sig') { // TODO: k === 'sig' is deprecated/removed
+  if (scaleSpec.k === 'sig') {
     const slotIndex = sigToSlot.get(scaleSpec.id as number);
     if (slotIndex === undefined) {
       throw new Error(

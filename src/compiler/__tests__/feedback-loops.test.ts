@@ -105,7 +105,7 @@ describe('Feedback Loops with UnitDelay', () => {
       const hasCycleError = result.errors.some(e =>
         e.message?.includes('cycle') ||
         e.message?.includes('Cycle') ||
-        e.kind === 'IllegalCycle'
+        e.code === 'IllegalCycle'
       );
       expect(hasCycleError).toBe(true);
     }

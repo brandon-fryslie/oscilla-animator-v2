@@ -39,7 +39,6 @@ import type { CanonicalType } from '../../core/canonical-types';
  * - instances: Instance declarations (count, layout, etc)
  * - steps: Ordered execution steps
  * - stateSlotCount: Number of persistent state slots
- * - stateSlots: Initial values (legacy format, prefer stateMappings)
  * - stateMappings: Canonical source for state slot declarations (ScalarSlotDecl | FieldSlotDecl)
  *
  * **Accessing State Slots:**
@@ -65,18 +64,6 @@ export interface ScheduleIR {
 
   /** Number of persistent state slots */
   readonly stateSlotCount: number;
-
-  /**
-   * **Legacy format** - Initial values for state slots.
-   *
-   * This is an expanded array used only for initial state buffer allocation.
-   * For hot-swap migration and semantic state queries, use `stateMappings` instead.
-   * For typed access, use `getScalarSlots()` or `getFieldSlots()`.
-   *
-   * @deprecated Legacy expanded format. Use stateMappings for hot-swap migration.
-   *             Use getScalarSlots() / getFieldSlots() for spec-aligned typed access.
-   */
-  readonly stateSlots: readonly StateSlotDef[];
 
   /**
    * Canonical source for state slot declarations with stable IDs.
@@ -113,13 +100,6 @@ export interface ScheduleIR {
 
   /** Number of event expressions (for sizing eventPrevPredicate Uint8Array) */
   readonly eventCount: number;
-}
-
-/**
- * State slot definition
- */
-export interface StateSlotDef {
-  readonly initialValue: number;
 }
 
 // =============================================================================
@@ -778,27 +758,8 @@ export function pass7Schedule(
     ...stateWriteSteps,
   ];
 
-  // Get state mappings from builder and convert to legacy StateSlotDef format
   const stateSlotCount = unlinkedIR.builder.getStateSlotCount();
   const stateMappings = unlinkedIR.builder.getStateMappings();
-
-  // Convert StateMapping[] to StateSlotDef[] by expanding all slots
-  const stateSlots: StateSlotDef[] = [];
-  for (const mapping of stateMappings) {
-    if (mapping.kind === 'scalar') {
-      // Scalar: expand stride slots
-      for (let i = 0; i < mapping.stride; i++) {
-        stateSlots.push({ initialValue: mapping.initial[i] });
-      }
-    } else {
-      // Field: expand laneCount * stride slots
-      for (let lane = 0; lane < mapping.laneCount; lane++) {
-        for (let i = 0; i < mapping.stride; i++) {
-          stateSlots.push({ initialValue: mapping.initial[i] });
-        }
-      }
-    }
-  }
 
   // Get event counts for runtime allocation
   const eventSlotCount = unlinkedIR.builder.getEventSlotCount();
@@ -809,7 +770,6 @@ export function pass7Schedule(
     instances,
     steps,
     stateSlotCount,
-    stateSlots,
     stateMappings,
     eventSlotCount,
     eventCount,

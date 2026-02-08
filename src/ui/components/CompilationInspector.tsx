@@ -265,8 +265,8 @@ export const CompilationInspector: React.FC = observer(() => {
           {currentPass.errors.map((error, idx) => (
             <div key={idx} className="compilation-error">
               <div className="compilation-error-message">{error.message}</div>
-              {error.blockId && (
-                <div className="compilation-error-location">Block: {error.blockId}</div>
+              {error.where?.blockId && (
+                <div className="compilation-error-location">Block: {error.where.blockId}</div>
               )}
             </div>
           ))}

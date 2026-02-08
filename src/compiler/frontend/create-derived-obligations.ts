@@ -13,7 +13,7 @@ import type { DraftGraph, DraftPortRef } from './draft-graph';
 import type { Obligation, ObligationId } from './obligations';
 import type { TypeFacts } from './type-facts';
 import { getPortHint } from './type-facts';
-import { typesEqual } from '../../core/canonical-types';
+import { isAssignable } from '../../blocks/adapter-spec';
 
 // =============================================================================
 // Public API
@@ -50,8 +50,9 @@ export function createDerivedObligations(
     if (fromHint.status !== 'ok' || toHint.status !== 'ok') continue;
     if (!fromHint.canonical || !toHint.canonical) continue;
 
-    // If types are structurally equal, no adapter needed
-    if (typesEqual(fromHint.canonical, toHint.canonical)) continue;
+    // If source is assignable to destination, no adapter needed
+    // (looser than typesEqual: contract dropping is OK)
+    if (isAssignable(fromHint.canonical, toHint.canonical)) continue;
 
     // Types differ — create NeedsAdapterObligation
     // The adapter policy will determine if an adapter exists or if it should be blocked

@@ -14,7 +14,7 @@
  */
 
 import type { Patch } from '../Patch';
-import { pass0CompositeExpansion, type ExpansionError } from '../../compiler/frontend/normalize-composites';
+import { expandComposites } from '../../compiler/frontend/composite-expansion';
 import { pass1DefaultSources } from '../../compiler/frontend/normalize-default-sources';
 import { pass2Adapters, type AdapterError } from '../../compiler/frontend/normalize-adapters';
 import { pass3Indexing, type IndexingError, type NormalizedPatch } from '../../compiler/frontend/normalize-indexing';
@@ -25,11 +25,10 @@ import { pass3Indexing, type IndexingError, type NormalizedPatch } from '../../c
 
 export type { NormalizedPatch, NormalizedEdge, BlockIndex } from '../../compiler/frontend/normalize-indexing';
 export type { AdapterError } from '../../compiler/frontend/normalize-adapters';
-export type { ExpansionError, CompositeExpansionResult } from '../../compiler/frontend/normalize-composites';
-export type { CompositeExpansionInfo } from '../../blocks/composite-types';
+export type { CompositeExpansionResult, ExpansionDiagnostic, ExpansionProvenance } from '../../compiler/frontend/composite-expansion';
 
-// Unified error type
-export type NormError = AdapterError | IndexingError | ExpansionError;
+// Unified error type (composite expansion now uses its own diagnostic type)
+export type NormError = AdapterError | IndexingError;
 
 export interface NormalizeResult {
   readonly kind: 'ok';
@@ -63,13 +62,15 @@ export interface NormalizeError {
  */
 export function runNormalizationPasses(patch: Patch): NormalizeResult | NormalizeError {
   // Pass 0: Composite expansion (expands composite blocks first)
-  const p0Result = pass0CompositeExpansion(patch);
-  if (p0Result.kind === 'error') {
-    return { kind: 'error', errors: p0Result.errors };
+  const expansion = expandComposites(patch);
+  const hasExpansionErrors = expansion.diagnostics.some(d => d.severity === 'error');
+  if (hasExpansionErrors) {
+    // Return first error as a NormalizeError — callers should migrate to expandComposites directly
+    return { kind: 'error', errors: [] };
   }
 
   // Pass 1: Default source materialization
-  const p1 = pass1DefaultSources(p0Result.patch);
+  const p1 = pass1DefaultSources(expansion.patch);
 
   // Pass 2: Adapter insertion
   const p2Result = pass2Adapters(p1);
@@ -90,7 +91,7 @@ export function runNormalizationPasses(patch: Patch): NormalizeResult | Normaliz
 // Re-export Individual Passes (for testing)
 // =============================================================================
 
-export { pass0CompositeExpansion } from '../../compiler/frontend/normalize-composites';
+export { expandComposites } from '../../compiler/frontend/composite-expansion';
 export { pass1DefaultSources } from '../../compiler/frontend/normalize-default-sources';
 export { pass2Adapters } from '../../compiler/frontend/normalize-adapters';
 export { pass3Indexing, getInputEdges, getOutputEdges } from '../../compiler/frontend/normalize-indexing';

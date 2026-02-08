@@ -44,8 +44,10 @@ describe('extractConstraints', () => {
     const g = buildDraftGraph(patch);
     const constraints = extractConstraints(g, BLOCK_DEFS_BY_TYPE);
 
-    // Should have at least one edge constraint
-    const edgeConstraints = constraints.payloadUnit.filter((c) => c.kind === 'edge');
+    // Should have at least one edge constraint (payloadEq or unitEq with edge origin)
+    const edgeConstraints = constraints.payloadUnit.filter(
+      (c) => c.kind === 'payloadEq' || c.kind === 'unitEq',
+    );
     expect(edgeConstraints.length).toBeGreaterThanOrEqual(1);
 
     // Edge → equal cardinality constraints should exist
@@ -62,7 +64,10 @@ describe('extractConstraints', () => {
     const constraints = extractConstraints(g, BLOCK_DEFS_BY_TYPE);
 
     // Broadcast has signal and field ports sharing payload/unit vars
-    const sameVarConstraints = constraints.payloadUnit.filter((c) => c.kind === 'sameVar');
+    // These now emit as payloadEq/unitEq with blockRule origin
+    const sameVarConstraints = constraints.payloadUnit.filter(
+      (c) => (c.kind === 'payloadEq' || c.kind === 'unitEq') && 'origin' in c && c.origin.kind === 'blockRule',
+    );
     // Should have same-var constraints for shared payload and/or unit vars
     expect(sameVarConstraints.length).toBeGreaterThanOrEqual(1);
   });
@@ -75,7 +80,9 @@ describe('extractConstraints', () => {
     const constraints = extractConstraints(g, BLOCK_DEFS_BY_TYPE);
 
     // Const has concrete types on its output
-    const concreteConstraints = constraints.payloadUnit.filter((c) => c.kind === 'concrete');
+    const concreteConstraints = constraints.payloadUnit.filter(
+      (c) => c.kind === 'concretePayload' || c.kind === 'concreteUnit',
+    );
     expect(concreteConstraints.length).toBeGreaterThanOrEqual(0); // May or may not depending on Const def
   });
 

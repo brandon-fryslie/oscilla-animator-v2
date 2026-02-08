@@ -1,0 +1,1 @@
+Note: i don't think we need this since we implemented this as 'combineMode: array'

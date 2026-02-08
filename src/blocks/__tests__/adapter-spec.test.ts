@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { findAdapter, needsAdapter, extractPattern } from '../adapter-spec';
+import { findAdapter, needsAdapter, extractPattern, isAssignable, findAdapterChain } from '../adapter-spec';
 import {
   canonicalType,
   unitTurns, contractWrap01,
@@ -218,5 +218,124 @@ describe('Adapter Registry', () => {
       expect(pattern.unit).toEqual({ kind: 'angle', unit: 'turns' });
       expect(pattern.extent).toEqual(type.extent);
     });
+  });
+});
+
+describe('isAssignable', () => {
+  it('identical types are assignable', () => {
+    const t = canonicalType(FLOAT, unitScalar());
+    expect(isAssignable(t, t)).toBe(true);
+  });
+
+  it('contract dropping is assignable (clamp01 → none)', () => {
+    const src = canonicalType(FLOAT, unitScalar(), undefined, contractClamp01());
+    const dst = canonicalType(FLOAT, unitScalar());
+    expect(isAssignable(src, dst)).toBe(true);
+  });
+
+  it('contract gaining is NOT assignable (none → clamp01)', () => {
+    const src = canonicalType(FLOAT, unitScalar());
+    const dst = canonicalType(FLOAT, unitScalar(), undefined, contractClamp01());
+    expect(isAssignable(src, dst)).toBe(false);
+  });
+
+  it('different units are NOT assignable', () => {
+    const src = canonicalType(FLOAT, unitRadians());
+    const dst = canonicalType(FLOAT, unitDegrees());
+    expect(isAssignable(src, dst)).toBe(false);
+  });
+
+  it('different payloads are NOT assignable', () => {
+    const src = canonicalType(FLOAT, unitScalar());
+    const dst = canonicalType(INT, unitScalar());
+    expect(isAssignable(src, dst)).toBe(false);
+  });
+
+  it('same contract is assignable', () => {
+    const src = canonicalType(FLOAT, unitScalar(), undefined, contractClamp01());
+    const dst = canonicalType(FLOAT, unitScalar(), undefined, contractClamp01());
+    expect(isAssignable(src, dst)).toBe(true);
+  });
+
+  it('wrap01 → none is assignable (contract dropping)', () => {
+    const src = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
+    const dst = canonicalType(FLOAT, unitTurns());
+    expect(isAssignable(src, dst)).toBe(true);
+  });
+});
+
+describe('findAdapterChain', () => {
+  it('returns null when types are already assignable', () => {
+    const src = canonicalType(FLOAT, unitScalar());
+    const dst = canonicalType(FLOAT, unitScalar());
+    expect(findAdapterChain(src, dst)).toBeNull();
+  });
+
+  it('returns null when contract dropping (assignable without adapter)', () => {
+    const src = canonicalType(FLOAT, unitScalar(), undefined, contractClamp01());
+    const dst = canonicalType(FLOAT, unitScalar());
+    expect(findAdapterChain(src, dst)).toBeNull();
+  });
+
+  it('single-step: scalar → phase01', () => {
+    const src = canonicalType(FLOAT, unitScalar());
+    const dst = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
+    const chain = findAdapterChain(src, dst);
+    expect(chain).not.toBeNull();
+    expect(chain!.steps.length).toBe(1);
+    expect(chain!.steps[0].blockType).toBe('Adapter_ScalarToPhase01');
+    expect(chain!.cost).toBe(1);
+  });
+
+  it('single-step: degrees → radians', () => {
+    const src = canonicalType(FLOAT, unitDegrees());
+    const dst = canonicalType(FLOAT, unitRadians());
+    const chain = findAdapterChain(src, dst);
+    expect(chain).not.toBeNull();
+    expect(chain!.steps.length).toBe(1);
+    expect(chain!.steps[0].blockType).toBe('Adapter_DegreesToRadians');
+  });
+
+  it('two-step: degrees → phase01 (via radians)', () => {
+    const src = canonicalType(FLOAT, unitDegrees());
+    const dst = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
+    const chain = findAdapterChain(src, dst);
+    expect(chain).not.toBeNull();
+    expect(chain!.steps.length).toBe(2);
+    expect(chain!.steps[0].blockType).toBe('Adapter_DegreesToRadians');
+    expect(chain!.steps[1].blockType).toBe('Adapter_RadiansToPhase01');
+    expect(chain!.cost).toBe(2);
+  });
+
+  it('returns null for impossible conversion (float → bool)', () => {
+    const src = canonicalType(FLOAT, unitScalar());
+    const dst = canonicalType(BOOL, { kind: 'none' });
+    expect(findAdapterChain(src, dst)).toBeNull();
+  });
+
+  it('deterministic: same inputs produce same chain', () => {
+    const src = canonicalType(FLOAT, unitDegrees());
+    const dst = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
+    const chain1 = findAdapterChain(src, dst);
+    const chain2 = findAdapterChain(src, dst);
+    expect(chain1).toEqual(chain2);
+  });
+
+  it('prefers shorter chain: radians → phase01 is 1 step, not 2', () => {
+    const src = canonicalType(FLOAT, unitRadians());
+    const dst = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
+    const chain = findAdapterChain(src, dst);
+    expect(chain).not.toBeNull();
+    expect(chain!.steps.length).toBe(1);
+    expect(chain!.steps[0].blockType).toBe('Adapter_RadiansToPhase01');
+  });
+
+  it('single-step: scalar → clamp01', () => {
+    const src = canonicalType(FLOAT, unitScalar());
+    const dst = canonicalType(FLOAT, unitScalar(), undefined, contractClamp01());
+    const chain = findAdapterChain(src, dst);
+    expect(chain).not.toBeNull();
+    expect(chain!.steps.length).toBe(1);
+    expect(chain!.steps[0].blockType).toBe('Adapter_Clamp01');
   });
 });

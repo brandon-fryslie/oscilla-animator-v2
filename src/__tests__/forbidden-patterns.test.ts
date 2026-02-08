@@ -276,6 +276,29 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
 
   });
 
+  // =============================================================================
+  // Legacy CompileError Removal
+  // =============================================================================
+
+  describe('Legacy CompileError Removal', () => {
+
+    it('no LegacyCompileError type anywhere in src/', () => {
+      const matches = grepSrc('LegacyCompileError');
+      const allowlist = [
+        /forbidden-patterns\.test\.ts/,  // This file
+      ];
+      const filtered = filterAllowlist(matches, allowlist);
+      expect(filtered, 'LegacyCompileError was removed — use CompileError from types.ts').toEqual([]);
+    });
+
+    it('no .kind on CompileError (use .code instead)', () => {
+      // compile.ts must not define a CompileError with 'kind' field
+      const matches = grepSrc("readonly kind: string", 'src/compiler/compile.ts');
+      expect(matches, 'compile.ts CompileError must use code, not kind').toEqual([]);
+    });
+
+  });
+
   describe('Opcode Single Enforcer', () => {
 
     it('ValueExprMaterializer must not contain inline opcode implementations', () => {
@@ -297,6 +320,41 @@ describe('Forbidden Patterns (Type System Invariants)', () => {
           `ValueExprMaterializer must not have case '${opcode}:' - use applyOpcode() instead`
         ).toEqual([]);
       }
+    });
+
+  });
+
+  // =============================================================================
+  // Composite Expansion Migration
+  // =============================================================================
+
+  describe('Composite Expansion Migration', () => {
+
+    it('no pass0CompositeExpansion function name in src/', () => {
+      const matches = grepSrc('pass0CompositeExpansion');
+      const allowlist = [
+        /forbidden-patterns\.test\.ts/,  // This file
+      ];
+      const filtered = filterAllowlist(matches, allowlist);
+      expect(filtered, 'pass0CompositeExpansion was removed — use expandComposites() instead').toEqual([]);
+    });
+
+    it('no normalize-composites import in src/', () => {
+      const matches = grepSrc('normalize-composites');
+      const allowlist = [
+        /forbidden-patterns\.test\.ts/,  // This file
+      ];
+      const filtered = filterAllowlist(matches, allowlist);
+      expect(filtered, 'normalize-composites was removed — use composite-expansion instead').toEqual([]);
+    });
+
+    it('no _comp_ prefix in src/ (old composite expansion ID scheme)', () => {
+      const matches = grepSrc('_comp_');
+      const allowlist = [
+        /forbidden-patterns\.test\.ts/,  // This file
+      ];
+      const filtered = filterAllowlist(matches, allowlist);
+      expect(filtered, '_comp_ prefix was replaced by cx: — use the new ID scheme').toEqual([]);
     });
 
   });

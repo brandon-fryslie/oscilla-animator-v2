@@ -28,6 +28,7 @@ registerBlock({
       result: STANDARD_NUMERIC_PAYLOADS,
     },
     semantics: 'componentwise',
+    unitBehavior: 'requireUnitless',
   },
   inputs: {
     input: { label: 'Input', type: canonicalType(FLOAT) },

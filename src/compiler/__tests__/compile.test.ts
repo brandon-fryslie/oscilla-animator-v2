@@ -37,7 +37,7 @@ describe('compile', () => {
 
       expect(result.kind).toBe('error');
       if (result.kind === 'error') {
-        expect(result.errors[0].kind).toBe('MultipleTimeRoots');
+        expect(result.errors[0].code).toBe('MultipleTimeRoots');
       }
     });
 
@@ -216,7 +216,7 @@ describe('compile', () => {
 
       expect(result.kind).toBe('error');
       if (result.kind === 'error') {
-        expect(result.errors.some((e) => e.kind === 'UnknownBlockType')).toBe(
+        expect(result.errors.some((e) => e.code === 'UnknownBlockType')).toBe(
           true
         );
       }
@@ -418,7 +418,7 @@ describe('error isolation for unreachable blocks', () => {
     expect(result.kind).toBe('ok');
 
     if (result.kind === 'ok') {
-      const unreachable = result.warnings.find(w => w.kind === 'W_BLOCK_UNREACHABLE_ERROR');
+      const unreachable = result.warnings.find(w => w.code === 'W_BLOCK_UNREACHABLE_ERROR');
       expect(unreachable).toBeDefined();
       expect(unreachable!.message).toContain('not connected to render pipeline');
     }
@@ -494,7 +494,7 @@ describe('zipBroadcast cardinality', () => {
     const result = compile(patch);
     if (result.kind === 'error') {
       throw new Error(
-        `Expected compilation to succeed, got errors:\n${result.errors.map(e => `  [${e.kind}] ${e.message}`).join('\n')}`
+        `Expected compilation to succeed, got errors:\n${result.errors.map(e => `  [${e.code}] ${e.message}`).join('\n')}`
       );
     }
     expect(result.kind).toBe('ok');

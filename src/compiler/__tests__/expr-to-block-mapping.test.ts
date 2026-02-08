@@ -16,7 +16,7 @@ function compileOk(patch: ReturnType<typeof buildPatch>) {
   const result = compile(patch);
   if (result.kind === 'error') {
     throw new Error(
-      `Compilation failed:\n${result.errors.map((e) => `  [${e.kind}] ${e.message}`).join('\n')}`
+      `Compilation failed:\n${result.errors.map((e) => `  [${e.code}] ${e.message}`).join('\n')}`
     );
   }
   return result.program;

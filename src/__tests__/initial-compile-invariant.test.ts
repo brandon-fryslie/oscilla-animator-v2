@@ -63,7 +63,7 @@ describe('initial compile invariant: broken patches MUST produce errors', () => 
 
     expect(result.kind).toBe('error');
     if (result.kind === 'error') {
-      const codes = result.errors.map((e) => e.kind);
+      const codes = result.errors.map((e) => e.code);
       expect(codes).toContain('UnknownBlockType');
     }
   });

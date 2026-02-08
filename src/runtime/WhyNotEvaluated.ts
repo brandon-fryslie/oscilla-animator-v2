@@ -154,7 +154,7 @@ function findCompileErrorsForBlock(
   const errors: string[] = [];
   for (const pass of snapshot.passes) {
     for (const err of pass.errors) {
-      if (err.blockId === blockIdStr) {
+      if (err.where?.blockId === blockIdStr) {
         errors.push(`[${pass.passName}] ${err.message}`);
       }
     }
@@ -164,7 +164,7 @@ function findCompileErrorsForBlock(
   if (snapshot.status === 'failure') {
     for (const pass of snapshot.passes) {
       for (const err of pass.errors) {
-        if (!err.blockId && err.message) {
+        if (!err.where?.blockId && err.message) {
           errors.push(`[${pass.passName}] ${err.message}`);
         }
       }

@@ -410,3 +410,270 @@ export function getAllAdapterRules(): readonly { from: TypePattern; to: TypePatt
   }));
 }
 
+// =============================================================================
+// isAssignable — Looser compatibility than typesEqual
+// =============================================================================
+
+/**
+ * Check if a source type is assignable to a destination type.
+ *
+ * Looser than typesEqual: contract dropping is OK (clamp01 → none),
+ * but contract gaining is not (none → clamp01).
+ *
+ * Used by createDerivedObligations to decide whether an edge needs an adapter.
+ */
+export function isAssignable(src: InferenceCanonicalType, dst: InferenceCanonicalType): boolean {
+  return patternsAreCompatible(extractPattern(src), extractPattern(dst));
+}
+
+// =============================================================================
+// Adapter Chain Types & BFS
+// =============================================================================
+
+/** A single step in a multi-step adapter chain. */
+export interface AdapterStep {
+  readonly blockType: string;
+  readonly inputPortId: string;
+  readonly outputPortId: string;
+}
+
+/** A complete adapter chain (one or more steps). */
+export interface AdapterChain {
+  readonly steps: readonly AdapterStep[];
+  readonly cost: number;
+}
+
+/** Maximum chain length (safety rail). */
+const MAX_CHAIN_LENGTH = 4;
+
+/**
+ * Check whether an adapter rule is applicable to a given source type.
+ *
+ * Factored out of findAdapter so both single-step and BFS can use it.
+ * Handles Broadcast cardinality direction check and unit/contract
+ * preservation constraints.
+ */
+function isRuleApplicable(
+  rule: AdapterRule,
+  fromType: InferenceCanonicalType,
+  fromPattern: TypePattern,
+): boolean {
+  if (!patternMatches(fromPattern, rule.from)) return false;
+
+  // Broadcast: verify cardinality direction (one → many only)
+  // [LAW:single-enforcer] Cardinality direction check lives here, not scattered.
+  if (rule.blockType === 'Broadcast') {
+    const fromCard = fromType.extent.cardinality;
+    const fromIsOne = fromCard.kind === 'inst' && fromCard.value.kind === 'one';
+    if (!fromIsOne) return false;
+  }
+
+  return true;
+}
+
+/**
+ * Check whether an adapter rule's output satisfies a given destination.
+ *
+ * Handles 'any'/'same' payload, unit, and contract constraints between
+ * the rule's `to` pattern and the actual destination type.
+ */
+function isRuleOutputCompatibleWithDest(
+  rule: AdapterRule,
+  fromPattern: TypePattern,
+  toPattern: TypePattern,
+): boolean {
+  if (!patternMatches(toPattern, rule.to)) return false;
+
+  // For rules with 'any' payload on both sides, require actual payloads to match
+  if (rule.from.payload === 'any' && rule.to.payload === 'any') {
+    if (fromPattern.payload !== toPattern.payload) return false;
+  }
+
+  // For rules with 'same'/'any' unit, require actual units to match
+  if (rule.to.unit === 'same' || (rule.from.unit === 'any' && rule.to.unit === 'any')) {
+    const fromUnit = fromPattern.unit;
+    const toUnit = toPattern.unit;
+    if (fromUnit !== 'any' && toUnit !== 'any' && fromUnit !== 'same' && toUnit !== 'same') {
+      if (typeof fromUnit === 'object' && typeof toUnit === 'object') {
+        if (fromUnit.kind !== 'var' && toUnit.kind !== 'var') {
+          if (!unitsEqual(fromUnit as UnitType, toUnit as UnitType)) return false;
+        }
+      }
+    }
+  }
+
+  // For rules with 'same' contract, require actual contracts to match
+  if (rule.to.contract === 'same') {
+    const fromContract = fromPattern.contract as ValueContract | undefined;
+    const toContract = toPattern.contract as ValueContract | undefined;
+    if (!contractsEqual(fromContract, toContract)) return false;
+  }
+
+  return true;
+}
+
+/**
+ * Compute the output type after applying an adapter rule to a concrete input type.
+ *
+ * Resolves 'same'/'any'/undefined in the rule's `to` pattern:
+ * - Concrete value in `to` → use it
+ * - 'same' → preserve input's value
+ * - 'any'/undefined → preserve input's value (except contract: undefined in to = no contract)
+ */
+function applyAdapterTransform(
+  rule: AdapterRule,
+  input: InferenceCanonicalType,
+): InferenceCanonicalType {
+  // Payload
+  const toPayload = rule.to.payload;
+  const payload: InferenceCanonicalType['payload'] =
+    (toPayload === 'same' || toPayload === 'any') ? input.payload : toPayload;
+
+  // Unit
+  const toUnit = rule.to.unit;
+  const unit: InferenceCanonicalType['unit'] =
+    (toUnit === 'same' || toUnit === 'any') ? input.unit : toUnit;
+
+  // Extent: adapters preserve extent (with possible cardinality change for Broadcast)
+  let extent = input.extent;
+  if (rule.to.extent !== 'any' && typeof rule.to.extent === 'object') {
+    extent = { ...extent, ...rule.to.extent };
+  }
+
+  // Contract
+  const toContract = rule.to.contract;
+  let contract: ValueContract | undefined;
+  if (toContract === 'same') {
+    contract = input.contract;
+  } else if (toContract === 'any' || toContract === undefined) {
+    // No contract guarantee on output (contract drops)
+    contract = undefined;
+  } else {
+    contract = toContract;
+  }
+
+  return { payload, unit, extent, contract };
+}
+
+/**
+ * Serialize an InferenceCanonicalType to a string key for BFS visited set.
+ * Only payload/unit/contract matter — extent is preserved through chains.
+ */
+function typeKey(t: InferenceCanonicalType): string {
+  const p = typeof t.payload === 'object' ? t.payload.kind : String(t.payload);
+
+  let u: string;
+  const unit = t.unit;
+  if (typeof unit !== 'object') {
+    u = String(unit);
+  } else if (unit.kind === 'angle') {
+    u = `angle:${unit.unit}`;
+  } else if (unit.kind === 'time') {
+    u = `time:${unit.unit}`;
+  } else if (unit.kind === 'space') {
+    u = `space:${unit.unit}:${unit.dims}`;
+  } else if (unit.kind === 'color') {
+    u = `color:${unit.unit}`;
+  } else {
+    u = unit.kind;
+  }
+
+  const c = t.contract ? t.contract.kind : 'none';
+  return `${p}:${u}:${c}`;
+}
+
+/**
+ * Find a multi-step adapter chain from source to destination type.
+ *
+ * BFS over the adapter registry:
+ * - Returns null if types are already assignable (no chain needed)
+ * - Returns the shortest chain (fewest steps)
+ * - Deterministic tie-breaking: lexicographic blockType sequence
+ * - Max chain length: 4 steps (safety rail)
+ *
+ * Spec Reference: design-docs/_frontend-compiler/03.1-adapter-insertion.md §7.3
+ */
+export function findAdapterChain(
+  src: InferenceCanonicalType,
+  dst: InferenceCanonicalType,
+): AdapterChain | null {
+  // Already assignable — no chain needed
+  if (isAssignable(src, dst)) return null;
+
+  const dstPattern = extractPattern(dst);
+  const rules = getAdapterRules();
+
+  // BFS state: queue of (current type, steps taken so far)
+  interface BfsNode {
+    readonly type: InferenceCanonicalType;
+    readonly steps: readonly AdapterStep[];
+  }
+
+  const visited = new Set<string>();
+  visited.add(typeKey(src));
+
+  // Store all solutions found at the shortest depth, then pick deterministically
+  let solutions: AdapterChain[] = [];
+  let solutionDepth = Infinity;
+
+  const queue: BfsNode[] = [{ type: src, steps: [] }];
+
+  while (queue.length > 0) {
+    const node = queue.shift()!;
+
+    // If we've found solutions and this node is deeper, stop
+    if (node.steps.length >= solutionDepth) continue;
+
+    // Safety rail
+    if (node.steps.length >= MAX_CHAIN_LENGTH) continue;
+
+    const nodePattern = extractPattern(node.type);
+
+    for (const rule of rules) {
+      if (!isRuleApplicable(rule, node.type, nodePattern)) continue;
+
+      const outputType = applyAdapterTransform(rule, node.type);
+      const step: AdapterStep = {
+        blockType: rule.blockType,
+        inputPortId: rule.spec.inputPortId,
+        outputPortId: rule.spec.outputPortId,
+      };
+      const newSteps = [...node.steps, step];
+
+      // Check if output is assignable to destination
+      const outputPattern = extractPattern(outputType);
+      if (isRuleOutputCompatibleWithDest(rule, nodePattern, dstPattern) ||
+          patternsAreCompatible(outputPattern, dstPattern)) {
+        const chain: AdapterChain = { steps: newSteps, cost: newSteps.length };
+        if (newSteps.length < solutionDepth) {
+          solutionDepth = newSteps.length;
+          solutions = [chain];
+        } else if (newSteps.length === solutionDepth) {
+          solutions.push(chain);
+        }
+        continue; // Don't enqueue — we found a solution at this depth
+      }
+
+      // Enqueue for further exploration if not visited
+      const key = typeKey(outputType);
+      if (!visited.has(key)) {
+        visited.add(key);
+        queue.push({ type: outputType, steps: newSteps });
+      }
+    }
+  }
+
+  if (solutions.length === 0) return null;
+
+  // Deterministic tie-breaking: lexicographic blockType sequence
+  solutions.sort((a, b) => {
+    for (let i = 0; i < a.steps.length; i++) {
+      const cmp = a.steps[i].blockType.localeCompare(b.steps[i].blockType);
+      if (cmp !== 0) return cmp;
+    }
+    return 0;
+  });
+
+  return solutions[0];
+}
+

@@ -34,6 +34,7 @@ registerBlock({
     // Expression block has dynamic type resolution based on expression text
     // The output type depends on the expression, not a fixed combination
     semantics: 'typeSpecific',
+    unitBehavior: 'requireUnitless',
   },
 
   // Inputs include both wirable ports AND config parameters

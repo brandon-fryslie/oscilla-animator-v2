@@ -23,7 +23,7 @@ import type { PolicyContext, PolicyResult } from './policies/policy-types';
 import type { BlockDef } from '../../blocks/registry';
 import { BLOCK_DEFS_BY_TYPE } from '../../blocks/registry';
 import { extractConstraints, type ExtractedConstraints } from './extract-constraints';
-import { solvePayloadUnit, buildPortVarMapping } from './solve-payload-unit';
+import { solvePayloadUnit, buildPortVarMapping } from './payload-unit/solve';
 import type { CanonicalType, InstanceRef } from '../../core/canonical-types';
 import { isAxisInst } from '../../core/canonical-types';
 import type { InferenceCanonicalType } from '../../core/inference-types';
@@ -150,6 +150,7 @@ function solveAndComputeFacts(
     solveDiagnostics.push({
       kind: 'TypeConstraintError',
       subKind: error.kind,
+      errorClass: error.errorClass,
       port: error.port,
       message: error.message,
     });

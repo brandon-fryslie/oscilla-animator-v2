@@ -35,7 +35,7 @@ import {
 } from './SlotLookupCache';
 
 // Module-level pool for Materializer buffers.
-// These buffers are CACHED in RuntimeState.cache.fieldBuffers and reused across frames,
+// These buffers are CACHED in RuntimeState.cache.valueExprFieldBuffers and reused across frames,
 // so they don't need arena semantics. The pool grows once and then stabilizes.
 const MATERIALIZER_POOL = new BufferPool();
 

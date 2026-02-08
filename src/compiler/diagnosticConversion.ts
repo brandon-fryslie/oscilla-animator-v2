@@ -17,43 +17,6 @@ import type { Diagnostic, DiagnosticCode, TargetRef } from '../diagnostics/types
 import { generateDiagnosticId } from '../diagnostics/diagnosticId';
 
 // =============================================================================
-// Legacy Error Compatibility
-// =============================================================================
-
-/**
- * Legacy error format from compile.ts (deprecated, to be migrated).
- * @deprecated Use CompileError from ./types.ts instead
- */
-interface LegacyCompileError {
-  readonly kind: string;
-  readonly message: string;
-  readonly blockId?: string;
-  readonly connectionId?: string;
-  readonly portId?: string;
-}
-
-/**
- * Type guard to check if an error is in legacy format.
- */
-function isLegacyError(error: CompileError | LegacyCompileError): error is LegacyCompileError {
-  return 'kind' in error && !('code' in error);
-}
-
-/**
- * Normalize legacy error to new format.
- */
-function normalizeLegacyError(error: LegacyCompileError): CompileError {
-  return {
-    code: error.kind, // Map kind → code
-    message: error.message,
-    where: {
-      blockId: error.blockId,
-      port: error.portId,
-    },
-  };
-}
-
-// =============================================================================
 // Error Code to DiagnosticCode Mapping
 // =============================================================================
 
@@ -146,32 +109,29 @@ function extractTargetRef(error: CompileError): TargetRef {
 /**
  * Converts a CompileError to a Diagnostic.
  *
- * @param error CompileError from compiler (or legacy format)
+ * @param error CompileError from compiler
  * @param patchRevision Current patch revision
  * @param compileId Compile session identifier
  * @returns Structured Diagnostic object
  */
 export function convertCompileErrorToDiagnostic(
-  error: CompileError | LegacyCompileError,
+  error: CompileError,
   patchRevision: number,
   compileId: string,
   severity: 'error' | 'warn' | 'info' = 'error'
 ): Diagnostic {
-  // Normalize legacy errors to new format
-  const normalizedError = isLegacyError(error) ? normalizeLegacyError(error) : error;
-
   // Map error code to diagnostic code
-  const code = ERROR_CODE_TO_DIAGNOSTIC_CODE[normalizedError.code] || 'E_UNKNOWN_BLOCK_TYPE';
+  const code = ERROR_CODE_TO_DIAGNOSTIC_CODE[error.code] || 'E_UNKNOWN_BLOCK_TYPE';
 
   // Extract target reference
-  const primaryTarget = extractTargetRef(normalizedError);
+  const primaryTarget = extractTargetRef(error);
 
   // Generate title (short summary)
-  const title = formatTitle(normalizedError.code);
+  const title = formatTitle(error.code);
 
   // Generate stable ID (use error.code as signature to disambiguate
   // multiple errors for the same block that map to the same diagnostic code)
-  const id = generateDiagnosticId(code, primaryTarget, patchRevision, normalizedError.code);
+  const id = generateDiagnosticId(code, primaryTarget, patchRevision, error.code);
 
   return {
     id,
@@ -180,7 +140,7 @@ export function convertCompileErrorToDiagnostic(
     domain: 'compile',
     primaryTarget,
     title,
-    message: normalizedError.message,
+    message: error.message,
     scope: {
       patchRevision,
       compileId,
@@ -190,25 +150,19 @@ export function convertCompileErrorToDiagnostic(
       lastSeenAt: Date.now(),
       occurrenceCount: 1,
     },
-    // TODO: Add addAdapter actions for type mismatch errors (Sprint 2 - P1 deferred)
-    // Blocker: CompileError.where does not include structured port references
-    // needed for addAdapter action (fromPort.blockId, fromPort.portId, fromPort.portKind).
-    // Edge-level type mismatches occur during compilation before being converted to diagnostics,
-    // but the CompileError structure only includes blockId/port string, not full PortTargetRef.
-    // Resolution: Enhance CompileError to include edge information or structured port refs.
   };
 }
 
 /**
  * Converts an array of CompileErrors to Diagnostics.
  *
- * @param errors Array of CompileErrors (or legacy format)
+ * @param errors Array of CompileErrors
  * @param patchRevision Current patch revision
  * @param compileId Compile session identifier
  * @returns Array of Diagnostics
  */
 export function convertCompileErrorsToDiagnostics(
-  errors: readonly (CompileError | LegacyCompileError)[],
+  errors: readonly CompileError[],
   patchRevision: number,
   compileId: string,
   severity: 'error' | 'warn' | 'info' = 'error'

@@ -45,7 +45,6 @@ function makeMinimalProgram(opts: {
       instances: opts.instances,
       steps: [],
       stateSlotCount: 0,
-      stateSlots: [],
       timeModel: { kind: 'driven', source: 'raf' } as any,
       stateMappings: [],
       eventSlotCount: 0,

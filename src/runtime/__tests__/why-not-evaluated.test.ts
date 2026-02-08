@@ -149,9 +149,9 @@ describe('analyzeWhyNotEvaluated', () => {
           input: null,
           output: null,
           errors: [{
-            kind: 'UnknownBlockType',
+            code: 'UnknownBlockType',
             message: 'Block type "Foo" is not registered',
-            blockId: 'test-block',
+            where: { blockId: 'test-block' },
           }],
           inputSize: 0,
           outputSize: 0,

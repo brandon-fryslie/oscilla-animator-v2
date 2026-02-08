@@ -59,7 +59,7 @@ export interface DraftBlock {
   readonly displayName: string;
   /** Domain ID (inherited from source block) */
   readonly domainId: string | null;
-  /** Semantic role (for bridge to legacy Patch format) */
+  /** Semantic role (bridged from Patch) */
   readonly role: BlockRole;
 }
 
@@ -203,7 +203,7 @@ function classifyBlockOrigin(block: Block): BlockOrigin {
   if (block.role.kind === 'derived') {
     // Blocks inserted by composite expansion
     const meta = block.role.meta as Record<string, unknown>;
-    if (meta.kind === 'compositeInternal' || meta.kind === 'compositeExposed') {
+    if (meta.kind === 'compositeExpansion') {
       return 'compositeInternal';
     }
   }

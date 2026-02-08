@@ -13,7 +13,6 @@ describe('State Slot Accessors', () => {
       stateSlotCount: stateMappings.reduce((sum, m) => 
         sum + (m.kind === 'scalar' ? m.stride : m.laneCount * m.stride), 0
       ),
-      stateSlots: [],
       stateMappings,
       eventSlotCount: 0,
       eventCount: 0

@@ -190,19 +190,13 @@ export interface FrameCache {
   /** Current frame ID (monotonic, starts at 0) */
   frameId: number;
 
-  /** Legacy cached signal values (indexed by legacy ValueExprId) */
+  /** Cached scalar signal values (indexed by step expr ID) */
   values: Float64Array;
 
-  /** Frame stamps for legacy signal cache validation */
+  /** Frame stamps for signal cache validation */
   stamps: Uint32Array;
 
-  /** Cached field buffers (nested Map: fieldId -> instanceId -> buffer) */
-  fieldBuffers: Map<number, Map<number, ArrayBufferView>>;
-
-  /** Frame stamps for field cache validation (nested Map: fieldId -> instanceId -> stamp) */
-  fieldStamps: Map<number, Map<number, number>>;
-
-  /** Cached ValueExpr signal values (indexed by ValueExprId) - migration path */
+  /** Cached ValueExpr signal values (indexed by ValueExprId) */
   valueExprValues: Float64Array;
 
   /** Frame stamps for ValueExpr cache validation */
@@ -210,15 +204,12 @@ export interface FrameCache {
 
   /**
    * Cached ValueExpr field buffers (indexed by ValueExprId, simple array).
-   * WI-2: ValueExpr materializer field buffer cache.
-   * Unlike legacy fieldBuffers (which need instanceId key), ValueExpr field buffers
-   * cache by expression ID only since instanceId is embedded in the type.
+   * Cache by expression ID since instanceId is embedded in the type.
    */
   valueExprFieldBuffers: (ArrayBufferView | null)[];
 
   /**
    * Frame stamps for ValueExpr field cache validation (indexed by ValueExprId).
-   * WI-2: Matches valueExprFieldBuffers indexing.
    */
   valueExprFieldStamps: number[];
 }
@@ -227,18 +218,15 @@ export interface FrameCache {
  * Create a FrameCache
  */
 export function createFrameCache(
-  maxLegacyExprs: number = 1000,
+  maxSignalExprs: number = 1000,
   maxValueExprs: number = 0
 ): FrameCache {
   return {
     frameId: 1, // Start at 1 so initial stamps[n]=0 don't match
-    values: new Float64Array(maxLegacyExprs),
-    stamps: new Uint32Array(maxLegacyExprs),
-    fieldBuffers: new Map(),
-    fieldStamps: new Map(),
+    values: new Float64Array(maxSignalExprs),
+    stamps: new Uint32Array(maxSignalExprs),
     valueExprValues: new Float64Array(maxValueExprs),
     valueExprStamps: new Uint32Array(maxValueExprs),
-    // WI-2: ValueExpr field buffer cache
     valueExprFieldBuffers: new Array(maxValueExprs).fill(null),
     valueExprFieldStamps: new Array(maxValueExprs).fill(-1),
   };

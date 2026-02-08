@@ -3,7 +3,7 @@
  *
  * Builds the complete constraint set that solvers consume:
  * - portBaseTypes: stable Map<DraftPortKey, InferenceCanonicalType> from block defs
- * - payloadUnit: Payload/unit equality constraints for union-find solving
+ * - payloadUnit: Payload/unit constraints for union-find solving (new typed constraints)
  * - cardinality: Cardinality constraints for cardinality union-find solving
  * - baseCardinalityAxis: Original cardinality axis per port (before axisVar rewriting)
  *
@@ -11,14 +11,19 @@
  * Solvers produce substitutions; you apply substitutions to portBaseTypes
  * to compute TypeFacts.
  *
+ * Auto-derivation: When a block has BlockPayloadMetadata declaring polymorphism
+ * (allowedPayloads with >1 entries) but its port types are concrete, this module
+ * auto-derives payload/unit vars and RequirePayloadIn/RequireUnitless constraints.
+ * This lets block defs stay simple while the solver handles polymorphism.
+ *
  * // [LAW:one-source-of-truth] portBaseTypes is the single source for per-port inference types.
  * // [LAW:single-enforcer] Constraint extraction is the single place that reads block defs for types.
  */
 
-import type { DraftGraph, DraftBlock, DraftEdge, DraftPortRef } from './draft-graph';
+import type { DraftGraph, DraftBlock } from './draft-graph';
 import type { DraftPortKey } from './type-facts';
 import { draftPortKey } from './type-facts';
-import type { BlockDef, InputDef, OutputDef, BlockCardinalityMetadata, AcceptsSpec } from '../../blocks/registry';
+import type { BlockDef, BlockCardinalityMetadata } from '../../blocks/registry';
 import { getBlockCardinalityMetadata } from '../../blocks/registry';
 import type { InferenceCanonicalType } from '../../core/inference-types';
 import { isPayloadVar, isUnitVar, isConcretePayload, isConcreteUnit } from '../../core/inference-types';
@@ -26,44 +31,7 @@ import type { PayloadType, UnitType, CardinalityValue, Axis } from '../../core/c
 import { axisVar, axisInst, isAxisInst, isAxisVar, instanceRef } from '../../core/canonical-types';
 import { cardinalityVarId, instanceVarId, type CardinalityVarId } from '../../core/ids';
 import type { CardinalityConstraint, InstanceTerm } from './cardinality/solve';
-
-// =============================================================================
-// Constraint Types
-// =============================================================================
-
-/**
- * Payload/unit equality constraint between two ports.
- * Produced from edges (source.out unified with sink.in).
- */
-export interface PayloadUnitEdgeConstraint {
-  readonly kind: 'edge';
-  readonly from: DraftPortKey;
-  readonly to: DraftPortKey;
-}
-
-/**
- * Payload/unit same-variable constraint within a block.
- * Produced when multiple ports share the same def-level var.
- */
-export interface PayloadUnitSameVarConstraint {
-  readonly kind: 'sameVar';
-  readonly ports: readonly DraftPortKey[];
-  readonly varId: string;
-  readonly axis: 'payload' | 'unit';
-}
-
-/**
- * Payload/unit concrete assignment for a port.
- * Produced when a port's def type has a concrete payload or unit.
- */
-export type PayloadUnitConcreteConstraint =
-  | { readonly kind: 'concrete'; readonly port: DraftPortKey; readonly axis: 'payload'; readonly value: PayloadType }
-  | { readonly kind: 'concrete'; readonly port: DraftPortKey; readonly axis: 'unit'; readonly value: UnitType };
-
-export type PayloadUnitConstraint =
-  | PayloadUnitEdgeConstraint
-  | PayloadUnitSameVarConstraint
-  | PayloadUnitConcreteConstraint;
+import type { PayloadUnitConstraint, ConstraintOrigin } from './payload-unit/solve';
 
 // =============================================================================
 // ExtractedConstraints
@@ -111,22 +79,76 @@ export function extractConstraints(
     const def = registry.get(block.type);
     if (!def) continue;
 
-    // Track vars within this block for same-var constraints
+    // Track vars within this block for same-var constraints (payload equality, unit equality)
     const payloadVarPorts = new Map<string, DraftPortKey[]>();
     const unitVarPorts = new Map<string, DraftPortKey[]>();
+
+    // Auto-derivation: check if block has payload metadata declaring polymorphism
+    const meta = def.payload;
+    const isPolymorphic = meta && Object.values(meta.allowedPayloads).some(a => a.length > 1);
 
     // Process outputs
     for (const [portName, outDef] of Object.entries(def.outputs)) {
       const key = draftPortKey(block.id, portName, 'out');
-      portBaseTypes.set(key, outDef.type);
-      collectVarConstraints(key, outDef.type, payloadVarPorts, unitVarPorts, payloadUnit);
+      let type = outDef.type;
+
+      // Auto-derivation: if port has concrete payload but metadata says polymorphic,
+      // replace payload with a block-scoped var + emit RequirePayloadIn
+      if (isPolymorphic && meta && isConcretePayload(type.payload) && !isPayloadVar(type.payload)) {
+        const allowedForPort = meta.allowedPayloads[portName];
+        if (allowedForPort && allowedForPort.length > 1) {
+          // Replace payload with block-scoped var
+          const varId = `${block.id}_T`;
+          type = { ...type, payload: { kind: 'var' as const, id: varId } };
+
+          payloadUnit.push({
+            kind: 'requirePayloadIn',
+            port: key,
+            allowed: allowedForPort,
+            origin: { kind: 'payloadMetadata', blockType: block.type, port: portName },
+          });
+        }
+      }
+
+      // Auto-derivation: if unitBehavior is set and port has concrete unit,
+      // replace unit with block-scoped var
+      if (isPolymorphic && meta?.unitBehavior === 'preserve' && isConcreteUnit(type.unit) && !isUnitVar(type.unit)) {
+        const varId = `${block.id}_U`;
+        type = { ...type, unit: { kind: 'var' as const, id: varId } };
+      }
+
+      portBaseTypes.set(key, type);
+      collectVarConstraints(key, type, payloadVarPorts, unitVarPorts, payloadUnit, block.type, portName, 'out');
     }
 
     // Process inputs
     for (const [portName, inDef] of Object.entries(def.inputs)) {
       if (inDef.exposedAsPort === false) continue;
       const key = draftPortKey(block.id, portName, 'in');
-      portBaseTypes.set(key, inDef.type);
+      let type = inDef.type;
+
+      // Auto-derivation for inputs (same logic as outputs)
+      if (isPolymorphic && meta && isConcretePayload(type.payload) && !isPayloadVar(type.payload)) {
+        const allowedForPort = meta.allowedPayloads[portName];
+        if (allowedForPort && allowedForPort.length > 1) {
+          const varId = `${block.id}_T`;
+          type = { ...type, payload: { kind: 'var' as const, id: varId } };
+
+          payloadUnit.push({
+            kind: 'requirePayloadIn',
+            port: key,
+            allowed: allowedForPort,
+            origin: { kind: 'payloadMetadata', blockType: block.type, port: portName },
+          });
+        }
+      }
+
+      if (isPolymorphic && meta?.unitBehavior === 'preserve' && isConcreteUnit(type.unit) && !isUnitVar(type.unit)) {
+        const varId = `${block.id}_U`;
+        type = { ...type, unit: { kind: 'var' as const, id: varId } };
+      }
+
+      portBaseTypes.set(key, type);
 
       // Track collect ports — they opt out of union-find unification
       // [LAW:one-type-per-behavior] Collect ports use normal edges, validated per-edge.
@@ -134,19 +156,48 @@ export function extractConstraints(
         collectPorts.add(key);
       } else {
         // Only non-collect ports participate in same-var constraints
-        collectVarConstraints(key, inDef.type, payloadVarPorts, unitVarPorts, payloadUnit);
+        collectVarConstraints(key, type, payloadVarPorts, unitVarPorts, payloadUnit, block.type, portName, 'in');
       }
     }
 
-    // Emit same-var constraints for ports sharing a def var within this block
-    for (const [varId, ports] of payloadVarPorts) {
+    // Emit same-var (payload equality) constraints for ports sharing a def var within this block
+    for (const [, ports] of payloadVarPorts) {
       if (ports.length > 1) {
-        payloadUnit.push({ kind: 'sameVar', ports, varId, axis: 'payload' });
+        for (let i = 1; i < ports.length; i++) {
+          payloadUnit.push({
+            kind: 'payloadEq',
+            a: ports[0],
+            b: ports[i],
+            origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'samePayloadVar' },
+          });
+        }
       }
     }
-    for (const [varId, ports] of unitVarPorts) {
+
+    // Emit same-var (unit equality) constraints for ports sharing a def var within this block
+    for (const [, ports] of unitVarPorts) {
       if (ports.length > 1) {
-        payloadUnit.push({ kind: 'sameVar', ports, varId, axis: 'unit' });
+        for (let i = 1; i < ports.length; i++) {
+          payloadUnit.push({
+            kind: 'unitEq',
+            a: ports[0],
+            b: ports[i],
+            origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'sameUnitVar' },
+          });
+        }
+      }
+    }
+
+    // Emit unitBehavior constraints from metadata
+    if (meta?.unitBehavior === 'requireUnitless') {
+      // All ports must be unitless
+      for (const key of portBaseTypes.keys()) {
+        if (!key.startsWith(block.id + ':')) continue;
+        payloadUnit.push({
+          kind: 'requireUnitless',
+          port: key,
+          origin: { kind: 'blockRule', blockId: block.id, blockType: block.type, rule: 'requireUnitless' },
+        });
       }
     }
 
@@ -166,7 +217,9 @@ export function extractConstraints(
 
     // Only emit constraints for ports we have types for
     if (portBaseTypes.has(fromKey) && portBaseTypes.has(toKey)) {
-      payloadUnit.push({ kind: 'edge', from: fromKey, to: toKey });
+      const edgeOrigin: ConstraintOrigin = { kind: 'edge', edgeId: edge.id };
+      payloadUnit.push({ kind: 'payloadEq', a: fromKey, b: toKey, origin: edgeOrigin });
+      payloadUnit.push({ kind: 'unitEq', a: fromKey, b: toKey, origin: edgeOrigin });
       // Edge cardinality equality — solver unifies cardinality across edges
       cardinality.push({ kind: 'equal', a: fromKey, b: toKey });
     }
@@ -188,6 +241,9 @@ function collectVarConstraints(
   payloadVarPorts: Map<string, DraftPortKey[]>,
   unitVarPorts: Map<string, DraftPortKey[]>,
   payloadUnit: PayloadUnitConstraint[],
+  blockType: string,
+  portName: string,
+  dir: 'in' | 'out',
 ): void {
   // Payload
   if (isPayloadVar(type.payload)) {
@@ -195,7 +251,12 @@ function collectVarConstraints(
     arr.push(key);
     payloadVarPorts.set(type.payload.id, arr);
   } else if (isConcretePayload(type.payload)) {
-    payloadUnit.push({ kind: 'concrete', port: key, axis: 'payload', value: type.payload });
+    payloadUnit.push({
+      kind: 'concretePayload',
+      port: key,
+      value: type.payload,
+      origin: { kind: 'portDef', blockType, port: portName, dir },
+    });
   }
 
   // Unit
@@ -204,7 +265,12 @@ function collectVarConstraints(
     arr.push(key);
     unitVarPorts.set(type.unit.id, arr);
   } else if (isConcreteUnit(type.unit)) {
-    payloadUnit.push({ kind: 'concrete', port: key, axis: 'unit', value: type.unit });
+    payloadUnit.push({
+      kind: 'concreteUnit',
+      port: key,
+      value: type.unit,
+      origin: { kind: 'portDef', blockType, port: portName, dir },
+    });
   }
 }
 
@@ -297,7 +363,6 @@ function rewriteTransform(
   blockPorts: DraftPortKey[],
 ): void {
   const ref = instanceRef(meta.domainType as string, block.id);
-  const inputPorts: DraftPortKey[] = [];
 
   for (const key of blockPorts) {
     const dir = key.endsWith(':out') ? 'out' : 'in';
@@ -317,7 +382,6 @@ function rewriteTransform(
     } else {
       // Transform inputs → axisVar
       rewritePortToVar(key, block.id, portBaseTypes);
-      inputPorts.push(key);
     }
   }
 

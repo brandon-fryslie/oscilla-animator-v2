@@ -19,12 +19,12 @@ import type { PortKey, CollectEdgeKey } from "../ir/patches";
 import {
   type Writer,
   resolveBlockInputs,
-} from "../passes-v2/resolveWriters";
+} from "./resolveWriters";
 import {
   createCombineNode,
   validateCombinePolicy,
   shouldCombine,
-} from "../passes-v2/combine-utils";
+} from "./combine-utils";
 import type { NormalizedEdge } from "../ir/patches";
 // Binding Pass Integration (WI-4)
 import { bindEffects, applyBinding, bindOutputs } from "./binding-pass";

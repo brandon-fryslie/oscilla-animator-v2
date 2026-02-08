@@ -41,9 +41,6 @@ export function mockIdentityMapping(count: number): MappingState {
   return { newToOld };
 }
 
-// Legacy aliases for backward compatibility with tests
-export const mockByIdMapping = mockMapping;
-export const mockPositionMapping = mockMapping;
 
 /**
  * Create a test instance ID with flexible naming.

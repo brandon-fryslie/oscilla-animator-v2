@@ -162,7 +162,7 @@ function patchInstanceCounts(
   }
 
   // Patch ScheduleIR: create new schedule with updated instances map.
-  // steps, stateMappings, stateSlots, stateSlotCount are unchanged
+  // steps, stateMappings, stateSlotCount are unchanged
   // (no field state for this instance per StateMappingField gate).
   const newSchedule: ScheduleIR = {
     ...program.schedule,

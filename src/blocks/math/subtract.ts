@@ -30,6 +30,7 @@ registerBlock({
       out: STANDARD_NUMERIC_PAYLOADS,
     },
     semantics: 'componentwise',
+    unitBehavior: 'preserve',
   },
   inputs: {
     a: { label: 'A', type: canonicalType(FLOAT) },

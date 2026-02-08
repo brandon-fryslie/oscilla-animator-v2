@@ -6,7 +6,7 @@ import { createDerivedObligations } from '../create-derived-obligations';
 import type { DraftGraph, DraftBlock, DraftEdge } from '../draft-graph';
 import type { TypeFacts, DraftPortKey, PortTypeHint } from '../type-facts';
 import { draftPortKey } from '../type-facts';
-import { canonicalSignal, canonicalField, FLOAT, instanceRef } from '../../../core/canonical-types';
+import { canonicalSignal, canonicalField, canonicalType, FLOAT, instanceRef, unitScalar, contractClamp01 } from '../../../core/canonical-types';
 import type { CanonicalType } from '../../../core/canonical-types';
 import type { ObligationId } from '../obligations';
 
@@ -178,6 +178,24 @@ describe('createDerivedObligations', () => {
       [draftPortKey('ri', 'pos', 'in'), okHint(FIELD_FLOAT)],
     ]);
 
+    expect(createDerivedObligations(g, facts)).toEqual([]);
+  });
+
+  it('contract-only difference is assignable (clamp01 → none), no obligation', () => {
+    const SCALAR_CLAMP01 = canonicalType(FLOAT, unitScalar(), undefined, contractClamp01());
+    const SCALAR_NONE = canonicalType(FLOAT, unitScalar());
+
+    const g = emptyGraph({
+      blocks: [makeBlock('c1', 'Const'), makeBlock('add', 'Add')],
+      edges: [makeEdge('e1', 'c1', 'out', 'add', 'a')],
+    });
+
+    const facts = makeFacts([
+      [draftPortKey('c1', 'out', 'out'), okHint(SCALAR_CLAMP01)],
+      [draftPortKey('add', 'a', 'in'), okHint(SCALAR_NONE)],
+    ]);
+
+    // Contract dropping is assignable — no adapter obligation created
     expect(createDerivedObligations(g, facts)).toEqual([]);
   });
 

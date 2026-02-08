@@ -11,7 +11,7 @@
  */
 
 import { makeAutoObservable } from 'mobx';
-import type { CompileError } from '../compiler/compile';
+import type { CompileError } from '../compiler/types';
 import type { ValueExprTable } from '../compiler/ir/program';
 import type { ValueExpr, ValueExprId } from '../compiler/ir/value-expr';
 

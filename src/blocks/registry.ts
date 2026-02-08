@@ -301,6 +301,13 @@ export interface BlockPayloadMetadata {
   readonly combinations?: readonly PayloadCombination[];
   /** How this block interprets payloads */
   readonly semantics: PayloadSemantics;
+  /**
+   * How this block treats units across its ports.
+   * - 'preserve': unit in = unit out, all ports share a unit var (Add, Sub, Modulo)
+   * - 'requireUnitless': all ports must be unitless (Sin, Cos, Mul, Div, Expression)
+   * Default: 'preserve' for componentwise blocks, undefined for others.
+   */
+  readonly unitBehavior?: 'preserve' | 'requireUnitless';
 }
 
 /**

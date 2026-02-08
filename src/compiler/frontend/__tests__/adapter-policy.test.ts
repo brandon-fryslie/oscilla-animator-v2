@@ -7,7 +7,7 @@ import type { PolicyContext } from '../policies/policy-types';
 import type { DraftGraph, DraftBlock, DraftEdge } from '../draft-graph';
 import type { TypeFacts, DraftPortKey, PortTypeHint } from '../type-facts';
 import { draftPortKey, getPortHint } from '../type-facts';
-import { canonicalSignal, canonicalField, FLOAT } from '../../../core/canonical-types';
+import { canonicalSignal, canonicalField, canonicalType, FLOAT, unitDegrees, unitTurns, contractWrap01 } from '../../../core/canonical-types';
 import { instanceRef } from '../../../core/canonical-types';
 import type { CanonicalType } from '../../../core/canonical-types';
 import type { Obligation, ObligationId } from '../obligations';
@@ -235,7 +235,84 @@ describe('AdapterPolicy (adapters.v1)', () => {
 
     expect(result.kind).toBe('plan');
     if (result.kind === 'plan') {
-      expect(result.plan.addBlocks![0].id).toBe(`_adapter_${oblId}`);
+      // Single-step chain: block ID uses _0 suffix
+      expect(result.plan.addBlocks![0].id).toBe(`_adapter_${oblId}_0`);
+    }
+  });
+
+  it('edge IDs use numeric indexing for single-step chains', () => {
+    const g = emptyGraph({
+      blocks: [makeBlock('c1', 'Const'), makeBlock('ri', 'RenderInstances2D')],
+      edges: [makeEdge('e1', 'c1', 'out', 'ri', 'pos')],
+    });
+
+    const facts = makeFacts([
+      [draftPortKey('c1', 'out', 'out'), okHint(SIGNAL_FLOAT)],
+      [draftPortKey('ri', 'pos', 'in'), okHint(FIELD_FLOAT)],
+    ]);
+
+    const oblId = 'needsAdapter:c1:out->ri:pos';
+    const obl = makeObligation(oblId, 'e1', 'c1');
+    const result = adapterPolicyV1.plan(obl, makeCtx(g, facts));
+
+    expect(result.kind).toBe('plan');
+    if (result.kind === 'plan') {
+      const edges = result.plan.replaceEdges![0].add;
+      expect(edges.length).toBe(2);
+      expect(edges[0].id).toBe(`_e_${oblId}_0`);
+      expect(edges[1].id).toBe(`_e_${oblId}_1`);
+    }
+  });
+
+  it('multi-step chain: degrees → phase01 inserts 2 adapters and 3 edges', () => {
+    // degrees → radians → phase01 (two-step chain)
+    const DEGREES_FLOAT = canonicalType(FLOAT, unitDegrees());
+    const PHASE_FLOAT = canonicalType(FLOAT, unitTurns(), undefined, contractWrap01());
+
+    const g = emptyGraph({
+      blocks: [makeBlock('b1', 'SomeBlock'), makeBlock('b2', 'OtherBlock')],
+      edges: [makeEdge('e1', 'b1', 'out', 'b2', 'in')],
+    });
+
+    const facts = makeFacts([
+      [draftPortKey('b1', 'out', 'out'), okHint(DEGREES_FLOAT)],
+      [draftPortKey('b2', 'in', 'in'), okHint(PHASE_FLOAT)],
+    ]);
+
+    const oblId = 'needsAdapter:b1:out->b2:in';
+    const obl = makeObligation(oblId, 'e1', 'b1');
+    const result = adapterPolicyV1.plan(obl, makeCtx(g, facts));
+
+    expect(result.kind).toBe('plan');
+    if (result.kind === 'plan') {
+      // 2 adapter blocks
+      expect(result.plan.addBlocks!.length).toBe(2);
+      expect(result.plan.addBlocks![0].type).toBe('Adapter_DegreesToRadians');
+      expect(result.plan.addBlocks![1].type).toBe('Adapter_RadiansToPhase01');
+
+      // Block IDs are indexed
+      expect(result.plan.addBlocks![0].id).toBe(`_adapter_${oblId}_0`);
+      expect(result.plan.addBlocks![1].id).toBe(`_adapter_${oblId}_1`);
+
+      // 3 edges: source→adapter0, adapter0→adapter1, adapter1→sink
+      const edges = result.plan.replaceEdges![0].add;
+      expect(edges.length).toBe(3);
+      expect(edges[0].id).toBe(`_e_${oblId}_0`);
+      expect(edges[1].id).toBe(`_e_${oblId}_1`);
+      expect(edges[2].id).toBe(`_e_${oblId}_2`);
+
+      // Edge connectivity: source → adapter0 → adapter1 → sink
+      expect(edges[0].from.blockId).toBe('b1');
+      expect(edges[0].to.blockId).toBe(`_adapter_${oblId}_0`);
+      expect(edges[1].from.blockId).toBe(`_adapter_${oblId}_0`);
+      expect(edges[1].to.blockId).toBe(`_adapter_${oblId}_1`);
+      expect(edges[2].from.blockId).toBe(`_adapter_${oblId}_1`);
+      expect(edges[2].to.blockId).toBe('b2');
+
+      // All edges are implicitCoerce
+      for (const edge of edges) {
+        expect(edge.role).toBe('implicitCoerce');
+      }
     }
   });
 });

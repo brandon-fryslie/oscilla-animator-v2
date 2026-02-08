@@ -18,7 +18,7 @@
  */
 
 import type { Patch } from '../../graph';
-import type { NormalizedPatch, NormError } from '../../graph/normalize';
+import type { NormalizedPatch } from '../../graph/normalize';
 import type { TypedPatch, TypeResolvedPatch } from '../ir/patches';
 import type { CanonicalType } from '../../core/canonical-types';
 // Frontend passes
@@ -26,8 +26,8 @@ import { pass2TypeGraph } from './analyze-type-graph';
 import { analyzeCycles, type CycleSummary } from './analyze-cycles';
 import { validateTypes, validateNoVarAxes, type AxisViolation } from './axis-validate';
 
-// Fixpoint engine
-import { pass0CompositeExpansion } from './normalize-composites';
+// Composite expansion
+import { expandComposites, type ExpansionDiagnostic, type ExpansionProvenance } from './composite-expansion';
 
 import { buildDraftGraph } from './draft-graph';
 import { finalizeNormalizationFixpoint } from './final-normalization';
@@ -73,6 +73,8 @@ export interface FrontendResult {
   readonly backendReady: boolean;
   /** The normalized patch (intermediate, for Backend) */
   readonly normalizedPatch: NormalizedPatch;
+  /** Provenance from composite expansion (block/edge/boundary maps) */
+  readonly expansionProvenance?: ExpansionProvenance;
 }
 
 /**
@@ -109,11 +111,12 @@ export interface FrontendOptions {
 
 export function compileFrontend(patch: Patch, options?: FrontendOptions): FrontendCompileResult {
   // Step 1: Composite expansion
-  const p0Result = pass0CompositeExpansion(patch);
-  if (p0Result.kind === 'error') {
-    return { kind: 'error', errors: p0Result.errors.map(convertNormError) };
+  const expansion = expandComposites(patch);
+  const hasExpansionErrors = expansion.diagnostics.some(d => d.severity === 'error');
+  if (hasExpansionErrors) {
+    return { kind: 'error', errors: expansion.diagnostics.map(convertExpansionDiagnostic) };
   }
-  const expandedPatch = p0Result.patch;
+  const expandedPatch = expansion.patch;
 
   // Step 2: Build DraftGraph from expanded patch
   const draftGraph = buildDraftGraph(expandedPatch);
@@ -165,7 +168,7 @@ export function compileFrontend(patch: Patch, options?: FrontendOptions): Fronte
     }
   }
 
-  return compileFrontendTail(typeResolved, normalizedPatch, errors);
+  return compileFrontendTail(typeResolved, normalizedPatch, errors, expansion.provenance);
 }
 
 // =============================================================================
@@ -179,6 +182,7 @@ function compileFrontendTail(
   typeResolved: TypeResolvedPatch,
   normalizedPatch: NormalizedPatch,
   errors: FrontendError[],
+  expansionProvenance?: ExpansionProvenance,
 ): FrontendCompileResult {
   // Type Graph (produces TypedPatch)
   let typedPatch;
@@ -211,7 +215,7 @@ function compileFrontendTail(
 
   return {
     kind: 'ok',
-    result: { typedPatch, cycleSummary, errors, backendReady, normalizedPatch },
+    result: { typedPatch, cycleSummary, errors, backendReady, normalizedPatch, expansionProvenance },
   };
 }
 
@@ -219,48 +223,13 @@ function compileFrontendTail(
 // Helper Functions
 // =============================================================================
 
-function convertNormError(e: NormError): FrontendError {
-  switch (e.kind) {
-    case 'DanglingEdge':
-      return {
-        kind: e.kind,
-        message: `Edge references missing block (${e.missing})`,
-        blockId: e.edge.from.blockId,
-      };
-    case 'DuplicateBlockId':
-      return {
-        kind: e.kind,
-        message: `Duplicate block ID: ${e.id}`,
-        blockId: e.id,
-      };
-    case 'UnknownPort':
-      return {
-        kind: 'UnknownBlockType',
-        message: `Port '${e.portId}' does not exist on block '${e.blockId}' (${e.direction})`,
-        blockId: e.blockId,
-        portId: e.portId,
-      };
-    case 'NoAdapterFound':
-      return {
-        kind: 'TypeMismatch',
-        message: `No adapter found for type conversion: ${e.fromType} → ${e.toType}`,
-        blockId: e.edge.to.blockId,
-        portId: e.edge.to.slotId,
-      };
-    case 'CompositeExpansion':
-      return {
-        kind: 'CompositeExpansion',
-        message: e.message,
-        blockId: e.compositeBlockId,
-      };
-    default: {
-      const _exhaustive: never = e;
-      return {
-        kind: 'UnknownError',
-        message: `Unknown normalization error: ${JSON.stringify(_exhaustive)}`,
-      };
-    }
-  }
+function convertExpansionDiagnostic(d: ExpansionDiagnostic): FrontendError {
+  return {
+    kind: `CompositeExpansion/${d.code}`,
+    message: d.message,
+    blockId: d.at.instanceBlockId,
+    portId: d.at.port,
+  };
 }
 
 /**

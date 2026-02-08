@@ -25,7 +25,7 @@ import {
   ColorInput as MuiColorInput,
   SliderWithInput,
 } from './common';
-import { validateCombineMode } from '../../compiler/passes-v2/combine-utils';
+import { validateCombineMode } from '../../compiler/backend/combine-utils';
 import { ConnectionPicker } from './ConnectionPicker';
 import { AddressRegistry } from '../../graph/address-registry';
 import { SuggestionProvider } from '../../expr/suggestions';

@@ -30,7 +30,8 @@ import { compilationInspector } from '../services/CompilationInspectorService';
 import { computeRenderReachableBlocks } from './reachability';
 import { resolveKernels } from './resolve-kernels';
 import { createDefaultRegistry } from '../runtime/kernels/default-registry';
-import { compileFrontend, type FrontendResult } from './frontend';
+import { compileFrontend, type FrontendResult, type FrontendError } from './frontend';
+import type { CompileError } from './types';
 
 // Import all block registrations (side-effect import)
 import '../blocks/all';
@@ -47,13 +48,7 @@ import { AddressRegistry } from '../graph/address-registry';
 // Compile Errors & Results
 // =============================================================================
 
-export interface CompileError {
-  readonly kind: string;
-  readonly message: string;
-  readonly blockId?: string;
-  readonly connectionId?: string;
-  readonly portId?: string;
-}
+export type { CompileError } from './types';
 
 export type CompileSuccess = {
   readonly kind: 'ok';
@@ -108,22 +103,10 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
     } else {
       const frontendResult = compileFrontend(patch);
       if (frontendResult.kind === 'error') {
-        const compileErrors: CompileError[] = frontendResult.errors.map((e) => ({
-          kind: e.kind,
-          message: e.message,
-          blockId: e.blockId,
-          portId: e.portId,
-        }));
-        return makeFailure(compileErrors);
+        return makeFailure(frontendResult.errors.map(frontendErrorToCompileError));
       }
       if (!frontendResult.result.backendReady) {
-        const compileErrors: CompileError[] = frontendResult.result.errors.map((e) => ({
-          kind: e.kind,
-          message: e.message,
-          blockId: e.blockId,
-          portId: e.portId,
-        }));
-        return makeFailure(compileErrors);
+        return makeFailure(frontendResult.result.errors.map(frontendErrorToCompileError));
       }
       frontend = frontendResult.result;
     }
@@ -190,8 +173,8 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
       }
 
       // Partition errors into reachable and unreachable
-      const reachableErrors: import('./types').CompileError[] = [];
-      const unreachableErrors: import('./types').CompileError[] = [];
+      const reachableErrors: CompileError[] = [];
+      const unreachableErrors: CompileError[] = [];
 
       for (const error of unlinkedIR.errors) {
         const blockIdx = error.where?.blockId
@@ -210,19 +193,14 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
 
       // Build warnings for unreachable block errors
       unreachableBlockWarnings = unreachableErrors.map((error) => ({
-        kind: 'W_BLOCK_UNREACHABLE_ERROR',
+        code: 'W_BLOCK_UNREACHABLE_ERROR',
         message: `Block '${error.where?.blockId || 'unknown'}' has error but is not connected to render pipeline: ${error.message}\n\nSuggestion: Connect this block to the render pipeline or remove it.`,
-        blockId: error.where?.blockId,
+        where: { blockId: error.where?.blockId },
       }));
 
       // Only fail compilation if there are reachable errors
       if (reachableErrors.length > 0) {
-        const compileErrors: CompileError[] = reachableErrors.map((e) => ({
-          kind: e.code,
-          message: e.message,
-          blockId: e.where?.blockId,
-        }));
-        return makeFailure(compileErrors);
+        return makeFailure(reachableErrors);
       }
     }
 
@@ -240,11 +218,10 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
     const kernelResolutionErrors = resolveKernels(valueExprs, registry);
 
     if (kernelResolutionErrors.length > 0) {
-      const compileErrors: CompileError[] = kernelResolutionErrors.map((e) => ({
-        kind: e.kind,
+      return makeFailure(kernelResolutionErrors.map((e) => ({
+        code: e.kind,
         message: e.message,
-      }));
-      return makeFailure(compileErrors);
+      })));
     }
 
     // Convert to CompiledProgramIR (now with registry)
@@ -258,14 +235,23 @@ export function compile(patch: Patch, options?: CompileOptions): CompileResult {
     };
   } catch (e: unknown) {
     const error = e instanceof Error ? e : new Error(String(e));
-    const errorKind = (e as { code?: string }).code || 'CompilationFailed';
-    return makeFailure([{ kind: errorKind, message: error.message || 'Unknown compilation error' }]);
+    const errorCode = (e as { code?: string }).code || 'CompilationFailed';
+    return makeFailure([{ code: errorCode, message: error.message || 'Unknown compilation error' }]);
   }
 }
 
 // =============================================================================
 // Helper Functions
 // =============================================================================
+
+/** Convert FrontendError (kind-based) to CompileError (code-based). */
+function frontendErrorToCompileError(e: FrontendError): CompileError {
+  return {
+    code: e.kind,
+    message: e.message,
+    where: { blockId: e.blockId, port: e.portId },
+  };
+}
 
 // [LAW:single-enforcer] Events are emitted by CompileOrchestrator, not compile().
 function makeFailure(errors: CompileError[]): CompileFailure {

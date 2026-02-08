@@ -231,23 +231,6 @@ export interface CompositeExpansionMeta {
 }
 
 // =============================================================================
-// Expansion Info
-// =============================================================================
-
-/**
- * Information about a single composite expansion.
- * Used for debugging and diagnostics tracing.
- */
-export interface CompositeExpansionInfo {
-  /** The composite block ID that was expanded */
-  readonly compositeBlockId: string;
-  /** The composite definition type */
-  readonly compositeDefId: string;
-  /** IDs of all blocks created by this expansion */
-  readonly expandedBlockIds: readonly string[];
-}
-
-// =============================================================================
 // Validation Types
 // =============================================================================
 
@@ -276,8 +259,5 @@ export interface CompositeValidationError {
 // Constants
 // =============================================================================
 
-/** Maximum allowed composite nesting depth */
-export const MAX_COMPOSITE_NESTING_DEPTH = 5;
-
 /** ID prefix for expanded composite blocks */
-export const COMPOSITE_EXPANSION_PREFIX = '_comp_';
+export const COMPOSITE_EXPANSION_PREFIX = 'cx:';
